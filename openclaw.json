@@ -202,13 +202,10 @@
         "xai/grok-4.6": {
           "alias": "Grok"
         },
-        "deepseek/deepseek-v4-flash": {
-          "alias": "DeepSeek-Flash"
-        },
         "openai/gpt-image-2": {}
       },
       "model": {
-        "primary": "deepseek/deepseek-v4-flash",
+        "primary": "deepseek/deepseek-flash",
         "fallbacks": [
           "zai/glm-5.3",
           "kimi/k3",
@@ -251,7 +248,7 @@
           "deepseek/deepseek-v4-pro": {}
         },
         "model": {
-          "primary": "deepseek/deepseek-v4-flash",
+          "primary": "deepseek/deepseek-flash",
           "fallbacks": [
             "zai/glm-5.3",
             "kimi/k3",
@@ -269,7 +266,7 @@
         "model": {
           "primary": "zai/glm-5.3",
           "fallbacks": [
-            "deepseek/deepseek-v4-flash",
+            "deepseek/deepseek-flash",
             "kimi/k3",
             "xai/grok-4.6",
             "anthropic/claude-sonnet-5"
@@ -289,7 +286,7 @@
           "primary": "xai/grok-4.6",
           "fallbacks": [
             "zai/glm-5.3",
-            "deepseek/deepseek-v4-flash",
+            "deepseek/deepseek-flash",
             "kimi/k3",
             "anthropic/claude-sonnet-5"
           ]
@@ -319,7 +316,7 @@
         "model": {
           "primary": "zai/glm-5.3",
           "fallbacks": [
-            "deepseek/deepseek-v4-flash",
+            "deepseek/deepseek-flash",
             "kimi/k3",
             "xai/grok-4.6",
             "anthropic/claude-sonnet-5"
@@ -343,7 +340,7 @@
         "model": {
           "primary": "kimi/k3",
           "fallbacks": [
-            "deepseek/deepseek-v4-flash",
+            "deepseek/deepseek-flash",
             "zai/glm-5.3",
             "xai/grok-4.6",
             "anthropic/claude-opus-5"
@@ -365,7 +362,7 @@
           "emoji": "⚔️"
         },
         "model": {
-          "primary": "deepseek/deepseek-v4-flash",
+          "primary": "deepseek/deepseek-flash",
           "fallbacks": [
             "kimi/k3",
             "zai/glm-5.3",
@@ -389,7 +386,7 @@
           "emoji": "✅"
         },
         "model": {
-          "primary": "deepseek/deepseek-v4-flash",
+          "primary": "deepseek/deepseek-flash",
           "fallbacks": [
             "zai/glm-5.3",
             "kimi/k3",
@@ -486,8 +483,8 @@
       "deepseek": {
         "models": [
           {
-            "id": "deepseek-v4-flash",
-            "name": "DeepSeek V4 Flash"
+            "id": "deepseek-flash",
+            "name": "DeepSeek V4.1 Flash"
           }
         ],
         "baseUrl": "https://api.deepseek.com",
