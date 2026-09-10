@@ -1,6 +1,6 @@
-# Patches de modelo — NO aplicados
+# Patches de modelo — APLICADOS 2026-09-10
 
-Estos archivos son para que el **lead** corra `openclaw config patch`. Cursor no los aplica.
+Estos archivos ya fueron aplicados al gateway el 2026-09-10 y quedan como registro de lo aplicado. Nota de fidelidad: lo aplicado en produccion usa `deepseek/deepseek-v4-flash` donde la tabla FASE-B original decia `deepseek/deepseek-v4-pro` (decision de David, 2026-09-10); estos archivos ya reflejan el flash real. `modelos-rollback.json5` NO se toco: describe el estado pre-M1 exacto (primarios OpenAI) y solo sirve para volver a ese estado.
 
 `config patch` mergea objetos y **reemplaza arrays enteros**. Los `fallbacks` del patch sustituyen la lista previa completa.
 
@@ -29,11 +29,11 @@ Cadenas (FASE B):
 
 | agente | primary | fallbacks |
 |---|---|---|
-| implementer | zai/glm-5.3 | deepseek-v4-pro, kimi/k3, xai/grok-4.6 |
-| reviewer | kimi/k3 | deepseek-v4-pro, zai/glm-5.3, xai/grok-4.6 |
-| adversary | deepseek-v4-pro | kimi/k3, zai/glm-5.3, xai/grok-4.6 |
-| verifier | deepseek-v4-pro | zai/glm-5.3, kimi/k3, xai/grok-4.6 |
-| ingenieria | **xai/grok-4.6** | zai/glm-5.3, deepseek-v4-pro, kimi/k3 |
+| implementer | zai/glm-5.3 | deepseek-v4-flash, kimi/k3, xai/grok-4.6 |
+| reviewer | kimi/k3 | deepseek-v4-flash, zai/glm-5.3, xai/grok-4.6 |
+| adversary | deepseek-v4-flash | kimi/k3, zai/glm-5.3, xai/grok-4.6 |
+| verifier | deepseek-v4-flash | zai/glm-5.3, kimi/k3, xai/grok-4.6 |
+| ingenieria | **xai/grok-4.6** | zai/glm-5.3, deepseek-v4-flash, kimi/k3 |
 
 ```bash
 # En la maquina Windows (gateway), no desde la Mac remota:
