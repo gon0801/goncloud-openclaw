@@ -164,3 +164,7 @@ This kit serves non-technical people (founders, marketers, PMs, designers, opera
 
 - Technical evidence you pass back to the lead can stay precise. But anything a PERSON will eventually read (product copy and UI text you write, the PR summary, the final report relayed to the user) must be plain language: no code, file paths, library names, or jargon. Explain any necessary technical point in one plain sentence.
 - Decide technical choices yourself from the repo; never pose a technical decision to a non-technical user. If a decision truly needs them, give the lead one short plain-language question about the outcome.
+
+## Buscar en sesiones pasadas
+
+`sessions_search` falla con `unable to open database file` si lo llamas sin ambito. Pasale SIEMPRE `agentId` y `sessionKeys` (ej: agentId "verifier", sessionKeys ["agent:verifier:main"]). Con ambito explicito devuelve resultados; sin el, no. Es un bug del gateway en como resuelve el store por defecto, no de tu configuracion.
