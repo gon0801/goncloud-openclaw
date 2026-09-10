@@ -24,7 +24,7 @@
 - V1 pings (lead no aplico M1).
 - Dry-run exit 0 desde Mac remote: falla resolucion de modelos no-OpenAI (`models list` remote solo OpenAI). Patches siguen el brief; dry-run real en gateway.
 - Toggle dedicado allowPrivateNetwork para `view_image`.
-- `openclaw config get agents.entries.<id>.model` via remote: unset; rollback tomado de `openclaw.json` del repo.
+- `openclaw config get agents.entries.<id>.model` via remote: unset; rollback re-verificado contra `gateway call config.get` → `parsed.agents.entries` (coincide con snapshot).
 - Rescate OpenAI nativo→codex forzado de punta a punta (`eslabon-6-openai.md`).
 
 ## Obstaculos del brief corregidos

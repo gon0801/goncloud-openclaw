@@ -8,9 +8,16 @@ Reglas de cadena (brief): ningun agente repite proveedor; toda la cadena en runt
 
 ## Fuente del rollback
 
-`openclaw config get agents.entries.<id>.model` (CLI remote desde esta Mac) devolvio **unset**. El remote solo expuso `agents.entries.main: {}`.
+`openclaw config get agents.entries.<id>.model` (CLI remote) devolvio **unset**.
 
-Los valores de `modelos-rollback.json5` salen del snapshot del repo `openclaw.json`. Verificar en vivo con el lead antes de revertir si el gateway ya diverge.
+**Re-verificado 2026-09-10** con lectura viva (permitida):
+
+```bash
+~/.openclaw/bin/openclaw gateway call config.get --params '{}'
+# usar parsed.agents.entries.<id>.model
+```
+
+Los valores de `modelos-rollback.json5` coinciden con esa lectura viva del gateway (mismo contenido que el snapshot `openclaw.json` del repo en ese momento). Si el gateway diverge despues, regenerar el rollback antes de revertir.
 
 ## modelos-fase1.json5
 

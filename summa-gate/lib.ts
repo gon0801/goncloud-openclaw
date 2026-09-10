@@ -71,12 +71,21 @@ export function redirectTargets(command: string): string[] {
  * Map label/agent text to a pipeline role.
  * implementer/engineer/fix must be checked before verif|test|qa so labels like
  * "implementer: fix failing tests" classify as implementer, not verifier.
+ * Word boundaries keep substrings like "prefix" / "fixture" from matching "fix".
  */
 export function canonicalRole(text: string): Role | undefined {
   const t = text.toLowerCase();
-  if (/adversar|critic/.test(t)) return "adversary";
-  if (/review|audit/.test(t)) return "reviewer";
-  if (/implement|engineer|coder|fix/.test(t)) return "implementer";
-  if (/verif|test|qa/.test(t)) return "verifier";
+  if (/\badversar(?:y|ial)?\b|\bcritic\b/.test(t)) return "adversary";
+  if (/\breview(?:er|s|ing)?\b|\baudit(?:or|s|ing)?\b/.test(t)) return "reviewer";
+  if (
+    /\bimplement(?:er|ers|ation|ing)?\b|\bengineer(?:s|ing)?\b|\bcoder(?:s)?\b|\bfix(?:es|ing|ed)?\b/.test(
+      t,
+    )
+  ) {
+    return "implementer";
+  }
+  if (/\bverif(?:y|ies|ied|ying|ier|ication)?\b|\btests?\b|\bqa\b/.test(t)) {
+    return "verifier";
+  }
   return undefined;
 }

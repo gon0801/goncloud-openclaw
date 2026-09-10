@@ -25,6 +25,15 @@ describe("canonicalRole", () => {
   it("maps qa run to verifier", () => {
     assert.equal(canonicalRole("qa run"), "verifier");
   });
+
+  it("does not treat prefix/suffix as implementer via bare fix substring", () => {
+    assert.equal(canonicalRole("check the prefix path"), undefined);
+    assert.equal(canonicalRole("check the suffix path"), undefined);
+  });
+
+  it("still maps a standalone fix label to implementer", () => {
+    assert.equal(canonicalRole("fix the census hole"), "implementer");
+  });
 });
 
 describe("mergeGuardVerdict", () => {
