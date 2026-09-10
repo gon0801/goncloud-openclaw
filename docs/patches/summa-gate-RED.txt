@@ -1,0 +1,53 @@
+▶ canonicalRole
+  ✖ maps implementer: fix failing tests to implementer (not verifier) (1.963958ms)
+  ✔ maps code reviewer to reviewer (0.101583ms)
+  ✔ maps adversary attack to adversary (0.064042ms)
+  ✔ maps qa run to verifier (0.035792ms)
+✖ canonicalRole (2.931583ms)
+▶ mergeGuardVerdict
+  ✔ blocks git push origin main (0.329875ms)
+  ✔ blocks git push origin HEAD:main (0.195542ms)
+  ✔ blocks gh pr merge (0.144833ms)
+  ✔ blocks gh api repos/.../merge (0.100125ms)
+  ✔ allows git push origin feature/x (0.058459ms)
+  ✔ allows git push --dry-run origin feature/x (0.07675ms)
+✔ mergeGuardVerdict (1.091042ms)
+▶ plugin smoke import
+  ✔ default export exposes register (90.528833ms)
+✔ plugin smoke import (90.964209ms)
+ℹ tests 11
+ℹ suites 3
+ℹ pass 10
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 175.505625
+
+✖ failing tests:
+
+test at role.test.ts:13:3
+✖ maps implementer: fix failing tests to implementer (not verifier) (1.963958ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'verifier'
+  - 'implementer'
+
+      at TestContext.<anonymous> (file:///Users/dn/dev/goncloud-openclaw-agents/summa-gate/role.test.ts:14:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.start (node:internal/test_runner/test:1242:17)
+      at node:internal/test_runner/test:1867:71
+      at node:internal/per_context/primordials:504:82
+      at new Promise (<anonymous>)
+      at new SafePromise (node:internal/per_context/primordials:478:3)
+      at node:internal/per_context/primordials:504:9
+      at Array.map (<anonymous>) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'verifier',
+    expected: 'implementer',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

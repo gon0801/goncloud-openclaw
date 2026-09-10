@@ -39,6 +39,7 @@ backups/
 staging/
 worktrees/
 summa-gate/state/
+summa-gate/node_modules/
 
 # Sistema
 .DS_Store

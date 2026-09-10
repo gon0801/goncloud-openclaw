@@ -1,0 +1,25 @@
+▶ canonicalRole
+  ✔ maps implementer: fix failing tests to implementer (not verifier) (0.302458ms)
+  ✔ maps code reviewer to reviewer (0.077292ms)
+  ✔ maps adversary attack to adversary (0.033916ms)
+  ✔ maps qa run to verifier (0.061875ms)
+✔ canonicalRole (0.865917ms)
+▶ mergeGuardVerdict
+  ✔ blocks git push origin main (0.648167ms)
+  ✔ blocks git push origin HEAD:main (0.161167ms)
+  ✔ blocks gh pr merge (0.037667ms)
+  ✔ blocks gh api repos/.../merge (0.055042ms)
+  ✔ allows git push origin feature/x (0.043ms)
+  ✔ allows git push --dry-run origin feature/x (0.061583ms)
+✔ mergeGuardVerdict (1.151125ms)
+▶ plugin smoke import
+  ✔ default export exposes register (79.456708ms)
+✔ plugin smoke import (80.273125ms)
+ℹ tests 11
+ℹ suites 3
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 140.580583

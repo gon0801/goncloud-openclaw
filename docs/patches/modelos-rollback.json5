@@ -1,0 +1,9 @@
+{ agents: { entries: {
+  implementer: { model: { primary: "openai/gpt-5.5", fallbacks: ["openai/gpt-5.6-sol", "xai/grok-4.6"] } },
+  reviewer:    { model: { primary: "openai/gpt-5.5-pro", fallbacks: ["openai/gpt-5.5", "openai/gpt-5.6-sol"] } },
+  adversary:   { model: { primary: "openai/gpt-5.5-pro", fallbacks: ["openai/gpt-5.5", "openai/gpt-5.6-sol"] } },
+  verifier:    { model: { primary: "openai/gpt-5.6-luna", fallbacks: ["openai/gpt-5.6-sol", "xai/grok-4.6"] } },
+  ingenieria:  { model: { primary: "openai/gpt-5.3-codex-spark", fallbacks: ["deepseek/deepseek-v4-flash", "openai/gpt-5.6-sol"] } },
+  main:        { model: { primary: "deepseek/deepseek-v4-flash", fallbacks: ["openai/gpt-5.6-sol", "kimi/k3", "zai/glm-5.3", "xai/grok-4.6", "deepseek/deepseek-v4-pro"] } },
+  operaciones: { model: { primary: "zai/glm-5.3", fallbacks: ["deepseek/deepseek-v4-flash", "openai/gpt-5.6-sol"] } },
+} } }
