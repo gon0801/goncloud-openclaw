@@ -34,7 +34,7 @@ El brief asumia PATH minimo `/usr/bin:/bin:/usr/sbin:/sbin`. Eso **ya no es el e
 Wrapper Edge headless con stderr silenciado. Evidencia local:
 
 ```text
-SHOT_OK /tmp/openclaw-shot-ok.png 2728 800x600
+SHOT_OK /tmp/openclaw-shot-ok.png 4255 1280x720
 ```
 
 (Correr de nuevo: `scripts/mac/shot.sh /tmp/openclaw-shot-ok.png about:blank`.)

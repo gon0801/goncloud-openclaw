@@ -1,21 +1,53 @@
-=== modelos-fase1 dry-run ===
+=== modelos-fase1 dry-run (post-fix) ===
 Dry run failed: model reference validation failed.
 - Cannot set model reference "<configured model reference>" at agents.entries.implementer.model.primary: Unable to resolve authored model reference. Run openclaw models list to list available models.
 - Cannot set model reference "<configured model reference>" at agents.entries.implementer.model.fallbacks.0: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.implementer.model.fallbacks.1: Unable to resolve authored model reference. Run openclaw models list to list available models.
 - Cannot set model reference "<configured model reference>" at agents.entries.reviewer.model.primary: Unable to resolve authored model reference. Run openclaw models list to list available models.
 - Cannot set model reference "<configured model reference>" at agents.entries.reviewer.model.fallbacks.0: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.reviewer.model.fallbacks.1: Unable to resolve authored model reference. Run openclaw models list to list available models.
 - Cannot set model reference "<configured model reference>" at agents.entries.adversary.model.primary: Unable to resolve authored model reference. Run openclaw models list to list available models.
 - Cannot set model reference "<configured model reference>" at agents.entries.adversary.model.fallbacks.0: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.adversary.model.fallbacks.1: Unable to resolve authored model reference. Run openclaw models list to list available models.
 - Cannot set model reference "<configured model reference>" at agents.entries.verifier.model.primary: Unable to resolve authored model reference. Run openclaw models list to list available models.
 - Cannot set model reference "<configured model reference>" at agents.entries.verifier.model.fallbacks.0: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.verifier.model.fallbacks.1: Unable to resolve authored model reference. Run openclaw models list to list available models.
 - Cannot set model reference "<configured model reference>" at agents.entries.ingenieria.model.primary: Unable to resolve authored model reference. Run openclaw models list to list available models.
 - Cannot set model reference "<configured model reference>" at agents.entries.ingenieria.model.fallbacks.0: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.ingenieria.model.fallbacks.2: Unable to resolve authored model reference. Run openclaw models list to list available models.
 EXIT:1
-=== modelos-fase2-main dry-run ===
+=== modelos-fase2-main-operaciones dry-run ===
 Dry run failed: model reference validation failed.
 - Cannot set model reference "<configured model reference>" at agents.entries.main.model.primary: Unable to resolve authored model reference. Run openclaw models list to list available models.
 - Cannot set model reference "<configured model reference>" at agents.entries.main.model.fallbacks.0: Unable to resolve authored model reference. Run openclaw models list to list available models.
 - Cannot set model reference "<configured model reference>" at agents.entries.main.model.fallbacks.1: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.operaciones.model.primary: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.operaciones.model.fallbacks.0: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.operaciones.model.fallbacks.1: Unable to resolve authored model reference. Run openclaw models list to list available models.
+EXIT:1
+=== modelos-fase3-anthropic dry-run ===
+Dry run failed: model reference validation failed.
+- Cannot set model reference "<configured model reference>" at agents.entries.main.model.primary: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.main.model.fallbacks.0: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.main.model.fallbacks.1: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.operaciones.model.primary: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.operaciones.model.fallbacks.0: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.operaciones.model.fallbacks.1: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.implementer.model.primary: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.implementer.model.fallbacks.0: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.implementer.model.fallbacks.1: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.ingenieria.model.primary: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.ingenieria.model.fallbacks.0: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.ingenieria.model.fallbacks.2: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.verifier.model.primary: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.verifier.model.fallbacks.0: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.verifier.model.fallbacks.1: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.reviewer.model.primary: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.reviewer.model.fallbacks.0: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.reviewer.model.fallbacks.1: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.adversary.model.primary: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.adversary.model.fallbacks.0: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.adversary.model.fallbacks.1: Unable to resolve authored model reference. Run openclaw models list to list available models.
 EXIT:1
 === modelos-rollback dry-run ===
 Dry run failed: model reference validation failed.
@@ -24,17 +56,8 @@ Dry run failed: model reference validation failed.
 - Cannot set model reference "<configured model reference>" at agents.entries.main.model.fallbacks.2: Unable to resolve authored model reference. Run openclaw models list to list available models.
 - Cannot set model reference "<configured model reference>" at agents.entries.main.model.fallbacks.4: Unable to resolve authored model reference. Run openclaw models list to list available models.
 - Cannot set model reference "<configured model reference>" at agents.entries.ingenieria.model.fallbacks.0: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.operaciones.model.primary: Unable to resolve authored model reference. Run openclaw models list to list available models.
+- Cannot set model reference "<configured model reference>" at agents.entries.operaciones.model.fallbacks.0: Unable to resolve authored model reference. Run openclaw models list to list available models.
 EXIT:1
 
-NOTE: dry-run from Mac remote CLI failed model reference resolution (models catalog not visible remotely). Patches match brief; lead should dry-run on gateway host or when remote models list is complete.
-=== models list (Mac remote, truncated) ===
-Model                                      Input      Ctx         Local Auth  Tags
-openai/gpt-5.6-sol                         -          -           no    yes   default
-openai/gpt-5.3-codex-spark                 -          -           no    yes
-openai/gpt-5.4-pro                         -          -           no    yes
-openai/gpt-5.5                             -          -           no    yes
-openai/gpt-5.5-pro                         -          -           no    yes
-openai/gpt-5.6-luna                        -          -           no    yes
-openai/gpt-5.6-terra                       -          -           no    yes
-openai/gpt-6-astra                         -          -           no    yes
-Remote catalog shows OpenAI only. zai/kimi/deepseek resolve on the Windows gateway config (agents.defaults.models in openclaw.json snapshot) but fail validation via this remote CLI.
+NOTE: Mac remote models list is OpenAI-only. Dry-run validation fails for zai/kimi/deepseek/anthropic refs. Lead must dry-run on gateway host.
