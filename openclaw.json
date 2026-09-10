@@ -78,7 +78,8 @@
         "config": {}
       },
       "anthropic": {
-        "config": {}
+        "config": {},
+        "enabled": true
       },
       "azure-speech": {
         "config": {}
@@ -255,6 +256,7 @@
           "primary": "zai/glm-5.3",
           "fallbacks": [
             "deepseek/deepseek-v4-flash",
+            "kimi/k3",
             "xai/grok-4.6",
             "anthropic/claude-sonnet-5"
           ]
@@ -267,6 +269,7 @@
           "primary": "zai/glm-5.3",
           "fallbacks": [
             "deepseek/deepseek-v4-flash",
+            "kimi/k3",
             "xai/grok-4.6",
             "anthropic/claude-sonnet-5"
           ]
@@ -286,6 +289,7 @@
           "fallbacks": [
             "zai/glm-5.3",
             "deepseek/deepseek-v4-flash",
+            "kimi/k3",
             "anthropic/claude-sonnet-5"
           ]
         },
@@ -315,6 +319,7 @@
           "primary": "zai/glm-5.3",
           "fallbacks": [
             "deepseek/deepseek-v4-flash",
+            "kimi/k3",
             "xai/grok-4.6",
             "anthropic/claude-sonnet-5"
           ]
@@ -335,10 +340,11 @@
           "emoji": "🔍"
         },
         "model": {
-          "primary": "xai/grok-4.6",
+          "primary": "kimi/k3",
           "fallbacks": [
             "deepseek/deepseek-v4-flash",
             "zai/glm-5.3",
+            "xai/grok-4.6",
             "anthropic/claude-opus-5"
           ]
         },
@@ -360,6 +366,7 @@
         "model": {
           "primary": "deepseek/deepseek-v4-flash",
           "fallbacks": [
+            "kimi/k3",
             "zai/glm-5.3",
             "xai/grok-4.6",
             "anthropic/claude-opus-5"
@@ -384,6 +391,7 @@
           "primary": "deepseek/deepseek-v4-flash",
           "fallbacks": [
             "zai/glm-5.3",
+            "kimi/k3",
             "xai/grok-4.6",
             "anthropic/claude-sonnet-5"
           ]
@@ -487,6 +495,18 @@
         ],
         "baseUrl": "https://api.deepseek.com",
         "api": "openai-completions"
+      },
+      "kimi": {
+        "models": [
+          {
+            "id": "k3",
+            "name": "Kimi K3",
+            "api": "anthropic-messages",
+            "baseUrl": "https://api.kimi.com/coding/v1"
+          }
+        ],
+        "baseUrl": "https://api.kimi.com/coding/v1",
+        "api": "anthropic-messages"
       }
     }
   },
@@ -639,7 +659,7 @@
     }
   },
   "wizard": {
-    "lastRunAt": "2026-09-09T19:49:07.249Z",
+    "lastRunAt": "2026-09-10T17:12:04.665Z",
     "lastRunVersion": "2026.9.3",
     "lastRunCommand": "doctor",
     "lastRunMode": "local"
