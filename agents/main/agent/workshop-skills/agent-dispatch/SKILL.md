@@ -12,12 +12,12 @@ Route work to this Gateway's agents and collect complete results. Main orchestra
 1. Dispatch to a configured agent by id: `sessions_send agentId=<id>`. A configured agent always runs its own configured model.
    - Completion: the send is accepted.
 
-2. If it fails with `All models failed (n): ... in cooldown` / `subscription usage limit`, the agent's model list is fixed — retrying or waiting will not help. Re-dispatch as a subagent with an explicit working model: `sessions_spawn model=<provider/model> ...` (e.g. `deepseek/deepseek-v4-pro`, `xai/grok-4.6`).
+2. If it fails with `All models failed (n): ... in cooldown` / `subscription usage limit`, the agent's model list is fixed — retrying or waiting will not help. Re-dispatch as a subagent with an explicit working model: `sessions_spawn model=<provider/model> ...`, naming a model registered in `models.providers` (e.g. `xai/grok-4.6`; register it first with the `openclaw-config-patch` skill if it is missing).
    - Completion: the spawn is accepted (`modelApplied: true`).
 
 3. Wait for the accepted completion mode: announced children → `sessions_yield`; collector runs → `agents_wait`. Never busy-poll.
 
-4. Read the FULL result from the child session. Completion/settle events can truncate the text (`display-cap`); fetch the complete report with `sessions_history sessionKey=<childSessionKey>` (the key returned by `sessions_spawn`).
+4. Read the FULL result. A completion/settle event and the inline reply of a `sessions_send` can both truncate the text (`display-cap`) — a report ending mid-sentence is truncated, not complete. Fetch the whole one with `sessions_history sessionKey=<childSessionKey>` (the key returned by `sessions_spawn`, or the key the send targeted).
    - Completion: you have the child's complete final text.
 
 5. Consolidate across children and report only the synthesized result.
