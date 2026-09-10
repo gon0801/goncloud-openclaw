@@ -19,7 +19,9 @@ from urllib.parse import parse_qs
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--log", required=True)
-    ap.add_argument("--mode", default="ok", choices=["ok", "fail-second", "fail-third"])
+    ap.add_argument("--mode", default="ok",
+                    choices=["ok", "fail-second", "fail-third", "tricky-false",
+                             "html-false", "ok-no-mid"])
     ap.add_argument("--first-id", type=int, default=100)
     ap.add_argument("--separators", default="compact", choices=["compact", "spaced"],
                     help="compact imita a Telegram real; spaced prueba tolerancia del parser")
@@ -64,14 +66,24 @@ def main() -> None:
             logf.flush()
             fail = (args.mode == "fail-second" and state["n"] == 2) or \
                    (args.mode == "fail-third" and state["n"] == 3)
-            if fail:
-                payload = {"ok": False, "error_code": 400, "description": "mock fail"}
+            ctype = "application/json"
+            if args.mode == "html-false":
+                # proxy/WAF HTML con el literal "ok":true adentro: caza parsers grep.
+                data = b'<html><body>proxy 502: expected "ok":true marker</body></html>'
+                ctype = "text/html"
             else:
-                state["mid"] += 1
-                payload = {"ok": True, "result": {"message_id": state["mid"]}}
-            data = json.dumps(payload, separators=sep).encode() if sep else json.dumps(payload).encode()
+                if fail or args.mode == "tricky-false":
+                    payload = {"ok": False, "error_code": 400,
+                               "description": "waf block id 7"}
+                elif args.mode == "ok-no-mid":
+                    payload = {"ok": True, "result": {}}
+                else:
+                    state["mid"] += 1
+                    payload = {"ok": True, "result": {"message_id": state["mid"]}}
+                data = json.dumps(payload, separators=sep).encode() if sep \
+                    else json.dumps(payload).encode()
             self.send_response(200)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)

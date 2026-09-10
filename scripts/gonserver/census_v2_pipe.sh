@@ -9,10 +9,10 @@
 set -euo pipefail
 umask 077
 D="${1:?falta D (YYYY-MM-DD)}"
+trap 'rm -rf "${T:-/tmp/cv2.NULL}"; echo CENSUS_V2_FAIL: fallo inesperado linea $LINENO — ABORTA con ALERTA, nunca silencio' ERR
+trap 'rm -rf "${T:-/tmp/cv2.NULL}"' EXIT
 T=/tmp/cv2.$$; mkdir -m 700 "$T"
-trap 'rm -rf "$T"; echo CENSUS_V2_FAIL: fallo inesperado linea $LINENO — ABORTA con ALERTA, nunca silencio' ERR
-trap 'rm -rf "$T"' EXIT
-awk -F: '$3=="EHV"{print $NF; exit}' /home/claw/.pgpass_claw_ro > "$T/p"
+awk -F: '$3=="EHV"{sub(/^([^:]*:){4}/,""); print; exit}' /home/claw/.pgpass_claw_ro > "$T/p"
 read -r PASS < "$T/p"
 rm -f "$T/p"
 [ -n "$PASS" ] || { echo CENSUS_V2_FAIL: pgpass sin entrada EHV; exit 1; }

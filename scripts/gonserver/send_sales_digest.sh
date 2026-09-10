@@ -19,20 +19,33 @@ set -a; source "$TG_ENV"; set +a
 MSG="$(tr -d '\r' < "$F")"
 [ -n "$MSG" ] || { echo "ERR_MSG_VACIO $F"; exit 1; }
 [ "${#MSG}" -le 4096 ] || { echo "ERR_MSG_LARGO ${#MSG} chars (max 4096), nada enviado"; exit 1; }
+# tg_parse: una linea "OK <mid>" o "FAIL <descripcion>" (parseo JSON real, no grep).
+tg_parse() { printf '%s' "$1" | python3 -c '
+import json,sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("FAIL respuesta no-JSON"); sys.exit(0)
+if d.get("ok") is True:
+    print("OK", d.get("result", {}).get("message_id", ""))
+else:
+    print("FAIL", str(d.get("description", "sin description")).replace("\n", " ")[:160])'; }
 ok=0; ids=""; n=0
-for CHAT in "$TELEGRAM_CHAT_ID" "$TELEGRAM_CHAT_ID_2"; do
+for CHAT_RAW in "$TELEGRAM_CHAT_ID" "$TELEGRAM_CHAT_ID_2"; do
   n=$((n+1))
-  R="$(curl -sS -X POST "$TG_SCHEME://$TG_API_HOST/bot${TELEGRAM_SALES_BOT_TOKEN}/sendMessage" \
+  CHAT="${CHAT_RAW//[[:space:]]/}"
+  R="$(curl -sS --connect-timeout 10 --max-time 60 -X POST "$TG_SCHEME://$TG_API_HOST/bot${TELEGRAM_SALES_BOT_TOKEN}/sendMessage" \
     --data-urlencode "chat_id=${CHAT}" \
     --data-urlencode "parse_mode=HTML" \
     --data-urlencode "text=${MSG}")" || R=""
-  if echo "$R" | grep -Eq '"ok":[[:space:]]*true'; then
-    MID="$(echo "$R" | grep -Eo '"message_id"[[:space:]]*:[[:space:]]*[0-9]+' | head -1 | grep -Eo '[0-9]+')"
-    ok=$((ok+1)); ids="$ids $MID"
-    echo "DIGEST_OK chat#$n mid=$MID"
-  else
-    echo "DIGEST_ERR chat#$n: $(echo "$R" | head -c 160)"
-  fi
+  PO="$(tg_parse "$R")"
+  case "$PO" in
+    "OK "|OK) echo "DIGEST_ERR chat#$n: ok:true sin message_id" ;;
+    OK\ *)
+      MID="${PO#OK }"; ok=$((ok+1)); ids="$ids $MID"
+      echo "DIGEST_OK chat#$n mid=$MID" ;;
+    *) echo "DIGEST_ERR chat#$n: ${PO#FAIL }" ;;
+  esac
 done
 if [ "$ok" -eq 2 ]; then echo "DIGEST_OK2 ids:$ids"; exit 0; fi
 echo "DIGEST_PARCIAL ok:$ok/2 (reenviar completo o marcar a mano)"; exit 1

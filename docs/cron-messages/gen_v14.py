@@ -56,6 +56,10 @@ EXTRA_11H = [
 ]
 
 
+def fail(msg):
+    sys.exit(f"GEN_V14_ABORT: {msg}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", required=True)
@@ -65,8 +69,10 @@ def main() -> None:
     d = json.load(open(args.src))
     j = d.get("job", d)
     if j.get("id") != JOBS[args.job]:
-        sys.exit(f"src no es el job {args.job}: id={j.get('id')}")
+        fail(f"src no es el job {args.job}: id={j.get('id')}")
     m = (j.get("payload") or {}).get("message", "")
+    if not m:
+        fail("message vacio en src")
     orig_len = len(m)
     repls = list(COMMON)
     if args.job in ("7h", "11h"):
@@ -78,18 +84,25 @@ def main() -> None:
     for old, new in repls:
         n = m.count(old)
         if n != 1:
-            sys.exit(f"ancla {old[:60]!r} aparece {n} veces (esperado 1); ABORTO")
+            fail(f"ancla {old[:60]!r} aparece {n} veces (esperado 1)")
         m = m.replace(old, new)
     emdash = m.count("—")
     m = m.replace("—", "-")
-    assert "\n" not in m, "message con salto de linea"
+    if "\n" in m:
+        fail("message con salto de linea")
     bad = sorted({c for c in m if ord(c) > 127})
-    assert not bad, f"chars no-ASCII: {bad}"
-    assert "v14 single-line" in m, "falta marker v14"
-    assert len(m) >= 0.95 * orig_len, f"posible truncado: {len(m)} < 95% de {orig_len}"
+    if bad:
+        fail(f"chars no-ASCII: {bad}")
+    if "v14 single-line" not in m:
+        fail("falta marker v14")
+    expected = orig_len + sum(len(new) - len(old) for old, new in repls)
+    if len(m) != expected:
+        fail(f"longitud {len(m)} != esperada {expected} (orig {orig_len})")
     for _, new in repls:
-        assert m.count(new) == 1, f"texto nuevo no-1x: {new[:60]!r}"
-    assert m.count("—") == 0
+        if m.count(new) != 1:
+            fail(f"texto nuevo no-1x: {new[:60]!r}")
+    if m.count("—") != 0:
+        fail("quedo emdash")
     open(args.out, "w").write(m)
     print(f"{args.job}: orig={orig_len} nuevo={len(m)} delta=+{len(m)-orig_len} "
           f"emdash={emdash} anclas={len(repls)} OK -> {args.out}")
