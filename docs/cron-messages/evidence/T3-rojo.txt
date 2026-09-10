@@ -1,0 +1,10 @@
+### T3-rojo (b) 17:2xZ: v4b root planta (RC=0, 4 archivos root), claw v4b -> RC=1:
+tee: /tmp/.cv2q1: Permission denied
+CENSUS_V2_FAIL Q1: fallo docker/psql — ABORTA con ALERTA, nunca silencio
+### b-verde: v4c root RC=0 OK; claw RC=0:
+ Q1_OK n=0
+ Q2_OK n=6
+ Q3_OK n=17
+ ALERTA_ML_FUERA_VENTANA n=0
+CENSUS_V2_OK 4 queries ejecutadas, sentinels verificados en bash
+### limpieza: rm root .cv2q*, restaurados los 4 de claw (17:01Z), cv2.* solo cv2.sh preexistente

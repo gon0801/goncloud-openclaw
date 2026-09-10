@@ -1,0 +1,12 @@
+{
+  "ok": false,
+  "error": {
+    "type": "cli_error",
+    "message": "Automation not found: 74e9a2e7-076a-49f0-9245-96300ab049ac. Run `openclaw cron list` to see recent automation ids."
+  }
+}
+[openclaw] Could not start the CLI.
+[openclaw] Reason: Automation not found: 74e9a2e7-076a-49f0-9245-96300ab049ac. Run `openclaw cron list` to see recent automation ids.
+[openclaw] Debug: set OPENCLAW_DEBUG=1 to include the stack trace.
+[openclaw] Try: openclaw doctor
+[openclaw] Help: openclaw --help
