@@ -1,0 +1,13 @@
+1. ALTA: T3 sale 0 con `[ FAIL = 1 ]` sin fijar que el unico FAIL sea el rojo-b; si el rojo no se reproduce y otro caso falla, falso verde.
+2. ALTA: b-verde no checa RCR ni que root haya dejado `.cv2q*`; si el run root no planta archivos, claw corre en limpio y el fix no se prueba.
+3. MEDIA: cleanup solo borra `.cv2q*` de root y luego restaura; si al inicio no habia cache, el test deja `.cv2q*` de claw (fecha D) y el cron puede leerlos.
+4. MEDIA: caso c `grep '\$('` tambien cuenta `$((`; aritmetica en v4c tumba c, FAIL>=2 y T3 nunca pasa (falso rojo).
+5. MEDIA: `LEFT=$(ls | wc -l)` vs `[ "$LEFT" = 0 ]` — padding de `wc` o glob raro hace falso rojo en a y b-verde.
+6. MEDIA: b-rojo marca `bad` si hay `Permission denied|CENSUS_V2_FAIL` y rc!=0, sin checar dueno root de `.cv2q*`; un fallo ajeno (runuser, permisos del archivo) cuenta como bug reproducido.
+7. MEDIA: gen_v14 usa `assert` para ASCII/nl/v14/longitud/1x; con `python -O` se saltan y escribe el archivo igual con exit 0.
+8. MEDIA: b-verde solo exige `CENSUS_V2_OK`+rc 0+sin `cv2.*`, no los 5 sentinels del caso a; un OK temprano o parcial pinta verde.
+9. BAJA: el 95% de longitud no discrimina truncado: todos los reemplazos alargan, el assert casi siempre pasa.
+10. BAJA: T3 no exige root (`id -u`); sin root, `runuser`/`chown` fallan opaco.
+11. BAJA: comentario "4 sentinels" vs 5 strings; `runuser -u claw -- true` no se checa; resto `cv2.*` no incluye `.cv2q*`.
+12. VERIFICAR: si el job 20h trae las 5 anclas COMMON (si no, gen aborta siempre en 20h).
+13. VERIFICAR: si `ALERTA_ML_FUERA_VENTANA` sale siempre post 13:35Z; si solo en alerta real, caso a es un falso rojo fuera de esa condicion.

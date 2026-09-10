@@ -1,0 +1,21 @@
+A) `send_pers_photo.sh`
+
+1. ALTA: `echo '{}' > "$JSON"` corre antes del flock; dos arranques en paralelo pueden truncar el JSON ya escrito y reenviar fotos.
+2. ALTA: el token va en la URL de curl; queda en `ps`, sudo/audit y similares.
+3. MEDIA: el flock se sostiene durante 3 curls sin `--max-time`; otro pedido espera 20s y cae en `ERR_NO_LOCK`.
+4. MEDIA: `ERR_CHAT` imprime 120 chars de la respuesta; puede filtrar chat id (el header dice que nunca).
+5. MEDIA: si curl da ok pero no se parsea `message_id`, no hay marca y el retry duplica esa foto.
+6. MEDIA: `ok3=len(merged)==3` no exige claves `1,2,3`; basura en `partial` tumba el write (`ERR_JSON_WRITE`) o deja `ok3` mal.
+7. BAJA: sin umask; JSON/tmp/lock salen con permisos por defecto.
+8. BAJA: el `grep` del JSON de Telegram es fragil frente a un parser.
+
+B) census head-30
+
+9. ALTA: `sudo docker exec -e PGPASSWORD="$PASS"` deja la clave de `claw_ro` en la linea de comando.
+10. MEDIA: traps se registran despues de `mkdir`; si `mkdir` falla, sale sin `CENSUS_V2_FAIL` (silencio).
+11. MEDIA: `/tmp/cv2.$$` es predecible; `mkdir` sin `mktemp` permite DoS (precrear el dir) o carrera en `/tmp`.
+12. BAJA: `$LINENO` en el trap ERR de bash casi nunca es la linea que fallo.
+
+Confirmado en el recorte: no hay `$(` (solo `$$` y `${...}`); `umask 077`; tmp por PID; `PGPASSWORD` real por `-e`; trap ERR+EXIT; `gate()` definido con aborta-alerta.
+
+VERIFICAR: no hay llamadas a `gate()` en el head-30 (el SQL posterior no se reviso). VERIFICAR: si el password de pgpass trae `:`, awk `$NF` lo corta mal.

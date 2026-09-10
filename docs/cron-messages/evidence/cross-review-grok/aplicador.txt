@@ -1,0 +1,18 @@
+1. ALTA: `"$(cat txt)"` en `--message` recorta newlines finales y, si cat falla o el txt sale vacio, el edit igual corre y puede dejar el cron en blanco.
+2. ALTA: no es atomico por job: el edit ya muto antes del verify; assert fail no hace rollback; jobs previos del for quedan aplicados.
+3. ALTA: 20h son dos `cron edit` seguidos (message, luego timeout); si el segundo falla el job queda a medias (v14 si, timeout no).
+4. ALTA: el post-verify nunca compara `payload.message` contra el `.v14.txt`; no prueba que el CLI persistio lo generado.
+5. ALTA: B2 con `2>/dev/null` trata red/auth/CLI caido como "job ya no existe" y se salta el cambio.
+6. ALTA: B2 edita y no post-verifica revision, ASCII, ancla ni que el replace haya quedado.
+7. ALTA: `declare -A` pide bash 4+; shebang `/bin/bash` en macOS 3.2 revienta antes de tocar nada.
+8. ALTA: guardas solo al arranque, no por job; el for puede cruzar 13:40Z o 16:55Z a mitad de corrida.
+9. MEDIA: ventana 20h cierra a 02:25Z pero el timeout que se setea es 3600s; puedes editar mientras el job sigue vivo.
+10. MEDIA: "despues de 13:35Z del 10-sep" no se chequea; solo HH:MM UTC, cualquier dia.
+11. MEDIA: "ASCII" solo cuenta el char `Â`; no valida ASCII real ni otros mojibake.
+12. MEDIA: `timeout-seconds 3600` no se lee del JSON post; configRevision solo mira que cambio, no el campo.
+13. MEDIA: `len >= 0.95 * message_viejo` no vs el generado: v14 mas corto aborta, reemplazo largo basura pasa.
+14. MEDIA: no `mkdir -p backup/` ni lock; dos corridas o dir ausente rompen el `>` del backup.
+15. BAJA: `exp2x` por prefix `eeae` del UUID, no por `job==20h`; UUID nuevo = conteo mal.
+16. BAJA: ancla `tool message` es substring generico; TS unico por corrida pisa backups si relanzas el mismo segundo.
+
+VERIFICAR: si `cron edit --timeout-seconds` sin `--message` es parche o replace (el segundo edit de 20h podria borrar el v14). Schema real de `cron get --json` (`payload.message`, `configRevision` string). Si openclaw acepta `--message-file` / stdin (argv + ARG_MAX). Contrato de `gen_v14.py` (out no vacio, anclas). Hueco 13:35-13:40Z intencional. Destino Linux vs `/bin/bash` 3.2.
