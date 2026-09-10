@@ -1,0 +1,26 @@
+### T4 caso a: mock ok x3 (esperado: ENVIADA_OK3 exit 0, ok3:true, json 600)
+PASS: ENVIADA_OK3 exit 0, ok3:true, 3 POST, json 600
+### T4 caso a2: respuesta con espacios (esperado: ENVIADA_OK3, 3 POST)
+PASS: ENVIADA_OK3 con espacios, 3 POST
+### T4 caso b: rerun orden propia (esperado: 2da YA_ENVIADA, 0 POST)
+PASS: YA_ENVIADA sin POST
+### T4 caso c: falla el 3ro -> parcial {1,2}; rerun manda solo #3
+PASS: ERR_PARCIAL exit 1, partial {1,2}
+PASS: reintento: 1 POST a #3, ENVIADA_OK3, ok3 con 3 mids
+### T4 caso f: partial con basura (esperado: se ignora, ENVIADA_OK3 con ok3:true)
+PASS: basura ignorada, 3 mids acumulados
+### T4 caso g: ok:false con description (esperado: ERR_PARCIAL, solo description)
+PASS: PARCIAL con description, sin volcar JSON
+### T4 caso h: HTML no-JSON (esperado: ERR_PARCIAL, no falso OK3)
+PASS: HTML no cuenta como exito
+### T4 caso i: ok:true sin message_id (esperado: ERR_PARCIAL con aviso explicito)
+PASS: ok sin mid no se marca
+### T4 caso j: chat ids con espacios/CR en env (esperado: se limpian)
+PASS: chat ids limpios
+### T4 caso d: json no escribible (v2 esperado: ERR_JSON_WRITE exit 2, 3 POST)
+PASS: ERR_JSON_WRITE exit 2, 3 fotos enviadas, sin ENVIADA_OK3
+### T4 caso e: captions con < y @ iniciales (esperado: caption intacto)
+PASS: caption intacto: [<b>x</b> pedido]
+PASS: caption intacto: [@x pedido]
+### T4 resultado: PASS=13 FAIL=0
+EXIT=0

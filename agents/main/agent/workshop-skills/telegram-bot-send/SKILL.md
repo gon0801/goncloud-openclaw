@@ -28,7 +28,7 @@ Variables (reference by name; never print their values):
    source /home/claw/.secrets/telegram-sales.env
    set +a
    MSG='<text; HTML tags allowed>'
-   for CHAT in "$TELEGRAM_CHAT_ID_2" "$TELEGRAM_CHAT_ID_CUSTOM"; do
+   for CHAT in "$TELEGRAM_CHAT_ID" "$TELEGRAM_CHAT_ID_2"; do
      curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_SALES_BOT_TOKEN}/sendMessage" \
        --data-urlencode "chat_id=${CHAT}" \
        --data-urlencode "parse_mode=HTML" \
@@ -36,17 +36,17 @@ Variables (reference by name; never print their values):
      echo ""
    done
    ```
-   Use `--data-urlencode` so quotes/newlines/UTF-8 inside MSG are safe.
+   Use `--data-urlencode` so quotes/newlines/UTF-8 inside MSG are safe. Digest loop is Gon + Isabel only — never Wide (see routing rules below).
 
    sendPhoto (personalizada with image) is multipart only — same loop, different flags:
    ```bash
    curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_SALES_BOT_TOKEN}/sendPhoto" \
-     -F "chat_id=${CHAT}" \
+     --form-string "chat_id=${CHAT}" \
      -F "photo=@/path/to/preview.jpg" \
-     -F "caption=${MSG}" \
-     -F "parse_mode=HTML"
+     --form-string "caption=${MSG}" \
+     --form-string "parse_mode=HTML"
    ```
-   Never mix `-F` (multipart) with `--data-urlencode` (urlencoded) in one curl call — it is rejected and returns an empty response; use `-F` for photo AND caption, and `-sS` (not `-s`) so curl errors surface instead of being silenced. The photo is the order's personalization-illustrative preview (from the order gestalt), never a product/stock photo; if it is missing, stop and report rather than inventing one.
+   Never mix `-F` (multipart) with `--data-urlencode` (urlencoded) in one curl call — it is rejected and returns an empty response; use `-F` only for the photo file and `--form-string` for chat_id/caption/parse_mode, and `-sS` (not `-s`) so curl errors surface instead of being silenced. A caption starting with `<` or `@` under plain `-F` is read as a file reference (send fails or caption arrives empty) — `--form-string` sends it literally. The photo is the order's personalization-illustrative preview (from the order gestalt), never a product/stock photo; if it is missing, stop and report rather than inventing one.
 
 4. Verify each delivery: the response JSON must contain `"ok":true` and a `message_id` per chat. Report those as proof. If instead you see `"error_code":404`, the token variable did not expand (quoting) or the env file is wrong. Diagnose cleanly with `getMe`:
    `curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_SALES_BOT_TOKEN}/getMe"` must return `"ok":true` with the bot username; a 404 means the token never reached the URL.
@@ -59,4 +59,4 @@ Variables (reference by name; never print their values):
 
 - Never print the token or chat IDs into chat, logs, prompts, or anywhere; only the env var names. Scripts contain variable names, never values, because they `source` the env file.
 - Keep `parse_mode=HTML` when the text carries formatting; `--data-urlencode` already protects the payload.
-- Reusable send script kept on the server: `/home/claw/send_sales_digest.sh` (sources env + loops recipients) — adapt MSG per run instead of rewriting from scratch.
+- Digests go ONLY through the server helper `/home/claw/send_sales_digest.sh <archivo_utf8>` (author UTF-8, scp to `/tmp/`, helper sends to Gon + Isabel, requires `ok:true` on both, exit 1 otherwise) — never hand-rolled curl for a digest, never to Wide.

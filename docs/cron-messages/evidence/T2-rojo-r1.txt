@@ -1,0 +1,29 @@
+### T2 caso 1: destinos + ok:true en ambos (esperado: 11111,22222,DIGEST_OK2,exit 0)
+PASS: destinos Gon+Isabel, DIGEST_OK2, exit 0
+### T2 caso 2: mock ok:false en el 2do (esperado: 2 POST 11111 22222, DIGEST_PARCIAL, exit 1)
+PASS: DIGEST_PARCIAL exit 1, ambos chats intentados en orden
+### T2 caso 3: mensaje 4097 chars (esperado: ERR_MSG_LARGO, 0 POST, exit != 0)
+PASS: ERR_MSG_LARGO sin POST, exit 1
+### T2 caso 4: CRLF (esperado: mock recibe sin CR)
+PASS: sin CR en destino, DIGEST_OK2
+### T2 caso 5: archivo vacio (esperado: ERR_MSG_VACIO, 0 POST, exit != 0)
+PASS: ERR_MSG_VACIO sin POST, exit 1
+### T2 caso 6: respuesta con espacios (esperado: DIGEST_OK2, parser tolerante)
+PASS: DIGEST_OK2 con espacios
+### T2 caso 7: ok:false con description (esperado: PARCIAL exit 1, solo description en salida)
+FAIL: rc=1 out=[DIGEST_ERR chat#1: {"ok":false,"error_code":400,"description":"waf block id 7"}
+DIGEST_ERR chat#2: {"ok":false,"error_code":400,"description":"waf block id 7"}]
+### T2 caso 8: HTML no-JSON con 'ok:true' adentro (esperado: PARCIAL exit 1, no falso OK)
+FAIL: rc=0 out=[DIGEST_OK chat#1 mid=
+DIGEST_OK chat#2 mid=
+DIGEST_OK2 ids:  ]
+### T2 caso 9: ok:true sin message_id (esperado: PARCIAL exit 1, sin DIGEST_OK2)
+FAIL: rc=0 out=[DIGEST_OK chat#1 mid=
+DIGEST_OK chat#2 mid=
+DIGEST_OK2 ids:  ]
+### T2 caso 10: chat ids con espacios/CR en env (esperado: se limpian, DIGEST_OK2)
+FAIL: ids=[ 11111  22222] out=[DIGEST_OK chat#1 mid=100
+DIGEST_OK chat#2 mid=101
+DIGEST_OK2 ids: 100 101]
+### T2 resultado: PASS=6 FAIL=4
+EXIT=1
