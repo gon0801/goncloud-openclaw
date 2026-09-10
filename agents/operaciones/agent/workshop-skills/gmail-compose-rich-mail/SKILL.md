@@ -19,7 +19,7 @@ Compose and send rich HTML mail in Gmail with browser profile `claw`, target hos
    to.dispatchEvent(new Event('input', {bubbles: true}));
    to.focus();
    ```
-   then `act` `press` key `Enter`. A synthetic `KeyboardEvent` does NOT commit the chip; only the real key event does.
+   then `act` `press` key `Enter`. A synthetic `KeyboardEvent` does NOT commit the chip; only the real key event does. Blurring the To input does NOT commit it either (chips stay empty) — do not substitute blur for the press. If the `press` call fails once with `Unknown key: "***"` (a serialization artifact), retry the identical call — the second attempt delivers the real Enter.
 4. Subject: set it with the same native setter plus an `input` event. Re-read the subject value before sending — recipient text can end up appended to the subject during this flow; rewrite it with the setter if contaminated.
 5. Body: inject the HTML through a TrustedTypes policy and fire an input event:
    ```js
@@ -29,6 +29,7 @@ Compose and send rich HTML mail in Gmail with browser profile `claw`, target hos
    body.innerHTML = policy.createHTML(html);
    body.dispatchEvent(new InputEvent('input', {bubbles: true}));
    ```
+   For bodies larger than ~8 KB, inject in two parts — first `innerHTML` with part 1, then `insertAdjacentHTML('beforeend', policy.createHTML(part2))` — reusing a TrustedTypes policy per part (verified with a 14 KB digest; a single 4-5 KB injection also works in one shot).
 6. Send by clicking the button whose `aria-label` starts with `Enviar`:
    ```js
    [...dlg.querySelectorAll('div[role="button"]')]
