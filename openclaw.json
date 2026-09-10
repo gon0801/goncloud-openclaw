@@ -202,7 +202,6 @@
         "xai/grok-4.6": {
           "alias": "Grok"
         },
-        "deepseek/deepseek-v4-pro": {},
         "deepseek/deepseek-v4-flash": {
           "alias": "DeepSeek-Flash"
         },
@@ -211,11 +210,10 @@
       "model": {
         "primary": "deepseek/deepseek-v4-flash",
         "fallbacks": [
-          "openai/gpt-5.6-sol",
-          "kimi/k3",
           "zai/glm-5.3",
+          "kimi/k3",
           "xai/grok-4.6",
-          "deepseek/deepseek-v4-pro"
+          "anthropic/claude-sonnet-5"
         ]
       },
       "systemAgent": {
@@ -253,15 +251,18 @@
           "deepseek/deepseek-v4-pro": {}
         },
         "model": {
-          "primary": "zai/glm-5.3",
+          "primary": "deepseek/deepseek-v4-flash",
           "fallbacks": [
-            "deepseek/deepseek-v4-flash",
+            "zai/glm-5.3",
             "kimi/k3",
             "xai/grok-4.6",
             "anthropic/claude-sonnet-5"
           ]
         },
-        "workspace": "C:\\Users\\ehven\\.openclaw\\workspace"
+        "workspace": "C:\\Users\\ehven\\.openclaw\\workspace",
+        "heartbeat": {
+          "every": "60m"
+        }
       },
       "operaciones": {
         "name": "operaciones",
@@ -487,10 +488,6 @@
           {
             "id": "deepseek-v4-flash",
             "name": "DeepSeek V4 Flash"
-          },
-          {
-            "id": "deepseek-v4-pro",
-            "name": "DeepSeek V4 Pro"
           }
         ],
         "baseUrl": "https://api.deepseek.com",
