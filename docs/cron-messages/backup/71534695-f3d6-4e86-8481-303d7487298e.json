@@ -1,0 +1,35 @@
+{
+  "id": "71534695-f3d6-4e86-8481-303d7487298e",
+  "agentId": "operaciones",
+  "name": "verif-7h-v12-estreno",
+  "enabled": true,
+  "deleteAfterRun": true,
+  "createdAtMs": 1789018958165,
+  "schedule": {
+    "kind": "at",
+    "at": "2026-09-10T13:12:00.000Z"
+  },
+  "sessionTarget": "isolated",
+  "wakeMode": "now",
+  "payload": {
+    "kind": "agentTurn",
+    "message": "VERIFICACION ESTRENO v12 — corrida 7h jue 10-sep (07:00 CDMX / 09:00 EDT, job packing-extras-7h 76b279ba). (1) Revisar resultado: sessions_history de agent:operaciones:cron:76b279ba-1a21-4d74-9a56-41da9514559e. (2) ESPERADO: census v12 con sentinels Q1_OK/Q2_OK/Q3_OK + CENSUS_V2_OK; extras nuevos = 2 Amazon (114-1534882-5053008 S02193 FBM US y 701-7802844-9726666 S02194 Easy MX, deadline 10-sep, decode por client_order_ref) + 1 MELI (Gerardo 2000014954022641, NH-CAR-AZU-CEN-DOR, Envio = sin fecha de envio ML); dedup EXCLUYE todo lo ya reportado (digest recuperado 2026-09-10 + personalizadas-sent.json ok3: delia/Janeth/Iliana/Lidia — sin sendPhotos nuevos). Si hay extras Amazon: mail ehventasmx + TG Gon/Isabel formato v9. (3) Si fallo, aborto por sentinels, o silencio sin Qn_OK en 0 verificados: RECOVERY MANUAL per runbook v12 — census listo (bash /tmp/cv3.sh 2026-09-10 en gonserver o packing/tmp/census_v2_pipe.sh via scp), browser profile claw, helper /home/claw/packing/send_pers_photo.sh. (4) Si OK: verificar mail en Enviados + msg ids TG + scratch 76b279ba + HTMLs extras del dia. (5) Reportar a Claw (agent:main:main) con evidencia (msg ids / mail). No reenviar nada del baseline.",
+    "toolsAllow": [
+      "*"
+    ]
+  },
+  "delivery": {
+    "mode": "announce",
+    "channel": "last"
+  },
+  "scheduledToolPolicy": {
+    "version": 1,
+    "mode": "trusted"
+  },
+  "state": {
+    "nextRunAtMs": 1789045920000
+  },
+  "updatedAtMs": 1789018990866,
+  "configRevision": "sha256:hpPFODVnMrXl5r8rO7oKkrBctLkO-vpaX1cFjDVTBww",
+  "nextRunAtMs": 1789045920000
+}
