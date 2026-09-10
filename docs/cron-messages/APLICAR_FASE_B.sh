@@ -61,23 +61,24 @@ for job in 7h 11h 20h; do
   need_get "$id" "docs/cron-messages/backup/$id.$TS.post.json" || { echo "ABORTO: post-get $job fallo"; rollback "$id" "docs/cron-messages/backup/$id.$TS.json"; exit 1; }
   if ! python3 - "$id" "$job" "$TS" <<'PY'; then
 import json,sys
+def fail(msg):
+    print(f'VERIFY_FAIL: {msg}'); sys.exit(1)
 uid,job,ts=sys.argv[1],sys.argv[2],sys.argv[3]
 pre=json.load(open(f'docs/cron-messages/backup/{uid}.{ts}.json'))
 post=json.load(open(f'docs/cron-messages/backup/{uid}.{ts}.post.json'))
 want=open(f'docs/cron-messages/{job}.{ts}.v14.txt').read().rstrip('\n')
 m=post['payload']['message']
-assert m == want, 'message persistido != generado'
-assert all(ord(c) < 128 for c in m), 'no-ASCII'
-assert 'v14' in m.split('\n')[0], 'sin marker v14'
-assert post['configRevision']!=pre['configRevision'], 'configRevision no cambio'
-if job == '20h':
-    assert post['payload'].get('timeoutSeconds')==3600, 'timeout no quedo'
+if m != want: fail('message persistido != generado')
+if not all(ord(c) < 128 for c in m): fail('no-ASCII')
+if 'v14' not in m.split('\n')[0]: fail('sin marker v14')
+if post['configRevision']==pre['configRevision']: fail('configRevision no cambio')
+if job == '20h' and post['payload'].get('timeoutSeconds')!=3600: fail('timeout no quedo')
 for a in ['v14 single-line','CENSUS V2 v4c','div[role=option]','tr[role=row]',
           '/home/claw/send_sales_digest.sh']:
-    assert m.count(a)==1, f'{a}: {m.count(a)}x'
+    if m.count(a)!=1: fail(f'{a}: {m.count(a)}x')
 exp2x=1 if job=='20h' else 2  # +R7 y +GUARD solo en 7h/11h
-assert m.count('sessions_send agent:main:main')==exp2x, 'sessions_send count'
-assert m.count('tool message')==exp2x, 'tool message count'
+if m.count('sessions_send agent:main:main')!=exp2x: fail('sessions_send count')
+if m.count('tool message')!=exp2x: fail('tool message count')
 print(f'verify {job}: message exacto, ascii, rev {post["configRevision"][:24]}..., timeout ok')
 PY
     echo "VERIFY FALLO en $job"
@@ -97,15 +98,20 @@ if ! need_get "$RID" "docs/cron-messages/backup/$RID.$TS.json"; then
 else
   python3 - "$TS" <<'PY' || exit 1
 import json,sys
+def fail(msg):
+    print(f'B2_REGEN_FAIL: {msg}'); sys.exit(1)
 ts=sys.argv[1]
 d=json.load(open(f'docs/cron-messages/backup/74e9a2e7-076a-49f0-9245-96300ab049ac.{ts}.json'))
 m=d['payload']['message']
 a='sessions_history sessionKey=agent:operaciones:main limit=8'
-assert m.count(a)==1, 'ancla B2 != 1x'
+if m.count(a)!=1: fail('ancla B2 != 1x')
 m=m.replace(a,'sessions_history sessionKey=agent:main:main limit=8 (el 7h y el verif reportan ahi via sessions_send)')
-assert '\n' not in m
+n=m.count('—')
+m=m.replace('—','-')
+if '\n' in m: fail('salto de linea')
+if any(ord(c) > 127 for c in m): fail('no-ASCII tras sanear')
 open(f'docs/cron-messages/report-7h-estreno.B2.{ts}.txt','w').write(m)
-print('B2 regenerado OK, len',len(m))
+print(f'B2 regenerado OK, len {len(m)}, emdash saneados {n}')
 PY
   [ -s "docs/cron-messages/report-7h-estreno.B2.$TS.txt" ] || { echo "ABORTO: B2 vacio"; exit 1; }
   echo "-- edit $(date -u +%H:%M:%SZ)"
@@ -113,15 +119,17 @@ PY
   need_get "$RID" "docs/cron-messages/backup/$RID.$TS.post.json" || { echo "ABORTO: post-get report fallo"; rollback "$RID" "docs/cron-messages/backup/$RID.$TS.json"; exit 1; }
   if ! python3 - "$TS" <<'PY'; then
 import json,sys
+def fail(msg):
+    print(f'VERIFY_FAIL B2: {msg}'); sys.exit(1)
 ts=sys.argv[1]
 pre=json.load(open(f'docs/cron-messages/backup/74e9a2e7-076a-49f0-9245-96300ab049ac.{ts}.json'))
 post=json.load(open(f'docs/cron-messages/backup/74e9a2e7-076a-49f0-9245-96300ab049ac.{ts}.post.json'))
 want=open(f'docs/cron-messages/report-7h-estreno.B2.{ts}.txt').read().rstrip('\n')
 m=post['payload']['message']
-assert m == want, 'message persistido != generado'
-assert all(ord(c) < 128 for c in m), 'no-ASCII'
-assert post['configRevision']!=pre['configRevision'], 'configRevision no cambio'
-assert m.count('agent:main:main')==1, 'ancla B2 no quedo 1x'
+if m != want: fail('message persistido != generado')
+if not all(ord(c) < 128 for c in m): fail('no-ASCII')
+if post['configRevision']==pre['configRevision']: fail('configRevision no cambio')
+if m.count('agent:main:main')!=1: fail('ancla B2 no quedo 1x')
 print('verify B2 OK')
 PY
     echo "VERIFY FALLO en B2"
