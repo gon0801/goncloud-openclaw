@@ -10,3 +10,4 @@ ts	phase	decision	why	evidence	result
 2026-09-10T08:45:00Z	review-fix	canonicalRole word boundaries for fix/test/etc	harness-review recommendation; prefix no longer implementer	docs/patches/summa-gate-boundary-GREEN.txt	13/13 green
 2026-09-10T08:46:00Z	review-fix	rollback rechecked via gateway config.get parsed.agents.entries	address review minor about snapshot-only source	docs/patches/README.md	matches live gateway
 2026-09-10T09:00:00Z	FASE-B	ingenieria primary xai/grok-4.6; fase1+fase3 patches updated	brief FASE-B replaces M1 points 1-2	docs/patches/modelos-fase1.json5	prepared not applied
+2026-09-10T09:15:00Z	FASE-B	fase3 anthropic unlocked with fase1; apply on Windows; fase3 excludes main/ops	brief correction 07:50Z auth + 07:55Z Windows-only patch	docs/patches/README.md	docs aligned

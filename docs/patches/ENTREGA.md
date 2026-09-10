@@ -12,12 +12,11 @@
 
 ## Para el lead
 
-1. Aplicar M1 fase1 en el **gateway** (dry-run remote desde Mac falla resolucion de modelos). Ver `docs/patches/README.md`. Luego V1 pings.
-2. Aplicar fase2-main-operaciones solo despues del estreno.
-3. Fase3 anthropic solo cuando authStatus liste anthropic (setup-token lo corre David).
-4. N1.2 PATH: ya incluye homebrew; ampliar solo si hace falta; reinicio desconecta.
-5. N1.4 file-transfer approvals + paths locales para imagenes.
-6. Fuera de alcance: `openclaw doctor` (sessions_search DB), sessions_send announce, heartbeat 60 min.
+1. Aplicar en **Windows/gateway** (no Mac remota): fase1 + fase3 ya (Anthropic desbloqueado; no toca main/operaciones). Ver `docs/patches/README.md`. Luego V1 pings.
+2. Aplicar fase2-main-operaciones despues del estreno (incluye Anthropic en main/ops).
+3. N1.2 PATH: ya incluye homebrew; ampliar solo si hace falta; reinicio desconecta.
+4. N1.4 file-transfer approvals + paths locales para imagenes.
+5. Fuera de alcance: `openclaw doctor` (sessions_search DB), sessions_send announce, heartbeat 60 min.
 
 ## not_observed
 
@@ -33,4 +32,5 @@
 2. PATH del nodo ya no es solo `/usr/bin:/bin:...`; incluye homebrew (observed en `ai.openclaw.node.env`).
 3. Dry-run remote no valida zai/kimi/deepseek; aplicar/validar en gateway.
 4. Follow-up audit: cadenas cortas → 4 proveedores + fase2/3.
-5. **FASE B** (`docs/briefs/2026-09-10-cursor-FASE-B-cadenas-modelos.md`): `ingenieria` primary `xai/grok-4.6` (antes deepseek-pro); patches fase1/fase3 actualizados. No aplicado.
+5. **FASE B** (`docs/briefs/2026-09-10-cursor-FASE-B-cadenas-modelos.md`): `ingenieria` primary `xai/grok-4.6`; fase3 Anthropic **desbloqueado** (aplicable con fase1). Patches no aplicados (los aplica el lead en Windows).
+6. Patches desde Mac no tocan el gateway: documentado; aplicar solo en Windows.

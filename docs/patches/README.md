@@ -4,7 +4,9 @@ Estos archivos son para que el **lead** corra `openclaw config patch`. Cursor no
 
 `config patch` mergea objetos y **reemplaza arrays enteros**. Los `fallbacks` del patch sustituyen la lista previa completa.
 
-Reglas de cadena (FASE B, brief `2026-09-10-cursor-FASE-B-cadenas-modelos.md`): ningun agente repite proveedor; toda la cadena en runtime nativo (sin OpenAI-OAuth/codex); 4 proveedores distintos hoy, 5 cuando entre Anthropic. Esta tabla reemplaza M1 puntos 1-2 del brief de agentes.
+Reglas de cadena (FASE B, brief `2026-09-10-cursor-FASE-B-cadenas-modelos.md`): ningun agente repite proveedor; toda la cadena en runtime nativo (sin OpenAI-OAuth/codex); 4 proveedores + Anthropic como 5o. Esta tabla reemplaza M1 puntos 1-2 del brief de agentes.
+
+**Donde se aplican.** `openclaw config patch` desde la Mac escribe `~/.openclaw/openclaw.json` local, no el gateway. Correr los patches **en la maquina Windows** (CLI local al gateway). No usar `gateway call config.patch` a ciegas (sin dry-run verificado).
 
 ## Fuente del rollback
 
@@ -34,8 +36,9 @@ Cadenas (FASE B):
 | ingenieria | **xai/grok-4.6** | zai/glm-5.3, deepseek-v4-pro, kimi/k3 |
 
 ```bash
-~/.openclaw/bin/openclaw config patch --file docs/patches/modelos-fase1.json5 --dry-run
-~/.openclaw/bin/openclaw config patch --file docs/patches/modelos-fase1.json5
+# En la maquina Windows (gateway), no desde la Mac remota:
+openclaw config patch --file docs/patches/modelos-fase1.json5 --dry-run
+openclaw config patch --file docs/patches/modelos-fase1.json5
 ```
 
 Verificar despues:
@@ -52,36 +55,39 @@ Esperado: `ingenieria` primary `xai/grok-4.6`; los demas segun tabla; ningun pri
 
 ## modelos-fase2-main-operaciones.json5
 
-`main` y `operaciones`. Aplicar **despues** del estreno de packing.
+`main` y `operaciones`. Aplicar **despues** del estreno de packing. Incluye el 5o eslabon Anthropic (ya desbloqueado) para no dejar esos dos agentes en 4 eslabones.
 
-- `main` → primary `zai/glm-5.3`, fallbacks deepseek-pro / kimi / xai
-- `operaciones` → primary `zai/glm-5.3` (sin cambio), fallbacks deepseek-flash / kimi / xai (saca el eslabon muerto `openai/gpt-5.6-sol`)
+- `main` → zai → deepseek-pro → kimi → xai → anthropic/claude-sonnet-5
+- `operaciones` → zai *(sin cambio de primary)* → deepseek-flash → kimi → xai → anthropic/claude-sonnet-5
 
 ```bash
-~/.openclaw/bin/openclaw config patch --file docs/patches/modelos-fase2-main-operaciones.json5 --dry-run
-~/.openclaw/bin/openclaw config patch --file docs/patches/modelos-fase2-main-operaciones.json5
+# Windows / gateway, despues del estreno:
+openclaw config patch --file docs/patches/modelos-fase2-main-operaciones.json5 --dry-run
+openclaw config patch --file docs/patches/modelos-fase2-main-operaciones.json5
 ```
 
 ## modelos-fase3-anthropic.json5
 
-5to eslabon. Aplicar **solo** cuando `models.authStatus` liste `anthropic`.
+5to eslabon para el pipeline + `ingenieria`. **YA DESBLOQUEADO (2026-09-10 ~07:50Z).** David instalo setup-token; `models.authStatus` lista `anthropic` (`anthropic:manual`, type token, inherited, sin expiracion). Smoke: verifier + `anthropic/claude-haiku-4-5` → harness nativo con tools.
 
-Prerequisito (lo corre David en persona; Cursor no lo ejecuta ni escribe el token): `claude setup-token` en la Mac → lead instala con `openclaw models auth login --provider anthropic --method setup-token`.
+**Aplicable junto con fase1** en Windows. No toca `main` ni `operaciones` (esos van en fase2 post-estreno, ya con Anthropic en la cola).
 
 ```bash
-~/.openclaw/bin/openclaw config patch --file docs/patches/modelos-fase3-anthropic.json5 --dry-run
-~/.openclaw/bin/openclaw config patch --file docs/patches/modelos-fase3-anthropic.json5
+# Windows / gateway, junto con fase1:
+openclaw config patch --file docs/patches/modelos-fase3-anthropic.json5 --dry-run
+openclaw config patch --file docs/patches/modelos-fase3-anthropic.json5
 ```
 
-Contenido: ultimo eslabon `anthropic/claude-sonnet-5` en main/operaciones/implementer/ingenieria/verifier; `anthropic/claude-opus-5` en reviewer/adversary.
+Contenido: `anthropic/claude-sonnet-5` en implementer/ingenieria/verifier; `anthropic/claude-opus-5` en reviewer/adversary. Cadena FASE B completa por agente.
 
-Este eslabon consume la **misma** cuota de la suscripcion Claude de David. Si estorba, cambiar a API key de Anthropic sin tocar el resto de la cadena. El token **no** entra al repo.
+Este eslabon consume la **misma** cuota de la suscripcion Claude de David. Si estorba, API key de Anthropic aparte. El token **no** entra al repo.
 
 ## Rollback
 
 ```bash
-~/.openclaw/bin/openclaw config patch --file docs/patches/modelos-rollback.json5 --dry-run
-~/.openclaw/bin/openclaw config patch --file docs/patches/modelos-rollback.json5
+# Windows / gateway:
+openclaw config patch --file docs/patches/modelos-rollback.json5 --dry-run
+openclaw config patch --file docs/patches/modelos-rollback.json5
 ```
 
 Si solo aplicaste fase1, el rollback tambien reescribe main/operaciones al snapshot. Recorta el JSON a mano si no queres eso.
@@ -93,7 +99,7 @@ Si solo aplicaste fase1, el rollback tambien reescribe main/operaciones al snaps
 - 2026-09-15 (reset OpenAI): ver `eslabon-6-openai.md` antes de reintroducir gpt-5.x.
 - Metricas: `openclaw audit --kind agent_run --status failed --agent <id>`; `models.authStatus` (openai/xai/deepseek). Audit no guarda el modelo que atendio cada corrida.
 
-## V1 — solo despues de que el lead aplique fase1
+## V1 — solo despues de que el lead aplique fase1 (y fase3 si va junto)
 
 Por cada uno de `implementer`, `reviewer`, `adversary`, `verifier` (NUNCA main/operaciones/ingenieria):
 
