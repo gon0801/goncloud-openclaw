@@ -1,0 +1,719 @@
+{
+  "plugins": {
+    "entries": {
+      "moonshot": {
+        "enabled": true
+      },
+      "kimi": {
+        "enabled": true
+      },
+      "zai": {
+        "enabled": true
+      },
+      "codex": {
+        "enabled": true,
+        "config": {
+          "codexPlugins": {
+            "plugins": {
+              "gmail@openai-curated": {
+                "enabled": true,
+                "marketplaceName": "openai-curated",
+                "pluginName": "gmail"
+              }
+            },
+            "enabled": true
+          }
+        }
+      },
+      "telegram": {
+        "enabled": true
+      },
+      "cua-computer": {
+        "enabled": true
+      },
+      "deepseek": {
+        "enabled": true
+      },
+      "llama-cpp": {
+        "enabled": true
+      },
+      "openai": {
+        "enabled": true
+      },
+      "xai": {
+        "enabled": true
+      },
+      "browser": {
+        "enabled": true
+      },
+      "microsoft": {
+        "enabled": true
+      },
+      "summa-gate": {
+        "enabled": true,
+        "hooks": {
+          "allowConversationAccess": true,
+          "allowPromptInjection": true
+        }
+      }
+    },
+    "load": {
+      "paths": [
+        "C:\\Users\\ehven\\.openclaw\\summa-gate"
+      ]
+    }
+  },
+  "meta": {
+    "migrations": {
+      "modelPolicyAllowlist": true
+    },
+    "lastTouchedVersion": "2026.9.3"
+  },
+  "agents": {
+    "defaults": {
+      "models": {
+        "openai/gpt-5.6-sol": {},
+        "xai/auto": {},
+        "kimi/k3": {},
+        "zai/glm-5.3": {},
+        "xai/grok-4.6": {
+          "alias": "Grok"
+        },
+        "deepseek/deepseek-v4-pro": {},
+        "deepseek/deepseek-v4-flash": {
+          "alias": "DeepSeek-Flash"
+        },
+        "openai/gpt-image-2": {}
+      },
+      "model": {
+        "primary": "deepseek/deepseek-v4-flash",
+        "fallbacks": [
+          "openai/gpt-5.6-sol",
+          "kimi/k3",
+          "zai/glm-5.3",
+          "xai/grok-4.6",
+          "deepseek/deepseek-v4-pro"
+        ]
+      },
+      "systemAgent": {
+        "agentId": "main"
+      },
+      "heartbeat": {
+        "agentId": "main"
+      },
+      "imageModel": {
+        "primary": "openai/gpt-image-2"
+      }
+    },
+    "ownership": "explicit",
+    "entries": {
+      "main": {
+        "identity": {
+          "name": "Claw",
+          "emoji": "🦞",
+          "theme": "Clara, directa, práctica y cuidadosa con tu control."
+        },
+        "models": {
+          "deepseek/deepseek-v4-flash": {},
+          "openai/gpt-5.6-sol": {},
+          "kimi/k3": {},
+          "zai/glm-5.3": {},
+          "xai/grok-4.6": {},
+          "deepseek/deepseek-v4-pro": {}
+        },
+        "model": {
+          "primary": "deepseek/deepseek-v4-flash",
+          "fallbacks": [
+            "openai/gpt-5.6-sol",
+            "kimi/k3",
+            "zai/glm-5.3",
+            "xai/grok-4.6",
+            "deepseek/deepseek-v4-pro"
+          ]
+        },
+        "workspace": "C:\\Users\\ehven\\.openclaw\\workspace"
+      },
+      "operaciones": {
+        "name": "operaciones",
+        "model": {
+          "primary": "zai/glm-5.3",
+          "fallbacks": [
+            "deepseek/deepseek-v4-flash",
+            "openai/gpt-5.6-sol"
+          ]
+        },
+        "workspace": "C:\\Users\\ehven\\.openclaw\\workspace-operaciones",
+        "agentDir": "C:\\Users\\ehven\\.openclaw\\agents\\operaciones\\agent",
+        "identity": {
+          "name": "operaciones",
+          "emoji": "📦",
+          "theme": "Claro y directo"
+        }
+      },
+      "ingenieria": {
+        "name": "ingenieria",
+        "model": {
+          "primary": "openai/gpt-5.3-codex-spark",
+          "fallbacks": [
+            "deepseek/deepseek-v4-flash",
+            "openai/gpt-5.6-sol"
+          ]
+        },
+        "workspace": "C:\\Users\\ehven\\.openclaw\\workspace-ingenieria",
+        "agentDir": "C:\\Users\\ehven\\.openclaw\\agents\\ingenieria\\agent",
+        "identity": {
+          "name": "ingenieria",
+          "emoji": "⚙️",
+          "theme": "claro y directo"
+        },
+        "tools": {
+          "exec": {
+            "host": "node",
+            "node": "71a0f52874f309cbafeba63c072ea543f94fdf3e3725c2a2cdf9a5be0a39239f"
+          }
+        }
+      },
+      "implementer": {
+        "name": "implementer",
+        "workspace": "C:\\Users\\ehven\\.openclaw\\workspace-implementer",
+        "agentDir": "C:\\Users\\ehven\\.openclaw\\agents\\implementer\\agent",
+        "identity": {
+          "name": "Implementer",
+          "emoji": "🛠️"
+        },
+        "model": {
+          "primary": "openai/gpt-5.5",
+          "fallbacks": [
+            "openai/gpt-5.6-sol",
+            "xai/grok-4.6"
+          ]
+        },
+        "tools": {
+          "exec": {
+            "host": "node",
+            "node": "71a0f52874f309cbafeba63c072ea543f94fdf3e3725c2a2cdf9a5be0a39239f"
+          }
+        }
+      },
+      "reviewer": {
+        "name": "reviewer",
+        "workspace": "C:\\Users\\ehven\\.openclaw\\workspace-reviewer",
+        "agentDir": "C:\\Users\\ehven\\.openclaw\\agents\\reviewer\\agent",
+        "identity": {
+          "name": "Reviewer",
+          "emoji": "🔍"
+        },
+        "model": {
+          "primary": "openai/gpt-5.5-pro",
+          "fallbacks": [
+            "openai/gpt-5.5",
+            "openai/gpt-5.6-sol"
+          ]
+        },
+        "tools": {
+          "exec": {
+            "host": "node",
+            "node": "71a0f52874f309cbafeba63c072ea543f94fdf3e3725c2a2cdf9a5be0a39239f"
+          }
+        }
+      },
+      "adversary": {
+        "name": "adversary",
+        "workspace": "C:\\Users\\ehven\\.openclaw\\workspace-adversary",
+        "agentDir": "C:\\Users\\ehven\\.openclaw\\agents\\adversary\\agent",
+        "identity": {
+          "name": "Adversary",
+          "emoji": "⚔️"
+        },
+        "model": {
+          "primary": "openai/gpt-5.5-pro",
+          "fallbacks": [
+            "openai/gpt-5.5",
+            "openai/gpt-5.6-sol"
+          ]
+        },
+        "tools": {
+          "exec": {
+            "host": "node",
+            "node": "71a0f52874f309cbafeba63c072ea543f94fdf3e3725c2a2cdf9a5be0a39239f"
+          }
+        }
+      },
+      "verifier": {
+        "name": "verifier",
+        "workspace": "C:\\Users\\ehven\\.openclaw\\workspace-verifier",
+        "agentDir": "C:\\Users\\ehven\\.openclaw\\agents\\verifier\\agent",
+        "identity": {
+          "name": "Verifier",
+          "emoji": "✅"
+        },
+        "model": {
+          "primary": "openai/gpt-5.6-luna",
+          "fallbacks": [
+            "openai/gpt-5.6-sol",
+            "xai/grok-4.6"
+          ]
+        },
+        "tools": {
+          "exec": {
+            "host": "node",
+            "node": "71a0f52874f309cbafeba63c072ea543f94fdf3e3725c2a2cdf9a5be0a39239f"
+          }
+        }
+      }
+    }
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "xai": {
+        "baseUrl": "https://api.x.ai/v1",
+        "api": "openai-responses",
+        "models": [
+          {
+            "id": "grok-4.6",
+            "name": "Grok 4.6",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2,
+              "output": 6,
+              "cacheRead": 0.5,
+              "cacheWrite": 0
+            },
+            "contextWindow": 500000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "grok-4.5",
+            "name": "Grok 4.5",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2,
+              "output": 6,
+              "cacheRead": 0.3,
+              "cacheWrite": 0
+            },
+            "contextWindow": 500000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "grok-build-0.1",
+            "name": "Grok Build 0.1",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1,
+              "output": 2,
+              "cacheRead": 0.2,
+              "cacheWrite": 0
+            },
+            "contextWindow": 256000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "grok-4.3",
+            "name": "Grok 4.3",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1.25,
+              "output": 2.5,
+              "cacheRead": 0.2,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "grok-4.20-0309-reasoning",
+            "name": "Grok 4.20 0309 (Reasoning)",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1.25,
+              "output": 2.5,
+              "cacheRead": 0.2,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 30000
+          },
+          {
+            "id": "grok-4.20-0309-non-reasoning",
+            "name": "Grok 4.20 0309 (Non-Reasoning)",
+            "reasoning": false,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1.25,
+              "output": 2.5,
+              "cacheRead": 0.2,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 30000
+          }
+        ]
+      },
+      "zai": {
+        "baseUrl": "https://api.z.ai/api/coding/paas/v4"
+      },
+      "llama-cpp": {
+        "baseUrl": "http://127.0.0.1:55702/v1",
+        "api": "openai-completions",
+        "timeoutSeconds": 600,
+        "localService": {
+          "command": "C:\\Users\\ehven\\.openclaw\\tools\\llama.cpp\\b10534\\win32-x64\\llama-server.exe",
+          "args": [
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "55702",
+            "--models-preset",
+            "C:\\Users\\ehven\\.openclaw\\tools\\llama.cpp\\models-f8e8d4cc-a852-423f-8d05-45b087f283e5.ini",
+            "--models-max",
+            "2",
+            "--metrics",
+            "--no-ui"
+          ],
+          "healthUrl": "http://127.0.0.1:55702/health",
+          "readyTimeoutMs": 30000,
+          "idleStopMs": 600000
+        },
+        "models": []
+      }
+    }
+  },
+  "auth": {
+    "profiles": {
+      "kimi:manual": {
+        "provider": "kimi",
+        "mode": "api_key"
+      },
+      "zai:manual": {
+        "provider": "zai",
+        "mode": "api_key"
+      },
+      "deepseek:manual": {
+        "provider": "deepseek",
+        "mode": "api_key"
+      }
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "accounts": {
+        "operaciones": {
+          "botToken": {
+            "source": "store",
+            "provider": "default",
+            "id": "TELEGRAM_BOT_TOKEN_OPERACIONES"
+          },
+          "dmPolicy": "allowlist",
+          "allowFrom": [
+            6470689715
+          ],
+          "groupAllowFrom": [
+            "6470689715"
+          ]
+        },
+        "ingenieria": {
+          "botToken": {
+            "source": "store",
+            "provider": "default",
+            "id": "TELEGRAM_BOT_TOKEN_INGENIERIA"
+          },
+          "dmPolicy": "allowlist",
+          "allowFrom": [
+            6470689715
+          ],
+          "groupAllowFrom": [
+            "6470689715"
+          ]
+        }
+      },
+      "streaming": {
+        "mode": "progress",
+        "progress": {
+          "toolProgress": true,
+          "commandText": "status"
+        }
+      },
+      "dmPolicy": "allowlist",
+      "allowFrom": [
+        6470689715
+      ],
+      "defaultAccount": "default",
+      "groupAllowFrom": [
+        "6470689715"
+      ],
+      "ackReaction": "🤔",
+      "richMessages": true
+    }
+  },
+  "gateway": {
+    "mode": "local",
+    "bind": "tailnet",
+    "auth": {
+      "mode": "token",
+      "token": {
+        "source": "store",
+        "provider": "default",
+        "id": "GATEWAY_AUTH_TOKEN"
+      }
+    }
+  },
+  "commands": {
+    "ownerAllowFrom": [
+      "telegram:6470689715"
+    ]
+  },
+  "browser": {
+    "profiles": {
+      "claw": {
+        "cdpPort": 18801
+      }
+    },
+    "allowSystemProfileImport": false
+  },
+  "tools": {
+    "sandbox": {
+      "tools": {
+        "alsoAllow": [
+          "computer"
+        ]
+      }
+    },
+    "alsoAllow": [
+      "computer"
+    ],
+    "exec": {
+      "mode": "full",
+      "safeBins": [
+        "git",
+        "ls",
+        "cat",
+        "rg",
+        "node",
+        "npm",
+        "python3"
+      ],
+      "safeBinProfiles": {
+        "cat": {},
+        "git": {},
+        "ls": {},
+        "npm": {},
+        "rg": {},
+        "node": {},
+        "python3": {}
+      },
+      "safeBinTrustedDirs": [
+        "C:\\Users\\ehven\\AppData\\Local\\OpenClaw\\deps\\portable-git\\usr\\bin",
+        "C:\\Users\\ehven\\AppData\\Local\\OpenClaw\\deps\\portable-git\\mingw64\\bin",
+        "C:\\Program Files\\nodejs"
+      ]
+    }
+  },
+  "memory": {
+    "search": {
+      "local": {
+        "modelPath": "hf:ggml-org/embeddinggemma-300m-qat-q8_0-GGUF/embeddinggemma-300m-qat-Q8_0.gguf"
+      },
+      "provider": "local",
+      "fallback": "none"
+    }
+  },
+  "wizard": {
+    "lastRunAt": "2026-09-09T19:49:07.249Z",
+    "lastRunVersion": "2026.9.3",
+    "lastRunCommand": "doctor",
+    "lastRunMode": "local"
+  },
+  "bindings": [
+    {
+      "type": "route",
+      "agentId": "operaciones",
+      "match": {
+        "channel": "telegram",
+        "accountId": "operaciones"
+      }
+    },
+    {
+      "agentId": "main",
+      "match": {
+        "channel": "telegram",
+        "accountId": "*"
+      }
+    },
+    {
+      "type": "route",
+      "agentId": "ingenieria",
+      "match": {
+        "channel": "telegram",
+        "accountId": "ingenieria"
+      }
+    }
+  ],
+  "talk": {
+    "agentId": "main"
+  },
+  "mcp": {
+    "servers": {
+      "context7": {
+        "url": "https://mcp.context7.com/mcp",
+        "transport": "streamable-http"
+      }
+    }
+  },
+  "tts": {
+    "auto": "tagged",
+    "provider": "microsoft"
+  },
+  "skills": {
+    "entries": {
+      "harness-loop": {
+        "enabled": false
+      },
+      "harness-setup": {
+        "enabled": false
+      },
+      "failure-codifier": {
+        "enabled": false
+      },
+      "cc-update-review": {
+        "enabled": false
+      },
+      "japanese-writing-drafter": {
+        "enabled": false
+      },
+      "cursor-ask": {
+        "enabled": false
+      },
+      "cursor-do": {
+        "enabled": false
+      },
+      "cursor-review": {
+        "enabled": false
+      },
+      "cursor-setup": {
+        "enabled": false
+      },
+      "agent-browser": {
+        "enabled": false
+      },
+      "1password": {
+        "enabled": false
+      },
+      "blogwatcher": {
+        "enabled": false
+      },
+      "blucli": {
+        "enabled": false
+      },
+      "camsnap": {
+        "enabled": false
+      },
+      "coding-agent": {
+        "enabled": false
+      },
+      "eightctl": {
+        "enabled": false
+      },
+      "gemini": {
+        "enabled": false
+      },
+      "gh-issues": {
+        "enabled": false
+      },
+      "gifgrep": {
+        "enabled": false
+      },
+      "github": {
+        "enabled": false
+      },
+      "gog": {
+        "enabled": false
+      },
+      "goplaces": {
+        "enabled": false
+      },
+      "himalaya": {
+        "enabled": false
+      },
+      "mcporter": {
+        "enabled": false
+      },
+      "nano-pdf": {
+        "enabled": false
+      },
+      "obsidian": {
+        "enabled": false
+      },
+      "openai-whisper": {
+        "enabled": false
+      },
+      "openai-whisper-api": {
+        "enabled": false
+      },
+      "openhue": {
+        "enabled": false
+      },
+      "oracle": {
+        "enabled": false
+      },
+      "ordercli": {
+        "enabled": false
+      },
+      "sag": {
+        "enabled": false
+      },
+      "sherpa-onnx-tts": {
+        "enabled": false
+      },
+      "songsee": {
+        "enabled": false
+      },
+      "sonoscli": {
+        "enabled": false
+      },
+      "spotify-player": {
+        "enabled": false
+      },
+      "summarize": {
+        "enabled": false
+      },
+      "trello": {
+        "enabled": false
+      },
+      "video-frames": {
+        "enabled": false
+      },
+      "xurl": {
+        "enabled": false
+      }
+    }
+  },
+  "messages": {
+    "ackReactionScope": "direct"
+  }
+}

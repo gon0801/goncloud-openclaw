@@ -1,0 +1,56 @@
+# Estado, secretos y credenciales
+state/
+credentials/
+locks/
+config-journal-fingerprint.key
+openclaw.json.bak*
+openclaw.json.last-good
+openclaw.json.pre-plan
+openclaw.json.pre-update
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.key
+*.pem
+.env
+.env.*
+
+# Binarios y caches grandes
+npm/
+tools/
+models/
+browser/
+cache/
+logs/
+tmp/
+media/
+delivery-queue-media/
+completions/
+
+# Instalado/regenerable
+skills/
+plugin-skills/
+extensions/
+migration/
+skill-workshop/
+archive/
+backups/
+staging/
+worktrees/
+summa-gate/state/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Runtime de Codex por agente (cache + auth)
+agents/*/agent/codex-home/
+
+# Workspaces que ya son su propio repo (se suben aparte)
+workspace/
+workspace-ingenieria/
+workspace-operaciones/
+
+# Transcripts de sesiones
+agents/*/sessions/

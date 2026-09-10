@@ -1,0 +1,7 @@
+{
+  "id": "summa-gate",
+  "name": "Summa Gate",
+  "description": "Port del harness summonaikit: merge-guard, sentinel -saikit con recibo de ceremonia, evidencia de verificación, gate de cierre, confinamiento de adversary y tracking de subagentes.",
+  "activation": { "onStartup": true },
+  "configSchema": { "type": "object", "additionalProperties": false }
+}
