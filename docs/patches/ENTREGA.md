@@ -7,7 +7,7 @@
 | Workspaces plantilla / BOOTSTRAP | W1 IDENTITY/USER/SOUL + delete BOOTSTRAP | diff `workspace-*` |
 | AGENTS.md Claude Code | W2 tools OpenClaw + Dos maquinas + Contrato + Grok + skills reales | `rg saikit:\|ctx7\|\`Write\`` vacio |
 | summa-gate role order | `canonicalRole` implementer antes que test; extract `lib.ts` | `docs/patches/summa-gate-RED.txt` → `summa-gate-GREEN.txt` (11/11) |
-| OpenAI cuota / codex / cadena corta | M1 patches 4 proveedores + fase2 main/operaciones + fase3 anthropic + eslabon-6 | `docs/patches/modelos-*.json5`, `eslabon-6-openai.md` |
+| OpenAI cuota / codex / cadenas | M1 FASE B: 4 proveedores; `ingenieria` primary grok; fase2 main+ops; fase3 anthropic; eslabon-6 | `docs/patches/modelos-*.json5`, brief FASE-B |
 | pathPrepend warning / noise | N1 docs + `scripts/mac/shot.sh` | `docs/patches/n1-mac-node.md`, `shot-evidence.txt` |
 
 ## Para el lead
@@ -32,4 +32,5 @@
 1. `config get …model` remote unset → rollback desde snapshot `openclaw.json`.
 2. PATH del nodo ya no es solo `/usr/bin:/bin:...`; incluye homebrew (observed en `ai.openclaw.node.env`).
 3. Dry-run remote no valida zai/kimi/deepseek; aplicar/validar en gateway.
-4. Follow-up audit: la primera entrega acorto fallbacks a 1-2 eslabones (brief viejo leido al arrancar). Reescrito a cadenas de 4 proveedores + fase2 operaciones + fase3 + eslabon-6.
+4. Follow-up audit: cadenas cortas → 4 proveedores + fase2/3.
+5. **FASE B** (`docs/briefs/2026-09-10-cursor-FASE-B-cadenas-modelos.md`): `ingenieria` primary `xai/grok-4.6` (antes deepseek-pro); patches fase1/fase3 actualizados. No aplicado.

@@ -3,5 +3,5 @@
   reviewer:    { model: { primary: "kimi/k3",                  fallbacks: ["deepseek/deepseek-v4-pro", "zai/glm-5.3", "xai/grok-4.6"] } },
   adversary:   { model: { primary: "deepseek/deepseek-v4-pro", fallbacks: ["kimi/k3", "zai/glm-5.3", "xai/grok-4.6"] } },
   verifier:    { model: { primary: "deepseek/deepseek-v4-pro", fallbacks: ["zai/glm-5.3", "kimi/k3", "xai/grok-4.6"] } },
-  ingenieria:  { model: { primary: "deepseek/deepseek-v4-pro", fallbacks: ["zai/glm-5.3", "xai/grok-4.6", "kimi/k3"] } },
+  ingenieria:  { model: { primary: "xai/grok-4.6",             fallbacks: ["zai/glm-5.3", "deepseek/deepseek-v4-pro", "kimi/k3"] } },
 } } }

@@ -4,7 +4,7 @@ Estos archivos son para que el **lead** corra `openclaw config patch`. Cursor no
 
 `config patch` mergea objetos y **reemplaza arrays enteros**. Los `fallbacks` del patch sustituyen la lista previa completa.
 
-Reglas de cadena (brief): ningun agente repite proveedor; toda la cadena en runtime nativo (sin OpenAI-OAuth/codex); 4 proveedores distintos hoy, 5 cuando entre Anthropic.
+Reglas de cadena (FASE B, brief `2026-09-10-cursor-FASE-B-cadenas-modelos.md`): ningun agente repite proveedor; toda la cadena en runtime nativo (sin OpenAI-OAuth/codex); 4 proveedores distintos hoy, 5 cuando entre Anthropic. Esta tabla reemplaza M1 puntos 1-2 del brief de agentes.
 
 ## Fuente del rollback
 
@@ -23,6 +23,16 @@ Los valores de `modelos-rollback.json5` coinciden con esa lectura viva del gatew
 
 Reasigna implementer, reviewer, adversary, verifier, ingenieria. Cada cadena tiene 4 proveedores distintos. No toca `main` ni `operaciones`.
 
+Cadenas (FASE B):
+
+| agente | primary | fallbacks |
+|---|---|---|
+| implementer | zai/glm-5.3 | deepseek-v4-pro, kimi/k3, xai/grok-4.6 |
+| reviewer | kimi/k3 | deepseek-v4-pro, zai/glm-5.3, xai/grok-4.6 |
+| adversary | deepseek-v4-pro | kimi/k3, zai/glm-5.3, xai/grok-4.6 |
+| verifier | deepseek-v4-pro | zai/glm-5.3, kimi/k3, xai/grok-4.6 |
+| ingenieria | **xai/grok-4.6** | zai/glm-5.3, deepseek-v4-pro, kimi/k3 |
+
 ```bash
 ~/.openclaw/bin/openclaw config patch --file docs/patches/modelos-fase1.json5 --dry-run
 ~/.openclaw/bin/openclaw config patch --file docs/patches/modelos-fase1.json5
@@ -36,7 +46,9 @@ for id in implementer reviewer adversary verifier ingenieria; do
 done
 ```
 
-Esperado: primarios zai/kimi/deepseek segun el patch; ningun primario OpenAI-OAuth; 3 fallbacks nativos.
+Esperado: `ingenieria` primary `xai/grok-4.6`; los demas segun tabla; ningun primario OpenAI-OAuth.
+
+**Nota xAI OAuth:** el token en Windows puede vencer ~6 h. Si no auto-renueva, `ingenieria` cae a zai (cadena viva, no bug). Renovar solo en Windows con `openclaw models auth login --provider xai --agent main`.
 
 ## modelos-fase2-main-operaciones.json5
 
@@ -74,10 +86,12 @@ Este eslabon consume la **misma** cuota de la suscripcion Claude de David. Si es
 
 Si solo aplicaste fase1, el rollback tambien reescribe main/operaciones al snapshot. Recorta el JSON a mano si no queres eso.
 
-## Ventana post-reset (documentado, no aplicar)
+## Ventana post-reset / ajuste con datos (documentado, no aplicar)
 
-- 2026-09-12 (reset xAI): evaluar `ingenieria` → primary `xai/grok-4.6`.
+- 2026-09-10 ~13:41Z: chequear si OAuth xAI se auto-renovo. Si no, y login manual cada 6 h es insostenible, bajar `ingenieria` primary a eslabon profundo.
+- 2026-09-12 (reset xAI semanal): reevaluar burn de grok en `ingenieria`.
 - 2026-09-15 (reset OpenAI): ver `eslabon-6-openai.md` antes de reintroducir gpt-5.x.
+- Metricas: `openclaw audit --kind agent_run --status failed --agent <id>`; `models.authStatus` (openai/xai/deepseek). Audit no guarda el modelo que atendio cada corrida.
 
 ## V1 — solo despues de que el lead aplique fase1
 
