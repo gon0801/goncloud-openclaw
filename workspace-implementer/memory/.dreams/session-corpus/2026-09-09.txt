@@ -1,0 +1,12 @@
+[implementer/sessions/implementer/6dabb1a2-4c50-4dfe-8aed-7a4d9bd22747#L5] Assistant: Voy a localizar el dashboard móvil en la Mac y el estado actual del menú antes de tocar código.
+[implementer/sessions/implementer/6dabb1a2-4c50-4dfe-8aed-7a4d9bd22747#L10] Assistant: El HTML está en la Mac. Ahora reviso el menú móvil y los estilos actuales.
+[implementer/sessions/implementer/6dabb1a2-4c50-4dfe-8aed-7a4d9bd22747#L11] Assistant: Estoy en el dashboard móvil de Orbit en la Mac. Primero miro el menú actual y después lo reemplazo por la tab bar de 7 pestañas.
+[implementer/sessions/implementer/6dabb1a2-4c50-4dfe-8aed-7a4d9bd22747#L22] Assistant: Este HTML no tiene el drawer descrito. Busco el archivo real del menú móvil.
+[implementer/sessions/implementer/6dabb1a2-4c50-4dfe-8aed-7a4d9bd22747#L67] Assistant: El menú roto está en el dashboard real (`base.html` + CSS), no en el HTML de prueba. Voy a dejar el sidebar de escritorio y poner la tab bar solo en móvil.
+[implementer/sessions/implementer/6dabb1a2-4c50-4dfe-8aed-7a4d9bd22747#L80] Assistant: Voy a editar el HTML, el CSS y el JS en el sitio, sin reescribir el dashboard entero.
+[implementer/sessions/implementer/6dabb1a2-4c50-4dfe-8aed-7a4d9bd22747#L137] Assistant: Los tests del menú pasaron. Ahora saco un screenshot a ancho iPhone para comprobar la tab bar.
+[implementer/sessions/implementer/6dabb1a2-4c50-4dfe-8aed-7a4d9bd22747#L174] Assistant: El screenshot salió con viewport de escritorio. Fuerzo el layout móvil y vuelvo a capturar.
+[implementer/sessions/implementer/6dabb1a2-4c50-4dfe-8aed-7a4d9bd22747#L258] Assistant: Listo. El menú móvil ya no es el sidebar de escritorio en overlay: es una tab bar inferior de 7 pestañas. Sin merge a master. **Archivos** - `app/templates/base.html` — tab bar + iconos; se quitó Menu / Cerrar menu - `app/static/css/dashboard.css` — bar fi
+[implementer/sessions/implementer/6dabb1a2-4c50-4dfe-8aed-7a4d9bd22747#L258] Assistant: `--o-ac` / `--morado` no se tocó. **Rama:** `fix/orbit-mobile-tab-bar` @ `09a4817` **Verificar** 1. Chrome/Safari → modo dispositivo 390×844 2. No hay overlay ni “Cerrar menu”; la bar queda abajo con 7 tabs (icono + label) 3. En `/cortes`, Revisión queda a
+[implementer/sessions/implementer/6dabb1a2-4c50-4dfe-8aed-7a4d9bd22747#L265] Assistant: Voy a capturar de nuevo la vista móvil (~390px) en la Mac, guardar el archivo y devolver la ruta.
+[implementer/sessions/implementer/6dabb1a2-4c50-4dfe-8aed-7a4d9bd22747#L269] Assistant: Recapturo a 390px con los estilos móviles forzados y lo guardo en una ruta estable.
