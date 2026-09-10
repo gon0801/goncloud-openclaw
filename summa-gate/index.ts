@@ -29,16 +29,25 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve, sep } from "node:path";
+import { join } from "node:path";
 
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
+
+import {
+  type Role,
+  adversaryPathAllowed,
+  canonicalRole,
+  isDocOrLock,
+  labelRegex,
+  mergeGuardVerdict,
+  redirectTargets,
+} from "./lib.ts";
 
 // ---------------------------------------------------------------------------
 // Estado persistido por sesión
 // ---------------------------------------------------------------------------
 
 type Lane = "fast" | "full";
-type Role = "implementer" | "verifier" | "reviewer" | "adversary";
 
 type SessionState = {
   taskHash: string;
@@ -112,31 +121,6 @@ function sha256(text: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Merge-guard
-// ---------------------------------------------------------------------------
-
-const GH_PR_MERGE_RE = /(?:^|[^A-Za-z0-9])gh\s+pr\s+merge(?:\s|$)/;
-const GH_API_RE = /(?:^|[^A-Za-z0-9])gh\s+api(?:\s|$)/;
-const GH_API_MERGE_PATH_RE = /\/merge(?:[\s/'"`]|$)/;
-const GIT_PUSH_RE = /(?:^|[^A-Za-z0-9])git\s+push\b/;
-// Port directo del regex del harness bash: destino master|main en cualquier forma.
-const GIT_PUSH_PROTECTED_RE =
-  /push\s+.*(\sorigin\s+[+:]?(master|main)|\sHEAD:(master|main)|refs\/heads\/(master|main)|[A-Za-z0-9._/-]+:(master|main)|\s[+:]?(master|main))(\s|$)/;
-
-function mergeGuardVerdict(command: string): string | undefined {
-  if (GH_PR_MERGE_RE.test(command)) {
-    return "Merge bloqueado por summa-gate: `gh pr merge` está prohibido desde el agente (también encadenado con &&/;). El merge lo hace el operador o el flujo autorizado del repo.";
-  }
-  if (GH_API_RE.test(command) && GH_API_MERGE_PATH_RE.test(command)) {
-    return "Merge bloqueado por summa-gate: `gh api …/merge` está prohibido desde el agente. El merge lo hace el operador o el flujo autorizado del repo.";
-  }
-  if (GIT_PUSH_RE.test(command) && GIT_PUSH_PROTECTED_RE.test(command)) {
-    return "Push bloqueado por summa-gate: `git push` a master/main está prohibido desde el agente (incluye origin master, +master, HEAD:main, refs/heads/main y delete-ref :main).";
-  }
-  return undefined;
-}
-
-// ---------------------------------------------------------------------------
 // 2/3. Sentinel, armado y standing rules
 // ---------------------------------------------------------------------------
 
@@ -202,14 +186,6 @@ const WRITE_TOOLS = new Set([
   "str_replace",
 ]);
 
-const DOC_RE = /\.(md|mdx|markdown|rst|txt|adoc|org)$/i;
-const LOCKFILE_RE =
-  /(^|[/\\])(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|cargo\.lock|poetry\.lock|composer\.lock|gemfile\.lock|go\.sum|pubspec\.lock)$/i;
-
-function isDocOrLock(path: string): boolean {
-  return DOC_RE.test(path) || LOCKFILE_RE.test(path);
-}
-
 function extractPathParam(params: Record<string, unknown>): string | undefined {
   for (const key of ["file_path", "path", "filePath", "target_file"]) {
     const value = params[key];
@@ -254,10 +230,6 @@ const DELEGATED_TOKEN = "SUMMONAIKIT HARNESS DELEGATED - awaiting";
 const VERIFY_SKIP_PROSE_RE =
   /skip de verificaci[oó]n|verificaci[oó]n omitida|verification skipped|verify[ -]?skip|no (se )?(corrieron|ejecutaron) (los )?tests/i;
 
-function labelRegex(label: string): RegExp {
-  return new RegExp(`(^|\\n)[ \\t]*${label}:`);
-}
-
 function roleFallbackRegex(role: Role): RegExp {
   return new RegExp(`ROLE FALLBACK:\\s*${role}`, "i");
 }
@@ -267,60 +239,11 @@ function roleFallbackRegex(role: Role): RegExp {
 // ---------------------------------------------------------------------------
 
 const ADVERSARY_AGENT_ID = "adversary";
-const ADVERSARY_ZONE_RE = /(?:^|[/\\])\.saikit[/\\](findings|scratch)(?:[/\\]|$)/;
 const ABSOLUTE_PATH_RE = /^(?:[A-Za-z]:[\\/]|[\\/]|~)/;
-// Redirecciones obvias: `>`, `>>`, `2>`, `tee <target>`. Best-effort.
-const REDIRECT_RE = /(?:^|[\s;|&])(?:\d?>>?|\btee)\s*("([^"]*)"|'([^']*)'|(\S+))/g;
-const REDIRECT_ALLOWLIST = new Set(["/dev/null", "/dev/stdout", "/dev/stderr", "NUL"]);
-
-function normalizeSlashes(p: string): string {
-  return p.replace(/\\/g, "/");
-}
-
-function isInsideDir(target: string, dir: string): boolean {
-  const rel = resolve(dir, ".") ;
-  const abs = resolve(dir, target);
-  return abs === rel || abs.startsWith(rel + sep);
-}
-
-function adversaryPathAllowed(target: string, workspaceDir?: string): boolean {
-  if (ADVERSARY_ZONE_RE.test(target)) return true;
-  if (workspaceDir) {
-    try {
-      const abs = isAbsolute(target) ? resolve(target) : resolve(workspaceDir, target);
-      const root = resolve(workspaceDir);
-      if (abs === root || abs.startsWith(root + sep)) return true;
-    } catch {
-      // fallthrough: fail-open más abajo
-    }
-    return false;
-  }
-  // Sin workspace del host: paths relativos se asumen dentro del workspace
-  // (mismo criterio best-effort del harness bash); absolutos fuera de zona, no.
-  return !ABSOLUTE_PATH_RE.test(target);
-}
-
-function redirectTargets(command: string): string[] {
-  const targets: string[] = [];
-  for (const match of command.matchAll(REDIRECT_RE)) {
-    const target = match[2] ?? match[3] ?? match[4];
-    if (target && !REDIRECT_ALLOWLIST.has(target)) targets.push(target);
-  }
-  return targets;
-}
 
 // ---------------------------------------------------------------------------
-// 7. Tracking de subagentes
+// 7. Tracking de subagentes (+ canonicalRole en lib.ts)
 // ---------------------------------------------------------------------------
-
-function canonicalRole(text: string): Role | undefined {
-  const t = text.toLowerCase();
-  if (/review|audit/.test(t)) return "reviewer";
-  if (/verif|test|qa/.test(t)) return "verifier";
-  if (/adversar|critic/.test(t)) return "adversary";
-  if (/implement|engineer|coder|fix/.test(t)) return "implementer";
-  return undefined;
-}
 
 // ---------------------------------------------------------------------------
 // Plugin entry

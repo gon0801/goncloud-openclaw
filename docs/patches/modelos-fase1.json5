@@ -1,0 +1,7 @@
+{ agents: { entries: {
+  implementer: { model: { primary: "zai/glm-5.3",              fallbacks: ["deepseek/deepseek-v4-pro"] } },
+  reviewer:    { model: { primary: "kimi/k3",                  fallbacks: ["deepseek/deepseek-v4-pro"] } },
+  adversary:   { model: { primary: "deepseek/deepseek-v4-pro", fallbacks: ["kimi/k3"] } },
+  verifier:    { model: { primary: "deepseek/deepseek-v4-pro", fallbacks: ["zai/glm-5.3"] } },
+  ingenieria:  { model: { primary: "deepseek/deepseek-v4-pro", fallbacks: ["zai/glm-5.3", "xai/grok-4.6"] } },
+} } }

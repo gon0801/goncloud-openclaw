@@ -1,0 +1,3 @@
+{ agents: { entries: {
+  main: { model: { primary: "zai/glm-5.3", fallbacks: ["deepseek/deepseek-v4-pro", "deepseek/deepseek-v4-flash"] } },
+} } }
