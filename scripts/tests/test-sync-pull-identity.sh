@@ -50,4 +50,18 @@ grep -Eq 'git -c user\.name="[^"]+" -c user\.email="[^"]+" pull --rebase origin 
 grep -q 'CONFLICTO en pull - se deja como estaba, revisar a mano: \$why' "$PS1FILE" \
   || fail "$PS1FILE: el log de CONFLICTO no incluye el motivo (\$why)"
 echo "ok (3): sync-repos.ps1 pasa identidad en el pull y loguea el motivo"
+
+# (4) Bug 2026-09-11: un repo git anidado SIN commits (workspace-scout/) hace abortar `git add -A`
+# entero -> nada staged -> arbol sucio -> el pull se niega. Rojo: add -A falla y no deja nada
+# staged. Verde: `git add -u` (el fallback del script) si deja los tracked modificados.
+( cd "$T/gateway" && echo cambio >> AGENTS.md && mkdir -p workspace-scout && git -C workspace-scout init -q ) || fail "setup anidado"
+out=$(cd "$T/gateway" && git add -A 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "add -A con repo anidado sin commits NO fallo: la prueba no discrimina"
+echo "$out" | grep -q "does not have a commit checked out" || fail "add -A fallo por otra cosa: $out"
+[ -z "$(cd "$T/gateway" && git diff --cached --name-only)" ] || fail "add -A dejo algo staged pese al fatal"
+( cd "$T/gateway" && git add -u 2>&1 && [ "$(git diff --cached --name-only)" = "AGENTS.md" ] ) || fail "add -u no dejo staged el tracked modificado"
+echo "ok (4): add -A aborta entero con un repo anidado sin commits; add -u si avanza"
+grep -q 'add -A FALLO (cayendo a add -u)' "$PS1FILE" || fail "$PS1FILE: falta el fallback a add -u con log"
+grep -qx 'workspace-scout/' .gitignore || fail ".gitignore: falta workspace-scout/"
+echo "ok (5): el script cae a add -u con log y .gitignore ignora workspace-scout/"
 echo "PASS test-sync-pull-identity"

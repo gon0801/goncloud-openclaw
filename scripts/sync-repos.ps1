@@ -16,7 +16,16 @@ foreach ($r in $repos) {
   $pre = git rev-parse HEAD
 
   # 1. Commitear cambios locales (de agentes o del gateway)
-  git add -A 2>$null
+  # `git add -A` es atomico: un solo path invalido (p.ej. un repo git anidado sin commits)
+  # aborta todo el add y deja el arbol sucio, con lo que el pull siguiente se niega
+  # (2026-09-11, workspace-scout/). Si falla, se loguea el motivo y se cae a `add -u`
+  # (solo tracked) para que al menos el ciclo avance.
+  $addOut = git add -A 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    $why = (@($addOut) | ForEach-Object { "$_" } | Where-Object { $_ -match 'error|fatal' } | Select-Object -Last 2) -join ' | '
+    Log "$name add -A FALLO (cayendo a add -u): $why"
+    git add -u 2>&1 | Out-Null
+  }
   $dirty = git status --porcelain
   if ($dirty) {
     $commitOut = git -c user.name="openclaw-auto" -c user.email="ehventasmx@gmail.com" commit -m "auto: snapshot $name $(Get-Date -Format 'yyyy-MM-dd HH:mm')" 2>&1

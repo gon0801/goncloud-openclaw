@@ -52,6 +52,9 @@ agents/*/agent/codex-home/
 workspace/
 workspace-ingenieria/
 workspace-operaciones/
+# Repo git anidado (sin commits aun): si no se ignora, `git add -A` aborta entero
+# ("does not have a commit checked out") y el sync del gateway se congela (2026-09-11).
+workspace-scout/
 
 # Transcripts de sesiones
 agents/*/sessions/
