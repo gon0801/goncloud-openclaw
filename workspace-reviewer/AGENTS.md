@@ -179,3 +179,5 @@ This kit serves non-technical people (founders, marketers, PMs, designers, opera
 ## Buscar en sesiones pasadas
 
 `sessions_search` falla con `unable to open database file` si lo llamas sin ambito. Pasale SIEMPRE `agentId` y `sessionKeys` (ej: agentId "verifier", sessionKeys ["agent:verifier:main"]). Con ambito explicito devuelve resultados; sin el, no. Es un bug del gateway en como resuelve el store por defecto, no de tu configuracion.
+
+Lo mismo con `sessions.list` por RPC: falla con `unable to open database file` si le pasas el objeto de params VACIO (`{}`). Con cualquier parametro — hasta `{"limit":1}` — funciona y agrega las sesiones de todos los agentes. Nunca lo llames sin parametros.
