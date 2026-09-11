@@ -14,7 +14,10 @@ pone rojo. Un test que sigue verde sin el fix no protege nada.
    con `git diff --quiet <modulo>` y un fix sin commitear ensucia el diff
    aunque la restauracion sea perfecta.
 2. Corre el archivo de tests enfocado y registra la linea base (passed).
-   Todo verde ANTES de mutar.
+   Todo verde ANTES de mutar. La base corre con el MISMO entorno (PATH
+   incluido) que el verde final; un rojo ambiental preexistente (p. ej.
+   `timeout` ausente en el PATH restringido) se declara y se excluye por
+   evidencia, no se arregla fuera de alcance.
 3. Escribe UN driver que, por cada proteccion documentada del modulo,
    aplique UNA mutacion que simule revertirla o DEBILITARLA (piso de
    longitud, guarda reducida, forma del reemplazo), sobre el archivo REAL
@@ -26,6 +29,11 @@ pone rojo. Un test que sigue verde sin el fix no protege nada.
      coleccion y corre CERO tests.
    - Nombra cada mutacion por la proteccion que revierte y el test que
      deberia ponerse rojo.
+   - Si lo mutado es un GENERADOR/escritor que declina sobreescribir un
+     artefacto presente ("ya hay..., no se escribe"): borra el artefacto
+     previo antes de correr el mutado, o la asercion leera salida vieja
+     y reportara que la mutacion no quito nada (medido con el workflow
+     de saikit-ci-minimo).
    - Relee el archivo mutado y afirma que su sha cambio antes de correr:
      la mutacion debe estar EN DISCO al importar pytest.
 4. Clasifica cada corrida DENTRO del driver (no a mano despues) por el

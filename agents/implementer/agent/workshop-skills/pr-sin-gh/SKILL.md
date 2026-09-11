@@ -21,6 +21,10 @@ description: Cuando la tarea exige abrir un PR en GitHub y el nodo no tiene gh. 
    - 401/403/422 -> la credencial no alcanza para crear PRs: declaralo y
      entrega la URL `https://github.com/<owner>/<repo>/pull/new/<branch>`
      que el propio `git push` ya imprimio.
+   - Cuerpo largo o con comillas: escribelo a archivo con heredoc y pasa
+     `-d @<archivo>`; y respeta la estructura `TOKEN=$(printf ...)`: un
+     parentesis huerfano en esa asignacion da syntax error antes de
+     ejecutar nada (medido en summonaikit 20.20).
 4. El token vive solo en la variable del proceso: nunca a stdout, logs ni
    chat. Si el paso 2 devuelve vacio, declara el bloqueo; no inventes
    otra fuente de credenciales.

@@ -1,6 +1,6 @@
 ---
 name: Mac exec detach poll
-description: Cuando un comando largo en el nodo Mac (exec host=node) muere con COMPANION_APP_UNAVAILABLE o queda con desenlace desconocido. Relanza despegado con nohup y vigilalo con comandos cortos.
+description: Cuando un comando largo en el nodo Mac (exec host=node) muere con COMPANION_APP_UNAVAILABLE, o un binario comun (rg, timeout, uv, gh, corepack) falta en el exec. Relanza despegado con nohup, vigila con comandos cortos y usa las rutas del PATH restringido.
 ---
 
 # Mac exec detach poll
@@ -27,6 +27,23 @@ ciegas.
    cada encuesta avanza pocos puntos de progreso.
 4. El resultado valido es el del log (`EXIT=` + resumen), nunca la sola
    ausencia de proceso. Un EXIT distinto de 0 va al reporte tal cual.
+
+## Entorno del exec (PATH restringido)
+
+El exec del nodo corre con `PATH=/usr/bin:/bin:/usr/sbin:/sbin` y
+`tools.exec.pathPrepend` se ignora en host=node. Ausencias medidas y su
+reemplazo:
+
+- `rg` no esta: usa `grep -n -E`. `uv` no esta: `<repo>/.venv/bin/python -m pytest`.
+- `timeout` no existe en macOS: antepone `/opt/homebrew/bin:$PATH` en la
+  corrida (ahi viven timeout y gtimeout); sin eso, casos preexistentes
+  que lo usan enrojecen por ambiente y no por tu cambio.
+- `gh` y `pre-commit` no estan como comando: el PR va por API (skill
+  pr-sin-gh) y los candados de commit corren igual via el shim de
+  `.git/hooks/`.
+- Un tarball de node exige anteponer `<dir>/bin` al PATH antes de usar
+  `corepack`/`npm`: sus scripts arrancan con `env node` y fallan con
+  exit 127 llamados por ruta absoluta sin PATH.
 
 ## Criterio de cierre
 

@@ -16,7 +16,7 @@ Any read, edit, transfer, or screenshot on the paired Mac node ("David's MacBook
 3. Mac→gateway file transfer (file_fetch blocked; Mac has no inbound sshd):
    1. Mac: `mkdir -p /tmp/<share> && cp <file> /tmp/<share>/ && cd /tmp/<share> && (nohup python3 -m http.server 8765 >/dev/null 2>&1 &) && sleep 1 && curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8765/<file>` (expect 200; a `000`/timeout means the port is taken — pick another).
    2. Gateway: `curl.exe -s --max-time 25 http://192.168.1.126:8765/<file> -o <local>`; verify size and magic bytes.
-   3. Mac: kill and clean immediately: `pkill -f "http.server 8765"; rm -rf /tmp/<share>`.
+   3. Mac: kill and clean immediately: `pkill -f "http.server 876[5]"; rm -rf /tmp/<share>` (bracket one digit so the pattern does not match the pkill command line; unbracketed `http.server 8765` can kill the session).
    Never base64 large binaries through exec output — it floods model context.
    When gateway exec is unavailable (host pinned to the node) that gateway-side step cannot run, and nothing else on the gateway can fetch from the Mac/LAN: `file_fetch` is allowlisted out, the gateway browser refuses LAN/WireGuard URLs (`browser navigation blocked by policy`), and `view_image` rejects private IPs (all verified 2026-09-10). Leave the temp server up, hand the requester the exact `curl.exe -s --max-time 25 http://192.168.1.126:8765/<file> -o <gateway path>` command, and stop the server once confirmed.
 4. Screenshots — two branches:
