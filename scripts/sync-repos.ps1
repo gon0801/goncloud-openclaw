@@ -19,16 +19,26 @@ foreach ($r in $repos) {
   git add -A 2>$null
   $dirty = git status --porcelain
   if ($dirty) {
-    git -c user.name="openclaw-auto" -c user.email="ehventasmx@gmail.com" commit -m "auto: snapshot $name $(Get-Date -Format 'yyyy-MM-dd HH:mm')" 2>&1 | Out-Null
-    Log "$name commit local auto"
+    $commitOut = git -c user.name="openclaw-auto" -c user.email="ehventasmx@gmail.com" commit -m "auto: snapshot $name $(Get-Date -Format 'yyyy-MM-dd HH:mm')" 2>&1
+    if ($LASTEXITCODE -eq 0) {
+      Log "$name commit local auto"
+    } else {
+      # Un commit que falla en silencio deja el arbol sucio y el pull siguiente se niega ("CONFLICTO").
+      $why = (@($commitOut) | ForEach-Object { "$_" } | Where-Object { $_ -match 'error|fatal|hook|Failed|identity' } | Select-Object -Last 2) -join ' | '
+      Log "$name commit local FALLO: $why"
+    }
   }
 
   # 2. Bajar cambios de GitHub (ediciones desde la Mac)
   git fetch origin 2>&1 | Out-Null
-  git pull --rebase origin $branch 2>&1 | Out-Null
+  # El rebase reescribe los commits locales y exige identidad: sin -c falla con
+  # "Committer identity unknown" en cuanto hay commits de los dos lados (paso 2026-09-10/11,
+  # y el log solo decia CONFLICTO). Misma identidad que el commit auto, y se guarda el motivo.
+  $pullOut = git -c user.name="openclaw-auto" -c user.email="ehventasmx@gmail.com" pull --rebase origin $branch 2>&1
   if ($LASTEXITCODE -ne 0) {
     git rebase --abort 2>$null
-    Log "$name CONFLICTO en pull - se deja como estaba, revisar a mano"
+    $why = (@($pullOut) | ForEach-Object { "$_" } | Where-Object { $_ -match 'error|fatal|CONFLICT|identity|Please tell me|unstaged|uncommitted|cannot pull' } | Select-Object -Last 2) -join ' | '
+    Log "$name CONFLICTO en pull - se deja como estaba, revisar a mano: $why"
   } else {
     $post = git rev-parse HEAD
     if ($post -ne $pre) {
