@@ -26,6 +26,50 @@ export function mergeGuardVerdict(command: string): string | undefined {
   return undefined;
 }
 
+// Canal entre agentes (2026-09-11): la respuesta de un sessions_send regresa por un camino que muere en
+// silencio cuando el turno que despacho ya cerro, y sin timeoutSeconds la espera es de solo 30 s.
+// Pasan: esperas explicitas, envios a sesiones de main y fire-and-forget que piden reporte de vuelta.
+const SEND_RETURN_ADDRESS_RE = /agent:main:[A-Za-z0-9._:-]+/;
+
+export type SessionsSendParams = {
+  agentId?: unknown;
+  sessionKey?: unknown;
+  timeoutSeconds?: unknown;
+  message?: unknown;
+};
+
+function sendTargetAgent(params: SessionsSendParams): string | undefined {
+  if (typeof params.agentId === "string" && params.agentId) return params.agentId;
+  if (typeof params.sessionKey === "string") return /^agent:([^:]+):/.exec(params.sessionKey)?.[1];
+  return undefined;
+}
+
+function sendTimeout(params: SessionsSendParams): number | undefined {
+  const raw = params.timeoutSeconds;
+  if (typeof raw === "number") return raw;
+  if (typeof raw === "string" && /^\d+$/.test(raw)) return Number(raw);
+  return undefined;
+}
+
+export function sessionsSendGuardVerdict(
+  requesterAgentId: string | undefined,
+  params: SessionsSendParams,
+): string | undefined {
+  if (requesterAgentId !== "main") return undefined;
+  if (sendTargetAgent(params) === "main") return undefined;
+  const timeout = sendTimeout(params);
+  if (timeout !== undefined && timeout > 0) return undefined;
+  const message = typeof params.message === "string" ? params.message : "";
+  if (timeout === 0 && SEND_RETURN_ADDRESS_RE.test(message)) return undefined;
+  return (
+    "Envio bloqueado por summa-gate: un sessions_send de Claw a otro agente sin espera explicita pierde la respuesta " +
+    "si el agente tarda mas de lo que esperas (sin timeoutSeconds la espera es de 30 s; 2026-09-11: 41 respuestas perdidas). " +
+    "Usa una de estas: (1) tarea nueva: sessions_spawn agentId=<agente> mode=run con todo el contexto en task; el resultado te llega solo. " +
+    "(2) seguir un trabajo en la sesion del agente: timeoutSeconds 0 y en el mensaje \"Cuando termines, reportame con sessions_send " +
+    "a sessionKey <tu sesion, p. ej. agent:main:main>, timeoutSeconds 0\". (3) pregunta rapida que vas a esperar: timeoutSeconds explicito (p. ej. 120)."
+  );
+}
+
 const DOC_RE = /\.(md|mdx|markdown|rst|txt|adoc|org)$/i;
 const LOCKFILE_RE =
   /(^|[/\\])(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|cargo\.lock|poetry\.lock|composer\.lock|gemfile\.lock|go\.sum|pubspec\.lock)$/i;

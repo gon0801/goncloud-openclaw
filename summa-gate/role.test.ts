@@ -7,7 +7,65 @@ import { describe, it, before, after } from "node:test";
 import {
   canonicalRole,
   mergeGuardVerdict,
+  sessionsSendGuardVerdict,
 } from "./lib.ts";
+
+// Canal entre agentes (2026-09-11): un sessions_send de Claw sin espera, o con la espera por defecto
+// de 30 s, pierde la respuesta si el agente tarda mas (41 perdidas el 09-11; dos mas en el chat real
+// despues de la regla escrita). El candado deja pasar spawn, esperas explicitas y envios que piden
+// reporte de vuelta a una sesion de main.
+describe("sessionsSendGuardVerdict", () => {
+  it("blocks main sending to another agent without timeoutSeconds (default 30 s wait)", () => {
+    assert.match(
+      sessionsSendGuardVerdict("main", { agentId: "ingenieria", message: "retoma el PR 306" }) ?? "",
+      /sessions_spawn/,
+    );
+  });
+
+  it("blocks main fire-and-forget (timeoutSeconds 0) without a return address", () => {
+    assert.match(
+      sessionsSendGuardVerdict("main", { agentId: "operaciones", timeoutSeconds: 0, message: "revisa la corrida" }) ?? "",
+      /sessions_spawn/,
+    );
+  });
+
+  it("blocks by sessionKey target too", () => {
+    assert.match(
+      sessionsSendGuardVerdict("main", { sessionKey: "agent:operaciones:main", message: "revisa" }) ?? "",
+      /sessions_spawn/,
+    );
+  });
+
+  // Verificado en vivo el 09-11: operaciones reporto de vuelta a la sesion de main (tardo ~4 min por
+  // una compactacion y el reporte llego duplicado, pero llego).
+  it("allows fire-and-forget when the message asks to report back to a main session", () => {
+    assert.equal(
+      sessionsSendGuardVerdict("main", {
+        agentId: "operaciones",
+        timeoutSeconds: 0,
+        message: "revisa y cuando termines reportame con sessions_send a sessionKey agent:main:main",
+      }),
+      undefined,
+    );
+  });
+
+  it("allows an explicit wait", () => {
+    assert.equal(
+      sessionsSendGuardVerdict("main", { agentId: "operaciones", timeoutSeconds: 120, message: "cuantos crons?" }),
+      undefined,
+    );
+  });
+
+  it("allows sends to main's own sessions", () => {
+    assert.equal(sessionsSendGuardVerdict("main", { sessionKey: "agent:main:diag-x", message: "x" }), undefined);
+    assert.equal(sessionsSendGuardVerdict("main", { agentId: "main", message: "x" }), undefined);
+  });
+
+  it("does not touch other agents' sends", () => {
+    assert.equal(sessionsSendGuardVerdict("operaciones", { agentId: "main", message: "listo" }), undefined);
+    assert.equal(sessionsSendGuardVerdict(undefined, { agentId: "ingenieria", message: "x" }), undefined);
+  });
+});
 
 describe("canonicalRole", () => {
   it("maps implementer: fix failing tests to implementer (not verifier)", () => {
