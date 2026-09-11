@@ -40,6 +40,7 @@ Route work to this Gateway's agents and collect complete results. Main orchestra
 ## Pitfalls
 
 - A configured agent cannot be model-overridden through `sessions_send`; model fallback requires `sessions_spawn` with an explicit `model`. Since 2026-09-11 `agents.entries.main.subagents.allowAgents` lets main spawn under main, operaciones, ingenieria, implementer, verifier, reviewer, adversary and scout. If `sessions_spawn` answers `agentId is not allowed for sessions_spawn`, that allowlist changed: report it, do not fall back to a fire-and-forget `sessions_send`.
+- A `sessions_send` that answers with an error yet also reports `sentBeforeError: true` **did deliver** the message: do not resend it (verified twice on 2026-09-11, error `Auth profile "opencode-go:manual" is temporarily unavailable`). Read the target session to confirm instead of dispatching again.
 - Trust `sessions_history` of the child over a truncated settle text.
 - Rate-limit cooldowns are provider-wide; switch provider instead of retrying the same one.
 - Dispatching the next role before the previous completion arrives loses the handoff facts (SHA, evidence paths) that role needs.
