@@ -1,6 +1,6 @@
 ---
 name: post-merge-closure
-description: Merge in doubt, or a deploy/ledger checker red after a saikit PR: confirm the merge, settle the hook deploy, log it, close the row.
+description: Merge in doubt, a PR that read mergeable no longer merges, or a deploy/ledger checker red after a saikit PR: confirm the merge, re-check mergeability, settle the hook deploy, log it, close the row.
 ---
 
 # Post-Merge Closure (saikit repo)
@@ -43,3 +43,4 @@ Verified 2026-09-11 (PR #300 → `844d048`): merge confirmed by API, hook copies
 - The closure PR is the owner's to merge; opening it is the deliverable.
 - The ledger's DoD text is the contract and survives closing unchanged (`[Required]`/`[Conditional]`/`[needs-spike]` markers included). Rewriting it to match an implementation is a ledger-integrity break, not a status update — verified 2026-09-11: #305 rewrote the 20.16 DoD while marking it done, and restoring the original from `4157c4c^` became part of the revert.
 - A merge whose gate was still running is not a validated merge: #304's check run finished 4½ minutes after its merge and #305's 6¾ minutes after. Before reporting a merged row as validated, confirm the gate run for that SHA finished green — not merely that checks exist.
+- **Mergeability is not static: re-check it immediately before handing a merge to the owner, and again after any other PR lands on the base branch.** A PR that read `MERGEABLE`/`CLEAN` at review time went `CONFLICTING`/`DIRTY` once a later PR touched the same files — verified 2026-09-11: #307 and #308 both went DIRTY after #306 was merged to master, so the owner hit a merge button with nothing to merge and reported the conflict instead. Check `gh pr view <n> --json mergeable,mergeStateStatus`, not the state you saw when you last reviewed it. A revert branch collides with a later PR on the same files as a modify/delete conflict (the branch deleted what the later PR edited); resolve it by keeping the branch's deletions (`git rm`) when the deletion is the branch's intent.
