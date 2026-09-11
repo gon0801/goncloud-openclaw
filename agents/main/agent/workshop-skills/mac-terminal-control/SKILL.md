@@ -1,6 +1,6 @@
 ---
 name: mac-terminal-control
-description: Operate David's Mac (macOS node "David's MacBook Pro") to read or type into Terminal tabs. Use when asked to see or control what's running in a Terminal window, or when node permissions/osascript behave unexpectedly. Produces the tab→tty map, the correct osascript calls, and the permission-state decision rules.
+description: Operate David's Mac (macOS node "David's MacBook Pro") to read or type into Terminal tabs. Use when asked to see or control what's running in a Terminal window, when a CLI agent's tab stopped producing output, when an agent hits its usage limit and the task must move to another open one, or when node permissions/osascript behave unexpectedly. Produces the tab→tty map, the correct osascript calls, how to unstick a stalled TUI, the substitute-agent rule, and the permission-state decision rules.
 ---
 
 # Mac Terminal Control (David's Mac)
@@ -27,12 +27,21 @@ Drive Terminal.app and the macOS node via read-only `exec host=node` plus `osasc
    This yields the `win → tab → tty → title` map (e.g. `win 1 tab 1 | tty=/dev/ttys005 | title=…`). Cross-reference `ps -o pid,tty,stat,command -p <pid>` to know which tab hosts which process.
    - Completion: you have the tab→tty→title map and know which tty each agent process lives on.
 
-3. Select a specific tab (correct syntax — the `set selected of window … to tab …` form fails with `-1700`):
+3. Select the target tab by its **tty**, resolving the window in the same script — never by a window index you captured earlier (see Pitfalls):
    ```applescript
-   tell application "Terminal" to activate
-   tell application "Terminal" to set selected of tab N of window W to true
+   tell application "Terminal"
+     repeat with i from 1 to count of windows
+       repeat with j from 1 to count of tabs of window i
+         if (tty of tab j of window i) is "/dev/ttysNNN" then
+           set index of window i to 1
+           activate
+           set selected of tab j of window 1 to true
+         end if
+       end repeat
+     end repeat
+   end tell
    ```
-   - Completion: the target tab is selected without an AppleScript error.
+   - Completion: the target tab is selected without an AppleScript error, and reading back `contents of tab 1 of window 1` shows the expected session.
 
 4. Type into the focused terminal (if the task is to send input):
    ```applescript
@@ -41,13 +50,18 @@ Drive Terminal.app and the macOS node via read-only `exec host=node` plus `osasc
    ```
    - Completion: `osascript` exits 0. Note: exit 0 only proves the keystroke was dispatched, NOT that a running TUI (e.g. kimi-code) accepted it as input — verify by checking the agent's session log for a new turn (`grep -o '"turnId":[0-9]*' wire.jsonl | sort -n | tail -1`) before claiming the agent received the message.
 
-## Permission-state decision rules
+5. A tab that stops producing new output is **stalled, not finished** — read its `contents` rather than assuming completion. Two observed stalls: (a) the harness blocks on a confirmation prompt (`Do you want to proceed? ❯ 1. Yes 2. No`) — send one Enter (`key code 36`), which selects the highlighted default `1. Yes`; (b) the CLI reports `You've hit your session limit · resets <time>` — that agent cannot continue before the reset, so **hand the task to another CLI agent already open in the same project** rather than waiting: map each CLI pid to its project (`ps -axo pid,tty,command`, then `lsof -a -p <pid> -d cwd -Fn` per pid) and use whichever of claude/kimi/muse sits in that repo's directory. David keeps several CLI agents open per project and told you to intercalate when one is limited (2026-09-11: "si un modelo está en su límite, pasa a otro modelo"). Schedule the resume for the reset time only when no substitute agent is open. David's standing instruction for Claude Code on the Mac is to answer Yes (2026-09-11); if a prompt names a command unrelated to the task, or one touching live profiles/secrets, surface it instead of auto-approving. For a long unattended run, poll the tab (~every 15 s) and send Enter when the prompt text appears.
+   - Completion: the tab shows the run resumed (new output or a working spinner), the task is handed to a substitute agent open in the same project, or you have scheduled the resume for the reset time.
+
+## Permission-state and reachability decision rules
 
 - `nodes describe` `permissions.appleScript: false` can be **stale**. Re-run `nodes describe` after a reconnect before concluding the user must change System Settings; observed 2026-09-09 flipping to `true` with no System Settings change, after which `osascript` worked.
 - `exec` running `osascript` may return `COMPANION_APP_UNAVAILABLE: macOS app exec host unreachable` while plain shell commands still succeed — this means the macOS app's automation/companion exec host is unreachable, not that the command is blocked. Retry after the app reconnects.
+- `exec host=node` also fails with `... is not eligible; eligible node ids: <other>` when the macOS node itself is offline: confirm with `nodes status` (`connected: false`, `lastDisconnectedAtMs` set). This is a dropped node, not the companion app (shell commands fail too, unlike `COMPANION_APP_UNAVAILABLE`). Repeating the same call changes nothing until the node reconnects — report the blocker and let it return, rather than polling.
 - **Computer use needs a vision-capable model** (it drives screen snapshots). A non-vision model (e.g. `deepseek-v4-pro`) cannot drive it even with `tools.alsoAllow: ["computer"]` set. For text-to-terminal tasks prefer `osascript`, which needs no vision.
 
 ## Pitfalls
 
 - `osascript` tab selection: `set selected of tab N of window W to true` (not `set selected of window W to tab N …`, which throws `-1700`).
+- **Window indices are not stable.** `set index of window i to 1` reorders windows, and macOS renumbers as tabs open/close. Reusing a window/tab index from an earlier map can silently select a *different* session — verified 2026-09-11, a paste meant for one Claude tab landed in another. Always resolve the window by its tty in the script that selects and types.
 - A keystroke `exit 0` is not delivery confirmation into a TUI; confirm a new turn in the target agent's log before reporting success.

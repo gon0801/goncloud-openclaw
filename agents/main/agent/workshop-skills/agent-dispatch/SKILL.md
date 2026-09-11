@@ -38,7 +38,7 @@ Route work to this Gateway's agents and collect complete results. Main orchestra
 
 ## Pitfalls
 
-- A configured agent cannot be model-overridden through `sessions_send`; model fallback requires `sessions_spawn` with an explicit `model`.
+- A configured agent cannot be model-overridden through `sessions_send`; model fallback requires `sessions_spawn` with an explicit `model`. Spawning is by id only for `main`: `sessions_spawn agentId=<configured-agent>` is rejected (`agentId is not allowed for sessions_spawn (allowed: main)`), so spawn a fresh subagent and carry the role's instructions in the task text instead.
 - Trust `sessions_history` of the child over a truncated settle text.
 - Rate-limit cooldowns are provider-wide; switch provider instead of retrying the same one.
 - Dispatching the next role before the previous reply arrives loses the handoff facts (SHA, evidence paths) that role needs.

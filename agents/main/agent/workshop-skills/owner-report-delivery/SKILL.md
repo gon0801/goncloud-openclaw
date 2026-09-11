@@ -28,3 +28,4 @@ Get a consolidated answer to actually reach David when the turn was not started 
 
 - Do not keep re-issuing plain-text replies to heartbeat continuations; the explicit message send is the only verified user-visible path in non-user-sourced turns.
 - Sending is outward-facing: consolidate first, send once, keep it complete but brief; never push "nothing new" pings (quiet-time rules live in AGENTS.md).
+- Never deliver a **state claim you inferred instead of checked**. A local branch position, a missing log entry, or "0 open PRs" is not evidence that work was not merged — verified 2026-09-11: a report to the owner asserted a plan was "still not merged" from exactly that local read, while the merge was already on the default branch. A wrong correction costs the owner more than silence: confirm against the remote (PR state, default-branch content) before sending, and if a wrong claim already went out, correct it in the same channel with the evidence that contradicts it.

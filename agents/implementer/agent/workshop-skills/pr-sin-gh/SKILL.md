@@ -20,7 +20,11 @@ description: Cuando la tarea exige abrir un PR en GitHub y el nodo no tiene gh. 
    - 201 -> PR creado: reporta el link.
    - 401/403/422 -> la credencial no alcanza para crear PRs: declaralo y
      entrega la URL `https://github.com/<owner>/<repo>/pull/new/<branch>`
-     que el propio `git push` ya imprimio.
+     que el propio `git push` ya imprimio. El token puede ROTAR a mitad
+     de sesion (401 "Bad credentials" con `git push` siguiendo vivo,
+     medido en 20.20): para vigilar el CI de un repo PUBLICO no hace
+     falta token, el endpoint `commits/<sha>/check-runs` responde sin
+     autenticacion.
    - Cuerpo largo o con comillas: escribelo a archivo con heredoc y pasa
      `-d @<archivo>`; y respeta la estructura `TOKEN=$(printf ...)`: un
      parentesis huerfano en esa asignacion da syntax error antes de

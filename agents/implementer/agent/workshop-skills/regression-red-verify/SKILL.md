@@ -36,6 +36,16 @@ pone rojo. Un test que sigue verde sin el fix no protege nada.
      de saikit-ci-minimo).
    - Relee el archivo mutado y afirma que su sha cambio antes de correr:
      la mutacion debe estar EN DISCO al importar pytest.
+   - Si el registro de mutaciones guarda expresiones sed que se aplican
+     via `sed "$expr"` (comillas dobles): `\$` casa el caracter $ LITERAL
+     del fuente (asi matchean los `$VAR` de las entradas existentes) y
+     `$` simple es el ancla de fin de linea. Confundirlas deja la
+     mutacion sin aplicar y el arnes la reporta como sed obsoleto
+     (medido en el arnes MUTS de summonaikit).
+   - Si el repo ya tiene arnes de mutaciones (registro de seds con
+     funciones cazadoras), registra la mutacion ALLI contra la funcion
+     que debe atraparla; un caso a mano que repite el sed duplica la
+     guarda sin sumar cobertura al arnes (correccion de review 20.20).
 4. Clasifica cada corrida DENTRO del driver (no a mano despues) por el
    CONTADOR del resumen (`N failed`), nunca por las lineas `FAILED`
    capturadas: con `--tb=line` hay lineas resumen `FAILED <ruta>` sin
