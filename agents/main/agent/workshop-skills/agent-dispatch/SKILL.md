@@ -9,8 +9,9 @@ Route work to this Gateway's agents and collect complete results. Main orchestra
 
 ## Chain dispatch (brief / "-saikit" lane)
 
-1. Read the brief yourself before dispatching; it names the lane and the role order. Dispatch one role at a time with `sessions_send agentId=<role>` and wait for its reply before the next. Observed full lane: implementer -> verifier -> reviewer.
-   - Completion: each role's reply returns before the next dispatch.
+1. Read the brief yourself before dispatching; it names the lane and the role order. Dispatch one role at a time with `sessions_spawn agentId=<role> mode=run` and put the whole shared context in `task` (a spawned child starts with isolated context). Its completion comes back to you as a new turn even after your turn has closed; dispatch the next role then. Observed full lane: implementer -> verifier -> reviewer.
+   - Never dispatch work whose result you need with `sessions_send` and `timeoutSeconds: 0`: that reply travels a path that dies silently once your turn ends (2026-09-11: 41 lost replies in one day).
+   - Completion: each role's completion arrives before the next dispatch.
 
 2. Put the whole shared context in each dispatch message: repo path, branch, base commit, brief path (the role reads it itself), that role's scope, what NOT to touch, and the handoff facts — previous role's commit SHA, the evidence paths it left (`.saikit/scratch/<task>/`), and which of its claims to attack.
    - Completion: the role can start without re-deriving state you already know.
@@ -31,14 +32,14 @@ Route work to this Gateway's agents and collect complete results. Main orchestra
 
 7. Wait for the accepted completion mode: announced children -> `sessions_yield`; collector runs -> `agents_wait`. Never busy-poll.
 
-8. Read the FULL result. A completion/settle event and the inline reply of a `sessions_send` can both truncate the text (`display-cap`) — a report ending mid-sentence is truncated, not complete. Fetch the whole one with `sessions_history sessionKey=<childSessionKey>`. For a configured agent that key is `agent:<id>:main`; if an unscoped `sessions_list` fails with `unable to open database file`, list with `agentId=<id>` to get the key and `sessionId`.
+8. Read the FULL result. A completion/settle event and the inline reply of a `sessions_send` can both truncate the text (`display-cap`) — a report ending mid-sentence is truncated, not complete. Fetch the whole one with `sessions_history sessionKey=<childSessionKey>`. For a spawned child that key is the `childSessionKey` returned by `sessions_spawn`; for a configured agent's own session it is `agent:<id>:main`. If an unscoped `sessions_list` fails with `unable to open database file`, list with `agentId=<id>` to get the key and `sessionId`.
    - Completion: you have the child's complete final text.
 
 9. Consolidate across roles and report only the synthesized result.
 
 ## Pitfalls
 
-- A configured agent cannot be model-overridden through `sessions_send`; model fallback requires `sessions_spawn` with an explicit `model`. Spawning is by id only for `main`: `sessions_spawn agentId=<configured-agent>` is rejected (`agentId is not allowed for sessions_spawn (allowed: main)`), so spawn a fresh subagent and carry the role's instructions in the task text instead.
+- A configured agent cannot be model-overridden through `sessions_send`; model fallback requires `sessions_spawn` with an explicit `model`. Since 2026-09-11 `agents.entries.main.subagents.allowAgents` lets main spawn under main, operaciones, ingenieria, implementer, verifier, reviewer, adversary and scout. If `sessions_spawn` answers `agentId is not allowed for sessions_spawn`, that allowlist changed: report it, do not fall back to a fire-and-forget `sessions_send`.
 - Trust `sessions_history` of the child over a truncated settle text.
 - Rate-limit cooldowns are provider-wide; switch provider instead of retrying the same one.
-- Dispatching the next role before the previous reply arrives loses the handoff facts (SHA, evidence paths) that role needs.
+- Dispatching the next role before the previous completion arrives loses the handoff facts (SHA, evidence paths) that role needs.
