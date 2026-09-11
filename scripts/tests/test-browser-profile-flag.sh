@@ -53,6 +53,10 @@ done
 grep -qF 'openclaw browser --browser-profile claw tabs --json' "$REF" || fail "$REF: falta el comando correcto"
 grep -qF 'requires credentials before opening a websocket' "$REF" || fail "$REF: falta la firma del error"
 grep -qF 'NEVER run `reset-profile` on `claw`' "$REF" || fail "$REF: falta la prohibicion de reset-profile"
+# Perdida del Edge 2026-09-11 7:33 PDT: operaciones y un sub-agente huerfano en la misma pestaña; y el
+# CLI en Windows tarda 10-23 s en arrancar, asi que timeouts de 15-20 s lo matan antes de conectar.
+grep -qF 'One session drives the claw browser at a time' "$REF" || fail "$REF: falta la regla de una sola sesion"
+grep -qF 'timeoutSeconds >= 60' "$REF" || fail "$REF: falta el timeout minimo de 60 s"
 echo "ok (3): skill $SK en main/operaciones/ingenieria, identica y con sus anclas"
 
 # (4) Mecanismo, solo si hay CLI local. HOME temporal y sin red: falla antes de abrir el websocket.
