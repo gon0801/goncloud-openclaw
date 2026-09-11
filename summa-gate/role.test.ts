@@ -7,6 +7,7 @@ import { describe, it, before, after } from "node:test";
 import {
   canonicalRole,
   mergeGuardVerdict,
+  sessionsSendGuardVerdict,
 } from "./lib.ts";
 
 describe("canonicalRole", () => {
@@ -65,6 +66,90 @@ describe("mergeGuardVerdict", () => {
   });
 });
 
+// Canal entre agentes (2026-09-11): la respuesta de un sessions_send regresa por un camino que muere en
+// silencio cuando el turno que despacho ya cerro, y ninguna espera lo arregla (30 s explicitos = el
+// default; 1 s es peor). Pasan: envios a sesiones de main, avisos marcados sin respuesta y encargos que
+// piden reporte de vuelta a la sessionKey exacta de Claw (verificado en vivo: llego, ~4 min y duplicado).
+describe("sessionsSendGuardVerdict", () => {
+  const CLAW = "agent:main:main";
+  const blocked = (params: Parameters<typeof sessionsSendGuardVerdict>[1]) =>
+    assert.match(sessionsSendGuardVerdict("main", params, CLAW) ?? "", /sessions_spawn/);
+
+  it("blocks main sending to another agent without timeoutSeconds (default 30 s wait)", () => {
+    blocked({ agentId: "ingenieria", message: "retoma el PR 306" });
+  });
+
+  it("blocks explicit waits too: 30 s is the default and 1 s is worse", () => {
+    for (const timeoutSeconds of [1, 30, 120, "120", " 120 "]) {
+      blocked({ agentId: "ingenieria", timeoutSeconds, message: "retoma el PR 306" });
+    }
+  });
+
+  it("blocks fire-and-forget (timeoutSeconds 0) without a marker or a return address", () => {
+    blocked({ agentId: "operaciones", timeoutSeconds: 0, message: "revisa la corrida" });
+  });
+
+  it("resolves the target like the tool: sessionKey first, snake_case too", () => {
+    blocked({ sessionKey: "agent:operaciones:main", message: "revisa" });
+    blocked({ agentId: "main", sessionKey: "agent:ingenieria:main", message: "retoma" });
+    blocked({ agentId: "main", session_key: "agent:ingenieria:main", message: "retoma" });
+  });
+
+  it("allows a report-back request carrying the explicit tag with Claw's exact session", () => {
+    assert.equal(
+      sessionsSendGuardVerdict(
+        "main",
+        {
+          agentId: "operaciones",
+          timeoutSeconds: 0,
+          message: `[REPORTE DE VUELTA: ${CLAW}] revisa la corrida y reportame con sessions_send cuando termines`,
+        },
+        CLAW,
+      ),
+      undefined,
+    );
+  });
+
+  // Revision cruzada (grok, 2026-09-11): buscando las cadenas sueltas "sessions_send" y la sessionKey,
+  // un texto que solo las menciona (incluso negando el reporte) abria el candado.
+  it("blocks messages that merely mention sessions_send and the session key", () => {
+    blocked({
+      agentId: "ingenieria",
+      timeoutSeconds: 0,
+      message: `no me reportes con sessions_send; el error salio en ${CLAW} ayer; retoma el PR`,
+    });
+  });
+
+  it("blocks the return tag when it carries another session", () => {
+    blocked({ agentId: "operaciones", timeoutSeconds: 0, message: "[REPORTE DE VUELTA: agent:main:zzz] revisa la corrida" });
+  });
+
+  it("allows notices marked as not needing a reply", () => {
+    for (const message of ["[AVISO SIN RESPUESTA] David confirma que Claude esta instalado", "  [aviso sin respuesta] ojo con el test X"]) {
+      assert.equal(sessionsSendGuardVerdict("main", { agentId: "ingenieria", timeoutSeconds: 0, message }, CLAW), undefined);
+    }
+  });
+
+  it("allows sends to main's own sessions", () => {
+    for (const target of [{ sessionKey: "agent:main:diag-x" }, { sessionKey: " AGENT:MAIN:X " }, { sessionKey: "main" }, { agentId: "MAIN" }]) {
+      assert.equal(sessionsSendGuardVerdict("main", { ...target, message: "x" }, CLAW), undefined);
+    }
+  });
+
+  it("only honors the notice marker at the start of the message", () => {
+    blocked({ agentId: "ingenieria", timeoutSeconds: 0, message: "retoma el PR 306 [AVISO SIN RESPUESTA]" });
+  });
+
+  it("blocks label targets it cannot resolve", () => {
+    blocked({ label: "pr-306", message: "retoma" });
+  });
+
+  it("does not touch other agents' sends", () => {
+    assert.equal(sessionsSendGuardVerdict("operaciones", { agentId: "main", message: "listo" }), undefined);
+    assert.equal(sessionsSendGuardVerdict(undefined, { agentId: "ingenieria", message: "x" }), undefined);
+  });
+});
+
 describe("plugin smoke import", () => {
   const here = dirname(fileURLToPath(import.meta.url));
   const nm = join(here, "node_modules");
@@ -99,5 +184,28 @@ describe("plugin smoke import", () => {
   it("default export exposes register", async () => {
     const mod = await import("./index.ts");
     assert.equal(typeof mod.default?.register, "function");
+  });
+
+  // Sin esto el verde no prueba que el candado este conectado: borrar el registro, cambiar el matcher o
+  // pasarle ctx.sessionKey como agente dejaban la bateria en 20/20 (adversary 09-11).
+  it("wires the sessions_send guard into before_tool_call with the requester's agent and session", async () => {
+    const mod = await import("./index.ts");
+    type Hook = (event: unknown, ctx: unknown) => unknown;
+    const regs: Array<{ event: string; handler: Hook; opts?: { matcher?: string[] } }> = [];
+    const noop = () => {};
+    mod.default.register({
+      logger: { info: noop, warn: noop, error: noop, debug: noop },
+      on: (event: string, handler: Hook, opts?: { matcher?: string[] }) => {
+        regs.push({ event, handler, opts });
+      },
+    } as never);
+    const hooks = regs.filter((r) => r.event === "before_tool_call" && r.opts?.matcher?.includes("sessions_send"));
+    assert.equal(hooks.length, 1);
+    const call = (params: object, ctx: object) =>
+      hooks[0].handler({ toolName: "sessions_send", params }, ctx) as { block?: boolean } | undefined;
+    const claw = { agentId: "main", sessionKey: "agent:main:main" };
+    assert.equal(call({ agentId: "ingenieria", message: "retoma" }, claw)?.block, true);
+    assert.equal(call({ agentId: "ingenieria", message: "retoma" }, { agentId: "operaciones", sessionKey: "agent:operaciones:main" }), undefined);
+    assert.equal(call({ agentId: "ingenieria", message: "[REPORTE DE VUELTA: agent:main:main] reportame al terminar" }, claw), undefined);
   });
 });

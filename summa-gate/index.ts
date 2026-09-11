@@ -14,6 +14,9 @@
  *     .saikit/scratch (best-effort, fail-open).
  *  7. Tracking de roles de subagentes y orden implementer → verifier/reviewer
  *     en lane=full.
+ *  8. Canal entre agentes: bloquea el `sessions_send` de main a otro agente
+ *     (pierde la respuesta), salvo avisos [AVISO SIN RESPUESTA] o reporte de
+ *     vuelta a su sessionKey.
  *
  * Solo módulos builtin de node + el plugin-sdk. Sin dependencias npm.
  */
@@ -35,9 +38,11 @@ import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 
 import {
   type Role,
+  type SessionsSendParams,
   adversaryPathAllowed,
   canonicalRole,
   isDocOrLock,
+  sessionsSendGuardVerdict,
   labelRegex,
   mergeGuardVerdict,
   redirectTargets,
@@ -276,6 +281,20 @@ export default definePluginEntry({
         if (reason) return { block: true, blockReason: reason };
       },
       { matcher: ["exec"] },
+    );
+
+    // -- 8. Canal entre agentes: sessions_send de Claw que pierde la respuesta --
+    api.on(
+      "before_tool_call",
+      (event, ctx) => {
+        const reason = sessionsSendGuardVerdict(
+          ctx.agentId,
+          (event.params ?? {}) as SessionsSendParams,
+          (ctx as { sessionKey?: string }).sessionKey,
+        );
+        if (reason) return { block: true, blockReason: reason };
+      },
+      { matcher: ["sessions_send"] },
     );
 
     // -- 6. Confinamiento adversary -----------------------------------------

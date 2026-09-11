@@ -26,6 +26,60 @@ export function mergeGuardVerdict(command: string): string | undefined {
   return undefined;
 }
 
+// Canal entre agentes (2026-09-11): la respuesta de un sessions_send regresa por un camino que muere en
+// silencio cuando el turno que despacho ya cerro, y ninguna espera lo arregla (30 s explicitos = el
+// default; el agente puede tardar mas que cualquier espera). Por eso las esperas no abren el candado.
+// Pasan: envios a sesiones de main, avisos marcados que no esperan respuesta y encargos que llevan la
+// etiqueta exacta de reporte de vuelta con la sessionKey de quien despacha (verificado en vivo el 09-11).
+// La etiqueta es literal a proposito: buscar "sessions_send" y la sessionKey sueltas dejaba pasar un
+// texto que solo las mencionaba, incluso negando el reporte (revision cruzada grok, 09-11).
+export const SEND_NOTICE_MARKER = "[AVISO SIN RESPUESTA]";
+export const SEND_RETURN_TAG = "[REPORTE DE VUELTA:";
+
+export type SessionsSendParams = {
+  agentId?: unknown;
+  sessionKey?: unknown;
+  session_key?: unknown;
+  label?: unknown;
+  timeoutSeconds?: unknown;
+  message?: unknown;
+};
+
+function normalized(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim().toLowerCase() : undefined;
+}
+
+/** Destino como lo resuelve la herramienta: sessionKey (o session_key), luego label, luego agentId. */
+function sendTargetsMain(params: SessionsSendParams): boolean {
+  const key = normalized(params.sessionKey) ?? normalized(params.session_key);
+  if (key) return key === "main" || key.startsWith("agent:main:");
+  if (normalized(params.label)) return false;
+  return normalized(params.agentId) === "main";
+}
+
+export function sessionsSendGuardVerdict(
+  requesterAgentId: string | undefined,
+  params: SessionsSendParams,
+  requesterSessionKey?: string,
+): string | undefined {
+  if (normalized(requesterAgentId) !== "main") return undefined;
+  if (sendTargetsMain(params)) return undefined;
+  const message = typeof params.message === "string" ? params.message : "";
+  if (message.trimStart().toUpperCase().startsWith(SEND_NOTICE_MARKER)) return undefined;
+  if (requesterSessionKey) {
+    const expectedTag = `${SEND_RETURN_TAG} ${requesterSessionKey}]`.toUpperCase();
+    if (message.toUpperCase().includes(expectedTag)) return undefined;
+  }
+  const returnKey = requesterSessionKey ?? "agent:main:main";
+  return (
+    "Envio bloqueado por summa-gate: la respuesta de un sessions_send de Claw a otro agente se pierde si el agente tarda " +
+    "mas que la espera, y ninguna espera lo evita (2026-09-11: 41 respuestas perdidas). Usa una de estas: " +
+    "(1) tarea o pregunta: sessions_spawn agentId=<agente> mode=run con todo el contexto en task; el resultado te llega solo como turno nuevo. " +
+    `(2) seguir un trabajo en la sesion del agente: empieza el mensaje con la etiqueta exacta "${SEND_RETURN_TAG} ${returnKey}]" y pidele ahi que te reporte con sessions_send al terminar (timeoutSeconds 0); mencionar sessions_send en el texto no abre nada. ` +
+    `(3) aviso que no necesita respuesta: empieza el mensaje con ${SEND_NOTICE_MARKER}.`
+  );
+}
+
 const DOC_RE = /\.(md|mdx|markdown|rst|txt|adoc|org)$/i;
 const LOCKFILE_RE =
   /(^|[/\\])(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|cargo\.lock|poetry\.lock|composer\.lock|gemfile\.lock|go\.sum|pubspec\.lock)$/i;
