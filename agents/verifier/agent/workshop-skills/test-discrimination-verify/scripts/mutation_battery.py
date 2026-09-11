@@ -79,6 +79,13 @@ def main() -> int:
             continue
 
         MODULE.write_text(original.replace(old, new))
+        # Read the mutated bytes back: the mutation must be ON DISK when pytest runs.
+        mutated_sha = hashlib.sha256(MODULE.read_bytes()).hexdigest()
+        if mutated_sha == hashlib.sha256(original.encode()).hexdigest():
+            print(f"{name} | the mutation did not change the file -> INVALID")
+            verdicts[name] = "INVALID"
+            MODULE.write_text(original)
+            continue
         try:
             try:
                 ast.parse(MODULE.read_text())
@@ -102,9 +109,15 @@ def main() -> int:
         finally:
             MODULE.write_text(original)
 
+        # Restore must be provable before the next mutation runs.
+        restored_ok = hashlib.sha256(MODULE.read_bytes()).hexdigest() == hashlib.sha256(original.encode()).hexdigest()
+        if not restored_ok:
+            print(f"{name} | RESTORATION FAILED - stop and restore from {backup}")
+            return 3
+
         verdicts[name] = verdict
         print(f"{name} | syntax_ok={syntax_ok} collected={collected} | {verdict} | "
-              f"failed={failed} errors={errored}")
+              f"sha={mutated_sha[:16]} | failed={failed} errors={errored}")
 
     restored = MODULE.read_text() == original
     print("restored:", restored)
