@@ -29,9 +29,12 @@ export function mergeGuardVerdict(command: string): string | undefined {
 // Canal entre agentes (2026-09-11): la respuesta de un sessions_send regresa por un camino que muere en
 // silencio cuando el turno que despacho ya cerro, y ninguna espera lo arregla (30 s explicitos = el
 // default; el agente puede tardar mas que cualquier espera). Por eso las esperas no abren el candado.
-// Pasan: envios a sesiones de main, avisos marcados que no esperan respuesta y encargos que piden reporte
-// de vuelta con sessions_send a la sessionKey exacta de quien despacha (verificado en vivo el 09-11).
+// Pasan: envios a sesiones de main, avisos marcados que no esperan respuesta y encargos que llevan la
+// etiqueta exacta de reporte de vuelta con la sessionKey de quien despacha (verificado en vivo el 09-11).
+// La etiqueta es literal a proposito: buscar "sessions_send" y la sessionKey sueltas dejaba pasar un
+// texto que solo las mencionaba, incluso negando el reporte (revision cruzada grok, 09-11).
 export const SEND_NOTICE_MARKER = "[AVISO SIN RESPUESTA]";
+export const SEND_RETURN_TAG = "[REPORTE DE VUELTA:";
 
 export type SessionsSendParams = {
   agentId?: unknown;
@@ -63,13 +66,16 @@ export function sessionsSendGuardVerdict(
   if (sendTargetsMain(params)) return undefined;
   const message = typeof params.message === "string" ? params.message : "";
   if (message.trimStart().toUpperCase().startsWith(SEND_NOTICE_MARKER)) return undefined;
-  if (requesterSessionKey && message.includes("sessions_send") && message.includes(requesterSessionKey)) return undefined;
+  if (requesterSessionKey) {
+    const expectedTag = `${SEND_RETURN_TAG} ${requesterSessionKey}]`.toUpperCase();
+    if (message.toUpperCase().includes(expectedTag)) return undefined;
+  }
   const returnKey = requesterSessionKey ?? "agent:main:main";
   return (
     "Envio bloqueado por summa-gate: la respuesta de un sessions_send de Claw a otro agente se pierde si el agente tarda " +
     "mas que la espera, y ninguna espera lo evita (2026-09-11: 41 respuestas perdidas). Usa una de estas: " +
     "(1) tarea o pregunta: sessions_spawn agentId=<agente> mode=run con todo el contexto en task; el resultado te llega solo como turno nuevo. " +
-    `(2) seguir un trabajo en la sesion del agente: escribe en el mensaje "Cuando termines, reportame con sessions_send a sessionKey ${returnKey}, timeoutSeconds 0". ` +
+    `(2) seguir un trabajo en la sesion del agente: empieza el mensaje con la etiqueta exacta "${SEND_RETURN_TAG} ${returnKey}]" y pidele ahi que te reporte con sessions_send al terminar (timeoutSeconds 0); mencionar sessions_send en el texto no abre nada. ` +
     `(3) aviso que no necesita respuesta: empieza el mensaje con ${SEND_NOTICE_MARKER}.`
   );
 }

@@ -95,14 +95,14 @@ describe("sessionsSendGuardVerdict", () => {
     blocked({ agentId: "main", session_key: "agent:ingenieria:main", message: "retoma" });
   });
 
-  it("allows a report-back request addressed to Claw's exact session", () => {
+  it("allows a report-back request carrying the explicit tag with Claw's exact session", () => {
     assert.equal(
       sessionsSendGuardVerdict(
         "main",
         {
           agentId: "operaciones",
           timeoutSeconds: 0,
-          message: `revisa y cuando termines reportame con sessions_send a sessionKey ${CLAW}, timeoutSeconds 0`,
+          message: `[REPORTE DE VUELTA: ${CLAW}] revisa la corrida y reportame con sessions_send cuando termines`,
         },
         CLAW,
       ),
@@ -110,9 +110,18 @@ describe("sessionsSendGuardVerdict", () => {
     );
   });
 
-  it("blocks a return address that is not Claw's session or is only mentioned", () => {
-    blocked({ agentId: "operaciones", timeoutSeconds: 0, message: "reportame con sessions_send a sessionKey agent:main:zzz" });
-    blocked({ agentId: "ingenieria", timeoutSeconds: 0, message: "no me reportes; el error salio en agent:main:main ayer" });
+  // Revision cruzada (grok, 2026-09-11): buscando las cadenas sueltas "sessions_send" y la sessionKey,
+  // un texto que solo las menciona (incluso negando el reporte) abria el candado.
+  it("blocks messages that merely mention sessions_send and the session key", () => {
+    blocked({
+      agentId: "ingenieria",
+      timeoutSeconds: 0,
+      message: `no me reportes con sessions_send; el error salio en ${CLAW} ayer; retoma el PR`,
+    });
+  });
+
+  it("blocks the return tag when it carries another session", () => {
+    blocked({ agentId: "operaciones", timeoutSeconds: 0, message: "[REPORTE DE VUELTA: agent:main:zzz] revisa la corrida" });
   });
 
   it("allows notices marked as not needing a reply", () => {
@@ -197,6 +206,6 @@ describe("plugin smoke import", () => {
     const claw = { agentId: "main", sessionKey: "agent:main:main" };
     assert.equal(call({ agentId: "ingenieria", message: "retoma" }, claw)?.block, true);
     assert.equal(call({ agentId: "ingenieria", message: "retoma" }, { agentId: "operaciones", sessionKey: "agent:operaciones:main" }), undefined);
-    assert.equal(call({ agentId: "ingenieria", message: "reportame con sessions_send a sessionKey agent:main:main" }, claw), undefined);
+    assert.equal(call({ agentId: "ingenieria", message: "[REPORTE DE VUELTA: agent:main:main] reportame al terminar" }, claw), undefined);
   });
 });
