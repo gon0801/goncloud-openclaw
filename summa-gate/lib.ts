@@ -27,46 +27,50 @@ export function mergeGuardVerdict(command: string): string | undefined {
 }
 
 // Canal entre agentes (2026-09-11): la respuesta de un sessions_send regresa por un camino que muere en
-// silencio cuando el turno que despacho ya cerro, y sin timeoutSeconds la espera es de solo 30 s.
-// Pasan: esperas explicitas, envios a sesiones de main y fire-and-forget que piden reporte de vuelta.
-const SEND_RETURN_ADDRESS_RE = /agent:main:[A-Za-z0-9._:-]+/;
+// silencio cuando el turno que despacho ya cerro, y ninguna espera lo arregla (30 s explicitos = el
+// default; el agente puede tardar mas que cualquier espera). Por eso las esperas no abren el candado.
+// Pasan: envios a sesiones de main, avisos marcados que no esperan respuesta y encargos que piden reporte
+// de vuelta con sessions_send a la sessionKey exacta de quien despacha (verificado en vivo el 09-11).
+export const SEND_NOTICE_MARKER = "[AVISO SIN RESPUESTA]";
 
 export type SessionsSendParams = {
   agentId?: unknown;
   sessionKey?: unknown;
+  session_key?: unknown;
+  label?: unknown;
   timeoutSeconds?: unknown;
   message?: unknown;
 };
 
-function sendTargetAgent(params: SessionsSendParams): string | undefined {
-  if (typeof params.agentId === "string" && params.agentId) return params.agentId;
-  if (typeof params.sessionKey === "string") return /^agent:([^:]+):/.exec(params.sessionKey)?.[1];
-  return undefined;
+function normalized(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim().toLowerCase() : undefined;
 }
 
-function sendTimeout(params: SessionsSendParams): number | undefined {
-  const raw = params.timeoutSeconds;
-  if (typeof raw === "number") return raw;
-  if (typeof raw === "string" && /^\d+$/.test(raw)) return Number(raw);
-  return undefined;
+/** Destino como lo resuelve la herramienta: sessionKey (o session_key), luego label, luego agentId. */
+function sendTargetsMain(params: SessionsSendParams): boolean {
+  const key = normalized(params.sessionKey) ?? normalized(params.session_key);
+  if (key) return key === "main" || key.startsWith("agent:main:");
+  if (normalized(params.label)) return false;
+  return normalized(params.agentId) === "main";
 }
 
 export function sessionsSendGuardVerdict(
   requesterAgentId: string | undefined,
   params: SessionsSendParams,
+  requesterSessionKey?: string,
 ): string | undefined {
-  if (requesterAgentId !== "main") return undefined;
-  if (sendTargetAgent(params) === "main") return undefined;
-  const timeout = sendTimeout(params);
-  if (timeout !== undefined && timeout > 0) return undefined;
+  if (normalized(requesterAgentId) !== "main") return undefined;
+  if (sendTargetsMain(params)) return undefined;
   const message = typeof params.message === "string" ? params.message : "";
-  if (timeout === 0 && SEND_RETURN_ADDRESS_RE.test(message)) return undefined;
+  if (message.trimStart().toUpperCase().startsWith(SEND_NOTICE_MARKER)) return undefined;
+  if (requesterSessionKey && message.includes("sessions_send") && message.includes(requesterSessionKey)) return undefined;
+  const returnKey = requesterSessionKey ?? "agent:main:main";
   return (
-    "Envio bloqueado por summa-gate: un sessions_send de Claw a otro agente sin espera explicita pierde la respuesta " +
-    "si el agente tarda mas de lo que esperas (sin timeoutSeconds la espera es de 30 s; 2026-09-11: 41 respuestas perdidas). " +
-    "Usa una de estas: (1) tarea nueva: sessions_spawn agentId=<agente> mode=run con todo el contexto en task; el resultado te llega solo. " +
-    "(2) seguir un trabajo en la sesion del agente: timeoutSeconds 0 y en el mensaje \"Cuando termines, reportame con sessions_send " +
-    "a sessionKey <tu sesion, p. ej. agent:main:main>, timeoutSeconds 0\". (3) pregunta rapida que vas a esperar: timeoutSeconds explicito (p. ej. 120)."
+    "Envio bloqueado por summa-gate: la respuesta de un sessions_send de Claw a otro agente se pierde si el agente tarda " +
+    "mas que la espera, y ninguna espera lo evita (2026-09-11: 41 respuestas perdidas). Usa una de estas: " +
+    "(1) tarea o pregunta: sessions_spawn agentId=<agente> mode=run con todo el contexto en task; el resultado te llega solo como turno nuevo. " +
+    `(2) seguir un trabajo en la sesion del agente: escribe en el mensaje "Cuando termines, reportame con sessions_send a sessionKey ${returnKey}, timeoutSeconds 0". ` +
+    `(3) aviso que no necesita respuesta: empieza el mensaje con ${SEND_NOTICE_MARKER}.`
   );
 }
 
