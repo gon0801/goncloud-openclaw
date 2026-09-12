@@ -5,10 +5,18 @@ import { fileURLToPath } from "node:url";
 import { describe, it, before, after } from "node:test";
 
 import {
+  blockedWithoutTryingVerdict,
   canonicalRole,
   mergeGuardVerdict,
   sessionsSendGuardVerdict,
 } from "./lib.ts";
+
+// Texto real del 2026-09-12: ingenieria se declaro incapaz sin correr un solo comando.
+const INCAPAZ_REAL =
+  "Techo funcional: no puedo tipear dentro de ttys001 desde aca - no hay skill instalada para eso.";
+// Negativa legitima real del 2026-09-11: Claw se nego a reiniciar el gateway, y tenia razon.
+const NEGATIVA_LEGITIMA =
+  "Los reinicios del gateway son accion del propietario; no los ejecuto por mi cuenta aunque la ventana este limpia.";
 
 describe("canonicalRole", () => {
   it("maps implementer: fix failing tests to implementer (not verifier)", () => {
@@ -207,5 +215,87 @@ describe("plugin smoke import", () => {
     assert.equal(call({ agentId: "ingenieria", message: "retoma" }, claw)?.block, true);
     assert.equal(call({ agentId: "ingenieria", message: "retoma" }, { agentId: "operaciones", sessionKey: "agent:operaciones:main" }), undefined);
     assert.equal(call({ agentId: "ingenieria", message: "[REPORTE DE VUELTA: agent:main:main] reportame al terminar" }, claw), undefined);
+  });
+
+  // Sin esto el verde no prueba nada: el candado tiene que correr ANTES del filtro de sesiones
+  // armadas. La falla del 2026-09-12 fue en una sesion despachada, sin sentinel -saikit, o sea
+  // sin estado en disco. Si el handler se moviera detras del `if (!state) return`, esta prueba
+  // pasaria a devolver undefined y lo cacharia.
+  it("blocks declared incapacity in a session that was never armed with -saikit", async () => {
+    const mod = await import("./index.ts");
+    type Hook = (event: unknown, ctx: unknown) => unknown;
+    const regs: Array<{ event: string; handler: Hook }> = [];
+    const noop = () => {};
+    mod.default.register({
+      logger: { info: noop, warn: noop, error: noop, debug: noop },
+      on: (event: string, handler: Hook) => {
+        regs.push({ event, handler });
+      },
+    } as never);
+
+    const finalize = regs.find((r) => r.event === "before_agent_finalize");
+    const afterTool = regs.find((r) => r.event === "after_tool_call");
+    assert.ok(finalize, "before_agent_finalize sin registrar");
+    assert.ok(afterTool, "after_tool_call sin registrar");
+
+    // Sesion nunca armada: no existe archivo de estado para esta clave.
+    const virgen = { sessionKey: "agent:ingenieria:jamas-armada-" + Date.now() };
+    const out = finalize.handler({ lastAssistantMessage: INCAPAZ_REAL }, virgen) as
+      | { action?: string; reason?: string }
+      | undefined;
+    assert.equal(out?.action, "revise");
+    assert.match(String(out?.reason), /sin haber corrido un solo comando/);
+
+    // Y si en esa misma sesion SI hubo un exec, deja pasar la misma conclusion.
+    afterTool.handler({ toolName: "exec", params: { command: "osascript -e 'x'" } }, virgen);
+    assert.equal(finalize.handler({ lastAssistantMessage: INCAPAZ_REAL }, virgen), undefined);
+  });
+});
+
+describe("blockedWithoutTryingVerdict", () => {
+  it("blocks the real 2026-09-12 text when no exec ran", () => {
+    assert.match(
+      String(blockedWithoutTryingVerdict(INCAPAZ_REAL, 0)),
+      /sin haber corrido un solo comando/,
+    );
+  });
+
+  it("lets it through once a command was actually attempted", () => {
+    assert.equal(blockedWithoutTryingVerdict(INCAPAZ_REAL, 1), undefined);
+  });
+
+  // El falso positivo que mas importa: una negativa por criterio NO es incapacidad tecnica.
+  // Claw acerto el 2026-09-11 al negarse a reiniciar el gateway; bloquearlo seria un bug del candado.
+  it("never blocks a refusal made on judgement, even with zero exec", () => {
+    assert.equal(blockedWithoutTryingVerdict(NEGATIVA_LEGITIMA, 0), undefined);
+  });
+
+  it("never blocks a refusal grounded in a real permission error", () => {
+    assert.equal(
+      blockedWithoutTryingVerdict(
+        "No pude abrir el archivo: approval cannot safely bind this command.",
+        0,
+      ),
+      undefined,
+    );
+  });
+
+  it("ignores answers that claim no incapacity at all", () => {
+    assert.equal(blockedWithoutTryingVerdict("Listo, quedaron 3 archivos cambiados.", 0), undefined);
+  });
+
+  it("fails open on empty or non-string text", () => {
+    assert.equal(blockedWithoutTryingVerdict("", 0), undefined);
+    assert.equal(blockedWithoutTryingVerdict(undefined, 0), undefined);
+  });
+
+  // Discriminacion: los dos textos tienen que caer de lados distintos con el MISMO execCount 0.
+  // Si un cambio futuro ensancha el patron de incapacidad hasta tragarse la negativa legitima,
+  // esta prueba lo ve aunque las dos de arriba sigan verdes por separado.
+  it("separates technical incapacity from a judgement refusal at the same zero-exec count", () => {
+    const bloqueado = blockedWithoutTryingVerdict(INCAPAZ_REAL, 0);
+    const permitido = blockedWithoutTryingVerdict(NEGATIVA_LEGITIMA, 0);
+    assert.ok(bloqueado, "el texto de incapacidad deberia bloquearse");
+    assert.equal(permitido, undefined, "la negativa por criterio no deberia bloquearse");
   });
 });

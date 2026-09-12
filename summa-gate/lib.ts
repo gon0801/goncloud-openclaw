@@ -143,3 +143,43 @@ export function canonicalRole(text: string): Role | undefined {
   }
   return undefined;
 }
+
+// Declararse incapaz sin intentar (2026-09-12): ingenieria le dijo a David "Tipear dentro de
+// ttys001 desde aca - no hay skill instalada para eso" sin correr un solo comando. Los mismos
+// osascript que no intento devolvieron despues la app al frente, 10 ventanas de Terminal, y una
+// ventana nueva donde se escribio y ejecuto un comando. Cero bloqueos de permisos. Mismo patron
+// que costo la corrida de las 7:00 del 2026-09-11 en operaciones.
+//
+// El discriminador es "¿lo intentaste?", NO "¿que concluiste?": quien corre el comando, falla y
+// reporta el error textual pasa limpio. Solo se rechaza la incapacidad declarada con cero exec.
+//
+// Las negativas por CRITERIO no se tocan: el 2026-09-11 Claw se nego a reiniciar el gateway
+// ("es accion del propietario") y tenia razon. Ese caso pasa aunque no haya corrido nada.
+
+/** Incapacidad TECNICA: dice que no se puede por falta de herramienta o capacidad. */
+const INCAPACITY_RE =
+  /no hay (?:ninguna |una )?(?:skill|herramienta)|no (?:tengo|existe) (?:esa |la |una |ninguna )?(?:skill|herramienta|capacidad)|sin (?:skill|herramienta) (?:instalada|disponible)|no (?:hay|tengo) (?:forma|manera|modo) de|no puedo (?:hacerlo|ejecutar|correr|tipear|escribir|controlar|acceder|abrir|leer)|no (?:es|resulta) posible (?:hacerlo|ejecutar|correr)|no tool (?:is )?(?:installed|available) for|there is no (?:skill|tool)/i;
+
+/** Negativa por CRITERIO o por permiso: legitima, no se bloquea aunque no haya corrido nada. */
+const JUDGMENT_REFUSAL_RE =
+  /no voy a\b|me niego\b|accion del (?:propietario|dueno|dueño)|del (?:propietario|dueno|dueño)\b|requiere (?:tu |su )?autoriza|sin (?:tu |su )?autoriza|lo decide (?:david|el (?:propietario|dueno|dueño))|por seguridad\b|destructiv|irreversible|no me corresponde|permission denied|approval cannot safely bind/i;
+
+export function blockedWithoutTryingVerdict(
+  text: unknown,
+  execCount: number,
+): string | undefined {
+  if (execCount > 0) return undefined; // lo intento: cualquier conclusion es suya
+  if (typeof text !== "string" || text.length === 0) return undefined; // fail-open
+  if (JUDGMENT_REFUSAL_RE.test(text)) return undefined; // negativa por criterio, no por incapacidad
+  if (!INCAPACITY_RE.test(text)) return undefined;
+  return (
+    "Cierre rechazado por summa-gate: estas declarando que no se puede sin haber corrido un solo " +
+    "comando en este turno (cero llamadas a exec). Intenta el comando real una vez antes de " +
+    "concluir. Si falla, reporta el error textual: eso si es un bloqueo, y pasa. " +
+    "Que no exista una skill con el nombre de la tarea no significa que la capacidad no exista: " +
+    "las capacidades viven en exec. En la Mac, exec host=node mas osascript maneja la interfaz " +
+    "grafica (app al frente, ventanas de Terminal, abrir una ventana y ejecutar dentro). " +
+    "Si tu negativa es por criterio y no por incapacidad (por ejemplo, una accion que le toca al " +
+    "propietario), dilo con esas palabras y este candado no te detiene."
+  );
+}
