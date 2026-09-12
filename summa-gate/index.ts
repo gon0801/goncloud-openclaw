@@ -48,6 +48,8 @@ import {
   redirectTargets,
 } from "./lib.ts";
 
+import { buildRecord, writeRecord } from "./observer.ts";
+
 // ---------------------------------------------------------------------------
 // Estado persistido por sesión
 // ---------------------------------------------------------------------------
@@ -539,6 +541,50 @@ export default definePluginEntry({
     });
 
     // Limpieza de memoria al cerrar sesión (el estado en disco lo barre el TTL).
+    // -- 9. Observador de rendiciones ---------------------------------------
+    //
+    // ALCANCE (Fase 2 / 2.1 - 2026-09-12, PR Fase2.1):
+    //   Observador, NO candado. El handler de agent_end solo escribe una linea
+    //   en ~/.openclaw/summa-gate/rendiciones.jsonl por turno que termina con
+    //   `nonReplaySafeCount === 0` y texto con forma de incapacidad. No
+    //   modifica el turno: agent_end corre via `runVoidHook` en el runtime, que
+    //   descarta el valor de retorno (cita: hook-runner-global-BhDCl4qm.mjs,
+    //   runAgentEnd en linea 1003 llama runVoidHook linea 778-796; el
+    //   comentario oficial del runtime en linea 996-1001 dice "Allows plugins
+    //   to analyze completed conversations. Runs handlers in parallel.").
+    //   El timeout default por hook es 3e4 ms (DEFAULT_VOID_HOOK_TIMEOUT_MS_BY_HOOK
+    //   linea 452). Por eso el handler hace append sincrono y sale: nada de
+    //   red, nada de leer archivos grandes.
+    //
+    //   Si el handler supera el timeout, el runtime lo corta y registra warn;
+    //   el jsonl gana una linea de menos ese turno, nunca se rompe el gate
+    //   de recibo ni el resto del flujo del agente.
+    api.on("agent_end", (event, ctx) => {
+      try {
+        const sessionKey =
+          (ctx as { sessionKey?: string }).sessionKey ??
+          (event as { sessionKey?: string }).sessionKey ??
+          "unknown";
+        const agent = (ctx as { agentId?: string }).agentId;
+        const inputProvenanceKind = (ctx as { inputProvenance?: { kind?: string } })
+          .inputProvenance?.kind;
+        const messages = (event as { messages?: unknown }).messages;
+        const record = buildRecord(
+          Date.now(),
+          sessionKey,
+          agent,
+          inputProvenanceKind,
+          messages as Parameters<typeof buildRecord>[4],
+        );
+        writeRecord(record);
+      } catch (err) {
+        // Fail-open: a broken observer must never block the turn. The runtime
+        // would still log the hook failure on its own; we add one warn so an
+        // operator scanning summa-gate logs can correlate.
+        log.warn(`summa-gate observer: agent_end failed: ${String(err)}`);
+      }
+    });
+
     api.on("session_end", (event) => {
       if (event.sessionKey) promptSeenSessions.delete(event.sessionKey);
     });
