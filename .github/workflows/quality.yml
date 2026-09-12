@@ -83,7 +83,7 @@ jobs:
       # workflow y el hook divergen, vuelve a pasar lo que paso — una prueba en rojo
       # durante dias porque cada lado creia que la corria el otro.
       - name: Candados del repo (bateria + contratos)
-        run: bash tools/run-checks.sh
+        run: bash scripts/run-checks.sh
 
   gate:
     runs-on: ubuntu-latest

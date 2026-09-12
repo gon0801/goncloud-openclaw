@@ -34,7 +34,7 @@ repos:
     hooks:
       - id: run-checks
         name: bateria summa-gate + contratos de scripts
-        entry: bash tools/run-checks.sh
+        entry: bash scripts/run-checks.sh
         language: system
         pass_filenames: false
         # Corre siempre, no solo cuando cambian los archivos obvios: la prueba
