@@ -15,8 +15,17 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      # exclude agregado 2026-09-12: `workspace-*/memory/` y `agents/*/sessions/` no son
+      # archivos escritos por nadie — el cron "auto: snapshot .openclaw" los vuelca desde el
+      # gateway cada ~2 h. Arreglarles el whitespace no sirve: el proximo snapshot los
+      # reescribe igual y el hook vuelve a fallar. Medido: 6 corpus de memoria dejaban el CI
+      # en rojo por esto, sin ninguna relacion con el cambio que se estaba revisando.
+      # Es la misma trampa que el SKILL.md desviado: no se corrige el artefacto generado,
+      # se corrige el generador o se lo excluye.
       - id: trailing-whitespace
+        exclude: '^(workspace-[^/]+/memory/|agents/[^/]+/sessions/)'
       - id: end-of-file-fixer
+        exclude: '^(workspace-[^/]+/memory/|agents/[^/]+/sessions/)'
       - id: check-merge-conflict
       - id: check-added-large-files
       - id: check-json
