@@ -140,7 +140,14 @@ export type ObserverRecord = {
   sessionKey: string;
   agent?: string;
   inputProvenanceKind?: string;
-  readSkill: boolean;
+  // `hadRead` mide "hubo algun read en este turno", no "se leyo un SKILL.md".
+  // El runtime no expone la ruta del `read` al observer hook; cualquier
+  // `read` (docs, TSV, jsonl, registry) cuenta igual. La medida ideal
+  // ("consulto su skill y aun asi se rindi") no es observable hoy.
+  // Anclar este contrato: el nombre describe lo que el dato dice,
+  // no lo que el operador querria medir (lo opuesto al error `unknown`
+  // vs `0` de Fase 1).
+  hadRead: boolean;
   tools: Record<string, number>;
   nonReplaySafeCount: number;
   detected: boolean;
@@ -184,11 +191,13 @@ export function lastAssistantText(messages: AgentEndMessage[] | undefined | null
   return "";
 }
 
-function readSkillInTurn(toolNames: string[]): boolean {
-  // Cheap witness the human wants: did this turn consult any SKILL.md?
-  // The runtime does not hand us the path of every `read` here; we record
-  // "the agent read something" so reviewers can correlate with the model
-  // transcript when a real incident comes back.
+function hadReadInTurn(toolNames: string[]): boolean {
+  // Mide "hubo algun read en este turno". NO mide "se leyo un SKILL.md":
+  // el runtime no entrega el `path` de cada `read` al observer hook, asi
+  // que un read a un doc, a un jsonl, o al registry de skills cuenta
+  // igual. Si el operador quiere "consulto su skill y aun asi se
+  // rindi" tiene que correlacionarlo con el transcript del modelo; no
+  // puede inferirlo de este campo.
   return toolNames.includes("read");
 }
 
@@ -213,7 +222,7 @@ export function buildRecord(
     sessionKey,
     agent,
     inputProvenanceKind,
-    readSkill: readSkillInTurn(toolNames),
+    hadRead: hadReadInTurn(toolNames),
     tools: counts,
     nonReplaySafeCount,
     detected,

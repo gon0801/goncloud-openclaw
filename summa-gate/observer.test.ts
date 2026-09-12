@@ -97,7 +97,7 @@ describe("observer — buildRecord", () => {
     assert.equal(r.detected, true);
     assert.equal(r.nonReplaySafeCount, 0);
     assert.equal(r.tools.read, 2);
-    assert.equal(r.readSkill, true);
+    assert.equal(r.hadRead, true);
     assert.equal(r.textPreview, REAL_INCAPACITY_FROM_20260912.slice(0, TEXT_PREVIEW_CHARS));
     assert.equal(r.textLen, REAL_INCAPACITY_FROM_20260912.length);
     assert.equal(r.ts, 1_700_000_000_000);
@@ -228,7 +228,7 @@ describe("observer — writer + rotation", () => {
       sessionKey: "agent:scout:web",
       agent: "scout",
       inputProvenanceKind: "user",
-      readSkill: true,
+      hadRead: true,
       tools: { read: 2 },
       nonReplaySafeCount: 0,
       detected: true,
@@ -249,7 +249,7 @@ describe("observer — writer + rotation", () => {
       "sessionKey",
       "agent",
       "inputProvenanceKind",
-      "readSkill",
+      "hadRead",
       "tools",
       "nonReplaySafeCount",
       "detected",
@@ -276,7 +276,7 @@ describe("observer — writer + rotation", () => {
       sessionKey: "agent:x:rotate",
       agent: "x",
       inputProvenanceKind: undefined,
-      readSkill: false,
+      hadRead: false,
       tools: {},
       nonReplaySafeCount: 0,
       detected: false,
