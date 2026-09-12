@@ -8,6 +8,15 @@
 # (2) ninguna instruccion versionada para agentes usa la forma mala; (3) la skill con la regla esta
 # en main/operaciones/ingenieria, identica y con sus anclas; (4) con CLI local, el mecanismo sigue.
 # Uso: bash scripts/tests/test-browser-profile-flag.sh
+# OJO SI ESTA PRUEBA SE PONE EN ROJO POR EL PASO (3), el de "difiere de":
+# los archivos bajo agents/*/agent/workshop-skills/ son ARTEFACTOS GENERADOS. El cron
+# "auto: snapshot .openclaw" los reescribe desde los workspaces vivos del gateway
+# (C:\Users\ehven\.openclaw\agents\<agente>\agent\workshop-skills\) cada ~2 h.
+# Arreglar la desviacion SOLO en el repo no sirve: el siguiente snapshot la revierte y la
+# prueba vuelve a rojo sola. Medido el 2026-09-12: el arreglo se deshizo y reaparecio como
+# conflicto de merge en el PR #25.
+# El arreglo va en el gateway (copiar la copia de referencia sobre la desviada ahi), y
+# despues el snapshot lo propaga al repo.
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
