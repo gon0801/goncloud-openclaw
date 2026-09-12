@@ -413,6 +413,40 @@ export default definePluginEntry({
     });
 
     // -- 5. Gate de cierre ----------------------------------------------------
+    //
+    // ALCANCE REAL (Fase 1 / 1.2 - 2026-09-12, PR Fase1.2):
+    //   El `revise` retornado por este handler SE DESCARTA SILENCIOSAMENTE
+    //   cuando el turno tuvo efecto lateral (`hadDeterministicSideEffect`).
+    //   Eso lo hace el runtime de OpenClaw, no este plugin. En la practica,
+    //   este gate solo bloquea cierres en turnos donde el agente NO emitio
+    //   herramientas mutantes (exec con side effect, write, sessions_send /
+    //   sessions_spawn aceptado, cron add, etc.).
+    //
+    // Cita del runtime instalado (OpenClaw 2026.9.4, host del gateway Mac):
+    //   builtin-openclaw-B-H-7lKk.mjs, lineas 13039-13042
+    //   sha256: 0a8c813e535c92d03f69bc58381518ba0e6ac6e46f3adda54138c5f668340ea8
+    //
+    //     if (event.hadDeterministicSideEffect) {
+    //       log$6.warn(`before_agent_finalize requested revision after potential side effects; finalizing runId=... sessionId=...`);
+    //       return;
+    //     }
+    //
+    // Evidencia empirica (Fase 1 / 1.1, PR #18): en 5 corridas de
+    // `openclaw logs` en la ventana del 2026-09-12T11:05-T12:05 (~50 min),
+    // cero `summa-gate: revise solicitado` y cero `before_agent_finalize requested revision after potential side effects`. Conclusion: sin
+    // datos para mover la exigencia a `before_prompt_build`; se documenta
+    // el alcance real y queda para Fase 2 / 2.2 como dato de entrada.
+    //
+    // Lo que NO cubre este gate hoy:
+    //   - Turnos donde el agente trabajo (exec, write, sessions_spawn,
+    //     cron add): el revise que este handler emite SE DESCARTA en runtime.
+    //   - Turnos donde faltaba un item del recibo y el agente ya cerro con
+    //     side effects: la falta se pierde silenciosamente (sin log de WARN).
+    //
+    // Lo que SI cubre:
+    //   - Turnos de conversacion pura sin herramientas mutantes.
+    //   - Turnos donde el agente declaro PAUSED / DELEGATED (escotillas).
+    //
     api.on("before_agent_finalize", (event, ctx) => {
       const sessionKey = ctx.sessionKey ?? event.sessionKey;
       if (!sessionKey) return;

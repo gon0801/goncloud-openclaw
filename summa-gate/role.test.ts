@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, symlinkSync, existsSync, rmSync } from "node:fs";
+import { mkdirSync, symlinkSync, existsSync, rmSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it, before, after } from "node:test";
@@ -256,6 +256,44 @@ describe("plugin smoke import", () => {
     assert.ok(
       !String(segundo?.appendContext ?? "").includes("Approved executables: none"),
       "las standing rules se reinyectan en cada turno; deberian ir una sola vez por sesion",
+    );
+  });
+});
+
+// Gate scope comment (Fase 1 / 1.2): declara el alcance real del gate de
+// `before_agent_finalize` con la cita del runtime. Si este describe falla
+// contra la version sin comentario, prueba que el comentario fue retirado.
+describe("gate scope comment (1.2)", () => {
+  it("declares real scope with the runtime citation in summa-gate/index.ts", () => {
+    const idx = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+
+    assert.match(
+      idx,
+      /ALCANCE REAL \(Fase 1 \/ 1\.2 - 2026-09-12/,
+      "the gate handler in index.ts must declare its real scope and credit the phase (1.2 DoD)",
+    );
+
+    // Cita la linea exacta del warning del runtime que descarta el revise.
+    assert.match(
+      idx,
+      /before_agent_finalize requested revision after potential side effects/,
+      "the gate handler in index.ts must cite the runtime-warning text that drops the revise with side effects",
+    );
+
+    // Ancla la cita al archivo del runtime instalado (sha256 verificado en
+    // host del gateway Mac contra builtin-openclaw-B-H-7lKk.mjs).
+    assert.match(
+      idx,
+      /0a8c813e535c92d03f69bc58381518ba0e6ac6e46f3adda54138c5f668340ea8/,
+      "the gate handler in index.ts must cite the exact sha256 of the runtime file (builtin-openclaw-B-H-7lKk.mjs)",
+    );
+
+    // Ancla al archivo + lineas exactas, asi el comentario no se puede
+    // editar livianamente sin tocar este test.
+    assert.match(
+      idx,
+      /builtin-openclaw-B-H-7lKk\.mjs, lineas 13039-13042/,
+      "the gate handler in index.ts must cite the exact runtime file and line range",
     );
   });
 });
