@@ -135,7 +135,8 @@ const STANDING_RULES = `[summa-gate] Reglas permanentes de esta sesión:
 1. La batería completa de pruebas se corre UNA sola vez por tarea, idealmente en CI/PR; no la repitas localmente si el mismo SHA ya fue validado por commit, push o CI.
 2. Creá las ramas desde origin/<default> actualizado y verificá el punto de partida con git log antes de trabajar.
 3. No te bloquees esperando jobs en background: revisá primero su estado y seguí con otra cosa.
-4. Antes de re-intentar una acción que falló, diagnosticá la causa raíz; no repitas a ciegas.`;
+4. Antes de re-intentar una acción que falló, diagnosticá la causa raíz; no repitas a ciegas.
+5. "Approved executables: none" es la lista de atajos pre-aprobados, NO un bloqueo de exec: intentá el comando real antes de decir que no podés. Un bloqueo de verdad es el binder negando un comando concreto con su error (ej. "approval cannot safely bind this command"); eso se reporta con el comando y el error exactos. La ausencia de una skill con el nombre de la tarea tampoco es un bloqueo: las capacidades viven en exec.`;
 
 function buildContract(lane: Lane, autopilot: boolean): string {
   const laneNote =
