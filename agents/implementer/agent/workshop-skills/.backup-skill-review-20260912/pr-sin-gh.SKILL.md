@@ -18,18 +18,13 @@ description: Cuando la tarea exige abrir un PR en GitHub y el nodo no tiene gh. 
    JSON `{title, head, base, body}`; guarda la respuesta con `-o` y
    reporta solo el codigo HTTP y el `html_url`.
    - 201 -> PR creado: reporta el link.
-   - 401/403 -> la credencial no alcanza para crear PRs: declaralo y
+   - 401/403/422 -> la credencial no alcanza para crear PRs: declaralo y
      entrega la URL `https://github.com/<owner>/<repo>/pull/new/<branch>`
      que el propio `git push` ya imprimio. El token puede ROTAR a mitad
      de sesion (401 "Bad credentials" con `git push` siguiendo vivo,
      medido en 20.20): para vigilar el CI de un repo PUBLICO no hace
      falta token, el endpoint `commits/<sha>/check-runs` responde sin
      autenticacion.
-   - 422 -> lee el `message` del cuerpo guardado con `-o`: si dice
-     "A pull request already exists", la tarea ya esta cumplida, reporta
-     el PR existente (GET `/repos/<owner>/<repo>/pulls?head=<owner>:<branch>`);
-     si no, es fallo de validacion o permisos: declara y entrega la URL
-     manual.
    - Cuerpo largo o con comillas: escribelo a archivo con heredoc y pasa
      `-d @<archivo>`; y respeta la estructura `TOKEN=$(printf ...)`: un
      parentesis huerfano en esa asignacion da syntax error antes de
