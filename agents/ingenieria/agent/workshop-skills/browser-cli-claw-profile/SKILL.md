@@ -17,7 +17,7 @@ Why (2026-09-11): the global flag made every browser command "ask for a key"; th
    Do not touch `gateway.auth`, do not create `~/.openclaw-claw`, do not ask the owner for a key, do not restart the gateway for it.
 4. NEVER run `reset-profile` on `claw`: it moves the profile's browser data to Trash and wipes every logged-in session (Seller Central, Seller Flex, Gmail, Mercado Libre).
    For "Port 18801 is in use for profile claw but not by openclaw", an owner-authorized gateway restart re-adopted the running browser (afterwards `tabs` listed the 4 tabs and `evaluate` read Seller Central).
-   Before asking for any restart, check that no cron job runs in the next 15 minutes (restart rule in workspace AGENTS.md).
+   Before asking for any restart, check that no cron job runs in the next 15 minutes.
 5. One session drives the claw browser at a time: the session that owns the task. Never split browser work across sessions or fan it out to helpers, and never touch the browser while a session you dispatched or spawned could still be on it: a sub-agent that times out leaves its own children running.
    Why: at 7:33 PDT on 2026-09-11 operaciones and an orphaned sub-agent drove the same tab at once (one navigating, one reading) and the gateway lost track of the running Edge.
 6. On the Windows gateway host every exec of the browser CLI needs `timeoutSeconds >= 60`: the CLI alone takes 10-23 s to start, so a 15-20 s timeout kills it before it connects.

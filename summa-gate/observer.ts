@@ -1,7 +1,15 @@
 /**
- * summa-gate observer — append-only jsonl that records `agent_end` turns whose
- * final assistant text looks like a capability refusal AND that did not perform
- * a non-replay-safe tool call earlier in the turn.
+ * summa-gate observer — append-only jsonl with ONE LINE PER `agent_end` turn.
+ *
+ * Every turn gets a line because the metric is a rate (detections / turns) and
+ * without the denominator the file cannot answer the question it exists for.
+ * `detected` marks the turns whose final assistant text looks like a capability
+ * refusal AND that did not perform a non-replay-safe tool call earlier in the
+ * turn — those are the ones a human reviews.
+ *
+ * `textPreview` is present ONLY on detected lines. The counts (`tools`,
+ * `nonReplaySafeCount`, `hadRead`) ride on every line; the text does not, so the
+ * jsonl never becomes a transcript archive of everything the agents say.
  *
  * Why this lives separately from `lib.ts`:
  * - lib.ts is pure helpers consumed by the gate of receipt and by
@@ -152,7 +160,7 @@ export type ObserverRecord = {
   nonReplaySafeCount: number;
   detected: boolean;
   textLen: number;
-  textPreview: string;
+  textPreview?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -227,7 +235,13 @@ export function buildRecord(
     nonReplaySafeCount,
     detected,
     textLen: text.length,
-    textPreview: text.slice(0, TEXT_PREVIEW_CHARS),
+    // El texto SOLO viaja cuando la linea es una deteccion. Una linea por turno
+    // es necesaria para tener el denominador de la tasa (detecciones/turnos); el
+    // contenido de las respuestas NO lo es, y guardarlo convertiria el medidor en
+    // un archivo de transcripciones de todo lo que dicen los 8 agentes.
+    // Revision 2026-09-12: el codigo escribia el preview en los ~97% de turnos que
+    // no son detecciones, contradiciendo el docstring de este mismo archivo.
+    ...(detected ? { textPreview: text.slice(0, TEXT_PREVIEW_CHARS) } : {}),
   };
 }
 

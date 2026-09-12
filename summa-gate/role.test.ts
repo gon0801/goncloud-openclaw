@@ -323,6 +323,51 @@ describe("gate scope comment (1.2)", () => {
 });
 
 describe("observer wiring to agent_end (Fase 2 / 2.1)", () => {
+  // Revision 2026-09-12: el handler escribia una linea por CADA turno (correcto: sin el
+  // denominador no hay tasa), pero el docstring de observer.ts prometia que solo registraba
+  // los detectados, y ninguna prueba fijaba ninguna de las dos conductas. Esta lo hace desde
+  // el handler real, no desde buildRecord: si alguien agrega un `if (!record.detected) return;`
+  // al cableado, la tasa deja de ser calculable y esta prueba cae.
+  it("escribe una linea tambien cuando el turno NO es una rendicion (el denominador)", async () => {
+    const mod = await import("./index.ts");
+    type Reg = { event: string; handler: (event: unknown, ctx: unknown) => unknown };
+    const regs: Reg[] = [];
+    const noop = () => {};
+    mod.default.register({
+      logger: { info: noop, warn: noop, error: noop, debug: noop },
+      on: (event: string, handler: Reg["handler"]) => { regs.push({ event, handler }); },
+    } as never);
+    const age = regs.find((r) => r.event === "agent_end");
+    assert.ok(age, "agent_end handler no registrado");
+
+    const tmp = mkdtempSync(join(tmpdir(), "summa-gate-denominador-"));
+    const live = join(tmp, "rendiciones.jsonl");
+    _setObserverFileForTest(live);
+    try {
+      age.handler(
+        {
+          type: "agent_end",
+          messages: [
+            { role: "user", content: "corre el deploy" },
+            { role: "toolResult", toolName: "exec", content: "ok" },
+            { role: "assistant", content: "Listo, el deploy quedo hecho y verificado." },
+          ],
+        },
+        { sessionKey: "agent:scout:denom-" + Date.now(), agentId: "scout" },
+      );
+      const lineas = readFileSync(live, "utf8").trim().split("\n").filter(Boolean);
+      assert.equal(lineas.length, 1, "un turno normal no dejo linea: sin denominador no hay tasa");
+      const r = JSON.parse(lineas[0]);
+      assert.equal(r.detected, false);
+      // ...pero sin el texto de la respuesta: el medidor no es un archivo de transcripciones.
+      assert.equal(r.textPreview, undefined);
+      assert.ok(!lineas[0].includes("deploy quedo hecho"), "el jsonl filtro la respuesta de un turno normal");
+    } finally {
+      _setObserverFileForTest(null);
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   it("registers an agent_end handler that records to the jsonl and cannot refuse the turn", async () => {
     const mod = await import("./index.ts");
     type Reg = { event: string; handler: (event: unknown, ctx: unknown) => unknown; opts?: { matcher?: string[] } };
