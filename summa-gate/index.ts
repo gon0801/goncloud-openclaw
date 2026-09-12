@@ -40,7 +40,6 @@ import {
   type Role,
   type SessionsSendParams,
   adversaryPathAllowed,
-  blockedWithoutTryingVerdict,
   canonicalRole,
   isDocOrLock,
   sessionsSendGuardVerdict,
@@ -48,11 +47,6 @@ import {
   mergeGuardVerdict,
   redirectTargets,
 } from "./lib.ts";
-
-// Intentos de exec por sesión, para el candado "no te declares bloqueado sin intentar".
-// A diferencia del resto del estado, esto se cuenta en TODAS las sesiones (no solo las armadas
-// con -saikit): la falla del 2026-09-12 ocurrió en una sesión despachada, sin sentinel.
-const execAttempts = new Map<string, number>();
 
 // ---------------------------------------------------------------------------
 // Estado persistido por sesión
@@ -380,13 +374,6 @@ export default definePluginEntry({
     api.on("after_tool_call", (event, ctx) => {
       const sessionKey = ctx.sessionKey;
       if (!sessionKey) return;
-
-      // Antes del filtro de sesiones armadas a propósito: el candado de "no te declares
-      // bloqueado sin intentar" vale para todas las sesiones, armadas o no.
-      if (event.toolName === "exec") {
-        execAttempts.set(sessionKey, (execAttempts.get(sessionKey) ?? 0) + 1);
-      }
-
       const state = loadState(sessionKey);
       if (!state) return; // solo sesiones armadas
 
@@ -428,26 +415,6 @@ export default definePluginEntry({
     api.on("before_agent_finalize", (event, ctx) => {
       const sessionKey = ctx.sessionKey ?? event.sessionKey;
       if (!sessionKey) return;
-
-      // Candado de "no te declares bloqueado sin intentar", ANTES del filtro de sesiones
-      // armadas: la falla del 2026-09-12 ocurrió en una sesión despachada, sin sentinel.
-      const tryingReason = blockedWithoutTryingVerdict(
-        event.lastAssistantMessage,
-        execAttempts.get(sessionKey) ?? 0,
-      );
-      if (tryingReason) {
-        log.info(`summa-gate: incapacidad declarada sin exec en ${sessionKey}; revise solicitado`);
-        return {
-          action: "revise" as const,
-          reason: tryingReason,
-          retry: {
-            instruction: tryingReason,
-            idempotencyKey: "summa-gate-intenta-primero",
-            maxAttempts: 2,
-          },
-        };
-      }
-
       const state = loadState(sessionKey);
       if (!state) return; // solo sesiones armadas
 
@@ -538,10 +505,7 @@ export default definePluginEntry({
 
     // Limpieza de memoria al cerrar sesión (el estado en disco lo barre el TTL).
     api.on("session_end", (event) => {
-      if (event.sessionKey) {
-        promptSeenSessions.delete(event.sessionKey);
-        execAttempts.delete(event.sessionKey);
-      }
+      if (event.sessionKey) promptSeenSessions.delete(event.sessionKey);
     });
 
     log.info("summa-gate: plugin registrado (merge-guard activo, sentinel -saikit listo)");
