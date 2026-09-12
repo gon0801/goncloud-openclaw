@@ -75,3 +75,14 @@ openclaw.json
 # (paso entre 3d97959 y c044d0c). Tiene que estar ignorado.
 summa-gate/rendiciones.jsonl
 summa-gate/rendiciones.jsonl.*
+
+# Preventivo, por FORMA y no por nombre. El gateway tiene su clon en ~/.openclaw, asi que
+# cualquier plugin que escriba ahi deja su salida DENTRO del repo, y el auto-commit del
+# snapshot corre `add -A` ANTES del pull — o sea agrega lo que encuentre sin que nadie lo
+# decida. Con el observador de summa-gate eso costo: el sync roto ~1 h (arbol sucio, el pull
+# se niega) y 22 lineas con previews de respuestas de agentes subidas a GitHub.
+# Estas dos lineas cubren al SIGUIENTE plugin sin que nadie tenga que acordarse.
+# Si algun dia un .log o un .jsonl de un plugin SI tiene que versionarse, se le pone una
+# excepcion con `!` y se explica por que aca mismo.
+summa-gate/*.log
+summa-gate/*.jsonl

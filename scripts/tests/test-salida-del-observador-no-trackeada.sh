@@ -33,9 +33,18 @@ echo "ok (1): ${#ARCHIVOS[@]} salida(s) del observador ignoradas y sin trackear"
 
 # (2) El patron tambien tiene que cubrir las rotaciones, que llevan sufijo de timestamp.
 ROT="summa-gate/rendiciones.jsonl.1789245777936.1.jsonl"
-git check-ignore -q "$ROT" \
+git check-ignore -q --no-index "$ROT" \
   || fail ".gitignore no cubre las rotaciones ($ROT): entrarian al repo al rotar"
 echo "ok (2): el patron cubre los archivos rotados"
+
+# (2b) Preventivo por FORMA: el siguiente plugin que escriba un .jsonl o un .log bajo
+# summa-gate/ tiene que quedar fuera sin que nadie se acuerde de agregarlo. El auto-commit
+# del snapshot corre `add -A` antes del pull, asi que lo que no este ignorado entra.
+for futuro in summa-gate/otro-medidor.jsonl summa-gate/debug.log; do
+  git check-ignore -q --no-index "$futuro" \
+    || fail ".gitignore no cubre $futuro por forma: el proximo plugin que escriba ahi entra al repo"
+done
+echo "ok (2b): el patron cubre por forma (*.jsonl y *.log), no solo por nombre"
 
 # (3) Discriminacion: el .gitignore no puede ser tan ancho que ignore el codigo del plugin.
 # Sin esto, un `summa-gate/*` cumpliria (1) y (2) y dejaria de versionar el plugin entero.
