@@ -63,3 +63,19 @@ decision del operador y NO se invierte desde el detector.
 ## Como se regenera el corpus
 
 El TSV se renderizo ejecutando `node /tmp/render-corpus-tsv.ts` desde el worktree `_wt-fase2` con el branch `fase2/3.2-corpus`. La clasificacion (`detected`/`missed`) se calculo contra `INCAPACITY_RE` **importado directamente** desde `summa-gate/observer.ts` (post-rename de `readSkill->hadRead`), no contra un regex copiado a mano. Esto hace que la migracion del regex en una PR futura se pueda auditar re-corriendo el mismo script contra el nuevo branch.
+
+## Como reproducir este corpus (sin depender de nada efimero)
+
+```sh
+node summa-gate/verify-corpus.mjs
+```
+
+Recalcula la columna `verdict_2_1` de cada fila contra el detector vivo
+(`buildRecord` en `summa-gate/observer.ts`) y falla si alguna no coincide. Tambien
+imprime la matriz de arriba. Las dos piezas que necesita viven en el repo: el TSV y el
+detector.
+
+El PR original apuntaba a `/tmp/render-corpus-tsv.ts`, que se borra con el reinicio de la
+maquina — el mismo defecto que este documento le reprocha a `probe.mjs` unas lineas mas
+arriba. Anotado aqui a proposito: el artefacto re-derivable es el criterio de la Fase 3,
+y es facil violarlo sin darse cuenta.
