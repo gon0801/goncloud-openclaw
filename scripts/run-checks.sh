@@ -50,9 +50,16 @@ else
   echo "FAIL: bateria summa-gate"; fallas=$((fallas + 1))
 fi
 
+# Cross-review de qwen (2026-09-12): este script imprimia "TODO VERDE" con exit 0 en un
+# arbol SIN una sola prueba — el `for` no encontraba nada y el `if -f` de verify-corpus se
+# salteaba en silencio. O sea el candado escrito para que los candados no fueran decorativos
+# podia decir verde sin correr nada, contradiciendo su propia cabecera. Ahora exige encontrar
+# lo que tiene que correr.
 paso "pruebas de contrato de scripts/"
+corridas=0
 for t in scripts/tests/*.sh; do
   [ -e "$t" ] || continue
+  corridas=$((corridas + 1))
   if bash "$t" >/dev/null 2>&1; then
     printf '  OK    %s\n' "$(basename "$t")"
   else
@@ -62,6 +69,11 @@ for t in scripts/tests/*.sh; do
   fi
 done
 
+if [ "$corridas" -eq 0 ]; then
+  echo "FAIL: no se encontro NINGUNA prueba en scripts/tests/ — un candado que no corre no existe"
+  fallas=$((fallas + 1))
+fi
+
 paso "corpus de rendiciones re-derivable"
 if [ -f summa-gate/verify-corpus.mjs ]; then
   if "$NODE" summa-gate/verify-corpus.mjs; then
@@ -69,6 +81,10 @@ if [ -f summa-gate/verify-corpus.mjs ]; then
   else
     echo "FAIL: verify-corpus"; fallas=$((fallas + 1))
   fi
+else
+  # Antes esto se salteaba sin decir nada. Si el re-derivador desaparece, hay que enterarse.
+  echo "FAIL: falta summa-gate/verify-corpus.mjs (el corpus deja de ser re-derivable)"
+  fallas=$((fallas + 1))
 fi
 
 printf '\n'

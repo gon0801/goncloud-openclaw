@@ -10,6 +10,9 @@
 //
 // Uso: node summa-gate/verify-corpus.mjs   (desde la raiz del repo)
 import { readFileSync } from "node:fs";
+
+/** Piso de filas: el corpus tiene 22 hoy. Menos que esto es un TSV roto o truncado. */
+const MIN_FILAS = 20;
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -46,11 +49,33 @@ for (const linea of lines.slice(1)) {
 }
 
 const total = lines.length - 1;
+
+// Cross-review de qwen (2026-09-12, hallazgo alto): este candado pasaba por vacio con un TSV
+// de solo header (filas 0 -> exit 0), y ademas solo comprobaba AUTO-CONSISTENCIA: el unico
+// exit(1) comparaba `verdict_2_1` (la columna declarada) contra lo recomputado, asi que si el
+// detector se degradaba bastaba reescribir esa columna para volver al verde. `expected_label`
+// se leia y solo se imprimia.
+if (total < MIN_FILAS) {
+  console.error(`El TSV tiene ${total} fila(s) de datos; se esperan al menos ${MIN_FILAS}.`);
+  console.error("Un candado que valida un corpus vacio no es un candado.");
+  process.exit(1);
+}
+
 console.log(`filas: ${total} | veredicto declarado == recomputado: ${coinciden}`);
 console.log(`DEBEN detectarse: ${tp + fn} -> atrapados ${tp}, escapados ${fn}`);
 console.log(`LEGITIMOS:        ${fp + tn} -> sobre-marcados ${fp}, bien ignorados ${tn}`);
 if (fallos.length) {
   console.error(`\n${fallos.length} fila(s) no reproducen su veredicto:`);
   for (const f of fallos) console.error(f);
+  process.exit(1);
+}
+
+// CORRECTITUD, no solo auto-consistencia: el detector no puede perder RECALL. Hoy atrapa
+// 16 de 16 de las que deben detectarse; si alguien aprieta el regex y empieza a dejar pasar
+// rendiciones reales, esto cae. La precision es otra cosa: el sobre-marcado (5 de 6 legitimos)
+// esta elegido a proposito y declarado en Plans.md 2.1, asi que se informa y no rompe.
+if (fn > 0) {
+  console.error(`\n${fn} fila(s) etiquetadas should-detect que el detector NO atrapa.`);
+  console.error("Eso es una regresion de recall: el medidor deja de ver rendiciones reales.");
   process.exit(1);
 }
