@@ -1,0 +1,100 @@
+{
+  "ranAt": "2026-09-12T20:44:34.369Z",
+  "agents": [
+    "main",
+    "ingenieria",
+    "operaciones",
+    "verifier",
+    "implementer",
+    "scout",
+    "reviewer",
+    "adversary"
+  ],
+  "historyLimit": 80,
+  "sessionsLimit": 50,
+  "outFile": "/Users/dn/dev/_wt-22/docs/evidence/backfill-rendiciones.jsonl",
+  "summary": {
+    "main": {
+      "totalSessions": 53,
+      "processed": 53,
+      "totalTurns": 104,
+      "detectedRecords": 1,
+      "incompleteSessions": 7,
+      "perDay": {
+        "2026-09-11": 1
+      },
+      "finished": true
+    },
+    "ingenieria": {
+      "totalSessions": 24,
+      "processed": 24,
+      "totalTurns": 38,
+      "detectedRecords": 2,
+      "incompleteSessions": 3,
+      "perDay": {
+        "2026-09-12": 2
+      },
+      "finished": true
+    },
+    "operaciones": {
+      "totalSessions": 16,
+      "processed": 16,
+      "totalTurns": 31,
+      "detectedRecords": 2,
+      "incompleteSessions": 0,
+      "perDay": {
+        "2026-09-11": 2
+      },
+      "finished": true
+    },
+    "verifier": {
+      "totalSessions": 3,
+      "processed": 3,
+      "totalTurns": 21,
+      "detectedRecords": 1,
+      "incompleteSessions": 0,
+      "perDay": {
+        "2026-09-11": 1
+      },
+      "finished": true
+    },
+    "implementer": {
+      "totalSessions": 3,
+      "processed": 3,
+      "totalTurns": 6,
+      "detectedRecords": 0,
+      "incompleteSessions": 0,
+      "perDay": {},
+      "finished": true
+    },
+    "scout": {
+      "totalSessions": 3,
+      "processed": 3,
+      "totalTurns": 3,
+      "detectedRecords": 1,
+      "incompleteSessions": 0,
+      "perDay": {
+        "2026-09-12": 1
+      },
+      "finished": true
+    },
+    "reviewer": {
+      "totalSessions": 2,
+      "processed": 2,
+      "totalTurns": 12,
+      "detectedRecords": 0,
+      "incompleteSessions": 0,
+      "perDay": {},
+      "finished": true
+    },
+    "adversary": {
+      "totalSessions": 2,
+      "processed": 2,
+      "totalTurns": 5,
+      "detectedRecords": 0,
+      "incompleteSessions": 0,
+      "perDay": {},
+      "finished": true
+    }
+  }
+}
