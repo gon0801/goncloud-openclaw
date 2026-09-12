@@ -155,6 +155,12 @@ Desde la raiz del repo (`/Users/dn/dev/_wt-22`, branch `fase2/2.2-backfill-tasa`
 ## Politica y limites
 
 - **No se reimplementa el detector**. La construccion de `detected` viene del `buildRecord` que el plugin ejecuta en vivo. Cambios al regex en una PR futura se auditan re-corriendo los mismos scripts.
-- **`not_observed != absent`**. 10 sesiones incompletas se reportan отдельно. 0 rendiciones en una ventana incompleta === `unknown`, no `0`.
+- **`not_observed != absent`**. 10 sesiones incompletas se reportan aparte. 0 rendiciones en una ventana incompleta === `unknown`, no `0`.
 - **Politica de inclusion de corpus 3.2**: no se mueven filas de C a A para "bajar la tasa de miss". Misma filosofia que `corpus-rendiciones-discrepancy.md`.
+- **El campo `ts` del jsonl NO es la hora del turno.** Es `Date.now()` del momento en que
+  corrio el backfill: los 220 registros caen en una ventana de 7 minutos del 2026-09-12.
+  La ventana de 8 dias de este reporte NO sale de ahi — sale de `backfill_meta.sessionUpdatedAt`,
+  que si conserva la fecha real de cada sesion. Quien reprocese el jsonl tiene que usar
+  `backfill_meta`, nunca `ts`. (El observador en vivo no tiene este problema: ahi `ts` es
+  el del turno. Es un defecto del backfill, no del detector.)
 - **No se busca justificar la Fase 4**. El numero es lo que es. La conclusion cae sola.
