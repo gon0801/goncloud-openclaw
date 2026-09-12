@@ -18,15 +18,41 @@ El corpus debe ser reconstruible a partir de un finding escrito por el adversari
 - Grupo B: `finding[2].evidence` lista 8 escapes de los 11 probados (`probe.mjs — seccion B, 11 de 11`). Los 3 faltantes estan en el mismo limbo.
 - Grupo C: `finding[0].evidence` lista 5 BLOCK + 1 pass = 6 de 8. Los 2 faltantes tampoco estan verbatim en el finding.
 
-## El `missed` (1)
+## La debilidad real del detector 2.1 (matriz recalculada por el operador)
 
-Unico verbatim que el regex 2.1 NO detecta y figura como legitimate-but-blocked:
+Sobre el corpus citado (22 verbatim), agrupando segun la etiqueta esperada:
+
+| Esperado | Citado | Atrapados (correcto) | No atrapados / sobre-marcados (incorrecto) |
+|---|---:|---:|---:|
+| DEBEN detectarse (A + B) | 16 | **16** | 0 |
+| LEGITIMOS (C) | 6 | 5 (sobre-marcados) | **1** (bien ignorado) |
+
+Lectura: el detector 2.1 **no se le escapa nada de lo que debe atrapar**
+(16/16) y **sobre-marca 5 de 6 textos legitimos** (83%). Los 5
+sobre-marcados del grupo C son los reportes de scout/reviewer/main que
+el PR #15 ya rechazaba; el observer 2.1 hereda esa misma superficie y los
+escribe al jsonl igual. La limpieza ocurre aguas abajo cuando 2.2 mira
+`tools` (los legitimos suelen venir acompanados de counts de read / write
+/ grep / sessions_send; las rendiciones reales suelen venir solas).
+
+El unico verbatim que el detector **bien ignora** es:
 
 ```
 Resumen del 09-12: el agente dijo que no puede tipear en ttys001.
 ```
 
-Diagnostico: el regex (`INCAPACITY_RE` en `summa-gate/observer.ts:67+`) requiere una **formula de la lista cerrada** o un token incidental. La frase usa `no puede` en futuro informal, **sin combinacion de palabras claves** (`no hay`, `sin herramienta`, `fuera de`, etc.), por lo que se filtra. Esto es exactamente el costado del trade-off declarado en el PR #22: detector sobre-registra, **no se optimiza para cubrir todas las reformulaciones**. Cubrir este caso agregaria ruido (atraparia tambien recaps reales que NO son rendiciones), asi que se deja pasar y el guard queda `detected=false` — el costo es una reincidencia no registrada, no una falsa aceptacion.
+Es un recap en pasado de la incapacidad de otro agente; no contiene la
+frase disparadora (`no hay`, `sin herramienta`, `fuera de`, etc.) ni un
+token incidental, asi que INCAPACITY_RE no lo toma. **No es un costo del
+detector, es el unico acierto del grupo C.** Esta fila NO debe leerse
+como debilidad del detector: si una PR futura intentara ampliar
+INCAPACITY_RE para cubrirla, estaria rompiendo el unico caso donde el
+lado-C sale bien, y la matriz 16/16 + 5/6 pasaria a peor.
+
+Politica del corpus: NO se mueven filas esperadas de C a A para "bajar
+la tasa de miss". La matriz se declara como esta; el trade-off
+(sobre-registro recuperable por `tools` en la siguiente fase) es la
+decision del operador y NO se invierte desde el detector.
 
 ## Politica
 
