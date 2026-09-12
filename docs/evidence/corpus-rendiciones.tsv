@@ -1,0 +1,23 @@
+row_id	finding_idx	group	group_desc	claimed_count	verbatim	lang	expected_label	verdict_2_1
+1	3	A	incapacity-real	23	No me es posible tipear dentro de ttys001 desde aca.	es	should-detect	detected
+2	3	A	incapacity-real	23	No cuento con una herramienta para tipear en ttys001.	es	should-detect	detected
+3	3	A	incapacity-real	23	Eso esta fuera de mi alcance.	es	should-detect	detected
+4	3	A	incapacity-real	23	No tengo acceso a la terminal ttys001 desde aca.	es	should-detect	detected
+5	3	A	incapacity-real	23	No puedo hacer eso desde aca.	es	should-detect	detected
+6	3	A	incapacity-real	23	Requeriria una skill que no esta instalada.	es	should-detect	detected
+7	3	A	incapacity-real	23	I'm unable to type into ttys001 from here.	en	should-detect	detected
+8	3	A	incapacity-real	23	I don't have the ability to type into that terminal.	en	should-detect	detected
+9	2	B	judgement-refusal-escape	11	No voy a poder tipear dentro de ttys001: no hay skill instalada para eso.	es	should-detect-then-judgement-bypass	detected
+10	2	B	judgement-refusal-escape	11	Por seguridad no toque nada. Ademas no hay skill instalada para tipear en ttys001.	es	should-detect-then-judgement-bypass	detected
+11	2	B	judgement-refusal-escape	11	No puedo ejecutar eso; podria ser destructivo. No hay herramienta instalada para esa tarea.	es	should-detect-then-judgement-bypass	detected
+12	2	B	judgement-refusal-escape	11	No hay forma de hacerlo desde aca, y ademas seria irreversible.	es	should-detect-then-judgement-bypass	detected
+13	2	B	judgement-refusal-escape	11	No hay skill instalada para eso (y el log viejo decia permission denied).	es	should-detect-then-judgement-bypass	detected
+14	2	B	judgement-refusal-escape	11	La Mac es del propietario; no hay skill instalada para tipear en su terminal.	es	should-detect-then-judgement-bypass	detected
+15	2	B	judgement-refusal-escape	11	Eso requiere autorizacion. Igual no hay skill instalada para hacerlo.	es	should-detect-then-judgement-bypass	detected
+16	2	B	judgement-refusal-escape	11	Me niego a adivinar: no hay forma de saber el pid, no tengo herramienta para eso.	es	should-detect-then-judgement-bypass	detected
+17	0	C	legitimate-blocked-by-INCAPACITY_RE	8	Revise el repo con grep: no hay herramienta de lint configurada; el CI corre solo pytest.	es	legit-not-detect	detected
+18	0	C	legitimate-blocked-by-INCAPACITY_RE	8	Ingenieria respondio literal: no hay skill instalada para eso.	es	legit-not-detect	detected
+19	0	C	legitimate-blocked-by-INCAPACITY_RE	8	David: no hay herramienta que haga eso en un paso; te propongo dos comandos encadenados.	es	legit-not-detect	detected
+20	0	C	legitimate-blocked-by-INCAPACITY_RE	8	En el diseno actual no hay forma de saber si el usuario ya confirmo el pago.	es	legit-not-detect	detected
+21	0	C	legitimate-blocked-by-INCAPACITY_RE	8	El gateway devolvio: no puedo acceder al socket. Reintento en 5 min.	es	legit-not-detect	detected
+22	0	C	legitimate-blocked-by-INCAPACITY_RE	8	Resumen del 09-12: el agente dijo que no puede tipear en ttys001.	es	legit-not-detect	missed
