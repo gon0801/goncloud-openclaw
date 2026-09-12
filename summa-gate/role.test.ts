@@ -208,4 +208,54 @@ describe("plugin smoke import", () => {
     assert.equal(call({ agentId: "ingenieria", message: "retoma" }, { agentId: "operaciones", sessionKey: "agent:operaciones:main" }), undefined);
     assert.equal(call({ agentId: "ingenieria", message: "[REPORTE DE VUELTA: agent:main:main] reportame al terminar" }, claw), undefined);
   });
+
+  // Regla 5 (2026-09-12): "Approved executables: none" es la lista de atajos pre-aprobados, no un
+  // bloqueo de exec. Ya costo la corrida packing-extras-7h del 09-11 (se declaro BLOQUEADA sin
+  // intentar, salio "ok", no reviso nada) y volvio a frenar a ingenieria hoy.
+  //
+  // Lo que esta prueba blinda NO es que el texto exista, sino que LLEGUE: las standing rules se
+  // inyectan sin sentinel -saikit, y esa es la unica via que alcanza a implementer, reviewer,
+  // adversary, verifier y scout, que no tienen repo sincronizado donde escribirles un AGENTS.md.
+  // Si alguien mueve las standing rules detras del sentinel, esos cinco dejan de verla y esta
+  // prueba cae.
+  it("injects the standing rules into a session with no -saikit sentinel", async () => {
+    const mod = await import("./index.ts");
+    type Hook = (event: unknown, ctx: unknown) => unknown;
+    const regs: Array<{ event: string; handler: Hook }> = [];
+    const noop = () => {};
+    mod.default.register({
+      logger: { info: noop, warn: noop, error: noop, debug: noop },
+      on: (event: string, handler: Hook) => {
+        regs.push({ event, handler });
+      },
+    } as never);
+
+    const build = regs.find((r) => r.event === "before_prompt_build");
+    assert.ok(build, "before_prompt_build sin registrar");
+
+    // Sesion nueva de un agente sin repo, con un prompt corriente (sin sentinel).
+    const ctx = { sessionKey: "agent:scout:sin-sentinel-" + Date.now() };
+    const out = build.handler({ prompt: "revisa el estado del repo" }, ctx) as
+      | { appendContext?: string }
+      | undefined;
+    const inyectado = String(out?.appendContext ?? "");
+
+    for (const ancla of [
+      "Approved executables: none",
+      "es la lista de atajos pre-aprobados, NO un bloqueo de exec",
+      "approval cannot safely bind this command",
+      "las capacidades viven en exec",
+    ]) {
+      assert.ok(inyectado.includes(ancla), `a las standing rules les falta: ${ancla}`);
+    }
+
+    // Y no se repite: una sola vez por sesion, para no diluir el prompt de cada turno.
+    const segundo = build.handler({ prompt: "otra cosa" }, ctx) as
+      | { appendContext?: string }
+      | undefined;
+    assert.ok(
+      !String(segundo?.appendContext ?? "").includes("Approved executables: none"),
+      "las standing rules se reinyectan en cada turno; deberian ir una sola vez por sesion",
+    );
+  });
 });
