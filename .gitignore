@@ -60,3 +60,18 @@ workspace-scout/
 agents/*/sessions/
 
 openclaw.json
+
+# La salida del observador de summa-gate. El gateway tiene su clon en ~/.openclaw, que es la
+# raiz de este repo, asi que el archivo cae DENTRO del repo. Trackearlo costo dos cosas,
+# medidas el 2026-09-12:
+#  1. El observador escribe en cada turno, asi que el arbol del gateway queda sucio entre
+#     snapshots y el pull con rebase se niega ("cannot pull with rebase: You have unstaged
+#     changes"). El sync quedo roto ~1 h y el gateway dejo de recibir codigo nuevo. El script
+#     loguea el fallo pero sale con exit 0, asi que el sintoma era "mergee el PR y el gateway
+#     sigue viejo".
+#  2. El snapshot lo commiteo a GitHub (7d909f2) con 22 lineas que incluian previews de las
+#     respuestas de scout e ingenieria. Es dato de medicion, no fuente.
+# Destrackearlo a mano NO alcanza: el auto-commit del snapshot hace `add -A` y lo repone
+# (paso entre 3d97959 y c044d0c). Tiene que estar ignorado.
+summa-gate/rendiciones.jsonl
+summa-gate/rendiciones.jsonl.*
