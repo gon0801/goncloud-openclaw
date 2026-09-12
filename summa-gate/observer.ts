@@ -209,6 +209,35 @@ function hadReadInTurn(toolNames: string[]): boolean {
   return toolNames.includes("read");
 }
 
+/**
+ * Recorta el snapshot que entrega `agent_end` al TURNO actual: del ultimo mensaje
+ * `user` hasta el final.
+ *
+ * Por que existe (cross-review de codex, 2026-09-12, hallazgo alto): `event.messages`
+ * NO son los mensajes del turno, es el acumulado de la sesion. Verificado en vivo con
+ * dos turnos de un `exec` cada uno en la misma sesion de scout:
+ *   turno 1 -> tools {"exec":1}, nonReplaySafeCount 1
+ *   turno 2 -> tools {"exec":2}, nonReplaySafeCount 2   <-- acumulaba
+ * Consecuencia: en cuanto una sesion usaba UNA herramienta mutante,
+ * `nonReplaySafeCount` no volvia a 0 nunca y `detected` no podia dar true otra vez.
+ * El observador quedaba ciego para el resto de la sesion, y todas las sesiones reales
+ * empiezan usando herramientas. El medidor medía la sesion, no el turno.
+ *
+ * El corte es el MISMO que usa el backfill retrospectivo (de un mensaje `user` al
+ * siguiente), a proposito: si el detector en vivo y el retrospectivo segmentan distinto,
+ * el numero de 2.2 no dice nada del numero que va a salir en produccion.
+ */
+export function turnSlice(messages: AgentEndMessage[] | undefined | null): AgentEndMessage[] {
+  if (!Array.isArray(messages)) return [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m && typeof m === "object" && m.role === "user") return messages.slice(i);
+  }
+  // Sin ningun `user` (turno de cron, heartbeat, arranque): el snapshot completo ES el
+  // turno. No se descarta nada.
+  return messages;
+}
+
 export function buildRecord(
   ts: number,
   sessionKey: string,
@@ -216,14 +245,15 @@ export function buildRecord(
   inputProvenanceKind: string | undefined,
   messages: AgentEndMessage[] | undefined | null,
 ): ObserverRecord {
-  const toolNames = toolNamesFromMessages(messages);
+  const delTurno = turnSlice(messages);
+  const toolNames = toolNamesFromMessages(delTurno);
   const counts: Record<string, number> = {};
   let nonReplaySafeCount = 0;
   for (const n of toolNames) {
     counts[n] = (counts[n] ?? 0) + 1;
     if (isNonReplaySafeTool(n)) nonReplaySafeCount += 1;
   }
-  const text = lastAssistantText(messages);
+  const text = lastAssistantText(delTurno);
   const detected = nonReplaySafeCount === 0 && text.length > 0 && INCAPACITY_RE.test(text);
   return {
     ts,
@@ -265,7 +295,7 @@ export function writeRecord(record: ObserverRecord): { rotated: boolean; bytesAf
   let rotated = false;
   let bytesAfter: number;
   if (bytesBefore > 0 && bytesBefore + Buffer.byteLength(line, "utf8") > OBSERVER_MAX_BYTES) {
-    const ts = Date.now();
+
     // Backup lives NEXT TO the live path (not under OBSERVER_DIR), so the
     // test-only override that points the live file into a tmpdir rotates
     // into the SAME tmpdir instead of dumping the backup into the real
@@ -274,7 +304,11 @@ export function writeRecord(record: ObserverRecord): { rotated: boolean; bytesAf
     // ~/.openclaw/summa-gate/rendiciones.<unix-ms>.1.jsonl in that case.
     // Suffix convention: `<base>.<ts>.1.jsonl`, so the backup keeps the
     // `.jsonl` extension and tail operators can do `tail ./*.<ts>.1.jsonl`.
-    const rotatedPath = `${livePath}.${ts}.1.jsonl`;
+    // UN solo nivel: nombre FIJO, se sobrescribe. Antes el nombre llevaba
+    // `Date.now()`, asi que cada rotacion creaba un archivo nuevo de 5 MB y no se
+    // borraba ninguno — el PR decia "un nivel de respaldo" y no era cierto
+    // (cross-review de codex, 2026-09-12). Tope real ahora: 2 x OBSERVER_MAX_BYTES.
+    const rotatedPath = `${livePath}.1.jsonl`;
     renameSync(livePath, rotatedPath);
     rotated = true;
     bytesAfter = Buffer.byteLength(line, "utf8");

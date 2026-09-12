@@ -28,6 +28,7 @@ import {
   isNonReplaySafeTool,
   lastAssistantText,
   toolNamesFromMessages,
+  turnSlice,
   writeRecord,
 } from "./observer.ts";
 
@@ -263,7 +264,7 @@ describe("observer — writer + rotation", () => {
     );
   });
 
-  it("rotates the jsonl to <ts>.1.jsonl when the live file exceeds OBSERVER_MAX_BYTES", () => {
+  it("rotates the jsonl to a FIXED .1.jsonl when the live file exceeds OBSERVER_MAX_BYTES", () => {
     // Forzamos la rotacion metiendo un jsonl pre-existente cerca del
     // techo, suficiente para que el siguiente write lo cruce.
     const pseudoTail = "X".repeat(OBSERVER_MAX_BYTES - 100);
@@ -285,8 +286,11 @@ describe("observer — writer + rotation", () => {
     });
     assert.equal(out.rotated, true, "se esperaba rotacion");
     // El backup debe existir con tamanio == antes de la rotacion.
+    // Nombre FIJO, sin timestamp: con `Date.now()` en el nombre cada rotacion creaba un
+    // archivo nuevo de 5 MB y no se borraba ninguno (cross-review de codex, 2026-09-12).
+    // Esta prueba pineaba ese nombre, o sea pineaba el bug.
     const rotated = readdirSync(tmpDir)
-      .filter((n: string) => /\.\d+\.1\.jsonl$/.test(n));
+      .filter((n: string) => /\.1\.jsonl$/.test(n));
     assert.equal(rotated.length, 1, `expected exactly one backup, got ${rotated.length}`);
     const backupSize = statSync(join(tmpDir, rotated[0])).size;
     assert.equal(backupSize, before, "el backup debe contener el contenido pre-rotacion");
@@ -348,5 +352,73 @@ describe("contrato del registro: denominador si, transcripciones no", () => {
     assert.equal(r.detected, true);
     assert.equal(r.nonReplaySafeCount, 0);
     assert.match(String(r.textPreview), /no hay skill instalada/);
+  });
+});
+
+// Cross-review de codex (2026-09-12, hallazgo ALTO, confirmado en vivo): `event.messages` no
+// son los mensajes del turno, es el acumulado de la SESION. Dos turnos de un `exec` cada uno
+// en la misma sesion de scout daban tools {"exec":1} y luego {"exec":2}. Consecuencia: en
+// cuanto una sesion usaba una herramienta mutante, `nonReplaySafeCount` no volvia a 0 y
+// `detected` no podia dar true nunca mas en esa sesion — el observador quedaba ciego, y todas
+// las sesiones reales empiezan usando herramientas.
+describe("el registro mide el TURNO, no la sesion acumulada", () => {
+  // Snapshot tipico que entrega agent_end en el SEGUNDO turno de una sesion.
+  const sesionAcumulada = [
+    { role: "user", content: "corre el deploy" },
+    { role: "toolResult", toolName: "exec", content: "ok" },
+    { role: "assistant", content: "Listo, deploy hecho." },
+    { role: "user", content: "ahora tipeame en ttys001" },
+    { role: "assistant", content: "no puedo hacerlo, no hay skill instalada para eso" },
+  ];
+
+  it("cuenta solo las herramientas del turno en curso, no las de turnos anteriores", () => {
+    const r = buildRecord(1, "s", "a", "k", sesionAcumulada as never);
+    assert.deepEqual(r.tools, {}, "conto el exec de un turno anterior: el medidor mide la sesion, no el turno");
+    assert.equal(r.nonReplaySafeCount, 0);
+  });
+
+  it("por eso SI detecta una rendicion despues de un turno que uso exec", () => {
+    const r = buildRecord(1, "s", "a", "k", sesionAcumulada as never);
+    assert.equal(r.detected, true, "el exec del turno anterior dejo ciego al observador para el resto de la sesion");
+    assert.match(String(r.textPreview), /no hay skill instalada/);
+  });
+
+  it("el corte es el ultimo mensaje user, igual que el backfill retrospectivo", () => {
+    const s = turnSlice(sesionAcumulada as never);
+    assert.equal(s.length, 2);
+    assert.equal((s[0] as { role?: string }).role, "user");
+  });
+
+  it("sin ningun mensaje user (cron, heartbeat) el snapshot completo ES el turno", () => {
+    const sinUser = [
+      { role: "toolResult", toolName: "exec", content: "ok" },
+      { role: "assistant", content: "listo" },
+    ];
+    assert.equal(turnSlice(sinUser as never).length, 2);
+    assert.equal(buildRecord(1, "s", "a", "k", sinUser as never).nonReplaySafeCount, 1);
+  });
+});
+
+// Mismo cross-review, hallazgo medio: la rotacion nombraba el respaldo con Date.now(), asi que
+// cada rotacion creaba un archivo NUEVO de 5 MB y no se borraba ninguno — el PR afirmaba "un
+// nivel de respaldo" y era falso. Nombre fijo => tope real de 2 x OBSERVER_MAX_BYTES.
+describe("rotacion: un solo nivel de respaldo, de verdad", () => {
+  it("el respaldo tiene nombre FIJO y la segunda rotacion lo sobrescribe", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "summa-gate-rot-"));
+    const live = join(tmp, "rendiciones.jsonl");
+    _setObserverFileForTest(live);
+    try {
+      const gordo = "x".repeat(OBSERVER_MAX_BYTES);
+      writeFileSync(live, gordo, "utf8");
+      writeRecord(buildRecord(1, "s1", "a", "k", [{ role: "assistant", content: "uno" }] as never));
+      writeFileSync(live, gordo, "utf8");
+      writeRecord(buildRecord(2, "s2", "a", "k", [{ role: "assistant", content: "dos" }] as never));
+      const respaldos = readdirSync(tmp).filter((f) => f !== "rendiciones.jsonl");
+      assert.deepEqual(respaldos, ["rendiciones.jsonl.1.jsonl"],
+        `dos rotaciones dejaron ${respaldos.length} respaldo(s): el almacenamiento crece sin tope`);
+    } finally {
+      _setObserverFileForTest(null);
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });

@@ -544,9 +544,15 @@ export default definePluginEntry({
     // -- 9. Observador de rendiciones ---------------------------------------
     //
     // ALCANCE (Fase 2 / 2.1 - 2026-09-12, PR Fase2.1):
-    //   Observador, NO candado. El handler de agent_end solo escribe una linea
-    //   en ~/.openclaw/summa-gate/rendiciones.jsonl por turno que termina con
-    //   `nonReplaySafeCount === 0` y texto con forma de incapacidad. No
+    //   Observador, NO candado. El handler de agent_end escribe UNA LINEA POR CADA
+    //   turno en ~/.openclaw/summa-gate/rendiciones.jsonl: la metrica es una tasa
+    //   (detecciones/turnos) y sin el denominador el archivo no responde la pregunta
+    //   para la que existe. `detected` marca los turnos con `nonReplaySafeCount === 0`
+    //   y texto con forma de incapacidad — esos son los que un humano revisa, y son los
+    //   unicos que llevan `textPreview`, para que el medidor no sea un archivo de
+    //   transcripciones. (Este comentario decia la conducta filtrada, que era falsa:
+    //   corregido tras el cross-review de codex del 2026-09-12, que lo cazo aunque el
+    //   docstring de observer.ts ya estaba arreglado.) No
     //   modifica el turno: agent_end corre via `runVoidHook` en el runtime, que
     //   descarta el valor de retorno (cita: hook-runner-global-BhDCl4qm.mjs,
     //   runAgentEnd en linea 1003 llama runVoidHook linea 778-796; el
