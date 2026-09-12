@@ -62,7 +62,9 @@ decision del operador y NO se invierte desde el detector.
 
 ## Como se regenera el corpus
 
-El TSV se renderizo ejecutando `node /tmp/render-corpus-tsv.ts` desde el worktree `_wt-fase2` con el branch `fase2/3.2-corpus`. La clasificacion (`detected`/`missed`) se calculo contra `INCAPACITY_RE` **importado directamente** desde `summa-gate/observer.ts` (post-rename de `readSkill->hadRead`), no contra un regex copiado a mano. Esto hace que la migracion del regex en una PR futura se pueda auditar re-corriendo el mismo script contra el nuevo branch.
+> **CAMINO MUERTO, no lo sigas.** El TSV se renderizo ejecutando `node /tmp/render-corpus-tsv.ts` desde el worktree `_wt-fase2` con el branch `fase2/3.2-corpus`. La clasificacion (`detected`/`missed`) se calculo contra `INCAPACITY_RE` **importado directamente** desde `summa-gate/observer.ts` (post-rename de `readSkill->hadRead`), no contra un regex copiado a mano. Esto hace que la migracion del regex en una PR futura se pueda auditar re-corriendo el mismo script contra el nuevo branch.
+>
+> Ese archivo vive en `/tmp` y se borra al reiniciar. La reproduccion buena es `node summa-gate/verify-corpus.mjs` (mas abajo), que usa solo el TSV y el detector, ambos en el repo.
 
 ## Como reproducir este corpus (sin depender de nada efimero)
 

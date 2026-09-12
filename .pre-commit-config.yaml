@@ -15,9 +15,39 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      # exclude agregado 2026-09-12: `workspace-*/memory/` y `agents/*/sessions/` no son
+      # archivos escritos por nadie — el cron "auto: snapshot .openclaw" los vuelca desde el
+      # gateway cada ~2 h. Arreglarles el whitespace no sirve: el proximo snapshot los
+      # reescribe igual y el hook vuelve a fallar. Medido: 6 corpus de memoria dejaban el CI
+      # en rojo por esto, sin ninguna relacion con el cambio que se estaba revisando.
+      # Es la misma trampa que el SKILL.md desviado: no se corrige el artefacto generado,
+      # se corrige el generador o se lo excluye.
       - id: trailing-whitespace
+        exclude: '^(workspace-[^/]+/memory/|agents/[^/]+/sessions/)'
       - id: end-of-file-fixer
+        exclude: '^(workspace-[^/]+/memory/|agents/[^/]+/sessions/)'
       - id: check-merge-conflict
       - id: check-added-large-files
       - id: check-json
       - id: check-yaml
+
+  # --- Agregado a mano el 2026-09-12 (quality-kit: init-repo.ps1 detecta esto y NO lo pisa).
+  #
+  # Motivo: los candados de este repo no corrian en ningun lado. El workflow de CI nunca se
+  # habia commiteado y, aun commiteado, GitHub Actions no ejecuta nada en esta cuenta (cero
+  # corridas historicas en los tres repos, verificado por API). Mientras eso siga asi, este
+  # hook es el UNICO lugar donde los candados corren solos.
+  #
+  # Costo medido: 0.8 s el conjunto completo. No hay motivo para saltearlo.
+  - repo: local
+    hooks:
+      - id: run-checks
+        name: bateria summa-gate + contratos de scripts
+        entry: bash scripts/run-checks.sh
+        language: system
+        pass_filenames: false
+        # Corre siempre, no solo cuando cambian los archivos obvios: la prueba
+        # test-browser-profile-flag.sh compara copias de una skill ENTRE agentes, asi que
+        # un cambio en agents/main/ puede romper una prueba que mira agents/ingenieria/.
+        # Un filtro por ruta habria dejado pasar justo la desviacion que llevaba dias en rojo.
+        always_run: true

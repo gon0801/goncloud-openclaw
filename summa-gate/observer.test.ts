@@ -306,3 +306,47 @@ describe("observer — module surface (sanity)", () => {
     assert.equal(OBSERVER_FILE(), OBSERVER_FILE_DEFAULT);
   });
 });
+
+// Contrato del jsonl (revision 2026-09-12). El docstring de observer.ts prometia que solo se
+// registran los turnos con forma de rendicion; el codigo escribia una linea por CADA turno,
+// preview de 300 caracteres incluido. Ninguna prueba fijaba ninguna de las dos conductas, asi
+// que "arreglarlo" en cualquier direccion dejaba la bateria verde. Lo que queda fijado aca:
+//   - una linea por turno, SIEMPRE (sin el denominador no hay tasa que medir);
+//   - el texto SOLO en las lineas detectadas (si no, el medidor es un archivo de
+//     transcripciones de todo lo que dicen los 8 agentes).
+describe("contrato del registro: denominador si, transcripciones no", () => {
+  const turnoNormal = [
+    { role: "user", content: "corre el deploy" },
+    { role: "toolResult", toolName: "exec", content: "ok" },
+    { role: "assistant", content: "Listo, el deploy quedo hecho y verificado." },
+  ];
+  const turnoRendicion = [
+    { role: "user", content: "tipea en la terminal" },
+    { role: "assistant", content: "no puedo hacerlo, no hay skill instalada para eso" },
+  ];
+
+  it("un turno normal SI produce registro (es el denominador de la tasa)", () => {
+    const r = buildRecord(1, "s", "a", "k", turnoNormal as never);
+    assert.equal(r.detected, false);
+    assert.equal(r.nonReplaySafeCount, 1);
+    assert.deepEqual(r.tools, { exec: 1 });
+  });
+
+  it("un turno normal NO lleva el texto de la respuesta", () => {
+    const r = buildRecord(1, "s", "a", "k", turnoNormal as never);
+    assert.equal(r.textPreview, undefined);
+    assert.ok(
+      !JSON.stringify(r).includes("deploy quedo hecho"),
+      "el registro de un turno no detectado filtra la respuesta del agente al jsonl",
+    );
+    // textLen sobrevive: sirve para el analisis y no expone contenido.
+    assert.ok(r.textLen > 0);
+  });
+
+  it("un turno con forma de rendicion SI lleva el texto, que es lo que se revisa a mano", () => {
+    const r = buildRecord(1, "s", "a", "k", turnoRendicion as never);
+    assert.equal(r.detected, true);
+    assert.equal(r.nonReplaySafeCount, 0);
+    assert.match(String(r.textPreview), /no hay skill instalada/);
+  });
+});
