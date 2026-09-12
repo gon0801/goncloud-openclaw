@@ -74,6 +74,16 @@ function parseArgs(argv) {
     else if (a === "--resume") out.resume = true;
     else if (a === "--start") out.start = true;
     else if (a === "--quiet") out.quiet = true;
+    else if (a === "--exclude-rule") out.excludeRule = argv[++i];
+    else if (a === "--include-test-prompts") out.excludeRule = "";
+  }
+  if (typeof out.excludeRule !== "string") {
+    // Default exclusion: the operator's smoke-test turns that fed the
+    // observer a known refusal phrase to verify wiring. They are not
+    // production data; if you want to include them, pass
+    // --include-test-prompts (sets the regex to "") or override with
+    // --exclude-rule <regex>.
+    out.excludeRule = "^agent:scout:smoke-observador-";
   }
   if (!out.agents || out.agents.length === 0) {
     out.agents = ["main", "ingenieria", "operaciones", "verifier", "implementer", "scout", "reviewer", "adversary"];
@@ -146,6 +156,23 @@ function fetchHistory(sessionKey, log) {
   return { messages: all, totalMessages, returnedMessages: all.length, incomplete };
 }
 
+function lastTsMs(messages) {
+  // Devuelve el timestamp (ms epoch, o el mayor posible interpretable) del
+  // ultimo mensaje del turno. El runtime de chat.history guarda `timestamp`
+  // como: ms epoch para user messages (1789xxxxxxxxxxx) y unix-seconds *1000
+  // para assistant/toolResult/system. Para universes coherentes dentro de un
+  // mismo turno, normalizamos a ms: si un timestamp esta en segundos
+  // (<= 1e11), lo multiplicamos por 1000.
+  let best = null;
+  for (const m of messages) {
+    const t = m?.timestamp;
+    if (typeof t !== "number" || !Number.isFinite(t) || t <= 0) continue;
+    const ms = t < 1e12 ? t * 1000 : t;
+    if (best === null || ms > best) best = ms;
+  }
+  return best;
+}
+
 function segmentTurns(messages) {
   const turns = [];
   let current = null;
@@ -154,7 +181,7 @@ function segmentTurns(messages) {
     const role = typeof m?.role === "string" ? m.role : "";
     if (role === "user") {
       if (current) turns.push(current);
-      current = { messages: [m], userText: extractUserText(m), index: turnIndex++ };
+      current = { messages: [m], userText: extractUserText(m), index: turnIndex++, orphan: false };
       continue;
     }
     if (!current) {
@@ -164,6 +191,7 @@ function segmentTurns(messages) {
     current.messages.push(m);
   }
   if (current) turns.push(current);
+  for (const t of turns) t.turnTs = lastTsMs(t.messages) ?? null;
   return turns;
 }
 
@@ -254,11 +282,18 @@ async function main() {
     let detectedRecords = 0;
     let turns = 0;
     let incompleteSessions = 0;
+    let excludedSessions = 0;
+    let excludedTurns = 0;
     let processed = 0;
-    let monthsSeen = new Set();
+    let excludedDetected = 0;
     const perDay = {};
     for (const s of sessions) {
       processed += 1;
+      if (ARGS.excludeRule && new RegExp(ARGS.excludeRule).test(s.key)) {
+        excludedSessions += 1;
+        log(`[${agent}] ${s.key} skipped by exclude-rule ${ARGS.excludeRule}`);
+        continue;
+      }
       let hist;
       try {
         hist = fetchHistory(s.key, (k, m) => log(`[${agent}] ${k} ${m}`));
@@ -274,8 +309,21 @@ async function main() {
       for (const t of segs) {
         const k = `${agent}|${s.key}|${t.index}`;
         if (progress.doneSessions.has(k)) continue;
+        // ts del registro = timestamp del ultimo mensaje del turno (ms epoch).
+        // Antes tomabamos Date.now() del backfill, lo cual colapsaba 8 dias
+        // de historia en una sola ventana de corrida: lector externo del
+        // jsonl no podia derivar la tasa por dia del ts. El backfill_meta.runTs
+        // guarda el momento de la corrida por separado, asi que la cronologia
+        // del turno y la ventana del run no se mezclan.
+        const runTs = Date.now();
+        // Para turnos al final de sesion sin timestamp del lado user, usamos
+        // el ultimo timestamp del mensaje (ms epoch) que aparece en el
+        // messages array. El segmenter ya lo calculo.
+        const tsRecord = t.turnTs
+          ?? (s.updatedAt ? (s.updatedAt < 1e12 ? s.updatedAt * 1000 : s.updatedAt) : runTs);
         const adapted = adaptHistoryMessages(t.messages);
-        const record = buildRecord(Date.now(), s.key, agent, kind, adapted);
+        const record = buildRecord(tsRecord, s.key, agent, kind, adapted);
+        const excluded = ARGS.excludeRule && new RegExp(ARGS.excludeRule).test(s.key);
         const line = {
           ...record,
           backfill_meta: {
@@ -286,17 +334,23 @@ async function main() {
             incomplete: hist.incomplete,
             turnIndex: t.index,
             orphan: !!t.orphan,
+            excludedByRule: excluded ? ARGS.excludeRule : null,
             sessionCreatedAt: s.createdAt,
             sessionUpdatedAt: s.updatedAt,
+            turnTs: t.turnTs,
+            runTs,
+            turnDay: new Date(tsRecord).toISOString().slice(0, 10),
             userTextLen: t.userText ? t.userText.length : 0,
             userTextPreview: t.userText ? t.userText.slice(0, 120) : null,
           },
         };
         appendLine(JSON.stringify(line));
         progress.doneSessions.add(k);
-        if (record.detected) {
+        if (record.detected && !excluded) {
           detectedRecords += 1;
-          const day = new Date(s.updatedAt ?? s.createdAt ?? Date.now()).toISOString().slice(0, 10);
+          // perDay se cuenta por el ts real del turno, no por sessionUpdatedAt
+          // ni por runTs. Asi el jsonl soporta la "tasa por dia" del DoD.
+          const day = new Date(tsRecord).toISOString().slice(0, 10);
           perDay[day] = (perDay[day] || 0) + 1;
         }
       }
@@ -319,10 +373,13 @@ async function main() {
       totalTurns: turns,
       detectedRecords,
       incompleteSessions,
+      excludedSessions,
+      excludedTurns,
       perDay,
+      excludeRule: ARGS.excludeRule || null,
       finished: true,
     });
-    log(`[${agent}] DONE turns=${turns} detected=${detectedRecords} incompleteSessions=${incompleteSessions}`);
+    log(`[${agent}] DONE turns=${turns} detected=${detectedRecords} incomplete=${incompleteSessions} excluded=${excludedSessions}`);
   }
   log("\n=== RESUMEN ===");
   for (const a of ARGS.agents) {
@@ -332,6 +389,8 @@ async function main() {
       turns: r.totalTurns || 0,
       detected: r.detectedRecords || 0,
       incomplete: r.incompleteSessions || 0,
+      excluded: r.excludedSessions || 0,
+      excludeRule: r.excludeRule || null,
       perDayDays: Object.keys(r.perDay || {}).length,
     }));
   }

@@ -1,5 +1,5 @@
 {
-  "ranAt": "2026-09-12T20:44:34.369Z",
+  "ranAt": "2026-09-12T20:57:19.279Z",
   "agents": [
     "main",
     "ingenieria",
@@ -21,19 +21,25 @@
       "detectedRecords": 1,
       "incompleteSessions": 7,
       "perDay": {
-        "2026-09-11": 1
+        "2026-09-10": 1
       },
+      "excludedSessions": 0,
+      "excludedTurns": 0,
+      "excludeRule": "^agent:scout:smoke-observador-",
       "finished": true
     },
     "ingenieria": {
-      "totalSessions": 24,
-      "processed": 24,
-      "totalTurns": 38,
+      "totalSessions": 25,
+      "processed": 25,
+      "totalTurns": 42,
       "detectedRecords": 2,
       "incompleteSessions": 3,
       "perDay": {
         "2026-09-12": 2
       },
+      "excludedSessions": 0,
+      "excludedTurns": 0,
+      "excludeRule": "^agent:scout:smoke-observador-",
       "finished": true
     },
     "operaciones": {
@@ -43,8 +49,11 @@
       "detectedRecords": 2,
       "incompleteSessions": 0,
       "perDay": {
-        "2026-09-11": 2
+        "2026-09-09": 2
       },
+      "excludedSessions": 0,
+      "excludedTurns": 0,
+      "excludeRule": "^agent:scout:smoke-observador-",
       "finished": true
     },
     "verifier": {
@@ -53,9 +62,12 @@
       "totalTurns": 21,
       "detectedRecords": 1,
       "incompleteSessions": 0,
+      "excludedSessions": 0,
+      "excludedTurns": 0,
       "perDay": {
-        "2026-09-11": 1
+        "2026-09-10": 1
       },
+      "excludeRule": "^agent:scout:smoke-observador-",
       "finished": true
     },
     "implementer": {
@@ -64,18 +76,22 @@
       "totalTurns": 6,
       "detectedRecords": 0,
       "incompleteSessions": 0,
+      "excludedSessions": 0,
+      "excludedTurns": 0,
       "perDay": {},
+      "excludeRule": "^agent:scout:smoke-observador-",
       "finished": true
     },
     "scout": {
-      "totalSessions": 3,
-      "processed": 3,
-      "totalTurns": 3,
-      "detectedRecords": 1,
+      "totalSessions": 4,
+      "processed": 4,
+      "totalTurns": 4,
+      "detectedRecords": 0,
       "incompleteSessions": 0,
-      "perDay": {
-        "2026-09-12": 1
-      },
+      "excludedSessions": 1,
+      "excludedTurns": 0,
+      "perDay": {},
+      "excludeRule": "^agent:scout:smoke-observador-",
       "finished": true
     },
     "reviewer": {
@@ -84,7 +100,10 @@
       "totalTurns": 12,
       "detectedRecords": 0,
       "incompleteSessions": 0,
+      "excludedSessions": 0,
+      "excludedTurns": 0,
       "perDay": {},
+      "excludeRule": "^agent:scout:smoke-observador-",
       "finished": true
     },
     "adversary": {
@@ -93,7 +112,10 @@
       "totalTurns": 5,
       "detectedRecords": 0,
       "incompleteSessions": 0,
+      "excludedSessions": 0,
+      "excludedTurns": 0,
       "perDay": {},
+      "excludeRule": "^agent:scout:smoke-observador-",
       "finished": true
     }
   }
