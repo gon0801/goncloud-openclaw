@@ -23,6 +23,9 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    env:
+      # Lo lee summa-gate/role.test.ts para el smoke de import del plugin.
+      OPENCLAW_NODE_MODULES: ${{ github.workspace }}/node_modules/openclaw
     steps:
       - uses: actions/checkout@v7
 
@@ -52,6 +55,14 @@ jobs:
         if: hashFiles('package-lock.json') != ''
         run: npm ci
 
+      # Antes de pre-commit a proposito: el hook local `run-checks` corre la bateria del
+      # plugin, y su smoke de import necesita un openclaw instalado. Si esto fuera despues,
+      # el hook fallaria en CI por una dependencia faltante y no por un defecto real.
+      - name: Install openclaw (para el smoke de import del plugin)
+        run: |
+          npm install --no-save --silent openclaw@2026.9.4
+          test -d node_modules/openclaw || { echo "openclaw no quedo instalado"; exit 1; }
+
       - name: Run pre-commit (todos los candados locales, sobre todo el repo)
         uses: pre-commit/action@v3.0.1
 
@@ -65,29 +76,14 @@ jobs:
         run: npm test --if-present
 
       # Revision 2026-09-12: el paso de arriba se saltaba TODO — mira package.json en la
-      # raiz, que este repo no tiene, mientras las 52 pruebas del plugin viven en
-      # summa-gate/. Las Fases 2 y 3 dependen de que estas corran; sin esto el candado
-      # era decorativo y solo se activaba si un humano se acordaba de correrlo a mano.
-      - name: Run summa-gate battery
-        run: |
-          set -euo pipefail
-          npm install --no-save --silent openclaw@2026.9.4
-          export OPENCLAW_NODE_MODULES="$PWD/node_modules/openclaw"
-          test -d "$OPENCLAW_NODE_MODULES" || { echo "openclaw no quedo instalado"; exit 1; }
-          cd summa-gate && node --test
-
-      # Las pruebas de scripts/tests/ son ejecutables y de segundos: comprueban anclas en
-      # scripts y contratos de sync. Van aparte para que un fallo aqui se lea distinto de
-      # un fallo de la bateria del plugin.
-      - name: Run script contract tests
-        run: |
-          set -euo pipefail
-          fallas=0
-          for t in scripts/tests/*.sh; do
-            echo "--- $t"
-            bash "$t" || fallas=$((fallas+1))
-          done
-          test "$fallas" -eq 0 || { echo "$fallas prueba(s) de scripts fallaron"; exit 1; }
+      # raiz, que este repo no tiene, mientras las pruebas del plugin viven en summa-gate/.
+      # Las Fases 2 y 3 dependen de que estas corran.
+      #
+      # Llama al MISMO script que corre el hook de pre-commit. Una sola definicion: si el
+      # workflow y el hook divergen, vuelve a pasar lo que paso — una prueba en rojo
+      # durante dias porque cada lado creia que la corria el otro.
+      - name: Candados del repo (bateria + contratos)
+        run: bash tools/run-checks.sh
 
   gate:
     runs-on: ubuntu-latest
