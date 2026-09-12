@@ -341,7 +341,13 @@ async function main() {
             runTs,
             turnDay: new Date(tsRecord).toISOString().slice(0, 10),
             userTextLen: t.userText ? t.userText.length : 0,
-            userTextPreview: t.userText ? t.userText.slice(0, 120) : null,
+            // Cross-review de qwen (2026-09-12): esto escribia los primeros 120 caracteres del PROMPT
+            // DEL USUARIO a docs/evidence/backfill-rendiciones.jsonl, que SI se versiona — 201 prompts
+            // de 8 agentes quedaron en GitHub. Es la misma fuga que se quito del observador en vivo,
+            // cometida en el archivo de evidencia. El largo alcanza para el analisis; el texto no hace
+            // falta y es re-derivable corriendo el backfill contra el historico del gateway.
+            userTextPreview: null,
+            userTextRedactado: true,
           },
         };
         appendLine(JSON.stringify(line));
