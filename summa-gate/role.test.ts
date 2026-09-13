@@ -16,6 +16,37 @@ import {
   buildRecord,
 } from "./observer.ts";
 
+// Fase 5 / 5.4: every fake plugin API exposes the SDK surface the
+// diagnostic guard uses (no-op middleware registration + memory-backed
+// runContext keyed by `${runId}:${namespace}`), so the existing tests
+// exercise the real registration path instead of an SDK without it.
+type FakeHook = (event: unknown, ctx: unknown) => unknown;
+function fakeBaseApi(
+  regs: Array<{ event: string; handler: FakeHook; opts?: { matcher?: string[] } }>,
+) {
+  const noop = () => {};
+  const store = new Map<string, unknown>();
+  return {
+    logger: { info: noop, warn: noop, error: noop, debug: noop },
+    on: (event: string, handler: FakeHook, opts?: { matcher?: string[] }) => {
+      regs.push({ event, handler, opts });
+    },
+    registerAgentToolResultMiddleware: noop,
+    runContext: {
+      setRunContext: ({ runId, namespace, value }: { runId: string; namespace: string; value: unknown }) => {
+        store.set(`${runId}:${namespace}`, value);
+        return true;
+      },
+      getRunContext: ({ runId, namespace }: { runId: string; namespace: string }) =>
+        store.get(`${runId}:${namespace}`),
+      clearRunContext: ({ runId, namespace }: { runId: string; namespace?: string }) => {
+        if (namespace) store.delete(`${runId}:${namespace}`);
+      },
+    },
+    pluginConfig: {},
+  };
+}
+
 describe("canonicalRole", () => {
   it("maps implementer: fix failing tests to implementer (not verifier)", () => {
     assert.equal(canonicalRole("implementer: fix failing tests"), "implementer");
@@ -198,13 +229,7 @@ describe("plugin smoke import", () => {
     const mod = await import("./index.ts");
     type Hook = (event: unknown, ctx: unknown) => unknown;
     const regs: Array<{ event: string; handler: Hook; opts?: { matcher?: string[] } }> = [];
-    const noop = () => {};
-    mod.default.register({
-      logger: { info: noop, warn: noop, error: noop, debug: noop },
-      on: (event: string, handler: Hook, opts?: { matcher?: string[] }) => {
-        regs.push({ event, handler, opts });
-      },
-    } as never);
+    mod.default.register(fakeBaseApi(regs) as never);
     const hooks = regs.filter((r) => r.event === "before_tool_call" && r.opts?.matcher?.includes("sessions_send"));
     assert.equal(hooks.length, 1);
     const call = (params: object, ctx: object) =>
@@ -228,13 +253,7 @@ describe("plugin smoke import", () => {
     const mod = await import("./index.ts");
     type Hook = (event: unknown, ctx: unknown) => unknown;
     const regs: Array<{ event: string; handler: Hook }> = [];
-    const noop = () => {};
-    mod.default.register({
-      logger: { info: noop, warn: noop, error: noop, debug: noop },
-      on: (event: string, handler: Hook) => {
-        regs.push({ event, handler });
-      },
-    } as never);
+    mod.default.register(fakeBaseApi(regs) as never);
 
     const build = regs.find((r) => r.event === "before_prompt_build");
     assert.ok(build, "before_prompt_build sin registrar");
@@ -375,11 +394,7 @@ describe("observer wiring to agent_end (Fase 2 / 2.1)", () => {
     const mod = await import("./index.ts");
     type Reg = { event: string; handler: (event: unknown, ctx: unknown) => unknown };
     const regs: Reg[] = [];
-    const noop = () => {};
-    mod.default.register({
-      logger: { info: noop, warn: noop, error: noop, debug: noop },
-      on: (event: string, handler: Reg["handler"]) => { regs.push({ event, handler }); },
-    } as never);
+    mod.default.register(fakeBaseApi(regs) as never);
     const age = regs.find((r) => r.event === "agent_end");
     assert.ok(age, "agent_end handler no registrado");
 
@@ -415,13 +430,7 @@ describe("observer wiring to agent_end (Fase 2 / 2.1)", () => {
     const mod = await import("./index.ts");
     type Reg = { event: string; handler: (event: unknown, ctx: unknown) => unknown; opts?: { matcher?: string[] } };
     const regs: Reg[] = [];
-    const noop = () => {};
-    mod.default.register({
-      logger: { info: noop, warn: noop, error: noop, debug: noop },
-      on: (event: string, handler: Reg["handler"], opts?: Reg["opts"]) => {
-        regs.push({ event, handler, opts });
-      },
-    } as never);
+    mod.default.register(fakeBaseApi(regs) as never);
 
     const age = regs.find((r) => r.event === "agent_end");
     assert.ok(age, "agent_end handler no registrado");

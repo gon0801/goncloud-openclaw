@@ -75,15 +75,11 @@ jobs:
         if: hashFiles('package.json') != ''
         run: npm test --if-present
 
-      # Revision 2026-09-12: el paso de arriba se saltaba TODO — mira package.json en la
-      # raiz, que este repo no tiene, mientras las pruebas del plugin viven en summa-gate/.
-      # Las Fases 2 y 3 dependen de que estas corran.
-      #
-      # Llama al MISMO script que corre el hook de pre-commit. Una sola definicion: si el
-      # workflow y el hook divergen, vuelve a pasar lo que paso — una prueba en rojo
-      # durante dias porque cada lado creia que la corria el otro.
-      - name: Candados del repo (bateria + contratos)
-        run: bash scripts/run-checks.sh
+      # La bateria del plugin (summa-gate/) corre via el hook pre-commit
+      # `run-checks` (always_run, sobre todo el repo), que es el unico
+      # entrypoint de la bateria dentro de CI. No se agrega una segunda
+      # invocacion directa de scripts/run-checks.sh: dos entrypoints
+      # divergen y repiten la bateria.
 
   gate:
     runs-on: ubuntu-latest

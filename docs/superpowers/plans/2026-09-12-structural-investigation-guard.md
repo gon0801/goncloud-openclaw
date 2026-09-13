@@ -187,6 +187,8 @@ Cover all three positive incidents and these negative controls:
 
 The `gh` classifier requires `isError === true`, tool `exec` or `bash`, an attempted command whose first executable token is `gh`, and a command-not-found/path-resolution signature. Browser requires the browser tool plus evidence that the global profile was selected instead of `claw`. Session scope requires `sessions_search`, a structured failure, and the unscoped-database signature. Do not classify from result text alone.
 
+> Correction (Codex review round 1, 2026-09-13, grounded in `agents/main/agent/workshop-skills/browser-cli-claw-profile/SKILL.md:12-15`): the browser incident is classified from `exec`/`bash` running the CLI with the GLOBAL `--profile claw` flag plus the credentials signature — not from the `browser` tool, whose tool-style `profile=claw` is the valid form. Likewise the session incident requires ABSENT scope (`agentId`/`sessionKeys`), and probes validate the executed command/params, never result text. The implementation and its tests follow the corrected form; this note keeps the plan traceable.
+
 Run:
 
 ```bash
