@@ -323,6 +323,49 @@ describe("gate scope comment (1.2)", () => {
 });
 
 describe("observer wiring to agent_end (Fase 2 / 2.1)", () => {
+  // El mutante que sobrevivio la primera vez: probar `isTurnRecordable` como funcion pura NO
+  // prueba que el HANDLER lo use. Quitar el `if (!isTurnRecordable(...)) return;` del cableado
+  // dejaba la bateria en 61/61. Es el mismo agujero que el cross-review de codex encontro con
+  // el contrato del jsonl: el defecto vive en el cableado, no en la funcion.
+  it("NO escribe linea cuando el agent_end no trae mensajes del asistente", async () => {
+    const mod = await import("./index.ts");
+    type Reg = { event: string; handler: (event: unknown, ctx: unknown) => unknown };
+    const regs: Reg[] = [];
+    const noop = () => {};
+    mod.default.register({
+      logger: { info: noop, warn: noop, error: noop, debug: noop },
+      on: (event: string, handler: Reg["handler"]) => { regs.push({ event, handler }); },
+    } as never);
+    const age = regs.find((r) => r.event === "agent_end");
+    assert.ok(age, "agent_end handler no registrado");
+
+    const tmp = mkdtempSync(join(tmpdir(), "summa-gate-fantasma-"));
+    const live = join(tmp, "rendiciones.jsonl");
+    _setObserverFileForTest(live);
+    try {
+      const ctx = { sessionKey: "agent:scout:fantasma-" + Date.now(), agentId: "scout" };
+      // Las tres formas en que el runtime emite un agent_end que no es un turno.
+      age.handler({ type: "agent_end", messages: [] }, ctx);
+      age.handler({ type: "agent_end" }, ctx);
+      age.handler({ type: "agent_end", messages: [{ role: "user", content: "sin respuesta" }] }, ctx);
+      assert.equal(
+        existsSync(live) ? readFileSync(live, "utf8").trim() : "",
+        "",
+        "escribio linea(s) para un agent_end sin respuesta: eso infla el denominador de la tasa",
+      );
+
+      // Y con una respuesta real SI escribe, para que la prueba no pase por prohibir todo.
+      age.handler(
+        { type: "agent_end", messages: [{ role: "user", content: "hola" }, { role: "assistant", content: "listo" }] },
+        ctx,
+      );
+      assert.equal(readFileSync(live, "utf8").trim().split("\n").filter(Boolean).length, 1);
+    } finally {
+      _setObserverFileForTest(null);
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   // Revision 2026-09-12: el handler escribia una linea por CADA turno (correcto: sin el
   // denominador no hay tasa), pero el docstring de observer.ts prometia que solo registraba
   // los detectados, y ninguna prueba fijaba ninguna de las dos conductas. Esta lo hace desde

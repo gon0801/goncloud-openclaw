@@ -238,6 +238,27 @@ export function turnSlice(messages: AgentEndMessage[] | undefined | null): Agent
   return messages;
 }
 
+/**
+ * Un `agent_end` sin NINGUN mensaje del asistente no es un turno: es un evento de ciclo de
+ * vida. El runtime lo emite asi en varias ramas (`emit({type:"agent_end", messages: []})`
+ * cuando no hubo mensajes nuevos, y en abortos/interrupciones), y esos eventos llegaban al
+ * jsonl como registros enteramente vacios.
+ *
+ * Medido en los datos vivos el 2026-09-12: 13 de 80 registros (16%) con `textLen: 0`, sin
+ * herramientas y sin texto — tres de ellos dentro de 1,5 s en la misma sesion. No generan
+ * detecciones falsas, pero inflan el DENOMINADOR: la tasa se lee ~16% mas baja de lo real,
+ * y la tasa es justamente lo que este archivo existe para medir.
+ *
+ * Un turno que solo emitio toolCalls y ningun texto SI cuenta: hubo trabajo. Lo que se
+ * descarta es el evento sin ningun mensaje del asistente.
+ */
+export function isTurnRecordable(messages: AgentEndMessage[] | undefined | null): boolean {
+  const delTurno = turnSlice(messages);
+  return delTurno.some(
+    (m) => m && typeof m === "object" && (m.role === "assistant" || m.role === "model"),
+  );
+}
+
 export function buildRecord(
   ts: number,
   sessionKey: string,
