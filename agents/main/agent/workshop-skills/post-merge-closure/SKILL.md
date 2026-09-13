@@ -30,8 +30,11 @@ Verified 2026-09-11 (PR #300 → `844d048`): merge confirmed by API, hook copies
    - `tools/check-hook-registration.sh` exits 0 either way: it validates that the key exists, not that the value runs.
    - Completion: every registered interpreter parses the harness.
 
-6. Close the ledger in one PR: add the `docs/deploy-log.md` entry and set the row to `cc:完了` in `Plans.md` (only the Status cell — the row's DoD text is the contract and is never edited); run `bash tools/check-deploy-log.sh` and `bash tools/audita-ledger.sh` (both exit 0); scope the commit by area (`docs(plans):`), never by row number; open the PR and leave the merge to the owner.
-   - Completion: both checkers exit 0, one PR open, nothing merged by you.
+6. Close the ledger in one PR: add the `docs/deploy-log.md` entry and set the row to `cc:完了` in `Plans.md` (only the Status cell — the row's DoD text is the contract and is never edited); run `bash tools/check-deploy-log.sh` and `bash tools/audita-ledger.sh` (both exit 0), plus `bash tests/test_plans_ledger.sh` before pushing any Plans.md edit; scope the commit by area (`docs(plans):`), never by row number; open the PR and leave the merge to the owner.
+   - A Plans.md task row must have exactly **5 cells**: editing rows by script duplicated the Dependencies column (20.10, 20.11 twice) and CI went red deterministically — `test_plans_ledger` rejects 6-cell rows. Verified 2026-09-13 on the 20.21/20.22 closure PR: first run red, cell fix green.
+   - `deploy-log` is newest-first: insert the new `##` entry ABOVE the most recent dated entry, not at the first anchor you find — the checker fails with "inversion de fecha" when a newer entry sits under an older one (verified same run: entry placed after the 2026-09-12 block → FAIL, repositioned above it → OK).
+   - When a CI shard goes red, grep for the first FAIL is misleading: a test's own expected-mutation output prints `FAIL:` lines that passed. Read the run-end summary (`=== N PASS / M FAIL ===`) and the `FAIL: test_<name>` lines to name the real failing file — verified: the scary advlock FAILs were expected mutations; the real break was `FAIL: test_plans_ledger` at the tail.
+   - Completion: all three checks exit 0, one PR open, nothing merged by you.
 
 7. Report only what you verified. If a wrong claim already reached the owner, correct it in the same channel, with the evidence that contradicts it.
 
