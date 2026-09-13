@@ -1,6 +1,6 @@
 ---
 name: mac-agent-transcript
-description: Read the last output of a CLI coding agent (kimi-code, claude, codex, muse) running in a Terminal tab on David's Mac, from its on-disk session log. Use when asked what Kimi/Claude/Codex said or did, or to see what a Terminal tab is running. Produces the agent's last assistant message.
+description: Read the last output of a CLI coding agent (kimi-code, claude, codex, muse) running in a Terminal tab on David's Mac, from its on-disk session log, or recover a claude.ai/code/artifact's content from the Mac when the link will not load. Use when asked what Kimi/Claude/Codex said or did, when a claude.ai/code/artifact URL returns an empty page, or to see what a Terminal tab is running. Produces the agent's last assistant message or the artifact's local file path.
 ---
 
 # Mac Coding-Agent Transcript (David's Mac)
@@ -27,6 +27,9 @@ Read what a CLI coding agent in a Terminal tab on the Mac is doing from its sess
 
 5. Verify it is the right task before reporting: `state.json` `title` and `lastPrompt` must match the question (e.g. "what did Kimi say about X"). If the newest session is a different task than the one asked about, say so instead of reporting the wrong session's output.
    - Completion: the reported text corresponds to the session/task the user asked about.
+
+6. Recover a claude.ai/code/artifact brief when the URL will not load: `web_fetch` of an artifact link returns only an empty "Claude Artifact" shell. Instead, on the Mac, `grep -rl "<artifact-uuid>" ~/.claude/projects/` — the transcript of the session that created it records the download: read the matching line's `frameUrl` and `path` fields to get the local file, e.g. `/private/tmp/claude-501/-Users-dn-dev-<repo>/<sessionId>/scratchpad/<name>.html`. Read that file and strip tags (a short `python3` `re` script) to get the content; sections keep stable ids (`id="b1"`…). The local copy is the version Claude Code downloaded — check the transcript for a version note before treating it as current.
+   - Completion: the local HTML exists (non-zero size), its title matches the artifact, and you have extracted the section you need.
 
 ## Pitfalls
 
