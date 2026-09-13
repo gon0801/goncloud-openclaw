@@ -21,6 +21,7 @@ npm/
 tools/
 models/
 browser/
+browser-claw/
 cache/
 logs/
 tmp/
