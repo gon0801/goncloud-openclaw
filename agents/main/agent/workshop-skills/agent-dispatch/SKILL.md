@@ -1,6 +1,6 @@
 ---
 name: agent-dispatch
-description: Dispatch a brief to the engineering agent chain (implementer / verifier / reviewer) or to a spawned subagent, and recover full results. Use for a task brief or "-saikit" lane, when a sessions_send agent fails with "All models failed", or when a completion result arrives truncated. Produces the complete result.
+description: Dispatch a brief to the engineering agent chain (implementer / verifier / reviewer) or to a spawned subagent, and recover full results; run the external Claude-on-the-Mac review loop (brief file, do-script delivery, verdict watch) until APROBADO. Use for a task brief or "-saikit" lane, when a sessions_send agent fails with "All models failed", when a completion result arrives truncated, or when David asks for a fix→review loop until Claude approves a block.
 ---
 
 # Agent / Subagent Dispatch
@@ -38,6 +38,17 @@ Route work to this Gateway's agents and collect complete results. Main orchestra
    - Completion: you have the child's complete final text.
 
 9. Consolidate across roles and report only the synthesized result.
+
+## External review loop (Claude on the Mac)
+
+David repeatedly orders a fix-then-review loop against the Claude Code tab in the Mac project ("revisa y haz el loop hasta que Claude apruebe"; asked 2026-09-11 and 2026-09-13 for different lanes). Verified full cycle 2026-09-13 (bloque 6: ronda 1 `VEREDICTO: CAMBIOS` with 8 findings, then fixes pushed → ronda 2 `VEREDICTO: APROBADO`):
+
+1. Write the brief to a Mac file (`/tmp/brief-<task>-r<N>.txt`): what to review (PRs, branches, head SHAs), the operator decisions it must not re-litigate (marked as such), the authoritative sources (Plans.md rows, artifact path), and the verdict format — first word `VEREDICTO: APROBADO` / `VEREDICTO: CAMBIOS` with file:line findings.
+   - Completion: the brief file exists on the Mac (`wc -c`).
+2. Deliver with ONE short `do script "Lee /tmp/brief-… y haz lo que pide"` into the project's tab (mac-terminal-control step 4). Confirm delivery by the marker text appearing in the project transcript (mac-agent-transcript step 4), not by the osascript exit.
+3. Watch for a NEW verdict by counting `VEREDICTO` occurrences in the transcript against a baseline taken at delivery — the brief itself contains the word, so a plain grep false-positives (same rule as mac-terminal-control step 5's marker matching). A detached watcher that fires when the count increases beats poll loops over a flaky companion channel.
+   - The verdict can take 30+ minutes: Claude dispatches its own verifier/reviewer subagents and posts progress echoes (`SUMMONAIKIT HARNESS DELEGATED - awaiting verifier`). Read the final verdict from the transcript (mac-agent-transcript step 3), never from the tab tail.
+4. `CAMBIOS` → dispatch the fixes to the implementer with the findings verbatim (each carries file:line), do the trivial gh-side items yourself (e.g. cross-PR chaining comments; "lo chico lo haces vos"), then re-brief with the NEW head SHAs and the per-finding commits before re-delivering (step 0's race rule — an un-updated brief makes the reviewer re-stamp the old verdict). `APROBADO` → the loop ends; report PRs, CI state, and the owner's remaining action (merge order for stacked PRs).
 
 ## Pitfalls
 

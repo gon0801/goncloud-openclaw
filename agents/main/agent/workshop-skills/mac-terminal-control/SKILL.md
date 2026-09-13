@@ -68,6 +68,7 @@ One command (`gh`, `ssh`, an installer) runs on the wrong machine when an exec o
 ## Pitfalls
 
 - `osascript` tab selection: `set selected of tab N of window W to true` (not `set selected of window W to tab N …`, which throws `-1700`).
+- Reading a tab tail with an AppleScript range (`text -1600 thru -1 of contents`) throws "Invalid range" when the buffer is shorter than the range (verified 2026-09-13): return the full `contents` and cut client-side.
 - **Window indices are not stable.** `set index of window i to 1` reorders windows, and macOS renumbers as tabs open/close. Reusing a window/tab index from an earlier map can silently select a *different* session — verified 2026-09-11, a paste meant for one Claude tab landed in another. Always resolve the window by its tty in the script that selects and types.
 - A keystroke `exit 0` is not delivery confirmation into a TUI; confirm a new turn in the target agent's log before reporting success.
 - The node service PATH is minimal: homebrew CLIs are missing (`gh: command not found`). Prefix `export PATH="$PATH:/opt/homebrew/bin"` and prefer `gh ... -R <owner/repo>` so the call works from a non-repo cwd (otherwise: "fatal: not a git repository" — verified 2026-09-13, both).
