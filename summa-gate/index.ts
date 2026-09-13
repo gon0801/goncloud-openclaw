@@ -50,6 +50,20 @@ import {
 
 import { buildRecord, isTurnRecordable, writeRecord } from "./observer.ts";
 
+import {
+  DIAGNOSTIC_NAMESPACE,
+  buildDiagnosticContract,
+  classifyCompletedProbe,
+  classifyIncident,
+  isTaskLevelIncapacity,
+  parseDiagnosticConfig,
+  reduceDiagnosticState,
+  shouldRequestRevision,
+  type DiagnosticObservation,
+  type DiagnosticState,
+  type IncidentId,
+} from "./diagnostic-guard.ts";
+
 // ---------------------------------------------------------------------------
 // Estado persistido por sesión
 // ---------------------------------------------------------------------------
@@ -125,6 +139,140 @@ function sweepStaleState(now: number): void {
 
 function sha256(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostic guard: tool-result observation adapter + per-run lock queue
+// ---------------------------------------------------------------------------
+
+type DiagnosticRunContext = {
+  setRunContext: (args: { runId: string; namespace: string; value: unknown }) => boolean;
+  getRunContext: (args: { runId: string; namespace: string }) => unknown;
+  clearRunContext: (args: { runId: string; namespace?: string }) => void;
+};
+
+type ToolResultEventLike = {
+  toolCallId?: unknown;
+  toolName?: unknown;
+  args?: unknown;
+  isError?: unknown;
+  result?: unknown;
+};
+
+type ToolResultContextLike = {
+  runtime?: unknown;
+  agentId?: unknown;
+  sessionId?: unknown;
+  sessionKey?: unknown;
+  runId?: unknown;
+};
+
+/**
+ * Map a host tool-result event to a pure observation. Follows the SDK shape
+ * (AgentToolResultMiddlewareEvent): toolName/args/isError/result come from
+ * the event; identity (runId) comes ONLY from ctx. Never throws.
+ */
+function diagnosticObservationFromEvent(event: ToolResultEventLike): DiagnosticObservation | undefined {
+  const toolName = typeof event.toolName === "string" ? event.toolName : "";
+  if (!toolName) return undefined;
+  const rawArgs = event.args;
+  const args =
+    rawArgs !== null && typeof rawArgs === "object"
+      ? (rawArgs as Record<string, unknown>)
+      : {};
+  return { toolName, args, isError: event.isError === true ? true : undefined, result: event.result };
+}
+
+const PROBE_CATEGORY_ALLOWLIST: ReadonlySet<string> = new Set([
+  "executable_discovery",
+  "known_install_location",
+  "capability_verification",
+  "resolved_config",
+  "profile_retry",
+  "browser_capability",
+  "explicit_agent_scope",
+  "explicit_session_scope",
+  "database_fault_check",
+]);
+
+const EXPECTED_CATEGORIES_BY_INCIDENT: Record<string, string[]> = {
+  "path_miss:gh_cli": ["executable_discovery", "known_install_location", "capability_verification"],
+  "wrong_profile:browser_claw": ["resolved_config", "profile_retry", "browser_capability"],
+  "session_scope:sessions_search": ["explicit_agent_scope", "explicit_session_scope", "database_fault_check"],
+};
+
+/**
+ * Validate untrusted runContext content into a DiagnosticState. Anything
+ * off the exact V1 allowlist (unknown incident, required triple mismatch,
+ * foreign completed entries, wrong types) is rejected as absent. Never throws.
+ */
+function asDiagnosticState(value: unknown): DiagnosticState | undefined {
+  if (value === null || typeof value !== "object") return undefined;
+  const rec = value as Record<string, unknown>;
+  if (rec["version"] !== 1) return undefined;
+  const incidentId = rec["incidentId"];
+  if (
+    incidentId !== "path_miss:gh_cli" &&
+    incidentId !== "wrong_profile:browser_claw" &&
+    incidentId !== "session_scope:sessions_search"
+  ) {
+    return undefined;
+  }
+  if (!Array.isArray(rec["requiredCategories"]) || !Array.isArray(rec["completedCategories"])) {
+    return undefined;
+  }
+  if (typeof rec["revisionRequested"] !== "boolean") return undefined;
+  const required = rec["requiredCategories"];
+  if (
+    required.length !== 3 ||
+    !required.every((item): item is string => typeof item === "string") ||
+    new Set(required).size !== 3
+  ) {
+    return undefined;
+  }
+  const expected: ReadonlySet<string> = new Set(
+    EXPECTED_CATEGORIES_BY_INCIDENT[incidentId as string] ?? [],
+  );
+  if (!required.every((item: string) => expected.has(item))) return undefined;
+  const completed = rec["completedCategories"];
+  if (
+    !completed.every(
+      (item): item is string =>
+        typeof item === "string" && PROBE_CATEGORY_ALLOWLIST.has(item) && expected.has(item),
+    )
+  ) {
+    return undefined;
+  }
+  // Duplicates are rejected, not deduplicated: a stored state claiming the
+  // same probe three times is corrupt, and must fail open instead of
+  // reading as a completed investigation.
+  if (new Set(completed as string[]).size !== (completed as string[]).length) {
+    return undefined;
+  }
+  return {
+    version: 1,
+    incidentId: incidentId as IncidentId,
+    requiredCategories: [...(required as string[])] as DiagnosticState["requiredCategories"],
+    completedCategories: [...(completed as string[])] as DiagnosticState["completedCategories"],
+    revisionRequested: rec["revisionRequested"],
+  };
+}
+
+// Module-local Map<runId, Promise<void>> used ONLY as a lock queue: keys are
+// runIds, values are void promises carrying no diagnostic data. Diagnostic
+// state itself lives in api.runContext under DIAGNOSTIC_NAMESPACE.
+const diagnosticLocks = new Map<string, Promise<void>>();
+
+function enqueueDiagnosticUpdate(runId: string, task: () => Promise<void>): Promise<void> {
+  const prev = diagnosticLocks.get(runId) ?? Promise.resolve();
+  const run = prev.then(task, task);
+  let settled: Promise<void>;
+  const cleanup = (): void => {
+    if (diagnosticLocks.get(runId) === settled) diagnosticLocks.delete(runId);
+  };
+  settled = run.then(cleanup, cleanup);
+  diagnosticLocks.set(runId, settled);
+  return run;
 }
 
 // ---------------------------------------------------------------------------
@@ -332,6 +480,107 @@ export default definePluginEntry({
       }
     });
 
+    // -- Diagnostic guard: tool-result guidance + per-run state -------------
+    //
+    // Placed AFTER the merge guard, sessions_send guard, and adversary
+    // confinement, inside its own try/catch: if the host lacks
+    // registerAgentToolResultMiddleware (or it throws), the three existing
+    // protections stay registered. The catch logs only the fixed text plus
+    // the error class, never the error message (it could carry tool output).
+    //
+    // Mode off registers nothing, restoring prior behavior. In observe and
+    // enforce the middleware appends the same static guidance; only
+    // before_agent_finalize (Task 5) may request a revision, and only in
+    // enforce. For Codex native tools the host may observe without
+    // re-injecting transformed content; reinjection is not claimed here.
+    const diagnosticToolResult = async (event: unknown, ctx: unknown): Promise<unknown> => {
+      const evt = ((event ?? {}) as ToolResultEventLike) ?? {};
+      const c = ((ctx ?? {}) as ToolResultContextLike) ?? {};
+      // runId comes ONLY from ctx (SDK AgentToolResultMiddlewareContext).
+      // Event-carried runId values are ignored; sessionKey is never a
+      // substitute. Without an exact non-empty runId: no guidance, no state.
+      const runId =
+        typeof c.runId === "string" && c.runId.length > 0 ? c.runId : undefined;
+      if (!runId) return undefined;
+      const observation = diagnosticObservationFromEvent(evt);
+      if (!observation) return undefined;
+      // The transform spreads evt.result into a new object: only safe for
+      // real result objects. A primitive/array result would corrupt into
+      // indexed keys, so contract violations fail open with no state change.
+      if (!evt.result || typeof evt.result !== "object" || Array.isArray(evt.result)) {
+        return undefined;
+      }
+      const runContext = (api as unknown as { runContext?: DiagnosticRunContext }).runContext;
+      if (!runContext) return undefined;
+      return enqueueDiagnosticUpdate(runId, async (): Promise<unknown> => {
+        let prev: DiagnosticState | undefined;
+        try {
+          prev = asDiagnosticState(
+            runContext.getRunContext({ runId, namespace: DIAGNOSTIC_NAMESPACE }),
+          );
+        } catch {
+          prev = undefined;
+        }
+        const incident = classifyIncident(observation);
+        const effective: IncidentId | undefined = prev?.incidentId ?? incident ?? undefined;
+        // Unknown errors fail open: no guidance, no state write.
+        if (!effective) return undefined;
+        // The incident-classified call itself is the trigger, never a probe.
+        const category =
+          incident === undefined ? classifyCompletedProbe(effective, observation) : undefined;
+        const next = reduceDiagnosticState(prev, effective, category);
+        let stored = false;
+        try {
+          stored = runContext.setRunContext({ runId, namespace: DIAGNOSTIC_NAMESPACE, value: next }) !== false;
+        } catch {
+          stored = false;
+        }
+        if (!stored) {
+          // Degraded counting, but the guidance below is still valid for
+          // this step; the queue itself stays alive via enqueueDiagnosticUpdate.
+          log.warn("summa-gate diagnostic: state write failed");
+        }
+        log.info(
+          `summa-gate diagnostic: incident=${next.incidentId} ` +
+            `completed=${next.completedCategories.length} revised=${next.revisionRequested}`,
+        );
+        const rawContent = (evt.result as { content?: unknown } | undefined)?.content;
+        const content = Array.isArray(rawContent) ? rawContent : [];
+        return {
+          result: {
+            ...((evt.result ?? {}) as Record<string, unknown>),
+            content: [...content, { type: "text", text: buildDiagnosticContract(next) }],
+          },
+        };
+      }).catch(() => undefined);
+    };
+
+    const diagnosticConfig = parseDiagnosticConfig(
+      (api as unknown as { pluginConfig?: unknown }).pluginConfig,
+    );
+    if (diagnosticConfig.mode !== "off") {
+      try {
+        (
+          api as unknown as {
+            registerAgentToolResultMiddleware: (
+              handler: (event: unknown) => unknown,
+              opts: { runtimes: string[] },
+            ) => unknown;
+          }
+        ).registerAgentToolResultMiddleware(diagnosticToolResult, {
+          runtimes: ["openclaw", "codex"],
+        });
+        log.info(`summa-gate: diagnostic guard registered (mode=${diagnosticConfig.mode})`);
+      } catch (err) {
+        const ctor =
+          err !== null && typeof err === "object"
+            ? (err as { constructor?: { name?: unknown } }).constructor
+            : undefined;
+        const name = typeof ctor?.name === "string" && ctor.name ? ctor.name : "Error";
+        log.warn(`summa-gate diagnostic: registration failed (${name})`);
+      }
+    }
+
     // -- 2/3. Sentinel + standing rules -------------------------------------
     api.on("before_prompt_build", (event, ctx) => {
       const sessionKey = ctx.sessionKey ?? ctx.sessionId ?? "unknown";
@@ -524,6 +773,111 @@ export default definePluginEntry({
         },
       };
     });
+
+    // -- Diagnostic guard: best-effort same-run revision ----------------------
+    //
+    // DIAGNOSTIC REVISE SCOPE (kimi cross-review): this revise is best-effort
+    // like the receipt gate above. The runtime silently discards
+    // `action: "revise"` after deterministic side effects
+    // (`hadDeterministicSideEffect`, same citation as the receipt gate), so
+    // an enforce revise may not run in turns whose incident trigger counts
+    // as one. If BOTH handlers revise the same finalize, the host merges
+    // them (runtime `mergeBeforeAgentFinalize`: reasons concatenated, first
+    // handler's retry wins, ours kept as candidate) — never a double pass.
+    // In every non-revise case the final is delivered normally.
+    //
+    // Observe logs the symbolic decision and never revises. Enforce may
+    // request exactly one same-run revision (maxAttempts 1, idempotency key
+    // bound to this runId) when all of these hold: a recognized incident is
+    // tracked for the exact runId, the final text is a task-level incapacity
+    // conclusion, fewer than three categories completed, and no revision was
+    // requested yet. Anything else (missing/ambiguous runId, cron/heartbeat
+    // origin, completed investigation, failed state write) delivers the
+    // final normally. This handler never blocks, never terminates, never
+    // schedules, and never continues another run: its only non-empty return
+    // is the single same-run revise below. State transitions are recorded
+    // by the tool-result middleware; the decision is read here, inside
+    // before_agent_finalize, while run context is still available.
+    if (diagnosticConfig.mode !== "off") {
+      api.on("before_agent_finalize", async (event, ctx) => {
+        const evt = ((event ?? {}) as {
+          runId?: unknown;
+          lastAssistantMessage?: unknown;
+        }) ?? {};
+        const c = ((ctx ?? {}) as {
+          runId?: unknown;
+          trigger?: unknown;
+        }) ?? {};
+        const eventRunId =
+          typeof evt.runId === "string" && evt.runId.length > 0 ? evt.runId : undefined;
+        const ctxRunId =
+          typeof c.runId === "string" && c.runId.length > 0 ? c.runId : undefined;
+        // Exact runId required; missing or ambiguous correlation fails open.
+        if (!eventRunId && !ctxRunId) return undefined;
+        if (eventRunId && ctxRunId && eventRunId !== ctxRunId) return undefined;
+        const runId = (eventRunId ?? ctxRunId) as string;
+        // Automation origins receive guidance only, never a revision: a new
+        // model step here could repeat business actions. The SDK-real signal
+        // is ctx.trigger (mirrors bundled memory-core); inputProvenance.kind
+        // can never be cron/heartbeat (SDK allows only external_user,
+        // inter_session, internal_system), so it is not consulted.
+        const trigger = typeof c.trigger === "string" ? c.trigger : undefined;
+        if (trigger === "cron" || trigger === "heartbeat") return undefined;
+        const runContext = (api as unknown as { runContext?: DiagnosticRunContext }).runContext;
+        if (!runContext) return undefined;
+        return enqueueDiagnosticUpdate(runId, async (): Promise<unknown> => {
+          let state: DiagnosticState | undefined;
+          try {
+            state = asDiagnosticState(
+              runContext.getRunContext({ runId, namespace: DIAGNOSTIC_NAMESPACE }),
+            );
+          } catch {
+            state = undefined;
+          }
+          if (!state) return undefined;
+          // Final text is inspected transiently and discarded: never stored,
+          // never logged, never added to any record.
+          const text =
+            typeof evt.lastAssistantMessage === "string" ? evt.lastAssistantMessage : "";
+          const incapacity = text ? isTaskLevelIncapacity(text) : false;
+          log.info(
+            `summa-gate diagnostic finalize: incident=${state.incidentId} ` +
+              `completed=${state.completedCategories.length} ` +
+              `revised=${state.revisionRequested} incapacity=${incapacity}`,
+          );
+          if (diagnosticConfig.mode !== "enforce") return undefined;
+          if (!shouldRequestRevision(state, text)) return undefined;
+          const next: DiagnosticState = {
+            version: 1,
+            incidentId: state.incidentId,
+            requiredCategories: [...state.requiredCategories],
+            completedCategories: [...state.completedCategories],
+            revisionRequested: true,
+          };
+          let stored = false;
+          try {
+            stored =
+              runContext.setRunContext({ runId, namespace: DIAGNOSTIC_NAMESPACE, value: next }) !== false;
+          } catch {
+            stored = false;
+          }
+          if (!stored) {
+            // Fail open: deliver the final normally.
+            return undefined;
+          }
+          return {
+            action: "revise" as const,
+            reason:
+              "A recognized first-path failure was converted into a task-level incapacity conclusion before three distinct diagnostic categories completed.",
+            retry: {
+              instruction: buildDiagnosticContract(next),
+              idempotencyKey: `summa-diagnostic:${runId}`,
+              maxAttempts: 1,
+            },
+          };
+        }).catch(() => undefined);
+      });
+    }
 
     // -- 7. Tracking de subagentes -------------------------------------------
     api.on("subagent_spawned", (event, ctx) => {

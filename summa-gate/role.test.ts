@@ -16,6 +16,37 @@ import {
   buildRecord,
 } from "./observer.ts";
 
+// Fase 5 / 5.4: every fake plugin API exposes the SDK surface the
+// diagnostic guard uses (no-op middleware registration + memory-backed
+// runContext keyed by `${runId}:${namespace}`), so the existing tests
+// exercise the real registration path instead of an SDK without it.
+type FakeHook = (event: unknown, ctx: unknown) => unknown;
+function fakeBaseApi(
+  regs: Array<{ event: string; handler: FakeHook; opts?: { matcher?: string[] } }>,
+) {
+  const noop = () => {};
+  const store = new Map<string, unknown>();
+  return {
+    logger: { info: noop, warn: noop, error: noop, debug: noop },
+    on: (event: string, handler: FakeHook, opts?: { matcher?: string[] }) => {
+      regs.push({ event, handler, opts });
+    },
+    registerAgentToolResultMiddleware: noop,
+    runContext: {
+      setRunContext: ({ runId, namespace, value }: { runId: string; namespace: string; value: unknown }) => {
+        store.set(`${runId}:${namespace}`, value);
+        return true;
+      },
+      getRunContext: ({ runId, namespace }: { runId: string; namespace: string }) =>
+        store.get(`${runId}:${namespace}`),
+      clearRunContext: ({ runId, namespace }: { runId: string; namespace?: string }) => {
+        if (namespace) store.delete(`${runId}:${namespace}`);
+      },
+    },
+    pluginConfig: {},
+  };
+}
+
 describe("canonicalRole", () => {
   it("maps implementer: fix failing tests to implementer (not verifier)", () => {
     assert.equal(canonicalRole("implementer: fix failing tests"), "implementer");
@@ -198,13 +229,7 @@ describe("plugin smoke import", () => {
     const mod = await import("./index.ts");
     type Hook = (event: unknown, ctx: unknown) => unknown;
     const regs: Array<{ event: string; handler: Hook; opts?: { matcher?: string[] } }> = [];
-    const noop = () => {};
-    mod.default.register({
-      logger: { info: noop, warn: noop, error: noop, debug: noop },
-      on: (event: string, handler: Hook, opts?: { matcher?: string[] }) => {
-        regs.push({ event, handler, opts });
-      },
-    } as never);
+    mod.default.register(fakeBaseApi(regs) as never);
     const hooks = regs.filter((r) => r.event === "before_tool_call" && r.opts?.matcher?.includes("sessions_send"));
     assert.equal(hooks.length, 1);
     const call = (params: object, ctx: object) =>
@@ -228,13 +253,7 @@ describe("plugin smoke import", () => {
     const mod = await import("./index.ts");
     type Hook = (event: unknown, ctx: unknown) => unknown;
     const regs: Array<{ event: string; handler: Hook }> = [];
-    const noop = () => {};
-    mod.default.register({
-      logger: { info: noop, warn: noop, error: noop, debug: noop },
-      on: (event: string, handler: Hook) => {
-        regs.push({ event, handler });
-      },
-    } as never);
+    mod.default.register(fakeBaseApi(regs) as never);
 
     const build = regs.find((r) => r.event === "before_prompt_build");
     assert.ok(build, "before_prompt_build sin registrar");
@@ -303,6 +322,40 @@ describe("gate scope comment (1.2)", () => {
     );
 
 
+});
+
+// ---------------------------------------------------------------------------
+// Fase 5 — alcance declarado del revise diagnóstico (kimi cross-review).
+//
+// El revise de enforce es best-effort como el del gate de recibo: el runtime
+// puede descartarlo tras side effects, y si ambos handlers revisan el host
+// fusiona (mergeBeforeAgentFinalize, gana el retry del primero). Si estos
+// comentarios se retiran, la limitación queda indocumentada y este test cae.
+// ---------------------------------------------------------------------------
+
+describe("diagnostic revise scope comment (kimi)", () => {
+  it("declares the discard limit and the two-revise merge in index.ts", () => {
+    const idx = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+    assert.match(
+      idx,
+      /DIAGNOSTIC REVISE SCOPE/,
+      "the diagnostic finalize block must declare its best-effort scope",
+    );
+    assert.match(
+      idx,
+      /mergeBeforeAgentFinalize/,
+      "the diagnostic finalize block must cite the runtime two-revise merge",
+    );
+  });
+
+  it("states the --browser-profile exclusion accurately in diagnostic-guard.ts", () => {
+    const src = readFileSync(new URL("./diagnostic-guard.ts", import.meta.url), "utf8");
+    assert.match(
+      src,
+      /cannot match inside --browser-profile/,
+      "the profile-exclusion comment must not claim a match that never occurs",
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -375,11 +428,7 @@ describe("observer wiring to agent_end (Fase 2 / 2.1)", () => {
     const mod = await import("./index.ts");
     type Reg = { event: string; handler: (event: unknown, ctx: unknown) => unknown };
     const regs: Reg[] = [];
-    const noop = () => {};
-    mod.default.register({
-      logger: { info: noop, warn: noop, error: noop, debug: noop },
-      on: (event: string, handler: Reg["handler"]) => { regs.push({ event, handler }); },
-    } as never);
+    mod.default.register(fakeBaseApi(regs) as never);
     const age = regs.find((r) => r.event === "agent_end");
     assert.ok(age, "agent_end handler no registrado");
 
@@ -415,13 +464,7 @@ describe("observer wiring to agent_end (Fase 2 / 2.1)", () => {
     const mod = await import("./index.ts");
     type Reg = { event: string; handler: (event: unknown, ctx: unknown) => unknown; opts?: { matcher?: string[] } };
     const regs: Reg[] = [];
-    const noop = () => {};
-    mod.default.register({
-      logger: { info: noop, warn: noop, error: noop, debug: noop },
-      on: (event: string, handler: Reg["handler"], opts?: Reg["opts"]) => {
-        regs.push({ event, handler, opts });
-      },
-    } as never);
+    mod.default.register(fakeBaseApi(regs) as never);
 
     const age = regs.find((r) => r.event === "agent_end");
     assert.ok(age, "agent_end handler no registrado");

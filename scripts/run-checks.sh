@@ -44,6 +44,13 @@ NODE=$(elegir_node) || {
 }
 
 paso "bateria summa-gate  (node $("$NODE" --version))"
+paso "sintaxis summa-gate (node --check)"
+if (cd summa-gate && PATH="$(dirname "$NODE"):$PATH" npm run check); then
+  echo "OK: sintaxis summa-gate"
+else
+  echo "FAIL: sintaxis summa-gate"; fallas=$((fallas + 1))
+fi
+
 if (cd summa-gate && "$NODE" --test); then
   echo "OK: bateria summa-gate"
 else

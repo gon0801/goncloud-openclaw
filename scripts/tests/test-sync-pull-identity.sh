@@ -8,6 +8,16 @@
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 PS1FILE=scripts/sync-repos.ps1
+
+# Git exporta variables locales (por ejemplo GIT_DIR/GIT_INDEX_FILE) al ejecutar hooks.
+# Si llegan a los repos de prueba, sus comandos apuntan al repo padre: `checkout -b
+# master` falla contra una rama ajena y `git add -A` puede contaminar su indice. Limpiar
+# exactamente el conjunto que Git declara local mantiene el fixture aislado tanto al
+# correrlo directo como desde pre-commit.
+for git_local_var in $(git rev-parse --local-env-vars 2>/dev/null); do
+  unset "$git_local_var"
+done
+
 T=$(mktemp -d) || exit 1
 trap 'rm -rf "$T"' EXIT
 # Sin identidad de ningun tipo: ni global ni de sistema (como la cuenta ehven del gateway).

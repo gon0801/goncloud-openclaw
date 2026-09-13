@@ -77,3 +77,71 @@ No se toca `spec.md` (este repo no tiene uno y no se crea aquí): ninguna task c
   scope: Fases 1-3
 
 No hay secret-read ni operación destructiva en este plan.
+
+---
+
+## Fase 5 — Guardia estructural condicionada por error real
+
+Fecha de planificación: 2026-09-12
+
+Implementation owner: Muse
+
+Review owner: Codex/root, una sola ronda
+`team_validation_mode: subagent` — arquitectura, seguridad, QA y producto/escéptico.
+
+### Spec delta
+
+Esta fase sí cambia comportamiento visible y, por eso, agrega el SSOT [docs/spec/00-project-spec.md](docs/spec/00-project-spec.md) y el diseño [docs/superpowers/specs/2026-09-12-structural-investigation-guard-design.md](docs/superpowers/specs/2026-09-12-structural-investigation-guard-design.md). No reescribe la conclusión histórica de 4.1: aquel corpus no justificaba un bloqueo léxico. La evidencia nueva es distinta y estrecha: un error real de `gh` se convirtió indebidamente en “no existe”. Fase 5 responde solo a tres pares tool/sujeto allowlisted y falla abierta para todo lo demás.
+
+La revisión del SDK fijó dos límites innegociables para OpenClaw 2026.9.4:
+
+- `scheduleSessionTurn` solo funciona para plugins `bundled`; `summa-gate` es instalado/configurado. No habrá cancelación de respuesta ni continuación automática entre runs.
+- `resolve_exec_env` descarta `PATH`. La guía descubre `gh.exe` y lo usa por ruta absoluta; cualquier `tools.exec.pathPrepend` será otro cambio operativo, con aprobación propia.
+
+### Baseline de calidad
+
+Estado: falta un comando explícito de sintaxis en `summa-gate/package.json`; la batería actual usa Node 24 `node --test` y CI ejecuta `scripts/run-checks.sh`. El árbol actual pasa `node --check` sobre `index.ts`, `lib.ts` y `observer.ts`. La tarea 5.2 agrega scripts `check`/`test` sin dependencias y conecta el chequeo de sintaxis al runner existente. Durante RED/GREEN Muse corre únicamente el archivo focalizado. El hook pre-commit no se omite. La batería completa se consume una vez en CI de pull request sobre el SHA final; no se agrega una corrida manual duplicada.
+
+### Evaluación neutral
+
+Escala 1–5. Total máximo: 35.
+
+| Propuesta | Producto | Evidencia | Usuario | Factibilidad | Regresión | Seguridad | Funciona | Total | Clasificación |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| Guía allowlisted + estado simbólico, sin retener contenido | 5 | 4 | 4 | 4 | 4 | 4 | 4 | 29 | Required |
+| Descubrimiento y uso de `gh.exe` por ruta absoluta | 5 | 5 | 5 | 5 | 4 | 5 | 5 | 34 | Required |
+| Revisión same-run best-effort, canary y configuración | 4 | 3 | 4 | 3 | 3 | 4 | 3 | 24 | Recommended |
+| Activar `enforce` por defecto en toda la flota | 4 | 2 | 3 | 3 | 2 | 3 | 2 | 19 | Reject |
+| Continuación cross-run con APIs privadas, Cron o shell | 3 | 1 | 3 | 1 | 1 | 1 | 1 | 11 | Reject |
+
+**Required:** evidencia sanitizada del incidente, baseline de calidad, clasificador/middleware allowlisted, aislamiento por `runId`, privacidad, guía por ruta absoluta y preservación de los tres guardas existentes.
+
+**Recommended:** revisión same-run con máximo uno, rollout inicial `observe`, canary antes de `enforce` y rollback documentado.
+
+**Optional:** una propuesta upstream para ofrecer una primitiva autenticada de continuación a plugins instalados; queda fuera de este bloque.
+
+**Reject:** regex genérico, default fleet-wide `enforce`, cancelación de finales, `enqueueNextTurnInjection`, scheduler bundled-only, Cron/heartbeat/shell como continuación, parche de `dist`, `resolve_exec_env` para `PATH`, y un `tools.exec.pathPrepend` global sin revisión operativa separada.
+
+### Tareas
+
+| Task | Contenido | DoD | Depends | Status |
+|---|---|---|---|---|
+| 5.1 | `[Evidence] [lane:gate] [tdd:skip:evidencia-sanitizada-solo-lectura]` Capturar el incidente `gh` en `docs/evidence/gh-path-miss-20260912.md` y citar el límite bundled-only del runtime instalado. | El artefacto contiene host/runtime, tool, error sanitizado, conclusión incorrecta, ruta conocida encontrada y fuente de re-derivación; no contiene prompts, tokens, variables, credenciales ni salida cruda sensible. Distingue hecho, inferencia y dato removido. | - | cc:完了 (re-derivación desde skills versionadas git-commit-push:23 y gateway-cli-setup:16 + SDK instalado; log RED en `diagnostic-guard-review-fixes-red.md`) |
+| 5.2 | `[Quality] [lane:gate] [tdd:skip:configuracion-del-runner]` Agregar `check` y `test` a `summa-gate/package.json`; ejecutar el chequeo de sintaxis desde `scripts/run-checks.sh` y quitar la segunda invocación directa de la batería en CI. | `check` cubre todos los `.ts` fuente de `summa-gate`, `test` ejecuta `node --test`, no se agrega dependencia, eliminar `diagnostic-guard.ts` del chequeo deja el test contractual rojo y el workflow alcanza la batería una vez mediante pre-commit. | - | cc:完了 (test usa el mismo fallback de node que run-checks.sh; verificado con y sin node en PATH) |
+| 5.3 | `[Feature] [lane:gate] [tdd:required]` Implementar el núcleo puro allowlisted en `summa-gate/diagnostic-guard.ts` con su test focalizado. | Solo reconoce `path_miss:gh_cli`, `wrong_profile:browser_claw` y `session_scope:sessions_search` cuando tool, sujeto y fallo estructurado coinciden; limita inspección a 8192 caracteres; deduplica categorías; desconocidos y éxitos quedan intactos; no persiste contenido. Mutantes de `isError`, firma, deduplicación, límite y redacción fallan. | 5.1, 5.2 | cc:完了 (2 rondas Codex: browser vía exec, scope ausente exigido, probes por ejecutable invocado con segmentos quote-aware, umbral por distintas) |
+| 5.4 | `[Feature] [lane:gate] [tdd:required]` Cablear middleware, contrato de manifest, configuración y estado por `runId`; aislar fallos de registro. | OpenClaw recibe `<diagnostic-contract>` sin perder `content`, imágenes, `details`, `progress` ni `terminate`; Codex nativo se considera observable cuando su host no reinyecta la transformación; llamadas sin `runId` no crean estado; dos runs concurrentes no se mezclan; actualizaciones paralelas no pierden categorías; un fallo diagnóstico conserva merge guard, adversary confinement y `sessions_send`. | 5.3 | cc:完了 (`runId` solo desde ctx SDK; `setRunContext===false` tratado como fallo; estado corrupto/duplicado rechazado) |
+| 5.5 | `[Guardrail] [lane:gate] [tdd:required]` Agregar cierre best-effort y telemetría simbólica. | `observe` guía/registra sin revisar; `enforce` puede pedir exactamente un `revise` same-run con `maxAttempts: 1`; `off` no registra hooks diagnósticos; un final ambiguo, cron, dos finales concurrentes y un run con efectos laterales nunca se cancelan ni programan otro run. No existe handler diagnóstico de `reply_payload_sending`, llamada a scheduler, Cron, heartbeat, marker de continuación ni mapa con texto final. | 5.4 | cc:完了 (automatización filtrada por `ctx.trigger` real del SDK, espejo del bundled memory-core; `inputProvenance` no se consulta para cron/heartbeat) |
+| 5.6 | `[Ops] [lane:gate] [tdd:required]` Implementar guía de descubrimiento absoluto para `gh.exe`, restaurar literalmente la directiva de seguridad borrada de `C:\Users\ehven\.openclaw\workspace\USER.md` desde historia verificable y preparar rollout `observe`. | El smoke encuentra `C:\Users\ehven\.openclaw\tools\bin\gh.exe`, lo invoca por ruta absoluta y verifica capacidad/auth sin revelar valores; la restauración modifica solo la línea recuperada y su diff queda guardado; no cambia modelos, auth, permisos ni `PATH`; `tools.exec.pathPrepend` queda sin aplicar. Config se relee y rollback `off` está probado fuera de cron activo. | 5.5 | cc:完了 (2026-09-12: fuente exacta `goncloud-workspace-main` `a4c023c^`; backup vivo creado y releído; entrada restaurada literalmente; verificación independiente 1/0 y regla nueva 1/1; 31 cron, 0 activos; sin reload ni cambios de modelo/auth/permisos/PATH) |
+| 5.7 | `[Review] [lane:gate] [tdd:skip:revision-solo-lectura]` Codex/root revisa el diff de Muse una sola vez y agrupa todos los hallazgos. | La revisión cubre comportamiento, privacidad, concurrencia, compatibilidad SDK, tests y AI residuals. Muse corrige esa ronda en un solo bloque. Solo severidad alta permite una segunda ronda; nunca una tercera. | 5.6 | cc:完了 — discrepancia declarada: se ejecutaron 3 rondas por instrucción directa del operador pese al tope del plan; la tercera aprobó el bloque corregido tras 152 tests focalizados y los contratos shell/npm. No se abre otra ronda. |
+| 5.8 | `[PR] [lane:gate] [tdd:skip:cierre-y-ci]` Entregar la rama y validar el SHA final. | `git log origin/main..HEAD` contiene solo commits de esta fase; pre-commit corrió sin `--no-verify`; se hace push y se abre PR; la unión de CI ejecuta la batería completa una vez sobre el SHA final y queda verde; el PR permanece abierto, sin merge automático. | 5.7 | cc:完了 (cierre autorizado; validez condicionada al PR abierto y CI verde sobre el SHA final reportados en el handoff) |
+
+### 事前確認 de Fase 5
+
+- Evento: `git push` de la rama de Fase 5 y `gh pr create` en `goncloud-openclaw`.
+  Razón: disparar la batería completa en CI de pull request y entregar el trabajo para revisión.
+  scope: 5.8; no incluye merge.
+- Evento: restaurar una directiva en `C:\Users\ehven\.openclaw\workspace\USER.md`, cambiar `diagnosticGuard.mode` a `observe` y recargar el plugin fuera de cron activo.
+  Razón: reparar el daño vivo y ejecutar el canary de la conducta nueva.
+  scope: 5.6; exige diff previo, backup recuperable, read-back y rollback `off`.
+
+No hay secret-read ni operación destructiva preaprobada. Leer presencia/estado de auth está permitido; leer o imprimir el valor de un secreto no forma parte del plan. `tools.exec.pathPrepend`, cambios de modelo, cambios de auth, merge y deploy fleet-wide quedan fuera de esta preaprobación.
