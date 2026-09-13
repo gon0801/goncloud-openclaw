@@ -30,6 +30,7 @@ import {
   isTurnRecordable,
   lastAssistantText,
   toolNamesFromMessages,
+  turnHashOf,
   turnKeyOf,
   turnSlice,
   writeRecord,
@@ -569,5 +570,33 @@ describe("collapseTurns: varias emisiones de agent_end, un turno", () => {
       { role: "assistant", content: "listo" },
     ] as never);
     assert.match(r.turnKey, /^\d+:[0-9a-f]{8}$/);
+  });
+});
+
+// El indice del turnKey NO es estable entre emisiones (medido en vivo 2026-09-12: el mismo
+// turno con su mensaje user en el indice 4 y luego en el 12, porque el contexto inyectado por
+// turno agrega mensajes antes). La agrupacion va por el HASH, que si es estable.
+describe("collapseTurns agrupa por el hash, no por el indice", () => {
+  it("dos emisiones del mismo turno con INDICE distinto colapsan", () => {
+    const out = collapseTurns([
+      { sessionKey: "s1", turnKey: "4:a20c7516", ts: 100, textLen: 84 },
+      { sessionKey: "s1", turnKey: "12:a20c7516", ts: 200, textLen: 145 },
+    ]);
+    assert.equal(out.length, 1, "el indice corrido impidio colapsar: era el bug medido en vivo");
+    assert.equal(out[0].textLen, 145, "no se quedo con la emision final");
+  });
+
+  it("hashes distintos siguen siendo turnos distintos", () => {
+    const out = collapseTurns([
+      { sessionKey: "s1", turnKey: "0:aaaaaaaa", ts: 1 },
+      { sessionKey: "s1", turnKey: "0:bbbbbbbb", ts: 2 },
+    ]);
+    assert.equal(out.length, 2);
+  });
+
+  it("turnHashOf tolera formas raras sin explotar", () => {
+    assert.equal(turnHashOf("12:abc"), "abc");
+    assert.equal(turnHashOf("sinindice"), "sinindice");
+    assert.equal(turnHashOf(undefined), "");
   });
 });
