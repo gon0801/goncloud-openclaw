@@ -1,6 +1,6 @@
 ---
 name: gateway-cli-setup
-description: Install a CLI tool and wire its token credentials on the Windows gateway host. Use when a winget install hangs at "Starting package install...", a freshly installed command is "not recognized" in the next exec, or a token file must become CLI auth plus a User env var (e.g. GH_TOKEN) without ever printing it. Produces a working, authenticated tool with the secret file destroyed and the variable verified.
+description: Install and authenticate a CLI tool from agent exec on the Windows gateway host — token-file auth (e.g. GH_TOKEN) or npm-global install with browser-OAuth login (e.g. Claude Code). Use when winget hangs at "Starting package install...", a freshly installed command is "not recognized" in the next exec, or a token file must become CLI auth plus a User env var without ever printing it. Produces a working, authenticated tool; the token path ends with the secret file destroyed and the variable verified.
 ---
 
 # Gateway CLI Setup (Windows host, token auth)
@@ -30,6 +30,16 @@ Install and authenticate a CLI tool from agent exec on the Windows gateway host.
    - Completion: env var verified non-null, token file gone, contents never printed.
 
 6. Clean up: `Remove-Item "$env:TEMP\<tool>.zip" -Force` and confirm it is gone.
+
+## npm route with OAuth login (verified: Claude Code 2.1.270, 2026-09-12)
+
+For npm-distributed CLIs the zip/winget path does not apply; auth is a browser OAuth wizard, not a token file.
+
+A. `npm install -g <pkg>` (node + npm are already on the gateway). An `npm warn allow-scripts ... postinstall` warning is non-fatal — verify with `<tool> --version` before re-running anything with `--allow-scripts` (verified: Claude Code worked fully with the postinstall script blocked).
+   - Completion: `<tool> --version` returns a version.
+B. OAuth login needs a real TTY: exec with `pty: true`, then drive the first-run wizard with `process send-keys` — Enter through the theme prompt and the login-method prompt; the OAuth URL opens in the owner's browser and the owner completes the sign-in. Verify from the PTY log ("Logged in as <account>", "Login successful") plus the tool's credentials file existing (e.g. `Test-Path "$env:USERPROFILE\.claude\.credentials.json"` → True) — never from the process exit code.
+   - The wizard can end on a "trust this folder" prompt and the pty session may then die with exit 1: auth is already stored by then, so an unanswered trust prompt is not a failed login — re-check the credentials file instead of re-running the wizard.
+   - Completion: login-success line in the PTY log and the credentials file present.
 
 ## Pitfalls
 
