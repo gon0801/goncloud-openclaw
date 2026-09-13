@@ -26,6 +26,7 @@ import {
   _setObserverFileForTest,
   buildRecord,
   isNonReplaySafeTool,
+  isTurnRecordable,
   lastAssistantText,
   toolNamesFromMessages,
   turnSlice,
@@ -420,5 +421,48 @@ describe("rotacion: un solo nivel de respaldo, de verdad", () => {
       _setObserverFileForTest(null);
       rmSync(tmp, { recursive: true, force: true });
     }
+  });
+});
+
+// Turnos fantasma (2026-09-12, medido en los datos vivos): 13 de 80 registros eran `agent_end`
+// sin ningun mensaje del asistente, sin herramientas y sin texto — el runtime los emite en
+// ramas de ciclo de vida (`messages: []`, abortos). No generan detecciones falsas pero inflan
+// el DENOMINADOR, y el denominador es la mitad de la metrica.
+describe("un agent_end sin mensajes del asistente no es un turno", () => {
+  it("descarta el evento vacio", () => {
+    assert.equal(isTurnRecordable([] as never), false);
+    assert.equal(isTurnRecordable(null), false);
+    assert.equal(isTurnRecordable([{ role: "user", content: "hola" }] as never), false);
+  });
+
+  it("un turno con respuesta SI se registra", () => {
+    assert.equal(
+      isTurnRecordable([
+        { role: "user", content: "hola" },
+        { role: "assistant", content: "listo" },
+      ] as never),
+      true,
+    );
+  });
+
+  it("un turno que solo emitio toolCalls y ningun texto TAMBIEN se registra (hubo trabajo)", () => {
+    assert.equal(
+      isTurnRecordable([
+        { role: "user", content: "corre el deploy" },
+        { role: "assistant", content: [{ type: "toolCall", name: "exec" }] },
+      ] as never),
+      true,
+    );
+  });
+
+  it("mira solo el turno en curso, no la sesion: un assistant de un turno anterior no cuenta", () => {
+    assert.equal(
+      isTurnRecordable([
+        { role: "user", content: "primero" },
+        { role: "assistant", content: "respondi" },
+        { role: "user", content: "segundo, interrumpido antes de responder" },
+      ] as never),
+      false,
+    );
   });
 });

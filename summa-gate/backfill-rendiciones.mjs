@@ -54,7 +54,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
-const { buildRecord } = await import(pathToFileURL(join(repo, "summa-gate/observer.ts")).href);
+const { buildRecord, isTurnRecordable } = await import(pathToFileURL(join(repo, "summa-gate/observer.ts")).href);
 const { adaptHistoryMessages } = await import(pathToFileURL(join(repo, "summa-gate/agent-history-adapter.ts")).href);
 
 function parseArgs(argv) {
@@ -280,6 +280,7 @@ async function main() {
       continue;
     }
     let detectedRecords = 0;
+  let turnosNoRegistrables = 0;
     let turns = 0;
     let incompleteSessions = 0;
     let excludedSessions = 0;
@@ -322,6 +323,12 @@ async function main() {
         const tsRecord = t.turnTs
           ?? (s.updatedAt ? (s.updatedAt < 1e12 ? s.updatedAt * 1000 : s.updatedAt) : runTs);
         const adapted = adaptHistoryMessages(t.messages);
+        // MISMO criterio que el observador en vivo: un "turno" sin ningun mensaje del
+        // asistente no es un turno, es un evento de ciclo de vida. Si el vivo y el
+        // retrospectivo cuentan denominadores distintos, la tasa medida aca no dice nada
+        // de la que va a salir en produccion — el mismo razonamiento por el que los dos
+        // comparten `turnSlice`.
+        if (!isTurnRecordable(adapted)) { turnosNoRegistrables += 1; continue; }
         const record = buildRecord(tsRecord, s.key, agent, kind, adapted);
         const excluded = ARGS.excludeRule && new RegExp(ARGS.excludeRule).test(s.key);
         const line = {
@@ -366,6 +373,8 @@ async function main() {
           processed,
           totalTurns: turns,
           detectedRecords,
+      turnosNoRegistrables,
+          turnosNoRegistrables,
           incompleteSessions,
           perDay,
         });
@@ -378,6 +387,7 @@ async function main() {
       processed,
       totalTurns: turns,
       detectedRecords,
+      turnosNoRegistrables,
       incompleteSessions,
       excludedSessions,
       excludedTurns,

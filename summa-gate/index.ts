@@ -48,7 +48,7 @@ import {
   redirectTargets,
 } from "./lib.ts";
 
-import { buildRecord, writeRecord } from "./observer.ts";
+import { buildRecord, isTurnRecordable, writeRecord } from "./observer.ts";
 
 // ---------------------------------------------------------------------------
 // Estado persistido por sesión
@@ -575,6 +575,10 @@ export default definePluginEntry({
         const inputProvenanceKind = (ctx as { inputProvenance?: { kind?: string } })
           .inputProvenance?.kind;
         const messages = (event as { messages?: unknown }).messages;
+        // Un agent_end sin ningun mensaje del asistente es un evento de ciclo de vida, no un
+        // turno. Registrarlo inflaba el denominador (13 de 80 en los datos vivos del
+        // 2026-09-12) y por lo tanto bajaba artificialmente la tasa que esto mide.
+        if (!isTurnRecordable(messages as Parameters<typeof isTurnRecordable>[0])) return;
         const record = buildRecord(
           Date.now(),
           sessionKey,
