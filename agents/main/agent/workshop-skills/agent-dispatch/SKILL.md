@@ -1,6 +1,6 @@
 ---
 name: agent-dispatch
-description: Dispatch a brief to the engineering agent chain (implementer / verifier / reviewer) or to a spawned subagent, and recover full results; run the external Claude-on-the-Mac review loop (brief file, do-script delivery, verdict watch) until APROBADO. Use for a task brief or "-saikit" lane, when a sessions_send agent fails with "All models failed", when a completion result arrives truncated, or when David asks for a fix→review loop until Claude approves a block.
+description: Dispatch a brief to the engineering agent chain (implementer / verifier / reviewer) or to a spawned subagent, and recover full results; run the external Claude-on-the-Mac review loop (brief file, do-script delivery, verdict watch) until APROBADO; merge approved PRs in chain via the GitHub GraphQL API when the owner orders it. Use for a task brief or "-saikit" lane, when a sessions_send agent fails with "All models failed", when a completion result arrives truncated, when David asks for a fix→review loop until Claude approves a block, or when David orders the lane's approved PRs merged.
 ---
 
 # Agent / Subagent Dispatch
@@ -22,6 +22,7 @@ Route work to this Gateway's agents and collect complete results. Main orchestra
    - Completion: the reply is a verdict (approved / approved with observations / rejected) with file:line, or the reopened role's new commit.
 
 4. Require evidence in the repo, not in the reply: mutation tables, logs, revalidation notes under `.saikit/scratch/<task>/`, with the module under test left identical to the commit.
+   - A late fix commit (a review-round patch) invalidates the evidence written before it: refresh the evidence to the final tree — re-run the battery with the repo hook and regenerate the blast with the literal new output (blast-21.4.json precedent, 2026-09-13), update the README/TSV counts, keep TSV rows append-only (new row, never rewrite). A reviewer rejects evidence that still describes the pre-fix tree (verified: 21.4r1 patch touched hook+tests but not README/blast/TSV; the refresh commit was the reviewer's required correction).
    - Completion: evidence files exist and `git diff --quiet <module>` is clean at the end.
 
 5. On a PR-extension task, have the role confirm the working branch is the PR's head branch (`git branch --show-current`) before committing: a commit on another branch does not extend the PR, and the mistake is silent.
@@ -29,7 +30,7 @@ Route work to this Gateway's agents and collect complete results. Main orchestra
 
 ## Failed or truncated dispatch
 
-6. A configured agent's model list is fixed: if it fails with `All models failed (n): ... in cooldown` / `subscription usage limit`, retrying or waiting will not help. Re-dispatch as a subagent with an explicit working model: `sessions_spawn model=<provider/model> ...`, naming a model registered in `models.providers` (e.g. `xai/grok-4.6`; register it first with the `openclaw-config-patch` skill if it is missing).
+6. A configured agent's model list is fixed: if it fails with `All models failed (n): ... in cooldown`, `subscription usage limit`, or a provider billing error (`your API key has run out of credits`), retrying or waiting will not help. Re-dispatch as a subagent with an explicit working model: `sessions_spawn model=<provider/model> ...`, naming a model registered in `models.providers` (e.g. `xai/grok-4.6`; register it first with the `openclaw-config-patch` skill if it is missing).
    - Completion: the spawn is accepted (`modelApplied: true`).
 
 7. Wait for the accepted completion mode: announced children -> `sessions_yield`; collector runs -> `agents_wait`. Never busy-poll.
@@ -49,6 +50,16 @@ David repeatedly orders a fix-then-review loop against the Claude Code tab in th
 3. Watch for a NEW verdict by counting `VEREDICTO` occurrences in the transcript against a baseline taken at delivery — the brief itself contains the word, so a plain grep false-positives (same rule as mac-terminal-control step 5's marker matching). A detached watcher that fires when the count increases beats poll loops over a flaky companion channel.
    - The verdict can take 30+ minutes: Claude dispatches its own verifier/reviewer subagents and posts progress echoes (`SUMMONAIKIT HARNESS DELEGATED - awaiting verifier`). Read the final verdict from the transcript (mac-agent-transcript step 3), never from the tab tail.
 4. `CAMBIOS` → dispatch the fixes to the implementer with the findings verbatim (each carries file:line), do the trivial gh-side items yourself (e.g. cross-PR chaining comments; "lo chico lo haces vos"), then re-brief with the NEW head SHAs and the per-finding commits before re-delivering (step 0's race rule — an un-updated brief makes the reviewer re-stamp the old verdict). `APROBADO` → the loop ends; report PRs, CI state, and the owner's remaining action (merge order for stacked PRs).
+
+## Merging approved PRs (when the owner orders it)
+
+The repo convention leaves merges to the owner, but David can order them explicitly ("Fusiona", 2026-09-13) — that order is the merge authority for the lane's approved PRs. `gh pr merge` is still blocked by the merge-guard; the GitHub API route is not (verified 2026-09-13 on #315/#316/#317, all squash):
+
+1. Merge order for stacked PRs: base PR first, then the stacked one after re-targeting. When a stacked PR's base is a branch that just merged, either wait for GitHub to auto-re-target or re-target it first: `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -f base=master --jq '{number,base:.base.ref,state}'` (verified on #316). Then re-check `mergeable` — it goes `UNKNOWN` while GitHub recalculates, and `CONFLICTING` if master moved past it (fix below before merging).
+2. Merge with the expected head pinned: `ID=$(gh pr view <n> -R <owner>/<repo> --json id,headRefOid --jq '"\(.id) \(.headRefOid)"')`, split into GraphQL node id and head oid, then `gh api graphql -f query='mutation($id:ID!,$oid:GitObjectID!){mergePullRequest(input:{pullRequestId:$id,expectedHeadOid:$oid,mergeMethod:SQUASH}){pullRequest{number,state}}}' -f id="$ID" -f oid="$OID"`. Confirm from `gh pr view <n> --json state,mergedAt`.
+3. A `UNPROCESSABLE ... Pull Request is not mergeable` error can race the merge actually landing: after the error, re-read `state,mergedAt` before retrying — #316/#317 both showed MERGED with a mergedAt timestamp immediately after the error (the first attempt or the retry landed; the second call raced its own recalculation). Never assume from the error alone that nothing merged.
+4. Merging master-moving PRs makes sibling PRs `CONFLICTING`: resolve by merging `origin/master` into the PR branch and fixing conflicts toward the branch's newer content (it carries the review rounds); push, wait for the CI run of the merge commit, then merge. Verified on #318 after #315–#317 landed (Plans.md rows and add/add .saikit tsv conflicts).
+   - Completion: every ordered PR reads `MERGED` with a mergedAt timestamp, and the lane's post-merge checks run on the new master.
 
 ## Pitfalls
 
