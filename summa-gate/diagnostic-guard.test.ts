@@ -429,6 +429,16 @@ describe("classifyCompletedProbe path_miss:gh_cli", () => {
       "executable_discovery",
     );
   });
+  it("counts a PowerShell call-operator invocation as the real executable", () => {
+    assert.equal(
+      classifyCompletedProbe(incident, {
+        toolName: "exec",
+        args: { command: '& "C:\\fakedir\\gh.exe" --version' },
+        result: "gh version 2.100.0",
+      }),
+      "capability_verification",
+    );
+  });
 });
 
 describe("classifyCompletedProbe wrong_profile:browser_claw", () => {

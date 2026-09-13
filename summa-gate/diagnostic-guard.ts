@@ -118,6 +118,9 @@ function attemptedCommand(args: Record<string, unknown> | undefined | null): str
 /** First executable token of a shell command, lowercased (gh.exe -> gh). */
 function firstExecutableToken(command: string): string {
   let rest = command.trim().replace(/^\(+/, "");
+  // Strip PowerShell call operators (`& "..." ...` executes the quoted path)
+  // so the real executable is validated, not the operator.
+  rest = rest.replace(/^&+\s*/, "");
   // Strip leading `sudo ` repetitions without interpreting anything else.
   for (;;) {
     const m = /^sudo\s+/i.exec(rest);
@@ -222,8 +225,10 @@ const BROWSER_CREDENTIAL_RES = [
 
 // The real incident drives the CLI via exec with the GLOBAL --profile flag
 // (see browser-cli-claw-profile/SKILL.md:12-15). The --browser-profile form
-// is the correct one and never marks the incident. NOTE: --profile also
-// matches inside --browser-profile, hence the explicit exclusion.
+// is the correct one and never marks the incident. NOTE: GLOBAL_PROFILE_RE
+// requires a literal double-dash `--profile`, so it cannot match inside --browser-profile
+// (single dash before "profile"); the explicit exclusion stays as defense-in-depth
+// in case the pattern ever relaxes.
 const OPENCLAW_BROWSER_CMD_RE = /\bopenclaw\s+browser\b/i;
 const GLOBAL_PROFILE_RE = /--profile(\s+|=)claw/i;
 const BROWSER_PROFILE_RE = /--browser-profile(\s+|=)claw/i;

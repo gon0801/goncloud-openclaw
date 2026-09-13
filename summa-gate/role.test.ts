@@ -325,6 +325,40 @@ describe("gate scope comment (1.2)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Fase 5 — alcance declarado del revise diagnóstico (kimi cross-review).
+//
+// El revise de enforce es best-effort como el del gate de recibo: el runtime
+// puede descartarlo tras side effects, y si ambos handlers revisan el host
+// fusiona (mergeBeforeAgentFinalize, gana el retry del primero). Si estos
+// comentarios se retiran, la limitación queda indocumentada y este test cae.
+// ---------------------------------------------------------------------------
+
+describe("diagnostic revise scope comment (kimi)", () => {
+  it("declares the discard limit and the two-revise merge in index.ts", () => {
+    const idx = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+    assert.match(
+      idx,
+      /DIAGNOSTIC REVISE SCOPE/,
+      "the diagnostic finalize block must declare its best-effort scope",
+    );
+    assert.match(
+      idx,
+      /mergeBeforeAgentFinalize/,
+      "the diagnostic finalize block must cite the runtime two-revise merge",
+    );
+  });
+
+  it("states the --browser-profile exclusion accurately in diagnostic-guard.ts", () => {
+    const src = readFileSync(new URL("./diagnostic-guard.ts", import.meta.url), "utf8");
+    assert.match(
+      src,
+      /cannot match inside --browser-profile/,
+      "the profile-exclusion comment must not claim a match that never occurs",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Fase 2 / 2.1 — observador y wiring de agent_end.
 //
 // El DoD textual pide:

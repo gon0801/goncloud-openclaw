@@ -504,6 +504,12 @@ export default definePluginEntry({
       if (!runId) return undefined;
       const observation = diagnosticObservationFromEvent(evt);
       if (!observation) return undefined;
+      // The transform spreads evt.result into a new object: only safe for
+      // real result objects. A primitive/array result would corrupt into
+      // indexed keys, so contract violations fail open with no state change.
+      if (!evt.result || typeof evt.result !== "object" || Array.isArray(evt.result)) {
+        return undefined;
+      }
       const runContext = (api as unknown as { runContext?: DiagnosticRunContext }).runContext;
       if (!runContext) return undefined;
       return enqueueDiagnosticUpdate(runId, async (): Promise<unknown> => {
@@ -769,6 +775,16 @@ export default definePluginEntry({
     });
 
     // -- Diagnostic guard: best-effort same-run revision ----------------------
+    //
+    // DIAGNOSTIC REVISE SCOPE (kimi cross-review): this revise is best-effort
+    // like the receipt gate above. The runtime silently discards
+    // `action: "revise"` after deterministic side effects
+    // (`hadDeterministicSideEffect`, same citation as the receipt gate), so
+    // an enforce revise may not run in turns whose incident trigger counts
+    // as one. If BOTH handlers revise the same finalize, the host merges
+    // them (runtime `mergeBeforeAgentFinalize`: reasons concatenated, first
+    // handler's retry wins, ours kept as candidate) — never a double pass.
+    // In every non-revise case the final is delivered normally.
     //
     // Observe logs the symbolic decision and never revises. Enforce may
     // request exactly one same-run revision (maxAttempts 1, idempotency key

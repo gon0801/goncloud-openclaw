@@ -393,6 +393,26 @@ describe("diagnostic per-run state", () => {
     assert.ok(fake.warns.some((w) => w.includes("state write failed")));
     assert.equal(fake.store.size, 0);
   });
+
+  it("fails open on a primitive result instead of spreading it (corruption pin)", async () => {
+    const { mwRegs, store } = await registerWith({});
+    const handler = mwRegs[0].handler as MwHandler;
+    const runId = `run-prim-${Date.now()}`;
+    const seed = ghErrorCall(runId);
+    await handler(seed.event, seed.ctx);
+    const out = await handler(
+      {
+        toolCallId: "c-prim",
+        toolName: "exec",
+        args: { command: "which gh" },
+        result: "FOUND",
+      },
+      { runtime: "openclaw", runId },
+    );
+    assert.equal(out, undefined);
+    const state = store.get(`${runId}:${NS}`) as { completedCategories: string[] };
+    assert.deepEqual(state.completedCategories, []);
+  });
 });
 
 describe("diagnostic registration failure isolation", () => {
