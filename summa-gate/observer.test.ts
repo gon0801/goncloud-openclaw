@@ -25,10 +25,12 @@ import {
   TEXT_PREVIEW_CHARS,
   _setObserverFileForTest,
   buildRecord,
+  collapseTurns,
   isNonReplaySafeTool,
   isTurnRecordable,
   lastAssistantText,
   toolNamesFromMessages,
+  turnKeyOf,
   turnSlice,
   writeRecord,
 } from "./observer.ts";
@@ -506,5 +508,66 @@ describe("stopReason distingue el agent_end intermedio del final", () => {
     assert.equal(r.textLen, 0);
     assert.deepEqual(r.tools, {});
     // ...o sea un fantasma con forma de turno real. Por eso no puede llegar al jsonl.
+  });
+});
+
+// Deduplicacion al LEER (2026-09-12). Tres intentos de que el observador adivinara en el
+// momento de escribir si un turno habia terminado fallaron, los tres verificados en produccion
+// despues de desplegarlos. El cuarto cambia el diseno en vez de la heuristica: el observador
+// solo etiqueta a QUE turno pertenece cada registro (un hecho que conoce), y el lector colapsa.
+describe("collapseTurns: varias emisiones de agent_end, un turno", () => {
+  const turno = (msgUser: string, extra: object[] = []) =>
+    [{ role: "user", content: msgUser }, ...extra] as never;
+
+  it("dos emisiones del MISMO turno comparten turnKey", () => {
+    const intermedia = turno("corre el deploy", [
+      { role: "assistant", content: [{ type: "toolCall", name: "exec" }] },
+    ]);
+    const final = turno("corre el deploy", [
+      { role: "assistant", content: [{ type: "toolCall", name: "exec" }] },
+      { role: "toolResult", toolName: "exec", content: "ok" },
+      { role: "assistant", content: "Listo." },
+    ]);
+    assert.equal(turnKeyOf(intermedia), turnKeyOf(final));
+  });
+
+  it("dos turnos DISTINTOS con el mismo texto NO comparten turnKey", () => {
+    const t1 = [{ role: "user", content: "ok" }, { role: "assistant", content: "a" }] as never;
+    const t2 = [
+      { role: "user", content: "ok" }, { role: "assistant", content: "a" },
+      { role: "user", content: "ok" }, { role: "assistant", content: "b" },
+    ] as never;
+    assert.notEqual(turnKeyOf(t1), turnKeyOf(t2));
+  });
+
+  it("colapsa a UN registro por turno y conserva el de ts mayor", () => {
+    const regs = [
+      { sessionKey: "s1", turnKey: "0:aaaa", ts: 100, textLen: 0 },
+      { sessionKey: "s1", turnKey: "0:aaaa", ts: 200, textLen: 42 },
+      { sessionKey: "s1", turnKey: "3:bbbb", ts: 300, textLen: 7 },
+      { sessionKey: "s2", turnKey: "0:aaaa", ts: 400, textLen: 9 },
+    ];
+    const out = collapseTurns(regs);
+    assert.equal(out.length, 3, "no colapso a un registro por turno");
+    const s1a = out.find((r) => r.sessionKey === "s1" && r.turnKey === "0:aaaa");
+    assert.equal(s1a?.textLen, 42, "se quedo con la emision intermedia en vez de la final");
+    // El mismo turnKey en OTRA sesion es otro turno.
+    assert.ok(out.some((r) => r.sessionKey === "s2"));
+  });
+
+  it("los registros viejos sin turnKey se dejan pasar, no se descartan", () => {
+    const out = collapseTurns([
+      { sessionKey: "s1", ts: 1 },
+      { sessionKey: "s1", turnKey: "0:aaaa", ts: 2 },
+    ]);
+    assert.equal(out.length, 2, "descarto datos historicos que no se pueden agrupar");
+  });
+
+  it("el registro que escribe el observador LLEVA turnKey", () => {
+    const r = buildRecord(1, "s", "a", "k", [
+      { role: "user", content: "hola" },
+      { role: "assistant", content: "listo" },
+    ] as never);
+    assert.match(r.turnKey, /^\d+:[0-9a-f]{8}$/);
   });
 });
