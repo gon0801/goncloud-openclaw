@@ -33,6 +33,7 @@
  *   only. No compression, no deletion. Operators tail the jsonl; cheap.
  */
 
+import { createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, renameSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -155,6 +156,8 @@ export type ObserverRecord = {
   // Anclar este contrato: el nombre describe lo que el dato dice,
   // no lo que el operador querria medir (lo opuesto al error `unknown`
   // vs `0` de Fase 1).
+  /** A que turno pertenece. Varias emisiones de agent_end comparten uno. */
+  turnKey: string;
   hadRead: boolean;
   tools: Record<string, number>;
   nonReplaySafeCount: number;
@@ -282,6 +285,43 @@ export function isTurnRecordable(messages: AgentEndMessage[] | undefined | null)
   return (ultimoAsistente as { stopReason?: unknown }).stopReason !== "toolUse";
 }
 
+/**
+ * Identifica a QUE turno pertenece este registro. No dice si el turno termino — eso el
+ * observador no lo sabe, y tres intentos de adivinarlo fallaron (ver la nota de
+ * `isTurnRecordable`). Dice algo que si conoce con certeza: donde empieza el turno.
+ *
+ * `agent_end` se emite VARIAS veces por turno de usuario (medido: 2, una tras el toolCall y
+ * una al cerrar). Todas esas emisiones comparten el mismo turno, y por lo tanto el mismo
+ * mensaje `user` inicial y la misma POSICION de ese mensaje en el snapshot. Eso da una clave
+ * estable sin heuristicas:
+ *
+ *   turnKey = "<indice del mensaje user>:<hash corto de su texto>"
+ *
+ * El indice solo no alcanza (una compactacion del historico lo corre); el hash solo tampoco
+ * (dos turnos con el mismo texto, "ok", colisionarian). Juntos son estables entre emisiones
+ * del mismo turno y distintos entre turnos.
+ *
+ * Quien LEE el jsonl colapsa por `sessionKey` + `turnKey` y se queda con el de `ts` mayor:
+ * ahi estan todos los datos y no hay que adivinar nada. El observador se queda tonto y
+ * append-only, que es lo que lo hace seguro.
+ */
+export function turnKeyOf(messages: AgentEndMessage[] | undefined | null): string {
+  if (!Array.isArray(messages)) return "0:vacio";
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m && typeof m === "object" && m.role === "user") {
+      const texto = typeof m.content === "string"
+        ? m.content
+        : Array.isArray(m.content)
+          ? m.content.map((p) => (p && typeof p === "object" ? String((p as { text?: unknown }).text ?? "") : "")).join("")
+          : "";
+      return `${i}:${createHash("sha256").update(texto).digest("hex").slice(0, 8)}`;
+    }
+  }
+  // Sin mensaje user (cron, heartbeat): el snapshot entero es el turno.
+  return "0:sinuser";
+}
+
 export function buildRecord(
   ts: number,
   sessionKey: string,
@@ -304,6 +344,7 @@ export function buildRecord(
     sessionKey,
     agent,
     inputProvenanceKind,
+    turnKey: turnKeyOf(messages),
     hadRead: hadReadInTurn(toolNames),
     tools: counts,
     nonReplaySafeCount,
@@ -364,4 +405,39 @@ export function writeRecord(record: ObserverRecord): { rotated: boolean; bytesAf
   }
   appendFileSync(livePath, line, "utf8");
   return { rotated, bytesAfter };
+}
+
+/**
+ * Colapsa las multiples emisiones de `agent_end` de un mismo turno en una sola: agrupa por
+ * `sessionKey` + `turnKey` y se queda con la de `ts` mayor, que es la del turno ya cerrado.
+ *
+ * Esto es lo que hay que usar para contar turnos y calcular la tasa. Sin colapsar, el
+ * denominador viene inflado ~1,7x (medido en vivo: 3 turnos reales dejaban 5 registros) y la
+ * tasa se lee mas baja de lo que es.
+ *
+ * Vive del lado del LECTOR a proposito: el observador escribe hechos y no decide nada; el
+ * criterio de "que es un turno" queda en un solo lugar, auditable y con pruebas, en vez de
+ * repartido en heuristicas del camino caliente.
+ */
+export function collapseTurns<T extends { sessionKey?: unknown; turnKey?: unknown; ts?: unknown }>(
+  records: readonly T[],
+): T[] {
+  const porTurno = new Map<string, T>();
+  const sinClave: T[] = [];
+  for (const r of records) {
+    const sk = typeof r.sessionKey === "string" ? r.sessionKey : "";
+    const tk = typeof r.turnKey === "string" ? r.turnKey : "";
+    if (!sk || !tk) {
+      // Registros viejos, de antes de que existiera turnKey: no se pueden agrupar, se dejan
+      // pasar tal cual en vez de descartarlos (perder datos es peor que sobre-contar).
+      sinClave.push(r);
+      continue;
+    }
+    const clave = `${sk}\u0000${tk}`;
+    const previo = porTurno.get(clave);
+    const tsR = typeof r.ts === "number" ? r.ts : 0;
+    const tsP = previo && typeof previo.ts === "number" ? previo.ts : -1;
+    if (!previo || tsR >= tsP) porTurno.set(clave, r);
+  }
+  return [...sinClave, ...porTurno.values()];
 }
