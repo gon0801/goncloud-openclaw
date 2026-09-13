@@ -36,3 +36,4 @@ Read what a CLI coding agent in a Terminal tab on the Mac is doing from its sess
 - `session_index.jsonl` is not guaranteed time-ordered; trust session directory mtimes (`ls -lt`) over index position to find the newest.
 - Several sessions can share one `wd_...` folder (the agent restarts sessions in the same project). Always confirm via `state.json` title/lastPrompt that you read the session the user means.
 - The live Terminal tab title reflects the active session; cross-check it against `state.json.title`.
+- Hunt a verdict marker (e.g. `VEREDICTO:`) across ALL assistant texts, not just the last: stray TUI turns (survey answers like "0", test strings like "XTEST") inject short exchanges that displace the real verdict from the tail, and an agent re-prompted with an unchanged brief may RE-STATE an old verdict — confirm the transcript mtime advanced past your delivery and that the newest long text matches the revision under review (verified 2026-09-13).

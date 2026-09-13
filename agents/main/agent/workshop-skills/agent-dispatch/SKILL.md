@@ -9,6 +9,8 @@ Route work to this Gateway's agents and collect complete results. Main orchestra
 
 ## Chain dispatch (brief / "-saikit" lane)
 
+0. Multi-PR rounds need delivery sequencing: an external reviewer re-reading an OLD brief can race the implementer's push (it re-read the unchanged brief file, saw old PR heads, and re-stamped its previous verdict instead of reviewing the fixes — verified 2026-09-13). Write the brief file pointing at the NEW head SHAs, list the per-finding commits, and only then deliver; if a reviewer reports "nothing new", compare the PR heads it cites against the actual pushed heads before dispatching fixes.
+
 1. Read the brief yourself before dispatching; it names the lane and the role order. Dispatch one role at a time with `sessions_spawn agentId=<role> mode=run` and put the whole shared context in `task` (a spawned child starts with isolated context). Its completion comes back to you as a new turn even after your turn has closed; dispatch the next role then. Observed full lane: implementer -> verifier -> reviewer.
    - Never dispatch work whose result you need with `sessions_send` and `timeoutSeconds: 0`: that reply travels a path that dies silently once your turn ends (2026-09-11: 41 lost replies in one day).
    - Completion: each role's completion arrives before the next dispatch.
