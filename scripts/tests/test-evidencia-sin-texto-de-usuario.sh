@@ -30,12 +30,35 @@ done < <(git ls-files 'docs/evidence/*.jsonl')
 echo "ok (1): $revisados archivo(s) de evidencia sin texto de prompts"
 
 # (2) Y el generador tampoco puede volver a escribirlos.
+# Cross-review de grok (2026-09-12): esta parte tenia los DOS defectos que este mismo
+# bloque venia corrigiendo en otros lados. (a) `if [ -f ]` se salteaba en silencio si el
+# generador no estaba — el mismo skip mudo que se le reprocho a run-checks.sh. (b) el
+# patron solo cazaba la forma con ternario, asi que una reintroduccion directa
+# (`userTextPreview: t.userText.slice(0, 120)`) pasaba en verde.
 GEN=summa-gate/backfill-rendiciones.mjs
-if [ -f "$GEN" ]; then
-  grep -qE 'userTextPreview: *[a-z]*\.?userText *\?' "$GEN" \
-    && fail "$GEN volvio a emitir el texto del prompt; redactarlo en el jsonl no alcanza si el generador lo repone"
-  echo "ok (2): el generador no emite el texto del prompt"
+[ -f "$GEN" ] || fail "falta $GEN: la comprobacion del generador no puede saltearse en silencio"
+# Cualquier asignacion de userTextPreview que NO sea literalmente null es sospechosa.
+if grep -nE 'userTextPreview: *[^n,]' "$GEN" | grep -vqE 'userTextPreview: *null'; then
+  grep -nE 'userTextPreview: *[^n,]' "$GEN" | grep -vE 'userTextPreview: *null' | sed 's/^/    /'
+  fail "$GEN emite texto en userTextPreview; redactar el jsonl no alcanza si el generador lo repone"
 fi
+echo "ok (2): el generador no emite el texto del prompt"
+
+# (2b) Discriminacion del patron de (2): tiene que cazar las dos formas de reintroduccion.
+SONDA_GEN=$(mktemp)
+for forma in 'userTextPreview: t.userText ? t.userText.slice(0, 120) : null,' \
+             'userTextPreview: t.userText.slice(0, 120),' \
+             'userTextPreview: userText,'; do
+  printf '%s\n' "$forma" > "$SONDA_GEN"
+  grep -nE 'userTextPreview: *[^n,]' "$SONDA_GEN" | grep -vqE 'userTextPreview: *null' \
+    || { rm -f "$SONDA_GEN"; fail "el patron de (2) no caza la reintroduccion: $forma"; }
+done
+printf 'userTextPreview: null,\n' > "$SONDA_GEN"
+if grep -nE 'userTextPreview: *[^n,]' "$SONDA_GEN" | grep -vqE 'userTextPreview: *null'; then
+  rm -f "$SONDA_GEN"; fail "el patron de (2) marca un null legitimo: daria falsos positivos"
+fi
+rm -f "$SONDA_GEN"
+echo "ok (2b): el patron caza las tres formas de reintroduccion y respeta el null"
 
 # (3) Discriminacion: la comprobacion de (1) tiene que disparar sobre un archivo que SI lo
 # traiga. Sin esto pasaria por vacio si el patron se rompiera.
