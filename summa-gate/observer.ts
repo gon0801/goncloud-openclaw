@@ -249,14 +249,37 @@ export function turnSlice(messages: AgentEndMessage[] | undefined | null): Agent
  * detecciones falsas, pero inflan el DENOMINADOR: la tasa se lee ~16% mas baja de lo real,
  * y la tasa es justamente lo que este archivo existe para medir.
  *
- * Un turno que solo emitio toolCalls y ningun texto SI cuenta: hubo trabajo. Lo que se
- * descarta es el evento sin ningun mensaje del asistente.
+ * Y hay una segunda razon, medida el 2026-09-12 DESPUES de un primer arreglo insuficiente:
+ * `agent_end` se emite DOS VECES por turno de usuario. La primera vez el turno todavia no
+ * termino. La estructura real, leida de `chat.history`:
+ *
+ *   user
+ *   assistant  stopReason=toolUse  content=[toolCall]   <- agent_end #1, turno SIN terminar
+ *   toolResult
+ *   assistant  stopReason=stop     content=[text]       <- agent_end #2, turno terminado
+ *
+ * La emision #1 producia un registro con `textLen: 0` y `tools: {}` (el toolCall vive dentro
+ * de `content` y el conteo mira los `toolResult`), o sea un turno fantasma con forma de turno
+ * real. Un primer arreglo que solo exigia "algun mensaje del asistente" NO la filtraba, y se
+ * comprobo en vivo: 2 turnos seguian dejando 4 registros.
+ *
+ * El discriminador correcto esta en el dato, no en una heuristica: `stopReason`. Si el ultimo
+ * mensaje del asistente del turno dice `toolUse`, el turno sigue. Si dice `stop`, termino.
+ * Cuando `stopReason` no viene (proveedor que no lo expone), se registra: preferimos
+ * sobre-contar el denominador antes que perderlo.
  */
 export function isTurnRecordable(messages: AgentEndMessage[] | undefined | null): boolean {
   const delTurno = turnSlice(messages);
-  return delTurno.some(
-    (m) => m && typeof m === "object" && (m.role === "assistant" || m.role === "model"),
-  );
+  let ultimoAsistente: AgentEndMessage | undefined;
+  for (let i = delTurno.length - 1; i >= 0; i--) {
+    const m = delTurno[i];
+    if (m && typeof m === "object" && (m.role === "assistant" || m.role === "model")) {
+      ultimoAsistente = m;
+      break;
+    }
+  }
+  if (!ultimoAsistente) return false;
+  return (ultimoAsistente as { stopReason?: unknown }).stopReason !== "toolUse";
 }
 
 export function buildRecord(
