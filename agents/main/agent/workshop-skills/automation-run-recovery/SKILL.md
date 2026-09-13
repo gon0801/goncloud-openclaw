@@ -1,6 +1,6 @@
 ---
 name: automation-run-recovery
-description: Re-fire a scheduled automation by hand and diagnose why a run died, stalled, or reported ok without doing its work. Use for "run this cron/automation now", after a gateway restart killed an in-flight job, or when a run shows failed/partial. Produces the run outcome and proof of whether outward-facing sends happened.
+description: Re-fire a scheduled automation by hand and diagnose why a run died, stalled, or reported ok without doing its work. Use for "run this cron/automation now", after a gateway restart killed an in-flight job, when a run shows failed/partial, or when a job's payload/instructions (prompt v-swap) must be updated. Produces the run outcome, proof of whether outward-facing sends happened, or a verified payload read-back.
 ---
 
 # Automation Run Recovery
@@ -29,6 +29,19 @@ Manually run, inspect and re-fire a scheduled automation (`openclaw cron`, alias
 
 6. Let the job's own `failureAlert` (channel + recipient) report a failure; do not hand-roll an alert. If the job has `failureAlert.mode: announce`, a failed run announces itself.
    - Completion: you are not replacing the job's configured alerting.
+
+## Update a job's payload (prompt swap)
+
+Replace a job's agent-turn instructions (e.g. a new runbook-prompt version). Verified 2026-09-13 (`packing-digest-20h` v14 → v15, a 9.5k-char single-line prompt).
+
+1. Prepare the new prompt as a one-line text file, then apply and read back:
+   `$m = Get-Content <prompt-file> -Raw; openclaw cron edit <id> --message $m`
+   `openclaw cron edit` only patches the fields you pass — schedule, agentId, failureAlert and delivery are untouched; confirm that in the JSON the command returns (`payload.message` starts with the new version string, `schedule` unchanged).
+   - Completion: the read-back shows the new payload text and an unchanged schedule.
+
+2. Long payloads break the shim: values over ~8k characters fail with `The command line is too long.` because `openclaw.cmd` is a cmd.exe shim and cmd's line limit is 8,191 chars. The shim is only `node ...npm\node_modules\openclaw\dist\index.js %*` — call node directly instead, which passes args via CreateProcess (~32k limit):
+   `node "C:\Users\ehven\AppData\Roaming\npm\node_modules\openclaw\dist\index.js" cron edit <id> --message $m`
+   - Completion: the same read-back as step 1 succeeds.
 
 ## Pitfalls
 
