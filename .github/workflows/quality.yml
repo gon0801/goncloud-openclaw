@@ -96,8 +96,21 @@ jobs:
         run: |
           set -e
           found=0
-          if [ -d tools ]; then
-            for f in tools/check-*.sh tools/check_*.py; do
+          # `tools/` esta en el .gitignore de ESTE repo, asi que en un clone fresco no existe y
+          # este paso pasaba en verde sin auditar nada — un candado de branch protection vacio
+          # (cross-review de qwen, 2026-09-12). Se agrega `scripts/`, que si esta trackeado, y
+          # se avisa si alguien deja un checker en un directorio ignorado en vez de callarlo.
+          for d in tools scripts; do
+            if [ -d "$d" ] && git check-ignore -q "$d/" 2>/dev/null; then
+              for c in "$d"/check-*.sh "$d"/check_*.py; do
+                [ -e "$c" ] || continue
+                echo "gate: AVISO — $c existe pero '$d/' esta en .gitignore: no llega al repo ni a CI"
+              done
+            fi
+          done
+          for dir in tools scripts; do
+            if [ -d "$dir" ]; then
+            for f in "$dir"/check-*.sh "$dir"/check_*.py; do
               [ -e "$f" ] || continue
               base=$(basename "$f")
               case "$base" in
@@ -111,7 +124,8 @@ jobs:
                 *) python3 "$f" ;;
               esac
             done
-          fi
+            fi
+          done
           if [ "$found" -eq 0 ]; then
             echo "gate: no hay tools/check-*.sh ni tools/check_*.py -- nada que auditar, sale 0"
           fi
