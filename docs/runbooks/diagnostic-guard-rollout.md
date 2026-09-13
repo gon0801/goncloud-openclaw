@@ -61,31 +61,36 @@ and logs symbolic telemetry; it never requests a revision.
 
 ## USER.md restoration
 
-STATUS: STOPPED — preapproval package below, live file NOT touched.
+STATUS: COMPLETED — 2026-09-12 (America/Vancouver).
 
 The live file `C:\Users\ehven\.openclaw\workspace\USER.md` is external to this
 repository and is not staged or modified by this change. Restoration requires
 all four items BEFORE any edit:
 
-1. Historical source with the exact deleted directive: NOT VERIFIED.
-   Searched this repository (`docs/`, `Plans.md`, evidence, session corpora)
-   for the deleted safety directive quoted verbatim — no citable source
-   found. The design (`docs/superpowers/specs/2026-09-12-structural-investigation-guard-design.md`,
-   Problem) records only that a new rule replaced an unrelated safety
-   directive, without quoting it. Per the plan, a directive reconstructed
-   from memory is NOT acceptable: do not edit until the operator supplies
-   the verified historical source (gateway backup, snapshot, or transcript
-   with exact bytes).
-2. Backup location: to be recorded here once the source is verified
-   (copy live file to a timestamped backup before editing).
-3. One-line proposed diff: to be recorded here once the source is verified
-   (restore literally the recovered line; read back and prove the diff
-   contains only that line).
-4. Proof of no active cron in the reload window: to be recorded here
-   (`openclaw cron list` showing no running job overlapping the edit+reload).
+1. Historical source: verified in the separately versioned
+   `goncloud-workspace-main` repository. Commit `a4c023c` replaced the safety
+   directive; `a4c023c^:USER.md` contains the exact deleted line:
 
-If the historical source cannot be verified, this section stays STOPPED and
-the task is reported incomplete — the guard rollout does not depend on it.
+   ```text
+   - Always request confirmation immediately before downloading or installing software or performing an administrative system change.
+   ```
+
+2. Recoverable backup created and read back before the edit:
+   `C:\Users\ehven\.openclaw\workspace\USER.md.pre-structural-guard-20260912.bak`
+   (1918 bytes at verification time).
+3. Operator-approved diff: append one well-formed active directive entry dated
+   `2026-09-12`, containing the historical line literally. No existing line is
+   replaced; the newer `Never say "no se puede"` directive remains active.
+4. Safe window: `openclaw cron list --all --json` reported 31 jobs and zero
+   jobs with `running=true` or non-null `state.runningAtMs`, both immediately
+   before and after the edit. No reload was needed or performed because
+   `USER.md` is workspace context, not plugin configuration.
+
+An independent read-only gateway session then proved that the live file equals
+the backup plus exactly one appended metadata/directive entry: the restored
+line occurs once in live and zero times in backup; the `Never say "no se puede"`
+directive occurs once in each. No model, provider, auth, permission, PATH,
+plugin, cron, session, or repository configuration was changed.
 
 ## Promotion gate
 

@@ -185,9 +185,7 @@ Cover all three positive incidents and these negative controls:
 - a legitimate reviewer/adversary negative without a recognized failure;
 - input longer than 8192 characters with the signature only after the limit.
 
-The `gh` classifier requires `isError === true`, tool `exec` or `bash`, an attempted command whose first executable token is `gh`, and a command-not-found/path-resolution signature. Browser requires the browser tool plus evidence that the global profile was selected instead of `claw`. Session scope requires `sessions_search`, a structured failure, and the unscoped-database signature. Do not classify from result text alone.
-
-> Correction (Codex review round 1, 2026-09-13, grounded in `agents/main/agent/workshop-skills/browser-cli-claw-profile/SKILL.md:12-15`): the browser incident is classified from `exec`/`bash` running the CLI with the GLOBAL `--profile claw` flag plus the credentials signature — not from the `browser` tool, whose tool-style `profile=claw` is the valid form. Likewise the session incident requires ABSENT scope (`agentId`/`sessionKeys`), and probes validate the executed command/params, never result text. The implementation and its tests follow the corrected form; this note keeps the plan traceable.
+The `gh` classifier requires `isError === true`, tool `exec` or `bash`, an attempted command whose first executable token is `gh`, and a command-not-found/path-resolution signature. The browser incident requires `exec` or `bash` running the CLI with the global `--profile claw` flag plus the credentials signature; a `browser`-tool call with tool-style `profile=claw` is the valid form and must not classify as the incident. Session scope requires `sessions_search`, a structured failure, and absent scope (`agentId`/`sessionKeys`). Probes validate the executed command or structured parameters, never result text alone.
 
 Run:
 
@@ -411,10 +409,10 @@ Before touching `C:\Users\ehven\.openclaw\workspace\USER.md`, show the operator:
 
 - the historical source containing the exact deleted directive;
 - a backup path;
-- a one-line proposed diff;
+- a one-directive-entry proposed diff;
 - proof no cron is active in the reload window.
 
-After approval, copy the directive literally from the verified historical source. Do not reconstruct it from memory. Read back and prove the diff contains only that line. If the historical source cannot be verified, do not edit the live file and report the task incomplete.
+After approval, copy the directive literally from the verified historical source. Do not reconstruct it from memory. Wrap it only in the metadata and blank lines required by the `USER.md` format, then read back and prove the diff contains only that appended entry. If the historical source cannot be verified, do not edit the live file and report the task incomplete.
 
 **Step 4: Record the checkpoint without committing**
 
