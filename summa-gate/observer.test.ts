@@ -466,3 +466,45 @@ describe("un agent_end sin mensajes del asistente no es un turno", () => {
     );
   });
 });
+
+// Segunda vuelta de los turnos fantasma (2026-09-12). El primer arreglo (exigir "algun mensaje
+// del asistente") NO alcanzo: comprobado en vivo, 2 turnos seguian dejando 4 registros. La causa
+// real, leida de chat.history: `agent_end` se emite DOS veces por turno, y la primera vez el
+// turno no termino todavia (`stopReason: "toolUse"`, content solo con el toolCall).
+describe("stopReason distingue el agent_end intermedio del final", () => {
+  const intermedio = [
+    { role: "user", content: "corre el deploy" },
+    { role: "assistant", stopReason: "toolUse", content: [{ type: "toolCall", name: "exec" }] },
+  ];
+  const final = [
+    { role: "user", content: "corre el deploy" },
+    { role: "assistant", stopReason: "toolUse", content: [{ type: "toolCall", name: "exec" }] },
+    { role: "toolResult", toolName: "exec", content: "ok" },
+    { role: "assistant", stopReason: "stop", content: "Listo." },
+  ];
+
+  it("descarta la emision intermedia (stopReason toolUse)", () => {
+    assert.equal(isTurnRecordable(intermedio as never), false);
+  });
+
+  it("registra la emision final (stopReason stop)", () => {
+    assert.equal(isTurnRecordable(final as never), true);
+  });
+
+  it("si el proveedor no expone stopReason, registra: mejor sobre-contar que perder el denominador", () => {
+    assert.equal(
+      isTurnRecordable([
+        { role: "user", content: "x" },
+        { role: "assistant", content: "respuesta sin stopReason" },
+      ] as never),
+      true,
+    );
+  });
+
+  it("el turno intermedio era justamente el que salia con textLen 0 y tools vacio", () => {
+    const r = buildRecord(1, "s", "a", "k", intermedio as never);
+    assert.equal(r.textLen, 0);
+    assert.deepEqual(r.tools, {});
+    // ...o sea un fantasma con forma de turno real. Por eso no puede llegar al jsonl.
+  });
+});
