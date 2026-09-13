@@ -29,7 +29,7 @@
  *
  * Rotation policy (declared here, not scattered ad-hoc in the writer):
  * - When the live jsonl would cross ~5 MB after this write, rename it to
- *   `rendiciones.<unix-ms>.1.jsonl` and start a fresh file. One backup level
+ *   `rendiciones.jsonl.1.jsonl` (FIXED name, overwritten) and start a fresh file. One level
  *   only. No compression, no deletion. Operators tail the jsonl; cheap.
  */
 
@@ -301,9 +301,12 @@ export function writeRecord(record: ObserverRecord): { rotated: boolean; bytesAf
     // into the SAME tmpdir instead of dumping the backup into the real
     // plugin install dir. Production wiring keeps OBSERVER_FILE() pointing
     // at ~/.openclaw/summa-gate/rendiciones.jsonl, so the backup lands at
-    // ~/.openclaw/summa-gate/rendiciones.<unix-ms>.1.jsonl in that case.
+    // ~/.openclaw/summa-gate/rendiciones.jsonl.1.jsonl in that case.
     // Suffix convention: `<base>.<ts>.1.jsonl`, so the backup keeps the
-    // `.jsonl` extension and tail operators can do `tail ./*.<ts>.1.jsonl`.
+    // `.jsonl` extension y se puede hacer `tail ./*.1.jsonl`. El nombre NO lleva
+    // timestamp: con `Date.now()` cada rotacion creaba un archivo nuevo y no se borraba
+    // ninguno (cross-review de codex). Estos comentarios seguian citando el nombre viejo
+    // despues del arreglo (cross-review de grok, 2026-09-12).
     // UN solo nivel: nombre FIJO, se sobrescribe. Antes el nombre llevaba
     // `Date.now()`, asi que cada rotacion creaba un archivo nuevo de 5 MB y no se
     // borraba ninguno — el PR decia "un nivel de respaldo" y no era cierto
