@@ -297,9 +297,16 @@ export function isTurnRecordable(messages: AgentEndMessage[] | undefined | null)
  *
  *   turnKey = "<indice del mensaje user>:<hash corto de su texto>"
  *
- * El indice solo no alcanza (una compactacion del historico lo corre); el hash solo tampoco
- * (dos turnos con el mismo texto, "ok", colisionarian). Juntos son estables entre emisiones
- * del mismo turno y distintos entre turnos.
+ * MEDIDO EN VIVO el 2026-09-12, y contra lo que supuse al principio: el INDICE NO es estable
+ * entre emisiones del mismo turno. El mismo turno aparecio con su mensaje `user` en el indice
+ * 4 y despues en el 12, porque el contexto que se inyecta por turno agrega mensajes ANTES de
+ * el. El HASH si es estable (`a20c7516` en las dos emisiones).
+ *
+ * Por eso el indice se conserva en el registro como dato auditable, pero la clave de
+ * agrupacion que usa `collapseTurns` es SOLO el hash (ver `turnHashOf`). El costo conocido y
+ * acotado: si en una misma sesion llegan dos prompts con texto identico ("ok"), sus turnos se
+ * colapsan en uno y se sub-cuenta por 1. Es un error chico, en una direccion conocida, y
+ * medible — frente a un sobre-conteo sin techo, que era lo que habia.
  *
  * Quien LEE el jsonl colapsa por `sessionKey` + `turnKey` y se queda con el de `ts` mayor:
  * ahi estan todos los datos y no hay que adivinar nada. El observador se queda tonto y
@@ -419,6 +426,13 @@ export function writeRecord(record: ObserverRecord): { rotated: boolean; bytesAf
  * criterio de "que es un turno" queda en un solo lugar, auditable y con pruebas, en vez de
  * repartido en heuristicas del camino caliente.
  */
+/** El hash del turnKey, sin el indice: es la parte estable entre emisiones. */
+export function turnHashOf(turnKey: unknown): string {
+  if (typeof turnKey !== "string") return "";
+  const i = turnKey.indexOf(":");
+  return i >= 0 ? turnKey.slice(i + 1) : turnKey;
+}
+
 export function collapseTurns<T extends { sessionKey?: unknown; turnKey?: unknown; ts?: unknown }>(
   records: readonly T[],
 ): T[] {
@@ -426,7 +440,7 @@ export function collapseTurns<T extends { sessionKey?: unknown; turnKey?: unknow
   const sinClave: T[] = [];
   for (const r of records) {
     const sk = typeof r.sessionKey === "string" ? r.sessionKey : "";
-    const tk = typeof r.turnKey === "string" ? r.turnKey : "";
+    const tk = turnHashOf(r.turnKey);
     if (!sk || !tk) {
       // Registros viejos, de antes de que existiera turnKey: no se pueden agrupar, se dejan
       // pasar tal cual en vez de descartarlos (perder datos es peor que sobre-contar).
