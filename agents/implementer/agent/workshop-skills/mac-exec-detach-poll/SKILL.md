@@ -38,9 +38,11 @@ reemplazo:
 - `timeout` no existe en macOS: antepone `/opt/homebrew/bin:$PATH` en la
   corrida (ahi viven timeout y gtimeout); sin eso, casos preexistentes
   que lo usan enrojecen por ambiente y no por tu cambio.
-- `gh` y `pre-commit` no estan como comando: el PR va por API (skill
-  pr-sin-gh) y los candados de commit corren igual via el shim de
-  `.git/hooks/`.
+- `gh` no esta en el PATH pero existe por ruta absoluta
+  `/opt/homebrew/bin/gh` en la Mac del operador (medido lane saikit
+  2026-09-13): usala asi; solo si falta del todo, el PR va por API
+  (skill pr-sin-gh). `pre-commit` no esta como comando: los candados de
+  commit corren igual via el shim de `.git/hooks/`.
 - Un tarball de node exige anteponer `<dir>/bin` al PATH antes de usar
   `corepack`/`npm`: sus scripts arrancan con `env node` y fallan con
   exit 127 llamados por ruta absoluta sin PATH.
