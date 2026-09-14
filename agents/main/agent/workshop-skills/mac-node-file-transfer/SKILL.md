@@ -33,6 +33,7 @@ Move a file from the paired Mac node ("David's MacBook Pro") to the gateway file
 
 ## Pitfalls
 
+- A bare `MEDIA:<path>` line in the final reply was NOT delivered to Telegram three times in a row (2026-09-14, same screenshot, 537 KB file present on the gateway): the recipient kept reporting nothing arrived. Do not treat the directive as a confirmed send; the verified user-visible path for non-user-sourced or media turns is the explicit `message` action=send (owner-report-delivery step 2), which is untested for media here — after any send, confirm receipt with the user before cleaning up the gateway copy, and do not delete the gateway copy in the same turn (delivery raced deletion in one attempt and could never be re-verified).
 - Once `file.fetch` is denied, the gateway cannot pull node files itself; the transfer must be pushed from the node (scp) or served by the node.
 - `COMPANION_APP_UNAVAILABLE` on `exec host=node` is intermittent — today it hit and cleared repeatedly within minutes. Retry before reporting a Mac node as broken, and fall back to `nodes invoke fs.listDir` for listing.
 - The gateway cannot reach the node's LAN URL through the browser or `view_image` — only `curl` from the gateway reaches it.
