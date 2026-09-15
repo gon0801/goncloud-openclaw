@@ -5,7 +5,7 @@ description: Type into and read CLI agents (Claude Code, kimi, muse, cursor-agen
 
 # Mac tmux control (David's Mac)
 
-Drive CLI agents by **tmux session name** through `exec` with `host="node"` and `node="David's MacBook Pro"`. No keyboard focus, no mouse, no Accessibility, no Secure Input involved: the input goes straight into the agent's pty. This replaces global keystrokes (`System Events keystroke`) for every agent David launched with `~/bin/agent-tmux.sh` (session name `<tool>-<repo>`, e.g. `claude-goncloud-orbit`).
+Drive CLI agents by **tmux session name** through `exec` with `host="node"` and `node="David's MacBook Pro"`. No keyboard focus, no mouse, no Accessibility, no Secure Input involved: the input goes straight into the agent's pty. This replaces global keystrokes (`System Events keystroke`) for every agent David launches from a terminal — his shell wraps `claude`, `glm`, `deepseek`, `kimi-claude`, `kimi`, `muse`, `codex`, `cursor-agent`, `grok`, `opencode`, `qwen`, `dsh` through `~/bin/agent-tmux.sh` automatically (session name `<tool>-<repo>`, e.g. `claude-goncloud-orbit`, `glm-summonaikit`; `glm`/`deepseek`/`kimi-claude` are Claude Code against other providers, so their pane runs `node` too).
 
 ## Steps
 
