@@ -86,6 +86,10 @@ except Exception:
 
 clean = "".join(ch if ch.isprintable() else " " for ch in text)
 clean = " ".join(clean.split())
+# The event frames this quote with '"' and separates fields with '|': the quote must not be able
+# to forge either, or the agent's output could close the quote and append text that reads as the
+# harness's own voice.
+clean = clean.replace('"', "'").replace("|", "/")
 print(clean[:160])
 PY
 )

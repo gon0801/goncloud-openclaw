@@ -12,7 +12,8 @@
 # output, so it never moved when the agent printed — the contract test caught it.
 #
 # WHICH sessions: only those carrying the marker OPENCLAW_WATCH=1 in their tmux session
-# environment. David's own conversations with Claude Code also live in tmux (agent-tmux-shell.zsh
+# environment — the marker is the ONE gate (no tool-name list: marking is deliberate, and a
+# marked session must report back whatever it is called). David's own conversations with Claude Code also live in tmux (agent-tmux-shell.zsh
 # wraps `claude`), and they must NOT wake the main agent on every turn. The marker is set by the
 # dispatcher (the main agent) when it hands a session an order, and cleared when the chain ends:
 #   /opt/homebrew/bin/tmux set-environment -t <session> OPENCLAW_WATCH 1      # start watching
@@ -41,7 +42,6 @@
 #   TICK_SECS=15
 #   STATE_DIR=$HOME/.local/state/tmux-activity-watch
 #   LOG_FILE=$HOME/Library/Logs/tmux-activity-watch.log
-#   TOOLS="claude glm deepseek kimi-claude kimi muse codex cursor-agent grok opencode qwen dsh"
 #
 # Install: cp scripts/mac/tmux-activity-watch.sh ~/bin/ && chmod +x ~/bin/tmux-activity-watch.sh
 # (the LaunchAgent in scripts/mac/ai.goncloud.tmux-activity-watch.plist runs it under launchd).
@@ -56,7 +56,6 @@ QUIET_SECS=${QUIET_SECS:-90}
 TICK_SECS=${TICK_SECS:-15}
 STATE_DIR=${STATE_DIR:-$HOME/.local/state/tmux-activity-watch}
 LOG_FILE=${LOG_FILE:-$HOME/Library/Logs/tmux-activity-watch.log}
-TOOLS=${TOOLS:-"claude glm deepseek kimi-claude kimi muse codex cursor-agent grok opencode qwen dsh"}
 WATCH_MARKER=OPENCLAW_WATCH
 
 once=0
@@ -80,19 +79,8 @@ log() {
   printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >>"$LOG_FILE"
 }
 
-# A session is a candidate when its name starts with "<tool>-" for a tool in TOOLS. Prefix
-# match, not "cut at the first dash": "cursor-agent-orbit" and "kimi-claude-orbit" must match
-# their two-word tool names.
-is_watched_tool() {
-  local session=$1 t
-  for t in $TOOLS; do
-    [[ $session == "$t"-* ]] && return 0
-  done
-  return 1
-}
-
 # The marker lives in the session's tmux environment; `show-environment` prints "NAME=value"
-# and exits 0 when set, prints "-NAME" and exits 1 when unset.
+# and exits 0 when set; when unset it exits 1 ("unknown variable" on stderr in tmux 3.7).
 is_marked() {
   local session=$1 v
   v=$("$TMUX_BIN" show-environment -t "$session" "$WATCH_MARKER" 2>/dev/null) || return 1
@@ -135,7 +123,7 @@ session_listed() {
 }
 
 tick() {
-  local line session activity cmd path sf prev_activity prev_notified now seen_file err_file
+  local session activity cmd path sf prev_activity prev_notified now seen_file err_file
   local elapsed text last_path rc
   seen_file=$(mktemp "${TMPDIR:-/tmp}/tmux-activity-watch.seen.XXXXXX")
   err_file=$(mktemp "${TMPDIR:-/tmp}/tmux-activity-watch.err.XXXXXX")
@@ -151,10 +139,11 @@ tick() {
   "$TMUX_BIN" list-sessions -F '#{session_name}|#{window_activity}|#{pane_current_command}|#{pane_current_path}' >"$seen_file" 2>"$err_file" || rc=$?
   if [[ $rc -ne 0 ]]; then
     : >"$seen_file"
-    # "no server running" means every session is genuinely gone (the closed sweep below is
-    # right). Any other failure (binary missing after an upgrade, socket busy) says nothing
-    # about the sessions: skip this tick instead of declaring them all closed.
-    if ! grep -qiE 'no server running|error connecting|No such file' "$err_file"; then
+    # "no server running" / "error connecting to <socket>" mean every session is genuinely
+    # gone (the closed sweep below is right). Any other failure — the binary missing during a
+    # `brew upgrade tmux` (bash prints "No such file or directory", rc=127), socket busy —
+    # says nothing about the sessions: skip this tick instead of declaring them all closed.
+    if ! grep -qiE 'no server running|error connecting' "$err_file"; then
       log "list-sessions failed (rc=$rc): $(tr '\n' ' ' <"$err_file") — tick skipped"
       rm -f "$seen_file" "$err_file"
       return 0
@@ -166,8 +155,11 @@ tick() {
 
   while IFS='|' read -r session activity cmd path; do
     [[ -n $session ]] || continue
-    is_watched_tool "$session" || continue
-    is_marked "$session" || continue
+    # Unmarked (never marked, or unmarked when its chain ended): forget it, state included, so
+    # the closed sweep below cannot fire for a session nobody is watching. Side effect, in the
+    # safe direction: a transient show-environment failure drops the state and the next tick
+    # may repeat one "quiet" event.
+    is_marked "$session" || { rm -f "$(state_file "$session")"; continue; }
 
     sf=$(state_file "$session")
     prev_activity=$(read_state_field "$sf" activity)

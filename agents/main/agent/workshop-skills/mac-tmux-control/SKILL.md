@@ -74,7 +74,7 @@ with `openclaw system event` instead of you polling tmux on a cron. Events you w
 /opt/homebrew/bin/tmux set-environment -t <session> OPENCLAW_WATCH 1      # after dispatching
 /opt/homebrew/bin/tmux set-environment -t <session> -u OPENCLAW_WATCH     # when the chain ends
 ```
-A session you dispatched to and did not mark will not report back; if you are waiting on a
+Any session with the marker reports back, whatever its name; a session you dispatched to and did not mark will not; if you are waiting on a
 session and no event arrives, check the marker with `show-environment -t <session> OPENCLAW_WATCH`
 before assuming the agent is still working.
 
