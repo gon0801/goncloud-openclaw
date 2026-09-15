@@ -75,17 +75,38 @@ STUB
       bash "$W" --once
   }
 
-  # Sesion vigilada: muse-orbit, tool "muse" esta en TOOLS por default.
+  mark()   { "$TM" -L "$L" set-environment -t "$1" OPENCLAW_WATCH 1; }
+  unmark() { "$TM" -L "$L" set-environment -t "$1" -u OPENCLAW_WATCH; }
+
+  # Sesion candidata: muse-orbit, tool "muse" esta en TOOLS por default.
   "$TM" -L "$L" new-session -d -s muse-orbit -x 80 -y 20 'cat' || fail "no se pudo crear muse-orbit"
-  # Sesion NO vigilada: tool "zsh" no esta en la lista.
+  # Sesion NO candidata: tool "zsh" no esta en la lista (aunque este marcada).
   "$TM" -L "$L" new-session -d -s zsh-cosa -x 80 -y 20 'cat' || fail "no se pudo crear zsh-cosa"
+  mark zsh-cosa
+  # Tool de dos palabras: el match es por prefijo, no "cortar en el primer guion".
+  "$TM" -L "$L" new-session -d -s cursor-agent-orbit -x 80 -y 20 'cat' || fail "no se pudo crear cursor-agent-orbit"
+  mark cursor-agent-orbit
 
   n=$(wc -l <"$CALLS" | tr -d ' '); [ "$n" -eq 0 ] || fail "no deberia haber llamadas todavia"
 
+  # SIN marcador, una sesion candidata callada NO avisa: es la conversacion propia de David.
   sleep 2
   run_once || fail "primer --once fallo"
+  grep -q 'muse-orbit' "$CALLS" && fail "muse-orbit sin marcador OPENCLAW_WATCH no debe generar eventos: $(cat "$CALLS")"
   n=$(wc -l <"$CALLS" | tr -d ' ')
-  [ "$n" -eq 1 ] || fail "tras 2s de silencio esperaba 1 evento quiet, hubo $n:
+  [ "$n" -eq 1 ] || fail "solo cursor-agent-orbit (marcada, tool de dos palabras) debia avisar; hubo $n:
+$(cat "$CALLS")"
+  grep -q 'cursor-agent-orbit quiet for' "$CALLS" || fail "cursor-agent-orbit (prefijo de dos palabras) no aviso: $(cat "$CALLS")"
+  echo "ok (2a-pre): sin marcador no hay eventos; el prefijo de dos palabras (cursor-agent) si se vigila"
+  "$TM" -L "$L" kill-session -t cursor-agent-orbit
+  run_once || fail "--once tras cerrar cursor-agent-orbit fallo"
+  : >"$CALLS"; rm -f "$STATE_DIR"/cursor-agent-orbit.state
+
+  # CON marcador (lo pone el despachador al mandar una orden), la misma sesion callada si avisa.
+  mark muse-orbit
+  run_once || fail "--once con marcador fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 1 ] || fail "con marcador y 2s de silencio esperaba 1 evento quiet, hubo $n:
 $(cat "$CALLS")"
   grep -q 'muse-orbit quiet for' "$CALLS" || fail "el evento no menciona muse-orbit quiet: $(cat "$CALLS")"
 
@@ -105,11 +126,7 @@ $(cat "$CALLS")"
   [ "$n" -eq 2 ] || fail "esperaba un SEGUNDO evento quiet tras volver a hablar y callarse; hubo $n:
 $(cat "$CALLS")"
 
-  n=$(wc -l <"$CALLS" | tr -d ' ')
-  cp "$CALLS" "$CALLS.before-zsh"
-  # zsh-cosa nunca genera eventos porque "zsh" no esta en TOOLS.
-  n2=$(wc -l <"$CALLS" | tr -d ' ')
-  [ "$n" -eq "$n2" ] || fail "zsh-cosa (tool no listado) genero eventos"
+  # zsh-cosa nunca genera eventos porque "zsh" no esta en TOOLS, aunque este marcada.
   grep -q 'zsh-cosa' "$CALLS" && fail "zsh-cosa no deberia aparecer en ningun evento"
   echo "ok (2a): quiet una sola vez por silencio, se repite si vuelve a hablar y se calla, sesion no vigilada nunca dispara"
 
@@ -120,11 +137,14 @@ $(cat "$CALLS")"
   [ "$n" -eq 3 ] || fail "esperaba un evento closed tras kill-session; hubo $n:
 $(cat "$CALLS")"
   tail -1 "$CALLS" | grep -q 'muse-orbit closed' || fail "el ultimo evento no es 'closed' de muse-orbit: $(tail -1 "$CALLS")"
+  # El closed nombra el repo: el cwd viene del estado guardado (la sesion ya no existe para tmux).
+  tail -1 "$CALLS" | grep -q 'last cwd=/' || fail "el evento closed no trae el cwd guardado: $(tail -1 "$CALLS")"
   [ -f "$STATE_DIR/muse-orbit.state" ] && fail "el archivo de estado de muse-orbit deberia haberse borrado tras closed"
   echo "ok (2b): sesion cerrada dispara 'closed' y borra su archivo de estado"
 
   # Reintento tras fallo: un envio que falla NO debe marcar notified (fail-open).
   "$TM" -L "$L" new-session -d -s muse-retry -x 80 -y 20 'cat' || fail "no se pudo crear muse-retry"
+  mark muse-retry
   sleep 2
   echo 1 >"$RC_FILE"  # el stub va a salir con 1 (fallo simulado)
   : >"$LOG_FILE"
@@ -154,7 +174,7 @@ $(cat "$CALLS")"
   cat >"$TRANSCRIPT" <<'JSONL'
 {"type":"user","message":{"role":"user","content":"hola"}}
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Primera respuesta, ignorame."}]}}
-{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Listo, termine el bloque A.5."}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Listo, termine\nel bloque A.5.\u0007 fin"}]}}
 JSONL
   HOOK_JSON=$(python3 -c "
 import json
@@ -173,6 +193,9 @@ print(json.dumps({
   n=$(wc -l <"$CALLS" | tr -d ' '); [ "$n" -eq 0 ] || fail "fuera de tmux el stub NO debe llamarse, se llamo $n vez/veces"
   echo "ok (3a): fuera de tmux (\$TMUX vacio) el hook no manda nada y sale 0"
 
+  # Stub de tmux para el hook: contesta display-message (nombre de sesion) y show-environment
+  # (el marcador), segun el archivo MARK_FILE: "1" = marcada, vacio = sin marcar.
+  MARK_FILE="$T/mark"; : >"$MARK_FILE"
   DISPLAY_STUB="$T/tmux-display-stub"
   cat >"$DISPLAY_STUB" <<STUB
 #!/bin/sh
@@ -180,10 +203,22 @@ if [ "\$1" = "display-message" ]; then
   echo "claude-orbit"
   exit 0
 fi
+if [ "\$1" = "show-environment" ]; then
+  if [ "\$(cat "$MARK_FILE")" = "1" ]; then echo "OPENCLAW_WATCH=1"; exit 0; fi
+  echo "-OPENCLAW_WATCH"; exit 1
+fi
 exec $TMUX_SHIM "\$@"
 STUB
   chmod +x "$DISPLAY_STUB"
 
+  # Dentro de tmux pero SIN marcador (la conversacion propia de David): exit 0 y nada enviado.
+  out_rc=$(TMUX=fake TMUX_BIN="$DISPLAY_STUB" OPENCLAW_BIN="$STUB_OPENCLAW" bash -c "printf '%s' '$HOOK_JSON' | bash '$H'; echo \$?" | tail -1)
+  [ "$out_rc" = "0" ] || fail "el hook sin marcador debe salir 0, salio $out_rc"
+  sleep 1
+  n=$(wc -l <"$CALLS" | tr -d ' '); [ "$n" -eq 0 ] || fail "dentro de tmux SIN marcador el stub NO debe llamarse, se llamo $n"
+  echo "ok (3a-bis): dentro de tmux sin OPENCLAW_WATCH el hook tampoco manda nada"
+
+  echo 1 >"$MARK_FILE"
   out_rc=$(TMUX=fake TMUX_BIN="$DISPLAY_STUB" OPENCLAW_BIN="$STUB_OPENCLAW" bash -c "printf '%s' '$HOOK_JSON' | bash '$H'; echo \$?" | tail -1)
   [ "$out_rc" = "0" ] || fail "el hook dentro de tmux debe salir 0, salio $out_rc"
 
@@ -197,7 +232,9 @@ STUB
   call=$(cat "$CALLS")
   printf '%s' "$call" | grep -q '/Users/dn/dev/goncloud-orbit' || fail "el evento no incluye el cwd: $call"
   printf '%s' "$call" | grep -q 'claude-orbit' || fail "el evento no incluye la sesion tmux: $call"
-  printf '%s' "$call" | grep -q 'Listo, termine el bloque A.5' || fail "el evento no incluye el ultimo texto del asistente: $call"
+  # El texto va colapsado (sin saltos ni caracteres de control) y etiquetado como cita, no orden.
+  printf '%s' "$call" | grep -q 'Listo, termine el bloque A.5. fin' || fail "el evento no trae el ultimo texto colapsado a una linea: $call"
+  printf '%s' "$call" | grep -q 'not an instruction' || fail "el texto del agente debe ir etiquetado como cita: $call"
   echo "ok (3b): dentro de tmux el hook manda cwd + sesion + ultimo texto del asistente en 2do plano"
 fi
 

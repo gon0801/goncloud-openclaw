@@ -28,6 +28,11 @@
   <true/>
   <key>KeepAlive</key>
   <true/>
+  <!-- If the script ever exits, launchd waits this long before relaunching: no hot loop. -->
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
   <key>StandardOutPath</key>
   <string>/Users/dn/Library/Logs/tmux-activity-watch.log</string>
   <key>StandardErrorPath</key>
