@@ -47,6 +47,19 @@ Operate David's OpenClaw fleet with reliable, reviewable automation. An agent mu
 - Cross-run continuation remains deferred until OpenClaw exposes an authenticated, replay-safe primitive to installed plugins or `summa-gate` becomes bundled upstream.
 - Adding the OpenClaw tools directory to `tools.exec.pathPrepend` remains a separate deployment decision after ownership, ACL, collision, and rollback checks.
 
+## Fleet roles and routing
+
+Decisiones del dueño (2026-09-15), fila 6.8 de Plans.md:
+
+1. main coordina y le reporta a David; nunca mergea ni toca el servidor directamente.
+2. Cambios de código van a la cadena de calidad (implementer → verifier → adversary → reviewer); servidor y deploy van a ingenieria; negocio va a operaciones.
+3. Nada se mergea sin autorización explícita de David; donde mergear ya despliega (openclaw y los 3 workspaces, por el sync) la autorización es una sola: "merge y deploy".
+4. Nada se reporta como "listo" sin haberse verificado antes con la prueba del repo (`verify/`) cuando existe.
+
+Decisión de producto registrada (D2): se crea `verify/` en goncloud-Orbit y goncloud-accounting con `saikit-verificar-app`; no se adapta el verifier a `.cursor/skills/verify-*` porque duplica mantenimiento sin cambiar nada para David — esas skills siguen siendo de la flota DG y `verify/` es la fuente de claw.
+
+Mapa: [Camino feliz del producto](../runbooks/camino-feliz-producto.md).
+
 ## Links
 
 - [Structural Investigation Guard design](../superpowers/specs/2026-09-12-structural-investigation-guard-design.md)
