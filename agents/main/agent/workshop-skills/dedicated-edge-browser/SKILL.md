@@ -15,8 +15,9 @@ The gateway's own browser for tasks needing a persistent login: one dedicated Ed
    - Completion: `/json/version` returns the browser JSON, and the window is foregrounded when the owner must act in it.
 2. Confirm the session you need before asking anyone to log in: count cookies per domain with a puppeteer `Storage.getCookies` probe. Seeded 2026-09-12 (cookie counts at seeding: monday 39, claude 19, amazon 18, mercadolibre 38, google 73; `anthropic` 0 — Claude stores under `claude.ai`). A site login wall means that site's own session expired — ask the owner to log in once in this window, never for a password in chat.
    - Completion: the task's domain has cookies, or the owner has just seeded/expired-and-renewed it.
-3. Work the task with `.js` puppeteer scripts. For a Monday group export, `gateway-edge-cdp/monday-export.md` applies unchanged over this port (verified with "Septiembre 2026"). For sending a file by email, `gmail-attachment-send.md` in this folder.
+3. Work the task with `.js` puppeteer scripts. For a Monday group export, `gateway-edge-cdp/monday-export.md` applies unchanged over this port (verified with "Septiembre 2026"). For sending a file by email, `gmail-attachment-send.md` in this folder. To read a claude.ai artifact tab whose body will not load (blank shell, puppeteer methods hang on it), read `claude-artifact-read.md` in this folder before any retry.
    - Completion: the task's own artifact (downloaded file, sent mail) is verified.
+3b. For a `claude.ai/artifact` URL (or any page whose content renders inside a cross-origin iframe), the puppeteer paths in step 3 fail to reach the content: read `claude-artifact-read.md` for the raw-WebSocket `Target.attachToTarget` procedure that does.
 
 ## Pitfalls
 
