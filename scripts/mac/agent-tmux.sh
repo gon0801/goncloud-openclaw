@@ -61,8 +61,12 @@ if [[ -n $existing && $existing != "$dir" ]]; then
 fi
 
 # The node service's exec has PATH=/usr/bin:/bin:/usr/sbin:/sbin, where claude/kimi/codex do not
-# resolve; a session whose tool is not found exits immediately. Prepend the known tool dirs.
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"
+# resolve, and a running tmux server keeps ITS OWN PATH (new-session does not inherit ours), so a
+# tool passed by bare name can be "not found" and the session exits at once. Resolve the tool to an
+# absolute path here (David's launchers in ~/bin — glm, deepseek, kimi-claude — included).
+export PATH="$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH"
+tool_path=$(command -v "$tool" 2>/dev/null) || true
+[[ -n $tool_path && -x $tool_path ]] || { echo "agent-tmux.sh: tool not found: $tool" >&2; exit 4; }
 
 # -A: attach if the session already exists (same dir, checked above) instead of failing.
-exec "$TMUX_BIN" new-session -A -s "$name" -c "$dir" "$tool" "$@"
+exec "$TMUX_BIN" new-session -A -s "$name" -c "$dir" "$tool_path" "$@"

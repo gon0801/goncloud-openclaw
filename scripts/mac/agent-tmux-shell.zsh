@@ -1,4 +1,4 @@
-# agent-tmux-shell.zsh: make `claude`, `kimi`, `muse`, `codex` and `cursor-agent` open inside a
+# agent-tmux-shell.zsh: make every CLI agent (claude, glm, deepseek, kimi, muse, codex, …) open inside a
 # named tmux session by default (via agent-tmux.sh), so David never has to type the wrapper.
 # Install: cp scripts/mac/agent-tmux-shell.zsh ~/bin/ && add `source ~/bin/agent-tmux-shell.zsh`
 # to ~/.zshrc. Source of truth lives in the repo (scripts/mac/).
@@ -29,8 +29,10 @@ _agent_tmux_run() {
   "$launcher" "$tool" "$PWD" "$@"
 }
 
-claude()       { _agent_tmux_run claude "$@"; }
-kimi()         { _agent_tmux_run kimi "$@"; }
-muse()         { _agent_tmux_run muse "$@"; }
-codex()        { _agent_tmux_run codex "$@"; }
-cursor-agent() { _agent_tmux_run cursor-agent "$@"; }
+# Every CLI agent David launches by hand, including his own launchers in ~/bin (glm, deepseek,
+# kimi-claude wrap `claude` against another provider). Add a name here when a new one appears.
+AGENT_TMUX_TOOLS=(claude glm deepseek kimi-claude kimi muse codex cursor-agent grok opencode qwen dsh)
+for _t in "${AGENT_TMUX_TOOLS[@]}"; do
+  eval "${_t}() { _agent_tmux_run ${_t} \"\$@\"; }"
+done
+unset _t

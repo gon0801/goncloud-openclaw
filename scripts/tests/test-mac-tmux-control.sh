@@ -86,6 +86,9 @@ out=$(bash "$W" --print-name claude "$T/goncloud.orbit:v2") || fail "--print-nam
 [ "$out" = "claude-goncloud-orbit-v2" ] || fail "nombre no saneado: '$out' (tmux rechaza '.' y ':')"
 bash "$W" >/dev/null 2>&1; [ $? -eq 2 ] || fail "$W sin argumentos debe salir con 2"
 bash "$W" --print-name claude "$T/no-existe" >/dev/null 2>&1; [ $? -eq 2 ] || fail "$W con dir inexistente debe salir con 2"
+# Un tool que no existe en PATH sale con 4 antes de tocar tmux (si no, la sesion moriria al instante).
+TMUX_BIN=/bin/sh bash "$W" herramienta-inexistente-xyz "$T" >/dev/null 2>&1; [ $? -eq 4 ] || fail "$W con tool inexistente debe salir con 4"
+grep -qE '"\$tool_path" "\$@"$' "$W" || fail "$W: debe pasar el tool a tmux por ruta absoluta (el servidor tmux no hereda nuestro PATH)"
 # Un 2º argumento con guion es del tool, no un dir: `agent-tmux.sh claude --resume` usa el cwd.
 out=$(cd "$T/goncloud.orbit:v2" && bash "$OLDPWD/$W" --print-name claude --resume) || fail "--print-name con flag del tool fallo"
 [ "$out" = "claude-goncloud-orbit-v2" ] || fail "un flag del tool se tomo como dir: '$out'"
@@ -99,6 +102,11 @@ Z=scripts/mac/agent-tmux-shell.zsh
 [ -f "$Z" ] || fail "falta $Z"
 if command -v zsh >/dev/null; then
   zsh -n "$Z" || fail "$Z no parsea"
+  for tool in claude glm deepseek kimi-claude kimi muse codex; do
+    grep -qE "AGENT_TMUX_TOOLS=\(.*\b$tool\b" "$Z" || fail "$Z: falta $tool en AGENT_TMUX_TOOLS"
+  done
+  out=$(zsh -c "source $PWD/$Z; whence -w glm deepseek kimi-claude" 2>&1)
+  [ "$(printf '%s\n' "$out" | grep -c ': function$')" -eq 3 ] || fail "las funciones glm/deepseek/kimi-claude no se definieron: $out"
   STUB="$T/launcher"; printf '#!/bin/sh\necho "LAUNCHER $1 $2 $3"\n' > "$STUB"; chmod +x "$STUB"
   mkdir -p "$T/bin"; printf '#!/bin/sh\necho REAL-CLAUDE\n' > "$T/bin/claude"; chmod +x "$T/bin/claude"
   ZR="export PATH=$T/bin:\$PATH; source $PWD/$Z; export AGENT_TMUX_LAUNCHER=$STUB; export AGENT_TMUX_ASSUME_TTY=1"
