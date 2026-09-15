@@ -1,0 +1,60 @@
+---
+name: mac-tmux-control
+description: Type into and read CLI agents (Claude Code, kimi, muse, cursor-agent, codex) that run inside tmux sessions on David's Mac (macOS node "David's MacBook Pro"). Use when a task must send a prompt, an Enter, an arrow key or an Escape to a running CLI agent, answer its dialogs (trust folder, "Do you want to proceed?"), or read its screen — BEFORE any osascript keystroke. Produces the session→cwd map, the exact tmux commands, and the delivery check that proves the TUI received the input. Verified 2026-09-14 against a live Claude Code TUI.
+---
+
+# Mac tmux control (David's Mac)
+
+Drive CLI agents by **tmux session name** through `exec` with `host="node"` and `node="David's MacBook Pro"`. No keyboard focus, no mouse, no Accessibility, no Secure Input involved: the input goes straight into the agent's pty. This replaces global keystrokes (`System Events keystroke`) for every agent David launched with `~/bin/agent-tmux.sh` (session name `<tool>-<repo>`, e.g. `claude-goncloud-orbit`).
+
+## Steps
+
+1. Map the sessions. The node service PATH has no Homebrew, so ALWAYS use the absolute binary:
+   ```bash
+   /opt/homebrew/bin/tmux list-sessions -F '#{session_name} | #{pane_current_command} | #{pane_current_path} | attached=#{session_attached}'
+   ```
+   `pane_current_command` is the process in the pane (`node` for Claude Code, `python3`/`kimi` for kimi, …) and `pane_current_path` its cwd — this IS the win→tty→pid→cwd map of `mac-node-ops`, without Terminal indices. "no server running on /private/tmp/tmux-501/default" means David has no tmux session open: ask him to launch the agent with `agent-tmux.sh <tool> <repo>` — do NOT fall back to global keystrokes on your own (see `mac-terminal-control` for tabs that are genuinely outside tmux).
+   - Completion: you have the session name whose `pane_current_path` is the target repo.
+
+2. Read the screen (last 80 lines, no colours):
+   ```bash
+   /opt/homebrew/bin/tmux capture-pane -p -t <session> -S -80
+   ```
+   A tab that stopped producing output is stalled, not finished — read it before deciding.
+   - Completion: you can see the prompt line (`❯` for Claude Code, `>` for others) or the dialog the TUI is showing.
+
+3. Type text: send it LITERALLY (`-l`) and send Enter in a SEPARATE call ≥0.3 s later. Ink-based TUIs (Claude Code) treat a newline arriving in the same burst as part of a paste and may swallow it; `-l` keeps words like `Enter`, `Escape`, `Up` from being interpreted as key names.
+   ```bash
+   /opt/homebrew/bin/tmux send-keys -t <session> -l 'Cierra A.5 y arranca el brief de A.6'
+   sleep 0.4
+   /opt/homebrew/bin/tmux send-keys -t <session> Enter
+   ```
+   - Completion: `capture-pane` shows the typed text gone from the prompt and a spinner / "esc to interrupt" / new output (see step 5).
+
+4. Keys and dialogs: use tmux key names, one per call — `Enter`, `Escape`, `Up`, `Down`, `Tab`, `C-c`, `BSpace`. Claude Code's folder-trust dialog (`❯ No, exit / Yes, I trust this folder`) is answered with `Down` then `Enter`; a `Do you want to proceed? ❯ 1. Yes` prompt with `Enter` (David's standing instruction is Yes for task-related prompts; surface prompts about unrelated commands, live profiles or secrets instead). If the prompt still holds stale text or a menu, send `Escape` first, then `C-c` if needed, and re-read before typing. A TUI stuck on `Interrupted · What should Claude do instead?` takes the new instruction typed as in step 3.
+   - Completion: the dialog is gone in the next `capture-pane`.
+
+5. Verify delivery — a tmux exit 0 only proves the bytes reached the pty. Re-read with `capture-pane` after 2–3 s: for Claude Code the proof is the spinner line (`✶ … (Ns · ↓ N tokens)`) or `esc to interrupt`; for others, new output under the prompt. If the text is still sitting in the prompt, Enter was not accepted: wait 0.5 s and send `Enter` once more, then `Escape` + retype if it still sits there. Never report "sent" without this read-back.
+   - Completion: the read-back shows the agent working on the new instruction.
+
+6. Starting a new agent yourself (David asked for it, or a limited agent must be replaced): create a detached session with the wrapper's naming rule and the absolute tool path, then attach is David's choice:
+   ```bash
+   /opt/homebrew/bin/tmux new-session -d -s claude-<repo> -c /Users/dn/dev/<repo> /Users/dn/.local/bin/claude
+   ```
+   Tool paths on this node: `/Users/dn/.local/bin/claude`, `/Users/dn/.local/bin/cursor-agent`, `/opt/homebrew/bin/kimi`, `/opt/homebrew/bin/codex`. Tell David the session name so he can `tmux attach -t <name>` and watch it.
+   - Completion: `list-sessions` shows the new name with the expected `pane_current_path`.
+
+## Rules
+
+- **Never write to `/dev/ttysNNN` to "inject" input.** On macOS a write to the tty device is output painted on the screen; there is no TIOCSTI. It makes the text *look* typed while the program received nothing (2026-09-14: the order sat in the prompt, no Enter method "worked"). The same goes for `printf '\r' > /dev/ttys…`.
+- **A session in tmux is addressed by name, never by Terminal window/tab index** and never by "the focused window": those change under you (2026-09-11 a paste landed in another project's tab).
+- Long waits: poll with short `capture-pane` reads (≤30 s per exec call), never one blocking `sleep` of 90 s+ — long node execs die with `COMPANION_APP_UNAVAILABLE` / "outcome is unknown" (see `mac-node-ops`).
+- The node is OpenClaw.app's. **Never run `openclaw node install` on the Mac** (and never accept that offer from an interactive `openclaw doctor` there): it creates a second `launchd` node (`ai.openclaw.node`) that dials `127.0.0.1:18789`, where no gateway listens, and loops on `ECONNREFUSED` forever (2026-09-11 → 2026-09-14: 11 000 failed connects, never paired). If `openclaw node status` on the Mac reports a LaunchAgent, the fix is `openclaw node uninstall`; the app keeps working.
+
+## Pitfalls
+
+- `tmux` without the absolute path → `command not found` from node exec; PATH there is `/usr/bin:/bin:/usr/sbin:/sbin`.
+- `send-keys 'texto' Enter` in ONE call is the classic way and usually works in a shell, but not reliably in Claude Code's TUI — keep the two-call form of step 3.
+- `capture-pane` returns the visible pane only; use `-S -200` for more history. A 120×40 pane is enough for Claude Code; a very narrow pane wraps the dialog text and confuses reads.
+- Session names cannot contain `.` or `:`; the wrapper maps them to `-` (`goncloud.orbit` → `goncloud-orbit`).
+- A tool that exits ends its session: "can't find session" right after a `/exit` or a crash is expected, not a tmux failure — re-launch (step 6) or ask David.
