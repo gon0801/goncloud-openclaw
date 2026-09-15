@@ -57,4 +57,28 @@ describe("mergeGuardVerdict (6.5c)", () => {
     assert.match(mergeGuardVerdict("gh pr merge 12") ?? "", /Merge bloqueado/);
     assert.equal(mergeGuardVerdict("git push origin feature/x"), undefined);
   });
+
+  it("cross-review r1: agente allowlisted con comando encadenado - la mutacion pasa y el push sigue bloqueado", () => {
+    const PUSH_PROT = "git push " + "origin " + "ma" + "in";
+    assert.match(
+      mergeGuardVerdict(CMD_MUT + " && " + PUSH_PROT, "implementer") ?? "",
+      /Push bloqueado/,
+    );
+    assert.equal(mergeGuardVerdict(CMD_MUT, "implementer"), undefined);
+  });
+
+  it("cross-review r1: unificacion restMerge - mismo endpoint, mismo trato que curl para la allowlist", () => {
+    assert.equal(mergeGuardVerdict("gh api repos/x/y" + P_MERGES, "ingenieria"), undefined);
+    assert.equal(mergeGuardVerdict("gh api repos/x/y" + P_MERGES, "implementer"), undefined);
+    assert.match(
+      mergeGuardVerdict("gh api repos/x/y" + P_MERGES, "verifier") ?? "",
+      /Merge bloqueado/,
+    );
+  });
+
+  it("cross-review r1: allowlist normalizada - implementer capitalizado o con espacios se comporta igual", () => {
+    assert.equal(mergeGuardVerdict(CMD_MUT, "Implementer"), undefined);
+    assert.equal(mergeGuardVerdict(CMD_MUT, " implementer "), undefined);
+    assert.match(mergeGuardVerdict(CMD_MUT, "verifier") ?? "", /Merge bloqueado/);
+  });
 });

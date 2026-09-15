@@ -20,7 +20,7 @@ const GIT_PUSH_PROTECTED_RE =
 const MERGE_AGENT_ALLOWLIST = new Set(["implementer", "ingenieria"]);
 
 // 6.5c: mutación GraphQL de merge (gh api graphql -f query=mutation … mergePullRequest(…) y llamadas a
-// api.github.com con path de merge. La ruta REST /merges ya cae en GH_API_MERGE_PATH_RE por gh api;
+// api.github.com con path de merge. // la rama REST via gh api comparte la allowlist con el path de host: mismo endpoint, un solo trato sin importar el cliente (cross-review r1);
 // el host explícito cubre curl/plain-URL. Alcance declarado (como en 1.2, el guard es léxico sobre exec):
 // query=@archivo lo esquiva (el texto no lleva la mutación) y curl con token queda fuera de alcance
 // (requeriría secret-read). Ambos bypass están declarados aquí y en la skill saikit-cierre-pr.
@@ -28,18 +28,25 @@ const GRAPHQL_MERGE_RE = /mergePullRequest\s*\(/;
 const GITHUB_HOST_MERGE_RE = /api\.github\.com\/[^\s'"]*\/merges?(?:[\s/'"`]|$)/;
 
 export function mergeGuardVerdict(command: string, agentId?: string): string | undefined {
+  // Normalizacion del agentId (trim + lowercase), como en el resto del modulo:
+  // "Implementer" o " implementer " se comportan igual que "implementer" (cross-review r1).
+  const allowlisted =
+    agentId !== undefined && MERGE_AGENT_ALLOWLIST.has(agentId.trim().toLowerCase());
   if (GH_PR_MERGE_RE.test(command)) {
     return "Merge bloqueado por summa-gate: `gh pr merge` está prohibido desde el agente (también encadenado con &&/;). El merge lo hace el operador o el flujo autorizado del repo.";
   }
+  const restMerge = GH_API_RE.test(command) && GH_API_MERGE_PATH_RE.test(command);
   const graphqlMerge = GH_API_RE.test(command) && GRAPHQL_MERGE_RE.test(command);
   const hostMerge = GITHUB_HOST_MERGE_RE.test(command);
-  if (graphqlMerge || hostMerge) {
-    if (agentId && MERGE_AGENT_ALLOWLIST.has(agentId)) return undefined;
+  // El bypass de la allowlist aplica SOLO a la regla de merge que coincidio: el resto de
+  // las reglas se sigue evaluando (comando encadenado de agente allowlisted: la mutacion
+  // pasa, el push a rama protegida sigue bloqueado - cross-review r1, no retornar temprano).
+  if ((graphqlMerge || hostMerge) && !allowlisted) {
     return (
       "Merge bloqueado por summa-gate: la mutación GraphQL de merge y las rutas de merge de api.github.com están prohibidas desde el agente salvo para implementer/ingenieria con la orden del dueño citada en el brief (6.5b)."
     );
   }
-  if (GH_API_RE.test(command) && GH_API_MERGE_PATH_RE.test(command)) {
+  if (restMerge && !allowlisted) {
     return "Merge bloqueado por summa-gate: `gh api …/merge` está prohibido desde el agente. El merge lo hace el operador o el flujo autorizado del repo.";
   }
   if (GIT_PUSH_RE.test(command) && GIT_PUSH_PROTECTED_RE.test(command)) {
