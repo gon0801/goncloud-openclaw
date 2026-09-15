@@ -31,11 +31,17 @@ fi
 
 tool=${1:-}
 [[ -n $tool ]] || usage
-dir=${2:-$PWD}
+shift
+# The optional dir is the 2nd argument unless it looks like a flag (`agent-tmux.sh claude --resume`):
+# then everything from the 2nd argument on belongs to the tool and the dir is the current one.
+if [[ $# -gt 0 && $1 != -* ]]; then
+  dir=$1
+  shift
+else
+  dir=$PWD
+fi
 [[ -d $dir ]] || { echo "agent-tmux.sh: no such directory: $dir" >&2; exit 2; }
 dir=$(cd "$dir" && pwd -P)
-shift
-[[ $# -gt 0 ]] && shift
 
 name=$(printf '%s-%s' "$tool" "$(basename "$dir")" | sed 's/[^A-Za-z0-9_-]/-/g')
 
@@ -46,6 +52,17 @@ fi
 
 [[ -x $TMUX_BIN ]] || { echo "agent-tmux.sh: tmux not found at $TMUX_BIN (brew install tmux)" >&2; exit 1; }
 
-# -A: attach if the session already exists instead of failing. The tool runs in the user's own
-# login shell environment (PATH from this Terminal), so `claude`, `kimi`, `muse` resolve as usual.
+# Two repos with the same basename (client-a/api, client-b/api) would map to one session name and
+# `-A` would silently attach to the other repo's agent: refuse instead of guessing.
+existing=$("$TMUX_BIN" display-message -p -t "$name" '#{pane_current_path}' 2>/dev/null || true)
+if [[ -n $existing && $existing != "$dir" ]]; then
+  echo "agent-tmux.sh: session '$name' already runs in $existing, not in $dir (rename one repo dir)" >&2
+  exit 3
+fi
+
+# The node service's exec has PATH=/usr/bin:/bin:/usr/sbin:/sbin, where claude/kimi/codex do not
+# resolve; a session whose tool is not found exits immediately. Prepend the known tool dirs.
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"
+
+# -A: attach if the session already exists (same dir, checked above) instead of failing.
 exec "$TMUX_BIN" new-session -A -s "$name" -c "$dir" "$tool" "$@"
