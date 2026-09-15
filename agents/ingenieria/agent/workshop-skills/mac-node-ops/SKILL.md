@@ -1,6 +1,6 @@
 ---
 name: mac-node-ops
-description: "Mac node ops including locating interactive agent sessions and verifying cwd via lsof ETL (never trust title), exec with explicit host+node, reads via exec (node file tools are allowlist-blocked), writes to Mac files via python heredoc through node exec (file tools target the gateway workspace, not the Mac; bash heredocs mangle backticks / escaped regex / dollar-quoted strings — verified 2026-09-12 during a multi-commit PR), Mac→gateway file transfer, screenshots and UI verification, commits/PRs in David's repos on the node, verifying squash-merged PR fixes landed via content markers (ancestry checks false-negative), auditing finished Claude session JSONL logs, headless agent CLIs (cursor-agent, claude, kimi) with PATH and bash 3.2 pitfalls, and retrying node exec after unknown-outcome errors."
+description: "Mac node ops including locating interactive agent sessions and verifying cwd via lsof ETL (never trust title), exec with explicit host+node, reads via exec (node file tools are allowlist-blocked), writes to Mac files via python heredoc through node exec (file tools target the gateway workspace, not the Mac; bash heredocs mangle backticks / escaped regex / dollar-quoted strings — verified 2026-09-12 during a multi-commit PR), Mac→gateway file transfer, screenshots and UI verification, commits/PRs in David's repos on the node, verifying squash-merged PR fixes landed via content markers (ancestry checks false-negative), auditing finished Claude session JSONL logs, headless agent CLIs (cursor-agent, claude, kimi) with PATH and bash 3.2 pitfalls, retrying node exec after unknown-outcome errors, parallel-lane worktrees on sibling repos, and the subagent spawn cap of a session."
 ---
 
 # Mac node operations ("David's MacBook Pro")
@@ -70,5 +70,24 @@ Full rule with its anchors and test: `AGENTS.md` § "Una imposibilidad se declar
 12. Auditing what a finished Claude harness session did (who instructed a merge, what the verdict was): parse the session JSONL at `/Users/dn/.claude/projects/<project-slug>/<session-id>.jsonl` — recipe, filters and decision rules in [`audit-session-log.md`](./audit-session-log.md). Key points: `type:user` mixes human text, tool results and `<task-notification>` wrappers (filter or you count the harness talking to itself); brief files are the instruction channel, check their mtime; no human text in the tail before a merge = harness-autonomous decision, report it as such.
 
 13. Driving an interactive in-terminal agent session (muse, claude TUI) after locating its tab (step 4 / [`locate-session-cwd.md`](./locate-session-cwd.md)): read the buffer by window id, submit TUI prompts with an explicit keystroke return, and track progress through the repo's git state (`git status -sb`, `gh pr checks`) rather than the screen, keeping in-node sleeps short — the verified procedure and its traps are in [`drive-agent-tab.md`](./drive-agent-tab.md).
+
+### Parallel lanes on David's repos (worktrees + subagent spawns)
+
+14. Multi-lane runs (one worktree + one subagent per repo): sibling repos share the
+    parent dir (`/Users/dn/dev`), so bare lane names collide — `git worktree add
+    ../wt-A` in goncloud-openclaw created a `wt-A` that made the same add in
+    goncloud-workspace-main fail with `fatal: '../wt-A' already exists`
+    (2026-09-15, caught only because the worktree list came back with 7 rows
+    instead of 8). Rules: name worktrees `wt-<repo>-<lane>`; `ls -d ../wt-*` before
+    any add; after opening, verify each worktree's true base with
+    `git -C <wt> log -1 origin/<default>` before dispatching a brief (one run
+    showed alias-lagged SHAs; the log read settles which repo each dir belongs to).
+15. `sessions_spawn` admits at most 5 active children per session
+    (`agents.defaults.subagents.maxChildrenPerAgent`): with 5 running, calls 6 and
+    7 return `"status": "forbidden", "error": "... max active children for this
+    session (5/5)"` while the first 5 run normally (2026-09-15, lanes F and G).
+    Launch parallel lanes in batches of 5 and spawn the rest as completions free
+    slots. This is a capacity limit, not a permission denial: do not reduce the
+    lane plan and do not ask the owner — re-spawn the missed lanes next turn.
 
 Completion check: every tty referenced by title matched to a row in the win→tab→tty→pid→cwd table from step 4; transfer matches source size/magic (step 5); UI change confirmed in the inspected screenshot or asserted via DOM markers before any report (when gateway exec is unavailable, the screenshot reaches the gateway through the requester's `curl.exe`, or the operator enables `file.fetch` for this node).
