@@ -1,6 +1,6 @@
 ---
 name: Saikit cierre PR
-description: Cuando cerrás un PR de la lane saikit en summonaikit-claude (integrar origin/master, validar y dejar listo). El merge lo hace el operador — summa-gate lo bloquea desde el agente — y la batería de comportamiento no corre en la Mac del nodo; la evidencia es CI.
+description: Cuando cerrás un PR de la lane saikit en summonaikit-claude (integrar origin/master, validar y dejar listo). El merge lo hace el operador o, con la orden textual del dueño con fecha en el brief (6.5b), ejecutada por esta skill en implementer/ingenieria — summa-gate lo bloquea para el resto — y la batería de comportamiento no corre en la Mac del nodo; la evidencia es CI.
 ---
 
 # Saikit cierre PR
@@ -40,6 +40,18 @@ el PATH del nodo: usá siempre la ruta absoluta `/opt/homebrew/bin/gh`
    está prohibido desde el agente... El merge lo hace el operador o el
    flujo autorizado del repo". Con CI verde y CLEAN, reportá rama, SHA,
    PR y resultado de tests, y entregá el merge al operador.
+
+## Merge por orden del dueño
+
+The repo convention leaves merges to the owner, but David can order them explicitly ("Fusiona", 2026-09-13) — that order is the merge authority for the lane's approved PRs. `gh pr merge` is still blocked by the merge-guard; the GitHub API route is not (verified 2026-09-13 on #315/#316/#317, all squash):
+
+1. Merge order for stacked PRs: base PR first, then the stacked one after re-targeting. When a stacked PR's base is a branch that just merged, either wait for GitHub to auto-re-target or re-target it first: `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -f base=master --jq '{number,base:.base.ref,state}'` (verified on #316). Then re-check `mergeable` — it goes `UNKNOWN` while GitHub recalculates, and `CONFLICTING` if master moved past it (fix below before merging).
+2. Merge with the expected head pinned: `ID=$(gh pr view <n> -R <owner>/<repo> --json id,headRefOid --jq '"\(.id) \(.headRefOid)"')`, split into GraphQL node id and head oid, then `gh api graphql -f query='mutation($id:ID!,$oid:GitObjectID!){mergePullRequest(input:{pullRequestId:$id,expectedHeadOid:$oid,mergeMethod:SQUASH}){pullRequest{number,state}}}' -f id="$ID" -f oid="$OID"`. Confirm from `gh pr view <n> --json state,mergedAt`.
+3. A `UNPROCESSABLE ... Pull Request is not mergeable` error can race the merge actually landing: after the error, re-read `state,mergedAt` before retrying — #316/#317 both showed MERGED with a mergedAt timestamp immediately after the error (the first attempt or the retry landed; the second call raced its own recalculation). Never assume from the error alone that nothing merged.
+4. Merging master-moving PRs makes sibling PRs `CONFLICTING`: resolve by merging `origin/master` into the PR branch and fixing conflicts toward the branch's newer content (it carries the review rounds); push, wait for the CI run of the merge commit, then merge. Verified on #318 after #315–#317 landed (Plans.md rows and add/add .saikit tsv conflicts).
+   - Completion: every ordered PR reads `MERGED` with a mergedAt timestamp, and the lane's post-merge checks run on the new master.
+
+Precondiciones (Fase 6, 6.5b): este bloque solo corre cuando el brief trae la orden textual de David con fecha; sin esa orden no se hace, nunca. La sección viene movida verbatim desde agent-dispatch. Alcance del guard desde 6.5c: la mutación GraphQL de merge y las rutas REST de merge de api.github.com quedan bloqueadas para todo agente salvo implementer/ingenieria (allowlist de summa-gate/lib.ts); bypass conocido declarado del guard léxico sobre exec: `query=@archivo` lo esquiva porque el texto del comando no lleva la mutación. curl con token queda fuera de alcance (requeriría secret-read) y se declara.
 
 ## Criterio de cierre
 
