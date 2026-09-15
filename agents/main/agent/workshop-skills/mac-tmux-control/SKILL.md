@@ -52,6 +52,28 @@ Drive CLI agents by **tmux session name** through `exec` with `host="node"` and 
 - Long waits: poll with short `capture-pane` reads (≤30 s per exec call), never one blocking `sleep` of 90 s+ — long node execs die with `COMPANION_APP_UNAVAILABLE` / "outcome is unknown" (see `mac-node-ops`).
 - The node is OpenClaw.app's. **Never run `openclaw node install` on the Mac** (and never accept that offer from an interactive `openclaw doctor` there): it creates a second `launchd` node (`ai.openclaw.node`) that dials `127.0.0.1:18789`, where no gateway listens, and loops on `ECONNREFUSED` forever (2026-09-11 → 2026-09-14: 11 000 failed connects, never paired). If `openclaw node status` on the Mac reports a LaunchAgent, the fix is `openclaw node uninstall`; the app keeps working.
 
+## Wake-ups (events)
+
+A watcher (`tmux-activity-watch.sh`, launchd on the Mac) and Claude Code's own Stop hook wake you
+with `openclaw system event` instead of you polling tmux on a cron. Events you will see:
+
+- `tmux: <session> quiet for Ns | cmd=<cmd> cwd=<path> | read it before acting: ...` — the session
+  produced no new output for at least 90 s.
+- `tmux: <session> closed | last cwd=<path>` — the session no longer exists (exited or crashed).
+- `Claude Code turn ended in <cwd> (tmux <session>) | last: <text>` — a Claude Code turn inside
+  tmux just finished.
+
+Rule on any of these: **read the screen with `capture-pane` BEFORE acting** (step 2). A quiet or
+"turn ended" event does not by itself tell you whether the agent is done, waiting on a dialog or
+an Enter (step 4), or genuinely stuck — decide from what `capture-pane` shows, the same as any
+other read in this skill.
+
+Never wait for a long-running thing with `sleep` or "I'll check back later": if you are about to
+babysit CI, a test run, or another agent working, launch it with `exec` and `background: true`
+(e.g. `gh pr checks <n> --watch`) so the gateway wakes you again on `notifyOnExit` when it
+finishes. The tmux watcher above is a safety net for silence, not the primary way to wait on work
+you started yourself.
+
 ## Pitfalls
 
 - `tmux` without the absolute path → `command not found` from node exec; PATH there is `/usr/bin:/bin:/usr/sbin:/sbin`.
