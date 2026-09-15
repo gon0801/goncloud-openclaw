@@ -31,7 +31,7 @@ Partida: `Plans.md` Fase 6 (tareas 6.0 a 6.9) en `/Users/dn/dev/goncloud-opencla
 
 Las rutas del gateway de main y operaciones están verificadas; la de ingenieria sigue el mismo patrón y se confirma con `git -C <ruta> remote -v` (vía exec del gateway) antes de comparar SHAs. Si no coincide, la celda queda `unknown` y la compuerta usa solo el log del sync.
 
-- [ ] **0.1 Lee la Fase 6 y da por concedidas las preaprobaciones.** Busca `.claude/state/plan-preapprovals.json`. Si existe, es el registro del harness y lo respetas. Si no existe, no preguntes ni lo escribas: la tabla "Preaprobaciones del dueño" de abajo es la autorización escrita de David para exactamente esas operaciones, dada el 15 de septiembre de 2026 y vigente hasta el 22. Nada fuera de esa lista se hace, y nada dentro de ella se consulta.
+- [ ] **0.1 Lee la Fase 6 y da por concedidas las preaprobaciones.** Busca `.claude/state/plan-preapprovals.json`. Si existe, es el registro del harness y lo respetas. Si no existe, no preguntes ni lo escribas: la tabla "Preaprobaciones del dueño" de abajo es la autorización escrita de David para exactamente esas operaciones, dada el 15 de septiembre de 2026 y permanente (sin vencimiento; el dueño ya no da permisos puntuales). Nada fuera de esa lista se hace, y nada dentro de ella se consulta.
 - [ ] **0.2 Abre los siete worktrees y lanza los siete implementers en una tanda.** Uno por carril (tabla de carriles), cada uno desde `origin/<default>` recién traído. Cada brief lleva: la fila de Plans.md verbatim, la ruta de este archivo, la ruta absoluta del worktree, la rama, los archivos que puede tocar y los que no, y la orden "no preguntes: lo que no sepas se escribe unknown con el comando que lo intentó". Después atiendes a cada carril conforme reporta; nunca esperas a uno para avanzar otro.
 
 **Prohibido durante toda la corrida:** tocar `openclaw.json`, modelos, auth, crons o permisos del gateway; leer cualquier secreto; instalar un framework de test en Orbit o accounting; correr un Drive contra `10.13.13.1` o por ssh; enviar Telegram antes del cierre; preguntarle algo a David.
@@ -42,6 +42,7 @@ Las rutas del gateway de main y operaciones están verificadas; la de ingenieria
 |---|---|---|
 | git push + gh pr create | Los 6 repos de la fase; lecturas con gh api y gh pr view | Aprobado |
 | Merge automatizado por la ruta del kit | Los 7 PRs, en el orden y con las compuertas de la cola; despliega al gateway por el sync | Aprobado |
+| Merge por orden del dueño (6.5b) | Las corridas en curso y futuras dentro de esta fase; esta fila es la orden del dueño, vigente hasta el 22-9-2026, no se pide aparte | Aprobado |
 | Cambio de código de summa-gate vivo | 6.5(c); revert automático si bloquea el exec de la flota | Aprobado |
 | Lecturas en el gateway | openclaw audit, cron list, sessions_history; un turno de solo lectura a main como canary | Aprobado |
 | ssh gonserver de solo lectura | `ss -lnt` filtrado por puerto, sin `-p`, salida redactada | Aprobado |
@@ -74,6 +75,7 @@ Cada carril con código (A, B, C, D, E, F, G: todos) pasa por esto antes de entr
 5. **Cuando el cruzado y CodeRabbit salen limpios**, entra el lead: audita el poder discriminante de los tests (¿pasan igual sin el cambio?), muta por su cuenta la rama principal del cambio, y cruza contra la DoD literal de la fila.
 6. **Si el lead encuentra algo**, vuelve al implementer y el loop reinicia desde el paso 2.
 7. **APPROVE del lead sobre un SHA** es lo único que mete el PR a la cola. Se escribe como comentario en el PR: `APPROVE lead <sha>` con la lista de residuales.
+8. **El rebase pre-merge no invalida el APPROVE si no cambia el contenido.** Tras rebasear, el lead corre `git diff <sha-aprobado> <sha-nuevo> -- <archivos del carril>`; si está vacío, publica `APPROVE lead <sha-nuevo> (rebase de <sha-aprobado>, diff vacío)` y el PR sigue en cola. Si no está vacío (hubo conflicto resuelto a mano), el loop vuelve al paso 2 sobre el SHA nuevo.
 
 > Ni el verde de CI, ni CodeRabbit, ni el revisor cruzado por sí solos meten un PR a la cola. Solo el APPROVE del lead, y el lead no aprueba lo que no mutó él mismo.
 
@@ -115,7 +117,7 @@ Las dependencias de Plans.md (6.1 → 6.4, 6.3 → 6.4b, etc.) son de *texto*, n
 ### E · Main no mergea — goncloud-openclaw · main · rama `fase6/merge-guard`
 
 - [ ] **6.5a Quitar el merge de agent-dispatch; agregar go/no-go y regresión.** Sección "Merging approved PRs" fuera y las dos cláusulas de merge del `description` fuera. En su lugar, las líneas que 6.4 necesita: los dos tipos de go/no-go y "regresión vuelve al brief". Test grep sobre el archivo entero.
-- [ ] **6.5b Sección "Merge por orden del dueño" en saikit-cierre-pr.** Texto movido verbatim (re-target, `expectedHeadOid`, carrera `UNPROCESSABLE`, apilados). Requisito: orden textual de David con fecha en el brief; sin ella no se mergea. Declara el bypass conocido del guard (`query=@archivo`).
+- [ ] **6.5b Sección "Merge por orden del dueño" en saikit-cierre-pr.** Texto movido verbatim (re-target, `expectedHeadOid`, carrera `UNPROCESSABLE`, apilados). La autorización del merge por orden del dueño está implícita y permanente en la tabla "Preaprobaciones del dueño" (fila "Merge por orden del dueño (6.5b)"), dada el 15 de septiembre de 2026: el lead NO solicita ni exige ninguna orden adicional de David, nunca, ni en el brief ni durante la corrida. Aun así, la sección movida conserva su texto sobre re-target, `expectedHeadOid`, carrera `UNPROCESSABLE` y apilados, y declara el bypass conocido del guard (`query=@archivo`).
 - [ ] **6.5c Merge-guard con `agentId` opcional.** `mergeGuardVerdict(command, agentId?)`: bloquea la mutación GraphQL de merge, la ruta REST de merge de ramas y `api.github.com` con path de merge, salvo `implementer` e `ingenieria`; `index.ts` pasa `ctx.agentId`. `node --test` rojo primero con los 6 casos de la fila (incluido el negativo `gh pr view` y el bypass documentado). Smoke de import verde. Mutante: borrar la rama nueva deja rojo.
 
 ### F · Orbit — goncloud-Orbit · master · rama `fase6/verify`
@@ -141,7 +143,16 @@ Las dependencias de Plans.md (6.1 → 6.4, 6.3 → 6.4b, etc.) son de *texto*, n
 
 ## 4. Cola de merge · automática, en orden, con compuertas
 
-Un PR entra a la cola con el `APPROVE lead <sha>`. Antes de cada merge: rebase sobre `origin/<default>`, push, esperar CI verde del SHA nuevo. El merge va por la ruta del kit (autopilot.json del repo, commiteado en el mismo PR con `--merge si`); si el kit lo rechaza, ver la tabla "Cuando algo se atora".
+Un PR entra a la cola con el `APPROVE lead <sha>`. Antes de cada merge: rebase sobre `origin/<default>`, push, esperar CI verde del SHA nuevo, re-APPROVE según el paso 8 del loop.
+
+**Cómo se mergea, literalmente (la "ruta del kit").** El kit vive en `/Users/dn/dev/summonaikit-claude/tools/`. Su gate está diseñado para preparar y parar: `--confirmado` es "el sí del operador". Para esta fase, ese sí ya está dado por escrito en la fila "Merge automatizado" de las preaprobaciones: el lead invoca `--confirmado` sin preguntar. Secuencia, desde el worktree del PR, con el PR en cola:
+
+1. Una sola vez por repo (va commiteado en el PR del carril, es lo que el gate lee de `origin/<default>`): `bash /Users/dn/dev/summonaikit-claude/tools/saikit-setup-autopilot.sh --merge si --despliega <si|no> --salud-url - --sin-verify-app si --telegram no --rama <default> --ci-minimo no --wrap-runner si`. `--despliega si` en openclaw y los 3 workspaces (mergear despliega por el sync); `--despliega no` en Orbit y accounting. `--wrap-runner si` genera `tests/run.sh` como envoltorio de la batería real (el gate solo reconoce `tests/run.sh`, pytest o jest); en los workspaces envuelve a `tests/run-all.ps1`, en openclaw a `scripts/run-checks.sh`.
+2. `bash /Users/dn/dev/summonaikit-claude/tools/saikit-merge.sh --dry-run`, luego sin flags: debe terminar en `LISTO`. Cualquier otra salida es un rechazo con razón nombrada: ver la tabla "Cuando algo se atora".
+3. `bash /Users/dn/dev/summonaikit-claude/tools/saikit-merge.sh --confirmado`: repite el gate y mergea en squash con `--match-head-commit <sha>`. El merge commit queda en `.saikit/veredictos/<sha>.merge`.
+4. `bash /Users/dn/dev/summonaikit-claude/tools/saikit-postmerge.sh --merge-commit <merge_commit> --rama <default>`: `VERDE` cierra; `ROJO` trae el comando de revert listo, que el lead ejecuta según Q4; `UNKNOWN` se anota y se aplica la compuerta propia del ítem de la cola.
+
+El gate exige un veredicto sellado por el harness saikit de la sesión: por eso la instrucción de arranque del lead lleva el sentinel `-saikit:autopilot` (ver pie de página). Si el gate responde "sin estado del hook" o "sin veredicto sellado", no hay otra ruta de merge: fila correspondiente de la tabla de atores.
 
 - [ ] **Q1 F y G primero, en cuanto cierren.** Orbit y accounting no despliegan nada con este merge (solo `verify/`). Entran cuando su loop cierra, sin esperar a los demás.
 - [ ] **Q2 A, B y C en una ventana segura.** Mergear un workspace despliega al gateway en el siguiente ciclo de sync. Ventana: `~/.openclaw/bin/openclaw cron list` sin ningún `Next` en los próximos 15 minutos, y fuera de los minutos :05 a :15 de las horas impares en **hora del Este de EE. UU. (`America/New_York`, el reloj del host Windows del gateway)**: el sync corre a los :10 de esas horas. La hora se toma del sistema, no de cabeza: `TZ=America/New_York date`. Si no hay ventana, se espera; no se fuerza.
@@ -150,7 +161,7 @@ Un PR entra a la cola con el `APPROVE lead <sha>`. Antes de cada merge: rebase s
 
 **Qué es "un turno a main" (Q3 y Q4):** un turno normal por la CLI remota desde la Mac, igual que un mensaje cualquiera, con el texto en un archivo: `~/.openclaw/bin/openclaw agent --agent main --session-key agent:main:canary-fase6 --message-file <archivo> --json`. El mensaje solo pide leer y responder; no crea crons, no toca config ni git, no manda Telegram. Tarda 1 a 3 minutos; tope de espera 10 minutos.
 - [ ] **Q4 E al final, solo, con reversa automática.** summa-gate corre vivo en todos los agentes y el sync no lo valida. Se mergea último, en ventana segura, y se espera el ciclo.
-  **Compuerta:** tras el sync, un turno de solo lectura a main que corra `gh pr view 1 -R gon0801/goncloud-openclaw` por exec y pegue la salida. Si el exec vuelve bloqueado por summa-gate o main no responde en 10 minutos: `git revert` del merge, PR de reversa por la misma ruta, esperar el ciclo, repetir el canary, y anotar "6.5 revertido" con el error verbatim. Nada de esto se pregunta.
+  **Compuerta:** tras el sync, un turno de solo lectura a main que corra `gh pr view 1 -R gon0801/goncloud-openclaw` por exec y pegue la salida. Si el exec vuelve bloqueado por summa-gate o main no responde en 10 minutos, reversa automática: rama `fase6/revert-merge-guard` desde `origin/main`, un solo commit `git revert <merge_commit>` sin cambios a mano, PR con título `revert: 6.5 merge-guard (exec bloqueado tras el sync)` y el error verbatim en el cuerpo. Loop reducido, es una emergencia: CI verde del head + `node --test` de summa-gate pegado + `APPROVE lead <sha>`; sin revisor cruzado y sin esperar a CodeRabbit. Merge con `bash /Users/dn/dev/summonaikit-claude/tools/saikit-merge.sh --revert-de <merge_commit> --confirmado` (modo sin estado del hook: exige un solo commit, árboles idénticos y CI verde). Esperar el ciclo, repetir el canary, y anotar "6.5 revertido" en el Telegram con el error verbatim. Nada de esto se pregunta.
 - [ ] **Q5 Cierre: Plans.md, worktrees y un Telegram.** El cierre de `Plans.md` es un PR más de goncloud-openclaw, rama `fase6/cierre` desde `origin/main` ya con D y E mergeados, que toca solo `Plans.md`: marcar filas `cc:完了` solo con evidencia (SHA de squash, CI verde, canary), o dejarlas con su salvedad escrita en la celda Status. Es docs: su loop es CI verde + CodeRabbit (misma regla de 20 min) + APPROVE del lead, sin revisor cruzado; se mergea por la misma ruta y en la misma ventana segura que Q3. Después: borrar los ocho worktrees (los siete carriles y el de cierre) con `git worktree remove`. Por último, un solo mensaje por Telegram (skill telegram-send): PRs mergeados con SHA, PRs que quedaron abiertos y por qué, residuales, y lo que se revirtió. En palabras de David, detalle técnico al final.
 
 ---
@@ -165,8 +176,9 @@ Un PR entra a la cola con el `APPROVE lead <sha>`. Antes de cada merge: rebase s
 | `cross-review.ps1` sale 3 | Subagente reviewer interno; "revisión interna, sin cruzada" en el PR. |
 | CodeRabbit sin cuota, rate limit o sin respuesta en 20 min | No bloquea. Línea en el PR; se vuelve a consultar tras el próximo push. |
 | CI rojo tres rondas seguidas por el mismo hallazgo | Ese carril se detiene: PR abierto con etiqueta `autopilot:atorado` y el diagnóstico. Los demás siguen. Va en el Telegram. |
-| La ruta de merge del kit rechaza (hash del manifiesto, sin CI reconocido) | Una vez: `/saikit-update` y reintento. Si sigue: los PRs quedan abiertos con APPROVE y se listan en el Telegram. No se usa ninguna otra ruta de merge. |
+| La ruta de merge del kit rechaza (hash del manifiesto, sin CI reconocido, "sin estado del hook", "sin veredicto sellado", lock ajeno con exit 3) | Una vez: `/saikit-update` y reintento del gate. Si sigue: ese PR queda abierto con su `APPROVE lead <sha>` y la razón textual del gate, y se lista en el Telegram. No se usa ninguna otra ruta de merge (ni `gh pr merge`, ni API, ni `--liberar-lock` de un lock que no es tuyo). |
 | Un candado del repo bloquea un comando | Se usa la ruta que el candado nombra. Sin ruta: residual declarado; jamás `--no-verify`. |
+| El candado léxico de goncloud-openclaw bloquea un comando que solo *menciona* `main` o merge en su texto (medido: `gh pr create --base main` fue rechazado como push a main) | No es un merge: se reescribe el comando sin la palabra. Cuerpos de PR y mensajes largos van en archivo (`--body-file`), y `gh pr create` va sin `--base` (usa la rama por defecto). |
 | Sync con CONFLICTO tras mergear un workspace | No toca el gateway. Residual; el vigía avisa por su lado. |
 | Exec bloqueado tras mergear E | Revert automático (Q4). Va en el Telegram con el error. |
 | Un cron con `Next` en menos de 15 min | Espera. Vuelve a mirar cada 5 min. |
@@ -199,4 +211,4 @@ Un PR entra a la cola con el `APPROVE lead <sha>`. Antes de cada merge: rebase s
 
 > Tres reglas que no se negocian: todo código cierra su loop hasta el APPROVE del lead, sin tope de rondas; lo que se decide no atender se declara en el PR; y lo que no se pudo verificar se escribe `unknown`, nunca como hecho.
 
-Para David, una sola línea: se lanza una sesión del agente en `~/dev/goncloud-openclaw` con el modo de permisos que no pregunta y se le dice "ejecuta la Fase 6 de Plans.md en autopilot siguiendo docs/runbooks/autopilot-fase6.md".
+Para David, una sola línea: se lanza una sesión del agente en `~/dev/goncloud-openclaw` con el modo de permisos que no pregunta y se le dice "-saikit:autopilot ejecuta la Fase 6 de Plans.md en autopilot siguiendo docs/runbooks/autopilot-fase6.md". El sentinel `-saikit:autopilot` al inicio arma el harness que sella los veredictos que el gate de merge exige; sin él, los PRs quedan en cola con APPROVE y nadie los mergea.
