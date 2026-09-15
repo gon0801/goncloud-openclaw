@@ -20,7 +20,9 @@ cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
 
 # Escribir a un dispositivo tty como si fuera entrada, o instalar el nodo headless en la Mac.
-BAD_TTY='((echo|printf|cat)[^|]*>+ */dev/ttys[0-9]+|tee +(-a +)?/dev/ttys[0-9]+)'
+# Escribir al tty (echo/printf/cat/tee) o LEER del tty (< /dev/ttysN, script/screen/cat sobre el):
+# un lector pegado al tty se roba las teclas que David escribe y el Enter nunca llega al TUI.
+BAD_TTY='((echo|printf|cat)[^|]*>+ */dev/ttys[0-9]+|tee +(-a +)?/dev/ttys[0-9]+|< */dev/ttys[0-9]+|(script|screen|cat) [^|]*/dev/ttys[0-9]+)'
 BAD_NODE='openclaw node install'
 # Una prohibicion ("never ...") cita el comando sin ser una instruccion de correrlo.
 bad() { grep -n -E -e "$BAD_TTY" -e "$BAD_NODE" | grep -v -i -E 'never|nunca|jam[aá]s'; }
@@ -30,6 +32,8 @@ for c in "printf '\\r' > /dev/ttys006" \
          'echo "texto" >> /dev/ttys006' \
          'cat orden.txt > /dev/ttys016' \
          "printf 'orden' | tee /dev/ttys006" \
+         'screen -dmS claude_tab /bin/bash -c "script -q /dev/null < /dev/ttys006 > /tmp/claw_ttys006.txt"' \
+         'cat /dev/ttys005' \
          'openclaw node install --host 127.0.0.1 --port 18789'; do
   printf '%s\n' "$c" | bad >/dev/null || fail "el detector NO marca: $c (la prueba no discrimina)"
 done
@@ -37,13 +41,15 @@ for c in "/opt/homebrew/bin/tmux send-keys -t claude-orbit -l 'hola'" \
          '/opt/homebrew/bin/tmux send-keys -t claude-orbit Enter' \
          '/opt/homebrew/bin/tmux capture-pane -p -t claude-orbit -S -80' \
          'ps -o pid,tty,command -t ttys006' \
+         'lsof -a -p 123 -d cwd -Fn' \
+         'tell application "Terminal" to get tty of tab 1 of window 1' \
          'Never run `openclaw node install` on the Mac' \
          "Nunca: printf '\\r' > /dev/ttys006"; do
   printf '%s\n' "$c" | bad >/dev/null && fail "el detector marca una forma correcta: $c"
 done
 echo "ok (1): el detector marca escrituras a /dev/ttysN y node install, y deja pasar tmux y las prohibiciones"
 
-# (2) Ninguna instruccion versionada para agentes usa la forma mala.
+# (2) Ninguna instruccion versionada para agentes usa la forma mala (escribir NI leer el tty).
 SPECS=('agents/*/agent/workshop-skills/*/SKILL.md' 'agents/*/agent/workshop-skills/*/*.md' '*AGENTS.md' '*TOOLS.md' 'docs/cron-messages/*.txt')
 n=$(git ls-files --cached --others --exclude-standard -- "${SPECS[@]}" | wc -l)
 [ "$n" -gt 0 ] || fail "no encontre instrucciones versionadas que revisar"
@@ -84,6 +90,29 @@ bash "$W" --print-name claude "$T/no-existe" >/dev/null 2>&1; [ $? -eq 2 ] || fa
 out=$(cd "$T/goncloud.orbit:v2" && bash "$OLDPWD/$W" --print-name claude --resume) || fail "--print-name con flag del tool fallo"
 [ "$out" = "claude-goncloud-orbit-v2" ] || fail "un flag del tool se tomo como dir: '$out'"
 echo "ok (4): wrapper parsea, nombre saneado, flags del tool no son dir, falla bien sin argumentos o sin dir"
+
+# (4b) Config de tmux (rueda del mouse) y funciones de shell que abren los CLIs dentro de tmux solos.
+C=scripts/mac/tmux.conf
+grep -qE '^set -g mouse on' "$C" || fail "$C: falta 'set -g mouse on' (la rueda del mouse)"
+grep -qF 'pbcopy' "$C" || fail "$C: seleccionar con el mouse debe copiar al portapapeles"
+Z=scripts/mac/agent-tmux-shell.zsh
+[ -f "$Z" ] || fail "falta $Z"
+if command -v zsh >/dev/null; then
+  zsh -n "$Z" || fail "$Z no parsea"
+  STUB="$T/launcher"; printf '#!/bin/sh\necho "LAUNCHER $1 $2 $3"\n' > "$STUB"; chmod +x "$STUB"
+  mkdir -p "$T/bin"; printf '#!/bin/sh\necho REAL-CLAUDE\n' > "$T/bin/claude"; chmod +x "$T/bin/claude"
+  ZR="export PATH=$T/bin:\$PATH; source $PWD/$Z; export AGENT_TMUX_LAUNCHER=$STUB; export AGENT_TMUX_ASSUME_TTY=1"
+  # Fuera de tmux e interactivo: va al launcher con el cwd y los flags del tool.
+  out=$(cd "$T" && unset TMUX && zsh -c "$ZR; claude --resume" 2>&1)
+  printf '%s\n' "$out" | grep -q "LAUNCHER claude $T/\?.* --resume\|LAUNCHER claude .* --resume" || fail "fuera de tmux, claude no fue al launcher: $out"
+  # Dentro de tmux, o one-shot (--version), o sin tty: corre el tool real, nunca el launcher.
+  out=$(zsh -c "$ZR; TMUX=1 claude; claude --version; unset AGENT_TMUX_ASSUME_TTY; claude </dev/null" 2>&1)
+  [ "$(printf '%s\n' "$out" | grep -c REAL-CLAUDE)" -eq 3 ] || fail "dentro de tmux / one-shot / sin tty debe correr el tool real: $out"
+  printf '%s\n' "$out" | grep -q LAUNCHER && fail "dentro de tmux / one-shot / sin tty no debe ir al launcher: $out"
+  echo "ok (4b): tmux.conf con mouse; las funciones de shell rutean a tmux solo fuera de tmux e interactivo"
+else
+  echo "SKIP (4b): sin zsh en esta maquina"
+fi
 
 # (5) Mecanismo real, solo si hay tmux: servidor propio (-L) para no tocar las sesiones del usuario;
 # el wrapper se prueba con un shim TMUX_BIN que agrega -L, asi tampoco toca al usuario.
