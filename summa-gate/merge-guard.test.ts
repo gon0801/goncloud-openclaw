@@ -82,6 +82,13 @@ describe("mergeGuardVerdict (6.5c)", () => {
     assert.match(mergeGuardVerdict(CMD_MUT, "verifier") ?? "", /Merge bloqueado/);
   });
 
+  it("agentId que no es texto bloquea y no lanza", () => {
+    for (const id of [null, 42, {}, []]) {
+      assert.doesNotThrow(() => mergeGuardVerdict(CMD_MUT, id));
+      assert.match(mergeGuardVerdict(CMD_MUT, id) ?? "", /Merge bloqueado/);
+    }
+  });
+
   // cross-review r2 (grok): los cortes de ruta terminaban en (?:[\s/'"`]|$) y no incluian ? ni #,
   // asi que `.../merge?squash=1` o `.../merges#ancla` pasaban. Con query/fragmento debe bloquear igual.
   it("cross-review r2: bloquea gh api con path de merge seguido de ?query", () => {
