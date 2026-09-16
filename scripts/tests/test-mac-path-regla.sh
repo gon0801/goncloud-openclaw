@@ -80,7 +80,7 @@ hits=""
 for f in "$SK1" "$SK2" "$SK3"; do
   while IFS= read -r line; do
     case "$line" in
-      *never*|*Never*|*NEVER*|*nunca*|*Nunca*|*jamás*|*jamas*) continue ;;
+      *never*|*Never*|*NEVER*|*nunca*|*Nunca*|*NUNCA*|*jamás*|*jamas*|*JAMÁS*|*JAMAS*) continue ;;
     esac
     spans=$(printf '%s\n' "$line" | grep -o -E '`[^`]*`' || true)
     [ -z "$spans" ] && continue
