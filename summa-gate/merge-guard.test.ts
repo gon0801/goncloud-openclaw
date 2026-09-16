@@ -165,4 +165,19 @@ describe("mergeGuardVerdict (6.5c)", () => {
     const quoted = "\"gh\" api graphql -f query='" + MUT + "'";
     assert.match(mergeGuardVerdict(quoted, "verifier") ?? "", /Merge bloqueado/);
   });
+
+  // r3 (hallazgo 3): comentario GraphQL — con un comment detras del nombre el `(`
+  // exigido por la regex ya no esta a continuacion y el comando esquivaba el guard.
+  // Queda declarado el falso positivo aceptado: mencionar el nombre ya blockea.
+  it("r3: bloquea mergePullRequest seguido de comentario GraphQL", () => {
+    const commented = "gh api graphql -f query='mutation($id:ID!){mergePullRequest#c\n(input:{pullRequestId:$id}){pullRequest{number,state}}}'";
+    assert.match(mergeGuardVerdict(commented, "verifier") ?? "", /Merge bloqueado/);
+  });
+
+  it("r3: bloquea mergeBranch y enablePullRequestAutoMerge con comentario", () => {
+    const b = "gh api graphql -f query='mutation($b:String!){mergeBranch#c\n(input:{branchName:$b}){mergeCommit{oid}}}'";
+    const a = "gh api graphql -f query='mutation($id:ID!){enablePullRequestAutoMerge#c\n(input:{pullRequestId:$id}){pullRequest{number}}}'";
+    assert.match(mergeGuardVerdict(b, "verifier") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict(a, "verifier") ?? "", /Merge bloqueado/);
+  });
 });

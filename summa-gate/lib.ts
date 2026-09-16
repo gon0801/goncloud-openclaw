@@ -30,7 +30,10 @@ const MERGE_AGENT_ALLOWLIST = new Set(["implementer", "ingenieria"]);
 // (requeriría secret-read). Ambos bypass están declarados aquí y en la skill saikit-cierre-pr.
 // cross-review r2 (grok): ademas de mergePullRequest se bloquean las mutaciones hermanas:
 // mergeBranch (equivale a POST /merges) y enablePullRequestAutoMerge (abre el mismo merge sin orden).
-const GRAPHQL_MERGE_RE = /\b(?:mergePullRequest|mergeBranch|enablePullRequestAutoMerge)\s*\(/;
+// r3 (hallazgo 3): word-boundary puro, sin exigir `(` — un comentario GraphQL pegado al
+// nombre (`mergePullRequest#c`) cortaba el matching. Falso positivo aceptado y declarado:
+// mencionar el nombre (p.ej. en un mensaje sobre la mutacion) ya blockea fuera de allowlist.
+const GRAPHQL_MERGE_RE = /\b(?:mergePullRequest|mergeBranch|enablePullRequestAutoMerge)\b/;
 const GITHUB_HOST_MERGE_RE = /api\.github\.com\/[^\s'"]*\/merges?(?:[\s/'"`?#;&|]|$)/;
 
 // r3 (hallazgo 2): nucleo del veredicto; mergeGuardVerdict lo corre sobre el comando
