@@ -50,18 +50,38 @@ export type Role = "implementer" | "verifier" | "reviewer" | "adversary";
 // la forma esquivada era mas probable que la contigua. Tampoco es un bypass INHERENTE (el texto
 // del comando lleva la orden completa y visible: es corregible lexicamente, y se corrige aca).
 // Fix: entre `gh` y `pr`, y entre `pr` y el verbo, se toleran cero o mas tokens de flag.
-// GH_FLAG_TOKEN = -x / --xx, con valor pegado por `=` o separado por espacio (valor opcional).
+// GH_FLAG_TOKEN cubre las CUATRO formas del flag CON VALOR que acepta pflag/cobra: separada por
+// espacio (`-R o/r`, `--repo o/r`), pegada con `=` (`-R=o/r`, `--repo=o/r`) y —desde r8— el
+// shorthand con el valor PEGADO SIN `=` (`-Ro/r`), la forma de una sola pieza. r7 enumero tres y
+// la clase tenia cuatro: la pegada era la UNICA que seguia pasando, asi que la bateria verde no
+// discriminaba el hueco y la regla incondicional seguia abierta para TODOS los agentes con un
+// caracter menos (hallazgo 1 del reviewer del sello, verificado contra el binario solo con --help:
+// `gh pr -Rowner/repo view --help` resuelve view en gh 2.98.0).
+// POR QUE QUEDA CUBIERTA LA CUARTA FORMA: el nombre del flag ya no se lee con un rango de
+// caracteres de nombre (`[A-Za-z0-9-]*`), que cortaba en la `o` de `-Ro/r` —el `/` no continuaba—
+// y dejaba al token exigiendo un `\s+` que nunca llegaba, colapsando la alternativa a cero flags.
+// Ahora el token absorbe el resto de la PIEZA con `\S*`, sea `=o/r`, `o/r` o nada: las cuatro
+// formas entran por el mismo camino y la de `=` deja de necesitar rama propia.
+// POR QUE NINGUN SUBCOMANDO CONOCIDO QUEDA COMIBLE: `\S*` no cruza el espacio, asi que la parte
+// pegada no puede tragarse una pieza separada — `pr` y el verbo real (view/checks/list/…) quedan
+// intactos en su posicion, y por eso `gh pr -Ro/r view 45` sigue PASANDO (prueba propia). La unica
+// via por la que un token se come la pieza siguiente sigue siendo el valor separado, y esa via
+// conserva su exclusion:
 // El valor separado NO puede ser `pr`, el verbo, ni un subcomando conocido: sin esa exclusion
 // `--repo o/r` podria tragarse el subcomando REAL (`gh pr -R o/r view 45` -> el valor se come
 // `view`) y correr la frontera hasta un `merge` que fuera dato, convirtiendo una consulta en un
 // bloqueo. Con la exclusion, view/checks/ready/list siguen sin matchear como verbo (prueba propia).
 // El valor tampoco puede empezar con `-`, asi que un flag nunca se traga otro flag: por eso el
 // bucle no es ambiguo (cada iteracion consume 1 o 2 tokens y la alternativa muere en el `\s+`
-// siguiente) y no hay backtracking exponencial.
+// siguiente) y no hay backtracking exponencial. El `\S*` de r8 tampoco lo vuelve ambiguo: solo
+// retrocede DENTRO de la pieza y el `\s+` que sigue unicamente casa al final de la pieza, asi que
+// el corte de cada token sigue siendo unico (medido en r8 sobre este mismo shape: 0.16 ms con
+// 2000 tokens separados, 0.08 ms con 2000 tokens pegados y 0.06 ms con una sola pieza de 20k
+// caracteres — el crecimiento es lineal, no explota).
 // La frontera DERECHA sigue siendo el lookahead de arriba, intacta.
 const GH_PR_SUBCOMANDOS =
   "pr|merge|view|checks|checkout|ready|list|status|diff|edit|comment|close|reopen|create|lock|unlock|review|update-branch";
-const GH_FLAG_TOKEN = `-{1,2}[A-Za-z][A-Za-z0-9-]*(?:=\\S*|\\s+(?!(?:${GH_PR_SUBCOMANDOS})(?![A-Za-z0-9-]))[^-\\s]\\S*)?`;
+const GH_FLAG_TOKEN = `-{1,2}[A-Za-z]\\S*(?:\\s+(?!(?:${GH_PR_SUBCOMANDOS})(?![A-Za-z0-9-]))[^-\\s]\\S*)?`;
 const GH_PR_MERGE_RE = new RegExp(
   `(?:^|[^A-Za-z0-9])gh\\s+(?:${GH_FLAG_TOKEN}\\s+)*pr\\s+(?:${GH_FLAG_TOKEN}\\s+)*merge(?![A-Za-z0-9_])`,
 );
@@ -98,16 +118,21 @@ const MERGE_AGENT_ALLOWLIST = new Set(["implementer", "ingenieria"]);
 //       la orden de merge, así que ninguna regex léxica la ve;
 //   (2) query=@archivo — la mutación vive en el archivo, no en el comando (tiene prueba propia).
 // Ya NO es bypass, desde este turno: curl con token contra /graphql (cubierto por host).
-// Ya NO es bypass, desde r7: el FLAG INTERPUESTO entre `gh`/`pr`/el verbo (`-R o/r`, `--repo o/r`,
-// `--repo=o/r`). Mientras esa forma estuvo abierta esta declaración decía DOS y eran TRES: no
-// entraba en ninguna de las dos clases inherentes —el texto del comando llevaba la orden completa
-// y visible— así que se cerró léxicamente en vez de re-escribir el conteo. Vuelven a ser DOS, y la
-// frontera izquierda queda cubierta con prueba propia (las tres formas, para main, la allowlist,
-// reviewer y agentId ausente, con las consultas `pr view`/`pr checks` como controles negativos).
+// Ya NO es bypass, desde r7 y cerrado del todo en r8: el FLAG INTERPUESTO entre `gh`/`pr`/el
+// verbo, en sus CUATRO formas — valor separado (`-R o/r`, `--repo o/r`), valor pegado con `=`
+// (`-R=o/r`, `--repo=o/r`) y valor pegado SIN `=` (`-Ro/r`, la forma de una sola pieza). Mientras
+// quedó una forma abierta esta declaración decía DOS y eran TRES, dos veces seguidas: r7 escribió
+// el conteo enumerando tres formas con la cuarta todavía pasando, y el reviewer del sello la
+// encontró. Ninguna de las cuatro entra en las dos clases inherentes —el texto del comando lleva
+// la orden completa y visible, o sea es corregible léxicamente— así que se cerraron en el código
+// en vez de re-escribir el conteo. AHORA SÍ son DOS, y la frontera izquierda queda cubierta con
+// prueba propia (las cuatro formas, para main, la allowlist, reviewer y agentId ausente, con las
+// consultas `pr view`/`pr checks` —también con el valor pegado— como controles negativos).
 // Tampoco lo es el encadenado sin espacio (r3 hallazgo 1) ni el terminador pegado (turno de
 // cierre): la frontera por lookahead de arriba los corta a los dos, así que la promesa del
 // mensaje "(también encadenado con &&/;)" es verdadera.
-// La copia de esta declaración en la skill saikit-cierre-pr está alineada desde a679c5a.
+// La copia de esta declaración en la skill saikit-cierre-pr se alinea en este mismo SHA (r8: las
+// cuatro formas), como se alineó en a679c5a: el texto y la regex tienen que decir lo mismo.
 // cross-review r2 (grok): ademas de mergePullRequest se bloquean las mutaciones hermanas:
 // mergeBranch (equivale a POST /merges) y enablePullRequestAutoMerge (abre el mismo merge sin orden).
 // r3 (hallazgo 3): word-boundary puro, sin exigir `(` — un comentario GraphQL pegado al

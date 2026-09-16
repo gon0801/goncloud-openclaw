@@ -474,33 +474,53 @@ describe("mergeGuardVerdict (6.5c)", () => {
   // interpuesto, la UNICA regla incondicional del guard —la que impide que main/reviewer/
   // adversary aterricen un PR sin la orden del dueño— quedaba abierta para TODOS los agentes.
   // No es una tecnica de evasion: `-R`/`--repo` es el estilo que el propio repo usa en sus
-  // comandos de lectura. Las tres formas del flag con valor tienen que bloquear igual que la
+  // comandos de lectura. Las CUATRO formas del flag con valor tienen que bloquear igual que la
   // forma contigua, y los subcomandos de consulta tienen que seguir pasando.
+  // r8 (hallazgo 1 del reviewer del sello): r7 enumero tres formas y la clase tiene cuatro. La
+  // que faltaba es la estandar de pflag/cobra, shorthand con el valor PEGADO SIN `=` (`-Ro/r`),
+  // de una sola pieza — verificada contra el binario solo con --help (`gh pr -Rowner/repo view
+  // --help` resuelve view en gh 2.98.0). Era la unica de las cuatro que pasaba, asi que la
+  // bateria verde de r7 no discriminaba el hueco: la regla incondicional quedaba abierta para
+  // TODOS los agentes con un caracter menos. Enumerar formas es lo que fallo; estas cuatro fijan
+  // la clase completa "flag con valor antes del subcomando".
   const FLAG_CORTO = "gh pr -R o/r " + "me" + "rge 45 --squash";
   const FLAG_LARGO = "gh pr --repo o/r " + "me" + "rge 45 --squash";
   const FLAG_IGUAL = "gh pr --repo=o/r " + "me" + "rge 45 --squash";
+  const FLAG_PEGADO = "gh pr -Ro/r " + "me" + "rge 45 --squash";
+  const FLAG_PEGADO_ANTES_PR = "gh -Ro/r pr " + "me" + "rge 45";
 
   it("r7: flag interpuesto entre pr y el verbo BLOQUEA para main (regla incondicional)", () => {
     assert.match(mergeGuardVerdict(FLAG_CORTO, "main") ?? "", /Merge bloqueado/);
     assert.match(mergeGuardVerdict(FLAG_LARGO, "main") ?? "", /Merge bloqueado/);
     assert.match(mergeGuardVerdict(FLAG_IGUAL, "main") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict(FLAG_PEGADO, "main") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict(FLAG_PEGADO_ANTES_PR, "main") ?? "", /Merge bloqueado/);
   });
 
   it("r7: flag interpuesto BLOQUEA tambien para la allowlist (implementer)", () => {
     assert.match(mergeGuardVerdict(FLAG_CORTO, "implementer") ?? "", /Merge bloqueado/);
     assert.match(mergeGuardVerdict(FLAG_LARGO, "implementer") ?? "", /Merge bloqueado/);
     assert.match(mergeGuardVerdict(FLAG_IGUAL, "implementer") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict(FLAG_PEGADO, "implementer") ?? "", /Merge bloqueado/);
   });
 
   it("r7: flag interpuesto BLOQUEA para reviewer y sin agentId", () => {
     assert.match(mergeGuardVerdict(FLAG_CORTO, "reviewer") ?? "", /Merge bloqueado/);
     assert.match(mergeGuardVerdict(FLAG_CORTO, undefined) ?? "", /Merge bloqueado/);
     assert.match(mergeGuardVerdict(FLAG_IGUAL, undefined) ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict(FLAG_PEGADO, "reviewer") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict(FLAG_PEGADO, undefined) ?? "", /Merge bloqueado/);
   });
 
   it("r7: control negativo - las consultas con flag de repo siguen PASANDO para main", () => {
     assert.equal(mergeGuardVerdict("gh pr -R o/r view 45", "main"), undefined);
     assert.equal(mergeGuardVerdict("gh pr checks 45 -R o/r", "main"), undefined);
+    // r8: el token que absorbe el valor pegado no puede comerse el subcomando REAL — `\S*` no
+    // cruza el espacio, asi que view/checks siguen en posicion de verbo y las consultas pasan.
+    assert.equal(mergeGuardVerdict("gh pr -Ro/r view 45", "main"), undefined);
+    assert.equal(mergeGuardVerdict("gh pr checks 45 -Ro/r", "main"), undefined);
+    assert.equal(mergeGuardVerdict("gh pr -Ro/r view 45", "reviewer"), undefined);
+    assert.equal(mergeGuardVerdict("gh pr checks 45 -Ro/r", undefined), undefined);
   });
 
   it("r7: regresion - la forma contigua sigue BLOQUEANDO para implementer", () => {
