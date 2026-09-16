@@ -14,7 +14,9 @@ const GH_API_RE = /(?:^|[^A-Za-z0-9])gh\s+api(?:[\s;&|]|$)/;
 // `.../merge?squash=1` o `.../merges#ancla` esquivaban el guard (bypass por regex).
 // r3 (hallazgo 1): la clase de corte tambien incluye ;, & y | para el encadenado sin espacio.
 // r3 (hallazgo 4): la ruta /auto-merge entra en la misma clase.
-const GH_API_MERGE_PATH_RE = /\/(?:merges?|auto-merge)(?:[\s/'"`?#;&|]|$)/;
+// turno de cola (re-review 2026-09-16, hallazgo 1): /merge-async (PUT, PRs apilados) entra
+// en la misma clase, en gh api y en la ruta de host (curl a api.github.com).
+const GH_API_MERGE_PATH_RE = /\/(?:merges?|auto-merge|merge-async)(?:[\s/'"`?#;&|]|$)/;
 const GIT_PUSH_RE = /(?:^|[^A-Za-z0-9])git\s+push\b/;
 const GIT_PUSH_PROTECTED_RE =
   /push\s+.*(\sorigin\s+[+:]?(master|main)|\sHEAD:(master|main)|refs\/heads\/(master|main)|[A-Za-z0-9._/-]+:(master|main)|\s[+:]?(master|main))(\s|$)/;
@@ -40,7 +42,7 @@ const MERGE_AGENT_ALLOWLIST = new Set(["implementer", "ingenieria"]);
 // nombre (`mergePullRequest#c`) cortaba el matching. Falso positivo aceptado y declarado:
 // mencionar el nombre (p.ej. en un mensaje sobre la mutacion) ya blockea fuera de allowlist.
 const GRAPHQL_MERGE_RE = /\b(?:mergePullRequest|mergeBranch|enablePullRequestAutoMerge)\b/;
-const GITHUB_HOST_MERGE_RE = /api\.github\.com\/[^\s'"]*\/merges?(?:[\s/'"`?#;&|]|$)/;
+const GITHUB_HOST_MERGE_RE = /api\.github\.com\/[^\s'"]*\/(?:merges?|auto-merge|merge-async)(?:[\s/'"`?#;&|]|$)/;
 
 // r3 (hallazgo 2): nucleo del veredicto; mergeGuardVerdict lo corre sobre el comando
 // original y sobre una copia sin comillas (wrapper mas abajo).

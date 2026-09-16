@@ -196,6 +196,21 @@ describe("mergeGuardVerdict (6.5c)", () => {
     assert.equal(mergeGuardVerdict("gh api -X DELETE repos/o/r/pulls/1/auto-merge", "ingenieria"), undefined);
   });
 
+  // turno de cola (re-review 2026-09-16, hallazgo 1 MEDIO): ruta REST merge-async —
+  // endpoint oficial de GitHub para PRs apilados; el path /merge-async no caia en la
+  // clase de merge (ni en gh api ni via curl a api.github.com).
+  it("turno de cola: bloquea PUT de la ruta REST merge-async (gh api)", () => {
+    assert.match(mergeGuardVerdict("gh api -X PUT repos/o/r/pulls/45/merge-async", "verifier") ?? "", /Merge bloqueado/);
+  });
+
+  it("turno de cola: bloquea curl contra api.github.com .../merge-async", () => {
+    assert.match(mergeGuardVerdict("curl -X PUT https://api.github.com/repos/o/r/pulls/45/merge-async", "verifier") ?? "", /Merge bloqueado/);
+  });
+
+  it("turno de cola: merge-async respeta la allowlist (implementer pasa)", () => {
+    assert.equal(mergeGuardVerdict("gh api -X PUT repos/o/r/pulls/45/merge-async", "implementer"), undefined);
+  });
+
   // r3 (hallazgo 5): controles negativos — las consultas de estado no blockean.
   it("r3: NO bloquea gh pr checks con -R (consulta de checks)", () => {
     assert.equal(mergeGuardVerdict("gh pr checks 1 -R gon0801/goncloud-openclaw"), undefined);
