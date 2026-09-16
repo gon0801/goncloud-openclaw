@@ -55,6 +55,13 @@ The repo convention leaves merges to the owner, but David can order them explici
    - Completion: every ordered PR reads `MERGED` with a mergedAt timestamp, and the lane's post-merge checks run on the new master.
 
 Precondiciones (Fase 6, 6.5b): este bloque solo corre cuando el brief trae la orden textual de David con fecha; sin esa orden no se hace, nunca. La sección viene movida verbatim desde agent-dispatch. Alcance del guard desde 6.5c: la mutación GraphQL de merge y las rutas REST de merge de api.github.com quedan bloqueadas para todo agente salvo implementer/ingenieria (allowlist de summa-gate/lib.ts; desde el cross-review r1 la rama REST via gh api aplica la misma allowlist que el path de host: mismo endpoint, un solo trato sin importar el cliente); bypass conocido declarado del guard léxico sobre exec: `query=@archivo` lo esquiva porque el texto del comando no lleva la mutación. curl con token queda fuera de alcance (requeriría secret-read) y se declara.
+   Bypass INHERENTE restante (r3, límite declarado del diseño): la indirección de shell
+   (variables, aliases, eval, base64) y `query=@archivo`/curl-con-token quedan fuera del
+   alcance léxico del guard sobre exec — declarado también en summa-gate/lib.ts. Cierre r3:
+   el encadenado sin espacio (`&&`/`;`/`|`) ya no esquiva la promesa del paso 4; la ruta
+   REST `auto-merge` (alta y baja) y las mutaciones de merge con comentario GraphQL pegado
+   al nombre blockean igual (falso positivo aceptado: mencionar el nombre de la mutación
+   blockea; `gh pr ready` y `gh pr checks` siguen pasando).
    Jerarquía explícita: esta orden del dueño en el brief PREVALECE sobre el paso 4
    genérico ("NUNCA intentes el merge") — con la orden en el brief se ejecuta esta
    sección; sin ella rige el paso 4 y el merge queda para el operador. Nota de ruta:

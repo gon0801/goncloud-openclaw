@@ -10,8 +10,10 @@ export type Role = "implementer" | "verifier" | "reviewer" | "adversary";
 // ya no esquiva el guard; la promesa "(tambien encadenado con &&/;)" del mensaje queda verdadera (6a).
 const GH_PR_MERGE_RE = /(?:^|[^A-Za-z0-9])gh\s+pr\s+merge(?:[\s;&|]|$)/;
 const GH_API_RE = /(?:^|[^A-Za-z0-9])gh\s+api(?:[\s;&|]|$)/;
-// cross-review r2 (grok): el corte tambien incluye ? y # // r3 (hallazgo 4): la ruta /auto-merge entra en la misma clase. // r3 (hallazgo 1): la clase de corte tambien incluye ;, & y | para el mismo caso encadenado. — sin ellos,
+// cross-review r2 (grok): el corte tambien incluye ? y # — sin ellos,
 // `.../merge?squash=1` o `.../merges#ancla` esquivaban el guard (bypass por regex).
+// r3 (hallazgo 1): la clase de corte tambien incluye ;, & y | para el encadenado sin espacio.
+// r3 (hallazgo 4): la ruta /auto-merge entra en la misma clase.
 const GH_API_MERGE_PATH_RE = /\/(?:merges?|auto-merge)(?:[\s/'"`?#;&|]|$)/;
 const GIT_PUSH_RE = /(?:^|[^A-Za-z0-9])git\s+push\b/;
 const GIT_PUSH_PROTECTED_RE =
@@ -28,6 +30,10 @@ const MERGE_AGENT_ALLOWLIST = new Set(["implementer", "ingenieria"]);
 // el host explícito cubre curl/plain-URL. Alcance declarado (como en 1.2, el guard es léxico sobre exec):
 // query=@archivo lo esquiva (el texto no lleva la mutación) y curl con token queda fuera de alcance
 // (requeriría secret-read). Ambos bypass están declarados aquí y en la skill saikit-cierre-pr.
+// r3 (hallazgo 6): bypass INHERENTE restante, límite declarado del diseño — la indirección de
+// shell (variables, aliases, eval, base64) y query=@archivo/curl-con-token quedan fuera del
+// alcance léxico del guard sobre exec. A cambio, la promesa del mensaje "(también encadenado
+// con &&/;)" es verdadera desde el hallazgo 1: el encadenado sin espacio ya corta.
 // cross-review r2 (grok): ademas de mergePullRequest se bloquean las mutaciones hermanas:
 // mergeBranch (equivale a POST /merges) y enablePullRequestAutoMerge (abre el mismo merge sin orden).
 // r3 (hallazgo 3): word-boundary puro, sin exigir `(` — un comentario GraphQL pegado al
