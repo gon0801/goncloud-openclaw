@@ -54,10 +54,11 @@ The repo convention leaves merges to the owner, but David can order them explici
 4. Merging master-moving PRs makes sibling PRs `CONFLICTING`: resolve by merging `origin/master` into the PR branch and fixing conflicts toward the branch's newer content (it carries the review rounds); push, wait for the CI run of the merge commit, then merge. Verified on #318 after #315–#317 landed (Plans.md rows and add/add .saikit tsv conflicts).
    - Completion: every ordered PR reads `MERGED` with a mergedAt timestamp, and the lane's post-merge checks run on the new master.
 
-Precondiciones (Fase 6, 6.5b): este bloque solo corre cuando el brief trae la orden textual de David con fecha; sin esa orden no se hace, nunca. La sección viene movida verbatim desde agent-dispatch. Alcance del guard desde 6.5c: la mutación GraphQL de merge y las rutas REST de merge de api.github.com quedan bloqueadas para todo agente salvo implementer/ingenieria (allowlist de summa-gate/lib.ts; desde el cross-review r1 la rama REST via gh api aplica la misma allowlist que el path de host: mismo endpoint, un solo trato sin importar el cliente); bypass conocido declarado del guard léxico sobre exec: `query=@archivo` lo esquiva porque el texto del comando no lleva la mutación. curl con token queda fuera de alcance (requeriría secret-read) y se declara.
-   Bypass INHERENTE restante (r3, límite declarado del diseño): la indirección de shell
-   (variables, aliases, eval, base64) y `query=@archivo`/curl-con-token quedan fuera del
-   alcance léxico del guard sobre exec — declarado también en summa-gate/lib.ts. Cierre r3:
+Precondiciones (Fase 6, 6.5b): este bloque solo corre cuando el brief trae la orden textual de David con fecha; sin esa orden no se hace, nunca. La sección viene movida verbatim desde agent-dispatch. Alcance del guard desde 6.5c: la mutación GraphQL de merge y las rutas REST de merge de api.github.com quedan bloqueadas para todo agente salvo implementer/ingenieria (allowlist de summa-gate/lib.ts; desde el cross-review r1 la rama REST via gh api aplica la misma allowlist que el path de host: mismo endpoint, un solo trato sin importar el cliente; desde el turno de cierre 6.5c el nombre de la mutación (GRAPHQL_MERGE_RE) se consulta cuando matchea el cliente `gh api` O el host `api.github.com/graphql`, así que curl con token queda cubierto en las DOS ramas: REST por path de host, GraphQL por host + nombre de mutación); bypass conocido declarado del guard léxico sobre exec: `query=@archivo` lo esquiva porque el texto del comando no lleva la mutación.
+   Bypass INHERENTE restante (r3, límite declarado del diseño): quedan DOS — la indirección
+   de shell (variables, aliases, eval, base64) y `query=@archivo` (la mutación vive en el
+   archivo, no en el comando) — fuera del alcance léxico del guard sobre exec, declarado
+   también en summa-gate/lib.ts. Cierre r3:
    el encadenado sin espacio (`&&`/`;`/`|`) ya no esquiva la promesa del paso 4; la ruta
    REST `auto-merge` (alta y baja) y las mutaciones de merge con comentario GraphQL pegado
    al nombre blockean igual (falso positivo aceptado: mencionar el nombre de la mutación
