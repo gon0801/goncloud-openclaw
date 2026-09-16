@@ -21,7 +21,8 @@ Move a file from the paired Mac node ("David's MacBook Pro") to the gateway file
 3. Relay through the goncloud server. Both the Mac and the gateway have an `ssh gonserver` alias:
    - On the Mac (exec host=node): `scp <mac-path> gonserver:/tmp/<name>`.
    - On the gateway: `scp gonserver:/tmp/<name> "<local-path>"` (e.g. under `...\.openclaw\workspace\media\`).
-   - Completion: local file exists with the same non-zero size.
+   - For many files, one archive beats N relays: `tar czf /tmp/<name>.tgz <files>` on the Mac, one `scp` each hop, `tar xzf` on the gateway (verified 2026-09-16, 13 images in a single relay).
+   - Completion: local file exists with the same non-zero size (for an archive, `tar tzf` lists the expected members).
 
 4. Fallback when scp is unavailable — serve from the node, pull from the gateway:
    - On the Mac: start a background HTTP server over the file's directory (`python3 -m http.server <port> --directory <dir>`).

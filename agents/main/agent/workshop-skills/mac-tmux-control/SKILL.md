@@ -13,7 +13,7 @@ Drive CLI agents by **tmux session name** through `exec` with `host="node"` and 
    ```bash
    /opt/homebrew/bin/tmux list-sessions -F '#{session_name} | #{pane_current_command} | #{pane_current_path} | attached=#{session_attached}'
    ```
-   `pane_current_command` is the process in the pane (`node` for Claude Code, `python3`/`kimi` for kimi, …) and `pane_current_path` its cwd — this IS the win→tty→pid→cwd map of `mac-node-ops`, without Terminal indices. "no server running on /private/tmp/tmux-501/default" means David has no tmux session open: ask him to launch the agent with `agent-tmux.sh <tool> <repo>` — do NOT fall back to global keystrokes on your own (see `mac-terminal-control` for tabs that are genuinely outside tmux).
+   `pane_current_command` is the process in the pane (`node` for Claude Code, `python3`/`kimi` for kimi, …) and `pane_current_path` its cwd — this IS the win→tty→pid→cwd map of `mac-terminal-control`, without Terminal indices. Use this map instead of Terminal window/tab indices, which reorder (see that skill's step 3). "no server running on /private/tmp/tmux-501/default" means David has no tmux session open: ask him to launch the agent with `agent-tmux.sh <tool> <repo>` — do NOT fall back to global keystrokes on your own (see `mac-terminal-control` for tabs that are genuinely outside tmux).
    - Completion: you have the session name whose `pane_current_path` is the target repo.
 
 2. Read the screen (last 80 lines, no colours):
@@ -51,7 +51,7 @@ Drive CLI agents by **tmux session name** through `exec` with `host="node"` and 
 - **Never write to `/dev/ttysNNN` to "inject" input.** On macOS a write to the tty device is output painted on the screen; there is no TIOCSTI. It makes the text *look* typed while the program received nothing (2026-09-14: the order sat in the prompt, no Enter method "worked"). The same goes for `printf '\r' > /dev/ttys…`.
 - **Never attach a reader to `/dev/ttysNNN` either** (`script -q /dev/null < /dev/ttysN`, `screen -dmS … < /dev/ttysN`, `cat /dev/ttysN`), not even as a "watcher": a second reader on the tty steals the keystrokes David types, so the TUI never gets its Enter. 2026-09-14 two such watchers (`claude_tab`, `muse_tab`) were found alive on ttys006/ttys005 an hour after the "Enter no entra" fight — they were the cause. Read a session with `/opt/homebrew/bin/tmux capture-pane` or the on-disk transcript (`mac-agent-transcript`), never from the tty device.
 - **A session in tmux is addressed by name, never by Terminal window/tab index** and never by "the focused window": those change under you (2026-09-11 a paste landed in another project's tab).
-- Long waits: poll with short `/opt/homebrew/bin/tmux capture-pane` reads (≤30 s per exec call), never one blocking `sleep` of 90 s+ — long node execs die with `COMPANION_APP_UNAVAILABLE` / "outcome is unknown" (see `mac-node-ops`).
+- Long waits: poll with short `/opt/homebrew/bin/tmux capture-pane` reads (≤30 s per exec call), never one blocking `sleep` of 90 s+ — long node execs die with `COMPANION_APP_UNAVAILABLE` / "outcome is unknown" (see `mac-terminal-control`).
 - The node is OpenClaw.app's. **Never run `openclaw node install` on the Mac** (and never accept that offer from an interactive `openclaw doctor` there): it creates a second `launchd` node (`ai.openclaw.node`) that dials `127.0.0.1:18789`, where no gateway listens, and loops on `ECONNREFUSED` forever (2026-09-11 → 2026-09-14: 11 000 failed connects, never paired). If `openclaw node status` on the Mac reports a LaunchAgent, the fix is `openclaw node uninstall`; the app keeps working.
 
 ## Wake-ups (events)
@@ -87,7 +87,7 @@ Never wait for a long-running thing with `sleep` or "I'll check back later": if 
 babysit CI, a test run, or another agent working, launch it with `exec` and `background: true`
 (e.g. `export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH; gh pr checks <n> --watch`, with `host: "node"` when it must run on the Mac) so the gateway
 wakes you again on `notifyOnExit` when it finishes. A node exec can still end with "outcome is
-unknown" / `COMPANION_APP_UNAVAILABLE` (see `mac-node-ops`): when the wake-up carries no result,
+unknown" / `COMPANION_APP_UNAVAILABLE` (see `mac-terminal-control`): when the wake-up carries no result,
 verify with a short read (`export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH; gh pr checks <n>`, `/opt/homebrew/bin/tmux capture-pane`) instead of relaunching the wait.
 The tmux watcher above is a safety net for silence, not the primary way to wait on work you
 started yourself.

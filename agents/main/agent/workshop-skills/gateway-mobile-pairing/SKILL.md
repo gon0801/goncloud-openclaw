@@ -1,18 +1,43 @@
 ---
 name: gateway-mobile-pairing
-description: Reach the gateway from the owner's phone — native QR pairing over Tailscale Serve, or a WireGuard tunnel route to the gateway PC. Use when he wants the mobile app connected, when `openclaw qr` refuses for lack of a secure URL, when `tailscale serve` answers "Serve is not enabled on your tailnet", or when the phone's VPN connects but the app stays mute.
+description: Reach the gateway from the owner's phone — pair the OpenClaw mobile app over his WireGuard tunnel (his standing choice), or over Tailscale Serve for a client that can run Tailscale. Use when he wants the mobile app connected, when `openclaw qr` refuses for lack of a secure URL, when `tailscale serve` answers "Serve is not enabled on your tailnet", when the phone's VPN connects but the app stays mute, or when the app needs full access and holds only the reduced `ws://` grant.
 ---
 
 # Gateway Mobile Pairing
 
-Get the owner's phone to the gateway. Two routes, each needing one owner action. Verified 2026-09-16 on the Windows gateway host (tailnet IP 100.80.179.76; WireGuard server 65.109.4.81:51820, net 10.13.13.x). The device app is OpenClaw — he corrects "Hermes", so use his name for it.
+Get the owner's phone to the gateway. Each route needs one owner action. Verified 2026-09-16 on the Windows gateway host (WireGuard server 65.109.4.81:51820, net 10.13.13.x; tailnet IP 100.80.179.76). The device app is OpenClaw — he corrects "Hermes", so use his name for it.
+
+**His standing constraint:** on his iPhone only one VPN can be active and it is WireGuard; he does not use Tailscale there and will delete it. When he names WireGuard, do not re-litigate Tailscale — proposing it cost five repetitions on 2026-09-16.
 
 ## Reachability facts (read before changing anything)
 
-- `netstat -ano | Select-String ":18789"` — the gateway listens on its **tailnet IP and 127.0.0.1 only**, never on a WireGuard address. A phone that reaches the VPN server over WireGuard therefore still cannot reach the gateway.
+- What the gateway exposes comes from `gateway.bind`, so check it first: `openclaw config get gateway.bind`.
+  - `lan` → the literal `0.0.0.0`: ONE listener answers on every address the host has — the tunnel IP, the tailnet IP, `127.0.0.1`, and the host's LAN address (auth stays `token`). Verified: `HTTP 200` on all of them with a single listener.
+  - `tailnet` → the tailnet IP plus loopback only, which is why a phone that reaches the VPN server still cannot reach the gateway.
+- Do NOT narrow it with `custom` + `customBindHost: <tunnel-ip>`: that resolves to `[<tunnel-ip>, 127.0.0.1]` and **drops the tailnet listener**, cutting off the Mac node. Code: `resolveGatewayBindHost` in `dist/net-*.mjs`. `lan` is the only mode that covers all three without loss.
 - `tailscale status --self` gives the tailnet IP and the machine list; `tailscale serve status` says whether Serve is on.
 
-## Route 1 — QR pairing (native app)
+## Route 1 — WireGuard tunnel to the gateway PC (his route)
+
+1. The server is authoritative: per-device client configs live at `/etc/wireguard/clients/<name>.conf`, and `ssh gonserver "sudo -n wg show wg0 allowed-ips"` maps peer keys to tunnel addresses. The gateway PC may already be a registered peer (2026-09-16: `pc1` = 10.13.13.4, connected) — check before creating anything. Read-only on the server: never restart `wg0` and never disturb the other peers' handshakes.
+   - Completion: you know the gateway PC's tunnel address and whether it is already a peer.
+2. Handing the PC the tunnel needs admin: `wireguard.exe /installtunnelservice <conf>` fails "Access is denied" from agent exec, and `elevated: true` is policy-denied for chat-sourced sessions. Write the `.conf` somewhere the owner can reach and have him import it in the WireGuard GUI (Add Tunnel → import from file → Activate).
+   - Completion: `Get-NetIPAddress` shows the tunnel address and `ping <server-tunnel-ip>` answers.
+3. Make the gateway answer at that address — this is the step that completes the route: set `gateway.bind` to `lan` (see Reachability facts) and let the gateway restart itself. Do **not** build a port proxy or a firewall rule for this; `lan` makes the existing listener answer on the tunnel IP.
+   - Completion: `curl.exe -sS -o NUL -w "%{http_code}" --max-time 8 http://<tunnel-ip>:18789/` returns 200.
+4. Pair the phone against the **tunnel** URL: `openclaw qr --url ws://<tunnel-ip>:18789 --setup-code-only`. To deliver it as an image, render the code yourself with `renderQrPngBase64` from `dist/extensions/device-pair/qr-image.js` (the CLI's own QR encodes the raw setup code — verified against `dist/qr-cli-*.mjs`) and send that PNG. The code expires in ~10 minutes; if it lapses, regenerate both.
+   - Completion: `openclaw devices list` shows the device with `remoteIp` = the phone's tunnel IP, `approvedVia: bootstrap`, roles `node`+`operator`.
+5. A pending device does not pair itself — approve it (`openclaw devices approve <requestId>`). The phone's traffic now really rides the tunnel, so confirm it at the socket level: `netstat -ano | Select-String "<phone-tunnel-ip>"` shows ESTABLISHED pairs to `<tunnel-ip>:18789`.
+   - Completion: the device is approved and its connections appear on the tunnel address.
+
+## Reduced access on a plaintext URL (branch)
+
+With `ws://` the setup code is deliberately downgraded (`accessDowngraded: true`, `LIMITED_TRANSPORT_WARNING`) and the device lands without `operator.admin`. If the app then refuses something that needs full access, the cause is the plaintext transport, not the device.
+`gateway.tls.enabled=true` would give full access over `wss://<tunnel-ip>:18789` **without Tailscale** — but the Mac node and the Control UI speak `ws://100.80.179.76:18789` and must be re-pointed to `wss://` in the same change or they drop; with a self-signed certificate iOS/CFNetwork may reject it outright. High risk of leaving the Mac disconnected: treat it as a separate decision with a simultaneous migration plan, never a casual flip. (Analysis only, 2026-09-16; not applied.)
+
+## Route 2 — Tailscale Serve + QR
+
+For a client that can run Tailscale. Not the owner's phone.
 
 1. `openclaw qr` refuses a plain `ws://` gateway and names the fix: a secure (wss://) URL or Tailscale Serve/Funnel. It resolves the URL from `gateway.bind`, so with `bind=tailnet` it simply fails.
 2. `tailscale serve --bg --https=443 http://127.0.0.1:18789`. On a tailnet where Serve was never enabled it stops with "Serve is not enabled on your tailnet" plus a `https://login.tailscale.com/f/serve?node=<id>` link — that click is the owner's and nothing proceeds without it. After the click the same command prints `https://<node>.<tailnet>.ts.net/`.
@@ -21,16 +46,8 @@ Get the owner's phone to the gateway. Two routes, each needing one owner action.
 4. No-restart alternative, **unverified**: setting `plugins.entries.device-pair.config.publicUrl` to the `https://<node>.<tailnet>.ts.net` URL (applies on a gateway restart). The write was accepted here but the QR was never re-run against it — present it as a candidate, not a fix.
 5. The app's password is the gateway auth token, which the owner reads himself with `openclaw gateway auth-token --show` in an interactive terminal (the CLI refuses to print it elsewhere). Never print or paste it.
 
-## Route 2 — WireGuard tunnel to the gateway PC
-
-1. The server is authoritative: per-device client configs live at `/etc/wireguard/clients/<name>.conf`, and `ssh gonserver "sudo -n wg show wg0 allowed-ips"` maps peer keys to tunnel addresses. The gateway PC may already be a registered peer (2026-09-16: `pc1` = 10.13.13.4, connected) — check before creating anything.
-2. Handing the PC the tunnel needs admin: `wireguard.exe /installtunnelservice <conf>` fails "Access is denied" from agent exec, and `elevated: true` is policy-denied for chat-sourced sessions. Write the `.conf` somewhere the owner can reach and have him import it in the WireGuard GUI (Add Tunnel → import from file → Activate).
-   - Completion: `Get-NetIPAddress` shows the tunnel address and `ping <server-tunnel-ip>` answers (verified: 10.13.13.4, 178 ms).
-3. The tunnel alone is not enough (see Reachability facts): the phone now reaches the PC, but the gateway still answers only on its own addresses. Candidate fix without restarting the gateway — a port proxy from the tunnel address to the loopback listener plus a firewall rule; **unverified here**, the owner never ran it.
-4. Adding a peer on the server touches the shared tunnel: get the owner's explicit OK, keep the other peers' handshakes undisturbed, and do not restart the tunnel.
-
 ## Pitfalls
 
-- A device that appears as pending does not pair itself — it still needs approval (`openclaw devices approve`).
 - "No conecta" with an app that stays mute is usually a wrong address, not a broken app: confirm the address the phone dials belongs to the machine the gateway actually listens on before touching either VPN.
+- **A paired phone whose upgrade dies with `code=1006` while the app reports "refused"/"timeout" is usually the gateway, not the tunnel.** If the tunnel is proven (fresh handshakes both ends, large packets pass) and the device is paired, stop rebuilding the VPN and diagnose the gateway with `gateway-stability-diagnosis`.
 - No gateway restart for any of this without checking `openclaw cron list --all` for a running job first; a restart kills in-flight runs, and the browser profile registration can come back missing (see `browser-cli-claw-profile`).
