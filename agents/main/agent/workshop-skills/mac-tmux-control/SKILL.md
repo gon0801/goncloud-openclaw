@@ -5,7 +5,7 @@ description: Type into and read CLI agents (Claude Code, kimi, muse, cursor-agen
 
 # Mac tmux control (David's Mac)
 
-Drive CLI agents by **tmux session name** through `exec` with `host="node"` and `node="David's MacBook Pro"`. No keyboard focus, no mouse, no Accessibility, no Secure Input involved: the input goes straight into the agent's pty. This replaces global keystrokes (`System Events keystroke`) for every agent David launches from a terminal — his shell wraps `claude`, `glm`, `deepseek`, `kimi-claude`, `kimi`, `muse`, `codex`, `cursor-agent`, `grok`, `opencode`, `qwen`, `dsh` through `~/bin/agent-tmux.sh` automatically (session name `<tool>-<repo>`, e.g. `claude-goncloud-orbit`, `glm-summonaikit`; `glm`/`deepseek`/`kimi-claude` are Claude Code against other providers, so their pane runs `node` too).
+Drive CLI agents by **tmux session name** through `exec` with `host="node"` and `node="David's MacBook Pro"`. No keyboard focus, no mouse, no Accessibility, no Secure Input involved: the input goes straight into the agent's pty. This replaces global keystrokes (`System Events keystroke`) for every agent David launches from a terminal — his shell wraps `claude`, `glm`, `deepseek`, `kimi-claude`, `kimi`, `muse`, `codex`, `cursor-agent`, `grok`, `opencode`, `qwen`, `dsh` through `~/bin/agent-tmux.sh` automatically (session name `<tool>-<repo>`, e.g. `claude-goncloud-orbit`, `glm-summonaikit`; `deepseek`/`kimi-claude` are Claude Code against other providers, so their pane runs `node`; `glm` is now zcode, the Z.AI runtime CLI (not Claude Code), and its pane also shows `node` — measured 2026-09-16: `pane_current_command=node`, process `node /opt/homebrew/bin/zcode`).
 
 ## Steps
 
@@ -31,27 +31,27 @@ Drive CLI agents by **tmux session name** through `exec` with `host="node"` and 
    ```
    Then mark the session so its silence, its close and its Claude turns wake you (see Wake-ups):
    `/opt/homebrew/bin/tmux set-environment -t <session> OPENCLAW_WATCH 1`. Unmark it with `-u` when the chain ends.
-   - Completion: `capture-pane` shows the typed text gone from the prompt and a spinner / "esc to interrupt" / new output (see step 5), and `show-environment -t <session> OPENCLAW_WATCH` prints `OPENCLAW_WATCH=1`.
+   - Completion: `/opt/homebrew/bin/tmux capture-pane` shows the typed text gone from the prompt and a spinner / "esc to interrupt" / new output (see step 5), and `/opt/homebrew/bin/tmux show-environment -t <session> OPENCLAW_WATCH` prints `OPENCLAW_WATCH=1`.
 
 4. Keys and dialogs: use tmux key names, one per call — `Enter`, `Escape`, `Up`, `Down`, `Tab`, `C-c`, `BSpace`. Claude Code's folder-trust dialog (`❯ No, exit / Yes, I trust this folder`) is answered with `Down` then `Enter`; a `Do you want to proceed? ❯ 1. Yes` prompt with `Enter` (David's standing instruction is Yes for task-related prompts; surface prompts about unrelated commands, live profiles or secrets instead). If the prompt still holds stale text or a menu, send `Escape` first, then `C-c` if needed, and re-read before typing. A TUI stuck on `Interrupted · What should Claude do instead?` takes the new instruction typed as in step 3.
-   - Completion: the dialog is gone in the next `capture-pane`.
+   - Completion: the dialog is gone in the next `/opt/homebrew/bin/tmux capture-pane`.
 
-5. Verify delivery — a tmux exit 0 only proves the bytes reached the pty. Re-read with `capture-pane` after 2–3 s: for Claude Code the proof is the spinner line (`✶ … (Ns · ↓ N tokens)`) or `esc to interrupt`; for others, new output under the prompt. If the text is still sitting in the prompt, Enter was not accepted: wait 0.5 s and send `Enter` once more, then `Escape` + retype if it still sits there. Never report "sent" without this read-back.
+5. Verify delivery — a tmux exit 0 only proves the bytes reached the pty. Re-read with `/opt/homebrew/bin/tmux capture-pane` after 2–3 s: for Claude Code the proof is the spinner line (`✶ … (Ns · ↓ N tokens)`) or `esc to interrupt`; for others, new output under the prompt. If the text is still sitting in the prompt, Enter was not accepted: wait 0.5 s and send `Enter` once more, then `Escape` + retype if it still sits there. Never report "sent" without this read-back.
    - Completion: the read-back shows the agent working on the new instruction.
 
 6. Starting a new agent yourself (David asked for it, or a limited agent must be replaced): create a detached session with the wrapper's naming rule and the absolute tool path, then attach is David's choice:
    ```bash
    /opt/homebrew/bin/tmux new-session -d -s claude-<repo> -c /Users/dn/dev/<repo> /Users/dn/.local/bin/claude
    ```
-   Tool paths on this node: `/Users/dn/.local/bin/claude`, `/Users/dn/.local/bin/cursor-agent`, `/opt/homebrew/bin/kimi`, `/opt/homebrew/bin/codex`. Tell David the session name so he can `tmux attach -t <name>` and watch it.
-   - Completion: `list-sessions` shows the new name with the expected `pane_current_path`.
+   Tool paths on this node: `/opt/homebrew/bin/gh`, `/opt/homebrew/bin/grok`, `/opt/homebrew/bin/zcode` (= `glm`), `/opt/homebrew/bin/qwen`, `/opt/homebrew/bin/kimi`, `/opt/homebrew/bin/codex`, `/Users/dn/.local/bin/pwsh`, `/Users/dn/.local/bin/muse`, `/Users/dn/.local/bin/claude`, `/Users/dn/.local/bin/cursor-agent`, `/Users/dn/bin/glm`. Tell David the session name so he can `/opt/homebrew/bin/tmux attach -t <name>` and watch it.
+   - Completion: `/opt/homebrew/bin/tmux list-sessions` shows the new name with the expected `pane_current_path`.
 
 ## Rules
 
 - **Never write to `/dev/ttysNNN` to "inject" input.** On macOS a write to the tty device is output painted on the screen; there is no TIOCSTI. It makes the text *look* typed while the program received nothing (2026-09-14: the order sat in the prompt, no Enter method "worked"). The same goes for `printf '\r' > /dev/ttys…`.
-- **Never attach a reader to `/dev/ttysNNN` either** (`script -q /dev/null < /dev/ttysN`, `screen -dmS … < /dev/ttysN`, `cat /dev/ttysN`), not even as a "watcher": a second reader on the tty steals the keystrokes David types, so the TUI never gets its Enter. 2026-09-14 two such watchers (`claude_tab`, `muse_tab`) were found alive on ttys006/ttys005 an hour after the "Enter no entra" fight — they were the cause. Read a session with `capture-pane` (tmux) or the on-disk transcript (`mac-agent-transcript`), never from the tty device.
+- **Never attach a reader to `/dev/ttysNNN` either** (`script -q /dev/null < /dev/ttysN`, `screen -dmS … < /dev/ttysN`, `cat /dev/ttysN`), not even as a "watcher": a second reader on the tty steals the keystrokes David types, so the TUI never gets its Enter. 2026-09-14 two such watchers (`claude_tab`, `muse_tab`) were found alive on ttys006/ttys005 an hour after the "Enter no entra" fight — they were the cause. Read a session with `/opt/homebrew/bin/tmux capture-pane` or the on-disk transcript (`mac-agent-transcript`), never from the tty device.
 - **A session in tmux is addressed by name, never by Terminal window/tab index** and never by "the focused window": those change under you (2026-09-11 a paste landed in another project's tab).
-- Long waits: poll with short `capture-pane` reads (≤30 s per exec call), never one blocking `sleep` of 90 s+ — long node execs die with `COMPANION_APP_UNAVAILABLE` / "outcome is unknown" (see `mac-node-ops`).
+- Long waits: poll with short `/opt/homebrew/bin/tmux capture-pane` reads (≤30 s per exec call), never one blocking `sleep` of 90 s+ — long node execs die with `COMPANION_APP_UNAVAILABLE` / "outcome is unknown" (see `mac-node-ops`).
 - The node is OpenClaw.app's. **Never run `openclaw node install` on the Mac** (and never accept that offer from an interactive `openclaw doctor` there): it creates a second `launchd` node (`ai.openclaw.node`) that dials `127.0.0.1:18789`, where no gateway listens, and loops on `ECONNREFUSED` forever (2026-09-11 → 2026-09-14: 11 000 failed connects, never paired). If `openclaw node status` on the Mac reports a LaunchAgent, the fix is `openclaw node uninstall`; the app keeps working.
 
 ## Wake-ups (events)
@@ -75,27 +75,27 @@ with `openclaw system event` instead of you polling tmux on a cron. Events you w
 /opt/homebrew/bin/tmux set-environment -t <session> -u OPENCLAW_WATCH     # when the chain ends
 ```
 Any session with the marker reports back, whatever its name; a session you dispatched to and did not mark will not; if you are waiting on a
-session and no event arrives, check the marker with `show-environment -t <session> OPENCLAW_WATCH`
+session and no event arrives, check the marker with `/opt/homebrew/bin/tmux show-environment -t <session> OPENCLAW_WATCH`
 before assuming the agent is still working.
 
-Rule on any of these: **read the screen with `capture-pane` BEFORE acting** (step 2). A quiet or
+Rule on any of these: **read the screen with `/opt/homebrew/bin/tmux capture-pane` BEFORE acting** (step 2). A quiet or
 "turn ended" event does not by itself tell you whether the agent is done, waiting on a dialog or
-an Enter (step 4), or genuinely stuck — decide from what `capture-pane` shows, the same as any
+an Enter (step 4), or genuinely stuck — decide from what `/opt/homebrew/bin/tmux capture-pane` shows, the same as any
 other read in this skill.
 
 Never wait for a long-running thing with `sleep` or "I'll check back later": if you are about to
 babysit CI, a test run, or another agent working, launch it with `exec` and `background: true`
-(e.g. `gh pr checks <n> --watch`, with `host: "node"` when it must run on the Mac) so the gateway
+(e.g. `export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH; gh pr checks <n> --watch`, with `host: "node"` when it must run on the Mac) so the gateway
 wakes you again on `notifyOnExit` when it finishes. A node exec can still end with "outcome is
 unknown" / `COMPANION_APP_UNAVAILABLE` (see `mac-node-ops`): when the wake-up carries no result,
-verify with a short read (`gh pr checks <n>`, `capture-pane`) instead of relaunching the wait.
+verify with a short read (`export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH; gh pr checks <n>`, `/opt/homebrew/bin/tmux capture-pane`) instead of relaunching the wait.
 The tmux watcher above is a safety net for silence, not the primary way to wait on work you
 started yourself.
 
 ## Pitfalls
 
-- `tmux` without the absolute path → `command not found` from node exec; PATH there is `/usr/bin:/bin:/usr/sbin:/sbin`.
-- `send-keys 'texto' Enter` in ONE call is the classic way and usually works in a shell, but not reliably in Claude Code's TUI — keep the two-call form of step 3.
-- `capture-pane` returns the visible pane only; use `-S -200` for more history. A 120×40 pane is enough for Claude Code; a very narrow pane wraps the dialog text and confuses reads.
+- The node exec sanitizes PATH and **`pathPrepend` is ignored**: every command carries `export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH;` up front, or an absolute path. That is why `tmux` without the absolute path → `command not found` from node exec (PATH there is `/usr/bin:/bin:/usr/sbin:/sbin`).
+- `/opt/homebrew/bin/tmux send-keys 'text' Enter` in ONE call is the classic way and usually works in a shell, but not reliably in Claude Code's TUI — keep the two-call form of step 3.
+- `/opt/homebrew/bin/tmux capture-pane` returns the visible pane only; use `-S -200` for more history. A 120×40 pane is enough for Claude Code; a very narrow pane wraps the dialog text and confuses reads.
 - Session names cannot contain `.` or `:`; the wrapper maps them to `-` (`goncloud.orbit` → `goncloud-orbit`).
 - A tool that exits ends its session: "can't find session" right after a `/exit` or a crash is expected, not a tmux failure — re-launch (step 6) or ask David.
