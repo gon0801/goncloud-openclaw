@@ -30,8 +30,12 @@ def sin_comentarios(src):
             continue
         elif c == '/' and i + 1 < n and src[i + 1] == '*':
             i += 2
+            # Un bloque sin cerrar NO se traga en silencio: `{a: 1} /*` dejaba
+            # `{a: 1}`, que parsea, y el test daba verde sobre un json5 roto.
             while i + 1 < n and not (src[i] == '*' and src[i + 1] == '/'):
                 i += 1
+            if i + 1 >= n:
+                raise ValueError('comentario de bloque sin cerrar: falta `*/`')
             i += 2
             continue
         else:
@@ -46,8 +50,9 @@ def cargar(path):
     src = re.sub(r',\s*([}\]])', r'\1', src)  # comas colgantes
     # Llaves sin comillas: la regex exige `{` o `,` justo antes del nombre.
     # Limitación conocida (falla en rojo, nunca en verde): `a/*x*/b` se vuelve
-    # `ab` (inocuo en JSON, que no distingue espacios), un `/*` sin cerrar se
-    # traga el resto (revienta el parseo -> rojo) y un `, b:` dentro de un string
+    # `ab` (inocuo en JSON, que no distingue espacios), un `/*` sin cerrar
+    # revienta con ValueError en `sin_comentarios` (antes se tragaba el resto y
+    # dejaba un JSON recortado que parseaba: verde falso) y un `, b:` dentro de un string
     # con comillas dobles sí se reescribiría mal (los patches del repo no traen
     # texto libre con ese patrón; no reusar el util para esos archivos).
     src = re.sub(r'([{,]\s*)([A-Za-z_][A-Za-z0-9_-]*)(\s*:)', r'\1"\2"\3', src)

@@ -88,6 +88,13 @@ for prv, n in sorted(Counter(prov(p) for p in primaries.values()).items()):
 # presente trae proveedor sí o sí; la presencia basta
 if 'main' not in primaries or 'operaciones' not in primaries:
     viol.append("(b) main/operaciones ausentes: el aislamiento no se verifica")
+# (b0) La propuesta cubre a la flota entera: si le falta un agente, ese agente se
+# queda con su primary viejo (todos en opencode-go) y el reparto no reparte nada.
+ESPERADOS = {'main', 'operaciones', 'implementer', 'reviewer', 'adversary',
+             'verifier', 'ingenieria', 'scout'}
+faltantes = sorted(ESPERADOS - set(entries))
+if faltantes:
+    viol.append(f"(b0) la propuesta no cubre a la flota: faltan {', '.join(faltantes)}")
 negocio = {primaries.get('main'), primaries.get('operaciones')}
 negocio_prov = {prov(p) for p in negocio if p and '/' in p}
 tuberia = {a: p for a, p in primaries.items() if a not in ('main', 'operaciones')}
@@ -234,6 +241,7 @@ out=$(revisar "$T/malo3.json5"); rc=$?
 [ "$rc" -eq 0 ] || fail "revisar() falló sobre el fixture malo3 (rc=$rc):
 $out"
 echo "$out" | grep -qxF '(b) main/operaciones ausentes: el aislamiento no se verifica' || fail "no detecta negocio incompleto (b): $out"
+echo "$out" | grep -q '(b0) la propuesta no cubre a la flota: faltan adversary, ingenieria, operaciones, reviewer, scout, verifier' || fail "no detecta agentes faltantes (b0): $out"
 echo "$out" | grep -q 'primary sin proveedor' && fail "malo3 no debe traer violación per-agente (es el caso solo-ausencia): $out"
 cat > "$T/malo3b.json5" <<'EOF'
 { agents: { entries: {
@@ -249,5 +257,14 @@ out=$(revisar "$T/malo3b.json5"); rc=$?
 $out"
 echo "$out" | grep -qxF '(b) main/operaciones ausentes: el aislamiento no se verifica' || fail "no detecta negocio sin proveedor (b): $out"
 echo "$out" | grep -q "operaciones: primary sin proveedor: 'k3'" || fail "el per-agente no nombra agente y valor: $out"
+cat > "$T/malo4.json5" <<'EOF'
+{ agents: { entries: {
+  main: { model: { primary: "zai/glm-5.3", fallbacks: ["kimi/k3", "anthropic/claude-sonnet-5"] } },
+} } } /* comentario que nadie cerro
+EOF
+out=$(revisar "$T/malo4.json5"); rc=$?
+[ "$rc" -ne 0 ] || fail "un json5 con comentario de bloque sin cerrar NO puede salir verde: $out"
+echo "$out" | grep -q 'no parsea como json5' || fail "el fallo de parseo no se nombra: $out"
+echo "$out" | grep -q 'sin cerrar' || fail "el fallo no dice que el comentario quedo sin cerrar: $out"
 echo "ok (2): el revisor marca >2 primaries, negocio compartido/ausente (b1/b2), repetición al inicio, Anthropic fuera del fondo, codex, cadenas idénticas, prefijo compartido, primer fallback concentrado, carga primary+fb1 e ids fuera de lo vivo"
 echo "TODO VERDE: patch de modelos repartidos"

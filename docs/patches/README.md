@@ -203,14 +203,31 @@ campos obligatorios de `EmbeddedAgentMeta`). Tres trampas, todas verificadas con
   modelo caído al fallback. El filtro de arriba, corrido contra ese archivo, devuelve
   `null` en los dos campos en vez de mentir.
 
-Un agente que conteste con `trace.fallbackUsed: true` tiene un primary que no sirve: se anota aquí
-con la razón y se le cambia el primary por un id que sí respondió. Hasta que los 8 pasen
-ese smoke, la tabla es una hipótesis, no una configuración verificada.
+Un agente que conteste con `trace.fallbackUsed: true` se anota aquí con la razón, que sale
+de `trace.attempts` (por qué falló el primary). **La razón decide, no el booleano**: un
+token OAuth vencido, un rate limit o un cooldown de cuota son transitorios y se arreglan
+en la cuenta, no cambiando la tabla; solo un fallo que persiste tras renovar credencial y
+esperar el cooldown justifica cambiar el primary por un id que sí respondió. Hasta que los
+8 pasen ese smoke, la tabla es una hipótesis, no una configuración verificada.
 
 Rollback: `modelos-rollback.json5` describe el estado pre-M1 (primarios OpenAI) y ya
 NO coincide con lo vivo (hoy primaries `opencode-go/*` + `defaults` + `scout`, que el
-rollback no trae). Sigue vigente solo como reversa de emergencia a pre-M1; antes de
-revertir, regenerarlo desde `modelos-vivos-2026-09-15.json5`.
+rollback no trae). Sirve solo como reversa de emergencia a pre-M1.
+
+El rollback de ESTE patch se captura **en el mismo turno, justo antes de aplicar**, no se
+regenera de un archivo fechado: `modelos-vivos-2026-09-15.json5` es una foto del 16 de
+septiembre, y revertir con ella pisaría cualquier cambio de ruteo hecho después. Antes
+del `config patch`, en la misma sesión:
+
+```bash
+# Windows / gateway, inmediatamente antes de aplicar:
+openclaw gateway call config.get --params '{}' --json \
+  | jq '{agents: {entries: (.parsed.agents.entries | map_values({model})),
+                  defaults: {model: .parsed.agents.defaults.model}}}' \
+  > docs/patches/rollback-vivo-$(date +%Y%m%dT%H%M%SZ).json
+```
+
+Ese archivo, y no el fechado, es el que se aplica si hay que revertir.
 
 ## V1 — solo despues de que el lead aplique fase1 (y fase3 si va junto)
 
