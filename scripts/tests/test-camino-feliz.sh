@@ -22,6 +22,10 @@ if [ -f "$MAP" ]; then
   # anclas de los dos tipos de go/no-go
   chk "go/no-go unico (merge y deploy)" grep -q 'merge y deploy' "$MAP"
   chk "go/no-go separado (merge y deploy separados)" grep -q 'merge y luego deploy' "$MAP"
+  chk "cierre Live SHA en URL" grep -q 'Live <SHA> en <URL>' "$MAP"
+  chk "regresion vuelve al brief" grep -q 'vuelve al brief' "$MAP"
+  chk "tabla Variantes" grep -qE '^## Variantes' "$MAP"
+  chk "tabla Bloqueos" grep -qE '^## Bloqueos' "$MAP"
   # sin GraphQL
   c=$(grep -c "GraphQL" "$MAP" || true)
   [ "$c" = "0" ] && echo "OK: cero GraphQL en el mapa" || { echo "FALLO: GraphQL aparece $c veces en el mapa"; fails=$((fails+1)); }
