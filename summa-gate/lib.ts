@@ -115,9 +115,10 @@ export function mergeGuardVerdict(command: string, agentId?: string): string | u
   // r3 (hallazgo 2): token entrecomillado — la comilla en la posicion del token
   // (`'gh' api ...`) cortaba la frontera del cliente. El matching corre sobre el comando
   // original Y sobre una copia sin comillas simples/dobles; fail-closed: los falsos
-  // positivos bloquean, los falsos negativos son lo prohibido. No alcanza la indireccion
-  // de shell (variables, aliases, eval, base64) ni query=@archivo/curl con token: bypass
-  // INHERENTE del guard lexico, declarado aqui y en saikit-cierre-pr.
+  // positivos bloquean, los falsos negativos son lo prohibido. No alcanza los DOS bypass
+  // INHERENTES del guard lexico, declarados arriba y en saikit-cierre-pr: la indireccion
+  // de shell (variables, aliases, eval, base64) y query=@archivo. curl con token contra
+  // /graphql ya NO es bypass: quedo cubierto por host (ver la declaracion larga de arriba).
   return (
     mergeGuardCoreVerdict(command, allowlisted) ??
     mergeGuardCoreVerdict(command.replace(/['"\\`]/g, ""), allowlisted)
