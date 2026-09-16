@@ -39,7 +39,10 @@ el PATH del nodo: usá siempre la ruta absoluta `/opt/homebrew/bin/gh`
    medido en PR #319: "Merge bloqueado por summa-gate: `gh pr merge`
    está prohibido desde el agente... El merge lo hace el operador o el
    flujo autorizado del repo". Con CI verde y CLEAN, reportá rama, SHA,
-   PR y resultado de tests, y entregá el merge al operador.
+   PR y resultado de tests, y entregá el merge al operador. Jerarquía
+   explícita (6.5b): la orden textual del dueño con fecha en el brief
+   PREVALECE sobre este paso — con esa orden seguí la sección "Merge por
+   orden del dueño" de abajo en vez de entregar al operador.
 
 ## Merge por orden del dueño
 
@@ -52,6 +55,11 @@ The repo convention leaves merges to the owner, but David can order them explici
    - Completion: every ordered PR reads `MERGED` with a mergedAt timestamp, and the lane's post-merge checks run on the new master.
 
 Precondiciones (Fase 6, 6.5b): este bloque solo corre cuando el brief trae la orden textual de David con fecha; sin esa orden no se hace, nunca. La sección viene movida verbatim desde agent-dispatch. Alcance del guard desde 6.5c: la mutación GraphQL de merge y las rutas REST de merge de api.github.com quedan bloqueadas para todo agente salvo implementer/ingenieria (allowlist de summa-gate/lib.ts; desde el cross-review r1 la rama REST via gh api aplica la misma allowlist que el path de host: mismo endpoint, un solo trato sin importar el cliente); bypass conocido declarado del guard léxico sobre exec: `query=@archivo` lo esquiva porque el texto del comando no lleva la mutación. curl con token queda fuera de alcance (requeriría secret-read) y se declara.
+   Jerarquía explícita: esta orden del dueño en el brief PREVALECE sobre el paso 4
+   genérico ("NUNCA intentes el merge") — con la orden en el brief se ejecuta esta
+   sección; sin ella rige el paso 4 y el merge queda para el operador. Nota de ruta:
+   el `gh` de la sección movida es `/opt/homebrew/bin/gh` en el nodo Mac (no está en
+   el PATH del nodo; ver cabecera de esta skill).
 
 ## Criterio de cierre
 
