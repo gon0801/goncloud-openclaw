@@ -423,12 +423,15 @@ export default definePluginEntry({
     const promptSeenSessions = new Set<string>();
 
     // -- 1. Merge-guard (siempre activo) ------------------------------------
+    // 6.5c: pasa ctx.agentId — la mutacion GraphQL de merge y las rutas REST de merge de
+    // api.github.com se permiten solo a implementer/ingenieria (orden del dueño en el brief, 6.5b);
+    // main y el resto siguen bloqueados.
     api.on(
       "before_tool_call",
-      (event) => {
+      (event, ctx) => {
         const command = typeof event.params?.command === "string" ? event.params.command : "";
         if (!command) return;
-        const reason = mergeGuardVerdict(command);
+        const reason = mergeGuardVerdict(command, ctx.agentId);
         if (reason) return { block: true, blockReason: reason };
       },
       { matcher: ["exec"] },
