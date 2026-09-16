@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # 6.2 (.sh): los 4 workspace-*/AGENTS.md completan el bloque "## Contrato de dispatch"
-# con los campos "nunca" y "reporta a". Implementer admite merge solo con la orden
-# del dueño via saikit-cierre-pr. Los otros tres siguen en nunca absoluto.
-# Ninguno carga la frase de scout (vive en el PR #44).
+# con los campos "nunca" y "reporta a". Rojo primero contra origin/main.
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 REF=${TEST_REF:-WORKTREE}

@@ -211,7 +211,6 @@ function mergeGuardCoreVerdict(command: string, allowlisted: boolean): string | 
 export function mergeGuardVerdict(command: string, agentId?: unknown): string | undefined {
   // Normalizacion del agentId (trim + lowercase), como en el resto del modulo:
   // "Implementer" o " implementer " se comportan igual que "implementer" (cross-review r1).
-  // Dato que no es texto (null, numero, objeto) no lanza: queda fuera de la allowlist.
   const allowlisted = MERGE_AGENT_ALLOWLIST.has(normalized(agentId) ?? "");
   // r3 (hallazgo 2): token entrecomillado — la comilla en la posicion del token
   // (`'gh' api ...`) cortaba la frontera del cliente. El matching corre sobre el comando

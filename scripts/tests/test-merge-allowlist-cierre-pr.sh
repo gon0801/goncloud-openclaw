@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Todo agente en MERGE_AGENT_ALLOWLIST tiene saikit-cierre-pr instalada.
-# Impide que el permiso del guard y el procedimiento vuelvan a desalinearse.
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 fails=0
