@@ -8,7 +8,9 @@ export type Role = "implementer" | "verifier" | "reviewer" | "adversary";
 
 const GH_PR_MERGE_RE = /(?:^|[^A-Za-z0-9])gh\s+pr\s+merge(?:\s|$)/;
 const GH_API_RE = /(?:^|[^A-Za-z0-9])gh\s+api(?:\s|$)/;
-const GH_API_MERGE_PATH_RE = /\/merges?(?:[\s/'"`]|$)/;
+// cross-review r2 (grok): el corte tambien incluye ? y # — sin ellos,
+// `.../merge?squash=1` o `.../merges#ancla` esquivaban el guard (bypass por regex).
+const GH_API_MERGE_PATH_RE = /\/merges?(?:[\s/'"`?#]|$)/;
 const GIT_PUSH_RE = /(?:^|[^A-Za-z0-9])git\s+push\b/;
 const GIT_PUSH_PROTECTED_RE =
   /push\s+.*(\sorigin\s+[+:]?(master|main)|\sHEAD:(master|main)|refs\/heads\/(master|main)|[A-Za-z0-9._/-]+:(master|main)|\s[+:]?(master|main))(\s|$)/;
@@ -24,8 +26,10 @@ const MERGE_AGENT_ALLOWLIST = new Set(["implementer", "ingenieria"]);
 // el host explícito cubre curl/plain-URL. Alcance declarado (como en 1.2, el guard es léxico sobre exec):
 // query=@archivo lo esquiva (el texto no lleva la mutación) y curl con token queda fuera de alcance
 // (requeriría secret-read). Ambos bypass están declarados aquí y en la skill saikit-cierre-pr.
-const GRAPHQL_MERGE_RE = /mergePullRequest\s*\(/;
-const GITHUB_HOST_MERGE_RE = /api\.github\.com\/[^\s'"]*\/merges?(?:[\s/'"`]|$)/;
+// cross-review r2 (grok): ademas de mergePullRequest se bloquean las mutaciones hermanas:
+// mergeBranch (equivale a POST /merges) y enablePullRequestAutoMerge (abre el mismo merge sin orden).
+const GRAPHQL_MERGE_RE = /\b(?:mergePullRequest|mergeBranch|enablePullRequestAutoMerge)\s*\(/;
+const GITHUB_HOST_MERGE_RE = /api\.github\.com\/[^\s'"]*\/merges?(?:[\s/'"`?#]|$)/;
 
 export function mergeGuardVerdict(command: string, agentId?: string): string | undefined {
   // Normalizacion del agentId (trim + lowercase), como en el resto del modulo:

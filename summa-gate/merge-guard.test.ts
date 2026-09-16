@@ -81,4 +81,48 @@ describe("mergeGuardVerdict (6.5c)", () => {
     assert.equal(mergeGuardVerdict(CMD_MUT, " implementer "), undefined);
     assert.match(mergeGuardVerdict(CMD_MUT, "verifier") ?? "", /Merge bloqueado/);
   });
+
+  // cross-review r2 (grok): los cortes de ruta terminaban en (?:[\s/'"`]|$) y no incluian ? ni #,
+  // asi que `.../merge?squash=1` o `.../merges#ancla` pasaban. Con query/fragmento debe bloquear igual.
+  it("cross-review r2: bloquea gh api con path de merge seguido de ?query", () => {
+    assert.match(mergeGuardVerdict("gh api -X PUT repos/o/r" + P_MERGES + "?squash=1", "verifier") ?? "", /Merge bloqueado/);
+  });
+
+  it("cross-review r2: bloquea api.github.com con path de merge y query string", () => {
+    assert.match(
+      mergeGuardVerdict("curl -s https://api.github.com/repos/x/y" + P_MERGES + "?squash=1 -X PUT", "verifier") ?? "",
+      /Merge bloqueado/,
+    );
+  });
+
+  it("cross-review r2: bloquea gh api con path de merge seguido de #fragmento", () => {
+    assert.match(mergeGuardVerdict("gh api repos/o/r" + P_MERGES + "#ancla", "verifier") ?? "", /Merge bloqueado/);
+  });
+
+  // cross-review r2 (grok): mutaciones GraphQL hermanas del merge. mergeBranch es el equivalente
+  // a POST /merges (ya cubierto via REST/host) pero por GraphQL pasaba, y
+  // enablePullRequestAutoMerge abre la puerta al mismo merge sin orden. Mismo criterio: se
+  // bloquean fuera de la allowlist, pasan dentro; mutacion inocua no se toca.
+  const MUT_BRANCH = "mutation($b:String!){me" + "rgeBranch(input:{branchName:$b,base:\"ma" + "in\",message:\"x\"}){mergeCommit{oid}}}";
+  const MUT_AUTO = "mutation($id:ID!){enablePullRequestAuto" + "Merge(input:{pullRequestId:$id,mergeMethod:SQUASH}){pullRequest{number}}}";
+
+  it("cross-review r2: bloquea la mutacion GraphQL mergeBranch (equivalente a POST /merges)", () => {
+    assert.match(mergeGuardVerdict("gh api graphql -f query='" + MUT_BRANCH + "'", "verifier") ?? "", /Merge bloqueado/);
+  });
+
+  it("cross-review r2: bloquea la mutacion GraphQL enablePullRequestAutoMerge", () => {
+    assert.match(mergeGuardVerdict("gh api graphql -f query='" + MUT_AUTO + "'", "verifier") ?? "", /Merge bloqueado/);
+  });
+
+  it("cross-review r2: las mutaciones hermanas respetan la allowlist (implementer pasa)", () => {
+    assert.equal(mergeGuardVerdict("gh api graphql -f query='" + MUT_BRANCH + "'", "implementer"), undefined);
+    assert.equal(mergeGuardVerdict("gh api graphql -f query='" + MUT_AUTO + "'", "ingenieria"), undefined);
+  });
+
+  it("cross-review r2: mutacion GraphQL inocua NO se bloquea", () => {
+    assert.equal(
+      mergeGuardVerdict("gh api graphql -f query='mutation($id:ID!){updateIssue(input:{id:$id}){issue{number}}}'", "verifier"),
+      undefined,
+    );
+  });
 });
