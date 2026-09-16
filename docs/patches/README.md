@@ -124,7 +124,10 @@ esta tabla (negocio separado).
 `zai/glm-5.3` y `operaciones` a `kimi/k3`, así que los crons de packing (`packing-*`,
 agente `operaciones`) pasarían a correr con otro proveedor. Separar el negocio de la
 llave del pipeline es justo el punto del reparto, pero el cambio de proveedor de los
-crons no se aplica sin que David lo apruebe en concreto.
+crons no se aplica sin que David lo apruebe en concreto. Y como el patch es **un solo
+archivo con los 8 agentes**, esa decisión bloquea el apply completo: nadie corre el
+`config patch` hasta que David apruebe ese cambio. No hay ruta documentada para aplicar
+solo los 6 del pipeline; si hiciera falta, se parte el archivo y se documenta aquí.
 
 Primaries por proveedor: opencode-go 2, xai 2, zai/kimi/opencode/deepseek 1. (Los dos
 roles de control no comparten dominio de cuota: reviewer en `opencode/free`,
@@ -172,13 +175,30 @@ Después del patch, una llamada real por agente, leyendo quién contestó:
 
 ```bash
 # Windows / gateway, tras aplicar, agente por agente:
-openclaw agent --agent <id> --session-key smoke:<id> --message "responde PONG" --json
-# se exige: fallbackUsed == false y winnerProvider == el primary de la tabla
+openclaw agent --agent <id> --session-key smoke:<id> -m "Responde exactamente: PONG" --json \
+  | jq '{fallback: .meta.executionTrace.fallbackUsed,
+         prov:     .meta.executionTrace.winnerProvider,
+         modelo:   .meta.executionTrace.winnerModel,
+         run_prov: .run.provider, run_model: .run.model}'
 ```
 
-Un agente que conteste con `fallbackUsed: true` tiene un primary que no sirve: se anota
-aquí con la razón y se le cambia el primary por un id que sí respondió. Hasta que los 8
-pasen ese smoke, la tabla es una hipótesis, no una configuración verificada.
+Se exige, por agente: `fallback == false` y `prov + "/" + modelo` igual al primary de la
+tabla. Los dos detalles que hacen fallar este smoke si se escriben de memoria:
+
+- **La ruta es `meta.executionTrace.*`, no la raíz.** Existe un homónimo,
+  `run.delivery.fallbackUsed`, que es el fallback del **canal de entrega**, no el del
+  modelo — y es el único que aparece en la evidencia capturada de este repo
+  (`docs/cron-messages/evidence/verif-20h-prueba.20260911T041940Z-26022.json`). Un
+  `grep fallbackUsed` o un `jq '..|.fallbackUsed?'` lee ese y da verde aunque el modelo
+  haya caído al fallback.
+- **`winnerProvider` es solo el proveedor** (`zai`), no `provider/model`: compararlo
+  contra `zai/glm-5.3` nunca da igual. El modelo va en `winnerModel`. Si
+  `executionTrace` no viene en la respuesta, el respaldo son `run.provider` y
+  `run.model`, que sí están en la evidencia de este repo.
+
+Un agente que conteste con `fallback: true` tiene un primary que no sirve: se anota aquí
+con la razón y se le cambia el primary por un id que sí respondió. Hasta que los 8 pasen
+ese smoke, la tabla es una hipótesis, no una configuración verificada.
 
 Rollback: `modelos-rollback.json5` describe el estado pre-M1 (primarios OpenAI) y ya
 NO coincide con lo vivo (hoy primaries `opencode-go/*` + `defaults` + `scout`, que el
@@ -190,8 +210,10 @@ revertir, regenerarlo desde `modelos-vivos-2026-09-15.json5`.
 Por cada uno de `implementer`, `reviewer`, `adversary`, `verifier` (NUNCA main/operaciones/ingenieria):
 
 ```bash
-~/.openclaw/bin/openclaw agent --agent <id> -m "Responde exactamente: PONG" --json
+# El smoke es el MISMO de la sección "Primaries repartidos" (mismo comando, mismo jq,
+# mismas aserciones: fallback == false y prov + "/" + modelo == el primary). No hay dos
+# procedimientos: este bloque solo agrega la comprobación propia de V1.
 ~/.openclaw/bin/openclaw gateway call sessions.list --params '{"agentId":"<id>","limit":1}'
 ```
 
-Assert: responde; modelo nuevo; `defaults.agentRuntime.id` distinto de `codex`.
+Assert, además del smoke: `defaults.agentRuntime.id` distinto de `codex`.

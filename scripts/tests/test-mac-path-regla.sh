@@ -7,7 +7,8 @@
 # `$PATH:/opt/homebrew/bin` (sin `~/.local/bin` ni `~/bin`, donde viven `pwsh`, `muse` y
 # los lanzadores); y `mac-tmux-control` decía que `glm` es Claude Code contra otro
 # proveedor, cuando hoy es zcode.
-# Verifica: (1) la regla del PATH existe con texto idéntico en las tres skills (ancla);
+# Verifica: (1) la regla del PATH existe en las tres skills: el prefijo del PATH es el
+# mismo texto exacto en las tres, y el ancla va en el idioma de cada archivo;
 # (2) ninguna línea de comando de esas skills invoca `gh`, `pwsh`, `grok`, `zcode`,
 # `kimi`, `codex` o `tmux` (ni un subcomando suelto de tmux) sin prefijo de PATH ni ruta
 # absoluta, salvo dentro de prohibiciones; (3) el detector discrimina con fixtures inline.
@@ -29,7 +30,8 @@ SK3=agents/implementer/agent/workshop-skills/mac-exec-detach-poll/SKILL.md
 # mac-exec-detach-poll en espanol): mezclar idiomas dentro de una skill la vuelve
 # ilegible para quien la lee de corrido. Lo que NO cambia entre idiomas, y es lo que
 # de verdad sostiene la regla, es el prefijo exacto del PATH: se exige en las tres.
-ANCLA_EN='the node exec sanitizes PATH and **`pathPrepend` is ignored**'
+# El ancla arranca despues del articulo: asi capitalizar la frase (o no) no la rompe.
+ANCLA_EN='node exec sanitizes PATH and **`pathPrepend` is ignored**'
 ANCLA_ES='el exec del nodo sanea el PATH y **`pathPrepend` se ignora**'
 PREFIJO='export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH;'
 

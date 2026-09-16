@@ -5,7 +5,7 @@ description: Type into and read CLI agents (Claude Code, kimi, muse, cursor-agen
 
 # Mac tmux control (David's Mac)
 
-Drive CLI agents by **tmux session name** through `exec` with `host="node"` and `node="David's MacBook Pro"`. No keyboard focus, no mouse, no Accessibility, no Secure Input involved: the input goes straight into the agent's pty. This replaces global keystrokes (`System Events keystroke`) for every agent David launches from a terminal — his shell wraps `claude`, `glm`, `deepseek`, `kimi-claude`, `kimi`, `muse`, `codex`, `cursor-agent`, `grok`, `opencode`, `qwen`, `dsh` through `~/bin/agent-tmux.sh` automatically (session name `<tool>-<repo>`, e.g. `claude-goncloud-orbit`, `glm-summonaikit`; `deepseek`/`kimi-claude` are Claude Code against other providers, so their pane runs `node`; `glm` is now zcode, the Z.AI runtime CLI (not Claude Code), and its pane also shows `node` — medido 2026-09-16: `pane_current_command=node`, proceso `node /opt/homebrew/bin/zcode`).
+Drive CLI agents by **tmux session name** through `exec` with `host="node"` and `node="David's MacBook Pro"`. No keyboard focus, no mouse, no Accessibility, no Secure Input involved: the input goes straight into the agent's pty. This replaces global keystrokes (`System Events keystroke`) for every agent David launches from a terminal — his shell wraps `claude`, `glm`, `deepseek`, `kimi-claude`, `kimi`, `muse`, `codex`, `cursor-agent`, `grok`, `opencode`, `qwen`, `dsh` through `~/bin/agent-tmux.sh` automatically (session name `<tool>-<repo>`, e.g. `claude-goncloud-orbit`, `glm-summonaikit`; `deepseek`/`kimi-claude` are Claude Code against other providers, so their pane runs `node`; `glm` is now zcode, the Z.AI runtime CLI (not Claude Code), and its pane also shows `node` — measured 2026-09-16: `pane_current_command=node`, process `node /opt/homebrew/bin/zcode`).
 
 ## Steps
 
@@ -94,7 +94,7 @@ started yourself.
 
 ## Pitfalls
 
-- the node exec sanitizes PATH and **`pathPrepend` is ignored**: every command carries `export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH;` up front, or an absolute path. That is why `tmux` without the absolute path → `command not found` from node exec (PATH there is `/usr/bin:/bin:/usr/sbin:/sbin`).
+- The node exec sanitizes PATH and **`pathPrepend` is ignored**: every command carries `export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH;` up front, or an absolute path. That is why `tmux` without the absolute path → `command not found` from node exec (PATH there is `/usr/bin:/bin:/usr/sbin:/sbin`).
 - `/opt/homebrew/bin/tmux send-keys 'texto' Enter` in ONE call is the classic way and usually works in a shell, but not reliably in Claude Code's TUI — keep the two-call form of step 3.
 - `/opt/homebrew/bin/tmux capture-pane` returns the visible pane only; use `-S -200` for more history. A 120×40 pane is enough for Claude Code; a very narrow pane wraps the dialog text and confuses reads.
 - Session names cannot contain `.` or `:`; the wrapper maps them to `-` (`goncloud.orbit` → `goncloud-orbit`).
