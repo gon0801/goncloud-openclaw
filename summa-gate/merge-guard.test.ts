@@ -180,4 +180,19 @@ describe("mergeGuardVerdict (6.5c)", () => {
     assert.match(mergeGuardVerdict(b, "verifier") ?? "", /Merge bloqueado/);
     assert.match(mergeGuardVerdict(a, "verifier") ?? "", /Merge bloqueado/);
   });
+
+  // r3 (hallazgo 4): ruta REST de auto-merge — PUT abre el mismo merge sin orden y DELETE
+  // era su alta; ninguna caia en GH_API_MERGE_PATH_RE porque el path es /auto-merge.
+  it("r3: bloquea PUT de la ruta REST auto-merge", () => {
+    assert.match(mergeGuardVerdict("gh api -X PUT repos/o/r/pulls/1/auto-merge -f merge_method=squash", "verifier") ?? "", /Merge bloqueado/);
+  });
+
+  it("r3: bloquea DELETE de la ruta REST auto-merge", () => {
+    assert.match(mergeGuardVerdict("gh api -X DELETE repos/o/r/pulls/1/auto-merge", "verifier") ?? "", /Merge bloqueado/);
+  });
+
+  it("r3: auto-merge respeta la allowlist (implementer pasa)", () => {
+    assert.equal(mergeGuardVerdict("gh api -X PUT repos/o/r/pulls/1/auto-merge -f merge_method=squash", "implementer"), undefined);
+    assert.equal(mergeGuardVerdict("gh api -X DELETE repos/o/r/pulls/1/auto-merge", "ingenieria"), undefined);
+  });
 });

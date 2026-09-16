@@ -10,9 +10,9 @@ export type Role = "implementer" | "verifier" | "reviewer" | "adversary";
 // ya no esquiva el guard; la promesa "(tambien encadenado con &&/;)" del mensaje queda verdadera (6a).
 const GH_PR_MERGE_RE = /(?:^|[^A-Za-z0-9])gh\s+pr\s+merge(?:[\s;&|]|$)/;
 const GH_API_RE = /(?:^|[^A-Za-z0-9])gh\s+api(?:[\s;&|]|$)/;
-// cross-review r2 (grok): el corte tambien incluye ? y # // r3 (hallazgo 1): la clase de corte tambien incluye ;, & y | para el mismo caso encadenado. — sin ellos,
+// cross-review r2 (grok): el corte tambien incluye ? y # // r3 (hallazgo 4): la ruta /auto-merge entra en la misma clase. // r3 (hallazgo 1): la clase de corte tambien incluye ;, & y | para el mismo caso encadenado. — sin ellos,
 // `.../merge?squash=1` o `.../merges#ancla` esquivaban el guard (bypass por regex).
-const GH_API_MERGE_PATH_RE = /\/merges?(?:[\s/'"`?#;&|]|$)/;
+const GH_API_MERGE_PATH_RE = /\/(?:merges?|auto-merge)(?:[\s/'"`?#;&|]|$)/;
 const GIT_PUSH_RE = /(?:^|[^A-Za-z0-9])git\s+push\b/;
 const GIT_PUSH_PROTECTED_RE =
   /push\s+.*(\sorigin\s+[+:]?(master|main)|\sHEAD:(master|main)|refs\/heads\/(master|main)|[A-Za-z0-9._/-]+:(master|main)|\s[+:]?(master|main))(\s|$)/;
