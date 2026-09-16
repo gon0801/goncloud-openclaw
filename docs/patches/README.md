@@ -29,11 +29,11 @@ Cadenas (FASE B):
 
 | agente | primary | fallbacks |
 |---|---|---|
-| implementer | zai/glm-5.3 | deepseek-v4-flash, kimi/k3, xai/grok-4.6 |
-| reviewer | kimi/k3 | deepseek-v4-flash, zai/glm-5.3, xai/grok-4.6 |
-| adversary | deepseek-v4-flash | kimi/k3, zai/glm-5.3, xai/grok-4.6 |
-| verifier | deepseek-v4-flash | zai/glm-5.3, kimi/k3, xai/grok-4.6 |
-| ingenieria | **xai/grok-4.6** | zai/glm-5.3, deepseek-v4-flash, kimi/k3 |
+| implementer | zai/glm-5.3 | deepseek/deepseek-v4-flash, kimi/k3, xai/grok-4.6 |
+| reviewer | kimi/k3 | deepseek/deepseek-v4-flash, zai/glm-5.3, xai/grok-4.6 |
+| adversary | deepseek/deepseek-v4-flash | kimi/k3, zai/glm-5.3, xai/grok-4.6 |
+| verifier | deepseek/deepseek-v4-flash | zai/glm-5.3, kimi/k3, xai/grok-4.6 |
+| ingenieria | **xai/grok-4.6** | zai/glm-5.3, deepseek/deepseek-v4-flash, kimi/k3 |
 
 ```bash
 # En la maquina Windows (gateway), no desde la Mac remota:
@@ -203,7 +203,7 @@ campos obligatorios de `EmbeddedAgentMeta`). Tres trampas, todas verificadas con
   modelo caído al fallback. El filtro de arriba, corrido contra ese archivo, devuelve
   `null` en los dos campos en vez de mentir.
 
-Un agente que conteste con `fallback: true` tiene un primary que no sirve: se anota aquí
+Un agente que conteste con `trace.fallbackUsed: true` tiene un primary que no sirve: se anota aquí
 con la razón y se le cambia el primary por un id que sí respondió. Hasta que los 8 pasen
 ese smoke, la tabla es una hipótesis, no una configuración verificada.
 
@@ -222,9 +222,14 @@ Por cada uno de `implementer`, `reviewer`, `adversary`, `verifier` (NUNCA main/o
 # de la tabla de fase1 de ESTE README, no el de "Primaries repartidos" (que no está
 # aplicada). No hay dos procedimientos de smoke; este bloque solo agrega lo propio de V1.
 ~/.openclaw/bin/openclaw gateway call sessions.list --params '{"agentId":"<id>","limit":1}'
-~/.openclaw/bin/openclaw gateway call config.get --params '{}' --json | jq '.parsed.agents.defaults.agentRuntime'
 ```
 
-Assert, además del smoke: `sessions.list` devuelve la sesión que acaba de crear la
-corrida (prueba que el turno existió), y `agentRuntime.id` es distinto de `codex`. El
-`agentRuntime` es config, no sale de `sessions.list`: por eso la segunda llamada.
+Assert, además del smoke: `sessions.list` devuelve la sesión que acaba de crear la corrida
+(ordena por `updatedAt` descendente, así que con `limit:1` es esa), y **en la salida del
+smoke** `agentMeta.agentHarnessId` es distinto de `codex`. Ojo: NO se comprueba leyendo
+config. `agents.defaults.agentRuntime` y `agents.entries.<id>.agentRuntime` ya no existen
+en 2026.9.4 — el esquema los rechaza con `unrecognized_keys` (verificado corriendo el zod
+del `dist`) y el doctor los borra ("runtime is now provider/model scoped"). Un
+`jq '.parsed.agents.defaults.agentRuntime'` devuelve `null` siempre, así que esa aserción
+daría verde aunque las cuatro rutas siguieran clavadas a codex. El harness que de verdad
+atendió la corrida viene por corrida, no por config, y ya está en el `jq` de arriba.
