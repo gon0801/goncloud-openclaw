@@ -176,25 +176,32 @@ Después del patch, una llamada real por agente, leyendo quién contestó:
 ```bash
 # Windows / gateway, tras aplicar, agente por agente:
 openclaw agent --agent <id> --session-key smoke:<id> -m "Responde exactamente: PONG" --json \
-  | jq '{fallback: .meta.executionTrace.fallbackUsed,
-         prov:     .meta.executionTrace.winnerProvider,
-         modelo:   .meta.executionTrace.winnerModel,
-         run_prov: .run.provider, run_model: .run.model}'
+  | jq '{trace:     (.result.meta.executionTrace // .meta.executionTrace),
+         agentMeta: (.result.meta.agentMeta      // .meta.agentMeta)}'
 ```
 
-Se exige, por agente: `fallback == false` y `prov + "/" + modelo` igual al primary de la
-tabla. Los dos detalles que hacen fallar este smoke si se escriben de memoria:
+Se exige, por agente: `trace.fallbackUsed == false` y
+`trace.winnerProvider + "/" + trace.winnerModel` igual al primary de la tabla. Si `trace`
+viene en `null`, el respaldo es `agentMeta.provider + "/" + agentMeta.model` (los dos son
+campos obligatorios de `EmbeddedAgentMeta`). Tres trampas, todas verificadas contra el
+`dist` de OpenClaw 2026.9.4, que hacen fallar este smoke si se escribe de memoria:
 
-- **La ruta es `meta.executionTrace.*`, no la raíz.** Existe un homónimo,
-  `run.delivery.fallbackUsed`, que es el fallback del **canal de entrega**, no el del
-  modelo — y es el único que aparece en la evidencia capturada de este repo
-  (`docs/cron-messages/evidence/verif-20h-prueba.20260911T041940Z-26022.json`). Un
-  `grep fallbackUsed` o un `jq '..|.fallbackUsed?'` lee ese y da verde aunque el modelo
-  haya caído al fallback.
+- **El resultado de la corrida va bajo `.result`.** El gateway devuelve
+  `{runId, status, summary, …, result}` y la CLI imprime ese objeto tal cual (ella misma
+  lee `response.result.deliveryStatus`). Por eso el filtro prueba los dos niveles:
+  `.result.meta…` primero y `.meta…` como respaldo, para que sirva igual si algún día la
+  corrida no va por el gateway.
 - **`winnerProvider` es solo el proveedor** (`zai`), no `provider/model`: compararlo
-  contra `zai/glm-5.3` nunca da igual. El modelo va en `winnerModel`. Si
-  `executionTrace` no viene en la respuesta, el respaldo son `run.provider` y
-  `run.model`, que sí están en la evidencia de este repo.
+  contra `zai/glm-5.3` nunca da igual. El modelo va aparte, en `winnerModel`.
+- **No uses `//` sobre el booleano ni un `grep fallbackUsed`.** En jq, `false // x`
+  devuelve `x` (comprobado), así que un respaldo con `//` sobre `fallbackUsed` convierte
+  un verde en rojo y al revés: el `//` va sobre el objeto, nunca sobre el booleano. Y
+  existe un homónimo, `run.delivery.fallbackUsed`, que es el fallback del **canal de
+  entrega**: aparece en la evidencia de crons de este repo
+  (`docs/cron-messages/evidence/verif-20h-prueba.20260911T041940Z-26022.json`, que es un
+  registro de cron, no la salida de este comando), y un `grep` lo lee y da verde con el
+  modelo caído al fallback. El filtro de arriba, corrido contra ese archivo, devuelve
+  `null` en los dos campos en vez de mentir.
 
 Un agente que conteste con `fallback: true` tiene un primary que no sirve: se anota aquí
 con la razón y se le cambia el primary por un id que sí respondió. Hasta que los 8 pasen
@@ -211,9 +218,13 @@ Por cada uno de `implementer`, `reviewer`, `adversary`, `verifier` (NUNCA main/o
 
 ```bash
 # El smoke es el MISMO de la sección "Primaries repartidos" (mismo comando, mismo jq,
-# mismas aserciones: fallback == false y prov + "/" + modelo == el primary). No hay dos
-# procedimientos: este bloque solo agrega la comprobación propia de V1.
+# mismas aserciones), con una diferencia: acá el primary contra el que se compara es el
+# de la tabla de fase1 de ESTE README, no el de "Primaries repartidos" (que no está
+# aplicada). No hay dos procedimientos de smoke; este bloque solo agrega lo propio de V1.
 ~/.openclaw/bin/openclaw gateway call sessions.list --params '{"agentId":"<id>","limit":1}'
+~/.openclaw/bin/openclaw gateway call config.get --params '{}' --json | jq '.parsed.agents.defaults.agentRuntime'
 ```
 
-Assert, además del smoke: `defaults.agentRuntime.id` distinto de `codex`.
+Assert, además del smoke: `sessions.list` devuelve la sesión que acaba de crear la
+corrida (prueba que el turno existió), y `agentRuntime.id` es distinto de `codex`. El
+`agentRuntime` es config, no sale de `sessions.list`: por eso la segunda llamada.

@@ -95,7 +95,7 @@ started yourself.
 ## Pitfalls
 
 - The node exec sanitizes PATH and **`pathPrepend` is ignored**: every command carries `export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH;` up front, or an absolute path. That is why `tmux` without the absolute path → `command not found` from node exec (PATH there is `/usr/bin:/bin:/usr/sbin:/sbin`).
-- `/opt/homebrew/bin/tmux send-keys 'texto' Enter` in ONE call is the classic way and usually works in a shell, but not reliably in Claude Code's TUI — keep the two-call form of step 3.
+- `/opt/homebrew/bin/tmux send-keys 'text' Enter` in ONE call is the classic way and usually works in a shell, but not reliably in Claude Code's TUI — keep the two-call form of step 3.
 - `/opt/homebrew/bin/tmux capture-pane` returns the visible pane only; use `-S -200` for more history. A 120×40 pane is enough for Claude Code; a very narrow pane wraps the dialog text and confuses reads.
 - Session names cannot contain `.` or `:`; the wrapper maps them to `-` (`goncloud.orbit` → `goncloud-orbit`).
 - A tool that exits ends its session: "can't find session" right after a `/exit` or a crash is expected, not a tmux failure — re-launch (step 6) or ask David.

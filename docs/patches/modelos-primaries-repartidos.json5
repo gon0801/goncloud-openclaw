@@ -10,7 +10,8 @@
 // opencode/free sigue). Todos los ids existen en las cadenas vivas del 2026-09-15
 // (docs/patches/modelos-vivos-2026-09-15.json5) y el test lo cruza.
 // Aplicar NO es verificar: tras el patch, el smoke test por agente del README
-// (fallbackUsed == false y winnerProvider == el primary de esta tabla). Y el cambio de
+// (trace.fallbackUsed == false y trace.winnerProvider + "/" + trace.winnerModel == el
+// primary de esta tabla; el trace vive en result.meta.executionTrace). Y el cambio de
 // proveedor de main/operaciones (crons de packing) lo aprueba David en concreto.
 { agents: { entries: {
   // Negocio: primaries propios, fuera del pipeline.
