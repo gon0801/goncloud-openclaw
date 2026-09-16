@@ -37,7 +37,6 @@ mal_path() {
       | grep -v -i -E 'nunca|jam[aá]s|never' || true
     printf '%s\n' "$input" | grep -n -E -e '`tmux[[:space:]]' \
       -e '`(capture-pane|send-keys|set-environment|show-environment|list-sessions|new-session)' \
-      | grep -v '/opt/homebrew/bin/tmux' \
       | grep -v -i -E 'nunca|jam[aá]s|never' || true
   } | grep .
 }
@@ -71,6 +70,7 @@ for c in 'un PR `bootstrap: .saikit/autopilot.json` con solo ese archivo, que me
          '`export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH; pwsh -NoProfile -File x.ps1`' \
          '`/opt/homebrew/bin/tmux capture-pane -p -t sesion -S -60`' \
          'lanza con `/opt/homebrew/bin/tmux new-session -d -s x` y ya' \
+         'primero `/opt/homebrew/bin/tmux list-sessions` y luego `/opt/homebrew/bin/tmux capture-pane -p -t x`' \
          '`export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH; gh pr checks 123`' \
          'Nunca pidas `docker run` en la Mac: Docker no está instalado' \
          'nunca digas "Claude Code apuntado a glm": hoy `~/bin/glm` es zcode'; do

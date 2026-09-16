@@ -101,14 +101,18 @@ escanear() {
       bad=$(printf '%s\n' "$line" \
         | grep -E -e '^[[:space:]]*(gh|pwsh|grok|zcode|kimi|codex|tmux)[[:space:]]' \
           -e '^[[:space:]]*(capture-pane|send-keys|set-environment|show-environment|list-sessions|new-session)[[:space:]]' || true)
-      bad=$(printf '%s\n' "$bad" | grep -v 'export PATH=/opt/homebrew/bin' || true)
+      # Sin `grep -v` del export: el patron ya exige el tool AL INICIO de la linea, asi
+      # que un `export PATH=…; gh …` correcto nunca entra. Filtrarlo despues dejaba pasar
+      # el caso inverso (`tmux …  # luego export PATH=…`), que es un verde falso.
     else
       spans=$(printf '%s\n' "$line" | grep -o -E '`[^`]*`' || true)
       [ -z "$spans" ] && continue
       bad=$(printf '%s\n' "$spans" \
         | grep -E -e '^`(gh|pwsh|grok|zcode|kimi|codex|tmux)[[:space:]]' \
           -e '^`(capture-pane|send-keys|set-environment|show-environment|list-sessions|new-session)([[:space:]]|`)' || true)
-      bad=$(printf '%s\n' "$bad" | grep -v 'export PATH=/opt/homebrew/bin' | grep -v '^`/' || true)
+      # Mismo criterio: el patron ancla el tool al inicio del tramo. Solo se descarta el
+      # tramo que arranca con ruta absoluta (`^`/`).
+      bad=$(printf '%s\n' "$bad" | grep -v '^`/' || true)
     fi
     [ -n "$bad" ] && out="$out
 $f: $line"
@@ -121,6 +125,11 @@ FX=$(mktemp -d) || exit 1
 trap 'rm -rf "$FX"' EXIT
 printf '%s\n' 'Texto.' '```bash' 'tmux capture-pane -p -t sesion -S -60' '```' > "$FX/malo.md"
 [ -n "$(escanear "$FX/malo.md")" ] || fail "el escaneo NO marca un tool pelado dentro de un bloque cercado"
+# El export DESPUES del comando no lo vuelve correcto: el comando ya corrio sin PATH.
+printf '%s\n' 'Texto.' '```bash' 'tmux capture-pane -p -t sesion  # y despues export PATH=/opt/homebrew/bin:$PATH' '```' > "$FX/malo2.md"
+[ -n "$(escanear "$FX/malo2.md")" ] || fail "el escaneo deja pasar un tool pelado cuando el export viene DESPUES (verde falso)"
+printf '%s\n' 'Se lee con `tmux capture-pane -p -t x` (y aparte `export PATH=/opt/homebrew/bin:$PATH`).' > "$FX/malo3.md"
+[ -n "$(escanear "$FX/malo3.md")" ] || fail "el escaneo deja pasar un tramo pelado por un export en otra parte de la linea"
 printf '%s\n' 'Texto.' '```bash' '/opt/homebrew/bin/tmux capture-pane -p -t sesion -S -60' \
   'export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH; gh pr checks 1' '```' > "$FX/bueno.md"
 [ -z "$(escanear "$FX/bueno.md")" ] || fail "el escaneo marca un bloque cercado correcto: $(escanear "$FX/bueno.md")"
