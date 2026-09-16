@@ -37,8 +37,8 @@ Partida: `Plans.md` Fase 7, este runbook y el spec viven en la rama `docs/fase7-
 
 | Operación | Alcance | Decisión |
 |---|---|---|
-| git push + gh pr create en goncloud-openclaw | Dos PRs (docs y código) y los de reversa si hacen falta | Aprobado |
-| Merge automatizado por la ruta del kit | Los dos PRs, docs primero; `--confirmado` con este runbook como el sí escrito | Aprobado |
+| git push + gh pr create en goncloud-openclaw | Todo PR de esta fase en este repo: #46 (o su recreación en Q0), docs (D), código (P), cierre (`fase7/cierre`) y los de reversa | Aprobado |
+| Merge automatizado por la ruta del kit | Todo PR de esta fase en este repo, en el orden Q0 a Q5; `--confirmado` con este runbook como el sí escrito | Aprobado |
 | Turno de solo lectura a main y `openclaw gateway call` desde la Mac; `curl` sin credencial al puerto del gateway | Spike 7.0 y canarios de 7.6 | Aprobado |
 | `openclaw config patch` de `plugins.entries.tablero-runbook.*` y reload con cero runs en vuelo; rollback `enabled: false` | 7.6 | Aprobado |
 | Código nuevo vivo en el gateway (plugin sin hooks) y un `gh pr merge` de prueba desde un agente que debe salir bloqueado | 7.4, 7.5, 7.6 | Aprobado |
