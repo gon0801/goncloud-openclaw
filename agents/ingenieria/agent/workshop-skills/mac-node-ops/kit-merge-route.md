@@ -1,6 +1,6 @@
 # Kit merge route (summonaikit): gate prerequisites + sealed verdict
 
-For autopilot runs where the lead merges PRs via `/Users/dn/dev/summonaikit-claude/tools/saikit-merge.sh` — the sanctioned path; direct `gh pr merge` from an agent is blocked by summa-gate (SKILL.md step 8). Verified live 2026-09-16 during Fase 6: one verdict sealed end-to-end (hash == hook seal), every gate failure produced its named reason verbatim. The final `--confirmado` merge was NOT observed completing this session — do not cite it as verified.
+For autopilot runs where the lead merges PRs via `/Users/dn/dev/summonaikit-claude/tools/saikit-merge.sh` — the sanctioned path; direct `gh pr merge` from an agent is blocked by summa-gate (SKILL.md step 8). Verified live 2026-09-16 during Fase 6: verdicts sealed end-to-end (hash == hook seal), every gate failure produced its named reason verbatim, and two `--confirmado` merges observed completing (squash `e2479ae` for #45, squash `8bafdae` for #49): each wrote `.saikit/veredictos/<sha>.merge` containing exactly the merge commit SHA, and deleted the remote branch as a separate reported step.
 
 ## Gate prerequisites (fail-closed; every rejection names its reason)
 
@@ -9,6 +9,10 @@ Run inside the PR's worktree, on the PR branch checked out (detached HEAD → `N
 Checked in order: repo match via `gh repo view`; the PR of the current branch; `mergeable` (one UNKNOWN retry); config `.saikit/autopilot.json` read from **origin/<base>** (never the working tree) with `merge=true` and `merge_despliega` ∈ {publica, no} — older configs with `"si"` are invalid ("merge_despliega unknown"); the setup script's `--despliega` accepts publica|no|no-se; `rama` == base; PR head == local HEAD; PR author == gh account; commits only from the local email / gh noreply; **base up to date** (`base avanzada` → integrate the base into the branch, re-run CI); **CI green on the exact head SHA** (`gh run list --commit`: no runs / pending / skipped / other sha = red; pull_request runs judged when any exist); the PR must NOT touch `.saikit/autopilot.json` (config/bootstrap PRs merge only by the operator — regla 20.22; every such refusal is a residual with command + verbatim output); then the sealed verdict and its semantics: `verifier=PASS`, `reviewer=clean`, `blast.nivel >= 4`, `verify_app` PASS with a command containing `verify/` (or `n/a` only when config `sin_verify_app=true`).
 
 Sequence: `--dry-run` (says what it would do) → plain run (ends `LISTO` = operator go already given by preapproval) → `--confirmado` (repeats the whole gate, merges squash with `--match-head-commit <sha> --body "Saikit-Merge: <sha>"`, records `.saikit/veredictos/<sha>.merge`, deletes the remote branch as a separate reported step). Reverts: `--revert-de <merge_commit> --confirmado` (single commit, exact tree equality with the pre-merge tree, Saikit-Merge trailer required, no verdict needed).
+
+## One owner per merge (race rule)
+
+Before launching a ceremony or a merge flow, check for other live flows targeting the same PR: `pgrep -fl 'claude -p'` and `ls -lt /tmp/*merge* /tmp/brief-* 2>/dev/null` — read any prompt file that names the PR and coordinate with its owner first. 2026-09-16: a flow launched outside the lead session (`/tmp/seal-merge-cierre.txt`) and the lead's own closer raced for PR #49; the gate's exact-head check (`--match-head-commit`) made a double merge impossible, but the loser's ceremony was wasted work killed mid-flight. If another live flow already covers the PR, stand down and verify its result instead of launching a second one.
 
 ## The sealed verdict (D16)
 
@@ -24,3 +28,7 @@ Launch detached from the PR worktree (SKILL.md step 10 stdin/detach rules): `noh
 Two brief rules kept the ceremony honest (a first attempt failed when the brief pre-loaded the verdict content): never dictate `blast.hecho` or `reviewer: clean` — the verifier redacts the hecho from what it measured, and the reviewer seals only its own adjudication. A refused seal with findings is a healthy outcome: back to the implementer, fix, re-ceremony on the new head.
 
 Poll the ceremony via on-disk artifacts — verdict file existence, `veredicto_sha256` in the newest harness-state.env, tail of harness-evidence.log — never by waiting on the exec.
+
+## Post-merge cleanup
+
+The kit's postmerge removes the PR worktree itself (wt-E was already gone from `git worktree list` right after the #45 merge, 2026-09-16). Verdict files under `.saikit/veredictos/` are untracked and gitignored — ephemeral by design; the durable evidence is the squash commit and the PR record. A leftover worktree therefore needs `--force` when only ephemeral untracked files remain: confirm nothing tracked is dirty (`git -C <wt> status --short` — expect only `?? .saikit/`, `?? .claude/`, `?? out/`), then `git worktree remove --force <wt>`. The merge deletes the remote branch on its own; the LOCAL branch outlives it and is deleted by hand with `git branch -D <branch>` after the worktree is gone.

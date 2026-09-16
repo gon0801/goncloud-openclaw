@@ -31,3 +31,4 @@ David connects to the Mac from his iPhone via the Screens app over WireGuard (se
 
 - A route-table `default` via utun3 alongside en0's default is normal for this full-tunnel setup — not by itself a fault.
 - Log files under `~/Library/Application Support/WireGuard/` do not exist on this install; only the Group Containers path above is real. Window-truth questions during such diagnosis go to the app's own AppleScript, not `System Events` process entries (see `mac-input-control` pitfalls).
+- This skill is about the **Mac's** tunnel. If the app that must answer is the OpenClaw app on the phone rather than Screens to the Mac, the diagnosis is different: the gateway listens only on its tailnet address and 127.0.0.1, so reaching the VPN server proves nothing about reaching the gateway — use `gateway-mobile-pairing`.
