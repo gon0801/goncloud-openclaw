@@ -16,9 +16,12 @@ el lead), no bug.
 `SessionTranscriptProjectionUnavailableError` (`src/config/sessions/session-transcript-projection-error.ts`),
 lanzado al final de `withCurrentProjectionSnapshot` cuando el snapshot no sirve.
 
-**Condición de disparo (leída en el código):** el error se lanza si pasa CUALQUIERA
-de: no hay snapshot; `snapshot.state.needsRebuild` es true; `indexedSeq != latestSeq`;
-o `hasUnclassifiedSessionTranscriptEvents(db, sessionId)` devuelve true. En ese caso
+**Condición de disparo (leída en el código):** cuando NO hay snapshot, la lectura
+devuelve el estado vacío y no falla (`if (!snapshot) return { kind: "value", … state:
+EMPTY_PROJECTION_STATE }`). El error se lanza cuando SÍ hay snapshot y pasa CUALQUIERA
+de: el snapshot no trae `state`; `snapshot.state.needsRebuild` es true;
+`indexedSeq != latestSeq`; o `hasUnclassifiedSessionTranscriptEvents(db, sessionId)`
+devuelve true. En ese caso
 dispara `startSessionTranscriptIndexReconcile({...databaseOptions, preferredSessionId})`
 y tira el error en vez del valor — o sea, toda lectura de historial durante una
 reconciliación (aunque sea por UN evento sin clasificar) falla en vez de devolver lo
@@ -60,7 +63,7 @@ relanzamiento manual, sin más diagnóstico que la cadena.
 
 **Repro:** llamar al spawn con un envelope cuyo `createdAt` sea float (p. ej.
 `Date.now()/1000` sin truncar) o con un campo adicional: el error es el mismo en
-los tres casos.
+ambos casos.
 
 **Sugerencia:** incluir en el mensaje el campo que falló y la causa
 (`schema`/`createdAt`/`campo extra: <nombre>`).

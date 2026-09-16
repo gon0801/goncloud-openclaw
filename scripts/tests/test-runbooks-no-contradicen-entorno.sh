@@ -27,14 +27,16 @@ mal_fase() { grep -n -E -e "$BAD_FASE" | grep -v -i -E 'nunca|jam[aá]s|never'; 
 
 # (d) comandos del exec de la Mac sin prefijo de PATH ni ruta absoluta.
 # `pwsh` pelado o cross-review.ps1 sin el prefijo del guardrail y sin su ruta absoluta;
-# subcomandos de tmux citados sin el binario absoluto.
+# `tmux` pelado (la forma normal, `tmux capture-pane ...`) y tambien el subcomando suelto
+# (`capture-pane ...`), los dos sin el binario absoluto.
 mal_path() {
   local input; input=$(cat)
   {
     printf '%s\n' "$input" | grep -n -E -e '`pwsh[[:space:]]' -e 'cross-review\.ps1' \
       | grep -v 'export PATH=/opt/homebrew/bin' | grep -v '/Users/dn/.local/bin/pwsh' \
       | grep -v -i -E 'nunca|jam[aá]s|never' || true
-    printf '%s\n' "$input" | grep -n -E -e '`(capture-pane|send-keys|set-environment|show-environment|list-sessions|new-session)' \
+    printf '%s\n' "$input" | grep -n -E -e '`tmux[[:space:]]' \
+      -e '`(capture-pane|send-keys|set-environment|show-environment|list-sessions|new-session)' \
       | grep -v '/opt/homebrew/bin/tmux' \
       | grep -v -i -E 'nunca|jam[aá]s|never' || true
   } | grep .
@@ -49,9 +51,11 @@ for c in 'va commiteado en el PR del carril, es lo que el gate lee' \
          '`pwsh -NoProfile -File /Users/dn/quality-kit/cross-review.ps1 -Con auto`' \
          'desde el worktree, `pwsh -NoProfile -File /Users/dn/quality-kit/cross-review.ps1 -Con auto -Excluir claude`' \
          'leyendo la pantalla (`capture-pane -p -t glm-wt-f7-P -S -60`)' \
+         'se lee con `tmux capture-pane -p -t glm-wt-f7-P -S -60` y listo' \
+         'arranca con `tmux new-session -d -s glm-wt-f7-P`' \
          'con `set-environment -t glm-wt-f7-P OPENCLAW_WATCH 1`' \
          '`gh pr checks 123 --watch`'; do
-  if printf '%s\n' "$c" | grep -q 'cross-review\.ps1\|`pwsh[[:space:]]\|capture-pane\|set-environment'; then
+  if printf '%s\n' "$c" | grep -q 'cross-review\.ps1\|`pwsh[[:space:]]\|capture-pane\|set-environment\|`tmux[[:space:]]'; then
     printf '%s\n' "$c" | mal_path >/dev/null || fail "mal_path NO marca: $c"
   elif printf '%s\n' "$c" | grep -q '`gh[[:space:]]'; then
     printf '%s\n' "$c" | mal_gh >/dev/null || fail "mal_gh NO marca: $c"
@@ -66,10 +70,11 @@ for c in 'un PR `bootstrap: .saikit/autopilot.json` con solo ese archivo, que me
          '`export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH; /Users/dn/.local/bin/pwsh -NoProfile -File /Users/dn/quality-kit/cross-review.ps1 -Con auto`' \
          '`export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH; pwsh -NoProfile -File x.ps1`' \
          '`/opt/homebrew/bin/tmux capture-pane -p -t sesion -S -60`' \
+         'lanza con `/opt/homebrew/bin/tmux new-session -d -s x` y ya' \
          '`export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH; gh pr checks 123`' \
          'Nunca pidas `docker run` en la Mac: Docker no está instalado' \
          'nunca digas "Claude Code apuntado a glm": hoy `~/bin/glm` es zcode'; do
-  if printf '%s\n' "$c" | grep -q 'cross-review\.ps1\|`pwsh[[:space:]]\|capture-pane\|set-environment'; then
+  if printf '%s\n' "$c" | grep -q 'cross-review\.ps1\|`pwsh[[:space:]]\|capture-pane\|set-environment\|tmux[[:space:]]'; then
     printf '%s\n' "$c" | mal_path >/dev/null && fail "mal_path marca una forma correcta: $c"
   elif printf '%s\n' "$c" | grep -q '`gh[[:space:]]\|docker run\|Claude Code apuntado a\|commiteado en el PR'; then
     printf '%s\n' "$c" | mal_fase >/dev/null && fail "mal_fase marca una forma correcta: $c"

@@ -85,21 +85,50 @@ grep -qF "$ANCLA_EN" "$SK2" || fail "$SK2: falta la regla del PATH (ancla en ing
 grep -qF "$ANCLA_ES" "$SK3" || fail "$SK3: falta la regla del PATH (ancla en español)"
 echo "ok (1): la regla del PATH está en las tres skills, con el mismo prefijo y en el idioma de cada una"
 
-# (2) Ninguna línea de comando de esas skills invoca un tool pelado.
-hits=""
-for f in "$SK1" "$SK2" "$SK3"; do
+# (2) Ninguna línea de comando de esas skills invoca un tool pelado. Se miran los dos
+# lugares donde una skill pone comandos: los tramos entre backticks EN PROSA y las
+# líneas DENTRO de bloques cercados (```), donde la línea entera ES el comando y no
+# hay backticks que extraer. Sin lo segundo, un `tmux ...` pelado en un bloque cercado
+# pasaba el candado.
+escanear() {
+  local f="$1" fence=0 line spans bad out=""
   while IFS= read -r line; do
+    case "$line" in '```'*) fence=$((1 - fence)); continue ;; esac
     case "$line" in
       *never*|*Never*|*NEVER*|*nunca*|*Nunca*|*NUNCA*|*jamás*|*jamas*|*JAMÁS*|*JAMAS*) continue ;;
     esac
-    spans=$(printf '%s\n' "$line" | grep -o -E '`[^`]*`' || true)
-    [ -z "$spans" ] && continue
-    bad=$(printf '%s\n' "$spans" | grep -E -e '^`(gh|pwsh|grok|zcode|kimi|codex|tmux)[[:space:]]' \
-      -e '^`(capture-pane|send-keys|set-environment|show-environment|list-sessions|new-session)([[:space:]]|`)' || true)
-    bad=$(printf '%s\n' "$bad" | grep -v 'export PATH=/opt/homebrew/bin' | grep -v '^`/' || true)
-    [ -n "$bad" ] && hits="$hits
+    if [ "$fence" -eq 1 ]; then
+      bad=$(printf '%s\n' "$line" \
+        | grep -E -e '^[[:space:]]*(gh|pwsh|grok|zcode|kimi|codex|tmux)[[:space:]]' \
+          -e '^[[:space:]]*(capture-pane|send-keys|set-environment|show-environment|list-sessions|new-session)[[:space:]]' || true)
+      bad=$(printf '%s\n' "$bad" | grep -v 'export PATH=/opt/homebrew/bin' || true)
+    else
+      spans=$(printf '%s\n' "$line" | grep -o -E '`[^`]*`' || true)
+      [ -z "$spans" ] && continue
+      bad=$(printf '%s\n' "$spans" \
+        | grep -E -e '^`(gh|pwsh|grok|zcode|kimi|codex|tmux)[[:space:]]' \
+          -e '^`(capture-pane|send-keys|set-environment|show-environment|list-sessions|new-session)([[:space:]]|`)' || true)
+      bad=$(printf '%s\n' "$bad" | grep -v 'export PATH=/opt/homebrew/bin' | grep -v '^`/' || true)
+    fi
+    [ -n "$bad" ] && out="$out
 $f: $line"
   done < "$f"
+  printf '%s' "$out"
+}
+
+# (2a) El escaneo de bloques cercados discrimina, con fixtures propios.
+FX=$(mktemp -d) || exit 1
+trap 'rm -rf "$FX"' EXIT
+printf '%s\n' 'Texto.' '```bash' 'tmux capture-pane -p -t sesion -S -60' '```' > "$FX/malo.md"
+[ -n "$(escanear "$FX/malo.md")" ] || fail "el escaneo NO marca un tool pelado dentro de un bloque cercado"
+printf '%s\n' 'Texto.' '```bash' '/opt/homebrew/bin/tmux capture-pane -p -t sesion -S -60' \
+  'export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH; gh pr checks 1' '```' > "$FX/bueno.md"
+[ -z "$(escanear "$FX/bueno.md")" ] || fail "el escaneo marca un bloque cercado correcto: $(escanear "$FX/bueno.md")"
+echo "ok (2a): el escaneo cubre los bloques cercados y distingue pelado de ruta absoluta o prefijo"
+
+hits=""
+for f in "$SK1" "$SK2" "$SK3"; do
+  hits="$hits$(escanear "$f")"
 done
 [ -z "$hits" ] || fail "invocaciones sin prefijo de PATH ni ruta absoluta:$hits"
 echo "ok (2): las tres skills invocan tools solo con prefijo de PATH o ruta absoluta"
