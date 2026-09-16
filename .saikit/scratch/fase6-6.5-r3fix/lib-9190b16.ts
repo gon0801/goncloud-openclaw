@@ -6,15 +6,11 @@ import { isAbsolute, resolve, sep } from "node:path";
 
 export type Role = "implementer" | "verifier" | "reviewer" | "adversary";
 
-// r3 (hallazgo 1): la frontera tambien corta en ;, & y | — el encadenado (`&&echo`, `;ls`, `|head`)
-// ya no esquiva el guard; la promesa "(tambien encadenado con &&/;)" del mensaje queda verdadera (6a).
-const GH_PR_MERGE_RE = /(?:^|[^A-Za-z0-9])gh\s+pr\s+merge(?:[\s;&|]|$)/;
-const GH_API_RE = /(?:^|[^A-Za-z0-9])gh\s+api(?:[\s;&|]|$)/;
+const GH_PR_MERGE_RE = /(?:^|[^A-Za-z0-9])gh\s+pr\s+merge(?:\s|$)/;
+const GH_API_RE = /(?:^|[^A-Za-z0-9])gh\s+api(?:\s|$)/;
 // cross-review r2 (grok): el corte tambien incluye ? y # — sin ellos,
 // `.../merge?squash=1` o `.../merges#ancla` esquivaban el guard (bypass por regex).
-// r3 (hallazgo 1): la clase de corte tambien incluye ;, & y | para el encadenado sin espacio.
-// r3 (hallazgo 4): la ruta /auto-merge entra en la misma clase.
-const GH_API_MERGE_PATH_RE = /\/(?:merges?|auto-merge)(?:[\s/'"`?#;&|]|$)/;
+const GH_API_MERGE_PATH_RE = /\/merges?(?:[\s/'"`?#]|$)/;
 const GIT_PUSH_RE = /(?:^|[^A-Za-z0-9])git\s+push\b/;
 const GIT_PUSH_PROTECTED_RE =
   /push\s+.*(\sorigin\s+[+:]?(master|main)|\sHEAD:(master|main)|refs\/heads\/(master|main)|[A-Za-z0-9._/-]+:(master|main)|\s[+:]?(master|main))(\s|$)/;
@@ -30,21 +26,16 @@ const MERGE_AGENT_ALLOWLIST = new Set(["implementer", "ingenieria"]);
 // el host explícito cubre curl/plain-URL. Alcance declarado (como en 1.2, el guard es léxico sobre exec):
 // query=@archivo lo esquiva (el texto no lleva la mutación) y curl con token queda fuera de alcance
 // (requeriría secret-read). Ambos bypass están declarados aquí y en la skill saikit-cierre-pr.
-// r3 (hallazgo 6): bypass INHERENTE restante, límite declarado del diseño — la indirección de
-// shell (variables, aliases, eval, base64) y query=@archivo/curl-con-token quedan fuera del
-// alcance léxico del guard sobre exec. A cambio, la promesa del mensaje "(también encadenado
-// con &&/;)" es verdadera desde el hallazgo 1: el encadenado sin espacio ya corta.
 // cross-review r2 (grok): ademas de mergePullRequest se bloquean las mutaciones hermanas:
 // mergeBranch (equivale a POST /merges) y enablePullRequestAutoMerge (abre el mismo merge sin orden).
-// r3 (hallazgo 3): word-boundary puro, sin exigir `(` — un comentario GraphQL pegado al
-// nombre (`mergePullRequest#c`) cortaba el matching. Falso positivo aceptado y declarado:
-// mencionar el nombre (p.ej. en un mensaje sobre la mutacion) ya blockea fuera de allowlist.
-const GRAPHQL_MERGE_RE = /\b(?:mergePullRequest|mergeBranch|enablePullRequestAutoMerge)\b/;
-const GITHUB_HOST_MERGE_RE = /api\.github\.com\/[^\s'"]*\/merges?(?:[\s/'"`?#;&|]|$)/;
+const GRAPHQL_MERGE_RE = /\b(?:mergePullRequest|mergeBranch|enablePullRequestAutoMerge)\s*\(/;
+const GITHUB_HOST_MERGE_RE = /api\.github\.com\/[^\s'"]*\/merges?(?:[\s/'"`?#]|$)/;
 
-// r3 (hallazgo 2): nucleo del veredicto; mergeGuardVerdict lo corre sobre el comando
-// original y sobre una copia sin comillas (wrapper mas abajo).
-function mergeGuardCoreVerdict(command: string, allowlisted: boolean): string | undefined {
+export function mergeGuardVerdict(command: string, agentId?: string): string | undefined {
+  // Normalizacion del agentId (trim + lowercase), como en el resto del modulo:
+  // "Implementer" o " implementer " se comportan igual que "implementer" (cross-review r1).
+  const allowlisted =
+    agentId !== undefined && MERGE_AGENT_ALLOWLIST.has(agentId.trim().toLowerCase());
   if (GH_PR_MERGE_RE.test(command)) {
     return "Merge bloqueado por summa-gate: `gh pr merge` está prohibido desde el agente (también encadenado con &&/;). El merge lo hace el operador o el flujo autorizado del repo.";
   }
@@ -66,23 +57,6 @@ function mergeGuardCoreVerdict(command: string, allowlisted: boolean): string | 
     return "Push bloqueado por summa-gate: `git push` a master/main está prohibido desde el agente (incluye origin master, +master, HEAD:main, refs/heads/main y delete-ref :main).";
   }
   return undefined;
-}
-
-export function mergeGuardVerdict(command: string, agentId?: string): string | undefined {
-  // Normalizacion del agentId (trim + lowercase), como en el resto del modulo:
-  // "Implementer" o " implementer " se comportan igual que "implementer" (cross-review r1).
-  const allowlisted =
-    agentId !== undefined && MERGE_AGENT_ALLOWLIST.has(agentId.trim().toLowerCase());
-  // r3 (hallazgo 2): token entrecomillado — la comilla en la posicion del token
-  // (`'gh' api ...`) cortaba la frontera del cliente. El matching corre sobre el comando
-  // original Y sobre una copia sin comillas simples/dobles; fail-closed: los falsos
-  // positivos bloquean, los falsos negativos son lo prohibido. No alcanza la indireccion
-  // de shell (variables, aliases, eval, base64) ni query=@archivo/curl con token: bypass
-  // INHERENTE del guard lexico, declarado aqui y en saikit-cierre-pr.
-  return (
-    mergeGuardCoreVerdict(command, allowlisted) ??
-    mergeGuardCoreVerdict(command.replace(/['"\\`]/g, ""), allowlisted)
-  );
 }
 
 // Canal entre agentes (2026-09-11): la respuesta de un sessions_send regresa por un camino que muere en

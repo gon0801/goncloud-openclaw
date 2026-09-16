@@ -204,4 +204,20 @@ describe("mergeGuardVerdict (6.5c)", () => {
   it("r3: gh pr ready pasa, declarado (cambia estado del borrador, no fusiona)", () => {
     assert.equal(mergeGuardVerdict("gh pr ready 12"), undefined);
   });
+  // r3 (hallazgo 2, completacion): comillas escapadas con backslash y backticks en el
+  // cliente — la copia de matching tambien tira backslashes de escape y backticks, si no
+  // `\'gh\' api` (queda `\gh\ api` al quitar comillas) y `` `gh` api `` siguen esquivando
+  // la frontera del cliente.
+  it("r3: cliente gh con comillas escapadas por backslash tambien bloquea", () => {
+    const escaped = "\\'gh\\' api graphql -f query='" + MUT + "'";
+    assert.match(mergeGuardVerdict(escaped, "verifier") ?? "", /Merge bloqueado/);
+    assert.equal(mergeGuardVerdict(escaped, "implementer"), undefined);
+  });
+
+  it("r3: cliente gh entre backticks tambien bloquea", () => {
+    const backticked = "`gh` api graphql -f query='" + MUT + "'";
+    assert.match(mergeGuardVerdict(backticked, "verifier") ?? "", /Merge bloqueado/);
+    assert.equal(mergeGuardVerdict(backticked, "implementer"), undefined);
+  });
+
 });
