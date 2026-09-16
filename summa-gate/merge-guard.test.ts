@@ -195,4 +195,13 @@ describe("mergeGuardVerdict (6.5c)", () => {
     assert.equal(mergeGuardVerdict("gh api -X PUT repos/o/r/pulls/1/auto-merge -f merge_method=squash", "implementer"), undefined);
     assert.equal(mergeGuardVerdict("gh api -X DELETE repos/o/r/pulls/1/auto-merge", "ingenieria"), undefined);
   });
+
+  // r3 (hallazgo 5): controles negativos — las consultas de estado no blockean.
+  it("r3: NO bloquea gh pr checks con -R (consulta de checks)", () => {
+    assert.equal(mergeGuardVerdict("gh pr checks 1 -R gon0801/goncloud-openclaw"), undefined);
+  });
+
+  it("r3: gh pr ready pasa, declarado (cambia estado del borrador, no fusiona)", () => {
+    assert.equal(mergeGuardVerdict("gh pr ready 12"), undefined);
+  });
 });
