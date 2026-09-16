@@ -124,5 +124,26 @@ describe("mergeGuardVerdict (6.5c)", () => {
       mergeGuardVerdict("gh api graphql -f query='mutation($id:ID!){updateIssue(input:{id:$id}){issue{number}}}'", "verifier"),
       undefined,
     );
+
+
+  });
+
+  // r3 (hallazgo 1): encadenado sin espacio — &&, ; y | no estaban en las clases de
+  // corte, asi que el comando con `&&echo`/`;ls` detras esquivaba el guard.
+  it("r3: bloquea path de merge encadenado con && o ;", () => {
+    assert.match(mergeGuardVerdict("gh api repos/o/r" + P_MERGES + "&&echo ok", "verifier") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict("gh api repos/o/r" + P_MERGES + ";ls", "verifier") ?? "", /Merge bloqueado/);
+  });
+
+  it("r3: bloquea la orden de merge de gh pr encadenada con ; o &&", () => {
+    assert.match(mergeGuardVerdict(GH_PR_M + ";ls") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict(GH_PR_M + "&&echo ok") ?? "", /Merge bloqueado/);
+  });
+
+  it("r3: bloquea curl a api.github.com con path de merge encadenado con &&", () => {
+    assert.match(
+      mergeGuardVerdict("curl -X PUT https://api.github.com/repos/o/r" + P_MERGES + "&&echo ok", "verifier") ?? "",
+      /Merge bloqueado/,
+    );
   });
 });
