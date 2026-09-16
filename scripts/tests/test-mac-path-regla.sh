@@ -25,7 +25,13 @@ fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
 SK1=agents/main/agent/workshop-skills/mac-tmux-control/SKILL.md
 SK2=agents/main/agent/workshop-skills/mac-terminal-control/SKILL.md
 SK3=agents/implementer/agent/workshop-skills/mac-exec-detach-poll/SKILL.md
-ANCLA='el exec del nodo sanea el PATH y **`pathPrepend` se ignora**'
+# El ancla va en el idioma de cada skill (las dos de main estan en ingles,
+# mac-exec-detach-poll en espanol): mezclar idiomas dentro de una skill la vuelve
+# ilegible para quien la lee de corrido. Lo que NO cambia entre idiomas, y es lo que
+# de verdad sostiene la regla, es el prefijo exacto del PATH: se exige en las tres.
+ANCLA_EN='the node exec sanitizes PATH and **`pathPrepend` is ignored**'
+ANCLA_ES='el exec del nodo sanea el PATH y **`pathPrepend` se ignora**'
+PREFIJO='export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH;'
 
 # Invocaciones peladas en la entrada estándar: tramos `tool args...` o subcomandos de
 # tmux que no traen prefijo de PATH ni ruta absoluta. Las prohibiciones se excluyen.
@@ -66,14 +72,16 @@ for c in '`export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PAT
 done
 echo "ok (3): el detector marca invocaciones peladas y deja pasar prefijos, rutas absolutas, nombres, citas y prohibiciones"
 
-# (1) La regla del PATH existe en las tres skills con el texto idéntico (ancla).
+# (1) La regla del PATH existe en las tres skills: mismo prefijo exacto en las tres,
+# y el ancla en el idioma de cada archivo.
 for f in "$SK1" "$SK2" "$SK3"; do
   [ -f "$f" ] || fail "falta $f"
-  grep -qF "$ANCLA" "$f" || fail "$f: falta la regla del PATH (ancla)"
+  grep -qF "$PREFIJO" "$f" || fail "$f: falta el prefijo exacto del PATH"
 done
-a1=$(grep -o -F "$ANCLA" "$SK1" | wc -l); a2=$(grep -o -F "$ANCLA" "$SK2" | wc -l); a3=$(grep -o -F "$ANCLA" "$SK3" | wc -l)
-[ "$a1" -ge 1 ] && [ "$a2" -ge 1 ] && [ "$a3" -ge 1 ] || fail "ancla ausente en alguna skill"
-echo "ok (1): la regla del PATH está en las tres skills con el texto idéntico"
+grep -qF "$ANCLA_EN" "$SK1" || fail "$SK1: falta la regla del PATH (ancla en inglés)"
+grep -qF "$ANCLA_EN" "$SK2" || fail "$SK2: falta la regla del PATH (ancla en inglés)"
+grep -qF "$ANCLA_ES" "$SK3" || fail "$SK3: falta la regla del PATH (ancla en español)"
+echo "ok (1): la regla del PATH está en las tres skills, con el mismo prefijo y en el idioma de cada una"
 
 # (2) Ninguna línea de comando de esas skills invoca un tool pelado.
 hits=""

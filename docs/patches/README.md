@@ -120,6 +120,12 @@ esta tabla (negocio separado).
 | ingenieria | deepseek/deepseek-flash | xai/grok-4.6 |
 | scout | opencode-go/deepseek-v4.1-flash | xai/grok-4.6 |
 
+**Decisión de David, pendiente: esto toca el negocio.** La tabla mueve `main` a
+`zai/glm-5.3` y `operaciones` a `kimi/k3`, así que los crons de packing (`packing-*`,
+agente `operaciones`) pasarían a correr con otro proveedor. Separar el negocio de la
+llave del pipeline es justo el punto del reparto, pero el cambio de proveedor de los
+crons no se aplica sin que David lo apruebe en concreto.
+
 Primaries por proveedor: opencode-go 2, xai 2, zai/kimi/opencode/deepseek 1. (Los dos
 roles de control no comparten dominio de cuota: reviewer en `opencode/free`,
 verifier en `xai`.) Primer fallback por proveedor: opencode 2, deepseek 2,
@@ -157,6 +163,22 @@ en ventana muerta (cero runs: `config patch` recarga la config y mata los runs):
 openclaw config patch --file docs/patches/modelos-primaries-repartidos.json5 --dry-run
 openclaw config patch --file docs/patches/modelos-primaries-repartidos.json5
 ```
+
+**Smoke test obligatorio: aplicar no es verificar.** Que un id aparezca en la config no
+prueba que responda (es la regla que nació de los dos incidentes del 2026-09-10).
+Ninguno de los primaries nuevos ha sido ganador en una corrida real:
+`deepseek/deepseek-flash`, por ejemplo, solo figuraba como último fallback en lo vivo.
+Después del patch, una llamada real por agente, leyendo quién contestó:
+
+```bash
+# Windows / gateway, tras aplicar, agente por agente:
+openclaw agent --agent <id> --session-key smoke:<id> --message "responde PONG" --json
+# se exige: fallbackUsed == false y winnerProvider == el primary de la tabla
+```
+
+Un agente que conteste con `fallbackUsed: true` tiene un primary que no sirve: se anota
+aquí con la razón y se le cambia el primary por un id que sí respondió. Hasta que los 8
+pasen ese smoke, la tabla es una hipótesis, no una configuración verificada.
 
 Rollback: `modelos-rollback.json5` describe el estado pre-M1 (primarios OpenAI) y ya
 NO coincide con lo vivo (hoy primaries `opencode-go/*` + `defaults` + `scout`, que el
