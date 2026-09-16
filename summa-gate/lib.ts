@@ -63,9 +63,8 @@ const MERGE_AGENT_ALLOWLIST = new Set(["implementer", "ingenieria"]);
 // Ya NO es bypass, desde este turno: curl con token contra /graphql (cubierto por host).
 // Tampoco lo es el encadenado sin espacio (r3 hallazgo 1) ni el terminador pegado (turno de
 // cierre): la frontera por lookahead de arriba los corta a los dos, así que la promesa del
-// mensaje "(también encadenado con &&/;)" es verdadera. La copia de esta declaración en la skill
-// saikit-cierre-pr todavía dice "curl con token queda fuera de alcance": necesita el mismo
-// ajuste, fuera del alcance de este carril (summa-gate/).
+// mensaje "(también encadenado con &&/;)" es verdadera.
+// La copia de esta declaración en la skill saikit-cierre-pr está alineada desde a679c5a.
 // cross-review r2 (grok): ademas de mergePullRequest se bloquean las mutaciones hermanas:
 // mergeBranch (equivale a POST /merges) y enablePullRequestAutoMerge (abre el mismo merge sin orden).
 // r3 (hallazgo 3): word-boundary puro, sin exigir `(` — un comentario GraphQL pegado al
