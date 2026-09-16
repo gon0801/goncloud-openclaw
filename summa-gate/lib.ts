@@ -40,7 +40,31 @@ export type Role = "implementer" | "verifier" | "reviewer" | "adversary";
 // el bypass (no se distingue endpoint de destino), resuelta del lado seguro: se pide un destino que
 // no lleve /merge en la ruta. Tiene prueba propia. La rama de host SI exige localidad, porque
 // [^\s'"]* no cruza el espacio: ahi solo cuenta la URL contigua.
-const GH_PR_MERGE_RE = /(?:^|[^A-Za-z0-9])gh\s+pr\s+merge(?![A-Za-z0-9_])/;
+// FRONTERA IZQUIERDA (r7, hallazgo del reviewer del sello): la regla exigia que `gh`, `pr` y el
+// verbo fueran CONTIGUOS, y cobra acepta los flags ANTES del subcomando — los remueve al resolver
+// la hoja, verificado contra el binario real solo con --help (`gh pr -R o/r view --help` y
+// `gh pr --repo=o/r view --help` resuelven view). Con un flag interpuesto, la UNICA regla
+// incondicional del guard —la que impide que main/reviewer/adversary aterricen un PR sin la orden
+// del dueño— quedaba abierta para TODOS los agentes, allowlist incluida. No es una tecnica de
+// evasion: `-R`/`--repo` es el estilo que el propio repo usa en sus comandos de lectura, asi que
+// la forma esquivada era mas probable que la contigua. Tampoco es un bypass INHERENTE (el texto
+// del comando lleva la orden completa y visible: es corregible lexicamente, y se corrige aca).
+// Fix: entre `gh` y `pr`, y entre `pr` y el verbo, se toleran cero o mas tokens de flag.
+// GH_FLAG_TOKEN = -x / --xx, con valor pegado por `=` o separado por espacio (valor opcional).
+// El valor separado NO puede ser `pr`, el verbo, ni un subcomando conocido: sin esa exclusion
+// `--repo o/r` podria tragarse el subcomando REAL (`gh pr -R o/r view 45` -> el valor se come
+// `view`) y correr la frontera hasta un `merge` que fuera dato, convirtiendo una consulta en un
+// bloqueo. Con la exclusion, view/checks/ready/list siguen sin matchear como verbo (prueba propia).
+// El valor tampoco puede empezar con `-`, asi que un flag nunca se traga otro flag: por eso el
+// bucle no es ambiguo (cada iteracion consume 1 o 2 tokens y la alternativa muere en el `\s+`
+// siguiente) y no hay backtracking exponencial.
+// La frontera DERECHA sigue siendo el lookahead de arriba, intacta.
+const GH_PR_SUBCOMANDOS =
+  "pr|merge|view|checks|checkout|ready|list|status|diff|edit|comment|close|reopen|create|lock|unlock|review|update-branch";
+const GH_FLAG_TOKEN = `-{1,2}[A-Za-z][A-Za-z0-9-]*(?:=\\S*|\\s+(?!(?:${GH_PR_SUBCOMANDOS})(?![A-Za-z0-9-]))[^-\\s]\\S*)?`;
+const GH_PR_MERGE_RE = new RegExp(
+  `(?:^|[^A-Za-z0-9])gh\\s+(?:${GH_FLAG_TOKEN}\\s+)*pr\\s+(?:${GH_FLAG_TOKEN}\\s+)*merge(?![A-Za-z0-9_])`,
+);
 const GH_API_RE = /(?:^|[^A-Za-z0-9])gh\s+api(?![A-Za-z0-9_])/;
 // r3 (hallazgo 4): la ruta /auto-merge entra en la misma clase (el `/` va antes de `auto`, asi
 // que necesita alternativa propia). turno de cola (re-review 2026-09-16, hallazgo 1):
@@ -74,6 +98,12 @@ const MERGE_AGENT_ALLOWLIST = new Set(["implementer", "ingenieria"]);
 //       la orden de merge, así que ninguna regex léxica la ve;
 //   (2) query=@archivo — la mutación vive en el archivo, no en el comando (tiene prueba propia).
 // Ya NO es bypass, desde este turno: curl con token contra /graphql (cubierto por host).
+// Ya NO es bypass, desde r7: el FLAG INTERPUESTO entre `gh`/`pr`/el verbo (`-R o/r`, `--repo o/r`,
+// `--repo=o/r`). Mientras esa forma estuvo abierta esta declaración decía DOS y eran TRES: no
+// entraba en ninguna de las dos clases inherentes —el texto del comando llevaba la orden completa
+// y visible— así que se cerró léxicamente en vez de re-escribir el conteo. Vuelven a ser DOS, y la
+// frontera izquierda queda cubierta con prueba propia (las tres formas, para main, la allowlist,
+// reviewer y agentId ausente, con las consultas `pr view`/`pr checks` como controles negativos).
 // Tampoco lo es el encadenado sin espacio (r3 hallazgo 1) ni el terminador pegado (turno de
 // cierre): la frontera por lookahead de arriba los corta a los dos, así que la promesa del
 // mensaje "(también encadenado con &&/;)" es verdadera.

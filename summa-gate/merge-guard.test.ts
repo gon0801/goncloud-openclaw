@@ -468,4 +468,43 @@ describe("mergeGuardVerdict (6.5c)", () => {
     );
   });
 
+  // r7 (hallazgo del reviewer del sello): la FRONTERA IZQUIERDA. GH_PR_MERGE_RE exigia que
+  // `gh`, `pr` y el verbo fueran contiguos, y cobra acepta los flags ANTES del subcomando (lo
+  // remueve al resolver la hoja: `gh pr -R o/r view --help` resuelve view). Con un flag de repo
+  // interpuesto, la UNICA regla incondicional del guard —la que impide que main/reviewer/
+  // adversary aterricen un PR sin la orden del dueño— quedaba abierta para TODOS los agentes.
+  // No es una tecnica de evasion: `-R`/`--repo` es el estilo que el propio repo usa en sus
+  // comandos de lectura. Las tres formas del flag con valor tienen que bloquear igual que la
+  // forma contigua, y los subcomandos de consulta tienen que seguir pasando.
+  const FLAG_CORTO = "gh pr -R o/r " + "me" + "rge 45 --squash";
+  const FLAG_LARGO = "gh pr --repo o/r " + "me" + "rge 45 --squash";
+  const FLAG_IGUAL = "gh pr --repo=o/r " + "me" + "rge 45 --squash";
+
+  it("r7: flag interpuesto entre pr y el verbo BLOQUEA para main (regla incondicional)", () => {
+    assert.match(mergeGuardVerdict(FLAG_CORTO, "main") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict(FLAG_LARGO, "main") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict(FLAG_IGUAL, "main") ?? "", /Merge bloqueado/);
+  });
+
+  it("r7: flag interpuesto BLOQUEA tambien para la allowlist (implementer)", () => {
+    assert.match(mergeGuardVerdict(FLAG_CORTO, "implementer") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict(FLAG_LARGO, "implementer") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict(FLAG_IGUAL, "implementer") ?? "", /Merge bloqueado/);
+  });
+
+  it("r7: flag interpuesto BLOQUEA para reviewer y sin agentId", () => {
+    assert.match(mergeGuardVerdict(FLAG_CORTO, "reviewer") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict(FLAG_CORTO, undefined) ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict(FLAG_IGUAL, undefined) ?? "", /Merge bloqueado/);
+  });
+
+  it("r7: control negativo - las consultas con flag de repo siguen PASANDO para main", () => {
+    assert.equal(mergeGuardVerdict("gh pr -R o/r view 45", "main"), undefined);
+    assert.equal(mergeGuardVerdict("gh pr checks 45 -R o/r", "main"), undefined);
+  });
+
+  it("r7: regresion - la forma contigua sigue BLOQUEANDO para implementer", () => {
+    assert.match(mergeGuardVerdict(GH_PR_M + " 45 --squash", "implementer") ?? "", /Merge bloqueado/);
+  });
+
 });
