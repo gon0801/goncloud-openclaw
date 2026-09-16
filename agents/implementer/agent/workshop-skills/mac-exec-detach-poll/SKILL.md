@@ -30,6 +30,8 @@ ciegas.
 
 ## Entorno del exec (PATH restringido)
 
+el exec del nodo sanea el PATH y **`pathPrepend` se ignora**; todo comando lleva `export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH;` al frente, o ruta absoluta.
+
 El exec del nodo corre con `PATH=/usr/bin:/bin:/usr/sbin:/sbin` y
 `tools.exec.pathPrepend` se ignora en host=node. Ausencias medidas y su
 reemplazo:

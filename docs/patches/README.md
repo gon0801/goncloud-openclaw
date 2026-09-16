@@ -99,6 +99,70 @@ Si solo aplicaste fase1, el rollback tambien reescribe main/operaciones al snaps
 - 2026-09-15 (reset OpenAI): ver `eslabon-6-openai.md` antes de reintroducir gpt-5.x.
 - Metricas: `openclaw audit --kind agent_run --status failed --agent <id>`; `models.authStatus` (openai/xai/deepseek). Audit no guarda el modelo que atendio cada corrida.
 
+## Primaries repartidos — PROPUESTA 2026-09-16 (NO aplicada)
+
+Causa (corrida nocturna del 2026-09-15): los 8 agentes colgaban de la misma llave
+`opencode-go` y una cuota agotada frenó toda la flota (cooldown de 10 min a 24 h).
+Propuesta en `modelos-primaries-repartidos.json5`: ningún proveedor es primary de más
+de 2 agentes y `main`/`operaciones` (negocio) no comparten primary con el pipeline.
+Respeta FASE B (cadenas con proveedores distintos, runtime nativo sin OpenAI ni codex,
+Anthropic al fondo: último fallback de cada cadena) y la regla nueva de David para
+esta tabla (negocio separado).
+
+| agente | primary | primer fallback |
+|---|---|---|
+| main | zai/glm-5.3 | opencode/glm-5.3-flash |
+| operaciones | kimi/k3 | opencode/muse-spark-1.3-contributor-free |
+| implementer | opencode-go/muse-spark-1.3-contributor | deepseek/deepseek-flash |
+| reviewer | opencode/deepseek-v4-flash | opencode-go/deepseek-v4.1-flash |
+| adversary | xai/grok-4.6 | opencode-go/deepseek-v4.1-flash |
+| verifier | xai/grok-4.6 | deepseek/deepseek-flash |
+| ingenieria | deepseek/deepseek-flash | xai/grok-4.6 |
+| scout | opencode-go/deepseek-v4.1-flash | xai/grok-4.6 |
+
+Primaries por proveedor: opencode-go 2, xai 2, zai/kimi/opencode/deepseek 1. (Los dos
+roles de control no comparten dominio de cuota: reviewer en `opencode/free`,
+verifier en `xai`.) Primer fallback por proveedor: opencode 2, deepseek 2,
+opencode-go 2, xai 2 (tope 3, con check). Carga primary+fb1 por proveedor: tope 4,
+con check (una sola llave no carga con media flota en los dos primeros saltos).
+Dirección del aislamiento: el pipeline no drena primaries de negocio (check b2);
+al revés sí se permite (negocio cae al colchón free): que `main`/`operaciones`
+sigan arriba importa más que la simetría.
+Proveedor = prefijo antes de `/`: `opencode-go` y `opencode` cuentan aparte porque
+son dominios de cuota distintos (llave de pago vs free: si `opencode-go` se agota,
+`opencode/free` sigue; esa es la gracia del reparto). Prueba:
+`bash scripts/tests/test-patch-modelos-repartidos.sh` (parseo con python3 stdlib,
+sin dependencia json5: strip de `//`, comas colgantes y llaves sin comillas;
+discrimina con fixture malo y cruza cada id de la propuesta contra los ids de
+`modelos-vivos-2026-09-15.json5`).
+
+Evidencia de que cada id existe (extraída el 2026-09-16; el archivo se fecha 09-15
+porque coincide con lo medido ese día en el brief de la corrida): `openclaw models
+list --json` falla en este gateway (`active gateway does not support required
+capability "published-model-catalog"`), así que los ids se verificaron contra lo
+vivo: `~/.openclaw/bin/openclaw gateway call config.get --params '{}' --json` — los
+8 primaries y los 40 fallbacks de la propuesta aparecen en las cadenas vivas
+(`docs/patches/modelos-vivos-2026-09-15.json5`). Criterio deliberado y estricto:
+solo ids ya probados en una cadena viva. `main.models` declara más ids disponibles
+(p. ej. `deepseek/deepseek-v4-flash`), pero al no estar en ninguna cadena no entran
+en la propuesta; quedan candidatos para después. `openclaw config get
+agents.entries.<id>.model` desde la Mac devuelve "unset" aunque esté puesto (quirk
+conocido): la lectura fiable es la de arriba.
+
+**No aplicar desde la Mac ni con runs en vuelo.** En la máquina Windows (gateway),
+en ventana muerta (cero runs: `config patch` recarga la config y mata los runs):
+
+```bash
+# Windows / gateway, ventana muerta:
+openclaw config patch --file docs/patches/modelos-primaries-repartidos.json5 --dry-run
+openclaw config patch --file docs/patches/modelos-primaries-repartidos.json5
+```
+
+Rollback: `modelos-rollback.json5` describe el estado pre-M1 (primarios OpenAI) y ya
+NO coincide con lo vivo (hoy primaries `opencode-go/*` + `defaults` + `scout`, que el
+rollback no trae). Sigue vigente solo como reversa de emergencia a pre-M1; antes de
+revertir, regenerarlo desde `modelos-vivos-2026-09-15.json5`.
+
 ## V1 — solo despues de que el lead aplique fase1 (y fase3 si va junto)
 
 Por cada uno de `implementer`, `reviewer`, `adversary`, `verifier` (NUNCA main/operaciones/ingenieria):

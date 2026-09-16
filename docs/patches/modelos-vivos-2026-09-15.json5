@@ -1,0 +1,138 @@
+// Lo vivo el 2026-09-16 (coincide con lo medido el 2026-09-15 en el brief 2026-09-15-brief-muse-fixes-corrida-nocturna).
+// Fuente: ~/.openclaw/bin/openclaw gateway call config.get --params {} --json (solo agents.entries.*.model y agents.defaults.model).
+// Reemplaza a modelos-cadena-go-zen.json (untracked, desactualizado): no dejar archivos que digan lo que no es.
+{
+ "agents": {
+  "entries": {
+   "main": {
+    "model": {
+     "primary": "opencode-go/glm-5.3-flash",
+     "fallbacks": [
+      "opencode/glm-5.3-flash",
+      "anthropic/claude-sonnet-5",
+      "kimi/k3",
+      "opencode/muse-spark-1.3-contributor-free",
+      "zai/glm-5.3",
+      "xai/grok-4.6",
+      "opencode/gpt-6-astra"
+     ]
+    }
+   },
+   "operaciones": {
+    "model": {
+     "primary": "opencode-go/glm-5.3-flash",
+     "fallbacks": [
+      "opencode/glm-5.3-flash",
+      "anthropic/claude-sonnet-5",
+      "opencode/muse-spark-1.3-contributor-free",
+      "zai/glm-5.3",
+      "kimi/k3",
+      "xai/grok-4.6",
+      "opencode/gpt-6-astra"
+     ]
+    }
+   },
+   "ingenieria": {
+    "model": {
+     "primary": "opencode-go/glm-5.3-flash",
+     "fallbacks": [
+      "opencode/glm-5.3-flash",
+      "opencode/gpt-6-astra",
+      "kimi/k3",
+      "zai/glm-5.3",
+      "opencode/muse-spark-1.3-contributor-free",
+      "opencode/claude-fable-5-1",
+      "xai/grok-4.6"
+     ]
+    }
+   },
+   "implementer": {
+    "model": {
+     "primary": "opencode-go/muse-spark-1.3-contributor",
+     "fallbacks": [
+      "opencode/muse-spark-1.3-contributor-free",
+      "opencode-go-resp/muse-spark-1.3-contributor",
+      "zai/glm-5.3",
+      "kimi/k3",
+      "opencode/gpt-6-astra",
+      "xai/grok-4.6",
+      "opencode/claude-fable-5-1"
+     ]
+    }
+   },
+   "reviewer": {
+    "model": {
+     "primary": "opencode-go/deepseek-v4.1-flash",
+     "fallbacks": [
+      "opencode/deepseek-v4-flash",
+      "opencode/claude-fable-5-1",
+      "kimi/k3",
+      "opencode/muse-spark-1.3-contributor-free",
+      "zai/glm-5.3",
+      "opencode/gpt-6-astra",
+      "xai/grok-4.6"
+     ]
+    }
+   },
+   "adversary": {
+    "model": {
+     "primary": "opencode-go/deepseek-v4.1-flash",
+     "fallbacks": [
+      "opencode/deepseek-v4-flash",
+      "xai/grok-4.6",
+      "kimi/k3",
+      "zai/glm-5.3",
+      "opencode/muse-spark-1.3-contributor-free",
+      "opencode/claude-fable-5-1",
+      "opencode/gpt-6-astra"
+     ]
+    }
+   },
+   "verifier": {
+    "model": {
+     "primary": "opencode-go/glm-5.3-flash",
+     "fallbacks": [
+      "opencode/glm-5.3-flash",
+      "opencode/gpt-6-astra",
+      "opencode/muse-spark-1.3-contributor-free",
+      "kimi/k3",
+      "zai/glm-5.3",
+      "opencode/claude-fable-5-1",
+      "xai/grok-4.6"
+     ]
+    }
+   },
+   "scout": {
+    "model": {
+     "primary": "opencode-go/deepseek-v4.1-flash",
+     "fallbacks": [
+      "opencode/deepseek-v4-flash",
+      "zai/glm-5.3",
+      "opencode/muse-spark-1.3-contributor-free",
+      "kimi/k3",
+      "xai/grok-4.6",
+      "anthropic/claude-sonnet-5",
+      "deepseek/deepseek-flash"
+     ]
+    }
+   }
+  },
+  "defaults": {
+   "model": {
+    "primary": "opencode-go-resp/muse-spark-1.3-contributor",
+    "fallbacks": [
+     "opencode/glm-5.3-flash",
+     "opencode-go/deepseek-v4.1-flash",
+     "opencode/muse-spark-1.3-contributor-free",
+     "opencode/deepseek-v4-flash-vision-exp",
+     "anthropic/claude-sonnet-5",
+     "zai/glm-5.3",
+     "kimi/k3",
+     "xai/grok-4.6",
+     "deepseek/deepseek-flash",
+     "openai/gpt-5.6-sol"
+    ]
+   }
+  }
+ }
+}
