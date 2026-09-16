@@ -46,7 +46,7 @@ el PATH del nodo: usá siempre la ruta absoluta `/opt/homebrew/bin/gh`
 
 ## Merge por orden del dueño
 
-The repo convention leaves merges to the owner, but David can order them explicitly ("Fusiona", 2026-09-13) — that order is the merge authority for the lane's approved PRs. `gh pr merge` is still blocked by the merge-guard — para TODO agente, sin excepción, y desde r7 (completado en r8) también con flags interpuestos entre `gh`, `pr` y el verbo, en sus CUATRO formas: valor separado (`-R o/r`, `--repo o/r`), valor pegado con `=` (`-R=o/r`, `--repo=o/r`) y valor pegado SIN `=` (`-Ro/r`, la forma de una sola pieza que r7 dejó abierta), que antes esquivaban la regla entera; the GitHub API route is not, for `implementer`/`ingenieria` agents (verified 2026-09-13 on #315/#316/#317, all squash — since 6.5c it *is* blocked for every other agent, see "Alcance del guard desde 6.5c" below):
+The repo convention leaves merges to the owner, but David can order them explicitly ("Fusiona", 2026-09-13) — that order is the merge authority for the lane's approved PRs. `gh pr merge` is still blocked by the merge-guard — para TODO agente, sin excepción, y desde r7 (completado en r8) también con flags interpuestos entre `gh`, `pr` y el verbo, en sus CUATRO formas: valor separado (`-R o/r`, `--repo o/r`), valor pegado con `=` (`-R=o/r`, `--repo=o/r`) y valor pegado SIN `=` (`-Ro/r`, la forma de una sola pieza que r7 dejó abierta), que antes esquivaban la regla entera; desde r9 la misma tolerancia vale para la rama `gh api` (las dos reglas con allowlist, REST y GraphQL), que hasta r8 exigía que `gh` y `api` fueran contiguos, y también para la forma separada con el valor entrecomillado que lleva un espacio adentro (`-H 'Accept: application/vnd.github+json'`); the GitHub API route is not, for `implementer`/`ingenieria` agents (verified 2026-09-13 on #315/#316/#317, all squash — since 6.5c it *is* blocked for every other agent, see "Alcance del guard desde 6.5c" below):
 
 1. Merge order for stacked PRs: base PR first, then the stacked one after re-targeting. When a stacked PR's base is a branch that just merged, either wait for GitHub to auto-re-target or re-target it first: `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -f base=master --jq '{number,base:.base.ref,state}'` (verified on #316). Then re-check `mergeable` — it goes `UNKNOWN` while GitHub recalculates, and `CONFLICTING` if master moved past it (fix below before merging).
 2. Merge with the expected head pinned: `ID=$(gh pr view <n> -R <owner>/<repo> --json id,headRefOid --jq '"\(.id) \(.headRefOid)"')`, split into GraphQL node id and head oid, then `gh api graphql -f query='mutation($id:ID!,$oid:GitObjectID!){mergePullRequest(input:{pullRequestId:$id,expectedHeadOid:$oid,mergeMethod:SQUASH}){pullRequest{number,state}}}' -f id="$ID" -f oid="$OID"`. Confirm from `gh pr view <n> --json state,mergedAt`.
@@ -65,8 +65,15 @@ Precondiciones (Fase 6, 6.5b): este bloque solo corre cuando el brief trae la or
    blockea; `gh pr ready` y `gh pr checks` siguen pasando). Cierre r7: el flag interpuesto
    entre `gh`/`pr`/el verbo tampoco esquiva; no era una tercera clase inherente (el texto
    del comando llevaba la orden completa y visible), por eso se cerró y el conteo sigue
-   siendo DOS. Las consultas con flag de repo (`gh pr -R o/r view 45`, `gh pr checks 45
-   -R o/r`) siguen pasando, con control negativo propio en la batería.
+   siendo DOS. Cierre r9: la frontera izquierda queda cubierta en las DOS ramas del
+   cliente —`gh pr <verbo>` y `gh api` (REST y GraphQL)—, no solo en la primera; hasta r8
+   la declaración decía "cubierta" con `gh api` todavía exigiendo contigüidad, que era
+   justo la rama de las dos reglas con allowlist. El conteo DOS vuelve a ser verdadero.
+   Las consultas con flag de repo (`gh pr -R o/r view 45`, `gh pr checks 45 -R o/r`,
+   también con el valor pegado) y las lecturas con flag antes de `api` (`gh -X GET api
+   rate_limit`, `gh --header '…' api repos/o/r/pulls/45`) siguen pasando, con control
+   negativo propio en la batería; la allowlist sigue pasando en su rama (implementer/
+   ingenieria con la orden del dueño), también con flag interpuesto.
    Jerarquía explícita: esta orden del dueño en el brief PREVALECE sobre el paso 4
    genérico ("NUNCA intentes el merge") — con la orden en el brief se ejecuta esta
    sección; sin ella rige el paso 4 y el merge queda para el operador. Nota de ruta:

@@ -527,4 +527,94 @@ describe("mergeGuardVerdict (6.5c)", () => {
     assert.match(mergeGuardVerdict(GH_PR_M + " 45 --squash", "implementer") ?? "", /Merge bloqueado/);
   });
 
+  // r9 (hallazgo del reviewer del sello sobre 5c49b27): la MISMA frontera izquierda, una rama
+  // mas alla. r7/r8 se la enseñaron solo a GH_PR_MERGE_RE; GH_API_RE seguia exigiendo que `gh` y
+  // `api` fueran CONTIGUOS, y GH_API_RE es el que gatilla las DOS reglas de merge con allowlist
+  // (la ruta REST /merge… y la mutacion GraphQL cuando el cliente es `gh api`). Con un flag
+  // interpuesto, main/reviewer/adversary y el agentId ausente aterrizaban el PR sin la orden del
+  // dueño. cobra aplica a la hoja los flags puestos ANTES del subcomando (stripFlags se los salta
+  // al resolver `api` y el flagset de `api` los parsea igual): verificado contra el binario solo
+  // con lecturas — `gh -X GET api rate_limit --jq '.rate.limit'` devuelve 5000 y
+  // `gh --method POST api rate_limit` devuelve un 404 DEL SERVIDOR, o sea el metodo puesto antes
+  // del subcomando viaja en la request; ese mismo camino con PUT es el merge.
+  // Las cuatro formas del flag con valor son la clase completa, igual que en la rama `pr`.
+  // QUINTA PIEZA (no es una quinta forma, es la separada con el valor ENTRECOMILLADO que lleva un
+  // espacio adentro): `-H 'Accept: application/vnd.github+json'`. La sonda del closer la listo
+  // como PASA (fila D) y cobra tambien la ejecuta, asi que se cierra en el mismo SHA en vez de
+  // dejarla abierta y volver a declarar una frontera que no lo esta.
+  const API_PATH_45 = "repos/o/r" + "/pulls/45/" + "me" + "rge";
+  const API_FLAG_CORTO = "gh -X PUT api " + API_PATH_45;
+  const API_FLAG_LARGO = "gh --method PUT api " + API_PATH_45;
+  const API_FLAG_IGUAL = "gh --method=PUT api " + API_PATH_45;
+  const API_FLAG_PEGADO = "gh -XPUT api " + API_PATH_45;
+  const API_FLAG_COMILLAS = "gh -H 'Accept: application/vnd.github+json' api -X PUT " + API_PATH_45;
+  const GQL_FLAG_CORTO = "gh -X POST api graphql -f query='" + MUT + "'";
+  const GQL_FLAG_LARGO = "gh --method POST api graphql -f query='" + MUT + "'";
+  const GQL_FLAG_IGUAL = "gh --method=POST api graphql -f query='" + MUT + "'";
+  const GQL_FLAG_PEGADO = "gh -XPOST api graphql -f query='" + MUT + "'";
+  const GQL_FLAG_TRAS_API = "gh api --method POST graphql -f query='" + MUT + "'";
+  const FORMAS_API_R9 = [API_FLAG_CORTO, API_FLAG_LARGO, API_FLAG_IGUAL, API_FLAG_PEGADO];
+  const FORMAS_GQL_R9 = [GQL_FLAG_CORTO, GQL_FLAG_LARGO, GQL_FLAG_IGUAL, GQL_FLAG_PEGADO];
+  // La allowlist NO aplica a estos tres: son los agentes que las dos reglas existen para detener.
+  const AGENTES_SIN_ORDEN = ["main", "reviewer", undefined];
+
+  it("r9: las cuatro formas del flag antes de api BLOQUEAN la ruta REST de merge (main, reviewer, sin agentId)", () => {
+    for (const cmd of FORMAS_API_R9) {
+      for (const agente of AGENTES_SIN_ORDEN) {
+        assert.match(mergeGuardVerdict(cmd, agente) ?? "", /Merge bloqueado/, cmd + " | " + String(agente));
+      }
+    }
+  });
+
+  it("r9: las cuatro formas del flag antes de api BLOQUEAN la mutacion GraphQL (main, reviewer, sin agentId)", () => {
+    for (const cmd of FORMAS_GQL_R9) {
+      for (const agente of AGENTES_SIN_ORDEN) {
+        assert.match(mergeGuardVerdict(cmd, agente) ?? "", /Merge bloqueado/, cmd + " | " + String(agente));
+      }
+    }
+  });
+
+  it("r9: el flag con valor entrecomillado y espacio antes de api tambien BLOQUEA", () => {
+    for (const agente of AGENTES_SIN_ORDEN) {
+      assert.match(mergeGuardVerdict(API_FLAG_COMILLAS, agente) ?? "", /Merge bloqueado/, String(agente));
+    }
+  });
+
+  it("r9: el flag interpuesto entre api y graphql BLOQUEA la mutacion", () => {
+    for (const agente of AGENTES_SIN_ORDEN) {
+      assert.match(mergeGuardVerdict(GQL_FLAG_TRAS_API, agente) ?? "", /Merge bloqueado/, String(agente));
+    }
+  });
+
+  it("r9: la allowlist sigue intacta - implementer PASA en las dos ramas con flag interpuesto", () => {
+    // Estas dos reglas son las de allowlist (no la incondicional de `gh pr <verbo>`): la orden del
+    // dueño la ejecutan implementer/ingenieria (decision D1), asi que cerrar la frontera izquierda
+    // NO puede convertir la allowlist en bloqueo.
+    for (const cmd of [...FORMAS_API_R9, ...FORMAS_GQL_R9, API_FLAG_COMILLAS]) {
+      assert.equal(mergeGuardVerdict(cmd, "implementer"), undefined, cmd);
+      assert.equal(mergeGuardVerdict(cmd, "ingenieria"), undefined, cmd);
+    }
+  });
+
+  it("r9: control negativo - las lecturas con flag antes de api siguen PASANDO", () => {
+    for (const agente of AGENTES_SIN_ORDEN) {
+      assert.equal(mergeGuardVerdict("gh -X GET api rate_limit --jq '.rate.limit'", agente), undefined, String(agente));
+      assert.equal(mergeGuardVerdict("gh --method GET api rate_limit --jq '.rate.limit'", agente), undefined, String(agente));
+      assert.equal(
+        mergeGuardVerdict("gh --header 'Accept: application/vnd.github+json' api repos/o/r/pulls/45", agente),
+        undefined,
+        String(agente),
+      );
+      assert.equal(mergeGuardVerdict("gh -XGET api repos/o/r/pulls/45", agente), undefined, String(agente));
+      // El valor entrecomillado con espacio tampoco puede volver bloqueo una consulta.
+      assert.equal(mergeGuardVerdict("gh -H 'Accept: application/vnd.github+json' pr view 45", agente), undefined, String(agente));
+    }
+  });
+
+  it("r9: control negativo - la forma pegada con view sigue PASANDO tras sumar api/graphql a la exclusion", () => {
+    assert.equal(mergeGuardVerdict("gh -Ro/r pr view 45", "main"), undefined);
+    assert.equal(mergeGuardVerdict("gh -R o/r pr view 45", "reviewer"), undefined);
+    assert.equal(mergeGuardVerdict("gh --repo=o/r pr checks 45", undefined), undefined);
+  });
+
 });

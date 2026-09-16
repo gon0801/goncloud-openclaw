@@ -79,13 +79,35 @@ export type Role = "implementer" | "verifier" | "reviewer" | "adversary";
 // 2000 tokens separados, 0.08 ms con 2000 tokens pegados y 0.06 ms con una sola pieza de 20k
 // caracteres — el crecimiento es lineal, no explota).
 // La frontera DERECHA sigue siendo el lookahead de arriba, intacta.
+// r9 (hallazgo del reviewer del sello sobre 5c49b27): la frontera izquierda estaba enseñada SOLO
+// a GH_PR_MERGE_RE. GH_API_RE seguia exigiendo `gh` y `api` CONTIGUOS, y es el que gatilla las DOS
+// reglas de merge con allowlist (ruta REST /merge… y mutacion GraphQL cuando el cliente es
+// `gh api`), asi que main/reviewer/adversary y el agentId ausente aterrizaban el PR con un flag
+// interpuesto. Misma clase ya declarada cerrada, una rama mas alla: se cierra igual, con el mismo
+// shape. Verificado contra el binario solo con lecturas: `gh -X GET api rate_limit` devuelve 5000
+// y `gh --method POST api rate_limit` devuelve un 404 DEL SERVIDOR, o sea el metodo puesto antes
+// del subcomando viaja en la request (ese camino con PUT es el merge).
+// `api` y `graphql` entran en la lista de exclusion del valor separado por las dos direcciones que
+// esa lista cuida: que un flag booleano no se trague la pieza `api` (`gh --verbose api …` tiene que
+// seguir matcheando) y que un valor de flag no se coma un subcomando real.
+// r9, pieza quinta: no es una quinta forma de attach, es la SEPARADA con el valor entrecomillado
+// que lleva un espacio adentro (`-H 'Accept: application/vnd.github+json'`). `\S*` no cruza el
+// espacio, asi que esa pieza cortaba el bucle de tokens y dejaba pasar el merge igual; cobra la
+// ejecuta (stripFlags se salta el flag y su valor para resolver la hoja). Se cierra aca en vez de
+// declarar cubierta una frontera que no lo estaria. Las tres alternativas del valor son DISJUNTAS
+// por el primer caracter (`'`, `"`, resto), asi que cada token sigue teniendo UN solo corte
+// posible: sin esa disyuncion el bucle tendria dos caminos del mismo largo por token y el
+// backtracking creceria exponencial con el numero de flags.
 const GH_PR_SUBCOMANDOS =
-  "pr|merge|view|checks|checkout|ready|list|status|diff|edit|comment|close|reopen|create|lock|unlock|review|update-branch";
-const GH_FLAG_TOKEN = `-{1,2}[A-Za-z]\\S*(?:\\s+(?!(?:${GH_PR_SUBCOMANDOS})(?![A-Za-z0-9-]))[^-\\s]\\S*)?`;
+  "pr|merge|view|checks|checkout|ready|list|status|diff|edit|comment|close|reopen|create|lock|unlock|review|update-branch|api|graphql";
+const GH_FLAG_VALOR = `(?:'[^']*'|"[^"]*"|[^-'"\\s]\\S*)`;
+const GH_FLAG_TOKEN = `-{1,2}[A-Za-z]\\S*(?:\\s+(?!(?:${GH_PR_SUBCOMANDOS})(?![A-Za-z0-9-]))${GH_FLAG_VALOR})?`;
 const GH_PR_MERGE_RE = new RegExp(
   `(?:^|[^A-Za-z0-9])gh\\s+(?:${GH_FLAG_TOKEN}\\s+)*pr\\s+(?:${GH_FLAG_TOKEN}\\s+)*merge(?![A-Za-z0-9_])`,
 );
-const GH_API_RE = /(?:^|[^A-Za-z0-9])gh\s+api(?![A-Za-z0-9_])/;
+const GH_API_RE = new RegExp(
+  `(?:^|[^A-Za-z0-9])gh\\s+(?:${GH_FLAG_TOKEN}\\s+)*api(?![A-Za-z0-9_])`,
+);
 // r3 (hallazgo 4): la ruta /auto-merge entra en la misma clase (el `/` va antes de `auto`, asi
 // que necesita alternativa propia). turno de cola (re-review 2026-09-16, hallazgo 1):
 // /merge-async (PUT, PRs apilados) entra en la misma clase, en gh api y en la ruta de host
@@ -118,21 +140,31 @@ const MERGE_AGENT_ALLOWLIST = new Set(["implementer", "ingenieria"]);
 //       la orden de merge, así que ninguna regex léxica la ve;
 //   (2) query=@archivo — la mutación vive en el archivo, no en el comando (tiene prueba propia).
 // Ya NO es bypass, desde este turno: curl con token contra /graphql (cubierto por host).
-// Ya NO es bypass, desde r7 y cerrado del todo en r8: el FLAG INTERPUESTO entre `gh`/`pr`/el
-// verbo, en sus CUATRO formas — valor separado (`-R o/r`, `--repo o/r`), valor pegado con `=`
-// (`-R=o/r`, `--repo=o/r`) y valor pegado SIN `=` (`-Ro/r`, la forma de una sola pieza). Mientras
-// quedó una forma abierta esta declaración decía DOS y eran TRES, dos veces seguidas: r7 escribió
-// el conteo enumerando tres formas con la cuarta todavía pasando, y el reviewer del sello la
-// encontró. Ninguna de las cuatro entra en las dos clases inherentes —el texto del comando lleva
-// la orden completa y visible, o sea es corregible léxicamente— así que se cerraron en el código
-// en vez de re-escribir el conteo. AHORA SÍ son DOS, y la frontera izquierda queda cubierta con
-// prueba propia (las cuatro formas, para main, la allowlist, reviewer y agentId ausente, con las
-// consultas `pr view`/`pr checks` —también con el valor pegado— como controles negativos).
+// Ya NO es bypass, desde r7 (rama `pr`), cerrado del todo en r8 (la cuarta forma) y extendido en
+// r9 a la rama `api`: el FLAG INTERPUESTO antes del subcomando, en sus CUATRO formas — valor
+// separado (`-R o/r`, `--repo o/r`), valor pegado con `=` (`-R=o/r`, `--repo=o/r`) y valor pegado
+// SIN `=` (`-Ro/r`, la forma de una sola pieza) — mas la forma separada con el valor
+// ENTRECOMILLADO que lleva un espacio adentro (`-H 'Accept: application/vnd.github+json'`), que no
+// es una quinta forma de attach sino la separada con una pieza que `\S*` no podia cruzar.
+// Mientras quedó una forma o una RAMA abierta esta declaración fue falsa tres veces seguidas: r7
+// enumeró tres formas con la cuarta pasando; r8 cerró la cuarta pero solo en `gh pr <verbo>` y
+// escribió "la frontera izquierda queda cubierta" mientras `gh api` —el que gatilla las DOS reglas
+// de merge con allowlist— seguía exigiendo contigüidad; el reviewer del sello encontró las dos.
+// Ninguna de esas formas entra en las dos clases inherentes —el texto del comando lleva la orden
+// completa y visible, o sea es corregible léxicamente— así que se cerraron en el código en vez de
+// re-escribir el conteo. AHORA SÍ son DOS, y la frontera izquierda queda cubierta en las DOS ramas
+// del cliente (`gh pr <verbo>` y `gh api`, REST y GraphQL) con prueba propia: las cuatro formas más
+// la entrecomillada, para main, reviewer y agentId ausente, con la allowlist (implementer/
+// ingenieria) verificada como PASA en la rama de allowlist para que cerrar la frontera no la
+// convierta en bloqueo, y con las lecturas (`api rate_limit` con `-X GET`/`--method GET`, `api`
+// leyendo un PR con `-H`/`--header`, `pr view`/`pr checks` también con el valor pegado) como
+// controles negativos.
 // Tampoco lo es el encadenado sin espacio (r3 hallazgo 1) ni el terminador pegado (turno de
 // cierre): la frontera por lookahead de arriba los corta a los dos, así que la promesa del
 // mensaje "(también encadenado con &&/;)" es verdadera.
-// La copia de esta declaración en la skill saikit-cierre-pr se alinea en este mismo SHA (r8: las
-// cuatro formas), como se alineó en a679c5a: el texto y la regex tienen que decir lo mismo.
+// La copia de esta declaración en la skill saikit-cierre-pr se alinea en este mismo SHA (r9: las
+// dos ramas del cliente), como se alineó en a679c5a y en r8: el texto y la regex tienen que decir
+// lo mismo.
 // cross-review r2 (grok): ademas de mergePullRequest se bloquean las mutaciones hermanas:
 // mergeBranch (equivale a POST /merges) y enablePullRequestAutoMerge (abre el mismo merge sin orden).
 // r3 (hallazgo 3): word-boundary puro, sin exigir `(` — un comentario GraphQL pegado al
