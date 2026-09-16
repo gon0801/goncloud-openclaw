@@ -6,17 +6,36 @@ import { isAbsolute, resolve, sep } from "node:path";
 
 export type Role = "implementer" | "verifier" | "reviewer" | "adversary";
 
-// r3 (hallazgo 1): la frontera tambien corta en ;, & y | — el encadenado (`&&echo`, `;ls`, `|head`)
-// ya no esquiva el guard; la promesa "(tambien encadenado con &&/;)" del mensaje queda verdadera (6a).
-const GH_PR_MERGE_RE = /(?:^|[^A-Za-z0-9])gh\s+pr\s+merge(?:[\s;&|]|$)/;
-const GH_API_RE = /(?:^|[^A-Za-z0-9])gh\s+api(?:[\s;&|]|$)/;
-// cross-review r2 (grok): el corte tambien incluye ? y # — sin ellos,
-// `.../merge?squash=1` o `.../merges#ancla` esquivaban el guard (bypass por regex).
-// r3 (hallazgo 1): la clase de corte tambien incluye ;, & y | para el encadenado sin espacio.
-// r3 (hallazgo 4): la ruta /auto-merge entra en la misma clase.
-// turno de cola (re-review 2026-09-16, hallazgo 1): /merge-async (PUT, PRs apilados) entra
-// en la misma clase, en gh api y en la ruta de host (curl a api.github.com).
-const GH_API_MERGE_PATH_RE = /\/(?:merges?|auto-merge|merge-async)(?:[\s/'"`?#;&|]|$)/;
+// FRONTERA POR LOOKAHEAD, NO POR ENUM DE TERMINADORES. Enumerar los caracteres que "cortan"
+// fallo tres veces seguidas en esta misma rama: r2 agrego ? y #, r3 (hallazgo 1) agrego ; & |,
+// y el turno de cierre (2026-09-16) encontro que seguian faltando >, >>, < y ) — el terminador
+// PEGADO (`.../pulls/45/merge>/tmp/resp.json`, `...merge>>/tmp/x`, `(gh api .../merge)`) esquivaba
+// el guard y el merge SE EJECUTABA. `merge>/tmp/resp.json` es bash ordinario, no una tecnica de
+// evasion: es lo que escribe cualquiera que quiera guardar la respuesta de la API en un archivo.
+// La condicion correcta no es "sigue uno de estos caracteres" sino "la palabra NO continua", que
+// es justo lo que expresa (?![A-Za-z0-9_]). Con eso cierran de una sola vez >, >>, <, ), }, , y
+// cualquier metacaracter futuro, y el enum deja de ser una lista que hay que parchear.
+//
+// Alcance declarado de la frontera (decision del lead, turno de cierre): el `-` NO cuenta como
+// continuacion de palabra, asi que /merge-upstream (sync de fork — no aterriza este PR en main)
+// queda BLOQUEADO fail-closed. Falso positivo aceptado a proposito: el costo de este lado es
+// pedirle al operador un comando poco frecuente; el costo del otro lado es un merge sin orden.
+// /update-branch no lleva ruta de merge y sigue pasando (tiene control negativo en la bateria).
+// Segundo falso positivo, costo directo de este fix y tambien declarado: la rama de `gh api` no
+// exige localidad — cualquier token /merge… del texto cuenta, sea el endpoint o el destino de un
+// redirect (`gh api …/pulls/45 > /tmp/merge.txt` bloquea, con espacio o pegado). Antes ese destino
+// se salvaba solo porque `.` no estaba en el enum. Es la misma ambiguedad lexica que hacia posible
+// el bypass (no se distingue endpoint de destino), resuelta del lado seguro: se pide un destino que
+// no lleve /merge en la ruta. Tiene prueba propia. La rama de host SI exige localidad, porque
+// [^\s'"]* no cruza el espacio: ahi solo cuenta la URL contigua.
+const GH_PR_MERGE_RE = /(?:^|[^A-Za-z0-9])gh\s+pr\s+merge(?![A-Za-z0-9_])/;
+const GH_API_RE = /(?:^|[^A-Za-z0-9])gh\s+api(?![A-Za-z0-9_])/;
+// r3 (hallazgo 4): la ruta /auto-merge entra en la misma clase (el `/` va antes de `auto`, asi
+// que necesita alternativa propia). turno de cola (re-review 2026-09-16, hallazgo 1):
+// /merge-async (PUT, PRs apilados) entra en la misma clase, en gh api y en la ruta de host
+// (curl a api.github.com); se deja explicito en la alternacion como intencion declarada aunque
+// la frontera por lookahead ya lo cubra via `merge` + `-`.
+const GH_API_MERGE_PATH_RE = /\/(?:merges?|auto-merge|merge-async)(?![A-Za-z0-9_])/;
 const GIT_PUSH_RE = /(?:^|[^A-Za-z0-9])git\s+push\b/;
 const GIT_PUSH_PROTECTED_RE =
   /push\s+.*(\sorigin\s+[+:]?(master|main)|\sHEAD:(master|main)|refs\/heads\/(master|main)|[A-Za-z0-9._/-]+:(master|main)|\s[+:]?(master|main))(\s|$)/;
@@ -29,20 +48,34 @@ const MERGE_AGENT_ALLOWLIST = new Set(["implementer", "ingenieria"]);
 
 // 6.5c: mutación GraphQL de merge (gh api graphql -f query=mutation … mergePullRequest(…) y llamadas a
 // api.github.com con path de merge. // la rama REST via gh api comparte la allowlist con el path de host: mismo endpoint, un solo trato sin importar el cliente (cross-review r1);
-// el host explícito cubre curl/plain-URL. Alcance declarado (como en 1.2, el guard es léxico sobre exec):
-// query=@archivo lo esquiva (el texto no lleva la mutación) y curl con token queda fuera de alcance
-// (requeriría secret-read). Ambos bypass están declarados aquí y en la skill saikit-cierre-pr.
-// r3 (hallazgo 6): bypass INHERENTE restante, límite declarado del diseño — la indirección de
-// shell (variables, aliases, eval, base64) y query=@archivo/curl-con-token quedan fuera del
-// alcance léxico del guard sobre exec. A cambio, la promesa del mensaje "(también encadenado
-// con &&/;)" es verdadera desde el hallazgo 1: el encadenado sin espacio ya corta.
+// el host explícito cubre curl/plain-URL.
+// turno de cierre (2026-09-16, hallazgo MEDIA): la mutación también se consulta por HOST
+// (api.github.com/graphql), no solo cuando matchea el cliente `gh api`. Antes, un curl directo
+// al endpoint graphql pasaba entero, y la excusa "curl con token requeriría secret-read" no
+// aplicaba: `gh auth token` entrega el token desde un exec común. Asimetría cerrada — curl
+// queda cubierto en las DOS ramas: REST por path de host, GraphQL por host + nombre de mutación.
+//
+// ALCANCE DECLARADO. El guard es léxico sobre exec, así que quedan dos bypass INHERENTES
+// (límite del diseño, no defectos pendientes):
+//   (1) indirección de shell — variables, aliases, eval, base64: el texto del comando no lleva
+//       la orden de merge, así que ninguna regex léxica la ve;
+//   (2) query=@archivo — la mutación vive en el archivo, no en el comando (tiene prueba propia).
+// Ya NO es bypass, desde este turno: curl con token contra /graphql (cubierto por host).
+// Tampoco lo es el encadenado sin espacio (r3 hallazgo 1) ni el terminador pegado (turno de
+// cierre): la frontera por lookahead de arriba los corta a los dos, así que la promesa del
+// mensaje "(también encadenado con &&/;)" es verdadera. La copia de esta declaración en la skill
+// saikit-cierre-pr todavía dice "curl con token queda fuera de alcance": necesita el mismo
+// ajuste, fuera del alcance de este carril (summa-gate/).
 // cross-review r2 (grok): ademas de mergePullRequest se bloquean las mutaciones hermanas:
 // mergeBranch (equivale a POST /merges) y enablePullRequestAutoMerge (abre el mismo merge sin orden).
 // r3 (hallazgo 3): word-boundary puro, sin exigir `(` — un comentario GraphQL pegado al
 // nombre (`mergePullRequest#c`) cortaba el matching. Falso positivo aceptado y declarado:
 // mencionar el nombre (p.ej. en un mensaje sobre la mutacion) ya blockea fuera de allowlist.
 const GRAPHQL_MERGE_RE = /\b(?:mergePullRequest|mergeBranch|enablePullRequestAutoMerge)\b/;
-const GITHUB_HOST_MERGE_RE = /api\.github\.com\/[^\s'"]*\/(?:merges?|auto-merge|merge-async)(?:[\s/'"`?#;&|]|$)/;
+const GITHUB_HOST_MERGE_RE = /api\.github\.com\/[^\s'"]*\/(?:merges?|auto-merge|merge-async)(?![A-Za-z0-9_])/;
+// turno de cierre (2026-09-16, hallazgo MEDIA): el endpoint GraphQL por host, para que la
+// mutación de merge se evalúe también cuando el cliente es curl y no `gh api`.
+const GITHUB_HOST_GRAPHQL_RE = /api\.github\.com\/graphql(?![A-Za-z0-9_])/;
 
 // r3 (hallazgo 2): nucleo del veredicto; mergeGuardVerdict lo corre sobre el comando
 // original y sobre una copia sin comillas (wrapper mas abajo).
@@ -51,7 +84,11 @@ function mergeGuardCoreVerdict(command: string, allowlisted: boolean): string | 
     return "Merge bloqueado por summa-gate: `gh pr merge` está prohibido desde el agente (también encadenado con &&/;). El merge lo hace el operador o el flujo autorizado del repo.";
   }
   const restMerge = GH_API_RE.test(command) && GH_API_MERGE_PATH_RE.test(command);
-  const graphqlMerge = GH_API_RE.test(command) && GRAPHQL_MERGE_RE.test(command);
+  // El cliente de la mutación puede ser `gh api` o un curl al host: el endpoint es el mismo,
+  // así que el trato es el mismo (turno de cierre, hallazgo MEDIA).
+  const graphqlMerge =
+    (GH_API_RE.test(command) || GITHUB_HOST_GRAPHQL_RE.test(command)) &&
+    GRAPHQL_MERGE_RE.test(command);
   const hostMerge = GITHUB_HOST_MERGE_RE.test(command);
   // El bypass de la allowlist aplica SOLO a la regla de merge que coincidio: el resto de
   // las reglas se sigue evaluando (comando encadenado de agente allowlisted: la mutacion

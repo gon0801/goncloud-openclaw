@@ -235,4 +235,160 @@ describe("mergeGuardVerdict (6.5c)", () => {
     assert.equal(mergeGuardVerdict(backticked, "implementer"), undefined);
   });
 
+  // turno de cierre (2026-09-16, hallazgo BLOQUEANTE ALTA): la frontera de ruta era un enum
+  // de terminadores ([\s/'"`?#;&|]) sin >, >>, < ni ), asi que el terminador PEGADO esquivaba
+  // el guard y el merge se ejecutaba. `.../45/merge>/tmp/resp.json` es bash ordinario — lo que
+  // escribe cualquiera que quiera guardar la respuesta de la API en un archivo — no una tecnica
+  // de evasion. El fix invierte la frontera (lookahead negativo de continuacion de ruta) en vez
+  // de agregar el tercer parche al enum. Red-first en las DOS rutas: gh api y host curl.
+  const P_MERGE = "/pulls/45/" + "me" + "rge";
+
+  it("cierre: bloquea la ruta REST de merge con > pegado (gh api)", () => {
+    assert.match(
+      mergeGuardVerdict("gh api -X PUT repos/o/r" + P_MERGE + ">/tmp/resp.json", "main") ?? "",
+      /Merge bloqueado/,
+    );
+  });
+
+  it("cierre: bloquea la ruta REST de merge con >> pegado (gh api)", () => {
+    assert.match(
+      mergeGuardVerdict("gh api -X PUT repos/o/r" + P_MERGE + ">>/tmp/resp.json", "main") ?? "",
+      /Merge bloqueado/,
+    );
+  });
+
+  it("cierre: bloquea la ruta REST de merge con < pegado (gh api)", () => {
+    assert.match(
+      mergeGuardVerdict("gh api -X PUT repos/o/r" + P_MERGE + "</tmp/body.json", "main") ?? "",
+      /Merge bloqueado/,
+    );
+  });
+
+  it("cierre: bloquea la ruta REST de merge en subshell, con ) pegado", () => {
+    assert.match(
+      mergeGuardVerdict("(gh api -X PUT repos/o/r" + P_MERGE + ")", "main") ?? "",
+      /Merge bloqueado/,
+    );
+    assert.match(
+      mergeGuardVerdict("(cd /Users/dn/dev/wt-E && gh api -X PUT repos/o/r" + P_MERGE + ")", "main") ?? "",
+      /Merge bloqueado/,
+    );
+  });
+
+  it("cierre: bloquea /auto-merge y /merges con > pegado (gh api)", () => {
+    assert.match(
+      mergeGuardVerdict("gh api -X PUT repos/o/r/pulls/45/auto-merge>/tmp/o.json", "main") ?? "",
+      /Merge bloqueado/,
+    );
+    assert.match(
+      mergeGuardVerdict("gh api -X POST repos/o/r" + "/me" + "rges>/tmp/o.json", "main") ?? "",
+      /Merge bloqueado/,
+    );
+  });
+
+  it("cierre: merge-async sigue bloqueando con la frontera invertida (alternacion)", () => {
+    assert.match(
+      mergeGuardVerdict("gh api -X PUT repos/o/r/pulls/45/merge-async>/tmp/o.json", "verifier") ?? "",
+      /Merge bloqueado/,
+    );
+    assert.match(
+      mergeGuardVerdict("gh api -X PUT repos/o/r/pulls/45/merge-async", "verifier") ?? "",
+      /Merge bloqueado/,
+    );
+  });
+
+  it("cierre: la forma pegada respeta la allowlist (implementer pasa)", () => {
+    assert.equal(
+      mergeGuardVerdict("gh api -X PUT repos/o/r" + P_MERGE + ">/tmp/resp.json", "implementer"),
+      undefined,
+    );
+  });
+
+  it("cierre: bloquea curl a api.github.com con > pegado a la ruta de merge", () => {
+    assert.match(
+      mergeGuardVerdict("curl -X PUT https://api.github.com/repos/o/r" + P_MERGE + ">/tmp/o.json", "main") ?? "",
+      /Merge bloqueado/,
+    );
+  });
+
+  it("cierre: bloquea curl a api.github.com en subshell, con ) pegado", () => {
+    assert.match(
+      mergeGuardVerdict("(curl -X PUT https://api.github.com/repos/o/r" + P_MERGE + ")", "main") ?? "",
+      /Merge bloqueado/,
+    );
+  });
+
+  it("cierre: la forma pegada del host respeta la allowlist (ingenieria pasa)", () => {
+    assert.equal(
+      mergeGuardVerdict("curl -X PUT https://api.github.com/repos/o/r" + P_MERGE + ">/tmp/o.json", "ingenieria"),
+      undefined,
+    );
+  });
+
+  it("cierre: bloquea la orden de gh pr con > o ) pegado (frontera del cliente)", () => {
+    assert.match(mergeGuardVerdict(GH_PR_M + ">/tmp/o.json") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict("(" + GH_PR_M + ")") ?? "", /Merge bloqueado/);
+  });
+
+  // turno de cierre (2026-09-16, hallazgo MEDIA): GRAPHQL_MERGE_RE solo se consultaba si
+  // GH_API_RE matcheaba, asi que la mutacion por curl a api.github.com/graphql pasaba entera.
+  // El token sale de `gh auth token` — un exec comun, sin secret-read — asi que la excusa
+  // "curl con token queda fuera de alcance" no cubria este caso. Se cierra por host, igual
+  // que la rama REST hace para curl.
+  const CURL_GRAPHQL_MUT =
+    'curl -s https://api.github.com/graphql -H "Authorization: bearer TOK" -d \'{"query":"mutation{mergePullRequest(input:{pullRequestId:$id}){pullRequest{number,state}}}"}\'';
+
+  it("cierre: bloquea la mutacion GraphQL por curl al host, fuera de la allowlist", () => {
+    assert.match(mergeGuardVerdict(CURL_GRAPHQL_MUT, "main") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict(CURL_GRAPHQL_MUT, "verifier") ?? "", /Merge bloqueado/);
+  });
+
+  it("cierre: la mutacion GraphQL por curl al host pasa dentro de la allowlist", () => {
+    assert.equal(mergeGuardVerdict(CURL_GRAPHQL_MUT, "implementer"), undefined);
+    assert.equal(mergeGuardVerdict(CURL_GRAPHQL_MUT, "ingenieria"), undefined);
+  });
+
+  it("cierre: consulta GraphQL inocua por curl al host NO se bloquea", () => {
+    assert.equal(
+      mergeGuardVerdict(
+        'curl -s https://api.github.com/graphql -d \'{"query":"query{repository(owner:\\"o\\",name:\\"r\\"){name}}"}\'',
+        "verifier",
+      ),
+      undefined,
+    );
+  });
+
+  // turno de cierre: alcance declarado de la frontera invertida. El lookahead no discrimina el
+  // sufijo de la ruta, asi que /merge-upstream (sync de fork: no aterriza este PR en main) queda
+  // bloqueado fail-closed — falso positivo aceptado y declarado por decision del lead, porque el
+  // costo es un comando raro que hay que pedirle al operador, y el costo del otro lado es un
+  // merge sin orden. /update-branch no lleva ruta de merge y sigue pasando.
+  it("cierre: /merge-upstream queda bloqueado fail-closed (falso positivo declarado)", () => {
+    assert.match(
+      mergeGuardVerdict("gh api -X POST repos/o/r/merge-upstream -f branch=main", "verifier") ?? "",
+      /Merge bloqueado/,
+    );
+  });
+
+  it("cierre: /update-branch sigue pasando (no aterriza el PR en main)", () => {
+    assert.equal(mergeGuardVerdict("gh api -X PUT repos/o/r/pulls/45/update-branch", "verifier"), undefined);
+  });
+
+  // turno de cierre: costo declarado del fix. La rama de `gh api` no exige localidad — cualquier
+  // token /merge… del texto cuenta, sea el endpoint o el destino de un redirect, con espacio o
+  // pegado. Antes, un destino como /tmp/merge.txt se salvaba solo porque `.` no estaba en el enum
+  // de terminadores; con la frontera invertida bloquea. Es la misma ambiguedad lexica que hacia
+  // posible el bypass, resuelta del lado seguro: se pide un destino que no lleve /merge en la ruta.
+  it("cierre: falso positivo declarado - un destino de redirect con /merge en la ruta bloquea", () => {
+    assert.match(mergeGuardVerdict("gh api repos/o/r/pulls/45>/tmp/merge.txt", "reviewer") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict("gh api repos/o/r/pulls/45 > /tmp/merge.txt", "reviewer") ?? "", /Merge bloqueado/);
+    assert.equal(mergeGuardVerdict("gh api repos/o/r/pulls/45 > /tmp/resp.txt", "reviewer"), undefined);
+  });
+
+  it("cierre: controles negativos - las consultas de estado siguen pasando", () => {
+    assert.equal(mergeGuardVerdict("gh pr view 45 --json state,mergedAt", "verifier"), undefined);
+    assert.equal(mergeGuardVerdict("gh api repos/o/r/pulls/45 --jq .mergeable_state", "verifier"), undefined);
+    assert.equal(mergeGuardVerdict("git log --merges -3", "verifier"), undefined);
+  });
+
 });
