@@ -146,4 +146,23 @@ describe("mergeGuardVerdict (6.5c)", () => {
       /Merge bloqueado/,
     );
   });
+
+  // r3 (hallazgo 2): token entrecomillado — la comilla en la posicion del token corta la
+  // frontera (?:^|[^A-Za-z0-9]) y el comando esquivaba el guard. Matching adicional sobre
+  // una copia sin comillas: normaliza para el matching, fail-closed (los falsos positivos
+  // bloquean; los falsos negativos son lo prohibido).
+  it("r3: bloquea el cliente gh entre comillas (token quoted)", () => {
+    const quoted = "'gh' api graphql -f query='" + MUT + "'";
+    assert.match(mergeGuardVerdict(quoted, "main") ?? "", /Merge bloqueado/);
+  });
+
+  it("r3: el quoted pasa solo dentro de la allowlist", () => {
+    const quoted = "'gh' api graphql -f query='" + MUT + "'";
+    assert.equal(mergeGuardVerdict(quoted, "implementer"), undefined);
+  });
+
+  it("r3: doble comilla en el cliente tambien bloquea (verifier)", () => {
+    const quoted = "\"gh\" api graphql -f query='" + MUT + "'";
+    assert.match(mergeGuardVerdict(quoted, "verifier") ?? "", /Merge bloqueado/);
+  });
 });

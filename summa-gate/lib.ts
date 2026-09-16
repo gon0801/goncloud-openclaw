@@ -33,11 +33,9 @@ const MERGE_AGENT_ALLOWLIST = new Set(["implementer", "ingenieria"]);
 const GRAPHQL_MERGE_RE = /\b(?:mergePullRequest|mergeBranch|enablePullRequestAutoMerge)\s*\(/;
 const GITHUB_HOST_MERGE_RE = /api\.github\.com\/[^\s'"]*\/merges?(?:[\s/'"`?#;&|]|$)/;
 
-export function mergeGuardVerdict(command: string, agentId?: string): string | undefined {
-  // Normalizacion del agentId (trim + lowercase), como en el resto del modulo:
-  // "Implementer" o " implementer " se comportan igual que "implementer" (cross-review r1).
-  const allowlisted =
-    agentId !== undefined && MERGE_AGENT_ALLOWLIST.has(agentId.trim().toLowerCase());
+// r3 (hallazgo 2): nucleo del veredicto; mergeGuardVerdict lo corre sobre el comando
+// original y sobre una copia sin comillas (wrapper mas abajo).
+function mergeGuardCoreVerdict(command: string, allowlisted: boolean): string | undefined {
   if (GH_PR_MERGE_RE.test(command)) {
     return "Merge bloqueado por summa-gate: `gh pr merge` está prohibido desde el agente (también encadenado con &&/;). El merge lo hace el operador o el flujo autorizado del repo.";
   }
@@ -59,6 +57,23 @@ export function mergeGuardVerdict(command: string, agentId?: string): string | u
     return "Push bloqueado por summa-gate: `git push` a master/main está prohibido desde el agente (incluye origin master, +master, HEAD:main, refs/heads/main y delete-ref :main).";
   }
   return undefined;
+}
+
+export function mergeGuardVerdict(command: string, agentId?: string): string | undefined {
+  // Normalizacion del agentId (trim + lowercase), como en el resto del modulo:
+  // "Implementer" o " implementer " se comportan igual que "implementer" (cross-review r1).
+  const allowlisted =
+    agentId !== undefined && MERGE_AGENT_ALLOWLIST.has(agentId.trim().toLowerCase());
+  // r3 (hallazgo 2): token entrecomillado — la comilla en la posicion del token
+  // (`'gh' api ...`) cortaba la frontera del cliente. El matching corre sobre el comando
+  // original Y sobre una copia sin comillas simples/dobles; fail-closed: los falsos
+  // positivos bloquean, los falsos negativos son lo prohibido. No alcanza la indireccion
+  // de shell (variables, aliases, eval, base64) ni query=@archivo/curl con token: bypass
+  // INHERENTE del guard lexico, declarado aqui y en saikit-cierre-pr.
+  return (
+    mergeGuardCoreVerdict(command, allowlisted) ??
+    mergeGuardCoreVerdict(command.replace(/['"]/g, ""), allowlisted)
+  );
 }
 
 // Canal entre agentes (2026-09-11): la respuesta de un sessions_send regresa por un camino que muere en
