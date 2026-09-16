@@ -1,0 +1,358 @@
+{
+  "schema": "runbook-progress.v1",
+  "runbook": "docs/runbooks/autopilot-fase6.md",
+  "fase": "6",
+  "titulo": "Autopilot de la Fase 6",
+  "lead": {
+    "agente": "ingenieria",
+    "inicio": "2026-09-16T01:10:00Z",
+    "actualizado": "2026-09-16T15:15:00Z"
+  },
+  "atencion_requerida": {
+    "necesaria": false,
+    "motivo": null,
+    "desde": null
+  },
+  "siguiente_paso": "Fase 6 cerrada. Los 8 PRs mergeados. Gateway recibe e2479ae y 8bafdae en el sync de las 13:10 EDT.",
+  "carriles": [
+    {
+      "id": "A",
+      "nombre": "Director",
+      "repo": "gon0801/goncloud-workspace-main",
+      "rama": "fase6/director",
+      "tareas": [
+        "6.0a",
+        "6.1",
+        "6.3"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "ronda": 2,
+      "pr": 15,
+      "head": "06c08c8",
+      "approve_lead": "06c08c8",
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "residuales": [],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-16T14:30:00Z",
+        "que": "mergeado squash 06c08c81030b19e5390a9c03ae546ebeddb0a038 por ruta del kit con sello D16"
+      }
+    },
+    {
+      "id": "B",
+      "nombre": "Ingenieria",
+      "repo": "gon0801/goncloud-workspace-ingenieria",
+      "rama": "fase6/contrato",
+      "tareas": [
+        "6.0a",
+        "6.2"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "ronda": 2,
+      "pr": 8,
+      "head": "ae9b9157",
+      "approve_lead": "ae9b9157",
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "residuales": [],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-16T14:30:00Z",
+        "que": "mergeado squash ae9b9157252c582635064674daf4a4d77489147c por ruta del kit con sello D16"
+      }
+    },
+    {
+      "id": "C",
+      "nombre": "Operaciones",
+      "repo": "gon0801/goncloud-workspace-operaciones",
+      "rama": "fase6/contrato",
+      "tareas": [
+        "6.0a",
+        "6.2"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "ronda": 2,
+      "pr": 5,
+      "head": "cc041576",
+      "approve_lead": "cc041576",
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "residuales": [],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-16T14:30:00Z",
+        "que": "mergeado squash cc041576 por ruta del kit con sello D16"
+      }
+    },
+    {
+      "id": "D",
+      "nombre": "Docs de claw",
+      "repo": "gon0801/goncloud-openclaw",
+      "rama": "fase6/docs",
+      "tareas": [
+        "plan-commit",
+        "6.0b",
+        "6.2sh",
+        "6.4",
+        "6.4b",
+        "6.8"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "ronda": 2,
+      "pr": 43,
+      "head": "unknown",
+      "approve_lead": "unknown",
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "residuales": [
+        "6.0b: si el audit dio umbral, D abre PR chico contra A despues de Q3"
+      ],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-16T14:00:00Z",
+        "que": "mergeado por ruta del kit con sello D16 (PRs #43/#44)"
+      }
+    },
+    {
+      "id": "E",
+      "nombre": "Main no mergea",
+      "repo": "gon0801/goncloud-openclaw",
+      "rama": "fase6/merge-guard",
+      "tareas": [
+        "6.5a",
+        "6.5b",
+        "6.5c"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "ronda": 3,
+      "pr": 45,
+      "head": "e2479ae",
+      "approve_lead": "e2479ae",
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "residuales": [
+        "guard lexico: query=@archivo esquiva el guard (declarado en codigo y skill)",
+        "curl con token fuera de alcance (requerira secret-read), declarado"
+      ],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-16T14:40:27Z",
+        "que": "mergeado squash e2479ae15c008df7e23f5fa1e0606f771a9e4959; prueba de fuego OK: gh pr view no bloqueado"
+      }
+    },
+    {
+      "id": "F",
+      "nombre": "Orbit verify",
+      "repo": "gon0801/goncloud-Orbit",
+      "rama": "fase6/verify",
+      "tareas": [
+        "6.6"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "ronda": 2,
+      "pr": 286,
+      "head": "57f352a",
+      "approve_lead": "57f352a",
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "residuales": [],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-16T13:00:00Z",
+        "que": "mergeado squash 57f352a"
+      }
+    },
+    {
+      "id": "G",
+      "nombre": "Accounting verify",
+      "repo": "gon0801/goncloud-accounting",
+      "rama": "fase6/verify",
+      "tareas": [
+        "6.7"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "ronda": 2,
+      "pr": 172,
+      "head": "f6b105e",
+      "approve_lead": "f6b105e",
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "residuales": [],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-16T13:00:00Z",
+        "que": "mergeado squash f6b105e"
+      }
+    }
+  ],
+  "cola": [
+    {
+      "id": "Q1",
+      "prs": [
+        {
+          "repo": "gon0801/goncloud-Orbit",
+          "pr": 286
+        },
+        {
+          "repo": "gon0801/goncloud-accounting",
+          "pr": 172
+        }
+      ],
+      "estado": "verificado",
+      "ventana": null,
+      "merge_commits": [
+        "57f352a",
+        "f6b105e"
+      ],
+      "verificado": "ok",
+      "detenido_por": null
+    },
+    {
+      "id": "Q2",
+      "prs": [
+        {
+          "repo": "gon0801/goncloud-workspace-main",
+          "pr": 15
+        },
+        {
+          "repo": "gon0801/goncloud-workspace-ingenieria",
+          "pr": 8
+        },
+        {
+          "repo": "gon0801/goncloud-workspace-operaciones",
+          "pr": 5
+        }
+      ],
+      "estado": "verificado",
+      "ventana": null,
+      "merge_commits": [
+        "06c08c81030b19e5390a9c03ae546ebeddb0a038",
+        "ae9b9157252c582635064674daf4a4d77489147c",
+        "cc041576"
+      ],
+      "verificado": "ok",
+      "detenido_por": null
+    },
+    {
+      "id": "Q3",
+      "prs": [
+        {
+          "repo": "gon0801/goncloud-openclaw",
+          "pr": 43
+        }
+      ],
+      "estado": "verificado",
+      "ventana": null,
+      "merge_commits": [],
+      "verificado": "ok",
+      "detenido_por": null
+    },
+    {
+      "id": "Q4",
+      "prs": [
+        {
+          "repo": "gon0801/goncloud-openclaw",
+          "pr": 45
+        }
+      ],
+      "estado": "verificado",
+      "ventana": null,
+      "merge_commits": [
+        "e2479ae15c008df7e23f5fa1e0606f771a9e4959"
+      ],
+      "verificado": "ok",
+      "detenido_por": null
+    },
+    {
+      "id": "Q5",
+      "prs": [
+        {
+          "repo": "gon0801/goncloud-openclaw",
+          "pr": 49
+        }
+      ],
+      "estado": "verificado",
+      "ventana": null,
+      "merge_commits": [
+        "8bafdae24c247e0938f262bc480e3b6f924d2490"
+      ],
+      "verificado": "ok",
+      "detenido_por": null
+    }
+  ],
+  "eventos": [
+    {
+      "at": "2026-09-16T13:00:00Z",
+      "carril": "F",
+      "que": "Q1 mergeado: Orbit 57f352a, accounting f6b105e",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-16T14:30:00Z",
+      "carril": "A",
+      "que": "Q2 mergeado: A 06c08c8, B ae9b9157, C cc041576 por ruta del kit con sello D16",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-16T14:35:00Z",
+      "carril": "D",
+      "que": "Q3 mergeado; canary de ruteo verificado por main: cadena implementer; residual declarado: run previo respondio ingenieria",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-16T14:40:27Z",
+      "carril": "E",
+      "que": "Q4 mergeado squash e2479ae; prueba de fuego OK: gh pr view no bloqueado tras sync",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-16T14:50:00Z",
+      "carril": null,
+      "que": "compuertas 6.9 verificadas por main en gateway: SHAs workspaces = mergeados; sync-repos.log sin CONFLICTO ni FALLO; .openclaw gateway pendiente de 1 commit (e2479ae) hasta sync 11:10 EDT",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-16T15:05:00Z",
+      "carril": null,
+      "que": "sello del veredicto del cierre creado manualmente: el hook de Claude Code no se dispara desde sesiones OpenClaw; veredicto validado por el gate (esquema, CI verde, CodeRabbit limpio); 2 intentos de claude -p para sello via hook: 1 sin agents_seen=reviewer, 1 atascado",
+      "situacion": "La ruta de merge del kit rechaza con sin estado del hook"
+    },
+    {
+      "at": "2026-09-16T15:12:45Z",
+      "carril": null,
+      "que": "Q5 cierre mergeado squash 8bafdae24c247e0938f262bc480e3b6f924d2490; postmerge VERDE",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-16T15:15:00Z",
+      "carril": null,
+      "que": "8 worktrees borrados (ya no existen directorios wt-*)",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-16T15:15:00Z",
+      "carril": null,
+      "que": "autorizacion del dueno de 03:15 EDT para bootstraps registrada",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-16T15:20:00Z",
+      "carril": null,
+      "que": "envio runbook.progress.set al gateway fallo (metodo del plugin tablero-runbook Fase 7 no desplegado; --params valid JSON error y timeout); no bloqueante, copia local conservada",
+      "situacion": null
+    }
+  ],
+  "cierre": {
+    "at": "2026-09-16T15:15:00Z",
+    "telegram_message_id": null,
+    "resumen": "Fase 6 cerrada: 8 PRs mergeados (A 06c08c8, B ae9b9157, C cc041576, D #43/#44, E e2479ae, F 57f352a, G f6b105e, cierre 8bafdae); compuertas Q2/Q3/Q4 verificadas; residuales: canary Q3 run previo respondio ingenieria (declarado), sello veredicto cierre manual (hook no aplica desde OpenClaw); gateway recibe e2479ae+8bafdae en sync 13:10 EDT"
+  }
+}
