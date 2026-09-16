@@ -1,4 +1,8 @@
-import { mergeGuardVerdict } from "./lib-9190b16.ts";
+// r6: la copia congelada del guard quedo como `lib-9190b16.ts.txt` para que un grep futuro de
+// GH_API_MERGE_PATH_RE no traiga una version vieja como si fuera la viva. Esta sonda es evidencia
+// congelada, no un candado (nada la corre). Para re-correrla:
+//   cp .saikit/scratch/fase6-6.5-r3fix/lib-9190b16.ts.txt /tmp/lib-frozen.ts
+import { mergeGuardVerdict } from "/tmp/lib-frozen.ts";
 
 // Sondas r3 (revision 2026-09-15). Antes del fix: PASO (bypass confirmado).
 // Despues del fix: BLOQUEADO. Controles: deben mantener su resultado en ambas corridas.

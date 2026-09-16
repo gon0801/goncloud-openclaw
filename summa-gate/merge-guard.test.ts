@@ -358,11 +358,12 @@ describe("mergeGuardVerdict (6.5c)", () => {
     );
   });
 
-  // turno de cierre: alcance declarado de la frontera invertida. El lookahead no discrimina el
-  // sufijo de la ruta, asi que /merge-upstream (sync de fork: no aterriza este PR en main) queda
-  // bloqueado fail-closed — falso positivo aceptado y declarado por decision del lead, porque el
-  // costo es un comando raro que hay que pedirle al operador, y el costo del otro lado es un
-  // merge sin orden. /update-branch no lleva ruta de merge y sigue pasando.
+  // turno de cierre: alcance declarado de la frontera invertida. /merge-upstream (sync de fork: no
+  // aterriza este PR en main) queda bloqueado fail-closed — falso positivo aceptado y declarado por
+  // decision del lead, porque el costo es un comando raro que hay que pedirle al operador, y el
+  // costo del otro lado es un merge sin orden. Desde r6 el bloqueo lo sostiene la ENUMERACION del
+  // sufijo, no la frontera (el guion paso a ser continuacion de palabra); el caso r6 de mas abajo
+  // fija esa regresion en las dos rutas. /update-branch no lleva ruta de merge y sigue pasando.
   it("cierre: /merge-upstream queda bloqueado fail-closed (falso positivo declarado)", () => {
     assert.match(
       mergeGuardVerdict("gh api -X POST repos/o/r/merge-upstream -f branch=main", "verifier") ?? "",
@@ -389,6 +390,82 @@ describe("mergeGuardVerdict (6.5c)", () => {
     assert.equal(mergeGuardVerdict("gh pr view 45 --json state,mergedAt", "verifier"), undefined);
     assert.equal(mergeGuardVerdict("gh api repos/o/r/pulls/45 --jq .mergeable_state", "verifier"), undefined);
     assert.equal(mergeGuardVerdict("git log --merges -3", "verifier"), undefined);
+  });
+
+  // re-review r6 (hallazgo BLOQUEANTE): la frontera (?![A-Za-z0-9_]) NO excluia el guion, asi que
+  // el guion contaba como fin de palabra y el NOMBRE DE RAMA de este mismo PR ("fase6/" + la
+  // palabra + "-guard") matcheaba la ruta de merge. Sumado a que la rama de `gh api` no exige
+  // localidad, cualquier comando que nombrara la rama quedaba bloqueado para todo agente fuera de
+  // la allowlist: las lecturas de CI por rama y el borrado de ref de la limpieza del cierre (la
+  // unica via que declara la skill git-commit-push), mientras la rama hermana de reversa pasaba —
+  // dos ramas hermanas con comportamiento distinto. Fix: el guion cuenta como continuacion de
+  // palabra y los sufijos reales quedan ENUMERADOS en la alternacion.
+  // Literales partidos: convencion del carril (el guard es lexico sobre el texto del exec).
+  const REPO_PR = "gon0801/goncloud-openclaw";
+  const BR_PR = "fase6/" + "me" + "rge-guard";
+  const BR_REVERT = "fase6/revert-" + "me" + "rge-guard";
+  const P_ASYNC = "/pulls/45/" + "me" + "rge-async";
+  const P_UPSTREAM = "/" + "me" + "rge-upstream";
+  const HOST = "https://api.github.com/repos/o/r";
+  const borradoDeRef = (branch: string) =>
+    "gh api -X DELETE repos/" + REPO_PR + "/git/refs/heads/" + branch;
+
+  it("r6: la lectura de runs de CI por nombre de rama pasa (verifier y reviewer)", () => {
+    const cmd = "gh api repos/" + REPO_PR + "/actions/runs?branch=" + BR_PR;
+    assert.equal(mergeGuardVerdict(cmd, "verifier"), undefined);
+    assert.equal(mergeGuardVerdict(cmd, "reviewer"), undefined);
+  });
+
+  it("r6: las demas lecturas de estado por nombre de rama pasan", () => {
+    assert.equal(
+      mergeGuardVerdict("gh api repos/" + REPO_PR + "/commits/" + BR_PR + "/check-runs", "reviewer"),
+      undefined,
+    );
+    assert.equal(
+      mergeGuardVerdict("gh api repos/" + REPO_PR + "/branches/" + BR_PR + "/protection", "main"),
+      undefined,
+    );
+  });
+
+  it("r6: el borrado de ref de la rama de este PR pasa para main (limpieza del cierre)", () => {
+    assert.equal(mergeGuardVerdict(borradoDeRef(BR_PR), "main"), undefined);
+  });
+
+  it("r6: la rama hermana de reversa sigue pasando para main (consistencia)", () => {
+    assert.equal(mergeGuardVerdict(borradoDeRef(BR_REVERT), "main"), undefined);
+  });
+
+  it("r6: el sufijo upstream sigue BLOQUEADO fuera de la allowlist, ahora por enumeracion", () => {
+    assert.match(
+      mergeGuardVerdict("gh api -X POST repos/o/r" + P_UPSTREAM + " -f branch=main", "verifier") ?? "",
+      /Merge bloqueado/,
+    );
+    assert.match(
+      mergeGuardVerdict("curl -X POST " + HOST + P_UPSTREAM, "verifier") ?? "",
+      /Merge bloqueado/,
+    );
+  });
+
+  it("r6: el sufijo async sigue BLOQUEADO en las dos rutas (gh api y host)", () => {
+    assert.match(
+      mergeGuardVerdict("gh api -X PUT repos/o/r" + P_ASYNC, "verifier") ?? "",
+      /Merge bloqueado/,
+    );
+    assert.match(
+      mergeGuardVerdict("curl -X PUT " + HOST + P_ASYNC, "reviewer") ?? "",
+      /Merge bloqueado/,
+    );
+  });
+
+  it("r6: control - la ruta de merge real sigue bloqueada aunque el texto nombre la rama", () => {
+    assert.match(
+      mergeGuardVerdict("gh api -X PUT repos/" + REPO_PR + P_MERGE + " # rama " + BR_PR, "main") ?? "",
+      /Merge bloqueado/,
+    );
+    assert.match(
+      mergeGuardVerdict("git checkout " + BR_PR + " && gh api -X PUT repos/o/r" + P_MERGE, "reviewer") ?? "",
+      /Merge bloqueado/,
+    );
   });
 
 });

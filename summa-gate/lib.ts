@@ -16,10 +16,22 @@ export type Role = "implementer" | "verifier" | "reviewer" | "adversary";
 // es justo lo que expresa (?![A-Za-z0-9_]). Con eso cierran de una sola vez >, >>, <, ), }, , y
 // cualquier metacaracter futuro, y el enum deja de ser una lista que hay que parchear.
 //
-// Alcance declarado de la frontera (decision del lead, turno de cierre): el `-` NO cuenta como
-// continuacion de palabra, asi que /merge-upstream (sync de fork — no aterriza este PR en main)
-// queda BLOQUEADO fail-closed. Falso positivo aceptado a proposito: el costo de este lado es
-// pedirle al operador un comando poco frecuente; el costo del otro lado es un merge sin orden.
+// Alcance declarado de la frontera (decision del lead, re-review r6): el `-` SI cuenta como
+// continuacion de palabra — (?![A-Za-z0-9_-]) —, asi que un NOMBRE DE RAMA que lleve el segmento
+// (la rama de este mismo PR: `fase6/` + la palabra + `-guard`) ya NO matchea. Antes si, y como la
+// rama de `gh api` no exige localidad eso bloqueaba lecturas de CI por rama y el borrado de ref de
+// la limpieza del cierre —el comando textual esta en la skill git-commit-push, no se repite aca—
+// mientras la rama hermana de reversa pasaba: dos ramas hermanas con comportamiento distinto.
+// A cambio los sufijos reales quedan ENUMERADOS: merges? | auto-merge | merge-async | merge-upstream.
+// /merge-upstream (sync de fork — no aterriza este PR en main) conserva el bloqueo fail-closed
+// declarado en el turno de cierre, ahora por enumeracion y no por la frontera: falso positivo
+// aceptado a proposito, el costo de este lado es pedirle al operador un comando poco frecuente y
+// el del otro lado es un merge sin orden.
+// LIMITE LEXICO, declarado: una ruta con un sufijo /merge-<otro> que GitHub agregue en el futuro
+// queda FUERA del alcance hasta que se la agregue a las dos alternaciones. Es el precio de dejar
+// de morder nombres de rama, y se paga del lado que no ejecuta merges hoy.
+// El pasteo de terminadores sigue cubierto: >, >>, <, ), }, `,` y cualquier metacaracter no son
+// ni palabra ni guion, asi que la frontera los corta igual que antes (tienen prueba propia).
 // /update-branch no lleva ruta de merge y sigue pasando (tiene control negativo en la bateria).
 // Segundo falso positivo, costo directo de este fix y tambien declarado: la rama de `gh api` no
 // exige localidad — cualquier token /merge… del texto cuenta, sea el endpoint o el destino de un
@@ -33,9 +45,10 @@ const GH_API_RE = /(?:^|[^A-Za-z0-9])gh\s+api(?![A-Za-z0-9_])/;
 // r3 (hallazgo 4): la ruta /auto-merge entra en la misma clase (el `/` va antes de `auto`, asi
 // que necesita alternativa propia). turno de cola (re-review 2026-09-16, hallazgo 1):
 // /merge-async (PUT, PRs apilados) entra en la misma clase, en gh api y en la ruta de host
-// (curl a api.github.com); se deja explicito en la alternacion como intencion declarada aunque
-// la frontera por lookahead ya lo cubra via `merge` + `-`.
-const GH_API_MERGE_PATH_RE = /\/(?:merges?|auto-merge|merge-async)(?![A-Za-z0-9_])/;
+// (curl a api.github.com). re-review r6: con el guion como continuacion de palabra la alternacion
+// dejo de ser decorativa — cada sufijo con guion bloquea SOLO si esta enumerado aca, y el limite
+// de esa lista esta declarado arriba.
+const GH_API_MERGE_PATH_RE = /\/(?:merges?|auto-merge|merge-async|merge-upstream)(?![A-Za-z0-9_-])/;
 const GIT_PUSH_RE = /(?:^|[^A-Za-z0-9])git\s+push\b/;
 const GIT_PUSH_PROTECTED_RE =
   /push\s+.*(\sorigin\s+[+:]?(master|main)|\sHEAD:(master|main)|refs\/heads\/(master|main)|[A-Za-z0-9._/-]+:(master|main)|\s[+:]?(master|main))(\s|$)/;
@@ -71,7 +84,9 @@ const MERGE_AGENT_ALLOWLIST = new Set(["implementer", "ingenieria"]);
 // nombre (`mergePullRequest#c`) cortaba el matching. Falso positivo aceptado y declarado:
 // mencionar el nombre (p.ej. en un mensaje sobre la mutacion) ya blockea fuera de allowlist.
 const GRAPHQL_MERGE_RE = /\b(?:mergePullRequest|mergeBranch|enablePullRequestAutoMerge)\b/;
-const GITHUB_HOST_MERGE_RE = /api\.github\.com\/[^\s'"]*\/(?:merges?|auto-merge|merge-async)(?![A-Za-z0-9_])/;
+// La misma alternacion enumerada y la misma frontera que la rama de `gh api` (re-review r6): un
+// solo trato por endpoint, sin importar el cliente. Si se agrega un sufijo, va en las DOS.
+const GITHUB_HOST_MERGE_RE = /api\.github\.com\/[^\s'"]*\/(?:merges?|auto-merge|merge-async|merge-upstream)(?![A-Za-z0-9_-])/;
 // turno de cierre (2026-09-16, hallazgo MEDIA): el endpoint GraphQL por host, para que la
 // mutación de merge se evalúe también cuando el cliente es curl y no `gh api`.
 const GITHUB_HOST_GRAPHQL_RE = /api\.github\.com\/graphql(?![A-Za-z0-9_])/;
