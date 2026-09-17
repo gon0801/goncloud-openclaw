@@ -96,7 +96,7 @@ $hits"
 echo "ok (2): $n runbooks revisados, sin bootstrap imposible, sin docker run y sin glm viejo"
 
 # (2b) Los comandos del exec de la Mac en los autopilot llevan prefijo o ruta absoluta.
-AUTO=$(git ls-files --cached --others --exclude-standard -- 'docs/runbooks/autopilot-fase6.md' 'docs/runbooks/autopilot-fase7.md')
+AUTO=$(git ls-files --cached --others --exclude-standard -- 'docs/runbooks/autopilot-fase6.md' 'docs/runbooks/autopilot-fase7.md' 'docs/runbooks/loop-autopilot.md')
 [ -n "$AUTO" ] || fail "no encontre los runbooks de autopilot"
 hits2=""
 while IFS= read -r f; do
@@ -108,7 +108,7 @@ done <<EOF
 $AUTO
 EOF
 [ -z "$hits2" ] || fail "comandos del exec de la Mac sin prefijo de PATH ni ruta absoluta:$hits2"
-echo "ok (2b): cross-review y tmux de los autopilot con prefijo de PATH o ruta absoluta"
+echo "ok (2b): cross-review y tmux de los autopilot y del loop con prefijo de PATH o ruta absoluta"
 
 # (2c) Ningun runbook de fase designa UN modelo como lead. El lead es un rol: el kit
 # sella por host y el mismo documento tiene que servir con cualquiera de los seis.

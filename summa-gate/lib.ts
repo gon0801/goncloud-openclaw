@@ -208,11 +208,10 @@ function mergeGuardCoreVerdict(command: string, allowlisted: boolean): string | 
   return undefined;
 }
 
-export function mergeGuardVerdict(command: string, agentId?: string): string | undefined {
+export function mergeGuardVerdict(command: string, agentId?: unknown): string | undefined {
   // Normalizacion del agentId (trim + lowercase), como en el resto del modulo:
   // "Implementer" o " implementer " se comportan igual que "implementer" (cross-review r1).
-  const allowlisted =
-    agentId !== undefined && MERGE_AGENT_ALLOWLIST.has(agentId.trim().toLowerCase());
+  const allowlisted = MERGE_AGENT_ALLOWLIST.has(normalized(agentId) ?? "");
   // r3 (hallazgo 2): token entrecomillado — la comilla en la posicion del token
   // (`'gh' api ...`) cortaba la frontera del cliente. El matching corre sobre el comando
   // original Y sobre una copia sin comillas simples/dobles; fail-closed: los falsos
