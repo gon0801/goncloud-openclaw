@@ -471,12 +471,19 @@ export default definePluginEntry({
       if (event.toolName === "exec") {
         const command = typeof event.params?.command === "string" ? event.params.command : "";
         if (!command) return;
+        // Los destinos RELATIVOS tambien se validan. Hasta 2026-09-16 esta rama
+        // hacia `continue` sobre todo lo no absoluto, con el comentario
+        // "relativos: dentro del workspace": eso es una suposicion, no un hecho.
+        // `../../outside` es relativo y sale de la zona, asi que el adversary
+        // podia escribir fuera con una redireccion y el guardia ni la miraba.
+        // `adversaryPathAllowed` ya resuelve el relativo contra el workspace; el
+        // error estaba en no llamarlo. Sin `workspaceDir` la funcion cae a su
+        // regla vieja (relativo = permitido), asi que ese caso no cambia.
         for (const target of redirectTargets(command)) {
-          if (!ABSOLUTE_PATH_RE.test(target)) continue; // relativos: dentro del workspace
           if (!adversaryPathAllowed(target, workspaceDir)) {
             return {
               block: true,
-              blockReason: `Confinamiento adversary (summa-gate): redirección a path absoluto fuera de zona permitida (solo workspace, .saikit/findings, .saikit/scratch). Destino: ${target}`,
+              blockReason: `Confinamiento adversary (summa-gate): redirección fuera de zona permitida (solo workspace, .saikit/findings, .saikit/scratch). Destino: ${target}`,
             };
           }
         }
