@@ -328,7 +328,7 @@ ORBIT_TEST_DSN="postgresql://orbit:orbit@localhost:5432/postgres" ./.venv/bin/py
 /opt/homebrew/bin/git status --porcelain | head -5
 ```
 
-Esperado: `CON-Q3`; `quality` en `pass`; `N passed` sin `skipped`; y **al menos una línea del último comando, dentro del código que arma el cuerpo del parche**. Eso es lo que prueba que la forma quedó sin sellar para la fila A.4 de David.
+Esperado, y son **cinco salidas distintas, una por comando**: `CON-Q3`; `quality` en `pass`; `N passed` sin `skipped`; del `git grep`, **al menos una línea, dentro del código que arma el cuerpo del parche**; y del `git status`, **ninguna**. Las dos últimas se leen por separado a propósito: juntas, una ruta sin trackear se puede confundir con la línea del marcador, y la compuerta acabaría rechazando un árbol limpio o aceptando una ruta como si fuera el marcador. Eso es lo que prueba que la forma quedó sin sellar para la fila A.4 de David.
 
 **Se muestran las líneas en vez de contarlas porque un `grep -q` a secas no distingue el marcador real de un comentario o de un test que lo menciona**, y con esa forma una fase que ya resolvió el parche pasaba la compuerta igual. El filtro quita los comentarios; que la línea que queda esté en la construcción del cuerpo y no en otra parte del archivo lo confirma el lead leyéndola, y la cita en el PR. Fallback: `FALTA-Q3` → rebase y otra vez a la compuerta; **sin líneas, o solo en comentarios o tests** → el carril inventó la forma del parche y vuelve al paso 1 del loop con encargo de corrección.
 
@@ -337,7 +337,7 @@ Esperado: `CON-Q3`; `quality` en `pass`; `N passed` sin `skipped`; y **al menos 
 ```
 cd /Users/dn/dev/wt-fase8-lead
 /opt/homebrew/bin/gh pr checks $pr | head -3
-/opt/homebrew/bin/git fetch -q origin
+/opt/homebrew/bin/git fetch -q origin || { echo "ATORADO: git fetch fallo"; exit 1; }
 /opt/homebrew/bin/git diff --name-only origin/master...HEAD | grep -vE '^(plans/repricing-01\.md|docs/CHAT-CONTEXT\.md)$'
 /opt/homebrew/bin/git status --porcelain | head -5
 for f in A.0 A.2 A.3 E.1; do
@@ -350,7 +350,7 @@ ORBIT_TEST_DSN="postgresql://orbit:orbit@localhost:5432/postgres" ./.venv/bin/py
 
 Esperado: `quality` en `pass`; los dos primeros comandos **sin salida**; **las cuatro filas con `1`**; y el candado de frescura en verde.
 
-**El `fetch` va primero y no se hereda del ítem anterior.** Q5 compara contra
+**El `fetch` va primero, corta si falla, y no se hereda del ítem anterior.** El corte es explícito y no un `set -e` para todo el bloque: los `grep -vE` de abajo esperan cero coincidencias, o sea salida distinta de cero, y un `errexit` general los tomaría por fallos. Q5 compara contra
 `origin/master`, que es una referencia local: sin traerla, compara contra lo que
 `master` era cuando alguien hizo fetch por última vez. Entre Q4 y Q5 median un
 merge y una revisión, tiempo de sobra para que `master` avance, y entonces el diff
