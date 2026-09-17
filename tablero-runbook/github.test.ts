@@ -37,7 +37,7 @@ function fixtureDoc(name: string): ProgresoDoc {
 /** Un gh falso: script con shebang nombrado *.exe. `cuerpo` es JS de node. */
 function ghFalso(dir: string, nombre: string, cuerpo: string): string {
   const ruta = join(dir, nombre);
-  writeFileSync(ruta, `#!/usr/bin/env node\n${cuerpo}\n`, "utf8");
+  writeFileSync(ruta, `#!${process.execPath}\n${cuerpo}\n`, "utf8");
   chmodSync(ruta, 0o755);
   return ruta;
 }
