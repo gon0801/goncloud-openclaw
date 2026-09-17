@@ -200,7 +200,9 @@ el remoto ni worktrees colisionando. Los tres candados del repo
 (`test-runbooks-no-contradicen-entorno.sh`, `test-loop-autopilot.sh`,
 `test-skill-autopilot-runbook.sh`) salen verdes con este runbook incluido.
 
-## Qué haría falta para levantarlo
+## Qué hizo falta para levantarlos (histórico, ya resuelto)
+
+> Las cuatro decisiones de abajo **ya se tomaron**. Se conservan escritas porque explican por qué la fase quedó como quedó, no porque sigan pendientes. El encabezado del archivo declara B1 a B4 levantados.
 
 1. Que exista el tablero de progreso, o que la skill y el loop admitan una fase
    sin él y lo digan (B1). Corregir de paso la forma `--params @archivo` en el

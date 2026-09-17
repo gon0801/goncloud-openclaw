@@ -47,6 +47,20 @@ test -r /Users/dn/dev/summonaikit-claude/tools/MANIFEST.sha256 || echo ATORADO k
 /opt/homebrew/bin/tmux display-message -p -t muse-goncloud-Orbit '#{pane_current_path}'
 ```
 
+**Lo que 0.0 no puede comprobar, y hay que saber antes de prometer seis merges.**
+La sección 6 del loop pide dos cosas que ningún comando responde desde aquí: que
+el hook del kit esté instalado **en el host que vaya a ser lead**, y que haya
+pasado un merge de prueba por host. Tampoco se puede comprobar de antemano que el
+veredicto sellado se cree y se consuma **en la misma sesión viva, mismo host y
+misma ruta de proyecto**, que es lo que el kit exige.
+
+Por eso el primer merge de la cola es el de este runbook (paso 0.1), y va **con
+`--dry-run` antes que nada**: si el sello no funciona en tu host, ahí sale, antes
+de haber lanzado un solo carril. Un `sin estado del hook` en ese dry-run detiene
+la fase; no se sigue esperando que el siguiente merge sí pase.
+
+La credencial `orbit:orbit` de esas líneas es la del Postgres **local y desechable** de desarrollo, ligada a `localhost`, y no abre nada más: no se reutiliza contra otro destino, no se copia a un archivo de configuración y no aparece en ningún comando que salga de esta máquina. Producción se toca solo por el camino del carril D, que lee su cadena de conexión del contenedor y nunca la escribe en el runbook.
+
 Esperado, en orden: sin salida; sin salida; la línea `{"merge":true,"merge_despliega":"no","salud_url":null,"revert_si_rojo":true,"rama":"master","sin_verify_app":false,"telegram":false}`; **sin salida** (el checkout principal limpio); `localhost:5432 - accepting connections`; `1`; `/Users/dn/dev/goncloud-Orbit`.
 
 **Detienen la fase**: el kit ausente, y `autopilot.json` ausente de `origin/master`. **Detiene el arranque de los carriles de muse, no la fase**: un checkout principal sucio; el carril D del lead puede avanzar igual mientras se resuelve.
@@ -131,11 +145,28 @@ Esperado, en orden: sin salida; sin salida; la línea `{"merge":true,"merge_desp
 
 5. **Número de migración, releído con `fetch`.** Solo el carril A crea migración. El número es el siguiente libre, y se relee **con la referencia fresca** al abrir el PR y otra vez en la compuerta:
 
+   Para **elegir** el número, antes de escribir la migración:
+
    ```
-   /opt/homebrew/bin/git fetch -q origin && /opt/homebrew/bin/git ls-tree --name-only origin/master migrations/ | sort | tail -1
+   /opt/homebrew/bin/git fetch -q origin
+   ULT=$(/opt/homebrew/bin/git ls-tree --name-only origin/master migrations/ \
+       | sed -n 's|migrations/\([0-9]\{4\}\)_.*|\1|p' | sort | tail -1)
+   echo "libre: $(printf '%04d' $((10#$ULT + 1)))"
    ```
 
-   Hoy devuelve `migrations/0038_fabrica_hermanas_biblioteca.sql`, así que el número es `0039`. Si al llegar a la compuerta ya existe un `0039` ajeno, el carril renumera en el mismo PR y vuelve al paso 3 del loop.
+   Hoy `ULT` es `0038`, así que el libre es `0039`. **El máximo más uno, no el último de la lista ordenada**: si existen `0039` y `0040`, el libre es `0041`, y una lectura que solo mire "no es 0038" se lleva un número tomado.
+
+   Y en la compuerta, para **comprobar** que sigue libre, que es otra pregunta:
+
+   ```
+   /opt/homebrew/bin/git fetch -q origin
+   NUEVA=$(/opt/homebrew/bin/git diff --name-only --diff-filter=A origin/master...HEAD -- migrations/ | head -1)
+   NUM=$(echo "$NUEVA" | sed -n 's|migrations/\([0-9]\{4\}\)_.*|\1|p')
+   /opt/homebrew/bin/git ls-tree --name-only origin/master migrations/ \
+       | grep -q "^migrations/${NUM}_" && echo "COLISION: $NUM ya aterrizó en master" || echo "LIBRE $NUM"
+   ```
+
+   Esa es la que puede salir mal de verdad: el carril eligió `0039` cuando estaba libre, y mientras su PR esperaba revisión aterrizó un `0039` ajeno. **Comprobar el máximo más uno en la compuerta no sirve**, porque ese número nunca puede estar tomado por construcción y la rama de colisión jamás se ejecutaría. `COLISION` manda al carril a renumerar con el primer bloque, en el mismo PR, y volver al paso 3 del loop.
 
 6. **`tests/test_architecture.py` tiene dueño y orden: primero el carril B, después el C.** C no toca ese archivo hasta que B esté en `master`. **Desviación declarada**: la tabla de propiedad de archivos del plan asigna ese archivo a la fila A.1, que no está en esta fase; como B y C lo necesitan para sus DoD, esta fase se lo reparte con ese orden y lo escribe en el PR.
 
@@ -146,13 +177,21 @@ Esperado, en orden: sin salida; sin salida; la línea `{"merge":true,"merge_desp
 9. **El carril D solo lee, y lo corre el lead.** El plan se lo asigna: «E.1 … (lead, solo lectura)». Sus consultas viven versionadas en `docs/evidencia/repricing-01/E.1/consultas/*.sql` y se corren así, desde el worktree del lead:
 
    ```
-   ssh goncloud 'DSN=$(docker exec orbit-app-1 printenv ORBIT_DSN_READ); docker exec -i orbit-db-1 psql "$DSN" -X -P pager=off -tA' \
-     < docs/evidencia/repricing-01/E.1/consultas/envio-por-producto.sql
+   { echo 'BEGIN READ ONLY;'; cat docs/evidencia/repricing-01/E.1/consultas/envio-por-producto.sql; } \
+     | ssh goncloud 'DSN=$(docker exec orbit-app-1 printenv ORBIT_DSN_READ); docker exec -i orbit-db-1 psql "$DSN" -X -P pager=off -tA -v ON_ERROR_STOP=1'
    ```
+
+   **El `BEGIN READ ONLY` no es adorno.** El nombre de la variable dice `READ` pero es solo un nombre: si el rol no trae `default_transaction_read_only` puesto, cualquier escritura que se cuele en un archivo de consulta corre contra producción. La transacción de solo lectura la rechaza, y `ON_ERROR_STOP` hace que se note en vez de seguir con la siguiente línea. Esto es lo único de esta fase que toca la base de producción: el costo de equivocarse no es un carril atorado.
 
    Si `ssh` no responde, el dato queda `unknown` con la consulta que lo resolvería escrita al lado, y el carril entrega lo que sí midió.
 
-10. **El progreso se escribe, sin tablero.** El plugin que serviría `runbook.progress.set` no existe en esta máquina y la CLI no acepta la forma `--params @<archivo>` (ver «Bloqueos levantados»). Por eso, **desviación declarada de la sección 8 del loop**: en cada cambio de estado de un carril o de la cola, y al cierre, el lead escribe `/Users/dn/dev/goncloud-Orbit/.saikit/progress/8.json` con el formato `runbook-progress.v1` y **no lo envía a ningún lado**. Ese archivo **no se commitea**: `.saikit/` está en el `.gitignore` de Orbit (línea 22) por diseño, y esta fase no lo fuerza. Es una ruta única, la del checkout principal, y ningún carril lo lista en su tabla de archivos. Se respeta la forma del spec, incluido `atencion_requerida` como objeto `{necesaria, motivo, desde}` y `siguiente_paso` de ≤160 caracteres en lenguaje llano; `paso_loop` se escribe `8` para cualquier carril que ya pasó la aprobación, porque el spec lo cierra en 0–8 y el loop tiene once pasos. **Lo que sí es progreso verificable por un tercero son los PRs, sus comentarios `APPROVE lead <sha>` y este archivo**, y eso es lo que lee un lead que reemplace al primero.
+10. **El progreso se escribe, sin tablero.** El plugin que serviría `runbook.progress.set` no existe en esta máquina y la CLI no acepta la forma `--params @<archivo>` (ver «Bloqueos levantados»). Por eso, **desviación declarada de la sección 8 del loop**: en cada cambio de estado de un carril o de la cola, y al cierre, el lead escribe `/Users/dn/dev/goncloud-Orbit/.saikit/progress/8.json` con el formato `runbook-progress.v1` y **no lo envía a ningún lado**. Ese archivo **no se commitea**: `.saikit/` está en el `.gitignore` de Orbit (línea 22) por diseño, y esta fase no lo fuerza. Es una ruta única, la del checkout principal, y ningún carril lo lista en su tabla de archivos. Se respeta la forma del spec, incluido `atencion_requerida` como objeto `{necesaria, motivo, desde}` y `siguiente_paso` de ≤160 caracteres en lenguaje llano; `paso_loop` se escribe `8` para cualquier carril que ya pasó la aprobación, porque el spec lo cierra en 0–8 y el loop tiene once pasos. **Ese archivo vive en una sola máquina y no basta para un relevo.** Está en el checkout principal, no se commitea porque `.saikit/` está en el `.gitignore` de Orbit, y no se envía a ningún lado: un lead que arranque en otro host no puede leerlo, y sin él repetiría carriles o perdería `detenido_por` y `siguiente_paso`. Por eso, en cada cambio de estado, el lead **también pega el JSON completo como comentario en el PR abierto del carril activo**, o en el del último si ninguno está abierto:
+
+   ```
+   /opt/homebrew/bin/gh pr comment <pr> --body-file /Users/dn/dev/goncloud-Orbit/.saikit/progress/8.json
+   ```
+
+   Eso lo vuelve legible desde cualquier host sin pelearse con el `.gitignore` y sin inventar una ruta trackeada. **Lo que un tercero puede verificar son los PRs, sus comentarios `APPROVE lead <sha>`, y el último comentario de progreso**; el archivo local es la copia de trabajo, no la fuente.
 
 11. **El cierre se reporta, no se relaya.** Al cerrar cada carril y la fase, la última línea en pantalla es `LISTO <sha>` o `ATORADO <razón>`, según la sección 2 del loop; claw la lee de tmux y hace lo que tenga que hacer con ella. **No hay comando de Telegram en esta fase**: `autopilot.json` de Orbit trae `telegram: false` y el kit no avisa. Donde la sección 5 del loop manda poner una línea «en el Telegram» (por ejemplo, CodeRabbit sin cuota), en esta fase esa línea va **en el cuerpo del PR y en el archivo de progreso**. Desviación declarada.
 
@@ -252,9 +291,10 @@ cd /Users/dn/dev/wt-fase8-lead
 /opt/homebrew/bin/git diff --name-only origin/master...HEAD
 /opt/homebrew/bin/git diff --name-only origin/master...HEAD | grep -qE '^docs/evidencia/repricing-01/E\.1/' && echo TIENE-EVIDENCIA || echo SIN-EVIDENCIA
 /opt/homebrew/bin/git diff --name-only origin/master...HEAD | grep -vE '^docs/evidencia/repricing-01/E\.1/' | head -3
+/opt/homebrew/bin/git status --porcelain | head -5
 ```
 
-Esperado: `quality` en `pass`; `TIENE-EVIDENCIA`; y el último comando **sin salida**, o sea ninguna ruta fuera de la evidencia. Fallback: `SIN-EVIDENCIA` significa que el entregable no está y el ítem no mergea; cualquier ruta intrusa se saca con un commit propio.
+Esperado: `quality` en `pass`; `TIENE-EVIDENCIA`; y los dos últimos comandos **sin salida**. El de estado va aparte del diff a propósito: un `BRIEF.md` residual no está trackeado, así que **el diff no lo ve**, y la regla de trabajo prohíbe conservarlo. Esta misma línea va en cada compuerta que mergea, no solo aquí: lo que un ítem anterior dejó suelto aparece en el árbol del siguiente. Fallback: `SIN-EVIDENCIA` significa que el entregable no está y el ítem no mergea; cualquier ruta intrusa se saca con un commit propio.
 
 **Q3 · Carril B** (`fase8/precio-reglas`, árbol `/Users/dn/dev/goncloud-Orbit`).
 
@@ -275,21 +315,31 @@ cd /Users/dn/dev/goncloud-Orbit
 /opt/homebrew/bin/git merge-base --is-ancestor <sha-squash-de-Q3> HEAD && echo CON-Q3 || echo FALTA-Q3
 /opt/homebrew/bin/gh pr checks $pr | head -3
 ORBIT_TEST_DSN="postgresql://orbit:orbit@localhost:5432/postgres" ./.venv/bin/python -m pytest tests/test_precio_write.py tests/test_spapi_write_client.py tests/test_architecture.py -q | tail -2
-/opt/homebrew/bin/git grep -q pendiente_sonda -- app/spapi/precio_write.py && echo SIN-SELLAR || echo SELLADO
+/opt/homebrew/bin/git grep -n pendiente_sonda -- app/spapi/precio_write.py | grep -vE ':[[:space:]]*#' | head -5
 ```
 
-Esperado: `CON-Q3`; `quality` en `pass`; `N passed` sin `skipped`; y `SIN-SELLAR`, que es la prueba de que la forma del parche quedó sin sellar para la fila A.4 de David. Fallback: `FALTA-Q3` → rebase y otra vez a la compuerta; `SELLADO` → el carril inventó la forma del parche y vuelve al paso 1 del loop con encargo de corrección.
+Esperado: `CON-Q3`; `quality` en `pass`; `N passed` sin `skipped`; y **al menos una línea del último comando, dentro del código que arma el cuerpo del parche**. Eso es lo que prueba que la forma quedó sin sellar para la fila A.4 de David.
+
+**Se muestran las líneas en vez de contarlas porque un `grep -q` a secas no distingue el marcador real de un comentario o de un test que lo menciona**, y con esa forma una fase que ya resolvió el parche pasaba la compuerta igual. El filtro quita los comentarios; que la línea que queda esté en la construcción del cuerpo y no en otra parte del archivo lo confirma el lead leyéndola, y la cita en el PR. Fallback: `FALTA-Q3` → rebase y otra vez a la compuerta; **sin líneas, o solo en comentarios o tests** → el carril inventó la forma del parche y vuelve al paso 1 del loop con encargo de corrección.
 
 **Q5 · Cierre** (`fase8/cierre`, árbol `/Users/dn/dev/wt-fase8-lead`). Va **después** de la revisión de cierre de la sección 10 del loop, con sus hallazgos ya corregidos y mergeados.
 
 ```
 cd /Users/dn/dev/wt-fase8-lead
 /opt/homebrew/bin/gh pr checks $pr | head -3
-/opt/homebrew/bin/git diff --name-only origin/master...HEAD
+/opt/homebrew/bin/git diff --name-only origin/master...HEAD | grep -vE '^(plans/repricing-01\.md|docs/CHAT-CONTEXT\.md)$'
+/opt/homebrew/bin/git status --porcelain | head -5
+for f in A.0 A.2 A.3 E.1; do
+  printf '%s ' "$f"
+  /opt/homebrew/bin/git diff origin/master...HEAD -- plans/repricing-01.md \
+    | grep -cE "^\+.*\b${f}\b.*cc:完了"
+done
 ORBIT_TEST_DSN="postgresql://orbit:orbit@localhost:5432/postgres" ./.venv/bin/python tools/check_chat_context_fresh.py origin/master
 ```
 
-Esperado: `quality` en `pass`; que el diff traiga **solo** `plans/repricing-01.md` y `docs/CHAT-CONTEXT.md`; y que el candado de frescura salga en verde. Fallback: si el candado sale rojo, falta la entrada en `CHAT-CONTEXT.md` y se agrega en el mismo PR; cualquier otra ruta en el diff se saca con un commit propio. Este ítem lleva un loop reducido: auditoría del lead y una ronda cruzada, sin CodeRabbit obligatorio, porque son celdas de estado y prosa.
+Esperado: `quality` en `pass`; los dos primeros comandos **sin salida**; **las cuatro filas con `1`**; y el candado de frescura en verde.
+
+**El conteo por fila es la compuerta, no el diff de nombres.** Que los dos archivos cambiaron no dice que las cuatro celdas se cerraron, ni que no se editó una quinta: un PR de cierre equivocado pasaba igual. Una fila en `0` es una celda sin cerrar; en `2` o más, la celda se tocó dos veces y hay que mirar por qué. Fallback: si el candado sale rojo, falta la entrada en `CHAT-CONTEXT.md` y se agrega en el mismo PR; cualquier otra ruta en el diff se saca con un commit propio. Este ítem lleva un loop reducido: auditoría del lead y una ronda cruzada, sin CodeRabbit obligatorio, porque son celdas de estado y prosa.
 
 ---
 
