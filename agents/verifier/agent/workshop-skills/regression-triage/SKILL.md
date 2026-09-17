@@ -1,6 +1,6 @@
 ---
 name: regression-triage
-description: Preexisting vs new failures — classify PR test/CI red against the base. HEAD-vs-BASE test and lint runs, per-module runner, CI step, skipped gates, local-green/CI-red.
+description: Preexisting vs new failures — classify PR test/CI red vs base. HEAD-vs-BASE tests/lint, per-module runner, CI step, skipped gates, local-green/CI-red.
 ---
 
 # Attribute failures: preexisting or new
