@@ -86,8 +86,9 @@ hit=$(lead_nombra_modelo < "$DOC")
 grep -q -E '^\| \*\*lead\*\*' "$DOC" || fail "$DOC: no encuentro la fila del lead en la tabla de roles"
 echo "ok (4): el lead es un rol, no un modelo"
 
-# (5) Toda sección de reglas cita su incidente. Sin "Medido:", la regla es una hipótesis.
-for n in 1 2 3 4 5 6 7 9 10 11; do
+# (5) Las secciones 1 a 12 citan su incidente. Sin "Medido:", la regla es una hipótesis.
+# La 13 describe este mismo candado y no es una regla.
+for n in 1 2 3 4 5 6 7 8 9 10 11 12; do
   ini=$(grep -n -E "^## $n\. " "$DOC" | head -1 | cut -d: -f1)
   fin=$(grep -n -E "^## $((n+1))\. " "$DOC" | head -1 | cut -d: -f1)
   [ -n "$fin" ] || fin=$(wc -l < "$DOC")

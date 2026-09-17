@@ -16,7 +16,7 @@ Cada regla lleva su origen, `Medido:` con fecha. Si una regla no tiene un incide
 | **lead** | un CLI en tmux, de cualquier host del kit | Escribe encargos, lanza implementadores, audita, corre la revisión cruzada, aprueba, mergea por el kit, despliega, escribe progreso, cierra la fase. No escribe código de producto. |
 | **implementador** | muse, cursor, glm, u otro, según el brief | Escribe el código de un carril en su worktree. Reporta con la línea de contrato. No hace push ni abre PR. |
 | **revisor cruzado** | otra IA por `cross-review.ps1` | Segunda opinión sobre un SHA. Nunca el modelo que implementó. |
-| **CodeRabbit** | bot en GitHub | Una revisión por PR, sobre código ya aprobado. Sin cuota no bloquea, pero se declara. |
+| **CodeRabbit** | bot en GitHub | Revisa cuando el PR se promueve a listo, nunca los pushes del borrador; después solo ve los pushes de corrección, que son pocos porque el código ya pasó la cruzada. Sin cuota no bloquea, pero se declara. |
 | **David** | el dueño | Solo lee el Telegram de cierre y el tablero. Preaprobó por escrito lo que la fase necesita. |
 
 Hosts que el kit de merge conoce hoy, o sea leads posibles: `claude`, `codex`, `grok`, `zcode`, `kimi`, `dsh`. Claw no es host del kit y no lo necesita: no mergea.
@@ -50,7 +50,7 @@ Cada tarea de un carril pasa por esto, en este orden. Ningún paso se salta; si 
 4. **PR en borrador.** El lead hace push y abre el PR **como draft**, desde el worktree, con el cuerpo en archivo. El CI corre; CodeRabbit no.
 5. **Rondas de revisión cruzada** sobre el SHA del PR, con la política de la sección 4. Cada hallazgo se corrige con un encargo `BRIEF-r<N>.md` al mismo implementador y vuelve al paso 3.
 6. **Promoción.** Cuando una ronda no trae altas ni medias, el lead marca el PR como listo para revisión. Ahí CodeRabbit revisa una sola vez, sobre código que ya no va a cambiar.
-7. **CodeRabbit.** Se leen sus comentarios, no solo su check. Lo accionable se corrige en el mismo PR y vuelve al paso 3. Se repite tras cada push hasta que no deje nada nuevo o no tenga cuota.
+7. **CodeRabbit.** Se leen sus comentarios, no solo su check. Lo accionable se corrige en el mismo PR y vuelve al paso 3. Cada push de corrección tras la promoción vuelve a pasar por CodeRabbit; se cierra cuando no deja nada nuevo o no tiene cuota.
 8. **Aprobación.** `APPROVE lead <sha>` como comentario en el PR, con la lista de residuales y su razón. Solo eso mete el PR a la cola.
 9. **Merge** por la ruta del kit, sección 5. Rebase antes, CI verde del SHA nuevo, y re-APPROVE si el diff es vacío o vuelta al paso 5 si no lo es.
 10. **Despliegue y verificación**, sección 6, si la fase lo pide.
@@ -76,7 +76,7 @@ Medido: 2026-09-16, PR #48: catorce rondas cruzadas sobre un cambio de documenta
 ## 5. PRs y CodeRabbit
 
 - **Un PR por carril, nunca por tarea.** Las tareas de un carril son commits del mismo PR.
-- **Borrador hasta la aprobación cruzada.** El PR nace como draft y solo se promueve cuando la sección 4 cerró. CodeRabbit revisa una vez por PR, no una vez por push.
+- **Borrador hasta la aprobación cruzada.** El PR nace como draft y solo se promueve cuando la sección 4 cerró. CodeRabbit no ve los pushes del borrador: ve el PR promovido y, después, solo los pushes de corrección, que son pocos porque el código ya pasó la cruzada.
 - **Tope de tres PRs abiertos a la vez** por corrida. Si hay que abrir un cuarto, se cierra uno primero.
 - **Sin cuota de CodeRabbit no se espera**: el PR sigue su curso, pero la línea "CodeRabbit sin cuota: no revisó este PR" va en el cuerpo del PR y en el Telegram. Que no bloquee no significa que no se diga.
 - **Los comentarios de CodeRabbit se leen** antes de mergear. Un check en verde con comentarios accionables no es una revisión aprobada.
@@ -114,6 +114,8 @@ Medido: 2026-09-16, 15:25 a 15:28 hora del Pacífico: doce recargas de configura
 ## 8. Progreso escrito, no contado
 
 En cada cambio de estado de un carril o de la cola, y al cierre, el lead escribe `.saikit/progress/<fase>.json` en el formato `runbook-progress.v1` y lo envía con `openclaw gateway call runbook.progress.set --params @<archivo>`. Un envío fallido no bloquea y se reintenta en el siguiente cambio. Cada escritura lleva `atencion_requerida` y `siguiente_paso` en lenguaje llano. Lo que no está en ese archivo no es progreso.
+
+Medido: 2026-09-16, el cierre de la Fase 6 quedó declarado en `Plans.md` con un residual de canary que, al repetirlo, pasaba: sin progreso escrito por corrida, el estado declarado y el real divergieron sin que nadie lo notara.
 
 ---
 
@@ -173,8 +175,10 @@ Aplican en toda fase. El runbook de fase agrega las suyas y no repite estas.
 | La ruta del kit rechaza (sin sello, sin estado del hook, lock ajeno) | Una vez: re-sellar con un revisor propio desde la sesión viva y reintentar. Si sigue: el PR queda abierto con su `APPROVE lead <sha>` y la razón textual, y va en el Telegram. Ninguna otra ruta de merge. |
 | Lo único que detiene toda la corrida | Perder acceso a GitHub o a la Mac, o un gateway que no responde tras un reinicio. Todo lo demás detiene un carril y deja evidencia. |
 
+Medido: 2026-09-15 y 16, corrida de la Fase 6: cada fila de esta tabla es una situación que ocurrió al menos una vez esa noche y se resolvió a mano o se declaró.
+
 ---
 
 ## 13. Cómo se prueba este documento
 
-`scripts/tests/test-loop-autopilot.sh` ancla cada sección y cada regla de aquí, y comprueba que la definición del lead **no nombra ningún modelo**. Cambiar una regla es cambiar el ancla en el mismo commit; borrarla sin tocar el test pone el candado en rojo. Las fallas que originaron cada regla están citadas con fecha en el propio texto: si una regla pierde su `Medido:`, no debería estar aquí.
+`scripts/tests/test-loop-autopilot.sh` ancla las 13 secciones en orden y las reglas clave como frases literales, comprueba que la fila del lead **no nombra ningún modelo**, y que las secciones 1 a 12 citan su incidente con `Medido:`. Cambiar una regla es cambiar el ancla en el mismo commit; borrarla sin tocar el test pone el candado en rojo. Las fallas que originaron cada regla están citadas con fecha en el propio texto: si una regla pierde su `Medido:`, no debería estar aquí.
