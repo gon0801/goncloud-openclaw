@@ -1,16 +1,25 @@
 # Fase 8 — hallazgos de los dos lectores y bloqueos declarados
 
-Fecha: 2026-09-16. Estado: **el runbook `autopilot-fase8.md` NO se lanza.** Dos
-lectores de contexto fresco lo ejecutaron en seco contra la máquina real y
-devolvieron 37 hallazgos. Cuatro son bloqueos que no se arreglan escribiendo
-mejor: el mecanismo que el formato exige no existe, y el plan dice que esta
-fase todavía no arranca. Este archivo es el rastro; el runbook se termina
-cuando los bloqueos se levanten, no antes.
+Fecha: 2026-09-16. Estado: **incorporado en la v2 del runbook.** Dos lectores de
+contexto fresco ejecutaron en seco la v1 contra la máquina real y devolvieron
+37 hallazgos. Los 24 redactables están corregidos en `autopilot-fase8.md` v2;
+los cuatro bloqueos quedaron levantados el mismo día con decisiones de David y
+con una medición, y su disposición está en la sección «Bloqueos levantados» del
+runbook. Este archivo se conserva como rastro: cada hallazgo con el comando que
+lo probó, para no volver a gastar ahí.
 
 Los dos lectores verificaron con comandos, no por lectura. Lo que declaran
 como verificado y correcto está al final, para no volver a gastar ahí.
 
-## Bloqueos (no se arreglan redactando)
+## Bloqueos (levantados el 2026-09-16; se conservan por su evidencia)
+
+**Cómo quedó cada uno**, en una línea: B1, la fase corre **sin tablero** por
+decisión de David, con la desviación declarada en el runbook; B2, David
+**adelantó el arranque** con su palabra literal; B3, la **ronda de cinco
+perspectivas está corriendo** sobre E, B y M, y el carril D avanza porque es
+solo lectura y su salida es insumo de esa misma ronda; B4, **medido**: muse
+trabaja en el checkout principal, una sesión por repo, así que sus carriles van
+secuenciales. El detalle de cada decisión está en el runbook.
 
 **B1 · El tablero de progreso no existe en esta máquina.** La skill
 `autopilot-runbook` hace obligatorio el slot de progreso (`runbook-progress.v1`
