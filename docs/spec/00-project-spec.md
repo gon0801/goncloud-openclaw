@@ -60,6 +60,16 @@ Decisión de producto registrada (D2): se crea `verify/` en goncloud-Orbit y gon
 
 Mapa: [Camino feliz del producto](../runbooks/camino-feliz-producto.md).
 
+## Tablero de runbook
+
+Decisiones de la Fase 7 de Plans.md. El dato vive en `runbook-progress.v1.md` (SSOT, mismo directorio); estas son las reglas que la interfaz cumple:
+
+1. El progreso de un runbook lo escribe el lead como `runbook-progress.v1`; la interfaz nunca lo infiere.
+2. El plugin `tablero-runbook` no registra hooks de agente ni tools: no puede alterar, retrasar ni bloquear ningún turno.
+3. Todo texto del progreso se trunca y escapa en el punto de interpolación antes de pintarse; el tablero no muestra salidas crudas ni secretos.
+4. Lo que el plugin lee de GitHub se rotula "GitHub" y, apagado, se rotula "GitHub: sin verificar"; el tablero nunca presenta lo reportado por el lead como verificado.
+5. `runbook.progress.get` y la ruta `/runbook/progress/<fase>.json` exponen `residuales` y `eventos` a quien pase la auth del gateway: quien escribe no pone nada que no pueda leer todo operador del gateway.
+
 ## Links
 
 - [Structural Investigation Guard design](../superpowers/specs/2026-09-12-structural-investigation-guard-design.md)
