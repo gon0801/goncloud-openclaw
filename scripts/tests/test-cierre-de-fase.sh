@@ -66,6 +66,18 @@ REM="$T/remoto.git"; git init -q --bare "$REM"
 git -C "$R" remote add origin "$REM" 2>/dev/null || git -C "$R" remote set-url origin "$REM"
 git -C "$R" push -q origin HEAD:main
 
+# Cinturon que SI puede fallar: el repo de juguete tiene que resolver a su propio .git.
+# Si una variable de git sobreviviera al unset de arriba, cada `git -C "$R"` de esta
+# prueba escribiria en el repo REAL. Medido el 2026-09-17, reproduciendo el fallo a
+# mano: dejo 464 borrados en el indice del clon del usuario y le cambio la direccion
+# del remoto a un temporal. Aqui se para antes de tocar nada.
+# En macOS /var es un enlace a /private/var, asi que se comparan las dos rutas ya
+# resueltas y no los textos.
+real=$(cd "$R" && git rev-parse --absolute-git-dir 2>/dev/null)
+esperado=$(cd "$R" && pwd -P)/.git
+[ "$(cd "$(dirname "$real")" 2>/dev/null && pwd -P)/$(basename "$real")" = "$esperado" ] \
+  || fail "los git de esta prueba no apuntan al repo de juguete sino a: $real"
+
 corre() { REPO="$R" REF=origin/main TMUX_BIN="${TM:-/no/hay}" OPENCLAW_BIN="$T/bin/openclaw" GH_BIN="$T/bin/gh" bash "$S" "$@"; }
 
 # (2) Todo cerrado: VERDE y salida 0. Sin este caso, un script que siempre dijera ROJO
