@@ -39,7 +39,6 @@ import {
   type GithubCruce,
   type ProgresoDoc,
   derivar,
-  fusionarEventos,
   renderTablero,
   validarFase,
   validarProgreso,
@@ -111,14 +110,23 @@ function leerEventosJsonl(ruta: string): Evento[] {
  * Append al jsonl de la fase con la rotación de observer.ts: si la línea nueva
  * cruzaría el tope de bytes, el archivo vivo se renombra a `<fase>.jsonl.1.jsonl`
  * (nombre FIJO, se sobrescribe) y se arranca uno nuevo. Un solo nivel; tope
- * real 2 x EVENTOS_JSONL_MAX_BYTES. `fusionarEventos` deduplica contra lo ya
- * persistido: reenviar el mismo documento no duplica líneas.
+ * real 2 x EVENTOS_JSONL_MAX_BYTES. El delta deduplica contra lo ya
+ * persistido (clave at+carril+que): reenviar el mismo documento no duplica líneas.
  */
 function agregarEventos(stateDir: string, fase: string, eventos: Evento[]): { lineas: number } {
   const ruta = rutaEventos(stateDir, fase);
   const previos = leerEventosJsonl(ruta);
-  const fusion = fusionarEventos(previos, eventos);
-  const porEscribir = fusion.slice(previos.length);
+  // El jsonl de disco guarda TODOS (spec, regla 4): el tope EVENTOS_TOPE
+  // es solo para la vista en memoria de fusionarEventos. El delta se
+  // calcula contra previos sin topar, deduplicando por clave at+carril+que.
+  const vistos = new Set(previos.map((e) => `${e?.at ?? ""}\u0000${e?.carril ?? ""}\u0000${e?.que ?? ""}`));
+  const porEscribir: Evento[] = [];
+  for (const e of Array.isArray(eventos) ? eventos : []) {
+    const clave = `${e?.at ?? ""}\u0000${e?.carril ?? ""}\u0000${e?.que ?? ""}`;
+    if (vistos.has(clave)) continue;
+    vistos.add(clave);
+    porEscribir.push(e);
+  }
   if (porEscribir.length === 0) return { lineas: 0 };
 
   mkdirSync(join(stateDir, "events"), { recursive: true });
@@ -245,7 +253,12 @@ function faseDeUrl(url: string | undefined): string | undefined {
   const limpio = (url ?? "").split("?")[0]?.split("#")[0] ?? "";
   const segs = limpio.split("/").filter(Boolean);
   if (segs.length !== 3) return undefined; // falta la fase o sobran segmentos
-  let crudo = decodeURIComponent(segs[2] ?? "");
+  let crudo: string;
+  try {
+    crudo = decodeURIComponent(segs[2] ?? "");
+  } catch {
+    return undefined; // percent-encoding malformado -> 400, no URIError fuera del handler
+  }
   if (crudo.endsWith(".json")) crudo = crudo.slice(0, -5);
   return validarFase(crudo) ? crudo : undefined;
 }

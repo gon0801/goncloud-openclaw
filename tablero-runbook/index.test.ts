@@ -235,6 +235,35 @@ describe("plugin smoke import (7.4)", () => {
     // Y el literal con barras de verdad también.
     const res3 = await llamarRuta(host.rutas, "/runbook/tablero/../../openclaw.json");
     assert.equal(res3.statusCode, 400);
+    // Percent-encoding malformado: decodeURIComponent lanzaba URIError fuera
+    // del handler; ahora es 400 (hallazgo 1).
+    const res4 = await llamarRuta(host.rutas, "/runbook/tablero/%zz");
+    assert.equal(res4.statusCode, 400);
+    const res5 = await llamarRuta(host.rutas, "/runbook/progress/%zz.json");
+    assert.equal(res5.statusCode, 400);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("1000 previos + 2 nuevos ⇒ 1002 líneas en disco (el tope es solo vista en memoria)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-tope-"));
+    const host = await cargar({ stateDir: dir });
+    const doc = fixtureDoc("fase6-en-curso.json");
+    // Pre-llena el jsonl con 1000 eventos ya persistidos (claves únicas).
+    mkdirSync(join(dir, "events"), { recursive: true });
+    const previos = Array.from({ length: 1000 }, (_, i) =>
+      JSON.stringify({ at: `2026-09-10T00:${String(i % 60).padStart(2, "0")}:00Z`, carril: "A", que: `previo-${i}`, situacion: null }),
+    );
+    writeFileSync(join(dir, "events", "6.jsonl"), `${previos.join("\n")}\n`, "utf8");
+    // Dos eventos nuevos que no existen en disco.
+    const doc2 = structuredClone(doc);
+    doc2.eventos = [
+      { at: "2026-09-17T00:00:01Z", carril: "P", que: "nuevo-uno", situacion: null },
+      { at: "2026-09-17T00:00:02Z", carril: "P", que: "nuevo-dos", situacion: null },
+    ];
+    const r = await llamarMetodo(host.metodos, "runbook.progress.set", doc2);
+    assert.deepEqual(r, { ok: true });
+    const lineas = readFileSync(join(dir, "events", "6.jsonl"), "utf8").split("\n").filter(Boolean);
+    assert.equal(lineas.length, 1002, `disco perdió eventos: ${lineas.length} líneas, esperadas 1002`);
     rmSync(dir, { recursive: true, force: true });
   });
 
