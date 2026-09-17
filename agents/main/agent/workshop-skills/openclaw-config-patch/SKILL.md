@@ -45,6 +45,12 @@ Same config surface, different entry point. Verified 2026-09-10 (adding the `sco
 3. Patch what `agents add` left out: the model chain (`primary` + `fallbacks`, matched to the sibling workers) and, for a worker that reads repos, `tools.exec.host` + `tools.exec.node` pinned to the Mac node — the same node id the other engineering workers carry. Without it the new agent's `exec` runs on the gateway Windows host, where the Mac paths do not exist.
    - Completion: dry-run passes, apply, then `openclaw config get agents.entries.<name>.model` and `...tools.exec` read back the intended values.
 
+## Exec host pin / unpin (both machines)
+
+A `tools.exec.host: "node"` pin denies a cross-host override outright — the call fails with `exec host not allowed (requested gateway; configured host is node; set tools.exec.host=gateway or auto to allow this override)`, it does not queue or run elsewhere. To let a pinned agent work on both hosts, set `host` to `"auto"` and keep the `node` id as its default (verified 2026-09-17: six agents unpinned, one word each, node ids untouched). Leave agents with no pin (here: main, operaciones) alone — adding one can move them off their home host.
+   - Completion: `openclaw config get agents.entries.<id>.tools.exec` reads back `host: auto` for every intended agent.
+Direct file edits over repeated identical blocks need unique neighboring context per block: two batch attempts failed (indentation, non-unique context) and changed nothing — verified by read-back — then one-by-one edits anchored on each agent's own lines succeeded. A config edit re-arms the deferred-restart mechanic in Pitfalls, so batch the pins into one round and check `cron list --all` first.
+
 ## Set an agent's identity (name / emoji / avatar)
 
 Same namespace (`agents.entries.<id>.identity`), different entry point: the `set-identity` subcommand. Verified 2026-09-16 (icons for all 8 agents).
