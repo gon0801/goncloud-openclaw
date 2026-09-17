@@ -53,6 +53,13 @@ That pull request merged weeks ago, so the command errors even if the guard
 failed. **It proves the message arrives, not that the block held.** Say that in
 the proof.
 
+**Which guard answers depends on where you type it, and the two say different
+things.** From your own session in this repo, a lexical pre-tool hook refuses
+the command before `summa-gate` ever sees it, and its message talks about the
+kit script. Only by exec on the gateway host does the command reach the
+registered hook, whose message starts with "Merge bloqueado por summa-gate".
+If your proof quotes the kit message, you proved the wrong guard.
+
 Send it to `main`, not to `implementer` or `ingenieria`. Not because of the
 allowlist, which does not cover this rule, but because `main` is the agent this
 repo's runbooks already use for exec. A drive against the API routes would have

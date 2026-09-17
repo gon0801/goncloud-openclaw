@@ -67,10 +67,19 @@ for i in 1 2; do
 done
 ```
 
+**Check the two prerequisites before believing the answer.** `timeout` and the
+CLI itself both make the probe fail, and neither means the gateway is down:
+
+```
+command -v timeout >/dev/null || echo "ATORADO: sin timeout, la sonda no mide nada"
+test -x ~/.openclaw/bin/openclaw || echo "ATORADO: la CLI no es ejecutable"
+```
+
 **Two attempts, not one, and this is measured.** Writing this skill, the first
 probe failed and the gateway was up: five probes right after it answered, three
 of them in under five seconds. A single failing probe means "ask again", not
-"down". Two failures in a row is the finding.
+"down". Two failures in a row, with both prerequisites satisfied, is the
+finding.
 
 `vivo=1`: nothing live is provable. Say so and stay on the local layer. Do not
 raise the timeout to "fix" it; the gateway answers in seconds when it answers at
@@ -140,12 +149,13 @@ drive and the problem disappears; the link is gitignored, so re-making it costs
 nothing.
 
 Then register the plugin against a fake host and fire the hook
-you care about: build an object with `logger`, `on`, and
-`runtime.middleware.register` plus a memory-backed `runtime.runContext`, pass it
-to the plugin's `register`, and pull your hook out of what it recorded. The
-shape is in `role.test.ts` as `fakeBaseApi`; copy it rather than inventing one,
-because a fake missing `runtime` registers silently and then the hook you want
-is not there.
+you care about. **Copy the shape from `fakeBaseApi` in `role.test.ts`; do not
+write one from memory.** The fields the plugin reads sit at the **top level** of
+the api object, not under `runtime`: `logger`, `on`,
+`registerAgentToolResultMiddleware`, a memory-backed `runContext` keyed by
+`${runId}:${namespace}`, and `pluginConfig`, which must be present even as `{}`.
+Nesting them under `runtime` looks right and is wrong: registration succeeds,
+the hook you wanted is simply not in the list, and nothing says so.
 
 **A working one ships with this skill.** It drives the merge guard with six
 commands, four that must block and two that must pass, and prints each verdict

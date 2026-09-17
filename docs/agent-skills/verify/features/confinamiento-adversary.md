@@ -25,6 +25,21 @@ command whose visible verb is harmless can still land bytes somewhere through
 its output. Redirects to the null device and to the standard streams are allowed
 by name; everything else absolute is a target.
 
+### The hole in the redirect check
+
+**The hook skips every relative target before checking it.** The line reads
+`if (!ABSOLUTE_PATH_RE.test(target)) continue;`, commented "relativos: dentro
+del workspace", and that comment is an assumption, not a fact: `../../outside`
+is relative and leaves the zone. So a redirect like `printf x > ../../outside`,
+run from the adversary's workspace, writes outside the allowed zone and the
+guard never looks at it.
+
+This is a real gap, not a declared limit like the two lexical bypasses the
+module documents. `adversaryPathAllowed` resolves relative paths correctly when
+it is given one, so the fix is in the caller, not the checker. **A proof about
+this guard says so**, rather than reporting confinement that holds only for
+absolute paths.
+
 ## How to get to it (user POV)
 
 The `adversary` agent, mid-turn, runs a command that would write somewhere. It
@@ -59,8 +74,11 @@ Confinamiento adversary (summa-gate): escritura fuera de zona permitida. El agen
 And for the redirect case:
 
 ```
-Confinamiento adversary (summa-gate): redirección a path absoluto fuera de zona permitida
+Confinamiento adversary (summa-gate): redirección a path absoluto fuera de zona permitida (solo workspace, .saikit/findings, .saikit/scratch). Destino: <ruta>
 ```
+
+Both messages end with the refused destination, so neither is a fixed string:
+match the part before `Destino:` and read the rest.
 
 ## Gotchas
 
