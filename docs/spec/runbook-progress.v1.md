@@ -8,7 +8,7 @@ Hoy el avance de un runbook está repartido en PRs, comentarios `APPROVE lead`, 
 
 ## Dónde vive y cómo se escribe
 
-- **Destino:** el gateway, vía el método RPC `runbook.progress.set` del plugin `tablero-runbook` (Fase 7). Desde la Mac: `~/.openclaw/bin/openclaw gateway call runbook.progress.set --params @<archivo.json>`. La CLI remota ya está autenticada; no se lee ningún token.
+- **Destino:** el gateway, vía el método RPC `runbook.progress.set` del plugin `tablero-runbook` (Fase 7). Desde la Mac: `~/.openclaw/bin/openclaw gateway call runbook.progress.set --params "$(cat <archivo.json>)"`. La CLI remota ya está autenticada; no se lee ningún token.
 - **Copia local del lead:** `.saikit/progress/<fase>.json` en el repo del runbook, misma forma, actualizada en cada escritura. Se commitea solo en el PR de cierre (es el rastro; durante la corrida cambia demasiado).
 - **Cuándo se escribe:** en cada cambio de estado de un carril o de un ítem de la cola, y al cierre. No por cada comando. Una escritura fallida nunca detiene el trabajo: se reintenta en el siguiente cambio de estado y se anota en `eventos`.
 - **Quién escribe:** solo el lead. Los implementers reportan al lead; el lead escribe.

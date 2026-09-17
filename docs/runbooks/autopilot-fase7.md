@@ -446,7 +446,7 @@ $G gateway call sessions.list --params '{"agentId":"<agente>","limit":20}' --tim
 
 ```
 G=~/.openclaw/bin/openclaw
-$G gateway call runbook.progress.set --params @tablero-runbook/fixtures/fase6-en-curso.json --timeout 30000
+$G gateway call runbook.progress.set --params "$(cat tablero-runbook/fixtures/fase6-en-curso.json)" --timeout 30000
 $G gateway call runbook.progress.get --params '{"fase":"6"}' --timeout 30000
 ```
 
@@ -459,7 +459,7 @@ $G gateway call runbook.progress.get --params '{"fase":"6"}' --timeout 30000
   **Devuelve la Fase 6 a su estado real antes de seguir.** Los canarios dejaron el tablero de la fase 6 mostrando un fixture, y el spec es last-writer-wins: si nadie lo corrige, David abre el tablero y ve una Fase 6 con un carril atorado que no existe. El cierre verdadero está versionado:
 
 ```
-$G gateway call runbook.progress.set --params @.saikit/progress/fase6.json --timeout 30000
+$G gateway call runbook.progress.set --params "$(cat .saikit/progress/fase6.json)" --timeout 30000
 $G gateway call runbook.progress.get --params '{"fase":"6"}' --timeout 30000   # debe traer el cierre, no el fixture
 ```
 
