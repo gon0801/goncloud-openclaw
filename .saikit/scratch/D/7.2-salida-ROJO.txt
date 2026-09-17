@@ -1,0 +1,1 @@
+FAIL: /tmp/fase6-previo.md: falta el ancla: runbook.progress.set

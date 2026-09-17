@@ -1,0 +1,4 @@
+ok (1): la seccion Tablero de runbook existe
+ok (2): las cinco declaraciones estan dentro de la seccion
+ok (3): las cinco anclas discriminan
+PASS test-spec-tablero
