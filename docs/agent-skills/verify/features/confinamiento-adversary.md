@@ -25,20 +25,23 @@ command whose visible verb is harmless can still land bytes somewhere through
 its output. Redirects to the null device and to the standard streams are allowed
 by name; everything else absolute is a target.
 
-### The hole in the redirect check
+### The hole that was here, and how it got found
 
-**The hook skips every relative target before checking it.** The line reads
+Until 2026-09-16 the hook skipped every relative target before checking it:
 `if (!ABSOLUTE_PATH_RE.test(target)) continue;`, commented "relativos: dentro
-del workspace", and that comment is an assumption, not a fact: `../../outside`
-is relative and leaves the zone. So a redirect like `printf x > ../../outside`,
-run from the adversary's workspace, writes outside the allowed zone and the
-guard never looks at it.
+del workspace". That comment was an assumption, not a fact, and
+`printf x > ../../outside` from the adversary's own workspace wrote outside the
+zone without the guard ever looking at it.
 
-This is a real gap, not a declared limit like the two lexical bypasses the
-module documents. `adversaryPathAllowed` resolves relative paths correctly when
-it is given one, so the fix is in the caller, not the checker. **A proof about
-this guard says so**, rather than reporting confinement that holds only for
-absolute paths.
+It is fixed: the `continue` is gone and every target goes through
+`adversaryPathAllowed`, which already resolved relative paths correctly.
+
+**Two things about it are worth keeping.** First, it survived because this guard
+had no test at all, neither of the function nor of the hook, which is why
+`adversary-confinamiento.test.ts` now exists. Second, it was found by a bot
+reviewing *this documentation*, not the code: writing down what a guard promises
+is what made the gap visible. A proof about this guard should still check both
+kinds of target, because nothing stops the skip from coming back.
 
 ## How to get to it (user POV)
 

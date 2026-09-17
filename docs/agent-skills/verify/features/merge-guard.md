@@ -40,8 +40,13 @@ Local, and this is the layer that can actually prove a block:
 
 ```
 cd /Users/dn/dev/goncloud-openclaw/summa-gate
-PATH="$(dirname "$(command -v node)"):$PATH" node --test role.test.ts
+PATH="$(dirname "$(command -v node)"):$PATH" node --test role.test.ts merge-guard-wiring.test.ts
 ```
+
+**Los dos archivos, no solo el primero.** `role.test.ts` cubre el veredicto y el
+hook de `sessions_send`; el cableado del merge-guard, que es que el hook
+registrado reciba el agente, vive en `merge-guard-wiring.test.ts`. Correr solo
+uno deja sin probar justo la parte que decide si la allowlist aplica.
 
 Live, inert by construction. Send a turn to `main` asking it to run, by exec:
 
