@@ -59,4 +59,24 @@ for necesario in summa-gate/observer.ts summa-gate/index.ts summa-gate/lib.ts; d
 done
 echo "ok (3): el codigo del plugin sigue versionado (el patron no es demasiado ancho)"
 
+# (4) tablero-runbook (Fase 7 / 7.4): el SEGUNDO plugin, mismo contrato. Su estado vive
+# fuera del clon (decision del spike 7.0), asi que no hay archivo vivo que vigilar hoy;
+# lo que se exige es la FORMA: .jsonl y .log bajo tablero-runbook/ ignorados, y el
+# patron sin roturas para el codigo versionado del plugin.
+for futuro in tablero-runbook/events-local.jsonl tablero-runbook/debug.log tablero-runbook/6.jsonl.1.jsonl; do
+  git check-ignore -q --no-index "$futuro" \
+    || fail ".gitignore no cubre $futuro por forma: si el estado cae en el clon, el snapshot lo sube"
+done
+echo "ok (4): la salida potencial de tablero-runbook esta ignorada por forma"
+
+# (5) Discriminacion para tablero-runbook: mismo mutante que (3), otro plugin. Un
+# `tablero-runbook/*` pasaria (4) y dejaria el plugin fuera del repo.
+for necesario_tr in tablero-runbook/lib.ts tablero-runbook/index.ts; do
+  git check-ignore -q --no-index "$necesario_tr" \
+    && fail ".gitignore ignora $necesario_tr: el patron es demasiado ancho"
+done
+git ls-files --error-unmatch tablero-runbook/lib.ts >/dev/null 2>&1 \
+  || echo "aviso: tablero-runbook/lib.ts todavia no esta en el indice (primer commit del plugin)"
+echo "ok (5): el codigo de tablero-runbook sigue versionado"
+
 echo "PASS test-salida-del-observador-no-trackeada"

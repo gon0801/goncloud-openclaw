@@ -1,0 +1,413 @@
+
+=== bateria summa-gate  (node v24.19.0)
+
+=== sintaxis summa-gate (node --check)
+
+> summa-gate@0.1.0 check
+> node --check index.ts && node --check lib.ts && node --check observer.ts && node --check diagnostic-guard.ts
+
+OK: sintaxis summa-gate
+▶ diagnostic finalize mode gating
+  ✔ off registers no diagnostic hooks (63.962792ms)
+  ✔ observe never revises but logs symbolic telemetry (1.5795ms)
+✔ diagnostic finalize mode gating (65.874208ms)
+▶ diagnostic finalize enforce revision
+  ✔ revises exactly once with the exact contract payload (0.937667ms)
+  ✔ a second call for the same run does not revise (0.257375ms)
+  ✔ two concurrent finals for the same run yield exactly one revise (0.407792ms)
+  ✔ two concurrent finals in different runs are isolated (0.23025ms)
+  ✔ three completed categories never revise (0.614709ms)
+  ✔ missing or ambiguous runId never revises (0.243917ms)
+  ✔ a failed state write delivers the final normally (0.158125ms)
+  ✔ a false setRunContext is a failed write: no revise (0.19875ms)
+  ✔ corrupt stored state fails open: no revise, no crash (0.115125ms)
+  ✔ tampered required categories fail open: no revise (0.083958ms)
+  ✔ duplicated completed categories fail open: no revise (0.073333ms)
+✔ diagnostic finalize enforce revision (3.651375ms)
+▶ diagnostic finalize automation safety
+  ✔ cron/heartbeat triggers create no run, cancel nothing, and repeat no action (0.179666ms)
+  ✔ registers no terminal-payload handler and schedules nothing (0.260083ms)
+  ✔ never cancels: every finalize outcome is undefined or a same-run revise (0.138667ms)
+  ✔ a diagnostic registration failure keeps the receipt gate working (4.767542ms)
+✔ diagnostic finalize automation safety (5.51ms)
+▶ diagnostic middleware registration
+  ✔ registers for openclaw and codex runtimes under the exact namespace (63.824458ms)
+  ✔ declares the middleware contract and diagnosticGuard schema in the manifest (0.428166ms)
+  ✔ does not register the middleware when mode is off (0.279167ms)
+✔ diagnostic middleware registration (64.9045ms)
+▶ diagnostic middleware runId source (SDK signature)
+  ✔ reads runId from ctx, the only SDK-carried source (0.797833ms)
+  ✔ ignores an event-carried runId (spoof pin): ctx wins (0.335584ms)
+  ✔ fails open with no ctx runId even when sessionKey is present (0.169875ms)
+  ✔ fails open with no ctx at all (0.117625ms)
+✔ diagnostic middleware runId source (SDK signature) (1.602792ms)
+▶ diagnostic middleware preservation
+  ✔ appends exactly one text block and preserves everything else (0.407541ms)
+  ✔ returns undefined for an unknown error (fail-open) (0.217375ms)
+  ✔ guides codex-runtime results the same way (host may observe without re-injection) (0.205208ms)
+  ✔ logs only symbolic telemetry, never observed content (0.161958ms)
+  ✔ rebuilds fresh state over corrupt stored state instead of crashing (0.211042ms)
+✔ diagnostic middleware preservation (1.380417ms)
+▶ diagnostic per-run state
+  ✔ does not lose categories on two concurrent updates of the same run (0.507083ms)
+  ✔ isolates two runIds in the same session (0.303834ms)
+  ✔ keeps the queue alive after a rejected update (0.200292ms)
+  ✔ treats a false setRunContext as a failed write: warns, still guides (0.119667ms)
+  ✔ fails open on a primitive result instead of spreading it (corruption pin) (0.137042ms)
+✔ diagnostic per-run state (1.36575ms)
+▶ diagnostic registration failure isolation
+  ✔ keeps merge guard, adversary confinement and sessions_send when middleware registration throws (0.4085ms)
+✔ diagnostic registration failure isolation (0.448708ms)
+▶ classifyIncident positives
+  ✔ classifies a gh PATH miss via exec (0.585209ms)
+  ✔ classifies a gh PATH miss via bash with a Windows signature (0.183167ms)
+  ✔ classifies a gh ENOENT spawn failure (0.192167ms)
+  ✔ classifies a browser global-profile miss via exec (real incident shape) (0.205625ms)
+  ✔ does not mistake the valid browser-tool profile for the global-flag miss (0.209292ms)
+  ✔ does not classify the correct --browser-profile flag as the incident (0.186208ms)
+  ✔ classifies an unscoped sessions_search database failure (0.131375ms)
+  ✔ accepts an equivalent structured failure without isError (0.101291ms)
+✔ classifyIncident positives (2.555666ms)
+▶ classifyIncident negative controls
+  ✔ ignores the same phrase in a successful result (isError mutation pin) (0.16325ms)
+  ✔ ignores result text alone with no failure marker (0.08675ms)
+  ✔ ignores the phrase under the wrong tool (0.049375ms)
+  ✔ ignores an echo of the phrase (first token is echo, not gh) (0.053875ms)
+  ✔ ignores an unknown command-not-found (signature mutation pin) (0.032208ms)
+  ✔ ignores a legitimate reviewer negative without a recognized failure (0.026917ms)
+  ✔ ignores a browser success carrying reviewer prose (0.023708ms)
+  ✔ ignores a scoped sessions_search failure as an incident (it is not unscoped) (0.035958ms)
+  ✔ ignores a partially scoped sessions_search failure as an incident (0.030541ms)
+  ✔ ignores a signature that only appears after the 8192-char bound (limit mutation pin) (0.076166ms)
+  ✔ still classifies when the signature precedes padding (0.05325ms)
+  ✔ supports cyclic args/result without throwing (collector cycle pin) (0.044833ms)
+  ✔ exposes the 8192 bound as a constant (0.092625ms)
+✔ classifyIncident negative controls (1.028041ms)
+▶ classifyCompletedProbe path_miss:gh_cli
+  ✔ labels executable discovery (0.420833ms)
+  ✔ counts a NOT_FOUND discovery as a completed probe (0.113834ms)
+  ✔ labels a known-location check (0.061834ms)
+  ✔ labels a read-only version probe as capability verification (0.047166ms)
+  ✔ does not count an aborted call (0.120375ms)
+  ✔ does not count a cancelled call (0.091292ms)
+  ✔ does not count a probe about another subject (0.092166ms)
+  ✔ does not let echo fake a version probe (spoof pin) (0.047041ms)
+  ✔ does not let echo fake executable discovery (spoof pin) (0.064875ms)
+  ✔ does not let a quoted documentary command count as a probe (spoof pin) (0.043958ms)
+  ✔ does not let result text alone grant a probe without the command (spoof pin) (0.103334ms)
+  ✔ does not let a text search fake executable discovery (rg pin) (0.12775ms)
+  ✔ does not let a text search fake a known-location check (grep pin) (0.063292ms)
+  ✔ does not let a text search fake capability verification (rg pin) (0.039875ms)
+  ✔ does not let a chained text search count (chain pin) (0.027375ms)
+  ✔ does not execute probes hidden inside quotes (quote pin) (0.087625ms)
+  ✔ counts a real probe even when chained with a documentary step (0.057625ms)
+  ✔ counts a PowerShell call-operator invocation as the real executable (0.118ms)
+✔ classifyCompletedProbe path_miss:gh_cli (2.153208ms)
+▶ classifyCompletedProbe wrong_profile:browser_claw
+  ✔ labels resolved-config inspection (0.202542ms)
+  ✔ labels a retry with the correct browser profile (0.16475ms)
+  ✔ labels a browser-tool capability check (0.089167ms)
+  ✔ does not grant a capability probe from result text alone (spoof pin) (0.0465ms)
+  ✔ does not let a text search fake a profile retry (rg pin) (0.039875ms)
+  ✔ does not let a text search fake resolved-config inspection (rg pin) (0.067375ms)
+  ✔ does not count an unrelated gh probe for the browser incident (0.087125ms)
+✔ classifyCompletedProbe wrong_profile:browser_claw (1.302417ms)
+▶ classifyCompletedProbe session_scope:sessions_search
+  ✔ labels an explicit agentId retry (0.176ms)
+  ✔ labels an explicit sessionKeys retry (0.058458ms)
+  ✔ labels a scoped retry that still hits a database fault (0.039166ms)
+  ✔ does not count the original unscoped failing call as a probe (0.022583ms)
+  ✔ labels a sqlite inspection command as a database fault check (0.050375ms)
+✔ classifyCompletedProbe session_scope:sessions_search (0.468458ms)
+▶ reduceDiagnosticState
+  ✔ creates state with the three gh categories (0.59ms)
+  ✔ creates state with the three browser categories (0.051459ms)
+  ✔ creates state with the three session categories (0.044916ms)
+  ✔ advances on a new relevant category (0.051791ms)
+  ✔ does not advance on a repeated category (dedup mutation pin) (0.026667ms)
+  ✔ does not advance on a category from another incident (0.0195ms)
+  ✔ keeps the first incident when a different one arrives (0.01875ms)
+  ✔ contains only the five DiagnosticState keys (privacy pin) (0.036917ms)
+✔ reduceDiagnosticState (0.925041ms)
+▶ buildDiagnosticContract
+  ✔ wraps guidance in the diagnostic-contract tags with the incident id (0.230541ms)
+  ✔ states the failure proves only that path failed (0.066125ms)
+  ✔ lists remaining symbolic categories and forbids repeats of side effects (0.093834ms)
+  ✔ never interpolates observed values (privacy mutation pin) (0.070541ms)
+  ✔ prescribes the ordered five-step gh recovery with the fixed known path (0.19875ms)
+  ✔ does not reuse the observer broad incapacity regex (0.320208ms)
+✔ buildDiagnosticContract (1.101417ms)
+▶ isTaskLevelIncapacity
+  ✔ matches a first-person run-scoped inability as the principal conclusion (0.696625ms)
+  ✔ matches an unavailable-capability conclusion in the final paragraph (0.376125ms)
+  ✔ does not match a quoted error (0.02675ms)
+  ✔ does not match historical discussion (0.018542ms)
+  ✔ does not match a reviewer finding (0.058667ms)
+  ✔ does not match a first failure followed by a next step (0.024917ms)
+  ✔ matches the originating Spanish denial: no access (0.032708ms)
+  ✔ matches the originating Spanish denial: capability unavailable (0.085291ms)
+  ✔ does not match a Spanish reviewer attribution (0.040917ms)
+✔ isTaskLevelIncapacity (1.45375ms)
+▶ shouldRequestRevision
+  ✔ requests when fewer than three categories completed and no revision yet (0.09225ms)
+  ✔ refuses after three distinct categories (0.109875ms)
+  ✔ refuses when a revision was already requested (0.07075ms)
+  ✔ refuses without a task-level incapacity conclusion (0.038083ms)
+  ✔ counts distinct categories only: triplicated one still revises (dup pin) (0.073834ms)
+✔ shouldRequestRevision (0.610667ms)
+▶ parseDiagnosticConfig
+  ✔ defaults to observe with 3 categories and 1 attempt (0.092083ms)
+  ✔ honors explicit enforce and off (0.034083ms)
+  ✔ falls back to observe on unknown modes and pins counts (0.0265ms)
+✔ parseDiagnosticConfig (0.207042ms)
+▶ merge-guard wiring (cross-review r2)
+  ✔ before_tool_call con matcher exec pasa ctx.agentId a mergeGuardVerdict (65.890125ms)
+✔ merge-guard wiring (cross-review r2) (66.23725ms)
+▶ mergeGuardVerdict (6.5c)
+  ✔ bloquea la mutacion GraphQL mergePullRequest desde main (1.28ms)
+  ✔ permite la mutacion GraphQL mergePullRequest desde implementer (0.364083ms)
+  ✔ permite la mutacion GraphQL mergePullRequest desde ingenieria (0.063417ms)
+  ✔ agente sin allowlist sigue bloqueado (0.050208ms)
+  ✔ bloquea la ruta REST /merges con agentId fuera de la allowlist (0.043833ms)
+  ✔ bloquea la ruta REST /merges sin agentId (retro-compatibilidad) (0.04125ms)
+  ✔ bloquea api.github.com con path de merge (0.057667ms)
+  ✔ NO bloquea gh pr view (consulta) (0.069292ms)
+  ✔ NO bloquea git push de rama del carril (0.234542ms)
+  ✔ bypass conocido documentado: query=@archivo pasa (declarado en codigo y skill) (0.091583ms)
+  ✔ retro-compatibilidad: un solo argumento mantiene el comportamiento previo (0.068208ms)
+  ✔ cross-review r1: agente allowlisted con comando encadenado - la mutacion pasa y el push sigue bloqueado (0.045417ms)
+  ✔ cross-review r1: unificacion restMerge - mismo endpoint, mismo trato que curl para la allowlist (0.036792ms)
+  ✔ cross-review r1: allowlist normalizada - implementer capitalizado o con espacios se comporta igual (0.035166ms)
+  ✔ agentId que no es texto bloquea y no lanza (0.102375ms)
+  ✔ cross-review r2: bloquea gh api con path de merge seguido de ?query (0.040708ms)
+  ✔ cross-review r2: bloquea api.github.com con path de merge y query string (0.036625ms)
+  ✔ cross-review r2: bloquea gh api con path de merge seguido de #fragmento (0.025417ms)
+  ✔ cross-review r2: bloquea la mutacion GraphQL mergeBranch (equivalente a POST /merges) (0.029292ms)
+  ✔ cross-review r2: bloquea la mutacion GraphQL enablePullRequestAutoMerge (0.022958ms)
+  ✔ cross-review r2: las mutaciones hermanas respetan la allowlist (implementer pasa) (0.02775ms)
+  ✔ cross-review r2: mutacion GraphQL inocua NO se bloquea (0.025292ms)
+  ✔ r3: bloquea path de merge encadenado con && o ; (0.026334ms)
+  ✔ r3: bloquea la orden de merge de gh pr encadenada con ; o && (0.026125ms)
+  ✔ r3: bloquea curl a api.github.com con path de merge encadenado con && (0.023875ms)
+  ✔ r3: bloquea el cliente gh entre comillas (token quoted) (0.025709ms)
+  ✔ r3: el quoted pasa solo dentro de la allowlist (0.023083ms)
+  ✔ r3: doble comilla en el cliente tambien bloquea (verifier) (0.023083ms)
+  ✔ r3: bloquea mergePullRequest seguido de comentario GraphQL (0.022459ms)
+  ✔ r3: bloquea mergeBranch y enablePullRequestAutoMerge con comentario (0.0355ms)
+  ✔ r3: bloquea PUT de la ruta REST auto-merge (0.022125ms)
+  ✔ r3: bloquea DELETE de la ruta REST auto-merge (0.020709ms)
+  ✔ r3: auto-merge respeta la allowlist (implementer pasa) (0.037083ms)
+  ✔ turno de cola: bloquea PUT de la ruta REST merge-async (gh api) (0.026083ms)
+  ✔ turno de cola: bloquea curl contra api.github.com .../merge-async (0.036792ms)
+  ✔ turno de cola: merge-async respeta la allowlist (implementer pasa) (0.031334ms)
+  ✔ r3: NO bloquea gh pr checks con -R (consulta de checks) (0.028041ms)
+  ✔ r3: gh pr ready pasa, declarado (cambia estado del borrador, no fusiona) (0.022125ms)
+  ✔ r3: cliente gh con comillas escapadas por backslash tambien bloquea (0.026292ms)
+  ✔ r3: cliente gh entre backticks tambien bloquea (0.03275ms)
+  ✔ cierre: bloquea la ruta REST de merge con > pegado (gh api) (0.028042ms)
+  ✔ cierre: bloquea la ruta REST de merge con >> pegado (gh api) (0.02875ms)
+  ✔ cierre: bloquea la ruta REST de merge con < pegado (gh api) (0.021667ms)
+  ✔ cierre: bloquea la ruta REST de merge en subshell, con ) pegado (0.037083ms)
+  ✔ cierre: bloquea /auto-merge y /merges con > pegado (gh api) (0.02625ms)
+  ✔ cierre: merge-async sigue bloqueando con la frontera invertida (alternacion) (0.025958ms)
+  ✔ cierre: la forma pegada respeta la allowlist (implementer pasa) (0.03075ms)
+  ✔ cierre: bloquea curl a api.github.com con > pegado a la ruta de merge (0.022625ms)
+  ✔ cierre: bloquea curl a api.github.com en subshell, con ) pegado (0.027625ms)
+  ✔ cierre: la forma pegada del host respeta la allowlist (ingenieria pasa) (0.036ms)
+  ✔ cierre: bloquea la orden de gh pr con > o ) pegado (frontera del cliente) (0.023917ms)
+  ✔ cierre: bloquea la mutacion GraphQL por curl al host, fuera de la allowlist (0.025125ms)
+  ✔ cierre: la mutacion GraphQL por curl al host pasa dentro de la allowlist (0.026ms)
+  ✔ cierre: consulta GraphQL inocua por curl al host NO se bloquea (0.028625ms)
+  ✔ cierre: /merge-upstream queda bloqueado fail-closed (falso positivo declarado) (0.032125ms)
+  ✔ cierre: /update-branch sigue pasando (no aterriza el PR en main) (0.019791ms)
+  ✔ cierre: falso positivo declarado - un destino de redirect con /merge en la ruta bloquea (0.036208ms)
+  ✔ cierre: controles negativos - las consultas de estado siguen pasando (0.026333ms)
+  ✔ r6: la lectura de runs de CI por nombre de rama pasa (verifier y reviewer) (0.04175ms)
+  ✔ r6: las demas lecturas de estado por nombre de rama pasan (0.026166ms)
+  ✔ r6: el borrado de ref de la rama de este PR pasa para main (limpieza del cierre) (0.035042ms)
+  ✔ r6: la rama hermana de reversa sigue pasando para main (consistencia) (0.062833ms)
+  ✔ r6: el sufijo upstream sigue BLOQUEADO fuera de la allowlist, ahora por enumeracion (0.056916ms)
+  ✔ r6: el sufijo async sigue BLOQUEADO en las dos rutas (gh api y host) (0.079209ms)
+  ✔ r6: control - la ruta de merge real sigue bloqueada aunque el texto nombre la rama (0.089958ms)
+  ✔ r7: flag interpuesto entre pr y el verbo BLOQUEA para main (regla incondicional) (0.059459ms)
+  ✔ r7: flag interpuesto BLOQUEA tambien para la allowlist (implementer) (0.088834ms)
+  ✔ r7: flag interpuesto BLOQUEA para reviewer y sin agentId (0.054125ms)
+  ✔ r7: control negativo - las consultas con flag de repo siguen PASANDO para main (0.032625ms)
+  ✔ r7: regresion - la forma contigua sigue BLOQUEANDO para implementer (0.02075ms)
+  ✔ r9: las cuatro formas del flag antes de api BLOQUEAN la ruta REST de merge (main, reviewer, sin agentId) (0.045333ms)
+  ✔ r9: las cuatro formas del flag antes de api BLOQUEAN la mutacion GraphQL (main, reviewer, sin agentId) (0.035792ms)
+  ✔ r9: el flag con valor entrecomillado y espacio antes de api tambien BLOQUEA (0.02725ms)
+  ✔ r9: el flag interpuesto entre api y graphql BLOQUEA la mutacion (0.0315ms)
+  ✔ r9: la allowlist sigue intacta - implementer PASA en las dos ramas con flag interpuesto (0.046334ms)
+  ✔ r9: control negativo - las lecturas con flag antes de api siguen PASANDO (0.043583ms)
+  ✔ r9: control negativo - la forma pegada con view sigue PASANDO tras sumar api/graphql a la exclusion (0.022875ms)
+✔ mergeGuardVerdict (6.5c) (6.430458ms)
+▶ observer — pure helpers
+  ✔ replays the runtime's REPLAY_SAFE_TOOL_NAMES exclusion correctly (0.4345ms)
+  ✔ extracts the final assistant text whether it comes as a string or a parts array (0.192042ms)
+  ✔ reads tool names from .toolName and falls back to .name for legacy shapes (0.545125ms)
+✔ observer — pure helpers (1.730875ms)
+▶ observer — buildRecord
+  ✔ flags a 2026-09-12 style incapacity with zero side effects as detected (1.890042ms)
+  ✔ does NOT detect incapacity when the turn performed an `exec` (side effect) (0.199417ms)
+  ✔ flags legitimate text #1 as incapacity (0.551ms)
+  ✔ flags legitimate text #2 as incapacity (0.071375ms)
+  ✔ does not flag legitimate text #3 as incapacity (0.172584ms)
+  ✔ flags legitimate text #4 as incapacity (0.107792ms)
+  ✔ flags legitimate text #5 as incapacity (0.103667ms)
+  ✔ flags legitimate text #6 as incapacity (0.050708ms)
+  ✔ flags legitimate text #7 as incapacity (0.053291ms)
+  ✔ flags legitimate text #8 as incapacity (0.038875ms)
+✔ observer — buildRecord (3.606958ms)
+▶ observer — INCAPACITY_RE classifier
+  ✔ covers the 23 incapacity reformulations from the adversary corpus (basic smoke) (0.131917ms)
+✔ observer — INCAPACITY_RE classifier (0.165458ms)
+▶ observer — writer + rotation
+  ✔ writes a single jsonl line per record with stable field order (0.454708ms)
+  ✔ rotates the jsonl to a FIXED .1.jsonl when the live file exceeds OBSERVER_MAX_BYTES (2.918125ms)
+✔ observer — writer + rotation (3.970625ms)
+▶ observer — module surface (sanity)
+  ✔ exports the OBSERVER_FILE default at the documented path (0.04275ms)
+✔ observer — module surface (sanity) (0.073625ms)
+▶ contrato del registro: denominador si, transcripciones no
+  ✔ un turno normal SI produce registro (es el denominador de la tasa) (0.09275ms)
+  ✔ un turno normal NO lleva el texto de la respuesta (0.052042ms)
+  ✔ un turno con forma de rendicion SI lleva el texto, que es lo que se revisa a mano (0.043917ms)
+✔ contrato del registro: denominador si, transcripciones no (0.230375ms)
+▶ el registro mide el TURNO, no la sesion acumulada
+  ✔ cuenta solo las herramientas del turno en curso, no las de turnos anteriores (0.044ms)
+  ✔ por eso SI detecta una rendicion despues de un turno que uso exec (0.02825ms)
+  ✔ el corte es el ultimo mensaje user, igual que el backfill retrospectivo (0.077083ms)
+  ✔ sin ningun mensaje user (cron, heartbeat) el snapshot completo ES el turno (0.029708ms)
+✔ el registro mide el TURNO, no la sesion acumulada (0.225417ms)
+▶ rotacion: un solo nivel de respaldo, de verdad
+  ✔ el respaldo tiene nombre FIJO y la segunda rotacion lo sobrescribe (7.460625ms)
+✔ rotacion: un solo nivel de respaldo, de verdad (7.511958ms)
+▶ un agent_end sin mensajes del asistente no es un turno
+  ✔ descarta el evento vacio (0.071166ms)
+  ✔ un turno con respuesta SI se registra (0.023292ms)
+  ✔ un turno que solo emitio toolCalls y ningun texto TAMBIEN se registra (hubo trabajo) (0.021958ms)
+  ✔ mira solo el turno en curso, no la sesion: un assistant de un turno anterior no cuenta (0.021333ms)
+✔ un agent_end sin mensajes del asistente no es un turno (0.191459ms)
+▶ stopReason distingue el agent_end intermedio del final
+  ✔ descarta la emision intermedia (stopReason toolUse) (0.03225ms)
+  ✔ registra la emision final (stopReason stop) (0.016834ms)
+  ✔ si el proveedor no expone stopReason, registra: mejor sobre-contar que perder el denominador (0.018667ms)
+  ✔ el turno intermedio era justamente el que salia con textLen 0 y tools vacio (0.045791ms)
+✔ stopReason distingue el agent_end intermedio del final (0.158875ms)
+▶ collapseTurns: varias emisiones de agent_end, un turno
+  ✔ dos emisiones del MISMO turno comparten turnKey (0.231459ms)
+  ✔ dos turnos DISTINTOS con el mismo texto NO comparten turnKey (0.06975ms)
+  ✔ colapsa a UN registro por turno y conserva el de ts mayor (0.0945ms)
+  ✔ los registros viejos sin turnKey se dejan pasar, no se descartan (0.025875ms)
+  ✔ el registro que escribe el observador LLEVA turnKey (0.054375ms)
+✔ collapseTurns: varias emisiones de agent_end, un turno (0.530709ms)
+▶ collapseTurns agrupa por el hash, no por el indice
+  ✔ dos emisiones del mismo turno con INDICE distinto colapsan (0.038959ms)
+  ✔ hashes distintos siguen siendo turnos distintos (0.024542ms)
+  ✔ turnHashOf tolera formas raras sin explotar (0.023625ms)
+✔ collapseTurns agrupa por el hash, no por el indice (0.116ms)
+▶ canonicalRole
+  ✔ maps implementer: fix failing tests to implementer (not verifier) (0.520917ms)
+  ✔ maps code reviewer to reviewer (0.131ms)
+  ✔ maps adversary attack to adversary (0.061667ms)
+  ✔ maps qa run to verifier (0.148875ms)
+  ✔ does not treat prefix/suffix as implementer via bare fix substring (0.081208ms)
+  ✔ still maps a standalone fix label to implementer (0.040875ms)
+✔ canonicalRole (1.499833ms)
+▶ mergeGuardVerdict
+  ✔ blocks git push origin main (0.599208ms)
+  ✔ blocks git push origin HEAD:main (0.347209ms)
+  ✔ blocks gh pr merge (0.068708ms)
+  ✔ blocks gh api repos/.../merge (0.125208ms)
+  ✔ allows git push origin feature/x (0.064584ms)
+  ✔ allows git push --dry-run origin feature/x (0.036709ms)
+✔ mergeGuardVerdict (1.422625ms)
+▶ sessionsSendGuardVerdict
+  ✔ blocks main sending to another agent without timeoutSeconds (default 30 s wait) (0.168042ms)
+  ✔ blocks explicit waits too: 30 s is the default and 1 s is worse (0.060417ms)
+  ✔ blocks fire-and-forget (timeoutSeconds 0) without a marker or a return address (0.029667ms)
+  ✔ resolves the target like the tool: sessionKey first, snake_case too (0.039208ms)
+  ✔ allows a report-back request carrying the explicit tag with Claw's exact session (0.02975ms)
+  ✔ blocks messages that merely mention sessions_send and the session key (0.024625ms)
+  ✔ blocks the return tag when it carries another session (0.025791ms)
+  ✔ allows notices marked as not needing a reply (0.029709ms)
+  ✔ allows sends to main's own sessions (0.035ms)
+  ✔ only honors the notice marker at the start of the message (0.024333ms)
+  ✔ blocks label targets it cannot resolve (0.028416ms)
+  ✔ does not touch other agents' sends (0.022708ms)
+✔ sessionsSendGuardVerdict (0.644792ms)
+▶ plugin smoke import
+  ✔ default export exposes register (56.262166ms)
+  ✔ wires the sessions_send guard into before_tool_call with the requester's agent and session (0.435292ms)
+  ✔ injects the standing rules into a session with no -saikit sentinel (0.725ms)
+✔ plugin smoke import (57.772291ms)
+▶ gate scope comment (1.2)
+  ✔ declares real scope with the runtime citation in summa-gate/index.ts (0.247375ms)
+  ▶ diagnostic revise scope comment (kimi)
+    ✔ declares the discard limit and the two-revise merge in index.ts (0.131875ms)
+    ✔ states the --browser-profile exclusion accurately in diagnostic-guard.ts (0.076042ms)
+  ✔ diagnostic revise scope comment (kimi) (0.246083ms)
+✔ gate scope comment (1.2) (0.56975ms)
+▶ observer wiring to agent_end (Fase 2 / 2.1)
+  ✔ NO escribe linea cuando el agent_end no trae mensajes del asistente (2.115083ms)
+  ✔ escribe una linea tambien cuando el turno NO es una rendicion (el denominador) (0.619459ms)
+  ✔ registers an agent_end handler that records to the jsonl and cannot refuse the turn (1.081166ms)
+  ✔ does NOT register any handler that could refuse the turn on agent_end (DoD Observe por tipo) (0.305959ms)
+  ✔ mutation: with the non-replay-safe filter disabled, the suite goes red (DoD mutacion) (0.215458ms)
+✔ observer wiring to agent_end (Fase 2 / 2.1) (4.44125ms)
+ℹ tests 271
+ℹ suites 39
+ℹ pass 271
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 159.535334
+OK: bateria summa-gate
+
+=== bateria tablero-runbook  (node v24.19.0)
+
+=== sintaxis tablero-runbook (node --check)
+
+> tablero-runbook@0.1.0 check
+> node --check lib.ts && node --check index.ts && node --check github.ts
+
+OK: sintaxis tablero-runbook
+  # tests 60
+  # pass 60
+  # fail 0
+OK: bateria tablero-runbook (pass=60)
+
+=== pruebas de contrato de scripts/
+  OK    test-agent-dispatch-no-merge.sh
+  OK    test-agent-dispatch-spawn.sh
+  OK    test-browser-profile-flag.sh
+  OK    test-camino-feliz.sh
+  OK    test-cierre-pr-merge-comando.sh
+  OK    test-contrato-dispatch.sh
+  OK    test-evidencia-sin-texto-de-usuario.sh
+  OK    test-goncloud-ssh-ops-deploy.sh
+  OK    test-hooks-apuntan-a-archivos-trackeados.sh
+  OK    test-loop-autopilot.sh
+  OK    test-mac-path-regla.sh
+  OK    test-mac-tmux-control.sh
+  OK    test-merge-allowlist-cierre-pr.sh
+  OK    test-patch-modelos-repartidos.sh
+  OK    test-restart-gateway-script.sh
+  OK    test-runbooks-no-contradicen-entorno.sh
+  OK    test-saikit-cierre-pr-merge-owner.sh
+  OK    test-salida-del-observador-no-trackeada.sh
+  OK    test-skill-autopilot-runbook.sh
+  OK    test-spec-fleet-roles.sh
+  OK    test-summa-gate-quality-entrypoints.sh
+  OK    test-sync-pull-identity.sh
+  OK    test-tmux-activity-watch.sh
+
+=== corpus de rendiciones re-derivable
+filas: 22 | veredicto declarado == recomputado: 22
+DEBEN detectarse: 16 -> atrapados 16, escapados 0
+LEGITIMOS:        6 -> sobre-marcados 5, bien ignorados 1
+OK: verify-corpus
+
+TODO VERDE

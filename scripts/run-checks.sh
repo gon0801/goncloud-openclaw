@@ -57,6 +57,34 @@ else
   echo "FAIL: bateria summa-gate"; fallas=$((fallas + 1))
 fi
 
+# --- tablero-runbook (Fase 7): mismos entrypoints que summa-gate, con UNA diferencia
+# medida en Plans 7.3: `node --test` sobre un directorio sin pruebas sale 0 y reporta
+# `# pass 0`, asi que el exit code solo no prueba que haya corrido nada. El guard de
+# conteo exige al menos un pass; sin el, borrar todos los *.test.ts dejaria este bloque
+# en verde y la bateria volveria a ser decorativa (el defecte que 5.2 ya corrigio una vez).
+paso "bateria tablero-runbook  (node $("$NODE" --version))"
+paso "sintaxis tablero-runbook (node --check)"
+if (cd tablero-runbook && PATH="$(dirname "$NODE"):$PATH" npm run check); then
+  echo "OK: sintaxis tablero-runbook"
+else
+  echo "FAIL: sintaxis tablero-runbook"; fallas=$((fallas + 1))
+fi
+
+salida_tr=$( (cd tablero-runbook && "$NODE" --test --test-reporter tap --test-reporter-destination stdout 2>&1) ); rc_tr=$?
+printf '%s\n' "$salida_tr" | grep -E '^# (tests|pass|fail) ' | sed 's/^/  /'
+if [ "$rc_tr" -ne 0 ]; then
+  echo "FAIL: bateria tablero-runbook"; fallas=$((fallas + 1))
+else
+  pass_tr=$(printf '%s\n' "$salida_tr" | sed -n 's/^# pass \([0-9][0-9]*\)[[:space:]]*$/\1/p' | tail -1)
+  pass_tr=${pass_tr:-0}
+  if [ "$pass_tr" -eq 0 ]; then
+    echo "FAIL: bateria tablero-runbook reporto 0 pass — un candado que no corre no existe"
+    fallas=$((fallas + 1))
+  else
+    echo "OK: bateria tablero-runbook (pass=$pass_tr)"
+  fi
+fi
+
 # Cross-review de qwen (2026-09-12): este script imprimia "TODO VERDE" con exit 0 en un
 # arbol SIN una sola prueba — el `for` no encontraba nada y el `if -f` de verify-corpus se
 # salteaba en silencio. O sea el candado escrito para que los candados no fueran decorativos
