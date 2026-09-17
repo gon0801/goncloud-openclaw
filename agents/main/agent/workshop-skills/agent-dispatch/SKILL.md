@@ -59,6 +59,25 @@ David repeatedly orders a fix-then-review loop against the Claude Code tab in th
 
 Main's verdict at lane close is a go/no-go, never an execution of the landing itself. Two kinds: one unified go/no-go ("land and deploy" in a single step) for openclaw and the workspaces — landing deploys by the sync — and two separate ones for Orbit and accounting (first the "land" go/no-go, then the "deploy" go/no-go, run by engineering). The owner's quoted landing order from the brief runs in the implementer chain via saikit-cierre-pr, with the guard's allowlist (implementer/ingenieria). A regression found after close goes back to the brief ("regression back to the brief"): re-open the lane at the brief step, do not patch ad hoc.
 
+## A phase is closed only when a command says so
+
+Never report a phase, plan or engineering task as finished from what a lead said, or from its PRs
+being closed. Run the check first, from the repo that holds the plan:
+
+```bash
+bash scripts/cierre-de-fase.sh <fase>
+```
+
+`VERDE` and exit 0 means closed. `ROJO` means it is not: each line names what is missing — plan cells
+still open, branches or worktrees of the phase left behind, sessions still carrying `OPENCLAW_WATCH`,
+a plugin the phase declares that is not enabled on the gateway, or a red default branch. Finish those,
+re-run it, and only then say it is done. `unknown` lines are declared, not treated as failures.
+
+Measured 2026-09-17: the Fase 7 was reported finished with every lane landed and CI green, while eight
+plan cells were still `cc:TODO`, its plugin was built but never enabled on the gateway (that was the
+deploy task), two sessions were still marked, and a worktree was still open. A landed PR is observable,
+so it gets believed; the close was not, so nobody noticed.
+
 ## Pitfalls
 
 - A configured agent cannot be model-overridden through `sessions_send`; model fallback requires `sessions_spawn` with an explicit `model`. Since 2026-09-11 `agents.entries.main.subagents.allowAgents` lets main spawn under main, operaciones, ingenieria, implementer, verifier, reviewer, adversary and scout. If `sessions_spawn` answers `agentId is not allowed for sessions_spawn`, that allowlist changed: report it, do not fall back to a fire-and-forget `sessions_send`.

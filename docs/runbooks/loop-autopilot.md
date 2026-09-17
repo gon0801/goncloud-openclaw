@@ -34,7 +34,15 @@ LISTO <sha>
 ATORADO <razón en una línea>
 ```
 
-Un implementador la imprime al cerrar su encargo. El lead la imprime al cerrar cada carril y al cerrar la fase. Claw la busca en la pantalla de tmux; no interpreta spinners, colores ni mensajes propios de ningún producto. Si un proceso termina sin esa línea, se trata como `ATORADO sin reporte` y se aplica la fila de relanzamiento.
+Un implementador la imprime al cerrar su encargo. El lead la imprime al cerrar cada carril y al cerrar la fase. **El `LISTO` de una fase no se escribe de memoria: se gana con un comando.** Antes de imprimirlo, y antes de que nadie le diga a David que la fase terminó:
+
+```
+bash scripts/cierre-de-fase.sh <fase>
+```
+
+Tiene que imprimir `VERDE` y salir 0. Comprueba las seis cosas que un merge no comprueba: las celdas `Status` del plan cerradas, ninguna rama ni worktree de la fase sin recoger, ninguna sesión suya todavía marcada, los plugins que la fase declara encendidos en el gateway, y la rama por defecto en verde. Con `ROJO` la fase **no** está cerrada: cada línea dice qué falta, se hace, y se vuelve a correr.
+
+Medido 2026-09-17: la Fase 7 se reportó terminada con todo su código mergeado y CI en verde, y le faltaban las ocho celdas del plan, el plugin sin encender en el gateway (que era su tarea de despliegue), dos sesiones todavía marcadas y un worktree abierto. Ninguna de esas cinco cosas tenía alarma, porque un merge es observable y el cierre no lo era. Claw la busca en la pantalla de tmux; no interpreta spinners, colores ni mensajes propios de ningún producto. Si un proceso termina sin esa línea, se trata como `ATORADO sin reporte` y se aplica la fila de relanzamiento.
 
 Medido: 2026-09-14, la skill `mac-tmux-control` nació leyendo el spinner de Claude Code como señal de vida; con otro CLI en la misma pantalla esa señal no existe.
 
@@ -164,7 +172,7 @@ Medido: 2026-09-16, corrida nocturna de la Fase 6: el primer lead murió por un 
 
 ## 10. Revisión de cierre de fase
 
-Cuando todos los carriles mergearon, antes de declarar la fase cerrada, el lead hace una revisión completa de lo implementado contra la DoD literal de cada fila, **no contra el cuerpo de los PRs**. Incluye mutar las pruebas nuevas. Lo que salga entra en un último loop de corrección con el mismo implementador de ese carril, con las mismas rondas de la sección 4, y se mergea por la misma ruta. Solo entonces se cierran las celdas de estado del plan, con el SHA de squash y las salvedades escritas en la celda.
+Cuando todos los carriles mergearon, antes de declarar la fase cerrada, el lead corre `bash scripts/cierre-de-fase.sh <fase>` (§2) y hace una revisión completa de lo implementado contra la DoD literal de cada fila, **no contra el cuerpo de los PRs**. Incluye mutar las pruebas nuevas. Lo que salga entra en un último loop de corrección con el mismo implementador de ese carril, con las mismas rondas de la sección 4, y se mergea por la misma ruta. Solo entonces se cierran las celdas de estado del plan, con el SHA de squash y las salvedades escritas en la celda.
 
 Medido: 2026-09-16, revisión de cierre de la Fase 6, hecha después de que el cierre ya se había declarado: ocho hallazgos reales, dos de ellos con consecuencia directa, incluida una prueba con puerta trasera en accounting y un contrato de agente que prohibía justo lo que el sistema le encargaba.
 

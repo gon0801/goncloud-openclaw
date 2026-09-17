@@ -49,6 +49,8 @@ echo "ok (2): las 13 secciones existen y van en orden"
 
 # (3) Cada regla tiene su ancla. Cambiar la regla = cambiar el ancla en el mismo commit.
 for a in 'LISTO <sha>' \
+         'cierre-de-fase.sh <fase>' \
+         'se gana con un comando' \
          'la del lead incluida' \
          'mktemp -d' \
          'No se limpia durante la corrida' \
