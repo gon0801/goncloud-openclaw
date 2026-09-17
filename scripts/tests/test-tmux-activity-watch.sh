@@ -195,11 +195,22 @@ $(cat "$CALLS")"
 while :; do printf '\033[H\033[2J'; cat "$1"; sleep 0.2; done
 TUISH
   chmod +x "$TUI"
+  # Bajo carga el TUI de mentira puede tardar mas de 1 s en pintar; una captura vacia se veria
+  # como "sin prompt" y la prueba fallaria sin que el vigilante tenga culpa (paso 1 vez en 16).
+  espera_pantalla() { # $1 sesion, $2 texto que debe verse
+    local i=0
+    while [ "$i" -lt 50 ]; do
+      "$TM" -L "$L" capture-pane -p -t "$1" 2>/dev/null | grep -qF -- "$2" && return 0
+      sleep 0.1; i=$((i + 1))
+    done
+    fail "el TUI de mentira de $1 no pinto '$2' en 5 s"
+  }
 
   PANTALLA_E="$T/pantalla-e.txt"; printf 'trabajando en el encargo\n' >"$PANTALLA_E"
   "$TM" -L "$L" new-session -d -s glm-repinta -x 80 -y 20 "$TUI $PANTALLA_E" || fail "no se pudo crear glm-repinta"
   mark glm-repinta
   : >"$CALLS"
+  espera_pantalla glm-repinta 'trabajando en el encargo'
   sleep 1
   run_once || fail "--once (2e, primera vista) fallo"
   sleep 2
@@ -222,6 +233,7 @@ $(cat "$CALLS")"
   "$TM" -L "$L" new-session -d -s glm-permiso -x 80 -y 20 "$TUI $PANTALLA_F" || fail "no se pudo crear glm-permiso"
   mark glm-permiso
   : >"$CALLS"
+  espera_pantalla glm-permiso 'Allow once'
   sleep 1
   run_p() { APPROVAL_REMIND_SECS=3 run_once; }
   run_p || fail "--once (2f, prompt a la vista) fallo"
@@ -262,6 +274,7 @@ $(cat "$CALLS")"
   "$TM" -L "$L" new-session -d -s glm-prosa -x 80 -y 30 "$TUI $PANTALLA_G" || fail "no se pudo crear glm-prosa"
   mark glm-prosa
   : >"$CALLS"
+  espera_pantalla glm-prosa 'linea de trabajo 15'
   sleep 1
   run_p || fail "--once (2f, prosa) fallo"
   grep -q 'glm-prosa waiting for approval' "$CALLS" && fail "(2f) 'Allow once' lejos del final de la pantalla NO es un prompt: $(cat "$CALLS")"
@@ -277,9 +290,11 @@ $(cat "$CALLS")"
   "$TM" -L "$L" new-session -d -s cli-generico -x 120 -y 30 "$TUI $PANTALLA_H" || fail "no se pudo crear cli-generico"
   mark cli-generico
   : >"$CALLS"
+  espera_pantalla cli-generico 'arrancando'
   sleep 1; run_p || fail "--once (2g, arranque) fallo"
   espera_aviso() { # $1 = nombre del caso; el archivo PANTALLA_H ya trae la pantalla
     antes=$(grep -c 'cli-generico waiting for approval' "$CALLS")
+    espera_pantalla cli-generico "$(tail -1 "$PANTALLA_H" | sed -e 's/^ *//' -e 's/ *$//')"
     sleep 1; run_p || fail "--once (2g, $1) fallo"
     ahora=$(grep -c 'cli-generico waiting for approval' "$CALLS")
     [ "$ahora" -eq $((antes + 1)) ] || fail "(2g) la pantalla de espera de $1 debe avisar 'waiting for approval'; avisos antes=$antes ahora=$ahora
@@ -287,6 +302,7 @@ $(cat "$PANTALLA_H")"
   }
   espera_silencio() {
     antes=$(wc -l <"$CALLS" | tr -d ' ')
+    espera_pantalla cli-generico "$(tail -1 "$PANTALLA_H" | sed -e 's/^ *//' -e 's/ *$//')"
     sleep 1; run_p || fail "--once (2g, $1) fallo"
     ahora=$(wc -l <"$CALLS" | tr -d ' ')
     [ "$ahora" -eq "$antes" ] || fail "(2g) la pantalla OCIOSA o TRABAJANDO de $1 no es un dialogo y no debe avisar de inmediato:
@@ -374,6 +390,7 @@ P
   "$TM" -L "$L" new-session -d -s cli-raro -x 80 -y 20 "$TUI $PANTALLA_I" || fail "no se pudo crear cli-raro"
   mark cli-raro
   : >"$CALLS"
+  espera_pantalla cli-raro 'que nadie ha visto nunca'
   run_q() { QUIET_REMIND_SECS=3 run_once; }
   # El primer aviso puede salir en la primera o en la segunda vista (depende de cuanto llevaba
   # pintada la pantalla), asi que se espera a verlo y el reloj del recordatorio corre desde ahi.
@@ -390,8 +407,22 @@ P
   n=$(grep -c 'cli-raro quiet for' "$CALLS")
   [ "$n" -eq 2 ] || fail "(2h) una sesion marcada que SIGUE callada se recuerda al pasar QUIET_REMIND_SECS; hubo $n:
 $(cat "$CALLS")"
+  # (2h-bis) Estado escrito por la version anterior: notified=1 y SIN notified_at. Al actualizar
+  # el vigilante eso no puede leerse como "avisado hace una eternidad" y repetir el aviso de
+  # inmediato a cada sesion ya avisada (hallazgo de CodeRabbit sobre este mismo cambio).
+  SFR="$STATE_DIR/cli-raro.state"
+  grep -q '^notified=1' "$SFR" || fail "(2h-bis) precondicion: cli-raro ya deberia estar avisada"
+  grep -v '^notified_at=' "$SFR" >"$SFR.viejo" && mv "$SFR.viejo" "$SFR"
+  antes=$(grep -c 'cli-raro quiet for' "$CALLS")
+  run_q || fail "--once (2h-bis, estado viejo) fallo"
+  ahora=$(grep -c 'cli-raro quiet for' "$CALLS")
+  [ "$ahora" -eq "$antes" ] || fail "(2h-bis) un estado viejo sin notified_at NO debe repetir el aviso de inmediato; antes=$antes ahora=$ahora"
+  grep -q '^notified_at=[1-9]' "$SFR" || fail "(2h-bis) el estado viejo debe quedar con notified_at=ahora para que el recordatorio cuente desde aqui: $(cat "$SFR")"
+  sleep 4; run_q || fail "--once (2h-bis, recordatorio tras migrar) fallo"
+  ahora=$(grep -c 'cli-raro quiet for' "$CALLS")
+  [ "$ahora" -eq $((antes + 1)) ] || fail "(2h-bis) tras migrar el estado, el recordatorio sigue funcionando; antes=$antes ahora=$ahora"
   "$TM" -L "$L" kill-session -t cli-raro; run_once >/dev/null 2>&1
-  echo "ok (2h): el silencio se recuerda; un dialogo que ningun patron conoce no se queda sin avisar"
+  echo "ok (2h): el silencio se recuerda; un dialogo que ningun patron conoce no se queda sin avisar; un estado de la version anterior no repite el aviso"
 
   "$TM" -L "$L" kill-server 2>/dev/null
   echo "ok (2): maquina de estados del vigilante verificada con tmux real ($TM)"

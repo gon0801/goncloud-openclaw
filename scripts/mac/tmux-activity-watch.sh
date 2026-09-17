@@ -226,6 +226,12 @@ tick() {
     [[ -n $prev_approval_at ]] || prev_approval_at=0
     [[ -n $prev_approval_since ]] || prev_approval_since=0
     prev_notified_at=$(read_state_field "$sf" notified_at)
+    if [[ -z $prev_notified_at && $prev_notified == 1 ]]; then
+      # State written before notified_at existed: "already notified, time unknown". Count the
+      # reminder from now; reading it as 0 would repeat the event at once for every session
+      # that was already notified when the watcher is upgraded.
+      prev_notified_at=$now
+    fi
     [[ -n $prev_notified_at ]] || prev_notified_at=0
 
     # The session can vanish between list-sessions and here: skip it, the closed sweep of the
