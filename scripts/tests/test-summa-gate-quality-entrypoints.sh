@@ -47,4 +47,30 @@ if grep -q 'run: bash scripts/run-checks.sh' .github/workflows/quality.yml; then
   fail "quality.yml invoca scripts/run-checks.sh directamente ademas de pre-commit (doble entrypoint)"
 fi
 echo "ok (3): CI alcanza la bateria una vez via pre-commit"
+
+# (4) tablero-runbook (Fase 7 / 7.3): los mismos contratos de entrypoint, incluida la
+# preaprobacion del dueño (package.json con check y SIN dependencies).
+[ -f tablero-runbook/package.json ] || fail "falta tablero-runbook/package.json"
+tr_check=$("$NODE" -e "console.log(require('./tablero-runbook/package.json').scripts?.check ?? '')" 2>/dev/null) \
+  || fail "no se pudo leer scripts.check de tablero-runbook/package.json"
+tr_test=$("$NODE" -e "console.log(require('./tablero-runbook/package.json').scripts?.test ?? '')" 2>/dev/null)
+tr_deps=$("$NODE" -e "const d=require('./tablero-runbook/package.json').dependencies; console.log(d?Object.keys(d).length:0)" 2>/dev/null)
+[ -n "$tr_check" ] || fail "tablero-runbook/package.json no tiene script check"
+[ "$tr_test" = "node --test" ] || fail "tablero-runbook: scripts.test debe ser 'node --test' (llega: $tr_test)"
+[ "$tr_deps" = "0" ] || fail "tablero-runbook/package.json declara dependencies: instalar dependencias esta NEGADO (preaprobaciones Fase 7)"
+# El check cubre cada .ts fuente presente (excluye *.test.ts): obliga a actualizar
+# scripts.check en el mismo commit que agrega una fuente nueva.
+for f in $(cd tablero-runbook && ls *.ts 2>/dev/null | grep -v '\.test\.ts$'); do
+  printf '%s' "$tr_check" | grep -qF "$f" || fail "tablero-runbook scripts.check no nombra $f (check=$tr_check)"
+done
+echo "ok (4): tablero-runbook/package.json con check completo, node --test y sin dependencies"
+
+# (5) el runner corre la bateria de tablero-runbook CON guard de conteo: la medicion de
+# Plans 7.3 es que `node --test` en un directorio sin pruebas sale 0, asi que sin el
+# guard un arbol sin pruebas pasaria en verde.
+grep -q 'tablero-runbook' scripts/run-checks.sh \
+  || fail "scripts/run-checks.sh no corre la bateria de tablero-runbook"
+grep -q '0 pass' scripts/run-checks.sh \
+  || fail "scripts/run-checks.sh no tiene el guard de conteo (0 pass = FALLA) para tablero-runbook"
+echo "ok (5): run-checks.sh corre tablero-runbook con guard de conteo"
 echo "PASS test-summa-gate-quality-entrypoints"

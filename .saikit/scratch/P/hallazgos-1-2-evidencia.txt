@@ -1,0 +1,59 @@
+FASE 7 carril P — fixes hallazgos 1 y 2 del revisor (PR #63, rama fase7/tablero @ c30de92)
+Fecha: 2026-09-17. No se commiteó (candado pre-commit en rojo por deriva ajena al carril; ver BLOQUEO).
+
+=== git diff --stat (cambios sin commitear) ===
+tablero-runbook/index.test.ts | 29 +++++++++++++++++++++++++++++
+ tablero-runbook/index.ts      | 25 +++++++++++++++++++------
+ 2 files changed, 48 insertions(+), 6 deletions(-)
+
+=== node --test tablero-runbook (index+progress+github) — resumen literal ===
+ℹ tests 61
+ℹ suites 10
+ℹ pass 61
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2156.907125
+EXIT=0
+Nuevos tests en verde:
+  ✔ GET /runbook/tablero/..%2f..%2fopenclaw.json → 400 (path traversal por URL) (0.730541ms)
+  ✔ 1000 previos + 2 nuevos ⇒ 1002 líneas en disco (el tope es solo vista en memoria) (1.729167ms)
+
+=== scripts/run-checks.sh — cola literal (EXIT=1) ===
+  OK    test-contrato-dispatch.sh
+  OK    test-evidencia-sin-texto-de-usuario.sh
+  OK    test-goncloud-ssh-ops-deploy.sh
+  OK    test-hooks-apuntan-a-archivos-trackeados.sh
+  OK    test-loop-autopilot.sh
+  OK    test-mac-path-regla.sh
+  OK    test-mac-tmux-control.sh
+  OK    test-merge-allowlist-cierre-pr.sh
+  OK    test-patch-modelos-repartidos.sh
+  OK    test-restart-gateway-script.sh
+  OK    test-runbooks-no-contradicen-entorno.sh
+  OK    test-saikit-cierre-pr-merge-owner.sh
+  OK    test-salida-del-observador-no-trackeada.sh
+  FALLA test-skill-autopilot-runbook.sh
+        ok (2): los doce slots de la receta están
+        ok (3): las nueve anclas de reglas están
+        FAIL: la copia de la Mac derivó de la del repo: diff docs/agent-skills/autopilot-runbook/SKILL.md /Users/dn/.claude/skills/autopilot-runbook/SKILL.md
+  OK    test-spec-fleet-roles.sh
+  OK    test-summa-gate-quality-entrypoints.sh
+  OK    test-sync-pull-identity.sh
+  OK    test-tmux-activity-watch.sh
+
+=== corpus de rendiciones re-derivable
+filas: 22 | veredicto declarado == recomputado: 22
+DEBEN detectarse: 16 -> atrapados 16, escapados 0
+LEGITIMOS:        6 -> sobre-marcados 5, bien ignorados 1
+OK: verify-corpus
+
+1 comprobacion(es) en rojo
+EXIT=1
+
+=== deriva ajena al carril (causa del rojo; archivos fuera de tablero-runbook/) ===
+27c27
+< 12. **Progreso.** One rule in Reglas de trabajo: on every lane or queue state change, and at close, the lead writes `runbook-progress.v1` (spec: `docs/spec/runbook-progress.v1.md` in goncloud-openclaw) to `.saikit/progress/<fase>.json` and sends it with `openclaw gateway call runbook.progress.set --params @<file>`; a failed send never blocks and is retried at the next state change. Every write carries `atencion_requerida` (true only for the rows that reach the human) and `siguiente_paso` in plain language. The interface reads that JSON; nothing else counts as progress.
+---
+> 12. **Progreso.** One rule in Reglas de trabajo: on every lane or queue state change, and at close, the lead writes `runbook-progress.v1` (spec: `docs/spec/runbook-progress.v1.md` in goncloud-openclaw) to `.saikit/progress/<fase>.json` and sends it with `openclaw gateway call runbook.progress.set --params "$(cat <file>)"` (the CLI rejects `--params @<file>` with `--params must be valid JSON`); a failed send never blocks and is retried at the next state change. Every write carries `atencion_requerida` (true only for the rows that reach the human) and `siguiente_paso` in plain language. The interface reads that JSON; nothing else counts as progress.

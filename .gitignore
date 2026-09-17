@@ -48,6 +48,7 @@ staging/
 worktrees/
 summa-gate/state/
 summa-gate/node_modules/
+tablero-runbook/node_modules/
 
 # Sistema
 .DS_Store
@@ -94,3 +95,14 @@ summa-gate/rendiciones.jsonl.*
 # excepcion con `!` y se explica por que aca mismo.
 summa-gate/*.log
 summa-gate/*.jsonl
+
+# tablero-runbook (Fase 7 / 7.4): mismo criterio preventivo por FORMA que summa-gate.
+# El estado de este plugin vive FUERA del clon por decision del spike 7.0
+# (configSchema.stateDir default C:\Users\ehven\.openclaw-state\tablero-runbook,
+# porque el de summa-gate cayo DENTRO de C:\Users\ehven\.openclaw y el sync del
+# gateway lo commitea con `add -A`). Una ruta absoluta de Windows no es un patron
+# de .gitignore, asi que aqui no va ninguna: solo la forma, que es lo que cubre si
+# un dia el estado se mueve adentro del clon. Sin excepcion `!`: nada de esto se
+# versiona.
+tablero-runbook/*.jsonl
+tablero-runbook/*.log

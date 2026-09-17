@@ -4,7 +4,8 @@ cd "$(dirname "$0")/../.." || exit 1
 fails=0
 lib=summa-gate/lib.ts
 [ -f "$lib" ] || { echo "FALLO: falta $lib"; exit 1; }
-allow=$(python3 - <<'PY'
+tmp_allow=$(mktemp)
+cat > "$tmp_allow" <<'PY'
 import re, sys
 text = open("summa-gate/lib.ts", encoding="utf-8").read()
 if re.search(r"MERGE_AGENT_ALLOWLIST\.add\s*\(", text):
@@ -28,7 +29,10 @@ if not ids:
     sys.exit("allowlist vacia")
 print("\n".join(ids))
 PY
-) || { echo "FALLO: no pude leer MERGE_AGENT_ALLOWLIST de $lib"; exit 1; }
+allow=$(python3 "$tmp_allow")
+rc_allow=$?
+rm -f "$tmp_allow"
+[ "$rc_allow" -eq 0 ] || { echo "FALLO: no pude leer MERGE_AGENT_ALLOWLIST de $lib"; exit 1; }
 while IFS= read -r agent; do
   [ -n "$agent" ] || continue
   skill="agents/${agent}/agent/workshop-skills/saikit-cierre-pr/SKILL.md"
