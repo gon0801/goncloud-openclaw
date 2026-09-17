@@ -49,16 +49,16 @@ reemplazo:
 - Todo ejecutable con shebang `env node` (tarballs, `corepack`/`npm`,
   lanzadores como `~/bin/glm`) muere si el PATH del llamante no trae
   node: por ruta absoluta falla con exit 127, y en
-  `tmux new-session` la sesion desaparece en segundos con rc=0 y sin
-  error visible. Firma medida (Fase 7, 2026-09-17): `new-session`
-  rc=0 pero `has-session` dice `can't find session`; al correr el
+  `/opt/homebrew/bin/tmux new-session` la sesion desaparece en segundos con rc=0 y sin
+  error visible. Firma medida (Fase 7, 2026-09-17): `/opt/homebrew/bin/tmux new-session`
+  rc=0 pero `/opt/homebrew/bin/tmux has-session` dice `can't find session`; al correr el
   binario directo (`/Users/dn/bin/glm --help`) sale
   `env: node: No such file or directory`. Recuperacion verificada:
   embeber el PATH en el comando de la sesion —
-  `new-session -d -s <s> -c <dir> "PATH=/opt/homebrew/bin:<bins>:$PATH <bin>"`
+  `/opt/homebrew/bin/tmux new-session -d -s <s> -c <dir> "PATH=/opt/homebrew/bin:<bins>:$PATH <bin>"`
   (node vive en `/opt/homebrew/bin`; para un tarball antepone
   `<dir>/bin`). Diagnostica siempre corriendo el binario directo
-  primero; no reintentes el `new-session` a ciegas.
+  primero; no reintentes el `/opt/homebrew/bin/tmux new-session` a ciegas.
 
 ## Criterio de cierre
 

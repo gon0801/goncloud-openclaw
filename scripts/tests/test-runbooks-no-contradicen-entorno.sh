@@ -110,6 +110,26 @@ EOF
 [ -z "$hits2" ] || fail "comandos del exec de la Mac sin prefijo de PATH ni ruta absoluta:$hits2"
 echo "ok (2b): cross-review y tmux de los autopilot y del loop con prefijo de PATH o ruta absoluta"
 
+# (2b-bis) El comando que lanza a un implementador lleva ADENTRO su PATH y su flag de modo sin
+# preguntas. Medido el 2026-09-17 (Fase 7): el comando terminaba en "$BIN" a secas. Desde el
+# exec del gateway la sesion moria al arrancar (rc=0, `env: node: No such file or directory`), y
+# una tabla aparte decia que flag agregar: los dos carriles se lanzaron sin flag y uno paso 7 h
+# detenido en un prompt de permiso.
+mal_lanzamiento() {
+  grep -n -E -e 'new-session -d .*\$BIN' | grep -v -E 'PATH=/opt/homebrew/bin[^"]*\$BIN <flag>"'
+}
+for c in '  $T new-session -d -s <token>-wt-f7-P -c /Users/dn/dev/wt-f7-P "$BIN"' \
+         '  $T new-session -d -s <token>-wt-f7-P -c /Users/dn/dev/wt-f7-P "$BIN" <flag>' \
+         '  $T new-session -d -s x -c /d "PATH=/opt/homebrew/bin:/Users/dn/bin:\$PATH $BIN"'; do
+  printf '%s\n' "$c" | mal_lanzamiento >/dev/null || fail "mal_lanzamiento NO marca: $c"
+done
+printf '%s\n' '  $T new-session -d -s x -c /d "PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:\$PATH $BIN <flag>"' \
+  | mal_lanzamiento >/dev/null && fail "mal_lanzamiento marca el lanzamiento correcto"
+hits2c=$(git ls-files -z --cached --others --exclude-standard -- 'docs/runbooks/*.md' | xargs -0 cat -- 2>/dev/null | mal_lanzamiento)
+[ -z "$hits2c" ] || fail "un runbook lanza a un implementador sin PATH embebido o sin su flag dentro del comando:
+$hits2c"
+echo "ok (2b-bis): ningun runbook lanza a un implementador sin PATH embebido y flag dentro del comando"
+
 # (2c) Ningun runbook de fase designa UN modelo como lead. El lead es un rol: el kit
 # sella por host y el mismo documento tiene que servir con cualquiera de los seis.
 # Medido 2026-09-16: el runbook de la Fase 7 decia "lead: Claude" y con claw o kimi de
