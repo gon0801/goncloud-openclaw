@@ -65,7 +65,7 @@ Medido: 2026-09-16, revisión de cierre de la Fase 6: en los siete carriles, al 
 - **Ronda 1**: el revisor más fuerte disponible, excluyendo al modelo que implementó. Comando: `pwsh -NoProfile -File /Users/dn/quality-kit/cross-review.ps1 -Con auto -Excluir <modelo-que-implementó> -Alcance branch`, con ruta absoluta de `pwsh` cuando corre por exec del nodo.
 - **Si salen altas**: la ronda 2 la hace un modelo **distinto** al de la ronda 1. Se pide con `-Con <otro>`.
 - **Se para** cuando una ronda no trae altas ni medias. Las bajas de esa última ronda se atienden si son de una línea; si no, se declaran como residuales.
-- **Tope: tres rondas por PR.** A la cuarta, el lead decide, corrige lo que juzgue y declara el resto. Más rondas no compran calidad: compran costo.
+- **Tope: tres rondas por PR.** A la cuarta, el lead decide qué se corrige y qué se declara. Lo que se corrige va como encargo `BRIEF-r<N>.md` al mismo implementador, nunca lo escribe el lead; el resto se declara como residual con su razón. Más rondas no compran calidad: compran costo.
 - **Si el script sale con código 3** (ningún revisor externo disponible), el lead hace la revisión con un subagente propio y lo escribe en el PR como "revisión interna, sin cruzada". Nunca se espera a que la cadena vuelva.
 - **Un revisor que tarda más que el tope del script no es un revisor caído**: se anota y se sigue con el siguiente. El tope se fija por medición, no por número redondo.
 
@@ -102,7 +102,7 @@ Medido: 2026-09-15, Fase 6: el runbook mandaba commitear `autopilot.json` dentro
 
 ## 7. Despliegue y configuración del gateway
 
-- Mergear a `main` de goncloud-openclaw o de un workspace **es** desplegar: el sync del gateway lo lleva en el siguiente ciclo. Se mergea en ventana segura: ningún cron con `Next` en 15 minutos, y fuera de los minutos :05 a :15 de las horas impares en `America/New_York`, leída con `TZ=America/New_York date`.
+- Mergear a `main` de goncloud-openclaw o de un workspace **es** desplegar: el sync del gateway lo lleva en el siguiente ciclo. Se mergea en ventana segura: ningún cron con `Next` en 15 minutos, y fuera de los minutos :05 a :15 de las horas impares en `America/New_York`, leída con `TZ=America/New_York date`. El sync del gateway no es un cron y no aparece en `cron list`: lo cubre la franja de minutos, que es exactamente cuando corre.
 - **Ningún cambio de configuración del gateway lo hace claw desde su propio turno.** Lo hace el lead desde la Mac, con cero corridas en vuelo verificadas, y con lectura de vuelta de la configuración después. Cada recarga en caliente congela al gateway entre diez y doce segundos; claw vive ahí y se mataría a sí mismo.
 - **Los cambios de configuración van en tanda, no en ráfaga.** Doce escrituras seguidas son doce congelamientos seguidos.
 - Todo despliegue tiene su canary escrito como comando, salida esperada y reversa automática. Sin reversa escrita, no se despliega.
@@ -165,7 +165,7 @@ Aplican en toda fase. El runbook de fase agrega las suyas y no repite estas.
 | Una prueba pasa igual sin el arreglo | Encargo de corrección al mismo implementador. El arreglo no existe hasta que la prueba lo atrape. |
 | El revisor cruzado sale 3 | Revisor interno, declarado en el PR. No se espera. |
 | CodeRabbit sin cuota o sin respuesta en 20 minutos | No bloquea. Línea en el PR y en el Telegram. Se reintenta tras el próximo push. |
-| Cuota agotada o rate limit de un proveedor por más de 30 minutos | El carril se detiene y se declara. Los demás siguen. No se cambia de modelo ni de proveedor por cuenta propia. |
+| Cuota agotada o rate limit de un **proveedor de modelo** (el del implementador o el del revisor) por más de 30 minutos | El carril se detiene y se declara. Los demás siguen. No se cambia de modelo ni de proveedor por cuenta propia. CodeRabbit no es un proveedor de modelo: su fila es la de arriba y nunca detiene un carril. |
 | El lead se cae | Claw relanza otro host de la lista; sección 9. |
 | Un implementador muere o calla 30 minutos sin mensaje de cuota | Se relanza una vez con el mismo encargo. A la segunda, atorado y declarado. |
 | El implementador hizo push o abrió el PR solo | No se castiga ni se rehace: se verifica igual y se anota como desvío de proceso. |

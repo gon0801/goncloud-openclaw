@@ -72,10 +72,13 @@ for a in 'LISTO <sha>' \
          'contra la DoD literal de cada fila' \
          'No repite' \
          'test-runbooks-no-contradicen-entorno.sh' \
-         'Jamás `--no-verify`'; do
+         'Jamás `--no-verify`' \
+         'nunca lo escribe el lead' \
+         'CodeRabbit no es un proveedor de modelo' \
+         'El sync del gateway no es un cron'; do
   grep -qF "$a" "$DOC" || fail "$DOC: falta el ancla: $a"
 done
-echo "ok (3): las 25 anclas de reglas están"
+echo "ok (3): las 28 anclas de reglas están"
 
 # (4) La fila del lead no nombra ningún modelo. Es la regla central del documento.
 hit=$(lead_nombra_modelo < "$DOC")
