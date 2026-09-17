@@ -1,6 +1,6 @@
 ---
 name: goncloud-ssh-ops
-description: "Run diagnostics or deploy app changes on the goncloud Linux server over SSH (Windows gateway or Mac node route); clean remote output without PowerShell quoting or CRLF failures."
+description: "Run diagnostics or deploy app changes on the goncloud Linux server over SSH (Windows gateway or Mac node route); clean remote output without PowerShell quoting or CRLF failures; trace which processes send to a shared Telegram chat."
 ---
 
 # goncloud SSH operations
@@ -20,6 +20,7 @@ Any task that reads or changes state on the goncloud server (logs, docker, git, 
 1. Simple one-liners without quotes/parens: as above. Anything with quotes, parentheses, or globs: write the bash script to a local file with the write tool, then pipe it **with CR stripped** — write-tool scripts carry CRLF and die remotely with `$'\r': command not found` (verified 2026-09-09):
    `((Get-Content -Raw <script>.sh) -replace "`r","") | ssh -o BatchMode=yes claw@goncloud bash -s`
    Never inline nested quotes in the PowerShell exec command — PowerShell double-parsing strips them and bash fails with syntax errors.
+   Scope remote searches per subdirectory and wrap them with remote `timeout 15-20`: a whole-tree `grep -r` over `/mnt/data/appdata/` exceeds the exec window and ends `COMPANION_APP_UNAVAILABLE` with unknown outcome (verified 2026-09-16 — two whole-tree attempts failed; every per-subdir grep with `timeout` returned). Pattern: `ssh gonserver "timeout 20 grep -rln '<pattern>' /mnt/data/appdata/<subdir>/ 2>/dev/null | head"`. After such a failure never re-run the same whole-tree search — narrow the scope instead.
 2. From the gateway, `docker` and `git` under /mnt/data/appdata are root-owned: prefix `sudo -n` (plain `docker ps` returns permission denied there).
 3. Inspecting app containers: use `docker top <container> aux` — container images often lack `ps`, so in-container `ps` returns nothing and looks like "no process" (verified). DB reads without touching secrets: `docker exec <db-container> sh -lc 'psql -U $POSTGRES_USER -d $POSTGRES_DB -Atc "<sql>"'`.
 4. `pkill -f <pattern>` can match your own ssh command line and kill the session mid-run (exit 16777215) — bracket a character (`pkill -f 'a6_wa[t]ch'`) or check with `pgrep` first.
@@ -30,5 +31,14 @@ Any task that reads or changes state on the goncloud server (logs, docker, git, 
    - Verify: `/health` returns ok; `ss -lntp | grep <port>` binds `127.0.0.1:<port>` and `10.13.13.1:<port>` (never `*:<port>`); `secrets/` perms unchanged (700). Rollback: `mv app.bak-predeploy-<fecha> app` (keep the new one) + rebuild.
    - Repo `deploy.sh` headers can describe a stale flow (`/mnt/data/repos` does not exist) — trust the live layout and `docs/DEPLOY.md`.
 6. Delete the local helper script when the remote work is done.
+
+### Who sends to a Telegram chat (mixed-messages diagnosis)
+
+When several topics arrive interleaved in one Telegram chat ("mensajes revueltos"), enumerate every sender before theorizing about queues or retries — verified 2026-09-16 (orbit's 9 `notifica_*` functions plus 5 competitive-engine call sites shared one bot and one chat, interleaving by design):
+
+1. Per-subdir sender search (bounded per step 1): `grep -rln 'api.telegram.org' /mnt/data/appdata/<orbit|competitive|bridge|odoo/custom_addons>/`.
+2. Confirm each sender is live, not just code: orbit `ls <secrets-dir>/telegram.json`; competitive `docker exec <container> printenv | grep -o 'TELEGRAM[A-Z_]*'` (names only, never values); a bridge `notify_*.sh` may point at a notifier path that no longer exists — a dead channel, not a sender.
+3. Prove same-chat/same-bot WITHOUT printing secrets: compare sha256 prefixes of `chat_id` (from `telegram.json` vs from container env) and of the bot token via remote `python3 -c`. Equal hashes = one bot, one chat, N independent senders.
+4. List every call site (`grep -rn '_send_telegram_alert\|notifica_'`, excluding tests) and check message headers: inconsistent prefixes (`[Orbit]` plain text vs HTML with no origin tag) make separate streams look like one garbled one, and fail-silent senders explain gaps with no trace in the chat.
 
 Completion check: remote output returns with no bash/CRLF errors; changes re-read from the server (or curl'd live) to confirm they landed.
