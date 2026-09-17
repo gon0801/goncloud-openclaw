@@ -57,8 +57,16 @@ guard exists to prevent, and an inert version would prove nothing.
 
 ```
 cd /Users/dn/dev/goncloud-openclaw/summa-gate
-PATH="$(dirname "$(command -v node)"):$PATH" node --test role.test.ts
+PATH="$(dirname "$(command -v node)"):$PATH" node --test adversary-confinamiento.test.ts
 ```
+
+That file is this guard's own battery: nine cases, each paired with its
+opposite. Pairing is the point, because a run where everything blocks and one
+where nothing does look identical from a green exit code.
+
+Two of those cases are regressions for holes this guard actually had: a relative
+target that escapes, and a relative target in a command that changes directory
+first. Neither is hypothetical; both were live.
 
 `adversaryPathAllowed` takes the target and the workspace directory, so a drive
 is: give it a path inside the zone and expect allowed, give it one outside and
