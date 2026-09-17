@@ -78,7 +78,9 @@ Readers on the Fase 6 runbook: 5, 6, 3, 2, 2, 1, then empty. On the Fase 7 runbo
 
 ## Verification (required before delivering)
 
-Dispatch one fresh-context subagent as the executor with this SKILL.md and the runbook, and the instruction: "list every question you would still have to ask a human; if the answer is deducible but not written, list it". Fix the runbook for every item, then dispatch a second fresh reader. Deliver only when a reader returns an empty list. Two readers were needed on the first runbook that used this skill; the second found six items the first had not.
+Dispatch one fresh-context subagent as the executor with this SKILL.md and the runbook, and the instruction: "list every question you would still have to ask a human; if the answer is deducible but not written, list it". Fix the runbook for every item, then dispatch another fresh reader.
+
+**One stopping rule, and it is the one above:** deliver when a pass returns either an empty list or only items you can classify as "one sentence, no new mechanism", and in that second case write those items into the runbook or the PR as declared residuals. Do not deliver on an unverified pass, and do not keep going past that point hoping for an empty list: every full rewrite manufactures new contradictions for the next reader, which is how the Fase 7 runbook reached thirteen passes without ever emptying. Two readers were needed on the first runbook that used this skill; the second found six items the first had not.
 
 ## Common mistakes
 

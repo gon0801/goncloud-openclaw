@@ -372,16 +372,15 @@ Ruta y comando del merge: loop §6. La cola tiene siete ítems y **cinco son mer
 ```
 SHA=<sha del squash>
 for i in 1 2 3 4 5 6 7 8 9 10; do
-  r=$(gh run list --workflow quality.yml --branch main --limit 10 \
-        --json headSha,status,conclusion \
-        --jq ".[] | select(.headSha==\"$SHA\") | \"\(.status) \(.conclusion)\"")
+  r=$(gh run list --workflow quality.yml --commit "$SHA" --limit 5 \
+        --json status,conclusion --jq '.[] | "\(.status) \(.conclusion)"' | head -1)
   echo "intento $i: ${r:-sin-corrida}"
   case "$r" in "completed success"|"completed failure") break ;; esac
   sleep 60
 done
 ```
 
-  `gh run list --limit 1` sin filtrar por SHA devuelve la última corrida de `main`, que en el minuto siguiente al merge todavía es la anterior, o la nueva con `conclusion: null`. Tres salidas: `completed success` cierra el ítem; `completed failure` manda el carril de vuelta al loop §3 con el log del job como encargo y **P no se mergea** hasta que `main` esté verde; `sin-corrida` o `in_progress` a los diez intentos queda `unknown`, se anota y **P tampoco se mergea** ese ciclo.
+  El filtro va en `--commit`, que es de la propia herramienta, **no en el `jq`**: `--limit` se aplica **antes** de filtrar, así que con diez corridas más nuevas en `main` la del SHA se queda fuera de la lista y el ítem se marcaría `sin-corrida` con el CI en verde. Y `--limit 1` sin filtro devuelve la última corrida de `main`, que en el minuto siguiente al merge todavía es la anterior, o la nueva con `conclusion: null`. Tres salidas: `completed success` cierra el ítem; `completed failure` manda el carril de vuelta al loop §3 con el log del job como encargo y **P no se mergea** hasta que `main` esté verde; `sin-corrida` o `in_progress` a los diez intentos queda `unknown`, se anota y **P tampoco se mergea** ese ciclo.
 - [ ] **Q2 · P después de D**, solo, en ventana segura. Mergear **no** lo enciende: el plugin queda deshabilitado hasta Q3. Misma compuerta de CI que Q1, y además:
   **Compuerta del sync:** tras el siguiente ciclo, por exec, el SHA mergeado tiene que estar **en la historia** del clon del gateway, no ser su punta:
 
@@ -460,12 +459,13 @@ L=/Users/dn/dev/wt-f7-lead; C=/Users/dn/dev/wt-f7-cierre
 cp $L/.saikit/progress/7.json $C/.saikit/progress/7.json                       # obligatorio
 test -r $L/.saikit/progress/7-sesiones.txt && cp $L/.saikit/progress/7-sesiones.txt $C/.saikit/progress/
 test -r $L/docs/evidence/tablero-runbook-canary.md && cp $L/docs/evidence/tablero-runbook-canary.md $C/docs/evidence/
-test -r /Users/dn/dev/wt-f7-D/docs/evidence/tablero-runbook-spike.md && \
-  git -C /Users/dn/dev/wt-f7-D diff --quiet HEAD -- docs/evidence/tablero-runbook-spike.md || \
-  cp /Users/dn/dev/wt-f7-D/docs/evidence/tablero-runbook-spike.md $C/docs/evidence/
+if ! git -C $C cat-file -e origin/main:docs/evidence/tablero-runbook-spike.md 2>/dev/null; then
+  test -r /Users/dn/dev/wt-f7-D/docs/evidence/tablero-runbook-spike.md \
+    && cp /Users/dn/dev/wt-f7-D/docs/evidence/tablero-runbook-spike.md $C/docs/evidence/
+fi
 ```
 
-  El de sesiones no existe si ningún carril se lanzó, y el del canary no existe si la fase cerró sin llegar a Q3: en los dos casos **no se copia y se declara en el PR**, no se inventa un archivo vacío. La evidencia del spike se copia **solo si D nunca la mergeó**, porque la DoD de 7.0 la exige y sin PR de D su único ejemplar vive en un worktree que el paso 6 borra; si D sí la mergeó, ya está en `main` y copiarla duplicaría. Las celdas Status de `Plans.md` se cierran con el token literal **`cc:完了`** y el SHA de squash, solo con evidencia; las filas de 7.6 y 7.7 se cierran igual. Antes de cerrar: la **revisión de cierre de fase** del loop §10, contra la DoD literal de cada fila.
+  El de sesiones no existe si ningún carril se lanzó, y el del canary no existe si la fase cerró sin llegar a Q3: en los dos casos **no se copia y se declara en el PR**, no se inventa un archivo vacío. La evidencia del spike se copia **solo si D nunca la mergeó**, porque la DoD de 7.0 la exige y sin PR de D su único ejemplar vive en un worktree que el paso 6 borra; si D sí la mergeó, ya está en `main` y copiarla duplicaría. La pregunta se le hace a `main`, no al worktree de D: después de un squash el commit de D no es antepasado de nada, así que comparar SHAs ahí no responde. Y va como `if`, no encadenado con `&&` y `||`: en esa forma, cuando la primera condición falla, la rama del `||` corre igual, que es justo lo contrario de lo que se quiere. Las celdas Status de `Plans.md` se cierran con el token literal **`cc:完了`** y el SHA de squash, solo con evidencia; las filas de 7.6 y 7.7 se cierran igual. Antes de cerrar: la **revisión de cierre de fase** del loop §10, contra la DoD literal de cada fila.
   **Compuerta:** CI verde sobre el SHA de cierre, con el mismo bucle por SHA de Q1.
 
   **Cómo termina tu turno, en orden:**

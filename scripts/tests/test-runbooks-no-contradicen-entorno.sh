@@ -118,9 +118,11 @@ echo "ok (2b): cross-review y tmux de los autopilot y del loop con prefijo de PA
 # (`- **lead**:`), y la primera version de este detector solo miraba la fila: pasaba en
 # verde justo el documento que lo motivo, que usa la vineta. Las dos se marcan.
 MODELOS='claude|codex|kimi|grok|zcode|dsh|muse|cursor|glm|gpt|opus|sonnet|deepseek|qwen'
+# Sin filtro de exencion: una linea que dice "Claude, de cualquier host del kit"
+# nombra un modelo Y trae la frase exenta, y el filtro la borraba antes de buscar el
+# modelo. La forma escrita como rol pasa sola, porque no nombra ninguno.
 lead_designado() {
   grep -E '^([|-]) \*\*lead\*\*' \
-    | grep -v -E 'de cualquier host|cualquiera de los hosts' \
     | grep -i -E "\b($MODELOS)\b"
 }
 FASES=$(git ls-files --cached --others --exclude-standard -- 'docs/runbooks/autopilot-fase*.md')
@@ -140,6 +142,8 @@ printf '%s\n' '| **lead** | Claude, sesion en la Mac | manda |' | lead_designado
   || fail "(2c) el detector NO marca la fila con modelo"
 printf '%s\n' '- **lead**: tu (Claude, sesion en la Mac). Spike 7.0, briefs.' | lead_designado | grep -q . \
   || fail "(2c) el detector NO marca la vineta con modelo"
+printf '%s\n' '- **lead**: Claude, de cualquier host del kit' | lead_designado | grep -q . \
+  || fail "(2c) el detector NO marca un modelo cuando la linea trae la frase del rol"
 printf '%s\n' '| **lead** | tu: un CLI en tmux, de cualquier host del kit | manda |' | lead_designado | grep -q . \
   && fail "(2c) el detector marca de mas: la fila escrita como rol"
 echo "ok (2c): ningun runbook de fase designa un modelo como lead"
