@@ -178,8 +178,17 @@ Esperado, en orden: sin salida; sin salida; la línea `{"merge":true,"merge_desp
 
    ```
    { echo 'BEGIN READ ONLY;'; cat docs/evidencia/repricing-01/E.1/consultas/envio-por-producto.sql; } \
-     | ssh goncloud 'DSN=$(docker exec orbit-app-1 printenv ORBIT_DSN_READ); docker exec -i orbit-db-1 psql "$DSN" -X -P pager=off -tA -v ON_ERROR_STOP=1'
+     | ssh goncloud 'set -eu
+         DSN=$(docker exec orbit-app-1 printenv ORBIT_DSN_READ)
+         test -n "$DSN" || { echo "ATORADO: ORBIT_DSN_READ vacio"; exit 1; }
+         docker exec -i orbit-db-1 psql "$DSN" -X -P pager=off -tA -v ON_ERROR_STOP=1'
    ```
+
+   **El `test -n` tampoco es adorno.** Si `printenv` falla o devuelve vacío, sin esa
+   línea el shell sigue y corre `psql ""`, y libpq entonces arma la conexión con sus
+   valores por defecto: usuario del sistema, base con ese mismo nombre, socket local.
+   O sea la consulta se ejecuta, devuelve algo, y **no es de la base que creías**. El
+   `set -eu` cubre el otro lado, que `printenv` reviente y el fallo no se note.
 
    **El `BEGIN READ ONLY` no es adorno.** El nombre de la variable dice `READ` pero es solo un nombre: si el rol no trae `default_transaction_read_only` puesto, cualquier escritura que se cuele en un archivo de consulta corre contra producción. La transacción de solo lectura la rechaza, y `ON_ERROR_STOP` hace que se note en vez de seguir con la siguiente línea. Esto es lo único de esta fase que toca la base de producción: el costo de equivocarse no es un carril atorado.
 
@@ -316,6 +325,7 @@ cd /Users/dn/dev/goncloud-Orbit
 /opt/homebrew/bin/gh pr checks $pr | head -3
 ORBIT_TEST_DSN="postgresql://orbit:orbit@localhost:5432/postgres" ./.venv/bin/python -m pytest tests/test_precio_write.py tests/test_spapi_write_client.py tests/test_architecture.py -q | tail -2
 /opt/homebrew/bin/git grep -n pendiente_sonda -- app/spapi/precio_write.py | grep -vE ':[[:space:]]*#' | head -5
+/opt/homebrew/bin/git status --porcelain | head -5
 ```
 
 Esperado: `CON-Q3`; `quality` en `pass`; `N passed` sin `skipped`; y **al menos una línea del último comando, dentro del código que arma el cuerpo del parche**. Eso es lo que prueba que la forma quedó sin sellar para la fila A.4 de David.
@@ -327,6 +337,7 @@ Esperado: `CON-Q3`; `quality` en `pass`; `N passed` sin `skipped`; y **al menos 
 ```
 cd /Users/dn/dev/wt-fase8-lead
 /opt/homebrew/bin/gh pr checks $pr | head -3
+/opt/homebrew/bin/git fetch -q origin
 /opt/homebrew/bin/git diff --name-only origin/master...HEAD | grep -vE '^(plans/repricing-01\.md|docs/CHAT-CONTEXT\.md)$'
 /opt/homebrew/bin/git status --porcelain | head -5
 for f in A.0 A.2 A.3 E.1; do
@@ -338,6 +349,13 @@ ORBIT_TEST_DSN="postgresql://orbit:orbit@localhost:5432/postgres" ./.venv/bin/py
 ```
 
 Esperado: `quality` en `pass`; los dos primeros comandos **sin salida**; **las cuatro filas con `1`**; y el candado de frescura en verde.
+
+**El `fetch` va primero y no se hereda del ítem anterior.** Q5 compara contra
+`origin/master`, que es una referencia local: sin traerla, compara contra lo que
+`master` era cuando alguien hizo fetch por última vez. Entre Q4 y Q5 median un
+merge y una revisión, tiempo de sobra para que `master` avance, y entonces el diff
+muestra rutas ajenas como si fueran del carril y los cuatro conteos miran un
+archivo viejo.
 
 **El conteo por fila es la compuerta, no el diff de nombres.** Que los dos archivos cambiaron no dice que las cuatro celdas se cerraron, ni que no se editó una quinta: un PR de cierre equivocado pasaba igual. Una fila en `0` es una celda sin cerrar; en `2` o más, la celda se tocó dos veces y hay que mirar por qué. Fallback: si el candado sale rojo, falta la entrada en `CHAT-CONTEXT.md` y se agrega en el mismo PR; cualquier otra ruta en el diff se saca con un commit propio. Este ítem lleva un loop reducido: auditoría del lead y una ronda cruzada, sin CodeRabbit obligatorio, porque son celdas de estado y prosa.
 
