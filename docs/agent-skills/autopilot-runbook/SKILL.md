@@ -24,7 +24,7 @@ Measured baseline (2026-09-15, Fase 6 de claw): a runbook written without this r
 9. **Cola de merge.** Ordered items, each with its gate written as an observable check and its automatic fallback.
 10. **Cuando algo se atora.** Table situación → acción. Every "if" that appears anywhere else in the document has a row here.
 11. **Inventario y cierre.** Counts, cost, budget, what is out of scope, and how the executor reports.
-12. **Progreso.** One rule in Reglas de trabajo: on every lane or queue state change, and at close, the lead writes `runbook-progress.v1` (spec: `docs/spec/runbook-progress.v1.md` in goncloud-openclaw) to `.saikit/progress/<fase>.json` and sends it with `openclaw gateway call runbook.progress.set --params @<file>`; a failed send never blocks and is retried at the next state change. Every write carries `atencion_requerida` (true only for the rows that reach the human) and `siguiente_paso` in plain language. The interface reads that JSON; nothing else counts as progress.
+12. **Progreso.** One rule in Reglas de trabajo: on every lane or queue state change, and at close, the lead writes `runbook-progress.v1` (spec: `docs/spec/runbook-progress.v1.md` in goncloud-openclaw) to `.saikit/progress/<fase>.json` and sends it with `openclaw gateway call runbook.progress.set --params "$(cat <file>)"` (the CLI rejects `--params @<file>` with `--params must be valid JSON`); a failed send never blocks and is retried at the next state change. Every write carries `atencion_requerida` (true only for the rows that reach the human) and `siguiente_paso` in plain language. The interface reads that JSON; nothing else counts as progress.
 
 ## Ambiguity pass (run before delivering)
 
