@@ -22,10 +22,32 @@ if [ -f "$MAP" ]; then
   # anclas de los dos tipos de go/no-go
   chk "go/no-go unico (merge y deploy)" grep -q 'merge y deploy' "$MAP"
   chk "go/no-go separado (merge y deploy separados)" grep -q 'merge y luego deploy' "$MAP"
-  chk "cierre Live SHA en URL" grep -q 'Live <SHA> en <URL>' "$MAP"
-  chk "regresion vuelve al brief" grep -q 'vuelve al brief' "$MAP"
-  chk "tabla Variantes" grep -qE '^## Variantes' "$MAP"
-  chk "tabla Bloqueos" grep -qE '^## Bloqueos' "$MAP"
+  section_h2() {
+    awk -v h="$1" '
+      index($0, h) == 1 {grab=1; print; next}
+      grab && /^## / {exit}
+      grab {print}
+    ' "$MAP"
+  }
+  filas_datos() {
+    awk '
+      /^\|[-:| ]+\|$/ {next}
+      /^\|/ { if (hdr++) n++; }
+      END { print n+0 }
+    '
+  }
+  row10=$(awk -F '|' '$2 ~ /^ *10 *$/ {print; exit}' "$MAP")
+  [ -n "$row10" ] || { echo "FALLO: falta la fila 10 del flujo"; fails=$((fails+1)); }
+  paso=$(printf '%s\n' "$row10" | awk -F '|' '{print $3}')
+  cierre=$(printf '%s\n' "$row10" | awk -F '|' '{print $5}')
+  if printf '%s' "$paso" | grep -q 'Live <SHA> en <URL>'; then echo "OK: Live SHA en celda Paso 10"; else echo "FALLO: Live SHA en celda Paso 10"; fails=$((fails+1)); fi
+  if printf '%s' "$cierre" | grep -q 'Live <SHA> en <URL>'; then echo "OK: Live SHA en celda Cierre 10"; else echo "FALLO: Live SHA en celda Cierre 10"; fails=$((fails+1)); fi
+  flujo=$(section_h2 '## Flujo principal')
+  if printf '%s\n' "$flujo" | grep -q 'vuelve al brief'; then echo "OK: regresion vuelve al brief en Flujo principal"; else echo "FALLO: regresion vuelve al brief en Flujo principal"; fails=$((fails+1)); fi
+  nvar=$(section_h2 '## Variantes' | filas_datos)
+  nblo=$(section_h2 '## Bloqueos' | filas_datos)
+  if [ "$nvar" -ge 1 ]; then echo "OK: tabla Variantes tiene $nvar fila(s)"; else echo "FALLO: tabla Variantes vacia o solo encabezado"; fails=$((fails+1)); fi
+  if [ "$nblo" -ge 1 ]; then echo "OK: tabla Bloqueos tiene $nblo fila(s)"; else echo "FALLO: tabla Bloqueos vacia o solo encabezado"; fails=$((fails+1)); fi
   # sin GraphQL
   c=$(grep -c "GraphQL" "$MAP" || true)
   [ "$c" = "0" ] && echo "OK: cero GraphQL en el mapa" || { echo "FALLO: GraphQL aparece $c veces en el mapa"; fails=$((fails+1)); }
