@@ -311,6 +311,19 @@ export function adversaryPathAllowed(target: string, workspaceDir?: string): boo
   return !ABSOLUTE_PATH_RE.test(target);
 }
 
+// Un comando que cambia de directorio invalida la resolucion estatica de
+// cualquier destino RELATIVO: el shell corre el `cd` antes de abrir la
+// redireccion, asi que `cd .. && printf x > outside` escribe en el padre aunque
+// `outside` parezca del workspace. Medido 2026-09-16 al cerrar el escape por
+// rutas relativas: el primer arreglo dejaba pasar justo esta forma.
+// No se intenta seguir el `cd` para deducir el destino real: eso es interpretar
+// shell, y el guardia es lexico por diseño. Se bloquea y se declara.
+const CWD_CHANGE_RE = /(?:^|[\s;|&(])(?:cd|pushd|popd)(?:\s|$)/;
+
+export function commandChangesCwd(command: string): boolean {
+  return CWD_CHANGE_RE.test(command);
+}
+
 export function redirectTargets(command: string): string[] {
   const targets: string[] = [];
   for (const match of command.matchAll(REDIRECT_RE)) {
