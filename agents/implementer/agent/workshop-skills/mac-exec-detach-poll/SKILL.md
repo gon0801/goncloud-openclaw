@@ -24,7 +24,11 @@ ciegas.
    `tail -3 /tmp/<tarea>.log; pgrep -fl "<proceso>" >/dev/null && echo SIGUE || echo TERMINO`
 
    Espacia las consultas: la bateria de Orbit (~2100 tests) tarda ~90 s;
-   cada encuesta avanza pocos puntos de progreso.
+   cada encuesta avanza pocos puntos de progreso. El espaciado se hace
+   ENTRE turnos del agente (una llamada corta por encuesta): nunca metas
+   `sleep`/espera DENTRO del comando — `sleep 60; tail ...` muere igual
+   con COMPANION_APP_UNAVAILABLE y el resultado queda desconocido
+   (medido 2026-09-17).
 4. El resultado valido es el del log (`EXIT=` + resumen), nunca la sola
    ausencia de proceso. Un EXIT distinto de 0 va al reporte tal cual.
 
@@ -40,6 +44,12 @@ reemplazo:
 - `timeout` no existe en macOS: antepone `/opt/homebrew/bin:$PATH` en la
   corrida (ahi viven timeout y gtimeout); sin eso, casos preexistentes
   que lo usan enrojecen por ambiente y no por tu cambio.
+- El shell por defecto del exec es `/bin/sh`: no hay sustitucion de procesos `<(...)` (`syntax error near unexpected token '<'`, medido 2026-09-17). Recuperacion verificada: dividir en dos llamadas — la primera imprime los valores, la segunda los usa literales.
+- El `sed` de macOS es BSD: `sed -i` exige argumento (`sed -i '' ...`);
+  la forma GNU `sed -i 's/.../.../'` falla con `extra characters at the
+  end of d command` (medido 2026-09-17: rompio el editor de secuencia
+  de un `git rebase -i`; recuperacion: dropear con `git rebase --onto`,
+  sin editor).
 - El bash 3.2 de macOS no cierra `$(... <<'HEREDOC' ...)`: aunque valido
   en bash 4+, `bash -n` dice `unexpected EOF while looking for
   matching ')'` (los parentesis del cuerpo confunden su parser; medido
