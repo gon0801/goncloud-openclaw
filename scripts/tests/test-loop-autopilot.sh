@@ -76,7 +76,7 @@ for a in 'LISTO <sha>' \
          'rama del worktree en el que estás parado' \
          'se invoca por `bash`' \
          '${SAIKIT_TOOLS:-' \
-         'ATORADO kit ausente' \
+         'ATORADO kit ausente en ' \
          '-Alcance last-commit' \
          'conjuntos cerrados' \
          'nunca lo escribe el lead' \
