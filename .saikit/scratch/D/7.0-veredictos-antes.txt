@@ -1,0 +1,6 @@
+veredicto backupResources: presente
+veredicto dataDir: presente
+veredicto registerControlUiDescriptor: presente
+veredicto registerGatewayMethod: presente
+veredicto registerHttpRoute: presente
+veredicto stateDir: presente
