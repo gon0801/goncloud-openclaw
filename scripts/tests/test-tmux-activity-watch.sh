@@ -8,7 +8,8 @@
 # `openclaw system event` real (despertaria al agente vivo y podria mandar Telegram).
 # Verifica: (1) los tres scripts parsean y el plist es un LaunchAgent valido; (2) la maquina de
 # estados del vigilante (quiet una sola vez por silencio, activity nueva la resetea, closed
-# borra el estado, un envio fallido no marca notified); (3) el Stop hook no manda nada fuera de
+# borra el estado, un envio fallido no marca notified, un TUI que repinta la misma pantalla
+# cuenta como callado, un prompt de permiso avisa de inmediato y se recuerda); (3) el Stop hook no manda nada fuera de
 # tmux y manda el texto correcto dentro de tmux; (4) las anclas de las dos skills; (5) el
 # detector de test-mac-tmux-control.sh sigue verde.
 # Uso: bash scripts/tests/test-tmux-activity-watch.sh
@@ -183,6 +184,90 @@ $(cat "$CALLS")"
   grep -q 'tick skipped' "$LOG_FILE" || fail "el log debe decir que el tick se salteo: $(cat "$LOG_FILE")"
   echo "ok (2d): tmux ausente = tick salteado, sin closed en falso y con el estado intacto"
 
+  # (2e) y (2f): medido el 2026-09-17 en la Fase 7. zcode y muse REPINTAN la pantalla cada
+  # segundo aunque el contenido no cambie, asi que #{window_activity} nunca se queda quieto y
+  # el vigilante no aviso en toda la noche: un carril paso 7 h parado en un prompt de permiso.
+  # Un TUI de mentira que repinta SIEMPRE lo mismo (lo que se ve sale de un archivo, para poder
+  # cambiarlo a media prueba) reproduce las dos cosas sin depender de ningun CLI real.
+  TUI="$T/tui-repinta.sh"
+  cat >"$TUI" <<'TUISH'
+#!/bin/sh
+while :; do printf '\033[H\033[2J'; cat "$1"; sleep 0.2; done
+TUISH
+  chmod +x "$TUI"
+
+  PANTALLA_E="$T/pantalla-e.txt"; printf 'trabajando en el encargo\n' >"$PANTALLA_E"
+  "$TM" -L "$L" new-session -d -s glm-repinta -x 80 -y 20 "$TUI $PANTALLA_E" || fail "no se pudo crear glm-repinta"
+  mark glm-repinta
+  : >"$CALLS"
+  sleep 1
+  run_once || fail "--once (2e, primera vista) fallo"
+  sleep 2
+  run_once || fail "--once (2e, segunda vista) fallo"
+  n=$(grep -c 'glm-repinta quiet for' "$CALLS")
+  [ "$n" -eq 1 ] || fail "(2e) un TUI que repinta la MISMA pantalla debe contar como callado y avisar una vez; hubo $n:
+$(cat "$CALLS")"
+  printf 'trabajando en el encargo\npaso nuevo\n' >"$PANTALLA_E"; sleep 1
+  run_once || fail "--once (2e, contenido nuevo) fallo"
+  sleep 2
+  run_once || fail "--once (2e, callado otra vez) fallo"
+  n=$(grep -c 'glm-repinta quiet for' "$CALLS")
+  [ "$n" -eq 2 ] || fail "(2e) contenido nuevo y luego silencio debe dar un SEGUNDO aviso; hubo $n:
+$(cat "$CALLS")"
+  "$TM" -L "$L" kill-session -t glm-repinta; run_once >/dev/null 2>&1
+  echo "ok (2e): un TUI que repinta la misma pantalla cuenta como callado (se mide el contenido, no el repintado)"
+
+  PANTALLA_F="$T/pantalla-f.txt"
+  printf 'Permission - Bash\nHigh risk tools require explicit approval\n sed -n 1,2p tipos.d.ts\n> Allow once\n  Always allow in this project\n  Deny\n running 3s\n' >"$PANTALLA_F"
+  "$TM" -L "$L" new-session -d -s glm-permiso -x 80 -y 20 "$TUI $PANTALLA_F" || fail "no se pudo crear glm-permiso"
+  mark glm-permiso
+  : >"$CALLS"
+  sleep 1
+  run_p() { APPROVAL_REMIND_SECS=3 run_once; }
+  run_p || fail "--once (2f, prompt a la vista) fallo"
+  n=$(grep -c 'glm-permiso waiting for approval' "$CALLS")
+  [ "$n" -eq 1 ] || fail "(2f) un prompt de permiso a la vista avisa DE INMEDIATO, sin esperar QUIET_SECS; hubo $n:
+$(cat "$CALLS")"
+  # El reloj del TUI avanza ("running 3s" -> "running 4s"): sigue siendo EL MISMO prompt.
+  sed -i.bak 's/running 3s/running 4s/' "$PANTALLA_F"; sleep 1
+  run_p || fail "--once (2f, mismo prompt) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 1 ] || fail "(2f) el mismo prompt no se repite ni sale ademas como 'quiet' aunque el reloj del TUI avance; hubo $n:
+$(cat "$CALLS")"
+  # Otro prompt distinto (otro comando) es otra pregunta: avisa otra vez.
+  sed -i.bak 's/sed -n 1,2p tipos.d.ts/git push origin fase7/' "$PANTALLA_F"; sleep 1
+  run_p || fail "--once (2f, prompt distinto) fallo"
+  n=$(grep -c 'glm-permiso waiting for approval' "$CALLS")
+  [ "$n" -eq 2 ] || fail "(2f) un prompt DISTINTO debe avisar otra vez; hubo $n:
+$(cat "$CALLS")"
+  # Nadie contesta: recordatorio al pasar APPROVAL_REMIND_SECS (la noche de la Fase 7 fueron 7 h).
+  sleep 4
+  run_p || fail "--once (2f, recordatorio) fallo"
+  n=$(grep -c 'glm-permiso waiting for approval' "$CALLS")
+  [ "$n" -eq 3 ] || fail "(2f) un prompt sin contestar debe RECORDARSE al pasar APPROVAL_REMIND_SECS; hubo $n:
+$(cat "$CALLS")"
+  # Contestado: la pantalla ya no trae prompt. No avisa por eso, y el silencio posterior si.
+  printf 'comando aprobado, sigo trabajando\n' >"$PANTALLA_F"; sleep 1
+  run_p || fail "--once (2f, ya sin prompt) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 3 ] || fail "(2f) al desaparecer el prompt no debe avisar nada; hubo $n:
+$(cat "$CALLS")"
+  sleep 2
+  run_p || fail "--once (2f, silencio tras el prompt) fallo"
+  tail -1 "$CALLS" | grep -q 'glm-permiso quiet for' || fail "(2f) tras el prompt, el silencio normal debe volver a avisar: $(cat "$CALLS")"
+  # El texto del prompt en medio de la pantalla (un agente HABLANDO de prompts) no es un prompt:
+  # solo cuentan las ultimas lineas, que es donde los TUIs lo pintan.
+  PANTALLA_G="$T/pantalla-g.txt"
+  { printf 'el usuario eligio Allow once ayer\n'; i=0; while [ $i -lt 16 ]; do printf 'linea de trabajo %s\n' "$i"; i=$((i+1)); done; } >"$PANTALLA_G"
+  "$TM" -L "$L" new-session -d -s glm-prosa -x 80 -y 30 "$TUI $PANTALLA_G" || fail "no se pudo crear glm-prosa"
+  mark glm-prosa
+  : >"$CALLS"
+  sleep 1
+  run_p || fail "--once (2f, prosa) fallo"
+  grep -q 'glm-prosa waiting for approval' "$CALLS" && fail "(2f) 'Allow once' lejos del final de la pantalla NO es un prompt: $(cat "$CALLS")"
+  "$TM" -L "$L" kill-session -t glm-permiso; "$TM" -L "$L" kill-session -t glm-prosa; run_once >/dev/null 2>&1
+  echo "ok (2f): prompt de permiso avisa de inmediato, una vez por prompt, con recordatorio, sin duplicar 'quiet' y sin confundirse con prosa"
+
   "$TM" -L "$L" kill-server 2>/dev/null
   echo "ok (2): maquina de estados del vigilante verificada con tmux real ($TM)"
 
@@ -271,6 +356,11 @@ grep -qF 'notifyOnExit' "$SK" || fail "$SK: falta la mencion de notifyOnExit"
 # desmarcar tiene que seguir en las skills.
 grep -qF 'OPENCLAW_WATCH 1' "$SK" || fail "$SK: falta la instruccion de marcar la sesion (OPENCLAW_WATCH 1)"
 grep -qF -- '-u OPENCLAW_WATCH' "$SK" || fail "$SK: falta la instruccion de desmarcar (-u OPENCLAW_WATCH)"
+# El evento nuevo solo sirve si main sabe que significa y que hacer: contestar con la tabla de
+# preaprobaciones, y cambiar de modo en vez de contestar de uno en uno.
+grep -qF 'waiting for approval for Ns' "$SK" || fail "$SK: falta el evento 'waiting for approval'"
+grep -qF 'preapproval table' "$SK" || fail "$SK: falta de donde sale la respuesta a un prompt de permiso"
+grep -qF '/mode yolo' "$SK" || fail "$SK: falta como cambiar zcode a modo sin preguntas a media corrida"
 
 DISP=agents/main/agent/workshop-skills/agent-dispatch/SKILL.md
 grep -qF 'Wake-ups' "$DISP" || fail "$DISP: el paso 3 no referencia el mecanismo de despertar de mac-tmux-control"

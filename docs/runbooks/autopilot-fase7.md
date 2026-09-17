@@ -200,8 +200,12 @@ done
 T=/opt/homebrew/bin/tmux
 BIN=$(bash -c 'PATH=$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH; command -v <token>')
 $T has-session -t <token>-wt-f7-P 2>/dev/null && echo YA-EXISTE || \
-  $T new-session -d -s <token>-wt-f7-P -c /Users/dn/dev/wt-f7-P "$BIN"
+  $T new-session -d -s <token>-wt-f7-P -c /Users/dn/dev/wt-f7-P "PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:\$PATH $BIN <flag>"
 ```
+
+El `PATH=` va **dentro** del comando de la sesión, con el `$` escapado para que lo expanda la sesión y no tu shell. Medido el 2026-09-17 desde el PATH mínimo del exec del gateway: con `"$BIN"` a secas la creación de la sesión sale rc=0 y la sesión desaparece en segundos, porque `~/bin/glm` arranca con `env node` y ese PATH no trae node; con el PATH embebido la sesión vive. Después de crearla, `/opt/homebrew/bin/tmux has-session -t <sesión>` tiene que salir 0: si dice `can't find session`, el binario murió al arrancar y se diagnostica corriéndolo directo, no reintentando.
+
+`<flag>` es el texto literal de la columna "Modo sin preguntas" de la tabla del punto 4, en la fila del token que ganó la sonda: `--mode yolo` para `glm`, `-f --trust` para `cursor-agent`, `--yolo` para `muse`. Va dentro de las mismas comillas, después del binario. **Comprueba que entró** antes de entregar el encargo: la barra de estado de `glm` dice `yolo` (sin flag dice `build`) y la de `muse` termina en `YOLO` (sin flag no lo trae). Si no lo dice, mata esa sesión recién creada y vuelve a crearla con el flag; todavía no tiene contexto que perder.
 
 El nombre se escribe igual que lo armaría el lanzador, `<token>-<basename del directorio>`, para que cualquier skill que busque por ese patrón lo encuentre. `YA-EXISTE` manda a su fila de atores. **Anota el token y el nombre** en `.saikit/progress/7-sesiones.txt`: Q5 los necesita y el `-Excluir` depende del token.
 
@@ -222,11 +226,9 @@ El `Enter` va en llamada aparte: en el mismo envío se lo traga el TUI. **Arranc
 |---|---|---|---|
 | `glm` | zcode, vía el lanzador de la Mac | `--mode yolo`, que además es el default cuando se le pasa un prompt | `-p` |
 | `cursor-agent` | el CLI de Cursor | `-f` (alias `--yolo`), más `--trust` para no preguntar por el directorio | `-p`, con `--output-format json` |
-| `muse` | el CLI de muse | `--permission-profile <id>`, con el id en `unknown` (ver abajo) | el subcomando `exec`, con `--json` |
+| `muse` | el CLI de muse | `--yolo` ("Disable approval and sandboxing and trust this workspace for this run", según su ayuda) | el subcomando `exec`, con `--json` |
 
-**El flag va en el lanzamiento, y por eso el comando de arriba no lo trae escrito.** El bloque que abre la sesión termina en `"$BIN"` a secas porque el flag depende de qué binario ganó la sonda: el lead le agrega el de la fila que le tocó, y solo se lanza sin flag en el caso de la última frase de esta sección. Lanzar con flag disponible y además contestar a mano no es la intención; el flag es lo que evita las preguntas.
-
-**El id del perfil de muse es `unknown`, y se queda `unknown`.** El flag existe, pero muse no lista sus perfiles: ni `muse config status` ni su configuración local los nombran, comprobado hoy. Así que para muse el lead **no inventa un id**. Se lo pregunta a muse en el primer turno ("qué perfiles de permiso acepta") y lo anota junto al nombre de sesión, o lo lanza sin el flag y contesta las aprobaciones a mano, que es la ruta de la última frase. Un id inventado se rechaza en el arranque y el carril nace muerto sin decir por qué.
+**Medido el 2026-09-17, en la primera corrida de esta fase.** Esta sección decía que el lead agregaba el flag por su cuenta, y el comando de arriba terminaba en `"$BIN"` a secas. Ese comando además no arrancaba desde el exec del gateway (ver el punto 2); el lead lo rescató embebiendo el PATH, y los dos carriles se lanzaron sin flag (los argumentos de sus procesos no traían ninguno), `glm` quedó en modo `build` pidiendo permiso por cada lectura con una variable o una ruta fuera del worktree, y `muse` pidió permiso 25 veces para el mismo destino de red. Un carril pasó 7 horas detenido en un prompt. Por eso el flag va escrito dentro del comando y se comprueba en la barra de estado. La fila de `muse` decía `--permission-profile <id>` con el id `unknown`; `--yolo` estaba en la misma ayuda. De `muse --yolo` está medido que el flag llega al proceso y que la barra dice `YOLO`; que un comando de red pase sin preguntar queda `unknown` hasta que un carril lo ejerza, y si aun así pregunta, aplica la fila de atores "Un carril pide permiso".
 
 **Ojo con el token de Cursor: es `cursor-agent`, no `cursor`.** En esta Mac, `cursor` es un envoltorio que busca el IDE de escritorio y muere con "No Cursor IDE installation found"; el agente de verdad es el otro. Verificado hoy corriendo los dos.
 
@@ -242,7 +244,7 @@ Y si de verdad no ofrece ninguno, el carril se lanza **sin flag** y el lead cont
 
 **Los tres traen además modo sin interfaz**, que no es el camino de este runbook pero conviene saberlo: el lead vigila por pantalla porque así puede intervenir y porque la sesión sobrevive si el lead se muere, cosa que un proceso sin interfaz no hace.
 
-**5. TIMEBOX.** Cada carril tiene **6 horas** de reloj desde el lanzamiento hasta su `LISTO`. A las 6 h el carril pasa a `atorado` con lo que tenga, y el lead cierra con el otro. Dentro de ese tope, la regla de silencio es la de loop §12: 30 minutos sin mensaje dispara la comprobación de cuota y el relanzamiento.
+**5. TIMEBOX.** Cada carril tiene **6 horas** de reloj desde el lanzamiento hasta su `LISTO`. A las 6 h el carril pasa a `atorado` con lo que tenga, y el lead cierra con el otro. Dentro de ese tope, la regla de silencio es la de loop §12: 30 minutos sin mensaje dispara la comprobación de cuota y el relanzamiento. Un carril que se lanzó sin su flag y pasó tiempo detenido en prompts de permiso **reinicia su TIMEBOX** en el momento en que queda en modo sin preguntas: ese tiempo lo perdió el lanzamiento, no el implementador.
 
 **6. VERIFY, los comandos exactos que van en cada encargo.**
 
@@ -517,6 +519,7 @@ Aplican todas las filas del loop §12. Estas son propias de la Fase 7.
 | **Ningún binario existe para ninguno de los dos** | Es el mismo conjunto para los dos carriles, así que es un caso real, no teórico. No hay nada que implementar ni nada que mergear: se mergean Q0a y Q0b si estaban pendientes, los dos carriles quedan `atorado`, se saltan Q1 a Q4, y Q5 cierra con `Plans.md` intacto y el progreso declarando por qué. El lead **no implementa en su lugar**. |
 | Un implementador no arranca: la captura sigue en el prompt a los 60 s | Un `Enter` más. Si sigue igual, se cierra la sesión con `kill-session` y se relanza con el siguiente binario de la preferencia. Si se acaba la lista, aplica la fila de arriba. |
 | Un implementador se queda parado pidiendo una aprobación | El lead la contesta por `/opt/homebrew/bin/tmux send-keys`, con la tabla de preaprobaciones como respuesta: lo `Aprobado` se acepta, lo `Negado` se rechaza, y lo que no está se rechaza y se anota como residual. No se despierta a David por una aprobación. |
+| Un carril pide permiso (llega el evento `waiting for approval`, o la captura muestra `Allow once` / `Would you like to allow`) | No se contesta de uno en uno: se pasa a modo sin preguntas. **`glm`**: `/opt/homebrew/bin/tmux send-keys -t <sesión> C-c`, esperar 2 s, otra vez `C-c`, hasta que la captura diga `Turn cancelled.` (la sesión y su contexto siguen; `/mode` a medio turno se rechaza con "Wait for the active turn"); luego `/opt/homebrew/bin/tmux send-keys -t <sesión> -l '/mode yolo'` y, en llamada aparte, `/opt/homebrew/bin/tmux send-keys -t <sesión> Enter`, comprobar que la barra dice `yolo`, y mandar "Continúa el encargo donde te quedaste. El modo ya es yolo." Medido el 2026-09-17: retoma la tarea con su contexto y cero prompts. **`muse`** y **`cursor-agent`**: no hay cambio de modo medido dentro de la sesión; se contesta ese prompt con la tabla de preaprobaciones y, si vuelve a preguntar, se relanza el carril con su flag. Ese relanzamiento **no** cuenta como el de loop §9: el implementador no falló. |
 | Un carril pasa su TIMEBOX de 6 h | Pasa a `atorado` con lo que tenga; si su trabajo es mergeable se mergea, si no se declara. El otro carril sigue. |
 | **D queda atorado y P está listo** | P se mergea igual: sus archivos son disjuntos y su compuerta de CI es propia. La fase cierra con el código puesto y el docs declarado pendiente. |
 | El spike dice que `registerControlUiDescriptor` está `ausente` o `unknown` | 7.4 sin pestaña; el tablero se abre por URL. Se declara en el PR y en el Telegram. |
