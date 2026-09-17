@@ -25,14 +25,14 @@ Fuente del plan: `Plans.md`, Fase 7, tareas 7.0 a 7.7. Si el plan y este runbook
 | Rol | Quién | Qué hace en esta fase |
 |---|---|---|
 | **lead** | tú: un CLI en tmux, de cualquier host del kit, elegido y lanzado por claw | Spike 7.0, encargos, entrega, revisión, APPROVE, merges, despliegue 7.6, cierre 7.7, Telegram. **No escribes código de producto.** |
-| **implementador P** | el que claw lanzó; preferencia: glm, cursor, muse | El plugin: 7.1, 7.3, 7.4, 7.5 |
-| **implementador D** | el que claw lanzó; preferencia: muse, cursor, glm | Docs y anclas: 7.0 (formato), 7.2 y el Spec delta |
+| **implementador P** | el que claw lanzó; preferencia: glm, cursor-agent, muse | El plugin: 7.1, 7.3, 7.4, 7.5 |
+| **implementador D** | el que claw lanzó; preferencia: muse, cursor-agent, glm | Docs y anclas: 7.0 (formato), 7.2 y el Spec delta |
 | **claw** | el agente `main` del gateway | Te lanzó, te vigila por tmux, te presta su exec para los comandos del host Windows. No mergea ni decide configuración por su cuenta. |
 | **David** | el dueño | Solo lee el Telegram de cierre con el enlace al tablero. Preaprobó lo de la tabla de abajo. |
 
 Los hosts que el kit sella están en loop §1; no se repiten aquí.
 
-**Escribe quién implementó cada carril** en el cuerpo de su PR, con esa palabra exacta. De ahí sale el `-Excluir` de la revisión cruzada, que tiene un conjunto cerrado de seis nombres (loop §4): si implementó muse o cursor, que no son candidatos a revisor, se pasa `-Excluir ''` y el nombre queda solo en el PR.
+**Escribe quién implementó cada carril** en el cuerpo de su PR, con esa palabra exacta. De ahí sale el `-Excluir` de la revisión cruzada, que tiene un conjunto cerrado de seis nombres (loop §4): si implementó muse o cursor-agent, que no son candidatos a revisor, se pasa `-Excluir ''` y el nombre queda solo en el PR.
 
 ---
 
@@ -186,7 +186,7 @@ Para cada carril, en este orden. Los dos carriles llevan lo mismo, incluido el m
 **1. Elegir el binario.** Se prueban **por nombre**, y la sonda tiene que resolver como resuelve el lanzador: en `bash`, con el PATH que él mismo se pone.
 
 ```
-for t in glm cursor muse; do
+for t in glm cursor-agent muse; do
   if bash -c 'PATH=$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH; command -v '"$t" >/dev/null 2>&1
   then echo "$t=ok"; else echo "$t=AUSENTE"; fi
 done
@@ -216,13 +216,25 @@ El nombre se escribe igual que lo armaría el lanzador, `<token>-<basename del d
 
 El `Enter` va en llamada aparte: en el mismo envío se lo traga el TUI. **Arrancó** cuando la captura muestra que el CLI leyó el archivo (su propia línea de lectura o el primer paso del plan); **no arrancó** si la captura sigue mostrando el prompt vacío pasados 60 s.
 
-**4. El modo sin preguntas es `unknown` y se resuelve, no se inventa.** Cada CLI lo llama distinto y el repo no lo tiene medido para ninguno. Se averigua antes de entregar el encargo:
+**4. El modo sin preguntas, medido para los tres.** Leído de la ayuda de cada binario el 2026-09-17:
+
+| Token | Binario | Modo sin preguntas | Modo sin interfaz |
+|---|---|---|---|
+| `glm` | zcode, vía el lanzador de la Mac | `--mode yolo`, que además es el default cuando se le pasa un prompt | `-p` |
+| `cursor-agent` | el CLI de Cursor | `-f` (alias `--yolo`), más `--trust` para no preguntar por el directorio | `-p`, con `--output-format json` |
+| `muse` | el CLI de muse | `--permission-profile <id>` sobre el subcomando `exec` | el subcomando `exec`, con `--json` |
+
+**Ojo con el token de Cursor: es `cursor-agent`, no `cursor`.** En esta Mac, `cursor` es un envoltorio que busca el IDE de escritorio y muere con "No Cursor IDE installation found"; el agente de verdad es el otro. Verificado hoy corriendo los dos.
+
+Si en el futuro un binario cambia y el flag ya no existe, se averigua igual, no se adivina:
 
 ```
 <token> --help 2>&1 | grep -i -E 'permission|approve|force|yolo|sandbox'
 ```
 
-El flag que salga se anota junto al nombre de sesión. Si `--help` no ofrece ninguno, el carril se lanza igual **sin flag** y el lead contesta las aprobaciones él mismo con `/opt/homebrew/bin/tmux send-keys`, usando la tabla de preaprobaciones como respuesta: lo `Aprobado` se acepta, lo `Negado` se rechaza, y lo que no está en la tabla se rechaza y se anota como residual. Un flag adivinado puede abrir la sesión en un modo que el dueño no aprobó.
+Y si de verdad no ofrece ninguno, el carril se lanza **sin flag** y el lead contesta las aprobaciones él mismo con `/opt/homebrew/bin/tmux send-keys`, usando la tabla de preaprobaciones como respuesta: lo `Aprobado` se acepta, lo `Negado` se rechaza, y lo que no está en la tabla se rechaza y se anota como residual. Un flag adivinado puede abrir la sesión en un modo que el dueño no aprobó.
+
+**Los tres traen además modo sin interfaz**, que no es el camino de este runbook pero conviene saberlo: el lead vigila por pantalla porque así puede intervenir y porque la sesión sobrevive si el lead se muere, cosa que un proceso sin interfaz no hace.
 
 **5. TIMEBOX.** Cada carril tiene **6 horas** de reloj desde el lanzamiento hasta su `LISTO`. A las 6 h el carril pasa a `atorado` con lo que tenga, y el lead cierra con el otro. Dentro de ese tope, la regla de silencio es la de loop §12: 30 minutos sin mensaje dispara la comprobación de cuota y el relanzamiento.
 
