@@ -96,7 +96,7 @@ $hits"
 echo "ok (2): $n runbooks revisados, sin bootstrap imposible, sin docker run y sin glm viejo"
 
 # (2b) Los comandos del exec de la Mac en los autopilot llevan prefijo o ruta absoluta.
-AUTO=$(git ls-files --cached --others --exclude-standard -- 'docs/runbooks/autopilot-fase6.md' 'docs/runbooks/autopilot-fase7.md')
+AUTO=$(git ls-files --cached --others --exclude-standard -- 'docs/runbooks/autopilot-fase6.md' 'docs/runbooks/autopilot-fase7.md' 'docs/runbooks/loop-autopilot.md')
 [ -n "$AUTO" ] || fail "no encontre los runbooks de autopilot"
 hits2=""
 while IFS= read -r f; do
@@ -108,5 +108,34 @@ done <<EOF
 $AUTO
 EOF
 [ -z "$hits2" ] || fail "comandos del exec de la Mac sin prefijo de PATH ni ruta absoluta:$hits2"
-echo "ok (2b): cross-review y tmux de los autopilot con prefijo de PATH o ruta absoluta"
+echo "ok (2b): cross-review y tmux de los autopilot y del loop con prefijo de PATH o ruta absoluta"
+
+# (2c) Ningun runbook de fase designa UN modelo como lead. El lead es un rol: el
+# kit sella por host y el mismo documento tiene que servir con cualquiera de los
+# seis. Medido 2026-09-16: el runbook de Fase 7 decia "lead: Claude" y con claw o
+# kimi de lead cada merge de la cola habria fallado con "sin estado del hook".
+MODELOS='claude|codex|kimi|grok|zcode|dsh|muse|cursor|glm|gpt|opus|sonnet|deepseek|qwen'
+lead_designado() {
+  grep -E '^\| \*\*lead\*\*' \
+    | grep -v -E 'de cualquier host|cualquiera de los hosts' \
+    | grep -i -E "\b($MODELOS)\b"
+}
+FASES=$(git ls-files --cached --others --exclude-standard -- 'docs/runbooks/autopilot-fase*.md')
+[ -n "$FASES" ] || fail "no encontre runbooks de fase"
+hits3=""
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  out=$(lead_designado < "$f" | sed "s|^|$f:|")
+  [ -n "$out" ] && hits3="$hits3
+$out"
+done <<EOF
+$FASES
+EOF
+[ -z "$hits3" ] || fail "un runbook de fase designa un modelo como lead (el lead es un rol):$hits3"
+# El detector discrimina: la fila con modelo se marca, la fila con rol pasa.
+printf '%s\n' '| **lead** | Claude, sesion en la Mac | manda |' | lead_designado | grep -q . \
+  || fail "(2c) el detector NO marca un lead nombrado por modelo"
+printf '%s\n' '| **lead** | tu: un CLI en tmux, de cualquier host del kit | manda |' | lead_designado | grep -q . \
+  && fail "(2c) el detector marca de mas: la fila escrita como rol"
+echo "ok (2c): ningun runbook de fase designa un modelo como lead"
 echo "TODO VERDE: runbooks sin contradicciones con el kit ni con el entorno"

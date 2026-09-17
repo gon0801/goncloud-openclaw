@@ -77,12 +77,16 @@ for a in 'LISTO <sha>' \
          'se invoca por `bash`' \
          '${SAIKIT_TOOLS:-' \
          'ATORADO kit ausente' \
+         '-Alcance last-commit' \
+         'conjuntos cerrados' \
          'nunca lo escribe el lead' \
          'CodeRabbit no es un proveedor de modelo' \
          'El sync del gateway no es un cron'; do
-  grep -qF "$a" "$DOC" || fail "$DOC: falta el ancla: $a"
+  # `--` obligatorio: un ancla que empieza con `-` (como `-Alcance last-commit`)
+  # la lee grep como bandera y sale "Invalid argument", no como ancla faltante.
+  grep -qF -- "$a" "$DOC" || fail "$DOC: falta el ancla: $a"
 done
-echo "ok (3): las 32 anclas de reglas están"
+echo "ok (3): las 34 anclas de reglas están"
 
 # (4) La fila del lead no nombra ningún modelo. Es la regla central del documento.
 hit=$(lead_nombra_modelo < "$DOC")

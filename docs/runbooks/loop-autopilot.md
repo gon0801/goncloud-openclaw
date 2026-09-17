@@ -62,7 +62,18 @@ Medido: 2026-09-16, revisión de cierre de la Fase 6: en los siete carriles, al 
 
 ## 4. Política de rondas de revisión cruzada
 
-- **Ronda 1**: el revisor más fuerte disponible, excluyendo al modelo que implementó. Comando: `pwsh -NoProfile -File /Users/dn/quality-kit/cross-review.ps1 -Con auto -Excluir <modelo-que-implementó> -Alcance branch`, con ruta absoluta de `pwsh` cuando corre por exec del nodo.
+- **Ronda 1**: el revisor más fuerte disponible, excluyendo al modelo que implementó. Comando, desde el worktree del carril:
+
+```
+/Users/dn/.local/bin/pwsh -NoProfile -File /Users/dn/quality-kit/cross-review.ps1 \
+  -Con auto -Excluir <modelo> -Alcance last-commit
+```
+
+  `pwsh` va con ruta absoluta siempre, no solo por exec del nodo: no está en el PATH que hereda un CLI lanzado en tmux.
+
+  **Los dos parámetros tienen conjuntos cerrados y el script aborta si te sales.** `-Alcance` acepta `staged`, `working` y `last-commit`, y **nada más**: no existe un alcance de rama entera, así que la revisión es por commit y por eso el loop pide un commit por tarea. Un carril con varios commits se revisa commit por commit, o antes de commitear con `-Alcance working`. `-Excluir` acepta solo los seis de la cadena (`claude`, `codex`, `grok`, `kimi`, `qwen`, `glm`) o vacío: si implementó alguien que no es candidato a revisor, como muse o cursor, se pasa `-Excluir ''` y se anota quién implementó en el PR, porque no hay a quién excluir. `glm` en esa cadena **es** zcode.
+
+Medido: 2026-09-16, lectura del script: `-Alcance branch` no es un valor válido y `-Excluir cursor` tampoco; el loop los mandaba y el comando abortaba por validación de parámetro antes de revisar nada.
 - **Si salen altas**: la ronda 2 la hace un modelo **distinto** al de la ronda 1. Se pide con `-Con <otro>`.
 - **Se para** cuando una ronda no trae altas ni medias. Las bajas de esa última ronda se atienden si son de una línea; si no, se declaran como residuales.
 - **Tope: tres rondas por PR.** A la cuarta, el lead decide qué se corrige y qué se declara. Lo que se corrige va como encargo `BRIEF-r<N>.md` al mismo implementador, nunca lo escribe el lead; el resto se declara como residual con su razón. Más rondas no compran calidad: compran costo.
