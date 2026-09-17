@@ -1,6 +1,6 @@
 ---
 name: Mac exec detach poll
-description: Cuando un comando largo en el nodo Mac (exec host=node) muere con COMPANION_APP_UNAVAILABLE, o un binario comun (rg, timeout, uv, gh, corepack) falta en el exec. Relanza despegado con nohup, vigila con comandos cortos y usa las rutas del PATH restringido.
+description: Cuando un comando largo en el nodo Mac (exec host=node) muere con COMPANION_APP_UNAVAILABLE, un binario comun (rg, timeout, uv, gh, corepack) falta en el exec, o un CLI lanzado en tmux muere al instante sin error. Relanza despegado con nohup, vigila con comandos cortos y usa las rutas del PATH restringido.
 ---
 
 # Mac exec detach poll
@@ -46,9 +46,19 @@ reemplazo:
   2026-09-13 y PRs #292/#2833 del 2026-09-16): usala asi; solo si falta del todo, el PR va por API
   (skill pr-sin-gh). `pre-commit` no esta como comando: los candados de
   commit corren igual via el shim de `.git/hooks/`.
-- Un tarball de node exige anteponer `<dir>/bin` al PATH antes de usar
-  `corepack`/`npm`: sus scripts arrancan con `env node` y fallan con
-  exit 127 llamados por ruta absoluta sin PATH.
+- Todo ejecutable con shebang `env node` (tarballs, `corepack`/`npm`,
+  lanzadores como `~/bin/glm`) muere si el PATH del llamante no trae
+  node: por ruta absoluta falla con exit 127, y en
+  `tmux new-session` la sesion desaparece en segundos con rc=0 y sin
+  error visible. Firma medida (Fase 7, 2026-09-17): `new-session`
+  rc=0 pero `has-session` dice `can't find session`; al correr el
+  binario directo (`/Users/dn/bin/glm --help`) sale
+  `env: node: No such file or directory`. Recuperacion verificada:
+  embeber el PATH en el comando de la sesion —
+  `new-session -d -s <s> -c <dir> "PATH=/opt/homebrew/bin:<bins>:$PATH <bin>"`
+  (node vive en `/opt/homebrew/bin`; para un tarball antepone
+  `<dir>/bin`). Diagnostica siempre corriendo el binario directo
+  primero; no reintentes el `new-session` a ciegas.
 
 ## Criterio de cierre
 
