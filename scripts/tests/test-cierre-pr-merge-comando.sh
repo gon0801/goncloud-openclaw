@@ -60,7 +60,7 @@ echo "ok (2): el paso 2 asigna ID y OID antes de la mutación"
 gh_pelado() {
   { grep -v -i -E 'nunca|never|jam[aá]s|bloquead|prohibid' || true; } \
     | grep -o -E '`[^`]*`' \
-    | grep -E '^`(gh|[A-Z]+=\$\(gh)[[:space:]]'
+    | grep -E '^`(gh|[A-Z]+=\$\(gh|read [^`]*< <\(gh)[[:space:]]'
 }
 for f in "$A" "$B"; do
   hit=$(seccion "$f" | gh_pelado || true)
@@ -71,7 +71,8 @@ echo "ok (3): los ejemplos ejecutables usan la ruta absoluta de gh"
 # (4) El detector discrimina: las formas malas se marcan y las buenas pasan.
 for c in '`gh pr view 45 --json state`' \
          '`gh api graphql -f query=x`' \
-         '`ID=$(gh pr view 45 --json id)`'; do
+         '`ID=$(gh pr view 45 --json id)`' \
+         '`read -r ID OID < <(gh pr view 45 --json id,headRefOid)`'; do
   printf '%s\n' "$c" | gh_pelado | grep -q . || fail "el detector NO marca: $c"
 done
 for c in '`/opt/homebrew/bin/gh pr view 45 --json state`' \
