@@ -61,19 +61,18 @@ Four read-only questions, in this order. Stop at the first `no`.
 
 ```
 G=~/.openclaw/bin/openclaw
+command -v timeout >/dev/null || { echo "ATORADO: sin timeout, la sonda no mide nada"; exit 1; }
+test -x "$G"                 || { echo "ATORADO: la CLI no es ejecutable"; exit 1; }
 for i in 1 2; do
   timeout 70 $G gateway call status --timeout 60000 >/dev/null 2>&1 && { echo "vivo=0"; break; }
   [ $i = 2 ] && echo "vivo=1"
 done
 ```
 
-**Check the two prerequisites before believing the answer.** `timeout` and the
-CLI itself both make the probe fail, and neither means the gateway is down:
-
-```
-command -v timeout >/dev/null || echo "ATORADO: sin timeout, la sonda no mide nada"
-test -x ~/.openclaw/bin/openclaw || echo "ATORADO: la CLI no es ejecutable"
-```
+**The two prerequisite lines gate the loop; they do not just warn.** `timeout`
+missing or the CLI not executable both make every probe fail, and neither means
+the gateway is down. Printing a warning and then running the loop anyway still
+ends in `vivo=1`, which is the wrong verdict for a broken local setup: they exit.
 
 **Two attempts, not one, and this is measured.** Writing this skill, the first
 probe failed and the gateway was up: five probes right after it answered, three
