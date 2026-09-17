@@ -44,15 +44,34 @@ seccion() {
   awk '/^1\. Merge order for stacked PRs/{f=1} /^Precondiciones \(Fase 6, 6\.5b\)/{f=0} f' "$1"
 }
 
-# (2) El paso 2 asigna las DOS variables que la mutación consume.
+# (2) La mutación recibe los DOS valores, y ninguno queda sin origen.
+# El bug original (hallazgo mayor de CodeRabbit en #52) era un solo `ID=$(...)` que
+# se quedaba con los dos valores pegados mientras `$OID` nunca se asignaba, asi que
+# la ruta de merge autorizada mandaba una entrada GraphQL invalida.
+# Esto comprueba el FONDO, no una forma concreta: el 2026-09-17 el agente vivo midio
+# que `read -r ID OID < <(...)` falla con "syntax error near unexpected token" porque
+# el exec por node corre /bin/sh, que no tiene sustitucion de proceso, y reescribio la
+# skill para pasar los dos valores literales. Esa correccion era buena y la version
+# anterior de esta prueba, que exigia `read -r ID OID`, la habria bloqueado.
 for f in "$A" "$B"; do
   s=$(seccion "$f")
-  printf '%s\n' "$s" | grep -q 'oid="\$OID"' \
-    || fail "$f: el paso 2 ya no manda oid=\$OID; esta prueba quedó desalineada"
-  printf '%s\n' "$s" | grep -q 'read -r ID OID' \
-    || fail "$f: la mutación usa \$ID y \$OID pero la sección no los asigna a los dos (hallazgo mayor de CodeRabbit en #52)"
+  printf '%s\n' "$s" | grep -q -- '-f id=' \
+    || fail "$f: el paso 2 ya no manda -f id= a la mutación; esta prueba quedó desalineada"
+  printf '%s\n' "$s" | grep -q -- '-f oid=' \
+    || fail "$f: el paso 2 ya no manda -f oid= a la mutación; esta prueba quedó desalineada"
+  # Si usa la variable $OID, tiene que asignarla en la misma sección. Si pasa el valor
+  # literal (<OID> o el sha), no hay variable que asignar y el bug original no cabe.
+  if printf '%s\n' "$s" | grep -q 'oid="\$OID"'; then
+    # Ojo con el verde falso: la seccion EXPLICA que `read -r ID OID < <(...)` falla,
+    # asi que buscar esa cadena a secas la encuentra en la prosa que dice lo contrario.
+    # Solo cuenta una asignacion en una linea que no este hablando de un fallo.
+    printf '%s\n' "$s" | grep -E 'OID=|read -r ID OID' \
+      | grep -v -i -E 'fail|falla|error|no tiene|sin sustitucion|sustitución' \
+      | grep -q . \
+      || fail "$f: la mutación usa \$OID y la sección no lo asigna en ninguna parte (es el bug de #52)"
+  fi
 done
-echo "ok (2): el paso 2 asigna ID y OID antes de la mutación"
+echo "ok (2): la mutación recibe id y oid, y toda variable que use queda asignada"
 
 # (3) Ningún ejemplo ejecutable de la sección invoca `gh` pelado.
 # Cuenta como invocación un tramo entre backticks que EMPIEZA con `gh ` o con
@@ -60,8 +79,15 @@ echo "ok (2): el paso 2 asigna ID y OID antes de la mutación"
 gh_pelado() {
   { grep -v -i -E 'nunca|never|jam[aá]s|bloquead|prohibid' || true; } \
     | grep -o -E '`[^`]*`' \
-    | grep -E '^`(gh|[A-Z]+=\$\(gh|read [^`]*< <\(gh)[[:space:]]'
+    | grep -E '^`(gh|[A-Z]+=\$\(gh|read [^`]*< <\(gh)[[:space:]]' \
+    | grep -v -E '\.\.\.`$|^`gh( [a-z-]+)?`$'
 }
+# El ultimo filtro deja pasar la PROSA: un tramo que termina en `...`, o que es solo
+# el nombre del comando sin un solo argumento, habla del comando en vez de invocarlo.
+# Lo que se persigue es un ejemplo COPIABLE sin el prefijo del PATH, y ninguna de esas
+# dos formas lo es. La skill del 2026-09-17 explica cuando vale -R diciendo que
+# "`-R <owner>/<repo>` vale para `gh pr ...` pero `gh api` no tiene ese flag", y sin
+# este filtro esa explicacion se leia como un ejemplo ejecutable.
 for f in "$A" "$B"; do
   hit=$(seccion "$f" | gh_pelado || true)
   [ -z "$hit" ] || fail "$f: ejemplo ejecutable con gh pelado (el exec del nodo Mac sanea el PATH): $hit"
