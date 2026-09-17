@@ -75,7 +75,7 @@ for a in 'LISTO <sha>' \
          'Jamás `--no-verify`' \
          'rama del worktree en el que estás parado' \
          'se invoca por `bash`' \
-         '${SAIKIT_TOOLS:-' \
+         'hashea el token literal' \
          'ATORADO kit ausente en ' \
          '-Alcance last-commit' \
          'conjuntos cerrados' \

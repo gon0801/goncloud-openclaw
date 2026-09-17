@@ -103,14 +103,15 @@ El merge es siempre el del kit, con `--confirmado` como el sí escrito del dueñ
 **Dónde y cómo se corre.** El script opera sobre la **rama del worktree en el que estás parado**, no toma número de PR y toma un lock por clon, así que se corre con `cd` al worktree de ese carril. En orden, desde ahí:
 
 ```
-K=${SAIKIT_TOOLS:-/Users/dn/dev/summonaikit-claude/tools}
-test -r $K/saikit-merge.sh || { echo "kit ausente en $K"; exit 1; }
-bash $K/saikit-merge.sh --dry-run       # debe terminar en LISTO
-bash $K/saikit-merge.sh --confirmado    # squash con --match-head-commit
-bash $K/saikit-postmerge.sh --merge-commit <merge_commit> --rama <default>
+test -r /Users/dn/dev/summonaikit-claude/tools/saikit-merge.sh || { echo ATORADO kit ausente en /Users/dn/dev/summonaikit-claude/tools; exit 1; }
+bash /Users/dn/dev/summonaikit-claude/tools/saikit-merge.sh --dry-run       # debe terminar en LISTO
+bash /Users/dn/dev/summonaikit-claude/tools/saikit-merge.sh --confirmado    # squash con --match-head-commit
+bash /Users/dn/dev/summonaikit-claude/tools/saikit-postmerge.sh --merge-commit <merge_commit> --rama <default>
 ```
 
-**La ruta del kit no se adivina.** El default es donde vive hoy en esta Mac; cualquier otra máquina la pasa en `SAIKIT_TOOLS`. Si la comprobación de arriba falla, el lead **no busca el script por el disco ni cambia de ruta de merge**: reporta `ATORADO kit ausente en <ruta>` y para. Un merge por otra vía deja el PR sin sello y rompe la cadena.
+**La ruta va escrita entera, no en una variable.** El candado léxico de este repo hashea el token literal del script y lo compara contra el manifiesto del kit: escrito como `$K/<script>` el token no resuelve, el hash no casa, y el candado deniega el comando con "hash does not match the kit manifest" aunque el kit esté intacto. Medido 2026-09-16, en las dos formas: afectaba a todos los merges de una fase. En otra máquina se sustituye esa ruta por la suya, también escrita entera.
+
+**Si esa primera línea falla, el lead no busca el script por el disco ni cambia de ruta de merge**: reporta `ATORADO kit ausente en <ruta>` y para. Un merge por otra vía deja el PR sin sello y rompe la cadena.
 
 `saikit-postmerge.sh` en VERDE cierra el ítem; en ROJO trae el comando de reversa listo; en UNKNOWN se anota y aplica la compuerta propia del ítem. El script del kit vive en `644` y **se invoca por `bash`**: comprobar su existencia con `test -x` da falso negativo. Si un PR no tiene worktree propio, se abre uno con `git worktree add <ruta> <rama>` solo para mergearlo y se borra después.
 
