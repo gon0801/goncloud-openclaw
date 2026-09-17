@@ -222,15 +222,21 @@ El `Enter` va en llamada aparte: en el mismo envío se lo traga el TUI. **Arranc
 |---|---|---|---|
 | `glm` | zcode, vía el lanzador de la Mac | `--mode yolo`, que además es el default cuando se le pasa un prompt | `-p` |
 | `cursor-agent` | el CLI de Cursor | `-f` (alias `--yolo`), más `--trust` para no preguntar por el directorio | `-p`, con `--output-format json` |
-| `muse` | el CLI de muse | `--permission-profile <id>` sobre el subcomando `exec` | el subcomando `exec`, con `--json` |
+| `muse` | el CLI de muse | `--permission-profile <id>`, con el id en `unknown` (ver abajo) | el subcomando `exec`, con `--json` |
+
+**El flag va en el lanzamiento, y por eso el comando de arriba no lo trae escrito.** El bloque que abre la sesión termina en `"$BIN"` a secas porque el flag depende de qué binario ganó la sonda: el lead le agrega el de la fila que le tocó, y solo se lanza sin flag en el caso de la última frase de esta sección. Lanzar con flag disponible y además contestar a mano no es la intención; el flag es lo que evita las preguntas.
+
+**El id del perfil de muse es `unknown`, y se queda `unknown`.** El flag existe, pero muse no lista sus perfiles: ni `muse config status` ni su configuración local los nombran, comprobado hoy. Así que para muse el lead **no inventa un id**. Se lo pregunta a muse en el primer turno ("qué perfiles de permiso acepta") y lo anota junto al nombre de sesión, o lo lanza sin el flag y contesta las aprobaciones a mano, que es la ruta de la última frase. Un id inventado se rechaza en el arranque y el carril nace muerto sin decir por qué.
 
 **Ojo con el token de Cursor: es `cursor-agent`, no `cursor`.** En esta Mac, `cursor` es un envoltorio que busca el IDE de escritorio y muere con "No Cursor IDE installation found"; el agente de verdad es el otro. Verificado hoy corriendo los dos.
 
 Si en el futuro un binario cambia y el flag ya no existe, se averigua igual, no se adivina:
 
 ```
-<token> --help 2>&1 | grep -i -E 'permission|approve|force|yolo|sandbox'
+<token> --help 2>&1 | grep -i -E 'permission|approve|force|yolo|sandbox|trust'
 ```
+
+`trust` va en el patrón a propósito: es el flag de `cursor-agent` para no preguntar por el directorio, y sin esa palabra la comprobación encuentra los de `glm` y `muse` pero **no** el suyo, así que un cambio en él pasaría por un binario sin flags. Si agregas una herramienta a la lista, agrega también la palabra de su flag aquí, o la comprobación mentirá para ella.
 
 Y si de verdad no ofrece ninguno, el carril se lanza **sin flag** y el lead contesta las aprobaciones él mismo con `/opt/homebrew/bin/tmux send-keys`, usando la tabla de preaprobaciones como respuesta: lo `Aprobado` se acepta, lo `Negado` se rechaza, y lo que no está en la tabla se rechaza y se anota como residual. Un flag adivinado puede abrir la sesión en un modo que el dueño no aprobó.
 
