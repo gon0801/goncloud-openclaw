@@ -63,8 +63,12 @@ with `openclaw system event` instead of you polling tmux on a cron. Events you w
   screen did not change for at least 90 s. A TUI that keeps repainting the same screen (zcode,
   muse) counts as quiet: the watcher compares content, not tmux timestamps.
 - `tmux: <session> waiting for approval for Ns | cmd=<cmd> cwd=<path> | read it before acting: ...`
-  — a permission prompt is on screen (`Allow once`, `Always allow`, `Would you like to allow`).
-  Sent at once, once per distinct prompt, and again every 15 min while nobody answers. Answer it
+  — a dialog is waiting for a person, whatever the CLI: a permission prompt (`Do you want to
+  proceed?`, `Allow once`, `Run this command?`), a folder-trust dialog, or something that is not a
+  permission at all (codex stops on "usage limit, switch model? Press enter to confirm"). The
+  watcher recognizes the shape of the dialog, not only the question. Sent at once, once per
+  distinct prompt, and again every 15 min while nobody answers. A marked session that simply stays
+  quiet gets its `quiet` event repeated every 30 min until you act on it or unmark it. Answer it
   from the preapproval table of the runbook or brief that launched that session: approved → accept,
   denied or not listed → reject. If the same session keeps asking, stop answering one by one and
   switch its mode. zcode (`glm`), measured 2026-09-17: `/mode yolo` is refused mid-turn, so send

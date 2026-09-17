@@ -268,6 +268,131 @@ $(cat "$CALLS")"
   "$TM" -L "$L" kill-session -t glm-permiso; "$TM" -L "$L" kill-session -t glm-prosa; run_once >/dev/null 2>&1
   echo "ok (2f): prompt de permiso avisa de inmediato, una vez por prompt, con recordatorio, sin duplicar 'quiet' y sin confundirse con prosa"
 
+  # (2g) CUALQUIER CLI, no solo zcode y muse. Medido el 2026-09-17 lanzando los diez CLIs de la
+  # Mac: cada pantalla de abajo es la cola REAL de ese CLI esperando a una persona (en ASCII
+  # plano, que es como la compara el vigilante). No todas son permisos: codex se queda en un
+  # dialogo de limite de uso, y codex/kimi/cursor-agent en el de confianza de la carpeta. Lo
+  # comun a todas es la linea de ayuda del dialogo (Enter confirma / Esc cancela).
+  PANTALLA_H="$T/pantalla-h.txt"; printf 'arrancando\n' >"$PANTALLA_H"
+  "$TM" -L "$L" new-session -d -s cli-generico -x 120 -y 30 "$TUI $PANTALLA_H" || fail "no se pudo crear cli-generico"
+  mark cli-generico
+  : >"$CALLS"
+  sleep 1; run_p || fail "--once (2g, arranque) fallo"
+  espera_aviso() { # $1 = nombre del caso; el archivo PANTALLA_H ya trae la pantalla
+    antes=$(grep -c 'cli-generico waiting for approval' "$CALLS")
+    sleep 1; run_p || fail "--once (2g, $1) fallo"
+    ahora=$(grep -c 'cli-generico waiting for approval' "$CALLS")
+    [ "$ahora" -eq $((antes + 1)) ] || fail "(2g) la pantalla de espera de $1 debe avisar 'waiting for approval'; avisos antes=$antes ahora=$ahora
+$(cat "$PANTALLA_H")"
+  }
+  espera_silencio() {
+    antes=$(wc -l <"$CALLS" | tr -d ' ')
+    sleep 1; run_p || fail "--once (2g, $1) fallo"
+    ahora=$(wc -l <"$CALLS" | tr -d ' ')
+    [ "$ahora" -eq "$antes" ] || fail "(2g) la pantalla OCIOSA o TRABAJANDO de $1 no es un dialogo y no debe avisar de inmediato:
+$(tail -1 "$CALLS")"
+  }
+  cat >"$PANTALLA_H" <<'P'
+ Detected a destructive delete command:
+ rm -rf /tmp/e1verif /tmp/mig1.log
+ Run it? [plugin:claude-code-harness]
+ Do you want to proceed?
+   1. Yes
+   2. No
+ Esc to cancel  Tab to amend
+P
+  espera_aviso "claude (permiso, medido en fase8-lead)"
+  cat >"$PANTALLA_H" <<'P'
+ You've hit your usage limit. Visit the settings page to purchase more credits.
+  Approaching rate limits
+  Switch to gpt-5.6-luna for lower credit usage?
+ 1. Switch to gpt-5.6-luna                 Fast and affordable agentic coding model.
+  2. Keep current model
+  Press enter to confirm or esc to go back
+P
+  espera_aviso "codex (limite de uso: no es un permiso, pero espera a una persona)"
+  cat >"$PANTALLA_H" <<'P'
+> You are in /tmp/pp-codex
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk.
+ 1. Yes, continue
+  2. No, quit
+  Press enter to continue
+P
+  espera_aviso "codex (confianza de la carpeta)"
+  cat >"$PANTALLA_H" <<'P'
+  Trust this folder?
+  navigate  Enter select  Esc exit
+  /tmp/pp-kimi
+     Trust this folder
+     Don't trust
+P
+  espera_aviso "kimi (confianza de la carpeta)"
+  cat >"$PANTALLA_H" <<'P'
+  $ echo hola > /tmp/pp-cursor-agent.txt Waiting for approval...
+ $  echo hola > /tmp/pp-cursor-agent.txt in .
+ Run this command?
+ Not in allowlist: echo
+   Run (once) (y)
+    Add Shell(echo) to allowlist? (tab)
+    Skip & tell the agent what to do instead (esc or n)
+P
+  espera_aviso "cursor-agent (permiso)"
+  cat >"$PANTALLA_H" <<'P'
+  Cursor Agent can execute code and access files in this directory.
+  Do you trust the contents of this directory?
+    [a] Trust this workspace
+    [q] Quit
+  Use arrow keys to navigate, Enter to select, or press the key shown
+P
+  espera_aviso "cursor-agent (confianza)"
+  cat >"$PANTALLA_H" <<'P'
+Would you like to allow this network access?
+  network: registry.npmjs.org:443 https
+  requested by:
+  $ bash .saikit/scratch/D/env-sano.sh
+P
+  espera_aviso "muse (red)"
+  cat >"$PANTALLA_H" <<'P'
+ Un instalador cualquiera pregunta:
+ Overwrite existing config? [y/N]
+P
+  espera_aviso "un CLI desconocido con un [y/N]"
+  # Y las pantallas OCIOSAS o TRABAJANDO de esos mismos CLIs, medidas el mismo dia, NO son dialogos.
+  for ociosa in ' ? for shortcuts' ' esc to interrupt' ' yolo  K3-256k thinking: high   @: mention files | ! to run a shell command' \
+                '  Auto mode (shift + tab to cycle)' '  tab agents  ctrl+p commands' '  Shift+Tab:mode  |  Ctrl+x:shortcuts' \
+                ' /help commands  /status details' ' Voice input ( + v to start)' ' Ask Codex to do anything' \
+                ' Wait for the active turn or press Ctrl+C before running a slash command.'; do
+    printf 'trabajo normal\n%s\n' "$ociosa" >"$PANTALLA_H"
+    espera_silencio "$ociosa"
+  done
+  "$TM" -L "$L" kill-session -t cli-generico; run_once >/dev/null 2>&1
+  echo "ok (2g): ocho pantallas de espera medidas en seis CLIs avisan; diez pantallas ociosas o trabajando no"
+
+  # (2h) La red universal: una sesion marcada que sigue callada se RECUERDA. Un dialogo que ningun
+  # patron reconozca (un CLI que no existe hoy) igual deja la pantalla quieta, y quieta avisa.
+  PANTALLA_I="$T/pantalla-i.txt"; printf 'un dialogo que nadie ha visto nunca\n   (A)ceptar   (R)echazar\n' >"$PANTALLA_I"
+  "$TM" -L "$L" new-session -d -s cli-raro -x 80 -y 20 "$TUI $PANTALLA_I" || fail "no se pudo crear cli-raro"
+  mark cli-raro
+  : >"$CALLS"
+  run_q() { QUIET_REMIND_SECS=3 run_once; }
+  # El primer aviso puede salir en la primera o en la segunda vista (depende de cuanto llevaba
+  # pintada la pantalla), asi que se espera a verlo y el reloj del recordatorio corre desde ahi.
+  i=0; n=0
+  while [ "$n" -eq 0 ] && [ "$i" -lt 4 ]; do
+    sleep 1; run_q || fail "--once (2h, esperando el primer aviso) fallo"
+    n=$(grep -c 'cli-raro quiet for' "$CALLS"); i=$((i + 1))
+  done
+  [ "$n" -eq 1 ] || fail "(2h) una pantalla quieta que ningun patron reconoce igual avisa 'quiet'; hubo $n"
+  run_q || fail "--once (2h, aun no toca recordar) fallo"
+  n=$(grep -c 'cli-raro quiet for' "$CALLS")
+  [ "$n" -eq 1 ] || fail "(2h) antes de QUIET_REMIND_SECS no se repite; hubo $n"
+  sleep 4; run_q || fail "--once (2h, recordatorio) fallo"
+  n=$(grep -c 'cli-raro quiet for' "$CALLS")
+  [ "$n" -eq 2 ] || fail "(2h) una sesion marcada que SIGUE callada se recuerda al pasar QUIET_REMIND_SECS; hubo $n:
+$(cat "$CALLS")"
+  "$TM" -L "$L" kill-session -t cli-raro; run_once >/dev/null 2>&1
+  echo "ok (2h): el silencio se recuerda; un dialogo que ningun patron conoce no se queda sin avisar"
+
   "$TM" -L "$L" kill-server 2>/dev/null
   echo "ok (2): maquina de estados del vigilante verificada con tmux real ($TM)"
 
@@ -360,6 +485,8 @@ grep -qF -- '-u OPENCLAW_WATCH' "$SK" || fail "$SK: falta la instruccion de desm
 # preaprobaciones, y cambiar de modo en vez de contestar de uno en uno.
 grep -qF 'waiting for approval for Ns' "$SK" || fail "$SK: falta el evento 'waiting for approval'"
 grep -qF 'preapproval table' "$SK" || fail "$SK: falta de donde sale la respuesta a un prompt de permiso"
+grep -qF 'whatever the CLI' "$SK" || fail "$SK: el evento de espera no es solo de un CLI; la skill tiene que decirlo"
+grep -qF 'repeated every 30 min' "$SK" || fail "$SK: falta que el silencio de una sesion marcada se recuerda"
 grep -qF '/mode yolo' "$SK" || fail "$SK: falta como cambiar zcode a modo sin preguntas a media corrida"
 
 DISP=agents/main/agent/workshop-skills/agent-dispatch/SKILL.md

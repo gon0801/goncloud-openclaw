@@ -44,7 +44,7 @@ Medido: 2026-09-14, la skill `mac-tmux-control` nació leyendo el spinner de Cla
 
 Cada tarea de un carril pasa por esto, en este orden. Ningún paso se salta; si uno no aplica, se escribe por qué en el PR.
 
-1. **Encargo.** El lead escribe `BRIEF.md` en la raíz del worktree del carril: GOAL con la fila del plan verbatim, SCOPE con la tabla de archivos, CONTEXT con rutas absolutas, ACCEPTANCE con la DoD verbatim, VERIFY con los comandos exactos, TIMEBOX, FORBIDDEN y REPORT. Un encargo por carril, no por tarea.
+1. **Encargo.** El lead escribe `BRIEF.md` en la raíz del worktree del carril: GOAL con la fila del plan verbatim, SCOPE con la tabla de archivos, CONTEXT con rutas absolutas, ACCEPTANCE con la DoD verbatim, VERIFY con los comandos exactos, TIMEBOX, FORBIDDEN y REPORT. Un encargo por carril, no por tarea. **El encargo viaja como archivo.** Por tmux solo va una línea corta que lo nombra ("Lee `<ruta>/BRIEF.md` y haz lo que pide"), con el `Enter` en llamada aparte: con textos largos el TUI se traga el `Enter` y el encargo queda escrito sin enviarse.
 2. **Implementación.** El implementador trabaja en su worktree, commitea con el hook, y termina con la línea de contrato. Donde la fila dice `[tdd:required]`, el rojo va pegado en `.saikit/scratch/<carril>/tdd.md`; sin rojo pegado, no terminó.
 3. **Auditoría del lead, antes de cualquier PR.** El lead lee el commit, corre la batería una vez, y **muta él mismo** lo que la prueba protege: revierte el cambio en una copia y comprueba que la prueba se pone en rojo. Una prueba que pasa igual sin el arreglo no cuenta, y la tarea vuelve al paso 1 con un encargo de corrección.
 4. **PR en borrador.** El lead hace push y abre el PR **como draft**, desde el worktree, con el cuerpo en archivo. El CI corre; CodeRabbit no.
@@ -194,6 +194,9 @@ Aplican en toda fase. El runbook de fase agrega las suyas y no repite estas.
 | El revisor cruzado sale 3 | Revisor interno, declarado en el PR. No se espera. |
 | CodeRabbit sin cuota o sin respuesta en 20 minutos | No bloquea. Línea en el PR y en el Telegram. Se reintenta tras el próximo push. |
 | Cuota agotada o rate limit de un **proveedor de modelo** (el del implementador o el del revisor) por más de 30 minutos | El carril se detiene y se declara. Los demás siguen. No se cambia de modelo ni de proveedor por cuenta propia. CodeRabbit no es un proveedor de modelo: su fila es la de arriba y nunca detiene un carril. |
+| Una sesión queda esperando a una persona: permiso, confianza de la carpeta, límite de uso con cambio de modelo | Llega sola, sea el CLI que sea: el vigilante manda `waiting for approval`, y recuerda cada 30 minutos a toda sesión marcada que siga callada. Se contesta con la tabla de preaprobaciones del runbook; lo que no está en la tabla se rechaza y se declara. Si el CLI tiene modo sin preguntas, se cambia de modo en vez de contestar de una en una. |
+| Nadie vigila una sesión | **Toda** sesión que la corrida lanza se marca al lanzarla, **la del lead incluida**: `/opt/homebrew/bin/tmux set-environment -t <sesión> OPENCLAW_WATCH 1`. Sin marca el vigilante la ignora por diseño. Se desmarcan todas al cerrar la fase. |
+| Un comando de limpieza se vuelve pregunta | El hook de seguridad convierte en pregunta cualquier borrado destructivo, aunque sea bajo `/tmp`: `rm -rf`, `DROP DATABASE`. Los directorios de trabajo se crean con `mktemp -d` y no se borran; las bases de verificación llevan nombre único y se dejan. **No se limpia durante la corrida**: el cierre declara qué quedó, con rutas y nombres de base. |
 | El lead se cae | Claw relanza otro host de la lista; sección 9. |
 | Un implementador muere o calla 30 minutos sin mensaje de cuota | Se relanza una vez con el mismo encargo. A la segunda, atorado y declarado. |
 | El implementador hizo push o abrió el PR solo | No se castiga ni se rehace: se verifica igual y se anota como desvío de proceso. |
@@ -202,6 +205,8 @@ Aplican en toda fase. El runbook de fase agrega las suyas y no repite estas.
 | Lo único que detiene toda la corrida | Perder acceso a GitHub o a la Mac, o un gateway que no responde tras un reinicio. Todo lo demás detiene un carril y deja evidencia. |
 
 Medido: 2026-09-15 y 16, corrida de la Fase 6: cada fila de esta tabla es una situación que ocurrió al menos una vez esa noche y se resolvió a mano o se declaró.
+
+Medido: 2026-09-17, corridas de las Fases 7 y 8, las tres filas de espera y vigilancia. En la Fase 8 el verificador del lead empezó una comprobación con `rm -rf` de un directorio bajo `/tmp`; el hook lo volvió pregunta a las 00:20 y nadie la contestó hasta las 07:15, 6 h 54 min, porque la sesión del lead no estaba marcada. El comando tardó segundos. En la Fase 7 un carril pasó 7 h en un prompt de red. Las pantallas de espera de los diez CLIs de la Mac se midieron ese día: no todas son permisos (codex se detiene en "límite de uso, ¿cambiar de modelo?"), y por eso el vigilante reconoce la forma del diálogo y no solo la pregunta.
 
 ---
 

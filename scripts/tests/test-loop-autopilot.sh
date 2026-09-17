@@ -49,6 +49,11 @@ echo "ok (2): las 13 secciones existen y van en orden"
 
 # (3) Cada regla tiene su ancla. Cambiar la regla = cambiar el ancla en el mismo commit.
 for a in 'LISTO <sha>' \
+         'la del lead incluida' \
+         'mktemp -d' \
+         'No se limpia durante la corrida' \
+         'El encargo viaja como archivo' \
+         'sea el CLI que sea' \
          'ATORADO <razón en una línea>' \
          'muta él mismo' \
          'como draft' \

@@ -13,9 +13,21 @@
 # #{window_activity} is only used once, as the starting point the first time a session is seen.
 # NOT #{session_activity}: that one tracks client activity (attach, keys), not pane output.
 #
-# A permission prompt does not wait for QUIET_SECS: if the last APPROVAL_TAIL_LINES non-empty
-# lines of the screen match APPROVAL_RE, a "waiting for approval" event goes out at once, once
-# per distinct prompt, and again every APPROVAL_REMIND_SECS while nobody answers. "Distinct" is
+# A dialog waiting for a person does not wait for QUIET_SECS: if the last APPROVAL_TAIL_LINES
+# non-empty lines of the screen match APPROVAL_RE (case-insensitive), a "waiting for approval"
+# event goes out at once, once per distinct prompt, and again every APPROVAL_REMIND_SECS while
+# nobody answers. APPROVAL_RE is two things. (1) The questions MEASURED 2026-09-17 on the ten CLIs
+# of this Mac: claude ("Do you want to proceed?"), zcode ("Allow once"), muse ("Would you like to
+# allow"), cursor-agent ("Run this command?", "Waiting for approval"), and the folder-trust
+# dialogs of codex, kimi and cursor-agent. kimi, qwen, grok and opencode start in a no-ask mode
+# and showed none. (2) The signature every one of those dialogs shares whatever the CLI: the
+# help line of a selection dialog ("Enter to select", "Press enter to confirm", "Esc to cancel")
+# or a y/n. That second half is what covers a CLI nobody measured, and dialogs that are not
+# permissions at all: codex sat on "usage limit, switch model? Press enter to confirm".
+# The net under both: a marked session whose screen stays unchanged is reported as quiet and
+# REMINDED every QUIET_REMIND_SECS, so a dialog no pattern knows still cannot sit unseen for
+# hours. All six blocked screens measured were static; a CLI that animates its blocked screen
+# with something other than a clock would defeat this, none measured does. "Distinct" is
 # judged on the screen with clocks ("18s", "7:25") and non-ASCII spinners removed, so a TUI
 # timer ticking inside the same prompt is still the same prompt. Only the tail of the screen
 # counts: an agent TALKING about "Allow once" further up is not a prompt.
@@ -41,6 +53,7 @@
 #   notified=0|1       1 once a "quiet" event has been sent for the CURRENT screen; a different
 #                       screen resets it to 0, so a session that talks again and goes quiet
 #                       again gets a second event.
+#   notified_at=<epoch> when that "quiet" event was last sent, for the reminder
 #   approval=<cksum>   checksum of the permission prompt already reported (empty: none)
 #   approval_at=<epoch> when it was last reported, for the reminder
 #   approval_since=<epoch> when that prompt was first seen, for the "for Ns" in the event
@@ -53,7 +66,8 @@
 #   OPENCLAW_BIN=$HOME/.openclaw/bin/openclaw
 #   QUIET_SECS=90
 #   TICK_SECS=15
-#   APPROVAL_RE='Allow once|Always allow|Would you like to allow'   (zcode and muse, measured)
+#   QUIET_REMIND_SECS=1800
+#   APPROVAL_RE=<measured questions + dialog signature, see DEFAULT_APPROVAL_RE below>
 #   APPROVAL_TAIL_LINES=15
 #   APPROVAL_REMIND_SECS=900
 #   STATE_DIR=$HOME/.local/state/tmux-activity-watch
@@ -70,7 +84,11 @@ TMUX_BIN=${TMUX_BIN:-/opt/homebrew/bin/tmux}
 OPENCLAW_BIN=${OPENCLAW_BIN:-$HOME/.openclaw/bin/openclaw}
 QUIET_SECS=${QUIET_SECS:-90}
 TICK_SECS=${TICK_SECS:-15}
-APPROVAL_RE=${APPROVAL_RE:-Allow once|Always allow|Would you like to allow}
+QUIET_REMIND_SECS=${QUIET_REMIND_SECS:-1800}
+# ASCII only: it is matched against the screen tail AFTER non-ASCII is stripped, with grep -i.
+DEFAULT_APPROVAL_RE='allow once|always allow|would you like to allow|do you want to proceed|run this command\?|waiting for approval|do you trust|trust this (folder|workspace)'
+DEFAULT_APPROVAL_RE="$DEFAULT_APPROVAL_RE"'|enter (to )?(select|confirm|continue)|esc (to )?(cancel|go back|exit)|arrow keys to navigate|[[(]y/n[])]|[(]yes/no[)]'
+APPROVAL_RE=${APPROVAL_RE:-$DEFAULT_APPROVAL_RE}
 APPROVAL_TAIL_LINES=${APPROVAL_TAIL_LINES:-15}
 APPROVAL_REMIND_SECS=${APPROVAL_REMIND_SECS:-900}
 STATE_DIR=${STATE_DIR:-$HOME/.local/state/tmux-activity-watch}
@@ -133,8 +151,9 @@ read_state_field() {
 
 write_state() {
   local file=$1 hash=$2 since=$3 notified=$4 path=$5 approval=$6 approval_at=$7 approval_since=$8
-  printf 'hash=%s\nsince=%s\nnotified=%s\npath=%s\napproval=%s\napproval_at=%s\napproval_since=%s\n' \
-    "$hash" "$since" "$notified" "$path" "$approval" "$approval_at" "$approval_since" >"$file"
+  local notified_at=${9:-0}
+  printf 'hash=%s\nsince=%s\nnotified=%s\npath=%s\napproval=%s\napproval_at=%s\napproval_since=%s\nnotified_at=%s\n' \
+    "$hash" "$since" "$notified" "$path" "$approval" "$approval_at" "$approval_since" "$notified_at" >"$file"
 }
 
 # Checksum of stdin as one token. cksum is POSIX: same on the Mac and in Linux CI.
@@ -159,7 +178,7 @@ session_listed() {
 tick() {
   local session activity cmd path sf prev_hash prev_since prev_notified now seen_file err_file
   local prev_approval prev_approval_at prev_approval_since screen hash since notified tailtxt
-  local approval approval_at approval_since due elapsed text last_path rc
+  local approval approval_at approval_since due elapsed text last_path rc prev_notified_at notified_at
   seen_file=$(mktemp "${TMPDIR:-/tmp}/tmux-activity-watch.seen.XXXXXX")
   err_file=$(mktemp "${TMPDIR:-/tmp}/tmux-activity-watch.err.XXXXXX")
 
@@ -206,6 +225,8 @@ tick() {
     [[ -n $prev_notified ]] || prev_notified=0
     [[ -n $prev_approval_at ]] || prev_approval_at=0
     [[ -n $prev_approval_since ]] || prev_approval_since=0
+    prev_notified_at=$(read_state_field "$sf" notified_at)
+    [[ -n $prev_notified_at ]] || prev_notified_at=0
 
     # The session can vanish between list-sessions and here: skip it, the closed sweep of the
     # next tick reports it.
@@ -227,7 +248,7 @@ tick() {
 
     # A permission prompt on screen: report it now, not after QUIET_SECS.
     tailtxt=$(printf '%s\n' "$screen" | approval_tail) || tailtxt=""
-    if printf '%s' "$tailtxt" | grep -Eq -- "$APPROVAL_RE"; then
+    if printf '%s' "$tailtxt" | grep -Eqi -- "$APPROVAL_RE"; then
       approval=$(printf '%s' "$tailtxt" | sum_of)
       approval_at=$prev_approval_at
       approval_since=$prev_approval_since
@@ -254,16 +275,23 @@ tick() {
     fi
 
     notified=$prev_notified
+    notified_at=$prev_notified_at
+    elapsed=$((now - since))
+    due=0
     if [[ $prev_notified == 0 ]]; then
-      elapsed=$((now - since))
-      if [[ $elapsed -ge $QUIET_SECS ]]; then
-        text="tmux: $session quiet for ${elapsed}s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"
-        if send_event "$text"; then
-          notified=1
-        fi
+      [[ $elapsed -ge $QUIET_SECS ]] && due=1
+    elif [[ $((now - prev_notified_at)) -ge $QUIET_REMIND_SECS ]]; then
+      # Still the same screen, still marked: nobody picked it up. Say it again.
+      due=1
+    fi
+    if [[ $due == 1 ]]; then
+      text="tmux: $session quiet for ${elapsed}s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"
+      if send_event "$text"; then
+        notified=1
+        notified_at=$now
       fi
     fi
-    write_state "$sf" "$hash" "$since" "$notified" "$path" "" 0 0
+    write_state "$sf" "$hash" "$since" "$notified" "$path" "" 0 0 "$notified_at"
   done <"$seen_file"
 
   # Sessions we have state for but that vanished from this tick's listing: closed.
