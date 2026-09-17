@@ -52,7 +52,7 @@ Cada tarea de un carril pasa por esto, en este orden. Ningún paso se salta; si 
 6. **Promoción.** Cuando una ronda no trae altas ni medias, el lead marca el PR como listo para revisión. Ahí CodeRabbit revisa una sola vez, sobre código que ya no va a cambiar.
 7. **CodeRabbit.** Se leen sus comentarios, no solo su check. Lo accionable se corrige en el mismo PR y vuelve al paso 3. Cada push de corrección tras la promoción vuelve a pasar por CodeRabbit; se cierra cuando no deja nada nuevo o no tiene cuota.
 8. **Aprobación.** `APPROVE lead <sha>` como comentario en el PR, con la lista de residuales y su razón. Solo eso mete el PR a la cola.
-9. **Merge** por la ruta del kit, sección 6. Rebase antes, CI verde del SHA nuevo, y re-APPROVE si el diff es vacío o vuelta al paso 5 si no lo es.
+9. **Merge** por la ruta del kit, sección 6. Base al día antes, con `git merge origin/<default>` en el worktree del carril y push normal: **nunca rebase**, que exige force-push y está prohibido. CI verde del SHA nuevo, y re-APPROVE si `git diff <sha aprobado> HEAD -- <archivos del carril>` sale vacío, o vuelta al paso 5 si no. La rama por defecto avanza sola cada dos horas con los snapshots del gateway, así que esto pasa en casi todo merge.
 10. **Despliegue y verificación**, sección 7, si la fase lo pide.
 11. **Progreso escrito**, sección 8. Solo entonces, la siguiente tarea.
 
@@ -139,7 +139,7 @@ Medido: 2026-09-16, 15:25 a 15:28 hora del Pacífico: doce recargas de configura
 
 ## 8. Progreso escrito, no contado
 
-En cada cambio de estado de un carril o de la cola, y al cierre, el lead escribe `.saikit/progress/<fase>.json` en el formato `runbook-progress.v1` y lo envía con `openclaw gateway call runbook.progress.set --params @<archivo>`. Un envío fallido no bloquea y se reintenta en el siguiente cambio. Cada escritura lleva `atencion_requerida` y `siguiente_paso` en lenguaje llano. Lo que no está en ese archivo no es progreso.
+En cada cambio de estado de un carril o de la cola, y al cierre, el lead escribe `.saikit/progress/<fase>.json` en el formato `runbook-progress.v1` y lo envía con `openclaw gateway call runbook.progress.set --params "$(cat <archivo>)"`. La CLI **no** acepta `--params @<archivo>`: contesta `--params must be valid JSON` (medido 2026-09-16 y otra vez el 2026-09-17), así que el JSON va en línea. Un envío fallido no bloquea y se reintenta en el siguiente cambio. Cada escritura lleva `atencion_requerida` y `siguiente_paso` en lenguaje llano. Lo que no está en ese archivo no es progreso.
 
 Medido: 2026-09-16, el cierre de la Fase 6 quedó declarado en `Plans.md` con un residual de canary que, al repetirlo, pasaba: sin progreso escrito por corrida, el estado declarado y el real divergieron sin que nadie lo notara.
 

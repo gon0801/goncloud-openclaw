@@ -96,7 +96,7 @@ $hits"
 echo "ok (2): $n runbooks revisados, sin bootstrap imposible, sin docker run y sin glm viejo"
 
 # (2b) Los comandos del exec de la Mac en los autopilot llevan prefijo o ruta absoluta.
-AUTO=$(git ls-files --cached --others --exclude-standard -- 'docs/runbooks/autopilot-fase6.md' 'docs/runbooks/autopilot-fase7.md' 'docs/runbooks/loop-autopilot.md')
+AUTO=$(git ls-files --cached --others --exclude-standard -- 'docs/runbooks/autopilot-fase6.md' 'docs/runbooks/autopilot-fase7.md' 'docs/runbooks/autopilot-fase9.md' 'docs/runbooks/loop-autopilot.md')
 [ -n "$AUTO" ] || fail "no encontre los runbooks de autopilot"
 hits2=""
 while IFS= read -r f; do
