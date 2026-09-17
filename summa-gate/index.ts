@@ -40,6 +40,7 @@ import {
   type Role,
   type SessionsSendParams,
   adversaryPathAllowed,
+  commandChangesCwd,
   canonicalRole,
   isDocOrLock,
   sessionsSendGuardVerdict,
@@ -479,7 +480,17 @@ export default definePluginEntry({
         // `adversaryPathAllowed` ya resuelve el relativo contra el workspace; el
         // error estaba en no llamarlo. Sin `workspaceDir` la funcion cae a su
         // regla vieja (relativo = permitido), asi que ese caso no cambia.
+        // Ver `commandChangesCwd`: con un cambio de directorio en el comando,
+        // un destino relativo puede aterrizar en cualquier parte y resolverlo
+        // contra el workspace da un permiso falso.
+        const cambiaCwd = commandChangesCwd(command);
         for (const target of redirectTargets(command)) {
+          if (cambiaCwd && !ABSOLUTE_PATH_RE.test(target)) {
+            return {
+              block: true,
+              blockReason: `Confinamiento adversary (summa-gate): el comando cambia de directorio, asi que un destino relativo no se puede ubicar; usa una ruta absoluta dentro de la zona permitida. Destino: ${target}`,
+            };
+          }
           if (!adversaryPathAllowed(target, workspaceDir)) {
             return {
               block: true,

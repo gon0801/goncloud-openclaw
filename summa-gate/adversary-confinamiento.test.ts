@@ -120,6 +120,25 @@ describe("confinamiento adversary: redirecciones por exec", () => {
     }
   });
 
+  it("bloquea el relativo cuando el comando cambia de directorio", () => {
+    // El bypass que abrio el primer arreglo: el shell corre el `cd` antes de la
+    // redireccion, asi que `outside` no es del workspace aunque lo parezca.
+    for (const cmd of [
+      "cd .. && printf x > outside",
+      "pushd /tmp; echo x > fuera",
+      "cd sub && printf x > notas.txt",
+    ]) {
+      const r = execHook()(cmd);
+      assert.equal(r?.block, true, `deberia bloquear: ${cmd}`);
+      assert.match(r?.blockReason ?? "", /cambia de directorio/);
+    }
+  });
+
+  it("con cambio de directorio, el absoluto dentro de zona sigue pasando", () => {
+    // El absoluto no depende del cwd, asi que el `cd` no lo vuelve ambiguo.
+    assert.equal(execHook()(`cd /tmp && printf x > ${WS}/nota.txt`)?.block, undefined);
+  });
+
   it("no toca a ningun otro agente", () => {
     // El guardia esta atado al id. Sin esta prueba, un cambio que lo desate
     // pasaria desapercibido porque todo lo demas seguiria en verde.
