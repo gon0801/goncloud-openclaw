@@ -4,7 +4,7 @@ Esta página es para ti, **el lead** que corre la Fase 7 en autopilot. David no 
 
 **Lo que no está escrito aquí está en `docs/runbooks/loop-autopilot.md`**, la parte invariante de todo runbook: el loop por tarea (§3), las rondas de revisión con su comando literal (§4), PRs y CodeRabbit (§5), la ruta del kit (§6), ventana segura y configuración del gateway (§7), progreso (§8), reanudación (§9), revisión de cierre (§10) y los atores universales (§12). Este runbook **no los repite**; solo nombra sus desviaciones, y hay una sección entera para eso.
 
-**Dos convenciones que valen para todo el documento.** Primera: **todo `openclaw` de este runbook es `~/.openclaw/bin/openclaw`**. El binario no está en el PATH (`command -v openclaw` sale 1); escrito pelado da "command not found" y no sabrías si falló el gateway o el PATH. Segunda: **todo comando se corre desde `wt-f7-lead`** salvo donde diga otra cosa, y ahí es donde se resuelven las rutas relativas.
+**Dos convenciones que valen para todo el documento.** Primera: **todo `openclaw` que corras desde la Mac es `~/.openclaw/bin/openclaw`**. Ahí no está en el PATH (`command -v openclaw` sale 1) y escrito pelado da "command not found", que parece un fallo del gateway y no lo es. La excepción es la lista cerrada de comandos por exec: esos corren en el host del gateway, donde el binario sí está en el PATH, y por eso van pelados ahí y solo ahí. Segunda: **todo comando se corre desde `wt-f7-lead`** salvo donde diga otra cosa, y ahí es donde se resuelven las rutas relativas.
 
 ---
 
@@ -12,7 +12,9 @@ Esta página es para ti, **el lead** que corre la Fase 7 en autopilot. David no 
 
 `origin/main` trae hoy una versión **superada** de este archivo: dice que el lead es Claude, fija dos implementadores por nombre, apunta a un binario que ya no existe, y pone como Q0 un PR que se mergeó hace días. Esa versión no se ejecuta.
 
-Manda **este texto**, el que claw te entregó al lanzarte. Ponerlo en `main` es parte de la fase: es **Q0b**, con rama `docs/fase7-runbook` y su propia fila en la tabla de archivos. Hasta que Q0b mergee, la comprobación 0.0 te va a decir que el archivo de `main` difiere del tuyo, y eso es lo esperado, no un fallo.
+Manda **este texto**, el que claw te entregó al lanzarte. Ya está escrito y subido: es el **PR #54**, rama `docs/fase7-runbook`, y ponerlo en `main` es **Q0b**, el segundo ítem de la cola. No lo vuelves a escribir ni vuelves a abrir su PR; lo mergeas.
+
+**No intentes comparar este texto con el de `main` archivo contra archivo.** Tu worktree nace en `origin/main`, así que la copia en disco **es** la de `main` y cualquier `cmp` entre las dos sale igual siempre. Lo que se consulta es el estado del PR.
 
 Fuente del plan: `Plans.md`, Fase 7, tareas 7.0 a 7.7. Si el plan y este runbook difieren en el **método**, manda este runbook. Si difieren en la **DoD de una tarea**, manda `Plans.md`: la revisión de cierre (loop §10) se hace contra la DoD literal del plan. Las tres DoD que este runbook declara desactualizadas están nombradas una por una en la sección "Desviaciones", con la celda exacta que Q5 tiene permitido corregir.
 
@@ -28,7 +30,7 @@ Fuente del plan: `Plans.md`, Fase 7, tareas 7.0 a 7.7. Si el plan y este runbook
 | **claw** | el agente `main` del gateway | Te lanzó, te vigila por tmux, te presta su exec para los comandos del host Windows. No mergea ni decide configuración por su cuenta. |
 | **David** | el dueño | Solo lee el Telegram de cierre con el enlace al tablero. Preaprobó lo de la tabla de abajo. |
 
-Los hosts que el kit sella están en loop §6; no se repiten aquí.
+Los hosts que el kit sella están en loop §1; no se repiten aquí.
 
 **Escribe quién implementó cada carril** en el cuerpo de su PR, con esa palabra exacta. De ahí sale el `-Excluir` de la revisión cruzada, que tiene un conjunto cerrado de seis nombres (loop §4): si implementó muse o cursor, que no son candidatos a revisor, se pasa `-Excluir ''` y el nombre queda solo en el PR.
 
@@ -68,17 +70,16 @@ git cat-file -e origin/main:.saikit/autopilot.json           2>/dev/null; echo a
 git cat-file -e origin/main:docs/spec/runbook-progress.v1.md 2>/dev/null; echo spec=$?
 test -r /Users/dn/dev/summonaikit-claude/tools/saikit-merge.sh; echo kit=$?
 bash scripts/tests/test-runbooks-no-contradicen-entorno.sh >/dev/null 2>&1; echo candado=$?
-git show origin/main:docs/runbooks/autopilot-fase7.md 2>/dev/null \
-  | cmp -s - docs/runbooks/autopilot-fase7.md; echo yo_en_main=$?
+gh pr view 54 --json state -q .state;                                     # Q0b
 $G gateway call status --timeout 30000 >/dev/null 2>&1; echo gateway=$?
 ```
 
-Cero es presente o igual; **cualquier valor distinto de cero es ausente o distinto**. `git cat-file -e` sale `128` cuando la ruta no está, no `1`, así que la comprobación es contra cero, nunca contra uno.
+En las seis líneas que imprimen un número, cero es presente y **cualquier valor distinto de cero es ausente**: `git cat-file -e` sale `128` cuando la ruta no está, no `1`, así que la comprobación es contra cero, nunca contra uno. La séptima imprime un estado de PR, no un número.
 
 Lectura de cada uno:
 
 - `loop` distinto de cero: el PR #53 sigue abierto. Es **Q0a** y nada más se mergea antes. Mientras tanto lees el loop con `git show origin/feat/loop-autopilot:docs/runbooks/loop-autopilot.md`.
-- `yo_en_main` distinto de cero: este runbook todavía no está en `main`. Es **Q0b**. Es lo normal al arrancar.
+- El PR #54 en `OPEN`: este runbook todavía no está en `main`. Es **Q0b**. Es lo normal al arrancar. En `MERGED`, Q0b ya está hecho y se salta. En `CLOSED` sin mergear, la fase se detiene: estarías ejecutando un texto que el repo rechazó.
 - `gateway` distinto de cero: el gateway no responde. **Detiene la fase**: sin él no hay spike, ni despliegue, ni canary.
 - `autopilot`, `spec`, `kit` o `candado` distintos de cero **detienen la fase**: son precondiciones que esta fase no produce.
 
@@ -161,14 +162,14 @@ Desde tu worktree, **sin** pasar por el gateway, esta fase usa además: `~/.open
 | Desde la Mac: `gateway call` de los métodos listados, `git`, `gh`, y `curl` sin credencial al puerto del gateway | Spike, compuertas y canarios | Aprobado |
 | Código nuevo vivo en el gateway (plugin sin hooks) y un `gh pr merge` de prueba que debe salir bloqueado | 7.4, 7.5, 7.6 | Aprobado |
 | Lanzar implementadores en tmux sobre worktrees desechables, con aprobaciones resueltas por el lead | Carriles P y D | Aprobado |
-| Un Telegram a David al cierre con el enlace al tablero | 7.6 y 7.7 | Aprobado |
+| Un Telegram a David: el de cierre con el enlace al tablero, o el de detención que lo sustituye | 0.0, 7.6 y 7.7 | Aprobado |
 | `tablero-runbook/package.json` con script `check` y **sin** `dependencies` | 7.3, igual que summa-gate | Aprobado |
 | Instalar dependencias en `tablero-runbook/` | El `package.json` de arriba no cuenta: lo negado son dependencias | **Negado** |
 | Registrar hooks de agente o tools en el plugin | Mezcla guard con interfaz; es el motivo de que sea un plugin aparte | **Negado** |
 
 ---
 
-> **Prohibido toda la corrida:** tocar `openclaw.json` en el repo, modelos, auth, crons o permisos del gateway fuera de `plugins.entries.tablero-runbook.*`; correr por exec cualquier comando que no esté en la lista cerrada; leer o imprimir cualquier secreto (el lanzador `~/bin/glm` contiene un token: se ejecuta, jamás se lee ni se pega); registrar hooks de agente o tools en el plugin; `git worktree remove --force` o `git worktree add --force`; enviar Telegram antes del cierre salvo las tres filas de atores que lo permiten; preguntarle algo a David.
+> **Prohibido toda la corrida:** tocar `openclaw.json` en el repo, modelos, auth, crons o permisos del gateway fuera de `plugins.entries.tablero-runbook.*`; correr por exec cualquier comando que no esté en la lista cerrada; leer o imprimir cualquier secreto (el lanzador `~/bin/glm` contiene un token: se ejecuta, jamás se lee ni se pega); registrar hooks de agente o tools en el plugin; `git worktree remove --force` o `git worktree add --force`; enviar Telegram antes del cierre salvo las cuatro salidas que este documento autoriza (la detención en 0.0 y las tres filas de atores que lo dicen); preguntarle algo a David.
 
 ---
 
@@ -248,7 +249,7 @@ La segunda **debe fallar por método desconocido, no por auth**: eso es lo que p
 curl -s -o /dev/null -w '%{http_code}' http://100.80.179.76:18789/__openclaw__/a2ui/
 ```
 
-**Si el egress a esa IP te lo niega tu entorno** (la tailnet no siempre está disponible desde donde corre el lead, y algunos hosts exigen aprobación humana para salir a red), el dato queda `unknown` y **la fase sigue**: no se pide ninguna aprobación. Las compuertas que dependían de ese `curl` tienen todas su equivalente por RPC, que es el camino principal; el `curl` es confirmación, no requisito.
+**Si el egress a esa IP te lo niega tu entorno** (la tailnet no siempre está disponible desde donde corre el lead, y algunos hosts exigen aprobación humana para salir a red), el dato queda `unknown` y **la fase sigue**: no se pide ninguna aprobación. Las dos compuertas que dependen de ese `curl`, esta y el canary (b) de Q3, tienen su equivalente por RPC, que es el camino principal; el `curl` es confirmación, no requisito.
 
 **D no cambia veredictos.** Después de que D dé formato, el lead comprueba:
 
@@ -300,6 +301,7 @@ bash scripts/tests/test-runbook-progreso.sh                                 # de
 | P | `tablero-runbook/**`, `scripts/run-checks.sh`, `scripts/tests/test-summa-gate-quality-entrypoints.sh`, `scripts/tests/test-salida-del-observador-no-trackeada.sh`, `.gitignore`, `.saikit/scratch/P/**` | `docs/**`, `summa-gate/**`, `Plans.md`, `agents/**`, `workspace-*/**` |
 | D | `docs/evidence/tablero-runbook-spike.md`, `docs/spec/00-project-spec.md`, `scripts/tests/test-runbook-progreso.sh`, `scripts/tests/test-spec-tablero.sh`, `.saikit/scratch/D/**` | `tablero-runbook/**`, `summa-gate/**`, `Plans.md`, `scripts/run-checks.sh`, `.gitignore` |
 | cierre | `Plans.md` (celdas Status, y **solo** las tres celdas de DoD nombradas en Desviaciones), `.saikit/progress/7.json`, `.saikit/progress/7-sesiones.txt`, `docs/evidence/tablero-runbook-canary.md` | todo lo demás |
+| reversa | hereda la columna de P, y nada más: solo puede **quitar** lo que P puso | todo lo demás |
 
 `BRIEF.md` y `BRIEF-r<N>.md` no entran en ninguna columna a propósito: viven en la raíz del worktree y **se borran antes del push**, así que no cuentan como "archivo fuera de la tabla" (loop §12). El encargo que importa queda citado en el cuerpo del PR.
 
@@ -317,13 +319,13 @@ bash scripts/tests/test-runbook-progreso.sh                                 # de
 
 **Del loop:**
 
-- **§3 paso 5 y §4 no aplican a Q0a, Q0b ni Q5.** Los tres son documentación ya revisada: su loop es CI verde + CodeRabbit con la regla de §5 + `APPROVE lead <sha>`. Q0a es el propio loop, ya revisado en su PR; Q0b es este documento, revisado por dos lecturas con contexto fresco; Q5 son celdas de estado con evidencia ya producida.
+- **§3 paso 5 y §4 no aplican a Q0a, Q0b, Q5 ni al PR de reversa.** Los tres son documentación ya revisada: su loop es CI verde + CodeRabbit con la regla de §5 + `APPROVE lead <sha>`. Q0a es el propio loop, ya revisado en su PR; Q0b es este documento, revisado por cuatro lecturas con contexto fresco; Q5 son celdas de estado con evidencia ya producida. El de reversa deshace código que ya pasó por el loop completo, y esperar una ronda cruzada mientras el gateway está en mal estado cuesta más de lo que protege.
 - **§5, tope de tres PRs abiertos:** cuenta **solo los de esta fase**, y Q0 son **dos** PRs, no uno. Por eso el orden de apertura es: Q0a y Q0b primero, se mergean, y **después** se abren D y P. Así nunca hay más de tres propios abiertos. Los PRs ajenos no cuentan y no se cierran por esto.
-- **§7, "el cambio de configuración lo hace el lead desde la Mac":** aquí el patch va **por exec en el host del gateway**, porque `openclaw config patch` desde la Mac escribe el JSON local y no llega al gateway. La razón de §7 es que una recarga congela al gateway y mataría al turno que la disparó; medido hoy con `gateway call config.schema.lookup plugins.entries`, un cambio en una entrada de plugin **recarga solo el runtime del plugin para turnos nuevos**, sin reiniciar el gateway, así que el turno que lo dispara sobrevive. Igual se verifican cero corridas en vuelo antes.
+- **§7, "el cambio de configuración lo hace el lead desde la Mac":** aquí el patch va **por exec en el host del gateway**, porque `openclaw config patch` desde la Mac escribe el JSON local y no llega al gateway. La razón de §7 sigue en pie y **no se minimiza**: un `config patch` recarga la configuración y **mata las corridas en vuelo** por el mecanismo *superseded*, medido en este gateway y escrito tanto en `docs/patches/README.md` como en la fila 7.6 de `Plans.md`. De ahí salen dos consecuencias que este runbook sí escribe. Una: las cero corridas en vuelo se verifican antes, y por eso la lectura autoritativa es `cron list --all`. Dos: **el turno que dispara el patch puede morir con las demás**. Si ese turno no responde, eso **no** significa que el patch falló: se lee el estado con un turno nuevo antes de concluir nada, y solo el read-back decide.
 
 **Del plan** — las tres celdas de DoD que Q5 tiene permitido corregir, y nada más:
 
-| Celda | Qué dice hoy | Por qué está desactualizada |
+| Celda | Qué dice hoy | Qué corrige Q5, y por qué |
 |---|---|---|
 | 7.2 DoD | "`test-runbook-progreso.sh` **rojo contra `origin/main`**" | Las seis anclas ya están en `origin/main` desde el PR #46. El rojo válido es contra `f8acd56`, el padre del commit que las introdujo. |
 | 7.4 DoD | pide la quinta declaración del spec sin asignarla a nadie | Se asigna al carril D, junto a las otras cuatro. |
@@ -335,15 +337,15 @@ Cualquier otra diferencia entre el plan y este runbook se **declara** en el PR d
 
 ## Cola de merge
 
-Ruta y comando del merge: loop §6. Ventana: loop §7. **Cada merge se corre desde el worktree de esa rama.**
+Ruta y comando del merge: loop §6. **Los seis ítems de esta cola mergean en la ventana segura de loop §7**, sin excepción: mergear a `main` es desplegar, y eso vale igual para docs que para código. Solo Q3 agrega la verificación de cero runs, porque además toca la configuración. **Cada merge se corre desde el worktree de esa rama.**
 
 **El lock del kit es uno solo para todo el clon.** Se toma en el directorio común de git, el mismo archivo para los cinco worktrees de esta fase y para cualquier otro del mismo clon. Un lock ajeno **bloquea con código 3** y solo `--liberar-lock` explícito lo quita: nunca se borra solo, ni con el pid muerto. Ver su fila de atores.
 
 - [ ] **Q0a · El PR #53, el loop**, si 0.0 lo encontró abierto. Loop reducido.
-  **Compuerta:** `git cat-file -e origin/main:docs/runbooks/loop-autopilot.md` sale 0, y después `bash scripts/tests/test-loop-autopilot.sh` sale verde. Si #53 se cerró sin mergear, la fase se detiene: este runbook lo referencia por sección y sin él no hay reglas.
-- [ ] **Q0b · Este runbook**, rama `docs/fase7-runbook`, si 0.0 lo encontró distinto del de `main`. Loop reducido.
-  **Compuerta:** el `cmp` de 0.0 vuelve a correr y sale 0, y `bash scripts/tests/test-runbooks-no-contradicen-entorno.sh` sale verde ahora sí escaneando este archivo, que hasta este merge vivía fuera de todo escaneo.
-- [ ] **Q1 · D primero.** Solo docs y tests: el sync lo lleva sin riesgo.
+  **Compuerta:** `git cat-file -e origin/main:docs/runbooks/loop-autopilot.md` sale 0, y después `bash scripts/tests/test-loop-autopilot.sh` sale verde. Si #53 se cerró sin mergear, la fase se detiene: este runbook lo referencia por sección y sin él no hay reglas. Si el test sale **rojo** después del merge, la fase también se detiene y se declara con la línea del FAIL: el loop llegó a `main` roto y ninguna regla de abajo es confiable.
+- [ ] **Q0b · Este runbook: el PR #54**, rama `docs/fase7-runbook`, si 0.0 lo encontró `OPEN`. Loop reducido. Ese PR ya trae los tres archivos de su fila en la tabla, ya commiteados: este runbook, la copia canónica de la skill `autopilot-runbook` y el candado de esa skill. No hay nada que escribir; hay que mergear. Su worktree se abre ad hoc como cualquier otro PR sin worktree propio (loop §6) en `/Users/dn/dev/wt-f7-q0b`.
+  **Compuerta:** `gh pr view 54 --json state -q .state` sale `MERGED`, y después `bash scripts/tests/test-runbooks-no-contradicen-entorno.sh` y `bash scripts/tests/test-skill-autopilot-runbook.sh` salen verdes contra `main`. Si cualquiera sale rojo, la fase se detiene y se declara con la línea del FAIL, por la misma razón que en Q0a.
+- [ ] **Q1 · D primero.** Solo docs y tests, así que el sync lo lleva sin riesgo de romper nada vivo; **la ventana segura de loop §7 aplica igual**, como a todo merge a `main` de esta cola, porque el sync no distingue qué trae el commit.
   **Compuerta:** la corrida de CI **de ese SHA**, no la última de `main`:
 
 ```
@@ -353,14 +355,20 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
         --json headSha,status,conclusion \
         --jq ".[] | select(.headSha==\"$SHA\") | \"\(.status) \(.conclusion)\"")
   echo "intento $i: ${r:-sin-corrida}"
-  case "$r" in "completed success") break ;; esac
+  case "$r" in "completed success"|"completed failure") break ;; esac
   sleep 60
 done
 ```
 
   `gh run list --limit 1` sin filtrar por SHA devuelve la última corrida de `main`, que en el minuto siguiente al merge todavía es la anterior, o la nueva con `conclusion: null`. Tres salidas: `completed success` cierra el ítem; `completed failure` manda el carril de vuelta al loop §3 con el log del job como encargo y **P no se mergea** hasta que `main` esté verde; `sin-corrida` o `in_progress` a los diez intentos queda `unknown`, se anota y **P tampoco se mergea** ese ciclo.
 - [ ] **Q2 · P después de D**, solo, en ventana segura. Mergear **no** lo enciende: el plugin queda deshabilitado hasta Q3. Misma compuerta de CI que Q1, y además:
-  **Compuerta del sync:** tras el siguiente ciclo, por exec, `git -C C:\Users\ehven\.openclaw log -1 --format=%H` igual al SHA mergeado, y la cola del log del sync sin `CONFLICTO` ni `FALLO`. Si el SHA **no coincide** y el log no muestra error, el sync aún no corrió: se espera un ciclo más y se repite **una** vez. Si a la segunda sigue sin coincidir, **no se pasa a Q3** y se declara. Si el log muestra `CONFLICTO`, **tampoco**: se anota como residual y la fase cierra sin despliegue. Si el log no existe, el dato es `unknown` y se trata igual que un SHA que no coincide.
+  **Compuerta del sync:** tras el siguiente ciclo, por exec, el SHA mergeado tiene que estar **en la historia** del clon del gateway, no ser su punta:
+
+```
+git -C C:\Users\ehven\.openclaw merge-base --is-ancestor <SHA> HEAD && echo PRESENTE || echo AUSENTE
+```
+
+  La punta casi nunca es el SHA mergeado: el sync hace `add -A` y commitea su propio snapshot **antes** del pull, así que cuando el árbol del gateway está sucio su último commit es ese snapshot. Cinco de los últimos doce commits de `main` son snapshots del sync. Leerlo por igualdad de punta bloquearía el despliegue por una causa que no existe. Se pide además la cola del log del sync sin `CONFLICTO` ni `FALLO`. Si sale `AUSENTE` y el log no muestra error, el sync aún no corrió: se espera un ciclo más y se repite **una** vez. Si a la segunda sigue `AUSENTE`, **no se pasa a Q3** y se declara. Si el log muestra `CONFLICTO`, **tampoco**: se anota como residual y la fase cierra sin despliegue. Si el log no existe, el dato es `unknown` y se trata igual que un `AUSENTE`.
   **Cómo se espera un ciclo de sync de dos horas:** no con un `sleep` de dos horas. El lead sigue con lo que tenga pendiente y vuelve a esta compuerta cada 30 minutos con la lectura por exec; entre lecturas escribe progreso, así que su silencio nunca pasa de 30 minutos y no dispara la regla de carril muerto de loop §12.
 - [ ] **Q3 · Despliegue 7.6.** Solo si Q2 cerró con el SHA confirmado.
 
@@ -411,17 +419,17 @@ $G gateway call runbook.progress.get --params '{"fase":"6"}' --timeout 30000
   **La evidencia que exige la DoD de 7.6**, en `docs/evidence/tablero-runbook-canary.md`: cada comando con su salida verbatim; el `doc` de la respuesta de `get` (el cuerpo que la DoD llama `/runbook/progress/6.json`, con su sustitución declarada); las primeras 30 líneas del `html`; la salida de `cron list --all` de antes y después del patch, que debe mostrar que ninguna corrida nueva empezó en medio; `plugins list` con los dos habilitados y el merge de prueba bloqueado; y el `message_id` del Telegram, que por orden se resuelve como dice la sección Telegram.
 
   **Compuerta:** si el plugin no aparece en `plugins list`, o summa-gate no bloquea, o el `curl` sin credencial devuelve 200, **rollback inmediato**: patch `enabled: false` por la misma vía, y repetir el canary de summa-gate. El 200 además abre un encargo para P (verificación propia de `Authorization` en las rutas) y no se vuelve a habilitar hasta que ese test esté verde en CI.
-- [ ] **Q4 · El enlace para David.** Es `http://100.80.179.76:18789/runbook/tablero/7`, o la pestaña "Runbook" de la Control UI si el spike la confirmó. Esa IP es de la tailnet y está detrás de la auth del gateway.
-  **Compuerta:** el canary (a) de Q3 salió bien para la fase `7`. Eso prueba que el documento existe y se renderiza; es toda la comprobación que se hace. **No se hace ninguna petición autenticada**: no hay credencial preaprobada y el bloque Prohibido veta leer secretos. El Telegram dice el enlace y dice, en una frase, que para verlo hay que estar en la tailnet y pasar la autenticación del gateway.
+- [ ] **Q4 · El enlace para David.** Es `http://100.80.179.76:18789/runbook/tablero/7`. La pestaña "Runbook" de la Control UI **no** sirve como sustituto: el descriptor que `Plans.md` 7.4 especifica lleva `path:"/runbook/tablero/6"` clavado, así que abre la Fase 6. Si el spike confirmó la pestaña, se menciona como atajo a la Fase 6 y nada más; el enlace de esta fase es el de arriba. Esa IP es de la tailnet y está detrás de la auth del gateway.
+  **Compuerta:** el último paso de Q3, el que envía el progreso real de esta fase y lo lee de vuelta con `runbook.progress.get --params '{"fase":"7"}'`, trajo un documento con el `titulo` de la Fase 7. Eso prueba que el documento existe y se renderiza; es toda la comprobación que se hace. Si ese paso quedó `unknown` o falló, Q4 no se da por cumplido: el Telegram sale igual pero dice que el tablero de la Fase 7 no se pudo confirmar, y queda como residual. **No se hace ninguna petición autenticada**: no hay credencial preaprobada y el bloque Prohibido veta leer secretos. El Telegram dice el enlace y dice, en una frase, que para verlo hay que estar en la tailnet y pasar la autenticación del gateway.
 - [ ] **Q5 · Cierre 7.7.** Worktree `/Users/dn/dev/wt-f7-cierre`, rama `fase7/cierre` desde `origin/main` ya con D y P mergeados. Primero `cp` del progreso, del archivo de sesiones y de la evidencia del canary desde `wt-f7-lead`. Las celdas Status de `Plans.md` se cierran con el token literal **`cc:完了`** y el SHA de squash, solo con evidencia; las filas de 7.6 y 7.7 se cierran igual. Antes de cerrar: la **revisión de cierre de fase** del loop §10, contra la DoD literal de cada fila.
   **Compuerta:** CI verde sobre el SHA de cierre, con el mismo bucle por SHA de Q1.
 
   **Cómo termina tu turno, en orden:**
   1. Merge de Q5 desde `/Users/dn/dev/wt-f7-cierre`, por la ruta del kit.
   2. Telegram (§ Telegram).
-  3. Último envío de progreso por RPC, ya con el `message_id`.
+  3. Último envío de progreso por RPC, ya con el `message_id`. **Si el plugin quedó apagado** (rollback, reversa, o Q2 cerrado sin despliegue), ese envío vuelve a fallar con "método desconocido", igual que en 0.4: se anota y se sigue. El archivo `.saikit/progress/7.json` que Q5 ya mergeó es entonces el registro, y el Telegram lo dice.
   4. `cd /Users/dn/dev/goncloud-openclaw` — **fuera de todo worktree de la fase**, porque no puedes borrar aquel en el que estás parado.
-  5. Desmarcar **las dos** sesiones de tmux, dejándolas abiertas: `/opt/homebrew/bin/tmux set-environment -t <sesión> -u OPENCLAW_WATCH`, con los nombres de `7-sesiones.txt`.
+  5. Desmarcar **cada** sesión que hayas marcado, dejándolas abiertas (pueden ser dos, una, o ninguna si ningún carril se lanzó): `/opt/homebrew/bin/tmux set-environment -t <sesión> -u OPENCLAW_WATCH`, con los nombres de `7-sesiones.txt`.
   6. `git worktree remove <ruta>` para los que hayas abierto. Si uno se niega por sucio, se mira qué quedó: si son `.saikit/scratch/` o `BRIEF*.md`, se borran esos archivos y se repite; si es otra cosa, **no se fuerza**, se deja el worktree y se declara como residual. `git worktree prune` al final.
   7. Imprimes la línea de cierre que pide loop §2: **`LISTO <sha>`**, donde `<sha>` es el squash de Q5. Si algo quedó abierto, `ATORADO <razón>` en su lugar.
 
@@ -453,7 +461,7 @@ Aplican todas las filas del loop §12. Estas son propias de la Fase 7.
 | El spike dice `unknown` para esos dos | P se lanza con la firma de la documentación pegada en el encargo; el canary de Q3 decide. Si el plugin no carga, rollback y la fase cierra como en la fila anterior. |
 | El directorio de estado cae dentro del clon, o `unknown` | 7.4 usa `configSchema.stateDir` con default `C:\Users\ehven\.openclaw-state\tablero-runbook`, fuera del clon; el `.gitignore` igual cubre `.jsonl` y `.log`. |
 | El `curl` sin credencial devuelve 200 en el spike | La ruta del spike es la de la Control UI, que el plugin no sirve. Un 200 ahí significa que `auth: "gateway"` no protege como se asumía: 7.4 agrega verificación propia y se declara como hallazgo de seguridad. |
-| El egress al puerto del gateway está negado desde donde corres | Ese dato queda `unknown` y **la fase sigue**. No se pide aprobación a nadie. Las tres compuertas que lo usaban tienen su equivalente por RPC y ese es el camino principal. |
+| El egress al puerto del gateway está negado desde donde corres | Ese dato queda `unknown` y **la fase sigue**. No se pide aprobación a nadie. Las dos compuertas que lo usaban, el código HTTP del spike y el canary (b) de Q3, tienen su equivalente por RPC y ese es el camino principal. Q4 no lo usa. |
 | El dry-run del patch responde "Refusing to replace … it would remove existing entries" | Se repite el dry-run agregando `--replace-path plugins.entries.tablero-runbook` — la ruta **exacta** de esta fase, nunca `plugins.entries`, que sería un alcance más ancho del preaprobado. El flag sugerido `--replace` no existe. Si el guard sigue disparando con la ruta exacta, no se aplica nada y se declara. |
 | Después del patch, `plugins list` no refleja el cambio a los 2 minutos | Se reinicia el gateway por exec, **desacoplado**, que aquí significa: el comando arranca el reinicio en un proceso aparte y devuelve enseguida, porque el script en primer plano espera hasta 40 s y el reinicio mata al nodo que lo dispara. Comando literal: `powershell -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy Bypass -File C:\Users\ehven\.openclaw\scripts\restart-openclaw-gateway.ps1' -WindowStyle Hidden"`, con `--session-key agent:main:reload-fase7`, y cero runs verificados con `cron list --all` justo antes. Es el único comando de escritura que esta fase agrega fuera de los tres del patch. Se espera hasta 5 min a que `gateway call status` responda. |
 | Tras ese reinicio, el exec a main queda denegado ("approval cannot safely bind this command", "Approved executables: none") | Es el binder, no el gateway. Se sigue por el fallback que documenta `agents/operaciones/agent/workshop-skills/openclaw-cron-jobs/exec-locked-fallback.md`. Si tampoco, el estado del plugin queda `unknown` y aplica la fila de abajo. |
@@ -465,7 +473,7 @@ Aplican todas las filas del loop §12. Estas son propias de la Fase 7.
 | Ese `git revert` sale con conflicto | `git revert --abort`; segundo intento determinista: `git checkout <merge_commit>^ -- tablero-runbook/ scripts/run-checks.sh scripts/tests/test-summa-gate-quality-entrypoints.sh scripts/tests/test-salida-del-observador-no-trackeada.sh .gitignore` en un solo commit, por la ruta normal del kit. Si el gate también lo rechaza, el Telegram ya salió y la fase se detiene. |
 | El merge sale con **código 3**: lock ajeno del kit | No se libera a ciegas. Se mira quién lo tiene: el directorio del lock guarda pid, host y hora de inicio. Si es de una corrida **tuya** ya muerta en esta misma máquina, se libera con `--liberar-lock` y se reintenta. Si es de otro host, de otro pid vivo, o no se puede saber, se espera 15 minutos y se reintenta **una** vez; después ese ítem queda `atorado` y se declara. Liberar un lock ajeno puede pisar un merge en curso. |
 | Un candado del repo responde algo sobre el kit ("hash does not match the kit manifest", "path must end exactly at .sh") | Es el candado **léxico** del repo reaccionando al texto del comando, no un fallo del kit. Se diagnostica en una forma que ese mismo candado no bloquea, con la ruta partida en variables: `K=/Users/dn/dev/summonaikit-claude/tools; F="$K/saikit-merge"".sh"; shasum -a 256 "$F"`, comparado contra el manifiesto del kit. Si el hash **coincide**, es falso positivo: se reescribe el comando y se sigue. Si **no** coincide, la ruta de merge está rota y aplica la fila del kit de loop §12. |
-| El Telegram falla: `scp`/`ssh` cae, el bot responde error, o sale `enviado: False` | Se reintenta **dos** veces con 60 s entre intentos. Si las tres fallan, la fase **cierra igual**: el merge ya está hecho y el trabajo no se deshace por una notificación. Queda como residual con la salida verbatim, y el último envío de progreso lleva `atencion_requerida.necesaria: true` con motivo "cierre sin Telegram", que es lo que David verá en el tablero. |
+| El Telegram falla: `scp`/`ssh` cae, el bot responde error, o sale `enviado: False` | Se reintenta **dos** veces con 60 s entre intentos. Si las tres fallan, la fase **cierra igual**: el merge ya está hecho y el trabajo no se deshace por una notificación. Queda como residual con la salida verbatim, y el último envío de progreso lleva `atencion_requerida.necesaria: true` con motivo "cierre sin Telegram". Si el tablero quedó encendido, eso es lo que David verá ahí; si quedó apagado, el registro es el `7.json` mergeado y nadie se entera hasta que alguien lo abra, y eso también se declara. |
 | Un implementador no acepta un flag del encargo | Se relanza con el flag equivalente de su CLI, se anota en el PR, y el encargo se corrige para la próxima. |
 
 ---
@@ -474,12 +482,12 @@ Aplican todas las filas del loop §12. Estas son propias de la Fase 7.
 
 | | |
 |---|---|
-| **PRs propios de la fase** | Hasta cinco: Q0a (#53), Q0b (este runbook), D, P y el de cierre. Q0a y Q0b se mergean antes de abrir D y P, así que nunca hay más de tres abiertos a la vez. Los ajenos no cuentan. |
+| **PRs propios de la fase** | Cinco en el camino normal (Q0a #53, Q0b #54, D, P y el de cierre) y hasta seis si hace falta el de reversa. Q0a y Q0b se mergean antes de abrir D y P, así que nunca hay más de tres abiertos a la vez. Los ajenos no cuentan. |
 | **Implementadores** | Dos, en worktrees desechables. El lead entrega, vigila, revisa y mergea. |
 | **Costo estimado** | 1.5 a 2.5 millones de tokens del lado del lead, más lo que consuman los implementadores en sus cuentas. De 4 a 8 horas de reloj, dominadas por dos ciclos de sync y el despliegue. |
 | **Presupuesto** | Nada que preparar antes de lanzar. Las cuotas de los implementadores no se pueden leer por adelantado; si una se agota, manda la fila de cuota del loop §12 y el otro carril sigue. |
 | **Fuera de alcance** | El widget `show_widget` del tablero de sesión, los parches parciales en `runbook.progress.set` (v2), e inferir progreso leyendo PRs o transcripts: eso último está rechazado en el plan. |
-| **Sin David** | Todo. Tres salidas hacia él como máximo: el Telegram de cierre, y las dos filas de atores que lo adelantan. |
+| **Sin David** | Todo. Como máximo **un** mensaje: el de cierre. Lo adelantan cuatro casos, y en cada uno ese mensaje adelantado **es** el de cierre, no uno extra: una detención en 0.0, el gateway mudo tras el reinicio, el guard que no bloquea, y la reversa por git. |
 | **Cómo termina** | El plugin vive en el gateway, encendido o apagado según el canary; el tablero muestra la Fase 6 desde su cierre y la Fase 7 en vivo desde 7.6; `Plans.md` cerrado con `cc:完了` y SHAs; y tú imprimes `LISTO <sha>`. |
 
 **Cómo se lanza, en una línea:** claw elige un lead de su lista de preferencia, lo abre en tmux sobre `/Users/dn/dev/goncloud-openclaw` con el modo de permisos que no pregunta de ese host, y le entrega **este archivo** junto con la instrucción: "ejecuta la Fase 7 de `Plans.md` en autopilot siguiendo este runbook; la copia que está en `origin/main` está superada y ponerla al día es Q0b". Si el host del lead necesita un sentinel para que el kit selle, la instrucción lo lleva. Los implementadores los lanza el lead; David no abre nada.
