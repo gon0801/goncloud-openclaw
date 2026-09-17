@@ -1,13 +1,13 @@
 ---
 name: PR sin gh
-description: Cuando la tarea exige abrir un PR en GitHub y el nodo no tiene gh. Crea el PR via API con la credencial de git ya almacenada, sin imprimir jamas el token.
+description: Cuando la tarea exige abrir un PR en GitHub y gh no aparece en el PATH (en la Mac primero verifica /opt/homebrew/bin/gh; solo sin el vas por API). Crea el PR via API con la credencial de git ya almacenada, sin imprimir jamas el token.
 ---
 
 # PR sin gh
 
 ## Pasos
 
-1. Confirma que gh falta: `which gh` termina en exit 1. No instales nada.
+1. Confirma que gh falta DE VERDAD: en el nodo Mac `which gh` falla por el PATH restringido aunque gh exista; proba primero `/opt/homebrew/bin/gh --version` (medido funcionando en la Mac del operador, PRs #292/#2833). Solo si falta en ambas vias segui con la API. No instales nada.
 2. Lee la credencial almacenada de git SIN mostrarla, con
    `GIT_TERMINAL_PROMPT=0` para que falle en vez de colgarse a preguntar:
 
