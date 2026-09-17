@@ -21,7 +21,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 // Host simulado.
 // ---------------------------------------------------------------------------
 
-type GatewayHandler = (opts: { params: unknown; respond: (ok: boolean, payload?: unknown) => void }) => void;
+type GatewayHandler = (opts: { params: unknown; respond: (ok: boolean, payload?: unknown) => void }) => void | Promise<void>;
 
 type FakeApi = {
   id: string;
@@ -62,11 +62,11 @@ function fakeApi(pluginConfig?: Record<string, unknown>) {
   return { api, metodos, rutas, descriptores, warns };
 }
 
-function llamarMetodo(metodos: Map<string, { handler: GatewayHandler }>, method: string, params: unknown): any {
+async function llamarMetodo(metodos: Map<string, { handler: GatewayHandler }>, method: string, params: unknown): Promise<any> {
   const m = metodos.get(method);
   assert.ok(m, `método ${method} no registrado`);
   let payload: unknown;
-  m.handler({ params, respond: (_ok, p) => { payload = p; } });
+  await m.handler({ params, respond: (_ok, p) => { payload = p; } });
   return payload;
 }
 
@@ -98,11 +98,11 @@ function fakeRes(): ResFake {
  * Host simulado con la política de auth del gateway: una ruta declarada
  * `auth:"gateway"` NO despacha al handler sin credencial (responde 401).
  */
-function llamarRuta(
-  rutas: Array<{ path: string; match?: string; auth?: string; handler: (req: unknown, res: unknown) => void }>,
+async function llamarRuta(
+  rutas: Array<{ path: string; match?: string; auth?: string; handler: (req: unknown, res: unknown) => unknown }>,
   url: string,
   opts: { authed?: boolean; method?: string; handlerCalls?: { n: number } } = {},
-): ResFake {
+): Promise<ResFake> {
   const ruta = rutas.find((p) => url === p.path || url.startsWith(`${p.path}/`));
   assert.ok(ruta, `ruta no registrada para ${url}`);
   const authed = opts.authed ?? true;
@@ -120,7 +120,7 @@ function llamarRuta(
     if (handlerCalls) handlerCalls.n += 1;
     return original(rq, rs);
   };
-  contado(req, res);
+  await contado(req, res);
   return res;
 }
 
@@ -176,7 +176,7 @@ describe("plugin smoke import (7.4)", () => {
     const host = await cargar({ stateDir: dir });
     const doc = fixtureDoc("fase6-en-curso.json");
 
-    const r1 = llamarMetodo(host.metodos, "runbook.progress.set", doc);
+    const r1 = await llamarMetodo(host.metodos, "runbook.progress.set", doc);
     assert.deepEqual(r1, { ok: true });
     const rutaDoc = join(dir, "progress", "6.json");
     const rutaJsonl = join(dir, "events", "6.jsonl");
@@ -185,7 +185,7 @@ describe("plugin smoke import (7.4)", () => {
     const lineas1 = readFileSync(rutaJsonl, "utf8").split("\n").filter(Boolean);
     assert.equal(lineas1.length, doc.eventos.length);
 
-    const r2 = llamarMetodo(host.metodos, "runbook.progress.set", doc);
+    const r2 = await llamarMetodo(host.metodos, "runbook.progress.set", doc);
     assert.deepEqual(r2, { ok: true });
     const lineas2 = readFileSync(rutaJsonl, "utf8").split("\n").filter(Boolean);
     assert.equal(lineas2.length, lineas1.length, "reenviar el mismo doc duplicó líneas");
@@ -203,7 +203,7 @@ describe("plugin smoke import (7.4)", () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-invalido-"));
     const host = await cargar({ stateDir: dir });
     const invalido = fixtureDoc("invalido.json");
-    const r = llamarMetodo(host.metodos, "runbook.progress.set", invalido);
+    const r = await llamarMetodo(host.metodos, "runbook.progress.set", invalido);
     assert.equal(r.ok, false);
     assert.equal(r.razones.length, 5);
     assert.ok(validarProgreso(invalido).razones.length === 5);
@@ -217,7 +217,7 @@ describe("plugin smoke import (7.4)", () => {
     const host = await cargar({ stateDir: dir });
     const doc = fixtureDoc("fase6-en-curso.json") as ProgresoDoc;
     doc.fase = "../../openclaw.json";
-    const r = llamarMetodo(host.metodos, "runbook.progress.set", doc);
+    const r = await llamarMetodo(host.metodos, "runbook.progress.set", doc);
     assert.equal(r.ok, false);
     assert.ok(r.razones.some((x: string) => /fase/.test(x)));
     assert.ok(!existsSync(join(dir, "progress")), "la fase envenenada tocó disco");
@@ -228,12 +228,12 @@ describe("plugin smoke import (7.4)", () => {
   it("GET /runbook/tablero/..%2f..%2fopenclaw.json → 400 (path traversal por URL)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-url-"));
     const host = await cargar({ stateDir: dir });
-    const res = llamarRuta(host.rutas, "/runbook/tablero/..%2f..%2fopenclaw.json");
+    const res = await llamarRuta(host.rutas, "/runbook/tablero/..%2f..%2fopenclaw.json");
     assert.equal(res.statusCode, 400);
-    const res2 = llamarRuta(host.rutas, "/runbook/progress/..%2f..%2fopenclaw.json");
+    const res2 = await llamarRuta(host.rutas, "/runbook/progress/..%2f..%2fopenclaw.json");
     assert.equal(res2.statusCode, 400);
     // Y el literal con barras de verdad también.
-    const res3 = llamarRuta(host.rutas, "/runbook/tablero/../../openclaw.json");
+    const res3 = await llamarRuta(host.rutas, "/runbook/tablero/../../openclaw.json");
     assert.equal(res3.statusCode, 400);
     rmSync(dir, { recursive: true, force: true });
   });
@@ -245,7 +245,7 @@ describe("plugin smoke import (7.4)", () => {
       assert.equal(ruta.auth, "gateway", `ruta ${ruta.path} sin auth:"gateway"`);
     }
     const handlerCalls = { n: 0 };
-    const res = llamarRuta(host.rutas, "/runbook/tablero/6", { authed: false, handlerCalls });
+    const res = await llamarRuta(host.rutas, "/runbook/tablero/6", { authed: false, handlerCalls });
     assert.equal(res.statusCode, 401);
     assert.equal(handlerCalls.n, 0, "el handler corrió sin credencial");
     rmSync(dir, { recursive: true, force: true });
@@ -254,11 +254,11 @@ describe("plugin smoke import (7.4)", () => {
   it("get de fase desconocida: 404 en la ruta y {ok:false} en el método", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-404-"));
     const host = await cargar({ stateDir: dir });
-    const res = llamarRuta(host.rutas, "/runbook/tablero/99");
+    const res = await llamarRuta(host.rutas, "/runbook/tablero/99");
     assert.equal(res.statusCode, 404);
-    const resJson = llamarRuta(host.rutas, "/runbook/progress/99.json");
+    const resJson = await llamarRuta(host.rutas, "/runbook/progress/99.json");
     assert.equal(resJson.statusCode, 404);
-    const r = llamarMetodo(host.metodos, "runbook.progress.get", { fase: "99" });
+    const r = await llamarMetodo(host.metodos, "runbook.progress.get", { fase: "99" });
     assert.equal(r.ok, false);
     rmSync(dir, { recursive: true, force: true });
   });
@@ -268,11 +268,11 @@ describe("plugin smoke import (7.4)", () => {
     const host = await cargar({ stateDir: dir });
     llamarMetodo(host.metodos, "runbook.progress.set", fixtureDoc("fase6-en-curso.json"));
 
-    const r = llamarMetodo(host.metodos, "runbook.progress.get", { fase: "6" });
+    const r = await llamarMetodo(host.metodos, "runbook.progress.get", { fase: "6" });
     assert.equal(r.ok, true);
     assert.ok(r.doc && r.derivado && typeof r.html === "string");
 
-    const res = llamarRuta(host.rutas, "/runbook/tablero/6");
+    const res = await llamarRuta(host.rutas, "/runbook/tablero/6");
     assert.equal(res.statusCode, 200);
     assert.equal(res.body, r.html, "el HTML de la ruta y el del método difieren");
     assert.equal(res.headers["Content-Type"], "text/html; charset=utf-8");
@@ -289,7 +289,7 @@ describe("plugin smoke import (7.4)", () => {
     const doc = fixtureDoc("fase6-en-curso.json");
     llamarMetodo(host.metodos, "runbook.progress.set", doc);
 
-    const res = llamarRuta(host.rutas, "/runbook/progress/6.json");
+    const res = await llamarRuta(host.rutas, "/runbook/progress/6.json");
     assert.equal(res.statusCode, 200);
     assert.equal(res.headers["Content-Type"], "application/json");
     const cuerpo = JSON.parse(res.body);
@@ -306,12 +306,12 @@ describe("plugin smoke import (7.4)", () => {
     closeSync(openSync(archivo, "w"));
     const host = await cargar({ stateDir: archivo });
 
-    const r = llamarMetodo(host.metodos, "runbook.progress.set", fixtureDoc("fase6-en-curso.json"));
+    const r = await llamarMetodo(host.metodos, "runbook.progress.set", fixtureDoc("fase6-en-curso.json"));
     assert.deepEqual(r, { ok: false, razon: "disco" });
     assert.ok(host.warns.some((w) => /disco/.test(w)), "el fallo de disco no se registró");
 
     // La ruta también responde 500 sin lanzar.
-    const res = llamarRuta(host.rutas, "/runbook/tablero/6");
+    const res = await llamarRuta(host.rutas, "/runbook/tablero/6");
     assert.equal(res.statusCode, 404); // sin doc persistido, el GET no tiene nada que servir
     rmSync(dir, { recursive: true, force: true });
   });
@@ -319,8 +319,8 @@ describe("plugin smoke import (7.4)", () => {
   it("métodos no GET en las rutas → 405", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-405-"));
     const host = await cargar({ stateDir: dir });
-    assert.equal(llamarRuta(host.rutas, "/runbook/tablero/6", { method: "POST" }).statusCode, 405);
-    assert.equal(llamarRuta(host.rutas, "/runbook/progress/6.json", { method: "PUT" }).statusCode, 405);
+    assert.equal((await llamarRuta(host.rutas, "/runbook/tablero/6", { method: "POST" })).statusCode, 405);
+    assert.equal((await llamarRuta(host.rutas, "/runbook/progress/6.json", { method: "PUT" })).statusCode, 405);
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -350,12 +350,12 @@ describe("plugin smoke import (7.4)", () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-fases-"));
     const host = await cargar({ stateDir: dir, fases: ["6", "7"] });
     llamarMetodo(host.metodos, "runbook.progress.set", fixtureDoc("fase6-en-curso.json"));
-    const res = llamarRuta(host.rutas, "/runbook/tablero/6");
+    const res = await llamarRuta(host.rutas, "/runbook/tablero/6");
     assert.ok(res.body.includes('href="/runbook/tablero/7"'), "falta el enlace a la fase 7");
     assert.ok(!res.body.includes('href="/runbook/tablero/6"'), "la fase actual no se auto-enlaza");
 
     const host2 = await cargar({ stateDir: dir });
-    const r2 = llamarMetodo(host2.metodos, "runbook.progress.get", { fase: "6" });
+    const r2 = await llamarMetodo(host2.metodos, "runbook.progress.get", { fase: "6" });
     assert.ok(!r2.html.includes('href="/runbook/tablero/'), "sin fases configuradas no hay nav");
     rmSync(dir, { recursive: true, force: true });
   });

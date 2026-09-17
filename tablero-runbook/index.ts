@@ -36,6 +36,7 @@ import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import {
   EVENTOS_JSONL_MAX_BYTES,
   type Evento,
+  type GithubCruce,
   type ProgresoDoc,
   derivar,
   fusionarEventos,
@@ -43,6 +44,7 @@ import {
   validarFase,
   validarProgreso,
 } from "./lib.ts";
+import { cruzarGitHub, leerGithubConfig } from "./github.ts";
 
 // ---------------------------------------------------------------------------
 // Configuración (configSchema del manifest).
@@ -192,7 +194,11 @@ type RespuestaTablero =
   | { ok: true; doc: ProgresoDoc; derivado: ReturnType<typeof derivar>; html: string }
   | { ok: false; razon: "desconocida" | "disco" };
 
-function armarTablero(cfg: Config, fase: string): RespuestaTablero {
+async function armarTablero(
+  cfg: Config,
+  cfgGithub: ReturnType<typeof leerGithubConfig>,
+  fase: string,
+): Promise<RespuestaTablero> {
   let crudo: string;
   try {
     crudo = readFileSync(rutaDoc(cfg.stateDir, fase), "utf8");
@@ -206,7 +212,14 @@ function armarTablero(cfg: Config, fase: string): RespuestaTablero {
     return { ok: false, razon: "desconocida" };
   }
   const derivado = derivar(doc);
-  const html = renderTablero(doc, derivado, undefined, cfg.fases);
+  // 7.5: el cruce con GitHub corre solo tras validarProgreso y solo con
+  // github.enabled. Apagado, no se ejecuta nada y el render rotula
+  // "GitHub: sin verificar".
+  const github: GithubCruce | undefined =
+    cfgGithub.enabled && validarProgreso(doc).ok
+      ? await cruzarGitHub(doc, cfgGithub)
+      : undefined;
+  const html = renderTablero(doc, derivado, github, cfg.fases);
   return { ok: true, doc, derivado, html };
 }
 
@@ -243,51 +256,64 @@ type ResLike = {
   end: (chunk?: string) => void;
 };
 
-function servirTablero(log: Logger, cfg: Config, req: ReqLike, res: ResLike): void {
+function servirTablero(
+  log: Logger,
+  cfg: Config,
+  cfgGithub: ReturnType<typeof leerGithubConfig>,
+  req: ReqLike,
+  res: ResLike,
+): Promise<void> {
   if (req.method !== "GET" && req.method !== "HEAD") {
     res.writeHead(405, { "Content-Type": "text/plain; charset=utf-8", Allow: "GET" });
     res.end("solo GET");
-    return;
+    return Promise.resolve();
   }
   const fase = faseDeUrl(req.url);
   if (fase === undefined) {
     res.writeHead(400, HEADERS_HTML);
     res.end("<!doctype html><p>fase inválida: debe casar ^[0-9]{1,3}(\\.[0-9]{1,3})?$</p>");
-    return;
+    return Promise.resolve();
   }
-  const respuesta = armarTablero(cfg, fase);
-  if (!respuesta.ok) {
-    const status = respuesta.razon === "disco" ? 500 : 404;
-    res.writeHead(status, HEADERS_HTML);
-    res.end(`<!doctype html><p>fase ${fase}: ${respuesta.razon === "disco" ? "fallo de disco" : "sin documento"}</p>`);
-    return;
-  }
-  res.writeHead(200, HEADERS_HTML);
-  res.end(respuesta.html);
+  return armarTablero(cfg, cfgGithub, fase).then((respuesta) => {
+    if (!respuesta.ok) {
+      const status = respuesta.razon === "disco" ? 500 : 404;
+      res.writeHead(status, HEADERS_HTML);
+      res.end(`<!doctype html><p>fase ${fase}: ${respuesta.razon === "disco" ? "fallo de disco" : "sin documento"}</p>`);
+      return;
+    }
+    res.writeHead(200, HEADERS_HTML);
+    res.end(respuesta.html);
+  });
 }
 
-function servirJson(cfg: Config, req: ReqLike, res: ResLike): void {
+function servirJson(
+  cfg: Config,
+  cfgGithub: ReturnType<typeof leerGithubConfig>,
+  req: ReqLike,
+  res: ResLike,
+): Promise<void> {
   if (req.method !== "GET" && req.method !== "HEAD") {
     res.writeHead(405, { "Content-Type": "text/plain; charset=utf-8", Allow: "GET" });
     res.end("solo GET");
-    return;
+    return Promise.resolve();
   }
   const fase = faseDeUrl(req.url);
   if (fase === undefined) {
     res.writeHead(400, HEADERS_JSON);
     res.end(JSON.stringify({ ok: false, razon: "fase inválida" }));
-    return;
+    return Promise.resolve();
   }
-  const respuesta = armarTablero(cfg, fase);
-  if (!respuesta.ok) {
+  return armarTablero(cfg, cfgGithub, fase).then((respuesta) => {
     // Regla 8 del spec: get y la ruta .json exponen el documento completo
     // (residuales y eventos incluidos) a quien pase la auth del gateway.
-    res.writeHead(respuesta.razon === "disco" ? 500 : 404, HEADERS_JSON);
-    res.end(JSON.stringify({ ok: false, razon: respuesta.razon }));
-    return;
-  }
-  res.writeHead(200, HEADERS_JSON);
-  res.end(JSON.stringify(respuesta.doc));
+    if (!respuesta.ok) {
+      res.writeHead(respuesta.razon === "disco" ? 500 : 404, HEADERS_JSON);
+      res.end(JSON.stringify({ ok: false, razon: respuesta.razon }));
+      return;
+    }
+    res.writeHead(200, HEADERS_JSON);
+    res.end(JSON.stringify(respuesta.doc));
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -302,6 +328,7 @@ export default definePluginEntry({
   register(api) {
     const log: Logger = api.logger;
     const cfg = leerConfig((api as { pluginConfig?: unknown }).pluginConfig);
+    const cfgGithub = leerGithubConfig((api as { pluginConfig?: unknown }).pluginConfig);
 
     // -- RPC ---------------------------------------------------------------
     api.registerGatewayMethod(
@@ -314,13 +341,13 @@ export default definePluginEntry({
 
     api.registerGatewayMethod(
       "runbook.progress.get",
-      ({ params, respond }) => {
+      async ({ params, respond }) => {
         const fase = (params as { fase?: unknown } | null)?.fase;
         if (!validarFase(fase)) {
           respond(true, { ok: false, razon: "fase inválida" });
           return;
         }
-        const respuesta = armarTablero(cfg, fase);
+        const respuesta = await armarTablero(cfg, cfgGithub, fase);
         if (!respuesta.ok) {
           respond(true, { ok: false, razon: respuesta.razon });
           return;
@@ -342,14 +369,12 @@ export default definePluginEntry({
       match: "prefix",
       auth: "gateway",
       handler: (req, res) => {
-        try {
-          servirTablero(log, cfg, req, res);
-        } catch (err) {
+        servirTablero(log, cfg, cfgGithub, req, res).catch((err: unknown) => {
           const ctor = err !== null && typeof err === "object" ? (err as { constructor?: { name?: unknown } }).constructor : undefined;
           log.warn(`tablero-runbook: fallo sirviendo el tablero (${typeof ctor?.name === "string" ? ctor.name : "Error"})`);
           res.writeHead(500, HEADERS_HTML);
           res.end("<!doctype html><p>error interno</p>");
-        }
+        });
       },
     });
 
@@ -358,14 +383,12 @@ export default definePluginEntry({
       match: "prefix",
       auth: "gateway",
       handler: (req, res) => {
-        try {
-          servirJson(cfg, req, res);
-        } catch (err) {
+        servirJson(cfg, cfgGithub, req, res).catch((err: unknown) => {
           const ctor = err !== null && typeof err === "object" ? (err as { constructor?: { name?: unknown } }).constructor : undefined;
           log.warn(`tablero-runbook: fallo sirviendo el json (${typeof ctor?.name === "string" ? ctor.name : "Error"})`);
           res.writeHead(500, HEADERS_JSON);
           res.end(JSON.stringify({ ok: false, razon: "disco" }));
-        }
+        });
       },
     });
 
