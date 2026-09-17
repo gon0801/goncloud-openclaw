@@ -52,9 +52,9 @@ Cada tarea de un carril pasa por esto, en este orden. Ningún paso se salta; si 
 6. **Promoción.** Cuando una ronda no trae altas ni medias, el lead marca el PR como listo para revisión. Ahí CodeRabbit revisa una sola vez, sobre código que ya no va a cambiar.
 7. **CodeRabbit.** Se leen sus comentarios, no solo su check. Lo accionable se corrige en el mismo PR y vuelve al paso 3. Cada push de corrección tras la promoción vuelve a pasar por CodeRabbit; se cierra cuando no deja nada nuevo o no tiene cuota.
 8. **Aprobación.** `APPROVE lead <sha>` como comentario en el PR, con la lista de residuales y su razón. Solo eso mete el PR a la cola.
-9. **Merge** por la ruta del kit, sección 5. Rebase antes, CI verde del SHA nuevo, y re-APPROVE si el diff es vacío o vuelta al paso 5 si no lo es.
-10. **Despliegue y verificación**, sección 6, si la fase lo pide.
-11. **Progreso escrito**, sección 7. Solo entonces, la siguiente tarea.
+9. **Merge** por la ruta del kit, sección 6. Rebase antes, CI verde del SHA nuevo, y re-APPROVE si el diff es vacío o vuelta al paso 5 si no lo es.
+10. **Despliegue y verificación**, sección 7, si la fase lo pide.
+11. **Progreso escrito**, sección 8. Solo entonces, la siguiente tarea.
 
 Medido: 2026-09-16, revisión de cierre de la Fase 6: en los siete carriles, al menos una prueba pasaba igual con el defecto puesto; ningún implementador lo detectó solo, el paso 3 lo atrapó en todos.
 
@@ -87,7 +87,18 @@ Medido: 2026-09-16, PR #48 se mergeó con el check de CodeRabbit en verde y trec
 
 ## 6. Merge: la ruta del kit
 
-El merge es siempre `saikit-merge.sh` del kit, con `--confirmado` como el sí escrito del dueño que ya está en la tabla de preaprobaciones de la fase. Ninguna otra ruta: ni la interfaz de GitHub, ni la API, ni `gh pr merge`.
+El merge es siempre el del kit, con `--confirmado` como el sí escrito del dueño que ya está en la tabla de preaprobaciones de la fase. Ninguna otra ruta: ni la interfaz de GitHub, ni la API, ni a mano.
+
+**Dónde y cómo se corre.** El script opera sobre la **rama del worktree en el que estás parado**, no toma número de PR y toma un lock por clon, así que se corre con `cd` al worktree de ese carril. En orden, desde ahí:
+
+```
+K=/Users/dn/dev/summonaikit-claude/tools
+bash $K/saikit-merge.sh --dry-run       # debe terminar en LISTO
+bash $K/saikit-merge.sh --confirmado    # squash con --match-head-commit
+bash $K/saikit-postmerge.sh --merge-commit <merge_commit> --rama <default>
+```
+
+`saikit-postmerge.sh` en VERDE cierra el ítem; en ROJO trae el comando de reversa listo; en UNKNOWN se anota y aplica la compuerta propia del ítem. El script del kit vive en `644` y **se invoca por `bash`**: comprobar su existencia con `test -x` da falso negativo. Si un PR no tiene worktree propio, se abre uno con `git worktree add <ruta> <rama>` solo para mergearlo y se borra después.
 
 El kit exige un **veredicto sellado**: el subagente revisor del lead escribe el archivo de veredicto con la herramienta de escritura de su host, el hook del host lo sella, y el merge se corre **desde esa misma sesión viva, en el mismo host y con la misma ruta de proyecto**, antes de cerrar el turno. Un estado de otro host, otra sesión u otra ruta no sirve.
 
