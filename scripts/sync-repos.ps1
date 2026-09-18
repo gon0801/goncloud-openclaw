@@ -26,8 +26,52 @@ foreach ($r in $repos) {
     Log "$name add -A FALLO (cayendo a add -u): $why"
     git add -u 2>&1 | Out-Null
   }
-  $dirty = git status --porcelain
-  if ($dirty) {
+
+  # 1b. GUARDIA DE TAMANO. `add -A` se lleva lo que encuentre, y lo que encuentre no
+  # siempre es codigo. Medido el 2026-09-18: el snapshot de las 03:10 subio a main
+  # lego.exe (66 MB) y lego.zip (21 MB), que el gateway habia dejado en tls/bin. Tumbo
+  # el CI tres corridas seguidas -- dos de ellas de PRs ajenos que solo heredaron el
+  # rojo -- y bloqueo el cierre de las Fases 6 y 7, que exigen la rama por defecto en
+  # verde. Este sync no pasa por los candados del repo, asi que nada mas lo frenaba.
+  #
+  # Se desestagea, NO se borra: el archivo se queda en el disco del gateway, que es
+  # donde hace falta (lego renueva los certificados). Y se loguea cada ciclo a
+  # proposito: el vigia lee este log, y un archivo grande que aparece y no se sube es
+  # exactamente lo que una persona tiene que ver.
+  $MAX_MB = 5
+  foreach ($g in @(git diff --cached --name-only 2>$null)) {
+    $f = Join-Path $r $g
+    if ((Test-Path -LiteralPath $f -PathType Leaf) -and ((Get-Item -LiteralPath $f).Length -gt ($MAX_MB * 1MB))) {
+      git restore --staged -- "$g" 2>&1 | Out-Null
+      $mb = [math]::Round((Get-Item -LiteralPath $f).Length / 1MB, 1)
+      Log "$name GRANDE no se sube: $g ($mb MB; limite $MAX_MB MB)"
+    }
+  }
+
+  # Lo que decide si hay algo que commitear es el INDICE, no el arbol: tras la guardia
+  # de tamano el archivo grande sigue en `status --porcelain` (queda sin rastrear), y
+  # mirar el arbol hacia intentar un commit con el indice vacio. Git lo rechaza y el log
+  # decia FALLO aunque la guardia hubiera hecho exactamente su trabajo.
+  # `git diff --cached --quiet` devuelve 0 con el indice limpio y 1 cuando hay algo
+  # estagiado. Cualquier OTRO codigo (128 por indice corrupto o por un lock) es un fallo
+  # de git, no "hay trabajo": se distingue, porque tratarlo como trabajo intenta un
+  # commit condenado y confunde el diagnostico. Hallazgo de kimi, 2026-09-18.
+  git diff --cached --quiet
+  $rc_diff = $LASTEXITCODE
+  $hay_estagiado = ($rc_diff -eq 1)
+  if ($rc_diff -gt 1) {
+    Log "$name no pude leer el indice (git diff --cached salio $rc_diff): no se intenta commit"
+  }
+  # Si el arbol trae cambios pero el indice quedo vacio, algo se los comio: el fallback a
+  # `add -u` con solo archivos nuevos, o la guardia de tamano. Antes esto se veia como un
+  # FALLO de commit -- ruido, pero VISIBLE. Con la guardia, el commit se salta y sin esta
+  # linea el log no diria nada nunca: un repo que dejo de commitear en silencio. Hallazgo
+  # de kimi: el arreglo no puede cambiar ruido por silencio.
+  if (-not $hay_estagiado -and $rc_diff -le 1) {
+    $sucio = git status --porcelain
+    if ($sucio) { Log "$name hay cambios en el arbol y NADA estagiado: no se commitea nada este ciclo" }
+  }
+  if ($hay_estagiado) {
     $commitOut = git -c user.name="openclaw-auto" -c user.email="ehventasmx@gmail.com" commit -m "auto: snapshot $name $(Get-Date -Format 'yyyy-MM-dd HH:mm')" 2>&1
     if ($LASTEXITCODE -eq 0) {
       Log "$name commit local auto"

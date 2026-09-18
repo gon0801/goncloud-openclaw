@@ -49,6 +49,9 @@ echo "ok (2): las 13 secciones existen y van en orden"
 
 # (3) Cada regla tiene su ancla. Cambiar la regla = cambiar el ancla en el mismo commit.
 for a in 'LISTO <sha>' \
+         'arranque-de-fase.sh <fase>' \
+         'El arranque se gana con su propio comando' \
+         'se localiza con un comando, nunca con una ruta fija' \
          'Enviar el progreso no lo hace alcanzable' \
          'prueba que se escribio, no que algo lo este usando' \
          'sin reinicio la configuración nueva queda guardada y sin efecto' \
@@ -98,7 +101,7 @@ for a in 'LISTO <sha>' \
   # la lee grep como bandera y sale "Invalid argument", no como ancla faltante.
   grep -qF -- "$a" "$DOC" || fail "$DOC: falta el ancla: $a"
 done
-echo "ok (3): las 37 anclas de reglas están"
+echo "ok (3): las 49 anclas de reglas están"
 
 # (4) La fila del lead no nombra ningún modelo. Es la regla central del documento.
 hit=$(lead_nombra_modelo < "$DOC")

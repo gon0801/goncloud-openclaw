@@ -40,6 +40,16 @@ Un implementador la imprime al cerrar su encargo. El lead la imprime al cerrar c
 bash scripts/cierre-de-fase.sh <fase>
 ```
 
+**El arranque se gana con su propio comando, y va ANTES de tocar ningun carril.** Una fase no esta arrancada hasta que esto imprima VERDE:
+
+```
+bash scripts/arranque-de-fase.sh <fase>
+```
+
+El lead no anuncia que empezo en prosa: pega esa salida. Comprueba las cinco cosas que el arranque produce y que si son observables -- filas en el plan, el primer avance enviado al tablero, los dos crons de seguimiento creados y encendidos, el apunte de sesiones con su linea del lead, y la sesion del lead viva y marcada. Ninguna es opinion. No comprueba si alguien leyo el runbook, que no se puede comprobar: comprueba lo que leerlo obliga a producir.
+
+Medido: 2026-09-18. claw reporto la Fase 9 terminada. No solo no habia terminado -- 13 de 13 filas seguian abiertas -- es que nunca la arranco: los crons `corrida-vigia-9` y `corrida-empuje-9` de la tarea 0.4 no existian. Sin ellos no hay alarma, y sin alarma nadie se entera de que no hay alarma. Ocho horas. La instruccion ya estaba escrita en el runbook; lo que faltaba era la comprobacion, porque un paso saltado no se ve y una linea ROJO si.
+
 **No es una compuerta de una sola pasada: es un bucle.** La primera corrida normalmente sale `ROJO`, y eso no es un fallo: su lista **es** la lista de lo que falta por hacer. Si el cierre se hizo entero antes de correrlo, puede salir `VERDE` a la primera. Se hace lo que dice cada línea, se vuelve a correr, y así hasta que imprima `VERDE` y salga 0. Solo entonces se escribe el `LISTO` y solo entonces se le dice a nadie que la fase terminó. Comprueba las seis cosas que un merge no comprueba: las celdas `Status` del plan cerradas, ninguna rama ni worktree de la fase sin recoger (ni en el remoto ni en el disco), ninguna sesión suya todavía marcada, los plugins que la fase declara encendidos en el gateway, y la rama por defecto en verde. Una línea `unknown` no bloquea: es una comprobación que no se pudo hacer, y se declara.
 
 Medido 2026-09-17: la Fase 7 se reportó terminada con todo su código mergeado y CI en verde, y le faltaban las ocho celdas del plan, el plugin sin encender en el gateway (que era su tarea de despliegue), dos sesiones todavía marcadas y un worktree abierto. Ninguna de esas cinco cosas tenía alarma, porque un merge es observable y el cierre no lo era. Claw la busca en la pantalla de tmux; no interpreta spinners, colores ni mensajes propios de ningún producto. Si un proceso termina sin esa línea, se trata como `ATORADO sin reporte` y se aplica la fila de relanzamiento.
@@ -197,6 +207,10 @@ Un runbook de fase lleva **solo lo específico de la fase**: quién implementa c
 **No repite** nada de este documento: ni el loop, ni la política de rondas, ni la de PRs, ni la ruta del kit, ni la ventana segura, ni la reanudación. Los referencia por número de sección. Si un runbook necesita apartarse de una sección de aquí, lo dice con esa sección nombrada y la razón.
 
 Antes de lanzarse, el runbook pasa `scripts/tests/test-runbooks-no-contradicen-entorno.sh` en verde. Un runbook en rojo no se lanza.
+
+**Un runbook se localiza con un comando, nunca con una ruta fija ni con un enlace.** Quien tenga que abrirlo corre `bash scripts/runbook.sh <fase>` desde cualquier clon del repo y obtiene la ruta absoluta en esa maquina; `--lista` las nombra todas. Ni el encargo, ni el brief, ni el mensaje que lanza a un implementador escriben la ruta a mano: escriben esa llamada. Una ruta fija solo vale en la maquina de quien la escribio, y un enlace de GitHub no abre porque el repo es privado.
+
+Medido: 2026-09-18, arrancando la Fase 9. A los implementadores se les dio el enlace de GitHub del runbook y no pudieron abrirlo; la ruta que traian los documentos era la de otra maquina. El archivo estaba en su sitio en las dos, todo el tiempo. Lo que faltaba no era el archivo sino una forma de preguntar donde esta que contestara igual en la Mac, en el gateway Windows y en una maquina nueva.
 
 Medido: 2026-09-16, los runbooks de las fases 6 y 7 pesaban 40 y 36 KB y repetían el loop entero; el de la 7 ya decía "hereda de la 6" a mano y se desfasó en tres puntos en un día.
 
