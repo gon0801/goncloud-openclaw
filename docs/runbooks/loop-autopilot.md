@@ -151,6 +151,13 @@ En cada cambio de estado de un carril o de la cola, y al cierre, el lead escribe
 
 Medido: 2026-09-16, el cierre de la Fase 6 quedó declarado en `Plans.md` con un residual de canary que, al repetirlo, pasaba: sin progreso escrito por corrida, el estado declarado y el real divergieron sin que nadie lo notara.
 
+**Enviar el progreso no lo hace alcanzable.** La ruta del tablero es por prefijo, así que `/runbook/tablero/<fase>` sirve cualquier fase en cuanto su documento existe; pero la barra "Fases:" que da el único clic desde la aplicación se pinta con la lista `plugins.entries.tablero-runbook.config.fases` de la configuración del gateway, y el plugin la lee **una sola vez, al registrarse**. Una fase que no esté en esa lista existe y nadie llega a ella sin escribir la dirección a mano. Por eso el despliegue de una fase nueva lleva dos pasos más, los dos en la ventana segura de §7:
+
+1. Agregar la fase a esa lista por `config.patch`, con `replacePaths` sobre `plugins.entries.tablero-runbook.config.fases` (un arreglo se reemplaza, no se fusiona).
+2. Reiniciar el gateway: no hay RPC que recargue un plugin, y sin reinicio la configuración nueva queda guardada y sin efecto. Después, comprobar el enlace en el tablero de **otra** fase, porque la barra excluye la que estás viendo.
+
+Medido: 2026-09-18, al cerrar la Fase 7. El documento estaba enviado y el tablero contestaba, y aun así desde la aplicación no había ningún camino a la Fase 7. Leer la configuración de vuelta decía que sí: la lista ya traía la fase, pero el plugin seguía sirviendo la que cargó al arrancar. La lectura de vuelta es un falso verde si no se reinicia.
+
 ---
 
 ## 9. El lead es reemplazable
