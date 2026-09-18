@@ -87,3 +87,4 @@ so it gets believed; the close was not, so nobody noticed.
 - Rate-limit cooldowns are provider-wide; switch provider instead of retrying the same one.
 - Dispatching the next role before the previous completion arrives loses the handoff facts (SHA, evidence paths) that role needs.
 - Match the worker to the work's machine before dispatching: `openclaw config get agents.entries.<id>.tools.exec` must cover the host the task runs on. A node-pinned agent can never run gateway work — the override is denied, not queued (verified 2026-09-17: a delegated gateway fix stalled two hours achieving nothing). Unpin first (openclaw-config-patch, Exec host pin / unpin) or send the task where its host already fits.
+- A respawn reusing a finished run's `label` fails with `label already in use`: suffix the label (`r2`, `r3`) and dispatch again (verified 2026-09-17).

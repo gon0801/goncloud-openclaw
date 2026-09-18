@@ -35,6 +35,17 @@ Get the owner's phone to the gateway. Each route needs one owner action. Verifie
 With `ws://` the setup code is deliberately downgraded (`accessDowngraded: true`, `LIMITED_TRANSPORT_WARNING`) and the device lands without `operator.admin`. If the app then refuses something that needs full access, the cause is the plaintext transport, not the device.
 `gateway.tls.enabled=true` would give full access over `wss://<tunnel-ip>:18789` **without Tailscale** — but the Mac node and the Control UI speak `ws://100.80.179.76:18789` and must be re-pointed to `wss://` in the same change or they drop; with a self-signed certificate iOS/CFNetwork may reject it outright. High risk of leaving the Mac disconnected: treat it as a separate decision with a simultaneous migration plan, never a casual flip. (Analysis only, 2026-09-16; not applied.)
 
+## Full access over WireGuard: real certificate (stable fix)
+
+Verified 2026-09-18 (Windows gateway host, Cloudflare DNS, Let's Encrypt). Use when the owner asks for full app access over WireGuard — self-signed is explicitly the patch, not the fix.
+
+- DNS: A record `<name> → <tunnel-ip>`, DNS-only. Cloudflare shows "DNS only - reserved IP" for RFC1918 targets — that means already correct, nothing to switch.
+- Secret timing (verified recovery): a token saved to the secrets store mid-run is invisible to gateway-host exec (`$env:NAME` reads empty — the run's store snapshot predates the save). Do not ask the owner to re-paste; use manual DNS-01 below instead.
+- Automated path (only when exec can already see the token): lego with the Cloudflare DNS plugin. lego v5 moved flags to the subcommand: `lego run --dns cloudflare --path <dir> -m <email> -d <name> -a` (global `--email`/`--dns` are rejected).
+- Manual path (verified): lego `--dns manual` does NOT wait in non-interactive exec — stdin EOF kills the authorization immediately. Use Posh-ACME instead: `Install-PackageProvider NuGet -Scope CurrentUser` first (admin install fails), then `Install-Module Posh-ACME -Scope CurrentUser`; `New-PAOrder <name>` → `(Get-PAOrder)|Get-PAAuthorizations` gives the token; TXT value = base64url(sha256(token + "." + account-JWK-thumbprint)) with JWK members in order crv,kty,x,y from `acct.json`; hand the TXT to the owner for Cloudflare, then `Submit-ChallengeValidation` + `New-PACertificate`.
+  - Completion: `New-PACertificate` returns the cert; files land under the Posh-ACME store.
+- The flip itself (`gateway.tls` certPath/keyPath + simultaneous Mac/UI re-point to `wss://` + renewal task) stays a planned daytime migration with the owner present — write the plan, do not execute at night. Unexecuted.
+
 ## Route 2 — Tailscale Serve + QR
 
 For a client that can run Tailscale. Not the owner's phone.
