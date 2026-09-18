@@ -1,0 +1,148 @@
+{
+  "schema": "runbook-progress.v1",
+  "runbook": "docs/runbooks/autopilot-fase7.md",
+  "fase": "7",
+  "titulo": "Autopilot de la Fase 7",
+  "lead": {
+    "agente": "implementer",
+    "inicio": "2026-09-17T16:16:00Z",
+    "actualizado": "2026-09-18T02:55:00Z"
+  },
+  "atencion_requerida": {
+    "necesaria": false,
+    "motivo": null,
+    "desde": null
+  },
+  "siguiente_paso": "Cierre en PR #69 (fase7/cierre): 7.6 parcial declarado en Plans.md; merge 7.7 tras CI verde.",
+  "carriles": [
+    {
+      "id": "D",
+      "nombre": "Documentos y spec",
+      "repo": "gon0801/goncloud-openclaw",
+      "rama": "fase7/docs",
+      "tareas": [
+        "7.0",
+        "7.2"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "pr": 62,
+      "head": "d4980274a75f2418c6924a5961509f7997f89a24",
+      "approve_lead": null,
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "residuales": [],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-17T16:16:02Z",
+        "que": "merge #62 d498027 (spec delta + evidencia + test 7.2; Quality y gate SUCCESS)"
+      }
+    },
+    {
+      "id": "P",
+      "nombre": "Plugin tablero-runbook",
+      "repo": "gon0801/goncloud-openclaw",
+      "rama": "fase7/tablero",
+      "tareas": [
+        "7.1",
+        "7.3",
+        "7.4",
+        "7.5"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "pr": 63,
+      "head": "545074096527556e35b183deca97c29eae603eca",
+      "approve_lead": null,
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "residuales": [],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-17T20:16:01Z",
+        "que": "merge #63 5450740 (plugin + fixtures + tests; Quality y gate SUCCESS)"
+      }
+    },
+    {
+      "id": "N1",
+      "nombre": "Documentacion N1 (forma --params)",
+      "repo": "gon0801/goncloud-openclaw",
+      "rama": "fase7/n1-forma-params",
+      "tareas": [
+        "7.2",
+        "7.6"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "pr": 65,
+      "head": "ddfc522b437d8006ef90230a2d6740c746ed943f",
+      "approve_lead": null,
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "residuales": [],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-17T20:28:35Z",
+        "que": "merge #65 ddfc522 (forma --params en receta 7.6 y runbooks; Quality y gate SUCCESS)"
+      }
+    },
+    {
+      "id": "C",
+      "nombre": "Cierre",
+      "repo": "gon0801/goncloud-openclaw",
+      "rama": "fase7/cierre",
+      "tareas": [
+        "7.6",
+        "7.7"
+      ],
+      "estado": "implementando",
+      "paso_loop": 7,
+      "pr": 69,
+      "head": null,
+      "approve_lead": null,
+      "ci": "pendiente",
+      "coderabbit": "unknown",
+      "residuales": [
+        "7.6 parcial: canarys (i)-(vi) sin correr; detalle en el Status de Plans.md",
+        "Telegram del cierre con el enlace /runbook/tablero/7"
+      ],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-18T02:55:00Z",
+        "que": "PR #69 abierto en fase7/cierre; envio inicial del progreso de Fase 7 al tablero"
+      }
+    }
+  ],
+  "cola": [],
+  "eventos": [
+    {
+      "at": "2026-09-17T16:16:02Z",
+      "carril": "D",
+      "que": "merge #62 d498027",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-17T20:16:01Z",
+      "carril": "P",
+      "que": "merge #63 5450740",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-17T20:28:35Z",
+      "carril": "N1",
+      "que": "merge #65 ddfc522",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-18T02:55:00Z",
+      "carril": "C",
+      "que": "envio inicial del progreso de Fase 7 al tablero",
+      "situacion": null
+    }
+  ],
+  "cierre": {
+    "at": null,
+    "telegram_message_id": null,
+    "resumen": null
+  }
+}

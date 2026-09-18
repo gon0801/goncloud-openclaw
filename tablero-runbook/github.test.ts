@@ -76,11 +76,11 @@ describe("constantes y configuración (7.5)", () => {
   });
 
   it("prsACruzar: deduplica, valida la forma y aplica el tope de 10", () => {
-    const doc = fixtureDoc("fase6-diez-prs.json");
+    const doc = fixtureDoc("prueba999-diez-prs.json");
     const lista = prsACruzar(doc);
     assert.equal(lista.length, 6, "seis PRs únicos en el fixture de diez referencias");
     // Tope: 25 PRs únicos → 10.
-    const grande = fixtureDoc("fase6-en-curso.json");
+    const grande = fixtureDoc("prueba999-en-curso.json");
     grande.carriles = Array.from({ length: 25 }, (_, i) => ({
       ...grande.carriles[0],
       id: `X${i}`,
@@ -88,7 +88,7 @@ describe("constantes y configuración (7.5)", () => {
     }));
     assert.equal(prsACruzar(grande).length, GH_MAX_PRS);
     // Repo/pr inválidos ni entran a la lista.
-    const veneno = fixtureDoc("fase6-en-curso.json");
+    const veneno = fixtureDoc("prueba999-en-curso.json");
     veneno.carriles[0].repo = "a/b; calc.exe";
     veneno.carriles[0].pr = 1;
     veneno.carriles[1].repo = "--template x";
@@ -121,7 +121,7 @@ describe("cruzarGitHub con gh simulado (7.5)", () => {
     }) as never);
 
     try {
-      const doc = fixtureDoc("fase6-diez-prs.json");
+      const doc = fixtureDoc("prueba999-diez-prs.json");
       const mapa = await cruzarGitHub(doc, { enabled: true, ghPath: gh });
       assert.equal(Object.keys(mapa).length, 6);
       for (const v of Object.values(mapa)) {
@@ -159,7 +159,7 @@ describe("cruzarGitHub con gh simulado (7.5)", () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-75-timeout-"));
     const gh = ghFalso(dir, "gh.exe", "setTimeout(() => process.stdout.write('{}'), 30000);");
     try {
-      const doc = fixtureDoc("fase6-en-curso.json");
+      const doc = fixtureDoc("prueba999-en-curso.json");
       const inicio = Date.now();
       const mapa = await cruzarGitHub(doc, { enabled: true, ghPath: gh }, { presupuesto: 500 });
       const duracion = Date.now() - inicio;
@@ -182,7 +182,7 @@ describe("cruzarGitHub con gh simulado (7.5)", () => {
       setTimeout(() => {}, 30000);
     `);
     try {
-      const doc = fixtureDoc("fase6-en-curso.json");
+      const doc = fixtureDoc("prueba999-en-curso.json");
       await cruzarGitHub(doc, { enabled: true, ghPath: gh }, { presupuesto: 600 });
       assert.ok(existsSync(pidFile));
       const pid = Number(readFileSync(pidFile, "utf8"));
@@ -218,7 +218,7 @@ describe("cruzarGitHub con gh simulado (7.5)", () => {
     }) as never);
 
     try {
-      const doc = fixtureDoc("fase6-diez-prs.json");
+      const doc = fixtureDoc("prueba999-diez-prs.json");
       const inicio = Date.now();
       const mapa = await cruzarGitHub(doc, { enabled: true, ghPath: gh });
       const duracion = Date.now() - inicio;
@@ -240,7 +240,7 @@ describe("cruzarGitHub con gh simulado (7.5)", () => {
       return { kill: () => {} };
     }) as never);
     try {
-      const doc = fixtureDoc("fase6-en-curso.json"); // 5 PRs únicos: 15, 8, 5, 43, 45
+      const doc = fixtureDoc("prueba999-en-curso.json"); // 5 PRs únicos: 15, 8, 5, 43, 45
       const primera = await cruzarGitHub(doc, { enabled: true, ghPath: "/opt/gh.exe" });
       assert.equal(ejecuciones, 5, "la primera corrida consulta cada PR único una vez");
       const segunda = await cruzarGitHub(doc, { enabled: true, ghPath: "/opt/gh.exe" });
@@ -260,7 +260,7 @@ describe("cruzarGitHub con gh simulado (7.5)", () => {
       ejecuciones += 1;
       throw new Error("no debió ejecutarse");
     }) as never);
-    const doc = fixtureDoc("fase6-en-curso.json");
+    const doc = fixtureDoc("prueba999-en-curso.json");
     const mapa = await cruzarGitHub(doc, { enabled: true, ghPath: "C:\\tools\\gh.cmd" });
     assert.equal(ejecuciones, 0);
     for (const valor of Object.values(mapa)) assert.equal(valor, null);
@@ -275,7 +275,7 @@ describe("cruzarGitHub con gh simulado (7.5)", () => {
       setImmediate(() => cb(null, JSON.stringify({ mergeable: true, mergeStateStatus: "CLEAN", statusCheckRollup: [] })));
       return { kill: () => {} };
     }) as never);
-    const doc = fixtureDoc("fase6-en-curso.json");
+    const doc = fixtureDoc("prueba999-en-curso.json");
     doc.carriles[0].repo = "a/b; calc.exe";
     doc.carriles[1].repo = "--template x";
     // La misma referencia válida del PR 8 vive en la cola: se envenena ahí
@@ -295,7 +295,7 @@ describe("cruzarGitHub con gh simulado (7.5)", () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-75-fallo-"));
     const gh = ghFalso(dir, "gh.exe", 'process.stderr.write("gh: token expirado"); process.exit(1);');
     try {
-      const doc = fixtureDoc("fase6-en-curso.json");
+      const doc = fixtureDoc("prueba999-en-curso.json");
       const mapa = await cruzarGitHub(doc, { enabled: true, ghPath: gh }, { presupuesto: 3_000 });
       assert.equal(Object.keys(mapa).length, 5);
       for (const v of Object.values(mapa)) assert.equal(v, null);
@@ -344,10 +344,10 @@ describe("github.enabled: false — nada se ejecuta (7.5, cableado en index)", (
         session: { controls: { registerControlUiDescriptor() {} } },
       };
       mod.default.register(api as never);
-      await metodos.get("runbook.progress.set")({ params: fixtureDoc("fase6-en-curso.json"), respond: () => {} });
+      await metodos.get("runbook.progress.set")({ params: fixtureDoc("prueba999-en-curso.json"), respond: () => {} });
 
       let payload: any;
-      await metodos.get("runbook.progress.get")({ params: { fase: "6" }, respond: (_k, p) => { payload = p; } });
+      await metodos.get("runbook.progress.get")({ params: { fase: "999" }, respond: (_k, p) => { payload = p; } });
       assert.equal(payload.ok, true);
       assert.ok(payload.html.includes("GitHub: sin verificar"));
       assert.ok(!payload.html.includes("GitHub: unknown"));
@@ -361,7 +361,7 @@ describe("github.enabled: false — nada se ejecuta (7.5, cableado en index)", (
         registerGatewayMethod(m: string, h: (o: never) => unknown) { metodos2.set(m, h as never); },
       } as never);
       let payload2: any;
-      await metodos2.get("runbook.progress.get")({ params: { fase: "6" }, respond: (_k, p) => { payload2 = p; } });
+      await metodos2.get("runbook.progress.get")({ params: { fase: "999" }, respond: (_k, p) => { payload2 = p; } });
       assert.equal(payload2.ok, true);
       assert.ok(payload2.html.includes("GitHub: CLEAN"), "con enabled:true el estado vivo debe llegar al render");
       assert.ok(ejecuciones > 0, "con enabled:true el espía debió ver ejecuciones");

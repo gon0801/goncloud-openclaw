@@ -73,6 +73,18 @@ fi
 salida_tr=$( (cd tablero-runbook && "$NODE" --test --test-reporter tap --test-reporter-destination stdout 2>&1) ); rc_tr=$?
 printf '%s\n' "$salida_tr" | grep -E '^# (tests|pass|fail) ' | sed 's/^/  /'
 if [ "$rc_tr" -ne 0 ]; then
+  # Sin esto la bateria solo imprime "# fail 1" y no QUE fallo: en CI, donde no se puede
+  # correr nada a mano, eso cuesta una ronda entera por intento. Medido el 2026-09-17:
+  # cinco rondas adivinando un fallo que solo ocurre en Linux.
+  #
+  # Los subtests anidados en TAP van indentados ("    not ok 17 - ..."), asi que un
+  # `grep '^not ok '` no los ve: solo casa el resumen de la suite exterior, que no dice
+  # nada util. Y el mensaje de error real viaja en un bloque YAML `error: |-` cuyo texto
+  # esta en las lineas SIGUIENTES, mas indentadas — no en la linea `error:` misma. El
+  # detalle vive en scripts/tap-detalle-fallas.awk (probado por
+  # scripts/tests/test-run-checks-reporta-fallo.sh) para que sea la misma fuente que
+  # corre aqui y la que la prueba verifica.
+  printf '%s\n' "$salida_tr" | awk -f scripts/tap-detalle-fallas.awk | head -40 | sed 's/^/  /'
   echo "FAIL: bateria tablero-runbook"; fallas=$((fallas + 1))
 else
   pass_tr=$(printf '%s\n' "$salida_tr" | sed -n 's/^# pass \([0-9][0-9]*\)[[:space:]]*$/\1/p' | tail -1)
