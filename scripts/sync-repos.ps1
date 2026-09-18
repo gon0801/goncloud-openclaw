@@ -26,6 +26,28 @@ foreach ($r in $repos) {
     Log "$name add -A FALLO (cayendo a add -u): $why"
     git add -u 2>&1 | Out-Null
   }
+
+  # 1b. GUARDIA DE TAMANO. `add -A` se lleva lo que encuentre, y lo que encuentre no
+  # siempre es codigo. Medido el 2026-09-18: el snapshot de las 03:10 subio a main
+  # lego.exe (66 MB) y lego.zip (21 MB), que el gateway habia dejado en tls/bin. Tumbo
+  # el CI tres corridas seguidas -- dos de ellas de PRs ajenos que solo heredaron el
+  # rojo -- y bloqueo el cierre de las Fases 6 y 7, que exigen la rama por defecto en
+  # verde. Este sync no pasa por los candados del repo, asi que nada mas lo frenaba.
+  #
+  # Se desestagea, NO se borra: el archivo se queda en el disco del gateway, que es
+  # donde hace falta (lego renueva los certificados). Y se loguea cada ciclo a
+  # proposito: el vigia lee este log, y un archivo grande que aparece y no se sube es
+  # exactamente lo que una persona tiene que ver.
+  $MAX_MB = 5
+  foreach ($g in @(git diff --cached --name-only 2>$null)) {
+    $f = Join-Path $r $g
+    if ((Test-Path -LiteralPath $f -PathType Leaf) -and ((Get-Item -LiteralPath $f).Length -gt ($MAX_MB * 1MB))) {
+      git restore --staged -- "$g" 2>&1 | Out-Null
+      $mb = [math]::Round((Get-Item -LiteralPath $f).Length / 1MB, 1)
+      Log "$name GRANDE no se sube: $g ($mb MB > $MAX_MB MB)"
+    }
+  }
+
   $dirty = git status --porcelain
   if ($dirty) {
     $commitOut = git -c user.name="openclaw-auto" -c user.email="ehventasmx@gmail.com" commit -m "auto: snapshot $name $(Get-Date -Format 'yyyy-MM-dd HH:mm')" 2>&1
