@@ -27,6 +27,12 @@
 # declara, porque no poder comprobar algo no es lo mismo que comprobar que esta mal.
 set -u
 
+# Las variables de git heredadas (las exporta el hook de pre-commit, entre otros) hacen
+# que `git -C "$REPO"` opere sobre OTRO repo: el comprobador miraria el plan equivocado
+# y podria decir VERDE de una fase que no es. Medido el 2026-09-17, dos veces, en la
+# prueba de este mismo script.
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR GIT_PREFIX
+
 FASE=${1:-}
 JSON=0
 [ "${2:-}" = "--json" ] && JSON=1
@@ -45,7 +51,11 @@ GH_BIN=${GH_BIN:-/opt/homebrew/bin/gh}
 rojos=0
 linea() { # $1 estado, $2 nombre, $3 detalle
   if [ "$JSON" = "1" ]; then
-    printf '{"estado":"%s","check":"%s","detalle":"%s"}\n' "$1" "$2" "$(printf '%s' "$3" | tr -d '"' | tr '\n' ' ')"
+    # El detalle trae rutas y salidas de git: pueden venir con comillas, backslashes o
+    # caracteres de control, y `tr -d` los cambiaria en vez de escaparlos, o dejaria un
+    # JSON invalido. Se escapa de verdad.
+    printf '{"estado":"%s","check":"%s","detalle":%s}\n' "$1" "$2" \
+      "$(printf '%s' "$3" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"
   else
     printf '%-8s %-22s %s\n' "$1" "$2" "$3"
   fi
@@ -65,22 +75,40 @@ else
   if [ "$filas" -eq 0 ]; then
     linea ROJO plan "Plans.md no tiene ninguna fila de la fase $FASE"
   else
-    abiertas=$(printf '%s\n' "$plan" | grep -E "^\| $FASE\.[0-9]+[a-z]? \|" | grep -c -E 'cc:(TODO|WIP)') || true
+    # Solo la ultima columna (Status). Buscar en la fila entera cuenta como abierta una
+    # fila cerrada que mencione cc:TODO en su Contenido o en su DoD.
+    estados=$(printf '%s\n' "$plan" | grep -E "^\| $FASE\.[0-9]+[a-z]? \|" | awk -F'|' '{print $(NF-1)}')
+    abiertas=$(printf '%s\n' "$estados" | grep -c -E 'cc:(TODO|WIP)') || true
     if [ "$abiertas" -eq 0 ]; then
       linea VERDE plan "$filas filas, todas cerradas"
     else
-      ids=$(printf '%s\n' "$plan" | grep -E "^\| $FASE\.[0-9]+[a-z]? \|" | grep -E 'cc:(TODO|WIP)' | awk -F'|' '{gsub(/^ +| +$/,"",$2); printf "%s ", $2}')
+      ids=$(printf '%s\n' "$plan" | grep -E "^\| $FASE\.[0-9]+[a-z]? \|" | awk -F'|' '$(NF-1) ~ /cc:(TODO|WIP)/ {gsub(/^ +| +$/,"",$2); printf "%s ", $2}')
       linea ROJO plan "$abiertas de $filas filas sin cerrar: $ids"
     fi
   fi
 fi
 
 # (2) Ramas de la fase en el remoto: una rama viva es trabajo que nadie recogio.
-ramas=$(en_repo ls-remote --heads origin 2>/dev/null | awk '{print $2}' | sed 's|refs/heads/||' | grep -E "(^|/)fase$FASE(/|$)|fase$FASE-" || true)
-if [ -z "$ramas" ]; then
-  linea VERDE ramas "ninguna rama de la fase $FASE en el remoto"
+# Un `ls-remote` que falla no da ramas, y eso NO es lo mismo que no haber ramas: sin
+# distinguirlo, una consulta caida cerraba la fase en verde. Y se miran tambien las
+# locales: borrar la del servidor no borra la del disco.
+# Las locales se miran SIEMPRE, aunque el remoto no conteste: si la consulta al
+# servidor falla y con ella se salta tambien esta, una rama local de la fase pasa
+# desapercibida y `unknown` no bloquea, asi que la fase cerraria en verde con trabajo
+# suelto en el disco.
+locales=$(en_repo for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null | grep -E "(^|/)fase$FASE(/|$)|fase$FASE-" || true)
+if remotas=$(en_repo ls-remote --heads origin 2>/dev/null); then
+  ramas=$(printf '%s\n' "$remotas" | awk '{print $2}' | sed 's|refs/heads/||' | grep -E "(^|/)fase$FASE(/|$)|fase$FASE-" || true)
+  todas=$(printf '%s\n%s\n' "$ramas" "$locales" | grep . | sort -u || true)
+  if [ -z "$todas" ]; then
+    linea VERDE ramas "ninguna rama de la fase $FASE, ni en el remoto ni aqui"
+  else
+    linea ROJO ramas "quedan sin borrar: $(printf '%s' "$todas" | tr '\n' ' ')"
+  fi
+elif [ -n "$locales" ]; then
+  linea ROJO ramas "sin respuesta del remoto, pero aqui quedan: $(printf '%s' "$locales" | tr '\n' ' ')"
 else
-  linea ROJO ramas "quedan sin borrar: $(printf '%s' "$ramas" | tr '\n' ' ')"
+  linea unknown ramas "no pude consultar el remoto; aqui no hay ninguna"
 fi
 
 # (3) Worktrees de la fase: los que abrio la corrida se quitan al cerrar.
@@ -142,7 +170,11 @@ if [ ! -x "$GH_BIN" ]; then
 else
   url=$(en_repo remote get-url origin 2>/dev/null | sed 's|\.git$||')
   slug="$(basename "$(dirname "$url")")/$(basename "$url")"
-  cc=$(timeout 90 "$GH_BIN" run list --repo "$slug" --branch "${REF#origin/}" --limit 1 --json status,conclusion --jq '.[0] | "\(.status) \(.conclusion // "")"' 2>/dev/null)
+  # Si la consulta falla o expira despues de haber escrito algo, aceptar su salida daba
+  # VERDE sin haber comprobado nada. Primero el exito de la consulta, luego su contenido.
+  if ! cc=$(timeout 90 "$GH_BIN" run list --repo "$slug" --branch "${REF#origin/}" --limit 1 --json status,conclusion --jq '.[0] | "\(.status) \(.conclusion // "")"' 2>/dev/null); then
+    cc=""
+  fi
   case "$cc" in
     "completed success") linea VERDE ci "la rama por defecto esta en verde" ;;
     "") linea unknown ci "no pude leer el estado de CI" ;;

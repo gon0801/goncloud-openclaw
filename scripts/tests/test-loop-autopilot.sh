@@ -51,6 +51,8 @@ echo "ok (2): las 13 secciones existen y van en orden"
 for a in 'LISTO <sha>' \
          'cierre-de-fase.sh <fase>' \
          'se gana con un comando' \
+         'No es una compuerta de una sola pasada: es un bucle' \
+         'El orden del cierre es' \
          'la del lead incluida' \
          'mktemp -d' \
          'No se limpia durante la corrida' \
