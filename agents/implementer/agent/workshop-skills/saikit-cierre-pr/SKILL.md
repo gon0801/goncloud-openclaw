@@ -62,7 +62,14 @@ Precondiciones (Fase 6, 6.5b): este bloque solo corre cuando el brief trae la or
    el encadenado sin espacio (`&&`/`;`/`|`) ya no esquiva la promesa del paso 4; la ruta
    REST `auto-merge` (alta y baja) y las mutaciones de merge con comentario GraphQL pegado
    al nombre blockean igual (falso positivo aceptado: mencionar el nombre de la mutación
-   blockea; `gh pr ready` y `gh pr checks` siguen pasando). Cierre r7: el flag interpuesto
+   blockea; `gh pr ready` y `gh pr checks` siguen pasando). El guard es
+   léxico sobre TODO el texto del comando: un heredoc que solo ESCRIBE
+   la frase literal también dispara (medido 2026-09-17 en
+   goncloud-openclaw: la escritura de un archivo de evidencia murió por
+   llevar la frase en el cuerpo, sin ejecutar nada). Recuperación
+   verificada: redactar el archivo sin el literal; no ofuscarlo con
+   variables o base64 para pasarlo — esa indirección es un bypass
+   declarado fuera del alcance del guard, no una vía de escritura. Cierre r7: el flag interpuesto
    entre `gh`/`pr`/el verbo tampoco esquiva; no era una tercera clase inherente (el texto
    del comando llevaba la orden completa y visible), por eso se cerró y el conteo sigue
    siendo DOS. Cierre r9: la frontera izquierda queda cubierta en las DOS ramas del
