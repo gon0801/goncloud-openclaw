@@ -70,9 +70,12 @@ export OPENCLAW_BIN="$T/bin/openclaw" TMUX_BIN="$T/bin/tmux-shim"
 # (0) abrir en simulacro: registro 600, dir 700, cron hombre-muerto, destino guardado.
 bash "$CORR" abrir t1 --runbook runbook-x --vigia claw --cli-modos "$T/modos.tsv" --simulacro >/dev/null \
   || fail "abrir fallo"
+permiso() { # $1 ruta: stat portable (macOS usa -f, Linux -c; en Linux stat -f no falla, asi que se elige por sistema)
+  if [ "$(uname)" = "Darwin" ]; then stat -f %Lp "$1"; else stat -c %a "$1"; fi
+}
 [ -f "$T/corridas/t1/registro.json" ] || fail "sin registro"
-[ "$(stat -f %Lp "$T/corridas/t1" 2>/dev/null || stat -c %a "$T/corridas/t1")" = "700" ] || fail "el dir no queda 700"
-[ "$(stat -f %Lp "$T/corridas/t1/registro.json" 2>/dev/null || stat -c %a "$T/corridas/t1/registro.json")" = "600" ] || fail "el registro no queda 600"
+[ "$(permiso "$T/corridas/t1")" = "700" ] || fail "el dir no queda 700"
+[ "$(permiso "$T/corridas/t1/registro.json")" = "600" ] || fail "el registro no queda 600"
 grep -q "cron add.*corrida-vigia-t1" "$LLAMADAS" || fail "abrir no crea el cron hombre-muerto"
 grep -q '"simulacro": *true' "$T/corridas/t1/registro.json" || fail "el registro no dice simulacro"
 

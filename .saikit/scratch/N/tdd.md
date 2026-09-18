@@ -37,3 +37,12 @@ Mutaciones que mueren (verificadas): gh en 401, binario que muere, flag que no e
 vigilante viejo, ssh declarado en sesion que lo niega, ssh usado sin declarar en la
 tabla ( estatico: bloque de comando sin fila de clase). NO APTO manda DETENIDA en
 lenguaje de usuario (las razones tecnicas van solo a stdout, jamas al mensaje).
+
+## Fix CI Linux (2026-09-18, PR 81)
+CI rojo con 2 fallas propias de Linux, ambas verdes en macOS:
+(1) nucleo "el dir no queda 700": en Linux `stat -f` NO falla (es stat de
+filesystem) y el `||` nunca caia al `stat -c`; se elige el flag por `uname`.
+(2) preflight "vigilante viejo": la prueba copiaba el vigilante del arbol, pero
+los hooks retocan el arbol antes de la bateria en CI; ahora el instalado se
+escribe desde el mismo blob de origin que preflight compara (el caso rojo sigue
+demostrando que la comparacion discrimina).

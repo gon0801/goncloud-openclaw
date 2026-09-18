@@ -74,8 +74,14 @@ export PATH="$T/bin:$PATH" CORRIDA_STATE="$T/corridas" REPO_DIR="$PWD"
 export OPENCLAW_BIN="$T/bin/openclaw" TMUX_BIN="$T/bin/tmux-shim" GH_BIN="$T/bin/gh"
 export WATCH_INSTALADO="$T/wbin/tmux-activity-watch.sh"
 
-# Vigilante de mentira: instalado = blob real del repo, proceso con su nombre.
-cp scripts/mac/tmux-activity-watch.sh "$WATCH_INSTALADO"
+# Vigilante de mentira: instalado = el mismo blob de origin que preflight compara
+# (se escribe desde git, no copiando el arbol, porque los hooks pueden retocar el
+# arbol antes de que corra la prueba; el caso rojo demuestra que la comparacion
+# discrimina). Proceso con su nombre para que pgrep lo encuentre.
+DEF="$(git -C "$REPO_DIR" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')"
+[ -z "$DEF" ] && DEF="main"
+git -C "$REPO_DIR" show "origin/$DEF:scripts/mac/tmux-activity-watch.sh" >"$WATCH_INSTALADO" \
+  || fail "sin blob de referencia del vigilante"
 bash -c "exec -a \"$T/wbin/tmux-activity-watch.sh\" sleep 120" &
 VPID=$!
 
