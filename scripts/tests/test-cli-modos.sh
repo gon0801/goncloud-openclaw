@@ -35,16 +35,20 @@ revienta lista-dura "lista dura aprobada"
 # Lista dura por regex con bordes: las variantes caen, los inocentes pasan.
 revienta dura-rmrf "lista dura aprobada"
 revienta dura-forcepush "lista dura aprobada"
-revienta dura-rm-separado "lista dura aprobada"
+for r in dura-rm-separado dura-rm-largos dura-rm-Rf dura-rm-r-fuerza dura-rm-R-sep; do
+  revienta "$r" "lista dura aprobada"
+done
 validar_registro "$FX/registro-pasa-emergencia.json" || fail "emergencia dio lista dura (falso positivo)"
 validar_registro "$FX/registro-pasa-dropbox.json" || fail "dropbox dio lista dura (falso positivo)"
 
-# runbook_de sin REPO_DIR y desde un subdirectorio resuelve contra la raiz del repo
-# (el contexto de launchd/latido no hereda REPO_DIR ni arranca en la raiz).
+# runbook_de deriva la raiz del propio lib.sh (no del pwd): desde /tmp y sin
+# REPO_DIR, un runbook relativo REAL resuelve igual, en forma fisica.
 LIBABS="$PWD/scripts/mac/corrida/lib.sh"
-z1="$( cd scripts/mac && env -u REPO_DIR bash -c ". '$LIBABS'; runbook_de tests/fixtures/corrida/runbook-simulacro.md" )"
-[ "$z1" = "$PWD/tests/fixtures/corrida/runbook-simulacro.md" ] \
-  || fail "runbook_de desde un subdirectorio no resuelve contra la raiz del repo: $z1"
+RAIZFIS="$(CDPATH= cd -P -- . && pwd)"
+z1="$( cd /tmp && env -u REPO_DIR bash -c ". '$LIBABS'; runbook_de scripts/tests/fixtures/corrida/runbook-simulacro.md" )"
+[ "$z1" = "$RAIZFIS/scripts/tests/fixtures/corrida/runbook-simulacro.md" ] \
+  || fail "runbook_de desde fuera del repo no resuelve contra la raiz del repo: $z1"
+[ -f "$z1" ] || fail "la ruta que resolvio runbook_de no existe: $z1"
 
 # mensaje_valido viene de lib.sh: es el que corre en cada envio de verdad.
 mensaje_valido "$FX/mensaje-valido.txt" || fail "el mensaje valido no pasa"
@@ -56,11 +60,12 @@ printf '[AVANZA] Fase 9, 2 de 5 partes terminadas\nQue cambio: la primera parte 
 mensaje_valido "$TMP/val-sin-salto.txt" || fail "4 lineas sin salto final no pasan"
 mensaje_valido "$TMP/cinco-sin-salto.txt" 2>/dev/null && fail "5 lineas sin salto final pasan"
 mensaje_valido "$FX/mensaje-etiqueta-mala.txt" 2>/dev/null && fail "etiqueta desconocida pasa"
+mensaje_valido "$FX/mensaje-cerrada-pelada.txt" 2>/dev/null && fail "un [CERRADA] pelado pasa"
 mensaje_valido "$FX/mensaje-forma-mala.txt" 2>/dev/null && fail "forma sin prefijos pasa"
 mensaje_valido "$FX/mensaje-forma-sin-avance.txt" 2>/dev/null && fail "linea 1 sin avance pasa"
 mensaje_valido "$FX/mensaje-linea-vacia.txt" 2>/dev/null && fail "prefijo con contenido vacio pasa"
 mensaje_valido "$FX/mensaje-necesito-solo-comando.txt" 2>/dev/null && fail "NECESITO sin pregunta pasa"
-for j in palabra ruta flag sha tilde commits mergeado prs mergear rama push rebase hash-mayus hash-mixto; do
+for j in palabra ruta flag sha sha256 tilde commits mergeado prs mergear rama push rebase hash-mayus hash-mixto; do
   mensaje_valido "$FX/mensaje-jerga-$j.txt" 2>/dev/null && fail "jerga ($j) pasa"
 done
 # Falsos positivos declarados residuales: sin digito o sin letra no es sha.

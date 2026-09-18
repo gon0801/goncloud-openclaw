@@ -21,12 +21,9 @@ corrida_abrir() {
   [ -f "$runbook" ] || { echo "abrir: no existe el runbook: $runbook" >&2; return 1; }
   [ -r "$cli_modos" ] || { echo "abrir: no se puede leer la tabla de modos: $cli_modos" >&2; return 1; }
   # El destino sale de la entrega de un cron que ya existe; jamas va en el repo ni en entorno.
-  local crons dest
-  crons="$("$OPENCLAW_BIN" cron list --json 2>/dev/null)" || { echo "abrir: sin lista de crons" >&2; return 1; }
-  dest="$(printf '%s' "$crons" | CANAL_DE="$canal_de" python3 -c "
-import sys,json,os
-t=sys.stdin.read(); d=json.loads(t[t.index('{'):])
-print(next(((j.get('delivery') or {}).get('to') or '' for j in d.get('jobs',[]) if j.get('name')==os.environ['CANAL_DE']),''))")"
+  local dest
+  dest="$(cron_dest_de "$canal_de")"
+  [ "$dest" = "ILEGIBLE" ] && { echo "abrir: sin lista de crons legible" >&2; return 1; }
   [ -n "$dest" ] || { echo "abrir: el cron $canal_de no trae destino" >&2; return 1; }
   local dir="$CORRIDA_STATE/$id"
   if [ -e "$dir/registro.json" ]; then
@@ -51,38 +48,32 @@ try:
 except Exception:
   d={}
 print(d.get('id',''))" 2>/dev/null)"
-  # Sin id en la salida, el cron quedo puesto: resolver el id REAL en la lista por
-  # nombre exacto y borrar por ese id; borrar a ciegas por nombre puede no borrar nada.
+  # Sin id en la salida, el cron quedo puesto: resolver TODOS los ids homonimos en
+  # la lista (los duplicados existen: medidos en vivo), quitarlos por id y verificar
+  # de verdad — "no se pudo verificar" nunca se viste de "se quito".
   if [ -z "$cid" ]; then
     echo "abrir: cron add no devolvio un id usable" >&2
-    local lista cid2 sigue
-    lista="$("$OPENCLAW_BIN" cron list --json 2>/dev/null || true)"
-    cid2="$(printf '%s' "$lista" | NOMBRE_CRON="corrida-vigia-$id" python3 -c "
-import sys,json,os
-t=sys.stdin.read()
-try:
-  d=json.loads(t[t.index('{'):])
-except Exception:
-  d={}
-print(next((j.get('id','') for j in d.get('jobs',[]) if j.get('name')==os.environ['NOMBRE_CRON']),''))" 2>/dev/null)"
-    if [ -n "$cid2" ]; then
-      "$OPENCLAW_BIN" cron rm "$cid2" >/dev/null 2>&1
-      sigue="$(printf '%s' "$("$OPENCLAW_BIN" cron list --json 2>/dev/null || true)" | NOMBRE_CRON="corrida-vigia-$id" python3 -c "
-import sys,json,os
-t=sys.stdin.read()
-try:
-  d=json.loads(t[t.index('{'):])
-except Exception:
-  d={}
-print('vivo' if any(j.get('name')==os.environ['NOMBRE_CRON'] for j in d.get('jobs',[])) else '')" 2>/dev/null)"
-      if [ "$sigue" = "vivo" ]; then
-        echo "abrir: no se pudo quitar el cron corrida-vigia-$id (id $cid2); revisarlo a mano" >&2
-      else
-        echo "abrir: el cron quedo puesto y se quito por el id de la lista ($cid2)" >&2
-      fi
-    else
-      echo "abrir: el cron corrida-vigia-$id no aparece en la lista; revisarlo a mano si quedo" >&2
+    local ids i quitados ids2
+    ids="$(cron_jobs_de "corrida-vigia-$id")"
+    if [ "$ids" = "ILEGIBLE" ]; then
+      echo "abrir: no se pudo leer la lista de crons; revisar corrida-vigia-$id a mano" >&2
+      return 1
     fi
+    if [ "$ids" = "NINGUNO" ]; then
+      echo "abrir: el cron corrida-vigia-$id no aparece en la lista; nada que quitar" >&2
+      return 1
+    fi
+    quitados=0
+    while IFS= read -r i; do
+      [ -n "$i" ] || continue
+      if "$OPENCLAW_BIN" cron rm "$i" >/dev/null 2>&1; then quitados=$((quitados+1)); fi
+    done <<< "$ids"
+    ids2="$(cron_jobs_de "corrida-vigia-$id")"
+    case "$ids2" in
+      ILEGIBLE) echo "abrir: no se pudo releer la lista tras quitar $quitados job(s); revisar a mano" >&2;;
+      NINGUNO)  echo "abrir: el cron quedo puesto y se quito por la lista ($quitados job(s))" >&2;;
+      *)        echo "abrir: el cron corrida-vigia-$id sigue en la lista; revisarlo a mano" >&2;;
+    esac
     return 1
   fi
   CORR_ID="$id" CORR_RUNBOOK="$runbook" CORR_VIGIA="$vigia" CORR_SIM="$sim" CORR_CANAL="$canal_de" \

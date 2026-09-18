@@ -222,3 +222,29 @@ Rojos con el defecto puesto:
 - Z4-4: comentario y aviso del umbral de locks viejos alineados con lo que find
   hace de verdad (a partir de ~2 min).
 Verde: las tres pruebas en TODO VERDE (tambien /bin/bash 3.2).
+
+## BRIEF-r5 (2026-09-18): ronda 4 (claude sobre 604e577) — AA, AB, AC, AD
+Rojos con el defecto puesto:
+- AA: desde /tmp sin REPO_DIR, runbook_de resolvio `/tmp/scripts/...` (pwd). Ahora
+  la raiz se deriva del propio lib.sh al cargarse (CORR_REPO_RAIZ, tres niveles
+  arriba; instalado en ~/bin/corrida no aplica, documentado) y REPO_DIR inyectado
+  gana. El caso z1 compara forma fisica y ruta REAL, y exige que exista.
+- AB: `FAIL: registro mutante pasa: dura-rm-largos` (las cuatro formas nuevas
+  evadian la regex). Ahora r/f cuentan por FLAG, no por letra suelta: "--force"
+  solo aporta f, "--recursive"/-r aportan r, y un cluster corto aporta las letras
+  que tenga; pat ya viene lowercase.
+- AC: `FAIL: con dos crons homonimos no se quitaron los dos` + demostracion de la
+  lista ilegible vistiendose de "se quito". Ahora cron_jobs_de devuelve TODOS los
+  ids homonimos, se quitan por id, y la relectura distingue ILEGIBLE (honesto: "no
+  se pudo releer") de NINGUNO ("se quito por la lista (N job(s))") de "sigue vivo".
+- AD-11: sha256 de 64 pasaba — rango 7-64, fixture nuevo. AD-13: un [CERRADA]
+  pelado YA caia por la regex de etiqueta (exige "] "); el calculo del resto se
+  endurecio igual (prefijo completo, vacio si no strip). AD-6: disarm ANTES del
+  rmdir (sin rojo determinista posible sin inyeccion — declarado). AD-12: parser
+  de cron list unificado en cron_dest_de/cron_jobs_de (abrir ya no duplica).
+  AD-8: z1 con ruta real y fisica. AD-10: la corrida t-limpio extra fuera; (7)
+  no cuenta corridas (solo grepea t1). AD-5: comentario con las dos semanticas
+  de find -mmin +1 (BSD >60 s; GNU ~2 min), umbral a proposito.
+Bugs propios del pase (cazados por la prueba o el repro): el patron de resto sin
+el corchete inicial; y en el stub, cron rm miraba $2 (el id es $3) y el grep -v
+con resultado vacio dejaba de hacer mv. Verde: las tres pruebas, tambien /bin/bash.

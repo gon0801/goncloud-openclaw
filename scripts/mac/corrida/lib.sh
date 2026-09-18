@@ -8,6 +8,10 @@ if [ -z "${TMUX_BIN:-}" ]; then
   TMUX_BIN="$(command -v tmux 2>/dev/null || true)"
   [ -z "$TMUX_BIN" ] && [ -x /opt/homebrew/bin/tmux ] && TMUX_BIN=/opt/homebrew/bin/tmux
 fi
+# Raiz del repo derivada del propio lib.sh al cargarse (corrida/ esta a tres niveles:
+# scripts/mac/corrida). Instalado vive en ~/bin/corrida/ y la derivacion no aplica
+# (documentado): ahi mandan REPO_DIR o los runbooks absolutos del registro.
+CORR_REPO_RAIZ="$(CDPATH= cd -P -- "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd || true)"
 
 registro_de() { printf '%s/%s/registro.json' "$CORRIDA_STATE" "$1"; }
 
@@ -28,20 +32,49 @@ print('' if v is None else (str(v).lower() if isinstance(v,bool) else v))
 }
 
 runbook_de() { # $1 runbook del registro: la absoluta, tal cual; la relativa, contra
-               # REPO_DIR o, sin el, la raiz del repo (launchd no hereda REPO_DIR
-               # ni arranca en la raiz: caer en pwd seria un falso "sin leer")
+               # REPO_DIR inyectado o contra la raiz derivada del propio lib.sh —
+               # nunca del pwd: bajo launchd el pwd es / y en otro repo resolveria
+               # contra ese sin avisar.
   local base="${REPO_DIR:-}"
-  [ -n "$base" ] || base="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+  [ -n "$base" ] || base="$CORR_REPO_RAIZ"
+  [ -n "$base" ] || base="$(pwd)"
   case "$1" in
     /*) printf '%s\n' "$1";;
     *) printf '%s/%s\n' "$base" "$1";;
   esac
 }
 
+# Parser unico de `cron list --json`: por nombre, el destino de entrega o TODOS los
+# ids (los duplicados homonimos existen: medido en vivo 2026-09-18). Sentinelas en
+# stdout: ILEGIBLE (lista sin leer) y NINGUNO (legible, sin ese nombre).
+cron_dest_de() { # $1 nombre -> destino de entrega
+  printf '%s' "$("$OPENCLAW_BIN" cron list --json 2>/dev/null)" | NOMBRE_CRON="$1" python3 -c "
+import sys,json,os
+t=sys.stdin.read()
+try:
+  d=json.loads(t[t.index('{'):])
+except Exception:
+  print('ILEGIBLE'); raise SystemExit
+print(next(((j.get('delivery') or {}).get('to') or '' for j in d.get('jobs',[]) if j.get('name')==os.environ['NOMBRE_CRON']),''))" 2>/dev/null
+}
+
+cron_jobs_de() { # $1 nombre -> ILEGIBLE | NINGUNO | un id por linea
+  printf '%s' "$("$OPENCLAW_BIN" cron list --json 2>/dev/null)" | NOMBRE_CRON="$1" python3 -c "
+import sys,json,os
+t=sys.stdin.read()
+try:
+  d=json.loads(t[t.index('{'):])
+except Exception:
+  print('ILEGIBLE'); raise SystemExit
+js=[j.get('id','') for j in d.get('jobs',[]) if j.get('name')==os.environ['NOMBRE_CRON'] and j.get('id')]
+print('\n'.join(js) if js else 'NINGUNO')" 2>/dev/null
+}
+
 # Actualizacion del registro con lock por directorio y renombre atomico: dos
 # lanzar-sesion en paralelo no se pisan y un corte a mitad no deja JSON truncado.
-# Un lock de mas de un minuto es de un proceso muerto (el +1 de find redondea: en
-# la practica se rompe a partir de ~2 min) y se quita con aviso.
+# Un lock de mas de un minuto es de un proceso muerto y se quita con aviso. El +1
+# de find tiene dos semanticas: BSD (macOS) matchea >60 s; GNU (CI) redondea y
+# matchea a partir de ~2 min. El umbral efectivo, entre 1 y 2 min, es a proposito.
 registro_actualizar() { # $1 registro, $2 lineas python que mutan d (env visible); 0 = escrito
   local reg="$1" dir i=0 armado=0
   dir="$(dirname "$reg")"
@@ -76,8 +109,10 @@ os.chmod(t,0o600)
 os.rename(t,r)
 "
   local rc=$?
-  rmdir "$dir/.lock" 2>/dev/null
+  # Desarmar ANTES de soltar: una senal entre el rmdir y el disarm dispararia el
+  # trap sobre un lock que otro proceso pudo tomar ya.
   [ "$armado" -eq 1 ] && trap - EXIT
+  rmdir "$dir/.lock" 2>/dev/null
   return "$rc"
 }
 
@@ -113,17 +148,24 @@ else:
       if not (isinstance(s,dict) and s.get(c)): malo('sesion sin '+c); break
     if isinstance(s,dict) and s.get('rol') not in (None,'lead','carril'):
       malo('rol fuera del conjunto')
-# Lista dura por regexes con bordes de palabra: "rm -rf" y "force push" caen,
-# "emergencia" y "dropbox" (que contienen "merge"/"drop" como substring) no.
-# rm con r y f en flags, juntos o separados ("rm -rf", "rm -r -f").
-DURA=[r'\brm\b(?=[^\n]*\s-[a-z]*r)(?=[^\n]*\s-[a-z]*f)', r'\bdrop\b', r'\bborr\w*\s+recursiv\w*',
+# Lista dura por regexes con bordes de palabra: "force push" cae y "emergencia" o
+# "dropbox" (que contienen "merge"/"drop" como substring) no. El rm recursivo va
+# aparte: r y f cuentan por flag, no por letra suelta ("--force" NO trae r).
+def _rm_recursivo(pat):
+  m=re.search(r'\brm\b', pat)
+  if not m: return False
+  fs=re.findall(r'-{1,2}[a-z]+', pat[m.end():m.end()+80])
+  r=any(t=='--recursive' or (not t.startswith('--') and 'r' in t) for t in fs)
+  f=any(t=='--force' or (not t.startswith('--') and 'f' in t) for t in fs)
+  return r and f
+DURA=[r'\bdrop\b', r'\bborr\w*\s+recursiv\w*',
       r'\bforce\s+push\b', r'\bpush\b[^\n]{0,40}\b(main|por defecto)\b',
       r'\bmerge\w*\b', r'\bcredenciales?\b', r'\btokens?\b', r'\bsecretos?\b']
 for p in d.get('preaprobaciones') or []:
   if not isinstance(p,dict): malo('preaprobacion sin forma'); continue
   if p.get('decision') not in ('Aprobado','Negado'): malo('decision fuera del conjunto')
   pat=str(p.get('patron','')).lower()
-  if p.get('decision')=='Aprobado' and any(re.search(k,pat) for k in DURA):
+  if p.get('decision')=='Aprobado' and (_rm_recursivo(pat) or any(re.search(k,pat) for k in DURA)):
     malo('lista dura aprobada: '+pat)
 for m in e: print('ROTO:'+m)
 sys.exit(1 if e else 0)
@@ -136,15 +178,15 @@ jerga_en_texto() { # $1 archivo; 0 = trae jerga
   grep -qE '/[A-Za-z0-9_.-]' "$m" && return 0
   grep -qE '(^|[[:space:]])--[A-Za-z]' "$m" && return 0
   grep -qE '#[0-9]+' "$m" && return 0
-  # sha: 7-40 hex en cualquier caja Y al menos un digito y una letra; "acabada" o
-  # "1234567" solos pasan, "Ab12Cd4" (mixto) no.
+  # sha: 7-64 hex en cualquier caja Y al menos un digito y una letra; "acabada" o
+  # "1234567" solos pasan, "Ab12Cd4" (mixto) o un sha256 de 64 no.
   while IFS= read -r c; do
     [ -n "$c" ] || continue
     case "$c" in
       *[0-9]*) printf '%s' "$c" | grep -q '[a-fA-F]' && return 0;;
     esac
   done <<EOF
-$(grep -oiE '\b[0-9a-f]{7,40}\b' "$m")
+$(grep -oiE '\b[0-9a-f]{7,64}\b' "$m")
 EOF
   # lista negra: stems con plurales y participios (commits, merged, mergeado, PRs,
   # mergear, rebase, push, pull request, repo, rama...).
@@ -170,7 +212,9 @@ mensaje_valido() { # $1 archivo; 0 = cumple seguimiento.v1
   primera="$(head -1 "$C")"
   printf '%s\n' "$primera" | grep -qE '^\[(AVANZA|DETENIDA|NECESITO TU RESPUESTA|CERRADA)\] ' || { rm -f "$C"; return 1; }
   etq="${primera%%]*}"; etq="${etq#[}"
-  resto="${primera#*] }"
+  local pref; pref="[$etq] "
+  resto="${primera#"$pref"}"
+  [ "$resto" = "$primera" ] && resto=""
   [ -n "$resto" ] || { rm -f "$C"; return 1; }
   if [ "$etq" != "CERRADA" ]; then
     printf '%s\n' "$resto" | grep -qE '[0-9]+ de [0-9]+ partes' || { rm -f "$C"; return 1; }

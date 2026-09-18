@@ -43,7 +43,9 @@ printf 'malo\tcli-mala-barra\t--modo-malo-9\tBARRITA-YOLO\t--\t--\t--\n' >>"$T/m
 
 # Stub openclaw: anota, no manda. El destino es unico para probar que no entra al repo.
 # CRON_RM_FAIL=1 hace fallar cron rm; CRON_SIN_ID=1 hace que cron add no devuelva id
-# (el job queda en la lista con id cron-listado-9: la limpieza debe resolverlo ahi).
+# (el job queda en la lista como par "nombre id" en cron-puesto: la limpieza debe
+# resolver los ids ahi, todos los duplicados). LISTA_MALA=1 con LISTA_DESPUES_DE=n
+# falla todo cron list despues del n-esimo.
 LLAMADAS="$T/llamadas.log"
 DESTINO="DESTINO-UNICO-9X"
 cat >"$T/bin/openclaw" <<STUB
@@ -52,21 +54,24 @@ printf '%s\n' "OPENCLAW \$*" >> "$LLAMADAS"
 case "\$*" in
   *cron\ rm*)
     [ "\${CRON_RM_FAIL:-0}" = "1" ] && exit 1
-    : > "$T/cron-puesto"
+    grep -v " \$3\$" "$T/cron-puesto" > "$T/cron-puesto.n" 2>/dev/null; mv "$T/cron-puesto.n" "$T/cron-puesto"
     printf '{}';;
   *cron\ list*)
+    n=\$([ -f "$T/lists" ] && wc -l < "$T/lists" || echo 0); n=\$((n + 1)); echo x >> "$T/lists"
+    if [ "\${LISTA_MALA:-0}" != "0" ] && [ "\$n" -gt "\${LISTA_DESPUES_DE:-0}" ]; then exit 1; fi
     printf '{"jobs":[{"name":"verif-sync-repos","delivery":{"to":"$DESTINO"}}'
     if [ -f "$T/cron-puesto" ]; then
-      while IFS= read -r n; do
-        [ -n "\$n" ] && printf ',{"name":"%s","id":"cron-listado-9"}' "\$n"
+      while IFS= read -r linea; do
+        [ -n "\$linea" ] && printf ',{"name":"%s","id":"%s"}' "\${linea%% *}" "\${linea#* }"
       done < "$T/cron-puesto"
     fi
     printf ']}';;
   *cron\ add*)
     if [ "\${CRON_SIN_ID:-0}" = "1" ]; then
-      n=""; prev=""
-      for a in "\$@"; do [ "\$prev" = "--name" ] && n="\$a"; prev="\$a"; done
-      printf '%s\n' "\$n" >> "$T/cron-puesto"
+      nom=""; prev=""
+      for a in "\$@"; do [ "\$prev" = "--name" ] && nom="\$a"; prev="\$a"; done
+      k=\$([ -f "$T/cron-puesto" ] && wc -l < "$T/cron-puesto" || echo 0); k=\$((k + 1))
+      printf '%s %s\n' "\$nom" "cron-dup\$k" >> "$T/cron-puesto"
       printf '{}'
     else
       printf '{"id":"cron-1"}'
@@ -242,16 +247,28 @@ SETENV_FAIL=ses-marka bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nomb
 grep -q '"nombre": *"ses-marka"' "$T/corridas/t1/registro.json" && fail "la sesion sin marca quedo registrada"
 unset SETENV_FAIL
 
-# (9e) cron add sin id usable: abrir se niega ruidosamente, no escribe registro y
-# la limpieza resuelve el id REAL en la lista (no borra a ciegas por nombre).
+# (9e) cron add sin id usable: abrir se niega, no escribe registro, y la limpieza
+# resuelve los ids REALES en la lista (TODOS los duplicados homonimos) y dice la
+# verdad cuando no puede verificar.
 CRON_SIN_ID=1 bash "$CORR" abrir t-sinid --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 \
   && fail "cron add sin id debio reventar abrir"
 [ -f "$T/corridas/t-sinid/registro.json" ] && fail "abrir escribio registro sin id de cron"
 out="$(CRON_SIN_ID=1 bash "$CORR" abrir t-sinid --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"
 printf '%s' "$out" | grep -q "id" || fail "el fallo del cron sin id no dice nada"
-grep -q "cron rm cron-listado-9" "$LLAMADAS" || fail "la limpieza sin id no borro por el id de la lista"
-bash "$CORR" abrir t-limpio --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 \
-  || fail "abrir t-limpio fallo"
+grep -q "cron rm cron-dup1" "$LLAMADAS" || fail "la limpieza sin id no borro por el id de la lista"
+# dos jobs homonimos (medido en vivo por el lead): la corrida que los deja debe
+# quitarlos a los DOS y reportar cuantos.
+CRON_SIN_ID=1 CRON_RM_FAIL=1 bash "$CORR" abrir t-dup --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 \
+  && fail "abrir t-dup con rm fallando debio fallar"
+out="$(CRON_SIN_ID=1 bash "$CORR" abrir t-dup --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"
+grep -q "cron rm cron-dup1" "$LLAMADAS" && grep -q "cron rm cron-dup2" "$LLAMADAS" \
+  || fail "con dos crons homonimos no se quitaron los dos"
+printf '%s' "$out" | grep -q "2 job" || fail "el informe no dice cuantos jobs quito"
+# lista ilegible tras el rm: no informa 'se quito' sin haber verificado nada.
+nl=$([ -f "$T/lists" ] && wc -l < "$T/lists" || echo 0)
+out="$(CRON_SIN_ID=1 LISTA_MALA=1 LISTA_DESPUES_DE=$((nl + 2)) bash "$CORR" abrir t-ileg --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"
+printf '%s' "$out" | grep -q "no se pudo" || fail "con la lista ilegible no dice la verdad"
+printf '%s' "$out" | grep -q "se quito por la lista" && fail "con la lista ilegible informo una limpieza no verificada"
 
 # (9f) lock del registro: fresco espera y falla; viejo se rompe y se sigue.
 . scripts/mac/corrida/lib.sh
