@@ -76,10 +76,12 @@ const d = JSON.parse(require('node:fs').readFileSync(process.argv[1], 'utf8'));
 const r = validarProgreso(d);
 console.log(r.ok ? 'ACEPTADO' : (r.razones || []).join(' | '));
 " "$TMP/fuera-de-norma.json" 2>&1)
+# La razon tiene que traer el tope Y el largo real. Aceptar solo "excede 300" dejaria
+# pasar un diagnostico que omite el dato que hacia falta: cuanto se paso.
 case "$razon" in
   ACEPTADO) fail "(2) el validador acepto un resumen de 340 caracteres: este candado no discrimina" ;;
-  *excede*300*) : ;;
-  *) fail "(2) el rechazo no nombra el tope ni el largo, que es lo que costo dos dias de diagnostico: $razon" ;;
+  *excede*300*340*) : ;;
+  *) fail "(2) el rechazo tiene que nombrar el tope (300) y el largo real (340), que es lo que costo dos dias de diagnostico: $razon" ;;
 esac
 echo "ok (2): un documento fuera de norma sale rechazado, y la razon nombra el tope y el largo"
 
