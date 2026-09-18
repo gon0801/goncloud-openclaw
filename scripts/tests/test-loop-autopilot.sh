@@ -68,9 +68,9 @@ for a in 'LISTO <sha>' \
          'muta él mismo' \
          'como draft' \
          'Un PR por carril, nunca por tarea' \
-         'Tope: tres rondas por PR' \
+         'no hay tope de rondas' \
          'excluyendo al modelo que implementó' \
-         'ronda 2 la hace un modelo **distinto**' \
+         'Cada ronda cambia de revisor' \
          'código 3' \
          'Tope de tres PRs abiertos' \
          'Los comentarios de CodeRabbit se leen' \
@@ -102,6 +102,24 @@ for a in 'LISTO <sha>' \
   grep -qF -- "$a" "$DOC" || fail "$DOC: falta el ancla: $a"
 done
 echo "ok (3): las 49 anclas de reglas están"
+
+# (3b) ANTI-ANCLA: la seccion 4 no puede volver a traer un tope por numero de rondas.
+# Un ancla positiva sola no alcanza: alguien puede agregar el tope Y dejar la frase, y la
+# prueba pasaria. Lo que hay que fijar es la AUSENCIA.
+#
+# Medido el 2026-09-18: el documento decia a la vez "se para cuando una ronda no trae altas
+# ni medias" (linea 96) y "Tope: tres rondas por PR" (linea 97). El lead de la Fase 9 siguio
+# la segunda y declaro "tope de rondas alcanzado" con cuatro medias vivas en el PR 81. La
+# regla del dueno es la primera: la revision para por hallazgos, nunca por cuenta.
+s4_ini=$(grep -n -E '^## 4\. ' "$DOC" | head -1 | cut -d: -f1)
+s4_fin=$(grep -n -E '^## 5\. ' "$DOC" | head -1 | cut -d: -f1)
+[ -n "$s4_ini" ] && [ -n "$s4_fin" ] || fail "$DOC: no encuentro los limites de la seccion 4"
+# Se mira solo lo que la seccion MANDA: las lineas de nota historica ("Medido:", y la que
+# fecha el tope viejo) hablan del tope justamente para explicar por que ya no esta.
+s4=$(sed -n "${s4_ini},${s4_fin}p" "$DOC" | grep -v '^Medido:' | grep -v 'estuvo escrito aqu')
+tope=$(printf '%s' "$s4" | grep -inE 'tope de [a-z]* ?rondas|tope: *[a-z]+ rondas|m[aá]ximo de [a-z]+ rondas|a la cuarta ronda' | grep -viE 'no hay tope de rondas|sin tope de rondas' || true)
+[ -z "$tope" ] || fail "$DOC: la seccion 4 volvio a poner un tope de rondas: $tope"
+echo "ok (3b): la seccion 4 no tiene tope de rondas"
 
 # (4) La fila del lead no nombra ningún modelo. Es la regla central del documento.
 hit=$(lead_nombra_modelo < "$DOC")
