@@ -11,15 +11,44 @@ fi
 
 registro_de() { printf '%s/%s/registro.json' "$CORRIDA_STATE" "$1"; }
 
+corrida_id_valido() { # $1 id; 0 = solo [A-Za-z0-9_-] (nada de /, .., :, ;)
+  case "$1" in ''|*[!A-Za-z0-9_-]*) return 1;; esac
+  return 0
+}
+
 json_campo() { # $1 archivo, $2 campo punto (p.ej. simulacro, canal.destino)
-  python3 -c "
-import json,sys
-d=json.load(open('$1'))
+  JARCH="$1" JCAMPO="$2" python3 -c "
+import json,os
+d=json.load(open(os.environ['JARCH']))
 v=d
-for k in '$2'.split('.'):
+for k in os.environ['JCAMPO'].split('.'):
   v=v.get(k) if isinstance(v,dict) else None
 print('' if v is None else (str(v).lower() if isinstance(v,bool) else v))
 " 2>/dev/null
+}
+
+# Actualizacion del registro con lock por directorio y renombre atomico: dos
+# lanzar-sesion en paralelo no se pisan y un corte a mitad no deja JSON truncado.
+registro_actualizar() { # $1 registro, $2 lineas python que mutan d (env visible); 0 = escrito
+  local reg="$1" dir i=0
+  dir="$(dirname "$reg")"
+  while ! mkdir "$dir/.lock" 2>/dev/null; do
+    i=$((i+1)); [ "$i" -gt 100 ] && { echo "registro_actualizar: lock del registro no cede" >&2; return 1; }
+    sleep 0.1
+  done
+  CORR_REG="$reg" CORR_PY="$2" python3 -c "
+import json,os
+r=os.environ['CORR_REG']
+d=json.load(open(r))
+exec(os.environ['CORR_PY'])
+t=r+'.tmp'
+open(t,'w').write(json.dumps(d,indent=1)+chr(10))
+os.chmod(t,0o600)
+os.rename(t,r)
+"
+  local rc=$?
+  rmdir "$dir/.lock" 2>/dev/null
+  return "$rc"
 }
 
 jerga_en_texto() { # $1 archivo; 0 = trae jerga
@@ -54,7 +83,9 @@ mensaje_valido() { # $1 archivo; 0 = cumple seguimiento.v1
   local C; C="$(mktemp)" || return 1
   cp "$m" "$C"
   primera="$(head -1 "$C")"
-  case "$primera" in '[[]SIMULACRO] '*) sed -i.bak '1s/^\[SIMULACRO\] //' "$C" && rm -f "$C.bak";; esac
+  if printf '%s\n' "$primera" | grep -q '^\[SIMULACRO\] '; then
+    sed -i.bak '1s/^\[SIMULACRO\] //' "$C" && rm -f "$C.bak"
+  fi
   head -1 "$C" | grep -qE '^\[(AVANZA|DETENIDA|NECESITO TU RESPUESTA|CERRADA)\] ' || { rm -f "$C"; return 1; }
   awk 'NR==2 && !/^Que cambio: /{m=1} NR==3 && !/^Que sigue: /{m=1} NR==4 && !/^Que necesito de ti: /{m=1} END{exit m?1:0}' "$C" \
     || { rm -f "$C"; return 1; }
@@ -97,9 +128,11 @@ corrida_mensaje() {
   [ "$sim" = "true" ] && sed -i.bak '1s/^/[SIMULACRO] /' "$M" && rm -f "$M.bak"
   local dest; dest="$(json_campo "$reg" canal.destino)"
   [ -n "$dest" ] || { echo "registro sin destino" >&2; rm -f "$M"; return 1; }
-  local texto rc=0 sil="--silent"
-  # seguimiento.v1: rutina en silencio; NECESITO TU RESPUESTA con notificacion.
-  [ "$etq" = "NECESITO TU RESPUESTA" ] && sil=""
+  local texto rc=0 sil=""
+  # seguimiento.v1: lo rutinario (AVANZA, CERRADA) en silencio; DETENIDA y
+  # NECESITO TU RESPUESTA suenan: en la etiqueta que pide respuesta, fallar hacia
+  # silencio es el peor sentido de fallar.
+  case "$etq" in AVANZA|CERRADA) sil="--silent";; esac
   texto="$(cat "$M")"
   "$OPENCLAW_BIN" message send --channel telegram -t "$dest" $sil --json -m "$texto" >/dev/null 2>&1 || rc=1
   CORR_MSG_ETQ="$etq" CORR_MSG_OK="$rc" CORR_MSG_DIR="$CORRIDA_STATE/$id" python3 -c "

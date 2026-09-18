@@ -101,6 +101,28 @@ Rojo por tema, con el defecto puesto:
   evadian \bcommit\b; "acabada"/"1234567" daban falso sha).
 Verde: `TODO VERDE: test-cli-modos` (tambien con /bin/bash 3.2) y
 `TODO VERDE: test-corrida-nucleo` sin cambios (corrida_mensaje pasa el validador
-nuevo). El validador de mensajes ahora es el de lib.sh probado directo (la copia del
-test se borro: un criterio, un lugar). Falsos positivos residuales declarados: "y/o",
-fechas "18/09" — falla cerrado a proposito, no se afloja.
+ nuevo). El validador de mensajes ahora es el de lib.sh probado directo (la copia del
+ test se borro: un criterio, un lugar). Falsos positivos residuales declarados: "y/o",
+ fechas "18/09" — falla cerrado a proposito, no se afloja.
+
+## BRIEF-r2 (2026-09-18): batch 9.2 — temas A,B,D,E,F,G,I,J,K,O,Q,R + H(nucleo)
+Rojos por tema (con el defecto puesto, corridas en secuencia):
+- D: `FAIL: abrir acepto un id con ../`
+- B: `FAIL: abrir piso una corrida existente` (cabeza de los casos B; el resto
+  —cron por id, cron rm ruidoso— muto-verificado abajo)
+- I: `FAIL: el prefijo SIMULACRO invalida un mensaje valido`
+- O/Q y demas casos tardios: implementados en bloque; verificados por mutacion.
+Bug propio hallado al integrar: en tmux 3.7 el target `=nombre` exacto NO resuelve
+para comandos de PANE (capture-pane, send-keys) — exigen `=nombre:` con colon; los de
+SESION (has/set-environment/kill-session) si toman `=nombre` pelado. Medido en vivo.
+El CLI de mentira no se comportaba como TUI (no pintaba recibo al consumir): ahora
+responde por pantalla y el heuristico de caja vacia distingue de verdad.
+Mutaciones que mueren (verificadas, cada una con su FAIL): sin kill-session en el
+camino de barra ausente → "la sesion fallida quedo viva" (A); sin chequeo de estado →
+"lanzar sobre una corrida cerrada debio negarse" (J); silencio siempre → "NECESITO TU
+RESPUESTA salio silenciosa" (R); has-session sin = → "una sesion con prefijo comun
+robo el nombre" (E); David en el texto → "el cron no habla de el dueno" (O).
+Verde: `TODO VERDE: test-corrida-nucleo` (tambien /bin/bash 3.2). El caso (9b) de
+lanzamientos paralelos paso con y sin lock en las corridas de observacion (la carrera
+es de milisegundos); el lock queda como correccion estructural, no como caso rojo
+determinista — declarado.

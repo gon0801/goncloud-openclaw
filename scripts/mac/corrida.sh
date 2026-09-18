@@ -9,6 +9,7 @@ AQUI="$(cd "$(dirname "$0")" && pwd)"
 SUB="${1:-}"
 [ -n "$SUB" ] || { echo "uso: corrida.sh <subcomando> ..." >&2; exit 2; }
 FN="$(printf '%s' "$SUB" | tr '-' '_')"
+case "$SUB" in lib|*/*|*..*) echo "subcomando invalido: $SUB" >&2; exit 2;; esac
 [ -f "$AQUI/corrida/$SUB.sh" ] || { echo "subcomando desconocido: $SUB" >&2; exit 2; }
 . "$AQUI/corrida/lib.sh"
 . "$AQUI/corrida/$SUB.sh"

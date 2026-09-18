@@ -1,11 +1,11 @@
 #!/bin/bash
-# TUI de mentira (Fase 9, 9.2): repinta pantalla.txt cada 0.2 s en el directorio que
-# recibe (o donde arranca) y termina la pantalla con la linea TUI-FALSO. Bash 3.2.
+# TUI de mentira (Fase 9, 9.2): pinta en su STDOUT, cada ~0.2 s, el contenido actual
+# de pantalla.txt del directorio recibido (o donde arranca) y termina la pantalla con
+# la linea TUI-FALSO. Vive hasta que lo maten (kill-session); bash 3.2, sin limpieza.
 D="${1:-$PWD}"
-i=0
-while [ "$i" -lt 5 ]; do
-  printf 'trabajando %s\n' "$i" > "$D/pantalla.txt"
+while :; do
+  printf '\033[H\033[2J'
+  [ -f "$D/pantalla.txt" ] && cat "$D/pantalla.txt"
+  printf 'TUI-FALSO\n'
   sleep 0.2
-  i=$((i + 1))
 done
-printf 'trabajando\nTUI-FALSO\n' > "$D/pantalla.txt"
