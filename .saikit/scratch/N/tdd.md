@@ -28,3 +28,12 @@ originales siguen en el clon principal), los dos trackeados se restauraron con
 `git checkout HEAD --` (arbol igual a fcc088a, diff vacio, stash intacto con sus 4
 entradas, clon principal sin tocar). Leccion: el stash es global al repo entre
 worktrees; jamas hacer push/pop de stash en un worktree con stashes ajenos.
+
+## 9.3 Preflight (2026-09-18)
+Rojo inicial (limpio, con mv reversible): sin `corrida/preflight.sh` el despachador
+dice `subcomando desconocido: preflight` y la prueba falla en `preflight sano debio
+dar APTO`. Verde tras implementar: `TODO VERDE: test-corrida-preflight`.
+Mutaciones que mueren (verificadas): gh en 401, binario que muere, flag que no entra,
+vigilante viejo, ssh declarado en sesion que lo niega, ssh usado sin declarar en la
+tabla ( estatico: bloque de comando sin fila de clase). NO APTO manda DETENIDA en
+lenguaje de usuario (las razones tecnicas van solo a stdout, jamas al mensaje).
