@@ -269,6 +269,10 @@ nl=$([ -f "$T/lists" ] && wc -l < "$T/lists" || echo 0)
 out="$(CRON_SIN_ID=1 LISTA_MALA=1 LISTA_DESPUES_DE=$((nl + 2)) bash "$CORR" abrir t-ileg --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"
 printf '%s' "$out" | grep -q "no se pudo" || fail "con la lista ilegible no dice la verdad"
 printf '%s' "$out" | grep -q "se quito por la lista" && fail "con la lista ilegible informo una limpieza no verificada"
+# y el ILEGIBLE del PRIMER cron_jobs_de (lista ilegible antes de intentar quitar).
+nl=$([ -f "$T/lists" ] && wc -l < "$T/lists" || echo 0)
+out="$(CRON_SIN_ID=1 LISTA_MALA=1 LISTA_DESPUES_DE=$((nl + 1)) bash "$CORR" abrir t-ileg2 --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"
+printf '%s' "$out" | grep -q "no se pudo leer la lista" || fail "la lista ilegible de entrada no se reporta honestamente"
 
 # (9f) lock del registro: fresco espera y falla; viejo se rompe y se sigue.
 . scripts/mac/corrida/lib.sh

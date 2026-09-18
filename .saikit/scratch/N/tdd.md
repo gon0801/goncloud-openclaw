@@ -248,3 +248,27 @@ Rojos con el defecto puesto:
 Bugs propios del pase (cazados por la prueba o el repro): el patron de resto sin
 el corchete inicial; y en el stub, cron rm miraba $2 (el id es $3) y el grep -v
 con resultado vacio dejaba de hacer mv. Verde: las tres pruebas, tambien /bin/bash.
+
+## BRIEF-r6 (2026-09-18): ronda 5 (kimi sobre bc29489) — BA + BB
+- BA: rojo `FAIL: relleno largo entre rm y los flags evita la lista dura` (la
+  ventana de 80 chars dejaba pasar el patron con relleno). _rm_recursivo ahora
+  mira el resto COMPLETO desde el "rm", por tokens que arrancan con guion.
+- BB-3: rojo demostrado — "quitar con rm -f y -restar horas" daba lista dura
+  (falso positivo): los tokens largos de una sola letra-por-flag cuentan como
+  cluster solo hasta 4 letras; "-restar" (6) es prosa. Los largos siguen
+  contando solo por nombre exacto (--recursive/--force).
+- BB-4: caso nuevo del ILEGIBLE del PRIMER cron_jobs_de (lista ilegible antes de
+  intentar quitar): cobertura verde desde el arranque (el camino ya existia).
+- BB-2: comentario de runbook_de ajustado a la verdad (pwd es el fallback final
+  si la derivacion fallara).
+- BB-5: cron_dest_de con homonimos devuelve el del ULTIMO; eleccion escrita en
+  el codigo.
+Verde: las tres pruebas, tambien /bin/bash 3.2.
+Incidente del pase (entorno, no codigo): la bateria del pre-commit aborto el primer
+commit con `FAIL: bateria summa-gate` — `Cannot find package 'openclaw'` desde
+summa-gate/index.ts. Hace una hora (commit bc29489) la misma bateria pasaba:
+el node_modules que resolvia el paquete desaparecio o nunca llego a este worktree
+(agentes concurrentes en la Mac). tablero-runbook/node_modules/openclaw es un
+SYMLINK a ~/.openclaw/tools/... creado 14:43 por otra mano; restaure el mismo
+enlace para summa-gate (gitignored, cero installs nuevos, mismo patron existente).
+Verificado: bateria completa en TODO VERDE.

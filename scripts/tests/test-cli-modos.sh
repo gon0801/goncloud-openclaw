@@ -7,6 +7,7 @@ set -u
 cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
 
+TMP=$(mktemp -d) || exit 1
 FX=scripts/tests/fixtures/corrida
 TSV=scripts/mac/cli-modos.tsv
 ZSH=scripts/mac/agent-tmux-shell.zsh
@@ -41,6 +42,22 @@ done
 validar_registro "$FX/registro-pasa-emergencia.json" || fail "emergencia dio lista dura (falso positivo)"
 validar_registro "$FX/registro-pasa-dropbox.json" || fail "dropbox dio lista dura (falso positivo)"
 
+# La ventana de deteccion no se acorta: relleno largo entre "rm" y los flags cae,
+# y una palabra con guion no cuenta como flag ("rm -f y -restar" es inocente).
+python3 - "$TMP" <<'PY'
+import json,sys
+d=json.load(open('scripts/tests/fixtures/corrida/registro-valido.json'))
+dos=dict(d)
+d['preaprobaciones']=[{'patron':'borrado con rm ' + 'relleno inofensivo '*10 + 'y al final -r -f del area','decision':'Aprobado'}]
+json.dump(d,open(sys.argv[1]+'/reg-ventana.json','w'),indent=1)
+dos['preaprobaciones']=[{'patron':'quitar con rm -f y -restar horas','decision':'Aprobado'}]
+json.dump(dos,open(sys.argv[1]+'/reg-restar.json','w'),indent=1)
+PY
+out="$(validar_registro "$TMP/reg-ventana.json" 2>/dev/null)"; rc=$?
+[ "$rc" -ne 0 ] || fail "relleno largo entre rm y los flags evita la lista dura"
+printf '%s' "$out" | grep -qF "ROTO:lista dura aprobada" || fail "reg-ventana sin su motivo"
+validar_registro "$TMP/reg-restar.json" || fail "una palabra con guion conto como flag (falso positivo)"
+
 # runbook_de deriva la raiz del propio lib.sh (no del pwd): desde /tmp y sin
 # REPO_DIR, un runbook relativo REAL resuelve igual, en forma fisica.
 LIBABS="$PWD/scripts/mac/corrida/lib.sh"
@@ -54,7 +71,6 @@ z1="$( cd /tmp && env -u REPO_DIR bash -c ". '$LIBABS'; runbook_de scripts/tests
 mensaje_valido "$FX/mensaje-valido.txt" || fail "el mensaje valido no pasa"
 # Los casos sin salto de linea final se generan al vuelo: un archivo del repo sin
 # salto final lo reescribe el hook de end-of-file, y el caso es justo ese.
-TMP=$(mktemp -d) || exit 1
 printf '[AVANZA] Fase 9, 2 de 5 partes terminadas\nQue cambio: la primera parte quedo lista\nQue sigue: ahora se trabaja la parte de mensajes\nQue necesito de ti: nada' >"$TMP/val-sin-salto.txt"
 printf '[AVANZA] Fase 9, 2 de 5 partes terminadas\nQue cambio: la primera parte quedo lista\nQue sigue: ahora se trabaja la parte de mensajes\nQue necesito de ti: nada\nsobra' >"$TMP/cinco-sin-salto.txt"
 mensaje_valido "$TMP/val-sin-salto.txt" || fail "4 lineas sin salto final no pasan"

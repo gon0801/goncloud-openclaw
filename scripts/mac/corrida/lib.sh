@@ -32,9 +32,9 @@ print('' if v is None else (str(v).lower() if isinstance(v,bool) else v))
 }
 
 runbook_de() { # $1 runbook del registro: la absoluta, tal cual; la relativa, contra
-               # REPO_DIR inyectado o contra la raiz derivada del propio lib.sh —
-               # nunca del pwd: bajo launchd el pwd es / y en otro repo resolveria
-               # contra ese sin avisar.
+               # REPO_DIR inyectado o contra la raiz derivada del propio lib.sh.
+               # pwd queda solo como fallback final si la derivacion fallara (no
+               # ocurre corriendo desde el repo; bajo launchd manda REPO_DIR).
   local base="${REPO_DIR:-}"
   [ -n "$base" ] || base="$CORR_REPO_RAIZ"
   [ -n "$base" ] || base="$(pwd)"
@@ -47,7 +47,8 @@ runbook_de() { # $1 runbook del registro: la absoluta, tal cual; la relativa, co
 # Parser unico de `cron list --json`: por nombre, el destino de entrega o TODOS los
 # ids (los duplicados homonimos existen: medido en vivo 2026-09-18). Sentinelas en
 # stdout: ILEGIBLE (lista sin leer) y NINGUNO (legible, sin ese nombre).
-cron_dest_de() { # $1 nombre -> destino de entrega
+cron_dest_de() { # $1 nombre -> destino de entrega. Con crons homonimos devuelve el
+                 # del ULTIMO de la lista (eleccion documentada: el mas reciente).
   printf '%s' "$("$OPENCLAW_BIN" cron list --json 2>/dev/null)" | NOMBRE_CRON="$1" python3 -c "
 import sys,json,os
 t=sys.stdin.read()
@@ -55,7 +56,11 @@ try:
   d=json.loads(t[t.index('{'):])
 except Exception:
   print('ILEGIBLE'); raise SystemExit
-print(next(((j.get('delivery') or {}).get('to') or '' for j in d.get('jobs',[]) if j.get('name')==os.environ['NOMBRE_CRON']),''))" 2>/dev/null
+dest=''
+for j in d.get('jobs',[]):
+  if j.get('name')==os.environ['NOMBRE_CRON']:
+    dest=(j.get('delivery') or {}).get('to') or ''
+print(dest)" 2>/dev/null
 }
 
 cron_jobs_de() { # $1 nombre -> ILEGIBLE | NINGUNO | un id por linea
@@ -150,13 +155,22 @@ else:
       malo('rol fuera del conjunto')
 # Lista dura por regexes con bordes de palabra: "force push" cae y "emergencia" o
 # "dropbox" (que contienen "merge"/"drop" como substring) no. El rm recursivo va
-# aparte: r y f cuentan por flag, no por letra suelta ("--force" NO trae r).
+# aparte y mira el resto COMPLETO del patron desde el "rm" (sin ventana: el relleno
+# no evade): por token que arranque con guion, los largos solo cuentan por nombre
+# exacto ("--recursive"/"--force") y los cortos por sus letras — un cluster de una
+# sola letra por flag, hasta 4; "-restar" es prosa con guion, no un flag.
 def _rm_recursivo(pat):
   m=re.search(r'\brm\b', pat)
   if not m: return False
-  fs=re.findall(r'-{1,2}[a-z]+', pat[m.end():m.end()+80])
-  r=any(t=='--recursive' or (not t.startswith('--') and 'r' in t) for t in fs)
-  f=any(t=='--force' or (not t.startswith('--') and 'f' in t) for t in fs)
+  r=f=False
+  for t in pat[m.end():].split():
+    s=t.lower()
+    if s=='--recursive': r=True
+    elif s=='--force': f=True
+    elif s.startswith('--'): continue
+    elif re.fullmatch(r'-[a-z]{1,4}', s):
+      if 'r' in s: r=True
+      if 'f' in s: f=True
   return r and f
 DURA=[r'\bdrop\b', r'\bborr\w*\s+recursiv\w*',
       r'\bforce\s+push\b', r'\bpush\b[^\n]{0,40}\b(main|por defecto)\b',
