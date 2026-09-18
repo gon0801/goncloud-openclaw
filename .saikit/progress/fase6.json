@@ -353,6 +353,6 @@
   "cierre": {
     "at": "2026-09-16T15:15:00Z",
     "telegram_message_id": null,
-    "resumen": "Fase 6 cerrada: 8 PRs mergeados (A 06c08c8, B ae9b9157, C cc041576, D #43/#44, E e2479ae, F 57f352a, G f6b105e, cierre 8bafdae); compuertas Q2/Q3/Q4 verificadas; residuales: canary Q3 run previo respondio ingenieria (declarado), sello veredicto cierre manual (hook no aplica desde OpenClaw); gateway recibe e2479ae+8bafdae en sync 13:10 EDT"
+    "resumen": "Fase 6 cerrada: 8 PRs mergeados (A 06c08c8, B ae9b9157, C cc041576, D #43/#44, E e2479ae, F 57f352a, G f6b105e, cierre 8bafdae); compuertas Q2/Q3/Q4 verificadas. Residuales declarados: canary Q3 (run previo) respondio ingenieria; sello del veredicto de cierre, manual."
   }
 }

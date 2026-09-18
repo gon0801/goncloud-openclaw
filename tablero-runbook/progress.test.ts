@@ -43,7 +43,7 @@ function clon<T>(v: T): T {
 }
 
 describe("validarProgreso sobre fixtures (7.1)", () => {
-  for (const nombre of ["fase6-en-curso", "fase6-cerrada", "fase6-diez-prs"]) {
+  for (const nombre of ["prueba999-en-curso", "prueba999-cerrada", "prueba999-diez-prs"]) {
     it(`${nombre}.json pasa`, () => {
       const veredicto = validarProgreso(fixture(`${nombre}.json`));
       assert.equal(
@@ -72,7 +72,7 @@ describe("validarProgreso sobre fixtures (7.1)", () => {
   });
 
   it("ningún fixture de Fase 6 usa el estado omitido (declarado, no representado)", () => {
-    for (const nombre of ["fase6-en-curso", "fase6-cerrada", "fase6-diez-prs"]) {
+    for (const nombre of ["prueba999-en-curso", "prueba999-cerrada", "prueba999-diez-prs"]) {
       const crudo = readFileSync(new URL(`./fixtures/${nombre}.json`, import.meta.url), "utf8");
       assert.ok(!crudo.includes("omitido"), `${nombre} no debería contener 'omitido'`);
     }
@@ -104,7 +104,7 @@ describe("validarFase (7.3)", () => {
 });
 
 describe("validarProgreso: valores cerrados (7.3)", () => {
-  const base = () => clon(fixture("fase6-en-curso.json")) as ProgresoDoc;
+  const base = () => clon(fixture("prueba999-en-curso.json")) as ProgresoDoc;
 
   it("rechaza un estado de carril fuera de lista", () => {
     const d = base();
@@ -216,7 +216,7 @@ describe("derivar (7.3)", () => {
   const T0 = Date.parse("2026-09-16T19:10:00Z");
 
   it("en-curso: 1/7 mergeado, G atorado, Q1 siguiente, 30 min del último evento", () => {
-    const doc = fixture("fase6-en-curso.json") as ProgresoDoc;
+    const doc = fixture("prueba999-en-curso.json") as ProgresoDoc;
     const d = derivar(doc, T0);
     assert.equal(d.totalCarriles, 7);
     assert.equal(d.mergeados, 1);
@@ -228,7 +228,7 @@ describe("derivar (7.3)", () => {
   });
 
   it("cerrada: 100%, sin atorados, sin siguiente de cola", () => {
-    const doc = fixture("fase6-cerrada.json") as ProgresoDoc;
+    const doc = fixture("prueba999-cerrada.json") as ProgresoDoc;
     const d = derivar(doc, T0);
     assert.equal(d.porcentajeMergeado, 100);
     assert.deepEqual(d.carrilesAtorados, []);
@@ -236,7 +236,7 @@ describe("derivar (7.3)", () => {
   });
 
   it("sin eventos ni carriles: null y 0, no NaN", () => {
-    const doc = clon(fixture("fase6-en-curso.json")) as ProgresoDoc;
+    const doc = clon(fixture("prueba999-en-curso.json")) as ProgresoDoc;
     doc.eventos = [];
     for (const c of doc.carriles) c.ultimo_evento = null;
     const d = derivar(doc, T0);
@@ -251,7 +251,7 @@ describe("renderTablero (7.3)", () => {
   const T0 = Date.parse("2026-09-16T19:10:00Z");
 
   it("banner de atencion_requerida arriba de todo, y siguiente_paso antes de las tablas", () => {
-    const doc = clon(fixture("fase6-en-curso.json")) as ProgresoDoc;
+    const doc = clon(fixture("prueba999-en-curso.json")) as ProgresoDoc;
     doc.atencion_requerida = { necesaria: true, motivo: "Reversa de Q4 falló dos veces", desde: "2026-09-16T18:00:00Z" };
     const html = renderTablero(doc, derivar(doc, T0));
     const iBanner = html.indexOf('class="atencion"');
@@ -262,18 +262,18 @@ describe("renderTablero (7.3)", () => {
     assert.ok(iBanner < iH1, "el banner no está arriba de todo");
     assert.ok(iPaso > -1 && iPaso < iTabla, "siguiente_paso no aparece como primera frase");
     // Sin atencion no hay banner (el fixture en-curso tiene necesaria:false).
-    const html2 = renderTablero(fixture("fase6-en-curso.json") as ProgresoDoc, derivar(fixture("fase6-en-curso.json") as ProgresoDoc, T0));
+    const html2 = renderTablero(fixture("prueba999-en-curso.json") as ProgresoDoc, derivar(fixture("prueba999-en-curso.json") as ProgresoDoc, T0));
     assert.ok(!html2.includes('class="atencion"'));
   });
 
   it("sin cruce: rótulo literal 'GitHub: sin verificar'", () => {
-    const doc = fixture("fase6-en-curso.json") as ProgresoDoc;
+    const doc = fixture("prueba999-en-curso.json") as ProgresoDoc;
     const html = renderTablero(doc, derivar(doc, T0));
     assert.ok(html.includes("GitHub: sin verificar"));
   });
 
   it("HTML autocontenido: sin scripts, sin fuentes remotas, sin recursos externos", () => {
-    const doc = fixture("fase6-en-curso.json") as ProgresoDoc;
+    const doc = fixture("prueba999-en-curso.json") as ProgresoDoc;
     const html = renderTablero(doc, derivar(doc, T0));
     assert.ok(!html.includes("<script"), "no debe haber scripts");
     assert.ok(!html.includes("<link"), "no debe cargar recursos");
@@ -284,7 +284,7 @@ describe("renderTablero (7.3)", () => {
   });
 
   it("un <script> en titulo, en repo y en un check de GitHub NUNCA aparece literal (mutante quitar esc)", () => {
-    const doc = clon(fixture("fase6-en-curso.json")) as ProgresoDoc;
+    const doc = clon(fixture("prueba999-en-curso.json")) as ProgresoDoc;
     doc.titulo = "<script>alert(1)</script>";
     doc.carriles[0].repo = "a/b<script>repo</script>";
     doc.carriles[0].pr = 1;
@@ -299,7 +299,7 @@ describe("renderTablero (7.3)", () => {
   });
 
   it("ninguna entidad queda cortada: truncar PRIMERO, escapar después (mutante invertir orden)", () => {
-    const doc = clon(fixture("fase6-en-curso.json")) as ProgresoDoc;
+    const doc = clon(fixture("prueba999-en-curso.json")) as ProgresoDoc;
     // Un '&' que cae justo en la frontera del truncado: escapar-primero produciría
     // "...&am" (entidad cortada); truncar-primero produce "...&amp;B" completa.
     doc.titulo = "A".repeat(298) + "&" + "B".repeat(100);
@@ -312,7 +312,7 @@ describe("renderTablero (7.3)", () => {
   });
 
   it("el truncado existe en el render aunque el validador ya rechace >300 (mutante quitar truncado)", () => {
-    const doc = clon(fixture("fase6-en-curso.json")) as ProgresoDoc;
+    const doc = clon(fixture("prueba999-en-curso.json")) as ProgresoDoc;
     doc.titulo = "x".repeat(350);
     const html = renderTablero(doc, derivar(doc, T0));
     assert.ok(!html.includes("x".repeat(320)), "el texto de 350 entró entero: no hay truncado");
@@ -335,7 +335,7 @@ describe("renderTablero (7.3)", () => {
   });
 
   it("residuales y eventos se pintan, y el html es determinístico entre llamadas", () => {
-    const doc = fixture("fase6-en-curso.json") as ProgresoDoc;
+    const doc = fixture("prueba999-en-curso.json") as ProgresoDoc;
     const d = derivar(doc, T0);
     const h1 = renderTablero(doc, d);
     const h2 = renderTablero(doc, d);

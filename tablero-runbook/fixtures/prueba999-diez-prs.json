@@ -1,7 +1,7 @@
 {
   "schema": "runbook-progress.v1",
   "runbook": "docs/runbooks/autopilot-fase6.md",
-  "fase": "6",
+  "fase": "999",
   "titulo": "Autopilot de la Fase 6 — barrido de diez PRs",
   "lead": {
     "agente": "claude",

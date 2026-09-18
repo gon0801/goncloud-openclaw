@@ -378,7 +378,13 @@ export function validarProgreso(doc: unknown): Veredicto {
       razones.push("cierre.telegram_message_id: entero positivo o null");
     }
     if (c["resumen"] !== null && !esTexto(c["resumen"], TEXTO_MAX)) {
-      razones.push("cierre.resumen: debe ser texto acotado o null");
+      // La razon nombra el tope y el largo real, como ya hace `titulo`. Medido el
+      // 2026-09-17: con el mensaje generico, un documento rechazado por 40 caracteres
+      // de mas costo dos dias — el tablero siguio sirviendo el fixture del canary y
+      // nadie supo por que, porque hubo que ir a leer el fuente para saber el tope.
+      razones.push(typeof c["resumen"] === "string" && (c["resumen"] as string).length > TEXTO_MAX
+        ? `cierre.resumen: excede ${TEXTO_MAX} caracteres (tiene ${(c["resumen"] as string).length})`
+        : "cierre.resumen: debe ser texto acotado o null");
     }
   }
 

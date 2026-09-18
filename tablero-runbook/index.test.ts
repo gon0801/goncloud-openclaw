@@ -174,12 +174,12 @@ describe("plugin smoke import (7.4)", () => {
   it("set válido persiste doc y eventos; el reenvío no duplica líneas", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-set-"));
     const host = await cargar({ stateDir: dir });
-    const doc = fixtureDoc("fase6-en-curso.json");
+    const doc = fixtureDoc("prueba999-en-curso.json");
 
     const r1 = await llamarMetodo(host.metodos, "runbook.progress.set", doc);
     assert.deepEqual(r1, { ok: true });
-    const rutaDoc = join(dir, "progress", "6.json");
-    const rutaJsonl = join(dir, "events", "6.jsonl");
+    const rutaDoc = join(dir, "progress", "999.json");
+    const rutaJsonl = join(dir, "events", "999.jsonl");
     assert.ok(existsSync(rutaDoc), "falta el doc persistido");
     assert.deepEqual(JSON.parse(readFileSync(rutaDoc, "utf8")), doc);
     const lineas1 = readFileSync(rutaJsonl, "utf8").split("\n").filter(Boolean);
@@ -215,7 +215,7 @@ describe("plugin smoke import (7.4)", () => {
   it("set con fase '../../openclaw.json' → {ok:false} y CERO writes", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-traversal-"));
     const host = await cargar({ stateDir: dir });
-    const doc = fixtureDoc("fase6-en-curso.json") as ProgresoDoc;
+    const doc = fixtureDoc("prueba999-en-curso.json") as ProgresoDoc;
     doc.fase = "../../openclaw.json";
     const r = await llamarMetodo(host.metodos, "runbook.progress.set", doc);
     assert.equal(r.ok, false);
@@ -247,13 +247,13 @@ describe("plugin smoke import (7.4)", () => {
   it("1000 previos + 2 nuevos ⇒ 1002 líneas en disco (el tope es solo vista en memoria)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-tope-"));
     const host = await cargar({ stateDir: dir });
-    const doc = fixtureDoc("fase6-en-curso.json");
+    const doc = fixtureDoc("prueba999-en-curso.json");
     // Pre-llena el jsonl con 1000 eventos ya persistidos (claves únicas).
     mkdirSync(join(dir, "events"), { recursive: true });
     const previos = Array.from({ length: 1000 }, (_, i) =>
       JSON.stringify({ at: `2026-09-10T00:${String(i % 60).padStart(2, "0")}:00Z`, carril: "A", que: `previo-${i}`, situacion: null }),
     );
-    writeFileSync(join(dir, "events", "6.jsonl"), `${previos.join("\n")}\n`, "utf8");
+    writeFileSync(join(dir, "events", "999.jsonl"), `${previos.join("\n")}\n`, "utf8");
     // Dos eventos nuevos que no existen en disco.
     const doc2 = structuredClone(doc);
     doc2.eventos = [
@@ -262,7 +262,7 @@ describe("plugin smoke import (7.4)", () => {
     ];
     const r = await llamarMetodo(host.metodos, "runbook.progress.set", doc2);
     assert.deepEqual(r, { ok: true });
-    const lineas = readFileSync(join(dir, "events", "6.jsonl"), "utf8").split("\n").filter(Boolean);
+    const lineas = readFileSync(join(dir, "events", "999.jsonl"), "utf8").split("\n").filter(Boolean);
     assert.equal(lineas.length, 1002, `disco perdió eventos: ${lineas.length} líneas, esperadas 1002`);
     rmSync(dir, { recursive: true, force: true });
   });
@@ -274,7 +274,7 @@ describe("plugin smoke import (7.4)", () => {
       assert.equal(ruta.auth, "gateway", `ruta ${ruta.path} sin auth:"gateway"`);
     }
     const handlerCalls = { n: 0 };
-    const res = await llamarRuta(host.rutas, "/runbook/tablero/6", { authed: false, handlerCalls });
+    const res = await llamarRuta(host.rutas, "/runbook/tablero/999", { authed: false, handlerCalls });
     assert.equal(res.statusCode, 401);
     assert.equal(handlerCalls.n, 0, "el handler corrió sin credencial");
     rmSync(dir, { recursive: true, force: true });
@@ -295,13 +295,13 @@ describe("plugin smoke import (7.4)", () => {
   it("get de fase existente: html idéntico byte a byte al de la ruta, y los 3 headers", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-html-"));
     const host = await cargar({ stateDir: dir });
-    llamarMetodo(host.metodos, "runbook.progress.set", fixtureDoc("fase6-en-curso.json"));
+    llamarMetodo(host.metodos, "runbook.progress.set", fixtureDoc("prueba999-en-curso.json"));
 
-    const r = await llamarMetodo(host.metodos, "runbook.progress.get", { fase: "6" });
+    const r = await llamarMetodo(host.metodos, "runbook.progress.get", { fase: "999" });
     assert.equal(r.ok, true);
     assert.ok(r.doc && r.derivado && typeof r.html === "string");
 
-    const res = await llamarRuta(host.rutas, "/runbook/tablero/6");
+    const res = await llamarRuta(host.rutas, "/runbook/tablero/999");
     assert.equal(res.statusCode, 200);
     assert.equal(res.body, r.html, "el HTML de la ruta y el del método difieren");
     assert.equal(res.headers["Content-Type"], "text/html; charset=utf-8");
@@ -315,10 +315,10 @@ describe("plugin smoke import (7.4)", () => {
   it("la ruta .json devuelve el documento completo: residuales y eventos incluidos (regla 8)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-json-"));
     const host = await cargar({ stateDir: dir });
-    const doc = fixtureDoc("fase6-en-curso.json");
+    const doc = fixtureDoc("prueba999-en-curso.json");
     llamarMetodo(host.metodos, "runbook.progress.set", doc);
 
-    const res = await llamarRuta(host.rutas, "/runbook/progress/6.json");
+    const res = await llamarRuta(host.rutas, "/runbook/progress/999.json");
     assert.equal(res.statusCode, 200);
     assert.equal(res.headers["Content-Type"], "application/json");
     const cuerpo = JSON.parse(res.body);
@@ -335,12 +335,12 @@ describe("plugin smoke import (7.4)", () => {
     closeSync(openSync(archivo, "w"));
     const host = await cargar({ stateDir: archivo });
 
-    const r = await llamarMetodo(host.metodos, "runbook.progress.set", fixtureDoc("fase6-en-curso.json"));
+    const r = await llamarMetodo(host.metodos, "runbook.progress.set", fixtureDoc("prueba999-en-curso.json"));
     assert.deepEqual(r, { ok: false, razon: "disco" });
     assert.ok(host.warns.some((w) => /disco/.test(w)), "el fallo de disco no se registró");
 
     // La ruta también responde 500 sin lanzar.
-    const res = await llamarRuta(host.rutas, "/runbook/tablero/6");
+    const res = await llamarRuta(host.rutas, "/runbook/tablero/999");
     assert.equal(res.statusCode, 404); // sin doc persistido, el GET no tiene nada que servir
     rmSync(dir, { recursive: true, force: true });
   });
@@ -348,8 +348,8 @@ describe("plugin smoke import (7.4)", () => {
   it("métodos no GET en las rutas → 405", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-405-"));
     const host = await cargar({ stateDir: dir });
-    assert.equal((await llamarRuta(host.rutas, "/runbook/tablero/6", { method: "POST" })).statusCode, 405);
-    assert.equal((await llamarRuta(host.rutas, "/runbook/progress/6.json", { method: "PUT" })).statusCode, 405);
+    assert.equal((await llamarRuta(host.rutas, "/runbook/tablero/999", { method: "POST" })).statusCode, 405);
+    assert.equal((await llamarRuta(host.rutas, "/runbook/progress/999.json", { method: "PUT" })).statusCode, 405);
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -377,15 +377,18 @@ describe("plugin smoke import (7.4)", () => {
 
   it("config fases alimenta los enlaces del tablero; el default es ['6']", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-fases-"));
-    const host = await cargar({ stateDir: dir, fases: ["6", "7"] });
-    llamarMetodo(host.metodos, "runbook.progress.set", fixtureDoc("fase6-en-curso.json"));
-    const res = await llamarRuta(host.rutas, "/runbook/tablero/6");
+    const host = await cargar({ stateDir: dir, fases: ["999", "7"] });
+    llamarMetodo(host.metodos, "runbook.progress.set", fixtureDoc("prueba999-en-curso.json"));
+    const res = await llamarRuta(host.rutas, "/runbook/tablero/999");
     assert.ok(res.body.includes('href="/runbook/tablero/7"'), "falta el enlace a la fase 7");
-    assert.ok(!res.body.includes('href="/runbook/tablero/6"'), "la fase actual no se auto-enlaza");
+    assert.ok(!res.body.includes('href="/runbook/tablero/999"'), "la fase actual no se auto-enlaza");
 
-    const host2 = await cargar({ stateDir: dir });
-    const r2 = await llamarMetodo(host2.metodos, "runbook.progress.get", { fase: "6" });
-    assert.ok(!r2.html.includes('href="/runbook/tablero/'), "sin fases configuradas no hay nav");
+    // La fase que se esta viendo no se auto-enlaza: con ella como unica fase configurada,
+    // no hay barra de navegacion. (El default de la config, ["6"], lo fija el caso del
+    // manifiesto; aqui se prueba el comportamiento del nav, no el valor por defecto.)
+    const host2 = await cargar({ stateDir: dir, fases: ["999"] });
+    const r2 = await llamarMetodo(host2.metodos, "runbook.progress.get", { fase: "999" });
+    assert.ok(!r2.html.includes('href="/runbook/tablero/'), "la unica fase configurada es la actual: no debe haber nav");
     rmSync(dir, { recursive: true, force: true });
   });
 
