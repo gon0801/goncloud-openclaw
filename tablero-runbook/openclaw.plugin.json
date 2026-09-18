@@ -4,7 +4,7 @@
   "description": "Guarda y pinta el progreso runbook-progress.v1 que el lead escribe: RPC set/get, tablero HTML y JSON por ruta autenticada del gateway. Sin hooks de agente ni tools.",
   "activation": { "onStartup": true },
   "backupResources": [
-    { "disposition": "include", "scope": "state", "relativePath": "." }
+    { "disposition": "include", "scope": "state", "relativePath": "tablero-runbook" }
   ],
   "configSchema": {
     "type": "object",

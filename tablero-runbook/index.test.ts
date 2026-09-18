@@ -410,6 +410,26 @@ describe("plugin smoke import (7.4)", () => {
         manifest.backupResources.some((b: { scope?: string }) => b.scope === "state"),
       "backupResources debe declarar scope state",
     );
+    // Cada relativePath tiene que ser una ruta POSIX relativa estricta. El gateway lo
+    // valida al ARRANCAR y rechaza el manifiesto entero: con `.` aqui, encender el
+    // plugin tumbo el gateway el 2026-09-17 y se quedo sin arrancar hasta que alguien
+    // edito el archivo a mano en la PC. La regla esta en la documentacion del SDK
+    // (plugins/manifest/surfaces.md): no vacia, no absoluta, sin backslashes, sin
+    // segmentos vacios, sin `.` ni `..`, sin prefijo de unidad ni UNC.
+    for (const b of manifest.backupResources as { relativePath?: unknown }[]) {
+      const rp = b.relativePath;
+      assert.equal(typeof rp, "string", "relativePath debe ser string");
+      const r = rp as string;
+      assert.ok(r.length > 0, "relativePath no puede ser vacio");
+      assert.ok(!r.startsWith("/"), `relativePath no puede ser absoluta: ${r}`);
+      assert.ok(!r.includes("\\"), `relativePath no puede traer backslashes: ${r}`);
+      assert.ok(!/^[A-Za-z]:/.test(r), `relativePath no puede traer prefijo de unidad: ${r}`);
+      assert.ok(!r.startsWith("//"), `relativePath no puede ser UNC: ${r}`);
+      for (const seg of r.split("/")) {
+        assert.ok(seg.length > 0, `relativePath no puede traer segmentos vacios: ${r}`);
+        assert.ok(seg !== "." && seg !== "..", `relativePath no puede traer "." ni "..": ${r}`);
+      }
+    }
     const props = manifest.configSchema.properties;
     assert.ok(props.stateDir && props.fases && props.github);
     assert.equal(props.github.properties.enabled.default, false, "github.enabled debe default false");
