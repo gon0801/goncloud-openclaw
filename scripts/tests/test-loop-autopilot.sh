@@ -49,6 +49,8 @@ echo "ok (2): las 13 secciones existen y van en orden"
 
 # (3) Cada regla tiene su ancla. Cambiar la regla = cambiar el ancla en el mismo commit.
 for a in 'LISTO <sha>' \
+         'arranque-de-fase.sh <fase>' \
+         'El arranque se gana con su propio comando' \
          'Enviar el progreso no lo hace alcanzable' \
          'prueba que se escribio, no que algo lo este usando' \
          'sin reinicio la configuración nueva queda guardada y sin efecto' \

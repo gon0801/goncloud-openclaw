@@ -40,6 +40,16 @@ Un implementador la imprime al cerrar su encargo. El lead la imprime al cerrar c
 bash scripts/cierre-de-fase.sh <fase>
 ```
 
+**El arranque se gana con su propio comando, y va ANTES de tocar ningun carril.** Una fase no esta arrancada hasta que esto imprima VERDE:
+
+```
+bash scripts/arranque-de-fase.sh <fase>
+```
+
+El lead no anuncia que empezo en prosa: pega esa salida. Comprueba las cinco cosas que el arranque produce y que si son observables -- filas en el plan, el primer avance enviado al tablero, los dos crons de seguimiento creados y encendidos, el apunte de sesiones con su linea del lead, y la sesion del lead viva y marcada. Ninguna es opinion. No comprueba si alguien leyo el runbook, que no se puede comprobar: comprueba lo que leerlo obliga a producir.
+
+Medido: 2026-09-18. claw reporto la Fase 9 terminada. No solo no habia terminado -- 13 de 13 filas seguian abiertas -- es que nunca la arranco: los crons `corrida-vigia-9` y `corrida-empuje-9` de la tarea 0.4 no existian. Sin ellos no hay alarma, y sin alarma nadie se entera de que no hay alarma. Ocho horas. La instruccion ya estaba escrita en el runbook; lo que faltaba era la comprobacion, porque un paso saltado no se ve y una linea ROJO si.
+
 **No es una compuerta de una sola pasada: es un bucle.** La primera corrida normalmente sale `ROJO`, y eso no es un fallo: su lista **es** la lista de lo que falta por hacer. Si el cierre se hizo entero antes de correrlo, puede salir `VERDE` a la primera. Se hace lo que dice cada línea, se vuelve a correr, y así hasta que imprima `VERDE` y salga 0. Solo entonces se escribe el `LISTO` y solo entonces se le dice a nadie que la fase terminó. Comprueba las seis cosas que un merge no comprueba: las celdas `Status` del plan cerradas, ninguna rama ni worktree de la fase sin recoger (ni en el remoto ni en el disco), ninguna sesión suya todavía marcada, los plugins que la fase declara encendidos en el gateway, y la rama por defecto en verde. Una línea `unknown` no bloquea: es una comprobación que no se pudo hacer, y se declara.
 
 Medido 2026-09-17: la Fase 7 se reportó terminada con todo su código mergeado y CI en verde, y le faltaban las ocho celdas del plan, el plugin sin encender en el gateway (que era su tarea de despliegue), dos sesiones todavía marcadas y un worktree abierto. Ninguna de esas cinco cosas tenía alarma, porque un merge es observable y el cierre no lo era. Claw la busca en la pantalla de tmux; no interpreta spinners, colores ni mensajes propios de ningún producto. Si un proceso termina sin esa línea, se trata como `ATORADO sin reporte` y se aplica la fila de relanzamiento.
