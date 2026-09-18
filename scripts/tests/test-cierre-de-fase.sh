@@ -224,8 +224,18 @@ GITSTUB
 chmod +x "$MALO/git"
 out=$(PATH="$MALO:$PATH" corre 5)
 printf '%s' "$out" | grep -q "^unknown *ramas" \
-  || fail "(11b) con el remoto caido, las ramas deben quedar unknown y no VERDE:
+  || fail "(11b) con el remoto caido y sin ramas locales, debe quedar unknown y no VERDE:
 $out"
+# Y con el remoto caido PERO una rama local de la fase viva: ROJO, no unknown. Saltarse
+# la revision local cuando el remoto no contesta deja pasar trabajo suelto, porque un
+# unknown no bloquea el cierre.
+git -C "$R" branch fase5/local-con-remoto-caido >/dev/null 2>&1
+out=$(PATH="$MALO:$PATH" corre 5)
+printf '%s' "$out" | grep -q "^ROJO *ramas" \
+  || fail "(11b-bis) con el remoto caido, una rama local de la fase debe salir ROJO:
+$out"
+printf '%s' "$out" | grep -q "fase5/local-con-remoto-caido" || fail "(11b-bis) el detalle debe nombrarla"
+git -C "$R" branch -D fase5/local-con-remoto-caido >/dev/null 2>&1
 
 # (c) una rama LOCAL de la fase tambien cuenta.
 git -C "$R" branch fase5/solo-local >/dev/null 2>&1

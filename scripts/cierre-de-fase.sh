@@ -92,17 +92,23 @@ fi
 # Un `ls-remote` que falla no da ramas, y eso NO es lo mismo que no haber ramas: sin
 # distinguirlo, una consulta caida cerraba la fase en verde. Y se miran tambien las
 # locales: borrar la del servidor no borra la del disco.
+# Las locales se miran SIEMPRE, aunque el remoto no conteste: si la consulta al
+# servidor falla y con ella se salta tambien esta, una rama local de la fase pasa
+# desapercibida y `unknown` no bloquea, asi que la fase cerraria en verde con trabajo
+# suelto en el disco.
+locales=$(en_repo for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null | grep -E "(^|/)fase$FASE(/|$)|fase$FASE-" || true)
 if remotas=$(en_repo ls-remote --heads origin 2>/dev/null); then
   ramas=$(printf '%s\n' "$remotas" | awk '{print $2}' | sed 's|refs/heads/||' | grep -E "(^|/)fase$FASE(/|$)|fase$FASE-" || true)
-  locales=$(en_repo for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null | grep -E "(^|/)fase$FASE(/|$)|fase$FASE-" || true)
   todas=$(printf '%s\n%s\n' "$ramas" "$locales" | grep . | sort -u || true)
   if [ -z "$todas" ]; then
     linea VERDE ramas "ninguna rama de la fase $FASE, ni en el remoto ni aqui"
   else
     linea ROJO ramas "quedan sin borrar: $(printf '%s' "$todas" | tr '\n' ' ')"
   fi
+elif [ -n "$locales" ]; then
+  linea ROJO ramas "sin respuesta del remoto, pero aqui quedan: $(printf '%s' "$locales" | tr '\n' ' ')"
 else
-  linea unknown ramas "no pude consultar el remoto"
+  linea unknown ramas "no pude consultar el remoto; aqui no hay ninguna"
 fi
 
 # (3) Worktrees de la fase: los que abrio la corrida se quitan al cerrar.
