@@ -201,3 +201,24 @@ Rojo por mutacion (los casos se agregaron junto al fix; cada mutacion mata su ca
 - U7: rb pegado sobre REPO → el runbook guardado absoluto daba "runbook sin leer";
   runbook_de (en lib.sh) resuelve absoluta tal cual y relativa bajo REPO_DIR.
 Verde: las tres pruebas en TODO VERDE.
+
+## BRIEF-r4 (2026-09-18): pase final del lead — Z1-Z4
+Rojos con el defecto puesto:
+- Z1: `runbook_de` desde scripts/mac sin REPO_DIR resolvio contra pwd
+  (`scripts/mac/tests/...`); el caso exige la raiz del repo. Ahora el fallback es
+  `git rev-parse --show-toplevel` (pwd de ultimo recurso).
+- Z2: tras `registro_actualizar`, `trap -p EXIT` seguia ARMADO — el EXIT de quien
+  uso el lock romperia un lock vivo de otro tomado entremedias. Ahora se desarma
+  (solo si esta funcion fue quien lo puso). Caso (9g) con proceso bash aparte.
+- Z3: `FAIL: la limpieza sin id no borro por el id de la lista` — el cleanup sin id
+  borraba por nombre a ciegas. Ahora: cron list, id del job por nombre exacto,
+  cron rm por ese id, y si el job sigue en la lista el error lo dice. El stub gana
+  estado (cron-puesto) para que el job "exista" de verdad.
+- Z4-1: `FAIL: registro mutante pasa: dura-rm-separado` (rm -r -f evadia la regex);
+  ahora r y f por lookaheads, juntos o separados.
+- Z4-2: `Ab12Cd4` (hex mixto) pasaba — un bucle solo-minusc, otro solo-mayusc;
+  unificado case-insensitive con digito+y+letra.
+- Z4-3: la exencion de CERRADA al "N de M" ya esta en seguimiento.v1.md.
+- Z4-4: comentario y aviso del umbral de locks viejos alineados con lo que find
+  hace de verdad (a partir de ~2 min).
+Verde: las tres pruebas en TODO VERDE (tambien /bin/bash 3.2).

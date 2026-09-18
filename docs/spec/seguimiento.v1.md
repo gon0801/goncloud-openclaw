@@ -13,6 +13,7 @@ Cuatro líneas, en este orden, con estos prefijos literales (un mensaje que no l
 traiga es rojo):
 
 1. `[ETIQUETA] Fase 9, N de M partes terminadas` — el avance como "N de M partes".
+   En `CERRADA` basta un cierre en palabras: ya no queda nada que contar.
 2. `Que cambio: ...` — una frase, en palabras de usuario.
 3. `Que sigue: ...` — una frase, en palabras de usuario.
 4. `Que necesito de ti: ...` — `nada`, o la pregunta en palabras simples con lo que

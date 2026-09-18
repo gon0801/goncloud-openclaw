@@ -51,10 +51,40 @@ try:
 except Exception:
   d={}
 print(d.get('id',''))" 2>/dev/null)"
-  [ -n "$cid" ] \
-    || { echo "abrir: cron add no devolvio un id usable; se quita el cron por nombre" >&2
-         "$OPENCLAW_BIN" cron rm "corrida-vigia-$id" >/dev/null 2>&1
-         return 1; }
+  # Sin id en la salida, el cron quedo puesto: resolver el id REAL en la lista por
+  # nombre exacto y borrar por ese id; borrar a ciegas por nombre puede no borrar nada.
+  if [ -z "$cid" ]; then
+    echo "abrir: cron add no devolvio un id usable" >&2
+    local lista cid2 sigue
+    lista="$("$OPENCLAW_BIN" cron list --json 2>/dev/null || true)"
+    cid2="$(printf '%s' "$lista" | NOMBRE_CRON="corrida-vigia-$id" python3 -c "
+import sys,json,os
+t=sys.stdin.read()
+try:
+  d=json.loads(t[t.index('{'):])
+except Exception:
+  d={}
+print(next((j.get('id','') for j in d.get('jobs',[]) if j.get('name')==os.environ['NOMBRE_CRON']),''))" 2>/dev/null)"
+    if [ -n "$cid2" ]; then
+      "$OPENCLAW_BIN" cron rm "$cid2" >/dev/null 2>&1
+      sigue="$(printf '%s' "$("$OPENCLAW_BIN" cron list --json 2>/dev/null || true)" | NOMBRE_CRON="corrida-vigia-$id" python3 -c "
+import sys,json,os
+t=sys.stdin.read()
+try:
+  d=json.loads(t[t.index('{'):])
+except Exception:
+  d={}
+print('vivo' if any(j.get('name')==os.environ['NOMBRE_CRON'] for j in d.get('jobs',[])) else '')" 2>/dev/null)"
+      if [ "$sigue" = "vivo" ]; then
+        echo "abrir: no se pudo quitar el cron corrida-vigia-$id (id $cid2); revisarlo a mano" >&2
+      else
+        echo "abrir: el cron quedo puesto y se quito por el id de la lista ($cid2)" >&2
+      fi
+    else
+      echo "abrir: el cron corrida-vigia-$id no aparece en la lista; revisarlo a mano si quedo" >&2
+    fi
+    return 1
+  fi
   CORR_ID="$id" CORR_RUNBOOK="$runbook" CORR_VIGIA="$vigia" CORR_SIM="$sim" CORR_CANAL="$canal_de" \
   CORR_DEST="$dest" CORR_MODOS="$cli_modos" CORR_CRON="$cid" CORR_REG="$dir/registro.json" python3 -c "
 import json,os

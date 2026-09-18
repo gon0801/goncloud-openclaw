@@ -42,16 +42,35 @@ printf 'bueno\tcli-bueno\t--modo-bueno-9\tBARRITA-YOLO\t--\t--\t--\n' >"$T/modos
 printf 'malo\tcli-mala-barra\t--modo-malo-9\tBARRITA-YOLO\t--\t--\t--\n' >>"$T/modos.tsv"
 
 # Stub openclaw: anota, no manda. El destino es unico para probar que no entra al repo.
-# CRON_RM_FAIL=1 hace fallar cron rm; CRON_SIN_ID=1 hace que cron add no devuelva id.
+# CRON_RM_FAIL=1 hace fallar cron rm; CRON_SIN_ID=1 hace que cron add no devuelva id
+# (el job queda en la lista con id cron-listado-9: la limpieza debe resolverlo ahi).
 LLAMADAS="$T/llamadas.log"
 DESTINO="DESTINO-UNICO-9X"
 cat >"$T/bin/openclaw" <<STUB
 #!/bin/sh
 printf '%s\n' "OPENCLAW \$*" >> "$LLAMADAS"
 case "\$*" in
-  *cron\ rm*) [ "\${CRON_RM_FAIL:-0}" = "1" ] && exit 1; printf '{}';;
-  *cron\ list*) printf '{"jobs":[{"name":"verif-sync-repos","delivery":{"to":"$DESTINO"}}]}';;
-  *cron\ add*) if [ "\${CRON_SIN_ID:-0}" = "1" ]; then printf '{}'; else printf '{"id":"cron-1"}'; fi;;
+  *cron\ rm*)
+    [ "\${CRON_RM_FAIL:-0}" = "1" ] && exit 1
+    : > "$T/cron-puesto"
+    printf '{}';;
+  *cron\ list*)
+    printf '{"jobs":[{"name":"verif-sync-repos","delivery":{"to":"$DESTINO"}}'
+    if [ -f "$T/cron-puesto" ]; then
+      while IFS= read -r n; do
+        [ -n "\$n" ] && printf ',{"name":"%s","id":"cron-listado-9"}' "\$n"
+      done < "$T/cron-puesto"
+    fi
+    printf ']}';;
+  *cron\ add*)
+    if [ "\${CRON_SIN_ID:-0}" = "1" ]; then
+      n=""; prev=""
+      for a in "\$@"; do [ "\$prev" = "--name" ] && n="\$a"; prev="\$a"; done
+      printf '%s\n' "\$n" >> "$T/cron-puesto"
+      printf '{}'
+    else
+      printf '{"id":"cron-1"}'
+    fi;;
   *message\ send*) printf '{"messageId":"m1"}';;
 esac
 exit 0
@@ -223,12 +242,16 @@ SETENV_FAIL=ses-marka bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nomb
 grep -q '"nombre": *"ses-marka"' "$T/corridas/t1/registro.json" && fail "la sesion sin marca quedo registrada"
 unset SETENV_FAIL
 
-# (9e) cron add sin id usable: abrir se niega ruidosamente y no escribe registro.
+# (9e) cron add sin id usable: abrir se niega ruidosamente, no escribe registro y
+# la limpieza resuelve el id REAL en la lista (no borra a ciegas por nombre).
 CRON_SIN_ID=1 bash "$CORR" abrir t-sinid --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 \
   && fail "cron add sin id debio reventar abrir"
 [ -f "$T/corridas/t-sinid/registro.json" ] && fail "abrir escribio registro sin id de cron"
 out="$(CRON_SIN_ID=1 bash "$CORR" abrir t-sinid --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"
 printf '%s' "$out" | grep -q "id" || fail "el fallo del cron sin id no dice nada"
+grep -q "cron rm cron-listado-9" "$LLAMADAS" || fail "la limpieza sin id no borro por el id de la lista"
+bash "$CORR" abrir t-limpio --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 \
+  || fail "abrir t-limpio fallo"
 
 # (9f) lock del registro: fresco espera y falla; viejo se rompe y se sigue.
 . scripts/mac/corrida/lib.sh
@@ -242,6 +265,17 @@ registro_actualizar "$T/corridas/t1/registro.json" "d['timebox_horas']=6" >"$T/l
 [ "$rc" -eq 0 ] || fail "con lock viejo debio recuperarse y escribir (rc=$rc)"
 grep -q "lock" "$T/lock.out" || fail "romper el lock viejo no avisa"
 [ -d "$T/corridas/t1/.lock" ] && fail "el lock viejo quedo puesto"
+
+# (9g) el trap del lock se desarma tras soltarlo: el EXIT de quien lo uso no puede
+# romperle a otro un lock vivo tomado entremedias.
+cat >"$T/z2.sh" <<Z2
+. "$PWD/scripts/mac/corrida/lib.sh"
+registro_actualizar "$T/corridas/t1/registro.json" 'd["timebox_horas"]=6' || exit 9
+t="\$(trap -p EXIT)"
+[ -z "\$t" ] && echo DESARMADO || echo ARMADO
+Z2
+desarmado="$(bash "$T/z2.sh")"
+[ "$desarmado" = "DESARMADO" ] || fail "el trap del lock quedo armado tras soltarlo"
 
 # (7) cerrar: todas las sesiones del registro desmarcadas, cron quitado por su id,
 # CERRADA enviada, estado cerrada.

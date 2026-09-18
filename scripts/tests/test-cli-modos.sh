@@ -35,8 +35,16 @@ revienta lista-dura "lista dura aprobada"
 # Lista dura por regex con bordes: las variantes caen, los inocentes pasan.
 revienta dura-rmrf "lista dura aprobada"
 revienta dura-forcepush "lista dura aprobada"
+revienta dura-rm-separado "lista dura aprobada"
 validar_registro "$FX/registro-pasa-emergencia.json" || fail "emergencia dio lista dura (falso positivo)"
 validar_registro "$FX/registro-pasa-dropbox.json" || fail "dropbox dio lista dura (falso positivo)"
+
+# runbook_de sin REPO_DIR y desde un subdirectorio resuelve contra la raiz del repo
+# (el contexto de launchd/latido no hereda REPO_DIR ni arranca en la raiz).
+LIBABS="$PWD/scripts/mac/corrida/lib.sh"
+z1="$( cd scripts/mac && env -u REPO_DIR bash -c ". '$LIBABS'; runbook_de tests/fixtures/corrida/runbook-simulacro.md" )"
+[ "$z1" = "$PWD/tests/fixtures/corrida/runbook-simulacro.md" ] \
+  || fail "runbook_de desde un subdirectorio no resuelve contra la raiz del repo: $z1"
 
 # mensaje_valido viene de lib.sh: es el que corre en cada envio de verdad.
 mensaje_valido "$FX/mensaje-valido.txt" || fail "el mensaje valido no pasa"
@@ -52,7 +60,7 @@ mensaje_valido "$FX/mensaje-forma-mala.txt" 2>/dev/null && fail "forma sin prefi
 mensaje_valido "$FX/mensaje-forma-sin-avance.txt" 2>/dev/null && fail "linea 1 sin avance pasa"
 mensaje_valido "$FX/mensaje-linea-vacia.txt" 2>/dev/null && fail "prefijo con contenido vacio pasa"
 mensaje_valido "$FX/mensaje-necesito-solo-comando.txt" 2>/dev/null && fail "NECESITO sin pregunta pasa"
-for j in palabra ruta flag sha tilde commits mergeado prs mergear rama push rebase hash-mayus; do
+for j in palabra ruta flag sha tilde commits mergeado prs mergear rama push rebase hash-mayus hash-mixto; do
   mensaje_valido "$FX/mensaje-jerga-$j.txt" 2>/dev/null && fail "jerga ($j) pasa"
 done
 # Falsos positivos declarados residuales: sin digito o sin letra no es sha.
