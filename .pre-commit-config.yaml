@@ -22,10 +22,19 @@ repos:
       # en rojo por esto, sin ninguna relacion con el cambio que se estaba revisando.
       # Es la misma trampa que el SKILL.md desviado: no se corrige el artefacto generado,
       # se corrige el generador o se lo excluye.
+      # exclude ampliado 2026-09-18: `tls/` es la misma trampa. El snapshot del gateway
+      # volco ahi el binario de lego (66 MB), su zip, su CHANGELOG y la cuenta ACME. El
+      # CHANGELOG trae whitespace sobrante y el account.json no termina en salto de linea,
+      # asi que los dos hooks los "arreglaban" y dejaban el CI en rojo. Medido: tres
+      # corridas seguidas de main en rojo por esto, incluidas las de dos PRs ajenos que se
+      # integraron despues y no tenian nada que ver. Son artefactos vendidos y generados,
+      # no archivos que alguien escriba: se excluyen, no se corrigen. Quitarlos del repo
+      # los borraria del disco del gateway en el siguiente pull y con ellos la renovacion
+      # de certificados, asi que siguen versionados a proposito.
       - id: trailing-whitespace
-        exclude: '^(workspace-[^/]+/memory/|agents/[^/]+/sessions/)'
+        exclude: '^(workspace-[^/]+/memory/|agents/[^/]+/sessions/|tls/)'
       - id: end-of-file-fixer
-        exclude: '^(workspace-[^/]+/memory/|agents/[^/]+/sessions/)'
+        exclude: '^(workspace-[^/]+/memory/|agents/[^/]+/sessions/|tls/)'
       - id: check-merge-conflict
       - id: check-added-large-files
       - id: check-json
