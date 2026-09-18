@@ -171,14 +171,41 @@ fi
 # Es el fallo de la Fase 6 al reves: alli el tablero servia un fixture y el documento
 # versionado era el bueno. Los dos son el mismo hueco: "cerrado" se declaraba sin
 # mirar lo unico que el dueno ve. Una fase que se abre y se ve a medias no esta cerrada.
-doc=$(en_repo show "$REF:.saikit/progress/$FASE.json" 2>/dev/null || true)
-if [ -z "$doc" ]; then
+# El nombre canonico es `<fase>.json`, pero la Fase 6 quedo versionada como
+# `fase6.json` y renombrarla romperia las citas de los runbooks. Se miran los dos: con
+# uno solo, `cierre-de-fase.sh 6` imprimia "la fase 6 no publica tablero" -- VERDE por
+# ausencia -- sobre una fase que publica y que el dueno tiene abierta en 7/7.
+# Y antes de concluir "no publica", la rama por defecto tiene que resolver: si no
+# resuelve, `show` falla igual que si el archivo no existiera, y un git roto quedaba
+# indistinguible de una fase sin tablero. Los dos hallazgos son del revisor del lead,
+# 2026-09-18, sobre esta misma comprobacion.
+if ! en_repo rev-parse --verify -q "$REF^{commit}" >/dev/null 2>&1; then
+  doc=""
+  ref_ok=0
+else
+  ref_ok=1
+  doc=""
+  for cand in ".saikit/progress/$FASE.json" ".saikit/progress/fase$FASE.json"; do
+    if en_repo cat-file -e "$REF:$cand" 2>/dev/null; then
+      doc=$(en_repo show "$REF:$cand" 2>/dev/null || true)
+      [ -n "$doc" ] && break
+    fi
+  done
+fi
+if [ "$ref_ok" = "0" ]; then
+  linea unknown tablero "no pude leer $REF; no se si la fase $FASE publica tablero"
+elif [ -z "$doc" ]; then
   linea VERDE tablero "la fase $FASE no publica tablero"
 elif [ "${CIERRE_SIN_GATEWAY:-0}" = "1" ] || [ ! -x "$OPENCLAW_BIN" ]; then
   linea unknown tablero "no consulte el gateway; hay documento versionado en $REF"
 else
-  vivo=$(timeout 60 "$OPENCLAW_BIN" gateway call runbook.progress.get \
-           --params "{\"fase\":\"$FASE\"}" --timeout 30000 2>/dev/null)
+  # Si la consulta falla despues de haber escrito algo, aceptar su stdout daria por
+  # buena una salida parcial. La comprobacion (6) de CI ya aprendio esto; esta tambien:
+  # primero el exito de la consulta, luego su contenido.
+  if ! vivo=$(timeout 60 "$OPENCLAW_BIN" gateway call runbook.progress.get \
+           --params "{\"fase\":\"$FASE\"}" --timeout 30000 2>/dev/null); then
+    vivo=""
+  fi
   if [ -z "$vivo" ]; then
     linea unknown tablero "el gateway no contesto"
   else
@@ -209,7 +236,21 @@ def resumen(d, de_donde):
         if not isinstance(cid, str) or not cid or not isinstance(est, str) or not est:
             raise Informe("UNKNOWN " + de_donde + " trae un carril sin id o sin estado")
         pares.append((cid, est))
-    return {"fase": d.get("fase"), "at": (d.get("cierre") or {}).get("at"), "carriles": sorted(pares)}
+    # Solo fase, cierre.at y los carriles dejaban fuera todo lo que el dueno lee ARRIBA
+    # del tablero: el titulo, la frase de siguiente paso y el banner rojo de atencion.
+    # Un tablero vivo con "atencion requerida: algo roto" pasaba por coincidente.
+    # `cierre.resumen` queda fuera a proposito y declarado: hoy diverge de forma legitima
+    # entre el vivo y el versionado de la Fase 6 (244 contra 268 caracteres del mismo
+    # texto), y meterlo pintaria de rojo una fase que si esta cerrada.
+    a = d.get("atencion_requerida") or {}
+    return {
+        "fase": d.get("fase"),
+        "at": (d.get("cierre") or {}).get("at"),
+        "titulo": d.get("titulo"),
+        "siguiente_paso": d.get("siguiente_paso"),
+        "atencion": a.get("necesaria"),
+        "carriles": sorted(pares),
+    }
 
 try:
     ver = resumen(json.loads(os.environ["CIERRE_DOC"]), "el documento versionado")
@@ -237,9 +278,10 @@ if abiertos:
 elif not viv["at"]:
     print("ROJO el tablero publicado no trae cierre.at: quien lo abra ve la fase en curso")
 elif viv != ver:
-    print("ROJO el tablero publicado no dice lo mismo que el documento versionado")
+    difieren = [k for k in ver if viv.get(k) != ver.get(k)]
+    print("ROJO el tablero publicado no dice lo mismo que el documento versionado; difiere en: " + ", ".join(difieren))
 else:
-    print("OK coincide con el documento versionado y esta cerrado")
+    print("OK fase, cierre, titulo, siguiente paso, atencion y carriles coinciden con lo versionado")
 ')
     case "$det" in
       "OK "*)      linea VERDE   tablero "${det#OK }" ;;

@@ -394,8 +394,103 @@ printf '%s' "$out" | grep -q "sin id o sin estado" \
 $out"
 echo "ok (12h): un carril sin id o sin estado se declara, no se normaliza a texto"
 
+# (12g-bis) El falso verde EXACTO que encontro CodeRabbit, que (12g) no reproducia:
+# los DOS lados sin carriles. Con el fixture de (12g) -- versionado con carriles, vivo
+# sin ellos -- el script viejo ya salia ROJO por la comparacion, asi que ese caso no
+# defendia la validacion de forma: un revert parcial que la dejara solo del lado vivo
+# habria pasado la bateria. Hallazgo del revisor del lead, 2026-09-18.
+cat >"$R/.saikit/progress/5.json" <<'DOC'
+{"fase":"5","cierre":{"at":"2026-09-18T00:00:00Z"}}
+DOC
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m sin-carriles-ambos
+git -C "$R" push -q -f origin HEAD:main
+cat >"$TAB" <<'DOC'
+Gateway call: runbook.progress.get
+{"ok":true,"doc":{"fase":"5","cierre":{"at":"2026-09-18T00:00:00Z"}}}
+DOC
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^VERDE *tablero" \
+  && fail "(12g-bis) con los dos lados sin carriles los resumenes coinciden por vacio: VERDE sin haber mirado un solo carril:
+$out"
+printf '%s' "$out" | grep -q "^unknown *tablero" \
+  || fail "(12g-bis) los dos lados sin carriles tienen que declararse unknown:
+$out"
+echo "ok (12g-bis): los dos lados sin carriles no coinciden por vacio"
+progreso mergeado
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m carriles-otra-vez
+git -C "$R" push -q -f origin HEAD:main
+
+# (12k) Lo que el dueno lee ARRIBA del tablero. El resumen comparaba fase, cierre.at y
+# carriles, y nada mas: un tablero vivo con el banner rojo "atencion requerida" y otra
+# frase de siguiente paso pasaba por coincidente, y el dueno abria la fase "cerrada" y
+# veia algo roto. Hallazgo del revisor del lead, 2026-09-18.
+cat >"$TAB" <<'DOC'
+Gateway call: runbook.progress.get
+{"ok":true,"doc":{"fase":"5",
+ "titulo":"Autopilot de la Fase 5",
+ "siguiente_paso":"Cierre pendiente, no lo mires todavia",
+ "atencion_requerida":{"necesaria":true,"motivo":"algo roto","desde":"2026-09-18T00:00:00Z"},
+ "carriles":[{"id":"A","estado":"mergeado"},{"id":"B","estado":"mergeado"}],
+ "cierre":{"at":"2026-09-18T00:00:00Z"}}}
+DOC
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^ROJO *tablero" \
+  || fail "(12k) un tablero vivo con el banner de atencion requerida no puede pasar por coincidente:
+$out"
+printf '%s' "$out" | grep -q "difiere en:.*atencion" \
+  || fail "(12k) el detalle tiene que nombrar el campo que diverge, que es lo que hay que ir a ver:
+$out"
+echo "ok (12k): el banner de atencion y la frase de siguiente paso entran en la comparacion"
+tablero mergeado 2026-09-18T00:00:00Z
+
+# (12i) Los dos hallazgos del revisor del lead, 2026-09-18, sobre esta comprobacion.
+#
+# (12i-1) El nombre del documento. La Fase 6 real quedo versionada como `fase6.json` y
+# la comprobacion solo miraba `<fase>.json`, asi que `cierre-de-fase.sh 6` imprimia
+# "la fase 6 no publica tablero" -- VERDE por ausencia -- sobre una fase que publica y
+# que el dueno tiene abierta en 7/7. Aqui el documento del repo de juguete se renombra
+# a la forma vieja y la comprobacion tiene que seguir encontrandolo.
+git -C "$R" mv .saikit/progress/5.json .saikit/progress/fase5.json
+git -C "$R" commit -q -m nombre-viejo; git -C "$R" push -q -f origin HEAD:main
+tablero mergeado 2026-09-18T00:00:00Z
+out=$(corre 5)
+printf '%s' "$out" | grep -q "no publica tablero" \
+  && fail "(12i-1) un documento con el nombre viejo fase<N>.json se dio por ausente; asi la Fase 6 real salia VERDE sin comparar nada:
+$out"
+printf '%s' "$out" | grep -q "^VERDE *tablero" \
+  || fail "(12i-1) con el nombre viejo la comprobacion tiene que comparar igual:
+$out"
+echo "ok (12i-1): el documento se encuentra con cualquiera de los dos nombres"
+
+# (12i-2) Discrimina de verdad: con el nombre viejo tambien tiene que salir ROJO cuando
+# el tablero vivo no coincide. Sin este caso, (12i-1) pasaria con una comprobacion que
+# dijera VERDE siempre que encuentre el archivo.
+tablero atorado 2026-09-18T00:00:00Z
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^ROJO *tablero" \
+  || fail "(12i-2) con el nombre viejo la comparacion tiene que seguir siendo real:
+$out"
+echo "ok (12i-2): con el nombre viejo la comparacion sigue discriminando"
+git -C "$R" mv .saikit/progress/fase5.json .saikit/progress/5.json
+git -C "$R" commit -q -m nombre-canonico; git -C "$R" push -q -f origin HEAD:main
+tablero mergeado 2026-09-18T00:00:00Z
+
+# (12j) Una rama por defecto que no resuelve hacia fallar `show` igual que si el archivo
+# no existiera, asi que un git roto quedaba indistinguible de una fase sin tablero: VERDE
+# por ausencia. Es el mismo falso verde que CodeRabbit ya encontro en la consulta de
+# ramas y en la de CI, otra vez.
+out=$(REPO="$R" REF=origin/no-existe TMUX_BIN="${TM:-/no/hay}" OPENCLAW_BIN="$T/bin/openclaw" GH_BIN="$T/bin/gh" bash "$S" 5)
+printf '%s' "$out" | grep -q "^VERDE *tablero" \
+  && fail "(12j) con una rama por defecto que no resuelve, el tablero no puede salir VERDE:
+$out"
+printf '%s' "$out" | grep -q "^unknown *tablero" \
+  || fail "(12j) una rama que no resuelve tiene que declararse unknown, no darse por buena:
+$out"
+echo "ok (12j): una rama por defecto ilegible se declara, no pasa por fase sin tablero"
+
 # (12f) Una fase que no publica tablero no se bloquea por eso.
-git -C "$R" rm -q .saikit/progress/5.json
+git -C "$R" rm -q .saikit/progress/5.json 2>/dev/null || true
+git -C "$R" rm -q .saikit/progress/fase5.json 2>/dev/null || true
 git -C "$R" commit -q -m sin-tablero; git -C "$R" push -q -f origin HEAD:main
 out=$(corre 5)
 printf '%s' "$out" | grep -q "^VERDE *tablero" \

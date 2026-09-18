@@ -144,6 +144,8 @@ Medido: 2026-09-15, Fase 6: el runbook mandaba commitear `autopilot.json` dentro
 
 Medido: 2026-09-16, 15:25 a 15:28 hora del Pacífico: doce recargas de configuración en tres minutos, una cada 30 a 49 segundos, cada una congelando el gateway 10 a 12 segundos y retrasando el latido hasta 36.7 segundos; el teléfono de David mostraba "gateway request timed out" a esa misma cadencia.
 
+Medido: 2026-09-18, encendiendo el tablero de la Fase 7. Se agrego la fase a la lista de la configuracion del plugin, la lectura de vuelta trajo el valor nuevo, y el tablero siguio sirviendo la lista que cargo al arrancar: desde la aplicacion no habia camino a la fase. La lectura de vuelta decia que si durante todo ese rato. Solo el reinicio del gateway lo cambio.
+
 ---
 
 ## 8. Progreso escrito, no contado
