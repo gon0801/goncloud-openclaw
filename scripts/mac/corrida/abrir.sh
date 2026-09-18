@@ -64,6 +64,11 @@ open(E['CORR_REG'],'w').write(json.dumps(d,indent=1)+chr(10))
        [ -n "$cid" ] && "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1
        return 1; }
   chmod 600 "$dir/registro.json"
+  # Self-check: el registro que sale de abrir pasa el mismo validador de corrida.v1.
+  validar_registro "$dir/registro.json" >/dev/null 2>&1 \
+    || { echo "abrir: el registro escrito no pasa su propio contrato; se quita el cron" >&2
+       [ -n "$cid" ] && "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1
+       return 1; }
   : > "$dir/mensajes.jsonl" && chmod 600 "$dir/mensajes.jsonl"
   echo "abierta $id"
 }

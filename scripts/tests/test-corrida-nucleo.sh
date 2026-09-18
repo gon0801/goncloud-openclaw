@@ -156,20 +156,20 @@ unset SWALLOW SWALLOW_N SWALLOW_SES
 
 # (5) jerga: corrida_mensaje la rechaza y no la manda.
 . scripts/mac/corrida/lib.sh
-corrida_mensaje t1 AVANZA "se integro el PR de mensajes" "sigue la politica" "nada" 2>/dev/null \
+corrida_mensaje t1 AVANZA "1 de 2 partes terminadas" "se integro el PR de mensajes" "sigue la politica" "nada" 2>/dev/null \
   && fail "el mensaje con jerga debio rechazarse"
 grep -q "se integro el PR" "$LLAMADAS" && fail "la jerga nunca sale del stub"
 
 # (6) simulacro: todo mensaje sale con prefijo; el texto enviado ES el del contrato.
-corrida_mensaje t1 AVANZA "quedo lista la primera parte" "sigue la parte de mensajes" "nada" \
+corrida_mensaje t1 AVANZA "1 de 2 partes terminadas" "quedo lista la primera parte" "sigue la parte de mensajes" "nada" \
   || fail "el mensaje valido en simulacro fallo"
-printf '[SIMULACRO] [AVANZA] Fase 9\nQue cambio: quedo lista la primera parte\nQue sigue: sigue la parte de mensajes\nQue necesito de ti: nada\n' >"$T/esp-sim.txt"
+printf '[SIMULACRO] [AVANZA] Fase 9, 1 de 2 partes terminadas\nQue cambio: quedo lista la primera parte\nQue sigue: sigue la parte de mensajes\nQue necesito de ti: nada\n' >"$T/esp-sim.txt"
 d=$(grep -n "OPENCLAW message send" "$LLAMADAS" | tail -1 | cut -d: -f1)
 tail -n +"$d" "$LLAMADAS" | sed '1s/.* -m //' >"$T/obtenido.txt"
 cmp -s "$T/esp-sim.txt" "$T/obtenido.txt" || fail "el texto enviado no es el de seguimiento.v1"
 
 # (6b) el prefijo SIMULACRO de la primera linea no invalida; y no se reescribe el archivo.
-printf '[SIMULACRO] [AVANZA] Fase 9\nQue cambio: quedo lista la primera parte\nQue sigue: sigue la parte de mensajes\nQue necesito de ti: nada\n' >"$T/prefijo.txt"
+printf '[SIMULACRO] [AVANZA] Fase 9, 1 de 2 partes terminadas\nQue cambio: quedo lista la primera parte\nQue sigue: sigue la parte de mensajes\nQue necesito de ti: nada\n' >"$T/prefijo.txt"
 cp "$T/prefijo.txt" "$T/prefijo.orig"
 mensaje_valido "$T/prefijo.txt" || fail "el prefijo SIMULACRO invalida un mensaje valido"
 cmp -s "$T/prefijo.txt" "$T/prefijo.orig" || fail "mensaje_valido reescribe el archivo de quien llama"
@@ -252,17 +252,17 @@ grep -q '"cron_vigia_id"' "$T/corridas/t1/registro.json" || fail "el registro no
 
 # (11) seguimiento.v1: NECESITO TU RESPUESTA y DETENIDA con notificacion; lo rutinario callado.
 : > "$LLAMADAS"
-corrida_mensaje t1 "NECESITO TU RESPUESTA" "un dialogo espera tu decision" "la corrida sigue en marcha" "responder si o no" \
+corrida_mensaje t1 "NECESITO TU RESPUESTA" "1 de 2 partes terminadas" "un dialogo espera tu decision" "la corrida sigue en marcha" "responder si o no" \
   || fail "el mensaje NECESITO TU RESPUESTA fallo"
 necesito_linea="$(grep "message send" "$LLAMADAS" | tail -1)"
 printf '%s' "$necesito_linea" | grep -q "NECESITO TU RESPUESTA" || fail "no salio la etiqueta NECESITO TU RESPUESTA"
 printf '%s' "$necesito_linea" | grep -q -- "--silent" && fail "NECESITO TU RESPUESTA salio silenciosa"
 printf '%s' "$necesito_linea" | grep -qF -- "-t $DESTINO" || fail "NECESITO TU RESPUESTA sin destino"
-corrida_mensaje t1 DETENIDA "la corrida se detuvo por un percance" "se retoma cuando este claro" "nada" \
+corrida_mensaje t1 DETENIDA "1 de 2 partes terminadas" "la corrida se detuvo por un percance" "se retoma cuando este claro" "nada" \
   || fail "el mensaje DETENIDA fallo"
 detenida_linea="$(grep "message send" "$LLAMADAS" | tail -1)"
 printf '%s' "$detenida_linea" | grep -q -- "--silent" && fail "DETENIDA salio silenciosa"
-corrida_mensaje t1 AVANZA "todo sigue en orden" "continua la misma parte" "nada" \
+corrida_mensaje t1 AVANZA "1 de 2 partes terminadas" "todo sigue en orden" "continua la misma parte" "nada" \
   || fail "el mensaje AVANZA fallo"
 avanza_linea="$(grep "message send" "$LLAMADAS" | tail -1)"
 printf '%s' "$avanza_linea" | grep -q -- "--silent" || fail "AVANZA dejo de salir silencioso"

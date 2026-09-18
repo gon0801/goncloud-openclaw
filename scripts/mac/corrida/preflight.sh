@@ -138,7 +138,7 @@ corrida_preflight() {
   if [ -n "$razones" ]; then
     printf 'NO APTO%s\n' "$razones"
     [ -n "$unknowns" ] && printf 'QUEDA unknown:%s\n' "$unknowns"
-    corrida_mensaje "$id" "DETENIDA" "la revision previa no paso y no se arranca" \
+    corrida_mensaje "$id" "DETENIDA" "0 de 1 partes terminadas" "la revision previa no paso y no se arranca" \
       "se revisa lo encontrado y se vuelve a intentar" "nada" >/dev/null 2>&1
     return 1
   fi

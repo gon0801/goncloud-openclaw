@@ -17,7 +17,7 @@ print(' '.join(x.get('nombre','') for x in json.load(open(os.environ['CORR_REG']
   [ -n "$cid" ] || cid="corrida-vigia-$id"
   "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1 \
     || { echo "cerrar: no se quito el cron $cid de la corrida $id" >&2; return 1; }
-  corrida_mensaje "$id" "CERRADA" "la corrida termino" "no queda nada en curso" "nada" || return 1
+  corrida_mensaje "$id" "CERRADA" "todas las partes terminadas" "la corrida termino" "no queda nada en curso" "nada" || return 1
   registro_actualizar "$reg" "d['estado']='cerrada'" || return 1
   echo "cerrada $id"
 }

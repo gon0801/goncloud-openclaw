@@ -88,7 +88,7 @@ tras corregir abrir.sh, (11) `FAIL: NECESITO TU RESPUESTA salio silenciosa`
 `TODO VERDE: test-corrida-nucleo`. El (11) ademas exige que AVANZA siga saliendo
 con --silent, y el (10) exige cada 60 min, Telegram, destino del canal, directorio
 de estado, "Contesta SOLO con el parte", capture-pane, lenguaje de usuario y, en
- simulacro, pedir el prefijo en el texto del cron.
+simulacro, pedir el prefijo en el texto del cron.
 
 ## BRIEF-r2 (2026-09-18): batch 9.1 — temas L, M, N (+ el patron SIMULACRO del tema I)
 Rojo por tema, con el defecto puesto:
@@ -147,4 +147,27 @@ caso "vigilante viejo" se restaura antes de los casos que siguen. Verde:
 iguales. Incidente propio: el commit del batch 9.2 aborto una vez ("files were
 modified by this hook") porque edite archivos mientras corria la bateria del
 pre-commit; el indice quedo intacto y el commit entro al segundo intento sin tocar
-el arbol. Leccion: durante un commit con este hook, el arbol se queda quieto.
+ el arbol. Leccion: durante un commit con este hook, el arbol se queda quieto.
+
+## BRIEF-r3 (2026-09-18): batch 9.1 — W, X, Y + fc3472e#4-#8,#13
+- W: ya estaba arreglado en a22804f (el hallazgo apuntaba a fc3472e); el grep+sed
+  se simplifico al sed incondicional que pide el brief. Cubierto por (6b).
+- X: rojo `validar_registro: command not found` al cargar solo lib.sh — el criterio
+  vivia en la prueba. Ahora validar_registro (con lista dura) es de lib.sh; la prueba
+  lo carga con source; abrir se autochequea el registro que escribe (sin rojo posible:
+  abrir no puede producir un registro invalido sin inyeccion — declarado).
+- Y: rojos con el validador de HEAD: `rm -rf` y `force push` aprobados PASABAN;
+  `emergencia` y `dropbox` daban lista dura por substring. Ahora regexes con bordes.
+- fc3472e#4: 4 lineas sin salto final se rechazaban y 5 pasaban (wc -l cuenta saltos,
+  no lineas) — awk END{print NR}. Los archivos sin salto final se generan al vuelo en
+  la prueba: guardados en el repo, el hook de end-of-file los reescribiria y el caso
+  dejaria de probar lo que prueba (hallazgo del propio pase; idem el espacio final
+  del caso de contenido vacio, que se codifica como "Que cambio:" sin espacio).
+- fc3472e#6: `mensaje-forma-sin-avance` pasaba (rc 0 verificado) — la linea 1 ahora
+  exige "N de M partes" (CERRADA exento: no queda nada que contar).
+- fc3472e#7/#8: mergear/rama/push/rebase/hash-mayus/Comando-en-linea-2/Comando-largo
+  pasaban — verificados en el mismo pase rojo.
+Bug propio del pase: inverti el exit del awk de marcadores en lineas 1-3 (exit 0 es
+limpio); lo cazo el primer verde. corrida_mensaje gana el argumento avance (tercero)
+y sus llamadores (cerrar, preflight, pruebas) se actualizan.
+Verde: las tres pruebas en TODO VERDE.

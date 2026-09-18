@@ -51,11 +51,60 @@ os.rename(t,r)
   return "$rc"
 }
 
+# validar_registro: el criterio unico de corrida.v1 vive aqui (la prueba 9.1 carga
+# este archivo); la lista dura es la regla 3 de 00-project-spec.
+validar_registro() { # $1 json del registro; 0 = valido; imprime ROTO:<motivo> por defecto
+  VREG="$1" python3 <<'PY' 2>/dev/null
+import json,os,re,sys
+try:
+  d=json.load(open(os.environ['VREG']))
+  assert isinstance(d,dict)
+except Exception:
+  print('ROTO:no es json'); sys.exit(1)
+e=[]
+def malo(m):
+  if m not in e: e.append(m)
+if d.get('vigia') not in ('claw','hermes'): malo('vigia fuera del conjunto')
+if d.get('schema')!='corrida.v1': malo('schema distinto')
+for c in ('id','runbook'):
+  if not d.get(c): malo('sin '+c)
+if not (isinstance(d.get('canal'),dict) and d['canal'].get('cron')): malo('sin canal.cron')
+if d.get('estado') not in ('abierta','cerrada'): malo('estado fuera del conjunto')
+tb=d.get('timebox_horas')
+if isinstance(tb,bool) or not isinstance(tb,int): malo('timebox no numerico')
+elif tb<1: malo('timebox fuera de rango')
+ss=d.get('sesiones')
+# Cero sesiones es valido en una corrida recien abierta (abrir escribe la lista vacia);
+# lo que no admite es que sesiones no sea lista o que cada elemento falle su forma.
+if not isinstance(ss,list): malo('sesiones no es lista')
+else:
+  for s in ss:
+    for c in ('nombre','rol','cli','dueno','dir'):
+      if not (isinstance(s,dict) and s.get(c)): malo('sesion sin '+c); break
+    if isinstance(s,dict) and s.get('rol') not in (None,'lead','carril'):
+      malo('rol fuera del conjunto')
+# Lista dura por regexes con bordes de palabra: "rm -rf" y "force push" caen,
+# "emergencia" y "dropbox" (que contienen "merge"/"drop" como substring) no.
+DURA=[r'\brm\s+-[a-z]*r[a-z]*f', r'\bdrop\b', r'\bborr\w*\s+recursiv\w*',
+      r'\bforce\s+push\b', r'\bpush\b[^\n]{0,40}\b(main|por defecto)\b',
+      r'\bmerge\w*\b', r'\bcredenciales?\b', r'\btokens?\b', r'\bsecretos?\b']
+for p in d.get('preaprobaciones') or []:
+  if not isinstance(p,dict): malo('preaprobacion sin forma'); continue
+  if p.get('decision') not in ('Aprobado','Negado'): malo('decision fuera del conjunto')
+  pat=str(p.get('patron','')).lower()
+  if p.get('decision')=='Aprobado' and any(re.search(k,pat) for k in DURA):
+    malo('lista dura aprobada: '+pat)
+for m in e: print('ROTO:'+m)
+sys.exit(1 if e else 0)
+PY
+}
+
 jerga_en_texto() { # $1 archivo; 0 = trae jerga
   local m="$1" c
   grep -q '`' "$m" && return 0
   grep -qE '/[A-Za-z0-9_.-]' "$m" && return 0
   grep -qE '(^|[[:space:]])--[A-Za-z]' "$m" && return 0
+  grep -qE '#[0-9]+' "$m" && return 0
   # sha: 7-40 hex Y al menos un digito y una letra; "acabada" o "1234567" solos pasan.
   while IFS= read -r c; do
     [ -n "$c" ] || continue
@@ -65,42 +114,61 @@ jerga_en_texto() { # $1 archivo; 0 = trae jerga
   done <<EOF
 $(grep -oE '\b[0-9a-f]{7,40}\b' "$m")
 EOF
-  # lista negra: stems con plurales y participios (commits, merged, mergeado, PRs...).
-  grep -qiE '\b(commits?|commitead[oa]s?|merges?|merged|mergead[oa]s?|mergearon|prs?|worktrees?|branches?|ci|hooks?|scripts?)\b' "$m" && return 0
+  # sha en mayusculas: misma regla con [A-F].
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    case "$c" in
+      *[0-9]*) printf '%s' "$c" | grep -q '[A-F]' && return 0;;
+    esac
+  done <<EOF
+$(grep -oE '\b[0-9A-F]{7,40}\b' "$m")
+EOF
+  # lista negra: stems con plurales y participios (commits, merged, mergeado, PRs,
+  # mergear, rebase, push, pull request, repo, rama...).
+  grep -qiE '\b(commits?|commitead[oa]s?|commitea\w*|merges?|merged|mergead[oa]s?|mergearon|mergear\w*|mergeo\w*|rebase\w*|push\w*|pull request|prs?|worktrees?|branches?|ramas?|repos?|ci|hooks?|scripts?)\b' "$m" && return 0
   return 1
 }
 
-# Validador de seguimiento.v1 (misma regla que test-cli-modos.sh 9.1; 9.2 la reusa aqui).
-# Cuatro lineas: etiqueta cerrada y los prefijos "Que cambio: ", "Que sigue: ",
-# "Que necesito de ti: " en las lineas 2-4. El prefijo "[SIMULACRO] " solo va en la
-# primera linea y se valida sobre una copia. El marcador "Comando: " es la referencia
-# textual que el contrato permite: UN segmento al final de la linea 4, solo en
-# "NECESITO TU RESPUESTA"; fuera de esa etiqueta o repetido es rojo.
+# Validador de seguimiento.v1 — el criterio unico vive aqui y la prueba 9.1 lo
+# ejercita. Cuatro lineas: etiqueta cerrada y avance "N de M partes" en la linea 1
+# (CERRADA queda solo con resto no vacio: ya no hay nada que contar), prefijos
+# "Que cambio: ", "Que sigue: ", "Que necesito de ti: " con contenido no vacio.
+# El prefijo "[SIMULACRO] " se quita de la primera linea y se valida sobre una copia.
+# El marcador "Comando: " es la referencia textual del contrato: UN segmento al
+# final de la linea 4, solo en "NECESITO TU RESPUESTA", con contenido no vacio y
+# de hasta 200 caracteres; en las lineas 1-3, fuera de esa etiqueta o repetido es rojo.
 mensaje_valido() { # $1 archivo; 0 = cumple seguimiento.v1
-  local m="$1" primera etq nmarc seg
+  local m="$1" primera etq resto nmarc seg
   [ -f "$m" ] || return 1
-  [ "$(wc -l < "$m")" -eq 4 ] || return 1
+  [ "$(awk 'END{print NR}' "$m")" -eq 4 ] || return 1
   local C; C="$(mktemp)" || return 1
   cp "$m" "$C"
+  sed -i.bak '1s/^\[SIMULACRO\] //' "$C" && rm -f "$C.bak"
   primera="$(head -1 "$C")"
-  if printf '%s\n' "$primera" | grep -q '^\[SIMULACRO\] '; then
-    sed -i.bak '1s/^\[SIMULACRO\] //' "$C" && rm -f "$C.bak"
+  printf '%s\n' "$primera" | grep -qE '^\[(AVANZA|DETENIDA|NECESITO TU RESPUESTA|CERRADA)\] ' || { rm -f "$C"; return 1; }
+  etq="${primera%%]*}"; etq="${etq#[}"
+  resto="${primera#*] }"
+  [ -n "$resto" ] || { rm -f "$C"; return 1; }
+  if [ "$etq" != "CERRADA" ]; then
+    printf '%s\n' "$resto" | grep -qE '[0-9]+ de [0-9]+ partes' || { rm -f "$C"; return 1; }
   fi
-  head -1 "$C" | grep -qE '^\[(AVANZA|DETENIDA|NECESITO TU RESPUESTA|CERRADA)\] ' || { rm -f "$C"; return 1; }
-  awk 'NR==2 && !/^Que cambio: /{m=1} NR==3 && !/^Que sigue: /{m=1} NR==4 && !/^Que necesito de ti: /{m=1} END{exit m?1:0}' "$C" \
+  awk 'NR==2 && !/^Que cambio: .+/ {m=1} NR==3 && !/^Que sigue: .+/ {m=1} NR==4 && !/^Que necesito de ti: .+/ {m=1} END{exit m?1:0}' "$C" \
     || { rm -f "$C"; return 1; }
-  etq="$(head -1 "$C")"; etq="${etq%%]*}"; etq="${etq#[}"
+  awk 'NR<=3 && /Comando: /{m=1} END{exit m?1:0}' "$C" || { rm -f "$C"; return 1; }
   nmarc="$(awk 'NR==4{print gsub(/Comando: /,"")}' "$C")"
   if [ "$etq" = "NECESITO TU RESPUESTA" ]; then
     [ "$nmarc" -le 1 ] || { rm -f "$C"; return 1; }
     if [ "$nmarc" -eq 1 ]; then
       seg="$(sed -n '4s/^.*Comando: //p' "$C")"
-      [ -n "$seg" ] || { rm -f "$C"; return 1; }
+      [ -n "$seg" ] && [ "${#seg}" -le 200 ] || { rm -f "$C"; return 1; }
       sed -i.bak '4s/Comando: .*$//' "$C" && rm -f "$C.bak"
     fi
   else
     [ "$nmarc" -eq 0 ] || { rm -f "$C"; return 1; }
   fi
+  # La linea 4 siempre trae la pregunta: no vale solo el comando textual.
+  awk 'NR==4{sub(/^Que necesito de ti: /,""); sub(/[[:space:]]+$/,""); exit ($0=="")?1:0}' "$C" \
+    || { rm -f "$C"; return 1; }
   if jerga_en_texto "$C"; then rm -f "$C"; return 1; fi
   rm -f "$C"
   return 0
@@ -110,16 +178,17 @@ tsv_fila() { # $1 tsv, $2 cli -> "binario|flag|barra" (vacio si no hay fila)
   awk -F'\t' -v c="$2" '$1==c && $1 !~ /^#/ {print $2"|"$3"|"$4; exit}' "$1"
 }
 
-# corrida_mensaje <id> <ETIQUETA> <cambio> <sigue> <necesito>
+# corrida_mensaje <id> <ETIQUETA> <avance> <cambio> <sigue> <necesito>
+# El avance es la linea 1 tras "Fase 9, " (p. ej. "2 de 5 partes terminadas").
 # Valida contra seguimiento.v1 ANTES de mandar; anota en mensajes.jsonl; 0 = enviado.
 corrida_mensaje() {
-  local id="$1" etq="$2" cambio="$3" sigue="$4" necesito="$5"
+  local id="$1" etq="$2" avance="$3" cambio="$4" sigue="$5" necesito="$6"
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
   local sim; sim="$(json_campo "$reg" simulacro)"
   local M; M="$(mktemp)" || return 1
   {
-    printf '[%s] Fase 9\n' "$etq"
+    printf '[%s] Fase 9, %s\n' "$etq" "$avance"
     printf 'Que cambio: %s\n' "$cambio"
     printf 'Que sigue: %s\n' "$sigue"
     printf 'Que necesito de ti: %s\n' "$necesito"
