@@ -22,25 +22,56 @@ print('' if v is None else (str(v).lower() if isinstance(v,bool) else v))
 " 2>/dev/null
 }
 
-# Validador de seguimiento.v1 (misma regla que test-cli-modos.sh 9.1; 9.2 la reusa aqui).
-# Acepta un prefijo "[SIMULACRO] " en la primera linea: se valida el mensaje base.
 jerga_en_texto() { # $1 archivo; 0 = trae jerga
-  grep -q '`' "$1" && return 0
-  grep -qE '/[A-Za-z0-9_.-]' "$1" && return 0
-  grep -qE '(^|[[:space:]])--[A-Za-z]' "$1" && return 0
-  grep -qE '\b[0-9a-f]{7,40}\b' "$1" && return 0
-  grep -qiE '\b(commit|merge|pr|worktree|branch|ci|hook|script)\b' "$1" && return 0
+  local m="$1" c
+  grep -q '`' "$m" && return 0
+  grep -qE '/[A-Za-z0-9_.-]' "$m" && return 0
+  grep -qE '(^|[[:space:]])--[A-Za-z]' "$m" && return 0
+  # sha: 7-40 hex Y al menos un digito y una letra; "acabada" o "1234567" solos pasan.
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    case "$c" in
+      *[0-9]*) printf '%s' "$c" | grep -q '[a-f]' && return 0;;
+    esac
+  done <<EOF
+$(grep -oE '\b[0-9a-f]{7,40}\b' "$m")
+EOF
+  # lista negra: stems con plurales y participios (commits, merged, mergeado, PRs...).
+  grep -qiE '\b(commits?|commitead[oa]s?|merges?|merged|mergead[oa]s?|mergearon|prs?|worktrees?|branches?|ci|hooks?|scripts?)\b' "$m" && return 0
   return 1
 }
 
+# Validador de seguimiento.v1 (misma regla que test-cli-modos.sh 9.1; 9.2 la reusa aqui).
+# Cuatro lineas: etiqueta cerrada y los prefijos "Que cambio: ", "Que sigue: ",
+# "Que necesito de ti: " en las lineas 2-4. El prefijo "[SIMULACRO] " solo va en la
+# primera linea y se valida sobre una copia. El marcador "Comando: " es la referencia
+# textual que el contrato permite: UN segmento al final de la linea 4, solo en
+# "NECESITO TU RESPUESTA"; fuera de esa etiqueta o repetido es rojo.
 mensaje_valido() { # $1 archivo; 0 = cumple seguimiento.v1
-  local m="$1" primera
+  local m="$1" primera etq nmarc seg
   [ -f "$m" ] || return 1
-  primera="$(head -1 "$m")"
-  case "$primera" in '[SIMULACRO]\ '*) tail -n +1 "$m" | sed 's/^\[SIMULACRO\] //' > "$m.tmp" && mv "$m.tmp" "$m";; esac
   [ "$(wc -l < "$m")" -eq 4 ] || return 1
-  head -1 "$m" | grep -qE '^\[(AVANZA|DETENIDA|NECESITO TU RESPUESTA|CERRADA)\] ' || return 1
-  jerga_en_texto "$m" && return 1
+  local C; C="$(mktemp)" || return 1
+  cp "$m" "$C"
+  primera="$(head -1 "$C")"
+  case "$primera" in '[[]SIMULACRO] '*) sed -i.bak '1s/^\[SIMULACRO\] //' "$C" && rm -f "$C.bak";; esac
+  head -1 "$C" | grep -qE '^\[(AVANZA|DETENIDA|NECESITO TU RESPUESTA|CERRADA)\] ' || { rm -f "$C"; return 1; }
+  awk 'NR==2 && !/^Que cambio: /{m=1} NR==3 && !/^Que sigue: /{m=1} NR==4 && !/^Que necesito de ti: /{m=1} END{exit m?1:0}' "$C" \
+    || { rm -f "$C"; return 1; }
+  etq="$(head -1 "$C")"; etq="${etq%%]*}"; etq="${etq#[}"
+  nmarc="$(awk 'NR==4{print gsub(/Comando: /,"")}' "$C")"
+  if [ "$etq" = "NECESITO TU RESPUESTA" ]; then
+    [ "$nmarc" -le 1 ] || { rm -f "$C"; return 1; }
+    if [ "$nmarc" -eq 1 ]; then
+      seg="$(sed -n '4s/^.*Comando: //p' "$C")"
+      [ -n "$seg" ] || { rm -f "$C"; return 1; }
+      sed -i.bak '4s/Comando: .*$//' "$C" && rm -f "$C.bak"
+    fi
+  else
+    [ "$nmarc" -eq 0 ] || { rm -f "$C"; return 1; }
+  fi
+  if jerga_en_texto "$C"; then rm -f "$C"; return 1; fi
+  rm -f "$C"
   return 0
 }
 

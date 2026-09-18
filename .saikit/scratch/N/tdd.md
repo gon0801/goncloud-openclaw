@@ -88,4 +88,19 @@ tras corregir abrir.sh, (11) `FAIL: NECESITO TU RESPUESTA salio silenciosa`
 `TODO VERDE: test-corrida-nucleo`. El (11) ademas exige que AVANZA siga saliendo
 con --silent, y el (10) exige cada 60 min, Telegram, destino del canal, directorio
 de estado, "Contesta SOLO con el parte", capture-pane, lenguaje de usuario y, en
-simulacro, pedir el prefijo en el texto del cron.
+ simulacro, pedir el prefijo en el texto del cron.
+
+## BRIEF-r2 (2026-09-18): batch 9.1 — temas L, M, N (+ el patron SIMULACRO del tema I)
+Rojo por tema, con el defecto puesto:
+- L (forma): `FAIL: forma sin prefijos pasa` (el validador solo contaba lineas y
+  etiqueta; tres lineas cualquiera pasaban).
+- M (registro): el validador de HEAD aceptaba los 7 mutantes nuevos — `MUTANTE
+  ACEPTADO: schema-malo ... lista-dura` (demo contra validar_registro de HEAD con los
+  fixtures nuevos).
+- N (lista negra/sha): tras arreglar L, `FAIL: jerga (commits) pasa` (los sufijos
+  evadian \bcommit\b; "acabada"/"1234567" daban falso sha).
+Verde: `TODO VERDE: test-cli-modos` (tambien con /bin/bash 3.2) y
+`TODO VERDE: test-corrida-nucleo` sin cambios (corrida_mensaje pasa el validador
+nuevo). El validador de mensajes ahora es el de lib.sh probado directo (la copia del
+test se borro: un criterio, un lugar). Falsos positivos residuales declarados: "y/o",
+fechas "18/09" — falla cerrado a proposito, no se afloja.
