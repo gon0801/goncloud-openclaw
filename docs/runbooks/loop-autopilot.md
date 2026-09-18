@@ -66,8 +66,8 @@ Cada tarea de un carril pasa por esto, en este orden. Ningún paso se salta; si 
 2. **Implementación.** El implementador trabaja en su worktree, commitea con el hook, y termina con la línea de contrato. Donde la fila dice `[tdd:required]`, el rojo va pegado en `.saikit/scratch/<carril>/tdd.md`; sin rojo pegado, no terminó.
 3. **Auditoría del lead, antes de cualquier PR.** El lead lee el commit, corre la batería una vez, y **muta él mismo** lo que la prueba protege: revierte el cambio en una copia y comprueba que la prueba se pone en rojo. Una prueba que pasa igual sin el arreglo no cuenta, y la tarea vuelve al paso 1 con un encargo de corrección.
 4. **PR en borrador.** El lead hace push y abre el PR **como draft**, desde el worktree, con el cuerpo en archivo. El CI corre; CodeRabbit no.
-5. **Rondas de revisión cruzada** sobre el SHA del PR, con la política de la sección 4. Cada hallazgo se corrige con un encargo `BRIEF-r<N>.md` al mismo implementador y vuelve al paso 3.
-6. **Promoción.** Cuando una ronda no trae altas ni medias, el lead marca el PR como listo para revisión. Ahí CodeRabbit revisa una sola vez, sobre código que ya no va a cambiar.
+5. **Rondas de revisión cruzada** sobre el SHA del PR, con la política de la sección 4. Cada hallazgo bloqueante se corrige con un encargo `BRIEF-r<N>.md` al mismo implementador y vuelve al paso 3. Lo no bloqueante va a una fila del plan.
+6. **Promoción.** Cuando una ronda no trae bloqueantes, el lead marca el PR como listo para revisión. Ahí CodeRabbit revisa una sola vez, sobre código que ya no va a cambiar.
 7. **CodeRabbit.** Se leen sus comentarios, no solo su check. Lo accionable se corrige en el mismo PR y vuelve al paso 3. Cada push de corrección tras la promoción vuelve a pasar por CodeRabbit; se cierra cuando no deja nada nuevo o no tiene cuota.
 8. **Aprobación.** `APPROVE lead <sha>` como comentario en el PR, con la lista de residuales y su razón. Solo eso mete el PR a la cola.
 9. **Merge** por la ruta del kit, sección 6. Base al día antes, con `git merge origin/<default>` en el worktree del carril y push normal: **nunca rebase**, que exige force-push y está prohibido. CI verde del SHA nuevo, y re-APPROVE si `git diff <sha aprobado> HEAD -- <archivos del carril>` sale vacío, o vuelta al paso 5 si no. La rama por defecto avanza sola cada dos horas con los snapshots del gateway, así que esto pasa en casi todo merge.
@@ -89,16 +89,27 @@ Medido: 2026-09-16, revisión de cierre de la Fase 6: en los siete carriles, al 
 
   `pwsh` va con ruta absoluta siempre, no solo por exec del nodo: no está en el PATH que hereda un CLI lanzado en tmux.
 
-  **Los dos parámetros tienen conjuntos cerrados y el script aborta si te sales.** `-Alcance` acepta `staged`, `working` y `last-commit`, y **nada más**: no existe un alcance de rama entera, así que la revisión es por commit y por eso el loop pide un commit por tarea. Un carril con varios commits se revisa commit por commit, o antes de commitear con `-Alcance working`. `-Excluir` acepta solo los seis de la cadena (`claude`, `codex`, `grok`, `kimi`, `qwen`, `glm`) o vacío: si implementó alguien que no es candidato a revisor, como muse o cursor, se pasa `-Excluir ''` y se anota quién implementó en el PR, porque no hay a quién excluir. `glm` en esa cadena **es** zcode.
+  **`-Alcance` tiene un conjunto cerrado y el script aborta si te sales:** acepta `staged`, `working` y `last-commit`, y nada más. La ronda 1 va por commit, y por eso el loop pide un commit por tarea. La ronda 2 no usa `-Alcance`: usa `-Desde <sha que vio la ronda 1>`, que manda solo el diff de los arreglos. `-Excluir` acepta cualquier nombre desde quality-kit #11: si implementó muse o cursor, se pasa ese nombre aunque no sea candidato a revisor. `glm` en esa cadena **es** zcode.
 
 Medido: 2026-09-16, lectura del script: `-Alcance branch` no es un valor válido y `-Excluir cursor` tampoco; el loop los mandaba y el comando abortaba por validación de parámetro antes de revisar nada.
 - **Cada ronda cambia de revisor**, no solo la ronda 2. Se pide con `-Con <otro>`. Un modelo que ya revisó ese código vuelve a traer su misma lista: repetirlo cuesta una ronda entera y no compra información.
-- **Se para cuando una ronda no trae ninguna alta ni media.** Ese es el único criterio de paro: **no hay tope de rondas**. Las bajas no extienden la cuenta — se atienden si son de una línea y, si no, se declaran como residuales con su razón. Lo que se corrige va como encargo `BRIEF-r<N>.md` al mismo implementador, nunca lo escribe el lead.
-- **Un tope por número es una fecha de caducidad para la calidad.** Si la ronda N todavía saca altas o medias, el código todavía las tiene, y pararse ahí solo mueve el hallazgo de la revisión a producción. Lo que sí se acota es el desperdicio: revisor distinto cada ronda, y las bajas no cuentan para seguir.
+- **Ronda 2**, cuando la ronda 1 trajo bloqueantes y ya se corrigieron: otro revisor y solo los arreglos.
+
+```
+/Users/dn/.local/bin/pwsh -NoProfile -File /Users/dn/quality-kit/cross-review.ps1 \
+  -Con <otro> -Excluir <modelo> -Desde <sha que vio la ronda 1>
+```
+
+- **Solo un hallazgo bloqueante abre otra ronda.** Bloqueante es seguridad, datos, una regla innegociable, el comportamiento que pide la fila roto o una prueba que no discrimina, y siempre va con el comando que lo reproduce: sin reproducción no bloquea. El script le pide al revisor marcar cada hallazgo `BLOQUEANTE` o `NO BLOQUEANTE`. Lo que se corrige va como encargo `BRIEF-r<N>.md` al mismo implementador, nunca lo escribe el lead.
+- **Tope: 2 rondas.** Una tercera solo si la ronda 2 halló un bloqueante que creó el arreglo de la ronda 1. Después de eso no hay más rondas.
+- **Un PR nunca se promueve con un bloqueante abierto.** Si se llega al tope con un bloqueante vivo, el carril se detiene con `ATORADO bloqueante abierto tras el tope de rondas`, el progreso lo marca con `atencion_requerida` y decide el operador. El tope corta el gasto, no la calidad: lo que baja el tope es el número de rondas, nunca la exigencia de que no quede un bloqueante.
+- **Lo que no se corrige va a una fila del plan**, con su razón, y se nombra en el `APPROVE` del paso 8. No se vuelve a revisar en este PR.
 - **Si el script sale con código 3** (ningún revisor externo disponible), el lead hace la revisión con un subagente propio y lo escribe en el PR como "revisión interna, sin cruzada". Nunca se espera a que la cadena vuelva.
 - **Un revisor que tarda más que el tope del script no es un revisor caído**: se anota y se sigue con el siguiente. El tope se fija por medición, no por número redondo.
 
 Medido: 2026-09-16, PR #48: catorce rondas cruzadas sobre un cambio de documentación, a 100 a 150 mil tokens cada una, **todas con el mismo revisor**. Ese desperdicio lo causaron dos cosas, y ninguna era la falta de un tope: el revisor nunca rotó, y se siguió rondando por hallazgos bajos. Con el criterio de arriba esa corrida para en la segunda o tercera ronda sola. El tope de tres que estuvo escrito aquí hasta el 2026-09-18 trataba el síntoma y, al hacerlo, mandaba a promover PRs con altas y medias vivas: la Fase 9 lo aplicó tal como estaba escrito y declaró "tope de rondas alcanzado" con cuatro medias abiertas. Y el mismo día la cadena entera salió con código 3: kimi y codex sin cuota, zcode, grok y qwen pasados de 300 segundos, cuando zcode necesita 366 en un diff real.
+
+Medido: 2026-09-18, en los repos del dueño: el criterio "sin tope, se sigue mientras aparezcan altas o medias" volvió la revisión una cadena sin fin, porque cada arreglo traía código nuevo que revisar y siempre salía algo. El dueño cambió la regla a bloqueantes con reproducción, segunda ronda solo sobre los arreglos y tope de 2 (quality-kit #12). La lección de la Fase 9 queda en la regla de arriba: el tope ya no permite promover con un bloqueante abierto.
 
 ---
 
