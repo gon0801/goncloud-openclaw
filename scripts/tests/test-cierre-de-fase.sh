@@ -32,11 +32,17 @@ trap '[ -n "${TM:-}" ] && "$TM" -L "$L" kill-server 2>/dev/null; rm -rf "$T"' EX
 
 # Stubs: ni gh ni openclaw reales. Su salida se controla con archivos.
 mkdir -p "$T/bin"
-CFG="$T/config.json"; CI="$T/ci.txt"
+CFG="$T/config.json"; CI="$T/ci.txt"; TAB="$T/tablero.json"
 printf '{"plugins":{"entries":{"summa-gate":{}}}}' >"$CFG"
 printf 'completed success' >"$CI"
+# El stub contesta segun el metodo: el comprobador pregunta por la configuracion y,
+# aparte, por el tablero publicado. Un stub que contestara lo mismo a los dos haria
+# pasar la comprobacion del tablero sin comprobar nada.
 cat >"$T/bin/openclaw" <<STUB
 #!/bin/sh
+for a in "\$@"; do
+  [ "\$a" = "runbook.progress.get" ] && { cat "$TAB"; exit 0; }
+done
 cat "$CFG"
 STUB
 cat >"$T/bin/gh" <<STUB
@@ -59,6 +65,26 @@ plan() { # $1 estado de las dos filas
 PLAN
 }
 plan 'cc:完了'
+# La fase de juguete publica tablero: sin documento versionado la comprobacion (7)
+# sale VERDE por vacio y ninguno de sus casos ejercitaria nada.
+mkdir -p "$R/.saikit/progress"
+progreso() { # $1 estado del carril B
+  cat >"$R/.saikit/progress/5.json" <<DOC
+{"fase":"5","carriles":[{"id":"A","estado":"mergeado"},{"id":"B","estado":"$1"}],
+ "cierre":{"at":"2026-09-18T00:00:00Z"}}
+DOC
+}
+tablero() { # $1 estado del carril B vivo, $2 cierre.at vivo (vacio = null)
+  at=null; [ -n "${2:-}" ] && at="\"$2\""
+  cat >"$TAB" <<DOC
+Gateway call: runbook.progress.get
+{"ok":true,"doc":{"fase":"5",
+ "carriles":[{"id":"A","estado":"mergeado"},{"id":"B","estado":"$1"}],
+ "cierre":{"at":$at}}}
+DOC
+}
+progreso mergeado
+tablero mergeado 2026-09-18T00:00:00Z
 git -C "$R" add -A && git -C "$R" commit -q -m plan
 git -C "$R" branch -f main HEAD 2>/dev/null
 # Un "remoto" de verdad, para que ls-remote responda sin red.
@@ -270,5 +296,78 @@ printf '%s' "$out" | grep -q "^VERDE *plan" \
   || fail "(11e) cc:TODO en el Contenido no abre una fila cuyo Status esta cerrado:
 $out"
 echo "ok (11): los cuatro falsos verdes de CodeRabbit mueren, y el Status se lee de su columna"
+
+# (12) El tablero publicado. Medido el 2026-09-18: este comprobador dio VERDE con el
+# tablero de la Fase 7 mostrando 75% y el cierre "implementando"; y dos dias antes, el
+# de la Fase 6 sirviendo un fixture mientras el documento versionado estaba bien.
+# Ninguna comprobacion miraba la copia publicada, que es lo unico que el dueno ve.
+# El Plans.md que quedo del caso (11e) ya esta cerrado; se reusa.
+progreso mergeado
+
+# (12a) El fallo de la Fase 7: el tablero vivo muestra un carril sin terminar.
+tablero implementando 2026-09-18T00:00:00Z
+out=$(corre 5); rc=$?
+printf '%s' "$out" | grep -q "^ROJO *tablero" \
+  || fail "(12a) un tablero publicado con un carril sin terminar debe salir ROJO:
+$out"
+printf '%s' "$out" | grep -q "carriles sin terminar: B" \
+  || fail "(12a) el detalle tiene que nombrar el carril, que es lo que hay que ir a ver:
+$out"
+[ "$rc" -eq 0 ] && fail "(12a) con el tablero en rojo la fase no puede salir con codigo 0:
+$out"
+echo "ok (12a): un tablero publicado a medias impide el cierre, y nombra el carril"
+
+# (12b) El fallo de la Fase 6: el tablero vivo esta cerrado, pero dice otra cosa que el
+# documento versionado. Sin comparar los dos, un fixture cerrado pasaria por bueno.
+tablero atorado 2026-09-18T00:00:00Z
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^ROJO *tablero" \
+  || fail "(12b) un tablero publicado que no coincide con lo versionado debe salir ROJO:
+$out"
+echo "ok (12b): un tablero publicado que contradice al documento versionado impide el cierre"
+
+# (12c) Sin cierre.at el dueno abre la fase y la ve en curso, aunque los carriles
+# esten todos mergeados.
+tablero mergeado ""
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^ROJO *tablero" \
+  || fail "(12c) un tablero publicado sin cierre.at debe salir ROJO:
+$out"
+echo "ok (12c): un tablero sin cierre declarado impide el cierre"
+
+# (12d) Discrimina: cuando el tablero publicado coincide y esta cerrado, sale VERDE.
+# Sin este caso, una comprobacion que siempre dijera ROJO pasaria los tres de arriba.
+tablero mergeado 2026-09-18T00:00:00Z
+out=$(corre 5); rc=$?
+printf '%s' "$out" | grep -q "^VERDE *tablero" \
+  || fail "(12d) un tablero publicado, coincidente y cerrado tiene que salir VERDE:
+$out"
+[ "$rc" -eq 0 ] || fail "(12d) con todo en verde la fase debe salir 0; salio $rc:
+$out"
+echo "ok (12d): un tablero publicado, coincidente y cerrado sale VERDE"
+
+# (12e) El gateway que no contesta es unknown, no VERDE por vacio: no poder mirar el
+# tablero no es haberlo mirado. Es el mismo falso verde que CodeRabbit encontro en la
+# consulta de ramas y en la de CI.
+mv "$T/bin/openclaw" "$T/bin/openclaw.off"
+printf '#!/bin/sh\nexit 1\n' >"$T/bin/openclaw"; chmod +x "$T/bin/openclaw"
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^unknown *tablero" \
+  || fail "(12e) sin respuesta del gateway el tablero es unknown, no VERDE:
+$out"
+printf '%s' "$out" | grep -q "^VERDE *tablero" \
+  && fail "(12e) un gateway caido no puede dar por bueno el tablero:
+$out"
+mv -f "$T/bin/openclaw.off" "$T/bin/openclaw"
+echo "ok (12e): sin respuesta del gateway el tablero queda unknown"
+
+# (12f) Una fase que no publica tablero no se bloquea por eso.
+git -C "$R" rm -q .saikit/progress/5.json
+git -C "$R" commit -q -m sin-tablero; git -C "$R" push -q -f origin HEAD:main
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^VERDE *tablero" \
+  || fail "(12f) una fase sin documento de progreso versionado no debe bloquearse:
+$out"
+echo "ok (12): el tablero publicado se compara con el versionado, y los dos falsos verdes de las Fases 6 y 7 mueren"
 
 echo "TODO VERDE: cierre-de-fase"

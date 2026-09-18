@@ -6,14 +6,14 @@
   "lead": {
     "agente": "implementer",
     "inicio": "2026-09-17T16:16:00Z",
-    "actualizado": "2026-09-18T02:55:00Z"
+    "actualizado": "2026-09-18T04:25:09Z"
   },
   "atencion_requerida": {
     "necesaria": false,
     "motivo": null,
     "desde": null
   },
-  "siguiente_paso": "Cierre en PR #69 (fase7/cierre): 7.6 parcial declarado en Plans.md; merge 7.7 tras CI verde.",
+  "siguiente_paso": "Fase 7 cerrada: el comprobador de cierre imprime VERDE en sus seis comprobaciones.",
   "carriles": [
     {
       "id": "D",
@@ -95,21 +95,20 @@
         "7.6",
         "7.7"
       ],
-      "estado": "implementando",
-      "paso_loop": 7,
+      "estado": "mergeado",
+      "paso_loop": 8,
       "pr": 69,
-      "head": null,
+      "head": "fca201a6ba06320315bb9536143d8600c4b63260",
       "approve_lead": null,
-      "ci": "pendiente",
-      "coderabbit": "unknown",
+      "ci": "verde",
+      "coderabbit": "limpio",
       "residuales": [
-        "7.6 parcial: canarys (i)-(vi) sin correr; detalle en el Status de Plans.md",
-        "Telegram del cierre con el enlace /runbook/tablero/7"
+        "7.6 parcial: canarys (i)-(vi) sin correr; detalle en el Status de Plans.md"
       ],
       "detenido_por": null,
       "ultimo_evento": {
-        "at": "2026-09-18T02:55:00Z",
-        "que": "PR #69 abierto en fase7/cierre; envio inicial del progreso de Fase 7 al tablero"
+        "at": "2026-09-18T04:25:09Z",
+        "que": "merge #69 fca201a (cierre de Plans.md 7.0-7.7; Quality y gate SUCCESS)"
       }
     }
   ],
@@ -138,11 +137,23 @@
       "carril": "C",
       "que": "envio inicial del progreso de Fase 7 al tablero",
       "situacion": null
+    },
+    {
+      "at": "2026-09-18T04:25:09Z",
+      "carril": "C",
+      "que": "merge #69 fca201a",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-18T04:40:00Z",
+      "carril": null,
+      "que": "cierre-de-fase.sh 7 en VERDE: plan, ramas, worktrees, sesiones, despliegue y CI",
+      "situacion": null
     }
   ],
   "cierre": {
-    "at": null,
+    "at": "2026-09-18T04:40:00Z",
     "telegram_message_id": null,
-    "resumen": null
+    "resumen": "Fase 7 cerrada: 4 carriles mergeados (D #62, P #63, N1 #65, C #69 fca201a); tablero-runbook desplegado y encendido en el gateway; comprobador de cierre VERDE en sus seis comprobaciones; residual declarado: 7.6 parcial, canarys (i)-(vi) sin correr."
   }
 }

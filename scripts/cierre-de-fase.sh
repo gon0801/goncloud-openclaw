@@ -164,6 +164,68 @@ else
   fi
 fi
 
+# (7) El tablero publicado: lo que el dueno abre tiene que decir lo mismo que el
+# documento versionado, y tiene que estar cerrado. Medido el 2026-09-18: este mismo
+# comprobador imprimio VERDE mientras el tablero de la Fase 7 mostraba 75% y el carril
+# de cierre en "implementando", porque ninguna comprobacion miraba la copia publicada.
+# Es el fallo de la Fase 6 al reves: alli el tablero servia un fixture y el documento
+# versionado era el bueno. Los dos son el mismo hueco: "cerrado" se declaraba sin
+# mirar lo unico que el dueno ve. Una fase que se abre y se ve a medias no esta cerrada.
+doc=$(en_repo show "$REF:.saikit/progress/$FASE.json" 2>/dev/null || true)
+if [ -z "$doc" ]; then
+  linea VERDE tablero "la fase $FASE no publica tablero"
+elif [ "${CIERRE_SIN_GATEWAY:-0}" = "1" ] || [ ! -x "$OPENCLAW_BIN" ]; then
+  linea unknown tablero "no consulte el gateway; hay documento versionado en $REF"
+else
+  vivo=$(timeout 60 "$OPENCLAW_BIN" gateway call runbook.progress.get \
+           --params "{\"fase\":\"$FASE\"}" --timeout 30000 2>/dev/null)
+  if [ -z "$vivo" ]; then
+    linea unknown tablero "el gateway no contesto"
+  else
+    det=$(printf '%s' "$vivo" | CIERRE_DOC="$doc" python3 -c '
+import json, os, sys
+
+TERMINALES = {"mergeado", "atorado", "revertido", "omitido"}
+
+def resumen(d):
+    d = d.get("result", d)
+    d = d.get("doc", d)
+    pares = sorted((str(c.get("id")), str(c.get("estado"))) for c in (d.get("carriles") or []))
+    return {"fase": d.get("fase"), "at": (d.get("cierre") or {}).get("at"), "carriles": pares}
+
+try:
+    ver = resumen(json.loads(os.environ["CIERRE_DOC"]))
+except Exception:
+    print("UNKNOWN no pude leer el documento versionado")
+    raise SystemExit
+
+bruto = sys.stdin.read()
+i = bruto.find("{")
+try:
+    viv = resumen(json.loads(bruto[i:]))
+except Exception:
+    print("UNKNOWN el gateway no devolvio un documento legible")
+    raise SystemExit
+
+abiertos = [i2 for i2, e in viv["carriles"] if e not in TERMINALES]
+if abiertos:
+    print("ROJO el tablero publicado muestra carriles sin terminar: " + " ".join(abiertos))
+elif not viv["at"]:
+    print("ROJO el tablero publicado no trae cierre.at: quien lo abra ve la fase en curso")
+elif viv != ver:
+    print("ROJO el tablero publicado no dice lo mismo que el documento versionado")
+else:
+    print("OK coincide con el documento versionado y esta cerrado")
+')
+    case "$det" in
+      "OK "*)      linea VERDE   tablero "${det#OK }" ;;
+      "UNKNOWN "*) linea unknown tablero "${det#UNKNOWN }" ;;
+      "ROJO "*)    linea ROJO    tablero "${det#ROJO }" ;;
+      *)           linea unknown tablero "no pude comparar el tablero publicado" ;;
+    esac
+  fi
+fi
+
 # (6) CI de la rama por defecto sobre su punta: una fase no cierra dejandola en rojo.
 if [ ! -x "$GH_BIN" ]; then
   linea unknown ci "sin gh en $GH_BIN"
