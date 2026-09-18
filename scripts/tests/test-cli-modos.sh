@@ -8,6 +8,9 @@ cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
 
 TMP=$(mktemp -d) || exit 1
+# El trap vive junto al mktemp (arriba del todo) para cubrir tambien los fail
+# tempranos. Borra solo los json creados (rm -f, no recursivo: regla del carril).
+trap 'rm -f "$TMP"/*.json "$TMP"/*.txt 2>/dev/null' EXIT
 FX=scripts/tests/fixtures/corrida
 TSV=scripts/mac/cli-modos.tsv
 ZSH=scripts/mac/agent-tmux-shell.zsh
@@ -42,21 +45,34 @@ done
 validar_registro "$FX/registro-pasa-emergencia.json" || fail "emergencia dio lista dura (falso positivo)"
 validar_registro "$FX/registro-pasa-dropbox.json" || fail "dropbox dio lista dura (falso positivo)"
 
-# La ventana de deteccion no se acorta: relleno largo entre "rm" y los flags cae,
-# y una palabra con guion no cuenta como flag ("rm -f y -restar" es inocente).
-python3 - "$TMP" <<'PY'
+# MATRIZ del detector de borrado recursivo (CA+CB+CE-r): todos los casos de una
+# vez; la mutacion (sin la regla) debe ponerla entera en rojo. Nota: el caso
+# "--force," de la matriz se codifica como "rm --recursive --force," — la regla
+# exige recursividad (r); una -f sola jamas cuenta (CE-r).
+python3 - "$TMP" "$FX" <<'PY'
 import json,sys
-d=json.load(open('scripts/tests/fixtures/corrida/registro-valido.json'))
-dos=dict(d)
-d['preaprobaciones']=[{'patron':'borrado con rm ' + 'relleno inofensivo '*10 + 'y al final -r -f del area','decision':'Aprobado'}]
-json.dump(d,open(sys.argv[1]+'/reg-ventana.json','w'),indent=1)
-dos['preaprobaciones']=[{'patron':'quitar con rm -f y -restar horas','decision':'Aprobado'}]
-json.dump(dos,open(sys.argv[1]+'/reg-restar.json','w'),indent=1)
+tmp,fx=sys.argv[1],sys.argv[2]
+rojo=['rm -rf','rm -fr','rm -Rf','rm -R -f','rm -r -f','rm --recursive --force',
+      'rm -vvvrf','`rm -rf`','"rm -rf"','rm -rf,','(rm -r -f)','rm --recursive --force,',
+      'rm -r dir','borrado con rm ' + 'relleno inofensivo '*10 + 'y al final -r -f del area',
+      'RM -RF','Rm -rf']
+limpio=['atencion en emergencia','respaldo en dropbox','quitar con rm -f y -restar horas',
+        'solo restar horas','la fecha 18/09 quedo','esto y/o aquello']
+d0=json.load(open(fx+'/registro-valido.json'))
+for lado,patrones in (('rojo',rojo),('limpio',limpio)):
+  for i,p in enumerate(patrones):
+    d=json.loads(json.dumps(d0))
+    d['preaprobaciones']=[{'patron':p,'decision':'Aprobado'}]
+    json.dump(d,open('%s/matriz-%s-%02d.json'%(tmp,lado,i),'w'),indent=1)
 PY
-out="$(validar_registro "$TMP/reg-ventana.json" 2>/dev/null)"; rc=$?
-[ "$rc" -ne 0 ] || fail "relleno largo entre rm y los flags evita la lista dura"
-printf '%s' "$out" | grep -qF "ROTO:lista dura aprobada" || fail "reg-ventana sin su motivo"
-validar_registro "$TMP/reg-restar.json" || fail "una palabra con guion conto como flag (falso positivo)"
+for f in "$TMP"/matriz-rojo-*.json; do
+  validar_registro "$f" >/dev/null 2>&1 \
+    && fail "matriz: debia ser rojo: $(basename "$f")"
+done
+for f in "$TMP"/matriz-limpio-*.json; do
+  validar_registro "$f" >/dev/null 2>&1 \
+    || fail "matriz: debia pasar limpio: $(basename "$f")"
+done
 
 # runbook_de deriva la raiz del propio lib.sh (no del pwd): desde /tmp y sin
 # REPO_DIR, un runbook relativo REAL resuelve igual, en forma fisica.

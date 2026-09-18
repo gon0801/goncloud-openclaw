@@ -272,3 +272,33 @@ el node_modules que resolvia el paquete desaparecio o nunca llego a este worktre
 SYMLINK a ~/.openclaw/tools/... creado 14:43 por otra mano; restaure el mismo
 enlace para summa-gate (gitignored, cero installs nuevos, mismo patron existente).
 Verificado: bateria completa en TODO VERDE.
+
+## BRIEF-r7 (2026-09-18): ronda 6 (claude sobre 7bce512) — CA, CB, CC, CD, CE
+- CA/CB/CE-r (MATRIZ completa): rojo inicial `FAIL: matriz: debia ser rojo:
+  matriz-rojo-06.json` (`` `rm -rf` `` con comillas invertidas; hoy el split por
+  espacios dejaba tokens sucios). _rm_recursivo v3: flags por findall con
+  lookbehind (?<![\w-]) sobre el texto YA lowercased (RM -RF cuenta), largos solo
+  por nombre exacto, cortos solo si TODAS sus letras son opciones de rm
+  (d f i p r v w x: -vvvrf vale, -restar no), y la regla exige r: una -f sola
+  jamas cuenta (rm -r dir es rojo). Nota de interpretacion: el caso "--force,"
+  de la matriz se codifico como "rm --recursive --force," para no contradecir
+  CE-r (f sola limpia).
+- MUTACION exigida por el brief verificada: con la regla reducida a `return
+  False`, los 16 ROJO de la matriz PASAN (16/16) y la prueba entera cae
+  (`FAIL: registro mutante pasa: dura-rmrf`).
+- CC: t-ileg2 ahora afirma rc!=0, el mensaje "no se pudo leer la lista" y que NO
+  aparece "se quito por la lista"; la lista cae en el PRIMER cron_jobs_de (la del
+  destino pasa: LISTA_DESPUES_DE=nl+1). Rojo demostrado rompiendo el mensaje de
+  ese camino: `FAIL: la lista ilegible de entrada no se reporta honestamente`.
+- CD: cron_dest_de con homonimos — createdAtMs en todos -> el mas reciente; sin
+  el y destinos DISTINTOS -> AMBIGUO y abrir falla cerrado ("destinos ambiguos
+  entre homonimos"); mismo destino -> ese. Rojo capturado (`con destinos
+  ambiguos debio fallar cerrado`). Bug propio del pase: el mensaje decia
+  "destinos distintos" y el test grepeaba "ambigu" — alineados.
+- CE-9b: trap de limpieza junto al mktemp (cubre fail tempranos) y $FX por argv
+  en el heredoc. Interpretacion: el trap borra con rm -f por glob (no recursivo),
+  porque la regla del carril veta rm -rf aun bajo /tmp — declarada.
+- CE-5: comentario de runbook_de sin prometer el plist: REPO_DIR si esta; si no,
+  raiz derivada de lib.sh; pwd ultimo recurso documentado; bajo launchd, inyectar
+  REPO_DIR es lo seguro.
+Verde: las tres pruebas, tambien /bin/bash 3.2.

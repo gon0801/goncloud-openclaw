@@ -24,6 +24,7 @@ corrida_abrir() {
   local dest
   dest="$(cron_dest_de "$canal_de")"
   [ "$dest" = "ILEGIBLE" ] && { echo "abrir: sin lista de crons legible" >&2; return 1; }
+  [ "$dest" = "AMBIGUO" ] && { echo "abrir: el cron $canal_de tiene destinos ambiguos entre homonimos; no se elige por adivinanza" >&2; return 1; }
   [ -n "$dest" ] || { echo "abrir: el cron $canal_de no trae destino" >&2; return 1; }
   local dir="$CORRIDA_STATE/$id"
   if [ -e "$dir/registro.json" ]; then

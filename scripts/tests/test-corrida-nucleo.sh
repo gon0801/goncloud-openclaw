@@ -60,6 +60,9 @@ case "\$*" in
     n=\$([ -f "$T/lists" ] && wc -l < "$T/lists" || echo 0); n=\$((n + 1)); echo x >> "$T/lists"
     if [ "\${LISTA_MALA:-0}" != "0" ] && [ "\$n" -gt "\${LISTA_DESPUES_DE:-0}" ]; then exit 1; fi
     printf '{"jobs":[{"name":"verif-sync-repos","delivery":{"to":"$DESTINO"}}'
+    if [ "\${DEST_AMBIGUO:-0}" = "1" ]; then
+      printf ',{"name":"verif-sync-repos","delivery":{"to":"OTRO-DESTINO-9Z"}}'
+    fi
     if [ -f "$T/cron-puesto" ]; then
       while IFS= read -r linea; do
         [ -n "\$linea" ] && printf ',{"name":"%s","id":"%s"}' "\${linea%% *}" "\${linea#* }"
@@ -269,10 +272,18 @@ nl=$([ -f "$T/lists" ] && wc -l < "$T/lists" || echo 0)
 out="$(CRON_SIN_ID=1 LISTA_MALA=1 LISTA_DESPUES_DE=$((nl + 2)) bash "$CORR" abrir t-ileg --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"
 printf '%s' "$out" | grep -q "no se pudo" || fail "con la lista ilegible no dice la verdad"
 printf '%s' "$out" | grep -q "se quito por la lista" && fail "con la lista ilegible informo una limpieza no verificada"
-# y el ILEGIBLE del PRIMER cron_jobs_de (lista ilegible antes de intentar quitar).
+# y el ILEGIBLE del PRIMER cron_jobs_de: la lista cae justo ahi (la del destino
+# paso, la relectura nunca llega) y el informe es honesto hasta el final.
 nl=$([ -f "$T/lists" ] && wc -l < "$T/lists" || echo 0)
-out="$(CRON_SIN_ID=1 LISTA_MALA=1 LISTA_DESPUES_DE=$((nl + 1)) bash "$CORR" abrir t-ileg2 --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"
+out="$(CRON_SIN_ID=1 LISTA_MALA=1 LISTA_DESPUES_DE=$((nl + 1)) bash "$CORR" abrir t-ileg2 --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "con la lista ilegible de entrada debio fallar"
 printf '%s' "$out" | grep -q "no se pudo leer la lista" || fail "la lista ilegible de entrada no se reporta honestamente"
+printf '%s' "$out" | grep -q "se quito por la lista" && fail "la lista ilegible de entrada informo una limpieza inexistente"
+
+# homonimos del canal con destinos DISTINTOS: abrir no elige, falla cerrado.
+out="$(DEST_AMBIGUO=1 bash "$CORR" abrir t-amb --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "con destinos ambiguos debio fallar cerrado"
+printf '%s' "$out" | grep -q "ambigu" || fail "el fallo por destinos ambiguos no lo dice"
 
 # (9f) lock del registro: fresco espera y falla; viejo se rompe y se sigue.
 . scripts/mac/corrida/lib.sh
