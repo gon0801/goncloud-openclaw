@@ -13,6 +13,14 @@
 # fijan esta llamada. Cuando alguien mueva el repo, o entre una maquina nueva, no hay
 # nada que actualizar en veinte documentos.
 #
+# DONDE CORRE. Necesita bash y grep. En la Mac, tal cual. En el gateway Windows hay
+# bash (el de Git) pero NO en el PATH: alli se invoca por su ruta completa,
+# `"C:\Program Files\Git\bin\bash.exe" scripts/runbook.sh <fase>`. Medido el
+# 2026-09-18 contra el gateway real: la gramatica se comporta igual en los dos (acepta
+# `9` y `9.1`, rechaza `.9`, `9.`, `9..1`, `1234` y `a9`). Se escribe porque la version
+# anterior de esta cabecera prometia "cualquier maquina" sin haberlo probado en ninguna
+# que no fuera esta. Hallazgo de kimi en la revision cruzada.
+#
 # Uso:
 #   bash scripts/runbook.sh <fase>        # imprime la ruta absoluta, o falla diciendo por que
 #   bash scripts/runbook.sh <fase> --ver  # ademas imprime el archivo entero

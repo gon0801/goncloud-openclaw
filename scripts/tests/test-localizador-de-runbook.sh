@@ -72,7 +72,18 @@ printf '%s' "$err_ok" | grep -q 'fase invalida' \
 
 # La copia sin validacion tambien falla, pero por OTRA razon. Medir solo el codigo de
 # salida aceptaba las dos y no detectaba nada: hay que medir la razon.
-sed '/fase invalida/d' "$LOC" > "$T/scripts/runbook.sh"
+python3 - "$LOC" "$T/scripts/runbook.sh" <<'PY'
+import re, sys
+origen, destino = sys.argv[1], sys.argv[2]
+s = open(origen, encoding="utf-8").read()
+# El bloque entero, no solo su mensaje: borrar la linea suelta deja un `if` sin cuerpo
+# y bash ni siquiera parsea el archivo.
+s2 = re.sub(r"\nif ! printf '%s' \"\$FASE\".*?\nfi\n", "\n", s, count=1, flags=re.S)
+assert s2 != s, "no pude quitar el bloque de validacion"
+open(destino, "w", encoding="utf-8").write(s2)
+PY
+bash -n "$T/scripts/runbook.sh" \
+  || fail "(5) la copia mutada no es bash valido: la asercion de abajo pasaria por no parsear, no por comportamiento"
 grep -q 'fase invalida' "$T/scripts/runbook.sh" \
   && fail "(5) no pude fabricar la version sin validacion; el caso (4) quedaria sin respaldo"
 err_malo=$(bash "$T/scripts/runbook.sh" '../../etc/passwd' 2>&1 >/dev/null)
@@ -91,6 +102,20 @@ echo "ok (5b): la gramatica cerrada rechaza punto suelto, punto final, punto dob
 
 # (5c) El mensaje de una fase que no existe no puede sugerir una fase imposible. Antes
 # listaba con su propio filtro y colaba `8-hallazgos`. Hallazgo de CodeRabbit.
+#
+# PRECONDICION: hace falta que exista al menos un `autopilot-fase*.md` cuyo sufijo NO
+# sea clave de fase. Si un dia nadie lo tiene, (5c) y (6) quedarian verdes sin probar
+# nada, porque el grep no podria fallar sobre una lista que ya no lo contiene. Se
+# comprueba en vez de suponerse. Hallazgo de kimi, 2026-09-18.
+vecinos=0
+for f in docs/runbooks/autopilot-fase*.md; do
+  [ -f "$f" ] || continue
+  n=$(basename "$f" .md); n=${n#autopilot-fase}
+  printf '%s' "$n" | grep -qE '^[0-9]{1,3}(\.[0-9]{1,3})?$' || vecinos=$((vecinos + 1))
+done
+[ "$vecinos" -gt 0 ] \
+  || fail "(5c) no hay ningun documento vecino que no sea runbook de fase: sin el, este caso y el (6) pasan sin probar nada"
+
 err=$(bash "$LOC" 42 2>&1 >/dev/null)
 printf '%s' "$err" | grep -q 'hallazgos' \
   && fail "(5c) el error sugiere '8-hallazgos', que no es una fase: manda a probar algo imposible
