@@ -198,6 +198,10 @@ Un runbook de fase lleva **solo lo específico de la fase**: quién implementa c
 
 Antes de lanzarse, el runbook pasa `scripts/tests/test-runbooks-no-contradicen-entorno.sh` en verde. Un runbook en rojo no se lanza.
 
+**Un runbook se localiza con un comando, nunca con una ruta fija ni con un enlace.** Quien tenga que abrirlo corre `bash scripts/runbook.sh <fase>` desde cualquier clon del repo y obtiene la ruta absoluta en esa maquina; `--lista` las nombra todas. Ni el encargo, ni el brief, ni el mensaje que lanza a un implementador escriben la ruta a mano: escriben esa llamada. Una ruta fija solo vale en la maquina de quien la escribio, y un enlace de GitHub no abre porque el repo es privado.
+
+Medido: 2026-09-18, arrancando la Fase 9. A los implementadores se les dio el enlace de GitHub del runbook y no pudieron abrirlo; la ruta que traian los documentos era la de otra maquina. El archivo estaba en su sitio en las dos, todo el tiempo. Lo que faltaba no era el archivo sino una forma de preguntar donde esta que contestara igual en la Mac, en el gateway Windows y en una maquina nueva.
+
 Medido: 2026-09-16, los runbooks de las fases 6 y 7 pesaban 40 y 36 KB y repetían el loop entero; el de la 7 ya decía "hereda de la 6" a mano y se desfasó en tres puntos en un día.
 
 ---
