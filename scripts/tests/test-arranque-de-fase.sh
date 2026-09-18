@@ -186,4 +186,63 @@ printf '%s' "$out" | grep -q '^VERDE *vigilantes' \
 $out"
 echo "ok (8): una consulta fallida no cuenta aunque haya escrito una lista valida"
 
+# El caso (8) dejo el stub saliendo 1 a proposito; se repone antes de seguir, o todo lo
+# que venga despues mediria "gateway caido" en vez de lo suyo.
+cat >"$T/bin/openclaw" <<STUB
+#!/bin/sh
+for a in "\$@"; do
+  [ "\$a" = "cron.list" ] && { cat "$CRONS"; exit 0; }
+  [ "\$a" = "runbook.progress.get" ] && { cat "$PROG"; exit 0; }
+done
+echo '{}'
+STUB
+chmod +x "$T/bin/openclaw"
+
+# (9) El resumen distingue "todo comprobado" de "no pude comprobar lo esencial". Sin
+# gateway las dos comprobaciones que motivaron el script quedan unknown; decir VERDE a
+# secas ahi seria prometer mas de lo que se miro, que es el falso verde contra el que
+# existe este script. Hallazgo de kimi en la revision cruzada, 2026-09-18.
+if [ -n "${TM:-}" ]; then
+  crons_con corrida-vigia-5 corrida-empuje-5; prog_ok
+  out=$(ARRANQUE_SIN_GATEWAY=1 REPO="$R" REF=origin/main TMUX_BIN="$SHIM" OPENCLAW_BIN="$T/bin/openclaw" bash "$S" 5); rc=$?
+  [ "$rc" -eq 0 ] || fail "(9) sin rojos tiene que salir 0 aunque haya unknowns; salio $rc:
+$out"
+  printf '%s' "$out" | grep -q 'VERDE con reservas' \
+    || fail "(9) con dos comprobaciones sin hacer, el resumen no puede decir VERDE a secas:
+$out"
+  printf '%s' "$out" | grep -qE 'VERDE con reservas.*2 comprobacion' \
+    || fail "(9) el resumen tiene que decir CUANTAS quedaron sin comprobar:
+$out"
+  echo "ok (9): con comprobaciones sin hacer el resumen lo dice, y no promete mas de lo que miro"
+
+  # Y discrimina: con todo comprobado, el resumen NO lleva reservas.
+  out=$(corre 5)
+  printf '%s' "$out" | grep -q 'VERDE con reservas' \
+    && fail "(9) con todo comprobado el resumen no debe llevar reservas:
+$out"
+  printf '%s' "$out" | grep -q 'VERDE: la fase 5 esta arrancada' \
+    || fail "(9) con todo comprobado falta el veredicto limpio:
+$out"
+  echo "ok (9b): con todo comprobado el resumen es VERDE a secas"
+else
+  echo "SKIP (9): sin tmux en esta maquina"
+fi
+
+# (10) El gateway que contesta con exito pero con JSON roto. Era la unica rama de
+# `vigilantes` sin prueba, justo en la comprobacion que motiva el cambio. Hallazgo de
+# kimi. No puede salir VERDE ni ROJO: no se pudo leer, se declara.
+cat >"$CRONS" <<'ROTO'
+{"jobs":[{"name":"corrida-vigia-5", enabled: true,,}
+ROTO
+prog_ok
+out=$(corre 5)
+printf '%s' "$out" | grep -q '^VERDE *vigilantes' \
+  && fail "(10) un JSON roto no puede dar los vigilantes por buenos:
+$out"
+printf '%s' "$out" | grep -q '^unknown *vigilantes' \
+  || fail "(10) un JSON roto tiene que declararse unknown, no ROJO ni VERDE:
+$out"
+crons_con corrida-vigia-5 corrida-empuje-5
+echo "ok (10): una respuesta ilegible se declara, no se interpreta"
+
 echo "TODO VERDE: arranque-de-fase"

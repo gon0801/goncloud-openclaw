@@ -51,6 +51,11 @@ case "$FASE" in
   *[!0-9.]*) echo "fase invalida: '$FASE' (solo digitos y punto)" >&2; exit 2 ;;
 esac
 
+# El punto de una fase como `9.1` es COMODIN en grep -E: sin escapar, el patron del
+# plan no matchearia sus filas y saldria ROJO "no hay nada que arrancar" de una fase
+# que si existe. Hallazgo de kimi, 2026-09-18.
+FASE_RE=$(printf '%s' "$FASE" | sed 's/\./\\./g')
+
 AQUI=$(cd "$(dirname "$0")/.." && pwd)
 REPO=${REPO:-$AQUI}
 REF=${REF:-origin/main}
@@ -58,6 +63,7 @@ TMUX_BIN=${TMUX_BIN:-/opt/homebrew/bin/tmux}
 OPENCLAW_BIN=${OPENCLAW_BIN:-$HOME/.openclaw/bin/openclaw}
 
 rojos=0
+desconocidos=0
 linea() { # $1 estado, $2 nombre, $3 detalle
   if [ "$JSON" = "1" ]; then
     printf '{"estado":"%s","check":"%s","detalle":%s}\n' "$1" "$2" \
@@ -66,6 +72,7 @@ linea() { # $1 estado, $2 nombre, $3 detalle
     printf '%-8s %-22s %s\n' "$1" "$2" "$3"
   fi
   [ "$1" = "ROJO" ] && rojos=$((rojos + 1))
+  [ "$1" = "unknown" ] && desconocidos=$((desconocidos + 1))
   return 0
 }
 
@@ -77,7 +84,7 @@ plan=$(en_repo show "$REF:Plans.md" 2>/dev/null)
 if [ -z "$plan" ]; then
   linea unknown plan "no pude leer Plans.md en $REF"
 else
-  filas=$(printf '%s\n' "$plan" | grep -c -E "^\| $FASE\.[0-9]+[a-z]? \|") || true
+  filas=$(printf '%s\n' "$plan" | grep -c -E "^\| $FASE_RE\.[0-9]+[a-z]? \|") || true
   if [ "$filas" -eq 0 ]; then
     linea ROJO plan "Plans.md no tiene ninguna fila de la fase $FASE: no hay nada que arrancar"
   else
@@ -156,9 +163,14 @@ fi
 # worktree del lead, asi que se busca en todos los worktrees del repo, no solo aqui.
 rel=".saikit/progress/$FASE-sesiones.txt"
 hallado=""
-for w in $(en_repo worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2}'); do
+# Se lee linea a linea: partir por espacios rompe cualquier ruta que los tenga y
+# produce un ROJO falso de "no existe en ningun worktree". Hallazgo de kimi, 2026-09-18.
+while IFS= read -r w; do
+  [ -n "$w" ] || continue
   [ -f "$w/$rel" ] && { hallado="$w/$rel"; break; }
-done
+done <<EOF
+$(en_repo worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')
+EOF
 if [ -z "$hallado" ]; then
   linea ROJO sesiones "no existe $rel en ningun worktree: al cerrar nadie sabra que quitar"
 elif ! grep -qE '^lead' "$hallado" 2>/dev/null; then
@@ -173,7 +185,7 @@ fi
 if [ ! -x "$TMUX_BIN" ]; then
   linea unknown lead "sin tmux en $TMUX_BIN"
 else
-  cands=$("$TMUX_BIN" list-sessions -F '#{session_name}' 2>/dev/null | grep -E "wt-f$FASE-" || true)
+  cands=$("$TMUX_BIN" list-sessions -F '#{session_name}' 2>/dev/null | grep -E "wt-f$FASE_RE-" || true)
   if [ -z "$cands" ]; then
     linea ROJO lead "ninguna sesion de tmux con 'wt-f$FASE-' en el nombre: el lead no esta lanzado"
   else
@@ -192,7 +204,13 @@ fi
 
 if [ "$JSON" = "0" ]; then
   echo
-  if [ "$rojos" -eq 0 ]; then
+  if [ "$rojos" -eq 0 ] && [ "$desconocidos" -gt 0 ]; then
+    # Un `unknown` no bloquea (misma politica que cierre-de-fase.sh), pero el resumen
+    # tiene que distinguir "todo comprobado" de "no pude comprobar lo esencial". Decir
+    # VERDE a secas con el gateway caido es prometer mas de lo que se miro, que es
+    # justo el falso verde contra el que existe este script. Hallazgo de kimi, 2026-09-18.
+    echo "VERDE con reservas: la fase $FASE puede estar arrancada, pero $desconocidos comprobacion(es) no se pudieron hacer"
+  elif [ "$rojos" -eq 0 ]; then
     echo "VERDE: la fase $FASE esta arrancada"
   else
     echo "ROJO: la fase $FASE NO esta arrancada ($rojos comprobacion(es) en rojo)"
