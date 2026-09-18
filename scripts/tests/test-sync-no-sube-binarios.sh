@@ -94,4 +94,17 @@ grep -q 'GRANDE no se sube' "$PS1FILE" \
   || fail "(5) la guardia no deja linea en el log: un archivo saltado en silencio nadie lo revisa"
 echo "ok (5): cada archivo saltado queda escrito en el log"
 
+# (6) Un ciclo que no commitea nada tiene que dejar rastro. El arreglo del indice
+# (PR 80) hacia que el commit se saltara en silencio cuando la guardia vaciaba lo
+# estagiado: antes eso se veia como un FALLO de commit, ruido pero VISIBLE. Cambiar
+# ruido por silencio habria dejado un repo que deja de subir sin que nadie lo note.
+# Hallazgo de kimi en la revision cruzada, 2026-09-18.
+grep -q 'NADA estagiado' "$PS1FILE" \
+  || fail "(6) sin esa linea, un ciclo que no commitea nada no deja rastro en el log"
+grep -q 'rc_diff -eq 1' "$PS1FILE" \
+  || fail "(6) el codigo de git tiene que distinguirse: un 128 por indice corrupto no es 'hay trabajo'"
+grep -q 'rc_diff -gt 1' "$PS1FILE" \
+  || fail "(6) un fallo de git al leer el indice tiene que declararse, no confundirse con trabajo"
+echo "ok (6): un ciclo sin nada que commitear deja rastro, y un fallo de git no pasa por trabajo"
+
 echo "TODO VERDE: sync-no-sube-binarios"

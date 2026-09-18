@@ -52,8 +52,25 @@ foreach ($r in $repos) {
   # de tamano el archivo grande sigue en `status --porcelain` (queda sin rastrear), y
   # mirar el arbol hacia intentar un commit con el indice vacio. Git lo rechaza y el log
   # decia FALLO aunque la guardia hubiera hecho exactamente su trabajo.
+  # `git diff --cached --quiet` devuelve 0 con el indice limpio y 1 cuando hay algo
+  # estagiado. Cualquier OTRO codigo (128 por indice corrupto o por un lock) es un fallo
+  # de git, no "hay trabajo": se distingue, porque tratarlo como trabajo intenta un
+  # commit condenado y confunde el diagnostico. Hallazgo de kimi, 2026-09-18.
   git diff --cached --quiet
-  $hay_estagiado = ($LASTEXITCODE -ne 0)
+  $rc_diff = $LASTEXITCODE
+  $hay_estagiado = ($rc_diff -eq 1)
+  if ($rc_diff -gt 1) {
+    Log "$name no pude leer el indice (git diff --cached salio $rc_diff): no se intenta commit"
+  }
+  # Si el arbol trae cambios pero el indice quedo vacio, algo se los comio: el fallback a
+  # `add -u` con solo archivos nuevos, o la guardia de tamano. Antes esto se veia como un
+  # FALLO de commit -- ruido, pero VISIBLE. Con la guardia, el commit se salta y sin esta
+  # linea el log no diria nada nunca: un repo que dejo de commitear en silencio. Hallazgo
+  # de kimi: el arreglo no puede cambiar ruido por silencio.
+  if (-not $hay_estagiado -and $rc_diff -le 1) {
+    $sucio = git status --porcelain
+    if ($sucio) { Log "$name hay cambios en el arbol y NADA estagiado: no se commitea nada este ciclo" }
+  }
   if ($hay_estagiado) {
     $commitOut = git -c user.name="openclaw-auto" -c user.email="ehventasmx@gmail.com" commit -m "auto: snapshot $name $(Get-Date -Format 'yyyy-MM-dd HH:mm')" 2>&1
     if ($LASTEXITCODE -eq 0) {
