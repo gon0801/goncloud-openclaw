@@ -123,6 +123,28 @@ camino de barra ausente → "la sesion fallida quedo viva" (A); sin chequeo de e
 RESPUESTA salio silenciosa" (R); has-session sin = → "una sesion con prefijo comun
 robo el nombre" (E); David en el texto → "el cron no habla de el dueno" (O).
 Verde: `TODO VERDE: test-corrida-nucleo` (tambien /bin/bash 3.2). El caso (9b) de
-lanzamientos paralelos paso con y sin lock en las corridas de observacion (la carrera
-es de milisegundos); el lock queda como correccion estructural, no como caso rojo
-determinista — declarado.
+ lanzamientos paralelos paso con y sin lock en las corridas de observacion (la carrera
+ es de milisegundos); el lock queda como correccion estructural, no como caso rojo
+ determinista — declarado.
+
+## BRIEF-r2 (2026-09-18): batch 9.3 — temas A(preflight), C, C2, P + H(preflight)
+Rojo inicial con el defecto puesto: `FAIL: con barra vacia debio dar NO APTO`
+(la barra vacia contaba como unknown y el preflight daba APTO sin probar nada; la
+tabla ilegible daba APTO ciego igual). Mutaciones que mueren (verificadas, cada una
+con su FAIL): sin chequeo de tabla ilegible → "con tabla ilegible debio dar NO APTO"
+(C); union reducida a las usadas → "clase declarada y no usada debio dar NO APTO"
+(C2); trap de salida anulado → "una senal a mitad dejo viva la sesion de prueba" (A;
+el caso usa SIGTERM porque POSIX ignora el SIGINT de los background en scripts).
+El caso "vigilante no corre" necesita un pgrep de mentira: el vigilante REAL de la
+Mac matchea el patron y contaminaba el caso (hallazgo propio, medido en vivo).
+P: centinela con GIT_DIR/GIT_INDEX_FILE hostiles intacto tras preflight, mas anclas
+grep de los unset en run-checks.sh y preflight.sh (el ancla es lo que rojea si los
+quitan; el centinela prueba que el env hostil no escapa). Los CLIs de mentira anotan
+su argv y el test exige que el flag LLEGUE al binario (el caso del flag malo prueba
+ademas que su flag llego: la razon es la barra, no el envio). El watch alterado del
+caso "vigilante viejo" se restaura antes de los casos que siguen. Verde:
+`TODO VERDE: test-corrida-preflight` (tambien /bin/bash 3.2), nucleo y cli-modos
+iguales. Incidente propio: el commit del batch 9.2 aborto una vez ("files were
+modified by this hook") porque edite archivos mientras corria la bateria del
+pre-commit; el indice quedo intacto y el commit entro al segundo intento sin tocar
+el arbol. Leccion: durante un commit con este hook, el arbol se queda quieto.

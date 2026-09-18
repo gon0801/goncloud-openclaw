@@ -6,8 +6,21 @@
 corrida_preflight() {
   unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX
   local id="$1"
+  corrida_id_valido "$id" || { echo "NO APTO id invalido: $id"; return 2; }
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "NO APTO sin registro: $id"; return 1; }
+  # Las sesiones de prueba (preflight-<id>-<cli>) mueren aunque un Ctrl-C corte a mitad:
+  # un CLI real lanzado en modo sin preguntas no puede quedarse vivo por un interrupt.
+  PF_ID="$id"
+  pf_limpiar() {
+    local s
+    for s in "$("$TMUX_BIN" list-sessions -F '#{session_name}' 2>/dev/null | grep "^preflight-$PF_ID-")"; do
+      "$TMUX_BIN" kill-session -t "=$s" 2>/dev/null
+    done
+  }
+  trap pf_limpiar EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   local GH="${GH_BIN:-$(command -v gh 2>/dev/null || echo gh)}"
   local REPO="${REPO_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
   local WATCH="${WATCH_INSTALADO:-$HOME/bin/tmux-activity-watch.sh}"
@@ -29,6 +42,9 @@ corrida_preflight() {
 
   # (2) cada binario con flag conocido arranca bajo PATH minimo y el flag entra.
   local tabla; tabla="$(json_campo "$reg" cli_modos)"
+  if [ ! -r "$tabla" ]; then
+    razon "tabla de modos ilegible: $tabla"
+  else
   local cli binario flag barra fila
   for cli in $(awk -F'\t' '$1 !~ /^#/ && $1 != "" {print $1}' "$tabla" 2>/dev/null); do
     fila="$(tsv_fila "$tabla" "$cli")"
@@ -36,28 +52,30 @@ corrida_preflight() {
     flag="$(printf '%s' "$fila" | cut -d'|' -f2)"
     barra="$(printf '%s' "$fila" | cut -d'|' -f3)"
     [ "$flag" = "unknown" ] || [ -z "$flag" ] && { unknown "flag de $cli sin medir"; continue; }
+    [ "$barra" != "unknown" ] && [ -z "$barra" ] && { razon "barra vacia en la tabla: $cli"; continue; }
     local bin
     bin="$(bash -c "PATH=$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:\$PATH; command -v $binario" 2>/dev/null)" \
       || { razon "binario no arranca: $cli"; continue; }
     local psn="preflight-$id-$cli" embebido="PATH=$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH"
-    "$TMUX_BIN" has-session -t "$psn" 2>/dev/null && "$TMUX_BIN" kill-session -t "$psn" 2>/dev/null
+    "$TMUX_BIN" has-session -t "=$psn" 2>/dev/null && "$TMUX_BIN" kill-session -t "=$psn" 2>/dev/null
     if "$TMUX_BIN" new-session -d -s "$psn" -x 80 -y 10 "$embebido $bin $flag" 2>/dev/null; then
       sleep 2
-      if "$TMUX_BIN" has-session -t "$psn" 2>/dev/null; then
-        if [ "$barra" = "unknown" ] || [ -z "$barra" ]; then
+      if "$TMUX_BIN" has-session -t "=$psn" 2>/dev/null; then
+        if [ "$barra" = "unknown" ]; then
           unknown "barra de $cli sin medir"
         else
-          "$TMUX_BIN" capture-pane -p -t "$psn" 2>/dev/null | grep -qF "$barra" \
+          "$TMUX_BIN" capture-pane -p -t "=$psn:" 2>/dev/null | grep -qF -- "$barra" \
             || razon "flag no entra: $cli"
         fi
       else
         razon "binario muere al arrancar: $cli"
       fi
-      "$TMUX_BIN" kill-session -t "$psn" 2>/dev/null
+      "$TMUX_BIN" kill-session -t "=$psn" 2>/dev/null
     else
       razon "binario muere al arrancar: $cli"
     fi
   done
+  fi
 
   # (3) vigilante corriendo y con el mismo blob que origin/<default>.
   if pgrep -f 'bin/tmux-activity-watch.sh' >/dev/null 2>&1; then
@@ -88,25 +106,33 @@ corrida_preflight() {
     razon "registro sin destino"
   fi
 
-  # (6) clases que el runbook declara, contra los candados; y clases usadas sin declarar.
+  # (6) cada clase que el runbook declara O usa, contra los candados; y clases
+  # usadas sin declarar. La DoD dice "cada clase que el runbook declara": una clase
+  # declarada en la tabla y usada en prosa tambien se prueba.
   local runbook; runbook="$(json_campo "$reg" runbook)"
   local rb="$REPO/$runbook"
   if [ -f "$rb" ]; then
     local declaradas=" "
     declaradas="$declaradas$(sed -n '/## Clases de comando/,$p' "$rb" | grep -iE '\|( *`?)(ssh|red externa|psql|gh)(`? *\|)' | tr 'A-Z' 'a-z' | grep -oE 'ssh|red externa|psql|gh' | sort -u | tr '\n' ' ')"
-    local usadas
+    local usadas usadas_clases=" " u clase
     usadas="$(awk '/^```/{f=!f;next} f' "$rb" | grep -oE '(^|[^a-z-])(ssh|curl|wget|psql|gh)([^a-z-]|$)' | grep -oE 'ssh|curl|wget|psql|gh' | sort -u)"
-    local u clase
     for u in $usadas; do
       case "$u" in curl|wget) clase="red externa";; *) clase="$u";; esac
+      printf '%s' "$usadas_clases" | grep -qF " $clase " || usadas_clases="$usadas_clases $clase "
+    done
+    for clase in $usadas_clases; do
       printf '%s' "$declaradas" | grep -qF " $clase " \
-        || { razon "clase sin declarar: $clase"; continue; }
+        || razon "clase sin declarar: $clase"
+    done
+    local union="$declaradas$usadas_clases" cr
+    for clase in ssh "red externa" psql gh; do
+      printf '%s' "$union" | grep -qF " $clase " || continue
       candado_clase "$clase"; cr=$?
       [ "$cr" -eq 1 ] && razon "clase negada: $clase"
       [ "$cr" -eq 2 ] && unknown "clase sin medir: $clase"
     done
   else
-    unknown "runbook sin leer: $runbook"
+    razon "runbook sin leer: $runbook"
   fi
 
   if [ -n "$razones" ]; then

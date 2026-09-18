@@ -8,6 +8,7 @@ fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
 
 CORR=scripts/mac/corrida.sh
 CORR_ABS="$PWD/scripts/mac/corrida.sh"
+RB="$PWD/scripts/tests/fixtures/corrida/runbook-simulacro.md"
 [ -x "$CORR" ] || fail "falta $CORR"
 TM_REAL="$(command -v tmux 2>/dev/null || true)"
 [ -z "$TM_REAL" ] && [ -x /opt/homebrew/bin/tmux ] && TM_REAL=/opt/homebrew/bin/tmux
@@ -79,7 +80,7 @@ export PATH="$T/bin:$PATH" CORRIDA_STATE="$T/corridas"
 export OPENCLAW_BIN="$T/bin/openclaw" TMUX_BIN="$T/bin/tmux-shim"
 
 # (0) abrir en simulacro: registro 600, dir 700, cron hombre-muerto, destino guardado.
-bash "$CORR" abrir t1 --runbook runbook-x --vigia claw --cli-modos "$T/modos.tsv" --simulacro >/dev/null \
+bash "$CORR" abrir t1 --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" --simulacro >/dev/null \
   || fail "abrir fallo"
 permiso() { # $1 ruta: stat portable (macOS usa -f, Linux -c; en Linux stat -f no falla, asi que se elige por sistema)
   if [ "$(uname)" = "Darwin" ]; then stat -f %Lp "$1"; else stat -c %a "$1"; fi
@@ -91,10 +92,10 @@ grep -q "cron add.*corrida-vigia-t1" "$LLAMADAS" || fail "abrir no crea el cron 
 grep -q '"simulacro": *true' "$T/corridas/t1/registro.json" || fail "el registro no dice simulacro"
 
 # (0b) id invalido: nada de salir del directorio de estado ni inyectar comandos.
-bash "$CORR" abrir '../fuga' --runbook runbook-x --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 \
+bash "$CORR" abrir '../fuga' --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 \
   && fail "abrir acepto un id con ../"
 [ ! -e "$T/fuga" ] || fail "abrir escapo del directorio de estado con ../"
-bash "$CORR" abrir 'a;b' --runbook runbook-x --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 \
+bash "$CORR" abrir 'a;b' --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 \
   && fail "abrir acepto un id con ;"
 
 # (1) lanzar bueno con encargo: vive, barra ok, entrega, registro la anota.
@@ -109,7 +110,7 @@ n1=$(grep -c "send-keys -t =ses-buena: Enter" "$TMUX_LOG")
 [ "$n1" -eq 1 ] || fail "sin Enter tragado se mandaron $n1 Enter (debe ser uno)"
 
 # (1b) abrir sobre una corrida existente se niega y no pisa nada.
-bash "$CORR" abrir t1 --runbook runbook-x --vigia claw --cli-modos "$T/modos.tsv" --simulacro >/dev/null 2>&1 \
+bash "$CORR" abrir t1 --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" --simulacro >/dev/null 2>&1 \
   && fail "abrir piso una corrida existente"
 grep -q '"nombre": *"ses-buena"' "$T/corridas/t1/registro.json" || fail "el abrir repetido borro sesiones"
 [ "$(grep -c "cron add.*corrida-vigia-t1" "$LLAMADAS")" = "1" ] || fail "abrir repetido duplico el cron"
@@ -176,11 +177,11 @@ cmp -s "$T/prefijo.txt" "$T/prefijo.orig" || fail "mensaje_valido reescribe el a
 # (6c) la ruta del cron es fisica y absoluta; una corrida NO simulacro no lleva prefijo.
 mkdir -p "$T/c-real"
 ln -s "$T/c-real" "$T/c-sym"
-( cd "$T" && CORRIDA_STATE=c-sym bash "$CORR_ABS" abrir t-sym --runbook runbook-x --vigia claw --cli-modos "$T/modos.tsv" >/dev/null ) \
+( cd "$T" && CORRIDA_STATE=c-sym bash "$CORR_ABS" abrir t-sym --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null ) \
   || fail "abrir con CORRIDA_STATE relativo fallo"
 sym_line="$(grep "cron add.*corrida-vigia-t-sym" "$LLAMADAS" | head -1)"
 printf '%s' "$sym_line" | grep -qF -- "$T/c-real/t-sym" || fail "el cron no cita la ruta fisica del estado"
-bash "$CORR" abrir t-ns --runbook runbook-x --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+bash "$CORR" abrir t-ns --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
   || fail "abrir sin simulacro fallo"
 ns_line="$(grep "cron add.*corrida-vigia-t-ns" "$LLAMADAS" | head -1)"
 printf '%s' "$ns_line" | grep -q "SIMULACRO" && fail "una corrida no simulacro lleva prefijo"
@@ -218,7 +219,7 @@ grep -q "CERRADA" "$T/corridas/t1/mensajes.jsonl" || fail "cerrar no anota CERRA
 grep -q '"estado": *"cerrada"' "$T/corridas/t1/registro.json" || fail "el registro no cierra"
 
 # (7b) cron rm que falla: cerrar se queja ruidosamente, no en silencio.
-bash "$CORR" abrir t-fc --runbook runbook-x --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+bash "$CORR" abrir t-fc --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
   || fail "abrir t-fc fallo"
 out="$(CRON_RM_FAIL=1 bash "$CORR" cerrar t-fc 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] || fail "cerrar trago el fallo del cron rm"

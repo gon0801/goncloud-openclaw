@@ -18,6 +18,8 @@ corrida_abrir() {
   [ -n "$runbook" ] && [ -n "$vigia" ] || { echo "abrir: faltan --runbook o --vigia" >&2; return 2; }
   case "$vigia" in claw|hermes) ;; *) echo "abrir: vigia fuera del conjunto" >&2; return 1;; esac
   [ -z "$cli_modos" ] && cli_modos="$HOME/bin/cli-modos.tsv"
+  [ -f "$runbook" ] || { echo "abrir: no existe el runbook: $runbook" >&2; return 1; }
+  [ -r "$cli_modos" ] || { echo "abrir: no se puede leer la tabla de modos: $cli_modos" >&2; return 1; }
   # El destino sale de la entrega de un cron que ya existe; jamas va en el repo ni en entorno.
   local crons dest
   crons="$("$OPENCLAW_BIN" cron list --json 2>/dev/null)" || { echo "abrir: sin lista de crons" >&2; return 1; }

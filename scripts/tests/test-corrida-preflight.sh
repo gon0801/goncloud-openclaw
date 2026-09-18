@@ -19,25 +19,36 @@ TM_REAL="$(command -v tmux 2>/dev/null || true)"
 
 T=$(mktemp -d) || exit 1
 L="preflight$$"
-trap '"$TM_REAL" -L "$L" kill-server 2>/dev/null; rm -rf "$T"' EXIT
+trap '[ -n "${VPID:-}" ] && kill "$VPID" 2>/dev/null; "$TM_REAL" -L "$L" kill-server 2>/dev/null; rm -rf "$T"' EXIT
 mkdir -p "$T/bin" "$T/ses" "$T/wbin"
 
-# CLIs de mentira.
+# CLIs de mentira: anotan su argv (para probar que el flag LLEGA al binario).
+ARGV_LOG="$T/argv.log"
 cat >"$T/bin/cli-ok" <<'CLI'
 #!/bin/sh
+printf '%s\n' "$*" >> "$ARGV_LOG"
 echo "BAR-OK-9"
 sleep 30
 CLI
 cat >"$T/bin/cli-muere" <<'CLI'
 #!/bin/sh
+printf '%s\n' "$*" >> "$ARGV_LOG"
 exit 3
 CLI
 cat >"$T/bin/cli-flag-malo" <<'CLI'
 #!/bin/sh
+printf '%s\n' "$*" >> "$ARGV_LOG"
 echo "BAR-OTRA"
 sleep 30
 CLI
-chmod +x "$T/bin"/cli-ok "$T/bin/cli-muere" "$T/bin/cli-flag-malo"
+cat >"$T/bin/cli-lento" <<'CLI'
+#!/bin/sh
+printf '%s\n' "$*" >> "$ARGV_LOG"
+sleep 3
+echo "BAR-LENTO-9"
+sleep 30
+CLI
+chmod +x "$T/bin"/cli-ok "$T/bin"/cli-muere "$T/bin"/cli-flag-malo "$T/bin"/cli-lento
 
 # gh de mentira: GH_MODO=mal simula el 401.
 cat >"$T/bin/gh" <<'STUB'
@@ -52,21 +63,21 @@ case "$*" in
 esac
 exit 0
 STUB
-# openclaw de mentira: gateway, dry-run y crons.
+# openclaw de mentira: gateway, dry-run y crons. GW_MODO/ENVIO_MODO fallan a pedido.
 LLAMADAS="$T/llamadas.log"
 cat >"$T/bin/openclaw" <<STUB
 #!/bin/sh
 printf '%s\n' "OPENCLAW \$*" >> "$LLAMADAS"
 case "\$*" in
+  *cron\ rm*) [ "\${CRON_RM_FAIL:-0}" = "1" ] && exit 1; printf '{}';;
   *cron\ list*) printf '{"jobs":[{"name":"verif-sync-repos","delivery":{"to":"DESTINO-PRE-9X"}}]}';;
   *cron\ add*) printf '{"id":"cron-1"}';;
-  *cron\ rm*) printf '{}';;
-  *gateway\ call\ status*) printf '{"ok":true}';;
-  *message\ send*) printf '{"messageId":"m1"}';;
+  *gateway\ call\ status*) [ "\${GW_MODO:-ok}" = "mal" ] && exit 1; printf '{"ok":true}';;
+  *message\ send*) [ "\${ENVIO_MODO:-ok}" = "mal" ] && exit 1; printf '{"messageId":"m1"}';;
 esac
 exit 0
 STUB
-chmod +x "$T/bin/gh" "$T/bin/openclaw"
+chmod +x "$T/bin"/gh "$T/bin"/openclaw
 
 # tmux con servidor propio.
 cat >"$T/bin/tmux-shim" <<STUB
@@ -89,10 +100,10 @@ git -C "$T/repo" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
 
 export PATH="$T/bin:$PATH" CORRIDA_STATE="$T/corridas" REPO_DIR="$T/repo"
 export OPENCLAW_BIN="$T/bin/openclaw" TMUX_BIN="$T/bin/tmux-shim" GH_BIN="$T/bin/gh"
-export WATCH_INSTALADO="$T/wbin/tmux-activity-watch.sh"
+export WATCH_INSTALADO="$T/wbin/tmux-activity-watch.sh" ARGV_LOG
 
 # Vigilante de mentira: instalado = el blob de origin que preflight compara.
-# Proceso con su nombre para que pgrep lo encuentre.
+# Proceso con su nombre para que pgrep lo encuentre; muere en el trap del EXIT.
 git -C "$T/repo" show "origin/main:scripts/mac/tmux-activity-watch.sh" >"$WATCH_INSTALADO" \
   || fail "sin blob de referencia del vigilante"
 bash -c "exec -a \"$T/wbin/tmux-activity-watch.sh\" sleep 120" &
@@ -109,52 +120,97 @@ abrir() { # $1 id, $2 runbook
   bash "$CORR" abrir "$1" --runbook "$2" --vigia claw --cli-modos "$T/m.tsv" >/dev/null \
     || fail "abrir $1 fallo"
 }
+RB=scripts/tests/fixtures/corrida/runbook-simulacro.md
 
-# VERDE con todo sano.
+# VERDE con todo sano (y el flag llega de verdad al binario).
+: > "$ARGV_LOG"
 modos x ok cli-ok "--flag-ok-9" "BAR-OK-9"
-abrir t-ok scripts/tests/fixtures/corrida/runbook-simulacro.md
+abrir t-ok "$RB"
 out=$(bash "$CORR" preflight t-ok) || fail "preflight sano debio dar APTO:
 $out"
 [ "$(printf '%s' "$out" | head -1)" = "APTO" ] || fail "primera linea distinta de APTO:
 $out"
+grep -q -- "--flag-ok-9" "$ARGV_LOG" || fail "el flag no llego al binario"
 
 # ROJO con gh en 401.
 export GH_MODO=mal
 modos x ok cli-ok "--flag-ok-9" "BAR-OK-9"
-abrir t-gh scripts/tests/fixtures/corrida/runbook-simulacro.md
+abrir t-gh "$RB"
 out=$(bash "$CORR" preflight t-gh 2>&1); rc=$?
 [ $rc -ne 0 ] || fail "con gh en 401 debio dar NO APTO"
 printf '%s' "$out" | head -1 | grep -q "^NO APTO" || fail "sin NO APTO con gh en 401:
 $out"
-printf '%s' "$out" | grep -q "gh" || fail "NO APTO sin razon de gh:
+printf '%s' "$out" | grep -q "gh sin autenticar" || fail "NO APTO sin razon de gh:
 $out"
 grep -q "DETENIDA" "$T/corridas/t-gh/mensajes.jsonl" || fail "NO APTO no mando mensaje"
 unset GH_MODO
 
 # ROJO con binario que muere.
 modos x muere cli-muere "--flag-9" "BAR-OK-9"
-abrir t-muere scripts/tests/fixtures/corrida/runbook-simulacro.md
+abrir t-muere "$RB"
 out=$(bash "$CORR" preflight t-muere 2>&1); rc=$?
 [ $rc -ne 0 ] || fail "con binario que muere debio dar NO APTO"
-printf '%s' "$out" | grep -q "muere" || fail "NO APTO sin razon del binario:
+printf '%s' "$out" | grep -q "binario muere al arrancar" || fail "NO APTO sin razon del binario:
 $out"
 
-# ROJO con flag que no entra.
+# ROJO con flag que no entra (pero que llega al binario: la razon es la barra).
+: > "$ARGV_LOG"
 modos x mal cli-flag-malo "--flag-malo-9" "BAR-OK-9"
-abrir t-flag scripts/tests/fixtures/corrida/runbook-simulacro.md
+abrir t-flag "$RB"
 out=$(bash "$CORR" preflight t-flag 2>&1); rc=$?
 [ $rc -ne 0 ] || fail "con flag que no entra debio dar NO APTO"
-printf '%s' "$out" | grep -q "flag no entra" || fail "NO APTO sin razon del flag:
+printf '%s' "$out" | grep -q "flag no entra: mal" || fail "NO APTO sin razon del flag:
+$out"
+grep -q -- "--flag-malo-9" "$ARGV_LOG" || fail "el flag del CLI malo no llego al binario"
+
+# ROJO con barra vacia en la tabla: error, no acierto por omision.
+modos x vacia cli-ok "--flag-ok-9" ""
+abrir t-vacia "$RB"
+out=$(bash "$CORR" preflight t-vacia 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "con barra vacia debio dar NO APTO"
+printf '%s' "$out" | grep -q "barra vacia" || fail "NO APTO sin razon de barra vacia:
 $out"
 
-# ROJO con vigilante viejo.
+# ROJO con vigilante viejo (y el instalado se restaura: los casos que siguen no
+# heredan el watch roto).
 printf '# linea ajena\n' >>"$WATCH_INSTALADO"
 modos x ok cli-ok "--flag-ok-9" "BAR-OK-9"
-abrir t-viejo scripts/tests/fixtures/corrida/runbook-simulacro.md
+abrir t-viejo "$RB"
 out=$(bash "$CORR" preflight t-viejo 2>&1); rc=$?
 [ $rc -ne 0 ] || fail "con vigilante viejo debio dar NO APTO"
 printf '%s' "$out" | grep -q "vigilante viejo" || fail "NO APTO sin razon del vigilante:
 $out"
+git -C "$T/repo" show "origin/main:scripts/mac/tmux-activity-watch.sh" >"$WATCH_INSTALADO"
+
+# ROJO con la tabla ilegible: nada de APTO ciego sin haber probado binarios.
+printf 'ok\tcli-ok\t--flag-ok-9\tBAR-OK-9\t--\t--\t--\n' >"$T/t-tabla.tsv"
+bash "$CORR" abrir t-tabla --runbook "$RB" --vigia claw --cli-modos "$T/t-tabla.tsv" >/dev/null \
+  || fail "abrir t-tabla fallo"
+mv "$T/t-tabla.tsv" "$T/t-tabla.tsv.fuera"
+out=$(bash "$CORR" preflight t-tabla 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "con tabla ilegible debio dar NO APTO"
+printf '%s' "$out" | grep -q "tabla de modos ilegible" || fail "NO APTO sin razon de tabla:
+$out"
+
+# ROJO con gateway caido.
+export GW_MODO=mal
+modos x ok cli-ok "--flag-ok-9" "BAR-OK-9"
+abrir t-gw "$RB"
+out=$(bash "$CORR" preflight t-gw 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "con gateway caido debio dar NO APTO"
+printf '%s' "$out" | grep -q "gateway no responde" || fail "NO APTO sin razon del gateway:
+$out"
+unset GW_MODO
+
+# ROJO con el canal sin envio.
+export ENVIO_MODO=mal
+modos x ok cli-ok "--flag-ok-9" "BAR-OK-9"
+abrir t-canal "$RB"
+out=$(bash "$CORR" preflight t-canal 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "con canal sin envio debio dar NO APTO"
+printf '%s' "$out" | grep -q "sin envio al canal" || fail "NO APTO sin razon de envio:
+$out"
+unset ENVIO_MODO
 
 # ROJO con runbook que declara ssh en sesion que lo niega.
 export CORRIDA_CANDADO_ssh=negado
@@ -174,5 +230,60 @@ out=$(bash "$CORR" preflight t-undecl 2>&1); rc=$?
 printf '%s' "$out" | grep -q "clase sin declarar: ssh" || fail "NO APTO sin razon de clase:
 $out"
 
-kill $VPID 2>/dev/null
+# ROJO con clase declarada en la tabla y nunca usada en bloques: tambien se prueba.
+export CORRIDA_CANDADO_psql=negado
+modos x ok cli-ok "--flag-ok-9" "BAR-OK-9"
+abrir t-psql scripts/tests/fixtures/corrida/runbook-declara-psql.md
+out=$(bash "$CORR" preflight t-psql 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "clase declarada y no usada debio dar NO APTO"
+printf '%s' "$out" | grep -q "clase negada: psql" || fail "NO APTO sin razon de psql declarado:
+$out"
+unset CORRIDA_CANDADO_psql
+
+# (P) aislamiento git: env hostil no toca el indice ni las refs del centinela, y
+# los unset que lo garantizan siguen en su sitio (ancla de regresion).
+mkdir -p "$T/sentinela"
+git -C "$T/sentinela" init -q
+git -C "$T/sentinela" -c user.email=t@t -c user.name=t commit -qm x --allow-empty
+antes_idx="$(git -C "$T/sentinela" ls-files | wc -l | tr -d ' ')"
+antes_ref="$(git -C "$T/sentinela" rev-parse refs/remotes/origin/main 2>/dev/null || echo ninguna)"
+(
+  export GIT_DIR="$T/sentinela/.git" GIT_INDEX_FILE="$T/sentinela/.git/idx-hostil"
+  bash "$CORR" preflight t-ok >/dev/null 2>&1
+)
+desp_idx="$(git -C "$T/sentinela" ls-files | wc -l | tr -d ' ')"
+desp_ref="$(git -C "$T/sentinela" rev-parse refs/remotes/origin/main 2>/dev/null || echo ninguna)"
+[ "$antes_idx" = "$desp_idx" ] || fail "el indice del centinela gano entradas"
+[ "$antes_ref" = "$desp_ref" ] || fail "se movio origin/main del centinela"
+grep -q "unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX" scripts/run-checks.sh \
+  || fail "run-checks.sh perdio el unset de git"
+grep -q "unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX" scripts/mac/corrida/preflight.sh \
+  || fail "preflight.sh perdio el unset de git"
+
+# (A3) una senal a mitad no deja sesiones de prueba vivas con un CLI real adentro.
+modos x lento cli-lento "--flag-lento-9" "BAR-LENTO-9"
+abrir t-int "$RB"
+bash "$CORR" preflight t-int >/dev/null 2>&1 &
+PPID_INT=$!
+sleep 0.7
+kill -TERM "$PPID_INT" 2>/dev/null
+wait "$PPID_INT" 2>/dev/null
+sleep 0.5
+"$TM_REAL" -L "$L" has-session -t "=preflight-t-int-lento" 2>/dev/null \
+  && fail "una senal a mitad dejo viva la sesion de prueba"
+
+# ROJO con el vigilante sin correr (ultimo caso: pgrep de mentira, porque el
+# vigilante REAL de la Mac tambien matchea el patron y contaminaria el caso).
+mkdir -p "$T/nopgrep"
+printf '#!/bin/sh\nexit 1\n' >"$T/nopgrep/pgrep"
+chmod +x "$T/nopgrep/pgrep"
+modos x ok cli-ok "--flag-ok-9" "BAR-OK-9"
+abrir t-novig "$RB"
+out="$(PATH="$T/nopgrep:$PATH" bash "$CORR" preflight t-novig 2>&1)"; rc=$?
+[ $rc -ne 0 ] || fail "sin vigilante debio dar NO APTO"
+printf '%s' "$out" | grep -q "vigilante no corre" || fail "NO APTO sin razon de vigilante:
+$out"
+
+kill "$VPID" 2>/dev/null
+wait "$VPID" 2>/dev/null
 echo "TODO VERDE: test-corrida-preflight"
