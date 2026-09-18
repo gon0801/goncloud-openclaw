@@ -421,27 +421,115 @@ git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m carriles-otra-vez
 git -C "$R" push -q -f origin HEAD:main
 
 # (12k) Lo que el dueno lee ARRIBA del tablero. El resumen comparaba fase, cierre.at y
-# carriles, y nada mas: un tablero vivo con el banner rojo "atencion requerida" y otra
-# frase de siguiente paso pasaba por coincidente, y el dueno abria la fase "cerrada" y
-# veia algo roto. Hallazgo del revisor del lead, 2026-09-18.
+# carriles, y nada mas: un tablero vivo con otro titulo y otra frase de siguiente paso
+# pasaba por coincidente, y el dueno abria la fase "cerrada" y leia algo distinto de lo
+# declarado. Hallazgo del revisor del lead, 2026-09-18. El banner de atencion tiene su
+# propio candado en (12m), porque ahi ni siquiera basta con que los dos lados coincidan.
 cat >"$TAB" <<'DOC'
 Gateway call: runbook.progress.get
 {"ok":true,"doc":{"fase":"5",
  "titulo":"Autopilot de la Fase 5",
  "siguiente_paso":"Cierre pendiente, no lo mires todavia",
- "atencion_requerida":{"necesaria":true,"motivo":"algo roto","desde":"2026-09-18T00:00:00Z"},
  "carriles":[{"id":"A","estado":"mergeado"},{"id":"B","estado":"mergeado"}],
  "cierre":{"at":"2026-09-18T00:00:00Z"}}}
 DOC
 out=$(corre 5)
 printf '%s' "$out" | grep -q "^ROJO *tablero" \
-  || fail "(12k) un tablero vivo con el banner de atencion requerida no puede pasar por coincidente:
+  || fail "(12k) un tablero vivo con otro titulo y otra frase de siguiente paso no puede pasar por coincidente:
 $out"
-printf '%s' "$out" | grep -q "difiere en:.*atencion" \
-  || fail "(12k) el detalle tiene que nombrar el campo que diverge, que es lo que hay que ir a ver:
+printf '%s' "$out" | grep -q "difiere en:.*titulo" \
+  || fail "(12k) el detalle tiene que nombrar titulo, que es uno de los que divergen:
 $out"
-echo "ok (12k): el banner de atencion y la frase de siguiente paso entran en la comparacion"
+printf '%s' "$out" | grep -q "difiere en:.*siguiente_paso" \
+  || fail "(12k) el detalle tiene que nombrar TODOS los que divergen, no solo el primero:
+$out"
+echo "ok (12k): un tablero con otro titulo y otro siguiente paso sale ROJO y los nombra a los dos"
 tablero mergeado 2026-09-18T00:00:00Z
+
+# (12l) Un campo cada uno, aislado. Medido por el revisor del lead en su segunda ronda:
+# (12k) hacia divergir titulo, siguiente_paso y atencion a la vez y solo afirmaba sobre
+# atencion, asi que quitar `titulo` o `siguiente_paso` del resumen dejaba la bateria
+# entera en VERDE. Dos de los tres campos nuevos estaban indefensos. Un caso por campo.
+for campo in titulo siguiente_paso; do
+  if [ "$campo" = "titulo" ]; then
+    cat >"$TAB" <<'DOC'
+Gateway call: runbook.progress.get
+{"ok":true,"doc":{"fase":"5","titulo":"Otro titulo distinto",
+ "carriles":[{"id":"A","estado":"mergeado"},{"id":"B","estado":"mergeado"}],
+ "cierre":{"at":"2026-09-18T00:00:00Z"}}}
+DOC
+  else
+    cat >"$TAB" <<'DOC'
+Gateway call: runbook.progress.get
+{"ok":true,"doc":{"fase":"5","siguiente_paso":"Todavia falta lo del cierre",
+ "carriles":[{"id":"A","estado":"mergeado"},{"id":"B","estado":"mergeado"}],
+ "cierre":{"at":"2026-09-18T00:00:00Z"}}}
+DOC
+  fi
+  out=$(corre 5)
+  printf '%s' "$out" | grep -q "^ROJO *tablero" \
+    || fail "(12l) el tablero vivo diverge solo en $campo y no salio ROJO; ese campo no esta defendido:
+$out"
+  printf '%s' "$out" | grep -q "difiere en:.*$campo" \
+    || fail "(12l) el rechazo tiene que nombrar $campo, que es el unico que diverge:
+$out"
+done
+echo "ok (12l): titulo y siguiente_paso estan defendidos cada uno por su cuenta"
+
+# (12m) El banner de atencion encendido en LOS DOS lados. Coincidir no basta: el resumen
+# cuadra y la comprobacion decia OK sobre un tablero que le pinta al dueno el aviso rojo
+# arriba de todo. Y es el camino MAS probable, porque el lead escribe el documento, lo
+# commitea y lo envia: los dos lados coinciden siempre. Hallazgo del revisor, 2da ronda.
+cat >"$R/.saikit/progress/5.json" <<'DOC'
+{"fase":"5","atencion_requerida":{"necesaria":true,"motivo":"algo que ver","desde":"2026-09-18T00:00:00Z"},
+ "carriles":[{"id":"A","estado":"mergeado"},{"id":"B","estado":"mergeado"}],
+ "cierre":{"at":"2026-09-18T00:00:00Z"}}
+DOC
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m atencion-los-dos
+git -C "$R" push -q -f origin HEAD:main
+cat >"$TAB" <<'DOC'
+Gateway call: runbook.progress.get
+{"ok":true,"doc":{"fase":"5","atencion_requerida":{"necesaria":true,"motivo":"algo que ver","desde":"2026-09-18T00:00:00Z"},
+ "carriles":[{"id":"A","estado":"mergeado"},{"id":"B","estado":"mergeado"}],
+ "cierre":{"at":"2026-09-18T00:00:00Z"}}}
+DOC
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^VERDE *tablero" \
+  && fail "(12m) los dos lados de acuerdo en que hace falta atencion no es una fase cerrada:
+$out"
+printf '%s' "$out" | grep -q "^ROJO *tablero" \
+  || fail "(12m) un tablero que pide atencion tiene que bloquear el cierre:
+$out"
+printf '%s' "$out" | grep -q "pide atencion" \
+  || fail "(12m) el detalle tiene que decir que el tablero pide atencion:
+$out"
+echo "ok (12m): un tablero que pide atencion no cierra la fase, aunque lo versionado coincida"
+progreso mergeado
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m sin-atencion
+git -C "$R" push -q -f origin HEAD:main
+tablero mergeado 2026-09-18T00:00:00Z
+
+# (12n) La consulta al gateway que FALLA pero deja algo escrito. (12e) usa un stub que
+# sale 1 sin escribir nada, asi que cubre las dos ramas a la vez y no defiende el arreglo:
+# revertido, la bateria seguia en verde. Aqui el stub imprime un documento valido y sale 1.
+mv "$T/bin/openclaw" "$T/bin/openclaw.ok"
+cat >"$T/bin/openclaw" <<STUB
+#!/bin/sh
+for a in "\$@"; do
+  [ "\$a" = "runbook.progress.get" ] && { cat "$TAB"; exit 1; }
+done
+cat "$CFG"
+STUB
+chmod +x "$T/bin/openclaw"
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^VERDE *tablero" \
+  && fail "(12n) una consulta que fallo no puede darse por buena por lo que alcanzo a escribir:
+$out"
+printf '%s' "$out" | grep -q "^unknown *tablero" \
+  || fail "(12n) una consulta que fallo tiene que declararse unknown:
+$out"
+mv -f "$T/bin/openclaw.ok" "$T/bin/openclaw"
+echo "ok (12n): una consulta fallida se declara aunque haya escrito un documento valido"
 
 # (12i) Los dos hallazgos del revisor del lead, 2026-09-18, sobre esta comprobacion.
 #

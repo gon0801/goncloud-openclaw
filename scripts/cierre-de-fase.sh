@@ -185,8 +185,10 @@ if ! en_repo rev-parse --verify -q "$REF^{commit}" >/dev/null 2>&1; then
 else
   ref_ok=1
   doc=""
+  habia=0
   for cand in ".saikit/progress/$FASE.json" ".saikit/progress/fase$FASE.json"; do
     if en_repo cat-file -e "$REF:$cand" 2>/dev/null; then
+      habia=1
       doc=$(en_repo show "$REF:$cand" 2>/dev/null || true)
       [ -n "$doc" ] && break
     fi
@@ -194,6 +196,10 @@ else
 fi
 if [ "$ref_ok" = "0" ]; then
   linea unknown tablero "no pude leer $REF; no se si la fase $FASE publica tablero"
+elif [ -z "$doc" ] && [ "${habia:-0}" = "1" ]; then
+  # El archivo esta versionado pero vino vacio: existe un tablero y no pude leerlo.
+  # Caer en la rama verde aqui seria decir "no publica" de una fase que si publica.
+  linea unknown tablero "la fase $FASE tiene documento versionado pero vino vacio"
 elif [ -z "$doc" ]; then
   linea VERDE tablero "la fase $FASE no publica tablero"
 elif [ "${CIERRE_SIN_GATEWAY:-0}" = "1" ] || [ ! -x "$OPENCLAW_BIN" ]; then
@@ -277,6 +283,12 @@ if abiertos:
     print("ROJO el tablero publicado muestra carriles sin terminar: " + " ".join(abiertos))
 elif not viv["at"]:
     print("ROJO el tablero publicado no trae cierre.at: quien lo abra ve la fase en curso")
+elif viv["atencion"]:
+    # Coincidir no basta: si los DOS lados declaran atencion_requerida, el resumen
+    # cuadra y la comprobacion decia OK sobre un tablero que le pinta al dueno el
+    # banner rojo arriba de todo. Una fase que pide atencion no esta cerrada, este o
+    # no de acuerdo el documento versionado.
+    print("ROJO el tablero publicado pide atencion arriba de todo: una fase que la pide no esta cerrada")
 elif viv != ver:
     difieren = [k for k in ver if viv.get(k) != ver.get(k)]
     print("ROJO el tablero publicado no dice lo mismo que el documento versionado; difiere en: " + ", ".join(difieren))
