@@ -6,7 +6,7 @@
   "lead": {
     "agente": "implementer",
     "inicio": "2026-09-17T16:16:00Z",
-    "actualizado": "2026-09-18T04:25:09Z"
+    "actualizado": "2026-09-18T05:05:00Z"
   },
   "atencion_requerida": {
     "necesaria": false,
@@ -149,11 +149,17 @@
       "carril": null,
       "que": "cierre-de-fase.sh 7 en VERDE: plan, ramas, worktrees, sesiones, despliegue y CI",
       "situacion": null
+    },
+    {
+      "at": "2026-09-18T05:05:00Z",
+      "carril": null,
+      "que": "Telegram de cierre enviado al dueno (3350) con el enlace al tablero",
+      "situacion": null
     }
   ],
   "cierre": {
     "at": "2026-09-18T04:40:00Z",
-    "telegram_message_id": null,
+    "telegram_message_id": 3350,
     "resumen": "Fase 7 cerrada: 4 carriles mergeados (D #62, P #63, N1 #65, C #69 fca201a); tablero-runbook desplegado y encendido en el gateway; comprobador de cierre VERDE en sus seis comprobaciones; residual declarado: 7.6 parcial, canarys (i)-(vi) sin correr."
   }
 }
