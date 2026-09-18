@@ -144,4 +144,28 @@ env -i PATH="$T/bin:/opt/homebrew/bin:/usr/bin:/bin" HOME="$HOME" CORRIDA_STATE=
   || fail "con env -i fallo"
 grep -q -- "--modo-bueno-9" "$TMUX_LOG" || fail "con env -i no se uso la tabla del registro"
 
+# (10) el cron hombre-muerto pide el parte: texto que instruye a claw, cada 60 min, a Telegram.
+cron_line="$(grep "cron add.*corrida-vigia-t1" "$LLAMADAS" | head -1)"
+printf '%s' "$cron_line" | grep -q -- "--every 60m" || fail "el cron no es cada 60 min"
+printf '%s' "$cron_line" | grep -q -- "--channel telegram" || fail "el cron no entrega por Telegram"
+printf '%s' "$cron_line" | grep -qF -- "--to $DESTINO" || fail "el cron no lleva el destino del canal"
+printf '%s' "$cron_line" | grep -qF -- "$T/corridas/t1" || fail "el cron no senala el directorio de estado de la corrida"
+printf '%s' "$cron_line" | grep -q "Contesta SOLO con el parte" || fail "el cron no le pide el parte a claw"
+printf '%s' "$cron_line" | grep -q "capture-pane" || fail "el cron no manda mirar las pantallas"
+printf '%s' "$cron_line" | grep -q "NO LEE CODIGO" || fail "el cron no exige lenguaje de usuario"
+printf '%s' "$cron_line" | grep -q "empieza tu parte con" || fail "en simulacro el cron no pide el prefijo"
+
+# (11) seguimiento.v1: NECESITO TU RESPUESTA con notificacion; lo rutinario en silencio.
+: > "$LLAMADAS"
+corrida_mensaje t1 "NECESITO TU RESPUESTA" "un dialogo espera tu decision" "la corrida sigue en marcha" "responder si o no" \
+  || fail "el mensaje NECESITO TU RESPUESTA fallo"
+necesito_linea="$(grep "message send" "$LLAMADAS" | tail -1)"
+printf '%s' "$necesito_linea" | grep -q "NECESITO TU RESPUESTA" || fail "no salio la etiqueta NECESITO TU RESPUESTA"
+printf '%s' "$necesito_linea" | grep -q -- "--silent" && fail "NECESITO TU RESPUESTA salio silenciosa"
+printf '%s' "$necesito_linea" | grep -qF -- "-t $DESTINO" || fail "NECESITO TU RESPUESTA sin destino"
+corrida_mensaje t1 AVANZA "todo sigue en orden" "continua la misma parte" "nada" \
+  || fail "el mensaje AVANZA fallo"
+avanza_linea="$(grep "message send" "$LLAMADAS" | tail -1)"
+printf '%s' "$avanza_linea" | grep -q -- "--silent" || fail "AVANZA dejo de salir silencioso"
+
 echo "TODO VERDE: test-corrida-nucleo"

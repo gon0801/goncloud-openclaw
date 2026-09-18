@@ -75,6 +75,17 @@ f556b93 (restaurado con `git fetch origin main`). Arreglo en 3 capas: unset en
 run-checks.sh (toda la bateria), en test-corrida-preflight.sh (incl. AUTHOR/
 COMMITTER) y en corrida_preflight (lecturas contra REPO_DIR). Verificado: prueba
 en verde con GIT_DIR/GIT_INDEX_FILE hostiles y refs intactos.
-Incidente 3: al matar mi cadena maté tambien con pkill todo run-checks de la Mac
-(ajenos). Solo aborta su hook sin commitear, pero les hice perder su bateria.
-Leccion: matar por PID exacto, jamas por patron.
+ Incidente 3: al matar mi cadena maté tambien con pkill todo run-checks de la Mac
+ (ajenos). Solo aborta su hook sin commitear, pero les hice perder su bateria.
+ Leccion: matar por PID exacto, jamas por patron.
+
+## Correccion tras auditoria del lead (BRIEF-r1, 2026-09-18)
+Dos hallazgos del PR 81. Rojo inicial con los dos casos nuevos y los defectos
+puestos: (10) `FAIL: el cron no senala el directorio de estado de la corrida`
+(el mensaje del cron era "Parte de la corrida t1 para el vigia.", no pedia nada);
+tras corregir abrir.sh, (11) `FAIL: NECESITO TU RESPUESTA salio silenciosa`
+(corrida_mensaje mandaba siempre con --silent). Verde tras ambos arreglos:
+`TODO VERDE: test-corrida-nucleo`. El (11) ademas exige que AVANZA siga saliendo
+con --silent, y el (10) exige cada 60 min, Telegram, destino del canal, directorio
+de estado, "Contesta SOLO con el parte", capture-pane, lenguaje de usuario y, en
+simulacro, pedir el prefijo en el texto del cron.

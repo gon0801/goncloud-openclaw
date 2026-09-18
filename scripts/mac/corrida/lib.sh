@@ -66,9 +66,11 @@ corrida_mensaje() {
   [ "$sim" = "true" ] && sed -i.bak '1s/^/[SIMULACRO] /' "$M" && rm -f "$M.bak"
   local dest; dest="$(json_campo "$reg" canal.destino)"
   [ -n "$dest" ] || { echo "registro sin destino" >&2; rm -f "$M"; return 1; }
-  local texto rc=0
+  local texto rc=0 sil="--silent"
+  # seguimiento.v1: rutina en silencio; NECESITO TU RESPUESTA con notificacion.
+  [ "$etq" = "NECESITO TU RESPUESTA" ] && sil=""
   texto="$(cat "$M")"
-  "$OPENCLAW_BIN" message send --channel telegram -t "$dest" --silent --json -m "$texto" >/dev/null 2>&1 || rc=1
+  "$OPENCLAW_BIN" message send --channel telegram -t "$dest" $sil --json -m "$texto" >/dev/null 2>&1 || rc=1
   CORR_MSG_ETQ="$etq" CORR_MSG_OK="$rc" CORR_MSG_DIR="$CORRIDA_STATE/$id" python3 -c "
 import json,os
 d={'etiqueta':os.environ['CORR_MSG_ETQ'],'ok':os.environ['CORR_MSG_OK']=='0'}
