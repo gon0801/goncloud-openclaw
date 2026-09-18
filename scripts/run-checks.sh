@@ -73,6 +73,10 @@ fi
 salida_tr=$( (cd tablero-runbook && "$NODE" --test --test-reporter tap --test-reporter-destination stdout 2>&1) ); rc_tr=$?
 printf '%s\n' "$salida_tr" | grep -E '^# (tests|pass|fail) ' | sed 's/^/  /'
 if [ "$rc_tr" -ne 0 ]; then
+  # Sin esto la bateria solo imprime "# fail 1" y no QUE fallo: en CI, donde no se puede
+  # correr nada a mano, eso cuesta una ronda entera por intento. Medido el 2026-09-17:
+  # cinco rondas adivinando un fallo que solo ocurre en Linux.
+  printf '%s\n' "$salida_tr" | grep -E '^not ok |^# Subtest|error:|expected:|actual:|operator:|failureType:' | head -40 | sed 's/^/  /'
   echo "FAIL: bateria tablero-runbook"; fallas=$((fallas + 1))
 else
   pass_tr=$(printf '%s\n' "$salida_tr" | sed -n 's/^# pass \([0-9][0-9]*\)[[:space:]]*$/\1/p' | tail -1)
