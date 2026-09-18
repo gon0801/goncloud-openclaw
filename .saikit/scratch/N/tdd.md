@@ -189,3 +189,15 @@ subshell y al cerrar esta ejecuto `kill-server; rm -rf $T` a mitad de la prueba
 rmdir si NO hay trap dueño; si lo hay (preflight), no se pisa y el caso lo cubre el
 rompimiento de locks viejos. La prueba captura a archivo, no con $().
 Verde: las tres pruebas en TODO VERDE (tambien /bin/bash 3.2).
+
+## BRIEF-r3 (2026-09-18): batch 9.3 — S + U6 + U7 (kimi/229daf4#1-#4)
+Rojo por mutacion (los casos se agregaron junto al fix; cada mutacion mata su caso):
+- S: pf_limpiar con la sustitucion entrecomillada (una sola palabra con saltos de
+  linea) → `FAIL: la senal dejo viva a preflight-t-mul-a` — con dos huerfanas
+  preflight-* vivas mas la sesion en curso, ninguna moria. Ahora lee linea a linea.
+  El caso A3/S espera a que la sesion exista (poll de has-session), sin sleep fijo.
+- U6: el bucle sin-declarar iterando la lista partida → la razon de "red externa"
+  usada sin declarar salia como "red"/"externa"; el caso exige la clase entera.
+- U7: rb pegado sobre REPO → el runbook guardado absoluto daba "runbook sin leer";
+  runbook_de (en lib.sh) resuelve absoluta tal cual y relativa bajo REPO_DIR.
+Verde: las tres pruebas en TODO VERDE.

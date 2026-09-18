@@ -27,6 +27,13 @@ print('' if v is None else (str(v).lower() if isinstance(v,bool) else v))
 " 2>/dev/null
 }
 
+runbook_de() { # $1 runbook del registro: la absoluta, tal cual; la relativa, bajo REPO_DIR
+  case "$1" in
+    /*) printf '%s\n' "$1";;
+    *) printf '%s/%s\n' "${REPO_DIR:-$(pwd)}" "$1";;
+  esac
+}
+
 # Actualizacion del registro con lock por directorio y renombre atomico: dos
 # lanzar-sesion en paralelo no se pisan y un corte a mitad no deja JSON truncado.
 # Un lock de mas de 60 s es de un proceso muerto: se rompe con aviso y se sigue.

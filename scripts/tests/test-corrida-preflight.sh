@@ -230,6 +230,25 @@ out=$(bash "$CORR" preflight t-undecl 2>&1); rc=$?
 printf '%s' "$out" | grep -q "clase sin declarar: ssh" || fail "NO APTO sin razon de clase:
 $out"
 
+# ROJO con red externa usada y no declarada: la clase compuesta se nombra entera.
+modos x ok cli-ok "--flag-ok-9" "BAR-OK-9"
+abrir t-redud scripts/tests/fixtures/corrida/runbook-usa-red-sin-declarar.md
+out=$(bash "$CORR" preflight t-redud 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "con red externa sin declarar debio dar NO APTO"
+printf '%s' "$out" | grep -q "clase sin declarar: red externa" || fail "la clase compuesta salio partida:
+$out"
+
+# ROJO con clase declarada en la tabla y nunca usada en bloques: tambien se prueba,
+# incluso la clase compuesta ("red externa" no se parte en dos).
+export CORRIDA_CANDADO_red_externa=negado
+modos x ok cli-ok "--flag-ok-9" "BAR-OK-9"
+abrir t-red scripts/tests/fixtures/corrida/runbook-declara-red.md
+out=$(bash "$CORR" preflight t-red 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "red externa declarada y no usada debio dar NO APTO"
+printf '%s' "$out" | grep -q "clase negada: red externa" || fail "NO APTO sin razon de red externa:
+$out"
+unset CORRIDA_CANDADO_red_externa
+
 # ROJO con clase declarada en la tabla y nunca usada en bloques: tambien se prueba.
 export CORRIDA_CANDADO_psql=negado
 modos x ok cli-ok "--flag-ok-9" "BAR-OK-9"
@@ -239,6 +258,15 @@ out=$(bash "$CORR" preflight t-psql 2>&1); rc=$?
 printf '%s' "$out" | grep -q "clase negada: psql" || fail "NO APTO sin razon de psql declarado:
 $out"
 unset CORRIDA_CANDADO_psql
+
+# ROJO con runbook guardado como ruta absoluta: preflight lo lee igual (unificar).
+modos x ok cli-ok "--flag-ok-9" "BAR-OK-9"
+bash "$CORR" abrir t-abs --runbook "$PWD/scripts/tests/fixtures/corrida/runbook-simulacro.md" --vigia claw --cli-modos "$T/m.tsv" >/dev/null \
+  || fail "abrir t-abs fallo"
+out=$(bash "$CORR" preflight t-abs 2>&1); rc=$?
+[ $rc -eq 0 ] || fail "con runbook absoluto debio dar APTO:
+$out"
+printf '%s' "$out" | grep -q "runbook sin leer" && fail "el runbook absoluto no se leyo"
 
 # (P) aislamiento git: env hostil no toca el indice ni las refs del centinela, y
 # los unset que lo garantizan siguen en su sitio (ancla de regresion).
@@ -261,16 +289,44 @@ grep -q "unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX" scripts/mac/corr
   || fail "preflight.sh perdio el unset de git"
 
 # (A3) una senal a mitad no deja sesiones de prueba vivas con un CLI real adentro.
+# Determinista: se espera a que la sesion exista antes de senalar, sin sleep fijo.
 modos x lento cli-lento "--flag-lento-9" "BAR-LENTO-9"
 abrir t-int "$RB"
 bash "$CORR" preflight t-int >/dev/null 2>&1 &
 PPID_INT=$!
-sleep 0.7
+espera_sesion() { # $1 nombre: 0 cuando existe (max ~5 s)
+  local k=0
+  while [ "$k" -lt 50 ]; do
+    "$TM_REAL" -L "$L" has-session -t "=$1" 2>/dev/null && return 0
+    sleep 0.1; k=$((k+1))
+  done
+  return 1
+}
+espera_sesion preflight-t-int-lento || fail "la sesion de prueba nunca existio"
 kill -TERM "$PPID_INT" 2>/dev/null
 wait "$PPID_INT" 2>/dev/null
 sleep 0.5
 "$TM_REAL" -L "$L" has-session -t "=preflight-t-int-lento" 2>/dev/null \
   && fail "una senal a mitad dejo viva la sesion de prueba"
+
+# (S) con DOS sesiones de prueba vivas, la senal las mata a las dos: la iteracion
+# de pf_limpiar no puede llegar pegada en una sola palabra.
+"$TM_REAL" -L "$L" new-session -d -s preflight-t-mul-a 'sleep 60' >/dev/null
+"$TM_REAL" -L "$L" new-session -d -s preflight-t-mul-b 'sleep 60' >/dev/null
+modos x lento cli-lento "--flag-lento-9" "BAR-LENTO-9"
+abrir t-mul "$RB"
+bash "$CORR" preflight t-mul >/dev/null 2>&1 &
+PMUL=$!
+espera_sesion preflight-t-mul-lento || fail "la sesion del caso multiple nunca existio"
+kill -TERM "$PMUL" 2>/dev/null
+wait "$PMUL" 2>/dev/null
+sleep 0.5
+"$TM_REAL" -L "$L" has-session -t "=preflight-t-mul-a" 2>/dev/null \
+  && fail "la senal dejo viva a preflight-t-mul-a"
+"$TM_REAL" -L "$L" has-session -t "=preflight-t-mul-b" 2>/dev/null \
+  && fail "la senal dejo viva a preflight-t-mul-b"
+"$TM_REAL" -L "$L" has-session -t "=preflight-t-mul-lento" 2>/dev/null \
+  && fail "la senal dejo viva a la sesion en curso"
 
 # ROJO con el vigilante sin correr (ultimo caso: pgrep de mentira, porque el
 # vigilante REAL de la Mac tambien matchea el patron y contaminaria el caso).

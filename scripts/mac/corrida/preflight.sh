@@ -13,10 +13,10 @@ corrida_preflight() {
   # un CLI real lanzado en modo sin preguntas no puede quedarse vivo por un interrupt.
   PF_ID="$id"
   pf_limpiar() {
-    local s
-    for s in "$("$TMUX_BIN" list-sessions -F '#{session_name}' 2>/dev/null | grep "^preflight-$PF_ID-")"; do
-      "$TMUX_BIN" kill-session -t "=$s" 2>/dev/null
-    done
+    "$TMUX_BIN" list-sessions -F '#{session_name}' 2>/dev/null | grep "^preflight-$PF_ID-" \
+      | while IFS= read -r s; do
+          "$TMUX_BIN" kill-session -t "=$s" 2>/dev/null
+        done
   }
   trap pf_limpiar EXIT
   trap 'exit 130' INT
@@ -108,9 +108,10 @@ corrida_preflight() {
 
   # (6) cada clase que el runbook declara O usa, contra los candados; y clases
   # usadas sin declarar. La DoD dice "cada clase que el runbook declara": una clase
-  # declarada en la tabla y usada en prosa tambien se prueba.
+  # declarada en la tabla y usada en prosa tambien se prueba. Los bucles recorren el
+  # conjunto cerrado de clases: "red externa" es una sola clase, no dos palabras.
   local runbook; runbook="$(json_campo "$reg" runbook)"
-  local rb="$REPO/$runbook"
+  local rb; rb="$(runbook_de "$runbook")"
   if [ -f "$rb" ]; then
     local declaradas=" "
     declaradas="$declaradas$(sed -n '/## Clases de comando/,$p' "$rb" | grep -iE '\|( *`?)(ssh|red externa|psql|gh)(`? *\|)' | tr 'A-Z' 'a-z' | grep -oE 'ssh|red externa|psql|gh' | sort -u | tr '\n' ' ')"
@@ -120,11 +121,13 @@ corrida_preflight() {
       case "$u" in curl|wget) clase="red externa";; *) clase="$u";; esac
       printf '%s' "$usadas_clases" | grep -qF " $clase " || usadas_clases="$usadas_clases $clase "
     done
-    for clase in $usadas_clases; do
+    local cr
+    for clase in ssh "red externa" psql gh; do
+      printf '%s' "$usadas_clases" | grep -qF " $clase " || continue
       printf '%s' "$declaradas" | grep -qF " $clase " \
         || razon "clase sin declarar: $clase"
     done
-    local union="$declaradas$usadas_clases" cr
+    local union="$declaradas$usadas_clases"
     for clase in ssh "red externa" psql gh; do
       printf '%s' "$union" | grep -qF " $clase " || continue
       candado_clase "$clase"; cr=$?
