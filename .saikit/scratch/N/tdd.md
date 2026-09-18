@@ -302,3 +302,21 @@ Verificado: bateria completa en TODO VERDE.
   raiz derivada de lib.sh; pwd ultimo recurso documentado; bajo launchd, inyectar
   REPO_DIR es lo seguro.
 Verde: las tres pruebas, tambien /bin/bash 3.2.
+
+## BRIEF-r8 (2026-09-18): hueco del reviewer del kit en cerrar — repro textual
+Rojos con el defecto puesto (stub ahora con estado: el cron-1 de cada abrir vive en
+cron-puesto, cron rm de un id inexistente falla como el gateway real, y
+ENVIO_MODO=mal tumba el envio):
+- `FAIL: el fallo del envio de CERRADA no se nombra` — cerrar salia 1 en silencio
+  con la corrida a medias (cron quitado, sesiones desmarcadas, registro abierto).
+- El reintento quedaba atado: mutacion verificada — sin la tolerancia de
+  idempotencia, `FAIL: el reintento de cerrar debio funcionar (rc=1)`.
+Arreglo: cerrar idempotente y honesto — (a) el fallo del aviso nombra la falla y en
+que quedo la corrida ("reintentar cierra"); (b) el estado pasa a cerrada SOLO
+cuando todo cerro; (c) cron rm que falla con el cron YA fuera de la lista cuenta
+como exito (verificado con cron_jobs_de; si sigue en la lista o la lista no se
+puede leer, error con lo hecho y lo falta). Bugs propios del pase, cazados por la
+prueba: el grep -c con || echo 0 duplicaba la salida y rompia la aritmetica del
+stub, y el contador de duplicados se contaminaba con los adds normales (ids de
+duplicados ahora deterministas por nombre).
+Verde: las tres pruebas, tambien /bin/bash 3.2.

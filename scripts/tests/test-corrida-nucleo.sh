@@ -54,6 +54,7 @@ printf '%s\n' "OPENCLAW \$*" >> "$LLAMADAS"
 case "\$*" in
   *cron\ rm*)
     [ "\${CRON_RM_FAIL:-0}" = "1" ] && exit 1
+    if ! grep -q " \$3\$" "$T/cron-puesto" 2>/dev/null; then exit 1; fi
     grep -v " \$3\$" "$T/cron-puesto" > "$T/cron-puesto.n" 2>/dev/null; mv "$T/cron-puesto.n" "$T/cron-puesto"
     printf '{}';;
   *cron\ list*)
@@ -70,16 +71,17 @@ case "\$*" in
     fi
     printf ']}';;
   *cron\ add*)
+    nom=""; prev=""
+    for a in "\$@"; do [ "\$prev" = "--name" ] && nom="\$a"; prev="\$a"; done
     if [ "\${CRON_SIN_ID:-0}" = "1" ]; then
-      nom=""; prev=""
-      for a in "\$@"; do [ "\$prev" = "--name" ] && nom="\$a"; prev="\$a"; done
-      k=\$([ -f "$T/cron-puesto" ] && wc -l < "$T/cron-puesto" || echo 0); k=\$((k + 1))
-      printf '%s %s\n' "\$nom" "cron-dup\$k" >> "$T/cron-puesto"
+      c=\$(grep -c "^\$nom " "$T/cron-puesto" 2>/dev/null); c=\${c:-0}
+      printf '%s %s\n' "\$nom" "cron-dup-\$nom-\$((c + 1))" >> "$T/cron-puesto"
       printf '{}'
     else
+      printf '%s %s\n' "\$nom" "cron-1" >> "$T/cron-puesto"
       printf '{"id":"cron-1"}'
     fi;;
-  *message\ send*) printf '{"messageId":"m1"}';;
+  *message\ send*) [ "\${ENVIO_MODO:-ok}" = "mal" ] && exit 1; printf '{"messageId":"m1"}';;
 esac
 exit 0
 STUB
@@ -258,13 +260,13 @@ CRON_SIN_ID=1 bash "$CORR" abrir t-sinid --runbook "$RB" --vigia claw --cli-modo
 [ -f "$T/corridas/t-sinid/registro.json" ] && fail "abrir escribio registro sin id de cron"
 out="$(CRON_SIN_ID=1 bash "$CORR" abrir t-sinid --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"
 printf '%s' "$out" | grep -q "id" || fail "el fallo del cron sin id no dice nada"
-grep -q "cron rm cron-dup1" "$LLAMADAS" || fail "la limpieza sin id no borro por el id de la lista"
+grep -q "cron rm cron-dup-corrida-vigia-t-sinid-1" "$LLAMADAS" || fail "la limpieza sin id no borro por el id de la lista"
 # dos jobs homonimos (medido en vivo por el lead): la corrida que los deja debe
 # quitarlos a los DOS y reportar cuantos.
 CRON_SIN_ID=1 CRON_RM_FAIL=1 bash "$CORR" abrir t-dup --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 \
   && fail "abrir t-dup con rm fallando debio fallar"
 out="$(CRON_SIN_ID=1 bash "$CORR" abrir t-dup --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"
-grep -q "cron rm cron-dup1" "$LLAMADAS" && grep -q "cron rm cron-dup2" "$LLAMADAS" \
+grep -q "cron rm cron-dup-corrida-vigia-t-dup-1" "$LLAMADAS" && grep -q "cron rm cron-dup-corrida-vigia-t-dup-2" "$LLAMADAS" \
   || fail "con dos crons homonimos no se quitaron los dos"
 printf '%s' "$out" | grep -q "2 job" || fail "el informe no dice cuantos jobs quito"
 # lista ilegible tras el rm: no informa 'se quito' sin haber verificado nada.
@@ -328,6 +330,27 @@ bash "$CORR" abrir t-fc --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 
 out="$(CRON_RM_FAIL=1 bash "$CORR" cerrar t-fc 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] || fail "cerrar trago el fallo del cron rm"
 printf '%s' "$out" | grep -q "cron" || fail "el fallo del cron rm no dice nada"
+
+# (7b2) repro del reviewer del kit: cerrar con el envio de CERRADA fallando.
+# Primera corrida: rc!=0 CON mensaje que nombre la falla del envio (y que diga en
+# que quedo la corrida); el reintento con envio sano cierra de verdad, aunque el
+# cron ya este quitado (cron rm de un id inexistente no lo ata).
+bash "$CORR" abrir t-ci --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir t-ci fallo"
+bash "$CORR" lanzar-sesion t-ci carril bueno "$T/ses" --nombre ses-ci --encargo "$T/encargo.txt" >/dev/null \
+  || fail "lanzar ses-ci fallo"
+out="$(ENVIO_MODO=mal bash "$CORR" cerrar t-ci 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "cerrar con el envio fallando debio fallar"
+printf '%s' "$out" | grep -q "aviso de cierre" || fail "el fallo del envio de CERRADA no se nombra"
+printf '%s' "$out" | grep -q "reintentar" || fail "el fallo no dice en que quedo la corrida ni que reintentar cierra"
+grep -q '"estado": *"abierta"' "$T/corridas/t-ci/registro.json" || fail "con el envio fallando el registro cerro a medias"
+out="$(bash "$CORR" cerrar t-ci 2>&1)"; rc=$?
+[ "$rc" -eq 0 ] || fail "el reintento de cerrar debio funcionar (rc=$rc):
+$out"
+grep -q '"estado": *"cerrada"' "$T/corridas/t-ci/registro.json" || fail "el reintento no cerro el registro"
+"$TM_REAL" -L "$L" show-environment -t "=ses-ci" OPENCLAW_WATCH >/dev/null 2>&1 \
+  && fail "tras el reintento ses-ci sigue marcada"
+grep -q "corrida-vigia-t-ci" "$T/cron-puesto" 2>/dev/null && fail "tras el reintento el cron sigue puesto"
 
 # (7c) lanzar sobre una corrida cerrada se niega.
 bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nombre ses-zombi --encargo "$T/encargo.txt" >/dev/null 2>&1 \
