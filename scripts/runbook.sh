@@ -29,18 +29,24 @@ morir() { printf 'runbook.sh: %s\n' "$1" >&2; exit 1; }
 
 [ -d "$DIR" ] || morir "no encuentro $DIR; este comando se corre desde un clon del repo"
 
-if [ "${1:-}" = "--lista" ]; then
-  encontrados=0
+# Una sola fuente para "que fases hay": la usan `--lista` y el mensaje de error de una
+# fase que no existe. Antes cada uno tenia su propio filtro y el del error colaba
+# `8-hallazgos`, o sea que sugeria una fase imposible. Hallazgo de CodeRabbit.
+fases_presentes() {
   for f in "$DIR"/autopilot-fase*.md; do
     [ -f "$f" ] || continue
     n=$(basename "$f" .md); n=${n#autopilot-fase}
-    case "$n" in
-      *[!0-9.]*) continue ;;   # autopilot-fase8-hallazgos.md y compania no son el runbook de una fase
-    esac
-    printf '%-6s %s\n' "$n" "$f"
-    encontrados=$((encontrados + 1))
+    printf '%s' "$n" | grep -qE '^[0-9]{1,3}(\.[0-9]{1,3})?$' || continue
+    printf '%s\t%s\n' "$n" "$f"
   done
-  [ "$encontrados" -gt 0 ] || morir "no hay ningun runbook de fase en $DIR"
+}
+
+if [ "${1:-}" = "--lista" ]; then
+  salida=$(fases_presentes)
+  [ -n "$salida" ] || morir "no hay ningun runbook de fase en $DIR"
+  printf '%s\n' "$salida" | while IFS="$(printf '\t')" read -r n f; do
+    printf '%-6s %s\n' "$n" "$f"
+  done
   exit 0
 fi
 
@@ -49,13 +55,16 @@ FASE=${1:-}
 
 # La fase es clave de archivo: forma cerrada, igual que en el spec del tablero. Sin esto
 # un argumento con `/` o `..` haria que este comando imprima la ruta de otra cosa.
-case "$FASE" in
-  *[!0-9.]*|""|.|..) morir "fase invalida: '$FASE' (solo digitos y punto, p. ej. 9 o 9.1)" ;;
-esac
+# Misma forma cerrada que el spec (`FASE_RE` en tablero-runbook/lib.ts). Un filtro de
+# "solo digitos y punto" aceptaba `.9`, `9.` y `9..1`, que no son claves de nada.
+# Hallazgo de CodeRabbit, 2026-09-18.
+if ! printf '%s' "$FASE" | grep -qE '^[0-9]{1,3}(\.[0-9]{1,3})?$'; then
+  morir "fase invalida: '$FASE' (forma cerrada: uno a tres digitos, con un solo punto opcional; p. ej. 9 o 9.1)"
+fi
 
 RUTA="$DIR/autopilot-fase$FASE.md"
 if [ ! -f "$RUTA" ]; then
-  hay=$(cd "$DIR" 2>/dev/null && ls autopilot-fase*.md 2>/dev/null | sed 's/^autopilot-fase//; s/\.md$//' | tr '\n' ' ')
+  hay=$(fases_presentes | cut -f1 | tr '\n' ' ')
   morir "no hay runbook de la fase $FASE en este clon. Los que si estan: ${hay:-ninguno}"
 fi
 [ -r "$RUTA" ] || morir "$RUTA existe pero no se puede leer"

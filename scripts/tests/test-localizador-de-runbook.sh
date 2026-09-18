@@ -65,12 +65,38 @@ T=$(mktemp -d) || exit 1
 trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/scripts" "$T/docs/runbooks"
 touch "$T/docs/runbooks/autopilot-fase9.md"
+# El original rechaza por la VALIDACION y lo dice.
+err_ok=$(bash "$LOC" '../../etc/passwd' 2>&1 >/dev/null)
+printf '%s' "$err_ok" | grep -q 'fase invalida' \
+  || fail "(5) el original tiene que rechazar por la validacion y decirlo; dijo: $err_ok"
+
+# La copia sin validacion tambien falla, pero por OTRA razon. Medir solo el codigo de
+# salida aceptaba las dos y no detectaba nada: hay que medir la razon.
 sed '/fase invalida/d' "$LOC" > "$T/scripts/runbook.sh"
 grep -q 'fase invalida' "$T/scripts/runbook.sh" \
   && fail "(5) no pude fabricar la version sin validacion; el caso (4) quedaria sin respaldo"
-bash "$T/scripts/runbook.sh" '../../etc/passwd' >/dev/null 2>&1
-[ $? -eq 0 ] && fail "(5) la version sin validacion deberia seguir fallando por archivo inexistente, no salir 0"
-echo "ok (5): quitando la validacion, el caso (4) deja de estar protegido"
+err_malo=$(bash "$T/scripts/runbook.sh" '../../etc/passwd' 2>&1 >/dev/null)
+printf '%s' "$err_malo" | grep -q 'fase invalida' \
+  && fail "(5) la copia mutada NO deberia poder decir 'fase invalida': la mutacion no la quito"
+echo "ok (5): el original rechaza por la validacion y la copia mutada no puede, que es lo que hace util al caso (4)"
+
+# (5b) La gramatica es cerrada, no "digitos y punto": `.9`, `9.` y `9..1` no son claves
+# de nada y antes pasaban el filtro. Hallazgo de CodeRabbit, 2026-09-18.
+for malo in '.9' '9.' '9..1' '1234' '9.1234'; do
+  salida=$(bash "$LOC" "$malo" 2>/dev/null); rc=$?
+  [ "$rc" -ne 0 ] || fail "(5b) la fase '$malo' no tiene forma de clave y salio 0"
+  [ -z "$salida" ] || fail "(5b) la fase '$malo' imprimio algo en stdout: $salida"
+done
+echo "ok (5b): la gramatica cerrada rechaza punto suelto, punto final, punto doble y mas de tres digitos"
+
+# (5c) El mensaje de una fase que no existe no puede sugerir una fase imposible. Antes
+# listaba con su propio filtro y colaba `8-hallazgos`. Hallazgo de CodeRabbit.
+err=$(bash "$LOC" 42 2>&1 >/dev/null)
+printf '%s' "$err" | grep -q 'hallazgos' \
+  && fail "(5c) el error sugiere '8-hallazgos', que no es una fase: manda a probar algo imposible
+$err"
+
+echo "ok (5c): el error de una fase inexistente no sugiere ninguna que no lo sea"
 
 # (6) `--lista` nombra cada fase con runbook, y solo esas. `autopilot-fase8-hallazgos.md`
 # existe y NO es el runbook de una fase: si colara, alguien pediria la fase "8-hallazgos".
