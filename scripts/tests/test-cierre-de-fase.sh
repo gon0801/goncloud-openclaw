@@ -361,6 +361,39 @@ $out"
 mv -f "$T/bin/openclaw.off" "$T/bin/openclaw"
 echo "ok (12e): sin respuesta del gateway el tablero queda unknown"
 
+# (12g) El falso verde que encontro CodeRabbit sobre esta misma comprobacion: un
+# documento sin carriles se normalizaba a lista vacia, "ningun carril abierto" salia
+# cierto por vacio, y con la misma fase y el mismo cierre.at los dos resumenes
+# coincidian. VERDE sin haber mirado un solo carril.
+cat >"$TAB" <<'DOC'
+Gateway call: runbook.progress.get
+{"ok":true,"doc":{"fase":"5","cierre":{"at":"2026-09-18T00:00:00Z"}}}
+DOC
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^VERDE *tablero" \
+  && fail "(12g) un tablero publicado SIN carriles no puede salir VERDE:
+$out"
+printf '%s' "$out" | grep -q "^unknown *tablero" \
+  || fail "(12g) un tablero publicado sin carriles tiene que declararse unknown:
+$out"
+echo "ok (12g): un tablero sin carriles se declara, no se da por bueno"
+
+# (12h) Lo mismo con un carril al que le falta el estado: la forma se valida antes de
+# normalizarla, no despues.
+cat >"$TAB" <<'DOC'
+Gateway call: runbook.progress.get
+{"ok":true,"doc":{"fase":"5","carriles":[{"id":"A"},{"id":"B","estado":"mergeado"}],
+ "cierre":{"at":"2026-09-18T00:00:00Z"}}}
+DOC
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^VERDE *tablero" \
+  && fail "(12h) un carril sin estado no puede pasar por bueno:
+$out"
+printf '%s' "$out" | grep -q "sin id o sin estado" \
+  || fail "(12h) el detalle tiene que decir que el carril viene incompleto:
+$out"
+echo "ok (12h): un carril sin id o sin estado se declara, no se normaliza a texto"
+
 # (12f) Una fase que no publica tablero no se bloquea por eso.
 git -C "$R" rm -q .saikit/progress/5.json
 git -C "$R" commit -q -m sin-tablero; git -C "$R" push -q -f origin HEAD:main

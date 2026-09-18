@@ -187,14 +187,35 @@ import json, os, sys
 
 TERMINALES = {"mergeado", "atorado", "revertido", "omitido"}
 
-def resumen(d):
+class Informe(Exception):
+    pass
+
+def resumen(d, de_donde):
     d = d.get("result", d)
     d = d.get("doc", d)
-    pares = sorted((str(c.get("id")), str(c.get("estado"))) for c in (d.get("carriles") or []))
-    return {"fase": d.get("fase"), "at": (d.get("cierre") or {}).get("at"), "carriles": pares}
+    # Un documento sin carriles bien formados se normalizaba a [], y entonces "ningun
+    # carril abierto" salia cierto por vacio: dos documentos con la misma fase y el
+    # mismo cierre.at pasaban sin que nadie hubiera mirado un solo carril. Es el mismo
+    # falso verde que esta comprobacion existe para matar, asi que la forma se valida
+    # antes de normalizarla y, si no cuadra, se declara en vez de darla por buena.
+    cs = d.get("carriles")
+    if not isinstance(cs, list) or not cs:
+        raise Informe("UNKNOWN " + de_donde + " no trae una lista de carriles; no hay nada que comparar")
+    pares = []
+    for c in cs:
+        if not isinstance(c, dict):
+            raise Informe("UNKNOWN " + de_donde + " trae un carril que no es un objeto")
+        cid, est = c.get("id"), c.get("estado")
+        if not isinstance(cid, str) or not cid or not isinstance(est, str) or not est:
+            raise Informe("UNKNOWN " + de_donde + " trae un carril sin id o sin estado")
+        pares.append((cid, est))
+    return {"fase": d.get("fase"), "at": (d.get("cierre") or {}).get("at"), "carriles": sorted(pares)}
 
 try:
-    ver = resumen(json.loads(os.environ["CIERRE_DOC"]))
+    ver = resumen(json.loads(os.environ["CIERRE_DOC"]), "el documento versionado")
+except Informe as e:
+    print(str(e))
+    raise SystemExit
 except Exception:
     print("UNKNOWN no pude leer el documento versionado")
     raise SystemExit
@@ -202,7 +223,10 @@ except Exception:
 bruto = sys.stdin.read()
 i = bruto.find("{")
 try:
-    viv = resumen(json.loads(bruto[i:]))
+    viv = resumen(json.loads(bruto[i:]), "el tablero publicado")
+except Informe as e:
+    print(str(e))
+    raise SystemExit
 except Exception:
     print("UNKNOWN el gateway no devolvio un documento legible")
     raise SystemExit
