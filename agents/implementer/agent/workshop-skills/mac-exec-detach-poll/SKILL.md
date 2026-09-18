@@ -13,7 +13,12 @@ ciegas.
 ## Pasos
 
 1. Diagnostica antes de reintentar: `pgrep -fl "<proceso>"` para ver si
-   algo sobrevivio. Si vive, vigilalo; no lo relances.
+   algo sobrevivio. Si vive, vigilalo; no lo relances. Si lo que murió
+   era un `git commit`, deja `index.lock` huérfano y el reintento muere
+   con `Unable to create ... index.lock`: antes de borrarlo verificá
+   que ningún git viva sobre ese worktree y recién ahí borrá el lock
+   (medido 2026-09-18: dos reintentos bloqueados por el lock de un
+   commit matado por COMPANION_APP_UNAVAILABLE).
 2. Relanza DESPEGADO de la sesion exec, con salida a archivo y el exit
    code registrado al final:
 

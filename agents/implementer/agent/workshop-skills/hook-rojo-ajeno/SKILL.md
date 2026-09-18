@@ -1,6 +1,6 @@
 ---
 name: Hook rojo ajeno
-description: Cuando el commit o el push se bloquea por tests en rojo en archivos que tu cambio no toco. Prueba de preexistencia con stash en base limpia, regla de direccion de reparacion y cuando reintentar un flake de timing.
+description: Cuando el commit o el push se bloquea por tests en rojo en archivos que tu cambio no toco. Prueba de preexistencia con stash en base limpia, regla de direccion de reparacion, cuando reintentar un flake de timing o una edicion concurrente en vuelo, y que hacer si un commit ajeno barrio tus archivos.
 ---
 
 # Hook rojo ajeno
@@ -16,11 +16,22 @@ propio test prescriba.
    Ningún reintento a ciegas antes de esto.
 2. Prueba de preexistencia: `git stash push -- <tus archivos>` (solo tu
    diff, nada más), corre LOS MISMOS tests que enrojecen sobre la base
-   limpia y compara salida contra salida:
+   limpia y compara salida contra salida. Si otro editor stagea en el
+   mismo árbol al mismo tiempo, preferí un worktree temporal al SHA
+   base antes que el stash (el stash no te aísla de sus staged).
    - Fallo idéntico en base limpia ⇒ preexistente ambiental: se declara
      con evidencia (test, SHA de la base, mensaje igual) y no se toca.
    - Pasa en base y falla una vez contigo ⇒ flake de timing: reintenta
      una vez y declara el pase aislado.
+   - Pasa a mano y en base limpia pero enrojece bajo el hook, y el
+     archivo que el test lee cambia solo ⇒ edición concurrente en
+     vuelo, no tu diff: el hook lee la versión del índice tras
+     stashear lo unstaged, así que compará `git show :<archivo>`
+     contra worktree y HEAD y mirá el mtime dos veces separadas. Si
+     el contenido alterna (medido 2026-09-18: un resumen inválido y
+     uno válido alternando cada ~1 min, dos baterías en rojo con
+     manuales en verde), no toques ese archivo: esperá mtime fijo +
+     contenido válido, verificá a mano y reintentá una vez.
    - Solo enrojece contigo ⇒ es tuyo: arréglalo en tu diff.
    Cierra con `git stash pop`; si el pop toca archivos de otro commit en
    vuelo, no confíes en el auto-merge silencioso (detalle en
@@ -34,6 +45,13 @@ propio test prescriba.
 4. Nunca `--no-verify` para pasar por encima del candado: un rojo real
    fuera de tu alcance se reporta al lead con la evidencia del paso 2,
    no se esquiva.
+
+5. Si tu commit responde `nothing to commit` porque un commit
+   concurrente barrió tus archivos: verificá tu contenido exacto en
+   su commit (`git diff <sha>^ <sha> -- <tus archivos>`; si reescribió
+   tus líneas, compará frase por frase contra tu versión) y seguí con
+   un follow-up solo con lo que falte. Reportá la atribución tal cual:
+   qué entró en qué SHA y de quién, sin duplicar el commit.
 
 ## Criterio de cierre
 
