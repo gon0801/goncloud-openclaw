@@ -34,7 +34,10 @@ grep -qE 'git (rm|clean)' "$PS1FILE" \
 echo "ok (1): la guardia desestagea y no borra"
 
 # (2) Esta DESPUES del add y ANTES del commit. Fuera de esa ventana no hace nada.
-n_add=$(linea_de 'git add -A' "$PS1FILE")
+# Se ancla en la ASIGNACION ejecutable, no en el texto `git add -A`: ese texto aparece
+# antes en un comentario, y anclando ahi la guardia podia colarse entre el comentario y
+# el comando real sin que esta prueba lo notara. Hallazgo de CodeRabbit, 2026-09-18.
+n_add=$(linea_de '\$addOut = git add -A' "$PS1FILE")
 n_g=$(linea_de 'git restore --staged' "$PS1FILE")
 n_commit=$(linea_de 'commit -m "auto: snapshot' "$PS1FILE")
 [ -n "$n_add" ] && [ -n "$n_g" ] && [ -n "$n_commit" ] \
@@ -57,6 +60,28 @@ n_c2=$(grep -n 'commit -m "auto: snapshot' "$T/movido.ps1" | head -1 | cut -d: -
 [ "$n_g2" -gt "$n_c2" ] \
   || fail "(3) la version fabricada no quedo con la guardia despues del commit (guardia=$n_g2 commit=$n_c2)"
 echo "ok (3): con la guardia despues del commit, la comprobacion de (2) la detecta"
+
+# (3b) La guardia colada ENTRE el comentario y el comando real. Es el agujero que
+# dejaba anclar en el texto `git add -A`: ahi no hay nada estagiado todavia, asi que la
+# guardia no haria nada, y la prueba vieja pasaba igual. Hallazgo de CodeRabbit.
+# awk en una pasada no sirve aqui: la guardia va DESPUES del add, asi que al llegar a
+# la linea donde hay que insertarla todavia no se ha leido. Se hace en dos pasos.
+python3 - "$PS1FILE" "$n_g" "$n_add" "$T/colada.ps1" <<'PY'
+import sys
+ruta, g, a, destino = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
+ls = open(ruta, encoding="utf-8").read().split("\n")
+guardia = ls[g - 1]
+del ls[g - 1]                      # quitarla de su sitio
+ls.insert(a - 1, guardia)          # y colarla justo antes del comando real
+open(destino, "w", encoding="utf-8").write("\n".join(ls))
+PY
+n_g3=$(grep -n 'git restore --staged' "$T/colada.ps1" | head -1 | cut -d: -f1)
+n_a3=$(grep -n '\$addOut = git add -A' "$T/colada.ps1" | head -1 | cut -d: -f1)
+[ -n "$n_g3" ] && [ -n "$n_a3" ] \
+  || fail "(3b) no pude fabricar la version colada; el caso (2) quedaria sin respaldo por ese lado"
+[ "$n_g3" -lt "$n_a3" ] \
+  || fail "(3b) la version fabricada no quedo con la guardia antes del add (guardia=$n_g3 add=$n_a3)"
+echo "ok (3b): una guardia colada antes del comando real tambien queda fuera de la ventana util"
 
 # (4) El tope es un numero y esta declarado, no escondido en la condicion.
 grep -qE '\$MAX_MB *= *[0-9]+' "$PS1FILE" \

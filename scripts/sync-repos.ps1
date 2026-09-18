@@ -44,12 +44,17 @@ foreach ($r in $repos) {
     if ((Test-Path -LiteralPath $f -PathType Leaf) -and ((Get-Item -LiteralPath $f).Length -gt ($MAX_MB * 1MB))) {
       git restore --staged -- "$g" 2>&1 | Out-Null
       $mb = [math]::Round((Get-Item -LiteralPath $f).Length / 1MB, 1)
-      Log "$name GRANDE no se sube: $g ($mb MB > $MAX_MB MB)"
+      Log "$name GRANDE no se sube: $g ($mb MB; limite $MAX_MB MB)"
     }
   }
 
-  $dirty = git status --porcelain
-  if ($dirty) {
+  # Lo que decide si hay algo que commitear es el INDICE, no el arbol: tras la guardia
+  # de tamano el archivo grande sigue en `status --porcelain` (queda sin rastrear), y
+  # mirar el arbol hacia intentar un commit con el indice vacio. Git lo rechaza y el log
+  # decia FALLO aunque la guardia hubiera hecho exactamente su trabajo.
+  git diff --cached --quiet
+  $hay_estagiado = ($LASTEXITCODE -ne 0)
+  if ($hay_estagiado) {
     $commitOut = git -c user.name="openclaw-auto" -c user.email="ehventasmx@gmail.com" commit -m "auto: snapshot $name $(Get-Date -Format 'yyyy-MM-dd HH:mm')" 2>&1
     if ($LASTEXITCODE -eq 0) {
       Log "$name commit local auto"
