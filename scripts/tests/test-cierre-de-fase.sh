@@ -199,4 +199,76 @@ printf '%s' "$out" | grep -q "no tiene ninguna fila de la fase 99" || fail "(10)
 $out"
 echo "ok (10): una fase sin filas en el plan sale ROJO, no VERDE por vacio"
 
+# (11) Los cuatro falsos verdes que encontro CodeRabbit sobre este mismo script. Los
+# cuatro tienen la misma forma: una comprobacion que no se puede hacer devolvia VERDE
+# en vez de unknown, o miraba el lugar equivocado.
+plan 'cc:完了'; git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m v11; git -C "$R" push -q -f origin HEAD:main
+printf '{"plugins":{"entries":{"summa-gate":{},"tablero-demo":{}}}}' >"$CFG"
+
+# (a) variables de git heredadas: el script no puede terminar mirando otro repo.
+OTRO="$T/otro"; git init -q "$OTRO"
+out=$(GIT_DIR="$OTRO/.git" GIT_WORK_TREE="$OTRO" corre 5)
+printf '%s' "$out" | grep -q "VERDE: la fase 5" \
+  || fail "(11a) con GIT_DIR de otro repo el comprobador dejo de ver el suyo:
+$out"
+
+# (b) el remoto no contesta: es unknown, no VERDE.
+MALO="$T/bin-malo"; mkdir -p "$MALO"
+# El script llama `git -C <repo> ls-remote ...`, asi que el subcomando no es $1: se
+# busca en todos los argumentos.
+cat >"$MALO/git" <<'GITSTUB'
+#!/bin/sh
+for a in "$@"; do [ "$a" = "ls-remote" ] && exit 1; done
+exec /usr/bin/git "$@"
+GITSTUB
+chmod +x "$MALO/git"
+out=$(PATH="$MALO:$PATH" corre 5)
+printf '%s' "$out" | grep -q "^unknown *ramas" \
+  || fail "(11b) con el remoto caido y sin ramas locales, debe quedar unknown y no VERDE:
+$out"
+# Y con el remoto caido PERO una rama local de la fase viva: ROJO, no unknown. Saltarse
+# la revision local cuando el remoto no contesta deja pasar trabajo suelto, porque un
+# unknown no bloquea el cierre.
+git -C "$R" branch fase5/local-con-remoto-caido >/dev/null 2>&1
+out=$(PATH="$MALO:$PATH" corre 5)
+printf '%s' "$out" | grep -q "^ROJO *ramas" \
+  || fail "(11b-bis) con el remoto caido, una rama local de la fase debe salir ROJO:
+$out"
+printf '%s' "$out" | grep -q "fase5/local-con-remoto-caido" || fail "(11b-bis) el detalle debe nombrarla"
+git -C "$R" branch -D fase5/local-con-remoto-caido >/dev/null 2>&1
+
+# (c) una rama LOCAL de la fase tambien cuenta.
+git -C "$R" branch fase5/solo-local >/dev/null 2>&1
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^ROJO *ramas" \
+  || fail "(11c) una rama local de la fase sin borrar debe salir ROJO:
+$out"
+printf '%s' "$out" | grep -q "fase5/solo-local" || fail "(11c) el detalle debe nombrarla"
+git -C "$R" branch -D fase5/solo-local >/dev/null 2>&1
+
+# (d) la consulta de CI que falla: unknown, no VERDE.
+printf '#!/bin/sh\nprintf "completed success"\nexit 1\n' >"$T/bin/gh"; chmod +x "$T/bin/gh"
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^unknown *ci" \
+  || fail "(11d) una consulta de CI que falla debe quedar unknown aunque haya escrito algo:
+$out"
+printf 'completed success' >"$CI"
+printf '#!/bin/sh\ncat "%s"\n' "$CI" >"$T/bin/gh"; chmod +x "$T/bin/gh"
+
+# (e) cc:TODO en otra columna no abre una fila cerrada.
+cat >"$R/Plans.md" <<PLAN
+## Fase 5 — algo con plugin \`tablero-demo\` para ver cosas
+
+| Task | Contenido | DoD | Depends | Status |
+|------|-----------|-----|---------|--------|
+| 5.0 | arregla lo que quedo en cc:TODO la vez pasada | su DoD | - | cc:完了 |
+| 5.1 | trabajo dos | su DoD | 5.0 | cc:完了 |
+PLAN
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m v11e; git -C "$R" push -q -f origin HEAD:main
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^VERDE *plan" \
+  || fail "(11e) cc:TODO en el Contenido no abre una fila cuyo Status esta cerrado:
+$out"
+echo "ok (11): los cuatro falsos verdes de CodeRabbit mueren, y el Status se lee de su columna"
+
 echo "TODO VERDE: cierre-de-fase"
