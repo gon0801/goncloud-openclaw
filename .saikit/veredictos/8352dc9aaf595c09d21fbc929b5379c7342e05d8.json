@@ -1,0 +1,17 @@
+{
+  "sha": "8352dc9aaf595c09d21fbc929b5379c7342e05d8",
+  "pr": 71,
+  "verifier": "PASS",
+  "verify_app": {
+    "resultado": "PASS",
+    "comando": "bash scripts/tests/test-cierre-de-fase.sh && bash scripts/tests/test-loop-autopilot.sh && bash scripts/tests/test-progreso-valido.sh && bash scripts/tests/test-runbooks-no-contradicen-entorno.sh"
+  },
+  "blast": {
+    "nivel": 4,
+    "hecho": "Revert quirurgico campo por campo sobre el script sellado: quitar 'titulo' del resumen deja la bateria entera en VERDE, quitar 'siguiente_paso' tambien, y quitar el 'if ! vivo=$(...)' que arreglo R4 tambien; solo 'atencion' queda defendido por (12k), cuyo propio mensaje afirma que tambien cubre la frase de siguiente paso. Y con atencion_requerida.necesaria=true de acuerdo en LOS DOS lados la comprobacion imprime 'OK ... coinciden con lo versionado' sobre una fase cuyo tablero le pinta al dueno el banner de atencion arriba de todo (docs/spec/runbook-progress.v1.md:62). Los cuatro arreglos R1-R4 si estan en el codigo y 12i-1, 12i-2, 12j y 12k fallan contra 629f148; 12g-bis pasa contra 629f148 y falla contra a4df133, que es su baseline correcto.",
+    "comando": "for campo in titulo siguiente_paso atencion; do git show HEAD:scripts/cierre-de-fase.sh | grep -v \"^        \\\"$campo\\\":\" > /tmp/rev/scripts/cierre-de-fase.sh; bash /tmp/rev/scripts/tests/test-cierre-de-fase.sh; done"
+  },
+  "adversary": "n/a",
+  "reviewer": "findings",
+  "decisiones": ".saikit/decisiones/fase7-tablero-cierre.tsv"
+}

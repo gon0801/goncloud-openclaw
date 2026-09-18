@@ -140,8 +140,11 @@ Medido: 2026-09-15, Fase 6: el runbook mandaba commitear `autopilot.json` dentro
 - **Ningún cambio de configuración del gateway lo hace claw desde su propio turno.** Lo hace el lead desde la Mac, con cero corridas en vuelo verificadas, y con lectura de vuelta de la configuración después. Cada recarga en caliente congela al gateway entre diez y doce segundos; claw vive ahí y se mataría a sí mismo.
 - **Los cambios de configuración van en tanda, no en ráfaga.** Doce escrituras seguidas son doce congelamientos seguidos.
 - Todo despliegue tiene su canary escrito como comando, salida esperada y reversa automática. Sin reversa escrita, no se despliega.
+- **La lectura de vuelta prueba que se escribio, no que algo lo este usando.** Un valor que un plugin lee al registrarse sigue sirviendo el viejo despues del cambio, y la configuracion leida de vuelta dice que si. No hay RPC que recargue un plugin: se reinicia el gateway. El canary de un cambio asi no se hace contra la configuracion sino contra el comportamiento: se pide lo que el valor nuevo tiene que cambiar y se mira si cambio.
 
 Medido: 2026-09-16, 15:25 a 15:28 hora del Pacífico: doce recargas de configuración en tres minutos, una cada 30 a 49 segundos, cada una congelando el gateway 10 a 12 segundos y retrasando el latido hasta 36.7 segundos; el teléfono de David mostraba "gateway request timed out" a esa misma cadencia.
+
+Medido: 2026-09-18, encendiendo el tablero de la Fase 7. Se agrego la fase a la lista de la configuracion del plugin, la lectura de vuelta trajo el valor nuevo, y el tablero siguio sirviendo la lista que cargo al arrancar: desde la aplicacion no habia camino a la fase. La lectura de vuelta decia que si durante todo ese rato. Solo el reinicio del gateway lo cambio.
 
 ---
 
@@ -150,6 +153,13 @@ Medido: 2026-09-16, 15:25 a 15:28 hora del Pacífico: doce recargas de configura
 En cada cambio de estado de un carril o de la cola, y al cierre, el lead escribe `.saikit/progress/<fase>.json` en el formato `runbook-progress.v1` y lo envía con `openclaw gateway call runbook.progress.set --params "$(cat <archivo>)"`. La CLI **no** acepta la forma arroba-archivo: contesta `--params must be valid JSON` (medido 2026-09-16 y otra vez el 2026-09-17), así que el JSON va en línea. Un envío fallido no bloquea y se reintenta en el siguiente cambio. Cada escritura lleva `atencion_requerida` y `siguiente_paso` en lenguaje llano. Lo que no está en ese archivo no es progreso.
 
 Medido: 2026-09-16, el cierre de la Fase 6 quedó declarado en `Plans.md` con un residual de canary que, al repetirlo, pasaba: sin progreso escrito por corrida, el estado declarado y el real divergieron sin que nadie lo notara.
+
+**Enviar el progreso no lo hace alcanzable.** La ruta del tablero es por prefijo, así que `/runbook/tablero/<fase>` sirve cualquier fase en cuanto su documento existe; pero la barra "Fases:" que da el único clic desde la aplicación se pinta con la lista `plugins.entries.tablero-runbook.config.fases` de la configuración del gateway, y el plugin la lee **una sola vez, al registrarse**. Una fase que no esté en esa lista existe y nadie llega a ella sin escribir la dirección a mano. Por eso el despliegue de una fase nueva lleva dos pasos más, los dos en la ventana segura de §7:
+
+1. Agregar la fase a esa lista por `config.patch`, con `replacePaths` sobre `plugins.entries.tablero-runbook.config.fases` (un arreglo se reemplaza, no se fusiona).
+2. Reiniciar el gateway: no hay RPC que recargue un plugin, y sin reinicio la configuración nueva queda guardada y sin efecto. Después, comprobar el enlace en el tablero de **otra** fase, porque la barra excluye la que estás viendo.
+
+Medido: 2026-09-18, al cerrar la Fase 7. El documento estaba enviado y el tablero contestaba, y aun así desde la aplicación no había ningún camino a la Fase 7. Leer la configuración de vuelta decía que sí: la lista ya traía la fase, pero el plugin seguía sirviendo la que cargó al arrancar. La lectura de vuelta es un falso verde si no se reinicia.
 
 ---
 

@@ -198,3 +198,33 @@ dias de diagnostico, y `scripts/tests/test-progreso-valido.sh` corre ese mismo v
 sobre todos los `.saikit/progress/*.json` del repo.
 
 **Registro.** `.saikit/decisiones/tablero-fase6-real.tsv`.
+
+## Actualizacion 2026-09-18: el canary de acceso sin credencial, corrido
+
+El runbook lo marcaba como compuerta de seguridad: **si una ruta del tablero contesta
+200 sin credencial, rollback inmediato**. Era una de las seis evidencias que 7.6 dejo
+declaradas como no corridas. Corrida ahora, contra el propio host del gateway, despues
+del reinicio que encendio la Fase 7 en la lista de fases.
+
+```
+# En C:\Users\ehven, sobre el gateway vivo, sin ninguna credencial:
+Invoke-WebRequest -Uri "http://127.0.0.1:18789<ruta>" -Method GET -UseBasicParsing
+
+/runbook/tablero/7  -> 401
+/runbook/tablero/6  -> 401
+/runbook/progress/7 -> 401
+```
+
+Las tres rutas que el plugin registra (`/runbook/tablero` y `/runbook/progress`, las dos
+por prefijo) rechazan sin credencial. La compuerta cierra. No hay rollback que hacer.
+
+Se corrio contra `127.0.0.1` del propio host y no desde la Mac a proposito: por la
+direccion de tailnet la peticion pasa antes por el filtro de red, y un 401 de ahi no
+distinguiria "la ruta pide credencial" de "la red no me dejo llegar". Contra el bucle
+local solo puede contestar el gateway.
+
+**Quedan cinco de las seis**, sin cambio y declaradas igual en el Status de 7.6 de
+`Plans.md`: el estado de crons y turnos antes del cambio de configuracion, los comandos
+de ese cambio con su lectura de vuelta, los timestamps del log de crons alrededor de la
+recarga, el intento de integracion de prueba que debe salir BLOQUEADO, y el segundo
+canary con `github.enabled: true`.

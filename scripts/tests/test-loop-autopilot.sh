@@ -49,6 +49,9 @@ echo "ok (2): las 13 secciones existen y van en orden"
 
 # (3) Cada regla tiene su ancla. Cambiar la regla = cambiar el ancla en el mismo commit.
 for a in 'LISTO <sha>' \
+         'Enviar el progreso no lo hace alcanzable' \
+         'prueba que se escribio, no que algo lo este usando' \
+         'sin reinicio la configuración nueva queda guardada y sin efecto' \
          'cierre-de-fase.sh <fase>' \
          'se gana con un comando' \
          'No es una compuerta de una sola pasada: es un bucle' \
@@ -95,7 +98,7 @@ for a in 'LISTO <sha>' \
   # la lee grep como bandera y sale "Invalid argument", no como ancla faltante.
   grep -qF -- "$a" "$DOC" || fail "$DOC: falta el ancla: $a"
 done
-echo "ok (3): las 34 anclas de reglas están"
+echo "ok (3): las 37 anclas de reglas están"
 
 # (4) La fila del lead no nombra ningún modelo. Es la regla central del documento.
 hit=$(lead_nombra_modelo < "$DOC")
@@ -112,4 +115,24 @@ for n in 1 2 3 4 5 6 7 8 9 10 11 12; do
   sed -n "${ini},${fin}p" "$DOC" | grep -q '^Medido:' || fail "$DOC: la sección $n no cita su incidente (Medido:)"
 done
 echo "ok (5): cada sección de reglas cita el incidente que la originó"
+
+# (6) La seccion 8 tiene que nombrar los DOS pasos de publicar una fase nueva, no uno.
+# Medido el 2026-09-18: se aplico el cambio de configuracion, la lectura de vuelta dijo
+# que la lista ya traia la fase, y desde la aplicacion seguia sin haber camino a ella
+# porque el plugin lee esa lista al registrarse. Quedarse en el primer paso es
+# exactamente el falso verde que costo el diagnostico, asi que el candado exige los dos
+# en la misma seccion: sin el reinicio, este caso falla.
+ini=$(grep -n -E '^## 8\. ' "$DOC" | head -1 | cut -d: -f1)
+fin=$(grep -n -E '^## 9\. ' "$DOC" | head -1 | cut -d: -f1)
+s8=$(sed -n "${ini},${fin}p" "$DOC")
+printf '%s' "$s8" | grep -qF 'plugins.entries.tablero-runbook.config.fases' \
+  || fail "$DOC: la sección 8 no nombra la lista de fases de la configuración, que es el primer paso"
+printf '%s' "$s8" | grep -qF 'replacePaths' \
+  || fail "$DOC: la sección 8 no dice que el arreglo se reemplaza, no se fusiona"
+printf '%s' "$s8" | grep -q -i 'reiniciar el gateway' \
+  || fail "$DOC: la sección 8 nombra el cambio de configuración pero NO el reinicio; sin él la lista nueva no tiene efecto y el dueño no llega a la fase"
+printf '%s' "$s8" | grep -q -i 'excluye la que estás viendo' \
+  || fail "$DOC: la sección 8 no dice dónde comprobar el enlace; la barra excluye la fase que se está viendo y comprobarlo ahí da un falso rojo"
+echo "ok (6): la sección 8 exige los dos pasos de publicar una fase, y dónde comprobarlo"
+
 echo "TODO VERDE: loop-autopilot"
