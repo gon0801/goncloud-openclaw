@@ -93,23 +93,24 @@ Medido: 2026-09-16, revisión de cierre de la Fase 6: en los siete carriles, al 
 
 Medido: 2026-09-16, lectura del script: `-Alcance branch` no es un valor válido y `-Excluir cursor` tampoco; el loop los mandaba y el comando abortaba por validación de parámetro antes de revisar nada.
 - **Cada ronda cambia de revisor**, no solo la ronda 2. Se pide con `-Con <otro>`. Un modelo que ya revisó ese código vuelve a traer su misma lista: repetirlo cuesta una ronda entera y no compra información.
-- **Ronda 2**, cuando la ronda 1 trajo bloqueantes y ya se corrigieron: otro revisor y solo los arreglos.
+- **Rondas siguientes**, cuando la ronda anterior trajo bloqueantes y ya se corrigieron: otro revisor y solo los arreglos de esa ronda.
 
 ```
 /Users/dn/.local/bin/pwsh -NoProfile -File /Users/dn/quality-kit/cross-review.ps1 \
-  -Con <otro> -Excluir <modelo> -Desde <sha que vio la ronda 1>
+  -Con <otro> -Excluir <modelo> -Desde <sha que vio la ronda anterior>
 ```
 
 - **Solo un hallazgo bloqueante abre otra ronda.** Bloqueante es seguridad, datos, una regla innegociable, el comportamiento que pide la fila roto o una prueba que no discrimina, y siempre va con el comando que lo reproduce: sin reproducción no bloquea. El script le pide al revisor marcar cada hallazgo `BLOQUEANTE` o `NO BLOQUEANTE`. Lo que se corrige va como encargo `BRIEF-r<N>.md` al mismo implementador, nunca lo escribe el lead.
-- **Tope: 2 rondas.** Una tercera solo si la ronda 2 halló un bloqueante que creó el arreglo de la ronda 1. Después de eso no hay más rondas.
-- **Un PR nunca se promueve con un bloqueante abierto.** Si se llega al tope con un bloqueante vivo, el carril se detiene con `ATORADO bloqueante abierto tras el tope de rondas`, el progreso lo marca con `atencion_requerida` y decide el operador. El tope corta el gasto, no la calidad: lo que baja el tope es el número de rondas, nunca la exigencia de que no quede un bloqueante.
-- **Lo que no se corrige va a una fila del plan**, con su razón, y se nombra en el `APPROVE` del paso 8. No se vuelve a revisar en este PR.
+- **Se repite mientras una ronda traiga un bloqueante, y para en la primera que no traiga ninguno.** No hay tope fijo: lo que acota el gasto es que solo un bloqueante abre ronda y que cada ronda ve solo los arreglos de la anterior.
+- **Si el mismo bloqueante vuelve en dos rondas seguidas, el arreglo no converge.** El carril se detiene con `ATORADO el mismo bloqueante volvio en dos rondas`, el progreso lo marca con `atencion_requerida` y decide el operador.
+- **Un PR nunca se promueve con un bloqueante abierto.** Un bloqueante nunca va a una fila del plan: se corrige o el carril queda `ATORADO` y decide el operador.
+- **Lo no bloqueante no abre ronda.** Se corrige en la misma si es de una línea; si no, va a una fila del plan con su razón y se nombra en el `APPROVE` del paso 8.
 - **Si el script sale con código 3** (ningún revisor externo disponible), el lead hace la revisión con un subagente propio y lo escribe en el PR como "revisión interna, sin cruzada". Nunca se espera a que la cadena vuelva.
 - **Un revisor que tarda más que el tope del script no es un revisor caído**: se anota y se sigue con el siguiente. El tope se fija por medición, no por número redondo.
 
 Medido: 2026-09-16, PR #48: catorce rondas cruzadas sobre un cambio de documentación, a 100 a 150 mil tokens cada una, **todas con el mismo revisor**. Ese desperdicio lo causaron dos cosas, y ninguna era la falta de un tope: el revisor nunca rotó, y se siguió rondando por hallazgos bajos. Con el criterio de arriba esa corrida para en la segunda o tercera ronda sola. El tope de tres que estuvo escrito aquí hasta el 2026-09-18 trataba el síntoma y, al hacerlo, mandaba a promover PRs con altas y medias vivas: la Fase 9 lo aplicó tal como estaba escrito y declaró "tope de rondas alcanzado" con cuatro medias abiertas. Y el mismo día la cadena entera salió con código 3: kimi y codex sin cuota, zcode, grok y qwen pasados de 300 segundos, cuando zcode necesita 366 en un diff real.
 
-Medido: 2026-09-18, en los repos del dueño: el criterio "sin tope, se sigue mientras aparezcan altas o medias" volvió la revisión una cadena sin fin, porque cada arreglo traía código nuevo que revisar y siempre salía algo. El dueño cambió la regla a bloqueantes con reproducción, segunda ronda solo sobre los arreglos y tope de 2 (quality-kit #12). La lección de la Fase 9 queda en la regla de arriba: el tope ya no permite promover con un bloqueante abierto.
+Medido: 2026-09-18, en los repos del dueño: el criterio "sin tope, se sigue mientras aparezcan altas o medias" volvió la revisión una cadena sin fin, porque cada arreglo traía código nuevo que revisar y siempre salía algo. El dueño cambió la regla a bloqueantes con reproducción, segunda ronda solo sobre los arreglos y tope de 2 (quality-kit #12). Ese mismo día quitó el tope (quality-kit #13): las rondas siguen mientras salgan bloqueantes, cada una solo sobre los arreglos de la anterior, con un seguro por el mismo bloqueante repetido. La lección de la Fase 9 queda en la regla de arriba: nunca se promueve con un bloqueante abierto.
 
 ---
 
