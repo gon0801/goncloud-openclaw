@@ -4,6 +4,11 @@
 # prueba toca la red real ni sesiones del usuario.
 # Uso: bash scripts/tests/test-corrida-preflight.sh
 set -u
+# Esta prueba arma un repo con git: sin esto, bajo el hook de pre-commit las ordenes
+# git escaparian al repo real (exporta GIT_DIR/GIT_INDEX_FILE). Ver run-checks.sh.
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX
+unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_AUTHOR_DATE
+unset GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL GIT_COMMITTER_DATE
 cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
 
@@ -70,17 +75,25 @@ exec $TM_REAL -L $L "\$@"
 STUB
 chmod +x "$T/bin/tmux-shim"
 
-export PATH="$T/bin:$PATH" CORRIDA_STATE="$T/corridas" REPO_DIR="$PWD"
+# Repo de mentira: preflight compara el instalado contra origin/main de REPO_DIR,
+# asi que se arma un repo propio y determinista (el checkout de CI no garantiza
+# que origin/main exista). El caso rojo demuestra que la comparacion discrimina.
+mkdir -p "$T/repo/scripts/mac" "$T/repo/scripts/tests"
+cp scripts/mac/tmux-activity-watch.sh "$T/repo/scripts/mac/"
+cp -r scripts/tests/fixtures "$T/repo/scripts/tests/"
+git -C "$T/repo" init -q
+git -C "$T/repo" add -A
+git -C "$T/repo" -c user.email=t@t -c user.name=t commit -qm semilla
+git -C "$T/repo" update-ref refs/remotes/origin/main HEAD
+git -C "$T/repo" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+
+export PATH="$T/bin:$PATH" CORRIDA_STATE="$T/corridas" REPO_DIR="$T/repo"
 export OPENCLAW_BIN="$T/bin/openclaw" TMUX_BIN="$T/bin/tmux-shim" GH_BIN="$T/bin/gh"
 export WATCH_INSTALADO="$T/wbin/tmux-activity-watch.sh"
 
-# Vigilante de mentira: instalado = el mismo blob de origin que preflight compara
-# (se escribe desde git, no copiando el arbol, porque los hooks pueden retocar el
-# arbol antes de que corra la prueba; el caso rojo demuestra que la comparacion
-# discrimina). Proceso con su nombre para que pgrep lo encuentre.
-DEF="$(git -C "$REPO_DIR" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')"
-[ -z "$DEF" ] && DEF="main"
-git -C "$REPO_DIR" show "origin/$DEF:scripts/mac/tmux-activity-watch.sh" >"$WATCH_INSTALADO" \
+# Vigilante de mentira: instalado = el blob de origin que preflight compara.
+# Proceso con su nombre para que pgrep lo encuentre.
+git -C "$T/repo" show "origin/main:scripts/mac/tmux-activity-watch.sh" >"$WATCH_INSTALADO" \
   || fail "sin blob de referencia del vigilante"
 bash -c "exec -a \"$T/wbin/tmux-activity-watch.sh\" sleep 120" &
 VPID=$!

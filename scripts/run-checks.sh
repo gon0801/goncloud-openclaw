@@ -17,6 +17,11 @@
 #
 # Uso:  bash scripts/run-checks.sh
 set -uo pipefail
+# El hook de pre-commit exporta GIT_DIR/GIT_INDEX_FILE/GIT_WORK_TREE/GIT_PREFIX al
+# correr la bateria: cualquier prueba que arme un repo con git escaparia al repo real
+# (Fase 9: el indice quedo con 16 archivos y origin/main movido). Se limpian aqui para
+# todas las pruebas; cada prueba con git propio tambien se protege sola.
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX
 cd "$(dirname "$0")/.." || exit 1
 
 fallas=0

@@ -4,6 +4,7 @@
 # Inyectables para pruebas: CORRIDA_STATE, OPENCLAW_BIN, TMUX_BIN, GH_BIN, REPO_DIR,
 # WATCH_INSTALADO, CORRIDA_CANDADO_<CLASE> (permitido|negado|unknown). Bash 3.2.
 corrida_preflight() {
+  unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX
   local id="$1"
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "NO APTO sin registro: $id"; return 1; }

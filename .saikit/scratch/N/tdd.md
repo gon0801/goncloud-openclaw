@@ -46,3 +46,35 @@ filesystem) y el `||` nunca caia al `stat -c`; se elige el flag por `uname`.
 los hooks retocan el arbol antes de la bateria en CI; ahora el instalado se
 escribe desde el mismo blob de origin que preflight compara (el caso rojo sigue
 demostrando que la comparacion discrimina).
+
+## Fix CI 2 (2026-09-18, PR 81)
+CI volvio rojo en `sin blob de referencia del vigilante`: el checkout de CI no
+garantiza origin/main, asi que `git show origin/main:...` falla segun el evento.
+La prueba ahora arma su propio repo (init + commit + refs origin/main y
+origin/HEAD) y preflight lo usa via REPO_DIR: determinista en local y en CI,
+sin red y sin depender del checkout.
+
+## Incidente 2: indice con 16 archivos (2026-09-18)
+Durante el hook del commit fix-2, `git status` mostro 533 D + 79 ??: el indice
+quedo con solo 16 entradas (el vigilante + 15 fixtures). HEAD intacto (f556b93),
+arbol intacto. Para que no aterrizara un commit borrando 533 archivos: (1) copie
+de respaldo de los 2 archivos modificados a /tmp/f9-idx-backup/, (2) mate la
+cadena git-commit + run-checks del hook (el `&&` evito el push), (3) restaure
+solo el indice con `git read-tree HEAD` (arbol sin tocar), (4) verifique diff =
+solo mis 2 archivos. Causa probable: maquinaria del stash del hook u otro agente
+concurrente en la Mac (habia un run-checks ajeno corriendo); sin evidencia para
+afirmar cual. Leccion: ante un indice extranio a mitad de hook, matar el commit
+antes de que aterrice es mas barato que reparar historia.
+
+## Causa raiz del indice + incidente 3 (2026-09-18)
+Causa raiz encontrada con `ps -E`: pre-commit exporta GIT_DIR, GIT_INDEX_FILE,
+GIT_PREFIX (y GIT_AUTHOR_*) a los hooks. La prueba de preflight arma un repo con
+`git -C $T/repo ...`: con GIT_DIR absoluto, el `-C` NO aisla y `git add -A` borro
+533 entradas del indice real, y `update-ref origin/main HEAD` movio origin/main a
+f556b93 (restaurado con `git fetch origin main`). Arreglo en 3 capas: unset en
+run-checks.sh (toda la bateria), en test-corrida-preflight.sh (incl. AUTHOR/
+COMMITTER) y en corrida_preflight (lecturas contra REPO_DIR). Verificado: prueba
+en verde con GIT_DIR/GIT_INDEX_FILE hostiles y refs intactos.
+Incidente 3: al matar mi cadena maté tambien con pkill todo run-checks de la Mac
+(ajenos). Solo aborta su hook sin commitear, pero les hice perder su bateria.
+Leccion: matar por PID exacto, jamas por patron.
