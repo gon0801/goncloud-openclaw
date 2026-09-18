@@ -42,7 +42,7 @@ printf 'bueno\tcli-bueno\t--modo-bueno-9\tBARRITA-YOLO\t--\t--\t--\n' >"$T/modos
 printf 'malo\tcli-mala-barra\t--modo-malo-9\tBARRITA-YOLO\t--\t--\t--\n' >>"$T/modos.tsv"
 
 # Stub openclaw: anota, no manda. El destino es unico para probar que no entra al repo.
-# CRON_RM_FAIL=1 hace fallar cron rm (cerrar debe quejarse ruidosamente).
+# CRON_RM_FAIL=1 hace fallar cron rm; CRON_SIN_ID=1 hace que cron add no devuelva id.
 LLAMADAS="$T/llamadas.log"
 DESTINO="DESTINO-UNICO-9X"
 cat >"$T/bin/openclaw" <<STUB
@@ -51,7 +51,7 @@ printf '%s\n' "OPENCLAW \$*" >> "$LLAMADAS"
 case "\$*" in
   *cron\ rm*) [ "\${CRON_RM_FAIL:-0}" = "1" ] && exit 1; printf '{}';;
   *cron\ list*) printf '{"jobs":[{"name":"verif-sync-repos","delivery":{"to":"$DESTINO"}}]}';;
-  *cron\ add*) printf '{"id":"cron-1"}';;
+  *cron\ add*) if [ "\${CRON_SIN_ID:-0}" = "1" ]; then printf '{}'; else printf '{"id":"cron-1"}'; fi;;
   *message\ send*) printf '{"messageId":"m1"}';;
 esac
 exit 0
@@ -59,11 +59,15 @@ STUB
 chmod +x "$T/bin/openclaw"
 
 # Shim tmux: servidor propio + bitacora de llamadas; con SWALLOW=1 traga los primeros
-# SWALLOW_N Enter de la sesion SWALLOW_SES (por defecto, uno).
+# SWALLOW_N Enter de la sesion SWALLOW_SES (por defecto, uno); con SETENV_FAIL=ses
+# falla el marcado de esa sesion.
 TMUX_LOG="$T/tmux.log"
 cat >"$T/bin/tmux-shim" <<STUB
 #!/bin/sh
 printf '%s\n' "TMUX \$*" >> "$TMUX_LOG"
+if [ -n "\${SETENV_FAIL:-}" ] && [ "\$*" = "set-environment -t =\${SETENV_FAIL} OPENCLAW_WATCH 1" ]; then
+  exit 1
+fi
 if [ "\${SWALLOW:-0}" != "0" ]; then
   case "\$*" in
     "send-keys -t =\${SWALLOW_SES:-}: Enter")
@@ -149,7 +153,7 @@ unset SWALLOW SWALLOW_SES
 export SWALLOW=1 SWALLOW_N=2 SWALLOW_SES=ses-cong
 rm -f "$T/tragado"
 bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nombre ses-cong --encargo "$T/encargo.txt" >/dev/null 2>&1 \
-  && fail "con la caja sin vaciarse nunca debio registrarse"
+  && fail "con la caja sin vaciarse, lanzar-sesion registro la sesion igual"
 "$TM_REAL" -L "$L" has-session -t "=ses-cong" 2>/dev/null && fail "la sesion congelada quedo viva"
 grep -q '"nombre": *"ses-cong"' "$T/corridas/t1/registro.json" && fail "la sesion congelada quedo registrada"
 unset SWALLOW SWALLOW_N SWALLOW_SES
@@ -204,6 +208,40 @@ wait "$p2"; r2=$?
 [ "$r1" -eq 0 ] && [ "$r2" -eq 0 ] || fail "un lanzamiento paralelo fallo (r1=$r1 r2=$r2)"
 grep -q '"nombre": *"ses-par-a"' "$T/corridas/t1/registro.json" || fail "el registro perdio a ses-par-a"
 grep -q '"nombre": *"ses-par-b"' "$T/corridas/t1/registro.json" || fail "el registro perdio a ses-par-b"
+
+# (9c) nombre de sesion invalido: se rechaza antes de crear nada.
+bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nombre "con espacio" --encargo "$T/encargo.txt" >/dev/null 2>&1 \
+  && fail "un nombre con espacio debio rechazarse"
+bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nombre "mai:l" >/dev/null 2>&1 \
+  && fail "un nombre con : debio rechazarse"
+"$TM_REAL" -L "$L" list-sessions -F '#{session_name}' 2>/dev/null | grep -q "mai:l" && fail "la sesion de nombre invalido se creo"
+
+# (9d) el marcado que falla no deja sesion viva ni sin marca.
+SETENV_FAIL=ses-marka bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nombre ses-marka >/dev/null 2>&1 \
+  && fail "con el marcado fallando debio fallar el lanzamiento"
+"$TM_REAL" -L "$L" has-session -t "=ses-marka" 2>/dev/null && fail "la sesion sin marca quedo viva"
+grep -q '"nombre": *"ses-marka"' "$T/corridas/t1/registro.json" && fail "la sesion sin marca quedo registrada"
+unset SETENV_FAIL
+
+# (9e) cron add sin id usable: abrir se niega ruidosamente y no escribe registro.
+CRON_SIN_ID=1 bash "$CORR" abrir t-sinid --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 \
+  && fail "cron add sin id debio reventar abrir"
+[ -f "$T/corridas/t-sinid/registro.json" ] && fail "abrir escribio registro sin id de cron"
+out="$(CRON_SIN_ID=1 bash "$CORR" abrir t-sinid --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"
+printf '%s' "$out" | grep -q "id" || fail "el fallo del cron sin id no dice nada"
+
+# (9f) lock del registro: fresco espera y falla; viejo se rompe y se sigue.
+. scripts/mac/corrida/lib.sh
+mkdir "$T/corridas/t1/.lock"
+registro_actualizar "$T/corridas/t1/registro.json" "d['timebox_horas']=6" >/dev/null 2>&1 \
+  && fail "con lock fresco debio esperar y fallar"
+rmdir "$T/corridas/t1/.lock"
+mkdir "$T/corridas/t1/.lock"
+touch -t 202001010000 "$T/corridas/t1/.lock"
+registro_actualizar "$T/corridas/t1/registro.json" "d['timebox_horas']=6" >"$T/lock.out" 2>&1; rc=$?
+[ "$rc" -eq 0 ] || fail "con lock viejo debio recuperarse y escribir (rc=$rc)"
+grep -q "lock" "$T/lock.out" || fail "romper el lock viejo no avisa"
+[ -d "$T/corridas/t1/.lock" ] && fail "el lock viejo quedo puesto"
 
 # (7) cerrar: todas las sesiones del registro desmarcadas, cron quitado por su id,
 # CERRADA enviada, estado cerrada.

@@ -29,13 +29,27 @@ print('' if v is None else (str(v).lower() if isinstance(v,bool) else v))
 
 # Actualizacion del registro con lock por directorio y renombre atomico: dos
 # lanzar-sesion en paralelo no se pisan y un corte a mitad no deja JSON truncado.
+# Un lock de mas de 60 s es de un proceso muerto: se rompe con aviso y se sigue.
 registro_actualizar() { # $1 registro, $2 lineas python que mutan d (env visible); 0 = escrito
   local reg="$1" dir i=0
   dir="$(dirname "$reg")"
+  if [ -d "$dir/.lock" ] && [ -n "$(find "$dir/.lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then
+    rmdir "$dir/.lock" 2>/dev/null \
+      && echo "registro_actualizar: rompio un lock de mas de 60 s en $dir" >&2
+  fi
   while ! mkdir "$dir/.lock" 2>/dev/null; do
     i=$((i+1)); [ "$i" -gt 100 ] && { echo "registro_actualizar: lock del registro no cede" >&2; return 1; }
     sleep 0.1
   done
+  # Si quien escribe muere dentro de la seccion critica, un EXIT sin dueno saca el
+  # lock. Si el llamador ya tiene su propio trap (p. ej. el de preflight), no se le
+  # pisa: ese caso lo cubre el rompimiento de locks viejos. Nada de guardar y
+  # restaurar traps: restaurar dentro de una subshell de captura dispara el trap
+  # ajeno al cerrar ella (medido: borro el dir de una prueba a mitad de corrida).
+  if [ -z "$(trap -p EXIT)" ]; then
+    CORR_LOCK_ACT="$dir/.lock"
+    trap 'rmdir "$CORR_LOCK_ACT" 2>/dev/null' EXIT
+  fi
   CORR_REG="$reg" CORR_PY="$2" python3 -c "
 import json,os
 r=os.environ['CORR_REG']

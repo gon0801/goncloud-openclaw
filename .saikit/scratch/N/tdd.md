@@ -171,3 +171,21 @@ Bug propio del pase: inverti el exit del awk de marcadores en lineas 1-3 (exit 0
 limpio); lo cazo el primer verde. corrida_mensaje gana el argumento avance (tercero)
 y sus llamadores (cerrar, preflight, pruebas) se actualizan.
 Verde: las tres pruebas en TODO VERDE.
+
+## BRIEF-r3 (2026-09-18): batch 9.2 — T + U1-U5 (kimi/a22804f#1-#6)
+Rojos con el defecto puesto: `FAIL: un nombre con espacio debio rechazarse` (U2,
+cabeza de los casos; U1 setenv, U3 cron sin id y T lock-viejo se agregaron en el
+mismo pase y mutan-verifica su caso en el verde). El caso de lock fresco ya pasaba
+(comportamiento existente); el de lock viejo, rojo por construccion (el spin de 10 s
+terminaba en fallo).
+Dos bugs propios del pase, ambos cazados por la prueba:
+(1) `find -mmin +1` como condicion por RC: find SIEMPRE sale 0 (match o no); la
+condicion ahora mira la salida. En mi shell interactivo ademas `find` es una
+funcion que envuelve bfs — enganoso al depurar; la prueba corre bash plano.
+(2) Incidente mayor: guardar y restaurar el trap de EXIT con eval, dentro de la
+captura `out=$(registro_actualizar ...)`, RE-ARMO el trap del test dentro de la
+subshell y al cerrar esta ejecuto `kill-server; rm -rf $T` a mitad de la prueba
+("sin registro: t1", trace completo). Rediseno: registro_actualizar solo arma su
+rmdir si NO hay trap dueño; si lo hay (preflight), no se pisa y el caso lo cubre el
+rompimiento de locks viejos. La prueba captura a archivo, no con $().
+Verde: las tres pruebas en TODO VERDE (tambien /bin/bash 3.2).

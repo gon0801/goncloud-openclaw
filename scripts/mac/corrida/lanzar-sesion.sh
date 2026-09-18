@@ -14,6 +14,8 @@ corrida_lanzar_sesion() {
       *) echo "lanzar-sesion: flag desconocido $1" >&2; return 2;;
     esac
   done
+  case "$nombre" in ''|*[!A-Za-z0-9_-]*)
+    echo "lanzar-sesion: nombre invalido (solo letras, numeros, - y _): $nombre" >&2; return 2;; esac
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
   local estado; estado="$(json_campo "$reg" estado)"
@@ -35,7 +37,8 @@ corrida_lanzar_sesion() {
   "$TMUX_BIN" new-session -d -s "$nombre" -x 200 -y 50 -c "$dir" "$embebido $bin $flag" >&2 || return 1
   "$TMUX_BIN" has-session -t "=$nombre" 2>/dev/null || { echo "la sesion murio al arrancar" >&2; return 1; }
   # La marca ocurre ANTES del primer send-keys (el orden lo vigila la prueba con el log del shim).
-  "$TMUX_BIN" set-environment -t "=$nombre" OPENCLAW_WATCH 1 || return 1
+  "$TMUX_BIN" set-environment -t "=$nombre" OPENCLAW_WATCH 1 \
+    || { echo "no se pudo marcar la sesion" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
   # Todo fallo a partir de aqui mata la sesion: cerrar solo desmarca lo que registro.
   local pantalla espera=0
   pantalla=""

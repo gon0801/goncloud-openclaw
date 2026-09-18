@@ -51,6 +51,10 @@ try:
 except Exception:
   d={}
 print(d.get('id',''))" 2>/dev/null)"
+  [ -n "$cid" ] \
+    || { echo "abrir: cron add no devolvio un id usable; se quita el cron por nombre" >&2
+         "$OPENCLAW_BIN" cron rm "corrida-vigia-$id" >/dev/null 2>&1
+         return 1; }
   CORR_ID="$id" CORR_RUNBOOK="$runbook" CORR_VIGIA="$vigia" CORR_SIM="$sim" CORR_CANAL="$canal_de" \
   CORR_DEST="$dest" CORR_MODOS="$cli_modos" CORR_CRON="$cid" CORR_REG="$dir/registro.json" python3 -c "
 import json,os
@@ -59,11 +63,13 @@ d={'schema':'corrida.v1','id':E['CORR_ID'],'runbook':E['CORR_RUNBOOK'],'vigia':E
 'simulacro':E['CORR_SIM']=='true','canal':{'cron':E['CORR_CANAL'],'destino':E['CORR_DEST']},
 'cli_modos':E['CORR_MODOS'],'cron_vigia_id':E['CORR_CRON'],
 'inicio':'$(date +%Y-%m-%dT%H:%M:%S%z)','timebox_horas':6,'sesiones':[],'preaprobaciones':[],'estado':'abierta'}
-open(E['CORR_REG'],'w').write(json.dumps(d,indent=1)+chr(10))
+t=E['CORR_REG']+'.tmp'
+open(t,'w').write(json.dumps(d,indent=1)+chr(10))
+os.chmod(t,0o600)
+os.rename(t,E['CORR_REG'])
 " || { echo "abrir: no se pudo escribir el registro; se quita el cron recien creado" >&2
        [ -n "$cid" ] && "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1
        return 1; }
-  chmod 600 "$dir/registro.json"
   # Self-check: el registro que sale de abrir pasa el mismo validador de corrida.v1.
   validar_registro "$dir/registro.json" >/dev/null 2>&1 \
     || { echo "abrir: el registro escrito no pasa su propio contrato; se quita el cron" >&2
