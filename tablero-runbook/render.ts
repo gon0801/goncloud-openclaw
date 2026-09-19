@@ -261,9 +261,6 @@ export function renderTablero(
     .join("");
   const nav = navFases ? `<nav class="fases">Fases: ${navFases}</nav>` : "";
 
-  const planTxt = doc.plan == null ? "plan: no declarado" : "plan: declarado";
-  const ghProv = github === undefined ? "GitHub: sin verificar. " : "";
-
   return `<!doctype html>
 <html lang="es">
 <head>
@@ -290,7 +287,7 @@ ${notas ? `<ul class="notas">${notas}</ul>` : ""}
 ${eventos || "<li>—</li>"}
 </ul>
 ${nav}
-<footer>La fuente de verdad es el runbook (${t(doc.runbook, 200)}); este tablero es una copia que solo pinta lo que el lead escribió. Lo rotulado "GitHub" viene del cruce vivo; lo demás lo reportó el lead. ${ghProv}${planTxt}.</footer>
+<footer>La fuente de verdad es el runbook (${t(doc.runbook, 200)}); este tablero es una copia que solo pinta lo que el lead escribió. Lo rotulado "GitHub" viene del cruce vivo; lo demás lo reportó el lead.</footer>
 </main>
 </body>
 </html>
