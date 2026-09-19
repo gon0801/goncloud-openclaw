@@ -379,3 +379,26 @@ Verde: las tres pruebas, tambien /bin/bash 3.2.
   exige el mensaje "sin valor". Guarda de aridad en abrir (4 flags) y
   lanzar-sesion (2 flags).
 Verde: las tres pruebas, tambien /bin/bash 3.2.
+
+## BRIEF-r12 (2026-09-18): la carrera lanzar/cerrar, reproducida y cerrada
+Rojo con el repro del reviewer hecho determinista (caso 9h): cli-tarde tarda su
+barra 2.5 s; cerrar entra a los 0.8 s (en pleno sondeo) y cierra; lanzar termina y
+anota. Hoy: `FAIL: lanzar sobre una corrida que se cerro debio negarse` (rc=0,
+ses-tarde viva, marcada y anotada en registro cerrado — tal cual el repro).
+Arreglo en dos frentes:
+- cerrar toma el lock del registro ANTES de listar sesiones y lo mantiene hasta
+  el final (estado, aviso y escritura dentro); el estado-cerrada se lee bajo lock.
+- lanzar-sesion re-verifica estado bajo lock justo antes de anotar: corrida ya no
+  abierta => desmarca, mata la sesion y error claro ("se cerro mientras se
+  lanzaba").
+Mutaciones exigidas, ambas muertas: (1) sin la re-verificacion en lanzar →
+`FAIL: lanzar sobre una corrida que se cerro debio negarse` (el propio repro);
+(2) listado movido antes del lock en cerrar → `FAIL: cerrar lista sesiones antes
+de tomar el lock` (ancla de orden en la prueba: la ventana de esa mutacion, ya
+con lanzar corregido, es de microsegundos y no es deterministicamente explotable
+desde fuera — el ancla la vela; misma tecnica que los anclajes de unset de git).
+Incidente propio del pase: para deshacer la mutacion 2 use `git checkout --` sobre
+cerrar.sh y ME LLEVO EL FIX SIN COMMITEAR (por eso los respaldos: siempre cp a
+/tmp antes de mutar, nunca checkout con trabajo sin commitear). Reescrito y
+verificado en verde.
+Verde: las tres pruebas, tambien /bin/bash 3.2.

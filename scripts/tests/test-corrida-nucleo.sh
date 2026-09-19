@@ -34,12 +34,23 @@ cat >"$T/bin/cli-mala-barra" <<'CLI'
 echo "OTRA-COSA"
 cat >> "$RECIBIDAS"
 CLI
-chmod +x "$T/bin"/cli-bueno "$T/bin/cli-mala-barra"
+# cli-tarde tarda su barra: abre la ventana donde la carrera lanzar/cerrar vive.
+cat >"$T/bin/cli-tarde" <<'CLI'
+#!/bin/sh
+sleep 2.5
+echo "BAR-TARDE-9"
+while IFS= read -r line; do
+  printf 'RECIBIDO: %s\n' "$line"
+  printf '%s\n' "$line" >> "$RECIBIDAS"
+done
+CLI
+chmod +x "$T/bin"/cli-bueno "$T/bin"/cli-mala-barra "$T/bin"/cli-tarde
 export RECIBIDAS="$T/recibidas.txt"
 
 # Tabla de modos propia de la prueba (el registro manda, no el entorno).
 printf 'bueno\tcli-bueno\t--modo-bueno-9\tBARRITA-YOLO\t--\t--\t--\n' >"$T/modos.tsv"
 printf 'malo\tcli-mala-barra\t--modo-malo-9\tBARRITA-YOLO\t--\t--\t--\n' >>"$T/modos.tsv"
+printf 'tarde\tcli-tarde\t--modo-tarde-9\tBAR-TARDE-9\t--\t--\t--\n' >>"$T/modos.tsv"
 
 # Stub openclaw: anota, no manda. El destino es unico para probar que no entra al repo.
 # CRON_RM_FAIL=1 hace fallar cron rm; CRON_SIN_ID=1 hace que cron add no devuelva id
@@ -335,6 +346,29 @@ t="\$(trap -p EXIT)"
 Z2
 desarmado="$(bash "$T/z2.sh")"
 [ "$desarmado" = "DESARMADO" ] || fail "el trap del lock quedo armado tras soltarlo"
+
+# (9h) repro del reviewer: la carrera lanzar/cerrar. Con cerrar entrando mientras
+# lanzar sondea la barra del CLI lento, NUNCA queda sesion viva y marcada en un
+# registro cerrado: o lanzar se niega, o la sesion entra y cerrar la desmarca.
+bash "$CORR" abrir t-tarde --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir t-tarde fallo"
+bash "$CORR" lanzar-sesion t-tarde carril tarde "$T/ses" --nombre ses-tarde --encargo "$T/encargo.txt" >"$T/lanzar-tarde.out" 2>&1 &
+plan=$!
+sleep 0.8
+bash "$CORR" cerrar t-tarde >/dev/null 2>&1 || fail "cerrar t-tarde fallo"
+wait "$plan"; rc_l=$?
+[ "$rc_l" -ne 0 ] || fail "lanzar sobre una corrida que se cerro debio negarse"
+grep -q "se cerro mientras se lanzaba" "$T/lanzar-tarde.out" || fail "la negativa no explica la carrera"
+"$TM_REAL" -L "$L" has-session -t "=ses-tarde" 2>/dev/null && fail "ses-tarde quedo viva en corrida cerrada"
+grep -q '"nombre": *"ses-tarde"' "$T/corridas/t-tarde/registro.json" && fail "ses-tarde quedo anotada en corrida cerrada"
+grep -q '"estado": *"cerrada"' "$T/corridas/t-tarde/registro.json" || fail "t-tarde no quedo cerrada"
+
+# ancla de orden: cerrar toma el lock ANTES de listar sesiones (reordenarlo — la
+# mutacion que deja la carrera abierta por el lado de cerrar — pone esto en rojo).
+linelock=$(grep -n 'registro_lock "$reg"' scripts/mac/corrida/cerrar.sh | head -1 | cut -d: -f1)
+linelista=$(grep -n "get('sesiones'" scripts/mac/corrida/cerrar.sh | head -1 | cut -d: -f1)
+[ -n "$linelock" ] && [ -n "$linelista" ] && [ "$linelock" -lt "$linelista" ] \
+  || fail "cerrar lista sesiones antes de tomar el lock"
 
 # (7) cerrar: todas las sesiones del registro desmarcadas, cron quitado por su id,
 # CERRADA enviada, estado cerrada.

@@ -1,15 +1,27 @@
 #!/bin/bash
 # corrida/cerrar.sh (9.2). cerrar <id>: desmarca, quita el cron por su id, manda CERRADA.
-# Idempotente y honesto: sobre una corrida cerrada es no-op con confirmacion; el lock
-# se toma ANTES del aviso (nada sale a medias sin decirlo); un aviso ya enviado no se
-# reenvia (se mira mensajes.jsonl); y cada fallo nombra la falla y lo hecho/lo falta.
+# Idempotente y honesto, y serializado contra lanzar-sesion: el lock se toma ANTES
+# de listar las sesiones y se suelta al final — una sesion que entra, desmarca; una
+# que llega tarde, lanzar la retira (re-verifica bajo lock antes de anotar).
 corrida_cerrar() {
   local id="$1"
   corrida_id_valido "$id" || { echo "cerrar: id invalido: $id" >&2; return 2; }
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
-  # Ya cerrada: segunda llamada = no-op con confirmacion (nada de reenviar).
+  if ! registro_lock "$reg"; then
+    echo "cerrar: lock del registro de $id no cede; no se ha hecho nada (ni desmarcado ni cron) y el aviso NO salio — reintentar cierra" >&2
+    return 1
+  fi
+  local armado=0
+  if [ -z "$(trap -p EXIT)" ]; then
+    CORR_LOCK_ACT="$(dirname "$reg")/.lock"
+    trap 'rmdir "$CORR_LOCK_ACT" 2>/dev/null' EXIT
+    armado=1
+  fi
+  # Ya cerrada (leido bajo lock): segunda llamada = no-op con confirmacion.
   if [ "$(json_campo "$reg" estado)" = "cerrada" ]; then
+    [ "$armado" -eq 1 ] && trap - EXIT
+    registro_unlock "$reg"
     echo "cerrada $id"
     return 0
   fi
@@ -28,24 +40,17 @@ print(' '.join(x.get('nombre','') for x in json.load(open(os.environ['CORR_REG']
   if ! "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1; then
     local quedan; quedan="$(cron_jobs_de "corrida-vigia-$id")"
     if [ "$quedan" = "ILEGIBLE" ]; then
+      [ "$armado" -eq 1 ] && trap - EXIT
+      registro_unlock "$reg"
       echo "cerrar: no se pudo verificar si el cron de $id sigue puesto (lista ilegible); las sesiones ya estan desmarcadas y el registro queda abierto — revisar el cron a mano y reintentar" >&2
       return 1
     fi
     if [ "$quedan" != "NINGUNO" ]; then
+      [ "$armado" -eq 1 ] && trap - EXIT
+      registro_unlock "$reg"
       echo "cerrar: no se quito el cron de la corrida $id (quedan: $quedan); las sesiones ya estan desmarcadas y el registro queda abierto — reintentar cierra" >&2
       return 1
     fi
-  fi
-  # Lock ANTES del aviso: si no cede, nada salio todavia y el reintento tiene camino.
-  if ! registro_lock "$reg"; then
-    echo "cerrar: lock del registro de $id no cede; las sesiones ya estan desmarcadas y el cron ya esta quitado, el aviso NO salio y el registro queda abierto — reintentar cierra" >&2
-    return 1
-  fi
-  local armado=0
-  if [ -z "$(trap -p EXIT)" ]; then
-    CORR_LOCK_ACT="$(dirname "$reg")/.lock"
-    trap 'rmdir "$CORR_LOCK_ACT" 2>/dev/null' EXIT
-    armado=1
   fi
   # Un aviso de cierre YA entregado (intento anterior que fallo al escribir) no se
   # reenvia: mensajes.jsonl es la memoria de lo que David ya recibio.
