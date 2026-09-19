@@ -16,6 +16,8 @@ corrida_lanzar_sesion() {
   done
   case "$nombre" in ''|*[!A-Za-z0-9_-]*)
     echo "lanzar-sesion: nombre invalido (solo letras, numeros, - y _): $nombre" >&2; return 2;; esac
+  case "$rol" in lead|carril) ;; *)
+    echo "lanzar-sesion: rol fuera del conjunto (lead o carril): $rol" >&2; return 2;; esac
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
   local estado; estado="$(json_campo "$reg" estado)"

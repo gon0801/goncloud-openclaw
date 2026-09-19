@@ -55,9 +55,9 @@ tmp,fx=sys.argv[1],sys.argv[2]
 rojo=['rm -rf','rm -fr','rm -Rf','rm -R -f','rm -r -f','rm --recursive --force',
       'rm -vvvrf','`rm -rf`','"rm -rf"','rm -rf,','(rm -r -f)','rm --recursive --force,',
       'rm -r dir','borrado con rm ' + 'relleno inofensivo '*10 + 'y al final -r -f del area',
-      'RM -RF','Rm -rf']
+      'RM -RF','Rm -rf','rm --r build','rm --rec -f build','rm --forc -r']
 limpio=['atencion en emergencia','respaldo en dropbox','quitar con rm -f y -restar horas',
-        'solo restar horas','la fecha 18/09 quedo','esto y/o aquello']
+        'solo restar horas','la fecha 18/09 quedo','esto y/o aquello','rm --resto cosas']
 d0=json.load(open(fx+'/registro-valido.json'))
 for lado,patrones in (('rojo',rojo),('limpio',limpio)):
   for i,p in enumerate(patrones):

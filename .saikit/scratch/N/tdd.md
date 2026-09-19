@@ -341,3 +341,21 @@ Extra por DB: si el aviso salio pero la escritura del registro fallo, el error
 lo dice y el reintento NO reenvia (mensajes.jsonl es la memoria de lo que David
 ya recibio: CERRADA ok:true → no se remanda).
 Verde: las tres pruebas, tambien /bin/bash 3.2.
+
+## BRIEF-r10 (2026-09-18): bloqueantes del reviewer sobre 2fb5aa2 — EA, EB, EC
+- EA: rojo `FAIL: matriz: debia ser rojo: matriz-rojo-16.json` (rm --r build; el
+  getopt de GNU abrevia opciones largas y el detector solo miraba --recursive
+  exacto). Ahora una opcion larga cuenta si es prefijo de "recursive" (--r, --rec,
+  ...); "--dir"/"--resto" no son prefijo y siguen limpios. Matriz: +3 rojo
+  (--r, --rec -f, --forc -r) y +1 limpio (--resto).
+- EB: una mutacion por cambio, cada una muere en SU caso:
+  (1) sin la salida temprana de ya-cerrada → `FAIL: la segunda llamada toco el
+      cron` (el caso (7b3) ahora exige cero reenvios Y cero toques de cron — el
+      ya-avisado solo enmascara lo primero);
+  (2) sin la lectura de mensajes.jsonl → `FAIL: el reintento reenvio el aviso
+      (n=2)` (caso nuevo 7b6: aviso enviado + registro_escribir fallando por
+      inyeccion de registro.json.tmp como directorio → mensaje honesto "ya salio
+      pero", reintento cierra sin reenviar, exactamente un CERRADA en total).
+- EC: rojo `FAIL: un rol fuera del conjunto debio rechazarse`; lanzar-sesion
+  acepta solo lead|carril (rc 2 antes de crear nada).
+Verde: las tres pruebas, tambien /bin/bash 3.2.

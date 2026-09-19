@@ -179,15 +179,18 @@ else:
 # "dropbox" (que contienen "merge"/"drop" como substring) no. El rm recursivo va
 # aparte y mira el resto COMPLETO del patron desde el "rm": los flags se extraen
 # con findall y lookbehind (sobreviven comillas invertidas, comillas, comas y
-# parentesis); los largos cuentan solo por nombre exacto ("--recursive"), los
-# cortos solo si TODAS sus letras son opciones de rm (d f i p r v w x) — la regla
-# exige recursividad: una -f sola jamas cuenta.
+# parentesis); una opcion larga cuenta si es "--recursive" o un PREFIJO suyo (el
+# getopt de GNU abrevia: --r, --rec...; "--dir"/"--resto" no son prefijo y no
+# cuentan); los cortos solo si TODAS sus letras son opciones de rm (d f i p r v w
+# x) — la regla exige recursividad: una -f sola jamas cuenta.
 def _rm_recursivo(pat):
   m=re.search(r'\brm\b', pat)
   if not m: return False
   for t in re.findall(r'(?<![\w-])-{1,2}[a-z]+', pat[m.end():]):
-    if t=='--recursive': return True
-    if t.startswith('--'): continue
+    if t.startswith('--'):
+      c=t[2:]
+      if c and 'recursive'.startswith(c): return True
+      continue
     if set(t[1:]) <= set('dfiprvwx') and 'r' in t: return True
   return False
 DURA=[r'\bdrop\b', r'\bborr\w*\s+recursiv\w*',
