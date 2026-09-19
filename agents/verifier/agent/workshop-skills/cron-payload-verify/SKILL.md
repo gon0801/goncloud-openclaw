@@ -1,11 +1,11 @@
 ---
 name: cron-payload-verify
-description: Verify cron/automation job messages were applied. Prove live payload wiring separately from source files; last-run chat is not the current message.
+description: Verify cron or automation job messages were applied. Prove the live job-store payload separately from source files; the last-run chat preview is not the current message.
 ---
 
 # Verify cron job payloads
 
-Two claims, two artifacts. Source-file checklist ≠ job-store payload. Finish only when each claimed job has a live payload artifact, or name that job inconcluso.
+Two claims, two artifacts. A source-file checklist ≠ the job-store payload. Finish only when each claimed job has a live payload artifact, or name that job inconcluso.
 
 ## 1. Content vs wiring
 
@@ -35,4 +35,4 @@ Done when: live message text is in hand for every job you mark wired, or those w
 
 ## 3. Report
 
-Per job: content checklist, then wiring (live JSON / recovered edit log / inconcluso). State when the payload has not been executed yet (last cron session still shows the previous run).
+Per job: content checklist, then wiring (live JSON / recovered edit log / inconcluso). State when the payload has not been executed yet (the last cron session still shows the previous run).

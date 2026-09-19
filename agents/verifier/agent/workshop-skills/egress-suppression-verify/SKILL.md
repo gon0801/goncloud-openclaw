@@ -1,6 +1,6 @@
 ---
 name: egress-suppression-verify
-description: Alert/email/webhook sending disabled? Prove zero egress on every path — config present but fake, transport poisoned, attempts captured = 0.
+description: Alert, email, webhook or push sending disabled? Prove zero egress on every path — config present but fake, transport poisoned, attempts captured = 0.
 ---
 
 # Prove a removed outbound effect is really gone
@@ -39,7 +39,7 @@ Done when: one line per sender: return value + captured-attempts count.
 
 - Captured attempts = **0** for every sender, with the config present. One attempt = FAIL: paste the sender and the capture.
 - Every leftover body (`_LEGACY_*`) has zero reachable callers.
-- Write the result to the blast artifact your dispatch names (repo convention: `.saikit/findings/blast-<task>.json`), `nivel`: 4, with the probe command and the per-sender output. **Redact before writing**: flatten CR/LF, truncate, and keep the fake env values out of the artifact.
+- Write the result to the blast artifact your dispatch names (repo convention: `.saikit/findings/blast-<task>.json`), `nivel`: 4, with the probe command and the per-sender output. **Redact before writing** — flatten CR/LF, truncate. The fake env values are safe only if fake: real credentials must never reach env vars or the artifact.
 - This is nivel 4: the real module, exercised on purpose. Nivel 5 (the running app) needs the repo's own e2e — name which level you reached, and never let a nivel-4 proof stand in for it unstated.
 - If a sender cannot be called in isolation (needs live engine/DB state), call the nearest reachable wrapper and say which layer you proved; mark the rest **inconcluso**. Inconcluso ≠ PASS.
 
