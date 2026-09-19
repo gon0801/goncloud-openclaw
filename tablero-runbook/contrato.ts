@@ -1,5 +1,3 @@
-/** Modelo tipado y validador del progreso. Sin disco ni red. */
-
 export const SCHEMA_LITERAL = "runbook-progress.v1";
 
 /** `omitido` existe para runbooks que CANCELAN un carril; Fase 6 no lo usó. */
@@ -35,9 +33,8 @@ export const COLA_ESTADOS = [
 ] as const;
 export const VERIFICADO_VALORES = ["pendiente", "ok", "fallo", "unknown"] as const;
 
-/** Validar ES sanitizar: forma cerrada de clave de disco/URL; ahí se cierra el path traversal. */
+/** Validar ES sanitizar. Clave de disco y de URL. */
 export const FASE_RE = /^[0-9]{1,3}(\.[0-9]{1,3})?$/;
-/** Propia, no `FASE_RE`: admite `[a-z0-9-]`. Validar ES sanitizar. */
 export const CORRIDA_RE = /^[a-z0-9][a-z0-9-]{0,40}$/;
 /** `owner/repo`; nunca empieza con `-` (spec, valores cerrados). */
 export const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,38}\/[A-Za-z0-9._-]{1,100}$/;

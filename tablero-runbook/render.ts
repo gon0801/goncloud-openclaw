@@ -1,4 +1,3 @@
-/** Emisión HTML del tablero. Una sola `esc()` en el punto de interpolación. */
 import { SIGUIENTE_PASO_MAX, TEXTO_MAX, type Derivado, type ProgresoDoc, validarFase } from "./contrato.ts";
 
 const ESC_MAP: Record<string, string> = {

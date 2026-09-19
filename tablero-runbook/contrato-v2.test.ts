@@ -1,9 +1,3 @@
-/**
- * contrato-v2.test.ts — campos presentes de runbook-progress.v2 sobre schema v1.
- *
- * El candado de schema v1 vive en progress.test.ts y no se toca. Aquí se clavan
- * los campos nuevos cuando vienen, y que un documento v1 sin ellos sigue pasando.
- */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
