@@ -81,6 +81,29 @@ PANEL_DIR="$pan" WATCH_STATE_DIR="$wat" bash "$CORR" estado "$id" >"$T/mc.out" 2
   || fail "MC: estado fallo sin approval_since"
 sed -n '1p' "$T/mc.out" | grep -q "NECESITO TU RESPUESTA" || fail "MC: sin approval_since no escalo"
 grep -q "mucho rato" "$T/mc.out" || fail "MC: sin approval_since miente o inventa el tiempo"
+# NB: la pausa de la ventana se aplica igual con el desde desconocido, y al no
+# saberse cuando empezo, la ventana queda completa (menos "y 0 minutos": NE).
+grep -q "(en pausa por la espera)" "$T/mc.out" || fail "NB: un dialogo sin approval_since no pausa la ventana"
+grep -q "quedan 6 horas de ventana" "$T/mc.out" || fail "NB: pausa desde arranque no da la ventana completa"
+grep -q "y 0 minutos" "$T/mc.out" && fail "NE: la ventana justa sigue trayendo 'y 0 minutos'"
+
+# (1d) NE: bordes de la ventana en palabras: menos de un minuto, y hora justa.
+mkdir -p "$T/pan-ne1" "$T/wat-ne1" "$T/pan-ne2" "$T/wat-ne2"
+for n in 1 2; do
+  cp "$FX"/avanza/paneles/*.txt "$T/pan-ne$n/"
+  for f in "$FX"/avanza/watch/*.state; do cp "$f" "$T/wat-ne$n/$(basename "$f")"; done
+done
+sed -i.bak "s/^since=.*/since=$((1789840770 - 120))/" "$T"/wat-ne1/*.state && rm -f "$T"/wat-ne1/*.state.bak
+CORR_AHORA=1789840770 PANEL_DIR="$T/pan-ne1" WATCH_STATE_DIR="$T/wat-ne1" \
+  bash "$CORR" estado m-avanza >"$T/ne1.out" 2>/dev/null || fail "NE: estado fallo (menos de un minuto)"
+grep -q "queda menos de un minuto de ventana de trabajo" "$T/ne1.out" \
+  || fail "NE: un resto menor a un minuto no se dice en palabras"
+sed -i.bak "s/^since=.*/since=$((1789837200 - 120))/" "$T"/wat-ne2/*.state && rm -f "$T"/wat-ne2/*.state.bak
+CORR_AHORA=1789837200 PANEL_DIR="$T/pan-ne2" WATCH_STATE_DIR="$T/wat-ne2" \
+  bash "$CORR" estado m-avanza >"$T/ne2.out" 2>/dev/null || fail "NE: estado fallo (hora justa)"
+grep -q "queda 1 hora de ventana de trabajo" "$T/ne2.out" \
+  || fail "NE: una hora justa no sale como singular limpio"
+grep -q "y 0 minutos" "$T/ne2.out" && fail "NE: la hora justa trae 'y 0 minutos'"
 
 # (1c) MB: singulares y "menos de un minuto". Directorios propios: estos casos
 # mutan watch/paneles y no pueden pisar los de los escenarios byte a byte.

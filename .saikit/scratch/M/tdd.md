@@ -139,3 +139,52 @@ failure en el conjunto rojo, y registro escrito aunque el envio cayera.
   2 de 3 verdes, fallando 2e una vez y 2f otra; carrera del TUI de mentira
   contra la reescritura del archivo de pantalla). Fuera de mi tabla SCOPE:
   declarado, sin tocar. Reintento el commit cuando cae.
+
+## Ronda 2 de revision cruzada (2026-09-19)
+
+### NA (bloqueante): la seccion (0) exigia una ruta de la Mac y revento en CI
+Rojo de CI (run 35446921515, textual del BRIEF-r2): `FAIL: el REPO_DIR del
+plist (/Users/dn/dev/goncloud-openclaw) no es un clon de este repo: 9.8
+vigilaria el CI de otro`. Rework: la relacion plist<->repo se prueba con
+fixtures portables — dos `git init` con origin copiado EN CALIENTE del repo
+bajo prueba (caso verde) y un origin distinto (caso rojo), plists generados
+por sed sobre el real — y el plist real solo se verifica si su REPO_DIR
+existe; si no, el caso se salta con el motivo impreso. Rojo de mutacion
+(mismo_origin siempre verdadero, que equivale a no mirar el origin):
+`FAIL: el REPO_DIR del plist apunta a un repo con otro origin: 9.8
+vigilaria el CI de otro` (rc=1); restaurado con cmp. La rama de skip probada
+con una ruta inexistente: imprime su motivo y la prueba sigue. El fixture de
+git corre con GIT_DIR/GIT_INDEX_FILE unset (leccion del carril N).
+
+### fix(9.5) r2 no bloqueantes
+NC: la sonda de TMUX_BIN corre con `unset TMUX_BIN` previo (antes no
+discriminaba si la prueba ya lo habia exportado). ND: el grep del stderr de
+(9c) exige "no se pudo escribir" (antes "latido.json" casaba con cualquier
+traceback que nombrara la ruta). NG: la memoria caida de latido.json tras un
+envio exitoso ya no corta el tick: avisa a stderr, sigue con vigia y CI,
+anota el evento de mensaje, y el fallo queda en el rc del tick (flag lrc).
+
+### fix(9.4) r2 no bloqueantes
+NB: confirmado y arreglado — con approval_since ausente (desde=0) la pausa
+de la ventana NO se aplicaba (el guard exigia -gt 0); ahora todo dialogo
+pausa, y con inicio desconocido la ventana queda completa (al salir de un
+dialogo vuelve a 6 completas, corrida.v1). Caso MC extendido: "(en pausa por
+la espera)" y "quedan 6 horas de ventana". NE: la ventana justa no trae "y 0
+minutos" ("queda 1 hora de ventana de trabajo"), un resto menor a un minuto
+dice "queda menos de un minuto", y el singular "queda 1 minuto" (casos 1d).
+NF: min_desde devuelve vacio cuando el hito no se supo y min_en_palabras lo
+trata como "mucho rato": sin numeros centinela acoplados.
+
+### Declarado de la ronda 2
+- #4: el stub de gh responde el workspace al repo view del fixture; inocuo
+  para lo que se aserta (sha, autor y archivos).
+- #5: el workflow Quality corre en push a main — confirmado por el lead (la
+  corrida 35446921515 es Quality por push sobre main).
+- #8: iso offset, ME, MI, MP y MQ sin prueba propia dedicada; cubiertos
+  indirectamente por los casos de la bateria.
+- #9: tail -5 de la zona de dialogo sin captura real de TUI que lo mida.
+- #11: el reintento de hermes no tiene caso propio (el 9b cubre la memoria
+  de firma_vigia, no reescribir la linea caida).
+- #14: los directorios de (1b)/(1c) se reutilizan entre corridas de la
+  prueba; aislados por escenario y sin efecto en los byte a byte.
+- #3 cayo con NG atendido; #12 se cierra con NB.

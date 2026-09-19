@@ -41,27 +41,21 @@ watch_campo() { # $1 sesion, $2 campo del .state del vigilante (vacio si no hay)
     "${WATCH_STATE_DIR:-$HOME/.local/state/tmux-activity-watch}/$1.state" 2>/dev/null
 }
 
-min_desde() { # $1 epoch del hito -> minutos enteros desde ahi. Un hito en 0 o
-               # ausente ("hace 29 millones de minutos") se trata como hace
-               # muchisimo: escala, no inventa cifra.
-  local d
-  if [ "${1:-0}" -gt 0 ] 2>/dev/null; then
-    d=$(( $(corr_ahora) - $1 ))
-  else
-    d=999999999
-  fi
+min_desde() { # $1 epoch del hito -> minutos enteros desde ahi. Un hito ausente
+               # o en 0 devuelve VACIO: mejor nada que una cifra inventada.
+  [ "${1:-0}" -gt 0 ] 2>/dev/null || return 0
+  local d=$(( $(corr_ahora) - $1 ))
   [ "$d" -lt 0 ] && d=0
   echo $(( d / 60 ))
 }
 
 min_en_palabras() { # $1 epoch -> la edad en palabras para el mensaje
   local m; m="$(min_desde "$1")"
-  case "$m" in
-    16666666) printf 'mucho rato';;      # 999999999/60: el desde no se supo
-    0) printf 'menos de un minuto';;
-    1) printf '1 minuto';;
-    *) printf '%s minutos' "$m";;
-  esac
+  if [ -z "$m" ]; then printf 'mucho rato'
+  elif [ "$m" -eq 0 ]; then printf 'menos de un minuto'
+  elif [ "$m" -eq 1 ]; then printf '1 minuto'
+  else printf '%s minutos' "$m"
+  fi
 }
 
 # panel_limpio <archivo crudo> <archivo destino>: ultima pantalla legible para el
@@ -327,11 +321,13 @@ recoger|carril con LISTO sin recoger: recoger lo terminado (loop 3)"
   fi
 
   # Ventana de trabajo: timebox desde el inicio; la espera de una decision pone
-  # el reloj en pausa (se descuenta el tiempo esperando, no trabajando).
+  # el reloj en pausa (se descuenta el tiempo esperando, no trabajando). Con el
+  # inicio de la espera desconocido (desde 0) la pausa corre desde el arranque:
+  # al salir de un dialogo la ventana vuelve a completas (corrida.v1).
   local tseg restante h mm pausa_txt="" consumido
   tseg=$(( tb * 3600 ))
   restante=$(( tseg - (ahora - iep) ))
-  if [ -n "$desde_dialogo" ] && [ "$desde_dialogo" -gt 0 ]; then
+  if [ -n "$desde_dialogo" ]; then
     consumido=$(( desde_dialogo - iep ))
     [ "$consumido" -lt 0 ] && consumido=0
     [ "$consumido" -gt "$tseg" ] && consumido="$tseg"
@@ -342,10 +338,15 @@ recoger|carril con LISTO sin recoger: recoger lo terminado (loop 3)"
   local ventana v_pal="quedan" h_pal="horas" m_pal="minutos"
   [ "$h" -eq 1 ] && { v_pal="queda"; h_pal="hora"; }
   [ "$mm" -eq 1 ] && m_pal="minuto"
+  [ "$h" -eq 0 ] && [ "$mm" -eq 1 ] && v_pal="queda"
   if [ "$restante" -le 0 ]; then
     ventana="la ventana de trabajo se agoto"
+  elif [ "$h" -gt 0 ] && [ "$mm" -eq 0 ]; then
+    ventana="$v_pal $h $h_pal de ventana de trabajo$pausa_txt"
   elif [ "$h" -gt 0 ]; then
     ventana="$v_pal $h $h_pal y $mm $m_pal de ventana de trabajo$pausa_txt"
+  elif [ "$mm" -eq 0 ]; then
+    ventana="queda menos de un minuto de ventana de trabajo$pausa_txt"
   else
     ventana="$v_pal $mm $m_pal de ventana de trabajo$pausa_txt"
   fi
