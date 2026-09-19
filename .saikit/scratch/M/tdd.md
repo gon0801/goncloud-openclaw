@@ -188,3 +188,22 @@ trata como "mucho rato": sin numeros centinela acoplados.
 - #14: los directorios de (1b)/(1c) se reutilizan entre corridas de la
   prueba; aislados por escenario y sin efecto en los byte a byte.
 - #3 cayo con NG atendido; #12 se cierra con NB.
+
+## Ronda 3 de revision cruzada (2026-09-19, cierre)
+
+### RA: el rc del tick tambien en la rama del vigia
+La escritura caida de latido.json tras despertar al vigia solo avisaba; ahora
+propaga lrc=1 como las otras ramas ("el fallo queda en el rc del tick"
+cierto tambien ahi). Caso 9d: memoria crafteada (firma igual y tope vigente
+para que el tick no mande mensaje), lead muerto que despierta al vigia, y el
+directorio de la corrida en 500 para que la unica escritura posible sea la
+que falla. Rojo de mutacion (sin el lrc de la rama del vigia): `FAIL: RA:
+con latido.json caido en la rama del vigia el tick salio en verde` (rc=1);
+restaurado con cmp.
+
+### Declarado de la ronda 3
+- RB: mismo_origin daria verdadero si ambos repos carecieran de origin
+  ("" == ""); en la practica este repo tiene origin y el caso rojo usa uno
+  explicito.
+- RC: el sed de generacion de plists romperia con & o | en la ruta del
+  REPO_DIR real; improbable en una ruta local.

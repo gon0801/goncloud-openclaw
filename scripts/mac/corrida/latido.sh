@@ -106,7 +106,7 @@ latido_de() { # $1 dir de la corrida (con el registro adentro)
     if [ "$rc" -eq 0 ]; then
       lfv="$P_FIRMA"
       lat_escribir "$lat" "$lfirma" "$lult" "$letq" "$lfv" "$lci" \
-        || echo "latido: no se pudo escribir $lat; el vigia puede despertarse de mas al proximo tick" >&2
+        || { echo "latido: no se pudo escribir $lat; el vigia puede despertarse de mas al proximo tick" >&2; lrc=1; }
     fi
   fi
 

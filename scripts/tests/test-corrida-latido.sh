@@ -311,6 +311,24 @@ tick "$T0" >"$T/k.out" 2>"$T/k.err" && fail "con latido.json caido el tick salio
 grep -q "no se pudo escribir" "$T/k.err" || fail "la escritura caida de latido.json no avisa en stderr"
 rmdir "$CORRIDA_STATE/lat-k/latido.json"
 
+# (9d) RA: la escritura caida de latido.json en la rama del VIGIA tambien pinta
+# el tick de rojo. Memoria crafteada para que el tick no mande mensaje (firma
+# igual, tope vigente) y un lead muerto que despierta al vigia; el directorio
+# queda sin permiso de escritura para que la unica escritura posible sea la que
+# falla.
+LLAMADAS="$T/l11.log"; export LLAMADAS; : > "$LLAMADAS"
+solo_dejar lat-ra
+montar_corrida lat-ra leadmuerto
+rm -f "$PANEL_DIR/m-lead.txt"
+watch_a m-a "$((T0 - 120))"
+watch_a m-b "$((T0 - 120))"
+printf '%s\n' '{"firma": "e=DETENIDA|av=2/5|pr=GitHub: sin verificar|ses=m-lead:muerta,m-a:trabajando,m-b:trabajando,", "ult_msj": 1789822900, "etq": "DETENIDA", "firma_vigia": "distinta", "ci_sha": ""}' \
+  >"$CORRIDA_STATE/lat-ra/latido.json"
+chmod 500 "$CORRIDA_STATE/lat-ra"
+tick "$T0" >/dev/null 2>"$T/ra.err" && fail "RA: con latido.json caido en la rama del vigia el tick salio en verde"
+grep -q "no se pudo escribir" "$T/ra.err" || fail "RA: la rama del vigia no avisa su escritura caida"
+chmod 700 "$CORRIDA_STATE/lat-ra"
+
 # (10) 9.8: la rama por defecto en rojo no pasa en silencio.
 LLAMADAS="$T/l7.log"; export LLAMADAS; : > "$LLAMADAS"
 solo_dejar lat-ci
