@@ -53,6 +53,9 @@ grep -q 'lanzar-fase.sh' "$REPO" \
   || fail "$REPO: el slot 13 no nombra scripts/lanzar-fase.sh, que es lo que hace la entrega comprobable"
 grep -q -E 'FIRST command opens the run on the board' "$REPO" \
   || fail "$REPO: el slot 12 perdio el paso de nacimiento (abrir la corrida es el primer comando)"
+grep -qF '`corrida`' "$REPO" || fail "$REPO: el slot 12 no nombra la clave corrida"
+grep -qF '`proyecto`' "$REPO" || fail "$REPO: el slot 12 no nombra la clave proyecto"
+grep -qF '`plan`' "$REPO" || fail "$REPO: el slot 12 no nombra la clave plan"
 echo "ok (2-bis): la entrega se prueba con un comando, y la corrida nace con el runbook"
 
 # (3) Las reglas que trece lecturas dejaron, cada una porque un runbook falló
@@ -109,5 +112,68 @@ if [ -r "$MAC" ]; then
 else
   echo "ok (4): sin copia en la Mac ($MAC); comparación saltada, declarado"
 fi
+
+primer_comando_abre_corrida() {
+  [ -r "$1" ] || return 1
+  local cuerpo
+  cuerpo=$(awk '
+    /^```/ {
+      n++
+      if (n == 1) next
+      if (n >= 2) exit
+    }
+    n == 1 { print }
+  ' "$1") || return 1
+  printf '%s\n' "$cuerpo" | grep -qF 'runbook.progress.set' || return 1
+  printf '%s\n' "$cuerpo" | grep -qF 'corrida' || return 1
+  printf '%s\n' "$cuerpo" | grep -qF 'proyecto' || return 1
+  printf '%s\n' "$cuerpo" | grep -qF 'plan' || return 1
+  printf '%s\n' "$cuerpo" | grep -qF 'pendiente' || return 1
+  return 0
+}
+
+FX=scripts/tests/fixtures/skill-autopilot-runbook
+BUENO=$FX/autopilot-bueno.md
+MALO=$FX/autopilot-malo.md
+[ -r "$BUENO" ] || fail "(5) no encuentro el fixture bueno: $BUENO"
+[ -r "$MALO" ] || fail "(5) no encuentro el fixture malo: $MALO"
+git check-ignore -q "$BUENO" \
+  && fail "(5) $BUENO está en .gitignore: el commit no lo lleva y CI se queda sin el archivo"
+git check-ignore -q "$MALO" \
+  && fail "(5) $MALO está en .gitignore: el commit no lo lleva y CI se queda sin el archivo"
+grep -qF tablero "$MALO" \
+  || fail "(5) el fixture malo no trae tablero: falta la semilla de la mutación"
+
+casos=()
+casos+=("$BUENO	0")
+casos+=("$MALO	1")
+for f in docs/runbooks/autopilot-fase*.md; do
+  [ -f "$f" ] || continue
+  n=${f##*/autopilot-fase}
+  n=${n%.md}
+  case "$n" in *[!0-9]*|'') continue ;; esac
+  [ "$n" -gt 12 ] || continue
+  casos+=("$f	0")
+done
+
+for fila in "${casos[@]}"; do
+  path=${fila%%	*}
+  expected=${fila#*	}
+  if primer_comando_abre_corrida "$path"; then
+    got=0
+  else
+    got=1
+  fi
+  if [ "$got" -ne "$expected" ]; then
+    if [ "$path" = "$MALO" ]; then
+      fail "(5) el fixture malo pasó: un candado que solo busca tablero se pondría verde"
+    fi
+    if [ "$path" = "$BUENO" ]; then
+      fail "(5) el fixture bueno no abre la corrida en el primer comando"
+    fi
+    fail "(5) $path: primer comando no abre la corrida"
+  fi
+done
+echo "ok (5): el primer comando de un runbook nuevo abre la corrida"
 
 echo "TODO VERDE: skill autopilot-runbook"
