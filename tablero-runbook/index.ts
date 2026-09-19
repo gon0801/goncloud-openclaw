@@ -28,22 +28,25 @@
  * summa-gate/observer.ts: un solo nivel de respaldo con nombre FIJO
  * `<vivo>.1.jsonl`, tope por bytes, sin compresión ni borrado.
  */
-import { appendFileSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 
 import {
+  CORRIDA_RE,
   EVENTOS_JSONL_MAX_BYTES,
   type Evento,
   type GithubCruce,
   type ProgresoDoc,
   derivar,
+  esc,
   renderTablero,
   validarFase,
   validarProgreso,
 } from "./lib.ts";
 import { cruzarGitHub, leerGithubConfig } from "./github.ts";
+import { cruzarPlan, type PlanCruce } from "./plan.ts";
 
 // ---------------------------------------------------------------------------
 // Configuración (configSchema del manifest).
@@ -69,7 +72,18 @@ function leerConfig(pluginConfig: unknown): Config {
   return { stateDir, fases };
 }
 
-function rutaDoc(stateDir: string, fase: string): string {
+function validarCorrida(s: unknown): s is string {
+  return typeof s === "string" && CORRIDA_RE.test(s);
+}
+
+type ClaveTablero = { kind: "fase"; id: string } | { kind: "corrida"; id: string };
+
+function rutaDoc(stateDir: string, clave: ClaveTablero): string {
+  return clave.kind === "fase"
+    ? join(stateDir, "progress", `${clave.id}.json`)
+    : join(stateDir, "progress", "c", `${clave.id}.json`);
+}
+function rutaDocFase(stateDir: string, fase: string): string {
   return join(stateDir, "progress", `${fase}.json`);
 }
 function rutaEventos(stateDir: string, fase: string): string {
@@ -84,7 +98,51 @@ function rutaEventos(stateDir: string, fase: string): string {
 
 function guardarDoc(stateDir: string, fase: string, doc: ProgresoDoc): void {
   mkdirSync(join(stateDir, "progress"), { recursive: true });
-  writeFileSync(rutaDoc(stateDir, fase), `${JSON.stringify(doc, null, 2)}\n`, "utf8");
+  writeFileSync(rutaDocFase(stateDir, fase), `${JSON.stringify(doc, null, 2)}\n`, "utf8");
+}
+
+function guardarDocCorrida(stateDir: string, corrida: string, doc: ProgresoDoc): void {
+  mkdirSync(join(stateDir, "progress", "c"), { recursive: true });
+  writeFileSync(join(stateDir, "progress", "c", `${corrida}.json`), `${JSON.stringify(doc, null, 2)}\n`, "utf8");
+}
+
+function descubrirNav(stateDir: string): { fases: string[]; corridas: string[] } {
+  const fases: string[] = [];
+  const corridas: string[] = [];
+  try {
+    for (const name of readdirSync(join(stateDir, "progress"))) {
+      if (!name.endsWith(".json")) continue;
+      const base = name.slice(0, -5);
+      if (validarFase(base)) fases.push(base);
+    }
+  } catch {}
+  try {
+    for (const name of readdirSync(join(stateDir, "progress", "c"))) {
+      if (!name.endsWith(".json")) continue;
+      const base = name.slice(0, -5);
+      if (validarCorrida(base)) corridas.push(base);
+    }
+  } catch {}
+  return { fases, corridas };
+}
+
+function extrasHtml(plan: PlanCruce | undefined, corridas: string[], clave: ClaveTablero): string {
+  let extra = "";
+  if (plan !== undefined) {
+    extra += `<p class="plan">${esc(plan.rotulo)}</p>`;
+    if (plan.kind === "cruzado") {
+      for (const [id, item] of Object.entries(plan.items)) {
+        if (item.discrepa) extra += `<span class="plan-disc">discrepancia: ${esc(id)}</span>`;
+      }
+    }
+  }
+  const otras = corridas.filter((c) => !(clave.kind === "corrida" && clave.id === c));
+  if (otras.length > 0) {
+    extra += `<nav class="corridas">${otras
+      .map((c) => `<a href="/runbook/tablero/c/${encodeURIComponent(c)}">${esc(c)}</a>`)
+      .join("")}</nav>`;
+  }
+  return extra;
 }
 
 function leerEventosJsonl(ruta: string): Evento[] {
@@ -188,6 +246,10 @@ function manejarSet(log: Logger, cfg: Config, params: unknown): RespuestaSet {
 
   try {
     guardarDoc(cfg.stateDir, fase, doc as ProgresoDoc);
+    const corrida = (doc as ProgresoDoc).corrida;
+    if (validarCorrida(corrida)) {
+      guardarDocCorrida(cfg.stateDir, corrida, doc as ProgresoDoc);
+    }
     agregarEventos(cfg.stateDir, fase, (doc as ProgresoDoc).eventos ?? []);
   } catch (err) {
     const ctor = err !== null && typeof err === "object" ? (err as { constructor?: { name?: unknown } }).constructor : undefined;
@@ -199,17 +261,17 @@ function manejarSet(log: Logger, cfg: Config, params: unknown): RespuestaSet {
 }
 
 type RespuestaTablero =
-  | { ok: true; doc: ProgresoDoc; derivado: ReturnType<typeof derivar>; html: string }
+  | { ok: true; doc: ProgresoDoc; derivado: ReturnType<typeof derivar>; html: string; plan?: PlanCruce }
   | { ok: false; razon: "desconocida" | "disco" };
 
 async function armarTablero(
   cfg: Config,
   cfgGithub: ReturnType<typeof leerGithubConfig>,
-  fase: string,
+  clave: ClaveTablero,
 ): Promise<RespuestaTablero> {
   let crudo: string;
   try {
-    crudo = readFileSync(rutaDoc(cfg.stateDir, fase), "utf8");
+    crudo = readFileSync(rutaDoc(cfg.stateDir, clave), "utf8");
   } catch {
     return { ok: false, razon: "desconocida" };
   }
@@ -220,15 +282,27 @@ async function armarTablero(
     return { ok: false, razon: "desconocida" };
   }
   const derivado = derivar(doc);
+  const docOk = validarProgreso(doc).ok;
   // 7.5: el cruce con GitHub corre solo tras validarProgreso y solo con
   // github.enabled. Apagado, no se ejecuta nada y el render rotula
   // "GitHub: sin verificar".
   const github: GithubCruce | undefined =
-    cfgGithub.enabled && validarProgreso(doc).ok
+    cfgGithub.enabled && docOk
       ? await cruzarGitHub(doc, cfgGithub)
       : undefined;
-  const html = renderTablero(doc, derivado, github, cfg.fases);
-  return { ok: true, doc, derivado, html };
+  let plan: PlanCruce | undefined;
+  if (doc.plan !== undefined && docOk) {
+    try {
+      plan = await cruzarPlan(doc, { ghPath: cfgGithub.ghPath });
+    } catch {
+      plan = { kind: "sin-verificar", rotulo: "plan: sin verificar" };
+    }
+  }
+  const nav = descubrirNav(cfg.stateDir);
+  let html = renderTablero(doc, derivado, github, nav.fases);
+  const extra = extrasHtml(plan, nav.corridas, clave);
+  if (extra) html = html.replace("</main>", `${extra}</main>`);
+  return { ok: true, doc, derivado, html, plan };
 }
 
 const HEADERS_HTML = {
@@ -243,24 +317,40 @@ const HEADERS_JSON = {
 } as const;
 
 /**
- * Extrae la fase de `/runbook/tablero/<fase>` o `/runbook/progress/<fase>.json`.
- * `decodeURIComponent` DESPUÉS de partir por "/" y volver a unir: así
- * `/runbook/tablero/..%2f..%2fopenclaw.json` decodifica a `../../openclaw.json`
- * y `validarFase` lo rechaza antes de que exista ninguna ruta de disco. Con
- * `/` literal pasa igual: los segmentos extra se unen y no casan la forma.
+ * Parte por "/" ANTES de decodificar. Un `%2f` no puede saltar de segmento y
+ * convertirse en una ruta de disco; `..` y mayúsculas mueren en validarFase
+ * o validarCorrida, nunca en join().
  */
-function faseDeUrl(url: string | undefined): string | undefined {
+function formaCorridaEnUrl(url: string | undefined): boolean {
   const limpio = (url ?? "").split("?")[0]?.split("#")[0] ?? "";
   const segs = limpio.split("/").filter(Boolean);
-  if (segs.length !== 3) return undefined; // falta la fase o sobran segmentos
-  let crudo: string;
-  try {
-    crudo = decodeURIComponent(segs[2] ?? "");
-  } catch {
-    return undefined; // percent-encoding malformado -> 400, no URIError fuera del handler
+  return segs.length >= 4 && segs[2] === "c";
+}
+
+function claveDeUrl(url: string | undefined): ClaveTablero | undefined {
+  const limpio = (url ?? "").split("?")[0]?.split("#")[0] ?? "";
+  const segs = limpio.split("/").filter(Boolean);
+  if (segs.length === 3) {
+    let crudo: string;
+    try {
+      crudo = decodeURIComponent(segs[2] ?? "");
+    } catch {
+      return undefined;
+    }
+    if (crudo.endsWith(".json")) crudo = crudo.slice(0, -5);
+    return validarFase(crudo) ? { kind: "fase", id: crudo } : undefined;
   }
-  if (crudo.endsWith(".json")) crudo = crudo.slice(0, -5);
-  return validarFase(crudo) ? crudo : undefined;
+  if (segs.length === 4 && segs[2] === "c") {
+    let crudo: string;
+    try {
+      crudo = decodeURIComponent(segs[3] ?? "");
+    } catch {
+      return undefined;
+    }
+    if (crudo.endsWith(".json")) crudo = crudo.slice(0, -5);
+    return validarCorrida(crudo) ? { kind: "corrida", id: crudo } : undefined;
+  }
+  return undefined;
 }
 
 type ReqLike = { method?: string; url?: string };
@@ -281,17 +371,27 @@ function servirTablero(
     res.end("solo GET");
     return Promise.resolve();
   }
-  const fase = faseDeUrl(req.url);
-  if (fase === undefined) {
+  const clave = claveDeUrl(req.url);
+  if (clave === undefined) {
     res.writeHead(400, HEADERS_HTML);
-    res.end("<!doctype html><p>fase inválida: debe casar ^[0-9]{1,3}(\\.[0-9]{1,3})?$</p>");
+    res.end(
+      formaCorridaEnUrl(req.url)
+        ? "<!doctype html><p>corrida inválida: debe casar ^[a-z0-9][a-z0-9-]{0,40}$</p>"
+        : "<!doctype html><p>fase inválida: debe casar ^[0-9]{1,3}(\\.[0-9]{1,3})?$</p>",
+    );
     return Promise.resolve();
   }
-  return armarTablero(cfg, cfgGithub, fase).then((respuesta) => {
+  return armarTablero(cfg, cfgGithub, clave).then((respuesta) => {
     if (!respuesta.ok) {
       const status = respuesta.razon === "disco" ? 500 : 404;
       res.writeHead(status, HEADERS_HTML);
-      res.end(`<!doctype html><p>fase ${fase}: ${respuesta.razon === "disco" ? "fallo de disco" : "sin documento"}</p>`);
+      if (clave.kind === "corrida") {
+        res.end(
+          `<!doctype html><p>corrida ${esc(clave.id)}: sin documento. Escribila con runbook.progress.set incluyendo el campo corrida.</p>`,
+        );
+        return;
+      }
+      res.end(`<!doctype html><p>fase ${clave.id}: ${respuesta.razon === "disco" ? "fallo de disco" : "sin documento"}</p>`);
       return;
     }
     res.writeHead(200, HEADERS_HTML);
@@ -310,17 +410,28 @@ function servirJson(
     res.end("solo GET");
     return Promise.resolve();
   }
-  const fase = faseDeUrl(req.url);
-  if (fase === undefined) {
+  const clave = claveDeUrl(req.url);
+  if (clave === undefined) {
     res.writeHead(400, HEADERS_JSON);
-    res.end(JSON.stringify({ ok: false, razon: "fase inválida" }));
+    res.end(JSON.stringify({
+      ok: false,
+      razon: formaCorridaEnUrl(req.url) ? "corrida inválida" : "fase inválida",
+    }));
     return Promise.resolve();
   }
-  return armarTablero(cfg, cfgGithub, fase).then((respuesta) => {
+  return armarTablero(cfg, cfgGithub, clave).then((respuesta) => {
     // Regla 8 del spec: get y la ruta .json exponen el documento completo
     // (residuales y eventos incluidos) a quien pase la auth del gateway.
     if (!respuesta.ok) {
       res.writeHead(respuesta.razon === "disco" ? 500 : 404, HEADERS_JSON);
+      if (clave.kind === "corrida") {
+        res.end(JSON.stringify({
+          ok: false,
+          razon: respuesta.razon,
+          como: "runbook.progress.set con campo corrida",
+        }));
+        return;
+      }
       res.end(JSON.stringify({ ok: false, razon: respuesta.razon }));
       return;
     }
@@ -355,22 +466,37 @@ export default definePluginEntry({
     api.registerGatewayMethod(
       "runbook.progress.get",
       async ({ params, respond }) => {
-        const fase = (params as { fase?: unknown } | null)?.fase;
-        if (!validarFase(fase)) {
+        const p = params !== null && typeof params === "object" ? (params as Record<string, unknown>) : {};
+        const fase = p["fase"];
+        const corrida = p["corrida"];
+        let clave: ClaveTablero | undefined;
+        if (validarFase(fase)) {
+          clave = { kind: "fase", id: fase };
+        } else if (fase !== undefined) {
+          respond(true, { ok: false, razon: "fase inválida" });
+          return;
+        } else if (validarCorrida(corrida)) {
+          clave = { kind: "corrida", id: corrida };
+        } else if (corrida !== undefined) {
+          respond(true, { ok: false, razon: "corrida inválida" });
+          return;
+        } else {
           respond(true, { ok: false, razon: "fase inválida" });
           return;
         }
-        const respuesta = await armarTablero(cfg, cfgGithub, fase);
+        const respuesta = await armarTablero(cfg, cfgGithub, clave);
         if (!respuesta.ok) {
           respond(true, { ok: false, razon: respuesta.razon });
           return;
         }
-        respond(true, {
+        const payload: Record<string, unknown> = {
           ok: true,
           doc: respuesta.doc,
           derivado: respuesta.derivado,
           html: respuesta.html,
-        });
+        };
+        if (respuesta.plan !== undefined) payload["plan"] = respuesta.plan;
+        respond(true, payload);
       },
       { scope: "operator.read" },
     );
@@ -382,7 +508,7 @@ export default definePluginEntry({
       match: "prefix",
       auth: "gateway",
       handler: (req, res) => {
-        servirTablero(log, cfg, cfgGithub, req, res).catch((err: unknown) => {
+        return servirTablero(log, cfg, cfgGithub, req, res).catch((err: unknown) => {
           const ctor = err !== null && typeof err === "object" ? (err as { constructor?: { name?: unknown } }).constructor : undefined;
           log.warn(`tablero-runbook: fallo sirviendo el tablero (${typeof ctor?.name === "string" ? ctor.name : "Error"})`);
           res.writeHead(500, HEADERS_HTML);
@@ -396,7 +522,7 @@ export default definePluginEntry({
       match: "prefix",
       auth: "gateway",
       handler: (req, res) => {
-        servirJson(cfg, cfgGithub, req, res).catch((err: unknown) => {
+        return servirJson(cfg, cfgGithub, req, res).catch((err: unknown) => {
           const ctor = err !== null && typeof err === "object" ? (err as { constructor?: { name?: unknown } }).constructor : undefined;
           log.warn(`tablero-runbook: fallo sirviendo el json (${typeof ctor?.name === "string" ? ctor.name : "Error"})`);
           res.writeHead(500, HEADERS_JSON);
