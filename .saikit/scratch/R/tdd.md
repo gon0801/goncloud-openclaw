@@ -174,3 +174,65 @@ ninguna ref (verificado con `git stash` que el fallo ocurría también en el
 `refs/heads/fase9/docs` (repo compartido con otros carriles) y el paso pasó a
 `ok (4): ... es la versión de refs/heads/fase9/docs`. La corrida final de la
 batería, arriba, es la que vale: TODO VERDE, exit 0.
+
+## r1 — el parser no veía anclas con ruta literal (hallazgo del cross-review, corregido)
+
+Defecto: un test que afirma una frase con la ruta del archivo INLINE no era
+reconocido como ancla. Arreglo: el destino del grep ahora acepta, además de
+variable, una RUTA LITERAL bajo agents/ o docs/agent-skills/ (con o sin
+comillas, ./ opcional). Nada más se relajó; la vuelta quedó igual.
+
+```
+$ # repro del lead (antes del fix), con scripts/tests/test-tmp-repro-r1.sh presente:
+$ cat scripts/tests/test-tmp-repro-r1.sh
+#!/usr/bin/env bash
+grep -qF 'A phase is closed only when a command says so' agents/main/agent/workshop-skills/agent-dispatch/SKILL.md || exit 1
+$ bash scripts/tests/test-candados-declarados.sh
+ok ida: las 100 frases ancladas por 11 test(s) tienen su marca
+ok vuelta: las 57 marca(s) de agents/** y docs/agent-skills/** apuntan a tests que existen y afirman su frase
+TODO VERDE: candados declarados (100 frases, 57 marcas)      # ← punto ciego: el ancla nueva no aparece
+exit=0
+
+$ # tras el fix, con el test temporal presente y sin su marca:
+$ bash scripts/tests/test-candados-declarados.sh
+FAIL ida: 1 frase(s) anclada(s) sin marca junto a la frase:
+  test-tmp-repro-r1.sh no marca 'A phase is closed only when a command says so' en agents/main/agent/workshop-skills/agent-dispatch/SKILL.md
+ok vuelta: las 57 marca(s) de agents/** y docs/agent-skills/** apuntan a tests que existen y afirman su frase
+ROJO: 1 problema(s) con los candados declarados
+exit=1
+
+$ # con la marca puesta junto a la frase (línea bajo el encabezado):
+$ bash scripts/tests/test-candados-declarados.sh
+ok ida: las 101 frases ancladas por 12 test(s) tienen su marca
+ok vuelta: las 58 marca(s) de agents/** y docs/agent-skills/** apuntan a tests que existen y afirman su frase
+TODO VERDE: candados declarados (101 frases, 58 marcas)
+exit=0
+
+$ # borrados el test temporal y su marca: verde como hoy
+$ bash scripts/tests/test-candados-declarados.sh
+ok ida: las 100 frases ancladas por 11 test(s) tienen su marca
+ok vuelta: las 57 marca(s) de agents/** y docs/agent-skills/** apuntan a tests que existen y afirman su frase
+TODO VERDE: candados declarados (100 frases, 57 marcas)
+exit=0
+```
+
+El fix no destapa anclas nuevas en los tests existentes (inventario antes y
+después: 100 entradas, 0 nuevas — los tests actuales usan variable para el
+destino); las 57 marcas quedan como estaban.
+
+Batería r1: primera corrida con UN rojo — `test-tmux-activity-watch.sh`,
+la excepción flaky conocida (fila 9.13 del plan): falló en la pasada de la
+batería y el re-run de diagnóstico del propio run-checks ya daba TODO VERDE;
+standalone ×3 verde. Segunda corrida completa, sin tocar nada:
+
+```
+$ bash scripts/run-checks.sh
+  ... (summa-gate: 280 pass, tablero-runbook: pass=105) ...
+=== pruebas de contrato de scripts/
+  OK    test-candados-declarados.sh        (+ los otros 38 OK, incluidos todos los que anclan frases)
+  ... (40 tests OK en total, 0 FALLA)
+=== corpus de rendiciones re-derivable
+OK: verify-corpus
+TODO VERDE
+exit=0
+```

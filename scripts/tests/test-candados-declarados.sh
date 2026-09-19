@@ -236,20 +236,31 @@ def parse_test(path):
     grep_re = re.compile(
         r"\bgrep\s+((?:-{1,2}[A-Za-z][\w-]*\s+|--\s+)*)"
         r"('(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"|\$\w+)"
-        r'\s+"?\$(\w+)"?'
+        # destino: variable ("$F", $F) o RUTA LITERAL bajo agents/ o
+        # docs/agent-skills/ (con o sin comillas y con ./ opcional). Lo segundo
+        # existe: hallazgo del cross-review r1, un grep con la ruta inline.
+        r'\s+("?\$(\w+)"?|"?\.?(?:agents|docs/agent-skills)/[^\s"\'`;&|)]+"?)'
     )
 
     for line in lines:
         # (a) grep directo: grep -qF 'frase' "$DESTINO" || fail
+        #                    grep -qF 'frase' agents/.../SKILL.md || exit 1
         for m in grep_re.finditer(line):
-            flags, pat, tvar = m.group(1) or "", m.group(2), m.group(3)
+            flags, pat, token = m.group(1) or "", m.group(2), m.group(3) or ""
             rest = line[m.end():]
             mode, ci = flag_mode(flags)
             targets = []
-            if tvar in pathvars:
-                targets.append(pathvars[tvar])
-            elif tvar in pathtpl:
-                targets.extend(pathtpl[tvar])
+            if m.group(4):  # "$DESTINO"
+                if m.group(4) in pathvars:
+                    targets.append(pathvars[m.group(4)])
+                elif m.group(4) in pathtpl:
+                    targets.extend(pathtpl[m.group(4)])
+            else:  # ruta literal en la misma línea
+                lit = token.strip('"')
+                if lit.startswith("./"):
+                    lit = lit[2:]
+                if in_scope(lit):
+                    targets.append(lit)
             if not targets:
                 continue
             pats = pattern_values(unq(pat))
