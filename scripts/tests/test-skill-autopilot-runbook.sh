@@ -6,7 +6,7 @@
 # leyera. La copia canónica ahora vive en el repo.
 #
 # Esta prueba verifica dos cosas distintas:
-#  (1) la copia del repo sigue trayendo los doce slots y la pasada de
+#  (1) la copia del repo sigue trayendo los trece slots y la pasada de
 #      ambigüedad, que es lo que hace que el runbook salga sin preguntas;
 #  (2) si la Mac tiene la copia suelta, las dos son idénticas. En CI esa copia
 #      no existe y ese check se salta, declarándolo: el candado que importa

@@ -93,7 +93,7 @@ JSON
 ~/.openclaw/bin/openclaw gateway call runbook.progress.set --params "$(cat .saikit/progress/12.json)" --timeout 30000
 ```
 
-La pantalla queda en `/runbook/tablero/12` desde ese momento. El documento se escribe en v1 hasta que Q1 mergee; a partir de Q2 se reescribe en v2 con `corrida: "fase12-tablero"`, `proyecto: "openclaw"` y `plan: {"repo":"gon0801/goncloud-openclaw","ruta":"Plans.md","seccion":"Fase 12"}`, y la URL pasa a `/runbook/tablero/c/fase12-tablero`. **La ruta vieja sigue sirviendo**: es la compuerta de Q2.
+La pantalla queda en `/runbook/tablero/12` desde ese momento. El documento se escribe en v1 **hasta que Q2 mergee** (Q1 es el corte mecánico de archivos: no cambia comportamiento del plugin, así que escribir v2 antes de Q2 solo agrega campos que el plugin todavía ignora); a partir de Q2 se reescribe en v2 con `corrida: "fase12-tablero"`, `proyecto: "openclaw"` y `plan: {"repo":"gon0801/goncloud-openclaw","ruta":"Plans.md","seccion":"Fase 12"}`, y la URL pasa a `/runbook/tablero/c/fase12-tablero`. **La ruta vieja sigue sirviendo**: es la compuerta de Q2.
 
 ## Cuando algo se atora (propias de esta fase)
 
