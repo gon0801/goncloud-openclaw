@@ -31,7 +31,7 @@ el PATH del nodo: usá siempre la ruta absoluta `/opt/homebrew/bin/gh`
    (`/opt/homebrew/bin/gh pr checks <N>`; los 15 checks tardan ~1–7 min
    por shard) y confirmá `mergeStateStatus: CLEAN` con
    `/opt/homebrew/bin/gh pr view <N> --json mergeable,mergeStateStatus`. Para la espera
-   ante las caídas `COMPANION_APP_UNAVAILABLE` del exec, seguí mac-node-ops paso 9 (reintentos de resultado desconocido: verificar efectos y re-encuestar con comandos cortos, lanzar detached con nohup si es largo; los `gh pr checks` son cortos y sobreviven;
+   ante las caídas `COMPANION_APP_UNAVAILABLE` del exec, seguí la skill de tu propio agente — **mac-exec-detach-poll** si sos implementer, **mac-node-ops paso 9** si sos ingeniería; los dos agentes tienen conjuntos de skills disjuntos y nombrar uno solo deja al otro sin ruta (reintentos de resultado desconocido: verificar efectos y re-encuestar con comandos cortos, lanzar detached con nohup si es largo; los `gh pr checks` son cortos y sobreviven;
    re-encuestá, no re-lances). No confundir con la ruta del kit autopilot (`kit-merge-route.md` en mac-node-ops, merge vía `saikit-merge.sh` con veredicto sellado): esta skill es cierre de lane saikit con validación de ledger + CI; el gate del kit es otro flujo del mismo repo.
 4. NUNCA intentes el merge: `gh pr merge` (también encadenado con
    `&&`/`;`) está bloqueado por summa-gate desde el agente — error
