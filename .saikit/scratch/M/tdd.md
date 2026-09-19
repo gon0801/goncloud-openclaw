@@ -53,3 +53,28 @@ TODO VERDE: crons-dos-copias  (verif-sync-repos ya no es excepcion; apareado a v
 
 ### Aplicador
 `APLICAR_VIGIA_SYNC.sh --test` (seco) escribio `.pre.json`/`.post.json` con `payload.message` == v2.txt y agentId/schedule/toolsAllow/enabled intactos. No edito el gateway.
+
+## r1 — el mutante «quitar el llamado» ahora muere
+
+### Antes del arreglo (reproduccion)
+Borrar la linea `$skillsSnap = Get-OpenclawSkillsCambiadasStaged -RepoRoot $r` o reemplazarla por `$skillsSnap = $null` dejaba el test en VERDE (rc=0): el chequeo (2) anclaba solo en `SKILLS error:` (el catch), que sobrevivia.
+
+### Mutante A (linea borrada) → ROJO
+```
+ROJO: (2) falta el llamado Get-OpenclawSkillsCambiadasStaged -RepoRoot $r en el flujo (borrarlo o anularlo a $null debe dejar rojo aqui)
+MUT_A_EXIT:1
+```
+
+### Mutante B (`$skillsSnap = $null`) → ROJO
+```
+ROJO: (2) falta el llamado Get-OpenclawSkillsCambiadasStaged -RepoRoot $r en el flujo (borrarlo o anularlo a $null debe dejar rojo aqui)
+MUT_B_EXIT:1
+```
+
+### Restituido → VERDE
+```
+ok (2): el llamado Get-OpenclawSkillsCambiadasStaged -RepoRoot $r va entre la guardia y el commit (linea 128)
+...
+TODO VERDE: sync-avisa-skills
+TODO VERDE: crons-dos-copias
+```

@@ -43,19 +43,28 @@ exit 0
 " || fail "(1) ParseFile reporto errores en $PS1FILE"
 echo "ok (1): ParseFile sin errores"
 
-# (2) Posicion: el llamado try/catch esta DESPUES de la guardia y ANTES del commit.
+# (2) Posicion Y presencia: el llamado Get-OpenclawSkillsCambiadasStaged -RepoRoot
+# tiene que existir en el flujo, estrictamente entre la guardia de tamano y el commit.
+# Anclar solo en "SKILLS error:" (el catch) no basta: ese texto sobrevive a borrar o
+# anular el llamado (mutante medido en BRIEF-r1).
 n_g=$(linea_de 'git restore --staged' "$PS1FILE")
-n_call=$(linea_de 'skills-cambiadas\|Write-OpenclawSkillsCambiadas\|Get-OpenclawSkillsCambiadas' "$PS1FILE")
-# Preferir la linea del try que envuelve el llamado en el flujo (no la marca).
-n_try=$(grep -n 'SKILLS error:' "$PS1FILE" | head -1 | cut -d: -f1)
 n_commit=$(linea_de 'commit -m "auto: snapshot' "$PS1FILE")
-[ -n "$n_g" ] && [ -n "$n_try" ] && [ -n "$n_commit" ] \
-  || fail "(2) no encuentro guardia/try SKILLS/commit: g=$n_g try=$n_try commit=$n_commit"
-[ "$n_try" -gt "$n_g" ] \
-  || fail "(2) el try/catch de SKILLS (linea $n_try) va ANTES de la guardia (linea $n_g)"
-[ "$n_try" -lt "$n_commit" ] \
-  || fail "(2) el try/catch de SKILLS (linea $n_try) va DESPUES del commit (linea $n_commit)"
-echo "ok (2): el llamado SKILLS va entre la guardia de tamano y el commit"
+[ -n "$n_g" ] && [ -n "$n_commit" ] \
+  || fail "(2) no encuentro guardia/commit: g=$n_g commit=$n_commit"
+# Solo el llamado del flujo: -RepoRoot $r (no la definicion ni el helper interno con $RepoRoot).
+n_call=$(grep -n 'Get-OpenclawSkillsCambiadasStaged -RepoRoot \$r' "$PS1FILE" | head -1 | cut -d: -f1)
+[ -n "$n_call" ] \
+  || fail "(2) falta el llamado Get-OpenclawSkillsCambiadasStaged -RepoRoot \$r en el flujo (borrarlo o anularlo a \$null debe dejar rojo aqui)"
+[ "$n_call" -gt "$n_g" ] \
+  || fail "(2) el llamado (linea $n_call) va ANTES de la guardia (linea $n_g)"
+[ "$n_call" -lt "$n_commit" ] \
+  || fail "(2) el llamado (linea $n_call) va DESPUES del commit (linea $n_commit)"
+# El try/catch que envuelve el llamado tambien debe quedar en la misma ventana.
+n_try=$(grep -n 'SKILLS error:' "$PS1FILE" | head -1 | cut -d: -f1)
+[ -n "$n_try" ] || fail "(2) falta el catch SKILLS error: junto al llamado"
+[ "$n_try" -gt "$n_g" ] && [ "$n_try" -lt "$n_commit" ] \
+  || fail "(2) el try/catch de SKILLS (linea $n_try) fuera de la ventana guardia($n_g)–commit($n_commit)"
+echo "ok (2): el llamado Get-OpenclawSkillsCambiadasStaged -RepoRoot \$r va entre la guardia y el commit (linea $n_call)"
 
 # (3) Extraer funcion, correrla contra repo temporal.
 T=$(mktemp -d) || exit 1
