@@ -167,4 +167,67 @@ printf '%s\n' '- **lead**: Claude, de cualquier host del kit' | lead_designado |
 printf '%s\n' '| **lead** | tu: un CLI en tmux, de cualquier host del kit | manda |' | lead_designado | grep -q . \
   && fail "(2c) el detector marca de mas: la fila escrita como rol"
 echo "ok (2c): ningun runbook de fase designa un modelo como lead"
+
+# (2d) Todo runbook NUEVO nace con seguimiento, clases y lanzamiento por
+# corrida.sh. Medido 2026-09-18/19 (Fase 9): los runbooks viejos se escribieron
+# antes de que corrida.sh existiera — sus corridas no se reescriben y quedan
+# exentos POR NOMBRE, cada uno listado abajo. Cualquier autopilot-*.md que no
+# este en esa lista es futuro y trae: (a) seccion "Seguimiento" (quien manda,
+# canal, cadencia); (b) seccion literal "## Clases de comando" con al menos una
+# fila de clase del conjunto que el preflight lee (misma expresion que
+# corrida/preflight.sh paso 6); (c) cero `new-session` escrito a mano: las
+# sesiones las abre `corrida.sh lanzar-sesion`, que marca antes de mandar.
+# Una prohibicion ("nunca ...") cita la forma mala sin mandarla: no cuenta.
+EXENTOS='autopilot-fase6.md autopilot-fase7.md autopilot-fase8.md autopilot-fase8-hallazgos.md autopilot-fase9.md autopilot-fase10.md autopilot-fase11.md autopilot-fase12.md autopilot-fase13.md autopilot-fase-saikit23.md'
+exento() {
+  case " $EXENTOS " in *" $1 "*) return 0;; esac
+  return 1
+}
+tiene_seguimiento() { grep -q -E '^#{1,3} .*Seguimiento' "$1"; }
+tiene_clases() {
+  grep -qF '## Clases de comando' "$1" || return 1
+  sed -n '/## Clases de comando/,$p' "$1" \
+    | grep -qiE '\|( *`?)(ssh|red externa|psql|gh)(`? *\|)' || return 1
+  return 0
+}
+sesion_a_mano() { # 0 = trae new-session mandado (rojo); prohibiciones no cuentan
+  grep -n 'new-session' "$1" 2>/dev/null | grep -v -i -E 'nunca|jam[aá]s|never' | grep -q .
+}
+runbook_futuro_ok() { # $1 archivo; 0 = nace con todo
+  tiene_seguimiento "$1" || return 1
+  tiene_clases "$1" || return 1
+  sesion_a_mano "$1" && return 1
+  return 0
+}
+FXF=scripts/tests/fixtures/runbook-futuro
+for fx in autopilot-bueno.md autopilot-malo-sin-seguimiento.md autopilot-malo-sin-clases.md autopilot-malo-new-session.md; do
+  [ -r "$FXF/$fx" ] || fail "(2d) no encuentro el fixture: $FXF/$fx"
+  git check-ignore -q "$FXF/$fx" \
+    && fail "(2d) $FXF/$fx esta en .gitignore: el commit no lo lleva y CI se queda sin el archivo"
+done
+runbook_futuro_ok "$FXF/autopilot-bueno.md" \
+  || fail "(2d) el fixture bueno no pasa: un candado roto se pondria rojo con un runbook correcto"
+runbook_futuro_ok "$FXF/autopilot-malo-sin-seguimiento.md" \
+  && fail "(2d) el fixture sin Seguimiento paso: el candado no exige la seccion"
+runbook_futuro_ok "$FXF/autopilot-malo-sin-clases.md" \
+  && fail "(2d) el fixture sin Clases paso: el candado no exige la tabla que lee el preflight"
+runbook_futuro_ok "$FXF/autopilot-malo-new-session.md" \
+  && fail "(2d) el fixture con new-session a mano paso: el candado deja abrir sesiones a mano"
+# Los exentos existen (si uno se borra, su exencion sobra y se retira).
+for e in $EXENTOS; do
+  [ -f "docs/runbooks/$e" ] || fail "(2d) exento por nombre pero ausente: docs/runbooks/$e"
+done
+# Y ningun runbook futuro versionado sale en rojo.
+NUEVOS=""
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  b=${f##*/}
+  exento "$b" && continue
+  NUEVOS="$NUEVOS $b"
+  runbook_futuro_ok "$f" || fail "(2d) $f: un runbook nuevo sin seccion Seguimiento, sin tabla de clases o con new-session a mano"
+done <<EOF
+$(git ls-files --cached --others --exclude-standard -- 'docs/runbooks/autopilot-*.md')
+EOF
+[ -z "$NUEVOS" ] && NUEVOS=" (ninguno todavia; los 10 exentos saltados, declarado)"
+echo "ok (2d): runbooks futuros revisados:$NUEVOS; fixtures bueno/malo discriminan las tres reglas"
 echo "TODO VERDE: runbooks sin contradicciones con el kit ni con el entorno"

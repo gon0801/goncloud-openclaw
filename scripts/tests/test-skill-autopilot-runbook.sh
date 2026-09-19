@@ -6,7 +6,7 @@
 # leyera. La copia canónica ahora vive en el repo.
 #
 # Esta prueba verifica dos cosas distintas:
-#  (1) la copia del repo sigue trayendo los trece slots y la pasada de
+#  (1) la copia del repo sigue trayendo los quince slots y la pasada de
 #      ambigüedad, que es lo que hace que el runbook salga sin preguntas;
 #  (2) si la Mac tiene la copia suelta, su contenido está commiteado en alguna
 #      ref de este repo. NO se exige que sea idéntica a la de ESTA rama: eso
@@ -38,12 +38,15 @@ grep -q '^name: autopilot-runbook$' "$REPO" || fail "$REPO: el name no es autopi
 grep -q '^description: Use when ' "$REPO" || fail "$REPO: la description no arranca con 'Use when'"
 echo "ok (1): frontmatter con name y description"
 
-# (2) Los trece slots numerados, en orden. Sin ellos la receta no produce un
+# (2) Los quince slots numerados, en orden. Sin ellos la receta no produce un
 # documento ejecutable: cada slot cerrado es una pregunta que el lector no hace.
-for n in 1 2 3 4 5 6 7 8 9 10 11 12 13; do
+# Los slots 14 (Seguimiento) y 15 (Clases de comando) nacen en la Fase 9, 9.7:
+# sin ellos el runbook no dice quien le habla a David ni el preflight tiene que
+# leer. No se renumera: runbooks y pruebas citan "slot 12" y "slot 13" por numero.
+for n in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
   grep -q -E "^$n\. \*\*" "$REPO" || fail "$REPO: falta el slot $n de la receta"
 done
-echo "ok (2): los trece slots de la receta están"
+echo "ok (2): los quince slots de la receta están"
 
 # (2-bis) El slot 13 no es prosa: nombra el comando que prueba la entrega y la
 # frase de una linea. Medido 2026-09-18: un runbook escrito, revisado y
@@ -69,10 +72,16 @@ for a in 'lead is written as a **role**' \
          'runbook-progress.v1' \
          'files table' \
          'Dispatch one fresh-context subagent' \
-         'test-runbooks-no-contradicen-entorno.sh'; do
+         'test-runbooks-no-contradicen-entorno.sh' \
+         '14. **Seguimiento.**' \
+         '15. **Clases de comando.**' \
+         'corrida.sh preflight' \
+         '## Clases de comando' \
+         'Plantilla del encargo del lead' \
+         'espejo de progreso'; do
   grep -qF "$a" "$REPO" || fail "$REPO: falta el ancla: $a"
 done
-echo "ok (3): las nueve anclas de reglas están"
+echo "ok (3): las quince anclas de reglas están"
 
 # (4) La copia de la Mac, cuando existe, no puede traer contenido que no esté
 # commiteado EN NINGUNA parte. Ojo con lo que NO se exige: que sea idéntica a la

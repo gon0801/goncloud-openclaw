@@ -21,6 +21,8 @@ Cada regla lleva su origen, `Medido:` con fecha. Si una regla no tiene un incide
 
 Hosts que el kit de merge conoce hoy, o sea leads posibles: `claude`, `codex`, `grok`, `zcode`, `kimi`, `dsh`. Claw no es host del kit y no lo necesita: no mergea.
 
+Claw abre cada corrida con `corrida.sh abrir` (contrato `corrida.v1`: quién es el vigía, qué sesiones son suyas, qué se preaprobó, a dónde van los mensajes) y lanza al lead y a los implementadores con `corrida.sh lanzar-sesion`, que marca la sesión antes de mandar el primer texto. Todo mensaje que la corrida manda a David cumple `seguimiento.v1`: cuatro líneas, etiquetas cerradas, lenguaje de usuario.
+
 Medido: 2026-09-16, `saikit-merge.sh` exige un veredicto sellado por el hook del host de la sesión y solo conoce esos seis; el runbook de la Fase 7 decía "lead: Claude" y con claw de lead los seis merges de la cola habrían fallado cerrados con "sin estado del hook".
 
 ---
@@ -62,8 +64,10 @@ Medido: 2026-09-14, la skill `mac-tmux-control` nació leyendo el spinner de Cla
 
 Cada tarea de un carril pasa por esto, en este orden. Ningún paso se salta; si uno no aplica, se escribe por qué en el PR.
 
-1. **Encargo.** El lead escribe `BRIEF.md` en la raíz del worktree del carril: GOAL con la fila del plan verbatim, SCOPE con la tabla de archivos, CONTEXT con rutas absolutas, ACCEPTANCE con la DoD verbatim, VERIFY con los comandos exactos, TIMEBOX, FORBIDDEN y REPORT. Un encargo por carril, no por tarea. **El encargo viaja como archivo.** Por tmux solo va una línea corta que lo nombra ("Lee `<ruta>/BRIEF.md` y haz lo que pide"), con el `Enter` en llamada aparte: con textos largos el TUI se traga el `Enter` y el encargo queda escrito sin enviarse.
-2. **Implementación.** El implementador trabaja en su worktree, commitea con el hook, y termina con la línea de contrato. Donde la fila dice `[tdd:required]`, el rojo va pegado en `.saikit/scratch/<carril>/tdd.md`; sin rojo pegado, no terminó.
+1. **Encargo.** El lead escribe `BRIEF.md` en la raíz del worktree del carril: GOAL con la fila del plan verbatim, SCOPE con la tabla de archivos, CONTEXT con rutas absolutas, ACCEPTANCE con la DoD verbatim, VERIFY con los comandos exactos, TIMEBOX, FORBIDDEN y REPORT. Un encargo por carril, no por tarea. **El encargo viaja como archivo.** Por tmux solo va una línea corta que lo nombra ("Lee `<ruta>/BRIEF.md` y haz lo que pide"), con el `Enter` en llamada aparte: con textos largos el TUI se traga el `Enter` y el encargo queda escrito sin enviarse. El encargo sigue la plantilla del encargo de la skill `autopilot-runbook` (regla de no limpiar y espejo de progreso); la sesión se abre con `corrida.sh lanzar-sesion`, que la anota en el registro y la marca antes de mandar.
+2. **Implementación.** El implementador trabaja en su worktree, commitea con el hook, y termina con la línea de contrato. Donde la fila dice `[tdd:required]`, el rojo va pegado en `.saikit/scratch/<carril>/tdd.md`; sin rojo pegado, no terminó. **TIMEBOX con pausas: 6 horas** de reloj por carril, desde su lanzamiento hasta su `LISTO`. El tiempo detenido en un diálogo no cuenta: al quedar otra vez trabajando, el TIMEBOX **vuelve a 6 horas completas** (el registro de `corrida.sh` guarda `timebox_horas`). A su tope, el carril pasa a `atorado` con lo que tenga y los demás siguen.
+
+Medido: 2026-09-17, primera corrida de la Fase 7, de donde esta regla se muda al loop: los dos carriles se lanzaron sin su flag sin-preguntas y uno pasó 7 h detenido en un prompt de permiso. Ese tiempo lo perdió el lanzamiento, no el implementador, y por eso el TIMEBOX se reinicia al quedar en modo sin preguntas.
 3. **Auditoría del lead, antes de cualquier PR.** El lead lee el commit, corre la batería una vez, y **muta él mismo** lo que la prueba protege: revierte el cambio en una copia y comprueba que la prueba se pone en rojo. Una prueba que pasa igual sin el arreglo no cuenta, y la tarea vuelve al paso 1 con un encargo de corrección.
 4. **PR en borrador.** El lead hace push y abre el PR **como draft**, desde el worktree, con el cuerpo en archivo. El CI corre; CodeRabbit no.
 5. **Rondas de revisión cruzada** sobre el SHA del PR, con la política de la sección 4. Cada hallazgo bloqueante se corrige con un encargo `BRIEF-r<N>.md` al mismo implementador y vuelve al paso 3. Lo no bloqueante va a una fila del plan.
@@ -72,7 +76,7 @@ Cada tarea de un carril pasa por esto, en este orden. Ningún paso se salta; si 
 8. **Aprobación.** `APPROVE lead <sha>` como comentario en el PR, con la lista de residuales y su razón. Solo eso mete el PR a la cola.
 9. **Merge** por la ruta del kit, sección 6. Base al día antes, con `git merge origin/<default>` en el worktree del carril y push normal: **nunca rebase**, que exige force-push y está prohibido. CI verde del SHA nuevo, y re-APPROVE si `git diff <sha aprobado> HEAD -- <archivos del carril>` sale vacío, o vuelta al paso 5 si no. La rama por defecto avanza sola cada dos horas con los snapshots del gateway, así que esto pasa en casi todo merge.
 10. **Despliegue y verificación**, sección 7, si la fase lo pide.
-11. **Progreso escrito**, sección 8. Solo entonces, la siguiente tarea.
+11. **Progreso escrito**, sección 8. Solo entonces, la siguiente tarea. Los mensajes que la corrida manda a David en cada cambio de estado cumplen `seguimiento.v1`.
 
 Medido: 2026-09-16, revisión de cierre de la Fase 6: en los siete carriles, al menos una prueba pasaba igual con el defecto puesto; ningún implementador lo detectó solo, el paso 3 lo atrapó en todos.
 
@@ -174,6 +178,8 @@ Medido: 2026-09-18, encendiendo el tablero de la Fase 7. Se agrego la fase a la 
 
 En cada cambio de estado de un carril o de la cola, y al cierre, el lead escribe `.saikit/progress/<fase>.json` en el formato `runbook-progress.v1` y lo envía con `openclaw gateway call runbook.progress.set --params "$(cat <archivo>)"`. La CLI **no** acepta la forma arroba-archivo: contesta `--params must be valid JSON` (medido 2026-09-16 y otra vez el 2026-09-17), así que el JSON va en línea. Un envío fallido no bloquea y se reintenta en el siguiente cambio. Cada escritura lleva `atencion_requerida` y `siguiente_paso` en lenguaje llano. Lo que no está en ese archivo no es progreso.
 
+Los mensajes que la corrida manda a David (seguimiento, parte, cierre) cumplen `seguimiento.v1`: `[ETIQUETA]`, `Que cambio`, `Que sigue`, `Que necesito de ti`, en lenguaje de usuario. `corrida.sh` valida cada mensaje contra ese contrato antes de mandarlo; un envío fallido se anota y se reintenta en el siguiente cambio, igual que el progreso.
+
 Medido: 2026-09-16, el cierre de la Fase 6 quedó declarado en `Plans.md` con un residual de canary que, al repetirlo, pasaba: sin progreso escrito por corrida, el estado declarado y el real divergieron sin que nadie lo notara.
 
 **Enviar el progreso no lo hace alcanzable.** La ruta del tablero es por prefijo, así que `/runbook/tablero/<fase>` sirve cualquier fase en cuanto su documento existe; pero la barra "Fases:" que da el único clic desde la aplicación se pinta con la lista `plugins.entries.tablero-runbook.config.fases` de la configuración del gateway, y el plugin la lee **una sola vez, al registrarse**. Una fase que no esté en esa lista existe y nadie llega a ella sin escribir la dirección a mano. Por eso el despliegue de una fase nueva lleva dos pasos más, los dos en la ventana segura de §7:
@@ -197,6 +203,8 @@ Por eso, si el lead muere, se cuelga o se queda sin cuota, claw relanza **otro h
 4. Si un PR aprobado no tiene sello vigente en el host nuevo, lo re-sella con un revisor propio contra el head actual y sigue.
 
 Un implementador externo se relanza **una vez** con el mismo encargo; a la segunda, el carril queda `atorado` y se declara. No se cambia de implementador en silencio.
+
+El lead nuevo lee además el registro de la corrida (`~/.local/state/corridas/<id>/registro.json`, contrato `corrida.v1`): sesiones con su rol, preaprobaciones y canal de seguimiento ya resuelto. Lo que `corrida.sh` anotó no se re-deriva de memoria. Si tiene que avisar a David, el mensaje cumple `seguimiento.v1`.
 
 Medido: 2026-09-16, corrida nocturna de la Fase 6: el primer lead murió por un error interno del gateway y se relanzó a mano; el segundo retomó desde los PRs sin repetir carriles cerrados.
 
@@ -240,8 +248,9 @@ Aplican en toda fase. El runbook de fase agrega las suyas y no repite estas.
 | El revisor cruzado sale 3 | Revisor interno, declarado en el PR. No se espera. |
 | CodeRabbit sin cuota o sin respuesta en 20 minutos | No bloquea. Línea en el PR y en el Telegram. Se reintenta tras el próximo push. |
 | Cuota agotada o rate limit de un **proveedor de modelo** (el del implementador o el del revisor) por más de 30 minutos | El carril se detiene y se declara. Los demás siguen. No se cambia de modelo ni de proveedor por cuenta propia. CodeRabbit no es un proveedor de modelo: su fila es la de arriba y nunca detiene un carril. |
-| Una sesión queda esperando a una persona: permiso, confianza de la carpeta, límite de uso con cambio de modelo | Llega sola, sea el CLI que sea: el vigilante manda `waiting for approval`, y recuerda cada 30 minutos a toda sesión marcada que siga callada. Se contesta con la tabla de preaprobaciones del runbook; lo que no está en la tabla se rechaza y se declara. Si el CLI tiene modo sin preguntas, se cambia de modo en vez de contestar de una en una. |
-| Nadie vigila una sesión | **Toda** sesión que la corrida lanza se marca al lanzarla, **la del lead incluida**: `/opt/homebrew/bin/tmux set-environment -t <sesión> OPENCLAW_WATCH 1`. Sin marca el vigilante la ignora por diseño. Se desmarcan todas al cerrar la fase. |
+| Una sesión queda esperando a una persona: permiso, confianza de la carpeta, límite de uso con cambio de modelo | Llega sola, sea el CLI que sea: el vigilante manda `waiting for approval`, y recuerda cada 30 minutos a toda sesión marcada que siga callada. Se contesta con la tabla de preaprobaciones del runbook; lo que no está en la tabla se rechaza y se declara. Si el CLI tiene modo sin preguntas, se cambia de modo en vez de contestar de una en una. Si el diálogo necesita a David, el mensaje cumple `seguimiento.v1`: pregunta en palabras simples con lo que implica cada opción. |
+| Nadie vigila una sesión | **Toda** sesión que la corrida lanza se marca al lanzarla, **la del lead incluida**: `/opt/homebrew/bin/tmux set-environment -t <sesión> OPENCLAW_WATCH 1`. Sin marca el vigilante la ignora por diseño. Se desmarcan todas al cerrar la fase. Las sesiones nuevas se abren con `corrida.sh lanzar-sesion`, que marca antes de mandar; el marcado a mano queda para sesiones que ya existían. |
+| Un carril pasa su TIMEBOX de 6 h | Pasa a `atorado` con lo que tenga; si su trabajo es mergeable se mergea, si no se declara. El tiempo detenido en un diálogo no contó (§3); el registro de `corrida.sh` dice cuánto queda. El otro carril sigue. |
 | Un comando de limpieza se vuelve pregunta | El hook de seguridad convierte en pregunta cualquier borrado destructivo, aunque sea bajo `/tmp`: `rm -rf`, `DROP DATABASE`. Los directorios de trabajo se crean con `mktemp -d` y no se borran; las bases de verificación llevan nombre único y se dejan. **No se limpia durante la corrida**: el cierre declara qué quedó, con rutas y nombres de base. |
 | El lead se cae | Claw relanza otro host de la lista; sección 9. |
 | Un implementador muere o calla 30 minutos sin mensaje de cuota | Se relanza una vez con el mismo encargo. A la segunda, atorado y declarado. |
