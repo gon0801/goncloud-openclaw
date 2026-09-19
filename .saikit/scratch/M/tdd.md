@@ -106,3 +106,29 @@ ok (4): un .txt nuevo sin .md deja rojo el chequeo (2) real
 TODO VERDE: crons-dos-copias
 TODO VERDE: sync-avisa-skills
 ```
+
+## r3 — ventana del log, --test D1/D2, y el ? de C
+
+### Hueco 1: tail-80 perdia SKILLS
+```
+{ echo "<linea SKILLS>"; seq 80; } | tail -80 | grep -c " SKILLS "  → 0
+{ echo "<linea SKILLS>"; seq 80; } | tail -400 | grep -c " SKILLS " → 1
+```
+Arreglo: PASO 1 y PASO 3b usan la misma ventana `tail -400` (declarada: cubre varios ciclos; minimo obligatorio).
+
+### Hueco 3: "?" restaurado
+`"Lo reviso ahora? Responde SI y lo veo."` (como el v1).
+
+### Hueco 2: --test declara D1/D2
+```
+bash docs/cron-messages/APLICAR_VIGIA_SYNC.sh --test  → EXIT 0
+recorrido D1/D2 impreso (vigia-sync-prueba-D1/D2, --tools exec, LOG=prueba, SKILLS de 43097da)
+SECO: no se crearon jobs. Falta la corrida real en Q2:
+  VIGIA_SYNC_EJECUTAR=1 docs/cron-messages/APLICAR_VIGIA_SYNC.sh --test
+```
+
+### Tests
+```
+TODO VERDE: crons-dos-copias
+TODO VERDE: sync-avisa-skills
+```
