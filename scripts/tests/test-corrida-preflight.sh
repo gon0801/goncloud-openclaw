@@ -165,6 +165,15 @@ printf '%s' "$out" | grep -q "binario invalido" || fail "la tabla inyectada no s
 $out"
 [ -e "$T/inyeccion-9x" ] && fail "la inyeccion del binario ejecuto codigo"
 
+# ROJO con flag inyectado en la tabla (JA): rechazo cerrado, diagnostico y nada ejecutado.
+modos x jaf cli-muere "--modo; touch $T/ja-marker-9x; true" "BAR-OK-9"
+abrir t-jaf "$RB"
+out=$(bash "$CORR" preflight t-jaf 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "con flag inyectado debio dar NO APTO"
+printf '%s' "$out" | grep -q "flag invalido" || fail "la tabla con flag inyectado no se diagnostica:
+$out"
+[ -e "$T/ja-marker-9x" ] && fail "la inyeccion del flag ejecuto codigo"
+
 # ROJO con flag que no entra (pero que llega al binario: la razon es la barra).
 : > "$ARGV_LOG"
 modos x mal cli-flag-malo "--flag-malo-9" "BAR-OK-9"

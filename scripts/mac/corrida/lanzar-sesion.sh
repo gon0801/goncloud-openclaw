@@ -33,6 +33,7 @@ corrida_lanzar_sesion() {
   flag="$(printf '%s' "$fila" | cut -d'|' -f2)"
   barra="$(printf '%s' "$fila" | cut -d'|' -f3)"
   [ -n "$barra" ] || { echo "barra vacia en la tabla para $token" >&2; return 1; }
+  flag_de_tabla "$flag" || return 1
   local bin
   bin="$(bin_de_tabla "$binario")" || return 1
   [ -d "$dir" ] || { echo "sin directorio: $dir" >&2; return 1; }

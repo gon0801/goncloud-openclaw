@@ -91,19 +91,34 @@ js=[j.get('id','') for j in d.get('jobs',[]) if j.get('name')==os.environ['NOMBR
 print('\n'.join(js) if js else 'NINGUNO')" 2>/dev/null
 }
 
-# El lock del registro, en un solo lugar. Un lock de mas de un minuto es de un
-# proceso muerto y se rompe con aviso (el +1 de find: BSD matchea >60 s, GNU
-# redondea y matchea desde ~2 min; el umbral efectivo, entre 1 y 2 min, a proposito).
-# Al tomar, se arma un trap de EXIT sin dueno (si el llamador ya tiene el suyo, como
-# preflight, no se le pisa: ese caso lo cubre el rompimiento de locks viejos). Nada
-# de guardar y restaurar traps: restaurar dentro de una subshell de captura dispara
+# El lock del registro, en un solo lugar, con lease de dueno. Al tomar se escribe
+# un token (.lock/token): la edad del lock es la del TOKEN, y su dueno vivo la
+# refresca entre llamadas largas (lock_refrescar) — un lock refrescado jamas se
+# roba, pase lo que pase debajo. Un lock sin token (manual, o de una version
+# vieja) se envejece por el directorio. Pasado CORR_LOCK_VIEJO segundos sin
+# refresco, el lock es de un proceso muerto y se rompe con aviso. Al tomar, se
+# arma un trap de EXIT sin dueno (si el llamador ya tiene el suyo, como preflight,
+# no se le pisa: ese caso lo cubre el rompimiento de locks viejos). Nada de
+# guardar y restaurar traps: restaurar dentro de una subshell de captura dispara
 # el trap ajeno al cerrar ella (medido: borro el dir de una prueba a mitad de
 # corrida). Al soltar, el disarm va ANTES del rmdir: el EXIT de este proceso no
-# puede romperle a otro un lock vivo tomado entremedias.
-lock_tomar() { # $1 registro; 0 = tomado (trap de EXIT armado si no habia dueno)
+# puede romperle a otro un lock vivo tomado entremedias; y el lock solo lo
+# elimina su dueno (el token calza) — un soltar ajeno no toca nada.
+CORR_LOCK_VIEJO="${CORR_LOCK_VIEJO:-60}"
+lock_viejo() { # $1 dir del lock, $2 umbral en segundos; 0 = viejo (rompible)
+  local ref="$1/token"
+  [ -f "$ref" ] || ref="$1"
+  VIEJO_REF="$ref" VIEJO_UMBRAL="$2" python3 -c "
+import os,sys,time
+try: m=os.path.getmtime(os.environ['VIEJO_REF'])
+except Exception: sys.exit(1)
+sys.exit(0 if time.time()-m > float(os.environ['VIEJO_UMBRAL']) else 1)" 2>/dev/null
+}
+lock_tomar() { # $1 registro; 0 = tomado (token escrito; trap de EXIT si no habia dueno)
   local dir i=0
   dir="$(dirname "$1")"
-  if [ -d "$dir/.lock" ] && [ -n "$(find "$dir/.lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then
+  if [ -d "$dir/.lock" ] && lock_viejo "$dir/.lock" "$CORR_LOCK_VIEJO"; then
+    rm -f "$dir/.lock/token"
     rmdir "$dir/.lock" 2>/dev/null \
       && echo "lock_tomar: rompio un lock viejo en $dir" >&2
   fi
@@ -111,20 +126,37 @@ lock_tomar() { # $1 registro; 0 = tomado (trap de EXIT armado si no habia dueno)
     i=$((i+1)); [ "$i" -gt 100 ] && return 1
     sleep 0.1
   done
+  CORR_LOCK_TOKEN="$$-${RANDOM:-0}"
+  printf '%s' "$CORR_LOCK_TOKEN" > "$dir/.lock/token"
   if [ -z "$(trap -p EXIT)" ]; then
     CORR_LOCK_ACT="$dir/.lock"
     CORR_LOCK_ARMADO=1
-    trap 'rmdir "$CORR_LOCK_ACT" 2>/dev/null' EXIT
+    trap 'rm -f "$CORR_LOCK_ACT/token"; rmdir "$CORR_LOCK_ACT" 2>/dev/null' EXIT
   fi
   return 0
 }
 
+lock_refrescar() { # $1 registro: re-touch del token, solo si este proceso sigue
+                   # siendo el dueno (nada de touch ciego: no se revive lock ajeno)
+  local t
+  t="$(dirname "$1")/.lock/token"
+  [ -f "$t" ] || return 0
+  [ "$(cat "$t" 2>/dev/null)" = "${CORR_LOCK_TOKEN:-}" ] && touch "$t" 2>/dev/null
+  return 0
+}
+
 lock_soltar() { # $1 registro: disarm ANTES del rmdir, solo si este proceso armo el trap
+  local d t
+  d="$(dirname "$1")/.lock"; t="$d/token"
   if [ "${CORR_LOCK_ARMADO:-0}" = "1" ]; then
     trap - EXIT
     CORR_LOCK_ARMADO=0
   fi
-  rmdir "$(dirname "$1")/.lock" 2>/dev/null
+  if [ -f "$t" ] && [ "$(cat "$t" 2>/dev/null)" != "${CORR_LOCK_TOKEN:-}" ]; then
+    return 0 # lock ajeno o robado: no es de quien suelta
+  fi
+  rm -f "$t"
+  rmdir "$d" 2>/dev/null
 }
 
 registro_escribir() { # $1 registro, $2 lineas python que mutan d; 0 = escrito.
@@ -298,6 +330,15 @@ bin_de_tabla() { # $1 binario de la tabla; stdout su absoluta; rc 2 = invalido, 
     echo "binario invalido en la tabla de modos: $1" >&2; return 2;; esac
   bash -c 'PATH="$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH"; command -v "$1"' _ "$1" 2>/dev/null \
     || { echo "binario no arranca: $1" >&2; return 1; }
+}
+
+# El flag de la tabla viaja al mismo shell-command de tmux (sh -c): solo
+# [A-Za-z0-9 _.=-] — el espacio queda ("--mode yolo", "-f --trust" existen medidos);
+# un ";" o una comilla alli es inyeccion, no un flag.
+flag_de_tabla() { # $1 flag de la tabla; rc 2 = invalido (mensaje a stderr)
+  case "$1" in *[!A-Za-z0-9_.\ =-]*)
+    echo "flag invalido en la tabla de modos: $1" >&2; return 2;; esac
+  return 0
 }
 
 # corrida_mensaje <id> <ETIQUETA> <avance> <cambio> <sigue> <necesito>

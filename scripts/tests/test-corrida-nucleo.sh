@@ -44,7 +44,13 @@ while IFS= read -r line; do
   printf '%s\n' "$line" >> "$RECIBIDAS"
 done
 CLI
-chmod +x "$T/bin"/cli-bueno "$T/bin"/cli-mala-barra "$T/bin"/cli-tarde
+# cli-ruin muere al instante: deja que la inyeccion del flag (mutada) corra su curso.
+cat >"$T/bin/cli-ruin" <<'CLI'
+#!/bin/sh
+printf 'RUIN: %s\n' "$*" >> "$RECIBIDAS"
+exit 3
+CLI
+chmod +x "$T/bin"/cli-bueno "$T/bin"/cli-mala-barra "$T/bin"/cli-tarde "$T/bin"/cli-ruin
 export RECIBIDAS="$T/recibidas.txt"
 
 # Tabla de modos propia de la prueba (el registro manda, no el entorno).
@@ -53,6 +59,8 @@ printf 'malo\tcli-mala-barra\t--modo-malo-9\tBARRITA-YOLO\t--\t--\t--\n' >>"$T/m
 printf 'tarde\tcli-tarde\t--modo-tarde-9\tBAR-TARDE-9\t--\t--\t--\n' >>"$T/modos.tsv"
 # IA: el binario de esta fila lleva comandos inyectados; jamas debe llegar a un sh.
 printf 'inyecta\ttocar; touch %s/inyeccion-9x; true\t--modo-9\tBARRITA-YOLO\t--\t--\t--\n' "$T" >>"$T/modos.tsv"
+# JA: el flag de esta fila lleva comandos inyectados; idem, jamas a un sh -c.
+printf 'jaflag\tcli-ruin\t--modo; touch %s/ja-marker-9x; true\tBARRITA-YOLO\t--\t--\t--\n' "$T" >>"$T/modos.tsv"
 
 # Stub openclaw: anota, no manda. El destino es unico para probar que no entra al repo.
 # CRON_RM_FAIL=1 hace fallar cron rm; CRON_SIN_ID=1 hace que cron add no devuelva id
@@ -89,11 +97,13 @@ case "\$*" in
     fi
     printf ']}';;
   *cron\ add*)
-    [ "\${CRON_ADD_SUENIO:-0}" != "0" ] && sleep "\${CRON_ADD_SUENIO}"
     nom=""; prev=""
     for a in "\$@"; do [ "\$prev" = "--name" ] && nom="\$a"; prev="\$a"; done
+    # El suenio va TRAS apuntar el cron y ANTES de responder: con el tope matando
+    # la llamada, el cron existe en la lista pero el id nunca llega al cliente.
     if [ "\${CRON_ID_UNIQ:-0}" = "1" ]; then
       printf '%s %s\n' "\$nom" "cron-\$nom-\$\$" >> "$T/cron-puesto"
+      [ "\${CRON_ADD_SUENIO:-0}" != "0" ] && sleep "\${CRON_ADD_SUENIO}"
       printf '{"id":"cron-%s-%s"}' "\$nom" "\$\$"
     elif [ "\${CRON_SIN_ID:-0}" = "1" ]; then
       c=\$(grep -c "^\$nom " "$T/cron-puesto" 2>/dev/null); c=\${c:-0}
@@ -101,6 +111,7 @@ case "\$*" in
       printf '{}'
     else
       printf '%s %s\n' "\$nom" "cron-\$nom" >> "$T/cron-puesto"
+      [ "\${CRON_ADD_SUENIO:-0}" != "0" ] && sleep "\${CRON_ADD_SUENIO}"
       printf '{"id":"cron-%s"}' "\$nom"
     fi;;
   *message\ send*) [ "\${MSJ_SUENIO:-0}" != "0" ] && sleep "\${MSJ_SUENIO}"; [ "\${ENVIO_MODO:-ok}" = "mal" ] && exit 1; printf '{"messageId":"m1"}';;
@@ -205,6 +216,15 @@ wait "$a2"; r2=$?
 n=$(grep -c "corrida-vigia-t-carrera" "$T/cron-puesto" 2>/dev/null || echo 0)
 [ "$n" -eq 1 ] || fail "la carrera dejo $n crons vivos (debia quedar uno)"
 [ -f "$T/corridas/t-carrera/registro.json" ] || fail "la carrera no dejo registro"
+
+# (1e) JC: cron add colgado — abrir muere al tope y el cron que llego a ponerse se
+# retira por nombre (nada de huerfanos), sin registro ni lock.
+out="$(CRON_ADD_SUENIO=12 CORR_TOPE_RED=3 bash "$CORR" abrir t-jc --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "con el cron add colgado debio fallar cerrado"
+printf '%s' "$out" | grep -q "se quito por la lista" || fail "la limpieza del add colgado no se reporta"
+grep -q "corrida-vigia-t-jc" "$T/cron-puesto" 2>/dev/null && fail "el cron del add colgado quedo huerfano"
+[ -f "$T/corridas/t-jc/registro.json" ] && fail "con el add colgado se escribio registro"
+[ -d "$T/corridas/t-jc/.lock" ] && fail "con el add colgado quedo lock puesto"
 
 # (1c) tmux -t sin = matchea por prefijo: ses-prefija-2 viva no estorba a ses-prefija.
 "$TM_REAL" -L "$L" new-session -d -s ses-prefija-2 >/dev/null 2>&1 || fail "no se creo ses-prefija-2"
@@ -328,6 +348,13 @@ out="$(bash "$CORR" lanzar-sesion t1 carril inyecta "$T/ses" --nombre ses-iny 2>
 printf '%s' "$out" | grep -q "binario invalido" || fail "el rechazo no diagnostica el binario invalido"
 [ -e "$T/inyeccion-9x" ] && fail "la inyeccion del binario ejecuto codigo"
 
+# (9k) JA: el flag de la tabla con comandos inyectados jamas llega al sh -c de tmux.
+out="$(bash "$CORR" lanzar-sesion t1 carril jaflag "$T/ses" --nombre ses-jaf 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "el flag inyectado debio rechazarse"
+printf '%s' "$out" | grep -q "flag invalido" || fail "el rechazo no diagnostica el flag invalido"
+[ -e "$T/ja-marker-9x" ] && fail "la inyeccion del flag ejecuto codigo"
+grep -q '"nombre": *"ses-jaf"' "$T/corridas/t1/registro.json" && fail "la sesion del flag inyectado quedo registrada"
+
 # (9d) el marcado que falla no deja sesion viva ni sin marca.
 SETENV_FAIL=ses-marka bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nombre ses-marka >/dev/null 2>&1 \
   && fail "con el marcado fallando debio fallar el lanzamiento"
@@ -387,6 +414,38 @@ lock_soltar "$T/corridas/t1/registro.json"
 # (9g2) deja vivos el servidor tmux y el temporal.
 trap '"$TM_REAL" -L "$L" kill-server 2>/dev/null; rm -rf "$T"' EXIT
 
+# (9f4) JB: un dueno vivo que refresca NO se rompe pasado el umbral — la edad que
+# manda es la del TOKEN (el dir del lock ya va viejo: si se mirara el dir, roba).
+CORR_LOCK_VIEJO=1; export CORR_LOCK_VIEJO
+lock_tomar "$T/corridas/t1/registro.json" >/dev/null 2>&1 || fail "lock_tomar para el lease fallo"
+sleep 1.2
+lock_refrescar "$T/corridas/t1/registro.json"
+bash -c ". '$PWD/scripts/mac/corrida/lib.sh'; lock_tomar '$T/corridas/t1/registro.json'" >/dev/null 2>&1 \
+  && fail "un segundo lock_tomar robo un lock refrescado"
+[ "$(cat "$T/corridas/t1/.lock/token" 2>/dev/null)" = "$CORR_LOCK_TOKEN" ] \
+  || fail "el token del lock ya no es el nuestro (nos robaron)"
+lock_soltar "$T/corridas/t1/registro.json"
+[ -d "$T/corridas/t1/.lock" ] && fail "lock_soltar propio dejo el lock"
+unset CORR_LOCK_VIEJO
+
+# (9f5) JB: lock_soltar de un no-dueno no elimina el lock ajeno; el dueno si, via
+# su EXIT (el holder trapea TERM -> exit -> el trap del lock corre).
+cat >"$T/jb-holder.sh" <<JBH
+. "$PWD/scripts/mac/corrida/lib.sh"
+trap 'exit 143' TERM
+lock_tomar "$T/corridas/t1/registro.json" || exit 9
+sleep 30
+JBH
+bash "$T/jb-holder.sh" >/dev/null 2>&1 &
+hjb=$!
+k=0; while [ ! -f "$T/corridas/t1/.lock/token" ] && [ "$k" -lt 50 ]; do sleep 0.1; k=$((k+1)); done
+[ -f "$T/corridas/t1/.lock/token" ] || fail "el holder nunca tomo el lock"
+lock_soltar "$T/corridas/t1/registro.json"
+[ -d "$T/corridas/t1/.lock" ] || fail "lock_soltar de un no-dueno elimino el lock ajeno"
+kill -TERM "$hjb" 2>/dev/null; wait "$hjb" 2>/dev/null
+k=0; while [ -d "$T/corridas/t1/.lock" ] && [ "$k" -lt 50 ]; do sleep 0.1; k=$((k+1)); done
+[ -d "$T/corridas/t1/.lock" ] && fail "el EXIT del dueno no solto su lock"
+
 # (9g) el trap del lock se desarma tras soltarlo: el EXIT de quien lo uso no puede
 # romperle a otro un lock vivo tomado entremedias.
 cat >"$T/z2.sh" <<Z2
@@ -425,6 +484,26 @@ grep -q "se cerro mientras se lanzaba" "$T/lanzar-tarde.out" || fail "la negativ
 "$TM_REAL" -L "$L" has-session -t "=ses-tarde" 2>/dev/null && fail "ses-tarde quedo viva en corrida cerrada"
 grep -q '"nombre": *"ses-tarde"' "$T/corridas/t-tarde/registro.json" && fail "ses-tarde quedo anotada en corrida cerrada"
 grep -q '"estado": *"cerrada"' "$T/corridas/t-tarde/registro.json" || fail "t-tarde no quedo cerrada"
+
+# (9h2) JB: la carrera cerrar x lanzar con la red lenta bajo el lock: con el lease
+# refrescado, lanzar ESPERA (no roba) y la corrida cerrada no registra sesiones.
+# Umbral 3 s; cerrar tarda rm 2 s + envio 4 s; lanzar entra a los ~3.8 s, cuando el
+# lock sin refresco ya seria viejo (mutacion: lo roba, registra y la prueba muere).
+bash "$CORR" abrir t-jb --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir t-jb fallo"
+CORR_LOCK_VIEJO=3 CRON_RM_SUENIO=2 MSJ_SUENIO=4 bash "$CORR" cerrar t-jb >/dev/null 2>&1 &
+cerrajb=$!
+sleep 3.5
+CORR_LOCK_VIEJO=3 bash "$CORR" lanzar-sesion t-jb carril bueno "$T/ses" --nombre ses-jb >"$T/jb-lanzar.out" 2>&1 &
+lanjb=$!
+wait "$cerrajb"; rc_c=$?
+wait "$lanjb"; rc_l=$?
+[ "$rc_c" -eq 0 ] || fail "cerrar con red lenta debio cerrar (rc=$rc_c)"
+[ "$rc_l" -ne 0 ] || fail "lanzar debio negarse sobre la corrida que se cerraba"
+grep -q '"nombre": *"ses-jb"' "$T/corridas/t-jb/registro.json" \
+  && fail "ses-jb quedo registrada en corrida cerrada (lock robado en vivo)"
+grep -q '"estado": *"cerrada"' "$T/corridas/t-jb/registro.json" || fail "t-jb no quedo cerrada"
+"$TM_REAL" -L "$L" has-session -t "=ses-jb" 2>/dev/null && fail "ses-jb quedo viva en corrida cerrada"
 
 # ancla de orden: cerrar toma el lock ANTES de listar sesiones (reordenarlo — la
 # mutacion que deja la carrera abierta por el lado de cerrar — pone esto en rojo).

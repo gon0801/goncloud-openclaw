@@ -43,6 +43,9 @@ print(' '.join(x.get('nombre','') for x in json.load(open(os.environ['CORR_REG']
       return 1
     fi
   fi
+  # Lease: la red de arriba pudo tardar; el token se refresca antes de la
+  # siguiente llamada larga para que ningun lock_tomar ajeno lo crea muerto.
+  lock_refrescar "$reg"
   # Un aviso de cierre YA entregado (intento anterior que fallo al escribir) no se
   # reenvia: mensajes.jsonl es la memoria de lo que David ya recibio.
   local ya
@@ -60,6 +63,8 @@ print('true' if any(f.get('etiqueta')=='CERRADA' and f.get('ok') for f in filas)
       return 1
     fi
   fi
+  # Lease otra vez: el envio es la llamada mas larga bajo el lock.
+  lock_refrescar "$reg"
   if ! registro_escribir "$reg" "d['estado']='cerrada'"; then
     lock_soltar "$reg"
     echo "cerrar: el aviso de $id ya salio pero el registro no se pudo marcar cerrado — reintentar cierra sin reenviar el aviso" >&2

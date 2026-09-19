@@ -514,3 +514,50 @@ Verde: las tres pruebas, tambien /bin/bash 3.2.
   tardio engana. Demo: generador roto sin || fail => FAIL tardio y enganoso;
   con || fail => FAIL: el generador de la matriz fallo.
 Verde: las tres pruebas, tambien /bin/bash 3.2.
+
+## BRIEF-r17 (2026-09-19): segunda tanda de CodeRabbit (JA-JD)
+- Hallazgos verificados contra el codigo: los cuatro aplican (JA: flag
+  interpolado en los dos shell-command de tmux; JB: lock roto por edad sin
+  identidad de dueno; JC: cron add sin tope y un || que devolvia sin limpiar;
+  JD: la spec no documenta canal.destino).
+- JA: flag_de_tabla en lib.sh — solo [A-Za-z0-9 _.=-] (el espacio queda: "--mode
+  yolo" y "-f --trust" existen medidos); lanzar-sesion y preflight la usan antes
+  de armar el comando de tmux. Casos (9k) y t-jaf con "--modo; touch
+  $T/ja-marker-9x; true" => rechazo cerrado con diagnostico y sin marcador.
+  Mutacion muerta (validacion neutralizada): nucleo y preflight en FAIL; repro
+  suelto con la mutacion puesta: MARCADOR CREADO — la inyeccion es real (el
+  cli-ruin muere al instante y deja correr el touch; un CLI que bloquea en read
+  no dejaria correr nada: el fixture eligio un CLI que muere rapido). El espacio
+  en el patron del case va escapado (\ ): sin eso bash parte el patron en dos
+  palabras (error de sintaxis en 5 y 3.2).
+- JB: lease con dueno — lock_tomar escribe .lock/token; la edad del lock es la
+  del TOKEN (sin token, la del dir: los locks manuales de 9f siguen igual);
+  lock_refrescar re-toca el token solo si el cat calza (nada de touch ciego);
+  lock_soltar SIEMPRE desarma su trap primero y elimina el lock solo si el token
+  calza (un trap apuntando a un lock robado no puede quedar armado); lock_viejo
+  compara en segundos via python3 (CORR_LOCK_VIEJO, 60 por defecto) — el find
+  -mmin y su nota BSD/GNU se retiran. cerrar refresca entre llamadas: tras el
+  bloque del cron rm y tras el envio de CERRADA. Casos: (9f4) el dueno que
+  refresca no se rompe pasado el umbral (con el DIR ya viejo: si se mirara el
+  dir, roba); (9f5) lock_soltar de un no-dueno no elimina el ajeno y el EXIT
+  del dueno si (el holder trapea TERM -> exit); (9h2) la carrera cerrar x
+  lanzar con red lenta (umbral 3 s, rm 2 s, envio 4 s, lanzar a los 3.5 s):
+  lanzar espera y la corrida cerrada no registra sesiones. Mutaciones muertas:
+  sin refresco => FAIL: lanzar debio negarse sobre la corrida que se cerraba;
+  soltar sin dueño => FAIL: ...elimino el lock ajeno; edad por el dir => FAIL:
+  ...robo un lock refrescado. La fila del residual GC-3 pasa a cubierto por el
+  lease en decisiones.
+- JC: cron add bajo con_tope; su fallo ya no devuelve: entra a la limpieza por
+  nombre (cada cron rm con con_tope). El stub ahora apunta el cron ANTES de
+  dormir y responde despues: con el tope matando la llamada, el cron existe en
+  la lista pero el id nunca llega — exactamente el huerfano que abrir debe
+  retirar. Caso (1e): CRON_ADD_SUENIO=12 con tope 3 => falla cerrado, "se quito
+  por la lista", sin cron huerfano, sin registro ni lock. Mutaciones muertas:
+  sin tope => el add dormido vuelve con id y rc=0; sin limpieza => FAIL por el
+  huerfano.
+- JD: corrida.v1.md documenta canal.destino (una linea).
+- Incidente propio: el primer repro suelto de JA uso el tmux REAL sin -L (regla
+  b del carril raspada): la cadena murio al instante y no quedo sesion (verificado
+  por nombre exacto; las sesiones de los otros agentes intactas); el repro valido
+  se rehizo con socket propio.
+Verde: las tres pruebas, tambien /bin/bash 3.2.

@@ -26,6 +26,7 @@ registro ya dice.
 | `vigia` | Cerrado: `claw` o `hermes`. Cualquier otro valor es rojo |
 | `simulacro` | `true` si es simulacro: `corrida_mensaje` antepone `[SIMULACRO] ` |
 | `canal.cron` | Nombre del cron existente del que `abrir` leyó el destino; el destino resuelto vive solo aquí, jamás en el repo ni en entorno |
+| `canal.destino` | El destino de entrega resuelto de ese cron; el validador lo exige (`ROTO:sin canal.destino`) |
 | `cron_vigia_id` | El `id` que devolvió `cron add --json` al crear el hombre-muerto; `cerrar` lo quita por ese id y falla ruidosamente si no puede |
 | `cli_modos` | Ruta de la tabla de modos que usa esta corrida (por defecto la instalada) |
 | `inicio` | Cuándo se abrió, con zona horaria |

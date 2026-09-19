@@ -53,6 +53,7 @@ corrida_preflight() {
     barra="$(printf '%s' "$fila" | cut -d'|' -f3)"
     [ "$flag" = "unknown" ] || [ -z "$flag" ] && { unknown "flag de $cli sin medir"; continue; }
     [ "$barra" != "unknown" ] && [ -z "$barra" ] && { razon "barra vacia en la tabla: $cli"; continue; }
+    flag_de_tabla "$flag" || { razon "flag invalido: $cli"; continue; }
     local bin
     bin="$(bin_de_tabla "$binario")" || { razon "binario no arranca: $cli"; continue; }
     local psn="preflight-$id-$cli" embebido="PATH=\"$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH\""
