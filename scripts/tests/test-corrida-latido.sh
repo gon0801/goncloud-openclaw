@@ -61,6 +61,7 @@ case "$1" in
   repo)
     printf '{"nameWithOwner": "gon0801/goncloud-workspace-main"}\n';;
   api)
+    [ "${GH_API_FALLA:-0}" = "1" ] && exit 1
     printf '{"commit": {"author": {"name": "gon0801"}}, "files": [{"filename": "docs/spec/corrida.v1.md"}, {"filename": "scripts/mac/corrida/lib.sh"}]}\n';;
   *) exit 0;;
 esac
@@ -401,6 +402,56 @@ GH_CAIDO=1 GH_CI=rojo GH_SHA=cafe1234567 tick "$T0" >/dev/null 2>"$T/ghc.err" ||
 grep -qi "quedo en rojo" "$LLAMADAS" && fail "con gh caido igual se aviso el rojo"
 grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[AVANZA\]" || fail "con gh caido el latido dejo de latear"
 [ ! -f "$CORRIDA_STATE/lat-gh/ci-rojo.json" ] || fail "con gh caido se escribio registro de rojo"
+
+# (11) TA: run-list sano pero el commit sin metadatos (api caida): sin aviso,
+# sin registro, sha sin marcar; y el tick siguiente con la api sana si avisa,
+# con autor y archivos completos.
+LLAMADAS="$T/l12.log"; export LLAMADAS; : > "$LLAMADAS"
+solo_dejar lat-ta
+montar_corrida lat-ta avanza
+trabajando_en "$T0"
+GH_CI=rojo GH_SHA=ta1234567890 GH_API_FALLA=1 tick "$T0" >/dev/null 2>"$T/ta.err" || fail "TA: el tick con api caida revinto"
+[ "$(msgs)" = "1" ] || fail "TA: con el commit sin metadatos salio el aviso igual (msgs=$(msgs))"
+grep -qi "quedo en rojo" "$LLAMADAS" && fail "TA: el aviso de rojo salio sin metadatos"
+[ ! -f "$CORRIDA_STATE/lat-ta/ci-rojo.json" ] || fail "TA: se escribio ci-rojo.json sin metadatos"
+[ "$(evjson lat-ta gh-fallo)" -ge 1 ] 2>/dev/null || fail "TA: el commit sin metadatos no dejo evento gh-fallo"
+GH_CI=rojo GH_SHA=ta1234567890 tick "$((T0 + 300))" >/dev/null 2>&1 || fail "TA: el reintento con api sana revinto"
+[ "$(msgs)" = "2" ] || fail "TA: el reintento no aviso (msgs=$(msgs))"
+grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[DETENIDA\]" || fail "TA: el reintento no salio como DETENIDA"
+CIC="$CORRIDA_STATE/lat-ta/ci-rojo.json" python3 -c "
+import json,os
+d=json.load(open(os.environ['CIC']))
+assert d.get('sha')=='ta1234567890', d
+assert d.get('autor')=='gon0801' and any('corrida.v1.md' in a for a in d.get('archivos',[])), d
+" || fail "TA: el registro del reintento no trae autor y archivos"
+
+# (11b) TB: ci-rojo.json sin poder persistirse => el sha NO queda marcado (el
+# tick siguiente vuelve a avisarlo) y el tick deja rastro.
+LLAMADAS="$T/l13.log"; export LLAMADAS; : > "$LLAMADAS"
+solo_dejar lat-tb
+montar_corrida lat-tb avanza
+trabajando_en "$T0"
+mkdir "$CORRIDA_STATE/lat-tb/ci-rojo.json"   # directorio: el rename revienta
+GH_CI=rojo GH_SHA=tb9876543210 tick "$T0" >/dev/null 2>"$T/tb.err" && fail "TB: el tick con registro caido salio en verde"
+grep -q "no se pudo escribir" "$T/tb.err" || fail "TB: el registro caido no avisa"
+[ "$(msgs)" = "2" ] || fail "TB: con el registro caido salieron $(msgs) mensajes (debia 2: parte y aviso)"
+rmdir "$CORRIDA_STATE/lat-tb/ci-rojo.json"
+GH_CI=rojo GH_SHA=tb9876543210 tick "$((T0 + 300))" >/dev/null 2>&1 || fail "TB: el reintento revinto"
+[ "$(msgs)" = "3" ] || fail "TB: el sha quedo marcado sin registro; no se reaviso (msgs=$(msgs))"
+CIC="$CORRIDA_STATE/lat-tb/ci-rojo.json" python3 -c "
+import json,os
+assert json.load(open(os.environ['CIC'])).get('sha')=='tb9876543210'
+" || fail "TB: el reintento no dejo el registro"
+
+# (11c) TC: si ademas falla anotar el evento, el stderr lo dice (sin mensaje).
+LLAMADAS="$T/l14.log"; export LLAMADAS; : > "$LLAMADAS"
+solo_dejar lat-tc
+montar_corrida lat-tc avanza
+trabajando_en "$T0"
+mkdir "$CORRIDA_STATE/lat-tc/eventos.jsonl"   # directorio: el append revienta
+GH_CAIDO=1 tick "$T0" >/dev/null 2>"$T/tc.err" || fail "TC: el tick con eventos caidos revinto"
+grep -q "no se pudo consultar" "$T/tc.err" || fail "TC: falta el diagnostico de la consulta"
+grep -q "no se pudo anotar el fallo" "$T/tc.err" || fail "TC: la persistencia caida del evento no avisa"
 # SA: la consulta caida deja rastro (stderr + evento), no un salto en silencio.
 grep -q "no se pudo consultar" "$T/ghc.err" || fail "SA: la consulta de CI caida no avisa en stderr"
 [ "$(evjson lat-gh gh-fallo)" = "1" ] || fail "SA: la consulta de CI caida no dejo evento gh-fallo"

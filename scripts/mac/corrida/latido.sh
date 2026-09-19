@@ -134,9 +134,10 @@ latido_de() { # $1 dir de la corrida (con el registro adentro)
       || out=""
     if [ -z "$out" ]; then
       # sin respuesta (gh caido o invocacion rechazada): cero mensajes, pero
-      # el diagnostico no se pierde.
+      # el diagnostico no se pierde (ni siquiera si anotarlo tambien falla).
       echo "latido: no se pudo consultar la ultima corrida de CI (rama $def): el chequeo de rama en rojo se salto este tick" >&2
-      EVT_tipo=gh-fallo EVT_rama="$def" evento_jsonl "$dir"
+      EVT_tipo=gh-fallo EVT_rama="$def" evento_jsonl "$dir" \
+        || echo "latido: y no se pudo anotar el fallo de gh en eventos.jsonl" >&2
     fi
     if [ -n "$out" ]; then
       # separador de unidad: un campo vacio no corre los demas (con tab y IFS
@@ -169,11 +170,18 @@ print(chr(10).join(f.get('filename','') for f in d.get('files',[]) if f.get('fil
           autor="$(printf '%s\n' "$info" | sed -n '1p')"
           archivos="$(printf '%s\n' "$info" | sed -n '2,$p')"
         fi
-        if corrida_mensaje "$id" "DETENIDA" "$P_AVANCE" \
+        if [ -z "$slug" ] || [ -z "$autor" ] || [ -z "$archivos" ]; then
+          # TA: el rojo se vio, pero el commit no entrego sus metadatos: sin
+          # aviso y sin registro (el contrato los exige), con rastro, y el sha
+          # sin marcar para reintentar al proximo tick.
+          echo "latido: el commit $sha no entrego autor o archivos: el aviso de rojo espera al proximo tick" >&2
+          EVT_tipo=gh-fallo EVT_rama="$def" EVT_motivo="commit sin metadatos" evento_jsonl "$dir" \
+            || echo "latido: y no se pudo anotar el fallo de gh en eventos.jsonl" >&2
+        elif corrida_mensaje "$id" "DETENIDA" "$P_AVANCE" \
             "el repositorio central quedo en rojo tras un cambio automatico; ya se esta revisando" \
             "$P_SIGUE" "nada"; then
-          CIDIR="$dir" CI_SHA="$sha" CI_AUTOR="$autor" CI_ARCH="$archivos" \
-            CI_AT="$(epoch_a_iso "$now")" python3 -c "
+          if CIDIR="$dir" CI_SHA="$sha" CI_AUTOR="$autor" CI_ARCH="$archivos" \
+             CI_AT="$(epoch_a_iso "$now")" python3 -c "
 import json,os
 d={'sha':os.environ['CI_SHA'],'autor':os.environ['CI_AUTOR'],
    'archivos':[l for l in os.environ['CI_ARCH'].splitlines() if l],
@@ -181,11 +189,18 @@ d={'sha':os.environ['CI_SHA'],'autor':os.environ['CI_AUTOR'],
 t=os.path.join(os.environ['CIDIR'],'ci-rojo.json')
 open(t+'.tmp','w').write(json.dumps(d,indent=1)+chr(10))
 os.chmod(t+'.tmp',0o600)
-os.rename(t+'.tmp',t)" 2>/dev/null
-          lci="$sha"
-          lat_escribir "$lat" "$lfirma" "$lult" "$letq" "$lfv" "$lci" \
-            || { echo "latido: no se pudo escribir $lat; el aviso de rojo puede repetirse al proximo tick" >&2; lrc=1; }
-          EVT_tipo=ci-rojo EVT_sha="$sha" EVT_autor="$autor" EVT_ok=true evento_jsonl "$dir"
+os.rename(t+'.tmp',t)" 2>/dev/null; then
+            lci="$sha"
+            lat_escribir "$lat" "$lfirma" "$lult" "$letq" "$lfv" "$lci" \
+              || { echo "latido: no se pudo escribir $lat; el aviso de rojo puede repetirse al proximo tick" >&2; lrc=1; }
+            EVT_tipo=ci-rojo EVT_sha="$sha" EVT_autor="$autor" EVT_ok=true evento_jsonl "$dir"
+          else
+            # TB: el registro no persistio: el sha NO queda marcado (el proximo
+            # tick reavisa y reintenta el registro) y el tick sale fallado.
+            echo "latido: no se pudo escribir $dir/ci-rojo.json; el sha queda sin marcar y el aviso se reintenta" >&2
+            lrc=1
+            EVT_tipo=ci-rojo EVT_sha="$sha" EVT_autor="$autor" EVT_ok=false evento_jsonl "$dir"
+          fi
         else
           EVT_tipo=ci-rojo EVT_sha="$sha" EVT_autor="$autor" EVT_ok=false evento_jsonl "$dir"
         fi

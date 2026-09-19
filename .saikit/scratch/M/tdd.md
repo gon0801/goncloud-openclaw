@@ -222,3 +222,31 @@ consulta de run-list que no responde deja rastro: stderr + linea
 tipo gh-fallo en eventos.jsonl (cero mensajes a David sigue vigente: la
 DoD de gh caido no cambia). El stub de gh de la prueba queda fiel para
 siempre: rechaza campos desconocidos como el real.
+
+## Ronda 5 — CodeRabbit sobre r4 (20:05Z)
+
+### TA (Major): aviso y registro sin metadatos
+Rojo pegado (pre-fix, con el stub en GH_API_FALLA=1): `FAIL: TA: con el
+commit sin metadatos salio el aviso igual (msgs=2)`. Arreglo: run-list sano
+pero commit sin autor o archivos (o sin slug) se trata como fallo de
+consulta: stderr + evento gh-fallo (motivo commit sin metadatos), cero
+aviso, cero ci-rojo.json y el sha sin marcar. Caso (11): el reintento con
+la api sana avisa y el registro trae autor y archivos.
+
+### TB (Major): lci marcado sin registro
+ci-rojo.json que no persiste ya no marca el sha: stderr, lrc=1, evento
+ci-rojo ok=false; el proximo tick reavisa y reintenta el registro. Caso
+(11b): registro como directorio => tick rojo con rastro, reintento reavisa
+(msgs 3) y deja el registro. Rojo de mutacion: persistir el sha marcado sin
+registro muere con `FAIL: TB: el sha quedo marcado sin registro; no se
+reaviso (msgs=2)`. Nota honesta del camino: mi primer intento de mutacion
+murio por un error de sintaxis mio (no valia) y el segundo (marcar lci solo
+en memoria) resulto inerte — lo que el caso vigila de verdad es la MEMORIA
+PERSISTIDA, que es la que cruza ticks.
+
+### TC (Minor): el evento gh-fallo no se comprueba
+Las dos llamadas de gh-fallo (consulta y commit sin metadatos) comprueban el
+rc de evento_jsonl y dejan "y no se pudo anotar el fallo de gh" en stderr,
+sin mensaje a David. Caso (11c): gh caido + eventos.jsonl como directorio =>
+el stderr trae el diagnostico de la consulta Y el de la persistencia caida.
+Rojo de mutacion (sin la comprobacion): muere con el FAIL de (11c).
