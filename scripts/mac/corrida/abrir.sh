@@ -7,6 +7,9 @@ corrida_abrir() {
   local runbook="" vigia="" cli_modos="" canal_de="verif-sync-repos" sim="false"
   while [ $# -gt 0 ]; do
     case "$1" in
+      --runbook|--vigia|--cli-modos|--canal-de)
+        [ $# -ge 2 ] || { echo "abrir: $1 sin valor" >&2; return 2; };; esac
+    case "$1" in
       --runbook) runbook="$2"; shift 2;;
       --vigia) vigia="$2"; shift 2;;
       --cli-modos) cli_modos="$2"; shift 2;;
@@ -97,6 +100,13 @@ os.rename(t,E['CORR_REG'])
     || { echo "abrir: el registro escrito no pasa su propio contrato; se quita el cron" >&2
        [ -n "$cid" ] && "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1
        return 1; }
-  : > "$dir/mensajes.jsonl" && chmod 600 "$dir/mensajes.jsonl"
+  # El canal de mensajes es la mitad del contrato de la corrida: si no nace, no hay
+  # apertura — se retira el cron y el registro recien creados, y el error lo dice.
+  if ! { : > "$dir/mensajes.jsonl" && chmod 600 "$dir/mensajes.jsonl"; }; then
+    echo "abrir: no se pudo crear el canal de mensajes de $id; se retiran el cron y el registro" >&2
+    "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1
+    rm -f "$dir/registro.json"
+    return 1
+  fi
   echo "abierta $id"
 }

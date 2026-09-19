@@ -45,6 +45,33 @@ done
 validar_registro "$FX/registro-pasa-emergencia.json" || fail "emergencia dio lista dura (falso positivo)"
 validar_registro "$FX/registro-pasa-dropbox.json" || fail "dropbox dio lista dura (falso positivo)"
 
+# FB: campos exigidos — un registro sin cada uno de ellos cae con su motivo (los
+# mutantes se generan al vuelo desde el valido).
+python3 - "$TMP" "$FX" <<'PY'
+import json,sys
+tmp,fx=sys.argv[1],sys.argv[2]
+d0=json.load(open(fx+'/registro-valido.json'))
+for nom in ('cli_modos','cron_vigia_id','inicio','simulacro'):
+  d=json.loads(json.dumps(d0)); d.pop(nom,None)
+  json.dump(d,open('%s/falta-%s.json'%(tmp,nom),'w'),indent=1)
+d=json.loads(json.dumps(d0)); d['canal'].pop('destino',None)
+json.dump(d,open(tmp+'/falta-destino.json','w'),indent=1)
+d=json.loads(json.dumps(d0)); d['preaprobaciones']=5
+json.dump(d,open(tmp+'/falta-prea.json','w'),indent=1)
+PY
+revienta_archivo() { # $1 archivo, $2 motivo esperado
+  out="$(validar_registro "$1" 2>/dev/null)"; rc=$?
+  [ "$rc" -ne 0 ] || fail "registro incompleto pasa: $(basename "$1")"
+  printf '%s' "$out" | grep -qF "ROTO:$2" || fail "$(basename "$1") sin su motivo ($2):
+$out"
+}
+revienta_archivo "$TMP/falta-destino.json" "sin canal.destino"
+revienta_archivo "$TMP/falta-cli_modos.json" "sin cli_modos"
+revienta_archivo "$TMP/falta-cron_vigia_id.json" "sin cron_vigia_id"
+revienta_archivo "$TMP/falta-inicio.json" "sin inicio"
+revienta_archivo "$TMP/falta-simulacro.json" "simulacro no es booleano"
+revienta_archivo "$TMP/falta-prea.json" "preaprobaciones no es lista"
+
 # MATRIZ del detector de borrado recursivo (CA+CB+CE-r): todos los casos de una
 # vez; la mutacion (sin la regla) debe ponerla entera en rojo. Nota: el caso
 # "--force," de la matriz se codifica como "rm --recursive --force," — la regla

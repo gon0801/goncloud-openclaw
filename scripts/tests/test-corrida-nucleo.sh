@@ -131,6 +131,27 @@ bash "$CORR" abrir '../fuga' --runbook "$RB" --vigia claw --cli-modos "$T/modos.
 bash "$CORR" abrir 'a;b' --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 \
   && fail "abrir acepto un id con ;"
 
+# (0c) FC: un flag con valor faltante muere rapido con error claro, no se queda
+# masticando la misma opcion para siempre (rc 99 = sigue vivo a los 2 s).
+colgado() { # $@ comando: rc 99 si sigue vivo a los 2 s; si no, el rc del comando
+  "$@" >/dev/null 2>&1 &
+  local p=$!
+  sleep 2
+  if kill -0 "$p" 2>/dev/null; then
+    kill "$p" 2>/dev/null; wait "$p" 2>/dev/null
+    return 99
+  fi
+  wait "$p" 2>/dev/null
+}
+colgado bash "$CORR" abrir t1 --runbook; rc=$?
+[ "$rc" -eq 99 ] && fail "abrir con --runbook sin valor quedo colgado"
+[ "$rc" -ne 0 ] || fail "abrir debio rechazar --runbook sin valor"
+out="$(bash "$CORR" abrir t1 --runbook 2>&1)"
+printf '%s' "$out" | grep -q "sin valor" || fail "el flag sin valor no se explica"
+colgado bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nombre; rc=$?
+[ "$rc" -eq 99 ] && fail "lanzar-sesion con --nombre sin valor quedo colgado"
+[ "$rc" -ne 0 ] || fail "lanzar-sesion debio rechazar --nombre sin valor"
+
 # (1) lanzar bueno con encargo: vive, barra ok, entrega, registro la anota.
 printf 'haz lo pedido y termina con LISTO\n' >"$T/encargo.txt"
 : > "$TMUX_LOG"
@@ -415,6 +436,14 @@ bash "$CORR" cerrar t-esc >/dev/null || fail "el reintento debio cerrar"
 grep -q '"estado": *"cerrada"' "$T/corridas/t-esc/registro.json" || fail "el reintento no cerro"
 n=$(grep -c '"etiqueta": "CERRADA", "ok": true' "$T/corridas/t-esc/mensajes.jsonl")
 [ "$n" = "1" ] || fail "el reintento reenvio el aviso (n=$n)"
+
+# (7b7) FA: el canal de mensajes muerto no se viste de abierta — revert y error.
+mkdir -p "$T/corridas/t-fa/mensajes.jsonl"
+out="$(bash "$CORR" abrir t-fa --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "con el canal de mensajes roto debio fallar"
+printf '%s' "$out" | grep -q "canal de mensajes" || fail "el canal roto no se nombra"
+[ -f "$T/corridas/t-fa/registro.json" ] && fail "con el canal roto el registro quedo escrito"
+grep -q "corrida-vigia-t-fa" "$T/cron-puesto" 2>/dev/null && fail "con el canal roto el cron quedo puesto"
 
 # (7c) lanzar sobre una corrida cerrada se niega.
 bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nombre ses-zombi --encargo "$T/encargo.txt" >/dev/null 2>&1 \

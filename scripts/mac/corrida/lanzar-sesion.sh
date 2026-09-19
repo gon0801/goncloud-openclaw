@@ -9,6 +9,9 @@ corrida_lanzar_sesion() {
   local nombre="$token-$id" encargo=""
   while [ $# -gt 0 ]; do
     case "$1" in
+      --nombre|--encargo)
+        [ $# -ge 2 ] || { echo "lanzar-sesion: $1 sin valor" >&2; return 2; };; esac
+    case "$1" in
       --nombre) nombre="$2"; shift 2;;
       --encargo) encargo="$2"; shift 2;;
       *) echo "lanzar-sesion: flag desconocido $1" >&2; return 2;;

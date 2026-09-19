@@ -359,3 +359,23 @@ Verde: las tres pruebas, tambien /bin/bash 3.2.
 - EC: rojo `FAIL: un rol fuera del conjunto debio rechazarse`; lanzar-sesion
   acepta solo lead|carril (rc 2 antes de crear nada).
 Verde: las tres pruebas, tambien /bin/bash 3.2.
+
+## BRIEF-r11 (2026-09-18): accionables de CodeRabbit — FA, FB, FC
+- FA: mutacion certificada (sin el chequeo del canal, `FAIL: con el canal de
+  mensajes roto debio fallar` — la inyeccion crea mensajes.jsonl como DIRECTORIO,
+  que hace fallar el touch sin romper nada mas). Ahora: canal muerto = cron
+  retirado + registro borrado + error que lo nombra.
+- FB: rojo con el primer mutante (`falta-destino.json sin su motivo`). El
+  validador exige presencia/tipo de canal.destino, cli_modos, cron_vigia_id,
+  inicio, simulacro (bool) y preaprobaciones lista-o-ausente (antes una
+  preaprobacion numerica reventaba el python con TypeError). Hallazgo propio del
+  rojo: registro-valido.json NUNCA tuvo canal.destino ni cron_vigia_id — el
+  contrato los exigia en produccion (abrir los escribe) pero el fixture de
+  referencia no; actualizados los tres fixtures que deben pasar limpio
+  (valido, pasa-emergencia, pasa-dropbox) con valores de mentira.
+- FC: rojo `FAIL: el flag sin valor no se explica` — con set -u el shift 2 sin
+  valor no colgaba pero moria con "unbound variable" criptico; el caso (0c)
+  vigila tambien lo eterno (helper colgado: rc 99 si sigue vivo a los 2 s) y
+  exige el mensaje "sin valor". Guarda de aridad en abrir (4 flags) y
+  lanzar-sesion (2 flags).
+Verde: las tres pruebas, tambien /bin/bash 3.2.

@@ -5,7 +5,8 @@
  "vigia": "claw",
  "simulacro": false,
  "canal": {
-  "cron": "verif-sync-repos"
+  "cron": "verif-sync-repos",
+  "destino": "DESTINO-FECHA-9X"
  },
  "cli_modos": "scripts/mac/cli-modos.tsv",
  "inicio": "2026-09-18T10:00:00-04:00",
@@ -25,5 +26,6 @@
    "decision": "Aprobado"
   }
  ],
- "estado": "abierta"
+ "estado": "abierta",
+ "cron_vigia_id": "cron-fixture-9"
 }

@@ -160,7 +160,15 @@ if d.get('vigia') not in ('claw','hermes'): malo('vigia fuera del conjunto')
 if d.get('schema')!='corrida.v1': malo('schema distinto')
 for c in ('id','runbook'):
   if not d.get(c): malo('sin '+c)
-if not (isinstance(d.get('canal'),dict) and d['canal'].get('cron')): malo('sin canal.cron')
+canal=d.get('canal')
+if not isinstance(canal,dict):
+  malo('sin canal.cron'); malo('sin canal.destino')
+else:
+  if not canal.get('cron'): malo('sin canal.cron')
+  if not canal.get('destino'): malo('sin canal.destino')
+for c in ('cli_modos','cron_vigia_id','inicio'):
+  if not d.get(c): malo('sin '+c)
+if not isinstance(d.get('simulacro'),bool): malo('simulacro no es booleano')
 if d.get('estado') not in ('abierta','cerrada'): malo('estado fuera del conjunto')
 tb=d.get('timebox_horas')
 if isinstance(tb,bool) or not isinstance(tb,int): malo('timebox no numerico')
@@ -196,7 +204,11 @@ def _rm_recursivo(pat):
 DURA=[r'\bdrop\b', r'\bborr\w*\s+recursiv\w*',
       r'\bforce\s+push\b', r'\bpush\b[^\n]{0,40}\b(main|por defecto)\b',
       r'\bmerge\w*\b', r'\bcredenciales?\b', r'\btokens?\b', r'\bsecretos?\b']
-for p in d.get('preaprobaciones') or []:
+pa=d.get('preaprobaciones')
+if pa is None: pa=[]
+if not isinstance(pa,list):
+  malo('preaprobaciones no es lista'); pa=[]
+for p in pa:
   if not isinstance(p,dict): malo('preaprobacion sin forma'); continue
   if p.get('decision') not in ('Aprobado','Negado'): malo('decision fuera del conjunto')
   pat=str(p.get('patron','')).lower()
