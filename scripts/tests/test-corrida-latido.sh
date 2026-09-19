@@ -1,11 +1,14 @@
 #!/bin/bash
-# 9.5 latido: el seguimiento garantizado. Con openclaw de mentira (anota, no
+# 9.5 latido + 9.8 rama por defecto en rojo. Con openclaw de mentira (anota, no
 # manda), tmux de mentira, gh de mentira y reloj inyectado: cambio => 1 mensaje;
 # 59 min sin cambio => 0, 60 => 1; dialogo de 10 min => NECESITO aunque no haya
 # pasado el tope; dialogo sin cobertura de politica => NECESITO inmediato; dos
 # ticks seguidos no duplican; sin corridas => cero llamadas. El mensaje sale
-# aunque falle el evento al vigia, y al reves. Herme(s) lee la linea en
-# eventos.jsonl, claw recibe system event. Uso: bash scripts/tests/test-corrida-latido.sh
+# aunque falle el evento al vigia, y al reves; hermes lee la linea en
+# eventos.jsonl, claw recibe system event. 9.8: CI en fallo => un DETENIDA en
+# lenguaje de usuario y registro local con sha, autor y archivos; el mismo sha
+# en el tick siguiente => cero (mutacion sin memoria muere); CI verde => cero;
+# gh caido => cero avisos y el latido sigue. Uso: bash scripts/tests/test-corrida-latido.sh
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
@@ -34,6 +37,7 @@ STUB
 cat >"$T/bin/gh-falso" <<'STUB'
 #!/bin/sh
 printf '%s\n' "GH $*" >> "${GH_LOG:-/dev/null}"
+[ "${GH_CAIDO:-0}" = "1" ] && exit 1
 case "$1" in
   run)
     if [ "${GH_CI:-verde}" = "rojo" ]; then
@@ -43,9 +47,11 @@ case "$1" in
       printf '[{"headSha": "%s", "conclusion": "success", "status": "completed", "actor": {"login": "%s"}}]\n' \
         "${GH_SHA:-abcdef1234567}" "${GH_AUTOR:-gon0801}"
     fi;;
+  repo)
+    printf '{"nameWithOwner": "gon0801/goncloud-workspace-main"}\n';;
   api)
     printf '{"files": [{"filename": "docs/spec/corrida.v1.md"}, {"filename": "scripts/mac/corrida/lib.sh"}]}\n';;
-  *) exit "${GH_RC:-0}";;
+  *) exit 0;;
 esac
 exit 0
 STUB
@@ -237,5 +243,42 @@ watch_a m-b "$((T0 - 120))"
 ENVIO_MODO=mal tick "$T0" || fail "el latido murio con el envio cayendo"
 [ "$(evts)" = "1" ] || fail "con el mensaje cayendo el vigia no se desperto (evts=$(evts))"
 grep -q '"ok": false' "$CORRIDA_STATE/lat-ind2/mensajes.jsonl" || fail "el envio caido no quedo anotado honesto"
+
+# (10) 9.8: la rama por defecto en rojo no pasa en silencio.
+LLAMADAS="$T/l7.log"; export LLAMADAS; : > "$LLAMADAS"
+solo_dejar lat-ci
+montar_corrida lat-ci avanza
+trabajando_en "$T0"
+GH_CI=rojo GH_SHA=cafe1234567 tick "$T0"
+[ "$(msgs)" = "2" ] || fail "CI rojo: salieron $(msgs) mensajes (debia 2: el parte y el aviso)"
+grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[DETENIDA\]" || fail "CI rojo: no salio como DETENIDA"
+grep -qi "quedo en rojo" "$LLAMADAS" || fail "CI rojo: el aviso no habla en palabras de usuario"
+d="$(grep -n "OPENCLAW message send" "$LLAMADAS" | tail -1 | cut -d: -f1)"
+tail -n +"$d" "$LLAMADAS" | sed '1s/.* -m //' >"$T/ci-msg.txt"
+( . scripts/mac/corrida/lib.sh && mensaje_valido "$T/ci-msg.txt" ) \
+  || fail "CI rojo: el aviso no pasa el validador de lenguaje de usuario"
+grep -qE '[0-9a-f]{7,}' "$T/ci-msg.txt" && fail "CI rojo: el aviso se filtro un sha o similar"
+[ -f "$CORRIDA_STATE/lat-ci/ci-rojo.json" ] || fail "CI rojo: sin registro local donde el lead lee"
+CIC="$CORRIDA_STATE/lat-ci/ci-rojo.json" python3 -c "
+import json,os
+d=json.load(open(os.environ['CIC']))
+assert d.get('sha')=='cafe1234567', d
+assert d.get('autor')=='gon0801', d
+assert any('corrida.v1.md' in a for a in d.get('archivos',[])), d
+" || fail "CI rojo: el registro local no trae sha, autor y archivos"
+# el mismo sha en el tick siguiente => cero (mutacion sin memoria del sha muere).
+GH_CI=rojo GH_SHA=cafe1234567 tick "$((T0 + 300))"
+[ "$(msgs)" = "2" ] || fail "CI rojo ya avisado volvio a avisar (msgs=$(msgs))"
+GH_CI=verde tick "$((T0 + 600))"
+[ "$(msgs)" = "2" ] || fail "CI verde mando mensaje (msgs=$(msgs))"
+# gh caido => cero avisos de rojo y el latido sigue.
+LLAMADAS="$T/l8.log"; export LLAMADAS; : > "$LLAMADAS"
+solo_dejar lat-gh
+montar_corrida lat-gh avanza
+trabajando_en "$T0"
+GH_CAIDO=1 tick "$T0"
+[ "$(msgs)" = "1" ] || fail "con gh caido salio mas que el parte (msgs=$(msgs))"
+grep "message send" "$LLAMADAS" | grep -qi "rojo" && fail "con gh caido igual se aviso el rojo"
+grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[AVANZA\]" || fail "con gh caido el latido dejo de latear"
 
 echo "TODO VERDE: test-corrida-latido"

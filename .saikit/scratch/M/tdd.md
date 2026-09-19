@@ -39,4 +39,15 @@ ahora solo bypassa el tope cuando la firma cambio (o lleva 15 min sin
 contestacion).
 
 ## 9.8 CI rojo (2026-09-19)
-(rojo pendiente de pegar)
+Rojo inicial (limpio): con el latido de 9.5 corriendo pero sin el chequeo de
+CI, `FAIL: CI rojo: salieron 1 mensajes (debia 2: el parte y el aviso)` (rc=1).
+Verde tras el chequeo en el tick: `TODO VERDE: test-corrida-latido`.
+Lo que la prueba pega: CI de la rama por defecto en fallo => un DETENIDA en
+lenguaje de usuario (pasa mensaje_valido, sin shas dentro) y ci-rojo.json en el
+directorio de la corrida con sha, autor y archivos; el mismo sha al tick
+siguiente => cero mensajes (mutacion sin memoria del sha: un aviso por tick,
+muere aqui); CI verde => cero; gh caido => cero avisos de rojo y el latido
+sigue lateando (el parte de la corrida sale igual).
+Mutacion verificada muriendo (con cmp de restauracion): sin la memoria del sha
+avisado, el mismo sha rojo avisa en cada tick y la prueba muere en el caso
+"mismo sha => cero".

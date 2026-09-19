@@ -97,6 +97,63 @@ latido_de() { # $1 dir de la corrida (con el registro adentro)
       lat_escribir "$lat" "$lfirma" "$lult" "$letq" "$lfv" "$lci"
     fi
   fi
+
+  # (3) 9.8: la rama por defecto en rojo no pasa en silencio (medido
+  # 2026-09-17: main 8 h en rojo por un snapshot que no paso por CI de PR). Se
+  # consulta la ultima corrida de CI de la rama por defecto; si concluyo en
+  # fallo y ese sha no se aviso, sale un DETENIDA en lenguaje de usuario y el
+  # sha, el autor y los archivos quedan en el registro local de la corrida, que
+  # es donde el lead los lee (el validador de 9.1 no deja citarlos en el
+  # mensaje, y esta fila no es excepcion). gh caido: cero avisos, el latido
+  # sigue. El mismo sha avisado no se vuelve a avisar.
+  local GH="${GH_BIN:-$(command -v gh 2>/dev/null || true)}"
+  if [ -n "$GH" ]; then
+    local repo def out sha="" concl="" stat="" autor=""
+    repo="${REPO_DIR:-${CORR_REPO_RAIZ:-$PWD}}"
+    def="$(git -C "$repo" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')"
+    [ -n "$def" ] || def="main"
+    out="$(cd "$repo" 2>/dev/null; con_tope "$CORR_TOPE_RED" "$GH" run list --branch "$def" --limit 1 --json headSha,conclusion,status,actor 2>/dev/null)" \
+      || out=""
+    if [ -n "$out" ]; then
+      read -r sha concl stat autor <<EOF
+$(printf '%s' "$out" | python3 -c "
+import sys,json
+try: d=(json.load(sys.stdin) or [{}])[0]
+except Exception: d={}
+a=d.get('actor') or {}
+print('\t'.join([str(d.get(k) or '') for k in ('headSha','conclusion','status')]+[str(a.get('login') or '')]))" 2>/dev/null)
+EOF
+      if [ "$stat" = "completed" ] && [ "$concl" = "failure" ] && [ -n "$sha" ] && [ "$sha" != "$lci" ]; then
+        local slug="" archivos=""
+        slug="$(cd "$repo" 2>/dev/null; con_tope "$CORR_TOPE_RED" "$GH" repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)" || slug=""
+        if [ -n "$slug" ]; then
+          archivos="$(cd "$repo" 2>/dev/null; con_tope "$CORR_TOPE_RED" "$GH" api "repos/$slug/commits/$sha" 2>/dev/null \
+            | python3 -c "
+import sys,json
+try: d=json.load(sys.stdin)
+except Exception: d={}
+print(chr(10).join(f.get('filename','') for f in d.get('files',[]) if f.get('filename')))" 2>/dev/null)" || archivos=""
+        fi
+        CIDIR="$dir" CI_SHA="$sha" CI_AUTOR="$autor" CI_ARCH="$archivos" \
+          CI_AT="$(epoch_a_iso "$now")" python3 -c "
+import json,os
+d={'sha':os.environ['CI_SHA'],'autor':os.environ['CI_AUTOR'],
+   'archivos':[l for l in os.environ['CI_ARCH'].splitlines() if l],
+   'avisado':os.environ['CI_AT']}
+t=os.path.join(os.environ['CIDIR'],'ci-rojo.json')
+open(t+'.tmp','w').write(json.dumps(d,indent=1)+chr(10))
+os.chmod(t+'.tmp',0o600)
+os.rename(t+'.tmp',t)" 2>/dev/null
+        if corrida_mensaje "$id" "DETENIDA" "$P_AVANCE" \
+            "el repositorio central quedo en rojo tras un cambio automatico; ya se esta revisando" \
+            "$P_SIGUE" "nada"; then
+          lci="$sha"
+          lat_escribir "$lat" "$lfirma" "$lult" "$letq" "$lfv" "$lci"
+        fi
+        EVT_tipo=ci-rojo EVT_sha="$sha" EVT_autor="$autor" evento_jsonl "$dir"
+      fi
+    fi
+  fi
   return 0
 }
 
