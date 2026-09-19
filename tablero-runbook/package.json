@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "check": "node --check lib.ts && node --check index.ts && node --check github.ts",
+    "check": "node --check lib.ts && node --check index.ts && node --check github.ts && node --check contrato.ts && node --check render.ts",
     "test": "node --test"
   },
   "openclaw": {
