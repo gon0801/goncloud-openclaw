@@ -420,3 +420,26 @@ Mutaciones exigidas, ambas muertas: (a) sin el disarm del helper →
 la vez); (b) sin el rompimiento de locks viejos → `FAIL: con lock viejo debio
 recuperarse y tomar (rc=1)`. El ancla de orden de r12 apunta ahora a lock_tomar.
 Verde: las tres pruebas, tambien /bin/bash 3.2.
+
+## BRIEF-r14 (2026-09-18): 9 hallazgos no bloqueantes (838a782) — GA-GD
+- GA: caso (9g2) — un script con EXIT propio llama lock_tomar/lock_soltar y su
+  trap debe seguir siendo el suyo. Mutacion del reviewer verificada: guard a
+  `if true` → `FAIL: lock_tomar piso el trap del script que llama (salio: '')`.
+  El caso no crea tmux ni temporales fuera de $T (que el trap de la prueba limpia).
+- GB: corrida.v1.md ya no dice al reves donde vive el validador (lib.sh, la prueba
+  lo carga); seguimiento.v1.md documenta sha 7-64, #123 y la lista negra real
+  (pull request, rebase, push, repo, rama, plurales y participios).
+- GC: con_tope (alarm de perl que sobrevive al exec) con CORR_TOPE_RED inyectable
+  (30 s por defecto) envuelve cron list (cron_dest_de/cron_jobs_de), el envio de
+  corrida_mensaje y el cron rm de cerrar: la red bajo el lock ya no puede pasar
+  el umbral de locks viejos. Caso (7b8): stub que duerme 12 s con tope 3 → la
+  llamada muere, cerrar falla nombrando el cron y el lock queda suelto. Rojo del
+  pase: sin tope, cerrar tardaba los 12 s y terminaba rc=0.
+- GD-1: PATH citado dentro del comando de new-session (preflight queda igual: fuera
+  de scope, declarado). GD-2: el stub da ids de cron unicos por corrida
+  (cron-<nombre>) y (7b6) exige que cerrar una corrida no se lleve el cron de otra
+  (t-ns sigue puesto tras cerrar t-esc). GD-3: la linea 1 de los mensajes dice
+  "Corrida" en vez de "Fase 9" — sin el id: un id como "t-ci" contiene la sigla
+  vetada "ci" y el validador de jerga lo rechaza (hallazgo del propio pase; la baja
+  permitia "o 'corrida'").
+Verde: las tres pruebas, tambien /bin/bash 3.2.

@@ -30,7 +30,7 @@ print(' '.join(x.get('nombre','') for x in json.load(open(os.environ['CORR_REG']
   # corrida: cuenta como exito (idempotencia), no como error.
   local cid; cid="$(json_campo "$reg" cron_vigia_id)"
   [ -n "$cid" ] || cid="corrida-vigia-$id"
-  if ! "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1; then
+  if ! con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1; then
     local quedan; quedan="$(cron_jobs_de "corrida-vigia-$id")"
     if [ "$quedan" = "ILEGIBLE" ]; then
       lock_soltar "$reg"

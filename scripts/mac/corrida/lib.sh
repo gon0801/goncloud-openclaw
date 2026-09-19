@@ -20,6 +20,15 @@ corrida_id_valido() { # $1 id; 0 = solo [A-Za-z0-9_-] (nada de /, .., :, ;)
   return 0
 }
 
+# Tope de reloj para las llamadas de red: cerrar retiene el lock mientras habla
+# con el gateway, y una llamada colgada no puede superar el umbral de locks viejos
+# (un proceso vivo con el lock roto es peor que un error oportuno).
+con_tope() { # $1 segundos; resto: comando a correr con tope (SIGALRM al vencer)
+  local seg="$1"; shift
+  perl -e 'alarm shift; exec @ARGV' "$seg" "$@"
+}
+CORR_TOPE_RED="${CORR_TOPE_RED:-30}"
+
 json_campo() { # $1 archivo, $2 campo punto (p.ej. simulacro, canal.destino)
   JARCH="$1" JCAMPO="$2" python3 -c "
 import json,os
@@ -51,7 +60,7 @@ runbook_de() { # $1 runbook del registro: la absoluta, tal cual; la relativa, co
 cron_dest_de() { # $1 nombre -> destino de entrega. Con crons homonimos: si todos
                  # traen createdAtMs, gana el mas reciente; si no, mismo destino en
                  # todos -> ese; destinos DISTINTOS -> AMBIGUO (que abrir falle).
-  printf '%s' "$("$OPENCLAW_BIN" cron list --json 2>/dev/null)" | NOMBRE_CRON="$1" python3 -c "
+  printf '%s' "$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" cron list --json 2>/dev/null)" | NOMBRE_CRON="$1" python3 -c "
 import sys,json,os
 t=sys.stdin.read()
 try:
@@ -71,7 +80,7 @@ print(dests[0] if len(set(dests))==1 else 'AMBIGUO')" 2>/dev/null
 }
 
 cron_jobs_de() { # $1 nombre -> ILEGIBLE | NINGUNO | un id por linea
-  printf '%s' "$("$OPENCLAW_BIN" cron list --json 2>/dev/null)" | NOMBRE_CRON="$1" python3 -c "
+  printf '%s' "$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" cron list --json 2>/dev/null)" | NOMBRE_CRON="$1" python3 -c "
 import sys,json,os
 t=sys.stdin.read()
 try:
@@ -291,7 +300,7 @@ corrida_mensaje() {
   local sim; sim="$(json_campo "$reg" simulacro)"
   local M; M="$(mktemp)" || return 1
   {
-    printf '[%s] Fase 9, %s\n' "$etq" "$avance"
+    printf '[%s] Corrida, %s\n' "$etq" "$avance"
     printf 'Que cambio: %s\n' "$cambio"
     printf 'Que sigue: %s\n' "$sigue"
     printf 'Que necesito de ti: %s\n' "$necesito"
@@ -306,7 +315,7 @@ corrida_mensaje() {
   # silencio es el peor sentido de fallar.
   case "$etq" in AVANZA|CERRADA) sil="--silent";; esac
   texto="$(cat "$M")"
-  "$OPENCLAW_BIN" message send --channel telegram -t "$dest" $sil --json -m "$texto" >/dev/null 2>&1 || rc=1
+  con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" message send --channel telegram -t "$dest" $sil --json -m "$texto" >/dev/null 2>&1 || rc=1
   CORR_MSG_ETQ="$etq" CORR_MSG_OK="$rc" CORR_MSG_DIR="$CORRIDA_STATE/$id" python3 -c "
 import json,os
 d={'etiqueta':os.environ['CORR_MSG_ETQ'],'ok':os.environ['CORR_MSG_OK']=='0'}

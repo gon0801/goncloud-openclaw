@@ -35,4 +35,4 @@ registro ya dice.
 | `estado` | `abierta` o `cerrada` |
 
 Ejemplo válido y mutaciones en `scripts/tests/fixtures/corrida/registro-*.json`;
-el validador vive en `scripts/tests/test-cli-modos.sh` y 9.2 lo reusa en `corrida/lib.sh`.
+el validador vive en `scripts/mac/corrida/lib.sh` y la prueba 9.1 lo carga por source.

@@ -37,9 +37,10 @@ etiquetas, repetido, o con el segmento vacío, es rojo.
 ## Lenguaje de usuario (lo que el validador rechaza)
 
 Sin nombres de archivo, comandos, ramas, SHAs, números de PR ni siglas. En concreto es
-rojo si el mensaje trae: acento grave (`` ` ``), ruta con `/`, `--flag`, SHA hexadecimal
-(7 a 40 dígitos hex), o una palabra de la lista negra: commit, merge, PR, worktree,
-branch, CI, hook, script. Ejemplo: se dice "la parte de mensajes quedó integrada y
-probada", no "mergeé el PR de M con CI verde".
+rojo si el mensaje trae: acento grave (`` ` ``), ruta con `/`, `--flag`, `#123`, SHA
+hexadecimal (7 a 64 dígitos hex, con al menos un dígito y una letra), o una palabra de
+la lista negra: commit, merge, PR, pull request, rebase, push, repo, rama, worktree,
+branch, CI, hook, script — con sus plurales y participios. Ejemplo: se dice "la parte
+de mensajes quedó integrada y probada", no "mergeé el PR de M con CI verde".
 
 Ejemplo válido y mutaciones en `scripts/tests/fixtures/corrida/mensaje-*.txt`.

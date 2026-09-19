@@ -64,6 +64,7 @@ cat >"$T/bin/openclaw" <<STUB
 printf '%s\n' "OPENCLAW \$*" >> "$LLAMADAS"
 case "\$*" in
   *cron\ rm*)
+    [ "\${CRON_RM_SUENIO:-0}" != "0" ] && sleep "\${CRON_RM_SUENIO}"
     [ "\${CRON_RM_FAIL:-0}" = "1" ] && exit 1
     if ! grep -q " \$3\$" "$T/cron-puesto" 2>/dev/null; then exit 1; fi
     grep -v " \$3\$" "$T/cron-puesto" > "$T/cron-puesto.n" 2>/dev/null; mv "$T/cron-puesto.n" "$T/cron-puesto"
@@ -89,8 +90,8 @@ case "\$*" in
       printf '%s %s\n' "\$nom" "cron-dup-\$nom-\$((c + 1))" >> "$T/cron-puesto"
       printf '{}'
     else
-      printf '%s %s\n' "\$nom" "cron-1" >> "$T/cron-puesto"
-      printf '{"id":"cron-1"}'
+      printf '%s %s\n' "\$nom" "cron-\$nom" >> "$T/cron-puesto"
+      printf '{"id":"cron-%s"}' "\$nom"
     fi;;
   *message\ send*) [ "\${ENVIO_MODO:-ok}" = "mal" ] && exit 1; printf '{"messageId":"m1"}';;
 esac
@@ -228,13 +229,13 @@ grep -q "se integro el PR" "$LLAMADAS" && fail "la jerga nunca sale del stub"
 # (6) simulacro: todo mensaje sale con prefijo; el texto enviado ES el del contrato.
 corrida_mensaje t1 AVANZA "1 de 2 partes terminadas" "quedo lista la primera parte" "sigue la parte de mensajes" "nada" \
   || fail "el mensaje valido en simulacro fallo"
-printf '[SIMULACRO] [AVANZA] Fase 9, 1 de 2 partes terminadas\nQue cambio: quedo lista la primera parte\nQue sigue: sigue la parte de mensajes\nQue necesito de ti: nada\n' >"$T/esp-sim.txt"
+printf '[SIMULACRO] [AVANZA] Corrida, 1 de 2 partes terminadas\nQue cambio: quedo lista la primera parte\nQue sigue: sigue la parte de mensajes\nQue necesito de ti: nada\n' >"$T/esp-sim.txt"
 d=$(grep -n "OPENCLAW message send" "$LLAMADAS" | tail -1 | cut -d: -f1)
 tail -n +"$d" "$LLAMADAS" | sed '1s/.* -m //' >"$T/obtenido.txt"
 cmp -s "$T/esp-sim.txt" "$T/obtenido.txt" || fail "el texto enviado no es el de seguimiento.v1"
 
 # (6b) el prefijo SIMULACRO de la primera linea no invalida; y no se reescribe el archivo.
-printf '[SIMULACRO] [AVANZA] Fase 9, 1 de 2 partes terminadas\nQue cambio: quedo lista la primera parte\nQue sigue: sigue la parte de mensajes\nQue necesito de ti: nada\n' >"$T/prefijo.txt"
+printf '[SIMULACRO] [AVANZA] Corrida, 1 de 2 partes terminadas\nQue cambio: quedo lista la primera parte\nQue sigue: sigue la parte de mensajes\nQue necesito de ti: nada\n' >"$T/prefijo.txt"
 cp "$T/prefijo.txt" "$T/prefijo.orig"
 mensaje_valido "$T/prefijo.txt" || fail "el prefijo SIMULACRO invalida un mensaje valido"
 cmp -s "$T/prefijo.txt" "$T/prefijo.orig" || fail "mensaje_valido reescribe el archivo de quien llama"
@@ -348,6 +349,17 @@ Z2
 desarmado="$(bash "$T/z2.sh")"
 [ "$desarmado" = "DESARMADO" ] || fail "el trap del lock quedo armado tras soltarlo"
 
+# (9g2) el guard de trap ajeno: lock_tomar NUNCA pisa el EXIT del script que llama
+# (mutarlo a "if true" deja este caso en rojo: el trap dueno deja de correr).
+cat >"$T/z4.sh" <<Z4
+. "$PWD/scripts/mac/corrida/lib.sh"
+trap 'echo TRAP-DUENO-CORRIO' EXIT
+lock_tomar "$T/corridas/t1/registro.json" || exit 9
+lock_soltar "$T/corridas/t1/registro.json"
+Z4
+out_z4="$(bash "$T/z4.sh")"
+[ "$out_z4" = "TRAP-DUENO-CORRIO" ] || fail "lock_tomar piso el trap del script que llama (salio: '$out_z4')"
+
 # (9h) repro del reviewer: la carrera lanzar/cerrar. Con cerrar entrando mientras
 # lanzar sondea la barra del CLI lento, NUNCA queda sesion viva y marcada en un
 # registro cerrado: o lanzar se niega, o la sesion entra y cerrar la desmarca.
@@ -380,7 +392,7 @@ print(' '.join(x.get('nombre','') for x in json.load(open(os.environ['CORR_REG']
   "$TM_REAL" -L "$L" show-environment -t "=$s" OPENCLAW_WATCH >/dev/null 2>&1 \
     && fail "cerrar debe desmarcar a $s"
 done
-grep -q "cron rm cron-1" "$LLAMADAS" || fail "cerrar no quito el cron por su id"
+grep -q "cron rm cron-corrida-vigia-t1" "$LLAMADAS" || fail "cerrar no quito el cron por su id"
 grep -q "CERRADA" "$T/corridas/t1/mensajes.jsonl" || fail "cerrar no anota CERRADA"
 grep -q '"estado": *"cerrada"' "$T/corridas/t1/registro.json" || fail "el registro no cierra"
 
@@ -471,6 +483,7 @@ bash "$CORR" cerrar t-esc >/dev/null || fail "el reintento debio cerrar"
 grep -q '"estado": *"cerrada"' "$T/corridas/t-esc/registro.json" || fail "el reintento no cerro"
 n=$(grep -c '"etiqueta": "CERRADA", "ok": true' "$T/corridas/t-esc/mensajes.jsonl")
 [ "$n" = "1" ] || fail "el reintento reenvio el aviso (n=$n)"
+grep -q "corrida-vigia-t-ns" "$T/cron-puesto" 2>/dev/null || fail "cerrar t-esc se llevo el cron de otra corrida (t-ns)"
 
 # (7b7) FA: el canal de mensajes muerto no se viste de abierta — revert y error.
 mkdir -p "$T/corridas/t-fa/mensajes.jsonl"
@@ -479,6 +492,16 @@ out="$(bash "$CORR" abrir t-fa --runbook "$RB" --vigia claw --cli-modos "$T/modo
 printf '%s' "$out" | grep -q "canal de mensajes" || fail "el canal roto no se nombra"
 [ -f "$T/corridas/t-fa/registro.json" ] && fail "con el canal roto el registro quedo escrito"
 grep -q "corrida-vigia-t-fa" "$T/cron-puesto" 2>/dev/null && fail "con el canal roto el cron quedo puesto"
+
+# (7b8) GC: una llamada de red colgada bajo el lock no deja el lock roto ni a cerrar
+# colgado: el tope la mata y el lock se suelta (umbral inyectado a 3 s, stub duerme 12).
+bash "$CORR" abrir t-gc --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir t-gc fallo"
+out="$(CRON_RM_SUENIO=12 CORR_TOPE_RED=3 bash "$CORR" cerrar t-gc 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "con la red colgada debio fallar (rc=0)"
+[ -d "$T/corridas/t-gc/.lock" ] && fail "el lock quedo puesto con la red colgada"
+printf '%s' "$out" | grep -q "cron" || fail "el fallo con la red colgada no nombra el cron"
+grep -q '"estado": *"abierta"' "$T/corridas/t-gc/registro.json" || fail "con la red colgada cerro a medias"
 
 # (7c) lanzar sobre una corrida cerrada se niega.
 bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nombre ses-zombi --encargo "$T/encargo.txt" >/dev/null 2>&1 \
