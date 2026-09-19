@@ -113,16 +113,49 @@ except Exception: pass
 print(n)" 2>/dev/null
 }
 
-# (0) el LaunchAgent existe y arranca el latido cada 5 min; y su REPO_DIR apunta
-# a un clon de ESTE repo (mismo origen), no a otro lado; y lib.sh fija TMUX_BIN.
+# (0) el LaunchAgent existe y arranca el latido cada 5 min. La relacion
+# plist<->repo se verifica SIN rutas de esta Mac (NA): con un repo de mentira
+# cuyo origin se copia en caliente del repo bajo prueba, y un plist generado
+# que apunta a el (caso verde); el caso rojo apunta a un repo con OTRO origin y
+# debe fallar. El plist real solo se verifica donde su REPO_DIR exista: en CI
+# esa ruta no esta y el caso se salta con su motivo impreso. Y lib.sh fija
+# TMUX_BIN incluso si el entorno lo trae vacio (NC).
 [ -f "$PLIST" ] || fail "falta el LaunchAgent del latido"
 grep -q "ai.goncloud.corrida-latido" "$PLIST" || fail "el label del LaunchAgent no es el del plan"
 grep -A1 "<key>StartInterval</key>" "$PLIST" | grep -q "<integer>300</integer>" || fail "el LaunchAgent no late cada 5 min"
 grep -q "corrida.sh" "$PLIST" && grep -q "latido" "$PLIST" || fail "el LaunchAgent no llama al latido"
-REPO_PLIST="$(awk '/REPO_DIR/{f=1} f && /<string>/{print; exit}' "$PLIST" | sed 's/.*<string>//; s/<\/string>.*//')"
-[ "$(git -C "$REPO_PLIST" remote get-url origin 2>/dev/null)" = "$(git remote get-url origin)" ] \
-  || fail "el REPO_DIR del plist ($REPO_PLIST) no es un clon de este repo: 9.8 vigilaria el CI de otro"
-( . scripts/mac/corrida/lib.sh && [ -n "$TMUX_BIN" ] ) \
+grep -q "REPO_DIR" "$PLIST" || fail "el plist no inyecta REPO_DIR al latido"
+
+repo_de_plist() { # $1 plist -> la ruta de su REPO_DIR
+  awk '/REPO_DIR/{f=1} f && /<string>/{print; exit}' "$1" | sed 's/.*<string>//; s/<\/string>.*//'
+}
+mismo_origin() { # $1 repo a revisar, $2 repo de referencia; 0 = mismo origin
+  [ -n "$1" ] && [ "$(git -C "$1" remote get-url origin 2>/dev/null)" = "$(git -C "$2" remote get-url origin 2>/dev/null)" ]
+}
+# El fixture de git de la prueba no hereda el GIT_DIR del hook que la corre
+# (leccion del carril N): estos git son solo locales, sin commit ni red.
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX
+ORIGIN_REAL="$(git remote get-url origin 2>/dev/null || echo sin-origin)"
+mkdir -p "$T/na-mismo" "$T/na-otro"
+printf 'x\n' >"$T/na-mismo/x"; printf 'x\n' >"$T/na-otro/x"
+git -C "$T/na-mismo" init -q && git -C "$T/na-mismo" remote add origin "$ORIGIN_REAL"
+git -C "$T/na-otro" init -q && git -C "$T/na-otro" remote add origin "https://example.com/otro/repo.git"
+REPO_PLIST_REAL="$(repo_de_plist "$PLIST")"
+[ -n "$REPO_PLIST_REAL" ] || fail "el plist no trae una ruta en REPO_DIR"
+sed "s|$REPO_PLIST_REAL|$T/na-mismo|" "$PLIST" >"$T/latido-mismo.plist"
+sed "s|$REPO_PLIST_REAL|$T/na-otro|" "$PLIST" >"$T/latido-otro.plist"
+mismo_origin "$(repo_de_plist "$T/latido-mismo.plist")" . \
+  || fail "NA verde: un REPO_DIR con el mismo origin que este repo debe pasar"
+if mismo_origin "$(repo_de_plist "$T/latido-otro.plist")" .; then
+  fail "el REPO_DIR del plist apunta a un repo con otro origin: 9.8 vigilaria el CI de otro"
+fi
+if [ -d "$REPO_PLIST_REAL" ]; then
+  mismo_origin "$REPO_PLIST_REAL" . \
+    || fail "el REPO_DIR del plist real ($REPO_PLIST_REAL) no es un clon de este repo: 9.8 vigilaria el CI de otro"
+else
+  echo "skip: el REPO_DIR del plist real ($REPO_PLIST_REAL) no existe aqui; la relacion plist<->repo se probo con el fixture"
+fi
+( unset TMUX_BIN; . scripts/mac/corrida/lib.sh; [ -n "${TMUX_BIN:-}" ] ) \
   || fail "lib.sh no fija TMUX_BIN: en produccion toda sesion saldria muerta"
 
 # (1) sin corridas abiertas no hace nada: ni mensajes ni eventos (y rc 0).
@@ -275,7 +308,7 @@ montar_corrida lat-k avanza
 trabajando_en "$T0"
 mkdir "$CORRIDA_STATE/lat-k/latido.json"   # directorio: el rename revienta
 tick "$T0" >"$T/k.out" 2>"$T/k.err" && fail "con latido.json caido el tick salio en verde"
-grep -q "latido.json" "$T/k.err" || fail "la escritura caida de latido.json no avisa en stderr"
+grep -q "no se pudo escribir" "$T/k.err" || fail "la escritura caida de latido.json no avisa en stderr"
 rmdir "$CORRIDA_STATE/lat-k/latido.json"
 
 # (10) 9.8: la rama por defecto en rojo no pasa en silencio.

@@ -37,7 +37,7 @@ os.rename(t,E['LATF'])" 2>/dev/null
 }
 
 latido_de() { # $1 dir de la corrida (con el registro adentro)
-  local dir="$1" id reg now lat
+  local dir="$1" id reg now lat lrc=0
   id="$(basename "$dir")"
   reg="$dir/registro.json"
   parte_calcular "$id" || return 0
@@ -70,9 +70,11 @@ latido_de() { # $1 dir de la corrida (con el registro adentro)
   if [ "$enviar" -eq 1 ]; then
     if corrida_mensaje "$id" "$P_ETIQ" "$P_AVANCE" "$P_CAMBIO" "$P_SIGUE" "$P_NECESITO"; then
       lfirma="$P_FIRMA"; lult="$now"; letq="$P_ETIQ"
+      # NG: la memoria caida no corta el resto del tick (vigia y CI siguen);
+      # avisa, queda en el rc del tick y el proximo repite el aviso si hace falta.
       if ! lat_escribir "$lat" "$lfirma" "$lult" "$letq" "$lfv" "$lci"; then
         echo "latido: no se pudo escribir $lat; el proximo tick puede repetir el ultimo aviso" >&2
-        return 1
+        lrc=1
       fi
       EVT_tipo=mensaje EVT_etiqueta="$P_ETIQ" EVT_firma="$P_FIRMA" evento_jsonl "$dir"
     else
@@ -167,7 +169,7 @@ os.chmod(t+'.tmp',0o600)
 os.rename(t+'.tmp',t)" 2>/dev/null
           lci="$sha"
           lat_escribir "$lat" "$lfirma" "$lult" "$letq" "$lfv" "$lci" \
-            || echo "latido: no se pudo escribir $lat; el aviso de rojo puede repetirse al proximo tick" >&2
+            || { echo "latido: no se pudo escribir $lat; el aviso de rojo puede repetirse al proximo tick" >&2; lrc=1; }
           EVT_tipo=ci-rojo EVT_sha="$sha" EVT_autor="$autor" EVT_ok=true evento_jsonl "$dir"
         else
           EVT_tipo=ci-rojo EVT_sha="$sha" EVT_autor="$autor" EVT_ok=false evento_jsonl "$dir"
@@ -175,7 +177,7 @@ os.rename(t+'.tmp',t)" 2>/dev/null
       fi
     fi
   fi
-  return 0
+  return "$lrc"
 }
 
 corrida_latido() {
