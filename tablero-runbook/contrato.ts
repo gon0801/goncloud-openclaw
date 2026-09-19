@@ -474,4 +474,3 @@ export function fusionarEventos(previo: Evento[], nuevo: Evento[]): Evento[] {
   }
   return fusion.length > EVENTOS_TOPE ? fusion.slice(fusion.length - EVENTOS_TOPE) : fusion;
 }
-
