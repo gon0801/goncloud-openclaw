@@ -211,11 +211,6 @@
       "avance": 0
     }
   ],
-  "notas": [
-    "12.5 queda cc:TODO hasta que exista evidencia de usuario con linea FUNCIONA.",
-    "Ramas fase12/contrato, fase12/nucleo, fase12/pantalla y fase12/docs ya mergearon a main y siguen en el remoto. El kit de cierre las quiere ausentes para VERDE; no se borran aqui porque 12.5 sigue abierto y el delete es irreversible.",
-    "Q0 vive en cola y eventos (PR #87, 9ff5b4eea156f52cdbb4edea82d27f8f99a83e1d), no en una celda Status de 12.x."
-  ],
   "eventos": [
     {
       "at": "2026-09-19T03:59:08Z",
