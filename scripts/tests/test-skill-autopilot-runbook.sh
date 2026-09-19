@@ -8,9 +8,11 @@
 # Esta prueba verifica dos cosas distintas:
 #  (1) la copia del repo sigue trayendo los trece slots y la pasada de
 #      ambigüedad, que es lo que hace que el runbook salga sin preguntas;
-#  (2) si la Mac tiene la copia suelta, las dos son idénticas. En CI esa copia
-#      no existe y ese check se salta, declarándolo: el candado que importa
-#      contra la deriva es el de la Mac, y ahí sí corre.
+#  (2) si la Mac tiene la copia suelta, su contenido está commiteado en alguna
+#      ref de este repo. NO se exige que sea idéntica a la de ESTA rama: eso
+#      acoplaba cada rama a un archivo global de la máquina y ponía en rojo a
+#      quien no lo había tocado. En CI esa copia no existe y el check se salta,
+#      declarándolo: el candado que importa contra la deriva es el de la Mac.
 #
 # Uso: bash scripts/tests/test-skill-autopilot-runbook.sh
 set -u
@@ -69,11 +71,41 @@ for a in 'lead is written as a **role**' \
 done
 echo "ok (3): las nueve anclas de reglas están"
 
-# (4) La copia de la Mac, cuando existe, no puede haber derivado.
+# (4) La copia de la Mac, cuando existe, no puede traer contenido que no esté
+# commiteado EN NINGUNA parte. Ojo con lo que NO se exige: que sea idéntica a la
+# de ESTA rama. La versión anterior lo exigía y acoplaba cada rama a un archivo
+# global de la máquina: medido 2026-09-18, una rama sacada de la rama por
+# defecto, que no tocaba el skill, se puso roja solo porque otra rama ya había
+# actualizado la copia de la Mac. Eso convertía un candado contra la deriva en
+# un bloqueo para cualquiera que no tuviera la última versión en su rama.
+#
+# Lo que sí atrapa, que es el riesgo real: contenido que vive SOLO en la Mac y
+# que nadie commiteó, que es como esta skill vivió trece pasadas sin control de
+# versiones.
 if [ -r "$MAC" ]; then
-  cmp -s "$REPO" "$MAC" \
-    || fail "la copia de la Mac derivó de la del repo: diff $REPO $MAC"
-  echo "ok (4): la copia de la Mac es idéntica a la del repo"
+  if cmp -s "$REPO" "$MAC"; then
+    echo "ok (4): la copia de la Mac es idéntica a la de esta rama"
+  else
+    # ALCANZABLE desde una ref, no solo presente en la base de objetos.
+    # Hallazgo del revisor en el PR 88, con reproduccion: `git cat-file -e $h`
+    # solo acredita que el blob existe, y eso lo consigue un `git add` de la
+    # deriva sin commitear, o un blob que dejo un commit descartado. Se probo
+    # exponiendo el blob por GIT_ALTERNATE_OBJECT_DIRECTORIES: contenido que
+    # esta en CERO commits pasaba en verde. Se compara contra la version de
+    # ESTE archivo en cada ref, que ademas acota el costo al numero de refs.
+    h=$(git hash-object "$MAC" 2>/dev/null)
+    encontrado=no
+    if [ -n "$h" ]; then
+      for r in $(git for-each-ref --format='%(refname)'); do
+        if [ "$(git rev-parse "$r:$REPO" 2>/dev/null)" = "$h" ]; then encontrado=$r; break; fi
+      done
+    fi
+    if [ "$encontrado" != "no" ]; then
+      echo "ok (4): la copia de la Mac no es la de esta rama, pero es la versión de $encontrado ($h)"
+    else
+      fail "la copia de la Mac tiene contenido que no está commiteado en ninguna rama: diff $REPO $MAC"
+    fi
+  fi
 else
   echo "ok (4): sin copia en la Mac ($MAC); comparación saltada, declarado"
 fi
