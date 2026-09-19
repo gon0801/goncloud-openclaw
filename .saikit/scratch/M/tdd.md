@@ -78,3 +78,31 @@ ok (2): el llamado Get-OpenclawSkillsCambiadasStaged -RepoRoot $r va entre la gu
 TODO VERDE: sync-avisa-skills
 TODO VERDE: crons-dos-copias
 ```
+
+## r2 — dos huecos del test de dos copias
+
+### Hueco 1 (antes): mutantes no ejercían el chequeo (1)
+Con la comparación `[ "$got" = "$want" ]` anulada a `:`, el test seguía VERDE e imprimía «ok (3)».
+
+### Hueco 1 (despues): anular la comparación → ROJO
+```
+ROJO: (3) mutante: cambiar una palabra del .txt debio hacer fallar el chequeo (1) real y paso
+EXIT:1
+```
+
+### Hueco 2 (antes): cualquier uuid del .md bastaba
+Borrar la linea `Id vivo: …` dejaba VERDE (encontraba el uuid del job en el cuerpo).
+
+### Hueco 2 (despues): sin la linea Id vivo → ROJO
+```
+ROJO: (1) docs/crons/verif-digest-20h.md no declara su id vivo (falta la linea 'Id vivo: <uuid>')
+EXIT:1
+```
+
+### Restituido
+```
+ok (3): mutante de una palabra deja rojo el chequeo (1) real
+ok (4): un .txt nuevo sin .md deja rojo el chequeo (2) real
+TODO VERDE: crons-dos-copias
+TODO VERDE: sync-avisa-skills
+```

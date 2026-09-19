@@ -56,17 +56,13 @@ if start is None:
     print("NO_FENCE_OPEN", file=sys.stderr)
     sys.exit(2)
 end = None
-own_line = False
 for i in range(start + 1, len(lines)):
     if lines[i].strip() == "```":
         end = i
-        own_line = True
         break
 if end is None:
-    # Cierre pegado: ultima linea termina en ```
     for i in range(len(lines) - 1, start, -1):
         if lines[i].rstrip().endswith("```"):
-            end = i
             body_line = lines[i].rstrip()[:-3]
             body = "\n".join(lines[start + 1:i] + ([body_line] if body_line else []))
             sys.stdout.write(body)
@@ -92,9 +88,14 @@ sys.exit(1)
 PY
 }
 
+# La linea del contrato, no cualquier uuid del cuerpo del mensaje (BRIEF-r2).
+tiene_linea_id_vivo() {
+  grep -qE '^Id vivo: `?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' "$1"
+}
+
 highest_txt() {
-  local id="$1"
-  python3 - "$MSGS" "$id" <<'PY'
+  local id="$1" msgs_dir="${2:-$MSGS}"
+  python3 - "$msgs_dir" "$id" <<'PY'
 import glob, os, re, sys
 msgs, cron_id = sys.argv[1], sys.argv[2]
 pat = re.compile(r"^" + re.escape(cron_id) + r"\.v(\d+)\.txt$")
@@ -109,90 +110,107 @@ print(best)
 PY
 }
 
-# (1) Cada .md tiene su .txt (salvo excepcion), el cuerpo del fence coincide con
-# el .txt de mayor version, el fence cierra en linea propia, y declara id vivo.
-for md in "$CRONS"/*.md; do
-  [ -e "$md" ] || continue
-  id=$(basename "$md" .md)
-  if en_lista "$id" "$MD_SIN_TXT"; then
-    echo "ok (1ex): $id en MD_SIN_TXT (sin .txt por ahora)"
-    fence_cierra_en_linea_propia "$md" \
-      || fail "(1) $md: el cierre del fence va en linea propia"
-    grep -qE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' "$md" \
-      || fail "(1) $md no declara su id vivo (uuid)"
-    continue
-  fi
-  txt=$(highest_txt "$id") || fail "(1) $id.md no tiene $MSGS/$id.v<N>.txt y no esta en MD_SIN_TXT"
-  if ! body=$(extraer_fence "$md" 2>/tmp/fence.err); then
-    err=$(cat /tmp/fence.err)
-    fail "(1) $md: no pude leer el fence ($err)"
-  fi
-  want=$(cat "$txt" | tr -d '\r' | sed -e '${/^$/d;}')
-  got=$(printf '%s' "$body" | tr -d '\r')
-  [ "$got" = "$want" ] \
-    || fail "(1) $md fence != $(basename "$txt"): las dos copias divergieron (el aplicador usaria el .txt)"
-  fence_cierra_en_linea_propia "$md" \
-    || fail "(1) $md: el cierre del fence va en linea propia, no pegado al texto"
-  grep -qE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' "$md" \
-    || fail "(1) $md no declara su id vivo (uuid)"
-  echo "ok (1): $id.md ↔ $(basename "$txt") (fence=txt, id vivo, cierre en linea propia)"
-done
+# Chequeo (1) real: apareo md↔txt + fence + linea Id vivo.
+# Quiet=1 solo imprime fallos (para que los mutantes lo invoquen sin ruido).
+# Devuelve 0 si todo OK, 1 si algo falla (sin exit del script padre).
+chequeo_1_apareo() {
+  local crons_dir="$1" msgs_dir="$2" quiet="${3:-0}"
+  local md id txt body want got err
+  for md in "$crons_dir"/*.md; do
+    [ -e "$md" ] || continue
+    id=$(basename "$md" .md)
+    if en_lista "$id" "$MD_SIN_TXT"; then
+      [ "$quiet" = 1 ] || echo "ok (1ex): $id en MD_SIN_TXT (sin .txt por ahora)"
+      fence_cierra_en_linea_propia "$md" || {
+        [ "$quiet" = 1 ] || printf 'ROJO: %s\n' "(1) $md: el cierre del fence va en linea propia"
+        return 1
+      }
+      tiene_linea_id_vivo "$md" || {
+        [ "$quiet" = 1 ] || printf 'ROJO: %s\n' "(1) $md no declara su id vivo (falta la linea 'Id vivo: <uuid>')"
+        return 1
+      }
+      continue
+    fi
+    if ! txt=$(MSGS="$msgs_dir" highest_txt "$id" "$msgs_dir"); then
+      [ "$quiet" = 1 ] || printf 'ROJO: %s\n' "(1) $id.md no tiene $msgs_dir/$id.v<N>.txt y no esta en MD_SIN_TXT"
+      return 1
+    fi
+    if ! body=$(extraer_fence "$md" 2>/tmp/fence.err); then
+      err=$(cat /tmp/fence.err)
+      [ "$quiet" = 1 ] || printf 'ROJO: %s\n' "(1) $md: no pude leer el fence ($err)"
+      return 1
+    fi
+    want=$(cat "$txt" | tr -d '\r' | sed -e '${/^$/d;}')
+    got=$(printf '%s' "$body" | tr -d '\r')
+    if [ "$got" != "$want" ]; then
+      [ "$quiet" = 1 ] || printf 'ROJO: %s\n' "(1) $md fence != $(basename "$txt"): las dos copias divergieron (el aplicador usaria el .txt)"
+      return 1
+    fi
+    fence_cierra_en_linea_propia "$md" || {
+      [ "$quiet" = 1 ] || printf 'ROJO: %s\n' "(1) $md: el cierre del fence va en linea propia, no pegado al texto"
+      return 1
+    }
+    tiene_linea_id_vivo "$md" || {
+      [ "$quiet" = 1 ] || printf 'ROJO: %s\n' "(1) $md no declara su id vivo (falta la linea 'Id vivo: <uuid>')"
+      return 1
+    }
+    [ "$quiet" = 1 ] || echo "ok (1): $id.md ↔ $(basename "$txt") (fence=txt, id vivo, cierre en linea propia)"
+  done
+  return 0
+}
 
-# (2) Cada .txt versionado tiene su .md, salvo excepcion explicita.
-for txt in "$MSGS"/*.txt; do
-  [ -e "$txt" ] || continue
-  base=$(basename "$txt")
-  if en_lista "$base" "$TXT_SIN_MD"; then
-    echo "ok (2ex): $base en TXT_SIN_MD (anterior a docs/crons/)"
-    continue
-  fi
-  # Solo entran al apareo los que siguen <id>.v<N>.txt
-  if ! echo "$base" | grep -qE '^.+\.v[0-9]+\.txt$'; then
-    fail "(2) $base no sigue <id>.v<N>.txt y no esta en TXT_SIN_MD"
-  fi
-  id=$(echo "$base" | sed -E 's/\.v[0-9]+\.txt$//')
-  [ -f "$CRONS/$id.md" ] \
-    || fail "(2) $base no tiene $CRONS/$id.md y no esta en TXT_SIN_MD"
-done
-echo "ok (2): todo .txt versionado tiene .md o excepcion con razon"
+# Chequeo (2) real: todo .txt versionado tiene .md o excepcion.
+chequeo_2_txt_tienen_md() {
+  local crons_dir="$1" msgs_dir="$2" quiet="${3:-0}"
+  local txt base id
+  for txt in "$msgs_dir"/*.txt; do
+    [ -e "$txt" ] || continue
+    base=$(basename "$txt")
+    if en_lista "$base" "$TXT_SIN_MD"; then
+      [ "$quiet" = 1 ] || echo "ok (2ex): $base en TXT_SIN_MD (anterior a docs/crons/)"
+      continue
+    fi
+    if ! echo "$base" | grep -qE '^.+\.v[0-9]+\.txt$'; then
+      [ "$quiet" = 1 ] || printf 'ROJO: %s\n' "(2) $base no sigue <id>.v<N>.txt y no esta en TXT_SIN_MD"
+      return 1
+    fi
+    id=$(echo "$base" | sed -E 's/\.v[0-9]+\.txt$//')
+    if [ ! -f "$crons_dir/$id.md" ]; then
+      [ "$quiet" = 1 ] || printf 'ROJO: %s\n' "(2) $base no tiene $crons_dir/$id.md y no esta en TXT_SIN_MD"
+      return 1
+    fi
+  done
+  [ "$quiet" = 1 ] || echo "ok (2): todo .txt versionado tiene .md o excepcion con razon"
+  return 0
+}
 
-# (3) Mutante: cambiar una palabra de cualquiera de las dos copias deja rojo.
+# --- corrida sobre el arbol real ---
+chequeo_1_apareo "$CRONS" "$MSGS" 0 || fail "chequeo (1) fallo"
+chequeo_2_txt_tienen_md "$CRONS" "$MSGS" 0 || fail "chequeo (2) fallo"
+
+# (3) Mutante: cambiar una palabra → el CHEQUEO (1) REAL debe fallar.
+# Si alguien anula la comparacion got==want dentro de chequeo_1_apareo, este
+# mutante deja de morir y ESTE paso sale ROJO (BRIEF-r2 hueco 1).
 T=$(mktemp -d) || exit 1
 trap 'rm -rf "$T"' EXIT
 cp -R "$CRONS" "$T/crons"
 cp -R "$MSGS" "$T/msgs"
-# Fabricar divergence en verif-digest-20h (tiene las dos copias).
 python3 - "$T/msgs/verif-digest-20h.v1.txt" <<'PY'
 import sys
 p = sys.argv[1]
 t = open(p, encoding="utf-8").read()
 open(p, "w", encoding="utf-8").write(t.replace("PROPOSITO", "PROPOSITO_MUTADO", 1))
 PY
-(
-  CRONS="$T/crons" MSGS="$T/msgs"
-  # Re-ejecutar solo el chequeo de igualdad sobre el mutante.
-  md="$CRONS/verif-digest-20h.md"
-  txt="$MSGS/verif-digest-20h.v1.txt"
-  body=$(extraer_fence "$md") || exit 0
-  want=$(cat "$txt" | tr -d '\r' | sed -e '${/^$/d;}')
-  got=$(printf '%s' "$body" | tr -d '\r')
-  [ "$got" != "$want" ]
-) || fail "(3) mutante: cambiar una palabra del .txt debio romper la igualdad fence↔txt"
-echo "ok (3): mutante de una palabra deja rojo"
-
-# (4) Mutante: un .txt nuevo sin .md deja rojo.
-touch "$T/msgs/cron-fantasma.v1.txt"
-if (
-  export CRONS="$T/crons" MSGS="$T/msgs"
-  # Misma regla que (2), aislada sobre el arbol mutado.
-  base=cron-fantasma.v1.txt
-  en_lista "$base" "$TXT_SIN_MD" && exit 0
-  id=cron-fantasma
-  [ -f "$CRONS/$id.md" ] && exit 0
-  exit 1
-); then
-  fail "(4) mutante: un .txt nuevo sin .md debio dejar rojo y paso"
+if chequeo_1_apareo "$T/crons" "$T/msgs" 1; then
+  fail "(3) mutante: cambiar una palabra del .txt debio hacer fallar el chequeo (1) real y paso"
 fi
-echo "ok (4): un .txt nuevo sin .md deja rojo"
+echo "ok (3): mutante de una palabra deja rojo el chequeo (1) real"
+
+# (4) Mutante: .txt nuevo sin .md → el CHEQUEO (2) REAL debe fallar.
+touch "$T/msgs/cron-fantasma.v1.txt"
+if chequeo_2_txt_tienen_md "$T/crons" "$T/msgs" 1; then
+  fail "(4) mutante: un .txt nuevo sin .md debio hacer fallar el chequeo (2) real y paso"
+fi
+echo "ok (4): un .txt nuevo sin .md deja rojo el chequeo (2) real"
 
 echo "TODO VERDE: crons-dos-copias"
