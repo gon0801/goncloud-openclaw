@@ -89,3 +89,28 @@ Verde final (bash y /bin/bash 3.2): TODO VERDE en corrida-responder,
 tmux-activity-watch, corrida-nucleo, corrida-preflight y cli-modos;
 `git diff --numstat origin/main -- scripts/tests/test-tmux-activity-watch.sh`
 => `80	0` (solo agregados).
+
+## 9.6 · BRIEF-r1 — rojo del endurecimiento PB
+
+Caso (4d) agregado antes de la corrección: transcript con `rm -rf /tmp/viejo`
+arriba y el diálogo real (`echo hola`, fila Aprobado) abajo. Salida verbatim:
+
+```
+FAIL: (4d) debía decidir sobre el comando del diálogo (echo hola, Aprobado)
+```
+
+Con la política de "primera línea tipo comando" el responder elegía el rm -rf
+viejo del transcript, caía en la lista dura y escalaba: la decisión se tomaba
+sobre el texto equivocado.
+
+Corrección aplicada (resp_comando prefiere la ÚLTIMA línea tipo comando):
+caso (4d) verde en `bash` y `/bin/bash`; las cinco baterías en TODO VERDE;
+numstat de la batería del vigilante 102/0.
+
+## 9.6 · BRIEF-r1 — PA y PC (sin rojo propio: cambios de una línea)
+
+PA: `run_once` fija `CORRIDA_BIN` a una ruta inexistente por defecto; caso
+(2k) comprueba que sin `CORRIDA_BIN` explícito el diálogo produce el evento
+como hoy. PC: línea de `CORRIDA_BIN` en el bloque Env del header del
+vigilante. PD (python3 ausente ⇒ eventos.jsonl malformado) queda anotado, sin
+acción, como pide el encargo.

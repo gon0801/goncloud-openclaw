@@ -279,7 +279,7 @@ grep -qF 'NECESITO TU RESPUESTA' "$LLAMADAS" || fail "(3b) rm -rf debía escalar
 echo "ok (3): push a main y rm -rf escalan aunque el registro los traiga Aprobados"
 
 # (4) Comandos por tabla: Aprobado => acepta, Negado => niega, sin fila => escala.
-abrir c4 "$(seses r4a claude r4b claude r4c glm)" "$(pres 'echo hola' Aprobado 'npm publish' Negado)"
+abrir c4 "$(seses r4a claude r4b claude r4c glm r4d claude)" "$(pres 'echo hola' Aprobado 'npm publish' Negado)"
 encender c4
 pan r4a "$P/eco-claude.txt"; espera r4a 'Do you want to proceed?'
 corre r4a; [ $? -eq 0 ] || fail "(4) comando Aprobado debía contestar"
@@ -299,7 +299,28 @@ corre r4c; [ $? -eq 1 ] || fail "(4) sin fila que case no se contesta"
 grep -qF 'NECESITO TU RESPUESTA' "$LLAMADAS" || fail "(4) sin fila => escala: $(cat "$LLAMADAS")"
 grep -qF 'Comando: curl https://ejemplo.invalid/datos' "$LLAMADAS" \
   || fail "(4) la escala cita el comando que no casa: $(cat "$LLAMADAS")"
-echo "ok (4): Aprobado acepta (1), Negado niega (2), sin fila escala citando el comando"
+# (4d) BRIEF-r1 PB: un CLI que conserva transcript encima del diálogo (claude lo
+# hace) puede traer un comando VIEJO y delicado dentro de las 15 líneas; la
+# decisión — incluida la lista dura — debe tomarse sobre el comando del diálogo
+# (el ÚLTIMO tipo comando), no sobre el de arriba.
+cat >"$P/transcript-claude.txt" <<'PAN'
+$ rm -rf /tmp/viejo
+Detected a shell command:
+echo hola
+Run it? [plugin:claude-code-harness]
+Do you want to proceed?
+  1. Yes
+  2. No
+Esc to cancel  Tab to amend
+PAN
+pan r4d "$P/transcript-claude.txt"; espera r4d 'Do you want to proceed?'
+corre r4d; [ $? -eq 0 ] || fail "(4d) debía decidir sobre el comando del diálogo (echo hola, Aprobado)"
+tecla_fue r4d 1 || fail "(4d) la tecla de aceptar de claude es 1: $(grep 'send-keys -t r4d' "$TMUX_LOG")"
+D="$(udec c4)"
+[ "$(jcampo comando "$D")" = "echo hola" ] || fail "(4d) el comando anotado debe ser el del diálogo, no el viejo de arriba: $D"
+grep -q '"comando": "rm -rf /tmp/viejo"' "$CORRIDA_STATE/c4/decisiones.jsonl" \
+  && fail "(4d) ningún rm -rf viejo del transcript debe decidir nada"
+echo "ok (4d): con transcript encima, decide sobre el comando del diálogo (el último), no sobre el viejo"
 
 # (5) Límite de uso: conserva el modelo (tecla de negar) y marca el carril cuota.
 abrir c5 "$(seses r5 codex)" "[]"

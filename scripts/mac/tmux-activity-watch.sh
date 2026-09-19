@@ -72,6 +72,7 @@
 #   APPROVAL_REMIND_SECS=900
 #   STATE_DIR=$HOME/.local/state/tmux-activity-watch
 #   LOG_FILE=$HOME/Library/Logs/tmux-activity-watch.log
+#   CORRIDA_BIN=$HOME/bin/corrida.sh   (policy engine offered each dialog first; unset = today's behavior)
 #
 # Install: cp scripts/mac/tmux-activity-watch.sh ~/bin/ && chmod +x ~/bin/tmux-activity-watch.sh
 # (the LaunchAgent in scripts/mac/ai.goncloud.tmux-activity-watch.plist runs it under launchd).

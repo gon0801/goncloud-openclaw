@@ -44,19 +44,22 @@ resp_es_dialogo() { printf '%s\n' "$1" | grep -Eqi -- "$RESP_APPROVAL_RE"; }
 resp_es_confianza() { printf '%s\n' "$1" | grep -Eqi -- "$RESP_TRUST_RE"; }
 resp_es_cuota() { printf '%s\n' "$1" | grep -Eqi -- "$RESP_CUOTA_RE"; }
 
-# El comando textual del diálogo: la primera línea que parece una orden de shell
-# (pelando los prefijos de prompt "$ " y ">"); si ninguna lo parece, la última
-# línea. Una línea de ayuda ("navigate", "Esc to cancel") no empieza con palabra
-# minúscula + espacio, y las opciones numeradas empiezan con dígito.
+# El comando textual del diálogo: la ÚLTIMA línea que parece una orden de shell
+# (pelando los prefijos de prompt "$ " y ">") previa a la firma del diálogo; si
+# ninguna lo parece, la última línea. Un CLI que conserva transcript encima del
+# diálogo (claude lo hace) puede traer un comando viejo y delicado dentro de las
+# 15 líneas: el comando preguntado es el de abajo, el más cercano a la pregunta
+# (BRIEF-r1 PB). Una línea de ayuda ("navigate", "Esc to cancel") no empieza con
+# palabra minúscula + espacio, y las opciones numeradas empiezan con dígito.
 resp_comando() {
   printf '%s\n' "$1" | awk '
     { l=$0
       sub(/^[[:space:]]+/, "", l)
       while (l ~ /^[$>]/) { sub(/^[$>][[:space:]]?/, "", l); sub(/^[[:space:]]+/, "", l) }
       ult=l
-      if (l ~ /^[a-z][a-z0-9_.-]* .+/) { print l; visto=1; exit }
+      if (l ~ /^[a-z][a-z0-9_.-]* .+/) cmd=l
     }
-    END { if (!visto) print ult }
+    END { print (cmd != "" ? cmd : ult) }
   '
 }
 

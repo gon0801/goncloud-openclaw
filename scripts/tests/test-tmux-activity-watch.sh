@@ -71,6 +71,10 @@ STUB
   chmod +x "$TMUX_SHIM"
 
   run_once() {
+    # BRIEF-r1 PA: sin CORRIDA_BIN explicito se apunta a una ruta que no existe:
+    # cuando Q4 instale ~/bin/corrida.sh, los casos sin enganche no deben llamar
+    # al responder real con nombres de sesion de prueba.
+    CORRIDA_BIN="${CORRIDA_BIN:-$T/no-hay-corrida}" \
     TMUX_BIN="$TMUX_SHIM" OPENCLAW_BIN="$STUB_OPENCLAW" QUIET_SECS=1 TICK_SECS=1 \
       STATE_DIR="$STATE_DIR" LOG_FILE="$LOG_FILE" \
       bash "$W" --once
@@ -503,6 +507,24 @@ STUB
   [ "$n" -eq 2 ] || fail "(2j) sin corrida.sh no debia llamarse a nadie nuevo; hubo $n"
   "$TM" -L "$L" kill-session -t pol-1
   echo "ok (2j): el dialogo se le ofrece a la politica primero; si contesta no despierta a nadie, y sin corrida.sh va como hoy"
+
+  # (2k) BRIEF-r1 PA: sin CORRIDA_BIN explicito, run_once lo apunta a una ruta
+  # inexistente: aunque exista un ~/bin/corrida.sh real (instalado en Q4), los
+  # casos sin enganche se comportan como hoy (el dialogo produce el evento).
+  run_once >/dev/null 2>&1   # traga el closed de pol-1 del caso anterior
+  PANTALLA_K="$T/pantalla-k.txt"
+  printf 'Permission - Bash\necho listar cuatro\n> Allow once\n  Deny\n running 3s\n' >"$PANTALLA_K"
+  "$TM" -L "$L" new-session -d -s pol-2 -x 100 -y 20 "$TUI $PANTALLA_K" || fail "no se pudo crear pol-2"
+  mark pol-2
+  : >"$CALLS"
+  espera_pantalla pol-2 'Allow once'
+  sleep 1
+  run_p || fail "--once (2k) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 1 ] || fail "(2k) sin CORRIDA_BIN explicito el evento debia salir como hoy; hubo $n"
+  grep -q 'pol-2 waiting for approval' "$CALLS" || fail "(2k) falta el evento de pol-2: $(cat "$CALLS")"
+  "$TM" -L "$L" kill-session -t pol-2
+  echo "ok (2k): run_once neutraliza CORRIDA_BIN por defecto; sin enganche explicito, el dialogo avisa como hoy"
 
   "$TM" -L "$L" kill-server 2>/dev/null
   echo "ok (2): maquina de estados del vigilante verificada con tmux real ($TM)"
