@@ -34,8 +34,7 @@ corrida_lanzar_sesion() {
   barra="$(printf '%s' "$fila" | cut -d'|' -f3)"
   [ -n "$barra" ] || { echo "barra vacia en la tabla para $token" >&2; return 1; }
   local bin
-  bin="$(bash -c "PATH=$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:\$PATH; command -v $binario" 2>/dev/null)" \
-    || { echo "binario no arranca: $binario" >&2; return 1; }
+  bin="$(bin_de_tabla "$binario")" || return 1
   [ -d "$dir" ] || { echo "sin directorio: $dir" >&2; return 1; }
   "$TMUX_BIN" has-session -t "=$nombre" 2>/dev/null && { echo "la sesion ya existe: $nombre" >&2; return 1; }
   local embebido="PATH=\"$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH\""

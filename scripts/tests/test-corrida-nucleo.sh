@@ -51,13 +51,17 @@ export RECIBIDAS="$T/recibidas.txt"
 printf 'bueno\tcli-bueno\t--modo-bueno-9\tBARRITA-YOLO\t--\t--\t--\n' >"$T/modos.tsv"
 printf 'malo\tcli-mala-barra\t--modo-malo-9\tBARRITA-YOLO\t--\t--\t--\n' >>"$T/modos.tsv"
 printf 'tarde\tcli-tarde\t--modo-tarde-9\tBAR-TARDE-9\t--\t--\t--\n' >>"$T/modos.tsv"
+# IA: el binario de esta fila lleva comandos inyectados; jamas debe llegar a un sh.
+printf 'inyecta\ttocar; touch %s/inyeccion-9x; true\t--modo-9\tBARRITA-YOLO\t--\t--\t--\n' "$T" >>"$T/modos.tsv"
 
 # Stub openclaw: anota, no manda. El destino es unico para probar que no entra al repo.
 # CRON_RM_FAIL=1 hace fallar cron rm; CRON_SIN_ID=1 hace que cron add no devuelva id
 # (el job queda en la lista como par "nombre id" en cron-puesto: la limpieza debe
 # resolver los ids ahi, todos los duplicados). LISTA_MALA=1 con LISTA_DESPUES_DE=n
 # falla todo cron list despues del n-esimo. CRON_RM_SUENIO/MSJ_SUENIO/LISTA_SUENIO=n
-# duermen esa llamada n segundos (para ejercitar el tope de reloj).
+# duermen esa llamada n segundos (para ejercitar el tope de reloj). CRON_ADD_SUENIO=n
+# duerme el cron add n segundos (abre la ventana de la carrera de abrir x abrir) y
+# CRON_ID_UNIQ=1 da un id unico por add (para que el perdedor Quite Su cron).
 LLAMADAS="$T/llamadas.log"
 DESTINO="DESTINO-UNICO-9X"
 cat >"$T/bin/openclaw" <<STUB
@@ -85,9 +89,13 @@ case "\$*" in
     fi
     printf ']}';;
   *cron\ add*)
+    [ "\${CRON_ADD_SUENIO:-0}" != "0" ] && sleep "\${CRON_ADD_SUENIO}"
     nom=""; prev=""
     for a in "\$@"; do [ "\$prev" = "--name" ] && nom="\$a"; prev="\$a"; done
-    if [ "\${CRON_SIN_ID:-0}" = "1" ]; then
+    if [ "\${CRON_ID_UNIQ:-0}" = "1" ]; then
+      printf '%s %s\n' "\$nom" "cron-\$nom-\$\$" >> "$T/cron-puesto"
+      printf '{"id":"cron-%s-%s"}' "\$nom" "\$\$"
+    elif [ "\${CRON_SIN_ID:-0}" = "1" ]; then
       c=\$(grep -c "^\$nom " "$T/cron-puesto" 2>/dev/null); c=\${c:-0}
       printf '%s %s\n' "\$nom" "cron-dup-\$nom-\$((c + 1))" >> "$T/cron-puesto"
       printf '{}'
@@ -182,6 +190,21 @@ bash "$CORR" abrir t1 --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" --
   && fail "abrir piso una corrida existente"
 grep -q '"nombre": *"ses-buena"' "$T/corridas/t1/registro.json" || fail "el abrir repetido borro sesiones"
 [ "$(grep -c "cron add.*corrida-vigia-t1" "$LLAMADAS")" = "1" ] || fail "abrir repetido duplico el cron"
+
+# (1d) IB: carrera abrir x abrir del mismo id — el suenio del cron add garantiza
+# que ambos pasen el chequeo temprano; el perdedor retira SU cron (ids unicos por
+# add) y queda un solo registro y un solo cron vivo.
+CRON_ID_UNIQ=1 CRON_ADD_SUENIO=1 bash "$CORR" abrir t-carrera --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 &
+a1=$!
+CRON_ID_UNIQ=1 CRON_ADD_SUENIO=1 bash "$CORR" abrir t-carrera --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 &
+a2=$!
+wait "$a1"; r1=$?
+wait "$a2"; r2=$?
+{ [ "$r1" -ne 0 ] || [ "$r2" -ne 0 ]; } || fail "la carrera de abrir debio dejar un perdedor"
+{ [ "$r1" -eq 0 ] || [ "$r2" -eq 0 ]; } || fail "la carrera de abrir debio dejar un ganador"
+n=$(grep -c "corrida-vigia-t-carrera" "$T/cron-puesto" 2>/dev/null || echo 0)
+[ "$n" -eq 1 ] || fail "la carrera dejo $n crons vivos (debia quedar uno)"
+[ -f "$T/corridas/t-carrera/registro.json" ] || fail "la carrera no dejo registro"
 
 # (1c) tmux -t sin = matchea por prefijo: ses-prefija-2 viva no estorba a ses-prefija.
 "$TM_REAL" -L "$L" new-session -d -s ses-prefija-2 >/dev/null 2>&1 || fail "no se creo ses-prefija-2"
@@ -297,6 +320,13 @@ mkdir -p "$T/co n"
 PATH="$T/co n:$PATH" bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nombre ses-path >/dev/null 2>&1 \
   || fail "un PATH con espacio rompio el arranque de la sesion"
 grep -q '"nombre": *"ses-path"' "$T/corridas/t1/registro.json" || fail "ses-path no quedo registrada"
+
+# (9j) IA: un binario de la tabla con comandos inyectados jamas llega a un sh: se
+# rechaza cerrado, con diagnostico claro, y sin ejecutar nada.
+out="$(bash "$CORR" lanzar-sesion t1 carril inyecta "$T/ses" --nombre ses-iny 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "el binario inyectado debio rechazarse"
+printf '%s' "$out" | grep -q "binario invalido" || fail "el rechazo no diagnostica el binario invalido"
+[ -e "$T/inyeccion-9x" ] && fail "la inyeccion del binario ejecuto codigo"
 
 # (9d) el marcado que falla no deja sesion viva ni sin marca.
 SETENV_FAIL=ses-marka bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nombre ses-marka >/dev/null 2>&1 \

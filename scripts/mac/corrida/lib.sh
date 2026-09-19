@@ -290,6 +290,16 @@ tsv_fila() { # $1 tsv, $2 cli -> "binario|flag|barra" (vacio si no hay fila)
   awk -F'\t' -v c="$2" '$1==c && $1 !~ /^#/ {print $2"|"$3"|"$4; exit}' "$1"
 }
 
+# El binario de la tabla de modos jamas llega interpolado a un sh (un campo como
+# "x; comando" es inyeccion, no un nombre): se valida contra [A-Za-z0-9_.-] y se
+# resuelve como argumento posicional del command -v, nunca dentro del texto -c.
+bin_de_tabla() { # $1 binario de la tabla; stdout su absoluta; rc 2 = invalido, 1 = no resuelve
+  case "$1" in ''|*[!A-Za-z0-9_.-]*)
+    echo "binario invalido en la tabla de modos: $1" >&2; return 2;; esac
+  bash -c 'PATH="$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH"; command -v "$1"' _ "$1" 2>/dev/null \
+    || { echo "binario no arranca: $1" >&2; return 1; }
+}
+
 # corrida_mensaje <id> <ETIQUETA> <avance> <cambio> <sigue> <necesito>
 # El avance es la linea 1 tras "Corrida, " (p. ej. "2 de 5 partes terminadas").
 # Valida contra seguimiento.v1 ANTES de mandar; anota en mensajes.jsonl; 0 = enviado.

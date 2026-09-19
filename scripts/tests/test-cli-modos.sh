@@ -46,8 +46,9 @@ validar_registro "$FX/registro-pasa-emergencia.json" || fail "emergencia dio lis
 validar_registro "$FX/registro-pasa-dropbox.json" || fail "dropbox dio lista dura (falso positivo)"
 
 # FB: campos exigidos — un registro sin cada uno de ellos cae con su motivo (los
-# mutantes se generan al vuelo desde el valido).
-python3 - "$TMP" "$FX" <<'PY'
+# mutantes se generan al vuelo desde el valido). El || fail vela al generador: si
+# muere, la prueba no puede seguir en verde (CodeRabbit IC).
+python3 - "$TMP" "$FX" <<'PY' || fail "el generador de falta-* fallo"
 import json,sys
 tmp,fx=sys.argv[1],sys.argv[2]
 d0=json.load(open(fx+'/registro-valido.json'))
@@ -75,8 +76,9 @@ revienta_archivo "$TMP/falta-prea.json" "preaprobaciones no es lista"
 # MATRIZ del detector de borrado recursivo (CA+CB+CE-r): todos los casos de una
 # vez; la mutacion (sin la regla) debe ponerla entera en rojo. Nota: el caso
 # "--force," de la matriz se codifica como "rm --recursive --force," — la regla
-# exige recursividad (r); una -f sola jamas cuenta (CE-r).
-python3 - "$TMP" "$FX" <<'PY'
+# exige recursividad (r); una -f sola jamas cuenta (CE-r). El || fail vela al
+# generador: muerto el, el glob de la matriz queda literal y la matriz muda.
+python3 - "$TMP" "$FX" <<'PY' || fail "el generador de la matriz fallo"
 import json,sys
 tmp,fx=sys.argv[1],sys.argv[2]
 rojo=['rm -rf','rm -fr','rm -Rf','rm -R -f','rm -r -f','rm --recursive --force',

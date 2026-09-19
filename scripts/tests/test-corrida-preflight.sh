@@ -153,6 +153,18 @@ out=$(bash "$CORR" preflight t-muere 2>&1); rc=$?
 printf '%s' "$out" | grep -q "binario muere al arrancar" || fail "NO APTO sin razon del binario:
 $out"
 
+# ROJO con binario inyectado en la tabla (IA): rechazo cerrado, con diagnostico,
+# y sin ejecutar nada de lo inyectado.
+modos x inyecta "tocar; touch $T/inyeccion-9x; true" "--flag-9" "BAR-OK-9"
+abrir t-iny "$RB"
+out=$(bash "$CORR" preflight t-iny 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "con binario inyectado debio dar NO APTO"
+printf '%s' "$out" | grep -q "binario no arranca" || fail "NO APTO sin razon del binario inyectado:
+$out"
+printf '%s' "$out" | grep -q "binario invalido" || fail "la tabla inyectada no se diagnostica:
+$out"
+[ -e "$T/inyeccion-9x" ] && fail "la inyeccion del binario ejecuto codigo"
+
 # ROJO con flag que no entra (pero que llega al binario: la razon es la barra).
 : > "$ARGV_LOG"
 modos x mal cli-flag-malo "--flag-malo-9" "BAR-OK-9"

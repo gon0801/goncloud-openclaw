@@ -82,6 +82,22 @@ print(d.get('id',''))" 2>/dev/null)"
     esac
     return 1
   fi
+  # La existencia se RE-comprueba bajo lock: dos abrir del mismo id pueden pasar el
+  # chequeo temprano de arriba a la vez y crear dos crons hombres-muertos; el
+  # perdedor retira el suyo. El cron add y el destino van fuera del lock (red: el
+  # umbral de locks viejos romperia un lock sostenido durante la llamada).
+  local reg="$dir/registro.json"
+  if ! lock_tomar "$reg"; then
+    echo "abrir: el lock de $id no cede; se retira el cron recien creado y no se escribio nada" >&2
+    [ -n "$cid" ] && con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1
+    return 1
+  fi
+  if [ -e "$reg" ]; then
+    echo "abrir: ya existe la corrida $id (registro en $dir); si hay que reabrir, cerrarla antes" >&2
+    [ -n "$cid" ] && con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1
+    lock_soltar "$reg"
+    return 1
+  fi
   CORR_ID="$id" CORR_RUNBOOK="$runbook" CORR_VIGIA="$vigia" CORR_SIM="$sim" CORR_CANAL="$canal_de" \
   CORR_DEST="$dest" CORR_MODOS="$cli_modos" CORR_CRON="$cid" CORR_REG="$dir/registro.json" python3 -c "
 import json,os
@@ -94,21 +110,23 @@ t=E['CORR_REG']+'.tmp'
 open(t,'w').write(json.dumps(d,indent=1)+chr(10))
 os.chmod(t,0o600)
 os.rename(t,E['CORR_REG'])
-" || { echo "abrir: no se pudo escribir el registro; se quita el cron recien creado" >&2
-       [ -n "$cid" ] && "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1
-       return 1; }
+  " || { echo "abrir: no se pudo escribir el registro; se quita el cron recien creado" >&2
+       [ -n "$cid" ] && con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1
+       lock_soltar "$reg"; return 1; }
   # Self-check: el registro que sale de abrir pasa el mismo validador de corrida.v1.
-  validar_registro "$dir/registro.json" >/dev/null 2>&1 \
+  validar_registro "$reg" >/dev/null 2>&1 \
     || { echo "abrir: el registro escrito no pasa su propio contrato; se quita el cron" >&2
-       [ -n "$cid" ] && "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1
-       return 1; }
+       [ -n "$cid" ] && con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1
+       lock_soltar "$reg"; return 1; }
   # El canal de mensajes es la mitad del contrato de la corrida: si no nace, no hay
   # apertura — se retira el cron y el registro recien creados, y el error lo dice.
   if ! { : > "$dir/mensajes.jsonl" && chmod 600 "$dir/mensajes.jsonl"; }; then
     echo "abrir: no se pudo crear el canal de mensajes de $id; se retiran el cron y el registro" >&2
-    "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1
-    rm -f "$dir/registro.json"
+    [ -n "$cid" ] && con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1
+    rm -f "$reg"
+    lock_soltar "$reg"
     return 1
   fi
+  lock_soltar "$reg"
   echo "abierta $id"
 }

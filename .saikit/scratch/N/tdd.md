@@ -481,3 +481,36 @@ Verde: las tres pruebas, tambien /bin/bash 3.2.
   (filas en decisiones): ~90 s de tres llamadas de 30 s bajo el lock, y el tope
   de cron_dest_de (la lista de abrir) sin prueba propia.
 Verde: las tres pruebas, tambien /bin/bash 3.2.
+
+## BRIEF-r16 (2026-09-19): los 3 accionables de CodeRabbit (IA-IC)
+- Hallazgos verificados contra el codigo antes de corregir: IA aplica en los dos
+  sitios (lanzar-sesion:37 y preflight:57 interpolaban $binario en el bash -c);
+  IB aplica (chequeo de existencia en abrir sin lock, cron add despues); IC con
+  un matiz (abajo).
+- IA: bin_de_tabla en lib.sh — el binario de la tabla se valida contra
+  [A-Za-z0-9_.-] (rc 2, "binario invalido en la tabla de modos") y se resuelve
+  como argumento posicional (bash -c '...; command -v "$1"' _ "$binario"), jamas
+  interpolado; lanzar-sesion y preflight lo usan. Casos: (9j) en nucleo y t-iny
+  en preflight, fila con "tocar; touch $T/inyeccion-9x; true" => rechazo cerrado,
+  diagnostico claro y el marcador NO existe. Mutaciones muertas: (1) resolucion
+  de lanzar revertida a la interpolada de HEAD => FAIL (y el marcador quedaba
+  creado: la inyeccion es real); (2) sin el case de validacion — misma mutacion
+  en lib mata nucleo Y preflight => FAIL por el diagnostico; (3) preflight
+  interpolado => FAIL.
+- IB: abrir re-serializa la carrera — chequeo temprano como fallo barato, cron
+  add y destino fuera del lock (umbral de locks viejos), y la existencia
+  RE-comprobada bajo lock con el cron ya puesto: toda ruta de fallo (lock que no
+  cede, registro existente, escritura/validacion/canal) retira el cron recien
+  creado (con con_tope: esas llamadas ahora si viajan bajo lock) y suelta el
+  lock. Caso (1d): dos abrir simultaneos de t-carrera (CRON_ADD_SUENIO=1 abre la
+  ventana; CRON_ID_UNIQ=1 da un id por add) => un ganador, un perdedor que retira
+  SU cron, un registro y UN cron vivo. Mutacion muerta: sin el re-chequeo bajo
+  lock => FAIL: la carrera de abrir debio dejar un perdedor.
+- IC: || fail en ambos generadores de cli-modos. Verificacion del reclamo: la
+  muerte TOTAL del generador ya la cazaba el loop limpio por accidente (glob
+  literal => validar falla => "debia pasar limpio" con el glob sin expandir en
+  el mensaje) — el verde silencioso de CodeRabbit no materializa; lo real es que
+  la matriz ROJA (la que mata mutaciones) puede no correr nunca y el diagnostico
+  tardio engana. Demo: generador roto sin || fail => FAIL tardio y enganoso;
+  con || fail => FAIL: el generador de la matriz fallo.
+Verde: las tres pruebas, tambien /bin/bash 3.2.

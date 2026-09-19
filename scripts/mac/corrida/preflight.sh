@@ -54,8 +54,7 @@ corrida_preflight() {
     [ "$flag" = "unknown" ] || [ -z "$flag" ] && { unknown "flag de $cli sin medir"; continue; }
     [ "$barra" != "unknown" ] && [ -z "$barra" ] && { razon "barra vacia en la tabla: $cli"; continue; }
     local bin
-    bin="$(bash -c "PATH=$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:\$PATH; command -v $binario" 2>/dev/null)" \
-      || { razon "binario no arranca: $cli"; continue; }
+    bin="$(bin_de_tabla "$binario")" || { razon "binario no arranca: $cli"; continue; }
     local psn="preflight-$id-$cli" embebido="PATH=\"$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH\""
     "$TMUX_BIN" has-session -t "=$psn" 2>/dev/null && "$TMUX_BIN" kill-session -t "=$psn" 2>/dev/null
     if "$TMUX_BIN" new-session -d -s "$psn" -x 80 -y 10 "$embebido $bin $flag" 2>/dev/null; then
