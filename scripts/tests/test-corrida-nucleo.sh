@@ -56,7 +56,8 @@ printf 'tarde\tcli-tarde\t--modo-tarde-9\tBAR-TARDE-9\t--\t--\t--\n' >>"$T/modos
 # CRON_RM_FAIL=1 hace fallar cron rm; CRON_SIN_ID=1 hace que cron add no devuelva id
 # (el job queda en la lista como par "nombre id" en cron-puesto: la limpieza debe
 # resolver los ids ahi, todos los duplicados). LISTA_MALA=1 con LISTA_DESPUES_DE=n
-# falla todo cron list despues del n-esimo.
+# falla todo cron list despues del n-esimo. CRON_RM_SUENIO/MSJ_SUENIO/LISTA_SUENIO=n
+# duermen esa llamada n segundos (para ejercitar el tope de reloj).
 LLAMADAS="$T/llamadas.log"
 DESTINO="DESTINO-UNICO-9X"
 cat >"$T/bin/openclaw" <<STUB
@@ -70,6 +71,7 @@ case "\$*" in
     grep -v " \$3\$" "$T/cron-puesto" > "$T/cron-puesto.n" 2>/dev/null; mv "$T/cron-puesto.n" "$T/cron-puesto"
     printf '{}';;
   *cron\ list*)
+    [ "\${LISTA_SUENIO:-0}" != "0" ] && sleep "\${LISTA_SUENIO}"
     n=\$([ -f "$T/lists" ] && wc -l < "$T/lists" || echo 0); n=\$((n + 1)); echo x >> "$T/lists"
     if [ "\${LISTA_MALA:-0}" != "0" ] && [ "\$n" -gt "\${LISTA_DESPUES_DE:-0}" ]; then exit 1; fi
     printf '{"jobs":[{"name":"verif-sync-repos","delivery":{"to":"$DESTINO"}}'
@@ -93,7 +95,7 @@ case "\$*" in
       printf '%s %s\n' "\$nom" "cron-\$nom" >> "$T/cron-puesto"
       printf '{"id":"cron-%s"}' "\$nom"
     fi;;
-  *message\ send*) [ "\${ENVIO_MODO:-ok}" = "mal" ] && exit 1; printf '{"messageId":"m1"}';;
+  *message\ send*) [ "\${MSJ_SUENIO:-0}" != "0" ] && sleep "\${MSJ_SUENIO}"; [ "\${ENVIO_MODO:-ok}" = "mal" ] && exit 1; printf '{"messageId":"m1"}';;
 esac
 exit 0
 STUB
@@ -245,6 +247,13 @@ mkdir -p "$T/c-real"
 ln -s "$T/c-real" "$T/c-sym"
 ( cd "$T" && CORRIDA_STATE=c-sym bash "$CORR_ABS" abrir t-sym --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null ) \
   || fail "abrir con CORRIDA_STATE relativo fallo"
+RB_REL="scripts/tests/fixtures/corrida/runbook-simulacro.md"
+bash "$CORR" abrir t-rel2 --runbook "$RB_REL" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir con runbook relativo fallo"
+grep -qF "\"runbook\": \"$RB_REL" "$T/corridas/t-rel2/registro.json" \
+  && fail "el runbook relativo se guardo sin resolver a absoluta"
+grep -qF "\"runbook\": \"$PWD/$RB_REL\"" "$T/corridas/t-rel2/registro.json" \
+  || fail "el runbook guardado no es la absoluta resuelta"
 sym_line="$(grep "cron add.*corrida-vigia-t-sym" "$LLAMADAS" | head -1)"
 printf '%s' "$sym_line" | grep -qF -- "$T/c-real/t-sym" || fail "el cron no cita la ruta fisica del estado"
 bash "$CORR" abrir t-ns --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
@@ -281,6 +290,13 @@ bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nombre "mai:l" >/dev/null 
 bash "$CORR" lanzar-sesion t1 jefe bueno "$T/ses" --nombre ses-jefe >/dev/null 2>&1 \
   && fail "un rol fuera del conjunto debio rechazarse"
 grep -q '"nombre": *"ses-jefe"' "$T/corridas/t1/registro.json" && fail "la sesion de rol invalido quedo registrada"
+
+# (9i) GD-1: un PATH con espacio no rompe el arranque — el PATH embebido en el
+# comando de tmux va citado adentro (sh -c lo parsea y el espacio parte el assignment).
+mkdir -p "$T/co n"
+PATH="$T/co n:$PATH" bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nombre ses-path >/dev/null 2>&1 \
+  || fail "un PATH con espacio rompio el arranque de la sesion"
+grep -q '"nombre": *"ses-path"' "$T/corridas/t1/registro.json" || fail "ses-path no quedo registrada"
 
 # (9d) el marcado que falla no deja sesion viva ni sin marca.
 SETENV_FAIL=ses-marka bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nombre ses-marka >/dev/null 2>&1 \
@@ -336,6 +352,10 @@ lock_tomar "$T/corridas/t1/registro.json" >"$T/lock.out" 2>&1; rc=$?
 grep -q "lock viejo" "$T/lock.out" || fail "romper el lock viejo no avisa"
 lock_soltar "$T/corridas/t1/registro.json"
 [ -d "$T/corridas/t1/.lock" ] && fail "lock_soltar dejo el lock puesto"
+# El guard de lock_tomar mutado a "if true" arma aqui su trap pisando el de
+# limpieza del arranque, y lock_soltar lo borra: sin re-armarlo, un fail posterior
+# (9g2) deja vivos el servidor tmux y el temporal.
+trap '"$TM_REAL" -L "$L" kill-server 2>/dev/null; rm -rf "$T"' EXIT
 
 # (9g) el trap del lock se desarma tras soltarlo: el EXIT de quien lo uso no puede
 # romperle a otro un lock vivo tomado entremedias.
@@ -502,6 +522,37 @@ out="$(CRON_RM_SUENIO=12 CORR_TOPE_RED=3 bash "$CORR" cerrar t-gc 2>&1)"; rc=$?
 [ -d "$T/corridas/t-gc/.lock" ] && fail "el lock quedo puesto con la red colgada"
 printf '%s' "$out" | grep -q "cron" || fail "el fallo con la red colgada no nombra el cron"
 grep -q '"estado": *"abierta"' "$T/corridas/t-gc/registro.json" || fail "con la red colgada cerro a medias"
+
+# (7b9) HA: OPENCLAW_BIN inexistente — con_tope NO convierte el 127 en exito: cerrar
+# falla cerrado y mensajes.jsonl no anota un CERRADA que nunca salio.
+bash "$CORR" abrir t-ha --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir t-ha fallo"
+out="$(OPENCLAW_BIN="/no/existe/openclaw" bash "$CORR" cerrar t-ha 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "con el binario inexistente debio fallar cerrado"
+printf '%s' "$out" | grep -q "cron\|lista" || fail "el fallo con binario inexistente no se explica"
+grep -q '"etiqueta": "CERRADA", "ok": true' "$T/corridas/t-ha/mensajes.jsonl" 2>/dev/null \
+  && fail "anoto ok:true un aviso que nunca salio"
+[ -d "$T/corridas/t-ha/.lock" ] && fail "el lock quedo puesto con el binario inexistente"
+
+# (7b10) el tope alcanza tambien a la lista de verificacion de cerrar: colgada,
+# muere al tope y se reporta como ilegible (sin tope esperaria los 12 s del stub
+# y diria "no se quito").
+bash "$CORR" abrir t-top --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir t-top fallo"
+out="$(CRON_RM_FAIL=1 LISTA_SUENIO=12 CORR_TOPE_RED=3 bash "$CORR" cerrar t-top 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "con la lista colgada debio fallar cerrado"
+printf '%s' "$out" | grep -q "no se pudo verificar" || fail "la lista colgada no se reporta al tope"
+grep -q '"estado": *"abierta"' "$T/corridas/t-top/registro.json" || fail "con la lista colgada cerro a medias"
+[ -d "$T/corridas/t-top/.lock" ] && fail "el lock quedo puesto con la lista colgada"
+
+# (7b11) M-D: el envio tambien va con tope — un message send colgado muere al tope
+# y el reporte es honesto (ok:false en mensajes.jsonl).
+rc=0
+( export CORR_TOPE_RED=3 MSJ_SUENIO=12
+  corrida_mensaje t1 AVANZA "2 de 2 partes terminadas" "quedo cubierto el envio con tope" "sigue lo demas del pase" "nada" >/dev/null 2>&1 ) \
+  || rc=1
+[ "$rc" -ne 0 ] || fail "un envio colgado debio morir al tope del reloj"
+grep -q '"ok": false' "$T/corridas/t1/mensajes.jsonl" || fail "el envio muerto al tope no reporto honesto"
 
 # (7c) lanzar sobre una corrida cerrada se niega.
 bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nombre ses-zombi --encargo "$T/encargo.txt" >/dev/null 2>&1 \

@@ -12,7 +12,7 @@ de una corrida cumple este contrato, lo mande el latido, el lead o el cierre.
 Cuatro líneas, en este orden, con estos prefijos literales (un mensaje que no los
 traiga es rojo):
 
-1. `[ETIQUETA] Fase 9, N de M partes terminadas` — el avance como "N de M partes".
+1. `[ETIQUETA] Corrida, N de M partes terminadas` — el avance como "N de M partes".
    En `CERRADA` basta un cierre en palabras: ya no queda nada que contar.
 2. `Que cambio: ...` — una frase, en palabras de usuario.
 3. `Que sigue: ...` — una frase, en palabras de usuario.

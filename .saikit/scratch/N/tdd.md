@@ -443,3 +443,41 @@ Verde: las tres pruebas, tambien /bin/bash 3.2.
   vetada "ci" y el validador de jerga lo rechaza (hallazgo del propio pase; la baja
   permitia "o 'corrida'").
 Verde: las tres pruebas, tambien /bin/bash 3.2.
+
+## BRIEF-r15 (2026-09-19): regresion de con_tope (HA) + una linea del resto
+- HA (bloqueante): con_tope devolvia 0 con el binario ausente (el exec de perl
+  falla y perl sale 0; la llamada directa da 127): cerrar se daba por bien hecho
+  y anotaba CERRADA ok:true sin haber mandado nada — y al quedar marcado enviado,
+  nunca se reenviaba (regresion contra 838a782, que fallaba cerrado). Arreglo:
+  exec(@ARGV) or exit 127. Caso (7b9): OPENCLAW_BIN inexistente -> cerrar falla
+  nombrando cron/lista, registro abierto, mensajes.jsonl sin ok:true, lock suelto.
+  Rojo del pase: mutado a "exec @ARGV" -> FAIL: con el binario inexistente debio
+  fallar cerrado.
+- GD-1: el PATH embebido en el comando de tmux (lanzar-sesion:41, preflight:59)
+  va citado adentro — sh -c parte el assignment en el primer espacio. Caso (9i):
+  PATH con "$T/co n" arranca la sesion y queda registrada; mutado sin comillas
+  internas -> FAIL: un PATH con espacio rompio el arranque de la sesion (muere
+  tambien con la linea de resolucion en HEAD). Hallazgo propio: citar la linea
+  de resolucion (bash -c "PATH=...") NO tiene observable — el assignment roto
+  solo alcanza al comando fallido y command -v cae al PATH heredado (la mutacion
+  sobrevive TODO VERDE); esas lineas quedaron como en HEAD, fuera del hallazgo.
+- spec: seguimiento.v1.md:15 dice "Corrida, " como el codigo (desde r14); idem el
+  comentario de corrida_mensaje en lib.sh.
+- abrir: el runbook relativo se resuelve a absoluta al guardar (la del registro
+  manda). Caso (t-rel2): asercion negativa (no queda la relativa) y positiva (es
+  $PWD/$relativa exacta). Mutado (resolucion neutralizada) -> FAIL: el runbook
+  relativo se guardo sin resolver a absoluta.
+- 9f: tras lock_tomar/lock_soltar en la shell de la prueba se rearma el trap de
+  limpieza. Con el guard mutado a "if true" (M3 del veredicto), lock_tomar pisa
+  el trap del test y lock_soltar lo borra: el fail de 9g2 dejaba vivos el
+  servidor tmux y el temporal — reproducido hoy (servidor nucleoNNN vivo y su
+  temporal presente tras el fail). Con el rearm: M3 sigue muriendo en 9g2 y no
+  queda servidor. Se recogio un servidor filtrado por la sesion muerta anterior
+  (arrancado 00:00, temp presente): kill-server por socket exacto.
+- topes de cerrar (los baratos): (7b10) la lista de verificacion colgada
+  (LISTA_SUENIO en el stub) muere al tope y se reporta como no-se-pudo-verificar
+  (mutada sin con_tope: espera los 12 s y FAIL); (7b11) el envio colgado
+  (MSJ_SUENIO) muere al tope y reporta ok:false — M-D ya no sobrevive. Declarados
+  (filas en decisiones): ~90 s de tres llamadas de 30 s bajo el lock, y el tope
+  de cron_dest_de (la lista de abrir) sin prueba propia.
+Verde: las tres pruebas, tambien /bin/bash 3.2.

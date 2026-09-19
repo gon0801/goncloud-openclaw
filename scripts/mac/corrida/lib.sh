@@ -25,7 +25,7 @@ corrida_id_valido() { # $1 id; 0 = solo [A-Za-z0-9_-] (nada de /, .., :, ;)
 # (un proceso vivo con el lock roto es peor que un error oportuno).
 con_tope() { # $1 segundos; resto: comando a correr con tope (SIGALRM al vencer)
   local seg="$1"; shift
-  perl -e 'alarm shift; exec @ARGV' "$seg" "$@"
+  perl -e 'alarm shift; exec(@ARGV) or exit 127' "$seg" "$@"
 }
 CORR_TOPE_RED="${CORR_TOPE_RED:-30}"
 
@@ -291,7 +291,7 @@ tsv_fila() { # $1 tsv, $2 cli -> "binario|flag|barra" (vacio si no hay fila)
 }
 
 # corrida_mensaje <id> <ETIQUETA> <avance> <cambio> <sigue> <necesito>
-# El avance es la linea 1 tras "Fase 9, " (p. ej. "2 de 5 partes terminadas").
+# El avance es la linea 1 tras "Corrida, " (p. ej. "2 de 5 partes terminadas").
 # Valida contra seguimiento.v1 ANTES de mandar; anota en mensajes.jsonl; 0 = enviado.
 corrida_mensaje() {
   local id="$1" etq="$2" avance="$3" cambio="$4" sigue="$5" necesito="$6"

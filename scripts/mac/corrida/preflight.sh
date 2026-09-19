@@ -56,7 +56,7 @@ corrida_preflight() {
     local bin
     bin="$(bash -c "PATH=$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:\$PATH; command -v $binario" 2>/dev/null)" \
       || { razon "binario no arranca: $cli"; continue; }
-    local psn="preflight-$id-$cli" embebido="PATH=$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH"
+    local psn="preflight-$id-$cli" embebido="PATH=\"$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH\""
     "$TMUX_BIN" has-session -t "=$psn" 2>/dev/null && "$TMUX_BIN" kill-session -t "=$psn" 2>/dev/null
     if "$TMUX_BIN" new-session -d -s "$psn" -x 80 -y 10 "$embebido $bin $flag" 2>/dev/null; then
       sleep 2

@@ -22,6 +22,8 @@ corrida_abrir() {
   case "$vigia" in claw|hermes) ;; *) echo "abrir: vigia fuera del conjunto" >&2; return 1;; esac
   [ -z "$cli_modos" ] && cli_modos="$HOME/bin/cli-modos.tsv"
   [ -f "$runbook" ] || { echo "abrir: no existe el runbook: $runbook" >&2; return 1; }
+  # El registro manda: el runbook se guarda resuelto a absoluta.
+  case "$runbook" in /*) ;; *) runbook="$PWD/$runbook";; esac
   [ -r "$cli_modos" ] || { echo "abrir: no se puede leer la tabla de modos: $cli_modos" >&2; return 1; }
   # El destino sale de la entrega de un cron que ya existe; jamas va en el repo ni en entorno.
   local dest

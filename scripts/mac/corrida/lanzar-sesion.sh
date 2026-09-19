@@ -38,7 +38,7 @@ corrida_lanzar_sesion() {
     || { echo "binario no arranca: $binario" >&2; return 1; }
   [ -d "$dir" ] || { echo "sin directorio: $dir" >&2; return 1; }
   "$TMUX_BIN" has-session -t "=$nombre" 2>/dev/null && { echo "la sesion ya existe: $nombre" >&2; return 1; }
-  local embebido="PATH="$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH""
+  local embebido="PATH=\"$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH\""
   "$TMUX_BIN" new-session -d -s "$nombre" -x 200 -y 50 -c "$dir" "$embebido $bin $flag" >&2 || return 1
   "$TMUX_BIN" has-session -t "=$nombre" 2>/dev/null || { echo "la sesion murio al arrancar" >&2; return 1; }
   # La marca ocurre ANTES del primer send-keys (el orden lo vigila la prueba con el log del shim).
