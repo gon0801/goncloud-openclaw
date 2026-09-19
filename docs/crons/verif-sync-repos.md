@@ -1,5 +1,7 @@
 # Cron `verif-sync-repos` — vigia del sync de repos
 
+Id vivo: `2d763be5-6390-4ccf-a3a4-621c91c41e94`.
+
 Vive en el gateway: agente `main`, cron `40 */2 * * *` (America/New_York), tools `exec,message,automations`.
 
 Copia versionada de su mensaje. Sin esto el diseno existe solo dentro del cron del gateway
