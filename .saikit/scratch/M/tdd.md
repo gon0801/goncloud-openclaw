@@ -93,3 +93,49 @@ muestra inyectabilidad (reloj +1 h => "3 horas y 58 minutos"); y la nota del
 tolera 5002 contando los 2 de sangria. Incidente propio de la ronda: mis
 casos nuevos pisaban watch-avanza/paneles-avanza que el caso --solo-mensaje
 reusa; ahora usan directorios propios (pan-mb2/wat-mb2, pan-mb3/wat-mb3).
+
+### fix(9.8) no bloqueantes
+MM: la consulta filtra por el workflow de calidad (quality.yml); el stub de gh
+de la prueba exige ese flag (exit 5 sin el). MN: timed_out y startup_failure
+entran al conjunto rojo (caso: GH_CI=timeout avisa y el registro local queda
+con el sha nuevo). MO: ci-rojo.json se escribe tras un envio que salio (con
+avisado en verdad); envio caido => sin registro mentiroso y reintento al tick
+siguiente (caso lat-mo). MP: parseo con separador de unidad (chr 31), un campo
+vacio no corre los demas. MQ: los tres gh van con cd && (si el cd falla, no se
+consulta al PWD). Mutaciones verificadas muriendo: sin --workflow, solo
+failure en el conjunto rojo, y registro escrito aunque el envio cayera.
+
+### Declarado de la ronda (no bloqueantes que no eran de una linea)
+- 9.4/2: NECESITO no tiene fixture byte a byte propio en estado (lo cubre la
+  prueba de latido con sus greps y validacion); abrir el fixture faltante
+  toca diseno de textos, no una linea.
+- 9.4/4-5, 7-8: cruce con progress.json y coherencia de mensajes entre
+  etiquetas: decisiones del lead sobre la forma del parte, no arreglables
+  en una linea sin inventar criterio.
+- 9.4/9: la pausa de la ventana no acumula esperas historicas (el vigilante
+  no guarda historia); ya declarado en ronda 0.
+- 9.4/10: P_FIRMA/P_ACCIONES se ejercitan via latido; la prueba de estado no
+  los aserta por su cuenta.
+- 9.4/14: panel_limpio deja el detalle del vigia en ASCII plano (igual que
+  approval_tail del vigilante); el mensaje a David nunca incluye pantalla.
+- 9.4/15: el texto de pantalla se trata como dato: limpio de control y
+  truncado antes de entrar al detalle; no se interpreta.
+- 9.4/16: el stub de gh de la prueba responde lo pedido; endurecerlo al
+  nivel de un gh real es trabajo de prueba, no de producto.
+- 9.4/17: los .panel.* temporales de estado se borran en el flujo normal;
+  sin trap a mitad de corrida pueden quedar sueltos (sin rm recursivo por
+  clausula (a); fuga acotada al directorio de estado de la corrida).
+- 9.4/MF: no se pudo verificar con una captura real de glm/muse si la TUI
+  antepone vineta a LISTO/ATORADO (no hay capturas a mano aqui); la regex
+  actual casa la misma forma que el grep del runbook (^ *(LISTO|ATORADO)).
+- 9.4/MG: no hay filtro barato de PRs por corrida (la rama por carril vive
+  en el espejo de progreso, no en el registro); el conteo del parte es de
+  propuestas abiertas del repo, dicho sin reclamo de pertenencia.
+- 9.8/MR: el chequeo de CI vive por corrida: con N corridas abiertas hay N
+  consultas y hasta N avisos del mismo sha (memoria por corrida, como pide
+  la fila: el registro local es de la corrida). El plan corre una corrida
+  a la vez; dedupe global declarado como residual.
+- Vigilante: test-tmux-activity-watch.sh es FLAKY bajo carga (reproducido:
+  2 de 3 verdes, fallando 2e una vez y 2f otra; carrera del TUI de mentira
+  contra la reescritura del archivo de pantalla). Fuera de mi tabla SCOPE:
+  declarado, sin tocar. Reintento el commit cuando cae.

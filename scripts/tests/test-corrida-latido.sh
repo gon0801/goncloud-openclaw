@@ -40,13 +40,16 @@ printf '%s\n' "GH $*" >> "${GH_LOG:-/dev/null}"
 [ "${GH_CAIDO:-0}" = "1" ] && exit 1
 case "$1" in
   run)
-    if [ "${GH_CI:-verde}" = "rojo" ]; then
-      printf '[{"headSha": "%s", "conclusion": "failure", "status": "completed", "actor": {"login": "%s"}}]\n' \
-        "${GH_SHA:-cafe1234567}" "${GH_AUTOR:-gon0801}"
-    else
-      printf '[{"headSha": "%s", "conclusion": "success", "status": "completed", "actor": {"login": "%s"}}]\n' \
-        "${GH_SHA:-abcdef1234567}" "${GH_AUTOR:-gon0801}"
-    fi;;
+    case "$*" in *"--workflow quality.yml"*) ;; *) exit 5;; esac
+    case "${GH_CI:-verde}" in
+      rojo)    c=failure;;
+      timeout) c=timed_out;;
+      arranque) c=startup_failure;;
+      *)       c=success;;
+    esac
+    if [ "${GH_CI:-verde}" = "verde" ]; then s="${GH_SHA:-abcdef1234567}"; else s="${GH_SHA:-cafe1234567}"; fi
+    printf '[{"headSha": "%s", "conclusion": "%s", "status": "completed", "actor": {"login": "%s"}}]\n' \
+      "$s" "$c" "${GH_AUTOR:-gon0801}";;
   repo)
     printf '{"nameWithOwner": "gon0801/goncloud-workspace-main"}\n';;
   api)
@@ -302,6 +305,31 @@ GH_CI=rojo GH_SHA=cafe1234567 tick "$((T0 + 300))" || fail "CI rojo: el tick del
 [ "$(msgs)" = "2" ] || fail "CI rojo ya avisado volvio a avisar (msgs=$(msgs))"
 GH_CI=verde tick "$((T0 + 600))" || fail "el tick con CI verde revinto"
 [ "$(msgs)" = "2" ] || fail "CI verde mando mensaje (msgs=$(msgs))"
+# MN: un timeout del CI tambien es rojo.
+GH_CI=timeout GH_SHA=dead999888777 tick "$((T0 + 660))" || fail "el tick con CI en timeout revinto"
+[ "$(msgs)" = "3" ] || fail "un timeout de CI no se aviso (msgs=$(msgs))"
+grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[DETENIDA\]" || fail "el timeout no salio como DETENIDA"
+CIC="$CORRIDA_STATE/lat-ci/ci-rojo.json" python3 -c "
+import json,os
+d=json.load(open(os.environ['CIC']))
+assert d.get('sha')=='dead999888777', d
+" || fail "el registro local quedo con el sha viejo tras el timeout"
+
+# MO: el registro local de rojo se escribe tras un envio que salio; si el envio
+# cae, no hay registro con "avisado" mentiroso y el proximo tick reintenta.
+LLAMADAS="$T/l9b.log"; export LLAMADAS; : > "$LLAMADAS"
+solo_dejar lat-mo
+montar_corrida lat-mo avanza
+trabajando_en "$T0"
+ENVIO_MODO=mal GH_CI=rojo GH_SHA=beef555aaa111 tick "$T0" >/dev/null 2>&1 || fail "MO: el tick con envio caido revinto"
+[ ! -f "$CORRIDA_STATE/lat-mo/ci-rojo.json" ] || fail "MO: registro de rojo escrito con el envio caido"
+ENVIO_MODO=ok GH_CI=rojo GH_SHA=beef555aaa111 tick "$((T0 + 300))" >/dev/null 2>&1 || fail "MO: el reintento revinto"
+[ -f "$CORRIDA_STATE/lat-mo/ci-rojo.json" ] || fail "MO: el reintento no dejo registro local"
+CIC="$CORRIDA_STATE/lat-mo/ci-rojo.json" python3 -c "
+import json,os
+d=json.load(open(os.environ['CIC']))
+assert d.get('sha')=='beef555aaa111' and d.get('avisado'), d
+" || fail "MO: el registro del reintento no trae sha y avisado"
 # gh caido => cero avisos de rojo en un estado que con gh vivo SI avisaria, y el
 # latido sigue. Corrida propia (firma y latido.json iniciales limpios) y reloj
 # propio: lo que mide esta seccion es el gh caido, no arrastres de las demas.
