@@ -82,35 +82,31 @@ js=[j.get('id','') for j in d.get('jobs',[]) if j.get('name')==os.environ['NOMBR
 print('\n'.join(js) if js else 'NINGUNO')" 2>/dev/null
 }
 
-# Actualizacion del registro con lock por directorio y renombre atomico: dos
-# lanzar-sesion en paralelo no se pisan y un corte a mitad no deja JSON truncado.
-# Un lock de mas de un minuto es de un proceso muerto y se quita con aviso. El +1
-# de find tiene dos semanticas: BSD (macOS) matchea >60 s; GNU (CI) redondea y
-# matchea a partir de ~2 min. El umbral efectivo, entre 1 y 2 min, es a proposito.
-registro_actualizar() { # $1 registro, $2 lineas python que mutan d (env visible); 0 = escrito
-  local reg="$1" dir i=0 armado=0
-  dir="$(dirname "$reg")"
+# Lock del registro por directorio. Un lock de mas de un minuto es de un proceso
+# muerto y se quita con aviso. El +1 de find tiene dos semanticas: BSD (macOS)
+# matchea >60 s; GNU (CI) redondea y matchea a partir de ~2 min. El umbral efectivo,
+# entre 1 y 2 min, es a proposito.
+registro_lock() { # $1 registro; 0 = tomado
+  local dir i=0
+  dir="$(dirname "$1")"
   if [ -d "$dir/.lock" ] && [ -n "$(find "$dir/.lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then
     rmdir "$dir/.lock" 2>/dev/null \
-      && echo "registro_actualizar: rompio un lock viejo en $dir" >&2
+      && echo "registro_lock: rompio un lock viejo en $dir" >&2
   fi
   while ! mkdir "$dir/.lock" 2>/dev/null; do
-    i=$((i+1)); [ "$i" -gt 100 ] && { echo "registro_actualizar: lock del registro no cede" >&2; return 1; }
+    i=$((i+1)); [ "$i" -gt 100 ] && return 1
     sleep 0.1
   done
-  # Si quien escribe muere dentro de la seccion critica, un EXIT sin dueno saca el
-  # lock. Si el llamador ya tiene su propio trap (p. ej. el de preflight), no se le
-  # pisa: ese caso lo cubre el rompimiento de locks viejos. Nada de guardar y
-  # restaurar traps: restaurar dentro de una subshell de captura dispara el trap
-  # ajeno al cerrar ella (medido: borro el dir de una prueba a mitad de corrida).
-  # Y tras soltar el lock el trap se DESARMA: el EXIT de este proceso no puede
-  # romperle a otro un lock vivo tomado entremedias.
-  if [ -z "$(trap -p EXIT)" ]; then
-    CORR_LOCK_ACT="$dir/.lock"
-    trap 'rmdir "$CORR_LOCK_ACT" 2>/dev/null' EXIT
-    armado=1
-  fi
-  CORR_REG="$reg" CORR_PY="$2" python3 -c "
+  return 0
+}
+
+registro_unlock() { # $1 registro: suelta el lock (inofensivo si no estaba)
+  rmdir "$(dirname "$1")/.lock" 2>/dev/null
+}
+
+registro_escribir() { # $1 registro, $2 lineas python que mutan d; 0 = escrito.
+                     # SIN lock: quien llama lo toma (registro_actualizar o cerrar).
+  CORR_REG="$1" CORR_PY="$2" python3 -c "
 import json,os
 r=os.environ['CORR_REG']
 d=json.load(open(r))
@@ -120,11 +116,30 @@ open(t,'w').write(json.dumps(d,indent=1)+chr(10))
 os.chmod(t,0o600)
 os.rename(t,r)
 "
+}
+
+# Actualizacion del registro con lock y renombre atomico: dos lanzar-sesion en
+# paralelo no se pisan y un corte a mitad no deja JSON truncado.
+# Si quien escribe muere dentro de la seccion critica, un EXIT sin dueno saca el
+# lock. Si el llamador ya tiene su propio trap (p. ej. el de preflight), no se le
+# pisa: ese caso lo cubre el rompimiento de locks viejos. Nada de guardar y
+# restaurar traps: restaurar dentro de una subshell de captura dispara el trap
+# ajeno al cerrar ella (medido: borro el dir de una prueba a mitad de corrida).
+# Y tras soltar el lock el trap se DESARMA: el EXIT de este proceso no puede
+# romperle a otro un lock vivo tomado entremedias.
+registro_actualizar() { # $1 registro, $2 lineas python que mutan d (env visible); 0 = escrito
+  local reg="$1" armado=0
+  registro_lock "$reg" \
+    || { echo "registro_actualizar: lock del registro no cede" >&2; return 1; }
+  if [ -z "$(trap -p EXIT)" ]; then
+    CORR_LOCK_ACT="$(dirname "$reg")/.lock"
+    trap 'rmdir "$CORR_LOCK_ACT" 2>/dev/null' EXIT
+    armado=1
+  fi
+  registro_escribir "$reg" "$2"
   local rc=$?
-  # Desarmar ANTES de soltar: una senal entre el rmdir y el disarm dispararia el
-  # trap sobre un lock que otro proceso pudo tomar ya.
   [ "$armado" -eq 1 ] && trap - EXIT
-  rmdir "$dir/.lock" 2>/dev/null
+  registro_unlock "$reg"
   return "$rc"
 }
 

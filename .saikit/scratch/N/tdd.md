@@ -320,3 +320,24 @@ prueba: el grep -c con || echo 0 duplicaba la salida y rompia la aritmetica del
 stub, y el contador de duplicados se contaminaba con los adds normales (ids de
 duplicados ahora deterministas por nombre).
 Verde: las tres pruebas, tambien /bin/bash 3.2.
+
+## BRIEF-r9 (2026-09-18): hallazgos del reviewer del kit sobre 7d8ab70 — DA-DD
+Rojos con el defecto puesto:
+- DA: `FAIL: la segunda llamada reenvio el aviso` (regresion: cerrar sobre
+  cerrada reenviaba CERRADA). Ahora: estado cerrada → rc=0, "cerrada <id>",
+  cero reenvios, ni cron ni sesiones.
+- DB: demostrado a mano con el lock tomado — el aviso SALIA y recien despues
+  fallaba "lock del registro no cede" (CERRADA en jsonl: 1). Ahora el lock se
+  toma ANTES del aviso (registro_lock/escribir/unlock extraidos de
+  registro_actualizar): con el lock tomado nada sale, el error dice "el aviso NO
+  salio" y lo hecho, y el reintento cierra con UN solo aviso (caso 7b4).
+- DC: "quedan: ILEGIBLE" (demostrado leyendo el mensaje) — ahora distingue: la
+  lista no se pudo leer ("no se pudo verificar... revisar el cron a mano") de
+  ids que quedan de verdad.
+- DD: mutacion verificada — sin la rama ILEGIBLE, `FAIL: la ilegibilidad de la
+  lista no se nombra`; la forma fail-open (ILEGIBLE como exito) la mata el
+  assert de rc!=0 del mismo caso (7b5).
+Extra por DB: si el aviso salio pero la escritura del registro fallo, el error
+lo dice y el reintento NO reenvia (mensajes.jsonl es la memoria de lo que David
+ya recibio: CERRADA ok:true → no se remanda).
+Verde: las tres pruebas, tambien /bin/bash 3.2.

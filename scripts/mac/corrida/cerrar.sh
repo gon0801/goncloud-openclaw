@@ -1,12 +1,18 @@
 #!/bin/bash
 # corrida/cerrar.sh (9.2). cerrar <id>: desmarca, quita el cron por su id, manda CERRADA.
-# Idempotente y honesto: cada fallo dice que falló y en qué quedó la corrida; el
-# estado pasa a cerrada SOLO cuando todo cerró, y reintentar tras un fallo cierra.
+# Idempotente y honesto: sobre una corrida cerrada es no-op con confirmacion; el lock
+# se toma ANTES del aviso (nada sale a medias sin decirlo); un aviso ya enviado no se
+# reenvia (se mira mensajes.jsonl); y cada fallo nombra la falla y lo hecho/lo falta.
 corrida_cerrar() {
   local id="$1"
   corrida_id_valido "$id" || { echo "cerrar: id invalido: $id" >&2; return 2; }
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
+  # Ya cerrada: segunda llamada = no-op con confirmacion (nada de reenviar).
+  if [ "$(json_campo "$reg" estado)" = "cerrada" ]; then
+    echo "cerrada $id"
+    return 0
+  fi
   local s nombres
   nombres="$(CORR_REG="$reg" python3 -c "
 import json,os
@@ -21,17 +27,51 @@ print(' '.join(x.get('nombre','') for x in json.load(open(os.environ['CORR_REG']
   [ -n "$cid" ] || cid="corrida-vigia-$id"
   if ! "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1; then
     local quedan; quedan="$(cron_jobs_de "corrida-vigia-$id")"
+    if [ "$quedan" = "ILEGIBLE" ]; then
+      echo "cerrar: no se pudo verificar si el cron de $id sigue puesto (lista ilegible); las sesiones ya estan desmarcadas y el registro queda abierto — revisar el cron a mano y reintentar" >&2
+      return 1
+    fi
     if [ "$quedan" != "NINGUNO" ]; then
       echo "cerrar: no se quito el cron de la corrida $id (quedan: $quedan); las sesiones ya estan desmarcadas y el registro queda abierto — reintentar cierra" >&2
       return 1
     fi
   fi
-  # El registro se marca cerrada solo cuando todo lo anterior cerró; si el aviso no
-  # sale, la corrida queda abierta PERO dicho, y el reintento tiene camino libre.
-  if ! corrida_mensaje "$id" "CERRADA" "todas las partes terminadas" "la corrida termino" "no queda nada en curso" "nada"; then
-    echo "cerrar: no salio el aviso de cierre de $id; las sesiones ya estan desmarcadas y el cron ya esta quitado — el registro queda abierto, reintentar cierra" >&2
+  # Lock ANTES del aviso: si no cede, nada salio todavia y el reintento tiene camino.
+  if ! registro_lock "$reg"; then
+    echo "cerrar: lock del registro de $id no cede; las sesiones ya estan desmarcadas y el cron ya esta quitado, el aviso NO salio y el registro queda abierto — reintentar cierra" >&2
     return 1
   fi
-  registro_actualizar "$reg" "d['estado']='cerrada'" || return 1
+  local armado=0
+  if [ -z "$(trap -p EXIT)" ]; then
+    CORR_LOCK_ACT="$(dirname "$reg")/.lock"
+    trap 'rmdir "$CORR_LOCK_ACT" 2>/dev/null' EXIT
+    armado=1
+  fi
+  # Un aviso de cierre YA entregado (intento anterior que fallo al escribir) no se
+  # reenvia: mensajes.jsonl es la memoria de lo que David ya recibio.
+  local ya
+  ya="$(CORR_MSG_DIR="$CORRIDA_STATE/$id" python3 -c "
+import json,os
+try:
+  filas=[json.loads(l) for l in open(os.path.join(os.environ['CORR_MSG_DIR'],'mensajes.jsonl'))]
+except Exception:
+  filas=[]
+print('true' if any(f.get('etiqueta')=='CERRADA' and f.get('ok') for f in filas) else 'false')" 2>/dev/null)"
+  if [ "$ya" != "true" ]; then
+    if ! corrida_mensaje "$id" "CERRADA" "todas las partes terminadas" "la corrida termino" "no queda nada en curso" "nada"; then
+      [ "$armado" -eq 1 ] && trap - EXIT
+      registro_unlock "$reg"
+      echo "cerrar: no salio el aviso de cierre de $id; las sesiones ya estan desmarcadas y el cron ya esta quitado — el registro queda abierto, reintentar cierra" >&2
+      return 1
+    fi
+  fi
+  if ! registro_escribir "$reg" "d['estado']='cerrada'"; then
+    [ "$armado" -eq 1 ] && trap - EXIT
+    registro_unlock "$reg"
+    echo "cerrar: el aviso de $id ya salio pero el registro no se pudo marcar cerrado — reintentar cierra sin reenviar el aviso" >&2
+    return 1
+  fi
+  [ "$armado" -eq 1 ] && trap - EXIT
+  registro_unlock "$reg"
   echo "cerrada $id"
 }

@@ -352,6 +352,45 @@ grep -q '"estado": *"cerrada"' "$T/corridas/t-ci/registro.json" || fail "el rein
   && fail "tras el reintento ses-ci sigue marcada"
 grep -q "corrida-vigia-t-ci" "$T/cron-puesto" 2>/dev/null && fail "tras el reintento el cron sigue puesto"
 
+# (7b3) DA: cerrar sobre una corrida YA cerrada es no-op con confirmacion: rc=0,
+# mensaje de cerrada y CERO reenvios del aviso.
+cerradas_antes=$(grep -c '"etiqueta": "CERRADA", "ok": true' "$T/corridas/t-ci/mensajes.jsonl")
+out="$(bash "$CORR" cerrar t-ci 2>&1)"; rc=$?
+[ "$rc" -eq 0 ] || fail "cerrar sobre una corrida cerrada debio ser rc=0"
+printf '%s' "$out" | grep -q "cerrada t-ci" || fail "la segunda llamada no confirma el cierre"
+cerradas_despues=$(grep -c '"etiqueta": "CERRADA", "ok": true' "$T/corridas/t-ci/mensajes.jsonl")
+[ "$cerradas_antes" = "$cerradas_despues" ] || fail "la segunda llamada reenvio el aviso"
+
+# (7b4) DB: lock del registro tomado — el aviso NO sale antes del fallo; el fallo
+# nombra el lock y lo hecho; el reintento cierra con UN solo aviso.
+bash "$CORR" abrir t-lk --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir t-lk fallo"
+bash "$CORR" lanzar-sesion t-lk carril bueno "$T/ses" --nombre ses-lk --encargo "$T/encargo.txt" >/dev/null \
+  || fail "lanzar ses-lk fallo"
+mkdir "$T/corridas/t-lk/.lock"
+out="$(bash "$CORR" cerrar t-lk 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "con el lock tomado debio fallar"
+printf '%s' "$out" | grep -q "lock" || fail "el fallo del lock no se nombra"
+printf '%s' "$out" | grep -q "aviso NO salio" || fail "el fallo del lock no dice que el aviso no salio"
+grep -q '"etiqueta": "CERRADA"' "$T/corridas/t-lk/mensajes.jsonl" 2>/dev/null \
+  && fail "el aviso salio antes de fallar el lock"
+grep -q '"estado": *"abierta"' "$T/corridas/t-lk/registro.json" || fail "con el lock tomado el registro cerro a medias"
+rmdir "$T/corridas/t-lk/.lock"
+bash "$CORR" cerrar t-lk >/dev/null || fail "el reintento debio cerrar"
+grep -q '"estado": *"cerrada"' "$T/corridas/t-lk/registro.json" || fail "el reintento no cerro el registro"
+n=$(grep -c '"etiqueta": "CERRADA", "ok": true' "$T/corridas/t-lk/mensajes.jsonl")
+[ "$n" = "1" ] || fail "el reintento duplico el aviso (n=$n)"
+
+# (7b5) DC: cron rm fallando con la lista ilegible — falla cerrado y nombra la
+# ilegibilidad, no "quedan: ILEGIBLE".
+bash "$CORR" abrir t-dc --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir t-dc fallo"
+nl=$([ -f "$T/lists" ] && wc -l < "$T/lists" || echo 0)
+out="$(CRON_RM_FAIL=1 LISTA_MALA=1 LISTA_DESPUES_DE="$nl" bash "$CORR" cerrar t-dc 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "con la lista ilegible debio fallar cerrado"
+printf '%s' "$out" | grep -q "no se pudo verificar" || fail "la ilegibilidad de la lista no se nombra"
+grep -q '"estado": *"abierta"' "$T/corridas/t-dc/registro.json" || fail "con la lista ilegible el registro cerro a medias"
+
 # (7c) lanzar sobre una corrida cerrada se niega.
 bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nombre ses-zombi --encargo "$T/encargo.txt" >/dev/null 2>&1 \
   && fail "lanzar sobre una corrida cerrada debio negarse"
