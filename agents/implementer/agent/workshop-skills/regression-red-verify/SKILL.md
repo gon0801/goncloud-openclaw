@@ -17,7 +17,7 @@ pone rojo. Un test que sigue verde sin el fix no protege nada.
    Todo verde ANTES de mutar. La base corre con el MISMO entorno (PATH
    incluido) que el verde final; un rojo ambiental preexistente (p. ej.
    `timeout` ausente en el PATH restringido del exec Mac — el setup de
-   ese PATH vive en el skill mac-exec-detach-poll) se declara y se
+   ese PATH vive en mac-exec-detach-poll/ENV.md) se declara y se
    excluye por evidencia, no se arregla fuera de alcance.
 3. Escribe UN driver que, por cada proteccion documentada del modulo,
    aplique UNA mutacion que simule revertirla o DEBILITARLA (piso de

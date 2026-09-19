@@ -7,7 +7,9 @@ description: Cuando la tarea exige abrir un PR en GitHub y gh no aparece en el P
 
 ## Pasos
 
-1. Confirma que gh falta DE VERDAD: en el nodo Mac `which gh` falla por el PATH restringido aunque gh exista; proba primero `/opt/homebrew/bin/gh --version` (medido funcionando en la Mac del operador, PRs #292/#2833). Solo si falta en ambas vias segui con la API. No instales nada.
+1. Confirma que gh falta DE VERDAD: en el nodo Mac `which gh` falla por el PATH restringido aunque gh exista; proba primero `/opt/homebrew/bin/gh --version` (el PATH del nodo lo
+   oculta aunque exista; medido funcionando en la Mac del operador, PRs #292/#2833 —
+   tabla en mac-exec-detach-poll/ENV.md). Solo si falta en ambas vias segui con la API. No instales nada.
 2. Lee la credencial almacenada de git SIN mostrarla, con
    `GIT_TERMINAL_PROMPT=0` para que falle en vez de colgarse a preguntar:
 

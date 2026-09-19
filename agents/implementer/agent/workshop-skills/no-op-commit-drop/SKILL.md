@@ -31,7 +31,7 @@ no contra main).
 5. Dropeá sin editor interactivo: `git rebase --onto <sha>^ <sha> <rama>`
    (verificado 2026-09-17, Fase 7: 6/6 replays limpios, sin conflictos).
    Evita `GIT_SEQUENCE_EDITOR` con `sed -i`: el sed de la Mac es BSD y
-   la forma GNU rompe el sequencer (detalle en mac-exec-detach-poll).
+   la forma GNU rompe el sequencer (detalle en mac-exec-detach-poll/ENV.md).
 6. Si stasheaste trabajo antes del rebase y el stash toca el mismo
    archivo que el commit dropeado, no confíes en el pop: puede
    auto-mergear en silencio contra la base nueva y dejar el archivo sin
