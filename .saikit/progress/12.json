@@ -13,14 +13,14 @@
   "lead": {
     "agente": "cursor-cloud",
     "inicio": "2026-09-19T03:59:08Z",
-    "actualizado": "2026-09-19T05:55:00Z"
+    "actualizado": "2026-09-19T06:17:29Z"
   },
   "atencion_requerida": {
     "necesaria": false,
     "motivo": null,
     "desde": null
   },
-  "siguiente_paso": "Prueba usuario 12.5 FUNCIONA en docs/evidence/usuario-fase12-2026-09-18.md. PR #93 abierto. Sin merge.",
+  "siguiente_paso": "Fase 12 cerrada. Tablero en /runbook/tablero/12. Evidence en docs/evidence/usuario-fase12-2026-09-18.md.",
   "carriles": [
     {
       "id": "C",
@@ -251,11 +251,17 @@
       "carril": null,
       "que": "12.5 FUNCIONA en docs/evidence/usuario-fase12-2026-09-18.md; Q5 verificado; Plans.md cc:完了",
       "situacion": null
+    },
+    {
+      "at": "2026-09-19T06:17:29Z",
+      "carril": null,
+      "que": "cierre.at seteado; progress alineado versionado↔gateway",
+      "situacion": null
     }
   ],
   "cierre": {
-    "at": null,
+    "at": "2026-09-19T06:17:29Z",
     "telegram_message_id": null,
-    "resumen": null
+    "resumen": "Fase 12 cerrada: tablero de corrida en main (PRs #87–#93)."
   }
 }
