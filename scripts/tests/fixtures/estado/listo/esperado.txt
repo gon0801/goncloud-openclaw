@@ -1,0 +1,19 @@
+[AVANZA] Corrida, 2 de 5 partes terminadas
+Que cambio: un carril termino su parte y aun no se recoge
+Que sigue: trabajan 2 sesiones; quedan 4 horas y 58 minutos de ventana de trabajo; GitHub: sin verificar
+Que necesito de ti: nada
+--- detalle (para el vigia; no va a David) ---
+corrida m-listo abierta desde 2026-09-19T12:00:00+0000, vigia claw
+sesion m-lead (lead, glm): trabajando
+  lead trabajando
+  revisando lo que llego
+  todo en orden
+sesion m-a (carril, glm): listo (contrato: LISTO abc1234)
+  carril A terminando
+  las pruebas quedaron en orden
+  LISTO abc1234
+sesion m-b (carril, muse): trabajando
+  carril B trabajando
+  leyendo el contrato del parte
+  sin novedades
+GitHub: sin verificar
