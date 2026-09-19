@@ -44,23 +44,52 @@ resp_es_dialogo() { printf '%s\n' "$1" | grep -Eqi -- "$RESP_APPROVAL_RE"; }
 resp_es_confianza() { printf '%s\n' "$1" | grep -Eqi -- "$RESP_TRUST_RE"; }
 resp_es_cuota() { printf '%s\n' "$1" | grep -Eqi -- "$RESP_CUOTA_RE"; }
 
-# El comando textual del diálogo: la ÚLTIMA línea que parece una orden de shell
-# (pelando los prefijos de prompt "$ " y ">") previa a la firma del diálogo; si
-# ninguna lo parece, la última línea. Un CLI que conserva transcript encima del
-# diálogo (claude lo hace) puede traer un comando viejo y delicado dentro de las
-# 15 líneas: el comando preguntado es el de abajo, el más cercano a la pregunta
-# (BRIEF-r1 PB). Una línea de ayuda ("navigate", "Esc to cancel") no empieza con
-# palabra minúscula + espacio, y las opciones numeradas empiezan con dígito.
-resp_comando() {
+# La unidad de decisión es el BLOQUE de comando del diálogo (BRIEF-r3 F3): la
+# última línea que parece una orden de shell (pelando los prefijos de prompt
+# "$ " y ">") extendida a las líneas tipo comando CONTIGUAS que la componen —
+# un diálogo de dos líneas (push + echo) decide sobre ambas. El transcript VIEJO
+# queda fuera por construcción: sus líneas tipo comando no son contiguas con el
+# bloque (BRIEF-r1 PB, caso 4d). Una línea de ayuda ("navigate", "Esc to
+# cancel") no empieza con palabra minúscula + espacio, y las opciones numeradas
+# empiezan con dígito.
+resp_bloque() { # $1 cola -> las líneas del bloque de comando (vacío si no hay)
   printf '%s\n' "$1" | awk '
-    { l=$0
+    function peel(l) {
       sub(/^[[:space:]]+/, "", l)
       while (l ~ /^[$>]/) { sub(/^[$>][[:space:]]?/, "", l); sub(/^[[:space:]]+/, "", l) }
-      ult=l
-      if (l ~ /^[a-z][a-z0-9_.-]* .+/) cmd=l
+      return l
     }
-    END { print (cmd != "" ? cmd : ult) }
-  '
+    { n++; line[n]=peel($0)
+      if (line[n] ~ /^[a-z][a-z0-9_.-]* .+/) last=n
+    }
+    END {
+      if (!last) exit
+      j=last
+      while (j>1 && line[j-1] ~ /^[a-z][a-z0-9_.-]* .+/) j--
+      for (k=j; k<=last; k++) print line[k]
+    }'
+}
+# El diálogo propio: desde la primera línea del bloque hasta el final de la
+# cola (la pregunta y las opciones viven ahí). Si no hay bloque, la cola entera
+# (un diálogo de confianza o de límite de uso no trae líneas tipo comando). Es
+# la única región donde se deciden las clases confianza y cuota (BRIEF-r3 F2):
+# una línea VIEJA de límite o una frase de confianza en el transcript de arriba
+# no pueden decidir la clase.
+resp_region() { # $1 cola -> líneas del diálogo propio
+  printf '%s\n' "$1" | awk '
+    function peel(l) {
+      sub(/^[[:space:]]+/, "", l)
+      while (l ~ /^[$>]/) { sub(/^[$>][[:space:]]?/, "", l); sub(/^[[:space:]]+/, "", l) }
+      return l
+    }
+    { n++; line[n]=peel($0)
+      if (line[n] ~ /^[a-z][a-z0-9_.-]* .+/) last=n
+    }
+    END {
+      j=1
+      if (last) { j=last; while (j>1 && line[j-1] ~ /^[a-z][a-z0-9_.-]* .+/) j-- }
+      for (k=j; k<=n; k++) print line[k]
+    }'
 }
 
 # La tabla de preaprobaciones se valida AL CARGAR: un patrón que no compila, o tan
@@ -305,12 +334,44 @@ EOF
   local encendido=0
   [ -e "$CORRIDA_STATE/$id/responder.on" ] && encendido=1
 
-  # Clasificación del diálogo y decisión por política.
-  local clase comando="" decision teclas="" ref="" esca_motivo=""
-  if resp_es_confianza "$cola1"; then
+  # Bloque de comando del diálogo y región del diálogo propio (BRIEF-r3 F3/F2).
+  # El join con "; " es solo para anotar y citar (una línea en decisiones.jsonl y
+  # en el marcador del mensaje); el CASO de filas va contra el bloque con sus
+  # saltos de línea: una fila anclada (^echo) no casa un bloque que empieza con
+  # otra cosa.
+  local bloque bjoin region linea rcl
+  bloque="$(resp_bloque "$cola1")"
+  bjoin=""
+  while IFS= read -r linea; do
+    [ -n "$linea" ] || continue
+    if [ -n "$bjoin" ]; then bjoin="$bjoin; $linea"; else bjoin="$linea"; fi
+  done <<EOF
+$bloque
+EOF
+  region="$(resp_region "$cola1")"
+
+  # BRIEF-r3 F2: la lista dura se evalúa PRIMERO, sobre TODO el bloque (dispara
+  # si CUALQUIER línea cae, o si no se pudo comprobar), y gana sobre cualquier
+  # clase: ni una frase de confianza ni una señal de límite de uso salvan un
+  # comando inaprobable.
+  local clase comando="" decision teclas="" ref="" esca_motivo="" lh=0 lh2=0
+  while IFS= read -r linea; do
+    [ -n "$linea" ] || continue
+    rcl=0; resp_lista_dura "$linea" || rcl=$?
+    [ "$rcl" -eq 0 ] && lh=1
+    [ "$rcl" -eq 2 ] && lh2=1
+  done <<EOF
+$bloque
+EOF
+  if [ "$lh" -eq 1 ] || [ "$lh2" -eq 1 ]; then
+    clase=comando; comando="$bjoin"; ref="$bjoin"
+    decision=escala
+    if [ "$lh" -eq 1 ]; then esca_motivo="lista dura: ninguna tabla lo aprueba"
+    else esca_motivo="no se pudo comprobar la lista dura"; fi
+  elif resp_es_confianza "$region"; then
     clase=confianza
     # La confianza solo se aprueba para una carpeta DE la corrida: sin ruta en
-    # pantalla, o la del registro / la del panel; una ruta ajena escala.
+    # el diálogo, o la del registro / la del panel; una ruta ajena escala.
     local r cwd="" okruta=1
     while IFS= read -r r; do
       if [ -z "$r" ] || [ "$r" = "/" ]; then continue; fi
@@ -319,38 +380,31 @@ EOF
         okruta=0; ref="$r"; break
       fi
     done <<EOF
-$(printf '%s\n' "$cola1" | LC_ALL=C grep -oE '/[A-Za-z0-9_./-]+' | sort -u)
+$(printf '%s\n' "$region" | LC_ALL=C grep -oE '/[A-Za-z0-9_./-]+' | sort -u)
 EOF
     if [ "$okruta" -eq 1 ]; then
       decision=acepta; teclas="$acepta"
     else
       decision=escala; esca_motivo="confianza en una carpeta ajena a la corrida"
     fi
-  elif resp_es_cuota "$cola1"; then
+  elif resp_es_cuota "$region"; then
     clase=cuota
     comando="límite de uso"
     decision=niega; teclas="$niega"   # niega el cambio: conserva el modelo
     ref="límite de uso"
   else
     clase=comando
-    comando="$(resp_comando "$cola1")"
+    comando="$bjoin"
+    [ -n "$comando" ] || comando="$(printf '%s\n' "$region" | tail -n 1)"
     ref="$comando"
-    # 0 = lista dura, 2 = no se pudo comprobar (fail-closed): ambas escalan.
-    local lh=0
-    resp_lista_dura "$comando" || lh=$?
-    if [ "$lh" -eq 0 ]; then
-      decision=escala; esca_motivo="lista dura: ninguna tabla lo aprueba"
-    elif [ "$lh" -eq 2 ]; then
-      decision=escala; esca_motivo="no se pudo comprobar la lista dura"
-    else
-      local fila_pre
-      fila_pre="$(resp_fila_de "$reg" "$comando")"
-      case "${fila_pre%%|*}" in
-        Aprobado) decision=acepta; teclas="$acepta";;
-        Negado)   decision=niega;  teclas="$niega";;
-        *)        decision=escala; esca_motivo="sin fila que case en la tabla del registro";;
-      esac
-    fi
+    # La fila casa el bloque ENTERO (con sus saltos de línea), no una línea suelta.
+    local fila_pre
+    fila_pre="$(resp_fila_de "$reg" "$bloque")"
+    case "${fila_pre%%|*}" in
+      Aprobado) decision=acepta; teclas="$acepta";;
+      Negado)   decision=niega;  teclas="$niega";;
+      *)        decision=escala; esca_motivo="sin fila que case en la tabla del registro";;
+    esac
   fi
 
   # Tecla sin medir: esa vía no se usa; se escala en vez de inventar.

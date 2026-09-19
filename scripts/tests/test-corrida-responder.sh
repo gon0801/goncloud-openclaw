@@ -221,6 +221,45 @@ echo adios
   Always allow in this project
   Deny
 PAN
+# BRIEF-r3: el push envuelto en una frase de confianza y el falso positivo de
+# cuota (línea VIEJA de usage limit encima de un diálogo de comando real).
+cat >"$P/push-trust.txt" <<'PAN'
+Permission - Bash
+git push origin main # trust this folder
+> Allow once
+  Always allow in this project
+  Deny
+PAN
+cat >"$P/cuota-falsa.txt" <<'PAN'
+You've hit your usage limit yesterday; credits restored, working again
+Detected a shell command:
+echo hola
+Run it? [plugin:claude-code-harness]
+Do you want to proceed?
+  1. Yes
+  2. No
+Esc to cancel  Tab to amend
+PAN
+# BRIEF-r3 F3: diálogo de DOS líneas de comando (el push arriba, el echo abajo).
+cat >"$P/dos-lineas.txt" <<'PAN'
+Detected commands to run:
+git push origin main
+echo listo
+Run it? [plugin:claude-code-harness]
+Do you want to proceed?
+  1. Yes
+  2. No
+Esc to cancel  Tab to amend
+PAN
+cat >"$P/eco-listo.txt" <<'PAN'
+Detected a shell command:
+echo listo
+Run it? [plugin:claude-code-harness]
+Do you want to proceed?
+  1. Yes
+  2. No
+Esc to cancel  Tab to amend
+PAN
 
 # (1) Nace apagado: sin responder.on registra en decisiones.jsonl qué HABRÍA hecho
 # y no manda ni una tecla ni un mensaje.
@@ -259,7 +298,7 @@ echo "ok (2): fixture confianza.txt (sin ruta) => acepta con la tecla de la tabl
 
 # (3) Lista dura: ni con fila Aprobado. push a main y rm -rf escalan con el
 # comando textual y las dos opciones, sin mandar tecla.
-abrir c3 "$(seses r3 glm r3b claude)" "$(pres 'git push origin main' Aprobado 'rm -rf' Aprobado)"
+abrir c3 "$(seses r3 glm r3b claude r3c glm)" "$(pres 'git push origin main' Aprobado 'rm -rf' Aprobado)"
 encender c3
 pan r3 "$FIXD/permiso-push.txt"; espera r3 'Allow once'
 : >"$LLAMADAS"
@@ -267,7 +306,7 @@ corre r3; [ $? -eq 1 ] || fail "(3) la lista dura no se contesta (rc 1)"
 [ "$(nteclas r3)" -eq 0 ] || fail "(3) ningún push a main se contesta con tecla"
 grep -qF 'NECESITO TU RESPUESTA' "$LLAMADAS" || fail "(3) debía escalar NECESITO TU RESPUESTA: $(cat "$LLAMADAS")"
 grep -qF 'Comando: git push origin main' "$LLAMADAS" || fail "(3) la escala debe citar el comando textual: $(cat "$LLAMADAS")"
-grep -qF '0 de 2 partes terminadas' "$LLAMADAS" || fail "(3) la escala habla de partes de la corrida: $(cat "$LLAMADAS")"
+grep -qF '0 de 3 partes terminadas' "$LLAMADAS" || fail "(3) la escala habla de partes de la corrida: $(cat "$LLAMADAS")"
 D="$(udec c3)"
 [ "$(jcampo decision "$D")" = "escala" ] || fail "(3) decisión escala: $D"
 case "$(jcampo motivo "$D")" in *lista\ dura*) ;; *) fail "(3) el motivo nombra la lista dura: $D";; esac
@@ -323,7 +362,7 @@ grep -q '"comando": "rm -rf /tmp/viejo"' "$CORRIDA_STATE/c4/decisiones.jsonl" \
 echo "ok (4d): con transcript encima, decide sobre el comando del diálogo (el último), no sobre el viejo"
 
 # (5) Límite de uso: conserva el modelo (tecla de negar) y marca el carril cuota.
-abrir c5 "$(seses r5 codex)" "[]"
+abrir c5 "$(seses r5 codex r5b codex)" "$(pres 'echo hola' Aprobado)"
 encender c5
 pan r5 "$P/cuota-codex.txt"; espera r5 'Keep current model'
 corre r5; [ $? -eq 0 ] || fail "(5) el límite de uso se contesta (conserva el modelo)"
@@ -486,5 +525,56 @@ qout="$(bash -c '
 ' 2>/dev/null)"
 [ "$qout" = "0 1 2" ] || fail "(12) contrato de resp_lista_dura: 0=dura 1=limpio 2=sin comprobar; salió: $qout"
 echo "ok (12): resp_lista_dura distingue lista dura (0), limpio (1) y fallo del validador (2)"
+
+# (13) BRIEF-r3 F2: la lista dura se evalúa PRIMERO sobre el bloque de comando y
+# gana sobre cualquier clase: un push a main envuelto en una frase de confianza
+# ("# trust this folder") escala igual, con cero teclas.
+abrir c13 "$(seses r13a glm)" "$(pres 'git push origin main' Aprobado)"
+encender c13
+pan r13a "$P/push-trust.txt"; espera r13a 'Allow once'
+: >"$LLAMADAS"
+corre r13a; [ $? -eq 1 ] || fail "(13) un push a main envuelto en frase de confianza no se acepta"
+[ "$(nteclas r13a)" -eq 0 ] || fail "(13) cero teclas ante lista dura, aunque la pantalla hable de confianza"
+grep -qF 'NECESITO TU RESPUESTA' "$LLAMADAS" || fail "(13) debía escalar: $(cat "$LLAMADAS")"
+D="$(udec c13)"
+[ "$(jcampo decision "$D")" = "escala" ] || fail "(13) decisión escala: $D"
+case "$(jcampo motivo "$D")" in *lista\ dura*) ;; *) fail "(13) el motivo nombra la lista dura: $D";; esac
+echo "ok (13): la lista dura gana sobre la clase confianza (push + frase de confianza => escala)"
+
+# (14) BRIEF-r3 F2: cuota se decide sobre el diálogo propio, no sobre texto viejo
+# de la pantalla: una línea VIEJA de límite de uso encima de un permiso de comando
+# no marca cuota ni conserva modelo; el permiso se decide como comando.
+pan r5b "$P/cuota-falsa.txt"; espera r5b 'Do you want to proceed?'
+corre r5b; [ $? -eq 0 ] || fail "(14) el diálogo real (echo hola Aprobado) se contesta"
+tecla_fue r5b 1 || fail "(14) la tecla es la de aceptar de claude (1), no la de cuota: $(grep 'send-keys -t r5b' "$TMUX_LOG")"
+D="$(udec c5)"
+[ "$(jcampo clase "$D")" = "comando" ] && [ "$(jcampo decision "$D")" = "acepta" ] \
+  || fail "(14) clase comando acepta, no cuota: $D"
+con_cuota="$(REG="$CORRIDA_STATE/c5/registro.json" SESION="r5b" python3 -c '
+import json,os
+d=json.load(open(os.environ["REG"]))
+s=[x for x in d["sesiones"] if x.get("nombre")==os.environ["SESION"]]
+print("true" if s and "cuota" in s[0] else "false")' 2>/dev/null)"
+[ "$con_cuota" = "false" ] || fail "(14) una línea vieja de límite no marca cuota en el registro"
+echo "ok (14): cuota solo por el diálogo propio; línea vieja de límite no marca cuota"
+
+# (15) BRIEF-r3 F3: la unidad de decisión es el BLOQUE de comando completo: un
+# diálogo de dos líneas (push + echo) con fila ^echo Aprobado escala (la lista
+# dura dispara en CUALQUIER línea del bloque y la fila no aprueba el bloque
+# entero); y un bloque que sí casa entero (^echo sobre "echo listo") se aprueba.
+abrir c15 "$(seses r15a claude r15b claude)" "$(pres '^echo' Aprobado)"
+encender c15
+pan r15a "$P/dos-lineas.txt"; espera r15a 'Do you want to proceed?'
+: >"$LLAMADAS"
+corre r15a; [ $? -eq 1 ] || fail "(15) el bloque trae un push a main: ninguna fila lo aprueba"
+[ "$(nteclas r15a)" -eq 0 ] || fail "(15) cero teclas: el ^echo no aprueba el bloque que trae el push"
+grep -qF 'NECESITO TU RESPUESTA' "$LLAMADAS" || fail "(15) debía escalar: $(cat "$LLAMADAS")"
+pan r15b "$P/eco-listo.txt"; espera r15b 'echo listo'
+corre r15b; [ $? -eq 0 ] || fail "(15) un bloque que casa la fila entera se aprueba"
+tecla_fue r15b 1 || fail "(15) ^echo aprueba el bloque 'echo listo': $(grep 'send-keys -t r15b' "$TMUX_LOG")"
+D="$(udec c15)"
+[ "$(jcampo clase "$D")" = "comando" ] && [ "$(jcampo decision "$D")" = "acepta" ] \
+  || fail "(15) clase comando acepta para el bloque que casa: $D"
+echo "ok (15): el bloque completo decide: push+echo con ^echo => escala; echo listo con ^echo => acepta"
 
 echo "TODO VERDE: corrida-responder"

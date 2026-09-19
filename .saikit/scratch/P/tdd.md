@@ -160,3 +160,28 @@ llamador trata el 2 como escala). Verde final: las cinco baterías en TODO VERDE
 con bash y /bin/bash 3.2; numstat del vigilante 64/0 y de su batería 145/0;
 los dos mutantes del DoD siguen ROJO (96-mutantes actualizado a la nueva forma
 de la llamada a resp_lista_dura).
+
+## 9.6 · BRIEF-r3 — rojos de los dos bloqueantes (repros del reviewer, pegados antes de corregir)
+
+Corridos por `93-rojos-r3.sh` contra el responder sin corregir (salida en
+`93-rojos-r3.txt`):
+
+```
+F2-confianza: rc=0 teclas=1 escalas=0 (esperado rc=1 teclas=0 escalas>=1)
+  => ROJO: la frase de confianza se lo llevó por delante
+F2-cuota: rc=0 tecla1=0 cuota=1 (esperado rc=0 tecla1=1 cuota=0)
+  => ROJO: texto viejo de límite decidió cuota
+F3-bloque: rc=0 teclas=1 escalas=0 (esperado rc=1 teclas=0 escalas>=1)
+  => ROJO: ^echo aprobó un bloque que trae un push a main
+```
+
+Correcciones aplicadas (F2+F3): la lista dura se evalúa PRIMERO sobre TODO el
+bloque de comando (resp_bloque: la última línea tipo comando extendida a las
+contiguas) y gana sobre cualquier clase; confianza y cuota se deciden solo
+después y sobre la región del diálogo propio (resp_region: desde el inicio del
+bloque hasta el final de la cola; sin bloque, la cola entera); una fila casa el
+bloque ENTERO (con saltos de línea: ^echo no aprueba un bloque que trae un
+push arriba). Verde final: las cinco baterías en TODO VERDE con bash y /bin/bash
+3.2 (el vigilante dio un flake de carga en una pasada y pasó en las tres
+siguientes, sin cambios de r3 en ese archivo); 4d verde intacto; mutantes del
+DoD siguen ROJO; numstat del vigilante 145/0.

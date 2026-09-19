@@ -32,10 +32,10 @@ muta() { # $1 descripción, $2 patrón sed; corre la batería y exige ROJO
 #    detiene la tecla (resp_relee siempre "intacta").
 muta "sin relectura (TOCTOU fuera)" 's/^  \[ -n "\$c" \] \&\& \[ "\$c" = "\$2" \]$/  return 0/'
 
-# 2) Sin lista dura: el comando cae directo a la tabla del registro, así que un
-#    "git push origin main" con fila Aprobado se aceptaría con tecla. (BRIEF-r2
-#    QD cambió la llamada a "resp_lista_dura ... || lh=$?": lh=1 = "limpio".)
-muta "sin lista dura" 's/^    resp_lista_dura "\$comando" || lh=\$?$/    lh=1/'
+# 2) Sin lista dura: el bloque cae directo a la tabla del registro, así que un
+#    "git push origin main" con fila Aprobado se aceptaría con tecla. (BRIEF-r3
+#    F2 pasó la puerta a un bucle por línea del bloque: rcl=1 = "limpio".)
+muta "sin lista dura" 's/^    rcl=0; resp_lista_dura "\$linea" || rcl=\$?$/    rcl=1/'
 
 # Vuelta al original y batería verde de sanity.
 restaura
