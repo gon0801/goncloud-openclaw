@@ -68,7 +68,13 @@ for a in 'LISTO <sha>' \
          'muta él mismo' \
          'como draft' \
          'Un PR por carril, nunca por tarea' \
-         'no hay tope de rondas' \
+         'Solo un hallazgo bloqueante abre otra ronda' \
+         'para en la primera que no traiga ninguno' \
+         'Si el mismo bloqueante vuelve en dos rondas seguidas' \
+         'Un PR nunca se promueve con un bloqueante abierto' \
+         'Un bloqueante nunca va a una fila del plan' \
+         'Lo no bloqueante no abre ronda' \
+         '-Desde <sha que vio la ronda anterior>' \
          'excluyendo al modelo que implementó' \
          'Cada ronda cambia de revisor' \
          'código 3' \
@@ -93,7 +99,7 @@ for a in 'LISTO <sha>' \
          'hashea el token literal' \
          'ATORADO kit ausente en ' \
          '-Alcance last-commit' \
-         'conjuntos cerrados' \
+         'conjunto cerrado' \
          'nunca lo escribe el lead' \
          'CodeRabbit no es un proveedor de modelo' \
          'El sync del gateway no es un cron'; do
@@ -101,25 +107,28 @@ for a in 'LISTO <sha>' \
   # la lee grep como bandera y sale "Invalid argument", no como ancla faltante.
   grep -qF -- "$a" "$DOC" || fail "$DOC: falta el ancla: $a"
 done
-echo "ok (3): las 49 anclas de reglas están"
+echo "ok (3): las 55 anclas de reglas están"
 
-# (3b) ANTI-ANCLA: la seccion 4 no puede volver a traer un tope por numero de rondas.
-# Un ancla positiva sola no alcanza: alguien puede agregar el tope Y dejar la frase, y la
-# prueba pasaria. Lo que hay que fijar es la AUSENCIA.
-#
-# Medido el 2026-09-18: el documento decia a la vez "se para cuando una ronda no trae altas
-# ni medias" (linea 96) y "Tope: tres rondas por PR" (linea 97). El lead de la Fase 9 siguio
-# la segunda y declaro "tope de rondas alcanzado" con cuatro medias vivas en el PR 81. La
-# regla del dueno es la primera: la revision para por hallazgos, nunca por cuenta.
+# (3b) La seccion 4 manda repetir mientras salgan bloqueantes, sin tope fijo, y nunca
+# promover con un bloqueante abierto. Medido el 2026-09-18 tres veces: un tope de tres
+# rondas llevo a la Fase 9 a promover el PR 81 con cuatro medias vivas; el criterio sin
+# tope por altas y medias volvio la revision una cadena sin fin; y el tope de 2 dejaba
+# dudas sobre que hacer con un bloqueante en la segunda ronda. Regla vigente
+# (quality-kit #13): solo un bloqueante abre ronda, cada ronda ve solo los arreglos, se
+# repite hasta la primera sin bloqueantes, y un bloqueante nunca va al plan ni se promueve.
 s4_ini=$(grep -n -E '^## 4\. ' "$DOC" | head -1 | cut -d: -f1)
 s4_fin=$(grep -n -E '^## 5\. ' "$DOC" | head -1 | cut -d: -f1)
 [ -n "$s4_ini" ] && [ -n "$s4_fin" ] || fail "$DOC: no encuentro los limites de la seccion 4"
-# Se mira solo lo que la seccion MANDA: las lineas de nota historica ("Medido:", y la que
-# fecha el tope viejo) hablan del tope justamente para explicar por que ya no esta.
+# Se mira solo lo que la seccion MANDA: las notas historicas ("Medido:" y la que fecha el
+# tope viejo) nombran las reglas anteriores justamente para explicar por que cambiaron.
 s4=$(sed -n "${s4_ini},${s4_fin}p" "$DOC" | grep -v '^Medido:' | grep -v 'estuvo escrito aqu')
-tope=$(printf '%s' "$s4" | grep -inE 'tope de [a-z]* ?rondas|tope: *[a-z]+ rondas|m[aá]ximo de [a-z]+ rondas|a la cuarta ronda' | grep -viE 'no hay tope de rondas|sin tope de rondas' || true)
-[ -z "$tope" ] || fail "$DOC: la seccion 4 volvio a poner un tope de rondas: $tope"
-echo "ok (3b): la seccion 4 no tiene tope de rondas"
+printf '%s' "$s4" | grep -qF 'Se repite mientras una ronda traiga un bloqueante' \
+  || fail "$DOC: la seccion 4 no manda repetir mientras salgan bloqueantes"
+printf '%s' "$s4" | grep -qF 'Un PR nunca se promueve con un bloqueante abierto' \
+  || fail "$DOC: la seccion 4 no prohibe promover con un bloqueante abierto"
+viejo=$(printf '%s' "$s4" | grep -inE 'tope: *[0-9a-z]+ rondas|tope de [0-9a-z]+ rondas|no hay tope de rondas|ninguna alta ni media|altas ni medias' || true)
+[ -z "$viejo" ] || fail "$DOC: la seccion 4 volvio a un tope fijo o al criterio de altas y medias: $viejo"
+echo "ok (3b): la seccion 4 repite mientras salgan bloqueantes y nunca promueve con uno abierto"
 
 # (4) La fila del lead no nombra ningún modelo. Es la regla central del documento.
 hit=$(lead_nombra_modelo < "$DOC")
