@@ -115,18 +115,14 @@ function descubrirNav(stateDir: string): { fases: string[]; corridas: string[] }
       const base = name.slice(0, -5);
       if (validarFase(base)) fases.push(base);
     }
-  } catch {
-    // el directorio no existe todavía
-  }
+  } catch {}
   try {
     for (const name of readdirSync(join(stateDir, "progress", "c"))) {
       if (!name.endsWith(".json")) continue;
       const base = name.slice(0, -5);
       if (validarCorrida(base)) corridas.push(base);
     }
-  } catch {
-    // el directorio no existe todavía
-  }
+  } catch {}
   return { fases, corridas };
 }
 

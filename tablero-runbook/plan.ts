@@ -295,9 +295,7 @@ export async function cruzarPlan(
     for (const child of vivos) {
       try {
         child.kill("SIGKILL");
-      } catch {
-        // el hijo ya no está
-      }
+      } catch {}
     }
   }, presupuesto);
   verdugo.unref?.();

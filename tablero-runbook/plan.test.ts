@@ -1,9 +1,3 @@
-/**
- * plan.test.ts. Cruce con Plans.md / plans/ (Fase 12 / 12.1).
- *
- * El exec se inyecta. Las aserciones son literales sobre el cruce, el argv y
- * los opts. Si cada import devolviera undefined, estos casos fallan.
- */
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
