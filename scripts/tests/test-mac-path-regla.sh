@@ -23,9 +23,14 @@ set -u
 cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
 
-SK1=agents/main/agent/workshop-skills/mac-tmux-control/SKILL.md
-SK2=agents/main/agent/workshop-skills/mac-terminal-control/SKILL.md
-SK3=agents/implementer/agent/workshop-skills/mac-exec-detach-poll/SKILL.md
+# Una skill es la CARPETA, no un archivo suelto. Medido el 2026-09-19: un agente
+# partio mac-exec-detach-poll en SKILL.md + ENV.md desde el gateway, y ENV.md quedo
+# con 82 lineas de comandos que este escaneo ya no miraba. Se revisa la skill entera.
+SK1=agents/main/agent/workshop-skills/mac-tmux-control
+SK2=agents/main/agent/workshop-skills/mac-terminal-control
+SK3=agents/implementer/agent/workshop-skills/mac-exec-detach-poll
+skill_texto() { cat "$1"/*.md 2>/dev/null | tr '\n' ' ' | tr -s ' '; }
+tiene() { printf '%s' "$1" | grep -qF "$(printf '%s' "$2" | tr '\n' ' ' | tr -s ' ')"; }
 # El ancla va en el idioma de cada skill (las dos de main estan en ingles,
 # mac-exec-detach-poll en espanol): mezclar idiomas dentro de una skill la vuelve
 # ilegible para quien la lee de corrido. Lo que NO cambia entre idiomas, y es lo que
@@ -76,13 +81,15 @@ echo "ok (3): el detector marca invocaciones peladas y deja pasar prefijos, ruta
 
 # (1) La regla del PATH existe en las tres skills: mismo prefijo exacto en las tres,
 # y el ancla en el idioma de cada archivo.
-for f in "$SK1" "$SK2" "$SK3"; do
-  [ -f "$f" ] || fail "falta $f"
-  grep -qF "$PREFIJO" "$f" || fail "$f: falta el prefijo exacto del PATH"
+for d in "$SK1" "$SK2" "$SK3"; do
+  [ -d "$d" ] || fail "falta la skill $d"
+  t=$(skill_texto "$d")
+  [ -n "$t" ] || fail "$d: no tiene ningun .md"
+  tiene "$t" "$PREFIJO" || fail "$d: falta el prefijo exacto del PATH"
 done
-grep -qF "$ANCLA_EN" "$SK1" || fail "$SK1: falta la regla del PATH (ancla en inglés)"
-grep -qF "$ANCLA_EN" "$SK2" || fail "$SK2: falta la regla del PATH (ancla en inglés)"
-grep -qF "$ANCLA_ES" "$SK3" || fail "$SK3: falta la regla del PATH (ancla en español)"
+tiene "$(skill_texto "$SK1")" "$ANCLA_EN" || fail "$SK1: falta la regla del PATH (ancla en inglés)"
+tiene "$(skill_texto "$SK2")" "$ANCLA_EN" || fail "$SK2: falta la regla del PATH (ancla en inglés)"
+tiene "$(skill_texto "$SK3")" "$ANCLA_ES" || fail "$SK3: falta la regla del PATH (ancla en español)"
 echo "ok (1): la regla del PATH está en las tres skills, con el mismo prefijo y en el idioma de cada una"
 
 # (2) Ninguna línea de comando de esas skills invoca un tool pelado. Se miran los dos
@@ -136,8 +143,11 @@ printf '%s\n' 'Texto.' '```bash' '/opt/homebrew/bin/tmux capture-pane -p -t sesi
 echo "ok (2a): el escaneo cubre los bloques cercados y distingue pelado de ruta absoluta o prefijo"
 
 hits=""
-for f in "$SK1" "$SK2" "$SK3"; do
-  hits="$hits$(escanear "$f")"
+for d in "$SK1" "$SK2" "$SK3"; do
+  for f in "$d"/*.md; do
+    [ -f "$f" ] || continue
+    hits="$hits$(escanear "$f")"
+  done
 done
 [ -z "$hits" ] || fail "invocaciones sin prefijo de PATH ni ruta absoluta:$hits"
 echo "ok (2): las tres skills invocan tools solo con prefijo de PATH o ruta absoluta"
