@@ -41,6 +41,15 @@ printf '%s\n' "GH $*" >> "${GH_LOG:-/dev/null}"
 case "$1" in
   run)
     case "$*" in *"--workflow quality.yml"*) ;; *) exit 5;; esac
+    # fiel al gh real (2.98.0): --json rechaza campos desconocidos
+    campos=""; prev=""
+    for a in "$@"; do [ "$prev" = "--json" ] && campos="$a"; prev="$a"; done
+    for c in $(printf '%s' "$campos" | tr ',' ' '); do
+      case "$c" in headSha|conclusion|status) ;; *)
+        printf 'Unknown JSON field: "%s"\n' "$c" >&2
+        exit 1;;
+      esac
+    done
     case "${GH_CI:-verde}" in
       rojo)    c=failure;;
       timeout) c=timed_out;;
@@ -48,12 +57,11 @@ case "$1" in
       *)       c=success;;
     esac
     if [ "${GH_CI:-verde}" = "verde" ]; then s="${GH_SHA:-abcdef1234567}"; else s="${GH_SHA:-cafe1234567}"; fi
-    printf '[{"headSha": "%s", "conclusion": "%s", "status": "completed", "actor": {"login": "%s"}}]\n' \
-      "$s" "$c" "${GH_AUTOR:-gon0801}";;
+    printf '[{"headSha": "%s", "conclusion": "%s", "status": "completed"}]\n' "$s" "$c";;
   repo)
     printf '{"nameWithOwner": "gon0801/goncloud-workspace-main"}\n';;
   api)
-    printf '{"files": [{"filename": "docs/spec/corrida.v1.md"}, {"filename": "scripts/mac/corrida/lib.sh"}]}\n';;
+    printf '{"commit": {"author": {"name": "gon0801"}}, "files": [{"filename": "docs/spec/corrida.v1.md"}, {"filename": "scripts/mac/corrida/lib.sh"}]}\n';;
   *) exit 0;;
 esac
 exit 0
@@ -388,10 +396,13 @@ LLAMADAS="$T/l8.log"; export LLAMADAS; : > "$LLAMADAS"
 solo_dejar lat-gh
 montar_corrida lat-gh avanza
 trabajando_en "$T0"
-GH_CAIDO=1 GH_CI=rojo GH_SHA=cafe1234567 tick "$T0" || fail "gh caido: el tick revinto"
+GH_CAIDO=1 GH_CI=rojo GH_SHA=cafe1234567 tick "$T0" >/dev/null 2>"$T/ghc.err" || fail "gh caido: el tick revinto"
 [ "$(msgs)" = "1" ] || fail "con gh caido salio mas que el parte (msgs=$(msgs))"
 grep -qi "quedo en rojo" "$LLAMADAS" && fail "con gh caido igual se aviso el rojo"
 grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[AVANZA\]" || fail "con gh caido el latido dejo de latear"
 [ ! -f "$CORRIDA_STATE/lat-gh/ci-rojo.json" ] || fail "con gh caido se escribio registro de rojo"
+# SA: la consulta caida deja rastro (stderr + evento), no un salto en silencio.
+grep -q "no se pudo consultar" "$T/ghc.err" || fail "SA: la consulta de CI caida no avisa en stderr"
+[ "$(evjson lat-gh gh-fallo)" = "1" ] || fail "SA: la consulta de CI caida no dejo evento gh-fallo"
 
 echo "TODO VERDE: test-corrida-latido"

@@ -207,3 +207,18 @@ restaurado con cmp.
   explicito.
 - RC: el sed de generacion de plists romperia con & o | en la ruta del
   REPO_DIR real; improbable en una ruta local.
+
+## Ronda 4 — veredicto sellado (codex): 9.8 moria en silencio con gh real
+Reproduccion del reviewer sobre 630b025: con gh 2.98.0 real,
+`gh run list --json headSha,conclusion,status,actor` responde `Unknown JSON
+field: "actor"` y sale con error ⇒ out vacio ⇒ el chequeo 9.8 entero se
+saltaba sin rastro. Rojo pegado tras hacer el stub fiel al real (rechaza
+campos --json desconocidos): `FAIL: CI rojo: salieron 1 mensajes (debia 2:
+el parte y el aviso)` (rc=1) — exactamente la omision en silencio.
+Arreglo: run list solo con headSha,conclusion,status (verificado contra el
+gh real en la VERIFY); el autor sale de la MISMA llamada gh api del commit
+(.commit.author.name junto a .files[].filename, cero llamadas extra); y una
+consulta de run-list que no responde deja rastro: stderr + linea
+tipo gh-fallo en eventos.jsonl (cero mensajes a David sigue vigente: la
+DoD de gh caido no cambia). El stub de gh de la prueba queda fiel para
+siempre: rechaza campos desconocidos como el real.

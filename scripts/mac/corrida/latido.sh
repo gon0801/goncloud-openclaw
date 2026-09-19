@@ -112,47 +112,62 @@ latido_de() { # $1 dir de la corrida (con el registro adentro)
 
   # (3) 9.8: la rama por defecto en rojo no pasa en silencio (medido
   # 2026-09-17: main 8 h en rojo por un snapshot que no paso por CI de PR). Se
-  # consulta la ultima corrida del workflow de calidad en la rama por defecto;
-  # si concluyo en fallo (incluido timeout y fallo de arranque) y ese sha no se
-  # aviso, sale un DETENIDA en lenguaje de usuario y el sha, el autor y los
-  # archivos quedan en el registro local de la corrida, que es donde el lead
-  # los lee (el validador de 9.1 no deja citarlos en el mensaje, y esta fila
-  # no es excepcion). gh caido: cero avisos, el latido sigue. El mismo sha
-  # avisado no se vuelve a avisar; y el registro local con "avisado" solo se
-  # escribe tras un envio que salio (si el envio cae, el proximo tick reintenta).
+  # consulta la ultima corrida del workflow de calidad en la rama por defecto
+  # (solo campos que el gh real soporta: con "actor" rechaza la invocacion
+  # entera y el chequeo moria en silencio); si concluyo en fallo (incluido
+  # timeout y fallo de arranque) y ese sha no se aviso, sale un DETENIDA en
+  # lenguaje de usuario y el sha, el autor y los archivos — sacados de la
+  # MISMA llamada al commit — quedan en el registro local de la corrida, que
+  # es donde el lead los lee (el validador de 9.1 no deja citarlos en el
+  # mensaje, y esta fila no es excepcion). gh caido: cero avisos, el latido
+  # sigue — pero la consulta que no responde deja rastro (stderr y evento
+  # gh-fallo), nunca un salto en silencio. El mismo sha avisado no se vuelve a
+  # avisar; y el registro local con "avisado" solo se escribe tras un envio
+  # que salio (si el envio cae, el proximo tick reintenta).
   local GH="${GH_BIN:-$(command -v gh 2>/dev/null || true)}"
   if [ -n "$GH" ]; then
-    local repo def out sha="" concl="" stat="" autor=""
+    local repo def out sha="" concl="" stat=""
     repo="${REPO_DIR:-${CORR_REPO_RAIZ:-$PWD}}"
     def="$(git -C "$repo" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')"
     [ -n "$def" ] || def="main"
-    out="$(cd "$repo" 2>/dev/null && con_tope "$CORR_TOPE_RED" "$GH" run list --workflow quality.yml --branch "$def" --limit 1 --json headSha,conclusion,status,actor 2>/dev/null)" \
+    out="$(cd "$repo" 2>/dev/null && con_tope "$CORR_TOPE_RED" "$GH" run list --workflow quality.yml --branch "$def" --limit 1 --json headSha,conclusion,status 2>/dev/null)" \
       || out=""
+    if [ -z "$out" ]; then
+      # sin respuesta (gh caido o invocacion rechazada): cero mensajes, pero
+      # el diagnostico no se pierde.
+      echo "latido: no se pudo consultar la ultima corrida de CI (rama $def): el chequeo de rama en rojo se salto este tick" >&2
+      EVT_tipo=gh-fallo EVT_rama="$def" evento_jsonl "$dir"
+    fi
     if [ -n "$out" ]; then
       # separador de unidad: un campo vacio no corre los demas (con tab y IFS
       # default, dos tab seguidos son un solo separador).
-      IFS="$(printf '\037')" read -r sha concl stat autor <<EOF
+      IFS="$(printf '\037')" read -r sha concl stat <<EOF
 $(printf '%s' "$out" | python3 -c "
 import sys,json
 try: d=(json.load(sys.stdin) or [{}])[0]
 except Exception: d={}
-a=d.get('actor') or {}
-print(chr(31).join([str(d.get(k) or '') for k in ('headSha','conclusion','status')]+[str(a.get('login') or '')]))" 2>/dev/null)
+print(chr(31).join([str(d.get(k) or '') for k in ('headSha','conclusion','status')]))" 2>/dev/null)
 EOF
       local es_rojo=0
       case "$stat:$concl" in
         completed:failure|completed:timed_out|completed:startup_failure) es_rojo=1;;
       esac
       if [ "$es_rojo" = "1" ] && [ -n "$sha" ] && [ "$sha" != "$lci" ]; then
-        local slug="" archivos=""
+        local slug="" archivos="" autor=""
         slug="$(cd "$repo" 2>/dev/null && con_tope "$CORR_TOPE_RED" "$GH" repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)" || slug=""
         if [ -n "$slug" ]; then
-          archivos="$(cd "$repo" 2>/dev/null && con_tope "$CORR_TOPE_RED" "$GH" api "repos/$slug/commits/$sha" 2>/dev/null \
+          # una sola llamada al commit trae autor Y archivos
+          local info=""
+          info="$(cd "$repo" 2>/dev/null && con_tope "$CORR_TOPE_RED" "$GH" api "repos/$slug/commits/$sha" 2>/dev/null \
             | python3 -c "
 import sys,json
 try: d=json.load(sys.stdin)
 except Exception: d={}
-print(chr(10).join(f.get('filename','') for f in d.get('files',[]) if f.get('filename')))" 2>/dev/null)" || archivos=""
+a=(d.get('commit') or {}).get('author') or {}
+print(a.get('name') or '')
+print(chr(10).join(f.get('filename','') for f in d.get('files',[]) if f.get('filename')))" 2>/dev/null)" || info=""
+          autor="$(printf '%s\n' "$info" | sed -n '1p')"
+          archivos="$(printf '%s\n' "$info" | sed -n '2,$p')"
         fi
         if corrida_mensaje "$id" "DETENIDA" "$P_AVANCE" \
             "el repositorio central quedo en rojo tras un cambio automatico; ya se esta revisando" \
