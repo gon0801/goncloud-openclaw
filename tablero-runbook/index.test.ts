@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { describe, it, before, after } from "node:test";
 
 import { type ProgresoDoc, validarProgreso } from "./lib.ts";
+import { _resetPlanCacheForTest, _setPlanExecForTest } from "./plan.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -375,21 +376,179 @@ describe("plugin smoke import (7.4)", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("config fases alimenta los enlaces del tablero; el default es ['6']", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "tablero-74-fases-"));
-    const host = await cargar({ stateDir: dir, fases: ["999", "7"] });
-    llamarMetodo(host.metodos, "runbook.progress.set", fixtureDoc("prueba999-en-curso.json"));
+  it("nav sale del disco, no de cfg.fases; una corrida fuera de cfg.fases aparece", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-12-nav-"));
+    const host = await cargar({ stateDir: dir, fases: ["6"] });
+    await llamarMetodo(host.metodos, "runbook.progress.set", fixtureDoc("prueba999-en-curso.json"));
+    await llamarMetodo(host.metodos, "runbook.progress.set", fixtureDoc("v2-campos-validos.json"));
     const res = await llamarRuta(host.rutas, "/runbook/tablero/999");
-    assert.ok(res.body.includes('href="/runbook/tablero/7"'), "falta el enlace a la fase 7");
-    assert.ok(!res.body.includes('href="/runbook/tablero/999"'), "la fase actual no se auto-enlaza");
-
-    // La fase que se esta viendo no se auto-enlaza: con ella como unica fase configurada,
-    // no hay barra de navegacion. (El default de la config, ["6"], lo fija el caso del
-    // manifiesto; aqui se prueba el comportamiento del nav, no el valor por defecto.)
-    const host2 = await cargar({ stateDir: dir, fases: ["999"] });
-    const r2 = await llamarMetodo(host2.metodos, "runbook.progress.get", { fase: "999" });
-    assert.ok(!r2.html.includes('href="/runbook/tablero/'), "la unica fase configurada es la actual: no debe haber nav");
+    assert.equal(res.statusCode, 200);
+    assert.ok(
+      res.body.includes('href="/runbook/tablero/c/fase12-tablero"'),
+      "falta el enlace a la corrida persistida que no está en cfg.fases",
+    );
+    assert.ok(
+      res.body.includes('href="/runbook/tablero/12"'),
+      "falta el enlace a la fase persistida que no está en cfg.fases",
+    );
+    assert.ok(
+      !res.body.includes('href="/runbook/tablero/6"'),
+      "cfg.fases=['6'] no debe alimentar el nav",
+    );
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("corrida envenenada en tablero y progress: 400 y no crea progress/", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-12-corrida-400-"));
+    const host = await cargar({ stateDir: dir });
+    const urls = [
+      "/runbook/tablero/c/..%2f",
+      "/runbook/progress/c/..%2f.json",
+      "/runbook/tablero/c/foo/bar",
+      "/runbook/progress/c/foo/bar.json",
+      "/runbook/tablero/c/%zz",
+      "/runbook/progress/c/%zz.json",
+      "/runbook/tablero/c/Fase12-tablero",
+      "/runbook/progress/c/Fase12-tablero.json",
+    ];
+    for (const url of urls) {
+      const res = await llamarRuta(host.rutas, url);
+      assert.equal(res.statusCode, 400, `${url} debió ser 400`);
+    }
+    assert.ok(!existsSync(join(dir, "progress")), "un 400 de corrida creó progress/");
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("corrida desconocida: 404 con runbook.progress.set y corrida", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-12-corrida-404-"));
+    const host = await cargar({ stateDir: dir });
+    const res = await llamarRuta(host.rutas, "/runbook/tablero/c/fase12-tablero");
+    assert.equal(res.statusCode, 404);
+    assert.ok(res.body.includes("fase12-tablero"), "el 404 no nombra la corrida");
+    assert.ok(res.body.includes("runbook.progress.set"), "el 404 no dice cómo abrirla");
+    assert.ok(res.body.includes("corrida"), "el 404 no menciona corrida");
+    const resJson = await llamarRuta(host.rutas, "/runbook/progress/c/fase12-tablero.json");
+    assert.equal(resJson.statusCode, 404);
+    assert.ok(resJson.body.includes("runbook.progress.set"));
+    assert.ok(resJson.body.includes("corrida"));
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("set v2 con corrida: GET /c/... es 200 y el JSON trae schema y corrida", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-12-corrida-ok-"));
+    const host = await cargar({ stateDir: dir });
+    await llamarMetodo(host.metodos, "runbook.progress.set", fixtureDoc("prueba999-en-curso.json"));
+    const v2 = fixtureDoc("v2-campos-validos.json");
+    const set = await llamarMetodo(host.metodos, "runbook.progress.set", v2);
+    assert.deepEqual(set, { ok: true });
+
+    const resFase = await llamarRuta(host.rutas, "/runbook/tablero/999");
+    assert.equal(resFase.statusCode, 200);
+    assert.ok(resFase.body.includes("Autopilot de la Fase 6"));
+
+    const resC = await llamarRuta(host.rutas, "/runbook/tablero/c/fase12-tablero");
+    assert.equal(resC.statusCode, 200);
+    assert.ok(resC.body.includes("Tablero de corrida"));
+    assert.ok(
+      !resC.body.includes('href="/runbook/tablero/c/fase12-tablero"'),
+      "la corrida actual no se auto-enlaza",
+    );
+
+    const resJson = await llamarRuta(host.rutas, "/runbook/progress/c/fase12-tablero.json");
+    assert.equal(resJson.statusCode, 200);
+    const cuerpo = JSON.parse(resJson.body);
+    assert.equal(cuerpo.schema, "runbook-progress.v1");
+    assert.equal(cuerpo.corrida, "fase12-tablero");
+
+    const getFase = await llamarMetodo(host.metodos, "runbook.progress.get", { fase: "999" });
+    assert.equal(getFase.ok, true);
+    assert.equal(getFase.doc.fase, "999");
+
+    const getCorrida = await llamarMetodo(host.metodos, "runbook.progress.get", { corrida: "fase12-tablero" });
+    assert.equal(getCorrida.ok, true);
+    assert.equal(getCorrida.doc.corrida, "fase12-tablero");
+    assert.equal(getCorrida.doc.schema, "runbook-progress.v1");
+
+    const getCorridaMala = await llamarMetodo(host.metodos, "runbook.progress.get", { corrida: "Fase12-tablero" });
+    assert.deepEqual(getCorridaMala, { ok: false, razon: "corrida inválida" });
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("plan hang/fail en GET tablero: 200 con plan: sin verificar", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-12-plan-fail-"));
+    _resetPlanCacheForTest();
+    _setPlanExecForTest((_c, _a, _o, cb) => {
+      setImmediate(() => cb(new Error("HTTP 403 API rate limit exceeded"), ""));
+      return { kill() {} };
+    });
+    try {
+      const host = await cargar({ stateDir: dir });
+      await llamarMetodo(host.metodos, "runbook.progress.set", fixtureDoc("v2-campos-validos.json"));
+      const res = await llamarRuta(host.rutas, "/runbook/tablero/c/fase12-tablero");
+      assert.equal(res.statusCode, 200);
+      assert.ok(res.body.includes("plan: sin verificar"));
+      assert.ok(!res.body.includes("error interno"));
+    } finally {
+      _setPlanExecForTest(undefined);
+      _resetPlanCacheForTest();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("sin bloque plan el HTML no trae rótulo de plan", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-12-sin-plan-"));
+    const host = await cargar({ stateDir: dir });
+    await llamarMetodo(host.metodos, "runbook.progress.set", fixtureDoc("prueba999-en-curso.json"));
+    const res = await llamarRuta(host.rutas, "/runbook/tablero/999");
+    assert.equal(res.statusCode, 200);
+    assert.ok(!res.body.includes("plan: sin verificar"));
+    assert.ok(!res.body.includes("plan: no declarado"));
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("discrepancia lead vs plan aparece en HTML y en el payload de get", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-12-disc-"));
+    _resetPlanCacheForTest();
+    _setPlanExecForTest((_c, _a, _o, cb) => {
+      const payload = JSON.stringify({
+        type: "file",
+        encoding: "base64",
+        content: Buffer.from("| 12.1 | x | cc:完了 |\n", "utf8").toString("base64"),
+      });
+      setImmediate(() => cb(null, payload));
+      return { kill() {} };
+    });
+    try {
+      const host = await cargar({ stateDir: dir });
+      const doc = structuredClone(fixtureDoc("v2-campos-validos.json"));
+      doc.plan = { repo: "gon0801/goncloud-openclaw", ruta: "Plans.md", seccion: null };
+      doc.cola = [
+        {
+          id: "12.1",
+          prs: [],
+          estado: "pendiente",
+          ventana: null,
+          merge_commits: [],
+          verificado: null,
+          detenido_por: null,
+        },
+      ];
+      await llamarMetodo(host.metodos, "runbook.progress.set", doc);
+      const get = await llamarMetodo(host.metodos, "runbook.progress.get", { corrida: "fase12-tablero" });
+      assert.equal(get.ok, true);
+      assert.equal(get.doc.cola[0].estado, "pendiente");
+      assert.equal(get.plan?.kind, "cruzado");
+      assert.equal(get.plan?.items["12.1"]?.estado, "mergeado");
+      assert.equal(get.plan?.items["12.1"]?.discrepa, true);
+      assert.ok(get.html.includes("discrepancia: 12.1"));
+      const res = await llamarRuta(host.rutas, "/runbook/tablero/c/fase12-tablero");
+      assert.equal(res.statusCode, 200);
+      assert.ok(res.body.includes("discrepancia: 12.1"));
+    } finally {
+      _setPlanExecForTest(undefined);
+      _resetPlanCacheForTest();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("cero registerHook / registerTool / api.on en el código del plugin", async () => {
