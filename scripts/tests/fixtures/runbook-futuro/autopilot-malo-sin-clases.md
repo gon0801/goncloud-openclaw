@@ -5,8 +5,8 @@ David no está y no se le pregunta nada. Hereda el loop (`docs/runbooks/loop-aut
 ## Seguimiento
 
 Quién manda: el lead en cada cambio de estado. Canal: Telegram, destino leído
-del cron. Cadencia: en cada cambio de estado. Todo mensaje cumple
-`seguimiento.v1`.
+del cron. Cadencia: en cada cambio de estado y un parte cada 60 minutos. Todo
+mensaje cumple `seguimiento.v1`.
 
 ## Lanzamiento
 

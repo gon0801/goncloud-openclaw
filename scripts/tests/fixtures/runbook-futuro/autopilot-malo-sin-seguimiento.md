@@ -10,7 +10,7 @@ quién manda los mensajes ni por qué canal: esa es la semilla de la mutación
 
 | Clase | Para qué | Candado |
 |---|---|---|
-| `gh` | leer PRs y CI | permitido |
+| `gh` | `gh pr checks` | permitido |
 
 ## Lanzamiento
 

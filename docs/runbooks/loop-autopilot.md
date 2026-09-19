@@ -178,7 +178,7 @@ Medido: 2026-09-18, encendiendo el tablero de la Fase 7. Se agrego la fase a la 
 
 En cada cambio de estado de un carril o de la cola, y al cierre, el lead escribe `.saikit/progress/<fase>.json` en el formato `runbook-progress.v1` y lo envía con `openclaw gateway call runbook.progress.set --params "$(cat <archivo>)"`. La CLI **no** acepta la forma arroba-archivo: contesta `--params must be valid JSON` (medido 2026-09-16 y otra vez el 2026-09-17), así que el JSON va en línea. Un envío fallido no bloquea y se reintenta en el siguiente cambio. Cada escritura lleva `atencion_requerida` y `siguiente_paso` en lenguaje llano. Lo que no está en ese archivo no es progreso.
 
-Los mensajes que la corrida manda a David (seguimiento, parte, cierre) cumplen `seguimiento.v1`: `[ETIQUETA]`, `Que cambio`, `Que sigue`, `Que necesito de ti`, en lenguaje de usuario. `corrida.sh` valida cada mensaje contra ese contrato antes de mandarlo; un envío fallido se anota y se reintenta en el siguiente cambio, igual que el progreso.
+Los mensajes que la corrida manda a David (seguimiento, parte, cierre) cumplen `seguimiento.v1`: `[ETIQUETA]`, `Que cambio`, `Que sigue`, `Que necesito de ti`, en lenguaje de usuario. `corrida.sh` los manda a través de `corrida_mensaje` (la llaman sus subcomandos por dentro), que valida cada uno contra ese contrato antes de mandarlo; un envío fallido se anota y se reintenta en el siguiente cambio, igual que el progreso.
 
 Medido: 2026-09-16, el cierre de la Fase 6 quedó declarado en `Plans.md` con un residual de canary que, al repetirlo, pasaba: sin progreso escrito por corrida, el estado declarado y el real divergieron sin que nadie lo notara.
 

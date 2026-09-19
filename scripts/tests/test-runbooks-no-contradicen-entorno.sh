@@ -172,11 +172,13 @@ echo "ok (2c): ningun runbook de fase designa un modelo como lead"
 # corrida.sh. Medido 2026-09-18/19 (Fase 9): los runbooks viejos se escribieron
 # antes de que corrida.sh existiera — sus corridas no se reescriben y quedan
 # exentos POR NOMBRE, cada uno listado abajo. Cualquier autopilot-*.md que no
-# este en esa lista es futuro y trae: (a) seccion "Seguimiento" (quien manda,
-# canal, cadencia); (b) seccion literal "## Clases de comando" con al menos una
-# fila de clase del conjunto que el preflight lee (misma expresion que
-# corrida/preflight.sh paso 6); (c) cero `new-session` escrito a mano: las
-# sesiones las abre `corrida.sh lanzar-sesion`, que marca antes de mandar.
+# este en esa lista es futuro y trae: (a) seccion "Seguimiento" CON CONTENIDO
+# (quien manda, canal con como se resuelve, cadencia con numero y unidad: un
+# encabezado vacio pasaba el candado y es rojo desde la r1); (b) seccion
+# literal "## Clases de comando" con al menos una fila de clase del conjunto
+# que el preflight lee (misma expresion que corrida/preflight.sh paso 6) Y con
+# un comando de esa clase en la fila; (c) una llamada a
+# `corrida.sh lanzar-sesion` en el cuerpo y cero `new-session` escrito a mano.
 # Una prohibicion ("nunca ...") cita la forma mala sin mandarla: no cuenta.
 EXENTOS='autopilot-fase6.md autopilot-fase7.md autopilot-fase8.md autopilot-fase8-hallazgos.md autopilot-fase9.md autopilot-fase10.md autopilot-fase11.md autopilot-fase12.md autopilot-fase13.md autopilot-fase-saikit23.md'
 exento() {
@@ -184,10 +186,25 @@ exento() {
   return 1
 }
 tiene_seguimiento() { grep -q -E '^#{1,3} .*Seguimiento' "$1"; }
+seccion_seguimiento() { # $1 archivo -> texto de la seccion (hasta el proximo ## o EOF)
+  awk '/^#{1,3} .*Seguimiento/ {s=1; next} s && /^## / {exit} s {print}' "$1"
+}
+seguimiento_con_contenido() { # quien manda + canal resuelto + cadencia con numero y unidad
+  local sec; sec=$(seccion_seguimiento "$1")
+  printf '%s' "$sec" | grep -qiE 'lead|vig[ií]a|claw|hermes' || return 1
+  printf '%s' "$sec" | grep -qi 'canal' || return 1
+  printf '%s' "$sec" | grep -qi 'cron' || return 1
+  printf '%s' "$sec" | grep -qiE '[0-9]+[[:space:]]*(minutos?|mins?|horas?|segundos?|d[ií]as?)' || return 1
+  return 0
+}
 tiene_clases() {
   grep -qF '## Clases de comando' "$1" || return 1
   sed -n '/## Clases de comando/,$p' "$1" \
     | grep -qiE '\|( *`?)(ssh|red externa|psql|gh)(`? *\|)' || return 1
+  # Y al menos una fila con clase y comando (un `gh` suelto sin comando es rojo).
+  sed -n '/## Clases de comando/,$p' "$1" \
+    | grep -qiE '\|( *`?)(ssh|red externa|psql|gh)(`? *\|).*(gh|ssh|curl|wget|psql)[[:space:]]+[^ |]' \
+    || return 1
   return 0
 }
 sesion_a_mano() { # 0 = trae new-session mandado (rojo); prohibiciones no cuentan
@@ -195,12 +212,14 @@ sesion_a_mano() { # 0 = trae new-session mandado (rojo); prohibiciones no cuenta
 }
 runbook_futuro_ok() { # $1 archivo; 0 = nace con todo
   tiene_seguimiento "$1" || return 1
+  seguimiento_con_contenido "$1" || return 1
   tiene_clases "$1" || return 1
+  grep -qF 'corrida.sh lanzar-sesion' "$1" || return 1
   sesion_a_mano "$1" && return 1
   return 0
 }
 FXF=scripts/tests/fixtures/runbook-futuro
-for fx in autopilot-bueno.md autopilot-malo-sin-seguimiento.md autopilot-malo-sin-clases.md autopilot-malo-new-session.md; do
+for fx in autopilot-bueno.md autopilot-malo-sin-seguimiento.md autopilot-malo-sin-clases.md autopilot-malo-new-session.md autopilot-malo-encabezados-vacios.md; do
   [ -r "$FXF/$fx" ] || fail "(2d) no encuentro el fixture: $FXF/$fx"
   git check-ignore -q "$FXF/$fx" \
     && fail "(2d) $FXF/$fx esta en .gitignore: el commit no lo lleva y CI se queda sin el archivo"
@@ -213,6 +232,8 @@ runbook_futuro_ok "$FXF/autopilot-malo-sin-clases.md" \
   && fail "(2d) el fixture sin Clases paso: el candado no exige la tabla que lee el preflight"
 runbook_futuro_ok "$FXF/autopilot-malo-new-session.md" \
   && fail "(2d) el fixture con new-session a mano paso: el candado deja abrir sesiones a mano"
+runbook_futuro_ok "$FXF/autopilot-malo-encabezados-vacios.md" \
+  && fail "(2d) el fixture con encabezados vacios paso: el candado no exige contenido"
 # Los exentos existen (si uno se borra, su exencion sobra y se retira).
 for e in $EXENTOS; do
   [ -f "docs/runbooks/$e" ] || fail "(2d) exento por nombre pero ausente: docs/runbooks/$e"
