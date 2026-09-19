@@ -36,12 +36,22 @@ grep -q '^name: autopilot-runbook$' "$REPO" || fail "$REPO: el name no es autopi
 grep -q '^description: Use when ' "$REPO" || fail "$REPO: la description no arranca con 'Use when'"
 echo "ok (1): frontmatter con name y description"
 
-# (2) Los doce slots numerados, en orden. Sin ellos la receta no produce un
+# (2) Los trece slots numerados, en orden. Sin ellos la receta no produce un
 # documento ejecutable: cada slot cerrado es una pregunta que el lector no hace.
-for n in 1 2 3 4 5 6 7 8 9 10 11 12; do
+for n in 1 2 3 4 5 6 7 8 9 10 11 12 13; do
   grep -q -E "^$n\. \*\*" "$REPO" || fail "$REPO: falta el slot $n de la receta"
 done
-echo "ok (2): los doce slots de la receta están"
+echo "ok (2): los trece slots de la receta están"
+
+# (2-bis) El slot 13 no es prosa: nombra el comando que prueba la entrega y la
+# frase de una linea. Medido 2026-09-18: un runbook escrito, revisado y
+# commiteado seguia necesitando dos comandos pegados a mano para arrancar, y el
+# dueño lo descubrio preguntando "que le digo a claw".
+grep -q 'lanzar-fase.sh' "$REPO" \
+  || fail "$REPO: el slot 13 no nombra scripts/lanzar-fase.sh, que es lo que hace la entrega comprobable"
+grep -q -E 'FIRST command opens the run on the board' "$REPO" \
+  || fail "$REPO: el slot 12 perdio el paso de nacimiento (abrir la corrida es el primer comando)"
+echo "ok (2-bis): la entrega se prueba con un comando, y la corrida nace con el runbook"
 
 # (3) Las reglas que trece lecturas dejaron, cada una porque un runbook falló
 # por no tenerla. Si alguna se cae, la skill vuelve a producir el runbook que

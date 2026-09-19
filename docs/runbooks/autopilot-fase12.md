@@ -4,6 +4,16 @@ Esto lo ejecutas tú, el **lead**, en autopilot; David no está y no se le pregu
 
 La fase deja el tablero **actualizándose solo y alcanzable por corrida, en cualquier repo**: contrato v2 con clave `corrida` (12.0), el cruce con el plan del repo (12.1), las rutas nuevas y el clic sin configuración (12.2), el render del tablero de referencia (12.3), y el paso de nacimiento en la receta de runbooks (12.4). **No toca el contenido de ninguna corrida ajena, no cambia la configuración del gateway, no reinicia el gateway y no despliega nada fuera del sync normal de `main`.** Versión 1.0, 2026-09-18 UTC.
 
+**Cómo se lanza esta fase (slot 13 de la receta).** El dueño dice una frase —«claw, empieza la Fase 12»— y claw corre **un** comando, con el CLI y el flag sin preguntas del host que elija de su lista:
+
+```
+bash scripts/lanzar-fase.sh 12 -- <cli> <flag-sin-preguntas>
+```
+
+El script decide solo de qué rama sale el lead (si el runbook ya está en la rama por defecto, de ahí; si no, de la rama que lo trae, y entonces le dice que su Q0 es integrarla), crea `/Users/dn/dev/wt-f12-lead` si falta, arma el mensaje con el sentinel `-saikit:autopilot` y llama a `lanzar-lead.sh`, que marca la sesión y comprueba el cwd del proceso. Termina en `LISTO fase12-lead /Users/dn/dev/wt-f12-lead` o en `ATORADO <razón>`. Con `--dry-run` imprime lo que haría sin tocar nada. **Nadie pega rutas, ramas ni nombres de sesión.**
+
+**La pantalla de esta fase**: `/runbook/tablero/12` desde el primer comando de la corrida, y `/runbook/tablero/c/fase12-tablero` a partir de que Q2 mergee.
+
 ## Preaprobaciones del dueño
 
 | Operación | Alcance | Decisión |
