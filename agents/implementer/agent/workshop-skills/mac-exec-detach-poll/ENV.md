@@ -7,6 +7,7 @@ instante sin error. Para comandos largos que mueren con
 `COMPANION_APP_UNAVAILABLE`, el procedimiento vive en SKILL.md.
 
 Regla: el exec del nodo sanea el PATH y **`pathPrepend` se ignora**;
+<!-- candado: test-mac-path-regla.sh -->
 todo comando lleva
 `export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH;`
 al frente, o ruta absoluta.

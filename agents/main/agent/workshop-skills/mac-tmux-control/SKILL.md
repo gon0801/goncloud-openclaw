@@ -20,6 +20,7 @@ Drive CLI agents by **tmux session name** through `exec` with `host="node"` and 
    ```bash
    /opt/homebrew/bin/tmux capture-pane -p -t <session> -S -80
    ```
+<!-- candado: test-mac-tmux-control.sh -->
    A tab that stopped producing output is stalled, not finished — read it before deciding.
    - Completion: you can see the prompt line (`❯` for Claude Code, `>` for others) or the dialog the TUI is showing.
 
@@ -29,6 +30,7 @@ Drive CLI agents by **tmux session name** through `exec` with `host="node"` and 
    sleep 0.4
    /opt/homebrew/bin/tmux send-keys -t <session> Enter
    ```
+<!-- candado: test-mac-tmux-control.sh -->
    Then mark the session so its silence, its close and its Claude turns wake you (see Wake-ups):
    `/opt/homebrew/bin/tmux set-environment -t <session> OPENCLAW_WATCH 1`. Unmark it with `-u` when the chain ends.
    - Completion: `/opt/homebrew/bin/tmux capture-pane` shows the typed text gone from the prompt and a spinner / "esc to interrupt" / new output (see step 5), and `/opt/homebrew/bin/tmux show-environment -t <session> OPENCLAW_WATCH` prints `OPENCLAW_WATCH=1`.
@@ -45,16 +47,20 @@ Drive CLI agents by **tmux session name** through `exec` with `host="node"` and 
    ```
    Tool paths on this node: `/opt/homebrew/bin/gh`, `/opt/homebrew/bin/grok`, `/opt/homebrew/bin/zcode` (= `glm`), `/opt/homebrew/bin/qwen`, `/opt/homebrew/bin/kimi`, `/opt/homebrew/bin/codex`, `/Users/dn/.local/bin/pwsh`, `/Users/dn/.local/bin/muse`, `/Users/dn/.local/bin/claude`, `/Users/dn/.local/bin/cursor-agent`, `/Users/dn/bin/glm`. Tell David the session name so he can `/opt/homebrew/bin/tmux attach -t <name>` and watch it.
    - Completion: `/opt/homebrew/bin/tmux list-sessions` shows the new name with the expected `pane_current_path`.
+<!-- candado: test-mac-tmux-control.sh -->
 
 ## Rules
 
 - **Never write to `/dev/ttysNNN` to "inject" input.** On macOS a write to the tty device is output painted on the screen; there is no TIOCSTI. It makes the text *look* typed while the program received nothing (2026-09-14: the order sat in the prompt, no Enter method "worked"). The same goes for `printf '\r' > /dev/ttys…`.
+<!-- candado: test-mac-tmux-control.sh -->
 - **Never attach a reader to `/dev/ttysNNN` either** (`script -q /dev/null < /dev/ttysN`, `screen -dmS … < /dev/ttysN`, `cat /dev/ttysN`), not even as a "watcher": a second reader on the tty steals the keystrokes David types, so the TUI never gets its Enter. 2026-09-14 two such watchers (`claude_tab`, `muse_tab`) were found alive on ttys006/ttys005 an hour after the "Enter no entra" fight — they were the cause. Read a session with `/opt/homebrew/bin/tmux capture-pane` or the on-disk transcript (`mac-agent-transcript`), never from the tty device.
 - **A session in tmux is addressed by name, never by Terminal window/tab index** and never by "the focused window": those change under you (2026-09-11 a paste landed in another project's tab).
 - Long waits: poll with short `/opt/homebrew/bin/tmux capture-pane` reads (≤30 s per exec call), never one blocking `sleep` of 90 s+ — long node execs die with `COMPANION_APP_UNAVAILABLE` / "outcome is unknown" (see `mac-terminal-control`).
 - The node is OpenClaw.app's. **Never run `openclaw node install` on the Mac** (and never accept that offer from an interactive `openclaw doctor` there): it creates a second `launchd` node (`ai.openclaw.node`) that dials `127.0.0.1:18789`, where no gateway listens, and loops on `ECONNREFUSED` forever (2026-09-11 → 2026-09-14: 11 000 failed connects, never paired). If `openclaw node status` on the Mac reports a LaunchAgent, the fix is `openclaw node uninstall`; the app keeps working.
+<!-- candado: test-mac-tmux-control.sh -->
 
 ## Wake-ups (events)
+<!-- candado: test-tmux-activity-watch.sh -->
 
 A watcher (`tmux-activity-watch.sh`, launchd on the Mac) and Claude Code's own Stop hook wake you
 with `openclaw system event` instead of you polling tmux on a cron. Events you will see:
@@ -63,6 +69,7 @@ with `openclaw system event` instead of you polling tmux on a cron. Events you w
   screen did not change for at least 90 s. A TUI that keeps repainting the same screen (zcode,
   muse) counts as quiet: the watcher compares content, not tmux timestamps.
 - `tmux: <session> waiting for approval for Ns | cmd=<cmd> cwd=<path> | read it before acting: ...`
+<!-- candado: test-tmux-activity-watch.sh -->
   — a dialog is waiting for a person, whatever the CLI: a permission prompt (`Do you want to
   proceed?`, `Allow once`, `Run this command?`), a folder-trust dialog, or something that is not a
   permission at all (codex stops on "usage limit, switch model? Press enter to confirm"). The
@@ -70,6 +77,7 @@ with `openclaw system event` instead of you polling tmux on a cron. Events you w
   distinct prompt, and again every 15 min while nobody answers. A marked session that simply stays
   quiet gets its `quiet` event repeated every 30 min until you act on it or unmark it. Answer it
   from the preapproval table of the runbook or brief that launched that session: approved → accept,
+<!-- candado: test-tmux-activity-watch.sh -->
   denied or not listed → reject. If the same session keeps asking, stop answering one by one and
   switch its mode. zcode (`glm`), measured 2026-09-17: `/mode yolo` is refused mid-turn, so send
   `C-c`, wait 2 s, `C-c` again until the pane says `Turn cancelled.` (the session and its context
@@ -87,6 +95,7 @@ with `openclaw system event` instead of you polling tmux on a cron. Events you w
 /opt/homebrew/bin/tmux set-environment -t <session> OPENCLAW_WATCH 1      # after dispatching
 /opt/homebrew/bin/tmux set-environment -t <session> -u OPENCLAW_WATCH     # when the chain ends
 ```
+<!-- candado: test-tmux-activity-watch.sh -->
 Any session with the marker reports back, whatever its name; a session you dispatched to and did not mark will not; if you are waiting on a
 session and no event arrives, check the marker with `/opt/homebrew/bin/tmux show-environment -t <session> OPENCLAW_WATCH`
 before assuming the agent is still working.
@@ -98,6 +107,7 @@ other read in this skill.
 
 Never wait for a long-running thing with `sleep` or "I'll check back later": if you are about to
 babysit CI, a test run, or another agent working, launch it with `exec` and `background: true`
+<!-- candado: test-tmux-activity-watch.sh -->
 (e.g. `export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH; gh pr checks <n> --watch`, with `host: "node"` when it must run on the Mac) so the gateway
 wakes you again on `notifyOnExit` when it finishes. A node exec can still end with "outcome is
 unknown" / `COMPANION_APP_UNAVAILABLE` (see `mac-terminal-control`): when the wake-up carries no result,
@@ -108,7 +118,9 @@ started yourself.
 ## Pitfalls
 
 - The node exec sanitizes PATH and **`pathPrepend` is ignored**: every command carries `export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH;` up front, or an absolute path. That is why `tmux` without the absolute path → `command not found` from node exec (PATH there is `/usr/bin:/bin:/usr/sbin:/sbin`).
+<!-- candado: test-mac-path-regla.sh -->
 - `/opt/homebrew/bin/tmux send-keys 'text' Enter` in ONE call is the classic way and usually works in a shell, but not reliably in Claude Code's TUI — keep the two-call form of step 3.
 - `/opt/homebrew/bin/tmux capture-pane` returns the visible pane only; use `-S -200` for more history. A 120×40 pane is enough for Claude Code; a very narrow pane wraps the dialog text and confuses reads.
+<!-- candado: test-tmux-activity-watch.sh -->
 - Session names cannot contain `.` or `:`; the wrapper maps them to `-` (`goncloud.orbit` → `goncloud-orbit`).
 - A tool that exits ends its session: "can't find session" right after a `/exit` or a crash is expected, not a tmux failure — re-launch (step 6) or ask David.
