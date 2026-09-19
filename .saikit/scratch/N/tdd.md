@@ -402,3 +402,21 @@ cerrar.sh y ME LLEVO EL FIX SIN COMMITEAR (por eso los respaldos: siempre cp a
 /tmp antes de mutar, nunca checkout con trabajo sin commitear). Reescrito y
 verificado en verde.
 Verde: las tres pruebas, tambien /bin/bash 3.2.
+
+## BRIEF-r13 (2026-09-18): el lock en un solo lugar — helpers y 9 traps cubiertos
+Defecto demostrado primero: la mutacion del reviewer (quitar los disarm de trap en
+los callers — 8 de 9 fuera) dejo `TODO VERDE: test-corrida-nucleo` — los 9 trap -EXIT
+que se ejecutan no tenian prueba (solo la tenia registro_actualizar, huerfano desde
+r12). Rojo del pase: 9f/9g repuntadas a los helpers → `lock_tomar: command not found`
+(rc 127).
+Arreglo: lock_tomar/lock_soltar en lib.sh — tomar = mkdir con espera acotada +
+rompimiento de locks viejos + trap de EXIT armado solo si no hay dueno (regla de
+preflight conservada); soltar = disarm ANTES del rmdir, solo si este proceso armo
+el trap (CORR_LOCK_ARMADO). cerrar.sh y lanzar-sesion.sh sin logica de lock propia
+(6 y 4 lock_soltar respectivamente); registro_actualizar, registro_lock y
+registro_unlock borrados (cero referencias en produccion ni pruebas).
+Mutaciones exigidas, ambas muertas: (a) sin el disarm del helper →
+`FAIL: el trap del lock quedo armado tras soltarlo` (equivalente a quitar los 9 a
+la vez); (b) sin el rompimiento de locks viejos → `FAIL: con lock viejo debio
+recuperarse y tomar (rc=1)`. El ancla de orden de r12 apunta ahora a lock_tomar.
+Verde: las tres pruebas, tambien /bin/bash 3.2.

@@ -323,24 +323,25 @@ out="$(DEST_AMBIGUO=1 bash "$CORR" abrir t-amb --runbook "$RB" --vigia claw --cl
 [ "$rc" -ne 0 ] || fail "con destinos ambiguos debio fallar cerrado"
 printf '%s' "$out" | grep -q "ambigu" || fail "el fallo por destinos ambiguos no lo dice"
 
-# (9f) lock del registro: fresco espera y falla; viejo se rompe y se sigue.
-. scripts/mac/corrida/lib.sh
+# (9f) lock del registro: fresco espera y falla; viejo se rompe (con aviso) y se toma.
 mkdir "$T/corridas/t1/.lock"
-registro_actualizar "$T/corridas/t1/registro.json" "d['timebox_horas']=6" >/dev/null 2>&1 \
+lock_tomar "$T/corridas/t1/registro.json" >/dev/null 2>&1 \
   && fail "con lock fresco debio esperar y fallar"
 rmdir "$T/corridas/t1/.lock"
 mkdir "$T/corridas/t1/.lock"
 touch -t 202001010000 "$T/corridas/t1/.lock"
-registro_actualizar "$T/corridas/t1/registro.json" "d['timebox_horas']=6" >"$T/lock.out" 2>&1; rc=$?
-[ "$rc" -eq 0 ] || fail "con lock viejo debio recuperarse y escribir (rc=$rc)"
-grep -q "lock" "$T/lock.out" || fail "romper el lock viejo no avisa"
-[ -d "$T/corridas/t1/.lock" ] && fail "el lock viejo quedo puesto"
+lock_tomar "$T/corridas/t1/registro.json" >"$T/lock.out" 2>&1; rc=$?
+[ "$rc" -eq 0 ] || fail "con lock viejo debio recuperarse y tomar (rc=$rc)"
+grep -q "lock viejo" "$T/lock.out" || fail "romper el lock viejo no avisa"
+lock_soltar "$T/corridas/t1/registro.json"
+[ -d "$T/corridas/t1/.lock" ] && fail "lock_soltar dejo el lock puesto"
 
 # (9g) el trap del lock se desarma tras soltarlo: el EXIT de quien lo uso no puede
 # romperle a otro un lock vivo tomado entremedias.
 cat >"$T/z2.sh" <<Z2
 . "$PWD/scripts/mac/corrida/lib.sh"
-registro_actualizar "$T/corridas/t1/registro.json" 'd["timebox_horas"]=6' || exit 9
+lock_tomar "$T/corridas/t1/registro.json" || exit 9
+lock_soltar "$T/corridas/t1/registro.json"
 t="\$(trap -p EXIT)"
 [ -z "\$t" ] && echo DESARMADO || echo ARMADO
 Z2
@@ -365,7 +366,7 @@ grep -q '"estado": *"cerrada"' "$T/corridas/t-tarde/registro.json" || fail "t-ta
 
 # ancla de orden: cerrar toma el lock ANTES de listar sesiones (reordenarlo — la
 # mutacion que deja la carrera abierta por el lado de cerrar — pone esto en rojo).
-linelock=$(grep -n 'registro_lock "$reg"' scripts/mac/corrida/cerrar.sh | head -1 | cut -d: -f1)
+linelock=$(grep -n 'lock_tomar "$reg"' scripts/mac/corrida/cerrar.sh | head -1 | cut -d: -f1)
 linelista=$(grep -n "get('sesiones'" scripts/mac/corrida/cerrar.sh | head -1 | cut -d: -f1)
 [ -n "$linelock" ] && [ -n "$linelista" ] && [ "$linelock" -lt "$linelista" ] \
   || fail "cerrar lista sesiones antes de tomar el lock"

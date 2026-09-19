@@ -8,20 +8,13 @@ corrida_cerrar() {
   corrida_id_valido "$id" || { echo "cerrar: id invalido: $id" >&2; return 2; }
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
-  if ! registro_lock "$reg"; then
+  if ! lock_tomar "$reg"; then
     echo "cerrar: lock del registro de $id no cede; no se ha hecho nada (ni desmarcado ni cron) y el aviso NO salio — reintentar cierra" >&2
     return 1
   fi
-  local armado=0
-  if [ -z "$(trap -p EXIT)" ]; then
-    CORR_LOCK_ACT="$(dirname "$reg")/.lock"
-    trap 'rmdir "$CORR_LOCK_ACT" 2>/dev/null' EXIT
-    armado=1
-  fi
   # Ya cerrada (leido bajo lock): segunda llamada = no-op con confirmacion.
   if [ "$(json_campo "$reg" estado)" = "cerrada" ]; then
-    [ "$armado" -eq 1 ] && trap - EXIT
-    registro_unlock "$reg"
+    lock_soltar "$reg"
     echo "cerrada $id"
     return 0
   fi
@@ -40,14 +33,12 @@ print(' '.join(x.get('nombre','') for x in json.load(open(os.environ['CORR_REG']
   if ! "$OPENCLAW_BIN" cron rm "$cid" >/dev/null 2>&1; then
     local quedan; quedan="$(cron_jobs_de "corrida-vigia-$id")"
     if [ "$quedan" = "ILEGIBLE" ]; then
-      [ "$armado" -eq 1 ] && trap - EXIT
-      registro_unlock "$reg"
+      lock_soltar "$reg"
       echo "cerrar: no se pudo verificar si el cron de $id sigue puesto (lista ilegible); las sesiones ya estan desmarcadas y el registro queda abierto — revisar el cron a mano y reintentar" >&2
       return 1
     fi
     if [ "$quedan" != "NINGUNO" ]; then
-      [ "$armado" -eq 1 ] && trap - EXIT
-      registro_unlock "$reg"
+      lock_soltar "$reg"
       echo "cerrar: no se quito el cron de la corrida $id (quedan: $quedan); las sesiones ya estan desmarcadas y el registro queda abierto — reintentar cierra" >&2
       return 1
     fi
@@ -64,19 +55,16 @@ except Exception:
 print('true' if any(f.get('etiqueta')=='CERRADA' and f.get('ok') for f in filas) else 'false')" 2>/dev/null)"
   if [ "$ya" != "true" ]; then
     if ! corrida_mensaje "$id" "CERRADA" "todas las partes terminadas" "la corrida termino" "no queda nada en curso" "nada"; then
-      [ "$armado" -eq 1 ] && trap - EXIT
-      registro_unlock "$reg"
+      lock_soltar "$reg"
       echo "cerrar: no salio el aviso de cierre de $id; las sesiones ya estan desmarcadas y el cron ya esta quitado — el registro queda abierto, reintentar cierra" >&2
       return 1
     fi
   fi
   if ! registro_escribir "$reg" "d['estado']='cerrada'"; then
-    [ "$armado" -eq 1 ] && trap - EXIT
-    registro_unlock "$reg"
+    lock_soltar "$reg"
     echo "cerrar: el aviso de $id ya salio pero el registro no se pudo marcar cerrado — reintentar cierra sin reenviar el aviso" >&2
     return 1
   fi
-  [ "$armado" -eq 1 ] && trap - EXIT
-  registro_unlock "$reg"
+  lock_soltar "$reg"
   echo "cerrada $id"
 }

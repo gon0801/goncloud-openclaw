@@ -78,21 +78,14 @@ corrida_lanzar_sesion() {
   fi
   # Anotar bajo lock con el estado RE-verificado: si la corrida se cerro mientras
   # esta sesion nacia, no entra a un registro muerto — se desmarca y se mata.
-  if ! registro_lock "$reg"; then
+  if ! lock_tomar "$reg"; then
     echo "lanzar-sesion: lock del registro de $id no cede; la sesion $nombre se retira" >&2
     "$TMUX_BIN" set-environment -t "=$nombre" -u OPENCLAW_WATCH 2>/dev/null
     "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null
     return 1
   fi
-  local armado=0
-  if [ -z "$(trap -p EXIT)" ]; then
-    CORR_LOCK_ACT="$(dirname "$reg")/.lock"
-    trap 'rmdir "$CORR_LOCK_ACT" 2>/dev/null' EXIT
-    armado=1
-  fi
   if [ "$(json_campo "$reg" estado)" != "abierta" ]; then
-    [ "$armado" -eq 1 ] && trap - EXIT
-    registro_unlock "$reg"
+    lock_soltar "$reg"
     echo "lanzar-sesion: la corrida $id se cerro mientras se lanzaba; la sesion $nombre se retira" >&2
     "$TMUX_BIN" set-environment -t "=$nombre" -u OPENCLAW_WATCH 2>/dev/null
     "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null
@@ -102,9 +95,8 @@ corrida_lanzar_sesion() {
     registro_escribir "$reg" "d['sesiones'].append({'nombre':os.environ['CORR_SES_NOMBRE'],
 'rol':os.environ['CORR_SES_ROL'],'cli':os.environ['CORR_SES_CLI'],'dueno':'lead',
 'dir':os.environ['CORR_SES_DIR']})" \
-    || { [ "$armado" -eq 1 ] && trap - EXIT; registro_unlock "$reg"
+    || { lock_soltar "$reg"
          echo "no se pudo anotar la sesion en el registro" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
-  [ "$armado" -eq 1 ] && trap - EXIT
-  registro_unlock "$reg"
+  lock_soltar "$reg"
   echo "$nombre"
 }

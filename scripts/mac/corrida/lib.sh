@@ -82,30 +82,44 @@ js=[j.get('id','') for j in d.get('jobs',[]) if j.get('name')==os.environ['NOMBR
 print('\n'.join(js) if js else 'NINGUNO')" 2>/dev/null
 }
 
-# Lock del registro por directorio. Un lock de mas de un minuto es de un proceso
-# muerto y se quita con aviso. El +1 de find tiene dos semanticas: BSD (macOS)
-# matchea >60 s; GNU (CI) redondea y matchea a partir de ~2 min. El umbral efectivo,
-# entre 1 y 2 min, es a proposito.
-registro_lock() { # $1 registro; 0 = tomado
+# El lock del registro, en un solo lugar. Un lock de mas de un minuto es de un
+# proceso muerto y se rompe con aviso (el +1 de find: BSD matchea >60 s, GNU
+# redondea y matchea desde ~2 min; el umbral efectivo, entre 1 y 2 min, a proposito).
+# Al tomar, se arma un trap de EXIT sin dueno (si el llamador ya tiene el suyo, como
+# preflight, no se le pisa: ese caso lo cubre el rompimiento de locks viejos). Nada
+# de guardar y restaurar traps: restaurar dentro de una subshell de captura dispara
+# el trap ajeno al cerrar ella (medido: borro el dir de una prueba a mitad de
+# corrida). Al soltar, el disarm va ANTES del rmdir: el EXIT de este proceso no
+# puede romperle a otro un lock vivo tomado entremedias.
+lock_tomar() { # $1 registro; 0 = tomado (trap de EXIT armado si no habia dueno)
   local dir i=0
   dir="$(dirname "$1")"
   if [ -d "$dir/.lock" ] && [ -n "$(find "$dir/.lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then
     rmdir "$dir/.lock" 2>/dev/null \
-      && echo "registro_lock: rompio un lock viejo en $dir" >&2
+      && echo "lock_tomar: rompio un lock viejo en $dir" >&2
   fi
   while ! mkdir "$dir/.lock" 2>/dev/null; do
     i=$((i+1)); [ "$i" -gt 100 ] && return 1
     sleep 0.1
   done
+  if [ -z "$(trap -p EXIT)" ]; then
+    CORR_LOCK_ACT="$dir/.lock"
+    CORR_LOCK_ARMADO=1
+    trap 'rmdir "$CORR_LOCK_ACT" 2>/dev/null' EXIT
+  fi
   return 0
 }
 
-registro_unlock() { # $1 registro: suelta el lock (inofensivo si no estaba)
+lock_soltar() { # $1 registro: disarm ANTES del rmdir, solo si este proceso armo el trap
+  if [ "${CORR_LOCK_ARMADO:-0}" = "1" ]; then
+    trap - EXIT
+    CORR_LOCK_ARMADO=0
+  fi
   rmdir "$(dirname "$1")/.lock" 2>/dev/null
 }
 
 registro_escribir() { # $1 registro, $2 lineas python que mutan d; 0 = escrito.
-                     # SIN lock: quien llama lo toma (registro_actualizar o cerrar).
+                     # SIN lock: quien llama lo toma con lock_tomar.
   CORR_REG="$1" CORR_PY="$2" python3 -c "
 import json,os
 r=os.environ['CORR_REG']
@@ -116,31 +130,6 @@ open(t,'w').write(json.dumps(d,indent=1)+chr(10))
 os.chmod(t,0o600)
 os.rename(t,r)
 "
-}
-
-# Actualizacion del registro con lock y renombre atomico: dos lanzar-sesion en
-# paralelo no se pisan y un corte a mitad no deja JSON truncado.
-# Si quien escribe muere dentro de la seccion critica, un EXIT sin dueno saca el
-# lock. Si el llamador ya tiene su propio trap (p. ej. el de preflight), no se le
-# pisa: ese caso lo cubre el rompimiento de locks viejos. Nada de guardar y
-# restaurar traps: restaurar dentro de una subshell de captura dispara el trap
-# ajeno al cerrar ella (medido: borro el dir de una prueba a mitad de corrida).
-# Y tras soltar el lock el trap se DESARMA: el EXIT de este proceso no puede
-# romperle a otro un lock vivo tomado entremedias.
-registro_actualizar() { # $1 registro, $2 lineas python que mutan d (env visible); 0 = escrito
-  local reg="$1" armado=0
-  registro_lock "$reg" \
-    || { echo "registro_actualizar: lock del registro no cede" >&2; return 1; }
-  if [ -z "$(trap -p EXIT)" ]; then
-    CORR_LOCK_ACT="$(dirname "$reg")/.lock"
-    trap 'rmdir "$CORR_LOCK_ACT" 2>/dev/null' EXIT
-    armado=1
-  fi
-  registro_escribir "$reg" "$2"
-  local rc=$?
-  [ "$armado" -eq 1 ] && trap - EXIT
-  registro_unlock "$reg"
-  return "$rc"
 }
 
 # validar_registro: el criterio unico de corrida.v1 vive aqui (la prueba 9.1 carga
