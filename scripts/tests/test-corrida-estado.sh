@@ -17,7 +17,8 @@ T=$(mktemp -d) || exit 1
 mkdir -p "$T/bin" "$T/corridas" "$T/watch" "$T/paneles"
 export CORRIDA_STATE="$T/corridas" WATCH_STATE_DIR="$T/watch" PANEL_DIR="$T/paneles"
 # Reloj inyectado: 2026-09-19T13:02:00Z; los registros nacen a las 12:00:00Z.
-export CORR_AHORA=1789822920
+T0=1789822920
+export CORR_AHORA="$T0"
 
 # tmux de mentira: la sesion existe si tiene panel; capture-pane lo imprime.
 cat >"$T/bin/tmux-falso" <<'STUB'
@@ -70,6 +71,46 @@ $(diff "$FX/$esc/esperado.txt" "$T/$esc.out" | head -8)"
     || fail "el mensaje de $esc no pasa seguimiento.v1"
 done
 
+# (1b) MC: un dialogo cuyo approval_since no esta en el estado del vigilante no
+# inventa cifras: escala y dice "mucho rato".
+read -r id pan wat <<EOF
+$(montar dialogo)
+EOF
+sed -i.bak '/^approval_since=/d' "$wat/m-a.state" && rm -f "$wat/m-a.state.bak"
+PANEL_DIR="$pan" WATCH_STATE_DIR="$wat" bash "$CORR" estado "$id" >"$T/mc.out" 2>/dev/null \
+  || fail "MC: estado fallo sin approval_since"
+sed -n '1p' "$T/mc.out" | grep -q "NECESITO TU RESPUESTA" || fail "MC: sin approval_since no escalo"
+grep -q "mucho rato" "$T/mc.out" || fail "MC: sin approval_since miente o inventa el tiempo"
+
+# (1c) MB: singulares y "menos de un minuto". Directorios propios: estos casos
+# mutan watch/paneles y no pueden pisar los de los escenarios byte a byte.
+read -r id pan wat <<EOF
+$(montar dialogo)
+EOF
+rm -f "$pan/m-lead.txt"
+PANEL_DIR="$pan" WATCH_STATE_DIR="$wat" bash "$CORR" estado "$id" >"$T/mb.out" 2>/dev/null \
+  || fail "MB: estado fallo (una sesion)"
+grep -q "trabaja 1 sesion" "$T/mb.out" || fail "MB: con una sesion sale en plural"
+mkdir -p "$T/pan-mb2" "$T/wat-mb2"
+cp "$FX"/avanza/paneles/*.txt "$T/pan-mb2/"
+for f in "$FX"/avanza/watch/*.state; do
+  sed "s/^since=.*/since=$((1789835400 - 120))/" "$f" >"$T/wat-mb2/$(basename "$f")"
+done
+CORR_AHORA=1789835400 PANEL_DIR="$T/pan-mb2" WATCH_STATE_DIR="$T/wat-mb2" \
+  bash "$CORR" estado m-avanza >"$T/mb2.out" 2>/dev/null \
+  || fail "MB: estado fallo (una hora)"
+grep -q "queda 1 hora y " "$T/mb2.out" || fail "MB: con una hora sale en plural"
+mkdir -p "$T/pan-mb3" "$T/wat-mb3"
+cp "$FX"/avanza/paneles/m-lead.txt "$FX"/avanza/paneles/m-b.txt "$T/pan-mb3/"
+cp "$FX/dialogo/paneles/m-a.txt" "$T/pan-mb3/"
+cp "$FX"/avanza/watch/m-lead.state "$FX"/avanza/watch/m-b.state "$T/wat-mb3/"
+printf 'hash=9-9\nsince=%s\nnotified=1\npath=/p\napproval=recien-1\napproval_at=%s\napproval_since=%s\nnotified_at=0\n' \
+  "$((T0 - 30))" "$((T0 - 30))" "$((T0 - 30))" >"$T/wat-mb3/m-a.state"
+PANEL_DIR="$T/pan-mb3" WATCH_STATE_DIR="$T/wat-mb3" \
+  bash "$CORR" estado m-avanza >"$T/mb3.out" 2>/dev/null \
+  || fail "MB: estado fallo (dialogo recien nacido)"
+grep -q "menos de un minuto" "$T/mb3.out" || fail "MB: un dialogo de segundos no dice menos de un minuto"
+
 # (2) --solo-mensaje: exactamente las cuatro lineas del mensaje.
 PANEL_DIR="$T/paneles-avanza" WATCH_STATE_DIR="$T/watch-avanza" \
   bash "$CORR" estado m-avanza --solo-mensaje >"$T/solo.out" 2>/dev/null \
@@ -109,11 +150,16 @@ grep -q "panel recortado" "$T/sucio.out" || fail "el panel largo no sale recorta
 larga="$(LC_ALL=C awk '{ if (length($0) > m) m = length($0) } END { print m }' "$T/sucio.out")"
 [ "$larga" -le 5002 ] || fail "una linea del detalle mide $larga (tope 5 000)"
 
-# (6) determinismo: con reloj inyectado, dos corridas dan los mismos bytes.
+# (6) determinismo e inyectabilidad: dos corridas con el mismo reloj dan los
+# mismos bytes; y al mover el reloj una hora, la ventana se mueve con el.
 PANEL_DIR="$T/paneles-avanza" WATCH_STATE_DIR="$T/watch-avanza" \
   bash "$CORR" estado m-avanza >"$T/d1.out" 2>/dev/null || fail "estado fallo (d1)"
 PANEL_DIR="$T/paneles-avanza" WATCH_STATE_DIR="$T/watch-avanza" \
   bash "$CORR" estado m-avanza >"$T/d2.out" 2>/dev/null || fail "estado fallo (d2)"
 cmp -s "$T/d1.out" "$T/d2.out" || fail "estado no es determinista con el reloj inyectado"
+CORR_AHORA=$((T0 + 3600)) PANEL_DIR="$T/paneles-avanza" WATCH_STATE_DIR="$T/watch-avanza" \
+  bash "$CORR" estado m-avanza >"$T/d3.out" 2>/dev/null || fail "estado fallo (d3)"
+grep -q "3 horas y 58 minutos de ventana" "$T/d3.out" \
+  || fail "el reloj inyectado no mueve la ventana del parte"
 
 echo "TODO VERDE: test-corrida-estado"

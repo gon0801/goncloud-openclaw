@@ -77,3 +77,19 @@ ML: confirmado y corregido: este repo es goncloud-openclaw (git remote
 get-url origin); el REPO_DIR del plist apuntaba a goncloud-workspace-main
 (otro repo: 9.8 hubiera vigilado el CI equivocado). La prueba (0) compara
 el origen del plist contra el del repo.
+
+### fix(9.4) no bloqueantes
+MB: singulares ("trabaja 1 sesion", "queda 1 hora", "1 minuto") y
+"menos de un minuto" para lo recien nacido (casos 1c de la prueba: sesion
+unica, hora unica, dialogo de 30 s). MC: approval_since ausente o en 0 ya no
+produce la cifra de 29 millones de minutos: escala (edad eterna) y el texto
+dice "mucho rato" (caso 1b). ME: dialogo_cubierto casa el patron en la zona
+del dialogo (ultimas 5 lineas no vacias), no en salida vieja. Hallazgo 1 de
+la seleccion: iso_a_epoch ahora respeta la zona del ISO
+(datetime.strptime+timestamp; timegm ignoraba el offset y la ventana salia
+descalzada con inicio fuera de UTC). MH: el caso de determinismo tambien
+muestra inyectabilidad (reloj +1 h => "3 horas y 58 minutos"); y la nota del
+5000/5002 de arriba se corrige: el tope del recorte es 5000 bytes y la prueba
+tolera 5002 contando los 2 de sangria. Incidente propio de la ronda: mis
+casos nuevos pisaban watch-avanza/paneles-avanza que el caso --solo-mensaje
+reusa; ahora usan directorios propios (pan-mb2/wat-mb2, pan-mb3/wat-mb3).

@@ -8,7 +8,7 @@ sesion m-lead (lead, glm): trabajando
   lead trabajando
   revisando lo que llego
   todo en orden
-sesion m-a (carril, glm): callada 31 min con la pantalla quieta, sin contrato
+sesion m-a (carril, glm): callada 31 minutos con la pantalla quieta, sin contrato
   carril A en silencio
   la ultima linea quedo quieta hace rato
   nada nuevo en pantalla

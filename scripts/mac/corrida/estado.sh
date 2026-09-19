@@ -18,11 +18,13 @@ corr_ahora() { # reloj inyectable: CORR_AHORA en segundos de epoch
   fi
 }
 
-iso_a_epoch() { # $1 ISO con zona (la forma que abre escribe); vacio si no parsea
+iso_a_epoch() { # $1 ISO con zona (la forma que abre escribe); vacio si no parsea.
+                # strptime+timestamp: la zona manda (timegm ignoraria el offset).
   ISOS="$1" python3 -c "
-import os,calendar,time
+import os
+from datetime import datetime
 try:
-  print(int(calendar.timegm(time.strptime(os.environ['ISOS'],'%Y-%m-%dT%H:%M:%S%z'))))
+  print(int(datetime.strptime(os.environ['ISOS'],'%Y-%m-%dT%H:%M:%S%z').timestamp()))
 except Exception:
   print('')" 2>/dev/null
 }
@@ -39,10 +41,27 @@ watch_campo() { # $1 sesion, $2 campo del .state del vigilante (vacio si no hay)
     "${WATCH_STATE_DIR:-$HOME/.local/state/tmux-activity-watch}/$1.state" 2>/dev/null
 }
 
-min_desde() { # $1 epoch del hito -> minutos enteros desde ahi (0 si negativo)
-  local d=$(( $(corr_ahora) - $1 ))
+min_desde() { # $1 epoch del hito -> minutos enteros desde ahi. Un hito en 0 o
+               # ausente ("hace 29 millones de minutos") se trata como hace
+               # muchisimo: escala, no inventa cifra.
+  local d
+  if [ "${1:-0}" -gt 0 ] 2>/dev/null; then
+    d=$(( $(corr_ahora) - $1 ))
+  else
+    d=999999999
+  fi
   [ "$d" -lt 0 ] && d=0
   echo $(( d / 60 ))
+}
+
+min_en_palabras() { # $1 epoch -> la edad en palabras para el mensaje
+  local m; m="$(min_desde "$1")"
+  case "$m" in
+    16666666) printf 'mucho rato';;      # 999999999/60: el desde no se supo
+    0) printf 'menos de un minuto';;
+    1) printf '1 minuto';;
+    *) printf '%s minutos' "$m";;
+  esac
 }
 
 # panel_limpio <archivo crudo> <archivo destino>: ultima pantalla legible para el
@@ -71,9 +90,11 @@ contrato_de_panel() { # $1 panel -> "LISTO <sha>" | "ATORADO ..." | "" (la ultim
 # Dialogo cubierto por la tabla de preaprobaciones del registro: algun patron
 # aprobado calza en la cola de la pantalla. Sin tabla, o con patron que no calza,
 # la politica no lo cubre y eso escala de inmediato.
-dialogo_cubierto() { # $1 registro, $2 panel; 0 = cubierto
+dialogo_cubierto() { # $1 registro, $2 panel; 0 = cubierto. El patron casa en la
+                     # zona del dialogo (ultimas lineas no vacias, donde el
+                     # vigilante ve el prompt), no en salida vieja de mas arriba.
   local patron restos
-  restos="$(grep -v '^[[:space:]]*$' "$2" 2>/dev/null | tail -15)"
+  restos="$(grep -v '^[[:space:]]*$' "$2" 2>/dev/null | tail -5)"
   [ -n "$restos" ] || return 1
   while IFS= read -r patron; do
     [ -n "$patron" ] || continue
@@ -186,7 +207,8 @@ print(chr(10).join('%s|%s|%s'%(s.get('nombre',''),s.get('rol') or '',s.get('cli'
       aprob="$(watch_campo "$n" approval)"
       desde="$(watch_campo "$n" approval_since)"; [ -n "$desde" ] || desde=0
       quieta="$(watch_campo "$n" since)"; [ -n "$quieta" ] || quieta=0
-      [ "$desde" -gt 0 ] && edad=$(( ahora - desde ))
+      # un approval_since ausente o en 0 se trata como espera eterna: escala ya.
+      [ "$desde" -gt 0 ] && edad=$(( ahora - desde )) || edad=999999999
     fi
     case "$ses_st" in
       trabajando)
@@ -208,15 +230,15 @@ print(chr(10).join('%s|%s|%s'%(s.get('nombre',''),s.get('rol') or '',s.get('cli'
                 if [ -z "$desde_pedir" ] || [ "$desde" -lt "$desde_pedir" ]; then
                   desde_pedir="$desde"
                 fi
-                st_det="dialogo desde hace $(min_desde "$desde") min (la politica no lo cubre o ya espero demasiado)"
+                st_det="dialogo desde hace $(min_en_palabras "$desde") (la politica no lo cubre o ya espero demasiado)"
               else
                 ses_st="dialogo-joven"; n_dlg_joven=$((n_dlg_joven+1))
-                st_det="dialogo desde hace $(min_desde "$desde") min (cubierto por preaprobaciones)"
+                st_det="dialogo desde hace $(min_en_palabras "$desde") (cubierto por preaprobaciones)"
               fi
             elif [ "$quieta" -gt 0 ] && [ $(( ahora - quieta )) -ge 1800 ]; then
               ses_st="callada"; n_callada=$((n_callada+1))
               [ -n "$quieta_primera" ] || quieta_primera="$quieta"
-              st_det="callada $(min_desde "$quieta") min con la pantalla quieta, sin contrato"
+              st_det="callada $(min_en_palabras "$quieta") con la pantalla quieta, sin contrato"
             else
               trabajando=$((trabajando+1))
             fi ;;
@@ -276,7 +298,7 @@ recoger|carril con LISTO sin recoger: recoger lo terminado (loop 3)"
     if [ $((n_dlg_pedir + n_dlg_joven)) -gt 1 ]; then
       P_CAMBIO="varios carriles esperan hace rato una decision tuya"
     else
-      P_CAMBIO="un carril lleva $(min_desde "$desde_pedir") minutos esperando una decision tuya"
+      P_CAMBIO="un carril lleva $(min_en_palabras "$desde_pedir") esperando una decision tuya"
     fi
   elif [ "$n_dlg_joven" -gt 1 ]; then
     P_CAMBIO="$n_dlg_joven carriles se detuvieron a esperar una decision tuya"
@@ -293,9 +315,9 @@ recoger|carril con LISTO sin recoger: recoger lo terminado (loop 3)"
   elif [ "$n_atorada" -gt 0 ]; then
     P_CAMBIO="un carril se declaro atorado"
   elif [ "$n_callada" -gt 1 ]; then
-    P_CAMBIO="$n_callada carriles llevan $(min_desde "$quieta_primera") minutos sin actividad en su pantalla"
+    P_CAMBIO="$n_callada carriles llevan $(min_en_palabras "$quieta_primera") sin actividad en su pantalla"
   elif [ "$n_callada" -gt 0 ]; then
-    P_CAMBIO="un carril lleva $(min_desde "$quieta_primera") minutos sin actividad en su pantalla"
+    P_CAMBIO="un carril lleva $(min_en_palabras "$quieta_primera") sin actividad en su pantalla"
   elif [ "$n_listo" -gt 1 ]; then
     P_CAMBIO="$n_listo carriles terminaron su parte y aun no se recogen"
   elif [ "$n_listo" -gt 0 ]; then
@@ -317,16 +339,20 @@ recoger|carril con LISTO sin recoger: recoger lo terminado (loop 3)"
     pausa_txt=" (en pausa por la espera)"
   fi
   h=$(( restante / 3600 )); mm=$(( (restante % 3600) / 60 ))
-  local ventana
+  local ventana v_pal="quedan" h_pal="horas" m_pal="minutos"
+  [ "$h" -eq 1 ] && { v_pal="queda"; h_pal="hora"; }
+  [ "$mm" -eq 1 ] && m_pal="minuto"
   if [ "$restante" -le 0 ]; then
     ventana="la ventana de trabajo se agoto"
   elif [ "$h" -gt 0 ]; then
-    ventana="quedan $h horas y $mm minutos de ventana de trabajo$pausa_txt"
+    ventana="$v_pal $h $h_pal y $mm $m_pal de ventana de trabajo$pausa_txt"
   else
-    ventana="quedan $mm minutos de ventana de trabajo$pausa_txt"
+    ventana="$v_pal $mm $m_pal de ventana de trabajo$pausa_txt"
   fi
   local en_marcha
-  if [ "$trabajando" -gt 0 ]; then
+  if [ "$trabajando" -eq 1 ]; then
+    en_marcha="trabaja 1 sesion"
+  elif [ "$trabajando" -gt 1 ]; then
     en_marcha="trabajan $trabajando sesiones"
   else
     en_marcha="ninguna sesion esta trabajando"
@@ -335,11 +361,11 @@ recoger|carril con LISTO sin recoger: recoger lo terminado (loop 3)"
   P_SIGUE="$en_marcha; $ventana; $GH_TXT"
 
   if [ "$n_dlg_pedir" -gt 0 ]; then
-    local min_dlg; min_dlg="$(min_desde "$desde_pedir")"
+    local min_dlg; min_dlg="$(min_en_palabras "$desde_pedir")"
     if [ "$n_dlg_pedir" -gt 1 ]; then
-      P_NECESITO="$n_dlg_pedir carriles esperan desde hace $min_dlg minutos tu decision: con tu si siguen solos, con tu no se detienen ahi"
+      P_NECESITO="$n_dlg_pedir carriles esperan desde hace $min_dlg tu decision: con tu si siguen solos, con tu no se detienen ahi"
     else
-      P_NECESITO="un carril espera desde hace $min_dlg minutos tu decision: con tu si sigue solo, con tu no se detiene ahi"
+      P_NECESITO="un carril espera desde hace $min_dlg tu decision: con tu si sigue solo, con tu no se detiene ahi"
     fi
   elif [ "$n_dlg_joven" -gt 0 ]; then
     P_NECESITO="nada por ahora; si sigue esperando, te pregunto"
