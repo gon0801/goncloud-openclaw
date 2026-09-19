@@ -24,9 +24,10 @@
     <string>/Users/dn</string>
     <key>PATH</key>
     <string>/Users/dn/.openclaw/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
-    <!-- Bajo launchd no hay repo a mano: el latido resuelve gh contra este clon. -->
+    <!-- Bajo launchd no hay repo a mano: el latido resuelve gh contra el clon
+         de ESTE repo (goncloud-openclaw), no contra el workspace. -->
     <key>REPO_DIR</key>
-    <string>/Users/dn/dev/goncloud-workspace-main</string>
+    <string>/Users/dn/dev/goncloud-openclaw</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>

@@ -14,13 +14,14 @@
 LAT_TOPE_MSG=900    # 15 min entre mensajes, salvo NECESITO
 LAT_HORA_MSJ=3600   # sin mensaje aunque todo avance: a la hora, uno
 
-evento_jsonl() { # $1 dir de la corrida; pares EVT_<campo>=valor en el entorno
+evento_jsonl() { # $1 dir de la corrida; pares EVT_<campo>=valor en el entorno.
+                 # Solo los campos del evento van en la linea: la linea ya vive
+                 # en el directorio de la corrida (nada de rutas absolutas).
   EVT_DIR="$1" EVT_AT="$(epoch_a_iso "$(corr_ahora)")" python3 -c "
 import json,os
-p={k[4:]:v for k,v in os.environ.items() if k.startswith('EVT_')}
+p={k[4:]:v for k,v in os.environ.items() if k.startswith('EVT_') and k not in ('EVT_DIR','EVT_AT')}
 p['at']=os.environ['EVT_AT']
 open(os.path.join(os.environ['EVT_DIR'],'eventos.jsonl'),'a').write(json.dumps(p)+chr(10))" 2>/dev/null
-  return 0
 }
 
 lat_escribir() { # $1 latido.json $2 firma $3 ult_msj $4 etq $5 firma_vigia $6 ci_sha
@@ -69,7 +70,10 @@ latido_de() { # $1 dir de la corrida (con el registro adentro)
   if [ "$enviar" -eq 1 ]; then
     if corrida_mensaje "$id" "$P_ETIQ" "$P_AVANCE" "$P_CAMBIO" "$P_SIGUE" "$P_NECESITO"; then
       lfirma="$P_FIRMA"; lult="$now"; letq="$P_ETIQ"
-      lat_escribir "$lat" "$lfirma" "$lult" "$letq" "$lfv" "$lci"
+      if ! lat_escribir "$lat" "$lfirma" "$lult" "$letq" "$lfv" "$lci"; then
+        echo "latido: no se pudo escribir $lat; el proximo tick puede repetir el ultimo aviso" >&2
+        return 1
+      fi
       EVT_tipo=mensaje EVT_etiqueta="$P_ETIQ" EVT_firma="$P_FIRMA" evento_jsonl "$dir"
     else
       # sin memoria nueva: el proximo tick reintenta con el mismo cambio.
@@ -88,13 +92,19 @@ latido_de() { # $1 dir de la corrida (con el registro adentro)
       con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" system event --mode now --timeout 15000 \
         --text "corrida $id | accion: ${P_ACCIONES//$LF/ ; } | parte: $parte4 | estado: $dir" \
         >/dev/null 2>&1 || rc=1
+      EVT_tipo=evento-vigia EVT_vigia="$vigia" EVT_accion="$acc_claves" \
+        EVT_ok="$([ "$rc" -eq 0 ] && echo true || echo false)" \
+        EVT_corrida="$id" EVT_parte="$parte4" evento_jsonl "$dir"
+    else
+      # hermes: la linea de eventos.jsonl ES el aviso; si no se pudo escribir,
+      # no se marca enviada (el proximo tick la reintenta).
+      EVT_tipo=evento-vigia EVT_vigia="$vigia" EVT_accion="$acc_claves" \
+        EVT_ok=true EVT_corrida="$id" EVT_parte="$parte4" evento_jsonl "$dir" || rc=1
     fi
-    EVT_tipo=evento-vigia EVT_vigia="$vigia" EVT_accion="$acc_claves" \
-      EVT_ok="$([ "$rc" -eq 0 ] && echo true || echo false)" \
-      EVT_corrida="$id" EVT_parte="$parte4" evento_jsonl "$dir"
     if [ "$rc" -eq 0 ]; then
       lfv="$P_FIRMA"
-      lat_escribir "$lat" "$lfirma" "$lult" "$letq" "$lfv" "$lci"
+      lat_escribir "$lat" "$lfirma" "$lult" "$letq" "$lfv" "$lci" \
+        || echo "latido: no se pudo escribir $lat; el vigia puede despertarse de mas al proximo tick" >&2
     fi
   fi
 
@@ -159,14 +169,14 @@ os.rename(t+'.tmp',t)" 2>/dev/null
 
 corrida_latido() {
   [ -d "$CORRIDA_STATE" ] || return 0
-  local dir reg
+  local dir reg rcg=0
   for dir in "$CORRIDA_STATE"/*/; do
     [ -d "$dir" ] || continue
     reg="${dir%/}/registro.json"
     [ -f "$reg" ] || continue
     validar_registro "$reg" >/dev/null 2>&1 || continue
     [ "$(json_campo "$reg" estado)" = "abierta" ] || continue
-    latido_de "${dir%/}"
+    latido_de "${dir%/}" || rcg=1
   done
-  return 0
+  return "$rcg"
 }

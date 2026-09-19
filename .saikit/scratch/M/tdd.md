@@ -51,3 +51,29 @@ sigue lateando (el parte de la corrida sale igual).
 Mutacion verificada muriendo (con cmp de restauracion): sin la memoria del sha
 avisado, el mismo sha rojo avisa en cada tick y la prueba muere en el caso
 "mismo sha => cero".
+
+## Ronda 1 de revision cruzada (2026-09-19)
+
+### MA (bloqueante): gh caido no discriminaba
+La seccion de "gh caido" contaba un AVANZA que con GH_CI por defecto verde
+nada probaba: ni un estado que con gh vivo SIBA avisado, ni || fail en el tick.
+Rework: corrida propia (lat-gh), GH_CI=rojo GH_SHA fijados + GH_CAIDO=1, todo
+tick con || fail, y asserts de cero avisos, cero ci-rojo.json y parte AVANZA.
+Rojo pegado (mutacion: gh caido tratado como rojo, con el payload fabricado):
+`FAIL: con gh caido salio mas que el parte (msgs=2)` (rc=1); restaurado y en
+verde. Ademas: todos los tick de la prueba llevan || fail (auditoria grep).
+
+### fix(9.5) no bloqueantes
+MI: evento_jsonl colaba EVT_DIR (ruta absoluta) y EVT_AT duplicado en cada
+linea (evidencia: lineas con "DIR": "/var/.../lat-her" y "AT" junto a "at");
+excluidos del dict. MJ: para hermes la linea de eventos.jsonl ES el aviso; su
+escritura ahora decide firma_vigia (caso 9b: eventos.jsonl como directorio,
+dos ticks, no se marca enviada). MK: lat_escribir con rc honrado: escritura
+caida tras un envio exitoso avisa a stderr y el tick sale rojo (caso 9c).
+MD: declarado no-materializado con prueba minima: lib.sh fija TMUX_BIN al
+cargarse (command -v tmux con fallback a /opt/homebrew/bin/tmux) y el
+despachador carga lib antes que el subcomando; la prueba (0) lo aserta.
+ML: confirmado y corregido: este repo es goncloud-openclaw (git remote
+get-url origin); el REPO_DIR del plist apuntaba a goncloud-workspace-main
+(otro repo: 9.8 hubiera vigilado el CI equivocado). La prueba (0) compara
+el origen del plist contra el del repo.
