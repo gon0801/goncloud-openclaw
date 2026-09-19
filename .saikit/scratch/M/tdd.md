@@ -29,3 +29,27 @@ TODO VERDE: crons-dos-copias
 - verif-sync-repos → 2d763be5-6390-4ccf-a3a4-621c91c41e94
 
 ## 13.2 — (pendiente)
+
+## 13.2 — sync avisa skills
+
+### Rojo primero (antes de las marcas en sync-repos.ps1)
+```
+ROJO: (0) faltan marcas # >>> skills-cambiadas — la funcion no se puede extraer
+EXIT:1
+```
+
+### Verde despues
+```
+ok (0)..ok (6)
+TODO VERDE: sync-avisa-skills
+TODO VERDE: crons-dos-copias  (verif-sync-repos ya no es excepcion; apareado a v2.txt)
+```
+
+### Mutantes
+- Llamado SKILLS movido despues del commit → fuera de la ventana de (2).
+- Quitar el try/catch del flujo → rojo en (2)/(0).
+- Funcion contra repo temporal: solo `s/SKILL.md` (no `otro/no-skill.txt`).
+- throw forzado → `SKILLS error:` y el ciclo sigue.
+
+### Aplicador
+`APLICAR_VIGIA_SYNC.sh --test` (seco) escribio `.pre.json`/`.post.json` con `payload.message` == v2.txt y agentId/schedule/toolsAllow/enabled intactos. No edito el gateway.

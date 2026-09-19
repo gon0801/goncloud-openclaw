@@ -15,8 +15,8 @@ MSGS=docs/cron-messages
 [ -d "$MSGS" ] || fail "falta $MSGS"
 
 # Excepciones md sin txt (razon por entrada).
-# verif-sync-repos: el .md existe antes del .txt; 13.2 agrega v2 y lo saca de aqui.
-MD_SIN_TXT='verif-sync-repos'
+# (vacio tras 13.2: verif-sync-repos ya tiene v2.txt)
+MD_SIN_TXT=''
 
 # Excepciones txt sin md (anteriores a docs/crons/).
 TXT_SIN_MD='packing-digest-20h.v14.txt
