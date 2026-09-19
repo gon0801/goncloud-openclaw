@@ -14,7 +14,29 @@ con escapes, CR y una linea de 6000 caracteres sale limpio y recortado a 5000
 (sangria incluida); dos corridas con reloj inyectado dan los mismos bytes.
 
 ## 9.5 latido (2026-09-19)
-(rojo pendiente de pegar)
+Rojo inicial (limpio): sin el LaunchAgent la prueba muere en `FAIL: falta el
+LaunchAgent del latido` (rc=1); con el plist presente pero sin
+`corrida/latido.sh` el despachador daria `subcomando desconocido: latido`.
+Verde tras implementar latido.sh + plist: `TODO VERDE: test-corrida-latido`.
+Lo que la prueba pega: sin corridas abiertas (y con dirs sin registro valido o
+cerrados) cero llamadas; primer tick un AVANZA silencioso anotado en
+mensajes.jsonl y eventos.jsonl; dos ticks seguidos no duplican; 59 min sin
+cambio 0 mensajes y a los 60 uno (mutacion sin latido por hora muere); un
+cambio a menos de 15 min del ultimo mensaje no sale (mutacion sin tope);
+carril callado 31 min => DETENIDA + system event al vigia con la accion y el
+parte; dialogo de 10 min => NECESITO sonora pese al tope y sin duplicar al
+tick siguiente (mutacion sin escalamiento muere); dialogo joven sin cobertura
+de politica => NECESITO inmediato; vigia hermes deja linea en eventos.jsonl y
+cero system event; con el evento al vigia cayendo el mensaje igual sale (y no
+se duplica al tick siguiente), y con el envio cayendo el evento igual sale y
+mensajes.jsonl anota ok:false honesto.
+Mutaciones verificadas muriendo (archivo restaurado tras cada una, con cmp):
+sin latido por hora (la rama de los 60 min), sin escalamiento a NECESITO (la
+etiqueta deja de ser especial), sin tope de 15 min (todo cambio sale solo).
+Incidente propio del diseno, atrapado por la prueba: el NECESITO que bypassaba
+el tope bypassaba tambien la deduplicacion por firma y se remandaba cada tick;
+ahora solo bypassa el tope cuando la firma cambio (o lleva 15 min sin
+contestacion).
 
 ## 9.8 CI rojo (2026-09-19)
 (rojo pendiente de pegar)

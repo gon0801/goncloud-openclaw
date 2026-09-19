@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Install:
+    cp scripts/mac/corrida.sh ~/bin/ && cp -R scripts/mac/corrida ~/bin/ &&
+    cp scripts/mac/ai.goncloud.corrida-latido.plist ~/Library/LaunchAgents/ &&
+    launchctl bootstrap gui/501 ~/Library/LaunchAgents/ai.goncloud.corrida-latido.plist
+  Remove:
+    launchctl bootout gui/501/ai.goncloud.corrida-latido
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.goncloud.corrida-latido</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/dn/bin/corrida.sh</string>
+    <string>latido</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>/Users/dn</string>
+    <key>PATH</key>
+    <string>/Users/dn/.openclaw/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <!-- Bajo launchd no hay repo a mano: el latido resuelve gh contra este clon. -->
+    <key>REPO_DIR</key>
+    <string>/Users/dn/dev/goncloud-workspace-main</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <!-- Cada 5 min (9.5); KeepAlive va en false: es un latido periodico, no un
+       demonio — si un tick muere, el siguiente lo trae launchd, y el cron
+       hombre-muerto de cada corrida sigue hablando mientras tanto. -->
+  <key>StartInterval</key>
+  <integer>300</integer>
+  <key>KeepAlive</key>
+  <false/>
+  <key>ThrottleInterval</key>
+  <integer>60</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>/Users/dn/Library/Logs/corrida-latido.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/dn/Library/Logs/corrida-latido.log</string>
+</dict>
+</plist>
