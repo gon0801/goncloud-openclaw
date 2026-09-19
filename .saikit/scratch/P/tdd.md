@@ -51,3 +51,41 @@ Ejecutado por `75-mutantes.sh`, salida en `75-mutantes.txt`:
 
 - `bash scripts/run-checks.sh` → `TODO VERDE`, exit 0 (`verify-run-checks.txt`).
 - `cd tablero-runbook && node --test` → `ℹ tests 60 · pass 60 · fail 0` (`verify-node-test.txt`).
+
+## 9.6 — rojo primero (carril P, Fase 9)
+
+Batería `scripts/tests/test-corrida-responder.sh` commiteada ANTES de que exista
+`scripts/mac/corrida/responder.sh`. Salida verbatim:
+
+```
+FAIL: falta scripts/mac/corrida/responder.sh
+```
+
+Y el despachador del núcleo todavía no lo carga:
+
+```
+$ bash scripts/mac/corrida.sh responder r0
+subcomando desconocido: responder   (rc=2)
+```
+
+Casos de la batería (resumen): nace apagado (1), confianza.txt => acepta (2),
+lista dura push a main y rm -rf con fila Aprobado => escala (3), Aprobado/Negado/
+sin fila (4), límite de uso => conserva modelo + marca cuota (5), confianza con
+ruta propia/ajena (6), sesión sin registro jamás se toca (7), patrón ancho =>
+rechazado al cargar (8), pantalla cambiada entre lectura y envío => no manda
+nada (9), tres diálogos en 10 min => cambio de modo (10), tecla unknown =>
+escala (11).
+
+## 9.6 — mutantes (ambos ROJO; batería verde en el commit)
+
+Ejecutado por `96-mutantes.sh`, salida en `96-mutantes.txt`:
+
+| Mutante | Resultado |
+|---|---|
+| sin relectura TOCTOU (resp_relee siempre "intacta") | ROJO (caso 9: pantalla cambiada ⇒ tecla) |
+| sin lista dura (el comando cae directo a la tabla) | ROJO (caso 3: push a main Aprobado ⇒ tecla) |
+
+Verde final (bash y /bin/bash 3.2): TODO VERDE en corrida-responder,
+tmux-activity-watch, corrida-nucleo, corrida-preflight y cli-modos;
+`git diff --numstat origin/main -- scripts/tests/test-tmux-activity-watch.sh`
+=> `80	0` (solo agregados).

@@ -1,0 +1,5 @@
+Permission - Bash
+git push origin main
+> Allow once
+  Always allow in this project
+  Deny

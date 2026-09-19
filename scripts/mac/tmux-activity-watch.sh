@@ -93,6 +93,10 @@ APPROVAL_TAIL_LINES=${APPROVAL_TAIL_LINES:-15}
 APPROVAL_REMIND_SECS=${APPROVAL_REMIND_SECS:-900}
 STATE_DIR=${STATE_DIR:-$HOME/.local/state/tmux-activity-watch}
 LOG_FILE=${LOG_FILE:-$HOME/Library/Logs/tmux-activity-watch.log}
+# Carril P (9.6): el despachador de corridas que contesta diálogos por política.
+# Si no existe o no es ejecutable (la instalación es del lead), el vigilante se
+# comporta exactamente como hoy.
+CORRIDA_BIN=${CORRIDA_BIN:-$HOME/bin/corrida.sh}
 WATCH_MARKER=OPENCLAW_WATCH
 
 once=0
@@ -131,11 +135,29 @@ send_event() {
   # retries. The watcher itself never dies from a failed send.
   if "$OPENCLAW_BIN" system event --mode now --timeout 15000 --text "$text" >>"$LOG_FILE" 2>&1; then
     log "sent: $text"
+    # Carril P (9.6): todo evento enviado queda tambien en $STATE_DIR/eventos.jsonl
+    # (t epoch + texto tal cual, escapado por python): es lo que un vigia puede
+    # leer sin pasar por el gateway.
+    printf '{"t":%s,"evento":%s}\n' "$(date +%s)" \
+      "$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$text")" >>"$STATE_DIR/eventos.jsonl"
     return 0
   else
     log "SEND FAILED (will retry next tick): $text"
     return 1
   fi
+}
+
+# Carril P (9.6): la politica de dialogos contesta primero. El vigilante le pasa
+# la sesion a "corrida.sh responder" y solo despierta al agente si la politica no
+# contesta (rc != 0: no existe, corrida sin registro de esa sesion, politica
+# apagada — sin responder.on no manda ninguna tecla — o escalada a la persona).
+# Tope de reloj propio (60 s): la politica habla con la red al escalar y un tick
+# no puede quedarse colgado tras ella. Su salida va al log, nunca a la pantalla.
+responder_contesta() {
+  local session=$1 rc=0
+  [[ -x $CORRIDA_BIN ]] || return 1
+  perl -e 'alarm shift; exec(@ARGV) or exit 127' 60 "$CORRIDA_BIN" responder "$session" >>"$LOG_FILE" 2>&1 || rc=1
+  return "$rc"
 }
 
 state_file() {
@@ -264,6 +286,15 @@ tick() {
         approval_since=$now
       elif [[ $((now - prev_approval_at)) -ge $APPROVAL_REMIND_SECS ]]; then
         due=1
+      fi
+      # Carril P (9.6): ofrecerle el dialogo a la politica ANTES de despertar a
+      # nadie. Si contesta (rc 0), el dialogo quedo atendido: no sale evento y el
+      # prompt queda marcado atendido (approval_at=now, igual que tras un envio).
+      # Si no, el evento sale como hoy.
+      if [[ $due == 1 ]] && responder_contesta "$session"; then
+        due=0
+        approval_at=$now
+        log "dialog answered by policy: $session"
       fi
       if [[ $due == 1 ]]; then
         text="tmux: $session waiting for approval for $((now - approval_since))s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"

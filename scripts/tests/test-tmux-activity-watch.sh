@@ -424,6 +424,86 @@ $(cat "$CALLS")"
   "$TM" -L "$L" kill-session -t cli-raro; run_once >/dev/null 2>&1
   echo "ok (2h): el silencio se recuerda; un dialogo que ningun patron conoce no se queda sin avisar; un estado de la version anterior no repite el aviso"
 
+  # (2i) Carril P (9.6): cada evento que el vigilante MANDA queda anotado en
+  # $STATE_DIR/eventos.jsonl (t epoch + texto): lo que un vigia lee sin gateway.
+  "$TM" -L "$L" new-session -d -s ev-log -x 80 -y 20 'cat' || fail "no se pudo crear ev-log"
+  mark ev-log
+  : >"$CALLS"
+  sleep 2
+  run_once || fail "--once (2i, quiet) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 1 ] || fail "(2i) esperaba exactamente un evento quiet de ev-log; hubo $n"
+  EJ="$STATE_DIR/eventos.jsonl"
+  [ -f "$EJ" ] || fail "(2i) falta $EJ"
+  python3 - "$EJ" <<'PY' || fail "(2i) eventos.jsonl no trae el evento quiet como {t, evento}"
+import json,sys
+lin=[l for l in open(sys.argv[1]) if l.strip()]
+assert lin, "sin lineas"
+d=json.loads(lin[-1])
+assert isinstance(d.get("t"),int), "t no es epoch"
+assert "ev-log quiet for" in d.get("evento",""), "el evento no es el quiet de ev-log: %r"%d.get("evento")
+PY
+  "$TM" -L "$L" kill-session -t ev-log
+  run_once || fail "--once (2i, closed) fallo"
+  python3 - "$EJ" <<'PY' || fail "(2i) el evento closed tampoco quedo en eventos.jsonl"
+import json,sys
+lin=[l for l in open(sys.argv[1]) if l.strip()]
+d=json.loads(lin[-1])
+assert isinstance(d.get("t"),int), "t no es epoch"
+assert "ev-log closed" in d.get("evento",""), "el ultimo evento no es el closed de ev-log: %r"%d.get("evento")
+PY
+  echo "ok (2i): cada evento enviado queda anotado en eventos.jsonl (t epoch + texto)"
+
+  # (2j) Carril P (9.6): el dialogo se le ofrece a la politica (corrida.sh
+  # responder) ANTES de despertar a nadie. Si la politica contesta (rc 0) no sale
+  # evento y el prompt queda atendido; si no existe o no contesta, como hoy.
+  CORR_CALLS="$T/corrida-llamadas.txt"; : >"$CORR_CALLS"
+  COR_RC="$T/corrida-rc"; echo 1 >"$COR_RC"
+  STUB_CORR="$T/corrida-stub"
+  cat >"$STUB_CORR" <<STUB
+#!/bin/sh
+printf '%s\n' "CORR \$*" >> "$CORR_CALLS"
+exit "\$(cat "$COR_RC")"
+STUB
+  chmod +x "$STUB_CORR"
+  PANTALLA_J="$T/pantalla-j.txt"
+  printf 'Permission - Bash\necho listar\n> Allow once\n  Deny\n running 3s\n' >"$PANTALLA_J"
+  "$TM" -L "$L" new-session -d -s pol-1 -x 100 -y 20 "$TUI $PANTALLA_J" || fail "no se pudo crear pol-1"
+  mark pol-1
+  : >"$CALLS"
+  espera_pantalla pol-1 'Allow once'
+  sleep 1
+  # La politica no contesta (rc 1: apagada, sin registro, escalada): como hoy.
+  CORRIDA_BIN="$STUB_CORR" run_p || fail "--once (2j, politica no contesta) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 1 ] || fail "(2j) con la politica sin respuesta debia salir el evento; hubo $n"
+  grep -q 'pol-1 waiting for approval' "$CALLS" || fail "(2j) falta el evento de aprobacion: $(cat "$CALLS")"
+  grep -q '^CORR responder pol-1$' "$CORR_CALLS" || fail "(2j) el vigilante no le paso el dialogo a la politica: $(cat "$CORR_CALLS")"
+  # La politica contesta (rc 0): ningun evento, el prompt queda atendido.
+  sed -i.bak 's/echo listar/echo listar mas/' "$PANTALLA_J" && rm -f "$PANTALLA_J.bak"
+  espera_pantalla pol-1 'echo listar mas'
+  sleep 1
+  : >"$CALLS"
+  echo 0 >"$COR_RC"
+  CORRIDA_BIN="$STUB_CORR" run_p || fail "--once (2j, politica contesta) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 0 ] || fail "(2j) la politica contesto: no debia salir NINGUN evento; hubo $n"
+  n=$(grep -c '^CORR responder pol-1$' "$CORR_CALLS")
+  [ "$n" -eq 2 ] || fail "(2j) la politica debia llamarse una vez por prompt; hubo $n"
+  grep -q '^approval=[0-9]' "$STATE_DIR/pol-1.state" || fail "(2j) el prompt atendido debe quedar marcado en el estado: $(cat "$STATE_DIR/pol-1.state")"
+  # Sin corrida.sh ejecutable el enganche esta inactivo: evento como hoy.
+  sed -i.bak 's/echo listar mas/echo listar tres/' "$PANTALLA_J" && rm -f "$PANTALLA_J.bak"
+  espera_pantalla pol-1 'echo listar tres'
+  sleep 1
+  : >"$CALLS"
+  CORRIDA_BIN="$T/no-hay-corrida" run_p || fail "--once (2j, sin corrida.sh) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 1 ] || fail "(2j) sin corrida.sh el evento debia salir como hoy; hubo $n"
+  n=$(grep -c '^CORR responder pol-1$' "$CORR_CALLS")
+  [ "$n" -eq 2 ] || fail "(2j) sin corrida.sh no debia llamarse a nadie nuevo; hubo $n"
+  "$TM" -L "$L" kill-session -t pol-1
+  echo "ok (2j): el dialogo se le ofrece a la politica primero; si contesta no despierta a nadie, y sin corrida.sh va como hoy"
+
   "$TM" -L "$L" kill-server 2>/dev/null
   echo "ok (2): maquina de estados del vigilante verificada con tmux real ($TM)"
 
