@@ -1,0 +1,1132 @@
+{
+  "plugins": {
+    "entries": {
+      "moonshot": {
+        "enabled": true,
+        "config": {}
+      },
+      "kimi": {
+        "enabled": true,
+        "config": {}
+      },
+      "zai": {
+        "enabled": true,
+        "config": {}
+      },
+      "codex": {
+        "enabled": true,
+        "config": {
+          "codexPlugins": {
+            "plugins": {
+              "gmail@openai-curated": {
+                "enabled": true,
+                "marketplaceName": "openai-curated",
+                "pluginName": "gmail"
+              }
+            },
+            "enabled": true,
+            "allow_all_plugins": false,
+            "allow_destructive_actions": true
+          },
+          "codexDynamicToolsLoading": "searchable",
+          "codexDynamicToolsExclude": []
+        }
+      },
+      "telegram": {
+        "enabled": true,
+        "config": {}
+      },
+      "cua-computer": {
+        "enabled": true,
+        "config": {}
+      },
+      "deepseek": {
+        "enabled": true,
+        "config": {}
+      },
+      "llama-cpp": {
+        "enabled": true,
+        "config": {}
+      },
+      "openai": {
+        "enabled": true,
+        "config": {
+          "personality": "friendly"
+        }
+      },
+      "xai": {
+        "enabled": true,
+        "config": {}
+      },
+      "browser": {
+        "enabled": true,
+        "config": {}
+      },
+      "microsoft": {
+        "enabled": true,
+        "config": {}
+      },
+      "summa-gate": {
+        "enabled": true,
+        "hooks": {
+          "allowConversationAccess": true,
+          "allowPromptInjection": true
+        },
+        "config": {}
+      },
+      "tablero-runbook": {
+        "enabled": true,
+        "config": {
+          "github": {
+            "enabled": false
+          },
+          "fases": [
+            "6",
+            "7"
+          ]
+        }
+      },
+      "alibaba": {
+        "config": {}
+      },
+      "anthropic": {
+        "config": {},
+        "enabled": true
+      },
+      "azure-speech": {
+        "config": {}
+      },
+      "canvas": {
+        "config": {}
+      },
+      "clawrouter": {
+        "config": {}
+      },
+      "copilot-proxy": {
+        "config": {}
+      },
+      "deepgram": {
+        "config": {}
+      },
+      "device-pair": {
+        "config": {
+          "publicUrl": "https://openclaw.tail6c8d60.ts.net"
+        }
+      },
+      "document-extract": {
+        "config": {}
+      },
+      "elevenlabs": {
+        "config": {}
+      },
+      "fal": {
+        "config": {}
+      },
+      "file-transfer": {
+        "config": {}
+      },
+      "geolocation": {
+        "config": {}
+      },
+      "github-copilot": {
+        "config": {}
+      },
+      "google": {
+        "config": {}
+      },
+      "huggingface": {
+        "config": {}
+      },
+      "linux-node": {
+        "config": {}
+      },
+      "litellm": {
+        "config": {}
+      },
+      "lmstudio": {
+        "config": {}
+      },
+      "memory-core": {
+        "config": {}
+      },
+      "microsoft-foundry": {
+        "config": {}
+      },
+      "minimax": {
+        "config": {}
+      },
+      "nvidia": {
+        "config": {}
+      },
+      "ollama": {
+        "config": {}
+      },
+      "opencode-go": {
+        "config": {},
+        "enabled": true
+      },
+      "openrouter": {
+        "config": {}
+      },
+      "runway": {
+        "config": {}
+      },
+      "senseaudio": {
+        "config": {}
+      },
+      "sglang": {
+        "config": {}
+      },
+      "talk-voice": {
+        "config": {}
+      },
+      "together": {
+        "config": {}
+      },
+      "tts-local-cli": {
+        "config": {}
+      },
+      "vllm": {
+        "config": {}
+      },
+      "web-readability": {
+        "config": {}
+      },
+      "opencode": {
+        "enabled": true,
+        "config": {}
+      },
+      "meta": {
+        "enabled": true
+      }
+    },
+    "load": {
+      "paths": [
+        "C:\\Users\\ehven\\.openclaw\\summa-gate",
+        "C:\\Users\\ehven\\.openclaw\\tablero-runbook"
+      ]
+    }
+  },
+  "meta": {
+    "migrations": {
+      "modelPolicyAllowlist": true
+    },
+    "lastTouchedVersion": "2026.9.3"
+  },
+  "agents": {
+    "defaults": {
+      "models": {
+        "openai/gpt-5.6-sol": {
+          "params": {
+            "thinking": "xhigh"
+          }
+        },
+        "xai/auto": {
+          "alias": "Grok"
+        },
+        "kimi/k3": {},
+        "zai/glm-5.3": {},
+        "xai/grok-4.6": {
+          "alias": "Grok"
+        },
+        "openai/gpt-image-2": {},
+        "opencode/claude-opus-5": {
+          "alias": "Opus"
+        },
+        "meta/muse-spark-1.3": {
+          "params": {
+            "thinking": "max"
+          }
+        },
+        "anthropic/claude-opus-5": {
+          "params": {
+            "thinking": "xhigh"
+          }
+        },
+        "anthropic/claude-sonnet-5": {
+          "params": {
+            "thinking": "xhigh"
+          }
+        },
+        "openai/gpt-5.6-terra": {
+          "params": {
+            "thinking": "xhigh"
+          }
+        }
+      },
+      "model": {
+        "primary": "opencode-go-resp/muse-spark-1.3-contributor",
+        "fallbacks": [
+          "opencode/glm-5.3-flash",
+          "opencode-go/deepseek-v4.1-flash",
+          "opencode/muse-spark-1.3-contributor-free",
+          "opencode/deepseek-v4-flash-vision-exp",
+          "anthropic/claude-sonnet-5",
+          "zai/glm-5.3",
+          "kimi/k3",
+          "xai/grok-4.6",
+          "deepseek/deepseek-flash",
+          "openai/gpt-5.6-sol"
+        ]
+      },
+      "systemAgent": {
+        "agentId": "main"
+      },
+      "heartbeat": {
+        "agentId": "main",
+        "every": "1h"
+      },
+      "imageModel": {
+        "primary": "openai/gpt-image-2"
+      },
+      "maxConcurrent": 8,
+      "subagents": {
+        "maxConcurrent": 8,
+        "archiveAfterMinutes": 60
+      },
+      "compaction": {
+        "mode": "safeguard"
+      },
+      "contextPruning": {
+        "mode": "cache-ttl",
+        "ttl": "1h"
+      }
+    },
+    "ownership": "explicit",
+    "entries": {
+      "main": {
+        "identity": {
+          "name": "Claw",
+          "emoji": "🦞",
+          "theme": "Clara, directa, práctica y cuidadosa con tu control.",
+          "avatar": "avatars/main.png"
+        },
+        "models": {
+          "deepseek/deepseek-v4-flash": {},
+          "openai/gpt-5.6-sol": {},
+          "kimi/k3": {},
+          "zai/glm-5.3": {},
+          "xai/grok-4.6": {},
+          "deepseek/deepseek-v4-pro": {},
+          "opencode-go/deepseek-v4-pro": {}
+        },
+        "model": {
+          "primary": "opencode-go-resp/muse-spark-1.3-contributor",
+          "fallbacks": [
+            "anthropic/claude-sonnet-5",
+            "meta/muse-spark-1.3",
+            "xai/grok-4.6",
+            "zai/glm-5.3",
+            "openai/gpt-5.6-sol"
+          ]
+        },
+        "workspace": "C:\\Users\\ehven\\.openclaw\\workspace",
+        "heartbeat": {
+          "every": "0m"
+        },
+        "subagents": {
+          "allowAgents": [
+            "main",
+            "operaciones",
+            "ingenieria",
+            "implementer",
+            "verifier",
+            "reviewer",
+            "adversary",
+            "scout"
+          ]
+        }
+      },
+      "operaciones": {
+        "name": "operaciones",
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "anthropic/claude-sonnet-5",
+            "meta/muse-spark-1.3",
+            "zai/glm-5.3",
+            "kimi/k3",
+            "xai/grok-4.6",
+            "openai/gpt-5.6-terra"
+          ]
+        },
+        "workspace": "C:\\Users\\ehven\\.openclaw\\workspace-operaciones",
+        "agentDir": "C:\\Users\\ehven\\.openclaw\\agents\\operaciones\\agent",
+        "identity": {
+          "name": "operaciones",
+          "emoji": "📦",
+          "theme": "Claro y directo",
+          "avatar": "avatars/operaciones.png"
+        }
+      },
+      "ingenieria": {
+        "name": "ingenieria",
+        "model": {
+          "primary": "opencode-go-resp/muse-spark-1.3-contributor",
+          "fallbacks": [
+            "openai/gpt-5.6-sol",
+            "kimi/k3",
+            "zai/glm-5.3",
+            "meta/muse-spark-1.3",
+            "anthropic/claude-opus-5",
+            "xai/grok-4.6"
+          ]
+        },
+        "workspace": "C:\\Users\\ehven\\.openclaw\\workspace-ingenieria",
+        "agentDir": "C:\\Users\\ehven\\.openclaw\\agents\\ingenieria\\agent",
+        "identity": {
+          "name": "ingenieria",
+          "emoji": "⚙️",
+          "theme": "claro y directo",
+          "avatar": "avatars/ingenieria.png"
+        },
+        "tools": {
+          "exec": {
+            "host": "auto",
+            "node": "71a0f52874f309cbafeba63c072ea543f94fdf3e3725c2a2cdf9a5be0a39239f"
+          }
+        }
+      },
+      "implementer": {
+        "name": "implementer",
+        "workspace": "C:\\Users\\ehven\\.openclaw\\workspace-implementer",
+        "agentDir": "C:\\Users\\ehven\\.openclaw\\agents\\implementer\\agent",
+        "identity": {
+          "name": "Implementer",
+          "emoji": "🛠️",
+          "avatar": "avatars/implementer.png"
+        },
+        "model": {
+          "primary": "opencode-go-resp/muse-spark-1.3-contributor",
+          "fallbacks": [
+            "meta/muse-spark-1.3",
+            "zai/glm-5.3",
+            "xai/grok-4.6",
+            "anthropic/claude-opus-5"
+          ]
+        },
+        "tools": {
+          "exec": {
+            "host": "auto",
+            "node": "71a0f52874f309cbafeba63c072ea543f94fdf3e3725c2a2cdf9a5be0a39239f"
+          }
+        }
+      },
+      "reviewer": {
+        "name": "reviewer",
+        "workspace": "C:\\Users\\ehven\\.openclaw\\workspace-reviewer",
+        "agentDir": "C:\\Users\\ehven\\.openclaw\\agents\\reviewer\\agent",
+        "identity": {
+          "name": "Reviewer",
+          "emoji": "🔍",
+          "avatar": "avatars/reviewer.png"
+        },
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "anthropic/claude-fable-5-1",
+            "kimi/k3",
+            "openai/gpt-6-astra",
+            "meta/muse-spark-1.3",
+            "xai/grok-4.6"
+          ]
+        },
+        "tools": {
+          "exec": {
+            "host": "auto",
+            "node": "71a0f52874f309cbafeba63c072ea543f94fdf3e3725c2a2cdf9a5be0a39239f"
+          }
+        }
+      },
+      "adversary": {
+        "name": "adversary",
+        "workspace": "C:\\Users\\ehven\\.openclaw\\workspace-adversary",
+        "agentDir": "C:\\Users\\ehven\\.openclaw\\agents\\adversary\\agent",
+        "identity": {
+          "name": "Adversary",
+          "emoji": "⚔️",
+          "avatar": "avatars/adversary.png"
+        },
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "xai/grok-4.6",
+            "kimi/k3",
+            "zai/glm-5.3",
+            "meta/muse-spark-1.3",
+            "anthropic/claude-opus-5",
+            "deepseek/deepseek-flash"
+          ]
+        },
+        "tools": {
+          "exec": {
+            "host": "auto",
+            "node": "71a0f52874f309cbafeba63c072ea543f94fdf3e3725c2a2cdf9a5be0a39239f"
+          }
+        }
+      },
+      "verifier": {
+        "name": "verifier",
+        "workspace": "C:\\Users\\ehven\\.openclaw\\workspace-verifier",
+        "agentDir": "C:\\Users\\ehven\\.openclaw\\agents\\verifier\\agent",
+        "identity": {
+          "name": "Verifier",
+          "emoji": "✅",
+          "avatar": "avatars/verifier.png"
+        },
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "openai/gpt-6-astra",
+            "meta/muse-spark-1.3",
+            "kimi/k3",
+            "zai/glm-5.3",
+            "anthropic/claude-fable-5-1",
+            "deepseek/deepseek-flash"
+          ]
+        },
+        "tools": {
+          "exec": {
+            "host": "auto",
+            "node": "71a0f52874f309cbafeba63c072ea543f94fdf3e3725c2a2cdf9a5be0a39239f"
+          }
+        }
+      },
+      "scout": {
+        "name": "scout",
+        "workspace": "C:\\Users\\ehven\\.openclaw\\workspace-scout",
+        "agentDir": "C:\\Users\\ehven\\.openclaw\\agents\\scout\\agent",
+        "identity": {
+          "name": "scout",
+          "avatar": "avatars/scout.png"
+        },
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "zai/glm-5.3",
+            "meta/muse-spark-1.3",
+            "kimi/k3",
+            "xai/grok-4.6",
+            "anthropic/claude-sonnet-5",
+            "openai/gpt-5.6-sol"
+          ]
+        },
+        "tools": {
+          "exec": {
+            "host": "auto",
+            "node": "71a0f52874f309cbafeba63c072ea543f94fdf3e3725c2a2cdf9a5be0a39239f"
+          }
+        }
+      }
+    }
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "xai": {
+        "baseUrl": "https://cli-chat-proxy.grok.com/v1",
+        "api": "openai-responses",
+        "models": [
+          {
+            "id": "grok-4.6",
+            "name": "Grok 4.6",
+            "api": "openai-responses",
+            "baseUrl": "https://cli-chat-proxy.grok.com/v1",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2,
+              "output": 6,
+              "cacheRead": 0.5,
+              "cacheWrite": 0
+            },
+            "contextWindow": 500000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "grok-4.5",
+            "name": "Grok 4.5",
+            "api": "openai-responses",
+            "baseUrl": "https://cli-chat-proxy.grok.com/v1",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2,
+              "output": 6,
+              "cacheRead": 0.3,
+              "cacheWrite": 0
+            },
+            "contextWindow": 500000,
+            "maxTokens": 64000
+          }
+        ],
+        "auth": "oauth",
+        "request": {}
+      },
+      "zai": {
+        "baseUrl": "https://api.z.ai/api/coding/paas/v4",
+        "models": [],
+        "timeoutSeconds": 600
+      },
+      "llama-cpp": {
+        "baseUrl": "http://127.0.0.1:55702/v1",
+        "api": "openai-completions",
+        "timeoutSeconds": 600,
+        "localService": {
+          "command": "C:\\Users\\ehven\\.openclaw\\tools\\llama.cpp\\b10534\\win32-x64\\llama-server.exe",
+          "args": [
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "55702",
+            "--models-preset",
+            "C:\\Users\\ehven\\.openclaw\\tools\\llama.cpp\\models-f8e8d4cc-a852-423f-8d05-45b087f283e5.ini",
+            "--models-max",
+            "2",
+            "--metrics",
+            "--no-ui"
+          ],
+          "healthUrl": "http://127.0.0.1:55702/health",
+          "readyTimeoutMs": 30000,
+          "idleStopMs": 600000
+        },
+        "models": []
+      },
+      "deepseek": {
+        "models": [
+          {
+            "id": "deepseek-flash",
+            "name": "DeepSeek V4.1 Flash",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "maxTokens": 8192
+          }
+        ],
+        "baseUrl": "https://api.deepseek.com",
+        "api": "openai-completions"
+      },
+      "kimi": {
+        "models": [
+          {
+            "id": "k3",
+            "name": "Kimi K3",
+            "api": "anthropic-messages",
+            "baseUrl": "https://api.kimi.com/coding/v1",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0.3,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1048576,
+            "maxTokens": 131072,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": "low",
+              "low": "low",
+              "medium": "high",
+              "high": "high",
+              "xhigh": "max",
+              "max": "max"
+            },
+            "compat": {
+              "codeMode": "preferred"
+            }
+          }
+        ],
+        "baseUrl": "https://api.kimi.com/coding/v1",
+        "api": "anthropic-messages"
+      },
+      "opencode-go": {
+        "baseUrl": "https://opencode.ai/zen/go/v1",
+        "models": [
+          {
+            "id": "mimo-v2.5-pro",
+            "name": "MiMo V2.5 Pro",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "maxTokens": 8192
+          },
+          {
+            "id": "deepseek-v4.1-flash",
+            "name": "DeepSeek V4.1 Flash",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "maxTokens": 8192
+          }
+        ]
+      },
+      "opencode-go-resp": {
+        "baseUrl": "https://opencode.ai/zen/go/v1",
+        "api": "openai-responses",
+        "headers": {
+          "x-opencode-session": "openclaw-gateway"
+        },
+        "models": [
+          {
+            "id": "muse-spark-1.3-contributor",
+            "name": "Muse Spark 1.3 Contributor",
+            "api": "openai-responses",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1048576,
+            "maxTokens": 131072
+          }
+        ]
+      },
+      "meta": {
+        "baseUrl": "https://api.meta.ai/v1",
+        "api": "openai-responses",
+        "models": [
+          {
+            "id": "muse-spark-1.3",
+            "name": "Muse Spark 1.3",
+            "api": "openai-responses",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "contextWindow": 1048576,
+            "maxTokens": 131072
+          }
+        ]
+      }
+    }
+  },
+  "auth": {
+    "profiles": {
+      "zai:manual": {
+        "provider": "zai",
+        "mode": "api_key"
+      },
+      "deepseek:manual": {
+        "provider": "deepseek",
+        "mode": "api_key"
+      },
+      "anthropic:manual": {
+        "provider": "anthropic",
+        "mode": "token"
+      },
+      "opencode:default": {
+        "provider": "opencode",
+        "mode": "api_key"
+      },
+      "opencode-go:default": {
+        "provider": "opencode-go",
+        "mode": "api_key"
+      },
+      "opencode-go:manual": {
+        "provider": "opencode-go",
+        "mode": "api_key"
+      },
+      "opencode-go-resp:manual": {
+        "provider": "opencode-go-resp",
+        "mode": "api_key"
+      },
+      "meta:manual": {
+        "provider": "meta",
+        "mode": "api_key"
+      },
+      "kimi:manual": {
+        "provider": "kimi",
+        "mode": "api_key"
+      }
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "accounts": {
+        "operaciones": {
+          "botToken": {
+            "source": "store",
+            "provider": "default",
+            "id": "TELEGRAM_BOT_TOKEN_OPERACIONES"
+          },
+          "dmPolicy": "allowlist",
+          "allowFrom": [
+            6470689715
+          ],
+          "groupAllowFrom": [
+            "6470689715"
+          ]
+        },
+        "ingenieria": {
+          "botToken": {
+            "source": "store",
+            "provider": "default",
+            "id": "TELEGRAM_BOT_TOKEN_INGENIERIA"
+          },
+          "dmPolicy": "allowlist",
+          "allowFrom": [
+            6470689715
+          ],
+          "groupAllowFrom": [
+            "6470689715"
+          ]
+        }
+      },
+      "streaming": {
+        "mode": "progress",
+        "progress": {
+          "toolProgress": true,
+          "commandText": "status"
+        }
+      },
+      "dmPolicy": "allowlist",
+      "allowFrom": [
+        6470689715
+      ],
+      "defaultAccount": "default",
+      "groupAllowFrom": [
+        "6470689715"
+      ],
+      "ackReaction": "🤔",
+      "richMessages": true,
+      "groupPolicy": "allowlist"
+    }
+  },
+  "gateway": {
+    "mode": "local",
+    "bind": "lan",
+    "trustedProxies": [
+      "127.0.0.1"
+    ],
+    "auth": {
+      "mode": "none",
+      "token": {
+        "source": "store",
+        "provider": "default",
+        "id": "GATEWAY_AUTH_TOKEN"
+      }
+    },
+    "port": 18789,
+    "tailscale": {
+      "mode": "off"
+    },
+    "controlUi": {
+      "allowedOrigins": [
+        "http://localhost:18789",
+        "http://127.0.0.1:18789"
+      ]
+    },
+    "nodes": {
+      "browser": {
+        "mode": "manual"
+      }
+    }
+  },
+  "commands": {
+    "ownerAllowFrom": [
+      "telegram:6470689715"
+    ],
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true
+  },
+  "browser": {
+    "profiles": {
+      "claw": {
+        "cdpPort": 18801
+      },
+      "pc": {
+        "driver": "openclaw",
+        "cdpPort": 18802,
+        "executablePath": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+      }
+    },
+    "allowSystemProfileImport": false
+  },
+  "tools": {
+    "sandbox": {
+      "tools": {
+        "alsoAllow": [
+          "computer"
+        ]
+      }
+    },
+    "alsoAllow": [
+      "computer"
+    ],
+    "exec": {
+      "mode": "full",
+      "safeBins": [
+        "git",
+        "ls",
+        "cat",
+        "rg",
+        "node",
+        "npm",
+        "python3"
+      ],
+      "safeBinProfiles": {
+        "cat": {},
+        "git": {},
+        "ls": {},
+        "npm": {},
+        "rg": {},
+        "node": {},
+        "python3": {}
+      },
+      "safeBinTrustedDirs": [
+        "C:\\Users\\ehven\\AppData\\Local\\OpenClaw\\deps\\portable-git\\usr\\bin",
+        "C:\\Users\\ehven\\AppData\\Local\\OpenClaw\\deps\\portable-git\\mingw64\\bin",
+        "C:\\Program Files\\nodejs"
+      ]
+    },
+    "profile": "coding"
+  },
+  "memory": {
+    "search": {
+      "local": {
+        "modelPath": "hf:ggml-org/embeddinggemma-300m-qat-q8_0-GGUF/embeddinggemma-300m-qat-Q8_0.gguf"
+      },
+      "provider": "local",
+      "fallback": "none"
+    }
+  },
+  "wizard": {
+    "lastRunAt": "2026-09-10T17:12:04.665Z",
+    "lastRunVersion": "2026.9.3",
+    "lastRunCommand": "doctor",
+    "lastRunMode": "local",
+    "securityAcknowledgedAt": "2026-09-11T07:40:29.726Z"
+  },
+  "bindings": [
+    {
+      "type": "route",
+      "agentId": "operaciones",
+      "match": {
+        "channel": "telegram",
+        "accountId": "operaciones"
+      }
+    },
+    {
+      "agentId": "main",
+      "match": {
+        "channel": "telegram",
+        "accountId": "*"
+      }
+    },
+    {
+      "type": "route",
+      "agentId": "ingenieria",
+      "match": {
+        "channel": "telegram",
+        "accountId": "ingenieria"
+      }
+    }
+  ],
+  "talk": {
+    "agentId": "main"
+  },
+  "mcp": {
+    "servers": {
+      "context7": {
+        "url": "https://mcp.context7.com/mcp",
+        "transport": "streamable-http"
+      }
+    }
+  },
+  "tts": {
+    "auto": "tagged",
+    "provider": "microsoft"
+  },
+  "skills": {
+    "entries": {
+      "harness-loop": {
+        "enabled": false
+      },
+      "harness-setup": {
+        "enabled": false
+      },
+      "failure-codifier": {
+        "enabled": false
+      },
+      "cc-update-review": {
+        "enabled": false
+      },
+      "japanese-writing-drafter": {
+        "enabled": false
+      },
+      "cursor-ask": {
+        "enabled": false
+      },
+      "cursor-do": {
+        "enabled": false
+      },
+      "cursor-review": {
+        "enabled": false
+      },
+      "cursor-setup": {
+        "enabled": false
+      },
+      "agent-browser": {
+        "enabled": false
+      },
+      "1password": {
+        "enabled": false
+      },
+      "blogwatcher": {
+        "enabled": false
+      },
+      "blucli": {
+        "enabled": false
+      },
+      "camsnap": {
+        "enabled": false
+      },
+      "coding-agent": {
+        "enabled": false
+      },
+      "eightctl": {
+        "enabled": false
+      },
+      "gemini": {
+        "enabled": false
+      },
+      "gh-issues": {
+        "enabled": false
+      },
+      "gifgrep": {
+        "enabled": false
+      },
+      "github": {
+        "enabled": false
+      },
+      "gog": {
+        "enabled": false
+      },
+      "goplaces": {
+        "enabled": false
+      },
+      "himalaya": {
+        "enabled": false
+      },
+      "mcporter": {
+        "enabled": false
+      },
+      "nano-pdf": {
+        "enabled": false
+      },
+      "obsidian": {
+        "enabled": false
+      },
+      "openai-whisper": {
+        "enabled": false
+      },
+      "openai-whisper-api": {
+        "enabled": false
+      },
+      "openhue": {
+        "enabled": false
+      },
+      "oracle": {
+        "enabled": false
+      },
+      "ordercli": {
+        "enabled": false
+      },
+      "sag": {
+        "enabled": false
+      },
+      "sherpa-onnx-tts": {
+        "enabled": false
+      },
+      "songsee": {
+        "enabled": false
+      },
+      "sonoscli": {
+        "enabled": false
+      },
+      "spotify-player": {
+        "enabled": false
+      },
+      "summarize": {
+        "enabled": false
+      },
+      "trello": {
+        "enabled": false
+      },
+      "video-frames": {
+        "enabled": false
+      },
+      "xurl": {
+        "enabled": false
+      }
+    }
+  },
+  "messages": {
+    "ackReactionScope": "direct"
+  },
+  "logging": {
+    "audit": {
+      "executionIdentity": true
+    }
+  },
+  "ui": {
+    "prefs": {
+      "sidebarEntries": [
+        "route:dashboards",
+        "route:cron",
+        "route:plugins",
+        "route:usage"
+      ]
+    }
+  },
+  "telemetry": {
+    "enabled": true,
+    "consentedAt": "2026-09-11T07:40:40.215Z"
+  },
+  "session": {
+    "reset": {
+      "mode": "daily",
+      "atHour": 11
+    }
+  }
+}
