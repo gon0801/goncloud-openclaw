@@ -138,9 +138,19 @@ send_event() {
     log "sent: $text"
     # Carril P (9.6): todo evento enviado queda tambien en $STATE_DIR/eventos.jsonl
     # (t epoch + texto tal cual, escapado por python): es lo que un vigia puede
-    # leer sin pasar por el gateway.
-    printf '{"t":%s,"evento":%s}\n' "$(date +%s)" \
-      "$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$text")" >>"$STATE_DIR/eventos.jsonl"
+    # leer sin pasar por el gateway. BRIEF-r2 QE: serializacion y append se
+    # comprueban por separado — jamas queda una linea vacia o a medias — y un
+    # fallo del journal se loguea pero NO toca el estado de notificacion del
+    # llamador (el evento ya viajo).
+    local jline
+    jline=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$text" 2>/dev/null) || jline=""
+    if [[ -n $jline ]]; then
+      if ! printf '{"t":%s,"evento":%s}\n' "$(date +%s)" "$jline" >>"$STATE_DIR/eventos.jsonl" 2>/dev/null; then
+        log "journal append failed (event delivered but not recorded): $text"
+      fi
+    else
+      log "journal serialize failed (event delivered but not recorded): $text"
+    fi
     return 0
   else
     log "SEND FAILED (will retry next tick): $text"
@@ -159,6 +169,28 @@ responder_contesta() {
   [[ -x $CORRIDA_BIN ]] || return 1
   perl -e 'alarm shift; exec(@ARGV) or exit 127' 60 "$CORRIDA_BIN" responder "$session" >>"$LOG_FILE" 2>&1 || rc=1
   return "$rc"
+}
+
+# BRIEF-r2 QA (Major): un rc 0 del responder solo prueba que SUS send-keys
+# salieron; no que el CLI consumiera la tecla. Se re-sondea la pantalla y el
+# dialogo solo cuenta como atendido cuando su prompt DESAPARECIO (visto ausente
+# en dos capturas seguidas, por si el TUI estaba a mitad de repintado). Si el
+# prompt sigue, devuelve 1 y la escalada sale como hoy: suprimirla sin prueba
+# dejaria un dialogo sin resolver mudo hasta el recordatorio (900 s).
+dialog_gone() { # $1 session; 0 = the dialog prompt is gone from the screen
+  local i screen2
+  for i in 1 2 3 4 5 6 7 8; do
+    screen2=$("$TMUX_BIN" capture-pane -p -t "$1" 2>/dev/null) || return 1
+    if ! printf '%s\n' "$screen2" | approval_tail | grep -Eqi -- "$APPROVAL_RE"; then
+      sleep 0.2
+      screen2=$("$TMUX_BIN" capture-pane -p -t "$1" 2>/dev/null) || return 1
+      if ! printf '%s\n' "$screen2" | approval_tail | grep -Eqi -- "$APPROVAL_RE"; then
+        return 0
+      fi
+    fi
+    sleep 0.2
+  done
+  return 1
 }
 
 state_file() {
@@ -289,10 +321,10 @@ tick() {
         due=1
       fi
       # Carril P (9.6): ofrecerle el dialogo a la politica ANTES de despertar a
-      # nadie. Si contesta (rc 0), el dialogo quedo atendido: no sale evento y el
-      # prompt queda marcado atendido (approval_at=now, igual que tras un envio).
-      # Si no, el evento sale como hoy.
-      if [[ $due == 1 ]] && responder_contesta "$session"; then
+      # nadie. Si contesta (rc 0) y el prompt DESAPARECIO (BRIEF-r2 QA), el
+      # dialogo quedo atendido: no sale evento y el prompt queda marcado atendido
+      # (approval_at=now, igual que tras un envio). Si no, el evento sale como hoy.
+      if [[ $due == 1 ]] && responder_contesta "$session" && dialog_gone "$session"; then
         due=0
         approval_at=$now
         log "dialog answered by policy: $session"

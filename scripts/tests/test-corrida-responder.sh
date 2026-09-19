@@ -403,7 +403,7 @@ echo "ok (9): la pantalla que cambia entre lectura y envío no recibe ninguna te
 
 # (10) Tres diálogos en 10 min con cambio de modo conocido => cambia de modo en
 # vez de seguir contestando; con los diálogos viejos (>10 min) contesta normal.
-abrir c10 "$(seses r10a glm r10b glm)" "$(pres 'echo hola' Aprobado)"
+abrir c10 "$(seses r10a glm r10b glm r10c glm r10d glm)" "$(pres 'echo hola' Aprobado 'git push origin main' Aprobado)"
 encender c10
 now=$(date +%s)
 { printf '{"ts":%d,"sesion":"r10a","clase":"comando"}\n' "$((now - 30))"
@@ -423,6 +423,44 @@ tecla_fue r10b y || fail "(10b) fuera de la ventana de 10 min contesta con la te
 ! grep -q '^TMUX send-keys -t r10b -l' "$TMUX_LOG" || fail "(10b) sin ráfaga no hay cambio de modo"
 echo "ok (10): tres diálogos en 10 min => cambio de modo (/mode yolo + Enter); viejos => tecla normal"
 
+# (10c) BRIEF-r2 QB: la ráfaga nunca pisa a la política: un TERCER diálogo de
+# lista dura escala (anotado como escala), no recibe cambio de modo.
+now=$(date +%s)
+{ printf '{"ts":%d,"sesion":"r10c","clase":"comando"}\n' "$((now - 40))"
+  printf '{"ts":%d,"sesion":"r10c","clase":"comando"}\n' "$((now - 30))"; } >>"$CORRIDA_STATE/c10/decisiones.jsonl"
+pan r10c "$FIXD/permiso-push.txt"; espera r10c 'Allow once'
+: >"$LLAMADAS"
+corre r10c; [ $? -eq 1 ] || fail "(10c) el tercer diálogo de lista dura no se contesta, ni con tecla ni con modo"
+! grep -q '^TMUX send-keys -t r10c ' "$TMUX_LOG" || fail "(10c) ninguna tecla (ni la de modo) ante lista dura"
+D="$(udec c10)"
+[ "$(jcampo decision "$D")" = "escala" ] || fail "(10c) debe anotarse como escala de política, no como modo: $D"
+grep -qF 'NECESITO TU RESPUESTA' "$LLAMADAS" || fail "(10c) la lista dura escala aunque sea el tercer diálogo"
+echo "ok (10c): la ráfaga no pisa a la política: tercer diálogo de lista dura => escala, sin tecla de modo"
+# (10d) BRIEF-r2 QC: si el envío del cambio de modo falla, se registra el fallo
+# y se escala; jamás cuenta como enviado.
+STUB_TM2="$T/bin/tmux-modo-falla"
+cat >"$STUB_TM2" <<STUB
+#!/bin/sh
+printf '%s\n' "TMUX \$*" >> "$TMUX_LOG"
+case "\$1" in
+  capture-pane) cat "$P/eco-glm.txt"; exit 0;;
+  display-message) printf '%s\n' "$WORK"; exit 0;;
+  send-keys) exit 1;;
+esac
+exit 0
+STUB
+chmod +x "$STUB_TM2"
+{ printf '{"ts":%d,"sesion":"r10d","clase":"comando"}\n' "$((now - 40))"
+  printf '{"ts":%d,"sesion":"r10d","clase":"comando"}\n' "$((now - 35))"; } >>"$CORRIDA_STATE/c10/decisiones.jsonl"
+: >"$LLAMADAS"
+TMUX_BIN="$STUB_TM2" bash "$CORR" responder r10d >/dev/null 2>&1; [ $? -eq 1 ] || fail "(10d) el fallo del envío de modo no es éxito"
+D="$(udec c10)"
+[ "$(jcampo clase "$D")" = "modo" ] || fail "(10d) clase modo (con fallo): $D"
+[ "$(jcampo decision "$D")" = "escala" ] || fail "(10d) un cambio de modo que falló jamás se anota como modo exitoso: $D"
+case "$(jcampo motivo "$D")" in *"cambio de modo"*) ;; *) fail "(10d) el motivo debe nombrar el fallo del envío: $D";; esac
+grep -qF 'NECESITO TU RESPUESTA' "$LLAMADAS" || fail "(10d) el fallo del envío del modo escala"
+echo "ok (10d): el envío de modo que falla se anota como fallo y escala, no como enviado"
+
 # (11) Tecla sin medir (unknown en la tabla): esa vía no se usa, escala.
 abrir c11 "$(seses r11 deepseek)" "$(pres 'echo hola' Aprobado)"
 encender c11
@@ -432,5 +470,21 @@ corre r11; [ $? -eq 1 ] || fail "(11) sin tecla medida no se contesta"
 [ "$(nteclas r11)" -eq 0 ] || fail "(11) sin tecla medida no hay tecla"
 grep -qF 'NECESITO TU RESPUESTA' "$LLAMADAS" || fail "(11) sin tecla medida => escala: $(cat "$LLAMADAS")"
 echo "ok (11): un CLI sin teclas medidas en la tabla escala en vez de inventar teclas"
+
+# (12) BRIEF-r2 QD: el comprobador de lista dura distingue tres salidas: 0 = cae
+# en la lista dura, 1 = registro sintético VÁLIDO y no cae, 2 = el validador
+# falló y no se pudo comprobar (que el llamador trata como escala, jamás como
+# aceptación). Con el validador caído, "limpio" no puede vestirse de "no casa".
+qout="$(bash -c '
+  . scripts/mac/corrida/lib.sh
+  . scripts/mac/corrida/responder.sh
+  resp_lista_dura "git push origin main"; a=$?
+  resp_lista_dura "echo limpio"; b=$?
+  validar_registro() { printf "ROTO:sin vigia\n"; return 1; }
+  resp_lista_dura "echo limpio"; c=$?
+  echo "$a $b $c"
+' 2>/dev/null)"
+[ "$qout" = "0 1 2" ] || fail "(12) contrato de resp_lista_dura: 0=dura 1=limpio 2=sin comprobar; salió: $qout"
+echo "ok (12): resp_lista_dura distingue lista dura (0), limpio (1) y fallo del validador (2)"
 
 echo "TODO VERDE: corrida-responder"

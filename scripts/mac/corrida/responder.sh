@@ -100,18 +100,31 @@ for p in (d.get("preaprobaciones") or []):
 else: print("NINGUNA")' 2>/dev/null
 }
 
-# Lista dura sin duplicarla: un registro sintético cuya única preaprobación es
-# ESTE comando con decisión Aprobado; si el validador de lib.sh lo tacha de lista
-# dura aprobada, el comando es inaprobable por cualquier tabla.
-resp_lista_dura() { # $1 comando; 0 = cae en la lista dura
-  local sint com
-  com="$(CMD="$1" python3 -c 'import json,os; print(json.dumps(os.environ["CMD"]))' 2>/dev/null)" || return 2
+# Lista dura sin duplicarla: un registro sintético VÁLIDO por derecho propio
+# (BRIEF-r2 QD) cuya única preaprobación es ESTE comando con decisión Aprobado.
+# Tres salidas: 0 = el validador lo tacha de lista dura aprobada (inaprobable
+# por cualquier tabla); 1 = el registro es válido y el comando no cae (limpio);
+# 2 = el validador falló por otra razón y NO SE PUDO COMPROBAR — el llamador lo
+# trata como escala, jamás como aceptación.
+resp_lista_dura() { # $1 comando; 0 = lista dura, 1 = limpio, 2 = sin comprobar
+  local sint salida r
   sint="$(mktemp)" || return 2
-  printf '{"preaprobaciones":[{"patron":%s,"decision":"Aprobado"}]}' "$com" >"$sint"
-  validar_registro "$sint" 2>/dev/null | grep -q 'lista dura aprobada'
-  local r=$?
+  CMD="$1" SAL="$sint" python3 -c '
+import json,os
+d={"schema":"corrida.v1","id":"lista-dura","runbook":"docs/runbooks/autopilot-fase9.md",
+   "vigia":"claw","simulacro":True,"canal":{"cron":"sonda","destino":"sonda"},
+   "cli_modos":"sonda","cron_vigia_id":"sonda","inicio":"2026-09-19T00:00:00+0000",
+   "timebox_horas":6,"sesiones":[],
+   "preaprobaciones":[{"patron":os.environ["CMD"],"decision":"Aprobado"}],
+   "estado":"abierta"}
+open(os.environ["SAL"],"w").write(json.dumps(d,indent=1)+chr(10))' 2>/dev/null \
+    || { rm -f "$sint"; return 2; }
+  salida="$(validar_registro "$sint" 2>/dev/null)"
+  r=$?
   rm -f "$sint"
-  return "$r"
+  [ "$r" -eq 0 ] && return 1
+  case "$salida" in *"lista dura aprobada"*) return 0;; esac
+  return 2
 }
 
 # Las teclas y el cambio de modo vienen de la tabla (dato): solo token por token
@@ -292,29 +305,6 @@ EOF
   local encendido=0
   [ -e "$CORRIDA_STATE/$id/responder.on" ] && encendido=1
 
-  # Tres diálogos en 10 min en un CLI con cambio de modo conocido: se cambia de
-  # modo en vez de seguir contestando de uno en uno (contando las propias
-  # anotaciones de esta sesión en decisiones.jsonl).
-  local recientes
-  recientes="$(resp_recientes "$id" "$ses" "$RESP_VENTANA_SEG")"
-  if [ "${recientes:-0}" -ge 2 ] 2>/dev/null && resp_cambio_ok "$cambio"; then
-    if [ "$encendido" -eq 0 ]; then
-      resp_anota "$id" modo modo "" "$cambio + Enter" "apagado: no se mandó" 0 "$ses" "$cli"
-      echo "responder: $ses lleva tres diálogos en 10 min; apagado, no se cambió de modo" >&2
-      return 1
-    fi
-    if ! resp_relee "$ses" "$cksum1"; then
-      resp_anota "$id" pantalla nada "" "$cambio + Enter" "la pantalla cambió entre lectura y envío" 0 "$ses" "$cli"
-      echo "responder: la pantalla de $ses cambió antes del cambio de modo; no se mandó nada" >&2
-      return 1
-    fi
-    "$TMUX_BIN" send-keys -t "$ses" -l "$cambio" 2>/dev/null
-    "$TMUX_BIN" send-keys -t "$ses" Enter 2>/dev/null
-    resp_anota "$id" modo modo "" "$cambio + Enter" "" 1 "$ses" "$cli"
-    echo "responder: $ses cambió de modo ($cambio) tras tres diálogos en 10 min" >&2
-    return 0
-  fi
-
   # Clasificación del diálogo y decisión por política.
   local clase comando="" decision teclas="" ref="" esca_motivo=""
   if resp_es_confianza "$cola1"; then
@@ -345,8 +335,13 @@ EOF
     clase=comando
     comando="$(resp_comando "$cola1")"
     ref="$comando"
-    if resp_lista_dura "$comando"; then
+    # 0 = lista dura, 2 = no se pudo comprobar (fail-closed): ambas escalan.
+    local lh=0
+    resp_lista_dura "$comando" || lh=$?
+    if [ "$lh" -eq 0 ]; then
       decision=escala; esca_motivo="lista dura: ninguna tabla lo aprueba"
+    elif [ "$lh" -eq 2 ]; then
+      decision=escala; esca_motivo="no se pudo comprobar la lista dura"
     else
       local fila_pre
       fila_pre="$(resp_fila_de "$reg" "$comando")"
@@ -372,6 +367,40 @@ EOF
     resp_anota "$id" "$clase" escala "$comando" "" "$esca_motivo" "$envio" "$ses" "$cli"
     echo "responder: $ses escala ($esca_motivo)" >&2
     return 1
+  fi
+
+  # Tres diálogos en 10 min en un CLI con cambio de modo conocido — y que la
+  # política SÍ contestaría (BRIEF-r2 QB): la ráfaga no pisa a la política, un
+  # tercer diálogo de lista dura, sin fila o con teclas sin medir escala igual.
+  # En vez de seguir contestando de uno en uno, se cambia de modo (contando las
+  # propias anotaciones de esta sesión en decisiones.jsonl).
+  local recientes
+  recientes="$(resp_recientes "$id" "$ses" "$RESP_VENTANA_SEG")"
+  if [ "${recientes:-0}" -ge 2 ] 2>/dev/null && resp_cambio_ok "$cambio"; then
+    if [ "$encendido" -eq 0 ]; then
+      resp_anota "$id" modo modo "" "$cambio + Enter" "apagado: no se mandó" 0 "$ses" "$cli"
+      echo "responder: $ses lleva tres diálogos en 10 min; apagado, no se cambió de modo" >&2
+      return 1
+    fi
+    if ! resp_relee "$ses" "$cksum1"; then
+      resp_anota "$id" pantalla nada "" "$cambio + Enter" "la pantalla cambió entre lectura y envío" 0 "$ses" "$cli"
+      echo "responder: la pantalla de $ses cambió antes del cambio de modo; no se mandó nada" >&2
+      return 1
+    fi
+    # BRIEF-r2 QC: un send-keys que falla no es un cambio de modo: se comprueban
+    # ambos rc, se anota el fallo y se escala (el diálogo sigue sin atender).
+    local rcm1=0 rcm2=0 envio_m=0
+    "$TMUX_BIN" send-keys -t "$ses" -l "$cambio" 2>/dev/null || rcm1=1
+    "$TMUX_BIN" send-keys -t "$ses" Enter 2>/dev/null || rcm2=1
+    if [ "$rcm1" -ne 0 ] || [ "$rcm2" -ne 0 ]; then
+      resp_escala "$id" "$nses" "$ses" "$ref" && envio_m=1
+      resp_anota "$id" modo escala "$comando" "$cambio + Enter" "falló el envío del cambio de modo" "$envio_m" "$ses" "$cli"
+      echo "responder: no se pudo mandar el cambio de modo a $ses; se escala" >&2
+      return 1
+    fi
+    resp_anota "$id" modo modo "" "$cambio + Enter" "" 1 "$ses" "$cli"
+    echo "responder: $ses cambió de modo ($cambio) tras tres diálogos en 10 min" >&2
+    return 0
   fi
 
   if [ "$encendido" -eq 0 ]; then

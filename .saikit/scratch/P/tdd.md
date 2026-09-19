@@ -114,3 +114,49 @@ PA: `run_once` fija `CORRIDA_BIN` a una ruta inexistente por defecto; caso
 como hoy. PC: línea de `CORRIDA_BIN` en el bloque Env del header del
 vigilante. PD (python3 ausente ⇒ eventos.jsonl malformado) queda anotado, sin
 acción, como pide el encargo.
+
+## 9.6 · BRIEF-r2 — rojos (QA Major y QB), pegados antes de sus correcciones
+
+QA (vigilante): el stub de política devuelve 0 pero NO consume la tecla (el
+prompt sigue en pantalla) — hoy el vigilante suprime la escalada:
+
+```
+FAIL: (2j-QA) la politica devolvio 0 pero el prompt SIGUE: la escalada debe salir en el mismo ciclo; hubo 0
+```
+
+QB (responder): tercer diálogo de lista dura en 10 min — la ráfaga corre antes
+de la política y manda el cambio de modo:
+
+```
+FAIL: (10c) el tercer diálogo de lista dura no se contesta, ni con tecla ni con modo
+```
+
+QE (vigilante): journal como directorio (todo append falla) — hoy el fallo pasa
+en silencio y la notificación sigue su curso sin rastro:
+
+```
+FAIL: (2m) el fallo del journal debe quedar dicho en el log
+```
+
+QC (responder): el envío del cambio de modo falla (stub send-keys rc 1) y la
+ráfaga igual devuelve éxito:
+
+```
+FAIL: (10d) el fallo del envío de modo no es éxito
+```
+
+QD (responder): con el validador caído, "limpio" se viste de "no casa" (el
+registro sintético era SIEMPRE inválido, rc 1 por cualquier motivo):
+
+```
+FAIL: (12) contrato de resp_lista_dura: 0=dura 1=limpio 2=sin comprobar; salió: 0 1 1
+```
+
+Correcciones aplicadas: (2j-QA) dialog_gone re-sondea la pantalla (ausente en
+dos capturas seguidas) antes de suprimir la escalada; (10c) la ráfaga va
+DESPUÉS de la política; (10d) los send-keys del modo se comprueban y su fallo
+escala; (12) resp_lista_dura con registro sintético válido y contrato 0/1/2 (el
+llamador trata el 2 como escala). Verde final: las cinco baterías en TODO VERDE
+con bash y /bin/bash 3.2; numstat del vigilante 64/0 y de su batería 145/0;
+los dos mutantes del DoD siguen ROJO (96-mutantes actualizado a la nueva forma
+de la llamada a resp_lista_dura).
