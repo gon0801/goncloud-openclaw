@@ -13,14 +13,14 @@
   "lead": {
     "agente": "cursor-cloud",
     "inicio": "2026-09-19T03:59:08Z",
-    "actualizado": "2026-09-19T05:20:00Z"
+    "actualizado": "2026-09-19T05:55:00Z"
   },
   "atencion_requerida": {
     "necesaria": false,
     "motivo": null,
     "desde": null
   },
-  "siguiente_paso": "Falta la prueba de usuario (12.5). El tablero de 12.0-12.4 ya esta en main. No se cierra en verde sin FUNCIONA.",
+  "siguiente_paso": "Prueba usuario 12.5 FUNCIONA en docs/evidence/usuario-fase12-2026-09-18.md. PR #93 abierto. Sin merge.",
   "carriles": [
     {
       "id": "C",
@@ -104,9 +104,7 @@
       "approve_lead": null,
       "ci": "verde",
       "coderabbit": "unknown",
-      "residuales": [
-        "12.5 abierto: no hay docs/evidence/usuario-fase12-*.md con linea FUNCIONA"
-      ],
+      "residuales": [],
       "detenido_por": null,
       "ultimo_evento": {
         "at": "2026-09-19T05:08:01Z",
@@ -203,12 +201,12 @@
     {
       "id": "Q5",
       "prs": [],
-      "estado": "pendiente",
+      "estado": "verificado",
       "ventana": null,
       "merge_commits": [],
-      "verificado": null,
+      "verificado": "ok",
       "detenido_por": null,
-      "avance": 0
+      "avance": 100
     }
   ],
   "eventos": [
@@ -246,6 +244,12 @@
       "at": "2026-09-19T05:20:00Z",
       "carril": null,
       "que": "12.5 sigue abierto: no hay docs/evidence/usuario-fase12-*.md con linea FUNCIONA; Plans.md queda cc:TODO",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-19T05:55:00Z",
+      "carril": null,
+      "que": "12.5 FUNCIONA en docs/evidence/usuario-fase12-2026-09-18.md; Q5 verificado; Plans.md cc:完了",
       "situacion": null
     }
   ],
