@@ -24,15 +24,19 @@ set -u
 cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
 
-A=agents/implementer/agent/workshop-skills/saikit-cierre-pr/SKILL.md
-B=agents/ingenieria/agent/workshop-skills/saikit-cierre-pr/SKILL.md
+# Una skill es la CARPETA, no un archivo suelto. Medido el 2026-09-19: un agente
+# repartio saikit-cierre-pr en SKILL.md + MERGE-POR-ORDEN.md desde el gateway y
+# solo en SU copia, asi que las dos dejaron de ser iguales. La igualdad que este
+# candado exige es la de la skill entera, archivo por archivo.
+A=agents/implementer/agent/workshop-skills/saikit-cierre-pr
+B=agents/ingenieria/agent/workshop-skills/saikit-cierre-pr
 
 for f in "$A" "$B"; do
-  [ -r "$f" ] || fail "no encuentro la skill: $f"
+  [ -d "$f" ] || fail "no encuentro la skill: $f"
 done
 
-# (1) Las dos copias son la misma.
-cmp -s "$A" "$B" || fail "las dos copias de saikit-cierre-pr difieren: $A vs $B"
+# (1) Las dos copias son la misma, con los mismos archivos.
+diff -r "$A" "$B" >/dev/null 2>&1 || fail "las dos copias de saikit-cierre-pr difieren: $A vs $B"
 echo "ok (1): las dos copias de saikit-cierre-pr son idénticas"
 
 # Sección bajo prueba: los pasos numerados del flujo de merge, del 1 hasta las
@@ -41,7 +45,7 @@ echo "ok (1): las dos copias de saikit-cierre-pr son idénticas"
 # no como comandos que alguien copie. Lo de abajo de las precondiciones es
 # documentación de la tolerancia léxica del guard, por la misma razón.
 seccion() {
-  awk '/^1\. Merge order for stacked PRs/{f=1} /^Precondiciones \(Fase 6, 6\.5b\)/{f=0} f' "$1"
+  cat "$1"/*.md 2>/dev/null | awk '/^1\. Merge order for stacked PRs/{f=1} /^Precondiciones \(Fase 6, 6\.5b\)/{f=0} f'
 }
 
 # (2) La mutación recibe los DOS valores, y ninguno queda sin origen.
