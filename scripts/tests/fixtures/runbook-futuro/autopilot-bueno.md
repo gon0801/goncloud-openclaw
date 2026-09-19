@@ -15,7 +15,8 @@ validado por `corrida.sh`.
 
 | Clase | Para qué | Candado |
 |---|---|---|
-| `gh` | `gh pr checks` | permitido |
+| gh | leer PRs y CI | permitido |
+| `ssh` | `ssh despliegue` | negado |
 | red externa | bajar un tarball | negado |
 
 ## Lanzamiento

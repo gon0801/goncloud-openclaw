@@ -64,3 +64,22 @@ intacto y el malo de encabezados-vacíos en ROJO. DB/DC/DD verificados contra
 el código (`corrida.v1:35` dice "lo no casado escala"; `corrida.sh latido` ⇒
 `subcomando desconocido`, la validación la hacen `preflight`/`cerrar` por
 `corrida_mensaje`; `command -v capture-pane` ⇒ rc 1).
+
+## Ronda 2 — rojos del pase (candado r1 vs 4 repros)
+
+Contra el candado r1, con `autopilot-fase99.md` temporal:
+
+```
+RA => FAIL: (2d) docs/runbooks/autopilot-fase99.md: ... (falso negativo: la fila minima valida era rechazada)
+RB => TODO VERDE (falso positivo: la frase-mencion pasaba)
+RC => TODO VERDE (bug: la frase negativa satisfacia el lanzamiento)
+RD => TODO VERDE (bug: palabras sueltas declaraban canal y cadencia)
+```
+
+Candado r2: RA pasa (fila minima en el bueno, `CLA=1`); RB/RC/RD dan FAIL
+(2d). Matriz de aislamiento (Hseg/SEG/CLA/LAN/MANO): bueno 11110 PASA;
+sin-seguimiento 00110 ROJO; sin-clases 11010 ROJO; new-session 11111 ROJO;
+encabezados-vacios 10100 ROJO; lanzar-negado 11100 ROJO; seguimiento-vago
+10110 ROJO. Nota de harness: backticks con comandos reales en la linea de
+`bash` se evalúan antes de Bash — los repros se generaron con script Python
+a archivo (`/tmp/r2-repro.py`), nunca con sed inline.

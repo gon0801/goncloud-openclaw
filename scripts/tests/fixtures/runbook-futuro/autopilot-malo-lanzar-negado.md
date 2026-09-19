@@ -1,4 +1,4 @@
-# Autopilot de la Fase 99 — sin clases (fixture malo)
+# Autopilot de la Fase 99 — lanzamiento negado (fixture malo)
 
 David no está y no se le pregunta nada. Hereda el loop (`docs/runbooks/loop-autopilot.md`).
 
@@ -12,14 +12,8 @@ mensaje cumple `seguimiento.v1`.
 
 | Clase | Para qué | Candado |
 |---|---|---|
-| gh | permiso para gh remoto | permitido |
+| gh | leer PRs y CI | permitido |
 
 ## Lanzamiento
 
-Las sesiones se lanzan con `corrida.sh lanzar-sesion`, que marca antes de
-mandar. La tabla trae una fila cuya celda de comando es una frase, no un
-comando: esa es la semilla de la mutación.
-
-```
-gh pr checks 123
-```
+Nunca llames corrida.sh lanzar-sesion; usa el lanzador alternativo.
