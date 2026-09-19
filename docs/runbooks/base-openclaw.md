@@ -130,11 +130,16 @@ git worktree add /Users/dn/dev/wt-f<N>-lead --detach origin/main
 cd /Users/dn/dev/wt-f<N>-lead
 bash scripts/arranque-de-fase.sh <N>
 bash scripts/runbook.sh <N>
+bash scripts/tests/test-skill-autopilot-runbook.sh
 git cat-file -e origin/main:docs/runbooks/loop-autopilot.md 2>/dev/null; echo loop=$?
 git show origin/main:.saikit/autopilot.json
 test -r /Users/dn/dev/summonaikit-claude/tools/MANIFEST.sha256; echo manifiesto=$?
 [ -n "${TMUX_PANE:-}" ] && /opt/homebrew/bin/tmux display-message -p -t "$TMUX_PANE" '#S #{pane_current_path}'
 ```
+
+**El runbook y sus filas del plan tienen que estar en `origin/main` ANTES de arrancar.** `arranque-de-fase.sh` lee `REF=origin/main` por default y el paso 0.0 crea el worktree del lead desde ahí: con el runbook todavía en una rama, las cinco comprobaciones salen `ROJO` y el lead no tiene ni el documento que ejecuta ni las filas cuya DoD obedece. A diferencia de Orbit, aquí **el lead puede mergearlo él mismo**: su cwd ya es un worktree de este repo. Por eso toda fase abre su cola con un **Q0** — el PR de plan y runbook — y el lead se lanza con su worktree parado en **la rama de ese PR**, no en `main`; después de mergear Q0 en ventana segura hace `git fetch origin && git checkout --detach origin/main` y sigue. Si Q0 ya está mergeado cuando claw lanza, el worktree nace detached en `origin/main` y el lead salta a Q1.
+
+**La copia de la Mac del skill se comprueba en el 0.0, no al final**: `bash scripts/tests/test-skill-autopilot-runbook.sh`. Una copia derivada bloquea **todo commit del repo** por pre-commit, así que descubrirla en la última compuerta significa que los carriles trabajaron la noche entera contra un candado que ya estaba rojo. Se arregla copiando la canónica del repo sobre la de la Mac (esa dirección, nunca la inversa) y se repite la prueba.
 
 **Detienen la fase**: kit ausente; `.saikit/autopilot.json` ausente en `origin/main`; el lead fuera de tmux (`ATORADO lead fuera de tmux`) o con otro cwd (`ATORADO lead lanzado fuera de wt-f<N>-lead`: no se corrige con `cd` ni con `rename-session`; claw relanza). **Un runbook se localiza con `bash scripts/runbook.sh <N>`, nunca con una ruta fija ni con un enlace** (medido 2026-09-18, Fase 9: a los implementadores se les dio el enlace de GitHub, el repo es privado, y la ruta de los documentos era la de otra máquina). En el gateway Windows hay bash pero no en el PATH: `"C:\Program Files\Git\bin\bash.exe" scripts/runbook.sh <N>`.
 

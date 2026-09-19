@@ -27,11 +27,13 @@ Preguntarle algo a David antes del cierre, salvo la única fila que lo permite (
 
 ## Carriles
 
-**Rama base de los cuatro: `origin/main` fresco.** `C` va primero y solo; `A`, `B` y `D` arrancan **después** de que `C` mergee, porque los tres compilan contra los archivos que `C` parte y los tipos que agrega.
+**Antes de nada: Q0.** El lead se lanza con su worktree parado en **la rama de este PR**, no en `main`, porque el documento que ejecuta y las filas cuya DoD obedece viven ahí todavía. Su primer trabajo es mergear Q0 en ventana segura; después, `git fetch origin && git checkout --detach origin/main` y sigue con Q1. Si Q0 ya está mergeado cuando claw lanza, el worktree nace detached en `origin/main` y el lead salta directo a Q1.
+
+**Rama base de los cuatro: `origin/main` fresco**, es decir con Q0 ya dentro. `C` va primero y solo; `A`, `B` y `D` arrancan **después** de que `C` mergee, porque los tres compilan contra los archivos que `C` parte y los tipos que agrega.
 
 | Carril | Rama | Tareas | Quién |
 |---|---|---|---|
-| **C · Contrato** | `fase12/contrato` | 12.0 | el lead (es spec y un corte mecánico de archivos) |
+| **C · Contrato** | `fase12/contrato` | 12.0 | el lead (es spec y un corte mecánico de archivos) — **sin sesión de tmux, sin `BRIEF.md` y sin TIMEBOX**: la regla 15 del base cuenta horas de una sesión de implementador y aquí no hay una. Sí aplica la regla 13: `C` termina con su línea `LISTO <sha>` o `ATORADO <razón>` como cualquier otro carril |
 | **A · Núcleo** | `fase12/nucleo` | 12.1, 12.2 | `glm`, si no `cursor-agent`, si no `muse` |
 | **B · Pantalla** | `fase12/pantalla` | 12.3 | `cursor-agent`, si no `glm`, si no `muse` |
 | **D · Receta** | `fase12/docs` | 12.4 | `muse`, si no `cursor-agent`, si no `glm` |
@@ -56,6 +58,7 @@ Cada ítem, además de su compuerta propia, pasa la compuerta común del base (C
 
 | # | Ítem | Compuerta propia | Fallback |
 |---|---|---|---|
+| Q0 | El PR de plan y runbook (`a32a1da` y lo que siga) | `git show origin/main:Plans.md \| grep -c '^| 12\.0 '` → `1`, y `bash scripts/arranque-de-fase.sh 12` en VERDE (con el runbook fuera de `main` sale ROJO en las cinco) | Si el PR no mergea, la fase **no arranca**: sin las filas 12.0–12.5 en `main` no hay DoD que obedecer |
 | Q1 | C · contrato | `git show origin/main:tablero-runbook/lib.ts \| wc -l` contra el corte: `contrato.ts` + `render.ts` suman lo mismo ±20 líneas, y `bash scripts/run-checks.sh` verde **sin haber editado** `index.test.ts` ni `progress.test.ts` | Si el corte obliga a editar esas pruebas, no es mecánico: vuelve a loop §3 con el diff como encargo |
 | Q2 | A · núcleo | `~/.openclaw/bin/openclaw gateway call runbook.progress.get --params '{"fase":"6"}'` sigue devolviendo el documento de la Fase 6 completo (no regresión de la ruta vieja) | Si la ruta vieja se rompe, reversa del ítem por el camino de emergencia del base |
 | Q3 | B · pantalla | El HTML del `get` de la Fase 11 trae los cuatro renglones (`A`, `B`, `D`, `R`) y un `%GLOBAL` que **no** es `porcentajeMergeado` | Si el render revienta con un ítem sin carril, vuelve a loop §3 |
@@ -66,7 +69,7 @@ Cada ítem, además de su compuerta propia, pasa la compuerta común del base (C
 
 ## Progreso de esta fase
 
-**Primer comando de la corrida, antes de lanzar ningún carril** — es el paso de nacimiento que 12.4 vuelve obligatorio para todos, y esta fase lo estrena:
+**Va después del 0.0 del base y de mergear Q0, y antes de lanzar ningún carril.** El 0.0 comprueba que se puede trabajar; esto abre la pantalla. Primer comando de la fase propiamente dicha — es el paso de nacimiento que 12.4 vuelve obligatorio para todos, y esta fase lo estrena:
 
 ```
 cat > .saikit/progress/12.json <<'JSON'
