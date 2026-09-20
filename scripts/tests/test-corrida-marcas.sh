@@ -249,6 +249,21 @@ kill "$contender_pid" 2>/dev/null || true
 wait "$contender_pid" 2>/dev/null || true
 wait "$holder_pid" || fail "el dueño vivo del lock fallo"
 
+# Un publicador muerto puede dejar archivos temporales dentro del lock. La
+# recuperacion reclama el directorio completo y no queda bloqueada por basura.
+stale_state="$T/stale-state"
+mkdir -p "$stale_state/.marcas.lock"
+printf '%s' '999999-stale' >"$stale_state/.marcas.lock/token"
+printf '%s' basura >"$stale_state/.marcas.lock/token.tmp.muerto"
+touch -t 202001010000 "$stale_state/.marcas.lock/token"
+CORRIDA_STATE="$stale_state" bash -c '
+  . scripts/mac/corrida/lib.sh
+  lock_abandonado_romper "$CORRIDA_STATE/.marcas.lock" 1 prueba
+' >/dev/null 2>&1 || fail "la basura temporal impidio recuperar el lock abandonado"
+[ ! -d "$stale_state/.marcas.lock" ] || fail "la recuperacion dejo el lock abandonado"
+compgen -G "$stale_state/.marcas.lock.muerto.*" >/dev/null \
+  && fail "la recuperacion dejo una tumba de lock"
+
 # El dispatcher EXIT limpia los dos locks anidados y conserva un trap ajeno.
 exit_state="$T/exit-state"
 mkdir -p "$exit_state/r1"

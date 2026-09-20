@@ -113,10 +113,19 @@ lock_token_publicar() { # $1 dir, $2 token
   mv -f "$tmp" "$1/token" || { rm -f "$tmp"; return 1; }
 }
 
+lock_reclamo_deshacer() { # $1 ruta original, $2 tumba reclamada
+  if [ -e "$1" ]; then
+    rm -rf "$2"
+  else
+    mv "$2" "$1" 2>/dev/null || rm -rf "$2"
+  fi
+}
+
 lock_abandonado_romper() { # $1 dir, $2 umbral, $3 etiqueta; 0 = roto
-  local d="$1" umbral="$2" etiqueta="$3" token pid actual
+  local d="$1" umbral="$2" etiqueta="$3" token="" pid actual tumba tenia_token=0
   [ -d "$d" ] && lock_viejo "$d" "$umbral" || return 1
   if [ -f "$d/token" ]; then
+    tenia_token=1
     token="$(cat "$d/token" 2>/dev/null)" || return 1
     pid="${token%%-*}"
     case "$pid" in
@@ -125,13 +134,29 @@ lock_abandonado_romper() { # $1 dir, $2 umbral, $3 etiqueta; 0 = roto
     kill -0 "$pid" 2>/dev/null && return 1
     actual="$(cat "$d/token" 2>/dev/null)" || return 1
     [ "$actual" = "$token" ] || return 1
-    rm -f "$d/token" || return 1
   else
     # Compatibilidad con locks manuales/antiguos: confirmar que el token no
     # aparecio mientras se comprobaba la edad del directorio.
     [ ! -e "$d/token" ] || return 1
   fi
-  rmdir "$d" 2>/dev/null || return 1
+  # El rename reclama el directorio completo antes de borrar nada. Desde este
+  # punto otro proceso puede crear un lock nuevo en $d sin que la limpieza de
+  # esta tumba pueda tocarlo.
+  tumba="$d.muerto.$$-${RANDOM:-0}"
+  [ ! -e "$tumba" ] || return 1
+  mv "$d" "$tumba" 2>/dev/null || return 1
+  if [ "$tenia_token" -eq 1 ]; then
+    actual="$(cat "$tumba/token" 2>/dev/null)" || {
+      lock_reclamo_deshacer "$d" "$tumba"; return 1;
+    }
+    [ "$actual" = "$token" ] || {
+      lock_reclamo_deshacer "$d" "$tumba"; return 1;
+    }
+  elif [ -e "$tumba/token" ]; then
+    lock_reclamo_deshacer "$d" "$tumba"
+    return 1
+  fi
+  rm -rf "$tumba" || return 1
   echo "$etiqueta: rompio un lock viejo sin proceso vivo" >&2
   return 0
 }
