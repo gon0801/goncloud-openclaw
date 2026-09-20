@@ -14,7 +14,11 @@ import {
   type ResumenCarril,
   type ResumenSeguimiento,
 } from "./seguimiento.ts";
-import { type EntradaSeguimientoV2, renderSeguimientoV2 } from "./seguimiento-render.ts";
+import {
+  type EntradaSeguimientoV2,
+  renderSeguimientoV2,
+  sanearTextoPropietario,
+} from "./seguimiento-render.ts";
 
 function carril(
   id: string,
@@ -245,5 +249,92 @@ describe("renderSeguimientoV2", () => {
         }],
       }],
     }));
+  });
+});
+
+describe("sanearTextoPropietario", () => {
+  it("keeps valid owner prose with accents untouched", () => {
+    for (const limpio of [
+      "Muse está corrigiendo el último caso del vigilante.",
+      "La primera revisión terminó; faltan la revisión cruzada y CodeRabbit.",
+      "Se completó la detección de sesiones terminadas.",
+      "Fase 14 avanzó de 1/4 a 2/4.",
+      "46% (6/13 tareas)",
+      "No pude leer el avance de Fase 14 (archivo ilegible); no retiro el seguimiento hasta verificarlo.",
+      "Necesito tu respuesta para Fase 14: Elegir A o B.",
+      "El trabajo sigue en curso: 45 minutos en la unidad actual.",
+      "nada.",
+      "¿Sigo por A o por B?",
+    ]) {
+      assert.equal(sanearTextoPropietario(limpio), limpio, `texto limpio rechazado: ${limpio}`);
+    }
+  });
+
+  it("rejects every forbidden class from the v2 contract", () => {
+    for (const sucio of [
+      "Revisando /tmp/x en commit abcdef1",
+      "mira foo.ts para el detalle",
+      "en la rama feat/watchdog",
+      "quedo en abcdef1",
+      "cierra PR #104",
+      "corre con --force",
+      "di `comando`",
+      "con CI en verde",
+      "se mergeo el cambio",
+      "haz push del repo",
+      "tras el rebase",
+      "el hook avisa",
+      "corre el script",
+    ]) {
+      assert.equal(sanearTextoPropietario(sucio), null, `texto sucio aceptado: ${sucio}`);
+    }
+  });
+
+  it("never leaks technical text through any interpolated field", () => {
+    const sucio = "Revisando /tmp/x en commit abcdef1, PR #104 con --force";
+    const entrada: EntradaSeguimientoV2 = {
+      fases: [{
+        ...fase14(),
+        carriles: [
+          { ...fase14().carriles[0], nombre: "Mira foo.ts", actividad: { detalle: sucio, iniciadaEn: "2026-09-19T10:20:00Z", ultimaEvidencia: sucio } },
+        ],
+      }],
+      tareasSueltas: [{
+        nombre: "suelta feat/watchdog",
+        progreso: { kind: "conocido", completadas: 1, total: 2, porcentaje: 50 },
+        actividad: { detalle: sucio, iniciadaEn: "2026-09-19T10:20:00Z", ultimaEvidencia: sucio },
+      }],
+      ahora: Date.parse("2026-09-19T11:00:00Z"),
+      cambio: sucio,
+      siguiente: sucio,
+      necesita: sucio,
+    };
+    const text = renderSeguimientoV2(entrada);
+    for (const prohibido of ["/tmp/x", "foo.ts", "feat/watchdog", "abcdef1", "PR #104", "--force", "`comando`", "commit"]) {
+      assert.doesNotMatch(text, new RegExp(prohibido.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `fuga tecnica: ${prohibido}`);
+    }
+    assert.match(text, /Que cambió:/);
+    assert.match(text, /Que sigue:/);
+    assert.match(text, /Que necesito de ti:/);
+  });
+
+  it("falls back to state-derived descriptions without inventing progress", () => {
+    const text = renderSeguimientoV2({
+      ...entradaEjemplo(),
+      fases: [{
+        ...fase14(),
+        carriles: [
+          { ...fase14().carriles[0], actividad: { detalle: "mira /tmp/x", iniciadaEn: "2026-09-19T10:20:00Z", ultimaEvidencia: "ok" } },
+        ],
+      }],
+      cambio: "cierra PR #104",
+      siguiente: "corre --force",
+      necesita: "mira foo.ts",
+    });
+    assert.doesNotMatch(text, /\/tmp\/x/);
+    assert.doesNotMatch(text, /PR #104/);
+    assert.doesNotMatch(text, /--force/);
+    assert.doesNotMatch(text, /foo\.ts/);
+    assert.match(text, /En implementando\./);
   });
 });

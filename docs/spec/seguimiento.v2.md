@@ -55,6 +55,18 @@ nada.
 - Lenguaje para el propietario: sin rutas, ramas, hashes, números de PR,
   flags, siglas ni acentos graves.
 
+## Límite de lenguaje (`sanearTextoPropietario`)
+
+Todo campo interpolado (nombre y detalle de carril, actividad de tarea
+suelta, `Que cambió`, `Que sigue`, `Que necesito de ti`, evidencia) pasa por
+el límite antes de imprimirse. Lo que trae texto técnico no sale: el carril
+usa una descripción derivada de su estado (`En implementando.`), el nombre
+cae a `Carril <id>`, el cambio vacío cae al texto de continuidad, y `Que
+sigue` / `Que necesito de ti` caen a frases seguras fijas. Las fracciones
+(`6/13`), los porcentajes, los acentos y el lenguaje natural válido pasan
+siempre. Casos en `seguimiento-render.test.ts`, incluido el ejemplo aprobado
+byte por byte.
+
 ## Implementación
 
 `tablero-runbook/seguimiento-render.ts` (`renderSeguimientoV2`): puro, sin
@@ -99,5 +111,16 @@ Reglas del corte:
   activo. Cerrar una fase la saca del próximo corte sin posponer el reporte
   debido de las demás.
 - Sin trabajo activo y sin evento inmediato, el tick termina `NO_REPLY`.
+- Un archivo que nombra una fase o corrida pero no se puede leer, parsear o
+  validar no desaparece: `runbook.progress.list` conserva su `trabajoId` con
+  un resumen conservador (`desconocido`, sin carriles) y su causa en
+  `problemas` (`ilegible`, `json-invalido`, `documento-invalido`), sin exponer
+  contenido crudo. `decidirSeguimiento` lo convierte en `DETENIDA` inmediata
+  (deduplicada tras confirmar) sin mover el corte periódico; el reloj se
+  conserva hasta verificarlo.
+- Una fase con `atencion_requerida.necesaria` deriva `NECESITO TU RESPUESTA`
+  inmediato del propio resumen, antes del corte y sin reclasificación manual.
+  El motivo se sanea; si cambia, sale un nuevo aviso; confirmado, no se
+  repite. Tampoco mueve el corte periódico.
 - `runbook.progress.decide` es la única entrada que la regla del director
   nombra; el agente no reproduce estas transiciones en prosa.

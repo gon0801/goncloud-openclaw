@@ -440,6 +440,95 @@ describe("plugin smoke import (7.4)", () => {
     }
   });
 
+  it("list: corrupt active work is reported, never hidden", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-list-mal-"));
+    const host = await cargar({ stateDir: dir });
+    assert.deepEqual(
+      await llamarMetodo(host.metodos, "runbook.progress.set", docMinimo({})),
+      { ok: true },
+    );
+    mkdirSync(join(dir, "progress", "c"), { recursive: true });
+    writeFileSync(join(dir, "progress", "15.json"), "{no es json", "utf8");
+    writeFileSync(join(dir, "progress", "16.json"),
+      JSON.stringify({ schema: "runbook-progress.v1", fase: "nope" }), "utf8");
+    mkdirSync(join(dir, "progress", "c", "rota.json"), { recursive: true });
+    const lista = await llamarMetodo(host.metodos, "runbook.progress.list", {});
+    assert.equal(lista.ok, true);
+    const ids = lista.activas.map((a: { trabajoId: string }) => a.trabajoId).sort();
+    assert.deepEqual(ids, ["corrida:rota", "fase:14", "fase:15", "fase:16"]);
+    const mots = lista.problemas.map((p: { motivo: string }) => p.motivo).sort();
+    assert.deepEqual(mots, ["documento-invalido", "ilegible", "json-invalido"]);
+    for (const a of lista.activas) {
+      if (a.trabajoId === "fase:14") continue;
+      assert.deepEqual(a.progreso, { kind: "desconocido", motivo: "unidad-desconocida" });
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("decide: the last active work broken becomes DETENIDA", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-decide-mal-2-"));
+    const host = await cargar({ stateDir: dir });
+    mkdirSync(join(dir, "progress"), { recursive: true });
+    writeFileSync(join(dir, "progress", "14.json"), "{roto", "utf8");
+    const mod = await import("./index.ts");
+    const T = 1_700_000_000_000;
+    try {
+      mod._setRelojSeguimientoForTest(() => T);
+      const r0 = await llamarMetodo(host.metodos, "runbook.progress.decide", { modo: "iniciar", estado: null });
+      assert.equal(r0.accion, "NO_REPLY");
+      mod._setRelojSeguimientoForTest(() => T + 900_000);
+      const r1 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r0.estado });
+      assert.equal(r1.accion, "SEND");
+      assert.equal(r1.tipo, "inmediato");
+      assert.match(r1.mensaje, /Fase 14/);
+      assert.doesNotMatch(r1.mensaje, /\{roto/);
+      mod._setRelojSeguimientoForTest(() => T + 901_000);
+      const r2 = await llamarMetodo(host.metodos, "runbook.progress.decide", {
+        modo: "tick",
+        estado: { ...r1.estadoTrasConfirmar, messageId: 9 },
+      });
+      assert.equal(r2.accion, "NO_REPLY");
+    } finally {
+      mod._setRelojSeguimientoForTest(undefined);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("decide: impossible standalone counts are evento-invalido", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-decide-lim-"));
+    const host = await cargar({ stateDir: dir });
+    const suelta = (progreso: unknown) => ({
+      nombre: "Suelta",
+      progreso,
+      actividad: { detalle: "d", iniciadaEn: "2026-09-19T10:00:00Z", ultimaEvidencia: "e" },
+    });
+    for (const [nombre, progreso] of [
+      ["negativos", { kind: "conocido", completadas: -3, total: -1, porcentaje: 900 }],
+      ["no-enteros", { kind: "conocido", completadas: 1.5, total: 2, porcentaje: 75 }],
+      ["mas-completadas", { kind: "conocido", completadas: 3, total: 2, porcentaje: 150 }],
+      ["porcentaje-mal", { kind: "conocido", completadas: 1, total: 2, porcentaje: 90 }],
+      ["cero-roto", { kind: "conocido", completadas: 1, total: 0, porcentaje: 0 }],
+      ["porcentaje-101", { kind: "conocido", completadas: 2, total: 2, porcentaje: 101 }],
+      ["motivo-malo", { kind: "desconocido", motivo: "otro" }],
+    ] as Array<[string, unknown]>) {
+      const r = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "iniciar", estado: null, tareasSueltas: [suelta(progreso)] });
+      assert.deepEqual(r, { ok: false, razon: "evento-invalido" }, nombre);
+    }
+    for (const [nombre, progreso] of [
+      ["cero", { kind: "conocido", completadas: 0, total: 0, porcentaje: 0 }],
+      ["medio", { kind: "conocido", completadas: 1, total: 2, porcentaje: 50 }],
+      ["cien", { kind: "conocido", completadas: 2, total: 2, porcentaje: 100 }],
+      ["tercio", { kind: "conocido", completadas: 1, total: 3, porcentaje: 33 }],
+    ] as Array<[string, unknown]>) {
+      const r = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "iniciar", estado: null, tareasSueltas: [suelta(progreso)] });
+      assert.equal(r.accion, "NO_REPLY", nombre);
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it("decide: malformed scratch never resets the cut", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-decide-mal-"));
     const host = await cargar({ stateDir: dir });

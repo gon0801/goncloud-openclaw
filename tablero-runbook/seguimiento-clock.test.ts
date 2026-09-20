@@ -17,6 +17,7 @@ import {
   type EstadoSeguimiento,
   type EstadoTrasConfirmar,
   type EventoInmediato,
+  type ProblemaSeguimiento,
 } from "./seguimiento-clock.ts";
 
 function resumen14(completadas: number, total: number, porcentaje: number): ResumenSeguimiento {
@@ -67,6 +68,11 @@ function resumen15(): ResumenSeguimiento {
     atencionRequerida: { necesaria: false, motivo: null },
     actualizado: "2026-09-19T10:30:00Z",
   };
+}
+
+function resumenAtencion(motivo: string | null): ResumenSeguimiento {
+  const base = resumen14(1, 4, 25);
+  return { ...base, atencionRequerida: { necesaria: true, motivo } };
 }
 
 function corteEn(ultimoReporteConfirmado: number, activas: ResumenSeguimiento[]): EstadoSeguimiento {
@@ -232,5 +238,118 @@ describe("parseEstadoSeguimiento", () => {
     ]) {
       assert.throws(() => parseEstadoSeguimiento(malo), /estado/i);
     }
+  });
+});
+
+describe("trabajo ilegible", () => {
+  const problemas: ProblemaSeguimiento[] = [{ trabajoId: "fase:14", motivo: "ilegible" }];
+
+  it("an unreadable active work item becomes DETENIDA, never silence", () => {
+    const d = decidirSeguimiento({
+      ahora: 901, previo: corteEn(900, []), activas: [], problemas,
+      inmediato: null,
+    });
+    assert.equal(d.accion, "SEND");
+    if (d.accion !== "SEND") throw new Error("ilegible inesperado");
+    assert.equal(d.tipo, "inmediato");
+    assert.match(d.mensaje, /Fase 14/);
+    assert.match(d.mensaje, /ilegible/);
+    assert.doesNotMatch(d.mensaje, /private|tmp|\.json/);
+    assert.deepEqual(d.estadoTrasConfirmar.corte,
+      { kind: "reporte-confirmado", ultimoReporteConfirmado: 900 });
+  });
+
+  it("a confirmed corrupt state does not resend", () => {
+    const primero = decidirSeguimiento({
+      ahora: 901, previo: corteEn(900, []), activas: [], problemas,
+      inmediato: null,
+    });
+    assert.equal(primero.accion, "SEND");
+    if (primero.accion !== "SEND") throw new Error("primer ilegible inesperado");
+    const segundo = decidirSeguimiento({
+      ahora: 902, previo: confirmado(primero.estadoTrasConfirmar, 3),
+      activas: [], problemas, inmediato: null,
+    });
+    assert.equal(segundo.accion, "NO_REPLY");
+  });
+
+  it("a changed corruption report sends again", () => {
+    const primero = decidirSeguimiento({
+      ahora: 901, previo: corteEn(900, []), activas: [], problemas,
+      inmediato: null,
+    });
+    assert.equal(primero.accion, "SEND");
+    if (primero.accion !== "SEND") throw new Error("primer ilegible inesperado");
+    const previo = confirmado(primero.estadoTrasConfirmar, 3);
+    const mas: ProblemaSeguimiento[] = [...problemas, { trabajoId: "corrida:otra", motivo: "json-invalido" }];
+    const segundo = decidirSeguimiento({ ahora: 902, previo, activas: [], problemas: mas, inmediato: null });
+    assert.equal(segundo.accion, "SEND");
+    if (segundo.accion !== "SEND") throw new Error("segundo ilegible inesperado");
+    assert.match(segundo.mensaje, /corrida otra/);
+  });
+
+  it("an explicit immediate wins over corruption triage", () => {
+    const d = decidirSeguimiento({
+      ahora: 901, previo: corteEn(900, []), activas: [], problemas,
+      inmediato: { tipo: "CERRADA", texto: "cierre observado" },
+    });
+    assert.equal(d.accion, "SEND");
+    if (d.accion !== "SEND") throw new Error("explicito inesperado");
+    assert.equal(d.tipo, "inmediato");
+    assert.equal(d.mensaje, "cierre observado");
+  });
+});
+
+describe("atencion requerida", () => {
+  it("needed attention at minute 15 sends NECESITO without waiting", () => {
+    const activas = [resumenAtencion("Elegir A o B")];
+    const d = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
+    assert.equal(d.accion, "SEND");
+    if (d.accion !== "SEND") throw new Error("atencion inesperada");
+    assert.equal(d.tipo, "inmediato");
+    assert.match(d.mensaje, /NECESITO TU RESPUESTA|Necesito tu respuesta/);
+    assert.match(d.mensaje, /Elegir A o B/);
+    assert.match(d.mensaje, /Fase 14/);
+  });
+
+  it("no attention before the cut stays silent", () => {
+    const activas = [resumen14(1, 4, 25)];
+    const d = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
+    assert.equal(d.accion, "NO_REPLY");
+  });
+
+  it("the same confirmed reason does not resend; a different one does", () => {
+    const activas = [resumenAtencion("Elegir A o B")];
+    const primero = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
+    assert.equal(primero.accion, "SEND");
+    if (primero.accion !== "SEND") throw new Error("primera atencion inesperada");
+    const previo = confirmado(primero.estadoTrasConfirmar, 11);
+    const repetido = decidirSeguimiento({ ahora: 901, previo, activas, inmediato: null });
+    assert.equal(repetido.accion, "NO_REPLY");
+    const cambiado = decidirSeguimiento({
+      ahora: 902, previo, activas: [resumenAtencion("Elegir C")], inmediato: null,
+    });
+    assert.equal(cambiado.accion, "SEND");
+    if (cambiado.accion !== "SEND") throw new Error("motivo nuevo inesperado");
+    assert.match(cambiado.mensaje, /Elegir C/);
+  });
+
+  it("a dirty reason falls back to safe owner language", () => {
+    const activas = [resumenAtencion("revisa /tmp/x en commit abcdef1")];
+    const d = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
+    assert.equal(d.accion, "SEND");
+    if (d.accion !== "SEND") throw new Error("atencion sucia inesperada");
+    assert.doesNotMatch(d.mensaje, /\/tmp\/x/);
+    assert.doesNotMatch(d.mensaje, /abcdef1/);
+    assert.match(d.mensaje, /Fase 14/);
+  });
+
+  it("an attention immediate preserves the periodic cut", () => {
+    const activas = [resumenAtencion("Elegir A o B")];
+    const d = decidirSeguimiento({ ahora: 900, previo: corteEn(0, activas), activas, inmediato: null });
+    assert.equal(d.accion, "SEND");
+    if (d.accion !== "SEND") throw new Error("atencion inesperada");
+    assert.deepEqual(d.estadoTrasConfirmar.corte,
+      { kind: "reporte-confirmado", ultimoReporteConfirmado: 0 });
   });
 });

@@ -125,26 +125,85 @@ export function resumirSeguimiento(doc: ProgresoDoc, plan: PlanCruce): ResumenSe
   return { ...base, progreso, carriles };
 }
 
-export type ListaSeguimiento = { ok: true; activas: ResumenSeguimiento[] };
+export type MotivoProblema = "ilegible" | "json-invalido" | "documento-invalido";
+
+export type ProblemaSeguimiento = {
+  trabajoId: `fase:${string}` | `corrida:${string}`;
+  motivo: MotivoProblema;
+};
+
+export type ListaSeguimiento = {
+  ok: true;
+  activas: ResumenSeguimiento[];
+  problemas: ProblemaSeguimiento[];
+};
+
+/**
+ * Marcador conservador para un trabajo cuyo documento no se puede usar: el
+ * trabajo sigue visible en el inventario (desconocido, sin carriles) para
+ * que el director nunca lo confunda con "nada activo". El motivo real viaja
+ * en `problemas`, sin exponer contenido crudo del archivo.
+ */
+function resumenConservador(
+  trabajoId: `fase:${string}` | `corrida:${string}`,
+  fase: string,
+  titulo: string,
+): ResumenSeguimiento {
+  return {
+    trabajoId,
+    fase,
+    titulo,
+    progreso: { kind: "desconocido", motivo: "unidad-desconocida" },
+    carriles: [],
+    siguientePaso: "",
+    atencionRequerida: { necesaria: false, motivo: null },
+    actualizado: "",
+  };
+}
+
+function nombreDeTrabajo(trabajoId: `fase:${string}` | `corrida:${string}`): { fase: string; titulo: string } {
+  if (trabajoId.startsWith("corrida:")) {
+    const id = trabajoId.slice("corrida:".length);
+    return { fase: id, titulo: `Corrida ${id}` };
+  }
+  const id = trabajoId.slice("fase:".length);
+  return { fase: id, titulo: `Fase ${id}` };
+}
+
+function reportarRoto(
+  trabajoId: `fase:${string}` | `corrida:${string}`,
+  motivo: MotivoProblema,
+  vistos: Set<string>,
+  activas: ResumenSeguimiento[],
+  problemas: ProblemaSeguimiento[],
+): void {
+  vistos.add(trabajoId);
+  const { fase, titulo } = nombreDeTrabajo(trabajoId);
+  activas.push(resumenConservador(trabajoId, fase, titulo));
+  problemas.push({ trabajoId, motivo });
+}
 
 /**
  * Inventario activo para `runbook.progress.list`: todo documento abierto del
  * stateDir existente (fases en `progress/*.json`, corridas en `progress/c/`),
  * cada uno resumido con su cruce acotado. Los cerrados (`cierre.at` puesto)
- * no aparecen. Deduplica por `trabajoId` estable: un doc con `corrida` vive
- * en disco bajo ambas claves. Ordenado por `trabajoId` para que el corte de
- * 30 minutos sea determinístico.
+ * no aparecen. Un archivo que nombra una fase o corrida pero no se puede
+ * leer, parsear o validar NO desaparece: conserva su `trabajoId` con un
+ * resumen conservador y su causa en `problemas`, para que el director nunca
+ * lo confunda con "nada activo" ni retire el reloj. Deduplica por
+ * `trabajoId` estable: un doc con `corrida` vive en disco bajo ambas claves.
+ * Ordenado por `trabajoId` para que el corte de 30 minutos sea determinístico.
  */
 export async function listarSeguimientoActivo(
   cfg: { stateDir: string },
   cfgGithub: { ghPath: string },
 ): Promise<ListaSeguimiento> {
-  const rutas: string[] = [];
+  const rutas: Array<{ ruta: string; trabajoId: `fase:${string}` | `corrida:${string}` }> = [];
   try {
     for (const name of readdirSync(join(cfg.stateDir, "progress"))) {
       if (!name.endsWith(".json")) continue;
       const base = name.slice(0, -5);
-      if (validarFase(base)) rutas.push(join(cfg.stateDir, "progress", name));
+      if (validarFase(base)) rutas.push({ ruta: join(cfg.stateDir, "progress", name), trabajoId: `fase:${base}` });
     }
   } catch {
     // Sin directorio no hay trabajo activo, no es un error.
@@ -153,7 +212,9 @@ export async function listarSeguimientoActivo(
     for (const name of readdirSync(join(cfg.stateDir, "progress", "c"))) {
       if (!name.endsWith(".json")) continue;
       const base = name.slice(0, -5);
-      if (CORRIDA_RE.test(base)) rutas.push(join(cfg.stateDir, "progress", "c", name));
+      if (CORRIDA_RE.test(base)) {
+        rutas.push({ ruta: join(cfg.stateDir, "progress", "c", name), trabajoId: `corrida:${base}` });
+      }
     }
   } catch {
     // Sin corridas no hay nada que sumar.
@@ -161,20 +222,27 @@ export async function listarSeguimientoActivo(
 
   const vistos = new Set<string>();
   const activas: ResumenSeguimiento[] = [];
-  for (const ruta of rutas) {
+  const problemas: ProblemaSeguimiento[] = [];
+  for (const { ruta, trabajoId } of rutas) {
+    if (vistos.has(trabajoId)) continue;
     let crudo: string;
     try {
       crudo = readFileSync(ruta, "utf8");
     } catch {
+      reportarRoto(trabajoId, "ilegible", vistos, activas, problemas);
       continue;
     }
     let crudoDoc: unknown;
     try {
       crudoDoc = JSON.parse(crudo);
     } catch {
+      reportarRoto(trabajoId, "json-invalido", vistos, activas, problemas);
       continue;
     }
-    if (!esProgresoDoc(crudoDoc)) continue;
+    if (!esProgresoDoc(crudoDoc)) {
+      reportarRoto(trabajoId, "documento-invalido", vistos, activas, problemas);
+      continue;
+    }
     if (crudoDoc.cierre.at !== null) continue;
     let plan: PlanCruce = SIN_VERIFICAR;
     if (crudoDoc.plan !== undefined && crudoDoc.plan !== null) {
@@ -190,6 +258,9 @@ export async function listarSeguimientoActivo(
     vistos.add(resumen.trabajoId);
     activas.push(resumen);
   }
-  activas.sort((a, b) => (a.trabajoId < b.trabajoId ? -1 : a.trabajoId > b.trabajoId ? 1 : 0));
-  return { ok: true, activas };
+  const porId = (a: { trabajoId: string }, b: { trabajoId: string }): number =>
+    (a.trabajoId < b.trabajoId ? -1 : a.trabajoId > b.trabajoId ? 1 : 0);
+  activas.sort(porId);
+  problemas.sort(porId);
+  return { ok: true, activas, problemas };
 }

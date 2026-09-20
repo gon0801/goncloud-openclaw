@@ -13,8 +13,8 @@
  * deja el scratch anterior byte por byte y el siguiente tick reintenta.
  * Un `SEND` no expone un próximo estado de nombre general.
  */
-import type { ConteoObjetivo, ResumenSeguimiento } from "./seguimiento.ts";
-import { renderSeguimientoV2, type TareaSuelta } from "./seguimiento-render.ts";
+import type { ConteoObjetivo, ProblemaSeguimiento, ResumenSeguimiento } from "./seguimiento.ts";
+import { renderSeguimientoV2, sanearTextoPropietario, type TareaSuelta } from "./seguimiento-render.ts";
 
 export const SCHEMA_SEGUIMIENTO_CLOCK = "seguimiento-clock.v1";
 
@@ -60,6 +60,7 @@ export type EntradaDecision = {
   activas: ResumenSeguimiento[];
   sueltas?: TareaSuelta[];
   inmediato?: EventoInmediato | null;
+  problemas?: ProblemaSeguimiento[];
 };
 
 /** Base de la ventana de 30 minutos: el inicio o el último corte confirmado. */
@@ -171,6 +172,62 @@ function derivarNecesita(activas: ResumenSeguimiento[]): string {
   return "nada";
 }
 
+type AtencionPendiente = { trabajoId: string; fase: string; motivo: string | null };
+
+/** Fases que piden una decisión, en orden estable. Solo cuenta `necesaria: true`. */
+function atencionPendiente(activas: ResumenSeguimiento[]): AtencionPendiente[] {
+  return activas
+    .filter((r) => r.atencionRequerida.necesaria)
+    .map((r) => ({ trabajoId: r.trabajoId, fase: r.fase, motivo: r.atencionRequerida.motivo }))
+    .sort((a, b) => (a.trabajoId < b.trabajoId ? -1 : a.trabajoId > b.trabajoId ? 1 : 0));
+}
+
+function puntuarFinal(s: string): string {
+  return /[.?!]$/.test(s) ? s : `${s}.`;
+}
+
+/** NECESITO derivado del estado autoritativo, en lenguaje para el propietario. */
+function textoAtencion(pendientes: AtencionPendiente[]): string {
+  return pendientes.map((p) => {
+    const motivo = p.motivo !== null ? sanearTextoPropietario(p.motivo) : null;
+    if (motivo !== null) return `Necesito tu respuesta para Fase ${p.fase}: ${puntuarFinal(motivo)}`;
+    return `Necesito tu respuesta para Fase ${p.fase}. Tienes una decisión pendiente.`;
+  }).join(" ");
+}
+
+function palabraMotivo(motivo: ProblemaSeguimiento["motivo"]): string {
+  switch (motivo) {
+    case "ilegible": return "archivo ilegible";
+    case "json-invalido": return "contenido ilegible";
+    case "documento-invalido": return "documento inválido";
+    default: {
+      const nunca: never = motivo;
+      return `problema ${JSON.stringify(nunca)}`;
+    }
+  }
+}
+
+function nombreProblema(trabajoId: ProblemaSeguimiento["trabajoId"]): string {
+  if (trabajoId.startsWith("corrida:")) return `corrida ${trabajoId.slice("corrida:".length)}`;
+  return `Fase ${trabajoId.slice("fase:".length)}`;
+}
+
+/**
+ * DETENIDA por trabajo ilegible: nombra cada trabajo con su causa en palabras
+ * llanas y ordena no retirar el seguimiento hasta verificarlo. Sin rutas,
+ * contenido crudo ni jerga: los identificadores salen del nombre del archivo,
+ * nunca de su contenido.
+ */
+function textoProblemas(problemas: ProblemaSeguimiento[]): string {
+  const partes = [...problemas]
+    .sort((a, b) => (a.trabajoId < b.trabajoId ? -1 : a.trabajoId > b.trabajoId ? 1 : 0))
+    .map((p) => `${nombreProblema(p.trabajoId)} (${palabraMotivo(p.motivo)})`);
+  const lista = partes.length === 1
+    ? partes[0]
+    : `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`;
+  return `No pude leer el avance de ${lista}; no retiro el seguimiento hasta verificarlo.`;
+}
+
 export function crearEstadoInicial(ahora: number, activas: ResumenSeguimiento[]): EstadoSeguimiento {
   return {
     schema: SCHEMA_SEGUIMIENTO_CLOCK,
@@ -184,21 +241,36 @@ export function crearEstadoInicial(ahora: number, activas: ResumenSeguimiento[])
 export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
   const { ahora, previo, activas } = args;
   const sueltas = args.sueltas ?? [];
-  const inmediato = args.inmediato ?? null;
+  const explicito = args.inmediato ?? null;
+  const problemas = [...(args.problemas ?? [])]
+    .sort((a, b) => (a.trabajoId < b.trabajoId ? -1 : a.trabajoId > b.trabajoId ? 1 : 0));
   const ids = [
     ...activas.map((r) => r.trabajoId),
     ...sueltas.map((s) => `suelta:${s.nombre}`),
   ].sort();
 
-  if (inmediato !== null) {
-    const dig = resumenEstable(activas, sueltas, inmediato);
+  // Prioridad del inmediato: lo explícito del director (observación fresca),
+  // luego la triage de corrupción (el estado no es confiable), luego la
+  // atención que el propio resumen pide. Lo derivado entra al resumen
+  // estable, así un motivo ya confirmado no se repite y uno nuevo sí sale.
+  const pendientes = atencionPendiente(activas);
+  const efectivo: EventoInmediato | null = explicito
+    ?? (problemas.length > 0
+      ? { tipo: "DETENIDA", texto: textoProblemas(problemas) }
+      : null)
+    ?? (pendientes.length > 0
+      ? { tipo: "NECESITO TU RESPUESTA", texto: textoAtencion(pendientes) }
+      : null);
+
+  if (efectivo !== null) {
+    const dig = resumenEstable(activas, sueltas, efectivo);
     if (dig === previo.ultimoEstado) {
       return { accion: "NO_REPLY", estado: { ...previo, trabajosActivos: ids } };
     }
     return {
       accion: "SEND",
       tipo: "inmediato",
-      mensaje: inmediato.texto,
+      mensaje: efectivo.texto,
       estadoTrasConfirmar: {
         schema: SCHEMA_SEGUIMIENTO_CLOCK,
         corte: previo.corte,

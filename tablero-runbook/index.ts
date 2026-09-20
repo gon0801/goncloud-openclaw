@@ -495,9 +495,19 @@ function parseConteo(v: unknown): ConteoObjetivo {
     const completadas = v["completadas"];
     const total = v["total"];
     const porcentaje = v["porcentaje"];
-    if (typeof completadas !== "number" || !Number.isFinite(completadas)
-      || typeof total !== "number" || !Number.isFinite(total)
-      || typeof porcentaje !== "number" || !Number.isFinite(porcentaje)) {
+    // Conteos imposibles fuera: enteros, 0 <= completadas <= total,
+    // porcentaje entero 0-100 igual al redondeo del sistema (0/0 solo 0%).
+    if (typeof completadas !== "number" || !Number.isInteger(completadas)
+      || typeof total !== "number" || !Number.isInteger(total)
+      || typeof porcentaje !== "number" || !Number.isInteger(porcentaje)) {
+      throw new Error("evento-invalido");
+    }
+    if (total < 0 || completadas < 0 || completadas > total) {
+      throw new Error("evento-invalido");
+    }
+    if (porcentaje < 0 || porcentaje > 100) throw new Error("evento-invalido");
+    const esperado = total === 0 ? 0 : Math.round((100 * completadas) / total);
+    if (total === 0 ? completadas !== 0 || porcentaje !== 0 : porcentaje !== esperado) {
       throw new Error("evento-invalido");
     }
     return { kind: "conocido", completadas, total, porcentaje };
@@ -560,10 +570,15 @@ async function manejarDecide(
   const lista = await listarSeguimientoActivo(cfg, cfgGithub);
   if (modo === "iniciar") {
     // Solo "iniciar" crea estado, y exige estado:null explícito: crear sobre
-    // un estado existente reiniciaría el corte en silencio.
+    // un estado existente reiniciaría el corte en silencio. La creación
+    // siempre devuelve el estado inicial en NO_REPLY para persistirlo de
+    // inmediato; lo pendiente (incluida corrupción o atención) sale en el
+    // primer tick, nunca en la creación.
     if (params["estado"] !== null) return { ok: false, razon: "estado-invalido" };
-    const previo = crearEstadoInicial(ahora, lista.activas);
-    return decidirSeguimiento({ ahora, previo, activas: lista.activas, sueltas, inmediato });
+    return {
+      accion: "NO_REPLY",
+      estado: crearEstadoInicial(ahora, lista.activas),
+    };
   }
   let previo: EstadoSeguimiento;
   try {
@@ -571,7 +586,14 @@ async function manejarDecide(
   } catch {
     return { ok: false, razon: "estado-invalido" };
   }
-  return decidirSeguimiento({ ahora, previo, activas: lista.activas, sueltas, inmediato });
+  return decidirSeguimiento({
+    ahora,
+    previo,
+    activas: lista.activas,
+    sueltas,
+    inmediato,
+    problemas: lista.problemas,
+  });
 }
 
 // ---------------------------------------------------------------------------
