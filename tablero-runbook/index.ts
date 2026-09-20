@@ -541,6 +541,7 @@ function parseSueltas(v: unknown): TareaSuelta[] {
     if (typeof detalle !== "string" || typeof iniciadaEn !== "string" || typeof ultimaEvidencia !== "string") {
       throw new Error("evento-invalido");
     }
+    if (Number.isNaN(Date.parse(iniciadaEn))) throw new Error("evento-invalido");
     sueltas.push({ nombre, progreso, actividad: { detalle, iniciadaEn, ultimaEvidencia } });
   }
   return sueltas;

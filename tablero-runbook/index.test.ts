@@ -516,6 +516,13 @@ describe("plugin smoke import (7.4)", () => {
         { modo: "iniciar", estado: null, tareasSueltas: [suelta(progreso)] });
       assert.deepEqual(r, { ok: false, razon: "evento-invalido" }, nombre);
     }
+    {
+      const mala = suelta({ kind: "conocido", completadas: 1, total: 2, porcentaje: 50 });
+      mala.actividad.iniciadaEn = "manana";
+      const r = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "iniciar", estado: null, tareasSueltas: [mala] });
+      assert.deepEqual(r, { ok: false, razon: "evento-invalido" }, "iniciadaEn-basura");
+    }
     for (const [nombre, progreso] of [
       ["cero", { kind: "conocido", completadas: 0, total: 0, porcentaje: 0 }],
       ["medio", { kind: "conocido", completadas: 1, total: 2, porcentaje: 50 }],

@@ -307,9 +307,7 @@ describe("atencion requerida", () => {
     assert.equal(d.accion, "SEND");
     if (d.accion !== "SEND") throw new Error("atencion inesperada");
     assert.equal(d.tipo, "inmediato");
-    assert.match(d.mensaje, /NECESITO TU RESPUESTA|Necesito tu respuesta/);
-    assert.match(d.mensaje, /Elegir A o B/);
-    assert.match(d.mensaje, /Fase 14/);
+    assert.equal(d.mensaje, "Necesito tu respuesta para Fase 14: Elegir A o B.");
   });
 
   it("no attention before the cut stays silent", () => {
@@ -351,5 +349,22 @@ describe("atencion requerida", () => {
     if (d.accion !== "SEND") throw new Error("atencion inesperada");
     assert.deepEqual(d.estadoTrasConfirmar.corte,
       { kind: "reporte-confirmado", ultimoReporteConfirmado: 0 });
+  });
+
+  it("a null reason uses the safe sentence; a question keeps single punctuation", () => {
+    const nula = decidirSeguimiento({
+      ahora: 900, previo: crearEstadoInicial(0, [resumenAtencion(null)]),
+      activas: [resumenAtencion(null)], inmediato: null,
+    });
+    assert.equal(nula.accion, "SEND");
+    if (nula.accion !== "SEND") throw new Error("atencion nula inesperada");
+    assert.equal(nula.mensaje, "Necesito tu respuesta para Fase 14. Tienes una decisión pendiente.");
+    const pregunta = decidirSeguimiento({
+      ahora: 900, previo: crearEstadoInicial(0, [resumenAtencion("¿Sigo por A?")]),
+      activas: [resumenAtencion("¿Sigo por A?")], inmediato: null,
+    });
+    assert.equal(pregunta.accion, "SEND");
+    if (pregunta.accion !== "SEND") throw new Error("pregunta inesperada");
+    assert.equal(pregunta.mensaje, "Necesito tu respuesta para Fase 14: ¿Sigo por A?");
   });
 });

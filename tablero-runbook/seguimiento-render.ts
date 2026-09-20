@@ -29,18 +29,23 @@ export type TareaSuelta = {
  */
 const JERGA_RE = new RegExp(
   "`"
+  + "|\\\\[\\w.~$-]"
   + "|(^|[\\s(>\"'])--[A-Za-z]"
   + "|#\\d"
   + "|(^|[\\s(>\"'])(\\/[\\w.~_-]+|~\\/|\\.\\.?\\/)"
   + "|(?<=[\\s(>\"'^]|^)(?=[\\w.~_-]*[A-Za-z])[\\w.~_-]+\\/[\\w.~_-]+"
   + "|\\b[\\w-]+\\.(ts|js|tsx|jsx|mjs|cjs|json|md|markdown|sh|bash|ps1|psm1|py|rb|go|rs|java|kt|yml|yaml|toml|ini|cfg|conf|txt|log|csv|tsv)\\b"
-  + "|\\b(commits?|commitead[oa]s?|commitea\\w*|merges?|merged|mergead[oa]s?|mergearon|mergear\\w*|mergeo\\w*|rebase\\w*|push\\w*|pull request|prs?|worktrees?|branches?|ramas?|repos?|ci|hooks?|scripts?)\\b",
+  + "|\\b(commit\\w*|merg\\w*|rebase\\w*|push\\w*|pull request|prs?|worktrees?|branches?|ramas?|repos?|ci|hooks?|scripts?)\\b",
   "i",
 );
 
 function traeSha(s: string): boolean {
-  const m = s.match(/\b[0-9a-fA-F]{7,64}\b/);
-  return m !== null && /[0-9]/.test(m[0]) && /[a-fA-F]/.test(m[0]);
+  const re = /\b[0-9a-fA-F]{7,64}\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s)) !== null) {
+    if (/[0-9]/.test(m[0]) && /[a-fA-F]/.test(m[0])) return true;
+  }
+  return false;
 }
 
 export function sanearTextoPropietario(s: string): string | null {
