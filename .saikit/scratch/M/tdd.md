@@ -180,3 +180,33 @@ d1-ok con `VIGIA SYNC SKILLS agentes=verifier n=…`; d2-ok callado; rm absent; 
 
 ### Test
 `TODO VERDE: aplicar-vigia-sync-prueba` (casos 1-12).
+
+## r6 — franja conductual, contrato UNA linea, jobs=[]
+
+### Hueco 1: franja solo por grep
+Antes: `grep en_franja_silencio_cdmx` → VERDE aunque `if false; then` anule el guard.
+Ahora: copia hermetica bajo scratch; mock dentro → exit≠0 + «franja de silencio»; mock fuera → no bloquea; guard anulado → expuesto.
+
+### Hueco 2: contrato partido con DOTALL
+```
+assert-d1 summary="VIGIA SYNC SKILLS agentes=verifier\ntexto n=1 skill.md" → EXIT 1
+```
+`_linea_contrato_d1` exige UNA linea; mutante DOTALL queda expuesto.
+
+### No-bloqueante: jobs=[]
+```
+list-status {"jobs":[]} → absent   (antes: unknown via `jobs or d`)
+list-status sin clave jobs → unknown
+```
+
+### VERIFY
+```
+ok (3b): D1 contrato partido → FAIL
+ok (3c): mutante DOTALL …
+ok (10b): jobs=[] → absent; mutante jobs-or …
+ok (13): franja conductual (in→abort, out→ok); guard anulado queda expuesto
+TODO VERDE: aplicar-vigia-sync-prueba
+TODO VERDE: crons-dos-copias
+TODO VERDE: sync-avisa-skills
+bash scripts/run-checks.sh → exit 0
+```

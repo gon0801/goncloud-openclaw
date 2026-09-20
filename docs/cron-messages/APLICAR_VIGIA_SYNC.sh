@@ -143,21 +143,8 @@ cron_list_status() {
     echo unknown
     return
   fi
-  printf '%s' "$raw" | python3 -c '
-import json,sys
-tid=sys.argv[1]
-try:
-    d=json.load(sys.stdin)
-except Exception:
-    print("unknown")
-    raise SystemExit(0)
-jobs=d.get("jobs") or d
-if not isinstance(jobs, list):
-    print("unknown")
-    raise SystemExit(0)
-ids=[j.get("id") for j in jobs if isinstance(j,dict)]
-print("present" if tid in ids else "absent")
-' "$tid"
+  # Usa el parser estricto (clave jobs presente aunque []): no fall-open con {}.
+  printf '%s' "$raw" | python3 scripts/tests/vigia_sync_prueba_assert.py list-status "$tid" -
 }
 
 rm_y_verificar() {

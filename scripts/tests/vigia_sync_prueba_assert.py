@@ -50,10 +50,18 @@ def _run_exitoso(entry: dict) -> str:
     return ""
 
 
+# Contrato D1: UNA sola linea (sin DOTALL / sin que \\s cruce el salto).
 _RE_CONTRATO_D1 = re.compile(
-    r"VIGIA SYNC SKILLS\s+agentes=verifier\b.*\bn=\d+",
-    re.IGNORECASE | re.DOTALL,
+    r"VIGIA SYNC SKILLS\s+agentes=verifier\s+n=\d+\b",
+    re.IGNORECASE,
 )
+
+
+def _linea_contrato_d1(blob: str) -> str | None:
+    for line in blob.splitlines():
+        if _RE_CONTRATO_D1.search(line):
+            return line
+    return None
 
 
 def assert_d1_result(runs: Any) -> str:
@@ -66,12 +74,12 @@ def assert_d1_result(runs: Any) -> str:
     if why:
         return f"D1: run no exitoso ({why}) — un run fallido no es un aviso"
     blob = _blob(entry)
-    if not _RE_CONTRATO_D1.search(blob):
+    if _linea_contrato_d1(blob) is None:
         return (
             "D1: falta la linea de contrato "
-            "'VIGIA SYNC SKILLS agentes=verifier ... n=<n>'"
+            "'VIGIA SYNC SKILLS agentes=verifier n=<n>' (debe caber en UNA linea)"
         )
-    # Archivos: al menos una pista del cambio 43097da
+    # Archivos: en la misma linea de contrato o citadas en el summary
     pistas = (
         "archivo",
         "skill.md",
@@ -125,6 +133,31 @@ def assert_rm_cleanup(tid: str, rm_ok: bool, list_status: str) -> str:
     return ""
 
 
+def jobs_from_cron_list(data: Any) -> tuple[str, list]:
+    """Parsea cron list --json.
+
+    Distingue clave `jobs` presente (aunque []) de ausente/invalida.
+    Returns: ("ok", jobs_list) | ("unknown", []).
+    """
+    if not isinstance(data, dict):
+        return "unknown", []
+    if "jobs" not in data:
+        return "unknown", []
+    jobs = data["jobs"]
+    if jobs is None or not isinstance(jobs, list):
+        return "unknown", []
+    return "ok", [j for j in jobs if isinstance(j, dict)]
+
+
+def list_status_for_tid(data: Any, tid: str) -> str:
+    """present | absent | unknown a partir del JSON de cron list."""
+    kind, jobs = jobs_from_cron_list(data)
+    if kind != "ok":
+        return "unknown"
+    ids = [j.get("id") for j in jobs]
+    return "present" if tid in ids else "absent"
+
+
 def main(argv: list[str]) -> int:
     # CLI: assert-d1|assert-d2 <runs.json>
     #      assert-rm <tid> <rm_ok:0|1> <absent|present|unknown>
@@ -159,6 +192,20 @@ def main(argv: list[str]) -> int:
             print("ASSERT_FAIL:", err)
             return 1
         print("ASSERT_OK: assert-rm")
+        return 0
+    if op == "list-status":
+        # list-status <tid> <cron-list.json|->
+        if len(argv) < 4:
+            print("falta tid cron-list.json", file=sys.stderr)
+            return 2
+        tid, path = argv[2], argv[3]
+        raw = sys.stdin.read() if path == "-" else open(path, encoding="utf-8").read()
+        try:
+            data = json.loads(raw)
+        except Exception:
+            print("unknown")
+            return 0
+        print(list_status_for_tid(data, tid))
         return 0
     print("op desconocida:", op, file=sys.stderr)
     return 2
