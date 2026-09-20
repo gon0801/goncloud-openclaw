@@ -170,7 +170,7 @@ type ActividadViva = {
   estado: string | null;
 };
 
-function actividadEnCurso(input: EntradaSeguimientoV2): ActividadViva {
+function actividadEnCurso(input: EntradaSeguimientoV2): ActividadViva | null {
   for (const fase of input.fases) {
     const actual = fase.carriles.find((c) => c.estado !== "omitido" && !esTerminal(c.estado))
       ?? fase.carriles.find((c) => c.estado !== "omitido");
@@ -180,7 +180,7 @@ function actividadEnCurso(input: EntradaSeguimientoV2): ActividadViva {
   }
   const suelta = input.tareasSueltas[0];
   if (suelta !== undefined) return { ...suelta.actividad, estado: null };
-  throw new Error("renderSeguimientoV2: sin carriles ni tareas para describir la ventana sin cambios");
+  return null;
 }
 
 function evidenciaSana(act: ActividadViva): string {
@@ -196,6 +196,12 @@ function textoCambio(input: EntradaSeguimientoV2): string {
   // que el trabajo continúa. Dice el tiempo en la unidad actual y la última
   // evidencia; nunca "nada nuevo".
   const act = actividadEnCurso(input);
+  // Caso toda-fase-conservador-sin-carriles (p.ej. corrupción) sin sueltas:
+  // no hay actividad que citar y no se inventa ninguna; el corte de 30
+  // minutos sale igual.
+  if (act === null) {
+    return "El trabajo sigue bajo seguimiento: sin lectura nueva del avance en esta ventana.";
+  }
   const inicioMs = Date.parse(act.iniciadaEn);
   if (Number.isNaN(inicioMs)) {
     throw new Error(`renderSeguimientoV2: iniciadaEn inválida (${act.iniciadaEn})`);

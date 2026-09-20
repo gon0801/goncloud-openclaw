@@ -313,6 +313,44 @@ describe("trabajo ilegible", () => {
     assert.equal(segundo.accion, "NO_REPLY");
   });
 
+  it("the due periodic cut with only corrupt work sends a safe report, never throws", () => {
+    // Recorrido completo del hallazgo 1: el resumen ilegible se conserva con
+    // su forma conservadora (desconocido, sin carriles) y en `problemas`.
+    const corrupta: ResumenSeguimiento = {
+      trabajoId: "fase:14",
+      fase: "14",
+      titulo: "Fase 14",
+      progreso: { kind: "desconocido", motivo: "plan-sin-verificar" },
+      carriles: [],
+      siguientePaso: "",
+      atencionRequerida: { necesaria: false, motivo: null },
+      actualizado: "2026-09-19T10:30:00Z",
+    };
+    const primero = decidirSeguimiento({
+      ahora: 900, previo: corteEn(0, [corrupta]), activas: [corrupta], problemas, inmediato: null,
+    });
+    assert.equal(primero.accion, "SEND");
+    if (primero.accion !== "SEND") throw new Error("primer ilegible inesperado");
+    assert.equal(primero.tipo, "inmediato");
+    // Confirmación por contrato público: messageId SOLO en el nivel superior.
+    const previo = confirmado(primero.estadoTrasConfirmar, 41);
+    // Minuto 30: la corrupción no pospone el corte debido (spec l.120-126) y
+    // el único trabajo activo sigue sin carriles: el reporte sale seguro,
+    // sin lanzar y sin inventar actividad.
+    const segundo = decidirSeguimiento({
+      ahora: 1800, previo, activas: [corrupta], problemas, inmediato: null,
+    });
+    assert.equal(segundo.accion, "SEND");
+    if (segundo.accion !== "SEND") throw new Error("corte con solo corrupcion inesperado");
+    assert.equal(segundo.tipo, "periodico");
+    assert.match(segundo.mensaje, /\[AVANZA\] Fase 14 — desconocido/);
+    assert.match(segundo.mensaje, /sin lectura nueva del avance en esta ventana\./);
+    assert.doesNotMatch(segundo.mensaje, /minutos en la unidad actual/);
+    assert.doesNotMatch(segundo.mensaje, /última evidencia/);
+    assert.deepEqual(segundo.estadoTrasConfirmar.corte,
+      { kind: "reporte-confirmado", ultimoReporteConfirmado: 1800 });
+  });
+
   it("a changed corruption report sends again", () => {
     const primero = decidirSeguimiento({
       ahora: 901, previo: corteEn(900, []), activas: [], problemas,

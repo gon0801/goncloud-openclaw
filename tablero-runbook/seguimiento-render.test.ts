@@ -200,6 +200,28 @@ describe("renderSeguimientoV2", () => {
     assert.doesNotMatch(text, /nada nuevo/i);
   });
 
+  it("with only a carril-less conservative phase and no change renders the safe continuity phrase", () => {
+    const conservadora: ResumenSeguimiento = {
+      trabajoId: "fase:14",
+      fase: "14",
+      titulo: "Fase 14",
+      progreso: { kind: "desconocido", motivo: "plan-sin-verificar" },
+      carriles: [],
+      siguientePaso: "",
+      atencionRequerida: { necesaria: false, motivo: null },
+      actualizado: "2026-09-19T10:30:00Z",
+    };
+    const text = renderSeguimientoV2({
+      ...entradaEjemplo(),
+      cambio: "",
+      fases: [conservadora],
+    });
+    assert.match(text, /Fase 14 — desconocido/);
+    assert.match(text, /Que cambió:\nEl trabajo sigue bajo seguimiento: sin lectura nueva del avance en esta ventana\./);
+    assert.doesNotMatch(text, /minutos en la unidad actual/);
+    assert.doesNotMatch(text, /última evidencia/);
+  });
+
   it("renders standalone tasks after the phases", () => {
     const text = renderSeguimientoV2({
       ...entradaEjemplo(),
