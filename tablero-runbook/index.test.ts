@@ -440,6 +440,77 @@ describe("plugin smoke import (7.4)", () => {
     }
   });
 
+  it("decide: malformed scratch never resets the cut", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-decide-mal-"));
+    const host = await cargar({ stateDir: dir });
+    assert.equal(host.metodos.get("runbook.progress.decide")?.opts?.scope, "operator.read");
+    assert.deepEqual(
+      await llamarMetodo(host.metodos, "runbook.progress.decide", { modo: "tick", estado: {} }),
+      { ok: false, razon: "estado-invalido" },
+    );
+    assert.deepEqual(
+      await llamarMetodo(host.metodos, "runbook.progress.decide", { modo: "tick", estado: null }),
+      { ok: false, razon: "estado-invalido" },
+    );
+    assert.deepEqual(
+      await llamarMetodo(host.metodos, "runbook.progress.decide", { modo: "iniciar", estado: {} }),
+      { ok: false, razon: "estado-invalido" },
+    );
+    assert.deepEqual(
+      await llamarMetodo(host.metodos, "runbook.progress.decide", { modo: "raro", estado: null }),
+      { ok: false, razon: "evento-invalido" },
+    );
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("decide: explicit init, silent first tick, due periodic, immediate bypass", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-decide-"));
+    const host = await cargar({ stateDir: dir });
+    assert.deepEqual(
+      await llamarMetodo(host.metodos, "runbook.progress.set", docMinimo({})),
+      { ok: true },
+    );
+    const mod = await import("./index.ts");
+    const T = 1_700_000_000_000;
+    const TS = 1_700_000_000;
+    try {
+      mod._setRelojSeguimientoForTest(() => T);
+      const r0 = await llamarMetodo(host.metodos, "runbook.progress.decide", { modo: "iniciar", estado: null });
+      assert.equal(r0.accion, "NO_REPLY");
+      assert.deepEqual(r0.estado.corte, { kind: "esperando-primer-reporte", inicioVentana: TS });
+
+      mod._setRelojSeguimientoForTest(() => T + 900_000);
+      const r1 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r0.estado });
+      assert.equal(r1.accion, "NO_REPLY");
+
+      mod._setRelojSeguimientoForTest(() => T + 1_800_000);
+      const r2 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r1.estado });
+      assert.equal(r2.accion, "SEND");
+      assert.equal(r2.tipo, "periodico");
+      assert.match(r2.mensaje, /Fase 14/);
+      assert.match(r2.mensaje, /sigue en curso/);
+      assert.deepEqual(r2.estadoTrasConfirmar.corte,
+        { kind: "reporte-confirmado", ultimoReporteConfirmado: TS + 1800 });
+
+      mod._setRelojSeguimientoForTest(() => T + 901_000);
+      const r3 = await llamarMetodo(host.metodos, "runbook.progress.decide", {
+        modo: "tick",
+        estado: r0.estado,
+        inmediato: { tipo: "DETENIDA", texto: "cuota agotada" },
+      });
+      assert.equal(r3.accion, "SEND");
+      assert.equal(r3.tipo, "inmediato");
+      assert.equal(r3.mensaje, "cuota agotada");
+      assert.deepEqual(r3.estadoTrasConfirmar.corte,
+        { kind: "esperando-primer-reporte", inicioVentana: TS });
+    } finally {
+      mod._setRelojSeguimientoForTest(undefined);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("scopes: set operator.write, get operator.read", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-scopes-"));
     const host = await cargar({ stateDir: dir });

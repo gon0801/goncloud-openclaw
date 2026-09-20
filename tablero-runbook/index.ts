@@ -47,7 +47,15 @@ import {
 } from "./lib.ts";
 import { cruzarGitHub, leerGithubConfig } from "./github.ts";
 import { cruzarPlan, type PlanCruce } from "./plan.ts";
-import { listarSeguimientoActivo } from "./seguimiento.ts";
+import { listarSeguimientoActivo, type ConteoObjetivo } from "./seguimiento.ts";
+import {
+  crearEstadoInicial,
+  decidirSeguimiento,
+  parseEstadoSeguimiento,
+  type EstadoSeguimiento,
+  type EventoInmediato,
+} from "./seguimiento-clock.ts";
+import type { TareaSuelta } from "./seguimiento-render.ts";
 import { syncProgress } from "./live-bus.ts";
 
 // ---------------------------------------------------------------------------
@@ -445,6 +453,128 @@ function servirJson(
 }
 
 // ---------------------------------------------------------------------------
+// Reloj de seguimiento (Task 3): `runbook.progress.decide` es la única entrada
+// que AGENTS.md nombra. El reloj puro vive en seguimiento-clock.ts; aquí solo
+// se angosta el insumo `unknown`, se pone la hora y se cargan los resúmenes
+// activos. Este RPC no envía nada ni escribe el scratch.
+// ---------------------------------------------------------------------------
+
+let relojInyectado: (() => number) | undefined;
+
+/** Solo tests: fija la hora que `runbook.progress.decide` ve como `ahora`. */
+export function _setRelojSeguimientoForTest(fn: (() => number) | undefined): void {
+  relojInyectado = fn;
+}
+
+function ahoraSeguimiento(): number {
+  const ms = relojInyectado?.() ?? Date.now();
+  return Math.floor(ms / 1000);
+}
+
+function esObjetoParams(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+function parseInmediato(v: unknown): EventoInmediato | null {
+  if (v === undefined || v === null) return null;
+  if (!esObjetoParams(v)) throw new Error("evento-invalido");
+  const tipo = v["tipo"];
+  if (tipo !== "NECESITO TU RESPUESTA" && tipo !== "DETENIDA" && tipo !== "CERRADA") {
+    throw new Error("evento-invalido");
+  }
+  const texto = v["texto"];
+  if (typeof texto !== "string" || texto.length === 0 || texto.length > 2000) {
+    throw new Error("evento-invalido");
+  }
+  return { tipo, texto };
+}
+
+function parseConteo(v: unknown): ConteoObjetivo {
+  if (!esObjetoParams(v)) throw new Error("evento-invalido");
+  if (v["kind"] === "conocido") {
+    const completadas = v["completadas"];
+    const total = v["total"];
+    const porcentaje = v["porcentaje"];
+    if (typeof completadas !== "number" || !Number.isFinite(completadas)
+      || typeof total !== "number" || !Number.isFinite(total)
+      || typeof porcentaje !== "number" || !Number.isFinite(porcentaje)) {
+      throw new Error("evento-invalido");
+    }
+    return { kind: "conocido", completadas, total, porcentaje };
+  }
+  if (v["kind"] === "desconocido") {
+    const motivo = v["motivo"];
+    if (motivo !== "plan-sin-verificar" && motivo !== "unidad-desconocida") {
+      throw new Error("evento-invalido");
+    }
+    return { kind: "desconocido", motivo };
+  }
+  throw new Error("evento-invalido");
+}
+
+function parseSueltas(v: unknown): TareaSuelta[] {
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v)) throw new Error("evento-invalido");
+  const sueltas: TareaSuelta[] = [];
+  for (const e of v) {
+    if (!esObjetoParams(e)) throw new Error("evento-invalido");
+    const nombre = e["nombre"];
+    if (typeof nombre !== "string" || nombre.length === 0) {
+      throw new Error("evento-invalido");
+    }
+    const progreso = parseConteo(e["progreso"]);
+    const a = e["actividad"];
+    if (!esObjetoParams(a)) throw new Error("evento-invalido");
+    const detalle = a["detalle"];
+    const iniciadaEn = a["iniciadaEn"];
+    const ultimaEvidencia = a["ultimaEvidencia"];
+    if (typeof detalle !== "string" || typeof iniciadaEn !== "string" || typeof ultimaEvidencia !== "string") {
+      throw new Error("evento-invalido");
+    }
+    sueltas.push({ nombre, progreso, actividad: { detalle, iniciadaEn, ultimaEvidencia } });
+  }
+  return sueltas;
+}
+
+type RespuestaDecide =
+  | { ok: false; razon: "estado-invalido" | "evento-invalido" }
+  | ReturnType<typeof decidirSeguimiento>;
+
+async function manejarDecide(
+  cfg: Config,
+  cfgGithub: ReturnType<typeof leerGithubConfig>,
+  params: unknown,
+): Promise<RespuestaDecide> {
+  if (!esObjetoParams(params)) return { ok: false, razon: "evento-invalido" };
+  const modo = params["modo"];
+  if (modo !== "iniciar" && modo !== "tick") return { ok: false, razon: "evento-invalido" };
+  let inmediato: EventoInmediato | null;
+  let sueltas: TareaSuelta[];
+  try {
+    inmediato = parseInmediato(params["inmediato"]);
+    sueltas = parseSueltas(params["tareasSueltas"]);
+  } catch {
+    return { ok: false, razon: "evento-invalido" };
+  }
+  const ahora = ahoraSeguimiento();
+  const lista = await listarSeguimientoActivo(cfg, cfgGithub);
+  if (modo === "iniciar") {
+    // Solo "iniciar" crea estado, y exige estado:null explícito: crear sobre
+    // un estado existente reiniciaría el corte en silencio.
+    if (params["estado"] !== null) return { ok: false, razon: "estado-invalido" };
+    const previo = crearEstadoInicial(ahora, lista.activas);
+    return decidirSeguimiento({ ahora, previo, activas: lista.activas, sueltas, inmediato });
+  }
+  let previo: EstadoSeguimiento;
+  try {
+    previo = parseEstadoSeguimiento(params["estado"]);
+  } catch {
+    return { ok: false, razon: "estado-invalido" };
+  }
+  return decidirSeguimiento({ ahora, previo, activas: lista.activas, sueltas, inmediato });
+}
+
+// ---------------------------------------------------------------------------
 // Plugin entry.
 // ---------------------------------------------------------------------------
 
@@ -509,6 +639,14 @@ export default definePluginEntry({
       "runbook.progress.list",
       async ({ respond }) => {
         respond(true, await listarSeguimientoActivo(cfg, cfgGithub));
+      },
+      { scope: "operator.read" },
+    );
+
+    api.registerGatewayMethod(
+      "runbook.progress.decide",
+      async ({ params, respond }) => {
+        respond(true, await manejarDecide(cfg, cfgGithub, params));
       },
       { scope: "operator.read" },
     );

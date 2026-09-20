@@ -13,13 +13,15 @@
  */
 import type { ConteoObjetivo, ResumenSeguimiento } from "./seguimiento.ts";
 
+export type TareaSuelta = {
+  nombre: string;
+  progreso: ConteoObjetivo;
+  actividad: { detalle: string; iniciadaEn: string; ultimaEvidencia: string };
+};
+
 export type EntradaSeguimientoV2 = {
   fases: ResumenSeguimiento[];
-  tareasSueltas: Array<{
-    nombre: string;
-    progreso: ConteoObjetivo;
-    actividad: { detalle: string; iniciadaEn: string; ultimaEvidencia: string };
-  }>;
+  tareasSueltas: TareaSuelta[];
   ahora: number;
   cambio: string;
   siguiente: string;

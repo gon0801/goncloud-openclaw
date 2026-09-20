@@ -61,3 +61,43 @@ nada.
 I/O. Rechaza el insumo vacío y las marcas de tiempo inválidas. Los casos
 viven en `tablero-runbook/seguimiento-render.test.ts`, incluido el ejemplo
 aprobado byte por byte.
+
+## Reloj y scratch (`seguimiento-clock.v1`)
+
+La vigilancia interna corre cada 15 minutos; el consolidado sale cada 30.
+`tablero-runbook/seguimiento-clock.ts` (`decidirSeguimiento`) es puro: dadas
+la época actual (en segundos), los resúmenes activos, las tareas sueltas, el
+último estado confirmado y un eventual evento inmediato, devuelve `NO_REPLY`
+o `SEND` (`periodico` o `inmediato`). Nunca llama a Telegram, al disco ni al
+reloj.
+
+El corte vive en el scratch de la automatización global `avance-tareas`, con
+esta forma (`schema: "seguimiento-clock.v1"`):
+
+- `corte`: `{kind:"esperando-primer-reporte", inicioVentana}` o
+  `{kind:"reporte-confirmado", ultimoReporteConfirmado}` (época en segundos).
+- `ultimoEstado`: resumen estable (identificadores de trabajo, conteos y
+  porcentajes por fase) del último corte confirmado; contra él se calcula el
+  `Que cambió`.
+- `messageId`: el del último Telegram confirmado, o `null`.
+- `trabajosActivos`: los `trabajoId` del corte.
+
+Reglas del corte:
+
+- La creación llama una vez a `runbook.progress.decide` en `modo:"iniciar"`
+  con `estado:null` y persiste de inmediato el `NO_REPLY` devuelto: así el
+  primer tick (+15) y el segundo (+30) comparten la base.
+- Solo `modo:"iniciar"` crea estado. En `modo:"tick"`, un scratch ausente o
+  malformado devuelve `{ok:false, razon:"estado-invalido"}`: nunca reinicia
+  el corte en silencio.
+- Un `SEND` devuelve `estadoTrasConfirmar` sin `messageId`. Quien llama lo
+  combina con el `messageId` y persiste el estado completo solo tras `ok:true`
+  más `messageId`. Un envío fallido deja el scratch anterior intacto y el
+  siguiente tick reintenta.
+- Confirmar un periódico avanza el corte a la época actual; confirmar un
+  inmediato conserva el corte y solo actualiza la deduplicación y el conjunto
+  activo. Cerrar una fase la saca del próximo corte sin posponer el reporte
+  debido de las demás.
+- Sin trabajo activo y sin evento inmediato, el tick termina `NO_REPLY`.
+- `runbook.progress.decide` es la única entrada que la regla del director
+  nombra; el agente no reproduce estas transiciones en prosa.
