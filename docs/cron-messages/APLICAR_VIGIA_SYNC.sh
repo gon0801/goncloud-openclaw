@@ -121,8 +121,10 @@ escribir_log_prueba() {
   fi
   echo "-- escribir_log_prueba ($label) con_skills=$con_skills"
   local OUT TID
+  # --no-deliver: sin esto el runner marca completionStatus=failed (announce→last
+  # fall-closed) y `cron run` sale ≠0 aunque el comando haya escrito el log.
   OUT=$($OC cron add --name "vigia-sync-write-$label" --at 1m --delete-after-run \
-    --timeout-seconds 120 --command "$cmd" --json 2>&1) \
+    --no-deliver --timeout-seconds 120 --command "$cmd" --json 2>&1) \
     || { echo "ABORTO: no pude crear job de escritura del fixture: $OUT" | cut -c1-400; return 1; }
   TID=$(printf '%s' "$OUT" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("id") or d.get("job",{}).get("id",""))' 2>/dev/null)
   [ -n "$TID" ] || { echo "ABORTO: write-job sin id: $OUT" | cut -c1-400; return 1; }

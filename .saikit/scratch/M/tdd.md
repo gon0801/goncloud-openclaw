@@ -210,3 +210,33 @@ TODO VERDE: crons-dos-copias
 TODO VERDE: sync-avisa-skills
 bash scripts/run-checks.sh → exit 0
 ```
+
+## Q2 — aplicador REAL contra el gateway (2026-09-20)
+
+Espera: sleep hasta `02:26:05Z` (fuera de ventana cerrada 01:55–02:25Z; CDMX 20:26, fuera de silencio 23–08).
+
+### 1. Edit vivo
+```
+bash docs/cron-messages/APLICAR_VIGIA_SYNC.sh → EXIT 0
+backup: 2d763be5-…20260920T022705Z-74654.{pre,post}.json
+message post == verif-sync-repos.v2.txt (8157 B)
+agentId/schedule/toolsAllow/enabled intactos vs pre
+```
+
+### 2. D1/D2 (VIGIA_SYNC_EJECUTAR=1 --test)
+Intento 1–2: ABORTO `write-job … no corrio` — `cron run` sale ≠0 porque el job de escritura iba con delivery announce→last (fall-closed) aunque el comando escribía el log (stdout `1`).
+Arreglo mínimo: `--no-deliver` en `escribir_log_prueba` (igual que D1/D2).
+Reintento:
+```
+fixture D1 OK → D1 id=42ee6ef5… status=ok succeeded 74s → ASSERT_OK assert-d1 + rm absent
+fixture D2 OK → D2 id=2f5b83bc… status=ok succeeded 44s → ASSERT_OK assert-d2 + rm absent
+PRUEBA D1/D2 terminada VERDE
+summary D1: CASO D + linea SKILLS verifier + archivos
+summary D2: VIGIA SYNC OK ciclo=… (callado en D)
+```
+
+### 3. Re-lectura
+`openclaw cron get 2d763be5-…` message == post.json == v2.txt.
+
+### 4. Commits
+`fix(13.2): --no-deliver en write-jobs del fixture` + `chore(13.2): respaldo pre/post del vigia v2 aplicado`.
