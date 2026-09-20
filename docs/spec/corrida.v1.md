@@ -40,7 +40,11 @@ el validador vive en `scripts/mac/corrida/lib.sh` y la prueba 9.1 lo carga por s
 
 ## Ciclo de vida de las marcas
 
-`corrida.sh lanzar-sesion` registra la sesión y activa `OPENCLAW_WATCH=1`. Cuando
+`corrida.sh lanzar-sesion` serializa la creación, las marcas y el registro con el
+mismo lock global que usa la reconciliación. Publica `OPENCLAW_WATCH_RUN=<id>`
+antes de activar `OPENCLAW_WATCH=1` y conserva el lock hasta registrar la sesión.
+Así una limpieza decidida sobre una sesión vieja no puede caer sobre otra que
+reutilizó el mismo nombre. Cuando
 un carril termina, el vigía ejecuta `corrida.sh terminar-sesion <id> <sesion>`:
 retira solo esa marca, deja la sesión abierta y no toca su worktree. La operación
 es idempotente y rechaza sesiones que no pertenezcan al registro indicado.

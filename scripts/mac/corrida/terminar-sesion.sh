@@ -33,6 +33,7 @@ sys.exit(0 if os.environ["CORR_SESION"] in nombres else 1)
       return 1
     fi
   fi
+  "$TMUX_BIN" set-environment -t "=$sesion" -u OPENCLAW_WATCH_RUN 2>/dev/null || true
   lock_soltar "$reg"
   echo "terminada $sesion"
 }

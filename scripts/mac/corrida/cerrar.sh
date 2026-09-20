@@ -24,6 +24,7 @@ import json,os
 print(' '.join(x.get('nombre','') for x in json.load(open(os.environ['CORR_REG'])).get('sesiones',[])))")"
   for s in $nombres; do
     "$TMUX_BIN" set-environment -t "=$s" -u OPENCLAW_WATCH 2>/dev/null
+    "$TMUX_BIN" set-environment -t "=$s" -u OPENCLAW_WATCH_RUN 2>/dev/null
   done
   # El cron se quita por el id que devolvio cron add; por nombre puede no borrar nada.
   # Si el rm falla porque el cron YA no esta en la lista, es un reintento tras media

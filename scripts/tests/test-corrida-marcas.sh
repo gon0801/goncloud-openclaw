@@ -30,43 +30,102 @@ cat >"$T/state/cerrada/registro.json" <<'JSON'
   "estado": "cerrada",
   "sesiones": [
     {"nombre": "ses-vieja", "rol": "carril", "cli": "grok", "dueno": "lead", "dir": "/tmp/vieja"},
-    {"nombre": "ses-activa", "rol": "carril", "cli": "grok", "dueno": "lead", "dir": "/tmp/activa-vieja"}
+    {"nombre": "ses-activa", "rol": "carril", "cli": "grok", "dueno": "lead", "dir": "/tmp/activa-vieja"},
+    {"nombre": "ses-reusada", "rol": "carril", "cli": "grok", "dueno": "lead", "dir": "/tmp/reusada-vieja"}
   ]
 }
 JSON
 
-printf '%s\n' ses-activa ses-lista ses-vieja ses-desconocida >"$T/sesiones"
+printf '%s\n' ses-activa ses-lista ses-vieja ses-desconocida ses-reusada >"$T/sesiones"
 cp "$T/sesiones" "$T/marcadas"
+printf '%s\t%s\n' ses-reusada abierta >"$T/duenos"
 TMUX_LOG="$T/tmux.log"
 cat >"$T/bin/tmux" <<'SH'
 #!/bin/sh
 printf '%s\n' "$*" >>"$TMUX_LOG"
 case "$1" in
   list-sessions) cat "$TMUX_SESIONES" ;;
-  show-environment)
+  has-session)
     ses=""
     while [ $# -gt 0 ]; do
       [ "$1" = "-t" ] && { ses="${2#=}"; shift 2; continue; }
       shift
     done
+    grep -qxF "$ses" "$TMUX_SESIONES" ;;
+  new-session)
+    ses=""
+    while [ $# -gt 0 ]; do
+      [ "$1" = "-s" ] && { ses="$2"; shift 2; continue; }
+      shift
+    done
+    grep -qxF "$ses" "$TMUX_SESIONES" 2>/dev/null || printf '%s\n' "$ses" >>"$TMUX_SESIONES" ;;
+  capture-pane) printf '%s\n' "${TMUX_BARRA:-READY}" ;;
+  kill-session)
+    ses=""
+    while [ $# -gt 0 ]; do
+      [ "$1" = "-t" ] && { ses="${2#=}"; shift 2; continue; }
+      shift
+    done
+    grep -vxF "$ses" "$TMUX_SESIONES" >"$TMUX_SESIONES.tmp" || true
+    mv "$TMUX_SESIONES.tmp" "$TMUX_SESIONES"
+    grep -vxF "$ses" "$TMUX_MARCADAS" >"$TMUX_MARCADAS.tmp" || true
+    mv "$TMUX_MARCADAS.tmp" "$TMUX_MARCADAS"
+    awk -F '\t' -v s="$ses" '$1 != s' "$TMUX_DUENOS" >"$TMUX_DUENOS.tmp" || true
+    mv "$TMUX_DUENOS.tmp" "$TMUX_DUENOS" ;;
+  show-environment)
+    ses="" var=""
+    while [ $# -gt 0 ]; do
+      [ "$1" = "-t" ] && { ses="${2#=}"; shift 2; continue; }
+      var="$1"
+      shift
+    done
+    if [ "$var" = "OPENCLAW_WATCH_RUN" ]; then
+      run=$(awk -F '\t' -v s="$ses" '$1==s { print $2; exit }' "$TMUX_DUENOS")
+      [ -n "$run" ] && { echo "OPENCLAW_WATCH_RUN=$run"; exit 0; }
+      exit 1
+    fi
     grep -qxF "$ses" "$TMUX_MARCADAS" && { echo OPENCLAW_WATCH=1; exit 0; }
     exit 1 ;;
   set-environment)
-    ses=""
+    ses="" quitar=false var="" valor=""
+    shift
     while [ $# -gt 0 ]; do
       [ "$1" = "-t" ] && { ses="${2#=}"; shift 2; continue; }
-      shift
+      [ "$1" = "-u" ] && { quitar=true; var="$2"; shift 2; continue; }
+      var="$1"; valor="${2:-}"; break
     done
     [ "${TMUX_FALLA_PARA:-}" = "$ses" ] && exit 1
-    grep -vxF "$ses" "$TMUX_MARCADAS" >"$TMUX_MARCADAS.tmp" || true
-    mv "$TMUX_MARCADAS.tmp" "$TMUX_MARCADAS" ;;
+    if [ "$quitar" = true ]; then
+      if [ "${TMUX_RACE:-}" = "1" ] && [ "$ses" = "ses-race" ] && [ "$var" = "OPENCLAW_WATCH" ]; then
+        grep -vxF "$ses" "$TMUX_SESIONES" >"$TMUX_SESIONES.tmp" || true
+        mv "$TMUX_SESIONES.tmp" "$TMUX_SESIONES"
+        : >"$TMUX_RACE_READY"
+        i=0
+        while [ ! -f "$TMUX_RACE_MARKED" ] && [ "$i" -lt 30 ]; do sleep 0.1; i=$((i+1)); done
+      fi
+      if [ "$var" = "OPENCLAW_WATCH" ]; then
+        grep -vxF "$ses" "$TMUX_MARCADAS" >"$TMUX_MARCADAS.tmp" || true
+        mv "$TMUX_MARCADAS.tmp" "$TMUX_MARCADAS"
+      else
+        awk -F '\t' -v s="$ses" '$1 != s' "$TMUX_DUENOS" >"$TMUX_DUENOS.tmp" || true
+        mv "$TMUX_DUENOS.tmp" "$TMUX_DUENOS"
+      fi
+    elif [ "$var" = "OPENCLAW_WATCH" ]; then
+      grep -qxF "$ses" "$TMUX_MARCADAS" 2>/dev/null || printf '%s\n' "$ses" >>"$TMUX_MARCADAS"
+      [ "${TMUX_RACE:-}" = "1" ] && [ "$ses" = "ses-race" ] && : >"$TMUX_RACE_MARKED"
+    else
+      awk -F '\t' -v s="$ses" '$1 != s' "$TMUX_DUENOS" >"$TMUX_DUENOS.tmp" || true
+      printf '%s\t%s\n' "$ses" "$valor" >>"$TMUX_DUENOS.tmp"
+      mv "$TMUX_DUENOS.tmp" "$TMUX_DUENOS"
+    fi ;;
   *) exit 2 ;;
 esac
 SH
 chmod +x "$T/bin/tmux"
 
 export CORRIDA_STATE="$T/state" TMUX_BIN="$T/bin/tmux" TMUX_LOG
-export TMUX_SESIONES="$T/sesiones" TMUX_MARCADAS="$T/marcadas"
+export TMUX_SESIONES="$T/sesiones" TMUX_MARCADAS="$T/marcadas" TMUX_DUENOS="$T/duenos"
+export TMUX_BARRA=READY
 
 # El procedimiento que instala corrida.sh debe copiar los subcomandos que el
 # runbook general manda usar. Una copia fija incompleta rompe solo en la Mac viva.
@@ -102,9 +161,45 @@ salida="$(bash "$CORR" reconciliar-marcas)" || fail "reconciliar-marcas fallo"
 grep -qxF ses-vieja "$T/marcadas" && fail "quedo una marca de corrida cerrada"
 grep -qxF ses-activa "$T/marcadas" || fail "reconciliar desmarco una corrida abierta"
 grep -qxF ses-desconocida "$T/marcadas" || fail "reconciliar adivino sobre una sesion desconocida"
+grep -qxF ses-reusada "$T/marcadas" \
+  || fail "reconciliar desmarco una sesion nueva antes de que entrara al registro"
 printf '%s\n' "$salida" | grep -qF 'marca conservada (abierta): ses-activa' \
   || fail "reconciliar no reporto la marca con dueña abierta"
 printf '%s\n' "$salida" | grep -qF 'marca conservada (desconocida): ses-desconocida' \
   || fail "reconciliar no reporto la marca sin dueño conocido"
+
+# Reproduce la carrera real: reconciliar decide sobre una sesion vieja cerrada;
+# mientras va a desmarcarla, lanzar-sesion reutiliza el nombre. Sin un lock comun,
+# el unset tardio cae sobre la sesion nueva y el vigilante deja de verla.
+mkdir -p "$T/state/race-open" "$T/state/race-closed"
+cat >"$T/modos.tsv" <<'TSV'
+sh	sh		READY
+TSV
+cat >"$T/state/race-open/registro.json" <<JSON
+{"id":"race-open","estado":"abierta","cli_modos":"$T/modos.tsv","sesiones":[]}
+JSON
+cat >"$T/state/race-closed/registro.json" <<'JSON'
+{"id":"race-closed","estado":"cerrada","sesiones":[{"nombre":"ses-race"}]}
+JSON
+printf '%s\n' ses-race >"$T/sesiones"
+printf '%s\n' ses-race >"$T/marcadas"
+printf '%s\t%s\n' ses-race race-closed >"$T/duenos"
+export TMUX_RACE=1 TMUX_RACE_READY="$T/race-ready" TMUX_RACE_MARKED="$T/race-marked"
+bash "$CORR" reconciliar-marcas >"$T/race-recon.out" 2>&1 & recon_pid=$!
+i=0
+while [ ! -f "$TMUX_RACE_READY" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i+1)); done
+[ -f "$TMUX_RACE_READY" ] || fail "la reproduccion no alcanzo la ventana de reconciliacion"
+bash "$CORR" lanzar-sesion race-open carril sh "$T" --nombre ses-race >"$T/race-launch.out" 2>&1 & launch_pid=$!
+wait "$recon_pid" || fail "reconciliar fallo durante la reproduccion concurrente"
+wait "$launch_pid" || fail "lanzar-sesion fallo durante la reproduccion concurrente"
+grep -qxF ses-race "$T/marcadas" \
+  || fail "reconciliar retiro la marca de la sesion nueva con nombre reutilizado"
+grep -q '"nombre": "ses-race"' "$T/state/race-open/registro.json" \
+  || fail "lanzar-sesion no registro la sesion nueva"
+linea_dueno=$(grep -nF 'set-environment -t =ses-race OPENCLAW_WATCH_RUN race-open' "$TMUX_LOG" | tail -1 | cut -d: -f1)
+linea_marca=$(grep -nF 'set-environment -t =ses-race OPENCLAW_WATCH 1' "$TMUX_LOG" | tail -1 | cut -d: -f1)
+[ -n "$linea_dueno" ] && [ -n "$linea_marca" ] && [ "$linea_dueno" -lt "$linea_marca" ] \
+  || fail "lanzar-sesion no publico el dueño antes de hacer visible la marca"
+unset TMUX_RACE TMUX_RACE_READY TMUX_RACE_MARKED
 
 echo "VERDE: terminar-sesion y reconciliar-marcas conservan el dueño de cada marca"

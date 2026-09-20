@@ -159,6 +159,65 @@ lock_soltar() { # $1 registro: disarm ANTES del rmdir, solo si este proceso armo
   rmdir "$d" 2>/dev/null
 }
 
+# Lock global e independiente para el nombre/las marcas de sesiones tmux. No usa
+# CORR_LOCK_TOKEN ni CORR_LOCK_ACT: lanzar-sesion necesita mantenerlo mientras
+# toma tambien el lock de su registro. Reconciliar usa el mismo lock desde el
+# snapshot de list-sessions hasta el ultimo unset, cerrando el TOCTOU por nombre.
+marcas_lock_abandonar() {
+  local d="${MARCAS_LOCK_ACT:-}" t
+  [ -n "$d" ] || return 0
+  t="$d/token"
+  if [ -f "$t" ] && [ "$(cat "$t" 2>/dev/null)" = "${MARCAS_LOCK_TOKEN:-}" ]; then
+    rm -f "$t"
+    rmdir "$d" 2>/dev/null
+  fi
+}
+
+marcas_lock_tomar() {
+  local d="$CORRIDA_STATE/.marcas.lock" i=0
+  mkdir -p "$CORRIDA_STATE" || return 1
+  if [ -d "$d" ] && lock_viejo "$d" "$CORR_LOCK_VIEJO"; then
+    rm -f "$d/token"
+    rmdir "$d" 2>/dev/null \
+      && echo "marcas_lock_tomar: rompio un lock viejo" >&2
+  fi
+  while ! mkdir "$d" 2>/dev/null; do
+    i=$((i+1)); [ "$i" -gt 100 ] && return 1
+    sleep 0.1
+  done
+  MARCAS_LOCK_TOKEN="$$-${RANDOM:-0}"
+  MARCAS_LOCK_ACT="$d"
+  printf '%s' "$MARCAS_LOCK_TOKEN" >"$d/token"
+  if [ -z "$(trap -p EXIT)" ]; then
+    MARCAS_LOCK_ARMADO=1
+    trap 'marcas_lock_abandonar' EXIT
+  fi
+  return 0
+}
+
+marcas_lock_refrescar() {
+  local t="${MARCAS_LOCK_ACT:-}/token"
+  [ -f "$t" ] || return 0
+  [ "$(cat "$t" 2>/dev/null)" = "${MARCAS_LOCK_TOKEN:-}" ] && touch "$t" 2>/dev/null
+  return 0
+}
+
+marcas_lock_soltar() {
+  local d="${MARCAS_LOCK_ACT:-}" t
+  [ -n "$d" ] || return 0
+  t="$d/token"
+  if [ -f "$t" ] && [ "$(cat "$t" 2>/dev/null)" != "${MARCAS_LOCK_TOKEN:-}" ]; then
+    return 0
+  fi
+  if [ "${MARCAS_LOCK_ARMADO:-0}" = "1" ]; then
+    trap - EXIT
+    MARCAS_LOCK_ARMADO=0
+  fi
+  rm -f "$t"
+  rmdir "$d" 2>/dev/null
+  MARCAS_LOCK_ACT=""
+}
+
 registro_escribir() { # $1 registro, $2 lineas python que mutan d; 0 = escrito.
                      # SIN lock: quien llama lo toma con lock_tomar.
   CORR_REG="$1" CORR_PY="$2" python3 -c "
