@@ -1,4 +1,0 @@
-[NECESITO TU RESPUESTA] Fase 9, 2 de 5 partes terminadas
-Que cambio: un permiso espera tu decision para avanzar
-Que sigue: sin tu respuesta la corrida queda en pausa
-Que necesito de ti: decir si o no; Comando: ~/bin/uno; Comando: ~/bin/dos

@@ -1,2 +1,0 @@
-cuando|etapa|decision|por_que|evidencia|resultado
-2026-09-18T14:52:37Z|implementacion|Un comprobador de arranque, hermano del de cierre, en vez del cron permanente que propuse primero|El dueno objeto que un cron cada 15 minutos con nada abierto seria basura semanas enteras, y tiene razon; el comprobador no gasta nada cuando nadie lo corre y ademas ataca la causa real, que es un paso saltado sin comprobacion, no una falta de vigilancia|cron.list del gateway: 15 crons, ninguno corrida-vigia-9 ni corrida-empuje-9; la tarea 0.4 del runbook de la Fase 9 los manda crear|ok

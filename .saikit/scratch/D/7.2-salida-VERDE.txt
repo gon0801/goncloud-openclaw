@@ -1,4 +1,0 @@
-ok (1): las seis anclas de la regla 8 estan en docs/runbooks/autopilot-fase6.md
-ok (2): el runbook no pone a la interfaz a calcular ni inferir
-ok (3): las anclas discriminan y la anti-ancla caza calcula/infiere sin falsos positivos
-PASS test-runbook-progreso

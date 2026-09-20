@@ -1,1 +1,0 @@
-{"hecho":"Contra la Fase 9 real el comprobador imprime 4 de 5 en rojo y nombra la causa exacta que costo ocho horas: los dos crons de seguimiento no existen","comando":"bash scripts/arranque-de-fase.sh 9","salida":"ROJO vigilantes: sin crear corrida-vigia-9 corrida-empuje-9; ROJO progreso, sesiones y lead; VERDE plan","nivel":4}
