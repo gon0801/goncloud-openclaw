@@ -64,9 +64,9 @@
 # Env (all optional, defaults shown):
 #   TMUX_BIN=/opt/homebrew/bin/tmux
 #   OPENCLAW_BIN=$HOME/.openclaw/bin/openclaw
-#   QUIET_SECS=90
+#   QUIET_SECS=900
 #   TICK_SECS=15
-#   QUIET_REMIND_SECS=1800
+#   QUIET_REMIND_SECS=900
 #   APPROVAL_RE=<measured questions + dialog signature, see DEFAULT_APPROVAL_RE below>
 #   APPROVAL_TAIL_LINES=15
 #   APPROVAL_REMIND_SECS=900
@@ -83,9 +83,9 @@ set -euo pipefail
 
 TMUX_BIN=${TMUX_BIN:-/opt/homebrew/bin/tmux}
 OPENCLAW_BIN=${OPENCLAW_BIN:-$HOME/.openclaw/bin/openclaw}
-QUIET_SECS=${QUIET_SECS:-90}
+QUIET_SECS=${QUIET_SECS:-900}
 TICK_SECS=${TICK_SECS:-15}
-QUIET_REMIND_SECS=${QUIET_REMIND_SECS:-1800}
+QUIET_REMIND_SECS=${QUIET_REMIND_SECS:-900}
 # ASCII only: it is matched against the screen tail AFTER non-ASCII is stripped, with grep -i.
 DEFAULT_APPROVAL_RE='allow once|always allow|would you like to allow|do you want to proceed|run this command\?|waiting for approval|do you trust|trust this (folder|workspace)'
 DEFAULT_APPROVAL_RE="$DEFAULT_APPROVAL_RE"'|enter (to )?(select|confirm|continue)|esc (to )?(cancel|go back|exit)|arrow keys to navigate|[[(]y/n[])]|[(]yes/no[)]'

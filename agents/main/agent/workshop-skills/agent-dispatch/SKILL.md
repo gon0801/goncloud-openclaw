@@ -23,6 +23,7 @@ Route work to this Gateway's agents and collect complete results. Main orchestra
    - Completion: the reply is a verdict (approved / approved with observations / rejected) with file:line, or the reopened role's new commit.
 
 4. Require evidence in the repo, not in the reply: mutation tables, logs, revalidation notes under `.saikit/scratch/<task>/`, with the module under test left identical to the commit.
+   - Always unmark a session whose chain ended or was abandoned (`set-environment -t <session> -u OPENCLAW_WATCH`): a marked session that outlives its chain keeps waking you for nothing.
    - A late fix commit (a review-round patch) invalidates the evidence written before it: refresh the evidence to the final tree — re-run the battery with the repo hook and regenerate the blast with the literal new output (blast-21.4.json precedent, 2026-09-13), update the README/TSV counts, keep TSV rows append-only (new row, never rewrite). A reviewer rejects evidence that still describes the pre-fix tree (verified: 21.4r1 patch touched hook+tests but not README/blast/TSV; the refresh commit was the reviewer's required correction).
    - Completion: evidence files exist and `git diff --quiet <module>` is clean at the end.
 
