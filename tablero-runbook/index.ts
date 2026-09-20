@@ -47,6 +47,7 @@ import {
 } from "./lib.ts";
 import { cruzarGitHub, leerGithubConfig } from "./github.ts";
 import { cruzarPlan, type PlanCruce } from "./plan.ts";
+import { syncProgress } from "./live-bus.ts";
 
 // ---------------------------------------------------------------------------
 // Configuración (configSchema del manifest).
@@ -257,6 +258,8 @@ function manejarSet(log: Logger, cfg: Config, params: unknown): RespuestaSet {
     log.warn(`tablero-runbook: fallo de disco al persistir progreso (${nombre})`);
     return { ok: false, razon: "disco" };
   }
+  // Live bus (opcional): avisa al BFF sin bloquear ni tumbar el set.
+  syncProgress(fase);
   return { ok: true };
 }
 
