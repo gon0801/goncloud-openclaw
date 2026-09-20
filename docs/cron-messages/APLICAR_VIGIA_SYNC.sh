@@ -42,6 +42,15 @@ DRY=0
 EJECUTAR=0
 [ "${VIGIA_SYNC_EJECUTAR:-0}" = "1" ] && EJECUTAR=1
 
+# Franja de silencio CDMX 23:00-08:00: D1 diferiria (DIFERIDO_D) y la asercion fallaria
+# sin que nada este roto. Rehusar la corrida real; reintentar fuera de la franja.
+en_franja_silencio_cdmx() {
+  local h
+  h=$(TZ=America/Mexico_City date +%H)
+  h=$((10#$h))
+  [ "$h" -ge 23 ] || [ "$h" -lt 8 ]
+}
+
 # --- 0. Chequeo local del mensaje (ASCII, anclas) antes de tocar el gateway.
 python3 - "$MSG" <<'PY' || exit 1
 import sys
@@ -126,15 +135,28 @@ escribir_log_prueba() {
   echo "-- fixture escrito ($label) id_writer=$TID"
 }
 
-cron_aun_listado() {
+cron_list_status() {
+  # Imprime: present | absent | unknown
   local tid="$1"
-  $OC cron list --json 2>/dev/null | python3 -c '
+  local raw
+  if ! raw=$($OC cron list --json 2>/dev/null); then
+    echo unknown
+    return
+  fi
+  printf '%s' "$raw" | python3 -c '
 import json,sys
 tid=sys.argv[1]
-d=json.load(sys.stdin)
+try:
+    d=json.load(sys.stdin)
+except Exception:
+    print("unknown")
+    raise SystemExit(0)
 jobs=d.get("jobs") or d
+if not isinstance(jobs, list):
+    print("unknown")
+    raise SystemExit(0)
 ids=[j.get("id") for j in jobs if isinstance(j,dict)]
-sys.exit(0 if tid in ids else 1)
+print("present" if tid in ids else "absent")
 ' "$tid"
 }
 
@@ -144,13 +166,11 @@ rm_y_verificar() {
   if ! $OC cron rm "$tid" >/dev/null 2>&1; then
     rm_ok=0
   fi
-  local still=0
-  if cron_aun_listado "$tid"; then
-    still=1
-  fi
-  python3 scripts/tests/vigia_sync_prueba_assert.py assert-rm "$tid" "$rm_ok" "$still" \
-    || { echo "ABORTO: cleanup de $tid incompleto — borrar a mano"; return 1; }
-  echo "rm $tid OK (no queda en cron list)"
+  local list_st
+  list_st=$(cron_list_status "$tid")
+  python3 scripts/tests/vigia_sync_prueba_assert.py assert-rm "$tid" "$rm_ok" "$list_st" \
+    || { echo "ABORTO: cleanup de $tid incompleto — borrar a mano (list=$list_st)"; return 1; }
+  echo "rm $tid OK (list=$list_st)"
 }
 
 ejecutar_pruebas_d1_d2() {
@@ -236,6 +256,13 @@ print(f"seco OK: pre+post en backup/ agentId={post.get('agentId')} toolsAllow={p
 PY
   declarar_recorrido_d1_d2
   if [ "$EJECUTAR" -eq 1 ]; then
+    if en_franja_silencio_cdmx; then
+      echo "ABORTO: franja de silencio CDMX (23:00-08:00): D1 diferiria el aviso (DIFERIDO_D)"
+      echo "        y la asercion fallaria sin que el vigia este roto. Reintenta fuera de la franja:"
+      echo "        TZ=America/Mexico_City date  # hora actual CDMX"
+      echo "        VIGIA_SYNC_EJECUTAR=1 $0 --test"
+      exit 1
+    fi
     ejecutar_pruebas_d1_d2 || exit 1
   else
     echo "SECO: no se crearon jobs. Falta la corrida real en Q2:"

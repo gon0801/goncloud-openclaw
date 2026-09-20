@@ -162,3 +162,21 @@ Mutante: quitar `escribir_log_prueba 1 D1` → ROJO (9).
 
 ### --test seco
 EXIT 0; declara escritura de fixture + asserts; no crea jobs (corrida real: VIGIA_SYNC_EJECUTAR=1).
+
+## r5 — aserciones estrictas y franja de silencio
+
+### Repros (antes → ahora EXIT 1)
+```
+assert-d1 {status:error, … verifier …} → ASSERT_FAIL: run no exitoso (completionStatus=failed)
+assert-d2 {} → ASSERT_FAIL: sin entradas
+assert-rm … unknown → ASSERT_FAIL: UNKNOWN: no pude leer cron list
+```
+
+### Legitimos (EXIT 0)
+d1-ok con `VIGIA SYNC SKILLS agentes=verifier n=…`; d2-ok callado; rm absent; rm fallido → 1.
+
+### Franja
+`VIGIA_SYNC_EJECUTAR=1 --test` se rehúsa entre 23:00-08:00 CDMX (`en_franja_silencio_cdmx`).
+
+### Test
+`TODO VERDE: aplicar-vigia-sync-prueba` (casos 1-12).
