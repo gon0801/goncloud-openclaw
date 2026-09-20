@@ -3,6 +3,10 @@
 
 Read this before running, debugging, or modifying `packing/tmp/census_v2_pipe.sh <D>` in the operations workspace — the script behind the SKILL.md rule that a zero/silence conclusion must be backed by Odoo, not queue counters.
 
+## Which sections still feed the digest
+
+Since 2026-09-13 (RUNBOOK-20h, v15) the MELI source of truth is the direct API census `meli_census_directo.py`; the Odoo queues **Q1 / Q2 / Q2b are superseded for MELI and stay out of the digest**. The script still runs and gates them, so ignore their rows as a MELI answer — do not "fix" them to make them match the API, and do not treat their absence as an error. **Q3 is the section that feeds the digest** (and the cross-check that backs an Amazon zero). If a future change drops Q1/Q2/Q2b from the script, the four-sentinel contract below changes with it; until then, keep validating all four.
+
 ## Why the script exists
 
 Once an Easy Ship label/pickup is purchased, the order leaves the unshipped/pending queues even before shipment — a queue census cannot see it. Verified: the 20h digest declared total silence while 2 labeled Easy orders and 1 Flex still needed packing.
