@@ -1,0 +1,61 @@
+{
+  "id": "9e907473-a32e-46e6-b2bf-180aadf3f14c",
+  "displayName": "Packing extras 11AM",
+  "agentId": "operaciones",
+  "name": "packing-extras-11h",
+  "description": "Extras de media manana: ventas posteriores a la corrida 07:00 (dedup contra -extras* del dia); mail combinado + Telegram a Gon e Isabel",
+  "enabled": true,
+  "createdAtMs": 1788930343107,
+  "schedule": {
+    "kind": "cron",
+    "expr": "0 11 * * 1-5",
+    "tz": "America/Mexico_City",
+    "staggerMs": 0
+  },
+  "sessionTarget": "isolated",
+  "wakeMode": "now",
+  "payload": {
+    "kind": "agentTurn",
+    "message": "CORRIDA EXTRAS 11AM v14 single-line (packing-extras-11h, lun-vie 11:00 CDMX; v9 + CENSUS V2 v4c con gate bash). Detalle amplio: C:\\Users\\ehven\\.openclaw\\workspace-operaciones\\tmp\\extras11h_prompt.txt y runbook C:\\Users\\ehven\\.openclaw\\workspace-operaciones\\packing\\RUNBOOK-20h.md (FORMATO v9 + regla 1b + dedup + seccion 2 census v2). PIPELINE: (PASO 0) BASELINE SIN AMBIGUEDAD (fix Grok 10-sep): D = fecha del par mas reciente SOLO en C:\\Users\\ehven\\.openclaw\\workspace-operaciones\\envios-del-dia\\ (fuente UNICA; NUNCA usar la carpeta del otro workspace C:\\Users\\ehven\\.openclaw\\workspace\\envios-del-dia\\, esta desactualizada y provoca reenvios y perdida de extras); baseline = pedidos de ese par + TODOS los <D>-extras*.html de workspace-operaciones (incluye extras de las 07:00 y cualquier corrida previa del dia: no reenviar nada ya reportado). GUARD: si D != fecha CDMX de hoy, el par de anoche no existe (fallo del 20h): ALERTA a David via tool message y ABORTAR, nunca continuar con baseline vieja. (PASO 1) Census Amazon SOLO LECTURA con browser profile claw target host: MX easyship y selfship unshipped+pending (sellercentral.amazon.com.mx/orders-v3/mfn/unshipped/easyship?shipByDate=all&page=1 y variantes /pending/easyship, /unshipped/selfship, /pending/selfship), US selfship unshipped+pending (sellercentral.amazon.com/orders-v3/mfn/unshipped/selfship?shipByDate=all&page=1 y /pending/selfship), Flex sellerflex.amazon.com.mx dashboard. Leer por fila: order id, Buyer name, producto, SKU, ship-by, Custom Order. Extras = sin enviar, ship-by <= D (vencidas incluidas), order id NO en baseline. Pending en verificacion de pago = solo aviso. (PASO 2) CENSUS V2 MELI+AMAZON via ssh gonserver rol claw_ro con C:\\Users\\ehven\\.openclaw\\workspace-operaciones\\packing\\tmp\\census_v2_pipe.sh <D> (scp SIEMPRE antes de correr; salida VALIDA = 4 secciones con sentinels Q1_OK / Q2_OK / Q3_OK / ALERTA_ML_FUERA_VENTANA y linea final CENSUS_V2_OK - el script mismo los verifica EN BASH): 4 SECCIONES OBLIGATORIAS: (Q1) MELI viejo: pickings partner ILIKE %mercado%libre% (cubre Mercado Libre con espacio) state assigned/confirmed/waiting, deadline CDMX (COALESCE date_deadline scheduled_date convertido a TZ America/Mexico_City) <= D, excluir S01570/S01574; (Q2) MELI nuevo (verificado empirico: viven SIEMPRE en state=draft con meli_status=paid, nunca sale/done; commitment_date NULL = sin fecha de envio en Odoo): SOs name ILIKE ML % OR meli_order_id IS NOT NULL, state=draft AND meli_status=paid SIN ningun picking outgoing (NOT EXISTS), ventana creada_cdmx >= D-7dias con piso 2026-09-08 (lote 03-sep = backlog historico de importacion, excluido por diseno), sin picking done/cancel - numero_real devuelto por el script YA sin prefijo ML (regexp_replace en SQL), cliente = partner, envio = sin fecha de envio ML (NUNCA inventar Envio para ML; usar fecha de creacion como referencia); extras MELI = no en baseline; (Q3) CROSS-CHECK AMAZON: pickings partner ILIKE %amazon% outgoing (cubre Amazon Flex MX id33, Amazon Flex id25, Easy MX, FBM US, FBM MX y cualquier variante con amazon en el nombre) state assigned/confirmed/waiting deadline CDMX <= D, excluir S01570/S01574 - recupera Easy Ship que salieron de colas unshipped de SC al comprar etiqueta pero siguen pendientes de empaque; OJO: puede traer pickings Odoo STALES ya enviadas en SC pero sin validar - contrastar cada fila contra SC y las ya enviadas se excluyen del digest y se listan como ghosts para limpieza Odoo; extras = no en baseline. (Q2b) GUARDS: seccion con ML en sale/done SIN picking outgoing (anomalia: si aparece, incluirla y avisar) y sentinel ALERTA_ML_FUERA_VENTANA (ML draft+paid sin picking que salieron de la ventana 7d: si n>0 reportarlo como alerta, nunca ignorarlo). REGLA ABORT (swarm 10-sep): si CUALQUIER de las 3 queries no devuelve su sentinel Qn_OK, o aparece CENSUS_V2_FAIL, o falta CENSUS_V2_OK = el run ABORTA con ALERTA inmediata a David via tool message (cuenta operaciones, al owner telegram:6470689715; NO depende de exec ni ssh) y a Claw via sessions_send agent:main:main, NUNCA declara silencio; los contadores de cola de SC NO bastan (incidente 9-sep: 7 ordenes invisibles). Dashboard Flex por browser: si no se pudo leer = ALERTA (fail-closed), no silencio. (PASO 3) Decode Odoo por client_order_ref (Amazon) o por nombre de SO (ML) a sale_order_line product default_code + template name; SKU con PERS = PERSONALIZADA; cliente = nombre real siempre; nunca inventar. (PASO 4) FORMATO (v9 DEFINITIVO aprobado David 9-sep 18:36; caption v9 con sus emojis, bloques normales con negritas sin emojis): secciones en negrita <b>AMAZON MX/US</b>, <b>AMAZON EASY SHIP</b>, <b>AMAZON FLEX</b>, <b>MERCADO LIBRE</b>; por orden un bloque con etiquetas en NEGRITA y un campo por linea (v9 canonico): <b>Pedido:</b>, <b>Cliente:</b>, <b>Producto:</b>, <b>Modelo:</b>, <b>Color:</b>, <b>Estuche:</b> (solo si aplica), <b>SKU:</b>, <b>Envio:</b> <ship-by>; SIN separador | y SIN emojis en los bloques normales; orden personalizada (PERS) abre el bloque con linea <b>PERSONALIZADA</b>; sin montos nunca; plantillas exactas en RUNBOOK-20h seccion FORMATO v9. (PASO 5) Entregas normales PRIMERO: mail combinado a ehventasmx@gmail.com SOLO si hay extras Amazon (Gmail profile claw, compose NUEVO, cuerpo HTML rico estilo Campo: valor SIN emojis via JS innerHTML con trustedTypes; metodo probado: Para con native setter + Enter real para el chip, revisar asunto limpio, antes de enviar confirmar que existe chip del destinatario (click en div[role=option]; Enter solo puede dejar el destinatario sin chip y el send falla en silencio); verificar entrega: en #drafts NO queda borrador con el asunto y en #sent el asunto aparece en una fila tr[role=row] (NUNCA usar body.innerText ni el cierre del compose como prueba); asunto estilo Extras 11AM (extras 11AM)); Telegram digest SOLO via helper /home/claw/send_sales_digest.sh <archivo_utf8 subido por scp a /tmp> (manda a Gon e Isabel, exige ok:true en ambos, exit 1 si falla; NUNCA curl a mano, nunca imprimir token ni chat ids; NUNCA a Wide en el digest); ambos lados vacios = SILENCIO TOTAL - solo tras PASO 2 con sentinels Q1_OK/Q2_OK/Q3_OK en n=0 y CENSUS_V2_OK. (PASO 5b) PERSONALIZADAS AMAZON (regla David 02:03; TODAS las corridas, cualquier canal Flex/Easy/Self, MX o US, SKU con PERS): por cada personalizada NUEVA (id NO en /home/claw/packing/personalizadas-sent.json; crear si no existe): PRIMERO completar mails+digest del PASO 5, LUEGO esperar 5 minutos exactos (sleep 300; nunca junto con el envio inicial) y ENTONCES por cada orden: obtener la IMAGEN ILUSTRATIVA (order detail /orders-v3/order/<id>, enlace Customization Information, pagina gestalt, img gestalt-buyer-snapshot...s3.amazonaws.com 400x400; URL EXPIRA 60s; metodo robusto probado 10-sep: evaluate en gestalt devolviendo LEN + slice(0,380) y luego slice(380), reensamblar la URL y descargar INMEDIATAMENTE con curl -sS -o /tmp/pers_<order>.jpg URL_ENSAMBLADA ejecutado en gonserver via ssh; alternativo Invoke-WebRequest + scp) y enviar sendPhoto MULTIPART (curl -F photo=@/tmp/pers_<order>.jpg -F caption=... -F parse_mode=HTML; NUNCA mezclar -F con --data-urlencode) a los TRES chats: Gon (TELEGRAM_CHAT_ID), Isabel (TELEGRAM_CHAT_ID_2) y Wide (TELEGRAM_CHAT_ID_CUSTOM), bot telegram-sales.env por ssh en gonserver, nunca imprimir token ni chat ids; NUNCA URL S3 directa a Telegram; NUNCA foto del listado; caption = plantilla v9 EXACTA de RUNBOOK-20h seccion FORMATO v9 copiada TAL CUAL (titulo emoji paquete + <b>PEDIDO PERSONALIZADO</b>; emoji rombo azul en Pedido y Cliente, cliente real OBLIGATORIO; secciones <b>Producto</b>, <b>Configuracion</b>, <b>Personalizacion</b>; un item Linea N por CADA linea pedida; Color con hex; SIN linea de Envio); detalle COMPLETO de Customizations con Show more; usar helper /home/claw/packing/send_pers_photo.sh <order> <jpg> <caption> (flock+dedup+sendPhoto x3+json). DEDUP: ok3 true = NO reenviar; ok:true en los 3 chats antes de reportar exito. Si NO trae preview: DETENERSE y reportar pendiente de preview, NUNCA generica; detalle ilegible: pendiente de personalizacion y avisar. Sin personalizadas nuevas: nada extra. (PASO 6) Registro: escribir envios-del-dia/<D>-extras11-amazon.html y <D>-extras11-meli.html en C:\\Users\\ehven\\.openclaw\\workspace-operaciones\\ (VACIO si no hay TRAS 3 queries; NO sobrescribir los de 20:00 ni los extras- de las 07:00) y scratch: openclaw automations scratch 9e907473-a32e-46e6-b2bf-180aadf3f14c --set con resumen + reportar a Claw (agente main) via sessions_send agent:main:main el resumen de lo enviado (a quien, que incluyo, personalizadas con sus msg ids) o el silencio verificado (sentinels). Nunca inventar datos; si algo falla (login, ssh, API) reportarlo claro en el resultado final.",
+    "timeoutSeconds": 3600,
+    "toolsAllow": [
+      "*"
+    ]
+  },
+  "delivery": {
+    "mode": "none",
+    "channel": "last"
+  },
+  "scheduledToolPolicy": {
+    "version": 1,
+    "mode": "trusted"
+  },
+  "failureAlert": {
+    "after": 1,
+    "channel": "telegram",
+    "to": "6470689715",
+    "cooldownMs": 3600000,
+    "mode": "announce",
+    "accountId": "default"
+  },
+  "state": {
+    "nextRunAtMs": 1789059600000,
+    "lastRunAtMs": 1788973200050,
+    "lastRunStatus": "ok",
+    "lastStatus": "ok",
+    "lastDurationMs": 710239,
+    "lastDelivered": false,
+    "lastDeliveryStatus": "not-requested",
+    "lastFailureNotificationDeliveryStatus": "not-requested",
+    "consecutiveErrors": 0,
+    "consecutiveSkipped": 0
+  },
+  "updatedAtMs": 1789058894464,
+  "configRevision": "sha256:Gt_z44F-Vp8MwNsp8PqHtBJyrOsZb77sbYJGINcxfOg",
+  "nextRunAtMs": 1789059600000,
+  "lastRunAtMs": 1788973200050,
+  "lastRunStatus": "ok",
+  "lastDelivered": false,
+  "lastDeliveryStatus": "not-requested",
+  "lastFailureNotificationDeliveryStatus": "not-requested"
+}

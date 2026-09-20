@@ -1,0 +1,138 @@
+# Generado por quality-kit (init-repo.ps1). Corre los mismos candados que
+# ya corren en tu maquina (pre-commit) mas las pruebas, en la nube, en cada
+# push y en cada pull request -- asi el repo queda protegido aunque alguien
+# (vos, otra IA, un colaborador) haga un commit sin pasar por los candados
+# locales, o desde una maquina que no los tiene instalados.
+#
+# CI paralelo (regla 8): la bateria corre COMPLETA en cada push/PR, nunca se
+# recorta ni se saltea por tipo de cambio. pytest usa `-n auto` (pytest-xdist)
+# por default. Opt-out por repo: QUALITY_KIT_PYTEST_SERIAL=1 al correr
+# init-repo.ps1 (suites con estado compartido; el workflow queda en `pytest -q`).
+#
+# Gate de docs/ledger: tools/check-*.sh y tools/check_*.py (nombres con
+# docs|ledger|deploy-log|context) corren SIN argumentos y SIN dependencias
+# extra -- solo stdlib / bash. Un checker que importe paquetes del repo
+# deja este job rojo: es el contrato, no un smoke de la bateria.
+name: Quality
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    env:
+      # Lo lee summa-gate/role.test.ts para el smoke de import del plugin.
+      OPENCLAW_NODE_MODULES: ${{ github.workspace }}/node_modules/openclaw
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        if: hashFiles('pyproject.toml', 'requirements.txt') != ''
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Set up Node
+        # Sin condicion: la bateria del plugin (summa-gate/) siempre tiene que correr, y
+        # este repo no tiene package.json en la raiz — con el `if` original este paso se
+        # saltaba y los pasos de abajo quedaban con el node que traiga el runner.
+        uses: actions/setup-node@v6
+        with:
+          # 24: las pruebas del plugin son .ts y `node --test` las corre por type
+          # stripping nativo, que no existe en 20. Con 20 el paso nace roto.
+          node-version: '24'
+
+      - name: Install Python dependencies
+        if: hashFiles('requirements.txt') != ''
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-xdist
+
+      - name: Install Node dependencies
+        if: hashFiles('package-lock.json') != ''
+        run: npm ci
+
+      # Antes de pre-commit a proposito: el hook local `run-checks` corre la bateria del
+      # plugin, y su smoke de import necesita un openclaw instalado. Si esto fuera despues,
+      # el hook fallaria en CI por una dependencia faltante y no por un defecto real.
+      - name: Install openclaw (para el smoke de import del plugin)
+        run: |
+          npm install --no-save --silent openclaw@2026.9.4
+          test -d node_modules/openclaw || { echo "openclaw no quedo instalado"; exit 1; }
+
+      - name: Run pre-commit (todos los candados locales, sobre todo el repo)
+        uses: pre-commit/action@v3.0.1
+
+      - name: Run Python tests
+        if: hashFiles('pyproject.toml', 'requirements.txt') != ''
+        run: |
+          pip install pytest pytest-xdist
+          pytest -n auto -q
+      - name: Run Node tests
+        if: hashFiles('package.json') != ''
+        run: npm test --if-present
+
+      # La bateria del plugin (summa-gate/) corre via el hook pre-commit
+      # `run-checks` (always_run, sobre todo el repo), que es el unico
+      # entrypoint de la bateria dentro de CI. No se agrega una segunda
+      # invocacion directa de scripts/run-checks.sh: dos entrypoints
+      # divergen y repiten la bateria.
+
+  gate:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [quality]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Checkers sobre docs o ledger reales
+        run: |
+          set -e
+          found=0
+          # `tools/` esta en el .gitignore de ESTE repo, asi que en un clone fresco no existe y
+          # este paso pasaba en verde sin auditar nada — un candado de branch protection vacio
+          # (cross-review de qwen, 2026-09-12). Se agrega `scripts/`, que si esta trackeado, y
+          # se avisa si alguien deja un checker en un directorio ignorado en vez de callarlo.
+          for d in tools scripts; do
+            if [ -d "$d" ] && git check-ignore -q "$d/" 2>/dev/null; then
+              for c in "$d"/check-*.sh "$d"/check_*.py; do
+                [ -e "$c" ] || continue
+                echo "gate: AVISO — $c existe pero '$d/' esta en .gitignore: no llega al repo ni a CI"
+              done
+            fi
+          done
+          for dir in tools scripts; do
+            if [ -d "$dir" ]; then
+            for f in "$dir"/check-*.sh "$dir"/check_*.py; do
+              [ -e "$f" ] || continue
+              base=$(basename "$f")
+              case "$base" in
+                *docs*|*ledger*|*deploy-log*|*context*) ;;
+                *) echo "gate: salto $f (no es checker de docs/ledger)"; continue ;;
+              esac
+              found=1
+              echo "gate: corriendo $f"
+              case "$f" in
+                *.sh) bash "$f" ;;
+                *) python3 "$f" ;;
+              esac
+            done
+            fi
+          done
+          if [ "$found" -eq 0 ]; then
+            echo "gate: no hay tools/check-*.sh ni tools/check_*.py -- nada que auditar, sale 0"
+          fi
+      - name: Todos los jobs de calidad en verde
+        env:
+          R_QUALITY: ${{ needs.quality.result }}
+        run: |
+          rc=0
+          for par in "quality=$R_QUALITY"; do
+            printf '%s\n' "$par"
+            case "$par" in *=success) ;; *) rc=1 ;; esac
+          done
+          [ "$rc" -eq 0 ] || { echo "gate: algun job de calidad NO quedo en success" >&2; exit 1; }
+          echo "gate: OK -- todos en success"

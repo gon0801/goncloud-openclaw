@@ -1,0 +1,1 @@
+SHOT_OK /tmp/openclaw-shot-ok.png 4255 1280x720

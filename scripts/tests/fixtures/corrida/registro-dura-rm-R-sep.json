@@ -1,0 +1,29 @@
+{
+ "schema": "corrida.v1",
+ "id": "simulacro-9",
+ "runbook": "docs/runbooks/autopilot-fase9.md",
+ "vigia": "claw",
+ "simulacro": true,
+ "canal": {
+  "cron": "verif-sync-repos"
+ },
+ "cli_modos": "scripts/tests/fixtures/corrida/cli-modos-simulacro.tsv",
+ "inicio": "2026-09-18T10:00:00-04:00",
+ "timebox_horas": 6,
+ "sesiones": [
+  {
+   "nombre": "sim9-falso",
+   "rol": "carril",
+   "cli": "tui-falso",
+   "dueno": "lead",
+   "dir": "/tmp/sim9-a"
+  }
+ ],
+ "preaprobaciones": [
+  {
+   "patron": "borrado con rm -R -f del area",
+   "decision": "Aprobado"
+  }
+ ],
+ "estado": "abierta"
+}

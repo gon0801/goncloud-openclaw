@@ -1,0 +1,7 @@
+### T4 caso d: json no escribible (v2 esperado: ERR_JSON_WRITE exit 2)
+FAIL: ROJO reproducido: v1 dice ENVIADA_OK3 exit 0 aunque json NO se marco
+### T4 caso e: captions con < y @ iniciales (esperado: caption intacto)
+FAIL: ROJO reproducido: caption '<b>x</b> pedido' llego como [] (posts=0)
+FAIL: ROJO reproducido: caption '@x pedido' llego como [] (posts=0)
+### T4 resultado: PASS=0 FAIL=3
+EXIT=1

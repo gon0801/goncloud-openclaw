@@ -1,0 +1,111 @@
+# Estado, secretos y credenciales
+state/
+credentials/
+locks/
+# El gateway tiene su clon en ~/.openclaw, que es la raiz de este repo, asi que
+# todo lo que una sesion de Claude Code escribe cae DENTRO del repo: locks,
+# jsonl de eventos, snapshots de sesion y skills locales. Son 124 archivos de
+# estado de maquina, ninguno trackeado, que el sync arrastraria al gateway en
+# cada ciclo. Decision del operador 2026-09-16: local, no se versiona. Una skill
+# de aqui que SI deba viajar se mueve a docs/agent-skills/ y se trackea ahi.
+.claude/
+config-journal-fingerprint.key
+openclaw.json.bak*
+openclaw.json.last-good
+openclaw.json.pre-plan
+openclaw.json.pre-update
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.key
+*.pem
+.env
+.env.*
+
+# Binarios y caches grandes
+npm/
+tools/
+models/
+browser/
+browser-claw/
+cache/
+logs/
+tmp/
+media/
+delivery-queue-media/
+completions/
+
+# Instalado/regenerable
+skills/
+plugin-skills/
+extensions/
+migration/
+skill-workshop/
+archive/
+backups/
+staging/
+worktrees/
+summa-gate/state/
+summa-gate/node_modules/
+tablero-runbook/node_modules/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Runtime de Codex por agente (cache + auth)
+agents/*/agent/codex-home/
+
+# Workspaces que ya son su propio repo (se suben aparte)
+workspace/
+workspace-ingenieria/
+workspace-operaciones/
+# Repo git anidado (sin commits aun): si no se ignora, `git add -A` aborta entero
+# ("does not have a commit checked out") y el sync del gateway se congela (2026-09-11).
+workspace-scout/
+
+# Transcripts de sesiones
+agents/*/sessions/
+
+openclaw.json
+
+# La salida del observador de summa-gate. El gateway tiene su clon en ~/.openclaw, que es la
+# raiz de este repo, asi que el archivo cae DENTRO del repo. Trackearlo costo dos cosas,
+# medidas el 2026-09-12:
+#  1. El observador escribe en cada turno, asi que el arbol del gateway queda sucio entre
+#     snapshots y el pull con rebase se niega ("cannot pull with rebase: You have unstaged
+#     changes"). El sync quedo roto ~1 h y el gateway dejo de recibir codigo nuevo. El script
+#     loguea el fallo pero sale con exit 0, asi que el sintoma era "mergee el PR y el gateway
+#     sigue viejo".
+#  2. El snapshot lo commiteo a GitHub (7d909f2) con 22 lineas que incluian previews de las
+#     respuestas de scout e ingenieria. Es dato de medicion, no fuente.
+# Destrackearlo a mano NO alcanza: el auto-commit del snapshot hace `add -A` y lo repone
+# (paso entre 3d97959 y c044d0c). Tiene que estar ignorado.
+summa-gate/rendiciones.jsonl
+summa-gate/rendiciones.jsonl.*
+
+# Preventivo, por FORMA y no por nombre. El gateway tiene su clon en ~/.openclaw, asi que
+# cualquier plugin que escriba ahi deja su salida DENTRO del repo, y el auto-commit del
+# snapshot corre `add -A` ANTES del pull — o sea agrega lo que encuentre sin que nadie lo
+# decida. Con el observador de summa-gate eso costo: el sync roto ~1 h (arbol sucio, el pull
+# se niega) y 22 lineas con previews de respuestas de agentes subidas a GitHub.
+# Estas dos lineas cubren al SIGUIENTE plugin sin que nadie tenga que acordarse.
+# Si algun dia un .log o un .jsonl de un plugin SI tiene que versionarse, se le pone una
+# excepcion con `!` y se explica por que aca mismo.
+summa-gate/*.log
+summa-gate/*.jsonl
+
+# tablero-runbook (Fase 7 / 7.4): mismo criterio preventivo por FORMA que summa-gate.
+# El estado de este plugin vive FUERA del clon por decision del spike 7.0
+# (configSchema.stateDir default C:\Users\ehven\.openclaw-state\tablero-runbook,
+# porque el de summa-gate cayo DENTRO de C:\Users\ehven\.openclaw y el sync del
+# gateway lo commitea con `add -A`). Una ruta absoluta de Windows no es un patron
+# de .gitignore, asi que aqui no va ninguna: solo la forma, que es lo que cubre si
+# un dia el estado se mueve adentro del clon. Sin excepcion `!`: nada de esto se
+# versiona.
+tablero-runbook/*.jsonl
+tablero-runbook/*.log
+
+# respaldos que dejan las ediciones de emergencia en el host del gateway
+*.plugin.json.bak

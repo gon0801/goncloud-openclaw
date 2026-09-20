@@ -1,0 +1,13 @@
+{
+  "name": "summa-gate",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "check": "node --check index.ts && node --check lib.ts && node --check observer.ts && node --check diagnostic-guard.ts",
+    "test": "node --test"
+  },
+  "openclaw": {
+    "extensions": ["./index.ts"]
+  }
+}

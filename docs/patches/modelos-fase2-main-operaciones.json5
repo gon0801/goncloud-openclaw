@@ -1,0 +1,4 @@
+{ agents: { entries: {
+  main: { model: { primary: "zai/glm-5.3", fallbacks: ["deepseek/deepseek-v4-flash", "kimi/k3", "xai/grok-4.6", "anthropic/claude-sonnet-5"] } },
+  operaciones: { model: { primary: "zai/glm-5.3", fallbacks: ["deepseek/deepseek-v4-flash", "kimi/k3", "xai/grok-4.6", "anthropic/claude-sonnet-5"] } },
+} } }

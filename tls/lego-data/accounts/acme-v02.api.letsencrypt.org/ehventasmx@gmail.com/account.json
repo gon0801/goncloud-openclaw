@@ -1,0 +1,11 @@
+{
+	"id": "ehventasmx@gmail.com",
+	"email": "ehventasmx@gmail.com",
+	"keyType": "EC256",
+	"server": "https://acme-v02.api.letsencrypt.org/directory",
+	"origin": "command",
+	"registration": {
+		"status": "valid",
+		"accountURL": "https://acme-v02.api.letsencrypt.org/acme/acct/3762374046"
+	}
+}

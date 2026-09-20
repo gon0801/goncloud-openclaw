@@ -1,0 +1,19 @@
+# Sondas r3 contra lib 9190b16 (estado ANTES, re-derivado con git show 9190b16:summa-gate/lib.ts) - 2026-09-16
+$ /opt/homebrew/bin/node before-probe.mjs
+PASO	1a gh api .../merge&&echo ok
+PASO	1b gh api .../merge;ls
+PASO	1c gh pr merge;ls
+PASO	1d curl host merge&&echo ok
+PASO	1e gh api .../merge|cat
+PASO	2 token entrecomillado
+PASO	3 comentario graphql
+PASO	4a PUT auto-merge
+PASO	4b DELETE auto-merge
+PASO	C1 gh pr view (consulta)
+PASO	C2 gh pr checks (consulta)
+PASO	C3 gh pr comment con body-file
+PASO	C4 push rama NO protegida (debe pasar)
+PASO	C5 push rama propia del carril (debe pasar)
+PASO	C6 gh pr ready (mutacion leve declarada)
+BLOQUEADO	C7 push a rama protegida sigue bloqueado
+EXIT=0

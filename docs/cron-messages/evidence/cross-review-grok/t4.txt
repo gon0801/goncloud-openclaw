@@ -1,0 +1,14 @@
+1. **alta** — `nposts` usa `wc -l` sin recortar espacios; `[ "$(nposts)" = 3|1|0 ]` puede pintar rojo falso en a/b/c.
+2. **alta** — `MOCK_PORT` sale de `sed` sobre todo `mock.port` (stdout+stderr); una linea extra rompe la URL del mock.
+3. **alta** — en `--legacy-de` caso e, 0 POST (parche URL/env, mock muerto) se cuenta como ROJO de caption: falso rojo.
+4. **alta** — casos a/a2/b/c usan caption con `<`; un fallo de `-F caption=` se disfraza de fallo okx3/dedup/parcial.
+5. **media** — `start_mock` no aborta si nunca aparece `MOCK_PORT`; el SUT pega a puerto vacio y todo sale rojo.
+6. **media** — `' '.join(...['chat_id'])` truena si el mock guarda int; el reintento falla con `chats=[]` (falso rojo).
+7. **media** — el reintento exige `len(msg_ids)=3`; si el SUT solo guarda el mid de esta corrida, rojo falso.
+8. **media** — caso b cuelga de que caso a haya escrito `ORD-A`; si a fallo, b es rojo arrastrado.
+9. **media** — el SUT legacy se copia a `/tmp`; si usa `$0`/`dirname`, el parche no cubre ese fallo (falso rojo en d/e).
+10. **media** — a2 solo busca `ENVIADA_OK3`: un SUT que ignora el body y siempre imprime OK3 pasa sin discriminar el parser.
+11. **baja** — caso a no exige `rc=0`; caso d v2 no cuenta POSTs (escribe-antes vs envia-luego quedan iguales).
+12. **baja** — `pkill -f "tg_mock.py --mode"` es amplio: en paralelo mata el mock de otro test.
+13. **VERIFICAR:** mock B1 es JSONL (1 POST = 1 linea) con `chat_id`/`caption` string y flags `--mode fail-third` `--separators spaced`.
+14. **VERIFICAR:** el SUT usa esos 3 env, orden 11111/22222/33333 = #1/#2/#3, archivo `personalizadas-sent.json`, `ok3` bool, `partial` dict con keys `'1'`/`'2'`, `msg_ids` acumulados.
