@@ -60,9 +60,27 @@ NODE=$(elegir_node) || { echo "FAIL: no hay un node >= 22 disponible"; exit 1; }
 # apuntando al node_modules del workspace, no a $HOME.
 OC="${OPENCLAW_NODE_MODULES:-$HOME/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw}"
 test -d "$OC" || { echo "FAIL: no hay instalacion de openclaw en $OC"; exit 1; }
+
+# r1: si el enlace preexistía (before de role.test.ts, setup de CI, drive
+# manual), se respalda con mv y se devuelve IGUAL al terminar; si no existía,
+# no queda nada. El trap anterior lo borraba siempre: destruía estado ajeno.
+LINK=summa-gate/node_modules/openclaw
+RESPALDO=$(mktemp -d)/openclaw.respaldo
+PREEXISTIA=0
+if [ -e "$LINK" ] || [ -L "$LINK" ]; then
+  PREEXISTIA=1
+  mv "$LINK" "$RESPALDO" || { echo "FAIL: no se pudo respaldar $LINK"; exit 1; }
+fi
 ( cd summa-gate && mkdir -p node_modules && { [ -e node_modules/openclaw ] || ln -s "$OC" node_modules/openclaw; } ) \
   || { echo "FAIL: no se pudo crear el symlink summa-gate/node_modules/openclaw"; exit 1; }
-trap 'rm -f summa-gate/node_modules/openclaw' EXIT
+restaurar_enlace() {
+  rm -f "$LINK"
+  if [ "$PREEXISTIA" -eq 1 ]; then
+    mv "$RESPALDO" "$LINK"
+  fi
+  rmdir "$(dirname "$RESPALDO")" 2>/dev/null || true
+}
+trap restaurar_enlace EXIT
 
 # --- HOME en caja de arena ---------------------------------------------------
 # La batería de (a) arma una sesión con el sentinel para disparar el gate de

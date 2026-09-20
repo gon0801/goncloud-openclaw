@@ -229,3 +229,86 @@ OK: drive-merge-guard corrió y cerró en verde
 El test re-crea el symlink con las cuatro líneas de la sección Drive de la
 skill (honrando OPENCLAW_NODE_MODULES, que es como CI se lo pasa) y lo borra
 al terminar (trap): la corrida deja el árbol como lo encontró.
+
+---
+
+# r1 — corrección 13.4: el test borraba un symlink preexistente
+
+Hallazgo de la cruzada (codex), verificado por el lead, reproducido acá.
+
+## Defecto (repro contra el commit 92e7e50)
+
+```
+$ ln -sfn ~/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw summa-gate/node_modules/openclaw
+$ test -L summa-gate/node_modules/openclaw && echo "test -L OK -> $(readlink ...)"
+test -L OK -> /Users/dn/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw
+$ bash scripts/tests/test-drive-merge-guard.sh | tail -1
+OK: drive-merge-guard corrió y cerró en verde
+$ test -L summa-gate/node_modules/openclaw && echo sobrevivió || echo BORRADO
+BORRADO: el test destruyó el symlink preexistente
+```
+
+El `trap 'rm -f …' EXIT` limpiaba incondicionalmente: el enlace preexistente
+(creado por el `before` de role.test.ts, por el setup de CI o por un drive
+manual) quedaba destruido. El mismo trap vivía en
+`scripts/tests/test-skill-verify.sh` — mismo defecto, corregido en el mismo
+commit.
+
+## Arreglo
+
+Ambos tests ahora respaldan con `mv` lo que encuentren en
+`summa-gate/node_modules/openclaw` (regular o symlink), crean su propio enlace
+solo si hace falta, y al salir restauran el estado inicial: el preexistente
+vuelve igual (mv de vuelta), y si no había nada, no queda nada. El `rm` del
+trap solo toca el enlace que ESA corrida creó.
+
+## VERIFY 1 — con symlink preexistente, sobrevive
+
+```
+$ ln -sfn "$OC" summa-gate/node_modules/openclaw
+$ bash scripts/tests/test-drive-merge-guard.sh | tail -1
+OK: drive-merge-guard corrió y cerró en verde
+$ test -L summa-gate/node_modules/openclaw && echo "test -L OK -> $(readlink ...)"
+test -L OK -> /Users/dn/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw
+
+$ bash scripts/tests/test-skill-verify.sh | tail -1
+TODO VERDE: la skill verify dice lo que el plugin hace
+$ test -L summa-gate/node_modules/openclaw && echo "test -L OK"
+test -L OK -> /Users/dn/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw
+```
+
+## VERIFY 2 — sin preexistente, verde y no deja nada
+
+```
+$ rm -f summa-gate/node_modules/openclaw
+$ bash scripts/tests/test-drive-merge-guard.sh | tail -1
+OK: drive-merge-guard corrió y cerró en verde
+$ [ -e ... ] || echo "no dejó nada"          → no dejó nada
+
+$ bash scripts/tests/test-skill-verify.sh | tail -1
+TODO VERDE: la skill verify dice lo que el plugin hace
+$ [ -e ... ] || echo "no dejó nada"          → no dejó nada
+```
+
+## VERIFY 3 — batería completa
+
+`bash scripts/run-checks.sh` → **TODO VERDE**, exit 0, 41 tests de contrato OK
+(salida final: «TODO VERDE»).
+
+Nota sobre dos corridas intermedias en rojo, ninguna causada por este cambio
+(este fix solo toca el estado del enlace DESPUÉS de la batería del plugin, que
+corre antes en run-checks):
+
+1. `summa-gate/adversary-confinamiento.test.ts` falló dos veces dentro de
+   run-checks con 'test failed' opaco. Diagnóstico: ese archivo importa
+   `./index.ts` al arrancar y NO crea su propio symlink de openclaw — depende
+   de que el `before()` de role.test.ts gane la carrera de arranque paralelo de
+   `node --test`. Verificado: sin enlace falla solo (exit 1), con enlace pasa
+   (exit 0); tres corridas del directorio completo sin enlace dieron verde —
+   la carrera se pierde solo bajo la carga actual del host. Es un flake
+   preexistente en summa-gate/** (fuera del scope de este carril): este test
+   debería crear su enlace en un before() propio como hace role.test.ts.
+   Reportado acá para el lead.
+2. `test-tmux-activity-watch.sh` falló una vez dentro de run-checks y pasa
+   individual (exit 0): el "Cannot allocate memory" transitorio del host ya
+   documentado arriba.

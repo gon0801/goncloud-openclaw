@@ -37,9 +37,30 @@ NODE=$(elegir_node) || { echo "FAIL: no hay un node >= 22 disponible"; exit 1; }
 # porque en CI (ubuntu-latest) apunta al node_modules del workspace.
 OC="${OPENCLAW_NODE_MODULES:-$HOME/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw}"
 test -d "$OC" || { echo "FAIL: no hay instalacion de openclaw en $OC"; exit 1; }
+
+# r1: el enlace puede preexistir (el `before` de role.test.ts lo crea, el setup
+# de CI lo instala así, un drive manual lo deja). Antes este test lo BORRABA al
+# limpiar. Ahora el estado inicial se restaura: lo que existía (regular o
+# symlink) se respalda con mv y se devuelve igual; lo que no existía no queda.
+# Nada de rm sobre algo que esta corrida no creó.
+LINK=summa-gate/node_modules/openclaw
+RESPALDO=$(mktemp -d)/openclaw.respaldo
+PREEXISTIA=0
+if [ -e "$LINK" ] || [ -L "$LINK" ]; then
+  PREEXISTIA=1
+  mv "$LINK" "$RESPALDO" || { echo "FAIL: no se pudo respaldar $LINK"; exit 1; }
+fi
 ( cd summa-gate && mkdir -p node_modules && { [ -e node_modules/openclaw ] || ln -s "$OC" node_modules/openclaw; } ) \
   || { echo "FAIL: no se pudo crear el symlink summa-gate/node_modules/openclaw"; exit 1; }
-trap 'rm -f summa-gate/node_modules/openclaw' EXIT
+restaurar_enlace() {
+  # saca solo el enlace de ESTA corrida y devuelve el preexistente tal como era
+  rm -f "$LINK"
+  if [ "$PREEXISTIA" -eq 1 ]; then
+    mv "$RESPALDO" "$LINK"
+  fi
+  rmdir "$(dirname "$RESPALDO")" 2>/dev/null || true
+}
+trap restaurar_enlace EXIT
 
 SALIDA=$("$NODE" docs/agent-skills/verify/drive-merge-guard.ts 2>&1)
 rc=$?
