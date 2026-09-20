@@ -9,21 +9,25 @@ so it only applies to `adversary` and leaves every other agent alone.
 
 ## Sub-features
 
-Two checks, and the second is the one people forget:
+Three checks, and the redirect ones are what people forget:
 
 | Check | What it catches |
 |---|---|
-| Write target | A command writing to a path outside the allowed zone |
-| Redirection target | An absolute path on the right side of a redirect |
+| Write target | A write tool aimed at a path outside the allowed zone |
+| Redirection target | A redirect target outside the zone, absolute or relative |
+| Redirect after a `cd` | A relative target in a command that changes directory first: where it lands cannot be known, so it is refused |
 
 The allowed zone is the agent's own workspace, plus anything under
 `.saikit/findings` and `.saikit/scratch`. That is where an adversary is supposed
 to leave what it finds: a report, not an edit.
 
-The redirect check exists because a write does not have to look like one. A
+The redirect checks exist because a write does not have to look like one. A
 command whose visible verb is harmless can still land bytes somewhere through
 its output. Redirects to the null device and to the standard streams are allowed
-by name; everything else absolute is a target.
+by name; every other target goes through `adversaryPathAllowed`, absolute or
+relative — and a command that changes directory invalidates the resolution of
+any relative target, so that combination is refused outright rather than
+guessed at.
 
 ### The hole that was here, and how it got found
 
@@ -82,14 +86,22 @@ path:
 Confinamiento adversary (summa-gate): escritura fuera de zona permitida. El agente adversary solo puede escribir dentro de su workspace o en paths bajo .saikit/findings y .saikit/scratch. Destino: <ruta>
 ```
 
-And for the redirect case:
+For a redirect whose target is outside the zone:
 
 ```
-Confinamiento adversary (summa-gate): redirección a path absoluto fuera de zona permitida (solo workspace, .saikit/findings, .saikit/scratch). Destino: <ruta>
+Confinamiento adversary (summa-gate): redirección fuera de zona permitida (solo workspace, .saikit/findings, .saikit/scratch). Destino: <ruta>
 ```
 
-Both messages end with the refused destination, so neither is a fixed string:
-match the part before `Destino:` and read the rest.
+And for the third check, a relative target in a command that changes directory
+first:
+
+```
+Confinamiento adversary (summa-gate): el comando cambia de directorio, asi que un destino relativo no se puede ubicar; usa una ruta absoluta dentro de la zona permitida. Destino: <ruta>
+```
+
+All three messages end with the refused destination, so none is a fixed string:
+match the part before `Destino:` and read the rest. `scripts/tests/test-skill-verify.sh`
+fires all three through the registered hook and compares exactly that part.
 
 ## Gotchas
 

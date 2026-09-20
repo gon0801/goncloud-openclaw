@@ -43,12 +43,28 @@ rejects every close.
 
 ## Expected output
 
+The refusal for a close that has nothing: armed with the sentinel, no receipt
+block, no labeled lines, no test run. Each missing piece is its own line:
+
 ```
 Cierre rechazado por summa-gate. Falta para cerrar la ceremonia:
+- el bloque `SUMMONAIKIT HARNESS RECEIPT`
+- la etiqueta `Understand:`
+- la etiqueta `Implement:`
+- la etiqueta `Verify:`
+- la etiqueta `Review:`
+- la etiqueta `Close:`
+- la etiqueta `Retro:`
+- evidencia de verificación real (no se detectó una corrida de tests exitosa en este turno) o una declaración explícita de skip de verificación con su razón
+
+Rehacé tu respuesta final incluyendo el bloque SUMMONAIKIT HARNESS RECEIPT con las 6 etiquetas (Understand, Implement, Verify, Review, Close, Retro), cada una en su línea. Si necesitás una aclaración usá `SUMMONAIKIT HARNESS PAUSED`; si esperás un subagente, `SUMMONAIKIT HARNESS DELEGATED - awaiting <rol>`.
 ```
 
-Followed by the missing pieces. The proof has to show the list, not just the
-first line, because the list is what makes the guard useful.
+The list varies with what the close is missing; this is the everything-missing
+instance. `<rol>` is a placeholder: `scripts/tests/test-skill-verify.sh` pins
+everything before it character for character against the registered hook. The
+proof has to show the list, not just the first line, because the list is what
+makes the guard useful.
 
 ## Gotchas
 

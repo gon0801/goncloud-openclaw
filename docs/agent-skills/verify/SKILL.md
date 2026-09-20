@@ -8,13 +8,29 @@ description: Drive summa-gate, the guard plugin this repo ships into the OpenCla
 ## What this app is, before you drive anything
 
 This repo has no web page, no CLI and no server you start. What it ships is
-**summa-gate**, a plugin that registers eight hooks inside the OpenClaw gateway.
-Its users are **agents**: the plugin fires while an agent takes a turn, and its
-behavior is visible as a blocked command, an injected instruction, a confined
-workspace, or a refused close.
+**summa-gate**, a plugin that registers its guards as hooks inside the OpenClaw
+gateway. Its users are **agents**: the plugin fires while an agent takes a turn,
+and its behavior is visible as a blocked command, an injected instruction, a
+confined workspace, or a refused close.
 
 So "driving the app like a user would" means **taking an agent turn and reading
 what the guard did to it**.
+
+## Guards
+
+The plugin's parts, exactly as `summa-gate/index.ts` numbers them with its
+`// -- N.` comments. This file carries no count on purpose: a count rots the
+first time someone adds a guard, and `scripts/tests/test-skill-verify.sh`
+checks this list against those comments so it cannot.
+
+- Merge-guard
+- Canal entre agentes
+- Confinamiento adversary
+- Sentinel + standing rules
+- Evidencia post-tool
+- Gate de cierre
+- Tracking de subagentes
+- Observador de rendiciones
 
 ## The isolation problem: read this first
 
@@ -47,7 +63,7 @@ cd /Users/dn/dev/goncloud-openclaw
 bash scripts/run-checks.sh
 ```
 
-That is the whole local harness: 20 shell tests under `scripts/tests/` plus the
+That is the whole local harness: the shell tests under `scripts/tests/` plus the
 plugin's own `node --test` suite, which builds a fake gateway host in
 `summa-gate/role.test.ts` (`fakeBaseApi`) and registers the real hooks against
 it. It needs no gateway, no network and no credentials.
