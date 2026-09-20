@@ -355,7 +355,7 @@ Cada ítem se mergea por la ruta del kit (loop §6), en ventana segura (loop §7
   }
   mkdir -p ~/bin/corrida
   instala scripts/mac/corrida.sh ~/bin/corrida.sh
-  for f in lib abrir lanzar-sesion cerrar preflight estado latido responder; do instala "scripts/mac/corrida/$f.sh" ~/bin/corrida/"$f.sh"; done
+  for f in lib abrir lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder; do instala "scripts/mac/corrida/$f.sh" ~/bin/corrida/"$f.sh"; done
   instala scripts/mac/cli-modos.tsv ~/bin/cli-modos.tsv
   instala scripts/mac/tmux-activity-watch.sh ~/bin/tmux-activity-watch.sh
   instala scripts/mac/ai.goncloud.corrida-latido.plist ~/Library/LaunchAgents/ai.goncloud.corrida-latido.plist
