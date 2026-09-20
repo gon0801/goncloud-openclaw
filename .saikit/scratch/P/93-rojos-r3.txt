@@ -1,3 +1,0 @@
-F2-confianza: rc=1 teclas=0 escalas=1 (esperado rc=1 teclas=0 escalas>=1)
-F2-cuota: rc=0 tecla1=1 cuota=0 (esperado rc=0 tecla1=1 cuota=0)
-F3-bloque: rc=1 teclas=0 escalas=1 (esperado rc=1 teclas=0 escalas>=1)

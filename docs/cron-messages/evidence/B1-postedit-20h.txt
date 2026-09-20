@@ -1,5 +1,0 @@
-job=20h rev_pre=sha256:5VfZCObwZOoLY rev_post=sha256:CkxTU5-tSBIao rev_cambio=True
-len_pre=8187 len_post=8612 v14_linea1=True A_circular=0 non_ascii=[]
-anclas1x=v14 single-line=1,CENSUS V2 v4c=1,div[role=option]=1,tr[role=row]=1,/home/claw/send_sales_digest.sh=1
-sessions_send=1 tool_message=1 GUARD=0
-timeoutSeconds=3600

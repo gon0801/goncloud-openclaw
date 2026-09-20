@@ -1,9 +1,0 @@
-### T3-verde (a): v4c como claw 16:47Z
-RC=0, 5 lineas sentinel+OK, /tmp/cv2.* sin restos nuevos (solo preexistente cv2.sh 05:27Z)
---- sentinels:
- Q1_OK n=0
- Q2_OK n=6
- Q3_OK n=17
- ALERTA_ML_FUERA_VENTANA n=0
-CENSUS_V2_OK 4 queries ejecutadas, sentinels verificados en bash
---- (c) grep -c '$(' = 0 (local, sha 2397f675ac5635de)

@@ -1,1 +1,0 @@
-{"hecho":"El vigilante manda exactamente un evento por periodo de silencio y uno por cierre, solo para sesiones tool-repo, y reintenta si el envio falla; el Stop hook nunca manda nada fuera de tmux y nunca bloquea a Claude (exit 0, envio en background)","comando":"bash scripts/tests/test-tmux-activity-watch.sh","salida":"ok (1)..ok (5); TODO VERDE: tmux-activity-watch","nivel":4}

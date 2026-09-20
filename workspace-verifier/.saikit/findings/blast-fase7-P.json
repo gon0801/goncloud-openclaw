@@ -1,6 +1,0 @@
-{
-  "hecho": "Los 2 tests rojos de tablero-runbook/github.test.ts tenian UNA sola causa de entorno: el gh falso con shebang `#!/usr/bin/env node` moria al nacer cuando node no estaba en el PATH del hijo. Con el fix `#!${process.execPath}` la suite pasa 60/60 incluso con PATH sin node, y revertir el shebang a `env node` vuelve a rojo 58/2.",
-  "comando": "cp -R tablero-runbook /tmp/mut-P/tablero-runbook; python3 -c \"s=open('github.test.ts').read().replace('${process.execPath}','/usr/bin/env node')\" ; env PATH=/usr/bin:/bin ~/.openclaw/tools/node-v24.19.0/bin/node --test --test-reporter tap",
-  "salida": "MUTADO ok | not ok 2 - cruzarGitHub con gh simulado (7.5) | not ok 1 - éxito: argv literal (pr view, -R repo, --json campos), shell:false, SIGKILL | not ok 3 - kill REAL al vencer: el proceso simulado no sobrevive al presupuesto | # tests 60 # pass 58 # fail 2 | --- sin mutar, PATH mínimo --- # tests 60 # pass 60 # fail 0",
-  "nivel": 4
-}

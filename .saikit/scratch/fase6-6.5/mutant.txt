@@ -1,4 +1,0 @@
-mutante aplicado (rama graphqlMerge||hostMerge borrada)
-ℹ fail 3
-ℹ pass 11
-ℹ fail 0

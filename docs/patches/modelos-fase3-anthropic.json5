@@ -1,7 +1,0 @@
-{ agents: { entries: {
-  implementer: { model: { primary: "zai/glm-5.3",              fallbacks: ["deepseek/deepseek-v4-flash", "kimi/k3", "xai/grok-4.6", "anthropic/claude-sonnet-5"] } },
-  ingenieria:  { model: { primary: "xai/grok-4.6",             fallbacks: ["zai/glm-5.3", "deepseek/deepseek-v4-flash", "kimi/k3", "anthropic/claude-sonnet-5"] } },
-  verifier:    { model: { primary: "deepseek/deepseek-v4-flash", fallbacks: ["zai/glm-5.3", "kimi/k3", "xai/grok-4.6", "anthropic/claude-sonnet-5"] } },
-  reviewer:    { model: { primary: "kimi/k3",                  fallbacks: ["deepseek/deepseek-v4-flash", "zai/glm-5.3", "xai/grok-4.6", "anthropic/claude-opus-5"] } },
-  adversary:   { model: { primary: "deepseek/deepseek-v4-flash", fallbacks: ["kimi/k3", "zai/glm-5.3", "xai/grok-4.6", "anthropic/claude-opus-5"] } },
-} } }
