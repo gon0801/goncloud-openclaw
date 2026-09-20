@@ -47,14 +47,17 @@ guard that refuses everything.
 
 ## Expected output
 
-The message names the measurement that produced the rule:
+The message names the measurement that produced the rule, then the three shapes
+that work. This is the whole block as fired from session `agent:main:main`:
 
 ```
-Envio bloqueado por summa-gate: la respuesta de un sessions_send de Claw a otro agente se pierde si el agente tarda mas que la espera, y ninguna espera lo evita (2026-09-11: 41 respuestas perdidas). Usa una de estas:
+Envio bloqueado por summa-gate: la respuesta de un sessions_send de Claw a otro agente se pierde si el agente tarda mas que la espera, y ninguna espera lo evita (2026-09-11: 41 respuestas perdidas). Usa una de estas: (1) tarea o pregunta: sessions_spawn agentId=<agente> mode=run con todo el contexto en task; el resultado te llega solo como turno nuevo. (2) seguir un trabajo en la sesion del agente: empieza el mensaje con la etiqueta exacta "[REPORTE DE VUELTA: agent:main:main]" y pidele ahi que te reporte con sessions_send al terminar (timeoutSeconds 0); mencionar sessions_send en el texto no abre nada. (3) aviso que no necesita respuesta: empieza el mensaje con [AVISO SIN RESPUESTA].
 ```
 
-It continues with the three allowed shapes. Match the opening; the list after it
-is guidance for the agent that got blocked.
+`<agente>` is a placeholder, and the return tag in (2) carries the sender's own
+session key, so that fragment changes with who sends. Everything before
+`<agente>` is fixed text: `scripts/tests/test-skill-verify.sh` pins it character
+for character against the registered hook, truncating at the first placeholder.
 
 ## Gotchas
 

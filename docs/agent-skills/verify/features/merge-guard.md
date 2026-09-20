@@ -79,6 +79,10 @@ Merge bloqueado por summa-gate: `gh pr merge` está prohibido desde el agente (t
 ```
 
 ```
+Merge bloqueado por summa-gate: la mutación GraphQL de merge y las rutas de merge de api.github.com están prohibidas desde el agente salvo para implementer/ingenieria con la orden del dueño citada en el brief (6.5b).
+```
+
+```
 Merge bloqueado por summa-gate: `gh api …/merge` está prohibido desde el agente. El merge lo hace el operador o el flujo autorizado del repo.
 ```
 
@@ -86,7 +90,11 @@ Merge bloqueado por summa-gate: `gh api …/merge` está prohibido desde el agen
 Push bloqueado por summa-gate: `git push` a master/main está prohibido desde el agente (incluye origin master, +master, HEAD:main, refs/heads/main y delete-ref :main).
 ```
 
-Note the ellipsis in the second one is a single character, not three dots.
+Note the ellipsis in the third one is a single character, not three dots.
+
+`scripts/tests/test-skill-verify.sh` registers the real plugin against the fake
+host and checks each of these against the live `blockReason`, so the four
+strings above cannot drift from `summa-gate` without the battery going red.
 
 ## Gotchas
 
