@@ -91,8 +91,11 @@ esta forma (`schema: "seguimiento-clock.v1"`):
 - `ultimoEstado`: resumen estable (identificadores de trabajo, conteos y
   porcentajes por fase) del último corte confirmado; contra él se calcula el
   `Que cambió`.
-- `ultimoInmediato`: la condición inmediata tratada (`firma` estable más el
-  `messageId` de su entrega) o `null` si no hay ninguna activa. Vive separado
+- `ultimoInmediato`: la condición inmediata tratada, identificada por su
+  `firma` estable, o `null` si no hay ninguna activa. El `messageId` de su
+  entrega es el del nivel superior del estado; el campo `messageId` anidado
+  queda como legado: siempre `null` en escrituras nuevas y aceptado al leer
+  por compatibilidad con scratches viejos. Vive separado
   del corte periódico: confirmar un inmediato no mueve
   `ultimoReporteConfirmado`, y un inmediato confirmado no silencia el próximo
   corte debido. Cuando la condición desaparece, el tick la registra inactiva
