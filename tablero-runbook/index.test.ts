@@ -484,11 +484,9 @@ describe("plugin smoke import (7.4)", () => {
       assert.match(r1.mensaje, /Fase 14/);
       assert.doesNotMatch(r1.mensaje, /\{roto/);
       mod._setRelojSeguimientoForTest(() => T + 901_000);
-      const confirmado1 = {
-        ...r1.estadoTrasConfirmar,
-        messageId: 9,
-        ultimoInmediato: { ...r1.estadoTrasConfirmar.ultimoInmediato, messageId: 9 },
-      };
+      // Contrato público: el llamador combina `estadoTrasConfirmar` solo con
+      // el messageId del nivel superior; el anidado queda informativo.
+      const confirmado1 = { ...r1.estadoTrasConfirmar, messageId: 9 };
       const r2 = await llamarMetodo(host.metodos, "runbook.progress.decide", {
         modo: "tick",
         estado: confirmado1,

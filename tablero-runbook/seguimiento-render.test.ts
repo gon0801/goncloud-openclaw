@@ -19,6 +19,7 @@ import {
   esMensajeV1Valido,
   renderSeguimientoV2,
   sanearTextoPropietario,
+  validarMensajeV1,
 } from "./seguimiento-render.ts";
 
 function carril(
@@ -302,6 +303,18 @@ describe("sanearTextoPropietario", () => {
     }
   });
 
+  it("rejects line breaks and control characters that would break the v1 line form", () => {
+    for (const roto of [
+      "Elegir\nA o B",
+      "Elegir\rA o B",
+      "con\ttabulado",
+      "Elegir A o B\u0007",
+      "con separador\u2028de linea",
+    ]) {
+      assert.equal(sanearTextoPropietario(roto), null, `control aceptado: ${JSON.stringify(roto)}`);
+    }
+  });
+
   it("never leaks technical text through any interpolated field", () => {
     const sucio = "Revisando /tmp/x en commit abcdef1, PR #104 con --force";
     const entrada: EntradaSeguimientoV2 = {
@@ -397,5 +410,13 @@ describe("esMensajeV1Valido", () => {
     for (const texto of V1_MAL) {
       assert.equal(esMensajeV1Valido(texto), false, `v1 inválido aceptado: ${texto.slice(0, 40)}`);
     }
+  });
+
+  it("validarMensajeV1 keeps accepting a valid four-line message line by line", () => {
+    const texto = "[NECESITO TU RESPUESTA] Corrida, 1 de 4 partes terminadas\n"
+      + "Que cambio: La fase 14 llegó a una decisión que no está preaprobada.\n"
+      + "Que sigue: El trabajo espera tu respuesta antes de continuar.\n"
+      + "Que necesito de ti: Elegir A o B.";
+    assert.deepEqual(validarMensajeV1(texto), { ok: true, etiqueta: "NECESITO TU RESPUESTA" });
   });
 });

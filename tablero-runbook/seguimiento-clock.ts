@@ -328,7 +328,11 @@ export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
     }
     const firma = firmaInmediato(explicito, problemas, pendientes);
     const ya = previo.ultimoInmediato;
-    if (ya === null || ya.firma !== firma || ya.messageId === null) {
+    // El scratch solo se persiste tras entrega confirmada, así que una firma
+    // presente ya fue entregada; exigir además el messageId anidado repetiría
+    // el aviso en cada tick, porque el contrato público solo llena el
+    // messageId del nivel superior y el anidado queda informativo.
+    if (ya === null || ya.firma !== firma) {
       return {
         accion: "SEND",
         tipo: "inmediato",
@@ -354,10 +358,6 @@ export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
     trabajosActivos: ids,
     ultimoInmediato: sinCondicion ? null : previo.ultimoInmediato,
   });
-
-  if (activas.length === 0 && sueltas.length === 0) {
-    return { accion: "NO_REPLY", estado: silencio() };
-  }
 
   if (activas.length === 0 && sueltas.length === 0) {
     return { accion: "NO_REPLY", estado: silencio() };
@@ -390,7 +390,9 @@ export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
         schema: SCHEMA_SEGUIMIENTO_CLOCK,
         corte: { kind: "reporte-confirmado", ultimoReporteConfirmado: ahora },
         ultimoEstado: resumenEstable(activas, sueltas, null),
-        ultimoInmediato: previo.ultimoInmediato,
+        // Regla del spec: la condición desaparecida se registra inactiva
+        // (null); si vuelve, es un evento nuevo y sale otra vez.
+        ultimoInmediato: sinCondicion ? null : previo.ultimoInmediato,
         trabajosActivos: ids,
       },
     };

@@ -86,11 +86,14 @@ const V1_DETENIDA = "[DETENIDA] Corrida, 1 de 4 partes terminadas\nQue cambio: a
 const V1_NECESITO = "[NECESITO TU RESPUESTA] Corrida, 1 de 4 partes terminadas\nQue cambio: algo material\nQue sigue: sigue igual\nQue necesito de ti: responde.";
 const V1_CERRADA = "[CERRADA] Corrida, cierre en palabras\nQue cambio: x\nQue sigue: y\nQue necesito de ti: nada.";
 
+/**
+ * Contrato público (spec seguimiento.v2 l.111): quien llama combina
+ * `estadoTrasConfirmar` SOLO con el `messageId` del nivel superior. El
+ * `messageId` anidado de `ultimoInmediato` queda informativo y nadie fuera
+ * de los tests lo escribe: este helper simula al llamador real.
+ */
 function confirmado(estadoTrasConfirmar: EstadoTrasConfirmar, messageId: number): EstadoSeguimiento {
   const estado: EstadoSeguimiento = { ...estadoTrasConfirmar, messageId };
-  if (estado.ultimoInmediato !== null) {
-    estado.ultimoInmediato = { ...estado.ultimoInmediato, messageId };
-  }
   return estado;
 }
 
@@ -383,6 +386,58 @@ describe("atencion requerida", () => {
     if (cambiado.accion !== "SEND") throw new Error("motivo nuevo inesperado");
     assert.match(cambiado.mensaje, /Elegir C/);
     assert.match(cambiado.mensaje, /^\[NECESITO TU RESPUESTA\] Corrida, /);
+  });
+
+  it("a public-contract confirmation (top-level messageId only) dedups the next tick", () => {
+    const activas = [resumenAtencion("Elegir A o B")];
+    const primero = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
+    assert.equal(primero.accion, "SEND");
+    if (primero.accion !== "SEND") throw new Error("primera atencion inesperada");
+    // El llamador real persiste `{ ...estadoTrasConfirmar, messageId }` y nada
+    // más: el messageId anidado nunca se llena fuera de los tests.
+    const previo = confirmado(primero.estadoTrasConfirmar, 21);
+    assert.equal(previo.ultimoInmediato !== null ? previo.ultimoInmediato.messageId : undefined, null);
+    const segundo = decidirSeguimiento({ ahora: 905, previo, activas, inmediato: null });
+    assert.equal(segundo.accion, "NO_REPLY");
+    if (segundo.accion !== "NO_REPLY") throw new Error("dedup tras confirmacion publica roto");
+  });
+
+  it("a condition gone exactly at the due periodic cut is registered inactive, not left treated", () => {
+    const conAtencion = resumenAtencion("Elegir A o B");
+    const sinAtencion = { ...conAtencion, atencionRequerida: { necesaria: false, motivo: null } };
+    const r0 = decidirSeguimiento({
+      ahora: 900, previo: crearEstadoInicial(0, [conAtencion]), activas: [conAtencion], inmediato: null,
+    });
+    assert.equal(r0.accion, "SEND");
+    if (r0.accion !== "SEND") throw new Error("primera atencion inesperada");
+    const previo = confirmado(r0.estadoTrasConfirmar, 30);
+    // Minuto 30: la condición desaparece justo cuando el periódico está debido.
+    const r30 = decidirSeguimiento({ ahora: 1800, previo, activas: [sinAtencion], inmediato: null });
+    assert.equal(r30.accion, "SEND");
+    if (r30.accion !== "SEND") throw new Error("periodico inesperado");
+    assert.equal(r30.tipo, "periodico");
+    assert.equal(r30.estadoTrasConfirmar.ultimoInmediato, null);
+    // Si la condición vuelve, es un evento nuevo (spec l.98-99): sale otra vez.
+    const r1860 = decidirSeguimiento({
+      ahora: 1860, previo: confirmado(r30.estadoTrasConfirmar, 31), activas: [conAtencion], inmediato: null,
+    });
+    assert.equal(r1860.accion, "SEND");
+    if (r1860.accion !== "SEND") throw new Error("retorno inesperado");
+    assert.equal(r1860.tipo, "inmediato");
+  });
+
+  it("a reason with line breaks or control characters falls back to the safe sentence instead of throwing", () => {
+    for (const motivo of ["Elegir\nA o B", "Elegir\rA o B", "Elegir A o B\u0007"]) {
+      const activas = [resumenAtencion(motivo)];
+      const d = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
+      assert.equal(d.accion, "SEND", `deberia enviar con motivo seguro: ${JSON.stringify(motivo)}`);
+      if (d.accion !== "SEND") throw new Error("atencion segura inesperada");
+      assert.equal(d.tipo, "inmediato");
+      assert.equal(
+        d.mensaje,
+        "[NECESITO TU RESPUESTA] Corrida, 1 de 4 partes terminadas\nQue cambio: La fase 14 llegó a una decisión que no está preaprobada.\nQue sigue: El trabajo espera tu respuesta antes de continuar.\nQue necesito de ti: Tienes una decisión pendiente.",
+      );
+    }
   });
 
   it("a dirty reason falls back to safe owner language", () => {

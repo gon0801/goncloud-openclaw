@@ -52,6 +52,9 @@ function traeSha(s: string): boolean {
 
 export function sanearTextoPropietario(s: string): string | null {
   if (typeof s !== "string" || s.length === 0) return null;
+  // Saltos y controles rompen la forma de líneas del mensaje v1: son texto
+  // no apto y quien interpola cae a la frase segura.
+  if (/[\u0000-\u001F\u007F\u2028\u2029]/.test(s)) return null;
   if (JERGA_RE.test(s)) return null;
   // Un hexadecimal largo con solo dígitos o solo letras no es un hash
   // ("1234567", "acabada" pasan); con letra Y dígito sí ("abcdef1").
@@ -109,8 +112,12 @@ export function validarMensajeV1(texto: string): { ok: true; etiqueta: EtiquetaV
   }
   const cuerpo4 = cuarta.replace(/^Que necesito de ti: /, "").replace(/\s+$/, "");
   if (cuerpo4 === "") return { ok: false };
-  const entero = [primera, l2, l3, cuarta].join("\n");
-  if (sanearTextoPropietario(entero) === null) return { ok: false };
+  // El mensaje completo une líneas con `\n`, que el saneo correctamente
+  // rechaza: el límite de lenguaje se aplica por línea, sobre las mismas
+  // cuatro piezas que componían el mensaje entero.
+  if ([primera, l2, l3, cuarta].some((linea) => sanearTextoPropietario(linea) === null)) {
+    return { ok: false };
+  }
   return { ok: true, etiqueta };
 }
 
