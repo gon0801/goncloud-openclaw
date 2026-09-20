@@ -127,6 +127,8 @@ z1="$( cd /tmp && env -u REPO_DIR bash -c ". '$LIBABS'; runbook_de scripts/tests
 
 # mensaje_valido viene de lib.sh: es el que corre en cada envio de verdad.
 mensaje_valido "$FX/mensaje-valido.txt" || fail "el mensaje valido no pasa"
+# Extension minima: avance desconocido honesto en lugar de un conteo inventado.
+mensaje_valido "$FX/mensaje-avance-desconocido.txt" || fail "avance desconocido no pasa"
 # Los casos sin salto de linea final se generan al vuelo: un archivo del repo sin
 # salto final lo reescribe el hook de end-of-file, y el caso es justo ese.
 printf '[AVANZA] Fase 9, 2 de 5 partes terminadas\nQue cambio: la primera parte quedo lista\nQue sigue: ahora se trabaja la parte de mensajes\nQue necesito de ti: nada' >"$TMP/val-sin-salto.txt"

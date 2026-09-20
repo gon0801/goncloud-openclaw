@@ -91,6 +91,12 @@ esta forma (`schema: "seguimiento-clock.v1"`):
 - `ultimoEstado`: resumen estable (identificadores de trabajo, conteos y
   porcentajes por fase) del último corte confirmado; contra él se calcula el
   `Que cambió`.
+- `ultimoInmediato`: la condición inmediata tratada (`firma` estable más el
+  `messageId` de su entrega) o `null` si no hay ninguna activa. Vive separado
+  del corte periódico: confirmar un inmediato no mueve
+  `ultimoReporteConfirmado`, y un inmediato confirmado no silencia el próximo
+  corte debido. Cuando la condición desaparece, el tick la registra inactiva
+  (`null`); si vuelve, es un evento nuevo y sale otra vez.
 - `messageId`: el del último Telegram confirmado, o `null`.
 - `trabajosActivos`: los `trabajoId` del corte.
 
@@ -116,11 +122,14 @@ Reglas del corte:
   un resumen conservador (`desconocido`, sin carriles) y su causa en
   `problemas` (`ilegible`, `json-invalido`, `documento-invalido`), sin exponer
   contenido crudo. `decidirSeguimiento` lo convierte en `DETENIDA` inmediata
-  (deduplicada tras confirmar) sin mover el corte periódico; el reloj se
-  conserva hasta verificarlo.
+  en formato `seguimiento.v1` exacto (deduplicada tras confirmar) sin mover
+  el corte periódico; el reloj se conserva hasta verificarlo.
 - Una fase con `atencion_requerida.necesaria` deriva `NECESITO TU RESPUESTA`
-  inmediato del propio resumen, antes del corte y sin reclasificación manual.
-  El motivo se sanea; si cambia, sale un nuevo aviso; confirmado, no se
-  repite. Tampoco mueve el corte periódico.
+  inmediato en formato `seguimiento.v1` exacto del propio resumen, antes del
+  corte y sin reclasificación manual. El motivo se sanea; si cambia, sale un
+  nuevo aviso; confirmado, no se repite. Tampoco mueve el corte periódico.
+- Un inmediato explícito del director debe cumplir `seguimiento.v1` con su
+  etiqueta desde la frontera (`evento-invalido` si no); ya válido, se
+  conserva intacto. Nunca sale crudo.
 - `runbook.progress.decide` es la única entrada que la regla del director
   nombra; el agente no reproduce estas transiciones en prosa.

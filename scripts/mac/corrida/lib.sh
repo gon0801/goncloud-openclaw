@@ -434,7 +434,7 @@ mensaje_valido() { # $1 archivo; 0 = cumple seguimiento.v1
   [ "$resto" = "$primera" ] && resto=""
   [ -n "$resto" ] || { rm -f "$C"; return 1; }
   if [ "$etq" != "CERRADA" ]; then
-    printf '%s\n' "$resto" | grep -qE '[0-9]+ de [0-9]+ partes' || { rm -f "$C"; return 1; }
+    printf '%s\n' "$resto" | grep -qE '[0-9]+ de [0-9]+ partes|avance desconocido' || { rm -f "$C"; return 1; }
   fi
   awk 'NR==2 && !/^Que cambio: .+/ {m=1} NR==3 && !/^Que sigue: .+/ {m=1} NR==4 && !/^Que necesito de ti: .+/ {m=1} END{exit m?1:0}' "$C" \
     || { rm -f "$C"; return 1; }

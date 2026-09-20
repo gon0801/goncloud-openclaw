@@ -14,7 +14,7 @@
  * Un `SEND` no expone un próximo estado de nombre general.
  */
 import type { ConteoObjetivo, ProblemaSeguimiento, ResumenSeguimiento } from "./seguimiento.ts";
-import { renderSeguimientoV2, sanearTextoPropietario, type TareaSuelta } from "./seguimiento-render.ts";
+import { renderSeguimientoV2, sanearTextoPropietario, validarMensajeV1, type TareaSuelta } from "./seguimiento-render.ts";
 
 export const SCHEMA_SEGUIMIENTO_CLOCK = "seguimiento-clock.v1";
 
@@ -34,6 +34,7 @@ export type EstadoSeguimiento = {
   schema: "seguimiento-clock.v1";
   corte: CorteSeguimiento;
   ultimoEstado: string;
+  ultimoInmediato: { firma: string; messageId: number | null } | null;
   messageId: number | null;
   trabajosActivos: string[];
 };
@@ -186,13 +187,23 @@ function puntuarFinal(s: string): string {
   return /[.?!]$/.test(s) ? s : `${s}.`;
 }
 
-/** NECESITO derivado del estado autoritativo, en lenguaje para el propietario. */
-function textoAtencion(pendientes: AtencionPendiente[]): string {
-  return pendientes.map((p) => {
+/** NECESITO derivado del estado autoritativo, en seguimiento.v1 exacto. */
+function textoAtencion(pendientes: AtencionPendiente[], activas: ResumenSeguimiento[]): string {
+  const primera = pendientes[0];
+  const doc = activas.find((r) => r.trabajoId === primera.trabajoId);
+  const avance = doc !== undefined && doc.progreso.kind === "conocido"
+    ? `${doc.progreso.completadas} de ${doc.progreso.total} partes terminadas`
+    : "avance desconocido";
+  const necesita = pendientes.map((p) => {
     const motivo = p.motivo !== null ? sanearTextoPropietario(p.motivo) : null;
-    if (motivo !== null) return `Necesito tu respuesta para Fase ${p.fase}: ${puntuarFinal(motivo)}`;
-    return `Necesito tu respuesta para Fase ${p.fase}. Tienes una decisión pendiente.`;
+    return motivo !== null ? puntuarFinal(motivo) : "Tienes una decisión pendiente.";
   }).join(" ");
+  return [
+    `[NECESITO TU RESPUESTA] Corrida, ${avance}`,
+    `Que cambio: La fase ${primera.fase} llegó a una decisión que no está preaprobada.`,
+    "Que sigue: El trabajo espera tu respuesta antes de continuar.",
+    `Que necesito de ti: ${necesita}`,
+  ].join("\n");
 }
 
 function palabraMotivo(motivo: ProblemaSeguimiento["motivo"]): string {
@@ -213,10 +224,11 @@ function nombreProblema(trabajoId: ProblemaSeguimiento["trabajoId"]): string {
 }
 
 /**
- * DETENIDA por trabajo ilegible: nombra cada trabajo con su causa en palabras
- * llanas y ordena no retirar el seguimiento hasta verificarlo. Sin rutas,
- * contenido crudo ni jerga: los identificadores salen del nombre del archivo,
- * nunca de su contenido.
+ * DETENIDA por trabajo ilegible, en seguimiento.v1 exacto: nombra cada
+ * trabajo con su causa en palabras llanas y ordena no retirar el seguimiento
+ * hasta verificarlo. Sin rutas, contenido crudo ni jerga: los identificadores
+ * salen del nombre del archivo, nunca de su contenido. El avance es
+ * desconocido por definición: jamás se inventa un conteo.
  */
 function textoProblemas(problemas: ProblemaSeguimiento[]): string {
   const partes = [...problemas]
@@ -225,17 +237,61 @@ function textoProblemas(problemas: ProblemaSeguimiento[]): string {
   const lista = partes.length === 1
     ? partes[0]
     : `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`;
-  return `No pude leer el avance de ${lista}; no retiro el seguimiento hasta verificarlo.`;
+  return [
+    "[DETENIDA] Corrida, avance desconocido",
+    `Que cambio: No pude leer el avance de ${lista}.`,
+    "Que sigue: Reviso el registro y aviso cuando esté verificado.",
+    "Que necesito de ti: nada por ahora; no retires el seguimiento hasta verificarlo.",
+  ].join("\n");
 }
 
-export function crearEstadoInicial(ahora: number, activas: ResumenSeguimiento[]): EstadoSeguimiento {
+export function crearEstadoInicial(
+  ahora: number,
+  activas: ResumenSeguimiento[],
+  sueltas: TareaSuelta[] = [],
+): EstadoSeguimiento {
+  const ids = [
+    ...activas.map((r) => r.trabajoId),
+    ...sueltas.map((s) => `suelta:${s.nombre}`),
+  ].sort();
   return {
     schema: SCHEMA_SEGUIMIENTO_CLOCK,
     corte: { kind: "esperando-primer-reporte", inicioVentana: ahora },
-    ultimoEstado: resumenEstable(activas, [], null),
+    ultimoEstado: resumenEstable(activas, sueltas, null),
+    ultimoInmediato: null,
     messageId: null,
-    trabajosActivos: activas.map((r) => r.trabajoId).sort(),
+    trabajosActivos: ids,
   };
+}
+
+/** Firma estable de la condición inmediata tratada: lo explícito por texto, lo derivado por causa. */
+function firmaInmediato(
+  explicito: EventoInmediato | null,
+  problemas: ProblemaSeguimiento[],
+  pendientes: AtencionPendiente[],
+): string | null {
+  if (explicito !== null) return `e:${explicito.tipo}:${explicito.texto}`;
+  if (problemas.length > 0) {
+    return `p:${problemas.map((p) => `${p.trabajoId}:${p.motivo}`).join("|")}`;
+  }
+  if (pendientes.length > 0) {
+    return `n:${pendientes.map((p) => `${p.trabajoId}:${p.motivo}`).join("|")}`;
+  }
+  return null;
+}
+
+function componerInmediato(
+  problemas: ProblemaSeguimiento[],
+  pendientes: AtencionPendiente[],
+  activas: ResumenSeguimiento[],
+): EventoInmediato | null {
+  if (problemas.length > 0) {
+    return { tipo: "DETENIDA", texto: textoProblemas(problemas) };
+  }
+  if (pendientes.length > 0) {
+    return { tipo: "NECESITO TU RESPUESTA", texto: textoAtencion(pendientes, activas) };
+  }
+  return null;
 }
 
 export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
@@ -251,37 +307,60 @@ export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
 
   // Prioridad del inmediato: lo explícito del director (observación fresca),
   // luego la triage de corrupción (el estado no es confiable), luego la
-  // atención que el propio resumen pide. Lo derivado entra al resumen
-  // estable, así un motivo ya confirmado no se repite y uno nuevo sí sale.
+  // atención que el propio resumen pide. El corte periódico y la condición
+  // inmediata tratada viven en campos separados: confirmar uno nunca borra
+  // ni bloquea al otro, así un inmediato confirmado no silencia el próximo
+  // corte debido.
   const pendientes = atencionPendiente(activas);
-  const efectivo: EventoInmediato | null = explicito
-    ?? (problemas.length > 0
-      ? { tipo: "DETENIDA", texto: textoProblemas(problemas) }
-      : null)
-    ?? (pendientes.length > 0
-      ? { tipo: "NECESITO TU RESPUESTA", texto: textoAtencion(pendientes) }
-      : null);
-
+  const derivado = explicito === null ? componerInmediato(problemas, pendientes, activas) : null;
+  const efectivo = explicito ?? derivado;
   if (efectivo !== null) {
-    const dig = resumenEstable(activas, sueltas, efectivo);
-    if (dig === previo.ultimoEstado) {
-      return { accion: "NO_REPLY", estado: { ...previo, trabajosActivos: ids } };
+    if (explicito !== null) {
+      const v1 = validarMensajeV1(efectivo.texto);
+      if (!v1.ok || v1.etiqueta !== efectivo.tipo) {
+        throw new Error("decidirSeguimiento: inmediato explícito inválido");
+      }
+    } else {
+      const v1 = validarMensajeV1(efectivo.texto);
+      if (!v1.ok || v1.etiqueta !== efectivo.tipo) {
+        throw new Error("decidirSeguimiento: inmediato derivado inválido");
+      }
     }
-    return {
-      accion: "SEND",
-      tipo: "inmediato",
-      mensaje: efectivo.texto,
-      estadoTrasConfirmar: {
-        schema: SCHEMA_SEGUIMIENTO_CLOCK,
-        corte: previo.corte,
-        ultimoEstado: dig,
-        trabajosActivos: ids,
-      },
-    };
+    const firma = firmaInmediato(explicito, problemas, pendientes);
+    const ya = previo.ultimoInmediato;
+    if (ya === null || ya.firma !== firma || ya.messageId === null) {
+      return {
+        accion: "SEND",
+        tipo: "inmediato",
+        mensaje: efectivo.texto,
+        estadoTrasConfirmar: {
+          schema: SCHEMA_SEGUIMIENTO_CLOCK,
+          corte: previo.corte,
+          ultimoEstado: previo.ultimoEstado,
+          ultimoInmediato: { firma: firma ?? "", messageId: null },
+          trabajosActivos: ids,
+        },
+      };
+    }
+    // Ya entregado y confirmado: no se repite, pero tampoco silencia el
+    // corte periódico que pueda estar debido. Sigue abajo.
+  }
+
+  // Sin condición inmediata activa se registra inactiva; con condición ya
+  // tratada se conserva pendiente.
+  const sinCondicion = efectivo === null;
+  const silencio = (): EstadoSeguimiento => ({
+    ...previo,
+    trabajosActivos: ids,
+    ultimoInmediato: sinCondicion ? null : previo.ultimoInmediato,
+  });
+
+  if (activas.length === 0 && sueltas.length === 0) {
+    return { accion: "NO_REPLY", estado: silencio() };
   }
 
   if (activas.length === 0 && sueltas.length === 0) {
-    return { accion: "NO_REPLY", estado: { ...previo, trabajosActivos: [] } };
+    return { accion: "NO_REPLY", estado: silencio() };
   }
 
   switch (previo.corte.kind) {
@@ -311,12 +390,13 @@ export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
         schema: SCHEMA_SEGUIMIENTO_CLOCK,
         corte: { kind: "reporte-confirmado", ultimoReporteConfirmado: ahora },
         ultimoEstado: resumenEstable(activas, sueltas, null),
+        ultimoInmediato: previo.ultimoInmediato,
         trabajosActivos: ids,
       },
     };
   }
 
-  return { accion: "NO_REPLY", estado: { ...previo, trabajosActivos: ids } };
+  return { accion: "NO_REPLY", estado: silencio() };
 }
 
 /**
@@ -349,10 +429,25 @@ export function parseEstadoSeguimiento(raw: unknown): EstadoSeguimiento {
   if (!Array.isArray(trabajos) || trabajos.some((t) => typeof t !== "string")) {
     throw new Error(invalido);
   }
+  // Sin despliegue vivo anterior, el scratch viejo no trae ultimoInmediato:
+  // ausente vale null. Presente, debe traer firma y messageId válidos.
+  let ultimoInmediato: EstadoSeguimiento["ultimoInmediato"] = null;
+  const inmediatoRaw = raw["ultimoInmediato"];
+  if (inmediatoRaw !== undefined && inmediatoRaw !== null) {
+    if (!esObjeto(inmediatoRaw) || typeof inmediatoRaw["firma"] !== "string") {
+      throw new Error(invalido);
+    }
+    const mid = inmediatoRaw["messageId"];
+    if (mid !== null && !(typeof mid === "number" && Number.isInteger(mid) && mid > 0)) {
+      throw new Error(invalido);
+    }
+    ultimoInmediato = { firma: inmediatoRaw["firma"], messageId: mid };
+  }
   return {
     schema: SCHEMA_SEGUIMIENTO_CLOCK,
     corte,
     ultimoEstado,
+    ultimoInmediato,
     messageId,
     trabajosActivos: trabajos.filter((t): t is string => typeof t === "string"),
   };

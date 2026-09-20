@@ -56,6 +56,7 @@ import {
   type EventoInmediato,
 } from "./seguimiento-clock.ts";
 import type { TareaSuelta } from "./seguimiento-render.ts";
+import { validarMensajeV1 } from "./seguimiento-render.ts";
 import { syncProgress } from "./live-bus.ts";
 
 // ---------------------------------------------------------------------------
@@ -486,6 +487,10 @@ function parseInmediato(v: unknown): EventoInmediato | null {
   if (typeof texto !== "string" || texto.length === 0 || texto.length > 2000) {
     throw new Error("evento-invalido");
   }
+  // Un inmediato explícito ya debe cumplir seguimiento.v1 con su etiqueta:
+  // lo crudo nunca se envía. Lo derivado lo garantiza su composición.
+  const v1 = validarMensajeV1(texto);
+  if (!v1.ok || v1.etiqueta !== tipo) throw new Error("evento-invalido");
   return { tipo, texto };
 }
 
@@ -578,7 +583,7 @@ async function manejarDecide(
     if (params["estado"] !== null) return { ok: false, razon: "estado-invalido" };
     return {
       accion: "NO_REPLY",
-      estado: crearEstadoInicial(ahora, lista.activas),
+      estado: crearEstadoInicial(ahora, lista.activas, sueltas),
     };
   }
   let previo: EstadoSeguimiento;

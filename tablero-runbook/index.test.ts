@@ -484,11 +484,134 @@ describe("plugin smoke import (7.4)", () => {
       assert.match(r1.mensaje, /Fase 14/);
       assert.doesNotMatch(r1.mensaje, /\{roto/);
       mod._setRelojSeguimientoForTest(() => T + 901_000);
+      const confirmado1 = {
+        ...r1.estadoTrasConfirmar,
+        messageId: 9,
+        ultimoInmediato: { ...r1.estadoTrasConfirmar.ultimoInmediato, messageId: 9 },
+      };
       const r2 = await llamarMetodo(host.metodos, "runbook.progress.decide", {
         modo: "tick",
-        estado: { ...r1.estadoTrasConfirmar, messageId: 9 },
+        estado: confirmado1,
       });
       assert.equal(r2.accion, "NO_REPLY");
+    } finally {
+      mod._setRelojSeguimientoForTest(undefined);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("decide: iniciar keeps standalone work in the initial cut", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-decide-suelta-"));
+    const host = await cargar({ stateDir: dir });
+    const mod = await import("./index.ts");
+    const T = 1_700_000_000_000;
+    const suelta = {
+      nombre: "Trabajo suelto",
+      progreso: { kind: "conocido", completadas: 0, total: 1, porcentaje: 0 },
+      actividad: {
+        detalle: "En curso",
+        iniciadaEn: "2026-09-20T10:00:00Z",
+        ultimaEvidencia: "Comenzó",
+      },
+    };
+    try {
+      mod._setRelojSeguimientoForTest(() => T);
+      const r0 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "iniciar", estado: null, tareasSueltas: [suelta] });
+      assert.equal(r0.accion, "NO_REPLY");
+      assert.deepEqual(r0.estado.trabajosActivos, ["suelta:Trabajo suelto"]);
+      mod._setRelojSeguimientoForTest(() => T + 900_000);
+      const r1 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r0.estado, tareasSueltas: [suelta] });
+      assert.equal(r1.accion, "NO_REPLY");
+      assert.deepEqual(r1.estado.ultimoEstado, r0.estado.ultimoEstado);
+      mod._setRelojSeguimientoForTest(() => T + 1_800_000);
+      const r2 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r1.estado, tareasSueltas: [suelta] });
+      assert.equal(r2.accion, "SEND");
+      assert.equal(r2.tipo, "periodico");
+      assert.match(r2.mensaje, /Trabajo suelto — 0% \(0\/1\)/);
+    } finally {
+      mod._setRelojSeguimientoForTest(undefined);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("decide: phase plus standalone keep both identities", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-decide-mixto-"));
+    const host = await cargar({ stateDir: dir });
+    assert.deepEqual(
+      await llamarMetodo(host.metodos, "runbook.progress.set", docMinimo({})),
+      { ok: true },
+    );
+    const mod = await import("./index.ts");
+    const T = 1_700_000_000_000;
+    const suelta = {
+      nombre: "Suelta",
+      progreso: { kind: "conocido", completadas: 1, total: 1, porcentaje: 100 },
+      actividad: {
+        detalle: "Cierre suelto.",
+        iniciadaEn: "2026-09-20T10:00:00Z",
+        ultimaEvidencia: "Listo.",
+      },
+    };
+    try {
+      mod._setRelojSeguimientoForTest(() => T);
+      const r0 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "iniciar", estado: null, tareasSueltas: [suelta] });
+      assert.equal(r0.accion, "NO_REPLY");
+      assert.deepEqual(r0.estado.trabajosActivos, ["fase:14", "suelta:Suelta"]);
+    } finally {
+      mod._setRelojSeguimientoForTest(undefined);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("decide: attention at minute 15 answers immediately end to end", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-decide-aten-"));
+    const host = await cargar({ stateDir: dir });
+    const doc = docMinimo({});
+    doc.atencion_requerida = { necesaria: true, motivo: "Elegir A o B", desde: null };
+    assert.deepEqual(await llamarMetodo(host.metodos, "runbook.progress.set", doc), { ok: true });
+    const mod = await import("./index.ts");
+    const T = 1_700_000_000_000;
+    try {
+      mod._setRelojSeguimientoForTest(() => T);
+      const r0 = await llamarMetodo(host.metodos, "runbook.progress.decide", { modo: "iniciar", estado: null });
+      assert.equal(r0.accion, "NO_REPLY");
+      mod._setRelojSeguimientoForTest(() => T + 900_000);
+      const r1 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r0.estado });
+      assert.equal(r1.accion, "SEND");
+      assert.equal(r1.tipo, "inmediato");
+      assert.match(r1.mensaje, /^\[NECESITO TU RESPUESTA\] Corrida, /);
+      assert.match(r1.mensaje, /Elegir A o B/);
+    } finally {
+      mod._setRelojSeguimientoForTest(undefined);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("decide: explicit immediates must already be v1", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-decide-v1-"));
+    const host = await cargar({ stateDir: dir });
+    const mod = await import("./index.ts");
+    const bueno = "[DETENIDA] Corrida, 1 de 2 partes terminadas\nQue cambio: algo material\nQue sigue: sigue igual\nQue necesito de ti: nada.";
+    try {
+      mod._setRelojSeguimientoForTest(() => 1_700_000_000_000);
+      const r0 = await llamarMetodo(host.metodos, "runbook.progress.decide", { modo: "iniciar", estado: null });
+      assert.equal(r0.accion, "NO_REPLY");
+      const r1 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r0.estado, inmediato: { tipo: "DETENIDA", texto: bueno } });
+      assert.equal(r1.accion, "SEND");
+      if (r1.accion !== "SEND") throw new Error("explicito valido inesperado");
+      assert.equal(r1.mensaje, bueno);
+      const r2 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r0.estado, inmediato: { tipo: "DETENIDA", texto: "cuota agotada" } });
+      assert.deepEqual(r2, { ok: false, razon: "evento-invalido" });
+      const r3 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r0.estado, inmediato: { tipo: "DETENIDA", texto: bueno.replace("[DETENIDA]", "[AVANZA]") } });
+      assert.deepEqual(r3, { ok: false, razon: "evento-invalido" });
     } finally {
       mod._setRelojSeguimientoForTest(undefined);
       rmSync(dir, { recursive: true, force: true });
@@ -591,14 +714,15 @@ describe("plugin smoke import (7.4)", () => {
         { kind: "reporte-confirmado", ultimoReporteConfirmado: TS + 1800 });
 
       mod._setRelojSeguimientoForTest(() => T + 901_000);
+      const v1detenida = "[DETENIDA] Corrida, 1 de 2 partes terminadas\nQue cambio: cuota agotada en el turno\nQue sigue: sigue igual\nQue necesito de ti: nada.";
       const r3 = await llamarMetodo(host.metodos, "runbook.progress.decide", {
         modo: "tick",
         estado: r0.estado,
-        inmediato: { tipo: "DETENIDA", texto: "cuota agotada" },
+        inmediato: { tipo: "DETENIDA", texto: v1detenida },
       });
       assert.equal(r3.accion, "SEND");
       assert.equal(r3.tipo, "inmediato");
-      assert.equal(r3.mensaje, "cuota agotada");
+      assert.equal(r3.mensaje, v1detenida);
       assert.deepEqual(r3.estadoTrasConfirmar.corte,
         { kind: "esperando-primer-reporte", inicioVentana: TS });
     } finally {

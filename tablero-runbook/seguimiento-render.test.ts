@@ -16,6 +16,7 @@ import {
 } from "./seguimiento.ts";
 import {
   type EntradaSeguimientoV2,
+  esMensajeV1Valido,
   renderSeguimientoV2,
   sanearTextoPropietario,
 } from "./seguimiento-render.ts";
@@ -288,6 +289,14 @@ describe("sanearTextoPropietario", () => {
       "tras el rebase",
       "el hook avisa",
       "corre el script",
+      "Ejecutar git status y npm test",
+      "El RPC usa JSON por API",
+      "Revisar SHA antes de continuar",
+      "Claude trabaja en tmux",
+      "corre node --test",
+      "mira openclaw cron list",
+      "pasa el TDD",
+      "pide la CLI",
     ]) {
       assert.equal(sanearTextoPropietario(sucio), null, `texto sucio aceptado: ${sucio}`);
     }
@@ -339,5 +348,54 @@ describe("sanearTextoPropietario", () => {
     assert.doesNotMatch(text, /--force/);
     assert.doesNotMatch(text, /foo\.ts/);
     assert.match(text, /En implementando\./);
+  });
+
+  it("rejects technical text in every interpolated field independently", () => {
+    const tecnico = "Ejecutar git status y npm test";
+    const base = entradaEjemplo();
+    const variantes: Array<[string, EntradaSeguimientoV2]> = [
+      ["detalle", { ...base, fases: [{ ...fase14(), carriles: [{ ...fase14().carriles[0], actividad: { detalle: tecnico, iniciadaEn: "2026-09-19T10:20:00Z", ultimaEvidencia: "ok" } }] }] }],
+      ["suelta", { ...base, tareasSueltas: [{ nombre: tecnico, progreso: { kind: "conocido", completadas: 1, total: 2, porcentaje: 50 }, actividad: { detalle: tecnico, iniciadaEn: "2026-09-19T10:20:00Z", ultimaEvidencia: tecnico } }] }],
+      ["cambio", { ...base, cambio: tecnico }],
+      ["siguiente", { ...base, siguiente: tecnico }],
+      ["necesita", { ...base, necesita: tecnico }],
+      ["evidencia", { ...base, cambio: "", fases: [{ ...fase14(), carriles: [{ ...fase14().carriles[0], actividad: { detalle: "ok", iniciadaEn: "2026-09-19T10:20:00Z", ultimaEvidencia: tecnico } }] }] }],
+    ];
+    for (const [campo, entrada] of variantes) {
+      const text = renderSeguimientoV2(entrada);
+      assert.doesNotMatch(text, /git status/, `fuga por ${campo}`);
+      assert.doesNotMatch(text, /npm test/, `fuga por ${campo}`);
+    }
+  });
+});
+
+describe("esMensajeV1Valido", () => {
+  const V1_OK = [
+    "[AVANZA] Corrida, 2 de 5 partes terminadas\nQue cambio: queda lista\nQue sigue: sigue igual\nQue necesito de ti: nada.",
+    "[DETENIDA] Corrida, 1 de 2 partes terminadas\nQue cambio: algo material\nQue sigue: sigue igual\nQue necesito de ti: nada.",
+    "[NECESITO TU RESPUESTA] Corrida, avance desconocido\nQue cambio: la fase espera\nQue sigue: sigue igual\nQue necesito de ti: responde si o no.",
+    "[CERRADA] Corrida, cierre en palabras\nQue cambio: x\nQue sigue: y\nQue necesito de ti: nada.",
+    "[SIMULACRO] [AVANZA] Corrida, 2 de 5 partes terminadas\nQue cambio: queda lista\nQue sigue: sigue igual\nQue necesito de ti: nada.",
+  ];
+  const V1_MAL = [
+    "[ETIQUETA-RARA] Corrida, 1 de 2 partes terminadas\nQue cambio: x\nQue sigue: y\nQue necesito de ti: z.",
+    "[AVANZA] Corrida, 1 de 2 partes terminadas\nQue cambio: x\nQue sigue: y",
+    "[AVANZA] Fase 9\nQue cambio: x\nQue sigue: y\nQue necesito de ti: z.",
+    "[AVANZA] Corrida, 1 de 2 partes terminadas\nQue cambio: \nQue sigue: y\nQue necesito de ti: z.",
+    "[AVANZA] Corrida, 1 de 2 partes terminadas\nQue cambio: mira /tmp/x\nQue sigue: y\nQue necesito de ti: z.",
+    "[NECESITO TU RESPUESTA] Corrida, 1 de 2 partes terminadas\nQue cambio: x\nQue sigue: y\nQue necesito de ti: z; Comando: ~/bin/corrida.sh responder --sesion s --si\nQue necesito de ti: otra.",
+    "[AVANZA] Corrida, 1 de 2 partes terminadas\nQue cambio: x\nQue sigue: y\nQue necesito de ti: z; Comando: ~/bin/x --si",
+  ];
+
+  it("accepts valid v1 messages including unknown advance", () => {
+    for (const texto of V1_OK) {
+      assert.equal(esMensajeV1Valido(texto), true, `v1 válido rechazado: ${texto.slice(0, 40)}`);
+    }
+  });
+
+  it("rejects malformed v1 messages like the shared validator", () => {
+    for (const texto of V1_MAL) {
+      assert.equal(esMensajeV1Valido(texto), false, `v1 inválido aceptado: ${texto.slice(0, 40)}`);
+    }
   });
 });

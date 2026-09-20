@@ -82,8 +82,16 @@ function corteEn(ultimoReporteConfirmado: number, activas: ResumenSeguimiento[])
   };
 }
 
+const V1_DETENIDA = "[DETENIDA] Corrida, 1 de 4 partes terminadas\nQue cambio: algo material\nQue sigue: sigue igual\nQue necesito de ti: nada.";
+const V1_NECESITO = "[NECESITO TU RESPUESTA] Corrida, 1 de 4 partes terminadas\nQue cambio: algo material\nQue sigue: sigue igual\nQue necesito de ti: responde.";
+const V1_CERRADA = "[CERRADA] Corrida, cierre en palabras\nQue cambio: x\nQue sigue: y\nQue necesito de ti: nada.";
+
 function confirmado(estadoTrasConfirmar: EstadoTrasConfirmar, messageId: number): EstadoSeguimiento {
-  return { ...estadoTrasConfirmar, messageId };
+  const estado: EstadoSeguimiento = { ...estadoTrasConfirmar, messageId };
+  if (estado.ultimoInmediato !== null) {
+    estado.ultimoInmediato = { ...estado.ultimoInmediato, messageId };
+  }
+  return estado;
 }
 
 describe("decidirSeguimiento", () => {
@@ -109,11 +117,12 @@ describe("decidirSeguimiento", () => {
 
   it("immediate decisions bypass the periodic cut", () => {
     const activas = [resumen14(1, 4, 25)];
-    const inmediato: EventoInmediato = { tipo: "NECESITO TU RESPUESTA", texto: "¿Sigo por A o por B?" };
+    const inmediato: EventoInmediato = { tipo: "NECESITO TU RESPUESTA", texto: V1_NECESITO };
     const d = decidirSeguimiento({ ahora: 901, previo: corteEn(900, activas), activas, inmediato });
     assert.equal(d.accion, "SEND");
     if (d.accion !== "SEND") throw new Error("inmediato inesperado");
     assert.equal(d.tipo, "inmediato");
+    assert.equal(d.mensaje, V1_NECESITO);
   });
 
   it("a restart from confirmed scratch sends at most once per two ticks", () => {
@@ -130,21 +139,21 @@ describe("decidirSeguimiento", () => {
 
   it("DETENIDA and CERRADA also bypass the periodic cut", () => {
     const activas = [resumen14(1, 4, 25)];
-    for (const tipo of ["DETENIDA", "CERRADA"] as const) {
+    for (const [tipo, texto] of [["DETENIDA", V1_DETENIDA], ["CERRADA", V1_CERRADA]] as const) {
       const d = decidirSeguimiento({
         ahora: 901, previo: corteEn(900, activas), activas,
-        inmediato: { tipo, texto: "motivo material" },
+        inmediato: { tipo, texto },
       });
       assert.equal(d.accion, "SEND");
       if (d.accion !== "SEND") throw new Error(`${tipo} inesperado`);
       assert.equal(d.tipo, "inmediato");
-      assert.equal(d.mensaje, "motivo material");
+      assert.equal(d.mensaje, texto);
     }
   });
 
   it("a repeated identical immediate is not sent twice", () => {
     const activas = [resumen14(1, 4, 25)];
-    const inmediato: EventoInmediato = { tipo: "DETENIDA", texto: "cuota agotada" };
+    const inmediato: EventoInmediato = { tipo: "DETENIDA", texto: V1_DETENIDA };
     const primero = decidirSeguimiento({ ahora: 901, previo: corteEn(900, activas), activas, inmediato });
     assert.equal(primero.accion, "SEND");
     if (primero.accion !== "SEND") throw new Error("primer inmediato inesperado");
@@ -162,7 +171,7 @@ describe("decidirSeguimiento", () => {
       { kind: "reporte-confirmado", ultimoReporteConfirmado: 1800 });
     const inm = decidirSeguimiento({
       ahora: 1900, previo: corteEn(1800, activas), activas,
-      inmediato: { tipo: "NECESITO TU RESPUESTA", texto: "¿Sigo?" },
+      inmediato: { tipo: "NECESITO TU RESPUESTA", texto: V1_NECESITO },
     });
     assert.equal(inm.accion, "SEND");
     if (inm.accion !== "SEND") throw new Error("inmediato inesperado");
@@ -235,9 +244,38 @@ describe("parseEstadoSeguimiento", () => {
       { ...estado, ultimoEstado: 7 },
       { ...estado, messageId: "siete" },
       { ...estado, trabajosActivos: "fase:14" },
+      { ...estado, ultimoInmediato: { firma: 7, messageId: null } },
+      { ...estado, ultimoInmediato: { firma: "x", messageId: -1 } },
     ]) {
       assert.throws(() => parseEstadoSeguimiento(malo), /estado/i);
     }
+  });
+
+  it("round-trips the immediate field and tolerates scratches without it", () => {
+    const estado = crearEstadoInicial(100, [resumen14(1, 4, 25)]);
+    const conInmediato = {
+      ...estado,
+      ultimoInmediato: { firma: "n:fase:14:Elegir", messageId: 9 },
+    };
+    assert.deepEqual(parseEstadoSeguimiento(JSON.parse(JSON.stringify(conInmediato))), conInmediato);
+    const { ultimoInmediato, ...viejo } = conInmediato;
+    assert.deepEqual(parseEstadoSeguimiento(viejo).ultimoInmediato, null);
+  });
+});
+
+describe("estado inicial con sueltas", () => {
+  const suelta = {
+    nombre: "Suelta",
+    progreso: { kind: "conocido", completadas: 0, total: 1, porcentaje: 0 } as const,
+    actividad: { detalle: "En curso", iniciadaEn: "2026-09-19T10:00:00Z", ultimaEvidencia: "Comenzó" },
+  };
+
+  it("keeps standalone identities and their digest in the initial cut", () => {
+    const solo = crearEstadoInicial(50, [], [suelta]);
+    assert.deepEqual(solo.trabajosActivos, ["suelta:Suelta"]);
+    assert.notEqual(solo.ultimoEstado, crearEstadoInicial(50, []).ultimoEstado);
+    const mixto = crearEstadoInicial(50, [resumen14(1, 4, 25)], [suelta]);
+    assert.deepEqual(mixto.trabajosActivos, ["fase:14", "suelta:Suelta"]);
   });
 });
 
@@ -252,8 +290,7 @@ describe("trabajo ilegible", () => {
     assert.equal(d.accion, "SEND");
     if (d.accion !== "SEND") throw new Error("ilegible inesperado");
     assert.equal(d.tipo, "inmediato");
-    assert.match(d.mensaje, /Fase 14/);
-    assert.match(d.mensaje, /ilegible/);
+    assert.equal(d.mensaje, "[DETENIDA] Corrida, avance desconocido\nQue cambio: No pude leer el avance de Fase 14 (archivo ilegible).\nQue sigue: Reviso el registro y aviso cuando esté verificado.\nQue necesito de ti: nada por ahora; no retires el seguimiento hasta verificarlo.");
     assert.doesNotMatch(d.mensaje, /private|tmp|\.json/);
     assert.deepEqual(d.estadoTrasConfirmar.corte,
       { kind: "reporte-confirmado", ultimoReporteConfirmado: 900 });
@@ -291,23 +328,38 @@ describe("trabajo ilegible", () => {
   it("an explicit immediate wins over corruption triage", () => {
     const d = decidirSeguimiento({
       ahora: 901, previo: corteEn(900, []), activas: [], problemas,
-      inmediato: { tipo: "CERRADA", texto: "cierre observado" },
+      inmediato: { tipo: "CERRADA", texto: V1_CERRADA },
     });
     assert.equal(d.accion, "SEND");
     if (d.accion !== "SEND") throw new Error("explicito inesperado");
     assert.equal(d.tipo, "inmediato");
-    assert.equal(d.mensaje, "cierre observado");
+    assert.equal(d.mensaje, V1_CERRADA);
+  });
+
+  it("a crude explicit immediate never goes out raw", () => {
+    const activas = [resumen14(1, 4, 25)];
+    for (const texto of ["cuota agotada", V1_DETENIDA.replace("[DETENIDA]", "[AVANZA]")]) {
+      assert.throws(
+        () => decidirSeguimiento({
+          ahora: 901, previo: corteEn(900, activas), activas,
+          inmediato: { tipo: "DETENIDA", texto },
+        }),
+        /inmediato explícito inválido/,
+      );
+    }
   });
 });
 
 describe("atencion requerida", () => {
+  const V1_ATENCION = "[NECESITO TU RESPUESTA] Corrida, 1 de 4 partes terminadas\nQue cambio: La fase 14 llegó a una decisión que no está preaprobada.\nQue sigue: El trabajo espera tu respuesta antes de continuar.\nQue necesito de ti: Elegir A o B.";
+
   it("needed attention at minute 15 sends NECESITO without waiting", () => {
     const activas = [resumenAtencion("Elegir A o B")];
     const d = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
     assert.equal(d.accion, "SEND");
     if (d.accion !== "SEND") throw new Error("atencion inesperada");
     assert.equal(d.tipo, "inmediato");
-    assert.equal(d.mensaje, "Necesito tu respuesta para Fase 14: Elegir A o B.");
+    assert.equal(d.mensaje, V1_ATENCION);
   });
 
   it("no attention before the cut stays silent", () => {
@@ -330,6 +382,7 @@ describe("atencion requerida", () => {
     assert.equal(cambiado.accion, "SEND");
     if (cambiado.accion !== "SEND") throw new Error("motivo nuevo inesperado");
     assert.match(cambiado.mensaje, /Elegir C/);
+    assert.match(cambiado.mensaje, /^\[NECESITO TU RESPUESTA\] Corrida, /);
   });
 
   it("a dirty reason falls back to safe owner language", () => {
@@ -339,7 +392,7 @@ describe("atencion requerida", () => {
     if (d.accion !== "SEND") throw new Error("atencion sucia inesperada");
     assert.doesNotMatch(d.mensaje, /\/tmp\/x/);
     assert.doesNotMatch(d.mensaje, /abcdef1/);
-    assert.match(d.mensaje, /Fase 14/);
+    assert.match(d.mensaje, /Que necesito de ti: Tienes una decisión pendiente\./);
   });
 
   it("an attention immediate preserves the periodic cut", () => {
@@ -358,13 +411,71 @@ describe("atencion requerida", () => {
     });
     assert.equal(nula.accion, "SEND");
     if (nula.accion !== "SEND") throw new Error("atencion nula inesperada");
-    assert.equal(nula.mensaje, "Necesito tu respuesta para Fase 14. Tienes una decisión pendiente.");
+    assert.equal(nula.mensaje, "[NECESITO TU RESPUESTA] Corrida, 1 de 4 partes terminadas\nQue cambio: La fase 14 llegó a una decisión que no está preaprobada.\nQue sigue: El trabajo espera tu respuesta antes de continuar.\nQue necesito de ti: Tienes una decisión pendiente.");
     const pregunta = decidirSeguimiento({
       ahora: 900, previo: crearEstadoInicial(0, [resumenAtencion("¿Sigo por A?")]),
       activas: [resumenAtencion("¿Sigo por A?")], inmediato: null,
     });
     assert.equal(pregunta.accion, "SEND");
     if (pregunta.accion !== "SEND") throw new Error("pregunta inesperada");
-    assert.equal(pregunta.mensaje, "Necesito tu respuesta para Fase 14: ¿Sigo por A?");
+    assert.match(pregunta.mensaje, /Que necesito de ti: ¿Sigo por A\?\n?$/);
+  });
+
+  it("attention minute 0-15-30-45 with confirmations, then lapse and return", () => {
+    const catorce = resumenAtencion("Elegir A o B");
+    const quince = resumen15();
+    const ambas = [catorce, quince];
+    const r0 = decidirSeguimiento({ ahora: 0, previo: crearEstadoInicial(0, ambas), activas: ambas, inmediato: null });
+    assert.equal(r0.accion, "SEND");
+    if (r0.accion !== "SEND") throw new Error("minuto 0 inesperado");
+    let previo = confirmado(r0.estadoTrasConfirmar, 1);
+    const r15 = decidirSeguimiento({ ahora: 900, previo, activas: ambas, inmediato: null });
+    assert.equal(r15.accion, "NO_REPLY");
+    if (r15.accion !== "NO_REPLY") throw new Error("minuto 15 inesperado");
+    const r30 = decidirSeguimiento({ ahora: 1800, previo: r15.estado, activas: ambas, inmediato: null });
+    assert.equal(r30.accion, "SEND");
+    if (r30.accion !== "SEND") throw new Error("minuto 30 inesperado");
+    assert.equal(r30.tipo, "periodico");
+    assert.match(r30.mensaje, /Fase 15/);
+    previo = confirmado(r30.estadoTrasConfirmar, 2);
+    const r45 = decidirSeguimiento({ ahora: 2700, previo, activas: ambas, inmediato: null });
+    assert.equal(r45.accion, "NO_REPLY");
+    const sinAtencion = [{ ...catorce, atencionRequerida: { necesaria: false, motivo: null } }, quince];
+    const r46 = decidirSeguimiento({ ahora: 2760, previo: r45.estado, activas: sinAtencion, inmediato: null });
+    assert.equal(r46.accion, "NO_REPLY");
+    if (r46.accion !== "NO_REPLY") throw new Error("lapso inesperado");
+    assert.equal(r46.estado.ultimoInmediato, null);
+    const vuelve = decidirSeguimiento({ ahora: 2820, previo: r46.estado, activas: ambas, inmediato: null });
+    assert.equal(vuelve.accion, "SEND");
+    if (vuelve.accion !== "SEND") throw new Error("retorno inesperado");
+    assert.equal(vuelve.tipo, "inmediato");
+  });
+
+  it("persistent corruption still lets the healthy phase report", () => {
+    const sana = resumen15();
+    const probs: ProblemaSeguimiento[] = [{ trabajoId: "fase:14", motivo: "ilegible" }];
+    const r1 = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, [sana]), activas: [sana], problemas: probs, inmediato: null });
+    assert.equal(r1.accion, "SEND");
+    if (r1.accion !== "SEND") throw new Error("detenida esperada");
+    assert.match(r1.mensaje, /^\[DETENIDA\] Corrida, /);
+    const previo = confirmado(r1.estadoTrasConfirmar, 5);
+    const r2 = decidirSeguimiento({ ahora: 1800, previo, activas: [sana], problemas: probs, inmediato: null });
+    assert.equal(r2.accion, "SEND");
+    if (r2.accion !== "SEND") throw new Error("periodico esperado");
+    assert.equal(r2.tipo, "periodico");
+    assert.match(r2.mensaje, /Fase 15/);
+    const r3 = decidirSeguimiento({
+      ahora: 1860, previo: confirmado(r2.estadoTrasConfirmar, 6),
+      activas: [sana], problemas: probs, inmediato: null,
+    });
+    assert.equal(r3.accion, "NO_REPLY");
+    const otra: ProblemaSeguimiento[] = [{ trabajoId: "fase:14", motivo: "documento-invalido" }];
+    const r4 = decidirSeguimiento({
+      ahora: 1920, previo: confirmado(r2.estadoTrasConfirmar, 6),
+      activas: [sana], problemas: otra, inmediato: null,
+    });
+    assert.equal(r4.accion, "SEND");
+    if (r4.accion !== "SEND") throw new Error("nueva causa esperada");
+    assert.match(r4.mensaje, /documento inválido/);
   });
 });

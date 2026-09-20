@@ -35,7 +35,9 @@ const JERGA_RE = new RegExp(
   + "|(^|[\\s(>\"'])(\\/[\\w.~_-]+|~\\/|\\.\\.?\\/)"
   + "|(?<=[\\s(>\"'^]|^)(?=[\\w.~_-]*[A-Za-z])[\\w.~_-]+\\/[\\w.~_-]+"
   + "|\\b[\\w-]+\\.(ts|js|tsx|jsx|mjs|cjs|json|md|markdown|sh|bash|ps1|psm1|py|rb|go|rs|java|kt|yml|yaml|toml|ini|cfg|conf|txt|log|csv|tsv)\\b"
-  + "|\\b(commit\\w*|merg\\w*|rebase\\w*|push\\w*|pull request|prs?|worktrees?|branches?|ramas?|repos?|ci|hooks?|scripts?)\\b",
+  + "|\\b(commit\\w*|merg\\w*|rebase\\w*|push\\w*|pull request|prs?|worktrees?|branches?|ramas?|repos?|ci|hooks?|scripts?)\\b"
+  + "|\\b(git|npm|node|openclaw|tmux|cron|docker|kubectl|gh|psql|ssh|curl|bash|pwsh)\\b"
+  + "|\\b(RPC|JSON|API|SHA|CLI|TDD|URL|SDK)\\b",
   "i",
 );
 
@@ -55,6 +57,66 @@ export function sanearTextoPropietario(s: string): string | null {
   // ("1234567", "acabada" pasan); con letra Y dígito sí ("abcdef1").
   if (traeSha(s)) return null;
   return s;
+}
+
+const ETIQUETAS_V1 = ["AVANZA", "DETENIDA", "NECESITO TU RESPUESTA", "CERRADA"] as const;
+
+export type EtiquetaV1 = (typeof ETIQUETAS_V1)[number];
+
+function sinSaltoFinal(texto: string): string[] {
+  const partes = texto.split("\n");
+  if (partes.length > 1 && partes[partes.length - 1] === "") partes.pop();
+  return partes;
+}
+
+/**
+ * Equivalente TypeScript del validador compartido de `seguimiento.v1`
+ * (`mensaje_valido` en `scripts/mac/corrida/lib.sh`): cuatro líneas, etiqueta
+ * cerrada, avance `N de M partes` o `avance desconocido` (extensión mínima
+ * para conteos que no se pueden expresar honestamente), prefijos `Que`
+ * con contenido, reglas de `Comando: ` y la misma jerga del límite de
+ * lenguaje. Devuelve la etiqueta cuando todo cuadra.
+ */
+export function validarMensajeV1(texto: string): { ok: true; etiqueta: EtiquetaV1 } | { ok: false } {
+  if (typeof texto !== "string") return { ok: false };
+  const lineas = sinSaltoFinal(texto);
+  if (lineas.length !== 4) return { ok: false };
+  const [l1raw, l2, l3, l4raw] = lineas as [string, string, string, string];
+  const primera = l1raw.startsWith("[SIMULACRO] ") ? l1raw.slice("[SIMULACRO] ".length) : l1raw;
+  const m = /^\[(AVANZA|DETENIDA|NECESITO TU RESPUESTA|CERRADA)\] /.exec(primera);
+  if (m === null) return { ok: false };
+  const etiqueta = m[1] as EtiquetaV1;
+  const resto = primera.slice(m[0].length);
+  if (resto === "") return { ok: false };
+  if (etiqueta !== "CERRADA" && !(/[0-9]+ de [0-9]+ partes/.test(resto) || /avance desconocido/.test(resto))) {
+    return { ok: false };
+  }
+  if (!/^Que cambio: .+/.test(l2)) return { ok: false };
+  if (!/^Que sigue: .+/.test(l3)) return { ok: false };
+  if (!/^Que necesito de ti: .+/.test(l4raw)) return { ok: false };
+  if (/Comando: /.test(l1raw) || /Comando: /.test(l2) || /Comando: /.test(l3)) return { ok: false };
+  const marcas4 = l4raw.match(/Comando: /g) ?? [];
+  let cuarta = l4raw;
+  if (etiqueta === "NECESITO TU RESPUESTA") {
+    if (marcas4.length > 1) return { ok: false };
+    if (marcas4.length === 1) {
+      const seg = l4raw.slice(l4raw.lastIndexOf("Comando: ") + "Comando: ".length);
+      if (seg === "" || seg.length > 200) return { ok: false };
+      cuarta = l4raw.slice(0, l4raw.lastIndexOf("Comando: "));
+    }
+  } else if (marcas4.length > 0) {
+    return { ok: false };
+  }
+  const cuerpo4 = cuarta.replace(/^Que necesito de ti: /, "").replace(/\s+$/, "");
+  if (cuerpo4 === "") return { ok: false };
+  const entero = [primera, l2, l3, cuarta].join("\n");
+  if (sanearTextoPropietario(entero) === null) return { ok: false };
+  return { ok: true, etiqueta };
+}
+
+/** Atajo booleano sobre `validarMensajeV1`. */
+export function esMensajeV1Valido(texto: string): boolean {
+  return validarMensajeV1(texto).ok;
 }
 
 export type EntradaSeguimientoV2 = {
