@@ -40,6 +40,7 @@ ciegas.
    `python`), un `sed`/`bash` con sintaxis distinta a Linux, o un CLI en
    tmux que muere al instante sin error: el exec del nodo sanea el PATH y **`pathPrepend` se ignora** — anteponé
    `export PATH=/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin:$PATH;`
+<!-- candado: test-mac-path-regla.sh -->
    o usá la ruta absoluta, y leé ENV.md (misma carpeta) para la tabla de
    ausencias medidas y su reemplazo. Solo esa rama lee ENV.md.
 
