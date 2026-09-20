@@ -82,30 +82,83 @@ PY
 declarar_recorrido_d1_d2() {
   echo "== recorrido D1/D2 (lo que Q2 ejecuta con VIGIA_SYNC_EJECUTAR=1 $0 --test)"
   echo "LOG_PRUEBA=$LOG_PRUEBA"
+  echo "ANTES de D1: el script ESCRIBE el log (cola sync + SKILLS_LINE) via cron --command en el gateway"
   echo "D1 name=vigia-sync-prueba-D1  tools=exec  mensaje=v2 con LOG=prueba"
-  echo "    log = cola (tail -400 del sync real o fixture) + linea SKILLS de 43097da:"
-  echo "    $SKILLS_LINE"
-  echo "    expect: summary/salida nombra verifier y sus archivos (CASO D); Telegram imposible (--tools exec)"
+  echo "    expect: assert-d1 → nombra verifier + archivos; Telegram imposible (--tools exec)"
+  echo "ANTES de D2: el script REESCRIBE el log (cola SIN lineas SKILLS)"
   echo "D2 name=vigia-sync-prueba-D2  tools=exec  mismo mensaje"
-  echo "    log = misma cola SIN la linea SKILLS"
-  echo "    expect: callado en D (nada que avisar por skills)"
+  echo "    expect: assert-d2 → callado en D"
   echo "ambos: --at 30m --session isolated --no-deliver --keep-after-run"
-  echo "        cron run --wait --wait-timeout 10m"
-  echo "        evidencia: .saikit/scratch/M/vigia-sync-prueba-D1.$TS.runs.json (y D2)"
-  echo "        cleanup: cron rm de cada id"
-  echo "armado del log en el gateway (antes del run), por exec:"
-  echo "  mkdir -p .../vigia-sync-prueba; armar D1 con SKILLS; copiar a D2 sin SKILLS (o reescribir entre runs)"
+  echo "        cron run --wait --wait-timeout 10m → assert → cron rm verificado con cron list"
+  echo "        evidencia: .saikit/scratch/M/vigia-sync-prueba-D*.$TS.runs.json"
+}
+
+# Escribe LOG_PRUEBA en el gateway por un one-shot --command (exec del CLI).
+# con_skills=1 → cola + SKILLS_LINE; con_skills=0 → cola filtrada sin lineas SKILLS.
+escribir_log_prueba() {
+  local con_skills="$1"
+  local label="$2"
+  local LOG_UNIX='/c/Users/ehven/.openclaw-state/vigia-sync-prueba/sync-repos.log'
+  local LOG_REAL='/c/Users/ehven/.openclaw/logs/sync-repos.log'
+  local DIR_UNIX='/c/Users/ehven/.openclaw-state/vigia-sync-prueba'
+  local cmd
+  if [ "$con_skills" = "1" ]; then
+    # shellcheck disable=SC2016
+    cmd=$(printf "mkdir -p '%s' && { tail -400 '%s' 2>/dev/null || true; printf '%%s\\n' '%s'; } > '%s' && (grep -c ' SKILLS ' '%s' || true)" \
+      "$DIR_UNIX" "$LOG_REAL" "$SKILLS_LINE" "$LOG_UNIX" "$LOG_UNIX")
+  else
+    cmd=$(printf "mkdir -p '%s' && { tail -400 '%s' 2>/dev/null || true; } | grep -v ' SKILLS ' > '%s' || :; (grep -c ' SKILLS ' '%s' || echo 0)" \
+      "$DIR_UNIX" "$LOG_REAL" "$LOG_UNIX" "$LOG_UNIX")
+  fi
+  echo "-- escribir_log_prueba ($label) con_skills=$con_skills"
+  local OUT TID
+  OUT=$($OC cron add --name "vigia-sync-write-$label" --at 1m --delete-after-run \
+    --timeout-seconds 120 --command "$cmd" --json 2>&1) \
+    || { echo "ABORTO: no pude crear job de escritura del fixture: $OUT" | cut -c1-400; return 1; }
+  TID=$(printf '%s' "$OUT" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("id") or d.get("job",{}).get("id",""))' 2>/dev/null)
+  [ -n "$TID" ] || { echo "ABORTO: write-job sin id: $OUT" | cut -c1-400; return 1; }
+  $OC cron run "$TID" --wait --wait-timeout 3m --json >/dev/null 2>&1 \
+    || { echo "ABORTO: write-job $TID no corrio"; $OC cron rm "$TID" >/dev/null 2>&1 || true; return 1; }
+  # cleanup del writer (delete-after-run puede bastar; igual verificamos)
+  if $OC cron get "$TID" --json >/dev/null 2>&1; then
+    $OC cron rm "$TID" >/dev/null 2>&1 || { echo "ABORTO: no pude borrar write-job $TID"; return 1; }
+  fi
+  echo "-- fixture escrito ($label) id_writer=$TID"
+}
+
+cron_aun_listado() {
+  local tid="$1"
+  $OC cron list --json 2>/dev/null | python3 -c '
+import json,sys
+tid=sys.argv[1]
+d=json.load(sys.stdin)
+jobs=d.get("jobs") or d
+ids=[j.get("id") for j in jobs if isinstance(j,dict)]
+sys.exit(0 if tid in ids else 1)
+' "$tid"
+}
+
+rm_y_verificar() {
+  local tid="$1"
+  local rm_ok=1
+  if ! $OC cron rm "$tid" >/dev/null 2>&1; then
+    rm_ok=0
+  fi
+  local still=0
+  if cron_aun_listado "$tid"; then
+    still=1
+  fi
+  python3 scripts/tests/vigia_sync_prueba_assert.py assert-rm "$tid" "$rm_ok" "$still" \
+    || { echo "ABORTO: cleanup de $tid incompleto — borrar a mano"; return 1; }
+  echo "rm $tid OK (no queda en cron list)"
 }
 
 ejecutar_pruebas_d1_d2() {
   echo "== PRUEBA D1/D2 $(date -u +%H:%M:%SZ)  (VIGIA_SYNC_EJECUTAR=1)"
-  local MSG_PRUEBA
+  local MSG_PRUEBA ASSERT
   MSG_PRUEBA=$(msg_con_log_prueba) || return 1
-  # Aviso: el log de prueba debe existir YA en el gateway en LOG_PRUEBA.
-  # Q2 lo arma (cola real + SKILLS_LINE) antes de este bloque; D2 se arma sin la linea
-  # entre el run de D1 y el de D2, o con dos archivos si se prefiere.
-  echo "-- armado esperado del log: $LOG_PRUEBA (D1 con SKILLS; D2 sin ella)"
-  echo "-- SKILLS_LINE: $SKILLS_LINE"
+  ASSERT=scripts/tests/vigia_sync_prueba_assert.py
+  [ -f "$ASSERT" ] || { echo "ABORTO: falta $ASSERT"; return 1; }
 
   run_one() {
     local label="$1"  # D1 o D2
@@ -122,9 +175,11 @@ ejecutar_pruebas_d1_d2() {
     echo "-- $jname id=$TID"
     echo "-- run --wait (max 10m)"
     $OC cron run "$TID" --wait --wait-timeout 10m --json \
-      > ".saikit/scratch/M/vigia-sync-prueba-$label.$TS.run.json" 2>&1 || true
+      > ".saikit/scratch/M/vigia-sync-prueba-$label.$TS.run.json" 2>&1 \
+      || { echo "PRUEBA $label: cron run fallo"; rm_y_verificar "$TID" || true; return 1; }
     $OC cron runs "$TID" --limit 1 --json \
-      > ".saikit/scratch/M/vigia-sync-prueba-$label.$TS.runs.json" 2>&1 || true
+      > ".saikit/scratch/M/vigia-sync-prueba-$label.$TS.runs.json" 2>&1 \
+      || { echo "PRUEBA $label: cron runs fallo"; rm_y_verificar "$TID" || true; return 1; }
     python3 - "$label" "$TS" <<'PY'
 import json,sys
 label,ts=sys.argv[1:3]
@@ -138,17 +193,22 @@ try:
 except Exception as ex:
     print(f'PRUEBA {label}: no pude leer runs:', ex)
 PY
-    echo "-- rm $TID"
-    $OC cron rm "$TID" >/dev/null 2>&1 && echo "rm $TID OK" || echo "rm $TID FALLO: borrar a mano"
-    echo "$TID"
+    # Asercion de resultado (DoD): falla el script si no calza.
+    if [ "$label" = "D1" ]; then
+      python3 "$ASSERT" assert-d1 ".saikit/scratch/M/vigia-sync-prueba-$label.$TS.runs.json" \
+        || { echo "PRUEBA D1 ASSERT FALLO"; rm_y_verificar "$TID" || true; return 1; }
+    else
+      python3 "$ASSERT" assert-d2 ".saikit/scratch/M/vigia-sync-prueba-$label.$TS.runs.json" \
+        || { echo "PRUEBA D2 ASSERT FALLO"; rm_y_verificar "$TID" || true; return 1; }
+    fi
+    rm_y_verificar "$TID" || return 1
   }
 
-  echo "NOTA Q2: antes de D1, escribir en el gateway $LOG_PRUEBA = cola + SKILLS_LINE."
-  echo "NOTA Q2: antes de D2, reescribir el mismo archivo SIN la linea SKILLS."
+  escribir_log_prueba 1 D1 || return 1
   run_one D1 || return 1
-  echo "NOTA Q2: ahora el log debe quedar sin la linea SKILLS para D2."
+  escribir_log_prueba 0 D2 || return 1
   run_one D2 || return 1
-  echo "PRUEBA D1/D2 terminada. Evidencia en .saikit/scratch/M/vigia-sync-prueba-D*.$TS.runs.json"
+  echo "PRUEBA D1/D2 terminada VERDE. Evidencia en .saikit/scratch/M/vigia-sync-prueba-D*.$TS.runs.json"
 }
 
 if [ "$DRY" -eq 1 ]; then

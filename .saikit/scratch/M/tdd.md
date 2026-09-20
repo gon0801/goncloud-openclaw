@@ -132,3 +132,33 @@ SECO: no se crearon jobs. Falta la corrida real en Q2:
 TODO VERDE: crons-dos-copias
 TODO VERDE: sync-avisa-skills
 ```
+
+## r4 — D1/D2 escriben fixture, aserciones y rm verificado
+
+### Huecos (antes)
+1. Solo NOTAs: D2 leia el mismo log que D1.
+2. Sin aserciones: exit 0 aunque D1 no nombre verifier.
+3. `cron rm` fallido → exit 0.
+
+### Arreglo
+- `escribir_log_prueba` via `cron add --command` (cola+SKILLS antes de D1; cola sin SKILLS antes de D2).
+- `vigia_sync_prueba_assert.py`: assert-d1 / assert-d2 / assert-rm.
+- `rm_y_verificar`: rm + cron list + assert-rm.
+
+### Test en seco (`test-aplicar-vigia-sync-prueba.sh`)
+```
+ok (1): D1 con verifier+archivos → PASS
+ok (2): D1 vacio → FAIL
+ok (3): D2 sin aviso D → PASS
+ok (4): D2 con aviso D → FAIL
+ok (5): rm fallido → FAIL
+ok (6): rm OK pero sigue en list → FAIL
+ok (7): rm verificado → PASS
+ok (8): mutante que acepta D1 vacio queda expuesto
+ok (9): el aplicador escribe fixture, aserta resultado y verifica rm
+TODO VERDE: aplicar-vigia-sync-prueba
+```
+Mutante: quitar `escribir_log_prueba 1 D1` → ROJO (9).
+
+### --test seco
+EXIT 0; declara escritura de fixture + asserts; no crea jobs (corrida real: VIGIA_SYNC_EJECUTAR=1).
