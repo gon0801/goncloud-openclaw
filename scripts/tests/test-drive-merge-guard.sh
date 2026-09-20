@@ -14,7 +14,19 @@
 # propia skill trae en su sección Drive: `node --test` (que corre ANTES en
 # run-checks.sh) borra summa-gate/node_modules/openclaw en su teardown, así que
 # este test no puede asumir que el enlace sobrevivió — por eso pasa igual
-# corriendo después de la batería del plugin. Al terminar, borra el enlace.
+# corriendo después de la batería del plugin.
+#
+# r1: el enlace puede preexistir y el estado inicial se restaura (respaldo con
+# mv, devolución al terminar). r2 (cross-review codex), tres huecos cerrados:
+#   1. El trap se arma ANTES de tocar el enlace: cualquier fallo posterior
+#      (incluso el propio ln de reposición) devuelve el estado original.
+#   2. La restauración verifica CADA paso y nunca calla una pérdida: si no se
+#      puede restaurar, exit != 0 con el diagnóstico y la ruta del respaldo
+#      para recuperación manual. Sin `|| true` en el camino del enlace.
+#   3. La preservación se PRUEBA: un caso planta un enlace preexistente, corre
+#      este mismo script como subproceso y exige que el enlace siga ahí
+#      apuntando al mismo destino. Con el trap revertido al `rm -f` de r1, ese
+#      caso se pone rojo (corridas pegadas en tdd.md, sección r2).
 #
 # Uso: bash scripts/tests/test-drive-merge-guard.sh
 set -u
@@ -38,29 +50,55 @@ NODE=$(elegir_node) || { echo "FAIL: no hay un node >= 22 disponible"; exit 1; }
 OC="${OPENCLAW_NODE_MODULES:-$HOME/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw}"
 test -d "$OC" || { echo "FAIL: no hay instalacion de openclaw en $OC"; exit 1; }
 
-# r1: el enlace puede preexistir (el `before` de role.test.ts lo crea, el setup
-# de CI lo instala así, un drive manual lo deja). Antes este test lo BORRABA al
-# limpiar. Ahora el estado inicial se restaura: lo que existía (regular o
-# symlink) se respalda con mv y se devuelve igual; lo que no existía no queda.
-# Nada de rm sobre algo que esta corrida no creó.
 LINK=summa-gate/node_modules/openclaw
-RESPALDO=$(mktemp -d)/openclaw.respaldo
+RESPALDO_DIR=$(mktemp -d) || { echo "FAIL: mktemp"; exit 1; }
+RESPALDO="$RESPALDO_DIR/openclaw.respaldo"
 PREEXISTIA=0
+
+# r2 hueco 1: el trap se arma ANTES de tocar el enlace. La restauración es la
+# única dueña del estado: devuelve el original si llegó a respaldarse, no toca
+# nada si el respaldo nunca se hizo (el mv falló y el original sigue en su
+# sitio), y retira lo de esta corrida si no había original.
+restaurar_enlace() {
+  if [ "$PREEXISTIA" -eq 1 ]; then
+    if [ -e "$RESPALDO" ] || [ -L "$RESPALDO" ]; then
+      rm -f "$LINK" || {
+        echo "FAIL restauración: no se pudo sacar el enlace de esta corrida ($LINK)." \
+             "Original a salvo en $RESPALDO — recuperar a mano: mv '$RESPALDO' '$LINK'" >&2
+        exit 1
+      }
+      mv "$RESPALDO" "$LINK" || {
+        echo "FAIL restauración: no se pudo devolver el enlace original a $LINK." \
+             "RECUPERAR A MANO: mv '$RESPALDO' '$LINK' (respaldo conservado)" >&2
+        exit 1
+      }
+      if ! rmdir "$RESPALDO_DIR" 2>/dev/null; then
+        echo "aviso: quedó el directorio de respaldo vacío $RESPALDO_DIR" >&2
+      fi
+    fi
+    # Sin respaldo: el mv inicial falló y el original NUNCA se movió de $LINK.
+    # Tocar algo acá sería destruir el estado que este test promete cuidar.
+  else
+    if [ -e "$LINK" ] || [ -L "$LINK" ]; then
+      rm -f "$LINK" || {
+        echo "FAIL limpieza: no se pudo retirar el enlace que esta corrida creó ($LINK)" >&2
+        exit 1
+      }
+    fi
+    if ! rmdir "$RESPALDO_DIR" 2>/dev/null; then
+      echo "aviso: quedó el directorio de respaldo vacío $RESPALDO_DIR" >&2
+    fi
+  fi
+}
+trap restaurar_enlace EXIT
+
 if [ -e "$LINK" ] || [ -L "$LINK" ]; then
   PREEXISTIA=1
   mv "$LINK" "$RESPALDO" || { echo "FAIL: no se pudo respaldar $LINK"; exit 1; }
 fi
+
 ( cd summa-gate && mkdir -p node_modules && { [ -e node_modules/openclaw ] || ln -s "$OC" node_modules/openclaw; } ) \
   || { echo "FAIL: no se pudo crear el symlink summa-gate/node_modules/openclaw"; exit 1; }
-restaurar_enlace() {
-  # saca solo el enlace de ESTA corrida y devuelve el preexistente tal como era
-  rm -f "$LINK"
-  if [ "$PREEXISTIA" -eq 1 ]; then
-    mv "$RESPALDO" "$LINK"
-  fi
-  rmdir "$(dirname "$RESPALDO")" 2>/dev/null || true
-}
-trap restaurar_enlace EXIT
 
 SALIDA=$("$NODE" docs/agent-skills/verify/drive-merge-guard.ts 2>&1)
 rc=$?
@@ -81,4 +119,34 @@ if ! printf '%s\n' "$SALIDA" | grep -q '^DRIVE VERDE: 10 casos'; then
 fi
 
 printf '%s\n' "$SALIDA" | tail -1
-echo "OK: drive-merge-guard corrió y cerró en verde"
+
+# r2 hueco 3: la preservación del enlace preexistente es un caso del test, no
+# una promesa del comentario. Planta un enlace, corre el flujo COMPLETO como
+# subproceso (este mismo script; el marcador evita la recursión) y exige que el
+# enlace preexistente siga existiendo y apuntando al mismo destino. El enlace
+# se planta hacia $OC —el openclaw real— porque la corrida hija lo usa para
+# importar el plugin.
+if [ -z "${PRESERVACION_HIJO:-}" ]; then
+  # A esta altura $LINK es el enlace de ESTA corrida (el original, si lo hubo,
+  # está respaldado): se retira para plantar el de la prueba.
+  rm -f "$LINK" || { echo "FAIL preservación: no se pudo retirar el enlace propio para plantar"; exit 1; }
+  ln -s "$OC" "$LINK" || { echo "FAIL preservación: no se pudo plantar el enlace de prueba"; exit 1; }
+  PLANTADO=$(readlink "$LINK")
+  SALIDA_HIJO=$(PRESERVACION_HIJO=1 bash "$0" 2>&1)
+  rc_hijo=$?
+  if [ $rc_hijo -ne 0 ]; then
+    echo "FAIL preservación: la corrida hija salió $rc_hijo"
+    printf '%s\n' "$SALIDA_HIJO" | tail -6 | sed 's/^/  /'
+    rm -f "$LINK"
+    exit 1
+  fi
+  if ! test -L "$LINK" || [ "$(readlink "$LINK")" != "$PLANTADO" ]; then
+    echo "FAIL preservación: el enlace preexistente no sobrevivió a la corrida (test -L o destino cambiado)"
+    rm -f "$LINK"
+    exit 1
+  fi
+  rm -f "$LINK"
+  echo "ok preservación: un enlace preexistente sobrevivió a la corrida apuntando a $PLANTADO"
+fi
+
+echo "OK: drive-merge-guard corrió, cerró en verde y preservó el enlace preexistente"

@@ -312,3 +312,112 @@ corre antes en run-checks):
 2. `test-tmux-activity-watch.sh` falló una vez dentro de run-checks y pasa
    individual (exit 0): el "Cannot allocate memory" transitorio del host ya
    documentado arriba.
+
+---
+
+# r2 — endurecer la restauración y probarla
+
+Tres hallazgos de la ronda de arreglos (codex), los tres cerrados en
+`test-drive-merge-guard.sh` y en su gemelo `test-skill-verify.sh` (mismo
+mecanismo, mismos huecos).
+
+- Hueco 1 (trap armado DESPUÉS de mover el original): el trap ahora se arma
+  antes de tocar el enlace; cualquier fallo posterior —incluido el propio `ln`
+  de reposición— pasa por el trap y devuelve el estado original. Si el `mv`
+  del respaldo falló, el trap no toca nada: el original nunca se movió.
+- Hueco 2 (restauración sin verificar + `|| true` final): cada paso de la
+  restauración se verifica; si no se puede restaurar, exit != 0 con el
+  diagnóstico y la ruta exacta del respaldo para recuperación manual. El
+  `|| true` del camino del enlace se fue (el único best-effort que queda es el
+  rmdir del directorio de respaldo vacío, y ahora avisa en vez de callar).
+- Hueco 3 (preservación sin prueba): ambos tests ganan un caso que planta un
+  enlace preexistente, corre el flujo completo como subproceso (este mismo
+  script, marcador PRESERVACION_HIJO contra la recursión) y exige `test -L` +
+  mismo destino.
+
+## VERIFY 1 — repros con ln/mv saboteados vía PATH (wrappers que fallan)
+
+A) preexistente + `ln` saboteado (el hueco 1 exacto: el fallo llega DESPUÉS de
+haber movido el original):
+
+```
+FAIL: no se pudo crear el symlink summa-gate/node_modules/openclaw
+exit=1
+enlace restaurado -> /Users/dn/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw
+```
+
+Rojo con el original devuelto: nunca verde con pérdida.
+
+B) preexistente + `mv` saboteado (el respaldo ni se hace):
+
+```
+FAIL: no se pudo respaldar summa-gate/node_modules/openclaw
+exit=1
+original intacto -> /Users/dn/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw
+```
+
+C) sin preexistente + `ln` saboteado:
+
+```
+FAIL: no se pudo crear el symlink summa-gate/node_modules/openclaw
+exit=1
+no quedó nada
+```
+
+D) `mv` que falla recién en la SEGUNDA llamada (la restauración del trap; con
+el código de r1 este fallo era silencioso y el test daba verde con el enlace
+perdido):
+
+```
+DRIVE VERDE: 10 casos, 6 bloqueados y 4 permitidos
+FAIL preservación: la corrida hija salió 1
+  FAIL: no se pudo respaldar summa-gate/node_modules/openclaw
+FAIL restauración: no se pudo devolver el enlace original a summa-gate/node_modules/openclaw. RECUPERAR A MANO: mv '/var/folders/.../tmp.tDfyVz6SWa/openclaw.respaldo' 'summa-gate/node_modules/openclaw' (respaldo conservado)
+exit=1
+enlace ausente (respaldo conservado, ruta impresa arriba)
+```
+
+Exit 1, diagnóstico con la ruta exacta del respaldo, respaldo conservado:
+ruidoso, jamás verde ni silencio.
+
+## VERIFY 2 — el mutante: traps revertidos al `rm -f` de r1
+
+Sustitución: insertada una línea tras `trap restaurar_enlace EXIT` que redefine
+`restaurar_enlace() { rm -f "$LINK"; }` (el trap de r1, exactamente). El caso
+de preservación tiene que caer:
+
+```
+$ bash scripts/tests/test-drive-merge-guard.sh   (mutado)
+DRIVE VERDE: 10 casos, 6 bloqueados y 4 permitidos
+FAIL preservación: el enlace preexistente no sobrevivió a la corrida (test -L o destino cambiado)
+exit=1
+
+$ bash scripts/tests/test-skill-verify.sh        (mutado)
+TODO VERDE: la skill verify dice lo que el plugin hace
+FAIL preservación: el enlace preexistente no sobrevivió a la corrida (test -L o destino cambiado)
+exit=1
+```
+
+Restaurados los archivos, ambos vuelven al verde con el caso ok:
+
+```
+$ bash scripts/tests/test-drive-merge-guard.sh
+DRIVE VERDE: 10 casos, 6 bloqueados y 4 permitidos
+ok preservación: un enlace preexistente sobrevivió a la corrida apuntando a /Users/dn/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw
+OK: drive-merge-guard corrió, cerró en verde y preservó el enlace preexistente
+exit=0
+
+$ bash scripts/tests/test-skill-verify.sh
+TODO VERDE: la skill verify dice lo que el plugin hace
+ok preservación: un enlace preexistente sobrevivió a la corrida apuntando a /Users/dn/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw
+exit=0
+```
+
+## VERIFY 3 — batería completa
+
+`bash scripts/run-checks.sh` → **TODO VERDE**, exit 0, 41 tests de contrato OK.
+Una corrida intermedia dio los dos flakes ambientales ya documentados en r1
+(adversary-confinamiento.test.ts perdiendo la carrera de arranque del symlink
+bajo carga — pasa individual — y test-tmux-activity-watch.sh con el
+"Cannot allocate memory" transitorio del host); la re-corrida cerró TODO VERDE
+sin cambios.

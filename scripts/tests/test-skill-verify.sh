@@ -63,24 +63,55 @@ test -d "$OC" || { echo "FAIL: no hay instalacion de openclaw en $OC"; exit 1; }
 
 # r1: si el enlace preexistía (before de role.test.ts, setup de CI, drive
 # manual), se respalda con mv y se devuelve IGUAL al terminar; si no existía,
-# no queda nada. El trap anterior lo borraba siempre: destruía estado ajeno.
+# no queda nada. r2 (cross-review codex): el trap se arma ANTES de tocar el
+# enlace (un fallo posterior cualquiera devuelve el estado original), la
+# restauración verifica cada paso y nunca calla una pérdida — si no se puede
+# restaurar, exit != 0 con la ruta del respaldo para recuperación manual — y
+# la preservación tiene un caso del test que la prueba (abajo, al final).
 LINK=summa-gate/node_modules/openclaw
-RESPALDO=$(mktemp -d)/openclaw.respaldo
+RESPALDO_DIR=$(mktemp -d) || { echo "FAIL: mktemp"; exit 1; }
+RESPALDO="$RESPALDO_DIR/openclaw.respaldo"
 PREEXISTIA=0
+
+restaurar_enlace() {
+  if [ "$PREEXISTIA" -eq 1 ]; then
+    if [ -e "$RESPALDO" ] || [ -L "$RESPALDO" ]; then
+      rm -f "$LINK" || {
+        echo "FAIL restauración: no se pudo sacar el enlace de esta corrida ($LINK)." \
+             "Original a salvo en $RESPALDO — recuperar a mano: mv '$RESPALDO' '$LINK'" >&2
+        exit 1
+      }
+      mv "$RESPALDO" "$LINK" || {
+        echo "FAIL restauración: no se pudo devolver el enlace original a $LINK." \
+             "RECUPERAR A MANO: mv '$RESPALDO' '$LINK' (respaldo conservado)" >&2
+        exit 1
+      }
+      if ! rmdir "$RESPALDO_DIR" 2>/dev/null; then
+        echo "aviso: quedó el directorio de respaldo vacío $RESPALDO_DIR" >&2
+      fi
+    fi
+    # Sin respaldo: el mv inicial falló y el original NUNCA se movió de $LINK:
+    # no se toca nada.
+  else
+    if [ -e "$LINK" ] || [ -L "$LINK" ]; then
+      rm -f "$LINK" || {
+        echo "FAIL limpieza: no se pudo retirar el enlace que esta corrida creó ($LINK)" >&2
+        exit 1
+      }
+    fi
+    if ! rmdir "$RESPALDO_DIR" 2>/dev/null; then
+      echo "aviso: quedó el directorio de respaldo vacío $RESPALDO_DIR" >&2
+    fi
+  fi
+}
+trap restaurar_enlace EXIT
+
 if [ -e "$LINK" ] || [ -L "$LINK" ]; then
   PREEXISTIA=1
   mv "$LINK" "$RESPALDO" || { echo "FAIL: no se pudo respaldar $LINK"; exit 1; }
 fi
 ( cd summa-gate && mkdir -p node_modules && { [ -e node_modules/openclaw ] || ln -s "$OC" node_modules/openclaw; } ) \
   || { echo "FAIL: no se pudo crear el symlink summa-gate/node_modules/openclaw"; exit 1; }
-restaurar_enlace() {
-  rm -f "$LINK"
-  if [ "$PREEXISTIA" -eq 1 ]; then
-    mv "$RESPALDO" "$LINK"
-  fi
-  rmdir "$(dirname "$RESPALDO")" 2>/dev/null || true
-}
-trap restaurar_enlace EXIT
 
 # --- HOME en caja de arena ---------------------------------------------------
 # La batería de (a) arma una sesión con el sentinel para disparar el gate de
@@ -345,4 +376,32 @@ PROGRAMA
 rc=$?
 
 rm -rf "$SB"
-exit $rc
+if [ "$rc" -ne 0 ]; then exit "$rc"; fi
+
+# r2 hueco 3: la preservación del enlace preexistente es un caso del test, no
+# una promesa. Planta un enlace, corre este mismo script como subproceso (el
+# marcador evita la recursión) y exige que el enlace siga ahí, mismo destino.
+if [ -z "${PRESERVACION_HIJO:-}" ]; then
+  # A esta altura $LINK es el enlace de ESTA corrida (el original, si lo hubo,
+  # está respaldado): se retira para plantar el de la prueba.
+  rm -f "$LINK" || { echo "FAIL preservación: no se pudo retirar el enlace propio para plantar"; exit 1; }
+  ln -s "$OC" "$LINK" || { echo "FAIL preservación: no se pudo plantar el enlace de prueba"; exit 1; }
+  PLANTADO=$(readlink "$LINK")
+  SALIDA_HIJO=$(PRESERVACION_HIJO=1 bash "$0" 2>&1)
+  rc_hijo=$?
+  if [ $rc_hijo -ne 0 ]; then
+    echo "FAIL preservación: la corrida hija salió $rc_hijo"
+    printf '%s\n' "$SALIDA_HIJO" | tail -6 | sed 's/^/  /'
+    rm -f "$LINK"
+    exit 1
+  fi
+  if ! test -L "$LINK" || [ "$(readlink "$LINK")" != "$PLANTADO" ]; then
+    echo "FAIL preservación: el enlace preexistente no sobrevivió a la corrida (test -L o destino cambiado)"
+    rm -f "$LINK"
+    exit 1
+  fi
+  rm -f "$LINK"
+  echo "ok preservación: un enlace preexistente sobrevivió a la corrida apuntando a $PLANTADO"
+fi
+
+exit 0
