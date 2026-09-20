@@ -354,6 +354,92 @@ describe("plugin smoke import (7.4)", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  function docMinimo(over: Record<string, unknown>): ProgresoDoc {
+    return {
+      schema: "runbook-progress.v1",
+      runbook: "docs/runbooks/autopilot-fase14.md",
+      fase: "14",
+      titulo: "Fase 14",
+      lead: {
+        agente: "muse",
+        inicio: "2026-09-19T10:00:00Z",
+        actualizado: "2026-09-19T10:30:00Z",
+      },
+      atencion_requerida: { necesaria: false, motivo: null, desde: null },
+      siguiente_paso: "Terminar la corrección y comenzar la revisión.",
+      carriles: [
+        {
+          id: "M",
+          nombre: "Implementación",
+          repo: "gon0801/goncloud-openclaw",
+          rama: null,
+          tareas: ["14.1", "14.2"],
+          estado: "implementando",
+          paso_loop: 1,
+          pr: null,
+          head: null,
+          approve_lead: null,
+          ci: "sin-ci",
+          coderabbit: "pendiente",
+          residuales: [],
+          detenido_por: null,
+          ultimo_evento: {
+            at: "2026-09-19T10:20:00Z",
+            que: "Muse está corrigiendo el último caso del vigilante.",
+          },
+        },
+      ],
+      cola: [],
+      eventos: [],
+      cierre: { at: null, telegram_message_id: null, resumen: null },
+      ...over,
+    } as ProgresoDoc;
+  }
+
+  it("list expone solo el doc abierto con conteos exactos y trabajoId estable", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-list-"));
+    _resetPlanCacheForTest();
+    _setPlanExecForTest((_c, _a, _o, cb) => {
+      const payload = JSON.stringify({
+        type: "file",
+        encoding: "base64",
+        content: Buffer.from("| 14.1 | a | cc:DONE |\n| 14.2 | b | cc:TODO |\n", "utf8").toString("base64"),
+      });
+      setImmediate(() => cb(null, payload));
+      return { kill() {} };
+    });
+    try {
+      const host = await cargar({ stateDir: dir });
+      assert.equal(host.metodos.get("runbook.progress.list")?.opts?.scope, "operator.read");
+      const abierto = docMinimo({
+        corrida: "vigia-test",
+        plan: { repo: "gon0801/goncloud-openclaw", ruta: "Plans.md", seccion: null },
+      });
+      assert.deepEqual(await llamarMetodo(host.metodos, "runbook.progress.set", abierto), { ok: true });
+      const cerrado = docMinimo({
+        fase: "15",
+        titulo: "Fase 15",
+        cierre: { at: "2026-09-19T11:00:00Z", telegram_message_id: 7, resumen: "cierre de prueba" },
+      });
+      assert.deepEqual(await llamarMetodo(host.metodos, "runbook.progress.set", cerrado), { ok: true });
+
+      const lista = await llamarMetodo(host.metodos, "runbook.progress.list", {});
+      assert.equal(lista.ok, true);
+      assert.equal(lista.activas.length, 1, "el doc cerrado no debe aparecer");
+      assert.equal(lista.activas[0].trabajoId, "corrida:vigia-test");
+      assert.deepEqual(lista.activas[0].progreso,
+        { kind: "conocido", completadas: 1, total: 2, porcentaje: 50 });
+
+      const lista2 = await llamarMetodo(host.metodos, "runbook.progress.list", {});
+      assert.equal(lista2.activas[0].trabajoId, lista.activas[0].trabajoId, "trabajoId inestable");
+      assert.deepEqual(lista2.activas[0].progreso, lista.activas[0].progreso);
+    } finally {
+      _setPlanExecForTest(undefined);
+      _resetPlanCacheForTest();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("scopes: set operator.write, get operator.read", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-scopes-"));
     const host = await cargar({ stateDir: dir });

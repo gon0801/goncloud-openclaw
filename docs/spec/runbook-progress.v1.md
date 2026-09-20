@@ -86,3 +86,14 @@ Hoy el avance de un runbook está repartido en PRs, comentarios `APPROVE lead`, 
 ## Qué deriva la interfaz (no se escribe en el JSON)
 
 Porcentaje de carriles mergeados, carriles atorados, siguiente ítem de la cola, tiempo desde el último evento, y, cuando el plugin tiene acceso a GitHub, el estado vivo de cada PR (mergeable, checks) marcado como "GitHub" para distinguirlo de lo reportado por el lead.
+
+### Resumen objetivo por fase y carril (`resumirSeguimiento`, RPC `runbook.progress.list`)
+
+El porcentaje nunca lo estima un modelo; sale de las unidades del plan que ya cruza `tablero-runbook`:
+
+- Solo `mergeado` cuenta como terminada. `pendiente` e `implementando` cuentan como no terminadas.
+- Un carril `omitido` no entra en el denominador de la fase: las tareas que solo viven en carriles omitidos se excluyen. Una tarea compartida por dos carriles incluidos cuenta una sola vez a nivel de fase.
+- Un carril `atorado` sí entra mientras no haya sido omitido formalmente.
+- Si el plan no se puede verificar (`sin-verificar`, `ruta-no-encontrada`, `nulo`) o una tarea falta del cruce o llega `unknown`, el conteo es `desconocido`, nunca 0%. Un conjunto vacío verificado es `0/0`, 0%.
+- `actividad.detalle` sale de `detenido_por`, o del estado del carril; `iniciadaEn` y `ultimaEvidencia` salen de `ultimo_evento`, o de `lead.inicio` y el estado. No se inventa prosa ni marcas de tiempo.
+- Cada resumen lleva un `trabajoId` estable: `corrida:<id>` cuando el documento trae `corrida`, o `fase:<fase>`. La lista solo expone documentos abiertos (`cierre.at` nulo).

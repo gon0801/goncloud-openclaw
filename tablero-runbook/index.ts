@@ -47,6 +47,7 @@ import {
 } from "./lib.ts";
 import { cruzarGitHub, leerGithubConfig } from "./github.ts";
 import { cruzarPlan, type PlanCruce } from "./plan.ts";
+import { listarSeguimientoActivo } from "./seguimiento.ts";
 import { syncProgress } from "./live-bus.ts";
 
 // ---------------------------------------------------------------------------
@@ -504,8 +505,15 @@ export default definePluginEntry({
       { scope: "operator.read" },
     );
 
-    // -- Rutas HTTP (auth gateway: el host las protege; sin credencial el
-    //    handler no corre) ---------------------------------------------------
+    api.registerGatewayMethod(
+      "runbook.progress.list",
+      async ({ respond }) => {
+        respond(true, await listarSeguimientoActivo(cfg, cfgGithub));
+      },
+      { scope: "operator.read" },
+    );
+
+    // -- Rutas HTTP (auth gateway: el host las protege; sin credencial el    //    handler no corre) ---------------------------------------------------
     api.registerHttpRoute({
       path: "/runbook/tablero",
       match: "prefix",
