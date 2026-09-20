@@ -236,3 +236,93 @@ OK: verify-corpus
 TODO VERDE
 exit=0
 ```
+
+## r2 — el regex de ruta literal seguía corto + auto-prueba de regresión permanente
+
+Hueco 1 (regex): ni `./agents/...` (con barra tras el punto) ni
+`'agents/...'` (comillas simples) se reconocían. Arreglo: el destino admite
+prefijo `./` opcional y comillas simples o dobles (además de la forma pelada
+de r1); la normalización quita comillas y `./` antes del chequeo de alcance.
+
+```
+$ # repro del lead, DOS tests temporales (./ y comillas simples), ANTES del fix:
+$ bash scripts/tests/test-candados-declarados.sh
+ok ida: las 100 frases ancladas por 11 test(s) tienen su marca      # ← punto ciego
+ok vuelta: las 57 marca(s) ...
+TODO VERDE: candados declarados (100 frases, 57 marcas)
+exit=0
+
+$ # VERIFY 1: los TRES estilos temporales presentes (pelado + ./ + comillas simples):
+$ bash scripts/tests/test-candados-declarados.sh
+FAIL ida: 3 frase(s) anclada(s) sin marca junto a la frase:
+  test-tmp-repro-r2a.sh no marca 'A phase is closed only when a command says so' en agents/main/agent/workshop-skills/agent-dispatch/SKILL.md
+  test-tmp-repro-r2b.sh no marca 'A phase is closed only when a command says so' en agents/main/agent/workshop-skills/agent-dispatch/SKILL.md
+  test-tmp-repro-r2c.sh no marca 'A phase is closed only when a command says so' en agents/main/agent/workshop-skills/agent-dispatch/SKILL.md
+ok vuelta: las 57 marca(s) ...
+ROJO: 3 problema(s) con los candados declarados
+exit=1
+
+$ # VERIFY 2: borrados los temporales:
+$ bash scripts/tests/test-candados-declarados.sh
+ok ida: las 100 frases ancladas por 11 test(s) tienen su marca
+ok vuelta: las 57 marca(s) ...
+TODO VERDE: candados declarados (100 frases, 57 marcas)
+exit=0
+```
+
+Hueco 2 (auto-prueba): dentro del propio test, `auto_prueba_regresion`
+levanta una caja de arena en `mktemp -d` (fuera del repo: no queda ningún
+archivo temporal commiteable) con una skill sintética y un test sintético por
+estilo (pelada, ./, comillas simples, comillas dobles), corre ESTE MISMO
+script contra ella con `CANDADOS_RAIZ` (raíz parametrizada) y exige: sin
+marcas, rojo nombrando a los cuatro estilos; con las marcas, TODO VERDE.
+
+```
+$ bash scripts/tests/test-candados-declarados.sh
+ok auto-prueba: los 4 estilos de ruta literal se detectan y exigen su marca
+ok ida: las 100 frases ancladas por 11 test(s) tienen su marca
+ok vuelta: las 57 marca(s) ...
+TODO VERDE: candados declarados (100 frases, 57 marcas)
+exit=0
+
+$ # VERIFY 3: mutación — regex revertido a la forma de r1 (sin ./ ni comillas simples):
+$ bash scripts/tests/test-candados-declarados.sh
+FAIL auto-prueba: el parser no detecta el ancla con ruta literal estilo dot
+  FAIL ida: 2 frase(s) anclada(s) sin marca junto a la frase:
+    test-sintetico-bare.sh no marca 'frase sintetica bare' en agents/sintetico/agent/workshop-skills/skill-s/SKILL.md
+    test-sintetico-dos.sh no marca 'frase sintetica dos' en agents/sintetico/agent/workshop-skills/skill-s/SKILL.md
+  ok vuelta: las 0 marca(s) ...
+  ROJO: 2 problema(s) con los candados declarados
+exit=1
+$ # restaurado:
+$ bash scripts/tests/test-candados-declarados.sh
+ok auto-prueba: los 4 estilos de ruta literal se detectan y exigen su marca
+ok ida: las 100 frases ancladas por 11 test(s) tienen su marca
+ok vuelta: las 57 marca(s) ...
+TODO VERDE: candados declarados (100 frases, 57 marcas)
+exit=0
+```
+
+Batería r2 (VERIFY 4), verde a la primera (sin flaky esta vez):
+
+```
+$ bash scripts/run-checks.sh
+  ... (tablero-runbook: node --check OK; # tests 105, pass 105, fail 0) ...
+=== pruebas de contrato de scripts/
+  OK    test-agent-dispatch-no-merge.sh
+  ... (los 39 tests de scripts/ en OK, incluido test-candados-declarados.sh) ...
+  OK    test-tmux-activity-watch.sh
+=== corpus de rendiciones re-derivable
+filas: 22 | veredicto declarado == recomputado: 22
+DEBEN detectarse: 16 -> atrapados 16, escapados 0
+LEGITIMOS:        6 -> sobre-marcados 5, bien ignorados 1
+OK: verify-corpus
+TODO VERDE
+```
+
+La salida cerró en `TODO VERDE`, que run-checks.sh solo imprime con
+`fallas == 0` (el final del script es ese eco o "N comprobacion(es) en rojo"
++ exit 1; verificado en run-checks.sh:143-148): exit 0. Los pasos previos
+(summa-gate, pre-commit) corrieron arriba de la parte volcada; cualquier
+rojo ahí habría cerrado la corrida con el conteo en rojo en vez de TODO
+VERDE. VERIFY 1-3 re-corridos hoy dieron idéntico a lo volcado arriba.

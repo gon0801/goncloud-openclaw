@@ -40,6 +40,65 @@ set -u
 cd "$(dirname "$0")/../.." || exit 1
 command -v python3 >/dev/null 2>&1 || { echo "FAIL: hace falta python3"; exit 1; }
 
+# --- auto-prueba de regresión (r2) -------------------------------------------
+# El reconocimiento de anclas con ruta literal vive en un regex: si se rompe,
+# nada más lo atrapa (medido en r1: el repro se borró y quedó sin cobertura).
+# Esta prueba levanta una caja de arena (mktemp, FUERA del repo: no queda
+# ningún archivo temporal commiteable) con una skill sintética y un test
+# sintético por estilo de ruta (pelada, ./, comillas simples, comillas
+# dobles) y corre ESTE MISMO script contra ella con CANDADOS_RAIZ: sin
+# marcas, tiene que ponerse rojo nombrando a cada estilo; con las marcas, en
+# verde. Se salta cuando CANDADOS_RAIZ ya está (somos la caja de arena).
+auto_prueba_regresion() {
+  local T SK out estilo rc
+  T=$(mktemp -d) || { echo "FAIL auto-prueba: mktemp"; return 1; }
+  if ! mkdir -p "$T/scripts/tests" "$T/agents/sintetico/agent/workshop-skills/skill-s"; then
+    rm -rf "$T"; echo "FAIL auto-prueba: mkdir"; return 1
+  fi
+  SK="$T/agents/sintetico/agent/workshop-skills/skill-s/SKILL.md"
+  printf '%s\n' 'frase sintetica bare' 'frase sintetica dot' \
+    'frase sintetica una' 'frase sintetica dos' > "$SK"
+  printf '%s\n' '#!/usr/bin/env bash' \
+    "grep -qF 'frase sintetica bare' agents/sintetico/agent/workshop-skills/skill-s/SKILL.md || exit 1" \
+    > "$T/scripts/tests/test-sintetico-bare.sh"
+  printf '%s\n' '#!/usr/bin/env bash' \
+    "grep -qF 'frase sintetica dot' ./agents/sintetico/agent/workshop-skills/skill-s/SKILL.md || exit 1" \
+    > "$T/scripts/tests/test-sintetico-dot.sh"
+  printf '%s\n' '#!/usr/bin/env bash' \
+    "grep -qF 'frase sintetica una' 'agents/sintetico/agent/workshop-skills/skill-s/SKILL.md' || exit 1" \
+    > "$T/scripts/tests/test-sintetico-una.sh"
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'grep -qF "frase sintetica dos" "agents/sintetico/agent/workshop-skills/skill-s/SKILL.md" || exit 1' \
+    > "$T/scripts/tests/test-sintetico-dos.sh"
+
+  out=$(CANDADOS_RAIZ="$T" bash "$0" 2>&1)
+  for estilo in bare dot una dos; do
+    if ! printf '%s\n' "$out" | grep -qF "test-sintetico-$estilo.sh no marca 'frase sintetica $estilo'"; then
+      rm -rf "$T"
+      echo "FAIL auto-prueba: el parser no detecta el ancla con ruta literal estilo $estilo"
+      printf '%s\n' "$out" | sed 's/^/  /'
+      return 1
+    fi
+  done
+
+  printf '%s\n' 'frase sintetica bare' '<!-- candado: test-sintetico-bare.sh -->' \
+    'frase sintetica dot' '<!-- candado: test-sintetico-dot.sh -->' \
+    'frase sintetica una' '<!-- candado: test-sintetico-una.sh -->' \
+    'frase sintetica dos' '<!-- candado: test-sintetico-dos.sh -->' > "$SK"
+  out=$(CANDADOS_RAIZ="$T" bash "$0" 2>&1); rc=$?
+  rm -rf "$T"
+  if [ "$rc" -ne 0 ] || ! printf '%s\n' "$out" | grep -q 'TODO VERDE'; then
+    echo "FAIL auto-prueba: con las marcas puestas, la caja de arena no cierra en verde"
+    printf '%s\n' "$out" | sed 's/^/  /'
+    return 1
+  fi
+  echo "ok auto-prueba: los 4 estilos de ruta literal se detectan y exigen su marca"
+}
+
+if [ -z "${CANDADOS_RAIZ:-}" ]; then
+  auto_prueba_regresion || exit 1
+fi
+
 python3 - <<'PY'
 import filecmp
 import json
@@ -49,6 +108,13 @@ import subprocess
 import sys
 
 TESTS_DIR = "scripts/tests"
+# Raíz configurable: la auto-prueba de regresión corre este mismo script
+# contra una caja de arena (CANDADOS_RAIZ) sin tocar el repo.
+ROOT = os.environ.get("CANDADOS_RAIZ", os.getcwd())
+
+
+def rp(path):
+    return path if os.path.isabs(path) else os.path.join(ROOT, path)
 SELF = "test-candados-declarados.sh"
 WINDOW = 2  # líneas de la marca a la frase (región extendida)
 
@@ -69,7 +135,7 @@ def unq(v):
 
 
 def read(path):
-    with open(path, encoding="utf-8", errors="replace") as f:
+    with open(rp(path), encoding="utf-8", errors="replace") as f:
         return f.read()
 
 
@@ -77,10 +143,10 @@ def read(path):
 # allowlist dinámica de test-merge-allowlist-cierre-pr.sh: la saca de
 # summa-gate/lib.ts, igual que el test que la recorre.
 allow = []
-if os.path.isfile("summa-gate/lib.ts"):
+if os.path.isfile(rp("summa-gate/lib.ts")):
     m = re.search(
         r"MERGE_AGENT_ALLOWLIST\s*=\s*new Set\(\[([^\]]*)\]\)",
-        read("summa-gate/lib.ts"),
+        read(rp("summa-gate/lib.ts")),
     )
     if m:
         allow = re.findall(r"""['"]([^'"]+)['"]""", m.group(1))
@@ -237,9 +303,9 @@ def parse_test(path):
         r"\bgrep\s+((?:-{1,2}[A-Za-z][\w-]*\s+|--\s+)*)"
         r"('(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"|\$\w+)"
         # destino: variable ("$F", $F) o RUTA LITERAL bajo agents/ o
-        # docs/agent-skills/ (con o sin comillas y con ./ opcional). Lo segundo
-        # existe: hallazgo del cross-review r1, un grep con la ruta inline.
-        r'\s+("?\$(\w+)"?|"?\.?(?:agents|docs/agent-skills)/[^\s"\'`;&|)]+"?)'
+        # docs/agent-skills/, con comillas simples o dobles (o sin comillas)
+        # y ./ opcional delante (r2: ./ y comillas simples tampoco se veían).
+        r'\s+("?\$(\w+)"?|["\']?\.?/?(?:agents|docs/agent-skills)/[^\s"\'`;&|)]+["\']?)'
     )
 
     for line in lines:
@@ -256,7 +322,7 @@ def parse_test(path):
                 elif m.group(4) in pathtpl:
                     targets.extend(pathtpl[m.group(4)])
             else:  # ruta literal en la misma línea
-                lit = token.strip('"')
+                lit = token.strip('"').strip("'")
                 if lit.startswith("./"):
                     lit = lit[2:]
                 if in_scope(lit):
@@ -349,11 +415,11 @@ def parse_test(path):
 
 
 tests = sorted(
-    f for f in os.listdir(TESTS_DIR) if f.endswith(".sh") and f != SELF
+    f for f in os.listdir(rp(TESTS_DIR)) if f.endswith(".sh") and f != SELF
 )
 inventory, negatives = [], []
 for t in tests:
-    e, n = parse_test(os.path.join(TESTS_DIR, t))
+    e, n = parse_test(rp(os.path.join(TESTS_DIR, t)))
     inventory.extend(e)
     negatives.extend(n)
 
@@ -528,11 +594,11 @@ def resolve_ref(ref):
 
 
 def target_files(target):
-    if os.path.isfile(target):
+    if os.path.isfile(rp(target)):
         return [target]
-    if os.path.isdir(target):
+    if os.path.isdir(rp(target)):
         out = []
-        for root, dirs, files in os.walk(target):
+        for root, dirs, files in os.walk(rp(target)):
             dirs[:] = [d for d in dirs if not d.startswith(".")]
             for f in sorted(files):
                 if f.endswith(".md"):
@@ -547,16 +613,16 @@ _dir_eq_cache = {}
 def target_covers(target, path):
     if target == path:
         return True
-    if os.path.isdir(target) and path.startswith(target + os.sep):
+    if os.path.isdir(rp(target)) and path.startswith(target + os.sep):
         return True
-    if os.path.isfile(target) and filecmp.cmp(target, path, shallow=False):
+    if os.path.isfile(rp(target)) and filecmp.cmp(rp(target), rp(path), shallow=False):
         return True
     parent = os.path.dirname(path)
-    if os.path.isdir(target) and os.path.isdir(parent) and target != parent:
+    if os.path.isdir(rp(target)) and os.path.isdir(rp(parent)) and target != parent:
         key = (target, parent)
         if key not in _dir_eq_cache:
             r = subprocess.run(
-                ["diff", "-r", target, parent], capture_output=True
+                ["diff", "-r", rp(target), rp(parent)], capture_output=True
             )
             _dir_eq_cache[key] = r.returncode == 0
         return _dir_eq_cache[key]
@@ -621,7 +687,7 @@ else:
 # VUELTA: toda marca apunta a un test que existe y que afirma esa frase ahí.
 md_files = []
 for base in ("agents", os.path.join("docs", "agent-skills")):
-    for root, dirs, files in os.walk(base):
+    for root, dirs, files in os.walk(rp(base)):
         dirs[:] = [d for d in dirs if not d.startswith(".")]
         for f in sorted(files):
             if f.endswith(".md"):
