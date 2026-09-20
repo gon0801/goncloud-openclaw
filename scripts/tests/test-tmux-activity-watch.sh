@@ -71,6 +71,10 @@ STUB
   chmod +x "$TMUX_SHIM"
 
   run_once() {
+    # BRIEF-r1 PA: sin CORRIDA_BIN explicito se apunta a una ruta que no existe:
+    # cuando Q4 instale ~/bin/corrida.sh, los casos sin enganche no deben llamar
+    # al responder real con nombres de sesion de prueba.
+    CORRIDA_BIN="${CORRIDA_BIN:-$T/no-hay-corrida}" \
     TMUX_BIN="$TMUX_SHIM" OPENCLAW_BIN="$STUB_OPENCLAW" QUIET_SECS=1 TICK_SECS=1 \
       STATE_DIR="$STATE_DIR" LOG_FILE="$LOG_FILE" \
       bash "$W" --once
@@ -423,6 +427,147 @@ $(cat "$CALLS")"
   [ "$ahora" -eq $((antes + 1)) ] || fail "(2h-bis) tras migrar el estado, el recordatorio sigue funcionando; antes=$antes ahora=$ahora"
   "$TM" -L "$L" kill-session -t cli-raro; run_once >/dev/null 2>&1
   echo "ok (2h): el silencio se recuerda; un dialogo que ningun patron conoce no se queda sin avisar; un estado de la version anterior no repite el aviso"
+
+  # (2i) Carril P (9.6): cada evento que el vigilante MANDA queda anotado en
+  # $STATE_DIR/eventos.jsonl (t epoch + texto): lo que un vigia lee sin gateway.
+  "$TM" -L "$L" new-session -d -s ev-log -x 80 -y 20 'cat' || fail "no se pudo crear ev-log"
+  mark ev-log
+  : >"$CALLS"
+  sleep 2
+  run_once || fail "--once (2i, quiet) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 1 ] || fail "(2i) esperaba exactamente un evento quiet de ev-log; hubo $n"
+  EJ="$STATE_DIR/eventos.jsonl"
+  [ -f "$EJ" ] || fail "(2i) falta $EJ"
+  python3 - "$EJ" <<'PY' || fail "(2i) eventos.jsonl no trae el evento quiet como {t, evento}"
+import json,sys
+lin=[l for l in open(sys.argv[1]) if l.strip()]
+assert lin, "sin lineas"
+d=json.loads(lin[-1])
+assert isinstance(d.get("t"),int), "t no es epoch"
+assert "ev-log quiet for" in d.get("evento",""), "el evento no es el quiet de ev-log: %r"%d.get("evento")
+PY
+  "$TM" -L "$L" kill-session -t ev-log
+  run_once || fail "--once (2i, closed) fallo"
+  python3 - "$EJ" <<'PY' || fail "(2i) el evento closed tampoco quedo en eventos.jsonl"
+import json,sys
+lin=[l for l in open(sys.argv[1]) if l.strip()]
+d=json.loads(lin[-1])
+assert isinstance(d.get("t"),int), "t no es epoch"
+assert "ev-log closed" in d.get("evento",""), "el ultimo evento no es el closed de ev-log: %r"%d.get("evento")
+PY
+  echo "ok (2i): cada evento enviado queda anotado en eventos.jsonl (t epoch + texto)"
+
+  # (2j) Carril P (9.6): el dialogo se le ofrece a la politica (corrida.sh
+  # responder) ANTES de despertar a nadie. Si la politica contesta (rc 0) no sale
+  # evento y el prompt queda atendido; si no existe o no contesta, como hoy.
+  CORR_CALLS="$T/corrida-llamadas.txt"; : >"$CORR_CALLS"
+  COR_RC="$T/corrida-rc"; echo 1 >"$COR_RC"
+  COR_CONSUME="$T/corrida-consume"; echo 0 >"$COR_CONSUME"
+  PANTALLA_J="$T/pantalla-j.txt"
+  STUB_CORR="$T/corrida-stub"
+  cat >"$STUB_CORR" <<STUB
+#!/bin/sh
+printf '%s\n' "CORR \$*" >> "$CORR_CALLS"
+rc=\$(cat "$COR_RC")
+# BRIEF-r2 QA: con rc 0 y CONSUME=1 el CLI de mentira se come la tecla (la
+# pantalla deja de mostrar el dialogo); con CONSUME=0 la tecla no hace nada.
+if [ "\$rc" = "0" ] && [ "\$(cat "$COR_CONSUME" 2>/dev/null || echo 0)" = "1" ]; then
+  printf 'aprobado, sigo trabajando\n' > "$PANTALLA_J"
+fi
+exit "\$rc"
+STUB
+  chmod +x "$STUB_CORR"
+  printf 'Permission - Bash\necho listar\n> Allow once\n  Deny\n running 3s\n' >"$PANTALLA_J"
+  "$TM" -L "$L" new-session -d -s pol-1 -x 100 -y 20 "$TUI $PANTALLA_J" || fail "no se pudo crear pol-1"
+  mark pol-1
+  : >"$CALLS"
+  espera_pantalla pol-1 'Allow once'
+  sleep 1
+  # La politica no contesta (rc 1: apagada, sin registro, escalada): como hoy.
+  CORRIDA_BIN="$STUB_CORR" run_p || fail "--once (2j, politica no contesta) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 1 ] || fail "(2j) con la politica sin respuesta debia salir el evento; hubo $n"
+  grep -q 'pol-1 waiting for approval' "$CALLS" || fail "(2j) falta el evento de aprobacion: $(cat "$CALLS")"
+  grep -q '^CORR responder pol-1$' "$CORR_CALLS" || fail "(2j) el vigilante no le paso el dialogo a la politica: $(cat "$CORR_CALLS")"
+  # La politica contesta (rc 0) y el CLI consume la tecla (la pantalla deja de
+  # mostrar el dialogo): ningun evento, el prompt queda atendido.
+  sed -i.bak 's/echo listar/echo listar mas/' "$PANTALLA_J" && rm -f "$PANTALLA_J.bak"
+  espera_pantalla pol-1 'echo listar mas'
+  sleep 1
+  : >"$CALLS"
+  echo 1 >"$COR_CONSUME"
+  echo 0 >"$COR_RC"
+  CORRIDA_BIN="$STUB_CORR" run_p || fail "--once (2j, politica contesta) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 0 ] || fail "(2j) la politica contesto: no debia salir NINGUN evento; hubo $n"
+  n=$(grep -c '^CORR responder pol-1$' "$CORR_CALLS")
+  [ "$n" -eq 2 ] || fail "(2j) la politica debia llamarse una vez por prompt; hubo $n"
+  grep -q '^approval=[0-9]' "$STATE_DIR/pol-1.state" || fail "(2j) el prompt atendido debe quedar marcado en el estado: $(cat "$STATE_DIR/pol-1.state")"
+  # Sin corrida.sh ejecutable el enganche esta inactivo: evento como hoy.
+  printf 'Permission - Bash\necho listar tres\n> Allow once\n  Deny\n running 3s\n' >"$PANTALLA_J"
+  espera_pantalla pol-1 'echo listar tres'
+  sleep 1
+  : >"$CALLS"
+  CORRIDA_BIN="$T/no-hay-corrida" run_p || fail "--once (2j, sin corrida.sh) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 1 ] || fail "(2j) sin corrida.sh el evento debia salir como hoy; hubo $n"
+  n=$(grep -c '^CORR responder pol-1$' "$CORR_CALLS")
+  [ "$n" -eq 2 ] || fail "(2j) sin corrida.sh no debia llamarse a nadie nuevo; hubo $n"
+  # BRIEF-r2 QA (Major): un rc 0 del responder solo prueba que SUS send-keys
+  # salieron; si el CLI no consumio la tecla y el prompt SIGUE en pantalla, el
+  # vigilante no puede suprimir la escalada (quedaria mudo hasta el recordatorio
+  # de 900 s). El stub devuelve 0 sin tocar la pantalla: el evento sale igual.
+  echo 0 >"$COR_CONSUME"
+  echo 0 >"$COR_RC"
+  printf 'Permission - Bash\necho listar cinco\n> Allow once\n  Deny\n running 4s\n' >"$PANTALLA_J"
+  espera_pantalla pol-1 'echo listar cinco'
+  sleep 1
+  : >"$CALLS"
+  CORRIDA_BIN="$STUB_CORR" run_p || fail "--once (2j-QA, tecla no consumida) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 1 ] || fail "(2j-QA) la politica devolvio 0 pero el prompt SIGUE: la escalada debe salir en el mismo ciclo; hubo $n"
+  grep -q 'pol-1 waiting for approval' "$CALLS" || fail "(2j-QA) falta la re-escalada del prompt no consumido: $(cat "$CALLS")"
+  "$TM" -L "$L" kill-session -t pol-1
+  echo "ok (2j): el dialogo se le ofrece a la politica primero; si contesta no despierta a nadie, y sin corrida.sh va como hoy"
+
+  # (2k) BRIEF-r1 PA: sin CORRIDA_BIN explicito, run_once lo apunta a una ruta
+  # inexistente: aunque exista un ~/bin/corrida.sh real (instalado en Q4), los
+  # casos sin enganche se comportan como hoy (el dialogo produce el evento).
+  run_once >/dev/null 2>&1   # traga el closed de pol-1 del caso anterior
+  PANTALLA_K="$T/pantalla-k.txt"
+  printf 'Permission - Bash\necho listar cuatro\n> Allow once\n  Deny\n running 3s\n' >"$PANTALLA_K"
+  "$TM" -L "$L" new-session -d -s pol-2 -x 100 -y 20 "$TUI $PANTALLA_K" || fail "no se pudo crear pol-2"
+  mark pol-2
+  : >"$CALLS"
+  espera_pantalla pol-2 'Allow once'
+  sleep 1
+  run_p || fail "--once (2k) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 1 ] || fail "(2k) sin CORRIDA_BIN explicito el evento debia salir como hoy; hubo $n"
+  grep -q 'pol-2 waiting for approval' "$CALLS" || fail "(2k) falta el evento de pol-2: $(cat "$CALLS")"
+  "$TM" -L "$L" kill-session -t pol-2
+  echo "ok (2k): run_once neutraliza CORRIDA_BIN por defecto; sin enganche explicito, el dialogo avisa como hoy"
+
+  # (2m) BRIEF-r2 QE: un fallo del journal (eventos.jsonl) no puede ni romper la
+  # notificacion ni pasar en silencio: el evento se manda igual, el estado queda
+  # notificado y el fallo queda en el log. eventos.jsonl como directorio hace
+  # fallar todo append al journal.
+  STATE2="$T/state2"
+  mkdir -p "$STATE2/eventos.jsonl"
+  "$TM" -L "$L" new-session -d -s ev-j -x 80 -y 20 'cat' || fail "no se pudo crear ev-j"
+  mark ev-j
+  : >"$CALLS"
+  : >"$LOG_FILE"
+  sleep 2
+  TMUX_BIN="$TMUX_SHIM" OPENCLAW_BIN="$STUB_OPENCLAW" QUIET_SECS=1 TICK_SECS=1 \
+    STATE_DIR="$STATE2" LOG_FILE="$LOG_FILE" CORRIDA_BIN="$T/no-hay-corrida" \
+    bash "$W" --once || fail "--once (2m) fallo"
+  [ "$(grep -c 'ev-j quiet for' "$CALLS")" -eq 1 ] || fail "(2m) el evento debia mandarse igual pese al journal roto: $(cat "$CALLS")"
+  grep -q 'notified=1' "$STATE2/ev-j.state" || fail "(2m) el fallo del journal no debe tocar el estado de notificacion"
+  grep -qi 'journal' "$LOG_FILE" || fail "(2m) el fallo del journal debe quedar dicho en el log: $(cat "$LOG_FILE")"
+  "$TM" -L "$L" kill-session -t ev-j
+  echo "ok (2m): un fallo del journal no rompe la notificacion y queda en el log"
 
   "$TM" -L "$L" kill-server 2>/dev/null
   echo "ok (2): maquina de estados del vigilante verificada con tmux real ($TM)"

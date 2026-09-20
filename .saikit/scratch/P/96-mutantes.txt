@@ -1,0 +1,5 @@
+MUTANTE: sin relectura (TOCTOU fuera)
+  >> ROJO (bateria lo caza): bien
+MUTANTE: sin lista dura
+  >> ROJO (bateria lo caza): bien
+RESTAURADO: batería en verde de nuevo

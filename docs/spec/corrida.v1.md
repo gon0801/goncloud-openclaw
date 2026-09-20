@@ -37,3 +37,20 @@ registro ya dice.
 
 Ejemplo válido y mutaciones en `scripts/tests/fixtures/corrida/registro-*.json`;
 el validador vive en `scripts/mac/corrida/lib.sh` y la prueba 9.1 lo carga por source.
+
+## Ciclo de vida de las marcas
+
+`corrida.sh lanzar-sesion` serializa la creación, las marcas y el registro con el
+mismo lock global que usa la reconciliación. Publica `OPENCLAW_WATCH_RUN=<id>`
+antes de activar `OPENCLAW_WATCH=1` y conserva el lock hasta registrar la sesión.
+Así una limpieza decidida sobre una sesión vieja no puede caer sobre otra que
+reutilizó el mismo nombre. Cuando
+un carril termina, el vigía ejecuta `corrida.sh terminar-sesion <id> <sesion>`:
+retira solo esa marca, deja la sesión abierta y no toca su worktree. La operación
+es idempotente y rechaza sesiones que no pertenezcan al registro indicado.
+
+`corrida.sh cerrar <id>` conserva el barrido final de todas las sesiones de la
+corrida. Como reparación conservadora, `corrida.sh reconciliar-marcas` retira las
+marcas cuyo único dueño registrado es una corrida cerrada. Si una corrida abierta
+también reclama la sesión, o no hay dueño conocido, la marca se conserva para que
+el operador decida; la reconciliación nunca mata sesiones ni borra worktrees.

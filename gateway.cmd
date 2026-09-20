@@ -1,5 +1,9 @@
 @echo off
 rem OpenClaw Gateway
+rem Live bus → Gonserver BFF (tablero-fase :8787)
+if exist "%USERPROFILE%\.openclaw\live-bus.env" (
+  for /f "usebackq eol=# tokens=1,* delims==" %%A in ("%USERPROFILE%\.openclaw\live-bus.env") do set "%%A=%%B"
+)
 set "HOME=C:\Users\ehven"
 set "TMPDIR=C:\Users\ehven\AppData\Local\Temp"
 set "NODE_OPTIONS="

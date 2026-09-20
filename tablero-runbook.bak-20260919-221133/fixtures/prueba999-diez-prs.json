@@ -1,0 +1,242 @@
+{
+  "schema": "runbook-progress.v1",
+  "runbook": "docs/runbooks/autopilot-fase6.md",
+  "fase": "999",
+  "titulo": "Autopilot de la Fase 6 — barrido de diez PRs",
+  "lead": {
+    "agente": "claude",
+    "inicio": "2026-09-16T12:00:00Z",
+    "actualizado": "2026-09-16T21:50:00Z"
+  },
+  "atencion_requerida": {
+    "necesaria": false,
+    "motivo": null,
+    "desde": null
+  },
+  "siguiente_paso": "Fixture de carga para el cruce con GitHub: seis PRs únicos repetidos hasta diez referencias.",
+  "carriles": [
+    {
+      "residuales": [],
+      "detenido_por": null,
+      "pr": 15,
+      "head": "06c08c8",
+      "approve_lead": "06c08c8",
+      "ronda": 2,
+      "id": "A",
+      "nombre": "Director",
+      "repo": "gon0801/goncloud-workspace-main",
+      "rama": "fase6/director",
+      "tareas": [
+        "6.0a",
+        "6.1",
+        "6.3"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "ci": "verde",
+      "coderabbit": "limpio",
+      "ultimo_evento": {
+        "at": "2026-09-16T19:31:07Z",
+        "que": "mergeado"
+      }
+    },
+    {
+      "residuales": [],
+      "detenido_por": null,
+      "pr": 8,
+      "head": "ae9b915",
+      "approve_lead": "ae9b915",
+      "ronda": 2,
+      "id": "B",
+      "nombre": "Ingenieria",
+      "repo": "gon0801/goncloud-workspace-ingenieria",
+      "rama": "fase6/contrato",
+      "tareas": [
+        "6.0a",
+        "6.2"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "ci": "verde",
+      "coderabbit": "sin-cuota",
+      "ultimo_evento": {
+        "at": "2026-09-16T19:58:44Z",
+        "que": "mergeado"
+      }
+    },
+    {
+      "residuales": [],
+      "detenido_por": null,
+      "pr": 5,
+      "head": "cc04157",
+      "approve_lead": "cc04157",
+      "ronda": 2,
+      "id": "C",
+      "nombre": "Operaciones",
+      "repo": "gon0801/goncloud-workspace-operaciones",
+      "rama": "fase6/contrato",
+      "tareas": [
+        "6.0a",
+        "6.2"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "ci": "verde",
+      "coderabbit": "con-hallazgos",
+      "ultimo_evento": {
+        "at": "2026-09-16T20:02:11Z",
+        "que": "mergeado"
+      }
+    },
+    {
+      "residuales": [],
+      "detenido_por": null,
+      "pr": 43,
+      "head": null,
+      "approve_lead": null,
+      "ronda": 2,
+      "id": "D",
+      "nombre": "Openclaw docs",
+      "repo": "gon0801/goncloud-openclaw",
+      "rama": "fase6/docs",
+      "tareas": [
+        "6.2",
+        "6.4",
+        "6.4b",
+        "6.8"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "ci": "verde",
+      "coderabbit": "limpio",
+      "ultimo_evento": {
+        "at": "2026-09-16T20:44:30Z",
+        "que": "mergeado"
+      }
+    },
+    {
+      "residuales": [],
+      "detenido_por": null,
+      "pr": 44,
+      "head": null,
+      "approve_lead": null,
+      "ronda": 1,
+      "id": "D2",
+      "nombre": "Openclaw tests",
+      "repo": "gon0801/goncloud-openclaw",
+      "rama": "fase6/docs-tests",
+      "tareas": [
+        "6.2"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "ci": "verde",
+      "coderabbit": "limpio",
+      "ultimo_evento": {
+        "at": "2026-09-16T20:47:02Z",
+        "que": "mergeado"
+      }
+    },
+    {
+      "residuales": [],
+      "detenido_por": null,
+      "pr": 45,
+      "head": "e2479ae",
+      "approve_lead": "e2479ae",
+      "ronda": 1,
+      "id": "E",
+      "nombre": "Summa gate",
+      "repo": "gon0801/goncloud-openclaw",
+      "rama": "fase6/merge-guard",
+      "tareas": [
+        "6.5"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "ci": "verde",
+      "coderabbit": "limpio",
+      "ultimo_evento": {
+        "at": "2026-09-16T21:03:59Z",
+        "que": "mergeado"
+      }
+    },
+    {
+      "residuales": [],
+      "detenido_por": null,
+      "pr": null,
+      "head": "57f352a",
+      "approve_lead": "57f352a",
+      "ronda": 1,
+      "id": "F",
+      "nombre": "Orbit verify",
+      "repo": "gon0801/goncloud-Orbit",
+      "rama": "fase6/orbit",
+      "tareas": [
+        "6.6"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "ci": "verde",
+      "coderabbit": "sin-cuota",
+      "ultimo_evento": {
+        "at": "2026-09-16T21:12:23Z",
+        "que": "mergeado"
+      }
+    }
+  ],
+  "cola": [
+    {
+      "id": "Q1",
+      "prs": [
+        {
+          "repo": "gon0801/goncloud-openclaw",
+          "pr": 43
+        },
+        {
+          "repo": "gon0801/goncloud-openclaw",
+          "pr": 44
+        },
+        {
+          "repo": "gon0801/goncloud-openclaw",
+          "pr": 45
+        }
+      ],
+      "estado": "verificado",
+      "ventana": null,
+      "merge_commits": [
+        "e2479ae"
+      ],
+      "verificado": "ok",
+      "detenido_por": null
+    },
+    {
+      "id": "Q2",
+      "prs": [
+        {
+          "repo": "gon0801/goncloud-workspace-main",
+          "pr": 15
+        }
+      ],
+      "estado": "verificado",
+      "ventana": null,
+      "merge_commits": [
+        "06c08c8"
+      ],
+      "verificado": "ok",
+      "detenido_por": null
+    }
+  ],
+  "eventos": [
+    {
+      "at": "2026-09-16T21:50:00Z",
+      "carril": null,
+      "que": "fixture de diez referencias escrito para 7.5",
+      "situacion": null
+    }
+  ],
+  "cierre": {
+    "at": "2026-09-16T21:41:00Z",
+    "telegram_message_id": 4781,
+    "resumen": "Fixture de carga; no es un estado real de la fase."
+  }
+}

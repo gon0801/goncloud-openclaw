@@ -38,12 +38,20 @@ corrida_lanzar_sesion() {
   bin="$(bin_de_tabla "$binario")" || return 1
   [ -d "$dir" ] || { echo "sin directorio: $dir" >&2; return 1; }
   "$TMUX_BIN" has-session -t "=$nombre" 2>/dev/null && { echo "la sesion ya existe: $nombre" >&2; return 1; }
+  marcas_lock_tomar \
+    || { echo "lanzar-sesion: lock global de marcas no cede" >&2; return 1; }
   local embebido="PATH=\"$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH\""
-  "$TMUX_BIN" new-session -d -s "$nombre" -x 200 -y 50 -c "$dir" "$embebido $bin $flag" >&2 || return 1
-  "$TMUX_BIN" has-session -t "=$nombre" 2>/dev/null || { echo "la sesion murio al arrancar" >&2; return 1; }
+  "$TMUX_BIN" new-session -d -s "$nombre" -x 200 -y 50 -c "$dir" "$embebido $bin $flag" >&2 \
+    || { marcas_lock_soltar; return 1; }
+  "$TMUX_BIN" has-session -t "=$nombre" 2>/dev/null \
+    || { echo "la sesion murio al arrancar" >&2; marcas_lock_soltar; return 1; }
+  # Publicar el dueno antes de la marca cierra la ventana en que una reconciliacion
+  # podria confundir este nombre reutilizado con una sesion de una corrida cerrada.
+  "$TMUX_BIN" set-environment -t "=$nombre" OPENCLAW_WATCH_RUN "$id" \
+    || { echo "no se pudo publicar el dueno de la sesion" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; marcas_lock_soltar; return 1; }
   # La marca ocurre ANTES del primer send-keys (el orden lo vigila la prueba con el log del shim).
   "$TMUX_BIN" set-environment -t "=$nombre" OPENCLAW_WATCH 1 \
-    || { echo "no se pudo marcar la sesion" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
+    || { echo "no se pudo marcar la sesion" >&2; "$TMUX_BIN" set-environment -t "=$nombre" -u OPENCLAW_WATCH_RUN 2>/dev/null; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; marcas_lock_soltar; return 1; }
   # Todo fallo a partir de aqui mata la sesion: cerrar solo desmarca lo que registro.
   local pantalla espera=0
   pantalla=""
@@ -52,36 +60,39 @@ corrida_lanzar_sesion() {
     printf '%s' "$pantalla" | grep -qF -- "$barra" && break
     sleep 1; espera=$((espera+1))
   done
+  marcas_lock_refrescar
   printf '%s' "$pantalla" | grep -qF -- "$barra" \
-    || { echo "la barra no trae $barra" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
+    || { echo "la barra no trae $barra" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; marcas_lock_soltar; return 1; }
   if [ -n "$encargo" ]; then
-    [ -f "$encargo" ] || { echo "sin encargo: $encargo" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
+    [ -f "$encargo" ] || { echo "sin encargo: $encargo" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; marcas_lock_soltar; return 1; }
     local texto escrito despues despues2
     texto="$(cat "$encargo")"
     "$TMUX_BIN" send-keys -t "=$nombre:" -l -- "$texto" \
-      || { echo "no se pudo escribir el encargo" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
+      || { echo "no se pudo escribir el encargo" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; marcas_lock_soltar; return 1; }
     sleep 1
     escrito="$("$TMUX_BIN" capture-pane -p -t "=$nombre:" 2>/dev/null)"
     "$TMUX_BIN" send-keys -t "=$nombre:" Enter \
-      || { echo "no se pudo mandar el Enter" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
+      || { echo "no se pudo mandar el Enter" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; marcas_lock_soltar; return 1; }
     sleep 2
     despues="$("$TMUX_BIN" capture-pane -p -t "=$nombre:" 2>/dev/null)"
     if [ "$escrito" = "$despues" ]; then
       # La caja no se vacio: el Enter se trago; UN reintento, re-verificado, antes de declarar.
       "$TMUX_BIN" send-keys -t "=$nombre:" Enter \
-        || { echo "no se pudo reintentar el Enter" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
+        || { echo "no se pudo reintentar el Enter" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; marcas_lock_soltar; return 1; }
       sleep 2
       despues2="$("$TMUX_BIN" capture-pane -p -t "=$nombre:" 2>/dev/null)"
       [ "$escrito" = "$despues2" ] \
-        && { echo "la caja no se vacio tras reintentar el Enter" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
+        && { echo "la caja no se vacio tras reintentar el Enter" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; marcas_lock_soltar; return 1; }
     fi
   fi
+  marcas_lock_refrescar
   # Anotar bajo lock con el estado RE-verificado: si la corrida se cerro mientras
   # esta sesion nacia, no entra a un registro muerto — se desmarca y se mata.
   if ! lock_tomar "$reg"; then
     echo "lanzar-sesion: lock del registro de $id no cede; la sesion $nombre se retira" >&2
     "$TMUX_BIN" set-environment -t "=$nombre" -u OPENCLAW_WATCH 2>/dev/null
     "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null
+    marcas_lock_soltar
     return 1
   fi
   if [ "$(json_campo "$reg" estado)" != "abierta" ]; then
@@ -89,6 +100,7 @@ corrida_lanzar_sesion() {
     echo "lanzar-sesion: la corrida $id se cerro mientras se lanzaba; la sesion $nombre se retira" >&2
     "$TMUX_BIN" set-environment -t "=$nombre" -u OPENCLAW_WATCH 2>/dev/null
     "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null
+    marcas_lock_soltar
     return 1
   fi
   CORR_SES_NOMBRE="$nombre" CORR_SES_ROL="$rol" CORR_SES_CLI="$token" CORR_SES_DIR="$dir" \
@@ -96,7 +108,8 @@ corrida_lanzar_sesion() {
 'rol':os.environ['CORR_SES_ROL'],'cli':os.environ['CORR_SES_CLI'],'dueno':'lead',
 'dir':os.environ['CORR_SES_DIR']})" \
     || { lock_soltar "$reg"
-         echo "no se pudo anotar la sesion en el registro" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
+         echo "no se pudo anotar la sesion en el registro" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; marcas_lock_soltar; return 1; }
   lock_soltar "$reg"
+  marcas_lock_soltar
   echo "$nombre"
 }

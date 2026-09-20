@@ -9,7 +9,7 @@ The pair `envios-del-dia/<D>-amazon.html` + `<D>-meli.html` is the baseline ever
 
 ## Steps
 
-1. Recover the day's content from the run's own digest text: `read` `packing/tmp/digest_20h_<D>.txt` (UTF-8). If that file is gone, the same content is in the 20h automation history `tmp/run20h.json` → `entries[].summary` of the entry whose date is D.
+1. Recover the day's content from the run's own digest text: `read` `packing/tmp/digest_20h_<D>.txt` (UTF-8). If that file is gone, the same content is in the run history: `openclaw cron runs eeae2a74-6389-4e83-a80a-d0ae6cdc7988` → the entry for D whose `summary` holds the digest. (A pasted copy of an earlier history also sits in `tmp/run20h.json` — UTF-16LE and only as fresh as the day it was dumped, so prefer the CLI.)
 2. Write the pair from that content only. Do not run censuses (SC / MELI / Odoo) to rebuild a pair: the pair reports what the digest reported, so a new census risks a pair that disagrees with the digest that was already delivered.
 3. Cross-check the recovered text against the run summary and `packing/RUNBOOK-20h.md` (Formato v9.1 is authoritative for fields). When the two sources disagree on a field — Modelo/Estuche, or the SKU ↔ Envío ID pairing of a Flex order — write the digest `.txt` verbatim and list every divergence in the report. Never merge silently, pick the tidier value, or invent a name, hour, or channel the input does not carry.
 4. Write both files with the `write` tool (UTF-8), copying the shape of the previous day's pair. Skeleton:
