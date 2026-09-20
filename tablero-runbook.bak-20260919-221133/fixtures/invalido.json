@@ -1,0 +1,49 @@
+{
+  "schema": "runbook-progress.v2",
+  "runbook": "docs/runbooks/autopilot-fase6.md",
+  "fase": "../../openclaw.json",
+  "titulo": "Título hostil de exactamente cuatrocientos caracteres que sirve de tercera razón: 012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567",
+  "lead": {
+    "agente": "claude",
+    "inicio": "2026-09-16T12:00:00Z",
+    "actualizado": "2026-09-16T18:40:00Z"
+  },
+  "atencion_requerida": {
+    "necesaria": false,
+    "motivo": null,
+    "desde": null
+  },
+  "siguiente_paso": "Documento inválido de prueba con cinco razones plantadas.",
+  "carriles": [
+    {
+      "residuales": [],
+      "detenido_por": null,
+      "pr": 15,
+      "head": null,
+      "approve_lead": null,
+      "ronda": 1,
+      "id": "X",
+      "nombre": "Envenenado",
+      "repo": "a/b; calc.exe",
+      "rama": "fase6/x",
+      "tareas": [
+        "6.0a"
+      ],
+      "estado": "volando",
+      "paso_loop": 1,
+      "ci": "verde",
+      "coderabbit": "pendiente",
+      "ultimo_evento": {
+        "at": "2026-09-16T18:39:00Z",
+        "que": "evento válido del carril"
+      }
+    }
+  ],
+  "cola": [],
+  "eventos": [],
+  "cierre": {
+    "at": null,
+    "telegram_message_id": null,
+    "resumen": null
+  }
+}
