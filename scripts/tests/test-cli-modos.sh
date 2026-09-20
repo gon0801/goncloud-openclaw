@@ -46,19 +46,27 @@ validar_registro "$FX/registro-pasa-emergencia.json" || fail "emergencia dio lis
 validar_registro "$FX/registro-pasa-dropbox.json" || fail "dropbox dio lista dura (falso positivo)"
 
 # FB: campos exigidos — un registro sin cada uno de ellos cae con su motivo (los
-# mutantes se generan al vuelo desde el valido). El || fail vela al generador: si
-# muere, la prueba no puede seguir en verde (CodeRabbit IC).
+# mutantes se generan al vuelo desde el valido, que es v2). El || fail vela al
+# generador: si muere, la prueba no puede seguir en verde (CodeRabbit IC).
 python3 - "$TMP" "$FX" <<'PY' || fail "el generador de falta-* fallo"
 import json,sys
 tmp,fx=sys.argv[1],sys.argv[2]
 d0=json.load(open(fx+'/registro-valido.json'))
-for nom in ('cli_modos','cron_vigia_id','inicio','simulacro'):
+for nom in ('cli_modos','seguimiento_global','inicio','simulacro'):
   d=json.loads(json.dumps(d0)); d.pop(nom,None)
   json.dump(d,open('%s/falta-%s.json'%(tmp,nom),'w'),indent=1)
 d=json.loads(json.dumps(d0)); d['canal'].pop('destino',None)
 json.dump(d,open(tmp+'/falta-destino.json','w'),indent=1)
 d=json.loads(json.dumps(d0)); d['preaprobaciones']=5
 json.dump(d,open(tmp+'/falta-prea.json','w'),indent=1)
+# v1 desde el valido v2: con cron y sin marca global.
+d=json.loads(json.dumps(d0)); d['schema']='corrida.v1'
+d['cron_vigia_id']='cron-falso'; d.pop('seguimiento_global',None)
+json.dump(d,open(tmp+'/v1-valido.json','w'),indent=1)
+d=json.loads(json.dumps(d0)); d['schema']='corrida.v1'; d.pop('seguimiento_global',None)
+json.dump(d,open(tmp+'/v1-sin-cron.json','w'),indent=1)
+d=json.loads(json.dumps(d0)); d['cron_vigia_id']='cron-sobra'
+json.dump(d,open(tmp+'/v2-con-cron.json','w'),indent=1)
 PY
 revienta_archivo() { # $1 archivo, $2 motivo esperado
   out="$(validar_registro "$1" 2>/dev/null)"; rc=$?
@@ -68,10 +76,15 @@ $out"
 }
 revienta_archivo "$TMP/falta-destino.json" "sin canal.destino"
 revienta_archivo "$TMP/falta-cli_modos.json" "sin cli_modos"
-revienta_archivo "$TMP/falta-cron_vigia_id.json" "sin cron_vigia_id"
+revienta_archivo "$TMP/falta-seguimiento_global.json" "sin seguimiento_global"
 revienta_archivo "$TMP/falta-inicio.json" "sin inicio"
 revienta_archivo "$TMP/falta-simulacro.json" "simulacro no es booleano"
 revienta_archivo "$TMP/falta-prea.json" "preaprobaciones no es lista"
+# Dual-read: v1 valido pasa, v1 sin cron cae, v2 con cron cae.
+validar_registro "$TMP/v1-valido.json" >/dev/null 2>&1 \
+  || fail "el v1 valido no pasa el dual-read"
+revienta_archivo "$TMP/v1-sin-cron.json" "sin cron_vigia_id"
+revienta_archivo "$TMP/v2-con-cron.json" "v2 con cron_vigia_id"
 
 # MATRIZ del detector de borrado recursivo (CA+CB+CE-r): todos los casos de una
 # vez; la mutacion (sin la regla) debe ponerla entera en rojo. Nota: el caso
@@ -114,6 +127,8 @@ z1="$( cd /tmp && env -u REPO_DIR bash -c ". '$LIBABS'; runbook_de scripts/tests
 
 # mensaje_valido viene de lib.sh: es el que corre en cada envio de verdad.
 mensaje_valido "$FX/mensaje-valido.txt" || fail "el mensaje valido no pasa"
+# Extension minima: avance desconocido honesto en lugar de un conteo inventado.
+mensaje_valido "$FX/mensaje-avance-desconocido.txt" || fail "avance desconocido no pasa"
 # Los casos sin salto de linea final se generan al vuelo: un archivo del repo sin
 # salto final lo reescribe el hook de end-of-file, y el caso es justo ese.
 printf '[AVANZA] Fase 9, 2 de 5 partes terminadas\nQue cambio: la primera parte quedo lista\nQue sigue: ahora se trabaja la parte de mensajes\nQue necesito de ti: nada' >"$TMP/val-sin-salto.txt"

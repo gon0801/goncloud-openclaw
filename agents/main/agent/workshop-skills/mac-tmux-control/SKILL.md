@@ -66,7 +66,7 @@ A watcher (`tmux-activity-watch.sh`, launchd on the Mac) and Claude Code's own S
 with `openclaw system event` instead of you polling tmux on a cron. Events you will see:
 
 - `tmux: <session> quiet for Ns | cmd=<cmd> cwd=<path> | read it before acting: ...` — the visible
-  screen did not change for at least 90 s. A TUI that keeps repainting the same screen (zcode,
+  screen did not change for at least 15 min. A TUI that keeps repainting the same screen (zcode,
   muse) counts as quiet: the watcher compares content, not tmux timestamps.
 - `tmux: <session> waiting for approval for Ns | cmd=<cmd> cwd=<path> | read it before acting: ...`
 <!-- candado: test-tmux-activity-watch.sh -->
@@ -75,7 +75,7 @@ with `openclaw system event` instead of you polling tmux on a cron. Events you w
   permission at all (codex stops on "usage limit, switch model? Press enter to confirm"). The
   watcher recognizes the shape of the dialog, not only the question. Sent at once, once per
   distinct prompt, and again every 15 min while nobody answers. A marked session that simply stays
-  quiet gets its `quiet` event repeated every 30 min until you act on it or unmark it. Answer it
+  quiet gets its `quiet` event repeated every 15 min until you act on it or unmark it. Answer it
   from the preapproval table of the runbook or brief that launched that session: approved → accept,
 <!-- candado: test-tmux-activity-watch.sh -->
   denied or not listed → reject. If the same session keeps asking, stop answering one by one and
@@ -104,6 +104,22 @@ Rule on any of these: **read the screen with `/opt/homebrew/bin/tmux capture-pan
 "turn ended" event does not by itself tell you whether the agent is done, waiting on a dialog or
 an Enter (step 4), or genuinely stuck — decide from what `/opt/homebrew/bin/tmux capture-pane` shows, the same as any
 other read in this skill.
+
+Classify the wake-up before delivering anything. Each of these events is an
+internal wake-up, not a Telegram instruction: it wakes you to inspect and act,
+and on its own never sends a Telegram. After reading the screen: still working
+<!-- candado: test-tmux-activity-watch.sh -->
+with no unit finished → record the inspection and end with exactly `NO_REPLY`,
+never calling the message tool; a unit finished → collect evidence and continue
+(it joins the next 30-minute report); the whole task or phase finished → collect
+<!-- candado: test-tmux-activity-watch.sh -->
+evidence, unmark the session and close with `CERRADA` at once; a decision nobody
+preapproved → stop that action and send `NECESITO TU RESPUESTA` at once with the
+options; dead, quota out, or a failed recovery → record the proven cause and send
+<!-- candado: test-tmux-activity-watch.sh -->
+`DETENIDA` at once. Always unmark a chain that ended or was abandoned
+(`/opt/homebrew/bin/tmux set-environment -t <session> -u OPENCLAW_WATCH`), so its
+sessions stop waking you.
 
 Never wait for a long-running thing with `sleep` or "I'll check back later": if you are about to
 babysit CI, a test run, or another agent working, launch it with `exec` and `background: true`

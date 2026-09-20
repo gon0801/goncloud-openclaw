@@ -569,6 +569,61 @@ STUB
   "$TM" -L "$L" kill-session -t ev-j
   echo "ok (2m): un fallo del journal no rompe la notificacion y queda en el log"
 
+  # (2n) La cadencia por defecto es 15 min de silencio y 15 min de recordatorio,
+  # sin dormir 15 minutos de verdad: el archivo de estado finge la edad. OJO: sin
+  # QUIET_SECS/QUIET_REMIND_SECS en el entorno, para que manden los defaults del
+  # script y no los de run_once (1 s). Con 899 s no hay evento; con 901 s hay uno.
+  "$TM" -L "$L" new-session -d -s cad-default -x 80 -y 20 'cat' || fail "no se pudo crear cad-default"
+  mark cad-default
+  corre_default() {
+    CORRIDA_BIN="$T/no-hay-corrida" \
+    TMUX_BIN="$TMUX_SHIM" OPENCLAW_BIN="$STUB_OPENCLAW" \
+      STATE_DIR="$STATE_DIR" LOG_FILE="$LOG_FILE" \
+      bash "$W" --once
+  }
+  # Purga: los casos anteriores dejan sesiones muertas (pol-2, ev-j) cuyo
+  # `closed` sale en el primer tick que las ve; se consume antes de medir.
+  corre_default >/dev/null 2>&1 || fail "--once (2n, purga) fallo"
+  : >"$CALLS"
+  ahora=$(date +%s)
+  # OJO: el vigilante chequea `printf '%s' "$screen" | cksum` sobre la captura ya
+  # sin saltos finales (el $(...) los recorta); chequear los bytes crudos con sus
+  # saltos da otro hash y el tick lo leeria como pantalla nueva.
+  pantalla_txt=$("$TM" -L "$L" capture-pane -p -t cad-default 2>/dev/null)
+  pantalla=$(printf '%s' "$pantalla_txt" | cksum | awk '{ print $1 "-" $2 }')
+  printf 'hash=%s\nsince=%s\nnotified=0\npath=/tmp\napproval=\napproval_at=0\napproval_since=0\nnotified_at=0\n' \
+    "$pantalla" "$((ahora - 899))" >"$STATE_DIR/cad-default.state"
+  corre_default || fail "--once (2n, 899 s) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 0 ] || fail "(2n) con 899 s de silencio y cadencia por defecto (15 min) no debe haber evento; hubo $n:
+$(cat "$CALLS")"
+  ahora=$(date +%s)
+  printf 'hash=%s\nsince=%s\nnotified=0\npath=/tmp\napproval=\napproval_at=0\napproval_since=0\nnotified_at=0\n' \
+    "$pantalla" "$((ahora - 901))" >"$STATE_DIR/cad-default.state"
+  corre_default || fail "--once (2n, 901 s) fallo"
+  n=$(grep -c 'cad-default quiet for' "$CALLS")
+  [ "$n" -eq 1 ] || fail "(2n) con 901 s de silencio debe haber exactamente un evento quiet; hubo $n:
+$(cat "$CALLS")"
+  # El recordatorio por defecto tambien es 15 min: con notified_at de hace 899 s
+  # no se repite; con 901 s sí.
+  estado_hash=$(awk -F= '$1 == "hash" { print $2 }' "$STATE_DIR/cad-default.state")
+  estado_since=$(awk -F= '$1 == "since" { print $2 }' "$STATE_DIR/cad-default.state")
+  ahora=$(date +%s)
+  printf 'hash=%s\nsince=%s\nnotified=1\npath=/tmp\napproval=\napproval_at=0\napproval_since=0\nnotified_at=%s\n' \
+    "$estado_hash" "$estado_since" "$((ahora - 899))" >"$STATE_DIR/cad-default.state"
+  corre_default || fail "--once (2n, recordatorio aun no) fallo"
+  n=$(grep -c 'cad-default quiet for' "$CALLS")
+  [ "$n" -eq 1 ] || fail "(2n) antes de 15 min el recordatorio no se repite; hubo $n"
+  ahora=$(date +%s)
+  printf 'hash=%s\nsince=%s\nnotified=1\npath=/tmp\napproval=\napproval_at=0\napproval_since=0\nnotified_at=%s\n' \
+    "$estado_hash" "$estado_since" "$((ahora - 901))" >"$STATE_DIR/cad-default.state"
+  corre_default || fail "--once (2n, recordatorio) fallo"
+  n=$(grep -c 'cad-default quiet for' "$CALLS")
+  [ "$n" -eq 2 ] || fail "(2n) una sesion que sigue callada se recuerda a los 15 min; hubo $n:
+$(cat "$CALLS")"
+  "$TM" -L "$L" kill-session -t cad-default
+  echo "ok (2n): la cadencia por defecto es 15 min de silencio y 15 min de recordatorio"
+
   "$TM" -L "$L" kill-server 2>/dev/null
   echo "ok (2): maquina de estados del vigilante verificada con tmux real ($TM)"
 
@@ -662,14 +717,38 @@ grep -qF -- '-u OPENCLAW_WATCH' "$SK" || fail "$SK: falta la instruccion de desm
 grep -qF 'waiting for approval for Ns' "$SK" || fail "$SK: falta el evento 'waiting for approval'"
 grep -qF 'preapproval table' "$SK" || fail "$SK: falta de donde sale la respuesta a un prompt de permiso"
 grep -qF 'whatever the CLI' "$SK" || fail "$SK: el evento de espera no es solo de un CLI; la skill tiene que decirlo"
-grep -qF 'repeated every 30 min' "$SK" || fail "$SK: falta que el silencio de una sesion marcada se recuerda"
+grep -qF 'repeated every 15 min' "$SK" || fail "$SK: el silencio de una sesion marcada se recuerda cada 15 min, no cada 30"
 grep -qF '/mode yolo' "$SK" || fail "$SK: falta como cambiar zcode a modo sin preguntas a media corrida"
+
+# (4b) Watchdog interno: despertar al lead no es instruccion de Telegram.
+# Cada idea va con su ancla exacta; si vuelve una orden de mandar Telegram en
+# cada inspeccion, la clasificacion se perdio.
+grep -qF 'internal wake-up, not a Telegram instruction' "$SK" || fail "$SK: falta que el wake-up es interno, no instruccion de Telegram"
+grep -qF 'NO_REPLY' "$SK" || fail "$SK: falta terminar en NO_REPLY sin cambio material"
+grep -qF 'every 15 min' "$SK" || fail "$SK: falta la cadencia interna de 15 min"
+grep -qF 'NECESITO TU RESPUESTA' "$SK" || fail "$SK: falta el inmediato NECESITO TU RESPUESTA"
+grep -qF 'DETENIDA' "$SK" || fail "$SK: falta el inmediato DETENIDA"
+grep -qF 'CERRADA' "$SK" || fail "$SK: falta el inmediato CERRADA"
+grep -qF 'unmark' "$SK" || fail "$SK: falta desmarcar la cadena terminada o abandonada"
 
 DISP=agents/main/agent/workshop-skills/agent-dispatch/SKILL.md
 grep -qF 'Wake-ups' "$DISP" || fail "$DISP: el paso 3 no referencia el mecanismo de despertar de mac-tmux-control"
 grep -qF 'OPENCLAW_WATCH 1' "$DISP" || fail "$DISP: el paso 2 no marca la sesion al entregar"
 grep -qF -- '-u OPENCLAW_WATCH' "$DISP" || fail "$DISP: el paso 4 no desmarca al terminar el loop"
+grep -qF 'unmark' "$DISP" || fail "$DISP: falta desmarcar la cadena terminada o abandonada"
 echo "ok (4): anclas de mac-tmux-control y agent-dispatch presentes"
+
+# (4c) owner-report-delivery clasifica ANTES de entregar: un wake-up interno sin
+# cambio material termina NO_REPLY y nunca entra a la regla de entrega explícita.
+ENTREGA=agents/main/agent/workshop-skills/owner-report-delivery/SKILL.md
+grep -qF 'internal wake-up' "$ENTREGA" || fail "$ENTREGA: falta clasificar el wake-up interno antes de entregar"
+grep -qF 'NO_REPLY' "$ENTREGA" || fail "$ENTREGA: un wake-up interno sin cambio material termina NO_REPLY"
+# Anti-ancla: mandar Telegram en cada turno sin entrante, antes de clasificar el
+# wake-up interno, es exactamente la contradicción que este cambio cierra.
+if grep -Eiq '(send|deliver)[^.]*every[^.]*(turn|inspection)' "$ENTREGA"; then
+  fail "$ENTREGA: manda en cada turno/inspeccion antes de clasificar el wake-up interno"
+fi
+echo "ok (4c): owner-report-delivery clasifica el wake-up interno antes de entregar"
 
 # (5) El detector de test-mac-tmux-control.sh (parte 1) sigue verde.
 bash scripts/tests/test-mac-tmux-control.sh >/dev/null 2>&1 || fail "test-mac-tmux-control.sh se puso rojo"

@@ -42,9 +42,16 @@ echo '{}'
 STUB
 chmod +x "$T/bin/openclaw"
 
-crons_con() { # $1..$n nombres encendidos
+crons_con() { # $1..$n nombres encendidos; avance-tareas sale con cadencia de 15 min
   printf '{"jobs":[' >"$CRONS"; sep=""
-  for n in "$@"; do printf '%s{"name":"%s","enabled":true}' "$sep" "$n" >>"$CRONS"; sep=","; done
+  for n in "$@"; do
+    if [ "$n" = "avance-tareas" ]; then
+      printf '%s{"name":"%s","enabled":true,"schedule":{"kind":"every","everyMs":900000}}' "$sep" "$n" >>"$CRONS"
+    else
+      printf '%s{"name":"%s","enabled":true}' "$sep" "$n" >>"$CRONS"
+    fi
+    sep=","
+  done
   printf ']}\n' >>"$CRONS"
 }
 prog_ok() { printf '{"ok":true,"doc":{"fase":"5"}}\n' >"$PROG"; }
@@ -86,7 +93,7 @@ corre() { REPO="$R" REF=origin/main TMUX_BIN="$SHIM" OPENCLAW_BIN="$T/bin/opencl
 
 # (1) Todo hecho: VERDE y salida 0. Sin este caso, un script que siempre dijera ROJO
 # pasaria todos los demas.
-crons_con corrida-vigia-5 corrida-empuje-5; prog_ok
+crons_con avance-tareas corrida-empuje-5; prog_ok
 out=$(corre 5); rc=$?
 if [ -n "${TM:-}" ]; then
   [ "$rc" -eq 0 ] || fail "(1) una fase arrancada debe salir 0; salio $rc:
@@ -100,27 +107,45 @@ else
   echo "SKIP (1): sin tmux en esta maquina"
 fi
 
-# (2) EL CASO DE HOY: faltan los dos crons de seguimiento.
+# (2) EL CASO DE HOY: faltan el reloj global y el empuje.
 crons_con otro-cron
 out=$(corre 5); rc=$?
-printf '%s' "$out" | grep -q '^ROJO *vigilantes' || fail "(2) sin los crons de seguimiento tiene que salir ROJO:
+printf '%s' "$out" | grep -q '^ROJO *vigilantes' || fail "(2) sin el reloj global tiene que salir ROJO:
 $out"
-printf '%s' "$out" | grep -q 'corrida-vigia-5' || fail "(2) el detalle tiene que nombrar el cron que falta:
+printf '%s' "$out" | grep -q 'avance-tareas' || fail "(2) el detalle tiene que nombrar el reloj que falta:
 $out"
-printf '%s' "$out" | grep -q 'corrida-empuje-5' || fail "(2) tiene que nombrar LOS DOS, no solo el primero:
+printf '%s' "$out" | grep -q 'corrida-empuje-5' || fail "(2) tiene que nombrar el empuje, no solo el reloj:
 $out"
 [ "$rc" -eq 0 ] && fail "(2) sin alarma la fase no puede salir con codigo 0:
 $out"
-echo "ok (2): sin los crons de seguimiento sale ROJO y los nombra a los dos"
+echo "ok (2): sin el reloj global sale ROJO y los nombra a los dos"
 
 # (2b) Creados pero apagados no es lo mismo que creados. Un cron apagado no avisa.
-printf '{"jobs":[{"name":"corrida-vigia-5","enabled":true},{"name":"corrida-empuje-5","enabled":false}]}\n' >"$CRONS"
+printf '{"jobs":[{"name":"avance-tareas","enabled":true,"schedule":{"kind":"every","everyMs":900000}},{"name":"corrida-empuje-5","enabled":false}]}\n' >"$CRONS"
 out=$(corre 5)
 printf '%s' "$out" | grep -q '^ROJO *vigilantes' || fail "(2b) un cron apagado no avisa: tiene que salir ROJO:
 $out"
 printf '%s' "$out" | grep -q 'apagados' || fail "(2b) el detalle tiene que distinguir apagado de ausente:
 $out"
 echo "ok (2b): un cron creado pero apagado tampoco cuenta"
+
+# (2c) El reloj global con otra cadencia no es el reloj: 60 min deja huecos.
+printf '{"jobs":[{"name":"avance-tareas","enabled":true,"schedule":{"kind":"every","everyMs":3600000}},{"name":"corrida-empuje-5","enabled":true}]}\n' >"$CRONS"
+out=$(corre 5)
+printf '%s' "$out" | grep -q '^ROJO *vigilantes' || fail "(2c) avance-tareas a 60 min tiene que salir ROJO:
+$out"
+printf '%s' "$out" | grep -q '15 min' || fail "(2c) el detalle tiene que nombrar la cadencia de 15 min:
+$out"
+echo "ok (2c): avance-tareas con otra cadencia no cuenta"
+
+# (2d) Un vigia por corrida todavia puesto es legado sin migrar: se rechaza.
+crons_con avance-tareas corrida-empuje-5 corrida-vigia-5
+out=$(corre 5)
+printf '%s' "$out" | grep -q '^ROJO *vigilantes' || fail "(2d) un corrida-vigia-5 presente tiene que salir ROJO:
+$out"
+printf '%s' "$out" | grep -q 'corrida-vigia-5' || fail "(2d) el detalle tiene que nombrar el vigia legado:
+$out"
+echo "ok (2d): un vigia por corrida sin migrar bloquea el arranque"
 
 # (3) El primer progreso no enviado: el dueno se queda sin tablero.
 crons_con corrida-vigia-5 corrida-empuje-5; prog_no
@@ -203,7 +228,7 @@ chmod +x "$T/bin/openclaw"
 # secas ahi seria prometer mas de lo que se miro, que es el falso verde contra el que
 # existe este script. Hallazgo de kimi en la revision cruzada, 2026-09-18.
 if [ -n "${TM:-}" ]; then
-  crons_con corrida-vigia-5 corrida-empuje-5; prog_ok
+  crons_con avance-tareas corrida-empuje-5; prog_ok
   out=$(ARRANQUE_SIN_GATEWAY=1 REPO="$R" REF=origin/main TMUX_BIN="$SHIM" OPENCLAW_BIN="$T/bin/openclaw" bash "$S" 5); rc=$?
   [ "$rc" -eq 0 ] || fail "(9) sin rojos tiene que salir 0 aunque haya unknowns; salio $rc:
 $out"

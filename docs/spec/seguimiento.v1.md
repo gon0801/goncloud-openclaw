@@ -14,6 +14,9 @@ traiga es rojo):
 
 1. `[ETIQUETA] Corrida, N de M partes terminadas` — el avance como "N de M partes".
    En `CERRADA` basta un cierre en palabras: ya no queda nada que contar.
+   Cuando el avance no se puede expresar honestamente con un conteo (el reloj
+   global lo desconoce), la línea 1 admite el literal `avance desconocido` en
+   lugar del conteo; nunca se inventa un 0 de 0.
 2. `Que cambio: ...` — una frase, en palabras de usuario.
 3. `Que sigue: ...` — una frase, en palabras de usuario.
 4. `Que necesito de ti: ...` — `nada`, o la pregunta en palabras simples con lo que

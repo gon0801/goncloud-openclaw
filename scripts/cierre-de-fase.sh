@@ -164,6 +164,89 @@ else
   fi
 fi
 
+# (8) Reloj global y vigias legados: un corrida-vigia-<fase> restante es un
+# resto sin migrar y bloquea. avance-tareas se resuelve UNA vez por
+# declarationKey exacta; si esta presente, su scratch dice si queda otro
+# trabajo activo: con otro trabajo el reloj se conserva (VERDE); si solo queda
+# esta fase o nada, el reloj esta rancio (ROJO). Un scratch ilegible es un
+# fallo indeterminado (ROJO). El scratch se lee por UUID, nunca por nombre.
+if [ "${CIERRE_SIN_GATEWAY:-0}" = "1" ] || [ ! -x "$OPENCLAW_BIN" ]; then
+  linea unknown reloj "no consulte el gateway"
+else
+  if ! crons=$(timeout 60 "$OPENCLAW_BIN" cron list --all --json 2>/dev/null); then
+    crons=""
+  fi
+  if [ -z "$crons" ]; then
+    linea unknown reloj "el gateway no contesto"
+  else
+    reloj=$(printf '%s' "$crons" | FASE="$FASE" python3 -c '
+import json, os, sys
+bruto = sys.stdin.read(); i = bruto.find("{")
+try:
+    d = json.loads(bruto[i:])
+except Exception:
+    print("ILEGIBLE"); raise SystemExit
+r = d.get("result", d)
+jobs = r.get("jobs") or r.get("items") or []
+if not isinstance(jobs, list):
+    print("ILEGIBLE"); raise SystemExit
+fase = os.environ["FASE"]
+legados = sorted(j.get("name", "") for j in jobs
+                 if isinstance(j, dict) and j.get("name") == "corrida-vigia-" + fase)
+reloj = [j for j in jobs
+         if isinstance(j, dict) and j.get("declarationKey") == "avance-tareas"]
+if legados:
+    print("LEGADO " + " ".join(legados)); raise SystemExit
+if not reloj:
+    print("AUSENTE"); raise SystemExit
+if len(reloj) > 1:
+    print("DUP"); raise SystemExit
+print("UUID " + str(reloj[0].get("id", "")))
+')
+    case "$reloj" in
+      ILEGIBLE|"") linea unknown reloj "no pude leer la lista de crons";;
+      AUSENTE) linea VERDE reloj "sin reloj global: nada que retirar";;
+      DUP*) linea ROJO reloj "avance-tareas duplicado por declarationKey: no se adivina cual es el bueno";;
+      LEGADO*) linea ROJO reloj "quedan vigias legados sin migrar: ${reloj#LEGADO }";;
+      UUID*)
+        uuid="${reloj#UUID }"
+        if [ -z "$uuid" ]; then
+          linea unknown reloj "el reloj no trae id; no se puede leer su scratch"
+        elif ! scratch=$(timeout 60 "$OPENCLAW_BIN" cron scratch "$uuid" 2>/dev/null) || [ -z "$scratch" ]; then
+          linea ROJO reloj "reloj presente pero su scratch no se pudo leer: fallo indeterminado"
+        else
+          uso=$(printf '%s' "$scratch" | FASE="$FASE" python3 -c '
+import json, os, sys
+bruto = sys.stdin.read(); i = bruto.find("{")
+try:
+    d = json.loads(bruto[i:])
+except Exception:
+    print("MAL"); raise SystemExit
+nodo = d
+if not (isinstance(nodo, dict) and nodo.get("schema") == "seguimiento-clock.v1"):
+    for k in ("result", "scratch", "data", "state"):
+        v = nodo.get(k) if isinstance(nodo, dict) else None
+        if isinstance(v, dict) and v.get("schema") == "seguimiento-clock.v1":
+            nodo = v
+            break
+if not (isinstance(nodo, dict) and nodo.get("schema") == "seguimiento-clock.v1"):
+    print("MAL"); raise SystemExit
+trab = nodo.get("trabajosActivos")
+if not isinstance(trab, list) or any(not isinstance(t, str) for t in trab):
+    print("MAL"); raise SystemExit
+fase = os.environ["FASE"]
+print("OTROS" if any(t != "fase:" + fase for t in trab) else "SOLO")
+')
+          case "$uso" in
+            OTROS) linea VERDE reloj "reloj compartido con otro trabajo activo: se conserva";;
+            SOLO) linea ROJO reloj "reloj global presente y rancio: retirarlo al cerrar lo ultimo";;
+            *) linea ROJO reloj "reloj presente pero su scratch no se pudo leer: fallo indeterminado";;
+          esac
+        fi
+        ;;
+    esac
+  fi
+fi
 # (7) El tablero publicado: lo que el dueno abre tiene que decir lo mismo que el
 # documento versionado, y tiene que estar cerrado. Medido el 2026-09-18: este mismo
 # comprobador imprimio VERDE mientras el tablero de la Fase 7 mostraba 75% y el carril

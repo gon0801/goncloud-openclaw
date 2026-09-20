@@ -354,6 +354,381 @@ describe("plugin smoke import (7.4)", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  function docMinimo(over: Record<string, unknown>): ProgresoDoc {
+    return {
+      schema: "runbook-progress.v1",
+      runbook: "docs/runbooks/autopilot-fase14.md",
+      fase: "14",
+      titulo: "Fase 14",
+      lead: {
+        agente: "muse",
+        inicio: "2026-09-19T10:00:00Z",
+        actualizado: "2026-09-19T10:30:00Z",
+      },
+      atencion_requerida: { necesaria: false, motivo: null, desde: null },
+      siguiente_paso: "Terminar la corrección y comenzar la revisión.",
+      carriles: [
+        {
+          id: "M",
+          nombre: "Implementación",
+          repo: "gon0801/goncloud-openclaw",
+          rama: null,
+          tareas: ["14.1", "14.2"],
+          estado: "implementando",
+          paso_loop: 1,
+          pr: null,
+          head: null,
+          approve_lead: null,
+          ci: "sin-ci",
+          coderabbit: "pendiente",
+          residuales: [],
+          detenido_por: null,
+          ultimo_evento: {
+            at: "2026-09-19T10:20:00Z",
+            que: "Muse está corrigiendo el último caso del vigilante.",
+          },
+        },
+      ],
+      cola: [],
+      eventos: [],
+      cierre: { at: null, telegram_message_id: null, resumen: null },
+      ...over,
+    } as ProgresoDoc;
+  }
+
+  it("list expone solo el doc abierto con conteos exactos y trabajoId estable", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-list-"));
+    _resetPlanCacheForTest();
+    _setPlanExecForTest((_c, _a, _o, cb) => {
+      const payload = JSON.stringify({
+        type: "file",
+        encoding: "base64",
+        content: Buffer.from("| 14.1 | a | cc:DONE |\n| 14.2 | b | cc:TODO |\n", "utf8").toString("base64"),
+      });
+      setImmediate(() => cb(null, payload));
+      return { kill() {} };
+    });
+    try {
+      const host = await cargar({ stateDir: dir });
+      assert.equal(host.metodos.get("runbook.progress.list")?.opts?.scope, "operator.read");
+      const abierto = docMinimo({
+        corrida: "vigia-test",
+        plan: { repo: "gon0801/goncloud-openclaw", ruta: "Plans.md", seccion: null },
+      });
+      assert.deepEqual(await llamarMetodo(host.metodos, "runbook.progress.set", abierto), { ok: true });
+      const cerrado = docMinimo({
+        fase: "15",
+        titulo: "Fase 15",
+        cierre: { at: "2026-09-19T11:00:00Z", telegram_message_id: 7, resumen: "cierre de prueba" },
+      });
+      assert.deepEqual(await llamarMetodo(host.metodos, "runbook.progress.set", cerrado), { ok: true });
+
+      const lista = await llamarMetodo(host.metodos, "runbook.progress.list", {});
+      assert.equal(lista.ok, true);
+      assert.equal(lista.activas.length, 1, "el doc cerrado no debe aparecer");
+      assert.equal(lista.activas[0].trabajoId, "corrida:vigia-test");
+      assert.deepEqual(lista.activas[0].progreso,
+        { kind: "conocido", completadas: 1, total: 2, porcentaje: 50 });
+
+      const lista2 = await llamarMetodo(host.metodos, "runbook.progress.list", {});
+      assert.equal(lista2.activas[0].trabajoId, lista.activas[0].trabajoId, "trabajoId inestable");
+      assert.deepEqual(lista2.activas[0].progreso, lista.activas[0].progreso);
+    } finally {
+      _setPlanExecForTest(undefined);
+      _resetPlanCacheForTest();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("list: corrupt active work is reported, never hidden", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-list-mal-"));
+    const host = await cargar({ stateDir: dir });
+    assert.deepEqual(
+      await llamarMetodo(host.metodos, "runbook.progress.set", docMinimo({})),
+      { ok: true },
+    );
+    mkdirSync(join(dir, "progress", "c"), { recursive: true });
+    writeFileSync(join(dir, "progress", "15.json"), "{no es json", "utf8");
+    writeFileSync(join(dir, "progress", "16.json"),
+      JSON.stringify({ schema: "runbook-progress.v1", fase: "nope" }), "utf8");
+    mkdirSync(join(dir, "progress", "c", "rota.json"), { recursive: true });
+    const lista = await llamarMetodo(host.metodos, "runbook.progress.list", {});
+    assert.equal(lista.ok, true);
+    const ids = lista.activas.map((a: { trabajoId: string }) => a.trabajoId).sort();
+    assert.deepEqual(ids, ["corrida:rota", "fase:14", "fase:15", "fase:16"]);
+    const mots = lista.problemas.map((p: { motivo: string }) => p.motivo).sort();
+    assert.deepEqual(mots, ["documento-invalido", "ilegible", "json-invalido"]);
+    for (const a of lista.activas) {
+      if (a.trabajoId === "fase:14") continue;
+      assert.deepEqual(a.progreso, { kind: "desconocido", motivo: "unidad-desconocida" });
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("decide: the last active work broken becomes DETENIDA", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-decide-mal-2-"));
+    const host = await cargar({ stateDir: dir });
+    mkdirSync(join(dir, "progress"), { recursive: true });
+    writeFileSync(join(dir, "progress", "14.json"), "{roto", "utf8");
+    const mod = await import("./index.ts");
+    const T = 1_700_000_000_000;
+    try {
+      mod._setRelojSeguimientoForTest(() => T);
+      const r0 = await llamarMetodo(host.metodos, "runbook.progress.decide", { modo: "iniciar", estado: null });
+      assert.equal(r0.accion, "NO_REPLY");
+      mod._setRelojSeguimientoForTest(() => T + 900_000);
+      const r1 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r0.estado });
+      assert.equal(r1.accion, "SEND");
+      assert.equal(r1.tipo, "inmediato");
+      assert.match(r1.mensaje, /Fase 14/);
+      assert.doesNotMatch(r1.mensaje, /\{roto/);
+      mod._setRelojSeguimientoForTest(() => T + 901_000);
+      // Contrato público: el llamador combina `estadoTrasConfirmar` solo con
+      // el messageId del nivel superior; el anidado queda informativo.
+      const confirmado1 = { ...r1.estadoTrasConfirmar, messageId: 9 };
+      const r2 = await llamarMetodo(host.metodos, "runbook.progress.decide", {
+        modo: "tick",
+        estado: confirmado1,
+      });
+      assert.equal(r2.accion, "NO_REPLY");
+    } finally {
+      mod._setRelojSeguimientoForTest(undefined);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("decide: iniciar keeps standalone work in the initial cut", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-decide-suelta-"));
+    const host = await cargar({ stateDir: dir });
+    const mod = await import("./index.ts");
+    const T = 1_700_000_000_000;
+    const suelta = {
+      nombre: "Trabajo suelto",
+      progreso: { kind: "conocido", completadas: 0, total: 1, porcentaje: 0 },
+      actividad: {
+        detalle: "En curso",
+        iniciadaEn: "2026-09-20T10:00:00Z",
+        ultimaEvidencia: "Comenzó",
+      },
+    };
+    try {
+      mod._setRelojSeguimientoForTest(() => T);
+      const r0 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "iniciar", estado: null, tareasSueltas: [suelta] });
+      assert.equal(r0.accion, "NO_REPLY");
+      assert.deepEqual(r0.estado.trabajosActivos, ["suelta:Trabajo suelto"]);
+      mod._setRelojSeguimientoForTest(() => T + 900_000);
+      const r1 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r0.estado, tareasSueltas: [suelta] });
+      assert.equal(r1.accion, "NO_REPLY");
+      assert.deepEqual(r1.estado.ultimoEstado, r0.estado.ultimoEstado);
+      mod._setRelojSeguimientoForTest(() => T + 1_800_000);
+      const r2 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r1.estado, tareasSueltas: [suelta] });
+      assert.equal(r2.accion, "SEND");
+      assert.equal(r2.tipo, "periodico");
+      assert.match(r2.mensaje, /Trabajo suelto — 0% \(0\/1\)/);
+    } finally {
+      mod._setRelojSeguimientoForTest(undefined);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("decide: phase plus standalone keep both identities", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-decide-mixto-"));
+    const host = await cargar({ stateDir: dir });
+    assert.deepEqual(
+      await llamarMetodo(host.metodos, "runbook.progress.set", docMinimo({})),
+      { ok: true },
+    );
+    const mod = await import("./index.ts");
+    const T = 1_700_000_000_000;
+    const suelta = {
+      nombre: "Suelta",
+      progreso: { kind: "conocido", completadas: 1, total: 1, porcentaje: 100 },
+      actividad: {
+        detalle: "Cierre suelto.",
+        iniciadaEn: "2026-09-20T10:00:00Z",
+        ultimaEvidencia: "Listo.",
+      },
+    };
+    try {
+      mod._setRelojSeguimientoForTest(() => T);
+      const r0 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "iniciar", estado: null, tareasSueltas: [suelta] });
+      assert.equal(r0.accion, "NO_REPLY");
+      assert.deepEqual(r0.estado.trabajosActivos, ["fase:14", "suelta:Suelta"]);
+    } finally {
+      mod._setRelojSeguimientoForTest(undefined);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("decide: attention at minute 15 answers immediately end to end", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-decide-aten-"));
+    const host = await cargar({ stateDir: dir });
+    const doc = docMinimo({});
+    doc.atencion_requerida = { necesaria: true, motivo: "Elegir A o B", desde: null };
+    assert.deepEqual(await llamarMetodo(host.metodos, "runbook.progress.set", doc), { ok: true });
+    const mod = await import("./index.ts");
+    const T = 1_700_000_000_000;
+    try {
+      mod._setRelojSeguimientoForTest(() => T);
+      const r0 = await llamarMetodo(host.metodos, "runbook.progress.decide", { modo: "iniciar", estado: null });
+      assert.equal(r0.accion, "NO_REPLY");
+      mod._setRelojSeguimientoForTest(() => T + 900_000);
+      const r1 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r0.estado });
+      assert.equal(r1.accion, "SEND");
+      assert.equal(r1.tipo, "inmediato");
+      assert.match(r1.mensaje, /^\[NECESITO TU RESPUESTA\] Corrida, /);
+      assert.match(r1.mensaje, /Elegir A o B/);
+    } finally {
+      mod._setRelojSeguimientoForTest(undefined);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("decide: explicit immediates must already be v1", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-decide-v1-"));
+    const host = await cargar({ stateDir: dir });
+    const mod = await import("./index.ts");
+    const bueno = "[DETENIDA] Corrida, 1 de 2 partes terminadas\nQue cambio: algo material\nQue sigue: sigue igual\nQue necesito de ti: nada.";
+    try {
+      mod._setRelojSeguimientoForTest(() => 1_700_000_000_000);
+      const r0 = await llamarMetodo(host.metodos, "runbook.progress.decide", { modo: "iniciar", estado: null });
+      assert.equal(r0.accion, "NO_REPLY");
+      const r1 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r0.estado, inmediato: { tipo: "DETENIDA", texto: bueno } });
+      assert.equal(r1.accion, "SEND");
+      if (r1.accion !== "SEND") throw new Error("explicito valido inesperado");
+      assert.equal(r1.mensaje, bueno);
+      const r2 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r0.estado, inmediato: { tipo: "DETENIDA", texto: "cuota agotada" } });
+      assert.deepEqual(r2, { ok: false, razon: "evento-invalido" });
+      const r3 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r0.estado, inmediato: { tipo: "DETENIDA", texto: bueno.replace("[DETENIDA]", "[AVANZA]") } });
+      assert.deepEqual(r3, { ok: false, razon: "evento-invalido" });
+    } finally {
+      mod._setRelojSeguimientoForTest(undefined);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("decide: impossible standalone counts are evento-invalido", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-decide-lim-"));
+    const host = await cargar({ stateDir: dir });
+    const suelta = (progreso: unknown) => ({
+      nombre: "Suelta",
+      progreso,
+      actividad: { detalle: "d", iniciadaEn: "2026-09-19T10:00:00Z", ultimaEvidencia: "e" },
+    });
+    for (const [nombre, progreso] of [
+      ["negativos", { kind: "conocido", completadas: -3, total: -1, porcentaje: 900 }],
+      ["no-enteros", { kind: "conocido", completadas: 1.5, total: 2, porcentaje: 75 }],
+      ["mas-completadas", { kind: "conocido", completadas: 3, total: 2, porcentaje: 150 }],
+      ["porcentaje-mal", { kind: "conocido", completadas: 1, total: 2, porcentaje: 90 }],
+      ["cero-roto", { kind: "conocido", completadas: 1, total: 0, porcentaje: 0 }],
+      ["porcentaje-101", { kind: "conocido", completadas: 2, total: 2, porcentaje: 101 }],
+      ["motivo-malo", { kind: "desconocido", motivo: "otro" }],
+    ] as Array<[string, unknown]>) {
+      const r = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "iniciar", estado: null, tareasSueltas: [suelta(progreso)] });
+      assert.deepEqual(r, { ok: false, razon: "evento-invalido" }, nombre);
+    }
+    {
+      const mala = suelta({ kind: "conocido", completadas: 1, total: 2, porcentaje: 50 });
+      mala.actividad.iniciadaEn = "manana";
+      const r = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "iniciar", estado: null, tareasSueltas: [mala] });
+      assert.deepEqual(r, { ok: false, razon: "evento-invalido" }, "iniciadaEn-basura");
+    }
+    for (const [nombre, progreso] of [
+      ["cero", { kind: "conocido", completadas: 0, total: 0, porcentaje: 0 }],
+      ["medio", { kind: "conocido", completadas: 1, total: 2, porcentaje: 50 }],
+      ["cien", { kind: "conocido", completadas: 2, total: 2, porcentaje: 100 }],
+      ["tercio", { kind: "conocido", completadas: 1, total: 3, porcentaje: 33 }],
+    ] as Array<[string, unknown]>) {
+      const r = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "iniciar", estado: null, tareasSueltas: [suelta(progreso)] });
+      assert.equal(r.accion, "NO_REPLY", nombre);
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("decide: malformed scratch never resets the cut", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-decide-mal-"));
+    const host = await cargar({ stateDir: dir });
+    assert.equal(host.metodos.get("runbook.progress.decide")?.opts?.scope, "operator.read");
+    assert.deepEqual(
+      await llamarMetodo(host.metodos, "runbook.progress.decide", { modo: "tick", estado: {} }),
+      { ok: false, razon: "estado-invalido" },
+    );
+    assert.deepEqual(
+      await llamarMetodo(host.metodos, "runbook.progress.decide", { modo: "tick", estado: null }),
+      { ok: false, razon: "estado-invalido" },
+    );
+    assert.deepEqual(
+      await llamarMetodo(host.metodos, "runbook.progress.decide", { modo: "iniciar", estado: {} }),
+      { ok: false, razon: "estado-invalido" },
+    );
+    assert.deepEqual(
+      await llamarMetodo(host.metodos, "runbook.progress.decide", { modo: "raro", estado: null }),
+      { ok: false, razon: "evento-invalido" },
+    );
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("decide: explicit init, silent first tick, due periodic, immediate bypass", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-74-decide-"));
+    const host = await cargar({ stateDir: dir });
+    assert.deepEqual(
+      await llamarMetodo(host.metodos, "runbook.progress.set", docMinimo({})),
+      { ok: true },
+    );
+    const mod = await import("./index.ts");
+    const T = 1_700_000_000_000;
+    const TS = 1_700_000_000;
+    try {
+      mod._setRelojSeguimientoForTest(() => T);
+      const r0 = await llamarMetodo(host.metodos, "runbook.progress.decide", { modo: "iniciar", estado: null });
+      assert.equal(r0.accion, "NO_REPLY");
+      assert.deepEqual(r0.estado.corte, { kind: "esperando-primer-reporte", inicioVentana: TS });
+
+      mod._setRelojSeguimientoForTest(() => T + 900_000);
+      const r1 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r0.estado });
+      assert.equal(r1.accion, "NO_REPLY");
+
+      mod._setRelojSeguimientoForTest(() => T + 1_800_000);
+      const r2 = await llamarMetodo(host.metodos, "runbook.progress.decide",
+        { modo: "tick", estado: r1.estado });
+      assert.equal(r2.accion, "SEND");
+      assert.equal(r2.tipo, "periodico");
+      assert.match(r2.mensaje, /Fase 14/);
+      assert.match(r2.mensaje, /sigue en curso/);
+      assert.deepEqual(r2.estadoTrasConfirmar.corte,
+        { kind: "reporte-confirmado", ultimoReporteConfirmado: TS + 1800 });
+
+      mod._setRelojSeguimientoForTest(() => T + 901_000);
+      const v1detenida = "[DETENIDA] Corrida, 1 de 2 partes terminadas\nQue cambio: cuota agotada en el turno\nQue sigue: sigue igual\nQue necesito de ti: nada.";
+      const r3 = await llamarMetodo(host.metodos, "runbook.progress.decide", {
+        modo: "tick",
+        estado: r0.estado,
+        inmediato: { tipo: "DETENIDA", texto: v1detenida },
+      });
+      assert.equal(r3.accion, "SEND");
+      assert.equal(r3.tipo, "inmediato");
+      assert.equal(r3.mensaje, v1detenida);
+      assert.deepEqual(r3.estadoTrasConfirmar.corte,
+        { kind: "esperando-primer-reporte", inicioVentana: TS });
+    } finally {
+      mod._setRelojSeguimientoForTest(undefined);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("scopes: set operator.write, get operator.read", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-scopes-"));
     const host = await cargar({ stateDir: dir });

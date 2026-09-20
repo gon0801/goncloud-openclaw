@@ -1,5 +1,5 @@
 {
- "schema": "corrida.v2",
+ "schema": "corrida.v9",
  "id": "x",
  "runbook": "docs/runbooks/autopilot-fase9.md",
  "vigia": "claw",
