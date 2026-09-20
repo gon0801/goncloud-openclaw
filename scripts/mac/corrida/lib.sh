@@ -302,8 +302,11 @@ os.rename(t,r)
 "
 }
 
-# validar_registro: el criterio unico de corrida.v1 vive aqui (la prueba 9.1 carga
-# este archivo); la lista dura es la regla 3 de 00-project-spec.
+# validar_registro: el criterio unico de corrida.v1/v2 vive aqui (la prueba 9.1
+# carga este archivo); la lista dura es la regla 3 de 00-project-spec.
+# Dual-read: v1 trae cron_vigia_id (el id del cron hombre-muerto por corrida);
+# v2 trae seguimiento_global:true y NADA de cron_vigia_id (el reloj es el unico
+# avance-tareas global). Lo que no sea exactamente una de las dos es ROTO.
 validar_registro() { # $1 json del registro; 0 = valido; imprime ROTO:<motivo> por defecto
   VREG="$1" python3 <<'PY' 2>/dev/null
 import json,os,re,sys
@@ -316,7 +319,15 @@ e=[]
 def malo(m):
   if m not in e: e.append(m)
 if d.get('vigia') not in ('claw','hermes'): malo('vigia fuera del conjunto')
-if d.get('schema')!='corrida.v1': malo('schema distinto')
+schema=d.get('schema')
+if schema=='corrida.v1':
+  if not isinstance(d.get('cron_vigia_id'),str) or not d.get('cron_vigia_id'):
+    malo('sin cron_vigia_id')
+elif schema=='corrida.v2':
+  if d.get('seguimiento_global') is not True: malo('sin seguimiento_global')
+  if 'cron_vigia_id' in d: malo('v2 con cron_vigia_id')
+else:
+  malo('schema distinto')
 for c in ('id','runbook'):
   if not d.get(c): malo('sin '+c)
 canal=d.get('canal')
@@ -325,7 +336,7 @@ if not isinstance(canal,dict):
 else:
   if not canal.get('cron'): malo('sin canal.cron')
   if not canal.get('destino'): malo('sin canal.destino')
-for c in ('cli_modos','cron_vigia_id','inicio'):
+for c in ('cli_modos','inicio'):
   if not d.get(c): malo('sin '+c)
 if not isinstance(d.get('simulacro'),bool): malo('simulacro no es booleano')
 if d.get('estado') not in ('abierta','cerrada'): malo('estado fuera del conjunto')
@@ -472,11 +483,22 @@ flag_de_tabla() { # $1 flag de la tabla; rc 2 = invalido (mensaje a stderr)
 
 # corrida_mensaje <id> <ETIQUETA> <avance> <cambio> <sigue> <necesito>
 # El avance es la linea 1 tras "Corrida, " (p. ej. "2 de 5 partes terminadas").
-# Valida contra seguimiento.v1 ANTES de mandar; anota en mensajes.jsonl; 0 = enviado.
+# Caso cerrado por etiqueta:
+# - AVANZA: valida contra seguimiento.v1 y acumula {at,cambio,sigue,necesito}
+#   en eventos-seguimiento.jsonl para el proximo corte global. NO llama a
+#   message send ni anota entrega en mensajes.jsonl: los llamadores viejos que
+#   mandaban por cambio ya no pueden saltarse el consolidador de 30 minutos.
+# - NECESITO TU RESPUESTA, DETENIDA, CERRADA: entrega inmediata por
+#   seguimiento.v1 con su fila en mensajes.jsonl, como siempre.
+# - Cualquier otra etiqueta falla cerrada: no se acumula ni se manda nada.
 corrida_mensaje() {
   local id="$1" etq="$2" avance="$3" cambio="$4" sigue="$5" necesito="$6"
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
+  case "$etq" in
+    AVANZA|NECESITO\ TU\ RESPUESTA|DETENIDA|CERRADA) ;;
+    *) echo "corrida_mensaje: etiqueta fuera del conjunto: $etq" >&2; return 1;;
+  esac
   local sim; sim="$(json_campo "$reg" simulacro)"
   local M; M="$(mktemp)" || return 1
   {
@@ -486,21 +508,48 @@ corrida_mensaje() {
     printf 'Que necesito de ti: %s\n' "$necesito"
   } > "$M"
   mensaje_valido "$M" || { echo "mensaje fuera de contrato" >&2; rm -f "$M"; return 1; }
-  [ "$sim" = "true" ] && sed -i.bak '1s/^/[SIMULACRO] /' "$M" && rm -f "$M.bak"
+  rm -f "$M"
+  if [ "$etq" = "AVANZA" ]; then
+    local evdir evtmp now
+    evdir="$(dirname "$reg")"
+    now="$(date +%Y-%m-%dT%H:%M:%S%z)"
+    evtmp="$(mktemp)" || return 1
+    CORR_MSG_CAMBIO="$cambio" CORR_MSG_SIGUE="$sigue" CORR_MSG_NECESITO="$necesito" CORR_MSG_AT="$now" \
+    python3 -c "
+import json,os
+d={'at':os.environ['CORR_MSG_AT'],'cambio':os.environ['CORR_MSG_CAMBIO'],
+'sigue':os.environ['CORR_MSG_SIGUE'],'necesito':os.environ['CORR_MSG_NECESITO']}
+open('$evtmp','w').write(json.dumps(d)+chr(10))
+" 2>/dev/null || { rm -f "$evtmp"; echo "corrida_mensaje: no se pudo acumular el evento" >&2; return 1; }
+    if [ ! -e "$evdir/eventos-seguimiento.jsonl" ]; then
+      : > "$evdir/eventos-seguimiento.jsonl" && chmod 600 "$evdir/eventos-seguimiento.jsonl"
+    fi
+    cat "$evtmp" >> "$evdir/eventos-seguimiento.jsonl" || { rm -f "$evtmp"; echo "corrida_mensaje: no se pudo acumular el evento" >&2; return 1; }
+    rm -f "$evtmp"
+    return 0
+  fi
+  local M2; M2="$(mktemp)" || return 1
+  {
+    printf '[%s] Corrida, %s\n' "$etq" "$avance"
+    printf 'Que cambio: %s\n' "$cambio"
+    printf 'Que sigue: %s\n' "$sigue"
+    printf 'Que necesito de ti: %s\n' "$necesito"
+  } > "$M2"
+  [ "$sim" = "true" ] && sed -i.bak '1s/^/[SIMULACRO] /' "$M2" && rm -f "$M2.bak"
   local dest; dest="$(json_campo "$reg" canal.destino)"
-  [ -n "$dest" ] || { echo "registro sin destino" >&2; rm -f "$M"; return 1; }
+  [ -n "$dest" ] || { echo "registro sin destino" >&2; rm -f "$M2"; return 1; }
   local texto rc=0 sil=""
-  # seguimiento.v1: lo rutinario (AVANZA, CERRADA) en silencio; DETENIDA y
+  # seguimiento.v1: lo rutinario (CERRADA) en silencio; DETENIDA y
   # NECESITO TU RESPUESTA suenan: en la etiqueta que pide respuesta, fallar hacia
   # silencio es el peor sentido de fallar.
-  case "$etq" in AVANZA|CERRADA) sil="--silent";; esac
-  texto="$(cat "$M")"
+  case "$etq" in CERRADA) sil="--silent";; esac
+  texto="$(cat "$M2")"
   con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" message send --channel telegram -t "$dest" $sil --json -m "$texto" >/dev/null 2>&1 || rc=1
   CORR_MSG_ETQ="$etq" CORR_MSG_OK="$rc" CORR_MSG_DIR="$CORRIDA_STATE/$id" python3 -c "
 import json,os
 d={'etiqueta':os.environ['CORR_MSG_ETQ'],'ok':os.environ['CORR_MSG_OK']=='0'}
 open(os.path.join(os.environ['CORR_MSG_DIR'],'mensajes.jsonl'),'a').write(json.dumps(d)+chr(10))
 " 2>/dev/null
-  rm -f "$M"
+  rm -f "$M2"
   return $rc
 }

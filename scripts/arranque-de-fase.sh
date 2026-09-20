@@ -112,8 +112,10 @@ else
   fi
 fi
 
-# (3) Los DOS crons de seguimiento. Es la tarea 0.4, y es la que falto el 2026-09-18.
-# Sin ellos nadie se entera de que un carril se atoro: la fase corre a ciegas.
+# (3) El reloj global y el empuje. Es la tarea 0.4: sin ellos nadie se entera de
+# que un carril se atoro. El reloj es el unico avance-tareas, habilitado y a
+# cadencia de 15 min; el empuje es corrida-empuje-<fase>. Un corrida-vigia-<fase>
+# todavia puesto es un resto sin migrar y bloquea el arranque.
 if [ "${ARRANQUE_SIN_GATEWAY:-0}" = "1" ] || [ ! -x "$OPENCLAW_BIN" ]; then
   linea unknown vigilantes "no consulte el gateway"
 else
@@ -123,10 +125,7 @@ else
   if [ -z "$crons" ]; then
     linea unknown vigilantes "el gateway no contesto"
   else
-    faltan=""
-    apagados=""
-    for c in "corrida-vigia-$FASE" "corrida-empuje-$FASE"; do
-      est=$(printf '%s' "$crons" | CRON="$c" python3 -c '
+    estado=$(printf '%s' "$crons" | FASE="$FASE" python3 -c '
 import json, os, sys
 bruto = sys.stdin.read(); i = bruto.find("{")
 try:
@@ -134,27 +133,55 @@ try:
 except Exception:
     print("ILEGIBLE"); raise SystemExit
 r = d.get("result", d)
-for j in (r.get("jobs") or r.get("items") or []):
-    if j.get("name") == os.environ["CRON"]:
-        print("ON" if j.get("enabled") else "OFF"); raise SystemExit
-print("FALTA")
+jobs = r.get("jobs") or r.get("items") or []
+if not isinstance(jobs, list):
+    print("ILEGIBLE"); raise SystemExit
+fase = os.environ["FASE"]
+marcas = []
+av = [j for j in jobs if isinstance(j, dict) and j.get("name") == "avance-tareas"]
+if not av:
+    marcas.append("FALTA-avance-tareas")
+elif not av[0].get("enabled"):
+    marcas.append("OFF-avance-tareas")
+else:
+    s = av[0].get("schedule") or {}
+    if not (isinstance(s, dict) and s.get("kind") == "every" and s.get("everyMs") == 900000):
+        marcas.append("RITMO-avance-tareas")
+em = [j for j in jobs if isinstance(j, dict) and j.get("name") == "corrida-empuje-" + fase]
+if not em:
+    marcas.append("FALTA-corrida-empuje-" + fase)
+elif not em[0].get("enabled"):
+    marcas.append("OFF-corrida-empuje-" + fase)
+if any(isinstance(j, dict) and j.get("name") == "corrida-vigia-" + fase for j in jobs):
+    marcas.append("LEGADO-corrida-vigia-" + fase)
+print(" ".join(marcas) if marcas else "OK")
 ')
-      case "$est" in
-        ON) : ;;
-        OFF) apagados="$apagados $c" ;;
-        ILEGIBLE) faltan="ILEGIBLE"; break ;;
-        *) faltan="$faltan $c" ;;
-      esac
-    done
-    if [ "$faltan" = "ILEGIBLE" ]; then
-      linea unknown vigilantes "no pude leer la lista de crons"
-    elif [ -n "$faltan" ]; then
-      linea ROJO vigilantes "sin crear:$faltan — la fase corre sin alarma y nadie se entera si un carril se atora"
-    elif [ -n "$apagados" ]; then
-      linea ROJO vigilantes "creados pero apagados:$apagados"
-    else
-      linea VERDE vigilantes "corrida-vigia-$FASE y corrida-empuje-$FASE creados y encendidos"
-    fi
+    case "$estado" in
+      ILEGIBLE|"") linea unknown vigilantes "no pude leer la lista de crons";;
+      OK) linea VERDE vigilantes "avance-tareas cada 15 min y corrida-empuje-$FASE creados y encendidos";;
+      *)
+        faltan=""; apagados=""; ritmo=""; legado=""
+        for m in $estado; do
+          case "$m" in
+            FALTA-*) faltan="$faltan ${m#FALTA-}" ;;
+            OFF-*) apagados="$apagados ${m#OFF-}" ;;
+            RITMO-*) ritmo="RITMO" ;;
+            LEGADO-*) legado="${m#LEGADO-}" ;;
+          esac
+        done
+        if [ -n "$legado" ]; then
+          linea ROJO vigilantes "quedo un vigia por corrida ($legado): migralo al reloj global antes de arrancar"
+        elif [ -n "$faltan" ]; then
+          linea ROJO vigilantes "sin crear:$faltan — la fase corre sin alarma y nadie se entera si un carril se atora"
+        elif [ -n "$apagados" ]; then
+          linea ROJO vigilantes "creados pero apagados:$apagados"
+        elif [ -n "$ritmo" ]; then
+          linea ROJO vigilantes "avance-tareas sin cadencia de 15 min: el corte de 30 min sale de ahi"
+        else
+          linea unknown vigilantes "no pude leer la lista de crons"
+        fi
+        ;;
+    esac
   fi
 fi
 

@@ -1,14 +1,15 @@
 #!/bin/bash
 # 9.5 latido + 9.8 rama por defecto en rojo. Con openclaw de mentira (anota, no
-# manda), tmux de mentira, gh de mentira y reloj inyectado: cambio => 1 mensaje;
-# 59 min sin cambio => 0, 60 => 1; dialogo de 10 min => NECESITO aunque no haya
-# pasado el tope; dialogo sin cobertura de politica => NECESITO inmediato; dos
-# ticks seguidos no duplican; sin corridas => cero llamadas. El mensaje sale
-# aunque falle el evento al vigia, y al reves; hermes lee la linea en
-# eventos.jsonl, claw recibe system event. 9.8: CI en fallo => un DETENIDA en
-# lenguaje de usuario y registro local con sha, autor y archivos; el mismo sha
-# en el tick siguiente => cero (mutacion sin memoria muere); CI verde => cero;
-# gh caido => cero avisos y el latido sigue. Uso: bash scripts/tests/test-corrida-latido.sh
+# manda), tmux de mentira, gh de mentira y reloj inyectado: lo rutinario
+# (AVANZA) se acumula para el corte global de 30 min sin mandar; dialogo de
+# 10 min => NECESITO aunque no haya pasado el tope; dialogo sin cobertura de
+# politica => NECESITO inmediato; dos ticks seguidos no duplican; sin corridas
+# => cero llamadas. El mensaje sale aunque falle el evento al vigia, y al
+# reves; hermes lee la linea en eventos.jsonl, claw recibe system event.
+# 9.8: CI en fallo => un DETENIDA en lenguaje de usuario y registro local con
+# sha, autor y archivos; el mismo sha en el tick siguiente => cero (mutacion
+# sin memoria muere); CI verde => cero; gh caido => cero avisos y el latido
+# sigue. Uso: bash scripts/tests/test-corrida-latido.sh
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
@@ -98,6 +99,10 @@ trabajando_en() { # $1 epoch: las tres sesiones con pantalla reciente
 }
 tick() { CORR_AHORA="$1" bash "$CORR" latido; }
 msgs() { local n; n="$(grep -c "message send" "$LLAMADAS" 2>/dev/null)"; printf '%s' "${n:-0}"; }
+acum() { # $1 corrida -> eventos rutinarios acumulados para el corte global
+  local f="$CORRIDA_STATE/$1/eventos-seguimiento.jsonl" n
+  n="$(grep -c . "$f" 2>/dev/null)"; printf '%s' "${n:-0}"
+}
 evts() { local n; n="$(grep -c "system event" "$LLAMADAS" 2>/dev/null)"; printf '%s' "${n:-0}"; }
 solo_dejar() { # $@ ids que siguen abiertas: el resto se cierra (no comparten sesion)
   local d id
@@ -178,29 +183,29 @@ tick "$T0" || fail "el latido fallo sin corridas abiertas"
 [ "$(evts)" = "0" ] || fail "sin corridas abiertas desperto al vigia"
 [ ! -e "$CORRIDA_STATE/basura/latido.json" ] || fail "el latido le hablo a un dir sin registro valido"
 
-# (2) primer tick: un AVANZA; dos ticks seguidos no duplican.
+# (2) primer tick: un AVANZA acumulado (sin mandar); dos ticks seguidos no duplican.
 montar_corrida lat-1 avanza
 trabajando_en "$T0"
 tick "$T0" || fail "el primer tick del latido fallo"
-[ "$(msgs)" = "1" ] || fail "el primer tick mando $(msgs) mensajes (debia 1)"
-grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[AVANZA\]" || fail "el primer mensaje no es AVANZA"
-grep "message send" "$LLAMADAS" | tail -1 | grep -q -- "--silent" || fail "lo rutinario no sale silencioso"
-grep -q '"etiqueta": "AVANZA", "ok": true' "$CORRIDA_STATE/lat-1/mensajes.jsonl" || fail "el mensaje no quedo anotado"
+[ "$(msgs)" = "0" ] || fail "el primer tick mando $(msgs) mensajes (lo rutinario se acumula, no se manda)"
+[ "$(acum lat-1)" = "1" ] || fail "el primer tick no acumulo el AVANZA (acum=$(acum lat-1))"
 [ -f "$CORRIDA_STATE/lat-1/latido.json" ] || fail "el latido no dejo memoria"
 [ "$(evjson lat-1 mensaje)" = "1" ] || fail "el mensaje no quedo en eventos.jsonl"
 trabajando_en "$((T0 + 300))"
 tick "$((T0 + 300))" || fail "el segundo tick fallo"
-[ "$(msgs)" = "1" ] || fail "dos ticks seguidos duplicaron (msgs=$(msgs)"
+[ "$(msgs)" = "0" ] || fail "dos ticks seguidos mandaron (msgs=$(msgs))"
+[ "$(acum lat-1)" = "1" ] || fail "dos ticks seguidos duplicaron el acumulado (acum=$(acum lat-1))"
 [ "$(evjson lat-1 mensaje)" = "1" ] || fail "dos ticks seguidos duplicaron eventos"
 
-# (3) 59 min sin cambio => 0; 60 => 1 (mutacion sin latido por hora).
+# (3) 59 min sin cambio => nada; 60 => se acumula (mutacion sin latido por hora).
 trabajando_en "$((T0 + 3540))"
 tick "$((T0 + 3540))" || fail "el tick de los 59 min revinto"
-[ "$(msgs)" = "1" ] || fail "a los 59 min sin cambio salieron $(msgs) mensajes (debia 0)"
+[ "$(msgs)" = "0" ] || fail "a los 59 min sin cambio salieron $(msgs) mensajes (debia 0)"
+[ "$(acum lat-1)" = "1" ] || fail "a los 59 min se acumulo sin hora (acum=$(acum lat-1))"
 trabajando_en "$((T0 + 3600))"
 tick "$((T0 + 3600))" || fail "el tick de los 60 min revinto"
-[ "$(msgs)" = "2" ] || fail "a los 60 min sin cambio salieron $(msgs) mensajes (debia 1)"
-grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[AVANZA\]" || fail "el mensaje de la hora no es AVANZA"
+[ "$(msgs)" = "0" ] || fail "a los 60 min salieron $(msgs) mensajes (lo rutinario no se manda)"
+[ "$(acum lat-1)" = "2" ] || fail "a los 60 min no se acumulo el segundo AVANZA (acum=$(acum lat-1))"
 
 # (4) tope: un cambio a menos de 15 min del ultimo mensaje no sale solo (mutacion sin tope).
 python3 - "$CORRIDA_STATE/lat-1/progress.json" <<'PY'
@@ -211,14 +216,15 @@ d['carriles'][1]['estado']='mergeado'
 json.dump(d,open(p,'w'),indent=1)
 PY
 tick "$((T0 + 3900))" || fail "el tick del tope revinto"
-[ "$(msgs)" = "2" ] || fail "el cambio dentro del tope salio igual (msgs=$(msgs))"
+[ "$(msgs)" = "0" ] || fail "el cambio dentro del tope salio igual (msgs=$(msgs))"
+[ "$(acum lat-1)" = "2" ] || fail "el cambio dentro del tope se acumulo igual (acum=$(acum lat-1))"
 
 # (5) carril callado 31 min (20 min despues del ultimo mensaje): DETENIDA + vigia despierto.
 watch_a m-a "$((T0 + 4800 - 1900))"
 watch_a m-lead "$((T0 + 4800 - 120))"
 watch_a m-b "$((T0 + 4800 - 120))"
 tick "$((T0 + 4800))" || fail "el tick del callado revinto"
-[ "$(msgs)" = "3" ] || fail "el carril callado no genero su mensaje (msgs=$(msgs))"
+[ "$(msgs)" = "1" ] || fail "el carril callado no genero su mensaje (msgs=$(msgs))"
 grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[DETENIDA\]" || fail "el carril callado no salio como DETENIDA"
 [ "$(evts)" = "1" ] || fail "el vigia no se desperto con el carril callado (evts=$(evts))"
 grep "system event" "$LLAMADAS" | tail -1 | grep -q "relanzar" || fail "el evento al vigia no trae la accion"
@@ -226,19 +232,21 @@ grep "system event" "$LLAMADAS" | tail -1 | grep -q "DETENIDA" || fail "el event
 [ "$(evjson lat-1 evento-vigia)" = "1" ] || fail "el evento al vigia no quedo en eventos.jsonl"
 
 # (6) dialogo de 10 min => NECESITO aunque no haya pasado el tope; y no duplica.
+# Lo rutinario previo se acumula, no se manda.
 LLAMADAS="$T/l2.log"; export LLAMADAS; : > "$LLAMADAS"
 solo_dejar lat-dlg
 montar_corrida lat-dlg dialogo
 trabajando_en "$T0"
 tick "$T0" || fail "lat-dlg: el primer tick revinto"
-[ "$(msgs)" = "1" ] || fail "lat-dlg: el primer tick mando $(msgs) (debia 1)"
+[ "$(msgs)" = "0" ] || fail "lat-dlg: el primer tick mando $(msgs) (lo rutinario se acumula)"
+[ "$(acum lat-dlg)" = "1" ] || fail "lat-dlg: el primer tick no acumulo"
 watch_a m-a "$((T0 + 300 - 605))" "cafe01-2" "$((T0 + 300 - 605))"
 tick "$((T0 + 300))" || fail "el tick del dialogo de 10 min revinto"
-[ "$(msgs)" = "2" ] || fail "el dialogo de 10 min no escalo (msgs=$(msgs))"
+[ "$(msgs)" = "1" ] || fail "el dialogo de 10 min no escalo (msgs=$(msgs))"
 grep "message send" "$LLAMADAS" | tail -1 | grep -q "NECESITO TU RESPUESTA" || fail "el dialogo de 10 min no salio como NECESITO"
 grep "message send" "$LLAMADAS" | tail -1 | grep -q -- "--silent" && fail "NECESITO salio silenciosa"
 tick "$((T0 + 600))" || fail "el tercer tick del dialogo revinto"
-[ "$(msgs)" = "2" ] || fail "el dialogo parado duplico mensajes (msgs=$(msgs))"
+[ "$(msgs)" = "1" ] || fail "el dialogo parado duplico mensajes (msgs=$(msgs))"
 [ "$(evts)" = "1" ] || fail "el dialogo no desperto al vigia una sola vez (evts=$(evts))"
 
 # (7) dialogo joven que la politica no cubre => NECESITO inmediato.
@@ -250,7 +258,7 @@ trabajando_en "$T0"
 tick "$T0" || fail "lat-desc: el primer tick revinto"
 watch_a m-a "$((T0 + 120 - 120))" "nuevo01-9" "$T0"
 tick "$((T0 + 120))" || fail "el tick sin cobertura revinto"
-[ "$(msgs)" = "2" ] || fail "el dialogo sin cobertura no escalo (msgs=$(msgs))"
+[ "$(msgs)" = "1" ] || fail "el dialogo sin cobertura no escalo (msgs=$(msgs))"
 grep "message send" "$LLAMADAS" | tail -1 | grep -q "NECESITO TU RESPUESTA" || fail "el dialogo sin cobertura no es NECESITO"
 
 # (8) vigia hermes: la linea va a eventos.jsonl, sin system event.
@@ -344,7 +352,7 @@ solo_dejar lat-ci
 montar_corrida lat-ci avanza
 trabajando_en "$T0"
 GH_CI=rojo GH_SHA=cafe1234567 tick "$T0" || fail "CI rojo: el tick revinto"
-[ "$(msgs)" = "2" ] || fail "CI rojo: salieron $(msgs) mensajes (debia 2: el parte y el aviso)"
+[ "$(msgs)" = "1" ] || fail "CI rojo: salieron $(msgs) mensajes (debia 1: el aviso; el parte se acumula)"
 grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[DETENIDA\]" || fail "CI rojo: no salio como DETENIDA"
 grep -qi "quedo en rojo" "$LLAMADAS" || fail "CI rojo: el aviso no habla en palabras de usuario"
 d="$(grep -n "OPENCLAW message send" "$LLAMADAS" | tail -1 | cut -d: -f1)"
@@ -362,12 +370,12 @@ assert any('corrida.v1.md' in a for a in d.get('archivos',[])), d
 " || fail "CI rojo: el registro local no trae sha, autor y archivos"
 # el mismo sha en el tick siguiente => cero (mutacion sin memoria del sha muere).
 GH_CI=rojo GH_SHA=cafe1234567 tick "$((T0 + 300))" || fail "CI rojo: el tick del mismo sha revinto"
-[ "$(msgs)" = "2" ] || fail "CI rojo ya avisado volvio a avisar (msgs=$(msgs))"
+[ "$(msgs)" = "1" ] || fail "CI rojo ya avisado volvio a avisar (msgs=$(msgs))"
 GH_CI=verde tick "$((T0 + 600))" || fail "el tick con CI verde revinto"
-[ "$(msgs)" = "2" ] || fail "CI verde mando mensaje (msgs=$(msgs))"
+[ "$(msgs)" = "1" ] || fail "CI verde mando mensaje (msgs=$(msgs))"
 # MN: un timeout del CI tambien es rojo.
 GH_CI=timeout GH_SHA=dead999888777 tick "$((T0 + 660))" || fail "el tick con CI en timeout revinto"
-[ "$(msgs)" = "3" ] || fail "un timeout de CI no se aviso (msgs=$(msgs))"
+[ "$(msgs)" = "2" ] || fail "un timeout de CI no se aviso (msgs=$(msgs))"
 grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[DETENIDA\]" || fail "el timeout no salio como DETENIDA"
 CIC="$CORRIDA_STATE/lat-ci/ci-rojo.json" python3 -c "
 import json,os
@@ -398,9 +406,9 @@ solo_dejar lat-gh
 montar_corrida lat-gh avanza
 trabajando_en "$T0"
 GH_CAIDO=1 GH_CI=rojo GH_SHA=cafe1234567 tick "$T0" >/dev/null 2>"$T/ghc.err" || fail "gh caido: el tick revinto"
-[ "$(msgs)" = "1" ] || fail "con gh caido salio mas que el parte (msgs=$(msgs))"
+[ "$(msgs)" = "0" ] || fail "con gh caido se mando mas que acumular (msgs=$(msgs))"
+[ "$(acum lat-gh)" = "1" ] || fail "con gh caido el latido dejo de acumular el parte"
 grep -qi "quedo en rojo" "$LLAMADAS" && fail "con gh caido igual se aviso el rojo"
-grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[AVANZA\]" || fail "con gh caido el latido dejo de latear"
 [ ! -f "$CORRIDA_STATE/lat-gh/ci-rojo.json" ] || fail "con gh caido se escribio registro de rojo"
 
 # (11) TA: run-list sano pero el commit sin metadatos (api caida): sin aviso,
@@ -411,12 +419,12 @@ solo_dejar lat-ta
 montar_corrida lat-ta avanza
 trabajando_en "$T0"
 GH_CI=rojo GH_SHA=ta1234567890 GH_API_FALLA=1 tick "$T0" >/dev/null 2>"$T/ta.err" || fail "TA: el tick con api caida revinto"
-[ "$(msgs)" = "1" ] || fail "TA: con el commit sin metadatos salio el aviso igual (msgs=$(msgs))"
+[ "$(msgs)" = "0" ] || fail "TA: con el commit sin metadatos se mando (msgs=$(msgs))"
 grep -qi "quedo en rojo" "$LLAMADAS" && fail "TA: el aviso de rojo salio sin metadatos"
 [ ! -f "$CORRIDA_STATE/lat-ta/ci-rojo.json" ] || fail "TA: se escribio ci-rojo.json sin metadatos"
 [ "$(evjson lat-ta gh-fallo)" -ge 1 ] 2>/dev/null || fail "TA: el commit sin metadatos no dejo evento gh-fallo"
 GH_CI=rojo GH_SHA=ta1234567890 tick "$((T0 + 300))" >/dev/null 2>&1 || fail "TA: el reintento con api sana revinto"
-[ "$(msgs)" = "2" ] || fail "TA: el reintento no aviso (msgs=$(msgs))"
+[ "$(msgs)" = "1" ] || fail "TA: el reintento no aviso (msgs=$(msgs))"
 grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[DETENIDA\]" || fail "TA: el reintento no salio como DETENIDA"
 CIC="$CORRIDA_STATE/lat-ta/ci-rojo.json" python3 -c "
 import json,os
@@ -434,10 +442,10 @@ trabajando_en "$T0"
 mkdir "$CORRIDA_STATE/lat-tb/ci-rojo.json"   # directorio: el rename revienta
 GH_CI=rojo GH_SHA=tb9876543210 tick "$T0" >/dev/null 2>"$T/tb.err" && fail "TB: el tick con registro caido salio en verde"
 grep -q "no se pudo escribir" "$T/tb.err" || fail "TB: el registro caido no avisa"
-[ "$(msgs)" = "2" ] || fail "TB: con el registro caido salieron $(msgs) mensajes (debia 2: parte y aviso)"
+[ "$(msgs)" = "1" ] || fail "TB: con el registro caido salieron $(msgs) mensajes (debia 1: el aviso)"
 rmdir "$CORRIDA_STATE/lat-tb/ci-rojo.json"
 GH_CI=rojo GH_SHA=tb9876543210 tick "$((T0 + 300))" >/dev/null 2>&1 || fail "TB: el reintento revinto"
-[ "$(msgs)" = "3" ] || fail "TB: el sha quedo marcado sin registro; no se reaviso (msgs=$(msgs))"
+[ "$(msgs)" = "2" ] || fail "TB: el sha quedo marcado sin registro; no se reaviso (msgs=$(msgs))"
 CIC="$CORRIDA_STATE/lat-tb/ci-rojo.json" python3 -c "
 import json,os
 assert json.load(open(os.environ['CIC'])).get('sha')=='tb9876543210'
