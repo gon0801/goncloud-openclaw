@@ -121,3 +121,111 @@ El resolutor de (c) resuelve las citas absolutas POSIX al pie de la letra en
 lugar de saltearlas en silencio; las familias de host (letra de unidad Windows,
 `$HOME/`, `~/`) y el symlink `.claude/` quedan excluidas con la razón escrita
 en el propio test. La corrida que vale es la de CI cuando el lead abra el PR.
+
+---
+
+# 13.4 — el driver prueba lo que dice, y alguien lo corre
+
+## HOY (driver original de 6 casos, todos con agentId "main", antes del cambio)
+
+Sin mutar:
+
+```
+$ node docs/agent-skills/verify/drive-merge-guard.ts | tail -1
+DRIVE VERDE: 6 casos, 4 bloqueados y 2 permitidos
+```
+
+### Mutante del DoD — `lib.ts:214` sustituido por `const allowlisted = false;`
+
+Sustitución exacta: la línea
+`  const allowlisted = MERGE_AGENT_ALLOWLIST.has(normalized(agentId) ?? "");`
+por `  const allowlisted = false;`. Contra el driver HOY (el de 6 casos):
+
+```
+DRIVE VERDE: 6 casos, 4 bloqueados y 2 permitidos
+```
+
+VERDE: la rama del allowlist no se ejercita en absoluto — ese es el hueco que
+esta tarea cierra.
+
+### La sustitución `= true` (por qué no sirve como mutante)
+
+La misma línea con `  const allowlisted = true;`, contra el driver HOY:
+
+```
+FALLA  bloquea  ruta de merge de la API
+DRIVE ROJO: 1 casos
+```
+
+Ya deja rojo hoy (el caso REST con agentId main debería bloquear y pasa), así
+que no discrimina el antes del después. El DoD lo declara y acá está medido.
+
+## DESPUÉS — el driver con los 4 casos del allowlist (10 en total)
+
+`bash scripts/tests/test-drive-merge-guard.sh` → exit 0. Salida completa del
+driver (la línea final es la que el DoD fija):
+
+```
+OK   bloquea  subcomando de merge de la CLI  (agentId: main)
+        comando: gh pr merge 12 -R o/r --squash
+        mensaje: Merge bloqueado por summa-gate: `gh pr merge` está prohibido desde el agente (también encadenado con &&/;). El merge lo hace el operador o el flujo autorizado del repo.
+OK   bloquea  misma orden encadenada  (agentId: main)
+        comando: echo hola && gh pr merge 12
+        mensaje: Merge bloqueado por summa-gate: `gh pr merge` está prohibido desde el agente (también encadenado con &&/;). El merge lo hace el operador o el flujo autorizado del repo.
+OK   bloquea  push a rama protegida  (agentId: main)
+        comando: git push origin main
+        mensaje: Push bloqueado por summa-gate: `git push` a master/main está prohibido desde el agente (incluye origin master, +master, HEAD:main, refs/heads/main y delete-ref :main).
+OK   bloquea  ruta de merge de la API  (agentId: main)
+        comando: gh api repos/o/r/pulls/1/merge -X PUT
+        mensaje: Merge bloqueado por summa-gate: `gh api …/merge` está prohibido desde el agente. El merge lo hace el operador o el flujo autorizado del repo.
+OK   pasa     push a rama de trabajo  (agentId: main)
+        comando: git push origin feature/x
+OK   pasa     lectura inofensiva  (agentId: main)
+        comando: gh pr view 12 --json state
+OK   pasa     allowlist: implementer ejecuta la orden  (agentId: implementer)
+        comando: gh api repos/o/r/pulls/1/merge -X PUT
+OK   pasa     allowlist: ingenieria ejecuta la orden  (agentId: ingenieria)
+        comando: gh api repos/o/r/pulls/1/merge -X PUT
+OK   bloquea  allowlist: verifier queda bloqueado  (agentId: verifier)
+        comando: gh api repos/o/r/pulls/1/merge -X PUT
+        mensaje: Merge bloqueado por summa-gate: `gh api …/merge` está prohibido desde el agente. El merge lo hace el operador o el flujo autorizado del repo.
+OK   bloquea  allowlist: sin agentId queda bloqueado  (agentId: ausente)
+        comando: gh api repos/o/r/pulls/1/merge -X PUT
+        mensaje: Merge bloqueado por summa-gate: `gh api …/merge` está prohibido desde el agente. El merge lo hace el operador o el flujo autorizado del repo.
+
+DRIVE VERDE: 10 casos, 6 bloqueados y 4 permitidos
+```
+
+### Mutante del DoD — `= false`, contra el driver NUEVO
+
+```
+FALLA  pasa     allowlist: implementer ejecuta la orden  (agentId: implementer)
+FALLA  pasa     allowlist: ingenieria ejecuta la orden  (agentId: ingenieria)
+DRIVE ROJO: 2 caso(s) de 10
+```
+
+exactamente en los casos «implementer pasa» e «ingenieria pasa», como dice la
+DoD. El test de batería lo caza igual:
+
+```
+$ bash scripts/tests/test-drive-merge-guard.sh   (con lib.ts mutado)
+FAIL: el driver del merge-guard salió 1
+  ...
+  DRIVE ROJO: 2 caso(s) de 10
+```
+
+## El test pasa igual después de `node --test`, que borra el enlace
+
+```
+$ ( cd summa-gate && node --test )   # su teardown borra node_modules/openclaw
+$ ls summa-gate/node_modules/ | grep -c openclaw || echo "enlace borrado por node --test"
+0
+enlace borrado por node --test
+$ bash scripts/tests/test-drive-merge-guard.sh
+DRIVE VERDE: 10 casos, 6 bloqueados y 4 permitidos
+OK: drive-merge-guard corrió y cerró en verde
+```
+
+El test re-crea el symlink con las cuatro líneas de la sección Drive de la
+skill (honrando OPENCLAW_NODE_MODULES, que es como CI se lo pasa) y lo borra
+al terminar (trap): la corrida deja el árbol como lo encontró.

@@ -1,6 +1,13 @@
 // Drive del merge-guard por el hook REGISTRADO, no llamando a la funcion.
 // Mismo patron que role.test.ts: se registra el plugin real contra un host
 // falso y se dispara el hook que quedo registrado.
+//
+// 13.4 (Fase 13): la rama del allowlist tenia cero cobertura aca porque todos
+// los casos mandaban el mismo agentId "main". La orden de merge del dueño la
+// ejecuta implementer o ingenieria (6.5c): esos dos pasan, verifier y un
+// agentId ausente siguen bloqueados. Los cuatro casos nuevos usan la ruta REST
+// de merge, que es la regla donde el allowlist decide; el subcomando de CLI
+// bloquea a todos y no prueba esta rama.
 import mod from "../../../summa-gate/index.ts";
 
 type Reg = { event: string; handler: Function; opts?: { matcher?: string[] } };
@@ -8,18 +15,29 @@ const regs: Reg[] = [];
 const noop = () => {};
 const store = new Map<string, unknown>();
 
+// Host falso con la forma de fakeBaseApi (summa-gate/role.test.ts:24-48): los
+// campos que el plugin lee van AL TOPE del api (logger, on,
+// registerAgentToolResultMiddleware, pluginConfig) y runContext anidado bajo
+// `runContext`, NO bajo `runtime` — anidado bajo runtime el registro "funciona"
+// y el hook que uno queria simplemente no queda en la lista.
 const api = {
   logger: { info: noop, warn: noop, error: noop, debug: noop },
   on(event: string, handler: Function, opts?: { matcher?: string[] }) {
     regs.push({ event, handler, opts });
   },
-  runtime: {
-    middleware: { register: noop },
-    runContext: {
-      get: (runId: string, ns: string) => store.get(`${runId}:${ns}`),
-      set: (runId: string, ns: string, v: unknown) => store.set(`${runId}:${ns}`, v),
+  registerAgentToolResultMiddleware: noop,
+  runContext: {
+    setRunContext: ({ runId, namespace, value }: { runId: string; namespace: string; value: unknown }) => {
+      store.set(`${runId}:${namespace}`, value);
+      return true;
+    },
+    getRunContext: ({ runId, namespace }: { runId: string; namespace: string }) =>
+      store.get(`${runId}:${namespace}`),
+    clearRunContext: ({ runId, namespace }: { runId: string; namespace?: string }) => {
+      if (namespace) store.delete(`${runId}:${namespace}`);
     },
   },
+  pluginConfig: {},
 };
 
 mod.register(api as never);
@@ -32,28 +50,42 @@ if (!hook) {
   process.exit(1);
 }
 
-const casos: Array<[string, string, boolean]> = [
-  ["subcomando de merge de la CLI", "gh pr merge 12 -R o/r --squash", true],
-  ["misma orden encadenada", "echo hola && gh pr merge 12", true],
-  ["push a rama protegida", "git push origin main", true],
-  ["ruta de merge de la API", "gh api repos/o/r/pulls/1/merge -X PUT", true],
-  ["push a rama de trabajo", "git push origin feature/x", false],
-  ["lectura inofensiva", "gh pr view 12 --json state", false],
+// [nombre, comando, debeBloquear, agentId] — agentId undefined = turno sin
+// agentId, que tambien debe quedar bloqueado fuera del allowlist.
+const casos: Array<[string, string, boolean, string | undefined]> = [
+  ["subcomando de merge de la CLI", "gh pr merge 12 -R o/r --squash", true, "main"],
+  ["misma orden encadenada", "echo hola && gh pr merge 12", true, "main"],
+  ["push a rama protegida", "git push origin main", true, "main"],
+  ["ruta de merge de la API", "gh api repos/o/r/pulls/1/merge -X PUT", true, "main"],
+  ["push a rama de trabajo", "git push origin feature/x", false, "main"],
+  ["lectura inofensiva", "gh pr view 12 --json state", false, "main"],
+  ["allowlist: implementer ejecuta la orden", "gh api repos/o/r/pulls/1/merge -X PUT", false, "implementer"],
+  ["allowlist: ingenieria ejecuta la orden", "gh api repos/o/r/pulls/1/merge -X PUT", false, "ingenieria"],
+  ["allowlist: verifier queda bloqueado", "gh api repos/o/r/pulls/1/merge -X PUT", true, "verifier"],
+  ["allowlist: sin agentId queda bloqueado", "gh api repos/o/r/pulls/1/merge -X PUT", true, undefined],
 ];
 
 let fallas = 0;
-for (const [nombre, comando, debeBloquear] of casos) {
+for (const [nombre, comando, debeBloquear, agentId] of casos) {
+  const ctx = agentId === undefined
+    ? { sessionKey: "agent:main:verify" }
+    : { agentId, sessionKey: "agent:main:verify" };
   const r = hook.handler(
     { toolName: "exec", params: { command: comando } },
-    { agentId: "main", sessionKey: "agent:main:verify" },
+    ctx,
   ) as { block?: boolean; blockReason?: string } | undefined;
   const bloqueo = r?.block === true;
   const ok = bloqueo === debeBloquear;
   if (!ok) fallas++;
-  console.log(`${ok ? "OK " : "FALLA"}  ${debeBloquear ? "bloquea" : "pasa   "}  ${nombre}`);
+  console.log(`${ok ? "OK " : "FALLA"}  ${debeBloquear ? "bloquea" : "pasa   "}  ${nombre}  (agentId: ${agentId ?? "ausente"})`);
   console.log(`        comando: ${comando}`);
   if (bloqueo) console.log(`        mensaje: ${r?.blockReason}`);
 }
 
-console.log(fallas === 0 ? "\nDRIVE VERDE: 6 casos, 4 bloqueados y 2 permitidos" : `\nDRIVE ROJO: ${fallas} casos`);
+const bloqueados = casos.filter((c) => c[2]).length;
+console.log(
+  fallas === 0
+    ? `\nDRIVE VERDE: ${casos.length} casos, ${bloqueados} bloqueados y ${casos.length - bloqueados} permitidos`
+    : `\nDRIVE ROJO: ${fallas} caso(s) de ${casos.length}`,
+);
 process.exit(fallas === 0 ? 0 : 1);

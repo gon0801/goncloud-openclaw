@@ -172,9 +172,12 @@ the api object, not under `runtime`: `logger`, `on`,
 Nesting them under `runtime` looks right and is wrong: registration succeeds,
 the hook you wanted is simply not in the list, and nothing says so.
 
-**A working one ships with this skill.** It drives the merge guard with six
-commands, four that must block and two that must pass, and prints each verdict
-with the guard's message:
+**A working one ships with this skill.** It drives the merge guard with ten
+commands, six that must block and four that must pass — the allowlist branch
+included: the same merge command must pass for `implementer` and `ingenieria`
+and block for `verifier` and for a turn with no agent id. It prints each
+verdict with the guard's message, and `scripts/tests/test-drive-merge-guard.sh`
+runs it in the battery, so it cannot silently rot. To run it by hand:
 
 ```
 cd /Users/dn/dev/goncloud-openclaw/summa-gate
