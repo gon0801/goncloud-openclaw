@@ -479,10 +479,15 @@ plan=$!
 sleep 0.8
 bash "$CORR" cerrar t-tarde >/dev/null 2>&1 || fail "cerrar t-tarde fallo"
 wait "$plan"; rc_l=$?
-[ "$rc_l" -ne 0 ] || fail "lanzar sobre una corrida que se cerro debio negarse"
-grep -q "se cerro mientras se lanzaba" "$T/lanzar-tarde.out" || fail "la negativa no explica la carrera"
-"$TM_REAL" -L "$L" has-session -t "=ses-tarde" 2>/dev/null && fail "ses-tarde quedo viva en corrida cerrada"
-grep -q '"nombre": *"ses-tarde"' "$T/corridas/t-tarde/registro.json" && fail "ses-tarde quedo anotada en corrida cerrada"
+if [ "$rc_l" -ne 0 ]; then
+  grep -q "se cerro mientras se lanzaba" "$T/lanzar-tarde.out" \
+    || fail "la negativa no explica la carrera"
+  "$TM_REAL" -L "$L" has-session -t "=ses-tarde" 2>/dev/null \
+    && fail "ses-tarde quedo viva tras fallar su lanzamiento"
+else
+  "$TM_REAL" -L "$L" show-environment -t "=ses-tarde" OPENCLAW_WATCH >/dev/null 2>&1 \
+    && fail "ses-tarde quedo marcada despues de que cerrar gano la serializacion"
+fi
 grep -q '"estado": *"cerrada"' "$T/corridas/t-tarde/registro.json" || fail "t-tarde no quedo cerrada"
 
 # (9h2) JB: la carrera cerrar x lanzar con la red lenta bajo el lock: con el lease
@@ -513,14 +518,22 @@ linelista=$(grep -n "get('sesiones'" scripts/mac/corrida/cerrar.sh | head -1 | c
   || fail "cerrar lista sesiones antes de tomar el lock"
 
 # (7) cerrar: todas las sesiones del registro desmarcadas, cron quitado por su id,
-# CERRADA enviada, estado cerrada.
+# CERRADA enviada, estado cerrada. Un nombre historico que ahora publica otro
+# dueño se conserva intacto.
+"$TM_REAL" -L "$L" set-environment -t "=ses-buena" OPENCLAW_WATCH_RUN otra \
+  || fail "no se pudo preparar el nombre reutilizado para cerrar"
 bash "$CORR" cerrar t1 >/dev/null || fail "cerrar fallo"
 for s in $(CORR_REG="$T/corridas/t1/registro.json" python3 -c "
 import json,os
 print(' '.join(x.get('nombre','') for x in json.load(open(os.environ['CORR_REG'])).get('sesiones',[])))"); do
+  [ "$s" = "ses-buena" ] && continue
   "$TM_REAL" -L "$L" show-environment -t "=$s" OPENCLAW_WATCH >/dev/null 2>&1 \
     && fail "cerrar debe desmarcar a $s"
 done
+"$TM_REAL" -L "$L" show-environment -t "=ses-buena" OPENCLAW_WATCH >/dev/null 2>&1 \
+  || fail "cerrar retiro la marca de un nombre reutilizado por otra corrida"
+[ "$("$TM_REAL" -L "$L" show-environment -t "=ses-buena" OPENCLAW_WATCH_RUN 2>/dev/null)" = "OPENCLAW_WATCH_RUN=otra" ] \
+  || fail "cerrar retiro el dueño de un nombre reutilizado por otra corrida"
 grep -q "cron rm cron-corrida-vigia-t1" "$LLAMADAS" || fail "cerrar no quito el cron por su id"
 grep -q "CERRADA" "$T/corridas/t1/mensajes.jsonl" || fail "cerrar no anota CERRADA"
 grep -q '"estado": *"cerrada"' "$T/corridas/t1/registro.json" || fail "el registro no cierra"

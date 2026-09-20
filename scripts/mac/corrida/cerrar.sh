@@ -8,13 +8,19 @@ corrida_cerrar() {
   corrida_id_valido "$id" || { echo "cerrar: id invalido: $id" >&2; return 2; }
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
+  if ! marcas_lock_tomar; then
+    echo "cerrar: lock global de marcas no cede; no se ha hecho nada" >&2
+    return 1
+  fi
   if ! lock_tomar "$reg"; then
+    marcas_lock_soltar
     echo "cerrar: lock del registro de $id no cede; no se ha hecho nada (ni desmarcado ni cron) y el aviso NO salio — reintentar cierra" >&2
     return 1
   fi
   # Ya cerrada (leido bajo lock): segunda llamada = no-op con confirmacion.
   if [ "$(json_campo "$reg" estado)" = "cerrada" ]; then
     lock_soltar "$reg"
+    marcas_lock_soltar
     echo "cerrada $id"
     return 0
   fi
@@ -23,9 +29,14 @@ corrida_cerrar() {
 import json,os
 print(' '.join(x.get('nombre','') for x in json.load(open(os.environ['CORR_REG'])).get('sesiones',[])))")"
   for s in $nombres; do
-    "$TMUX_BIN" set-environment -t "=$s" -u OPENCLAW_WATCH 2>/dev/null
-    "$TMUX_BIN" set-environment -t "=$s" -u OPENCLAW_WATCH_RUN 2>/dev/null
+    if ! marca_retirar_si_dueno "$id" "$s"; then
+      lock_soltar "$reg"
+      marcas_lock_soltar
+      echo "cerrar: no se pudieron retirar las marcas propias de $s" >&2
+      return 1
+    fi
   done
+  marcas_lock_soltar
   # El cron se quita por el id que devolvio cron add; por nombre puede no borrar nada.
   # Si el rm falla porque el cron YA no esta en la lista, es un reintento tras media
   # corrida: cuenta como exito (idempotencia), no como error.

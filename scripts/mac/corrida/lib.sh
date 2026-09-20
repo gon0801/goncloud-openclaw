@@ -91,19 +91,11 @@ js=[j.get('id','') for j in d.get('jobs',[]) if j.get('name')==os.environ['NOMBR
 print('\n'.join(js) if js else 'NINGUNO')" 2>/dev/null
 }
 
-# El lock del registro, en un solo lugar, con lease de dueno. Al tomar se escribe
-# un token (.lock/token): la edad del lock es la del TOKEN, y su dueno vivo la
-# refresca entre llamadas largas (lock_refrescar) — un lock refrescado jamas se
-# roba, pase lo que pase debajo. Un lock sin token (manual, o de una version
-# vieja) se envejece por el directorio. Pasado CORR_LOCK_VIEJO segundos sin
-# refresco, el lock es de un proceso muerto y se rompe con aviso. Al tomar, se
-# arma un trap de EXIT sin dueno (si el llamador ya tiene el suyo, como preflight,
-# no se le pisa: ese caso lo cubre el rompimiento de locks viejos). Nada de
-# guardar y restaurar traps: restaurar dentro de una subshell de captura dispara
-# el trap ajeno al cerrar ella (medido: borro el dir de una prueba a mitad de
-# corrida). Al soltar, el disarm va ANTES del rmdir: el EXIT de este proceso no
-# puede romperle a otro un lock vivo tomado entremedias; y el lock solo lo
-# elimina su dueno (el token calza) — un soltar ajeno no toca nada.
+# Locks con lease de dueno. El token empieza con el PID y se publica por rename.
+# Un lock viejo solo se rompe si el token no cambio Y su PID ya no vive; la edad
+# por si sola nunca autoriza robarlo. Un dispatcher EXIT unico conoce ambos locks,
+# los limpia por token y despues ejecuta exactamente una vez cualquier trap EXIT
+# que ya tuviera el llamador.
 CORR_LOCK_VIEJO="${CORR_LOCK_VIEJO:-60}"
 lock_viejo() { # $1 dir del lock, $2 umbral en segundos; 0 = viejo (rompible)
   local ref="$1/token"
@@ -114,25 +106,95 @@ try: m=os.path.getmtime(os.environ['VIEJO_REF'])
 except Exception: sys.exit(1)
 sys.exit(0 if time.time()-m > float(os.environ['VIEJO_UMBRAL']) else 1)" 2>/dev/null
 }
-lock_tomar() { # $1 registro; 0 = tomado (token escrito; trap de EXIT si no habia dueno)
-  local dir i=0
-  dir="$(dirname "$1")"
-  if [ -d "$dir/.lock" ] && lock_viejo "$dir/.lock" "$CORR_LOCK_VIEJO"; then
-    rm -f "$dir/.lock/token"
-    rmdir "$dir/.lock" 2>/dev/null \
-      && echo "lock_tomar: rompio un lock viejo en $dir" >&2
+
+lock_token_publicar() { # $1 dir, $2 token
+  local tmp="$1/token.tmp.$$"
+  printf '%s' "$2" >"$tmp" || return 1
+  mv -f "$tmp" "$1/token" || { rm -f "$tmp"; return 1; }
+}
+
+lock_abandonado_romper() { # $1 dir, $2 umbral, $3 etiqueta; 0 = roto
+  local d="$1" umbral="$2" etiqueta="$3" token pid actual
+  [ -d "$d" ] && lock_viejo "$d" "$umbral" || return 1
+  if [ -f "$d/token" ]; then
+    token="$(cat "$d/token" 2>/dev/null)" || return 1
+    pid="${token%%-*}"
+    case "$pid" in
+      ''|*[!0-9]*) return 1;;
+    esac
+    kill -0 "$pid" 2>/dev/null && return 1
+    actual="$(cat "$d/token" 2>/dev/null)" || return 1
+    [ "$actual" = "$token" ] || return 1
+    rm -f "$d/token" || return 1
+  else
+    # Compatibilidad con locks manuales/antiguos: confirmar que el token no
+    # aparecio mientras se comprobaba la edad del directorio.
+    [ ! -e "$d/token" ] || return 1
   fi
+  rmdir "$d" 2>/dev/null || return 1
+  echo "$etiqueta: rompio un lock viejo sin proceso vivo" >&2
+  return 0
+}
+
+lock_directorio_soltar() { # $1 dir, $2 token; solo el dueno lo elimina
+  local d="$1" token="$2"
+  [ -n "$d" ] || return 0
+  [ -f "$d/token" ] || return 0
+  [ "$(cat "$d/token" 2>/dev/null)" = "$token" ] || return 0
+  rm -f "$d/token"
+  rmdir "$d" 2>/dev/null
+}
+
+locks_exit_despachar() {
+  local estado="$?" previo citado
+  lock_directorio_soltar "${CORR_LOCK_ACT:-}" "${CORR_LOCK_TOKEN:-}"
+  lock_directorio_soltar "${MARCAS_LOCK_ACT:-}" "${MARCAS_LOCK_TOKEN:-}"
+  CORR_LOCK_ACT=""; CORR_LOCK_TOKEN=""
+  MARCAS_LOCK_ACT=""; MARCAS_LOCK_TOKEN=""
+  previo="${LOCKS_EXIT_PREV:-}"
+  LOCKS_EXIT_PREV=""; LOCKS_EXIT_ARMADO=0
+  trap - EXIT
+  if [ -n "$previo" ]; then
+    citado="${previo#trap -- }"
+    citado="${citado% EXIT}"
+    eval "set -- $citado"
+    eval "$1"
+  fi
+  return "$estado"
+}
+
+locks_exit_armar() {
+  [ "${LOCKS_EXIT_ARMADO:-0}" = "1" ] && return 0
+  LOCKS_EXIT_PREV="$(trap -p EXIT)"
+  LOCKS_EXIT_ARMADO=1
+  trap 'locks_exit_despachar' EXIT
+}
+
+locks_exit_restaurar_si_libre() {
+  local previo
+  [ -z "${CORR_LOCK_ACT:-}" ] || return 0
+  [ -z "${MARCAS_LOCK_ACT:-}" ] || return 0
+  [ "${LOCKS_EXIT_ARMADO:-0}" = "1" ] || return 0
+  previo="${LOCKS_EXIT_PREV:-}"
+  trap - EXIT
+  [ -n "$previo" ] && eval "$previo"
+  LOCKS_EXIT_PREV=""; LOCKS_EXIT_ARMADO=0
+}
+
+lock_tomar() { # $1 registro; 0 = tomado y registrado en el dispatcher EXIT
+  local dir i=0 token
+  dir="$(dirname "$1")"
+  lock_abandonado_romper "$dir/.lock" "$CORR_LOCK_VIEJO" "lock_tomar" || true
   while ! mkdir "$dir/.lock" 2>/dev/null; do
     i=$((i+1)); [ "$i" -gt 100 ] && return 1
     sleep 0.1
   done
-  CORR_LOCK_TOKEN="$$-${RANDOM:-0}"
-  printf '%s' "$CORR_LOCK_TOKEN" > "$dir/.lock/token"
-  if [ -z "$(trap -p EXIT)" ]; then
-    CORR_LOCK_ACT="$dir/.lock"
-    CORR_LOCK_ARMADO=1
-    trap 'rm -f "$CORR_LOCK_ACT/token"; rmdir "$CORR_LOCK_ACT" 2>/dev/null' EXIT
-  fi
+  token="$$-${RANDOM:-0}"
+  lock_token_publicar "$dir/.lock" "$token" \
+    || { rmdir "$dir/.lock" 2>/dev/null; return 1; }
+  CORR_LOCK_TOKEN="$token"
+  CORR_LOCK_ACT="$dir/.lock"
+  locks_exit_armar
   return 0
 }
 
@@ -145,53 +207,31 @@ lock_refrescar() { # $1 registro: re-touch del token, solo si este proceso sigue
   return 0
 }
 
-lock_soltar() { # $1 registro: disarm ANTES del rmdir, solo si este proceso armo el trap
-  local d t
-  d="$(dirname "$1")/.lock"; t="$d/token"
-  if [ "${CORR_LOCK_ARMADO:-0}" = "1" ]; then
-    trap - EXIT
-    CORR_LOCK_ARMADO=0
-  fi
-  if [ -f "$t" ] && [ "$(cat "$t" 2>/dev/null)" != "${CORR_LOCK_TOKEN:-}" ]; then
-    return 0 # lock ajeno o robado: no es de quien suelta
-  fi
-  rm -f "$t"
-  rmdir "$d" 2>/dev/null
+lock_soltar() { # $1 registro; solo suelta el token propio
+  local d token
+  d="$(dirname "$1")/.lock"; token="${CORR_LOCK_TOKEN:-}"
+  CORR_LOCK_ACT=""; CORR_LOCK_TOKEN=""
+  lock_directorio_soltar "$d" "$token"
+  locks_exit_restaurar_si_libre
 }
 
 # Lock global e independiente para el nombre/las marcas de sesiones tmux. No usa
 # CORR_LOCK_TOKEN ni CORR_LOCK_ACT: lanzar-sesion necesita mantenerlo mientras
 # toma tambien el lock de su registro. Reconciliar usa el mismo lock desde el
 # snapshot de list-sessions hasta el ultimo unset, cerrando el TOCTOU por nombre.
-marcas_lock_abandonar() {
-  local d="${MARCAS_LOCK_ACT:-}" t
-  [ -n "$d" ] || return 0
-  t="$d/token"
-  if [ -f "$t" ] && [ "$(cat "$t" 2>/dev/null)" = "${MARCAS_LOCK_TOKEN:-}" ]; then
-    rm -f "$t"
-    rmdir "$d" 2>/dev/null
-  fi
-}
-
 marcas_lock_tomar() {
-  local d="$CORRIDA_STATE/.marcas.lock" i=0
+  local d="$CORRIDA_STATE/.marcas.lock" i=0 token
   mkdir -p "$CORRIDA_STATE" || return 1
-  if [ -d "$d" ] && lock_viejo "$d" "$CORR_LOCK_VIEJO"; then
-    rm -f "$d/token"
-    rmdir "$d" 2>/dev/null \
-      && echo "marcas_lock_tomar: rompio un lock viejo" >&2
-  fi
+  lock_abandonado_romper "$d" "$CORR_LOCK_VIEJO" "marcas_lock_tomar" || true
   while ! mkdir "$d" 2>/dev/null; do
     i=$((i+1)); [ "$i" -gt 100 ] && return 1
     sleep 0.1
   done
-  MARCAS_LOCK_TOKEN="$$-${RANDOM:-0}"
+  token="$$-${RANDOM:-0}"
+  lock_token_publicar "$d" "$token" || { rmdir "$d" 2>/dev/null; return 1; }
+  MARCAS_LOCK_TOKEN="$token"
   MARCAS_LOCK_ACT="$d"
-  printf '%s' "$MARCAS_LOCK_TOKEN" >"$d/token"
-  if [ -z "$(trap -p EXIT)" ]; then
-    MARCAS_LOCK_ARMADO=1
-    trap 'marcas_lock_abandonar' EXIT
-  fi
+  locks_exit_armar
   return 0
 }
 
@@ -203,19 +243,24 @@ marcas_lock_refrescar() {
 }
 
 marcas_lock_soltar() {
-  local d="${MARCAS_LOCK_ACT:-}" t
+  local d="${MARCAS_LOCK_ACT:-}" token="${MARCAS_LOCK_TOKEN:-}"
   [ -n "$d" ] || return 0
-  t="$d/token"
-  if [ -f "$t" ] && [ "$(cat "$t" 2>/dev/null)" != "${MARCAS_LOCK_TOKEN:-}" ]; then
-    return 0
+  MARCAS_LOCK_ACT=""; MARCAS_LOCK_TOKEN=""
+  lock_directorio_soltar "$d" "$token"
+  locks_exit_restaurar_si_libre
+}
+
+# Retira marcas solo si la corrida indicada sigue siendo su dueña publicada.
+# Debe llamarse con el lock global de marcas tomado.
+marca_retirar_si_dueno() { # $1 corrida, $2 sesion; otro/ningun dueno = no-op
+  local id="$1" sesion="$2" dueno marca
+  dueno="$("$TMUX_BIN" show-environment -t "=$sesion" OPENCLAW_WATCH_RUN 2>/dev/null || true)"
+  [ "$dueno" = "OPENCLAW_WATCH_RUN=$id" ] || return 0
+  marca="$("$TMUX_BIN" show-environment -t "=$sesion" OPENCLAW_WATCH 2>/dev/null || true)"
+  if [ "$marca" = "OPENCLAW_WATCH=1" ]; then
+    "$TMUX_BIN" set-environment -t "=$sesion" -u OPENCLAW_WATCH || return 1
   fi
-  if [ "${MARCAS_LOCK_ARMADO:-0}" = "1" ]; then
-    trap - EXIT
-    MARCAS_LOCK_ARMADO=0
-  fi
-  rm -f "$t"
-  rmdir "$d" 2>/dev/null
-  MARCAS_LOCK_ACT=""
+  "$TMUX_BIN" set-environment -t "=$sesion" -u OPENCLAW_WATCH_RUN || return 1
 }
 
 registro_escribir() { # $1 registro, $2 lineas python que mutan d; 0 = escrito.

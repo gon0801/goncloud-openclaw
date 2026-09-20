@@ -26,19 +26,16 @@ import glob, json, os
 abierta = False
 cerrada = False
 run_id = os.environ.get("CORR_RUN_ID", "")
-if run_id:
-    paths = [os.path.join(os.environ["CORR_STATE"], run_id, "registro.json")]
-else:
-    paths = glob.glob(os.path.join(os.environ["CORR_STATE"], "*", "registro.json"))
+paths = glob.glob(os.path.join(os.environ["CORR_STATE"], "*", "registro.json"))
 for path in paths:
     try:
         d = json.load(open(path))
     except Exception:
         continue
-    if not run_id:
-        nombres = [s.get("nombre") for s in d.get("sesiones", []) if isinstance(s, dict)]
-        if os.environ["CORR_SESION"] not in nombres:
-            continue
+    nombres = [s.get("nombre") for s in d.get("sesiones", []) if isinstance(s, dict)]
+    registro_id = d.get("id") or os.path.basename(os.path.dirname(path))
+    if os.environ["CORR_SESION"] not in nombres and registro_id != run_id:
+        continue
     if d.get("estado") == "abierta":
         abierta = True
     elif d.get("estado") == "cerrada":

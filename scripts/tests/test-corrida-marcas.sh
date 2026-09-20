@@ -19,7 +19,8 @@ cat >"$T/state/abierta/registro.json" <<'JSON'
   "estado": "abierta",
   "sesiones": [
     {"nombre": "ses-activa", "rol": "carril", "cli": "codex", "dueno": "lead", "dir": "/tmp/activa"},
-    {"nombre": "ses-lista", "rol": "carril", "cli": "claude", "dueno": "lead", "dir": "/tmp/lista"}
+    {"nombre": "ses-lista", "rol": "carril", "cli": "claude", "dueno": "lead", "dir": "/tmp/lista"},
+    {"nombre": "ses-prestada", "rol": "carril", "cli": "claude", "dueno": "lead", "dir": "/tmp/prestada"}
   ]
 }
 JSON
@@ -36,9 +37,14 @@ cat >"$T/state/cerrada/registro.json" <<'JSON'
 }
 JSON
 
-printf '%s\n' ses-activa ses-lista ses-vieja ses-desconocida ses-reusada >"$T/sesiones"
+printf '%s\n' ses-activa ses-lista ses-prestada ses-vieja ses-desconocida ses-reusada >"$T/sesiones"
 cp "$T/sesiones" "$T/marcadas"
-printf '%s\t%s\n' ses-reusada abierta >"$T/duenos"
+printf '%s\t%s\n' \
+  ses-activa abierta \
+  ses-lista abierta \
+  ses-prestada otra \
+  ses-vieja cerrada \
+  ses-reusada abierta >"$T/duenos"
 TMUX_LOG="$T/tmux.log"
 cat >"$T/bin/tmux" <<'SH'
 #!/bin/sh
@@ -155,6 +161,21 @@ bash "$CORR" terminar-sesion abierta ses-activa >/dev/null 2>&1 \
 grep -qxF ses-activa "$T/marcadas" || fail "el stub perdio la marca pese al fallo"
 unset TMUX_FALLA_PARA
 
+# La pertenencia historica al registro no autoriza a quitar la marca de otra
+# corrida que reutilizo ese nombre.
+bash "$CORR" terminar-sesion abierta ses-prestada >/dev/null \
+  || fail "terminar-sesion fallo al conservar una sesion de otro dueño"
+grep -qxF ses-prestada "$T/marcadas" \
+  || fail "terminar-sesion retiro la marca de otra corrida"
+grep -q $'^ses-prestada\totra$' "$T/duenos" \
+  || fail "terminar-sesion retiro el dueño de otra corrida"
+
+# Aunque la marca publique una corrida cerrada, cualquier registro abierto que
+# aun reclame el nombre impide retirarla.
+awk -F '\t' '$1 != "ses-activa"' "$T/duenos" >"$T/duenos.tmp"
+printf '%s\t%s\n' ses-activa cerrada >>"$T/duenos.tmp"
+mv "$T/duenos.tmp" "$T/duenos"
+
 # La reconciliación solo conoce dueños registrados. Cerrada sale; abierta y
 # desconocida sobreviven.
 salida="$(bash "$CORR" reconciliar-marcas)" || fail "reconciliar-marcas fallo"
@@ -201,5 +222,47 @@ linea_marca=$(grep -nF 'set-environment -t =ses-race OPENCLAW_WATCH 1' "$TMUX_LO
 [ -n "$linea_dueno" ] && [ -n "$linea_marca" ] && [ "$linea_dueno" -lt "$linea_marca" ] \
   || fail "lanzar-sesion no publico el dueño antes de hacer visible la marca"
 unset TMUX_RACE TMUX_RACE_READY TMUX_RACE_MARKED
+
+# Un lock viejo por reloj, pero cuyo PID sigue vivo, no se roba. El token debe
+# permanecer byte-identico mientras un segundo proceso intenta tomarlo.
+lock_state="$T/lock-state"
+mkdir -p "$lock_state"
+CORRIDA_STATE="$lock_state" CORR_LOCK_VIEJO=1 bash -c '
+  . scripts/mac/corrida/lib.sh
+  marcas_lock_tomar || exit 2
+  printf "%s" "$MARCAS_LOCK_TOKEN" >"$CORRIDA_STATE/holder-token"
+  sleep 8
+' & holder_pid=$!
+i=0
+while [ ! -f "$lock_state/holder-token" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i+1)); done
+[ -f "$lock_state/holder-token" ] || fail "el dueño no publico el token del lock"
+sleep 2
+CORRIDA_STATE="$lock_state" CORR_LOCK_VIEJO=1 bash -c '
+  . scripts/mac/corrida/lib.sh
+  marcas_lock_tomar
+' >"$T/contender.out" 2>&1 & contender_pid=$!
+sleep 1
+token_antes=$(cat "$lock_state/holder-token")
+token_despues=$(cat "$lock_state/.marcas.lock/token" 2>/dev/null || true)
+[ "$token_despues" = "$token_antes" ] || fail "un lock activo fue robado solo por antigüedad"
+kill "$contender_pid" 2>/dev/null || true
+wait "$contender_pid" 2>/dev/null || true
+wait "$holder_pid" || fail "el dueño vivo del lock fallo"
+
+# El dispatcher EXIT limpia los dos locks anidados y conserva un trap ajeno.
+exit_state="$T/exit-state"
+mkdir -p "$exit_state/r1"
+CORRIDA_STATE="$exit_state" FOREIGN_TRAP_FILE="$T/foreign-trap" bash -c '
+  . scripts/mac/corrida/lib.sh
+  trap '\''printf trap >>"$FOREIGN_TRAP_FILE"'\'' EXIT
+  marcas_lock_tomar || exit 2
+  lock_tomar "$CORRIDA_STATE/r1/registro.json" || exit 3
+  kill -TERM $$
+' >/dev/null 2>&1
+[ "$?" -eq 143 ] || fail "el proceso de prueba no salio por TERM como se esperaba"
+[ ! -d "$exit_state/.marcas.lock" ] || fail "EXIT dejo el lock global"
+[ ! -d "$exit_state/r1/.lock" ] || fail "EXIT dejo el lock del registro"
+[ "$(cat "$T/foreign-trap" 2>/dev/null)" = "trap" ] \
+  || fail "el dispatcher no preservo exactamente una ejecucion del trap ajeno"
 
 echo "VERDE: terminar-sesion y reconciliar-marcas conservan el dueño de cada marca"
