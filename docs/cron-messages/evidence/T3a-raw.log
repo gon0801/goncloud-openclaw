@@ -1,0 +1,64 @@
+=== (Q1) MELI formato VIEJO: pickings %mercado%libre% outgoing | D=2026-09-10 CDMX ===
+ partner | odoo | client_order_ref | picking | state | deadline_cdmx
+---------+------+------------------+---------+-------+---------------
+(0 rows)
+
+ ?column?
+-----------
+ Q1_OK n=0
+(1 row)
+
+=== (Q2) MELI formato NUEVO: ML/draft+paid SIN picking, ventana 7d + piso 2026-09-08 ===
+   numero_real    |            cliente            |     creada_cdmx     | meli_status |         envio
+------------------+-------------------------------+---------------------+-------------+-----------------------
+ 2000014934287813 | Paola Martinez Leal           | 2026-09-08 17:33:20 | paid        | sin fecha de envio ML
+ 2000014933312865 | Sarai Lara Altamirano         | 2026-09-08 17:33:22 | paid        | sin fecha de envio ML
+ 2000014936492573 | Erika Araceli Mendoza Ayala   | 2026-09-08 19:34:01 | paid        | sin fecha de envio ML
+ 2000014938339621 | Jose Angel Escamilla Linares  | 2026-09-08 22:33:27 | paid        | sin fecha de envio ML
+ 2000014954022641 | Gerardo Tule Arias            | 2026-09-09 16:33:18 | paid        | sin fecha de envio ML
+ 2000014965663285 | Martha Adriana Soriano Mendez | 2026-09-10 09:33:58 | paid        | sin fecha de envio ML
+(6 rows)
+
+ ?column?
+-----------
+ Q2_OK n=6
+(1 row)
+
+=== (Q3) CROSS-CHECK AMAZON: pickings %amazon% outgoing deadline CDMX <= D (cubre Flex MX id33/Flex id25/Easy/FBM) ===
+    partner     |  odoo  |  client_order_ref   |    picking    |  state   | deadline_cdmx
+----------------+--------+---------------------+---------------+----------+---------------
+ Amazon Flex MX | S02178 | 701-6167430-7852254 | EHV/OUT/02217 | assigned | 2026-09-07
+ Amazon Flex MX | S02179 | 701-0772789-9885816 | EHV/OUT/02218 | assigned | 2026-09-07
+ Amazon FBM US  | S02180 | 112-6174413-7626643 | EHV/OUT/02219 | assigned | 2026-09-07
+ Amazon Easy MX | S02181 | 701-5921901-7229825 | EHV/OUT/02220 | assigned | 2026-09-07
+ Amazon Easy MX | S02182 | 702-8238327-1559430 | EHV/OUT/02221 | assigned | 2026-09-07
+ Amazon FBM MX  | S02183 | 701-2817823-2361800 | EHV/OUT/02222 | assigned | 2026-09-07
+ Amazon FBM US  | S02184 | 113-7945413-9549847 | EHV/OUT/02223 | assigned | 2026-09-07
+ Amazon FBM US  | S02185 | 114-8219024-9505824 | EHV/OUT/02224 | assigned | 2026-09-08
+ Amazon Flex MX | S02186 | 701-0127343-3755455 | EHV/OUT/02225 | assigned | 2026-09-08
+ Amazon Flex MX | S02187 | 701-7004306-7465852 | EHV/OUT/02226 | assigned | 2026-09-08
+ Amazon FBM US  | S02188 | 114-4913582-6944237 | EHV/OUT/02227 | assigned | 2026-09-08
+ Amazon FBM US  | S02189 | 113-4596105-9681840 | EHV/OUT/02228 | assigned | 2026-09-08
+ Amazon Easy MX | S02190 | 702-5404588-7153049 | EHV/OUT/02229 | assigned | 2026-09-09
+ Amazon Easy MX | S02191 | 701-5700486-3012211 | EHV/OUT/02230 | assigned | 2026-09-09
+ Amazon Easy MX | S02192 | 701-6472476-5281063 | EHV/OUT/02231 | assigned | 2026-09-09
+ Amazon FBM US  | S02193 | 114-1534882-5053008 | EHV/OUT/02232 | assigned | 2026-09-09
+ Amazon Easy MX | S02194 | 701-7802844-9726666 | EHV/OUT/02233 | assigned | 2026-09-09
+(17 rows)
+
+  ?column?
+------------
+ Q3_OK n=17
+(1 row)
+
+=== (Q2b) GUARDS: ML sale/done SIN picking (anomalia a revisar) + ALERTA ML fuera de ventana sin picking ===
+ numero_real | cliente | so_state | meli_status | creada
+-------------+---------+----------+-------------+--------
+(0 rows)
+
+          ?column?
+-----------------------------
+ ALERTA_ML_FUERA_VENTANA n=0
+(1 row)
+
+CENSUS_V2_OK 4 queries ejecutadas, sentinels verificados en bash

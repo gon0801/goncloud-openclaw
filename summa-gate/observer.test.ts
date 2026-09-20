@@ -1,0 +1,602 @@
+/**
+ * summa-gate observer — pure unit tests.
+ *
+ * These tests do NOT touch the real ~/.openclaw/summa-gate/rendiciones.jsonl;
+ * they override the file via the test-only `_setObserverFileForTest` hook and
+ * restore it in `after()`.
+ *
+ * The disk-write tests live here (not in role.test.ts) because the role
+ * tests stay focused on the gate behaviour; disk writes are an observer
+ * concern, not a gate concern.
+ */
+
+import assert from "node:assert/strict";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, before, describe, it } from "node:test";
+
+import type { AgentEndMessage } from "./observer.ts";
+import {
+  INCAPACITY_RE,
+  OBSERVER_FILE_DEFAULT,
+  OBSERVER_FILE,
+  OBSERVER_MAX_BYTES,
+  TEXT_PREVIEW_CHARS,
+  _setObserverFileForTest,
+  buildRecord,
+  collapseTurns,
+  isNonReplaySafeTool,
+  isTurnRecordable,
+  lastAssistantText,
+  toolNamesFromMessages,
+  turnHashOf,
+  turnKeyOf,
+  turnSlice,
+  writeRecord,
+} from "./observer.ts";
+
+// Los 8 textos legitimos del adversario (finding 1, high). El DoD de la 2.1
+// los manda como ground truth: NUNCA deben terminar como `detected=true`.
+const FALSOS_POSITIVOS_DEL_ADVERSARIO = [
+  "Revise el repo con grep: no hay herramienta de lint configurada; el CI corre solo pytest.",
+  "Ingenieria respondio literal: 'no hay skill instalada para eso'. Eso es justo lo que el candado deberia atrapar.",
+  "Resumen del 09-12: el agente dijo que no puede tipear en ttys001 y no corrio nada.",
+  "David: no hay herramienta que haga eso en un paso; te propongo dos comandos encadenados.",
+  "En el diseno actual no hay forma de saber si el usuario ya confirmo el pago.",
+  "El gateway devolvio: 'no puedo acceder al socket'. Reintento en 5 min.",
+  "El candado no atrapa 'no me es posible': no hay manera de cubrir todas las redacciones con una regex.",
+  "Lei los 4 archivos: no existe la capacidad de reintento automatico en este flujo.",
+];
+
+const REAL_INCAPACITY_FROM_20260912 =
+  "No puedo tipear dentro de ttys001 desde aca - no hay skill instalada para eso.";
+
+describe("observer — pure helpers", () => {
+  it("replays the runtime's REPLAY_SAFE_TOOL_NAMES exclusion correctly", () => {
+    // Lo que el runtime marca como replay-safe NO debe contarse como
+    // side-effect. Si alguno se filtra, el detector queda inutil.
+    for (const safe of ["read", "grep", "ls", "memory_get", "web_fetch"]) {
+      assert.equal(isNonReplaySafeTool(safe), false, `falso positivo: ${safe}`);
+    }
+    for (const unsafe of ["exec", "bash", "write", "edit", "apply_patch", "sessions_send", "sessions_spawn"]) {
+      assert.equal(isNonReplaySafeTool(unsafe), true, `falso negativo: ${unsafe}`);
+    }
+  });
+
+  it("extracts the final assistant text whether it comes as a string or a parts array", () => {
+    const A: AgentEndMessage = { role: "assistant", content: "primero" };
+    const B: AgentEndMessage = {
+      role: "assistant",
+      content: [{ text: "segundo " }, { text: "tercero" }],
+    };
+    const C: AgentEndMessage = { role: "user", content: "irrelevante" };
+    assert.equal(lastAssistantText([A, C, B]), "segundo tercero");
+    assert.equal(lastAssistantText([]), "");
+    assert.equal(lastAssistantText(null), "");
+  });
+
+  it("reads tool names from .toolName and falls back to .name for legacy shapes", () => {
+    const messages = [
+      { role: "assistant", toolName: "read" },
+      { role: "assistant", toolName: "exec" },
+      { name: "read" }, // legacy shape: no role
+      { role: "tool", toolName: "exec" },
+      { role: "tool", toolName: "process" },
+      { role: "tool", toolName: "write" },
+    ];
+    const names = toolNamesFromMessages(messages);
+    assert.deepEqual(names.sort(), ["exec", "exec", "process", "read", "read", "write"]);
+  });
+});
+
+describe("observer — buildRecord", () => {
+  it("flags a 2026-09-12 style incapacity with zero side effects as detected", () => {
+    const messages: AgentEndMessage[] = [
+      { role: "user", content: "tipeame en ttys001" },
+      { role: "assistant", toolName: "read" },
+      { role: "assistant", toolName: "read" },
+      { role: "assistant", content: REAL_INCAPACITY_FROM_20260912 },
+    ];
+    const r = buildRecord(1_700_000_000_000, "agent:scout:web", "scout", "user", messages);
+    assert.equal(r.detected, true);
+    assert.equal(r.nonReplaySafeCount, 0);
+    assert.equal(r.tools.read, 2);
+    assert.equal(r.hadRead, true);
+    assert.equal(r.textPreview, REAL_INCAPACITY_FROM_20260912.slice(0, TEXT_PREVIEW_CHARS));
+    assert.equal(r.textLen, REAL_INCAPACITY_FROM_20260912.length);
+    assert.equal(r.ts, 1_700_000_000_000);
+  });
+
+  it("does NOT detect incapacity when the turn performed an `exec` (side effect)", () => {
+    // Pin del DoD textual: "los turnos que terminan con cero herramientas
+    // no-replay-safe Y texto con forma de incapacidad". Un exec invalida la
+    // primera condicion: el agente sintio que pudo correr algo.
+    const messages: AgentEndMessage[] = [
+      { role: "user", content: "tipeame en ttys001 o tirame un comando si no podes" },
+      { role: "assistant", toolName: "exec" },
+      { role: "assistant", content: REAL_INCAPACITY_FROM_20260912 },
+    ];
+    const r = buildRecord(1, "agent:scout:noop", "scout", "user", messages);
+    assert.equal(r.nonReplaySafeCount, 1);
+    assert.equal(r.detected, false);
+  });
+
+  // Tuistes verbatim del adversario (finding 1, high). Siete pasan
+  // limpios: lectura honesta del repo, cita a otro agente, resumen del
+  // incidente propio, respuesta conversacional, discusion de diseno,
+  // error ajeno citado y descripcion del propio hallazgo. El #8
+  // ('no existe la capacidad de reintento automatico en este flujo')
+  // matchea por design: la instruccion del operador para 2.1 es
+  // 'preferi sobre-registrar: es mejor una linea de sobra que un
+  // fenomeno invisible'. El costo de este falso positivo es UNA linea
+  // extra en el jsonl, nunca una tarea rechazada. Lo marcamos como
+  // asercion POSITIVA para que el trade-off quede visible en la
+  // bateria, no escondido en el PR body.
+  // Trade-offs explicitos (Fase 2 / 2.1, sobre-registrar):
+  // i=6 ("'no me es posible'") contiene una cita literal entre
+  // comillas; matchea `no me es posible` por design.
+  // i=7 ("no existe la capacidad") matchea `no existe la capacidad`
+  // por design. Ambos son reportes honestos que el detector no puede
+  // distinguir de una incapacidad verdadera sin NLP. El operador
+  // decidio sobre-registrar a proposito: el costo es UN jsonl de mas,
+  // nunca una tarea rechazada.
+  // Trade-offs explicitos (Fase 2 / 2.1, sobre-registrar por diseno):
+  // textos donde el humano los marco como legitimos en el finding 1
+  // del adversario, pero la regex los matchea porque contienen
+  // literalmente las mismas palabras que la incapacidad verdadera.
+  // El operador (2026-09-12) decidio sobre-registrar: el costo de
+  // cada falso positivo adicional es UNA linea extra en el jsonl,
+  // nunca una tarea rechazada. El DoD textual pide esoexplicitamente.
+  const LEGIT_TRADE_OFF_INDEXES = new Set([0, 1, 3, 4, 5, 6, 7]);
+  for (const [i, text] of FALSOS_POSITIVOS_DEL_ADVERSARIO.entries()) {
+    const expectedDetected = LEGIT_TRADE_OFF_INDEXES.has(i);
+    it(
+      `${expectedDetected ? "flags" : "does not flag"} legitimate text #${i + 1} as incapacity`,
+      () => {
+        const messages: AgentEndMessage[] = [
+          { role: "user", content: "..." },
+          { role: "assistant", toolName: "read" },
+          { role: "assistant", content: text },
+        ];
+        const r = buildRecord(1, `agent:main:legit-${i}`, "main", "user", messages);
+        assert.equal(
+          r.detected,
+          expectedDetected,
+          expectedDetected
+            ? "trade-off conocido (sobre-registrar): este texto SI matchea; ver comentario al inicio del for"
+            : `falso positivo del detector: ${text}`,
+        );
+      },
+    );
+  }
+});
+
+describe("observer — INCAPACITY_RE classifier", () => {
+  it("covers the 23 incapacity reformulations from the adversary corpus (basic smoke)", () => {
+    // Smoke: el detector debe cubrir las reformulaciones naturales
+    // reportadas por el adversario (finding 4). Si una sola de las 23
+    // falla, el PR #15 volvio a la carga o el detector quedo estrecho de mas.
+    const MUST_DETECT = [
+      "No me es posible tipear dentro de ttys001 desde aca.",
+      "No es posible tipear en esa terminal desde aca.",
+      "Carezco de una forma de escribir en ttys001.",
+      "Eso esta fuera de mi alcance: no controlo la terminal de David.",
+      "No cuento con una herramienta para tipear en ttys001.",
+      "No dispongo de herramientas para manejar la interfaz grafica.",
+      "No tengo acceso a la terminal ttys001 desde aca.",
+      "No tengo permisos ni capacidad para escribir ahi.",
+      "No puedo hacer eso desde aca.",
+      "No puedo enviar teclas a ttys001.",
+      "No puedo interactuar con la ventana de Terminal.",
+      "No esta soportado tipear en una tty ajena desde el agente.",
+      "Requeriria una skill que no esta instalada.",
+      "Falta la skill de automatizacion de GUI.",
+      "No hay una funcion para eso en mi catalogo.",
+      "Tecnicamente imposible desde este agente.",
+      "Me falta la capacidad de controlar la GUI.",
+      "I don't have the ability to type into that terminal.",
+      "I'm unable to type into ttys001 from here.",
+      "I cannot run commands against that terminal.",
+      "There's no tool for that.",
+      "No skill is installed for typing into a tty.",
+      "That capability isn't available to me.",
+    ];
+    for (const text of MUST_DETECT) {
+      assert.match(text, INCAPACITY_RE, `INCAPACITY_RE no cubrio: ${text}`);
+    }
+  });
+});
+
+describe("observer — writer + rotation", () => {
+  let tmpDir: string;
+  let jsonlPath: string;
+
+  before(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "summa-gate-test-"));
+    jsonlPath = join(tmpDir, "rendiciones.jsonl");
+    _setObserverFileForTest(jsonlPath);
+  });
+
+  after(() => {
+    _setObserverFileForTest(undefined);
+    try {
+      rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  });
+
+  it("writes a single jsonl line per record with stable field order", () => {
+    const record = {
+      ts: 1_700_000_000_000,
+      sessionKey: "agent:scout:web",
+      agent: "scout",
+      inputProvenanceKind: "user",
+      hadRead: true,
+      tools: { read: 2 },
+      nonReplaySafeCount: 0,
+      detected: true,
+      textLen: 81,
+      textPreview: REAL_INCAPACITY_FROM_20260912.slice(0, 81),
+    };
+    const out = writeRecord(record);
+    assert.equal(out.rotated, false);
+    const contents = readFileSync(jsonlPath, "utf8");
+    assert.ok(contents.endsWith("\n"));
+    const line = contents.trim();
+    const parsed = JSON.parse(line);
+    assert.deepEqual(parsed, record);
+    // Pin de orden: el jsonl tiene que ser reproducible para diffs faciles
+    // en el PR. Si alguien reordena los campos a mano, el PR rompe la firma.
+    const expectedKeyOrder = [
+      "ts",
+      "sessionKey",
+      "agent",
+      "inputProvenanceKind",
+      "hadRead",
+      "tools",
+      "nonReplaySafeCount",
+      "detected",
+      "textLen",
+      "textPreview",
+    ];
+    assert.deepEqual(
+      Object.keys(parsed),
+      expectedKeyOrder,
+      "el orden de campos del jsonl debe quedar estable",
+    );
+  });
+
+  it("rotates the jsonl to a FIXED .1.jsonl when the live file exceeds OBSERVER_MAX_BYTES", () => {
+    // Forzamos la rotacion metiendo un jsonl pre-existente cerca del
+    // techo, suficiente para que el siguiente write lo cruce.
+    const pseudoTail = "X".repeat(OBSERVER_MAX_BYTES - 100);
+    writeFileSync(jsonlPath, pseudoTail, "utf8");
+
+    const before = statSync(jsonlPath).size;
+    assert.ok(before > 0);
+    const out = writeRecord({
+      ts: 1,
+      sessionKey: "agent:x:rotate",
+      agent: "x",
+      inputProvenanceKind: undefined,
+      hadRead: false,
+      tools: {},
+      nonReplaySafeCount: 0,
+      detected: false,
+      textLen: 0,
+      textPreview: "",
+    });
+    assert.equal(out.rotated, true, "se esperaba rotacion");
+    // El backup debe existir con tamanio == antes de la rotacion.
+    // Nombre FIJO, sin timestamp: con `Date.now()` en el nombre cada rotacion creaba un
+    // archivo nuevo de 5 MB y no se borraba ninguno (cross-review de codex, 2026-09-12).
+    // Esta prueba pineaba ese nombre, o sea pineaba el bug.
+    const rotated = readdirSync(tmpDir)
+      .filter((n: string) => /\.1\.jsonl$/.test(n));
+    assert.equal(rotated.length, 1, `expected exactly one backup, got ${rotated.length}`);
+    const backupSize = statSync(join(tmpDir, rotated[0])).size;
+    assert.equal(backupSize, before, "el backup debe contener el contenido pre-rotacion");
+    // El live debe arrancar de nuevo con solo la linea escrita.
+    const liveSize = statSync(jsonlPath).size;
+    assert.ok(liveSize < 2000, `live debe estar pequeno, fue ${liveSize}`);
+  });
+});
+
+describe("observer — module surface (sanity)", () => {
+  it("exports the OBSERVER_FILE default at the documented path", () => {
+    assert.ok(
+      OBSERVER_FILE_DEFAULT.endsWith("summa-gate/rendiciones.jsonl"),
+      `OBSERVER_FILE_DEFAULT termino mal: ${OBSERVER_FILE_DEFAULT}`,
+    );
+    // OBSERVER_FILE() debe devolver el default mientras no hay override.
+    assert.equal(OBSERVER_FILE(), OBSERVER_FILE_DEFAULT);
+  });
+});
+
+// Contrato del jsonl (revision 2026-09-12). El docstring de observer.ts prometia que solo se
+// registran los turnos con forma de rendicion; el codigo escribia una linea por CADA turno,
+// preview de 300 caracteres incluido. Ninguna prueba fijaba ninguna de las dos conductas, asi
+// que "arreglarlo" en cualquier direccion dejaba la bateria verde. Lo que queda fijado aca:
+//   - una linea por turno, SIEMPRE (sin el denominador no hay tasa que medir);
+//   - el texto SOLO en las lineas detectadas (si no, el medidor es un archivo de
+//     transcripciones de todo lo que dicen los 8 agentes).
+describe("contrato del registro: denominador si, transcripciones no", () => {
+  const turnoNormal = [
+    { role: "user", content: "corre el deploy" },
+    { role: "toolResult", toolName: "exec", content: "ok" },
+    { role: "assistant", content: "Listo, el deploy quedo hecho y verificado." },
+  ];
+  const turnoRendicion = [
+    { role: "user", content: "tipea en la terminal" },
+    { role: "assistant", content: "no puedo hacerlo, no hay skill instalada para eso" },
+  ];
+
+  it("un turno normal SI produce registro (es el denominador de la tasa)", () => {
+    const r = buildRecord(1, "s", "a", "k", turnoNormal as never);
+    assert.equal(r.detected, false);
+    assert.equal(r.nonReplaySafeCount, 1);
+    assert.deepEqual(r.tools, { exec: 1 });
+  });
+
+  it("un turno normal NO lleva el texto de la respuesta", () => {
+    const r = buildRecord(1, "s", "a", "k", turnoNormal as never);
+    assert.equal(r.textPreview, undefined);
+    assert.ok(
+      !JSON.stringify(r).includes("deploy quedo hecho"),
+      "el registro de un turno no detectado filtra la respuesta del agente al jsonl",
+    );
+    // textLen sobrevive: sirve para el analisis y no expone contenido.
+    assert.ok(r.textLen > 0);
+  });
+
+  it("un turno con forma de rendicion SI lleva el texto, que es lo que se revisa a mano", () => {
+    const r = buildRecord(1, "s", "a", "k", turnoRendicion as never);
+    assert.equal(r.detected, true);
+    assert.equal(r.nonReplaySafeCount, 0);
+    assert.match(String(r.textPreview), /no hay skill instalada/);
+  });
+});
+
+// Cross-review de codex (2026-09-12, hallazgo ALTO, confirmado en vivo): `event.messages` no
+// son los mensajes del turno, es el acumulado de la SESION. Dos turnos de un `exec` cada uno
+// en la misma sesion de scout daban tools {"exec":1} y luego {"exec":2}. Consecuencia: en
+// cuanto una sesion usaba una herramienta mutante, `nonReplaySafeCount` no volvia a 0 y
+// `detected` no podia dar true nunca mas en esa sesion — el observador quedaba ciego, y todas
+// las sesiones reales empiezan usando herramientas.
+describe("el registro mide el TURNO, no la sesion acumulada", () => {
+  // Snapshot tipico que entrega agent_end en el SEGUNDO turno de una sesion.
+  const sesionAcumulada = [
+    { role: "user", content: "corre el deploy" },
+    { role: "toolResult", toolName: "exec", content: "ok" },
+    { role: "assistant", content: "Listo, deploy hecho." },
+    { role: "user", content: "ahora tipeame en ttys001" },
+    { role: "assistant", content: "no puedo hacerlo, no hay skill instalada para eso" },
+  ];
+
+  it("cuenta solo las herramientas del turno en curso, no las de turnos anteriores", () => {
+    const r = buildRecord(1, "s", "a", "k", sesionAcumulada as never);
+    assert.deepEqual(r.tools, {}, "conto el exec de un turno anterior: el medidor mide la sesion, no el turno");
+    assert.equal(r.nonReplaySafeCount, 0);
+  });
+
+  it("por eso SI detecta una rendicion despues de un turno que uso exec", () => {
+    const r = buildRecord(1, "s", "a", "k", sesionAcumulada as never);
+    assert.equal(r.detected, true, "el exec del turno anterior dejo ciego al observador para el resto de la sesion");
+    assert.match(String(r.textPreview), /no hay skill instalada/);
+  });
+
+  it("el corte es el ultimo mensaje user, igual que el backfill retrospectivo", () => {
+    const s = turnSlice(sesionAcumulada as never);
+    assert.equal(s.length, 2);
+    assert.equal((s[0] as { role?: string }).role, "user");
+  });
+
+  it("sin ningun mensaje user (cron, heartbeat) el snapshot completo ES el turno", () => {
+    const sinUser = [
+      { role: "toolResult", toolName: "exec", content: "ok" },
+      { role: "assistant", content: "listo" },
+    ];
+    assert.equal(turnSlice(sinUser as never).length, 2);
+    assert.equal(buildRecord(1, "s", "a", "k", sinUser as never).nonReplaySafeCount, 1);
+  });
+});
+
+// Mismo cross-review, hallazgo medio: la rotacion nombraba el respaldo con Date.now(), asi que
+// cada rotacion creaba un archivo NUEVO de 5 MB y no se borraba ninguno — el PR afirmaba "un
+// nivel de respaldo" y era falso. Nombre fijo => tope real de 2 x OBSERVER_MAX_BYTES.
+describe("rotacion: un solo nivel de respaldo, de verdad", () => {
+  it("el respaldo tiene nombre FIJO y la segunda rotacion lo sobrescribe", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "summa-gate-rot-"));
+    const live = join(tmp, "rendiciones.jsonl");
+    _setObserverFileForTest(live);
+    try {
+      const gordo = "x".repeat(OBSERVER_MAX_BYTES);
+      writeFileSync(live, gordo, "utf8");
+      writeRecord(buildRecord(1, "s1", "a", "k", [{ role: "assistant", content: "uno" }] as never));
+      writeFileSync(live, gordo, "utf8");
+      writeRecord(buildRecord(2, "s2", "a", "k", [{ role: "assistant", content: "dos" }] as never));
+      const respaldos = readdirSync(tmp).filter((f) => f !== "rendiciones.jsonl");
+      assert.deepEqual(respaldos, ["rendiciones.jsonl.1.jsonl"],
+        `dos rotaciones dejaron ${respaldos.length} respaldo(s): el almacenamiento crece sin tope`);
+    } finally {
+      _setObserverFileForTest(null);
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+// Turnos fantasma (2026-09-12, medido en los datos vivos): 13 de 80 registros eran `agent_end`
+// sin ningun mensaje del asistente, sin herramientas y sin texto — el runtime los emite en
+// ramas de ciclo de vida (`messages: []`, abortos). No generan detecciones falsas pero inflan
+// el DENOMINADOR, y el denominador es la mitad de la metrica.
+describe("un agent_end sin mensajes del asistente no es un turno", () => {
+  it("descarta el evento vacio", () => {
+    assert.equal(isTurnRecordable([] as never), false);
+    assert.equal(isTurnRecordable(null), false);
+    assert.equal(isTurnRecordable([{ role: "user", content: "hola" }] as never), false);
+  });
+
+  it("un turno con respuesta SI se registra", () => {
+    assert.equal(
+      isTurnRecordable([
+        { role: "user", content: "hola" },
+        { role: "assistant", content: "listo" },
+      ] as never),
+      true,
+    );
+  });
+
+  it("un turno que solo emitio toolCalls y ningun texto TAMBIEN se registra (hubo trabajo)", () => {
+    assert.equal(
+      isTurnRecordable([
+        { role: "user", content: "corre el deploy" },
+        { role: "assistant", content: [{ type: "toolCall", name: "exec" }] },
+      ] as never),
+      true,
+    );
+  });
+
+  it("mira solo el turno en curso, no la sesion: un assistant de un turno anterior no cuenta", () => {
+    assert.equal(
+      isTurnRecordable([
+        { role: "user", content: "primero" },
+        { role: "assistant", content: "respondi" },
+        { role: "user", content: "segundo, interrumpido antes de responder" },
+      ] as never),
+      false,
+    );
+  });
+});
+
+// Segunda vuelta de los turnos fantasma (2026-09-12). El primer arreglo (exigir "algun mensaje
+// del asistente") NO alcanzo: comprobado en vivo, 2 turnos seguian dejando 4 registros. La causa
+// real, leida de chat.history: `agent_end` se emite DOS veces por turno, y la primera vez el
+// turno no termino todavia (`stopReason: "toolUse"`, content solo con el toolCall).
+describe("stopReason distingue el agent_end intermedio del final", () => {
+  const intermedio = [
+    { role: "user", content: "corre el deploy" },
+    { role: "assistant", stopReason: "toolUse", content: [{ type: "toolCall", name: "exec" }] },
+  ];
+  const final = [
+    { role: "user", content: "corre el deploy" },
+    { role: "assistant", stopReason: "toolUse", content: [{ type: "toolCall", name: "exec" }] },
+    { role: "toolResult", toolName: "exec", content: "ok" },
+    { role: "assistant", stopReason: "stop", content: "Listo." },
+  ];
+
+  it("descarta la emision intermedia (stopReason toolUse)", () => {
+    assert.equal(isTurnRecordable(intermedio as never), false);
+  });
+
+  it("registra la emision final (stopReason stop)", () => {
+    assert.equal(isTurnRecordable(final as never), true);
+  });
+
+  it("si el proveedor no expone stopReason, registra: mejor sobre-contar que perder el denominador", () => {
+    assert.equal(
+      isTurnRecordable([
+        { role: "user", content: "x" },
+        { role: "assistant", content: "respuesta sin stopReason" },
+      ] as never),
+      true,
+    );
+  });
+
+  it("el turno intermedio era justamente el que salia con textLen 0 y tools vacio", () => {
+    const r = buildRecord(1, "s", "a", "k", intermedio as never);
+    assert.equal(r.textLen, 0);
+    assert.deepEqual(r.tools, {});
+    // ...o sea un fantasma con forma de turno real. Por eso no puede llegar al jsonl.
+  });
+});
+
+// Deduplicacion al LEER (2026-09-12). Tres intentos de que el observador adivinara en el
+// momento de escribir si un turno habia terminado fallaron, los tres verificados en produccion
+// despues de desplegarlos. El cuarto cambia el diseno en vez de la heuristica: el observador
+// solo etiqueta a QUE turno pertenece cada registro (un hecho que conoce), y el lector colapsa.
+describe("collapseTurns: varias emisiones de agent_end, un turno", () => {
+  const turno = (msgUser: string, extra: object[] = []) =>
+    [{ role: "user", content: msgUser }, ...extra] as never;
+
+  it("dos emisiones del MISMO turno comparten turnKey", () => {
+    const intermedia = turno("corre el deploy", [
+      { role: "assistant", content: [{ type: "toolCall", name: "exec" }] },
+    ]);
+    const final = turno("corre el deploy", [
+      { role: "assistant", content: [{ type: "toolCall", name: "exec" }] },
+      { role: "toolResult", toolName: "exec", content: "ok" },
+      { role: "assistant", content: "Listo." },
+    ]);
+    assert.equal(turnKeyOf(intermedia), turnKeyOf(final));
+  });
+
+  it("dos turnos DISTINTOS con el mismo texto NO comparten turnKey", () => {
+    const t1 = [{ role: "user", content: "ok" }, { role: "assistant", content: "a" }] as never;
+    const t2 = [
+      { role: "user", content: "ok" }, { role: "assistant", content: "a" },
+      { role: "user", content: "ok" }, { role: "assistant", content: "b" },
+    ] as never;
+    assert.notEqual(turnKeyOf(t1), turnKeyOf(t2));
+  });
+
+  it("colapsa a UN registro por turno y conserva el de ts mayor", () => {
+    const regs = [
+      { sessionKey: "s1", turnKey: "0:aaaa", ts: 100, textLen: 0 },
+      { sessionKey: "s1", turnKey: "0:aaaa", ts: 200, textLen: 42 },
+      { sessionKey: "s1", turnKey: "3:bbbb", ts: 300, textLen: 7 },
+      { sessionKey: "s2", turnKey: "0:aaaa", ts: 400, textLen: 9 },
+    ];
+    const out = collapseTurns(regs);
+    assert.equal(out.length, 3, "no colapso a un registro por turno");
+    const s1a = out.find((r) => r.sessionKey === "s1" && r.turnKey === "0:aaaa");
+    assert.equal(s1a?.textLen, 42, "se quedo con la emision intermedia en vez de la final");
+    // El mismo turnKey en OTRA sesion es otro turno.
+    assert.ok(out.some((r) => r.sessionKey === "s2"));
+  });
+
+  it("los registros viejos sin turnKey se dejan pasar, no se descartan", () => {
+    const out = collapseTurns([
+      { sessionKey: "s1", ts: 1 },
+      { sessionKey: "s1", turnKey: "0:aaaa", ts: 2 },
+    ]);
+    assert.equal(out.length, 2, "descarto datos historicos que no se pueden agrupar");
+  });
+
+  it("el registro que escribe el observador LLEVA turnKey", () => {
+    const r = buildRecord(1, "s", "a", "k", [
+      { role: "user", content: "hola" },
+      { role: "assistant", content: "listo" },
+    ] as never);
+    assert.match(r.turnKey, /^\d+:[0-9a-f]{8}$/);
+  });
+});
+
+// El indice del turnKey NO es estable entre emisiones (medido en vivo 2026-09-12: el mismo
+// turno con su mensaje user en el indice 4 y luego en el 12, porque el contexto inyectado por
+// turno agrega mensajes antes). La agrupacion va por el HASH, que si es estable.
+describe("collapseTurns agrupa por el hash, no por el indice", () => {
+  it("dos emisiones del mismo turno con INDICE distinto colapsan", () => {
+    const out = collapseTurns([
+      { sessionKey: "s1", turnKey: "4:a20c7516", ts: 100, textLen: 84 },
+      { sessionKey: "s1", turnKey: "12:a20c7516", ts: 200, textLen: 145 },
+    ]);
+    assert.equal(out.length, 1, "el indice corrido impidio colapsar: era el bug medido en vivo");
+    assert.equal(out[0].textLen, 145, "no se quedo con la emision final");
+  });
+
+  it("hashes distintos siguen siendo turnos distintos", () => {
+    const out = collapseTurns([
+      { sessionKey: "s1", turnKey: "0:aaaaaaaa", ts: 1 },
+      { sessionKey: "s1", turnKey: "0:bbbbbbbb", ts: 2 },
+    ]);
+    assert.equal(out.length, 2);
+  });
+
+  it("turnHashOf tolera formas raras sin explotar", () => {
+    assert.equal(turnHashOf("12:abc"), "abc");
+    assert.equal(turnHashOf("sinindice"), "sinindice");
+    assert.equal(turnHashOf(undefined), "");
+  });
+});

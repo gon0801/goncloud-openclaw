@@ -1,0 +1,165 @@
+{
+  "schema": "runbook-progress.v1",
+  "runbook": "docs/runbooks/autopilot-fase7.md",
+  "fase": "7",
+  "titulo": "Autopilot de la Fase 7",
+  "lead": {
+    "agente": "implementer",
+    "inicio": "2026-09-17T16:16:00Z",
+    "actualizado": "2026-09-18T05:20:00Z"
+  },
+  "atencion_requerida": {
+    "necesaria": false,
+    "motivo": null,
+    "desde": null
+  },
+  "siguiente_paso": "Fase 7 cerrada: el comprobador imprime VERDE en sus siete comprobaciones, tablero incluido.",
+  "carriles": [
+    {
+      "id": "D",
+      "nombre": "Documentos y spec",
+      "repo": "gon0801/goncloud-openclaw",
+      "rama": "fase7/docs",
+      "tareas": [
+        "7.0",
+        "7.2"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "pr": 62,
+      "head": "d4980274a75f2418c6924a5961509f7997f89a24",
+      "approve_lead": null,
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "residuales": [],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-17T16:16:02Z",
+        "que": "merge #62 d498027 (spec delta + evidencia + test 7.2; Quality y gate SUCCESS)"
+      }
+    },
+    {
+      "id": "P",
+      "nombre": "Plugin tablero-runbook",
+      "repo": "gon0801/goncloud-openclaw",
+      "rama": "fase7/tablero",
+      "tareas": [
+        "7.1",
+        "7.3",
+        "7.4",
+        "7.5"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "pr": 63,
+      "head": "545074096527556e35b183deca97c29eae603eca",
+      "approve_lead": null,
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "residuales": [],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-17T20:16:01Z",
+        "que": "merge #63 5450740 (plugin + fixtures + tests; Quality y gate SUCCESS)"
+      }
+    },
+    {
+      "id": "N1",
+      "nombre": "Documentacion N1 (forma --params)",
+      "repo": "gon0801/goncloud-openclaw",
+      "rama": "fase7/n1-forma-params",
+      "tareas": [
+        "7.2",
+        "7.6"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "pr": 65,
+      "head": "ddfc522b437d8006ef90230a2d6740c746ed943f",
+      "approve_lead": null,
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "residuales": [],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-17T20:28:35Z",
+        "que": "merge #65 ddfc522 (forma --params en receta 7.6 y runbooks; Quality y gate SUCCESS)"
+      }
+    },
+    {
+      "id": "C",
+      "nombre": "Cierre",
+      "repo": "gon0801/goncloud-openclaw",
+      "rama": "fase7/cierre",
+      "tareas": [
+        "7.6",
+        "7.7"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "pr": 69,
+      "head": "fca201a6ba06320315bb9536143d8600c4b63260",
+      "approve_lead": null,
+      "ci": "verde",
+      "coderabbit": "limpio",
+      "residuales": [
+        "7.6 parcial: canarys (i)-(vi) sin correr; detalle en el Status de Plans.md"
+      ],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-18T04:25:09Z",
+        "que": "merge #69 fca201a (cierre de Plans.md 7.0-7.7; Quality y gate SUCCESS)"
+      }
+    }
+  ],
+  "cola": [],
+  "eventos": [
+    {
+      "at": "2026-09-17T16:16:02Z",
+      "carril": "D",
+      "que": "merge #62 d498027",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-17T20:16:01Z",
+      "carril": "P",
+      "que": "merge #63 5450740",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-17T20:28:35Z",
+      "carril": "N1",
+      "que": "merge #65 ddfc522",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-18T02:55:00Z",
+      "carril": "C",
+      "que": "envio inicial del progreso de Fase 7 al tablero",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-18T04:25:09Z",
+      "carril": "C",
+      "que": "merge #69 fca201a",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-18T04:40:00Z",
+      "carril": null,
+      "que": "cierre-de-fase.sh 7 en VERDE: plan, ramas, worktrees, sesiones, despliegue, tablero y CI",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-18T05:05:00Z",
+      "carril": null,
+      "que": "Telegram de cierre enviado al dueno (3350) con el enlace al tablero",
+      "situacion": null
+    }
+  ],
+  "cierre": {
+    "at": "2026-09-18T04:40:00Z",
+    "telegram_message_id": 3350,
+    "resumen": "Fase 7 cerrada: 4 carriles mergeados (D #62, P #63, N1 #65, C #69 fca201a); tablero-runbook desplegado y encendido; el comprobador de cierre VERDE en sus siete comprobaciones, con la del tablero publicado incluida; residual declarado: 7.6 parcial, canarys (i)-(vi) sin correr."
+  }
+}

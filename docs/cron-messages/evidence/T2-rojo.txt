@@ -1,0 +1,7 @@
+### T2 caso 1: destinos + ok:true en ambos (esperado: 11111,22222,DIGEST_OK2,exit 0)
+FAIL: destinos: posts=2 ids=[22222 33333] rc=0 out=[=== envio a chat 22222 ===
+{"ok":true,"result":{"message_id":100}}
+=== envio a chat 33333 ===
+{"ok":true,"result":{"mess]
+### legacy: solo caso 1. PASS=0 FAIL=1
+EXIT=1

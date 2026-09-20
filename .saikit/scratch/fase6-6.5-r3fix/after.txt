@@ -1,0 +1,19 @@
+# Sondas r3 contra HEAD 3f33516 (DESPUES del fix) - 2026-09-16
+$ /opt/homebrew/bin/node probe.mjs
+BLOQUEADO	1a gh api .../merge&&echo ok
+BLOQUEADO	1b gh api .../merge;ls
+BLOQUEADO	1c gh pr merge;ls
+BLOQUEADO	1d curl host merge&&echo ok
+BLOQUEADO	1e gh api .../merge|cat
+BLOQUEADO	2 token entrecomillado
+BLOQUEADO	3 comentario graphql
+BLOQUEADO	4a PUT auto-merge
+BLOQUEADO	4b DELETE auto-merge
+PASO	C1 gh pr view (consulta)
+PASO	C2 gh pr checks (consulta)
+PASO	C3 gh pr comment con body-file
+PASO	C4 push rama NO protegida (debe pasar)
+PASO	C5 push rama propia del carril (debe pasar)
+PASO	C6 gh pr ready (mutacion leve declarada)
+BLOQUEADO	C7 push a rama protegida sigue bloqueado
+EXIT=0

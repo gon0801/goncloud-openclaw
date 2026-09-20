@@ -1,0 +1,4 @@
+[AVANZA] Fase 9, 2 de 5 partes terminadas
+Que cambio: los PRs de la parte de mensajes pasaron solos
+Que sigue: ahora se trabaja la parte de politicas
+Que necesito de ti: nada

@@ -1,0 +1,4 @@
+# Tabla de modos del simulacro 9.9 (Fase 9, 9.2). La fila tui-falso apunta al TUI de
+# mentira en el worktree del lead; la comprobacion de barra es su linea final.
+tui-falso	/Users/dn/dev/wt-f9-lead/scripts/tests/fixtures/tui-falso.sh		TUI-FALSO	unknown	unknown	unknown
+glm	glm	--mode yolo	yolo	/mode yolo	unknown	unknown

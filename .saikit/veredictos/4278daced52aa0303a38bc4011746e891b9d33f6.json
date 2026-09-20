@@ -1,0 +1,17 @@
+{
+  "sha": "4278daced52aa0303a38bc4011746e891b9d33f6",
+  "pr": 88,
+  "verifier": "PASS",
+  "verify_app": {
+    "resultado": "PASS",
+    "comando": "bash scripts/tests/test-cierre-pr-merge-comando.sh && bash scripts/tests/test-skill-autopilot-runbook.sh"
+  },
+  "blast": {
+    "nivel": 4,
+    "hecho": "El candado relajado NO quedo inerte, medido a mano y no por lectura. Estado de partida: la copia de la Mac (sha256 11be49d9) YA difería de la de esta rama (b9164f05) y el bloque (4) pasaba por la rama nueva, imprimiendo 'no es la de esta rama, pero es una version commiteada (222b4b2)' — o sea la corrida verde de base ejercita justo la rama que el cambio agrega, no la de igualdad. Con una linea agregada a la copia de la Mac que no existe en ningun commit (blob 296eff26), el script sale ROJO con rc=1 y nombra los dos archivos: 'FAIL: la copia de la Mac tiene contenido que no esta commiteado en ninguna rama: diff docs/agent-skills/autopilot-runbook/SKILL.md /Users/dn/.claude/skills/autopilot-runbook/SKILL.md'. Restaurado el respaldo (sha256 de vuelta a 11be49d9, identico al de partida) vuelve a TODO VERDE con rc=0. Segundo hecho, el limite del candado: 'es una version commiteada' afirma mas de lo que la comprobacion prueba — `git cat-file -e $h` solo acredita que el blob esta en la base de objetos, no que sea alcanzable desde un commit. Demostrado sin escribir en el repo real: con el blob de la deriva escrito en un objdir aparte y expuesto via GIT_ALTERNATE_OBJECT_DIRECTORIES, el mismo contenido NO commiteado (0 commits lo contienen, `git rev-list --all --objects` = 0) pasa en verde e imprime 'es una version commiteada (6fec25d1)'. El agujero real en el repo es un `git add` de la deriva, o un blob que dejo un commit descartado. Cierre limpio: los dos blobs de prueba (296eff26, 6fec25d1) quedaron AUSENTES de la base de objetos del repo y el worktree quedo limpio.",
+    "comando": "cp -p ~/.claude/skills/autopilot-runbook/SKILL.md $S/autopilot-SKILL.md.bak; printf '\\nLINEA DE DERIVA NO COMMITEADA reviewer-blast 4278dac %s\\n' \"$(date +%s)\" >> ~/.claude/skills/autopilot-runbook/SKILL.md; bash scripts/tests/test-skill-autopilot-runbook.sh; cp -p $S/autopilot-SKILL.md.bak ~/.claude/skills/autopilot-runbook/SKILL.md; bash scripts/tests/test-skill-autopilot-runbook.sh; git init -q $S/tmprepo; B=$(GIT_DIR=$S/tmprepo/.git git hash-object -w ~/.claude/skills/autopilot-runbook/SKILL.md); GIT_ALTERNATE_OBJECT_DIRECTORIES=$S/tmprepo/.git/objects bash scripts/tests/test-skill-autopilot-runbook.sh"
+  },
+  "adversary": "n/a",
+  "reviewer": "findings",
+  "decisiones": ".saikit/decisiones/pr88-main-en-rojo.tsv"
+}

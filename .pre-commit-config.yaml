@@ -1,0 +1,63 @@
+# Generado y mantenido por quality-kit (init-repo.ps1) -- QUALITY-KIT MANAGED.
+# Si este archivo es EXACTAMENTE igual a lo que init-repo.ps1 generaria hoy
+# para el stack detectado, es seguro de volver a generar cada vez que
+# corre. Si le agregaste algo propio directo aca (una linea "exclude:", un
+# comentario explicandola, un hook nuevo, args editados), init-repo.ps1 lo
+# va a detectar y va a dejar el archivo tal cual esta, avisando -- nunca
+# se pisa una personalizacion en silencio. Para sumar algo propio de forma
+# permanente, agregalo directo en este archivo (no hace falta un archivo
+# aparte: pre-commit no fusiona varios archivos de config de todas formas).
+#
+# Este bloque base (pre-commit-hooks) se incluye SIEMPRE, sin importar el
+# stack detectado -- son chequeos genericos de higiene de archivo que
+# tienen sentido en cualquier repo.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # exclude agregado 2026-09-12: `workspace-*/memory/` y `agents/*/sessions/` no son
+      # archivos escritos por nadie — el cron "auto: snapshot .openclaw" los vuelca desde el
+      # gateway cada ~2 h. Arreglarles el whitespace no sirve: el proximo snapshot los
+      # reescribe igual y el hook vuelve a fallar. Medido: 6 corpus de memoria dejaban el CI
+      # en rojo por esto, sin ninguna relacion con el cambio que se estaba revisando.
+      # Es la misma trampa que el SKILL.md desviado: no se corrige el artefacto generado,
+      # se corrige el generador o se lo excluye.
+      # exclude ampliado 2026-09-18: `tls/` es la misma trampa. El snapshot del gateway
+      # volco ahi el binario de lego (66 MB), su zip, su CHANGELOG y la cuenta ACME. El
+      # CHANGELOG trae whitespace sobrante y el account.json no termina en salto de linea,
+      # asi que los dos hooks los "arreglaban" y dejaban el CI en rojo. Medido: tres
+      # corridas seguidas de main en rojo por esto, incluidas las de dos PRs ajenos que se
+      # integraron despues y no tenian nada que ver. Son artefactos vendidos y generados,
+      # no archivos que alguien escriba: se excluyen, no se corrigen. Quitarlos del repo
+      # los borraria del disco del gateway en el siguiente pull y con ellos la renovacion
+      # de certificados, asi que siguen versionados a proposito.
+      - id: trailing-whitespace
+        exclude: '^(workspace-[^/]+/memory/|agents/[^/]+/sessions/|tls/)'
+      - id: end-of-file-fixer
+        exclude: '^(workspace-[^/]+/memory/|agents/[^/]+/sessions/|tls/)'
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        exclude: '^tls/'
+      - id: check-json
+      - id: check-yaml
+
+  # --- Agregado a mano el 2026-09-12 (quality-kit: init-repo.ps1 detecta esto y NO lo pisa).
+  #
+  # Motivo: los candados de este repo no corrian en ningun lado. El workflow de CI nunca se
+  # habia commiteado y, aun commiteado, GitHub Actions no ejecuta nada en esta cuenta (cero
+  # corridas historicas en los tres repos, verificado por API). Mientras eso siga asi, este
+  # hook es el UNICO lugar donde los candados corren solos.
+  #
+  # Costo medido: 0.8 s el conjunto completo. No hay motivo para saltearlo.
+  - repo: local
+    hooks:
+      - id: run-checks
+        name: bateria summa-gate + contratos de scripts
+        entry: bash scripts/run-checks.sh
+        language: system
+        pass_filenames: false
+        # Corre siempre, no solo cuando cambian los archivos obvios: la prueba
+        # test-browser-profile-flag.sh compara copias de una skill ENTRE agentes, asi que
+        # un cambio en agents/main/ puede romper una prueba que mira agents/ingenieria/.
+        # Un filtro por ruta habria dejado pasar justo la desviacion que llevaba dias en rojo.
+        always_run: true

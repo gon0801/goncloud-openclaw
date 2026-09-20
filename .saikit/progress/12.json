@@ -1,0 +1,267 @@
+{
+  "schema": "runbook-progress.v1",
+  "runbook": "docs/runbooks/autopilot-fase12.md",
+  "fase": "12",
+  "corrida": "fase12-tablero",
+  "proyecto": "openclaw",
+  "titulo": "Autopilot de la Fase 12 (tablero de corrida)",
+  "plan": {
+    "repo": "gon0801/goncloud-openclaw",
+    "ruta": "Plans.md",
+    "seccion": "Fase 12"
+  },
+  "lead": {
+    "agente": "cursor-cloud",
+    "inicio": "2026-09-19T03:59:08Z",
+    "actualizado": "2026-09-19T06:17:29Z"
+  },
+  "atencion_requerida": {
+    "necesaria": false,
+    "motivo": null,
+    "desde": null
+  },
+  "siguiente_paso": "Fase 12 cerrada. Tablero en /runbook/tablero/12. Evidence en docs/evidence/usuario-fase12-2026-09-18.md.",
+  "carriles": [
+    {
+      "id": "C",
+      "nombre": "Contrato",
+      "repo": "gon0801/goncloud-openclaw",
+      "rama": "fase12/contrato",
+      "tareas": [
+        "12.0"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "pr": 89,
+      "head": "ce23af1b647fb3852f5e07d9b4a42e7e5c808fb8",
+      "approve_lead": null,
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "residuales": [],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-19T04:28:33Z",
+        "que": "merge #89 ce23af1"
+      }
+    },
+    {
+      "id": "A",
+      "nombre": "Nucleo",
+      "repo": "gon0801/goncloud-openclaw",
+      "rama": "fase12/nucleo",
+      "tareas": [
+        "12.1",
+        "12.2"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "pr": 91,
+      "head": "53b8e7ce1c44117e67d807cd6d733a311b88bdbb",
+      "approve_lead": null,
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "residuales": [],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-19T04:57:59Z",
+        "que": "merge #91 53b8e7c"
+      }
+    },
+    {
+      "id": "B",
+      "nombre": "Pantalla",
+      "repo": "gon0801/goncloud-openclaw",
+      "rama": "fase12/pantalla",
+      "tareas": [
+        "12.3"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "pr": 90,
+      "head": "54dbe8870c6dc8488cf8024807623ccb450136bf",
+      "approve_lead": null,
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "residuales": [],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-19T05:04:58Z",
+        "que": "merge #90 54dbe88"
+      }
+    },
+    {
+      "id": "D",
+      "nombre": "Receta",
+      "repo": "gon0801/goncloud-openclaw",
+      "rama": "fase12/docs",
+      "tareas": [
+        "12.4"
+      ],
+      "estado": "mergeado",
+      "paso_loop": 8,
+      "pr": 92,
+      "head": "836dfa2acd205282030755b52055ab9f8c0c14f8",
+      "approve_lead": null,
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "residuales": [],
+      "detenido_por": null,
+      "ultimo_evento": {
+        "at": "2026-09-19T05:08:01Z",
+        "que": "merge #92 836dfa2"
+      }
+    }
+  ],
+  "cola": [
+    {
+      "id": "Q0",
+      "prs": [
+        {
+          "repo": "gon0801/goncloud-openclaw",
+          "pr": 87
+        }
+      ],
+      "estado": "verificado",
+      "ventana": null,
+      "merge_commits": [
+        "9ff5b4eea156f52cdbb4edea82d27f8f99a83e1d"
+      ],
+      "verificado": "ok",
+      "detenido_por": null,
+      "avance": 100
+    },
+    {
+      "id": "Q1",
+      "prs": [
+        {
+          "repo": "gon0801/goncloud-openclaw",
+          "pr": 89
+        }
+      ],
+      "estado": "verificado",
+      "ventana": null,
+      "merge_commits": [
+        "ce23af1b647fb3852f5e07d9b4a42e7e5c808fb8"
+      ],
+      "verificado": "ok",
+      "detenido_por": null,
+      "avance": 100
+    },
+    {
+      "id": "Q2",
+      "prs": [
+        {
+          "repo": "gon0801/goncloud-openclaw",
+          "pr": 91
+        }
+      ],
+      "estado": "verificado",
+      "ventana": null,
+      "merge_commits": [
+        "53b8e7ce1c44117e67d807cd6d733a311b88bdbb"
+      ],
+      "verificado": "ok",
+      "detenido_por": null,
+      "avance": 100
+    },
+    {
+      "id": "Q3",
+      "prs": [
+        {
+          "repo": "gon0801/goncloud-openclaw",
+          "pr": 90
+        }
+      ],
+      "estado": "verificado",
+      "ventana": null,
+      "merge_commits": [
+        "54dbe8870c6dc8488cf8024807623ccb450136bf"
+      ],
+      "verificado": "ok",
+      "detenido_por": null,
+      "avance": 100
+    },
+    {
+      "id": "Q4",
+      "prs": [
+        {
+          "repo": "gon0801/goncloud-openclaw",
+          "pr": 92
+        }
+      ],
+      "estado": "verificado",
+      "ventana": null,
+      "merge_commits": [
+        "836dfa2acd205282030755b52055ab9f8c0c14f8"
+      ],
+      "verificado": "ok",
+      "detenido_por": null,
+      "avance": 100
+    },
+    {
+      "id": "Q5",
+      "prs": [],
+      "estado": "verificado",
+      "ventana": null,
+      "merge_commits": [],
+      "verificado": "ok",
+      "detenido_por": null,
+      "avance": 100
+    }
+  ],
+  "eventos": [
+    {
+      "at": "2026-09-19T03:59:08Z",
+      "carril": null,
+      "que": "merge #87 9ff5b4eea156f52cdbb4edea82d27f8f99a83e1d",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-19T04:28:33Z",
+      "carril": "C",
+      "que": "merge #89 ce23af1",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-19T04:57:59Z",
+      "carril": "A",
+      "que": "merge #91 53b8e7c",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-19T05:04:58Z",
+      "carril": "B",
+      "que": "merge #90 54dbe88",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-19T05:08:01Z",
+      "carril": "D",
+      "que": "merge #92 836dfa2",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-19T05:20:00Z",
+      "carril": null,
+      "que": "12.5 sigue abierto: no hay docs/evidence/usuario-fase12-*.md con linea FUNCIONA; Plans.md queda cc:TODO",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-19T05:55:00Z",
+      "carril": null,
+      "que": "12.5 FUNCIONA en docs/evidence/usuario-fase12-2026-09-18.md; Q5 verificado; Plans.md cc:完了",
+      "situacion": null
+    },
+    {
+      "at": "2026-09-19T06:17:29Z",
+      "carril": null,
+      "que": "cierre.at seteado; progress alineado versionado↔gateway",
+      "situacion": null
+    }
+  ],
+  "cierre": {
+    "at": "2026-09-19T06:17:29Z",
+    "telegram_message_id": null,
+    "resumen": "Fase 12 cerrada: tablero de corrida en main (PRs #87–#93)."
+  }
+}

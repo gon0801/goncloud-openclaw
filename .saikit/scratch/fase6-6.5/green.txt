@@ -1,0 +1,23 @@
+
+== GREEN (SHA pendiente de commit) ==
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 143.40925
+
+PASS test-agent-dispatch-no-merge
+PASS test-saikit-cierre-pr-merge-owner
+== GREEN tras rebase ==
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 117.355958
+
+PASS test-agent-dispatch-no-merge
+PASS test-saikit-cierre-pr-merge-owner
+
+== mutante (borra la rama nueva del guard) ==
+  File "<string>", line 3
+    p=Path('summa-gate/lib.ts'); t=p.read_text(); mut='  if (graphql'||'Merge || hostMerge) {'; import sys
+                                                                      ^
+SyntaxError: invalid syntax
