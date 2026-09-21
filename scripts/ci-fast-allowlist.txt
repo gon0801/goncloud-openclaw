@@ -1,0 +1,32 @@
+# Allowlist del carril fast de CI (Fase 15.0, carril S).
+#
+# Politica (Plans.md, "Politica de seleccion aprobada"): el carril fast son
+# EXCLUSIVAMENTE documentos de planificacion, evidencia y registros de cierre
+# enumerados aqui. La enumeracion es exhaustiva: cualquier ruta que no case
+# con una regla es carril completo, aunque sea .md. La extension sola nunca
+# habilita fast; el contrato es arbol + formato.
+#
+# Formato (lo consume scripts/clasificar-cambio.sh, que tambien lo documenta):
+#   - una regla por linea; '#' inicia comentario; las lineas vacias no cuentan;
+#   - la regla casa contra la ruta relativa completa del archivo cambiado;
+#   - '*' casa cualquier cosa que NO cruce '/';
+#   - '**/' casa cualquier profundidad de directorios, INCLUIDA cero;
+#   - no hay negaciones ni prefijos de directorio magicos: lo que no esta
+#     enumerado, no es fast.
+#
+# Arboles con contrato de formatos (no solo extension):
+#   docs/evidence/**      evidencia de medicion: los formatos que ya viven ahi
+#                         (md, txt, tsv, json, jsonl, html). Un .sh ahi dentro
+#                         no es evidencia, es codigo: cae a completo.
+#   .saikit/progress/**   registros de cierre: <fase>.json y
+#                         <fase>-sesiones.txt. Cualquier otro archivo en ese
+#                         arbol (un .md de notas, un script) cae a completo.
+Plans.md
+docs/evidence/**/*.md
+docs/evidence/**/*.txt
+docs/evidence/**/*.tsv
+docs/evidence/**/*.json
+docs/evidence/**/*.jsonl
+docs/evidence/**/*.html
+.saikit/progress/*.json
+.saikit/progress/*-sesiones.txt

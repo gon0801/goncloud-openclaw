@@ -1,12 +1,25 @@
-# Generado por quality-kit (init-repo.ps1). Pre-commit conserva las comprobaciones
-# rapidas de archivos; este workflow corre ademas la bateria completa en la nube, en
-# cada push y pull request. Asi el repo queda protegido sin cobrar la bateria en cada
-# commit local.
+# Generado por quality-kit (init-repo.ps1) y adaptado en Fase 15 (carril S) a la
+# politica de seleccion de Plans.md ("Politica de seleccion aprobada"). El
+# workflow corre SIEMPRE en PR y push a main, pero la bateria ya no es
+# incondicional: el job `clasificador` decide POR ARCHIVOS (nunca por titulo,
+# etiqueta o declaracion) contra la allowlist versionada
+# scripts/ci-fast-allowlist.txt, y selecciona el carril:
 #
-# CI paralelo (regla 8): la bateria corre COMPLETA en cada push/PR, nunca se
-# recorta ni se saltea por tipo de cambio. pytest usa `-n auto` (pytest-xdist)
-# por default. Opt-out por repo: QUALITY_KIT_PYTEST_SERIAL=1 al correr
-# init-repo.ps1 (suites con estado compartido; el workflow queda en `pytest -q`).
+#   fast     exclusivamente documentos de planificacion, evidencia y registros
+#            de cierre enumerados en la allowlist: corren los checks
+#            documentales del gate; no se instala OpenClaw ni corre la bateria.
+#   completo todo lo demas (codigo, tests, CI, config, scripts, documentos que
+#            controlan comportamiento, cambios mixtos, y cualquier cosa que no
+#            se pueda asegurar: comparacion fallida o historial incompleto
+#            seleccionan completo).
+#
+# El gate corre SIEMPRE y distingue omision autorizada por fast de fallo o
+# cancelacion: un job omitido solo pasa con clasificacion fast valida y checks
+# documentales verdes. Clasificacion ausente, fallida o cancelada NUNCA pasa.
+#
+# pytest usa `-n auto` (pytest-xdist) por default. Opt-out por repo:
+# QUALITY_KIT_PYTEST_SERIAL=1 al correr init-repo.ps1 (suites con estado
+# compartido; el workflow queda en `pytest -q`).
 #
 # Gate de docs/ledger: tools/check-*.sh y tools/check_*.py (nombres con
 # docs|ledger|deploy-log|context) corren SIN argumentos y SIN dependencias
@@ -23,8 +36,75 @@ permissions:
   contents: read
 
 jobs:
+  clasificador:
+    runs-on: ubuntu-latest
+    outputs:
+      carril: ${{ steps.clasificar.outputs.carril }}
+      motivo: ${{ steps.clasificar.outputs.motivo }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # Historial completo: la clasificacion necesita el merge-base de la
+          # base del PR con el head (y el rango before/after del push). Con un
+          # fetch corto, un before viejo no se resuelve y el carril cae a
+          # completo (fail-closed): pagaria la bateria entera por un clone
+          # corto.
+          fetch-depth: 0
+
+      - name: Clasificar el cambio por archivos
+        id: clasificar
+        env:
+          # Los shas llegan por env y no interpolados en el run: el clasificador
+          # valida lo que recibe y un evento sin base/head debe morir aca (exit
+          # 2, job rojo), no filtrarse como condicion vacia mas abajo.
+          EVENTO: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BASE: ${{ github.event.before }}
+          PUSH_HEAD: ${{ github.event.after }}
+        run: |
+          set -eu
+          if [ "$EVENTO" = "pull_request" ]; then
+            base=$PR_BASE
+            head=$PR_HEAD
+          else
+            base=$PUSH_BASE
+            head=$PUSH_HEAD
+          fi
+          bash scripts/clasificar-cambio.sh --base "$base" --head "$head"
+
+      - name: Resumen del carril
+        if: always()
+        env:
+          CARRIL: ${{ steps.clasificar.outputs.carril }}
+          MOTIVO: ${{ steps.clasificar.outputs.motivo }}
+        run: |
+          {
+            echo "### Carril de CI: ${CARRIL:-invalido o ausente}"
+            echo "motivo: ${MOTIVO:-la clasificacion no llego a producirse}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Shards (Fase 15.1/15.2, carril W) ──────────────────────────────────────
+  # W agrega aca los jobs de shard (matriz con checkout y estado propios,
+  # fail-fast: false). Reglas que ya quedan fijadas y no se renegocian en W:
+  #   1. Condicion de corrida de cada shard:
+  #        needs: [clasificador]
+  #        if: needs.clasificador.outputs.carril != 'fast'
+  #      Solo un `fast` EXACTO autoriza a omitir; carril ausente o invalido
+  #      corre la bateria (fail-closed).
+  #   2. El job `gate` pasa a listar cada shard en `needs` y en la lista de
+  #      pares del ultimo paso (R_SHARD1, R_SHARD2, ...). La regla por par:
+  #      success pasa; skipped pasa SOLO con clasificacion fast valida; todo lo
+  #      demas (failure/cancelled) rebota.
+  #   3. Triggers, permisos y checkouts con persist-credentials: false quedan
+  #      como estan.
   quality:
     runs-on: ubuntu-latest
+    needs: [clasificador]
+    # `!= 'fast'` y no `== 'completo'`: si el output llegara vacio o con basura,
+    # corre la bateria. La omision se autoriza SOLO con un fast exacto.
+    if: needs.clasificador.outputs.carril != 'fast'
     env:
       # Lo lee summa-gate/role.test.ts para el smoke de import del plugin.
       OPENCLAW_NODE_MODULES: ${{ github.workspace }}/node_modules/openclaw
@@ -83,13 +163,13 @@ jobs:
         run: npm test --if-present
 
       # La bateria completa tiene un solo entrypoint en CI: scripts/run-checks.sh.
-      # Pre-commit conserva solo validaciones rapidas de archivos para no cobrar la
-      # bateria completa en cada commit local.
+      # Pre-commit conserva solo validaciones rapidas de archivos para no cobrar
+      # la bateria completa en cada commit local.
 
   gate:
     runs-on: ubuntu-latest
     if: always()
-    needs: [quality]
+    needs: [clasificador, quality]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
@@ -132,14 +212,44 @@ jobs:
           if [ "$found" -eq 0 ]; then
             echo "gate: no hay tools/check-*.sh ni tools/check_*.py -- nada que auditar, sale 0"
           fi
-      - name: Todos los jobs de calidad en verde
+      - name: Carril valido y jobs de calidad en su carril
         env:
+          R_CLASIFICADOR: ${{ needs.clasificador.result }}
+          CARRIL: ${{ needs.clasificador.outputs.carril }}
+          # Jobs de calidad: quality hoy; los shards de W (15.2) se agregan a
+          # needs y a esta lista de pares, con la MISMA regla.
           R_QUALITY: ${{ needs.quality.result }}
         run: |
           rc=0
+          printf 'clasificador=%s carril=%s\n' "$R_CLASIFICADOR" "${CARRIL:-}"
+          # (a) Clasificacion valida: el job tiene que haber terminado success
+          # y el carril ser exactamente fast o completo. Ausencia, fallo o
+          # cancelacion del clasificador NUNCA pasan (fail-closed): sin
+          # clasificacion no se autoriza ninguna omision.
+          case "$R_CLASIFICADOR:$CARRIL" in
+            success:fast|success:completo) ;;
+            *)
+              echo "gate: clasificacion invalida o ausente (job=$R_CLASIFICADOR carril='${CARRIL:-}')" >&2
+              rc=1 ;;
+          esac
+          # (b) Jobs de calidad: success pasa; skipped pasa SOLO con
+          # clasificacion fast valida (omision autorizada); todo lo demas
+          # (failure, cancelled) rebota.
           for par in "quality=$R_QUALITY"; do
             printf '%s\n' "$par"
-            case "$par" in *=success) ;; *) rc=1 ;; esac
+            case "$par" in
+              *=success) ;;
+              *=skipped)
+                if [ "$R_CLASIFICADOR:$CARRIL" = "success:fast" ]; then
+                  echo "gate: $par omitido, autorizado por clasificacion fast"
+                else
+                  echo "gate: $par omitido SIN clasificacion fast valida" >&2
+                  rc=1
+                fi ;;
+              *)
+                echo "gate: $par no quedo en success (fallo o cancelacion)" >&2
+                rc=1 ;;
+            esac
           done
-          [ "$rc" -eq 0 ] || { echo "gate: algun job de calidad NO quedo en success" >&2; exit 1; }
-          echo "gate: OK -- todos en success"
+          [ "$rc" -eq 0 ] || { echo "gate: RECHAZADO" >&2; exit 1; }
+          echo "gate: OK -- carril valido y todos los jobs de calidad en verde"
