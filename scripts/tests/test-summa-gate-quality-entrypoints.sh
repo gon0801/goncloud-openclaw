@@ -8,7 +8,10 @@
 # recortados demuestran que el validador rechaza shard faltante, fallo ignorado,
 # gate sin dependencia completa y gate con la dependencia escondida en un job
 # señuelo — r1: la seccion gate se ancla por su clave (siembras locales, jamas
-# pushes rojos).
+# pushes rojos) — r2: TODOS los checks del job de shards corren DENTRO de la
+# seccion `shards:` anclada por su clave (un comentario u otro job satisfacia
+# los tokens mientras el shards real violaba el contrato) y la matriz exige
+# EXACTAMENTE tres entradas con cada valor UNA vez.
 # Uso: bash scripts/tests/test-summa-gate-quality-entrypoints.sh
 set -u
 cd "$(dirname "$0")/../.." || exit 1
@@ -110,22 +113,38 @@ echo "ok (5): run-checks.sh corre tablero-runbook con guard de conteo"
 contrato_shards() { # $1=yaml -> exit 0 si cumple el contrato de shards+gate
   yaml=$1
   [ -f "$yaml" ] || return 1
-  # (a) exactamente UN paso corre la bateria, shardado por la matriz
-  [ "$(grep -cE '^[[:space:]]+run:.*scripts/run-checks\.sh' "$yaml" || true)" -eq 1 ] || return 1
-  grep -F 'run: SAIKIT_SHARD=${{ matrix.shard }} bash scripts/run-checks.sh' "$yaml" >/dev/null || return 1
-  # (b) matriz con fail-fast: false y EXACTAMENTE los tres shards: la union de
-  # resumen.txt cubre el glob y las entradas node/sintaxis/corpus solo si los
-  # tres corren; un shard faltante deja cobertura muerta.
-  grep -q 'fail-fast: false' "$yaml" || return 1
+  # (a)-(d) y (g): checks del JOB DE SHARDS, anclados a SU seccion. r2
+  # (cross-review): sobre el YAML crudo, un comentario u otro job satisfacia
+  # fail-fast, los valores de shard, la dependencia del clasificador, la
+  # corrida shardada o el upload de artifacts mientras el job shards REAL
+  # violaba el contrato (fixture shards-en-comentario.yml, rojo medido antes
+  # del arreglo). Se extrae la SECCION `shards:` por su clave (clave de job a
+  # dos espacios hasta la siguiente de igual nivel o EOF, la misma tecnica del
+  # gate); seccion ausente o vacia = rechazo (fail-closed).
+  seccion_shards=$(awk '/^  shards:/{f=1} f && !/^  shards:/ && /^  [A-Za-z_][A-Za-z0-9_-]*:/{f=0} f' "$yaml")
+  [ -n "$seccion_shards" ] || return 1
+  # (a) exactamente UN paso corre la bateria, shardado por la matriz — dentro
+  # del job shards
+  [ "$(printf '%s\n' "$seccion_shards" | grep -cE '^[[:space:]]+run:.*scripts/run-checks\.sh' || true)" -eq 1 ] || return 1
+  printf '%s\n' "$seccion_shards" | grep -F 'run: SAIKIT_SHARD=${{ matrix.shard }} bash scripts/run-checks.sh' >/dev/null || return 1
+  # (b) matriz con fail-fast: false y EXACTAMENTE tres entradas de matrix
+  # include, cada valor UNA vez: la union de resumen.txt cubre el glob y las
+  # entradas node/sintaxis/corpus solo si los tres corren, con cada entrada
+  # exactamente una vez. Duplicados (dos 1/3), entradas extra o faltantes
+  # rechazan (fixture shards-duplicado.yml: dos 1/3 y ningun 3/3; el loop
+  # viejo solo verificaba que APARECIERAN y aceptaba entradas de mas).
+  printf '%s\n' "$seccion_shards" | grep -q 'fail-fast: false' || return 1
+  [ "$(printf '%s\n' "$seccion_shards" | grep -cE '^[[:space:]]*-[[:space:]]*shard:' || true)" -eq 3 ] || return 1
   for s in 1/3 2/3 3/3; do
-    grep -qF "shard: $s" "$yaml" || return 1
+    [ "$(printf '%s\n' "$seccion_shards" | grep -cE "^[[:space:]]*-[[:space:]]*shard:[[:space:]]*$s[[:space:]]*\$" || true)" -eq 1 ] || return 1
   done
   # (c) los shards dependen del clasificador y solo se omiten con fast EXACTO
   # (fail-closed: carril ausente o invalido corre la bateria)
-  grep -qF 'needs: [clasificador]' "$yaml" || return 1
-  grep -qF "carril != 'fast'" "$yaml" || return 1
+  needs_shards=$(printf '%s\n' "$seccion_shards" | grep -E '^[[:space:]]{4}needs:' || true)
+  printf '%s\n' "$needs_shards" | grep -qF 'clasificador' || return 1
+  printf '%s\n' "$seccion_shards" | grep -qF "carril != 'fast'" || return 1
   # (d) un fallo de shard jamas se ignora
-  grep -q 'continue-on-error' "$yaml" && return 1
+  printf '%s\n' "$seccion_shards" | grep -q 'continue-on-error' && return 1
   # (e) el GATE — anclado por su clave, no cualquier job — depende del
   # clasificador Y de los shards. r1 (cross-review): grepear el needs completo
   # en TODO el archivo aceptaba un job señuelo con `needs: [clasificador,
@@ -141,12 +160,15 @@ contrato_shards() { # $1=yaml -> exit 0 si cumple el contrato de shards+gate
   printf '%s\n' "$needs_gate" | grep -qF 'clasificador' || return 1
   printf '%s\n' "$needs_gate" | grep -qF 'shards' || return 1
   # (f) la regla de pares: success pasa; skipped pasa SOLO con fast valido
-  # (success:fast); todo lo demas rebota como "no quedo en success"
-  grep -qF 'success:fast' "$yaml" || return 1
-  grep -qF 'no quedo en success' "$yaml" || return 1
-  # (g) cada shard publica logs/run-checks/ para auditar la union sin re-correr
-  grep -q 'actions/upload-artifact' "$yaml" || return 1
-  grep -q 'logs/run-checks' "$yaml" || return 1
+  # (success:fast); todo lo demas rebota como "no quedo en success". r2:
+  # DENTRO de la seccion gate — el texto suelto en el YAML crudo lo
+  # satisfacia un comentario o el job señuelo.
+  printf '%s\n' "$seccion_gate" | grep -qF 'success:fast' || return 1
+  printf '%s\n' "$seccion_gate" | grep -qF 'no quedo en success' || return 1
+  # (g) cada shard publica logs/run-checks/ para auditar la union sin
+  # re-correr — dentro del job shards
+  printf '%s\n' "$seccion_shards" | grep -q 'actions/upload-artifact' || return 1
+  printf '%s\n' "$seccion_shards" | grep -q 'logs/run-checks' || return 1
   return 0
 }
 contrato_shards .github/workflows/quality.yml \
@@ -161,11 +183,16 @@ echo "ok (6): tres shards fail-fast: false, gate con dependencia completa y regl
 #   gate-sin-shards-senuelo  el needs completo vive en un job señuelo y el gate
 #                            arranca sin los shards (r1: el validador tiene que
 #                            anclar la seccion gate, no grepear todo el archivo)
+#   shards-duplicado      dos entradas 1/3 y ninguna 3/3 (r2: exactamente tres
+#                            entradas, cada valor UNA vez)
+#   shards-en-comentario  los tokens del contrato en comentarios de OTRO job
+#                            mientras el shards real viola el contrato (r2: los
+#                            checks del job corren DENTRO de su seccion)
 FX=scripts/tests/fixtures/quality-shards
 [ -d "$FX" ] || fail "falta $FX"
 contrato_shards "$FX/workflow-valido.yml" \
   || fail "el fixture VALIDO no pasa el contrato: el validador esta roto, no discrimina"
-for roto in shard-faltante fallo-ignorado gate-sin-dependencia gate-sin-shards-senuelo; do
+for roto in shard-faltante fallo-ignorado gate-sin-dependencia gate-sin-shards-senuelo shards-duplicado shards-en-comentario; do
   if contrato_shards "$FX/$roto.yml"; then
     fail "fixture $roto.yml no fue rechazado: el validador acepta $roto"
   fi

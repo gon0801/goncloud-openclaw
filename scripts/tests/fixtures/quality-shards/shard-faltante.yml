@@ -2,9 +2,10 @@
 # la union de los shards ya no cubre la bateria y el validador tiene que
 # rechazarlo. Lo consume
 # scripts/tests/test-summa-gate-quality-entrypoints.sh para demostrar que su
-# validador discrimina: este archivo pasa, y los cuatro hermanos (shard-faltante,
-# fallo-ignorado, gate-sin-dependencia, gate-sin-shards-senuelo) son mutaciones de ESTE archivo y deben
-# ser rechazados uno por una.
+# validador discrimina: este archivo pasa, y los seis hermanos (shard-faltante,
+# fallo-ignorado, gate-sin-dependencia, gate-sin-shards-senuelo,
+# shards-duplicado, shards-en-comentario) son mutaciones de ESTE archivo y
+# deben ser rechazados uno por una.
 name: Quality (fixture valido)
 on:
   push:

@@ -1,12 +1,9 @@
-# Fixture VALIDO del contrato shards+gate (15.2, carril W): un recorte del
-# workflow real con los mismos jobs y las mismas lineas de contrato, sin la
-# plantilla de calidad-kit que en este repo no aplica. Lo consume
-# scripts/tests/test-summa-gate-quality-entrypoints.sh para demostrar que su
-# validador discrimina: este archivo pasa, y los seis hermanos (shard-faltante,
-# fallo-ignorado, gate-sin-dependencia, gate-sin-shards-senuelo,
-# shards-duplicado, shards-en-comentario) son mutaciones de ESTE archivo y
-# deben ser rechazados uno por una.
-name: Quality (fixture valido)
+# Mutacion de workflow-valido.yml: SHARDS DUPLICADOS — la matriz tiene DOS
+# entradas 1/3 y ninguna 3/3. El validador viejo solo verificaba que 1/3, 2/3
+# y 3/3 APARECIERAN; r2 exige EXACTAMENTE tres entradas con cada valor UNA vez.
+# YAML valido que el ciclo (7) tiene que rechazar. Lo consume
+# scripts/tests/test-summa-gate-quality-entrypoints.sh.
+name: Quality (fixture shards-duplicado)
 on:
   push:
     branches: [main]
@@ -35,9 +32,9 @@ jobs:
         include:
           - shard: 1/3
             n: 1
-          - shard: 2/3
+          - shard: 1/3
             n: 2
-          - shard: 3/3
+          - shard: 2/3
             n: 3
     steps:
       - uses: actions/checkout@v7
