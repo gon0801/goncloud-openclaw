@@ -72,6 +72,7 @@ Antes de iniciar Q4, instala con `bash scripts/mac/instalar-mac.sh` desde el
 `corrida.sh`:
 
 ```bash
+bash scripts/mac/instalar-mac.sh &&
 for f in lib abrir lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento; do test -x "$HOME/bin/corrida/$f.sh" || { echo "FALTA $f" >&2; exit 1; }; done
 ```
 
