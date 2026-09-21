@@ -1,8 +1,8 @@
 #!/bin/bash
 # Candado de docs/runbooks/loop-autopilot.md, la parte invariante de todo runbook de fase.
 # Nace del 2026-09-16: los runbooks de las fases 6 y 7 repetían el loop entero (40 y 36 KB),
-# el de la 7 decía "lead: Claude" cuando el lead tiene que poder ser cualquier host del kit
-# (con claw o kimi de lead, "sin estado del hook" en los seis merges), y las reglas que
+# el de la 7 decía "lead: Claude" cuando el lead tiene que poder cambiar de host sin perder
+# el recibo persistente del PR, y las reglas que
 # costaron la noche del 15 (bootstrap dentro del PR, catorce rondas cruzadas, pruebas que
 # pasan sin el arreglo, CodeRabbit sin leer, recargas en ráfaga) no estaban escritas en
 # ningún lugar único. Verifica: (1) el detector de "lead nombrado por modelo" discrimina;
@@ -15,6 +15,7 @@ cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
 
 DOC=docs/runbooks/loop-autopilot.md
+BASE=docs/runbooks/base-openclaw.md
 MODELOS='claude|codex|kimi|grok|zcode|dsh|muse|cursor|glm|gpt|opus|sonnet|deepseek|qwen'
 
 # Detector: la fila del lead (la línea de la tabla de roles que empieza por "| **lead**")
@@ -81,9 +82,9 @@ for a in 'LISTO <sha>' \
          'Tope de tres PRs abiertos' \
          'Los comentarios de CodeRabbit se leen' \
          'saikit-merge.sh' \
-         'veredicto sellado' \
+         'saikit-entrega.v1' \
          'ya en `origin/<default>`' \
-         'cada host que pueda ser lead' \
+         'no consulta estado de sesión' \
          'Ningún cambio de configuración del gateway lo hace claw' \
          'en tanda, no en ráfaga' \
          'America/New_York' \
@@ -108,6 +109,14 @@ for a in 'LISTO <sha>' \
   grep -qF -- "$a" "$DOC" || fail "$DOC: falta el ancla: $a"
 done
 echo "ok (3): las 55 anclas de reglas están"
+
+# (3a) Entrega-sin-sello A retiro la autoridad ligada a una sesion. Estas formas
+# reintroducirian el candado que detuvo Fase 9 aunque el resto de las anclas pase.
+vieja=$(grep -nEi 'veredicto sellado|sin estado del hook|re-sell|para que el kit selle' "$DOC" "$BASE" || true)
+[ -z "$vieja" ] || fail "reaparecio autoridad de sesion obsoleta: $vieja"
+grep -qF 'saikit-entrega.v1' "$DOC" || fail "$DOC: falta el recibo persistente"
+grep -qF 'no consulta estado de sesión' "$DOC" || fail "$DOC: no declara independencia de sesion"
+echo "ok (3a): recibo persistente presente y autoridad de sesion ausente"
 
 # (3b) La seccion 4 manda repetir mientras salgan bloqueantes, sin tope fijo, y nunca
 # promover con un bloqueante abierto. Medido el 2026-09-18 tres veces: un tope de tres
@@ -164,5 +173,38 @@ printf '%s' "$s8" | grep -q -i 'reiniciar el gateway' \
 printf '%s' "$s8" | grep -q -i 'excluye la que estás viendo' \
   || fail "$DOC: la sección 8 no dice dónde comprobar el enlace; la barra excluye la fase que se está viendo y comprobarlo ahí da un falso rojo"
 echo "ok (6): la sección 8 exige los dos pasos de publicar una fase, y dónde comprobarlo"
+
+# (7) Fase 9, 9.7: las secciones que hablan de corridas referencian la
+# herramienta y el contrato que las sostienen. §1 (quien lanza y quien vigila),
+# §3 (encargo e implementacion), §8 (progreso y mensajes), §9 (relevo del lead)
+# y §12 (atores) nombran `corrida.sh` y `seguimiento.v1`: sin la referencia, el
+# loop manda un mecanismo que ya vive en codigo con otro nombre. El TIMEBOX con
+# pausas se mudo del runbook de la Fase 7 (§3 lo define, §12 lo aplica).
+seccion() { # $1 numero -> texto de esa seccion
+  ini=$(grep -n -E "^## $1\. " "$DOC" | head -1 | cut -d: -f1)
+  fin=$(grep -n -E "^## $(($1+1))\. " "$DOC" | head -1 | cut -d: -f1)
+  [ -n "$fin" ] || fin=$(wc -l < "$DOC")
+  sed -n "${ini},${fin}p" "$DOC"
+}
+for n in 1 3 8 9 12; do
+  s=$(seccion "$n")
+  printf '%s' "$s" | grep -qF 'corrida.sh' \
+    || fail "$DOC: la sección $n no referencia corrida.sh"
+  printf '%s' "$s" | grep -qF 'seguimiento.v1' \
+    || fail "$DOC: la sección $n no referencia seguimiento.v1"
+done
+s3=$(seccion 3)
+printf '%s' "$s3" | grep -qF 'TIMEBOX con pausas' \
+  || fail "$DOC: la sección 3 no define el TIMEBOX con pausas (mudado de Fase 7)"
+printf '%s' "$s3" | grep -qF 'vuelve a 6 horas completas' \
+  || fail "$DOC: la sección 3 no dice que el TIMEBOX vuelve a 6 horas completas al salir del dialogo"
+printf '%s' "$s3" | grep -qF 'plantilla del encargo' \
+  || fail "$DOC: la sección 3 no cita la plantilla del encargo de la skill autopilot-runbook"
+printf '%s' "$s3" | grep -qF 'espejo de progreso' \
+  || fail "$DOC: la sección 3 no nombra el espejo de progreso"
+s12=$(seccion 12)
+printf '%s' "$s12" | grep -qF 'TIMEBOX de 6 h' \
+  || fail "$DOC: la sección 12 no aplica el TIMEBOX de 6 h"
+echo "ok (7): §1, §3, §8, §9 y §12 referencian corrida.sh y seguimiento.v1; TIMEBOX con pausas en §3 y §12"
 
 echo "TODO VERDE: loop-autopilot"

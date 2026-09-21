@@ -1,0 +1,76 @@
+# Mutacion de workflow-valido.yml: SHARDS EN COMENTARIO — los tokens del
+# contrato (fail-fast: false, los valores de shard, la dependencia del
+# clasificador, la corrida shardada, el upload de artifacts y la regla de
+# pares) viven en COMENTARIOS de OTRO job, mientras el job `shards` REAL
+# viola el contrato: bateria monolitica sin SAIKIT_SHARD y matriz 1/2-2/2.
+# El validador viejo grepeaba el YAML crudo y ACEPTABA este archivo; r2
+# ancla cada check a la seccion de SU job. YAML valido que el ciclo (7)
+# tiene que rechazar. Lo consume
+# scripts/tests/test-summa-gate-quality-entrypoints.sh.
+name: Quality (fixture shards-en-comentario)
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  clasificador:
+    runs-on: ubuntu-latest
+    outputs:
+      carril: fast
+      motivo: fixture
+    steps:
+      - name: Clasificar (stub)
+        run: echo "clasificacion de juguete"
+      # Tokens del contrato, escondidos en comentarios de este job:
+      #   fail-fast: false
+      #   needs: [clasificador]
+      #   if: needs.clasificador.outputs.carril != 'fast'
+      #   run: SAIKIT_SHARD=${{ matrix.shard }} bash scripts/run-checks.sh
+      #   shard: 1/3
+      #   shard: 2/3
+      #   shard: 3/3
+      #   uses: actions/upload-artifact@v4
+      #   path: logs/run-checks/
+      #   success:fast
+      #   no quedo en success
+
+  shards:
+    runs-on: ubuntu-latest
+    needs: [clasificador]
+    strategy:
+      matrix:
+        include:
+          - shard: 1/2
+          - shard: 2/2
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Run bateria monolitica (sin shard)
+        run: bash scripts/run-checks.sh
+
+  gate:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [clasificador, shards]
+    steps:
+      - name: Carril valido y jobs de calidad en su carril
+        env:
+          R_CLASIFICADOR: ${{ needs.clasificador.result }}
+          CARRIL: ${{ needs.clasificador.outputs.carril }}
+          R_SHARDS: ${{ needs.shards.result }}
+        run: |
+          case "$R_CLASIFICADOR:$CARRIL" in
+            success:fast|success:completo) ;;
+            *) echo "clasificacion invalida o ausente" >&2; exit 1 ;;
+          esac
+          for par in "shards=$R_SHARDS"; do
+            case "$par" in
+              *=success) ;;
+              *) echo "no quedo en success (fallo o cancelacion)" >&2; exit 1 ;;
+            esac
+          done

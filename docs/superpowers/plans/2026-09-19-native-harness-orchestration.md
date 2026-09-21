@@ -6,7 +6,7 @@
 
 **Architecture:** Keep `corrida.sh` as the lifecycle boundary and `tablero-runbook` as the read-only operator view. Add a versioned worker registry plus a deterministic Python control-plane CLI for validation, selection, gate state, and reconciliation; keep external effects in small Bash subcommands that own worktrees, `tmux`, Terminal, GitHub, and deployment. Every durable transition is written atomically to `registro.json`, keyed by SHA, so restart and retry converge instead of repeating effects.
 
-**Tech Stack:** Bash 3.2, Python 3 standard library, JSON, git worktrees, tmux, macOS Terminal automation, TypeScript/Node test runner, OpenClaw plugin SDK, GitHub CLI, quality-kit cross-review.
+**Tech Stack:** Bash 3.2, Python 3.10+ standard library, JSON, git worktrees, tmux, macOS Terminal automation, TypeScript/Node test runner, OpenClaw plugin SDK, GitHub CLI, quality-kit cross-review.
 
 **Spec:** `docs/superpowers/specs/2026-09-19-native-harness-orchestration-design.md`
 
@@ -15,13 +15,13 @@
 
 This document is a corrected plan, not an instruction to start Phase 14 now. Finish Phase 15, then Phase 9, before implementation. Delivery-without-seal Blocks A/B/C must be integrated and the applicable kit installed. No pending PR number is evidence of integration.
 
-Before starting, fetch both repos, record their default-branch SHAs, read the Phase 9/15 closure evidence, verify the Phase 9 installed manifest/hashes and registered `usuario`, and inspect the installed kit receipt interface. Resolve any installer filename difference in Task 9 once. Missing prerequisites produce one explicit pending-dependency report; do not repeatedly launch the phase.
+Before starting, fetch both repos, record their default-branch SHAs, read the Phase 9/15 closure evidence, verify the Phase 9 installed manifest/hashes and registered `usuario`, confirm `python3` is 3.10 or newer, and inspect the installed kit receipt interface. Resolve any installer filename difference in Task 9 once. Missing prerequisites produce one explicit pending-dependency report; do not repeatedly launch the phase.
 
 | Owner | Result consumed here | Phase 14 action |
 |---|---|---|
 | Phase 15 | CI coverage, sharding, injected test clocks and timing evidence | Reuse; no rewrite of `quality.yml`, pre-commit or test timing infrastructure |
 | Phase 9 | Installed corrida runtime, bounded close/recovery, installer/rollback, registered usuario, user acceptance and global-clock canary | Extend and regression-test; do not reinstall an alternative scheduler or recreate usuario |
-| Delivery-without-seal A/C | Persistent PR receipt, independent roles and canonical delivery loop | Consume; no signing model or session-dependent merge authorization |
+| Delivery-without-seal A/B/C | Persistent PR receipt, independent roles and canonical delivery loop | Consume; no signing model or session-dependent merge authorization |
 | Phase 23, SummonAIKit repo | Muse compatibility and hook improvements | Independent; consume merged behavior if available. Recommended pending rows do not block Phase 14 |
 
 The final preflight updates paths and SHAs against completed Phase 9, not its feature design. Phase 23 modifications belong to its own repo and worktree, and never run concurrently against an unmerged Block A hook.
@@ -99,12 +99,14 @@ CodeRabbit is requested once after local review. Read its comments on the curren
     "model": "router",
     "capabilities": ["read", "write", "review"],
     "task_types": ["general", "backend", "frontend", "review"],
-    "permission_mode": "acceptEdits",
+    "permission_modes": {"write": "acceptEdits", "review": "plan"},
     "version": "2.1.278",
     "commands": {
       "health": ["claude", "--version"],
-      "start": ["claude", "--permission-mode", "acceptEdits"],
-      "resume": ["claude", "--resume", "{session_id}"],
+      "start:write": ["claude", "--permission-mode", "acceptEdits"],
+      "start:review": ["claude", "--permission-mode", "plan"],
+      "resume:write": ["claude", "--resume", "{session_id}", "--permission-mode", "acceptEdits"],
+      "resume:review": ["claude", "--resume", "{session_id}", "--permission-mode", "plan"],
       "stop": ["tmux-stop", "{session_name}"]
     },
     "quota_patterns": ["usage limit", "rate limit"],
@@ -115,17 +117,21 @@ CodeRabbit is requested once after local review. Read its comments on the curren
 }
 ```
 
-The production file repeats that closed shape for `codex`, `zcode`, `kimi`, `cursor`, and `grok`. Command values are argv arrays, never shell strings. Validation permits only the closed placeholders `{session_id}`, `{session_name}`, `{worktree}`, and `{brief}`. The measured start modes are Claude `--permission-mode acceptEdits`, Codex `--sandbox workspace-write`, ZCode `--mode edit`, Kimi `--auto`, Cursor `--auto-review --sandbox enabled --trust --workspace {worktree}`, and Grok with repo-scoped `--allow` rules. Review workers use the read-only modes exposed by their CLI, including Cursor `--mode plan`, and never inherit the writer's permission argv.
+The production file repeats that closed shape for `codex`, `zcode`, `kimi`, `cursor`, and `grok`. Command values are argv arrays, never shell strings. Every worker with both `write` and `review` capabilities has explicit `start:<role>` and `resume:<role>` argv plus a `permission_modes` entry for each role. Validation rejects a missing role command or permission. It permits only the closed placeholders `{session_id}`, `{session_name}`, `{worktree}`, and `{brief}`. The measured write modes are Claude `--permission-mode acceptEdits`, Codex `--sandbox workspace-write`, ZCode `--mode edit`, Kimi `--auto`, Cursor `--auto-review --sandbox enabled --trust --workspace {worktree}`, and Grok with repo-scoped `--allow` rules. Review commands use the read-only modes exposed by their CLI, including Cursor `--mode plan`, and never inherit the writer's permission argv.
 
 - [ ] **Step 2: Write the failing registry test**
 
 ```bash
 python3 scripts/mac/corrida-worker.py registry validate --registry scripts/tests/fixtures/workers/valid.json \
   | grep -qx 'VALID workers.v1 1'
-python3 scripts/mac/corrida-worker.py registry validate --registry scripts/tests/fixtures/workers/invalid-command.json 2>&1 \
-  && fail "accepted a shell-bearing binary"
-python3 scripts/mac/corrida-worker.py registry validate --registry scripts/tests/fixtures/workers/invalid-pattern.json 2>&1 \
-  && fail "accepted an empty or control-bearing pattern"
+if out=$(python3 scripts/mac/corrida-worker.py registry validate --registry scripts/tests/fixtures/workers/invalid-command.json 2>&1); then
+  fail "accepted a shell-bearing binary"
+fi
+printf '%s\n' "$out" | grep -qx 'ERROR invalid command' || fail "wrong invalid-command diagnostic: $out"
+if out=$(python3 scripts/mac/corrida-worker.py registry validate --registry scripts/tests/fixtures/workers/invalid-pattern.json 2>&1); then
+  fail "accepted an empty or control-bearing pattern"
+fi
+printf '%s\n' "$out" | grep -qx 'ERROR invalid pattern' || fail "wrong invalid-pattern diagnostic: $out"
 ```
 
 - [ ] **Step 3: Run the focused test and confirm the missing CLI failure**
@@ -146,7 +152,7 @@ class Worker:
     model: str
     capabilities: tuple[str, ...]
     task_types: tuple[str, ...]
-    permission_mode: str
+    permission_modes: Mapping[str, str]
     version: str
     commands: Mapping[str, tuple[str, ...]]
     quota_patterns: tuple[str, ...]
@@ -183,6 +189,8 @@ git commit -m "feat: add native worker registry"
 
 **Files:**
 - Create: `scripts/mac/corrida_worker/selector.py`
+- Create: `scripts/tests/fixtures/workers/selection.json`
+- Create: `scripts/tests/fixtures/workers/request-review.json`
 - Create: `scripts/tests/fixtures/workers/selection-state.json`
 - Create: `scripts/tests/test-worker-selector.sh`
 - Modify: `scripts/mac/corrida-worker.py`
@@ -196,7 +204,7 @@ git commit -m "feat: add native worker registry"
 
 ```bash
 decision=$(python3 scripts/mac/corrida-worker.py select \
-  --registry scripts/tests/fixtures/workers/valid.json \
+  --registry scripts/tests/fixtures/workers/selection.json \
   --request scripts/tests/fixtures/workers/request-review.json \
   --state scripts/tests/fixtures/workers/selection-state.json)
 [ "$(printf '%s' "$decision" | json_get winner)" = "codex" ] || fail "unstable winner"
@@ -265,7 +273,7 @@ git commit -m "feat: select native workers deterministically"
 - Modify: `scripts/mac/corrida/lib.sh`
 
 **Interfaces:**
-- Consumes: registry worker ID, run ID, lane ID, worktree, brief file, and named tmux session.
+- Consumes: registry worker ID, run ID, lane ID, persisted lane role (`write|review`), worktree, brief file, and named tmux session.
 - Produces: `corrida.sh adaptador <health|start|deliver|inspect|resume|stop> ...` with the exact normalized statuses from the spec.
 
 - [ ] **Step 1: Write a table-driven failing contract test for all six workers**
@@ -277,7 +285,7 @@ for worker in claude codex zcode kimi cursor grok; do
 done
 ```
 
-For every worker exercise start, accepted delivery, swallowed Enter, running, waiting, complete, failed, quota, expired authentication, resume, stop, and already-stopped. The fake CLI records argv separately so the test proves the adapter invoked the intended native binary and permission mode. A silence fixture remains `running` until `inspect` reads the pane; silence alone can never become `complete`.
+For every worker exercise both `write` and `review` start/resume argv, accepted delivery, swallowed Enter, running, waiting, complete, failed, quota, expired authentication, stop, and already-stopped. The fake CLI records argv separately so the test proves the adapter invoked the intended native binary and role-specific permission mode. A silence fixture remains `running` until `inspect` reads the pane; silence alone can never become `complete`.
 
 - [ ] **Step 2: Run the focused test and confirm the subcommand is absent**
 
@@ -508,12 +516,12 @@ git commit -m "feat: evidence autonomous quality gates by sha"
 - Modify: `scripts/tests/test-merge-allowlist-cierre-pr.sh`
 
 **Interfaces:**
-- Consumes: either a dated owner order or a validated `corrida.v2` record with a valid current-head kit receipt and current CI and `automatic_routing.enabled=true`.
+- Consumes: either a dated owner order or a validated `corrida.v2` record with `authorization_ref` pointing to an approved, versioned phase preapproval, a valid current-head kit receipt and current CI, and `automatic_routing.enabled=true`.
 - Produces: one merge request assigned to exactly one `implementer|ingenieria`, pinned by `expectedHeadOid`; `main` receives only the result.
 
 - [ ] **Step 1: Write the failing authority tests**
 
-Assert that `main`, `reviewer`, and a malformed run record cannot merge; `implementer` and `ingenieria` can follow the documented API route only when the kit receipt and current CI validate; the legacy dated owner order still works; and both copies of `saikit-cierre-pr` remain byte-identical.
+Assert that `main`, `reviewer`, and a malformed run record cannot merge; a missing, unknown, unapproved, or out-of-scope `authorization_ref` fails closed; `implementer` and `ingenieria` can follow the documented API route only when the versioned preapproval, kit receipt and current CI validate; the legacy dated owner order still works; and both copies of `saikit-cierre-pr` remain byte-identical.
 
 Run: `bash scripts/tests/test-autonomous-merge-authority.sh`
 
@@ -521,7 +529,7 @@ Expected: FAIL because the skill recognizes only a dated textual order.
 
 - [ ] **Step 2: Add the second, closed authority branch to both skill copies**
 
-The branch reads the run record, invokes the Task 6 `corrida.sh compuerta RUN LANE merge --sha SHA --evidence FILE` projection and delegates to the installed kit merge entrypoint. The kit verifies the current receipt, CI and `headRefOid`, and pins its GitHub mutation with `expectedHeadOid`. No alternate direct GraphQL bypass is introduced. Record intent before delegation and reread `state,mergedAt,mergeCommit` after every response, including `UNPROCESSABLE`.
+The branch reads the run record, resolves `authorization_ref` to the checked-in preapproval table, verifies that the requested repo/branch/operation is in scope, invokes the Task 6 `corrida.sh compuerta RUN LANE merge --sha SHA --evidence FILE` projection and delegates to the installed kit merge entrypoint. The kit verifies the current receipt, CI and `headRefOid`, and pins its GitHub mutation with `expectedHeadOid`. A receipt never creates authorization by itself. No alternate direct GraphQL bypass is introduced. Record intent before delegation and reread `state,mergedAt,mergeCommit` after every response, including `UNPROCESSABLE`.
 
 - [ ] **Step 3: Keep the hard allowlist unchanged**
 

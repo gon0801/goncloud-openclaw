@@ -2,6 +2,66 @@
 
 Para el lead que Claw asigne. Plan: `docs/superpowers/plans/2026-09-19-native-harness-orchestration.md`; diseño: `docs/superpowers/specs/2026-09-19-native-harness-orchestration-design.md`. Esta revisión corrige el plan; no lanza la fase. Tablero previsto: `/runbook/tablero/c/fase14-harness`.
 
+El primer comando de una futura corrida crea el estado observable antes de tocar un carril:
+
+```bash
+mkdir -p .saikit/progress
+PROGRESS_PATH=${PROGRESS_PATH:-.saikit/progress/14.json}
+export PROGRESS_PATH
+/usr/bin/python3 - <<'PY'
+import datetime
+import json
+import os
+import pathlib
+
+now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def lane(id_, name, branch, task):
+    return {
+        "id": id_, "nombre": name, "repo": "gon0801/goncloud-openclaw",
+        "rama": branch, "tareas": [task], "estado": "pendiente", "paso_loop": 0,
+        "pr": None, "head": None, "approve_lead": None, "ci": "pendiente",
+        "coderabbit": "pendiente", "residuales": [], "detenido_por": None,
+    }
+
+
+def queue(id_):
+    return {
+        "id": id_, "prs": [], "estado": "pendiente", "ventana": None,
+        "merge_commits": [], "verificado": None, "detenido_por": None, "avance": 0,
+    }
+
+
+doc = {
+    "schema": "runbook-progress.v1",
+    "runbook": "docs/runbooks/autopilot-fase14.md",
+    "fase": "14",
+    "corrida": "fase14-harness",
+    "proyecto": "openclaw",
+    "titulo": "Fase 14: orquestación autónoma con harnesses nativos",
+    "plan": {"repo": "gon0801/goncloud-openclaw", "ruta": "Plans.md", "seccion": "Fase 14"},
+    "lead": {"agente": os.environ.get("CORRIDA_HOST", "unknown"), "inicio": now, "actualizado": now},
+    "atencion_requerida": {"necesaria": False, "motivo": None, "desde": None},
+    "siguiente_paso": "Validar dependencias; después iniciar B1.",
+    "carriles": [
+        lane("R", "Registro y selector", "fase14/registro-adaptadores", "14.1"),
+        lane("A", "Adaptadores y aislamiento", "fase14/registro-adaptadores", "14.2"),
+        lane("T", "Tablero", "fase14/tablero-direccion", "14.3"),
+        lane("M", "Autoridad de merge", "fase14/estado-entrega", "14.4"),
+        lane("E", "Estado y compuertas", "fase14/estado-entrega", "14.5"),
+        lane("S", "Skill de main", "fase14/tablero-direccion", "14.6"),
+        lane("L", "Humo y entrega", "fase14/rollout", "14.7"),
+    ],
+    "cola": [queue("B1"), queue("B2"), queue("B3"), queue("B4"), queue("cierre")],
+    "eventos": [],
+    "cierre": {"at": None, "telegram_message_id": None, "resumen": None},
+}
+pathlib.Path(os.environ["PROGRESS_PATH"]).write_text(json.dumps(doc, ensure_ascii=False) + "\n")
+PY
+~/.openclaw/bin/openclaw gateway call runbook.progress.set --params "$(cat "$PROGRESS_PATH")" --timeout 30000
+```
+
 ## Arranque y precedencia
 
 Hereda `docs/runbooks/base-openclaw.md` y `docs/runbooks/loop-autopilot.md` una vez alineados por entrega-sin-sello C. Ante instrucciones antiguas de sellar, cambiar el reloj o esperar cuota, no ejecutar esa copia: falta integrar la dependencia. Las decisiones específicas de esta revisión están en “Execution prerequisites and ownership” del plan.
@@ -12,11 +72,24 @@ Lecturas iniciales desde el repo OpenClaw: `git fetch origin`, `git show origin/
 
 Antes de activar el lanzamiento por frase, validar `bash scripts/lanzar-fase.sh 14 --dry-run -- <cli> <flag>` con la CLI y el flag verificados en el base instalado. Hasta pasar ese check no anunciar “lista para ejecutar”. El primer efecto de la corrida registra `fase14-harness` y las siete tareas pendientes en el tablero mediante el mecanismo instalado de Fase 9.
 
+El lead usa `corrida.sh lanzar-sesion` para abrir cada worker después de reservar su carril; esa ruta registra y marca la sesión antes de entregar el brief.
+
 ## Roles y alcance
 
 Claw asigna el lead por disponibilidad. El implementador escribe en su worktree; verifier y reviewer son independientes de todos los autores. `main` dirige y registra, `implementer` o `ingenieria` ejecutan merge/deploy mediante el kit. `usuario`, instalado en Fase 9, recibe solo promesa y recorrido visible.
 
 Esta guía conserva el alcance previamente autorizado para la futura implementación: ramas/worktrees de Fase 14, PRs, merge por kit, pruebas con CLIs, instalación local prevista y canary de bajo riesgo con rollback. Corregir este documento no ejecuta esas operaciones. Configuración/reinicio del gateway, lectura de secretos, compras de cuota, push directo a main y borrados recursivos quedan fuera.
+
+## Preaprobaciones del dueño
+
+Esta tabla es la autorización versionada de la fase; la corrida guarda su ruta como `authorization_ref`. Un recibo técnico o una CI verde sin esta referencia no autorizan un merge.
+
+| Operación | Alcance | Estado |
+|---|---|---|
+| Push y apertura de PR | ramas `fase14/*` de los cuatro bloques | Aprobado |
+| Merge por la ruta del kit en ventana segura | PRs de los cuatro bloques y el PR único de cierre | Aprobado |
+| Instalación, seis smokes y canary con reversa acotada | artefactos y repos desechables de Fase 14 | Aprobado |
+| `runbook.progress.set\|get` | corrida `fase14-harness` | Aprobado |
 
 ## Bloques, archivos y cola
 
@@ -40,9 +113,13 @@ Pruebas focalizadas durante implementación. Batería completa una vez por SHA f
 
 El recibo vive en el PR; reiniciar el lead no exige otra revisión. Merge usa el kit y `expectedHeadOid`. Guardar head revisado, merge commit y artefacto instalado: un squash puede cambiar el hash. La guía de rollout del Task 10 concretará comandos de instalación/canary/rollback sobre el instalador entregado por Fase 9.
 
-## Seguimiento y recuperación
+## Seguimiento
+
+En cada cambio de estado el lead actualiza el tablero por RPC del gateway y manda a David un Telegram conforme a `seguimiento.v2`. Mientras exista trabajo activo, claw o Hermes envía seguimiento al menos cada 30 minutos, como máximo cada 30 minutos sin novedad. Canal: Telegram, con el destino resuelto por la configuración instalada y nunca pegado en el repo.
 
 Tick interno global de 15 minutos más eventos tmux; Telegram consolidado cada 30 minutos con porcentajes derivados según `seguimiento.v2`. `AVANZA` se acumula; avisos inmediatos usan `seguimiento.v1`. No crear cron por worker ni activar otro `corrida-latido`. Al cerrar, liberar solo marcas de esta fase y conservar el reloj si otro trabajo sigue.
+
+### Recuperación
 
 | Situación | Acción |
 |---|---|

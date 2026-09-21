@@ -60,9 +60,9 @@ El diseño no crea otro tablero ni otro administrador de sesiones.
 3. Una corrida puede tener hasta cuatro harnesses externos activos.
 4. Dos trabajadores con permiso de escritura no comparten un worktree.
 5. El tablero y las terminales visibles son obligatorios. El tablero resume. La terminal muestra el detalle del harness.
-6. Claw puede fusionar y desplegar sin una confirmación por tarea cuando todas las compuertas de este documento están verdes.
+6. Claw puede fusionar y desplegar sin una confirmación por tarea cuando una preaprobación versionada del dueño cubre la operación y todas las compuertas de este documento están verdes.
 7. `main` no ejecuta el merge ni entra a producción. Delega esas acciones a `implementer` o `ingenieria`, según el contrato del repo.
-8. La autoridad automática de merge sustituye el requisito anterior de una orden textual de David por tarea. El registro de la corrida y las compuertas verdes son la autoridad auditable.
+8. La autoridad automática de merge sustituye el requisito anterior de una orden textual de David por tarea dentro del alcance preaprobado. El registro conserva `authorization_ref`; la preaprobación versionada, el registro de la corrida y las compuertas verdes forman juntas la autoridad auditable. Un recibo técnico no crea autorización.
 
 ## Registro de trabajadores
 
@@ -133,7 +133,7 @@ resume(session) -> resumed | unavailable
 stop(session) -> stopped | already_stopped
 ```
 
-El contrato normaliza el ciclo de vida, no la interfaz interna. Cada adaptador usa las opciones reales de su CLI. Por ejemplo, ZCode conserva sus modos `build`, `edit`, `plan` y `yolo`; Cursor Agent conserva `--auto-review`, `--sandbox` y `--worktree`; Codex conserva su TUI; Claude Code conserva sus permisos y hooks.
+El contrato normaliza el ciclo de vida, no la interfaz interna. Cada adaptador usa las opciones reales de su CLI. Por ejemplo, ZCode conserva sus modos `build`, `edit`, `plan` y `yolo`; Cursor Agent conserva `--auto-review`, `--sandbox` y `--workspace` para reutilizar el worktree que asignó la corrida; Codex conserva su TUI; Claude Code conserva sus permisos y hooks.
 
 `agent-tmux.sh` crea la sesión. `corrida.sh` la registra y la marca antes de entregar el brief. El adaptador confirma que la caja de entrada se vació y que la CLI empezó a trabajar. Un exit 0 de `tmux send-keys` no prueba la entrega.
 

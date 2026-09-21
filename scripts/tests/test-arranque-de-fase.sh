@@ -147,6 +147,26 @@ printf '%s' "$out" | grep -q 'corrida-vigia-5' || fail "(2d) el detalle tiene qu
 $out"
 echo "ok (2d): un vigia por corrida sin migrar bloquea el arranque"
 
+# (2e) Una fase que delega TODO seguimiento al watchdog global no crea un empuje
+# propio. La excepcion es explicita: sin el flag, el contrato normal de (2) sigue
+# exigiendo corrida-empuje; con el flag, avance-tareas sano basta y el legado sigue
+# prohibido. Es el contrato de cierre de Fase 9 tras PR #110.
+crons_con avance-tareas
+out=$(corre 5 --solo-watchdog-global); rc=$?
+[ "$rc" -eq 0 ] || fail "(2e) watchdog global sano con excepcion explicita debe salir 0; salio $rc:
+$out"
+printf '%s' "$out" | grep -q '^VERDE *vigilantes.*solo watchdog global' \
+  || fail "(2e) la salida tiene que acreditar el modo global sin empuje propio:
+$out"
+crons_con avance-tareas corrida-vigia-5
+out=$(corre 5 --solo-watchdog-global); rc=$?
+[ "$rc" -ne 0 ] || fail "(2e) la excepcion no puede aceptar corrida-vigia-5 legado:
+$out"
+printf '%s' "$out" | grep -q '^ROJO *vigilantes.*corrida-vigia-5' \
+  || fail "(2e) el legado debe seguir nombrado y rechazado:
+$out"
+echo "ok (2e): el modo global no exige empuje propio y sigue rechazando el vigia legado"
+
 # (3) El primer progreso no enviado: el dueno se queda sin tablero.
 crons_con corrida-vigia-5 corrida-empuje-5; prog_no
 out=$(corre 5)

@@ -10,8 +10,9 @@
 # estados del vigilante (quiet una sola vez por silencio, activity nueva la resetea, closed
 # borra el estado, un envio fallido no marca notified, un TUI que repinta la misma pantalla
 # cuenta como callado, un prompt de permiso avisa de inmediato y se recuerda); (3) el Stop hook no manda nada fuera de
-# tmux y manda el texto correcto dentro de tmux; (4) las anclas de las dos skills; (5) el
-# detector de test-mac-tmux-control.sh sigue verde.
+# tmux y manda el texto correcto dentro de tmux; (4) las anclas de las dos skills.
+# (El detector de test-mac-tmux-control.sh ya no corre anidado aqui: desde 15.1 el runner
+# lo corre por su cuenta en el inventario del glob — antes coronaba cada bateria dos veces.)
 # Uso: bash scripts/tests/test-tmux-activity-watch.sh
 set -u
 cd "$(dirname "$0")/../.." || exit 1
@@ -735,6 +736,14 @@ DISP=agents/main/agent/workshop-skills/agent-dispatch/SKILL.md
 grep -qF 'Wake-ups' "$DISP" || fail "$DISP: el paso 3 no referencia el mecanismo de despertar de mac-tmux-control"
 grep -qF 'OPENCLAW_WATCH 1' "$DISP" || fail "$DISP: el paso 2 no marca la sesion al entregar"
 grep -qF -- '-u OPENCLAW_WATCH' "$DISP" || fail "$DISP: el paso 4 no desmarca al terminar el loop"
+# Fase 9, 9.7: las dos skills abren sesiones con corrida.sh (que marca antes de
+# mandar) y marcan ANTES del primer send-keys, no despues. Pendiente de
+# CodeRabbit del PR 60: marcar despues de mandar deja una ventana donde la
+# sesion trabaja sin vigilancia.
+grep -qF 'corrida.sh lanzar-sesion' "$SK" || fail "$SK: no abre sesiones con corrida.sh lanzar-sesion"
+grep -qF 'BEFORE the first send-keys' "$SK" || fail "$SK: no marca BEFORE the first send-keys"
+grep -qF 'corrida.sh lanzar-sesion' "$DISP" || fail "$DISP: no abre sesiones con corrida.sh lanzar-sesion"
+grep -qF 'BEFORE the first send-keys' "$DISP" || fail "$DISP: no marca BEFORE the first send-keys"
 grep -qF 'unmark' "$DISP" || fail "$DISP: falta desmarcar la cadena terminada o abandonada"
 echo "ok (4): anclas de mac-tmux-control y agent-dispatch presentes"
 
@@ -750,8 +759,9 @@ if grep -Eiq '(send|deliver)[^.]*every[^.]*(turn|inspection)' "$ENTREGA"; then
 fi
 echo "ok (4c): owner-report-delivery clasifica el wake-up interno antes de entregar"
 
-# (5) El detector de test-mac-tmux-control.sh (parte 1) sigue verde.
-bash scripts/tests/test-mac-tmux-control.sh >/dev/null 2>&1 || fail "test-mac-tmux-control.sh se puso rojo"
-echo "ok (5): test-mac-tmux-control.sh sigue verde"
+# (5) Retirado en 15.1: la llamada anidada a scripts/tests/test-mac-tmux-control.sh.
+# Corria el detector DOS veces por bateria (una aqui, otra por el inventario del glob del
+# runner). El test independiente sigue en el inventario y con todas sus assertions: es el
+# runner quien garantiza que se corre, no esta prueba.
 
 echo "TODO VERDE: tmux-activity-watch"

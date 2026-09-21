@@ -137,6 +137,8 @@ export TMUX_BARRA=READY
 # runbook general manda usar. Una copia fija incompleta rompe solo en la Mac viva.
 grep -Eq 'for f in .*terminar-sesion.*reconciliar-marcas' "$INSTALA" \
   || fail "la instalacion de corrida no incluye los subcomandos de marcas"
+grep -Eq 'bash scripts/mac/instalar-mac\.sh[[:space:]]*&&' "$INSTALA" \
+  || fail "el runbook puede validar una instalacion vieja despues de fallar el instalador"
 
 # Una sesión registrada puede finalizar sin afectar a las demás de la corrida.
 bash "$CORR" terminar-sesion abierta ses-lista >/dev/null \

@@ -326,3 +326,108 @@ La salida cerró en `TODO VERDE`, que run-checks.sh solo imprime con
 (summa-gate, pre-commit) corrieron arriba de la parte volcada; cualquier
 rojo ahí habría cerrado la corrida con el conteo en rojo en vez de TODO
 VERDE. VERIFY 1-3 re-corridos hoy dieron idéntico a lo volcado arriba.
+
+---
+
+# TDD 15.1 — inventario, logs y shards (carril R, glm)
+
+Worktree `/Users/dn/dev/wt-f15-R`, rama `fase15/runner`.
+Test nuevo: `scripts/tests/test-runner-shards.sh` (arbol de juguete con fixtures en
+`scripts/tests/fixtures/runner-shards/`: NO corre la bateria real). Rojo medido el
+2026-09-20, ANTES de tocar `scripts/run-checks.sh` y `test-tmux-activity-watch.sh`.
+
+## Rojo 1 — el runner de hoy ignora SAIKIT_SHARD (corre todo en cualquier shard)
+
+```
+$ bash scripts/tests/test-runner-shards.sh
+(1) union de los tres shards = bateria completa, sin duplicados
+FAIL: (1) shard 1/3: el inventario corrido no es el esperado.
+    esperaba : nucleo
+    obtuvo   : bateria-summa bateria-tablero corpus nucleo preflight resto-a resto-b sintaxis-summa sintaxis-tablero watchdog
+exit=1
+```
+
+## Rojo 2 — SAIKIT_SHARD invalido (4/3) pasa por verde y ademas corre la bateria
+
+Sonda contra el runner sin cambios, arbol de juguete todo verde (5 entradas):
+
+```
+$ TALLY_SHARDS=... SAIKIT_SHARD=4/3 bash run-checks.sh-de-juguete
+exit=0 ; entradas corridas: 5
+```
+
+## Rojo 3 — una prueba roja se ejecuta dos veces (la segunda es el "diagnostico")
+
+```
+$ TALLY_SHARDS=... bash run-checks.sh-de-juguete   (con test-roja.sh que sale 7)
+exit=1
+ejecuciones de la roja: 2
+```
+
+## Verde
+
+(despues de implementar: `bash scripts/tests/test-runner-shards.sh` → TODO VERDE,
+pegado mas abajo en este mismo archivo)
+
+## Verde (tras reescribir scripts/run-checks.sh y retirar la llamada anidada del watchdog)
+
+```
+$ bash scripts/tests/test-runner-shards.sh
+(1) union de los tres shards = bateria completa, sin duplicados
+ok (1): la union de los tres shards es la bateria completa y nada corre dos veces
+(2) sin SAIKIT_SHARD corre TODO y un archivo nuevo entra solo por el glob
+ok (2): sin la variable corre TODO y el archivo nuevo entro solo por el glob
+(3) shards invalidos salen != 0 sin correr nada
+ok (3): 4/3 y x salen != 0 sin correr una sola entrada
+(4) un shard sin su prueba en el glob es rojo, no un verde por vacio
+ok (4): el shard que no encuentra su prueba revienta
+(5) una prueba roja: una sola ejecucion, primera salida y exit code en el log
+ok (5): una sola ejecucion; primera salida y exit code conservados en el log y el resumen
+TODO VERDE: runner-shards
+exit=0
+```
+
+Lo que el arbol de juguete afirma, entrada por entrada: cada fixture, cada bateria node,
+cada sintaxis y el corpus dejan UNA linea por ejecucion en un tally compartido; la union
+de los tres shards son las 10 entradas exactamente una vez cada una (5 shell + 2
+baterias node + 2 sintaxis + corpus). La roja cuenta 1 linea (antes 2: la segunda era el
+"diagnostico" del runner viejo re-ejecutandola).
+
+## Bateria local: ATASCADA por el python3 de Homebrew, no por este cambio
+
+`bash scripts/run-checks.sh` (todo, una sola vez) quedo colgado en
+`test-corrida-nucleo.sh` paso (9), que corre con un entorno lavado a proposito:
+`env -i PATH="$T/bin:/opt/homebrew/bin:/usr/bin:/bin"`. Ese PATH pone primero el
+python3 de Homebrew, que HOY esta roto A NIVEL DE MAQUINA:
+
+```
+$ timeout 10 python3 -c 'print(1)'          # /opt/homebrew/bin/python3 (3.14.7)
+rc=124   (gira a ~100% CPU incluso sin sandbox y con -S/-E)
+$ timeout 10 /usr/bin/python3 -c 'print(1)' # el de Apple: 0.036 s
+vivo-apple
+```
+
+Arbol del cuello de botella (ps): corrida.sh (paso 9) -> `/bin/sh
+/opt/homebrew/bin/python3 -c "import json,os..."` con 7+ min de CPU girando. El
+carril hermano S (wt-f15-S) quedo clavado en el MISMO paso con el MISMO arbol, y
+`test-corrida-nucleo.sh` es el UNICO test del repo con ese PATH lavado
+(grep env -i). Es decir: un arbol SIN este diff tambien se cuelga hoy en esta
+maquina — el bloqueo es del entorno, no del cambio. En CI (ubuntu) el python3 es
+sano y ese paso corre normal.
+
+Verificacion local alcanzable (con PATH prefijando un python3 sano para el resto
+de la bateria, que hereda el PATH): shards 2/3 y 3/3 en verde, watcher y vecinos
+en verde sueltos; el shard 1/3 queda bloqueado solo por ese paso. La union
+mecanica de los tres shards la exige `scripts/tests/test-runner-shards.sh`.
+
+## Rojo tardio (hallado por la bateria, no por la corrida suelta)
+
+El shard 3/3 real puso `test-runner-shards.sh` en rojo: el caso "(2) sin SAIKIT_SHARD
+corre TODO" heredaba la variable del runner que lo envolvia (en CI se invoca como
+`SAIKIT_SHARD=3/3 bash scripts/run-checks.sh`) y el "todo" de juguete corria un shard 3
+disfrazado — el tally salia sin nucleo/preflight/watchdog. Suelto nunca fallaba: sin
+variable en el entorno que heredar. Fix: el caso '' usa `env -u SAIKIT_SHARD`. Es
+exactamente el tipo de falso verde de entorno que esta prueba existe para cazar.
+
+Verde del fix en los tres contextos: suelto, con SAIKIT_SHARD=3/3 exportado (el que
+pintaba el rojo) y con 1/3 exportado: exit=0 en los tres.
