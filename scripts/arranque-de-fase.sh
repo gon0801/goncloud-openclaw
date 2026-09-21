@@ -22,6 +22,7 @@
 # Uso:
 #   bash scripts/arranque-de-fase.sh <fase>            # p. ej. 9
 #   bash scripts/arranque-de-fase.sh <fase> --json     # una linea JSON por comprobacion
+#   bash scripts/arranque-de-fase.sh <fase> --solo-watchdog-global
 #
 # Solo lectura: no toca el repo, ni el gateway, ni ninguna sesion, ni ningun cron.
 #
@@ -42,14 +43,23 @@ unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR G
 
 FASE=${1:-}
 JSON=0
-[ "${2:-}" = "--json" ] && JSON=1
+SOLO_GLOBAL=0
 if [ -z "$FASE" ]; then
-  echo "uso: bash scripts/arranque-de-fase.sh <fase> [--json]" >&2
+  echo "uso: bash scripts/arranque-de-fase.sh <fase> [--json] [--solo-watchdog-global]" >&2
   exit 2
 fi
 case "$FASE" in
   *[!0-9.]*) echo "fase invalida: '$FASE' (solo digitos y punto)" >&2; exit 2 ;;
 esac
+shift
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --json) JSON=1 ;;
+    --solo-watchdog-global) SOLO_GLOBAL=1 ;;
+    *) echo "opcion invalida: '$1'" >&2; exit 2 ;;
+  esac
+  shift
+done
 
 # El punto de una fase como `9.1` es COMODIN en grep -E: sin escapar, el patron del
 # plan no matchearia sus filas y saldria ROJO "no hay nada que arrancar" de una fase
@@ -125,7 +135,7 @@ else
   if [ -z "$crons" ]; then
     linea unknown vigilantes "el gateway no contesto"
   else
-    estado=$(printf '%s' "$crons" | FASE="$FASE" python3 -c '
+    estado=$(printf '%s' "$crons" | FASE="$FASE" SOLO_GLOBAL="$SOLO_GLOBAL" python3 -c '
 import json, os, sys
 bruto = sys.stdin.read(); i = bruto.find("{")
 try:
@@ -137,6 +147,7 @@ jobs = r.get("jobs") or r.get("items") or []
 if not isinstance(jobs, list):
     print("ILEGIBLE"); raise SystemExit
 fase = os.environ["FASE"]
+solo_global = os.environ.get("SOLO_GLOBAL") == "1"
 marcas = []
 av = [j for j in jobs if isinstance(j, dict) and j.get("name") == "avance-tareas"]
 if not av:
@@ -147,18 +158,20 @@ else:
     s = av[0].get("schedule") or {}
     if not (isinstance(s, dict) and s.get("kind") == "every" and s.get("everyMs") == 900000):
         marcas.append("RITMO-avance-tareas")
-em = [j for j in jobs if isinstance(j, dict) and j.get("name") == "corrida-empuje-" + fase]
-if not em:
-    marcas.append("FALTA-corrida-empuje-" + fase)
-elif not em[0].get("enabled"):
-    marcas.append("OFF-corrida-empuje-" + fase)
+if not solo_global:
+    em = [j for j in jobs if isinstance(j, dict) and j.get("name") == "corrida-empuje-" + fase]
+    if not em:
+        marcas.append("FALTA-corrida-empuje-" + fase)
+    elif not em[0].get("enabled"):
+        marcas.append("OFF-corrida-empuje-" + fase)
 if any(isinstance(j, dict) and j.get("name") == "corrida-vigia-" + fase for j in jobs):
     marcas.append("LEGADO-corrida-vigia-" + fase)
-print(" ".join(marcas) if marcas else "OK")
+print(" ".join(marcas) if marcas else ("OK-GLOBAL" if solo_global else "OK"))
 ')
     case "$estado" in
       ILEGIBLE|"") linea unknown vigilantes "no pude leer la lista de crons";;
       OK) linea VERDE vigilantes "avance-tareas cada 15 min y corrida-empuje-$FASE creados y encendidos";;
+      OK-GLOBAL) linea VERDE vigilantes "avance-tareas cada 15 min; solo watchdog global, sin empuje propio";;
       *)
         faltan=""; apagados=""; ritmo=""; legado=""
         for m in $estado; do
