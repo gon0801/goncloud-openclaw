@@ -17,6 +17,15 @@
 # cancelacion: un job omitido solo pasa con clasificacion fast valida y checks
 # documentales verdes. Clasificacion ausente, fallida o cancelada NUNCA pasa.
 #
+# Desde 15.2 (carril W) la bateria no corre monolitica: el job `shards` la
+# reparte en una matriz de TRES shards (mismo reparto que el runner: nucleo /
+# watchdog+preflight / resto del glob + Node + sintaxis + corpus), cada uno con
+# checkout y estado propios y fail-fast: false. La bateria en CI tiene un solo
+# entrypoint, scripts/run-checks.sh, invocado UNA vez en el YAML y multiplicado
+# en tres runners por la matriz; la union de sus logs/run-checks/resumen.txt
+# cubre la bateria con cada entrada exactamente una vez, y cada shard publica
+# sus logs como artifact para auditar esa union sin re-correr nada.
+#
 # Los checks documentales son un paso REAL del job clasificador ("Checks
 # documentales del rango"): valida los contratos de los archivos CAMBIADOS
 # (.saikit/progress/*.json parseable y con schema/fase; docs/evidence/**.md|txt
@@ -25,9 +34,10 @@
 # controlan la clasificacion (allowlist, clasificador, este workflow) clasifica
 # completo por regla: la llave no abre su propia puerta.
 #
-# pytest usa `-n auto` (pytest-xdist) por default. Opt-out por repo:
-# QUALITY_KIT_PYTEST_SERIAL=1 al correr init-repo.ps1 (suites con estado
-# compartido; el workflow queda en `pytest -q`).
+# La plantilla de quality-kit agrega pasos de pytest y npm-test de raiz
+# condicionados con hashFiles; este repo no tiene pyproject.toml,
+# requirements.txt ni package.json en la raiz, asi que esos pasos nunca llegaron
+# a correr aca y el reparto en shards no los arrastra.
 #
 # Gate de docs/ledger: tools/check-*.sh y tools/check_*.py (nombres con
 # docs|ledger|deploy-log|context) corren SIN argumentos y SIN dependencias
@@ -175,26 +185,56 @@ jobs:
             echo "motivo: ${MOTIVO:-la clasificacion no llego a producirse}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # ── Shards (Fase 15.1/15.2, carril W) ──────────────────────────────────────
-  # W agrega aca los jobs de shard (matriz con checkout y estado propios,
-  # fail-fast: false). Reglas que ya quedan fijadas y no se renegocian en W:
+  # ── Shards (Fase 15.1/15.2, carriles R y W) ────────────────────────────────
+  # R (15.1) le dio al runner el reparto: SAIKIT_SHARD=1/3 corre el nucleo,
+  # 2/3 watchdog+preflight, 3/3 el resto del glob + Node + sintaxis + corpus;
+  # la union de los tres es la bateria entera, con cada entrada exactamente una
+  # vez en logs/run-checks/resumen.txt. W (15.2) lo monta en CI: el job
+  # `quality` monolitico se convierte en esta matriz (checkout y estado propios
+  # por runner; fail-fast: false para que un shard rojo NO cancele a sus
+  # hermanos — los tres tienen que llegar a veredicto propio).
+  # Reglas fijadas por S (15.0) y no renegociadas:
   #   1. Condicion de corrida de cada shard:
   #        needs: [clasificador]
   #        if: needs.clasificador.outputs.carril != 'fast'
   #      Solo un `fast` EXACTO autoriza a omitir; carril ausente o invalido
   #      corre la bateria (fail-closed).
-  #   2. El job `gate` pasa a listar cada shard en `needs` y en la lista de
-  #      pares del ultimo paso (R_SHARD1, R_SHARD2, ...). La regla por par:
-  #      success pasa; skipped pasa SOLO con clasificacion fast valida; todo lo
-  #      demas (failure/cancelled) rebota.
+  #   2. El gate depende del clasificador y de TODOS los shards, con la regla
+  #      de pares: success pasa; skipped pasa SOLO con clasificacion fast
+  #      valida; todo lo demas (failure/cancelled) rebota. S anoto "un par por
+  #      shard (R_SHARD1, R_SHARD2, ...)", pero needs de GitHub no expone el
+  #      resultado por pata de una matriz, solo el agregado del job — y aca el
+  #      agregado es EXACTO, no una perdida de granularidad: las tres patas
+  #      comparten la MISMA condicion (el carril del clasificador), asi que es
+  #      success solo con las tres verdes, skipped solo si fast omitio la
+  #      matriz entera, y failure/cancelled si cualquiera rebota.
   #   3. Triggers, permisos y checkouts con persist-credentials: false quedan
   #      como estan.
-  quality:
+  # Reparto de dependencias: cada runner instala SOLO lo que su porcion de
+  # bateria necesita — lo instalado en otro job no se comparte implicitamente.
+  # El runner solo exige node>=22 cuando corre entradas node, y esas viven en el
+  # shard 3 (sintaxis + baterias del plugin y de tablero-runbook + corpus), asi
+  # que node 24 e `Install openclaw` son pasos de ese shard; el 1 y el 2 son
+  # solo shell. pre-commit es higiene estatica de archivos de TODO el repo (no
+  # forma parte de la bateria ni de la union): corre una vez, en el shard 1,
+  # con la misma condicion de carril que ya tenia el job quality.
+  shards:
     runs-on: ubuntu-latest
     needs: [clasificador]
     # `!= 'fast'` y no `== 'completo'`: si el output llegara vacio o con basura,
     # corre la bateria. La omision se autoriza SOLO con un fast exacto.
     if: needs.clasificador.outputs.carril != 'fast'
+    strategy:
+      fail-fast: false
+      matrix:
+        # `n` sanitiza el nombre del artifact: upload-artifact no admite `/`.
+        include:
+          - shard: 1/3
+            n: 1
+          - shard: 2/3
+            n: 2
+          - shard: 3/3
+            n: 3
     env:
       # Lo lee summa-gate/role.test.ts para el smoke de import del plugin.
       OPENCLAW_NODE_MODULES: ${{ github.workspace }}/node_modules/openclaw
@@ -203,63 +243,57 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        if: hashFiles('pyproject.toml', 'requirements.txt') != ''
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.x'
-
       - name: Set up Node
-        # Sin condicion: la bateria del plugin (summa-gate/) siempre tiene que correr, y
-        # este repo no tiene package.json en la raiz — con el `if` original este paso se
-        # saltaba y los pasos de abajo quedaban con el node que traiga el runner.
+        # Solo el shard 3 corre entradas node; el 1 y el 2 son solo shell y no
+        # tienen por que romperse en una maquina sin node (mismo criterio del
+        # runner). Este repo no tiene package.json en la raiz: sin este paso
+        # explicito la bateria quedaria con el node que traiga el runner.
+        if: matrix.shard == '3/3'
         uses: actions/setup-node@v6
         with:
           # 24: las pruebas del plugin son .ts y `node --test` las corre por type
           # stripping nativo, que no existe en 20. Con 20 el paso nace roto.
           node-version: '24'
 
-      - name: Install Python dependencies
-        if: hashFiles('requirements.txt') != ''
-        run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-xdist
-
-      - name: Install Node dependencies
-        if: hashFiles('package-lock.json') != ''
-        run: npm ci
-
-      # Antes de la bateria a proposito: el smoke de import necesita un openclaw instalado.
-      # Si esto fuera despues, la bateria fallaria por una dependencia faltante y no por un
-      # defecto real.
+      # Antes de la bateria a proposito: el smoke de import necesita un openclaw
+      # instalado. Si esto fuera despues, la bateria fallaria por una dependencia
+      # faltante y no por un defecto real.
       - name: Install openclaw (para el smoke de import del plugin)
+        if: matrix.shard == '3/3'
         run: |
           npm install --no-save --silent openclaw@2026.9.4
           test -d node_modules/openclaw || { echo "openclaw no quedo instalado"; exit 1; }
 
       - name: Run pre-commit (todos los candados locales, sobre todo el repo)
+        if: matrix.shard == '1/3'
         uses: pre-commit/action@v3.0.1
 
-      - name: Run full repository battery
-        run: bash scripts/run-checks.sh
+      - name: Run shard de la bateria
+        run: SAIKIT_SHARD=${{ matrix.shard }} bash scripts/run-checks.sh
 
-      - name: Run Python tests
-        if: hashFiles('pyproject.toml', 'requirements.txt') != ''
-        run: |
-          pip install pytest pytest-xdist
-          pytest -n auto -q
-      - name: Run Node tests
-        if: hashFiles('package.json') != ''
-        run: npm test --if-present
+      # La auditoria de la union (los tres resumen.txt cubren el glob del head y
+      # las entradas node/sintaxis/corpus exactamente una vez) se hace contra
+      # estos artifacts, sin re-correr nada. `always()`: un shard que revienta
+      # igual publica lo que alcanzo a correr. if-no-files-found: error — un
+      # shard sin logs es un shard que no corrio nada, y eso no puede pasar
+      # callado (mismo principio que el guard de 0 pass de tablero-runbook).
+      - name: Publicar logs del shard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-run-checks-shard-${{ matrix.n }}
+          path: logs/run-checks/
+          if-no-files-found: error
 
-      # La bateria completa tiene un solo entrypoint en CI: scripts/run-checks.sh.
-      # Pre-commit conserva solo validaciones rapidas de archivos para no cobrar
-      # la bateria completa en cada commit local.
+  # La bateria completa conserva un solo entrypoint en CI: scripts/run-checks.sh,
+  # ahora invocado por la matriz con SAIKIT_SHARD. Pre-commit conserva solo
+  # validaciones rapidas de archivos para no cobrar la bateria completa en cada
+  # commit local.
 
   gate:
     runs-on: ubuntu-latest
     if: always()
-    needs: [clasificador, quality]
+    needs: [clasificador, shards]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
@@ -306,9 +340,12 @@ jobs:
         env:
           R_CLASIFICADOR: ${{ needs.clasificador.result }}
           CARRIL: ${{ needs.clasificador.outputs.carril }}
-          # Jobs de calidad: quality hoy; los shards de W (15.2) se agregan a
-          # needs y a esta lista de pares, con la MISMA regla.
-          R_QUALITY: ${{ needs.quality.result }}
+          # Resultado AGREGADO de la matriz de shards: las tres patas comparten
+          # la misma condicion de corrida (el carril del clasificador), asi que
+          # el agregado es exacto — success solo con las tres verdes, skipped
+          # solo si fast omitio la matriz entera, failure/cancelled si
+          # cualquiera rebota.
+          R_SHARDS: ${{ needs.shards.result }}
         run: |
           rc=0
           printf 'clasificador=%s carril=%s\n' "$R_CLASIFICADOR" "${CARRIL:-}"
@@ -325,7 +362,7 @@ jobs:
           # (b) Jobs de calidad: success pasa; skipped pasa SOLO con
           # clasificacion fast valida (omision autorizada); todo lo demas
           # (failure, cancelled) rebota.
-          for par in "quality=$R_QUALITY"; do
+          for par in "shards=$R_SHARDS"; do
             printf '%s\n' "$par"
             case "$par" in
               *=success) ;;
