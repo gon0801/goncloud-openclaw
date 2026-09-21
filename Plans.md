@@ -489,3 +489,41 @@ Los cuatro carriles arrancan en paralelo. 13.2 va después de 13.5 en el mismo c
   scope: Fase 13 / Task 13.2, 13.5, 13.7.
 
 No hay `config patch`, no hay alta de crons nuevos, no hay ssh a gonserver, no hay secret-read y ningún agente mergea por su cuenta.
+
+---
+
+## Fase 15 — CI completa sin siete minutos de espera
+
+Fecha de planificación: 2026-09-20. Fase independiente: no modifica ni depende de la Fase 14 de openclaw ni de la Fase 23 de summonaikit-claude.
+
+### Baseline medido
+
+El PR #111 ejecutó la batería completa en 6m52s y el push del mismo árbol a `main` la repitió en 6m54s. Los árboles Git del head probado (`0ab6e93`) y del squash en `main` (`19b9c2f`) fueron idénticos (`f09f2b2c7f4b98480b53327fd86917f7d566be6a`). La repetición en `main` no se elimina en esta fase: el repo es privado y el plan actual de GitHub devuelve 403 para branch protection y rulesets, así que un push directo podría evitar toda la batería.
+
+Los 280 tests de `summa-gate` tardaron 1.97s y los 176 de `tablero-runbook`, menos de 5s. El costo está en pruebas shell seriales: `test-corrida-nucleo.sh` 142.69s, `test-tmux-activity-watch.sh` 76.16s, `test-corrida-preflight.sh` 42.58s y `test-corrida-latido.sh` 32.21s. Esas cuatro consumieron 4m54s. La cobertura se conserva; se quitan espera serial, sleeps que simulan reloj y sondeos fijos.
+
+### Spec skip reason
+
+No se modifica un spec de producto. La fase conserva los contratos existentes: cambia la ejecución de CI, agrega un reloj de prueba con fallback al reloj real y reemplaza la espera fija del preflight por sondeo acotado. Los resultados visibles, los umbrales por defecto, mensajes, estado persistido, APIs, permisos y despliegue no cambian.
+
+### Tareas
+
+| Task | Contenido | DoD | Depends | Status |
+|---|---|---|---|---|
+| 15.1 | `[lane:gate] [tdd:required]` **Contrato de cobertura y tiempos por prueba.** `scripts/run-checks.sh` imprime duración y resultado de cada `scripts/tests/*.sh`, conserva la salida útil de una prueba roja y mantiene un inventario derivado del glob, no una lista manual que pueda olvidar archivos nuevos. El runner acepta `SAIKIT_SHARD=i/3`: shard 1 ejecuta `test-corrida-nucleo.sh`; shard 2 ejecuta `test-tmux-activity-watch.sh` y `test-corrida-preflight.sh`; shard 3 ejecuta el resto, las baterías Node y el corpus. Sin `SAIKIT_SHARD`, conserva el recorrido completo actual. | Test focalizado nuevo con fixtures de pruebas rápidas demuestra: la unión de `1/3`, `2/3` y `3/3` ejecuta cada archivo exactamente una vez; un archivo nuevo entra automáticamente; un shard inválido falla; una prueba roja hace rojo solo su shard y su nombre aparece en la salida. Mutantes que omiten o duplican una prueba dejan rojo. | - | cc:TODO |
+| 15.2 | `[lane:gate] [tdd:required]` **Reloj inyectable en el watchdog, sin cambiar producción.** `scripts/mac/tmux-activity-watch.sh` obtiene el epoch mediante una función única que usa `WATCH_NOW` solo si es un entero y, en cualquier otro caso, usa `date +%s`. `test-tmux-activity-watch.sh` adelanta el reloj para silencio, recordatorios y migración de estado; conserva tmux real para captura, cierre, permisos y política, pero elimina los `sleep 1/2/4` cuyo único propósito era envejecer el estado. | Test rojo primero para `WATCH_NOW`; con reloj inválido se prueba el fallback. Las mismas assertions actuales de quiet, reminder, approval, migración, closed y journal siguen presentes. Cambiar los defaults vivos `QUIET_SECS=900` o `QUIET_REMIND_SECS=900` deja rojo. El test focalizado tarda ≤30s en CI, frente a 76.16s de baseline. | 15.1 | cc:TODO |
+| 15.3 | `[lane:gate] [tdd:required]` **Esperar condiciones, no segundos fijos.** En `corrida/preflight.sh`, el arranque de cada CLI sondea hasta ver la barra esperada, la muerte del proceso o el límite existente; no duerme 2s incondicionales. En `test-corrida-nucleo.sh` y `test-corrida-preflight.sh`, las carreras conservan al menos un caso con tiempo real, mientras los casos que solo necesitan observar una condición usan archivos/señales y reloj o umbral inyectable. No se reducen timeouts de producción. | Tests focalizados prueban éxito temprano, proceso muerto y límite agotado. Quitar el límite deja rojo; aceptar una barra ausente deja rojo. `test-corrida-preflight.sh` tarda ≤20s y `test-corrida-nucleo.sh` ≤90s en CI. La prueba documenta cuáles esperas reales permanecen y qué condición discriminan. | 15.1 | cc:TODO |
+| 15.4 | `[lane:gate] [tdd:required]` **Tres shards aislados en GitHub Actions.** `quality.yml` ejecuta los tres valores de `SAIKIT_SHARD` en jobs o matriz con checkout independiente; el gate depende de todos. La instalación y pre-commit no se serializan tres veces si pueden vivir en un job rápido separado. El workflow sigue disparándose en `pull_request` y en `push` a `main`; no se recorta cobertura por tipo de cambio. | El test contractual cuenta tres shards distintos, exige que el gate dependa de su unión y rechaza un workflow con solo 1 o 2. En el PR final los tres quedan verdes, cada uno publica su lista y duración, y la unión nombra exactamente el mismo conjunto de pruebas que el glob. Un fallo sembrado en una prueba de cada shard pone rojo el job correspondiente antes de retirarse. | 15.1–15.3 | cc:TODO |
+| 15.5 | `[lane:release] [tdd:skip:benchmark-y-cierre]` **Benchmark final y cierre.** Comparar una sola corrida final del PR contra el baseline de #111. Registrar tiempo total, tiempo de cada shard y lista de esperas reales conservadas. No abrir otra ronda por variación de infraestructura si la cobertura y los límites por prueba pasan. | `docs/evidence/fase15-ci-performance.md` contiene baseline, resultado, comandos y enlaces de CI. La corrida final del PR tarda <4m00s desde inicio de `quality` hasta gate verde; todos los tests del inventario corren exactamente una vez en la unión; `bash scripts/cierre-de-fase.sh 15` queda VERDE tras merge y limpieza. | 15.4 | cc:TODO |
+
+### Clasificación
+
+**Required:** 15.1, 15.2, 15.3, 15.4 y 15.5. **Optional:** eliminar la segunda batería en `main`, únicamente cuando GitHub permita proteger la rama o exista otra barrera verificable contra pushes directos. **Reject:** borrar pruebas lentas, bajar timeouts vivos, marcar tests como flaky para permitir fallo, o saltar la batería en cambios de docs.
+
+### 事前確認 de Fase 15
+
+- Evento: `git push` de ramas `fase15/*`, apertura de PR y lectura de GitHub Actions en `gon0801/goncloud-openclaw`.
+  Razón: CI es el objeto de la fase y la medición final debe ejecutarse en runners aislados.
+  scope: Fase 15 / Tasks 15.1–15.5.
+
+No hay secret-read, despliegue, `config patch`, cron, Telegram, SSH, operación destructiva ni cambios al gateway vivo.
