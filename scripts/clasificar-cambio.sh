@@ -42,6 +42,8 @@
 #     llave no puede usarla para abrirse la puerta del fast). La ruta del
 #     workflow la marca este script por nombre, no leyendolo: es config de CI.
 #   - renombres: origen Y destino deben ser fast para que el cambio sea fast.
+#   - symlinks, gitlinks (submodulos) y cualquier modo no regular son
+#     completo: en --name-status se ven como A/T y la allowlist no mira modos.
 #   - los borrados cuentan (un D sobre una ruta fuera de contrato es completo).
 #   - un cambio sin archivos (base == head) es fast: no hay nada que probar;
 #     "no pude comparar" es otro caso y SI es completo.
@@ -137,6 +139,22 @@ ruta_es_control() { # <ruta>: 0 si la ruta controla la clasificacion
   return 1
 }
 
+# Symlinks (120000), gitlinks (160000) y modos desconocidos JAMAS son fast:
+# `git diff --name-status` no muestra modos y un symlink nuevo en ruta
+# allowlisted se veria como 'A' indistinguible de un .md. 000000 = ese extremo
+# no existe (alta o baja).
+modo_es_regular() { # <modo>: 0 si es archivo regular (100644/100755)
+  case $1 in
+    100644|100755) return 0 ;;
+  esac
+  return 1
+}
+modos_sanos() { # <modo_origen> <modo_destino>: 0 si todo extremo existente es archivo regular
+  [ "$1" = 000000 ] || modo_es_regular "$1" || return 1
+  [ "$2" = 000000 ] || modo_es_regular "$2" || return 1
+  return 0
+}
+
 veredicto() { # <fast|completo> <motivo de una linea>
   printf '%s\n' "$1"
   printf 'clasificar-cambio: carril=%s\nclasificar-cambio: motivo=%s\n' "$1" "$2" >&2
@@ -161,36 +179,48 @@ MB=$(git merge-base "$BASE_SHA" "$HEAD_SHA" 2>/dev/null) || {
 }
 [ -n "$MB" ] || veredicto completo "merge-base vacio"
 
-if ! LISTA=$(git -c core.quotepath=false diff --name-status --find-renames "$MB" "$HEAD_SHA" 2>/dev/null); then
+if ! LISTA=$(git -c core.quotepath=false diff --raw --find-renames "$MB" "$HEAD_SHA" 2>/dev/null); then
   veredicto completo "git diff fallo en ${MB:0:12}..${HEAD_SHA:0:12} (comparacion fallida)"
 fi
 
 # --- clasificacion archivo por archivo ---------------------------------------
-# Estados esperados: A/M/D/T (una ruta) y R*/C* (origen y destino; el rename
-# detection va FORZADO con --find-renames para no depender de la config local).
-# Cualquier otra cosa (estado raro, cantidad de campos inesperada por una ruta
-# con tabulador) rebota a completo: si no puedo asegurar el archivo, no lo
-# clasifico.
+# Formato --raw: ':<modo_origen> <modo_destino> <sha_o> <sha_d> <estado>\t<ruta>'
+# (los renombres traen dos rutas y estado R*/C*; el rename detection va FORZADO
+# con --find-renames para no depender de la config local). Los modos viajan EN
+# la linea: la politica manda symlink, gitlink o modo desconocido a completo y
+# --name-status no los muestra. Cualquier otra cosa (estado raro, cantidad de
+# campos inesperada por una ruta con tabulador) rebota a completo: si no puedo
+# asegurar el archivo, no lo clasifico.
 total=0
 fuera=0
 motivo=
 while IFS= read -r linea; do
   [ -n "$linea" ] || continue
   total=$((total + 1))
-  estado=${linea%%$'\t'*}
+  cabecera=${linea%%$'\t'*}
+  rutas=${linea#*$'\t'}
   campos=1
-  restante=$linea
+  restante=$rutas
   while [[ $restante == *$'\t'* ]]; do
     restante=${restante#*$'\t'}
     campos=$((campos + 1))
   done
+  cabecera=${cabecera#:}
+  modo_origen=${cabecera%% *}; cabecera=${cabecera#* }
+  modo_destino=${cabecera%% *}; cabecera=${cabecera#* }
+  estado=${cabecera##* }
   case $estado in
     A|M|D|T)
-      if [ "$campos" -ne 2 ]; then
+      if [ "$campos" -ne 1 ]; then
         fuera=$((fuera + 1)); motivo="${motivo:+$motivo }linea de diff con forma inesperada"
         continue
       fi
-      ruta=${linea#*$'\t'}
+      ruta=$rutas
+      if ! modos_sanos "$modo_origen" "$modo_destino"; then
+        fuera=$((fuera + 1))
+        [ "$fuera" -le 5 ] && motivo="${motivo:+$motivo }modo no regular en $ruta (symlink/gitlink/desconocido)"
+        continue
+      fi
       if ruta_es_control "$ruta"; then
         veredicto completo "toca un archivo que controla la clasificacion: $ruta"
       fi
@@ -199,12 +229,17 @@ while IFS= read -r linea; do
         [ "$fuera" -le 5 ] && motivo="${motivo:+$motivo }$ruta"
       fi ;;
     R*|C*)
-      if [ "$campos" -ne 3 ]; then
+      if [ "$campos" -ne 2 ]; then
         fuera=$((fuera + 1)); motivo="${motivo:+$motivo }linea de diff con forma inesperada (renombre)"
         continue
       fi
-      origen=${linea#*$'\t'}; origen=${origen%%$'\t'*}
-      destino=${linea#*$'\t'}; destino=${destino#*$'\t'}
+      origen=${rutas%%$'\t'*}
+      destino=${rutas#*$'\t'}
+      if ! modos_sanos "$modo_origen" "$modo_destino"; then
+        fuera=$((fuera + 1))
+        [ "$fuera" -le 5 ] && motivo="${motivo:+$motivo }modo no regular en renombre $origen -> $destino (symlink/gitlink/desconocido)"
+        continue
+      fi
       # La regla de archivos de control tambien aplica a cada extremo del
       # renombre: entrar o salir de la llave es tocar la llave.
       if ruta_es_control "$origen" || ruta_es_control "$destino"; then

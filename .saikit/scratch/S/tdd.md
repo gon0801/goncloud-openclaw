@@ -272,3 +272,80 @@ TODO VERDE: sim-gate-doc-check-r1 (8 escenarios)
 - `bash .saikit/scratch/S/sim-gate-doc-check-r1.sh` -> TODO VERDE (8 escenarios).
 - `grep -c 'head -n 1' .github/workflows/quality.yml` -> 0.
 - YAML del workflow parsea (`ruby -ryaml`, sanity local).
+
+# r3 (2026-09-21) — symlinks y gitlinks jamas fast (CodeRabbit Functional Major)
+
+## Hallazgo
+
+`git diff --name-status --find-renames` no muestra modos: un SYMLINK nuevo en
+ruta allowlisted (p.ej. `docs/evidence/informe.md` -> un script) aparece como
+`A` y clasifica fast, igual que una conversion de tipo (`T`) a symlink o un
+gitlink (submodulo). La politica aprobada de Plans.md nombra EXPLICITAMENTE
+symlinks en el carril completo: comportamiento pedido roto.
+
+## Rojo medido ANTES del arreglo (tests nuevos primero, clasificador de bc6a18f)
+
+```
+$ bash scripts/tests/test-clasificador-cambio.sh
+  OK    docs-permitidos -> fast            (los 29 casos previos, verdes)
+  ...
+  FALLA symlink-nuevo-allowlist: veredicto 'fast', esperaba 'completo' (stderr: ... motivo=los 1 archivo(s) del cambio estan en la allowlist)
+  FALLA conversion-a-symlink: veredicto 'fast', esperaba 'completo' (stderr: ... motivo=los 1 archivo(s) del cambio estan en la allowlist)
+  FALLA gitlink-nuevo-allowlist: veredicto 'fast', esperaba 'completo' (stderr: ... motivo=los 1 archivo(s) del cambio estan en la allowlist)
+  ...
+ROJO: 3 caso(s) del clasificador en fallo
+exit=1
+```
+
+Exactamente los 3 casos nuevos (los fixtures de symlink/gitlink llevan un
+guard propio que afirma que el diff realmente trae el modo 120000/160000 o el
+estado T, para que el caso ejercite la regla y no un fixture roto).
+
+## Arreglo
+
+El clasificador usa `git diff --raw --find-renames` (los modos octales de AMBOS
+extremos viajan en la linea, junto al estado): symlink (120000), gitlink
+(160000) y cualquier modo desconocido => `completo`, ANTES de consultar la
+allowlist, junto a la regla ruta_es_control. 000000 = ese extremo no existe
+(alta o baja). Un T de 100644<->100755 sigue siendo elegible (ambos regulares).
+
+## Mutaciones (poder discriminante de la regla nueva)
+
+Neutralizar SOLO el check del origen en `modos_sanos` NO produce rojo (el check
+del destino atrapa el symlink nuevo); neutralizar AMBOS reproduce EXACTAMENTE
+el rojo de arriba (los 3 casos nuevos en FALLA, los 29 previos verdes):
+
+```
+$ sed -i '' -e '153s/.*/  : # mutacion/' -e '154s/.*/  : # mutacion/' scripts/clasificar-cambio.sh
+$ bash scripts/tests/test-clasificador-cambio.sh
+  FALLA symlink-nuevo-allowlist: veredicto 'fast', esperaba 'completo'
+  FALLA conversion-a-symlink: veredicto 'fast', esperaba 'completo'
+  FALLA gitlink-nuevo-allowlist: veredicto 'fast', esperaba 'completo'
+ROJO: 3 caso(s) del clasificador en fallo
+```
+
+(El switch de --name-status a --raw queda cubierto por los 29 casos previos:
+los de renombre ejercitan el parseo de lineas R100 del formato --raw.)
+
+## Verde (2026-09-21, tras el arreglo)
+
+```
+$ bash scripts/tests/test-clasificador-cambio.sh
+  OK    symlink-nuevo-allowlist -> completo
+  OK    conversion-a-symlink -> completo
+  OK    gitlink-nuevo-allowlist -> completo
+TODO VERDE: test-clasificador-cambio            (32 casos)
+$ bash .saikit/scratch/S/sim-gate-doc-check-r1.sh
+TODO VERDE: sim-gate-doc-check-r1 (8 escenarios)
+$ bash scripts/tests/test-summa-gate-quality-entrypoints.sh
+PASS test-summa-gate-quality-entrypoints
+```
+
+## Verificacion final r3 (2026-09-21)
+
+- `bash scripts/tests/test-clasificador-cambio.sh` -> TODO VERDE (32 casos).
+- `bash .saikit/scratch/S/sim-gate-doc-check-r1.sh` -> TODO VERDE (8 escenarios).
+- `bash scripts/tests/test-summa-gate-quality-entrypoints.sh` -> PASS
+  (invariantes del workflow intactos).
+- `bash -n scripts/clasificar-cambio.sh` -> OK.
+- quality.yml NO cambio en esta ronda (el arreglo vive solo en el clasificador).

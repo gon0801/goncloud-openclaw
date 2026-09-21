@@ -16,6 +16,10 @@
 #      sin veredicto (el job muere rojo y el gate no autoriza omisiones).
 #   6. Interfaz para el workflow: stdout es UNA linea (fast|completo) y
 #      GITHUB_OUTPUT recibe carril=<...> y motivo=<...>.
+#   7. Symlinks (120000), gitlinks (160000) y modos no regulares JAMAS fast,
+#      aunque la ruta case con la allowlist: --name-status no muestra modos y
+#      un symlink nuevo en arbol de docs se ve igual que un .md. La politica
+#      nombra explicitamente symlinks en el carril completo.
 #
 # Uso: bash scripts/tests/test-clasificador-cambio.sh
 set -u
@@ -173,6 +177,53 @@ if git -C "$d" diff --name-status --find-renames HEAD~1 HEAD | grep -q '^R'; the
   veredicto_es renombre-codigo-doc completo "$d" "$ALLOWLIST" "$(git -C "$d" rev-parse HEAD~1)" "$(git -C "$d" rev-parse HEAD)"
 else
   falla "renombre-codigo-doc: el fixture no produjo un R real"
+fi
+
+# (7) modos no regulares JAMAS fast (r3, CodeRabbit Major): `git diff
+# --name-status` no muestra modos, asi que un symlink nuevo (o una conversion
+# de tipo, o un submodulo) en ruta allowlisted se ve como A/T fast. Cada
+# fixture afirma que el diff realmente trae el modo/estado (si no, el caso no
+# ejercita la regla), igual que los fixtures de renombre de arriba.
+
+# symlink NUEVO en ruta allowlisted: aparece 'A' y casaria con
+# docs/evidence/**/*.md si el clasificador no mira el modo (120000).
+d=$T/symlink-nuevo-allowlist; sembrar "$d"
+ln -s ../../scripts/run.sh "$d/docs/evidence/informe.md"
+commit_todo "$d"
+if git -C "$d" diff --raw --find-renames HEAD~1 HEAD | grep -q '120000'; then
+  veredicto_es symlink-nuevo-allowlist completo "$d" "$ALLOWLIST" \
+    "$(git -C "$d" rev-parse HEAD~1)" "$(git -C "$d" rev-parse HEAD)"
+else
+  falla "symlink-nuevo-allowlist: el fixture no produjo un symlink (modo 120000)"
+fi
+
+# conversion de tipo (T): archivo regular de la semilla pasa a symlink. Sin la
+# regla de modos el 'T' casaria con la allowlist igual que antes del cambio.
+d=$T/conversion-a-symlink; sembrar "$d"
+rm "$d/docs/evidence/semilla.md"
+ln -s ../../Plans.md "$d/docs/evidence/semilla.md"
+commit_todo "$d"
+if git -C "$d" diff --name-status --find-renames HEAD~1 HEAD | grep -q '^T'; then
+  veredicto_es conversion-a-symlink completo "$d" "$ALLOWLIST" \
+    "$(git -C "$d" rev-parse HEAD~1)" "$(git -C "$d" rev-parse HEAD)"
+else
+  falla "conversion-a-symlink: el fixture no produjo un T real"
+fi
+
+# gitlink NUEVO (submodulo) en ruta allowlisted: el nombre .md es el punto del
+# caso; el modo 160000 es lo unico que lo delata como no-archivo.
+d=$T/gitlink-nuevo-allowlist; sembrar "$d"
+r=$T/submodulo
+git -C "$r" init -q 2>/dev/null || { mkdir -p "$r" && git -C "$r" init -q; }
+git -C "$r" -c user.name=fixture -c user.email=fixture@test commit -qm raiz --allow-empty
+sha_sub=$(git -C "$r" rev-parse HEAD)
+git -C "$d" update-index --add --cacheinfo 160000,"$sha_sub",docs/evidence/submodulo.md
+git -C "$d" -c user.name=fixture -c user.email=fixture@test commit -qm cambio
+if git -C "$d" diff --raw --find-renames HEAD~1 HEAD | grep -q '160000'; then
+  veredicto_es gitlink-nuevo-allowlist completo "$d" "$ALLOWLIST" \
+    "$(git -C "$d" rev-parse HEAD~1)" "$(git -C "$d" rev-parse HEAD)"
+else
+  falla "gitlink-nuevo-allowlist: el fixture no produjo un gitlink (modo 160000)"
 fi
 
 # (3) documentos operativos: markdown que controla comportamiento NO es fast.
