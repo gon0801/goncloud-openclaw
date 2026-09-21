@@ -46,6 +46,8 @@ cruzada() { # $1 fragmento, $2 codigo, $3 que es, $4 accion obligatoria
 # (2) Los tres eventos del vigilante, con su texto literal del codigo.
 cruzada 'waiting for approval for ' "$W" 'waiting for approval' 'preaprobaciones del registro'
 cruzada 'quiet for ' "$W" 'quiet' 'ATORADO sin reporte'
+cruzada 'quiet for ' "$W" 'quiet trabajando' 'NO_REPLY'
+cruzada 'quiet for ' "$W" 'quiet detenido' 'falló la recuperación'
 cruzada 'closed | last cwd=' "$W" 'closed' 'relanza una vez'
 grep -qF 'closed \| last cwd=' "$GUIA" \
   || fail "$GUIA: la barra de 'closed | last cwd=' rompe la tabla Markdown si no esta escapada"

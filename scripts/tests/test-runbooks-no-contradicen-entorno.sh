@@ -244,6 +244,52 @@ tiene_clases() {
   fila_clase_valida "$1" || return 1
   return 0
 }
+clases_declaradas() { # $1 archivo -> una clase por línea
+  awk '
+    /^## Clases de comando[[:space:]]*$/ { dentro = 1; next }
+    dentro && /^## / { exit }
+    dentro { print }
+  ' "$1" | awk -F'|' '
+    function recorta(s) { gsub(/^[ \t`]+|[ \t`]+$/, "", s); return tolower(s) }
+    {
+      for (i = 1; i <= NF; i++) {
+        celda = recorta($i)
+        if (celda == "ssh" || celda == "red externa" || celda == "psql" || celda == "gh") print celda
+      }
+    }
+  ' | sort -u
+}
+clases_usadas() { # $1 archivo -> clases citadas fuera de su tabla
+  awk '
+    /^## Clases de comando[[:space:]]*$/ { dentro = 1; next }
+    dentro && /^## / { dentro = 0 }
+    !dentro { print }
+  ' "$1" | awk '
+    {
+      linea = tolower($0)
+      gsub(/[^[:alnum:]_\.\/-]+/, " ", linea)
+      n = split(linea, palabra, /[[:space:]]+/)
+      for (i = 1; i <= n; i++) {
+        ejecutable = palabra[i]
+        sub(/^.*\//, "", ejecutable)
+        if (ejecutable == "gh" || ejecutable == "ssh" || ejecutable == "psql") print ejecutable
+        if (ejecutable == "curl" || ejecutable == "wget") print "red externa"
+        if (palabra[i] == "red" && palabra[i + 1] == "externa") print "red externa"
+      }
+    }
+  ' | sort -u
+}
+clases_usadas_declaradas() { # $1 archivo; toda clase usada aparece en la tabla
+  local declaradas clase
+  declaradas=$(clases_declaradas "$1")
+  while IFS= read -r clase; do
+    [ -n "$clase" ] || continue
+    printf '%s\n' "$declaradas" | grep -qFx -- "$clase" || return 1
+  done <<EOF
+$(clases_usadas "$1")
+EOF
+  return 0
+}
 sesion_a_mano() { # 0 = trae new-session mandado (rojo); prohibiciones no cuentan
   grep -n 'new-session' "$1" 2>/dev/null | grep -v -i -E 'nunca|jam[aá]s|never' | grep -q .
 }
@@ -266,12 +312,13 @@ runbook_futuro_ok() { # $1 archivo; 0 = nace con todo
   tiene_seguimiento "$1" || return 1
   seguimiento_con_contenido "$1" || return 1
   tiene_clases "$1" || return 1
+  clases_usadas_declaradas "$1" || return 1
   lanzamiento_afirmativo "$1" || return 1
   sesion_a_mano "$1" && return 1
   return 0
 }
 FXF=scripts/tests/fixtures/runbook-futuro
-for fx in autopilot-bueno.md autopilot-malo-sin-seguimiento.md autopilot-malo-sin-clases.md autopilot-malo-clases-fuera-de-seccion.md autopilot-malo-new-session.md autopilot-malo-encabezados-vacios.md autopilot-malo-lanzar-negado.md autopilot-malo-seguimiento-vago.md autopilot-malo-seguimiento-sin-david.md autopilot-malo-seguimiento-sin-cambio.md autopilot-malo-seguimiento-lento.md; do
+for fx in autopilot-bueno.md autopilot-malo-sin-seguimiento.md autopilot-malo-sin-clases.md autopilot-malo-clases-fuera-de-seccion.md autopilot-malo-clase-no-declarada.md autopilot-malo-new-session.md autopilot-malo-encabezados-vacios.md autopilot-malo-lanzar-negado.md autopilot-malo-seguimiento-vago.md autopilot-malo-seguimiento-sin-david.md autopilot-malo-seguimiento-sin-cambio.md autopilot-malo-seguimiento-lento.md; do
   [ -r "$FXF/$fx" ] || fail "(2d) no encuentro el fixture: $FXF/$fx"
   git check-ignore -q "$FXF/$fx" \
     && fail "(2d) $FXF/$fx esta en .gitignore: el commit no lo lleva y CI se queda sin el archivo"
@@ -284,6 +331,8 @@ runbook_futuro_ok "$FXF/autopilot-malo-sin-clases.md" \
   && fail "(2d) el fixture sin Clases paso: el candado no exige una fila valida (clase sin frase-mencion)"
 runbook_futuro_ok "$FXF/autopilot-malo-clases-fuera-de-seccion.md" \
   && fail "(2d) el fixture con una clase valida fuera de Clases paso: el candado lee mas alla de la seccion"
+runbook_futuro_ok "$FXF/autopilot-malo-clase-no-declarada.md" \
+  && fail "(2d) el fixture con ssh no declarado paso: el candado no compara clases usadas y declaradas"
 runbook_futuro_ok "$FXF/autopilot-malo-new-session.md" \
   && fail "(2d) el fixture con new-session a mano paso: el candado deja abrir sesiones a mano"
 runbook_futuro_ok "$FXF/autopilot-malo-encabezados-vacios.md" \
