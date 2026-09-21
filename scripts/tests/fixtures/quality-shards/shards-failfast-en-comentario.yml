@@ -1,14 +1,12 @@
-# Fixture VALIDO del contrato shards+gate (15.2, carril W): un recorte del
-# workflow real con los mismos jobs y las mismas lineas de contrato, sin la
-# plantilla de calidad-kit que en este repo no aplica. Lo consume
-# scripts/tests/test-summa-gate-quality-entrypoints.sh para demostrar que su
-# validador discrimina: este archivo pasa, y los diez hermanos (shard-faltante,
-# fallo-ignorado, gate-sin-dependencia, gate-sin-shards-senuelo,
-# shards-duplicado, shards-en-comentario, shards-run-en-comentario,
-# shards-cuatro-entradas, shards-failfast-en-comentario,
-# gate-pareja-en-comentario) son mutaciones de ESTE archivo y deben ser
-# rechazados uno por una.
-name: Quality (fixture valido)
+# Fixture ROTO del contrato shards+gate (15.2, carril W, r4): el job shards
+# REAL no tiene `fail-fast: false` en codigo — GitHub Actions hereda
+# fail-fast: true, el primer shard rojo cancela a sus hermanos y la union de
+# resumen.txt deja de cubrir la bateria. El token vive SOLO en un COMENTARIO
+# dentro del propio job shards (estrategia, matriz y corrida shardadas reales).
+# Debe ser RECHAZADO: las lineas de comentario completas se quitan de la
+# seccion antes de matchear, asi que el grep de `fail-fast: false` no puede
+# satisfacerse con el comentario.
+name: Quality (shards fail-fast solo en comentario)
 on:
   push:
     branches: [main]
@@ -32,7 +30,7 @@ jobs:
     needs: [clasificador]
     if: needs.clasificador.outputs.carril != 'fast'
     strategy:
-      fail-fast: false
+      # fail-fast: false
       matrix:
         include:
           - shard: 1/3

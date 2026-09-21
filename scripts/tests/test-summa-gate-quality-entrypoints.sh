@@ -15,7 +15,16 @@
 # quitan las lineas de COMENTARIO de cada seccion (un comentario dentro del
 # propio job shards satisfacia el grep -F de la corrida shardada) y un cuarto
 # entrada con valor NUEVO se rechaza por el tope de tres (fixture que solo el
-# tope rechaza: el exactly-once ya atrapaba a los duplicados).
+# tope rechaza: el exactly-once ya atrapaba a los duplicados) — r4: el filtro
+# r3 ya corria sobre TODOS los checks de texto (reasigna la seccion antes de
+# cada grep), asi que el hallazgo de re-review (fail-fast, regla de pares y
+# upload satisfacibles con un comentario interno) NO reproduce contra el
+# validador vigente; lo que si faltaba es la COBERTURA: sin fixtures propios,
+# borrar SOLO el filtro de seccion_gate dejaba la suite en verde (medido). Los
+# dos fixtures nuevos fijan la cobertura por job: sin el filtro de shards
+# pasan shards-run-en-comentario y shards-failfast-en-comentario; sin el de
+# gate pasa gate-pareja-en-comentario. El sufijo inline ` # ...` de lineas de
+# codigo sigue sin recortarse (borde r3, sin reparar aca).
 # Uso: bash scripts/tests/test-summa-gate-quality-entrypoints.sh
 set -u
 cd "$(dirname "$0")/../.." || exit 1
@@ -217,11 +226,27 @@ echo "ok (6): tres shards fail-fast: false, gate con dependencia completa y regl
 #                            atrapaba el exactly-once y no discriminaba el
 #                            tope (r3, medido: sin la asercion -eq 3 este
 #                            fixture pasa de rechazado a aceptado)
+#   shards-failfast-en-comentario  `fail-fast: false` SOLO en un comentario
+#                            dentro del propio job shards, estrategia real
+#                            sin el (r4: el validador ya lo rechazaba — el
+#                            filtro r3 cubre TODOS los checks de texto,
+#                            rojo no reproduce contra f019dd5: hallazgo de
+#                            re-review stale, era real contra c4c86ba —
+#                            pero sin fixture propio, borrar el filtro de
+#                            seccion_shards solo lo atrapaba
+#                            shards-run-en-comentario y borrar el de
+#                            seccion_gate no ponia NADA rojo, medido)
+#   gate-pareja-en-comentario  regla de pares (`success:fast`,
+#                            `no quedo en success`) SOLO en un comentario
+#                            dentro del propio gate, script real exit 0
+#                            (r4: idem validador; es el UNICO fixture que
+#                            flipea al borrar SOLO el filtro de
+#                            seccion_gate — su cobertura era un hueco)
 FX=scripts/tests/fixtures/quality-shards
 [ -d "$FX" ] || fail "falta $FX"
 contrato_shards "$FX/workflow-valido.yml" \
   || fail "el fixture VALIDO no pasa el contrato: el validador esta roto, no discrimina"
-for roto in shard-faltante fallo-ignorado gate-sin-dependencia gate-sin-shards-senuelo shards-duplicado shards-en-comentario shards-run-en-comentario shards-cuatro-entradas; do
+for roto in shard-faltante fallo-ignorado gate-sin-dependencia gate-sin-shards-senuelo shards-duplicado shards-en-comentario shards-run-en-comentario shards-cuatro-entradas shards-failfast-en-comentario gate-pareja-en-comentario; do
   if contrato_shards "$FX/$roto.yml"; then
     fail "fixture $roto.yml no fue rechazado: el validador acepta $roto"
   fi
