@@ -204,3 +204,71 @@ literal: md Y txt con titulo).
 - `bash .saikit/scratch/S/sim-gate-doc-check-r1.sh` -> TODO VERDE (7 escenarios).
 - `git diff origin/main...HEAD --stat -- scripts/run-checks.sh` -> vacio.
 - YAML del workflow parsea (`ruby -ryaml`, sanity local).
+
+# r2 (2026-09-20) — correccion exprés (CodeRabbit Stability Major: SIGPIPE)
+
+## Hallazgo
+
+En el paso "Checks documentales del rango", leer la primera linea con
+`head -n 1` dentro de una sustitucion bajo `set -euo pipefail` puede recibir
+SIGPIPE cuando `git show` todavia escribe (archivo grande): head cierra la
+tuberia en cuanto imprime la primera linea, el productor recibe SIGPIPE (141)
+y la ASIGNACION devuelve != 0, matando el job con un archivo de evidencia
+VALIDO. El doc-check debe validar, no crashear entrada valida.
+
+## Rojo medido (repro determinista, ANTES del arreglo)
+
+Repro minima del mecanismo (repo de juguete, archivo de 15 MB bajo una tuberia
+con buffer de 64 KiB), 5/5 corridas iguales:
+
+```
+$ bash -c 'set -euo pipefail; h=$(git rev-parse HEAD); primera=$(git show "$h:big.md" | head -n 1); echo "vivo: $primera"'
+exit=141        # sin "vivo:" -- la asignacion mato el script
+```
+
+Escenario nuevo F en sim-gate-doc-check-r1.sh (fast + evidencia GRANDE y
+valida: titulo '# ' en la primera linea, 15 MB de contenido), contra el
+workflow de 5efa62f (con `head -n 1`):
+
+```
+$ bash .saikit/scratch/S/sim-gate-doc-check-r1.sh
+  OK    A-fast-progress-sin-schema -> carril=fast doc=1 gate=1
+  OK    A2-fast-progress-no-json -> carril=fast doc=1 gate=1
+  OK    B-fast-docs-validos -> carril=fast doc=0 gate=0
+  OK    C-mixto-evidencia-sin-titulo -> carril=completo doc=1 gate=1
+  OK    D-fast-fila-4-columnas -> carril=fast doc=1 gate=1
+  OK    D2-fast-evidencia-vacia -> carril=fast doc=1 gate=1
+  OK    E-fast-sin-docs-contractuales -> carril=fast doc=0 gate=0
+  FALLA F-fast-evidencia-grande-valida: doc-check rc=141, esperaba 0 ()
+ROJO: 1 escenario(s) del sim en fallo
+```
+
+El rc=141 ES el hallazgo: entrada valida, paso muerto. Este rojo es tambien la
+mutacion que acredita poder discriminante (revertir sed -> head reproduce
+exactamente esta FALLA).
+
+## Arreglo
+
+`primera=$(git show "$hs:$f" | sed -n '1p')`: sed consume TODA la entrada, el
+productor nunca ve la tuberia cerrada temprano y no hay EPIPE que convertir en
+141 bajo pipefail. Era la unica lectura de primera linea del paso (grep
+'head -n 1' == 0 despues del cambio). Coste: sed drena el archivo completo
+(milisegundos para los .md/.txt de evidencia).
+
+## Verde (2026-09-20, tras el arreglo)
+
+```
+$ bash .saikit/scratch/S/sim-gate-doc-check-r1.sh
+  OK    F-fast-evidencia-grande-valida -> carril=fast doc=0 gate=0
+TODO VERDE: sim-gate-doc-check-r1 (8 escenarios)
+```
+
+## Verificacion final r2 (2026-09-20)
+
+- `bash scripts/tests/test-clasificador-cambio.sh` -> TODO VERDE (29 casos).
+- `bash scripts/tests/test-summa-gate-quality-entrypoints.sh` -> PASS
+  (invariantes del workflow intactos: run-checks.sh exactamente una vez en CI,
+  pre-commit/action, permisos contents: read, persist-credentials: false).
+- `bash .saikit/scratch/S/sim-gate-doc-check-r1.sh` -> TODO VERDE (8 escenarios).
+- `grep -c 'head -n 1' .github/workflows/quality.yml` -> 0.
+- YAML del workflow parsea (`ruby -ryaml`, sanity local).

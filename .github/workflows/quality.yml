@@ -132,7 +132,12 @@ jobs:
                 if [ "$tam" -eq 0 ]; then
                   echo "doc-check: $f esta vacio" >&2; rc=1; continue
                 fi
-                primera=$(git show "$hs:$f" | head -n 1)
+                # sed en vez de head para leer la primera linea: head cierra la
+                # tuberia en cuanto la imprime y git show puede seguir
+                # escribiendo (archivo grande): SIGPIPE + pipefail mataban el
+                # paso con una evidencia valida. sed consume toda la entrada y
+                # el productor nunca ve la tuberia cerrada.
+                primera=$(git show "$hs:$f" | sed -n '1p')
                 case $primera in
                   '# '*) ;;
                   *) echo "doc-check: $f no arranca con titulo '# '" >&2; rc=1 ;;

@@ -10,6 +10,7 @@
 #   C. mixto + evidencia sin titulo    -> doc-check rojo  -> clasificador failure -> gate RECHAZA (aunque quality corra)
 #   D. fast + fila de Plans.md de 4 col-> doc-check rojo  -> clasificador failure -> gate RECHAZA
 #   E. fast + solo 15-sesiones.txt     -> doc-check verde (nada que validar) -> gate PASA
+#   F. fast + evidencia GRANDE valida  -> doc-check verde (lectura sin SIGPIPE) -> gate PASA
 #
 # El clasificador es el real (scripts/clasificar-cambio.sh); los resultados de
 # los pasos se traducen a job results como los veria GitHub y el paso del gate
@@ -161,8 +162,20 @@ printf 'sesion 15\n' > "$d/.saikit/progress/15-sesiones.txt"
 commit_sim "$d"; correr_clasificador "$d"; correr_gate "$d"
 afirmar E-fast-sin-docs-contractuales "$d" fast 0 0
 
+# F. fast + evidencia GRANDE (15 MB) y valida: repro del SIGPIPE de la r2
+# (CodeRabbit Major). `head -n 1` cierra la tuberia tras la primera linea y el
+# productor (git show) sigue escribiendo: recibe SIGPIPE (141) y, bajo
+# set -euo pipefail, la ASIGNACION falla y mata el paso con un archivo de
+# evidencia VALIDO. El tamanno (15 MB) es >> buffer de la tuberia (64 KiB)
+# para que el productor siga escribiendo cuando el lector sale: determinista
+# (5/5 rojo medido en el host). La lectura debe consumir toda la entrada.
+d=$T/F-fast-evidencia-grande-valida; sembrar_sim "$d"
+{ printf '# Evidencia grande\n'; /usr/bin/head -c 15000000 /dev/zero; } > "$d/docs/evidence/grande.md"
+commit_sim "$d"; correr_clasificador "$d"; correr_gate "$d"
+afirmar F-fast-evidencia-grande-valida "$d" fast 0 0
+
 if [ "$fails" -gt 0 ]; then
   echo "ROJO: $fails escenario(s) del sim en fallo"
   exit 1
 fi
-echo "TODO VERDE: sim-gate-doc-check-r1 (7 escenarios)"
+echo "TODO VERDE: sim-gate-doc-check-r1 (8 escenarios)"
