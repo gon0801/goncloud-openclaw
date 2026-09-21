@@ -36,6 +36,11 @@
 #   - clasifica POR ARCHIVOS contra la allowlist versionada; nunca por titulo,
 #     etiqueta o declaracion. La extension .md por si sola no es fast: hay
 #     documentos que controlan comportamiento y no estan enumerados.
+#   - la llave no abre su propia puerta: tocar scripts/ci-fast-allowlist.txt,
+#     scripts/clasificar-cambio.sh o .github/workflows/quality.yml clasifica
+#     completo SIN consultar la allowlist (el mismo cambio que reescribe la
+#     llave no puede usarla para abrirse la puerta del fast). La ruta del
+#     workflow la marca este script por nombre, no leyendolo: es config de CI.
 #   - renombres: origen Y destino deben ser fast para que el cambio sea fast.
 #   - los borrados cuentan (un D sobre una ruta fuera de contrato es completo).
 #   - un cambio sin archivos (base == head) es fast: no hay nada que probar;
@@ -121,6 +126,17 @@ ruta_es_fast() { # <ruta>: 0 si ALGUNA regla de la allowlist casa con la ruta
   return 1
 }
 
+# Archivos que controlan la clasificacion misma (la llave y sus cerraduras).
+# Cualquier cambio que los toca clasifica completo ANTES de consultar la
+# allowlist: ese mismo cambio pudo reescribirla (p.ej. a '**'), y la llave no
+# puede autorizar la puerta del fast en el mismo cambio que la cambia.
+ruta_es_control() { # <ruta>: 0 si la ruta controla la clasificacion
+  case $1 in
+    scripts/ci-fast-allowlist.txt|scripts/clasificar-cambio.sh|.github/workflows/quality.yml) return 0 ;;
+  esac
+  return 1
+}
+
 veredicto() { # <fast|completo> <motivo de una linea>
   printf '%s\n' "$1"
   printf 'clasificar-cambio: carril=%s\nclasificar-cambio: motivo=%s\n' "$1" "$2" >&2
@@ -175,6 +191,9 @@ while IFS= read -r linea; do
         continue
       fi
       ruta=${linea#*$'\t'}
+      if ruta_es_control "$ruta"; then
+        veredicto completo "toca un archivo que controla la clasificacion: $ruta"
+      fi
       if ! ruta_es_fast "$ruta"; then
         fuera=$((fuera + 1))
         [ "$fuera" -le 5 ] && motivo="${motivo:+$motivo }$ruta"
@@ -186,6 +205,11 @@ while IFS= read -r linea; do
       fi
       origen=${linea#*$'\t'}; origen=${origen%%$'\t'*}
       destino=${linea#*$'\t'}; destino=${destino#*$'\t'}
+      # La regla de archivos de control tambien aplica a cada extremo del
+      # renombre: entrar o salir de la llave es tocar la llave.
+      if ruta_es_control "$origen" || ruta_es_control "$destino"; then
+        veredicto completo "toca un archivo que controla la clasificacion (renombre: $origen -> $destino)"
+      fi
       # Renombre: origen Y destino deben ser fast; cada extremo cuenta.
       if ! ruta_es_fast "$origen"; then
         fuera=$((fuera + 1))

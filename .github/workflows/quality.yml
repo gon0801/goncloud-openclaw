@@ -17,6 +17,14 @@
 # cancelacion: un job omitido solo pasa con clasificacion fast valida y checks
 # documentales verdes. Clasificacion ausente, fallida o cancelada NUNCA pasa.
 #
+# Los checks documentales son un paso REAL del job clasificador ("Checks
+# documentales del rango"): valida los contratos de los archivos CAMBIADOS
+# (.saikit/progress/*.json parseable y con schema/fase; docs/evidence/**.md|txt
+# no vacios y con titulo '# '; filas del ledger de Plans.md tocadas por el diff
+# con 5 columnas) y corre en AMBOS carriles. Ademas, tocar los archivos que
+# controlan la clasificacion (allowlist, clasificador, este workflow) clasifica
+# completo por regla: la llave no abre su propia puerta.
+#
 # pytest usa `-n auto` (pytest-xdist) por default. Opt-out por repo:
 # QUALITY_KIT_PYTEST_SERIAL=1 al correr init-repo.ps1 (suites con estado
 # compartido; el workflow queda en `pytest -q`).
@@ -38,6 +46,15 @@ permissions:
 jobs:
   clasificador:
     runs-on: ubuntu-latest
+    # Los shas llegan por env y no interpolados en los run: el clasificador y
+    # el doc-check validan lo que reciben y un evento sin base/head debe morir
+    # aca (exit 2, job rojo), no filtrarse como condicion vacia mas abajo.
+    env:
+      EVENTO: ${{ github.event_name }}
+      PR_BASE: ${{ github.event.pull_request.base.sha }}
+      PR_HEAD: ${{ github.event.pull_request.head.sha }}
+      PUSH_BASE: ${{ github.event.before }}
+      PUSH_HEAD: ${{ github.event.after }}
     outputs:
       carril: ${{ steps.clasificar.outputs.carril }}
       motivo: ${{ steps.clasificar.outputs.motivo }}
@@ -54,15 +71,6 @@ jobs:
 
       - name: Clasificar el cambio por archivos
         id: clasificar
-        env:
-          # Los shas llegan por env y no interpolados en el run: el clasificador
-          # valida lo que recibe y un evento sin base/head debe morir aca (exit
-          # 2, job rojo), no filtrarse como condicion vacia mas abajo.
-          EVENTO: ${{ github.event_name }}
-          PR_BASE: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD: ${{ github.event.pull_request.head.sha }}
-          PUSH_BASE: ${{ github.event.before }}
-          PUSH_HEAD: ${{ github.event.after }}
         run: |
           set -eu
           if [ "$EVENTO" = "pull_request" ]; then
@@ -73,6 +81,83 @@ jobs:
             head=$PUSH_HEAD
           fi
           bash scripts/clasificar-cambio.sh --base "$base" --head "$head"
+
+      # Checks documentales REALES del rango (bloqueante 2 de la r1): hasta
+      # aqui el carril fast no ejecutaba ningun control documental -- quality
+      # omitido y el gate verde sin auditar nada. Este paso valida los
+      # contratos de los archivos CAMBIADOS del rango que el clasificador miro
+      # y corre en AMBOS carriles (la politica exige "bateria completa y
+      # checks documentales" para mixtos). Fail-closed: si algo no cumple, el
+      # job muere rojo y el gate no autoriza ninguna omision.
+      - name: Checks documentales del rango
+        run: |
+          set -euo pipefail
+          if [ "$EVENTO" = "pull_request" ]; then
+            base=$PR_BASE; head=$PR_HEAD
+          else
+            base=$PUSH_BASE; head=$PUSH_HEAD
+          fi
+          # Rango igual que el clasificador (merge-base). Si no se puede
+          # resolver, el clasificador ya habra forzado completo en este mismo
+          # job: la bateria cubre el cambio y no hay omision que auditar.
+          bs=$(git rev-parse --verify --quiet "${base}^{commit}" || true)
+          hs=$(git rev-parse --verify --quiet "${head}^{commit}" || true)
+          if [ -z "$bs" ] || [ -z "$hs" ]; then
+            echo "doc-check: base/head inresoluble -- el clasificador ya selecciono completo"
+            exit 0
+          fi
+          if ! mb=$(git merge-base "$bs" "$hs" 2>/dev/null) || [ -z "$mb" ]; then
+            echo "doc-check: merge-base inresoluble -- el clasificador ya selecciono completo"
+            exit 0
+          fi
+          rc=0
+          n=0
+          # --diff-filter=d: lo BORRADO no tiene contenido que validar; se
+          # revisa lo que el cambio dejo vivo en el head.
+          while IFS= read -r -d '' f; do
+            n=$((n + 1))
+            case $f in
+              .saikit/progress/*.json)
+                # Contrato runbook-progress.v1 basico: JSON parseable (python3
+                # -m json.tool) y con las claves schema y fase.
+                if ! git show "$hs:$f" | python3 -m json.tool >/dev/null 2>&1; then
+                  echo "doc-check: $f no es JSON parseable" >&2; rc=1; continue
+                fi
+                if ! git show "$hs:$f" | python3 -c 'import json,sys; d=json.load(sys.stdin); raise SystemExit(0 if isinstance(d, dict) and "schema" in d and "fase" in d else 1)' 2>/dev/null; then
+                  echo "doc-check: $f sin las claves schema/fase (runbook-progress.v1)" >&2; rc=1
+                fi ;;
+              docs/evidence/*.md|docs/evidence/*.txt)
+                # Evidencia: no vacia y con titulo en la primera linea.
+                tam=$(git cat-file -s "$hs:$f")
+                if [ "$tam" -eq 0 ]; then
+                  echo "doc-check: $f esta vacio" >&2; rc=1; continue
+                fi
+                primera=$(git show "$hs:$f" | head -n 1)
+                case $primera in
+                  '# '*) ;;
+                  *) echo "doc-check: $f no arranca con titulo '# '" >&2; rc=1 ;;
+                esac ;;
+              Plans.md)
+                # Filas del ledger TOCADAS por el diff (agregadas o borradas,
+                # no todo el archivo): la forma | <n>.<n> | ... | ... | ... |
+                # cc:... | exige exactamente 5 columnas.
+                while IFS= read -r linea; do
+                  cuerpo=${linea:1}
+                  if printf '%s\n' "$cuerpo" | grep -Eq '^\|[[:space:]]*[0-9]+\.[0-9]+[[:space:]]*\|'; then
+                    if ! printf '%s\n' "$cuerpo" | grep -Eq '^\|[[:space:]]*[0-9]+\.[0-9]+[[:space:]]*\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|[[:space:]]*$'; then
+                      printf 'doc-check: Plans.md fila tocada sin 5 columnas: %s\n' "$cuerpo" >&2
+                      rc=1
+                    fi
+                  fi
+                done < <(git diff --unified=0 "$mb" "$hs" -- Plans.md | grep -E '^[+-]\|' || true) ;;
+            esac
+          done < <(git -c core.quotepath=false diff --name-only --diff-filter=d -z "$mb" "$hs")
+          echo "doc-check: $n archivo(s) cambiados en el rango; contratos documentales revisados"
+          if [ "$rc" -ne 0 ]; then
+            echo "doc-check: RECHAZADO" >&2
+            exit 1
+          fi
+          echo "doc-check: OK"
 
       - name: Resumen del carril
         if: always()

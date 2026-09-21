@@ -271,6 +271,35 @@ else
   falla "salida-stdout-unica-linea: stdout='$out'"
 fi
 
+# (7) la llave no abre su propia puerta (bloqueante 1 de la r1): cualquier
+# cambio que toque LOS ARCHIVOS QUE CONTROLAN LA CLASIFICACION clasifica
+# completo, sin importar el contenido de la allowlist. El atacante reescribe
+# la allowlist a '**' y agrega codigo: sin esta regla el cambio saldria fast
+# porque la allowlist consultada (la del head) casa con todo.
+d=$T/allowlist-se-reescribe; sembrar "$d"
+mkdir -p "$d/src"
+printf '**\n'   > "$d/scripts/ci-fast-allowlist.txt"   # el cambio reescribe la llave...
+printf 'app\n'  > "$d/src/app.txt"                     # ...y agrega codigo
+commit_todo "$d"
+veredicto_es allowlist-se-reescribe completo "$d" "$d/scripts/ci-fast-allowlist.txt" \
+  "$(git -C "$d" rev-parse HEAD~1)" "$(git -C "$d" rev-parse HEAD)"
+
+# Igual con el clasificador y con el workflow: aqui la allowlist permisiva
+# queda EN LA BASE (fuera del rango), y el cambio toca SOLO el archivo de
+# control + codigo. Con la '**' en la base, sin la regla estos saldrian fast.
+for caso in scripts/clasificar-cambio.sh .github/workflows/quality.yml; do
+  nombre=control-$(printf '%s' "$caso" | tr '/' '-')
+  d=$T/$nombre; sembrar "$d"
+  printf '**\n' > "$d/scripts/ci-fast-allowlist.txt"
+  commit_todo "$d"                       # la llave permisiva entra a la BASE
+  mkdir -p "$d/src"
+  printf 'cambio\n' > "$d/$caso"
+  printf 'app\n'    > "$d/src/app.txt"
+  commit_todo "$d"
+  veredicto_es "$nombre" completo "$d" "$d/scripts/ci-fast-allowlist.txt" \
+    "$(git -C "$d" rev-parse HEAD~1)" "$(git -C "$d" rev-parse HEAD)"
+done
+
 if [ "$fails" -gt 0 ]; then
   echo "ROJO: $fails caso(s) del clasificador en fallo"
   exit 1

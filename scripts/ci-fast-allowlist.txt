@@ -21,6 +21,11 @@
 #   .saikit/progress/**   registros de cierre: <fase>.json y
 #                         <fase>-sesiones.txt. Cualquier otro archivo en ese
 #                         arbol (un .md de notas, un script) cae a completo.
+#
+# Esta allowlist es un archivo de CONTROL: cualquier cambio que la toque (igual
+# que scripts/clasificar-cambio.sh o .github/workflows/quality.yml) clasifica
+# completo por regla, sin consultar esta lista -- la llave no abre su propia
+# puerta en el mismo cambio que la reescribe.
 Plans.md
 docs/evidence/**/*.md
 docs/evidence/**/*.txt
