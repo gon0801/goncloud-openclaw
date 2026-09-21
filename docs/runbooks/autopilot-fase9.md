@@ -36,7 +36,7 @@ Claw elige al lead por disponibilidad. El lead dirige, registra y hace la audito
 | CLI real barato, reloj inyectado y sesiones `sim9-*` | simulacro 7/7, máximo 10 min de pared | Aprobado |
 | gateway config, secretos, otro cron, `ai.goncloud.corrida-latido`, borrado recursivo | toda la fase | Negado |
 
-Prohibido: reimplementar filas ya integradas; abrir reemplazo de PR #100; rebase, amend, force-push o `--no-verify`; cambiar de trabajador para escapar de una prueba/revisión; repetir batería completa para el mismo SHA; activar un segundo reloj; implementar Fases 14, 15, 23 o 9.17.
+Prohibido: reimplementar filas ya integradas; abrir reemplazo de PR #100; rebase, amend, force-push o `--no-verify`; cambiar de trabajador para escapar de una prueba/revisión; repetir batería completa para el mismo SHA; activar un segundo reloj; implementar Fases 14, 15, 23, 9.17 o 9.18.
 
 ## Carriles y archivos
 
@@ -88,9 +88,9 @@ El lead escribe progreso en cada cambio de estado. El watchdog global manda cada
 
 ## Inventario y cierre
 
-Inventario esperado: 3 carriles de código/documentación, 1 simulacro, 1 PR de cierre; 9.17 queda en Block D; Fase 14 espera 9+15 y Fase 23 no espera esta fase. Respaldos instalados y temporales se enumeran en evidencia; no se borran durante la corrida.
+Inventario esperado: 3 carriles de código/documentación, 1 simulacro, 1 PR de cierre; 9.17–9.18 quedan en Block D; Fase 14 espera 9+15 y Fase 23 no espera esta fase. Respaldos instalados y temporales se enumeran en evidencia; no se borran durante la corrida.
 
-El cierre reconcilia 9.0–9.16 con PR/SHA/evidencia reales, deja 9.17 pendiente con su destino y termina solo cuando `bash scripts/cierre-de-fase.sh 9` imprime `VERDE: la fase 9 puede declararse cerrada`. Última línea del lead: `LISTO <sha-del-cierre>`.
+El cierre reconcilia 9.0–9.16 con PR/SHA/evidencia reales, deja 9.17–9.18 pendientes con su destino y termina solo cuando `bash scripts/cierre-de-fase.sh 9` imprime `VERDE: la fase 9 puede declararse cerrada`. Última línea del lead: `LISTO <sha-del-cierre>`.
 
 ## Clases de comando
 

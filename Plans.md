@@ -315,7 +315,7 @@ El cierre se ejecuta con `docs/superpowers/plans/2026-09-21-fase9-cierre.md` y `
 | 9.7 | PR #100 abierto, rama `fase9/docs` | recuperar el mismo PR después de Q0 |
 | 9.9–9.13, 9.16 | pendientes según el plan de cierre | carriles I/U/S y prueba 9.13 en PR #100 |
 | 9.14–9.15 | integradas por PR #104, merge `f31d58de` | corregir la celda vieja en Q5 |
-| 9.17 | hardening no bloqueante | mover a entrega-sin-sello Block D después de B/C |
+| 9.17–9.18 | hardening no bloqueante | mover a entrega-sin-sello Block D después de B/C |
 
 Se llama Fase 9 y no 8 porque `docs/runbooks/autopilot-fase8.md` ya usa ese número para el Repricing de Orbit.
 
@@ -365,6 +365,7 @@ Misma que el vigilante: pruebas de contrato en `scripts/tests/` con servidor tmu
 | 9.15 | `[lane:gate] [tdd:required]` **Cerrar y terminar sesiones sin desmarcar un nombre reutilizado por otra corrida.** `cerrar` y `terminar-sesion` todavía actúan por nombre; deben participar en el lock global y comprobar que `OPENCLAW_WATCH_RUN` coincide con la corrida antes del `unset`. | Prueba concurrente: una sesión de A muere, B reutiliza el nombre y `cerrar A`/`terminar-sesion A` no quitan ninguna marca de B; las operaciones normales e idempotentes de A siguen verdes. | 9.2 | cc:TODO [implementado y probado en la corrección de PR #104; pendiente merge] |
 | 9.16 | `[lane:gate] [tdd:required]` **Hacer que `cerrar` espere de forma acotada a un lanzamiento lento sin exigir reintento manual.** El lock global protege correctamente las marcas, pero el sondeo de barra y la entrega del encargo pueden superar los ~10 s de espera del competidor. | Prueba con lanzamiento lento: `cerrar` espera o reintenta de forma acotada, termina en verde y no deja una corrida abierta ni una sesión marcada por ella. | 9.15 | cc:TODO |
 | 9.17 | `[lane:gate] [tdd:required]` **Definir recuperación explícita de un lock cuyo PID sigue vivo pero está irrecuperablemente colgado o fue reciclado.** La seguridad actual prefiere no robar un lock vivo; falta una salida operativa auditable que no dependa de borrar el directorio a mano. | Pruebas distinguen dueño vivo que refresca, dueño vivo colgado y PID reciclado; solo una acción explícita y verificada recupera los dos últimos sin robar el primero. | 9.14 | cc:TODO |
+| 9.18 | `[lane:gate] [tdd:required]` **Endurecer el arranque en modo `--solo-watchdog-global`.** El modo no exige empuje propio, pero hoy tampoco rechaza ni reporta un `corrida-empuje-<fase>` sobrante y su caso focalizado no prueba `avance-tareas` ausente o con cadencia incorrecta. Hallazgo no bloqueante de la cross-review del arreglo de PR #115 | Con el flag: empuje propio presente ⇒ ROJO y lo nombra; `avance-tareas` ausente, apagado o fuera de 15 min ⇒ ROJO; global sano sin empuje ⇒ VERDE; sin el flag se conserva el contrato normal. Cada mutación queda atrapada | 9.7 | cc:TODO — entrega-sin-sello Block D después de B/C; no bloquea Fase 9 |
 
 ### Clasificación
 

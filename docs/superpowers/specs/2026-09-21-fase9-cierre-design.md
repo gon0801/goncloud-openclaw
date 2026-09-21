@@ -80,8 +80,8 @@ requerida.
   observado. Ninguna tarea requerida depende de ese dato.
 - 9.1 a 9.6, 9.8, 9.14 y 9.15 se marcan terminadas con sus merges existentes.
 - 9.7, 9.9 a 9.13 y 9.16 se cierran mediante los carriles de este documento.
-- 9.17 pasa al bloque de hardening posterior a A, B y C. La recuperación de un
-  PID vivo colgado no bloquea el flujo normal ni el simulacro.
+- 9.17 y el hardening 9.18 hallado al revisar Q0 pasan al bloque posterior a A,
+  B y C. Ninguno bloquea el flujo normal ni el simulacro.
 
 ## Revisión, CI y límites
 
@@ -123,7 +123,7 @@ permanece independiente.
 ## Hardening posterior a A, B y C
 
 El plan de entrega sin sello gana un Bloque D que empieza después de B y C.
-Incluye A.R2 a A.R11, 9.17 y todos los hallazgos no bloqueantes que produzcan B
+Incluye A.R2 a A.R11, 9.17–9.18 y todos los hallazgos no bloqueantes que produzcan B
 y C. El bloque agrupa el trabajo por repositorio y conserva pruebas, revisión y
 CI independientes. Registrar un hallazgo no lo marca como realizado.
 
@@ -133,4 +133,4 @@ CI independientes. Registrar un hallazgo no lo marca como realizado.
 - Reactivar el sello por sesión.
 - Instalar `ai.goncloud.corrida-latido` junto al watchdog global.
 - Crear un router nuevo de modelos dentro de SummonAIKit.
-- Resolver 9.17 antes del simulacro.
+- Resolver 9.17 o 9.18 antes del simulacro.

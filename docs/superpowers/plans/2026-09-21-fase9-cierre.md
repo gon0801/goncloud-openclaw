@@ -23,7 +23,7 @@
 - A worker may be replaced only for quota, authentication, unavailable binary/provider, or launch failure. Preserve its branch, worktree, brief, and commits. A red test or review finding stays with the lane.
 - Each lane runs only focused tests locally. Open its PR for the full battery once on the final SHA. Reuse CI evidence while that SHA is unchanged.
 - Review each code lane once across the whole lane, then CodeRabbit once. Only a reproduced blocker opens a correction and delta-only cross-review with a different reviewer. The same blocker twice stops the lane.
-- Nonblocking findings from lanes I and U join A.R2–A.R11, 9.17, and the future B/C findings in delivery-without-seal Block D. Recording is not implementation.
+- Nonblocking findings from lanes I and U join A.R2–A.R11, 9.17–9.18, and the future B/C findings in delivery-without-seal Block D. Recording is not implementation.
 - Phase 14 implementation starts only after Phase 9 and Phase 15. Phase 23 remains independent.
 
 ## Review Focus
@@ -278,7 +278,7 @@ Give `usuario` only the promise and its human route. Store its `FUNCIONA` line a
 
 **Step 1: Reconcile every Phase 9 row**
 
-Use existing merge evidence for 9.1–9.6, 9.8, 9.14, and 9.15. Use the new PRs/evidence for 9.7, 9.9–9.13, and 9.16. Close 9.0 with measured unknowns. Keep 9.17 pending and point it to delivery-without-seal Block D; do not call it done.
+Use existing merge evidence for 9.1–9.6, 9.8, 9.14, and 9.15. Use the new PRs/evidence for 9.7, 9.9–9.13, and 9.16. Close 9.0 with measured unknowns. Keep 9.17–9.18 pending and point them to delivery-without-seal Block D; do not call them done.
 
 **Step 2: Run the closure command as a loop over missing facts**
 
@@ -294,4 +294,4 @@ Run focused ledger/doc checks, commit all Phase 9 closure records together, open
 
 ## Block D handoff
 
-After delivery-without-seal Blocks B and C finish, create one hardening phase with repository-separated lanes. Seed it with A.R2–A.R11 and Phase 9.17, then append every nonblocking B/C/I/U finding with reproduction and owner. Each repository keeps its own tests, review, CI, and PR. No item becomes complete merely by appearing in this list.
+After delivery-without-seal Blocks B and C finish, create one hardening phase with repository-separated lanes. Seed it with A.R2–A.R11 and Phase 9.17–9.18, then append every nonblocking B/C/I/U finding with reproduction and owner. Each repository keeps its own tests, review, CI, and PR. No item becomes complete merely by appearing in this list.
