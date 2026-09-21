@@ -527,3 +527,42 @@ No se modifica un spec de producto. La fase conserva los contratos existentes: c
   scope: Fase 15 / Tasks 15.1–15.5.
 
 No hay secret-read, despliegue, `config patch`, cron, Telegram, SSH, operación destructiva ni cambios al gateway vivo.
+
+## Fase 14 — Orquestación autónoma con harnesses nativos
+
+Fecha de planificación: 2026-09-19.
+
+Plan: `docs/superpowers/plans/2026-09-19-native-harness-orchestration.md` (Tasks 1–10, revisión actual). Diseño aprobado: `docs/superpowers/specs/2026-09-19-native-harness-orchestration-design.md`. Runbook: `docs/runbooks/autopilot-fase14.md`.
+
+**Qué construye.** `main` rutea cada pedido al mejor harness nativo (Claude, Codex, ZCode, Kimi, Cursor, Grok) con terminal visible, tablero de solo lectura y ciclo autónomo hasta canary vivo o reversa verificada. La DoD de detalle son los Steps verbatim de cada Task del plan; la DoD de cada fila de abajo es su compuerta observable. Orden: Fase 15 → cierre de Fase 9 → Fase 14. Entrega-sin-sello A/B/C debe estar integrada y el kit instalado. Fase 23 es independiente. Cuatro bloques seriales: Tasks 1–4, 5–7, 8–9, 10; luego un PR de cierre. El runbook detalla dependencias y verificación previa.
+
+| Task | Contenido | DoD | Depends | Status |
+|---|---|---|---|---|
+| 14.1 | `[lane:R] [tdd:required]` **Registro y selector.** Tasks 1–2 del plan: `workers.v1.json` con validación estricta, `corrida_worker/{registry,selector}.py`, `corrida-worker.py`, preflight con probes acotados. | `test-worker-registry.sh` y `test-worker-selector.sh` verdes, `VALID workers.v1 6` en el registro real, 20 corridas del fixture de selección byte-idénticas | - | cc:TODO |
+| 14.2 | `[lane:A] [tdd:required]` **Adaptadores y aislamiento.** Tasks 3–4: contrato `adaptador` para las seis CLIs sin `eval`, `preparar-carril` con tope de cuatro bajo el candado del run, `mostrar-terminal` con degradación. | Contrato verde en los seis workers, carrera de cinco reservas con cuatro ganadoras y ningún worktree compartido, Terminal negada ⇒ `degraded` con el attach exacto | 14.1 | cc:TODO |
+| 14.3 | `[lane:T] [tdd:required]` **Tablero.** Task 8: `worker`, `execution`, `evidence` y `delivery` en `tablero-runbook`, con escape, truncado y sin endpoint de ejecución. | `node --test` de contrato, render e índice en verde; HTML idéntico por RPC y HTTP; sin botón ni form que ejecute el attach | 14.5 | cc:TODO |
+| 14.4 | `[lane:M] [tdd:required]` **Autoridad de merge.** Task 7: consumo del recibo persistente en `saikit-cierre-pr`, allowlist intacta, `saikit-merge-route` con `main` fuera de la ejecución. | Merge solo por `implementer`/`ingenieria` con recibo `saikit-entrega.v1` y CI vigente para el head y `expectedHeadOid`; copias `saikit-cierre-pr` byte-idénticas; `main` fuera del allowlist | 14.5 | cc:TODO |
+| 14.5 | `[lane:E] [tdd:required]` **Estado y compuertas.** Tasks 5–6: reducer persistente con reconciliación idempotente, evidencia persistente y consumidores del loop entrega-sin-sello. | Cada crash fixture converge en dos invocaciones sin duplicar efectos; lazo de mutación de compuertas verde; reanudación reutiliza recibos; solo bloqueantes reproducibles reabren revisión | 14.1, 14.2 | cc:TODO |
+| 14.6 | `[lane:S] [tdd:required]` **Skill de `main`.** Task 9: `native-harness-orchestration`, puntero único en `agent-dispatch`, instalador atómico del paquete y el registro. | Skill contract, hooks e installer verdes; `CORRIDA_NATIVE_ROUTING=off` conserva el flujo actual; sin rutas absolutas de binarios en la skill | 14.3, 14.4, 14.5 | cc:TODO |
+| 14.7 | `[lane:L] [tdd:required]` **Humo y entrega.** Task 10: driver de humos con test en falso, `native-harness-rollout.md`, seis humos reales, pre-commit, cruzada, push/PR listo, CI, CodeRabbit, canary integral y `usuario`. Los humos reales y el canary son medición viva, no unitaria. | Seis `passed` con harness y versión; CI vigente y CodeRabbit revisado o indisponibilidad declarada; canary vivo observado o reversa verificada; línea `FUNCIONA` de `usuario` con evidencia | 14.1–14.6 | cc:TODO |
+
+### Clasificación
+
+**Required:** las siete; contratos/smokes de seis harnesses, recibos persistentes, independencia de roles y aceptación viva. Hosts indisponibles no se declaran aprobados; continúan pendientes sin detener tareas independientes. **Reject:** firmas de sesión, segundo reloj, repetir batería/revisión sobre el mismo contenido, duplicar instalador/usuario de Fase 9 o CI de Fase 15.
+
+### 事前確認 de Fase 14
+
+- Evento: `git push` de ramas `fase14/*` + `gh pr create` en goncloud-openclaw.
+  Razón: entrega de los siete carriles; el CI de `pull_request` corre la batería una vez por SHA.
+  scope: Fase 14 / todas las tareas.
+- Evento: merge de los PRs de la fase por la ruta del kit, en ventana segura.
+  Razón: mergear openclaw despliega al gateway por el sync de cada 2 h.
+  scope: Fase 14 / los cuatro bloques y el cierre.
+- Evento: seis humos reales en repos desechables + un canary integral de bajo riesgo (spawn de CLIs nativas en tmux, `mostrar-terminal`, deploy/sync y reversa solo de ese cambio).
+  Razón: 14.7, la evidencia viva que ningún fixture sustituye.
+  scope: Fase 14 / Task 14.7.
+- Evento: `openclaw gateway call runbook.progress.set|get` sobre la corrida `fase14-harness`.
+  Razón: nacimiento y avance del tablero de la fase.
+  scope: Fase 14 / todas las tareas.
+
+No hay `config patch`, no hay reinicio del gateway, no hay push a la rama por defecto, no hay merge fuera del kit y ningún secreto sale en briefs ni en evidencia commiteada.
