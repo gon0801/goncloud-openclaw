@@ -736,6 +736,14 @@ DISP=agents/main/agent/workshop-skills/agent-dispatch/SKILL.md
 grep -qF 'Wake-ups' "$DISP" || fail "$DISP: el paso 3 no referencia el mecanismo de despertar de mac-tmux-control"
 grep -qF 'OPENCLAW_WATCH 1' "$DISP" || fail "$DISP: el paso 2 no marca la sesion al entregar"
 grep -qF -- '-u OPENCLAW_WATCH' "$DISP" || fail "$DISP: el paso 4 no desmarca al terminar el loop"
+# Fase 9, 9.7: las dos skills abren sesiones con corrida.sh (que marca antes de
+# mandar) y marcan ANTES del primer send-keys, no despues. Pendiente de
+# CodeRabbit del PR 60: marcar despues de mandar deja una ventana donde la
+# sesion trabaja sin vigilancia.
+grep -qF 'corrida.sh lanzar-sesion' "$SK" || fail "$SK: no abre sesiones con corrida.sh lanzar-sesion"
+grep -qF 'BEFORE the first send-keys' "$SK" || fail "$SK: no marca BEFORE the first send-keys"
+grep -qF 'corrida.sh lanzar-sesion' "$DISP" || fail "$DISP: no abre sesiones con corrida.sh lanzar-sesion"
+grep -qF 'BEFORE the first send-keys' "$DISP" || fail "$DISP: no marca BEFORE the first send-keys"
 grep -qF 'unmark' "$DISP" || fail "$DISP: falta desmarcar la cadena terminada o abandonada"
 echo "ok (4): anclas de mac-tmux-control y agent-dispatch presentes"
 

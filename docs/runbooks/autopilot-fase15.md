@@ -39,6 +39,25 @@ JSON
 | `cron add\|edit\|rm`, `config patch` | cualquiera | **Negado** — el plan no trae reloj ni cambios al gateway |
 | `ssh` a cualquier lado, leer secretos | cualquiera | **Negado** |
 
+## Seguimiento
+
+El lead lanza cada sesión con `corrida.sh lanzar-sesion`, que la marca antes del
+primer texto. Claw vigila las sesiones marcadas y recuerda su silencio cada 30
+minutos; ese aviso es interno y no cuenta como seguimiento al dueño. En cada
+cambio de estado, el lead actualiza el tablero por RPC del gateway y manda a
+David un Telegram. Mientras la corrida siga activa, claw o Hermes manda otro al
+menos cada 30 minutos. Canal: Telegram, con el destino leído del cron
+`verif-sync-repos` y nunca pegado en el repo. Todos los mensajes siguen
+`seguimiento.v1` y salen validados por `corrida.sh`, como define
+`loop-autopilot.md` §8.
+
+## Clases de comando
+
+| Clase | Para qué | Candado |
+|---|---|---|
+| `gh` | PRs, CI, ventana y merges autorizados | Permitido por las filas de Preaprobaciones |
+| `ssh` | Ninguna operación | Negado para esta fase |
+
 ## Prohibido
 
 Preguntarle algo a David antes del cierre, salvo la única fila que lo permite (base, «la reversa que no entra»). Usar `--no-verify`. Mergear por cualquier ruta que no sea la de su tabla (kit en openclaw, squash directo solo en K). Correr instaladores del kit contra rutas reales. Pushear rojo a propósito. Tocar producción del watchdog o del preflight. Quitar el trigger de `main` o saltar batería por tipo de cambio fuera del clasificador. Crear `AGENTS.md` en openclaw. Editar entre marcadores. Dar de alta, editar o borrar crons. Mandar a David otro Telegram que no sea el de cierre. Leer o pegar secretos, tokens o lanzadores de `~/bin`.
