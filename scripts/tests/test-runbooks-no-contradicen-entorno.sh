@@ -195,22 +195,28 @@ seccion_seguimiento() { # $1 archivo -> texto de la seccion (hasta el proximo ##
   awk '/^#{1,3} .*Seguimiento/ {s=1; next} s && /^## / {exit} s {print}' "$1"
 }
 seguimiento_con_contenido() { # quien + canal concreto + cadencia en contexto de envio
-  local sec; sec=$(seccion_seguimiento "$1")
-  printf '%s' "$sec" | grep -qiE 'lead|vig[ií]a|claw|hermes' || return 1
+  local sec plano; sec=$(seccion_seguimiento "$1")
+  plano=$(printf '%s' "$sec" | tr '\n' ' ')
+  printf '%s' "$plano" | grep -qiE 'lead|vig[ií]a|claw|hermes' || return 1
+  printf '%s' "$plano" | grep -qiE 'David' || return 1
+  printf '%s' "$plano" | grep -qiE 'cada cambio de estado' || return 1
   # canal: alguna linea con "canal" trae mecanismo y no dice que falta definir
   local cl; cl=$(printf '%s' "$sec" | grep -i 'canal' || true)
   [ -n "$cl" ] || return 1
   printf '%s' "$cl" \
     | grep -v -iE 'sin definir|sin resolver|sin concretar|no definid[oa]|por definir|por concretar|sigue pendiente|queda pendiente|pendiente de|falta definir|TBD|XXX' \
     | grep -qiE 'cron|telegram|gateway|rpc|chat' || return 1
-  # cadencia: numero+unidad en linea con marca de envio ("cada", "sale", ...)
-  printf '%s' "$sec" \
-    | grep -iE '(^|[^a-zA-Z])(cada|sales?|env[ií]a|enviar|manda|mandar|junta|juntar|parte|frecuencia|per[ií]odo|latido)([^a-zA-Z]|$)' \
-    | grep -qiE '[0-9]+[[:space:]]*(minutos?|mins?|horas?|segundos?|d[ií]as?)' || return 1
+  # cadencia: el contrato declara de forma inequívoca el máximo de 30 minutos.
+  printf '%s' "$plano" \
+    | grep -qiE '(al menos|como m[aá]ximo).*cada[[:space:]]+30[[:space:]]+minutos|cada[[:space:]]+30[[:space:]]+minutos.*(como m[aá]ximo)' || return 1
   return 0
 }
 fila_clase_valida() { # $1 archivo; 0 = hay fila con clase en celda propia y sin menciones
-  sed -n '/## Clases de comando/,$p' "$1" | awk -F'|' '
+  awk '
+    /^## Clases de comando[[:space:]]*$/ { dentro = 1; next }
+    dentro && /^## / { exit }
+    dentro { print }
+  ' "$1" | awk -F'|' '
     function recorta(s) { gsub(/^[ \t`]+|[ \t`]+$/, "", s); return s }
     function es_clase(s) {
       s = tolower(recorta(s))
@@ -265,7 +271,7 @@ runbook_futuro_ok() { # $1 archivo; 0 = nace con todo
   return 0
 }
 FXF=scripts/tests/fixtures/runbook-futuro
-for fx in autopilot-bueno.md autopilot-malo-sin-seguimiento.md autopilot-malo-sin-clases.md autopilot-malo-new-session.md autopilot-malo-encabezados-vacios.md autopilot-malo-lanzar-negado.md autopilot-malo-seguimiento-vago.md; do
+for fx in autopilot-bueno.md autopilot-malo-sin-seguimiento.md autopilot-malo-sin-clases.md autopilot-malo-clases-fuera-de-seccion.md autopilot-malo-new-session.md autopilot-malo-encabezados-vacios.md autopilot-malo-lanzar-negado.md autopilot-malo-seguimiento-vago.md autopilot-malo-seguimiento-sin-david.md autopilot-malo-seguimiento-sin-cambio.md autopilot-malo-seguimiento-lento.md; do
   [ -r "$FXF/$fx" ] || fail "(2d) no encuentro el fixture: $FXF/$fx"
   git check-ignore -q "$FXF/$fx" \
     && fail "(2d) $FXF/$fx esta en .gitignore: el commit no lo lleva y CI se queda sin el archivo"
@@ -276,6 +282,8 @@ runbook_futuro_ok "$FXF/autopilot-malo-sin-seguimiento.md" \
   && fail "(2d) el fixture sin Seguimiento paso: el candado no exige la seccion"
 runbook_futuro_ok "$FXF/autopilot-malo-sin-clases.md" \
   && fail "(2d) el fixture sin Clases paso: el candado no exige una fila valida (clase sin frase-mencion)"
+runbook_futuro_ok "$FXF/autopilot-malo-clases-fuera-de-seccion.md" \
+  && fail "(2d) el fixture con una clase valida fuera de Clases paso: el candado lee mas alla de la seccion"
 runbook_futuro_ok "$FXF/autopilot-malo-new-session.md" \
   && fail "(2d) el fixture con new-session a mano paso: el candado deja abrir sesiones a mano"
 runbook_futuro_ok "$FXF/autopilot-malo-encabezados-vacios.md" \
@@ -284,6 +292,12 @@ runbook_futuro_ok "$FXF/autopilot-malo-lanzar-negado.md" \
   && fail "(2d) el fixture con lanzamiento negado paso: la llamada debe ser afirmativa"
 runbook_futuro_ok "$FXF/autopilot-malo-seguimiento-vago.md" \
   && fail "(2d) el fixture con Seguimiento vago paso: palabras sueltas no declaran canal ni cadencia"
+runbook_futuro_ok "$FXF/autopilot-malo-seguimiento-sin-david.md" \
+  && fail "(2d) el fixture sin destinatario paso: el candado no exige que el seguimiento llegue a David"
+runbook_futuro_ok "$FXF/autopilot-malo-seguimiento-sin-cambio.md" \
+  && fail "(2d) el fixture sin cambio de estado paso: el candado no exige entrega en cada cambio"
+runbook_futuro_ok "$FXF/autopilot-malo-seguimiento-lento.md" \
+  && fail "(2d) el fixture con 60 minutos paso: el candado permite superar el maximo de 30 minutos"
 # Los exentos existen (si uno se borra, su exencion sobra y se retira).
 for e in $EXENTOS; do
   [ -f "docs/runbooks/$e" ] || fail "(2d) exento por nombre pero ausente: docs/runbooks/$e"

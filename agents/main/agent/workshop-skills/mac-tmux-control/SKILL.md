@@ -26,6 +26,7 @@ Drive CLI agents by **tmux session name** through `exec` with `host="node"` and 
 
 3. Type text: send it LITERALLY (`-l`) and send Enter in a SEPARATE call ≥0.3 s later. Ink-based TUIs (Claude Code) treat a newline arriving in the same burst as part of a paste and may swallow it; `-l` keeps words like `Enter`, `Escape`, `Up` from being interpreted as key names.
    Mark the session BEFORE the first send-keys, so its silence, its close and its Claude turns wake you from the start (see Wake-ups). Marking after sending leaves a window where the session works unwatched.
+   <!-- candado: test-mac-tmux-control.sh -->
    ```bash
    /opt/homebrew/bin/tmux set-environment -t <session> OPENCLAW_WATCH 1
    /opt/homebrew/bin/tmux send-keys -t <session> -l 'Cierra A.5 y arranca el brief de A.6'
@@ -41,6 +42,7 @@ Drive CLI agents by **tmux session name** through `exec` with `host="node"` and 
 5. Verify delivery — a tmux exit 0 only proves the bytes reached the pty. Re-read with `/opt/homebrew/bin/tmux capture-pane` after 2–3 s: for Claude Code the proof is the spinner line (`✶ … (Ns · ↓ N tokens)`) or `esc to interrupt`; for others, new output under the prompt. If the text is still sitting in the prompt, Enter was not accepted: wait 0.5 s and send `Enter` once more, then `Escape` + retype if it still sits there. Never report "sent" without this read-back.
    - Completion: the read-back shows the agent working on the new instruction.
 
+<!-- candado: test-tmux-activity-watch.sh -->
 6. Starting a new agent yourself (David asked for it, or a limited agent must be replaced): when a run is open, create it with `corrida.sh lanzar-sesion <run-id> <rol> <token> <dir>` — it marks the session BEFORE the first send-keys, checks the no-questions mode bar, and records the session in the run registry (`corrida.v1`). Only with no run open, create a detached session by hand with the wrapper's naming rule and the absolute tool path, then attach is David's choice:
    ```bash
    /opt/homebrew/bin/tmux new-session -d -s claude-<repo> -c /Users/dn/dev/<repo> /Users/dn/.local/bin/claude

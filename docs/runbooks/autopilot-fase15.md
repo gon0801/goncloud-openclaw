@@ -42,11 +42,14 @@ JSON
 ## Seguimiento
 
 El lead lanza cada sesión con `corrida.sh lanzar-sesion`, que la marca antes del
-primer texto. Claw vigila las sesiones marcadas y recuerda su silencio cada 30 minutos;
-ese aviso es interno y no crea un cron de la fase. En cada cambio de
-estado, el lead actualiza el tablero por RPC del gateway, como define
-`loop-autopilot.md` §8. El único canal a David es el Telegram de cierre que ya
-lee el cron `verif-sync-repos`; no hay avisos intermedios al dueño.
+primer texto. Claw vigila las sesiones marcadas y recuerda su silencio cada 30
+minutos; ese aviso es interno y no cuenta como seguimiento al dueño. En cada
+cambio de estado, el lead actualiza el tablero por RPC del gateway y manda a
+David un Telegram. Mientras la corrida siga activa, claw o Hermes manda otro al
+menos cada 30 minutos. Canal: Telegram, con el destino leído del cron
+`verif-sync-repos` y nunca pegado en el repo. Todos los mensajes siguen
+`seguimiento.v1` y salen validados por `corrida.sh`, como define
+`loop-autopilot.md` §8.
 
 ## Clases de comando
 

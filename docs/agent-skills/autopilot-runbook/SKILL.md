@@ -40,11 +40,13 @@ Measured 2026-09-18 (Fase 10 de Orbit): the phase runbook was 430 lines, of whic
 13. **Entrega.** A runbook is not delivered when it is written; it is delivered when the owner can start it with one sentence and nothing else. Four things, all of them checked by running them, not by reading them: (a) the branch is pushed and the PR is open, because a lead cannot read a runbook that lives only on the author's disk; (b) `bash scripts/lanzar-fase.sh <N> --dry-run -- <cli> <flag>` prints `LISTO` and names the branch it found — that one command creates the lead's worktree and launches it, so nobody pastes a path or a branch name; (c) the runbook's header carries that command and the board URL; (d) the handoff to the owner is literally one sentence — «dile a claw: empieza la Fase <N>». **If the owner has to paste a path, a command, a branch name or a session name, it is not delivered.** Measured 2026-09-18, Fase 12: the runbook was written, reviewed and committed, and starting it still needed two hand-pasted commands, each with a trap that had already cost hours — the launcher aborts when the worktree does not exist yet, and the lead cannot read a runbook that is not on a branch of origin. The owner found it by asking «¿qué le digo a claw?».
 <!-- candado: test-skill-autopilot-runbook.sh -->
 
-14. **Seguimiento.** A section that says who tells David what, through which channel, and how often: who sends each message (the lead on every state change; the hourly part comes from the watcher, claw or Hermes); the channel (Telegram, with the destination read from the cron that already delivers there, never pasted in the repo); the cadence (on every state change, plus the hourly part; an `AVANZA` within 15 minutes of the previous one joins the next change). Every message follows `seguimiento.v1` (spec: `docs/spec/seguimiento.v1.md` in goncloud-openclaw) and goes out validated by `corrida.sh`. Measured 2026-09-17, Fase 9: David asked for running updates during the whole run, written for him and not for an engineer; without this slot each runbook invented its own shape and sending stayed a rule the lead had to remember mid-run.
+14. **Seguimiento.** A section that says who tells David what, through which channel, and how often. The lead sends David a Telegram update on every state change. While the run remains active, claw or Hermes sends one at least every 30 minutes, with the destination read from the cron that already delivers there and never pasted in the repo. Watcher reminders stay internal and do not count as owner updates. An `AVANZA` within 15 minutes of the previous owner update joins the next change. Every message follows `seguimiento.v1` (spec: `docs/spec/seguimiento.v1.md` in goncloud-openclaw) and goes out validated by `corrida.sh`. Measured 2026-09-17, Fase 9: David asked for running updates during the whole run, written for him and not for an engineer; without this slot each runbook invented its own shape and sending stayed a rule the lead had to remember mid-run.
 
 15. **Clases de comando.** A section titled literally `## Clases de comando` with the table that `corrida.sh preflight` reads: one row per command class the phase uses, from the closed set (`ssh`, `red externa`, `psql`, `gh`), the class in its own cell, with or without backticks. Every command of those classes used anywhere in the runbook must be declared there, or preflight answers `NO APTO` and the run does not start. Measured 2026-09-18 (Fase 9, 9.3): a run that needs `gh` must not discover mid-queue that nobody authenticated it — preflight checks every class the runbook declares or uses before launching, so this table is where the runbook declares them.
+<!-- candado: test-skill-autopilot-runbook.sh -->
 
 ## Ambiguity pass (run before delivering)
+<!-- candado: test-skill-autopilot-runbook.sh -->
 
 Read the finished document as the executor and answer each question from the text alone. If the answer is "se deduce" or "obvio", it is not written: write it.
 
@@ -94,17 +96,14 @@ Read the finished document as the executor and answer each question from the tex
 Readers on the Fase 6 runbook: 5, 6, 3, 2, 2, 1, then empty. On the Fase 7 runbook (inherits from Fase 6, adds external implementers in tmux and a live deploy): 6, 4, 7, 5, 3, 3, 2, 1, 6, 3, 4, 5, 3 without reaching empty in thirteen passes; readers kept finding one-line gaps, and two were contradictions introduced by earlier fixes. Fase 10 de Orbit: 22, 20, 21 in three passes, again mostly contradictions born from the previous fix. Every item was a fact the author had in context and never wrote, or a file the runbook pointed at and the author had not reopened. **The lesson is not more readers: it is a shorter document** (base runbook per repo) and new passes only for blocking items, each reading only what changed (see Verification). After the last pass, re-read the whole document yourself once for contradictions between edited paragraphs, and write the last pass's one-sentence items in; what stays unfixed goes to a plan row.
 
 ## Plantilla del encargo del lead
+<!-- candado: test-skill-autopilot-runbook.sh -->
 
 The lead's brief to an implementer follows this skeleton, in Spanish, with the
 no-cleaning rule verbatim and the progress mirror step. The loop (§3 step 1)
 points here; the runbook does not restate it.
 
-On launching, before delivering the brief: open the session with
-`corrida.sh lanzar-sesion`, note `<lane> <token> <session>` in
-`.saikit/progress/<fase>-sesiones.txt`, and run the espejo de progreso — copy
-the progress file and the sessions file outside the repo to the path the
-runbook names, where the watcher and the crons read them. Re-run the mirror
-after every progress write.
+<!-- candado: test-skill-autopilot-runbook.sh -->
+On launching, before delivering the brief: open the session with `corrida.sh lanzar-sesion`, note `<lane> <token> <session>` in `.saikit/progress/<fase>-sesiones.txt`, and run the espejo de progreso — copy the progress file and the sessions file outside the repo to the path the runbook names, where the watcher and the crons read them. Re-run the mirror after every progress write.
 
 ```
 # BRIEF — Carril <X> · <task ids>
