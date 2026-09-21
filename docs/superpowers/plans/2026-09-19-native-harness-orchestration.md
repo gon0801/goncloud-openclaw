@@ -78,12 +78,14 @@ CodeRabbit is requested once after local review. Read its comments on the curren
 - Create: `scripts/tests/fixtures/workers/valid.json`
 - Create: `scripts/tests/fixtures/workers/invalid-command.json`
 - Create: `scripts/tests/fixtures/workers/invalid-pattern.json`
+- Create: `scripts/tests/fixtures/corrida/v2-existing-without-workers.json`
+- Create: `scripts/tests/fixtures/corrida/v2-native-workers.json`
 - Create: `scripts/tests/test-worker-registry.sh`
 - Modify: `docs/spec/corrida.v2.md`
 
 **Interfaces:**
 - Consumes: local executable overrides from `CORRIDA_WORKER_BIN_<UPPER_ID>`; no secrets or absolute user paths from the registry.
-- Produces: `load_registry(path: Path) -> Registry`, `resolve_binary(worker: Worker, env: Mapping[str, str]) -> Path | None`, and CLI `corrida-worker.py registry validate|list --registry PATH`.
+- Produces: `load_registry(path: Path) -> Registry`, `resolve_binary(worker: Worker, env: Mapping[str, str]) -> Path | None`, CLI `corrida-worker.py registry validate|list --registry PATH`, and compatibility check `corrida-worker.py record validate --record PATH`.
 
 - [ ] **Step 1: Write the valid registry and red/green contract fixtures**
 
@@ -170,18 +172,27 @@ Reject unknown top-level and worker keys, duplicate IDs, non-ASCII identifiers, 
 
 - [ ] **Step 5: Extend the existing `corrida.v2` contract compatibly**
 
-Extend `docs/spec/corrida.v2.md` with optional `workers_registry`, `automatic_routing`, `lanes`, `effects`, `evidence`, and `outcome`. Preserve `seguimiento_global:true`, absence of `cron_vigia_id`, reading existing v1/v2 records, and the global reporting lifecycle. Add fixtures for existing v2 records without worker fields and enriched v2 records. Do not create another schema named v2 or copy the old per-run cron.
+Extend `docs/spec/corrida.v2.md` with optional `workers_registry`, `automatic_routing`, `lanes`, `effects`, `evidence`, `outcome`, and `authorization_ref`. Preserve `seguimiento_global:true`, absence of `cron_vigia_id`, reading existing v1/v2 records, and the global reporting lifecycle. Add `scripts/tests/fixtures/corrida/v2-existing-without-workers.json`, which omits every new field, and `scripts/tests/fixtures/corrida/v2-native-workers.json`, which exercises the enriched fields and points `authorization_ref` at the checked-in Phase 14 preapproval. The field remains optional for legacy and read-only records; Task 7 requires it, resolves it against the versioned preapproval table, and fails closed when it is missing, unknown, unapproved, or out of scope before automatic merge. Do not create another schema named v2 or copy the old per-run cron.
+
+Add these compatibility assertions to `scripts/tests/test-worker-registry.sh`:
+
+```bash
+python3 scripts/mac/corrida-worker.py record validate --record scripts/tests/fixtures/corrida/v2-existing-without-workers.json \
+  | grep -qx 'VALID corrida.v2 legacy'
+python3 scripts/mac/corrida-worker.py record validate --record scripts/tests/fixtures/corrida/v2-native-workers.json \
+  | grep -qx 'VALID corrida.v2 native-workers'
+```
 
 - [ ] **Step 6: Run the focused test and syntax checks**
 
 Run: `bash scripts/tests/test-worker-registry.sh && python3 -m py_compile scripts/mac/corrida-worker.py scripts/mac/corrida_worker/*.py`
 
-Expected: PASS and `VALID workers.v1 6` for the production registry.
+Expected: PASS, `VALID workers.v1 6` for the production registry, and both `corrida.v2` compatibility fixtures accepted with their exact diagnostics.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add scripts/mac/workers.v1.json scripts/mac/corrida-worker.py scripts/mac/corrida_worker scripts/tests/fixtures/workers scripts/tests/test-worker-registry.sh docs/spec/corrida.v2.md
+git add scripts/mac/workers.v1.json scripts/mac/corrida-worker.py scripts/mac/corrida_worker scripts/tests/fixtures/workers scripts/tests/fixtures/corrida/v2-existing-without-workers.json scripts/tests/fixtures/corrida/v2-native-workers.json scripts/tests/test-worker-registry.sh docs/spec/corrida.v2.md
 git commit -m "feat: add native worker registry"
 ```
 

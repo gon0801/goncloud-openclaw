@@ -36,6 +36,16 @@ grep -qF 'preaprobación versionada' "$ROOT" \
   || fail "el contrato superior no representa la autoridad autonoma aprobada"
 grep -qF 'authorization_ref' "$PLAN" \
   || fail "Task 7 no enlaza la corrida con la preaprobacion del dueño"
+grep -qF 'Create: `scripts/tests/fixtures/corrida/v2-existing-without-workers.json`' "$PLAN" \
+  || fail "Task 1 no declara el fixture corrida.v2 legado"
+grep -qF 'Create: `scripts/tests/fixtures/corrida/v2-native-workers.json`' "$PLAN" \
+  || fail "Task 1 no declara el fixture corrida.v2 enriquecido"
+grep -qF 'corrida-worker.py record validate --record scripts/tests/fixtures/corrida/v2-existing-without-workers.json' "$PLAN" \
+  || fail "Task 1 no valida por comando el fixture corrida.v2 legado"
+grep -qF 'corrida-worker.py record validate --record scripts/tests/fixtures/corrida/v2-native-workers.json' "$PLAN" \
+  || fail "Task 1 no valida por comando el fixture corrida.v2 enriquecido"
+grep -qF '`authorization_ref` válido y en alcance' Plans.md \
+  || fail "la DoD 14.4 omite authorization_ref"
 
 RUNBOOK=${RUNBOOK:-docs/runbooks/autopilot-fase14.md}
 TMP=$(mktemp -d)
