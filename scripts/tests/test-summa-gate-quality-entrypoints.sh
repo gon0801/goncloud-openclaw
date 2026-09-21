@@ -2,7 +2,7 @@
 # Contrato de entrypoints de calidad de summa-gate (Fase 5 / 5.2).
 # Verifica: (1) el script `check` de summa-gate/package.json cubre los cuatro
 # .ts fuente; (2) scripts/run-checks.sh invoca `npm run check`; (3) CI alcanza
-# la bateria una sola vez via pre-commit, sin invocacion directa duplicada.
+# la bateria una sola vez de forma directa y pre-commit no la corre localmente.
 # Uso: bash scripts/tests/test-summa-gate-quality-entrypoints.sh
 set -u
 cd "$(dirname "$0")/../.." || exit 1
@@ -40,13 +40,30 @@ grep -q 'npm run check' scripts/run-checks.sh \
   || fail "scripts/run-checks.sh no invoca npm run check"
 echo "ok (2): scripts/run-checks.sh invoca npm run check"
 
-# (3) CI llega a la bateria via pre-commit, sin paso directo duplicado.
+# (3) La bateria completa pertenece a CI, no al commit local. Un hook pesado aca
+# hizo que un cambio de una linea en progress/ tardara minutos y ademas dejara
+# artefactos al interrumpirse. Los hooks genericos de pre-commit siguen corriendo.
 grep -q 'pre-commit/action' .github/workflows/quality.yml \
   || fail "quality.yml no usa pre-commit/action"
-if grep -q 'run: bash scripts/run-checks.sh' .github/workflows/quality.yml; then
-  fail "quality.yml invoca scripts/run-checks.sh directamente ademas de pre-commit (doble entrypoint)"
+if grep -qE '^[[:space:]]*(- id: run-checks|entry: .*scripts/run-checks\.sh)' .pre-commit-config.yaml; then
+  fail "pre-commit todavia conecta la bateria completa: los commits locales deben ser rapidos"
 fi
-echo "ok (3): CI alcanza la bateria una vez via pre-commit"
+entradas_ci=$(grep -cE '^[[:space:]]*(run:[[:space:]]*)?(bash[[:space:]]+)?(\./)?scripts/run-checks\.sh([[:space:]]|$)' .github/workflows/quality.yml || true)
+[ "$entradas_ci" -eq 1 ] \
+  || fail "CI debe invocar scripts/run-checks.sh exactamente una vez (llega: $entradas_ci)"
+echo "ok (3): pre-commit es rapido y CI corre la bateria completa exactamente una vez"
+
+# (3b) Los scripts del repo corren sin credenciales de escritura persistentes.
+grep -qE '^permissions:$' .github/workflows/quality.yml \
+  || fail "quality.yml no declara permisos minimos para GITHUB_TOKEN"
+grep -qE '^[[:space:]]+contents: read[[:space:]]*$' .github/workflows/quality.yml \
+  || fail "quality.yml debe limitar GITHUB_TOKEN a contents: read"
+checkouts=$(grep -cE '^[[:space:]]*- uses: actions/checkout@' .github/workflows/quality.yml || true)
+sin_credenciales=$(grep -cE '^[[:space:]]+persist-credentials: false[[:space:]]*$' .github/workflows/quality.yml || true)
+[ "$checkouts" -gt 0 ] || fail "quality.yml no contiene checkouts que validar"
+[ "$sin_credenciales" -eq "$checkouts" ] \
+  || fail "cada checkout debe declarar persist-credentials: false ($sin_credenciales/$checkouts)"
+echo "ok (3b): CI usa permisos de solo lectura y no persiste credenciales del checkout"
 
 # (4) tablero-runbook (Fase 7 / 7.3): los mismos contratos de entrypoint, incluida la
 # preaprobacion del dueño (package.json con check y SIN dependencies).

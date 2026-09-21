@@ -8,8 +8,9 @@
 # asi que se saltaba entero. Consecuencia medida: `test-browser-profile-flag.sh` llevaba
 # dias en rojo en `origin/main` sin que nadie lo supiera, porque nada la ejecutaba.
 #
-# Una sola definicion, tres consumidores: el hook de pre-commit, el workflow de CI, y un
-# humano que quiera correrlos a mano. Si divergen, vuelve a pasar lo mismo.
+# Una sola definicion, dos consumidores: el workflow de CI y un humano que quiera correrla
+# a mano. Pre-commit conserva solo validaciones rapidas de archivos; la bateria completa
+# corre una vez en CI por PR. Si los entrypoints divergen, vuelve a pasar lo mismo.
 #
 # Vive en scripts/ y NO en tools/: `tools/` esta en .gitignore de este repo, asi que un
 # script ahi no llega a nadie mas — el mismo defecto que el `/tmp/render-corpus-tsv.ts`
@@ -17,7 +18,7 @@
 #
 # Uso:  bash scripts/run-checks.sh
 set -uo pipefail
-# El hook de pre-commit exporta GIT_DIR/GIT_INDEX_FILE/GIT_WORK_TREE/GIT_PREFIX al
+# Algunos runners pueden exportar GIT_DIR/GIT_INDEX_FILE/GIT_WORK_TREE/GIT_PREFIX al
 # correr la bateria: cualquier prueba que arme un repo con git escaparia al repo real
 # (Fase 9: el indice quedo con 16 archivos y origin/main movido). Se limpian aqui para
 # todas las pruebas; cada prueba con git propio tambien se protege sola.

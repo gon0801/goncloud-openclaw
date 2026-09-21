@@ -1,8 +1,7 @@
-# Generado por quality-kit (init-repo.ps1). Corre los mismos candados que
-# ya corren en tu maquina (pre-commit) mas las pruebas, en la nube, en cada
-# push y en cada pull request -- asi el repo queda protegido aunque alguien
-# (vos, otra IA, un colaborador) haga un commit sin pasar por los candados
-# locales, o desde una maquina que no los tiene instalados.
+# Generado por quality-kit (init-repo.ps1). Pre-commit conserva las comprobaciones
+# rapidas de archivos; este workflow corre ademas la bateria completa en la nube, en
+# cada push y pull request. Asi el repo queda protegido sin cobrar la bateria en cada
+# commit local.
 #
 # CI paralelo (regla 8): la bateria corre COMPLETA en cada push/PR, nunca se
 # recorta ni se saltea por tipo de cambio. pytest usa `-n auto` (pytest-xdist)
@@ -20,6 +19,9 @@ on:
     branches: [main, master]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -28,6 +30,8 @@ jobs:
       OPENCLAW_NODE_MODULES: ${{ github.workspace }}/node_modules/openclaw
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         if: hashFiles('pyproject.toml', 'requirements.txt') != ''
@@ -55,9 +59,9 @@ jobs:
         if: hashFiles('package-lock.json') != ''
         run: npm ci
 
-      # Antes de pre-commit a proposito: el hook local `run-checks` corre la bateria del
-      # plugin, y su smoke de import necesita un openclaw instalado. Si esto fuera despues,
-      # el hook fallaria en CI por una dependencia faltante y no por un defecto real.
+      # Antes de la bateria a proposito: el smoke de import necesita un openclaw instalado.
+      # Si esto fuera despues, la bateria fallaria por una dependencia faltante y no por un
+      # defecto real.
       - name: Install openclaw (para el smoke de import del plugin)
         run: |
           npm install --no-save --silent openclaw@2026.9.4
@@ -65,6 +69,9 @@ jobs:
 
       - name: Run pre-commit (todos los candados locales, sobre todo el repo)
         uses: pre-commit/action@v3.0.1
+
+      - name: Run full repository battery
+        run: bash scripts/run-checks.sh
 
       - name: Run Python tests
         if: hashFiles('pyproject.toml', 'requirements.txt') != ''
@@ -75,11 +82,9 @@ jobs:
         if: hashFiles('package.json') != ''
         run: npm test --if-present
 
-      # La bateria del plugin (summa-gate/) corre via el hook pre-commit
-      # `run-checks` (always_run, sobre todo el repo), que es el unico
-      # entrypoint de la bateria dentro de CI. No se agrega una segunda
-      # invocacion directa de scripts/run-checks.sh: dos entrypoints
-      # divergen y repiten la bateria.
+      # La bateria completa tiene un solo entrypoint en CI: scripts/run-checks.sh.
+      # Pre-commit conserva solo validaciones rapidas de archivos para no cobrar la
+      # bateria completa en cada commit local.
 
   gate:
     runs-on: ubuntu-latest
@@ -88,6 +93,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Checkers sobre docs o ledger reales
         run: |
           set -e

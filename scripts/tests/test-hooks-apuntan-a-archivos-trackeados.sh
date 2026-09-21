@@ -8,8 +8,9 @@
 #      hermano, test-restart-gateway-script.sh).
 #   3. El hook `run-checks` quedo apuntando a `tools/run-checks.sh` con `tools/` en .gitignore:
 #      el `git add` lo descarto EN SILENCIO y el commit subio un hook sin su script.
-# Esta prueba mira los `entry:` de .pre-commit-config.yaml y exige que los archivos que
-# nombran esten trackeados.
+# Esta prueba mira los `entry:` locales de .pre-commit-config.yaml y exige que los archivos
+# que nombran esten trackeados. Cero `entry:` locales es valido: desde 2026-09-20 el commit
+# local conserva solo hooks remotos rapidos y la bateria completa corre una vez en CI.
 # Uso: bash scripts/tests/test-hooks-apuntan-a-archivos-trackeados.sh
 set -u
 cd "$(dirname "$0")/../.." || exit 1
@@ -28,8 +29,11 @@ while IFS= read -r ruta; do
     || fail "$CFG: el hook apunta a '$ruta', que NO esta trackeado (.gitignore lo descarta en silencio)"
 done < <(grep -oE '^\s*entry:.*' "$CFG" | grep -oE '[A-Za-z0-9_./-]+\.(sh|py|ps1|mjs|js)' | sort -u)
 
-[ "$revisados" -gt 0 ] || fail "$CFG: no se encontro ningun entry con archivo; la prueba no estaria mirando nada"
-echo "ok (1): $revisados archivo(s) referenciados por hooks, todos trackeados"
+if [ "$revisados" -eq 0 ]; then
+  echo "ok (1): no hay hooks locales con archivo; nada que resolver en el checkout"
+else
+  echo "ok (1): $revisados archivo(s) referenciados por hooks, todos trackeados"
+fi
 
 # (2) Discriminacion: un archivo recien creado (no trackeado) tiene que dar rojo con la misma
 # comprobacion de (1). Sin esto, (1) pasaria por vacio si `git ls-files` cambiara de conducta.
