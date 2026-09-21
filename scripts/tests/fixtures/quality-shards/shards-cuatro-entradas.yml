@@ -1,0 +1,85 @@
+# Mutacion de workflow-valido.yml (r3, cross-review codex): CUARTA entrada en
+# la matriz — 1/3, 2/3, 3/3 y una cuarta con valor NUEVO (4/4). Los tres
+# valores siguen presentes y cada uno UNA vez: la UNICA regla que rechaza
+# este archivo es el tope de EXACTAMENTE tres entradas. La cuarta lleva un
+# valor nuevo a proposito: con un 1/3 duplicado la rechazaba tambien la regla
+# cada-valor-UNA-vez y el tope quedaba sin prueba (medido en r3: quitando
+# solo la asercion -eq 3 del validador, la forma duplicada sigue rechazada
+# mientras ESTE archivo pasa de rechazado a aceptado y los demas fixtures
+# conservan su veredicto). YAML valido que el ciclo (7) tiene que rechazar.
+# Lo consume scripts/tests/test-summa-gate-quality-entrypoints.sh.
+name: Quality (fixture valido)
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  clasificador:
+    runs-on: ubuntu-latest
+    outputs:
+      carril: fast
+      motivo: fixture
+    steps:
+      - name: Clasificar (stub)
+        run: echo "clasificacion de juguete"
+
+  shards:
+    runs-on: ubuntu-latest
+    needs: [clasificador]
+    if: needs.clasificador.outputs.carril != 'fast'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: 1/3
+            n: 1
+          - shard: 2/3
+            n: 2
+          - shard: 3/3
+            n: 3
+          - shard: 4/4
+            n: 4
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Run shard de la bateria
+        run: SAIKIT_SHARD=${{ matrix.shard }} bash scripts/run-checks.sh
+      - name: Publicar logs del shard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-run-checks-shard-${{ matrix.n }}
+          path: logs/run-checks/
+
+  gate:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [clasificador, shards]
+    steps:
+      - name: Carril valido y jobs de calidad en su carril
+        env:
+          R_CLASIFICADOR: ${{ needs.clasificador.result }}
+          CARRIL: ${{ needs.clasificador.outputs.carril }}
+          R_SHARDS: ${{ needs.shards.result }}
+        run: |
+          case "$R_CLASIFICADOR:$CARRIL" in
+            success:fast|success:completo) ;;
+            *) echo "clasificacion invalida o ausente" >&2; exit 1 ;;
+          esac
+          for par in "shards=$R_SHARDS"; do
+            case "$par" in
+              *=success) ;;
+              *=skipped)
+                if [ "$R_CLASIFICADOR:$CARRIL" = "success:fast" ]; then
+                  echo "omitido, autorizado por clasificacion fast"
+                else
+                  echo "omitido SIN clasificacion fast valida" >&2; exit 1
+                fi ;;
+              *) echo "no quedo en success (fallo o cancelacion)" >&2; exit 1 ;;
+            esac
+          done

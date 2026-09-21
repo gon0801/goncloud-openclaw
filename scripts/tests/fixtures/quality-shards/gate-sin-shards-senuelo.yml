@@ -1,0 +1,97 @@
+# Mutacion de workflow-valido.yml: GATE CON SENUELO — el needs completo
+# [clasificador, shards] se MUEVE a un job señuelo (`agregador`) y el gate
+# queda con `needs: [clasificador]` solo: el gate correria sin esperar la
+# bateria y aun asi un validador que grepea el needs completo en TODO el
+# archivo lo acepta (hallazgo bloqueante de la r1, cross-review codex).
+# El validador tiene que anclar el bloque del job `gate` por su clave y
+# exigir shards+clasificador DENTRO de esa seccion: debe rechazarlo.
+# Nombre ASCII (`senuelo` sin eñe): los fixtures los consumen shells y
+# validadores en MSYS/Linux y un `ñ` en la ruta es riesgo de codificacion
+# gratis. Lo consume scripts/tests/test-summa-gate-quality-entrypoints.sh
+# para demostrar que su validador discrimina: workflow-valido.yml pasa, y
+# los seis hermanos (shard-faltante, fallo-ignorado, gate-sin-dependencia,
+# gate-sin-shards-senuelo, shards-duplicado, shards-en-comentario) son
+# mutaciones de ESTE archivo y deben ser rechazados uno por una.
+name: Quality (fixture valido)
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  clasificador:
+    runs-on: ubuntu-latest
+    outputs:
+      carril: fast
+      motivo: fixture
+    steps:
+      - name: Clasificar (stub)
+        run: echo "clasificacion de juguete"
+
+  shards:
+    runs-on: ubuntu-latest
+    needs: [clasificador]
+    if: needs.clasificador.outputs.carril != 'fast'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: 1/3
+            n: 1
+          - shard: 2/3
+            n: 2
+          - shard: 3/3
+            n: 3
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Run shard de la bateria
+        run: SAIKIT_SHARD=${{ matrix.shard }} bash scripts/run-checks.sh
+      - name: Publicar logs del shard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-run-checks-shard-${{ matrix.n }}
+          path: logs/run-checks/
+
+  # SENUELO: job plausible que si espera a los shards, pero NO es el gate.
+  # Un validador que no ancla por clave ve esta linea y da el contrato por
+  # cumplido mientras el gate de abajo arranca sin la bateria.
+  agregador:
+    runs-on: ubuntu-latest
+    needs: [clasificador, shards]
+    steps:
+      - name: Agregado de juguete
+        run: echo "job señuelo con la dependencia completa"
+
+  gate:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [clasificador]
+    steps:
+      - name: Carril valido y jobs de calidad en su carril
+        env:
+          R_CLASIFICADOR: ${{ needs.clasificador.result }}
+          CARRIL: ${{ needs.clasificador.outputs.carril }}
+          R_SHARDS: ${{ needs.shards.result }}
+        run: |
+          case "$R_CLASIFICADOR:$CARRIL" in
+            success:fast|success:completo) ;;
+            *) echo "clasificacion invalida o ausente" >&2; exit 1 ;;
+          esac
+          for par in "shards=$R_SHARDS"; do
+            case "$par" in
+              *=success) ;;
+              *=skipped)
+                if [ "$R_CLASIFICADOR:$CARRIL" = "success:fast" ]; then
+                  echo "omitido, autorizado por clasificacion fast"
+                else
+                  echo "omitido SIN clasificacion fast valida" >&2; exit 1
+                fi ;;
+              *) echo "no quedo en success (fallo o cancelacion)" >&2; exit 1 ;;
+            esac
+          done

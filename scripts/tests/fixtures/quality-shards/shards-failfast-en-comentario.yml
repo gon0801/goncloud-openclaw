@@ -1,0 +1,81 @@
+# Fixture ROTO del contrato shards+gate (15.2, carril W, r4): el job shards
+# REAL no tiene `fail-fast: false` en codigo — GitHub Actions hereda
+# fail-fast: true, el primer shard rojo cancela a sus hermanos y la union de
+# resumen.txt deja de cubrir la bateria. El token vive SOLO en un COMENTARIO
+# dentro del propio job shards (estrategia, matriz y corrida shardadas reales).
+# Debe ser RECHAZADO: las lineas de comentario completas se quitan de la
+# seccion antes de matchear, asi que el grep de `fail-fast: false` no puede
+# satisfacerse con el comentario.
+name: Quality (shards fail-fast solo en comentario)
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  clasificador:
+    runs-on: ubuntu-latest
+    outputs:
+      carril: fast
+      motivo: fixture
+    steps:
+      - name: Clasificar (stub)
+        run: echo "clasificacion de juguete"
+
+  shards:
+    runs-on: ubuntu-latest
+    needs: [clasificador]
+    if: needs.clasificador.outputs.carril != 'fast'
+    strategy:
+      # fail-fast: false
+      matrix:
+        include:
+          - shard: 1/3
+            n: 1
+          - shard: 2/3
+            n: 2
+          - shard: 3/3
+            n: 3
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Run shard de la bateria
+        run: SAIKIT_SHARD=${{ matrix.shard }} bash scripts/run-checks.sh
+      - name: Publicar logs del shard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-run-checks-shard-${{ matrix.n }}
+          path: logs/run-checks/
+
+  gate:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [clasificador, shards]
+    steps:
+      - name: Carril valido y jobs de calidad en su carril
+        env:
+          R_CLASIFICADOR: ${{ needs.clasificador.result }}
+          CARRIL: ${{ needs.clasificador.outputs.carril }}
+          R_SHARDS: ${{ needs.shards.result }}
+        run: |
+          case "$R_CLASIFICADOR:$CARRIL" in
+            success:fast|success:completo) ;;
+            *) echo "clasificacion invalida o ausente" >&2; exit 1 ;;
+          esac
+          for par in "shards=$R_SHARDS"; do
+            case "$par" in
+              *=success) ;;
+              *=skipped)
+                if [ "$R_CLASIFICADOR:$CARRIL" = "success:fast" ]; then
+                  echo "omitido, autorizado por clasificacion fast"
+                else
+                  echo "omitido SIN clasificacion fast valida" >&2; exit 1
+                fi ;;
+              *) echo "no quedo en success (fallo o cancelacion)" >&2; exit 1 ;;
+            esac
+          done
