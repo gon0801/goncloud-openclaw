@@ -13,15 +13,15 @@ Cada regla lleva su origen, `Medido:` con fecha. Si una regla no tiene un incide
 | Rol | Quién | Qué hace |
 |---|---|---|
 | **claw** | el agente `main` del gateway | Recibe "implementa las fases X e Y". Manda a hacer o valida el runbook. Elige y lanza al lead. Lo vigila por tmux. Contesta lo mecánico. Relanza al lead en otro host si se cae. Relaya el Telegram. **Nunca mergea ni toca la configuración del gateway.** |
-| **lead** | un CLI en tmux, de cualquier host del kit | Escribe encargos, lanza implementadores, audita, corre la revisión cruzada, aprueba, mergea por el kit, despliega, escribe progreso, cierra la fase. No escribe código de producto. |
+| **lead** | un CLI disponible que Claw pueda lanzar y verificar en tmux | Escribe encargos, lanza implementadores, audita, corre la revisión cruzada, aprueba, mergea por el kit, despliega, escribe progreso, cierra la fase. No escribe código de producto. |
 | **implementador** | muse, cursor, glm, u otro, según el brief | Escribe el código de un carril en su worktree. Reporta con la línea de contrato. No hace push ni abre PR. |
 | **revisor cruzado** | otra IA por `cross-review.ps1` | Segunda opinión sobre un SHA. Nunca el modelo que implementó. |
 | **CodeRabbit** | bot en GitHub | Revisa cuando el PR se promueve a listo, nunca los pushes del borrador; después solo ve los pushes de corrección, que son pocos porque el código ya pasó la cruzada. Sin cuota no bloquea, pero se declara. |
 | **David** | el dueño | Solo lee el Telegram de cierre y el tablero. Preaprobó por escrito lo que la fase necesita. |
 
-Hosts que el kit de merge conoce hoy, o sea leads posibles: `claude`, `codex`, `grok`, `zcode`, `kimi`, `dsh`. Claw no es host del kit y no lo necesita: no mergea.
+El kit ya no mantiene una allowlist de hosts para autorizar la entrega. La lista de preferencia pertenece a Claw y puede incluir cualquier CLI cuyo binario, modo de permisos y arranque haya verificado. Claw no mergea.
 
-Medido: 2026-09-16, `saikit-merge.sh` exige un veredicto sellado por el hook del host de la sesión y solo conoce esos seis; el runbook de la Fase 7 decía "lead: Claude" y con claw de lead los seis merges de la cola habrían fallado cerrados con "sin estado del hook".
+Medido: 2026-09-16, el runbook de la Fase 7 fijó «lead: Claude» y no pudo relevarlo. Corregido el 2026-09-21: entrega-sin-sello A movió la autoridad al recibo persistente del PR, por lo que el host ya no forma parte de la aprobación.
 
 ---
 
@@ -141,16 +141,16 @@ bash /Users/dn/dev/summonaikit-claude/tools/saikit-postmerge.sh --merge-commit <
 
 **La ruta va escrita entera, no en una variable.** El candado léxico de este repo hashea el token literal del script y lo compara contra el manifiesto del kit: escrito como `$K/<script>` el token no resuelve, el hash no casa, y el candado deniega el comando con "hash does not match the kit manifest" aunque el kit esté intacto. Medido 2026-09-16, en las dos formas: afectaba a todos los merges de una fase. En otra máquina se sustituye esa ruta por la suya, también escrita entera.
 
-**Si esa primera línea falla, el lead no busca el script por el disco ni cambia de ruta de merge**: reporta `ATORADO kit ausente en <ruta>` y para. Un merge por otra vía deja el PR sin sello y rompe la cadena.
+**Si esa primera línea falla, el lead no busca el script por el disco ni cambia de ruta de merge**: reporta `ATORADO kit ausente en <ruta>` y para. Un merge por otra vía omite el recibo y rompe la cadena.
 
 `saikit-postmerge.sh` en VERDE cierra el ítem; en ROJO trae el comando de reversa listo; en UNKNOWN se anota y aplica la compuerta propia del ítem. El script del kit vive en `644` y **se invoca por `bash`**: comprobar su existencia con `test -x` da falso negativo. Si un PR no tiene worktree propio, se abre uno con `git worktree add <ruta> <rama>` solo para mergearlo y se borra después.
 
-El kit exige un **veredicto sellado**: el subagente revisor del lead escribe el archivo de veredicto con la herramienta de escritura de su host, el hook del host lo sella, y el merge se corre **desde esa misma sesión viva, en el mismo host y con la misma ruta de proyecto**, antes de cerrar el turno. Un estado de otro host, otra sesión u otra ruta no sirve.
+El kit exige el último recibo aplicable del PR: un comentario `APPROVE lead <sha>` del autor esperado con bloque JSON `saikit-entrega.v1`. El recibo identifica repo, PR, head, clase, evidencia durable de los roles exigidos, workflow de CI, bloqueantes vacíos y residuales. Un comentario `REVOKE lead <sha>` posterior del mismo autor lo invalida. El gate vuelve a leer GitHub; no consulta estado de sesión.
 
 Precondiciones que el runbook de fase tiene que dejar listas antes de lanzar:
 
 - `.saikit/autopilot.json` **ya en `origin/<default>`** de cada repo. El kit lo lee de ahí y rechaza cualquier PR que lo traiga; por eso el bootstrap es un PR aparte que mergea David antes de la corrida, y no es tarea de ningún carril.
-- El hook del kit instalado para **cada host que pueda ser lead**, y probado con un merge de prueba por host, una vez.
+- El workflow que el recibo nombra existe para ese head y acredita la batería completa exigida por la clase del cambio.
 
 Medido: 2026-09-15, Fase 6: el runbook mandaba commitear `autopilot.json` dentro del PR del carril; el kit lo rechaza por diseño y la corrida se atascó una noche entera hasta que se hicieron PRs de bootstrap a mano.
 
@@ -194,9 +194,9 @@ Por eso, si el lead muere, se cuelga o se queda sin cuota, claw relanza **otro h
 1. Lee `gh pr list` de los repos de la fase y los comentarios `APPROVE lead`.
 2. Lee el archivo de progreso y los worktrees.
 3. Retoma cada carril donde quedó. No repite trabajo ya aprobado.
-4. Si un PR aprobado no tiene sello vigente en el host nuevo, lo re-sella con un revisor propio contra el head actual y sigue.
+4. Lee y valida el último recibo aplicable al head actual. Si sigue válido, continúa sin repetir revisión; si el head cambió, construye evidencia para el delta y publica un recibo nuevo.
 
-Un implementador externo se relanza **una vez** con el mismo encargo; a la segunda, el carril queda `atorado` y se declara. No se cambia de implementador en silencio.
+Un implementador caído se relanza **una vez** con el mismo encargo. Si el proveedor no tiene cuota, auth, binario o arranque, se detiene ese proceso y se releva al siguiente candidato compatible, conservando worktree, rama y brief. Una prueba roja o una revisión negativa no justifican cambiarlo.
 
 Medido: 2026-09-16, corrida nocturna de la Fase 6: el primer lead murió por un error interno del gateway y se relanzó a mano; el segundo retomó desde los PRs sin repetir carriles cerrados.
 
@@ -239,7 +239,7 @@ Aplican en toda fase. El runbook de fase agrega las suyas y no repite estas.
 | Una prueba pasa igual sin el arreglo | Encargo de corrección al mismo implementador. El arreglo no existe hasta que la prueba lo atrape. |
 | El revisor cruzado sale 3 | Revisor interno, declarado en el PR. No se espera. |
 | CodeRabbit sin cuota o sin respuesta en 20 minutos | No bloquea. Línea en el PR y en el Telegram. Se reintenta tras el próximo push. |
-| Cuota agotada o rate limit de un **proveedor de modelo** (el del implementador o el del revisor) por más de 30 minutos | El carril se detiene y se declara. Los demás siguen. No se cambia de modelo ni de proveedor por cuenta propia. CodeRabbit no es un proveedor de modelo: su fila es la de arriba y nunca detiene un carril. |
+| Cuota agotada, auth, binario ausente o fallo de arranque del **proveedor de modelo** | Se detiene el proceso anterior y se releva al siguiente candidato compatible, conservando worktree, rama, brief y commits. No se usa el relevo para escapar de una prueba o revisión. CodeRabbit no es un proveedor de modelo: su fila es la de arriba y nunca detiene un carril. |
 | Una sesión queda esperando a una persona: permiso, confianza de la carpeta, límite de uso con cambio de modelo | Llega sola, sea el CLI que sea: el vigilante manda `waiting for approval`, y recuerda cada 30 minutos a toda sesión marcada que siga callada. Se contesta con la tabla de preaprobaciones del runbook; lo que no está en la tabla se rechaza y se declara. Si el CLI tiene modo sin preguntas, se cambia de modo en vez de contestar de una en una. |
 | Nadie vigila una sesión | **Toda** sesión que la corrida lanza se marca al lanzarla, **la del lead incluida**. Sin marca el vigilante la ignora por diseño. Al terminar cada carril se ejecuta `~/bin/corrida.sh terminar-sesion <id> <sesion>`; `corrida.sh cerrar <id>` conserva el barrido final de la fase. |
 | Un comando de limpieza se vuelve pregunta | El hook de seguridad convierte en pregunta cualquier borrado destructivo, aunque sea bajo `/tmp`: `rm -rf`, `DROP DATABASE`. Los directorios de trabajo se crean con `mktemp -d` y no se borran; las bases de verificación llevan nombre único y se dejan. **No se limpia durante la corrida**: el cierre declara qué quedó, con rutas y nombres de base. |
@@ -247,7 +247,7 @@ Aplican en toda fase. El runbook de fase agrega las suyas y no repite estas.
 | Un implementador muere o calla 30 minutos sin mensaje de cuota | Se relanza una vez con el mismo encargo. A la segunda, atorado y declarado. |
 | El implementador hizo push o abrió el PR solo | No se castiga ni se rehace: se verifica igual y se anota como desvío de proceso. |
 | Un archivo fuera de la tabla del carril | Se descarta antes del push con un commit propio. Nunca se pushea sin declararlo. |
-| La ruta del kit rechaza (sin sello, sin estado del hook, lock ajeno) | Una vez: re-sellar con un revisor propio desde la sesión viva y reintentar. Si sigue: el PR queda abierto con su `APPROVE lead <sha>` y la razón textual, y va en el Telegram. Ninguna otra ruta de merge. |
+| La ruta del kit rechaza (recibo ausente/inválido, CI del workflow no vigente, lock ajeno) | Corregir la causa nombrada: publicar o revocar el recibo correcto, esperar/corregir CI, o tratar el lock según su dueño. No se busca una sesión antigua ni otra ruta de merge. |
 | Lo único que detiene toda la corrida | Perder acceso a GitHub o a la Mac, o un gateway que no responde tras un reinicio. Todo lo demás detiene un carril y deja evidencia. |
 
 Medido: 2026-09-15 y 16, corrida de la Fase 6: cada fila de esta tabla es una situación que ocurrió al menos una vez esa noche y se resolvió a mano o se declaró.

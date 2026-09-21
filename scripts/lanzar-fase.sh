@@ -27,7 +27,7 @@
 #   2. decide de que rama sale el lead: --rama, o origin/<default> si el runbook
 #      ya esta ahi, o la unica rama remota que lo traiga (eso es Q0 pendiente)
 #   3. crea /Users/dn/dev/wt-f<N>-lead si falta (jamas --force)
-#   4. arma el mensaje, con el sentinel del kit y el primer paso
+#   4. arma el mensaje, con el sentinel de instrucciones y el primer paso
 #   5. llama a lanzar-lead.sh, que es quien marca la sesion y comprueba el cwd
 #
 # Salida: la ultima linea es `LISTO fase<N>-lead <cwd>` o `ATORADO <razon>`.

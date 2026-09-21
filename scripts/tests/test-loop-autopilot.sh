@@ -1,8 +1,8 @@
 #!/bin/bash
 # Candado de docs/runbooks/loop-autopilot.md, la parte invariante de todo runbook de fase.
 # Nace del 2026-09-16: los runbooks de las fases 6 y 7 repetían el loop entero (40 y 36 KB),
-# el de la 7 decía "lead: Claude" cuando el lead tiene que poder ser cualquier host del kit
-# (con claw o kimi de lead, "sin estado del hook" en los seis merges), y las reglas que
+# el de la 7 decía "lead: Claude" cuando el lead tiene que poder cambiar de host sin perder
+# el recibo persistente del PR, y las reglas que
 # costaron la noche del 15 (bootstrap dentro del PR, catorce rondas cruzadas, pruebas que
 # pasan sin el arreglo, CodeRabbit sin leer, recargas en ráfaga) no estaban escritas en
 # ningún lugar único. Verifica: (1) el detector de "lead nombrado por modelo" discrimina;
@@ -15,6 +15,7 @@ cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
 
 DOC=docs/runbooks/loop-autopilot.md
+BASE=docs/runbooks/base-openclaw.md
 MODELOS='claude|codex|kimi|grok|zcode|dsh|muse|cursor|glm|gpt|opus|sonnet|deepseek|qwen'
 
 # Detector: la fila del lead (la línea de la tabla de roles que empieza por "| **lead**")
@@ -81,9 +82,9 @@ for a in 'LISTO <sha>' \
          'Tope de tres PRs abiertos' \
          'Los comentarios de CodeRabbit se leen' \
          'saikit-merge.sh' \
-         'veredicto sellado' \
+         'saikit-entrega.v1' \
          'ya en `origin/<default>`' \
-         'cada host que pueda ser lead' \
+         'no consulta estado de sesión' \
          'Ningún cambio de configuración del gateway lo hace claw' \
          'en tanda, no en ráfaga' \
          'America/New_York' \
@@ -108,6 +109,14 @@ for a in 'LISTO <sha>' \
   grep -qF -- "$a" "$DOC" || fail "$DOC: falta el ancla: $a"
 done
 echo "ok (3): las 55 anclas de reglas están"
+
+# (3a) Entrega-sin-sello A retiro la autoridad ligada a una sesion. Estas formas
+# reintroducirian el candado que detuvo Fase 9 aunque el resto de las anclas pase.
+vieja=$(grep -nEi 'veredicto sellado|sin estado del hook|re-sell|para que el kit selle' "$DOC" "$BASE" || true)
+[ -z "$vieja" ] || fail "reaparecio autoridad de sesion obsoleta: $vieja"
+grep -qF 'saikit-entrega.v1' "$DOC" || fail "$DOC: falta el recibo persistente"
+grep -qF 'no consulta estado de sesión' "$DOC" || fail "$DOC: no declara independencia de sesion"
+echo "ok (3a): recibo persistente presente y autoridad de sesion ausente"
 
 # (3b) La seccion 4 manda repetir mientras salgan bloqueantes, sin tope fijo, y nunca
 # promover con un bloqueante abierto. Medido el 2026-09-18 tres veces: un tope de tres
