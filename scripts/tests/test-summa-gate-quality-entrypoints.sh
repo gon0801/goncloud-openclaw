@@ -11,7 +11,11 @@
 # pushes rojos) — r2: TODOS los checks del job de shards corren DENTRO de la
 # seccion `shards:` anclada por su clave (un comentario u otro job satisfacia
 # los tokens mientras el shards real violaba el contrato) y la matriz exige
-# EXACTAMENTE tres entradas con cada valor UNA vez.
+# EXACTAMENTE tres entradas con cada valor UNA vez — r3: antes de matchear se
+# quitan las lineas de COMENTARIO de cada seccion (un comentario dentro del
+# propio job shards satisfacia el grep -F de la corrida shardada) y un cuarto
+# entrada con valor NUEVO se rechaza por el tope de tres (fixture que solo el
+# tope rechaza: el exactly-once ya atrapaba a los duplicados).
 # Uso: bash scripts/tests/test-summa-gate-quality-entrypoints.sh
 set -u
 cd "$(dirname "$0")/../.." || exit 1
@@ -123,6 +127,17 @@ contrato_shards() { # $1=yaml -> exit 0 si cumple el contrato de shards+gate
   # gate); seccion ausente o vacia = rechazo (fail-closed).
   seccion_shards=$(awk '/^  shards:/{f=1} f && !/^  shards:/ && /^  [A-Za-z_][A-Za-z0-9_-]*:/{f=0} f' "$yaml")
   [ -n "$seccion_shards" ] || return 1
+  # r3 (cross-review codex): un comentario DENTRO del propio job shards
+  # satisfacia los tokens del contrato — conservar `# run: SAIKIT_SHARD=...`
+  # debajo de un `run:` monolitico dejaba el grep -F de (a) en verde porque el
+  # -F no esta anclado y el substring vive en el comentario (fixture
+  # shards-run-en-comentario.yml, rojo medido antes del arreglo). Por eso las
+  # lineas de comentario COMPLETAS (primer caracter no-blanco = #) se quitan
+  # de la seccion ANTES de matchear; los sufijos ` # ...` de lineas de codigo
+  # NO se recortan: no hay evidencia de ese hueco y partir la linea podria
+  # alterar valores legitimos. Seccion que queda vacia al filtrar = rechazo
+  # (los checks de abajo fallan sobre entrada vacia, fail-closed).
+  seccion_shards=$(printf '%s\n' "$seccion_shards" | grep -vE '^[[:space:]]*#' || true)
   # (a) exactamente UN paso corre la bateria, shardado por la matriz — dentro
   # del job shards
   [ "$(printf '%s\n' "$seccion_shards" | grep -cE '^[[:space:]]+run:.*scripts/run-checks\.sh' || true)" -eq 1 ] || return 1
@@ -156,6 +171,10 @@ contrato_shards() { # $1=yaml -> exit 0 si cumple el contrato de shards+gate
   # espacios) debe nombrar a los dos, en cualquier orden.
   seccion_gate=$(awk '/^  gate:/{f=1} f && !/^  gate:/ && /^  [A-Za-z_][A-Za-z0-9_-]*:/{f=0} f' "$yaml")
   [ -n "$seccion_gate" ] || return 1
+  # r3: mismo filtro de comentarios que seccion_shards — un `# needs: [...]`
+  # o un `# success:fast` dentro del propio gate satisfacian (e) y (f) igual
+  # que en el job shards.
+  seccion_gate=$(printf '%s\n' "$seccion_gate" | grep -vE '^[[:space:]]*#' || true)
   needs_gate=$(printf '%s\n' "$seccion_gate" | grep -E '^[[:space:]]{4}needs:' || true)
   printf '%s\n' "$needs_gate" | grep -qF 'clasificador' || return 1
   printf '%s\n' "$needs_gate" | grep -qF 'shards' || return 1
@@ -188,11 +207,21 @@ echo "ok (6): tres shards fail-fast: false, gate con dependencia completa y regl
 #   shards-en-comentario  los tokens del contrato en comentarios de OTRO job
 #                            mientras el shards real viola el contrato (r2: los
 #                            checks del job corren DENTRO de su seccion)
+#   shards-run-en-comentario  la corrida shardada conservada como COMENTARIO
+#                            dentro del propio job shards y el run real
+#                            monolitico (r3: se filtran las lineas de
+#                            comentario de la seccion antes de matchear)
+#   shards-cuatro-entradas    CUARTA entrada con valor NUEVO (4/4): los tres
+#                            valores presentes cada una vez, SOLO el tope de
+#                            tres la rechaza — un duplicado de 1/3 ya lo
+#                            atrapaba el exactly-once y no discriminaba el
+#                            tope (r3, medido: sin la asercion -eq 3 este
+#                            fixture pasa de rechazado a aceptado)
 FX=scripts/tests/fixtures/quality-shards
 [ -d "$FX" ] || fail "falta $FX"
 contrato_shards "$FX/workflow-valido.yml" \
   || fail "el fixture VALIDO no pasa el contrato: el validador esta roto, no discrimina"
-for roto in shard-faltante fallo-ignorado gate-sin-dependencia gate-sin-shards-senuelo shards-duplicado shards-en-comentario; do
+for roto in shard-faltante fallo-ignorado gate-sin-dependencia gate-sin-shards-senuelo shards-duplicado shards-en-comentario shards-run-en-comentario shards-cuatro-entradas; do
   if contrato_shards "$FX/$roto.yml"; then
     fail "fixture $roto.yml no fue rechazado: el validador acepta $roto"
   fi

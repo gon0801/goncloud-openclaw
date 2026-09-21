@@ -1,12 +1,12 @@
-# Fixture VALIDO del contrato shards+gate (15.2, carril W): un recorte del
-# workflow real con los mismos jobs y las mismas lineas de contrato, sin la
-# plantilla de calidad-kit que en este repo no aplica. Lo consume
-# scripts/tests/test-summa-gate-quality-entrypoints.sh para demostrar que su
-# validador discrimina: este archivo pasa, y los ocho hermanos (shard-faltante,
-# fallo-ignorado, gate-sin-dependencia, gate-sin-shards-senuelo,
-# shards-duplicado, shards-en-comentario, shards-run-en-comentario,
-# shards-cuatro-entradas) son mutaciones de ESTE archivo y deben ser
-# rechazados uno por una.
+# Mutacion de workflow-valido.yml (r3, cross-review codex): la corrida
+# shardada conservada como COMENTARIO dentro del PROPIO job shards, mientras
+# el run real es monolitico. El grep -F de la corrida no esta anclado, asi que
+# el substring `run: SAIKIT_SHARD=... bash scripts/run-checks.sh` vivia en el
+# comentario y satisfacia (a): el validador r2 ACEPTABA este archivo (rojo
+# medido antes del arreglo). El arreglo r3 quita las lineas de comentario
+# completas de la seccion antes de matchear. YAML valido que el ciclo (7)
+# tiene que rechazar. Lo consume
+# scripts/tests/test-summa-gate-quality-entrypoints.sh.
 name: Quality (fixture valido)
 on:
   push:
@@ -44,8 +44,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Run shard de la bateria
-        run: SAIKIT_SHARD=${{ matrix.shard }} bash scripts/run-checks.sh
+      - name: Run bateria monolitica (sin SAIKIT_SHARD)
+        run: bash scripts/run-checks.sh
+        # run: SAIKIT_SHARD=${{ matrix.shard }} bash scripts/run-checks.sh
       - name: Publicar logs del shard
         if: always()
         uses: actions/upload-artifact@v4
