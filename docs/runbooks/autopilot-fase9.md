@@ -20,7 +20,7 @@ PY
 open 'http://127.0.0.1:18789/runbook/tablero/9'
 ```
 
-Después corre el 0.0 del base y verifica: `origin/main` contiene PRs #81, #97, #98, #104 y #110; PR #100 sigue abierto sobre `fase9/docs`; `ai.goncloud.corrida-latido` no está cargado; el vigilante global vive. Una celda vieja de `Plans.md` no invalida un merge comprobado. Q0 es este plan/runbook si aún no está integrado.
+Después corre el 0.0 del base, sustituyendo su línea de arranque por `bash scripts/arranque-de-fase.sh 9 --solo-watchdog-global`, y verifica: `origin/main` contiene PRs #81, #97, #98, #104 y #110; PR #100 sigue abierto sobre `fase9/docs`; `ai.goncloud.corrida-latido` no está cargado; el vigilante global vive. Una celda vieja de `Plans.md` no invalida un merge comprobado. Q0 es este plan/runbook si aún no está integrado.
 
 Claw lanza con `bash scripts/lanzar-fase.sh 9 -- <cli> <flag-verificado>`. El sentinel solo arma las instrucciones del turno; el merge usa un recibo persistente del PR y no depende de sello, sesión, host ni cwd.
 
