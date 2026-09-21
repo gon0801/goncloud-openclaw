@@ -48,10 +48,22 @@ grep -q 'pre-commit/action' .github/workflows/quality.yml \
 if grep -qE '^[[:space:]]*(- id: run-checks|entry: .*scripts/run-checks\.sh)' .pre-commit-config.yaml; then
   fail "pre-commit todavia conecta la bateria completa: los commits locales deben ser rapidos"
 fi
-entradas_ci=$(grep -cE '^[[:space:]]*run: bash scripts/run-checks\.sh[[:space:]]*$' .github/workflows/quality.yml || true)
+entradas_ci=$(grep -cE '^[[:space:]]*(run:[[:space:]]*)?(bash[[:space:]]+)?(\./)?scripts/run-checks\.sh([[:space:]]|$)' .github/workflows/quality.yml || true)
 [ "$entradas_ci" -eq 1 ] \
   || fail "CI debe invocar scripts/run-checks.sh exactamente una vez (llega: $entradas_ci)"
 echo "ok (3): pre-commit es rapido y CI corre la bateria completa exactamente una vez"
+
+# (3b) Los scripts del repo corren sin credenciales de escritura persistentes.
+grep -qE '^permissions:$' .github/workflows/quality.yml \
+  || fail "quality.yml no declara permisos minimos para GITHUB_TOKEN"
+grep -qE '^[[:space:]]+contents: read[[:space:]]*$' .github/workflows/quality.yml \
+  || fail "quality.yml debe limitar GITHUB_TOKEN a contents: read"
+checkouts=$(grep -cE '^[[:space:]]*- uses: actions/checkout@' .github/workflows/quality.yml || true)
+sin_credenciales=$(grep -cE '^[[:space:]]+persist-credentials: false[[:space:]]*$' .github/workflows/quality.yml || true)
+[ "$checkouts" -gt 0 ] || fail "quality.yml no contiene checkouts que validar"
+[ "$sin_credenciales" -eq "$checkouts" ] \
+  || fail "cada checkout debe declarar persist-credentials: false ($sin_credenciales/$checkouts)"
+echo "ok (3b): CI usa permisos de solo lectura y no persiste credenciales del checkout"
 
 # (4) tablero-runbook (Fase 7 / 7.3): los mismos contratos de entrypoint, incluida la
 # preaprobacion del dueño (package.json con check y SIN dependencies).

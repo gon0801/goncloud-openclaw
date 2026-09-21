@@ -19,6 +19,9 @@ on:
     branches: [main, master]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -27,6 +30,8 @@ jobs:
       OPENCLAW_NODE_MODULES: ${{ github.workspace }}/node_modules/openclaw
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         if: hashFiles('pyproject.toml', 'requirements.txt') != ''
@@ -88,6 +93,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Checkers sobre docs o ledger reales
         run: |
           set -e
