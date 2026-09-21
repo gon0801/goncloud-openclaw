@@ -60,15 +60,15 @@ else
   echo "ok (5): omitida (la fase 12 todavia no esta en ninguna rama de origin)"
 fi
 
-# (6) El mensaje que recibe el lead trae el sentinel del kit. Sin ese literal el
-# hook no sella los veredictos y los PRs se quedan aprobados sin integrarse.
+# (6) El mensaje que recibe el lead trae el sentinel que arma las instrucciones
+# de autopilot. La autorización de merge vive aparte, en el recibo persistente.
 out=$(bash "$S" 12 --dry-run -- cli --flag 2>/dev/null)
 if echo "$out" | grep -q '^mensaje='; then
   echo "$out" | grep -q 'saikit:autopilot' \
     || fail "el mensaje del lead no trae el sentinel -saikit:autopilot"
   echo "$out" | grep -q 'primer paso es el 0.0' \
     || fail "el mensaje del lead no nombra su primer paso"
-  echo "ok (6): el mensaje trae el sentinel del kit y nombra el primer paso"
+  echo "ok (6): el mensaje trae el sentinel de instrucciones y nombra el primer paso"
 else
   echo "ok (6): omitida (sin rama con el runbook no hay mensaje que mirar)"
 fi

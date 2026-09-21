@@ -66,7 +66,8 @@ segunda corrida sin v1 es no-op verde.
 `corrida.sh cerrar` quita el cron legado exacto solo en v1; en v2 nunca toca
 el reloj compartido. En ambos caminos conserva la limpieza de marcas por
 dueño (PR #104). `scripts/arranque-de-fase.sh` exige `avance-tareas` a
-15 minutos más `corrida-empuje-<fase>` y rechaza un `corrida-vigia-<fase>`
-todavía puesto. `scripts/cierre-de-fase.sh` rechaza el vigía legado y solo
+15 minutos más `corrida-empuje-<fase>`; `--solo-watchdog-global` omite solo
+el empuje propio. Ambos modos rechazan un `corrida-vigia-<fase>` todavía puesto.
+`scripts/cierre-de-fase.sh` rechaza el vigía legado y solo
 pide ausente el reloj global cuando su scratch dice que no queda otro
 trabajo activo (el scratch se lee por UUID, nunca por nombre).
