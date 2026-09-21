@@ -19,7 +19,7 @@ Eres el lead. Cierras las filas recomendadas 23.5 y 23.10 a 23.17 de Muse Code. 
 
 ## Preaprobaciones
 
-Esta tabla, aprobada al mergear el runbook original de la fase, cubre las dos entradas que aún dicen `PENDIENTE` en el plan; A solo sincroniza su texto.
+Esta tabla conserva la autorización aprobada al mergear el runbook original y hace explícito el merge de David que ya manda el base, regla 7; cubre las dos entradas que aún dicen `PENDIENTE` en el plan y A solo sincroniza su texto.
 
 | Operación | Alcance | Decisión |
 |---|---|---|
@@ -47,7 +47,7 @@ Esta tabla, aprobada al mergear el runbook original de la fase, cubre las dos en
 
 **Stream 3 — feature map, paralelo:** **F — `cursor-agent → glm → muse → grok`, `fase23/f-feature-map-muse`: 23.12.** DoD: «La ficha instala y quita con el Muse falso y deja evidencia; el lint del catálogo pasa; los `test_feature_map_*` quedan en verde en CI». La ficha, descriptor y driver cubren `--host muse` y `--quitar-muse`. No toca hook ni instalador.
 
-**Stream 4 — instalador, paralelo:** **D-install — `cursor-agent → glm → muse → grok`, `fase23/d-install-menores`: 23.11(b,c,d).** Comparte con D-hook el DoD de 23.11: «Cada punto con un caso que falla en master y pasa después, o declarado `no se hace` con su razón en el PR; (a) medido con una sola lectura de `tool_response` por evento; una mutación por punto arreglado». Primero escribe el caso de (b) y clasifica si es solo test o exige hook; esa línea de contrato es gate para lanzar D-hook. Si exige hook, D-install excluye (b) de su PR y el lead lo incluye en el brief de D-hook. Después cubre (c,d). Stream 4 nunca toca el hook.
+**Stream 4 — instalador, paralelo:** **D-install — `cursor-agent → glm → muse → grok`, `fase23/d-install-menores`: 23.11(b,c,d).** Comparte con D-hook el DoD de 23.11: «Cada punto con un caso que falla en master y pasa después, o declarado `no se hace` con su razón en el PR; (a) medido con una sola lectura de `tool_response` por evento; una mutación por punto arreglado». Primero escribe el caso de (b) y deja `SOLO_TEST` o `MOVER_D_HOOK <razón>` en `/tmp/f23-saikit/d-install/clasificacion-b.txt`; ese archivo parcial es el gate para lanzar D-hook, no el contrato final. Si exige hook, D-install excluye (b) de su PR y el lead lo incluye en el brief de D-hook. Después cubre (c,d). Stream 4 nunca toca el hook.
 
 ## Archivos por carril
 
@@ -76,6 +76,7 @@ Stream 1 conserva su orden. Streams 2–4 arrancan en paralelo desde `origin/mas
 | Vivo de A o B2 contradice la fila | Una rama `a-bis` o `b2-bis`, revisión delta, merge, deploy y un segundo vivo; si repite, bloquear la fila y seguir lo independiente |
 | E y D-install cambian el instalador | El segundo integra `origin/master` y vuelve a CI; nunca rebase |
 | D-install clasifica (b) como cambio de hook | Antes de lanzar D-hook, el lead pone (b) en su brief; D-install lo excluye y D-hook no cierra hasta resolverlo |
+| D-install queda `ATORADO` antes de clasificar (b) | D-hook toma (b) por defecto en su brief y arranca después de C; nunca espera ese archivo sin tope |
 | Un temporal deja de ser necesario | Se deja en `/tmp/f23-saikit/`; no se borra durante la corrida |
 
 ## Inventario y cierre
