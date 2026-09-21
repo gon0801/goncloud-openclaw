@@ -2,8 +2,8 @@
 # ya no depende de los shards: correria con la bateria en rojo o sin correr.
 # El validador tiene que rechazarlo. Lo consume
 # scripts/tests/test-summa-gate-quality-entrypoints.sh para demostrar que su
-# validador discrimina: este archivo pasa, y los tres hermanos (shard-faltante,
-# fallo-ignorado, gate-sin-dependencia) son mutaciones de ESTE archivo y deben
+# validador discrimina: este archivo pasa, y los cuatro hermanos (shard-faltante,
+# fallo-ignorado, gate-sin-dependencia, gate-sin-shards-senuelo) son mutaciones de ESTE archivo y deben
 # ser rechazados uno por una.
 name: Quality (fixture valido)
 on:

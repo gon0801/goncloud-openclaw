@@ -5,8 +5,10 @@
 # la bateria una sola vez de forma directa y pre-commit no la corre localmente.
 # 15.2 (carril W): (6) esa unica corrida es la MATRIZ de tres shards con
 # fail-fast: false y el gate depende de ella con la regla de pares; (7) fixtures
-# recortados demuestran que el validador rechaza shard faltante, fallo ignorado
-# y gate sin dependencia completa (siembras locales, jamas pushes rojos).
+# recortados demuestran que el validador rechaza shard faltante, fallo ignorado,
+# gate sin dependencia completa y gate con la dependencia escondida en un job
+# señuelo — r1: la seccion gate se ancla por su clave (siembras locales, jamas
+# pushes rojos).
 # Uso: bash scripts/tests/test-summa-gate-quality-entrypoints.sh
 set -u
 cd "$(dirname "$0")/../.." || exit 1
@@ -124,8 +126,20 @@ contrato_shards() { # $1=yaml -> exit 0 si cumple el contrato de shards+gate
   grep -qF "carril != 'fast'" "$yaml" || return 1
   # (d) un fallo de shard jamas se ignora
   grep -q 'continue-on-error' "$yaml" && return 1
-  # (e) el gate depende del clasificador Y de los shards
-  grep -qE '^    needs: \[clasificador, shards\]' "$yaml" || return 1
+  # (e) el GATE — anclado por su clave, no cualquier job — depende del
+  # clasificador Y de los shards. r1 (cross-review): grepear el needs completo
+  # en TODO el archivo aceptaba un job señuelo con `needs: [clasificador,
+  # shards]` mientras el gate real quedaba `needs: [clasificador]` (fixture
+  # gate-sin-shards-senuelo.yml, rojo medido antes del arreglo). Se extrae la
+  # SECCION `gate:` por su clave (clave de job a dos espacios hasta la
+  # siguiente clave de igual nivel o EOF); seccion ausente o vacia = rechazo
+  # (fail-closed). Dentro de la seccion, el `needs:` de nivel de job (cuatro
+  # espacios) debe nombrar a los dos, en cualquier orden.
+  seccion_gate=$(awk '/^  gate:/{f=1} f && !/^  gate:/ && /^  [A-Za-z_][A-Za-z0-9_-]*:/{f=0} f' "$yaml")
+  [ -n "$seccion_gate" ] || return 1
+  needs_gate=$(printf '%s\n' "$seccion_gate" | grep -E '^[[:space:]]{4}needs:' || true)
+  printf '%s\n' "$needs_gate" | grep -qF 'clasificador' || return 1
+  printf '%s\n' "$needs_gate" | grep -qF 'shards' || return 1
   # (f) la regla de pares: success pasa; skipped pasa SOLO con fast valido
   # (success:fast); todo lo demas rebota como "no quedo en success"
   grep -qF 'success:fast' "$yaml" || return 1
@@ -144,11 +158,14 @@ echo "ok (6): tres shards fail-fast: false, gate con dependencia completa y regl
 #   shard-faltante        la matriz pierde el 3/3 (la union deja de ser la bateria)
 #   fallo-ignorado        continue-on-error en el job de shards
 #   gate-sin-dependencia  el gate ya no depende de los shards
+#   gate-sin-shards-senuelo  el needs completo vive en un job señuelo y el gate
+#                            arranca sin los shards (r1: el validador tiene que
+#                            anclar la seccion gate, no grepear todo el archivo)
 FX=scripts/tests/fixtures/quality-shards
 [ -d "$FX" ] || fail "falta $FX"
 contrato_shards "$FX/workflow-valido.yml" \
   || fail "el fixture VALIDO no pasa el contrato: el validador esta roto, no discrimina"
-for roto in shard-faltante fallo-ignorado gate-sin-dependencia; do
+for roto in shard-faltante fallo-ignorado gate-sin-dependencia gate-sin-shards-senuelo; do
   if contrato_shards "$FX/$roto.yml"; then
     fail "fixture $roto.yml no fue rechazado: el validador acepta $roto"
   fi
