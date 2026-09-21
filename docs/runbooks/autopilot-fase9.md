@@ -67,6 +67,14 @@ Pruebas focalizadas al editar. Una batería completa por PR, en CI sobre el SHA 
 | Q4 S | instalado desde `origin/main`; 7/7 `FUNCIONA`; `[SIMULACRO]`; ≤10 min pared |
 | Q5 cierre | evidencia, estados honestos, `bash scripts/cierre-de-fase.sh 9` en VERDE |
 
+Antes de iniciar Q4, instala con `bash scripts/mac/instalar-mac.sh` desde el
+`origin/main` integrado y comprueba que no quedó una copia parcial de
+`corrida.sh`:
+
+```bash
+for f in lib abrir lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento; do test -x "$HOME/bin/corrida/$f.sh" || { echo "FALTA $f" >&2; exit 1; }; done
+```
+
 El recibo `saikit-entrega.v1` del PR nombra head, roles y workflow de CI. Reiniciar o cambiar el lead no exige repetir revisión. El merge usa el kit con head esperado; ninguna sesión produce un sello. El PR de cierre reúne todas las celdas/evidencias de la fase y no vuelve a revisar el código ya aprobado.
 
 ## Seguimiento
