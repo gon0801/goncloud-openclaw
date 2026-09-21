@@ -1,0 +1,3 @@
+# Vacia a proposito: sin reglas enumeradas nada es fast. La allowlist es
+# exhaustiva por definicion (Politica de seleccion aprobada, Plans.md); una
+# allowlist vacia NO significa "todo vale", significa "todo es carril completo".
