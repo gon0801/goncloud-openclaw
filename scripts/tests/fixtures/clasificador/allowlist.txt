@@ -1,0 +1,13 @@
+# Allowlist de juguete para los fixtures del clasificador (Fase 15.0, carril S).
+# Espeja el contrato de scripts/ci-fast-allowlist.txt sin depender de el: los
+# casos unitarios tienen que seguir discriminando aunque la allowlist real
+# amplie o recorte su enumeracion. El contrato de formato es el mismo:
+#   - una regla por linea, '#' comenta, las lineas vacias no cuentan;
+#   - '*' no cruza '/', '**/' es cualquier profundidad (incluida cero);
+#   - dentro de los arboles enumerados solo los formatos listados: un .sh o
+#     un .md fuera de contrato NO es fast.
+Plans.md
+docs/evidence/**/*.md
+docs/evidence/**/*.txt
+.saikit/progress/*.json
+.saikit/progress/*-sesiones.txt

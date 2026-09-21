@@ -1,0 +1,47 @@
+LOG=C:\Users\ehven\.openclaw\logs\sync-repos.log
+VIGIA SYNC REPOS v2 (job verif-sync-repos; corre cada 2 h; vigila la tarea programada GoncloudRepoSync del host Windows, que sincroniza los 4 repos goncloud cada PT2H y escribe el log de la linea LOG= de arriba - si esta prueba cambia LOG=, lee ESA ruta, no la de produccion). PROPOSITO: el 2026-09-12 el sync quedo roto 1 hora sin que nadie se enterara: el pull fallaba con "cannot pull with rebase: You have unstaged changes", el script lo logueaba y salia con exit 0 igual (correcto: no debe abortar los otros 3 repos por uno). El sintoma que llego a David fue "mergee el PR y el gateway sigue con el codigo viejo". Este job convierte ese fallo silencioso en un aviso. Y desde v2 tambien avisa cuando un agente cambia sus workshop-skills (lineas " SKILLS " que escribe sync-repos.ps1), porque los ocho skill-collection-review-* no se pueden editar. SOLO LECTURA + AVISO: NUNCA correr el sync, NUNCA hacer git pull/push/commit/checkout/reset en ningun repo, NUNCA tocar configuracion ni reiniciar nada. Si crees que hace falta arreglar algo, se lo dices a David y paras.
+
+(PASO 1) Leer la cola del log con exec en el host gateway: tail -400 de la ruta LOG= (sustituir la de arriba si el mensaje la cambio). Ventana: 400 lineas cubren varios ciclos del sync; una linea SKILLS no debe perderse aunque vengan 80 lineas detras (con tail -80 se perdia: medido). Si el log pesa poco podes leerlo entero; el minimo obligatorio es tail -400.
+
+(PASO 2) Aislar el ULTIMO ciclo: es el bloque de lineas que va desde despues del penultimo "---- ciclo terminado" hasta el ultimo "---- ciclo terminado". Anotar su fecha/hora (la del ultimo "ciclo terminado"). OJO CON EL RELOJ, y NO lo calcules de cabeza: el log usa la hora local del host Windows (America/New_York). NO restes horas a mano - el diferencial con CDMX cambia con el horario de verano de EEUU y CDMX ya no tiene DST, asi que la cuenta mental se equivoca. Verificado el 2026-09-12: son 2 h, no 1 (gateway 20:05 EDT = 18:05 CDMX), y una version anterior de este mismo job decia 1 h y convertia mal. Pedile las dos horas al sistema en un solo exec y usa esa salida: node -e "const d=new Date();console.log('NY',d.toLocaleString('sv-SE',{timeZone:'America/New_York'}),'CDMX',d.toLocaleString('sv-SE',{timeZone:'America/Mexico_City'}))" . Con esas dos referencias del MISMO instante ya podes ubicar cualquier linea del log en CDMX sin restar nada.
+
+(PASO 3) Clasificar A/B/C en exactamente UNO de tres casos (D se evalua aparte en el PASO 3b).
+
+CASO A OK: el ultimo ciclo termino hace menos de 3 horas Y ninguna de sus lineas contiene "FALLO" ni "CONFLICTO".
+
+CASO B SIN DATOS: el log no existe, esta vacio, o no tiene ningun "---- ciclo terminado". Tratar como CASO C con causa "no se pudo leer el log del sync".
+
+CASO C FALLA, cualquiera de estas dos, que son problemas distintos y hay que decir cual es:
+  C1 EL SYNC FALLA: alguna linea del ultimo ciclo dice "FALLO" o "CONFLICTO". Anotar el nombre del repo y el motivo textual que trae la linea.
+  C2 EL SYNC NO ESTA CORRIENDO: el ultimo ciclo termino hace mas de 3 horas. Eso significa que la tarea GoncloudRepoSync dejo de dispararse, que es igual de grave y hoy no lo vigila nada. Anotar hace cuanto fue el ultimo ciclo.
+
+(PASO 3b) CASO D SKILLS - independiente de A, B y C: se evalua SIEMPRE, aunque A este OK. Buscar en la cola leida en PASO 1 (tail -400 de LOG=, la misma ventana; no solo el ultimo ciclo, y nunca un tail mas corto) las lineas que contienen " SKILLS " (espacio-SKILLS-espacio) cuya fecha/hora sea POSTERIOR al ultimo marcador D del scratch (formato del marcador: "D|<fecha-hora de la linea SKILLS mas reciente ya avisada>"). Si el scratch no tiene marcador D, considerar todas las lineas SKILLS de esa cola. Agrupar por agente. Ignorar lineas " SKILLS error:" para el aviso a David (esas son del try/catch; no son un cambio de skills).
+
+(PASO 4) Antiduplicado, obligatorio antes de avisar. Leer el scratch de este job (tool de automations, accion scratch, lectura). El scratch guarda DOS marcadores por separado, para que uno no borre al otro:
+  - Marcador C: para C1, "C1|<fecha-hora del ciclo>|<repo>"; para C2, "C2|<fecha-hora del ultimo ciclo>".
+  - Marcador D: "D|<fecha-hora de la linea SKILLS mas reciente avisada>".
+Si ibas a reportar C y el scratch ya tiene el mismo marcador C, NO avises C otra vez. Si ibas a reportar D y el scratch ya tiene un marcador D cuya fecha cubre esas lineas, NO avises D otra vez. Podes avisar C sin D, D sin C, o ambos en el mismo turno si ambos aplican. Cuando SI avises, escribir/actualizar solo el marcador del caso que avisaste; no borres el otro.
+
+(PASO 5) Actuar segun el caso.
+
+CASO A (y sin D pendiente): no enviar NADA a nadie; el silencio es el resultado correcto. Terminar con una sola linea: VIGIA SYNC OK ciclo=<fecha-hora CDMX>.
+
+CASO C: respetar el silencio de 23:00 a 08:00 CDMX, con UNA excepcion: si el problema lleva mas de 6 horas, avisar igual (a esa altura ya se perdieron 3 ciclos). Si estas en la franja de silencio y no aplica la excepcion, no avises C y termina con: VIGIA SYNC DIFERIDO marcador=<marcador C>.
+Si corresponde avisar C: UN solo mensaje por Telegram a David con la tool message (channel telegram, target 6470689715), maximo 6 lineas, sin jerga tecnica, con:
+  (1) para C1: "El sync de los repos con el gateway esta fallando"; para C2: "El sync de los repos dejo de correr".
+  (2) desde cuando, en hora CDMX.
+  (3) que significa en una linea: "hasta que se arregle, lo que mergees en GitHub NO le llega al gateway; los agentes siguen con el codigo viejo".
+  (4) el motivo textual del log, una linea, tal cual lo dice (no lo interpretes).
+  (5) la pregunta literal: "Lo reviso ahora? Responde SI y lo veo."
+Terminar con la linea: VIGIA SYNC FALLA tipo=<C1|C2> causa=<causa corta>.
+
+CASO D: respetar el silencio de 23:00 a 08:00 CDMX SIN excepcion - lo diferido de D sale junto en el primer aviso de la manana (cuando salgas de la franja). Si estas en la franja, no avises D y termina con: VIGIA SYNC DIFERIDO_D marcador=<marcador D pendiente>.
+Si corresponde avisar D: UN solo mensaje por Telegram a David (channel telegram, target 6470689715), con:
+  (1) Una linea por agente que cambio skills: el nombre del agente, la lista de archivos (rutas relativas a workshop-skills/ tal cual el log) y UNA linea del porque en lenguaje de usuario.
+  (2) El porque se toma del campo summary del ultimo run del cron skill-collection-review-<agente>, leido por exec con el CLI del gateway (NO con la tool automations): primero resolve el id con openclaw cron list --json buscando name==skill-collection-review-<agente>; despues openclaw cron runs <id> --limit 1 --json (si el CLI no esta en PATH usar C:\Users\ehven\AppData\Roaming\npm\openclaw.cmd). Ese summary SOLO se usa si el runAtIso del run cae entre el ciclo anterior al que trajo el cambio y el ciclo que escribio la linea SKILLS; si no hay run en esa ventana, o el summary no habla de esos archivos, escribi literal: "el cambio no vino de la revision semanal".
+  (3) Cierra el mensaje con la frase literal: "Ya esta en main. Si algo no te cuadra, dime y lo reviso."
+No ejecutar nada mas por D. Terminar con la linea: VIGIA SYNC SKILLS agentes=<lista> n=<total lineas SKILLS avisadas>.
+
+Si en el mismo turno avisaste C y D, son DOS mensajes de Telegram (uno por caso), cada uno con su marcador.
+
+REGLAS: no inventar evidencia. Si exec falla al leer el log, tratarlo como CASO C con causa "verificacion incompleta: exec". Si exec falla al leer el summary de un agente en D, ese agente lleva "el cambio no vino de la revision semanal". No propongas el arreglo en el Telegram de C, solo el hecho y la pregunta. PARA PROBAR ESTE JOB no existe un "modo prueba" por texto: se prueba creando una copia one-shot con la allow-list de tools reducida a exec, asi el aviso es fisicamente imposible en vez de depender de que leas una regla. Verificado el 2026-09-12: una version con "MODO PRUEBA" al inicio del mensaje mando el Telegram igual, porque la prohibicion estaba al final y actue antes de llegar a ella. Toda salida en ASCII, una sola linea final por caso actuado.

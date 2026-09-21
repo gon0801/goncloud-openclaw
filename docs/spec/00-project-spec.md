@@ -84,8 +84,10 @@ y `seguimiento.v1` (contratos en `docs/spec/corrida.v1.md` y
 
 1. Toda corrida en autopilot se abre, lanza sus sesiones y se cierra por `corrida.sh`;
    ningún runbook trae un `new-session` escrito a mano.
-2. El seguimiento lo garantiza el latido determinista, el agente lo enriquece;
-   ninguna espera pasa de 30 minutos sin mensaje.
+2. El seguimiento lo garantiza el reloj global `avance-tareas` (cada 15 minutos,
+   un solo reporte consolidado cada 30), el agente lo enriquece con eventos;
+   ninguna espera pasa de 30 minutos sin mensaje. Ninguna corrida crea un cron
+   de entrega propio.
 3. Un diálogo se contesta por la tabla de preaprobaciones del registro; la lista dura
    (borrado recursivo, `DROP`, push a la rama por defecto, merge, lectura de
    credenciales) no la aprueba ninguna tabla.

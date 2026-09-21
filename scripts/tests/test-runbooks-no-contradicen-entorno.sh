@@ -130,10 +130,9 @@ hits2c=$(git ls-files -z --cached --others --exclude-standard -- 'docs/runbooks/
 $hits2c"
 echo "ok (2b-bis): ningun runbook lanza a un implementador sin PATH embebido y flag dentro del comando"
 
-# (2c) Ningun runbook de fase designa UN modelo como lead. El lead es un rol: el kit
-# sella por host y el mismo documento tiene que servir con cualquiera de los seis.
-# Medido 2026-09-16: el runbook de la Fase 7 decia "lead: Claude" y con claw o kimi de
-# lead cada merge de la cola habria fallado con "sin estado del hook".
+# (2c) Ningun runbook de fase designa UN modelo como lead. El lead es un rol y el recibo
+# persistente permite relevarlo sin perder una aprobacion valida del mismo head.
+# Medido 2026-09-16: el runbook de la Fase 7 decia "lead: Claude" y no tenia ruta de relevo.
 # La linea del lead aparece de dos formas, fila de tabla (`| **lead** |`) y vineta
 # (`- **lead**:`), y la primera version de este detector solo miraba la fila: pasaba en
 # verde justo el documento que lo motivo, que usa la vineta. Las dos se marcan.

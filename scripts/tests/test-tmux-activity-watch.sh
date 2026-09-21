@@ -10,8 +10,9 @@
 # estados del vigilante (quiet una sola vez por silencio, activity nueva la resetea, closed
 # borra el estado, un envio fallido no marca notified, un TUI que repinta la misma pantalla
 # cuenta como callado, un prompt de permiso avisa de inmediato y se recuerda); (3) el Stop hook no manda nada fuera de
-# tmux y manda el texto correcto dentro de tmux; (4) las anclas de las dos skills; (5) el
-# detector de test-mac-tmux-control.sh sigue verde.
+# tmux y manda el texto correcto dentro de tmux; (4) las anclas de las dos skills.
+# (El detector de test-mac-tmux-control.sh ya no corre anidado aqui: desde 15.1 el runner
+# lo corre por su cuenta en el inventario del glob — antes coronaba cada bateria dos veces.)
 # Uso: bash scripts/tests/test-tmux-activity-watch.sh
 set -u
 cd "$(dirname "$0")/../.." || exit 1
@@ -71,6 +72,10 @@ STUB
   chmod +x "$TMUX_SHIM"
 
   run_once() {
+    # BRIEF-r1 PA: sin CORRIDA_BIN explicito se apunta a una ruta que no existe:
+    # cuando Q4 instale ~/bin/corrida.sh, los casos sin enganche no deben llamar
+    # al responder real con nombres de sesion de prueba.
+    CORRIDA_BIN="${CORRIDA_BIN:-$T/no-hay-corrida}" \
     TMUX_BIN="$TMUX_SHIM" OPENCLAW_BIN="$STUB_OPENCLAW" QUIET_SECS=1 TICK_SECS=1 \
       STATE_DIR="$STATE_DIR" LOG_FILE="$LOG_FILE" \
       bash "$W" --once
@@ -424,6 +429,202 @@ $(cat "$CALLS")"
   "$TM" -L "$L" kill-session -t cli-raro; run_once >/dev/null 2>&1
   echo "ok (2h): el silencio se recuerda; un dialogo que ningun patron conoce no se queda sin avisar; un estado de la version anterior no repite el aviso"
 
+  # (2i) Carril P (9.6): cada evento que el vigilante MANDA queda anotado en
+  # $STATE_DIR/eventos.jsonl (t epoch + texto): lo que un vigia lee sin gateway.
+  "$TM" -L "$L" new-session -d -s ev-log -x 80 -y 20 'cat' || fail "no se pudo crear ev-log"
+  mark ev-log
+  : >"$CALLS"
+  sleep 2
+  run_once || fail "--once (2i, quiet) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 1 ] || fail "(2i) esperaba exactamente un evento quiet de ev-log; hubo $n"
+  EJ="$STATE_DIR/eventos.jsonl"
+  [ -f "$EJ" ] || fail "(2i) falta $EJ"
+  python3 - "$EJ" <<'PY' || fail "(2i) eventos.jsonl no trae el evento quiet como {t, evento}"
+import json,sys
+lin=[l for l in open(sys.argv[1]) if l.strip()]
+assert lin, "sin lineas"
+d=json.loads(lin[-1])
+assert isinstance(d.get("t"),int), "t no es epoch"
+assert "ev-log quiet for" in d.get("evento",""), "el evento no es el quiet de ev-log: %r"%d.get("evento")
+PY
+  "$TM" -L "$L" kill-session -t ev-log
+  run_once || fail "--once (2i, closed) fallo"
+  python3 - "$EJ" <<'PY' || fail "(2i) el evento closed tampoco quedo en eventos.jsonl"
+import json,sys
+lin=[l for l in open(sys.argv[1]) if l.strip()]
+d=json.loads(lin[-1])
+assert isinstance(d.get("t"),int), "t no es epoch"
+assert "ev-log closed" in d.get("evento",""), "el ultimo evento no es el closed de ev-log: %r"%d.get("evento")
+PY
+  echo "ok (2i): cada evento enviado queda anotado en eventos.jsonl (t epoch + texto)"
+
+  # (2j) Carril P (9.6): el dialogo se le ofrece a la politica (corrida.sh
+  # responder) ANTES de despertar a nadie. Si la politica contesta (rc 0) no sale
+  # evento y el prompt queda atendido; si no existe o no contesta, como hoy.
+  CORR_CALLS="$T/corrida-llamadas.txt"; : >"$CORR_CALLS"
+  COR_RC="$T/corrida-rc"; echo 1 >"$COR_RC"
+  COR_CONSUME="$T/corrida-consume"; echo 0 >"$COR_CONSUME"
+  PANTALLA_J="$T/pantalla-j.txt"
+  STUB_CORR="$T/corrida-stub"
+  cat >"$STUB_CORR" <<STUB
+#!/bin/sh
+printf '%s\n' "CORR \$*" >> "$CORR_CALLS"
+rc=\$(cat "$COR_RC")
+# BRIEF-r2 QA: con rc 0 y CONSUME=1 el CLI de mentira se come la tecla (la
+# pantalla deja de mostrar el dialogo); con CONSUME=0 la tecla no hace nada.
+if [ "\$rc" = "0" ] && [ "\$(cat "$COR_CONSUME" 2>/dev/null || echo 0)" = "1" ]; then
+  printf 'aprobado, sigo trabajando\n' > "$PANTALLA_J"
+fi
+exit "\$rc"
+STUB
+  chmod +x "$STUB_CORR"
+  printf 'Permission - Bash\necho listar\n> Allow once\n  Deny\n running 3s\n' >"$PANTALLA_J"
+  "$TM" -L "$L" new-session -d -s pol-1 -x 100 -y 20 "$TUI $PANTALLA_J" || fail "no se pudo crear pol-1"
+  mark pol-1
+  : >"$CALLS"
+  espera_pantalla pol-1 'Allow once'
+  sleep 1
+  # La politica no contesta (rc 1: apagada, sin registro, escalada): como hoy.
+  CORRIDA_BIN="$STUB_CORR" run_p || fail "--once (2j, politica no contesta) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 1 ] || fail "(2j) con la politica sin respuesta debia salir el evento; hubo $n"
+  grep -q 'pol-1 waiting for approval' "$CALLS" || fail "(2j) falta el evento de aprobacion: $(cat "$CALLS")"
+  grep -q '^CORR responder pol-1$' "$CORR_CALLS" || fail "(2j) el vigilante no le paso el dialogo a la politica: $(cat "$CORR_CALLS")"
+  # La politica contesta (rc 0) y el CLI consume la tecla (la pantalla deja de
+  # mostrar el dialogo): ningun evento, el prompt queda atendido.
+  sed -i.bak 's/echo listar/echo listar mas/' "$PANTALLA_J" && rm -f "$PANTALLA_J.bak"
+  espera_pantalla pol-1 'echo listar mas'
+  sleep 1
+  : >"$CALLS"
+  echo 1 >"$COR_CONSUME"
+  echo 0 >"$COR_RC"
+  CORRIDA_BIN="$STUB_CORR" run_p || fail "--once (2j, politica contesta) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 0 ] || fail "(2j) la politica contesto: no debia salir NINGUN evento; hubo $n"
+  n=$(grep -c '^CORR responder pol-1$' "$CORR_CALLS")
+  [ "$n" -eq 2 ] || fail "(2j) la politica debia llamarse una vez por prompt; hubo $n"
+  grep -q '^approval=[0-9]' "$STATE_DIR/pol-1.state" || fail "(2j) el prompt atendido debe quedar marcado en el estado: $(cat "$STATE_DIR/pol-1.state")"
+  # Sin corrida.sh ejecutable el enganche esta inactivo: evento como hoy.
+  printf 'Permission - Bash\necho listar tres\n> Allow once\n  Deny\n running 3s\n' >"$PANTALLA_J"
+  espera_pantalla pol-1 'echo listar tres'
+  sleep 1
+  : >"$CALLS"
+  CORRIDA_BIN="$T/no-hay-corrida" run_p || fail "--once (2j, sin corrida.sh) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 1 ] || fail "(2j) sin corrida.sh el evento debia salir como hoy; hubo $n"
+  n=$(grep -c '^CORR responder pol-1$' "$CORR_CALLS")
+  [ "$n" -eq 2 ] || fail "(2j) sin corrida.sh no debia llamarse a nadie nuevo; hubo $n"
+  # BRIEF-r2 QA (Major): un rc 0 del responder solo prueba que SUS send-keys
+  # salieron; si el CLI no consumio la tecla y el prompt SIGUE en pantalla, el
+  # vigilante no puede suprimir la escalada (quedaria mudo hasta el recordatorio
+  # de 900 s). El stub devuelve 0 sin tocar la pantalla: el evento sale igual.
+  echo 0 >"$COR_CONSUME"
+  echo 0 >"$COR_RC"
+  printf 'Permission - Bash\necho listar cinco\n> Allow once\n  Deny\n running 4s\n' >"$PANTALLA_J"
+  espera_pantalla pol-1 'echo listar cinco'
+  sleep 1
+  : >"$CALLS"
+  CORRIDA_BIN="$STUB_CORR" run_p || fail "--once (2j-QA, tecla no consumida) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 1 ] || fail "(2j-QA) la politica devolvio 0 pero el prompt SIGUE: la escalada debe salir en el mismo ciclo; hubo $n"
+  grep -q 'pol-1 waiting for approval' "$CALLS" || fail "(2j-QA) falta la re-escalada del prompt no consumido: $(cat "$CALLS")"
+  "$TM" -L "$L" kill-session -t pol-1
+  echo "ok (2j): el dialogo se le ofrece a la politica primero; si contesta no despierta a nadie, y sin corrida.sh va como hoy"
+
+  # (2k) BRIEF-r1 PA: sin CORRIDA_BIN explicito, run_once lo apunta a una ruta
+  # inexistente: aunque exista un ~/bin/corrida.sh real (instalado en Q4), los
+  # casos sin enganche se comportan como hoy (el dialogo produce el evento).
+  run_once >/dev/null 2>&1   # traga el closed de pol-1 del caso anterior
+  PANTALLA_K="$T/pantalla-k.txt"
+  printf 'Permission - Bash\necho listar cuatro\n> Allow once\n  Deny\n running 3s\n' >"$PANTALLA_K"
+  "$TM" -L "$L" new-session -d -s pol-2 -x 100 -y 20 "$TUI $PANTALLA_K" || fail "no se pudo crear pol-2"
+  mark pol-2
+  : >"$CALLS"
+  espera_pantalla pol-2 'Allow once'
+  sleep 1
+  run_p || fail "--once (2k) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 1 ] || fail "(2k) sin CORRIDA_BIN explicito el evento debia salir como hoy; hubo $n"
+  grep -q 'pol-2 waiting for approval' "$CALLS" || fail "(2k) falta el evento de pol-2: $(cat "$CALLS")"
+  "$TM" -L "$L" kill-session -t pol-2
+  echo "ok (2k): run_once neutraliza CORRIDA_BIN por defecto; sin enganche explicito, el dialogo avisa como hoy"
+
+  # (2m) BRIEF-r2 QE: un fallo del journal (eventos.jsonl) no puede ni romper la
+  # notificacion ni pasar en silencio: el evento se manda igual, el estado queda
+  # notificado y el fallo queda en el log. eventos.jsonl como directorio hace
+  # fallar todo append al journal.
+  STATE2="$T/state2"
+  mkdir -p "$STATE2/eventos.jsonl"
+  "$TM" -L "$L" new-session -d -s ev-j -x 80 -y 20 'cat' || fail "no se pudo crear ev-j"
+  mark ev-j
+  : >"$CALLS"
+  : >"$LOG_FILE"
+  sleep 2
+  TMUX_BIN="$TMUX_SHIM" OPENCLAW_BIN="$STUB_OPENCLAW" QUIET_SECS=1 TICK_SECS=1 \
+    STATE_DIR="$STATE2" LOG_FILE="$LOG_FILE" CORRIDA_BIN="$T/no-hay-corrida" \
+    bash "$W" --once || fail "--once (2m) fallo"
+  [ "$(grep -c 'ev-j quiet for' "$CALLS")" -eq 1 ] || fail "(2m) el evento debia mandarse igual pese al journal roto: $(cat "$CALLS")"
+  grep -q 'notified=1' "$STATE2/ev-j.state" || fail "(2m) el fallo del journal no debe tocar el estado de notificacion"
+  grep -qi 'journal' "$LOG_FILE" || fail "(2m) el fallo del journal debe quedar dicho en el log: $(cat "$LOG_FILE")"
+  "$TM" -L "$L" kill-session -t ev-j
+  echo "ok (2m): un fallo del journal no rompe la notificacion y queda en el log"
+
+  # (2n) La cadencia por defecto es 15 min de silencio y 15 min de recordatorio,
+  # sin dormir 15 minutos de verdad: el archivo de estado finge la edad. OJO: sin
+  # QUIET_SECS/QUIET_REMIND_SECS en el entorno, para que manden los defaults del
+  # script y no los de run_once (1 s). Con 899 s no hay evento; con 901 s hay uno.
+  "$TM" -L "$L" new-session -d -s cad-default -x 80 -y 20 'cat' || fail "no se pudo crear cad-default"
+  mark cad-default
+  corre_default() {
+    CORRIDA_BIN="$T/no-hay-corrida" \
+    TMUX_BIN="$TMUX_SHIM" OPENCLAW_BIN="$STUB_OPENCLAW" \
+      STATE_DIR="$STATE_DIR" LOG_FILE="$LOG_FILE" \
+      bash "$W" --once
+  }
+  # Purga: los casos anteriores dejan sesiones muertas (pol-2, ev-j) cuyo
+  # `closed` sale en el primer tick que las ve; se consume antes de medir.
+  corre_default >/dev/null 2>&1 || fail "--once (2n, purga) fallo"
+  : >"$CALLS"
+  ahora=$(date +%s)
+  # OJO: el vigilante chequea `printf '%s' "$screen" | cksum` sobre la captura ya
+  # sin saltos finales (el $(...) los recorta); chequear los bytes crudos con sus
+  # saltos da otro hash y el tick lo leeria como pantalla nueva.
+  pantalla_txt=$("$TM" -L "$L" capture-pane -p -t cad-default 2>/dev/null)
+  pantalla=$(printf '%s' "$pantalla_txt" | cksum | awk '{ print $1 "-" $2 }')
+  printf 'hash=%s\nsince=%s\nnotified=0\npath=/tmp\napproval=\napproval_at=0\napproval_since=0\nnotified_at=0\n' \
+    "$pantalla" "$((ahora - 899))" >"$STATE_DIR/cad-default.state"
+  corre_default || fail "--once (2n, 899 s) fallo"
+  n=$(wc -l <"$CALLS" | tr -d ' ')
+  [ "$n" -eq 0 ] || fail "(2n) con 899 s de silencio y cadencia por defecto (15 min) no debe haber evento; hubo $n:
+$(cat "$CALLS")"
+  ahora=$(date +%s)
+  printf 'hash=%s\nsince=%s\nnotified=0\npath=/tmp\napproval=\napproval_at=0\napproval_since=0\nnotified_at=0\n' \
+    "$pantalla" "$((ahora - 901))" >"$STATE_DIR/cad-default.state"
+  corre_default || fail "--once (2n, 901 s) fallo"
+  n=$(grep -c 'cad-default quiet for' "$CALLS")
+  [ "$n" -eq 1 ] || fail "(2n) con 901 s de silencio debe haber exactamente un evento quiet; hubo $n:
+$(cat "$CALLS")"
+  # El recordatorio por defecto tambien es 15 min: con notified_at de hace 899 s
+  # no se repite; con 901 s sí.
+  estado_hash=$(awk -F= '$1 == "hash" { print $2 }' "$STATE_DIR/cad-default.state")
+  estado_since=$(awk -F= '$1 == "since" { print $2 }' "$STATE_DIR/cad-default.state")
+  ahora=$(date +%s)
+  printf 'hash=%s\nsince=%s\nnotified=1\npath=/tmp\napproval=\napproval_at=0\napproval_since=0\nnotified_at=%s\n' \
+    "$estado_hash" "$estado_since" "$((ahora - 899))" >"$STATE_DIR/cad-default.state"
+  corre_default || fail "--once (2n, recordatorio aun no) fallo"
+  n=$(grep -c 'cad-default quiet for' "$CALLS")
+  [ "$n" -eq 1 ] || fail "(2n) antes de 15 min el recordatorio no se repite; hubo $n"
+  ahora=$(date +%s)
+  printf 'hash=%s\nsince=%s\nnotified=1\npath=/tmp\napproval=\napproval_at=0\napproval_since=0\nnotified_at=%s\n' \
+    "$estado_hash" "$estado_since" "$((ahora - 901))" >"$STATE_DIR/cad-default.state"
+  corre_default || fail "--once (2n, recordatorio) fallo"
+  n=$(grep -c 'cad-default quiet for' "$CALLS")
+  [ "$n" -eq 2 ] || fail "(2n) una sesion que sigue callada se recuerda a los 15 min; hubo $n:
+$(cat "$CALLS")"
+  "$TM" -L "$L" kill-session -t cad-default
+  echo "ok (2n): la cadencia por defecto es 15 min de silencio y 15 min de recordatorio"
+
   "$TM" -L "$L" kill-server 2>/dev/null
   echo "ok (2): maquina de estados del vigilante verificada con tmux real ($TM)"
 
@@ -517,8 +718,19 @@ grep -qF -- '-u OPENCLAW_WATCH' "$SK" || fail "$SK: falta la instruccion de desm
 grep -qF 'waiting for approval for Ns' "$SK" || fail "$SK: falta el evento 'waiting for approval'"
 grep -qF 'preapproval table' "$SK" || fail "$SK: falta de donde sale la respuesta a un prompt de permiso"
 grep -qF 'whatever the CLI' "$SK" || fail "$SK: el evento de espera no es solo de un CLI; la skill tiene que decirlo"
-grep -qF 'repeated every 30 min' "$SK" || fail "$SK: falta que el silencio de una sesion marcada se recuerda"
+grep -qF 'repeated every 15 min' "$SK" || fail "$SK: el silencio de una sesion marcada se recuerda cada 15 min, no cada 30"
 grep -qF '/mode yolo' "$SK" || fail "$SK: falta como cambiar zcode a modo sin preguntas a media corrida"
+
+# (4b) Watchdog interno: despertar al lead no es instruccion de Telegram.
+# Cada idea va con su ancla exacta; si vuelve una orden de mandar Telegram en
+# cada inspeccion, la clasificacion se perdio.
+grep -qF 'internal wake-up, not a Telegram instruction' "$SK" || fail "$SK: falta que el wake-up es interno, no instruccion de Telegram"
+grep -qF 'NO_REPLY' "$SK" || fail "$SK: falta terminar en NO_REPLY sin cambio material"
+grep -qF 'every 15 min' "$SK" || fail "$SK: falta la cadencia interna de 15 min"
+grep -qF 'NECESITO TU RESPUESTA' "$SK" || fail "$SK: falta el inmediato NECESITO TU RESPUESTA"
+grep -qF 'DETENIDA' "$SK" || fail "$SK: falta el inmediato DETENIDA"
+grep -qF 'CERRADA' "$SK" || fail "$SK: falta el inmediato CERRADA"
+grep -qF 'unmark' "$SK" || fail "$SK: falta desmarcar la cadena terminada o abandonada"
 
 DISP=agents/main/agent/workshop-skills/agent-dispatch/SKILL.md
 grep -qF 'Wake-ups' "$DISP" || fail "$DISP: el paso 3 no referencia el mecanismo de despertar de mac-tmux-control"
@@ -532,10 +744,24 @@ grep -qF 'corrida.sh lanzar-sesion' "$SK" || fail "$SK: no abre sesiones con cor
 grep -qF 'BEFORE the first send-keys' "$SK" || fail "$SK: no marca BEFORE the first send-keys"
 grep -qF 'corrida.sh lanzar-sesion' "$DISP" || fail "$DISP: no abre sesiones con corrida.sh lanzar-sesion"
 grep -qF 'BEFORE the first send-keys' "$DISP" || fail "$DISP: no marca BEFORE the first send-keys"
+grep -qF 'unmark' "$DISP" || fail "$DISP: falta desmarcar la cadena terminada o abandonada"
 echo "ok (4): anclas de mac-tmux-control y agent-dispatch presentes"
 
-# (5) El detector de test-mac-tmux-control.sh (parte 1) sigue verde.
-bash scripts/tests/test-mac-tmux-control.sh >/dev/null 2>&1 || fail "test-mac-tmux-control.sh se puso rojo"
-echo "ok (5): test-mac-tmux-control.sh sigue verde"
+# (4c) owner-report-delivery clasifica ANTES de entregar: un wake-up interno sin
+# cambio material termina NO_REPLY y nunca entra a la regla de entrega explícita.
+ENTREGA=agents/main/agent/workshop-skills/owner-report-delivery/SKILL.md
+grep -qF 'internal wake-up' "$ENTREGA" || fail "$ENTREGA: falta clasificar el wake-up interno antes de entregar"
+grep -qF 'NO_REPLY' "$ENTREGA" || fail "$ENTREGA: un wake-up interno sin cambio material termina NO_REPLY"
+# Anti-ancla: mandar Telegram en cada turno sin entrante, antes de clasificar el
+# wake-up interno, es exactamente la contradicción que este cambio cierra.
+if grep -Eiq '(send|deliver)[^.]*every[^.]*(turn|inspection)' "$ENTREGA"; then
+  fail "$ENTREGA: manda en cada turno/inspeccion antes de clasificar el wake-up interno"
+fi
+echo "ok (4c): owner-report-delivery clasifica el wake-up interno antes de entregar"
+
+# (5) Retirado en 15.1: la llamada anidada a scripts/tests/test-mac-tmux-control.sh.
+# Corria el detector DOS veces por bateria (una aqui, otra por el inventario del glob del
+# runner). El test independiente sigue en el inventario y con todas sus assertions: es el
+# runner quien garantiza que se corre, no esta prueba.
 
 echo "TODO VERDE: tmux-activity-watch"

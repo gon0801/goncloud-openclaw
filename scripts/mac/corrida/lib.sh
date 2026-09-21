@@ -91,19 +91,11 @@ js=[j.get('id','') for j in d.get('jobs',[]) if j.get('name')==os.environ['NOMBR
 print('\n'.join(js) if js else 'NINGUNO')" 2>/dev/null
 }
 
-# El lock del registro, en un solo lugar, con lease de dueno. Al tomar se escribe
-# un token (.lock/token): la edad del lock es la del TOKEN, y su dueno vivo la
-# refresca entre llamadas largas (lock_refrescar) — un lock refrescado jamas se
-# roba, pase lo que pase debajo. Un lock sin token (manual, o de una version
-# vieja) se envejece por el directorio. Pasado CORR_LOCK_VIEJO segundos sin
-# refresco, el lock es de un proceso muerto y se rompe con aviso. Al tomar, se
-# arma un trap de EXIT sin dueno (si el llamador ya tiene el suyo, como preflight,
-# no se le pisa: ese caso lo cubre el rompimiento de locks viejos). Nada de
-# guardar y restaurar traps: restaurar dentro de una subshell de captura dispara
-# el trap ajeno al cerrar ella (medido: borro el dir de una prueba a mitad de
-# corrida). Al soltar, el disarm va ANTES del rmdir: el EXIT de este proceso no
-# puede romperle a otro un lock vivo tomado entremedias; y el lock solo lo
-# elimina su dueno (el token calza) — un soltar ajeno no toca nada.
+# Locks con lease de dueno. El token empieza con el PID y se publica por rename.
+# Un lock viejo solo se rompe si el token no cambio Y su PID ya no vive; la edad
+# por si sola nunca autoriza robarlo. Un dispatcher EXIT unico conoce ambos locks,
+# los limpia por token y despues ejecuta exactamente una vez cualquier trap EXIT
+# que ya tuviera el llamador.
 CORR_LOCK_VIEJO="${CORR_LOCK_VIEJO:-60}"
 lock_viejo() { # $1 dir del lock, $2 umbral en segundos; 0 = viejo (rompible)
   local ref="$1/token"
@@ -114,25 +106,120 @@ try: m=os.path.getmtime(os.environ['VIEJO_REF'])
 except Exception: sys.exit(1)
 sys.exit(0 if time.time()-m > float(os.environ['VIEJO_UMBRAL']) else 1)" 2>/dev/null
 }
-lock_tomar() { # $1 registro; 0 = tomado (token escrito; trap de EXIT si no habia dueno)
-  local dir i=0
-  dir="$(dirname "$1")"
-  if [ -d "$dir/.lock" ] && lock_viejo "$dir/.lock" "$CORR_LOCK_VIEJO"; then
-    rm -f "$dir/.lock/token"
-    rmdir "$dir/.lock" 2>/dev/null \
-      && echo "lock_tomar: rompio un lock viejo en $dir" >&2
+
+lock_token_publicar() { # $1 dir, $2 token
+  local tmp="$1/token.tmp.$$"
+  printf '%s' "$2" >"$tmp" || return 1
+  mv -f "$tmp" "$1/token" || { rm -f "$tmp"; return 1; }
+}
+
+lock_reclamo_deshacer() { # $1 ruta original, $2 tumba reclamada
+  if [ -e "$1" ]; then
+    rm -rf "$2"
+  else
+    mv "$2" "$1" 2>/dev/null || rm -rf "$2"
   fi
+}
+
+lock_abandonado_romper() { # $1 dir, $2 umbral, $3 etiqueta; 0 = roto
+  local d="$1" umbral="$2" etiqueta="$3" token="" pid actual tumba tenia_token=0
+  [ -d "$d" ] && lock_viejo "$d" "$umbral" || return 1
+  if [ -f "$d/token" ]; then
+    tenia_token=1
+    token="$(cat "$d/token" 2>/dev/null)" || return 1
+    pid="${token%%-*}"
+    case "$pid" in
+      ''|*[!0-9]*) return 1;;
+    esac
+    kill -0 "$pid" 2>/dev/null && return 1
+    actual="$(cat "$d/token" 2>/dev/null)" || return 1
+    [ "$actual" = "$token" ] || return 1
+  else
+    # Compatibilidad con locks manuales/antiguos: confirmar que el token no
+    # aparecio mientras se comprobaba la edad del directorio.
+    [ ! -e "$d/token" ] || return 1
+  fi
+  # El rename reclama el directorio completo antes de borrar nada. Desde este
+  # punto otro proceso puede crear un lock nuevo en $d sin que la limpieza de
+  # esta tumba pueda tocarlo.
+  tumba="$d.muerto.$$-${RANDOM:-0}"
+  [ ! -e "$tumba" ] || return 1
+  mv "$d" "$tumba" 2>/dev/null || return 1
+  if [ "$tenia_token" -eq 1 ]; then
+    actual="$(cat "$tumba/token" 2>/dev/null)" || {
+      lock_reclamo_deshacer "$d" "$tumba"; return 1;
+    }
+    [ "$actual" = "$token" ] || {
+      lock_reclamo_deshacer "$d" "$tumba"; return 1;
+    }
+  elif [ -e "$tumba/token" ]; then
+    lock_reclamo_deshacer "$d" "$tumba"
+    return 1
+  fi
+  rm -rf "$tumba" || return 1
+  echo "$etiqueta: rompio un lock viejo sin proceso vivo" >&2
+  return 0
+}
+
+lock_directorio_soltar() { # $1 dir, $2 token; solo el dueno lo elimina
+  local d="$1" token="$2"
+  [ -n "$d" ] || return 0
+  [ -f "$d/token" ] || return 0
+  [ "$(cat "$d/token" 2>/dev/null)" = "$token" ] || return 0
+  rm -f "$d/token"
+  rmdir "$d" 2>/dev/null
+}
+
+locks_exit_despachar() {
+  local estado="$?" previo citado
+  lock_directorio_soltar "${CORR_LOCK_ACT:-}" "${CORR_LOCK_TOKEN:-}"
+  lock_directorio_soltar "${MARCAS_LOCK_ACT:-}" "${MARCAS_LOCK_TOKEN:-}"
+  CORR_LOCK_ACT=""; CORR_LOCK_TOKEN=""
+  MARCAS_LOCK_ACT=""; MARCAS_LOCK_TOKEN=""
+  previo="${LOCKS_EXIT_PREV:-}"
+  LOCKS_EXIT_PREV=""; LOCKS_EXIT_ARMADO=0
+  trap - EXIT
+  if [ -n "$previo" ]; then
+    citado="${previo#trap -- }"
+    citado="${citado% EXIT}"
+    eval "set -- $citado"
+    eval "$1"
+  fi
+  return "$estado"
+}
+
+locks_exit_armar() {
+  [ "${LOCKS_EXIT_ARMADO:-0}" = "1" ] && return 0
+  LOCKS_EXIT_PREV="$(trap -p EXIT)"
+  LOCKS_EXIT_ARMADO=1
+  trap 'locks_exit_despachar' EXIT
+}
+
+locks_exit_restaurar_si_libre() {
+  local previo
+  [ -z "${CORR_LOCK_ACT:-}" ] || return 0
+  [ -z "${MARCAS_LOCK_ACT:-}" ] || return 0
+  [ "${LOCKS_EXIT_ARMADO:-0}" = "1" ] || return 0
+  previo="${LOCKS_EXIT_PREV:-}"
+  trap - EXIT
+  [ -n "$previo" ] && eval "$previo"
+  LOCKS_EXIT_PREV=""; LOCKS_EXIT_ARMADO=0
+}
+
+lock_tomar() { # $1 registro; 0 = tomado y registrado en el dispatcher EXIT
+  local dir i=0 token
+  dir="$(dirname "$1")"
+  lock_abandonado_romper "$dir/.lock" "$CORR_LOCK_VIEJO" "lock_tomar" || true
   while ! mkdir "$dir/.lock" 2>/dev/null; do
     i=$((i+1)); [ "$i" -gt 100 ] && return 1
     sleep 0.1
   done
-  CORR_LOCK_TOKEN="$$-${RANDOM:-0}"
-  printf '%s' "$CORR_LOCK_TOKEN" > "$dir/.lock/token"
-  if [ -z "$(trap -p EXIT)" ]; then
-    CORR_LOCK_ACT="$dir/.lock"
-    CORR_LOCK_ARMADO=1
-    trap 'rm -f "$CORR_LOCK_ACT/token"; rmdir "$CORR_LOCK_ACT" 2>/dev/null' EXIT
-  fi
+  token="$$-${RANDOM:-0}"
+  lock_token_publicar "$dir/.lock" "$token" \
+    || { rmdir "$dir/.lock" 2>/dev/null; return 1; }
+  CORR_LOCK_TOKEN="$token"
+  CORR_LOCK_ACT="$dir/.lock"
+  locks_exit_armar
   return 0
 }
 
@@ -145,18 +232,60 @@ lock_refrescar() { # $1 registro: re-touch del token, solo si este proceso sigue
   return 0
 }
 
-lock_soltar() { # $1 registro: disarm ANTES del rmdir, solo si este proceso armo el trap
-  local d t
-  d="$(dirname "$1")/.lock"; t="$d/token"
-  if [ "${CORR_LOCK_ARMADO:-0}" = "1" ]; then
-    trap - EXIT
-    CORR_LOCK_ARMADO=0
+lock_soltar() { # $1 registro; solo suelta el token propio
+  local d token
+  d="$(dirname "$1")/.lock"; token="${CORR_LOCK_TOKEN:-}"
+  CORR_LOCK_ACT=""; CORR_LOCK_TOKEN=""
+  lock_directorio_soltar "$d" "$token"
+  locks_exit_restaurar_si_libre
+}
+
+# Lock global e independiente para el nombre/las marcas de sesiones tmux. No usa
+# CORR_LOCK_TOKEN ni CORR_LOCK_ACT: lanzar-sesion necesita mantenerlo mientras
+# toma tambien el lock de su registro. Reconciliar usa el mismo lock desde el
+# snapshot de list-sessions hasta el ultimo unset, cerrando el TOCTOU por nombre.
+marcas_lock_tomar() {
+  local d="$CORRIDA_STATE/.marcas.lock" i=0 token
+  mkdir -p "$CORRIDA_STATE" || return 1
+  lock_abandonado_romper "$d" "$CORR_LOCK_VIEJO" "marcas_lock_tomar" || true
+  while ! mkdir "$d" 2>/dev/null; do
+    i=$((i+1)); [ "$i" -gt 100 ] && return 1
+    sleep 0.1
+  done
+  token="$$-${RANDOM:-0}"
+  lock_token_publicar "$d" "$token" || { rmdir "$d" 2>/dev/null; return 1; }
+  MARCAS_LOCK_TOKEN="$token"
+  MARCAS_LOCK_ACT="$d"
+  locks_exit_armar
+  return 0
+}
+
+marcas_lock_refrescar() {
+  local t="${MARCAS_LOCK_ACT:-}/token"
+  [ -f "$t" ] || return 0
+  [ "$(cat "$t" 2>/dev/null)" = "${MARCAS_LOCK_TOKEN:-}" ] && touch "$t" 2>/dev/null
+  return 0
+}
+
+marcas_lock_soltar() {
+  local d="${MARCAS_LOCK_ACT:-}" token="${MARCAS_LOCK_TOKEN:-}"
+  [ -n "$d" ] || return 0
+  MARCAS_LOCK_ACT=""; MARCAS_LOCK_TOKEN=""
+  lock_directorio_soltar "$d" "$token"
+  locks_exit_restaurar_si_libre
+}
+
+# Retira marcas solo si la corrida indicada sigue siendo su dueña publicada.
+# Debe llamarse con el lock global de marcas tomado.
+marca_retirar_si_dueno() { # $1 corrida, $2 sesion; otro/ningun dueno = no-op
+  local id="$1" sesion="$2" dueno marca
+  dueno="$("$TMUX_BIN" show-environment -t "=$sesion" OPENCLAW_WATCH_RUN 2>/dev/null || true)"
+  [ "$dueno" = "OPENCLAW_WATCH_RUN=$id" ] || return 0
+  marca="$("$TMUX_BIN" show-environment -t "=$sesion" OPENCLAW_WATCH 2>/dev/null || true)"
+  if [ "$marca" = "OPENCLAW_WATCH=1" ]; then
+    "$TMUX_BIN" set-environment -t "=$sesion" -u OPENCLAW_WATCH || return 1
   fi
-  if [ -f "$t" ] && [ "$(cat "$t" 2>/dev/null)" != "${CORR_LOCK_TOKEN:-}" ]; then
-    return 0 # lock ajeno o robado: no es de quien suelta
-  fi
-  rm -f "$t"
-  rmdir "$d" 2>/dev/null
+  "$TMUX_BIN" set-environment -t "=$sesion" -u OPENCLAW_WATCH_RUN || return 1
 }
 
 registro_escribir() { # $1 registro, $2 lineas python que mutan d; 0 = escrito.
@@ -173,8 +302,11 @@ os.rename(t,r)
 "
 }
 
-# validar_registro: el criterio unico de corrida.v1 vive aqui (la prueba 9.1 carga
-# este archivo); la lista dura es la regla 3 de 00-project-spec.
+# validar_registro: el criterio unico de corrida.v1/v2 vive aqui (la prueba 9.1
+# carga este archivo); la lista dura es la regla 3 de 00-project-spec.
+# Dual-read: v1 trae cron_vigia_id (el id del cron hombre-muerto por corrida);
+# v2 trae seguimiento_global:true y NADA de cron_vigia_id (el reloj es el unico
+# avance-tareas global). Lo que no sea exactamente una de las dos es ROTO.
 validar_registro() { # $1 json del registro; 0 = valido; imprime ROTO:<motivo> por defecto
   VREG="$1" python3 <<'PY' 2>/dev/null
 import json,os,re,sys
@@ -187,7 +319,15 @@ e=[]
 def malo(m):
   if m not in e: e.append(m)
 if d.get('vigia') not in ('claw','hermes'): malo('vigia fuera del conjunto')
-if d.get('schema')!='corrida.v1': malo('schema distinto')
+schema=d.get('schema')
+if schema=='corrida.v1':
+  if not isinstance(d.get('cron_vigia_id'),str) or not d.get('cron_vigia_id'):
+    malo('sin cron_vigia_id')
+elif schema=='corrida.v2':
+  if d.get('seguimiento_global') is not True: malo('sin seguimiento_global')
+  if 'cron_vigia_id' in d: malo('v2 con cron_vigia_id')
+else:
+  malo('schema distinto')
 for c in ('id','runbook'):
   if not d.get(c): malo('sin '+c)
 canal=d.get('canal')
@@ -196,7 +336,7 @@ if not isinstance(canal,dict):
 else:
   if not canal.get('cron'): malo('sin canal.cron')
   if not canal.get('destino'): malo('sin canal.destino')
-for c in ('cli_modos','cron_vigia_id','inicio'):
+for c in ('cli_modos','inicio'):
   if not d.get(c): malo('sin '+c)
 if not isinstance(d.get('simulacro'),bool): malo('simulacro no es booleano')
 if d.get('estado') not in ('abierta','cerrada'): malo('estado fuera del conjunto')
@@ -294,7 +434,7 @@ mensaje_valido() { # $1 archivo; 0 = cumple seguimiento.v1
   [ "$resto" = "$primera" ] && resto=""
   [ -n "$resto" ] || { rm -f "$C"; return 1; }
   if [ "$etq" != "CERRADA" ]; then
-    printf '%s\n' "$resto" | grep -qE '[0-9]+ de [0-9]+ partes' || { rm -f "$C"; return 1; }
+    printf '%s\n' "$resto" | grep -qE '[0-9]+ de [0-9]+ partes|avance desconocido' || { rm -f "$C"; return 1; }
   fi
   awk 'NR==2 && !/^Que cambio: .+/ {m=1} NR==3 && !/^Que sigue: .+/ {m=1} NR==4 && !/^Que necesito de ti: .+/ {m=1} END{exit m?1:0}' "$C" \
     || { rm -f "$C"; return 1; }
@@ -343,11 +483,22 @@ flag_de_tabla() { # $1 flag de la tabla; rc 2 = invalido (mensaje a stderr)
 
 # corrida_mensaje <id> <ETIQUETA> <avance> <cambio> <sigue> <necesito>
 # El avance es la linea 1 tras "Corrida, " (p. ej. "2 de 5 partes terminadas").
-# Valida contra seguimiento.v1 ANTES de mandar; anota en mensajes.jsonl; 0 = enviado.
+# Caso cerrado por etiqueta:
+# - AVANZA: valida contra seguimiento.v1 y acumula {at,cambio,sigue,necesito}
+#   en eventos-seguimiento.jsonl para el proximo corte global. NO llama a
+#   message send ni anota entrega en mensajes.jsonl: los llamadores viejos que
+#   mandaban por cambio ya no pueden saltarse el consolidador de 30 minutos.
+# - NECESITO TU RESPUESTA, DETENIDA, CERRADA: entrega inmediata por
+#   seguimiento.v1 con su fila en mensajes.jsonl, como siempre.
+# - Cualquier otra etiqueta falla cerrada: no se acumula ni se manda nada.
 corrida_mensaje() {
   local id="$1" etq="$2" avance="$3" cambio="$4" sigue="$5" necesito="$6"
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
+  case "$etq" in
+    AVANZA|NECESITO\ TU\ RESPUESTA|DETENIDA|CERRADA) ;;
+    *) echo "corrida_mensaje: etiqueta fuera del conjunto: $etq" >&2; return 1;;
+  esac
   local sim; sim="$(json_campo "$reg" simulacro)"
   local M; M="$(mktemp)" || return 1
   {
@@ -357,21 +508,48 @@ corrida_mensaje() {
     printf 'Que necesito de ti: %s\n' "$necesito"
   } > "$M"
   mensaje_valido "$M" || { echo "mensaje fuera de contrato" >&2; rm -f "$M"; return 1; }
-  [ "$sim" = "true" ] && sed -i.bak '1s/^/[SIMULACRO] /' "$M" && rm -f "$M.bak"
+  rm -f "$M"
+  if [ "$etq" = "AVANZA" ]; then
+    local evdir evtmp now
+    evdir="$(dirname "$reg")"
+    now="$(date +%Y-%m-%dT%H:%M:%S%z)"
+    evtmp="$(mktemp)" || return 1
+    CORR_MSG_CAMBIO="$cambio" CORR_MSG_SIGUE="$sigue" CORR_MSG_NECESITO="$necesito" CORR_MSG_AT="$now" \
+    python3 -c "
+import json,os
+d={'at':os.environ['CORR_MSG_AT'],'cambio':os.environ['CORR_MSG_CAMBIO'],
+'sigue':os.environ['CORR_MSG_SIGUE'],'necesito':os.environ['CORR_MSG_NECESITO']}
+open('$evtmp','w').write(json.dumps(d)+chr(10))
+" 2>/dev/null || { rm -f "$evtmp"; echo "corrida_mensaje: no se pudo acumular el evento" >&2; return 1; }
+    if [ ! -e "$evdir/eventos-seguimiento.jsonl" ]; then
+      : > "$evdir/eventos-seguimiento.jsonl" && chmod 600 "$evdir/eventos-seguimiento.jsonl"
+    fi
+    cat "$evtmp" >> "$evdir/eventos-seguimiento.jsonl" || { rm -f "$evtmp"; echo "corrida_mensaje: no se pudo acumular el evento" >&2; return 1; }
+    rm -f "$evtmp"
+    return 0
+  fi
+  local M2; M2="$(mktemp)" || return 1
+  {
+    printf '[%s] Corrida, %s\n' "$etq" "$avance"
+    printf 'Que cambio: %s\n' "$cambio"
+    printf 'Que sigue: %s\n' "$sigue"
+    printf 'Que necesito de ti: %s\n' "$necesito"
+  } > "$M2"
+  [ "$sim" = "true" ] && sed -i.bak '1s/^/[SIMULACRO] /' "$M2" && rm -f "$M2.bak"
   local dest; dest="$(json_campo "$reg" canal.destino)"
-  [ -n "$dest" ] || { echo "registro sin destino" >&2; rm -f "$M"; return 1; }
+  [ -n "$dest" ] || { echo "registro sin destino" >&2; rm -f "$M2"; return 1; }
   local texto rc=0 sil=""
-  # seguimiento.v1: lo rutinario (AVANZA, CERRADA) en silencio; DETENIDA y
+  # seguimiento.v1: lo rutinario (CERRADA) en silencio; DETENIDA y
   # NECESITO TU RESPUESTA suenan: en la etiqueta que pide respuesta, fallar hacia
   # silencio es el peor sentido de fallar.
-  case "$etq" in AVANZA|CERRADA) sil="--silent";; esac
-  texto="$(cat "$M")"
+  case "$etq" in CERRADA) sil="--silent";; esac
+  texto="$(cat "$M2")"
   con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" message send --channel telegram -t "$dest" $sil --json -m "$texto" >/dev/null 2>&1 || rc=1
   CORR_MSG_ETQ="$etq" CORR_MSG_OK="$rc" CORR_MSG_DIR="$CORRIDA_STATE/$id" python3 -c "
 import json,os
 d={'etiqueta':os.environ['CORR_MSG_ETQ'],'ok':os.environ['CORR_MSG_OK']=='0'}
 open(os.path.join(os.environ['CORR_MSG_DIR'],'mensajes.jsonl'),'a').write(json.dumps(d)+chr(10))
 " 2>/dev/null
-  rm -f "$M"
+  rm -f "$M2"
   return $rc
 }

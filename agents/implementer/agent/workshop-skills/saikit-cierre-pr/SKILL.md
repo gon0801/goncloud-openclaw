@@ -2,6 +2,7 @@
 name: saikit-cierre-pr
 description: Cuando cerrás un PR de la lane saikit en summonaikit-claude (integrar origin/master, validar y dejar listo). El merge lo hace el operador o, con la orden textual del dueño con fecha en el brief (6.5b), ejecutada por esta skill en implementer/ingenieria — summa-gate lo bloquea para el resto — y la batería de comportamiento no corre en la Mac del nodo; la evidencia es CI.
 ---
+<!-- candado: test-saikit-cierre-pr-merge-owner.sh -->
 
 # Saikit cierre PR
 

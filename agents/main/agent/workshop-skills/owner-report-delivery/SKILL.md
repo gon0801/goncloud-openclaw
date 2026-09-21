@@ -9,6 +9,19 @@ Get a consolidated answer to actually reach David when the turn was not started 
 
 ## Steps
 
+0. Classify the turn before delivering anything. A turn that arrives from an
+   internal wake-up (a tmux watcher event, a Claude Stop hook, an
+   `avance-tareas` tick) is an internal wake-up, not a Telegram instruction:
+<!-- candado: test-tmux-activity-watch.sh -->
+   read the authoritative state first (the pane with `capture-pane`,
+   `runbook.progress.decide` for the global cut). If the inspection finds no
+<!-- candado: test-tmux-activity-watch.sh -->
+   material change, end with exactly `NO_REPLY` and never call the message
+   tool — that turn never enters the explicit-delivery rule below. Only a
+   finished unit (next 30-minute cut), `NECESITO TU RESPUESTA`, `DETENIDA`, or
+   `CERRADA` reaches step 2.
+   - Completion: you know whether this turn is an internal wake-up or an outward delivery.
+
 1. Check whether the turn has an inbound user message. Heartbeat polls, forwarded inter-session reports, and system continuations do not create a reply route — final assistant text in such turns was observed to never reach the chat.
    - Completion: you know whether a reply route exists.
 

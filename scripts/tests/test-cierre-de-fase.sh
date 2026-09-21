@@ -33,8 +33,11 @@ trap '[ -n "${TM:-}" ] && "$TM" -L "$L" kill-server 2>/dev/null; rm -rf "$T"' EX
 # Stubs: ni gh ni openclaw reales. Su salida se controla con archivos.
 mkdir -p "$T/bin"
 CFG="$T/config.json"; CI="$T/ci.txt"; TAB="$T/tablero.json"
+CRONS="$T/crons.json"; SCRATCH="$T/scratch.json"
 printf '{"plugins":{"entries":{"summa-gate":{}}}}' >"$CFG"
 printf 'completed success' >"$CI"
+printf '{"jobs":[]}' >"$CRONS"
+printf '{}' >"$SCRATCH"
 # El stub contesta segun el metodo: el comprobador pregunta por la configuracion y,
 # aparte, por el tablero publicado. Un stub que contestara lo mismo a los dos haria
 # pasar la comprobacion del tablero sin comprobar nada.
@@ -43,6 +46,10 @@ cat >"$T/bin/openclaw" <<STUB
 for a in "\$@"; do
   [ "\$a" = "runbook.progress.get" ] && { cat "$TAB"; exit 0; }
 done
+case "\$*" in
+  *cron\ scratch*) printf '%s\n' "SCRATCH \$*" >> "$T/scratch-calls.txt"; cat "$SCRATCH"; exit 0;;
+  *cron\ list*) cat "$CRONS"; exit 0;;
+esac
 cat "$CFG"
 STUB
 cat >"$T/bin/gh" <<STUB
@@ -585,5 +592,76 @@ printf '%s' "$out" | grep -q "^VERDE *tablero" \
   || fail "(12f) una fase sin documento de progreso versionado no debe bloquearse:
 $out"
 echo "ok (12): el tablero publicado se compara con el versionado, y los dos falsos verdes de las Fases 6 y 7 mueren"
+
+# (13) Reloj global y vigias legados: un corrida-vigia-5 restante es un resto sin
+# migrar; avance-tareas se retira solo cuando no queda otro trabajo activo. El
+# scratch se lee por UUID, nunca por nombre.
+reloj_crons() { printf '%s\n' "$1" >"$CRONS"; }
+reloj_scratch() { printf '%s\n' "$1" >"$SCRATCH"; : >"$T/scratch-calls.txt"; }
+reloj_uuid1='{"name":"avance-tareas","id":"uuid-1","declarationKey":"avance-tareas","enabled":true,"schedule":{"kind":"every","everyMs":900000}}'
+reloj_reloj() { # $1 trabajosActivos json
+  reloj_scratch "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":1000},\"ultimoEstado\":\"{}\",\"messageId\":null,\"trabajosActivos\":$1}"
+}
+
+# (13a) Un vigia legado restante bloquea el cierre y se nombra.
+reloj_crons '{"jobs":[{"name":"corrida-vigia-5","enabled":true}]}'
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^ROJO *reloj" \
+  || fail "(13a) un corrida-vigia-5 restante debe salir ROJO:
+$out"
+printf '%s' "$out" | grep -q 'corrida-vigia-5' \
+  || fail "(13a) el detalle debe nombrar el vigia legado:
+$out"
+echo "ok (13a): un vigia legado sin migrar bloquea el cierre"
+
+# (13b) Reloj presente y rancio (solo esta fase): ROJO.
+reloj_crons "{\"jobs\":[$reloj_uuid1]}"
+reloj_reloj '["fase:5"]'
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^ROJO *reloj" \
+  || fail "(13b) el reloj rancio debe salir ROJO:
+$out"
+grep -q 'cron scratch uuid-1' "$T/scratch-calls.txt" \
+  || fail "(13b) el scratch debio leerse por UUID: $(cat "$T/scratch-calls.txt" 2>/dev/null)"
+grep -q 'cron scratch avance-tareas' "$T/scratch-calls.txt" \
+  && fail "(13b) el scratch se pidio por nombre, no por UUID"
+echo "ok (13b): el reloj rancio bloquea y el scratch se lee por UUID"
+
+# (13c) Reloj compartido con otro trabajo: VERDE, se conserva.
+reloj_reloj '["fase:5","corrida:otra"]'
+out=$(corre 5); rc=$?
+printf '%s' "$out" | grep -q "^VERDE *reloj" \
+  || fail "(13c) el reloj compartido debe salir VERDE:
+$out"
+[ "$rc" -eq 0 ] || fail "(13c) con el reloj compartido el cierre debe salir 0; salio $rc:
+$out"
+echo "ok (13c): el reloj con otro trabajo activo se conserva"
+
+# (13d) Scratch ilegible: fallo indeterminado, no verde.
+reloj_scratch '{esto no es un scratch'
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^ROJO *reloj" \
+  || fail "(13d) el scratch ilegible debe salir ROJO:
+$out"
+printf '%s' "$out" | grep -q "^VERDE *reloj" \
+  && fail "(13d) el scratch ilegible no puede salir VERDE:
+$out"
+echo "ok (13d): el scratch ilegible bloquea el cierre"
+
+# (13e) Reloj duplicado por declarationKey: fallo, no se adivina cual.
+reloj_crons "{\"jobs\":[$reloj_uuid1,{\"name\":\"avance-otro\",\"id\":\"uuid-2\",\"declarationKey\":\"avance-tareas\",\"enabled\":true}]}"
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^ROJO *reloj" \
+  || fail "(13e) el reloj duplicado debe salir ROJO:
+$out"
+echo "ok (13e): el reloj duplicado bloquea el cierre"
+
+# (13f) Sin reloj y sin legados: VERDE, nada que retirar.
+reloj_crons '{"jobs":[]}'
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^VERDE *reloj" \
+  || fail "(13f) sin reloj debe salir VERDE:
+$out"
+echo "ok (13f): sin reloj no hay nada que retirar"
 
 echo "TODO VERDE: cierre-de-fase"

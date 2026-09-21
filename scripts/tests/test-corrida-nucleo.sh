@@ -63,13 +63,9 @@ printf 'inyecta\ttocar; touch %s/inyeccion-9x; true\t--modo-9\tBARRITA-YOLO\t--\
 printf 'jaflag\tcli-ruin\t--modo; touch %s/ja-marker-9x; true\tBARRITA-YOLO\t--\t--\t--\n' "$T" >>"$T/modos.tsv"
 
 # Stub openclaw: anota, no manda. El destino es unico para probar que no entra al repo.
-# CRON_RM_FAIL=1 hace fallar cron rm; CRON_SIN_ID=1 hace que cron add no devuelva id
-# (el job queda en la lista como par "nombre id" en cron-puesto: la limpieza debe
-# resolver los ids ahi, todos los duplicados). LISTA_MALA=1 con LISTA_DESPUES_DE=n
+# CRON_RM_FAIL=1 hace fallar cron rm; LISTA_MALA=1 con LISTA_DESPUES_DE=n
 # falla todo cron list despues del n-esimo. CRON_RM_SUENIO/MSJ_SUENIO/LISTA_SUENIO=n
-# duermen esa llamada n segundos (para ejercitar el tope de reloj). CRON_ADD_SUENIO=n
-# duerme el cron add n segundos (abre la ventana de la carrera de abrir x abrir) y
-# CRON_ID_UNIQ=1 da un id unico por add (para que el perdedor Quite Su cron).
+# duermen esa llamada n segundos (para ejercitar el tope de reloj).
 LLAMADAS="$T/llamadas.log"
 DESTINO="DESTINO-UNICO-9X"
 cat >"$T/bin/openclaw" <<STUB
@@ -97,23 +93,9 @@ case "\$*" in
     fi
     printf ']}';;
   *cron\ add*)
-    nom=""; prev=""
-    for a in "\$@"; do [ "\$prev" = "--name" ] && nom="\$a"; prev="\$a"; done
-    # El suenio va TRAS apuntar el cron y ANTES de responder: con el tope matando
-    # la llamada, el cron existe en la lista pero el id nunca llega al cliente.
-    if [ "\${CRON_ID_UNIQ:-0}" = "1" ]; then
-      printf '%s %s\n' "\$nom" "cron-\$nom-\$\$" >> "$T/cron-puesto"
-      [ "\${CRON_ADD_SUENIO:-0}" != "0" ] && sleep "\${CRON_ADD_SUENIO}"
-      printf '{"id":"cron-%s-%s"}' "\$nom" "\$\$"
-    elif [ "\${CRON_SIN_ID:-0}" = "1" ]; then
-      c=\$(grep -c "^\$nom " "$T/cron-puesto" 2>/dev/null); c=\${c:-0}
-      printf '%s %s\n' "\$nom" "cron-dup-\$nom-\$((c + 1))" >> "$T/cron-puesto"
-      printf '{}'
-    else
-      printf '%s %s\n' "\$nom" "cron-\$nom" >> "$T/cron-puesto"
-      [ "\${CRON_ADD_SUENIO:-0}" != "0" ] && sleep "\${CRON_ADD_SUENIO}"
-      printf '{"id":"cron-%s"}' "\$nom"
-    fi;;
+    # abrir ya no crea crons: si algo llama a cron add, queda anotado y la
+    # prueba que vigila la ausencia lo pone en rojo.
+    printf '{}';;
   *message\ send*) [ "\${MSJ_SUENIO:-0}" != "0" ] && sleep "\${MSJ_SUENIO}"; [ "\${ENVIO_MODO:-ok}" = "mal" ] && exit 1; printf '{"messageId":"m1"}';;
 esac
 exit 0
@@ -154,7 +136,9 @@ permiso() { # $1 ruta: stat portable (macOS usa -f, Linux -c; en Linux stat -f n
 [ -f "$T/corridas/t1/registro.json" ] || fail "sin registro"
 [ "$(permiso "$T/corridas/t1")" = "700" ] || fail "el dir no queda 700"
 [ "$(permiso "$T/corridas/t1/registro.json")" = "600" ] || fail "el registro no queda 600"
-grep -q "cron add.*corrida-vigia-t1" "$LLAMADAS" || fail "abrir no crea el cron hombre-muerto"
+grep -q "cron add" "$LLAMADAS" && fail "abrir creo un cron: el reloj es el unico avance-tareas global"
+grep -q '"schema": *"corrida.v2"' "$T/corridas/t1/registro.json" || fail "abrir no escribe v2"
+grep -q '"seguimiento_global": *true' "$T/corridas/t1/registro.json" || fail "abrir no declara el reloj global"
 grep -q '"simulacro": *true' "$T/corridas/t1/registro.json" || fail "el registro no dice simulacro"
 
 # (0b) id invalido: nada de salir del directorio de estado ni inyectar comandos.
@@ -200,31 +184,29 @@ n1=$(grep -c "send-keys -t =ses-buena: Enter" "$TMUX_LOG")
 bash "$CORR" abrir t1 --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" --simulacro >/dev/null 2>&1 \
   && fail "abrir piso una corrida existente"
 grep -q '"nombre": *"ses-buena"' "$T/corridas/t1/registro.json" || fail "el abrir repetido borro sesiones"
-[ "$(grep -c "cron add.*corrida-vigia-t1" "$LLAMADAS")" = "1" ] || fail "abrir repetido duplico el cron"
+grep -q "cron add" "$LLAMADAS" && fail "abrir repetido creo un cron"
 
-# (1d) IB: carrera abrir x abrir del mismo id — el suenio del cron add garantiza
-# que ambos pasen el chequeo temprano; el perdedor retira SU cron (ids unicos por
-# add) y queda un solo registro y un solo cron vivo.
-CRON_ID_UNIQ=1 CRON_ADD_SUENIO=1 bash "$CORR" abrir t-carrera --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 &
+# (1d) IB: carrera abrir x abrir del mismo id — los dos pasan el chequeo
+# temprano; el perdedor falla bajo lock sin escribir nada. Sin crons de por
+# medio: queda un solo registro.
+bash "$CORR" abrir t-carrera --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 &
 a1=$!
-CRON_ID_UNIQ=1 CRON_ADD_SUENIO=1 bash "$CORR" abrir t-carrera --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 &
+bash "$CORR" abrir t-carrera --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 &
 a2=$!
 wait "$a1"; r1=$?
 wait "$a2"; r2=$?
 { [ "$r1" -ne 0 ] || [ "$r2" -ne 0 ]; } || fail "la carrera de abrir debio dejar un perdedor"
 { [ "$r1" -eq 0 ] || [ "$r2" -eq 0 ]; } || fail "la carrera de abrir debio dejar un ganador"
-n=$(grep -c "corrida-vigia-t-carrera" "$T/cron-puesto" 2>/dev/null || echo 0)
-[ "$n" -eq 1 ] || fail "la carrera dejo $n crons vivos (debia quedar uno)"
 [ -f "$T/corridas/t-carrera/registro.json" ] || fail "la carrera no dejo registro"
+grep -q "cron add" "$LLAMADAS" && fail "la carrera creo un cron"
 
-# (1e) JC: cron add colgado — abrir muere al tope y el cron que llego a ponerse se
-# retira por nombre (nada de huerfanos), sin registro ni lock.
-out="$(CRON_ADD_SUENIO=12 CORR_TOPE_RED=3 bash "$CORR" abrir t-jc --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"; rc=$?
-[ "$rc" -ne 0 ] || fail "con el cron add colgado debio fallar cerrado"
-printf '%s' "$out" | grep -q "se quito por la lista" || fail "la limpieza del add colgado no se reporta"
-grep -q "corrida-vigia-t-jc" "$T/cron-puesto" 2>/dev/null && fail "el cron del add colgado quedo huerfano"
-[ -f "$T/corridas/t-jc/registro.json" ] && fail "con el add colgado se escribio registro"
-[ -d "$T/corridas/t-jc/.lock" ] && fail "con el add colgado quedo lock puesto"
+# (1e) JC: lista de crons colgada — abrir muere al tope sin escribir nada.
+# (El destino sale de la lista; sin lista legible no hay apertura.)
+out="$(LISTA_SUENIO=12 CORR_TOPE_RED=3 bash "$CORR" abrir t-jc --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "con la lista colgada debio fallar cerrado"
+printf '%s' "$out" | grep -q "destino\|lista" || fail "la lista colgada no se reporta"
+[ -f "$T/corridas/t-jc/registro.json" ] && fail "con la lista colgada se escribio registro"
+[ -d "$T/corridas/t-jc/.lock" ] && fail "con la lista colgada quedo lock puesto"
 
 # (1c) tmux -t sin = matchea por prefijo: ses-prefija-2 viva no estorba a ses-prefija.
 "$TM_REAL" -L "$L" new-session -d -s ses-prefija-2 >/dev/null 2>&1 || fail "no se creo ses-prefija-2"
@@ -271,10 +253,17 @@ corrida_mensaje t1 AVANZA "1 de 2 partes terminadas" "se integro el PR de mensaj
   && fail "el mensaje con jerga debio rechazarse"
 grep -q "se integro el PR" "$LLAMADAS" && fail "la jerga nunca sale del stub"
 
-# (6) simulacro: todo mensaje sale con prefijo; el texto enviado ES el del contrato.
+# (6) simulacro: AVANZA acumula sin mandar; lo inmediato sale con prefijo y el
+# texto enviado ES el del contrato.
 corrida_mensaje t1 AVANZA "1 de 2 partes terminadas" "quedo lista la primera parte" "sigue la parte de mensajes" "nada" \
-  || fail "el mensaje valido en simulacro fallo"
-printf '[SIMULACRO] [AVANZA] Corrida, 1 de 2 partes terminadas\nQue cambio: quedo lista la primera parte\nQue sigue: sigue la parte de mensajes\nQue necesito de ti: nada\n' >"$T/esp-sim.txt"
+  || fail "AVANZA en simulacro debio acumular"
+grep -q 'message send' "$LLAMADAS" && fail "AVANZA en simulacro mando en vez de acumular"
+grep -q '"cambio": *"quedo lista la primera parte"' "$T/corridas/t1/eventos-seguimiento.jsonl" \
+  || fail "AVANZA en simulacro no dejo el evento"
+: >"$LLAMADAS"
+corrida_mensaje t1 DETENIDA "1 de 2 partes terminadas" "quedo lista la primera parte" "sigue la parte de mensajes" "nada" \
+  || fail "DETENIDA en simulacro fallo"
+printf '[SIMULACRO] [DETENIDA] Corrida, 1 de 2 partes terminadas\nQue cambio: quedo lista la primera parte\nQue sigue: sigue la parte de mensajes\nQue necesito de ti: nada\n' >"$T/esp-sim.txt"
 d=$(grep -n "OPENCLAW message send" "$LLAMADAS" | tail -1 | cut -d: -f1)
 tail -n +"$d" "$LLAMADAS" | sed '1s/.* -m //' >"$T/obtenido.txt"
 cmp -s "$T/esp-sim.txt" "$T/obtenido.txt" || fail "el texto enviado no es el de seguimiento.v1"
@@ -297,12 +286,10 @@ grep -qF "\"runbook\": \"$RB_REL" "$T/corridas/t-rel2/registro.json" \
   && fail "el runbook relativo se guardo sin resolver a absoluta"
 grep -qF "\"runbook\": \"$PWD/$RB_REL\"" "$T/corridas/t-rel2/registro.json" \
   || fail "el runbook guardado no es la absoluta resuelta"
-sym_line="$(grep "cron add.*corrida-vigia-t-sym" "$LLAMADAS" | head -1)"
-printf '%s' "$sym_line" | grep -qF -- "$T/c-real/t-sym" || fail "el cron no cita la ruta fisica del estado"
 bash "$CORR" abrir t-ns --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
   || fail "abrir sin simulacro fallo"
-ns_line="$(grep "cron add.*corrida-vigia-t-ns" "$LLAMADAS" | head -1)"
-printf '%s' "$ns_line" | grep -q "SIMULACRO" && fail "una corrida no simulacro lleva prefijo"
+grep -q '"simulacro": *false' "$T/corridas/t-ns/registro.json" \
+  || fail "el registro de t-ns no dice no-simulacro"
 
 # (9) con el entorno vacio se usa la misma tabla del registro.
 : > "$TMUX_LOG"
@@ -362,35 +349,9 @@ SETENV_FAIL=ses-marka bash "$CORR" lanzar-sesion t1 carril bueno "$T/ses" --nomb
 grep -q '"nombre": *"ses-marka"' "$T/corridas/t1/registro.json" && fail "la sesion sin marca quedo registrada"
 unset SETENV_FAIL
 
-# (9e) cron add sin id usable: abrir se niega, no escribe registro, y la limpieza
-# resuelve los ids REALES en la lista (TODOS los duplicados homonimos) y dice la
-# verdad cuando no puede verificar.
-CRON_SIN_ID=1 bash "$CORR" abrir t-sinid --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 \
-  && fail "cron add sin id debio reventar abrir"
-[ -f "$T/corridas/t-sinid/registro.json" ] && fail "abrir escribio registro sin id de cron"
-out="$(CRON_SIN_ID=1 bash "$CORR" abrir t-sinid --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"
-printf '%s' "$out" | grep -q "id" || fail "el fallo del cron sin id no dice nada"
-grep -q "cron rm cron-dup-corrida-vigia-t-sinid-1" "$LLAMADAS" || fail "la limpieza sin id no borro por el id de la lista"
-# dos jobs homonimos (medido en vivo por el lead): la corrida que los deja debe
-# quitarlos a los DOS y reportar cuantos.
-CRON_SIN_ID=1 CRON_RM_FAIL=1 bash "$CORR" abrir t-dup --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 \
-  && fail "abrir t-dup con rm fallando debio fallar"
-out="$(CRON_SIN_ID=1 bash "$CORR" abrir t-dup --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"
-grep -q "cron rm cron-dup-corrida-vigia-t-dup-1" "$LLAMADAS" && grep -q "cron rm cron-dup-corrida-vigia-t-dup-2" "$LLAMADAS" \
-  || fail "con dos crons homonimos no se quitaron los dos"
-printf '%s' "$out" | grep -q "2 job" || fail "el informe no dice cuantos jobs quito"
-# lista ilegible tras el rm: no informa 'se quito' sin haber verificado nada.
-nl=$([ -f "$T/lists" ] && wc -l < "$T/lists" || echo 0)
-out="$(CRON_SIN_ID=1 LISTA_MALA=1 LISTA_DESPUES_DE=$((nl + 2)) bash "$CORR" abrir t-ileg --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"
-printf '%s' "$out" | grep -q "no se pudo" || fail "con la lista ilegible no dice la verdad"
-printf '%s' "$out" | grep -q "se quito por la lista" && fail "con la lista ilegible informo una limpieza no verificada"
-# y el ILEGIBLE del PRIMER cron_jobs_de: la lista cae justo ahi (la del destino
-# paso, la relectura nunca llega) y el informe es honesto hasta el final.
-nl=$([ -f "$T/lists" ] && wc -l < "$T/lists" || echo 0)
-out="$(CRON_SIN_ID=1 LISTA_MALA=1 LISTA_DESPUES_DE=$((nl + 1)) bash "$CORR" abrir t-ileg2 --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"; rc=$?
-[ "$rc" -ne 0 ] || fail "con la lista ilegible de entrada debio fallar"
-printf '%s' "$out" | grep -q "no se pudo leer la lista" || fail "la lista ilegible de entrada no se reporta honestamente"
-printf '%s' "$out" | grep -q "se quito por la lista" && fail "la lista ilegible de entrada informo una limpieza inexistente"
+# (9e) Sin cron por corrida ya no hay "cron add sin id": abrir no llama a cron
+# add nunca. La limpieza de ids legados (duplicados homonimos, lista ilegible)
+# vive en test-corrida-seguimiento-global.sh, del lado de migrar-seguimiento.
 
 # homonimos del canal con destinos DISTINTOS: abrir no elige, falla cerrado.
 out="$(DEST_AMBIGUO=1 bash "$CORR" abrir t-amb --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 2>&1)"; rc=$?
@@ -479,10 +440,15 @@ plan=$!
 sleep 0.8
 bash "$CORR" cerrar t-tarde >/dev/null 2>&1 || fail "cerrar t-tarde fallo"
 wait "$plan"; rc_l=$?
-[ "$rc_l" -ne 0 ] || fail "lanzar sobre una corrida que se cerro debio negarse"
-grep -q "se cerro mientras se lanzaba" "$T/lanzar-tarde.out" || fail "la negativa no explica la carrera"
-"$TM_REAL" -L "$L" has-session -t "=ses-tarde" 2>/dev/null && fail "ses-tarde quedo viva en corrida cerrada"
-grep -q '"nombre": *"ses-tarde"' "$T/corridas/t-tarde/registro.json" && fail "ses-tarde quedo anotada en corrida cerrada"
+if [ "$rc_l" -ne 0 ]; then
+  grep -q "se cerro mientras se lanzaba" "$T/lanzar-tarde.out" \
+    || fail "la negativa no explica la carrera"
+  "$TM_REAL" -L "$L" has-session -t "=ses-tarde" 2>/dev/null \
+    && fail "ses-tarde quedo viva tras fallar su lanzamiento"
+else
+  "$TM_REAL" -L "$L" show-environment -t "=ses-tarde" OPENCLAW_WATCH >/dev/null 2>&1 \
+    && fail "ses-tarde quedo marcada despues de que cerrar gano la serializacion"
+fi
 grep -q '"estado": *"cerrada"' "$T/corridas/t-tarde/registro.json" || fail "t-tarde no quedo cerrada"
 
 # (9h2) JB: la carrera cerrar x lanzar con la red lenta bajo el lock: con el lease
@@ -513,29 +479,37 @@ linelista=$(grep -n "get('sesiones'" scripts/mac/corrida/cerrar.sh | head -1 | c
   || fail "cerrar lista sesiones antes de tomar el lock"
 
 # (7) cerrar: todas las sesiones del registro desmarcadas, cron quitado por su id,
-# CERRADA enviada, estado cerrada.
+# CERRADA enviada, estado cerrada. Un nombre historico que ahora publica otro
+# dueño se conserva intacto.
+"$TM_REAL" -L "$L" set-environment -t "=ses-buena" OPENCLAW_WATCH_RUN otra \
+  || fail "no se pudo preparar el nombre reutilizado para cerrar"
 bash "$CORR" cerrar t1 >/dev/null || fail "cerrar fallo"
 for s in $(CORR_REG="$T/corridas/t1/registro.json" python3 -c "
 import json,os
 print(' '.join(x.get('nombre','') for x in json.load(open(os.environ['CORR_REG'])).get('sesiones',[])))"); do
+  [ "$s" = "ses-buena" ] && continue
   "$TM_REAL" -L "$L" show-environment -t "=$s" OPENCLAW_WATCH >/dev/null 2>&1 \
     && fail "cerrar debe desmarcar a $s"
 done
-grep -q "cron rm cron-corrida-vigia-t1" "$LLAMADAS" || fail "cerrar no quito el cron por su id"
+"$TM_REAL" -L "$L" show-environment -t "=ses-buena" OPENCLAW_WATCH >/dev/null 2>&1 \
+  || fail "cerrar retiro la marca de un nombre reutilizado por otra corrida"
+[ "$("$TM_REAL" -L "$L" show-environment -t "=ses-buena" OPENCLAW_WATCH_RUN 2>/dev/null)" = "OPENCLAW_WATCH_RUN=otra" ] \
+  || fail "cerrar retiro el dueño de un nombre reutilizado por otra corrida"
+grep -q "cron rm" "$LLAMADAS" && fail "cerrar v2 toco un cron: el reloj global no se toca"
 grep -q "CERRADA" "$T/corridas/t1/mensajes.jsonl" || fail "cerrar no anota CERRADA"
 grep -q '"estado": *"cerrada"' "$T/corridas/t1/registro.json" || fail "el registro no cierra"
 
-# (7b) cron rm que falla: cerrar se queja ruidosamente, no en silencio.
+# (7b) el rm de un cron que ya no existe no ata: en v2 cerrar ni siquiera llama.
 bash "$CORR" abrir t-fc --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
   || fail "abrir t-fc fallo"
 out="$(CRON_RM_FAIL=1 bash "$CORR" cerrar t-fc 2>&1)"; rc=$?
-[ "$rc" -ne 0 ] || fail "cerrar trago el fallo del cron rm"
-printf '%s' "$out" | grep -q "cron" || fail "el fallo del cron rm no dice nada"
+[ "$rc" -eq 0 ] || fail "cerrar v2 no toca crons: un rm fallando no puede tumbarlo:
+$out"
+grep -q '"estado": *"cerrada"' "$T/corridas/t-fc/registro.json" || fail "t-fc no quedo cerrada"
 
 # (7b2) repro del reviewer del kit: cerrar con el envio de CERRADA fallando.
 # Primera corrida: rc!=0 CON mensaje que nombre la falla del envio (y que diga en
-# que quedo la corrida); el reintento con envio sano cierra de verdad, aunque el
-# cron ya este quitado (cron rm de un id inexistente no lo ata).
+# que quedo la corrida); el reintento con envio sano cierra de verdad.
 bash "$CORR" abrir t-ci --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
   || fail "abrir t-ci fallo"
 bash "$CORR" lanzar-sesion t-ci carril bueno "$T/ses" --nombre ses-ci --encargo "$T/encargo.txt" >/dev/null \
@@ -551,7 +525,6 @@ $out"
 grep -q '"estado": *"cerrada"' "$T/corridas/t-ci/registro.json" || fail "el reintento no cerro el registro"
 "$TM_REAL" -L "$L" show-environment -t "=ses-ci" OPENCLAW_WATCH >/dev/null 2>&1 \
   && fail "tras el reintento ses-ci sigue marcada"
-grep -q "corrida-vigia-t-ci" "$T/cron-puesto" 2>/dev/null && fail "tras el reintento el cron sigue puesto"
 
 # (7b3) DA: cerrar sobre una corrida YA cerrada es no-op con confirmacion: rc=0,
 # mensaje de cerrada, CERO reenvios del aviso y CERO toques al cron.
@@ -585,15 +558,9 @@ grep -q '"estado": *"cerrada"' "$T/corridas/t-lk/registro.json" || fail "el rein
 n=$(grep -c '"etiqueta": "CERRADA", "ok": true' "$T/corridas/t-lk/mensajes.jsonl")
 [ "$n" = "1" ] || fail "el reintento duplico el aviso (n=$n)"
 
-# (7b5) DC: cron rm fallando con la lista ilegible — falla cerrado y nombra la
-# ilegibilidad, no "quedan: ILEGIBLE".
-bash "$CORR" abrir t-dc --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
-  || fail "abrir t-dc fallo"
-nl=$([ -f "$T/lists" ] && wc -l < "$T/lists" || echo 0)
-out="$(CRON_RM_FAIL=1 LISTA_MALA=1 LISTA_DESPUES_DE="$nl" bash "$CORR" cerrar t-dc 2>&1)"; rc=$?
-[ "$rc" -ne 0 ] || fail "con la lista ilegible debio fallar cerrado"
-printf '%s' "$out" | grep -q "no se pudo verificar" || fail "la ilegibilidad de la lista no se nombra"
-grep -q '"estado": *"abierta"' "$T/corridas/t-dc/registro.json" || fail "con la lista ilegible el registro cerro a medias"
+# (7b5) DC: sin cron por corrida ya no hay lista que verificar en cerrar v2.
+# La ilegibilidad de la lista se prueba del lado de migrar-seguimiento
+# (test-corrida-seguimiento-global.sh): ahi si para todo.
 
 # (7b6) EB: el aviso salio pero registro_escribir fallo (inyeccion: registro.json.tmp
 # existe como directorio) — mensaje honesto de lo hecho/faltante y reintento SIN
@@ -612,7 +579,7 @@ bash "$CORR" cerrar t-esc >/dev/null || fail "el reintento debio cerrar"
 grep -q '"estado": *"cerrada"' "$T/corridas/t-esc/registro.json" || fail "el reintento no cerro"
 n=$(grep -c '"etiqueta": "CERRADA", "ok": true' "$T/corridas/t-esc/mensajes.jsonl")
 [ "$n" = "1" ] || fail "el reintento reenvio el aviso (n=$n)"
-grep -q "corrida-vigia-t-ns" "$T/cron-puesto" 2>/dev/null || fail "cerrar t-esc se llevo el cron de otra corrida (t-ns)"
+grep -q "cron rm" "$LLAMADAS" && fail "cerrar t-esc toco un cron ajeno (ya no hay crons por corrida)"
 
 # (7b7) FA: el canal de mensajes muerto no se viste de abierta — revert y error.
 mkdir -p "$T/corridas/t-fa/mensajes.jsonl"
@@ -620,17 +587,18 @@ out="$(bash "$CORR" abrir t-fa --runbook "$RB" --vigia claw --cli-modos "$T/modo
 [ "$rc" -ne 0 ] || fail "con el canal de mensajes roto debio fallar"
 printf '%s' "$out" | grep -q "canal de mensajes" || fail "el canal roto no se nombra"
 [ -f "$T/corridas/t-fa/registro.json" ] && fail "con el canal roto el registro quedo escrito"
-grep -q "corrida-vigia-t-fa" "$T/cron-puesto" 2>/dev/null && fail "con el canal roto el cron quedo puesto"
+grep -q "cron add" "$LLAMADAS" && fail "abrir con el canal roto creo un cron"
 
-# (7b8) GC: una llamada de red colgada bajo el lock no deja el lock roto ni a cerrar
-# colgado: el tope la mata y el lock se suelta (umbral inyectado a 3 s, stub duerme 12).
+# (7b8) GC: un envio colgado bajo el lock no deja el lock roto ni a cerrar
+# colgado: el tope lo mata, el aviso queda sin salir y el lock se suelta
+# (umbral inyectado a 3 s, stub duerme 12).
 bash "$CORR" abrir t-gc --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
   || fail "abrir t-gc fallo"
-out="$(CRON_RM_SUENIO=12 CORR_TOPE_RED=3 bash "$CORR" cerrar t-gc 2>&1)"; rc=$?
-[ "$rc" -ne 0 ] || fail "con la red colgada debio fallar (rc=0)"
-[ -d "$T/corridas/t-gc/.lock" ] && fail "el lock quedo puesto con la red colgada"
-printf '%s' "$out" | grep -q "cron" || fail "el fallo con la red colgada no nombra el cron"
-grep -q '"estado": *"abierta"' "$T/corridas/t-gc/registro.json" || fail "con la red colgada cerro a medias"
+out="$(MSJ_SUENIO=12 CORR_TOPE_RED=3 bash "$CORR" cerrar t-gc 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "con el envio colgado debio fallar (rc=0)"
+[ -d "$T/corridas/t-gc/.lock" ] && fail "el lock quedo puesto con el envio colgado"
+printf '%s' "$out" | grep -q "aviso" || fail "el fallo con el envio colgado no nombra el aviso"
+grep -q '"estado": *"abierta"' "$T/corridas/t-gc/registro.json" || fail "con el envio colgado cerro a medias"
 
 # (7b9) HA: OPENCLAW_BIN inexistente — con_tope NO convierte el 127 en exito: cerrar
 # falla cerrado y mensajes.jsonl no anota un CERRADA que nunca salio.
@@ -638,27 +606,19 @@ bash "$CORR" abrir t-ha --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 
   || fail "abrir t-ha fallo"
 out="$(OPENCLAW_BIN="/no/existe/openclaw" bash "$CORR" cerrar t-ha 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] || fail "con el binario inexistente debio fallar cerrado"
-printf '%s' "$out" | grep -q "cron\|lista" || fail "el fallo con binario inexistente no se explica"
+printf '%s' "$out" | grep -q "aviso\|reintentar" || fail "el fallo con binario inexistente no se explica"
 grep -q '"etiqueta": "CERRADA", "ok": true' "$T/corridas/t-ha/mensajes.jsonl" 2>/dev/null \
   && fail "anoto ok:true un aviso que nunca salio"
 [ -d "$T/corridas/t-ha/.lock" ] && fail "el lock quedo puesto con el binario inexistente"
 
-# (7b10) el tope alcanza tambien a la lista de verificacion de cerrar: colgada,
-# muere al tope y se reporta como ilegible (sin tope esperaria los 12 s del stub
-# y diria "no se quito").
-bash "$CORR" abrir t-top --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
-  || fail "abrir t-top fallo"
-out="$(CRON_RM_FAIL=1 LISTA_SUENIO=12 CORR_TOPE_RED=3 bash "$CORR" cerrar t-top 2>&1)"; rc=$?
-[ "$rc" -ne 0 ] || fail "con la lista colgada debio fallar cerrado"
-printf '%s' "$out" | grep -q "no se pudo verificar" || fail "la lista colgada no se reporta al tope"
-grep -q '"estado": *"abierta"' "$T/corridas/t-top/registro.json" || fail "con la lista colgada cerro a medias"
-[ -d "$T/corridas/t-top/.lock" ] && fail "el lock quedo puesto con la lista colgada"
+# (7b10) Sin lista que verificar en cerrar v2: la verificacion por lista vive
+# en migrar-seguimiento (test-corrida-seguimiento-global.sh).
 
-# (7b11) M-D: el envio tambien va con tope — un message send colgado muere al tope
-# y el reporte es honesto (ok:false en mensajes.jsonl).
+# (7b11) M-D: el envio inmediato tambien va con tope — un message send colgado
+# muere al tope y el reporte es honesto (ok:false en mensajes.jsonl).
 rc=0
 ( export CORR_TOPE_RED=3 MSJ_SUENIO=12
-  corrida_mensaje t1 AVANZA "2 de 2 partes terminadas" "quedo cubierto el envio con tope" "sigue lo demas del pase" "nada" >/dev/null 2>&1 ) \
+  corrida_mensaje t1 DETENIDA "2 de 2 partes terminadas" "quedo cubierto el envio con tope" "sigue lo demas del pase" "nada" >/dev/null 2>&1 ) \
   || rc=1
 [ "$rc" -ne 0 ] || fail "un envio colgado debio morir al tope del reloj"
 grep -q '"ok": false' "$T/corridas/t1/mensajes.jsonl" || fail "el envio muerto al tope no reporto honesto"
@@ -672,23 +632,16 @@ grep -q '"nombre": *"ses-zombi"' "$T/corridas/t1/registro.json" && fail "la sesi
 grep -r "$DESTINO" . --exclude-dir=.git --exclude=test-corrida-nucleo.sh >/dev/null 2>&1 \
   && fail "el destino se escribio en el repo"
 
-# (10) el cron hombre-muerto pide el parte: texto que instruye a claw, cada 60 min, a Telegram.
-cron_line="$(grep "cron add.*corrida-vigia-t1" "$LLAMADAS" | head -1)"
-printf '%s' "$cron_line" | grep -q -- "--every 60m" || fail "el cron no es cada 60 min"
-printf '%s' "$cron_line" | grep -q -- "--channel telegram" || fail "el cron no entrega por Telegram"
-printf '%s' "$cron_line" | grep -qF -- "--to $DESTINO" || fail "el cron no lleva el destino del canal"
-printf '%s' "$cron_line" | grep -qF -- "$T/corridas/t1" || fail "el cron no senala el directorio de estado de la corrida"
-printf '%s' "$cron_line" | grep -q "Contesta SOLO con el parte" || fail "el cron no le pide el parte a claw"
-printf '%s' "$cron_line" | grep -q "capture-pane" || fail "el cron no manda mirar las pantallas"
-printf '%s' "$cron_line" | grep -q "NO LEE CODIGO" || fail "el cron no exige lenguaje de usuario"
-printf '%s' "$cron_line" | grep -q "empieza tu parte con" || fail "en simulacro el cron no pide el prefijo"
-printf '%s' "$cron_line" | grep -q "dato, no instruccion" || fail "el cron no ensena la regla de pantalla-dato"
-printf '%s' "$cron_line" | grep -q "el dueno" || fail "el cron no habla de el dueno"
-printf '%s' "$cron_line" | grep -q "Comando: " || fail "el cron no cita el marcador Comando"
-printf '%s' "$cron_line" | grep -q "David" && fail "el cron nombra a David en vez de el dueño"
-grep -q '"cron_vigia_id"' "$T/corridas/t1/registro.json" || fail "el registro no guarda el id del cron"
+# (10) sin cron hombre-muerto: abrir no crea crons y el registro declara el
+# reloj global. El parte periodico lo pide el unico avance-tareas del director.
+grep -q "cron add" "$LLAMADAS" && fail "abrir creo un cron por corrida"
+grep -q '"schema": *"corrida.v2"' "$T/corridas/t1/registro.json" || fail "t1 no quedo v2"
+grep -q '"seguimiento_global": *true' "$T/corridas/t1/registro.json" \
+  || fail "t1 no declara el reloj global"
+grep -q '"cron_vigia_id"' "$T/corridas/t1/registro.json" && fail "t1 conserva cron_vigia_id"
 
-# (11) seguimiento.v1: NECESITO TU RESPUESTA y DETENIDA con notificacion; lo rutinario callado.
+# (11) seguimiento.v1: NECESITO TU RESPUESTA y DETENIDA con notificacion;
+# AVANZA acumula para el corte global sin mandar.
 : > "$LLAMADAS"
 corrida_mensaje t1 "NECESITO TU RESPUESTA" "1 de 2 partes terminadas" "un dialogo espera tu decision" "la corrida sigue en marcha" "responder si o no" \
   || fail "el mensaje NECESITO TU RESPUESTA fallo"
@@ -700,10 +653,12 @@ corrida_mensaje t1 DETENIDA "1 de 2 partes terminadas" "la corrida se detuvo por
   || fail "el mensaje DETENIDA fallo"
 detenida_linea="$(grep "message send" "$LLAMADAS" | tail -1)"
 printf '%s' "$detenida_linea" | grep -q -- "--silent" && fail "DETENIDA salio silenciosa"
+envios_antes=$(grep -c "message send" "$LLAMADAS")
 corrida_mensaje t1 AVANZA "1 de 2 partes terminadas" "todo sigue en orden" "continua la misma parte" "nada" \
-  || fail "el mensaje AVANZA fallo"
-avanza_linea="$(grep "message send" "$LLAMADAS" | tail -1)"
-printf '%s' "$avanza_linea" | grep -q -- "--silent" || fail "AVANZA dejo de salir silencioso"
+  || fail "AVANZA debio acumular"
+[ "$(grep -c "message send" "$LLAMADAS")" = "$envios_antes" ] || fail "AVANZA mando en vez de acumular"
+grep -q '"cambio": *"todo sigue en orden"' "$T/corridas/t1/eventos-seguimiento.jsonl" \
+  || fail "AVANZA no dejo el evento acumulado"
 
 # (11b) el despachador no carga lib ni subcomandos con ruta.
 out="$(bash "$CORR" lib 2>&1)"; rc=$?

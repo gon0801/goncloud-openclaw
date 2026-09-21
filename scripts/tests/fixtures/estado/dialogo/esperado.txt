@@ -1,0 +1,19 @@
+[DETENIDA] Corrida, 2 de 5 partes terminadas
+Que cambio: un carril se detuvo a esperar una decision tuya
+Que sigue: trabajan 2 sesiones; quedan 5 horas y 2 minutos de ventana de trabajo (en pausa por la espera); GitHub: sin verificar
+Que necesito de ti: nada por ahora; si sigue esperando, te pregunto
+--- detalle (para el vigia; no va a David) ---
+corrida m-dialogo abierta desde 2026-09-19T12:00:00+0000, vigia claw
+sesion m-lead (lead, glm): trabajando
+  lead trabajando
+  revisando lo que llego
+  todo en orden
+sesion m-a (carril, glm): dialogo desde hace 4 minutos (cubierto por preaprobaciones)
+  carril A detenido
+  trabajando la parte de mensajes
+  Do you want to proceed? (y/n)
+sesion m-b (carril, muse): trabajando
+  carril B trabajando
+  leyendo el contrato del parte
+  sin novedades
+GitHub: sin verificar

@@ -8,6 +8,54 @@ $repos = @(
 )
 function Log($msg) { Add-Content $log ("{0} {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $msg) }
 
+# >>> skills-cambiadas
+# Lista lo estagiado bajo agents/*/agent/workshop-skills/. Vive aqui (no en otro
+# archivo) porque GoncloudRepoSync no garantiza el cwd: un dot-source a un .ps1
+# que no llego tumbaria los 4 repos.
+function Get-OpenclawSkillsCambiadasStaged {
+  param([Parameter(Mandatory = $true)][string]$RepoRoot)
+  $staged = @(git -C $RepoRoot diff --cached --name-only 2>$null)
+  $byAgent = @{}
+  foreach ($g in $staged) {
+    $norm = ($g -replace '\\', '/')
+    if ($norm -match '^agents/([^/]+)/agent/workshop-skills/(.+)$') {
+      $agent = $Matches[1]
+      $rel = $Matches[2]
+      if (-not $byAgent.ContainsKey($agent)) {
+        $byAgent[$agent] = New-Object System.Collections.Generic.List[string]
+      }
+      [void]$byAgent[$agent].Add($rel)
+    }
+  }
+  return $byAgent
+}
+
+function Write-OpenclawSkillsLog {
+  param(
+    [Parameter(Mandatory = $true)]$Snap,
+    [Parameter(Mandatory = $true)][string]$LogPath
+  )
+  if (-not $Snap -or $Snap.Count -eq 0) { return }
+  foreach ($agent in ($Snap.Keys | Sort-Object)) {
+    $files = @($Snap[$agent] | Sort-Object)
+    $n = $files.Count
+    $list = $files -join ','
+    $line = "{0} .openclaw SKILLS {1} {2} archivo(s): {3}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $agent, $n, $list
+    Add-Content -LiteralPath $LogPath -Value $line
+  }
+}
+
+# Entrada unica para el test: lista lo estagiado y escribe el log.
+function Write-OpenclawSkillsCambiadas {
+  param(
+    [Parameter(Mandatory = $true)][string]$RepoRoot,
+    [Parameter(Mandatory = $true)][string]$LogPath
+  )
+  $snap = Get-OpenclawSkillsCambiadasStaged -RepoRoot $RepoRoot
+  Write-OpenclawSkillsLog -Snap $snap -LogPath $LogPath
+}
+# <<< skills-cambiadas
+
 foreach ($r in $repos) {
   if (-not (Test-Path (Join-Path $r '.git'))) { Log "SKIP $r (sin .git)"; continue }
   Set-Location $r
@@ -72,9 +120,26 @@ foreach ($r in $repos) {
     if ($sucio) { Log "$name hay cambios en el arbol y NADA estagiado: no se commitea nada este ciclo" }
   }
   if ($hay_estagiado) {
+    # Listar skills ANTES del commit (despues el indice queda vacio). Escribir el
+    # log solo si el commit sale bien. try/catch: un fallo no tumba el sync.
+    $skillsSnap = $null
+    if ($name -eq '.openclaw') {
+      try {
+        $skillsSnap = Get-OpenclawSkillsCambiadasStaged -RepoRoot $r
+      } catch {
+        Log (".openclaw SKILLS error: {0}" -f $_.Exception.Message)
+      }
+    }
     $commitOut = git -c user.name="openclaw-auto" -c user.email="ehventasmx@gmail.com" commit -m "auto: snapshot $name $(Get-Date -Format 'yyyy-MM-dd HH:mm')" 2>&1
     if ($LASTEXITCODE -eq 0) {
       Log "$name commit local auto"
+      if ($name -eq '.openclaw' -and $null -ne $skillsSnap) {
+        try {
+          Write-OpenclawSkillsLog -Snap $skillsSnap -LogPath $log
+        } catch {
+          Log (".openclaw SKILLS error: {0}" -f $_.Exception.Message)
+        }
+      }
     } else {
       # Un commit que falla en silencio deja el arbol sucio y el pull siguiente se niega ("CONFLICTO").
       $why = (@($commitOut) | ForEach-Object { "$_" } | Where-Object { $_ -match 'error|fatal|hook|Failed|identity' } | Select-Object -Last 2) -join ' | '
