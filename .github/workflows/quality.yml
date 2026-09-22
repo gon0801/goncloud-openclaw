@@ -285,15 +285,48 @@ jobs:
           path: logs/run-checks/
           if-no-files-found: error
 
+  # El contrato de cobertura (B1) corre FUERA de la matriz que valida: si
+  # corriera dentro de un shard, un defecto del contrato quedaria escondido por
+  # la corrida que el propio shard hace de si mismo. Sin condicion de omision
+  # (sin `if:`): corre en AMBOS carriles, porque en fast la matriz se omite y
+  # seria justamente ahi donde un contrato roto pasaria callado. Ejecuta
+  # scripts/tests/test-ci-coverage-contract.sh, que ejercita el MISMO validador
+  # (scripts/valida-union-shards.sh) que el gate usa abajo para auditar la
+  # union real de los artifacts publicados por la matriz.
+  ci-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        # El arbol de juguete del contrato corre entradas node de mentira que
+        # exigen >= 22 (mismo criterio del shard 3); el default del runner
+        # puede ser mas viejo.
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Contrato de cobertura de CI (13 casos + cableado)
+        run: bash scripts/tests/test-ci-coverage-contract.sh
+
   # La bateria completa conserva un solo entrypoint en CI: scripts/run-checks.sh,
   # ahora invocado por la matriz con SAIKIT_SHARD. Pre-commit conserva solo
   # validaciones rapidas de archivos para no cobrar la bateria completa en cada
-  # commit local.
+  # commit local. Desde B1, ademas, el gate AUDITA el CONTENIDO de lo que la
+  # matriz produjo: baja los tres artifacts de logs y valida con
+  # scripts/valida-union-shards.sh que su union sea exactamente el inventario
+  # de la bateria del checkout — sin faltantes, duplicados, resumenes vacios ni
+  # filas en falla. El resultado del job ya no alcanza: una matriz que pierde
+  # una pata sigue saliendo success con las restantes, y ese falso verde es
+  # exactamente lo que la auditoria de union caza.
 
   gate:
     runs-on: ubuntu-latest
     if: always()
-    needs: [clasificador, shards]
+    needs: [clasificador, shards, ci-contract]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
@@ -346,6 +379,9 @@ jobs:
           # solo si fast omitio la matriz entera, failure/cancelled si
           # cualquiera rebota.
           R_SHARDS: ${{ needs.shards.result }}
+          # El contrato de cobertura se decide aparte de los shards: no admite
+          # la via del skipped-autorizado-por-fast porque no depende del carril.
+          R_CI_CONTRACT: ${{ needs.ci-contract.result }}
         run: |
           rc=0
           printf 'clasificador=%s carril=%s\n' "$R_CLASIFICADOR" "${CARRIL:-}"
@@ -378,5 +414,55 @@ jobs:
                 rc=1 ;;
             esac
           done
+          # (c) El contrato de cobertura NO se omite nunca: corre en ambos
+          # carriles y cualquier resultado que no sea success (incluido
+          # skipped) rebota.
+          case "$R_CI_CONTRACT" in
+            success) ;;
+            *)
+              echo "gate: ci-contract no quedo en success (resultado=$R_CI_CONTRACT): el contrato de cobertura no admite omision" >&2
+              rc=1 ;;
+          esac
           [ "$rc" -eq 0 ] || { echo "gate: RECHAZADO" >&2; exit 1; }
           echo "gate: OK -- carril valido y todos los jobs de calidad en verde"
+
+      # Auditoria real de la union (B1), SOLO cuando la bateria corrio: en fast
+      # no hay artifacts que auditar y la omision ya la autorizo la regla de
+      # pares de arriba con clasificacion fast. Tres pasos: bajar cada artifact
+      # a su dir, generar el inventario desde el checkout (glob + entradas
+      # fijas del runner, el MISMO inventario que describe run-checks.sh) y
+      # correr el validador de union. No se re-corrre nada: la auditoria solo
+      # lee lo que los shards publicaron.
+      - name: Bajar artifact del shard 1
+        if: needs.shards.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: logs-run-checks-shard-1
+          path: auditoria/shard-1
+
+      - name: Bajar artifact del shard 2
+        if: needs.shards.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: logs-run-checks-shard-2
+          path: auditoria/shard-2
+
+      - name: Bajar artifact del shard 3
+        if: needs.shards.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: logs-run-checks-shard-3
+          path: auditoria/shard-3
+
+      - name: Auditar la union de los shards contra el inventario del checkout
+        if: needs.shards.result == 'success'
+        run: |
+          set -eu
+          inv=$(mktemp)
+          {
+            for t in scripts/tests/*.sh; do
+              if [ -e "$t" ]; then printf '%s\n' "${t##*/}"; fi
+            done
+            printf '%s\n' sintaxis-summa-gate bateria-summa-gate sintaxis-tablero-runbook bateria-tablero-runbook verify-corpus
+          } | LC_ALL=C sort >"$inv"
+          bash scripts/valida-union-shards.sh auditoria "$inv"
