@@ -82,20 +82,29 @@ for f in $archivos; do
   # carril por id. Un documento fuera de contrato no se adivina: sale 2 sin tocarlo.
   candidatos=$(F="$f" python3 -c "
 import json, os, sys
+# El documento se valida COMPLETO antes de emitir el primer candidato: si la
+# salida mezclara candidatos y ROTO, el case del shell solo veria el principio
+# y una re-corrida aplicaria el MERGED a un documento fuera de contrato (medido
+# 2026-09-22: con ids duplicados, el MERGED tocaba tambien al carril bloqueado
+# por CI y borraba su motivo real). Solo un documento valido imprime candidatos.
+def roto(motivo):
+    print('ROTO:' + motivo)
+    raise SystemExit
 try:
     d = json.load(open(os.environ['F']))
 except Exception:
-    print('ROTO:no es json'); sys.exit(0)
+    roto('no es json')
 if d.get('schema') != 'runbook-progress.v1':
-    print('ROTO:schema distinto'); sys.exit(0)
+    roto('schema distinto')
 if not isinstance(d.get('carriles'), list):
-    print('ROTO:sin carriles'); sys.exit(0)
+    roto('sin carriles')
 vistos = set()
+salida = []
 for c in d['carriles']:
     if not isinstance(c, dict) or not isinstance(c.get('id'), str) or not c.get('id'):
-        print('ROTO:carril sin id'); sys.exit(0)
+        roto('carril sin id')
     if c['id'] in vistos:
-        print('ROTO:id duplicado: ' + c['id']); sys.exit(0)
+        roto('id duplicado: ' + c['id'])
     vistos.add(c['id'])
     pr = c.get('pr')
     motivo = c.get('detenido_por')
@@ -106,7 +115,9 @@ for c in d['carriles']:
         continue
     if estado in ('mergeado', 'revertido', 'omitido'):
         continue
-    print('%s|%s|%s|%s' % (c['id'], pr, c.get('repo', ''), estado))
+    salida.append('%s|%s|%s|%s' % (c['id'], pr, c.get('repo', ''), estado))
+for linea in salida:
+    print(linea)
 ") || candidatos=""
   case "$candidatos" in
     ROTO*) printf 'reconciliar: %s esta fuera de contrato (%s)' "$f" "${candidatos#ROTO:}" >&2; echo; exit 2;;

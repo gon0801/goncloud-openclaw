@@ -241,4 +241,36 @@ $out"
 cmp -s "$P5" "$P5.original" || fail "(7) el archivo cambio para un motivo que no es el sello"
 echo "ok (7): uso y contrato salen 2, y un bloqueo real no se confunde con el sello"
 
+# (8) IDs duplicados: el documento esta FUERA de contrato y no se toca NADA.
+# Medido el 2026-09-22: el extractor emitia candidatos mientras recorria los
+# carriles, asi que un id duplicado DESPUES del primer candidato salia como
+# ROTO en medio de la salida, el case no lo veia, y la conciliacion aplicaba el
+# MERGED a los DOS carriles con ese id, borrando el motivo real (CI en rojo)
+# del segundo. Fuera de contrato = rc 2 y archivo intacto.
+P6="$T/duplicados.json"
+cat >"$P6" <<'DOC'
+{
+ "schema": "runbook-progress.v1",
+ "runbook": "docs/runbooks/autopilot-fase9.md",
+ "fase": "9",
+ "lead": {"agente": "glm", "inicio": "2026-09-20T12:00:00Z", "actualizado": "2026-09-20T12:40:00Z"},
+ "siguiente_paso": "dos carriles con el mismo id",
+ "carriles": [
+  {"id": "X", "repo": "gon0801/goncloud-openclaw", "tareas": ["9.4"], "estado": "en-cola", "pr": 97, "detenido_por": "esperando sello del kit"},
+  {"id": "X", "repo": "gon0801/goncloud-openclaw", "tareas": ["9.2"], "estado": "atorado", "pr": 98, "detenido_por": "CI en rojo del head"}
+ ],
+ "cola": [], "eventos": [],
+ "cierre": {"at": null, "telegram_message_id": null, "resumen": null}
+}
+DOC
+cp "$P6" "$P6.original"
+out=$(corre "$P6" 2>&1); rc=$?
+[ "$rc" -eq 2 ] || fail "(8) un documento con ids duplicados debe salir 2; salio $rc:
+$out"
+cmp -s "$P6" "$P6.original" \
+  || fail "(8) con ids duplicados el progreso no debe cambiar; la conciliacion toco carriles de mas"
+printf '%s' "$out" | grep -q "duplicad" || fail "(8) la salida debe nombrar el id duplicado:
+$out"
+echo "ok (8): ids duplicados => fuera de contrato, rc 2, nada escrito"
+
 echo "TODO VERDE: reconciliar-progreso"
