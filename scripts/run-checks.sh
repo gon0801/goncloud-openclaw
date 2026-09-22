@@ -121,7 +121,12 @@ if [ "$corre_node" -eq 1 ]; then
 fi
 
 # --- registro por entrada (Fase 15.1): UNA ejecucion, la primera salida al log.
-LOGDIR=logs/run-checks
+# Cada invocacion escribe SU directorio (corrida-<marca>): una re-corrida del
+# mismo shard nunca sobrescribe el resumen anterior (medido 2026-09-22: al
+# truncar resumen.txt fijo, una segunda corrida dejaba el artifact como una
+# corrida limpia y el gate no podia verla). El validador de la union rechaza un
+# shard que trae mas de una corrida en su artifact.
+LOGDIR="logs/run-checks/corrida-$(date +%Y%m%d-%H%M%S)-$$"
 mkdir -p "$LOGDIR" || { echo "FAIL: no pude crear $LOGDIR" >&2; exit 1; }
 RESUMEN="$LOGDIR/resumen.txt"
 : >"$RESUMEN"

@@ -22,7 +22,7 @@
 # watchdog+preflight / resto del glob + Node + sintaxis + corpus), cada uno con
 # checkout y estado propios y fail-fast: false. La bateria en CI tiene un solo
 # entrypoint, scripts/run-checks.sh, invocado UNA vez en el YAML y multiplicado
-# en tres runners por la matriz; la union de sus logs/run-checks/resumen.txt
+# en tres runners por la matriz; la union de sus logs/run-checks/corrida-*/resumen.txt
 # cubre la bateria con cada entrada exactamente una vez, y cada shard publica
 # sus logs como artifact para auditar esa union sin re-correr nada.
 #
@@ -189,7 +189,7 @@ jobs:
   # R (15.1) le dio al runner el reparto: SAIKIT_SHARD=1/3 corre el nucleo,
   # 2/3 watchdog+preflight, 3/3 el resto del glob + Node + sintaxis + corpus;
   # la union de los tres es la bateria entera, con cada entrada exactamente una
-  # vez en logs/run-checks/resumen.txt. W (15.2) lo monta en CI: el job
+  # vez en su logs/run-checks/corrida-*/resumen.txt. W (15.2) lo monta en CI: el job
   # `quality` monolitico se convierte en esta matriz (checkout y estado propios
   # por runner; fail-fast: false para que un shard rojo NO cancele a sus
   # hermanos — los tres tienen que llegar a veredicto propio).
