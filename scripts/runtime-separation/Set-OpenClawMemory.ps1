@@ -350,7 +350,11 @@ try {
     $stRaw = (& openclaw memory status --json 2>&1)
     if ($LASTEXITCODE -ne 0) { throw 'memory status fallo' }
     $agents = @()
-    try { $agents = @(($stRaw | Out-String) | ConvertFrom-Json) } catch { $agents = @() }
+    # foreach aplanar (CI17): @(...|ConvertFrom-Json) envuelve en 5.1.
+    $agentsRaw = $null
+    try { $agentsRaw = (($stRaw | Out-String) | ConvertFrom-Json) } catch { $agentsRaw = $null }
+    $agents = @()
+    foreach ($a in $agentsRaw) { $agents += $a }
     if ($agents.Count -eq 0) { throw 'sin agentes' }
     $priorRaw = (& openclaw config get memory.search --json 2>&1)
     if ($LASTEXITCODE -ne 0) { throw 'config get fallo' }

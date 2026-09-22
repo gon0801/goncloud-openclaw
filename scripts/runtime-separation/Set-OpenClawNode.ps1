@@ -300,8 +300,11 @@ try {
       $pendRaw = (& openclaw nodes pending --json 2>&1)
       if ($LASTEXITCODE -eq 0) {
         $rawPend = @()
-        try { $rawPend = @(($pendRaw | Out-String) | ConvertFrom-Json) } catch { $rawPend = @() }
-        $rawPend = @($rawPend | Where-Object { $_ -ne $null })
+        # foreach aplanar (CI17): @(...|ConvertFrom-Json) envuelve en 5.1.
+        $pendParsed = $null
+        try { $pendParsed = (($pendRaw | Out-String) | ConvertFrom-Json) } catch { $pendParsed = $null }
+        $rawPend = @()
+        foreach ($p in $pendParsed) { if ($null -ne $p) { $rawPend += $p } }
         $reqs = @()
         if ($rawPend.Count -eq 1 -and $null -ne $rawPend[0].requests) {
           $reqs = @($rawPend[0].requests)
@@ -401,8 +404,11 @@ try {
     $stRaw = (& openclaw nodes status --json 2>&1)
     if ($LASTEXITCODE -eq 0) {
       $rawSt = @()
-      try { $rawSt = @(($stRaw | Out-String) | ConvertFrom-Json) } catch { $rawSt = @() }
-      $rawSt = @($rawSt | Where-Object { $_ -ne $null })
+      # foreach aplanar (CI17): @(...|ConvertFrom-Json) envuelve en 5.1.
+      $stParsed = $null
+      try { $stParsed = (($stRaw | Out-String) | ConvertFrom-Json) } catch { $stParsed = $null }
+      $rawSt = @()
+      foreach ($s in $stParsed) { if ($null -ne $s) { $rawSt += $s } }
       $nodes = @()
       if ($rawSt.Count -eq 1 -and $null -ne $rawSt[0].nodes) {
         $nodes = @($rawSt[0].nodes)

@@ -288,7 +288,11 @@ try {
       exit 2
     }
     $found = @()
-    try { $found = @(($listRaw | Out-String) | ConvertFrom-Json) } catch { $found = @() }
+    # foreach aplanar (CI17): @(...|ConvertFrom-Json) envuelve en 5.1.
+    $foundRaw = $null
+    try { $foundRaw = (($listRaw | Out-String) | ConvertFrom-Json) } catch { $foundRaw = $null }
+    $found = @()
+    foreach ($f in $foundRaw) { $found += $f }
     if ($found.Count -eq 0) { continue }
     $num = [int]$found[0].number
     $e.pr = $num

@@ -790,3 +790,10 @@ F24 (autocrlf + EAP=Stop en 5.1): CI14 avisa (2): `git add` avisa
 `LF will be replaced by CRLF` a stderr (core.autocrlf del runner) y
 5.1 lo convierte en throw. Fix: EAP temporal en add/commit/push del
 capture (misma familia F22). Aplica tambien a prod Windows-live.
+
+F25 (array envuelto @() en 5.1): CI16 backup (2b) con manifiesto
+perfecto: DIAG CI17 mostro `$agents[0].agentId` = Object[]: en 5.1
+`@(...|ConvertFrom-Json)` envuelve el array top-level ([[A,B]]); en PS7
+desenvuelve. Fix: parseo a escalar + foreach aplanar (identico en ambos,
+vacio==0 preservado) en Backup agents, Memory agents, Node rawPend/rawSt
+y Sync found. Los `@($x.prop)` sobre variable no envuelven (diag: OK).

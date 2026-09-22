@@ -194,13 +194,16 @@ try {
   if ($kinds -notcontains 'state') { throw 'manifiesto sin asset state' }
   $stRaw = (& openclaw memory status --json 2>&1)
   if ($LASTEXITCODE -ne 0) { throw 'memory status fallo' }
+  # Sin @() externo: en 5.1 @(...|ConvertFrom-Json) envuelve el array
+  # top-level ([[A,B]]) y el [0] sale array (CI17). foreach aplanar es
+  # identico en ambos motores y preserva el vacio==0.
+  $agentsRaw = $null
+  try { $agentsRaw = (($stRaw | Out-String) | ConvertFrom-Json) } catch { $agentsRaw = $null }
   $agents = @()
-  try { $agents = @(($stRaw | Out-String) | ConvertFrom-Json) } catch { $agents = @() }
+  foreach ($a in $agentsRaw) { $agents += $a }
   if ($agents.Count -eq 0) { throw 'sin agentes en memory status' }
   $covered = @()
   foreach ($r in @($man.agentRoots)) { $covered += $r.agentId }
-  # DIAG TEMPORAL CI16: longitudes revelan CR/espacios invisibles.
-  throw ("DIAG coverN={0} coverLens=[{1}] agent0=[{2}] agent0len={3} r0type={4}" -f $covered.Count, (($covered | ForEach-Object { $_.Length }) -join ','), $agents[0].agentId, $agents[0].agentId.Length, @($man.agentRoots)[0].GetType().FullName)
   foreach ($g in $agents) {
     if ($covered -notcontains $g.agentId) { throw ("manifiesto sin agente: {0}" -f $g.agentId) }
   }
