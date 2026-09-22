@@ -282,19 +282,28 @@ Un ciclo exitoso prueba:
 La política de Code Integrity permanece activa. La migración no crea una
 excepción para `llama.cpp`.
 
+La instalación usa `config/ollama-runtime.v1.json`, una política revisada antes
+del merge que fija la versión aprobada de Ollama, URL oficial inmutable,
+SHA-256 esperado del instalador, publisher y cadena Authenticode esperados, y
+hash y firma esperados de los binarios instalados. La operación no descubre ni
+acepta valores nuevos. Solo compara el artefacto y la instalación con la
+política versionada.
+
 La instalación de Ollama sigue estas compuertas:
 
-1. Descargar el instalador desde `https://ollama.com/download/windows`.
-2. Calcular y registrar su SHA-256.
-3. Exigir una firma Authenticode válida antes de ejecutarlo.
+1. Descargar la URL inmutable indicada por la política.
+2. Comparar el SHA-256 con el valor esperado antes de ejecutar el instalador.
+3. Comparar publisher, cadena y estado Authenticode con los valores esperados.
 4. Instalarlo sin cambiar las cadenas de modelos de conversación.
-5. Confirmar que el servicio escucha solo en el endpoint local configurado.
+5. Comparar hash y firma de los binarios instalados con la política y confirmar
+   que el servicio escucha solo en el endpoint local configurado.
 6. Descargar `nomic-embed-text`, el modelo predeterminado de embeddings de
    Ollama en OpenClaw.
 7. Probar `/api/embed` con una entrada controlada y exigir un vector no vacío.
 
-Si el instalador o los binarios instalados no cumplen Code Integrity, la fase
-se detiene. El sistema no cambia automáticamente a un proveedor remoto.
+Si falta un valor esperado o el instalador o los binarios no coinciden con la
+política y Code Integrity, la fase se detiene antes de configurar memoria. El
+sistema no cambia automáticamente a un proveedor remoto.
 
 Después de la prueba local, la configuración cambia únicamente estos campos:
 
