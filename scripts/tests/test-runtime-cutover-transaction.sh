@@ -157,8 +157,20 @@ if (\$v -eq \$true) { 'VEREDICTO-True' } else { 'VEREDICTO-False' }
 # ausente, generacion ajena y terminales.
 arma_lease "$T/l-ok" "$GEN_FIJO" "$AHORA" "$FUTURO"
 arma_estado "$T/l-ok" "$GEN_FIJO" IN_PROGRESS
-[ "$(veredicto "$T/l-ok" "$GEN_FIJO")" = "VEREDICTO-True" ] \
-  || fail "(2a) lease valido debio dar True"
+diag_cutover() { # $1=dir -> subveredictos sueltos (solo diagnostico CI19)
+  "$PSH" -NoProfile -NonInteractive -Command "
+Import-Module '$MODN' -Force
+\$lr = Get-Content -Raw -LiteralPath '$1/lease.json'
+\$sr = Get-Content -Raw -LiteralPath '$1/state.json'
+'OBJ:' + (Test-CutoverLeaseObject -LeaseJson \$lr)
+'STA:' + (Test-CutoverStateObject -StateJson \$sr)
+'ACL:' + (Test-CutoverAcl -StateRoot '$1')
+'CP:' + ((\$sr | ConvertFrom-Json).completedPhases -is [array])
+" 2>&1 | tr '\n' '~'
+}
+if [ "$(veredicto "$T/l-ok" "$GEN_FIJO")" != "VEREDICTO-True" ]; then
+  fail "(2a) lease valido debio dar True [$(diag_cutover "$T/l-ok")]"
+fi
 [ "$(veredicto "$T/l-ok")" = "VEREDICTO-True" ] \
   || fail "(2a) lease valido sin generacion esperada debio dar True"
 echo "ok (2a): valido honra la generacion, con o sin ExpectedGeneration"
