@@ -69,7 +69,7 @@ Cada tarea de un carril pasa por esto, en este orden. Ningún paso se salta; si 
 2. **Implementación.** El implementador trabaja en su worktree, commitea con el hook, y termina con la línea de contrato. Donde la fila dice `[tdd:required]`, el rojo va pegado en `.saikit/scratch/<carril>/tdd.md`; sin rojo pegado, no terminó. **TIMEBOX con pausas: 6 horas** de reloj por carril, desde su lanzamiento hasta su `LISTO`. El tiempo detenido en un diálogo no cuenta: al quedar otra vez trabajando, el TIMEBOX **vuelve a 6 horas completas** (el registro de `corrida.sh` guarda `timebox_horas`). A su tope, el carril pasa a `atorado` con lo que tenga y los demás siguen.
 
 Medido: 2026-09-17, primera corrida de la Fase 7, de donde esta regla se muda al loop: los dos carriles se lanzaron sin su flag sin-preguntas y uno pasó 7 h detenido en un prompt de permiso. Ese tiempo lo perdió el lanzamiento, no el implementador, y por eso el TIMEBOX se reinicia al quedar en modo sin preguntas.
-3. **Auditoría del lead, antes de cualquier PR.** El lead lee el commit, corre solo las pruebas focalizadas del carril y **muta él mismo** lo que cada prueba protege: revierte el cambio en una copia y comprueba que la prueba se pone en rojo. Una prueba que pasa igual sin el arreglo no cuenta, y la tarea vuelve al paso 1 con un encargo de corrección. La batería completa no corre localmente cuando el PR la cubre: se consume una sola vez en CI sobre el SHA final del bloque.
+3. **Auditoría del lead, antes de cualquier PR.** El lead lee el commit y **la evidencia del verificador**: la prueba que discrimina, con su mutación demostrada en una copia aislada (rojo sin el arreglo, con comando y resultado pegados). El lead **no vuelve a correr la batería** ni repite la mutación: ese trabajo ya lo hizo el verificador de la sección 1, y repetirlo es pagar dos veces el mismo carril. Una prueba que pasa igual sin el arreglo, visible en esa evidencia, devuelve la tarea al paso 1 con un encargo de corrección. La batería completa corre una sola vez, en CI sobre el SHA final del bloque; cuando el PR la cubre, nada de ella corre en local.
 4. **PR en borrador.** El lead hace push y abre el PR **como draft**, desde el worktree, con el cuerpo en archivo. El CI corre la batería completa; CodeRabbit no. Si la unión de jobs no cubre la batería, el lead ejecuta localmente solo lo que falta y lo registra.
 5. **Rondas de revisión cruzada** sobre el SHA del PR, con la política de la sección 4. Cada hallazgo bloqueante se corrige con un encargo `BRIEF-r<N>.md` al mismo implementador y vuelve al paso 3. Lo no bloqueante va a una fila del plan.
 6. **Promoción.** Cuando una ronda no trae bloqueantes, el lead marca el PR como listo para revisión. Ahí CodeRabbit revisa una sola vez, sobre código que ya no va a cambiar.
@@ -79,22 +79,24 @@ Medido: 2026-09-17, primera corrida de la Fase 7, de donde esta regla se muda al
 10. **Despliegue y verificación**, sección 7, si la fase lo pide.
 11. **Progreso escrito**, sección 8. Solo entonces, la siguiente tarea. Los mensajes que la corrida manda a David en cada cambio de estado cumplen `seguimiento.v1`.
 
-Medido: 2026-09-16, revisión de cierre de la Fase 6: en los siete carriles, al menos una prueba pasaba igual con el defecto puesto; ningún implementador lo detectó solo, el paso 3 lo atrapó en todos.
+Medido: 2026-09-16, revisión de cierre de la Fase 6: en los siete carriles, al menos una prueba pasaba igual con el defecto puesto; ningún implementador lo detectó solo, el paso 3 lo atrapó en todos. Esa mutación hoy viaja en la evidencia del verificador (sección 1): el lead la exige, no la repite.
 
 ---
 
 ## 4. Política de rondas de revisión cruzada
 
-- **Ronda 1**: el revisor más fuerte disponible, excluyendo al modelo que implementó. Comando, desde el worktree del carril:
+- **Ronda 1**: el revisor más fuerte disponible, excluyendo al modelo que implementó, sobre **el diff completo del bloque** —no sobre el último commit: en una entrega de varios commits, mirar solo el último omitiría justo lo que los primeros cambiaron. Comando, desde el worktree del carril:
 
 ```
 /Users/dn/.local/bin/pwsh -NoProfile -File /Users/dn/quality-kit/cross-review.ps1 \
-  -Con auto -Excluir <modelo> -Alcance last-commit
+  -Con auto -Excluir <modelo> -Desde <sha de la base del bloque>
 ```
+
+  `<sha de la base del bloque>` es el merge-base del carril con `origin/<default>` (`git merge-base HEAD origin/<default>`): `-Desde` manda el diff desde ese sha hasta HEAD, que es exactamente el diff del PR. Medido 2026-09-22: con `-Alcance last-commit` en ronda 1, la revisión de una entrega de cuatro commits habría visto uno solo y omitido los scripts de cierre y reconciliación.
 
   `pwsh` va con ruta absoluta siempre, no solo por exec del nodo: no está en el PATH que hereda un CLI lanzado en tmux.
 
-  **`-Alcance` tiene un conjunto cerrado y el script aborta si te sales:** acepta `staged`, `working` y `last-commit`, y nada más. La ronda 1 va por commit, y por eso el loop pide un commit por tarea. La ronda 2 no usa `-Alcance`: usa `-Desde <sha que vio la ronda 1>`, que manda solo el diff de los arreglos. `-Excluir` acepta cualquier nombre desde quality-kit #11: si implementó muse o cursor, se pasa ese nombre aunque no sea candidato a revisor. `glm` en esa cadena **es** zcode.
+  **`-Alcance` tiene un conjunto cerrado y el script aborta si te sales:** acepta `staged`, `working` y `last-commit`, y nada más; le queda un uso, revisar algo que aún no está commiteado. Las rondas siguientes usan `-Desde <sha que vio la ronda anterior>`, que manda solo el diff de los arreglos. `-Excluir` acepta cualquier nombre desde quality-kit #11: si implementó muse o cursor, se pasa ese nombre aunque no sea candidato a revisor. `glm` en esa cadena **es** zcode.
 
 Medido: 2026-09-16, lectura del script: `-Alcance branch` no es un valor válido y `-Excluir cursor` tampoco; el loop los mandaba y el comando abortaba por validación de parámetro antes de revisar nada.
 - **Cada ronda cambia de revisor**, no solo la ronda 2. Se pide con `-Con <otro>`. Un modelo que ya revisó ese código vuelve a traer su misma lista: repetirlo cuesta una ronda entera y no compra información.

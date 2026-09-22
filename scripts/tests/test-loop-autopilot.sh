@@ -66,7 +66,8 @@ for a in 'LISTO <sha>' \
          'El encargo viaja como archivo' \
          'sea el CLI que sea' \
          'ATORADO <razón en una línea>' \
-         'muta él mismo' \
+         'la evidencia del verificador' \
+         'no vuelve a correr la batería' \
          'como draft' \
          'Un PR por carril, nunca por tarea' \
          'Solo un hallazgo bloqueante abre otra ronda' \
@@ -106,7 +107,7 @@ for a in 'LISTO <sha>' \
          'se invoca por `bash`' \
          'hashea el token literal' \
          'ATORADO kit ausente en ' \
-         '-Alcance last-commit' \
+         '-Desde <sha de la base del bloque>' \
          'conjunto cerrado' \
          'nunca lo escribe el lead' \
          'CodeRabbit no es un proveedor de modelo' \
@@ -115,7 +116,7 @@ for a in 'LISTO <sha>' \
   # la lee grep como bandera y sale "Invalid argument", no como ancla faltante.
   grep -qF -- "$a" "$DOC" || fail "$DOC: falta el ancla: $a"
 done
-echo "ok (3): las 62 anclas de reglas están"
+echo "ok (3): las 63 anclas de reglas están"
 
 # (3a) Entrega-sin-sello A retiro la autoridad ligada a una sesion. Estas formas
 # reintroducirian el candado que detuvo Fase 9 aunque el resto de las anclas pase.
