@@ -1,7 +1,7 @@
 # Separación y limpieza del runtime de OpenClaw
 
 Fecha: 2026-09-22
-Estado: corregido tras la revisión cruzada de Grok
+Estado: corregido tras revisiones cruzadas
 Propietario: David
 
 ## Propósito
@@ -117,9 +117,11 @@ manifiesto y confirmar que contiene la base compartida, las bases de agentes,
 las credenciales y los workspaces declarados. No se acepta un archivo de
 backup solo porque existe.
 
-Esta interfaz está confirmada en OpenClaw `2026.9.5`: `openclaw backup create
---verify` incluye configuración, credenciales, sesiones y workspaces, salvo
-que el operador pase `--no-include-workspace`.
+Esta interfaz está confirmada en OpenClaw `2026.9.5`. Un `--dry-run --json`
+confirmó que el asset `state` cubre el estado compartido y las bases de los
+agentes, y que los workspaces y raíces de agente quedan cubiertos por ese
+asset. La aceptación todavía exige crear el archivo real con `--verify` y
+restaurarlo en staging; el dry-run no sustituye esa prueba.
 
 Si la verificación del backup falla, la migración se detiene antes de mover o
 borrar cualquier archivo.
@@ -129,19 +131,20 @@ borrar cualquier archivo.
 `GoncloudRepoSync` dejará de ejecutar Git dentro del estado vivo para el repo
 principal. El ciclo nuevo tendrá este orden:
 
-1. Capturar cambios autónomos permitidos del estado vivo en un worktree
-   temporal.
-2. Registrar como protegidas las rutas capturadas mientras su PR siga
-   pendiente.
-3. Actualizar el checkout dedicado contra `origin/main`.
-4. Preparar un árbol de staging con los archivos desplegables.
-5. Excluir del staging las rutas protegidas y verificar que sus bytes vivos no
+1. Consultar `origin/main` y el ledger de PRs pendientes.
+2. Conciliar las rutas protegidas y capturar en un worktree temporal solo los
+   cambios autónomos que todavía no estén representados en el ledger.
+3. Registrar o actualizar como protegidas las rutas capturadas mientras su PR
+   siga pendiente.
+4. Actualizar el checkout dedicado contra `origin/main`.
+5. Preparar un árbol de staging con los archivos desplegables.
+6. Excluir del staging las rutas protegidas y verificar que sus bytes vivos no
    cambien.
-6. Validar la configuración y los contratos del árbol de staging.
-7. Copiar el árbol validado al estado vivo mediante reemplazos atómicos por
+7. Validar la configuración y los contratos del árbol de staging.
+8. Copiar el árbol validado al estado vivo mediante reemplazos atómicos por
    archivo.
-8. Ejecutar las sondas de salud.
-9. Registrar el SHA desplegado y el resultado del ciclo.
+9. Ejecutar las sondas de salud.
+10. Registrar el SHA desplegado y el resultado del ciclo.
 
 El script conserva el bucle sobre los cuatro repos actuales. Un fallo en
 `goncloud-openclaw` se registra y no impide que `workspace`,
@@ -164,12 +167,19 @@ commit, push y abre un PR. Después elimina el worktree temporal. El checkout
 dedicado permanece en `main`, sin commits locales ni cambio de rama. El
 capturador no mergea el PR y no empuja a `main`.
 
-El ciclo guarda ruta, hash vivo, rama y PR de cada captura pendiente. El
-deploy no toca esas rutas mientras el PR permanezca abierto. Cuando el PR
-llega a `main`, el siguiente ciclo despliega la versión mergeada y elimina la
-protección solo después de comprobar el hash resultante. Si el PR se cierra
-sin mergear, el sync conserva el archivo vivo, registra el conflicto y espera
-una decisión del propietario.
+El ciclo guarda ruta, hash vivo, rama, commit y PR de cada captura pendiente.
+Si el hash vivo coincide con el ledger, no crea otro PR. Si cambia mientras el
+PR sigue abierto, añade el cambio a la misma rama y actualiza el PR y el hash
+protegido; si la rama ya no admite escritura, crea un PR sucesor enlazado en
+el ledger. Nunca crea PRs duplicados a ciegas.
+
+El deploy no toca las rutas protegidas. Cuando el PR llega a `main`, compara
+el hash capturado con el hash vivo. Si coinciden, despliega la versión mergeada
+y elimina la protección después del read-back. Si el archivo vivo cambió de
+nuevo, primero captura ese delta contra el `main` nuevo en un PR sucesor y
+mantiene la protección: el merge anterior nunca pisa una edición viva más
+reciente. Si el PR se cierra sin mergear, el sync conserva el archivo vivo,
+registra el conflicto y espera una decisión del propietario.
 
 Un cambio fuera de la lista permitida queda en el estado vivo y produce una
 alerta. El sync no lo añade, no lo borra y no lo sobrescribe.
@@ -187,8 +197,9 @@ CONFLICTO
 Una captura nueva escribe `SKILLS_PR`, el agente, las rutas y el número del
 PR. No escribe `SKILLS`, porque el cambio todavía no está en `main`. El vigía
 sube a una versión que reconoce `SKILLS_PR` y dice que el cambio espera
-revisión. Solo una línea de despliegue posterior puede afirmar que el cambio
-llegó a `main`.
+revisión. El despliegue posterior escribe `SKILLS_DEPLOYED`, el SHA mergeado y
+las rutas cuyo read-back coincidió; solo ese token afirma que el cambio llegó
+a `main` y al runtime.
 
 El cambio del script y el cambio del vigía se despliegan como una sola unidad.
 `GoncloudRepoSync` no se habilita hasta que el vigía nuevo esté activo y su
@@ -235,10 +246,11 @@ El deploy conserva una copia de los archivos que reemplazará. Si una sonda
 posterior falla, restaura solo esos archivos. Nunca ejecuta
 `git reset --hard` contra el estado vivo.
 
-Antes del primer deploy, el script exige que `origin/main` contenga
-`$httpTimeoutSec = 90` en `gateway-watchdog.ps1`. El PR #122 ya dejó ese valor
-en `origin/main`. La compuerta evita que una base equivocada restaure el valor
-de 10 segundos.
+Antes de cada deploy, el script analiza la asignación efectiva de
+`httpTimeoutSec` en `gateway-watchdog.ps1` y exige un entero de al menos 90;
+no depende de espacios ni de una búsqueda literal. También ejecuta la prueba
+focalizada del watchdog. El PR #122 ya dejó el valor en 90 en `origin/main`.
+La compuerta evita que una base futura equivocada restaure los 10 segundos.
 
 Un ciclo exitoso prueba:
 
@@ -292,7 +304,9 @@ vectores creados por `llama.cpp` con vectores creados por Ollama.
 
 Antes de reconstruir, la migración crea y verifica un snapshot SQLite de cada
 base de agente. El recibo relaciona cada agente con su snapshot y con la
-identidad del proveedor anterior.
+identidad del proveedor anterior. Esos snapshots son recuperación ante
+desastre mientras el gateway continúa detenido; dejan de ser una reversa
+ordinaria en cuanto el gateway vuelve a aceptar tráfico.
 
 La verificación hace una consulta cuyo resultado semántico no dependa de una
 coincidencia literal. También confirma que no aparecen eventos nuevos 3033 o
@@ -302,11 +316,20 @@ El directorio de `llama.cpp` se mueve al archivo de cuarentena después de que
 la memoria funcione con Ollama. No se borra durante la misma fase.
 
 Si Ollama falla antes del cambio de configuración, la fase termina sin tocar
-la configuración ni los índices. Si falla después del cambio, la reversa
-detiene el gateway, restaura los snapshots de las bases de agentes y configura
-`memory.search.provider` como `none`. Ese modo conserva la búsqueda léxica y
-no intenta ejecutar `llama.cpp`. La reversa nunca devuelve la configuración a
-`provider: "local"` mientras Code Integrity bloquee el binario.
+la configuración ni los índices. Si falla antes de reabrir el gateway y no
+hubo escrituras desde el snapshot, la reversa puede restaurar las bases. Una
+vez reabierto el tráfico, queda prohibido reemplazar bases completas: la
+reversa detiene el gateway, conserva una copia diagnóstica del índice fallido
+con la herramienta SQLite de OpenClaw, configura `memory.search.provider` y
+`fallback` como `none`, valida y relee la configuración, reconstruye la parte
+léxica si es necesario y reinicia. Así conserva los mensajes nuevos y no
+intenta ejecutar `llama.cpp`.
+
+La configuración temporal con `provider: "none"` y `fallback: "none"` ya pasó
+`openclaw config validate --json` en OpenClaw `2026.9.5`. La prueba operativa
+todavía debe demostrar que `memory_search` entrega resultados léxicos tras la
+reversa. La reversa nunca vuelve a `provider: "local"` mientras Code Integrity
+bloquee el binario.
 
 ## Nodo Windows aislado
 
@@ -409,10 +432,12 @@ Las pruebas automatizadas deben cubrir estos fallos:
 - una sonda fallida restaura solo los archivos del deploy;
 - el manifiesto nunca incluye bases, credenciales, logs o herramientas;
 - un ciclo repetido sin cambios no modifica archivos ni crea commits;
-- un ciclo interrumpido converge al mismo resultado cuando se repite.
+- un ciclo interrumpido converge al mismo resultado cuando se repite;
+- un hash ya protegido no crea un segundo PR;
+- una edición viva posterior al PR no es sobrescrita por el merge anterior;
 - un fallo del repo principal no impide procesar los tres workspaces;
-- el log conserva el marcador final y distingue `SKILLS_PR` de un despliegue
-  que ya llegó a `main`.
+- el log conserva el marcador final y distingue `SKILLS_PR` de
+  `SKILLS_DEPLOYED`.
 
 La aceptación operativa exige evidencia fresca de:
 
@@ -455,9 +480,10 @@ Cada componente tiene una reversa independiente:
 - Sync: deshabilitar `GoncloudRepoSync` y restaurar la versión anterior del
   script desde la copia operativa.
 - Deploy: restaurar los archivos reemplazados desde el staging del ciclo.
-- Memoria: restaurar los snapshots previos de las bases de agentes y usar
-  `provider: "none"` para búsqueda léxica. La reversa no vuelve al
-  `llama.cpp` bloqueado.
+- Memoria: antes de reabrir tráfico, restaurar snapshots solo si no hubo
+  escrituras posteriores. Después de reabrir, preservar la base actual,
+  archivar el índice fallido para diagnóstico y usar `provider: "none"` para
+  búsqueda léxica. La reversa no vuelve al `llama.cpp` bloqueado.
 - Nodo: detener `OpenClaw Node` y restaurar su XML anterior. El gateway no
   depende del nodo para responder mensajes.
 - Limpieza: mover el artefacto desde cuarentena a su ruta registrada.
@@ -473,18 +499,31 @@ decisiones:
 - Aceptado: el deploy pisaba una skill capturada pero todavía no mergeada. El
   diseño ahora protege las rutas pendientes y usa un worktree temporal.
 - Aceptado: la reversa de memoria volvía al `llama.cpp` bloqueado y mezclaba
-  identidades de índice. Ahora restaura snapshots y cae a búsqueda léxica.
+  identidades de índice. Ahora cae a búsqueda léxica sin ejecutar ese binario.
 - Aceptado: el diseño omitía el contrato del log, el vigía y el aislamiento de
   fallos de los otros tres repos. Ahora los conserva y versiona el cambio del
   vigía junto con el script.
-- Rechazado como bloqueante reproducible: `origin/main` no conserva el timeout
-  de 10 segundos. La lectura directa confirma `$httpTimeoutSec = 90`. Se añadió
-  una compuerta para detectar una base futura equivocada.
+- Rechazado: Grok afirmó que `origin/main` conservaba el timeout de 10
+  segundos. La lectura directa confirma `$httpTimeoutSec = 90`. Se añadió una
+  compuerta para detectar una base futura equivocada.
 - Verificado: OpenClaw `2026.9.5` ofrece `backup create --verify` con config,
   credenciales, sesiones y workspaces.
 - Verificado: la configuración viva usa `memory.search`, y la versión instalada
   admite `provider`, `model` y `fallback`. El diseño añade validación y
   read-back antes del reinicio.
+
+Claude revisó únicamente las correcciones posteriores a Grok. Encontró un
+bloqueante reproducible: restaurar una base completa después de reabrir el
+gateway perdería mensajes escritos desde el snapshot. El diseño ahora limita
+esa restauración a la ventana sin tráfico y usa `provider: "none"` sin cambiar
+la base después de reabrir. También incorporó sus observaciones sobre PRs
+duplicados, ediciones vivas posteriores, el token `SKILLS_DEPLOYED`, la
+compuerta del watchdog en cada ciclo y la conservación del índice fallido.
+
+Las comprobaciones de entorno confirmaron además que el host tiene una cuenta
+activa de GitHub con alcance para repo y workflow, y que existe
+`scripts/tests/test-sync-avisa-skills.sh`. Estas comprobaciones habilitan la
+implementación futura, pero no sustituyen sus pruebas ni autorizan el deploy.
 
 ## Decisiones posteriores
 
