@@ -161,8 +161,11 @@ correr_shard() { # $1=valor SAIKIT_SHARD, $2=dir artifact destino; 0 si el runne
   # validador, caso 7) y el resumen de la corrida fallida se publica igual.
   ultimo=$(ls -td "$R"/logs/run-checks/corrida-* 2>/dev/null | head -1)
   if [ -n "$ultimo" ] && [ -f "$ultimo/resumen.txt" ]; then
-    mkdir -p "$dest/logs/run-checks"
-    cp -R "$ultimo" "$dest/logs/run-checks/"
+    # Mismo layout que el upload real (path: logs/run-checks/): las corridas
+    # quedan en la RAIZ del artifact, no bajo logs/run-checks/ (run
+    # 35748762272: el simular otra cosa escondio el caso del gate).
+    mkdir -p "$dest"
+    cp -R "$ultimo" "$dest/"
   fi
   return "$rc"
 }
@@ -182,7 +185,7 @@ validar() { # $1=dir artifacts -> separa salida y rc como el gate
 }
 
 ids_union() { # $1=dir artifacts -> ids de la union, orden C, uno por linea
-  for r in "$1"/shard-*/resumen.txt "$1"/shard-*/logs/run-checks/*/resumen.txt; do
+  for r in "$1"/shard-*/resumen.txt "$1"/shard-*/corrida-*/resumen.txt; do
     [ -f "$r" ] || continue
     awk -F'\t' '$1=="ok" || $1=="falla" {print $4}' "$r"
   done | LC_ALL=C sort
@@ -223,7 +226,7 @@ rm -rf "$T/dup"; cp -R "$T/ok" "$T/dup"
 # Las filas de shard-1 se cuelan DENTRO de la unica corrida de shard-2: la
 # union repite ids sin que haya una segunda corrida en el artifact (eso lo
 # cubre el caso 7; aqui lo duplicado es la entrada, no la corrida).
-cat "$T/dup/shard-1/logs/run-checks/"*/resumen.txt >>"$T/dup/shard-2/logs/run-checks/"*/resumen.txt
+cat "$T/dup/shard-1/corrida-"*/resumen.txt >>"$T/dup/shard-2/corrida-"*/resumen.txt
 validar "$T/dup"
 [ "$RC_VALIDADOR" -ne 0 ] || fail "(4) el validador acepto ids duplicados:
 $SALIDA_VALIDADOR"
@@ -238,13 +241,13 @@ echo "(5) una falla del runner vuelve rojo el agregador"
 # acumulara, el rechazo seria por re-corrida (caso 7); ninguno de los dos
 # demostraria lo que este caso mide (la fila en falla).
 rm -rf "$T/rojo"; cp -R "$T/ok" "$T/rojo"
-rm -rf "$T/rojo/shard-3/logs/run-checks"
+rm -rf "$T/rojo/shard-3"/corrida-*
 cp scripts/tests/fixtures/runner-shards/roja.sh "$R/scripts/tests/test-roja.sh"
 correr_shard 3/3 "$T/rojo/shard-3"
 rc_roja=$?
 rm -f "$R/scripts/tests/test-roja.sh"
 [ "$rc_roja" -ne 0 ] || fail "(5) el shard con la prueba roja salio 0"
-RES_ROJO=$(ls -td "$T/rojo/shard-3"/logs/run-checks/*/resumen.txt 2>/dev/null | head -1)
+RES_ROJO=$(ls -td "$T/rojo/shard-3"/corrida-*/resumen.txt 2>/dev/null | head -1)
 grep -q '^falla' "$RES_ROJO" || fail "(5) el resumen del shard rojo no trae la fila en falla:
 $(cat "$RES_ROJO")"
 validar "$T/rojo"
@@ -325,7 +328,7 @@ echo "ok (10): falta shard-3 -> rechazo"
 
 echo "(11) resumenes vacios (cero pruebas) son rechazados"
 rm -rf "$T/vacios"; cp -R "$T/ok" "$T/vacios"
-: >"$T/vacios/shard-1/logs/run-checks/"*/resumen.txt; : >"$T/vacios/shard-2/logs/run-checks/"*/resumen.txt; : >"$T/vacios/shard-3/logs/run-checks/"*/resumen.txt
+: >"$T/vacios/shard-1/corrida-"*/resumen.txt; : >"$T/vacios/shard-2/corrida-"*/resumen.txt; : >"$T/vacios/shard-3/corrida-"*/resumen.txt
 validar "$T/vacios"
 [ "$RC_VALIDADOR" -ne 0 ] || fail "(11) el validador acepto resumenes VACIOS (cero pruebas corridas):
 $SALIDA_VALIDADOR"
@@ -336,7 +339,7 @@ $SALIDA_VALIDADOR"
 echo "ok (11): un shard que no corrio nada no da verde"
 
 echo "(12) un artifact esperado sin su resumen.txt es rechazado"
-rm -rf "$T/sinlog"; cp -R "$T/ok" "$T/sinlog"; rm -f "$T/sinlog/shard-2/logs/run-checks/"*/resumen.txt
+rm -rf "$T/sinlog"; cp -R "$T/ok" "$T/sinlog"; rm -f "$T/sinlog/shard-2/corrida-"*/resumen.txt
 validar "$T/sinlog"
 [ "$RC_VALIDADOR" -ne 0 ] || fail "(12) el validador acepto un artifact sin resumen:
 $SALIDA_VALIDADOR"
@@ -346,7 +349,7 @@ echo "ok (12): artifact sin resumen -> rechazo"
 
 echo "(13) una prueba no inventariada en la union es rechazada"
 rm -rf "$T/intruso"; cp -R "$T/ok" "$T/intruso"
-printf 'ok\t1\t0\ttest-intruso.sh\t-\n' >>"$T/intruso/shard-3/logs/run-checks/"*/resumen.txt
+printf 'ok\t1\t0\ttest-intruso.sh\t-\n' >>"$T/intruso/shard-3/corrida-"*/resumen.txt
 validar "$T/intruso"
 [ "$RC_VALIDADOR" -ne 0 ] || fail "(13) el validador acepto una prueba FUERA del inventario:
 $SALIDA_VALIDADOR"
