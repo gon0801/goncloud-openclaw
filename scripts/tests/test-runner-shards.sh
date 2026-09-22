@@ -174,7 +174,7 @@ run_runner 3/3 "$T/t8"
 esperar "$T/t8" "bateria-summa bateria-tablero corpus nuevo resto-a resto-b roja sintaxis-summa sintaxis-tablero" "(5) shard 3/3 con la roja"
 n=$(grep -c '^roja$' "$T/t8")
 [ "$n" -eq 1 ] || fail "(5) la prueba roja se ejecuto $n veces (esperaba 1): el runner no puede re-ejecutarla para diagnosticar"
-LOG_ROJA="$T/logs/run-checks/test-roja.sh.log"
+LOG_ROJA=$(ls -td "$T"/logs/run-checks/corrida-*/test-roja.sh.log 2>/dev/null | head -1)
 [ -f "$LOG_ROJA" ] || fail "(5) falta el log de la prueba roja: $LOG_ROJA"
 grep -q 'PRIMERA SALIDA UNICA DE LA ROJA' "$LOG_ROJA" || fail "(5) el log no conserva la primera salida:
 $(cat "$LOG_ROJA")"
@@ -183,7 +183,7 @@ $(cat "$LOG_ROJA")"
 grep -q 'PRIMERA SALIDA UNICA DE LA ROJA' <<<"$SALIDA" || fail "(5) la salida del runner no muestra la primera salida de la roja"
 grep -q 'FALLA test-roja.sh' <<<"$SALIDA" || fail "(5) la salida no reporta la FALLA:
 $SALIDA"
-RES="$T/logs/run-checks/resumen.txt"
+RES=$(ls -td "$T"/logs/run-checks/corrida-*/resumen.txt 2>/dev/null | head -1)
 [ -f "$RES" ] || fail "(5) falta $RES"
 awk -F'\t' 'BEGIN{ok=0} $1=="falla" && $3=="7" && $4=="test-roja.sh"{ok=1} END{exit ok?0:1}' "$RES" \
   || fail "(5) resumen.txt no registro la falla con su exit code:
