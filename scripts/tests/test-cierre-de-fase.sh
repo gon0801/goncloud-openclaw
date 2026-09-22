@@ -726,4 +726,20 @@ printf '%s' "$out" | grep -q "^VERDE *entregables" \
 $out"
 echo "ok (14c): un documento de progreso sin carriles se declara, no se da por bueno"
 
+# (14d) Un entregable ATORADO no esta terminado. Medido el 2026-09-22: el check
+# contaba atorado como terminal, y una instalacion que revienta (pg_isready
+# caido, copia parcial) producia cierre VERDE con el entregable a medias. Un
+# carril atorado es un entregable pendiente con nombre y motivo: ROJO.
+entregables atorado mergeado null
+out=$(CIERRE_SIN_GATEWAY=1 corre 5); rc=$?
+[ "$rc" -eq 1 ] || fail "(14d) con la instalacion atorada el cierre debe salir 1; salio $rc:
+$out"
+printf '%s' "$out" | grep -q "^ROJO *entregables" \
+  || fail "(14d) un entregable atorado debe salir ROJO, no contarse como terminado:
+$out"
+printf '%s' "$out" | grep -q "Instalacion" \
+  || fail "(14d) el detalle debe nombrar el carril Instalacion:
+$out"
+echo "ok (14d): un entregable atorado es un entregable pendiente, no terminado"
+
 echo "TODO VERDE: cierre-de-fase"

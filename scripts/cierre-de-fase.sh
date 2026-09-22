@@ -406,7 +406,8 @@ fi
 # carril que no llego a estado terminal es un entregable sin terminar y bloquea el cierre,
 # aunque todos los PR de la fase digan MERGED. Sin documento no hay entregables declarados
 # y la fase no se bloquea por lo que no declaro; un documento ilegible o sin carriles se
-# declara unknown, mismo falso verde que (12g) mato en el tablero publicado.
+# declara unknown, mismo falso verde que (12g) mato en el tablero publicado. Un
+# carril ATORADO tampoco esta terminado: es un entregable pendiente con motivo.
 if [ "$ref_ok" = "0" ]; then
   linea unknown entregables "no pude leer $REF; no se que entregables declara la fase $FASE"
 elif [ -z "$doc" ]; then
@@ -416,7 +417,11 @@ else
   # al fallar o vencer sale el string JSON vacio y el check cae en unknown (la rama *).
   det=$(printf '%s' "$doc" | timeout 30 python3 -c '
 import json, sys
-TERMINALES = {"mergeado", "atorado", "revertido", "omitido"}
+# atorado NO cuenta: una instalacion o un simulacro atorados son justamente el
+# entregable pendiente (medido 2026-09-22: con la instalacion atorada el cierre
+# salia VERDE). Terminal aqui es: hecho, revertido declarado u omitido por el
+# operador; lo demas es un entregable con nombre y motivo.
+TERMINALES = {"mergeado", "revertido", "omitido"}
 try:
     d = json.loads(sys.stdin.read())
 except Exception:
