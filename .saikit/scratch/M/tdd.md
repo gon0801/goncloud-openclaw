@@ -740,3 +740,9 @@ VERDE local (no-op fuera de Windows): manifest, atomic, protected-paths.
 Nota: test-corrida-nucleo fallo en CI4 shard-1 (TUI/tmux, 140s) sin
 relacion de codigo con este diff (grep vacio), verde en CI3 y en Mac:
 se clasifica flaky pendiente de re-evaluacion en CI5.
+
+F18 (CRLF de powershell.exe vs LF del espejo): CI5 (5) reporto
+`desacuerdo ... espejo=deployable modulo=deployable`: veredictos
+identicos salvo el CR que 5.1 emite por stdout redirigido. Fix:
+`tr -d '\r'` a got.txt antes de comparar (no-op en PS7/Linux).
+Barrido: unico sitio que compara texto PS exacto contra espejo.

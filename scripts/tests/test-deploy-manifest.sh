@@ -294,6 +294,9 @@ PS1
   "$PSH" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$T/acuerdo.ps1" \
     -ModulePath "$MODN" -ManifestPath "$MANN" -FixturesPath "$T/fixtures.txt" >"$T/got.txt" 2>"$T/acuerdo.err" \
     || fail "(5) acuerdo PS fallo: $(cat "$T/acuerdo.err")"
+  # powershell.exe emite CRLF y el espejo LF: sin strip, veredictos
+  # identicos discrepan por el CR (CI5).
+  tr -d '\r' <"$T/got.txt" >"$T/got.lf" && mv "$T/got.lf" "$T/got.txt"
   [ "$(wc -l <"$T/got.txt" | tr -d ' ')" -eq 16 ] \
     || fail "(5) el modulo devolvio lineas de mas o de menos: $(cat "$T/got.txt")"
   paste -d'|' "$T/fixtures.txt" "$T/esp.txt" "$T/got.txt" >"$T/cmp.tsv"
