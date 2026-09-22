@@ -421,9 +421,9 @@ despacha d-ok "$T/d-ok" || fail "(3a) dispatch debio salir 0: $(cat "$T/d-ok.out
 GEN_OK=$(grep -a '^generation=' "$T/d-ok.out" | cut -d= -f2)
 printf '%s' "$GEN_OK" | grep -qE '^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}$' \
   || fail "(3a) generation con forma rara: $GEN_OK"
-grep -q -a "^receipt=$T/d-ok/receipts/cutover-$GEN_OK.json" "$T/d-ok.out" \
+tr '\\' '/' <"$T/d-ok.out" | grep -q -a "^receipt=$T/d-ok/receipts/cutover-$GEN_OK.json" \
   || fail "(3a) sin ruta de recibo determinista: $(cat "$T/d-ok.out")"
-grep -q -a "^state=$T/d-ok/state.json" "$T/d-ok.out" \
+tr '\\' '/' <"$T/d-ok.out" | grep -q -a "^state=$T/d-ok/state.json" \
   || fail "(3a) sin ruta de estado: $(cat "$T/d-ok.out")"
 [ -f "$T/d-ok/lease.json" ] || fail "(3a) falta lease.json"
 [ -f "$T/d-ok/state.json" ] || fail "(3a) falta state.json"
