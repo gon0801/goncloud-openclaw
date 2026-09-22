@@ -53,7 +53,7 @@ Decisiones del dueño (2026-09-15), fila 6.8 de Plans.md:
 
 1. main coordina y le reporta a David; nunca mergea ni toca el servidor directamente.
 2. Cambios de código van a la cadena de calidad (implementer → verifier → adversary → reviewer); servidor y deploy van a ingenieria; negocio va a operaciones.
-3. Nada se mergea sin autorización explícita de David; puede ser una orden fechada por tarea o una preaprobación versionada con alcance cerrado para una fase. La corrida debe guardar una `authorization_ref` comprobable a esa preaprobación; recibos, revisiones y CI acreditan calidad, pero no crean autoridad. Donde mergear ya despliega (openclaw y los 3 workspaces, por el sync) la autorización es una sola: "merge y deploy".
+3. Nada se mergea sin autorización explícita de David; puede ser una orden fechada por tarea o una preaprobación versionada con alcance cerrado para una fase. La corrida debe guardar una `authorization_ref` comprobable a esa preaprobación; recibos, revisiones y CI acreditan calidad, pero no crean autoridad. Donde mergear ya despliega (openclaw y los 3 workspaces, por el sync) la autorización es una sola: "merge y deploy". Fase 16 es la excepción durante la migración: la autorización para mergear su implementación no autoriza el corte vivo. Ingeniería necesita otra `authorization_ref` que nombre la ventana operativa y el SHA ya integrado antes de cambiar el host Windows.
 4. Nada se reporta como "listo" sin haberse verificado antes con la prueba del repo (`verify/`) cuando existe.
 
 ## Propiedad del runtime Windows

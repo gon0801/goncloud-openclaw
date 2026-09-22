@@ -242,6 +242,15 @@ estado vivo para ampliar la lista de lo que sube. Antes de reemplazar una ruta
 desplegable compara sus bytes contra el último recibo: un delta vivo que no sea
 capturable queda intacto y genera alerta.
 
+La ausencia de una ruta que el último recibo desplegó también es un delta vivo.
+El sync registra un tombstone protegido y no recrea el archivo. Si la ruta es
+una skill capturable, el capturador crea un PR con `git rm` y aplica las mismas
+reglas de hash, PR pendiente y sucesor. Para configuración, plugins,
+`gateway-watchdog.ps1` y cualquier ruta no capturable, el tombstone produce
+`CONFLICTO`, permanece protegido y espera una decisión explícita; nunca genera
+un commit automático. Un merge posterior no repone esa ruta mientras el
+tombstone siga protegido.
+
 ### Validación y reversa
 
 El deploy prepara cada archivo fuera de su destino. Antes de publicar ejecuta
@@ -352,10 +361,15 @@ El alta tendrá estos pasos:
    y la inferencia local si esas capacidades no forman parte de la lista de
    comandos aprobada.
 3. Antes de emparejar, configurar las aprobaciones locales del nodo en modo
-   allowlist, sin comodines ni wrappers de shell. `system.run` se limita a los
-   ejecutables y directorios de trabajo que CUA necesite; un `cmd.exe /c` no
-   listado debe ser rechazado. El emparejamiento y la aprobación de superficie
-   no sustituyen esta política local.
+   allowlist, sin comodines ni wrappers de shell. Cada entrada de `system.run`
+   fija ejecutable, directorio de trabajo y argv exacto. Cuando un argumento
+   deba variar, la aprobación usa un `argPattern` anclado, construido con
+   escapes literales y probado contra casos permitidos y rechazados; no acepta
+   regex con repetición anidada. No queda ninguna entrada path-only para el
+   mismo ejecutable que pueda actuar como fallback. Intérpretes, `cmd.exe /c`
+   y cualquier variante de argumentos no aprobada deben ser rechazados. El
+   emparejamiento y la aprobación de comandos anunciados no sustituyen esta
+   política local.
 4. Generar un código de emparejamiento de un solo uso desde el gateway.
 5. Ejecutar una vez `openclaw node run --pair <codigo>` en primer plano bajo
    el estado aislado, aprobar el dispositivo y la superficie de comandos, y
@@ -456,11 +470,17 @@ Las pruebas automatizadas deben cubrir estos fallos:
 - una edición viva posterior al PR no es sobrescrita por el merge anterior;
 - una rama de captura no escribible crea un PR sucesor enlazado;
 - un delta vivo posterior a un merge se captura antes de desplegar esa ruta;
+- una skill eliminada crea un tombstone y un PR con `git rm`, y no reaparece
+  mientras el PR siga pendiente o cerrado sin merge;
+- una configuración o `gateway-watchdog.ps1` eliminados crean un tombstone y
+  `CONFLICTO`, no un commit, y no se recrean sin decisión explícita;
 - un timeout mal formado o menor que 90 aborta cada deploy, mientras que un
   entero mayor o igual a 90 pasa aunque cambie el formato;
 - un fallo del repo principal no impide procesar los tres workspaces;
 - el log conserva el marcador final y distingue `SKILLS_PR` de
   `SKILLS_DEPLOYED`.
+- una aprobación de `system.run` acepta solo el argv esperado; cambiar un
+  argumento, usar un intérprete o dejar una entrada path-only falla cerrado.
 
 La aceptación operativa exige evidencia fresca de:
 
