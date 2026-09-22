@@ -89,7 +89,9 @@ function Invoke-CutoverSchtasks {
 
 function Test-CutoverTaskExists {
   param([Parameter(Mandatory = $true)][string]$Name)
-  & schtasks /query /tn $Name 2>&1 | Out-Null
+  # EAP temporal (CI22): stderr de schtasks no lanza en 5.1; manda el exit.
+  $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  try { & schtasks /query /tn $Name 2>&1 | Out-Null } finally { $ErrorActionPreference = $prevEAP }
   return ($LASTEXITCODE -eq 0)
 }
 
@@ -99,7 +101,9 @@ function Invoke-CutoverStep {
     [Parameter(Mandatory = $true)][string[]]$SchtasksArgs,
     [Parameter(Mandatory = $true)]$Commands
   )
-  $out = (& schtasks @SchtasksArgs 2>&1 | Out-String)
+  # EAP temporal (CI22): stderr de schtasks no lanza en 5.1; manda el exit.
+  $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  try { $out = (& schtasks @SchtasksArgs 2>&1 | Out-String) } finally { $ErrorActionPreference = $prevEAP }
   [void]$Commands.Add([PSCustomObject]@{ name = $Step; exit = $LASTEXITCODE })
   if ($LASTEXITCODE -ne 0) {
     throw ("{0}: schtasks salio {1}: {2}" -f $Step, $LASTEXITCODE, (Remove-SecretValue -Text $out))
@@ -436,7 +440,9 @@ if ($Dispatch) {
   }
   Write-CutoverTextAtomic -Content $leaseJson -Path $leasePath
   Write-CutoverTextAtomic -Content $stateJson -Path $statePath
-  & schtasks /run /tn $TaskName 2>&1 | Out-Null
+  # EAP temporal (CI22): stderr de schtasks no lanza en 5.1; manda el exit.
+  $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  try { & schtasks /run /tn $TaskName 2>&1 | Out-Null } finally { $ErrorActionPreference = $prevEAP }
   if ($LASTEXITCODE -ne 0) {
     Write-Output 'aviso: /run del one-shot fallo, dispara por backstop /st'
   }
@@ -687,7 +693,9 @@ if ($Run) {
           }
           if (-not $recovered) { Add-CutoverObservation -List $observations -Text 'recuperacion: salud sin verde' }
         }
-        & schtasks /change /tn $WatchdogTask /enable 2>&1 | Out-Null
+        # EAP temporal (CI22): stderr de schtasks no lanza en 5.1; manda el exit.
+        $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        try { & schtasks /change /tn $WatchdogTask /enable 2>&1 | Out-Null } finally { $ErrorActionPreference = $prevEAP }
         if ($LASTEXITCODE -eq 0) {
           [void]$commands.Add([PSCustomObject]@{ name = 'watchdog-enable-recuperacion'; exit = 0 })
         } elseif ($stopDone) {
