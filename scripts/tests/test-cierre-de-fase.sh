@@ -821,4 +821,19 @@ printf '%s' "$out" | grep -q "^ROJO *entregables" \
 $out"
 echo "ok (14h): un estado desconocido jamas produce VERDE"
 
+# (14i) Documento versionado PERO ilegible: es unknown, jamas el VERDE de "sin
+# documento". Reproducido por el revisor del bloque C: con un doc de 0 bytes el
+# cierre salia VERDE tratandolo como fase sin tablero.
+: >"$R/.saikit/progress/5.json"
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m entregables-doc-vacio
+git -C "$R" push -q -f origin HEAD:main
+out=$(CIERRE_SIN_GATEWAY=1 corre 5)
+printf '%s' "$out" | grep -q "^unknown *entregables" \
+  || fail "(14i) un documento versionado ilegible debe declararse unknown:
+$out"
+printf '%s' "$out" | grep -q "^VERDE *entregables" \
+  && fail "(14i) no pude leer los entregables no puede salir VERDE:
+$out"
+echo "ok (14i): documento presente pero ilegible es unknown, no verde por vacio"
+
 echo "TODO VERDE: cierre-de-fase"

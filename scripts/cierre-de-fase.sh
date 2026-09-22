@@ -411,7 +411,15 @@ fi
 if [ "$ref_ok" = "0" ]; then
   linea unknown entregables "no pude leer $REF; no se que entregables declara la fase $FASE"
 elif [ -z "$doc" ]; then
-  linea VERDE entregables "sin documento de progreso; sin entregables declarados"
+  # Distinto de la rama de (7): si el documento EXISTE versionado pero no se
+  # pudo leer (vacio, corrupto), no es "sin entregables declarados" sino un
+  # unknown (CodeRabbit/revisor 2026-09-22: con un doc de 0 bytes el cierre
+  # salia VERDE).
+  if [ "${habia:-0}" = "1" ]; then
+    linea unknown entregables "la fase $FASE tiene documento versionado pero no se pudo leer"
+  else
+    linea VERDE entregables "sin documento de progreso; sin entregables declarados"
+  fi
 else
   # timeout 30 (F1): un python3 colgado del PATH no puede trabar el cierre. Fallback r2:
   # al fallar o vencer sale el string JSON vacio y el check cae en unknown (la rama *).
