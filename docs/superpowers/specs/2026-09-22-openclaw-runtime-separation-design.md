@@ -211,8 +211,10 @@ anterior cuando el PR siga abierto.
 
 ### Manifiesto de despliegue
 
-Un manifiesto versionado define qué archivos del repo pueden llegar al estado
-vivo. El manifiesto excluye al menos:
+Un manifiesto versionado y cerrado define qué raíces y archivos concretos del
+repo pueden llegar al estado vivo. Todo lo no incluido se rechaza por defecto;
+la lista positiva no se deriva de todos los archivos versionados. Además aplica
+una denylist dura que excluye al menos:
 
 ```text
 .git/**
@@ -234,9 +236,11 @@ node.cmd
 node.vbs
 ```
 
-El implementador debe derivar la lista positiva a partir de los archivos
-versionados y aplicar las exclusiones. No debe recorrer el estado vivo para
-decidir qué subir.
+El implementador clasifica cada archivo versionado como desplegable o rechazado
+y las pruebas fallan si aparece uno nuevo sin decisión. No debe recorrer el
+estado vivo para ampliar la lista de lo que sube. Antes de reemplazar una ruta
+desplegable compara sus bytes contra el último recibo: un delta vivo que no sea
+capturable queda intacto y genera alerta.
 
 ### Validación y reversa
 
@@ -347,10 +351,21 @@ El alta tendrá estos pasos:
 2. Crear una configuración mínima. Debe deshabilitar la publicación de skills
    y la inferencia local si esas capacidades no forman parte de la lista de
    comandos aprobada.
-3. Generar un código de emparejamiento de un solo uso desde el gateway.
-4. Instalar `OpenClaw Node` con `--pair` bajo el estado aislado.
-5. Aprobar únicamente la lista de comandos que requiera CUA en Windows.
-6. Confirmar que la acción de la tarea conserva el estado aislado después de
+3. Antes de emparejar, configurar las aprobaciones locales del nodo en modo
+   allowlist, sin comodines ni wrappers de shell. `system.run` se limita a los
+   ejecutables y directorios de trabajo que CUA necesite; un `cmd.exe /c` no
+   listado debe ser rechazado. El emparejamiento y la aprobación de superficie
+   no sustituyen esta política local.
+4. Generar un código de emparejamiento de un solo uso desde el gateway.
+5. Ejecutar una vez `openclaw node run --pair <codigo>` en primer plano bajo
+   el estado aislado, aprobar el dispositivo y la superficie de comandos, y
+   detener el proceso solo cuando la identidad durable haya quedado guardada.
+   El código no se registra en argumentos de una tarea ni en evidencia.
+6. Instalar `OpenClaw Node` sin `--pair`, con la misma lista exacta de comandos
+   y el mismo `OPENCLAW_STATE_DIR`. OpenClaw no admite `node install --pair`
+   deliberadamente, porque persistiría un bearer de corta vida.
+7. Aprobar únicamente la lista de comandos que requiera CUA en Windows.
+8. Confirmar que la acción de la tarea conserva el estado aislado después de
    cerrar la terminal que hizo la instalación.
 
 La lista inicial de comandos será:
@@ -477,9 +492,9 @@ simbólicos y destinos fuera de `C:\Users\ehven\.openclaw`. La captura aplica
 las mismas reglas antes de leer un archivo del estado vivo.
 
 El merge y el despliegue requieren autorización explícita del propietario de
-acuerdo con `docs/spec/00-project-spec.md`. La petición actual autoriza el
-diseño y la revisión cruzada. No autoriza todavía el merge ni el despliegue de
-la implementación.
+acuerdo con `docs/spec/00-project-spec.md`. La petición posterior autoriza que
+Muse implemente el cambio versionado y que Codex lo revise. No autoriza todavía
+el merge ni el despliegue de la implementación.
 
 ## Reversas
 

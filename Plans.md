@@ -594,3 +594,35 @@ Plan: `docs/superpowers/plans/2026-09-19-native-harness-orchestration.md` (Tasks
   scope: Fase 14 / todas las tareas.
 
 No hay `config patch`, no hay reinicio del gateway, no hay push a la rama por defecto, no hay merge fuera del kit y ningún secreto sale en briefs ni en evidencia commiteada.
+
+## Fase 16 — Separación del runtime Windows de OpenClaw
+
+Fecha de planificación: 2026-09-22. Plan: `docs/superpowers/plans/2026-09-22-openclaw-runtime-separation.md`. Diseño corregido: `docs/superpowers/specs/2026-09-22-openclaw-runtime-separation-design.md`. Runbook: `docs/runbooks/autopilot-fase16.md`.
+
+**Qué construye.** Muse implementa en un solo carril el contrato versionado, pruebas, despliegue por allowlist, captura de skills por PR, memoria Ollama, nodo aislado y transacción recuperable. Codex revisa el PR antes de cualquier efecto vivo. Ingeniería hace el corte Windows únicamente con una autorización posterior que nombre merge y ventana operativa. Esta fase reemplaza hacia adelante el contrato histórico de Fase 13 que escribía `SKILLS` y ejecutaba Git dentro de `.openclaw`; no reescribe sus filas cerradas.
+
+### Spec delta
+
+`docs/spec/00-project-spec.md` incorpora propiedad estable de source/runtime/nodo, despliegue por manifiesto, cuarentena y reversa de memoria. El diseño corrige el flujo del nodo: OpenClaw no admite `node install --pair`; el alta usa `node run --pair` en primer plano, política local restrictiva y después instala el servicio sin persistir el bearer.
+
+| Task | Contenido | DoD | Depends | Status |
+|---|---|---|---|---|
+| 16.1 | `[lane:Muse] [tdd:required]` **Contratos y CI 2026.9.5.** Receipt/layout estrictos, escritura atómica, roots separados, target CI correcto y contrato Windows focalizado. | Tests receipt/layout rojos y verdes; CI instala 2026.9.5; gate completo depende de tres shards Linux y Windows-contract | - | cc:TODO |
+| 16.2 | `[lane:Muse] [tdd:required]` **Manifiesto, deploy e higiene.** Allowlist cerrada más denylist dura, path safety, staging/journal/rollback por archivo, parser watchdog ≥90; retirar de HEAD artefactos generados/confidenciales y basura confirmada sin reescribir historia. | Todos los paths trackeados clasificados; sentinels y escapes rechazados; read-back/rollback verdes; scan redactado y regression de higiene verde | 16.1 | cc:TODO |
+| 16.3 | `[lane:Muse] [tdd:required]` **Sync, ledger y vigía v3.** Checkout fuente, mutex, journal, captura egress-safe por PR, hashes/tombstones protegidos, cuatro repos y tokens `SKILLS_PR`/`SKILLS_DEPLOYED`. | Concurrencia/crash/idempotencia convergen; no push a main; fallo de repo no salta los otros; último ciclo y exit global correctos; watcher notifica una vez | 16.2 | cc:TODO |
+| 16.4 | `[lane:Muse] [tdd:required]` **Backup y memoria.** Backup real restaurable, ACL/espacio/recibos; Ollama versionado con hash/firma/publisher, loopback, digest local, índices por agente y reversa léxica post-tráfico. | Políticas y state machine verdes; no pipe-to-shell, `llama.cpp`, cambio de modelos conversacionales ni restore completo post-tráfico | 16.1 | cc:TODO |
+| 16.5 | `[lane:Muse] [tdd:required]` **Nodo y cuarentena.** Estado aislado, exec allowlist local antes del pairing, superficie exacta, instalación sin `--pair`, tarea duplicada exportada y cuarentena reversible sin delete. | `cmd.exe /c` no listado se rechaza; no SQLite compartida ni bearer persistido; fixtures de inventario/restauración verdes | 16.1, 16.4 | cc:TODO |
+| 16.6 | `[lane:Muse] [tdd:required]` **Transacción y verdad operativa.** Scheduled Task desacoplada, lease coordinado con watchdog y dead-man independiente, timeouts/resume, `DONE/ROLLED_BACK`; bootstrap sin sync viejo; base runbook/verify actualizados atómicamente. | Test mata el proceso tras detener gateway y prueba que el dead-man reactiva watchdog/gateway y deja recibo; `.openclaw` nunca vuelve a ser instruido como repo; hooks pasan | 16.2–16.5 | cc:TODO |
+| 16.7 | `[lane:Codex] [tdd:skip:review]` **PR y revisión.** Muse publica un PR desde `origin/main`; batería completa una vez en CI; Codex hace revisión agrupada y Muse corrige aceptados. | Head final con CI/gate verdes, `git log origin/main..HEAD` limpio, `APPROVE Codex <sha>` y cero bloqueantes reproducibles | 16.1–16.6 | cc:TODO |
+| 16.8 | `[lane:ingenieria] [tdd:skip:operacion-viva]` **Corte Windows y aceptación.** Preflight, transacción de backup, checkout/deploy/sync, Ollama/memoria, nodo, soak, cuarentena y cierre con recibos. | Solo con authorization_ref posterior; dos ciclos idempotentes, health 200, memoria semántica, nodo 2026.9.5 conectado 15 min, cero eventos CI nuevos y cero borrados | 16.7, autorización explícita de merge y operación | cc:TODO |
+
+### Clasificación
+
+**Required ahora:** 16.1–16.7. **Required después de autorización:** 16.8. **Optional/deferred:** borrar cuarentena tras siete días, mover workspaces, fallback remoto y ampliar superficie del nodo. **Reject:** merge/deploy bajo la orden actual, Git en estado vivo, `git add -A` principal, Code Integrity/Defender relajados, `node install --pair`, exec abierto, secretos en evidencia, borrado, history rewrite o migración de workspaces.
+
+### 事前確認 de Fase 16
+
+- Evento: branch/worktree `fase16/runtime-separation`, tests focalizados, hooks, push y apertura/actualización de un PR; lectura de docs oficiales y checks. Razón: implementación completa por Muse y batería final en CI. Scope: 16.1–16.7. Estado: aprobado por el pedido de David de que Muse implemente y Codex revise.
+- Evento: merge, push a main, deploy, instalación, config, pairing, cambios de tareas, movimiento de `.git` o cuarentena en Windows. Razón: 16.8. Scope: host vivo. Estado: **no aprobado**; requiere un `authorization_ref` posterior, explícito y cerrado.
+
+No se leen secretos en general, no se imprime contenido sensible y no se cambia power policy, reinicia ni cierra sesión. Una dependencia roja detiene su carril en el último recibo verde; no se pregunta durante trabajo reversible ya aprobado.
