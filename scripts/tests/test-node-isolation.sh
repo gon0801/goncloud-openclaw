@@ -93,7 +93,7 @@ elif args[:2] == ["nodes", "pending"]:
     print(json.dumps([{"requestId": "req-1", "displayName": "Windows CUA"}]))
 elif args[:2] == ["nodes", "approve"]:
     w(f"openclaw nodes approve {args[2]}")
-    print(json.dumps({"nodeId": "node-1"}))
+    print(json.dumps({"nodeId": os.environ.get("OC_APPROVE_ID", "node-1")}))
 elif args[:2] == ["approvals", "set"]:
     src = args[args.index("--file") + 1]
     w(f"openclaw approvals set --file {src} node={args[args.index('--node') + 1]}")
@@ -239,6 +239,10 @@ else
   [ "$(grep -n 'PAIR_USED=1' "$OC_LOG" | cut -d: -f1)" -lt "$(grep -n 'node install' "$OC_LOG" | cut -d: -f1)" ] \
     || fail "(2b) install antes que run"
   grep -q 'approvals set' "$OC_LOG" || fail "(2b) sin approvals set"
+  [ "$(grep -n 'approvals set' "$OC_LOG" | cut -d: -f1)" -lt "$(grep -n 'PAIR_USED=1' "$OC_LOG" | cut -d: -f1)" ] \
+    || fail "(2b) pairing arranco antes de approvals set"
+  [ "$(grep -n 'approvals get' "$OC_LOG" | cut -d: -f1)" -lt "$(grep -n 'PAIR_USED=1' "$OC_LOG" | cut -d: -f1)" ] \
+    || fail "(2b) pairing arranco antes de approvals readback"
   "$PYBIN" - "$OC_CAPTURE" <<'PY' || exit 1
 import json, sys
 up = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -316,6 +320,12 @@ else
   OC_NODE_MODE="absent" corre nonode 1 \
     && fail "(2f) oficial ausente debio frenar y salio 0"
   echo "ok (2f): duplicada idempotente, oficial obligatoria"
+
+  # (2g) Approve ajeno al pre-aprobado: frena.
+  OC_APPROVE_ID="node-2" corre wrongdev 1 \
+    && fail "(2g) approve ajeno debio frenar y salio 0"
+  grep -q 'aprobado ajeno' "$T/wrongdev.out" || fail "(2g) no nombra el desajuste"
+  echo "ok (2g): approve ajeno al pre-aprobado frena"
 fi
 
 # (2h) Version vieja: report-only avisa, apply frena.

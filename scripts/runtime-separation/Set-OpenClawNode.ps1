@@ -4,10 +4,12 @@
 # escribe nada. Con -Apply crea el estado aislado con ACL restringida (sin
 # SQLite del gateway), aplica la config minima exacta con relectura, valida
 # la allowlist local (sin comodines ni shells, argv exacto o argPattern
-# anclado con casos, sin repeticion anidada), empareja una vez en primer
-# plano con `node run --pair` (el codigo jamas se registra), aprueba
-# dispositivo + superficie exacta de 8 comandos, instala sin --pair bajo el
-# mismo estado, exporta y borra la duplicada, verifica la oficial habilitada
+# anclado con casos, sin repeticion anidada), lee la identidad del
+# dispositivo, aplica y relee la allowlist sobre esa identidad, y SOLO
+# entonces empareja una vez en primer plano con `node run --pair` (el
+# codigo jamas se registra), aprueba el dispositivo pre-aprobado +
+# superficie exacta de 8 comandos, instala sin --pair bajo el mismo
+# estado, exporta y borra la duplicada, verifica la oficial habilitada
 # con logon trigger y estado aislado, reinicia y espera conexion + 2026.9.5.
 # Salidas: 0 ok, 1 freno, 2 herramienta ausente.
 # Produccion: -NodeStateDir C:\Users\ehven\.openclaw-node -NodeUser ehven.
@@ -171,8 +173,9 @@ try {
 
   if (-not $Apply) {
     Write-Output 'plan nodo: estado fresco + icacls + config minima exacta'
+    Write-Output 'plan nodo: node identity + approvals set + readback'
     Write-Output 'plan nodo: node run --pair en primer plano (codigo redactado)'
-    Write-Output 'plan nodo: nodes approve + approvals set + readback'
+    Write-Output 'plan nodo: nodes approve del pre-aprobado'
     Write-Output 'plan nodo: node install sin --pair bajo el mismo estado'
     Write-Output 'plan nodo: exportar+borrar duplicada, verificar oficial'
     Write-Output 'plan nodo: reinicio + connected + 2026.9.5 + 8 comandos'
@@ -244,6 +247,47 @@ try {
     } elseif ($NoTls) {
       $gwArgs += @('--no-tls')
     }
+    $deviceId = ''
+    $deadline = [DateTime]::UtcNow.AddSeconds($PairTimeoutSec)
+    while ([DateTime]::UtcNow -lt $deadline) {
+      $idRaw = (& openclaw node identity --json 2>&1)
+      if ($LASTEXITCODE -eq 0) {
+        $ident = $null
+        try { $ident = (($idRaw | Out-String) | ConvertFrom-Json) } catch { $ident = $null }
+        if ($null -ne $ident -and -not [string]::IsNullOrEmpty($ident.deviceId)) {
+          $deviceId = [string]$ident.deviceId
+          break
+        }
+      }
+      Start-Sleep -Seconds $PollIntervalSec
+    }
+    if ([string]::IsNullOrEmpty($deviceId)) { throw 'identidad sin persistir (timeout)' }
+    [void]$commands.Add([PSCustomObject]@{ name = 'node-identity'; exit = 0 })
+
+    $sanitized = [ordered]@{ version = 1; agents = $doc.agents }
+    $sanJson = (New-Object PSObject -Property $sanitized) | ConvertTo-Json -Depth 10 -Compress
+    $sanPath = Join-Path ([IO.Path]::GetTempPath()) ('approvals-node-' + [Guid]::NewGuid().ToString('N') + '.json')
+    try {
+      [IO.File]::WriteAllText($sanPath, $sanJson, (New-Object Text.UTF8Encoding $false))
+      & openclaw approvals set --file $sanPath --node $deviceId 2>&1 | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw 'approvals set fallo' }
+      [void]$commands.Add([PSCustomObject]@{ name = 'approvals-set'; exit = 0 })
+      $inputs['approvals'] = [ordered]@{ algo = 'sha256'; sha256 = (Get-FileSha -Path $sanPath) }
+    } finally {
+      if (Test-Path -LiteralPath $sanPath) {
+        Remove-Item -LiteralPath $sanPath -Force -ErrorAction SilentlyContinue
+      }
+    }
+    $getRaw = (& openclaw approvals get --node $deviceId --json 2>&1)
+    if ($LASTEXITCODE -ne 0) { throw 'approvals get fallo' }
+    $got = $null
+    try { $got = (($getRaw | Out-String) | ConvertFrom-Json) } catch { $got = $null }
+    if ($null -eq $got -or $null -eq $got.file) { throw 'approvals get sin file' }
+    if ((ConvertTo-CanonicalJson $got.file.agents) -cne (ConvertTo-CanonicalJson $doc.agents)) {
+      throw 'readback de approvals distinto'
+    }
+    [void]$commands.Add([PSCustomObject]@{ name = 'approvals-readback'; exit = 0 })
+
     $runArgs = @('node', 'run', '--pair', $PairingCode) + $gwArgs
     $runProc = Start-Process -FilePath 'openclaw' -ArgumentList $runArgs `
       -NoNewWindow -PassThru
@@ -281,6 +325,7 @@ try {
             $nodeId = [string]$ap.node
           }
           if ([string]::IsNullOrEmpty($nodeId)) { throw 'approve sin nodeId' }
+          if ($nodeId -cne $deviceId) { throw ("aprobado ajeno: {0}" -f $nodeId) }
           break
         }
       }
@@ -289,47 +334,6 @@ try {
     if ([string]::IsNullOrEmpty($nodeId)) { throw 'pairing sin solicitud (timeout)' }
     [void]$commands.Add([PSCustomObject]@{ name = 'nodes-approve'; exit = 0 })
     [void]$observations.Add("dispositivo aprobado: $nodeId")
-
-    $sanitized = [ordered]@{ version = 1; agents = $doc.agents }
-    $sanJson = (New-Object PSObject -Property $sanitized) | ConvertTo-Json -Depth 10 -Compress
-    $sanPath = Join-Path ([IO.Path]::GetTempPath()) ('approvals-node-' + [Guid]::NewGuid().ToString('N') + '.json')
-    try {
-      [IO.File]::WriteAllText($sanPath, $sanJson, (New-Object Text.UTF8Encoding $false))
-      & openclaw approvals set --file $sanPath --node $nodeId 2>&1 | Out-Null
-      if ($LASTEXITCODE -ne 0) { throw 'approvals set fallo' }
-      [void]$commands.Add([PSCustomObject]@{ name = 'approvals-set'; exit = 0 })
-      $inputs['approvals'] = [ordered]@{ algo = 'sha256'; sha256 = (Get-FileSha -Path $sanPath) }
-    } finally {
-      if (Test-Path -LiteralPath $sanPath) {
-        Remove-Item -LiteralPath $sanPath -Force -ErrorAction SilentlyContinue
-      }
-    }
-    $getRaw = (& openclaw approvals get --node $nodeId --json 2>&1)
-    if ($LASTEXITCODE -ne 0) { throw 'approvals get fallo' }
-    $got = $null
-    try { $got = (($getRaw | Out-String) | ConvertFrom-Json) } catch { $got = $null }
-    if ($null -eq $got -or $null -eq $got.file) { throw 'approvals get sin file' }
-    if ((ConvertTo-CanonicalJson $got.file.agents) -cne (ConvertTo-CanonicalJson $doc.agents)) {
-      throw 'readback de approvals distinto'
-    }
-    [void]$commands.Add([PSCustomObject]@{ name = 'approvals-readback'; exit = 0 })
-
-    $idOk = $false
-    $deadline = [DateTime]::UtcNow.AddSeconds($PairTimeoutSec)
-    while ([DateTime]::UtcNow -lt $deadline) {
-      $idRaw = (& openclaw node identity --json 2>&1)
-      if ($LASTEXITCODE -eq 0) {
-        $ident = $null
-        try { $ident = (($idRaw | Out-String) | ConvertFrom-Json) } catch { $ident = $null }
-        if ($null -ne $ident -and -not [string]::IsNullOrEmpty($ident.deviceId)) {
-          $idOk = $true
-          break
-        }
-      }
-      Start-Sleep -Seconds $PollIntervalSec
-    }
-    if (-not $idOk) { throw 'identidad sin persistir (timeout)' }
-    [void]$commands.Add([PSCustomObject]@{ name = 'node-identity'; exit = 0 })
   } finally {
     $env:OPENCLAW_STATE_DIR = $prevState
     if ($null -ne $runProc) {

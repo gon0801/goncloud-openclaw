@@ -90,6 +90,7 @@ argumentos y con `exit` explicito, por ejemplo:
   -BackupDir 'C:\Users\ehven\.openclaw-backup\<fecha>' -StagingRoot 'C:\Users\ehven\.openclaw-staging' `
   -EvidencePath 'C:\Users\ehven\.openclaw-backup\<fecha>\evidencia.md' `
   -ReceiptRoot 'C:\Users\ehven\.openclaw-backup\<fecha>\recibos' `
+  -LauncherPaths '<launcher-1>;<launcher-2>' `
   -HealthUrl 'http://127.0.0.1:18789' -OpenClawVersion '2026.9.5' -Apply
 exit $LASTEXITCODE
 ```
@@ -124,17 +125,25 @@ instalar el vigia v3 y leer de vuelta que el job vivo trae EXACTO el
 mensaje versionado `docs/cron-messages/verif-sync-repos.v3.txt` (v3:
 `SKILLS_PR` pendiente una vez, `SKILLS_DEPLOYED` salda al mergear;
 salud solo del ultimo ciclo completo; se preservan `FALLO`,
-`CONFLICTO` y el marcador final; el vigia es solo-lectura). Solo con
-read-back igual, habilitar y correr `GoncloudRepoSync`:
+`CONFLICTO` y el marcador final; el vigia es solo-lectura).
+
+Cambiar la accion de `GoncloudRepoSync` al checkout dedicado (sobre el
+XML exportado en §3, cambiando SOLO la accion; jamas habilitarla con
+la accion vieja: reactivaria el sync dentro de `.openclaw`), releer el
+XML vivo y verificar que apunta al checkout dedicado, y RECIEN
+ENTONCES habilitar y correr:
 
 ```
+schtasks /change /tn "GoncloudRepoSync" /tr "<accion-nueva-hacia-C:\Users\ehven\src\goncloud-openclaw>"
+schtasks /query /tn "GoncloudRepoSync" /xml   # accion == checkout dedicado
 schtasks /change /tn "GoncloudRepoSync" /enable
 schtasks /run /tn "GoncloudRepoSync"
 ```
 
 Exigir: cuatro resultados de repo, marcador final, exit 0, fuente
-exactamente en el `origin/main` limpio autorizado, runtime SIN el `.git`
-principal, y un SEGUNDO ciclo sin cambios (sin escrituras ni PRs nuevos).
+exactamente en el `origin/main` limpio autorizado, y un SEGUNDO ciclo
+sin cambios (sin escrituras ni PRs nuevos). El `.git` vivo sigue en su
+lugar en este punto; se mueve en §5.
 
 ## 5. Mover el `.git` vivo a cuarentena `[authorization_ref]`
 
@@ -155,6 +164,10 @@ powershell -NoProfile -File '...\scripts\runtime-separation\Move-OpenClawQuarant
 ```
 
 Rollback restaura el XML de la tarea Y el `.git` a su lugar.
+
+Verificar tras mover: runtime SIN el `.git` principal
+(`Test-Path C:\Users\ehven\.openclaw\.git` = falso) y recibo `passed`
+del script con el inventario registrado.
 
 ## 6. Ollama y memoria semantica `[authorization_ref]`
 
@@ -177,18 +190,20 @@ Rollback: `-Mode rollback` con `-MigrationPath` al recibo de migracion.
 
 ## 7. Nodo aislado `[authorization_ref]`
 
-Parear UNA vez en foreground bajo `.openclaw-node` (el codigo no se
-persiste), instalar sin `--pair` sobre el mismo estado, aprobar el
-allowlist exacto de ocho comandos (sin wildcards/shells), exportar y
-eliminar el duplicado `OpenClaw CUA Node`, reiniciar la tarea oficial y
-exigir conexion y version `2026.9.5` tras salida terminal:
+El script exige estado FRESCO: no emparejar a mano antes (un pairing
+manual previo deja estado que el script rechaza). El script crea el
+estado aislado, aplica y relee la allowlist exacta de ocho comandos
+(sin wildcards/shells) sobre la identidad del dispositivo, y SOLO
+entonces empareja una vez con el codigo dado (el codigo no se
+persiste), instala sin `--pair` sobre el mismo estado, exporta y
+elimina el duplicado `OpenClaw CUA Node`, reinicia la tarea oficial y
+exige conexion y version `2026.9.5` tras salida terminal:
 
 ```powershell
-$env:OPENCLAW_STATE_DIR = 'C:\Users\ehven\.openclaw-node'
-openclaw node run --pair        # foreground, una vez; el codigo no se guarda
 powershell -NoProfile -File '...\scripts\runtime-separation\Set-OpenClawNode.ps1' `
   -NodeStateDir 'C:\Users\ehven\.openclaw-node' -NodeDisplayName '<nombre>' `
   -GatewayHost '127.0.0.1' -ApprovalsPath '...\approvals.json' `
+  -NodeConfigSets '<path1>=<json1>;<path2>=<json2>' -PairingCode '<codigo-del-gateway>' `
   -ReceiptRoot '...\recibos' -Apply
 ```
 
