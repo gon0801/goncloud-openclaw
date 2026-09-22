@@ -6,6 +6,8 @@ Versión 1.1, 2026-09-18 UTC (reglas 3 y 5 ajustadas por la Fase 11), destilada 
 
 **Cadena de mando**: `docs/runbooks/loop-autopilot.md` (salvo la tabla de preaprobaciones de cada fase) > `docs/CONTEXTO.md` de Orbit, reglas 1–10 > el spec del módulo > el plan del módulo (`plans/<plan>.md`) > este documento > el runbook de la fase. El plan y el spec mandan en el **qué** y en la DoD; este documento y el de la fase mandan en el **cómo**. Una contradicción entre el plan y un runbook la gana el plan y se declara como residual en el PR; un runbook nunca edita el cuerpo de una fila del plan, solo el ítem de cierre edita celdas de estado.
 
+> **Autoridad vigente (2026-09-21, entrega sin sello):** aprobar y mergear se rige por el recibo del PR (`saikit-entrega.v1`, `loop-autopilot.md` §6); el gate vuelve a leer GitHub y no consulta estado de sesión, host ni cwd. Donde este documento describe el sello del hook, el sondeo de `harness-state.env`, los veredictos de `.saikit/veredictos/` o el blast nivel 4 (regla 12 y su fila de atores), eso es historia de las Fases 8 y 10 y NO es una instrucción: un turno de merge hoy es Drive, recibo vigente del head y los comandos de la sección 6 del loop.
+
 ---
 
 ## Quién
