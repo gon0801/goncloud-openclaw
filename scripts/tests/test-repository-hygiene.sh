@@ -61,6 +61,7 @@ allow = {
     ("scripts/tests/test-runtime-layout.sh", "ghp_abcdefghi" + "jklmnopqrstuvwx" + "yza1B2"),
     ("scripts/tests/test-runtime-receipt.sh", "-----BEGIN RSA PRIVATE " + "KEY-----"),
     ("scripts/tests/test-runtime-receipt.sh", "Bearer abcdef" + "ghijklmnop1234"),
+    ("scripts/tests/test-skills-pr-ledger.sh", "ghp_abcdefghijk" + "lmnopqrstuvw" + "xyza1B2"),
 }
 rx = re.compile(r"(?:gh[pousr]|github_pat)_[A-Za-z0-9]{16,}|sk-[A-Za-z0-9]{16,}"
                 r"|xox[bpras]-[A-Za-z0-9-]+|bearer\s+[A-Za-z0-9._~+/-]{16,}={0,2}"
