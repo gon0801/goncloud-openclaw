@@ -93,7 +93,7 @@ nat() {
     case "$1" in /*) printf '%s' "$1";; *) printf '%s/%s' "$PWD" "$1";; esac
   fi
 }
-MMN=$(nat "$MM")
+MMN=$(nat "$PWD/$MM")
 mp() { # ruta legible por hijos nativos y por bash (mixta en Windows)
   if [ "$en_windows" -eq 1 ] && command -v cygpath >/dev/null 2>&1; then
     cygpath -m "$1"

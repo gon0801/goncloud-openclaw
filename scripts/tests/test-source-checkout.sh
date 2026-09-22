@@ -68,7 +68,7 @@ if [ -n "$PSH" ]; then
   export PATH="$T/fake-bin:$PATH"
 
   semilla() { # $1=origin-bare: crea origin con main + skill v1 + agent.md
-    git init -q --bare "$1" || return 1
+    git init -q -b main --bare "$1" || return 1
     W="$T/w"; rm -rf "$W"; git clone -q "$1" "$W" 2>/dev/null || return 1
     ( cd "$W" && git checkout -q -b main \
       && mkdir -p agents/main/agent/workshop-skills/s \
@@ -133,6 +133,8 @@ JSON
   clona "$T/origin.git" "$T/b-src" || fail "(2b) clone"
   runtime_conv "$T/b-rt"
   printf 'sucio-local\n' >>"$T/b-src/agents/main/agent.md"
+  [ -n "$(cd "$T/b-src" && git status --porcelain)" ] \
+    || fail "(2b) fixture no quedo sucio (HEAD colgante?)"
   SHA_B=$(cd "$T/b-src" && git rev-parse HEAD)
   if corre "$T/b-src" "$T/b-rt" b; then fail "(2b) fuente sucia debio fallar y salio 0"; fi
   grep -q 'sucio-local' "$T/b-src/agents/main/agent.md" || fail "(2b) el alto altero bytes sucios"

@@ -53,7 +53,7 @@ nat() {
     case "$1" in /*) printf '%s' "$1";; *) printf '%s/%s' "$PWD" "$1";; esac
   fi
 }
-QZN=$(nat "$QZ")
+QZN=$(nat "$PWD/$QZ")
 PYBIN=$(command -v python3 || command -v python) || fail "(2) sin python3 ni python"
 
 # --- stubs minimos ---

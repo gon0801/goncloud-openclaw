@@ -102,7 +102,8 @@ nat() { # ruta absoluta nativa para el motor
 
 if [ -n "$PSH" ]; then
   # (2) El modulo parsea sin errores de sintaxis.
-  MODNAT=$(nat "$MODULO")
+  # Absolutas: Import-Module 5.1 no resuelve rutas relativas sin .\ como ruta.
+  MODNAT=$(nat "$PWD/$MODULO")
   if ! out=$("$PSH" -NoProfile -NonInteractive -Command "
 \$errs = \$null
 [void][System.Management.Automation.Language.Parser]::ParseFile('$MODNAT', [ref]\$null, [ref]\$errs)
@@ -164,7 +165,7 @@ Check 'atomic-invalid-no-file' ((-not (Test-Path -LiteralPath (Join-Path $tmpdir
 Remove-Item -Recurse -Force -LiteralPath $tmpdir
 if ($script:fails.Count -gt 0) { exit 1 }
 PS1
-  SCHNAT=$(nat "$SCHEMA")
+  SCHNAT=$(nat "$PWD/$SCHEMA")
   if ! out=$("$PSH" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$T/smoke.ps1" -ModulePath "$MODNAT" -SchemaPath "$SCHNAT" 2>&1); then
     fail "(3) humo del modulo en rojo: $out"
   fi
