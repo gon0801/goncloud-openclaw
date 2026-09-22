@@ -181,7 +181,8 @@ if fs:
     print('obs=%s' % (r.get('observations'),))
     print('cmds=%s' % ([(c.get('name'), c.get('exit')) for c in r.get('commands', [])],))
 " 2>&1 | tr '\n' '~')
-  [ "$got_app" = 'v2-app' ] || fail "(3) app.txt no se publico (got [$(dump "$got_app")] rec~[${diag_rec}])"
+  diag_rt="T=[$T] PWD=[$PWD] natSrc=[$(nat "$T/s-src")] natRec=[$(nat "$T/s-rec")] lsT=[$(ls "$T" 2>&1 | tr '\n' ',')]"
+  [ "$got_app" = 'v2-app' ] || fail "(3) app.txt no se publico (got [$(dump "$got_app")] rec~[${diag_rec}] ${diag_rt})"
   [ "$got_nuevo" = 'nuevo' ] || fail "(3) nuevo.txt no se publico (got [$(dump "$got_nuevo")])"
   [ "$got_bak" = 'v1-app' ] \
     || fail "(3) el respaldo no guarda el original de app.txt (got [$(dump "$got_bak")])"
