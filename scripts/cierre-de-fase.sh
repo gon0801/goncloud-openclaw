@@ -54,8 +54,11 @@ linea() { # $1 estado, $2 nombre, $3 detalle
     # El detalle trae rutas y salidas de git: pueden venir con comillas, backslashes o
     # caracteres de control, y `tr -d` los cambiaria en vez de escaparlos, o dejaria un
     # JSON invalido. Se escapa de verdad.
+    # timeout 30 (F1): un python3 colgado del PATH no puede trabar el cierre. Fallback r2:
+    # si el parseo falla o vence, el detalle sale como string JSON vacio y no vacio de
+    # verdad: un detalle vacio dejaba esta linea con "detalle":} -- JSON invalido.
     printf '{"estado":"%s","check":"%s","detalle":%s}\n' "$1" "$2" \
-      "$(printf '%s' "$3" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"
+      "$(printf '%s' "$3" | timeout 30 python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))' || printf '%s' '""')"
   else
     printf '%-8s %-22s %s\n' "$1" "$2" "$3"
   fi
@@ -179,7 +182,10 @@ else
   if [ -z "$crons" ]; then
     linea unknown reloj "el gateway no contesto"
   else
-    reloj=$(printf '%s' "$crons" | FASE="$FASE" python3 -c '
+    # timeout 30 (F1): un python3 colgado del PATH no puede trabar el cierre. Fallback r2:
+    # al fallar o vencer sale el string JSON vacio y el check cae en unknown (el case
+    # de abajo lo recibe junto con ILEGIBLE y el vacio).
+    reloj=$(printf '%s' "$crons" | FASE="$FASE" timeout 30 python3 -c '
 import json, os, sys
 bruto = sys.stdin.read(); i = bruto.find("{")
 try:
@@ -202,9 +208,9 @@ if not reloj:
 if len(reloj) > 1:
     print("DUP"); raise SystemExit
 print("UUID " + str(reloj[0].get("id", "")))
-')
+' || printf '%s' '""')
     case "$reloj" in
-      ILEGIBLE|"") linea unknown reloj "no pude leer la lista de crons";;
+      ILEGIBLE|""|'""') linea unknown reloj "no pude leer la lista de crons";;
       AUSENTE) linea VERDE reloj "sin reloj global: nada que retirar";;
       DUP*) linea ROJO reloj "avance-tareas duplicado por declarationKey: no se adivina cual es el bueno";;
       LEGADO*) linea ROJO reloj "quedan vigias legados sin migrar: ${reloj#LEGADO }";;
@@ -215,7 +221,10 @@ print("UUID " + str(reloj[0].get("id", "")))
         elif ! scratch=$(timeout 60 "$OPENCLAW_BIN" cron scratch "$uuid" 2>/dev/null) || [ -z "$scratch" ]; then
           linea ROJO reloj "reloj presente pero su scratch no se pudo leer: fallo indeterminado"
         else
-          uso=$(printf '%s' "$scratch" | FASE="$FASE" python3 -c '
+          # timeout 30 (F1): un python3 colgado del PATH no puede trabar el cierre. Fallback r2:
+          # al fallar o vencer sale el string JSON vacio y el check lo declara como
+          # fallo indeterminado (la rama *) del case de abajo).
+          uso=$(printf '%s' "$scratch" | FASE="$FASE" timeout 30 python3 -c '
 import json, os, sys
 bruto = sys.stdin.read(); i = bruto.find("{")
 try:
@@ -236,7 +245,7 @@ if not isinstance(trab, list) or any(not isinstance(t, str) for t in trab):
     print("MAL"); raise SystemExit
 fase = os.environ["FASE"]
 print("OTROS" if any(t != "fase:" + fase for t in trab) else "SOLO")
-')
+' || printf '%s' '""')
           case "$uso" in
             OTROS) linea VERDE reloj "reloj compartido con otro trabajo activo: se conserva";;
             SOLO) linea ROJO reloj "reloj global presente y rancio: retirarlo al cerrar lo ultimo";;
@@ -298,7 +307,10 @@ else
   if [ -z "$vivo" ]; then
     linea unknown tablero "el gateway no contesto"
   else
-    det=$(printf '%s' "$vivo" | CIERRE_DOC="$doc" python3 -c '
+    # timeout 30 (F1): un python3 colgado del PATH no puede trabar el cierre. Fallback r2:
+    # al fallar o vencer sale el string JSON vacio y el check cae en unknown (la rama
+    # *) del case de abajo).
+    det=$(printf '%s' "$vivo" | CIERRE_DOC="$doc" timeout 30 python3 -c '
 import json, os, sys
 
 TERMINALES = {"mergeado", "atorado", "revertido", "omitido"}
@@ -377,7 +389,7 @@ elif viv != ver:
     print("ROJO el tablero publicado no dice lo mismo que el documento versionado; difiere en: " + ", ".join(difieren))
 else:
     print("OK fase, cierre, titulo, siguiente paso, atencion y carriles coinciden con lo versionado")
-')
+' || printf '%s' '""')
     case "$det" in
       "OK "*)      linea VERDE   tablero "${det#OK }" ;;
       "UNKNOWN "*) linea unknown tablero "${det#UNKNOWN }" ;;

@@ -73,7 +73,11 @@ done
   printf '%s\n%s\n' "hace falta --base y --head" "$USO" >&2; exit 2;
 }
 : "${ALLOWLIST:=$SCRIPT_DIR/ci-fast-allowlist.txt}"
-[ -r "$ALLOWLIST" ] || { echo "FAIL: no se puede leer la allowlist: $ALLOWLIST" >&2; exit 2; }
+# F3 (auditoria adversarial post-Fase 15): archivo REGULAR y legible. Un -r
+# suelto era cierto para un directorio, la barrera no cortaba y el script
+# moria despues ADENTRO con exit 1 sin veredicto; el contrato de la cabecera
+# promete exit 2 aca, el error de herramienta que deja el job rojo.
+[ -f "$ALLOWLIST" ] && [ -r "$ALLOWLIST" ] || { echo "FAIL: no se puede leer la allowlist: $ALLOWLIST" >&2; exit 2; }
 git rev-parse --git-dir >/dev/null 2>&1 || {
   echo "FAIL: no estoy dentro de un repo git (corre desde el clon que se clasifica)" >&2; exit 2;
 }

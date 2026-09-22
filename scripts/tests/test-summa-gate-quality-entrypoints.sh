@@ -187,6 +187,20 @@ contrato_shards() { # $1=yaml -> exit 0 si cumple el contrato de shards+gate
   needs_gate=$(printf '%s\n' "$seccion_gate" | grep -E '^[[:space:]]{4}needs:' || true)
   printf '%s\n' "$needs_gate" | grep -qF 'clasificador' || return 1
   printf '%s\n' "$needs_gate" | grep -qF 'shards' || return 1
+  # (e) el gate corre SIEMPRE: `if: always()` a nivel de job es lo que evita
+  # que un clasificador caido deje el gate SKIPPED en vez de correr su
+  # veredicto fail-closed (F4, auditoria adversarial post-Fase 15; fixture
+  # gate-sin-always.yml, aceptado por el validador vigente — rojo medido
+  # antes del arreglo). El filtro de comentarios de arriba ya corre sobre
+  # esta seccion: un `# if: always()` no lo satisface. Re-review de F4: el
+  # ancla `[[:space:]]+` aceptaba tambien el `if: always()` de un PASO
+  # (ocho espacios): un gate sin if de job pasaba el validador mientras
+  # GitHub igualmente saltaba el job cuando una dependencia falla — un paso
+  # "always" no corre si el JOB se salta (fixture gate-always-step.yml,
+  # rojo medido antes del arreglo). Los jobs viven a DOS espacios y sus
+  # claves a CUATRO; el if de un paso vive a ocho o mas, asi que el ancla
+  # exacta `{4}` es la que distingue el nivel de job.
+  printf '%s\n' "$seccion_gate" | grep -qE '^[[:space:]]{4}if:[[:space:]]*always\(\)[[:space:]]*$' || return 1
   # (f) la regla de pares: success pasa; skipped pasa SOLO con fast valido
   # (success:fast); todo lo demas rebota como "no quedo en success". r2:
   # DENTRO de la seccion gate — el texto suelto en el YAML crudo lo
@@ -201,7 +215,7 @@ contrato_shards() { # $1=yaml -> exit 0 si cumple el contrato de shards+gate
 }
 contrato_shards .github/workflows/quality.yml \
   || fail "quality.yml no cumple el contrato de shards+gate (15.2)"
-echo "ok (6): tres shards fail-fast: false, gate con dependencia completa y regla de pares"
+echo "ok (6): tres shards fail-fast: false, gate siempre corre (if: always()), con dependencia completa y regla de pares"
 
 # (7) Sembrar fallos CON FIXTURES, nunca con pushes rojos deliberados. El fixture
 # valido es un recorte del workflow real; cada roto es una mutacion UNA por una:
@@ -242,11 +256,21 @@ echo "ok (6): tres shards fail-fast: false, gate con dependencia completa y regl
 #                            (r4: idem validador; es el UNICO fixture que
 #                            flipea al borrar SOLO el filtro de
 #                            seccion_gate — su cobertura era un hueco)
+#   gate-sin-always        el gate pierde su `if: always()` (F4, auditoria
+#                            adversarial post-Fase 15): si el clasificador
+#                            falla, el gate quedaria SKIPPED en vez de
+#                            correr su veredicto fail-closed
+#   gate-always-step       el `if: always()` del gate MOVIDO a su unico
+#                            paso, sin if de job (re-review F4): el paso
+#                            "always" no corre si el JOB se salta, y el
+#                            validador con ancla `[[:space:]]+` lo
+#                            aceptaba igual (rojo medido antes del
+#                            arreglo del ancla `{4}`)
 FX=scripts/tests/fixtures/quality-shards
 [ -d "$FX" ] || fail "falta $FX"
 contrato_shards "$FX/workflow-valido.yml" \
   || fail "el fixture VALIDO no pasa el contrato: el validador esta roto, no discrimina"
-for roto in shard-faltante fallo-ignorado gate-sin-dependencia gate-sin-shards-senuelo shards-duplicado shards-en-comentario shards-run-en-comentario shards-cuatro-entradas shards-failfast-en-comentario gate-pareja-en-comentario; do
+for roto in shard-faltante fallo-ignorado gate-sin-dependencia gate-sin-shards-senuelo shards-duplicado shards-en-comentario shards-run-en-comentario shards-cuatro-entradas shards-failfast-en-comentario gate-pareja-en-comentario gate-sin-always gate-always-step; do
   if contrato_shards "$FX/$roto.yml"; then
     fail "fixture $roto.yml no fue rechazado: el validador acepta $roto"
   fi
