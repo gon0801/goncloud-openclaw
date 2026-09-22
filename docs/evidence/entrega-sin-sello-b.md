@@ -80,3 +80,78 @@ del host): salidas completas en `.saikit/scratch/ADV/tdd.md`.
 - URL del run de Actions final: la añade el lead al abrir el PR.
 - Primer gate con los artifacts reales: confirma la unión de inventario en CI
   (los números locales ya cubren la lógica; queda la observación en vivo).
+
+## Ronda correctiva 2026-09-22 (`fix/entrega-sin-sello-b-review`)
+
+Tres defectos de la revisión del bloque, cada uno con su regresión que falla sin
+el arreglo. Rojos previos copiados aquí (versionados); el detalle de sesión vive
+en el comentario de adjudicación del PR.
+
+### Commits de la ronda
+
+- `ab1cd1d` B1: re-corrida del mismo shard deja rastro y el gate la rechaza
+  (runner `corrida-<marca>` por invocación + validador que rechaza un shard con
+  más de una corrida + contrato con re-corrida real).
+- `fd5cb1e` B3: preflight mira el exit code de la sonda `--browser-profile`.
+- `53c0f4b` B2: la corrida hija aislada hereda el node verificado por el padre.
+- `711e5f8` B1-bis: el discovery del validador incluye `corrida-*/` a la raíz
+  del artifact (layout real del upload; reproducido por el gate rojo del run
+  35748762272 en el PR del bloque C).
+- `7460293` B2-bis (CodeRabbit): el wrapper ejecuta la ruta de node vía
+  `NODE_WRAPPER_TARGET` (tolera espacios).
+- Arreglos de una línea de la revisión independiente: `local rc_bien` y el
+  mensaje de "falta el resumen" lista las cuatro formas buscadas.
+
+### Comandos focalizados y resultados (macOS, esta rama)
+
+| Comando | Resultado |
+|---|---|
+| `bash scripts/tests/test-ci-coverage-contract.sh` | rc=0, `TODO VERDE` (casos 7 y 7b nuevos) |
+| `bash scripts/tests/test-skill-verify.sh` | rc=0, `TODO VERDE` (regresión B2 afirmada) |
+| `bash scripts/tests/test-corrida-preflight.sh` | rc=0, `TODO VERDE` (caso B4-8 `rechaza`) |
+| `bash scripts/tests/test-runner-shards.sh` | rc=0, `TODO VERDE` (rutas `corrida-*`) |
+| `git diff --check` | vacío |
+
+### Rojos previos (verificados antes de cada arreglo)
+
+- B1 (sin el rechazo de re-corridas, el validador daba OK con dos invocaciones
+  de 1/3 sobre el mismo artifact):
+  `FAIL: (7) el validador acepto la RE-CORRIDA del mismo shard (rc=0)` /
+  `valida-union-shards: OK — 10 entrada(s), cada una exactamente una vez`.
+- B2 (la hija re-descubrió node en su entorno en vez de heredarlo):
+  `FAIL regresion B2: la hija no uso el node heredado del padre; re-descubrio
+  node en su entorno (0 usos antes, 0 despues)`.
+- B3 (un CLI que rechaza el flag salía APTO):
+  `FAIL: un CLI que rechaza --browser-profile no puede salir APTO:` seguido de
+  `APTO`.
+- B1-bis en CI real (gate sobre el artifact real): run 35748762272, job `gate`,
+  `RECHAZADO — falta el resumen del shard 1 (se busco auditoria/shard-1/resumen.txt
+  ...)` — el layout que el discovery no miraba; corregido y verde en el run
+  35750564167.
+
+### Verifier independiente (agente distinto del implementador)
+
+VERIFICACION PASS. Los cinco comandos en rc=0 y tres mutaciones demostraron
+discriminación: (a) sin el rechazo de `n_res -ne 1` el contrato cae en el caso
+(7) exacto; (b) sin `NODE_HEREDADO` la hija falla con "corrida aislada sin
+NODE_HEREDADO ejecutable"; (c) sin el chequeo del exit code el preflight
+declara `APTO` para un CLI que rechaza el flag (caso B4-8). Worktree restaurado
+limpio; sin `--no-verify`; sin batería completa local.
+
+### Revisión independiente (agente distinto del implementador y del verifier)
+
+REVISION APPROVE, cero bloqueantes. Revisó `origin/main...HEAD` completo (8
+archivos, 5 commits) con cuatro mutaciones propias, la reproducción del hueco
+de mundo viejo con `origin/main` (dos corridas reales de 1/3 → validador viejo
+`OK`), el layout upload/download contra el discovery, las sondas restantes del
+preflight y la herencia de node. No bloqueantes: `rc_bien` fuera de `local`
+(aplicado), mensaje de búsqueda incompleto (aplicado), directorio `corrida-*`
+sin resumen invisible (sin bypass real: sin resumen no hay filas que auditar y
+"falta el resumen" rechaza), grep del caso (7) más laxo que el rc (la
+aserción que discrimina es la del rc, probada por mutación), `RES_ROJO` vacío
+(ya cubierto por el assert del rc de la corrida roja).
+
+### CI
+
+- URL del run final de esta rama: se añade al pie cuando el PR complete su
+  batería (un push más, normal, sin fuerza).

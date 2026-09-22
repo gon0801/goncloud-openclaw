@@ -147,7 +147,7 @@ corrida_preflight() {
   # Ausente o sin probar = unknown explicito, jamas un silencio.
   local oc_real="${OPENCLAW_BIN:-$HOME/.openclaw/bin/openclaw}"
   if [ -x "$oc_real" ]; then
-    local pf_home sal_mal sal_bien
+    local pf_home sal_mal sal_bien rc_bien
     pf_home="$(mktemp -d 2>/dev/null)" || pf_home=""
     if [ -n "$pf_home" ]; then
       sal_mal="$(HOME="$pf_home" "$oc_real" browser tabs --profile claw --json 2>&1)"
