@@ -415,8 +415,8 @@ elif [ -z "$doc" ]; then
 else
   # timeout 30 (F1): un python3 colgado del PATH no puede trabar el cierre. Fallback r2:
   # al fallar o vencer sale el string JSON vacio y el check cae en unknown (la rama *).
-  det=$(printf '%s' "$doc" | timeout 30 python3 -c '
-import json, sys
+  det=$(printf '%s' "$doc" | FASE="$FASE" timeout 30 python3 -c '
+import json, os, sys
 # atorado NO cuenta: una instalacion o un simulacro atorados son justamente el
 # entregable pendiente (medido 2026-09-22: con la instalacion atorada el cierre
 # salia VERDE). Terminal aqui es: hecho, revertido declarado u omitido por el
@@ -426,6 +426,11 @@ try:
     d = json.loads(sys.stdin.read())
 except Exception:
     print("UNKNOWN no pude leer el documento de progreso")
+    raise SystemExit
+# El documento tiene que ser EL de esta fase: un progreso de otra fase con
+# carriles terminales no acredita los entregables de esta (CodeRabbit 2026-09-22).
+if d.get("fase") != os.environ["FASE"]:
+    print("ROJO el documento de progreso no corresponde a la fase " + os.environ["FASE"])
     raise SystemExit
 cs = d.get("carriles")
 if not isinstance(cs, list) or not cs:

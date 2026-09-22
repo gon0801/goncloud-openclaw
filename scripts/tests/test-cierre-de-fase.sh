@@ -742,4 +742,25 @@ printf '%s' "$out" | grep -q "Instalacion" \
 $out"
 echo "ok (14d): un entregable atorado es un entregable pendiente, no terminado"
 
+# (14e) El documento tiene que ser EL de la fase: un progreso de OTRA fase con
+# todos los carriles terminales no acredita los entregables de esta (CodeRabbit
+# 2026-09-22: el check no miraba d.fase y otra fase cerrada daba VERDE aqui).
+cat >"$R/.saikit/progress/5.json" <<'DOC'
+{"fase":"6","titulo":"Otra fase","siguiente_paso":"x",
+ "carriles":[{"id":"A","estado":"mergeado"}],
+ "cierre":{"at":null}}
+DOC
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m entregables-otra-fase
+git -C "$R" push -q -f origin HEAD:main
+out=$(CIERRE_SIN_GATEWAY=1 corre 5); rc=$?
+[ "$rc" -eq 1 ] || fail "(14e) un documento de otra fase no puede cerrar la fase 5; salio $rc:
+$out"
+printf '%s' "$out" | grep -q "^ROJO *entregables" \
+  || fail "(14e) el check de entregables debe salir ROJO con un documento de otra fase:
+$out"
+printf '%s' "$out" | grep -q "no corresponde a la fase" \
+  || fail "(14e) el detalle debe nombrar el desajuste de fase:
+$out"
+echo "ok (14e): un documento de otra fase no acredita entregables ajenos"
+
 echo "TODO VERDE: cierre-de-fase"

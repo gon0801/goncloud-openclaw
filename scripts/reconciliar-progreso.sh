@@ -94,6 +94,8 @@ try:
     d = json.load(open(os.environ['F']))
 except Exception:
     roto('no es json')
+if not isinstance(d, dict):
+    roto('raiz no es un objeto')
 if d.get('schema') != 'runbook-progress.v1':
     roto('schema distinto')
 if not isinstance(d.get('carriles'), list):
@@ -118,7 +120,7 @@ for c in d['carriles']:
     salida.append('%s|%s|%s|%s' % (c['id'], pr, c.get('repo', ''), estado))
 for linea in salida:
     print(linea)
-") || candidatos=""
+") || { printf 'reconciliar: no pude validar %s\n' "$f" >&2; exit 2; }
   case "$candidatos" in
     ROTO*) printf 'reconciliar: %s esta fuera de contrato (%s)' "$f" "${candidatos#ROTO:}" >&2; echo; exit 2;;
   esac

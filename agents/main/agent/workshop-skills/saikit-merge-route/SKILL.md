@@ -25,7 +25,7 @@ Land a lane's PR through the kit's gate. `gh pr merge` is blocked by summa-gate 
 
 ## Gate rejections and their real cause
 
-- `NO-MERGE: commit de otro email: <sha> es de <bot@…>` — the gate refuses bot-authored commits. Rewrite author and committer only (`GIT_AUTHOR_EMAIL`/`NAME`), verify the content diff is empty, push normally (never force-push), wait for fresh green CI, publish a fresh `APPROVE lead <new-sha>` receipt, and re-run the route.
+- `NO-MERGE: commit de otro email: <sha> es de <bot@…>` — the gate refuses bot-authored commits. Rewrite author and committer only (`GIT_AUTHOR_EMAIL`/`NAME`) and verify the content diff is empty. The rewritten SHA is NOT a descendant of the PR branch's remote head, so no normal push can update it and force-push is prohibited: create a replacement branch and a replacement PR with the same content, wait for fresh green CI on the new head, publish a fresh `APPROVE lead <new-sha>` receipt there, and re-run the route.
 - `NO-MERGE: gh repo view no respondio en este cwd` — the kit calls `gh` unqualified and the exec PATH lacks `/opt/homebrew/bin`. Re-run with `PATH=/opt/homebrew/bin:…`.
 - An `APPROVE lead` published with an **empty** SHA, or with a short SHA **expanded by hand** to a commit that does not exist, leaves the gate with no valid receipt. Read the real value: `git rev-parse HEAD`, or `gh pr view <n> --json headRefOid`.
 - A red whose job died in 2–3 s with no steps and `recent account payments have failed or your spending limit needs to be increased` is GitHub billing, not code — and the `push:<default>` job first runs on the merge that introduces the workflow, so its red can belong to a merge whose tree is exactly what was approved. Do not revert: have the owner fix Billing & plans, then re-run.

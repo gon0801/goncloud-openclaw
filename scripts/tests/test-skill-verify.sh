@@ -77,7 +77,7 @@ FAKEBIN="$NB/fakebin"
 mkdir -p "$FAKEBIN" || { echo "FAIL: mktemp wrapper node"; exit 1; }
 WRAPPER_LOG="$NB/b2-node-usos.log"
 : >"$WRAPPER_LOG"
-printf '#!/bin/sh\nprintf "%%s\n" "$*" >> "%s"\nexec %s "$@"\n' "$WRAPPER_LOG" "$NODE" >"$FAKEBIN/node"
+printf '#!/bin/sh\nprintf "%%s\n" "$*" >> "%s"\nexec "$NODE_WRAPPER_TARGET" "$@"\n' "$WRAPPER_LOG" >"$FAKEBIN/node"
 chmod +x "$FAKEBIN/node"
 NODE_HEREDADO="$FAKEBIN/node"
 
@@ -392,7 +392,7 @@ throw new Error("SDK DIVERGENTE");
 DIV
   suma_antes=$(cksum "$SDK_DIV/plugin-sdk/plugin-entry.mjs") || { echo "FAIL: no pude sembrar la copia divergente"; exit 1; }
   usos_antes=$(wc -l <"$WRAPPER_LOG" | tr -d ' ')
-  SALIDA_HIJO=$(HIJO_AISLADO=1 HOME="$T2" PATH="/usr/bin:/bin" NODE_HEREDADO="$NODE_HEREDADO" \
+  SALIDA_HIJO=$(HIJO_AISLADO=1 HOME="$T2" PATH="/usr/bin:/bin" NODE_HEREDADO="$NODE_HEREDADO" NODE_WRAPPER_TARGET="$NODE" \
     env -u OPENCLAW_NODE_MODULES bash "$0" 2>&1)
   rc_hijo=$?
   if [ "$rc_hijo" -ne 0 ]; then

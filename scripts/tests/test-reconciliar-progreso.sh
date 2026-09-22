@@ -273,4 +273,17 @@ printf '%s' "$out" | grep -q "duplicad" || fail "(8) la salida debe nombrar el i
 $out"
 echo "ok (8): ids duplicados => fuera de contrato, rc 2, nada escrito"
 
+# (9) La raiz del documento tiene que ser un objeto. Medido por CodeRabbit
+# (2026-09-22): con una raiz lista, el python reventaba DESPUES de abrir el
+# archivo y el `|| candidatos=""` del shell convertia el crash en "sin cambios"
+# con rc 0; un documento roto no puede parecer conciliado sin novedad.
+P7="$T/raiz-lista.json"; printf '[]' >"$P7"; cp "$P7" "$P7.original"
+out=$(corre "$P7" 2>&1); rc=$?
+[ "$rc" -eq 2 ] || fail "(9) una raiz que no es objeto debe salir 2; salio $rc:
+$out"
+cmp -s "$P7" "$P7.original" || fail "(9) el archivo cambio con la raiz invalida"
+printf '%s' "$out" | grep -q "no pude validar\|raiz" || fail "(9) la salida debe nombrar el fallo de validacion:
+$out"
+echo "ok (9): raiz no-objeto => rc 2, sin cambios, con rastro"
+
 echo "TODO VERDE: reconciliar-progreso"
