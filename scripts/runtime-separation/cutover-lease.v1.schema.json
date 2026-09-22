@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://goncloud/openclaw/spec/cutover-lease.v1",
+  "title": "cutover-lease.v1",
+  "description": "Lease de mantenimiento de la transaccion separada del cutover (Fase 16.6). Mientras el lease es valido y el estado ligado sigue IN_PROGRESS para la misma generacion, el watchdog se aparta y el reinicio manual se niega. Nunca contiene credenciales ni material de pairing: solo coordenadas.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "generation",
+    "createdAt",
+    "expiresAt",
+    "statePath",
+    "taskName",
+    "deadManTaskName",
+    "deadManFireTimeUtc",
+    "issuedBy"
+  ],
+  "properties": {
+    "schema": {
+      "const": "cutover-lease.v1"
+    },
+    "generation": {
+      "type": "string",
+      "pattern": "^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}$"
+    },
+    "createdAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "expiresAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "statePath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "taskName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "deadManTaskName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "deadManFireTimeUtc": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "issuedBy": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    }
+  }
+}

@@ -91,4 +91,31 @@ grep -qF 'function Test-EffectiveHttpTimeout' "$modulo" \
   || fail "el modulo no trae Test-EffectiveHttpTimeout"
 echo "ok (t2): Test-EffectiveHttpTimeout existe en el modulo (su conducta la prueba test-deploy-atomic.sh en windows-contract)"
 
+# (t3) Stand-down de cutover (Task 7 / 16.6): con lease valido para una
+# generacion no terminal, el watchdog se aparta antes de tocar nada. El
+# modulo se importa desde el checkout FUENTE (scripts/ no se despliega a
+# runtime: manifiesto runtime-deploy.v1): una ruta relativa a $PSScriptRoot
+# apuntaria a runtime y el stand-down seria codigo muerto en prod.
+while IFS= read -r anchor; do
+  [ -n "$anchor" ] || continue
+  grep -qF -- "$anchor" "$watchdog" \
+    || fail "(t3) $watchdog sin stand-down: $anchor"
+done <<'ANCHORS'
+C:\Users\ehven\src\goncloud-openclaw\scripts\runtime-separation\RuntimeSeparation.psm1
+Get-CutoverStandDownGeneration
+stand-down
+cutover $standGen vigente
+ANCHORS
+echo "ok (t3a): stand-down anclado con modulo desde fuente"
+grep -q 'PSScriptRoot.*[Rr]untime[Ss]eparation' "$watchdog" \
+  && fail "(t3) el watchdog busca el modulo relativo a runtime (scripts/ no viaja ahi)"
+grep -qF 'function Get-CutoverStandDownGeneration' "$modulo" \
+  || fail "(t3) el modulo no trae Get-CutoverStandDownGeneration"
+echo "ok (t3b): modulo desde fuente y funcion existe (conducta en test-runtime-cutover-transaction.sh)"
+l_stand=$(grep -n -F 'cutover $standGen vigente' "$watchdog" | head -1 | cut -d: -f1)
+l_port=$(grep -n 'Get-NetTCPConnection -State Listen' "$watchdog" | head -1 | cut -d: -f1)
+[ -n "$l_stand" ] && [ -n "$l_port" ] && [ "$l_stand" -lt "$l_port" ] \
+  || fail "(t3) el stand-down no precede a la primera sonda (lineas $l_stand vs $l_port)"
+echo "ok (t3c): stand-down precede a toda accion"
+
 echo "PASS test-gateway-watchdog"

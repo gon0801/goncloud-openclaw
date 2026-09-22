@@ -13,6 +13,11 @@
 $Script:CanonicalSourceRoot = 'C:\Users\ehven\src\goncloud-openclaw'
 $Script:CanonicalRuntimeRoot = 'C:\Users\ehven\.openclaw'
 $Script:CanonicalNodeRoot = 'C:\Users\ehven\.openclaw-node'
+$Script:CanonicalCutoverRoot = 'C:\Users\ehven\.openclaw-cutover'
+# Mismos literales que cutover-lease.v1/cutover-state.v1.schema.json
+# (paridad fijada por test-runtime-cutover-transaction.sh, igual que x-secret*).
+$Script:CutoverGenerationPattern = '^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}$'
+$Script:CutoverUtcPattern = '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$'
 $Script:WorkspaceNames = @('workspace', 'workspace-ingenieria', 'workspace-operaciones')
 # Mismo literal que x-secretKeyPattern / x-secretValuePattern del schema
 # docs/spec/runtime-separation-receipt.v1.schema.json (paridad fijada por test).
@@ -359,4 +364,139 @@ function Test-HashEqual {
   return ($h -ceq $ExpectedSha256.ToLowerInvariant())
 }
 
-Export-ModuleMember -Function Get-RuntimeCanonicalRoots, Test-RuntimeLayout, Test-WorkspaceExcluded, Test-ReceiptObject, Write-ReceiptAtomic, Test-DeployPathClassification, Test-EffectiveHttpTimeout, Test-HashEqual, Test-RootsIsolated, Protect-LogToken
+function Get-CutoverStateRoot {
+  return $Script:CanonicalCutoverRoot
+}
+
+function Test-CutoverLeaseObject {
+  param([Parameter(Mandatory = $true)][string]$LeaseJson)
+  try {
+    $doc = $LeaseJson | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return $false
+  }
+  $want = @('schema', 'generation', 'createdAt', 'expiresAt', 'statePath',
+    'taskName', 'deadManTaskName', 'deadManFireTimeUtc', 'issuedBy')
+  $got = @($doc.PSObject.Properties.Name)
+  if ($want.Count -ne $got.Count) { return $false }
+  foreach ($k in $want) {
+    if ($got -notcontains $k) { return $false }
+  }
+  if ($doc.schema -cne 'cutover-lease.v1') { return $false }
+  if (-not ($doc.generation -is [string]) -or $doc.generation -cnotmatch $Script:CutoverGenerationPattern) { return $false }
+  foreach ($k in @('createdAt', 'expiresAt', 'deadManFireTimeUtc')) {
+    $raw = Get-RawJsonString -Json $LeaseJson -Key $k
+    if ($null -eq $raw -or $raw -cnotmatch $Script:CutoverUtcPattern) { return $false }
+    if (-not ($doc.$k -is [datetime])) { return $false }
+    if (([datetime]$raw).ToUniversalTime() -ne ($doc.$k).ToUniversalTime()) { return $false }
+  }
+  if ($doc.expiresAt.ToUniversalTime() -le $doc.createdAt.ToUniversalTime()) { return $false }
+  if ($doc.deadManFireTimeUtc.ToUniversalTime() -ge $doc.expiresAt.ToUniversalTime()) { return $false }
+  if (-not ($doc.statePath -is [string]) -or $doc.statePath.Length -eq 0) { return $false }
+  if (-not ($doc.taskName -is [string]) -or $doc.taskName.Length -eq 0) { return $false }
+  if (-not ($doc.deadManTaskName -is [string]) -or $doc.deadManTaskName.Length -eq 0) { return $false }
+  if (-not ($doc.issuedBy -is [string]) -or $doc.issuedBy.Length -eq 0 -or $doc.issuedBy.Length -gt 128) { return $false }
+  return $true
+}
+
+function Test-CutoverStateObject {
+  param([Parameter(Mandatory = $true)][string]$StateJson)
+  try {
+    $doc = $StateJson | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return $false
+  }
+  $want = @('schema', 'generation', 'status', 'completedPhases', 'updatedAt', 'attempts')
+  $got = @($doc.PSObject.Properties.Name)
+  if ($want.Count -ne $got.Count) { return $false }
+  foreach ($k in $want) {
+    if ($got -notcontains $k) { return $false }
+  }
+  if ($doc.schema -cne 'cutover-state.v1') { return $false }
+  if (-not ($doc.generation -is [string]) -or $doc.generation -cnotmatch $Script:CutoverGenerationPattern) { return $false }
+  if (@('IN_PROGRESS', 'DONE', 'ROLLED_BACK') -notcontains $doc.status) { return $false }
+  $phases = @('stop', 'payload', 'restart', 'finalize')
+  $seen = @{}
+  foreach ($p in @($doc.completedPhases)) {
+    if ($phases -notcontains $p) { return $false }
+    if ($seen.ContainsKey($p)) { return $false }
+    $seen[$p] = $true
+  }
+  $rawUp = Get-RawJsonString -Json $StateJson -Key 'updatedAt'
+  if ($null -eq $rawUp -or $rawUp -cnotmatch $Script:CutoverUtcPattern) { return $false }
+  if (-not ($doc.updatedAt -is [datetime])) { return $false }
+  if (([datetime]$rawUp).ToUniversalTime() -ne ($doc.updatedAt).ToUniversalTime()) { return $false }
+  if (-not (Test-JsonInteger -Value $doc.attempts)) { return $false }
+  if ($doc.attempts -lt 0) { return $false }
+  return $true
+}
+
+function Test-CutoverAcl {
+  param([Parameter(Mandatory = $true)][string]$StateRoot)
+  try {
+    $aclRaw = (& icacls $StateRoot 2>&1 | Out-String)
+  } catch {
+    return $false
+  }
+  if ($LASTEXITCODE -ne 0) { return $false }
+  foreach ($line in ($aclRaw -split "`r?`n")) {
+    $t = $line.Trim()
+    if ($t -eq '') { continue }
+    $ace = ($t -split '\s+')[-1]
+    if ($ace -notmatch '\(') { continue }
+    if ($ace -notmatch 'SYSTEM|S-1-5-18|S-1-5-32-544|Administrators|Administradores') { return $false }
+  }
+  return $true
+}
+
+function Test-CutoverLease {
+  param(
+    [Parameter(Mandatory = $true)][string]$StateRoot,
+    [string]$ExpectedGeneration = ''
+  )
+  $leasePath = Join-Path $StateRoot 'lease.json'
+  if (-not (Test-Path -LiteralPath $leasePath)) { return $false }
+  try {
+    $leaseRaw = Get-Content -Raw -LiteralPath $leasePath -ErrorAction Stop
+  } catch {
+    return $false
+  }
+  if (-not (Test-CutoverLeaseObject -LeaseJson $leaseRaw)) { return $false }
+  $lease = $leaseRaw | ConvertFrom-Json
+  if ($ExpectedGeneration -ne '' -and $lease.generation -cne $ExpectedGeneration) { return $false }
+  if (-not (Test-Path -LiteralPath $lease.statePath)) { return $false }
+  try {
+    $stateRaw = Get-Content -Raw -LiteralPath $lease.statePath -ErrorAction Stop
+  } catch {
+    return $false
+  }
+  if (-not (Test-CutoverStateObject -StateJson $stateRaw)) { return $false }
+  $state = $stateRaw | ConvertFrom-Json
+  if ($state.generation -cne $lease.generation) { return $false }
+  if ($state.status -cne 'IN_PROGRESS') { return $false }
+  if ($lease.expiresAt.ToUniversalTime() -le [DateTime]::UtcNow) { return $false }
+  return (Test-CutoverAcl -StateRoot $StateRoot)
+}
+
+function Get-CutoverStandDownGeneration {
+  param([string]$StateRoot = '')
+  try {
+    $rt = $StateRoot
+    if ([string]::IsNullOrEmpty($rt)) { $rt = Get-CutoverStateRoot }
+    if (-not (Test-CutoverLease -StateRoot $rt)) { return '' }
+    $raw = Get-Content -Raw -LiteralPath (Join-Path $rt 'lease.json') -ErrorAction Stop
+    $gen = Get-RawJsonString -Json $raw -Key 'generation'
+    if ($null -eq $gen) { return '' }
+    return $gen
+  } catch {
+    return ''
+  }
+}
+
+function Remove-SecretValue {
+  param([Parameter(Mandatory = $true)][string]$Text)
+  $s = [regex]::Replace($Text, $Script:SecretValuePattern, '[REDACTED]')
+  return (Protect-LogToken -Text $s)
+}
+
+Export-ModuleMember -Function Get-RuntimeCanonicalRoots, Test-RuntimeLayout, Test-WorkspaceExcluded, Test-ReceiptObject, Write-ReceiptAtomic, Test-DeployPathClassification, Test-EffectiveHttpTimeout, Test-HashEqual, Test-RootsIsolated, Protect-LogToken, Remove-SecretValue, Get-CutoverStateRoot, Test-CutoverLeaseObject, Test-CutoverStateObject, Test-CutoverAcl, Test-CutoverLease, Get-CutoverStandDownGeneration

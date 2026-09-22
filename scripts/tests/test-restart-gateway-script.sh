@@ -47,4 +47,24 @@ grep -qF 'CommandLine -match' "$PS1FILE" \
   || fail "$PS1FILE: el filtro no mira CommandLine; mataria cualquier node.exe"
 echo "ok (4): filtra por CommandLine, no por nombre de proceso"
 
+# (5) Stand-down de cutover (Task 7 / 16.6): con lease vigente se niega con
+# RESTART_FAIL antes de matar nada; el reinicio manual pelearia con la
+# transaccion. El modulo se importa relativo al script porque este corre
+# desde el checkout FUENTE (scripts/ no viaja a runtime).
+while IFS= read -r anchor; do
+  [ -n "$anchor" ] || continue
+  grep -qF -- "$anchor" "$PS1FILE" || fail "$PS1FILE: falta stand-down: $anchor"
+done <<'ANCHORS'
+Get-CutoverStandDownGeneration
+Join-Path $PSScriptRoot 'runtime-separation\RuntimeSeparation.psm1'
+RESTART_FAIL: cutover
+pelearia con la transaccion
+ANCHORS
+echo "ok (5a): stand-down anclado con modulo relativo a fuente"
+l_stand=$(grep -n -F 'RESTART_FAIL: cutover' "$PS1FILE" | head -1 | cut -d: -f1)
+l_kill=$(grep -n -F 'Stop-Process' "$PS1FILE" | head -1 | cut -d: -f1)
+[ -n "$l_stand" ] && [ -n "$l_kill" ] && [ "$l_stand" -lt "$l_kill" ] \
+  || fail "$PS1FILE: el stand-down no precede al kill (lineas $l_stand vs $l_kill)"
+echo "ok (5b): stand-down precede al kill"
+
 echo "PASS test-restart-gateway-script"

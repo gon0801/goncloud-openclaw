@@ -6,6 +6,7 @@ $ErrorActionPreference = "SilentlyContinue"
 #   2. Port listening but gateway not responding (wedged event loop: accepts TCP,
 #      serves nothing, e.g. 2026-09-21 outage) -> kill the wedged node tree, restart task.
 # Boot grace: a fresh gateway takes minutes before it serves; never kill young procs.
+# Cutover stand-down: with a valid lease for a nonterminal generation, do nothing.
 
 $gatewayPort = 18789
 $gatewayTask = "OpenClaw Gateway"
@@ -15,6 +16,24 @@ $httpTimeoutSec = 90
 
 function Watchdog-Log($msg) {
     Add-Content -Path $logFile -Value ("[{0:yyyy-MM-dd HH:mm:ss}] {1}" -f (Get-Date), $msg)
+}
+
+# Stand-down de cutover (Fase 16.6): con un lease valido para una generacion
+# no terminal, el watchdog se aparta y deja actuar a la transaccion separada.
+# El modulo vive en el checkout FUENTE (scripts/ no se despliega a runtime);
+# si falta o no sabe de stand-down, se sigue como siempre (fallo cerrado
+# hacia proteger el servicio: sin lease verificable no hay pausa).
+$cutoverModule = 'C:\Users\ehven\src\goncloud-openclaw\scripts\runtime-separation\RuntimeSeparation.psm1'
+if (Test-Path -LiteralPath $cutoverModule) {
+    Import-Module $cutoverModule -Force -ErrorAction SilentlyContinue
+    if (Get-Command Get-CutoverStandDownGeneration -ErrorAction SilentlyContinue) {
+        $standGen = ''
+        try { $standGen = Get-CutoverStandDownGeneration } catch { $standGen = '' }
+        if ($standGen -ne '') {
+            Watchdog-Log "cutover $standGen vigente; stand-down"
+            exit 0
+        }
+    }
 }
 
 function Get-GatewaySupervisorProcs {

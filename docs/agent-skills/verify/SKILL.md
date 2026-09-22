@@ -37,7 +37,13 @@ checks this list against those comments so it cannot.
 **There is exactly one gateway and it is production.** It runs on the Windows
 host at `C:\Users\ehven\.openclaw`. You cannot start a second one, and this
 repo's content reaches it only through a sync that runs every two hours at :10
-of odd hours in `America/New_York`.
+of odd hours in `America/New_York`. Source/runtime ownership (Phase 16.8):
+pre-16.8 the gateway was a git clone and the sync pulled inside it; since
+16.8 the source lives in the dedicated checkout at
+`C:\Users\ehven\src\goncloud-openclaw` and the runtime is live state with no
+`.git`, deployed by manifest (`config/runtime-deploy.v1.json`). During the
+cutover the sync is temporarily disabled while the cutover lease holds (no
+deploys); the watchdog and manual restart stand down for that lease.
 
 Three consequences that shape everything below:
 
@@ -106,9 +112,12 @@ The other three run **by exec on the gateway host**, through a turn to `main`
 
 ```
 openclaw plugins list
-git -C C:\Users\ehven\.openclaw log -1 --format=%H
+git -C C:\Users\ehven\src\goncloud-openclaw log -1 --format=%H
 powershell -Command "Get-Content C:\Users\ehven\.openclaw\logs\sync-repos.log -Tail 20"
 ```
+
+Pre-16.8 the git path was `C:\Users\ehven\.openclaw`; since 16.8 the runtime
+has no `.git`, so read the source checkout above.
 
 - `summa-gate` missing from `plugins list`: the plugin is not loaded. A drive
   would prove nothing; the absence is the finding.
@@ -118,6 +127,11 @@ powershell -Command "Get-Content C:\Users\ehven\.openclaw\logs\sync-repos.log -T
   before interpreting any live result.
 - The sync log ends in `CONFLICTO` or `FALLO`: the gateway stopped taking
   updates. Every live result is about an old build until that clears.
+- Skills lines changed shape in Phase 16: the old Phase 13 ` SKILLS ` +
+  direct commit ("already in main") is superseded — since 16.8 expect
+  `SKILLS_PR` (pending, opens a PR) and `SKILLS_DEPLOYED` (merged and
+  deployed), per `docs/cron-messages/verif-sync-repos.v3.txt`. A bare
+  ` SKILLS ` line on a post-16.8 host is stale evidence, not a live change.
 
 ## Drive
 
