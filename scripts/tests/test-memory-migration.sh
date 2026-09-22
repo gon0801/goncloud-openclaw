@@ -23,8 +23,8 @@ done
 
 # (0) El script existe y parsea limpio.
 [ -f "$MM" ] || fail "(0) falta $MM"
-PSH="$(command -v pwsh || true)"
-[ -n "$PSH" ] || fail "(0) sin pwsh en PATH"
+PSH="$(command -v powershell.exe || command -v powershell || command -v pwsh || true)"
+[ -n "$PSH" ] || fail "(0) sin powershell ni pwsh en PATH"
 "$PSH" -NoProfile -NonInteractive -Command "
 \$e=\$null; \$t=\$null
 [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path '$MM'), [ref]\$t, [ref]\$e)
@@ -94,13 +94,25 @@ nat() {
   fi
 }
 MMN=$(nat "$MM")
+mp() { # ruta legible por hijos nativos y por bash (mixta en Windows)
+  if [ "$en_windows" -eq 1 ] && command -v cygpath >/dev/null 2>&1; then
+    cygpath -m "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
+mkshim() { # $1=nombre $2=script.py -> lanzadores bash + .cmd hacia python
+  printf '#!/bin/bash\nexec "%s" "$(dirname "$0")/%s" "$@"\n' "$PYBIN" "$2" >"$T/fake-bin/$1"
+  chmod +x "$T/fake-bin/$1"
+  printf '@python "%%~dp0%s" %%*\r\n@exit /b %%errorlevel%%\r\n' "$2" >"$T/fake-bin/$1.cmd"
+}
 
 # --- stubs ---
 mkdir -p "$T/fake-bin" "$DBS"
 printf 'DB-MAIN-V1' >"$DBS/main.sqlite"
 printf 'DB-VER-V1' >"$DBS/verifier.sqlite"
-export OC_VERSION="2026.9.5" OC_LOG="$T/oc.log" OC_STATE="$T/oc-config.json"
-export OC_DBDIR="$DBS" OC_SEARCH_MODE="semantic" OC_DAEMON_FAIL="0"
+export OC_VERSION="2026.9.5" OC_LOG="$(mp "$T/oc.log")" OC_STATE="$(mp "$T/oc-config.json")"
+export OC_DBDIR="$(mp "$DBS")" OC_SEARCH_MODE="semantic" OC_DAEMON_FAIL="0"
 : >"$OC_LOG"
 printf '{"provider":"openai","model":"text-embedding-3-small","fallback":"lexical"}' >"$OC_STATE"
 cat >"$T/fake-bin/oc-stub.py" <<'PY'
@@ -165,64 +177,77 @@ else:
     print(f"oc stub: args inesperados: {args}", file=sys.stderr)
     sys.exit(99)
 PY
-printf '#!/bin/bash\nexec python3 "$(dirname "$0")/oc-stub.py" "$@"\n' >"$T/fake-bin/openclaw"
-chmod +x "$T/fake-bin/openclaw"
-cat >"$T/fake-bin/ollama" <<'SH'
-#!/bin/bash
-echo "ollama $*" >>"$OC_LOG"
-case "$1" in
-  --version) echo "ollama version 0.34.2" ;;
-  list) printf 'NAME\tID\nnomic-embed-text:latest\t0a109f422b47\n' ;;
-  pull) [ "$2" = "nomic-embed-text" ] || exit 1 ;;
-  *) echo "ollama stub: $*" >&2; exit 99 ;;
-esac
-SH
-chmod +x "$T/fake-bin/ollama"
-cat >"$T/fake-bin/curl" <<'SH'
-#!/bin/bash
+mkshim openclaw oc-stub.py
+cat >"$T/fake-bin/ollama-stub.py" <<'PY'
+import os, sys
+log = os.environ["OC_LOG"]
+args = sys.argv[1:]
+with open(log, "a") as fh:
+    fh.write("ollama " + " ".join(args) + "\n")
+if args[:1] == ["--version"]:
+    print("ollama version 0.34.2")
+elif args[:1] == ["list"]:
+    print("NAME\tID\nnomic-embed-text:latest\t0a109f422b47")
+elif args[:1] == ["pull"]:
+    sys.exit(0 if args[1:2] == ["nomic-embed-text"] else 1)
+else:
+    print(f"ollama stub: {' '.join(args)}", file=sys.stderr)
+    sys.exit(99)
+PY
+mkshim ollama ollama-stub.py
+cat >"$T/fake-bin/curl-stub.py" <<'PY'
 # curl -sSL --fail -o <dest> <url> -> escribe bytes fixture
-dest=""
-prev=""
-for a in "$@"; do
-  if [ "$prev" = "-o" ]; then dest="$a"; fi
-  prev="$a"
-done
-printf '#!/bin/bash\necho INSTALADOR-EJECUTADO >>"$OC_LOG"\nexit 0\n' >"$dest"
-chmod +x "$dest"
-SH
-chmod +x "$T/fake-bin/curl"
-cat >"$T/fake-bin/netstat" <<'SH'
-#!/bin/bash
-echo "netstat $*" >>"$OC_LOG"
-if [ "${OC_NETSTAT_MODE:-loopback}" = "loopback" ]; then
-  printf 'TCP    127.0.0.1:11434    0.0.0.0:0    LISTENING\n'
-else
-  printf 'TCP    0.0.0.0:11434    0.0.0.0:0    LISTENING\n'
-fi
-SH
-chmod +x "$T/fake-bin/netstat"
-cat >"$T/fake-bin/wevtutil" <<'SH'
-#!/bin/bash
-echo "wevtutil $*" >>"$OC_LOG"
-case "$*" in
-  *3033*) # consulta de eventos: limpio = vacio
-    if [ "${OC_EVENTS_MODE:-clean}" != "clean" ]; then
-      printf 'EventID: 3033 Source: llama-server RecordID: 101\n'
-    fi ;;
-  *) printf 'EventRecordID: 100\n' ;; # bookmark
-esac
-SH
-chmod +x "$T/fake-bin/wevtutil"
-cat >"$T/fake-bin/sigchecker" <<'SH'
-#!/bin/bash
-echo "sigchecker $*" >>"$OC_LOG"
-if [ "${OC_SIG_MODE:-valid}" = "valid" ]; then
-  printf 'Valid|CN=Ollama Inc.|CN=DigiCert G5 CS ECC SHA384 2021 CA1\n'
-else
-  printf 'NotSigned||\n'
-fi
-SH
-chmod +x "$T/fake-bin/sigchecker"
+import os, sys
+args = sys.argv[1:]
+dest = ""
+prev = ""
+for a in args:
+    if prev == "-o":
+        dest = a
+    prev = a
+if not dest:
+    sys.exit(1)
+with open(dest, "w", newline="\n") as fh:
+    fh.write('#!/bin/bash\necho INSTALADOR-EJECUTADO >>"%s"\nexit 0\n' % os.environ["OC_LOG"])
+try:
+    os.chmod(dest, 0o755)
+except OSError:
+    pass
+PY
+mkshim curl curl-stub.py
+cat >"$T/fake-bin/netstat-stub.py" <<'PY'
+import os, sys
+with open(os.environ["OC_LOG"], "a") as fh:
+    fh.write("netstat " + " ".join(sys.argv[1:]) + "\n")
+if os.environ.get("OC_NETSTAT_MODE", "loopback") == "loopback":
+    print("TCP    127.0.0.1:11434    0.0.0.0:0    LISTENING")
+else:
+    print("TCP    0.0.0.0:11434    0.0.0.0:0    LISTENING")
+PY
+mkshim netstat netstat-stub.py
+cat >"$T/fake-bin/wevtutil-stub.py" <<'PY'
+import os, sys
+args = sys.argv[1:]
+with open(os.environ["OC_LOG"], "a") as fh:
+    fh.write("wevtutil " + " ".join(args) + "\n")
+if "3033" in " ".join(args):
+    # consulta de eventos: limpio = vacio
+    if os.environ.get("OC_EVENTS_MODE", "clean") != "clean":
+        print("EventID: 3033 Source: llama-server RecordID: 101")
+else:
+    print("EventRecordID: 100")  # bookmark
+PY
+mkshim wevtutil wevtutil-stub.py
+cat >"$T/fake-bin/sigchecker-stub.py" <<'PY'
+import os, sys
+with open(os.environ["OC_LOG"], "a") as fh:
+    fh.write("sigchecker " + " ".join(sys.argv[1:]) + "\n")
+if os.environ.get("OC_SIG_MODE", "valid") == "valid":
+    print("Valid|CN=Ollama Inc.|CN=DigiCert G5 CS ECC SHA384 2021 CA1")
+else:
+    print("NotSigned||")
+PY
+mkshim sigchecker sigchecker-stub.py
 export PATH="$T/fake-bin:$PATH"
 
 # --- politica fixture (hashes de bytes fixture) ---
@@ -283,7 +308,7 @@ class H(BaseHTTPRequestHandler):
         pass
 HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
 PY
-export OC_EMBED_MODE_FILE="$T/embed-mode"
+export OC_EMBED_MODE_FILE="$(mp "$T/embed-mode")"
 "$PYBIN" "$T/fake-embed.py" 11434 >"$T/embed.log" 2>&1 &
 EMB_PID=$!
 trap 'kill $EMB_PID 2>/dev/null; rm -rf "$T"' EXIT
@@ -667,7 +692,8 @@ grep -q 'sqlite restore' "$OC_LOG" && fail "(4h/d) restauro con duplicados"
 corre_rb rbhe "$T/mig-h-e.json" -AllowSnapshotRestore \
   && fail "(4h/e) campo extra debio frenar y salio 0"
 grep -q 'sqlite restore' "$OC_LOG" && fail "(4h/e) restauro con campo desconocido"
-if ln -s "$T/fuera/victima.sqlite" "$DBS/evil.sqlite" 2>/dev/null; then
+if ln -s "$T/fuera/victima.sqlite" "$DBS/evil.sqlite" 2>/dev/null \
+    && [ -L "$DBS/evil.sqlite" ]; then
   corre_rb rbhf "$T/mig-h-f.json" -AllowSnapshotRestore \
     && fail "(4h/f) reparse db debio frenar y salio 0"
   [ "$(cat "$T/fuera/victima.sqlite")" = "VICTIMA" ] || fail "(4h/f) toco via reparse"
@@ -675,7 +701,8 @@ if ln -s "$T/fuera/victima.sqlite" "$DBS/evil.sqlite" 2>/dev/null; then
 else
   echo "SKIP (4h/f): sin symlinks"
 fi
-if ln -s "$T/fuera/snap2.db" "$T/rb-snap/snap-evil.db" 2>/dev/null; then
+if ln -s "$T/fuera/snap2.db" "$T/rb-snap/snap-evil.db" 2>/dev/null \
+    && [ -L "$T/rb-snap/snap-evil.db" ]; then
   corre_rb rbhg "$T/mig-h-g.json" -AllowSnapshotRestore \
     && fail "(4h/g) reparse snapshot debio frenar y salio 0"
   [ "$(cat "$DBS/main.sqlite")" = "DB-MAIN-V1" ] || fail "(4h/g) restauro via reparse"
@@ -696,5 +723,12 @@ want = hashlib.sha256(open(sys.argv[2], "rb").read()).hexdigest()
 assert any(want in o for o in d["observations"]), d["observations"]
 PY
 echo "ok (4h): recibo de rollback liga migration por hash"
+
+# (5) windows-contract corre ESTE test (pin de cobertura propia).
+YAML=.github/workflows/quality.yml
+SEC_W=$(awk '/^  windows-contract:/{f=1} f && !/^  windows-contract:/ && /^  [A-Za-z_][A-Za-z0-9_-]*:/{f=0} f' "$YAML" | grep -vE '^[[:space:]]*#')
+printf '%s\n' "$SEC_W" | grep -qF 'test-memory-migration.sh' \
+  || fail "(5) windows-contract no corre test-memory-migration.sh"
+echo "ok (5): windows-contract cubre este test"
 
 echo "TODO VERDE: memory-migration"

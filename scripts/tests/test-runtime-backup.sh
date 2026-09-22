@@ -22,8 +22,8 @@ done
 
 # (0) El script existe y parsea limpio.
 [ -f "$BK" ] || fail "(0) falta $BK"
-PSH="$(command -v pwsh || true)"
-[ -n "$PSH" ] || fail "(0) sin pwsh en PATH"
+PSH="$(command -v powershell.exe || command -v powershell || command -v pwsh || true)"
+[ -n "$PSH" ] || fail "(0) sin powershell ni pwsh en PATH"
 "$PSH" -NoProfile -NonInteractive -Command "
 \$e=\$null; \$t=\$null
 [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path '$BK'), [ref]\$t, [ref]\$e)
@@ -60,10 +60,22 @@ nat() {
 }
 BKN=$(nat "$BK")
 PYBIN=$(command -v python3 || command -v python) || fail "(2) sin python3 ni python"
+mp() { # ruta legible por hijos nativos y por bash (mixta en Windows)
+  if [ "$en_windows" -eq 1 ] && command -v cygpath >/dev/null 2>&1; then
+    cygpath -m "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
+mkshim() { # $1=nombre $2=script.py -> lanzadores bash + .cmd hacia python
+  printf '#!/bin/bash\nexec "%s" "$(dirname "$0")/%s" "$@"\n' "$PYBIN" "$2" >"$T/fake-bin/$1"
+  chmod +x "$T/fake-bin/$1"
+  printf '@python "%%~dp0%s" %%*\r\n@exit /b %%errorlevel%%\r\n' "$2" >"$T/fake-bin/$1.cmd"
+}
 
 # --- stubs ---
 mkdir -p "$T/fake-bin"
-export OC_VERSION="2026.9.5" OC_LOG="$T/oc.log" OC_MODE="full" OC_FAIL_VERIFY=""
+export OC_VERSION="2026.9.5" OC_LOG="$(mp "$T/oc.log")" OC_MODE="full" OC_FAIL_VERIFY=""
 : >"$OC_LOG"
 cat >"$T/fake-bin/oc-stub.py" <<'PY'
 import json, os, sys
@@ -112,37 +124,38 @@ else:
     print(f"oc stub: args inesperados: {args}", file=sys.stderr)
     sys.exit(99)
 PY
-printf '#!/bin/bash\nexec python3 "$(dirname "$0")/oc-stub.py" "$@"\n' >"$T/fake-bin/openclaw"
-chmod +x "$T/fake-bin/openclaw"
-cat >"$T/fake-bin/schtasks" <<'SH'
-#!/bin/bash
+mkshim openclaw oc-stub.py
+cat >"$T/fake-bin/schtasks-stub.py" <<'PY'
 # schtasks /query /tn <name> /xml -> XML en stdout
-name=""
-prev=""
-for a in "$@"; do
-  if [ "$prev" = "/tn" ]; then name="$a"; fi
-  prev="$a"
-done
-if [ "x$OC_SCHTASKS_MISSING" = "x$name" ]; then
-  echo "ERROR: no existe" >&2
-  exit 1
-fi
-printf '<Task version="1.2"><RegistrationInfo><URI>\\%s</URI></RegistrationInfo></Task>\n' "$name"
-SH
-chmod +x "$T/fake-bin/schtasks"
-cat >"$T/fake-bin/icacls" <<'SH'
-#!/bin/bash
+import os, sys
+args = sys.argv[1:]
+name = ""
+prev = ""
+for a in args:
+    if prev == "/tn":
+        name = a
+    prev = a
+if os.environ.get("OC_SCHTASKS_MISSING", "") == name:
+    print("ERROR: no existe", file=sys.stderr)
+    sys.exit(1)
+print('<Task version="1.2"><RegistrationInfo><URI>\\%s</URI></RegistrationInfo></Task>' % name)
+PY
+mkshim schtasks schtasks-stub.py
+cat >"$T/fake-bin/icacls-stub.py" <<'PY'
 # lockdown (con /inheritance) -> exit 0; lectura -> ACL en stdout
-for a in "$@"; do
-  if [ "$a" = "/inheritance:r" ]; then exit 0; fi
-done
-if [ "${OC_ACL_MODE:-locked}" = "locked" ]; then
-  printf '%s NT AUTHORITY\\SYSTEM:(OI)(CI)(F)\n%s *S-1-5-32-544:(OI)(CI)(F)\n' "$1" "$1"
-else
-  printf '%s BUILTIN\\Users:(OI)(CI)(F)\n' "$1"
-fi
-SH
-chmod +x "$T/fake-bin/icacls"
+import os, sys
+args = sys.argv[1:]
+for a in args:
+    if a == "/inheritance:r":
+        sys.exit(0)
+d = args[0] if args else ""
+if os.environ.get("OC_ACL_MODE", "locked") == "locked":
+    print("%s NT AUTHORITY\\SYSTEM:(OI)(CI)(F)" % d)
+    print("%s *S-1-5-32-544:(OI)(CI)(F)" % d)
+else:
+    print("%s BUILTIN\\Users:(OI)(CI)(F)" % d)
+PY
+mkshim icacls icacls-stub.py
 export PATH="$T/fake-bin:$PATH"
 
 # --- fixtures reales: repo fuente + runtime + launchers ---
@@ -301,5 +314,12 @@ OC_VERSION="2026.9.4" corre vw 0 || fail "(2h) report-only con version vieja deb
 grep -q '2026.9.5' "$T/vw.out" || fail "(2h) report-only no advierte version"
 OC_VERSION="2026.9.4" corre va 1 && fail "(2h) apply con version vieja debio fallar y salio 0"
 echo "ok (2h): version vieja avisa en seco y frena en apply"
+
+# (3) windows-contract corre ESTE test (pin de cobertura propia).
+YAML=.github/workflows/quality.yml
+SEC_W=$(awk '/^  windows-contract:/{f=1} f && !/^  windows-contract:/ && /^  [A-Za-z_][A-Za-z0-9_-]*:/{f=0} f' "$YAML" | grep -vE '^[[:space:]]*#')
+printf '%s\n' "$SEC_W" | grep -qF 'test-runtime-backup.sh' \
+  || fail "(3) windows-contract no corre test-runtime-backup.sh"
+echo "ok (3): windows-contract cubre este test"
 
 echo "TODO VERDE: runtime-backup"

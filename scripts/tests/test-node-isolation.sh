@@ -22,8 +22,8 @@ done
 
 # (0) El script existe y parsea limpio.
 [ -f "$ND" ] || fail "(0) falta $ND"
-PSH="$(command -v pwsh || true)"
-[ -n "$PSH" ] || fail "(0) sin pwsh en PATH"
+PSH="$(command -v powershell.exe || command -v powershell || command -v pwsh || true)"
+[ -n "$PSH" ] || fail "(0) sin powershell ni pwsh en PATH"
 "$PSH" -NoProfile -NonInteractive -Command "
 \$e=\$null; \$t=\$null
 [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path '$ND'), [ref]\$t, [ref]\$e)
@@ -60,11 +60,23 @@ nat() {
 }
 NDN=$(nat "$ND")
 PYBIN=$(command -v python3 || command -v python) || fail "(2) sin python3 ni python"
+mp() { # ruta legible por hijos nativos y por bash (mixta en Windows)
+  if [ "$en_windows" -eq 1 ] && command -v cygpath >/dev/null 2>&1; then
+    cygpath -m "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
+mkshim() { # $1=nombre $2=script.py -> lanzadores bash + .cmd hacia python
+  printf '#!/bin/bash\nexec "%s" "$(dirname "$0")/%s" "$@"\n' "$PYBIN" "$2" >"$T/fake-bin/$1"
+  chmod +x "$T/fake-bin/$1"
+  printf '@python "%%~dp0%s" %%*\r\n@exit /b %%errorlevel%%\r\n' "$2" >"$T/fake-bin/$1.cmd"
+}
 
 # --- stubs ---
 mkdir -p "$T/fake-bin"
-export OC_VERSION="2026.9.5" OC_LOG="$T/oc.log" OC_STATE="$T/oc-config.json"
-export OC_CAPTURE="$T/uploaded.json" OC_STATUS_MODE="ok"
+export OC_VERSION="2026.9.5" OC_LOG="$(mp "$T/oc.log")" OC_STATE="$(mp "$T/oc-config.json")"
+export OC_CAPTURE="$(mp "$T/uploaded.json")" OC_STATUS_MODE="ok"
 : >"$OC_LOG"
 : >"$OC_STATE"
 cat >"$T/fake-bin/oc-stub.py" <<'PY'
@@ -129,52 +141,59 @@ else:
     print(f"oc stub: args inesperados: {args}", file=sys.stderr)
     sys.exit(99)
 PY
-printf '#!/bin/bash\nexec python3 "$(dirname "$0")/oc-stub.py" "$@"\n' >"$T/fake-bin/openclaw"
-chmod +x "$T/fake-bin/openclaw"
-export NODE_STATE_DIR="$T/nstate" ST_DIR="$T"
+mkshim openclaw oc-stub.py
+export NODE_STATE_DIR="$(nat "$T/nstate")" ST_DIR="$(mp "$T")"
 mkdir -p "$T"
-cat >"$T/fake-bin/schtasks" <<'SH'
-#!/bin/bash
-echo "schtasks $*" >>"$OC_LOG"
-op="$1"
-if [ "$op" = "/query" ]; then
-  name=""
-  prev=""
-  for a in "$@"; do
-    if [ "$prev" = "/tn" ]; then name="$a"; fi
-    prev="$a"
-  done
-  if [ "$name" = "OpenClaw CUA Node" ]; then
-    if [ "${OC_CUA_MODE:-present}" = "absent" ] || [ -f "$ST_DIR/cua-deleted" ]; then
-      echo "ERROR: no existe" >&2
-      exit 1
-    fi
-    printf '<Task version="1.2"><RegistrationInfo><URI>\\OpenClaw CUA Node</URI></RegistrationInfo></Task>\n'
-  else
-    if [ "${OC_NODE_MODE:-present}" = "absent" ]; then
-      echo "ERROR: no existe" >&2
-      exit 1
-    fi
-    printf '<Task version="1.2"><RegistrationInfo><URI>\\OpenClaw Node</URI></RegistrationInfo><Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers><Settings><Enabled>true</Enabled></Settings><Actions><Exec><Command>openclaw.exe</Command><Arguments>node run --state %s</Arguments></Exec></Actions></Task>\n' "$NODE_STATE_DIR"
-  fi
-elif [ "$op" = "/delete" ]; then
-  : >"$ST_DIR/cua-deleted"
-elif [ "$op" = "/run" ]; then
-  :
-else
-  echo "schtasks stub: $*" >&2
-  exit 99
-fi
-SH
-chmod +x "$T/fake-bin/schtasks"
-cat >"$T/fake-bin/icacls" <<'SH'
-#!/bin/bash
-for a in "$@"; do
-  if [ "$a" = "/inheritance:r" ]; then exit 0; fi
-done
-printf '%s NT AUTHORITY\\SYSTEM:(OI)(CI)(F)\n%s testuser:(OI)(CI)(F)\n' "$1" "$1"
-SH
-chmod +x "$T/fake-bin/icacls"
+cat >"$T/fake-bin/schtasks-stub.py" <<'PY'
+import os, sys
+log = os.environ["OC_LOG"]
+st = os.environ["ST_DIR"]
+args = sys.argv[1:]
+with open(log, "a") as fh:
+    fh.write("schtasks " + " ".join(args) + "\n")
+op = args[0] if args else ""
+if op == "/query":
+    name = ""
+    prev = ""
+    for a in args:
+        if prev == "/tn":
+            name = a
+        prev = a
+    if name == "OpenClaw CUA Node":
+        if os.environ.get("OC_CUA_MODE", "present") == "absent" or \
+                os.path.exists(os.path.join(st, "cua-deleted")):
+            print("ERROR: no existe", file=sys.stderr)
+            sys.exit(1)
+        print('<Task version="1.2"><RegistrationInfo><URI>\\OpenClaw CUA Node</URI></RegistrationInfo></Task>')
+    else:
+        if os.environ.get("OC_NODE_MODE", "present") == "absent":
+            print("ERROR: no existe", file=sys.stderr)
+            sys.exit(1)
+        print('<Task version="1.2"><RegistrationInfo><URI>\\OpenClaw Node</URI></RegistrationInfo>'
+              "<Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>"
+              "<Settings><Enabled>true</Enabled></Settings><Actions><Exec><Command>openclaw.exe</Command>"
+              "<Arguments>node run --state %s</Arguments></Exec></Actions></Task>"
+              % os.environ["NODE_STATE_DIR"])
+elif op == "/delete":
+    open(os.path.join(st, "cua-deleted"), "w").close()
+elif op == "/run":
+    pass
+else:
+    print(f"schtasks stub: {' '.join(args)}", file=sys.stderr)
+    sys.exit(99)
+PY
+mkshim schtasks schtasks-stub.py
+cat >"$T/fake-bin/icacls-stub.py" <<'PY'
+import sys
+args = sys.argv[1:]
+for a in args:
+    if a == "/inheritance:r":
+        sys.exit(0)
+d = args[0] if args else ""
+print("%s NT AUTHORITY\\SYSTEM:(OI)(CI)(F)" % d)
+print("%s testuser:(OI)(CI)(F)" % d)
+PY
+mkshim icacls icacls-stub.py
 export PATH="$T/fake-bin:$PATH"
 
 # --- approvals valido ---
@@ -200,7 +219,7 @@ corre() { # $1=tag $2=apply(0/1) resto=extra
   : >"$OC_LOG"
   : >"$OC_STATE"
   rm -f "$OC_CAPTURE" "$T/cua-deleted"
-  export NODE_STATE_DIR="$T/$tag-nstate"
+  export NODE_STATE_DIR="$(nat "$T/$tag-nstate")"
   "$PSH" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$NDN" \
     -NodeStateDir "$(nat "$T/$tag-nstate")" -NodeDisplayName "Windows CUA" \
     -GatewayHost "10.0.0.9" -GatewayPort 18789 -NodeUser "testuser" \
@@ -225,45 +244,41 @@ printf '{"version":1,"agents":{"main":{"allowlist":[{"pattern":"C:\\Tools\\x.exe
   >"$T/robad.out" 2>&1 && fail "(2a) report-only invalido debio frenar y salio 0"
 echo "ok (2a): report-only valida sin escribir"
 
-# (2b) Apply verde (POSIX).
-if [ "$en_windows" -eq 1 ]; then
-  echo "SKIP (2b): stubs POSIX; CI ubuntu lo cubre"
-else
-  corre ok 1 || fail "(2b) apply debio salir 0: $(cat "$T/ok.out")"
-  [ -d "$T/ok-nstate" ] || fail "(2b) sin dir de estado"
-  [ "$(grep -c 'openclaw config set' "$OC_LOG")" = 2 ] || fail "(2b) sets != 2"
-  [ "$(find "$T/ok-nstate" -name '*.sqlite' | wc -l | tr -d ' ')" = 0 ] || fail "(2b) sqlite en estado"
-  grep -q 'PAIR_USED=1' "$OC_LOG" || fail "(2b) sin node run --pair"
-  grep -q 'node install' "$OC_LOG" || fail "(2b) sin node install"
-  grep -q -- '--pair' "$OC_LOG" && fail "(2b) codigo o flag --pair en log"
-  [ "$(grep -n 'PAIR_USED=1' "$OC_LOG" | cut -d: -f1)" -lt "$(grep -n 'node install' "$OC_LOG" | cut -d: -f1)" ] \
-    || fail "(2b) install antes que run"
-  grep -q 'approvals set' "$OC_LOG" || fail "(2b) sin approvals set"
-  [ "$(grep -n 'approvals set' "$OC_LOG" | cut -d: -f1)" -lt "$(grep -n 'PAIR_USED=1' "$OC_LOG" | cut -d: -f1)" ] \
-    || fail "(2b) pairing arranco antes de approvals set"
-  [ "$(grep -n 'approvals get' "$OC_LOG" | cut -d: -f1)" -lt "$(grep -n 'PAIR_USED=1' "$OC_LOG" | cut -d: -f1)" ] \
-    || fail "(2b) pairing arranco antes de approvals readback"
-  "$PYBIN" - "$OC_CAPTURE" <<'PY' || exit 1
+# (2b) Apply verde.
+corre ok 1 || fail "(2b) apply debio salir 0: $(cat "$T/ok.out")"
+[ -d "$T/ok-nstate" ] || fail "(2b) sin dir de estado"
+[ "$(grep -c 'openclaw config set' "$OC_LOG")" = 2 ] || fail "(2b) sets != 2"
+[ "$(find "$T/ok-nstate" -name '*.sqlite' | wc -l | tr -d ' ')" = 0 ] || fail "(2b) sqlite en estado"
+grep -q 'PAIR_USED=1' "$OC_LOG" || fail "(2b) sin node run --pair"
+grep -q 'node install' "$OC_LOG" || fail "(2b) sin node install"
+grep -q -- '--pair' "$OC_LOG" && fail "(2b) codigo o flag --pair en log"
+[ "$(grep -n 'PAIR_USED=1' "$OC_LOG" | cut -d: -f1)" -lt "$(grep -n 'node install' "$OC_LOG" | cut -d: -f1)" ] \
+  || fail "(2b) install antes que run"
+grep -q 'approvals set' "$OC_LOG" || fail "(2b) sin approvals set"
+[ "$(grep -n 'approvals set' "$OC_LOG" | cut -d: -f1)" -lt "$(grep -n 'PAIR_USED=1' "$OC_LOG" | cut -d: -f1)" ] \
+  || fail "(2b) pairing arranco antes de approvals set"
+[ "$(grep -n 'approvals get' "$OC_LOG" | cut -d: -f1)" -lt "$(grep -n 'PAIR_USED=1' "$OC_LOG" | cut -d: -f1)" ] \
+  || fail "(2b) pairing arranco antes de approvals readback"
+"$PYBIN" - "$OC_CAPTURE" <<'PY' || exit 1
 import json, sys
 up = json.load(open(sys.argv[1], encoding="utf-8"))
 assert "x-cases" not in up, "x-cases subido!"
 assert up["agents"]["main"]["allowlist"][0]["pattern"].endswith("snap.exe")
 PY
-  grep -q 'schtasks /delete' "$OC_LOG" || fail "(2b) sin borrar duplicada"
-  cua_xml=$(find "$T" -name '*.xml' | head -1)
-  [ -n "$cua_xml" ] || fail "(2b) sin XML exportada de la duplicada"
-  grep -q 'OpenClaw CUA Node' "$cua_xml" || fail "(2b) XML no es de la duplicada"
-  grep -q 'schtasks /run' "$OC_LOG" || fail "(2b) sin reinicio de tarea"
-  grep -qrF "pair-CODE-ok-9Z" "$T" 2>/dev/null && fail "(2b) codigo de pairing en disco"
-  "$PYBIN" - "$T/ok-rec" <<'PY' || exit 1
+grep -q 'schtasks /delete' "$OC_LOG" || fail "(2b) sin borrar duplicada"
+cua_xml=$(find "$T" -name '*.xml' | head -1)
+[ -n "$cua_xml" ] || fail "(2b) sin XML exportada de la duplicada"
+grep -q 'OpenClaw CUA Node' "$cua_xml" || fail "(2b) XML no es de la duplicada"
+grep -q 'schtasks /run' "$OC_LOG" || fail "(2b) sin reinicio de tarea"
+grep -qrF "pair-CODE-ok-9Z" "$T" 2>/dev/null && fail "(2b) codigo de pairing en disco"
+"$PYBIN" - "$T/ok-rec" <<'PY' || exit 1
 import glob, json, sys
 recs = glob.glob(sys.argv[1] + "/*.json")
 assert len(recs) == 1, recs
 d = json.load(open(recs[0], encoding="utf-8"))
 assert d["result"] == "passed", d["result"]
 PY
-  echo "ok (2b): apply verde con pairing, superficie y tareas"
-fi
+echo "ok (2b): apply verde con pairing, superficie y tareas"
 
 # (2c) Allowlist estricta: 8 variantes invalidas frenan en seco sin estado.
 mkbad() { # $1=nombre $2=entry-json $3=cases-json
@@ -300,37 +315,40 @@ for v in wildcard pathonly unanchored nested cmd sh allowfail denypass; do
 done
 echo "ok (2c): 8 variantes invalidas frenan sin estado"
 
-if [ "$en_windows" -eq 1 ]; then
-  echo "SKIP (2d/2e/2f): stubs POSIX; CI ubuntu los cubre"
-else
-  # (2d) Superficie con extra: frena nombrando el comando.
-  OC_STATUS_MODE="extra-cmd" corre xsurf 1 \
-    && fail "(2d) superficie extra debio frenar y salio 0"
-  grep -q 'file.write' "$T/xsurf.out" || fail "(2d) no nombra el comando extra"
-  echo "ok (2d): superficie distinta frena nombrando el extra"
+# (2d) Superficie con extra: frena nombrando el comando.
+OC_STATUS_MODE="extra-cmd" corre xsurf 1 \
+  && fail "(2d) superficie extra debio frenar y salio 0"
+grep -q 'file.write' "$T/xsurf.out" || fail "(2d) no nombra el comando extra"
+echo "ok (2d): superficie distinta frena nombrando el extra"
 
-  # (2e) Nodo que nunca conecta: frena por timeout.
-  OC_STATUS_MODE="disconnected" corre noconn 1 \
-    && fail "(2e) sin conexion debio frenar y salio 0"
-  echo "ok (2e): sin conexion frena por timeout"
+# (2e) Nodo que nunca conecta: frena por timeout.
+OC_STATUS_MODE="disconnected" corre noconn 1 \
+  && fail "(2e) sin conexion debio frenar y salio 0"
+echo "ok (2e): sin conexion frena por timeout"
 
-  # (2f) Duplicada ausente: idempotente; oficial ausente: frena.
-  OC_CUA_MODE="absent" corre nocua 1 \
-    || fail "(2f) duplicada ausente debio salir 0: $(cat "$T/nocua.out")"
-  OC_NODE_MODE="absent" corre nonode 1 \
-    && fail "(2f) oficial ausente debio frenar y salio 0"
-  echo "ok (2f): duplicada idempotente, oficial obligatoria"
+# (2f) Duplicada ausente: idempotente; oficial ausente: frena.
+OC_CUA_MODE="absent" corre nocua 1 \
+  || fail "(2f) duplicada ausente debio salir 0: $(cat "$T/nocua.out")"
+OC_NODE_MODE="absent" corre nonode 1 \
+  && fail "(2f) oficial ausente debio frenar y salio 0"
+echo "ok (2f): duplicada idempotente, oficial obligatoria"
 
-  # (2g) Approve ajeno al pre-aprobado: frena.
-  OC_APPROVE_ID="node-2" corre wrongdev 1 \
-    && fail "(2g) approve ajeno debio frenar y salio 0"
-  grep -q 'aprobado ajeno' "$T/wrongdev.out" || fail "(2g) no nombra el desajuste"
-  echo "ok (2g): approve ajeno al pre-aprobado frena"
-fi
+# (2g) Approve ajeno al pre-aprobado: frena.
+OC_APPROVE_ID="node-2" corre wrongdev 1 \
+  && fail "(2g) approve ajeno debio frenar y salio 0"
+grep -q 'aprobado ajeno' "$T/wrongdev.out" || fail "(2g) no nombra el desajuste"
+echo "ok (2g): approve ajeno al pre-aprobado frena"
 
 # (2h) Version vieja: report-only avisa, apply frena.
 OC_VERSION="2026.9.4" corre vw 0 || fail "(2h) report-only viejo debio salir 0"
 OC_VERSION="2026.9.4" corre va 1 && fail "(2h) apply viejo debio frenar y salio 0"
 echo "ok (2h): version vieja avisa en seco y frena en apply"
+
+# (3) windows-contract corre ESTE test (pin de cobertura propia).
+YAML=.github/workflows/quality.yml
+SEC_W=$(awk '/^  windows-contract:/{f=1} f && !/^  windows-contract:/ && /^  [A-Za-z_][A-Za-z0-9_-]*:/{f=0} f' "$YAML" | grep -vE '^[[:space:]]*#')
+printf '%s\n' "$SEC_W" | grep -qF 'test-node-isolation.sh' \
+  || fail "(3) windows-contract no corre test-node-isolation.sh"
+echo "ok (3): windows-contract cubre este test"
 
 echo "TODO VERDE: node-isolation"

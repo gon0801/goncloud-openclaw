@@ -29,8 +29,8 @@ PUERTO_FAKE=18797
 [ -f "$CUT" ] || fail "(0) falta $CUT"
 [ -f "$LEASE_SCHEMA" ] || fail "(0) falta $LEASE_SCHEMA"
 [ -f "$STATE_SCHEMA" ] || fail "(0) falta $STATE_SCHEMA"
-PSH="$(command -v pwsh || true)"
-[ -n "$PSH" ] || fail "(0) sin pwsh en PATH"
+PSH="$(command -v powershell.exe || command -v powershell || command -v pwsh || true)"
+[ -n "$PSH" ] || fail "(0) sin powershell ni pwsh en PATH"
 "$PSH" -NoProfile -NonInteractive -Command "
 \$e=\$null; \$t=\$null
 foreach (\$f in @('$CUT', '$MODULO', 'gateway-watchdog.ps1', 'scripts/restart-openclaw-gateway.ps1')) {
@@ -75,23 +75,46 @@ echo "ok (1b): schtasks CLI sin cmdlets ScheduledTask"
 # --- arnes: stubs icacls/schtasks + fechas ---
 T=$(mktemp -d) || exit 1
 trap 'rm -rf "$T"' EXIT
-mkdir -p "$T/fake-bin"
-cat >"$T/fake-bin/icacls" <<'SH'
-#!/bin/bash
-: "${OC_LOG:=/dev/null}"
-echo "icacls $*" >>"$OC_LOG"
-for a in "$@"; do
-  if [ "$a" = "/inheritance:r" ]; then exit 0; fi
-done
-if [ "${OC_ACL_MODE:-restricted}" = "open" ]; then
-  printf '%s BUILTIN\\Users:(OI)(CI)(RX)\n' "$1"
-else
-  printf '%s NT AUTHORITY\\SYSTEM:(OI)(CI)(F)\n%s BUILTIN\\Administrators:(OI)(CI)(F)\n' "$1" "$1"
+en_windows=0
+[ "${OS:-}" = "Windows_NT" ] && en_windows=1
+case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) en_windows=1;; esac
+mwd() { # ruta mixta C:/... en Windows (bash y powershell la aceptan)
+  if [ "$en_windows" -eq 1 ] && command -v cygpath >/dev/null 2>&1; then
+    cygpath -m "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
+T="$(mwd "$T")"
+if ! command -v shasum >/dev/null 2>&1; then
+  shasum() { [ "$1" = "-a" ] && shift 2; sha256sum "$@"; }
 fi
-SH
-chmod +x "$T/fake-bin/icacls"
+mkshim() { # $1=nombre $2=script.py -> lanzadores bash + .cmd hacia python
+  printf '#!/bin/bash\nexec "%s" "$(dirname "$0")/%s" "$@"\n' "$PYBIN" "$2" >"$T/fake-bin/$1"
+  chmod +x "$T/fake-bin/$1"
+  printf '@python "%%~dp0%s" %%*\r\n@exit /b %%errorlevel%%\r\n' "$2" >"$T/fake-bin/$1.cmd"
+}
+mkdir -p "$T/fake-bin"
+cat >"$T/fake-bin/icacls-stub.py" <<'PY'
+import os, sys
+log = os.environ.get("OC_LOG", os.devnull)
+args = sys.argv[1:]
+with open(log, "a") as fh:
+    fh.write("icacls " + " ".join(args) + "\n")
+for a in args:
+    if a == "/inheritance:r":
+        sys.exit(0)
+d = args[0] if args else ""
+if os.environ.get("OC_ACL_MODE", "restricted") == "open":
+    print("%s BUILTIN\\Users:(OI)(CI)(RX)" % d)
+else:
+    print("%s NT AUTHORITY\\SYSTEM:(OI)(CI)(F)" % d)
+    print("%s BUILTIN\\Administrators:(OI)(CI)(F)" % d)
+PY
+mkshim icacls icacls-stub.py
 export PATH="$T/fake-bin:$PATH"
-MODN="$PWD/$MODULO"
+MODN="$(mwd "$PWD/$MODULO")"
+RECN="$(mwd "$PWD/$RECIBO_SCHEMA")"
 GEN_FIJO=20260922T120000Z-abcdef12
 AHORA=$("$PYBIN" -c "from datetime import datetime,timezone,timedelta; print((datetime.now(timezone.utc)).strftime('%Y-%m-%dT%H:%M:%SZ'))")
 FUTURO=$("$PYBIN" -c "from datetime import datetime,timezone,timedelta; print((datetime.now(timezone.utc)+timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M:%SZ'))")
@@ -276,69 +299,92 @@ resetea_taskdb() { # solo gateway corriendo + watchdog listo (transaccion previa
   rm -f "$T/gw-down" "$T/gw-unhealthy"
 }
 resetea_taskdb
-cat >"$T/fake-bin/schtasks" <<'SH'
-#!/bin/bash
-echo "schtasks $*" >>"$OC_LOG"
-op="$1"; shift || true
-tn=""; prev=""
-for a in "$@"; do
-  if [ "$prev" = "/tn" ]; then tn="$a"; fi
-  prev="$a"
-done
-slot="$ST_DIR/taskdb/$(printf '%s' "$tn" | tr -c 'A-Za-z0-9' '_' )"
-case "$op" in
-  /query)
-    if [ -f "$slot" ]; then
-      printf 'HostName:      FAKE\nTaskName:      \\%s\nNext Run Time: 9/22/2026 12:00:00 PM\nStatus:        %s\n' "$tn" "$(cat "$slot")"
-    else
-      echo "ERROR: no existe" >&2; exit 1
-    fi
-    ;;
-  /create)
-    if [ "${OC_SCHTASKS_FAIL_CREATE:-0}" = "1" ]; then echo "ERROR: create" >&2; exit 1; fi
-    if [ -n "${OC_SCHTASKS_FAIL_CREATE_TN:-}" ] && [ "$tn" = "$OC_SCHTASKS_FAIL_CREATE_TN" ]; then
-      echo "ERROR: create $tn" >&2; exit 1
-    fi
-    printf 'Ready' >"$slot"
-    ;;
-  /delete)
-    if [ "${OC_SCHTASKS_FAIL_DELETE:-0}" = "1" ]; then echo "ERROR: delete" >&2; exit 1; fi
-    rm -f "$slot"
-    ;;
-  /run)
-    if [ "${OC_SCHTASKS_FAIL_RUN:-0}" = "1" ]; then echo "ERROR: run" >&2; exit 1; fi
-    printf 'Running' >"$slot"
-    if [ "$tn" = "$GW_TASK" ]; then
-      rm -f "$ST_DIR/gw-down"
-      if [ "${OC_GW_UNHEALTHY_AFTER_RUN:-0}" = "1" ]; then : >"$ST_DIR/gw-unhealthy"; fi
-    fi
-    ;;
-  /end)
-    if [ "${OC_SCHTASKS_FAIL_END:-0}" = "1" ]; then echo "ERROR: end" >&2; exit 1; fi
-    printf 'Ready' >"$slot"
-    if [ "$tn" = "$GW_TASK" ] && [ "${OC_SCHTASKS_END_NODOWN:-0}" != "1" ]; then
-      : >"$ST_DIR/gw-down"
-    fi
-    ;;
-  /change)
-    if [ "${OC_SCHTASKS_FAIL_CHANGE:-0}" = "1" ]; then echo "ERROR: change" >&2; exit 1; fi
-    case "$*" in
-      */disable)
-        if [ "${OC_SCHTASKS_FAIL_DISABLE:-0}" = "1" ]; then echo "ERROR: disable" >&2; exit 1; fi
-        ;;
-      */enable)
-        if [ "${OC_SCHTASKS_FAIL_ENABLE:-0}" = "1" ]; then echo "ERROR: enable" >&2; exit 1; fi
-        ;;
-    esac
-    echo "change $tn $*" >>"$ST_DIR/change.log"
-    ;;
-  *) echo "schtasks stub: op $op" >&2; exit 99 ;;
-esac
-SH
-chmod +x "$T/fake-bin/schtasks"
+cat >"$T/fake-bin/schtasks-stub.py" <<'PY'
+import os, re, sys
+log = os.environ["OC_LOG"]
+st = os.environ["ST_DIR"]
+gw = os.environ.get("GW_TASK", "")
+args = sys.argv[1:]
+with open(log, "a") as fh:
+    fh.write("schtasks " + " ".join(args) + "\n")
+op = args[0] if args else ""
+rest = args[1:]
+tn = ""
+prev = ""
+for a in rest:
+    if prev == "/tn":
+        tn = a
+    prev = a
+slot = os.path.join(st, "taskdb", re.sub(r"[^A-Za-z0-9]", "_", tn))
+
+
+def fail(msg, code=1):
+    print(msg, file=sys.stderr)
+    sys.exit(code)
+
+
+if op == "/query":
+    if os.path.isfile(slot):
+        with open(slot, encoding="utf-8") as fh:
+            status = fh.read().rstrip("\n")
+        print("HostName:      FAKE")
+        print("TaskName:      \\%s" % tn)
+        print("Next Run Time: 9/22/2026 12:00:00 PM")
+        print("Status:        %s" % status)
+    else:
+        fail("ERROR: no existe")
+elif op == "/create":
+    if os.environ.get("OC_SCHTASKS_FAIL_CREATE", "0") == "1":
+        fail("ERROR: create")
+    if os.environ.get("OC_SCHTASKS_FAIL_CREATE_TN", "") and tn == os.environ["OC_SCHTASKS_FAIL_CREATE_TN"]:
+        fail("ERROR: create %s" % tn)
+    with open(slot, "w", encoding="utf-8") as fh:
+        fh.write("Ready")
+elif op == "/delete":
+    if os.environ.get("OC_SCHTASKS_FAIL_DELETE", "0") == "1":
+        fail("ERROR: delete")
+    try:
+        os.remove(slot)
+    except FileNotFoundError:
+        pass
+elif op == "/run":
+    if os.environ.get("OC_SCHTASKS_FAIL_RUN", "0") == "1":
+        fail("ERROR: run")
+    with open(slot, "w", encoding="utf-8") as fh:
+        fh.write("Running")
+    if tn == gw:
+        try:
+            os.remove(os.path.join(st, "gw-down"))
+        except FileNotFoundError:
+            pass
+        if os.environ.get("OC_GW_UNHEALTHY_AFTER_RUN", "0") == "1":
+            open(os.path.join(st, "gw-unhealthy"), "w").close()
+elif op == "/end":
+    if os.environ.get("OC_SCHTASKS_FAIL_END", "0") == "1":
+        fail("ERROR: end")
+    with open(slot, "w", encoding="utf-8") as fh:
+        fh.write("Ready")
+    if tn == gw and os.environ.get("OC_SCHTASKS_END_NODOWN", "0") != "1":
+        open(os.path.join(st, "gw-down"), "w").close()
+elif op == "/change":
+    if os.environ.get("OC_SCHTASKS_FAIL_CHANGE", "0") == "1":
+        fail("ERROR: change")
+    tail = " ".join(rest)
+    if tail.endswith("/disable"):
+        if os.environ.get("OC_SCHTASKS_FAIL_DISABLE", "0") == "1":
+            fail("ERROR: disable")
+    if tail.endswith("/enable"):
+        if os.environ.get("OC_SCHTASKS_FAIL_ENABLE", "0") == "1":
+            fail("ERROR: enable")
+    with open(os.path.join(st, "change.log"), "a") as fh:
+        fh.write("change %s %s\n" % (tn, tail))
+else:
+    fail("schtasks stub: op %s" % op, 99)
+PY
+mkshim schtasks schtasks-stub.py
 
 # (3) Dispatch: valida, crea lease+estado+tareas, arranca el one-shot.
-CUTN="$PWD/$CUT"
+CUTN="$(mwd "$PWD/$CUT")"
 SHA40=0123456789abcdef0123456789abcdef01234567
 printf 'Write-Output "payload ok"\n' >"$T/payload-ok.ps1"
 despacha() { # $1=tag $2=stateroot; overrides D_SHA D_DM D_PAY D_VER D_URL; out en $T/$1.out
@@ -620,7 +666,7 @@ valida_recibo() { # $1=ruta -> exige Test-ReceiptObject del modulo
   "$PSH" -NoProfile -NonInteractive -Command "
 Import-Module '$MODN' -Force
 \$r = Get-Content -Raw -LiteralPath '$1'
-if (Test-ReceiptObject -ReceiptJson \$r -SchemaPath '$PWD/$RECIBO_SCHEMA') { 'RECIBO-OK' } else { 'RECIBO-MAL' }
+if (Test-ReceiptObject -ReceiptJson \$r -SchemaPath '$RECN') { 'RECIBO-OK' } else { 'RECIBO-MAL' }
 " 2>"$T/recerr.log" | grep -q 'RECIBO-OK' \
     || fail "(recibo) $1 no pasa Test-ReceiptObject: $(cat "$T/recerr.log")"
 }
@@ -1288,5 +1334,12 @@ grep -a -q "terminal=FAILED SIN TERMINAL generation=$GEN_T500" "$T/r-t500.out" \
   || fail "(8e) sin FAILED SIN TERMINAL"
 rm -f "$ST_DIR/gw-unhealthy"
 echo "ok (8e): 500 no es detenido"
+
+# (9) windows-contract corre ESTE test (pin de cobertura propia).
+YAML=.github/workflows/quality.yml
+SEC_W=$(awk '/^  windows-contract:/{f=1} f && !/^  windows-contract:/ && /^  [A-Za-z_][A-Za-z0-9_-]*:/{f=0} f' "$YAML" | grep -vE '^[[:space:]]*#')
+printf '%s\n' "$SEC_W" | grep -qF 'test-runtime-cutover-transaction.sh' \
+  || fail "(9) windows-contract no corre test-runtime-cutover-transaction.sh"
+echo "ok (9): windows-contract cubre este test"
 
 echo "TODO VERDE: cutover-transaction"

@@ -373,6 +373,26 @@ jobs:
         shell: bash
         run: bash scripts/tests/test-protected-paths.sh
 
+      - name: Contrato del backup del runtime
+        shell: bash
+        run: bash scripts/tests/test-runtime-backup.sh
+
+      - name: Contrato de memoria y rollback
+        shell: bash
+        run: bash scripts/tests/test-memory-migration.sh
+
+      - name: Contrato del nodo aislado
+        shell: bash
+        run: bash scripts/tests/test-node-isolation.sh
+
+      - name: Contrato de cuarentena
+        shell: bash
+        run: bash scripts/tests/test-quarantine.sh
+
+      - name: Contrato de la transaccion de cutover
+        shell: bash
+        run: bash scripts/tests/test-runtime-cutover-transaction.sh
+
   # La bateria completa conserva un solo entrypoint en CI: scripts/run-checks.sh,
   # ahora invocado por la matriz con SAIKIT_SHARD. Pre-commit conserva solo
   # validaciones rapidas de archivos para no cobrar la bateria completa en cada

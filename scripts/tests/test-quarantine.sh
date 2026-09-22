@@ -20,8 +20,8 @@ done
 
 # (0) El script existe y parsea limpio.
 [ -f "$QZ" ] || fail "(0) falta $QZ"
-PSH="$(command -v pwsh || true)"
-[ -n "$PSH" ] || fail "(0) sin pwsh en PATH"
+PSH="$(command -v powershell.exe || command -v powershell || command -v pwsh || true)"
+[ -n "$PSH" ] || fail "(0) sin powershell ni pwsh en PATH"
 "$PSH" -NoProfile -NonInteractive -Command "
 \$e=\$null; \$t=\$null
 [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path '$QZ'), [ref]\$t, [ref]\$e)
@@ -69,6 +69,7 @@ echo "oc stub: $*" >&2
 exit 99
 SH
 chmod +x "$T/fake-bin/openclaw"
+printf '@echo off\r\n@if "%%~1"=="--version" echo OpenClaw %%OC_VERSION%% (stub)\r\n@if "%%~1"=="--version" exit /b 0\r\n@echo oc stub: %%* 1>&2\r\n@exit /b 99\r\n' >"$T/fake-bin/openclaw.cmd"
 export PATH="$T/fake-bin:$PATH"
 
 mkdir -p "$T/rt" "$T/repo"
@@ -262,7 +263,8 @@ hace_d=0
 if cp -R "$T/mh-q" "$T/mh-d-q" 2>/dev/null; then
   QA_LEAF_D=$(ls "$T/mh-d-q" | grep '^a\.txt-' | head -1)
   if [ -n "$QA_LEAF_D" ] && rm -f "$T/mh-d-q/$QA_LEAF_D" \
-      && ln -s "$T/fuera/secreto.txt" "$T/mh-d-q/$QA_LEAF_D" 2>/dev/null; then
+      && ln -s "$T/fuera/secreto.txt" "$T/mh-d-q/$QA_LEAF_D" 2>/dev/null \
+      && [ -L "$T/mh-d-q/$QA_LEAF_D" ]; then
     hace_d=1
   else
     echo "SKIP (2h/d): sin symlinks"
@@ -380,5 +382,12 @@ want = hashlib.sha256(open(os.path.join(T, "kn-inv.jsonl"), "rb").read()).hexdig
 assert any(want in o for o in d["observations"]), d["observations"]
 PY
 echo "ok (2j): recovery iguala inventario; recibo liga hash"
+
+# (3) windows-contract corre ESTE test (pin de cobertura propia).
+YAML=.github/workflows/quality.yml
+SEC_W=$(awk '/^  windows-contract:/{f=1} f && !/^  windows-contract:/ && /^  [A-Za-z_][A-Za-z0-9_-]*:/{f=0} f' "$YAML" | grep -vE '^[[:space:]]*#')
+printf '%s\n' "$SEC_W" | grep -qF 'test-quarantine.sh' \
+  || fail "(3) windows-contract no corre test-quarantine.sh"
+echo "ok (3): windows-contract cubre este test"
 
 echo "TODO VERDE: quarantine"
