@@ -261,7 +261,7 @@ jobs:
       - name: Install openclaw (para el smoke de import del plugin)
         if: matrix.shard == '3/3'
         run: |
-          npm install --no-save --silent openclaw@2026.9.4
+          npm install --no-save --silent openclaw@2026.9.5
           test -d node_modules/openclaw || { echo "openclaw no quedo instalado"; exit 1; }
 
       - name: Run pre-commit (todos los candados locales, sobre todo el repo)
@@ -312,6 +312,31 @@ jobs:
       - name: Contrato de cobertura de CI (13 casos + cableado)
         run: bash scripts/tests/test-ci-coverage-contract.sh
 
+  # Contrato Windows (Fase 16.1): corre SOLO los tests de contrato del
+  # runtime en windows-latest, donde powershell.exe 5.1 existe de verdad.
+  # Linux no finge ser Windows: el parseo 5.1 y la conducta del modulo
+  # PowerShell se prueban aqui, no en los shards. No publica artifacts ni
+  # entra a la auditoria de union (esos tests ya corren en el shard 3 por
+  # el glob; contarlos dos veces romperia el exactly-once). Misma regla de
+  # omision que los shards: solo un fast exacto autoriza skipped.
+  windows-contract:
+    runs-on: windows-latest
+    needs: [clasificador]
+    if: needs.clasificador.outputs.carril != 'fast'
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Contrato del recibo
+        shell: bash
+        run: bash scripts/tests/test-runtime-receipt.sh
+
+      - name: Contrato de disposicion y modulo
+        shell: bash
+        run: bash scripts/tests/test-runtime-layout.sh
+
   # La bateria completa conserva un solo entrypoint en CI: scripts/run-checks.sh,
   # ahora invocado por la matriz con SAIKIT_SHARD. Pre-commit conserva solo
   # validaciones rapidas de archivos para no cobrar la bateria completa en cada
@@ -326,7 +351,7 @@ jobs:
   gate:
     runs-on: ubuntu-latest
     if: always()
-    needs: [clasificador, shards, ci-contract]
+    needs: [clasificador, shards, ci-contract, windows-contract]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
@@ -379,6 +404,10 @@ jobs:
           # solo si fast omitio la matriz entera, failure/cancelled si
           # cualquiera rebota.
           R_SHARDS: ${{ needs.shards.result }}
+          # El contrato Windows decide igual que los shards: success pasa y
+          # skipped pasa solo con fast valido. No admite la via del
+          # skipped-autorizado-por-fast sin clasificacion fast.
+          R_WINDOWS: ${{ needs.windows-contract.result }}
           # El contrato de cobertura se decide aparte de los shards: no admite
           # la via del skipped-autorizado-por-fast porque no depende del carril.
           R_CI_CONTRACT: ${{ needs.ci-contract.result }}
@@ -398,7 +427,7 @@ jobs:
           # (b) Jobs de calidad: success pasa; skipped pasa SOLO con
           # clasificacion fast valida (omision autorizada); todo lo demas
           # (failure, cancelled) rebota.
-          for par in "shards=$R_SHARDS"; do
+          for par in "shards=$R_SHARDS" "windows=$R_WINDOWS"; do
             printf '%s\n' "$par"
             case "$par" in
               *=success) ;;

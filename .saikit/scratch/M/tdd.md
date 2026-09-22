@@ -496,3 +496,60 @@ summary D2: VIGIA SYNC OK ciclo=… (callado en D)
 
 ### 4. Commits
 `fix(13.2): --no-deliver en write-jobs del fixture` + `chore(13.2): respaldo pre/post del vigia v2 aplicado`.
+
+---
+
+# TDD — carril M, Fase 16 (rama fase16/runtime-separation)
+
+Contrato: un commit por Task del plan
+`docs/superpowers/plans/2026-09-22-openclaw-runtime-separation.md`.
+Cada Task corre sus pruebas en ROJO antes de implementar y en VERDE después.
+Solo pruebas focalizadas durante desarrollo; la batería completa la consume
+el PR en CI. `git diff --check` + hooks antes de cada handoff.
+
+Formas compartidas (un literal, tres dueños; el test lo fija):
+
+- SECRET_KEY_PATTERN:
+  `(?i)(password|passwd|secret|token|bearer|apikey|api[_-]?key|private[_-]?key|pairing|passphrase|credential|session[_-]?key|connection[_-]?string|authorization|cookie|transcript|memory[_-]?content|messages)`
+- SECRET_VALUE_PATTERN:
+  `(?im)(bearer\s+[A-Za-z0-9._~+/-]+=*|sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|xox[bpras]-[A-Za-z0-9-]+|-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----|(?-i:^[A-Z][A-Z0-9_]{2,}=[^\s]{4,}))`
+
+Dueños: `docs/spec/runtime-separation-receipt.v1.schema.json` (campos
+`x-secretKeyPattern` / `x-secretValuePattern`),
+`scripts/runtime-separation/RuntimeSeparation.psm1` (mismo literal),
+`scripts/tests/test-runtime-receipt.sh` (los LEE del schema: paridad
+estructural, no por grep).
+
+Ayudas OpenClaw 2026.9.5 (ec9c1a1) capturadas de un `npm install` en scratch
+ANTES de codificar (contrato de ejecución del plan): `backup`, `memory`,
+`node`, `nodes`, `config` + subhelps (`node run --pair` existe,
+`node install` NO trae `--pair`, `nodes status --json`, `memory index
+--agent/--force`, `memory search --query/--json`, `memory status
+--deep/--json`, `backup create --verify/--json/--output`,
+`backup restore <archive> --target`, `backup sqlite create/list/verify/restore`,
+`config get <path> --json`, `config validate --json`). Salida íntegra en
+scratch del implementador; la evidencia versionada nace en la Task 5, que es
+la que fija sintaxis exacta de memoria.
+
+## Task 1 (16.1) — Contratos y CI 2026.9.5
+
+ROJO (2026-09-22, antes de implementar):
+
+- `bash scripts/tests/test-runtime-receipt.sh` →
+  `ROJO: (0) falta docs/spec/runtime-separation-receipt.v1.schema.json`
+- `bash scripts/tests/test-runtime-layout.sh` →
+  `ROJO: (0) falta scripts/runtime-separation/RuntimeSeparation.psm1`
+
+Desviaciones declaradas del plan (la DoD manda sobre la lista de archivos):
+
+- `scripts/run-checks.sh`: SIN cambios. Los tests nuevos entran por el glob
+  (contrato Fase 15.1: el glob manda, nadie mantiene listas a mano) y el job
+  Windows los invoca directo. Un toque cosmético al runner solo sumaría ruido
+  al diff.
+- `scripts/tests/test-ci-coverage-contract.sh` (chequeo w): el plan no lo
+  cita, pero fija con `grep -qF` el `needs:` EXACTO del gate. La DoD exige
+  que el gate dependa de `windows-contract`, así que el pin se actualiza al
+  needs nuevo y se agregan las aserciones del par windows (misma regla:
+  skipped solo con fast válido). Sin este cambio, cumplir la DoD rompería
+  la batería: es el patrón de evolución del propio repo (15.2 hizo lo mismo
+  con los shards).

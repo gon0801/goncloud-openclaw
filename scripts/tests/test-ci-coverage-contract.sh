@@ -360,8 +360,8 @@ limpio "$sec_cc" | grep -q 'node-version' \
 sec_gate=$(seccion gate "$Y")
 [ -n "$sec_gate" ] || fail "(w) quality.yml no tiene la seccion gate"
 GL=$(limpio "$sec_gate")
-printf '%s\n' "$GL" | grep -qF 'needs: [clasificador, shards, ci-contract]' \
-  || fail "(w) el gate no depende de ci-contract:
+printf '%s\n' "$GL" | grep -qF 'needs: [clasificador, shards, ci-contract, windows-contract]' \
+  || fail "(w) el gate no depende de ci-contract y windows-contract:
 $GL"
 printf '%s\n' "$GL" | grep -qF 'R_CI_CONTRACT: ${{ needs.ci-contract.result }}' \
   || fail "(w) el gate no lee el resultado de ci-contract:
@@ -388,6 +388,9 @@ $GL"
 # condicionada no abre la puerta: la decision sigue leyendo R_SHARDS.
 printf '%s\n' "$GL" | grep -qF 'R_SHARDS: ${{ needs.shards.result }}' \
   || fail "(w) el gate dejo de leer el resultado agregado de shards:
+$GL"
+printf '%s\n' "$GL" | grep -qF 'R_WINDOWS: ${{ needs.windows-contract.result }}' \
+  || fail "(w) el gate dejo de leer el resultado de windows-contract:
 $GL"
 echo "ok (w): mismo validador en YAML y test, ci-contract sin omision, gate audita la union"
 
