@@ -166,6 +166,10 @@ Import-Module '$MODN' -Force
 'STA:' + (Test-CutoverStateObject -StateJson \$sr)
 'ACL:' + (Test-CutoverAcl -StateRoot '$1')
 'CP:' + ((\$sr | ConvertFrom-Json).completedPhases -is [array])
+\$ar = (& icacls '$1' 2>&1 | Out-String); \$ax = \$LASTEXITCODE
+'ACLRAW:' + \$ar + 'ACLEND'
+'ACLEXIT:' + \$ax
+'WHICH:' + ((Get-Command icacls).Source)
 " 2>&1 | tr '\n' '~'
 }
 if [ "$(veredicto "$T/l-ok" "$GEN_FIJO")" != "VEREDICTO-True" ]; then
