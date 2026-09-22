@@ -785,3 +785,8 @@ F23 (HEAD huerfano, segunda instancia): CI13 avisa-skills (2):
 accidente, en 5.1 throw). Fix: `-b <rama>` en los 8 `init --bare`
 restantes (7x main, pull-identity a master: ese pushea master).
 Verdes con HOME vacio (hermeticos): los 8.
+
+F24 (autocrlf + EAP=Stop en 5.1): CI14 avisa (2): `git add` avisa
+`LF will be replaced by CRLF` a stderr (core.autocrlf del runner) y
+5.1 lo convierte en throw. Fix: EAP temporal en add/commit/push del
+capture (misma familia F22). Aplica tambien a prod Windows-live.

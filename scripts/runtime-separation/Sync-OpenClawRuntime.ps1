@@ -517,7 +517,9 @@ try {
           $dd = Split-Path -Parent $dst
           if (-not (Test-Path -LiteralPath $dd)) { [void](New-Item -ItemType Directory -Path $dd -Force) }
           Copy-Item -LiteralPath $src -Destination $dst -Force
-          & git -C $wt add -- $rel 2>&1 | Out-Null
+          # EAP temporal (CI14): git add avisa autocrlf a stderr.
+          $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+          try { & git -C $wt add -- $rel 2>$null } finally { $ErrorActionPreference = $prevEAP }
           if ($LASTEXITCODE -ne 0) { return @{ Ok = $false; Why = "stage fallo: $rel" } }
           [void]$staged.Add($rel)
         }
@@ -558,13 +560,17 @@ try {
       $title = "capture(skills): $who $($staged.Count) ruta(s)"
       $body = "Capture automatica de skills vivas."
       if ($PrevPr -gt 0) { $body = "Successor of #$PrevPr. $body" }
-      & git -C $wt -c user.name=openclaw-auto -c user.email=ehventasmx@gmail.com commit --quiet -m $title 2>&1 | Out-Null
+      # EAP temporal (CI14): commit/push escriben informativo a stderr.
+      $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+      try { & git -C $wt -c user.name=openclaw-auto -c user.email=ehventasmx@gmail.com commit --quiet -m $title 2>$null } finally { $ErrorActionPreference = $prevEAP }
       if ($LASTEXITCODE -ne 0) { return @{ Ok = $false; Why = 'commit fallo' } }
       $commit = (& git -C $wt rev-parse HEAD 2>&1)
       Push-Location -LiteralPath $wt
+      $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
       try {
-        git push --quiet origin $branch 2>&1 | Out-Null
+        git push --quiet origin $branch 2>$null
       } finally {
+        $ErrorActionPreference = $prevEAP
         Pop-Location
       }
       if ($LASTEXITCODE -ne 0) { return @{ Ok = $false; Why = 'push fallo' } }
