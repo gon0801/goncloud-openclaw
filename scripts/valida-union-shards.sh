@@ -67,14 +67,23 @@ tmp_inv=$(mktemp "${TMPDIR:-/tmp}/valida-union.XXXXXX") || { rm -f "$tmp"; exit 
 trap 'rm -f "$tmp" "$tmp_inv"' EXIT
 
 # 2-5. Cada shard: su resumen, bien formado, no vacio, sin filas en falla.
+# Y EXACTAMENTE UNA corrida por shard: el runner deja cada invocacion en su
+# directorio corrida-<marca> bajo logs/run-checks/, asi que una re-corrida del
+# mismo shard llega al artifact como un segundo resumen y se rechaza aqui (si
+# el runner truncara un resumen fijo, la re-corrida quedaria invisible: medido
+# 2026-09-22, el gate la daba por buena).
 : >"$tmp"
 for k in 1 2 3; do
   d="$base/shard-$k"
-  r=''
-  for cand in "$d/resumen.txt" "$d/logs/run-checks/resumen.txt"; do
-    [ -f "$cand" ] && { r=$cand; break; }
-  done
-  [ -n "$r" ] || rechaza "falta el resumen del shard $k (se busco $d/resumen.txt y $d/logs/run-checks/resumen.txt)"
+  # El artifact real (upload de logs/run-checks/) trae las corridas en su
+  # raiz: auditoria/shard-K/corrida-<marca>/resumen.txt (run 35748762272: sin
+  # esta ruta el gate rechazaba un artifact valido). Las dos formas viejas se
+  # mantienen por compatibilidad.
+  resumenes=$(ls "$d/resumen.txt" "$d/logs/run-checks/resumen.txt" "$d"/logs/run-checks/*/resumen.txt "$d"/corrida-*/resumen.txt 2>/dev/null | LC_ALL=C sort -u)
+  n_res=$(printf '%s\n' "$resumenes" | grep -c .)
+  [ "$n_res" -ne 0 ] || rechaza "falta el resumen del shard $k (se busco $d/resumen.txt, $d/logs/run-checks/resumen.txt, $d/logs/run-checks/*/resumen.txt y $d/corrida-*/resumen.txt)"
+  [ "$n_res" -eq 1 ] || rechaza "el shard $k trae $n_res corridas en su artifact ($(printf '%s' "$resumenes" | tr '\n' ' ')): una re-corrida del mismo shard no se cuela sobre la union"
+  r=$(printf '%s\n' "$resumenes" | head -1)
   [ -s "$r" ] || rechaza "el resumen del shard $k ($r) esta VACIO: un shard que no corrio ninguna entrada no puede dar verde"
   if ! awk -F'\t' '
     NF != 5 || ($1 != "ok" && $1 != "falla") || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $4 == "" {bad = 1}

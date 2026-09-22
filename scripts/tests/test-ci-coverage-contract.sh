@@ -22,7 +22,8 @@
 #   (4)  una entrada duplicada -> rechazo con su razon
 #   (5)  una falla del runner -> el agregador (el validador) sale rojo
 #   (6)  eliminar la invocacion del runner (ningun shard) -> rechazo
-#   (7)  duplicar la invocacion de un shard (artifact extra shard-4) -> rechazo
+#   (7)  repetir la invocacion del MISMO shard sobre su artifact -> rechazo
+#   (7b) un artifact de shard fuera del contrato (shard-4) -> rechazo
 #   (8)  eliminar el shard 1/3 -> rechazo independiente
 #   (9)  eliminar el shard 2/3 -> rechazo independiente
 #   (10) eliminar el shard 3/3 -> rechazo independiente
@@ -155,10 +156,16 @@ correr_shard() { # $1=valor SAIKIT_SHARD, $2=dir artifact destino; 0 si el runne
     bash "$R/scripts/run-checks.sh" >"$T/salida-ultimo-shard.log" 2>&1
   rc=$?
   # CI publica el artifact TAMBIEN cuando el shard revienta (upload con if:
-  # always()): el agregador necesita ver el resumen de la corrida fallida.
-  if [ -f "$R/logs/run-checks/resumen.txt" ]; then
+  # always()). Cada invocacion deja SU corrida-<marca> dentro del artifact: las
+  # corridas se ACUMULAN (es lo que hace visible una re-corrida para el
+  # validador, caso 7) y el resumen de la corrida fallida se publica igual.
+  ultimo=$(ls -td "$R"/logs/run-checks/corrida-* 2>/dev/null | head -1)
+  if [ -n "$ultimo" ] && [ -f "$ultimo/resumen.txt" ]; then
+    # Mismo layout que el upload real (path: logs/run-checks/): las corridas
+    # quedan en la RAIZ del artifact, no bajo logs/run-checks/ (run
+    # 35748762272: el simular otra cosa escondio el caso del gate).
     mkdir -p "$dest"
-    cp "$R/logs/run-checks/resumen.txt" "$dest/resumen.txt"
+    cp -R "$ultimo" "$dest/"
   fi
   return "$rc"
 }
@@ -178,7 +185,7 @@ validar() { # $1=dir artifacts -> separa salida y rc como el gate
 }
 
 ids_union() { # $1=dir artifacts -> ids de la union, orden C, uno por linea
-  for r in "$1"/shard-*/resumen.txt; do
+  for r in "$1"/shard-*/resumen.txt "$1"/shard-*/corrida-*/resumen.txt; do
     [ -f "$r" ] || continue
     awk -F'\t' '$1=="ok" || $1=="falla" {print $4}' "$r"
   done | LC_ALL=C sort
@@ -216,7 +223,10 @@ echo "ok (3): union == inventario, verificado fuera del validador"
 
 echo "(4) una entrada duplicada es rechazada con su razon"
 rm -rf "$T/dup"; cp -R "$T/ok" "$T/dup"
-cat "$T/dup/shard-1/resumen.txt" >>"$T/dup/shard-2/resumen.txt"
+# Las filas de shard-1 se cuelan DENTRO de la unica corrida de shard-2: la
+# union repite ids sin que haya una segunda corrida en el artifact (eso lo
+# cubre el caso 7; aqui lo duplicado es la entrada, no la corrida).
+cat "$T/dup/shard-1/corrida-"*/resumen.txt >>"$T/dup/shard-2/corrida-"*/resumen.txt
 validar "$T/dup"
 [ "$RC_VALIDADOR" -ne 0 ] || fail "(4) el validador acepto ids duplicados:
 $SALIDA_VALIDADOR"
@@ -225,17 +235,21 @@ $SALIDA_VALIDADOR"
 echo "ok (4): duplicado detectado"
 
 echo "(5) una falla del runner vuelve rojo el agregador"
-# La corrida roja REEMPLAZA el resumen del shard 3 sobre una union por lo demas
-# valida: si se validara solo el shard rojo, el rechazo seria por shard faltante
-# y no demostraria lo que este caso mide (la fila en falla).
+# La corrida roja REEMPLAZA la corrida del shard 3 sobre una union por lo demas
+# valida (el artifact nuevo trae UNA sola corrida, la roja): si se validara solo
+# el shard rojo, el rechazo seria por shard faltante, y si la segunda corrida se
+# acumulara, el rechazo seria por re-corrida (caso 7); ninguno de los dos
+# demostraria lo que este caso mide (la fila en falla).
 rm -rf "$T/rojo"; cp -R "$T/ok" "$T/rojo"
+rm -rf "$T/rojo/shard-3"/corrida-*
 cp scripts/tests/fixtures/runner-shards/roja.sh "$R/scripts/tests/test-roja.sh"
 correr_shard 3/3 "$T/rojo/shard-3"
 rc_roja=$?
 rm -f "$R/scripts/tests/test-roja.sh"
 [ "$rc_roja" -ne 0 ] || fail "(5) el shard con la prueba roja salio 0"
-grep -q '^falla' "$T/rojo/shard-3/resumen.txt" || fail "(5) el resumen del shard rojo no trae la fila en falla:
-$(cat "$T/rojo/shard-3/resumen.txt")"
+RES_ROJO=$(ls -td "$T/rojo/shard-3"/corrida-*/resumen.txt 2>/dev/null | head -1)
+grep -q '^falla' "$RES_ROJO" || fail "(5) el resumen del shard rojo no trae la fila en falla:
+$(cat "$RES_ROJO")"
 validar "$T/rojo"
 [ "$RC_VALIDADOR" -ne 0 ] || fail "(5) el agregador acepto una corrida con filas en falla:
 $SALIDA_VALIDADOR"
@@ -257,17 +271,33 @@ $SALIDA_VALIDADOR"
 n_inv=$(wc -l <"$INVOCACIONES" | tr -d ' ')
 echo "ok (6): sin invocacion no hay verde (registradas $n_inv invocaciones acumuladas; el rechazo no depende de eso)"
 
-echo "(7) duplicar la invocacion de un shard (artifact extra shard-4) es rechazado"
-rm -rf "$T/dupinv"; cp -R "$T/ok" "$T/dupinv"
-correr_shard 1/3 "$T/dupinv/shard-4" || fail "(7) la segunda invocacion de 1/3 revinto"
+echo "(7) repetir la invocacion del MISMO shard sobre el mismo artifact es rechazado"
+# Medido el 2026-09-22: la version anterior de este caso inventaba un artifact
+# shard-4; una re-corrida REAL del mismo shard re-escribe SU resumen.txt y el
+# gate la daba por buena (el artifact queda como una corrida limpia). La
+# re-corrida de verdad se simula invocando 1/3 dos veces contra el mismo dir.
+rm -rf "$T/rerun"; cp -R "$T/ok" "$T/rerun"
+n13_antes=$(grep -c '^1/3$' "$INVOCACIONES")
+correr_shard 1/3 "$T/rerun/shard-1" || fail "(7) la primera corrida de 1/3 revinto"
+correr_shard 1/3 "$T/rerun/shard-1" || fail "(7) la segunda corrida de 1/3 revinto"
 n13=$(grep -c '^1/3$' "$INVOCACIONES")
-[ "$n13" -eq 2 ] || fail "(7) el registro debia tener 1/3 dos veces, tiene $n13"
+[ "$((n13 - n13_antes))" -eq 2 ] || fail "(7) el registro debia sumar dos 1/3 mas, tiene $n13_antes -> $n13"
+validar "$T/rerun"
+[ "$RC_VALIDADOR" -ne 0 ] || fail "(7) el validador acepto la RE-CORRIDA del mismo shard (rc=0): el artifact quedo como una sola corrida limpia y el gate no la detecta:
+$SALIDA_VALIDADOR"
+grep -qE 'shard 1|re-corrida|corrida' <<<"$SALIDA_VALIDADOR" || fail "(7) el rechazo no nombra la re-corrida del shard 1:
+$SALIDA_VALIDADOR"
+echo "ok (7): la re-corrida del mismo shard deja rastro y el gate la rechaza"
+
+echo "(7b) un artifact de shard fuera del contrato (shard-4) es rechazado"
+rm -rf "$T/dupinv"; cp -R "$T/ok" "$T/dupinv"
+correr_shard 1/3 "$T/dupinv/shard-4" || fail "(7b) la invocacion extra de 1/3 revinto"
 validar "$T/dupinv"
-[ "$RC_VALIDADOR" -ne 0 ] || fail "(7) el validador acepto un artifact fuera del contrato (shard-4):
+[ "$RC_VALIDADOR" -ne 0 ] || fail "(7b) el validador acepto un artifact fuera del contrato (shard-4):
 $SALIDA_VALIDADOR"
-grep -q 'shard-4' <<<"$SALIDA_VALIDADOR" || fail "(7) el rechazo no nombra el artifact inesperado:
+grep -q 'shard-4' <<<"$SALIDA_VALIDADOR" || fail "(7b) el rechazo no nombra el artifact inesperado:
 $SALIDA_VALIDADOR"
-echo "ok (7): la invocacion duplicada deja un artifact de mas y el contrato lo rechaza"
+echo "ok (7b): el artifact de mas sigue rechazado por el conjunto exacto"
 
 echo "(8) eliminar el shard 1/3 es rechazado independientemente"
 rm -rf "$T/sin1"; cp -R "$T/ok" "$T/sin1"; rm -rf "$T/sin1/shard-1"
@@ -298,7 +328,7 @@ echo "ok (10): falta shard-3 -> rechazo"
 
 echo "(11) resumenes vacios (cero pruebas) son rechazados"
 rm -rf "$T/vacios"; cp -R "$T/ok" "$T/vacios"
-: >"$T/vacios/shard-1/resumen.txt"; : >"$T/vacios/shard-2/resumen.txt"; : >"$T/vacios/shard-3/resumen.txt"
+: >"$T/vacios/shard-1/corrida-"*/resumen.txt; : >"$T/vacios/shard-2/corrida-"*/resumen.txt; : >"$T/vacios/shard-3/corrida-"*/resumen.txt
 validar "$T/vacios"
 [ "$RC_VALIDADOR" -ne 0 ] || fail "(11) el validador acepto resumenes VACIOS (cero pruebas corridas):
 $SALIDA_VALIDADOR"
@@ -309,7 +339,7 @@ $SALIDA_VALIDADOR"
 echo "ok (11): un shard que no corrio nada no da verde"
 
 echo "(12) un artifact esperado sin su resumen.txt es rechazado"
-rm -rf "$T/sinlog"; cp -R "$T/ok" "$T/sinlog"; rm -f "$T/sinlog/shard-2/resumen.txt"
+rm -rf "$T/sinlog"; cp -R "$T/ok" "$T/sinlog"; rm -f "$T/sinlog/shard-2/corrida-"*/resumen.txt
 validar "$T/sinlog"
 [ "$RC_VALIDADOR" -ne 0 ] || fail "(12) el validador acepto un artifact sin resumen:
 $SALIDA_VALIDADOR"
@@ -319,7 +349,7 @@ echo "ok (12): artifact sin resumen -> rechazo"
 
 echo "(13) una prueba no inventariada en la union es rechazada"
 rm -rf "$T/intruso"; cp -R "$T/ok" "$T/intruso"
-printf 'ok\t1\t0\ttest-intruso.sh\t-\n' >>"$T/intruso/shard-3/resumen.txt"
+printf 'ok\t1\t0\ttest-intruso.sh\t-\n' >>"$T/intruso/shard-3/corrida-"*/resumen.txt
 validar "$T/intruso"
 [ "$RC_VALIDADOR" -ne 0 ] || fail "(13) el validador acepto una prueba FUERA del inventario:
 $SALIDA_VALIDADOR"

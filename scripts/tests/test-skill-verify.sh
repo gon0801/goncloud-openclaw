@@ -42,6 +42,19 @@ cd "$(dirname "$0")/../.." || exit 1
 # --- node >= 22: el programa embebido importa .ts (type stripping nativo) ---
 elegir_node() {
   local c v
+  # En la corrida aislada (HIJO_AISLADO=1, HOME cambiado) NO se re-descubre
+  # node: el padre ya verifico uno y lo pasa por NODE_HEREDADO. Re-buscar bajo
+  # otro HOME es como el hijo perdio el node >= 22 del padre (medido 2026-09-22:
+  # caia en el fallback absoluto de OTRO entorno).
+  if [ "${HIJO_AISLADO:-}" = "1" ]; then
+    c="${NODE_HEREDADO:-}"
+    if [ -n "$c" ] && [ -x "$c" ]; then
+      v=$("$c" --version 2>/dev/null | sed 's/^v//;s/\..*//')
+      [ -n "$v" ] && [ "$v" -ge 22 ] 2>/dev/null && { echo "$c"; return 0; }
+    fi
+    echo "FAIL: corrida aislada sin NODE_HEREDADO ejecutable (>= 22): la hija no re-descubre node bajo otro HOME" >&2
+    return 1
+  fi
   for c in "$(command -v node 2>/dev/null)" \
            "$HOME/.openclaw/tools/node-v24.19.0/bin/node" \
            /opt/homebrew/bin/node /usr/local/bin/node; do
@@ -52,6 +65,21 @@ elegir_node() {
   return 1
 }
 NODE=$(elegir_node) || { echo "FAIL: no hay un node >= 22 disponible"; exit 1; }
+
+# --- B2: el HIJO aislado usa EL MISMO node que verifico el padre --------------
+# Medido el 2026-09-22: la regresion B4 cambiaba HOME en la corrida hija, y la
+# hija re-descubria node sola (cayo en el fallback absoluto /opt/homebrew). Si
+# el unico node >= 22 vivia bajo el HOME original, la hija lo perdía. El padre
+# resuelve node, publica un wrapper que deja rastro de cada uso, y le pasa esa
+# ruta a la hija (NODE_HEREDADO): el uso del hijo queda PROBADO en el log.
+NB=$(mktemp -d) || { echo "FAIL: mktemp wrapper node"; exit 1; }
+FAKEBIN="$NB/fakebin"
+mkdir -p "$FAKEBIN" || { echo "FAIL: mktemp wrapper node"; exit 1; }
+WRAPPER_LOG="$NB/b2-node-usos.log"
+: >"$WRAPPER_LOG"
+printf '#!/bin/sh\nprintf "%%s\n" "$*" >> "%s"\nexec "$NODE_WRAPPER_TARGET" "$@"\n' "$WRAPPER_LOG" >"$FAKEBIN/node"
+chmod +x "$FAKEBIN/node"
+NODE_HEREDADO="$FAKEBIN/node"
 
 # --- SDK de openclaw: fixture aislado (B4) ----------------------------------
 # Antes el import `openclaw/plugin-sdk/plugin-entry` se resolvia contra la
@@ -363,7 +391,9 @@ appendFileSync("$T2/leida", "x");
 throw new Error("SDK DIVERGENTE");
 DIV
   suma_antes=$(cksum "$SDK_DIV/plugin-sdk/plugin-entry.mjs") || { echo "FAIL: no pude sembrar la copia divergente"; exit 1; }
-  SALIDA_HIJO=$(HIJO_AISLADO=1 HOME="$T2" env -u OPENCLAW_NODE_MODULES bash "$0" 2>&1)
+  usos_antes=$(wc -l <"$WRAPPER_LOG" | tr -d ' ')
+  SALIDA_HIJO=$(HIJO_AISLADO=1 HOME="$T2" PATH="/usr/bin:/bin" NODE_HEREDADO="$NODE_HEREDADO" NODE_WRAPPER_TARGET="$NODE" \
+    env -u OPENCLAW_NODE_MODULES bash "$0" 2>&1)
   rc_hijo=$?
   if [ "$rc_hijo" -ne 0 ]; then
     echo "FAIL regresion B4: con la copia divergente en HOME la fuente ya no pasa (rc=$rc_hijo)"
@@ -371,6 +401,13 @@ DIV
     rm -rf "$T2"
     exit 1
   fi
+  # B2: la hija uso el node heredado (el wrapper deja rastro). Con PATH sin node
+  # y sin herencia, la hija solo puede salir verde re-descubriendo node por su
+  # cuenta: exactamente el vicio que esta regression retira.
+  usos_despues=$(wc -l <"$WRAPPER_LOG" | tr -d ' ')
+  [ "$usos_despues" -gt "$usos_antes" ] \
+    || { echo "FAIL regresion B2: la hija no uso el node heredado del padre; re-descubrio node en su entorno ($usos_antes usos antes, $usos_despues despues)"
+         rm -rf "$T2"; exit 1; }
   printf '%s\n' "$SALIDA_HIJO" | grep -q '^skip' \
     && { echo "FAIL regresion B4: la corrida hija produjo un skip"; rm -rf "$T2"; exit 1; }
   if [ -f "$T2/leida" ]; then

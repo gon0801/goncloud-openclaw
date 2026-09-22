@@ -85,11 +85,16 @@ case "\$*" in
       if [ "\$prev" = "--profile" ] && [ "\$a" = "claw" ]; then mala=1; fi
       prev="\$a"
     done
-    if [ "\$mala" = "1" ] && [ "\${BROWSER_MODO:-ok}" = "ok" ]; then
+    if [ "\$mala" = "1" ] && { [ "\${BROWSER_MODO:-ok}" = "ok" ] || [ "\${BROWSER_MODO:-ok}" = "rechaza" ]; }; then
       printf 'config desviada a ~/.openclaw-claw/openclaw.json\n'
     fi
     if [ "\$mala" = "0" ] && [ "\${BROWSER_MODO:-ok}" = "doblez" ]; then
       printf 'config desviada a ~/.openclaw-claw/openclaw.json\n'
+    fi
+    if [ "\$mala" = "0" ] && [ "\${BROWSER_MODO:-ok}" = "rechaza" ]; then
+      # CLI que no conoce el flag: usage de mentira, sin la ruta desviada.
+      printf 'error: unknown option --browser-profile\n' >&2
+      exit 64
     fi
     exit 0
     ;;
@@ -247,6 +252,20 @@ out=$(bash "$CORR" preflight t-bro-doblez 2>&1); rc=$?
 $out"
 printf '%s' "$out" | grep -q "tambien desvia" \
   || fail "NO APTO sin la razon de divergencia (direccion 2):
+$out"
+unset BROWSER_MODO
+
+# B4 (8): el CLI RECHAZA --browser-profile (no lo conoce) => NO APTO. Medido el
+# 2026-09-22: el preflight ignoraba el exit code de la sonda y con una salida de
+# error que no menciona la ruta desviada declaraba APTO un CLI que no sabe
+# ejecutar el flag que el runbook usa.
+export BROWSER_MODO=rechaza
+abrir t-bro-rechaza "$RB"
+out=$(bash "$CORR" preflight t-bro-rechaza 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "un CLI que rechaza --browser-profile no puede salir APTO:
+$out"
+printf '%s' "$out" | grep -q "rechazo --browser-profile" \
+  || fail "NO APTO sin nombrar el rechazo del flag:
 $out"
 unset BROWSER_MODO
 
