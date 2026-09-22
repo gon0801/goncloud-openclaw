@@ -54,8 +54,9 @@ linea() { # $1 estado, $2 nombre, $3 detalle
     # El detalle trae rutas y salidas de git: pueden venir con comillas, backslashes o
     # caracteres de control, y `tr -d` los cambiaria en vez de escaparlos, o dejaria un
     # JSON invalido. Se escapa de verdad.
+    # timeout 30 (F1): un python3 colgado del PATH no puede trabar el cierre; al vencer sale vacio.
     printf '{"estado":"%s","check":"%s","detalle":%s}\n' "$1" "$2" \
-      "$(printf '%s' "$3" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"
+      "$(printf '%s' "$3" | timeout 30 python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"
   else
     printf '%-8s %-22s %s\n' "$1" "$2" "$3"
   fi
@@ -179,7 +180,8 @@ else
   if [ -z "$crons" ]; then
     linea unknown reloj "el gateway no contesto"
   else
-    reloj=$(printf '%s' "$crons" | FASE="$FASE" python3 -c '
+    # timeout 30 (F1): un python3 colgado del PATH no puede trabar el cierre; al vencer sale vacio y el check cae en unknown.
+    reloj=$(printf '%s' "$crons" | FASE="$FASE" timeout 30 python3 -c '
 import json, os, sys
 bruto = sys.stdin.read(); i = bruto.find("{")
 try:
@@ -215,7 +217,8 @@ print("UUID " + str(reloj[0].get("id", "")))
         elif ! scratch=$(timeout 60 "$OPENCLAW_BIN" cron scratch "$uuid" 2>/dev/null) || [ -z "$scratch" ]; then
           linea ROJO reloj "reloj presente pero su scratch no se pudo leer: fallo indeterminado"
         else
-          uso=$(printf '%s' "$scratch" | FASE="$FASE" python3 -c '
+          # timeout 30 (F1): un python3 colgado del PATH no puede trabar el cierre; al vencer sale vacio y el check lo declara.
+          uso=$(printf '%s' "$scratch" | FASE="$FASE" timeout 30 python3 -c '
 import json, os, sys
 bruto = sys.stdin.read(); i = bruto.find("{")
 try:
@@ -298,7 +301,8 @@ else
   if [ -z "$vivo" ]; then
     linea unknown tablero "el gateway no contesto"
   else
-    det=$(printf '%s' "$vivo" | CIERRE_DOC="$doc" python3 -c '
+    # timeout 30 (F1): un python3 colgado del PATH no puede trabar el cierre; al vencer sale vacio y el check cae en unknown.
+    det=$(printf '%s' "$vivo" | CIERRE_DOC="$doc" timeout 30 python3 -c '
 import json, os, sys
 
 TERMINALES = {"mergeado", "atorado", "revertido", "omitido"}
