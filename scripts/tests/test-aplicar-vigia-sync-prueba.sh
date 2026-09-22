@@ -8,6 +8,7 @@ ASSERT=scripts/tests/vigia_sync_prueba_assert.py
 
 T=$(mktemp -d) || exit 1
 trap 'rm -rf "$T"' EXIT
+PORCELAIN_ANTES=$(git status --porcelain)
 
 # --- fixtures ---
 # D1 bueno: run ok + linea de contrato de pendiente
@@ -341,6 +342,10 @@ def make_copy(*, franja_true: bool, annul_guard: bool, name: str) -> pathlib.Pat
         "LOCKDIR=/tmp/aplicar_vigia_sync.lock",
         f"LOCKDIR={T / ('lock_' + name)}",
     )
+    # Hermetico (F14): respaldos y evidencia al temporal de la prueba
+    body = body.replace("docs/cron-messages/backup", f"{T}/ap13-backup")
+    body = body.replace("docs/cron-messages/evidence", f"{T}/ap13-evidence")
+    body = body.replace(".saikit/scratch/M", f"{T}/ap13-scratch")
     # Mock franja
     if franja_true:
         body = body.replace(
@@ -531,6 +536,10 @@ def make_copy(*, name: str, fresh_scratch_mutant: bool = False) -> pathlib.Path:
         "LOCKDIR=/tmp/aplicar_vigia_sync.lock",
         f"LOCKDIR={T / ('lock_' + name)}",
     )
+    # Hermetico (F14): respaldos y evidencia al temporal de la prueba
+    body = body.replace("docs/cron-messages/backup", f"{T}/ap14-backup")
+    body = body.replace("docs/cron-messages/evidence", f"{T}/ap14-evidence")
+    body = body.replace(".saikit/scratch/M", f"{T}/ap14-scratch")
     if FRANJA not in body:
         raise SystemExit("no halle en_franja para mock")
     body = body.replace(
@@ -580,7 +589,7 @@ def rojob(msg: str, extra: str = "") -> None:
     sys.exit(1)
 
 
-evdir = repo / ".saikit/scratch/M"
+evdir = T / "ap14-scratch"
 antes = set(glob.glob(str(evdir / "vigia-sync-prueba-D4.*.runs?.json")))
 
 # Verde: doble corrida, mismo job, 1ra avisa + 2da calla.
@@ -625,5 +634,10 @@ if "D4 ASSERT-2 FALLO" not in (r.stdout + r.stderr):
 
 print("ok (14): D4 misma cola+mismo scratch (avisa, calla); mutante job-fresco expuesto")
 PY
+
+# (15) Hermetico (F14): el worktree queda como estaba.
+[ "$(git status --porcelain)" = "$PORCELAIN_ANTES" ] \
+  || fail "(15) el worktree cambio durante la prueba: $(git status --porcelain | head -5)"
+echo "ok (15): git status --porcelain igual que al entrar"
 
 echo "TODO VERDE: aplicar-vigia-sync-prueba"
