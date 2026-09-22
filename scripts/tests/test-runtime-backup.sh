@@ -191,7 +191,10 @@ grep -q 'backup create' "$T/ro.out" || fail "(2a) sin plan en stdout"
 echo "ok (2a): report-only no escribe, imprime plan"
 
 # (2b) Apply verde: artefactos, cobertura, evidencia minima, recibo.
-corre ok 1 || fail "(2b) apply debio salir 0: $(cat "$T/ok.out")"
+if ! corre ok 1; then
+  diag_man=$(cat "$T/ok-staging/manifest.json" 2>/dev/null | tr -d '\r' | head -c 600)
+  fail "(2b) apply debio salir 0: $(cat "$T/ok.out") MAN~[${diag_man}]"
+fi
 [ -f "$T/ok-bk/fake-backup.tar.gz" ] || fail "(2b) sin archive"
 git bundle verify "$T/ok-bk/"*.bundle >/dev/null 2>&1 || fail "(2b) bundle invalido"
 for t in 'OpenClaw Gateway' 'OpenClaw Gateway Watchdog' 'OpenClaw Node' 'OpenClaw CUA Node' 'GoncloudRepoSync'; do
