@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Aserciones D1/D2/rm del aplicador vigia, en seco (BRIEF-r4/r5).
+# Aserciones D1/D2/D3/rm del aplicador vigia, en seco (BRIEF-r4/r5; v3).
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'ROJO: %s\n' "$1"; exit 1; }
@@ -10,11 +10,11 @@ T=$(mktemp -d) || exit 1
 trap 'rm -rf "$T"' EXIT
 
 # --- fixtures ---
-# D1 bueno: run ok + linea de contrato
+# D1 bueno: run ok + linea de contrato de pendiente
 python3 - "$T/d1_ok.json" <<'PY'
 import json,sys
 json.dump({"entries":[{"status":"ok","completionStatus":"succeeded",
-  "summary":"VIGIA SYNC SKILLS agentes=verifier n=1\nverifier: cron-payload-verify/SKILL.md,lane-claim-verify/SKILL.md\nYa esta en main. Si algo no te cuadra, dime y lo reviso."}]},
+  "summary":"VIGIA SYNC PENDIENTE pr=7 agentes=verifier\nverifier: cron-payload-verify/SKILL.md,lane-claim-verify/SKILL.md\nTodavia no esta en el gateway. Te aviso cuando se deploye."}]},
   open(sys.argv[1],"w"))
 PY
 # D1 malo: run FALLIDO que menciona verifier (BRIEF-r5 hueco 1)
@@ -27,8 +27,8 @@ PY
 python3 -c 'import json,sys; json.dump({"entries":[{"summary":""}]}, open(sys.argv[1],"w"))' "$T/d1_vacio.json"
 # D2 bueno: OK sin aviso D
 python3 -c 'import json,sys; json.dump({"entries":[{"status":"ok","completionStatus":"succeeded","summary":"VIGIA SYNC OK ciclo=2026-09-19 12:00 CDMX"}]}, open(sys.argv[1],"w"))' "$T/d2_ok.json"
-# D2 malo: aviso D
-python3 -c 'import json,sys; json.dump({"entries":[{"status":"ok","summary":"VIGIA SYNC SKILLS agentes=verifier n=1\nYa esta en main."}]}, open(sys.argv[1],"w"))' "$T/d2_aviso.json"
+# D2 malo: aviso D (deployado)
+python3 -c 'import json,sys; json.dump({"entries":[{"status":"ok","summary":"VIGIA SYNC DEPLOYED sha=e701489 n=1\nYa esta en el gateway. Si algo no te cuadra, dime y lo reviso."}]}, open(sys.argv[1],"w"))' "$T/d2_aviso.json"
 # D2 malo: {} (BRIEF-r5 hueco 2)
 printf '%s' '{}' > "$T/d2_vacio.json"
 
@@ -55,7 +55,7 @@ echo "ok (3): D1 vacio → FAIL"
 python3 - "$T/d1_partido.json" <<'PY'
 import json, sys
 json.dump({"entries":[{"status":"ok","completionStatus":"succeeded",
-  "summary":"VIGIA SYNC SKILLS agentes=verifier\ntexto n=1 skill.md"}]}, open(sys.argv[1],"w"))
+  "summary":"VIGIA SYNC PENDIENTE pr=7\nagentes=verifier skill.md"}]}, open(sys.argv[1],"w"))
 PY
 if python3 "$ASSERT" assert-d1 "$T/d1_partido.json" >/dev/null 2>&1; then
   fail "(3b) contrato partido debio FAIL y paso"
@@ -74,7 +74,7 @@ old = '''def _linea_contrato_d1(blob: str) -> str | None:
 new = '''def _linea_contrato_d1(blob: str) -> str | None:
     # MUTANTE: DOTALL + \\s cruza saltos
     import re as _re
-    if _re.search(r"VIGIA SYNC SKILLS\\s+agentes=verifier\\b.*\\bn=\\d+", blob, _re.I | _re.DOTALL):
+    if _re.search(r"VIGIA SYNC PENDIENTE\\s+pr=[\\d,]+\\s+agentes=verifier\\b", blob, _re.I | _re.DOTALL):
         return blob
     return None'''
 mut = src.replace(old, new, 1)
@@ -109,6 +109,61 @@ fi
 out=$(python3 "$ASSERT" assert-d2 "$T/d2_vacio.json" 2>&1 || true)
 echo "$out" | grep -q 'ASSERT_FAIL' || fail "(6) debio imprimir ASSERT_FAIL"
 echo "ok (6): D2 {} → FAIL"
+
+# (6b) D3 bueno → PASS
+python3 - "$T/d3_ok.json" <<'PY'
+import json, sys
+json.dump({"entries":[{"status":"ok","completionStatus":"succeeded",
+  "summary":"VIGIA SYNC DEPLOYED sha=e701489 n=1\ne701489 agents/verifier/agent/workshop-skills/cron-payload-verify/SKILL.md\nYa esta en el gateway. Si algo no te cuadra, dime y lo reviso."}]},
+  open(sys.argv[1],"w"))
+PY
+python3 "$ASSERT" assert-d3 "$T/d3_ok.json" >/dev/null \
+  || fail "(6b) D3 con linea de contrato debio PASS"
+echo "ok (6b): D3 ok+contrato → PASS"
+
+# (6c) D3 callado → FAIL
+python3 -c 'import json,sys; json.dump({"entries":[{"status":"ok","completionStatus":"succeeded","summary":"VIGIA SYNC OK ciclo=2026-09-19 12:00 CDMX"}]}, open(sys.argv[1],"w"))' "$T/d3_callado.json"
+if python3 "$ASSERT" assert-d3 "$T/d3_callado.json" >/dev/null 2>&1; then
+  fail "(6c) D3 callado debio FAIL y paso"
+fi
+echo "ok (6c): D3 sin aviso → FAIL"
+
+# (6d) D3 contrato partido → FAIL; mutante DOTALL queda expuesto
+python3 - "$T/d3_partido.json" <<'PY'
+import json, sys
+json.dump({"entries":[{"status":"ok","completionStatus":"succeeded",
+  "summary":"VIGIA SYNC DEPLOYED sha=e701489\nn=1 skill.md"}]}, open(sys.argv[1],"w"))
+PY
+if python3 "$ASSERT" assert-d3 "$T/d3_partido.json" >/dev/null 2>&1; then
+  fail "(6d) D3 contrato partido debio FAIL y paso"
+fi
+python3 - "$ASSERT" "$T" <<'PY' || exit 1
+import pathlib, subprocess, sys
+src = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+old = '''def _linea_contrato_d3(blob: str) -> str | None:
+    for line in blob.splitlines():
+        if _RE_CONTRATO_D3.search(line):
+            return line
+    return None'''
+new = '''def _linea_contrato_d3(blob: str) -> str | None:
+    # MUTANTE: DOTALL + \\s cruza saltos
+    import re as _re
+    if _re.search(r"VIGIA SYNC DEPLOYED\\s+sha=[0-9a-f]{7}\\s+n=\\d+", blob, _re.I | _re.DOTALL):
+        return blob
+    return None'''
+mut = src.replace(old, new, 1)
+assert mut != src, "no pude aplicar mutante DOTALL en d3"
+mp = pathlib.Path(sys.argv[2]) / "mut_dotall_d3.py"
+mp.write_text(mut, encoding="utf-8")
+r = subprocess.run(
+    [sys.executable, str(mp), "assert-d3", str(pathlib.Path(sys.argv[2]) / "d3_partido.json")],
+    capture_output=True, text=True,
+)
+if r.returncode != 0:
+    print("ROJO: mutante DOTALL-D3 no acepto partido; no discrimina", file=sys.stderr)
+    sys.exit(1)
+print("ok (6d): D3 contrato partido → FAIL; mutante DOTALL-D3 queda expuesto")
+PY
 
 # (7) rm fallido → FAIL
 if python3 "$ASSERT" assert-rm deadbeef 0 absent >/dev/null 2>&1; then
@@ -194,10 +249,16 @@ grep -q 'escribir_log_prueba 1 D1' docs/cron-messages/APLICAR_VIGIA_SYNC.sh \
   || fail "(12) falta escribir_log_prueba 1 D1"
 grep -q 'escribir_log_prueba 0 D2' docs/cron-messages/APLICAR_VIGIA_SYNC.sh \
   || fail "(12) falta escribir_log_prueba 0 D2"
+grep -q 'escribir_log_prueba 2 D3' docs/cron-messages/APLICAR_VIGIA_SYNC.sh \
+  || fail "(12) falta escribir_log_prueba 2 D3"
+grep -q 'verif-sync-repos.v3.txt' docs/cron-messages/APLICAR_VIGIA_SYNC.sh \
+  || fail "(12) aplicador no apunta a v3"
 grep -q 'assert-d1 "' docs/cron-messages/APLICAR_VIGIA_SYNC.sh \
   || fail "(12) falta assert-d1"
 grep -q 'assert-d2 "' docs/cron-messages/APLICAR_VIGIA_SYNC.sh \
   || fail "(12) falta assert-d2"
+grep -q 'assert-d3 "' docs/cron-messages/APLICAR_VIGIA_SYNC.sh \
+  || fail "(12) falta assert-d3"
 grep -q 'assert-rm' docs/cron-messages/APLICAR_VIGIA_SYNC.sh \
   || fail "(12) falta assert-rm"
 grep -q 'cron_list_status' docs/cron-messages/APLICAR_VIGIA_SYNC.sh \
@@ -276,8 +337,8 @@ def make_copy(*, franja_true: bool, annul_guard: bool, name: str) -> pathlib.Pat
         )
     # Stub ejecutar (no tocar gateway)
     body = body.replace(
-        "ejecutar_pruebas_d1_d2() {",
-        'ejecutar_pruebas_d1_d2() { echo "STUB ejecutar_pruebas_d1_d2"; return 0; }\n_ejecutar_pruebas_d1_d2_ORIG() {',
+        "ejecutar_pruebas() {",
+        'ejecutar_pruebas() { echo "STUB ejecutar_pruebas"; return 0; }\n_ejecutar_pruebas_ORIG() {',
     )
     if annul_guard:
         if "if en_franja_silencio_cdmx; then" not in body:

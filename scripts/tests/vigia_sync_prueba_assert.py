@@ -52,14 +52,38 @@ def _run_exitoso(entry: dict) -> str:
 
 # Contrato D1: UNA sola linea (sin DOTALL / sin que \\s cruce el salto).
 _RE_CONTRATO_D1 = re.compile(
-    r"VIGIA SYNC SKILLS\s+agentes=verifier\s+n=\d+\b",
+    r"VIGIA SYNC PENDIENTE\s+pr=[\d,]+\s+agentes=verifier\b",
     re.IGNORECASE,
+)
+
+# Contrato D3: UNA sola linea, igual disciplina que D1.
+_RE_CONTRATO_D3 = re.compile(
+    r"VIGIA SYNC DEPLOYED\s+sha=[0-9a-f]{7}\s+n=\d+",
+    re.IGNORECASE,
+)
+
+_PISTAS_ARCHIVOS = (
+    "archivo",
+    "skill.md",
+    "cron-payload-verify",
+    "lane-claim-verify",
+    "test-discrimination",
+    "regression-triage",
+    "egress-suppression",
+    "workshop-skills",
 )
 
 
 def _linea_contrato_d1(blob: str) -> str | None:
     for line in blob.splitlines():
         if _RE_CONTRATO_D1.search(line):
+            return line
+    return None
+
+
+def _linea_contrato_d3(blob: str) -> str | None:
+    for line in blob.splitlines():
+        if _RE_CONTRATO_D3.search(line):
             return line
     return None
 
@@ -77,21 +101,31 @@ def assert_d1_result(runs: Any) -> str:
     if _linea_contrato_d1(blob) is None:
         return (
             "D1: falta la linea de contrato "
-            "'VIGIA SYNC SKILLS agentes=verifier n=<n>' (debe caber en UNA linea)"
+            "'VIGIA SYNC PENDIENTE pr=<n> agentes=verifier' (debe caber en UNA linea)"
         )
     # Archivos: en la misma linea de contrato o citadas en el summary
-    pistas = (
-        "archivo",
-        "skill.md",
-        "cron-payload-verify",
-        "lane-claim-verify",
-        "test-discrimination",
-        "regression-triage",
-        "egress-suppression",
-        "workshop-skills",
-    )
-    if not any(p in blob.lower() for p in pistas):
+    if not any(p in blob.lower() for p in _PISTAS_ARCHIVOS):
         return "D1: tiene la linea de contrato pero no nombra archivos"
+    return ""
+
+
+def assert_d3_result(runs: Any) -> str:
+    """D3: run exitoso + linea de contrato del deployado. '' = OK."""
+    entries = _entries(runs)
+    if not entries:
+        return "D3: sin entradas — no hay evidencia de que corrio"
+    entry = entries[0]
+    why = _run_exitoso(entry)
+    if why:
+        return f"D3: run no exitoso ({why}) — un run fallido no es un aviso"
+    blob = _blob(entry)
+    if _linea_contrato_d3(blob) is None:
+        return (
+            "D3: falta la linea de contrato "
+            "'VIGIA SYNC DEPLOYED sha=<7> n=<n>' (debe caber en UNA linea)"
+        )
+    if not any(p in blob.lower() for p in _PISTAS_ARCHIVOS):
+        return "D3: tiene la linea de contrato pero no nombra archivos"
     return ""
 
 
@@ -105,12 +139,16 @@ def assert_d2_result(runs: Any) -> str:
     if why:
         return f"D2: run no exitoso ({why})"
     blob = _blob(entry)
-    if "VIGIA SYNC SKILLS" in blob:
-        return "D2: aviso por D (VIGIA SYNC SKILLS) — debia estar callado"
+    if "VIGIA SYNC PENDIENTE" in blob:
+        return "D2: aviso de pendiente (VIGIA SYNC PENDIENTE) — debia estar callado"
+    if "VIGIA SYNC DEPLOYED" in blob:
+        return "D2: aviso de deployado (VIGIA SYNC DEPLOYED) — debia estar callado"
     if "DIFERIDO_D" in blob:
         return "D2: DIFERIDO_D — fuera de franja no aplica; reintenta fuera de 23:00-08:00 CDMX"
-    if "Ya esta en main" in blob or "Ya está en main" in blob:
-        return "D2: cierra con la frase del aviso D — debia estar callado"
+    if "DIFERIDO_E" in blob:
+        return "D2: DIFERIDO_E — fuera de franja no aplica; reintenta fuera de 23:00-08:00 CDMX"
+    if "Ya esta en el gateway" in blob or "Todavia no esta en el gateway" in blob:
+        return "D2: cierra con frase de aviso D — debia estar callado"
     return ""
 
 
@@ -159,19 +197,24 @@ def list_status_for_tid(data: Any, tid: str) -> str:
 
 
 def main(argv: list[str]) -> int:
-    # CLI: assert-d1|assert-d2 <runs.json>
+    # CLI: assert-d1|assert-d2|assert-d3 <runs.json>
     #      assert-rm <tid> <rm_ok:0|1> <absent|present|unknown>
     if len(argv) < 2:
-        print("uso: vigia_sync_prueba_assert.py assert-d1|assert-d2 <runs.json>", file=sys.stderr)
+        print("uso: vigia_sync_prueba_assert.py assert-d1|assert-d2|assert-d3 <runs.json>", file=sys.stderr)
         print("     vigia_sync_prueba_assert.py assert-rm <tid> <0|1> <absent|present|unknown>", file=sys.stderr)
         return 2
     op = argv[1]
-    if op in ("assert-d1", "assert-d2"):
+    if op in ("assert-d1", "assert-d2", "assert-d3"):
         if len(argv) < 3:
             print("falta runs.json", file=sys.stderr)
             return 2
         data = json.load(open(argv[2], encoding="utf-8"))
-        err = assert_d1_result(data) if op == "assert-d1" else assert_d2_result(data)
+        if op == "assert-d1":
+            err = assert_d1_result(data)
+        elif op == "assert-d3":
+            err = assert_d3_result(data)
+        else:
+            err = assert_d2_result(data)
         if err:
             print("ASSERT_FAIL:", err)
             return 1

@@ -1,8 +1,8 @@
 #!/bin/bash
-# APLICAR_VIGIA_SYNC.sh — actualiza el mensaje del cron verif-sync-repos (id fijo) a v2.
+# APLICAR_VIGIA_SYNC.sh — actualiza el mensaje del cron verif-sync-repos (id fijo) a v3.
 # Job vivo: 2d763be5-6390-4ccf-a3a4-621c91c41e94; agente main; cron 40 */2 * * * America/New_York;
 # tools exec,message,automations. Solo edita --message; no toca horario, agente, tools ni enabled.
-# Mensaje: docs/cron-messages/verif-sync-repos.v2.txt
+# Mensaje: docs/cron-messages/verif-sync-repos.v3.txt
 # Forma probada: copia de APLICAR_VERIF_20H.sh (cron edit --message + .pre.json/.post.json).
 # Ventanas cerradas (corridas de negocio): 12:55-13:35Z (7h) 16:55-17:25Z (11h) 01:55-02:25Z (20h).
 #
@@ -10,10 +10,10 @@
 #   ./docs/cron-messages/APLICAR_VIGIA_SYNC.sh
 #       edit + verify (lead en Q2)
 #   ./docs/cron-messages/APLICAR_VIGIA_SYNC.sh --test
-#       seco: valida msg, fabrica pre/post de ejemplo, DECLARA el recorrido D1/D2
+#       seco: valida msg, fabrica pre/post de ejemplo, DECLARA el recorrido D1/D2/D3
 #       (no crea jobs). La corrida real falta hasta Q2.
 #   VIGIA_SYNC_EJECUTAR=1 ./docs/cron-messages/APLICAR_VIGIA_SYNC.sh --test
-#       Q2: seco + crea/corre/borra vigia-sync-prueba-D1 y D2 (--tools exec),
+#       Q2: seco + crea/corre/borra vigia-sync-prueba-D1, D2 y D3 (--tools exec),
 #       evidencia en .saikit/scratch/M/*.runs.json. No edita el vigia vivo.
 #
 # Compatible con bash 3.2 (macOS).
@@ -22,10 +22,11 @@ cd "$(dirname "$0")/../.." || exit 1
 OC=~/.openclaw/bin/openclaw
 ID=2d763be5-6390-4ccf-a3a4-621c91c41e94
 NAME=verif-sync-repos
-MSG=docs/cron-messages/verif-sync-repos.v2.txt
+MSG=docs/cron-messages/verif-sync-repos.v3.txt
 LOG_PRUEBA='C:\Users\ehven\.openclaw-state\vigia-sync-prueba\sync-repos.log'
-# Linea SKILLS real del snapshot 43097da (verifier, 10 archivos).
-SKILLS_LINE='2026-09-19 09:10:00 .openclaw SKILLS verifier 10 archivo(s): cron-payload-verify/SKILL.md,egress-suppression-verify/SKILL.md,lane-claim-verify/SKILL.md,lane-claim-verify/history-rewrite.md,regression-triage/SKILL.md,regression-triage/full-battery.md,test-discrimination-verify/SKILL.md,test-discrimination-verify/fixtures.md,test-discrimination-verify/live-leak-probe.md,test-discrimination-verify/rules.md'
+# Lineas v3 con el formato exacto del orquestador (verifier, PR 7).
+SKILLS_PR_LINE='2026-09-19 09:10:00 main SKILLS_PR 7 verifier agents/verifier/agent/workshop-skills/cron-payload-verify/SKILL.md agents/verifier/agent/workshop-skills/lane-claim-verify/SKILL.md'
+SKILLS_DEPLOYED_LINE='2026-09-19 11:10:00 main SKILLS_DEPLOYED e70148962f359d8e75ba4388732eeb55e8b8dbf7 agents/verifier/agent/workshop-skills/cron-payload-verify/SKILL.md'
 mkdir -p docs/cron-messages/backup docs/cron-messages/evidence .saikit/scratch/M
 LOCKDIR=/tmp/aplicar_vigia_sync.lock
 if ! mkdir "$LOCKDIR" 2>/dev/null; then echo "ABORTO: otra corrida en curso ($LOCKDIR)."; exit 1; fi
@@ -60,10 +61,13 @@ def fail(x): print('MSG_FAIL:', x); sys.exit(1)
 bad=[c for c in body if ord(c)>127]
 if bad: fail('no-ASCII: %r' % bad[:5])
 if '$(' in body or '`' in body: fail('command substitution / backticks')
-for a in ['LOG=', 'VIGIA SYNC REPOS v2', 'CASO A', 'CASO B', 'CASO C', 'CASO D',
-          'SKILLS', 'skill-collection-review-', 'Ya esta en main',
+for a in ['LOG=', 'VIGIA SYNC REPOS v3', 'CASO A', 'CASO B', 'CASO C', 'CASO D',
+          'SKILLS_PR', 'SKILLS_DEPLOYED', 'pendiente', 'saldado',
+          'VIGIA SYNC PENDIENTE', 'VIGIA SYNC DEPLOYED',
+          'skill-collection-review-', 'Ya esta en el gateway',
+          'Todavia no esta en el gateway',
           'target 6470689715', 'openclaw cron runs', '--limit 1 --json',
-          'DIFERIDO_D', '23:00 a 08:00', 'tail -400', 'Lo reviso ahora?',
+          'DIFERIDO_D', 'DIFERIDO_E', '23:00 a 08:00', 'tail -400', 'Lo reviso ahora?',
           'cola leida en PASO 1']:
     if a not in body: fail('falta ancla %r' % a)
 # La instruccion de lectura debe ser tail -400 (el minimo); mencionar el bug
@@ -88,22 +92,26 @@ sys.stdout.write('\n'.join(lines))
 PY
 }
 
-declarar_recorrido_d1_d2() {
-  echo "== recorrido D1/D2 (lo que Q2 ejecuta con VIGIA_SYNC_EJECUTAR=1 $0 --test)"
+declarar_recorrido_d1_d2_d3() {
+  echo "== recorrido D1/D2/D3 (lo que Q2 ejecuta con VIGIA_SYNC_EJECUTAR=1 $0 --test)"
   echo "LOG_PRUEBA=$LOG_PRUEBA"
-  echo "ANTES de D1: el script ESCRIBE el log (cola sync + SKILLS_LINE) via cron --command en el gateway"
-  echo "D1 name=vigia-sync-prueba-D1  tools=exec  mensaje=v2 con LOG=prueba"
-  echo "    expect: assert-d1 → nombra verifier + archivos; Telegram imposible (--tools exec)"
-  echo "ANTES de D2: el script REESCRIBE el log (cola SIN lineas SKILLS)"
+  echo "ANTES de D1: el script ESCRIBE el log (cola sync + SKILLS_PR_LINE) via cron --command en el gateway"
+  echo "D1 name=vigia-sync-prueba-D1  tools=exec  mensaje=v3 con LOG=prueba"
+  echo "    expect: assert-d1 → pendiente pr=7 verifier + archivos; Telegram imposible (--tools exec)"
+  echo "ANTES de D2: el script REESCRIBE el log (cola SIN lineas SKILLS_PR ni SKILLS_DEPLOYED)"
   echo "D2 name=vigia-sync-prueba-D2  tools=exec  mismo mensaje"
   echo "    expect: assert-d2 → callado en D"
-  echo "ambos: --at 30m --session isolated --no-deliver --keep-after-run"
+  echo "ANTES de D3: el script REESCRIBE el log (cola + SKILLS_PR_LINE + SKILLS_DEPLOYED_LINE)"
+  echo "D3 name=vigia-sync-prueba-D3  tools=exec  mismo mensaje"
+  echo "    expect: assert-d3 → deployado sha=e701489 + archivos; Telegram imposible (--tools exec)"
+  echo "los tres: --at 30m --session isolated --no-deliver --keep-after-run"
   echo "        cron run --wait --wait-timeout 10m → assert → cron rm verificado con cron list"
   echo "        evidencia: .saikit/scratch/M/vigia-sync-prueba-D*.$TS.runs.json"
 }
 
 # Escribe LOG_PRUEBA en el gateway por un one-shot --command (exec del CLI).
-# con_skills=1 → cola + SKILLS_LINE; con_skills=0 → cola filtrada sin lineas SKILLS.
+# con_skills=1 → cola + SKILLS_PR_LINE; con_skills=0 → cola filtrada sin
+# lineas de skills; con_skills=2 → cola + SKILLS_PR_LINE + SKILLS_DEPLOYED_LINE.
 escribir_log_prueba() {
   local con_skills="$1"
   local label="$2"
@@ -113,10 +121,14 @@ escribir_log_prueba() {
   local cmd
   if [ "$con_skills" = "1" ]; then
     # shellcheck disable=SC2016
-    cmd=$(printf "mkdir -p '%s' && { tail -400 '%s' 2>/dev/null || true; printf '%%s\\n' '%s'; } > '%s' && (grep -c ' SKILLS ' '%s' || true)" \
-      "$DIR_UNIX" "$LOG_REAL" "$SKILLS_LINE" "$LOG_UNIX" "$LOG_UNIX")
+    cmd=$(printf "mkdir -p '%s' && { tail -400 '%s' 2>/dev/null || true; printf '%%s\\n' '%s'; } > '%s' && (grep -c 'SKILLS_PR' '%s' || true)" \
+      "$DIR_UNIX" "$LOG_REAL" "$SKILLS_PR_LINE" "$LOG_UNIX" "$LOG_UNIX")
+  elif [ "$con_skills" = "2" ]; then
+    # shellcheck disable=SC2016
+    cmd=$(printf "mkdir -p '%s' && { tail -400 '%s' 2>/dev/null || true; printf '%%s\\n' '%s'; printf '%%s\\n' '%s'; } > '%s' && (grep -c 'SKILLS_DEPLOYED' '%s' || true)" \
+      "$DIR_UNIX" "$LOG_REAL" "$SKILLS_PR_LINE" "$SKILLS_DEPLOYED_LINE" "$LOG_UNIX" "$LOG_UNIX")
   else
-    cmd=$(printf "mkdir -p '%s' && { tail -400 '%s' 2>/dev/null || true; } | grep -v ' SKILLS ' > '%s' || :; (grep -c ' SKILLS ' '%s' || echo 0)" \
+    cmd=$(printf "mkdir -p '%s' && { tail -400 '%s' 2>/dev/null || true; } | grep -v 'SKILLS_PR' | grep -v 'SKILLS_DEPLOYED' > '%s' || :; (grep -c 'SKILLS_PR' '%s' || echo 0)" \
       "$DIR_UNIX" "$LOG_REAL" "$LOG_UNIX" "$LOG_UNIX")
   fi
   echo "-- escribir_log_prueba ($label) con_skills=$con_skills"
@@ -162,15 +174,15 @@ rm_y_verificar() {
   echo "rm $tid OK (list=$list_st)"
 }
 
-ejecutar_pruebas_d1_d2() {
-  echo "== PRUEBA D1/D2 $(date -u +%H:%M:%SZ)  (VIGIA_SYNC_EJECUTAR=1)"
+ejecutar_pruebas() {
+  echo "== PRUEBA D1/D2/D3 $(date -u +%H:%M:%SZ)  (VIGIA_SYNC_EJECUTAR=1)"
   local MSG_PRUEBA ASSERT
   MSG_PRUEBA=$(msg_con_log_prueba) || return 1
   ASSERT=scripts/tests/vigia_sync_prueba_assert.py
   [ -f "$ASSERT" ] || { echo "ABORTO: falta $ASSERT"; return 1; }
 
   run_one() {
-    local label="$1"  # D1 o D2
+    local label="$1"  # D1, D2 o D3
     local jname="vigia-sync-prueba-$label"
     echo "== add $jname"
     local OUT TID
@@ -206,6 +218,9 @@ PY
     if [ "$label" = "D1" ]; then
       python3 "$ASSERT" assert-d1 ".saikit/scratch/M/vigia-sync-prueba-$label.$TS.runs.json" \
         || { echo "PRUEBA D1 ASSERT FALLO"; rm_y_verificar "$TID" || true; return 1; }
+    elif [ "$label" = "D3" ]; then
+      python3 "$ASSERT" assert-d3 ".saikit/scratch/M/vigia-sync-prueba-$label.$TS.runs.json" \
+        || { echo "PRUEBA D3 ASSERT FALLO"; rm_y_verificar "$TID" || true; return 1; }
     else
       python3 "$ASSERT" assert-d2 ".saikit/scratch/M/vigia-sync-prueba-$label.$TS.runs.json" \
         || { echo "PRUEBA D2 ASSERT FALLO"; rm_y_verificar "$TID" || true; return 1; }
@@ -217,7 +232,9 @@ PY
   run_one D1 || return 1
   escribir_log_prueba 0 D2 || return 1
   run_one D2 || return 1
-  echo "PRUEBA D1/D2 terminada VERDE. Evidencia en .saikit/scratch/M/vigia-sync-prueba-D*.$TS.runs.json"
+  escribir_log_prueba 2 D3 || return 1
+  run_one D3 || return 1
+  echo "PRUEBA D1/D2/D3 terminada VERDE. Evidencia en .saikit/scratch/M/vigia-sync-prueba-D*.$TS.runs.json"
 }
 
 if [ "$DRY" -eq 1 ]; then
@@ -243,7 +260,7 @@ if (post.get('payload') or {}).get('toolsAllow')!=(pre.get('payload') or {}).get
 if post.get('enabled')!=pre.get('enabled'): fail('enabled muto')
 print(f"seco OK: pre+post en backup/ agentId={post.get('agentId')} toolsAllow={post['payload'].get('toolsAllow')} enabled={post.get('enabled')}")
 PY
-  declarar_recorrido_d1_d2
+  declarar_recorrido_d1_d2_d3
   if [ "$EJECUTAR" -eq 1 ]; then
     if en_franja_silencio_cdmx; then
       echo "ABORTO: franja de silencio CDMX (23:00-08:00): D1 diferiria el aviso (DIFERIDO_D)"
@@ -252,7 +269,7 @@ PY
       echo "        VIGIA_SYNC_EJECUTAR=1 $0 --test"
       exit 1
     fi
-    ejecutar_pruebas_d1_d2 || exit 1
+    ejecutar_pruebas || exit 1
   else
     echo "SECO: no se crearon jobs. Falta la corrida real en Q2:"
     echo "  VIGIA_SYNC_EJECUTAR=1 $0 --test"
