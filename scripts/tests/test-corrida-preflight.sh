@@ -212,15 +212,19 @@ printf '%s' "$out" | grep -q "barra vacia" || fail "NO APTO sin razon de barra v
 $out"
 
 # B4 (7): mecanismo del navegador con el binario real. Con la copia IGUAL,
-# APTO sin unknowns (el mecanismo SI se probo: un unknown callado aqui seria
-# la vuelta del skip que este bloque elimino de la prueba de fuente).
+# APTO con el mecanismo PROBADO: su propio unknown no puede aparecer. Los
+# unknowns de clase (ssh, red externa) son previos del sandbox (candado_clase
+# sin CORRIDA_CANDADO_*, rc=2 medido) y no dicen nada del chequeo (7): exigir
+# cero unknowns en TODO el output dio un falso rojo en CI (PR #123, artifact
+# logs-run-checks-shard-2: "APTO / QUEDA unknown: clase sin medir ssh, red
+# externa" con el mecanismo correctamente probado).
 modos x ok cli-ok "--flag-ok-9" "BAR-OK-9"
 abrir t-bro-ok "$RB"
 out=$(bash "$CORR" preflight t-bro-ok 2>&1) || fail "preflight con navegador igual debio dar APTO:
 $out"
 printf '%s' "$out" | head -1 | grep -q "^APTO" || fail "primera linea distinta de APTO con navegador igual:
 $out"
-printf '%s' "$out" | grep -q "QUEDA unknown" \
+printf '%s' "$out" | grep -q "mecanismo del navegador sin probar" \
   && fail "el mecanismo del navegador quedo sin probar (unknown) con el binario presente:
 $out"
 
