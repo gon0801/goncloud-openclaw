@@ -138,6 +138,31 @@ corrida_preflight() {
     razon "runbook sin leer: $runbook"
   fi
 
+  # (7) mecanismo del flag del navegador con el binario REAL (B4: la paridad
+  # instalacion-vs-fuente vive aqui, fuera de la bateria de fuente; la prueba
+  # de fuente no consulta la instalacion). Con HOME aislado y sin red:
+  # `browser tabs --profile claw` desvia la config a ~/.openclaw-claw (falla
+  # antes de abrir el websocket) y `browser tabs --browser-profile claw` no.
+  # Un binario instalado divergente revienta el arranque AQUI, con la razon.
+  # Ausente o sin probar = unknown explicito, jamas un silencio.
+  local oc_real="${OPENCLAW_BIN:-$HOME/.openclaw/bin/openclaw}"
+  if [ -x "$oc_real" ]; then
+    local pf_home sal_mal sal_bien
+    pf_home="$(mktemp -d 2>/dev/null)" || pf_home=""
+    if [ -n "$pf_home" ]; then
+      sal_mal="$(HOME="$pf_home" "$oc_real" browser tabs --profile claw --json 2>&1)"
+      printf '%s' "$sal_mal" | grep -q '\.openclaw-claw/openclaw\.json' \
+        || razon "CLI instalado divergente: --profile claw ya no desvia la config"
+      sal_bien="$(HOME="$pf_home" "$oc_real" browser tabs --browser-profile claw --json 2>&1)"
+      printf '%s' "$sal_bien" | grep -q '\.openclaw-claw' \
+        && razon "CLI instalado divergente: --browser-profile tambien desvia la config"
+    else
+      unknown "mecanismo del navegador sin probar (mktemp fallo)"
+    fi
+  else
+    unknown "CLI openclaw ausente ($oc_real): mecanismo del navegador sin probar"
+  fi
+
   if [ -n "$razones" ]; then
     printf 'NO APTO%s\n' "$razones"
     [ -n "$unknowns" ] && printf 'QUEDA unknown:%s\n' "$unknowns"

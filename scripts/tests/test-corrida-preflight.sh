@@ -74,6 +74,25 @@ case "\$*" in
   *cron\ add*) printf '{"id":"cron-1"}';;
   *gateway\ call\ status*) [ "\${GW_MODO:-ok}" = "mal" ] && exit 1; printf '{"ok":true}';;
   *message\ send*) [ "\${ENVIO_MODO:-ok}" = "mal" ] && exit 1; printf '{"messageId":"m1"}';;
+  *browser\ tabs*)
+    # B4: mecanismo del flag del navegador. "ok": solo --profile claw desvia la
+    # config (la forma del incidente). "muda": la forma mala deja de desviar
+    # (copia divergente, direccion 1). "doblez": --browser-profile TAMBIEN
+    # desvia (copia divergente, direccion 2).
+    prev=""
+    mala=0
+    for a in "\$@"; do
+      if [ "\$prev" = "--profile" ] && [ "\$a" = "claw" ]; then mala=1; fi
+      prev="\$a"
+    done
+    if [ "\$mala" = "1" ] && [ "\${BROWSER_MODO:-ok}" = "ok" ]; then
+      printf 'config desviada a ~/.openclaw-claw/openclaw.json\n'
+    fi
+    if [ "\$mala" = "0" ] && [ "\${BROWSER_MODO:-ok}" = "doblez" ]; then
+      printf 'config desviada a ~/.openclaw-claw/openclaw.json\n'
+    fi
+    exit 0
+    ;;
 esac
 exit 0
 STUB
@@ -190,6 +209,60 @@ abrir t-vacia "$RB"
 out=$(bash "$CORR" preflight t-vacia 2>&1); rc=$?
 [ $rc -ne 0 ] || fail "con barra vacia debio dar NO APTO"
 printf '%s' "$out" | grep -q "barra vacia" || fail "NO APTO sin razon de barra vacia:
+$out"
+
+# B4 (7): mecanismo del navegador con el binario real. Con la copia IGUAL,
+# APTO con el mecanismo PROBADO: su propio unknown no puede aparecer. Los
+# unknowns de clase (ssh, red externa) son previos del sandbox (candado_clase
+# sin CORRIDA_CANDADO_*, rc=2 medido) y no dicen nada del chequeo (7): exigir
+# cero unknowns en TODO el output dio un falso rojo en CI (PR #123, artifact
+# logs-run-checks-shard-2: "APTO / QUEDA unknown: clase sin medir ssh, red
+# externa" con el mecanismo correctamente probado).
+modos x ok cli-ok "--flag-ok-9" "BAR-OK-9"
+abrir t-bro-ok "$RB"
+out=$(bash "$CORR" preflight t-bro-ok 2>&1) || fail "preflight con navegador igual debio dar APTO:
+$out"
+printf '%s' "$out" | head -1 | grep -q "^APTO" || fail "primera linea distinta de APTO con navegador igual:
+$out"
+printf '%s' "$out" | grep -q "mecanismo del navegador sin probar" \
+  && fail "el mecanismo del navegador quedo sin probar (unknown) con el binario presente:
+$out"
+
+# B4 (7): copia DIVERGENTE direccion 1 --profile claw mudo => NO APTO con razon.
+export BROWSER_MODO=muda
+abrir t-bro-muda "$RB"
+out=$(bash "$CORR" preflight t-bro-muda 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "con CLI divergente (--profile mudo) debio dar NO APTO:
+$out"
+printf '%s' "$out" | grep -q "ya no desvia la config" \
+  || fail "NO APTO sin la razon de divergencia (direccion 1):
+$out"
+unset BROWSER_MODO
+
+# B4 (7): copia DIVERGENTE direccion 2 --browser-profile tambien desvia => NO APTO.
+export BROWSER_MODO=doblez
+abrir t-bro-doblez "$RB"
+out=$(bash "$CORR" preflight t-bro-doblez 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "con CLI divergente (doble desvio) debio dar NO APTO:
+$out"
+printf '%s' "$out" | grep -q "tambien desvia" \
+  || fail "NO APTO sin la razon de divergencia (direccion 2):
+$out"
+unset BROWSER_MODO
+
+# B4 (7): CLI AUSENTE => unknown explicito, jamas silencio (el resto de las
+# razones siguen su curso: gateway y canal tampoco responden). El REGISTRO de
+# la corrida (abrir) usa el stub SANO: abrir lee `openclaw cron list` y con el
+# binario ausente muere ANTES de llegar a preflight ("abrir: sin lista de
+# crons legible", CI run 35690236857 — exportar OPENCLAW_BIN ausente antes de
+# abrir fue el defecto de la ronda 2). La ausencia se pasa SOLO al preflight,
+# por env del comando: es exactamente la superficie que el chequeo (7) audita.
+abrir t-bro-ausente "$RB"
+out=$(OPENCLAW_BIN="$T/bin/openclaw-ausente" bash "$CORR" preflight t-bro-ausente 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "sin CLI el preflight no puede quedar APTO:
+$out"
+printf '%s' "$out" | grep -q "CLI openclaw ausente" \
+  || fail "sin CLI instalado la ausencia debia quedar como unknown explicito:
 $out"
 
 # ROJO con vigilante viejo (y el instalado se restaura: los casos que siguen no
