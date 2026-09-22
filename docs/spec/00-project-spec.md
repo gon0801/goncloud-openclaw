@@ -53,8 +53,34 @@ Decisiones del dueño (2026-09-15), fila 6.8 de Plans.md:
 
 1. main coordina y le reporta a David; nunca mergea ni toca el servidor directamente.
 2. Cambios de código van a la cadena de calidad (implementer → verifier → adversary → reviewer); servidor y deploy van a ingenieria; negocio va a operaciones.
-3. Nada se mergea sin autorización explícita de David; puede ser una orden fechada por tarea o una preaprobación versionada con alcance cerrado para una fase. La corrida debe guardar una `authorization_ref` comprobable a esa preaprobación; recibos, revisiones y CI acreditan calidad, pero no crean autoridad. Donde mergear ya despliega (openclaw y los 3 workspaces, por el sync) la autorización es una sola: "merge y deploy".
+3. Nada se mergea sin autorización explícita de David; puede ser una orden fechada por tarea o una preaprobación versionada con alcance cerrado para una fase. La corrida debe guardar una `authorization_ref` comprobable a esa preaprobación; recibos, revisiones y CI acreditan calidad, pero no crean autoridad. Donde mergear ya despliega (openclaw y los 3 workspaces, por el sync) la autorización es una sola: "merge y deploy". Fase 16 es la excepción durante la migración: la autorización para mergear su implementación no autoriza el corte vivo. Ingeniería necesita otra `authorization_ref` que nombre la ventana operativa y el SHA ya integrado antes de cambiar el host Windows.
 4. Nada se reporta como "listo" sin haberse verificado antes con la prueba del repo (`verify/`) cuando existe.
+
+## Propiedad del runtime Windows
+
+Decisión del dueño aprobada en el diseño de separación del runtime del 22 de
+septiembre de 2026:
+
+1. `C:\Users\ehven\.openclaw` contiene estado vivo y no el `.git` principal;
+   el checkout fuente vive en `C:\Users\ehven\src\goncloud-openclaw`.
+2. El repo principal llega al runtime por un manifiesto positivo, staging,
+   validación, reemplazo atómico por archivo y read-back. Bases, credenciales,
+   sesiones, logs, herramientas, modelos y launchers generados no se publican.
+3. Los cambios autónomos de skills permitidos se capturan en una rama y un PR.
+   Nunca se empujan directamente a `main` ni autorizan que Git sobrescriba una
+   edición viva pendiente.
+4. El nodo Windows usa `C:\Users\ehven\.openclaw-node` mediante
+   `OPENCLAW_STATE_DIR`; no comparte la SQLite, identidad ni aprobaciones del
+   gateway.
+5. Windows Code Integrity no se deshabilita ni se relaja. La limpieza mueve a
+   cuarentena inventariada; esta fase no autoriza borrado definitivo.
+6. Después de reabrir tráfico, una reversa de memoria conserva las bases
+   actuales. No restaura un snapshot completo ni vuelve al `llama.cpp`
+   bloqueado; degrada a búsqueda léxica con `provider: none`.
+
+Estos contratos no cambian modelos de conversación ni sus fallbacks. Código y
+artefactos versionados siguen la cadena de calidad; la migración viva y el
+deploy pertenecen a ingeniería y requieren autorización explícita separada.
 
 Decisión de producto registrada (D2): se crea `verify/` en goncloud-Orbit y goncloud-accounting con `saikit-verificar-app`; no se adapta el verifier a `.cursor/skills/verify-*` porque duplica mantenimiento sin cambiar nada para David — esas skills siguen siendo de la flota DG y `verify/` es la fuente de claw.
 
