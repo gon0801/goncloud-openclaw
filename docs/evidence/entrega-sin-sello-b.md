@@ -153,5 +153,10 @@ aserción que discrimina es la del rc, probada por mutación), `RES_ROJO` vacío
 
 ### CI
 
-- URL del run final de esta rama: se añade al pie cuando el PR complete su
-  batería (un push más, normal, sin fuerza).
+- Run de Actions que validó el código de esta ronda (SHA `07245d6`, PR #127):
+  https://github.com/gon0801/goncloud-openclaw/actions/runs/35757609197 —
+  shards (1/3, 2/3, 3/3), `gate`, `ci-contract` y `clasificador` en success.
+- El commit de evidencia (este) re-corre la batería por ser push nuevo; el run
+  de su SHA final queda citado en el recibo del PR #127 (comentario
+  persistente), junto con el veredicto de CodeRabbit sobre esta rama
+  (revisión completada sin comentarios).
