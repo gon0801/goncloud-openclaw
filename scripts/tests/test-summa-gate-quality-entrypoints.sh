@@ -192,8 +192,15 @@ contrato_shards() { # $1=yaml -> exit 0 si cumple el contrato de shards+gate
   # veredicto fail-closed (F4, auditoria adversarial post-Fase 15; fixture
   # gate-sin-always.yml, aceptado por el validador vigente — rojo medido
   # antes del arreglo). El filtro de comentarios de arriba ya corre sobre
-  # esta seccion: un `# if: always()` no lo satisface.
-  printf '%s\n' "$seccion_gate" | grep -qE '^[[:space:]]+if:[[:space:]]*always\(\)[[:space:]]*$' || return 1
+  # esta seccion: un `# if: always()` no lo satisface. Re-review de F4: el
+  # ancla `[[:space:]]+` aceptaba tambien el `if: always()` de un PASO
+  # (ocho espacios): un gate sin if de job pasaba el validador mientras
+  # GitHub igualmente saltaba el job cuando una dependencia falla — un paso
+  # "always" no corre si el JOB se salta (fixture gate-always-step.yml,
+  # rojo medido antes del arreglo). Los jobs viven a DOS espacios y sus
+  # claves a CUATRO; el if de un paso vive a ocho o mas, asi que el ancla
+  # exacta `{4}` es la que distingue el nivel de job.
+  printf '%s\n' "$seccion_gate" | grep -qE '^[[:space:]]{4}if:[[:space:]]*always\(\)[[:space:]]*$' || return 1
   # (f) la regla de pares: success pasa; skipped pasa SOLO con fast valido
   # (success:fast); todo lo demas rebota como "no quedo en success". r2:
   # DENTRO de la seccion gate — el texto suelto en el YAML crudo lo
@@ -253,11 +260,17 @@ echo "ok (6): tres shards fail-fast: false, gate siempre corre (if: always()), c
 #                            adversarial post-Fase 15): si el clasificador
 #                            falla, el gate quedaria SKIPPED en vez de
 #                            correr su veredicto fail-closed
+#   gate-always-step       el `if: always()` del gate MOVIDO a su unico
+#                            paso, sin if de job (re-review F4): el paso
+#                            "always" no corre si el JOB se salta, y el
+#                            validador con ancla `[[:space:]]+` lo
+#                            aceptaba igual (rojo medido antes del
+#                            arreglo del ancla `{4}`)
 FX=scripts/tests/fixtures/quality-shards
 [ -d "$FX" ] || fail "falta $FX"
 contrato_shards "$FX/workflow-valido.yml" \
   || fail "el fixture VALIDO no pasa el contrato: el validador esta roto, no discrimina"
-for roto in shard-faltante fallo-ignorado gate-sin-dependencia gate-sin-shards-senuelo shards-duplicado shards-en-comentario shards-run-en-comentario shards-cuatro-entradas shards-failfast-en-comentario gate-pareja-en-comentario gate-sin-always; do
+for roto in shard-faltante fallo-ignorado gate-sin-dependencia gate-sin-shards-senuelo shards-duplicado shards-en-comentario shards-run-en-comentario shards-cuatro-entradas shards-failfast-en-comentario gate-pareja-en-comentario gate-sin-always gate-always-step; do
   if contrato_shards "$FX/$roto.yml"; then
     fail "fixture $roto.yml no fue rechazado: el validador acepta $roto"
   fi
