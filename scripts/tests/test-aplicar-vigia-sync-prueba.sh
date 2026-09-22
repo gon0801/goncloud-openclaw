@@ -265,7 +265,24 @@ grep -q 'cron_list_status' docs/cron-messages/APLICAR_VIGIA_SYNC.sh \
   || fail "(12) falta cron_list_status (no fail-open)"
 grep -q 'en_franja_silencio_cdmx' docs/cron-messages/APLICAR_VIGIA_SYNC.sh \
   || fail "(12) falta rechazo en franja de silencio CDMX"
-echo "ok (12): anclas aplicador (escribe, aserta, lista, franja)"
+grep -q 'run_two' docs/cron-messages/APLICAR_VIGIA_SYNC.sh \
+  || fail "(12) falta run_two (D4 doble corrida)"
+grep -q 'runs1.json' docs/cron-messages/APLICAR_VIGIA_SYNC.sh \
+  || fail "(12) falta evidencia runs1"
+grep -q 'runs2.json' docs/cron-messages/APLICAR_VIGIA_SYNC.sh \
+  || fail "(12) falta evidencia runs2"
+grep -q 'D4 ASSERT-2 FALLO' docs/cron-messages/APLICAR_VIGIA_SYNC.sh \
+  || fail "(12) falta asercion 2da corrida"
+grep -q 'escribir_log_prueba 1 D4' docs/cron-messages/APLICAR_VIGIA_SYNC.sh \
+  || fail "(12) falta fixture D4"
+rtwo=$(sed -n '/^  run_two() {/,/^  }/p' docs/cron-messages/APLICAR_VIGIA_SYNC.sh)
+[ -n "$rtwo" ] || fail "(12) no se aislo run_two"
+echo "$rtwo" | grep -q 'for n in 1 2' || fail "(12) D4 sin doble corrida"
+a1=$(printf '%s\n' "$rtwo" | grep -n 'assert-d1' | head -1 | cut -d: -f1)
+a2=$(printf '%s\n' "$rtwo" | grep -n 'assert-d2' | head -1 | cut -d: -f1)
+[ -n "$a1" ] && [ -n "$a2" ] && [ "$a1" -lt "$a2" ] \
+  || fail "(12) D4 aserta en orden distinto (1ra avisa, 2da calla)"
+echo "ok (12): anclas aplicador (escribe, aserta, lista, franja, D4)"
 
 # (13) Prueba CONDUCTUAL de franja (no solo grep): copia bajo scratch, mock hora
 python3 - "$T" <<'PY' || exit 1
@@ -392,6 +409,221 @@ else:
         file=sys.stderr,
     )
     sys.exit(1)
+PY
+
+# (14) D4 doble corrida hermetica (F11): MISMA cola + MISMO scratch =>
+# la 2da corrida calla ("cada aviso una sola vez"). El gateway falso
+# modela el scratch: un job fresco re-avisa, el mismo job calla.
+python3 - "$T" <<'PY' || exit 1
+"""Ejecuta ejecutar_pruebas de verdad contra un gateway falso con scratch."""
+from __future__ import annotations
+
+import glob
+import json
+import os
+import pathlib
+import re
+import subprocess
+import sys
+import textwrap
+
+T = pathlib.Path(sys.argv[1])
+repo = pathlib.Path(".").resolve()
+src = (repo / "docs/cron-messages/APLICAR_VIGIA_SYNC.sh").read_text(encoding="utf-8")
+
+# --- fixtures de runs ---
+d1 = {"entries": [{"status": "ok", "completionStatus": "succeeded",
+  "summary": "VIGIA SYNC PENDIENTE pr=7 agentes=verifier\n"
+             "archivos: agents/verifier/agent/workshop-skills/cron-payload-verify/SKILL.md "
+             "agents/verifier/agent/workshop-skills/lane-claim-verify/SKILL.md"}]}
+quiet = {"entries": [{"status": "ok", "completionStatus": "succeeded",
+  "summary": "VIGIA SYNC OK ciclo=2026-09-19 12:00 CDMX"}]}
+d3 = {"entries": [{"status": "ok", "completionStatus": "succeeded",
+  "summary": "VIGIA SYNC DEPLOYED sha=e701489 n=1 skill\n"
+             "archivos: agents/verifier/agent/workshop-skills/cron-payload-verify/SKILL.md"}]}
+(T / "fix-d1.json").write_text(json.dumps(d1), encoding="utf-8")
+(T / "fix-quiet.json").write_text(json.dumps(quiet), encoding="utf-8")
+(T / "fix-d3.json").write_text(json.dumps(d3), encoding="utf-8")
+
+# --- gateway falso: scratch por job ---
+fake = T / "fakeoc_d4"
+fake.write_text(
+    textwrap.dedent(
+        """\
+        #!/bin/bash
+        ST="$FAKEOC_STATE"
+        LOG="$FAKEOC_LOG"
+        echo "oc $*" >>"$LOG"
+        if [ "$1" = "cron" ] && [ "$2" = "add" ]; then
+          name=""; prev=""
+          for a in "$@"; do
+            if [ "$prev" = "--name" ]; then name="$a"; fi
+            prev="$a"
+          done
+          n=0
+          if [ -f "$ST/seq" ]; then n=$(cat "$ST/seq"); fi
+          n=$((n + 1)); echo "$n" >"$ST/seq"
+          tid="tid-$name-$n"
+          echo "$name" >"$ST/$tid.name"
+          echo 0 >"$ST/$tid.runs"
+          echo "add $name -> $tid" >>"$LOG"
+          printf '{"id":"%s"}\\n' "$tid"
+          exit 0
+        fi
+        if [ "$1" = "cron" ] && [ "$2" = "run" ]; then
+          tid="$3"
+          c=$(cat "$ST/$tid.runs" 2>/dev/null || echo 0)
+          echo $((c + 1)) >"$ST/$tid.runs"
+          printf '{"id":"%s","run":%d}\\n' "$tid" $((c + 1))
+          exit 0
+        fi
+        if [ "$1" = "cron" ] && [ "$2" = "runs" ]; then
+          tid="$3"
+          name=$(cat "$ST/$tid.name" 2>/dev/null || echo "?")
+          c=$(cat "$ST/$tid.runs" 2>/dev/null || echo 0)
+          case "$name" in
+            vigia-sync-write-*) printf '{"entries":[]}\\n'; exit 0;;
+            vigia-sync-prueba-D1) f="$FIX_D1";;
+            vigia-sync-prueba-D2) f="$FIX_QUIET";;
+            vigia-sync-prueba-D3) f="$FIX_D3";;
+            vigia-sync-prueba-D4*)
+              if [ "$c" -ge 2 ]; then f="$FIX_QUIET"; else f="$FIX_D1"; fi;;
+            *) printf '{"entries":[]}\\n'; exit 0;;
+          esac
+          cat "$f"
+          exit 0
+        fi
+        if [ "$1" = "cron" ] && [ "$2" = "get" ]; then
+          printf '{"id":"%s"}\\n' "$3"; exit 0
+        fi
+        if [ "$1" = "cron" ] && [ "$2" = "rm" ]; then exit 0; fi
+        if [ "$1" = "cron" ] && [ "$2" = "list" ]; then
+          printf '{"jobs":[]}\\n'; exit 0
+        fi
+        echo "fakeoc: args inesperados: $*" >&2
+        exit 99
+        """
+    ),
+    encoding="utf-8",
+)
+fake.chmod(0o755)
+
+FRANJA = ("en_franja_silencio_cdmx() {\n  local h\n"
+          "  h=$(TZ=America/Mexico_City date +%H)\n  h=$((10#$h))\n"
+          '  [ "$h" -ge 23 ] || [ "$h" -lt 8 ]\n}')
+
+
+def make_copy(*, name: str, fresh_scratch_mutant: bool = False) -> pathlib.Path:
+    body = src
+    body = body.replace(
+        'cd "$(dirname "$0")/../.." || exit 1',
+        f'cd "{repo}" || exit 1',
+    )
+    body = body.replace("OC=~/.openclaw/bin/openclaw", f"OC={fake}")
+    body = re.sub(
+        r"for w in .*?; do\n  # shellcheck disable=SC2086\n  if in_win \$w; then echo \"ABORTO: dentro de ventana cerrada \(\$\w UTC\)\.\"; exit 1; fi\ndone",
+        "true  # stub: sin ventanas en prueba hermetica",
+        body,
+        count=1,
+        flags=re.S,
+    )
+    body = body.replace(
+        "LOCKDIR=/tmp/aplicar_vigia_sync.lock",
+        f"LOCKDIR={T / ('lock_' + name)}",
+    )
+    if FRANJA not in body:
+        raise SystemExit("no halle en_franja para mock")
+    body = body.replace(
+        FRANJA, "en_franja_silencio_cdmx() { return 1; }  # MOCK: fuera de franja"
+    )
+    if fresh_scratch_mutant:
+        old = "for n in 1 2; do"
+        if body.count(old) != 1:
+            raise SystemExit("no halle el loop D4 para mutar")
+        mut = (
+            "for n in 1 2; do\n"
+            '    if [ "$n" = "2" ]; then TID=$($OC cron add --name "$jname-fresh" '
+            "--agent main --session isolated --no-deliver --at 30m --keep-after-run "
+            "--timeout-seconds 600 --tools exec --message x --json 2>/dev/null | "
+            "python3 -c 'import json,sys; print(json.load(sys.stdin).get(\"id\",\"\"))'); fi "
+            "# MUTANTE: 2da corrida en job fresco"
+        )
+        body = body.replace(old, mut, 1)
+    out = T / f"aplicar_{name}.sh"
+    out.write_text(body, encoding="utf-8")
+    out.chmod(0o755)
+    return out
+
+
+def run_copy(path: pathlib.Path, tag: str):
+    st = T / f"ocstate_{tag}"
+    st.mkdir(exist_ok=True)
+    env = os.environ.copy()
+    env["VIGIA_SYNC_EJECUTAR"] = "1"
+    env["FAKEOC_STATE"] = str(st)
+    env["FAKEOC_LOG"] = str(T / f"oc_{tag}.log")
+    env["FIX_D1"] = str(T / "fix-d1.json")
+    env["FIX_QUIET"] = str(T / "fix-quiet.json")
+    env["FIX_D3"] = str(T / "fix-d3.json")
+    r = subprocess.run(
+        ["bash", str(path), "--test"], cwd=str(repo),
+        capture_output=True, text=True, env=env,
+    )
+    log = (T / f"oc_{tag}.log").read_text(encoding="utf-8") if (T / f"oc_{tag}.log").exists() else ""
+    return r, log
+
+
+def rojob(msg: str, extra: str = "") -> None:
+    print(f"ROJO: {msg}", file=sys.stderr)
+    if extra:
+        print(extra[:1500], file=sys.stderr)
+    sys.exit(1)
+
+
+evdir = repo / ".saikit/scratch/M"
+antes = set(glob.glob(str(evdir / "vigia-sync-prueba-D4.*.runs?.json")))
+
+# Verde: doble corrida, mismo job, 1ra avisa + 2da calla.
+c_ok = make_copy(name="d4ok")
+r, log = run_copy(c_ok, "d4ok")
+if r.returncode != 0:
+    rojob("D4 hermetico debio salir 0", r.stdout + r.stderr)
+lineas = log.splitlines()
+adds = [l for l in lineas if l.startswith("add vigia-sync-prueba-D4 ")]
+if len(adds) != 1:
+    rojob(f"D4 debio crear UN job, creo {len(adds)}", log)
+tid = adds[0].split(" -> ")[1]
+runs = [i for i, l in enumerate(lineas) if f"cron run {tid} " in l or l.endswith(f"cron run {tid}")]
+if len(runs) != 2:
+    rojob(f"D4 debio correr el mismo job 2 veces, corrio {len(runs)}", log)
+writes = [i for i, l in enumerate(lineas) if "vigia-sync-write-D4" in l and "cron add" in l]
+if len(writes) != 1:
+    rojob(f"D4 debio escribir el fixture 1 vez, lo escribio {len(writes)}", log)
+if not (writes[0] < runs[0] < runs[1]):
+    rojob("D4 orden distinto de fixture->run1->run2", log)
+if not any(f"cron rm {tid}" in l for l in lineas):
+    rojob("D4 no borro su job", log)
+nuevos = sorted(set(glob.glob(str(evdir / "vigia-sync-prueba-D4.*.runs?.json"))) - antes)
+r1 = [p for p in nuevos if p.endswith(".runs1.json")]
+r2 = [p for p in nuevos if p.endswith(".runs2.json")]
+if len(r1) != 1 or len(r2) != 1:
+    rojob("D4 sin evidencia runs1+runs2", str(nuevos))
+s1 = json.load(open(r1[0], encoding="utf-8"))["entries"][0]["summary"]
+s2 = json.load(open(r2[0], encoding="utf-8"))["entries"][0]["summary"]
+if "VIGIA SYNC PENDIENTE" not in s1:
+    rojob("D4-1ra debio avisar", s1)
+if "VIGIA SYNC PENDIENTE" in s2 or "VIGIA SYNC DEPLOYED" in s2:
+    rojob("D4-2da debio callar (re-aviso)", s2)
+
+# Mutante: 2da corrida en job fresco => re-avisa => ASSERT-2 FALLO.
+c_mut = make_copy(name="d4mut", fresh_scratch_mutant=True)
+r, _ = run_copy(c_mut, "d4mut")
+if r.returncode == 0:
+    rojob("mutante job-fresco salio 0; no discrimina")
+if "D4 ASSERT-2 FALLO" not in (r.stdout + r.stderr):
+    rojob("mutante job-fresco fallo en otro lado", r.stdout + r.stderr)
+
+print("ok (14): D4 misma cola+mismo scratch (avisa, calla); mutante job-fresco expuesto")
 PY
 
 echo "TODO VERDE: aplicar-vigia-sync-prueba"

@@ -10,10 +10,10 @@
 #   ./docs/cron-messages/APLICAR_VIGIA_SYNC.sh
 #       edit + verify (lead en Q2)
 #   ./docs/cron-messages/APLICAR_VIGIA_SYNC.sh --test
-#       seco: valida msg, fabrica pre/post de ejemplo, DECLARA el recorrido D1/D2/D3
+#       seco: valida msg, fabrica pre/post de ejemplo, DECLARA el recorrido D1-D4
 #       (no crea jobs). La corrida real falta hasta Q2.
 #   VIGIA_SYNC_EJECUTAR=1 ./docs/cron-messages/APLICAR_VIGIA_SYNC.sh --test
-#       Q2: seco + crea/corre/borra vigia-sync-prueba-D1, D2 y D3 (--tools exec),
+#       Q2: seco + crea/corre/borra vigia-sync-prueba-D1, D2, D3 y D4 (--tools exec),
 #       evidencia en .saikit/scratch/M/*.runs.json. No edita el vigia vivo.
 #
 # Compatible con bash 3.2 (macOS).
@@ -92,8 +92,8 @@ sys.stdout.write('\n'.join(lines))
 PY
 }
 
-declarar_recorrido_d1_d2_d3() {
-  echo "== recorrido D1/D2/D3 (lo que Q2 ejecuta con VIGIA_SYNC_EJECUTAR=1 $0 --test)"
+declarar_recorrido() {
+  echo "== recorrido D1/D2/D3/D4 (lo que Q2 ejecuta con VIGIA_SYNC_EJECUTAR=1 $0 --test)"
   echo "LOG_PRUEBA=$LOG_PRUEBA"
   echo "ANTES de D1: el script ESCRIBE el log (cola sync + SKILLS_PR_LINE) via cron --command en el gateway"
   echo "D1 name=vigia-sync-prueba-D1  tools=exec  mensaje=v3 con LOG=prueba"
@@ -104,9 +104,12 @@ declarar_recorrido_d1_d2_d3() {
   echo "ANTES de D3: el script REESCRIBE el log (cola + SKILLS_PR_LINE + SKILLS_DEPLOYED_LINE)"
   echo "D3 name=vigia-sync-prueba-D3  tools=exec  mismo mensaje"
   echo "    expect: assert-d3 → deployado sha=e701489 + archivos; Telegram imposible (--tools exec)"
-  echo "los tres: --at 30m --session isolated --no-deliver --keep-after-run"
+  echo "ANTES de D4: el script REESCRIBE el log (cola sync + SKILLS_PR_LINE, una sola vez)"
+  echo "D4 name=vigia-sync-prueba-D4  tools=exec  mismo mensaje, MISMO job dos corridas"
+  echo "    expect: 1ra assert-d1 → avisa; 2da assert-d2 → calla (cada aviso una sola vez)"
+  echo "todos: --at 30m --session isolated --no-deliver --keep-after-run"
   echo "        cron run --wait --wait-timeout 10m → assert → cron rm verificado con cron list"
-  echo "        evidencia: .saikit/scratch/M/vigia-sync-prueba-D*.$TS.runs.json"
+  echo "        evidencia: .saikit/scratch/M/vigia-sync-prueba-D*.$TS.runs*.json"
 }
 
 # Escribe LOG_PRUEBA en el gateway por un one-shot --command (exec del CLI).
@@ -228,13 +231,47 @@ PY
     rm_y_verificar "$TID" || return 1
   }
 
+  # D4: doble corrida, MISMO job (mismo scratch) y MISMA cola (un solo
+  # fixture, sin reescribir entre corridas). La 1ra avisa (assert-d1), la
+  # 2da calla (assert-d2): "cada aviso una sola vez".
+  run_two() {
+    local label="D4"
+    local jname="vigia-sync-prueba-$label"
+    echo "== add $jname (doble corrida, mismo job)"
+    local OUT TID
+    OUT=$($OC cron add --name "$jname" --agent main --session isolated --no-deliver \
+      --at 30m --keep-after-run --timeout-seconds 600 --tools exec \
+      --description "Prueba CASO D doble corrida ($label); solo exec, sin Telegram." \
+      --message "$MSG_PRUEBA" --json 2>&1) \
+      || { echo "PRUEBA $label: add fallo: $OUT" | cut -c1-400; return 1; }
+    TID=$(printf '%s' "$OUT" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("id") or d.get("job",{}).get("id",""))' 2>/dev/null)
+    [ -n "$TID" ] || { echo "PRUEBA $label: sin id: $OUT" | cut -c1-400; return 1; }
+    echo "-- $jname id=$TID"
+    for n in 1 2; do
+      echo "-- run $n --wait (max 10m) mismo job $TID"
+      $OC cron run "$TID" --wait --wait-timeout 10m --json \
+        > ".saikit/scratch/M/vigia-sync-prueba-$label.$TS.run$n.json" 2>&1 \
+        || { echo "PRUEBA $label corrida $n: cron run fallo"; rm_y_verificar "$TID" || true; return 1; }
+      $OC cron runs "$TID" --limit 1 --json \
+        > ".saikit/scratch/M/vigia-sync-prueba-$label.$TS.runs$n.json" 2>&1 \
+        || { echo "PRUEBA $label corrida $n: cron runs fallo"; rm_y_verificar "$TID" || true; return 1; }
+    done
+    python3 "$ASSERT" assert-d1 ".saikit/scratch/M/vigia-sync-prueba-$label.$TS.runs1.json" \
+      || { echo "PRUEBA D4 ASSERT-1 FALLO (1ra debio avisar)"; rm_y_verificar "$TID" || true; return 1; }
+    python3 "$ASSERT" assert-d2 ".saikit/scratch/M/vigia-sync-prueba-$label.$TS.runs2.json" \
+      || { echo "PRUEBA D4 ASSERT-2 FALLO (2da debio callar: re-aviso)"; rm_y_verificar "$TID" || true; return 1; }
+    rm_y_verificar "$TID" || return 1
+  }
+
   escribir_log_prueba 1 D1 || return 1
   run_one D1 || return 1
   escribir_log_prueba 0 D2 || return 1
   run_one D2 || return 1
   escribir_log_prueba 2 D3 || return 1
   run_one D3 || return 1
-  echo "PRUEBA D1/D2/D3 terminada VERDE. Evidencia en .saikit/scratch/M/vigia-sync-prueba-D*.$TS.runs.json"
+  escribir_log_prueba 1 D4 || return 1
+  run_two || return 1
+  echo "PRUEBA D1/D2/D3/D4 terminada VERDE. Evidencia en .saikit/scratch/M/vigia-sync-prueba-D*.$TS.runs*.json"
 }
 
 if [ "$DRY" -eq 1 ]; then
@@ -260,7 +297,7 @@ if (post.get('payload') or {}).get('toolsAllow')!=(pre.get('payload') or {}).get
 if post.get('enabled')!=pre.get('enabled'): fail('enabled muto')
 print(f"seco OK: pre+post en backup/ agentId={post.get('agentId')} toolsAllow={post['payload'].get('toolsAllow')} enabled={post.get('enabled')}")
 PY
-  declarar_recorrido_d1_d2_d3
+  declarar_recorrido
   if [ "$EJECUTAR" -eq 1 ]; then
     if en_franja_silencio_cdmx; then
       echo "ABORTO: franja de silencio CDMX (23:00-08:00): D1 diferiria el aviso (DIFERIDO_D)"

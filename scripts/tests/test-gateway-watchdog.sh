@@ -118,4 +118,40 @@ l_port=$(grep -n 'Get-NetTCPConnection -State Listen' "$watchdog" | head -1 | cu
   || fail "(t3) el stand-down no precede a la primera sonda (lineas $l_stand vs $l_port)"
 echo "ok (t3c): stand-down precede a toda accion"
 
+# (t4) Stand-down real (F10): ejecuta gateway-watchdog.ps1 de verdad con
+# modulo falso. Lease vigente => stand-down (exit 0, generacion en log,
+# sin sonda). Lease vacio o modulo ausente => procede (sin stand-down).
+# Una inversion de la condicion (-ne por -eq) debe poner este bloque rojo.
+PSH="$(command -v pwsh || true)"
+[ -n "$PSH" ] || fail "(t4) sin pwsh en PATH"
+mkdir -p "$T/wd"
+cat >"$T/wd/stub.psm1" <<'PSM'
+function Get-CutoverStandDownGeneration {
+  return $env:OC_STAND_GEN
+}
+Export-ModuleMember -Function Get-CutoverStandDownGeneration
+PSM
+corre_wd() { # $1=tag $2=gen -> exit; log en $T/wd/$1.log
+  local tag="$1" gen="$2"
+  OC_STAND_GEN="$gen" OPENCLAW_CUTOVER_MODULE="$T/wd/stub.psm1" \
+    OPENCLAW_WATCHDOG_LOG="$T/wd/$tag.log" \
+    "$PSH" -NoProfile -NonInteractive -File "$watchdog" >"$T/wd/$tag.out" 2>&1
+  return $?
+}
+corre_wd gen "20260922T120000Z-abcdef12" \
+  || fail "(t4) stand-down debio salir 0: $(cat "$T/wd/gen.out")"
+grep -q 'stand-down' "$T/wd/gen.log" || fail "(t4) sin stand-down con lease vigente"
+grep -q 'cutover 20260922T120000Z-abcdef12 vigente' "$T/wd/gen.log" \
+  || fail "(t4) sin generacion en el log"
+grep -q 'no listener' "$T/wd/gen.log" && fail "(t4) sondo pese al stand-down"
+corre_wd vacio "" \
+  || fail "(t4) sin lease debio salir 0: $(cat "$T/wd/vacio.out")"
+grep -q 'stand-down' "$T/wd/vacio.log" && fail "(t4) stand-down sin lease"
+OPENCLAW_CUTOVER_MODULE="$T/wd/no-existe.psm1" OPENCLAW_WATCHDOG_LOG="$T/wd/ausente.log" \
+  "$PSH" -NoProfile -NonInteractive -File "$watchdog" >"$T/wd/ausente.out" 2>&1 \
+  || fail "(t4) modulo ausente debio salir 0: $(cat "$T/wd/ausente.out")"
+[ -f "$T/wd/ausente.log" ] && grep -q 'stand-down' "$T/wd/ausente.log" \
+  && fail "(t4) stand-down sin modulo"
+echo "ok (t4): stand-down real con lease; sin lease procede"
+
 echo "PASS test-gateway-watchdog"

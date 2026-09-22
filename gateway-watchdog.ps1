@@ -10,7 +10,10 @@ $ErrorActionPreference = "SilentlyContinue"
 
 $gatewayPort = 18789
 $gatewayTask = "OpenClaw Gateway"
-$logFile = "C:\Users\ehven\.openclaw\logs\gateway-watchdog.log"
+$logFile = $env:OPENCLAW_WATCHDOG_LOG
+if ([string]::IsNullOrEmpty($logFile)) {
+    $logFile = "C:\Users\ehven\.openclaw\logs\gateway-watchdog.log"
+}
 $bootGraceSeconds = 300
 $httpTimeoutSec = 90
 
@@ -23,7 +26,10 @@ function Watchdog-Log($msg) {
 # El modulo vive en el checkout FUENTE (scripts/ no se despliega a runtime);
 # si falta o no sabe de stand-down, se sigue como siempre (fallo cerrado
 # hacia proteger el servicio: sin lease verificable no hay pausa).
-$cutoverModule = 'C:\Users\ehven\src\goncloud-openclaw\scripts\runtime-separation\RuntimeSeparation.psm1'
+$cutoverModule = $env:OPENCLAW_CUTOVER_MODULE
+if ([string]::IsNullOrEmpty($cutoverModule)) {
+    $cutoverModule = 'C:\Users\ehven\src\goncloud-openclaw\scripts\runtime-separation\RuntimeSeparation.psm1'
+}
 if (Test-Path -LiteralPath $cutoverModule) {
     Import-Module $cutoverModule -Force -ErrorAction SilentlyContinue
     if (Get-Command Get-CutoverStandDownGeneration -ErrorAction SilentlyContinue) {
