@@ -126,7 +126,9 @@ try {
   }
 
   # --- reconciliacion del checkout ---
-  $fetchOut = (& git -C $SourceRoot fetch origin --prune 2>&1)
+  # 2>$null: git escribe informativo a stderr (From ...) y 5.1 con EAP=Stop
+  # lo convierte en throw (CI11); el exit manda.
+  & git -C $SourceRoot fetch origin --prune 2>$null
   if ($LASTEXITCODE -ne 0) {
     Write-SyncLog 'main FALLO: fetch de fuente no responde'
     exit 1
@@ -139,7 +141,7 @@ try {
       Write-SyncLog ("main FALLO: rama $branch sucia, sin tocar")
       exit 1
     }
-    & git -C $SourceRoot checkout --quiet main 2>&1 | Out-Null
+    & git -C $SourceRoot checkout --quiet main 2>$null
     if ($LASTEXITCODE -ne 0) {
       Write-SyncLog 'main FALLO: no pude volver a main'
       exit 1

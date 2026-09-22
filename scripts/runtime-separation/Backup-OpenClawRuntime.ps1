@@ -222,9 +222,11 @@ try {
 
   $bundleName = "source-$stamp.bundle"
   $bundlePath = Join-Path $BackupDir $bundleName
-  & git -C $RepoRoot bundle create $bundlePath --all 2>&1 | Out-Null
+  # 2>$null: git escribe informativo a stderr (Enumerating ...) y 5.1 con
+  # EAP=Stop lo convierte en throw; el exit manda (mismo patron que Sync).
+  & git -C $RepoRoot bundle create $bundlePath --all 2>$null
   if ($LASTEXITCODE -ne 0) { throw 'git bundle create fallo' }
-  & git bundle verify $bundlePath 2>&1 | Out-Null
+  & git bundle verify $bundlePath 2>$null
   if ($LASTEXITCODE -ne 0) { throw 'git bundle verify fallo' }
   [void]$commands.Add([PSCustomObject]@{ name = 'git-bundle'; exit = 0 })
   [void]$observations.Add("bundle: $bundleName")

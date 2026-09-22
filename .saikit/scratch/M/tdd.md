@@ -764,3 +764,11 @@ el arbol real (v1-app intacto). Fix: TMPDIR bajo el workspace (D:, sin
 shortnames) a nivel job en windows-contract + step mkdir. Nota: en
 Windows-dev con TEMP similar haria falta lo mismo (sin evidencia; no
 se toca nat()).
+
+F21 (stderr nativo + EAP=Stop en 5.1): CI11 source-checkout (2a):
+`git fetch` escribe `From ...` a stderr y 5.1 lo convierte en
+NativeCommandError terminante (en PS7 no). Fix: `2>$null` donde el
+output se descarta y manda el exit: Sync fetch/checkout, Backup bundle
+create/verify (git escribe `Enumerating ...`). sync-repos.ps1 no pone
+Stop (Continue: a salvo). Lo demas (schtasks/icacls/openclaw en exito
+no emiten stderr; try/catch atrapa) se deja con evidencia ausente.
