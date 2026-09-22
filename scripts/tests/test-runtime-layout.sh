@@ -143,9 +143,12 @@ $good = '{"schema": "runtime-separation-receipt.v1", "phase": "16", "startedAt":
 $bad = $good.Replace('"passed"', '"casi"')
 $secretObs = 'token usado: ghp_abcdefghijklmnopqrstuvwxyza1B2'
 $secret = $good.Replace('staging con 3 archivos', $secretObs)
+$shortObs = 'nota: bearer de corta vida'
+$short = $good.Replace('staging con 3 archivos', $shortObs)
 Check 'receipt-good' ((Test-ReceiptObject -ReceiptJson $good -SchemaPath $SchemaPath) -eq $true)
 Check 'receipt-bad' ((Test-ReceiptObject -ReceiptJson $bad -SchemaPath $SchemaPath) -eq $false)
 Check 'receipt-secret' ((Test-ReceiptObject -ReceiptJson $secret -SchemaPath $SchemaPath) -eq $false)
+Check 'receipt-short-bearer' ((Test-ReceiptObject -ReceiptJson $short -SchemaPath $SchemaPath) -eq $true)
 $tmpdir = Join-Path ([IO.Path]::GetTempPath()) ('rsmoke-' + [Guid]::NewGuid().ToString('N'))
 [void](New-Item -ItemType Directory -Path $tmpdir)
 $dest = Join-Path $tmpdir 'receipt.json'
@@ -168,8 +171,8 @@ PS1
   printf '%s\n' "$out" | grep -q 'SMOKE-OK: atomic-roundtrip' \
     || fail "(3) el humo no llego al final: $out"
   n=$(printf '%s\n' "$out" | grep -c 'SMOKE-OK:') || n=0
-  [ "$n" -eq 21 ] || fail "(3) se esperaban 21 SMOKE-OK, llegaron $n: $out"
-  echo "ok (3): humo conductual del modulo en verde (21/21)"
+  [ "$n" -eq 22 ] || fail "(3) se esperaban 22 SMOKE-OK, llegaron $n: $out"
+  echo "ok (3): humo conductual del modulo en verde (22/22)"
 fi
 
 # (4) CI: instala 2026.9.5, job windows-contract acotado y gate que depende de el.

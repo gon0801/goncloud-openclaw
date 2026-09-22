@@ -337,6 +337,14 @@ jobs:
         shell: bash
         run: bash scripts/tests/test-runtime-layout.sh
 
+      - name: Contrato del manifiesto de despliegue
+        shell: bash
+        run: bash scripts/tests/test-deploy-manifest.sh
+
+      - name: Contrato atomico del deploy
+        shell: bash
+        run: bash scripts/tests/test-deploy-atomic.sh
+
   # La bateria completa conserva un solo entrypoint en CI: scripts/run-checks.sh,
   # ahora invocado por la matriz con SAIKIT_SHARD. Pre-commit conserva solo
   # validaciones rapidas de archivos para no cobrar la bateria completa en cada

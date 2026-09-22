@@ -109,3 +109,20 @@ tablero-runbook/*.log
 
 # respaldos que dejan las ediciones de emergencia en el host del gateway
 *.plugin.json.bak
+
+# Higiene Fase 16 (Task 2): lo generado/confidencial no se versiona. Retirado
+# del indice con `git rm --cached` (sin history rewrite); estas reglas
+# impiden que `git add -A` lo resucite. Fijado por test-repository-hygiene.sh.
+openclaw.json.*
+live-bus.env
+tls/lego-data/
+gateway.cmd
+gateway.vbs
+node.cmd
+node.vbs
+*.bak*
+tablero-runbook.bak-*
+tmp_*
+doctor-*.log
+doctor-fix-run.ps1
+scripts/restore-console.*.ps1

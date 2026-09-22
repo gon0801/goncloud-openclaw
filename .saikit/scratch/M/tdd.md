@@ -514,6 +514,10 @@ Formas compartidas (un literal, tres dueños; el test lo fija):
 - SECRET_VALUE_PATTERN:
   `(?im)(bearer\s+[A-Za-z0-9._~+/-]+=*|sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|xox[bpras]-[A-Za-z0-9-]+|-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----|(?-i:^[A-Z][A-Z0-9_]{2,}=[^\s]{4,}))`
 
+Revision 2026-09-22: el bearer del patron de valor exige piso 16
+(`bearer\s+[A-Za-z0-9._~+/-]{16,}={0,2}`): el scan de higiene hallo 5
+falsos positivos (prosa espanola y fixtures de 1 a 13 caracteres).
+
 Dueños: `docs/spec/runtime-separation-receipt.v1.schema.json` (campos
 `x-secretKeyPattern` / `x-secretValuePattern`),
 `scripts/runtime-separation/RuntimeSeparation.psm1` (mismo literal),
@@ -553,3 +557,28 @@ Desviaciones declaradas del plan (la DoD manda sobre la lista de archivos):
   skipped solo con fast válido). Sin este cambio, cumplir la DoD rompería
   la batería: es el patrón de evolución del propio repo (15.2 hizo lo mismo
   con los shards).
+
+## Task 2 (16.2) — Manifiesto, deploy e higiene
+
+Conjunto de retiro (90 archivos, verificado sin fijaciones en tests):
+openclaw.json.broken/clobbered (3), live-bus.env, tls/lego-data account.json,
+agents/main/sessions/*.zst, 4 launchers + gateway.cmd.bak-pre-livebus,
+SKILL.md.bak-20260912, gateway-watchdog.ps1.bak-20260921, 2 arboles
+tablero-runbook.bak-* (58), tmp_* (14), doctor-*.log + doctor-fix-run.ps1 (3),
+2 respaldos restore-console.*. Quedan: scripts sueltos de raiz no enumerados
+(deploy/smoke/fix/gw/merge/verify) y tls/bin (el plan solo enumera lego-data).
+
+Decisiones: deny siempre gana (sin puntajes); lo no igualado por ninguna
+lista falla el test como no-clasificado (ahi nace la decision explicita).
+`openclaw config validate` no acepta config de staging (sin --config), asi
+que valida en vivo tras reemplazar y revierte si falla; staging valida
+clasificacion, parseo PS, compuerta httpTimeoutSec y streams ADS.
+
+ROJO (2026-09-22, antes de implementar):
+
+- `bash scripts/tests/test-deploy-manifest.sh` →
+  `ROJO: (0) falta config/runtime-deploy.v1.json`
+- `bash scripts/tests/test-deploy-atomic.sh` →
+  `ROJO: (0) falta scripts/runtime-separation/Invoke-OpenClawDeploy.ps1`
+- `bash scripts/tests/test-repository-hygiene.sh` → rojo (basura trackeada)
+- `bash scripts/tests/test-gateway-watchdog.sh` → rojo (falta compuerta en modulo)

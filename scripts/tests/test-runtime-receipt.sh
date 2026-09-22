@@ -325,6 +325,28 @@ json.dump(doc, open(sys.argv[2], "w", encoding="utf-8"))
 PY
 debe_rechazar larga.json
 echo "ok (3c): clave/valor secreto, .env, pairing, memoria, llave privada y observacion larga rechazan"
+# (3d) Piso bearer: un token de 16+ se rechaza; prosa corta ("bearer de...")
+# se acepta (falsos positivos medidos en el scan de higiene de Task 2).
+pon_recibo bearer-largo.json <<'JSON'
+{"schema": "runtime-separation-receipt.v1", "phase": "16",
+ "startedAt": "2026-09-22T10:00:00Z", "endedAt": "2026-09-22T10:04:31Z",
+ "sourceSha": "0123456789abcdef0123456789abcdef01234567",
+ "host": "ehven-pc", "openclawVersion": "2026.9.5",
+ "commands": [{"name": "x", "exit": 0}], "inputs": {},
+ "observations": ["token usado: Bearer abcdefghijklmnop1234"],
+ "health": {"startupz": 200, "readyz": 200},
+ "result": "passed", "rollback": {"artifact": "a", "deadlineUtc": "2026-09-29T10:00:00Z"}}
+JSON
+debe_rechazar bearer-largo.json
+"$PYBIN" - "$T/good.json" "$T/bearer-corto.json" <<'PY'
+import json, sys
+doc = json.load(open(sys.argv[1], encoding="utf-8"))
+doc["observations"] = ["nota: bearer de corta vida"]
+json.dump(doc, open(sys.argv[2], "w", encoding="utf-8"))
+PY
+"$PYBIN" "$T/validate.py" "$SCHEMA" "$T/bearer-corto.json" >/dev/null \
+  || fail "(3d) prosa con bearer corto debio aceptarse"
+echo "ok (3d): piso bearer 16 (largo rechaza, prosa corta acepta)"
 
 # (4) Paridad de los patrones: el .psm1 trae EL MISMO literal que el schema
 # (comparado decodificado, no a ojo).

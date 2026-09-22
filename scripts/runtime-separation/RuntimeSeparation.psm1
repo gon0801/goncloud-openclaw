@@ -17,7 +17,7 @@ $Script:WorkspaceNames = @('workspace', 'workspace-ingenieria', 'workspace-opera
 # Mismo literal que x-secretKeyPattern / x-secretValuePattern del schema
 # docs/spec/runtime-separation-receipt.v1.schema.json (paridad fijada por test).
 $Script:SecretKeyPattern = '(?i)(password|passwd|secret|token|bearer|apikey|api[_-]?key|private[_-]?key|pairing|passphrase|credential|session[_-]?key|connection[_-]?string|authorization|cookie|transcript|memory[_-]?content|messages)'
-$Script:SecretValuePattern = '(?im)(bearer\s+[A-Za-z0-9._~+/-]+=*|sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|xox[bpras]-[A-Za-z0-9-]+|-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----|(?-i:^[A-Z][A-Z0-9_]{2,}=[^\s]{4,}))'
+$Script:SecretValuePattern = '(?im)(bearer\s+[A-Za-z0-9._~+/-]{16,}={0,2}|sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|xox[bpras]-[A-Za-z0-9-]+|-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----|(?-i:^[A-Z][A-Z0-9_]{2,}=[^\s]{4,}))'
 
 function Get-RuntimeCanonicalRoots {
   return @{ Source = $Script:CanonicalSourceRoot; Runtime = $Script:CanonicalRuntimeRoot; Node = $Script:CanonicalNodeRoot }
@@ -51,27 +51,59 @@ function Get-CanonicalWindowsPath {
   return ($prefix + ($segs -join '\'))
 }
 
+function Get-CanonicalNativePath {
+  param([Parameter(Mandatory = $true)][string]$Path)
+  if ($Path -cmatch '^[A-Za-z]:[\\/]' -or $Path.StartsWith('\\')) {
+    $c = Get-CanonicalWindowsPath -Path $Path
+    if ($null -eq $c) { return $null }
+    return @{ Canon = $c; Sep = '\'; Flavor = 'win' }
+  }
+  if ($Path.StartsWith('/')) {
+    $segs = New-Object System.Collections.Generic.List[string]
+    foreach ($s in $Path.Split('/')) {
+      if ($s -eq '' -or $s -eq '.') { continue }
+      if ($s -eq '..') {
+        if ($segs.Count -eq 0) { return $null }
+        [void]$segs.RemoveAt($segs.Count - 1)
+        continue
+      }
+      [void]$segs.Add($s)
+    }
+    return @{ Canon = '/' + ($segs -join '/'); Sep = '/'; Flavor = 'posix' }
+  }
+  return $null
+}
+
+function Test-RootsIsolated {
+  param([Parameter(Mandatory = $true)][string[]]$Roots)
+  $canon = @()
+  $flavor = $null
+  foreach ($r in $Roots) {
+    $c = Get-CanonicalNativePath -Path $r
+    if ($null -eq $c) { return $false }
+    if ($null -eq $flavor) { $flavor = $c.Flavor }
+    elseif ($flavor -ne $c.Flavor) { return $false }
+    $canon += $c
+  }
+  for ($i = 0; $i -lt $canon.Count; $i++) {
+    for ($j = $i + 1; $j -lt $canon.Count; $j++) {
+      $a = $canon[$i].Canon.ToLowerInvariant()
+      $b = $canon[$j].Canon.ToLowerInvariant()
+      $sep = $canon[$i].Sep
+      if ($a -eq $b) { return $false }
+      if ($b.StartsWith($a + $sep) -or $a.StartsWith($b + $sep)) { return $false }
+    }
+  }
+  return $true
+}
+
 function Test-RuntimeLayout {
   param(
     [Parameter(Mandatory = $true)][string]$SourceRoot,
     [Parameter(Mandatory = $true)][string]$RuntimeRoot,
     [Parameter(Mandatory = $true)][string]$NodeRoot
   )
-  $canon = @()
-  foreach ($r in @($SourceRoot, $RuntimeRoot, $NodeRoot)) {
-    $c = Get-CanonicalWindowsPath -Path $r
-    if ($null -eq $c) { return $false }
-    $canon += $c.ToLowerInvariant()
-  }
-  for ($i = 0; $i -lt $canon.Count; $i++) {
-    for ($j = $i + 1; $j -lt $canon.Count; $j++) {
-      $a = $canon[$i]
-      $b = $canon[$j]
-      if ($a -eq $b) { return $false }
-      if ($b.StartsWith($a + '\') -or $a.StartsWith($b + '\')) { return $false }
-    }
-  }
-  return $true
+  return (Test-RootsIsolated -Roots @($SourceRoot, $RuntimeRoot, $NodeRoot))
 }
 
 function Test-WorkspaceExcluded {
@@ -220,4 +252,104 @@ function Write-ReceiptAtomic {
   }
 }
 
-Export-ModuleMember -Function Get-RuntimeCanonicalRoots, Test-RuntimeLayout, Test-WorkspaceExcluded, Test-ReceiptObject, Write-ReceiptAtomic
+function ConvertTo-DeployRegex {
+  param([Parameter(Mandatory = $true)][string]$Pattern)
+  if ($Pattern.EndsWith('/')) {
+    return ('^' + [regex]::Escape($Pattern))
+  }
+  if ($Pattern.Contains('*') -or $Pattern.Contains('?')) {
+    $out = ''
+    $i = 0
+    while ($i -lt $Pattern.Length) {
+      $c = $Pattern[$i]
+      if ($c -eq '*') {
+        if ((($i + 1) -lt $Pattern.Length) -and ($Pattern[$i + 1] -eq '*')) {
+          if ((($i + 2) -lt $Pattern.Length) -and ($Pattern[$i + 2] -eq '/')) {
+            $out += '(.*/)?'; $i += 3
+          } else {
+            $out += '.*'; $i += 2
+          }
+        } else {
+          $out += '[^/]*'; $i += 1
+        }
+      } elseif ($c -eq '?') {
+        $out += '[^/]'; $i += 1
+      } else {
+        $out += [regex]::Escape($c.ToString()); $i += 1
+      }
+    }
+    return ('^' + $out + '$')
+  }
+  return ('^' + [regex]::Escape($Pattern) + '$')
+}
+
+function Test-DeployPathSafety {
+  param([Parameter(Mandatory = $true)][string]$RelativePath)
+  $p = $RelativePath.Replace('\', '/')
+  if ($RelativePath -match '^[A-Za-z]:[\\/]') { return 'absoluta' }
+  if ($p.StartsWith('/')) { return 'absoluta' }
+  if ($p.Contains(':')) { return 'dos-puntos-stream' }
+  if ($p -match '[\x00-\x1f\x7f]') { return 'control' }
+  $segs = $p.Split('/')
+  foreach ($s in $segs) {
+    if ($s -eq '') { return 'segmento-vacio' }
+    if ($s -eq '..') { return 'dotdot' }
+    if ($s -match '^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$') { return "reservado:$s" }
+    if ($s -match '[. ]$') { return "cola-punto-espacio:$s" }
+  }
+  return $null
+}
+
+function Test-DeployPathClassification {
+  param(
+    [Parameter(Mandatory = $true)][string]$RelativePath,
+    [Parameter(Mandatory = $true)][string]$ManifestPath
+  )
+  if ($null -ne (Test-DeployPathSafety -RelativePath $RelativePath)) { return 'rejected' }
+  if (-not (Test-Path -LiteralPath $ManifestPath)) { throw "manifiesto ilegible: $ManifestPath" }
+  $m = Get-Content -Raw -LiteralPath $ManifestPath | ConvertFrom-Json
+  $p = $RelativePath.Replace('\', '/')
+  foreach ($e in $m.denied) {
+    $rx = ConvertTo-DeployRegex -Pattern $e.pattern
+    if ($p -match $rx) { return 'rejected' }
+  }
+  foreach ($e in $m.allowed) {
+    if ($e.kind -eq 'file') {
+      if ($p -eq $e.path) { return 'deployable' }
+    } elseif ($e.kind -eq 'dir') {
+      if ($p.ToLowerInvariant().StartsWith($e.path.ToLowerInvariant())) { return 'deployable' }
+    } else {
+      $rx = ConvertTo-DeployRegex -Pattern $e.path
+      if ($p -match $rx) { return 'deployable' }
+    }
+  }
+  return 'unclassified'
+}
+
+function Test-EffectiveHttpTimeout {
+  param([Parameter(Mandatory = $true)][string]$Path)
+  $vals = @()
+  foreach ($line in (Get-Content -LiteralPath $Path)) {
+    if ($line -match '^\s*\$httpTimeoutSec\s*=\s*(.+?)\s*(#.*)?$') {
+      $vals += $Matches[1]
+    }
+  }
+  if ($vals.Count -ne 1) { return $false }
+  if ($vals[0] -cnotmatch '^\d+$') { return $false }
+  return ([int]$vals[0] -ge 90)
+}
+
+function Test-HashEqual {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$ExpectedSha256
+  )
+  try {
+    $h = (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+  } catch {
+    return $false
+  }
+  return ($h -ceq $ExpectedSha256.ToLowerInvariant())
+}
+
+Export-ModuleMember -Function Get-RuntimeCanonicalRoots, Test-RuntimeLayout, Test-WorkspaceExcluded, Test-ReceiptObject, Write-ReceiptAtomic, Test-DeployPathClassification, Test-EffectiveHttpTimeout, Test-HashEqual, Test-RootsIsolated
