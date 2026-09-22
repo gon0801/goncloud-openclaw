@@ -211,8 +211,10 @@ anterior cuando el PR siga abierto.
 
 ### Manifiesto de despliegue
 
-Un manifiesto versionado define qué archivos del repo pueden llegar al estado
-vivo. El manifiesto excluye al menos:
+Un manifiesto versionado y cerrado define qué raíces y archivos concretos del
+repo pueden llegar al estado vivo. Todo lo no incluido se rechaza por defecto;
+la lista positiva no se deriva de todos los archivos versionados. Además aplica
+una denylist dura que excluye al menos:
 
 ```text
 .git/**
@@ -234,9 +236,20 @@ node.cmd
 node.vbs
 ```
 
-El implementador debe derivar la lista positiva a partir de los archivos
-versionados y aplicar las exclusiones. No debe recorrer el estado vivo para
-decidir qué subir.
+El implementador clasifica cada archivo versionado como desplegable o rechazado
+y las pruebas fallan si aparece uno nuevo sin decisión. No debe recorrer el
+estado vivo para ampliar la lista de lo que sube. Antes de reemplazar una ruta
+desplegable compara sus bytes contra el último recibo: un delta vivo que no sea
+capturable queda intacto y genera alerta.
+
+La ausencia de una ruta que el último recibo desplegó también es un delta vivo.
+El sync registra un tombstone protegido y no recrea el archivo. Si la ruta es
+una skill capturable, el capturador crea un PR con `git rm` y aplica las mismas
+reglas de hash, PR pendiente y sucesor. Para configuración, plugins,
+`gateway-watchdog.ps1` y cualquier ruta no capturable, el tombstone produce
+`CONFLICTO`, permanece protegido y espera una decisión explícita; nunca genera
+un commit automático. Un merge posterior no repone esa ruta mientras el
+tombstone siga protegido.
 
 ### Validación y reversa
 
@@ -269,19 +282,28 @@ Un ciclo exitoso prueba:
 La política de Code Integrity permanece activa. La migración no crea una
 excepción para `llama.cpp`.
 
+La instalación usa `config/ollama-runtime.v1.json`, una política revisada antes
+del merge que fija la versión aprobada de Ollama, URL oficial inmutable,
+SHA-256 esperado del instalador, publisher y cadena Authenticode esperados, y
+hash y firma esperados de los binarios instalados. La operación no descubre ni
+acepta valores nuevos. Solo compara el artefacto y la instalación con la
+política versionada.
+
 La instalación de Ollama sigue estas compuertas:
 
-1. Descargar el instalador desde `https://ollama.com/download/windows`.
-2. Calcular y registrar su SHA-256.
-3. Exigir una firma Authenticode válida antes de ejecutarlo.
+1. Descargar la URL inmutable indicada por la política.
+2. Comparar el SHA-256 con el valor esperado antes de ejecutar el instalador.
+3. Comparar publisher, cadena y estado Authenticode con los valores esperados.
 4. Instalarlo sin cambiar las cadenas de modelos de conversación.
-5. Confirmar que el servicio escucha solo en el endpoint local configurado.
+5. Comparar hash y firma de los binarios instalados con la política y confirmar
+   que el servicio escucha solo en el endpoint local configurado.
 6. Descargar `nomic-embed-text`, el modelo predeterminado de embeddings de
    Ollama en OpenClaw.
 7. Probar `/api/embed` con una entrada controlada y exigir un vector no vacío.
 
-Si el instalador o los binarios instalados no cumplen Code Integrity, la fase
-se detiene. El sistema no cambia automáticamente a un proveedor remoto.
+Si falta un valor esperado o el instalador o los binarios no coinciden con la
+política y Code Integrity, la fase se detiene antes de configurar memoria. El
+sistema no cambia automáticamente a un proveedor remoto.
 
 Después de la prueba local, la configuración cambia únicamente estos campos:
 
@@ -347,10 +369,26 @@ El alta tendrá estos pasos:
 2. Crear una configuración mínima. Debe deshabilitar la publicación de skills
    y la inferencia local si esas capacidades no forman parte de la lista de
    comandos aprobada.
-3. Generar un código de emparejamiento de un solo uso desde el gateway.
-4. Instalar `OpenClaw Node` con `--pair` bajo el estado aislado.
-5. Aprobar únicamente la lista de comandos que requiera CUA en Windows.
-6. Confirmar que la acción de la tarea conserva el estado aislado después de
+3. Antes de emparejar, configurar las aprobaciones locales del nodo en modo
+   allowlist, sin comodines ni wrappers de shell. Cada entrada de `system.run`
+   fija ejecutable, directorio de trabajo y argv exacto. Cuando un argumento
+   deba variar, la aprobación usa un `argPattern` anclado, construido con
+   escapes literales y probado contra casos permitidos y rechazados; no acepta
+   regex con repetición anidada. No queda ninguna entrada path-only para el
+   mismo ejecutable que pueda actuar como fallback. Intérpretes, `cmd.exe /c`
+   y cualquier variante de argumentos no aprobada deben ser rechazados. El
+   emparejamiento y la aprobación de comandos anunciados no sustituyen esta
+   política local.
+4. Generar un código de emparejamiento de un solo uso desde el gateway.
+5. Ejecutar una vez `openclaw node run --pair <codigo>` en primer plano bajo
+   el estado aislado, aprobar el dispositivo y la superficie de comandos, y
+   detener el proceso solo cuando la identidad durable haya quedado guardada.
+   El código no se registra en argumentos de una tarea ni en evidencia.
+6. Instalar `OpenClaw Node` sin `--pair`, con la misma lista exacta de comandos
+   y el mismo `OPENCLAW_STATE_DIR`. OpenClaw no admite `node install --pair`
+   deliberadamente, porque persistiría un bearer de corta vida.
+7. Aprobar únicamente la lista de comandos que requiera CUA en Windows.
+8. Confirmar que la acción de la tarea conserva el estado aislado después de
    cerrar la terminal que hizo la instalación.
 
 La lista inicial de comandos será:
@@ -441,11 +479,17 @@ Las pruebas automatizadas deben cubrir estos fallos:
 - una edición viva posterior al PR no es sobrescrita por el merge anterior;
 - una rama de captura no escribible crea un PR sucesor enlazado;
 - un delta vivo posterior a un merge se captura antes de desplegar esa ruta;
+- una skill eliminada crea un tombstone y un PR con `git rm`, y no reaparece
+  mientras el PR siga pendiente o cerrado sin merge;
+- una configuración o `gateway-watchdog.ps1` eliminados crean un tombstone y
+  `CONFLICTO`, no un commit, y no se recrean sin decisión explícita;
 - un timeout mal formado o menor que 90 aborta cada deploy, mientras que un
   entero mayor o igual a 90 pasa aunque cambie el formato;
 - un fallo del repo principal no impide procesar los tres workspaces;
 - el log conserva el marcador final y distingue `SKILLS_PR` de
   `SKILLS_DEPLOYED`.
+- una aprobación de `system.run` acepta solo el argv esperado; cambiar un
+  argumento, usar un intérprete o dejar una entrada path-only falla cerrado.
 
 La aceptación operativa exige evidencia fresca de:
 
@@ -477,9 +521,9 @@ simbólicos y destinos fuera de `C:\Users\ehven\.openclaw`. La captura aplica
 las mismas reglas antes de leer un archivo del estado vivo.
 
 El merge y el despliegue requieren autorización explícita del propietario de
-acuerdo con `docs/spec/00-project-spec.md`. La petición actual autoriza el
-diseño y la revisión cruzada. No autoriza todavía el merge ni el despliegue de
-la implementación.
+acuerdo con `docs/spec/00-project-spec.md`. La petición posterior autoriza que
+Muse implemente el cambio versionado y que Codex lo revise. No autoriza todavía
+el merge ni el despliegue de la implementación.
 
 ## Reversas
 
