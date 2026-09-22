@@ -228,7 +228,7 @@ PY
   done
 
   semilla() {
-    git init -q --bare "$T/origin.git" || return 1
+    git init -q -b main --bare "$T/origin.git" || return 1
     W="$T/w"; rm -rf "$W"; git clone -q "$T/origin.git" "$W" 2>/dev/null || return 1
     ( cd "$W" && git checkout -q -b main \
       && mkdir -p agents/main/agent/workshop-skills/s \

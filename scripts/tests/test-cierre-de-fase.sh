@@ -95,7 +95,7 @@ tablero mergeado 2026-09-18T00:00:00Z
 git -C "$R" add -A && git -C "$R" commit -q -m plan
 git -C "$R" branch -f main HEAD 2>/dev/null
 # Un "remoto" de verdad, para que ls-remote responda sin red.
-REM="$T/remoto.git"; git init -q --bare "$REM"
+REM="$T/remoto.git"; git init -q -b main --bare "$REM"
 git -C "$R" remote add origin "$REM" 2>/dev/null || git -C "$R" remote set-url origin "$REM"
 git -C "$R" push -q origin HEAD:main
 

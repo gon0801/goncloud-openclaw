@@ -779,3 +779,9 @@ temporal a Continue alrededor de git nativo con output descartado
 (Sync fetch/checkout/fetch-branch/worktree, Backup bundle x2). En PS7
 es no-op (ya era el efectivo). Lo output-usado (ls-remote, rev-parse,
 status) se deja: sin evidencia de stderr-informativo.
+
+F23 (HEAD huerfano, segunda instancia): CI13 avisa-skills (2):
+`rev-parse HEAD` fatal en clon de bare sin -b (en PS7 tolerado por
+accidente, en 5.1 throw). Fix: `-b <rama>` en los 8 `init --bare`
+restantes (7x main, pull-identity a master: ese pushea master).
+Verdes con HOME vacio (hermeticos): los 8.

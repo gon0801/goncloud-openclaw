@@ -70,7 +70,7 @@ cat >"$R/Plans.md" <<'PLAN'
 PLAN
 printf 'lead - tok-wt-f5-lead\ncron abc\ncron def\n' >"$R/.saikit/progress/5-sesiones.txt"
 git -C "$R" add -A && git -C "$R" commit -q -m plan
-REM="$T/remoto.git"; git init -q --bare "$REM"
+REM="$T/remoto.git"; git init -q -b main --bare "$REM"
 git -C "$R" remote add origin "$REM"; git -C "$R" push -q origin HEAD:main
 
 # Cinturon: los git de esta prueba tienen que resolver al repo de juguete, no al real.

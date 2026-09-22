@@ -115,7 +115,7 @@ PY
     sleep 0.2
   done
 
-  git init -q --bare "$T/origin.git" || fail "(1) bare"
+  git init -q -b main --bare "$T/origin.git" || fail "(1) bare"
   W="$T/w"; git clone -q "$T/origin.git" "$W" 2>/dev/null || fail "(1) seed"
   ( cd "$W" && git checkout -q -b main \
     && mkdir -p agents/main/agent/workshop-skills/s \

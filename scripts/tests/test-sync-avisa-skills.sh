@@ -109,7 +109,7 @@ PY
   printf '@python "%%~dp0gh-stub.py" %%*\r\n' >"$T/fake-bin/gh.cmd"
   export PATH="$T/fake-bin:$PATH"
 
-  git init -q --bare "$T/origin.git" || fail "(2) bare"
+  git init -q -b main --bare "$T/origin.git" || fail "(2) bare"
   W="$T/w"; git clone -q "$T/origin.git" "$W" 2>/dev/null || fail "(2) seed"
   ( cd "$W" && git checkout -q -b main \
     && mkdir -p agents/main/agent/workshop-skills/s \

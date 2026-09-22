@@ -26,7 +26,7 @@ unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 ID=(-c user.name=openclaw-auto -c user.email=ehventasmx@gmail.com)
 fail() { echo "FAIL: $1"; exit 1; }
 
-git init -q --bare "$T/origin.git" || fail "init bare"
+git init -q -b master --bare "$T/origin.git" || fail "init bare"
 git clone -q "$T/origin.git" "$T/mac" 2>/dev/null || fail "clone mac"
 ( cd "$T/mac" && git checkout -q -b master && echo base > AGENTS.md && git add -A \
   && git "${ID[@]}" commit -q -m base && git push -q origin master ) || fail "seed"
