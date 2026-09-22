@@ -1,67 +1,57 @@
-# sync-repos.ps1 - sincroniza los 4 repos goncloud con GitHub (pull + commit local + push)
-$log = 'C:\Users\ehven\.openclaw\logs\sync-repos.log'
-$repos = @(
-  'C:\Users\ehven\.openclaw',
-  'C:\Users\ehven\.openclaw\workspace',
-  'C:\Users\ehven\.openclaw\workspace-ingenieria',
-  'C:\Users\ehven\.openclaw\workspace-operaciones'
+# sync-repos.ps1 - ciclo de 4 repos: main delega al orquestador de separacion,
+# los 3 workspaces conservan su conducta (commit local + pull + push).
+param(
+  [string]$LogPath = 'C:\Users\ehven\.openclaw\logs\sync-repos.log',
+  [string]$SourceRoot = 'C:\Users\ehven\src\goncloud-openclaw',
+  [string]$RuntimeRoot = 'C:\Users\ehven\.openclaw',
+  [string[]]$WorkspaceRoots = @(
+    'C:\Users\ehven\.openclaw\workspace',
+    'C:\Users\ehven\.openclaw\workspace-ingenieria',
+    'C:\Users\ehven\.openclaw\workspace-operaciones'
+  ),
+  [string]$ReceiptRoot = 'C:\Users\ehven\.openclaw\receipts\sync',
+  [string]$ManifestPath = '',
+  [string]$MutexName = 'Global\OpenClawRuntimeSync',
+  [string]$SyncScriptPath = '',
+  [string]$OpenClawVersion = ''
 )
+$log = $LogPath
+if ([string]::IsNullOrEmpty($ManifestPath)) {
+  $ManifestPath = Join-Path $SourceRoot 'config/runtime-deploy.v1.json'
+}
+if ([string]::IsNullOrEmpty($SyncScriptPath)) {
+  $SyncScriptPath = Join-Path $PSScriptRoot 'runtime-separation/Sync-OpenClawRuntime.ps1'
+}
 function Log($msg) { Add-Content $log ("{0} {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $msg) }
+$failed = $false
 
-# >>> skills-cambiadas
-# Lista lo estagiado bajo agents/*/agent/workshop-skills/. Vive aqui (no en otro
-# archivo) porque GoncloudRepoSync no garantiza el cwd: un dot-source a un .ps1
-# que no llego tumbaria los 4 repos.
-function Get-OpenclawSkillsCambiadasStaged {
-  param([Parameter(Mandatory = $true)][string]$RepoRoot)
-  $staged = @(git -C $RepoRoot diff --cached --name-only 2>$null)
-  $byAgent = @{}
-  foreach ($g in $staged) {
-    $norm = ($g -replace '\\', '/')
-    if ($norm -match '^agents/([^/]+)/agent/workshop-skills/(.+)$') {
-      $agent = $Matches[1]
-      $rel = $Matches[2]
-      if (-not $byAgent.ContainsKey($agent)) {
-        $byAgent[$agent] = New-Object System.Collections.Generic.List[string]
-      }
-      [void]$byAgent[$agent].Add($rel)
-    }
+# >>> main-delegate
+# El repo main vive en el checkout dedicado y lo reconcilia el orquestador
+# (capture por PR, ledger, deploy). Este bloque solo delega y registra el
+# outcome: un fallo aqui no salta los workspaces.
+try {
+  $splat = @{
+    SourceRoot = $SourceRoot; RuntimeRoot = $RuntimeRoot; ReceiptRoot = $ReceiptRoot
+    LogPath = $log; ManifestPath = $ManifestPath; MutexName = $MutexName
   }
-  return $byAgent
+  if (-not [string]::IsNullOrEmpty($OpenClawVersion)) { $splat['OpenClawVersion'] = $OpenClawVersion }
+  & $SyncScriptPath @splat
+  if ($LASTEXITCODE -ne 0) { throw "orquestador exit $LASTEXITCODE" }
+  Log 'SYNC-REPO main ok'
+} catch {
+  Log ('SYNC-REPO main FALLO: ' + $_.Exception.Message)
+  $failed = $true
 }
+# <<< main-delegate
 
-function Write-OpenclawSkillsLog {
-  param(
-    [Parameter(Mandatory = $true)]$Snap,
-    [Parameter(Mandatory = $true)][string]$LogPath
-  )
-  if (-not $Snap -or $Snap.Count -eq 0) { return }
-  foreach ($agent in ($Snap.Keys | Sort-Object)) {
-    $files = @($Snap[$agent] | Sort-Object)
-    $n = $files.Count
-    $list = $files -join ','
-    $line = "{0} .openclaw SKILLS {1} {2} archivo(s): {3}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $agent, $n, $list
-    Add-Content -LiteralPath $LogPath -Value $line
-  }
-}
-
-# Entrada unica para el test: lista lo estagiado y escribe el log.
-function Write-OpenclawSkillsCambiadas {
-  param(
-    [Parameter(Mandatory = $true)][string]$RepoRoot,
-    [Parameter(Mandatory = $true)][string]$LogPath
-  )
-  $snap = Get-OpenclawSkillsCambiadasStaged -RepoRoot $RepoRoot
-  Write-OpenclawSkillsLog -Snap $snap -LogPath $LogPath
-}
-# <<< skills-cambiadas
-
-foreach ($r in $repos) {
+# >>> workspace-sync
+foreach ($r in $WorkspaceRoots) {
   if (-not (Test-Path (Join-Path $r '.git'))) { Log "SKIP $r (sin .git)"; continue }
   Set-Location $r
   $name = Split-Path $r -Leaf
   $branch = git branch --show-current
   $pre = git rev-parse HEAD
+  $repoFailed = $false
 
   # 1. Commitear cambios locales (de agentes o del gateway)
   # `git add -A` es atomico: un solo path invalido (p.ej. un repo git anidado sin commits)
@@ -109,6 +99,7 @@ foreach ($r in $repos) {
   $hay_estagiado = ($rc_diff -eq 1)
   if ($rc_diff -gt 1) {
     Log "$name no pude leer el indice (git diff --cached salio $rc_diff): no se intenta commit"
+    $repoFailed = $true
   }
   # Si el arbol trae cambios pero el indice quedo vacio, algo se los comio: el fallback a
   # `add -u` con solo archivos nuevos, o la guardia de tamano. Antes esto se veia como un
@@ -120,30 +111,14 @@ foreach ($r in $repos) {
     if ($sucio) { Log "$name hay cambios en el arbol y NADA estagiado: no se commitea nada este ciclo" }
   }
   if ($hay_estagiado) {
-    # Listar skills ANTES del commit (despues el indice queda vacio). Escribir el
-    # log solo si el commit sale bien. try/catch: un fallo no tumba el sync.
-    $skillsSnap = $null
-    if ($name -eq '.openclaw') {
-      try {
-        $skillsSnap = Get-OpenclawSkillsCambiadasStaged -RepoRoot $r
-      } catch {
-        Log (".openclaw SKILLS error: {0}" -f $_.Exception.Message)
-      }
-    }
     $commitOut = git -c user.name="openclaw-auto" -c user.email="ehventasmx@gmail.com" commit -m "auto: snapshot $name $(Get-Date -Format 'yyyy-MM-dd HH:mm')" 2>&1
     if ($LASTEXITCODE -eq 0) {
       Log "$name commit local auto"
-      if ($name -eq '.openclaw' -and $null -ne $skillsSnap) {
-        try {
-          Write-OpenclawSkillsLog -Snap $skillsSnap -LogPath $log
-        } catch {
-          Log (".openclaw SKILLS error: {0}" -f $_.Exception.Message)
-        }
-      }
     } else {
       # Un commit que falla en silencio deja el arbol sucio y el pull siguiente se niega ("CONFLICTO").
       $why = (@($commitOut) | ForEach-Object { "$_" } | Where-Object { $_ -match 'error|fatal|hook|Failed|identity' } | Select-Object -Last 2) -join ' | '
       Log "$name commit local FALLO: $why"
+      $repoFailed = $true
     }
   }
 
@@ -157,23 +132,20 @@ foreach ($r in $repos) {
     git rebase --abort 2>$null
     $why = (@($pullOut) | ForEach-Object { "$_" } | Where-Object { $_ -match 'error|fatal|CONFLICT|identity|Please tell me|unstaged|uncommitted|cannot pull' } | Select-Object -Last 2) -join ' | '
     Log "$name CONFLICTO en pull - se deja como estaba, revisar a mano: $why"
+    $repoFailed = $true
   } else {
     $post = git rev-parse HEAD
     if ($post -ne $pre) {
       Log "$name pull aplico cambios ($pre -> $post)"
-      # Guardia: si es el repo del gateway, validar config; si quedo rota, revertir el pull
-      if ($name -eq '.openclaw') {
-        $v = & openclaw config validate 2>&1
-        if ($v -notmatch 'Config valid') {
-          git reset --hard $pre 2>&1 | Out-Null
-          Log "$name config INVALIDA tras pull - revertido a $pre"
-        }
-      }
     }
   }
 
   # 3. Subir
   git push origin $branch 2>&1 | Out-Null
-  if ($LASTEXITCODE -eq 0) { Log "$name push ok" } else { Log "$name push FALLO" }
+  if ($LASTEXITCODE -eq 0) { Log "$name push ok" } else { Log "$name push FALLO"; $repoFailed = $true }
+
+  if ($repoFailed) { Log "SYNC-REPO $name FALLO"; $failed = $true } else { Log "SYNC-REPO $name ok" }
 }
+# <<< workspace-sync
 Log "---- ciclo terminado"
+if ($failed) { exit 1 } else { exit 0 }

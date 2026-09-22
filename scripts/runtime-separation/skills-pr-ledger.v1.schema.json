@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "skills-pr-ledger.v1",
+  "title": "skills-pr-ledger.v1",
+  "schema": "skills-pr-ledger.v1",
+  "type": "object",
+  "required": ["schema", "updatedUtc", "entries", "tombstones"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "skills-pr-ledger.v1" },
+    "updatedUtc": { "type": "string" },
+    "entries": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["liveHash", "capturedHash", "branch", "commit", "pr", "status", "previousPr", "updatedUtc"],
+        "additionalProperties": false,
+        "properties": {
+          "liveHash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "capturedHash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "branch": { "type": "string", "minLength": 1 },
+          "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "pr": { "type": "integer", "minimum": 0 },
+          "status": { "enum": ["open", "merged", "deployed", "closed-unmerged"] },
+          "previousPr": { "type": "integer", "minimum": 0 },
+          "updatedUtc": { "type": "string" }
+        }
+      }
+    },
+    "tombstones": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["reason", "createdUtc", "pr"],
+        "additionalProperties": false,
+        "properties": {
+          "reason": { "type": "string", "minLength": 1 },
+          "createdUtc": { "type": "string" },
+          "pr": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

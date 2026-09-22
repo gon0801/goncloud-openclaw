@@ -582,3 +582,15 @@ ROJO (2026-09-22, antes de implementar):
   `ROJO: (0) falta scripts/runtime-separation/Invoke-OpenClawDeploy.ps1`
 - `bash scripts/tests/test-repository-hygiene.sh` → rojo (basura trackeada)
 - `bash scripts/tests/test-gateway-watchdog.sh` → rojo (falta compuerta en modulo)
+
+## Task 3 (16.3) — Sync con capture, ledger y deploy
+
+Contrato gh stub (fijo para los 6 tests): `pr create` anexa
+`create head=H` a $GH_LOG y devuelve URL con N incremental; `pr view N`
+lee $GH_STATE (JSON numero -> {state, mergedAt, headRefOid}); `pr list
+--head` filtra por rama. Todo lo demas sale 99. Ramas
+`auto/skills/yyyyMMddTHHmmssZ-agente`. Ciclo sin cambios no escribe
+recibo ni ledger (solo lineas de log): "alter no files" estricto.
+
+ROJO (2026-09-22, antes de implementar): los 6 tests nuevos fallan en (0)
+y los 3 reorientados fallan en sus anclas nuevas.

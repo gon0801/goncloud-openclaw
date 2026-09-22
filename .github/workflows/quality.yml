@@ -345,6 +345,34 @@ jobs:
         shell: bash
         run: bash scripts/tests/test-deploy-atomic.sh
 
+      - name: Contrato del checkout fuente
+        shell: bash
+        run: bash scripts/tests/test-source-checkout.sh
+
+      - name: Contrato de avisos de skills
+        shell: bash
+        run: bash scripts/tests/test-sync-avisa-skills.sh
+
+      - name: Contrato del ledger de PRs
+        shell: bash
+        run: bash scripts/tests/test-skills-pr-ledger.sh
+
+      - name: Contrato de reanudacion del sync
+        shell: bash
+        run: bash scripts/tests/test-sync-resume.sh
+
+      - name: Contrato de idempotencia del sync
+        shell: bash
+        run: bash scripts/tests/test-sync-idempotent.sh
+
+      - name: Contrato del ciclo de cuatro repos
+        shell: bash
+        run: bash scripts/tests/test-sync-four-repos.sh
+
+      - name: Contrato de rutas protegidas
+        shell: bash
+        run: bash scripts/tests/test-protected-paths.sh
+
   # La bateria completa conserva un solo entrypoint en CI: scripts/run-checks.sh,
   # ahora invocado por la matriz con SAIKIT_SHARD. Pre-commit conserva solo
   # validaciones rapidas de archivos para no cobrar la bateria completa en cada

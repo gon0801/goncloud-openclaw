@@ -107,4 +107,28 @@ grep -q 'rc_diff -gt 1' "$PS1FILE" \
   || fail "(6) un fallo de git al leer el indice tiene que declararse, no confundirse con trabajo"
 echo "ok (6): un ciclo sin nada que commitear deja rastro, y un fallo de git no pasa por trabajo"
 
+# (7) Reorientacion Fase 16: add/guardia/commit viven en el camino de
+# workspaces; el camino main delega y no toca git add/commit.
+grep -q '# >>> workspace-sync' "$PS1FILE" || fail "(7) sin marcas workspace-sync"
+grep -q '# <<< workspace-sync' "$PS1FILE" || fail "(7) sin cierre workspace-sync"
+n_w0=$(linea_de '# >>> workspace-sync' "$PS1FILE")
+n_w1=$(linea_de '# <<< workspace-sync' "$PS1FILE")
+for par in "$n_add/add" "$n_g/guardia" "$n_commit/commit"; do
+  n=${par%%/*}; nombre=${par##*/}
+  [ "$n" -gt "$n_w0" ] && [ "$n" -lt "$n_w1" ] \
+    || fail "(7) $nombre (linea $n) fuera del camino workspace ($n_w0-$n_w1)"
+done
+T7=$(mktemp -d) || exit 1
+trap 'rm -rf "$T" "$T7"' EXIT
+python3 - "$PS1FILE" "$T7/main.ps1" <<'PY'
+import sys
+lines = open(sys.argv[1], encoding="utf-8").read().splitlines()
+a = next(i for i, l in enumerate(lines) if "# >>> main-delegate" in l)
+b = next(i for i, l in enumerate(lines) if "# <<< main-delegate" in l)
+open(sys.argv[2], "w", encoding="utf-8").write("\n".join(lines[a + 1:b]))
+PY
+grep -Eq 'git (add|commit)' "$T7/main.ps1" \
+  && fail "(7) el camino main trae git add/commit: el orquestador es dueno de src/"
+echo "ok (7): add/guardia/commit en workspaces; main delega sin add/commit"
+
 echo "TODO VERDE: sync-no-sube-binarios"

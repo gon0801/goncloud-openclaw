@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# El sync avisa cuando un agente cambia workshop-skills (13.2a).
+# El sync avisa captures pendientes, no commits (Fase 16.3).
 #
-# Extrae la funcion entre # >>> skills-cambiadas y # <<< skills-cambiadas,
-# la corre con pwsh contra un repo git temporal, exige la linea SKILLS y
-# que un error dentro de la funcion escriba SKILLS error: sin tumbar el flujo.
-# Ademas ParseFile del .ps1 entero y anclas estructurales (entre guardia y commit).
-#
-# Si pwsh no esta: FALLA (no se salta). ubuntu-latest lo trae; local: /Users/dn/.local/bin/pwsh.
+# Antes (13.2a): commitear skills locales escribia `SKILLS <agente> N
+# archivo(s)`. Ahora el repo main no commitea en vivo: captura a un PR y
+# escribe `SKILLS_PR <pr>`, y tras merge+deploy `SKILLS_DEPLOYED <sha>`.
+# Este test rechaza el texto anterior cuando el PR sigue abierto (diseno,
+# "Contrato del log y del vigia") y exige los tokens nuevos. El helper
+# viejo se elimino con su camino; ParseFile sigue cuidando el .ps1.
 #
 # Uso: bash scripts/tests/test-sync-avisa-skills.sh
 set -u
@@ -14,7 +14,13 @@ cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'ROJO: %s\n' "$1"; exit 1; }
 
 PS1FILE=scripts/sync-repos.ps1
+ORQ=scripts/runtime-separation/Sync-OpenClawRuntime.ps1
+YAML=.github/workflows/quality.yml
 [ -f "$PS1FILE" ] || fail "falta $PS1FILE"
+
+for git_local_var in $(git rev-parse --local-env-vars 2>/dev/null); do
+  unset "$git_local_var"
+done
 
 PWSH="${PWSH:-}"
 if [ -z "$PWSH" ]; then
@@ -22,139 +28,125 @@ if [ -z "$PWSH" ]; then
     [ -n "$c" ] && [ -x "$c" ] && PWSH=$c && break
   done
 fi
-[ -n "${PWSH:-}" ] && [ -x "$PWSH" ] \
-  || fail "pwsh no esta en PATH ni en /Users/dn/.local/bin/pwsh (CI lo trae; no se salta)"
 
-linea_de() { grep -n -- "$1" "$2" | head -1 | cut -d: -f1; }
+# (0) El flujo viejo murio: sin helper, sin marcas, sin formato anterior.
+grep -q 'Get-OpenclawSkillsCambiadasStaged' "$PS1FILE" \
+  && fail "(0) el helper de SKILLS sigue en $PS1FILE (codigo muerto)"
+grep -q 'skills-cambiadas' "$PS1FILE" \
+  && fail "(0) las marcas skills-cambiadas siguen en $PS1FILE"
+grep -q 'SKILLS {1} {2} archivo(s)' "$PS1FILE" \
+  && fail "(0) el formato viejo SKILLS sigue en $PS1FILE"
+echo "ok (0): flujo SKILLS-por-commit eliminado"
 
-# (0) Marcas presentes.
-grep -q '# >>> skills-cambiadas' "$PS1FILE" \
-  || fail "(0) faltan marcas # >>> skills-cambiadas — la funcion no se puede extraer"
-grep -q '# <<< skills-cambiadas' "$PS1FILE" \
-  || fail "(0) faltan marcas # <<< skills-cambiadas"
-echo "ok (0): marcas de extraccion presentes"
-
-# (1) ParseFile cero errores.
-"$PWSH" -NoProfile -Command "
+# (1) ParseFile cero errores (conservado de 13.2a).
+if [ -n "${PWSH:-}" ] && [ -x "$PWSH" ]; then
+  "$PWSH" -NoProfile -Command "
 \$e=\$null; \$t=\$null
 [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path '$PS1FILE'), [ref]\$t, [ref]\$e)
 if (\$e -and \$e.Count -gt 0) { \$e | ForEach-Object { \$_.ToString() }; exit 1 }
 exit 0
 " || fail "(1) ParseFile reporto errores en $PS1FILE"
-echo "ok (1): ParseFile sin errores"
+  echo "ok (1): ParseFile sin errores"
+else
+  echo "SKIP (1): sin pwsh; windows-contract cubre ParseFile"
+fi
 
-# (2) Posicion Y presencia: el llamado Get-OpenclawSkillsCambiadasStaged -RepoRoot
-# tiene que existir en el flujo, estrictamente entre la guardia de tamano y el commit.
-# Anclar solo en "SKILLS error:" (el catch) no basta: ese texto sobrevive a borrar o
-# anular el llamado (mutante medido en BRIEF-r1).
-n_g=$(linea_de 'git restore --staged' "$PS1FILE")
-n_commit=$(linea_de 'commit -m "auto: snapshot' "$PS1FILE")
-[ -n "$n_g" ] && [ -n "$n_commit" ] \
-  || fail "(2) no encuentro guardia/commit: g=$n_g commit=$n_commit"
-# Solo el llamado del flujo: -RepoRoot $r (no la definicion ni el helper interno con $RepoRoot).
-n_call=$(grep -n 'Get-OpenclawSkillsCambiadasStaged -RepoRoot \$r' "$PS1FILE" | head -1 | cut -d: -f1)
-[ -n "$n_call" ] \
-  || fail "(2) falta el llamado Get-OpenclawSkillsCambiadasStaged -RepoRoot \$r en el flujo (borrarlo o anularlo a \$null debe dejar rojo aqui)"
-[ "$n_call" -gt "$n_g" ] \
-  || fail "(2) el llamado (linea $n_call) va ANTES de la guardia (linea $n_g)"
-[ "$n_call" -lt "$n_commit" ] \
-  || fail "(2) el llamado (linea $n_call) va DESPUES del commit (linea $n_commit)"
-# El try/catch que envuelve el llamado tambien debe quedar en la misma ventana.
-n_try=$(grep -n 'SKILLS error:' "$PS1FILE" | head -1 | cut -d: -f1)
-[ -n "$n_try" ] || fail "(2) falta el catch SKILLS error: junto al llamado"
-[ "$n_try" -gt "$n_g" ] && [ "$n_try" -lt "$n_commit" ] \
-  || fail "(2) el try/catch de SKILLS (linea $n_try) fuera de la ventana guardia($n_g)–commit($n_commit)"
-echo "ok (2): el llamado Get-OpenclawSkillsCambiadasStaged -RepoRoot \$r va entre la guardia y el commit (linea $n_call)"
+# --- comportamiento: PR abierto = SKILLS_PR y nada del texto viejo ---
+en_windows=0
+[ "${OS:-}" = "Windows_NT" ] && en_windows=1
+case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) en_windows=1;; esac
+PSH="$(command -v powershell.exe || command -v powershell || command -v pwsh || true)"
+if [ "$en_windows" -eq 1 ] && [ -z "$PSH" ]; then
+  fail "(2) en Windows powershell.exe debe existir"
+fi
+PYBIN=$(command -v python3 || command -v python) || fail "(2) sin python3 ni python en PATH"
 
-# (3) Extraer funcion, correrla contra repo temporal.
-T=$(mktemp -d) || exit 1
-trap 'rm -rf "$T"' EXIT
-REPO="$T/repo"
-LOG="$T/sync.log"
-mkdir -p "$REPO/agents/x/agent/workshop-skills/s" "$REPO/otro"
-git -C "$REPO" init -q
-git -C "$REPO" config user.name test
-git -C "$REPO" config user.email test@test
-echo 'skill' > "$REPO/agents/x/agent/workshop-skills/s/SKILL.md"
-echo 'fuera' > "$REPO/otro/no-skill.txt"
-git -C "$REPO" add -A
-# HEAD vacio: primer commit no; dejamos estagiado sin commit (diff --cached ve los dos).
-
-python3 - "$PS1FILE" "$T/fn.ps1" <<'PY'
-import sys
-src, dst = sys.argv[1], sys.argv[2]
-lines = open(src, encoding="utf-8").read().splitlines()
-try:
-    a = next(i for i, l in enumerate(lines) if "# >>> skills-cambiadas" in l)
-    b = next(i for i, l in enumerate(lines) if "# <<< skills-cambiadas" in l)
-except StopIteration:
-    sys.exit("marcas no encontradas")
-body = "\n".join(lines[a + 1:b])
-open(dst, "w", encoding="utf-8").write(body + "\n")
+if [ -n "$PSH" ]; then
+  [ -f "$ORQ" ] || fail "(2) falta $ORQ"
+  T=$(mktemp -d) || exit 1
+  trap 'rm -rf "$T"' EXIT
+  nat() {
+    if [ "$en_windows" -eq 1 ] && command -v cygpath >/dev/null 2>&1; then
+      cygpath -w "$1"
+    else
+      case "$1" in /*) printf '%s' "$1";; *) printf '%s/%s' "$PWD" "$1";; esac
+    fi
+  }
+  mkdir -p "$T/fake-bin"
+  export GH_LOG="$T/gh.log" GH_CTR="$T/gh-ctr" GH_STATE="$T/gh-state.json"
+  echo 1 >"$GH_CTR"; echo '{}' >"$GH_STATE"; : >"$GH_LOG"
+  cat >"$T/fake-bin/gh-stub.py" <<'PY'
+import json, os, sys
+log, ctr, state = os.environ["GH_LOG"], os.environ["GH_CTR"], os.environ["GH_STATE"]
+args = sys.argv[1:]
+def head_of(a):
+    for i, x in enumerate(a):
+        if x == "--head" and i + 1 < len(a):
+            return a[i + 1]
+    return None
+if args[:2] == ["pr", "create"]:
+    n = int(open(ctr).read().strip())
+    open(ctr, "w").write(str(n + 1))
+    with open(log, "a") as fh:
+        fh.write(f"create head={head_of(args)}\n")
+    if "--json" in args:
+        print(json.dumps({"number": n, "url": f"https://example.invalid/pull/{n}"}))
+    else:
+        print(f"https://example.invalid/pull/{n}")
+elif args[:2] == ["pr", "view"]:
+    st = json.load(open(state))
+    print(json.dumps(st.get(str(args[2]), {})))
+elif args[:2] == ["pr", "list"]:
+    st = json.load(open(state))
+    h = head_of(args)
+    print(json.dumps([{"number": int(k), **v} for k, v in st.items() if v.get("headRefName") == h]))
+else:
+    print(f"gh stub: args inesperados: {args}", file=sys.stderr)
+    sys.exit(99)
 PY
-[ -s "$T/fn.ps1" ] || fail "(3) no pude extraer la funcion entre las marcas"
+  printf '#!/bin/bash\nexec python3 "$(dirname "$0")/gh-stub.py" "$@"\n' >"$T/fake-bin/gh"
+  chmod +x "$T/fake-bin/gh"
+  printf '@python "%%~dp0gh-stub.py" %%*\r\n' >"$T/fake-bin/gh.cmd"
+  export PATH="$T/fake-bin:$PATH"
 
-"$PWSH" -NoProfile -File /dev/stdin <<EOF || fail "(3) pwsh fallo al correr la funcion extraida"
-. '$T/fn.ps1'
-if (-not (Get-Command Write-OpenclawSkillsCambiadas -ErrorAction SilentlyContinue)) {
-  Write-Error 'falta Write-OpenclawSkillsCambiadas tras dot-source'
-  exit 1
-}
-Write-OpenclawSkillsCambiadas -RepoRoot '$REPO' -LogPath '$LOG'
-EOF
+  git init -q --bare "$T/origin.git" || fail "(2) bare"
+  W="$T/w"; git clone -q "$T/origin.git" "$W" 2>/dev/null || fail "(2) seed"
+  ( cd "$W" && git checkout -q -b main \
+    && mkdir -p agents/main/agent/workshop-skills/s \
+    && printf 'v1\n' > agents/main/agent/workshop-skills/s/SKILL.md \
+    && git add -A && git -c user.name=t -c user.email=t@t commit -qm base \
+    && git push -q origin main ) || fail "(2) seed"
+  rm -rf "$W"
+  git clone -q "$T/origin.git" "$T/src" 2>/dev/null || fail "(2) clone"
+  ( cd "$T/src" && git config user.name t && git config user.email t@t ) || fail "(2) id"
+  mkdir -p "$T/rt/agents/main/agent/workshop-skills/s"
+  printf 'v2\n' >"$T/rt/agents/main/agent/workshop-skills/s/SKILL.md"
+  printf '{"ok":true}\n' >"$T/rt/openclaw.json"
+  printf '$httpTimeoutSec = 90\n' >"$T/rt/gateway-watchdog.ps1"
+  cat >"$T/man.json" <<'JSON'
+{"schema": "runtime-deploy.v1", "sourceRoot": "C:\\F\\src", "runtimeRoot": "C:\\F\\rt",
+ "allowed": [{"path": "gateway-watchdog.ps1", "kind": "file", "reason": "t"},
+             {"path": "agents/*/agent/workshop-skills/**", "kind": "glob", "reason": "t"}],
+ "denied": [{"pattern": "**/*.secret", "reason": "t"}]}
+JSON
+  "$PSH" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$(nat "$ORQ")" \
+    -SourceRoot "$(nat "$T/src")" -RuntimeRoot "$(nat "$T/rt")" \
+    -ReceiptRoot "$(nat "$T/rec")" -LedgerPath "$(nat "$T/ledger.json")" \
+    -JournalPath "$(nat "$T/journal.jsonl")" -LogPath "$(nat "$T/sync.log")" \
+    -ManifestPath "$(nat "$T/man.json")" -OpenClawVersion 2026.9.5 \
+    >"$T/run.out" 2>&1 || fail "(2) ciclo capture fallo: $(cat "$T/run.out")"
+  grep -q 'SKILLS_PR 1 ' "$T/sync.log" || fail "(2) sin SKILLS_PR 1"
+  grep -Eq 'SKILLS [A-Za-z]+ [0-9]+ archivo\(s\)' "$T/sync.log" \
+    && fail "(2) texto viejo SKILLS con PR abierto: $(grep -Eo 'SKILLS [A-Za-z]+ [0-9]+ archivo\(s\)' "$T/sync.log")"
+  echo "ok (2): PR abierto emite SKILLS_PR y jamas el texto viejo"
+else
+  echo "SKIP (2): sin motor PowerShell; windows-contract cubre tokens"
+fi
 
-grep -q 'SKILLS x 1 archivo(s): s/SKILL.md' "$LOG" \
-  || fail "(3) no escribio la linea SKILLS x 1 archivo(s): s/SKILL.md; log=$(cat "$LOG" 2>/dev/null)"
-grep -q 'otro/no-skill' "$LOG" \
-  && fail "(3) logueo un archivo fuera de workshop-skills"
-# Exactamente una linea SKILLS de agente (no la de error).
-n_skills=$(grep -c ' SKILLS ' "$LOG" || true)
-[ "$n_skills" -eq 1 ] || fail "(3) esperaba 1 linea SKILLS de agente, hubo $n_skills"
-echo "ok (3): funcion extraida escribe SKILLS x 1 archivo(s): s/SKILL.md y ignora lo de fuera"
-
-# (4) Error dentro de la funcion → SKILLS error: y el flujo sigue (no exit).
-"$PWSH" -NoProfile -File /dev/stdin <<EOF || fail "(4) el flujo no debio morir ante el error forzado"
-\$log = '$T/err.log'
-\$repo = '$REPO'
-# Redefinir con una funcion que tira, y el try/catch del contrato.
-function Write-OpenclawSkillsCambiadas {
-  param([string]\$RepoRoot, [string]\$LogPath)
-  throw 'boom-forzado'
-}
-function Log([string]\$msg) {
-  Add-Content \$log ("{0} {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), \$msg)
-}
-try {
-  Write-OpenclawSkillsCambiadas -RepoRoot \$repo -LogPath \$log
-} catch {
-  Log (".openclaw SKILLS error: {0}" -f \$_.Exception.Message)
-}
-# El flujo sigue:
-Log '.openclaw commit local auto'
-Log '.openclaw pull ok'
-Log '---- ciclo terminado'
-EOF
-grep -q 'SKILLS error:' "$T/err.log" \
-  || fail "(4) no escribio SKILLS error: tras el throw; log=$(cat "$T/err.log")"
-grep -q 'ciclo terminado' "$T/err.log" \
-  || fail "(4) el flujo no continuo tras SKILLS error:"
-echo "ok (4): SKILLS error: y el ciclo sigue"
-
-# (5) Mutante estructural: llamado despues del commit → (2) lo detectaria.
-awk -v t="$n_try" -v c="$n_commit" '
-  NR==t { guardado=$0; next }
-  { print }
-  NR==c { print guardado }
-' "$PS1FILE" > "$T/movido.ps1"
-n_try2=$(grep -n 'SKILLS error:' "$T/movido.ps1" | head -1 | cut -d: -f1)
-n_c2=$(grep -n 'commit -m "auto: snapshot' "$T/movido.ps1" | head -1 | cut -d: -f1)
-[ "$n_try2" -gt "$n_c2" ] \
-  || fail "(5) no pude fabricar llamado despues del commit"
-echo "ok (5): mutante con SKILLS despues del commit queda fuera de la ventana (rojo en 2)"
-
-# (6) Quitar el llamado del flujo deja rojo (no hay SKILLS error: en el cuerpo del foreach).
-# Comprueba que el ancla del try existe en el archivo vivo (ya en 2); si se quitara, (2) falla.
-grep -q 'SKILLS error:' "$PS1FILE" || fail "(6) sin el try/catch en el flujo"
-echo "ok (6): el llamado esta en el flujo (quitarlo deja rojo en 2/0)"
+# (3) windows-contract corre ESTE test (pin de cobertura propia).
+SEC_W=$(awk '/^  windows-contract:/{f=1} f && !/^  windows-contract:/ && /^  [A-Za-z_][A-Za-z0-9_-]*:/{f=0} f' "$YAML" | grep -vE '^[[:space:]]*#')
+printf '%s\n' "$SEC_W" | grep -qF 'test-sync-avisa-skills.sh' \
+  || fail "(3) windows-contract no corre test-sync-avisa-skills.sh"
+echo "ok (3): windows-contract cubre este test"
 
 echo "TODO VERDE: sync-avisa-skills"

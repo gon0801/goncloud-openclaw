@@ -339,6 +339,13 @@ function Test-EffectiveHttpTimeout {
   return ([int]$vals[0] -ge 90)
 }
 
+function Protect-LogToken {
+  param([Parameter(Mandatory = $true)][string]$Text)
+  $s = [regex]::Replace($Text, '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\r\n\t]', ' ')
+  if ($s.Length -gt 200) { $s = $s.Substring(0, 200) }
+  return $s
+}
+
 function Test-HashEqual {
   param(
     [Parameter(Mandatory = $true)][string]$Path,
@@ -352,4 +359,4 @@ function Test-HashEqual {
   return ($h -ceq $ExpectedSha256.ToLowerInvariant())
 }
 
-Export-ModuleMember -Function Get-RuntimeCanonicalRoots, Test-RuntimeLayout, Test-WorkspaceExcluded, Test-ReceiptObject, Write-ReceiptAtomic, Test-DeployPathClassification, Test-EffectiveHttpTimeout, Test-HashEqual, Test-RootsIsolated
+Export-ModuleMember -Function Get-RuntimeCanonicalRoots, Test-RuntimeLayout, Test-WorkspaceExcluded, Test-ReceiptObject, Write-ReceiptAtomic, Test-DeployPathClassification, Test-EffectiveHttpTimeout, Test-HashEqual, Test-RootsIsolated, Protect-LogToken

@@ -74,4 +74,23 @@ echo "ok (4): add -A aborta entero con un repo anidado sin commits; add -u si av
 grep -q 'add -A FALLO (cayendo a add -u)' "$PS1FILE" || fail "$PS1FILE: falta el fallback a add -u con log"
 grep -qx 'workspace-scout/' .gitignore || fail ".gitignore: falta workspace-scout/"
 echo "ok (5): el script cae a add -u con log y .gitignore ignora workspace-scout/"
+# (6) Reorientacion Fase 16: el pull con rebase vive en el camino de
+# workspaces; el camino main delega y no jala nada.
+n_w0=$(grep -n '# >>> workspace-sync' "$PS1FILE" | head -1 | cut -d: -f1)
+n_w1=$(grep -n '# <<< workspace-sync' "$PS1FILE" | head -1 | cut -d: -f1)
+n_pull=$(grep -n 'pull --rebase origin \$branch' "$PS1FILE" | head -1 | cut -d: -f1)
+[ -n "$n_w0" ] && [ -n "$n_w1" ] && [ -n "$n_pull" ] \
+  || fail "(6) sin marcas workspace o sin pull: w0=$n_w0 w1=$n_w1 pull=$n_pull"
+[ "$n_pull" -gt "$n_w0" ] && [ "$n_pull" -lt "$n_w1" ] \
+  || fail "(6) el pull (linea $n_pull) fuera del camino workspace ($n_w0-$n_w1)"
+python3 - "$PS1FILE" "$T/main.ps1" <<'PY'
+import sys
+lines = open(sys.argv[1], encoding="utf-8").read().splitlines()
+a = next(i for i, l in enumerate(lines) if "# >>> main-delegate" in l)
+b = next(i for i, l in enumerate(lines) if "# <<< main-delegate" in l)
+open(sys.argv[2], "w", encoding="utf-8").write("\n".join(lines[a + 1:b]))
+PY
+grep -Eq 'git (pull|push|fetch)' "$T/main.ps1" \
+  && fail "(6) el camino main trae git pull/push/fetch: el orquestador es dueno de src/"
+echo "ok (6): pull con rebase en workspaces; main delega sin pull/push/fetch"
 echo "PASS test-sync-pull-identity"
