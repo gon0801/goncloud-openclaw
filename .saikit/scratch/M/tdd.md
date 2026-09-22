@@ -730,3 +730,13 @@ revertido). VERDE con `Test-JsonInstant` ([datetime] o [string] con
 forma estricta) en receipt/lease/state + normalizacion en
 comparaciones de orden y heartbeat del cutover (803/829).
 Mutantes: instant-mismatch/instant-badshape en el humo (26/26).
+
+F17 (Import-Module con ruta relativa en 5.1): CI4 desbloqueo layout
+(receipt-good verde en 5.1: hipotesis DateTime confirmada) y cayo en
+test-deploy-manifest (5): `cygpath -w` de ruta relativa deja `scripts\...`
+sin unidad y 5.1 no la resuelve. Mismo latente en deploy-atomic (7)(8) y
+protected-paths (barrido: los demas Import-Module ya eran absolutos).
+VERDE local (no-op fuera de Windows): manifest, atomic, protected-paths.
+Nota: test-corrida-nucleo fallo en CI4 shard-1 (TUI/tmux, 140s) sin
+relacion de codigo con este diff (grep vacio), verde en CI3 y en Mac:
+se clasifica flaky pendiente de re-evaluacion en CI5.

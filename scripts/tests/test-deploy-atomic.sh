@@ -61,7 +61,8 @@ if [ -n "$PSH" ]; then
       case "$1" in /*) printf '%s' "$1";; *) printf '%s/%s' "$PWD" "$1";; esac
     fi
   }
-  DEPN=$(nat "$DEPLOY"); MODN=$(nat "$MODULO")
+  # Absolutas: Import-Module 5.1 no resuelve rutas relativas (CI4).
+  DEPN=$(nat "$PWD/$DEPLOY"); MODN=$(nat "$PWD/$MODULO")
 
   arbol() { # $1=dir $2=timeout-watchdog $3=contenido-app
     mkdir -p "$1"

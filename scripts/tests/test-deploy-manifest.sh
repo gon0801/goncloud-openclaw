@@ -284,8 +284,10 @@ foreach ($f in (Get-Content -LiteralPath $FixturesPath)) {
   Write-Output (Test-DeployPathClassification -RelativePath $f -ManifestPath $ManifestPath)
 }
 PS1
+  # Absolutas antes de cygpath: Import-Module 5.1 no resuelve rutas
+  # relativas y cygpath -w deja una relativa sin unidad (CI4).
   if [ "$en_windows" -eq 1 ] && command -v cygpath >/dev/null 2>&1; then
-    MODN=$(cygpath -w "$MODULO"); MANN=$(cygpath -w "$MANIFIESTO")
+    MODN=$(cygpath -w "$PWD/$MODULO"); MANN=$(cygpath -w "$PWD/$MANIFIESTO")
   else
     MODN="$PWD/$MODULO"; MANN="$PWD/$MANIFIESTO"
   fi

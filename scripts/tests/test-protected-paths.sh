@@ -52,7 +52,8 @@ if [ -n "$PSH" ]; then
       case "$1" in /*) printf '%s' "$1";; *) printf '%s/%s' "$PWD" "$1";; esac
     fi
   }
-  ORQN=$(nat "$ORQ"); MODN=$(nat "$MODULO")
+  # Absolutas: Import-Module 5.1 no resuelve rutas relativas (CI4).
+  ORQN=$(nat "$PWD/$ORQ"); MODN=$(nat "$PWD/$MODULO")
 
   mkdir -p "$T/fake-bin"
   export GH_LOG="$T/gh.log" GH_CTR="$T/gh-ctr" GH_STATE="$T/gh-state.json"
