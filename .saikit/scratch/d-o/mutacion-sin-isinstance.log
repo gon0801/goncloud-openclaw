@@ -1,0 +1,8 @@
+ok (1): el script existe y parsea
+Traceback (most recent call last):
+  File "<string>", line 38, in <module>
+    salida.append('%s|%s|%s|%s' % (c['id'], pr, repo, estado))
+                                                ^^^^
+NameError: name 'repo' is not defined. Did you mean: 'repr'?
+reconciliar: no pude validar /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.eJNHbt4ydS/progress.json
+FAIL: (2) la reconciliacion debe salir 0; salio 2:

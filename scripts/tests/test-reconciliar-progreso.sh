@@ -328,4 +328,46 @@ printf '%s' "$out" | grep -q "no consulto GitHub" || fail "(10) la salida debe d
 $out"
 echo "ok (10): sin repo no se llama a gh y el carril queda como estaba"
 
+# (11) repo null en un carril candidato. null no es la cadena vacia ni la clave
+# ausente del (10): en JSON es un valor explicito, y el isinstance del extractor
+# es lo que lo convierte en cadena vacia para que la validacion del shell lo
+# rechace sin llamar a gh. Quitar esa conversion deja la salida con el None crudo
+# y el documento deja de conciliar: este caso se pone rojo. Un gh llamado con
+# cualquier repo vacio o raro contestaria OPEN y el carril quedaria sin unknown
+# (rc 0): por eso se afirma el rc 3 y el unknown, no solo el estado del carril.
+P9="$T/repo-null.json"
+cat >"$P9" <<'DOC'
+{
+ "schema": "runbook-progress.v1",
+ "runbook": "docs/runbooks/autopilot-fase9.md",
+ "fase": "9",
+ "lead": {"agente": "glm", "inicio": "2026-09-20T12:00:00Z", "actualizado": "2026-09-20T12:40:00Z"},
+ "siguiente_paso": "un carril con repo null",
+ "carriles": [
+  {"id": "M", "repo": "gon0801/goncloud-openclaw", "tareas": ["9.4"], "estado": "en-cola", "pr": 97, "detenido_por": "esperando sello del kit"},
+  {"id": "W", "repo": null, "tareas": ["9.6"], "estado": "atorado", "pr": 21, "detenido_por": "esperando sello"}
+ ],
+ "cola": [], "eventos": [],
+ "cierre": {"at": null, "telegram_message_id": null, "resumen": null}
+}
+DOC
+cp "$P9" "$P9.original"
+out=$(corre "$P9"); rc=$?
+[ "$rc" -eq 3 ] || fail "(11) con repo null debe salir 3 (unknown); salio $rc:
+$out"
+[ "$(carril "$P9" W estado)" = "atorado" ] \
+  || fail "(11) el carril W con repo null no puede quedar mergeado"
+[ "$(carril "$P9" W detenido_por)" = "esperando sello" ] \
+  || fail "(11) el motivo de W debia sobrevivir"
+[ "$(carril "$P9" M estado)" = "mergeado" ] \
+  || fail "(11) el control M, con repo valido, debio reconciliarse"
+printf '%s' "$out" | grep -q "carril W pr 21: repo ausente o fuera de contrato" \
+  || fail "(11) la salida debe nombrar a W con su pr y la razon:
+$out"
+nevt=$(F="$P9" python3 -c "
+import json, os
+print(len(json.load(open(os.environ['F']))['eventos']))")
+[ "$nevt" -eq 1 ] || fail "(11) solo el control M genera evento; hubo $nevt"
+echo "ok (11): repo null no consulta GitHub, queda unknown nombrado y el control si concilia"
+
 echo "TODO VERDE: reconciliar-progreso"

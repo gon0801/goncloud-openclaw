@@ -167,6 +167,42 @@ printf '%s' "$out" | grep -q '^ROJO *vigilantes.*corrida-vigia-5' \
 $out"
 echo "ok (2e): el modo global no exige empuje propio y sigue rechazando el vigia legado"
 
+# (2f) Con el flag, un empuje propio sobrante tambien se rechaza. Hallazgo de la
+# cross-review del arreglo de PR #115 (9.18): el modo no mira corrida-empuje, asi
+# que un empuje de una fase que delega en el reloj global salia VERDE aunque
+# siguiera creado: el resto manda mensajes que nadie espera y nadie mira.
+crons_con avance-tareas corrida-empuje-5
+out=$(corre 5 --solo-watchdog-global); rc=$?
+[ "$rc" -ne 0 ] || fail "(2f) con el flag, un empuje propio sobrante debe salir ROJO; salio 0:
+$out"
+printf '%s' "$out" | grep -q '^ROJO *vigilantes.*corrida-empuje-5' \
+  || fail "(2f) el empuje sobrante tiene que nombrarse:
+$out"
+echo "ok (2f): con el flag, un empuje propio sobrante sale ROJO y nombrado"
+
+# (2g) Con el flag el reloj global no se relaja: ausente, apagado o a otro ritmo
+# sigue ROJO. Quitar cualquiera de esas marcas de la salida deja esta prueba roja.
+printf '{"jobs":[{"name":"corrida-empuje-5","enabled":true}]}\n' >"$CRONS"
+out=$(corre 5 --solo-watchdog-global)
+printf '%s' "$out" | grep -q '^ROJO *vigilantes.*avance-tareas' \
+  || fail "(2g) con el flag, avance-tareas ausente tiene que salir ROJO:
+$out"
+printf '{"jobs":[{"name":"avance-tareas","enabled":false}]}\n' >"$CRONS"
+out=$(corre 5 --solo-watchdog-global)
+printf '%s' "$out" | grep -q '^ROJO *vigilantes' \
+  || fail "(2g) con el flag, avance-tareas apagado tiene que salir ROJO:
+$out"
+printf '%s' "$out" | grep -q 'apagados' \
+  || fail "(2g) apagado tiene que distinguirse de ausente:
+$out"
+printf '{"jobs":[{"name":"avance-tareas","enabled":true,"schedule":{"kind":"every","everyMs":3600000}}]}\n' >"$CRONS"
+out=$(corre 5 --solo-watchdog-global)
+printf '%s' "$out" | grep -q '^ROJO *vigilantes.*15 min' \
+  || fail "(2g) con el flag, avance-tareas fuera de la cadencia de 15 min tiene que salir ROJO:
+$out"
+crons_con avance-tareas
+echo "ok (2g): con el flag el reloj global sigue exigiendose presente, encendido y a 15 min"
+
 # (3) El primer progreso no enviado: el dueno se queda sin tablero.
 crons_con corrida-vigia-5 corrida-empuje-5; prog_no
 out=$(corre 5)

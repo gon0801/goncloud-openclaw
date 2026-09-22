@@ -1,0 +1,6 @@
+ok (1): el detector marca un lead nombrado por modelo y deja pasar el rol y las menciones ajenas
+ok (2): las 13 secciones existen y van en orden
+ok (3): las 63 anclas de reglas están
+ok (3-r1): la ronda 1 usa -Base y no -Desde
+FAIL: docs/runbooks/base-openclaw.md: el comando de la ronda 1 no usa -Base:
+/Users/dn/.local/bin/pwsh -NoProfile -File /Users/dn/quality-kit/cross-review.ps1 -Con auto -Excluir <modelo> -Alcance last-commit

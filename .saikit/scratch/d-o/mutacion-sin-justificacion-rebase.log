@@ -1,0 +1,6 @@
+ok (1): el detector marca un lead nombrado por modelo y deja pasar el rol y las menciones ajenas
+ok (2): las 13 secciones existen y van en orden
+ok (3): las 63 anclas de reglas están
+ok (3-r1): la ronda 1 usa -Base y no -Desde
+ok (3-r1b): la ronda 1 de base-openclaw usa -Base y ni -Desde ni -Alcance
+FAIL: docs/runbooks/base-openclaw.md: la regla 4 ya no justifica el veto de rebase con la historia que la ronda 1 lee con -Base

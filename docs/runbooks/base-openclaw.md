@@ -2,7 +2,7 @@
 
 Esto lo hereda **todo runbook de fase de `gon0801/goncloud-openclaw`**. Un runbook de fase lo cita en su primer párrafo («Hereda `docs/runbooks/base-openclaw.md` v<K>») y **no repite nada de lo que está aquí**: trae solo sus carriles con la DoD verbatim del plan, su tabla de archivos, su cola con compuertas, sus atores propios y su inventario (≤ 120 líneas). Si una fase mide algo nuevo del repo, la corrección entra **aquí**, en el mismo PR que arregla la fase.
 
-Versión 1.1, 2026-09-21 UTC. Destilada de las fases 6, 7 y 9 y actualizada tras integrar entrega-sin-sello A en SummonAIKit (`81aa8ff`). Todo lo que dice «medido» conserva su fecha y lugar en los documentos citados.
+Versión 1.2, 2026-09-22 UTC. Destilada de las fases 6, 7 y 9 y actualizada tras integrar entrega-sin-sello A en SummonAIKit (`81aa8ff`); la 1.2 aclara el `-Alcance last-commit` que conservan como historia los runbooks de las fases 6 y 7. Todo lo que dice «medido» conserva su fecha y lugar en los documentos citados.
 
 **Cadena de mando**: `docs/runbooks/loop-autopilot.md` (salvo la tabla de preaprobaciones de cada fase) > el spec del módulo > `Plans.md` > este documento > el runbook de la fase. El plan manda en el **qué** y en la DoD; este documento y el de la fase mandan en el **cómo**. Una contradicción entre el plan y un runbook la gana el plan y se declara como residual en el PR; un runbook nunca edita el cuerpo de una fila del plan, solo el ítem de cierre edita celdas de estado.
 
@@ -81,7 +81,7 @@ Devuelve la línea de contrato (código 0), `SIN-CONTRATO VIVA` (3: la pantalla 
 /Users/dn/.local/bin/pwsh -NoProfile -File /Users/dn/quality-kit/cross-review.ps1 -Con auto -Excluir <modelo> -Base <sha de la base del bloque>
 ```
 
-`<sha de la base del bloque>` es `git merge-base HEAD origin/main`. `-Base` manda ese diff hasta HEAD. Ronda 2, solo sobre los arreglos y con **otro** revisor: `-Con <otro> -Excluir <modelo> -Desde <sha que vio la ronda 1>`. **`-Alcance branch` no existe** y `-Desde` en la ronda 1 la convierte en revisión de arreglos: el conjunto de `-Alcance` es `staged`, `working`, `last-commit` (medido, `loop-autopilot.md` §4). `-Excluir` acepta cualquier nombre desde quality-kit #11, así que se pasa `muse` o `cursor` aunque no sean candidatos. `glm` en esa cadena **es** zcode.
+`<sha de la base del bloque>` es `git merge-base HEAD origin/main`. `-Base` manda ese diff hasta HEAD. Ronda 2, solo sobre los arreglos y con **otro** revisor: `-Con <otro> -Excluir <modelo> -Desde <sha que vio la ronda 1>`. **`-Alcance branch` no existe** y `-Desde` en la ronda 1 la convierte en revisión de arreglos: el conjunto de `-Alcance` es `staged`, `working`, `last-commit` (medido, `loop-autopilot.md` §4). Los runbooks de las fases 6 y 7, ya cerradas, escriben `-Alcance last-commit` en sus rondas de revisión: queda como historia y no se reescribe. Ese valor está en el conjunto y corre; el script aborta si el valor de `-Alcance` no está en ese conjunto, y combinado con `-Desde` o `-Base` aborta igual. `-Excluir` acepta cualquier nombre desde quality-kit #11, así que se pasa `muse` o `cursor` aunque no sean candidatos. `glm` en esa cadena **es** zcode.
 
 **Un turno a main / «por exec del gateway»** son el mismo mecanismo: un turno normal por la CLI remota desde la Mac, con el texto en un archivo.
 

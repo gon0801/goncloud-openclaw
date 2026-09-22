@@ -1,0 +1,14 @@
+ok (1): el script existe y parsea
+ok (2): 97 y 98 pasan a mergeado, se limpia solo ese motivo y el resto no se toca
+ok (3): la segunda pasada no cambia nada y lo declara
+ok (4): la firma del parte cambia una vez con el cambio real y queda quieta al repetir
+ok (5): GitHub caido deja unknown, el archivo quieto y el cierre vacio
+ok (6): parcial cambia solo lo consultado y declara el unknown
+uso: bash scripts/reconciliar-progreso.sh <progress.json> [otro.json ...]
+reconciliar: no encuentro el documento: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.ldta0OM6lE/no-existe.json
+reconciliar: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.ldta0OM6lE/roto.json esta fuera de contrato (schema distinto)ok (7): uso y contrato salen 2, y un bloqueo real no se confunde con el sello
+ok (8): ids duplicados => fuera de contrato, rc 2, nada escrito
+ok (9): raiz no-objeto => rc 2, sin cambios, con rastro
+ok (10): sin repo no se llama a gh y el carril queda como estaba
+ok (11): repo null no consulta GitHub, queda unknown nombrado y el control si concilia
+TODO VERDE: reconciliar-progreso
