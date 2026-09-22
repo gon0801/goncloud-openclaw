@@ -199,7 +199,9 @@ PR. No escribe `SKILLS`, porque el cambio todavía no está en `main`. El vigía
 sube a una versión que reconoce `SKILLS_PR` y dice que el cambio espera
 revisión. El despliegue posterior escribe `SKILLS_DEPLOYED`, el SHA mergeado y
 las rutas cuyo read-back coincidió; solo ese token afirma que el cambio llegó
-a `main` y al runtime.
+a `main` y al runtime. El vigía reconoce ambos tokens: mantiene el aviso de
+pendiente para `SKILLS_PR` y, al ver el `SKILLS_DEPLOYED` correspondiente,
+reporta éxito una sola vez y deja de tratar esas rutas como pendientes.
 
 El cambio del script y el cambio del vigía se despliegan como una sola unidad.
 `GoncloudRepoSync` no se habilita hasta que el vigía nuevo esté activo y su
@@ -246,11 +248,13 @@ El deploy conserva una copia de los archivos que reemplazará. Si una sonda
 posterior falla, restaura solo esos archivos. Nunca ejecuta
 `git reset --hard` contra el estado vivo.
 
-Antes de cada deploy, el script analiza la asignación efectiva de
-`httpTimeoutSec` en `gateway-watchdog.ps1` y exige un entero de al menos 90;
-no depende de espacios ni de una búsqueda literal. También ejecuta la prueba
-focalizada del watchdog. El PR #122 ya dejó el valor en 90 en `origin/main`.
-La compuerta evita que una base futura equivocada restaure los 10 segundos.
+Antes de cada deploy, una compuerta PowerShell analiza la asignación efectiva
+de `httpTimeoutSec` en el candidato del árbol de staging y exige un entero de
+al menos 90; no depende de espacios ni de una búsqueda literal. La prueba
+focalizada del watchdog se actualiza para aplicar la misma regla y corre en
+desarrollo y CI, no dentro de la tarea programada de Windows. El PR #122 ya
+dejó el valor en 90 en `origin/main`. La compuerta evita que una base futura
+equivocada restaure los 10 segundos.
 
 Un ciclo exitoso prueba:
 
@@ -319,11 +323,11 @@ Si Ollama falla antes del cambio de configuración, la fase termina sin tocar
 la configuración ni los índices. Si falla antes de reabrir el gateway y no
 hubo escrituras desde el snapshot, la reversa puede restaurar las bases. Una
 vez reabierto el tráfico, queda prohibido reemplazar bases completas: la
-reversa detiene el gateway, conserva una copia diagnóstica del índice fallido
-con la herramienta SQLite de OpenClaw, configura `memory.search.provider` y
-`fallback` como `none`, valida y relee la configuración, reconstruye la parte
-léxica si es necesario y reinicia. Así conserva los mensajes nuevos y no
-intenta ejecutar `llama.cpp`.
+reversa detiene el gateway, conserva el estado fallido en un nuevo archivo de
+diagnóstico creado con `openclaw backup create --verify`, configura
+`memory.search.provider` y `fallback` como `none`, valida y relee la
+configuración, reconstruye la parte léxica si es necesario y reinicia. Así
+conserva los mensajes nuevos y no intenta ejecutar `llama.cpp`.
 
 La configuración temporal con `provider: "none"` y `fallback: "none"` ya pasó
 `openclaw config validate --json` en OpenClaw `2026.9.5`. La prueba operativa
@@ -435,6 +439,10 @@ Las pruebas automatizadas deben cubrir estos fallos:
 - un ciclo interrumpido converge al mismo resultado cuando se repite;
 - un hash ya protegido no crea un segundo PR;
 - una edición viva posterior al PR no es sobrescrita por el merge anterior;
+- una rama de captura no escribible crea un PR sucesor enlazado;
+- un delta vivo posterior a un merge se captura antes de desplegar esa ruta;
+- un timeout mal formado o menor que 90 aborta cada deploy, mientras que un
+  entero mayor o igual a 90 pasa aunque cambie el formato;
 - un fallo del repo principal no impide procesar los tres workspaces;
 - el log conserva el marcador final y distingue `SKILLS_PR` de
   `SKILLS_DEPLOYED`.
@@ -507,7 +515,9 @@ decisiones:
   segundos. La lectura directa confirma `$httpTimeoutSec = 90`. Se añadió una
   compuerta para detectar una base futura equivocada.
 - Verificado: OpenClaw `2026.9.5` ofrece `backup create --verify` con config,
-  credenciales, sesiones y workspaces.
+  credenciales, sesiones y workspaces según su ayuda. El dry-run confirmó la
+  cobertura del asset `state`; crear y restaurar el archivo real sigue siendo
+  un criterio de aceptación.
 - Verificado: la configuración viva usa `memory.search`, y la versión instalada
   admite `provider`, `model` y `fallback`. El diseño añade validación y
   read-back antes del reinicio.
@@ -524,6 +534,13 @@ Las comprobaciones de entorno confirmaron además que el host tiene una cuenta
 activa de GitHub con alcance para repo y workflow, y que existe
 `scripts/tests/test-sync-avisa-skills.sh`. Estas comprobaciones habilitan la
 implementación futura, pero no sustituyen sus pruebas ni autorizan el deploy.
+
+GLM revisó únicamente las correcciones posteriores a Claude y no encontró
+bloqueantes. Sus observaciones no bloqueantes quedaron incorporadas: la
+compuerta inspecciona el candidato de staging con PowerShell, el test acepta
+cualquier entero de al menos 90, el vigía define `SKILLS_DEPLOYED`, las pruebas
+cubren PRs sucesores y la copia diagnóstica usa el backup verificado de
+OpenClaw en lugar de una herramienta SQLite no confirmada.
 
 ## Decisiones posteriores
 
