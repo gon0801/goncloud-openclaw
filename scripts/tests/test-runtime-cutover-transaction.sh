@@ -478,7 +478,7 @@ DEADMAN=$(grep -a 'schtasks /create /tn OpenClaw Cutover DeadMan /tr ' "$OC_LOG"
 [ -n "$ONESHOT" ] && [ -n "$DEADMAN" ] \
   || fail "(3c) faltan /create one-shot o dead-man: $(cat "$OC_LOG")"
 for linea in "$ONESHOT" "$DEADMAN"; do
-  printf '%s' "$linea" | grep -q -a -F -- "$CUTN" \
+  printf '%s' "$linea" | tr '\\' '/' | grep -q -a -F -- "$CUTN" \
     || fail "(3c) /create sin ruta absoluta al script: $linea"
   printf '%s' "$linea" | grep -q -a -F -- "$GEN_OK" \
     || fail "(3c) /create sin generacion: $linea"
