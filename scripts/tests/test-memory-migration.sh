@@ -1,0 +1,580 @@
+#!/bin/bash
+# Contrato de memoria Ollama + rollback (Task 5 / 16.4).
+#
+# La politica config/ollama-runtime.v1.json fija version, URL inmutable,
+# SHA-256 del instalador, publisher/cadena Authenticode, hash/firma de
+# binarios, loopback:11434, digest de nomic-embed-text y el triple exacto
+# ollama/nomic-embed-text/none. El instalador se compara ANTES de ejecutar;
+# sin pipe-to-shell. Rollback: con prueba de no-escrituras + switch puede
+# restaurar snapshots; si no, diagnostico + none/none + rebuild lexico.
+# Nunca local ni llama.cpp. Nota dev: scenarios con exec corren en POSIX;
+# CI ubuntu es autoritativo (windows-contract no corre este test).
+#
+# Uso: bash scripts/tests/test-memory-migration.sh
+set -u
+cd "$(dirname "$0")/../.." || exit 1
+fail() { printf 'ROJO: %s\n' "$1"; exit 1; }
+MM=scripts/runtime-separation/Set-OpenClawMemory.ps1
+POL=config/ollama-runtime.v1.json
+
+for git_local_var in $(git rev-parse --local-env-vars 2>/dev/null); do
+  unset "$git_local_var"
+done
+
+# (0) El script existe y parsea limpio.
+[ -f "$MM" ] || fail "(0) falta $MM"
+PSH="$(command -v pwsh || true)"
+[ -n "$PSH" ] || fail "(0) sin pwsh en PATH"
+"$PSH" -NoProfile -NonInteractive -Command "
+\$e=\$null; \$t=\$null
+[void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path '$MM'), [ref]\$t, [ref]\$e)
+if (\$e -and \$e.Count -gt 0) { \$e | ForEach-Object { \$_.ToString() }; exit 1 }
+exit 0
+" || fail "(0) ParseFile reporto errores en $MM"
+echo "ok (0): Set-OpenClawMemory.ps1 existe y parsea"
+
+# (1) Anclas: politica, compuertas, triple exacto, snapshots, rollback.
+for a in 'ollama-runtime' 'curl' 'Authenticode' 'netstat' 'ollama pull' \
+    'manifestDigest' '/api/embed' 'memory.search' 'sqlite create' 'sqlite verify' \
+    'memory index' 'memory search' 'wevtutil' '3033' '3077' 'daemon stop' \
+    'daemon start' 'sqlite restore' 'AllowSnapshotRestore' 'Write-ReceiptAtomic' \
+    '2026.9.5' 'Apply' 'nomic-embed-text'; do
+  grep -qF "$a" "$MM" || fail "(1) falta ancla: $a"
+done
+grep -q "'local'" "$MM" || fail "(1) sin regla de rechazo a local"
+for b in '| iex' 'Invoke-Expression' 'DownloadString' 'FromBase64String' '| sh'; do
+  grep -qF "$b" "$MM" && fail "(1) trae pipe-to-shell: $b"
+done
+echo "ok (1): compuertas, triple, snapshots y rollback anclados; sin pipe-to-shell"
+
+PYBIN=$(command -v python3 || command -v python) || fail "(2) sin python3 ni python"
+
+# (2) La politica fija todos los pines + revision.
+[ -f "$POL" ] || fail "(2) falta $POL"
+"$PYBIN" - "$POL" <<'PY' || exit 1
+import json, re, sys
+p = json.load(open(sys.argv[1], encoding="utf-8"))
+assert p.get("schema") == "ollama-runtime.v1", "schema"
+assert re.fullmatch(r"\d+\.\d+\.\d+", p.get("ollamaVersion", "")), "ollamaVersion"
+ins = p["installer"]
+assert ins["url"].startswith("https://github.com/ollama/ollama/releases/download/") or \
+    ins["url"].startswith("https://ollama.com/"), "url oficial"
+assert re.fullmatch(r"[0-9a-f]{64}", ins.get("sha256", "")), "installer sha256"
+assert isinstance(ins.get("sizeBytes"), int) and ins["sizeBytes"] > 10**9, "sizeBytes"
+assert isinstance(ins.get("args"), list) and len(ins["args"]) > 0, "installer args"
+au = p["authenticode"]
+for k in ("subjectCN", "issuerCN", "rootCN"):
+    assert isinstance(au.get(k), str) and au[k], k
+assert au.get("status") == "Valid", "authenticode status"
+b0 = p["installedBinaries"][0]
+assert b0["name"].endswith(".exe"), "binary name"
+assert re.fullmatch(r"[0-9a-f]{64}", b0.get("sha256", "")), "binary sha256"
+assert p["service"]["host"] == "127.0.0.1" and p["service"]["port"] == 11434, "loopback"
+assert p["model"]["name"] == "nomic-embed-text", "model"
+assert re.fullmatch(r"sha256:[0-9a-f]{64}", p["model"].get("manifestDigest", "")), "digest"
+assert p["memorySearch"] == {"provider": "ollama", "model": "nomic-embed-text",
+                             "fallback": "none"}, "triple exacto"
+assert isinstance(p.get("reviewedBy"), str) and p["reviewedBy"], "reviewedBy"
+assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", p.get("reviewedUtc", "")), "reviewedUtc"
+assert isinstance(p.get("reviewNote"), str) and p["reviewNote"], "reviewNote"
+PY
+echo "ok (2): politica con pines, triple exacto y revision"
+
+T=$(mktemp -d) || exit 1
+trap 'rm -rf "$T"' EXIT
+en_windows=0
+[ "${OS:-}" = "Windows_NT" ] && en_windows=1
+case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) en_windows=1;; esac
+nat() {
+  if [ "$en_windows" -eq 1 ] && command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$1"
+  else
+    case "$1" in /*) printf '%s' "$1";; *) printf '%s/%s' "$PWD" "$1";; esac
+  fi
+}
+MMN=$(nat "$MM")
+
+# --- stubs ---
+mkdir -p "$T/fake-bin" "$T/dbs"
+printf 'DB-MAIN-V1' >"$T/dbs/main.sqlite"
+printf 'DB-VER-V1' >"$T/dbs/verifier.sqlite"
+export OC_VERSION="2026.9.5" OC_LOG="$T/oc.log" OC_STATE="$T/oc-config.json"
+export OC_DBDIR="$T/dbs" OC_SEARCH_MODE="semantic" OC_DAEMON_FAIL="0"
+: >"$OC_LOG"
+printf '{"provider":"openai","model":"text-embedding-3-small","fallback":"lexical"}' >"$OC_STATE"
+cat >"$T/fake-bin/oc-stub.py" <<'PY'
+import json, os, sys
+log = os.environ["OC_LOG"]
+ver = os.environ["OC_VERSION"]
+state = os.environ["OC_STATE"]
+dbdir = os.environ["OC_DBDIR"]
+args = sys.argv[1:]
+with open(log, "a") as fh:
+    fh.write("openclaw " + " ".join(args) + "\n")
+if args[:1] == ["--version"]:
+    print(f"OpenClaw {ver} (stub)")
+elif args[:2] == ["config", "get"]:
+    print(json.dumps(json.load(open(state))))
+elif args[:2] == ["config", "set"]:
+    d = json.load(open(state))
+    d[args[2].split(".")[-1]] = args[3]
+    json.dump(d, open(state, "w"))
+    print("ok")
+elif args[:2] == ["config", "validate"]:
+    print(json.dumps({"ok": os.environ.get("OC_INVALID", "0") != "1"}))
+elif args[:2] == ["memory", "status"]:
+    print(json.dumps([
+        {"agentId": "main", "dbPath": os.path.join(dbdir, "main.sqlite"),
+         "provider": "openai", "model": "text-embedding-3-small"},
+        {"agentId": "verifier", "dbPath": os.path.join(dbdir, "verifier.sqlite"),
+         "provider": "openai", "model": "text-embedding-3-small"}]))
+elif args[:2] == ["memory", "index"]:
+    print("indexed")
+elif args[:2] == ["memory", "search"]:
+    m = os.environ.get("OC_SEARCH_MODE", "semantic")
+    if m == "empty":
+        print(json.dumps({"results": []}))
+    elif m == "lexical":
+        print(json.dumps({"results": [{"score": 0.2, "snippet": "lexical hit"}]}))
+    else:
+        print(json.dumps({"results": [{"score": 0.9,
+            "snippet": "respuesta conceptual sin la frase literal"}]}))
+elif args[:3] == ["backup", "sqlite", "create"]:
+    repo = args[args.index("--repository") + 1]
+    ag = args[args.index("--agent") + 1] if "--agent" in args else "shared"
+    os.makedirs(repo, exist_ok=True)
+    sp = os.path.join(repo, f"snap-{ag}.db")
+    open(sp, "wb").write(b"SNAP-" + ag.encode())
+    print(json.dumps({"snapshot": sp}))
+elif args[:3] == ["backup", "sqlite", "verify"]:
+    print(json.dumps({"ok": True}))
+elif args[:3] == ["backup", "sqlite", "restore"]:
+    tgt = args[args.index("--target") + 1]
+    open(tgt, "wb").write(open(args[3], "rb").read())
+    print(json.dumps({"ok": True, "target": tgt}))
+elif args[:2] == ["backup", "create"]:
+    out = args[args.index("--output") + 1] if "--output" in args else "."
+    os.makedirs(out, exist_ok=True)
+    ap = os.path.join(out, "diag-backup.tar.gz")
+    open(ap, "wb").write(b"DIAG-ARCHIVE")
+    print(json.dumps({"archivePath": ap, "verified": True}))
+elif args[:2] == ["daemon", "stop"] or args[:2] == ["daemon", "start"]:
+    sys.exit(1 if os.environ.get("OC_DAEMON_FAIL") == "1" else 0)
+else:
+    print(f"oc stub: args inesperados: {args}", file=sys.stderr)
+    sys.exit(99)
+PY
+printf '#!/bin/bash\nexec python3 "$(dirname "$0")/oc-stub.py" "$@"\n' >"$T/fake-bin/openclaw"
+chmod +x "$T/fake-bin/openclaw"
+cat >"$T/fake-bin/ollama" <<'SH'
+#!/bin/bash
+echo "ollama $*" >>"$OC_LOG"
+case "$1" in
+  --version) echo "ollama version 0.34.2" ;;
+  list) printf 'NAME\tID\nnomic-embed-text:latest\t0a109f422b47\n' ;;
+  pull) [ "$2" = "nomic-embed-text" ] || exit 1 ;;
+  *) echo "ollama stub: $*" >&2; exit 99 ;;
+esac
+SH
+chmod +x "$T/fake-bin/ollama"
+cat >"$T/fake-bin/curl" <<'SH'
+#!/bin/bash
+# curl -sSL --fail -o <dest> <url> -> escribe bytes fixture
+dest=""
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "-o" ]; then dest="$a"; fi
+  prev="$a"
+done
+printf '#!/bin/bash\necho INSTALADOR-EJECUTADO >>"$OC_LOG"\nexit 0\n' >"$dest"
+chmod +x "$dest"
+SH
+chmod +x "$T/fake-bin/curl"
+cat >"$T/fake-bin/netstat" <<'SH'
+#!/bin/bash
+echo "netstat $*" >>"$OC_LOG"
+if [ "${OC_NETSTAT_MODE:-loopback}" = "loopback" ]; then
+  printf 'TCP    127.0.0.1:11434    0.0.0.0:0    LISTENING\n'
+else
+  printf 'TCP    0.0.0.0:11434    0.0.0.0:0    LISTENING\n'
+fi
+SH
+chmod +x "$T/fake-bin/netstat"
+cat >"$T/fake-bin/wevtutil" <<'SH'
+#!/bin/bash
+echo "wevtutil $*" >>"$OC_LOG"
+case "$*" in
+  *3033*) # consulta de eventos: limpio = vacio
+    if [ "${OC_EVENTS_MODE:-clean}" != "clean" ]; then
+      printf 'EventID: 3033 Source: llama-server RecordID: 101\n'
+    fi ;;
+  *) printf 'EventRecordID: 100\n' ;; # bookmark
+esac
+SH
+chmod +x "$T/fake-bin/wevtutil"
+cat >"$T/fake-bin/sigchecker" <<'SH'
+#!/bin/bash
+echo "sigchecker $*" >>"$OC_LOG"
+if [ "${OC_SIG_MODE:-valid}" = "valid" ]; then
+  printf 'Valid|CN=Ollama Inc.|CN=DigiCert G5 CS ECC SHA384 2021 CA1\n'
+else
+  printf 'NotSigned||\n'
+fi
+SH
+chmod +x "$T/fake-bin/sigchecker"
+export PATH="$T/fake-bin:$PATH"
+
+# --- politica fixture (hashes de bytes fixture) ---
+"$T/fake-bin/curl" -sSL --fail -o "$T/probe.exe" "http://example.invalid/x" \
+  || fail "(2) stub curl no produjo fixture"
+INST_SHA=$(shasum -a 256 "$T/probe.exe" 2>/dev/null | cut -d' ' -f1)
+[ -n "$INST_SHA" ] || INST_SHA=$(sha256sum "$T/probe.exe" | cut -d' ' -f1)
+INST_SIZE=$(wc -c <"$T/probe.exe" | tr -d ' ')
+mkdir -p "$T/models/manifests/registry.ollama.ai/library/nomic-embed-text"
+printf '{"schemaVersion":2,"config":{"digest":"sha256:aaaa"}}' >"$T/models/manifests/registry.ollama.ai/library/nomic-embed-text/latest"
+MAN_SHA=$(shasum -a 256 "$T/models/manifests/registry.ollama.ai/library/nomic-embed-text/latest" 2>/dev/null | cut -d' ' -f1)
+[ -n "$MAN_SHA" ] || MAN_SHA=$(sha256sum "$T/models/manifests/registry.ollama.ai/library/nomic-embed-text/latest" | cut -d' ' -f1)
+mkdir -p "$T/ollama-bin"
+printf 'OLLAMA-EXE-FIXTURE' >"$T/ollama-bin/ollama.exe"
+BIN_SHA=$(shasum -a 256 "$T/ollama-bin/ollama.exe" 2>/dev/null | cut -d' ' -f1)
+[ -n "$BIN_SHA" ] || BIN_SHA=$(sha256sum "$T/ollama-bin/ollama.exe" | cut -d' ' -f1)
+"$PYBIN" - "$T/pol.json" "$INST_SHA" "$MAN_SHA" "$BIN_SHA" "$INST_SIZE" <<'PY'
+import json, sys
+pol = {"schema": "ollama-runtime.v1", "ollamaVersion": "0.34.2",
+ "installer": {"url": "https://github.com/ollama/ollama/releases/download/v0.34.2/OllamaSetup.exe",
+   "sha256": sys.argv[2], "sizeBytes": int(sys.argv[5]),
+   "args": ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"]},
+ "authenticode": {"subjectCN": "Ollama Inc.",
+   "issuerCN": "DigiCert G5 CS ECC SHA384 2021 CA1",
+   "rootCN": "DigiCert CS ECC P384 Root G5", "status": "Valid"},
+ "installedBinaries": [{"name": "ollama.exe", "sha256": sys.argv[4],
+   "subjectCN": "Ollama Inc."}],
+ "service": {"host": "127.0.0.1", "port": 11434},
+ "model": {"name": "nomic-embed-text", "manifestDigest": "sha256:" + sys.argv[3]},
+ "memorySearch": {"provider": "ollama", "model": "nomic-embed-text", "fallback": "none"},
+ "reviewedBy": "fixture", "reviewedUtc": "2026-09-22", "reviewNote": "test"}
+json.dump(pol, open(sys.argv[1], "w"))
+PY
+
+# --- API embed falsa (modo bueno/vacio) ---
+printf 'good' >"$T/embed-mode"
+cat >"$T/fake-embed.py" <<'PY'
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import json, os, sys
+MODE_FILE = os.environ["OC_EMBED_MODE_FILE"]
+class H(BaseHTTPRequestHandler):
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(n) or b"{}")
+        assert body.get("model") == "nomic-embed-text", body
+        assert body.get("input"), body
+        mode = open(MODE_FILE).read().strip()
+        if mode == "good":
+            payload = {"embeddings": [[0.1] * 8]}
+        else:
+            payload = {"embeddings": []}
+        raw = json.dumps(payload).encode()
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+    def log_message(self, *a):
+        pass
+HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
+PY
+export OC_EMBED_MODE_FILE="$T/embed-mode"
+"$PYBIN" "$T/fake-embed.py" 11434 >"$T/embed.log" 2>&1 &
+EMB_PID=$!
+trap 'kill $EMB_PID 2>/dev/null; rm -rf "$T"' EXIT
+i=0
+while ! "$PYBIN" -c "import socket; socket.create_connection(('127.0.0.1', 11434), 1).close()" 2>/dev/null; do
+  i=$((i + 1))
+  [ "$i" -lt 50 ] || fail "(3) embed falso no levanto"
+  sleep 0.2
+done
+
+corre() { # $1=tag $2=mode $3=apply(0/1) resto=extra
+  local tag="$1" mode="$2" apply="$3"; shift 3
+  local aflag=()
+  [ "$apply" = "1" ] && aflag=(-Apply)
+  : >"$OC_LOG"
+  printf '{"provider":"openai","model":"text-embedding-3-small","fallback":"lexical"}' >"$OC_STATE"
+  "$PSH" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$MMN" \
+    -RuntimeRoot "$(nat "$T/rt")" -PolicyPath "$(nat "$T/pol.json")" \
+    -ReceiptRoot "$(nat "$T/$tag-rec")" -SnapshotRepo "$(nat "$T/$tag-snap")" \
+    -OllamaModelsDir "$(nat "$T/models")" -OllamaInstallDir "$(nat "$T/ollama-bin")" \
+    -SignatureChecker "$(nat "$T/fake-bin/sigchecker")" \
+    -HealthUrl "http://127.0.0.1:9" -Mode "$mode" -VerifyQuery "concepto sin literal" \
+    "${aflag[@]}" "$@" >"$T/$tag.out" 2>&1
+  return $?
+}
+
+# (3a) Migrate report-only: exit 0 sin mutar nada.
+mkdir -p "$T/rt"
+corre mro migrate 0 || fail "(3a) report-only debio salir 0: $(cat "$T/mro.out")"
+grep -q 'config set' "$OC_LOG" && fail "(3a) report-only toco config"
+grep -q 'ollama pull' "$OC_LOG" && fail "(3a) report-only hizo pull"
+[ -e "$T/mro-snap" ] && fail "(3a) report-only creo snapshots"
+[ -e "$T/mro-rec" ] && fail "(3a) report-only escribio recibo"
+echo "ok (3a): migrate report-only no muta"
+
+# (3b) Migrate verde (POSIX: ejecuta instalador fixture).
+if [ "$en_windows" -eq 1 ]; then
+  echo "SKIP (3b): instalador fixture POSIX; CI ubuntu lo cubre"
+else
+  corre mok migrate 1 || fail "(3b) migrate debio salir 0: $(cat "$T/mok.out")"
+  grep -q 'INSTALADOR-EJECUTADO' "$OC_LOG" || fail "(3b) no ejecuto instalador"
+  [ "$(grep -c 'openclaw config set' "$OC_LOG")" = 3 ] || fail "(3b) sets != 3: $(cat "$OC_LOG")"
+  grep -q 'config set memory.search.provider ollama' "$OC_LOG" || fail "(3b) sin set provider"
+  grep -q 'config set memory.search.model nomic-embed-text' "$OC_LOG" || fail "(3b) sin set model"
+  grep -q 'config set memory.search.fallback none' "$OC_LOG" || fail "(3b) sin set fallback"
+  [ "$(grep -c 'memory index' "$OC_LOG")" = 2 ] || fail "(3b) index != 2 agentes"
+  [ "$(grep -c 'sqlite create' "$OC_LOG")" = 2 ] || fail "(3b) snapshots != 2"
+  grep -q 'wevtutil' "$OC_LOG" || fail "(3b) sin chequeo de eventos"
+  "$PYBIN" - "$T/mok-rec" <<'PY' || exit 1
+import glob, json, sys
+recs = glob.glob(sys.argv[1] + "/*.json")
+assert len(recs) == 1, recs
+d = json.load(open(recs[0], encoding="utf-8"))
+assert d["result"] == "passed", d["result"]
+obs = " ".join(d["observations"])
+assert "main" in obs and "verifier" in obs, obs
+assert "openai" in obs, obs
+PY
+  "$PYBIN" - "$T/mok-snap/migration.json" "$T/dbs/main.sqlite" "$T/dbs/verifier.sqlite" <<'PY' || exit 1
+import hashlib, json, sys
+m = json.load(open(sys.argv[1], encoding="utf-8"))
+assert m["schema"] == "memory-migration.v1", m.get("schema")
+assert m["globalPrior"] == {"provider": "openai", "model": "text-embedding-3-small",
+                            "fallback": "lexical"}, m["globalPrior"]
+by = {a["agent"]: a for a in m["agents"]}
+assert set(by) == {"main", "verifier"}, set(by)
+for ag, db in (("main", sys.argv[2]), ("verifier", sys.argv[3])):
+    want = hashlib.sha256(open(db, "rb").read()).hexdigest()
+    assert by[ag]["dbHash"] == want, ag
+    assert by[ag]["snapshot"].endswith(f"snap-{ag}.db"), by[ag]
+PY
+  echo "ok (3b): migrate verde con snapshots, triple, indices y recibo"
+fi
+
+# (3c) SHA distinto: frena ANTES de ejecutar.
+"$PYBIN" - "$T/pol.json" "$T/pol-badsha.json" <<'PY'
+import json, sys
+p = json.load(open(sys.argv[1]))
+p["installer"]["sha256"] = "0" * 64
+json.dump(p, open(sys.argv[2], "w"))
+PY
+: >"$OC_LOG"
+"$PSH" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$MMN" \
+  -RuntimeRoot "$(nat "$T/rt")" -PolicyPath "$(nat "$T/pol-badsha.json")" \
+  -ReceiptRoot "$(nat "$T/badsha-rec")" -SnapshotRepo "$(nat "$T/badsha-snap")" \
+  -OllamaModelsDir "$(nat "$T/models")" -OllamaInstallDir "$(nat "$T/ollama-bin")" \
+  -SignatureChecker "$(nat "$T/fake-bin/sigchecker")" \
+  -HealthUrl "http://127.0.0.1:9" -Mode migrate -VerifyQuery "x" -Apply \
+  >"$T/badsha.out" 2>&1 && fail "(3c) SHA distinto debio frenar y salio 0"
+grep -q 'INSTALADOR-EJECUTADO' "$OC_LOG" && fail "(3c) ejecuto con SHA distinto"
+echo "ok (3c): SHA distinto frena antes de ejecutar"
+
+# (3d) Firma invalida: frena sin ejecutar.
+OC_SIG_MODE="invalid" corre badsig migrate 1 && fail "(3d) firma invalida debio frenar y salio 0"
+grep -q 'INSTALADOR-EJECUTADO' "$OC_LOG" && fail "(3d) ejecuto con firma invalida"
+echo "ok (3d): firma invalida frena sin ejecutar"
+
+# (3e) Digest distinto: frena sin tocar config.
+printf '{"schemaVersion":2,"config":{"digest":"sha256:bbbb"}}' >"$T/models/manifests/registry.ollama.ai/library/nomic-embed-text/latest"
+corre baddigest migrate 1 && fail "(3e) digest distinto debio frenar y salio 0"
+grep -q 'config set' "$OC_LOG" && fail "(3e) toco config con digest distinto"
+printf '{"schemaVersion":2,"config":{"digest":"sha256:aaaa"}}' >"$T/models/manifests/registry.ollama.ai/library/nomic-embed-text/latest"
+echo "ok (3e): digest distinto frena sin tocar config"
+
+# (3f) Embed vacio: frena sin tocar config.
+printf 'empty' >"$T/embed-mode"
+corre badempty migrate 1 && fail "(3f) embed vacio debio frenar y salio 0"
+grep -q 'config set' "$OC_LOG" && fail "(3f) toco config con embed vacio"
+printf 'good' >"$T/embed-mode"
+echo "ok (3f): embed vacio frena sin tocar config"
+
+# (3g) Puerto no-loopback: frena.
+OC_NETSTAT_MODE="open" corre badloop migrate 1 && fail "(3g) puerto abierto debio frenar y salio 0"
+echo "ok (3g): endpoint no-loopback frena"
+
+# (3h) Version vieja: report-only avisa, apply frena.
+OC_VERSION="2026.9.4" corre vw migrate 0 || fail "(3h) report-only viejo debio salir 0"
+OC_VERSION="2026.9.4" corre va migrate 1 && fail "(3h) apply viejo debio frenar y salio 0"
+echo "ok (3h): version vieja avisa en seco y frena en apply"
+
+# (3i) Puerto fuera de politica: frena.
+corre badport migrate 1 -OllamaPort 11435 && fail "(3i) puerto distinto debio frenar y salio 0"
+echo "ok (3i): puerto fuera de politica frena"
+
+# (3j) Eventos 3033/3077 nuevos: frena.
+if [ "$en_windows" -eq 1 ]; then
+  echo "SKIP (3j): instalador fixture POSIX; CI ubuntu lo cubre"
+else
+  OC_EVENTS_MODE="dirty" corre badev migrate 1 && fail "(3j) eventos nuevos debio frenar y salio 0"
+  echo "ok (3j): eventos 3033/3077 nuevos frenan"
+fi
+
+kill $EMB_PID 2>/dev/null || true
+
+# --- rollback: fixture migration.json ---
+mk_migration() { # $1=dest $2=prior-provider (openai|local)
+  "$PYBIN" - "$1" "$2" "$T/dbs/main.sqlite" "$T/dbs/verifier.sqlite" "$T/rb-snap" <<'PY'
+import hashlib, json, sys
+def h(p):
+    return hashlib.sha256(open(p, "rb").read()).hexdigest()
+m = {"schema": "memory-migration.v1", "createdUtc": "2026-09-22T10:00:00Z",
+ "agents": [
+   {"agent": "main", "snapshot": sys.argv[5] + "/snap-main.db",
+    "dbHash": h(sys.argv[3]), "dbPath": sys.argv[3],
+    "priorProvider": sys.argv[2], "priorModel": "text-embedding-3-small"},
+   {"agent": "verifier", "snapshot": sys.argv[5] + "/snap-verifier.db",
+    "dbHash": h(sys.argv[4]), "dbPath": sys.argv[4],
+    "priorProvider": sys.argv[2], "priorModel": "text-embedding-3-small"}],
+ "globalPrior": {"provider": sys.argv[2], "model": "text-embedding-3-small",
+                 "fallback": "lexical"},
+ "policyDigest": "sha256:" + "0" * 64}
+json.dump(m, open(sys.argv[1], "w"))
+PY
+}
+mkdir -p "$T/rb-snap"
+printf 'SNAP-MAIN' >"$T/rb-snap/snap-main.db"
+printf 'SNAP-VER' >"$T/rb-snap/snap-verifier.db"
+mk_migration "$T/mig-ok.json" "openai"
+
+corre_rb() { # $1=tag $2=migration $3+=extra
+  local tag="$1" mig="$2"; shift 2
+  : >"$OC_LOG"
+  printf '{"provider":"ollama","model":"nomic-embed-text","fallback":"none"}' >"$OC_STATE"
+  "$PSH" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$MMN" \
+    -RuntimeRoot "$(nat "$T/rt")" -PolicyPath "$(nat "$T/pol.json")" \
+    -ReceiptRoot "$(nat "$T/$tag-rec")" -SnapshotRepo "$(nat "$T/rb-snap")" \
+    -MigrationPath "$(nat "$mig")" -HealthUrl "http://127.0.0.1:9" \
+    -Mode rollback -Apply "$@" >"$T/$tag.out" 2>&1
+  return $?
+}
+
+# (4a) Sin escrituras + switch: restaura snapshots y revierte config.
+corre_rb rbsnap "$T/mig-ok.json" -AllowSnapshotRestore \
+  || fail "(4a) rollback snapshot debio salir 0: $(cat "$T/rbsnap.out")"
+[ "$(grep -c 'sqlite restore' "$OC_LOG")" = 2 ] || fail "(4a) restore != 2"
+grep -q 'config set memory.search.provider openai' "$OC_LOG" || fail "(4a) sin revertir provider"
+grep -q 'daemon start' "$OC_LOG" || fail "(4a) sin reinicio"
+"$PYBIN" - "$T/rbsnap-rec" <<'PY' || exit 1
+import glob, json, sys
+recs = glob.glob(sys.argv[1] + "/*.json")
+assert len(recs) == 1, recs
+d = json.load(open(recs[0], encoding="utf-8"))
+assert d["result"] == "passed", d["result"]
+assert "snapshot" in " ".join(d["observations"]), d["observations"]
+PY
+# (4a) restaura de verdad: re-sembrar DBs para los siguientes escenarios.
+printf 'DB-MAIN-V1' >"$T/dbs/main.sqlite"
+printf 'DB-VER-V1' >"$T/dbs/verifier.sqlite"
+echo "ok (4a): sin escrituras + switch restaura snapshots"
+
+# (4b) Con escrituras: diagnostico + none/none, jamas restore.
+printf 'DB-MAIN-V2' >"$T/dbs/main.sqlite"
+corre_rb rbdiag "$T/mig-ok.json" -AllowSnapshotRestore \
+  || fail "(4b) rollback diagnostico debio salir 0: $(cat "$T/rbdiag.out")"
+grep -q 'sqlite restore' "$OC_LOG" && fail "(4b) restauro con escrituras encima"
+grep -q 'backup create' "$OC_LOG" || fail "(4b) sin backup diagnostico"
+grep -q 'config set memory.search.provider none' "$OC_LOG" || fail "(4b) sin provider none"
+grep -q 'config set memory.search.fallback none' "$OC_LOG" || fail "(4b) sin fallback none"
+grep -qi 'config set memory.search.provider local' "$OC_LOG" && fail "(4b) selecciono local"
+[ "$(grep -c 'memory index' "$OC_LOG")" = 2 ] || fail "(4b) sin rebuild lexico x2"
+"$PYBIN" - "$T/rbdiag-rec" <<'PY' || exit 1
+import glob, json, sys
+d = json.load(open(glob.glob(sys.argv[1] + "/*.json")[0], encoding="utf-8"))
+assert d["result"] == "passed", d["result"]
+assert "diagnostic" in " ".join(d["observations"]), d["observations"]
+PY
+printf 'DB-MAIN-V1' >"$T/dbs/main.sqlite"
+echo "ok (4b): con escrituras va a diagnostico + none/none"
+
+# (4c) Sin switch aunque coincidan hashes: diagnostico.
+corre_rb rbnosw "$T/mig-ok.json" \
+  || fail "(4c) rollback sin switch debio salir 0: $(cat "$T/rbnosw.out")"
+grep -q 'sqlite restore' "$OC_LOG" && fail "(4c) restauro sin switch"
+grep -q 'backup create' "$OC_LOG" || fail "(4c) sin diagnostico sin switch"
+echo "ok (4c): sin switch no restaura aunque coincidan"
+
+# (4d) Gateway que no se detiene: frena sin mutar.
+cat >"$T/fake-gw.py" <<'PY'
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import sys
+class H(BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = b'{"status":"ok"}'
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+    def log_message(self, *a):
+        pass
+HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
+PY
+"$PYBIN" "$T/fake-gw.py" 18789 >"$T/gw.log" 2>&1 &
+GW_PID=$!
+trap 'kill $GW_PID 2>/dev/null; rm -rf "$T"' EXIT
+i=0
+while ! "$PYBIN" -c "import socket; socket.create_connection(('127.0.0.1', 18789), 1).close()" 2>/dev/null; do
+  i=$((i + 1))
+  [ "$i" -lt 50 ] || fail "(4d) gateway falso no levanto"
+  sleep 0.2
+done
+: >"$OC_LOG"
+OC_DAEMON_FAIL="1" "$PSH" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$MMN" \
+  -RuntimeRoot "$(nat "$T/rt")" -PolicyPath "$(nat "$T/pol.json")" \
+  -ReceiptRoot "$(nat "$T/rbdown-rec")" -SnapshotRepo "$(nat "$T/rb-snap")" \
+  -MigrationPath "$(nat "$T/mig-ok.json")" -HealthUrl "http://127.0.0.1:18789" \
+  -Mode rollback -Apply -AllowSnapshotRestore >"$T/rbdown.out" 2>&1 \
+  && fail "(4d) gateway vivo sin stop debio frenar y salio 0"
+grep -q 'config set' "$OC_LOG" && fail "(4d) muto sin detener gateway"
+grep -q 'sqlite restore' "$OC_LOG" && fail "(4d) restauro sin detener gateway"
+echo "ok (4d): gateway que no para frena sin mutar"
+
+# (4g) Rollback report-only: decide sin mutar.
+: >"$OC_LOG"
+"$PSH" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$MMN" \
+  -RuntimeRoot "$(nat "$T/rt")" -PolicyPath "$(nat "$T/pol.json")" \
+  -ReceiptRoot "$(nat "$T/rbro-rec")" -SnapshotRepo "$(nat "$T/rb-snap")" \
+  -MigrationPath "$(nat "$T/mig-ok.json")" -HealthUrl "http://127.0.0.1:9" \
+  -Mode rollback -AllowSnapshotRestore >"$T/rbro.out" 2>&1 \
+  || fail "(4g) rollback report-only debio salir 0: $(cat "$T/rbro.out")"
+grep -q 'snapshot-restore' "$T/rbro.out" || fail "(4g) sin decision en plan"
+grep -q 'config set' "$OC_LOG" && fail "(4g) report-only muto config"
+grep -q 'sqlite restore' "$OC_LOG" && fail "(4g) report-only restauro"
+[ -e "$T/rbro-rec" ] && fail "(4g) report-only escribio recibo"
+echo "ok (4g): rollback report-only decide sin mutar"
+
+# (4e) Prior local: se rehusa aunque coincidan hashes + switch.
+mk_migration "$T/mig-local.json" "local"
+corre_rb rblocal "$T/mig-local.json" -AllowSnapshotRestore \
+  && fail "(4e) prior local debio frenar y salio 0"
+grep -q 'sqlite restore' "$OC_LOG" && fail "(4e) restauro con prior local"
+echo "ok (4e): prior local jamas se restaura"
+
+# (4f) Gateway en marcha + stop OK: procede y verifica salud al final.
+corre_rb_up() {
+  : >"$OC_LOG"
+  printf '{"provider":"ollama","model":"nomic-embed-text","fallback":"none"}' >"$OC_STATE"
+  "$PSH" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$MMN" \
+    -RuntimeRoot "$(nat "$T/rt")" -PolicyPath "$(nat "$T/pol.json")" \
+    -ReceiptRoot "$(nat "$T/rbup-rec")" -SnapshotRepo "$(nat "$T/rb-snap")" \
+    -MigrationPath "$(nat "$T/mig-ok.json")" -HealthUrl "http://127.0.0.1:18789" \
+    -Mode rollback -Apply -AllowSnapshotRestore >"$T/rbup.out" 2>&1
+  return $?
+}
+corre_rb_up || fail "(4f) rollback con stop OK debio salir 0: $(cat "$T/rbup.out")"
+grep -q 'daemon stop' "$OC_LOG" || fail "(4f) sin daemon stop"
+"$PYBIN" - "$T/rbup-rec" <<'PY' || exit 1
+import glob, json, sys
+d = json.load(open(glob.glob(sys.argv[1] + "/*.json")[0], encoding="utf-8"))
+assert d["result"] == "passed", d["result"]
+assert d["health"]["startupz"] == 200 and d["health"]["readyz"] == 200, d["health"]
+PY
+kill $GW_PID 2>/dev/null || true
+echo "ok (4f): stop OK procede y salud 200 al final"
+
+echo "TODO VERDE: memory-migration"

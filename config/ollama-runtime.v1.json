@@ -1,0 +1,39 @@
+{
+  "schema": "ollama-runtime.v1",
+  "ollamaVersion": "0.34.2",
+  "installer": {
+    "url": "https://github.com/ollama/ollama/releases/download/v0.34.2/OllamaSetup.exe",
+    "sha256": "8c9eb7ba71f3c6a62df4c7d204cc4739d90c335e1cbeb07c99fd471544066a8b",
+    "sizeBytes": 1569993232,
+    "args": ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"]
+  },
+  "authenticode": {
+    "subjectCN": "Ollama Inc.",
+    "issuerCN": "DigiCert G5 CS ECC SHA384 2021 CA1",
+    "rootCN": "DigiCert CS ECC P384 Root G5",
+    "status": "Valid"
+  },
+  "installedBinaries": [
+    {
+      "name": "ollama.exe",
+      "sha256": "ad41dcf55c5de96d4a0bff7c559a17285c3aa064a6f12d23db3ebf59ad8e4125",
+      "subjectCN": "Ollama Inc."
+    }
+  ],
+  "service": {
+    "host": "127.0.0.1",
+    "port": 11434
+  },
+  "model": {
+    "name": "nomic-embed-text",
+    "manifestDigest": "sha256:0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf3c45e59f"
+  },
+  "memorySearch": {
+    "provider": "ollama",
+    "model": "nomic-embed-text",
+    "fallback": "none"
+  },
+  "reviewedBy": "Muse Code",
+  "reviewedUtc": "2026-09-22",
+  "reviewNote": "Installer SHA/size from a full download of the pinned release URL; Authenticode chain read from the binary PKCS7 (Ollama Inc via DigiCert G5 CS ECC 2021 CA1, root DigiCert CS ECC P384 Root G5); Inno Setup 6.7 payload so silent args are stock Inno flags; ollama.exe hash range-extracted from the release amd64 zip (installer copies payload verbatim, same signer); model digest from a local ollama pull manifest; /api/embed returned a 768-dim vector locally. First apply confirms the binary hash by read-back; any mismatch fails closed."
+}
