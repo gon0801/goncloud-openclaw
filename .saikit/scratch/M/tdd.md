@@ -772,3 +772,10 @@ output se descarta y manda el exit: Sync fetch/checkout, Backup bundle
 create/verify (git escribe `Enumerating ...`). sync-repos.ps1 no pone
 Stop (Continue: a salvo). Lo demas (schtasks/icacls/openclaw en exito
 no emiten stderr; try/catch atrapa) se deja con evidencia ausente.
+
+F22 (2-null no basta en 5.1): CI12 mostro que `2>$null` NO evita el
+NativeCommandError con EAP=Stop: el throw sale igual. Fix real: EAP
+temporal a Continue alrededor de git nativo con output descartado
+(Sync fetch/checkout/fetch-branch/worktree, Backup bundle x2). En PS7
+es no-op (ya era el efectivo). Lo output-usado (ls-remote, rev-parse,
+status) se deja: sin evidencia de stderr-informativo.

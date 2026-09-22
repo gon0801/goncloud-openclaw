@@ -126,9 +126,10 @@ try {
   }
 
   # --- reconciliacion del checkout ---
-  # 2>$null: git escribe informativo a stderr (From ...) y 5.1 con EAP=Stop
-  # lo convierte en throw (CI11); el exit manda.
-  & git -C $SourceRoot fetch origin --prune 2>$null
+  # 5.1 lanza con stderr nativo aunque vaya a $null (CI12); Continue
+  # temporal para que mande el exit, como en PS7.
+  $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  try { & git -C $SourceRoot fetch origin --prune 2>$null } finally { $ErrorActionPreference = $prevEAP }
   if ($LASTEXITCODE -ne 0) {
     Write-SyncLog 'main FALLO: fetch de fuente no responde'
     exit 1
@@ -141,7 +142,9 @@ try {
       Write-SyncLog ("main FALLO: rama $branch sucia, sin tocar")
       exit 1
     }
-    & git -C $SourceRoot checkout --quiet main 2>$null
+    # EAP temporal (CI12): stderr nativo no lanza.
+    $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try { & git -C $SourceRoot checkout --quiet main 2>$null } finally { $ErrorActionPreference = $prevEAP }
     if ($LASTEXITCODE -ne 0) {
       Write-SyncLog 'main FALLO: no pude volver a main'
       exit 1
@@ -480,17 +483,21 @@ try {
     }
     $wt = Join-Path ([IO.Path]::GetTempPath()) ('capture-' + [Guid]::NewGuid().ToString('N'))
     try {
+      # EAP temporal en este bloque (CI12): stderr nativo no lanza.
+      $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+      try {
       if ($Mode -ceq 'update') {
-        & git -C $SourceRoot fetch origin $branch 2>&1 | Out-Null
+        & git -C $SourceRoot fetch origin $branch 2>$null
         $hasLocal = (& git -C $SourceRoot branch --list $branch 2>$null)
         if ([string]::IsNullOrEmpty($hasLocal)) {
-          & git -C $SourceRoot branch $branch "origin/$branch" 2>&1 | Out-Null
+          & git -C $SourceRoot branch $branch "origin/$branch" 2>$null
           if ($LASTEXITCODE -ne 0) { return @{ Ok = $false; Why = 'rama-update irrecuperable' } }
         }
-        & git -C $SourceRoot worktree add $wt $branch 2>&1 | Out-Null
+        & git -C $SourceRoot worktree add $wt $branch 2>$null
       } else {
-        & git -C $SourceRoot worktree add $wt -b $branch origin/main 2>&1 | Out-Null
+        & git -C $SourceRoot worktree add $wt -b $branch origin/main 2>$null
       }
+      } finally { $ErrorActionPreference = $prevEAP }
       if ($LASTEXITCODE -ne 0) { return @{ Ok = $false; Why = 'worktree add fallo' } }
       $staged = New-Object System.Collections.Generic.List[string]
       foreach ($it in $Items) {
