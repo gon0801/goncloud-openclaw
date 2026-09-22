@@ -199,6 +199,8 @@ try {
   if ($agents.Count -eq 0) { throw 'sin agentes en memory status' }
   $covered = @()
   foreach ($r in @($man.agentRoots)) { $covered += $r.agentId }
+  # DIAG TEMPORAL CI16: longitudes revelan CR/espacios invisibles.
+  throw ("DIAG coverN={0} coverLens=[{1}] agent0=[{2}] agent0len={3} r0type={4}" -f $covered.Count, (($covered | ForEach-Object { $_.Length }) -join ','), $agents[0].agentId, $agents[0].agentId.Length, @($man.agentRoots)[0].GetType().FullName)
   foreach ($g in $agents) {
     if ($covered -notcontains $g.agentId) { throw ("manifiesto sin agente: {0}" -f $g.agentId) }
   }
