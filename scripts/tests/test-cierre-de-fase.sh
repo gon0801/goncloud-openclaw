@@ -664,4 +664,66 @@ printf '%s' "$out" | grep -q "^VERDE *reloj" \
 $out"
 echo "ok (13f): sin reloj no hay nada que retirar"
 
+# (14) Entregables de la fase: la instalacion y el simulacro son carriles sin PR. Un
+# remoto con todos los PR en MERGED no los prueba: medido 2026-09-17 (Fase 7), todo
+# mergeado y CI en verde faltaban el plugin encendido y las celdas; y en la Fase 9 el
+# simulacro era justamente el entregable que quedaba. El documento de progreso
+# versionado declara los carriles: para cerrar la fase, cada uno tiene que estar en
+# estado terminal, aunque los PR digan MERGED. Aqui A y B (los PR 97 y 98 de la Fase 9)
+# estan mergeado y el plan cerrado: lo unico que falta es el entregable.
+mkdir -p "$R/.saikit/progress"
+entregables() { # $1 estado de Instalacion, $2 estado de Simulacro, $3 cierre.at (o null)
+  cat >"$R/.saikit/progress/5.json" <<DOC
+{"fase":"5","titulo":"Fase 5","siguiente_paso":"cierre",
+ "carriles":[{"id":"A","estado":"mergeado","pr":97},{"id":"B","estado":"mergeado","pr":98},
+             {"id":"I","nombre":"Instalacion","estado":"$1"},
+             {"id":"S","nombre":"Simulacro","estado":"$2"}],
+ "cierre":{"at":$3}}
+DOC
+  git -C "$R" add -A >/dev/null 2>&1
+  git -C "$R" commit -q -m "entregables-$1-$2" 2>/dev/null
+  git -C "$R" push -q -f origin HEAD:main
+}
+
+entregables pendiente pendiente null
+out=$(CIERRE_SIN_GATEWAY=1 corre 5); rc=$?
+[ "$rc" -eq 1 ] || fail "(14) con Instalacion y Simulacro pendientes y todos los PR mergeados, el cierre debe salir 1; salio $rc:
+$out"
+printf '%s' "$out" | grep -q "^ROJO *entregables" \
+  || fail "(14) el check de entregables no salio ROJO con un entregable pendiente:
+$out"
+printf '%s' "$out" | grep -q "Instalacion" \
+  || fail "(14) el detalle debe nombrar el carril Instalacion:
+$out"
+printf '%s' "$out" | grep -q "Simulacro" \
+  || fail "(14) el detalle debe nombrar el carril Simulacro:
+$out"
+echo "ok (14a): con todos los PR mergeados, un entregable pendiente impide el cierre y se nombra"
+
+# (14b) El otro lado: con el entregable presente y el resto igual, VERDE. Sin este
+# caso, una comprobacion que siempre dijera ROJO pasaria la de arriba.
+entregables mergeado mergeado '"2026-09-18T00:00:00Z"'
+out=$(CIERRE_SIN_GATEWAY=1 corre 5); rc=$?
+[ "$rc" -eq 0 ] || fail "(14b) con los entregables terminados el cierre debe salir 0; salio $rc:
+$out"
+printf '%s' "$out" | grep -q "^VERDE *entregables" \
+  || fail "(14b) el check de entregables debe salir VERDE con todos terminados:
+$out"
+echo "ok (14b): con el entregable presente y el resto verde, la fase cierra"
+
+# (14c) Un documento sin carriles legibles se declara unknown: no hay que dar por
+# cerrada una fase cuyos entregables no se pudieron leer. Es el mismo falso verde que
+# (12g) mato en el tablero publicado, aqui sobre el documento versionado.
+printf '{"fase":"5","cierre":{"at":null}}' >"$R/.saikit/progress/5.json"
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m entregables-sin-carriles
+git -C "$R" push -q -f origin HEAD:main
+out=$(CIERRE_SIN_GATEWAY=1 corre 5)
+printf '%s' "$out" | grep -q "^unknown *entregables" \
+  || fail "(14c) un documento sin carriles debe declararse unknown, no VERDE:
+$out"
+printf '%s' "$out" | grep -q "^VERDE *entregables" \
+  && fail "(14c) sin poder leer los entregables no puede salir VERDE:
+$out"
+echo "ok (14c): un documento de progreso sin carriles se declara, no se da por bueno"
+
 echo "TODO VERDE: cierre-de-fase"
