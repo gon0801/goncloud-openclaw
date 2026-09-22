@@ -9,7 +9,9 @@
 # con validate + relectura, reindex por agente, consulta semantica y cero
 # eventos 3033/3077 nuevos. Rollback: con -AllowSnapshotRestore y prueba de
 # no-escrituras restaura snapshots; si no, diagnostico + none/none + rebuild
-# lexico. Nunca local. Salidas: 0 ok, 1 freno, 2 herramienta ausente.
+# lexico. DB confinada a RuntimeRoot y snapshot a SnapshotRepo, ambos con
+# hash registrado y sin reparse points. Nunca local. Salidas: 0 ok, 1 freno,
+# 2 herramienta ausente.
 param(
   [Parameter(Mandatory = $true)][string]$RuntimeRoot,
   [Parameter(Mandatory = $true)][string]$PolicyPath,
@@ -35,6 +37,56 @@ Import-Module (Join-Path $PSScriptRoot 'RuntimeSeparation.psm1') -Force
 function Get-UtcNow { return ([DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')) }
 function Get-FileSha([string]$Path) {
   return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+function Get-Full([string]$Path) {
+  return [IO.Path]::GetFullPath($Path)
+}
+function Test-PathInside([string]$Path, [string]$Root) {
+  $sep = [IO.Path]::DirectorySeparatorChar
+  return ((Get-Full -Path $Path).StartsWith((Get-Full -Path $Root) + $sep,
+    [StringComparison]::OrdinalIgnoreCase))
+}
+function Test-PathReparse([string]$Path) {
+  $it = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+  if ($null -eq $it) { return $false }
+  return ((($it.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0))
+}
+function Read-RollbackAgents([object]$Mig, [string]$RtFull, [string]$SnapFull) {
+  $want = @('agent', 'snapshot', 'snapshotHash', 'dbHash', 'dbPath',
+    'priorProvider', 'priorModel')
+  $sep = [IO.Path]::DirectorySeparatorChar
+  $out = New-Object System.Collections.Generic.List[object]
+  $seen = @{}
+  foreach ($a in @($Mig.agents)) {
+    $got = @($a.PSObject.Properties.Name)
+    if ($got.Count -ne $want.Count) { throw 'migration.json con agente ajeno' }
+    foreach ($k in $want) {
+      if ($got -notcontains $k) { throw 'migration.json con agente ajeno' }
+    }
+    $id = [string]$a.agent
+    if ([string]::IsNullOrEmpty($id)) { throw 'agente sin id' }
+    if ($a.dbHash -cnotmatch '^[0-9a-f]{64}$') { throw 'migration.json sin dbHash' }
+    if ($a.snapshotHash -cnotmatch '^[0-9a-f]{64}$') { throw 'migration.json sin snapshotHash' }
+    if ([string]::IsNullOrEmpty($a.dbPath) -or [string]::IsNullOrEmpty($a.snapshot)) {
+      throw 'migration.json sin rutas'
+    }
+    if ($a.priorProvider -ceq 'local') { throw 'prior local prohibido' }
+    $db = Get-Full -Path $a.dbPath
+    $snap = Get-Full -Path $a.snapshot
+    if (-not $db.StartsWith($RtFull + $sep, [StringComparison]::OrdinalIgnoreCase)) {
+      throw ("db fuera de runtime: {0}" -f $id)
+    }
+    if (-not $snap.StartsWith($SnapFull + $sep, [StringComparison]::OrdinalIgnoreCase)) {
+      throw ("snapshot fuera de repo: {0}" -f $id)
+    }
+    if ($seen.ContainsKey($id)) { throw ("agente duplicado: {0}" -f $id) }
+    $seen[$id] = $true
+    [void]$out.Add([PSCustomObject]@{
+        Agent = $id; Db = $db; Snap = $snap
+        DbHash = [string]$a.dbHash; SnapHash = [string]$a.snapshotHash
+      })
+  }
+  return $out
 }
 function Get-ResolvedVersion([string]$Pinned) {
   if (-not [string]::IsNullOrEmpty($Pinned)) { return $Pinned }
@@ -152,12 +204,19 @@ try {
       Write-Output 'plan migrate: triple exacto + validate + relectura + index + semantica'
       Write-Output 'plan migrate: bookmark de eventos + recibo'
     } else {
-      $mig0 = Get-Content -Raw -LiteralPath $MigrationPath | ConvertFrom-Json
+      $mig0 = $null
+      try { $mig0 = Get-Content -Raw -LiteralPath $MigrationPath | ConvertFrom-Json } catch { $mig0 = $null }
+      if ($null -eq $mig0 -or $mig0.schema -cne 'memory-migration.v1') { throw 'migration.json invalido' }
+      $rb0 = Read-RollbackAgents -Mig $mig0 -RtFull (Get-Full -Path $RuntimeRoot) `
+        -SnapFull (Get-Full -Path $SnapshotRepo)
       $allMatch = $true
-      foreach ($a in @($mig0.agents)) {
-        if (-not (Test-Path -LiteralPath $a.dbPath -PathType Leaf)) { $allMatch = $false; break }
-        if ((Get-FileSha -Path $a.dbPath) -cne $a.dbHash) { $allMatch = $false; break }
-        if (-not (Test-Path -LiteralPath $a.snapshot -PathType Leaf)) { $allMatch = $false; break }
+      foreach ($a in $rb0) {
+        if (-not (Test-Path -LiteralPath $a.Db -PathType Leaf)) { $allMatch = $false; break }
+        if (Test-PathReparse -Path $a.Db) { throw ("db reparse: {0}" -f $a.Agent) }
+        if ((Get-FileSha -Path $a.Db) -cne $a.DbHash) { $allMatch = $false; break }
+        if (-not (Test-Path -LiteralPath $a.Snap -PathType Leaf)) { $allMatch = $false; break }
+        if (Test-PathReparse -Path $a.Snap) { throw ("snapshot reparse: {0}" -f $a.Agent) }
+        if ((Get-FileSha -Path $a.Snap) -cne $a.SnapHash) { $allMatch = $false; break }
       }
       if ($AllowSnapshotRestore -and $allMatch) {
         Write-Output 'plan rollback: via snapshot-restore (hashes coinciden + switch)'
@@ -300,18 +359,31 @@ try {
     if ($null -eq $prior) { throw 'prior ilegible' }
 
     $snaps = New-Object System.Collections.Generic.List[object]
+    $seenMig = @{}
     foreach ($g in $agents) {
       $id = $g.agentId
       if ([string]::IsNullOrEmpty($id)) { throw 'agente sin id' }
+      if ($seenMig.ContainsKey($id)) { throw ("agente duplicado: {0}" -f $id) }
+      $seenMig[$id] = $true
       $dbp = $g.dbPath
       if ([string]::IsNullOrEmpty($dbp) -or !(Test-Path -LiteralPath $dbp -PathType Leaf)) {
         throw ("db ausente: {0}" -f $id)
       }
+      if (-not (Test-PathInside -Path $dbp -Root $RuntimeRoot)) {
+        throw ("db fuera de runtime: {0}" -f $id)
+      }
+      if (Test-PathReparse -Path $dbp) { throw ("db reparse: {0}" -f $id) }
+      $dbp = Get-Full -Path $dbp
       $crRaw = (& openclaw backup sqlite create --agent $id --repository $SnapshotRepo --json 2>&1)
       if ($LASTEXITCODE -ne 0) { throw ("snapshot fallo: {0}" -f $id) }
       $snapPath = ''
       try { $snapPath = ((($crRaw | Out-String) | ConvertFrom-Json).snapshot) } catch { $snapPath = '' }
       if ([string]::IsNullOrEmpty($snapPath)) { throw ("snapshot sin ruta: {0}" -f $id) }
+      if (-not (Test-PathInside -Path $snapPath -Root $SnapshotRepo)) {
+        throw ("snapshot fuera de repo: {0}" -f $id)
+      }
+      if (Test-PathReparse -Path $snapPath) { throw ("snapshot reparse: {0}" -f $id) }
+      $snapPath = Get-Full -Path $snapPath
       $scratch = Join-Path ([IO.Path]::GetTempPath()) ('snap-verify-' + [Guid]::NewGuid().ToString('N'))
       [void](New-Item -ItemType Directory -Path $scratch -Force)
       try {
@@ -322,6 +394,7 @@ try {
       }
       [void]$snaps.Add([PSCustomObject]@{
           agent = $id; snapshot = $snapPath; dbHash = (Get-FileSha -Path $dbp); dbPath = $dbp
+          snapshotHash = (Get-FileSha -Path $snapPath)
           priorProvider = $g.provider; priorModel = $g.model
         })
     }
@@ -331,8 +404,9 @@ try {
     $mig = [ordered]@{
       schema = 'memory-migration.v1'; createdUtc = (Get-UtcNow)
       agents = @($snaps.ToArray() | ForEach-Object {
-          [ordered]@{ agent = $_.agent; snapshot = $_.snapshot; dbHash = $_.dbHash
-            dbPath = $_.dbPath; priorProvider = $_.priorProvider; priorModel = $_.priorModel }
+          [ordered]@{ agent = $_.agent; snapshot = $_.snapshot; snapshotHash = $_.snapshotHash
+            dbHash = $_.dbHash; dbPath = $_.dbPath; priorProvider = $_.priorProvider
+            priorModel = $_.priorModel }
         })
       globalPrior = [ordered]@{ provider = $prior.provider; model = $prior.model; fallback = $prior.fallback }
       policyDigest = ('sha256:' + (Get-FileSha -Path $PolicyPath))
@@ -410,10 +484,11 @@ try {
     $gp = $mig.globalPrior
     if ($null -eq $gp -or [string]::IsNullOrEmpty($gp.provider)) { throw 'migration.json sin globalPrior' }
     if ($gp.provider -ceq 'local') { throw 'prior local prohibido' }
-    foreach ($a in @($mig.agents)) {
-      if ($a.priorProvider -ceq 'local') { throw 'prior local prohibido' }
-    }
+    $rb = Read-RollbackAgents -Mig $mig -RtFull (Get-Full -Path $RuntimeRoot) `
+      -SnapFull (Get-Full -Path $SnapshotRepo)
     [void]$commands.Add([PSCustomObject]@{ name = 'migration-load'; exit = 0 })
+    $migSha = Get-FileSha -Path $MigrationPath
+    [void]$observations.Add(("migration sha256: {0}" -f $migSha))
 
     if (Test-GatewayUp -Url $HealthUrl) {
       & openclaw daemon stop 2>&1 | Out-Null
@@ -425,15 +500,20 @@ try {
     $canSnap = [bool]$AllowSnapshotRestore
     $whyNot = ''
     if ($canSnap) {
-      foreach ($a in @($mig.agents)) {
-        if (-not (Test-Path -LiteralPath $a.dbPath -PathType Leaf)) {
-          $canSnap = $false; $whyNot = ("db ausente: {0}" -f $a.agent); break
+      foreach ($a in $rb) {
+        if (-not (Test-Path -LiteralPath $a.Db -PathType Leaf)) {
+          $canSnap = $false; $whyNot = ("db ausente: {0}" -f $a.Agent); break
         }
-        if ((Get-FileSha -Path $a.dbPath) -cne $a.dbHash) {
-          $canSnap = $false; $whyNot = ("escrituras tras snapshot: {0}" -f $a.agent); break
+        if (Test-PathReparse -Path $a.Db) { throw ("db reparse: {0}" -f $a.Agent) }
+        if ((Get-FileSha -Path $a.Db) -cne $a.DbHash) {
+          $canSnap = $false; $whyNot = ("escrituras tras snapshot: {0}" -f $a.Agent); break
         }
-        if (-not (Test-Path -LiteralPath $a.snapshot -PathType Leaf)) {
-          $canSnap = $false; $whyNot = ("snapshot ausente: {0}" -f $a.agent); break
+        if (-not (Test-Path -LiteralPath $a.Snap -PathType Leaf)) {
+          $canSnap = $false; $whyNot = ("snapshot ausente: {0}" -f $a.Agent); break
+        }
+        if (Test-PathReparse -Path $a.Snap) { throw ("snapshot reparse: {0}" -f $a.Agent) }
+        if ((Get-FileSha -Path $a.Snap) -cne $a.SnapHash) {
+          $canSnap = $false; $whyNot = ("snapshot distinto: {0}" -f $a.Agent); break
         }
       }
     } else {
@@ -441,24 +521,28 @@ try {
     }
 
     if ($canSnap) {
-      foreach ($a in @($mig.agents)) {
+      foreach ($a in $rb) {
         $scratch = Join-Path ([IO.Path]::GetTempPath()) ('snap-verify-' + [Guid]::NewGuid().ToString('N'))
         [void](New-Item -ItemType Directory -Path $scratch -Force)
         try {
-          $vfRaw = (& openclaw backup sqlite verify $a.snapshot --scratch $scratch --json 2>&1)
-          if ($LASTEXITCODE -ne 0) { throw ("snapshot no verifico: {0}" -f $a.agent) }
+          $vfRaw = (& openclaw backup sqlite verify $a.Snap --scratch $scratch --json 2>&1)
+          if ($LASTEXITCODE -ne 0) { throw ("snapshot no verifico: {0}" -f $a.Agent) }
         } finally {
           Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue
         }
-        $freshTarget = $a.dbPath + '.restored'
+        $freshTarget = $a.Db + '.restored'
         if (Test-Path -LiteralPath $freshTarget) {
           Remove-Item -LiteralPath $freshTarget -Force
         }
-        $rsRaw = (& openclaw backup sqlite restore $a.snapshot --target $freshTarget --json 2>&1)
-        if ($LASTEXITCODE -ne 0) { throw ("snapshot restore fallo: {0}" -f $a.agent) }
-        Move-Item -LiteralPath $freshTarget -Destination $a.dbPath -Force
+        $rsRaw = (& openclaw backup sqlite restore $a.Snap --target $freshTarget --json 2>&1)
+        if ($LASTEXITCODE -ne 0) { throw ("snapshot restore fallo: {0}" -f $a.Agent) }
+        if (-not (Test-Path -LiteralPath $freshTarget -PathType Leaf)) {
+          throw ("restore sin destino: {0}" -f $a.Agent)
+        }
+        if (Test-PathReparse -Path $freshTarget) { throw ("restore reparse: {0}" -f $a.Agent) }
+        Move-Item -LiteralPath $freshTarget -Destination $a.Db -Force
         foreach ($side in @('-wal', '-shm', '-journal')) {
-          $sp = $a.dbPath + $side
+          $sp = $a.Db + $side
           if (Test-Path -LiteralPath $sp) { Remove-Item -LiteralPath $sp -Force }
         }
       }

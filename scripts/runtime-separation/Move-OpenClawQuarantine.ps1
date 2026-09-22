@@ -2,12 +2,15 @@
 #
 # Sin -Apply es report-only: valida, imprime el plan y no mueve nada. Con
 # -Apply y -Mode move hashea e inventaria cada candidato ANTES de moverlo a
-# una raiz fresca fuera del repo y del runtime, re-hashea despues y registra
-# ruta/hash. Rechaza bases de datos, WAL/SHM, credenciales, sesiones,
-# launchers activos, evidencia, handles abiertos y worktrees sin cerrar, y
-# candidatos ancestros de las raices. No existe comando de borrado en este
-# archivo. -Mode restore devuelve por ruta/hash registrados; si el origen
-# esta ocupado frena. Salidas: 0 ok, 1 freno, 2 herramienta ausente.
+# una raiz fresca fuera del repo y del runtime, persiste recovery.jsonl con
+# fsync ANTES de cada movimiento, re-hashea despues y registra ruta/hash.
+# Rechaza bases de datos, WAL/SHM, credenciales, sesiones, launchers
+# activos, evidencia, handles abiertos y worktrees sin cerrar, y candidatos
+# ancestros de las raices. No existe comando de borrado en este archivo.
+# -Mode restore canoniza rutas, exige quarantinePath dentro de la raiz,
+# valida TODO el inventario antes del primer movimiento y rechaza
+# duplicados, campos desconocidos y reparse points; si el origen esta
+# ocupado frena. Salidas: 0 ok, 1 freno, 2 herramienta ausente.
 param(
   [string[]]$CandidatePaths = @(),
   [Parameter(Mandatory = $true)][string]$QuarantineRoot,
@@ -44,6 +47,50 @@ function Get-ResolvedVersion([string]$Pinned) {
 }
 function Get-Full([string]$Path) {
   return [IO.Path]::GetFullPath($Path)
+}
+function Get-RawLineString([string]$Line, [string]$Key) {
+  $m = [regex]::Match($Line, '"' + $Key + '"\s*:\s*"([^"]*)"')
+  if (-not $m.Success) { return $null }
+  return $m.Groups[1].Value
+}
+function Get-DirSha([string]$Root) {
+  $df = @(Get-ChildItem -LiteralPath $Root -Recurse -File -Force -ErrorAction SilentlyContinue)
+  $fp = New-Object System.Collections.Generic.List[string]
+  foreach ($f in ($df | Sort-Object { $_.FullName })) {
+    $rel = $f.FullName.Substring($Root.Length)
+    [void]$fp.Add(("{0}|{1}|{2}" -f $rel, $f.Length, (Get-FileSha -Path $f.FullName)))
+  }
+  $joined = [string]::Join("`n", $fp.ToArray())
+  $bytes = [Text.Encoding]::UTF8.GetBytes($joined)
+  $hasher = [Security.Cryptography.SHA256]::Create()
+  try {
+    return ([BitConverter]::ToString($hasher.ComputeHash($bytes)) -replace '-', '').ToLowerInvariant()
+  } finally {
+    $hasher.Dispose()
+  }
+}
+function ConvertTo-InventoryLine([string]$Original, [string]$Dest, [string]$Kind,
+    [long]$Size, [string]$Sha, [long]$Count, [string]$Stamp) {
+  $eo = $Original.Replace('\', '\\').Replace('"', '\"')
+  $ed = $Dest.Replace('\', '\\').Replace('"', '\"')
+  return ('{"originalPath":"' + $eo + '","quarantinePath":"' + $ed +
+    '","kind":"' + $Kind + '","sizeBytes":' + $Size + ',"sha256":"' + $Sha +
+    '","fileCount":' + $Count + ',"movedUtc":"' + $Stamp + '"}')
+}
+function Write-RecoveryLine([string]$LogPath, [string]$Line) {
+  $dir = Split-Path -Parent $LogPath
+  if (-not (Test-Path -LiteralPath $dir)) {
+    [void](New-Item -ItemType Directory -Path $dir -Force)
+  }
+  $fs = [IO.File]::Open($LogPath, [IO.FileMode]::Append,
+    [IO.FileAccess]::Write, [IO.FileShare]::Read)
+  try {
+    $bytes = (New-Object Text.UTF8Encoding $false).GetBytes($Line + "`n")
+    $fs.Write($bytes, 0, $bytes.Length)
+    $fs.Flush($true)
+  } finally {
+    $fs.Dispose()
+  }
 }
 function Test-HandleOpen([string]$Path) {
   $isWin = ([Environment]::OSVersion.Platform -eq 'Win32NT')
@@ -106,6 +153,7 @@ try {
   $evFull = @($EvidencePaths | ForEach-Object { Get-Full -Path $_ })
 
   if ($Mode -ceq 'move') {
+    $rbArtifact = $QuarantineRoot
     if ($CandidatePaths.Count -eq 0) { throw 'sin candidatos' }
     if ($Apply) {
       if (Test-Path -LiteralPath $QuarantineRoot) { throw 'cuarentena existe: se exige fresca' }
@@ -165,20 +213,8 @@ try {
       $sha = ''
       if ($isDir) {
         $kind = 'dir'
-        $fp = New-Object System.Collections.Generic.List[string]
-        foreach ($f in ($files | Sort-Object { $_.FullName })) {
-          $size += $f.Length
-          $rel = $f.FullName.Substring($full.Length)
-          [void]$fp.Add(("{0}|{1}|{2}" -f $rel, $f.Length, (Get-FileSha -Path $f.FullName)))
-        }
-        $joined = [string]::Join("`n", $fp.ToArray())
-        $bytes = [Text.Encoding]::UTF8.GetBytes($joined)
-        $hasher = [Security.Cryptography.SHA256]::Create()
-        try {
-          $sha = ([BitConverter]::ToString($hasher.ComputeHash($bytes)) -replace '-', '').ToLowerInvariant()
-        } finally {
-          $hasher.Dispose()
-        }
+        foreach ($f in $files) { $size += $f.Length }
+        $sha = Get-DirSha -Root $full
       } else {
         $size = (Get-Item -LiteralPath $c).Length
         $sha = Get-FileSha -Path $c
@@ -199,29 +235,20 @@ try {
     }
 
     [void](New-Item -ItemType Directory -Path $QuarantineRoot -Force)
-    $rbArtifact = $QuarantineRoot
+    $recoveryLog = Join-Path $QuarantineRoot 'recovery.jsonl'
     foreach ($p in $plan) {
       $leaf = Split-Path -Leaf $p.Original
       $dest = Join-Path $QuarantineRoot ("{0}-{1}-{2}" -f $leaf, $stamp,
         [Guid]::NewGuid().ToString('N').Substring(0, 4))
+      Write-RecoveryLine -LogPath $recoveryLog -Line (ConvertTo-InventoryLine `
+        -Original $p.Original -Dest $dest -Kind $p.Kind -Size $p.Size `
+        -Sha $p.Sha -Count $p.Count -Stamp (Get-UtcNow))
+      if ($env:OPENCLAW_QUARANTINE_FAULT -ceq 'pre-move-crash') { Start-Sleep -Seconds 30 }
       Move-Item -LiteralPath $p.Original -Destination $dest -Force
       if (Test-Path -LiteralPath $p.Original) { throw ("origen sigue: {0}" -f $p.Original) }
       $reSha = ''
       if ($p.Kind -ceq 'dir') {
-        $df = @(Get-ChildItem -LiteralPath $dest -Recurse -File -Force -ErrorAction SilentlyContinue)
-        $fp = New-Object System.Collections.Generic.List[string]
-        foreach ($f in ($df | Sort-Object { $_.FullName })) {
-          $rel = $f.FullName.Substring($dest.Length)
-          [void]$fp.Add(("{0}|{1}|{2}" -f $rel, $f.Length, (Get-FileSha -Path $f.FullName)))
-        }
-        $joined = [string]::Join("`n", $fp.ToArray())
-        $bytes = [Text.Encoding]::UTF8.GetBytes($joined)
-        $hasher = [Security.Cryptography.SHA256]::Create()
-        try {
-          $reSha = ([BitConverter]::ToString($hasher.ComputeHash($bytes)) -replace '-', '').ToLowerInvariant()
-        } finally {
-          $hasher.Dispose()
-        }
+        $reSha = Get-DirSha -Root $dest
       } else {
         $reSha = Get-FileSha -Path $dest
       }
@@ -232,73 +259,105 @@ try {
         })
     }
     [void]$commands.Add([PSCustomObject]@{ name = 'move'; exit = 0 })
-    $rbArtifact = $QuarantineRoot
   } else {
+    $rbArtifact = $QuarantineRoot
     if ([string]::IsNullOrEmpty($InventoryPath) -or !(Test-Path -LiteralPath $InventoryPath -PathType Leaf)) {
       throw 'restore exige inventario'
     }
     if (-not (Test-Path -LiteralPath $QuarantineRoot -PathType Container)) {
       throw 'restore exige raiz de cuarentena'
     }
+    $rbArtifact = $InventoryPath
     $entries = New-Object System.Collections.Generic.List[object]
+    $wantKeys = @('originalPath', 'quarantinePath', 'kind', 'sizeBytes',
+      'sha256', 'fileCount', 'movedUtc')
+    $seenO = @{}
+    $seenQ = @{}
+    $rsep = [IO.Path]::DirectorySeparatorChar
     foreach ($line in (Get-Content -LiteralPath $InventoryPath -Encoding UTF8)) {
       if ([string]::IsNullOrWhiteSpace($line)) { continue }
       $e = $null
-      try { $e = $line | ConvertFrom-Json } catch { $e = $null }
-      if ($null -eq $e) { throw 'inventario corrupto' }
-      if (-not [string]::IsNullOrEmpty($RestoreOnly)) {
-        if ((Get-Full -Path $e.originalPath) -cne (Get-Full -Path $RestoreOnly)) { continue }
+      try { $e = $line | ConvertFrom-Json -ErrorAction Stop } catch { throw 'inventario corrupto' }
+      $got = @($e.PSObject.Properties.Name)
+      if ($got.Count -ne $wantKeys.Count) { throw 'inventario corrupto' }
+      foreach ($k in $wantKeys) {
+        if ($got -notcontains $k) { throw 'inventario corrupto' }
       }
-      [void]$entries.Add($e)
+      if (@('file', 'dir') -notcontains $e.kind) { throw 'inventario corrupto' }
+      try { $sz = [long]$e.sizeBytes; $fc = [long]$e.fileCount } catch { throw 'inventario corrupto' }
+      if ($sz -lt 0 -or $fc -lt 0) { throw 'inventario corrupto' }
+      if ($e.sha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'inventario corrupto' }
+      $rawTs = Get-RawLineString -Line $line -Key 'movedUtc'
+      if ($null -eq $rawTs -or $rawTs -cnotmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$') {
+        throw 'inventario corrupto'
+      }
+      if ([string]::IsNullOrEmpty($e.originalPath) -or
+          [string]::IsNullOrEmpty($e.quarantinePath)) { throw 'inventario corrupto' }
+      $oq = Get-Full -Path $e.originalPath
+      $qq = Get-Full -Path $e.quarantinePath
+      if (-not $qq.StartsWith($qFull + $rsep, [StringComparison]::OrdinalIgnoreCase)) {
+        throw ("cuarentena fuera de raiz: {0}" -f $e.quarantinePath)
+      }
+      if (-not [string]::IsNullOrEmpty($RestoreOnly)) {
+        if ($oq -cne (Get-Full -Path $RestoreOnly)) { continue }
+      }
+      if ($seenO.ContainsKey($oq) -or $seenQ.ContainsKey($qq)) { throw 'inventario duplicado' }
+      $seenO[$oq] = $true
+      $seenQ[$qq] = $true
+      [void]$entries.Add([PSCustomObject]@{
+          O = $oq; Q = $qq; Kind = [string]$e.kind; Size = $sz
+          Sha = [string]$e.sha256; Count = $fc
+        })
     }
     if ($entries.Count -eq 0) { throw 'restore sin entradas' }
     [void]$commands.Add([PSCustomObject]@{ name = 'restore-load'; exit = 0 })
+    $rSha = (Get-FileHash -LiteralPath $InventoryPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    [void]$observations.Add(("inventario sha256: {0}" -f $rSha))
+
+    foreach ($en in $entries) {
+      if (-not (Test-Path -LiteralPath $en.Q)) {
+        throw ("cuarentena sin ruta: {0}" -f $en.Q)
+      }
+      $qi = Get-Item -LiteralPath $en.Q -Force
+      if (($qi.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw ("reparse en cuarentena: {0}" -f $en.Q)
+      }
+      $cur = ''
+      if ($en.Kind -ceq 'dir') {
+        $cur = Get-DirSha -Root $en.Q
+      } else {
+        $cur = Get-FileSha -Path $en.Q
+      }
+      if ($cur -cne $en.Sha) { throw ("hash distinto en cuarentena: {0}" -f $en.O) }
+      if (Test-Path -LiteralPath $en.O) { throw ("origen ocupado: {0}" -f $en.O) }
+      $parent = Split-Path -Parent $en.O
+      if ((Test-Path -LiteralPath $parent) -and
+          (((Get-Item -LiteralPath $parent -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        throw ("reparse en destino: {0}" -f $parent)
+      }
+    }
 
     if (-not $Apply) {
-      foreach ($e in $entries) {
-        Write-Output ("plan restore: {0} <- {1}" -f $e.originalPath, $e.quarantinePath)
+      foreach ($en in $entries) {
+        Write-Output ("plan restore: {0} <- {1}" -f $en.O, $en.Q)
       }
       exit 0
     }
 
-    foreach ($e in $entries) {
-      if (-not (Test-Path -LiteralPath $e.quarantinePath)) {
-        throw ("cuarentena sin ruta: {0}" -f $e.quarantinePath)
-      }
-      $cur = ''
-      if ($e.kind -ceq 'dir') {
-        $df = @(Get-ChildItem -LiteralPath $e.quarantinePath -Recurse -File -Force -ErrorAction SilentlyContinue)
-        $fp = New-Object System.Collections.Generic.List[string]
-        foreach ($f in ($df | Sort-Object { $_.FullName })) {
-          $rel = $f.FullName.Substring($e.quarantinePath.Length)
-          [void]$fp.Add(("{0}|{1}|{2}" -f $rel, $f.Length, (Get-FileSha -Path $f.FullName)))
-        }
-        $joined = [string]::Join("`n", $fp.ToArray())
-        $bytes = [Text.Encoding]::UTF8.GetBytes($joined)
-        $hasher = [Security.Cryptography.SHA256]::Create()
-        try {
-          $cur = ([BitConverter]::ToString($hasher.ComputeHash($bytes)) -replace '-', '').ToLowerInvariant()
-        } finally {
-          $hasher.Dispose()
-        }
-      } else {
-        $cur = Get-FileSha -Path $e.quarantinePath
-      }
-      if ($cur -cne $e.sha256) { throw ("hash distinto en cuarentena: {0}" -f $e.originalPath) }
-      if (Test-Path -LiteralPath $e.originalPath) { throw ("origen ocupado: {0}" -f $e.originalPath) }
-      $parent = Split-Path -Parent $e.originalPath
+    foreach ($en in $entries) {
+      $parent = Split-Path -Parent $en.O
       if (-not (Test-Path -LiteralPath $parent)) {
         [void](New-Item -ItemType Directory -Path $parent -Force)
       }
-      Move-Item -LiteralPath $e.quarantinePath -Destination $e.originalPath -Force
+      Move-Item -LiteralPath $en.Q -Destination $en.O -Force
+      if (-not (Test-Path -LiteralPath $en.O)) { throw ("restore sin destino: {0}" -f $en.O) }
       [void]$moved.Add([PSCustomObject]@{
-          Original = $e.originalPath; Dest = $e.originalPath; Kind = $e.kind
-          Size = $e.sizeBytes; Sha = $e.sha256; Count = $e.fileCount
+          Original = $en.O; Dest = $en.O; Kind = $en.Kind
+          Size = $en.Size; Sha = $en.Sha; Count = $en.Count
         })
     }
     [void]$commands.Add([PSCustomObject]@{ name = 'restore'; exit = 0 })
     [void]$observations.Add(("restaurados: {0}" -f $moved.Count))
-    $rbArtifact = $InventoryPath
   }
 } catch {
   $failed = $true
@@ -308,11 +367,8 @@ try {
 if ($Mode -ceq 'move' -and $Apply -and $moved.Count -gt 0) {
   $lines = New-Object System.Collections.Generic.List[string]
   foreach ($m in $moved) {
-    $eo = $m.Original.Replace('\', '\\').Replace('"', '\"')
-    $ed = $m.Dest.Replace('\', '\\').Replace('"', '\"')
-    [void]$lines.Add(('{"originalPath":"' + $eo + '","quarantinePath":"' + $ed +
-      '","kind":"' + $m.Kind + '","sizeBytes":' + $m.Size + ',"sha256":"' + $m.Sha +
-      '","fileCount":' + $m.Count + ',"movedUtc":"' + (Get-UtcNow) + '"}'))
+    [void]$lines.Add((ConvertTo-InventoryLine -Original $m.Original -Dest $m.Dest `
+      -Kind $m.Kind -Size $m.Size -Sha $m.Sha -Count $m.Count -Stamp (Get-UtcNow)))
   }
   $invParent = Split-Path -Parent $InventoryPath
   if (-not (Test-Path -LiteralPath $invParent)) {
@@ -321,6 +377,8 @@ if ($Mode -ceq 'move' -and $Apply -and $moved.Count -gt 0) {
   $invTmp = $InventoryPath + '.tmp-' + [Guid]::NewGuid().ToString('N')
   [IO.File]::WriteAllLines($invTmp, $lines.ToArray(), (New-Object Text.UTF8Encoding $false))
   Move-Item -LiteralPath $invTmp -Destination $InventoryPath -Force
+  $invSha = (Get-FileHash -LiteralPath $InventoryPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  [void]$observations.Add(("inventario sha256: {0}" -f $invSha))
 }
 
 $obs = $observations.ToArray()

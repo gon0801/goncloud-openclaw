@@ -3,11 +3,13 @@
 # Sin -Apply es report-only: prepara staging, valida y reporta; no toca
 # runtime ni escribe recibo. Con -Apply exige las cuatro raices, valida
 # staging (clasificacion, parseo PS, compuerta httpTimeoutSec, streams),
-# respalda solo reemplazos, publica en orden alfabetico con reemplazo
-# atomico por archivo, re-lee por hash, valida config en vivo, sondea salud
-# y revierte el conjunto del recibo ante cualquier fallo. Salidas: 0 exito,
-# 1 validacion, 2 revertido, 3 reversa fallida. El runtime jamas se toca
-# con git: sin resets duros ni pulls dentro del estado vivo.
+# valida config ANTES de publicar (cero escrituras si falla), respalda
+# solo reemplazos, publica en orden alfabetico con reemplazo atomico por
+# archivo, re-lee por hash, sondea salud y revierte el conjunto del recibo
+# ante cualquier fallo. Salidas: 0 exito, 1 validacion, 2 revertido,
+# 3 reversa fallida. El runtime jamas se toca con git: sin resets duros
+# ni pulls dentro del estado vivo. OPENCLAW_DEPLOY_FAULT=readback|journal
+# inyecta fallos solo de prueba tras el reemplazo (nunca en produccion).
 param(
   [Parameter(Mandatory = $true)][string]$SourceRoot,
   [Parameter(Mandatory = $true)][string]$ManifestPath,
@@ -25,6 +27,9 @@ Import-Module (Join-Path $PSScriptRoot 'RuntimeSeparation.psm1') -Force
 
 function Write-JournalLine {
   param([string]$JournalPath, [string]$Op, [string]$Path, [string]$Sha)
+  if ($env:OPENCLAW_DEPLOY_FAULT -ceq 'journal' -and $Op -ceq 'replace') {
+    throw 'falla inyectada: journal'
+  }
   $esc = $Path.Replace('\', '\\').Replace('"', '\"')
   $line = '{"op":"' + $Op + '","path":"' + $esc + '","sha256":"' + $Sha + '"}'
   Add-Content -LiteralPath $JournalPath -Value $line
@@ -214,6 +219,17 @@ if (-not $valid) {
   exit 1
 }
 Add-Command 'validate' 0
+$cfgOut = (& openclaw config validate 2>&1 | Out-String)
+if (($LASTEXITCODE -ne 0) -or ($cfgOut -notmatch 'Config valid')) {
+  Add-Command 'config-validate' 1
+  if ($Apply) {
+    Write-DeployReceipt -Result 'failed' -Health $health -Artifact 'none' -Deadline $deadline -Inputs $inputs -DestDir $ReceiptRoot
+  } else {
+    Write-Output 'WhatIf: config validate no acepta'
+  }
+  exit 1
+}
+Add-Command 'config-validate' 0
 
 if (-not $Apply) {
   Write-Output ("WhatIf: " + $stageList.Count + " archivo(s) pasarian validacion; runtime intacto, sin recibo")
@@ -260,19 +276,16 @@ try {
     $tmp = $p.Target + '.tmp-' + [Guid]::NewGuid().ToString('N')
     Copy-Item -LiteralPath $p.Staged -Destination $tmp -Force
     Move-Item -LiteralPath $tmp -Destination $p.Target -Force
+    [void]$published.Add($p)
+    if ($env:OPENCLAW_DEPLOY_FAULT -ceq 'readback') {
+      throw 'falla inyectada: read-back'
+    }
     if (-not (Test-HashEqual -Path $p.Target -ExpectedSha256 $p.Sha)) {
       throw ("re-lectura difiere: " + $p.Rel)
     }
     Write-JournalLine -JournalPath $journal -Op 'replace' -Path $p.Rel -Sha $p.Sha
-    [void]$published.Add($p)
   }
   Add-Command 'replace' 0
-  $phase = 'config-validate'
-  $cfgOut = (& openclaw config validate 2>&1 | Out-String)
-  if (($LASTEXITCODE -ne 0) -or ($cfgOut -notmatch 'Config valid')) {
-    throw 'config validate en vivo no acepta'
-  }
-  Add-Command 'config-validate' 0
   $phase = 'probes'
   $sondas = [ordered]@{ startupz = '/startupz'; readyz = '/readyz' }
   foreach ($k in $sondas.Keys) {

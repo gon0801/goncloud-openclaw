@@ -416,11 +416,16 @@ function Test-CutoverStateObject {
   if (-not ($doc.generation -is [string]) -or $doc.generation -cnotmatch $Script:CutoverGenerationPattern) { return $false }
   if (@('IN_PROGRESS', 'DONE', 'ROLLED_BACK') -notcontains $doc.status) { return $false }
   $phases = @('stop', 'payload', 'restart', 'finalize')
-  $seen = @{}
-  foreach ($p in @($doc.completedPhases)) {
-    if ($phases -notcontains $p) { return $false }
-    if ($seen.ContainsKey($p)) { return $false }
-    $seen[$p] = $true
+  if ($doc.completedPhases -isnot [array]) { return $false }
+  $done = @($doc.completedPhases)
+  if ($done.Count -gt $phases.Count) { return $false }
+  for ($i = 0; $i -lt $done.Count; $i++) {
+    if ($done[$i] -cne $phases[$i]) { return $false }
+  }
+  if ($doc.status -ceq 'DONE') {
+    if ($done.Count -ne $phases.Count) { return $false }
+  } elseif ($done -contains 'finalize') {
+    return $false
   }
   $rawUp = Get-RawJsonString -Json $StateJson -Key 'updatedAt'
   if ($null -eq $rawUp -or $rawUp -cnotmatch $Script:CutoverUtcPattern) { return $false }

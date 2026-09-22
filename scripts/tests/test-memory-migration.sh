@@ -38,7 +38,7 @@ for a in 'ollama-runtime' 'curl' 'Authenticode' 'netstat' 'ollama pull' \
     'manifestDigest' '/api/embed' 'memory.search' 'sqlite create' 'sqlite verify' \
     'memory index' 'memory search' 'wevtutil' '3033' '3077' 'daemon stop' \
     'daemon start' 'sqlite restore' 'AllowSnapshotRestore' 'Write-ReceiptAtomic' \
-    '2026.9.5' 'Apply' 'nomic-embed-text'; do
+    '2026.9.5' 'Apply' 'nomic-embed-text' 'snapshotHash' 'ReparsePoint'; do
   grep -qF "$a" "$MM" || fail "(1) falta ancla: $a"
 done
 grep -q "'local'" "$MM" || fail "(1) sin regla de rechazo a local"
@@ -82,6 +82,7 @@ echo "ok (2): politica con pines, triple exacto y revision"
 
 T=$(mktemp -d) || exit 1
 trap 'rm -rf "$T"' EXIT
+DBS="$T/rt/dbs"
 en_windows=0
 [ "${OS:-}" = "Windows_NT" ] && en_windows=1
 case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) en_windows=1;; esac
@@ -95,11 +96,11 @@ nat() {
 MMN=$(nat "$MM")
 
 # --- stubs ---
-mkdir -p "$T/fake-bin" "$T/dbs"
-printf 'DB-MAIN-V1' >"$T/dbs/main.sqlite"
-printf 'DB-VER-V1' >"$T/dbs/verifier.sqlite"
+mkdir -p "$T/fake-bin" "$DBS"
+printf 'DB-MAIN-V1' >"$DBS/main.sqlite"
+printf 'DB-VER-V1' >"$DBS/verifier.sqlite"
 export OC_VERSION="2026.9.5" OC_LOG="$T/oc.log" OC_STATE="$T/oc-config.json"
-export OC_DBDIR="$T/dbs" OC_SEARCH_MODE="semantic" OC_DAEMON_FAIL="0"
+export OC_DBDIR="$DBS" OC_SEARCH_MODE="semantic" OC_DAEMON_FAIL="0"
 : >"$OC_LOG"
 printf '{"provider":"openai","model":"text-embedding-3-small","fallback":"lexical"}' >"$OC_STATE"
 cat >"$T/fake-bin/oc-stub.py" <<'PY'
@@ -341,8 +342,8 @@ obs = " ".join(d["observations"])
 assert "main" in obs and "verifier" in obs, obs
 assert "openai" in obs, obs
 PY
-  "$PYBIN" - "$T/mok-snap/migration.json" "$T/dbs/main.sqlite" "$T/dbs/verifier.sqlite" <<'PY' || exit 1
-import hashlib, json, sys
+  "$PYBIN" - "$T/mok-snap/migration.json" "$DBS/main.sqlite" "$DBS/verifier.sqlite" "$T/mok-snap" <<'PY' || exit 1
+import hashlib, json, os, sys
 m = json.load(open(sys.argv[1], encoding="utf-8"))
 assert m["schema"] == "memory-migration.v1", m.get("schema")
 assert m["globalPrior"] == {"provider": "openai", "model": "text-embedding-3-small",
@@ -353,6 +354,8 @@ for ag, db in (("main", sys.argv[2]), ("verifier", sys.argv[3])):
     want = hashlib.sha256(open(db, "rb").read()).hexdigest()
     assert by[ag]["dbHash"] == want, ag
     assert by[ag]["snapshot"].endswith(f"snap-{ag}.db"), by[ag]
+    swant = hashlib.sha256(open(os.path.join(sys.argv[4], f"snap-{ag}.db"), "rb").read()).hexdigest()
+    assert by[ag]["snapshotHash"] == swant, ag
 PY
   echo "ok (3b): migrate verde con snapshots, triple, indices y recibo"
 fi
@@ -415,20 +418,36 @@ else
   echo "ok (3j): eventos 3033/3077 nuevos frenan"
 fi
 
+# (3k) DB fuera de RuntimeRoot: frena antes de snapshots y config.
+if [ "$en_windows" -eq 1 ]; then
+  echo "SKIP (3k): instalador fixture POSIX; CI ubuntu lo cubre"
+else
+  mkdir -p "$T/fuera"
+  printf 'DB-FUERA' >"$T/fuera/main.sqlite"
+  printf 'DB-FUERA' >"$T/fuera/verifier.sqlite"
+  OC_DBDIR="$T/fuera" corre badrt migrate 1 \
+    && fail "(3k) db fuera debio frenar y salio 0"
+  grep -q 'sqlite create' "$OC_LOG" && fail "(3k) snapshot con db fuera de runtime"
+  grep -q 'config set' "$OC_LOG" && fail "(3k) toco config con db fuera de runtime"
+  echo "ok (3k): db fuera de runtime frena antes de snapshots"
+fi
+
 kill $EMB_PID 2>/dev/null || true
 
 # --- rollback: fixture migration.json ---
 mk_migration() { # $1=dest $2=prior-provider (openai|local)
-  "$PYBIN" - "$1" "$2" "$T/dbs/main.sqlite" "$T/dbs/verifier.sqlite" "$T/rb-snap" <<'PY'
+  "$PYBIN" - "$1" "$2" "$DBS/main.sqlite" "$DBS/verifier.sqlite" "$T/rb-snap" <<'PY'
 import hashlib, json, sys
 def h(p):
     return hashlib.sha256(open(p, "rb").read()).hexdigest()
 m = {"schema": "memory-migration.v1", "createdUtc": "2026-09-22T10:00:00Z",
  "agents": [
    {"agent": "main", "snapshot": sys.argv[5] + "/snap-main.db",
+    "snapshotHash": h(sys.argv[5] + "/snap-main.db"),
     "dbHash": h(sys.argv[3]), "dbPath": sys.argv[3],
     "priorProvider": sys.argv[2], "priorModel": "text-embedding-3-small"},
    {"agent": "verifier", "snapshot": sys.argv[5] + "/snap-verifier.db",
+    "snapshotHash": h(sys.argv[5] + "/snap-verifier.db"),
     "dbHash": h(sys.argv[4]), "dbPath": sys.argv[4],
     "priorProvider": sys.argv[2], "priorModel": "text-embedding-3-small"}],
  "globalPrior": {"provider": sys.argv[2], "model": "text-embedding-3-small",
@@ -469,12 +488,12 @@ assert d["result"] == "passed", d["result"]
 assert "snapshot" in " ".join(d["observations"]), d["observations"]
 PY
 # (4a) restaura de verdad: re-sembrar DBs para los siguientes escenarios.
-printf 'DB-MAIN-V1' >"$T/dbs/main.sqlite"
-printf 'DB-VER-V1' >"$T/dbs/verifier.sqlite"
+printf 'DB-MAIN-V1' >"$DBS/main.sqlite"
+printf 'DB-VER-V1' >"$DBS/verifier.sqlite"
 echo "ok (4a): sin escrituras + switch restaura snapshots"
 
 # (4b) Con escrituras: diagnostico + none/none, jamas restore.
-printf 'DB-MAIN-V2' >"$T/dbs/main.sqlite"
+printf 'DB-MAIN-V2' >"$DBS/main.sqlite"
 corre_rb rbdiag "$T/mig-ok.json" -AllowSnapshotRestore \
   || fail "(4b) rollback diagnostico debio salir 0: $(cat "$T/rbdiag.out")"
 grep -q 'sqlite restore' "$OC_LOG" && fail "(4b) restauro con escrituras encima"
@@ -489,7 +508,7 @@ d = json.load(open(glob.glob(sys.argv[1] + "/*.json")[0], encoding="utf-8"))
 assert d["result"] == "passed", d["result"]
 assert "diagnostic" in " ".join(d["observations"]), d["observations"]
 PY
-printf 'DB-MAIN-V1' >"$T/dbs/main.sqlite"
+printf 'DB-MAIN-V1' >"$DBS/main.sqlite"
 echo "ok (4b): con escrituras va a diagnostico + none/none"
 
 # (4c) Sin switch aunque coincidan hashes: diagnostico.
@@ -576,5 +595,106 @@ assert d["health"]["startupz"] == 200 and d["health"]["readyz"] == 200, d["healt
 PY
 kill $GW_PID 2>/dev/null || true
 echo "ok (4f): stop OK procede y salud 200 al final"
+
+# (4h) Rollback no confia en registro manipulado: canoniza, confina
+# db dentro de RuntimeRoot y snapshot dentro de SnapshotRepo, verifica
+# hashes y rechaza reparse points, duplicados y campos desconocidos.
+printf 'DB-MAIN-V1' >"$DBS/main.sqlite"
+printf 'DB-VER-V1' >"$DBS/verifier.sqlite"
+mkdir -p "$T/fuera"
+printf 'VICTIMA' >"$T/fuera/victima.sqlite"
+printf 'SNAP-FUERA' >"$T/fuera/snap-fuera.db"
+printf 'SNAP-FUERA2' >"$T/fuera/snap2.db"
+"$PYBIN" - "$T" "$DBS" <<'PY' || exit 1
+import hashlib, json, os, sys
+T, DBS = sys.argv[1], sys.argv[2]
+def h(p):
+    return hashlib.sha256(open(p, "rb").read()).hexdigest()
+def base():
+    snap = os.path.join(T, "rb-snap")
+    return {"schema": "memory-migration.v1", "createdUtc": "2026-09-22T10:00:00Z",
+     "agents": [
+       {"agent": "main", "snapshot": os.path.join(snap, "snap-main.db"),
+        "snapshotHash": h(os.path.join(snap, "snap-main.db")),
+        "dbHash": h(os.path.join(DBS, "main.sqlite")),
+        "dbPath": os.path.join(DBS, "main.sqlite"),
+        "priorProvider": "openai", "priorModel": "text-embedding-3-small"},
+       {"agent": "verifier", "snapshot": os.path.join(snap, "snap-verifier.db"),
+        "snapshotHash": h(os.path.join(snap, "snap-verifier.db")),
+        "dbHash": h(os.path.join(DBS, "verifier.sqlite")),
+        "dbPath": os.path.join(DBS, "verifier.sqlite"),
+        "priorProvider": "openai", "priorModel": "text-embedding-3-small"}],
+     "globalPrior": {"provider": "openai", "model": "text-embedding-3-small",
+                     "fallback": "lexical"},
+     "policyDigest": "sha256:" + "0" * 64}
+def w(name, m):
+    json.dump(m, open(os.path.join(T, name), "w"))
+m = base()
+m["agents"][0]["dbPath"] = os.path.join(T, "fuera", "victima.sqlite")
+m["agents"][0]["dbHash"] = h(os.path.join(T, "fuera", "victima.sqlite"))
+w("mig-h-a.json", m)
+m = base()
+m["agents"][0]["snapshot"] = os.path.join(T, "fuera", "snap-fuera.db")
+m["agents"][0]["snapshotHash"] = h(os.path.join(T, "fuera", "snap-fuera.db"))
+w("mig-h-b.json", m)
+w("mig-h-c.json", base())
+m = base()
+m["agents"][1] = dict(m["agents"][0], agent="main")
+w("mig-h-d.json", m)
+m = base()
+m["agents"][0]["extra"] = 1
+w("mig-h-e.json", m)
+m = base()
+m["agents"][0]["dbPath"] = os.path.join(DBS, "evil.sqlite")
+m["agents"][0]["dbHash"] = h(os.path.join(T, "fuera", "victima.sqlite"))
+w("mig-h-f.json", m)
+m = base()
+m["agents"][0]["snapshot"] = os.path.join(T, "rb-snap", "snap-evil.db")
+m["agents"][0]["snapshotHash"] = h(os.path.join(T, "fuera", "snap2.db"))
+w("mig-h-g.json", m)
+PY
+corre_rb rbha "$T/mig-h-a.json" -AllowSnapshotRestore \
+  && fail "(4h/a) db escape debio frenar y salio 0"
+[ "$(cat "$T/fuera/victima.sqlite")" = "VICTIMA" ] || fail "(4h/a) toco db fuera de runtime"
+grep -q 'sqlite restore' "$OC_LOG" && fail "(4h/a) intento restore con escape"
+corre_rb rbhb "$T/mig-h-b.json" -AllowSnapshotRestore \
+  && fail "(4h/b) snapshot escape debio frenar y salio 0"
+[ "$(cat "$DBS/main.sqlite")" = "DB-MAIN-V1" ] || fail "(4h/b) restauro desde snapshot fuera de repo"
+grep -q 'sqlite restore' "$OC_LOG" && fail "(4h/b) intento restore con escape"
+corre_rb rbhd "$T/mig-h-d.json" -AllowSnapshotRestore \
+  && fail "(4h/d) duplicado debio frenar y salio 0"
+grep -q 'sqlite restore' "$OC_LOG" && fail "(4h/d) restauro con duplicados"
+corre_rb rbhe "$T/mig-h-e.json" -AllowSnapshotRestore \
+  && fail "(4h/e) campo extra debio frenar y salio 0"
+grep -q 'sqlite restore' "$OC_LOG" && fail "(4h/e) restauro con campo desconocido"
+if ln -s "$T/fuera/victima.sqlite" "$DBS/evil.sqlite" 2>/dev/null; then
+  corre_rb rbhf "$T/mig-h-f.json" -AllowSnapshotRestore \
+    && fail "(4h/f) reparse db debio frenar y salio 0"
+  [ "$(cat "$T/fuera/victima.sqlite")" = "VICTIMA" ] || fail "(4h/f) toco via reparse"
+  grep -q 'sqlite restore' "$OC_LOG" && fail "(4h/f) restauro via reparse"
+else
+  echo "SKIP (4h/f): sin symlinks"
+fi
+if ln -s "$T/fuera/snap2.db" "$T/rb-snap/snap-evil.db" 2>/dev/null; then
+  corre_rb rbhg "$T/mig-h-g.json" -AllowSnapshotRestore \
+    && fail "(4h/g) reparse snapshot debio frenar y salio 0"
+  [ "$(cat "$DBS/main.sqlite")" = "DB-MAIN-V1" ] || fail "(4h/g) restauro via reparse"
+  grep -q 'sqlite restore' "$OC_LOG" && fail "(4h/g) restauro via reparse"
+else
+  echo "SKIP (4h/g): sin symlinks"
+fi
+printf 'x-intruso' >>"$T/rb-snap/snap-main.db"
+corre_rb rbhc "$T/mig-h-c.json" -AllowSnapshotRestore \
+  || fail "(4h/c) snapshot distinto debio ir a diagnostico: $(cat "$T/rbhc.out")"
+grep -q 'sqlite restore' "$OC_LOG" && fail "(4h/c) restauro con snapshot distinto"
+grep -q 'backup create' "$OC_LOG" || fail "(4h/c) sin diagnostico con snapshot distinto"
+echo "ok (4h): rollback rechaza registro manipulado; snapshot distinto va a diagnostico"
+"$PYBIN" - "$T/rbsnap-rec" "$T/mig-ok.json" <<'PY' || exit 1
+import glob, hashlib, json, sys
+d = json.load(open(glob.glob(sys.argv[1] + "/*.json")[0], encoding="utf-8"))
+want = hashlib.sha256(open(sys.argv[2], "rb").read()).hexdigest()
+assert any(want in o for o in d["observations"]), d["observations"]
+PY
+echo "ok (4h): recibo de rollback liga migration por hash"
 
 echo "TODO VERDE: memory-migration"

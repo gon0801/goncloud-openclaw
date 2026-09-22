@@ -193,6 +193,32 @@ arma_estado "$T/l-rb" "$GEN_FIJO" ROLLED_BACK '["stop"]'
   || fail "(2g) lease con estado ROLLED_BACK debio dar False"
 echo "ok (2g): terminal en estado termina el stand-down aunque el lease siga vigente"
 
+# (2j) Matriz de prefijos exactos: solo prefijos ordenados pasan,
+# DONE exige las 4 fases, IN_PROGRESS nunca trae finalize.
+"$PSH" -NoProfile -NonInteractive -Command "
+Import-Module '$MODN' -Force
+\$cases = @(
+  @{ s = 'IN_PROGRESS'; c = @('payload'); ok = \$false },
+  @{ s = 'IN_PROGRESS'; c = @('stop', 'restart'); ok = \$false },
+  @{ s = 'IN_PROGRESS'; c = @('stop', 'stop'); ok = \$false },
+  @{ s = 'IN_PROGRESS'; c = @('stop', 'payload', 'restart', 'finalize'); ok = \$false },
+  @{ s = 'DONE'; c = @('stop', 'payload', 'restart'); ok = \$false },
+  @{ s = 'DONE'; c = @('stop', 'payload', 'restart', 'finalize', 'stop'); ok = \$false },
+  @{ s = 'IN_PROGRESS'; c = 'stop'; ok = \$false },
+  @{ s = 'IN_PROGRESS'; c = @('stop', 'payload'); ok = \$true },
+  @{ s = 'DONE'; c = @('stop', 'payload', 'restart', 'finalize'); ok = \$true },
+  @{ s = 'ROLLED_BACK'; c = @('stop'); ok = \$true }
+)
+foreach (\$t in \$cases) {
+  \$doc = [ordered]@{ schema = 'cutover-state.v1'; generation = '$GEN_FIJO';
+    status = \$t.s; completedPhases = \$t.c; updatedAt = '$AHORA'; attempts = 1 }
+  \$got = Test-CutoverStateObject -StateJson (\$doc | ConvertTo-Json -Depth 4 -Compress)
+  if (\$got -cne \$t.ok) { throw ('(2j/matrix) status={0} esperaba {1}, obtuvo {2}' -f \$t.s, \$t.ok, \$got) }
+}
+'2j-matriz-ok'" 2>"$T/verr.log" | grep -aq '2j-matriz-ok' \
+  || fail "(2j) matriz de prefijos: $(cat "$T/verr.log")"
+echo "ok (2j): solo prefijos ordenados exactos, DONE exige todo"
+
 # (2i) Stand-down: generacion honrada o vacio, nunca lanza.
 standdown() { # $1=dir -> gen o vacio
   "$PSH" -NoProfile -NonInteractive -Command "

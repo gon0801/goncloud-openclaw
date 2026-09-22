@@ -34,7 +34,8 @@ echo "ok (0): Move-OpenClawQuarantine.ps1 existe y parsea"
 for a in 'Move-Item' 'QuarantineRoot' 'Test-RootsIsolated' 'originalPath' \
     'quarantinePath' 'sizeBytes' 'sha256' 'movedUtc' '.sqlite' '-wal' \
     'credential' 'sessions' 'ActiveLaunchers' 'EvidencePaths' 'worktree' \
-    '.git' 'restore' 'RestoreOnly' 'Write-ReceiptAtomic' '2026.9.5' 'Apply'; do
+    '.git' 'restore' 'RestoreOnly' 'Write-ReceiptAtomic' '2026.9.5' 'Apply' \
+    'recovery.jsonl' 'ReparsePoint'; do
   grep -qF -- "$a" "$QZ" || fail "(1) falta ancla: $a"
 done
 [ "$(grep -c 'Remove-Item' "$QZ")" = 0 ] || fail "(1) trae Remove-Item (prohibido)"
@@ -102,6 +103,15 @@ corre() { # $1=tag $2=apply(0/1) $3=candidates $4+=extra
     -ActiveLaunchers "$(nat "$T/fix/launcher.cmd")" \
     -EvidencePaths "$(nat "$T/fix/run-evidence.json")" \
     "${aflag[@]}" "$@" >"$T/$tag.out" 2>&1
+  return $?
+}
+restaura() { # $1=tag $2=qdir $3=inv
+  local tag="$1" q="$2" inv="$3"
+  "$PSH" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$QZN" \
+    -QuarantineRoot "$(nat "$q")" -RepoRoot "$(nat "$T/repo")" \
+    -RuntimeRoot "$(nat "$T/rt")" -ReceiptRoot "$(nat "$T/$tag-rec")" \
+    -InventoryPath "$(nat "$inv")" -Mode restore -Apply \
+    >"$T/$tag.out" 2>&1
   return $?
 }
 
@@ -205,5 +215,170 @@ OC_VERSION="2026.9.4" corre vw 0 "$(nat "$T/fix/old.log")" \
 OC_VERSION="2026.9.4" corre va 1 "$(nat "$T/fix/old.log")" \
   && fail "(2g) apply viejo debio frenar y salio 0"
 echo "ok (2g): version vieja avisa en seco y frena en apply"
+
+# (2h) Restore no confia en inventario manipulado: canoniza rutas, exige
+# quarantinePath dentro de la raiz y valida TODO antes del primer
+# movimiento; rechaza duplicados, campos desconocidos y reparse points.
+mkdir -p "$T/h" "$T/fuera"
+printf 'hola-a\n' >"$T/h/a.txt"
+printf 'hola-b\n' >"$T/h/b.txt"
+corre mh 1 "$(nat "$T/h/a.txt");$(nat "$T/h/b.txt")" \
+  || fail "(2h) setup move debio salir 0: $(cat "$T/mh.out")"
+"$PYBIN" - "$T/mh-inv.jsonl" "$T" <<'PY' || exit 1
+import json, os, shutil, sys
+inv, T = sys.argv[1], sys.argv[2]
+lines = [json.loads(l) for l in open(inv, encoding="utf-8").read().splitlines() if l.strip()]
+assert len(lines) == 2, len(lines)
+la = [e for e in lines if e["originalPath"].replace("\\", "/").endswith("h/a.txt")][0]
+lb = [e for e in lines if e["originalPath"].replace("\\", "/").endswith("h/b.txt")][0]
+fuera = os.path.join(T, "fuera")
+shutil.copyfile(la["quarantinePath"], os.path.join(fuera, "secreto.txt"))
+def w(name, entries):
+    with open(os.path.join(T, name), "w", encoding="utf-8") as f:
+        for e in entries:
+            f.write(json.dumps(e) + "\n")
+ea = dict(la)
+ea["quarantinePath"] = os.path.join(fuera, "secreto.txt")
+ea["originalPath"] = os.path.join(fuera, "devuelto.txt")
+w("inv-h-a.jsonl", [ea])
+w("inv-h-b.jsonl", [la, la])
+ec = dict(la)
+ec["extra"] = 1
+w("inv-h-c.jsonl", [ec])
+ed = dict(la)
+ed["quarantinePath"] = os.path.join(T, "mh-d-q", os.path.basename(la["quarantinePath"]))
+w("inv-h-d.jsonl", [ed])
+ee = dict(la)
+ee["quarantinePath"] = os.path.join(T, "mh-e-q", os.path.basename(la["quarantinePath"]))
+w("inv-h-e.jsonl", [ee])
+ef = [la, dict(lb, quarantinePath=os.path.join(T, "mh-q", "no-existe"))]
+w("inv-h-f.jsonl", ef)
+PY
+cp -R "$T/mh-q" "$T/mh-e-q"
+QA_LEAF_E=$(ls "$T/mh-e-q" | grep '^a\.txt-' | head -1)
+[ -n "$QA_LEAF_E" ] || fail "(2h) setup no hallo cuarentenado de a.txt"
+printf 'x-intruso' >>"$T/mh-e-q/$QA_LEAF_E"
+hace_d=0
+if cp -R "$T/mh-q" "$T/mh-d-q" 2>/dev/null; then
+  QA_LEAF_D=$(ls "$T/mh-d-q" | grep '^a\.txt-' | head -1)
+  if [ -n "$QA_LEAF_D" ] && rm -f "$T/mh-d-q/$QA_LEAF_D" \
+      && ln -s "$T/fuera/secreto.txt" "$T/mh-d-q/$QA_LEAF_D" 2>/dev/null; then
+    hace_d=1
+  else
+    echo "SKIP (2h/d): sin symlinks"
+  fi
+fi
+nada_movido_h() {
+  [ -e "$T/h/a.txt" ] && return 1
+  [ -e "$T/h/b.txt" ] && return 1
+  [ "$(ls "$T/mh-q" | grep -cv '^recovery\.jsonl$')" = "2" ] || return 1
+  return 0
+}
+restaura rsa "$T/mh-q" "$T/inv-h-a.jsonl" \
+  && fail "(2h/a) escape debio frenar y salio 0"
+[ "$(cat "$T/fuera/secreto.txt")" = "hola-a" ] || fail "(2h/a) toco el archivo fuera de la raiz"
+[ -e "$T/fuera/devuelto.txt" ] && fail "(2h/a) creo destino fuera de la raiz"
+nada_movido_h || fail "(2h/a) movio algo con inventario manipulado"
+restaura rsb "$T/mh-q" "$T/inv-h-b.jsonl" \
+  && fail "(2h/b) duplicado debio frenar y salio 0"
+nada_movido_h || fail "(2h/b) movio con duplicados"
+restaura rsc "$T/mh-q" "$T/inv-h-c.jsonl" \
+  && fail "(2h/c) campo extra debio frenar y salio 0"
+nada_movido_h || fail "(2h/c) movio con campo desconocido"
+if [ "$hace_d" = "1" ]; then
+  restaura rsd "$T/mh-d-q" "$T/inv-h-d.jsonl" \
+    && fail "(2h/d) reparse debio frenar y salio 0"
+  [ -e "$T/h/a.txt" ] && fail "(2h/d) restauro via reparse point"
+fi
+restaura rse "$T/mh-e-q" "$T/inv-h-e.jsonl" \
+  && fail "(2h/e) hash distinto debio frenar y salio 0"
+[ -e "$T/h/a.txt" ] && fail "(2h/e) restauro con hash distinto"
+restaura rsf "$T/mh-q" "$T/inv-h-f.jsonl" \
+  && fail "(2h/f) 2da invalida debio frenar y salio 0"
+nada_movido_h || fail "(2h/f) movio la 1ra antes de validar la 2da"
+echo "ok (2h): restore rechaza inventario manipulado sin mover nada"
+# El recibo de restore liga el inventario consumido por hash.
+"$PYBIN" - "$T/rs-rec" "$T/mv2-inv.jsonl" <<'PY' || exit 1
+import glob, hashlib, json, sys
+recs = glob.glob(sys.argv[1] + "/*.json")
+assert len(recs) == 1, recs
+d = json.load(open(recs[0], encoding="utf-8"))
+want = hashlib.sha256(open(sys.argv[2], "rb").read()).hexdigest()
+assert any(want in o for o in d["observations"]), d["observations"]
+PY
+echo "ok (2h): recibo de restore liga inventario por hash"
+
+# (2i) Registro de recuperacion: linea con fsync ANTES de cada movimiento;
+# sobrevive kill -9 con inventario ausente y origenes intactos.
+mkdir -p "$T/k"
+printf 'k1\n' >"$T/k/k1.txt"
+printf 'k2\n' >"$T/k/k2.txt"
+( trap '' EXIT
+  OPENCLAW_QUARANTINE_FAULT=pre-move-crash
+  export OPENCLAW_QUARANTINE_FAULT
+  exec "$PSH" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$QZN" \
+    -CandidatePaths "$(nat "$T/k/k1.txt");$(nat "$T/k/k2.txt")" \
+    -QuarantineRoot "$(nat "$T/kkill-q")" \
+    -RepoRoot "$(nat "$T/repo")" -RuntimeRoot "$(nat "$T/rt")" \
+    -ReceiptRoot "$(nat "$T/kkill-rec")" -InventoryPath "$(nat "$T/kkill-inv.jsonl")" \
+    -ActiveLaunchers "$(nat "$T/fix/launcher.cmd")" \
+    -EvidencePaths "$(nat "$T/fix/run-evidence.json")" \
+    -Apply >"$T/kkill.out" 2>&1 ) &
+KK=$!
+for _ in $(seq 1 200); do
+  [ -s "$T/kkill-q/recovery.jsonl" ] && break
+  kill -0 $KK 2>/dev/null || break
+  sleep 0.1
+done
+[ -s "$T/kkill-q/recovery.jsonl" ] \
+  || fail "(2i) sin linea de recuperacion pre-movimiento: $(cat "$T/kkill.out" 2>/dev/null)"
+kill -9 $KK 2>/dev/null || true
+wait $KK 2>/dev/null || true
+kill -0 $KK 2>/dev/null && fail "(2i) pwsh sobrevivio al kill -9"
+"$PYBIN" - "$T" <<'PY' || exit 1
+import hashlib, json, os, sys
+T = sys.argv[1]
+def norm(p):
+    return os.path.normcase(os.path.normpath(p))
+rec = os.path.join(T, "kkill-q", "recovery.jsonl")
+lines = [l for l in open(rec, encoding="utf-8").read().splitlines() if l.strip()]
+assert len(lines) == 1, len(lines)
+e = json.loads(lines[0])
+assert set(e) == {"originalPath", "quarantinePath", "kind", "sizeBytes",
+                  "sha256", "fileCount", "movedUtc"}, set(e)
+assert os.path.realpath(e["originalPath"]) == os.path.realpath(os.path.join(T, "k", "k1.txt")), e
+assert norm(e["quarantinePath"]).startswith(norm(os.path.join(T, "kkill-q")) + os.sep), e
+assert e["sha256"] == hashlib.sha256(open(os.path.join(T, "k", "k1.txt"), "rb").read()).hexdigest()
+assert os.path.isfile(os.path.join(T, "k", "k1.txt"))
+assert os.path.isfile(os.path.join(T, "k", "k2.txt"))
+assert not os.path.lexists(os.path.join(T, "kkill-inv.jsonl"))
+PY
+echo "ok (2i): linea de recuperacion con fsync sobrevive kill -9 antes de mover"
+
+# (2j) Move verde: recovery.jsonl trae lo mismo que el inventario y el
+# recibo liga el inventario por hash.
+mkdir -p "$T/kn"
+printf 'n1\n' >"$T/kn/n1.txt"
+printf 'n2\n' >"$T/kn/n2.txt"
+corre kn 1 "$(nat "$T/kn/n1.txt");$(nat "$T/kn/n2.txt")" \
+  || fail "(2j) move debio salir 0: $(cat "$T/kn.out")"
+"$PYBIN" - "$T" <<'PY' || exit 1
+import glob, hashlib, json, os, sys
+T = sys.argv[1]
+def entries(p):
+    return [json.loads(l) for l in open(p, encoding="utf-8").read().splitlines() if l.strip()]
+rec = entries(os.path.join(T, "kn-q", "recovery.jsonl"))
+inv = entries(os.path.join(T, "kn-inv.jsonl"))
+assert len(rec) == 2 and len(inv) == 2, (len(rec), len(inv))
+kr = {(e["quarantinePath"], e["sha256"]) for e in rec}
+ki = {(e["quarantinePath"], e["sha256"]) for e in inv}
+assert kr == ki, (kr, ki)
+recs = glob.glob(os.path.join(T, "kn-rec", "*.json"))
+assert len(recs) == 1, recs
+d = json.load(open(recs[0], encoding="utf-8"))
+want = hashlib.sha256(open(os.path.join(T, "kn-inv.jsonl"), "rb").read()).hexdigest()
+assert any(want in o for o in d["observations"]), d["observations"]
+PY
+echo "ok (2j): recovery iguala inventario; recibo liga hash"
 
 echo "TODO VERDE: quarantine"

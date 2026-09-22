@@ -31,6 +31,8 @@ grep -qF '/startupz' "$DEPLOY" || fail "(1) sin sonda startupz"
 grep -qF '/readyz' "$DEPLOY" || fail "(1) sin sonda readyz"
 grep -qF 'Move-Item' "$DEPLOY" || fail "(1) sin reemplazo atomico"
 grep -qF 'journal' "$DEPLOY" || fail "(1) sin journal"
+grep -qF 'config-validate' "$DEPLOY" || fail "(1) sin compuerta config-validate"
+grep -qF 'OPENCLAW_DEPLOY_FAULT' "$DEPLOY" || fail "(1) sin inyeccion de fallos"
 grep -qF 'reset --hard' "$DEPLOY" && fail "(1) trae git reset --hard: prohibido en runtime"
 grep -E 'Remove-Item.*-Recurse' "$DEPLOY" 2>/dev/null | grep -q 'Runtime' \
   && fail "(1) borrado recursivo sobre runtime"
@@ -78,6 +80,30 @@ JSON
   }
   SHA40=0123456789abcdef0123456789abcdef01234567
 
+  # openclaw falso: `config validate` dice Config valid salvo OC_VALIDATE=fail.
+  mkdir -p "$T/fake-bin"
+  cat >"$T/fake-bin/openclaw" <<'SH'
+#!/bin/bash
+if [ "${OC_VALIDATE:-ok}" = "fail" ]; then echo "Config INVALID (stub)"; exit 1; fi
+echo "Config valid (stub)"
+SH
+  chmod +x "$T/fake-bin/openclaw"
+  printf '@if "%%OC_VALIDATE%%"=="fail" goto :invalid\r\n@echo Config valid (stub)\r\n@exit /b 0\r\n:invalid\r\n@echo Config INVALID (stub)\r\n@exit /b 1\r\n' >"$T/fake-bin/openclaw.cmd"
+  export PATH="$T/fake-bin:$PATH"
+
+  arbol_sha() { # $1=dir -> sha de (relpath,bytes) ordenado
+    "$PYBIN" - "$1" <<'PY'
+import hashlib, os, sys
+h = hashlib.sha256()
+for dp, dn, fn in os.walk(sys.argv[1]):
+    for f in sorted(fn):
+        p = os.path.join(dp, f)
+        h.update(os.path.relpath(p, sys.argv[1]).encode())
+        h.update(open(p, "rb").read())
+print(h.hexdigest())
+PY
+  }
+
   # (2) WhatIf por defecto: cero escrituras en runtime y sin recibo.
   arbol "$T/w-src" 90 'v2-app'
   arbol "$T/w-rt" 90 'v1-app'
@@ -120,13 +146,6 @@ PY
     [ "$i" -lt 50 ] || { kill $GW_PID 2>/dev/null; fail "(3) el gateway falso no levanto"; }
     sleep 0.2
   done
-
-  # openclaw falso: `config validate` en vivo debe decir Config valid.
-  mkdir -p "$T/fake-bin"
-  printf '#!/bin/bash\necho "Config valid (stub)"\n' >"$T/fake-bin/openclaw"
-  chmod +x "$T/fake-bin/openclaw"
-  printf '@echo Config valid (stub)\r\n' >"$T/fake-bin/openclaw.cmd"
-  export PATH="$T/fake-bin:$PATH"
 
   # (3) Apply con exito: bytes iguales, recibo passed, respaldo de originales.
   arbol "$T/s-src" 90 'v2-app'
@@ -189,6 +208,29 @@ assert r["result"] == "failed", r["result"]
 PY
   echo "ok (4): validacion fallida escribe nada y recibe failed"
 
+  # (4b) config validate falla: runtime byte por byte intacto + failed.
+  arbol "$T/c-src" 90 'v2-app'
+  arbol "$T/c-rt" 90 'v1-app'
+  printf 'nuevo' >"$T/c-src/nuevo.txt"
+  manifiesto "$T/c-man.json"
+  ANTES_C=$(arbol_sha "$T/c-rt")
+  if OC_VALIDATE=fail "$PSH" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$DEPN" \
+    -SourceRoot "$(nat "$T/c-src")" -RuntimeRoot "$(nat "$T/c-rt")" \
+    -StagingRoot "$(nat "$T/c-st")" -ReceiptRoot "$(nat "$T/c-rec")" \
+    -ManifestPath "$(nat "$T/c-man.json")" -HealthUrl "http://127.0.0.1:$PUERTO_FAKE" \
+    -OpenClawVersion 2026.9.5 -SourceSha "$SHA40" -Apply >"$T/c.out" 2>&1; then
+    fail "(4b) config invalido debio fallar y salio 0"
+  fi
+  [ "$(arbol_sha "$T/c-rt")" = "$ANTES_C" ] \
+    || fail "(4b) config invalido toco runtime"
+  "$PYBIN" - "$(ls "$T/c-rec/"*.json)" <<'PY' || fail "(4b) recibo failed malformado"
+import json, sys
+r = json.load(open(sys.argv[1], encoding="utf-8"))
+assert r["result"] == "failed", r["result"]
+assert any(c["name"] == "config-validate" and c["exit"] == 1 for c in r["commands"]), r["commands"]
+PY
+  echo "ok (4b): config invalido deja runtime intacto byte por byte"
+
   # (5) Fallo tras reemplazos parciales: revierte SOLO lo listado. El deploy
   # procesa en orden alfabetico (documentado): app.txt y nuevo.txt se
   # publican y watchdog.ps1 falla porque en runtime es un DIRECTORIO (el
@@ -219,6 +261,33 @@ r = json.load(open(sys.argv[1], encoding="utf-8"))
 assert r["result"] == "rolled_back", r["result"]
 PY
   echo "ok (5): rollback restaura lo listado, elimina lo agregado, respeta lo ajeno"
+
+  # (5b) Falla inyectada tras reemplazar (read-back o journal): el archivo
+  # ya publicado esta en el conjunto de rollback y vuelve byte por byte.
+  for flt in readback journal; do
+    arbol "$T/fi-$flt-src" 90 'v2-app'
+    printf 'nuevo' >"$T/fi-$flt-src/nuevo.txt"
+    arbol "$T/fi-$flt-rt" 90 'v1-app'
+    manifiesto "$T/fi-$flt-man.json"
+    ANTES_F=$(arbol_sha "$T/fi-$flt-rt")
+    if OPENCLAW_DEPLOY_FAULT=$flt "$PSH" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$DEPN" \
+      -SourceRoot "$(nat "$T/fi-$flt-src")" -RuntimeRoot "$(nat "$T/fi-$flt-rt")" \
+      -StagingRoot "$(nat "$T/fi-$flt-st")" -ReceiptRoot "$(nat "$T/fi-$flt-rec")" \
+      -ManifestPath "$(nat "$T/fi-$flt-man.json")" -HealthUrl "http://127.0.0.1:$PUERTO_FAKE" \
+      -OpenClawVersion 2026.9.5 -SourceSha "$SHA40" -Apply >"$T/fi-$flt.out" 2>&1; then
+      fail "(5b/$flt) falla inyectada debio fallar y salio 0"
+    fi
+    grep -q 'falla inyectada' "$T/fi-$flt.out" \
+      || fail "(5b/$flt) sin diagnostico: $(cat "$T/fi-$flt.out")"
+    [ "$(arbol_sha "$T/fi-$flt-rt")" = "$ANTES_F" ] \
+      || fail "(5b/$flt) rollback incompleto: runtime difiere"
+    "$PYBIN" - "$(ls "$T/fi-$flt-rec/"*.json)" <<'PY' || fail "(5b/$flt) recibo rolled_back malformado"
+import json, sys
+r = json.load(open(sys.argv[1], encoding="utf-8"))
+assert r["result"] == "rolled_back", r["result"]
+PY
+  done
+  echo "ok (5b): read-back y journal fallidos revierten lo publicado"
 
   # (6) Raices traslapadas: staging dentro de fuente se rechaza sin escribir.
   arbol "$T/o-src" 90 'v2-app'
