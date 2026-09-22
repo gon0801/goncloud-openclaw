@@ -89,10 +89,10 @@ Medido: 2026-09-16, revisión de cierre de la Fase 6: en los siete carriles, al 
 
 ```
 /Users/dn/.local/bin/pwsh -NoProfile -File /Users/dn/quality-kit/cross-review.ps1 \
-  -Con auto -Excluir <modelo> -Desde <sha de la base del bloque>
+  -Con auto -Excluir <modelo> -Base <sha de la base del bloque>
 ```
 
-  `<sha de la base del bloque>` es el merge-base del carril con `origin/<default>` (`git merge-base HEAD origin/<default>`): `-Desde` manda el diff desde ese sha hasta HEAD, que es exactamente el diff del PR. Medido 2026-09-22: con `-Alcance last-commit` en ronda 1, la revisión de una entrega de cuatro commits habría visto uno solo y omitido los scripts de cierre y reconciliación.
+  `<sha de la base del bloque>` es el merge-base del carril con `origin/<default>` (`git merge-base HEAD origin/<default>`). `-Base` manda `git diff <sha> HEAD`: lo ya commiteado del bloque, sin cláusula de arreglos. `-Desde` no sirve en esta ronda: cualquier `-Desde` le pide al revisor que juzgue solo los arreglos. Medido 2026-09-22: con `-Alcance last-commit` en ronda 1, la revisión de una entrega de cuatro commits habría visto uno solo y omitido los scripts de cierre y reconciliación.
 
   `pwsh` va con ruta absoluta siempre, no solo por exec del nodo: no está en el PATH que hereda un CLI lanzado en tmux.
 

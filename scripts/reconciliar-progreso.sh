@@ -117,7 +117,10 @@ for c in d['carriles']:
         continue
     if estado in ('mergeado', 'revertido', 'omitido'):
         continue
-    salida.append('%s|%s|%s|%s' % (c['id'], pr, c.get('repo', ''), estado))
+    repo = c.get('repo')
+    if not isinstance(repo, str):
+        repo = ''
+    salida.append('%s|%s|%s|%s' % (c['id'], pr, repo, estado))
 for linea in salida:
     print(linea)
 ") || { printf 'reconciliar: no pude validar %s\n' "$f" >&2; exit 2; }
@@ -129,6 +132,13 @@ for linea in salida:
   unknowns=0
   while IFS='|' read -r cid pr repo est; do
     [ -n "$cid" ] || continue
+    # gh con --repo vacio ignora el flag y usa el repo del cwd: un PR ajeno
+    # con el mismo numero quedaria mergeado. Sin owner/nombre no se consulta.
+    if ! printf '%s' "$repo" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]{0,38}/[A-Za-z0-9._-]{1,100}$'; then
+      unknowns=$((unknowns + 1))
+      printf 'unknown carril %s pr %s: repo ausente o fuera de contrato; no consulto GitHub\n' "$cid" "$pr"
+      continue
+    fi
     if respuesta=$(estado_pr "$pr" "$repo"); then
       if [ "$respuesta" = "MERGED" ]; then
         cambios="$cambios$cid|$pr|$est$LF"

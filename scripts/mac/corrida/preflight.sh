@@ -153,13 +153,14 @@ corrida_preflight() {
       sal_mal="$(HOME="$pf_home" "$oc_real" browser tabs --profile claw --json 2>&1)"
       printf '%s' "$sal_mal" | grep -q '\.openclaw-claw/openclaw\.json' \
         || razon "CLI instalado divergente: --profile claw ya no desvia la config"
-      # El exit code de la sonda manda: un CLI que rechaza el flag sale con
-      # error de uso y una salida que no menciona la ruta desviada; sin mirar
-      # el rc, ese CLI quedaba APTO (medido 2026-09-22).
+      # Un exit distinto de 0 solo es rechazo del flag si la salida no muestra
+      # que se parseo: el CLI bueno deja la config en .openclaw/openclaw.json
+      # y puede salir 1 despues, porque no hay gateway.
       rc_bien=0
       sal_bien="$(HOME="$pf_home" "$oc_real" browser tabs --browser-profile claw --json 2>&1)" || rc_bien=$?
-      [ "$rc_bien" -ne 0 ] \
-        && razon "el CLI rechazo --browser-profile (exit $rc_bien): el flag que el runbook usa no existe en este binario"
+      if [ "$rc_bien" -ne 0 ] && ! printf '%s' "$sal_bien" | grep -q '\.openclaw/openclaw\.json'; then
+        razon "el CLI rechazo --browser-profile (exit $rc_bien): el flag que el runbook usa no existe en este binario"
+      fi
       printf '%s' "$sal_bien" | grep -q '\.openclaw-claw' \
         && razon "CLI instalado divergente: --browser-profile tambien desvia la config"
     else

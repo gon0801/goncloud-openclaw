@@ -31,10 +31,20 @@ NOW=1789999200   # 2026-09-22T02:00:00Z; los timestamps quedan deterministas
 mkdir -p "$T/bin"
 cat >"$T/bin/gh" <<'STUB'
 #!/bin/sh
-n=""; prev=""
-for a in "$@"; do [ "$prev" = "view" ] && n="$a"; prev="$a"; done
+n=""; repo="UNSET"; prev=""
+for a in "$@"; do
+  [ "$prev" = "view" ] && n="$a"
+  [ "$prev" = "--repo" ] && repo="$a"
+  prev="$a"
+done
 [ "${GH_CAIDO:-0}" = "1" ] && exit 1
 [ "$n" = "98" ] && [ "${GH_98_CAIDO:-0}" = "1" ] && exit 1
+# --repo vacio no es un repo: si el script lo manda, gh real usaria el cwd
+# y este stub contesta MERGED para que el archivo cambie y la prueba lo vea.
+if [ "$repo" = "UNSET" ] || [ -z "$repo" ]; then
+  printf '{"state": "MERGED"}\n'
+  exit 0
+fi
 case "$n" in
   97) printf '{"state": "%s"}\n' "${GH_97:-MERGED}";;
   98) printf '{"state": "%s"}\n' "${GH_98:-MERGED}";;
@@ -285,5 +295,37 @@ cmp -s "$P7" "$P7.original" || fail "(9) el archivo cambio con la raiz invalida"
 printf '%s' "$out" | grep -q "no pude validar\|raiz" || fail "(9) la salida debe nombrar el fallo de validacion:
 $out"
 echo "ok (9): raiz no-objeto => rc 2, sin cambios, con rastro"
+
+# (10) Un carril detenido por sello, con PR y sin repo valido, no se consulta.
+# gh con --repo "" usa el repo del cwd; este stub, si lo llaman asi, contesta
+# MERGED. El carril tiene que quedar intacto y la corrida salir unknown.
+P8="$T/sin-repo.json"
+cat >"$P8" <<'DOC'
+{
+ "schema": "runbook-progress.v1",
+ "runbook": "docs/runbooks/autopilot-fase9.md",
+ "fase": "9",
+ "lead": {"agente": "glm", "inicio": "2026-09-20T12:00:00Z", "actualizado": "2026-09-20T12:40:00Z"},
+ "siguiente_paso": "un carril sin repo",
+ "carriles": [
+  {"id": "M", "repo": "gon0801/goncloud-openclaw", "tareas": ["9.4"], "estado": "en-cola", "pr": 97, "detenido_por": "esperando sello del kit"},
+  {"id": "Z", "tareas": ["9.2"], "estado": "atorado", "pr": 14, "detenido_por": "esperando sello"},
+  {"id": "V", "repo": "", "tareas": ["9.3"], "estado": "atorado", "pr": 15, "detenido_por": "esperando sello del kit"}
+ ],
+ "cola": [], "eventos": [],
+ "cierre": {"at": null, "telegram_message_id": null, "resumen": null}
+}
+DOC
+out=$(corre "$P8"); rc=$?
+[ "$rc" -eq 3 ] || fail "(10) sin repo valido debe salir 3; salio $rc:
+$out"
+[ "$(carril "$P8" M estado)" = "mergeado" ] || fail "(10) M, con repo, debio reconciliarse"
+[ "$(carril "$P8" Z estado)" = "atorado" ] || fail "(10) Z sin repo no puede quedar mergeado"
+[ "$(carril "$P8" Z detenido_por)" = "esperando sello" ] || fail "(10) el motivo de Z debia sobrevivir"
+[ "$(carril "$P8" V estado)" = "atorado" ] || fail "(10) V con repo vacio no puede quedar mergeado"
+[ "$(carril "$P8" V detenido_por)" = "esperando sello del kit" ] || fail "(10) el motivo de V debia sobrevivir"
+printf '%s' "$out" | grep -q "no consulto GitHub" || fail "(10) la salida debe decir que no consulto:
+$out"
+echo "ok (10): sin repo no se llama a gh y el carril queda como estaba"
 
 echo "TODO VERDE: reconciliar-progreso"

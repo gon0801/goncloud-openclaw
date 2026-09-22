@@ -107,7 +107,7 @@ for a in 'LISTO <sha>' \
          'se invoca por `bash`' \
          'hashea el token literal' \
          'ATORADO kit ausente en ' \
-         '-Desde <sha de la base del bloque>' \
+         '-Base <sha de la base del bloque>' \
          'conjunto cerrado' \
          'nunca lo escribe el lead' \
          'CodeRabbit no es un proveedor de modelo' \
@@ -117,6 +117,22 @@ for a in 'LISTO <sha>' \
   grep -qF -- "$a" "$DOC" || fail "$DOC: falta el ancla: $a"
 done
 echo "ok (3): las 63 anclas de reglas están"
+
+# La ronda 1 pide el diff del bloque. -Desde, en cualquier sha, le dice al
+# revisor que juzgue solo los arreglos; ese flag queda para las rondas siguientes.
+r1cmd=$(awk '
+  /^## 4\. / { in4=1 }
+  in4 && /^## 5\. / { exit }
+  in4 && /^```$/ { fence++; next }
+  in4 && fence==1 { print }
+' "$DOC")
+printf '%s\n' "$r1cmd" | grep -qF -- '-Base <sha de la base del bloque>' \
+  || fail "el comando de la ronda 1 no usa -Base:
+$r1cmd"
+printf '%s\n' "$r1cmd" | grep -qF -- '-Desde' \
+  && fail "el comando de la ronda 1 no puede usar -Desde:
+$r1cmd"
+echo "ok (3-r1): la ronda 1 usa -Base y no -Desde"
 
 # (3a) Entrega-sin-sello A retiro la autoridad ligada a una sesion. Estas formas
 # reintroducirian el candado que detuvo Fase 9 aunque el resto de las anclas pase.
