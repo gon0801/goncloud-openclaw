@@ -746,3 +746,12 @@ F18 (CRLF de powershell.exe vs LF del espejo): CI5 (5) reporto
 identicos salvo el CR que 5.1 emite por stdout redirigido. Fix:
 `tr -d '\r'` a got.txt antes de comparar (no-op en PS7/Linux).
 Barrido: unico sitio que compara texto PS exacto contra espejo.
+
+F19 (deploy-atomic (3) en Windows, diagnostico): CI6 `app.txt no se
+publico` con Apply=0. El readback del deploy (Test-HashEqual) garantiza
+bytes correctos donde el escribe, asi que el fail ciego no discrimina
+contenido-vs-ruta. Se agrego got visible (od -c) a los 3 asserts de (3);
+el veredicto de CI7 dira si es skip silencioso (rel corrupto), CR
+fantasma u otra cosa. Nota: shard-2 cayo en test-tmux-activity-watch
+(2h-bis) con diff CI5->CI6 vacio en esa area: segundo flaky tmux
+seguido (tras corrida-nucleo CI4), se re-evalua en CI7.

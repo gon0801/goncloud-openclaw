@@ -167,10 +167,14 @@ PY
     -ManifestPath "$(nat "$T/s-man.json")" -HealthUrl "http://127.0.0.1:$PUERTO_FAKE" \
     -OpenClawVersion 2026.9.5 -SourceSha "$SHA40" -Apply >"$T/s.out" 2>&1 \
     || fail "(3) Apply debio salir 0: $(cat "$T/s.out")"
-  [ "$(cat "$T/s-rt/app.txt")" = 'v2-app' ] || fail "(3) app.txt no se publico"
-  [ "$(cat "$T/s-rt/nuevo.txt")" = 'nuevo' ] || fail "(3) nuevo.txt no se publico"
-  [ "$(cat "$T/s-st/backup/app.txt")" = 'v1-app' ] \
-    || fail "(3) el respaldo no guarda el original de app.txt"
+  # got visible: en Windows el fallo no se puede reproducir en Mac (CI6).
+  got_app=$(cat "$T/s-rt/app.txt" 2>/dev/null); got_nuevo=$(cat "$T/s-rt/nuevo.txt" 2>/dev/null)
+  got_bak=$(cat "$T/s-st/backup/app.txt" 2>/dev/null)
+  dump() { printf '%s' "$1" | od -An -c | tr -d ' \n'; }
+  [ "$got_app" = 'v2-app' ] || fail "(3) app.txt no se publico (got [$(dump "$got_app")])"
+  [ "$got_nuevo" = 'nuevo' ] || fail "(3) nuevo.txt no se publico (got [$(dump "$got_nuevo")])"
+  [ "$got_bak" = 'v1-app' ] \
+    || fail "(3) el respaldo no guarda el original de app.txt (got [$(dump "$got_bak")])"
   [ -e "$T/s-st/backup/igual.txt" ] && fail "(3) respaldo incluye igual.txt sin cambios"
   [ -e "$T/s-st/backup/nuevo.txt" ] && fail "(3) respaldo incluye nuevo.txt sin original"
   [ -f "$T/s-st/journal.jsonl" ] || fail "(3) falta journal.jsonl"
