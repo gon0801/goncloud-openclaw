@@ -66,7 +66,8 @@ for a in 'LISTO <sha>' \
          'El encargo viaja como archivo' \
          'sea el CLI que sea' \
          'ATORADO <razón en una línea>' \
-         'muta él mismo' \
+         'la evidencia del verificador' \
+         'no vuelve a correr la batería' \
          'como draft' \
          'Un PR por carril, nunca por tarea' \
          'Solo un hallazgo bloqueante abre otra ronda' \
@@ -91,7 +92,14 @@ for a in 'LISTO <sha>' \
          'runbook-progress.v1' \
          'git y en los PRs' \
          'otro host de la lista de preferencia' \
-         'contra la DoD literal de cada fila' \
+         'la aceptación real de lo que la fase promete' \
+         'No hay una revisión de código nueva al cierre' \
+         'bloqueante adjudicado que siga abierto' \
+         'no bloqueante no abre ronda ni impide el merge' \
+         'cero bloqueantes adjudicados abiertos' \
+         'residuales del recibo' \
+         '`implementer`, `verifier` y `reviewer`' \
+         'No hay un revisor de sello' \
          'No repite' \
          'test-runbooks-no-contradicen-entorno.sh' \
          'Jamás `--no-verify`' \
@@ -99,7 +107,7 @@ for a in 'LISTO <sha>' \
          'se invoca por `bash`' \
          'hashea el token literal' \
          'ATORADO kit ausente en ' \
-         '-Alcance last-commit' \
+         '-Base <sha de la base del bloque>' \
          'conjunto cerrado' \
          'nunca lo escribe el lead' \
          'CodeRabbit no es un proveedor de modelo' \
@@ -108,7 +116,23 @@ for a in 'LISTO <sha>' \
   # la lee grep como bandera y sale "Invalid argument", no como ancla faltante.
   grep -qF -- "$a" "$DOC" || fail "$DOC: falta el ancla: $a"
 done
-echo "ok (3): las 55 anclas de reglas están"
+echo "ok (3): las 63 anclas de reglas están"
+
+# La ronda 1 pide el diff del bloque. -Desde, en cualquier sha, le dice al
+# revisor que juzgue solo los arreglos; ese flag queda para las rondas siguientes.
+r1cmd=$(awk '
+  /^## 4\. / { in4=1 }
+  in4 && /^## 5\. / { exit }
+  in4 && /^```$/ { fence++; next }
+  in4 && fence==1 { print }
+' "$DOC")
+printf '%s\n' "$r1cmd" | grep -qF -- '-Base <sha de la base del bloque>' \
+  || fail "el comando de la ronda 1 no usa -Base:
+$r1cmd"
+printf '%s\n' "$r1cmd" | grep -qF -- '-Desde' \
+  && fail "el comando de la ronda 1 no puede usar -Desde:
+$r1cmd"
+echo "ok (3-r1): la ronda 1 usa -Base y no -Desde"
 
 # (3a) Entrega-sin-sello A retiro la autoridad ligada a una sesion. Estas formas
 # reintroducirian el candado que detuvo Fase 9 aunque el resto de las anclas pase.
@@ -138,6 +162,48 @@ printf '%s' "$s4" | grep -qF 'Un PR nunca se promueve con un bloqueante abierto'
 viejo=$(printf '%s' "$s4" | grep -inE 'tope: *[0-9a-z]+ rondas|tope de [0-9a-z]+ rondas|no hay tope de rondas|ninguna alta ni media|altas ni medias' || true)
 [ -z "$viejo" ] || fail "$DOC: la seccion 4 volvio a un tope fijo o al criterio de altas y medias: $viejo"
 echo "ok (3b): la seccion 4 repite mientras salgan bloqueantes y nunca promueve con uno abierto"
+
+# (3c) Entrega-sin-sello C alinea las tres politicas que frenaban el relevo y el cierre.
+# Medido 2026-09-20: el loop trataba cualquier comentario de CodeRabbit como revision no
+# aprobada (catorce rondas por hallazgos bajos en el PR #48), mandaba una revision
+# completa del codigo al cierre despues de que todos los carriles mergearon, y no nombraba
+# los tres roles que el recibo exige. Cada regla se mira DENTRO de su seccion: nombrarla
+# en otra seccion no la manda. Las formas viejas se marcan como negativas: si vuelven,
+# el candado se pone rojo aunque las anclas nuevas sigan presentes.
+seccion() { # $1 numero -> texto de esa seccion
+  ini=$(grep -n -E "^## $1\. " "$DOC" | head -1 | cut -d: -f1)
+  fin=$(grep -n -E "^## $(($1+1))\. " "$DOC" | head -1 | cut -d: -f1)
+  [ -n "$fin" ] || fin=$(wc -l < "$DOC")
+  sed -n "${ini},${fin}p" "$DOC"
+}
+s3=$(seccion 3)
+printf '%s' "$s3" | grep -qF 'bloqueante adjudicado que siga abierto' \
+  || fail "$DOC: el paso 7 no manda adjudicar CodeRabbit: solo un bloqueante abierto vuelve al loop"
+printf '%s' "$s3" | grep -qF 'residuales del recibo' \
+  || fail "$DOC: el paso 7 no manda los comentarios no bloqueantes a los residuales del recibo"
+viejo=$(printf '%s' "$s3" | grep -inE 'no deja nada nuevo|Lo accionable se corrige' || true)
+[ -z "$viejo" ] || fail "$DOC: el paso 7 volvio a exigir cero comentarios de CodeRabbit: $viejo"
+s5=$(seccion 5)
+printf '%s' "$s5" | grep -qF 'cero bloqueantes adjudicados abiertos' \
+  || fail "$DOC: la seccion 5 no declara la compuerta de CodeRabbit (cero bloqueantes adjudicados abiertos)"
+viejo=$(printf '%s' "$s5" | grep -inE 'con comentarios accionables no es' || true)
+[ -z "$viejo" ] || fail "$DOC: la seccion 5 volvio a tratar cualquier comentario como revision no aprobada: $viejo"
+s6=$(seccion 6)
+printf '%s' "$s6" | grep -qF '`implementer`, `verifier` y `reviewer`' \
+  || fail "$DOC: la seccion 6 no nombra los tres roles que el recibo exige distintos entre si"
+printf '%s' "$s6" | grep -qF 'No hay un revisor de sello' \
+  || fail "$DOC: la seccion 6 no cierra la puerta a un nuevo revisor de sello"
+s10=$(seccion 10)
+printf '%s' "$s10" | grep -qF 'la aceptación real de lo que la fase promete' \
+  || fail "$DOC: la seccion 10 no manda la aceptacion real de la promesa de la fase"
+printf '%s' "$s10" | grep -qF 'No hay una revisión de código nueva al cierre' \
+  || fail "$DOC: la seccion 10 no declara que el cierre no repite la revision de codigo"
+# Lo que la seccion MANDA: la frase que prohibe la revision completa y la nota historica
+# quedan fuera, porque las nombran justamente para prohibirlas o explicar por que.
+s10_manda=$(printf '%s' "$s10" | grep -v 'No hay una revisión' | grep -v '^Medido:')
+viejo=$(printf '%s' "$s10_manda" | grep -inE 'revisión completa|muta|mutar' || true)
+[ -z "$viejo" ] || fail "$DOC: la seccion 10 volvio a mandar una revision completa de cierre: $viejo"
+echo "ok (3c): CodeRabbit por adjudicacion, roles del recibo y cierre sin revision repetida"
 
 # (4) La fila del lead no nombra ningún modelo. Es la regla central del documento.
 hit=$(lead_nombra_modelo < "$DOC")
@@ -180,12 +246,6 @@ echo "ok (6): la sección 8 exige los dos pasos de publicar una fase, y dónde c
 # y §12 (atores) nombran `corrida.sh` y `seguimiento.v1`: sin la referencia, el
 # loop manda un mecanismo que ya vive en codigo con otro nombre. El TIMEBOX con
 # pausas se mudo del runbook de la Fase 7 (§3 lo define, §12 lo aplica).
-seccion() { # $1 numero -> texto de esa seccion
-  ini=$(grep -n -E "^## $1\. " "$DOC" | head -1 | cut -d: -f1)
-  fin=$(grep -n -E "^## $(($1+1))\. " "$DOC" | head -1 | cut -d: -f1)
-  [ -n "$fin" ] || fin=$(wc -l < "$DOC")
-  sed -n "${ini},${fin}p" "$DOC"
-}
 for n in 1 3 8 9 12; do
   s=$(seccion "$n")
   printf '%s' "$s" | grep -qF 'corrida.sh' \

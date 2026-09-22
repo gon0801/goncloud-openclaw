@@ -399,6 +399,78 @@ else:
   fi
 fi
 
+# (9) Entregables de la fase: los carriles del documento de progreso versionado. La
+# instalacion y el simulacro son carriles sin PR: un remoto con todos los PR en MERGED
+# no los prueba (medido 2026-09-17 en la Fase 7: todo mergeado y CI en verde faltaban el
+# despliegue y las celdas; en la Fase 9 el simulacro era el entregable que quedaba). Un
+# carril que no llego a estado terminal es un entregable sin terminar y bloquea el cierre,
+# aunque todos los PR de la fase digan MERGED. Sin documento no hay entregables declarados
+# y la fase no se bloquea por lo que no declaro; un documento ilegible o sin carriles se
+# declara unknown, mismo falso verde que (12g) mato en el tablero publicado. Un
+# carril ATORADO tampoco esta terminado: es un entregable pendiente con motivo.
+if [ "$ref_ok" = "0" ]; then
+  linea unknown entregables "no pude leer $REF; no se que entregables declara la fase $FASE"
+elif [ -z "$doc" ]; then
+  # Distinto de la rama de (7): si el documento EXISTE versionado pero no se
+  # pudo leer (vacio, corrupto), no es "sin entregables declarados" sino un
+  # unknown (CodeRabbit/revisor 2026-09-22: con un doc de 0 bytes el cierre
+  # salia VERDE).
+  if [ "${habia:-0}" = "1" ]; then
+    linea unknown entregables "la fase $FASE tiene documento versionado pero no se pudo leer"
+  else
+    linea VERDE entregables "sin documento de progreso; sin entregables declarados"
+  fi
+else
+  # timeout 30 (F1): un python3 colgado del PATH no puede trabar el cierre. Fallback r2:
+  # al fallar o vencer sale el string JSON vacio y el check cae en unknown (la rama *).
+  det=$(printf '%s' "$doc" | FASE="$FASE" timeout 30 python3 -c '
+import json, os, sys
+# atorado NO cuenta: una instalacion o un simulacro atorados son justamente el
+# entregable pendiente (medido 2026-09-22: con la instalacion atorada el cierre
+# salia VERDE). Terminal aqui es: hecho, revertido declarado u omitido por el
+# operador; lo demas es un entregable con nombre y motivo.
+TERMINALES = {"mergeado", "revertido", "omitido"}
+try:
+    d = json.loads(sys.stdin.read())
+except Exception:
+    print("UNKNOWN no pude leer el documento de progreso")
+    raise SystemExit
+# El documento tiene que ser EL de esta fase: un progreso de otra fase con
+# carriles terminales no acredita los entregables de esta (CodeRabbit 2026-09-22).
+if d.get("fase") != os.environ["FASE"]:
+    print("ROJO el documento de progreso no corresponde a la fase " + os.environ["FASE"])
+    raise SystemExit
+cs = d.get("carriles")
+if not isinstance(cs, list) or not cs:
+    print("UNKNOWN el documento no trae una lista de carriles; no hay entregables que leer")
+    raise SystemExit
+vivos = []
+for c in cs:
+    if not isinstance(c, dict):
+        print("UNKNOWN el documento trae un carril que no es un objeto")
+        raise SystemExit
+    cid, est = c.get("id"), c.get("estado")
+    if not isinstance(cid, str) or not cid or not isinstance(est, str) or not est:
+        print("UNKNOWN el documento trae un carril sin id o sin estado")
+        raise SystemExit
+    if est not in TERMINALES:
+        # El detalle es lo que el lead va a ir a terminar: "I" solo no dice nada,
+        # "Instalacion" si. El nombre viaja cuando el carril lo trae.
+        nom = c.get("nombre")
+        vivos.append(cid + (" (" + nom + ")" if isinstance(nom, str) and nom else ""))
+if vivos:
+    print("ROJO entregables sin terminar: " + " ".join(vivos))
+else:
+    print("OK %d carriles, todos en estado terminal" % len(cs))
+' || printf '%s' '""')
+  case "$det" in
+    "OK "*)      linea VERDE entregables "${det#OK }" ;;
+    "UNKNOWN "*) linea unknown entregables "${det#UNKNOWN }" ;;
+    "ROJO "*)    linea ROJO entregables "${det#ROJO }" ;;
+    *)           linea unknown entregables "no pude leer los entregables del documento de progreso" ;;
+  esac
+fi
+
 # (6) CI de la rama por defecto sobre su punta: una fase no cierra dejandola en rojo.
 if [ ! -x "$GH_BIN" ]; then
   linea unknown ci "sin gh en $GH_BIN"

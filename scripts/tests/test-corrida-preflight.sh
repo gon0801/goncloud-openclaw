@@ -85,7 +85,7 @@ case "\$*" in
       if [ "\$prev" = "--profile" ] && [ "\$a" = "claw" ]; then mala=1; fi
       prev="\$a"
     done
-    if [ "\$mala" = "1" ] && { [ "\${BROWSER_MODO:-ok}" = "ok" ] || [ "\${BROWSER_MODO:-ok}" = "rechaza" ]; }; then
+    if [ "\$mala" = "1" ] && { [ "\${BROWSER_MODO:-ok}" = "ok" ] || [ "\${BROWSER_MODO:-ok}" = "rechaza" ] || [ "\${BROWSER_MODO:-ok}" = "gateway" ]; }; then
       printf 'config desviada a ~/.openclaw-claw/openclaw.json\n'
     fi
     if [ "\$mala" = "0" ] && [ "\${BROWSER_MODO:-ok}" = "doblez" ]; then
@@ -95,6 +95,12 @@ case "\$*" in
       # CLI que no conoce el flag: usage de mentira, sin la ruta desviada.
       printf 'error: unknown option --browser-profile\n' >&2
       exit 64
+    fi
+    if [ "\$mala" = "0" ] && [ "\${BROWSER_MODO:-ok}" = "gateway" ]; then
+      # El flag se acepto. Sale 1 porque no hay gateway, y nombra la config
+      # real, no la desviada.
+      printf 'gateway browser.request requires credentials\nConfig: %s/.openclaw/openclaw.json\n' "\$HOME" >&2
+      exit 1
     fi
     exit 0
     ;;
@@ -266,6 +272,22 @@ out=$(bash "$CORR" preflight t-bro-rechaza 2>&1); rc=$?
 $out"
 printf '%s' "$out" | grep -q "rechazo --browser-profile" \
   || fail "NO APTO sin nombrar el rechazo del flag:
+$out"
+unset BROWSER_MODO
+
+# B4 (8): el CLI ACEPTA --browser-profile y sale 1 porque no hay gateway.
+# Medido el 2026-09-22: cualquier exit distinto de 0 se leia como flag
+# ausente, y el binario instalado (que si tiene el flag) dejaba la corrida
+# NO APTO.
+export BROWSER_MODO=gateway
+abrir t-bro-gw "$RB"
+out=$(bash "$CORR" preflight t-bro-gw 2>&1) || fail "un CLI que acepta --browser-profile y falla el gateway debe seguir APTO:
+$out"
+printf '%s' "$out" | head -1 | grep -q "^APTO" \
+  || fail "primera linea distinta de APTO con fallo de gateway:
+$out"
+printf '%s' "$out" | grep -q "rechazo --browser-profile" \
+  && fail "un fallo de gateway no es rechazo del flag:
 $out"
 unset BROWSER_MODO
 
