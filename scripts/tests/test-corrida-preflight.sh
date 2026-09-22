@@ -251,16 +251,19 @@ $out"
 unset BROWSER_MODO
 
 # B4 (7): CLI AUSENTE => unknown explicito, jamas silencio (el resto de las
-# razones siguen su curso: gateway y canal tampoco responden).
-export OPENCLAW_BIN="$T/bin/openclaw-ausente"
+# razones siguen su curso: gateway y canal tampoco responden). El REGISTRO de
+# la corrida (abrir) usa el stub SANO: abrir lee `openclaw cron list` y con el
+# binario ausente muere ANTES de llegar a preflight ("abrir: sin lista de
+# crons legible", CI run 35690236857 — exportar OPENCLAW_BIN ausente antes de
+# abrir fue el defecto de la ronda 2). La ausencia se pasa SOLO al preflight,
+# por env del comando: es exactamente la superficie que el chequeo (7) audita.
 abrir t-bro-ausente "$RB"
-out=$(bash "$CORR" preflight t-bro-ausente 2>&1); rc=$?
+out=$(OPENCLAW_BIN="$T/bin/openclaw-ausente" bash "$CORR" preflight t-bro-ausente 2>&1); rc=$?
 [ $rc -ne 0 ] || fail "sin CLI el preflight no puede quedar APTO:
 $out"
 printf '%s' "$out" | grep -q "CLI openclaw ausente" \
   || fail "sin CLI instalado la ausencia debia quedar como unknown explicito:
 $out"
-export OPENCLAW_BIN="$T/bin/openclaw"
 
 # ROJO con vigilante viejo (y el instalado se restaura: los casos que siguen no
 # heredan el watch roto).
