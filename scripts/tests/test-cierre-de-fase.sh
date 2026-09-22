@@ -763,4 +763,62 @@ printf '%s' "$out" | grep -q "no corresponde a la fase" \
 $out"
 echo "ok (14e): un documento de otra fase no acredita entregables ajenos"
 
+# (14f) El conjunto terminal, estado por estado. Medido el 2026-09-22 (revision
+# del bloque C): instalacion y simulacro atorados bloquean cada uno por su
+# cuenta; omitido pasa SOLO porque la omision formal existe en el contrato
+# runbook-progress.v1 (carril cancelado con detenido_por, regla 3) y un estado
+# desconocido jamas produce VERDE.
+atorado_de() { # $1 id, $2 nombre -> ROJO nombrando ese carril
+  cat >"$R/.saikit/progress/5.json" <<DOC
+{"fase":"5","titulo":"Fase 5","siguiente_paso":"cierre",
+ "carriles":[{"id":"A","estado":"mergeado","pr":97},{"id":"B","estado":"mergeado","pr":98},
+             {"id":"$1","nombre":"$2","estado":"atorado","detenido_por":"pg_isready caido"}],
+ "cierre":{"at":null}}
+DOC
+  git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m "entregables-atorado-$1" 2>/dev/null
+  git -C "$R" push -q -f origin HEAD:main
+  local out; out=$(CIERRE_SIN_GATEWAY=1 corre 5); local rc=$?
+  [ "$rc" -eq 1 ] || fail "(14f) con $2 atorado el cierre debe salir 1; salio $rc:
+$out"
+  printf '%s' "$out" | grep -q "^ROJO *entregables" \
+    || fail "(14f) un entregable atorado ($2) debe salir ROJO:
+$out"
+  printf '%s' "$out" | grep -q "$2" \
+    || fail "(14f) el detalle debe nombrar $2:
+$out"
+}
+atorado_de I Instalacion
+atorado_de S Simulacro
+echo "ok (14f): instalacion y simulacro atorados bloquean el cierre, cada uno nombrado"
+
+entregables omitido mergeado '"2026-09-18T00:00:00Z"'
+# La omision formal existe en el contrato (runbook-progress.v1, regla 3: carril
+# cancelado pasa a omitido con detenido_por): pasa, y lo declara.
+sed -i.bak 's/"estado":"omitido"/"estado":"omitido","detenido_por":"cancelado por el operador"/' "$R/.saikit/progress/5.json" && rm -f "$R/.saikit/progress/5.json.bak"
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m entregables-omitido-formal
+git -C "$R" push -q -f origin HEAD:main
+out=$(CIERRE_SIN_GATEWAY=1 corre 5); rc=$?
+[ "$rc" -eq 0 ] || fail "(14g) con la omision formal del contrato el cierre debe salir 0; salio $rc:
+$out"
+printf '%s' "$out" | grep -q "^VERDE *entregables" \
+  || fail "(14g) omitido formal debe contar como terminal:
+$out"
+echo "ok (14g): omitido pasa porque el contrato permite la omision formal"
+
+cat >"$R/.saikit/progress/5.json" <<'DOC'
+{"fase":"5","titulo":"Fase 5","siguiente_paso":"cierre",
+ "carriles":[{"id":"A","estado":"mergeado","pr":97},{"id":"B","estado":"mergeado","pr":98},
+             {"id":"I","nombre":"Instalacion","estado":"desconocido"}],
+ "cierre":{"at":null}}
+DOC
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m entregables-estado-desconocido
+git -C "$R" push -q -f origin HEAD:main
+out=$(CIERRE_SIN_GATEWAY=1 corre 5); rc=$?
+[ "$rc" -eq 1 ] || fail "(14h) un estado desconocido no puede cerrar la fase; salio $rc:
+$out"
+printf '%s' "$out" | grep -q "^ROJO *entregables" \
+  || fail "(14h) un estado desconocido debe salir ROJO, nunca VERDE:
+$out"
+echo "ok (14h): un estado desconocido jamas produce VERDE"
+
 echo "TODO VERDE: cierre-de-fase"
