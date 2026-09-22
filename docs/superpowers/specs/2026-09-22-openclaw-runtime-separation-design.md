@@ -1,7 +1,7 @@
 # Separación y limpieza del runtime de OpenClaw
 
 Fecha: 2026-09-22
-Estado: propuesto para revisión cruzada
+Estado: corregido tras la revisión cruzada de Grok
 Propietario: David
 
 ## Propósito
@@ -117,6 +117,10 @@ manifiesto y confirmar que contiene la base compartida, las bases de agentes,
 las credenciales y los workspaces declarados. No se acepta un archivo de
 backup solo porque existe.
 
+Esta interfaz está confirmada en OpenClaw `2026.9.5`: `openclaw backup create
+--verify` incluye configuración, credenciales, sesiones y workspaces, salvo
+que el operador pase `--no-include-workspace`.
+
 Si la verificación del backup falla, la migración se detiene antes de mover o
 borrar cualquier archivo.
 
@@ -125,14 +129,25 @@ borrar cualquier archivo.
 `GoncloudRepoSync` dejará de ejecutar Git dentro del estado vivo para el repo
 principal. El ciclo nuevo tendrá este orden:
 
-1. Capturar cambios autónomos permitidos del estado vivo.
-2. Actualizar el checkout dedicado contra `origin/main`.
-3. Preparar un árbol de staging con los archivos desplegables.
-4. Validar la configuración y los contratos del árbol de staging.
-5. Copiar el árbol validado al estado vivo mediante reemplazos atómicos por
+1. Capturar cambios autónomos permitidos del estado vivo en un worktree
+   temporal.
+2. Registrar como protegidas las rutas capturadas mientras su PR siga
+   pendiente.
+3. Actualizar el checkout dedicado contra `origin/main`.
+4. Preparar un árbol de staging con los archivos desplegables.
+5. Excluir del staging las rutas protegidas y verificar que sus bytes vivos no
+   cambien.
+6. Validar la configuración y los contratos del árbol de staging.
+7. Copiar el árbol validado al estado vivo mediante reemplazos atómicos por
    archivo.
-6. Ejecutar las sondas de salud.
-7. Registrar el SHA desplegado y el resultado del ciclo.
+8. Ejecutar las sondas de salud.
+9. Registrar el SHA desplegado y el resultado del ciclo.
+
+El script conserva el bucle sobre los cuatro repos actuales. Un fallo en
+`goncloud-openclaw` se registra y no impide que `workspace`,
+`workspace-ingenieria` y `workspace-operaciones` completen sus ciclos. Cada
+repo conserva su propio resultado y el marcador final se escribe después de
+procesar los cuatro.
 
 ### Captura de cambios autónomos
 
@@ -142,12 +157,44 @@ La captura usa una lista permitida. La primera versión admite únicamente:
 agents/*/agent/workshop-skills/**
 ```
 
-El capturador compara el estado vivo con el checkout fuente. Si encuentra un
-cambio permitido, crea una rama `auto/skills/<fecha>-<agente>`, hace commit,
-push y abre un PR. El capturador no mergea el PR y no empuja a `main`.
+El capturador compara el estado vivo con `origin/main`. Si encuentra un
+cambio permitido, crea un worktree temporal desde `origin/main`, abre una rama
+`auto/skills/<fecha-hora>-<agente>`, copia solo las rutas permitidas, hace
+commit, push y abre un PR. Después elimina el worktree temporal. El checkout
+dedicado permanece en `main`, sin commits locales ni cambio de rama. El
+capturador no mergea el PR y no empuja a `main`.
+
+El ciclo guarda ruta, hash vivo, rama y PR de cada captura pendiente. El
+deploy no toca esas rutas mientras el PR permanezca abierto. Cuando el PR
+llega a `main`, el siguiente ciclo despliega la versión mergeada y elimina la
+protección solo después de comprobar el hash resultante. Si el PR se cierra
+sin mergear, el sync conserva el archivo vivo, registra el conflicto y espera
+una decisión del propietario.
 
 Un cambio fuera de la lista permitida queda en el estado vivo y produce una
 alerta. El sync no lo añade, no lo borra y no lo sobrescribe.
+
+### Contrato del log y del vigía
+
+El ciclo conserva los tokens que consume `verif-sync-repos`:
+
+```text
+FALLO
+CONFLICTO
+---- ciclo terminado
+```
+
+Una captura nueva escribe `SKILLS_PR`, el agente, las rutas y el número del
+PR. No escribe `SKILLS`, porque el cambio todavía no está en `main`. El vigía
+sube a una versión que reconoce `SKILLS_PR` y dice que el cambio espera
+revisión. Solo una línea de despliegue posterior puede afirmar que el cambio
+llegó a `main`.
+
+El cambio del script y el cambio del vigía se despliegan como una sola unidad.
+`GoncloudRepoSync` no se habilita hasta que el vigía nuevo esté activo y su
+read-back coincida con la copia versionada. Las pruebas existentes de
+`scripts/tests/test-sync-avisa-skills.sh` se actualizan para rechazar el texto
+anterior cuando el PR siga abierto.
 
 ### Manifiesto de despliegue
 
@@ -188,6 +235,11 @@ El deploy conserva una copia de los archivos que reemplazará. Si una sonda
 posterior falla, restaura solo esos archivos. Nunca ejecuta
 `git reset --hard` contra el estado vivo.
 
+Antes del primer deploy, el script exige que `origin/main` contenga
+`$httpTimeoutSec = 90` en `gateway-watchdog.ps1`. El PR #122 ya dejó ese valor
+en `origin/main`. La compuerta evita que una base equivocada restaure el valor
+de 10 segundos.
+
 Un ciclo exitoso prueba:
 
 - el checkout dedicado termina exactamente en `origin/main`;
@@ -227,9 +279,20 @@ memory: {
 }
 ```
 
+El cambio se aplica a la configuración viva, que no forma parte del
+manifiesto de deploy. Antes de reiniciar, `openclaw config validate --json`
+debe aceptar el archivo y `openclaw config get memory.search` debe devolver
+`ollama`, `nomic-embed-text` y `none`. OpenClaw `2026.9.5` admite esos campos
+en `memory.search`; la implementación no usa la forma antigua
+`agents.defaults.memorySearch`.
+
 El cambio de proveedor invalida la identidad de los índices vectoriales. La
 migración reconstruye el índice de cada agente de forma explícita. No mezcla
 vectores creados por `llama.cpp` con vectores creados por Ollama.
+
+Antes de reconstruir, la migración crea y verifica un snapshot SQLite de cada
+base de agente. El recibo relaciona cada agente con su snapshot y con la
+identidad del proveedor anterior.
 
 La verificación hace una consulta cuyo resultado semántico no dependa de una
 coincidencia literal. También confirma que no aparecen eventos nuevos 3033 o
@@ -237,6 +300,13 @@ coincidencia literal. También confirma que no aparecen eventos nuevos 3033 o
 
 El directorio de `llama.cpp` se mueve al archivo de cuarentena después de que
 la memoria funcione con Ollama. No se borra durante la misma fase.
+
+Si Ollama falla antes del cambio de configuración, la fase termina sin tocar
+la configuración ni los índices. Si falla después del cambio, la reversa
+detiene el gateway, restaura los snapshots de las bases de agentes y configura
+`memory.search.provider` como `none`. Ese modo conserva la búsqueda léxica y
+no intenta ejecutar `llama.cpp`. La reversa nunca devuelve la configuración a
+`provider: "local"` mientras Code Integrity bloquee el binario.
 
 ## Nodo Windows aislado
 
@@ -333,11 +403,16 @@ Las pruebas automatizadas deben cubrir estos fallos:
 - un launcher generado nunca entra al índice de Git;
 - un archivo fuera de la lista de captura no produce un commit;
 - un cambio de skill crea una rama y un PR, no un push a `main`;
+- un cambio de skill pendiente conserva sus bytes vivos durante el deploy;
+- un PR de skill cerrado sin mergear queda protegido y genera conflicto;
 - un fallo de validación no cambia el estado vivo;
 - una sonda fallida restaura solo los archivos del deploy;
 - el manifiesto nunca incluye bases, credenciales, logs o herramientas;
 - un ciclo repetido sin cambios no modifica archivos ni crea commits;
 - un ciclo interrumpido converge al mismo resultado cuando se repite.
+- un fallo del repo principal no impide procesar los tres workspaces;
+- el log conserva el marcador final y distingue `SKILLS_PR` de un despliegue
+  que ya llegó a `main`.
 
 La aceptación operativa exige evidencia fresca de:
 
@@ -380,13 +455,36 @@ Cada componente tiene una reversa independiente:
 - Sync: deshabilitar `GoncloudRepoSync` y restaurar la versión anterior del
   script desde la copia operativa.
 - Deploy: restaurar los archivos reemplazados desde el staging del ciclo.
-- Memoria: restaurar la configuración previa y conservar Ollama detenido. El
-  índice nuevo se conserva para diagnóstico y no reemplaza el backup.
+- Memoria: restaurar los snapshots previos de las bases de agentes y usar
+  `provider: "none"` para búsqueda léxica. La reversa no vuelve al
+  `llama.cpp` bloqueado.
 - Nodo: detener `OpenClaw Node` y restaurar su XML anterior. El gateway no
   depende del nodo para responder mensajes.
 - Limpieza: mover el artefacto desde cuarentena a su ruta registrada.
 
 Ninguna reversa usa `git reset --hard` dentro del estado vivo.
+
+## Resultado de la revisión cruzada
+
+Grok revisó el commit `bf2b513` con
+`/Users/dn/quality-kit/cross-review.ps1`. La revisión produjo estas
+decisiones:
+
+- Aceptado: el deploy pisaba una skill capturada pero todavía no mergeada. El
+  diseño ahora protege las rutas pendientes y usa un worktree temporal.
+- Aceptado: la reversa de memoria volvía al `llama.cpp` bloqueado y mezclaba
+  identidades de índice. Ahora restaura snapshots y cae a búsqueda léxica.
+- Aceptado: el diseño omitía el contrato del log, el vigía y el aislamiento de
+  fallos de los otros tres repos. Ahora los conserva y versiona el cambio del
+  vigía junto con el script.
+- Rechazado como bloqueante reproducible: `origin/main` no conserva el timeout
+  de 10 segundos. La lectura directa confirma `$httpTimeoutSec = 90`. Se añadió
+  una compuerta para detectar una base futura equivocada.
+- Verificado: OpenClaw `2026.9.5` ofrece `backup create --verify` con config,
+  credenciales, sesiones y workspaces.
+- Verificado: la configuración viva usa `memory.search`, y la versión instalada
+  admite `provider`, `model` y `fallback`. El diseño añade validación y
+  read-back antes del reinicio.
 
 ## Decisiones posteriores
 
