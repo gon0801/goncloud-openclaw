@@ -155,7 +155,7 @@ try {
   $createRaw = (& openclaw backup create --verify --output $BackupDir --json 2>&1)
   if ($LASTEXITCODE -ne 0) { throw 'backup create fallo' }
   $created = $null
-  try { $created = (($createRaw | Out-String) | ConvertFrom-Json) } catch { $created = $null }
+  try { $created = (($createRaw | Out-String) | ConvertFrom-Json -Depth 32) } catch { $created = $null }
   if ($null -eq $created -or [string]::IsNullOrEmpty($created.archivePath)) { throw 'backup create sin archivePath' }
   $archivePath = $created.archivePath
   [void]$commands.Add([PSCustomObject]@{ name = 'backup-create'; exit = 0 })
@@ -164,7 +164,7 @@ try {
   $verifyRaw = (& openclaw backup verify $archivePath --json 2>&1)
   if ($LASTEXITCODE -ne 0) { throw 'backup verify fallo' }
   $verdict = $null
-  try { $verdict = (($verifyRaw | Out-String) | ConvertFrom-Json) } catch { $verdict = $null }
+  try { $verdict = (($verifyRaw | Out-String) | ConvertFrom-Json -Depth 32) } catch { $verdict = $null }
   if ($null -eq $verdict -or ($verdict.ok -ne $true -and $verdict.verified -ne $true)) { throw 'backup verify no-ok' }
   [void]$commands.Add([PSCustomObject]@{ name = 'backup-verify'; exit = 0 })
 
@@ -187,7 +187,7 @@ try {
   $manFile = @(Get-ChildItem -LiteralPath $StagingRoot -Recurse -Depth 3 -Filter 'manifest.json' -File -ErrorAction SilentlyContinue | Select-Object -First 1)
   if ($manFile.Count -eq 0) { throw 'manifiesto ilegible en staging' }
   $man = $null
-  try { $man = Get-Content -Raw -LiteralPath $manFile[0].FullName | ConvertFrom-Json } catch { $man = $null }
+  try { $man = Get-Content -Raw -LiteralPath $manFile[0].FullName | ConvertFrom-Json -Depth 32 } catch { $man = $null }
   if ($null -eq $man) { throw 'manifiesto corrupto' }
   $kinds = @()
   foreach ($a in @($man.assets)) { $kinds += $a.kind }
@@ -195,7 +195,7 @@ try {
   $stRaw = (& openclaw memory status --json 2>&1)
   if ($LASTEXITCODE -ne 0) { throw 'memory status fallo' }
   $agents = @()
-  try { $agents = @(($stRaw | Out-String) | ConvertFrom-Json) } catch { $agents = @() }
+  try { $agents = @(($stRaw | Out-String) | ConvertFrom-Json -Depth 32) } catch { $agents = @() }
   if ($agents.Count -eq 0) { throw 'sin agentes en memory status' }
   $covered = @()
   foreach ($r in @($man.agentRoots)) { $covered += $r.agentId }

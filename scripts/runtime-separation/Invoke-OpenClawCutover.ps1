@@ -211,11 +211,11 @@ function Read-CutoverPair {
   if (-not (Test-Path -LiteralPath $leasePath)) { throw 'lease ausente' }
   $leaseRaw = Get-Content -Raw -LiteralPath $leasePath
   if (-not (Test-CutoverLeaseObject -LeaseJson $leaseRaw)) { throw 'lease malformado' }
-  $lease = $leaseRaw | ConvertFrom-Json
+  $lease = $leaseRaw | ConvertFrom-Json -Depth 32
   if (-not (Test-Path -LiteralPath $lease.statePath)) { throw 'estado ausente' }
   $stateRaw = Get-Content -Raw -LiteralPath $lease.statePath
   if (-not (Test-CutoverStateObject -StateJson $stateRaw)) { throw 'estado malformado' }
-  $state = $stateRaw | ConvertFrom-Json
+  $state = $stateRaw | ConvertFrom-Json -Depth 32
   if ($state.generation -cne $lease.generation) { throw 'lease y estado de distinta generacion' }
   return @{ lease = $lease; state = $state }
 }

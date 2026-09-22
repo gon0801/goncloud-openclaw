@@ -277,7 +277,7 @@ try {
     foreach ($line in (Get-Content -LiteralPath $InventoryPath -Encoding UTF8)) {
       if ([string]::IsNullOrWhiteSpace($line)) { continue }
       $e = $null
-      try { $e = $line | ConvertFrom-Json -ErrorAction Stop } catch { throw 'inventario corrupto' }
+      try { $e = $line | ConvertFrom-Json -Depth 32 -ErrorAction Stop } catch { throw 'inventario corrupto' }
       $got = @($e.PSObject.Properties.Name)
       if ($got.Count -ne $wantKeys.Count) { throw 'inventario corrupto' }
       foreach ($k in $wantKeys) {

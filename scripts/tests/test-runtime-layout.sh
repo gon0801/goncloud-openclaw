@@ -74,6 +74,15 @@ for a in bajas:
 PY
 echo "ok (5): las tres raices son distintas y no se anidan"
 
+# (6) Paridad 5.1/PS7: ConvertFrom-Json sin -Depth usa default 2 en 5.1 y
+# amplio en PS7; un JSON de 3+ niveles lanza en 5.1 y todo valida $false
+# (CI2: los receipt-* que esperan $true fallaron solo en 5.1).
+# Toda llamada en codigo que corre en 5.1 lleva -Depth explicito.
+SIN_DEPTH=$(grep -hn 'ConvertFrom-Json' scripts/runtime-separation/RuntimeSeparation.psm1 scripts/runtime-separation/*.ps1 \
+  | grep -vE '^\s*[0-9]+:\s*#' | grep -vF -- '-Depth' || true)
+[ -z "$SIN_DEPTH" ] || fail "(6) ConvertFrom-Json sin -Depth (5.1 default 2): $SIN_DEPTH"
+echo "ok (6): todo ConvertFrom-Json lleva -Depth explicito"
+
 # --- motor PowerShell: obligatorio en Windows, oportunista fuera ---
 en_windows=0
 [ "${OS:-}" = "Windows_NT" ] && en_windows=1

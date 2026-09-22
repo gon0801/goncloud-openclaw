@@ -178,7 +178,7 @@ try {
   $ledgerDirty = $false
   if (Test-Path -LiteralPath $LedgerPath) {
     try {
-      $ledger = Get-Content -Raw -LiteralPath $LedgerPath | ConvertFrom-Json
+      $ledger = Get-Content -Raw -LiteralPath $LedgerPath | ConvertFrom-Json -Depth 32
     } catch {
       Write-SyncLog 'main FALLO: ledger ilegible'
       exit 2
@@ -253,7 +253,7 @@ try {
       exit 2
     }
     $view = $null
-    try { $view = ($viewRaw | Out-String) | ConvertFrom-Json } catch { $view = $null }
+    try { $view = ($viewRaw | Out-String) | ConvertFrom-Json -Depth 32 } catch { $view = $null }
     if ($null -eq $view -or [string]::IsNullOrEmpty($view.state)) {
       [void]$observations.Add("pr $($e.pr) sin estado; se conserva open")
       continue
@@ -283,7 +283,7 @@ try {
       exit 2
     }
     $found = @()
-    try { $found = @(($listRaw | Out-String) | ConvertFrom-Json) } catch { $found = @() }
+    try { $found = @(($listRaw | Out-String) | ConvertFrom-Json -Depth 32) } catch { $found = @() }
     if ($found.Count -eq 0) { continue }
     $num = [int]$found[0].number
     $e.pr = $num
@@ -565,7 +565,7 @@ try {
       $prRaw = (& gh pr create --title $title --body $body --head $branch --base main --json number,url 2>&1)
       if ($LASTEXITCODE -ne 0) { return @{ Ok = $false; Why = 'gh pr create fallo'; Pushed = $true; Branch = $branch; Commit = $commit; Hashes = $hashes } }
       $prNum = 0
-      try { $prNum = ([int]((($prRaw | Out-String) | ConvertFrom-Json).number)) } catch { $prNum = 0 }
+      try { $prNum = ([int]((($prRaw | Out-String) | ConvertFrom-Json -Depth 32).number)) } catch { $prNum = 0 }
       if ($prNum -le 0) { return @{ Ok = $false; Why = 'gh sin numero'; Pushed = $true; Branch = $branch; Commit = $commit; Hashes = $hashes } }
       return @{ Ok = $true; Branch = $branch; Commit = $commit; Hashes = $hashes; Pr = $prNum }
     } finally {

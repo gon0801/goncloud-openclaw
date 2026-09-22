@@ -173,9 +173,9 @@ function Test-ReceiptObject {
     [Parameter(Mandatory = $true)][string]$SchemaPath
   )
   if (-not (Test-Path -LiteralPath $SchemaPath)) { throw "schema ilegible: $SchemaPath" }
-  $schema = Get-Content -Raw -LiteralPath $SchemaPath | ConvertFrom-Json
+  $schema = Get-Content -Raw -LiteralPath $SchemaPath | ConvertFrom-Json -Depth 32
   try {
-    $doc = $ReceiptJson | ConvertFrom-Json -ErrorAction Stop
+    $doc = $ReceiptJson | ConvertFrom-Json -Depth 32 -ErrorAction Stop
   } catch {
     return $false
   }
@@ -312,7 +312,7 @@ function Test-DeployPathClassification {
   )
   if ($null -ne (Test-DeployPathSafety -RelativePath $RelativePath)) { return 'rejected' }
   if (-not (Test-Path -LiteralPath $ManifestPath)) { throw "manifiesto ilegible: $ManifestPath" }
-  $m = Get-Content -Raw -LiteralPath $ManifestPath | ConvertFrom-Json
+  $m = Get-Content -Raw -LiteralPath $ManifestPath | ConvertFrom-Json -Depth 32
   $p = $RelativePath.Replace('\', '/')
   foreach ($e in $m.denied) {
     $rx = ConvertTo-DeployRegex -Pattern $e.pattern
@@ -371,7 +371,7 @@ function Get-CutoverStateRoot {
 function Test-CutoverLeaseObject {
   param([Parameter(Mandatory = $true)][string]$LeaseJson)
   try {
-    $doc = $LeaseJson | ConvertFrom-Json -ErrorAction Stop
+    $doc = $LeaseJson | ConvertFrom-Json -Depth 32 -ErrorAction Stop
   } catch {
     return $false
   }
@@ -402,7 +402,7 @@ function Test-CutoverLeaseObject {
 function Test-CutoverStateObject {
   param([Parameter(Mandatory = $true)][string]$StateJson)
   try {
-    $doc = $StateJson | ConvertFrom-Json -ErrorAction Stop
+    $doc = $StateJson | ConvertFrom-Json -Depth 32 -ErrorAction Stop
   } catch {
     return $false
   }
@@ -467,7 +467,7 @@ function Test-CutoverLease {
     return $false
   }
   if (-not (Test-CutoverLeaseObject -LeaseJson $leaseRaw)) { return $false }
-  $lease = $leaseRaw | ConvertFrom-Json
+  $lease = $leaseRaw | ConvertFrom-Json -Depth 32
   if ($ExpectedGeneration -ne '' -and $lease.generation -cne $ExpectedGeneration) { return $false }
   if (-not (Test-Path -LiteralPath $lease.statePath)) { return $false }
   try {
@@ -476,7 +476,7 @@ function Test-CutoverLease {
     return $false
   }
   if (-not (Test-CutoverStateObject -StateJson $stateRaw)) { return $false }
-  $state = $stateRaw | ConvertFrom-Json
+  $state = $stateRaw | ConvertFrom-Json -Depth 32
   if ($state.generation -cne $lease.generation) { return $false }
   if ($state.status -cne 'IN_PROGRESS') { return $false }
   if ($lease.expiresAt.ToUniversalTime() -le [DateTime]::UtcNow) { return $false }

@@ -58,7 +58,7 @@ if [ -n "$PSH" ]; then
   export PATH="$T/fake-bin:$PATH"
 
   semilla_ws() { # $1=bare $2=nombre
-    git init -q --bare "$1" || return 1
+    git init -q -b main --bare "$1" || return 1
     W="$T/w"; rm -rf "$W"; git clone -q "$1" "$W" 2>/dev/null || return 1
     ( cd "$W" && git checkout -q -b main && printf 'ws1\n' > NOTAS.md \
       && git add -A && git -c user.name=t -c user.email=t@t commit -qm base \
@@ -66,7 +66,7 @@ if [ -n "$PSH" ]; then
     rm -rf "$W"
   }
   semilla_main() {
-    git init -q --bare "$T/m-origin.git" || return 1
+    git init -q -b main --bare "$T/m-origin.git" || return 1
     W="$T/w"; rm -rf "$W"; git clone -q "$T/m-origin.git" "$W" 2>/dev/null || return 1
     ( cd "$W" && git checkout -q -b main \
       && mkdir -p agents/main/agent/workshop-skills/s \

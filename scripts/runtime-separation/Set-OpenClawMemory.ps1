@@ -106,7 +106,7 @@ function Test-GatewayUp([string]$Url) {
 # La politica vive en config/ollama-runtime.v1.json (ruta via -PolicyPath).
 function Read-Policy([string]$Path) {
   $p = $null
-  try { $p = Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json } catch { $p = $null }
+  try { $p = Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json -Depth 32 } catch { $p = $null }
   if ($null -eq $p) { throw 'politica ilegible' }
   if ($p.schema -cne 'ollama-runtime.v1') { throw 'politica con schema ajeno' }
   if ($p.ollamaVersion -notmatch '^\d+\.\d+\.\d+$') { throw 'politica sin ollamaVersion' }
@@ -205,7 +205,7 @@ try {
       Write-Output 'plan migrate: bookmark de eventos + recibo'
     } else {
       $mig0 = $null
-      try { $mig0 = Get-Content -Raw -LiteralPath $MigrationPath | ConvertFrom-Json } catch { $mig0 = $null }
+      try { $mig0 = Get-Content -Raw -LiteralPath $MigrationPath | ConvertFrom-Json -Depth 32 } catch { $mig0 = $null }
       if ($null -eq $mig0 -or $mig0.schema -cne 'memory-migration.v1') { throw 'migration.json invalido' }
       $rb0 = Read-RollbackAgents -Mig $mig0 -RtFull (Get-Full -Path $RuntimeRoot) `
         -SnapFull (Get-Full -Path $SnapshotRepo)
@@ -350,12 +350,12 @@ try {
     $stRaw = (& openclaw memory status --json 2>&1)
     if ($LASTEXITCODE -ne 0) { throw 'memory status fallo' }
     $agents = @()
-    try { $agents = @(($stRaw | Out-String) | ConvertFrom-Json) } catch { $agents = @() }
+    try { $agents = @(($stRaw | Out-String) | ConvertFrom-Json -Depth 32) } catch { $agents = @() }
     if ($agents.Count -eq 0) { throw 'sin agentes' }
     $priorRaw = (& openclaw config get memory.search --json 2>&1)
     if ($LASTEXITCODE -ne 0) { throw 'config get fallo' }
     $prior = $null
-    try { $prior = (($priorRaw | Out-String) | ConvertFrom-Json) } catch { $prior = $null }
+    try { $prior = (($priorRaw | Out-String) | ConvertFrom-Json -Depth 32) } catch { $prior = $null }
     if ($null -eq $prior) { throw 'prior ilegible' }
 
     $snaps = New-Object System.Collections.Generic.List[object]
@@ -377,7 +377,7 @@ try {
       $crRaw = (& openclaw backup sqlite create --agent $id --repository $SnapshotRepo --json 2>&1)
       if ($LASTEXITCODE -ne 0) { throw ("snapshot fallo: {0}" -f $id) }
       $snapPath = ''
-      try { $snapPath = ((($crRaw | Out-String) | ConvertFrom-Json).snapshot) } catch { $snapPath = '' }
+      try { $snapPath = ((($crRaw | Out-String) | ConvertFrom-Json -Depth 32).snapshot) } catch { $snapPath = '' }
       if ([string]::IsNullOrEmpty($snapPath)) { throw ("snapshot sin ruta: {0}" -f $id) }
       if (-not (Test-PathInside -Path $snapPath -Root $SnapshotRepo)) {
         throw ("snapshot fuera de repo: {0}" -f $id)
@@ -427,12 +427,12 @@ try {
     $valRaw = (& openclaw config validate --json 2>&1)
     if ($LASTEXITCODE -ne 0) { throw 'config validate fallo' }
     $valOk = $false
-    try { $valOk = (((($valRaw | Out-String) | ConvertFrom-Json).ok) -eq $true) } catch { $valOk = $false }
+    try { $valOk = (((($valRaw | Out-String) | ConvertFrom-Json -Depth 32).ok) -eq $true) } catch { $valOk = $false }
     if (-not $valOk) { throw 'config validate no-ok' }
     $rbRaw = (& openclaw config get memory.search --json 2>&1)
     if ($LASTEXITCODE -ne 0) { throw 'config readback fallo' }
     $rb = $null
-    try { $rb = (($rbRaw | Out-String) | ConvertFrom-Json) } catch { $rb = $null }
+    try { $rb = (($rbRaw | Out-String) | ConvertFrom-Json -Depth 32) } catch { $rb = $null }
     if ($null -eq $rb -or $rb.provider -cne $ms.provider -or $rb.model -cne $ms.model -or $rb.fallback -cne $ms.fallback) {
       throw 'readback distinto del triple'
     }
@@ -448,7 +448,7 @@ try {
       $sRaw = (& openclaw memory search --agent $g.agentId --json --query $VerifyQuery 2>&1)
       if ($LASTEXITCODE -ne 0) { throw ("search fallo: {0}" -f $g.agentId) }
       $res = @()
-      try { $res = @((($sRaw | Out-String) | ConvertFrom-Json).results) } catch { $res = @() }
+      try { $res = @((($sRaw | Out-String) | ConvertFrom-Json -Depth 32).results) } catch { $res = @() }
       $semantic = $false
       foreach ($r in $res) {
         if ($r.score -ge $MinVerifyScore) {
@@ -478,7 +478,7 @@ try {
       exit 2
     }
     $mig = $null
-    try { $mig = Get-Content -Raw -LiteralPath $MigrationPath | ConvertFrom-Json } catch { $mig = $null }
+    try { $mig = Get-Content -Raw -LiteralPath $MigrationPath | ConvertFrom-Json -Depth 32 } catch { $mig = $null }
     if ($null -eq $mig -or $mig.schema -cne 'memory-migration.v1') { throw 'migration.json invalido' }
     if (@($mig.agents).Count -eq 0) { throw 'migration.json sin agentes' }
     $gp = $mig.globalPrior
@@ -563,7 +563,7 @@ try {
       $dgRaw = (& openclaw backup create --verify --output $diagDir --json 2>&1)
       if ($LASTEXITCODE -ne 0) { throw 'backup diagnostico fallo' }
       $dgPath = ''
-      try { $dgPath = ((($dgRaw | Out-String) | ConvertFrom-Json).archivePath) } catch { $dgPath = '' }
+      try { $dgPath = ((($dgRaw | Out-String) | ConvertFrom-Json -Depth 32).archivePath) } catch { $dgPath = '' }
       if ([string]::IsNullOrEmpty($dgPath)) { throw 'diagnostico sin archivePath' }
       [void]$commands.Add([PSCustomObject]@{ name = 'diagnostic-backup'; exit = 0 })
       [void]$observations.Add("diagnostico: $dgPath")
@@ -578,12 +578,12 @@ try {
     $valRaw = (& openclaw config validate --json 2>&1)
     if ($LASTEXITCODE -ne 0) { throw 'config validate fallo' }
     $valOk = $false
-    try { $valOk = (((($valRaw | Out-String) | ConvertFrom-Json).ok) -eq $true) } catch { $valOk = $false }
+    try { $valOk = (((($valRaw | Out-String) | ConvertFrom-Json -Depth 32).ok) -eq $true) } catch { $valOk = $false }
     if (-not $valOk) { throw 'config validate no-ok' }
     $rbRaw = (& openclaw config get memory.search --json 2>&1)
     if ($LASTEXITCODE -ne 0) { throw 'config readback fallo' }
     $rb = $null
-    try { $rb = (($rbRaw | Out-String) | ConvertFrom-Json) } catch { $rb = $null }
+    try { $rb = (($rbRaw | Out-String) | ConvertFrom-Json -Depth 32) } catch { $rb = $null }
     if ($canSnap) {
       if ($null -eq $rb -or $rb.provider -cne $gp.provider -or $rb.model -cne $gp.model -or $rb.fallback -cne $gp.fallback) {
         throw 'readback distinto del prior'
@@ -606,7 +606,7 @@ try {
         $sRaw = (& openclaw memory search --agent $a.agent --json --query 'rollback-lexical-probe' 2>&1)
         if ($LASTEXITCODE -ne 0) { throw ("search fallo: {0}" -f $a.agent) }
         $res = @()
-        try { $res = @((($sRaw | Out-String) | ConvertFrom-Json).results) } catch { $res = @() }
+        try { $res = @((($sRaw | Out-String) | ConvertFrom-Json -Depth 32).results) } catch { $res = @() }
         if ($res.Count -eq 0) { throw ("sin resultados lexicos: {0}" -f $a.agent) }
       }
       [void]$commands.Add([PSCustomObject]@{ name = 'lexical-verify'; exit = 0 })
