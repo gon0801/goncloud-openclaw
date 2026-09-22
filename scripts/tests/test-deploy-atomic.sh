@@ -171,7 +171,8 @@ PY
   got_app=$(cat "$T/s-rt/app.txt" 2>/dev/null); got_nuevo=$(cat "$T/s-rt/nuevo.txt" 2>/dev/null)
   got_bak=$(cat "$T/s-st/backup/app.txt" 2>/dev/null)
   dump() { printf '%s' "$1" | od -An -c | tr -d ' \n'; }
-  [ "$got_app" = 'v2-app' ] || fail "(3) app.txt no se publico (got [$(dump "$got_app")])"
+  diag_out=$(tr -d '\r' <"$T/s.out" 2>/dev/null | tail -c 1200 | tr '\n' '~')
+  [ "$got_app" = 'v2-app' ] || fail "(3) app.txt no se publico (got [$(dump "$got_app")] sout~[${diag_out}])"
   [ "$got_nuevo" = 'nuevo' ] || fail "(3) nuevo.txt no se publico (got [$(dump "$got_nuevo")])"
   [ "$got_bak" = 'v1-app' ] \
     || fail "(3) el respaldo no guarda el original de app.txt (got [$(dump "$got_bak")])"
