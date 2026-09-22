@@ -85,6 +85,7 @@ mwd() { # ruta mixta C:/... en Windows (bash y powershell la aceptan)
     printf '%s' "$1"
   fi
 }
+T_POSIX=$T # PATH hereda forma POSIX: MSYS2 reconvierte D:/ mal y pwsh pierde el shim (CI21)
 T="$(mwd "$T")"
 if ! command -v shasum >/dev/null 2>&1; then
   shasum() { [ "$1" = "-a" ] && shift 2; sha256sum "$@"; }
@@ -112,7 +113,7 @@ else:
     print("%s BUILTIN\\Administrators:(OI)(CI)(F)" % d)
 PY
 mkshim icacls icacls-stub.py
-export PATH="$T/fake-bin:$PATH"
+export PATH="$T_POSIX/fake-bin:$PATH"
 MODN="$(mwd "$PWD/$MODULO")"
 RECN="$(mwd "$PWD/$RECIBO_SCHEMA")"
 GEN_FIJO=20260922T120000Z-abcdef12
