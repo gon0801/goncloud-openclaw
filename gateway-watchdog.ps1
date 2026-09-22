@@ -11,7 +11,7 @@ $gatewayPort = 18789
 $gatewayTask = "OpenClaw Gateway"
 $logFile = "C:\Users\ehven\.openclaw\logs\gateway-watchdog.log"
 $bootGraceSeconds = 300
-$httpTimeoutSec = 10
+$httpTimeoutSec = 90
 
 function Watchdog-Log($msg) {
     Add-Content -Path $logFile -Value ("[{0:yyyy-MM-dd HH:mm:ss}] {1}" -f (Get-Date), $msg)
