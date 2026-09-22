@@ -283,6 +283,14 @@ b=$(git -C "$d" rev-parse HEAD); h=$b
 ( cd "$T/plano" && bash "$RAIZ/$CLASIFICADOR" --allowlist "$ALLOWLIST" --base x --head y >/dev/null 2>&1 )
 [ $? -eq 2 ] && ok "no-es-repo-git -> exit 2" || falla "no-es-repo-git: espero exit 2"
 
+# F3 (auditoria adversarial post-Fase 15): una allowlist que es DIRECTORIO.
+# [ -r ] era cierto para un directorio, la barrera no cortaba y el script
+# moria despues ADENTRO (el read del redirect `done < dir` falla y con
+# set -u rebota en $patron) con exit 1 y SIN veredicto; el contrato de la
+# cabecera promete exit 2, el error de herramienta que deja el job rojo.
+( cd "$d" && bash "$RAIZ/$CLASIFICADOR" --allowlist "$T/plano" --base "$b" --head "$h" >/dev/null 2>&1 )
+[ $? -eq 2 ] && ok "allowlist-directorio -> exit 2" || falla "allowlist-directorio: espero exit 2"
+
 # (2) contrato con la allowlist REAL: los 4 paths del cierre de la fase.
 d=$T/contrato-real-4-paths; sembrar "$d"
 printf 'plan 5\n'                 > "$d/Plans.md"
