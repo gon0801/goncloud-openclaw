@@ -367,7 +367,9 @@ try {
   if (-not (Test-Path -LiteralPath $expDir)) {
     [void](New-Item -ItemType Directory -Path $expDir -Force)
   }
-  $dupXml = (& schtasks /query /tn $DuplicateTaskName /xml 2>&1 | Out-String)
+  # EAP temporal (CI18): stderr de schtasks no lanza en 5.1; manda el exit.
+  $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  try { $dupXml = (& schtasks /query /tn $DuplicateTaskName /xml 2>&1 | Out-String) } finally { $ErrorActionPreference = $prevEAP }
   if ($LASTEXITCODE -eq 0 -and $dupXml -match '<Task ') {
     $safe = ($DuplicateTaskName -replace '[^A-Za-z0-9]+', '-').Trim('-')
     $xp = Join-Path $expDir ("task-{0}-{1}.xml" -f $safe, $stamp)
@@ -375,7 +377,8 @@ try {
     $inputs['duplicateXml'] = [ordered]@{ algo = 'sha256'; sha256 = (Get-FileSha -Path $xp) }
     & schtasks /delete /tn $DuplicateTaskName /f 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'no se pudo borrar la duplicada' }
-    & schtasks /query /tn $DuplicateTaskName /xml 2>&1 | Out-Null
+    $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try { & schtasks /query /tn $DuplicateTaskName /xml 2>&1 | Out-Null } finally { $ErrorActionPreference = $prevEAP }
     if ($LASTEXITCODE -eq 0) { throw 'la duplicada sigue viva' }
     [void]$commands.Add([PSCustomObject]@{ name = 'duplicate-remove'; exit = 0 })
     [void]$observations.Add("duplicada exportada y borrada: $DuplicateTaskName")
@@ -386,7 +389,8 @@ try {
   $savedEnv = $env:OPENCLAW_STATE_DIR
   $env:OPENCLAW_STATE_DIR = $null
   try {
-    $offXml = (& schtasks /query /tn $NodeTaskName /xml 2>&1 | Out-String)
+    $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try { $offXml = (& schtasks /query /tn $NodeTaskName /xml 2>&1 | Out-String) } finally { $ErrorActionPreference = $prevEAP }
     if ($LASTEXITCODE -ne 0) { throw ("oficial ausente: {0}" -f $NodeTaskName) }
     if ($offXml -notmatch '<Enabled>true</Enabled>') { throw 'oficial sin Enabled' }
     if ($offXml -notmatch 'LogonTrigger') { throw 'oficial sin LogonTrigger' }

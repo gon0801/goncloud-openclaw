@@ -797,3 +797,9 @@ perfecto: DIAG CI17 mostro `$agents[0].agentId` = Object[]: en 5.1
 desenvuelve. Fix: parseo a escalar + foreach aplanar (identico en ambos,
 vacio==0 preservado) en Backup agents, Memory agents, Node rawPend/rawSt
 y Sync found. Los `@($x.prop)` sobre variable no envuelven (diag: OK).
+
+F26 (stderr schtasks + EAP=Stop en 5.1): CI18 node (2b): el verify tras
+`delete` espera exit!=0, pero el `ERROR:` del stub a stderr lanza en 5.1
+antes del chequeo. Fix: EAP temporal en los 3 `schtasks /query`
+(dup, verify-borrado, oficial). delete/run/icacls en exito no emiten
+stderr: se dejan.
