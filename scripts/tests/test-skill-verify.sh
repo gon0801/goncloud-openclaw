@@ -53,75 +53,39 @@ elegir_node() {
 }
 NODE=$(elegir_node) || { echo "FAIL: no hay un node >= 22 disponible"; exit 1; }
 
-# --- symlink de openclaw: las cuatro líneas de la propia skill (Drive) ------
-# role.test.ts borra summa-gate/node_modules/openclaw en su teardown, así que
-# esto se re-crea en CADA corrida (idempotente), igual que exige SKILL.md.
-# OPENCLAW_NODE_MODULES primero: en CI (ubuntu-latest) la batería lo exporta
-# apuntando al node_modules del workspace, no a $HOME.
-OC="${OPENCLAW_NODE_MODULES:-$HOME/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw}"
-test -d "$OC" || { echo "FAIL: no hay instalacion de openclaw en $OC"; exit 1; }
-
-# r1: si el enlace preexistía (before de role.test.ts, setup de CI, drive
-# manual), se respalda con mv y se devuelve IGUAL al terminar; si no existía,
-# no queda nada. r2 (cross-review codex): el trap se arma ANTES de tocar el
-# enlace (un fallo posterior cualquiera devuelve el estado original), la
-# restauración verifica cada paso y nunca calla una pérdida — si no se puede
-# restaurar, exit != 0 con la ruta del respaldo para recuperación manual — y
-# la preservación tiene un caso del test que la prueba (abajo, al final).
-LINK=summa-gate/node_modules/openclaw
-RESPALDO_DIR=$(mktemp -d) || { echo "FAIL: mktemp"; exit 1; }
-RESPALDO="$RESPALDO_DIR/openclaw.respaldo"
-PREEXISTIA=0
-
-restaurar_enlace() {
-  if [ "$PREEXISTIA" -eq 1 ]; then
-    if [ -e "$RESPALDO" ] || [ -L "$RESPALDO" ]; then
-      rm -f "$LINK" || {
-        echo "FAIL restauración: no se pudo sacar el enlace de esta corrida ($LINK)." \
-             "Original a salvo en $RESPALDO — recuperar a mano: mv '$RESPALDO' '$LINK'" >&2
-        exit 1
-      }
-      mv "$RESPALDO" "$LINK" || {
-        echo "FAIL restauración: no se pudo devolver el enlace original a $LINK." \
-             "RECUPERAR A MANO: mv '$RESPALDO' '$LINK' (respaldo conservado)" >&2
-        exit 1
-      }
-      if ! rmdir "$RESPALDO_DIR" 2>/dev/null; then
-        echo "aviso: quedó el directorio de respaldo vacío $RESPALDO_DIR" >&2
-      fi
-    fi
-    # Sin respaldo: el mv inicial falló y el original NUNCA se movió de $LINK:
-    # no se toca nada.
-  else
-    if [ -e "$LINK" ] || [ -L "$LINK" ]; then
-      rm -f "$LINK" || {
-        echo "FAIL limpieza: no se pudo retirar el enlace que esta corrida creó ($LINK)" >&2
-        exit 1
-      }
-    fi
-    if ! rmdir "$RESPALDO_DIR" 2>/dev/null; then
-      echo "aviso: quedó el directorio de respaldo vacío $RESPALDO_DIR" >&2
-    fi
-  fi
-}
-trap restaurar_enlace EXIT
-
-if [ -e "$LINK" ] || [ -L "$LINK" ]; then
-  PREEXISTIA=1
-  mv "$LINK" "$RESPALDO" || { echo "FAIL: no se pudo respaldar $LINK"; exit 1; }
-fi
-( cd summa-gate && mkdir -p node_modules && { [ -e node_modules/openclaw ] || ln -s "$OC" node_modules/openclaw; } ) \
-  || { echo "FAIL: no se pudo crear el symlink summa-gate/node_modules/openclaw"; exit 1; }
+# --- SDK de openclaw: fixture aislado (B4) ----------------------------------
+# Antes el import `openclaw/plugin-sdk/plugin-entry` se resolvia contra la
+# instalacion del host ($HOME/.openclaw/... o OPENCLAW_NODE_MODULES) y esta
+# prueba manipulaba el node_modules COMPARTIDO de summa-gate (respaldaba y
+# restauraba su symlink en cada corrida). Medido 2026-09-21: una copia
+# instalada divergente rompia la prueba de fuente, y una maquina sin
+# instalacion la dejaba en FAIL por entorno. Ahora: copia de summa-gate a un
+# playground temporal con su PROPIO node_modules, y el SDK es un fixture de
+# esta prueba — la fuente no consulta ninguna instalacion y el arbol
+# compartido no se toca.
+PG=$(mktemp -d) || { echo "FAIL: mktemp playground"; exit 1; }
+SDK="$PG/sdk/openclaw"
+mkdir -p "$SDK/plugin-sdk" "$PG/summa-gate" || { echo "FAIL: mktemp sdk"; exit 1; }
+printf '%s\n' '{"name":"openclaw","version":"0.0.0-fixture-b4","type":"module","exports":{"./plugin-sdk/plugin-entry":"./plugin-sdk/plugin-entry.mjs"}}' >"$SDK/package.json"
+# definePluginEntry identitario: el unico punto del SDK que summa-gate usa aqui
+# es recibir la definicion (con register) y devolverla.
+printf '%s\n' 'export const definePluginEntry = (def) => def;' >"$SDK/plugin-sdk/plugin-entry.mjs"
+# Copia de summa-gate SIN el node_modules compartido: tar excluye el symlink
+# ajeno en vez de arrastrarlo al playground.
+tar -C summa-gate --exclude=node_modules -cf - . | tar -C "$PG/summa-gate" -xf - \
+  || { echo "FAIL: no pude copiar summa-gate al playground"; exit 1; }
+mkdir -p "$PG/summa-gate/node_modules" || exit 1
+ln -s "$SDK" "$PG/summa-gate/node_modules/openclaw" \
+  || { echo "FAIL: no pude enlazar el fixture del SDK"; exit 1; }
 
 # --- HOME en caja de arena ---------------------------------------------------
 # La batería de (a) arma una sesión con el sentinel para disparar el gate de
 # cierre, y ese armado persiste estado en ~/.openclaw/summa-gate/state. Correr
-# la batería no puede ensuciar el HOME de la máquina que la corre. OC ya quedó
-# resuelto a ruta absoluta, y el import del plugin pasa por el symlink, no por
-# $HOME.
+# la batería no puede ensuciar el HOME de la máquina que la corre. El import
+# del plugin pasa por el playground, no por $HOME.
 SB=$(mktemp -d) || { echo "FAIL: mktemp"; exit 1; }
 
-HOME="$SB" REPO_ROOT="$PWD" OPENCLAW_NODE_MODULES="$OC" "$NODE" --input-type=module - <<'PROGRAMA'
+HOME="$SB" REPO_ROOT="$PWD" PLAYGROUND="$PG" "$NODE" --input-type=module - <<'PROGRAMA'
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -152,7 +116,11 @@ const api = {
   },
   pluginConfig: {},
 };
-const plugin = await import(pathToFileURL(join(ROOT, "summa-gate", "index.ts")).href);
+// El plugin se importa de la COPIA del playground: ahi vive el node_modules
+// propio con el fixture del SDK, y el arbol compartido del repo no se toca.
+// ROOT (el checkout) solo se LEE: SKILL.md, features/ y los comentarios
+// `// -- N.` del index.ts original.
+const plugin = await import(pathToFileURL(join(process.env.PLAYGROUND, "summa-gate", "index.ts")).href);
 plugin.default.register(api);
 
 const hookCon = (event) => regs.find((r) => r.event === event && !r.opts?.matcher);
@@ -378,30 +346,46 @@ rc=$?
 rm -rf "$SB"
 if [ "$rc" -ne 0 ]; then exit "$rc"; fi
 
-# r2 hueco 3: la preservación del enlace preexistente es un caso del test, no
-# una promesa. Planta un enlace, corre este mismo script como subproceso (el
-# marcador evita la recursión) y exige que el enlace siga ahí, mismo destino.
-if [ -z "${PRESERVACION_HIJO:-}" ]; then
-  # A esta altura $LINK es el enlace de ESTA corrida (el original, si lo hubo,
-  # está respaldado): se retira para plantar el de la prueba.
-  rm -f "$LINK" || { echo "FAIL preservación: no se pudo retirar el enlace propio para plantar"; exit 1; }
-  ln -s "$OC" "$LINK" || { echo "FAIL preservación: no se pudo plantar el enlace de prueba"; exit 1; }
-  PLANTADO=$(readlink "$LINK")
-  SALIDA_HIJO=$(PRESERVACION_HIJO=1 bash "$0" 2>&1)
+# r-B4: la prueba de fuente es DETERMINISTA frente a la instalacion del host.
+# Se planta en un HOME temporal una copia divergente de openclaw cuyo SDK deja
+# marca al importar y revienta; la corrida hija (sin OPENCLAW_NODE_MODULES)
+# tiene que pasar, sin skip, sin leer la copia y sin modificarla. Es la
+# regresion del vicio viejo: antes esta prueba resolvia el SDK contra
+# $HOME/.openclaw y una copia divergente la rompia (medido 2026-09-21).
+if [ -z "${HIJO_AISLADO:-}" ]; then
+  T2=$(mktemp -d) || { echo "FAIL: mktemp regresion"; exit 1; }
+  SDK_DIV="$T2/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw"
+  mkdir -p "$SDK_DIV/plugin-sdk" || { echo "FAIL: mktemp sdk divergente"; exit 1; }
+  printf '%s\n' '{"name":"openclaw","version":"9.9.9-divergente","type":"module","exports":{"./plugin-sdk/plugin-entry":"./plugin-sdk/plugin-entry.mjs"}}' >"$SDK_DIV/package.json"
+  cat >"$SDK_DIV/plugin-sdk/plugin-entry.mjs" <<DIV
+import { appendFileSync } from "node:fs";
+appendFileSync("$T2/leida", "x");
+throw new Error("SDK DIVERGENTE");
+DIV
+  suma_antes=$(cksum "$SDK_DIV/plugin-sdk/plugin-entry.mjs") || { echo "FAIL: no pude sembrar la copia divergente"; exit 1; }
+  SALIDA_HIJO=$(HIJO_AISLADO=1 HOME="$T2" env -u OPENCLAW_NODE_MODULES bash "$0" 2>&1)
   rc_hijo=$?
-  if [ $rc_hijo -ne 0 ]; then
-    echo "FAIL preservación: la corrida hija salió $rc_hijo"
+  if [ "$rc_hijo" -ne 0 ]; then
+    echo "FAIL regresion B4: con la copia divergente en HOME la fuente ya no pasa (rc=$rc_hijo)"
     printf '%s\n' "$SALIDA_HIJO" | tail -6 | sed 's/^/  /'
-    rm -f "$LINK"
+    rm -rf "$T2"
     exit 1
   fi
-  if ! test -L "$LINK" || [ "$(readlink "$LINK")" != "$PLANTADO" ]; then
-    echo "FAIL preservación: el enlace preexistente no sobrevivió a la corrida (test -L o destino cambiado)"
-    rm -f "$LINK"
+  printf '%s\n' "$SALIDA_HIJO" | grep -q '^skip' \
+    && { echo "FAIL regresion B4: la corrida hija produjo un skip"; rm -rf "$T2"; exit 1; }
+  if [ -f "$T2/leida" ]; then
+    echo "FAIL regresion B4: la copia divergente fue LEIDA/IMPORTADA (canario marcado)"
+    rm -rf "$T2"
     exit 1
   fi
-  rm -f "$LINK"
-  echo "ok preservación: un enlace preexistente sobrevivió a la corrida apuntando a $PLANTADO"
+  suma_despues=$(cksum "$SDK_DIV/plugin-sdk/plugin-entry.mjs") || { echo "FAIL: la copia divergente desaparecio"; rm -rf "$T2"; exit 1; }
+  if [ "$suma_antes" != "$suma_despues" ]; then
+    echo "FAIL regresion B4: la copia divergente fue MODIFICADA"
+    rm -rf "$T2"
+    exit 1
+  fi
+  rm -rf "$T2"
+  echo "ok regresion B4: copia divergente en HOME — la fuente pasa igual, no la lee, no la modifica"
 fi
 
 exit 0

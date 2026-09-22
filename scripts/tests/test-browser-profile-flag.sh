@@ -6,7 +6,9 @@
 # reinicio innecesario mato la corrida 11h. Y reset-profile manda el perfil logueado a la Papelera.
 # Verifica: (1) el detector marca las formas del incidente y deja pasar las correctas (discrimina);
 # (2) ninguna instruccion versionada para agentes usa la forma mala; (3) la skill con la regla esta
-# en main/operaciones/ingenieria, identica y con sus anclas; (4) con CLI local, el mecanismo sigue.
+# en main/operaciones/ingenieria, identica y con sus anclas; (4) la fuente es determinista: con una
+# copia divergente de openclaw instalada en HOME, el veredicto no cambia y la copia queda intacta
+# (el mecanismo con el binario real lo audita el preflight de corrida, no esta prueba).
 # Uso: bash scripts/tests/test-browser-profile-flag.sh
 # OJO SI ESTA PRUEBA SE PONE EN ROJO POR EL PASO (3), el de "difiere de":
 # los archivos bajo agents/*/agent/workshop-skills/ son ARTEFACTOS GENERADOS. El cron
@@ -68,19 +70,41 @@ grep -qF 'One session drives the claw browser at a time' "$REF" || fail "$REF: f
 grep -qF 'timeoutSeconds >= 60' "$REF" || fail "$REF: falta el timeout minimo de 60 s"
 echo "ok (3): skill $SK en main/operaciones/ingenieria, identica y con sus anclas"
 
-# (4) Mecanismo, solo si hay CLI local. HOME temporal y sin red: falla antes de abrir el websocket.
-# `--profile claw` debe desviar la config a ~/.openclaw-claw; `--browser-profile claw` no.
-OC=${OPENCLAW_BIN:-$HOME/.openclaw/bin/openclaw}
-if [ -x "$OC" ]; then
+# (4) Aislamiento de la copia instalada (B4): esta prueba es de FUENTE y su
+# veredicto no puede depender de la copia de openclaw instalada en la Mac.
+# Antes este paso corria el CLI real de $HOME/.openclaw (o OPENCLAW_BIN) y
+# salteaba con "skip" si faltaba: medido 2026-09-21, una copia divergente
+# pintaba la fuente de rojo y una maquina sin instalacion producia un skip
+# callado (el candado desaparecia justamente donde la instalacion podia estar
+# rota). El chequeo del mecanismo con el binario real vive en el preflight de
+# corrida (scripts/mac/corrida/preflight.sh), donde la ausencia es un unknown
+# explicito. Aca se prueba lo contrario: con una copia divergente PLANTADA en
+# un HOME temporal, el veredicto de fuente no cambia, la copia no se ejecuta
+# y no se modifica.
+if [ -z "${HIJO_AISLADO:-}" ]; then
   T=$(mktemp -d) || exit 1
   trap 'rm -rf "$T"' EXIT
-  out=$(HOME="$T" "$OC" browser tabs --profile claw --json 2>&1)
-  printf '%s' "$out" | grep -q '\.openclaw-claw/openclaw\.json' \
-    || fail "--profile claw ya no desvia la config (cambio el CLI?): $out"
-  out=$(HOME="$T" "$OC" browser --browser-profile claw tabs --json 2>&1)
-  printf '%s' "$out" | grep -q '\.openclaw-claw' && fail "--browser-profile tambien desvia la config: $out"
-  echo "ok (4): el CLI desvia la config a ~/.openclaw-claw solo con --profile"
-else
-  echo "skip (4): no hay CLI openclaw en $OC"
+  DIVERGENTE="$T/.openclaw/bin/openclaw"
+  mkdir -p "$(dirname "$DIVERGENTE")" || exit 1
+  {
+    printf '#!/bin/sh\n'
+    printf 'printf x >> "%s/ejecutada"\n' "$T"
+    printf 'echo "forma mala aceptada: reset-profile --profile claw"\n'
+    printf 'exit 0\n'
+  } >"$DIVERGENTE" || exit 1
+  chmod +x "$DIVERGENTE"
+  suma_antes=$(cksum "$DIVERGENTE") || fail "no pude sembrar la copia divergente"
+  SALIDA_HIJO=$(HIJO_AISLADO=1 HOME="$T" OPENCLAW_BIN="$DIVERGENTE" bash "$0" 2>&1)
+  rc_hijo=$?
+  [ "$rc_hijo" -eq 0 ] || fail "(4) con la copia divergente presente la fuente ya no pasa (rc=$rc_hijo):
+$SALIDA_HIJO"
+  grep -q '^skip' <<<"$SALIDA_HIJO" && fail "(4) la corrida hija produjo un skip: la fuente todavia depende de la instalacion:
+$SALIDA_HIJO"
+  if [ -f "$T/ejecutada" ]; then
+    fail "(4) la copia divergente FUE EJECUTADA: la fuente consulta la instalacion"
+  fi
+  suma_despues=$(cksum "$DIVERGENTE") || fail "(4) la copia divergente desaparecio durante la corrida"
+  [ "$suma_antes" = "$suma_despues" ] || fail "(4) la copia divergente fue MODIFICADA por la corrida"
+  echo "ok (4): fuente determinista — copia divergente presente, no ejecutada, no modificada, veredicto igual"
 fi
 echo "PASS test-browser-profile-flag"
