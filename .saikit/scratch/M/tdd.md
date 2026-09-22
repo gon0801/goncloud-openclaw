@@ -755,3 +755,12 @@ el veredicto de CI7 dira si es skip silencioso (rel corrupto), CR
 fantasma u otra cosa. Nota: shard-2 cayo en test-tmux-activity-watch
 (2h-bis) con diff CI5->CI6 vacio en esa area: segundo flaky tmux
 seguido (tras corrida-nucleo CI4), se re-evalua en CI7.
+
+F20 (arbol fantasma RUNNER~1, causa raiz de F19): CI10 mostro
+natSrc shortname con nrec=0 y Apply=0: TEMP trae shortname, 8.3
+deshabilitado, cygpath -w lo propaga y PowerShell crea RUNNER~1
+literal. El deploy opero 100% en el fantasma (exit 0) y el test miro
+el arbol real (v1-app intacto). Fix: TMPDIR bajo el workspace (D:, sin
+shortnames) a nivel job en windows-contract + step mkdir. Nota: en
+Windows-dev con TEMP similar haria falta lo mismo (sin evidencia; no
+se toca nat()).

@@ -324,10 +324,19 @@ jobs:
     needs: [clasificador]
     if: needs.clasificador.outputs.carril != 'fast'
     timeout-minutes: 10
+    env:
+      # %TEMP% trae shortname (RUNNER~1) con 8.3 deshabilitado: cygpath -w lo
+      # propaga y PowerShell crea un arbol fantasma literal. mktemp bajo el
+      # workspace (D:, sin shortnames) lo evita (CI10).
+      TMPDIR: ${{ github.workspace }}/.tmp-f16ci
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      - name: Temporal propio sin shortnames
+        shell: bash
+        run: mkdir -p "$TMPDIR"
 
       - name: Contrato del recibo
         shell: bash
