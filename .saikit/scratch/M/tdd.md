@@ -711,3 +711,22 @@ movimiento + fault injection `OPENCLAW_DEPLOY_FAULT=readback|journal`
 (solo tests). Mutante muerto (orden viejo: published antes del
 journal): `ROJO: (5b/readback) rollback incompleto: runtime difiere`.
 Verde: `TODO VERDE: deploy-atomic`.
+
+## CI rondas 2-4 (paridad 5.1/PS7, post-brief)
+
+F15 (fixture hermetico a init.defaultBranch): ROJO solo en CI
+(`(1a) ciclo verde debio salir 0`, 3x `ambiguous argument 'HEAD'`);
+en Mac pasaba por `init.defaultBranch=main` global. Repro local:
+`HOME=/tmp/fakehome` → mismo ROJO. VERDE con `git init -b main
+--bare` en semillas (`TODO VERDE: sync-four-repos` con HOME vacio).
+
+F16 (fechas JSON en 5.1): ROJO solo en windows-contract
+(`SMOKE-FAIL: receipt-good`, CI2). Causa: 5.1
+(JavaScriptSerializer) deja ISO8601 como [string]; PS7 (Newtonsoft)
+lo convierte a [datetime]; el validador exigia [datetime].
+Intento fallido documentado: `-Depth 32` en ConvertFrom-Json (CI3:
+`NamedParameterNotFound 'Depth'` — 5.1 no tiene ese parametro;
+revertido). VERDE con `Test-JsonInstant` ([datetime] o [string] con
+forma estricta) en receipt/lease/state + normalizacion en
+comparaciones de orden y heartbeat del cutover (803/829).
+Mutantes: instant-mismatch/instant-badshape en el humo (26/26).

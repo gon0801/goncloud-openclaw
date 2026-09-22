@@ -26,7 +26,7 @@ YAML=.github/workflows/quality.yml
 [ -f "$MODULO" ] || fail "(0) falta $MODULO"
 echo "ok (0): el modulo existe"
 
-# (1) Anclas: las cinco funciones, las tres raices, la exportacion y los
+# (1) Anclas: las seis funciones, las tres raices, la exportacion y los
 # tres workspaces excluidos.
 while IFS= read -r anchor; do
   [ -n "$anchor" ] || continue
@@ -37,6 +37,7 @@ function Test-RuntimeLayout
 function Test-WorkspaceExcluded
 function Test-ReceiptObject
 function Write-ReceiptAtomic
+function Test-JsonInstant
 C:\Users\ehven\src\goncloud-openclaw
 C:\Users\ehven\.openclaw
 C:\Users\ehven\.openclaw-node
@@ -44,8 +45,8 @@ Export-ModuleMember
 workspace-ingenieria
 workspace-operaciones
 ANCHORS
-# La exportacion nombra las cinco (una funcion sin exportar no existe para el deploy).
-for f in Get-RuntimeCanonicalRoots Test-RuntimeLayout Test-WorkspaceExcluded Test-ReceiptObject Write-ReceiptAtomic; do
+# La exportacion nombra las seis (una funcion sin exportar no existe para el deploy).
+for f in Get-RuntimeCanonicalRoots Test-RuntimeLayout Test-WorkspaceExcluded Test-ReceiptObject Write-ReceiptAtomic Test-JsonInstant; do
   grep -E '^Export-ModuleMember' "$MODULO" | grep -qF "$f" \
     || fail "(1) Export-ModuleMember no nombra $f"
 done
@@ -73,15 +74,6 @@ for a in bajas:
             sys.exit(1)
 PY
 echo "ok (5): las tres raices son distintas y no se anidan"
-
-# (6) Paridad 5.1/PS7: ConvertFrom-Json sin -Depth usa default 2 en 5.1 y
-# amplio en PS7; un JSON de 3+ niveles lanza en 5.1 y todo valida $false
-# (CI2: los receipt-* que esperan $true fallaron solo en 5.1).
-# Toda llamada en codigo que corre en 5.1 lleva -Depth explicito.
-SIN_DEPTH=$(grep -hn 'ConvertFrom-Json' scripts/runtime-separation/RuntimeSeparation.psm1 scripts/runtime-separation/*.ps1 \
-  | grep -vE '^\s*[0-9]+:\s*#' | grep -vF -- '-Depth' || true)
-[ -z "$SIN_DEPTH" ] || fail "(6) ConvertFrom-Json sin -Depth (5.1 default 2): $SIN_DEPTH"
-echo "ok (6): todo ConvertFrom-Json lleva -Depth explicito"
 
 # --- motor PowerShell: obligatorio en Windows, oportunista fuera ---
 en_windows=0
@@ -159,6 +151,11 @@ Check 'receipt-good' ((Test-ReceiptObject -ReceiptJson $good -SchemaPath $Schema
 Check 'receipt-bad' ((Test-ReceiptObject -ReceiptJson $bad -SchemaPath $SchemaPath) -eq $false)
 Check 'receipt-secret' ((Test-ReceiptObject -ReceiptJson $secret -SchemaPath $SchemaPath) -eq $false)
 Check 'receipt-short-bearer' ((Test-ReceiptObject -ReceiptJson $short -SchemaPath $SchemaPath) -eq $true)
+$instPat = '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$'
+Check 'instant-datetime' ((Test-JsonInstant -Value ([datetime]'2026-09-22T10:00:00Z') -Raw '2026-09-22T10:00:00Z' -Pattern $instPat) -eq $true)
+Check 'instant-string' ((Test-JsonInstant -Value '2026-09-22T10:00:00Z' -Raw '2026-09-22T10:00:00Z' -Pattern $instPat) -eq $true)
+Check 'instant-mismatch' ((Test-JsonInstant -Value '2026-09-22T10:00:01Z' -Raw '2026-09-22T10:00:00Z' -Pattern $instPat) -eq $false)
+Check 'instant-badshape' ((Test-JsonInstant -Value ([datetime]'2026-09-22T10:00:00Z') -Raw '2026-09-22 10:00:00' -Pattern $instPat) -eq $false)
 $tmpdir = Join-Path ([IO.Path]::GetTempPath()) ('rsmoke-' + [Guid]::NewGuid().ToString('N'))
 [void](New-Item -ItemType Directory -Path $tmpdir)
 $dest = Join-Path $tmpdir 'receipt.json'
@@ -181,8 +178,8 @@ PS1
   printf '%s\n' "$out" | grep -q 'SMOKE-OK: atomic-roundtrip' \
     || fail "(3) el humo no llego al final: $out"
   n=$(printf '%s\n' "$out" | grep -c 'SMOKE-OK:') || n=0
-  [ "$n" -eq 22 ] || fail "(3) se esperaban 22 SMOKE-OK, llegaron $n: $out"
-  echo "ok (3): humo conductual del modulo en verde (22/22)"
+  [ "$n" -eq 26 ] || fail "(3) se esperaban 26 SMOKE-OK, llegaron $n: $out"
+  echo "ok (3): humo conductual del modulo en verde (26/26)"
 fi
 
 # (4) CI: instala 2026.9.5, job windows-contract acotado y gate que depende de el.

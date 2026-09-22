@@ -79,7 +79,7 @@ function ConvertTo-CanonicalJson($Obj) {
 }
 function Read-Approvals([string]$Path) {
   $doc = $null
-  try { $doc = Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json -Depth 32 } catch { $doc = $null }
+  try { $doc = Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json } catch { $doc = $null }
   if ($null -eq $doc) { throw 'allowlist ilegible' }
   if ($doc.version -ne 1) { throw 'allowlist sin version 1' }
   $agents = @($doc.agents.PSObject.Properties)
@@ -167,7 +167,7 @@ try {
     $eq = $s.IndexOf('=')
     if ($eq -le 0) { throw ("set sin forma path=value: {0}" -f $s) }
     $val = $s.Substring($eq + 1)
-    try { [void]($val | ConvertFrom-Json -Depth 32) } catch { throw ("set sin JSON: {0}" -f $s) }
+    try { [void]($val | ConvertFrom-Json) } catch { throw ("set sin JSON: {0}" -f $s) }
     [void]$sets.Add([PSCustomObject]@{ Path = $s.Substring(0, $eq); Value = $val })
   }
 
@@ -237,7 +237,7 @@ try {
     $valRaw = (& openclaw config validate --json 2>&1)
     if ($LASTEXITCODE -ne 0) { throw 'config validate fallo' }
     $valOk = $false
-    try { $valOk = (((($valRaw | Out-String) | ConvertFrom-Json -Depth 32).ok) -eq $true) } catch { $valOk = $false }
+    try { $valOk = (((($valRaw | Out-String) | ConvertFrom-Json).ok) -eq $true) } catch { $valOk = $false }
     if (-not $valOk) { throw 'config validate no-ok' }
 
     $gwArgs = @('--host', $GatewayHost, '--port', [string]$GatewayPort,
@@ -253,7 +253,7 @@ try {
       $idRaw = (& openclaw node identity --json 2>&1)
       if ($LASTEXITCODE -eq 0) {
         $ident = $null
-        try { $ident = (($idRaw | Out-String) | ConvertFrom-Json -Depth 32) } catch { $ident = $null }
+        try { $ident = (($idRaw | Out-String) | ConvertFrom-Json) } catch { $ident = $null }
         if ($null -ne $ident -and -not [string]::IsNullOrEmpty($ident.deviceId)) {
           $deviceId = [string]$ident.deviceId
           break
@@ -281,7 +281,7 @@ try {
     $getRaw = (& openclaw approvals get --node $deviceId --json 2>&1)
     if ($LASTEXITCODE -ne 0) { throw 'approvals get fallo' }
     $got = $null
-    try { $got = (($getRaw | Out-String) | ConvertFrom-Json -Depth 32) } catch { $got = $null }
+    try { $got = (($getRaw | Out-String) | ConvertFrom-Json) } catch { $got = $null }
     if ($null -eq $got -or $null -eq $got.file) { throw 'approvals get sin file' }
     if ((ConvertTo-CanonicalJson $got.file.agents) -cne (ConvertTo-CanonicalJson $doc.agents)) {
       throw 'readback de approvals distinto'
@@ -300,7 +300,7 @@ try {
       $pendRaw = (& openclaw nodes pending --json 2>&1)
       if ($LASTEXITCODE -eq 0) {
         $rawPend = @()
-        try { $rawPend = @(($pendRaw | Out-String) | ConvertFrom-Json -Depth 32) } catch { $rawPend = @() }
+        try { $rawPend = @(($pendRaw | Out-String) | ConvertFrom-Json) } catch { $rawPend = @() }
         $rawPend = @($rawPend | Where-Object { $_ -ne $null })
         $reqs = @()
         if ($rawPend.Count -eq 1 -and $null -ne $rawPend[0].requests) {
@@ -316,7 +316,7 @@ try {
           $apRaw = (& openclaw nodes approve $mine[0].requestId --json 2>&1)
           if ($LASTEXITCODE -ne 0) { throw 'nodes approve fallo' }
           $ap = $null
-          try { $ap = (($apRaw | Out-String) | ConvertFrom-Json -Depth 32) } catch { $ap = $null }
+          try { $ap = (($apRaw | Out-String) | ConvertFrom-Json) } catch { $ap = $null }
           foreach ($k in @('nodeId', 'id')) {
             if (-not [string]::IsNullOrEmpty($nodeId)) { break }
             if ($null -ne $ap -and $null -ne $ap.$k) { $nodeId = [string]$ap.$k }
@@ -401,7 +401,7 @@ try {
     $stRaw = (& openclaw nodes status --json 2>&1)
     if ($LASTEXITCODE -eq 0) {
       $rawSt = @()
-      try { $rawSt = @(($stRaw | Out-String) | ConvertFrom-Json -Depth 32) } catch { $rawSt = @() }
+      try { $rawSt = @(($stRaw | Out-String) | ConvertFrom-Json) } catch { $rawSt = @() }
       $rawSt = @($rawSt | Where-Object { $_ -ne $null })
       $nodes = @()
       if ($rawSt.Count -eq 1 -and $null -ne $rawSt[0].nodes) {

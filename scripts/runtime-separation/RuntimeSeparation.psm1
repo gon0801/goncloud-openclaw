@@ -129,6 +129,19 @@ function Test-JsonInteger {
   return (($Value -is [int]) -or ($Value -is [long]))
 }
 
+# 5.1 (JavaScriptSerializer) deja ISO8601 como [string]; PS7 (Newtonsoft) lo
+# convierte a [datetime]. Valen ambos si el texto crudo trae forma estricta
+# (CI3: exigir [datetime] ponia receipt-good en rojo solo en 5.1).
+function Test-JsonInstant {
+  param($Value, $Raw, [string]$Pattern)
+  if ($null -eq $Raw -or $Raw -cnotmatch $Pattern) { return $false }
+  if ($Value -is [datetime]) {
+    return (([datetime]$Raw).ToUniversalTime() -eq $Value.ToUniversalTime())
+  }
+  if ($Value -is [string]) { return ($Value -ceq $Raw) }
+  return $false
+}
+
 function Find-SecretShape {
   param($Node)
   if ($Node -is [string]) {
@@ -173,9 +186,9 @@ function Test-ReceiptObject {
     [Parameter(Mandatory = $true)][string]$SchemaPath
   )
   if (-not (Test-Path -LiteralPath $SchemaPath)) { throw "schema ilegible: $SchemaPath" }
-  $schema = Get-Content -Raw -LiteralPath $SchemaPath | ConvertFrom-Json -Depth 32
+  $schema = Get-Content -Raw -LiteralPath $SchemaPath | ConvertFrom-Json
   try {
-    $doc = $ReceiptJson | ConvertFrom-Json -Depth 32 -ErrorAction Stop
+    $doc = $ReceiptJson | ConvertFrom-Json -ErrorAction Stop
   } catch {
     return $false
   }
@@ -187,16 +200,16 @@ function Test-ReceiptObject {
   }
   if (-not ($doc.schema -is [string]) -or $doc.schema -cne 'runtime-separation-receipt.v1') { return $false }
   if (-not ($doc.phase -is [string]) -or $doc.phase -cnotmatch '^[0-9]{1,3}(\.[0-9]{1,3})?$') { return $false }
-  # ConvertFrom-Json convierte ISO8601 a [datetime] solo: la FORMA estricta
-  # (con Z) se verifica contra el texto crudo y el instante contra el objeto.
+  # La FORMA estricta (con Z) se verifica contra el texto crudo y el
+  # instante contra el objeto (Test-JsonInstant: [datetime] o [string]).
   $utc = '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$'
   foreach ($k in @('startedAt', 'endedAt')) {
     $raw = Get-RawJsonString -Json $ReceiptJson -Key $k
-    if ($null -eq $raw -or $raw -cnotmatch $utc) { return $false }
-    if (-not ($doc.$k -is [datetime])) { return $false }
-    if (([datetime]$raw).ToUniversalTime() -ne ($doc.$k).ToUniversalTime()) { return $false }
+    if (-not (Test-JsonInstant -Value $doc.$k -Raw $raw -Pattern $utc)) { return $false }
   }
-  if ($doc.endedAt.ToUniversalTime() -lt $doc.startedAt.ToUniversalTime()) { return $false }
+  $st = $doc.startedAt; if ($st -is [string]) { $st = [datetime]$st }
+  $en = $doc.endedAt; if ($en -is [string]) { $en = [datetime]$en }
+  if ($en.ToUniversalTime() -lt $st.ToUniversalTime()) { return $false }
   if (-not ($doc.sourceSha -is [string]) -or $doc.sourceSha -cnotmatch '^[0-9a-f]{40}$') { return $false }
   if (-not ($doc.host -is [string]) -or $doc.host.Length -eq 0 -or $doc.host.Length -gt 128) { return $false }
   if (-not ($doc.openclawVersion -is [string]) -or $doc.openclawVersion -cnotmatch '^\d{4}\.\d+\.\d+$') { return $false }
@@ -229,9 +242,7 @@ function Test-ReceiptObject {
   if ($rk.Count -ne 2 -or $rk -notcontains 'artifact' -or $rk -notcontains 'deadlineUtc') { return $false }
   if (-not ($doc.rollback.artifact -is [string]) -or $doc.rollback.artifact.Length -eq 0) { return $false }
   $rawDl = Get-RawJsonString -Json $ReceiptJson -Key 'deadlineUtc'
-  if ($null -eq $rawDl -or $rawDl -cnotmatch $utc) { return $false }
-  if (-not ($doc.rollback.deadlineUtc -is [datetime])) { return $false }
-  if (([datetime]$rawDl).ToUniversalTime() -ne ($doc.rollback.deadlineUtc).ToUniversalTime()) { return $false }
+  if (-not (Test-JsonInstant -Value $doc.rollback.deadlineUtc -Raw $rawDl -Pattern $utc)) { return $false }
   if (Find-SecretShape -Node $doc) { return $false }
   return $true
 }
@@ -312,7 +323,7 @@ function Test-DeployPathClassification {
   )
   if ($null -ne (Test-DeployPathSafety -RelativePath $RelativePath)) { return 'rejected' }
   if (-not (Test-Path -LiteralPath $ManifestPath)) { throw "manifiesto ilegible: $ManifestPath" }
-  $m = Get-Content -Raw -LiteralPath $ManifestPath | ConvertFrom-Json -Depth 32
+  $m = Get-Content -Raw -LiteralPath $ManifestPath | ConvertFrom-Json
   $p = $RelativePath.Replace('\', '/')
   foreach ($e in $m.denied) {
     $rx = ConvertTo-DeployRegex -Pattern $e.pattern
@@ -371,7 +382,7 @@ function Get-CutoverStateRoot {
 function Test-CutoverLeaseObject {
   param([Parameter(Mandatory = $true)][string]$LeaseJson)
   try {
-    $doc = $LeaseJson | ConvertFrom-Json -Depth 32 -ErrorAction Stop
+    $doc = $LeaseJson | ConvertFrom-Json -ErrorAction Stop
   } catch {
     return $false
   }
@@ -386,12 +397,13 @@ function Test-CutoverLeaseObject {
   if (-not ($doc.generation -is [string]) -or $doc.generation -cnotmatch $Script:CutoverGenerationPattern) { return $false }
   foreach ($k in @('createdAt', 'expiresAt', 'deadManFireTimeUtc')) {
     $raw = Get-RawJsonString -Json $LeaseJson -Key $k
-    if ($null -eq $raw -or $raw -cnotmatch $Script:CutoverUtcPattern) { return $false }
-    if (-not ($doc.$k -is [datetime])) { return $false }
-    if (([datetime]$raw).ToUniversalTime() -ne ($doc.$k).ToUniversalTime()) { return $false }
+    if (-not (Test-JsonInstant -Value $doc.$k -Raw $raw -Pattern $Script:CutoverUtcPattern)) { return $false }
   }
-  if ($doc.expiresAt.ToUniversalTime() -le $doc.createdAt.ToUniversalTime()) { return $false }
-  if ($doc.deadManFireTimeUtc.ToUniversalTime() -ge $doc.expiresAt.ToUniversalTime()) { return $false }
+  $cre = $doc.createdAt; if ($cre -is [string]) { $cre = [datetime]$cre }
+  $exp = $doc.expiresAt; if ($exp -is [string]) { $exp = [datetime]$exp }
+  $dmn = $doc.deadManFireTimeUtc; if ($dmn -is [string]) { $dmn = [datetime]$dmn }
+  if ($exp.ToUniversalTime() -le $cre.ToUniversalTime()) { return $false }
+  if ($dmn.ToUniversalTime() -ge $exp.ToUniversalTime()) { return $false }
   if (-not ($doc.statePath -is [string]) -or $doc.statePath.Length -eq 0) { return $false }
   if (-not ($doc.taskName -is [string]) -or $doc.taskName.Length -eq 0) { return $false }
   if (-not ($doc.deadManTaskName -is [string]) -or $doc.deadManTaskName.Length -eq 0) { return $false }
@@ -402,7 +414,7 @@ function Test-CutoverLeaseObject {
 function Test-CutoverStateObject {
   param([Parameter(Mandatory = $true)][string]$StateJson)
   try {
-    $doc = $StateJson | ConvertFrom-Json -Depth 32 -ErrorAction Stop
+    $doc = $StateJson | ConvertFrom-Json -ErrorAction Stop
   } catch {
     return $false
   }
@@ -428,9 +440,7 @@ function Test-CutoverStateObject {
     return $false
   }
   $rawUp = Get-RawJsonString -Json $StateJson -Key 'updatedAt'
-  if ($null -eq $rawUp -or $rawUp -cnotmatch $Script:CutoverUtcPattern) { return $false }
-  if (-not ($doc.updatedAt -is [datetime])) { return $false }
-  if (([datetime]$rawUp).ToUniversalTime() -ne ($doc.updatedAt).ToUniversalTime()) { return $false }
+  if (-not (Test-JsonInstant -Value $doc.updatedAt -Raw $rawUp -Pattern $Script:CutoverUtcPattern)) { return $false }
   if (-not (Test-JsonInteger -Value $doc.attempts)) { return $false }
   if ($doc.attempts -lt 0) { return $false }
   return $true
@@ -467,7 +477,7 @@ function Test-CutoverLease {
     return $false
   }
   if (-not (Test-CutoverLeaseObject -LeaseJson $leaseRaw)) { return $false }
-  $lease = $leaseRaw | ConvertFrom-Json -Depth 32
+  $lease = $leaseRaw | ConvertFrom-Json
   if ($ExpectedGeneration -ne '' -and $lease.generation -cne $ExpectedGeneration) { return $false }
   if (-not (Test-Path -LiteralPath $lease.statePath)) { return $false }
   try {
@@ -476,10 +486,12 @@ function Test-CutoverLease {
     return $false
   }
   if (-not (Test-CutoverStateObject -StateJson $stateRaw)) { return $false }
-  $state = $stateRaw | ConvertFrom-Json -Depth 32
+  $state = $stateRaw | ConvertFrom-Json
   if ($state.generation -cne $lease.generation) { return $false }
   if ($state.status -cne 'IN_PROGRESS') { return $false }
-  if ($lease.expiresAt.ToUniversalTime() -le [DateTime]::UtcNow) { return $false }
+  $exp = $lease.expiresAt
+  if ($exp -is [string]) { $exp = [datetime]$exp }
+  if ($exp.ToUniversalTime() -le [DateTime]::UtcNow) { return $false }
   return (Test-CutoverAcl -StateRoot $StateRoot)
 }
 
@@ -504,4 +516,4 @@ function Remove-SecretValue {
   return (Protect-LogToken -Text $s)
 }
 
-Export-ModuleMember -Function Get-RuntimeCanonicalRoots, Test-RuntimeLayout, Test-WorkspaceExcluded, Test-ReceiptObject, Write-ReceiptAtomic, Test-DeployPathClassification, Test-EffectiveHttpTimeout, Test-HashEqual, Test-RootsIsolated, Protect-LogToken, Remove-SecretValue, Get-CutoverStateRoot, Test-CutoverLeaseObject, Test-CutoverStateObject, Test-CutoverAcl, Test-CutoverLease, Get-CutoverStandDownGeneration
+Export-ModuleMember -Function Get-RuntimeCanonicalRoots, Test-RuntimeLayout, Test-WorkspaceExcluded, Test-ReceiptObject, Write-ReceiptAtomic, Test-JsonInstant, Test-DeployPathClassification, Test-EffectiveHttpTimeout, Test-HashEqual, Test-RootsIsolated, Protect-LogToken, Remove-SecretValue, Get-CutoverStateRoot, Test-CutoverLeaseObject, Test-CutoverStateObject, Test-CutoverAcl, Test-CutoverLease, Get-CutoverStandDownGeneration

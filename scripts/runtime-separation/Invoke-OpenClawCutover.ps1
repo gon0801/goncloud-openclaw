@@ -211,11 +211,11 @@ function Read-CutoverPair {
   if (-not (Test-Path -LiteralPath $leasePath)) { throw 'lease ausente' }
   $leaseRaw = Get-Content -Raw -LiteralPath $leasePath
   if (-not (Test-CutoverLeaseObject -LeaseJson $leaseRaw)) { throw 'lease malformado' }
-  $lease = $leaseRaw | ConvertFrom-Json -Depth 32
+  $lease = $leaseRaw | ConvertFrom-Json
   if (-not (Test-Path -LiteralPath $lease.statePath)) { throw 'estado ausente' }
   $stateRaw = Get-Content -Raw -LiteralPath $lease.statePath
   if (-not (Test-CutoverStateObject -StateJson $stateRaw)) { throw 'estado malformado' }
-  $state = $stateRaw | ConvertFrom-Json -Depth 32
+  $state = $stateRaw | ConvertFrom-Json
   if ($state.generation -cne $lease.generation) { throw 'lease y estado de distinta generacion' }
   return @{ lease = $lease; state = $state }
 }
@@ -800,7 +800,10 @@ if ($DeadMan) {
         Write-CutoverLog -LogPath $logPath -Text ("terminal={0} generation={1} (run termino solo, sin accion)" -f $pW.state.status, $gen)
         exit 0
       }
-      $age = ([DateTime]::UtcNow - $pW.state.updatedAt.ToUniversalTime()).TotalSeconds
+      # 5.1 deja ISO8601 como [string] al releer el estado; PS7 lo convierte
+      # a [datetime]. La forma ya se valido en Read-CutoverPair: el cast es seguro.
+      $upW = $pW.state.updatedAt; if ($upW -is [string]) { $upW = [datetime]$upW }
+      $age = ([DateTime]::UtcNow - $upW.ToUniversalTime()).TotalSeconds
       $staleNow = ($age -gt $HeartbeatStaleSec)
     } finally {
       if ($null -ne $fsW) { $fsW.Close() }
@@ -826,7 +829,8 @@ if ($DeadMan) {
         Write-CutoverLog -LogPath $logPath -Text ("terminal={0} generation={1} (sin accion)" -f $pC.state.status, $gen)
         exit 0
       }
-      $ageC = ([DateTime]::UtcNow - $pC.state.updatedAt.ToUniversalTime()).TotalSeconds
+      $upC = $pC.state.updatedAt; if ($upC -is [string]) { $upC = [datetime]$upC }
+      $ageC = ([DateTime]::UtcNow - $upC.ToUniversalTime()).TotalSeconds
       if ($ageC -le $HeartbeatStaleSec) {
         Add-CutoverObservation -List $observations -Text 'run colgado sigue latiendo tras /end'
         $hC = Get-CutoverHealth -HealthUrl $HealthUrl -ProbeTimeoutSec $ProbeTimeoutSec
