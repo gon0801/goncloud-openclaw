@@ -594,3 +594,120 @@ recibo ni ledger (solo lineas de log): "alter no files" estricto.
 
 ROJO (2026-09-22, antes de implementar): los 6 tests nuevos fallan en (0)
 y los 3 reorientados fallan en sus anclas nuevas.
+
+## Ronda de corrección (brief 14 hallazgos, 2026-09-22)
+
+Los ciclos TDD de implementacion de Tasks 4-7 no se registraron; lo que
+sigue es lo OBSERVADO al endurecer el codigo y los tests de cada Task
+en esta ronda (un carril, secuencial, mutante por fix). Commits
+d93ea15 (F1-F6), dec4fc7 (F7-F9), ea2cb76 (F10-F11), dbf3584 (F14).
+
+## Task 4 (16.4) — Vigia v3 + aplicador
+
+F11 (doble corrida D4: misma cola + mismo scratch):
+
+- ROJO: `bash scripts/tests/test-aplicar-vigia-sync-prueba.sh` →
+  `ROJO: (12) falta run_two (D4 doble corrida)`.
+- VERDE tras `run_two` en APLICAR_VIGIA_SYNC.sh: `TODO VERDE`,
+  con `ok (14)` (gateway falso con semantica de scratch: UN add D4,
+  2 `cron run` al MISMO tid, 1 fixture antes del run1, runs1 avisa +
+  runs2 calla) y `ok (15)` (porcelain igual).
+- Mutantes muertos: 2da corrida en job fresco → re-avisa →
+  `D4 ASSERT-2 FALLO` (expuesto DENTRO de (14)); asserts D4
+  invertidos → `ROJO: (12) D4 aserta en orden distinto`.
+
+F14 (hermeticidad): redirects de las copias (13)/(14) a $T
+(backup, evidence, scratch) + check (15) de porcelain.
+Mutantes muertos: sin redirects → (14) `sin evidencia runs1+runs2`;
+archivo suelto en repo → `ROJO: (15) el worktree cambio`.
+Limpieza: 40+ respaldos `backup/2d763be5-*` y evidencias
+`vigia-sync-prueba-*` fuera del arbol. `decisions.tsv` es scratch
+del lead (01:43, sin escritor en el repo), no salida del test:
+se deja y se reporta.
+
+## Task 5 (16.5) — Backup, memoria Ollama, rollback
+
+F3 (rollback confinado + hashes + reparse):
+
+- ROJO: `ROJO: (1) falta ancla: snapshotHash`; con bypass de anclas,
+  (3b) muere en `KeyError: 'snapshotHash'`.
+- VERDE: `TODO VERDE: memory-migration` con (3k) db-fuera-de-runtime,
+  (4h/a-g) registro manipulado (escape db/snapshot, duplicado, campo
+  extra, reparse x2), (4h/c) snapshot-distinto → diagnostico, y liga
+  migration↔recibo por sha256.
+- Mutantes muertos: rollback sin confinamiento db → (4h/a)
+  `db escape debio frenar y salio 0`; sin check snapshotHash →
+  (4h/c) `restauro con snapshot distinto`; sin reparse db →
+  (4h/f); migrate sin confinamiento → (3k).
+- Decision: snapshot-distinto va a diagnostico (paralelo a
+  escrituras→diagnostico); escape/reparse/duplicado/campo-extra
+  frenan en seco. Fixtures de DBs bajo `$T/rt/dbs` para que el
+  flujo legitimo pase el confinamiento.
+
+## Task 6 (16.6) — Nodo aislado + cuarentena
+
+F8 (approvals antes del pairing):
+
+- ROJO: `ROJO: (2b) pairing arranco antes de approvals set`.
+- VERDE tras reorder (identity → approvals set+readback → pair →
+  approve ligado al deviceId): `TODO VERDE: node-isolation` con
+  (2g) approve-ajeno.
+- Mutantes muertos: orden viejo (pair antes) → (2b); sin ligue
+  approve==deviceId → (2g) `approve ajeno debio frenar y salio 0`.
+
+F1+F2 (restore + recovery de cuarentena):
+
+- ROJO: `ROJO: (1) falta ancla: recovery.jsonl`; conductual en
+  codigo viejo (bypass de anclas): `ROJO: (2h/a) escape debio
+  frenar y salio 0` (movia un archivo fuera de la raiz).
+- VERDE: `TODO VERDE: quarantine` con (2h/a-f) inventario
+  manipulado sin mover nada, (2i) linea recovery con fsync que
+  sobrevive `kill -9` antes del primer movimiento, (2j)
+  recovery==inventario, y liga inventario↔recibo por sha256.
+- Mutantes muertos: sin containment → (2h/a); sin linea recovery
+  → (2i); sin dup-check → (2h/b) `movio con duplicados`; sin
+  fase de validacion total → (2f) `restore ocupado debio frenar`.
+- Incidentes atrapados por las pruebas: ConvertFrom-Json convierte
+  `movedUtc` a datetime (check contra texto crudo, estilo del
+  modulo); `rollback.artifact` nulo en fallos invalidaba el recibo
+  y enmascaraba el error real (init temprano por rama); `wc -l`
+  rellena con espacios en macOS (conteo con `grep -c`).
+
+## Task 7 (16.7/16.8) — Cutover, runbook, watchdog
+
+F6 (prefijos exactos de la maquina de estados):
+
+- ROJO en codigo viejo: `(2j/matrix) status=IN_PROGRESS esperaba
+  False, obtuvo True` (aceptaba `["payload"]`).
+- VERDE: `TODO VERDE: cutover-transaction` con matriz (2j) de 10
+  casos (7 rechazos + 3 aceptaciones).
+
+F7+F9 (runbook §3/§4/§5/§7 + test-cutover-runbook.sh nuevo):
+
+- ROJO: `ROJO: (1) §4 no cambia la accion (/tr) al checkout dedicado`.
+- VERDE: `TODO VERDE: cutover-runbook` (accion→read-back→enable,
+  ausencia de .git tras mover, -LauncherPaths, -NodeConfigSets +
+  -PairingCode, sin pairing manual).
+- Mutantes muertos: enable-antes-de-accion → (1); backup sin
+  -LauncherPaths → (3). (2) y (4) cubren regresiones que el doc
+  original traia (ausencia exigida en §4, pairing manual en §7).
+
+F10 (stand-down real del watchdog):
+
+- ROJO: `FAIL: (t4) sin stand-down con lease vigente` (sin seams,
+  la ruta `C:\...` no existe fuera de prod).
+- VERDE tras seams env (defaults prod intactos): `PASS
+  test-gateway-watchdog` con (t4) lease→stand-down (generacion en
+  log, sin sonda), vacio/ausente→procede.
+- Mutante muerto: `-ne` por `-eq` en la condicion →
+  `FAIL: (t4) sin stand-down con lease vigente`.
+
+## Deploy (Task 2, revision en esta ronda)
+
+F4 (validar en staging antes de publicar): regresion (4b) que deja
+runtime byte por byte intacto si la validacion falla.
+F5 (journal antes del replace): intencion registrada antes de cada
+movimiento + fault injection `OPENCLAW_DEPLOY_FAULT=readback|journal`
+(solo tests). Mutante muerto (orden viejo: published antes del
+journal): `ROJO: (5b/readback) rollback incompleto: runtime difiere`.
+Verde: `TODO VERDE: deploy-atomic`.
