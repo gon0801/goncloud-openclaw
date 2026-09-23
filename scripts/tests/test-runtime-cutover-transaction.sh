@@ -341,6 +341,13 @@ def fail(msg, code=1):
 
 
 if op == "/query":
+    qm = os.environ.get("OC_SCHTASKS_QUERY_MODE", "ok")
+    if qm == "denied":
+        fail("ERROR: Access is denied.")
+    if qm == "fail":
+        fail("ERROR: The service is not available.")
+    if qm == "es-absent":
+        fail("ERROR: El sistema no puede encontrar el archivo especificado.")
     if os.path.isfile(slot):
         with open(slot, encoding="utf-8") as fh:
             status = fh.read().rstrip("\n")
@@ -556,6 +563,27 @@ fi
 [ -e "$T/d-acl/lease.json" ] && fail "(3g) escribio lease con ACL abierta"
 grep -a -q 'schtasks /create' "$OC_LOG" && fail "(3g) creo tareas con ACL abierta"
 echo "ok (3g): ACL abierta falla cerrado antes de crear nada"
+
+# (3g2) /query denegado o caido: dispatch aborta antes de crear nada;
+# "no existe" en espanol confirma ausencia y procede.
+resetea_taskdb
+: >"$OC_LOG"
+if OC_SCHTASKS_QUERY_MODE=denied despacha d-deny "$T/d-deny" >/dev/null 2>&1; then
+  fail "(3g2) dispatch con /query denegado salio 0"
+fi
+[ -e "$T/d-deny/lease.json" ] && fail "(3g2) escribio lease con /query denegado"
+grep -a -q 'schtasks /create' "$OC_LOG" && fail "(3g2) creo tareas con /query denegado"
+: >"$OC_LOG"
+if OC_SCHTASKS_QUERY_MODE=fail despacha d-qfail "$T/d-qfail" >/dev/null 2>&1; then
+  fail "(3g2) dispatch con /query caido salio 0"
+fi
+[ -e "$T/d-qfail/lease.json" ] && fail "(3g2) escribio lease con /query caido"
+grep -a -q 'schtasks /create' "$OC_LOG" && fail "(3g2) creo tareas con /query caido"
+resetea_taskdb
+OC_SCHTASKS_QUERY_MODE=es-absent despacha d-esabs "$T/d-esabs" >/dev/null 2>&1 \
+  || fail "(3g2) no-existe en espanol debio confirmar ausencia: $(cat "$T/d-esabs.out")"
+echo "ok (3g2): /query denegado o caido aborta; no-existe localizado procede"
+resetea_taskdb
 
 # (3h) Si el segundo /create falla, limpia la primera tarea creada.
 resetea_taskdb

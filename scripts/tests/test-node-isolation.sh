@@ -160,8 +160,18 @@ if op == "/query":
             name = a
         prev = a
     if name == "OpenClaw CUA Node":
-        if os.environ.get("OC_CUA_MODE", "present") == "absent" or \
-                os.path.exists(os.path.join(st, "cua-deleted")):
+        cm = os.environ.get("OC_CUA_MODE", "present")
+        if cm == "denied":
+            print("ERROR: Access is denied.", file=sys.stderr)
+            sys.exit(1)
+        if cm == "error":
+            print("ERROR: The service is not available.", file=sys.stderr)
+            sys.exit(1)
+        if cm == "absent" or os.path.exists(os.path.join(st, "cua-deleted")):
+            if os.path.exists(os.path.join(st, "cua-deleted")) and \
+                    os.environ.get("OC_CUA_POSTDELETE_MODE", "gone") == "denied":
+                print("ERROR: Access is denied.", file=sys.stderr)
+                sys.exit(1)
             print("ERROR: no existe", file=sys.stderr)
             sys.exit(1)
         print('<Task version="1.2"><RegistrationInfo><URI>\\OpenClaw CUA Node</URI></RegistrationInfo></Task>')
@@ -332,6 +342,22 @@ OC_CUA_MODE="absent" corre nocua 1 \
 OC_NODE_MODE="absent" corre nonode 1 \
   && fail "(2f) oficial ausente debio frenar y salio 0"
 echo "ok (2f): duplicada idempotente, oficial obligatoria"
+
+# (2f2) Duplicada denegada o irreconocible: aborta, no la da por ausente.
+OC_CUA_MODE="denied" corre duadeny 1 \
+  && fail "(2f2) duplicada denegada debio frenar y salio 0"
+grep -qi 'duplicada\|indeterminada' "$T/duadeny.out" \
+  || fail "(2f2) no nombra la causa: $(cat "$T/duadeny.out")"
+OC_CUA_MODE="error" corre duaerr 1 \
+  && fail "(2f2) duplicada irreconocible debio frenar y salio 0"
+echo "ok (2f2): duplicada denegada o caida aborta"
+
+# (2f3) Post-borrado con error distinto de no-existe: aborta, no acredita.
+OC_CUA_POSTDELETE_MODE="denied" corre duapost 1 \
+  && fail "(2f3) post-borrado denegado debio frenar y salio 0"
+grep -qi 'borrado\|duplicada\|indeterminada' "$T/duapost.out" \
+  || fail "(2f3) no nombra la causa: $(cat "$T/duapost.out")"
+echo "ok (2f3): post-borrado con error no acredita borrado"
 
 # (2g) Approve ajeno al pre-aprobado: frena.
 OC_APPROVE_ID="node-2" corre wrongdev 1 \

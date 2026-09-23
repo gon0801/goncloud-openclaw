@@ -367,19 +367,20 @@ try {
   if (-not (Test-Path -LiteralPath $expDir)) {
     [void](New-Item -ItemType Directory -Path $expDir -Force)
   }
-  # EAP temporal (CI18): stderr de schtasks no lanza en 5.1; manda el exit.
-  $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  try { $dupXml = (& schtasks /query /tn $DuplicateTaskName /xml 2>&1 | Out-String) } finally { $ErrorActionPreference = $prevEAP }
-  if ($LASTEXITCODE -eq 0 -and $dupXml -match '<Task ') {
+  $dup = Get-SchtaskQuery -Name $DuplicateTaskName -FormatArgs @('/xml')
+  if ($dup.Presence -ceq 'unknown') { throw ("duplicada indeterminada: {0}" -f $DuplicateTaskName) }
+  if ($dup.Presence -ceq 'present') {
+    $dupXml = $dup.Output
+    if ($dupXml -notmatch '<Task ') { throw ("duplicada sin XML: {0}" -f $DuplicateTaskName) }
     $safe = ($DuplicateTaskName -replace '[^A-Za-z0-9]+', '-').Trim('-')
     $xp = Join-Path $expDir ("task-{0}-{1}.xml" -f $safe, $stamp)
     [IO.File]::WriteAllText($xp, $dupXml, (New-Object Text.UTF8Encoding $false))
     $inputs['duplicateXml'] = [ordered]@{ algo = 'sha256'; sha256 = (Get-FileSha -Path $xp) }
     & schtasks /delete /tn $DuplicateTaskName /f 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'no se pudo borrar la duplicada' }
-    $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    try { & schtasks /query /tn $DuplicateTaskName /xml 2>&1 | Out-Null } finally { $ErrorActionPreference = $prevEAP }
-    if ($LASTEXITCODE -eq 0) { throw 'la duplicada sigue viva' }
+    $dupVer = Get-SchtaskQuery -Name $DuplicateTaskName -FormatArgs @('/xml')
+    if ($dupVer.Presence -ceq 'present') { throw 'la duplicada sigue viva' }
+    if ($dupVer.Presence -ceq 'unknown') { throw 'borrado sin acreditar: duplicada indeterminada' }
     [void]$commands.Add([PSCustomObject]@{ name = 'duplicate-remove'; exit = 0 })
     [void]$observations.Add("duplicada exportada y borrada: $DuplicateTaskName")
   } else {

@@ -89,10 +89,9 @@ function Invoke-CutoverSchtasks {
 
 function Test-CutoverTaskExists {
   param([Parameter(Mandatory = $true)][string]$Name)
-  # EAP temporal (CI22): stderr de schtasks no lanza en 5.1; manda el exit.
-  $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  try { & schtasks /query /tn $Name 2>&1 | Out-Null } finally { $ErrorActionPreference = $prevEAP }
-  return ($LASTEXITCODE -eq 0)
+  $q = Get-SchtaskQuery -Name $Name
+  if ($q.Presence -ceq 'unknown') { throw ("tarea indeterminada (no se acredita ausencia): {0}" -f $Name) }
+  return ($q.Presence -ceq 'present')
 }
 
 function Invoke-CutoverStep {
@@ -391,10 +390,17 @@ if ($Dispatch) {
   if (-not (Test-CutoverAcl -StateRoot $root)) {
     Write-Output 'dispatch: ACL sin restringir tras lockdown'; exit 1
   }
-  if (Test-CutoverTaskExists -Name $TaskName) {
+  try {
+    $runTaken = Test-CutoverTaskExists -Name $TaskName
+    $deadTaken = Test-CutoverTaskExists -Name $DeadManTaskName
+  } catch {
+    Write-Output ("dispatch: {0}" -f (Remove-SecretValue -Text $_.Exception.Message))
+    exit 1
+  }
+  if ($runTaken) {
     Write-Output ("dispatch: la tarea existe sin cancelar: {0}" -f $TaskName); exit 1
   }
-  if (Test-CutoverTaskExists -Name $DeadManTaskName) {
+  if ($deadTaken) {
     Write-Output ("dispatch: la tarea existe sin cancelar: {0}" -f $DeadManTaskName); exit 1
   }
   $trRun = ('powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -Run -Generation {1} -StateRoot "{2}" -GatewayTask "{3}" -WatchdogTask "{4}" -HealthUrl {6} -PhaseTimeoutSec {7} -GlobalTimeoutSec {8} -ProbeTimeoutSec {9} -LockTimeoutSec {10} -RecoverTimeoutSec {16} -PayloadScript "{11}" -PayloadSha256 {12} -OpenClawVersion {13} -SourceSha {14} -HostName "{15}"' -f $self, $gen, $root, $GatewayTask, $WatchdogTask, $DeadManTaskName, $HealthUrl, $PhaseTimeoutSec, $GlobalTimeoutSec, $ProbeTimeoutSec, $LockTimeoutSec, $PayloadScript, $payloadSha, $OpenClawVersion, $SourceSha, $hostName, $RecoverTimeoutSec)

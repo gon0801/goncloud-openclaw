@@ -823,3 +823,16 @@ servidor por el umbral de la consulta (sin umbral devuelve todo: eso da
 el rojo conductual) y (3j3) inspecciona que la consulta trae
 "EventRecordID > 100". (3j4)/(3j5) cubren wevtutil caido y bookmark
 invalido. Verde: test-memory-migration.sh completo.
+
+F29 (schtasks /query falla abierto, F3): cutover (3g2) y nodo (2f2) en
+ROJO antes del fix (denegado salia 0 y creaba/daba por ausente). Fix:
+Get-SchtaskQuery central en RuntimeSeparation.psm1 (+export): present /
+absent (solo texto no-encontrado en-US + es + 0x80070002) / unknown;
+cutover Test-CutoverTaskExists lanza ante unknown (dispatch lo prefija y
+sale 1) y nodo aborta en duplicada indeterminada y en post-borrado no
+acreditado. Nota: schtasks CLI no da "no existe" estructurado (mismo
+exit), por eso el match bilingue con unknown cerrado. (3g2) incluye
+anti-mutante es-absent (procede). Presente/ausente-confirmado ya los
+cubrian (3a)/(3f) y (2b)/(2f). Mutante muerto en el camino: $ver pisaba
+la version del recibo en nodo (2b recibo invalido); renombrado a $dupVer.
+Verdes: test-runtime-cutover-transaction.sh y test-node-isolation.sh.

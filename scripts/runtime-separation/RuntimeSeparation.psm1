@@ -375,6 +375,28 @@ function Test-HashEqual {
   return ($h -ceq $ExpectedSha256.ToLowerInvariant())
 }
 
+function Get-SchtaskQuery {
+  param(
+    [Parameter(Mandatory = $true)][string]$Name,
+    [string[]]$FormatArgs = @()
+  )
+  # schtasks CLI no expone "no existe" estructurado: ausente, denegado y
+  # servicio caido comparten exit != 0. Solo el texto no-encontrado
+  # (en-US + es, mas HRESULT 0x80070002) confirma ausencia; exit 0 con
+  # salida confirma presencia; lo demas es indeterminado (falla cerrado).
+  $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  try { $out = (& schtasks /query /tn $Name @FormatArgs 2>&1 | Out-String) } finally { $ErrorActionPreference = $prevEAP }
+  $code = $LASTEXITCODE
+  $t = [string]$out
+  if ($code -eq 0) {
+    return ([PSCustomObject]@{ Presence = 'present'; Output = $t; Exit = $code })
+  }
+  if ($t -match 'cannot find the file|does not exist|no puede encontrar el archivo|no existe|0x80070002') {
+    return ([PSCustomObject]@{ Presence = 'absent'; Output = $t; Exit = $code })
+  }
+  return ([PSCustomObject]@{ Presence = 'unknown'; Output = $t; Exit = $code })
+}
+
 function Get-CutoverStateRoot {
   return $Script:CanonicalCutoverRoot
 }
@@ -516,4 +538,4 @@ function Remove-SecretValue {
   return (Protect-LogToken -Text $s)
 }
 
-Export-ModuleMember -Function Get-RuntimeCanonicalRoots, Test-RuntimeLayout, Test-WorkspaceExcluded, Test-ReceiptObject, Write-ReceiptAtomic, Test-JsonInstant, Test-DeployPathClassification, Test-EffectiveHttpTimeout, Test-HashEqual, Test-RootsIsolated, Protect-LogToken, Remove-SecretValue, Get-CutoverStateRoot, Test-CutoverLeaseObject, Test-CutoverStateObject, Test-CutoverAcl, Test-CutoverLease, Get-CutoverStandDownGeneration
+Export-ModuleMember -Function Get-RuntimeCanonicalRoots, Test-RuntimeLayout, Test-WorkspaceExcluded, Test-ReceiptObject, Write-ReceiptAtomic, Test-JsonInstant, Test-DeployPathClassification, Test-EffectiveHttpTimeout, Test-HashEqual, Test-RootsIsolated, Protect-LogToken, Remove-SecretValue, Get-CutoverStateRoot, Test-CutoverLeaseObject, Test-CutoverStateObject, Test-CutoverAcl, Test-CutoverLease, Get-CutoverStandDownGeneration, Get-SchtaskQuery
