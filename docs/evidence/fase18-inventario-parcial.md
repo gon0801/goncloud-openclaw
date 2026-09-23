@@ -103,9 +103,12 @@ se sustituyen por el arreglo vivo observado. Cada fila tiene siete posiciones.
 | `adversary` | `opencode-go/deepseek-v4.1-flash` → `xai/grok-4.6` → `kimi/k3` → `zai/glm-5.3` → `meta/muse-spark-1.3 (max)` → `anthropic/claude-opus-5 (xhigh)` → `openai/gpt-5.6-sol (xhigh)` |
 | `verifier` | `opencode-go/deepseek-v4.1-flash` → `zai/glm-5.3-flash` → `meta/muse-spark-1.3 (max)` → `kimi/kimi-for-coding` → `anthropic/claude-sonnet-5 (xhigh)` → `openai/gpt-5.6-terra (xhigh)` → `deepseek/deepseek-flash` |
 | `scout` | `opencode-go/deepseek-v4.1-flash` → `zai/glm-5.3-flash` → `meta/muse-spark-1.3 (max)` → `kimi/kimi-for-coding` → `deepseek/deepseek-flash` → `anthropic/claude-sonnet-5 (xhigh)` → `openai/gpt-5.6-terra (xhigh)` |
+| `agents.defaults.model` | `opencode-go-resp/muse-spark-1.3-contributor` → `anthropic/claude-opus-5 (xhigh)` → `meta/muse-spark-1.3 (max)` → `xai/grok-4.6` → `zai/glm-5.3` → `openai/gpt-5.6-sol (xhigh)` → `kimi/k3` |
 
-La captura no muestra `agents.defaults.model`; ese valor se observó solo en
-Windows y queda pendiente de decisión antes de generar la configuración nueva.
+La captura no muestra `agents.defaults.model`. David decidió usar también para
+ese valor la cadena de `main` de la captura, con el mismo orden. Esta es una
+decisión de destino; el valor por defecto observado en Windows se conserva
+abajo como evidencia histórica, no como configuración aprobada.
 
 ## Cadenas observadas en Windows, no aprobadas como destino
 
@@ -141,8 +144,8 @@ Inventariar rutas, instalador, servicios, tareas, sync y archivos
 únicos sin abrir secretos, y guardar el manifiesto detallado en un destino
 privado. Comparar los ocho arreglos ordenados con ambas referencias fechadas.
 Publicar aquí solo el recibo redactado con origen, hora y método de cada dato.
-David eligió la captura como cadena de destino. Antes de cambiar el host falta
-resolver el valor por defecto, clasificar archivos únicos y registrar el
+David eligió la captura como cadena de destino y la cadena de `main` para el
+valor por defecto. Antes de cambiar el host falta clasificar archivos únicos y registrar el
 manifiesto privado. El respaldo y su restore aislado de 18.1 ya se ejecutaron
 como salvaguarda, pero la fase no se cierra por eso. El corte de 18.4 no se
 inicia hasta completar las compuertas previas.
