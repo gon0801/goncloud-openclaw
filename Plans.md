@@ -626,3 +626,45 @@ Fecha de planificación: 2026-09-22. Plan: `docs/superpowers/plans/2026-09-22-op
 - Evento: merge, push a main, deploy, instalación, config, pairing, cambios de tareas, movimiento de `.git` o cuarentena en Windows. Razón: 16.8. Scope: host vivo. Estado: **no aprobado**; requiere un `authorization_ref` posterior, explícito y cerrado.
 
 No se leen secretos en general, no se imprime contenido sensible y no se cambia power policy, reinicia ni cierra sesión. Una dependencia roja detiene su carril en el último recibo verde; no se pregunta durante trabajo reversible ya aprobado.
+
+## Fase 18 — Recuperación limpia de OpenClaw y nueva base de ejecución
+
+Fecha de planificación: 2026-09-22. Plan maestro:
+`docs/superpowers/plans/2026-09-22-recuperacion-limpia-openclaw.md`.
+Spec delta: `docs/spec/00-project-spec.md`, "Objetivo de recuperación
+limpia". Esta fase crea un estado nuevo y verificable; no ejecuta el corte
+16.8 antiguo por equivalencia. Las filas históricas 9/14/15/16 no se cambian
+hasta medir el nuevo estado en 18.5. Fase 17, aún en un PR de planificación,
+se reconcilia en 18.6 antes de implementarla.
+
+| Task | Contenido | DoD | Depends | Status |
+|---|---|---|---|---|
+| 18.0 | `[lane:fast] [tdd:skip:inventario]` Inventario redactado del host, ocho agentes, roles, cadenas ordenadas y defaults; comparación con captura y snapshot fechado. | Manifiesto con origen/hora/método, sin secretos; diferencias resueltas por David antes de cortar; `unknown` no se convierte en ausencia. | - | cc:TODO |
+| 18.1 | `[lane:gate] [tdd:skip:respaldo-operativo]` Respaldo oficial verificable, restauración a staging fresco, bundle Git, XML y ediciones únicas. | Archivo real verificado y restaurado; manifiesto cubre estado, agentes y workspaces; un fallo bloquea 18.4. | 18.0, autorización de lectura/respaldo | cc:TODO |
+| 18.2 | `[lane:gate] [tdd:skip:procedimiento-host]` Runbook de corte específico del Windows observado, con dry-run, destinos exactos, efectos, reversa y revisión independiente. | Ningún comando destructivo ambiguo; `--all` solo en dry-run, nunca en el corte; autorización operativa cita runbook, SHA, host y ventana. | 18.0, 18.1 | cc:TODO |
+| 18.3 | `[lane:gate] [tdd:required]` Preparar solo fuente/runtime, deploy allowlist y sync seguro que requiere el estado nuevo; evaluar piezas de PR #128 sin mergearlo en bloque. | Rojo/verde focalizado para separación, protección y segundo ciclo; hooks, CI final y revisión independientes verdes. | 18.2 | cc:TODO |
+| 18.4 | `[lane:release] [tdd:skip:operacion-viva]` Instalación Windows con estado nuevo, ocho agentes/cadenas exactas y viejo estado recuperable. | Health 200/200, `doctor`, servicio y ocho agentes verificados; cadena ordenada/defaults idénticos a 18.0; recibo de corte y reversa. | 18.1–18.3, autorización Windows | cc:TODO |
+| 18.5 | `[lane:release] [tdd:skip:aceptacion-viva]` Comprobar un encargo real acotado, dos ciclos de sync, límites de procesos y componentes necesarios. | Resultado observado y dos ciclos sin duplicados/sobrescritura; cualquier memoria/nodo no restaurado figura pendiente; ninguna prueba desconocida se marca verde. | 18.4 | cc:TODO |
+| 18.6 | `[lane:fast] [tdd:skip:replan-documental]` Reconciliar 15, 9, 14, 16 y 17 con el estado nuevo en un solo PR de ledger. | Matriz `conservar/reusar/reemplazar/diferir`, DoD y Depends nuevos para autonomía, panel local y Hermes; 15 conserva sus cierres; #128/#130 tienen decisión explícita. | 18.5 | cc:TODO |
+| 18.7 | `[lane:fast] [tdd:skip:cierre]` Cierre de R1 y entrega de los hitos R2–R4 a los planes revisados. | Recibos y CI vigentes, residuales y pendientes comunicados; no se confunde recuperación de OpenClaw con goal completo ni se borra el respaldo. | 18.6 | cc:TODO |
+
+### Clasificación y 事前確認 de Fase 18
+
+**Required:** 18.0–18.7 para recuperar Windows; R2 autonomía, R3 panel
+local y R4 Hermes para el goal completo. **Condicional:** Ollama, nodo y
+agente `usuario` según inventario y decisión posterior. **Diferido:** seis
+CLIs en el primer canary, botones de ejecución del panel y vista multi-host.
+**Reject:** borrar el estado antiguo antes de la aceptación, importar sus
+bases en bloque, cambiar modelos sin consentimiento o crear otro reloj.
+
+- Evento: cambios documentales, rama, hooks, push y PR de este plan.
+  Razón: entregar planificación revisable. Scope: Q0 de Fase 18. Estado:
+  aprobado por el pedido actual; no autoriza ejecución.
+- Evento: lectura de estado privado y backup real. Razón: 18.0–18.1.
+  Scope: rutas exactas que determine el inventario. Estado: pendiente de
+  referencia y destino protegidos; nunca se imprimen valores secretos.
+- Evento: merge/deploy, desinstalar servicio, cambiar configuración/tareas,
+  pairing o cortar Windows. Razón: 18.3–18.5. Scope: host, SHA y ventana
+  exactos. Estado: **no aprobado**; requiere referencia operativa posterior.
+- Evento: borrado definitivo de estado, respaldos o cuarentena. Razón:
+  ninguno de los DoD. Scope: fuera de Fase 18. Estado: **no aprobado**.

@@ -82,6 +82,40 @@ Estos contratos no cambian modelos de conversación ni sus fallbacks. Código y
 artefactos versionados siguen la cadena de calidad; la migración viva y el
 deploy pertenecen a ingeniería y requieren autorización explícita separada.
 
+## Objetivo de recuperación limpia (pendiente de operación)
+
+David quiere reconstruir OpenClaw con estado nuevo y conservar los ocho agentes
+existentes (`main`, `operaciones`, `ingenieria`, `implementer`, `reviewer`,
+`adversary`, `verifier`, `scout`), sus roles, workspaces y la cadena ordenada
+`primary`/`fallbacks` de cada uno. La captura del 19 de septiembre y
+`docs/patches/modelos-vivos-2026-09-15.json5` son referencias fechadas, no
+prueba de la configuración viva. Una exportación nueva, sin secretos, debe
+reconciliarlas antes de cambiar el host. Un modelo no disponible no se sustituye
+en silencio. El agente `usuario` previsto por Fase 9 es una posible adición,
+no el noveno agente existente que este rescate deba reconstruir.
+
+La recuperación conserva un respaldo verificable fuera del estado vivo y
+prueba su restauración en un destino nuevo. La instalación nueva no importa
+en bloque las bases, sesiones, logs, modelos descargados ni launchers del
+estado anterior. Solo tras inventario y comparación se copian los archivos
+de agente/workspace/skill seleccionados y se reconfiguran las conexiones.
+El estado antiguo sigue recuperable hasta la aceptación del nuevo. Su borrado
+definitivo exige otra decisión; este objetivo no la autoriza.
+
+La experiencia final permite encargar una tarea, ver responsable, agente,
+CLI, intento, avance, espera y evidencia, y recibir un resultado verificado
+sin vigilar un turno de modelo. Las acciones rutinarias reversibles pueden
+preaprobarse con alcance y presupuesto cerrados. Merge, deploy, borrado,
+secretos y efectos externos irreversibles conservan su autoridad específica.
+El panel local de OpenClaw puede entregarse antes del adaptador Hermes;
+la paridad se prueba después en dos equipos independientes. No hay cola ni
+credenciales compartidas entre ellos.
+
+Este objetivo modifica el resultado deseado, no convierte el runbook actual
+de Fase 16 en un procedimiento de reinstalación ni autoriza efectos en Windows.
+El plan de recuperación limpia define las compuertas; la reconciliación de
+Fases 15, 9, 14, 16 y 17 ocurre después de medir el estado nuevo.
+
 Decisión de producto registrada (D2): se crea `verify/` en goncloud-Orbit y goncloud-accounting con `saikit-verificar-app`; no se adapta el verifier a `.cursor/skills/verify-*` porque duplica mantenimiento sin cambiar nada para David — esas skills siguen siendo de la flota DG y `verify/` es la fuente de claw.
 
 Mapa: [Camino feliz del producto](../runbooks/camino-feliz-producto.md).
