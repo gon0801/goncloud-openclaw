@@ -180,13 +180,47 @@ correr una consulta semantica no literal. Probar que no hay eventos
 `llama-server` 3033/3077 nuevos. Degradacion intencional: `provider: none`
 da lexico puro.
 
+Reporte primero: sin `-Apply` el script solo imprime el plan y sale 0;
+NO migra:
+
 ```powershell
 powershell -NoProfile -File '...\scripts\runtime-separation\Set-OpenClawMemory.ps1' `
   -RuntimeRoot 'C:\Users\ehven\.openclaw' -PolicyPath '...\config\ollama-runtime.v1.json' `
   -ReceiptRoot '...\recibos' -SnapshotRepo '...\snapshots' -VerifyQuery '<no literal>'
 ```
 
-Rollback: `-Mode rollback` con `-MigrationPath` al recibo de migracion.
+La migracion real lleva `-Apply`, y `-Apply` exige el gateway detenido:
+corre como payload de la transaccion separada (seccion 12), igual que el
+backup de §3. Nadie detiene ni rearranca el gateway a mano: la
+transaccion lo detiene antes del payload y lo rearranca en su `finally`
+(`-Run` hace `stop -> payload -> restart -> finalize`).
+
+```powershell
+# C:\Users\ehven\src\goncloud-openclaw\scripts\payload-memoria.ps1 (ejemplo)
+& "$PSScriptRoot\runtime-separation\Set-OpenClawMemory.ps1" `
+  -RuntimeRoot 'C:\Users\ehven\.openclaw' -PolicyPath '...\config\ollama-runtime.v1.json' `
+  -ReceiptRoot '...\recibos' -SnapshotRepo '...\snapshots' -VerifyQuery '<no literal>' `
+  -HealthUrl 'http://127.0.0.1:18789' -OpenClawVersion '2026.9.5' -Apply
+exit $LASTEXITCODE
+```
+
+Despachar (una vez) y luego leer el recibo en la ruta impresa:
+
+```powershell
+powershell -NoProfile -File 'C:\Users\ehven\src\goncloud-openclaw\scripts\runtime-separation\Invoke-OpenClawCutover.ps1' `
+  -Dispatch -PayloadScript 'C:\Users\ehven\src\goncloud-openclaw\scripts\payload-memoria.ps1' `
+  -HealthUrl 'http://127.0.0.1:18789' -OpenClawVersion '2026.9.5' -SourceSha '<merge-SHA>'
+# imprime generation=... receipt=... state=...
+```
+
+Exito = `terminal=DONE` en el log, estado `DONE`, recibo `passed` del
+script de memoria. `DONE` ya implica gateway rearrancado con salud
+200/200: finalize no escribe DONE sin verde. Cualquier otro terminal se
+atiende por la seccion 11 antes de seguir; jamas se opera sobre un
+`FAILED SIN TERMINAL`.
+
+Rollback: `-Mode rollback` con `-MigrationPath` al `migration.json` del
+repo de snapshots.
 
 ## 7. Nodo aislado `[authorization_ref]`
 
