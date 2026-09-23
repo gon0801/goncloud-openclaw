@@ -855,3 +855,13 @@ del fix (lanzaba FormatException en vez de $false). Fix: Parse con
 cultura invariante + RoundtripKind envuelto en try (imposible -> $false)
 y guardas en los casts startedAt/endedAt de Test-ReceiptObject
 (veredicto, no throw: contrato del modulo). Humo 28/28 en verde.
+
+F33 (menor subn ventana cerrada, M3): los dos make_copy ahora exigen
+exactamente 1 reemplazo con diagnostico (SystemExit con nombre y conteo).
+Fuente real da n=1 (test verde); sonda negativa con texto sin loop da
+n=0 y aborta con el diagnostico. Verde:
+test-aplicar-vigia-sync-prueba.sh completo.
+
+F34 (menor watchdog pwsh obligatoria, M4): verificado, sin cambio:
+test-gateway-watchdog.sh falla sin pwsh en PATH (t4) y no trae ningun
+SKIP; no se anadio skip.

@@ -331,13 +331,15 @@ def make_copy(*, franja_true: bool, annul_guard: bool, name: str) -> pathlib.Pat
     )
     body = body.replace("OC=~/.openclaw/bin/openclaw", f"OC={oc}")
     # Evitar ventanas cerradas UTC y lock global
-    body = re.sub(
+    body, n_win = re.subn(
         r"for w in .*?; do\n  # shellcheck disable=SC2086\n  if in_win \$w; then echo \"ABORTO: dentro de ventana cerrada \(\$w UTC\)\.\"; exit 1; fi\ndone",
         "true  # stub: sin ventanas en prueba hermetica",
         body,
         count=1,
         flags=re.S,
     )
+    if n_win != 1:
+        raise SystemExit(f"sin stub de ventana cerrada en {name}: reemplazos={n_win}")
     body = body.replace(
         "LOCKDIR=/tmp/aplicar_vigia_sync.lock",
         f"LOCKDIR={T / ('lock_' + name)}",
@@ -525,13 +527,15 @@ def make_copy(*, name: str, fresh_scratch_mutant: bool = False) -> pathlib.Path:
         f'cd "{repo}" || exit 1',
     )
     body = body.replace("OC=~/.openclaw/bin/openclaw", f"OC={fake}")
-    body = re.sub(
+    body, n_win = re.subn(
         r"for w in .*?; do\n  # shellcheck disable=SC2086\n  if in_win \$w; then echo \"ABORTO: dentro de ventana cerrada \(\$\w UTC\)\.\"; exit 1; fi\ndone",
         "true  # stub: sin ventanas en prueba hermetica",
         body,
         count=1,
         flags=re.S,
     )
+    if n_win != 1:
+        raise SystemExit(f"sin stub de ventana cerrada en {name}: reemplazos={n_win}")
     body = body.replace(
         "LOCKDIR=/tmp/aplicar_vigia_sync.lock",
         f"LOCKDIR={T / ('lock_' + name)}",
