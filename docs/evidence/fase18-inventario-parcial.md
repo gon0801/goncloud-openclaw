@@ -84,6 +84,18 @@ La carpeta retenida de `adversary` es una copia de base antigua, no un noveno
 agente. Backup y staging conservan los siete elementos; la comprobación de
 hashes de los seis archivos individuales se hizo antes de la futura rotación.
 
+Comparación focalizada de las dos skills modificadas (2026-09-23, `git diff
+--unified=2` en el PC, sin exportar valores privados):
+
+| Archivo | Diferencia viva | Decisión para la fuente nueva |
+|---|---|---|
+| `agents/main/agent/workshop-skills/agent-dispatch/SKILL.md` | Dos referencias a `saikit-cierre-pr` cambiadas por `saikit-merge-route`. | **No importar**: `saikit-merge-route/SKILL.md` no existe ni en el PC ni en la fuente Mac; `saikit-cierre-pr/SKILL.md` sí existe en ambos. La versión viva introduciría una referencia rota. Conservar el diff solo en backup. |
+| `agents/main/agent/workshop-skills/gateway-edge-cdp/monday-export.md` | Añade la alternativa del Edge dedicado por CDP 18803 y la verificación de septiembre. | **Candidato a portar a Git**, no copiar en bloque desde runtime: `dedicated-edge-browser/SKILL.md` versionada documenta exactamente el puerto 18803. Revisar y probar esa edición en la fuente antes de incluirla en el manifiesto selectivo. |
+
+Esta clasificación no decide importar perfiles de navegador: `browser` y
+`browser-claw` siguen excluidos del corte limpio. Los archivos originales
+permanecen en el backup verificado y no se modificaron en Windows.
+
 Un bundle privado de Git de 45.402.859 bytes, SHA-256
 `0FC9D7215DA7A07BD76AC351886E0D450BA5BEB31EB85A50CF2FB5267FCDE03E`,
 pasó `git bundle verify` (109 refs, historia completa). Se exportaron seis
