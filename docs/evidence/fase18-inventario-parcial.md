@@ -172,15 +172,15 @@ No se cambió ninguno.
 | `scout` | `opencode-go/deepseek-v4.1-flash` → `zai/glm-5.3` → `meta/muse-spark-1.3` → `kimi/k3` → `xai/grok-4.6` → `anthropic/claude-sonnet-5` → `openai/gpt-5.6-sol` |
 | `agents.defaults.model` | `opencode-go-resp/muse-spark-1.3-contributor` → `opencode/glm-5.3-flash` → `opencode-go/deepseek-v4.1-flash` → `opencode/muse-spark-1.3-contributor-free` → `opencode/deepseek-v4-flash-vision-exp` → `anthropic/claude-sonnet-5` → `zai/glm-5.3` → `kimi/k3` → `xai/grok-4.6` → `deepseek/deepseek-flash` → `openai/gpt-5.6-sol` |
 
-## Datos que siguen `unknown`
+## Datos que seguían `unknown` en el inventario previo al corte
 
 - Comparación de contenido propio contra sus fuentes para decidir la lista
   exacta de importación; todos los cambios únicos ya están preservados.
 - Disponibilidad real de cada proveedor. La configuración válida no la prueba.
-- Resolución y disponibilidad viva de los dos modelos Z.AI de la captura. El
-  catálogo local del CLI viejo está vacío con el gateway caído y el dry-run
-  aislado deja ocho referencias Z.AI sin resolver. El proveedor requiere una
-  comprobación posterior de catálogo, auth y llamada real, sin sustituir IDs.
+- Resolución de los dos modelos Z.AI de la captura. El catálogo local del CLI
+  viejo estaba vacío con el gateway caído y el dry-run aislado dejaba ocho
+  referencias sin resolver. La instalación posterior resolvió ambas referencias
+  con el plugin oficial; su autenticación y llamada real siguen sin comprobar.
 - Argumentos exactos de tareas y rutas de sync para el runbook, versiones de
   skills replicadas y referencias de autenticación fuera del archivo oficial,
   aún sin inventario completo. Los XML de tareas están en destino privado;
@@ -193,7 +193,64 @@ Inventariar rutas, instalador, servicios, tareas, sync y archivos
 privado. Comparar los ocho arreglos ordenados con ambas referencias fechadas.
 Publicar aquí solo el recibo redactado con origen, hora y método de cada dato.
 David eligió la captura como cadena de destino y la cadena de `main` para el
-valor por defecto. Antes de cambiar el host falta clasificar archivos únicos y registrar el
-manifiesto privado. El respaldo y su restore aislado de 18.1 ya se ejecutaron
-como salvaguarda, pero la fase no se cierra por eso. El corte de 18.4 no se
-inicia hasta completar las compuertas previas.
+valor por defecto. En ese momento faltaba clasificar archivos únicos y
+registrar el manifiesto privado. El respaldo y su restore aislado de 18.1 ya
+se habían ejecutado como salvaguarda. La reconstrucción operativa posterior se
+registra abajo;
+esta sección conserva el estado del inventario antes de ella.
+
+## Reconstrucción operativa observada el 2026-09-23
+
+David priorizó instalar y recuperar servicio frente a terminar el instalador
+selectivo. La operación se hizo por SSH en `gwpc`, no en la Mac. El respaldo
+verificado permanece en `C:\Users\ehven\.openclaw-recovery`. El estado anterior
+se **renombró, no se borró**, a `C:\Users\ehven\.openclaw-old-20260922`.
+Antes se retiró solo la tarea Gateway mediante `openclaw uninstall --service`;
+el dry-run había enumerado únicamente ese servicio. Watchdog y sync siguen
+deshabilitados.
+
+Se reinstaló `openclaw` 2026.9.5 (ec9c1a1) desde el tarball privado cuyo
+SHA-256 es `1FB6EF4FAE447AF14F1E3B1028334F39146D181A66A4CCE2848D4F741C636340`.
+El onboarding creó un estado nuevo en `C:\Users\ehven\.openclaw`. Se instaló
+el plugin oficial `@openclaw/zai-provider@2026.9.5`; las dos filas GLM-5.3
+se tomaron de su manifiesto local, manteniendo el endpoint Coding Plan que
+figuraba en la configuración anterior. La configuración nueva pasó
+`openclaw config validate --json`. La comparación directa del archivo nuevo
+contra la transcripción de la captura dio `true` para las ocho cadenas de
+siete posiciones, sus ajustes de thinking y `agents.defaults.model`.
+
+Se copiaron exclusivamente `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `USER.md` y
+`DREAMS.md` de cada uno de los ocho workspaces antiguos; los cuatro archivos
+de bootstrap que ya existían en el workspace principal quedaron en
+`C:\Users\ehven\.openclaw-recovery\bootstrap-before-roles-20260923`. No se
+importaron sesiones, SQLite antiguo ni las carpetas completas. Cinco perfiles
+estáticos de API de `operaciones` se copiaron a la base **nueva** de `main`;
+la base nueva previa quedó en
+`C:\Users\ehven\.openclaw-recovery\new-main-before-auth-20260923.sqlite`.
+La base antigua de `main` no contenía perfiles. Las otras siete bases nuevas
+no han recibido todavía esos perfiles.
+
+La tarea Gateway nueva está registrada y, tras un arranque lento, `/healthz`
+y `/readyz` respondieron HTTP 200. `/readyz` indicó `degraded=false` en esa
+lectura. Una petición real de `main` respondió `OK` con
+`opencode-go-resp/muse-spark-1.3-contributor`, `credentialSource=profile` y
+`fallbackUsed=false`. Eso prueba la ruta principal de `main`, no todos los
+proveedores ni los otros siete agentes. Antes de copiar los perfiles, el
+intento sin override falló por credenciales ausentes en seis modelos y por
+cuota semanal de Kimi; esta última limitación no se arregla reinstalando.
+
+GitHub CLI tenía su helper apuntando a un `gh.exe` dentro del estado viejo.
+Se copió ese ejecutable, con el mismo SHA-256, a
+`C:\Users\ehven\tools\bin\gh.exe`, se guardó el `.gitconfig` previo en el
+directorio privado de recuperación y `gh auth setup-git` actualizó el helper.
+`git ls-remote` funcionó. La fuente quedó clonada fuera del estado activo en
+`C:\Users\ehven\src\goncloud-openclaw`, commit
+`847412a8d197334d2535b8f5bbd4e072a97d2f20`, con 946 archivos rastreados.
+
+Pendiente antes de declarar R1 completo: habilitar/probar las credenciales de
+los otros siete agentes y sus primarios, comprobar los proveedores restantes
+sin cambiar el orden aprobado, y cerrar la ruta de sync sin Git dentro de
+`.openclaw`. El PR #134 del instalador selectivo sigue en borrador: la revisión
+encontró bloqueantes de seguridad, protección de archivos, política de
+selección y verificación de thinking; no se usó para este corte. Ninguna prueba
+de autonomía, panel o Hermes se ha declarado terminada.
