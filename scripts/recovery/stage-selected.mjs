@@ -3,7 +3,8 @@ import {
   copyFileSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
   readdirSync, realpathSync, renameSync, rmSync,
 } from "node:fs";
-import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
+import { selectionParts } from "./selection-policy.mjs";
 
 const [manifestPath, sourceArg, stageArg, flag] = process.argv.slice(2);
 if (!manifestPath || !sourceArg || !stageArg || (flag && flag !== "--apply")) {
@@ -32,34 +33,14 @@ if (manifest.version !== 1 || !Array.isArray(manifest.files) || !manifest.files.
   throw new Error("invalid selection manifest");
 }
 
-const forbidden = /^(?:\.git|credentials|sessions|logs|tools|models|cache|state|backups)$/i;
-const forbiddenFile = /(?:^openclaw\.json(?:\..*)?$|\.env(?:\..*)?$|\.(?:sqlite(?:-wal|-shm)?|wal|shm|pem|key|pfx|p12|exe|dll|zip)(?:\..*)?$|\.bak(?:[-.].*)?$)/i;
-const reserved = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
-const agentIds = new Set(["main", "operaciones", "ingenieria", "implementer", "reviewer", "adversary", "verifier", "scout"]);
 const seen = new Set();
-
-function safePath(path) {
-  if (typeof path !== "string" || !path || isAbsolute(path) || path.includes("\\") || /[:\x00-\x1f\x7f]/.test(path)) {
-    throw new Error("unsafe selection path");
-  }
-  const parts = path.split("/");
-  if (parts.some((part) => !part || part === "." || part === ".." || reserved.test(part) || /[. ]$/.test(part) || forbidden.test(part) || forbiddenFile.test(part))) {
-    throw new Error("unsafe selection path");
-  }
-  const plugin = ["summa-gate", "tablero-runbook"].includes(parts[0]) && parts.length > 1;
-  const skill = parts[0] === "agents" && agentIds.has(parts[1]) && parts.length > 5 && parts[2] === "agent" && parts[3] === "workshop-skills";
-  if (!plugin && !skill && path !== "gateway-watchdog.ps1") {
-    throw new Error("path outside recovery allowlist");
-  }
-  return parts;
-}
 
 function hash(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
 const files = manifest.files.map((entry) => {
-  const parts = safePath(entry.path);
+  const parts = selectionParts(entry.path);
   if (!/^[a-f0-9]{64}$/i.test(entry.sha256)) {
     throw new Error("selection hash missing or invalid");
   }
