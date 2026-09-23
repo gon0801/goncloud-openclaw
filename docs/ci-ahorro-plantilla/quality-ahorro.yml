@@ -1,0 +1,79 @@
+# PLANTILLA de ahorro de CI — regla global (2026-09, pedido del dueno).
+# Que corra solo donde sea necesario; ahorrar minutos ante todo.
+#
+# Como usarla en un repo nuevo: ver APLICAR.md en esta misma carpeta.
+# Referencia funcionando: goncloud-openclaw PR #135.
+#
+# Las 4 piezas (no quites ninguna):
+#   1. `types` en pull_request: en borrador la bateria espera; arranca sola
+#      al marcar listo (ready_for_review), al etiquetar (labeled) o al salir
+#      de borrador (converted_to_draft).
+#   2. `concurrency` + cancel-in-progress: cada push nuevo cancela la corrida
+#      anterior; solo la ULTIMA corre la bateria.
+#   3. `if` anti-borrador en cada job caro: en draft no corre (el gate lo da
+#      por pendiente). Push a main/master: no hay borrador, corre siempre.
+#   4. Job `gate` (~0 costo, sin checkout): la unica marca en verde. Pasa con
+#      todo en success, o con skips autorizados por borrador. Todo lo demas
+#      (fallo, cancelacion) rebota: fail-closed, nunca un verde falso.
+name: Quality
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled, converted_to_draft]
+
+concurrency:
+  group: quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # ── TU BATERIA AQUI: reemplaza estos pasos de ejemplo ──────────────
+      - name: Ejemplo test Python (borrar o adaptar)
+        if: hashFiles('requirements.txt') != ''
+        run: |
+          pip install -r requirements.txt
+          pip install pytest
+          pytest -q
+
+      - name: Ejemplo test Node (borrar o adaptar)
+        if: hashFiles('package.json') != ''
+        run: npm test --if-present
+      # ───────────────────────────────────────────────────────────────────
+
+  gate:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [quality]
+    timeout-minutes: 5
+    steps:
+      - name: Marca minima en verde
+        env:
+          R_QUALITY: ${{ needs.quality.result }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          rc=0
+          for par in "quality=$R_QUALITY"; do
+            printf '%s\n' "$par"
+            case "$par" in
+              *=success) ;;
+              *=skipped)
+                if [ "$DRAFT" = "true" ]; then
+                  echo "gate: $par omitido, PR en borrador: la bateria corre al marcar listo para revision"
+                else
+                  echo "gate: $par omitido SIN borrador que lo autorice" >&2
+                  rc=1
+                fi ;;
+              *)
+                echo "gate: $par no quedo en success (fallo o cancelacion)" >&2
+                rc=1 ;;
+            esac
+          done
+          [ "$rc" -eq 0 ] || { echo "gate: RECHAZADO" >&2; exit 1; }
+          echo "gate: OK"
