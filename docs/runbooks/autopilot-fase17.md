@@ -28,7 +28,7 @@ Q0 es el [PR de planificación](https://github.com/gon0801/goncloud-openclaw/pul
 Tras Q0 integrado y autorización para ejecutar, comprueba sin instalar nada: `test -x /Users/dn/bin/corrida.sh`, `test -r /Users/dn/bin/cli-modos.tsv`, `test -x /Users/dn/bin/tmux-activity-watch.sh` y `test -x /Users/dn/.openclaw/bin/openclaw`. Todos deben salir 0. En la Mac revisada al redactar este documento faltan los dos primeros: es una dependencia de la instalación de Fase 9, no un paso que se improvisa en esta fase. Si falta cualquiera, `ATORADO Fase 9 no instalada` antes de lanzar; 17.0 puede seguir sólo como investigación sin corrida viva. Después de comprobarlos, **el primer bloque de comandos abre la corrida en el tablero** desde el worktree del lead. Reanudar conserva el JSON existente; no vuelve a poner tareas en pendiente. `python3` escribe sólo el estado local inicial, sin secretos:
 
 ```bash
-python3 - <<'PY'
+python3 - <<'PY' || exit 1
 import datetime, json, os, pathlib, stat
 os.umask(0o077)
 p = pathlib.Path('.saikit/progress/17.json')
