@@ -149,6 +149,13 @@ decisión. Si no resulta apto, se extiende el tablero existente con diseño prop
 no se bloquea el contrato de tareas por elegir un frontend. OpenGrokBot queda
 como referencia de experiencia, no dependencia.
 
+De esa referencia se toman requisitos observables, no su runtime: una línea
+temporal de actividad por tarea, identificación visible del agente y la CLI
+real, avisos de espera/bloqueo y acceso directo a la evidencia final. La
+implementación se hace sobre el contrato de tareas propio y se prueba sin
+OpenGrokBot instalado. No se copia código ni assets de ambos candidatos hasta
+verificar licencia, commit, dependencias y permisos de reutilización.
+
 ## Datos y seguridad
 
 El panel consume una proyección por allowlist. No exporta prompts, entorno,

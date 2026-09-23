@@ -1,5 +1,10 @@
 # Fase 17: centro de tareas para OpenClaw y Hermes
 
+> **NO LANZAR AÚN.** Este runbook es el detalle propuesto para U4/U5 de
+> `Plans.md`. Primero se aceptan U1–U3 y se comprueba en 17.0 qué interfaces
+> existen en la instalación nueva. El launcher en este documento no es un
+> permiso de ejecución ni sustituye la aceptación por host.
+
 Tú eres el lead de ejecución. David no está al teclado: no le haces preguntas durante la corrida. Heredas `docs/runbooks/base-openclaw.md` v1.1 y `docs/runbooks/loop-autopilot.md`. El qué y las DoD están en `Plans.md`, Fase 17; el contrato de producto está en `docs/superpowers/specs/2026-09-22-centro-tareas-design.md`. Si discrepan, manda el spec para producto y `Plans.md` para tareas; detén el carril afectado y corrige el documento inferior en el siguiente PR. Tablero: `/runbook/tablero/c/fase17-centro-tareas`. Localizador: `bash scripts/runbook.sh 17`. Lanzador, **sólo después de autorización para ejecutar y de Q0 integrado**: `bash scripts/lanzar-fase.sh 17 --sesion wt-f17-lead -- <cli-del-lead> <flag-sin-preguntas-verificado>`; nadie adivina el CLI ni su flag. Antes, se permite únicamente `bash scripts/lanzar-fase.sh 17 --sesion wt-f17-lead --dry-run -- <cli> <flag>`.
 
 ## Quién y autoridad

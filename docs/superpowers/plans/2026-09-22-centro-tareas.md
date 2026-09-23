@@ -1,5 +1,9 @@
 # Plan 17: centro de tareas común para OpenClaw y Hermes
 
+> **Detalle de U4/U5.** La ruta activa y sus dependencias están al inicio de
+> `Plans.md`. Este plan no se inicia mientras U1–U3 sigan sin aceptación; 17.0
+> y 17.1 pueden prepararse sin activar servicios.
+
 Fecha: 2026-09-22. Estado: plan listo para evaluación; implementación no iniciada.
 Base de investigación: `origin/main` en `31dfaf0`.
 Diseño y aceptación: [especificación](../specs/2026-09-22-centro-tareas-design.md).

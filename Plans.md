@@ -1,5 +1,57 @@
 # Plans
 
+## Ruta activa única después de la reinstalación (2026-09-22)
+
+Este es el orden operativo vigente. Las secciones numeradas que siguen son el
+registro histórico y el detalle reutilizable; **no se ejecutan por su cuenta**
+cuando contradicen esta tabla. La especificación de producto prevalece sobre
+este ledger. Una fila vieja `cc:TODO` no demuestra que haya que repetirla, y
+un servicio instalado no demuestra que su fase esté aceptada.
+
+**Resultado buscado:** David encarga un goal por la entrada autenticada de
+OpenClaw o Hermes; el sistema conserva la tarea, muestra qué agente y CLI la
+ejecutan, avisa por Telegram mientras avanza o espera, y entrega resultado con
+evidencia. Cada computadora funciona sin la otra y muestra el mismo panel.
+Las acciones rutinarias pueden ejecutarse sin preguntas dentro de una política
+preaprobada y acotada; merge, deploy, borrado, secretos y efectos externos fuera
+de ella conservan su compuerta de autorización.
+
+**Estado conocido, no aceptación completa:** el PC tiene OpenClaw 2026.9.5
+recién instalado, `/healthz` y `/readyz` dieron 200 y respondieron los ocho
+primarios. El nodo de la Mac quedó conectado por túnel SSH y aprobado; Telegram
+quedó emparejado. Estas comprobaciones no prueban todos los fallbacks, una
+tarea autónoma, sync seguro, el panel ni Hermes. El inventario de recuperación
+está en [PR #132](https://github.com/gon0801/goncloud-openclaw/pull/132);
+el instalador selectivo [PR #134](https://github.com/gon0801/goncloud-openclaw/pull/134)
+sigue en borrador con bloqueantes. Fase 15 está cerrada y no se repite.
+
+| Etapa | Entrega para David | Compuerta verificable | Depends | Estado |
+|---|---|---|---|---|
+| U0 | `[lane:fast] [tdd:skip:inventario]` Base nueva documentada: ocho cadenas exactas, canales, nodo Mac y límites conocidos. | Matriz por agente/modelo/proveedor/canal con `passed`, `failed` o `unknown` y evidencia fechada; un mensaje de Telegram entra y recibe respuesta; el nodo Mac responde a `system.which`; ningún fallback se llama probado por inferencia. | - | cc:WIP (primarios, gateway y Mac probados; secundarios/canales pendientes) |
+| U1 | `[lane:gate] [tdd:required]` Fuente fuera del estado vivo y deploy/sync selectivo seguro en Windows. Reutilizar sólo piezas válidas de Fase 16/PR #128 y resolver bloqueantes de PR #134. | Proveniencia de instalador/plugin/herramientas; allowlist y denylist, rollback y dos ciclos idempotentes con read-back; un solo dueño de watchdog y avisos; CI completo del SHA final y revisión sin bloqueantes antes de activar el sync. El estado viejo sigue recuperable. | U0 | cc:TODO |
+| U2 | `[lane:gate] [tdd:required]` Cerrar sólo los faltantes de Fase 9 y probar un goal acotado de principio a fin en OpenClaw. | PR #100 y filas 9.7, 9.9–9.13 y 9.16 reconciliados; un encargo persiste tras terminar el turno del agente, muestra espera real, envía avances por Telegram sin segundo reloj y cierra con evidencia o bloqueo explícito; no responde preguntas fuera de la política. | U1; entrega sin sello B/C integrada | cc:TODO |
+| U3 | `[lane:gate] [tdd:required]` Fase 14: selector y adaptadores de CLI, reconciliación, revisión y entrega autónoma. | Primer canary con una CLI elegida y recibo verificable; después contratos y humos de las seis CLI previstas, sin procesos duplicados ni worktrees compartidos; merge/deploy sólo por la ruta autorizada del nuevo sync y SHA instalado leído de vuelta. | U2 | cc:TODO |
+| U4 | `[lane:gate] [tdd:required]` Fase 17 en OpenClaw: contrato de tarea, supervisor y panel de solo lectura. | Lista/detalle/historial indican responsable, agente, CLI, intento, avance, espera, próxima comprobación, recursos y evidencia; móvil/escritorio, datos viejos y errores distinguibles; sin secretos ni XSS. LobsterBoard se usa sólo si licencia, assets y dependencias del commit elegido pasan revisión; OpenGrokBot aporta patrones de seguimiento, no código ni otro runtime. | U3; 17.0–17.2, 17.4–17.5 | cc:TODO |
+| U5 | `[lane:gate] [tdd:required]` El mismo contrato y panel en la computadora Hermes, con estado, reloj e identidad propios. | Crear, seguir y cerrar la misma clase de tarea con OpenClaw inaccesible; diez recorridos de aceptación en cada host, instalador reversible, CI/revisión del SHA final y recibos por host. No se comparten sesiones ni credenciales. | U4; 17.3, 17.6–17.8 | cc:TODO |
+
+La primera unidad de trabajo es **U0**, sólo lectura y una prueba acotada de
+Telegram. En paralelo puede prepararse U1 en una rama, pero no se activa
+sync, no se mergea un PR ni se despliega por el hecho de existir este plan.
+Después de cada etapa se actualiza esta tabla en un único PR de cierre con
+recibos; no se reabre una fase cerrada ni se repite la batería para el mismo SHA.
+
+**Reconciliación de números antiguos:** 15 = cerrado; 18.0/18.4 = recuperación
+parcial que alimenta U0, no “terminado” retroactivo; 16 = piezas para U1,
+sin ejecutar el corte viejo 16.8; 9 = sólo faltantes para U2; 14 = U3; 17 =
+U4/U5. Fase 23 y los hardenings 9.17–9.18 quedan fuera de esta ruta salvo
+un bloqueo reproducible. Los PR #128, #130, #131, #132 y #134 se deciden por
+diff y evidencia: ninguno se mergea automáticamente por aparecer aquí.
+
+`Spec delta`: la sección "Objetivo de recuperación limpia" de
+`docs/spec/00-project-spec.md` debe leerse con la nota de estado
+posreinstalación añadida en este PR. `team_validation_mode: subagent`:
+producto, arquitectura y seguridad/QA revisaron la secuencia y sus riesgos.
+
 ## Purpose
 
 Que un agente no le haga perder una noche a David concluyendo "no se puede" sin haberlo intentado — y que la solución no cueste más que el problema. El intento anterior (candado en `before_agent_finalize`, PR #15) se revirtió en PR #16 tras 4 hallazgos altos del adversary. Este plan sale de esos hallazgos más dos revisiones independientes (reconocimiento del runtime + escéptico), y **cambia de mecanismo**: no se rehace el candado.
@@ -629,13 +681,18 @@ No se leen secretos en general, no se imprime contenido sensible y no se cambia 
 
 ## Fase 18 — Recuperación limpia de OpenClaw y nueva base de ejecución
 
+**Registro histórico, no secuencia de corte vigente.** La instalación nueva
+ocurrió después de redactar estas filas. Su estado sigue `cc:TODO` hasta que
+cada DoD tenga recibo; la ejecución futura se rige por U0–U5 arriba. No se
+vuelve a correr 18.1–18.4 ni el corte 16.8 por inercia.
+
 Fecha de planificación: 2026-09-22. Plan maestro:
 `docs/superpowers/plans/2026-09-22-recuperacion-limpia-openclaw.md`.
 Spec delta: `docs/spec/00-project-spec.md`, "Objetivo de recuperación
 limpia". Esta fase crea un estado nuevo y verificable; no ejecuta el corte
 16.8 antiguo por equivalencia. Las filas históricas 9/14/15/16 no se cambian
-hasta medir el nuevo estado en 18.5. Fase 17, aún en un PR de planificación,
-se reconcilia en 18.6 antes de implementarla.
+hasta medir el nuevo estado en 18.5. El borrador de Fase 17 se incorporó a
+esta rama para reconciliarlo con la ruta activa antes de implementarlo.
 La ruta de corte anterior 16.8 no se ejecuta ni se autoriza durante Fase 18.
 Después de 18.6 solo podría reabrirse si el ledger la conserva expresamente
 con dependencias nuevas; de lo contrario queda sustituida por 18.4.
@@ -684,6 +741,10 @@ bases en bloque, cambiar modelos sin consentimiento o crear otro reloj.
   ninguno de los DoD. Scope: fuera de Fase 18. Estado: **no aprobado**.
 ## Fase 17 — Centro de tareas común para OpenClaw y Hermes
 
+**Detalle subordinado a U4/U5.** La fase está planificada, no implementada.
+Su runbook no se lanza mientras Fase 14 y la ruta segura de deploy sigan sin
+aceptación; las filas 17.0–17.1 sí pueden investigarse sin activar servicios.
+
 Fecha: 2026-09-22. [Plan detallado](docs/superpowers/plans/2026-09-22-centro-tareas.md).
 [Diseño y aceptación](docs/superpowers/specs/2026-09-22-centro-tareas-design.md).
 [Runbook de ejecución](docs/runbooks/autopilot-fase17.md).
@@ -703,7 +764,7 @@ Las tareas siguientes son propuestas, no autorización de implementación o depl
 | 17.2 | `[lane:gate] [tdd:required]` Adaptador OpenClaw y observaciones de ejecución/recursos sobre Fase 14. | Tarea nativa visible con intento y proceso verificables; PID reutilizado y métricas ausentes no se atribuyen mal; guardas existentes pasan | 17.1, Fase 14 integrada y contratos de entrega sin sello | cc:TODO |
 | 17.3 | `[lane:gate] [tdd:required]` Adaptador Hermes sin dependencia de gateway OpenClaw. | Crear, observar, reportar y verificar con OpenClaw ausente; mismo contrato y capacidades requeridas; cobertura parcial explícita | 17.2 | cc:TODO |
 | 17.4 | `[lane:gate] [tdd:required]` Supervisión local independiente del coordinador y recuperación con presupuesto persistente. | Pruebas de crash sin intentos duplicados; efectos inciertos no se repiten; un reloj para dos tareas; recursos/permiso no se amplían al reiniciar | 17.2, 17.3 | cc:TODO |
-| 17.5 | `[lane:gate] [tdd:required]` Panel bonito de solo lectura con lista, detalle, historial y evidencia. | Recorridos del diseño verdes en móvil/escritorio; teclado, errores y frescura visibles; API/HTML sin secretos sintéticos ni XSS | 17.1, 17.4 | cc:TODO |
+| 17.5 | `[lane:gate] [tdd:required]` Panel de solo lectura con lista, detalle, línea temporal, avisos de espera y evidencia; agente y CLI visibles. | Recorridos del diseño verdes en móvil/escritorio y sin OpenGrokBot instalado; teclado, errores y frescura visibles; API/HTML sin secretos sintéticos ni XSS; decisión de licencia/commit de LobsterBoard registrada antes de usar código o assets. | 17.1, 17.4 | cc:TODO |
 | 17.6 | `[lane:gate] [tdd:required]` Paquete común e instalación independiente por host, preflight y reversa. | Instalar dos veces converge; upgrade/reversa conserva tareas; identidades distintas; manifiesto común y credenciales separadas | 17.4, 17.5 | cc:TODO |
 | 17.7 | `[lane:gate] [tdd:required]` Integración, PR, revisión agrupada y runbook operativo verificado. | Hooks y batería completa en CI del head final; reviewer distinto; cero bloqueantes; launcher dry-run y lectura independiente del runbook | 17.6 | cc:TODO |
 | 17.8 | `[lane:release] [tdd:skip:aceptacion-viva]` Instalación autorizada y demo real en cada computadora. | Mismo sistema probado con el otro runtime inaccesible; recibos por host, checklist y aceptación del usuario; ninguna paridad declarada sin probar ambos | 17.7, permiso vivo, Fase 16 aceptada donde aplique | cc:TODO |

@@ -1,5 +1,10 @@
 # Fase 9: cierre de corridas autónomas
 
+> **Revalidar antes de lanzar.** La ruta activa es U2 de `Plans.md`. El sync
+> Windows y el watchdog se deshabilitaron durante la reinstalación; este
+> runbook no puede asumir que mergear despliega ni crear un segundo reloj.
+> Conservar PR #100 y ejecutar sólo las filas faltantes tras U1.
+
 Para el lead que Claw asigne. Hereda `docs/runbooks/base-openclaw.md` v1.1 y `docs/runbooks/loop-autopilot.md`. Plan: `docs/superpowers/plans/2026-09-21-fase9-cierre.md`; diseño: `docs/superpowers/specs/2026-09-21-fase9-cierre-design.md`. Pantalla: `/runbook/tablero/9` desde el primer comando.
 
 ## Arranque

@@ -1,5 +1,11 @@
 # Fase 16: Muse implementa la separación del runtime
 
+> **NO LANZAR ESTE RUNBOOK EN EL ESTADO REINSTALADO.** Su corte Windows y sus
+> supuestos de sync son anteriores a la recuperación. `Plans.md` U1 decide
+> qué código reutilizar; exige un runbook nuevo, revisado contra el host vivo,
+> antes de cualquier deploy. El nodo Mac ya conectado no es el nodo Windows
+> de 16.5.
+
 Construye código, pruebas y documentación hasta un PR revisado; no mergea ni opera Windows. Hereda `docs/runbooks/base-openclaw.md` v1.1 y `docs/runbooks/loop-autopilot.md`. Plan: `docs/superpowers/plans/2026-09-22-openclaw-runtime-separation.md`. Diseño: `docs/superpowers/specs/2026-09-22-openclaw-runtime-separation-design.md`. Tablero: `/runbook/tablero/c/fase16-runtime`.
 
 Q0 es el PR que contiene este plan, runbook y sus deltas. La autorización actual no permite que el lead lo mergee: David decide Q0. No lanzar la fase hasta que Q0 esté en `origin/main`. Entonces el primer bloque abre el registro y el tablero sin destruir una reanudación; sustituye `<host>`, `<ISO>` y `<sesion-lead>`:

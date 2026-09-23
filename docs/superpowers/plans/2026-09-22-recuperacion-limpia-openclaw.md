@@ -1,5 +1,10 @@
 # Recuperación limpia de OpenClaw y ruta al centro de tareas
 
+> **Histórico desde la reinstalación del 22 de septiembre.** La ruta activa es
+> U0–U5 al inicio de `Plans.md`. No repitas este corte ni tomes sus filas TODO
+> como autorización para desinstalar o restaurar el estado anterior. El
+> inventario vivo de PR #132 y sus pendientes alimentan U0/U1.
+
 > Plan maestro para agentes ejecutores. Antes de operar Windows, convertir el
 > inventario real en un runbook de corte con comandos y destinos exactos, revisarlo
 > y obtener una autorización operativa separada. Este plan no autoriza borrar,
