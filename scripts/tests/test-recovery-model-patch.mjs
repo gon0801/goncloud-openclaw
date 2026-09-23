@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -104,4 +104,60 @@ test("published recovery manifest preserves every screenshot chain in order", ()
     patch.agents.entries.main.models["anthropic/claude-opus-5"].params.thinking,
     "xhigh",
   );
+});
+
+test("writes the private patch once and rejects a different existing file", () => {
+  const dir = mkdtempSync(join(tmpdir(), "recovery-output-"));
+  const manifestPath = join(dir, "manifest.json");
+  const outputPath = join(dir, "patch.json");
+  const agents = Object.fromEntries(
+    ids.map((id) => [id, { chain: [`provider/${id}`], thinking: {} }]),
+  );
+  writeFileSync(manifestPath, JSON.stringify({ version: 1, defaultsFrom: "main", agents }));
+
+  const command = () =>
+    spawnSync(process.execPath, [script, manifestPath, outputPath], {
+      encoding: "utf8",
+    });
+  const first = command();
+  assert.equal(first.status, 0, first.stderr);
+  assert.equal(first.stdout, "");
+  const content = readFileSync(outputPath, "utf8");
+  assert.equal(JSON.parse(content).agents.entries.main.model.primary, "provider/main");
+
+  const old = new Date("2020-01-01T00:00:00Z");
+  utimesSync(outputPath, old, old);
+  const second = command();
+  assert.equal(second.status, 0, second.stderr);
+  assert.equal(statSync(outputPath).mtimeMs, old.getTime());
+
+  writeFileSync(outputPath, "other data");
+  const conflict = command();
+  assert.notEqual(conflict.status, 0);
+  assert.match(conflict.stderr, /existing patch differs/i);
+  assert.equal(readFileSync(outputPath, "utf8"), "other data");
+});
+
+test("does not silently drop a ninth agent from the recovery manifest", () => {
+  const agents = Object.fromEntries(
+    ids.map((id) => [id, { chain: [`provider/${id}`], thinking: {} }]),
+  );
+  agents.usuario = { chain: ["provider/usuario"], thinking: {} };
+  const result = run({ version: 1, defaultsFrom: "main", agents });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /unexpected agent.*usuario/i);
+  assert.equal(result.stdout, "");
+});
+
+test("rejects thinking settings for a model outside that agent's chain", () => {
+  const agents = Object.fromEntries(
+    ids.map((id) => [id, { chain: [`provider/${id}`], thinking: {} }]),
+  );
+  agents.main.thinking["other/model"] = "xhigh";
+  const result = run({ version: 1, defaultsFrom: "main", agents });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /thinking model.*main/i);
+  assert.equal(result.stdout, "");
 });
