@@ -1,5 +1,11 @@
 # Fase 9: cierre de corridas autónomas
 
+> **Revalidar antes de lanzar.** La ruta activa es U2 de `Plans.md`. El sync
+> Windows y el watchdog se deshabilitaron durante la reinstalación; este
+> runbook no puede asumir que mergear despliega ni crear un segundo reloj.
+> Conservar PR #100 y ejecutar sólo las filas faltantes tras U1. La fila 9.0
+> queda diferida; no forma parte del carril U2 ni del simulacro activo.
+
 Para el lead que Claw asigne. Hereda `docs/runbooks/base-openclaw.md` v1.1 y `docs/runbooks/loop-autopilot.md`. Plan: `docs/superpowers/plans/2026-09-21-fase9-cierre.md`; diseño: `docs/superpowers/specs/2026-09-21-fase9-cierre-design.md`. Pantalla: `/runbook/tablero/9` desde el primer comando.
 
 ## Arranque
@@ -13,7 +19,7 @@ import datetime, json, pathlib
 now=datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00','Z')
 lane=lambda i,n,r,t:{"id":i,"nombre":n,"repo":"gon0801/goncloud-openclaw","rama":r,"tareas":t,"estado":"pendiente","paso_loop":0,"pr":None,"head":None,"approve_lead":None,"ci":"pendiente","coderabbit":"pendiente","residuales":[],"detenido_por":None}
 queue=lambda i:{"id":i,"prs":[],"estado":"pendiente","ventana":None,"merge_commits":[],"verificado":None,"detenido_por":None}
-doc={"schema":"runbook-progress.v1","runbook":"docs/runbooks/autopilot-fase9.md","fase":"9","corrida":"fase9-cierre","proyecto":"openclaw","titulo":"Cierre de Fase 9","plan":{"repo":"gon0801/goncloud-openclaw","ruta":"Plans.md","seccion":"Fase 9"},"lead":{"agente":"unknown","inicio":now,"actualizado":now},"atencion_requerida":{"necesaria":False,"motivo":None,"desde":None},"siguiente_paso":"Integrar Q0 y recuperar PR 100","carriles":[lane("D","Docs","fase9/docs",["9.7","9.13"]),lane("I","Instalacion","fase9/instalacion-cierre",["9.10","9.16"]),lane("U","Usuario","fase9/usuario",["9.11","9.12"]),lane("S","Simulacro","sin-rama",["9.0","9.9"])],"cola":[queue(f"Q{i}") for i in range(6)],"eventos":[],"cierre":{"at":None,"telegram_message_id":None,"resumen":None}}
+doc={"schema":"runbook-progress.v1","runbook":"docs/runbooks/autopilot-fase9.md","fase":"9","corrida":"fase9-cierre","proyecto":"openclaw","titulo":"Cierre de Fase 9","plan":{"repo":"gon0801/goncloud-openclaw","ruta":"Plans.md","seccion":"Fase 9"},"lead":{"agente":"unknown","inicio":now,"actualizado":now},"atencion_requerida":{"necesaria":False,"motivo":None,"desde":None},"siguiente_paso":"Integrar Q0 y recuperar PR 100","carriles":[lane("D","Docs","fase9/docs",["9.7","9.13"]),lane("I","Instalacion","fase9/instalacion-cierre",["9.10","9.16"]),lane("U","Usuario","fase9/usuario",["9.11","9.12"]),lane("S","Simulacro","sin-rama",["9.9"])],"cola":[queue(f"Q{i}") for i in range(6)],"eventos":[],"cierre":{"at":None,"telegram_message_id":None,"resumen":None}}
 pathlib.Path('.saikit/progress/9.json').write_text(json.dumps(doc,ensure_ascii=False)+"\n")
 PY
 ~/.openclaw/bin/openclaw gateway call runbook.progress.set --params "$(cat .saikit/progress/9.json)" --timeout 30000
@@ -47,7 +53,7 @@ Cada carril sigue los Tasks homónimos del plan, incluida su DoD y sus comandos 
 | D `fase9/docs`, PR #100 | 9.7, 9.13 | alcance existente del PR; watcher/runner, loop, skill y guía |
 | I `fase9/instalacion-cierre` | 9.10, 9.16 | `scripts/mac/instalar-mac.sh`, corrida cerrar/lib y pruebas focalizadas |
 | U `fase9/usuario` | 9.11, 9.12 | `agents/usuario/`, cierre de fase, skill y pruebas focalizadas |
-| S sin rama de código | 9.0, 9.9 | instalación integrada, simulacro y evidencia |
+| S sin rama de código | 9.9 | instalación integrada, simulacro y evidencia; 9.0 queda diferida |
 | C `docs/fase9-cierre` | ledger | `Plans.md`, `.saikit/progress/9*`, evidencia final |
 
 D primero: `git fetch origin && git merge origin/main` en su worktree; nunca se duplica. I puede prepararse desde `origin/main`, pero U nace después de integrar D. I/U comparten PR solo si `git diff --name-only` demuestra propiedad disjunta y cada fila conserva commit/prueba propia; si no, se serializan. Todo worker recibe un `BRIEF.md`, escribe contrato y no hace push/PR.

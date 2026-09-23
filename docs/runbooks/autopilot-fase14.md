@@ -1,5 +1,10 @@
 # Fase 14: guía de ejecución pendiente de Fases 15 y 9
 
+> **NO LANZAR CON EL CORTE VIEJO.** Fase 15 ya está cerrada, pero U1/U2 de
+> `Plans.md` siguen pendientes. El sync Windows anterior está deshabilitado;
+> cualquier canary o merge vivo debe usar el nuevo deploy selectivo y un SHA
+> instalado leído de vuelta.
+
 Para el lead que Claw asigne. Plan: `docs/superpowers/plans/2026-09-19-native-harness-orchestration.md`; diseño: `docs/superpowers/specs/2026-09-19-native-harness-orchestration-design.md`. Esta revisión corrige el plan; no lanza la fase. Tablero previsto: `/runbook/tablero/c/fase14-harness`.
 
 El primer comando de una futura corrida crea el estado observable antes de tocar un carril:

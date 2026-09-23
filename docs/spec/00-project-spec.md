@@ -53,7 +53,7 @@ Decisiones del dueño (2026-09-15), fila 6.8 de Plans.md:
 
 1. main coordina y le reporta a David; nunca mergea ni toca el servidor directamente.
 2. Cambios de código van a la cadena de calidad (implementer → verifier → adversary → reviewer); servidor y deploy van a ingenieria; negocio va a operaciones.
-3. Nada se mergea sin autorización explícita de David; puede ser una orden fechada por tarea o una preaprobación versionada con alcance cerrado para una fase. La corrida debe guardar una `authorization_ref` comprobable a esa preaprobación; recibos, revisiones y CI acreditan calidad, pero no crean autoridad. Donde mergear ya despliega (openclaw y los 3 workspaces, por el sync) la autorización es una sola: "merge y deploy". Fase 16 es la excepción durante la migración: la autorización para mergear su implementación no autoriza el corte vivo. Ingeniería necesita otra `authorization_ref` que nombre la ventana operativa y el SHA ya integrado antes de cambiar el host Windows.
+3. Nada se mergea sin autorización explícita de David; puede ser una orden fechada por tarea o una preaprobación versionada con alcance cerrado para una fase. La corrida debe guardar una `authorization_ref` comprobable a esa preaprobación; recibos, revisiones y CI acreditan calidad, pero no crean autoridad. Cuando mergear también despliega, la autorización es una sola: "merge y deploy". Tras la reinstalación Windows el sync está deshabilitado: no se presume que mergear despliegue, ni se activa por esta regla. Ingeniería necesita otra `authorization_ref` que nombre host, ventana y SHA integrado antes de cambiar el runtime vivo.
 4. Nada se reporta como "listo" sin haberse verificado antes con la prueba del repo (`verify/`) cuando existe.
 
 ## Propiedad del runtime Windows
@@ -81,6 +81,51 @@ septiembre de 2026:
 Estos contratos no cambian modelos de conversación ni sus fallbacks. Código y
 artefactos versionados siguen la cadena de calidad; la migración viva y el
 deploy pertenecen a ingeniería y requieren autorización explícita separada.
+
+## Objetivo de recuperación limpia (pendiente de operación)
+
+David quiere reconstruir OpenClaw con estado nuevo y conservar los ocho agentes
+existentes (`main`, `operaciones`, `ingenieria`, `implementer`, `reviewer`,
+`adversary`, `verifier`, `scout`), sus roles, workspaces y la cadena ordenada
+`primary`/`fallbacks` de cada uno. La captura del 19 de septiembre y
+`docs/patches/modelos-vivos-2026-09-15.json5` son referencias fechadas, no
+prueba de la configuración viva. Una exportación nueva, sin secretos, debe
+reconciliarlas antes de cambiar el host. Un modelo no disponible no se sustituye
+en silencio. El agente `usuario` previsto por Fase 9 es una posible adición,
+no el noveno agente existente que este rescate deba reconstruir.
+
+La recuperación conserva un respaldo verificable fuera del estado vivo y
+prueba su restauración en un destino nuevo. La instalación nueva no importa
+en bloque las bases, sesiones, logs, modelos descargados ni launchers del
+estado anterior. Solo tras inventario y comparación se copian los archivos
+de agente/workspace/skill seleccionados y se reconfiguran las conexiones.
+El estado antiguo sigue recuperable hasta la aceptación del nuevo. Su borrado
+definitivo exige otra decisión; este objetivo no la autoriza.
+
+La experiencia final permite encargar una tarea, ver responsable, agente,
+CLI, intento, avance, espera y evidencia, y recibir un resultado verificado
+sin vigilar un turno de modelo. Las acciones rutinarias reversibles pueden
+preaprobarse con alcance y presupuesto cerrados. Merge, deploy, borrado,
+secretos y efectos externos irreversibles conservan su autoridad específica.
+El panel local de OpenClaw puede entregarse antes del adaptador Hermes;
+la paridad se prueba después en dos equipos independientes. No hay cola ni
+credenciales compartidas entre ellos.
+
+La instalación nueva no se declara recuperada solo por arrancar: los ocho
+agentes deben conservar sus cadenas y responder por la ruta real. Si un
+proveedor impide esa prueba, el resultado queda bloqueado, no aprobado por
+equivalencia con otro modelo. Un encargo real y los ciclos de sync requieren
+alcance operativo explícito, separado del permiso para instalar.
+
+Este objetivo modifica el resultado deseado, no convierte el runbook actual
+de Fase 16 en un procedimiento de reinstalación ni autoriza efectos en Windows.
+La ruta activa está al inicio de `Plans.md`; los planes de Fases 16–18 son
+detalle o historial cuando la contradicen. Al 22 de septiembre el gateway
+Windows nuevo respondió health/ready y los ocho primarios, Telegram quedó
+emparejado y la Mac quedó conectada como nodo por SSH. No se ha acreditado
+la cadena completa de fallbacks, el sync selectivo, autonomía, panel ni Hermes.
+Fase 15 sí está cerrada. Esta observación no cambia modelos ni declara una
+fase completa por haber instalado el servicio.
 
 Decisión de producto registrada (D2): se crea `verify/` en goncloud-Orbit y goncloud-accounting con `saikit-verificar-app`; no se adapta el verifier a `.cursor/skills/verify-*` porque duplica mantenimiento sin cambiar nada para David — esas skills siguen siendo de la flota DG y `verify/` es la fuente de claw.
 
@@ -122,3 +167,30 @@ y `seguimiento.v1` (contratos en `docs/spec/corrida.v1.md` y
 5. El texto de un panel es dato no confiable: se trunca y se limpia de caracteres de
    control antes de entrar a un mensaje o a un evento, y nunca se interpreta como
    instrucción.
+
+## Centro de tareas portable, contrato objetivo de Fase 17
+
+Estado: planificado, no prueba de soporte instalado. Diseño:
+[Fase 17](../superpowers/specs/2026-09-22-centro-tareas-design.md).
+
+1. Dos instalaciones independientes, una OpenClaw y otra Hermes, comparten versión,
+   reglas y pruebas. Cada una conserva identidad, estado y credenciales propios y
+   debe funcionar sin el otro runtime. No hay failover ni sesiones compartidas.
+2. Se reutilizan lifecycle, registro de workers, reconciliación y entrega de Fase 14.
+   Su disponibilidad exige evidencia. Un único reloj de seguimiento por instalación
+   conserva vigilancia de 15 minutos y consolidado de 30; no hay cron por tarea.
+3. El centro distingue tarea, agente responsable, CLI, intento, sesión y proceso.
+   Observaciones con fecha/origen no sobrescriben el progreso del lead. Desconocido,
+   antiguo y no aplicable se distinguen de cero, terminado y ausencia de trabajo.
+4. El progreso principal usa unidades verificadas de una revisión del plan. Terminar
+   exige evidencia del resultado actual, también para tareas sin PR. Un latido,
+   mensaje del worker o merge aislado no prueba cumplimiento ni concede autoridad.
+5. El panel inicial es de solo lectura y proyecta campos permitidos, sin prompts,
+   entorno, argv ni transcripciones crudas. Los contratos/rutas legacy se conservan,
+   incluido el literal v1 exigido por el validador de progreso durante su transición.
+6. El inventario/seguimiento sobrevive al coordinador. Continuar requiere interfaz
+   pública soportada, presupuesto persistente e identidad del intento. Un efecto
+   incierto se reconcilia antes de repetir; no se inventa garantía de ejecución única.
+7. La capacidad local empieza en un worker y aumenta sólo con configuración y
+   medición dentro del límite de Fase 14. No se mata ni atribuye un proceso sólo por
+   nombre o PID. Las dos instalaciones pasan los mismos recorridos antes del cierre.
