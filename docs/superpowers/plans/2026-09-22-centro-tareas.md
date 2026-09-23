@@ -4,6 +4,7 @@ Fecha: 2026-09-22. Estado: plan listo para evaluación; implementación no inici
 Base de investigación: `origin/main` en `31dfaf0`.
 Diseño y aceptación: [especificación](../specs/2026-09-22-centro-tareas-design.md).
 Estado de tareas: [Plans.md](../../../Plans.md), sección Fase 17.
+Runbook de ejecución: [autopilot-fase17.md](../../runbooks/autopilot-fase17.md).
 
 ## Qué entrega
 

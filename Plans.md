@@ -686,6 +686,7 @@ bases en bloque, cambiar modelos sin consentimiento o crear otro reloj.
 
 Fecha: 2026-09-22. [Plan detallado](docs/superpowers/plans/2026-09-22-centro-tareas.md).
 [Diseño y aceptación](docs/superpowers/specs/2026-09-22-centro-tareas-design.md).
+[Runbook de ejecución](docs/runbooks/autopilot-fase17.md).
 
 Purpose: dos computadoras independientes con el mismo sistema de seguimiento,
 ejecución verificable y panel; David elige cuál usar. Sin sesiones compartidas ni
