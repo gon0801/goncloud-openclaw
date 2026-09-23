@@ -1,0 +1,1 @@
+{"hecho":"F1-F4 fallan cerrados con pruebas conductuales rojo-verde; solo 6 scripts + runbook + tests + tdd.md","comando":"bash scripts/tests/test-quarantine.sh","salida":"TODO VERDE: quarantine","nivel":3}

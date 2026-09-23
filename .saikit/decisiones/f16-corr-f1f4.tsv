@@ -1,0 +1,2 @@
+cuando|etapa|decision|por_que|evidencia|resultado
+2026-09-23T00:21:24Z|cierre|Aceptar ronda F1-F4+M1-M4 para revision|4 bloqueantes con rojo-verde conductual; 8 focalizados verdes; diff-check limpio|7 commits a1b2062..1890571; tdd.md ronda F1-F4|ok
