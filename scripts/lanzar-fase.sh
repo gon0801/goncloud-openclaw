@@ -66,7 +66,7 @@ DOC="docs/runbooks/autopilot-fase${N}.md"
 SESION="${SESION_OPT:-fase${N}-lead}"
 if [ -n "$SESION_OPT" ]; then
   case "$SESION_OPT" in
-    *[!A-Za-z0-9_-]*) echo "ATORADO sesion invalida: '$SESION_OPT'" >&2; exit 1 ;;
+    [!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) echo "ATORADO sesion invalida: '$SESION_OPT'" >&2; exit 1 ;;
   esac
 fi
 CWD="$DEV/wt-f${N}-lead"

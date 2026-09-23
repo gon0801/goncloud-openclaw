@@ -23,15 +23,24 @@ El lead comprueba la autorización aplicable antes de cada ítem. Un CI verde, u
 
 ## Arranque y progreso
 
-Q0 es el [PR de planificación](https://github.com/gon0801/goncloud-openclaw/pull/130). Antes de ejecutar, comprueba `git cat-file -e origin/main:docs/runbooks/autopilot-fase17.md` y `git cat-file -e origin/main:docs/superpowers/plans/2026-09-22-centro-tareas.md`. Ambos deben salir 0; si no, Q0 sigue pendiente y se detiene. El launcher puede localizar Q0 en una rama, pero eso **no** autoriza integrarlo. El repositorio es `gon0801/goncloud-openclaw`, default `main`, clon local `/Users/dn/dev/goncloud-openclaw`. Destino OpenClaw Windows: la ruta fuente y la raíz runtime se validan contra los recibos de Fase 16 antes de 17.8. Destino Hermes: `unknown` hasta 17.0; no se inventa ruta ni plataforma.
+Q0 es el [PR de planificación](https://github.com/gon0801/goncloud-openclaw/pull/131). Antes de ejecutar, comprueba `git cat-file -e origin/main:docs/runbooks/autopilot-fase17.md` y `git cat-file -e origin/main:docs/superpowers/plans/2026-09-22-centro-tareas.md`. Ambos deben salir 0; si no, Q0 sigue pendiente y se detiene. El launcher puede localizar Q0 en una rama, pero eso **no** autoriza integrarlo. El repositorio es `gon0801/goncloud-openclaw`, default `main`, clon local `/Users/dn/dev/goncloud-openclaw`. Destino OpenClaw Windows: la ruta fuente y la raíz runtime se validan contra los recibos de Fase 16 antes de 17.8. Destino Hermes: `unknown` hasta 17.0; no se inventa ruta ni plataforma.
 
 Tras Q0 integrado y autorización para ejecutar, comprueba sin instalar nada: `test -x /Users/dn/bin/corrida.sh`, `test -r /Users/dn/bin/cli-modos.tsv`, `test -x /Users/dn/bin/tmux-activity-watch.sh` y `test -x /Users/dn/.openclaw/bin/openclaw`. Todos deben salir 0. En la Mac revisada al redactar este documento faltan los dos primeros: es una dependencia de la instalación de Fase 9, no un paso que se improvisa en esta fase. Si falta cualquiera, `ATORADO Fase 9 no instalada` antes de lanzar; 17.0 puede seguir sólo como investigación sin corrida viva. Después de comprobarlos, **el primer bloque de comandos abre la corrida en el tablero** desde el worktree del lead. Reanudar conserva el JSON existente; no vuelve a poner tareas en pendiente. `python3` escribe sólo el estado local inicial, sin secretos:
 
 ```bash
 python3 - <<'PY'
-import datetime, json, pathlib
+import datetime, json, os, pathlib, stat
+os.umask(0o077)
 p = pathlib.Path('.saikit/progress/17.json')
-p.parent.mkdir(parents=True, exist_ok=True)
+for directory in (p.parent.parent, p.parent):
+    if directory.is_symlink():
+        raise SystemExit(f'ATORADO ruta de progreso enlazada: {directory}')
+    directory.mkdir(exist_ok=True)
+    directory.chmod(0o700)
+if p.is_symlink():
+    raise SystemExit(f'ATORADO archivo de progreso enlazado: {p}')
+if p.exists():
+    p.chmod(0o600)
 if not p.exists():
     at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00', 'Z')
     repo = 'gon0801/goncloud-openclaw'
@@ -40,11 +49,24 @@ if not p.exists():
     queue = [dict(id=f'Q{i}', prs=[], estado='verificado' if i == 0 else 'pendiente', ventana=None, merge_commits=[], verificado='ok' if i == 0 else None, detenido_por=None, avance=100 if i == 0 else 0) for i in range(7)]
     doc = dict(schema='runbook-progress.v1', runbook='docs/runbooks/autopilot-fase17.md', fase='17', corrida='fase17-centro-tareas', proyecto='goncloud-openclaw', titulo='Fase 17: centro de tareas', plan=dict(repo=repo, ruta='Plans.md', seccion='Fase 17'), lead=dict(agente='lead', inicio=at, actualizado=at), atencion_requerida=dict(necesaria=False, motivo=None, desde=None), siguiente_paso='Verificar capacidades y dependencias de la fase', carriles=lanes, cola=queue, eventos=[], cierre=dict(at=None, telegram_message_id=None, resumen=None))
     p.write_text(json.dumps(doc, ensure_ascii=False, separators=(',', ':')) + '\n', encoding='utf-8')
+p.chmod(0o600)
+if stat.S_IMODE(p.stat().st_mode) != 0o600 or any(stat.S_IMODE(d.stat().st_mode) != 0o700 for d in (p.parent.parent, p.parent)):
+    raise SystemExit('ATORADO permisos de progreso no privados')
 PY
-~/.openclaw/bin/openclaw gateway call runbook.progress.set --params "$(cat .saikit/progress/17.json)" --timeout 30000
+if ! ~/.openclaw/bin/openclaw gateway call runbook.progress.set --params "$(cat .saikit/progress/17.json)" --timeout 30000; then
+  python3 - <<'PY'
+import datetime, json, pathlib
+p = pathlib.Path('.saikit/progress/17.json')
+doc = json.loads(p.read_text(encoding='utf-8'))
+at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00', 'Z')
+doc['eventos'].append(dict(at=at, carril=None, que='publicación inicial de progreso falló; reintentar en el siguiente cambio de estado', situacion=None))
+p.write_text(json.dumps(doc, ensure_ascii=False, separators=(',', ':')) + '\n', encoding='utf-8')
+p.chmod(0o600)
+PY
+fi
 ```
 
-El RPC sólo publica el tablero OpenClaw. El propio trabajo de 17.3 debe sustituir esa frontera para Hermes; una futura corrida en la otra computadora usa su almacenamiento y transporte local, nunca este gateway. Si falla la publicación inicial, conserva el JSON y detiene el lanzamiento hasta que el tablero responda: esta fase exige seguimiento visible desde el inicio. Una publicación posterior fallida no detiene una corrida ya abierta; se registra y reintenta en el siguiente cambio. Esta es la excepción al reintento no bloqueante del base para el nacimiento de la corrida. El lanzador usa el nombre estable `wt-f17-lead`, que también busca `arranque-de-fase.sh` y reconocerá al reanudar. El lead confirma su marca `OPENCLAW_WATCH=1` y escribe su línea en `.saikit/progress/17-sesiones.txt` antes del chequeo:
+El RPC sólo publica el tablero OpenClaw. El propio trabajo de 17.3 debe sustituir esa frontera para Hermes; una futura corrida en la otra computadora usa su almacenamiento y transporte local, nunca este gateway. Si falla la publicación inicial, conserva el JSON, registra el fallo en `eventos` y continúa el lanzamiento; reintenta en el siguiente cambio de estado, igual que ante un fallo posterior. El lanzador usa el nombre estable `wt-f17-lead`, que también busca `arranque-de-fase.sh` y reconocerá al reanudar. El lead confirma su marca `OPENCLAW_WATCH=1` y escribe su línea en `.saikit/progress/17-sesiones.txt` antes del chequeo:
 
 ```bash
 T=/opt/homebrew/bin/tmux

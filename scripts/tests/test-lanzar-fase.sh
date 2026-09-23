@@ -82,6 +82,11 @@ printf '%s\n' "$out" | grep -q '^LISTO wt-f17-lead ' || fail "--sesion no llegó
 out=$(bash "$S" 17 --rama HEAD --sesion '../otra' --dry-run -- cli --flag 2>&1); rc=$?
 [ "$rc" = "1" ] || fail "--sesion inválido: esperaba 1, dio $rc"
 printf '%s\n' "$out" | grep -q 'ATORADO sesion invalida' || fail "--sesion inválido sin causa"
+for malo in '-otra' '--dry-run'; do
+  out=$(bash "$S" 17 --rama HEAD --sesion "$malo" --dry-run -- cli --flag 2>&1); rc=$?
+  [ "$rc" = "1" ] || fail "--sesion '$malo': esperaba codigo 1, dio $rc"
+  printf '%s\n' "$out" | grep -q 'ATORADO sesion invalida' || fail "--sesion '$malo' sin causa"
+done
 echo "ok (7): el nombre estable llega al lanzamiento y uno inválido se rechaza"
 
 echo "TODO VERDE: contrato de lanzar-fase.sh"

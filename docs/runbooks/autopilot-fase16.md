@@ -8,7 +8,7 @@
 
 Construye código, pruebas y documentación hasta un PR revisado; no mergea ni opera Windows. Hereda `docs/runbooks/base-openclaw.md` v1.1 y `docs/runbooks/loop-autopilot.md`. Plan: `docs/superpowers/plans/2026-09-22-openclaw-runtime-separation.md`. Diseño: `docs/superpowers/specs/2026-09-22-openclaw-runtime-separation-design.md`. Tablero: `/runbook/tablero/c/fase16-runtime`.
 
-Q0 es el PR que contiene este plan, runbook y sus deltas. La autorización actual no permite que el lead lo mergee: David decide Q0. No lanzar la fase hasta que Q0 esté en `origin/main`. Entonces el primer bloque abre el registro y el tablero sin destruir una reanudación; sustituye `<host>`, `<ISO>` y `<sesion-lead>`:
+Q0 era el PR que contenía este plan, runbook y sus deltas. La secuencia siguiente es histórica y no ejecutable en el estado reinstalado. No la inicies aunque Q0 esté en `origin/main`; U1 debe definir un runbook nuevo revisado contra el host vivo antes de cualquier deploy:
 
 ```bash
 mkdir -p .saikit/progress
@@ -22,7 +22,7 @@ mv .saikit/progress/16-sesiones.txt.tmp .saikit/progress/16-sesiones.txt
 bash scripts/arranque-de-fase.sh 16 --solo-watchdog-global
 ```
 
-El lead pega su salida y no toca el carril hasta `VERDE`. Después usa `corrida.sh lanzar-sesion` para abrir y registrar el único carril Muse antes de entregar `BRIEF.md`. La rama nace de `origin/main` fresco; `/Users/dn/.local/bin/muse --version` debe responder y la sesión usa `--yolo`, con `YOLO` visible.
+Históricamente, el lead pegaba su salida y no tocaba el carril hasta `VERDE`. La rama nacía de `origin/main` fresco; `/Users/dn/.local/bin/muse --version` debía responder y la sesión usaba `--yolo`, con `YOLO` visible. Nada de este bloque autoriza una ejecución nueva.
 
 ## Preaprobaciones
 
