@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
   existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
-  readdirSync, statSync, utimesSync, writeFileSync,
+  readdirSync, statSync, symlinkSync, utimesSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -245,4 +245,52 @@ test("una transacción previa distinta aborta en vez de mezclarse", () => {
   assert.notEqual(again.status, 0);
   assert.match(again.stderr, /prior transaction pending/);
   assert.equal(statSync(join(f.runtime, f.files[0].path)).size, "nuevo 0\n".length);
+});
+
+test("ya-publicado se adopta: v1 presente → edición viva → v2 la conserva (B2)", () => {
+  const f = fixture();
+  // El vivo ya trae los bytes v1 pero el ledger no los registra.
+  for (const [i, entry] of f.files.entries()) {
+    const target = join(f.runtime, entry.path);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, `nuevo ${i}\n`);
+  }
+  const first = f.run("--apply");
+  assert.equal(first.status, 0, first.stderr);
+  assert.match(first.stdout, /already published/);
+  // La rama sin cambios adopta: el ledger registra lo ya coincidente.
+  const ledgerPath = join(f.runtime, ".ledger", "sync-seguro-installed.json");
+  assert.equal(existsSync(ledgerPath), true, "la adopción debe registrar el ledger");
+  const ledger = JSON.parse(readFileSync(ledgerPath, "utf8"));
+  for (const entry of f.files) {
+    assert.equal(ledger.files[entry.path.toLowerCase()], entry.sha256);
+  }
+  // El operador edita el vivo; publish v2 debe conservar la edición.
+  const live0 = join(f.runtime, f.files[0].path);
+  writeFileSync(live0, "edición del operador\n");
+  const v2 = f.files.map((entry, i) => {
+    const content = `nuevo v2 ${i}\n`;
+    writeFileSync(join(f.stage, entry.path), content);
+    return { path: entry.path, sha256: sha(content) };
+  });
+  const manifest2 = join(f.root, "selection2.json");
+  writeFileSync(manifest2, JSON.stringify({ version: 1, policyVersion: 1, files: v2 }));
+  const state2 = join(f.root, "state2");
+  const second = spawnSync(
+    process.execPath, [publishScript, manifest2, f.stage, f.runtime, state2, "--apply"],
+    { encoding: "utf8" },
+  );
+  assert.equal(second.status, 0, second.stderr);
+  assert.match(second.stdout, new RegExp(`SKIPPED live-edit ${f.files[0].path}`));
+  assert.equal(readFileSync(live0, "utf8"), "edición del operador\n");
+  assert.equal(readFileSync(join(f.runtime, f.files[1].path), "utf8"), "nuevo v2 1\n");
+});
+
+test(".ledger symlinkeado a fuera: apply falla cerrado sin escribir fuera (B3)", () => {
+  const f = fixture();
+  const outside = mkdtempSync(join(tmpdir(), "u1-b3-fuera-"));
+  symlinkSync(outside, join(f.runtime, ".ledger"));
+  const result = f.run("--apply");
+  assert.notEqual(result.status, 0, `apply debió fallar cerrado, stdout: ${result.stdout}`);
+  assert.deepEqual(readdirSync(outside), [], "nada del ledger debe salir del runtime");
 });

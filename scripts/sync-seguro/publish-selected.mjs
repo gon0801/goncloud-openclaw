@@ -154,7 +154,22 @@ function parentDirs(relative) {
 const LEDGER_DIR = join(runtime, ".ledger");
 const INSTALLED_PATH = join(LEDGER_DIR, "sync-seguro-installed.json");
 
+// El ledger vive dentro del runtime: si .ledger existe debe ser un directorio
+// real (lstat: un symlink a fuera no vale); si falta se crea. Falla cerrado
+// antes de cualquier lectura o escritura del registro.
+function ensureLedgerDir() {
+  const stat = lstatSync(LEDGER_DIR, { throwIfNoEntry: false });
+  if (!stat) {
+    mkdirSync(LEDGER_DIR);
+    return;
+  }
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new Error(".ledger is not a real directory");
+  }
+}
+
 function loadInstalled() {
+  ensureLedgerDir();
   const stat = lstatSync(INSTALLED_PATH, { throwIfNoEntry: false });
   if (!stat) return new Map();
   if (!stat.isFile()) throw new Error("installed record is not a file");
@@ -173,6 +188,7 @@ function loadInstalled() {
 }
 
 function saveInstalled(map) {
+  ensureLedgerDir();
   const data = {};
   for (const [key, sha] of [...map.entries()].sort()) data[key] = sha;
   syncJsonAtomic(INSTALLED_PATH, { version: 1, files: data });
@@ -256,11 +272,21 @@ if (mode === "--rollback") {
 // --- apply ---
 const installed = loadInstalled();
 const skipped = [];
+let adopted = false;
 const changes = files.flatMap((file) => {
   const target = pathFor(runtime, file.path);
   const liveSha = existsSync(target) ? hash(target) : null;
   const newSha = file.sha256.toLowerCase();
-  if (liveSha === newSha) return [];
+  if (liveSha === newSha) {
+    // Adopción: el vivo ya coincide con lo staged; se registra para que una
+    // edición viva posterior se detecte en vez de sobrescribirse.
+    const key = file.path.toLowerCase();
+    if (installed.get(key) !== newSha) {
+      installed.set(key, newSha);
+      adopted = true;
+    }
+    return [];
+  }
   // Edición viva pendiente: el archivo vivo difiere tanto de lo último
   // instalado como de lo staged. No se sobrescribe: se reporta y se sigue.
   // Sin registro previo no hay "último instalado" contra el cual comparar:
@@ -274,6 +300,10 @@ const changes = files.flatMap((file) => {
 });
 
 if (!changes.length) {
+  // La rama sin cambios también persiste: sin esto lo adoptado se perdería y
+  // una edición viva posterior se sobrescribiría. En estado estable no hay
+  // nada que adoptar y no se escribe (idempotencia medida).
+  if (adopted) saveInstalled(installed);
   for (const path of skipped) process.stdout.write(`SKIPPED live-edit ${path}\n`);
   process.stdout.write(skipped.length
     ? `${files.length} selected files already published; ${skipped.length} live edits kept\n`
