@@ -110,3 +110,17 @@ test("rejects symlinked source components and overlapping roots", () => {
   assert.notEqual(nested.status, 0);
   assert.equal(existsSync(join(f.source, "stage")), false);
 });
+
+test("refuses to use a live .openclaw directory as source", () => {
+  const f = fixture();
+  const live = join(f.root, ".openclaw");
+  mkdirSync(live);
+  mkdirSync(join(live, "summa-gate"));
+  writeFileSync(join(live, "summa-gate", "index.ts"), "file 0\n");
+  const result = spawnSync(process.execPath, [script, f.manifest, live, f.stage, "--apply"], {
+    encoding: "utf8",
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /live.*source/i);
+  assert.equal(existsSync(f.stage), false);
+});

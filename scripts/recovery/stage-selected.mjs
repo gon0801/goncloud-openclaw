@@ -12,6 +12,9 @@ if (!manifestPath || !sourceArg || !stageArg || (flag && flag !== "--apply")) {
 }
 
 const source = realpathSync(sourceArg);
+if (source.split(sep).some((part) => part.toLowerCase() === ".openclaw")) {
+  throw new Error("live runtime cannot be recovery source");
+}
 const stage = resolve(stageArg);
 const parent = realpathSync(dirname(stage));
 const actualStage = join(parent, basename(stage));
