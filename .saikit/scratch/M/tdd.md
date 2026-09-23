@@ -813,3 +813,13 @@ Mutante muerto en el camino: segunda senal por proceso openclaw* rompio
 los verdes (2b)/(3b) en dev porque OpenClaw.app vive en la Mac; el nombre
 de proceso no identifica el endpoint, se quito con comentario. Verdes
 tras el fix: test-runtime-backup.sh y test-memory-migration.sh completos.
+
+F28 (bookmark del Event Log sin usar, F2): memoria (3j2) en ROJO antes
+del fix (evento 99/bookmark 100 fallaba: la consulta no filtraba). Fix:
+bookmark exige exit 0 + EventRecordID (si no, aborta) y la consulta final
+filtra EventID 3033/3077 con EventRecordID > bookmark, con exit check de
+wevtutil (EAP temporal, idioma F22/F26). Stub wevtutil ahora filtra en
+servidor por el umbral de la consulta (sin umbral devuelve todo: eso da
+el rojo conductual) y (3j3) inspecciona que la consulta trae
+"EventRecordID > 100". (3j4)/(3j5) cubren wevtutil caido y bookmark
+invalido. Verde: test-memory-migration.sh completo.

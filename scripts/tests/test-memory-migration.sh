@@ -226,16 +226,35 @@ else:
 PY
 mkshim netstat netstat-stub.py
 cat >"$T/fake-bin/wevtutil-stub.py" <<'PY'
-import os, sys
+import os, re, sys
 args = sys.argv[1:]
 with open(os.environ["OC_LOG"], "a") as fh:
     fh.write("wevtutil " + " ".join(args) + "\n")
-if "3033" in " ".join(args):
-    # consulta de eventos: limpio = vacio
-    if os.environ.get("OC_EVENTS_MODE", "clean") != "clean":
-        print("EventID: 3033 Source: llama-server RecordID: 101")
+joined = " ".join(args)
+if "3033" in joined:
+    # consulta final: filtra en servidor por EventRecordID > umbral de la
+    # consulta; sin umbral devuelve todo (como el log real sin filtro).
+    if os.environ.get("OC_WEVTUTIL_FAIL", "0") == "1":
+        print("ERROR: servicio no disponible", file=sys.stderr)
+        sys.exit(1)
+    m = re.search(r"EventRecordID\s*>\s*(\d+)", joined)
+    thr = int(m.group(1)) if m else -1
+    ids = os.environ.get("OC_EVENT_IDS", "")
+    if not ids and os.environ.get("OC_EVENTS_MODE", "clean") != "clean":
+        ids = "101"
+    for tok in ids.split(","):
+        tok = tok.strip()
+        if tok.isdigit() and int(tok) > thr:
+            print(f"EventID: 3033 Source: llama-server RecordID: {tok}")
 else:
-    print("EventRecordID: 100")  # bookmark
+    # bookmark
+    if os.environ.get("OC_WEVTUTIL_FAIL", "0") == "1":
+        print("ERROR: servicio no disponible", file=sys.stderr)
+        sys.exit(1)
+    if os.environ.get("OC_BOOKMARK_MODE", "valid") != "valid":
+        print("log vacio: sin registros")
+    else:
+        print("EventRecordID: 100")
 PY
 mkshim wevtutil wevtutil-stub.py
 cat >"$T/fake-bin/sigchecker-stub.py" <<'PY'
@@ -491,6 +510,35 @@ else
   OC_EVENTS_MODE="dirty" corre badev migrate 1 && fail "(3j) eventos nuevos debio frenar y salio 0"
   echo "ok (3j): eventos 3033/3077 nuevos frenan"
 fi
+
+# (3j2) Evento anterior al bookmark (99/100): pasa; posterior (101/100):
+# frena, y la consulta final incorpora el bookmark.
+if [ "$en_windows" -eq 1 ]; then
+  echo "SKIP (3j2/3j3): instalador fixture POSIX; CI ubuntu lo cubre"
+else
+  OC_EVENT_IDS="99" corre evold migrate 1 \
+    || fail "(3j2) evento anterior al bookmark debio pasar: $(cat "$T/evold.out")"
+  echo "ok (3j2): evento anterior al bookmark pasa"
+  OC_EVENT_IDS="101" corre evnew migrate 1 \
+    && fail "(3j3) evento posterior al bookmark debio frenar y salio 0"
+  grep -q 'EventRecordID > 100' "$OC_LOG" \
+    || fail "(3j3) la consulta final no incorpora el bookmark: $(grep wevtutil "$OC_LOG")"
+  echo "ok (3j3): evento posterior frena y la consulta usa el bookmark"
+fi
+
+# (3j4) wevtutil caido: falla cerrado (bookmark y consulta final).
+OC_WEVTUTIL_FAIL="1" corre evfail migrate 1 \
+  && fail "(3j4) wevtutil caido debio frenar y salio 0"
+grep -qi 'bookmark\|wevtutil' "$T/evfail.out" \
+  || fail "(3j4) no nombra la causa: $(cat "$T/evfail.out")"
+echo "ok (3j4): wevtutil caido falla cerrado"
+
+# (3j5) Bookmark sin EventRecordID: aborta, no sigue con evidencia desconocida.
+OC_BOOKMARK_MODE="invalid" corre evnobm migrate 1 \
+  && fail "(3j5) bookmark invalido debio frenar y salio 0"
+grep -qi 'bookmark' "$T/evnobm.out" \
+  || fail "(3j5) no nombra el bookmark: $(cat "$T/evnobm.out")"
+echo "ok (3j5): sin bookmark valido aborta"
 
 # (3k) DB fuera de RuntimeRoot: frena antes de snapshots y config.
 if [ "$en_windows" -eq 1 ]; then

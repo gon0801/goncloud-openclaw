@@ -320,10 +320,13 @@ try {
     $migPath = Join-Path $SnapshotRepo 'migration.json'
     if (Test-Path -LiteralPath $migPath) { throw 'ya existe migration.json' }
 
-    $bmRaw = (& wevtutil qe Application /c:1 /rd:true /f:text 2>&1 | Out-String)
-    $bm = ''
+    # EAP temporal (F22/F26): stderr de wevtutil no lanza en 5.1; manda el exit.
+    $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try { $bmRaw = (& wevtutil qe Application /c:1 /rd:true /f:text 2>&1 | Out-String) } finally { $ErrorActionPreference = $prevEAP }
+    if ($LASTEXITCODE -ne 0) { throw 'bookmark de eventos ilegible (wevtutil fallo)' }
     $bmm = [regex]::Match($bmRaw, 'EventRecordID:\s*(\d+)')
-    if ($bmm.Success) { $bm = $bmm.Groups[1].Value }
+    if (-not $bmm.Success) { throw 'bookmark de eventos sin EventRecordID' }
+    $bm = $bmm.Groups[1].Value
     [void]$commands.Add([PSCustomObject]@{ name = 'event-bookmark'; exit = 0 })
     [void]$observations.Add("bookmark eventos: $bm")
 
@@ -515,7 +518,10 @@ try {
     }
     [void]$commands.Add([PSCustomObject]@{ name = 'semantic-verify'; exit = 0 })
 
-    $evRaw = (& wevtutil qe Application '/q:*[System[(EventID=3033 or EventID=3077)]]' /f:text /c:50 2>&1 | Out-String)
+    $evQuery = ('*[System[(EventID=3033 or EventID=3077) and EventRecordID > {0}]]' -f $bm)
+    $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try { $evRaw = (& wevtutil qe Application ('/q:' + $evQuery) /f:text /c:50 2>&1 | Out-String) } finally { $ErrorActionPreference = $prevEAP }
+    if ($LASTEXITCODE -ne 0) { throw 'consulta final de eventos fallo (wevtutil)' }
     if ($evRaw -match '3033|3077') { throw 'eventos 3033/3077 de llama-server tras el cambio' }
     [void]$commands.Add([PSCustomObject]@{ name = 'event-check'; exit = 0 })
 
