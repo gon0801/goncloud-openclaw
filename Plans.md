@@ -18,25 +18,26 @@ de ella conservan su compuerta de autorización.
 
 **Estado conocido, no aceptación completa:** el PC tiene OpenClaw 2026.9.5
 recién instalado, `/healthz` y `/readyz` dieron 200 y respondieron los ocho
-primarios. El nodo de la Mac quedó conectado por túnel SSH y aprobado; Telegram
-quedó emparejado. Estas comprobaciones no prueban todos los fallbacks, una
-tarea autónoma, sync seguro, el panel ni Hermes. El inventario de recuperación
-está en [PR #132](https://github.com/gon0801/goncloud-openclaw/pull/132);
+primarios. El nodo de la Mac respondió a `system.which` y Telegram registró
+entrada y respuesta en el mismo chat. Estas comprobaciones no prueban todos
+los fallbacks, una tarea autónoma, sync seguro, el panel ni Hermes. El
+inventario de recuperación está en
+[PR #132](https://github.com/gon0801/goncloud-openclaw/pull/132);
 el instalador selectivo [PR #134](https://github.com/gon0801/goncloud-openclaw/pull/134)
-sigue en borrador con bloqueantes. Fase 15 está cerrada y no se repite.
+se cerró sin merge por bloqueantes. Fase 15 está cerrada y no se repite.
 
 | Etapa | Entrega para David | Compuerta verificable | Depends | Estado |
 |---|---|---|---|---|
-| U0 | `[lane:fast] [tdd:skip:inventario]` Base nueva documentada: ocho cadenas exactas, canales, nodo Mac y límites conocidos. | Matriz por agente/modelo/proveedor/canal con `passed`, `failed` o `unknown` y evidencia fechada; un mensaje de Telegram entra y recibe respuesta; el nodo Mac responde a `system.which`; ningún fallback se llama probado por inferencia. | - | cc:WIP (primarios, gateway y Mac probados; secundarios/canales pendientes) |
+| U0 | `[lane:fast] [tdd:skip:inventario]` Base nueva documentada: ocho cadenas exactas, canales, nodo Mac y límites conocidos. | Matriz por agente/modelo/proveedor/canal con `passed`, `failed` o `unknown` y evidencia fechada; un mensaje de Telegram entra y recibe respuesta; el nodo Mac responde a `system.which`; ningún fallback se llama probado por inferencia. | - | cc:完了 — inventario y límites en `docs/evidence/fase18-inventario-parcial.md`; secundarios con auth faltante o sin prueba no se declaran operativos |
 | U1 | `[lane:gate] [tdd:required]` Fuente fuera del estado vivo y deploy/sync selectivo seguro en Windows. Reutilizar sólo piezas válidas de Fase 16/PR #128 y resolver bloqueantes de PR #134. | Proveniencia de instalador/plugin/herramientas; allowlist y denylist, rollback y dos ciclos idempotentes con read-back; un solo dueño de watchdog y avisos; CI completo del SHA final y revisión sin bloqueantes antes de activar el sync. El estado viejo sigue recuperable. | U0 | cc:TODO |
 | U2 | `[lane:gate] [tdd:required]` Cerrar sólo los faltantes de Fase 9 y probar un goal acotado de principio a fin en OpenClaw. | PR #100 ya integrado; filas 9.7, 9.9–9.13 y 9.16 reconciliadas con evidencia; un encargo persiste tras terminar el turno del agente, muestra espera real, envía avances por Telegram sin segundo reloj y cierra con evidencia o bloqueo explícito; no responde preguntas fuera de la política. | U1; entrega sin sello B/C integrada | cc:TODO |
 | U3 | `[lane:gate] [tdd:required]` Fase 14: selector y adaptadores de CLI, reconciliación, revisión y entrega autónoma. | Primer canary con una CLI elegida y recibo verificable; después contratos y humos de las seis CLI previstas, sin procesos duplicados ni worktrees compartidos; merge/deploy sólo por la ruta autorizada del nuevo sync y SHA instalado leído de vuelta. | U2 | cc:TODO |
 | U4 | `[lane:gate] [tdd:required]` Fase 17 en OpenClaw: contrato de tarea, supervisor y panel de solo lectura. | Lista/detalle/historial indican responsable, agente, CLI, intento, avance, espera, próxima comprobación, recursos y evidencia; móvil/escritorio, datos viejos y errores distinguibles; sin secretos ni XSS. LobsterBoard se usa sólo si licencia, assets y dependencias del commit elegido pasan revisión; OpenGrokBot aporta patrones de seguimiento, no código ni otro runtime. | U3; 17.0–17.2, 17.4–17.5 | cc:TODO |
 | U5 | `[lane:gate] [tdd:required]` El mismo contrato y panel en la computadora Hermes, con estado, reloj e identidad propios. | Crear, seguir y cerrar la misma clase de tarea con OpenClaw inaccesible; diez recorridos de aceptación en cada host, instalador reversible, CI/revisión del SHA final y recibos por host. No se comparten sesiones ni credenciales. | U4; 17.3, 17.6–17.8 | cc:TODO |
 
-La primera unidad de trabajo es **U0**, sólo lectura y una prueba acotada de
-Telegram. En paralelo puede prepararse U1 en una rama, pero no se activa
-sync, no se mergea un PR ni se despliega por el hecho de existir este plan.
+U0 cerró como inventario y una prueba acotada de Telegram. La siguiente
+unidad de trabajo es **U1**. No se activa sync, no se mergea un PR ni se
+despliega por el hecho de existir este plan.
 Después de cada etapa se actualiza esta tabla en un único PR de cierre con
 recibos; no se reabre una fase cerrada ni se repite la batería para el mismo SHA.
 

@@ -1,12 +1,63 @@
-# Fase 18.0: inventario parcial y fallo del gateway
+# Fase 18.0: inventario de recuperación y cierre de U0
 
-Estado al 2026-09-23: **18.0 en curso, no aceptada**. El primer inventario
+**U0 aceptada como inventario el 2026-09-23.** Esto no acepta U1, los
+fallbacks, el sync, la autonomía, el panel ni Hermes. El primer inventario
 se hizo entre 02:11 y 02:12 UTC; después se obtuvo acceso SSH mediante el
 alias configurado `gwpc` y se inició la recuperación del gateway.
 No contiene la configuración completa de Windows, credenciales, sesiones ni
 transcripciones. Este recibo no autoriza desinstalación, corte o deploy.
 
-## Fuentes y observaciones
+## Cierre de U0: estado vivo y límites conocidos
+
+Lecturas del 2026-09-23 desde la Mac por `ssh -o BatchMode=yes gwpc` al PC,
+salvo la llamada al nodo, hecha por el cliente local a través del gateway.
+Los comandos de estado tuvieron límite de tiempo y sus salidas se filtraron
+para no publicar tokens, IDs de chat ni contenido de mensajes. No se cambió
+ninguna configuración ni se hizo una llamada de prueba a un fallback.
+
+`openclaw gateway call health --json --timeout 10000` devolvió `ok=true`.
+`openclaw config get agents.entries --json` mostró los ocho agentes con las
+siete posiciones en el orden de la tabla "Cadenas de destino confirmadas por
+David" de abajo; `agents.defaults.model` coincide con la cadena de `main`.
+La prueba real anterior de ocho peticiones secuenciales acreditó solo la
+posición 1 de cada agente, con `fallbackUsed=false`. La consulta nueva de
+configuración no sustituye esa prueba ni acredita las posiciones 2–7.
+
+La matriz une por agente y posición los modelos y proveedores nombrados en
+la tabla de destino. `passed` significa respuesta real del primario;
+`failed` significa que `openclaw models status --agent <id> --json --check`
+detectó que falta autenticación para el proveedor de esa posición;
+`unknown` significa que no hubo llamada real o que la ruta fue indeterminada.
+Un `failed` aquí es fallo de preparación de la ruta, no una respuesta fallida
+del modelo. El chequeo de rutas salió 1 en los ocho agentes; ninguno de esos
+resultados se convirtió por inferencia en una prueba de fallback.
+
+| Agente | 1 | 2 | 3 | 4 | 5 | 6 | 7 | Proveedores con auth faltante según `--check` |
+|---|---|---|---|---|---|---|---|---|
+| `main` | passed | failed | unknown | unknown | failed | unknown | unknown | `anthropic`, `zai`; `xai` y `openai` indeterminados |
+| `operaciones` | passed | failed | failed | failed | failed | unknown | unknown | `zai`, `openai`, `anthropic`, `xai` |
+| `ingenieria` | passed | failed | unknown | failed | unknown | failed | failed | `openai`, `zai`, `anthropic`, `xai` |
+| `implementer` | passed | unknown | failed | failed | failed | failed | unknown | `zai`, `xai`, `anthropic`, `openai` |
+| `reviewer` | passed | failed | unknown | failed | unknown | failed | failed | `anthropic`, `openai`, `xai`, `zai` |
+| `adversary` | passed | failed | unknown | failed | unknown | failed | failed | `xai`, `zai`, `anthropic`, `openai` |
+| `verifier` | passed | failed | unknown | unknown | failed | failed | failed | `zai`, `anthropic`, `openai`, `deepseek` |
+| `scout` | passed | failed | unknown | unknown | failed | failed | failed | `zai`, `deepseek`, `anthropic`, `openai` |
+
+| Canal o nodo | Estado U0 | Evidencia observable y límite |
+|---|---|---|
+| `telegram/default` | passed | `channels status --channel telegram --probe --json`: configurado, habilitado, conectado, `running=true`, `lifecycle=ready`, `probe.ok=true`, `lastError=null`. El log del canal muestra `Inbound` a las 16:55:42 UTC y `outbound send` a las 16:56:13 UTC para el mismo chat; el envío tiene `messageId`. La comparación se hizo sin publicar el ID ni el texto. |
+| Otras cuentas Telegram históricas | unknown | `config get channels --json` informa que la ruta declarativa está sin valor; `channels list --json` no enumera cuentas redactadas, mientras el estado runtime solo muestra `default`. No se afirma que `ingenieria` u `operaciones` conserven sus cuentas antiguas. |
+| Nodo Mac | passed | `nodes status --json`: emparejado y conectado. `nodes invoke --command system.which --params '{"bins":["git"]}' --json` devolvió `ok=true` y `git=/usr/bin/git`. No se ejecutó `system.run`. |
+
+Este cierre satisface U0 como línea base fechada con límites explícitos. U1
+debe resolver su propia ruta segura de sync; los proveedores secundarios
+marcados `failed` o `unknown` no pasan a `passed` sin una verificación nueva.
+
+## Fuentes y observaciones antes de la reinstalación
+
+Las filas siguientes conservan la secuencia histórica del diagnóstico. Un
+gateway caído o una cadena distinta en estas filas no describe el estado nuevo
+medido en el cierre de U0 de arriba.
 
 | Dato | Fuente y método | Resultado |
 |---|---|---|
