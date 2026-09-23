@@ -359,13 +359,17 @@ Fecha de planificación: 2026-09-17
 
 El cierre se ejecuta con `docs/superpowers/plans/2026-09-21-fase9-cierre.md` y `docs/runbooks/autopilot-fase9.md`. Esta reconciliación manda sobre descripciones antiguas de despliegue dentro de esta sección: el watchdog global de PR #110 reemplaza la activación de `ai.goncloud.corrida-latido`; no se crea otro reloj ni otro cron periódico. Las celdas históricas se actualizan juntas en el PR final de ledger, no mediante PRs sueltos de «cierre».
 
+Actualización posterior: PR #100 se integró el 2026-09-21, merge
+`f87f27ec`. La tabla fechada abajo conserva su texto original como evidencia;
+U2 es la única instrucción vigente para los faltantes de Fase 9.
+
 | Filas | Estado comprobado al 2026-09-21 | Acción del cierre |
 |---|---|---|
 | 9.1–9.3 | integradas por PR #81, merge `1e177b71` | no repetir; acreditar en Q5 |
 | 9.4, 9.5, 9.8 | integradas por PR #97, merge `f7d5cb7d`; el reloj viejo queda reemplazado por PR #110, merge `591726f0` | no cargar el LaunchAgent viejo |
 | 9.6 | integrada por PR #98, merge `1516a515` | no repetir |
-| 9.7 | PR #100 integrado, merge `f87f27ec` el 2026-09-21 | acreditar en el cierre del ledger; no recuperar el PR |
-| 9.9–9.13, 9.16 | pendientes de aceptación según el plan de cierre | carriles I/U/S y prueba 9.13 se reconcilian en U2; PR #100 ya no es vehículo de trabajo |
+| 9.7 | PR #100 abierto, rama `fase9/docs` | recuperar el mismo PR después de Q0 |
+| 9.9–9.13, 9.16 | pendientes según el plan de cierre | carriles I/U/S y prueba 9.13 en PR #100 |
 | 9.14–9.15 | integradas por PR #104, merge `f31d58de` | corregir la celda vieja en Q5 |
 | 9.17–9.18 | hardening no bloqueante | mover a entrega-sin-sello Block D después de B/C |
 
