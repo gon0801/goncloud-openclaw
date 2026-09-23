@@ -227,17 +227,24 @@ importaron sesiones, SQLite antiguo ni las carpetas completas. Cinco perfiles
 estáticos de API de `operaciones` se copiaron a la base **nueva** de `main`;
 la base nueva previa quedó en
 `C:\Users\ehven\.openclaw-recovery\new-main-before-auth-20260923.sqlite`.
-La base antigua de `main` no contenía perfiles. Las otras siete bases nuevas
-no han recibido todavía esos perfiles.
+La base antigua de `main` no contenía perfiles. OpenClaw creó las otras siete
+bases nuevas con su esquema v21; después se insertaron allí los mismos cinco
+perfiles portables. Un intento previo de crear una base parcial con solo tablas
+de auth fue rechazado por el esquema v0 y se apartó intacto en el directorio
+privado de recuperación antes de usar el inicializador oficial.
 
 La tarea Gateway nueva está registrada y, tras un arranque lento, `/healthz`
 y `/readyz` respondieron HTTP 200. `/readyz` indicó `degraded=false` en esa
 lectura. Una petición real de `main` respondió `OK` con
 `opencode-go-resp/muse-spark-1.3-contributor`, `credentialSource=profile` y
-`fallbackUsed=false`. Eso prueba la ruta principal de `main`, no todos los
-proveedores ni los otros siete agentes. Antes de copiar los perfiles, el
-intento sin override falló por credenciales ausentes en seis modelos y por
-cuota semanal de Kimi; esta última limitación no se arregla reinstalando.
+`fallbackUsed=false`. Después, los otros siete agentes respondieron también
+`OK` con el primario esperado: `operaciones`, `reviewer`, `adversary`,
+`verifier` y `scout` con `opencode-go/deepseek-v4.1-flash`; `ingenieria` e
+`implementer` con `opencode-go-resp/muse-spark-1.3-contributor`. Fueron ocho
+peticiones secuenciales, no una prueba de todos los fallbacks. Antes de copiar
+los perfiles, el intento sin override de `main` falló por credenciales ausentes
+en seis modelos y por cuota semanal de Kimi; esta última limitación no se
+arregla reinstalando.
 
 GitHub CLI tenía su helper apuntando a un `gh.exe` dentro del estado viejo.
 Se copió ese ejecutable, con el mismo SHA-256, a
@@ -247,10 +254,10 @@ directorio privado de recuperación y `gh auth setup-git` actualizó el helper.
 `C:\Users\ehven\src\goncloud-openclaw`, commit
 `847412a8d197334d2535b8f5bbd4e072a97d2f20`, con 946 archivos rastreados.
 
-Pendiente antes de declarar R1 completo: habilitar/probar las credenciales de
-los otros siete agentes y sus primarios, comprobar los proveedores restantes
-sin cambiar el orden aprobado, y cerrar la ruta de sync sin Git dentro de
-`.openclaw`. El PR #134 del instalador selectivo sigue en borrador: la revisión
-encontró bloqueantes de seguridad, protección de archivos, política de
-selección y verificación de thinking; no se usó para este corte. Ninguna prueba
+Pendiente antes de declarar R1 completo: comprobar los proveedores secundarios
+y canales sin cambiar el orden aprobado, y cerrar la ruta de sync sin Git
+dentro de `.openclaw`. El PR #134 del instalador selectivo sigue en borrador:
+la revisión encontró bloqueantes de seguridad, protección de archivos,
+política de selección y verificación de thinking; no se usó para este corte.
+Ninguna prueba
 de autonomía, panel o Hermes se ha declarado terminada.
