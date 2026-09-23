@@ -29,7 +29,7 @@ sigue en borrador con bloqueantes. Fase 15 está cerrada y no se repite.
 |---|---|---|---|---|
 | U0 | `[lane:fast] [tdd:skip:inventario]` Base nueva documentada: ocho cadenas exactas, canales, nodo Mac y límites conocidos. | Matriz por agente/modelo/proveedor/canal con `passed`, `failed` o `unknown` y evidencia fechada; un mensaje de Telegram entra y recibe respuesta; el nodo Mac responde a `system.which`; ningún fallback se llama probado por inferencia. | - | cc:WIP (primarios, gateway y Mac probados; secundarios/canales pendientes) |
 | U1 | `[lane:gate] [tdd:required]` Fuente fuera del estado vivo y deploy/sync selectivo seguro en Windows. Reutilizar sólo piezas válidas de Fase 16/PR #128 y resolver bloqueantes de PR #134. | Proveniencia de instalador/plugin/herramientas; allowlist y denylist, rollback y dos ciclos idempotentes con read-back; un solo dueño de watchdog y avisos; CI completo del SHA final y revisión sin bloqueantes antes de activar el sync. El estado viejo sigue recuperable. | U0 | cc:TODO |
-| U2 | `[lane:gate] [tdd:required]` Cerrar sólo los faltantes de Fase 9 y probar un goal acotado de principio a fin en OpenClaw. | PR #100 y filas 9.7, 9.9–9.13 y 9.16 reconciliados; un encargo persiste tras terminar el turno del agente, muestra espera real, envía avances por Telegram sin segundo reloj y cierra con evidencia o bloqueo explícito; no responde preguntas fuera de la política. | U1; entrega sin sello B/C integrada | cc:TODO |
+| U2 | `[lane:gate] [tdd:required]` Cerrar sólo los faltantes de Fase 9 y probar un goal acotado de principio a fin en OpenClaw. | PR #100 ya integrado; filas 9.7, 9.9–9.13 y 9.16 reconciliadas con evidencia; un encargo persiste tras terminar el turno del agente, muestra espera real, envía avances por Telegram sin segundo reloj y cierra con evidencia o bloqueo explícito; no responde preguntas fuera de la política. | U1; entrega sin sello B/C integrada | cc:TODO |
 | U3 | `[lane:gate] [tdd:required]` Fase 14: selector y adaptadores de CLI, reconciliación, revisión y entrega autónoma. | Primer canary con una CLI elegida y recibo verificable; después contratos y humos de las seis CLI previstas, sin procesos duplicados ni worktrees compartidos; merge/deploy sólo por la ruta autorizada del nuevo sync y SHA instalado leído de vuelta. | U2 | cc:TODO |
 | U4 | `[lane:gate] [tdd:required]` Fase 17 en OpenClaw: contrato de tarea, supervisor y panel de solo lectura. | Lista/detalle/historial indican responsable, agente, CLI, intento, avance, espera, próxima comprobación, recursos y evidencia; móvil/escritorio, datos viejos y errores distinguibles; sin secretos ni XSS. LobsterBoard se usa sólo si licencia, assets y dependencias del commit elegido pasan revisión; OpenGrokBot aporta patrones de seguimiento, no código ni otro runtime. | U3; 17.0–17.2, 17.4–17.5 | cc:TODO |
 | U5 | `[lane:gate] [tdd:required]` El mismo contrato y panel en la computadora Hermes, con estado, reloj e identidad propios. | Crear, seguir y cerrar la misma clase de tarea con OpenClaw inaccesible; diez recorridos de aceptación en cada host, instalador reversible, CI/revisión del SHA final y recibos por host. No se comparten sesiones ni credenciales. | U4; 17.3, 17.6–17.8 | cc:TODO |
@@ -364,8 +364,8 @@ El cierre se ejecuta con `docs/superpowers/plans/2026-09-21-fase9-cierre.md` y `
 | 9.1–9.3 | integradas por PR #81, merge `1e177b71` | no repetir; acreditar en Q5 |
 | 9.4, 9.5, 9.8 | integradas por PR #97, merge `f7d5cb7d`; el reloj viejo queda reemplazado por PR #110, merge `591726f0` | no cargar el LaunchAgent viejo |
 | 9.6 | integrada por PR #98, merge `1516a515` | no repetir |
-| 9.7 | PR #100 abierto, rama `fase9/docs` | recuperar el mismo PR después de Q0 |
-| 9.9–9.13, 9.16 | pendientes según el plan de cierre | carriles I/U/S y prueba 9.13 en PR #100 |
+| 9.7 | PR #100 integrado, merge `f87f27ec` el 2026-09-21 | acreditar en el cierre del ledger; no recuperar el PR |
+| 9.9–9.13, 9.16 | pendientes de aceptación según el plan de cierre | carriles I/U/S y prueba 9.13 se reconcilian en U2; PR #100 ya no es vehículo de trabajo |
 | 9.14–9.15 | integradas por PR #104, merge `f31d58de` | corregir la celda vieja en Q5 |
 | 9.17–9.18 | hardening no bloqueante | mover a entrega-sin-sello Block D después de B/C |
 
@@ -609,6 +609,10 @@ No hay secret-read, despliegue, `config patch`, cron, Telegram, SSH, operación 
 La tarea 15.0 incluye cambios coordinados al repo quality-kit y regeneración de sus instrucciones administradas. Resolver su remoto y leer sus instrucciones antes de abrir su PR; no sobrescribir cambios ajenos ni editar manualmente bloques generados. No incluye ejecutar instaladores de producto, cambiar el gateway, configurar crons ni desplegar servicios.
 
 ## Fase 14 — Orquestación autónoma con harnesses nativos
+
+**Detalle histórico para U3.** Antes de lanzar este runbook se reemplaza su
+supuesto de despliegue automático cada dos horas por la ruta selectiva y los
+recibos de U1. No se ejecuta el canary vivo con el sync deshabilitado.
 
 Fecha de planificación: 2026-09-19.
 
