@@ -836,3 +836,12 @@ anti-mutante es-absent (procede). Presente/ausente-confirmado ya los
 cubrian (3a)/(3f) y (2b)/(2f). Mutante muerto en el camino: $ver pisaba
 la version del recibo en nodo (2b recibo invalido); renombrado a $dupVer.
 Verdes: test-runtime-cutover-transaction.sh y test-node-isolation.sh.
+
+F30 (cuarentena pierde el recibo en fallos tempranos, F4): (2g2) en ROJO
+antes del fix (version vieja moria en "recibo invalido" sin causa ni
+recibo: $rbArtifact sin init llegaba $null al rollback). Fix:
+$rbArtifact='none' antes del try y Write-ReceiptAtomic envuelto para que
+no oculte el error original (en verde sigue lanzando). La prueba exige
+causa impresa, exactamente un recibo result=failed con artifact=none
+validado contra el esquema via Test-ReceiptObject, y sin movimientos.
+Verde: test-quarantine.sh completo.

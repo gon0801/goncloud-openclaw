@@ -118,6 +118,7 @@ $observations = New-Object System.Collections.Generic.List[string]
 $stamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ')
 $failed = $false
 $failWhy = ''
+$rbArtifact = 'none'
 $moved = New-Object System.Collections.Generic.List[object]
 $probeWarned = $false
 
@@ -417,7 +418,16 @@ $receiptSchema = Join-Path $PSScriptRoot '../../docs/spec/runtime-separation-rec
 $json = (New-Object PSObject -Property $doc) | ConvertTo-Json -Depth 5 -Compress
 $name = 'quarantine-' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ') + '-' +
   [Guid]::NewGuid().ToString('N').Substring(0, 8) + '.json'
-Write-ReceiptAtomic -ReceiptJson $json -Path (Join-Path $ReceiptRoot $name) -SchemaPath $receiptSchema
+try {
+  Write-ReceiptAtomic -ReceiptJson $json -Path (Join-Path $ReceiptRoot $name) -SchemaPath $receiptSchema
+} catch {
+  # La escritura del recibo no oculta el error original; en verde si falla.
+  if ($failed) {
+    Write-Output ("aviso: recibo no escrito: {0}" -f $_.Exception.Message)
+  } else {
+    throw
+  }
+}
 
 if ($failed) {
   Write-Output ("FALLO: {0}" -f $failWhy)

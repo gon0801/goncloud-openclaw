@@ -217,6 +217,26 @@ OC_VERSION="2026.9.4" corre va 1 "$(nat "$T/fix/old.log")" \
   && fail "(2g) apply viejo debio frenar y salio 0"
 echo "ok (2g): version vieja avisa en seco y frena en apply"
 
+# (2g2) Fallo temprano (version): causa original + recibo failed valido.
+grep -q 'se requiere openclaw 2026.9.5' "$T/va.out" \
+  || fail "(2g2) sin causa original: $(cat "$T/va.out")"
+"$PYBIN" - "$T/va-rec" <<'PY' || exit 1
+import glob, json, sys
+recs = glob.glob(sys.argv[1] + "/*.json")
+assert len(recs) == 1, recs
+d = json.load(open(recs[0], encoding="utf-8"))
+assert d["result"] == "failed", d["result"]
+assert d["rollback"]["artifact"] == "none", d["rollback"]
+assert any("se requiere openclaw" in o for o in d["observations"]), d["observations"]
+PY
+"$PSH" -NoProfile -NonInteractive -Command "
+Import-Module '$(nat "$PWD/scripts/runtime-separation/RuntimeSeparation.psm1")' -Force
+\$r = Get-ChildItem -LiteralPath '$(nat "$T/va-rec")' -Filter '*.json' | Select-Object -First 1
+if (-not (Test-ReceiptObject -ReceiptJson (Get-Content -Raw -LiteralPath \$r.FullName) -SchemaPath '$(nat "$PWD/docs/spec/runtime-separation-receipt.v1.schema.json")')) { exit 1 }
+" || fail "(2g2) recibo invalido contra esquema"
+[ -f "$T/fix/old.log" ] || fail "(2g2) movio pese al fallo temprano"
+echo "ok (2g2): fallo temprano conserva causa y recibo failed con artifact none"
+
 # (2h) Restore no confia en inventario manipulado: canoniza rutas, exige
 # quarantinePath dentro de la raiz y valida TODO antes del primer
 # movimiento; rechaza duplicados, campos desconocidos y reparse points.
