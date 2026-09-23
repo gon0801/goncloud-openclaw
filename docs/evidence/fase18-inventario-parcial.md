@@ -98,6 +98,13 @@ Esta clasificación no decide importar perfiles de navegador: `browser` y
 `browser-claw` siguen excluidos del corte limpio. Los archivos originales
 permanecen en el backup verificado y no se modificaron en Windows.
 
+La memoria sin seguimiento de `implementer` mide 7.035 bytes. Sus encabezados
+tratan reglas de `summa-gate`, problemas medidos del nodo Mac y el cierre de
+un PR de Fase 23; no es configuración ni requisito de arranque. Se conserva en
+el backup, pero **no entra en el manifiesto de instalación**. Las decisiones
+vigentes se reconciliarán con su repositorio dueño antes de importar una nota
+de memoria antigua.
+
 Un bundle privado de Git de 45.402.859 bytes, SHA-256
 `0FC9D7215DA7A07BD76AC351886E0D450BA5BEB31EB85A50CF2FB5267FCDE03E`,
 pasó `git bundle verify` (109 refs, historia completa). Se exportaron seis
