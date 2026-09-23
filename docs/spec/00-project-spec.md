@@ -122,3 +122,30 @@ y `seguimiento.v1` (contratos en `docs/spec/corrida.v1.md` y
 5. El texto de un panel es dato no confiable: se trunca y se limpia de caracteres de
    control antes de entrar a un mensaje o a un evento, y nunca se interpreta como
    instrucción.
+
+## Centro de tareas portable, contrato objetivo de Fase 17
+
+Estado: planificado, no prueba de soporte instalado. Diseño:
+[Fase 17](../superpowers/specs/2026-09-22-centro-tareas-design.md).
+
+1. Dos instalaciones independientes, una OpenClaw y otra Hermes, comparten versión,
+   reglas y pruebas. Cada una conserva identidad, estado y credenciales propios y
+   debe funcionar sin el otro runtime. No hay failover ni sesiones compartidas.
+2. Se reutilizan lifecycle, registro de workers, reconciliación y entrega de Fase 14.
+   Su disponibilidad exige evidencia. Un único reloj de seguimiento por instalación
+   conserva vigilancia de 15 minutos y consolidado de 30; no hay cron por tarea.
+3. El centro distingue tarea, agente responsable, CLI, intento, sesión y proceso.
+   Observaciones con fecha/origen no sobrescriben el progreso del lead. Desconocido,
+   antiguo y no aplicable se distinguen de cero, terminado y ausencia de trabajo.
+4. El progreso principal usa unidades verificadas de una revisión del plan. Terminar
+   exige evidencia del resultado actual, también para tareas sin PR. Un latido,
+   mensaje del worker o merge aislado no prueba cumplimiento ni concede autoridad.
+5. El panel inicial es de solo lectura y proyecta campos permitidos, sin prompts,
+   entorno, argv ni transcripciones crudas. Los contratos/rutas legacy se conservan,
+   incluido el literal v1 exigido por el validador de progreso durante su transición.
+6. El inventario/seguimiento sobrevive al coordinador. Continuar requiere interfaz
+   pública soportada, presupuesto persistente e identidad del intento. Un efecto
+   incierto se reconcilia antes de repetir; no se inventa garantía de ejecución única.
+7. La capacidad local empieza en un worker y aumenta sólo con configuración y
+   medición dentro del límite de Fase 14. No se mata ni atribuye un proceso sólo por
+   nombre o PID. Las dos instalaciones pasan los mismos recorridos antes del cierre.

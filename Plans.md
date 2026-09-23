@@ -626,3 +626,47 @@ Fecha de planificación: 2026-09-22. Plan: `docs/superpowers/plans/2026-09-22-op
 - Evento: merge, push a main, deploy, instalación, config, pairing, cambios de tareas, movimiento de `.git` o cuarentena en Windows. Razón: 16.8. Scope: host vivo. Estado: **no aprobado**; requiere un `authorization_ref` posterior, explícito y cerrado.
 
 No se leen secretos en general, no se imprime contenido sensible y no se cambia power policy, reinicia ni cierra sesión. Una dependencia roja detiene su carril en el último recibo verde; no se pregunta durante trabajo reversible ya aprobado.
+
+## Fase 17 — Centro de tareas común para OpenClaw y Hermes
+
+Fecha: 2026-09-22. [Plan detallado](docs/superpowers/plans/2026-09-22-centro-tareas.md).
+[Diseño y aceptación](docs/superpowers/specs/2026-09-22-centro-tareas-design.md).
+
+Purpose: dos computadoras independientes con el mismo sistema de seguimiento,
+ejecución verificable y panel; David elige cuál usar. Sin sesiones compartidas ni
+failover. El panel distingue responsable, agente, CLI, intento, avance, espera y
+evidencia. Reutiliza Fase 14, que figura pendiente; no crea otro orquestador.
+
+Spec delta: `docs/spec/00-project-spec.md` fija el contrato objetivo de Fase 17.
+Las tareas siguientes son propuestas, no autorización de implementación o deploy.
+
+| Task | Contenido | DoD | Depends | Status |
+|---|---|---|---|---|
+| 17.0 | `[lane:fast] [tdd:skip:investigacion]` Inventario de interfaces, dependencias instaladas, licencia UI, plataformas y baseline de lint/formatter antes del código. | Matriz con evidencia por capacidad/host, límites medibles y decisión UI; desconocido no se toma por ausente; gaps requeridos detienen sólo su carril | - | cc:TODO |
+| 17.1 | `[lane:gate] [tdd:required]` Contrato de tareas, proyección redactada, porcentaje y maqueta escritorio/móvil. | Fixtures legacy/nuevos verdes; identidad y cierre verificable definidos; resumen y reporte coinciden; maqueta cubre estados degradados | 17.0 | cc:TODO |
+| 17.2 | `[lane:gate] [tdd:required]` Adaptador OpenClaw y observaciones de ejecución/recursos sobre Fase 14. | Tarea nativa visible con intento y proceso verificables; PID reutilizado y métricas ausentes no se atribuyen mal; guardas existentes pasan | 17.1, Fase 14 integrada y contratos de entrega sin sello | cc:TODO |
+| 17.3 | `[lane:gate] [tdd:required]` Adaptador Hermes sin dependencia de gateway OpenClaw. | Crear, observar, reportar y verificar con OpenClaw ausente; mismo contrato y capacidades requeridas; cobertura parcial explícita | 17.2 | cc:TODO |
+| 17.4 | `[lane:gate] [tdd:required]` Supervisión local independiente del coordinador y recuperación con presupuesto persistente. | Pruebas de crash sin intentos duplicados; efectos inciertos no se repiten; un reloj para dos tareas; recursos/permiso no se amplían al reiniciar | 17.2, 17.3 | cc:TODO |
+| 17.5 | `[lane:gate] [tdd:required]` Panel bonito de solo lectura con lista, detalle, historial y evidencia. | Recorridos del diseño verdes en móvil/escritorio; teclado, errores y frescura visibles; API/HTML sin secretos sintéticos ni XSS | 17.1, 17.4 | cc:TODO |
+| 17.6 | `[lane:gate] [tdd:required]` Paquete común e instalación independiente por host, preflight y reversa. | Instalar dos veces converge; upgrade/reversa conserva tareas; identidades distintas; manifiesto común y credenciales separadas | 17.4, 17.5 | cc:TODO |
+| 17.7 | `[lane:gate] [tdd:required]` Integración, PR, revisión agrupada y runbook operativo verificado. | Hooks y batería completa en CI del head final; reviewer distinto; cero bloqueantes; launcher dry-run y lectura independiente del runbook | 17.6 | cc:TODO |
+| 17.8 | `[lane:release] [tdd:skip:aceptacion-viva]` Instalación autorizada y demo real en cada computadora. | Mismo sistema probado con el otro runtime inaccesible; recibos por host, checklist y aceptación del usuario; ninguna paridad declarada sin probar ambos | 17.7, permiso vivo, Fase 16 aceptada donde aplique | cc:TODO |
+
+### Clasificación y 事前確認 de Fase 17
+
+Required: 17.0–17.7; 17.8 para cierre operativo tras autorización. Recommended:
+LobsterBoard si licencia/compatibilidad permiten, demo visual y revisión cruzada
+de recuperación. Optional/deferred: controles desde navegador, costos históricos,
+visor multi-host y acceso remoto. Reject: otro orquestador, segundo reloj, shell
+libre, copiar secretos, failover entre equipos o cierre por autodeclaración.
+
+- Evento: documentos, rama, hooks, push y PR del plan. Razón: entregar el plan
+  solicitado. Scope: planificación, no implementación.
+- Evento: código/PRs de 17.0–17.7. Razón: construir el sistema. Scope: pendiente
+  de un pedido posterior de implementación.
+- Evento: merge, instalación, servicios, configuración y tareas vivas. Razón:
+  aceptación 17.8. Scope: requiere permiso posterior por host y ventana.
+
+No se cambian estados de Fases 14/16 por lo dicho en chat. `team_validation_mode:
+subagent`; arquitectura, producto/QA y seguridad revisaron el alcance. Detalles,
+archivos previstos, pruebas y guía de inicio están en el plan enlazado.
