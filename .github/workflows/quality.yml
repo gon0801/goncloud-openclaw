@@ -45,13 +45,17 @@
 # deja este job rojo: es el contrato, no un smoke de la bateria.
 #
 # Ahorro de CI (2026-09, pedido del dueno): el gasto estaba en corridas
-# redundantes (cada push corria la bateria entera y la anterior seguia viva).
-# Tres frenos, sin tocar la politica de seleccion (Plans.md, aprobada) ni los
-# contratos que la custodian:
+# redundantes (cada push corria la bateria entera y la anterior seguia viva)
+# y en correrla tambien en borradores. Tres frenos, sin tocar la politica de
+# seleccion (Plans.md, aprobada) ni los contratos que la custodian:
 #   1. `concurrency` + cancel-in-progress: solo la ULTIMA corrida por PR o
 #      rama llega a correr la bateria; las anteriores se cancelan solas.
-#   2. Borradores: en PR draft los shards no corren (el gate los da por
-#      pendientes); la bateria arranca sola al marcar listo para revision.
+#   2. Borradores: en PR draft NO corre nada que cueste —ni clasificador, ni
+#      shards, ni contrato—; solo el gate (por contrato corre siempre) deja
+#      constancia de la pausa y sale verde. Todo arranca solo al marcar listo
+#      para revision, al poner la etiqueta `ci-full` o con el push ya fuera
+#      de borrador. Volver a borrador (`converted_to_draft`) cancela la
+#      bateria en curso via el freno 1 y deja una corrida pausada.
 #   3. Carriles fast/completo por archivos: ya existian y quedan igual.
 name: Quality
 
@@ -59,9 +63,11 @@ on:
   push:
     branches: [main, master]
   pull_request:
-    # Tipos por defecto (opened, synchronize, reopened) + ready_for_review:
-    # en borrador la bateria espera; al marcar listo para revision arranca sola.
-    types: [opened, synchronize, reopened, ready_for_review]
+    # En borrador nada costoso corre; todo arranca solo al marcar listo para
+    # revision, al poner la etiqueta `ci-full` (`labeled`) o con pushes fuera
+    # de borrador. `converted_to_draft` existe para que volver a borrador
+    # cancele la bateria en curso (freno 1) dejando una corrida pausada.
+    types: [opened, synchronize, reopened, ready_for_review, labeled, converted_to_draft]
 
 permissions:
   contents: read
@@ -77,6 +83,10 @@ concurrency:
 jobs:
   clasificador:
     runs-on: ubuntu-latest
+    # Pausa por borrador (freno 2): en PR draft sin etiqueta `ci-full` este
+    # job se omite y no consume runner (ni siquiera el clone completo que la
+    # clasificacion necesita). Push a main, PR listo o etiqueta: corre.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false || contains(github.event.pull_request.labels.*.name, 'ci-full')
     # Los shas llegan por env y no interpolados en los run: el clasificador y
     # el doc-check validan lo que reciben y un evento sin base/head debe morir
     # aca (exit 2, job rojo), no filtrarse como condicion vacia mas abajo.
@@ -243,11 +253,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: [clasificador]
     # `!= 'fast'` y no `== 'completo'`: si el output llegara vacio o con basura,
-    # corre la bateria. La omision se autoriza SOLO con un fast exacto.
-    # Borradores: en un PR draft la bateria NO corre en cada push; el gate la
-    # da por pendiente y corre sola al marcar listo para revision
-    # (ready_for_review en los triggers). Push a main: no hay borrador.
-    if: needs.clasificador.outputs.carril != 'fast' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    # corre la bateria. La omision por carril se autoriza SOLO con un fast exacto.
+    # Borradores (freno 2): en un PR draft sin etiqueta `ci-full` la bateria NO
+    # corre en cada push; el gate deja constancia de la pausa y todo arranca
+    # solo al marcar listo para revision, al poner la etiqueta o con el push
+    # ya fuera de borrador. Push a main: no hay borrador.
+    if: needs.clasificador.outputs.carril != 'fast' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false || contains(github.event.pull_request.labels.*.name, 'ci-full'))
     strategy:
       fail-fast: false
       matrix:
@@ -311,14 +322,22 @@ jobs:
 
   # El contrato de cobertura (B1) corre FUERA de la matriz que valida: si
   # corriera dentro de un shard, un defecto del contrato quedaria escondido por
-  # la corrida que el propio shard hace de si mismo. Sin condicion de omision
-  # (sin `if:`): corre en AMBOS carriles, porque en fast la matriz se omite y
-  # seria justamente ahi donde un contrato roto pasaria callado. Ejecuta
+  # la corrida que el propio shard hace de si mismo. Sin omision por CARRIL:
+  # corre en AMBOS carriles, porque en fast la matriz se omite y seria
+  # justamente ahi donde un contrato roto pasaria callado. La UNICA omision
+  # admitida es la pausa por borrador (freno 2, sin etiqueta `ci-full`): en
+  # borrador nada se revisa ni se mergea, y el contrato vuelve a correr al
+  # marcar listo para revision. El test (w) distingue ambas: prohibe `carril`
+  # y solo autoriza `pull_request.draft`. Ejecuta
   # scripts/tests/test-ci-coverage-contract.sh, que ejercita el MISMO validador
   # (scripts/valida-union-shards.sh) que el gate usa abajo para auditar la
   # union real de los artifacts publicados por la matriz.
   ci-contract:
     runs-on: ubuntu-latest
+    # Pausa por borrador (freno 2): misma condicion que el clasificador. No es
+    # omision por carril (prohibida por el contrato): en borrador todo el
+    # workflow esta pausado y el contrato vuelve a correr al marcar listo.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false || contains(github.event.pull_request.labels.*.name, 'ci-full')
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -397,8 +416,12 @@ jobs:
         env:
           R_CLASIFICADOR: ${{ needs.clasificador.result }}
           CARRIL: ${{ needs.clasificador.outputs.carril }}
-          # Borrador o no (vacio en push a main): SOLO autoriza omitir shards.
+          # Borrador o no (vacio en push a main): autoriza la pausa total.
           DRAFT: ${{ github.event.pull_request.draft }}
+          # Etiqueta que reanuda todo aun en borrador (falsa si no esta).
+          HAS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci-full') }}
+          # Tipo de evento: la pausa total solo aplica a pull_request.
+          EVENT_NAME: ${{ github.event_name }}
           # Resultado AGREGADO de la matriz de shards: las tres patas comparten
           # la misma condicion de corrida (el carril del clasificador), asi que
           # el agregado es exacto — success solo con las tres verdes, skipped
@@ -409,6 +432,15 @@ jobs:
           # la via del skipped-autorizado-por-fast porque no depende del carril.
           R_CI_CONTRACT: ${{ needs.ci-contract.result }}
         run: |
+          # (0) Pausa por borrador (freno 2): PR draft sin etiqueta `ci-full`:
+          # nada costoso corrio y no hay nada que auditar. El gate —que por
+          # contrato corre siempre— lo deja constar y sale verde. Todo vuelve
+          # a correr al marcar listo para revision, al poner la etiqueta o
+          # con el push ya fuera de borrador.
+          if [ "$EVENT_NAME" = "pull_request" ] && [ "$DRAFT" = "true" ] && [ "$HAS_LABEL" != "true" ]; then
+            echo "gate: PR en borrador sin etiqueta ci-full: todo lo costoso pausado, nada que auditar"
+            exit 0
+          fi
           rc=0
           printf 'clasificador=%s carril=%s\n' "$R_CLASIFICADOR" "${CARRIL:-}"
           # (a) Clasificacion valida: el job tiene que haber terminado success
@@ -442,9 +474,9 @@ jobs:
                 rc=1 ;;
             esac
           done
-          # (c) El contrato de cobertura NO se omite nunca: corre en ambos
-          # carriles y cualquier resultado que no sea success (incluido
-          # skipped) rebota.
+          # (c) El contrato de cobertura NO se omite por carril: corre en
+          # ambos carriles y cualquier resultado que no sea success (incluido
+          # skipped) rebota. La pausa por borrador no llega aca: sale por (0).
           case "$R_CI_CONTRACT" in
             success) ;;
             *)

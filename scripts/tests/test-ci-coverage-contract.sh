@@ -372,7 +372,7 @@ limpio() { # $1=texto -> sin lineas de comentario
   printf '%s\n' "$1" | grep -v '^[[:space:]]*#'
 }
 
-echo "(w) el workflow llama al MISMO validador desde un job propio sin omision, y el gate audita la union"
+echo "(w) el workflow llama al MISMO validador desde un job propio sin omision por carril, y el gate audita la union"
 Y="$T/quality-extraido.yml"
 cp "$YAML" "$Y"
 sec_cc=$(seccion ci-contract "$Y")
@@ -380,9 +380,19 @@ sec_cc=$(seccion ci-contract "$Y")
 limpio "$sec_cc" | grep -qE '^[[:space:]]+run:.*bash scripts/tests/test-ci-coverage-contract\.sh' \
   || fail "(w) ci-contract no ejecuta ESTE contrato:
 $sec_cc"
-if limpio "$sec_cc" | grep -qE '^[[:space:]]+if:'; then
-  fail "(w) ci-contract tiene condicion de omision: el contrato de cobertura no admite carril que lo salte:
-$sec_cc"
+# Pausa por borrador SI admitida (freno 2, ahorro 2026-09): en PR draft sin
+# etiqueta ci-full nada costoso corre y todo vuelve al marcar listo. Lo que
+# sigue prohibido es la omision por CARRIL: cualquier `if:` que no sea la
+# pausa por borrador (`pull_request.draft`) o que mencione `carril` rebota.
+ifs_cc=$(limpio "$sec_cc" | grep -E '^[[:space:]]+if:' || true)
+if [ -n "$ifs_cc" ]; then
+  printf '%s\n' "$ifs_cc" | grep -q 'pull_request.draft' \
+    || fail "(w) ci-contract tiene condicion de omision que no es pausa por borrador:
+$ifs_cc"
+  if printf '%s\n' "$ifs_cc" | grep -q 'carril'; then
+    fail "(w) ci-contract se omite por carril: el contrato de cobertura no admite carril que lo salte:
+$ifs_cc"
+  fi
 fi
 limpio "$sec_cc" | grep -q 'node-version' \
   || fail "(w) ci-contract no fija node: el arbol de juguete exige >= 22 y el default del runner puede ser viejo"
@@ -419,6 +429,6 @@ $GL"
 printf '%s\n' "$GL" | grep -qF 'R_SHARDS: ${{ needs.shards.result }}' \
   || fail "(w) el gate dejo de leer el resultado agregado de shards:
 $GL"
-echo "ok (w): mismo validador en YAML y test, ci-contract sin omision, gate audita la union"
+echo "ok (w): mismo validador en YAML y test, ci-contract sin omision por carril (pausa por borrador admitida), gate audita la union"
 
 echo "TODO VERDE: ci-coverage-contract"
