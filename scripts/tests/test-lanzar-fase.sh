@@ -75,11 +75,11 @@ fi
 
 # (7) Un nombre fijo debe sobrevivir al relanzamiento: renombrar la sesión
 # después del arranque permitiría abrir un segundo lead sin detectar el primero.
-out=$(bash "$S" 12 --sesion wt-f12-lead --dry-run -- cli --flag 2>&1); rc=$?
+out=$(bash "$S" 17 --rama HEAD --sesion wt-f17-lead --dry-run -- cli --flag 2>&1); rc=$?
 [ "$rc" = "0" ] || fail "--sesion válido: esperaba 0, dio $rc: $out"
-printf '%s\n' "$out" | grep -q '^sesion=wt-f12-lead$' || fail "--sesion no llegó al lanzamiento"
-printf '%s\n' "$out" | grep -q '^LISTO wt-f12-lead ' || fail "--sesion no llegó al recibo"
-out=$(bash "$S" 12 --sesion '../otra' --dry-run -- cli --flag 2>&1); rc=$?
+printf '%s\n' "$out" | grep -q '^sesion=wt-f17-lead$' || fail "--sesion no llegó al lanzamiento"
+printf '%s\n' "$out" | grep -q '^LISTO wt-f17-lead ' || fail "--sesion no llegó al recibo"
+out=$(bash "$S" 17 --rama HEAD --sesion '../otra' --dry-run -- cli --flag 2>&1); rc=$?
 [ "$rc" = "1" ] || fail "--sesion inválido: esperaba 1, dio $rc"
 printf '%s\n' "$out" | grep -q 'ATORADO sesion invalida' || fail "--sesion inválido sin causa"
 echo "ok (7): el nombre estable llega al lanzamiento y uno inválido se rechaza"
