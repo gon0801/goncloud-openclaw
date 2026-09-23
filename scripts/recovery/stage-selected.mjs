@@ -18,6 +18,9 @@ if (source.split(sep).some((part) => part.toLowerCase() === ".openclaw")) {
 const stage = resolve(stageArg);
 const parent = realpathSync(dirname(stage));
 const actualStage = join(parent, basename(stage));
+if (actualStage.split(sep).some((part) => part.toLowerCase() === ".openclaw")) {
+  throw new Error("live runtime cannot be recovery stage");
+}
 const norm = (value) => process.platform === "win32" ? value.toLowerCase() : value;
 const within = (child, root) => norm(child) === norm(root) || norm(child).startsWith(`${norm(root)}${sep}`);
 if (within(actualStage, source) || within(source, actualStage)) {

@@ -124,3 +124,16 @@ test("refuses to use a live .openclaw directory as source", () => {
   assert.match(result.stderr, /live.*source/i);
   assert.equal(existsSync(f.stage), false);
 });
+
+test("refuses to stage inside a live .openclaw directory", () => {
+  const f = fixture();
+  const live = join(f.root, ".openclaw");
+  mkdirSync(live);
+  const destination = join(live, "staging");
+  const result = spawnSync(process.execPath, [script, f.manifest, f.source, destination, "--apply"], {
+    encoding: "utf8",
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /live.*stage/i);
+  assert.equal(existsSync(destination), false);
+});
