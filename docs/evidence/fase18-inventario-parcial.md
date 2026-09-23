@@ -22,6 +22,7 @@ transcripciones. Este recibo no autoriza desinstalación, corte o deploy.
 | Lanzadores y scripts de tareas | `Get-ScheduledTask` por SSH, leyendo solo ejecutable, directorio de trabajo y longitud de argumentos | Gateway: `C:\Users\ehven\.openclaw\gateway.vbs`, sin argumentos. Node: `C:\Users\ehven\.openclaw\node.vbs`, sin argumentos. Watchdog y sync ejecutan PowerShell; CUA Node ejecuta `cmd.exe`; Restore Console ejecuta PowerShell del sistema. Los argumentos íntegros no se publican: sus XML están exportados en el destino privado citado abajo. |
 | Alcance de desinstalación, solo simulación | `openclaw uninstall --all --dry-run --non-interactive --yes` y `openclaw uninstall --service --dry-run --non-interactive --yes` en Windows | `--all` enumera el servicio y toda `C:\Users\ehven\.openclaw`, incluidos ocho workspaces. `--service` enumera solo el servicio. No se ejecutó ninguna desinstalación; el runbook de corte no puede usar `--all` realmente. |
 | Paquete para reinstalar | `npm cache ls`, `npm pack openclaw@2026.9.5 --pack-destination C:\Users\ehven\.openclaw-recovery --silent` y `Get-FileHash` por SSH | Tarball privado `openclaw-2026.9.5.tgz`, 72.453.925 bytes, SHA-256 `1FB6EF4FAE447AF14F1E3B1028334F39146D181A66A4CCE2848D4F741C636340`. No se desinstaló ni reinstaló el paquete. |
+| Prueba de instalación aislada | `npm install --offline --prefix C:\Users\ehven\.openclaw-recovery\npm-probe-20260922 ... --no-audit --no-fund`, seguido de `node ...\node_modules\openclaw\openclaw.mjs --version` | 331 paquetes instalados fuera del estado vivo; CLI aislada responde `2026.9.5 (ec9c1a1)`. npm avisó que cinco paquetes tienen scripts pendientes de aprobación, por lo que esta prueba no acredita los plugins/native modules completos. La instalación global y el servicio siguen intactos. |
 | Workspaces | Campo `workspace` de los ocho `agents.entries` | `main` usa `workspace`; los otros siete usan `workspace-<id>`, todos bajo `C:\Users\ehven\.openclaw`. El `agentDir` de los siete secundarios apunta a `agents\<id>\agent`; el de `main` no está fijado explícitamente. |
 | Tareas/servicio | `Get-ScheduledTask` y `Get-Service` por SSH | `OpenClaw Gateway` y `OpenClaw Node` están Ready; `OpenClaw Gateway Watchdog` y `OpenClaw CUA Node` Disabled; `OpenClaw Restore Console` Ready. `GoncloudRepoSync` está Disabled. `WireGuardTunnel$openclaw` está Running. No se deduce salud del gateway de estas tareas. |
 | Canales/autenticación | Solo claves de `openclaw config get channels --json` y de `auth --json` | Telegram es el canal configurado, con cuentas secundarias `ingenieria` y `operaciones`. Hay nueve referencias de perfil de autenticación; no se exportaron valores. |
@@ -44,6 +45,10 @@ ruta canónica de `adversary`. `openclaw backup restore --target` terminó con
 solo para el usuario del gateway, SYSTEM y Administrators. Es una prueba de
 recuperabilidad, **no** una selección de archivos para importar a la
 instalación nueva.
+El SHA-256 del archivo de 3.342.919.705 bytes es
+`9D91AF302A461CF412C17E5CFD94771E0A5FF98CD17BE63EB96F3DF40B70587A`;
+un preflight puede cotejar ese hash sin repetir la restauración de 27.341
+entradas.
 
 | Área del estado restaurado | Archivos | Tamaño aproximado (MiB) | Decisión inicial |
 |---|---:|---:|---|
