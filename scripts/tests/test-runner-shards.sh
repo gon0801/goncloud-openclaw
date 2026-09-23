@@ -41,6 +41,7 @@ instalar watchdog.sh  test-tmux-activity-watch.sh
 instalar preflight.sh test-corrida-preflight.sh
 instalar resto-a.sh   test-aaa.sh
 instalar resto-b.sh   test-zzz.sh
+instalar node.mjs     test-node-fixture.mjs
 
 # Entradas node/sintaxis/corpus de juguete: lo unico que hacen es dejar su linea en el
 # tally. Asi la union auditada incluye TODO lo que el runner puede correr, no solo shell.
@@ -132,12 +133,12 @@ case "$SALIDA" in *test-corrida-nucleo.sh*) fail "(1) el shard 2/3 corrio el nuc
 run_runner 3/3 "$T/t3"
 [ "$RC_RUN" -eq 0 ] || fail "(1) shard 3/3 salio $RC_RUN:
 $SALIDA"
-esperar "$T/t3" "bateria-summa bateria-tablero corpus resto-a resto-b sintaxis-summa sintaxis-tablero" "(1) shard 3/3"
+esperar "$T/t3" "bateria-summa bateria-tablero corpus node-test resto-a resto-b sintaxis-summa sintaxis-tablero" "(1) shard 3/3"
 
 cat "$T/t1" "$T/t2" "$T/t3" >"$T/union"
 dup=$(LC_ALL=C sort "$T/union" | uniq -d)
 [ -z "$dup" ] || fail "(1) estas entradas corrieron en mas de un shard: $dup"
-esperar "$T/union" "bateria-summa bateria-tablero corpus nucleo preflight resto-a resto-b sintaxis-summa sintaxis-tablero watchdog" "(1) union de los tres shards"
+esperar "$T/union" "bateria-summa bateria-tablero corpus node-test nucleo preflight resto-a resto-b sintaxis-summa sintaxis-tablero watchdog" "(1) union de los tres shards"
 echo "ok (1): la union de los tres shards es la bateria completa y nada corre dos veces"
 
 echo "(2) sin SAIKIT_SHARD corre TODO y un archivo nuevo entra solo por el glob"
@@ -145,7 +146,7 @@ instalar nuevo.sh test-nuevo-recien-llegado.sh
 run_runner '' "$T/t4"
 [ "$RC_RUN" -eq 0 ] || fail "(2) la bateria completa salio $RC_RUN:
 $SALIDA"
-esperar "$T/t4" "bateria-summa bateria-tablero corpus nucleo nuevo preflight resto-a resto-b sintaxis-summa sintaxis-tablero watchdog" "(2) bateria completa"
+esperar "$T/t4" "bateria-summa bateria-tablero corpus node-test nucleo nuevo preflight resto-a resto-b sintaxis-summa sintaxis-tablero watchdog" "(2) bateria completa"
 echo "ok (2): sin la variable corre TODO y el archivo nuevo entro solo por el glob"
 
 echo "(3) shards invalidos salen != 0 sin correr nada"
@@ -171,7 +172,7 @@ echo "(5) una prueba roja: una sola ejecucion, primera salida y exit code en el 
 instalar roja.sh test-roja.sh
 run_runner 3/3 "$T/t8"
 [ "$RC_RUN" -ne 0 ] || fail "(5) la prueba roja no propago su fallo (salio 0)"
-esperar "$T/t8" "bateria-summa bateria-tablero corpus nuevo resto-a resto-b roja sintaxis-summa sintaxis-tablero" "(5) shard 3/3 con la roja"
+esperar "$T/t8" "bateria-summa bateria-tablero corpus node-test nuevo resto-a resto-b roja sintaxis-summa sintaxis-tablero" "(5) shard 3/3 con la roja"
 n=$(grep -c '^roja$' "$T/t8")
 [ "$n" -eq 1 ] || fail "(5) la prueba roja se ejecuto $n veces (esperaba 1): el runner no puede re-ejecutarla para diagnosticar"
 LOG_ROJA=$(ls -td "$T"/logs/run-checks/corrida-*/test-roja.sh.log 2>/dev/null | head -1)

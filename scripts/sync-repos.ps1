@@ -1,3 +1,8 @@
+# U1-OBSOLETO: este sync hacía `git add -A` dentro del estado vivo
+# (C:\Users\ehven\.openclaw), prohibido por el contrato "Propiedad del runtime
+# Windows" (docs/spec/00-project-spec.md). Se conserva por historia; el camino
+# activo es scripts/sync-seguro/ (desactivado por defecto, flag explícito).
+# No volver a programar ni invocar desde código nuevo.
 # sync-repos.ps1 - sincroniza los 4 repos goncloud con GitHub (pull + commit local + push)
 $log = 'C:\Users\ehven\.openclaw\logs\sync-repos.log'
 $repos = @(
