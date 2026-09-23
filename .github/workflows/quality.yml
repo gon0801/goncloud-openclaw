@@ -43,15 +43,36 @@
 # docs|ledger|deploy-log|context) corren SIN argumentos y SIN dependencias
 # extra -- solo stdlib / bash. Un checker que importe paquetes del repo
 # deja este job rojo: es el contrato, no un smoke de la bateria.
+#
+# Ahorro de CI (2026-09, pedido del dueno): el gasto estaba en corridas
+# redundantes (cada push corria la bateria entera y la anterior seguia viva).
+# Tres frenos, sin tocar la politica de seleccion (Plans.md, aprobada) ni los
+# contratos que la custodian:
+#   1. `concurrency` + cancel-in-progress: solo la ULTIMA corrida por PR o
+#      rama llega a correr la bateria; las anteriores se cancelan solas.
+#   2. Borradores: en PR draft los shards no corren (el gate los da por
+#      pendientes); la bateria arranca sola al marcar listo para revision.
+#   3. Carriles fast/completo por archivos: ya existian y quedan igual.
 name: Quality
 
 on:
   push:
     branches: [main, master]
   pull_request:
+    # Tipos por defecto (opened, synchronize, reopened) + ready_for_review:
+    # en borrador la bateria espera; al marcar listo para revision arranca sola.
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
+
+# Si llega un push nuevo sobre la misma rama o PR, la corrida anterior se
+# cancela sola y solo la ULTIMA corre la bateria completa. El gate es
+# fail-closed ante cancelaciones, asi que una corrida vieja cancelada nunca
+# deja un verde falso: muere y la ultima decide.
+concurrency:
+  group: quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   clasificador:
@@ -223,7 +244,10 @@ jobs:
     needs: [clasificador]
     # `!= 'fast'` y no `== 'completo'`: si el output llegara vacio o con basura,
     # corre la bateria. La omision se autoriza SOLO con un fast exacto.
-    if: needs.clasificador.outputs.carril != 'fast'
+    # Borradores: en un PR draft la bateria NO corre en cada push; el gate la
+    # da por pendiente y corre sola al marcar listo para revision
+    # (ready_for_review en los triggers). Push a main: no hay borrador.
+    if: needs.clasificador.outputs.carril != 'fast' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
     strategy:
       fail-fast: false
       matrix:
@@ -373,6 +397,8 @@ jobs:
         env:
           R_CLASIFICADOR: ${{ needs.clasificador.result }}
           CARRIL: ${{ needs.clasificador.outputs.carril }}
+          # Borrador o no (vacio en push a main): SOLO autoriza omitir shards.
+          DRAFT: ${{ github.event.pull_request.draft }}
           # Resultado AGREGADO de la matriz de shards: las tres patas comparten
           # la misma condicion de corrida (el carril del clasificador), asi que
           # el agregado es exacto — success solo con las tres verdes, skipped
@@ -396,8 +422,8 @@ jobs:
               rc=1 ;;
           esac
           # (b) Jobs de calidad: success pasa; skipped pasa SOLO con
-          # clasificacion fast valida (omision autorizada); todo lo demas
-          # (failure, cancelled) rebota.
+          # clasificacion fast valida o PR en borrador (omisiones
+          # autorizadas); todo lo demas (failure, cancelled) rebota.
           for par in "shards=$R_SHARDS"; do
             printf '%s\n' "$par"
             case "$par" in
@@ -405,6 +431,8 @@ jobs:
               *=skipped)
                 if [ "$R_CLASIFICADOR:$CARRIL" = "success:fast" ]; then
                   echo "gate: $par omitido, autorizado por clasificacion fast"
+                elif [ "$DRAFT" = "true" ]; then
+                  echo "gate: $par omitido, PR en borrador: la bateria corre al marcar listo para revision"
                 else
                   echo "gate: $par omitido SIN clasificacion fast valida" >&2
                   rc=1
