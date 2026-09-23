@@ -849,3 +849,9 @@ Verde: test-quarantine.sh completo.
 F31 (menor runbook PSValue, M1): (5) en ROJO antes del fix; runbook
 ahora usa $PSVersionTable.PSVersion.ToString() con ancla positiva y
 negativa en test-cutover-runbook.sh. Verde.
+
+F32 (menor Test-JsonInstant, M2): humo instant-impossible en ROJO antes
+del fix (lanzaba FormatException en vez de $false). Fix: Parse con
+cultura invariante + RoundtripKind envuelto en try (imposible -> $false)
+y guardas en los casts startedAt/endedAt de Test-ReceiptObject
+(veredicto, no throw: contrato del modulo). Humo 28/28 en verde.

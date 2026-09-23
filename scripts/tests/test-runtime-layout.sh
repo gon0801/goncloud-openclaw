@@ -156,6 +156,9 @@ Check 'instant-datetime' ((Test-JsonInstant -Value ([datetime]'2026-09-22T10:00:
 Check 'instant-string' ((Test-JsonInstant -Value '2026-09-22T10:00:00Z' -Raw '2026-09-22T10:00:00Z' -Pattern $instPat) -eq $true)
 Check 'instant-mismatch' ((Test-JsonInstant -Value '2026-09-22T10:00:01Z' -Raw '2026-09-22T10:00:00Z' -Pattern $instPat) -eq $false)
 Check 'instant-badshape' ((Test-JsonInstant -Value ([datetime]'2026-09-22T10:00:00Z') -Raw '2026-09-22 10:00:00' -Pattern $instPat) -eq $false)
+Check 'instant-impossible' ((Test-JsonInstant -Value ([datetime]'2026-01-01T00:00:00Z') -Raw '2026-99-99T00:00:00Z' -Pattern $instPat) -eq $false)
+$imp = $good.Replace('2026-09-22T10:00:00Z', '2026-99-99T00:00:00Z')
+Check 'receipt-impossible' ((Test-ReceiptObject -ReceiptJson $imp -SchemaPath $SchemaPath) -eq $false)
 $tmpdir = Join-Path ([IO.Path]::GetTempPath()) ('rsmoke-' + [Guid]::NewGuid().ToString('N'))
 [void](New-Item -ItemType Directory -Path $tmpdir)
 $dest = Join-Path $tmpdir 'receipt.json'
@@ -178,8 +181,8 @@ PS1
   printf '%s\n' "$out" | grep -q 'SMOKE-OK: atomic-roundtrip' \
     || fail "(3) el humo no llego al final: $out"
   n=$(printf '%s\n' "$out" | grep -c 'SMOKE-OK:') || n=0
-  [ "$n" -eq 26 ] || fail "(3) se esperaban 26 SMOKE-OK, llegaron $n: $out"
-  echo "ok (3): humo conductual del modulo en verde (26/26)"
+  [ "$n" -eq 28 ] || fail "(3) se esperaban 28 SMOKE-OK, llegaron $n: $out"
+  echo "ok (3): humo conductual del modulo en verde (28/28)"
 fi
 
 # (4) CI: instala 2026.9.5, job windows-contract acotado y gate que depende de el.

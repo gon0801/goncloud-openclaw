@@ -136,7 +136,14 @@ function Test-JsonInstant {
   param($Value, $Raw, [string]$Pattern)
   if ($null -eq $Raw -or $Raw -cnotmatch $Pattern) { return $false }
   if ($Value -is [datetime]) {
-    return (([datetime]$Raw).ToUniversalTime() -eq $Value.ToUniversalTime())
+    $parsed = $null
+    try {
+      $parsed = [DateTime]::Parse($Raw, [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::RoundtripKind)
+    } catch {
+      return $false
+    }
+    return ($parsed.ToUniversalTime() -eq ([datetime]$Value).ToUniversalTime())
   }
   if ($Value -is [string]) { return ($Value -ceq $Raw) }
   return $false
@@ -207,8 +214,8 @@ function Test-ReceiptObject {
     $raw = Get-RawJsonString -Json $ReceiptJson -Key $k
     if (-not (Test-JsonInstant -Value $doc.$k -Raw $raw -Pattern $utc)) { return $false }
   }
-  $st = $doc.startedAt; if ($st -is [string]) { $st = [datetime]$st }
-  $en = $doc.endedAt; if ($en -is [string]) { $en = [datetime]$en }
+  $st = $doc.startedAt; if ($st -is [string]) { try { $st = [datetime]$st } catch { return $false } }
+  $en = $doc.endedAt; if ($en -is [string]) { try { $en = [datetime]$en } catch { return $false } }
   if ($en.ToUniversalTime() -lt $st.ToUniversalTime()) { return $false }
   if (-not ($doc.sourceSha -is [string]) -or $doc.sourceSha -cnotmatch '^[0-9a-f]{40}$') { return $false }
   if (-not ($doc.host -is [string]) -or $doc.host.Length -eq 0 -or $doc.host.Length -gt 128) { return $false }
