@@ -54,4 +54,10 @@ echo "$S7" | grep -qF 'openclaw node run --pair' \
 echo "$S7" | grep -qi 'fresco' || fail "(4) §7 no advierte estado fresco"
 echo "ok (4): nodo trae sets+pairing y no empareja a mano"
 
+# (5) §1: version de PowerShell con forma valida.
+S1=$(sec 1 2)
+echo "$S1" | grep -qF 'PSVersion.ToString()' || fail "(5) §1 sin PSVersion.ToString()"
+echo "$S1" | grep -qF 'PSValue' && fail "(5) §1 trae PSValue inexistente"
+echo "ok (5): preflight pide la version con forma valida"
+
 echo "TODO VERDE: cutover-runbook"

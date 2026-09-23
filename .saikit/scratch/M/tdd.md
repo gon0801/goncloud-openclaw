@@ -845,3 +845,7 @@ no oculte el error original (en verde sigue lanzando). La prueba exige
 causa impresa, exactamente un recibo result=failed con artifact=none
 validado contra el esquema via Test-ReceiptObject, y sin movimientos.
 Verde: test-quarantine.sh completo.
+
+F31 (menor runbook PSValue, M1): (5) en ROJO antes del fix; runbook
+ahora usa $PSVersionTable.PSVersion.ToString() con ancla positiva y
+negativa en test-cutover-runbook.sh. Verde.

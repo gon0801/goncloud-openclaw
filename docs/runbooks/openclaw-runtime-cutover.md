@@ -37,7 +37,7 @@ no cerrar sesion.
 
 ```
 git --version; gh --version                      # ayuda exacta de cada CLI usada
-powershell -NoProfile -Command '$PSVersionTable.PSValue'
+powershell -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
 ~/.openclaw/bin/openclaw --version               # o la ruta instalada; exigir 2026.9.5
 powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE   # AC: 0
 query user                                       # usuario/sesion durables
