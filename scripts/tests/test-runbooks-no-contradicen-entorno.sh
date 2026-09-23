@@ -185,7 +185,9 @@ echo "ok (2c): ningun runbook de fase designa un modelo como lead"
 # candado distingue formas, no intenciones; un falso rojo se arregla
 # reescribiendo la linea. Una prohibicion ("nunca ...") cita la forma mala sin
 # mandarla: no cuenta.
-EXENTOS='autopilot-fase6.md autopilot-fase7.md autopilot-fase8.md autopilot-fase8-hallazgos.md autopilot-fase9.md autopilot-fase10.md autopilot-fase11.md autopilot-fase12.md autopilot-fase13.md autopilot-fase-saikit23.md'
+# Fase 16 se volvio historica tras la reinstalacion: no debe recuperar un
+# lanzamiento afirmativo para satisfacer el contrato de los runbooks nuevos.
+EXENTOS='autopilot-fase6.md autopilot-fase7.md autopilot-fase8.md autopilot-fase8-hallazgos.md autopilot-fase9.md autopilot-fase10.md autopilot-fase11.md autopilot-fase12.md autopilot-fase13.md autopilot-fase16.md autopilot-fase-saikit23.md'
 exento() {
   case " $EXENTOS " in *" $1 "*) return 0;; esac
   return 1
@@ -351,6 +353,10 @@ runbook_futuro_ok "$FXF/autopilot-malo-seguimiento-lento.md" \
 for e in $EXENTOS; do
   [ -f "docs/runbooks/$e" ] || fail "(2d) exento por nombre pero ausente: docs/runbooks/$e"
 done
+grep -Fq '**NO LANZAR ESTE RUNBOOK EN EL ESTADO REINSTALADO.**' docs/runbooks/autopilot-fase16.md \
+  || fail '(2d) Fase 16 solo esta exenta mientras prohíba el lanzamiento viejo'
+grep -Fq 'U1 debe definir un runbook nuevo revisado contra el host vivo' docs/runbooks/autopilot-fase16.md \
+  || fail '(2d) Fase 16 exenta sin ruta de reemplazo revisada'
 # Y ningun runbook futuro versionado sale en rojo.
 NUEVOS=""
 while IFS= read -r f; do
@@ -362,6 +368,6 @@ while IFS= read -r f; do
 done <<EOF
 $(git ls-files --cached --others --exclude-standard -- 'docs/runbooks/autopilot-*.md')
 EOF
-[ -z "$NUEVOS" ] && NUEVOS=" (ninguno todavia; los 10 exentos saltados, declarado)"
+[ -z "$NUEVOS" ] && NUEVOS=" (ninguno todavia; los 11 exentos saltados, declarado)"
 echo "ok (2d): runbooks futuros revisados:$NUEVOS; fixtures bueno/malo discriminan cada regla"
 echo "TODO VERDE: runbooks sin contradicciones con el kit ni con el entorno"
