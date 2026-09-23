@@ -234,9 +234,14 @@ joined = " ".join(args)
 if "3033" in joined:
     # consulta final: filtra en servidor por EventRecordID > umbral de la
     # consulta; sin umbral devuelve todo (como el log real sin filtro).
+    # 3033/3077 solo existen en CodeIntegrity/Operational: cualquier otro
+    # registro devuelve vacio, como en Windows real.
     if os.environ.get("OC_WEVTUTIL_FAIL", "0") == "1":
         print("ERROR: servicio no disponible", file=sys.stderr)
         sys.exit(1)
+    log = args[1] if len(args) > 1 and args[0] == "qe" else ""
+    if log != "Microsoft-Windows-CodeIntegrity/Operational":
+        sys.exit(0)
     m = re.search(r"EventRecordID\s*>\s*(\d+)", joined)
     thr = int(m.group(1)) if m else -1
     ids = os.environ.get("OC_EVENT_IDS", "")
@@ -512,7 +517,8 @@ else
 fi
 
 # (3j2) Evento anterior al bookmark (99/100): pasa; posterior (101/100):
-# frena, y la consulta final incorpora el bookmark.
+# frena, y la consulta final incorpora el bookmark. Ambas consultas van a
+# CodeIntegrity/Operational, unico registro donde existen 3033/3077.
 if [ "$en_windows" -eq 1 ]; then
   echo "SKIP (3j2/3j3): instalador fixture POSIX; CI ubuntu lo cubre"
 else
@@ -523,7 +529,13 @@ else
     && fail "(3j3) evento posterior al bookmark debio frenar y salio 0"
   grep -q 'EventRecordID > 100' "$OC_LOG" \
     || fail "(3j3) la consulta final no incorpora el bookmark: $(grep wevtutil "$OC_LOG")"
-  echo "ok (3j3): evento posterior frena y la consulta usa el bookmark"
+  grep -q 'wevtutil qe Microsoft-Windows-CodeIntegrity/Operational /c:1' "$OC_LOG" \
+    || fail "(3j3) bookmark fuera de CodeIntegrity/Operational: $(grep wevtutil "$OC_LOG")"
+  grep -q 'wevtutil qe Microsoft-Windows-CodeIntegrity/Operational /q:' "$OC_LOG" \
+    || fail "(3j3) consulta final fuera de CodeIntegrity/Operational: $(grep wevtutil "$OC_LOG")"
+  grep -q 'wevtutil qe Application' "$OC_LOG" \
+    && fail "(3j3) consulta al registro equivocado: $(grep wevtutil "$OC_LOG")"
+  echo "ok (3j3): evento posterior frena y ambas consultas van al registro correcto"
 fi
 
 # (3j4) wevtutil caido: falla cerrado (bookmark y consulta final).
