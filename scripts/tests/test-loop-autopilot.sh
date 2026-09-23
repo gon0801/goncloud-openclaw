@@ -134,6 +134,42 @@ printf '%s\n' "$r1cmd" | grep -qF -- '-Desde' \
 $r1cmd"
 echo "ok (3-r1): la ronda 1 usa -Base y no -Desde"
 
+# (3-r1b) El comando de ronda 1 que cita base-openclaw.md manda lo mismo que el §4
+# del loop: -Base con el merge-base del bloque. Ni -Desde (eso es ronda de
+# arreglos) ni -Alcance last-commit (la ronda 1 ve el diff completo del bloque).
+# Es el ancla del residual del recibo de #126: el doc base y el loop no pueden
+# volver a divergir sobre que diff ve la primera ronda.
+r1base=$(awk '
+  /La revisión cruzada/ { inr=1 }
+  inr && /^```$/ { fence++; next }
+  inr && fence==1 { print }
+  inr && fence>=2 { exit }
+' "$BASE")
+[ -n "$r1base" ] || fail "$BASE: no encuentro el comando de la revisión cruzada"
+printf '%s\n' "$r1base" | grep -qF -- '-Base <sha de la base del bloque>' \
+  || fail "$BASE: el comando de la ronda 1 no usa -Base:
+$r1base"
+printf '%s\n' "$r1base" | grep -qF -- '-Desde' \
+  && fail "$BASE: el comando de la ronda 1 no puede usar -Desde:
+$r1base"
+printf '%s\n' "$r1base" | grep -qF -- '-Alcance' \
+  && fail "$BASE: el comando de la ronda 1 no puede usar -Alcance last-commit:
+$r1base"
+echo "ok (3-r1b): la ronda 1 de base-openclaw usa -Base y ni -Desde ni -Alcance"
+
+# (3d) La regla 4 de base-openclaw.md justifica el veto de rebase con la historia
+# que la ronda 1 lee con -Base (sin esa justificacion el veto parece capricho), y
+# el doc deja dicho que los runbooks cerrados de fases 6 y 7 conservan su
+# `-Alcance last-commit` como historia: el script aborta solo con un valor fuera
+# del conjunto. Sin la nota, quien sigue un runbook viejo no sabe si rompe algo.
+grep -qF '(`-Base`, loop §4) y un rebase reescribe esa historia' "$BASE" \
+  || fail "$BASE: la regla 4 ya no justifica el veto de rebase con la historia que la ronda 1 lee con -Base"
+grep -qF 'fases 6 y 7, ya cerradas, escriben `-Alcance last-commit`' "$BASE" \
+  || fail "$BASE: falta declarar que los runbooks cerrados de fases 6 y 7 escriben -Alcance last-commit"
+grep -qF 'aborta si el valor de `-Alcance` no está en ese conjunto' "$BASE" \
+  || fail "$BASE: falta decir que el script aborta si el valor de -Alcance no está en el conjunto"
+echo "ok (3d): regla 4 justificada con -Base e historia de fases 6 y 7 declarada"
+
 # (3a) Entrega-sin-sello A retiro la autoridad ligada a una sesion. Estas formas
 # reintroducirian el candado que detuvo Fase 9 aunque el resto de las anclas pase.
 vieja=$(grep -nEi 'veredicto sellado|sin estado del hook|re-sell|para que el kit selle' "$DOC" "$BASE" || true)

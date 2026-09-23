@@ -134,9 +134,12 @@ for linea in salida:
     [ -n "$cid" ] || continue
     # gh con --repo vacio ignora el flag y usa el repo del cwd: un PR ajeno
     # con el mismo numero quedaria mergeado. Sin owner/nombre no se consulta.
+    # El valor rechazado va en el mensaje: es lo que deja a la prueba distinguir
+    # null convertido a cadena vacia (repo "") del None crudo que quedaria si
+    # alguien quitara solo la conversion del isinstance.
     if ! printf '%s' "$repo" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]{0,38}/[A-Za-z0-9._-]{1,100}$'; then
       unknowns=$((unknowns + 1))
-      printf 'unknown carril %s pr %s: repo ausente o fuera de contrato; no consulto GitHub\n' "$cid" "$pr"
+      printf 'unknown carril %s pr %s: repo "%s" ausente o fuera de contrato; no consulto GitHub\n' "$cid" "$pr" "$repo"
       continue
     fi
     if respuesta=$(estado_pr "$pr" "$repo"); then

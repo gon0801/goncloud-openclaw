@@ -158,8 +158,14 @@ else:
     s = av[0].get("schedule") or {}
     if not (isinstance(s, dict) and s.get("kind") == "every" and s.get("everyMs") == 900000):
         marcas.append("RITMO-avance-tareas")
-if not solo_global:
-    em = [j for j in jobs if isinstance(j, dict) and j.get("name") == "corrida-empuje-" + fase]
+em = [j for j in jobs if isinstance(j, dict) and j.get("name") == "corrida-empuje-" + fase]
+if solo_global:
+    # 9.18: el modo no EXIGE empuje propio, pero un empuje presente tampoco se
+    # ignora: es un resto que manda mensajes que nadie espera. Con el flag,
+    # presente = sobrante y bloquea el arranque.
+    if em:
+        marcas.append("SOBRANTE-corrida-empuje-" + fase)
+else:
     if not em:
         marcas.append("FALTA-corrida-empuje-" + fase)
     elif not em[0].get("enabled"):
@@ -173,13 +179,14 @@ print(" ".join(marcas) if marcas else ("OK-GLOBAL" if solo_global else "OK"))
       OK) linea VERDE vigilantes "avance-tareas cada 15 min y corrida-empuje-$FASE creados y encendidos";;
       OK-GLOBAL) linea VERDE vigilantes "avance-tareas cada 15 min; solo watchdog global, sin empuje propio";;
       *)
-        faltan=""; apagados=""; ritmo=""; legado=""
+        faltan=""; apagados=""; ritmo=""; legado=""; sobran=""
         for m in $estado; do
           case "$m" in
             FALTA-*) faltan="$faltan ${m#FALTA-}" ;;
             OFF-*) apagados="$apagados ${m#OFF-}" ;;
             RITMO-*) ritmo="RITMO" ;;
             LEGADO-*) legado="${m#LEGADO-}" ;;
+            SOBRANTE-*) sobran="$sobran ${m#SOBRANTE-}" ;;
           esac
         done
         if [ -n "$legado" ]; then
@@ -190,6 +197,8 @@ print(" ".join(marcas) if marcas else ("OK-GLOBAL" if solo_global else "OK"))
           linea ROJO vigilantes "creados pero apagados:$apagados"
         elif [ -n "$ritmo" ]; then
           linea ROJO vigilantes "avance-tareas sin cadencia de 15 min: el corte de 30 min sale de ahi"
+        elif [ -n "$sobran" ]; then
+          linea ROJO vigilantes "sobra un empuje propio ($sobran): con --solo-watchdog-global la fase delega el seguimiento en el reloj global; quitaelo o corre sin el flag"
         else
           linea unknown vigilantes "no pude leer la lista de crons"
         fi

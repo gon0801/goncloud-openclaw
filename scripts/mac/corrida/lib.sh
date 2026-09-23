@@ -170,6 +170,85 @@ lock_directorio_soltar() { # $1 dir, $2 token; solo el dueno lo elimina
   rmdir "$d" 2>/dev/null
 }
 
+# Edad relativa para 9.17: el token guarda el PID de su dueno, pero un PID se
+# recicla. Si el proceso con ese PID nacio DESPUES de la ultima escritura del
+# token, el dueno original murio y el lock apunta a un proceso ajeno.
+edad_segundos() { # $1 archivo -> segundos desde su mtime, por stdout
+  python3 -c 'import os,sys,time
+try: print(int(time.time()-os.path.getmtime(sys.argv[1])))
+except Exception: raise SystemExit(1)' "$1" 2>/dev/null
+}
+
+segundos_de_vida() { # $1 pid -> segundos desde que el proceso arranco (etime), por stdout
+  local e d=0 h=0
+  e="$(ps -o etime= -p "$1" 2>/dev/null | tr -d ' ')" || return 1
+  case "$e" in ''|*[!0-9:-]*) return 1;; esac
+  case "$e" in *-*) d="${e%%-*}"; e="${e#*-}";; esac
+  case "$e" in *:*:*) h="${e%%:*}"; e="${e#*:}";; esac
+  case "$e" in
+    # 10#: etime trae ceros a la izquierda y bash leería 08/09 como octal
+    # inválido ("value too great for base"); sin el prefijo, la recuperación
+    # explícita se rendía en cada segundo/minuto/hora 08 o 09 (medido).
+    *:*) printf '%s\n' $(( 10#$d*86400 + 10#$h*3600 + 10#${e%%:*}*60 + 10#${e##*:} ));;
+    *) return 1;;
+  esac
+}
+
+# 9.17: salida operativa y auditable para un lock cuyo PID sigue respondiendo.
+# lock_abandonado_romper se rinde con kill -0 vivo (bien: no roba), y el operador
+# se quedaba sin salida salvo borrar el directorio a mano. Esta funcion es la
+# salida: se llama A PROPOSITO (nunca del camino automatico), verifica y dice que
+# hizo. Los tres casos de la fila 9.17:
+#   - dueno vivo que refresca (token fresco): SE NIEGA, tambien a proposito.
+#   - dueno vivo colgado (pid vivo, token viejo, proceso mas viejo que el token): rompe.
+#   - pid reciclado (token mas viejo que el proceso actual): rompe y lo dice.
+# Sin token o con token ilegible no toca nada: sin identidad no hay verificacion.
+lock_recuperar_explicito() { # $1 dir, $2 umbral, $3 etiqueta; 0 = roto
+  local d="$1" umbral="$2" etiqueta="$3" token pid edad_token seg_proc motivo tumba actual
+  [ -d "$d" ] || { echo "$etiqueta: no hay lock en $d: nada que recuperar" >&2; return 1; }
+  [ -f "$d/token" ] || { echo "$etiqueta: lock sin token en $d: sin identidad no se verifica y no se toca" >&2; return 1; }
+  token="$(cat "$d/token" 2>/dev/null)" || return 1
+  pid="${token%%-*}"
+  case "$pid" in
+    ''|*[!0-9]*) echo "$etiqueta: token ilegible ($token): no se toca" >&2; return 1;;
+  esac
+  if ! kill -0 "$pid" 2>/dev/null; then
+    echo "$etiqueta: el pid $pid ya no vive: la ruta automatica (lock_tomar) lo rompe sola" >&2
+    return 1
+  fi
+  if ! lock_viejo "$d" "$umbral"; then
+    echo "$etiqueta: el dueno $pid vive y refresca su token: un lock vivo no se roba, ni a proposito" >&2
+    return 1
+  fi
+  edad_token="$(edad_segundos "$d/token")" || edad_token=""
+  seg_proc="$(segundos_de_vida "$pid")" || seg_proc=""
+  if [ -z "$edad_token" ] || [ -z "$seg_proc" ]; then
+    echo "$etiqueta: no pude comparar la edad del token con la vida del pid $pid: sin verificacion no se rompe" >&2
+    return 1
+  fi
+  if [ "$edad_token" -gt "$seg_proc" ]; then
+    motivo="pid reciclado: el proceso $pid actual nacio despues del ultimo refresco del token"
+  else
+    motivo="dueno vivo colgado: el pid $pid retiene el lock sin refrescarlo"
+  fi
+  # Mismo reclamo por rename que la ruta automatica. El token se reconfirma
+  # dentro de la tumba y se vuelve a medir su edad: si el dueno refresco entre
+  # la verificacion y el mv, se restaura y no se roba nada.
+  tumba="$d.recuperado.$$-${RANDOM:-0}"
+  [ ! -e "$tumba" ] || return 1
+  mv "$d" "$tumba" 2>/dev/null || return 1
+  actual="$(cat "$tumba/token" 2>/dev/null)" || { lock_reclamo_deshacer "$d" "$tumba"; return 1; }
+  [ "$actual" = "$token" ] || { lock_reclamo_deshacer "$d" "$tumba"; return 1; }
+  lock_viejo "$tumba" "$umbral" || {
+    lock_reclamo_deshacer "$d" "$tumba"
+    echo "$etiqueta: el dueno refresco el token durante la recuperacion: no se roba" >&2
+    return 1
+  }
+  rm -rf "$tumba" || return 1
+  echo "$etiqueta: rompio un lock con proceso vivo ($motivo): accion explicita y verificada" >&2
+  return 0
+}
+
 locks_exit_despachar() {
   local estado="$?" previo citado
   lock_directorio_soltar "${CORR_LOCK_ACT:-}" "${CORR_LOCK_TOKEN:-}"

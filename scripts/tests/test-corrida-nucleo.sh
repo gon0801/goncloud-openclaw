@@ -407,6 +407,116 @@ kill -TERM "$hjb" 2>/dev/null; wait "$hjb" 2>/dev/null
 k=0; while [ -d "$T/corridas/t1/.lock" ] && [ "$k" -lt 50 ]; do sleep 0.1; k=$((k+1)); done
 [ -d "$T/corridas/t1/.lock" ] && fail "el EXIT del dueno no solto su lock"
 
+# (9f6) 9.17: recuperacion explicita de un lock cuyo pid responde. La ruta
+# automatica se rinde con kill -0 vivo (bien: no roba), pero dejaba al operador
+# sin salida salvo borrar el directorio a mano. La explicita distingue los tres
+# casos: dueno vivo que refresca (SE NIEGA, ni llamandola a proposito), dueno
+# vivo colgado (recupera, audita y nombra el pid) y pid reciclado (recupera y
+# dice que el token es de otro proceso).
+command -v lock_recuperar_explicito >/dev/null 2>&1 \
+  || fail "falta lock_recuperar_explicito en scripts/mac/corrida/lib.sh"
+R9="$T/corridas/rec917"; mkdir -p "$R9"
+CORR_LOCK_VIEJO=1; export CORR_LOCK_VIEJO
+
+# (9f6a) dueno vivo que refresca: pasado el umbral, el refresco mantiene el token
+# fresco y la explicita tambien se niega. Un lock vivo no se roba, ni a proposito.
+lock_tomar "$R9/registro.json" >/dev/null 2>&1 || fail "(9f6a) el dueno no pudo tomar el lock"
+sleep 1.2
+lock_refrescar "$R9/registro.json"
+out9a=$(lock_recuperar_explicito "$R9/.lock" 1 prueba 2>&1); rc9a=$?
+[ "$rc9a" -ne 0 ] || fail "(9f6a) la recuperacion explicita robo el lock de un dueno vivo que refresca:
+$out9a"
+[ -f "$R9/.lock/token" ] || fail "(9f6a) el lock del dueno vivo desaparecio"
+[ "$(cat "$R9/.lock/token" 2>/dev/null)" = "$CORR_LOCK_TOKEN" ] \
+  || fail "(9f6a) el token del dueno vivo cambio"
+printf '%s' "$out9a" | grep -qi 'refresca' \
+  || fail "(9f6a) la negativa no explica que el dueno esta vivo y refresca:
+$out9a"
+lock_soltar "$R9/registro.json"
+[ -d "$R9/.lock" ] && fail "(9f6a) lock_soltar propio dejo el lock"
+
+# (9f6b) dueno vivo colgado: el proceso vive, nunca refresca, el token queda
+# viejo. La ruta automatica se rinde (ese es el defecto 9.17); la explicita
+# recupera, dice COLGADO y nombra el pid.
+cat >"$T/r9-colgado.sh" <<COLG
+. "$PWD/scripts/mac/corrida/lib.sh"
+lock_tomar "$R9/registro.json" || exit 9
+printf '%s' "\$CORR_LOCK_TOKEN" > "$T/r9-token-colgado"
+sleep 30
+COLG
+bash "$T/r9-colgado.sh" >/dev/null 2>&1 &
+colg_pid=$!
+k=0; while [ ! -f "$T/r9-token-colgado" ] && [ "$k" -lt 50 ]; do sleep 0.1; k=$((k+1)); done
+[ -f "$T/r9-token-colgado" ] || fail "(9f6b) el colgado nunca tomo el lock"
+sleep 1.2
+lock_abandonado_romper "$R9/.lock" 1 prueba-auto >/dev/null 2>&1 \
+  && fail "(9f6b) la ruta automatica robo el lock de un proceso vivo"
+[ -f "$R9/.lock/token" ] \
+  || fail "(9f6b) la ruta automatica borro el lock de un proceso vivo"
+out9b=$(lock_recuperar_explicito "$R9/.lock" 1 prueba 2>&1); rc9b=$?
+[ "$rc9b" -eq 0 ] || fail "(9f6b) la explicita debio recuperar el lock del colgado (rc=$rc9b):
+$out9b"
+[ -d "$R9/.lock" ] && fail "(9f6b) la explicita dejo el lock colgado puesto:
+$out9b"
+printf '%s' "$out9b" | grep -qi 'colgado' \
+  || fail "(9f6b) el aviso tiene que decir que era un colgado:
+$out9b"
+printf '%s' "$out9b" | grep -q "$colg_pid" \
+  || fail "(9f6b) el aviso tiene que nombrar el pid del dueno colgado:
+$out9b"
+kill -TERM "$colg_pid" 2>/dev/null; wait "$colg_pid" 2>/dev/null
+
+# (9f6c) pid reciclado: el token apunta a un proceso vivo pero nacido DESPUES del
+# token: el dueno original murio y el pid ahora es de otro. La automatica tambien
+# se rinde aqui; la explicita verifica la edad relativa, recupera y lo dice.
+sleep 30 & rec_pid=$!
+mkdir "$R9/.lock"
+printf '%s-reciclado' "$rec_pid" >"$R9/.lock/token"
+touch -t 202001010000 "$R9/.lock/token"
+lock_abandonado_romper "$R9/.lock" 1 prueba-auto >/dev/null 2>&1 \
+  && fail "(9f6c) la ruta automatica robo un lock con pid vivo"
+[ -d "$R9/.lock" ] || fail "(9f6c) la ruta automatica borro el lock con pid vivo"
+out9c=$(lock_recuperar_explicito "$R9/.lock" 1 prueba 2>&1); rc9c=$?
+[ "$rc9c" -eq 0 ] || fail "(9f6c) la explicita debio recuperar el pid reciclado (rc=$rc9c):
+$out9c"
+[ -d "$R9/.lock" ] && fail "(9f6c) la explicita dejo el lock del reciclado puesto:
+$out9c"
+printf '%s' "$out9c" | grep -qi 'reciclado' \
+  || fail "(9f6c) el aviso tiene que decir que el pid estaba reciclado:
+$out9c"
+kill "$rec_pid" 2>/dev/null; wait "$rec_pid" 2>/dev/null
+
+# (9f6d) el etime trae ceros a la izquierda y bash lee 08/09 como octal
+# invalido. Cada forma pone el 08 en un solo campo: hora, dia, minutos,
+# segundos. Quitar el 10# de ese campo tiene que rendir la explicita.
+mkdir -p "$T/bin08"
+for et in '08:00:01' '08-00:00:01' '08:00' '00:08'; do
+  cat >"$T/bin08/ps" <<PS08
+#!/bin/sh
+case "\$1 \$2" in
+  "-o etime="*) printf '%s\n' "$et"; exit 0 ;;
+esac
+exec /bin/ps "\$@"
+PS08
+  chmod +x "$T/bin08/ps"
+  sleep 30 & rec08=$!
+  mkdir "$R9/.lock"
+  printf '%s-08' "$rec08" >"$R9/.lock/token"
+  touch -t 202001010000 "$R9/.lock/token"
+  lock_abandonado_romper "$R9/.lock" 1 prueba-auto >/dev/null 2>&1 \
+    && fail "(9f6d) la ruta automatica robo un lock con pid vivo (etime $et)"
+  out9d=$(PATH="$T/bin08:$PATH" lock_recuperar_explicito "$R9/.lock" 1 prueba 2>&1); rc9d=$?
+  kill "$rec08" 2>/dev/null; wait "$rec08" 2>/dev/null
+  [ "$rc9d" -eq 0 ] || fail "(9f6d) con etime $et debio recuperar el reciclado (rc=$rc9d):
+$out9d"
+  [ -d "$R9/.lock" ] && fail "(9f6d) la explicita dejo el lock puesto con etime $et:
+$out9d"
+  printf '%s' "$out9d" | grep -qi 'reciclado' \
+    || fail "(9f6d) la clasificacion con etime $et debio decir reciclado:
+$out9d"
+done
+unset CORR_LOCK_VIEJO
+
 # (9g) el trap del lock se desarma tras soltarlo: el EXIT de quien lo uso no puede
 # romperle a otro un lock vivo tomado entremedias.
 cat >"$T/z2.sh" <<Z2
