@@ -114,7 +114,11 @@ nombre/ubicación activa.
 La carpeta `skills` del PC tiene 69 skills. La comparación de nombres de
 directorios con los catálogos locales de la Mac encontró una sola exclusiva
 del PC: `make-bot-ui` (dos archivos, `SKILL.md` de 4.649 bytes más metadato de
-origen). Está en el respaldo; se revisará para copiarla selectivamente. Las
+origen). La lectura de su encabezado y primeros pasos muestra que depende de
+rutinas/webhooks de Grok Bot/Cursor (`update_state`, `SendToUser`), no de una
+capacidad nativa de OpenClaw; **no se importa automáticamente** a la nueva
+instalación. Está en el respaldo por si se decide migrar esa integración de
+forma explícita. Las
 otras 68 se pueden reconstruir desde las fuentes locales, sujeto a comprobar
 versiones antes del corte.
 
