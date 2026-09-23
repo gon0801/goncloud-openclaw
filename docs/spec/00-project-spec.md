@@ -111,6 +111,12 @@ El panel local de OpenClaw puede entregarse antes del adaptador Hermes;
 la paridad se prueba después en dos equipos independientes. No hay cola ni
 credenciales compartidas entre ellos.
 
+La instalación nueva no se declara recuperada solo por arrancar: los ocho
+agentes deben conservar sus cadenas y responder por la ruta real. Si un
+proveedor impide esa prueba, el resultado queda bloqueado, no aprobado por
+equivalencia con otro modelo. Un encargo real y los ciclos de sync requieren
+alcance operativo explícito, separado del permiso para instalar.
+
 Este objetivo modifica el resultado deseado, no convierte el runbook actual
 de Fase 16 en un procedimiento de reinstalación ni autoriza efectos en Windows.
 El plan de recuperación limpia define las compuertas; la reconciliación de

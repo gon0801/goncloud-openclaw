@@ -636,15 +636,26 @@ limpia". Esta fase crea un estado nuevo y verificable; no ejecuta el corte
 16.8 antiguo por equivalencia. Las filas históricas 9/14/15/16 no se cambian
 hasta medir el nuevo estado en 18.5. Fase 17, aún en un PR de planificación,
 se reconcilia en 18.6 antes de implementarla.
+La ruta de corte anterior 16.8 no se ejecuta ni se autoriza durante Fase 18.
+Después de 18.6 solo podría reabrirse si el ledger la conserva expresamente
+con dependencias nuevas; de lo contrario queda sustituida por 18.4.
+
+Orden de implementación: **A diagnóstico (18.0)**, **B salvaguarda y runbook
+(18.1–18.2)**, **C preparación de código (18.3)**, **D reinstalación y
+aceptación viva (18.4–18.5)**, **E replanificación y cierre (18.6–18.7)**.
+Cada bloque entrega un recibo y abre su propia compuerta. Después de E se
+implementan autonomía (9/14), panel local y paridad Hermes (17) según el
+ledger revisado. Primer encargo: 18.0, inventario de solo lectura; no cortar
+Windows hasta completar B y C.
 
 | Task | Contenido | DoD | Depends | Status |
 |---|---|---|---|---|
 | 18.0 | `[lane:fast] [tdd:skip:inventario]` Inventario redactado del host, ocho agentes, roles, cadenas ordenadas y defaults; comparación con captura y snapshot fechado. | Manifiesto con origen/hora/método, sin secretos; diferencias resueltas por David antes de cortar; `unknown` no se convierte en ausencia. | - | cc:TODO |
-| 18.1 | `[lane:gate] [tdd:skip:respaldo-operativo]` Respaldo oficial verificable, restauración a staging fresco, bundle Git, XML y ediciones únicas. | Archivo real verificado y restaurado; manifiesto cubre estado, agentes y workspaces; un fallo bloquea 18.4. | 18.0, autorización de lectura/respaldo | cc:TODO |
+| 18.1 | `[lane:gate] [tdd:skip:respaldo-operativo]` Respaldo oficial `backup create --verify`, restauración a staging fresco con ACL restringidas, bundle Git, XML, launchers y ediciones únicas. | Archivo real verificado y restaurado; cotejo separado de base compartida, bases de agentes, credenciales presentes sin valores, workspaces, bundle, XML, launchers, hashes, tamaño y rutas; fallo bloquea 18.4. | 18.0, autorización de lectura/respaldo | cc:TODO |
 | 18.2 | `[lane:gate] [tdd:skip:procedimiento-host]` Runbook de corte específico del Windows observado, con dry-run, destinos exactos, efectos, reversa y revisión independiente. | Ningún comando destructivo ambiguo; `--all` solo en dry-run, nunca en el corte; autorización operativa cita runbook, SHA, host y ventana. | 18.0, 18.1 | cc:TODO |
 | 18.3 | `[lane:gate] [tdd:required]` Preparar solo fuente/runtime, deploy allowlist y sync seguro que requiere el estado nuevo; evaluar piezas de PR #128 sin mergearlo en bloque. | Rojo/verde focalizado para separación, protección y segundo ciclo; hooks, CI final y revisión independientes verdes. | 18.2 | cc:TODO |
-| 18.4 | `[lane:release] [tdd:skip:operacion-viva]` Instalación Windows con estado nuevo, ocho agentes/cadenas exactas y viejo estado recuperable. | Health 200/200, `doctor`, servicio y ocho agentes verificados; cadena ordenada/defaults idénticos a 18.0; recibo de corte y reversa. | 18.1–18.3, autorización Windows | cc:TODO |
-| 18.5 | `[lane:release] [tdd:skip:aceptacion-viva]` Comprobar un encargo real acotado, dos ciclos de sync, límites de procesos y componentes necesarios. | Resultado observado y dos ciclos sin duplicados/sobrescritura; cualquier memoria/nodo no restaurado figura pendiente; ninguna prueba desconocida se marca verde. | 18.4 | cc:TODO |
+| 18.4 | `[lane:release] [tdd:skip:operacion-viva]` Instalación Windows con estado nuevo, ocho agentes/cadenas exactas y viejo estado recuperable. | Health 200/200, `doctor`, servicio y ocho agentes responden; cadena ordenada/defaults idénticos a 18.0; proveedor inaccesible bloquea R1 sin sustitución; recibo de corte y reversa. | 18.1–18.3, autorización Windows | cc:TODO |
+| 18.5 | `[lane:release] [tdd:skip:aceptacion-viva]` Comprobar un encargo real acotado, dos ciclos de sync, límites de procesos y componentes necesarios. | Resultado observado y dos ciclos sin duplicados/sobrescritura; cualquier memoria/nodo no restaurado figura pendiente; ninguna prueba desconocida se marca verde. | 18.4, autorización explícita de encargo/sync | cc:TODO |
 | 18.6 | `[lane:fast] [tdd:skip:replan-documental]` Reconciliar 15, 9, 14, 16 y 17 con el estado nuevo en un solo PR de ledger. | Matriz `conservar/reusar/reemplazar/diferir`, DoD y Depends nuevos para autonomía, panel local y Hermes; 15 conserva sus cierres; #128/#130 tienen decisión explícita. | 18.5 | cc:TODO |
 | 18.7 | `[lane:fast] [tdd:skip:cierre]` Cierre de R1 y entrega de los hitos R2–R4 a los planes revisados. | Recibos y CI vigentes, residuales y pendientes comunicados; no se confunde recuperación de OpenClaw con goal completo ni se borra el respaldo. | 18.6 | cc:TODO |
 
@@ -666,5 +677,8 @@ bases en bloque, cambiar modelos sin consentimiento o crear otro reloj.
 - Evento: merge/deploy, desinstalar servicio, cambiar configuración/tareas,
   pairing o cortar Windows. Razón: 18.3–18.5. Scope: host, SHA y ventana
   exactos. Estado: **no aprobado**; requiere referencia operativa posterior.
+- Evento: encargo real y dos ciclos de sync de 18.5. Razón: aceptación viva.
+  Scope: host, build/SHA, ventana y efectos permitidos. Estado: **no aprobado**;
+  la referencia de 18.4 sirve solo si incluye expresamente este alcance.
 - Evento: borrado definitivo de estado, respaldos o cuarentena. Razón:
   ninguno de los DoD. Scope: fuera de Fase 18. Estado: **no aprobado**.
