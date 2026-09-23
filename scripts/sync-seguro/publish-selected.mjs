@@ -138,6 +138,20 @@ function syncJsonExclusive(path, value) {
   }
 }
 
+function storeBackup(entry) {
+  const backup = pathFor(txn, `backup/${entry.path}`);
+  mkdirSync(dirname(backup), { recursive: true });
+  const bytes = readFileSync(pathFor(runtime, entry.path));
+  const tmp = writeTempExclusive(dirname(backup), basename(backup), bytes);
+  try {
+    renameSync(tmp, backup);
+  } finally {
+    if (lstatSync(tmp, { throwIfNoEntry: false })) unlinkSync(tmp);
+  }
+  if (hash(backup) !== entry.oldSha) throw new Error("backup read-back hash differs");
+  syncFile(backup);
+}
+
 function parentDirs(relative) {
   const dirs = [];
   let cursor = runtime;
@@ -311,63 +325,92 @@ if (!changes.length) {
   process.exit(0);
 }
 
-// Transacción: directorio fresco, o reanudación de una interrumpida que pida
-// exactamente lo mismo. Sin borrados: un resto ajeno se reporta, no se limpia.
+// Transacción: directorio fresco, reanudación de una interrumpida que pida
+// exactamente lo mismo, o recuperación de un corte mkdir→journal (B5).
+// Sin borrados: un resto ajeno se reporta, no se limpia.
 let journal;
 let completed = new Set();
 let skipNow = new Set();
 const existingTxn = lstatSync(txn, { throwIfNoEntry: false });
 if (existingTxn) {
   if (!existingTxn.isDirectory()) throw new Error("transaction path already exists");
-  const priorRaw = readFileSync(join(txn, "journal.json"), "utf8");
-  const prior = JSON.parse(priorRaw);
+  let prior = null;
+  try {
+    prior = JSON.parse(readFileSync(join(txn, "journal.json"), "utf8"));
+  } catch (error) {
+    if (error.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
+    prior = null;
+  }
   const shapeOk = prior && prior.version === 1 && Array.isArray(prior.entries) &&
     Array.isArray(prior.createdDirs) && prior.entries.every((e) => e &&
       typeof e.path === "string" && typeof e.newSha === "string" &&
       (e.oldSha === null || typeof e.oldSha === "string"));
-  if (!shapeOk) throw new Error("prior transaction journal corrupt; move it aside first");
-  // Reanudación: los cambios frescos deben ser un subconjunto idéntico de la
-  // intención previa (lo demás ya quedó publicado), con los mismos skips.
-  const subset = changes.every((c) => prior.entries.some((p) =>
-    p.path === c.path && p.oldSha === c.oldSha && p.newSha === c.newSha)) &&
-    JSON.stringify([...skipped].sort()) === JSON.stringify([...prior.skipped ?? []].sort());
-  if (!subset) throw new Error("prior transaction pending; rollback or move it aside first");
-  validateJournal(prior);
-  journal = prior;
-  // Reanudación desde la realidad verificada, no desde lo persistido: lo que
-  // sigue en nuevo se salta (aunque el completed no se haya persistido antes
-  // del kill); lo que volvió a viejo se reintenta; lo demás aborta.
-  const freshPaths = new Set(changes.map((c) => c.path));
-  skipNow = new Set(skipped.filter((s) => prior.entries.some((p) => p.path === s)));
-  const resumed = new Set();
-  for (const entry of journal.entries) {
-    if (freshPaths.has(entry.path) || skipNow.has(entry.path)) continue;
-    const live = hash(pathFor(runtime, entry.path));
-    if (live === entry.newSha) resumed.add(entry.path);
-    else {
-      throw new Error("interrupted publication left inconsistent state; rollback first");
+  if (!shapeOk) {
+    // B5: dir de txn sin journal, o journal incompleto (truncado). La
+    // escritura inicial del journal es la única no atómica y precede a toda
+    // publicación: si falta o está incompleta, esta txn no publicó nada y el
+    // journal se reconstruye de lo fresco. Solo se crean el journal y los
+    // respaldos faltantes; cualquier otro contenido del txn no se toca, y un
+    // respaldo previo que no coincida aborta en vez de sobrescribirse.
+    for (const entry of changes) {
+      if (!entry.oldSha) continue;
+      const backup = pathFor(txn, `backup/${entry.path}`);
+      const backupStat = lstatSync(backup, { throwIfNoEntry: false });
+      if (!backupStat) {
+        storeBackup(entry);
+        continue;
+      }
+      if (!backupStat.isFile() || hash(backup) !== entry.oldSha) {
+        throw new Error("transaction holds foreign backup; move it aside first");
+      }
     }
+    const rebuiltDirs = [];
+    for (const entry of changes) {
+      for (const dir of parentDirs(entry.path)) {
+        if (!lstatSync(dir, { throwIfNoEntry: false })) {
+          const rel = dir.slice(runtime.length + 1).split(sep).join("/");
+          if (!rebuiltDirs.includes(rel)) rebuiltDirs.push(rel);
+        }
+      }
+    }
+    journal = { version: 1, entries: changes, createdDirs: rebuiltDirs, completed: [], skipped };
+    if (lstatSync(join(txn, "journal.json"), { throwIfNoEntry: false })) {
+      syncJsonAtomic(join(txn, "journal.json"), journal);
+    } else {
+      syncJsonExclusive(join(txn, "journal.json"), journal);
+    }
+  } else {
+    // Reanudación: los cambios frescos deben ser un subconjunto idéntico de la
+    // intención previa (lo demás ya quedó publicado), con los mismos skips.
+    const subset = changes.every((c) => prior.entries.some((p) =>
+      p.path === c.path && p.oldSha === c.oldSha && p.newSha === c.newSha)) &&
+      JSON.stringify([...skipped].sort()) === JSON.stringify([...prior.skipped ?? []].sort());
+    if (!subset) throw new Error("prior transaction pending; rollback or move it aside first");
+    validateJournal(prior);
+    journal = prior;
+    // Reanudación desde la realidad verificada, no desde lo persistido: lo que
+    // sigue en nuevo se salta (aunque el completed no se haya persistido antes
+    // del kill); lo que volvió a viejo se reintenta; lo demás aborta.
+    const freshPaths = new Set(changes.map((c) => c.path));
+    skipNow = new Set(skipped.filter((s) => prior.entries.some((p) => p.path === s)));
+    const resumed = new Set();
+    for (const entry of journal.entries) {
+      if (freshPaths.has(entry.path) || skipNow.has(entry.path)) continue;
+      const live = hash(pathFor(runtime, entry.path));
+      if (live === entry.newSha) resumed.add(entry.path);
+      else {
+        throw new Error("interrupted publication left inconsistent state; rollback first");
+      }
+    }
+    completed = resumed;
+    journal.completed = [...resumed];
+    journal.resumedSkips = [...skipNow];
   }
-  completed = resumed;
-  journal.completed = [...resumed];
-  journal.resumedSkips = [...skipNow];
 } else {
   mkdirSync(txn);
   const createdDirs = [];
   for (const entry of changes) {
-    if (entry.oldSha) {
-      const backup = pathFor(txn, `backup/${entry.path}`);
-      mkdirSync(dirname(backup), { recursive: true });
-      const bytes = readFileSync(pathFor(runtime, entry.path));
-      const tmp = writeTempExclusive(dirname(backup), basename(backup), bytes);
-      try {
-        renameSync(tmp, backup);
-      } finally {
-        if (lstatSync(tmp, { throwIfNoEntry: false })) unlinkSync(tmp);
-      }
-      if (hash(backup) !== entry.oldSha) throw new Error("backup read-back hash differs");
-      syncFile(backup);
-    }
+    if (entry.oldSha) storeBackup(entry);
     for (const dir of parentDirs(entry.path)) {
       if (!lstatSync(dir, { throwIfNoEntry: false })) {
         const rel = dir.slice(runtime.length + 1).split(sep).join("/");

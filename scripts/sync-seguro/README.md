@@ -22,9 +22,11 @@ publish-selected.mjs <selection.json> <staging> <runtime> <transacción> --apply
 publish-selected.mjs <selection.json> <staging> <runtime> <transacción> --rollback
 ```
 
-1. **Manifiesto** (`{version: 1, policyVersion: 1, files: [{path, sha256}]}`):
+1. **Manifiesto** (`{version: 1, policyVersion: 1, commit, files: [{path, sha256}]}`):
    allowlist positiva versionada (`selection-policy.mjs`) + denylist cerrada
-   por categoría. Solo archivos trackeados por git del checkout fuente.
+   por categoría. Solo archivos trackeados por git del checkout fuente,
+   pinneados al SHA del commit registrado: cada byte debe ser idéntico al de
+   ese commit (lo dirty o sin commit se rechaza, la fuente debe tener HEAD).
 2. **Staging** fuera del runtime vivo, con validación de set exacto y hashes
    antes de publicar. Sin borrados recursivos: un resto se reporta, no se
    limpia solo.
@@ -46,7 +48,10 @@ con respaldo previo, reversible por `--rollback`.
 ## Interrupciones e idempotencia
 
 Re-ejecutable tras kill con la misma transacción: lo publicado se salta, lo
-pendiente se reintenta, lo inconsistente aborta. Segundo ciclo sin cambios =
+pendiente se reintenta, lo inconsistente aborta. Un corte entre crear el dir
+de transacción y guardar el journal (dir sin journal, o journal incompleto)
+se recupera solo al reintentar: reconstruye journal y respaldos faltantes sin
+tocar ningún otro contenido de la transacción. Segundo ciclo sin cambios =
 cero escrituras. Una transacción previa distinta aborta (`prior transaction
 pending`) en vez de mezclarse.
 

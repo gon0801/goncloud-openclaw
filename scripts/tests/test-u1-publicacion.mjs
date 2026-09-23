@@ -286,6 +286,42 @@ test("ya-publicado se adopta: v1 presente → edición viva → v2 la conserva (
   assert.equal(readFileSync(join(f.runtime, f.files[1].path), "utf8"), "nuevo v2 1\n");
 });
 
+test("corte mkdir→journal: txn dir sin journal se recupera sin limpieza (B5)", () => {
+  const f = fixture();
+  const existing = join(f.runtime, f.files[0].path);
+  mkdirSync(dirname(existing), { recursive: true });
+  writeFileSync(existing, "viejo\n");
+  // Resto del corte: dir de txn creado, journal jamás escrito, respaldo
+  // parcial válido y un archivo ajeno que nadie debe tocar.
+  mkdirSync(f.state);
+  const foreign = join(f.state, "notas-del-operador.txt");
+  writeFileSync(foreign, "ajeno\n");
+  const partial = join(f.state, "backup", f.files[0].path);
+  mkdirSync(dirname(partial), { recursive: true });
+  writeFileSync(partial, "viejo\n");
+  const retry = f.run("--apply");
+  assert.equal(retry.status, 0, `reintento misma txn debe recuperar, stderr: ${retry.stderr}`);
+  assert.equal(readFileSync(existing, "utf8"), "nuevo 0\n");
+  assert.equal(readFileSync(join(f.runtime, f.files[1].path), "utf8"), "nuevo 1\n");
+  assert.equal(readFileSync(foreign, "utf8"), "ajeno\n", "lo ajeno no se toca");
+  assert.equal(existsSync(join(f.state, "journal.json")), true);
+});
+
+test("journal incompleto (truncado) se recupera sin tocar lo ajeno (B5)", () => {
+  const f = fixture();
+  mkdirSync(f.state);
+  const foreign = join(f.state, "notas-del-operador.txt");
+  writeFileSync(foreign, "ajeno\n");
+  writeFileSync(join(f.state, "journal.json"), '{"version": 1, "entries": [{"path": "summa-gate/ind');
+  const retry = f.run("--apply");
+  assert.equal(retry.status, 0, `journal truncado debe recuperarse, stderr: ${retry.stderr}`);
+  assert.equal(readFileSync(join(f.runtime, f.files[0].path), "utf8"), "nuevo 0\n");
+  assert.equal(readFileSync(join(f.runtime, f.files[1].path), "utf8"), "nuevo 1\n");
+  assert.equal(readFileSync(foreign, "utf8"), "ajeno\n", "lo ajeno no se toca");
+  const journal = JSON.parse(readFileSync(join(f.state, "journal.json"), "utf8"));
+  assert.equal(journal.entries.length, 2);
+});
+
 test(".ledger symlinkeado a fuera: apply falla cerrado sin escribir fuera (B3)", () => {
   const f = fixture();
   const outside = mkdtempSync(join(tmpdir(), "u1-b3-fuera-"));

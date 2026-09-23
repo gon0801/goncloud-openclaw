@@ -20,6 +20,7 @@ function fixture(paths) {
     writeFileSync(full, `content: ${path}\n`);
   }
   assert.equal(git("add", ".").status, 0);
+  assert.equal(git("-c", "user.email=u1@test", "-c", "user.name=u1", "commit", "-qm", "init").status, 0);
   const output = join(root, "selection.json");
   const run = () => spawnSync(process.execPath, [script, root, output], { encoding: "utf8" });
   return { root, output, run };
@@ -64,6 +65,30 @@ test("exige revisión antes de seleccionar un ejecutable nuevo del plugin", () =
   const result = f.run();
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /unreviewed plugin file/i);
+});
+
+test("rechaza bytes dirty: lo modificado sin commit no entra al manifiesto (B4)", () => {
+  const f = fixture(["summa-gate/index.ts"]);
+  writeFileSync(join(f.root, "summa-gate/index.ts"), "dirty sin commit\n");
+  const dirtyOut = join(f.root, "selection-dirty.json");
+  const result = spawnSync(process.execPath, [script, f.root, dirtyOut], { encoding: "utf8" });
+  let accepted = "";
+  if (result.status === 0) {
+    const m = JSON.parse(readFileSync(dirtyOut, "utf8"));
+    accepted = ` ACEPTÓ dirty (sha=${m.files[0].sha256.slice(0, 12)}… sin commit)`;
+  }
+  assert.notEqual(result.status, 0, `build debe rechazar bytes dirty sin commit.${accepted}`);
+  assert.match(result.stderr, /differs from pinned commit/);
+});
+
+test("el manifiesto registra el SHA del commit pinned (B4)", () => {
+  const f = fixture(["summa-gate/index.ts", "gateway-watchdog.ps1"]);
+  const head = spawnSync("git", ["-C", f.root, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
+  const result = f.run();
+  assert.equal(result.status, 0, result.stderr);
+  const manifest = JSON.parse(readFileSync(f.output, "utf8"));
+  assert.match(manifest.commit ?? "", /^[a-f0-9]{40}$/, "el manifiesto debe registrar el commit");
+  assert.equal(manifest.commit, head);
 });
 
 test("rechaza un runtime vivo .openclaw como fuente", () => {

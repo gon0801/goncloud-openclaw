@@ -18,6 +18,14 @@ if (source.split(sep).some((part) => part.toLowerCase() === ".openclaw")) {
 const listed = spawnSync("git", ["-C", source, "ls-files", "-z"], { encoding: "utf8" });
 if (listed.status !== 0) throw new Error("cannot list tracked source files");
 
+// B4: la selección se pinnea al HEAD commiteado. Sin commit no hay
+// manifiesto (falla cerrado: un árbol solo stageado no es revisable).
+const head = spawnSync("git", ["-C", source, "rev-parse", "HEAD"], { encoding: "utf8" });
+if (head.status !== 0 || !/^[a-f0-9]{40}\n?$/.test(head.stdout)) {
+  throw new Error("source has no commit; commit first");
+}
+const commit = head.stdout.trim();
+
 function candidate(path) {
   if (path === "gateway-watchdog.ps1") return true;
   if (path.startsWith("summa-gate/") || path.startsWith("tablero-runbook/")) {
@@ -47,11 +55,21 @@ const files = listed.stdout.split("\0").filter(Boolean).filter(candidate).sort()
     if (lstatSync(cursor).isSymbolicLink()) throw new Error("symlink in tracked selection");
   }
   if (!lstatSync(cursor).isFile()) throw new Error("tracked selection is not a file");
-  return { path, sha256: createHash("sha256").update(readFileSync(cursor)).digest("hex") };
+  // B4: cada byte debe ser idéntico al del commit pinned; lo dirty o
+  // stageado-sin-commit se rechaza, no se hashea.
+  const bytes = readFileSync(cursor);
+  const pinned = spawnSync("git", ["-C", source, "show", `${commit}:${path}`], { encoding: "buffer" });
+  const pinnedSha = pinned.status === 0
+    ? createHash("sha256").update(pinned.stdout).digest("hex") : null;
+  const liveSha = createHash("sha256").update(bytes).digest("hex");
+  if (pinnedSha === null || pinnedSha !== liveSha) {
+    throw new Error(`tracked selection differs from pinned commit ${commit}: ${path}`);
+  }
+  return { path, sha256: liveSha };
 });
 if (!files.length) throw new Error("empty runtime selection");
 
-const output = `${JSON.stringify({ version: 1, policyVersion: POLICY_VERSION, files }, null, 2)}\n`;
+const output = `${JSON.stringify({ version: 1, policyVersion: POLICY_VERSION, commit, files }, null, 2)}\n`;
 if (existsSync(outputPath)) {
   if (readFileSync(outputPath, "utf8") !== output) throw new Error("existing selection differs");
 } else {
