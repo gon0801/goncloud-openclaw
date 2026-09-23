@@ -19,6 +19,7 @@ transcripciones. Este recibo no autoriza desinstalación, corte o deploy.
 | CLI en Windows | `openclaw --version` por SSH, 2026-09-23 | `2026.9.5 (ec9c1a1)`, instalada en `C:\Users\ehven\AppData\Roaming\npm\node_modules\openclaw`. |
 | Configuración viva | `openclaw config validate --json` y `openclaw config get agents.entries --json` por SSH | Configuración válida, con los ocho IDs históricos. Las cadenas vivas difieren de la foto del 16 de septiembre; no se han cambiado. |
 | Instalador | `npm ls -g openclaw --depth=0 --json` por SSH | Paquete npm global `openclaw@2026.9.5`. La ruta del paquete es `C:\Users\ehven\AppData\Roaming\npm\node_modules\openclaw`. |
+| Lanzadores y scripts de tareas | `Get-ScheduledTask` por SSH, leyendo solo ejecutable, directorio de trabajo y longitud de argumentos | Gateway: `C:\Users\ehven\.openclaw\gateway.vbs`, sin argumentos. Node: `C:\Users\ehven\.openclaw\node.vbs`, sin argumentos. Watchdog y sync ejecutan PowerShell; CUA Node ejecuta `cmd.exe`; Restore Console ejecuta PowerShell del sistema. Los argumentos íntegros no se publican: sus XML están exportados en el destino privado citado abajo. |
 | Alcance de desinstalación, solo simulación | `openclaw uninstall --all --dry-run --non-interactive --yes` y `openclaw uninstall --service --dry-run --non-interactive --yes` en Windows | `--all` enumera el servicio y toda `C:\Users\ehven\.openclaw`, incluidos ocho workspaces. `--service` enumera solo el servicio. No se ejecutó ninguna desinstalación; el runbook de corte no puede usar `--all` realmente. |
 | Workspaces | Campo `workspace` de los ocho `agents.entries` | `main` usa `workspace`; los otros siete usan `workspace-<id>`, todos bajo `C:\Users\ehven\.openclaw`. El `agentDir` de los siete secundarios apunta a `agents\<id>\agent`; el de `main` no está fijado explícitamente. |
 | Tareas/servicio | `Get-ScheduledTask` y `Get-Service` por SSH | `OpenClaw Gateway` y `OpenClaw Node` están Ready; `OpenClaw Gateway Watchdog` y `OpenClaw CUA Node` Disabled; `OpenClaw Restore Console` Ready. `GoncloudRepoSync` está Disabled. `WireGuardTunnel$openclaw` está Running. No se deduce salud del gateway de estas tareas. |
@@ -66,6 +67,16 @@ También hay dos rutas sin seguimiento: la carpeta retenida de `adversary` y
 De los 214 MiB del `workspace` principal restaurado, ~152 MiB son `tmp`,
 ~23 MiB `node_modules`, ~19 MiB `.git` y ~17 MiB `media`; no son una lista de
 importación. El Git vivo rastrea 193 archivos bajo los ocho workspaces.
+
+Clasificación conservadora para el corte: las cinco ediciones rastreadas y las
+dos rutas sin seguimiento son **datos a preservar**, no código autorizado para
+copiar automáticamente. Los dos archivos de `workshop-skills` y la memoria de
+`implementer` son contenido propio que se comparará con su fuente antes de
+seleccionar; `gateway-watchdog.ps1`, `gateway.cmd` y `gateway.vbs` son
+lanzadores/operación de la instalación vieja y se reconstruyen, no se importan.
+La carpeta retenida de `adversary` es una copia de base antigua, no un noveno
+agente. Backup y staging conservan los siete elementos; la comprobación de
+hashes de los seis archivos individuales se hizo antes de la futura rotación.
 
 Un bundle privado de Git de 45.402.859 bytes, SHA-256
 `0FC9D7215DA7A07BD76AC351886E0D450BA5BEB31EB85A50CF2FB5267FCDE03E`,
@@ -132,12 +143,13 @@ No se cambió ninguno.
 
 ## Datos que siguen `unknown`
 
-- Clasificación de las cinco ediciones rastreadas y las dos rutas sin
-  seguimiento como fuente única, recuperable o descartable.
+- Comparación de contenido propio contra sus fuentes para decidir la lista
+  exacta de importación; todos los cambios únicos ya están preservados.
 - Disponibilidad real de cada proveedor. La configuración válida no la prueba.
 - Argumentos exactos de tareas y rutas de sync para el runbook, versiones de
-  skills replicadas y referencias de autenticación fuera del archivo oficial, aún sin
-  inventario completo. No se necesitan los valores de las credenciales.
+  skills replicadas y referencias de autenticación fuera del archivo oficial,
+  aún sin inventario completo. Los XML de tareas están en destino privado;
+  no se necesitan los valores de las credenciales.
 
 ## Para completar 18.0
 
