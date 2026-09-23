@@ -1,0 +1,381 @@
+{
+  "version": 1,
+  "files": [
+    {
+      "path": "agents/implementer/agent/workshop-skills/hook-rojo-ajeno/SKILL.md",
+      "sha256": "ac41213a86905de55df717f4def2f75ffa8fc72d22a23f2ea5f68949d00e18d5"
+    },
+    {
+      "path": "agents/implementer/agent/workshop-skills/mac-exec-detach-poll/ENV.md",
+      "sha256": "f7f155f311bf50e69e7ddc46793233e7597852436010e520d0623b1d9bc2c6f9"
+    },
+    {
+      "path": "agents/implementer/agent/workshop-skills/mac-exec-detach-poll/SKILL.md",
+      "sha256": "0150d5ea54830ee34d7edd765d5b458e3cbc078f3822a5406bc1e294a7b7987b"
+    },
+    {
+      "path": "agents/implementer/agent/workshop-skills/no-op-commit-drop/SKILL.md",
+      "sha256": "3080d29c23d30087ebbb40928177ffe264ae921b6154711d1a4c116f8cf67682"
+    },
+    {
+      "path": "agents/implementer/agent/workshop-skills/pr-sin-gh/SKILL.md",
+      "sha256": "eefa20d4deb998004410438b648f8997e8683d666bb2b82b5c072b28c972fa3a"
+    },
+    {
+      "path": "agents/implementer/agent/workshop-skills/regression-red-verify/SKILL.md",
+      "sha256": "a8a6f27a7471ff2e063415c713c8c81eaf68d6db96dd65ceb3108c7045c97c52"
+    },
+    {
+      "path": "agents/implementer/agent/workshop-skills/saikit-cierre-pr/MERGE-POR-ORDEN.md",
+      "sha256": "040c3729644a7492fb50f6fb0997864261f49a6670a21e9509b6eee44f255277"
+    },
+    {
+      "path": "agents/implementer/agent/workshop-skills/saikit-cierre-pr/SKILL.md",
+      "sha256": "a433917cd254e0486eb3ca67cd92f7be46f6677e3cf560690afe4f2d4ef90980"
+    },
+    {
+      "path": "agents/ingenieria/agent/workshop-skills/browser-cli-claw-profile/SKILL.md",
+      "sha256": "0d71175c166757aa19fb893926e92bfb5d19b7b785f7a74a0f5dea2062844754"
+    },
+    {
+      "path": "agents/ingenieria/agent/workshop-skills/gateway-sync-verify/SKILL.md",
+      "sha256": "9aca8f2bc5fa9db9785d43120c4f29de12c899064f891e35cacd4e5b959e7457"
+    },
+    {
+      "path": "agents/ingenieria/agent/workshop-skills/goncloud-ssh-ops/SKILL.md",
+      "sha256": "bf9a92efd3a110ae07fcee3cecb9ecfed888cc9bc84ec44118f495a6889951de"
+    },
+    {
+      "path": "agents/ingenieria/agent/workshop-skills/mac-node-ops/SKILL.md",
+      "sha256": "e5e00b1f02f0dfd78238d06e31506945f012e08f3d32077af60101e8552c4eed"
+    },
+    {
+      "path": "agents/ingenieria/agent/workshop-skills/mac-node-ops/audit-session-log.md",
+      "sha256": "de8b4656f8b0fe486be64c1b80cac4ae85ebe07ca9028b3285eef9e8c5da9ea0"
+    },
+    {
+      "path": "agents/ingenieria/agent/workshop-skills/mac-node-ops/drive-agent-tab.md",
+      "sha256": "90c8fc1e39bb2bc0b844ad05cbd7649c078ce41b249aa1ec5f96f75893ccc35c"
+    },
+    {
+      "path": "agents/ingenieria/agent/workshop-skills/mac-node-ops/kit-merge-route.md",
+      "sha256": "0f2fbfd001b2bab7cf3d6a89474cf897657dcec2c0899c07d61860fc762218a3"
+    },
+    {
+      "path": "agents/ingenieria/agent/workshop-skills/mac-node-ops/locate-session-cwd.md",
+      "sha256": "b6a4a5a9795cbd1824890eabcb9461f374f65be44e79fb50e8b5fc5eff468448"
+    },
+    {
+      "path": "agents/ingenieria/agent/workshop-skills/openclaw-gateway-diag/SKILL.md",
+      "sha256": "e5cc5af7a5353e1d0b18fabbbe32116027a447fb89f8a8fee9951c389c12e656"
+    },
+    {
+      "path": "agents/ingenieria/agent/workshop-skills/saikit-cierre-pr/MERGE-POR-ORDEN.md",
+      "sha256": "040c3729644a7492fb50f6fb0997864261f49a6670a21e9509b6eee44f255277"
+    },
+    {
+      "path": "agents/ingenieria/agent/workshop-skills/saikit-cierre-pr/SKILL.md",
+      "sha256": "a433917cd254e0486eb3ca67cd92f7be46f6677e3cf560690afe4f2d4ef90980"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/agent-dispatch/SKILL.md",
+      "sha256": "4e7ca6f003ac8b03653eb421491e5d02bd26ef08437e929653fea36d2efe5f07"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/automation-run-recovery/SKILL.md",
+      "sha256": "fb17e4c322cad827e44cb2adaa151b2c9814b28e22b734f7f29b29614fe88880"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/browser-bridge-recovery/SKILL.md",
+      "sha256": "b0091842d43d7725a992a15cf2aa3542976a2b1e8cc3d8a4dea16025ae062dfe"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/browser-cli-claw-profile/SKILL.md",
+      "sha256": "0d71175c166757aa19fb893926e92bfb5d19b7b785f7a74a0f5dea2062844754"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/dedicated-edge-browser/SKILL.md",
+      "sha256": "28219583ec71882be81c16ed324a044b60d21b7fd4c5e517292ec8c294c30fa5"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/dedicated-edge-browser/claude-artifact-read.md",
+      "sha256": "ca026b1e68c4ad9661b11d04459d129351f4ea7fde851515ddd17ddaa882704f"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/dedicated-edge-browser/gmail-attachment-send.md",
+      "sha256": "ae0473d9110c4e8aaf8afa5c4a1081cfd4e0e00693489453184cecdaac1ae3d2"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/gateway-cli-setup/SKILL.md",
+      "sha256": "01e88c9a5cf6473448aca0f537049031471143ede9c0d33d42f17ef034bb4874"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/gateway-delivery-queue/SKILL.md",
+      "sha256": "4cd83e7f6778068c9e839917f33d195e39f544d369227c2d5a1005c9b382d4a1"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/gateway-doctor-fix/SKILL.md",
+      "sha256": "cc4b8ec45f7cbf87799266659a33409d5717e7fa93ce4002add74c33122d632c"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/gateway-edge-cdp/SKILL.md",
+      "sha256": "786da518429a9aa0a8895a89e6448a553e80a43547ec35e8740962ac1389fd1e"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/gateway-edge-cdp/monday-export.md",
+      "sha256": "1b0e889de06796964f75e3f9f1d8a1ad260ddb77ed9d6e0f9322ca45aa428207"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/gateway-mobile-pairing/SKILL.md",
+      "sha256": "c84bfa1819f8e2fc4cf222137db49857fad78340bc0cee166be6d88093ea156f"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/gateway-stability-diagnosis/SKILL.md",
+      "sha256": "632f8da9655be869dfab9ed9cd1acd50d9b01f5b972522b4e0391783130d0637"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/gateway-to-mac-mail-attachment/SKILL.md",
+      "sha256": "5aa63cd6611940513c5a6f6f674ab42bd8d69d1de788ac1d65f1fc4134cf084a"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/git-commit-push/SKILL.md",
+      "sha256": "10f210e57fce4bae6d284b80a046cf09b41f6f741b2b1a206ad28ba0502706c6"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/github-private-read/SKILL.md",
+      "sha256": "cb21b431123ac489b7b0ada21304946059e0afd88808e796c7c21999f5318968"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/gmail-html-email/SKILL.md",
+      "sha256": "52e05217f7b054b6b57a82869077c35612f86c4ff45de1ca6025b67d348c49cc"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/local-image-inspection/SKILL.md",
+      "sha256": "2f5259af8febf9590079ab08afae2bd2eedc691f746d7b6c3741d2248171f583"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/mac-agent-transcript/SKILL.md",
+      "sha256": "8b5f396f05be602604474eea4b956ba02f4f063f609567a788c16291a0828310"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/mac-input-control/SKILL.md",
+      "sha256": "4135c50337da7c8760eb7b270df69ead4dd2dd5dc0b438bcc4dcf8d97ba9e2d4"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/mac-node-file-transfer/SKILL.md",
+      "sha256": "7802aba7206abe948908aea4a7c9e64e0e8287e8450950514abf33564d5c37d5"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/mac-screenshot/SKILL.md",
+      "sha256": "d230e57d3a25c099f908e8a9e69160dc4f58ed14dd743b50620afdeafa2521bc"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/mac-terminal-control/SKILL.md",
+      "sha256": "d6885d8fcdd6f14fdcefdc42e55ede9164face713ef37e44e1e42ded94115c18"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/mac-tmux-control/SKILL.md",
+      "sha256": "fd06efda8708355d0428422cf6b1d38fb5510e0d6fc2ae42a5420ae83fd9225f"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/mac-wireguard-diagnose/SKILL.md",
+      "sha256": "26625e4bcd6d0e0dc245b46c1288c2820c9877be1ce06b1362a3b8716ec29192"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/openclaw-config-patch/SKILL.md",
+      "sha256": "135c1836360280b11d647f2d4fc67d2a40633e38eac4aa63b6c4d8fef1e1caa9"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/owner-report-delivery/SKILL.md",
+      "sha256": "70582e633b94e6bbfc175003a2b1e1aa1ab9b4c2149938cb136e8ea68ce40b00"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/post-merge-closure/SKILL.md",
+      "sha256": "7ff633929537625b8faf47abb0c5588ad007ba744f3c27187dda95421f5f2c9e"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/saikit-merge-route/SKILL.md",
+      "sha256": "ec6a913d2168f5d5e819eea9a206df9cc47c0142325e3bd937aef099e8af8d4a"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/telegram-ack-reaction/SKILL.md",
+      "sha256": "de5cc937936a29c0c708c9b1b8e55800cddb002a921a965f2f2266633cde5941"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/telegram-bot-send/SKILL.md",
+      "sha256": "fb19d9246cccd57846c7facf916d28dbb902b9d5df4633d1df424545a40638e6"
+    },
+    {
+      "path": "agents/main/agent/workshop-skills/test-discrimination-verification/SKILL.md",
+      "sha256": "5e65b7eed8bd9af1469fd6be5dad42ccbd7836d261d28e3648b261beaddc041b"
+    },
+    {
+      "path": "agents/operaciones/agent/workshop-skills/browser-cli-claw-profile/SKILL.md",
+      "sha256": "0d71175c166757aa19fb893926e92bfb5d19b7b785f7a74a0f5dea2062844754"
+    },
+    {
+      "path": "agents/operaciones/agent/workshop-skills/gmail-compose-rich-mail/SKILL.md",
+      "sha256": "e67e18053c24b20bbce28855f8dea546a6181f7617533d4f23dfecd6d91667c3"
+    },
+    {
+      "path": "agents/operaciones/agent/workshop-skills/openclaw-cron-jobs/SKILL.md",
+      "sha256": "ace7ce4dca45a1218baa2fa88dfbf690f1dd45c98f3e1bb07895674e56f56c07"
+    },
+    {
+      "path": "agents/operaciones/agent/workshop-skills/openclaw-cron-jobs/exec-locked-fallback.md",
+      "sha256": "3c127d4d718a2bdbe7698637acf4f0a96867d5bc532e6b77fe9eb048487fac3b"
+    },
+    {
+      "path": "agents/operaciones/agent/workshop-skills/packing-baseline-html-pair/SKILL.md",
+      "sha256": "78fa058614cea45ce9b1fc4e617aa1e043393a22e3c1bb9ff4ac921d73d13afb"
+    },
+    {
+      "path": "agents/operaciones/agent/workshop-skills/sellercentral-browser-census/SKILL.md",
+      "sha256": "75b9b09663abb8c89acc8733eeb5503ed9b5a260aea1c087c5e0916ad3dd3576"
+    },
+    {
+      "path": "agents/operaciones/agent/workshop-skills/sellercentral-browser-census/customization-capture.md",
+      "sha256": "e6e1f01b7285db96c27857079953bec3043ceef364ced48d8bff4eb58dc06a48"
+    },
+    {
+      "path": "agents/operaciones/agent/workshop-skills/sellercentral-browser-census/odoo-census-crosscheck.md",
+      "sha256": "51deb5162d676fa84ddc147bfb79ee9790450b54dc3e0ccf68a1f03119bfcb07"
+    },
+    {
+      "path": "agents/operaciones/agent/workshop-skills/telegram-send-gonserver/SKILL.md",
+      "sha256": "b993ee4feca2e626729b13ba88a3e96de6e740c9fc0dbfb5d315d3d64dc424ed"
+    },
+    {
+      "path": "agents/reviewer/agent/workshop-skills/superseded-head-review/SKILL.md",
+      "sha256": "924a12b690223d815db0ef770140d3e3e020be88da4ab47f950e0c3a201da7c9"
+    },
+    {
+      "path": "agents/reviewer/agent/workshop-skills/test-lock-vacuity/SKILL.md",
+      "sha256": "be1174d844f08239aa860715ad95737790897818383f84db3926e55fdf699253"
+    },
+    {
+      "path": "agents/verifier/agent/workshop-skills/cron-payload-verify/SKILL.md",
+      "sha256": "d77cef51dfc0e70719ca7f2bdd2fd02f1f7e3d29a1ba856a8051b79c03001c65"
+    },
+    {
+      "path": "agents/verifier/agent/workshop-skills/egress-suppression-verify/SKILL.md",
+      "sha256": "5aa70d0b8757aadb46088574d40c82746e09f9e7f392a56f5115d135b1babf39"
+    },
+    {
+      "path": "agents/verifier/agent/workshop-skills/lane-claim-verify/SKILL.md",
+      "sha256": "2202dc84586050cd48c4444dc5460dbb0ea2202534b2a0479cc6ac3aa6b06ac5"
+    },
+    {
+      "path": "agents/verifier/agent/workshop-skills/lane-claim-verify/history-rewrite.md",
+      "sha256": "3eacfd6319e4d3b1138e48b6efdebb823900ff37b8394759ffb067bbafd762c4"
+    },
+    {
+      "path": "agents/verifier/agent/workshop-skills/regression-triage/SKILL.md",
+      "sha256": "dd991e6e229e30257095c71d23077d1dfa50934c467b5c438b2768662800cb11"
+    },
+    {
+      "path": "agents/verifier/agent/workshop-skills/regression-triage/full-battery.md",
+      "sha256": "9786cb01ea2a2c26abcd54026b278e44f4851e18a496ce33c90a70d05225afed"
+    },
+    {
+      "path": "agents/verifier/agent/workshop-skills/test-discrimination-verify/SKILL.md",
+      "sha256": "5d8e15ecefacd7f8ddd76da236039d8dfa52dce41ee65a593e09500949fa1985"
+    },
+    {
+      "path": "agents/verifier/agent/workshop-skills/test-discrimination-verify/fixtures.md",
+      "sha256": "d506c71a6c5d8b05ab7c85b59668ed3a6a087adb9de6252c3a0a9b42fddfd8ea"
+    },
+    {
+      "path": "agents/verifier/agent/workshop-skills/test-discrimination-verify/live-leak-probe.md",
+      "sha256": "b21ea786750f065de62f43d715ad1824feb3a3b9801b595d8eb6c9faa10ce8ba"
+    },
+    {
+      "path": "agents/verifier/agent/workshop-skills/test-discrimination-verify/rules.md",
+      "sha256": "c47a1eb6b83c5f1f35ec787a8a74e491bb889da02dbea4250115189253d35bfe"
+    },
+    {
+      "path": "agents/verifier/agent/workshop-skills/test-discrimination-verify/scripts/mutation_battery.py",
+      "sha256": "66c5d7d8d491802a7ae1ba9b4dc42a653e028ea334216396f3d963f82994e64d"
+    },
+    {
+      "path": "gateway-watchdog.ps1",
+      "sha256": "815c17d116919be45b799d86c45dc7e46fd91b1d210463c974e5538d5eade392"
+    },
+    {
+      "path": "summa-gate/agent-history-adapter.ts",
+      "sha256": "b3f12bcda5d532795cd2bca2200a1703ff84c2954427095025fa3e8298979c07"
+    },
+    {
+      "path": "summa-gate/diagnostic-guard.ts",
+      "sha256": "394f4e56d840d7941e5a8861025d0b9799744a4af13756cbb95096f13ac5c8a8"
+    },
+    {
+      "path": "summa-gate/index.ts",
+      "sha256": "bc0151d9ea7c60402e1bcbfe84b60ce55cb0da0b9aeb5c34e8aa688200b1e14d"
+    },
+    {
+      "path": "summa-gate/lib.ts",
+      "sha256": "3dcd6ef60ec1001261d877fd8307e89aa6d214242aeb82b37c421423a4652ae5"
+    },
+    {
+      "path": "summa-gate/observer.ts",
+      "sha256": "16c243fcb07a706164688c170207aff0402a0e3f6c12651dccedd959fa7ffd09"
+    },
+    {
+      "path": "summa-gate/openclaw.plugin.json",
+      "sha256": "aecd09ab49dcaeec71f72a3f158ada6e78d1743b05c254d230aedb44f534b7e7"
+    },
+    {
+      "path": "summa-gate/package.json",
+      "sha256": "84b125b09e2b9605b552e1fec11ab2908a757b9a9f6b8f1b4df407e2a58475b1"
+    },
+    {
+      "path": "tablero-runbook/contrato.ts",
+      "sha256": "bca0ffcbbc3fe1f83ea564721d9bec2bf3c6172cba86f69193d6f77011cfcc05"
+    },
+    {
+      "path": "tablero-runbook/github.ts",
+      "sha256": "584b6fdabe87475ba2b3861c06fd909385e24e5d31843d2d7d7b3d4069f5d995"
+    },
+    {
+      "path": "tablero-runbook/index.ts",
+      "sha256": "06b363fea331749a07ee3ad13b3549c7711e878c6c9bd5991153c325b2441f16"
+    },
+    {
+      "path": "tablero-runbook/lib.ts",
+      "sha256": "d679e71d1a11615b5940f64d8c7a3b4999c2beb97e23252e5fdf0843a8e655b2"
+    },
+    {
+      "path": "tablero-runbook/live-bus.ts",
+      "sha256": "a9d0899ea2b8a618aa7522c3c047bb99c8d78a8f348e215da1e5230fd0807844"
+    },
+    {
+      "path": "tablero-runbook/openclaw.plugin.json",
+      "sha256": "bf49b0189ab28659daed35d82ae6bb3935ed93fbf6295ef9d5e67b27e1317ce4"
+    },
+    {
+      "path": "tablero-runbook/package.json",
+      "sha256": "8258d55d23c126b6edecf109990ec476027585fb4c6e69c8f0ef0ad7a54de512"
+    },
+    {
+      "path": "tablero-runbook/plan.ts",
+      "sha256": "1986f03731c7caddc7af91d205982f97887e96bead9e02a8b1bed5ef343632bb"
+    },
+    {
+      "path": "tablero-runbook/render.ts",
+      "sha256": "417e255e830941641b7c7631035ad8dbd90498bb439ce199e617a5eb0b8dd396"
+    },
+    {
+      "path": "tablero-runbook/seguimiento-clock.ts",
+      "sha256": "195af85ad7562a87173aeb07231219e48111c4a4b75d7d45ad1bfcc7dc1f32c6"
+    },
+    {
+      "path": "tablero-runbook/seguimiento-render.ts",
+      "sha256": "70557bb9288c99dac1bcd04c015e009c01995dd6a628919332d72f074dc54f2a"
+    },
+    {
+      "path": "tablero-runbook/seguimiento.ts",
+      "sha256": "61ba83d16ea763751f8c6519edfa258ddae28f26b7d83cc99978113117496683"
+    }
+  ]
+}
