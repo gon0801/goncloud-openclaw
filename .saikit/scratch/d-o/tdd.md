@@ -61,25 +61,39 @@ Prueba: `scripts/tests/test-arranque-de-fase.sh` casos (2f) y (2g).
 4. `test-loop-autopilot.sh` (3-r1b): el comando de ronda 1 de base-openclaw.md
    usa `-Base` y ni `-Desde` ni `-Alcance`. Anclas en (3-r1b) y (3d).
 
-## Evidencia (este directorio)
+## Evidencia
 
-- `rojo-test-arranque-de-fase.log` — (2f) en rojo sin producción: el empuje
-  sobrante salía 0 (el defecto 9.18).
-- `rojo-test-corrida-nucleo.log` — falta `lock_recuperar_explicito`.
-- `verde-test-*.log` — las cuatro pruebas focales en rc 0 con producción.
-- `mutacion-sin-sobrante.log` — quitar la marca SOBRANTE ⇒ (2f) rojo.
-- `mutacion-sin-falta-flag.log` — quitar la marca FALTA ⇒ (2) rojo.
-- `mutacion-roba-fresco.log` — quitar la guarda de token fresco ⇒ (9f6a) rojo
-  (la explicita roba el lock del vivo que refresca).
-- `mutacion-clasificacion-invertida.log` — invertir la comparación de edades ⇒
-  (9f6c) rojo.
-- `mutacion-sin-isinstance.log` — quitar la conversión de repo null ⇒ rc 2.
-- `mutacion-sin-nota-fases67.log` — quitar la nota de fases 6/7 ⇒ ancla roja.
-- `mutacion-sin-justificacion-rebase.log` — quitar «(`-Base`, loop §4)» de la
-  regla 4 ⇒ ancla roja (primera versión del ancla, más corta, sobrevivía a la
-  mutación: endurecida y re-medida).
-- `mutacion-r1-con-alcance.log` — comando de ronda 1 con `-Alcance
-  last-commit` ⇒ (3-r1b) rojo.
+Por revision del bloque D los logs crudos de corrida locales no se versionan
+(rutas de esta maquina, ningun gate los usa). Las mediciones quedan citadas en
+el cuerpo del PR y aqui, en una linea por cada una:
+
+- Rojo 9.18: `(2f) con el flag, un empuje propio sobrante debe salir ROJO;
+  salio 0` — el defecto medido antes del arreglo.
+- Rojo 9.17: `falta lock_recuperar_explicito` — la funcion no existia.
+- Verde: las cuatro pruebas focales en rc 0 con produccion.
+- Mutaciones atrapadas: quitar la marca SOBRANTE ⇒ (2f) rojo; quitar la marca
+  FALTA ⇒ (2) rojo; quitar la guarda de token fresco ⇒ (9f6a) rojo; invertir
+  la comparacion de edades ⇒ (9f6c) rojo; quitar el bloque de conversion de
+  repo null ⇒ rc 2; quitar SOLO la guarda del isinstance (dejar la asignacion)
+  ⇒ (11) rojo por el valor crudo en la salida; quitar la nota de fases 6/7,
+  quitar `(\`-Base\`, loop §4)` de la regla 4 o poner `-Alcance last-commit` en
+  el comando de ronda 1 ⇒ anclas rojas. La primera version del ancla de la
+  regla 4 era mas corta y sobrevivia a la mutacion: endurecida y re-medida.
+
+## Ronda de revision del bloque D (grok)
+
+- Bug: `segundos_de_vida` metia etime con ceros a la izquierda en la
+  aritmetica de bash; `08`/`09` abortaban (octal invalido) y la recuperacion
+  explicita se rendia en cada ventana 08/09. Arreglo: prefijo `10#` en dias,
+  horas, minutos y segundos. Caso (9f6d) nuevo: un ps que contesta `08:00:01`
+  (stub de ps) y la explicita debe recuperar y clasificar reciclado; rojo
+  medido antes del arreglo (rc 1, se rendia).
+- Bug: el caso (11) no veia la mutacion de quitar SOLO el isinstance. Arreglo:
+  el mensaje de repo rechazado ahora incluye el valor (`repo "" ausente`), asi
+  la salida distingue la conversion del None crudo; la mutacion de solo la
+  guarda quedo medida en rojo.
+- Los .log de corridas locales salieron del repo; las citas de este documento
+  y del cuerpo del PR quedan como registro.
 
 ## Límite del poder discriminante, declarado
 

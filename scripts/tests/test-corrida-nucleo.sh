@@ -485,6 +485,34 @@ printf '%s' "$out9c" | grep -qi 'reciclado' \
   || fail "(9f6c) el aviso tiene que decir que el pid estaba reciclado:
 $out9c"
 kill "$rec_pid" 2>/dev/null; wait "$rec_pid" 2>/dev/null
+
+# (9f6d) el etime trae ceros a la izquierda (macOS mide 00:00) y bash lee 08/09
+# como octal invalido en la aritmetica. Con un ps que contesta 08:00:01, la
+# explicita tiene que seguir rompiendo el lock del reciclado y clasificar bien.
+mkdir -p "$T/bin08"
+cat >"$T/bin08/ps" <<PS08
+#!/bin/sh
+case "\$1 \$2" in
+  "-o etime="*) printf '08:00:01\n'; exit 0 ;;
+esac
+exec /bin/ps "\$@"
+PS08
+chmod +x "$T/bin08/ps"
+sleep 30 & rec08=$!
+mkdir "$R9/.lock"
+printf '%s-08' "$rec08" >"$R9/.lock/token"
+touch -t 202001010000 "$R9/.lock/token"
+lock_abandonado_romper "$R9/.lock" 1 prueba-auto >/dev/null 2>&1 \
+  && fail "(9f6d) la ruta automatica robo un lock con pid vivo"
+out9d=$(PATH="$T/bin08:$PATH" lock_recuperar_explicito "$R9/.lock" 1 prueba 2>&1); rc9d=$?
+kill "$rec08" 2>/dev/null; wait "$rec08" 2>/dev/null
+[ "$rc9d" -eq 0 ] || fail "(9f6d) con etime 08:00:01 debio recuperar el reciclado (rc=$rc9d):
+$out9d"
+[ -d "$R9/.lock" ] && fail "(9f6d) la explicita dejo el lock puesto con etime 08:
+$out9d"
+printf '%s' "$out9d" | grep -qi 'reciclado' \
+  || fail "(9f6d) la clasificacion con etime 08:00:01 debio decir reciclado:
+$out9d"
 unset CORR_LOCK_VIEJO
 
 # (9g) el trap del lock se desarma tras soltarlo: el EXIT de quien lo uso no puede

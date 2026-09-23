@@ -1,2 +1,0 @@
-FAIL: (9f6c) el aviso tiene que decir que el pid estaba reciclado:
-prueba: rompio un lock con proceso vivo (dueno vivo colgado: el pid 26369 retiene el lock sin refrescarlo): accion explicita y verificada

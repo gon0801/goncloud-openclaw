@@ -331,10 +331,11 @@ echo "ok (10): sin repo no se llama a gh y el carril queda como estaba"
 # (11) repo null en un carril candidato. null no es la cadena vacia ni la clave
 # ausente del (10): en JSON es un valor explicito, y el isinstance del extractor
 # es lo que lo convierte en cadena vacia para que la validacion del shell lo
-# rechace sin llamar a gh. Quitar esa conversion deja la salida con el None crudo
-# y el documento deja de conciliar: este caso se pone rojo. Un gh llamado con
-# cualquier repo vacio o raro contestaria OPEN y el carril quedaria sin unknown
-# (rc 0): por eso se afirma el rc 3 y el unknown, no solo el estado del carril.
+# rechace sin llamar a gh. La salida nombra el valor rechazado: por eso este
+# caso distingue la conversion (repo "") del None crudo que quedaria si
+# alguien quitara SOLO el isinstance, y se pone rojo con esa mutacion. Un gh
+# llamado con cualquier repo vacio o raro contestaria OPEN y el carril quedaria
+# sin unknown (rc 0): por eso se afirma el rc 3 y el unknown, no solo el estado.
 P9="$T/repo-null.json"
 cat >"$P9" <<'DOC'
 {
@@ -361,8 +362,8 @@ $out"
   || fail "(11) el motivo de W debia sobrevivir"
 [ "$(carril "$P9" M estado)" = "mergeado" ] \
   || fail "(11) el control M, con repo valido, debio reconciliarse"
-printf '%s' "$out" | grep -q "carril W pr 21: repo ausente o fuera de contrato" \
-  || fail "(11) la salida debe nombrar a W con su pr y la razon:
+printf '%s' "$out" | grep -q 'carril W pr 21: repo "" ausente o fuera de contrato' \
+  || fail "(11) la salida debe nombrar a W con su pr, el valor vacio y la razon:
 $out"
 nevt=$(F="$P9" python3 -c "
 import json, os

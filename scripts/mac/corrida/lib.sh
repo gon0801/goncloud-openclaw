@@ -186,7 +186,10 @@ segundos_de_vida() { # $1 pid -> segundos desde que el proceso arranco (etime), 
   case "$e" in *-*) d="${e%%-*}"; e="${e#*-}";; esac
   case "$e" in *:*:*) h="${e%%:*}"; e="${e#*:}";; esac
   case "$e" in
-    *:*) printf '%s\n' $(( d*86400 + h*3600 + ${e%%:*}*60 + ${e##*:} ));;
+    # 10#: etime trae ceros a la izquierda y bash leería 08/09 como octal
+    # inválido ("value too great for base"); sin el prefijo, la recuperación
+    # explícita se rendía en cada segundo/minuto/hora 08 o 09 (medido).
+    *:*) printf '%s\n' $(( 10#$d*86400 + 10#$h*3600 + 10#${e%%:*}*60 + 10#${e##*:} ));;
     *) return 1;;
   esac
 }
