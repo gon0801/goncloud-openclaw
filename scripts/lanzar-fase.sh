@@ -21,6 +21,7 @@
 #   bash scripts/lanzar-fase.sh <N> --dry-run -- <cli> <flag>   # no toca nada
 #   bash scripts/lanzar-fase.sh <N> --rama <rama> -- <cli> <flag>
 #   bash scripts/lanzar-fase.sh <N> --prompt '<regex>' -- <cli> <flag>
+#   bash scripts/lanzar-fase.sh <N> --sesion <nombre> -- <cli> <flag>
 #
 # Que hace, en orden:
 #   1. valida <N> con la misma gramatica de runbook.sh
@@ -38,13 +39,14 @@ set -u
 RAIZ=$(cd "$(dirname "$0")/.." && pwd)
 GIT_BIN=${GIT_BIN:-git}
 DEV=${DEV_DIR:-/Users/dn/dev}
-DRY=0; RAMA=""; PROMPT=""; N=""
+DRY=0; RAMA=""; PROMPT=""; SESION_OPT=""; N=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY=1; shift ;;
     --rama)    RAMA=${2:-}; shift 2 ;;
     --prompt)  PROMPT=${2:-}; shift 2 ;;
+    --sesion)  [ -n "${2:-}" ] || { echo "ATORADO sesion invalida: vacia" >&2; exit 1; }; SESION_OPT=$2; shift 2 ;;
     --)        shift; break ;;
     -*)        echo "ATORADO opcion desconocida: $1" >&2; exit 1 ;;
     *)         if [ -z "$N" ]; then N=$1; shift; else echo "ATORADO sobra: $1" >&2; exit 1; fi ;;
@@ -61,7 +63,12 @@ echo "$N" | grep -qE '^[0-9]{1,3}(\.[0-9]{1,3})?$' || { echo "ATORADO fase inval
 [ -n "$CLI" ] || { echo "ATORADO falta el CLI despues de --" >&2; exit 1; }
 
 DOC="docs/runbooks/autopilot-fase${N}.md"
-SESION="fase${N}-lead"
+SESION="${SESION_OPT:-fase${N}-lead}"
+if [ -n "$SESION_OPT" ]; then
+  case "$SESION_OPT" in
+    *[!A-Za-z0-9_-]*) echo "ATORADO sesion invalida: '$SESION_OPT'" >&2; exit 1 ;;
+  esac
+fi
 CWD="$DEV/wt-f${N}-lead"
 
 "$GIT_BIN" -C "$RAIZ" fetch -q origin 2>/dev/null || true
