@@ -865,3 +865,13 @@ test-aplicar-vigia-sync-prueba.sh completo.
 F34 (menor watchdog pwsh obligatoria, M4): verificado, sin cambio:
 test-gateway-watchdog.sh falla sin pwsh en PATH (t4) y no trae ningun
 SKIP; no se anadio skip.
+
+F35 (registro CodeIntegrity/Operational, revision post-CI25):
+Set-OpenClawMemory consultaba 3033/3077 en Application, donde esos
+eventos nunca caen: un bloqueo nuevo pasaba inadvertido. ROJO con
+stub consciente del registro: `ROJO: (3j) eventos nuevos debio
+frenar y salio 0`. Fix: `$evLog` unico con
+Microsoft-Windows-CodeIntegrity/Operational usado en bookmark y
+consulta final. (3j3) exige ademas ambas consultas al registro
+correcto y cero `qe Application`. Verde:
+test-memory-migration.sh completo.
