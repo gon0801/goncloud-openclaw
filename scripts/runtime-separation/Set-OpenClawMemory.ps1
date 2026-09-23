@@ -95,12 +95,60 @@ function Get-ResolvedVersion([string]$Pinned) {
   if (-not $m.Success) { throw 'version openclaw irresoluble' }
   return $m.Groups[1].Value
 }
+function Get-HttpErrorStatus($ErrorRecord) {
+  # Codigo HTTP de un error de Invoke-WebRequest, en 5.1 y 7. 0 = sin
+  # respuesta HTTP (sin listener, DNS, timeout...).
+  try {
+    $ex = $ErrorRecord.Exception
+    while ($null -ne $ex) {
+      $sc = $null
+      try { $sc = $ex.StatusCode } catch { $sc = $null }
+      if ($null -ne $sc) {
+        $n = 0
+        try { $n = [int]$sc } catch { $n = 0 }
+        if ($n -ge 100 -and $n -le 599) { return $n }
+      }
+      $resp = $null
+      try { $resp = $ex.Response } catch { $resp = $null }
+      if ($null -ne $resp) {
+        $rsc = $null
+        try { $rsc = $resp.StatusCode } catch { $rsc = $null }
+        if ($null -ne $rsc) {
+          $n = 0
+          try { $n = [int]$rsc } catch { $n = 0 }
+          if ($n -ge 100 -and $n -le 599) { return $n }
+        }
+      }
+      $ex = $ex.InnerException
+    }
+  } catch { }
+  try {
+    $t = [string]$ErrorRecord.Exception.Message
+    # Solo 4xx/5xx: los octetos de IP (127...) son 1xx y no cuentan.
+    $m = [regex]::Match($t, '\b([45]\d{2})\b')
+    if ($m.Success) { return [int]$m.Groups[1].Value }
+    if ($t -match 'Unauthorized|Forbidden|Not Found|Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout') { return 500 }
+  } catch { }
+  return 0
+}
 function Test-GatewayUp([string]$Url) {
   try {
     [void](Invoke-WebRequest -Uri ($Url + '/startupz') -TimeoutSec 5 -UseBasicParsing)
     return $true
   } catch {
-    return $false
+    # Cualquier respuesta HTTP (401/500/503/...) = listener vivo.
+    if ((Get-HttpErrorStatus -ErrorRecord $_) -ne 0) { return $true }
+    $msg = ''
+    try { $msg = [string]$_.Exception.Message } catch { $msg = '' }
+    # Solo "conexion rechazada / sin listener" acredita apagado. No se
+    # anade senal de proceso o tarea: el nombre de proceso no identifica
+    # ESTE endpoint (un OpenClaw ajeno puede vivir en la maquina) y la
+    # tarea existe tambien detenida con estado en texto localizado.
+    if ($msg -match 'Connection refused|No connection could be made|Unable to connect|No se puede establecer|rehus|refused') {
+      return $false
+    }
+    # Indeterminado (timeout, DNS, TLS...): fallar cerrado.
+    return $true
   }
 }
 # La politica vive en config/ollama-runtime.v1.json (ruta via -PolicyPath).

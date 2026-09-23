@@ -435,6 +435,55 @@ echo "ok (3h): version vieja avisa en seco y frena en apply"
 corre badport migrate 1 -OllamaPort 11435 && fail "(3i) puerto distinto debio frenar y salio 0"
 echo "ok (3i): puerto fuera de politica frena"
 
+# (3i2) Gateway con error HTTP (401/503): vivo, frena sin instalar ni migrar.
+cat >"$T/fake-gwerr.py" <<'PY'
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import sys
+STATUS = int(sys.argv[2]) if len(sys.argv) > 2 else 200
+class H(BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = b'{"status":"err"}'
+        self.send_response(STATUS)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+    def log_message(self, *a):
+        pass
+HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
+PY
+for code in 401 503; do
+  "$PYBIN" "$T/fake-gwerr.py" 18791 "$code" >"$T/gwerr$code.log" 2>&1 &
+  GW_PID=$!
+  i=0
+  while ! "$PYBIN" -c "import socket; socket.create_connection(('127.0.0.1', 18791), 1).close()" 2>/dev/null; do
+    i=$((i + 1))
+    [ "$i" -lt 50 ] || fail "(3i2/$code) gateway falso no levanto"
+    sleep 0.2
+  done
+  : >"$OC_LOG"
+  printf '{"provider":"openai","model":"text-embedding-3-small","fallback":"lexical"}' >"$OC_STATE"
+  if "$PSH" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$MMN" \
+      -RuntimeRoot "$(nat "$T/rt")" -PolicyPath "$(nat "$T/pol.json")" \
+      -ReceiptRoot "$(nat "$T/gwerr$code-rec")" -SnapshotRepo "$(nat "$T/gwerr$code-snap")" \
+      -OllamaModelsDir "$(nat "$T/models")" -OllamaInstallDir "$(nat "$T/ollama-bin")" \
+      -SignatureChecker "$(nat "$T/fake-bin/sigchecker")" \
+      -HealthUrl "http://127.0.0.1:18791" -Mode migrate -VerifyQuery "x" -Apply \
+      >"$T/gwerr$code.out" 2>&1; then
+    kill $GW_PID 2>/dev/null || true
+    fail "(3i2/$code) HTTP $code debio frenar y salio 0"
+  fi
+  grep -q 'INSTALADOR-EJECUTADO' "$OC_LOG" \
+    && { kill $GW_PID 2>/dev/null; fail "(3i2/$code) instalo con gateway en HTTP $code"; }
+  grep -q 'config set' "$OC_LOG" \
+    && { kill $GW_PID 2>/dev/null; fail "(3i2/$code) toco config con gateway en HTTP $code"; }
+  grep -q 'memory index' "$OC_LOG" \
+    && { kill $GW_PID 2>/dev/null; fail "(3i2/$code) reindexo con gateway en HTTP $code"; }
+  grep -q 'sqlite create' "$OC_LOG" \
+    && { kill $GW_PID 2>/dev/null; fail "(3i2/$code) snapshot con gateway en HTTP $code"; }
+  kill $GW_PID 2>/dev/null || true
+done
+echo "ok (3i2): gateway en 401/503 frena sin instalar ni migrar"
+
 # (3j) Eventos 3033/3077 nuevos: frena.
 if [ "$en_windows" -eq 1 ]; then
   echo "SKIP (3j): instalador fixture POSIX; CI ubuntu lo cubre"

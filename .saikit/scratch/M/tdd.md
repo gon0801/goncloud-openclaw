@@ -803,3 +803,13 @@ F26 (stderr schtasks + EAP=Stop en 5.1): CI18 node (2b): el verify tras
 antes del chequeo. Fix: EAP temporal en los 3 `schtasks /query`
 (dup, verify-borrado, oficial). delete/run/icacls en exito no emiten
 stderr: se dejan.
+
+F27 (gateway HTTP con error = vivo, F1): backup (2g2) y memoria (3i2) en
+ROJO antes del fix (401 salia 0 y respaldaba/migraba). Fix:
+Get-HttpErrorStatus (StatusCode 5.1/7 + fallback textual solo 4xx/5xx,
+los octetos de IP son 1xx) y Test-GatewayUp: respuesta HTTP = vivo,
+solo conexion rechazada acredita apagado, indeterminado falla cerrado.
+Mutante muerto en el camino: segunda senal por proceso openclaw* rompio
+los verdes (2b)/(3b) en dev porque OpenClaw.app vive en la Mac; el nombre
+de proceso no identifica el endpoint, se quito con comentario. Verdes
+tras el fix: test-runtime-backup.sh y test-memory-migration.sh completos.

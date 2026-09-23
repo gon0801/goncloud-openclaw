@@ -287,10 +287,11 @@ echo "ok (2f): espacio insuficiente frena cerrado"
 cat >"$T/fake-gw.py" <<'PY'
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import sys
+STATUS = int(sys.argv[2]) if len(sys.argv) > 2 else 200
 class H(BaseHTTPRequestHandler):
     def do_GET(self):
-        body = b'{"status":"ok"}'
-        self.send_response(200)
+        body = b'{"status":"ok"}' if STATUS == 200 else b'{"status":"err"}'
+        self.send_response(STATUS)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -311,6 +312,29 @@ corre gw 1 -HealthUrl "http://127.0.0.1:18789" && fail "(2g) gateway en marcha d
 [ -e "$T/gw-bk/fake-backup.tar.gz" ] && fail "(2g) creo archive con gateway en marcha"
 kill $GW_PID 2>/dev/null || true
 echo "ok (2g): gateway en marcha frena (se exige detenido)"
+
+# (2g2) Gateway con error HTTP (401/503): vivo, frena antes de respaldar.
+for code in 401 503; do
+  "$PYBIN" "$T/fake-gw.py" 18789 "$code" >"$T/gw$code.log" 2>&1 &
+  GW_PID=$!
+  i=0
+  while ! "$PYBIN" -c "import socket; socket.create_connection(('127.0.0.1', 18789), 1).close()" 2>/dev/null; do
+    i=$((i + 1))
+    [ "$i" -lt 50 ] || fail "(2g2/$code) gateway falso no levanto"
+    sleep 0.2
+  done
+  if corre "gw$code" 1 -HealthUrl "http://127.0.0.1:18789"; then
+    kill $GW_PID 2>/dev/null || true
+    fail "(2g2/$code) HTTP $code debio frenar y salio 0"
+  fi
+  if [ -e "$T/gw$code-bk/fake-backup.tar.gz" ]; then
+    kill $GW_PID 2>/dev/null || true
+    fail "(2g2/$code) creo archive con gateway en HTTP $code"
+  fi
+  kill $GW_PID 2>/dev/null || true
+done
+trap 'rm -rf "$T"' EXIT
+echo "ok (2g2): gateway en 401/503 frena antes de respaldar"
 
 # (2h) Version vieja: report-only avisa, apply frena.
 OC_VERSION="2026.9.4" corre vw 0 || fail "(2h) report-only con version vieja debio salir 0"
