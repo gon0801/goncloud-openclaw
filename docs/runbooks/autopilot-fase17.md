@@ -54,19 +54,29 @@ if stat.S_IMODE(p.stat().st_mode) != 0o600 or any(stat.S_IMODE(d.stat().st_mode)
     raise SystemExit('ATORADO permisos de progreso no privados')
 PY
 if ! ~/.openclaw/bin/openclaw gateway call runbook.progress.set --params "$(cat .saikit/progress/17.json)" --timeout 30000; then
-  python3 - <<'PY'
-import datetime, json, pathlib
+  python3 - <<'PY' || exit 1
+import datetime, json, os, pathlib, tempfile
 p = pathlib.Path('.saikit/progress/17.json')
 doc = json.loads(p.read_text(encoding='utf-8'))
 at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00', 'Z')
 doc['eventos'].append(dict(at=at, carril=None, que='publicación inicial de progreso falló; reintentar en el siguiente cambio de estado', situacion=None))
-p.write_text(json.dumps(doc, ensure_ascii=False, separators=(',', ':')) + '\n', encoding='utf-8')
-p.chmod(0o600)
+tmp_path = None
+try:
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=p.parent, prefix='.17.', delete=False) as tmp:
+        tmp_path = pathlib.Path(tmp.name)
+        tmp.write(json.dumps(doc, ensure_ascii=False, separators=(',', ':')) + '\n')
+        tmp.flush()
+        os.fsync(tmp.fileno())
+    tmp_path.chmod(0o600)
+    os.replace(tmp_path, p)
+finally:
+    if tmp_path is not None:
+        tmp_path.unlink(missing_ok=True)
 PY
 fi
 ```
 
-El RPC sólo publica el tablero OpenClaw. El propio trabajo de 17.3 debe sustituir esa frontera para Hermes; una futura corrida en la otra computadora usa su almacenamiento y transporte local, nunca este gateway. Si falla la publicación inicial, conserva el JSON, registra el fallo en `eventos` y continúa el lanzamiento; reintenta en el siguiente cambio de estado, igual que ante un fallo posterior. El lanzador usa el nombre estable `wt-f17-lead`, que también busca `arranque-de-fase.sh` y reconocerá al reanudar. El lead confirma su marca `OPENCLAW_WATCH=1` y escribe su línea en `.saikit/progress/17-sesiones.txt` antes del chequeo:
+El RPC sólo publica el tablero OpenClaw. El propio trabajo de 17.3 debe sustituir esa frontera para Hermes; una futura corrida en la otra computadora usa su almacenamiento y transporte local, nunca este gateway. Si falla la publicación inicial, registra el fallo en `eventos` y continúa el lanzamiento; reintenta en el siguiente cambio de estado, igual que ante un fallo posterior. Si no puede guardar el evento, detiene el arranque y conserva el último JSON válido. El lanzador usa el nombre estable `wt-f17-lead`, que también busca `arranque-de-fase.sh` y reconocerá al reanudar. El lead confirma su marca `OPENCLAW_WATCH=1` y escribe su línea en `.saikit/progress/17-sesiones.txt` antes del chequeo:
 
 ```bash
 T=/opt/homebrew/bin/tmux
