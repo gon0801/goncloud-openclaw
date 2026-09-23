@@ -23,6 +23,8 @@ transcripciones. Este recibo no autoriza desinstalación, corte o deploy.
 | Alcance de desinstalación, solo simulación | `openclaw uninstall --all --dry-run --non-interactive --yes` y `openclaw uninstall --service --dry-run --non-interactive --yes` en Windows | `--all` enumera el servicio y toda `C:\Users\ehven\.openclaw`, incluidos ocho workspaces. `--service` enumera solo el servicio. No se ejecutó ninguna desinstalación; el runbook de corte no puede usar `--all` realmente. |
 | Paquete para reinstalar | `npm cache ls`, `npm pack openclaw@2026.9.5 --pack-destination C:\Users\ehven\.openclaw-recovery --silent` y `Get-FileHash` por SSH | Tarball privado `openclaw-2026.9.5.tgz`, 72.453.925 bytes, SHA-256 `1FB6EF4FAE447AF14F1E3B1028334F39146D181A66A4CCE2848D4F741C636340`. No se desinstaló ni reinstaló el paquete. |
 | Prueba de instalación aislada | `npm install --offline --prefix C:\Users\ehven\.openclaw-recovery\npm-probe-20260922 ... --no-audit --no-fund`, seguido de `node ...\node_modules\openclaw\openclaw.mjs --version` | 331 paquetes instalados fuera del estado vivo; CLI aislada responde `2026.9.5 (ec9c1a1)`. npm avisó que cinco paquetes tienen scripts pendientes de aprobación, por lo que esta prueba no acredita los plugins/native modules completos. La instalación global y el servicio siguen intactos. |
+| Resolución de modelos en estado aislado | `config patch --dry-run --json` con la cadena confirmada, primero sin proveedores y después con un catálogo de prueba sin claves ni URLs reales | El esquema del parche pasa. Errores de referencia: 34 sin catálogo, 8 con seis proveedores personalizados de prueba. Los ocho restantes señalan exclusivamente `zai/glm-5.3` o `zai/glm-5.3-flash`; no se sustituyeron modelos ni se aplicó el parche. El catálogo de prueba vive solo en `.openclaw-recovery\validation-state-20260922`. |
+| Catálogo Z.AI del CLI viejo | `openclaw models list --all --provider zai --json` con el estado viejo, gateway detenido | `count=0` en el catálogo local. Esto no prueba indisponibilidad remota ni invalida los IDs de la captura; sí impide declarar la cadena operativa antes de reconstruir auth/catálogo y hacer una llamada real. |
 | Workspaces | Campo `workspace` de los ocho `agents.entries` | `main` usa `workspace`; los otros siete usan `workspace-<id>`, todos bajo `C:\Users\ehven\.openclaw`. El `agentDir` de los siete secundarios apunta a `agents\<id>\agent`; el de `main` no está fijado explícitamente. |
 | Tareas/servicio | `Get-ScheduledTask` y `Get-Service` por SSH | `OpenClaw Gateway` y `OpenClaw Node` están Ready; `OpenClaw Gateway Watchdog` y `OpenClaw CUA Node` Disabled; `OpenClaw Restore Console` Ready. `GoncloudRepoSync` está Disabled. `WireGuardTunnel$openclaw` está Running. No se deduce salud del gateway de estas tareas. |
 | Canales/autenticación | Solo claves de `openclaw config get channels --json` y de `auth --json` | Telegram es el canal configurado, con cuentas secundarias `ingenieria` y `operaciones`. Hay nueve referencias de perfil de autenticación; no se exportaron valores. |
@@ -164,6 +166,10 @@ No se cambió ninguno.
 - Comparación de contenido propio contra sus fuentes para decidir la lista
   exacta de importación; todos los cambios únicos ya están preservados.
 - Disponibilidad real de cada proveedor. La configuración válida no la prueba.
+- Resolución y disponibilidad viva de los dos modelos Z.AI de la captura. El
+  catálogo local del CLI viejo está vacío con el gateway caído y el dry-run
+  aislado deja ocho referencias Z.AI sin resolver. El proveedor requiere una
+  comprobación posterior de catálogo, auth y llamada real, sin sustituir IDs.
 - Argumentos exactos de tareas y rutas de sync para el runbook, versiones de
   skills replicadas y referencias de autenticación fuera del archivo oficial,
   aún sin inventario completo. Los XML de tareas están en destino privado;
