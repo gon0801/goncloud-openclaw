@@ -4,6 +4,9 @@
 # RECIEN ENTONCES habilita; la ausencia de .git se comprueba DESPUES de moverlo
 # (§5). §3 backup trae -LauncherPaths; §7 nodo trae -NodeConfigSets y
 # -PairingCode y no empareja a mano antes (el script exige estado fresco).
+# §6 memoria migra con -Apply como payload de la transaccion separada (sin
+# -Apply Set-OpenClawMemory.ps1 solo imprime el plan y sale 0; con -Apply
+# exige gateway detenido, que solo la transaccion detiene y rearranca).
 # Uso: bash scripts/tests/test-cutover-runbook.sh
 set -u
 cd "$(dirname "$0")/../.." || exit 1
@@ -59,5 +62,56 @@ S1=$(sec 1 2)
 echo "$S1" | grep -qF 'PSVersion.ToString()' || fail "(5) §1 sin PSVersion.ToString()"
 echo "$S1" | grep -qF 'PSValue' && fail "(5) §1 trae PSValue inexistente"
 echo "ok (5): preflight pide la version con forma valida"
+
+bloques() { # $1=seccion -> un bloque ``` por linea, en orden (saltos como <LF>)
+  printf '%s\n' "$1" | awk '
+    /^```/ {
+      en = !en
+      if (en) buf = ""
+      else if (buf != "") { gsub(/\n/, "<LF>", buf); print buf }
+      next
+    }
+    en { buf = buf $0 "\n" }
+  '
+}
+
+# (6) §6: la migracion que muta lleva -Apply DENTRO de un payload de la
+# transaccion separada (patron §3). El ejemplo directo sin -Apply solo
+# imprime el plan y sale 0: no migra; y un -Apply suelto frena en
+# "gateway en marcha" porque nadie detuvo el gateway.
+S6=$(sec 6 7)
+B6=$(bloques "$S6")
+[ -n "$B6" ] || fail "(6) §6 sin bloques de codigo"
+plan=$(printf '%s\n' "$B6" | grep -F 'powershell -NoProfile -File' | grep -F 'Set-OpenClawMemory.ps1')
+[ -n "$plan" ] || fail "(6) §6 sin reporte en seco del script de memoria"
+printf '%s' "$plan" | grep -qF -- '-Apply' \
+  && fail "(6) el reporte en seco de §6 lleva -Apply: dejaria de ser reporte"
+payload=$(printf '%s\n' "$B6" | grep -F 'Set-OpenClawMemory.ps1' | grep -F -- '-Apply')
+[ -n "$payload" ] || fail "(6) §6 sin payload wrapper de memoria con -Apply: el ejemplo no migra"
+printf '%s' "$payload" | grep -qF 'exit $LASTEXITCODE' \
+  || fail "(6) payload sin exit explicito (contrato de payload de la transaccion)"
+printf '%s' "$payload" | grep -qF -- '-VerifyQuery' \
+  || fail "(6) payload sin -VerifyQuery (migrate con -Apply lo exige)"
+desp=$(printf '%s\n' "$B6" | grep -F 'Invoke-OpenClawCutover.ps1')
+[ -n "$desp" ] || fail "(6) §6 no despacha la migracion por la transaccion separada"
+printf '%s' "$desp" | grep -qF -- '-Dispatch' || fail "(6) dispatch sin -Dispatch"
+printf '%s' "$desp" | grep -qF -- '-PayloadScript' || fail "(6) dispatch sin -PayloadScript"
+i_plan=$(printf '%s\n' "$B6" | grep -nF 'powershell -NoProfile -File' | grep -F 'Set-OpenClawMemory.ps1' | head -1 | cut -d: -f1)
+i_payload=$(printf '%s\n' "$B6" | grep -nF 'Set-OpenClawMemory.ps1' | grep -F -- '-Apply' | head -1 | cut -d: -f1)
+i_desp=$(printf '%s\n' "$B6" | grep -nF 'Invoke-OpenClawCutover.ps1' | head -1 | cut -d: -f1)
+[ "$i_plan" -lt "$i_payload" ] && [ "$i_payload" -lt "$i_desp" ] \
+  || fail "(6) orden §6 distinto de reporte -> payload -Apply -> dispatch"
+echo "ok (6): §6 migra con -Apply como payload de la transaccion, tras el reporte"
+
+# (7) §6: la transaccion es quien detiene y rearranca el gateway (nadie a
+# mano), el exito es terminal=DONE (que ya implica salud 200/200) y el
+# rollback por -MigrationPath sigue vigente.
+echo "$S6" | grep -q 'transaccion' || fail "(7) §6 no nombra la transaccion separada"
+echo "$S6" | grep -qE 'rearranca|reinicia' \
+  || fail "(7) §6 no explica quien rearranca el gateway tras el payload"
+echo "$S6" | grep -qF 'terminal=DONE' || fail "(7) §6 sin criterio de exito terminal=DONE"
+echo "$S6" | grep -qF -- '-Mode rollback' || fail "(7) §6 sin rollback"
+echo "$S6" | grep -qF -- '-MigrationPath' || fail "(7) §6 sin -MigrationPath en el rollback"
+echo "ok (7): §6 explica detencion/recuperacion del gateway y rollback intacto"
 
 echo "TODO VERDE: cutover-runbook"
