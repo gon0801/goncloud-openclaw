@@ -1008,4 +1008,33 @@ sin_evidencia_usuario
 git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m limpia-evidencia-15f 2>/dev/null
 git -C "$R" push -q -f origin HEAD:main
 
+# (15g) Una promesa real en Contenido y "Promesa: sin promesa observable." en el DoD
+# (OTRA celda de la misma fila): la regex tiene que mirar solo la celda de Contenido.
+# Mirar la fila entera dejaba que el "sin promesa observable" del DoD apagara la
+# exigencia de la promesa real -- hallazgo del lead sobre 182fde0, revision del PR
+# 150. Sin evidencia, tiene que salir ROJO nombrando la fila.
+cat >"$R/Plans.md" <<PLAN
+## Fase 5 — algo con plugin \`tablero-demo\` para ver cosas
+
+| Task | Contenido | DoD | Depends | Status |
+|------|-----------|-----|---------|--------|
+| 5.0 | trabajo uno. Promesa: la pantalla muestra "7 de 7" — ruta: abre http://x/tablero/5. | su DoD. Promesa: sin promesa observable. | - | cc:完了 |
+| 5.1 | trabajo dos | su DoD | 5.0 | cc:完了 |
+PLAN
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m plan-promesa-en-dod 2>/dev/null
+git -C "$R" push -q -f origin HEAD:main
+sin_evidencia_usuario
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m sin-evidencia-15g 2>/dev/null
+git -C "$R" push -q -f origin HEAD:main
+out=$(CIERRE_SIN_GATEWAY=1 corre 5); rc=$?
+[ "$rc" -eq 1 ] || fail "(15g) una promesa real en Contenido sin evidencia debe salir 1 aunque el DoD diga 'sin promesa observable'; salio $rc:
+$out"
+printf '%s' "$out" | grep -q "^ROJO *usuario" \
+  || fail "(15g) el 'sin promesa observable' de otra celda (DoD) no puede apagar la promesa real de Contenido:
+$out"
+printf '%s' "$out" | grep -q "5.0" \
+  || fail "(15g) el detalle debe nombrar la fila 5.0:
+$out"
+echo "ok (15g): la promesa se lee solo de la celda de Contenido; un 'sin promesa observable' en el DoD no la apaga"
+
 echo "TODO VERDE: cierre-de-fase"

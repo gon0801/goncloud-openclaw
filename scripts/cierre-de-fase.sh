@@ -502,9 +502,13 @@ FASE = os.environ["FASE"]
 filas = os.environ.get("FILAS", "")
 evid = os.environ.get("EVIDENCIA", "")
 
-# Solo la linea literal "Promesa: <...> — ruta: <...>." dentro de la fila cuenta
-# como promesa observable. "Promesa: sin promesa observable." es una promesa
-# declarada explicitamente como ausente, y no exige evidencia.
+# Solo la linea literal "Promesa: <...> — ruta: <...>." dentro de la celda de
+# Contenido (columna 2: | Task | Contenido | DoD | Depends | Status |) cuenta como
+# promesa observable. "Promesa: sin promesa observable." en esa MISMA celda es una
+# promesa declarada explicitamente como ausente, y no exige evidencia. Mirar la fila
+# entera en vez de solo Contenido dejaba que un "Promesa: sin promesa observable."
+# escrito en el DoD (otra celda) apagara la exigencia de una promesa real declarada
+# en Contenido -- hallazgo del lead, revision del PR 150.
 sin_promesa_re = re.compile(r"Promesa: sin promesa observable\.")
 promesa_re = re.compile(r"Promesa: .+? — ruta: .+?\.")
 
@@ -513,14 +517,15 @@ for linea in filas.splitlines():
     if not linea.strip():
         continue
     celdas = linea.split("|")
-    if len(celdas) < 2:
+    if len(celdas) < 3:
         continue
     tid = celdas[1].strip()
+    contenido = celdas[2]
     if not tid:
         continue
-    if sin_promesa_re.search(linea):
+    if sin_promesa_re.search(contenido):
         continue
-    if promesa_re.search(linea):
+    if promesa_re.search(contenido):
         prometidas.append(tid)
 
 if not prometidas:

@@ -117,4 +117,27 @@ grep -qF 'No lee el código del cambio' "$COPIA_MUTADA" \
   && fail "(7) la copia mutada debería haber perdido la cláusula, algo salió mal en el fixture"
 echo "ok (7): quitar la cláusula que prohíbe leer el código deja la mutación detectable (caso (1) del contrato real la exige)"
 
+# (8) Exactamente UNA línea de veredicto, no "la primera que calce". Un informe
+# contradictorio (NO FUNCIONA y más abajo FUNCIONA) tiene que rechazarse: si el
+# validador solo mirara la primera línea, este informe pasaría, y como
+# cierre-de-fase.sh toma el veredicto MÁS RECIENTE de un bloque, terminaría
+# contando como FUNCIONA. Hallazgo del lead, revisión del PR 150.
+cat >"$T/contradictorio.txt" <<'EOF'
+NO FUNCIONA la pantalla se quedó en blanco
+FUNCIONA en realidad sí cargó, me equivoqué arriba
+EOF
+bash "$VALIDADOR" "$T/contradictorio.txt" 2>/dev/null \
+  && fail "(8) un informe con dos líneas de veredicto contradictorias debe rechazarse"
+echo "ok (8): un informe con más de una línea de veredicto se rechaza, aunque la primera sea válida"
+
+# (9) Un patrón prohibido que empieza con "-" (como el encabezado de un diff real,
+# "--- a/archivo") no puede tomarse como una opción de grep y colarse: el validador
+# tiene que rechazar igual el informe que lo cita.
+cat >"$T/cita-encabezado-diff.txt" <<'EOF'
+FUNCIONA vi el cambio completo en --- a/scripts/cierre-de-fase.sh
+EOF
+bash "$VALIDADOR" "$T/cita-encabezado-diff.txt" "--- a/" 2>/dev/null \
+  && fail "(9) un patrón prohibido que empieza con '-' debe rechazar igual el informe que lo cita, no tomarse como opción de grep"
+echo "ok (9): un patrón prohibido que empieza con '-' se comprueba igual, sin confundirse con una opción de grep"
+
 echo "TODO VERDE: agente usuario"
