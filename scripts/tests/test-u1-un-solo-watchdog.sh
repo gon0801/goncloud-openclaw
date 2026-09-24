@@ -68,10 +68,11 @@ fi
 
 # Cero activaciones programadas del sync nuevo: solo sus scripts, sus pruebas,
 # su README, el apuntador del obsoleto y su runbook de operación manual lo
-# nombran. El rastro documenta, no ejecuta ni programa nada.
+# nombran, y la skill que verifica despliegues LEE su ledger. El rastro
+# documenta, no ejecuta ni programa nada.
 while IFS= read -r f; do
   case "$f" in
-    scripts/sync-seguro/*|scripts/tests/test-u1-*|scripts/sync-repos.ps1|.saikit/*|docs/runbooks/publicar-runtime-windows.md) ;;
+    scripts/sync-seguro/*|scripts/tests/test-u1-*|scripts/sync-repos.ps1|.saikit/*|docs/runbooks/publicar-runtime-windows.md|agents/ingenieria/agent/workshop-skills/gateway-sync-verify/SKILL.md) ;;
     *) fail "sync-seguro referenciado fuera de su camino: $f" ;;
   esac
 done < <(git ls-files --cached --others --exclude-standard | xargs grep -l "sync-seguro" 2>/dev/null)

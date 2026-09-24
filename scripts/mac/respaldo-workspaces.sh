@@ -31,20 +31,35 @@ esac
 mkdir -p "$RESPALDO_DIR"
 LOCK="$RESPALDO_DIR/.lock"
 if ! mkdir "$LOCK" 2>/dev/null; then
-  log "ABORTO: otra corrida tiene el lock $LOCK"; exit 3
+  # Un lock huérfano (corte de luz, SIGKILL) no puede detener los respaldos para
+  # siempre: si su dueño ya no vive, se recupera.
+  dueno="$(cat "$LOCK/pid" 2>/dev/null)"
+  if [ -n "$dueno" ] && kill -0 "$dueno" 2>/dev/null; then
+    log "ABORTO: otra corrida (pid $dueno) tiene el lock $LOCK"; exit 3
+  fi
+  log "lock huérfano (pid ${dueno:-desconocido}); se recupera"
+  rm -rf "$LOCK"
+  mkdir "$LOCK" 2>/dev/null || { log "ABORTO: no se pudo tomar el lock $LOCK"; exit 3; }
 fi
+echo $$ > "$LOCK/pid"
 TMP="$(mktemp -d "$RESPALDO_DIR/.fuente.XXXXXX")"
-trap 'rm -rf "$TMP"; rmdir "$LOCK" 2>/dev/null' EXIT
+trap 'rm -rf "$TMP" "$LOCK"' EXIT
 
 dirs=""
 for par in $PARES; do dirs="$dirs ${par%%:*}"; done
 
 # 1. Copia de solo lectura de los workspaces vivos.
 if [ "$RESPALDO_FUENTE" = ssh ]; then
-  read -r SSH_TARGET SSH_ID < <(python3 -c "
+  if ! destino="$(python3 -c "
 import json,os
 r=json.load(open(os.path.expanduser('~/.openclaw/openclaw.json')))['gateway']['remote']
-print(r['sshTarget'], os.path.expanduser(r['sshIdentity']))")
+print(r['sshTarget'], os.path.expanduser(r['sshIdentity']))" 2>&1)"; then
+    log "ABORTO: no se pudo leer gateway.remote de ~/.openclaw/openclaw.json: $destino"; exit 4
+  fi
+  read -r SSH_TARGET SSH_ID <<< "$destino"
+  if [ -z "${SSH_TARGET:-}" ] || [ -z "${SSH_ID:-}" ]; then
+    log "ABORTO: gateway.remote sin sshTarget/sshIdentity"; exit 4
+  fi
   # shellcheck disable=SC2086
   if ! ssh -i "$SSH_ID" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 \
       "$SSH_TARGET" "tar -cf - -C $RUNTIME_WIN$dirs" | tar -xf - -C "$TMP"; then

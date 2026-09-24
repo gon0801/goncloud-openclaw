@@ -10,6 +10,7 @@
 #   6. Una rama que no es respaldo/*: se rechaza antes de tocar nada.
 #   7. Archivos enormes: se omiten, no rompen el push.
 #   8. Nunca --force; por SSH solo `tar -c`; el plist es válido y apunta al script.
+#   9-11. Lock huérfano se recupera, lock vivo se respeta, config SSH ilegible aborta.
 #
 # Uso: bash scripts/tests/test-respaldo-workspaces.sh
 set -u
@@ -92,6 +93,25 @@ correr env || { cat "$SB/salida"; fail "un archivo enorme rompió la corrida"; }
 grep -q "omitido por tamaño" "$SB/salida" || fail "no reportó el archivo enorme"
 git -C "$SB/remotos/goncloud-workspace-main.git" ls-tree -r --name-only respaldo/runtime | grep -qx grande.bin \
   && fail "el archivo enorme llegó al respaldo"
+
+# 9. Lock huérfano (dueño muerto): se recupera y el respaldo corre.
+mkdir -p "$SB/clones/.lock"; echo 999999 > "$SB/clones/.lock/pid"
+correr env || { cat "$SB/salida"; fail "un lock huérfano detuvo el respaldo"; }
+grep -q "lock huérfano" "$SB/salida" || fail "no reportó la recuperación del lock huérfano"
+[ -e "$SB/clones/.lock" ] && fail "el lock quedó tomado al terminar"
+
+# 10. Lock con dueño vivo: se respeta y no se toca.
+mkdir -p "$SB/clones/.lock"; echo $$ > "$SB/clones/.lock/pid"
+correr env; rc=$?
+[ "$rc" -eq 3 ] || fail "con el lock de un proceso vivo no salió con 3 (rc=$rc)"
+[ "$(cat "$SB/clones/.lock/pid")" = "$$" ] || fail "se robó el lock de un proceso vivo"
+rm -rf "$SB/clones/.lock"
+
+# 11. Config de SSH ilegible: aborta nombrando la causa, sin intentar SSH.
+mkdir -p "$SB/home/.openclaw"; printf '{ gateway: {} }\n' > "$SB/home/.openclaw/openclaw.json"
+HOME="$SB/home" RESPALDO_DIR="$SB/clones" RESPALDO_FUENTE=ssh bash "$S" > "$SB/salida" 2>&1; rc=$?
+[ "$rc" -eq 4 ] || fail "config ilegible no salió con 4 (rc=$rc)"
+grep -q "no se pudo leer gateway.remote" "$SB/salida" || fail "config ilegible sin causa nombrada"
 
 # 8
 grep -vE '^[[:space:]]*#' "$S" | grep -nE -- '--force|push -f|\+HEAD:|\+refs/' && fail "el respaldo puede forzar un push"
