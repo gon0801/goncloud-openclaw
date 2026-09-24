@@ -41,7 +41,9 @@ Por eso la raíz es `.openclaw-publish`.
 
 ## Antes de empezar
 
-1. El commit está en `origin/main` con CI verde.
+1. El commit está en `origin/main` con CI verde, y es la **punta** de
+   `origin/main`: ese SHA completo es el `$sha` del bloque. Si `main` avanzó
+   después de la autorización, lo nuevo también necesita la suya.
 2. Ventana: `~/.openclaw/bin/openclaw cron list` sin ningún cron con `Next`
    en los próximos 15 minutos.
 3. Autorización del dueño para esta publicación, escrita en el PR o en el chat.
@@ -53,6 +55,7 @@ runtime hasta el paso 5.
 
 ```powershell
 $ErrorActionPreference = 'Stop'
+$sha = '<SHA completo autorizado>'
 $src = 'C:\Users\ehven\src\goncloud-openclaw'
 $rt  = 'C:\Users\ehven\.openclaw'
 $id  = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -60,9 +63,13 @@ $pub = "C:\Users\ehven\.openclaw-publish\$id"
 $ss  = "$src\scripts\sync-seguro"
 function Paso($n) { if ($LASTEXITCODE -ne 0) { throw "paso $n salió con $LASTEXITCODE" } }
 
-# 1. Poner al día la fuente (solo fast-forward; si no se puede, se detiene)
-git -C $src pull --ff-only origin main; Paso 1
+# 1. Poner la fuente exactamente en el SHA autorizado (solo fast-forward de main)
+if ((git -C $src rev-parse --abbrev-ref HEAD) -ne 'main') { throw 'la fuente no está en main' }
 if (git -C $src status --porcelain) { throw 'fuente con cambios sin commitear' }
+git -C $src fetch origin main; Paso 1
+if ((git -C $src rev-parse origin/main) -ne $sha) { throw 'origin/main no es el SHA autorizado: main avanzó o el SHA está mal' }
+git -C $src merge --ff-only $sha; Paso 1
+if ((git -C $src rev-parse HEAD) -ne $sha) { throw 'la fuente no quedó en el SHA autorizado' }
 "fuente en " + (git -C $src log -1 --format='%h %s')
 
 # 2. Manifiesto
@@ -106,9 +113,9 @@ el bloque en el host, o lo registra como job de un solo uso y lo dispara él:
 # publicar.ps1 = el bloque de arriba, guardado en la Mac
 ARGV=$(python3 -c "import json;print(json.dumps(['powershell','-NoProfile','-Command',open('publicar.ps1').read()]))")
 id=$(~/.openclaw/bin/openclaw cron add --name publicar-runtime --at 60m --command-argv "$ARGV" --json | python3 -c "import json,sys;r=sys.stdin.read();print(json.loads(r[r.find('{'):])['id'])")
-~/.openclaw/bin/openclaw cron run "$id"
-~/.openclaw/bin/openclaw cron runs "$id" --limit 1     # leer la salida
-~/.openclaw/bin/openclaw cron rm "$id"                 # siempre, al final
+~/.openclaw/bin/openclaw cron run "$id" --wait --wait-timeout 20m
+~/.openclaw/bin/openclaw cron runs "$id" --limit 1     # status ok + la salida del paso 5
+~/.openclaw/bin/openclaw cron rm "$id"                 # solo después de leer el resultado final
 ```
 
 ## Revertir
