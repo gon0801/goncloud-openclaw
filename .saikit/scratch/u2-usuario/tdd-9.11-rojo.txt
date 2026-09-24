@@ -1,0 +1,1 @@
+FAIL: falta el contrato: agents/usuario/agent/AGENTS.md

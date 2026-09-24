@@ -1,0 +1,64 @@
+ok (1): el script parsea con bash 3.2 y con el de homebrew
+ok (2): una fase realmente cerrada sale VERDE y con codigo 0
+ok (3): filas sin cerrar en el plan salen ROJO y se nombran
+ok (4): plugin sin encender = ROJO; sin gateway = unknown y no bloquea
+ok (5): una rama de la fase sin borrar sale ROJO y deja de salir al borrarla
+ok (6): un worktree de la fase sin quitar sale ROJO
+ok (7): una sesion de la fase marcada sale ROJO; desmarcada, verde
+ok (8): CI en rojo bloquea el cierre; sin respuesta queda unknown
+ok (9): --json emite una linea valida por comprobacion
+ok (10): una fase sin filas en el plan sale ROJO, no VERDE por vacio
+ok (11): los cuatro falsos verdes de CodeRabbit mueren, y el Status se lee de su columna
+ok (12a): un tablero publicado a medias impide el cierre, y nombra el carril
+ok (12b): un tablero publicado que contradice al documento versionado impide el cierre
+ok (12c): un tablero sin cierre declarado impide el cierre
+ok (12d): un tablero publicado, coincidente y cerrado sale VERDE
+ok (12e): sin respuesta del gateway el tablero queda unknown
+ok (12g): un tablero sin carriles se declara, no se da por bueno
+ok (12h): un carril sin id o sin estado se declara, no se normaliza a texto
+ok (12g-bis): los dos lados sin carriles no coinciden por vacio
+ok (12k): un tablero con otro titulo y otro siguiente paso sale ROJO y los nombra a los dos
+ok (12l): titulo y siguiente_paso estan defendidos cada uno por su cuenta
+ok (12m): un tablero que pide atencion no cierra la fase, aunque lo versionado coincida
+ok (12n): una consulta fallida se declara aunque haya escrito un documento valido
+ok (12i-1): el documento se encuentra con cualquiera de los dos nombres
+ok (12i-2): con el nombre viejo la comparacion sigue discriminando
+ok (12j): una rama por defecto ilegible se declara, no pasa por fase sin tablero
+ok (12): el tablero publicado se compara con el versionado, y los dos falsos verdes de las Fases 6 y 7 mueren
+ok (13a): un vigia legado sin migrar bloquea el cierre
+ok (13b): el reloj rancio bloquea y el scratch se lee por UUID
+ok (13c): el reloj con otro trabajo activo se conserva
+ok (13d): el scratch ilegible bloquea el cierre
+ok (13e): el reloj duplicado bloquea el cierre
+ok (13f): sin reloj no hay nada que retirar
+ok (14a): con todos los PR mergeados, un entregable pendiente impide el cierre y se nombra
+ok (14b): con el entregable presente y el resto verde, la fase cierra
+ok (14c): un documento de progreso sin carriles se declara, no se da por bueno
+ok (14d): un entregable atorado es un entregable pendiente, no terminado
+ok (14e): un documento de otra fase no acredita entregables ajenos
+ok (14f): instalacion y simulacro atorados bloquean el cierre, cada uno nombrado
+ok (14g): omitido pasa porque el contrato permite la omision formal
+ok (14h): un estado desconocido jamas produce VERDE
+ok (14i): documento presente pero ilegible es unknown, no verde por vacio
+ok (15a): promesa con evidencia FUNCIONA sale VERDE
+ok (15b): promesa sin evidencia sale ROJO y nombra la fila
+ok (15c): una evidencia NO FUNCIONA sale ROJO -- el check mira el contenido, no solo si el archivo existe
+ok (15d): sin ninguna promesa declarada, VERDE con el detalle que lo dice
+ok (15e): 'sin promesa observable' no exige evidencia, y la otra fila con FUNCIONA cierra
+ok (15f-1): con un FUNCIONA viejo y un NO FUNCIONA mas nuevo, gana el mas nuevo: ROJO
+ok (15f-2): con un NO FUNCIONA viejo y un FUNCIONA mas nuevo (re-probado), gana el mas nuevo: VERDE
+On branch main
+nothing to commit, working tree clean
+FAIL: (15g) una promesa real en Contenido sin evidencia debe salir 1 aunque el DoD diga 'sin promesa observable'; salio 0:
+VERDE    plan                   2 filas, todas cerradas
+VERDE    ramas                  ninguna rama de la fase 5, ni en el remoto ni aqui
+VERDE    worktrees              ninguno de la fase 5 abierto
+VERDE    sesiones               ninguna sesion de la fase marcada
+unknown  despliegue             no consulte el gateway; plugins declarados: tablero-demo
+unknown  reloj                  no consulte el gateway
+unknown  tablero                la fase 5 tiene documento versionado pero vino vacio
+unknown  entregables            la fase 5 tiene documento versionado pero no se pudo leer
+VERDE    usuario                ninguna fila de la fase 5 declara promesa observable
+VERDE    ci                     la rama por defecto esta en verde
+
+VERDE: la fase 5 puede declararse cerrada

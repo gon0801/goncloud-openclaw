@@ -1,0 +1,7 @@
+ok (1): frontmatter con name y description
+ok (2): los dieciseis slots de la receta están
+ok (2-bis): la entrega se prueba con un comando, y la corrida nace con el runbook
+ok (3): las diecinueve anclas de reglas están
+ok (4): la copia de la Mac no es la de esta rama, pero es la versión de refs/heads/fase9/docs (d757ca7002435be87df62607af9892ed173e566c)
+ok (5): el primer comando de un runbook nuevo abre la corrida
+TODO VERDE: skill autopilot-runbook
