@@ -355,7 +355,9 @@ marcas_lock_soltar() {
 }
 
 # Tope total (s) que cerrar espera por los locks antes de rendirse (9.16).
-CORR_CIERRE_ESPERA="${CORR_CIERRE_ESPERA:-60}"
+# Debe quedar POR DEBAJO de CORR_LOCK_VIEJO (60): un lock fresco al empezar la
+# espera no puede volverse "abandonado" (y romperse) mientras cerrar lo espera.
+CORR_CIERRE_ESPERA="${CORR_CIERRE_ESPERA:-45}"
 # Espera acotada por un lock de cerrar (9.16): reintenta la toma hasta CIERRE_TOPE
 # (lo fija quien cierra para las dos tomas juntas). No roba nada: cada intento
 # respeta el lock, su token y su lease; solo espera mas que los ~10 s de un

@@ -643,6 +643,12 @@ tope0dado=$(bash -c '. scripts/mac/corrida/lib.sh; n=0; toma() { n=$((n+1)); ret
   CIERRE_TOPE=0 cerrar_esperar_lock "lock de prueba" toma 2>/dev/null; echo "rc=$? intentos=$n"')
 [ "$tope0dado" = "rc=1 intentos=1" ] || fail "tope vencido + lock ocupado debio fallar con 1 intento (9.16): $tope0dado"
 
+# (9i5) 9.16: el tope por defecto de cerrar queda por debajo del umbral de lock
+# abandonado; si no, un lock fresco puede romperse al final de la espera.
+( unset CORR_CIERRE_ESPERA CORR_LOCK_VIEJO; . scripts/mac/corrida/lib.sh
+  [ "$CORR_CIERRE_ESPERA" -lt "$CORR_LOCK_VIEJO" ] ) \
+  || fail "CORR_CIERRE_ESPERA por defecto debe ser menor que CORR_LOCK_VIEJO (9.16)"
+
 # (9i4) 9.16: CORR_CIERRE_ESPERA se valida como segundos decimales: "08" son 8 s
 # (no un octal invalido que rompa la aritmetica) y un valor no numerico se
 # rechaza sin tocar nada.
@@ -728,7 +734,9 @@ bash "$CORR" abrir t-lk --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 
 bash "$CORR" lanzar-sesion t-lk carril bueno "$T/ses" --nombre ses-lk --encargo "$T/encargo.txt" >/dev/null \
   || fail "lanzar ses-lk fallo"
 mkdir "$T/corridas/t-lk/.lock"
-out="$(bash "$CORR" cerrar t-lk 2>&1)"; rc=$?
+# Tope corto: cerrar se rinde mucho antes de que el lock manual (sin token) cumpla
+# CORR_LOCK_VIEJO y sea rompible; asi el caso no depende de milisegundos (9.16).
+out="$(CORR_CIERRE_ESPERA=3 bash "$CORR" cerrar t-lk 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] || fail "con el lock tomado debio fallar"
 printf '%s' "$out" | grep -q "lock" || fail "el fallo del lock no se nombra"
 printf '%s' "$out" | grep -q "aviso NO salio" || fail "el fallo del lock no dice que el aviso no salio"
