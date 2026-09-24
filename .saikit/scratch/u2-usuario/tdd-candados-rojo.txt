@@ -1,0 +1,11 @@
+ok auto-prueba: los 4 estilos de ruta literal se detectan y exigen su marca
+FAIL ida: 7 frase(s) anclada(s) sin marca junto a la frase:
+  test-agente-usuario.sh no marca 'No lee el código del cambio' en agents/usuario/agent/AGENTS.md
+  test-agente-usuario.sh no marca 'Ni el diff, ni las pruebas, ni los PR' en agents/usuario/agent/AGENTS.md
+  test-agente-usuario.sh no marca 'No puede arreglar nada' en agents/usuario/agent/AGENTS.md
+  test-agente-usuario.sh no marca 'FUNCIONA <qué vio>' en agents/usuario/agent/AGENTS.md
+  test-agente-usuario.sh no marca 'NO FUNCIONA <qué vio en su lugar>' en agents/usuario/agent/AGENTS.md
+  test-agente-usuario.sh no marca 'NO PUDE PROBARLO <razón>' en agents/usuario/agent/AGENTS.md
+  test-agente-usuario.sh no marca 'docs/evidence/usuario-<fase>-<AAAA-MM-DD>.md' en agents/usuario/agent/AGENTS.md
+ok vuelta: las 71 marca(s) de agents/** y docs/agent-skills/** apuntan a tests que existen y afirman su frase
+ROJO: 7 problema(s) con los candados declarados

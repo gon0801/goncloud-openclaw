@@ -1,0 +1,8 @@
+ok (1): el contrato prohíbe leer el código y arreglar, y define las tres líneas
+ok (2): promesa cumplida ⇒ FUNCIONA con evidencia pasa
+ok (3): promesa rota ⇒ NO FUNCIONA nombrando lo que vio, no lo esperado
+ok (4): sin ruta de acceso ⇒ NO PUDE PROBARLO
+ok (5): un informe fuera de las tres líneas del contrato se rechaza
+ok (6): un informe que cita el diff plantado en su directorio se rechaza; uno que no lo cita, pasa
+ok (7): quitar la cláusula que prohíbe leer el código deja la mutación detectable (caso (1) del contrato real la exige)
+TODO VERDE: agente usuario

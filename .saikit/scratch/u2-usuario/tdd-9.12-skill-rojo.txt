@@ -1,0 +1,2 @@
+ok (1): frontmatter con name y description
+FAIL: docs/agent-skills/autopilot-runbook/SKILL.md: falta el slot 16 de la receta
