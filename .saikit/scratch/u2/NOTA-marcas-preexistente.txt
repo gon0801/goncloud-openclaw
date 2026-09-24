@@ -1,0 +1,26 @@
+U2 hallazgo (NO es de este carril, NO se toca aqui): test-corrida-marcas.sh
+falla en origin/main f93543b sin ningun cambio del carril.
+
+Caso: "El dispatcher EXIT limpia los dos locks anidados" — proceso que toma
+lock global + lock de registro y muere por `kill -TERM $$`; espera rc=143 y
+ambos locks fuera.
+
+Medido (bash 3.2 macOS, 3/3 + bateria sola 2/2):
+  rc=143 (muere por TERM, ok) pero .marcas.lock QUEDA, r1/.lock QUEDA y el
+  trap EXIT ajeno JAMAS corre (foreign-trap vacio).
+
+Causa raiz: locks_exit_armar solo arma `trap ... EXIT`. bash no corre el trap
+EXIT al morir por SIGTERM con disposicion por defecto (solo lo corre al salir
+normal/por exit o si la senal misma esta atrapada). El caso exige un
+comportamiento que la implementacion no provee: falta `trap ... TERM` (o
+equivalente) en el dispatcher. Viene de PR #104 (f31d58d, fila 9.14).
+
+Evidencia: bateria con lib.sh pristine de HEAD (git show HEAD:...):
+  FAIL: EXIT dejo el lock global (pristina-rc=1).
+El cambio 9.16 de este carril es aditivo (helper + tope) y no toca el
+dispatcher; la biseccion lo excluye.
+
+Impacto: run-checks.sh incluye este test -> la bateria completa esta en rojo
+en origin/main. El PR del carril I nacera con ese rojo preexistente; se
+reporta para que el cierre (Q5) lo reconcilie, no para arreglarlo aqui
+(alcance: 9.10+9.16; 9.14 esta integrada y su dueno es otro).
