@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -97,6 +98,30 @@ test("rechaza bytes dirty: lo modificado sin commit no entra al manifiesto (B4)"
     accepted = ` ACEPTÓ dirty (sha=${m.files[0].sha256.slice(0, 12)}… sin commit)`;
   }
   assert.notEqual(result.status, 0, `build debe rechazar bytes dirty sin commit.${accepted}`);
+  assert.match(result.stderr, /differs from pinned commit/);
+});
+
+test("D1: CRLF del checkout (autocrlf) no rechaza archivos no modificados", () => {
+  const f = fixture(["summa-gate/index.ts"]);
+  const full = join(f.root, "summa-gate/index.ts");
+  const committed = readFileSync(full);
+  assert.ok(!committed.includes("\r"), "el fixture se commitea con LF");
+  // Simula core.autocrlf=true: el vivo trae CRLF, el commit guarda LF.
+  writeFileSync(full, committed.toString("utf8").replaceAll("\n", "\r\n"));
+  const crlfOut = join(f.root, "selection-crlf.json");
+  const result = spawnSync(process.execPath, [script, f.root, crlfOut], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  const manifest = JSON.parse(readFileSync(crlfOut, "utf8"));
+  // El SHA registrado es el del blob pinneado (LF), no el del vivo (CRLF).
+  assert.equal(manifest.files[0].sha256, createHash("sha256").update(committed).digest("hex"));
+});
+
+test("D1: CRLF no enmascara cambios reales de contenido", () => {
+  const f = fixture(["summa-gate/index.ts"]);
+  writeFileSync(join(f.root, "summa-gate/index.ts"), "contenido cambiado\r\n");
+  const dirtyOut = join(f.root, "selection-crlf-dirty.json");
+  const result = spawnSync(process.execPath, [script, f.root, dirtyOut], { encoding: "utf8" });
+  assert.notEqual(result.status, 0, "build debe rechazar contenido cambiado aunque traiga CRLF");
   assert.match(result.stderr, /differs from pinned commit/);
 });
 

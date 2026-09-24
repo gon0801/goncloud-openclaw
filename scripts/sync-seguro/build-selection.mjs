@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join, sep } from "node:path";
-import { POLICY_VERSION, selectionParts } from "./selection-policy.mjs";
+import { POLICY_VERSION, canonicalEolBytes, selectionParts } from "./selection-policy.mjs";
 
 const [sourceArg, outputPath] = process.argv.slice(2);
 if (!sourceArg || !outputPath) {
@@ -57,6 +57,10 @@ const files = listed.stdout.split("\0").filter(Boolean).filter(candidate).sort()
   if (!lstatSync(cursor).isFile()) throw new Error("tracked selection is not a file");
   // B4: cada byte debe ser idéntico al del commit pinned; lo dirty o
   // stageado-sin-commit se rechaza, no se hashea.
+  // D1: la identidad se decide en bytes canónicos (CRLF→LF): con
+  // core.autocrlf=true el checkout convierte LF→CRLF y un archivo no
+  // modificado se vería distinto en bytes crudos. El SHA registrado es el
+  // del blob pinneado; el stage publica esos mismos bytes.
   const bytes = readFileSync(cursor);
   // maxBuffer explícito: el de 1 MiB por defecto mataría al hijo (ENOBUFS,
   // status null) ante un blob grande y la proveniencia fallaría aunque el
@@ -65,13 +69,16 @@ const files = listed.stdout.split("\0").filter(Boolean).filter(candidate).sort()
     encoding: "buffer",
     maxBuffer: 64 * 1024 * 1024,
   });
-  const pinnedSha = pinned.status === 0
-    ? createHash("sha256").update(pinned.stdout).digest("hex") : null;
-  const liveSha = createHash("sha256").update(bytes).digest("hex");
-  if (pinnedSha === null || pinnedSha !== liveSha) {
+  if (pinned.status !== 0) {
     throw new Error(`tracked selection differs from pinned commit ${commit}: ${path}`);
   }
-  return { path, sha256: liveSha };
+  const pinnedSha = createHash("sha256").update(pinned.stdout).digest("hex");
+  const liveCanon = createHash("sha256").update(canonicalEolBytes(bytes)).digest("hex");
+  const pinnedCanon = createHash("sha256").update(canonicalEolBytes(pinned.stdout)).digest("hex");
+  if (liveCanon !== pinnedCanon) {
+    throw new Error(`tracked selection differs from pinned commit ${commit}: ${path}`);
+  }
+  return { path, sha256: pinnedSha };
 });
 if (!files.length) throw new Error("empty runtime selection");
 

@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
-  copyFileSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
-  readdirSync, realpathSync, renameSync,
+  lstatSync, mkdirSync, mkdtempSync, readFileSync,
+  readdirSync, realpathSync, renameSync, writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
-import { POLICY_VERSION, selectionParts } from "./selection-policy.mjs";
+import { POLICY_VERSION, canonicalEolBytes, selectionParts } from "./selection-policy.mjs";
 
 const [manifestPath, sourceArg, stageArg, flag] = process.argv.slice(2);
 if (!manifestPath || !sourceArg || !stageArg || (flag && flag !== "--apply")) {
@@ -59,7 +59,7 @@ const files = manifest.files.map((entry) => {
       throw new Error("symlink in selected source");
     }
   }
-  if (!lstatSync(cursor).isFile() || hash(cursor) !== entry.sha256.toLowerCase()) {
+  if (!lstatSync(cursor).isFile()) {
     throw new Error("selected source hash differs");
   }
   // B6: proveniencia de principio a fin. El hash contra el vivo no basta: un
@@ -83,7 +83,15 @@ const files = manifest.files.map((entry) => {
   if (pinnedSha !== entry.sha256.toLowerCase()) {
     throw new Error(`selected source differs from pinned commit ${manifest.commit}: ${entry.path}`);
   }
-  return { path: entry.path, sourcePath: cursor, sha256: entry.sha256.toLowerCase() };
+  // D1: el vivo puede traer CRLF del checkout (core.autocrlf=true); la
+  // identidad se decide en bytes canónicos contra el blob pinneado, igual
+  // que en build. Lo que se stagea son los bytes del blob, no los del vivo.
+  const liveCanon = createHash("sha256").update(canonicalEolBytes(readFileSync(cursor))).digest("hex");
+  const pinnedCanon = createHash("sha256").update(canonicalEolBytes(pinned.stdout)).digest("hex");
+  if (liveCanon !== pinnedCanon) {
+    throw new Error(`selected source differs from pinned commit ${manifest.commit}: ${entry.path}`);
+  }
+  return { path: entry.path, sha256: entry.sha256.toLowerCase(), blob: pinned.stdout };
 });
 
 function stageFiles(root) {
@@ -127,7 +135,7 @@ try {
   for (const file of files) {
     const target = join(temp, ...file.path.split("/"));
     mkdirSync(dirname(target), { recursive: true });
-    copyFileSync(file.sourcePath, target);
+    writeFileSync(target, file.blob);
     if (hash(target) !== file.sha256) throw new Error("staged read-back hash differs");
   }
   if (lstatSync(actualStage, { throwIfNoEntry: false })) {

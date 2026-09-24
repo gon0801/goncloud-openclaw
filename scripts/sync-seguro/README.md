@@ -27,6 +27,9 @@ publish-selected.mjs <selection.json> <staging> <runtime> <transacción> --rollb
    por categoría. Solo archivos trackeados por git del checkout fuente,
    pinneados al SHA del commit registrado: cada byte debe ser idéntico al de
    ese commit (lo dirty o sin commit se rechaza, la fuente debe tener HEAD).
+   La identidad se decide en bytes canónicos (CRLF→LF) para que un checkout
+   con `core.autocrlf=true` no rechace archivos no modificados; el SHA
+   registrado y lo staged son los bytes del blob pinneado.
 2. **Staging** fuera del runtime vivo, con validación de set exacto y hashes
    antes de publicar. La fuente debe ser un checkout git que contenga el
    commit del manifiesto: cada byte se re-valida contra ese commit (un

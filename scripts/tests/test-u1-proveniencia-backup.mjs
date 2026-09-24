@@ -162,6 +162,37 @@ function checkConfined(f, result, where) {
   );
 }
 
+test("D1 control: build→stage→publish con CRLF del checkout publica bytes del blob", () => {
+  const lf = "línea uno\nlínea dos\n";
+  const crlf = lf.replaceAll("\n", "\r\n");
+  const f = gitSource({
+    "summa-gate/index.ts": lf,
+    "tablero-runbook/index.ts": lf,
+  });
+  // Simula core.autocrlf=true: el vivo trae CRLF, el commit guarda LF.
+  writeFileSync(join(f.source, "summa-gate/index.ts"), crlf);
+  writeFileSync(join(f.source, "tablero-runbook/index.ts"), crlf);
+  const manifest = join(f.root, "selection.json");
+  const built = spawnSync(process.execPath, [buildScript, f.source, manifest], { encoding: "utf8" });
+  assert.equal(built.status, 0, built.stderr);
+  const stage = join(f.root, "stage");
+  const staged = spawnSync(
+    process.execPath, [stageScript, manifest, f.source, stage, "--apply"], { encoding: "utf8" },
+  );
+  assert.equal(staged.status, 0, staged.stderr);
+  const runtime = join(f.root, "runtime");
+  const txn = join(f.root, "txn");
+  mkdirSync(runtime);
+  const published = spawnSync(
+    process.execPath, [publishScript, manifest, stage, runtime, txn, f.source, "--apply"],
+    { encoding: "utf8" },
+  );
+  assert.equal(published.status, 0, published.stderr);
+  // Lo instalado son los bytes del blob (LF), no los del vivo (CRLF).
+  assert.equal(readFileSync(join(runtime, "summa-gate", "index.ts"), "utf8"), lf);
+  assert.equal(readFileSync(join(runtime, "tablero-runbook", "index.ts"), "utf8"), lf);
+});
+
 test("B7: txn sin journal con backup symlinkeado falla cerrado sin escribir fuera", () => {
   const f = backupFixture((state, outside) => symlinkSync(outside, join(state, "backup")));
   checkConfined(f, f.run(), "symlinkeado");

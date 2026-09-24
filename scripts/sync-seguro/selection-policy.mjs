@@ -68,3 +68,23 @@ export function selectionParts(path) {
   }
   return parts;
 }
+
+// D1: comparación canónica de fin de línea. Con core.autocrlf=true el
+// checkout convierte LF→CRLF en el working tree mientras el blob guarda LF,
+// así que dos contenidos iguales se verían distintos en bytes crudos. Para
+// decidir "sin cambios" se comparan los bytes canónicos (CRLF→LF); el SHA
+// que se registra y lo que se publica son siempre los bytes del blob
+// pinneado. Solo colapsa CR seguido de LF (igual que el clean de git).
+export function canonicalEolBytes(buffer) {
+  const bytes = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  const parts = [];
+  let start = 0;
+  let at = bytes.indexOf("\r\n");
+  while (at !== -1) {
+    parts.push(bytes.subarray(start, at));
+    start = at + 1; // conserva el \n, descarta el \r
+    at = bytes.indexOf("\r\n", start);
+  }
+  parts.push(bytes.subarray(start));
+  return Buffer.concat(parts);
+}
