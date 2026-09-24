@@ -58,7 +58,13 @@ const files = listed.stdout.split("\0").filter(Boolean).filter(candidate).sort()
   // B4: cada byte debe ser idéntico al del commit pinned; lo dirty o
   // stageado-sin-commit se rechaza, no se hashea.
   const bytes = readFileSync(cursor);
-  const pinned = spawnSync("git", ["-C", source, "show", `${commit}:${path}`], { encoding: "buffer" });
+  // maxBuffer explícito: el de 1 MiB por defecto mataría al hijo (ENOBUFS,
+  // status null) ante un blob grande y la proveniencia fallaría aunque el
+  // byte esté commiteado. El pipeline ya lee archivos completos a memoria.
+  const pinned = spawnSync("git", ["-C", source, "show", `${commit}:${path}`], {
+    encoding: "buffer",
+    maxBuffer: 64 * 1024 * 1024,
+  });
   const pinnedSha = pinned.status === 0
     ? createHash("sha256").update(pinned.stdout).digest("hex") : null;
   const liveSha = createHash("sha256").update(bytes).digest("hex");

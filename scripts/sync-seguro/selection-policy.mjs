@@ -29,7 +29,7 @@ const deniedDirs = new Map([
 // Archivos por categoría: aunque lleguen al manifiesto se rechazan.
 const deniedFiles = new Map([
   ["bases", /\.(?:sqlite(?:-wal|-shm)?|db(?:-wal|-shm)?|wal|shm)(?:\..*)?$/i],
-  ["credenciales", /(?:^openclaw\.json(?:\..*)?$|\.env(?:\..*)?$|\.(?:pem|key|pfx|p12)(?:\..*)?$)/i],
+  ["credenciales", /(?:^openclaw\.json(?:\..*)?$|\.env(?:\..*)?$|\.(?:pem|key|pfx|p12)(?:\..*)?$|(?:^|[._-])secrets?(?:$|[._-].*)|(?:^|[._-])credentials?(?:$|[._-].*))/i],
   ["modelos", /\.(?:gguf|ggml|onnx|safetensors|pt|ckpt|bin)(?:\..*)?$/i],
   ["launchers generados", /\.(?:cmd|vbs|lnk|bat|com|scr|msi|exe|dll|zip)(?:\..*)?$/i],
   ["respaldos", /(?:\.bak(?:[-.]|$)|^__MACOSX$)/i],

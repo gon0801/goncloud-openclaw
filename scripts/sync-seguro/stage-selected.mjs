@@ -69,8 +69,12 @@ const files = manifest.files.map((entry) => {
   if (!/^[a-f0-9]{40}$/i.test(manifest.commit ?? "")) {
     throw new Error("selection commit missing or invalid");
   }
+  // maxBuffer explícito: el de 1 MiB por defecto mataría al hijo (ENOBUFS,
+  // status null) ante un blob grande y la proveniencia fallaría aunque el
+  // byte esté commiteado. El pipeline ya lee archivos completos a memoria.
   const pinned = spawnSync("git", ["-C", source, "show", `${manifest.commit}:${entry.path}`], {
     encoding: "buffer",
+    maxBuffer: 64 * 1024 * 1024,
   });
   if (pinned.status !== 0) {
     throw new Error(`selected source missing from pinned commit ${manifest.commit}: ${entry.path}`);

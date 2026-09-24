@@ -18,7 +18,7 @@ decisión y autorización separadas (el merge no despliega).
 ```text
 build-selection.mjs <checkout-fuente> <selection.json>
 stage-selected.mjs  <selection.json> <fuente> <staging> --apply
-publish-selected.mjs <selection.json> <staging> <runtime> <transacción> --apply
+publish-selected.mjs <selection.json> <staging> <runtime> <transacción> <fuente> --apply
 publish-selected.mjs <selection.json> <staging> <runtime> <transacción> --rollback
 ```
 
@@ -32,10 +32,14 @@ publish-selected.mjs <selection.json> <staging> <runtime> <transacción> --rollb
    commit del manifiesto: cada byte se re-valida contra ese commit (un
    manifiesto a mano con bytes sin commit se rechaza). Sin borrados
    recursivos: un resto se reporta, no se limpia solo.
-3. **Publicación** por archivo: temporal de nombre impredecible creado con
-   O_EXCL (nunca sigue symlinks), rechazo de symlinks en staging y destino,
-   confinamiento dentro del runtime, journal + fsync antes de cada reemplazo,
-   y read-back del SHA instalado. Respaldo previo de cada reemplazo.
+3. **Publicación** por archivo: antes de tocar el runtime cada byte se
+   re-valida contra el commit declarado, leído de la fuente git (un
+   manifiesto+stage preparados a mano se rechazan aunque los hashes
+   coincidan); temporal de nombre impredecible creado con O_EXCL (nunca
+   sigue symlinks), rechazo de symlinks en staging y destino, confinamiento
+   dentro del runtime, journal + fsync antes de cada reemplazo, y read-back
+   del SHA instalado. Respaldo previo de cada reemplazo. `--rollback` no
+   instala bytes staged y no recibe fuente.
 4. **Rollback** por archivo desde el journal + respaldos de la transacción.
 
 ## Política de ediciones vivas pendientes

@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import {
   closeSync, existsSync, fsyncSync, lstatSync, mkdirSync,
   openSync, readFileSync, readdirSync, realpathSync, renameSync,
@@ -7,9 +8,21 @@ import {
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { POLICY_VERSION, selectionParts } from "./selection-policy.mjs";
 
-const [manifestPath, stageArg, runtimeArg, transactionArg, mode] = process.argv.slice(2);
+const [manifestPath, stageArg, runtimeArg, transactionArg, maybeSource, maybeMode] = process.argv.slice(2);
+// C1: --apply exige la fuente git para re-validar proveniencia (cierra el
+// publish directo con manifiesto+stage fabricados); --rollback no instala
+// bytes staged y conserva sus 4 argumentos.
+const mode = maybeMode === undefined ? maybeSource : maybeMode;
+const sourceArg = maybeMode === undefined ? undefined : maybeSource;
 if (!manifestPath || !stageArg || !runtimeArg || !transactionArg || !["--apply", "--rollback"].includes(mode)) {
-  process.stderr.write("usage: node publish-selected.mjs <selection.json> <stage> <runtime> <transaction> --apply|--rollback\n");
+  process.stderr.write("usage: node publish-selected.mjs <selection.json> <stage> <runtime> <transaction> <source> --apply\n");
+  process.stderr.write("usage: node publish-selected.mjs <selection.json> <stage> <runtime> <transaction> --rollback\n");
+  process.exit(2);
+}
+if ((mode === "--apply" && sourceArg === undefined) ||
+    (mode === "--rollback" && sourceArg !== undefined)) {
+  process.stderr.write("usage: node publish-selected.mjs <selection.json> <stage> <runtime> <transaction> <source> --apply\n");
+  process.stderr.write("usage: node publish-selected.mjs <selection.json> <stage> <runtime> <transaction> --rollback\n");
   process.exit(2);
 }
 
@@ -29,13 +42,17 @@ for (const file of files) {
 }
 
 const stage = mode === "--apply" ? realpathSync(stageArg) : null;
+const source = mode === "--apply" ? realpathSync(sourceArg) : null;
+if (source && source.split(sep).some((part) => part.toLowerCase() === ".openclaw")) {
+  throw new Error("live runtime cannot be recovery source");
+}
 const runtime = realpathSync(runtimeArg);
 const transaction = resolve(transactionArg);
 const transactionParent = realpathSync(dirname(transaction));
 const txn = join(transactionParent, basename(transaction));
 const norm = (path) => process.platform === "win32" ? path.toLowerCase() : path;
 const inside = (a, b) => norm(a) === norm(b) || norm(a).startsWith(`${norm(b)}${sep}`);
-const roots = stage ? [stage, runtime, txn] : [runtime, txn];
+const roots = stage ? [stage, runtime, txn, source] : [runtime, txn];
 if (roots.some((root, i) => roots.some((other, j) => i !== j && inside(root, other)))) {
   throw new Error("transaction roots overlap");
 }
@@ -88,6 +105,31 @@ if (mode === "--apply") {
     const staged = checkComponents(stage, file.path, true);
     if (hash(staged) !== file.sha256.toLowerCase()) throw new Error("stage hash differs");
     checkComponents(runtime, file.path);
+  }
+  // C1: proveniencia también en publish. El hash contra el stage no basta: un
+  // manifiesto+stage preparados a mano (commit declarado inexistente, bytes
+  // sin commitear) publicaban con rc=0 saltándose el gate de stage. Cada byte
+  // debe ser idéntico al del commit que el manifiesto declara, leído de la
+  // fuente git — igual que en build (B4) y stage (B6). Corre después de las
+  // validaciones de política y pre-chequeos, pero antes de crear la
+  // transacción o tocar el runtime.
+  if (!/^[a-f0-9]{40}$/i.test(manifest.commit ?? "")) {
+    throw new Error("selection commit missing or invalid");
+  }
+  for (const file of files) {
+    // maxBuffer explícito: ver build-selection.mjs (un blob mayor a 1 MiB
+    // con el valor por defecto mata al hijo y finge proveniencia rota).
+    const pinned = spawnSync("git", ["-C", source, "show", `${manifest.commit}:${file.path}`], {
+      encoding: "buffer",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    if (pinned.status !== 0) {
+      throw new Error(`selected source missing from pinned commit ${manifest.commit}: ${file.path}`);
+    }
+    const pinnedSha = createHash("sha256").update(pinned.stdout).digest("hex");
+    if (pinnedSha !== file.sha256.toLowerCase()) {
+      throw new Error(`selected source differs from pinned commit ${manifest.commit}: ${file.path}`);
+    }
   }
 }
 

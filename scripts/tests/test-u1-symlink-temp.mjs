@@ -26,14 +26,24 @@ const publishScript = join(BIN, "publish-selected.mjs");
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "u1-symlink-temp-"));
+  const source = join(root, "source");
   const stage = join(root, "stage");
   const runtime = join(root, "runtime");
   const state = join(root, "state");
   mkdirSync(join(stage, "summa-gate"), { recursive: true });
+  mkdirSync(join(source, "summa-gate"), { recursive: true });
   mkdirSync(join(runtime, "summa-gate"), { recursive: true });
   // 1 MiB para que el hijo pase tiempo hasheando mientras plantamos el symlink.
   const staged = `nuevo-${"x".repeat(1024 * 1024)}\n`;
   writeFileSync(join(stage, "summa-gate", "index.ts"), staged);
+  // C1: lo staged está commiteado en la fuente para pasar la proveniencia.
+  writeFileSync(join(source, "summa-gate", "index.ts"), staged);
+  const git = (...args) => spawnSync("git", args, { cwd: source, encoding: "utf8" });
+  assert.equal(git("init", "-q").status, 0);
+  assert.equal(git("add", ".").status, 0);
+  assert.equal(
+    git("-c", "user.email=u1@test", "-c", "user.name=u1", "commit", "-qm", "v1").status, 0,
+  );
   const target = join(runtime, "summa-gate", "index.ts");
   writeFileSync(target, "viejo\n");
   const outside = join(root, "fuera.txt");
@@ -43,18 +53,19 @@ function fixture() {
   writeFileSync(manifest, JSON.stringify({
     version: 1,
     policyVersion: 1,
+    commit: git("rev-parse", "HEAD").stdout.trim(),
     files: [{
       path: "summa-gate/index.ts",
       sha256: createHash("sha256").update(staged).digest("hex"),
     }],
   }));
-  return { root, manifest, stage, runtime, state, target, outside, sentinel, staged };
+  return { root, manifest, source, stage, runtime, state, target, outside, sentinel, staged };
 }
 
 function runPublishSync(f) {
   return spawnSync(
     process.execPath,
-    [publishScript, f.manifest, f.stage, f.runtime, f.state, "--apply"],
+    [publishScript, f.manifest, f.stage, f.runtime, f.state, f.source, "--apply"],
     { encoding: "utf8" },
   );
 }
@@ -63,7 +74,7 @@ test("un symlink plantado en el temporal predecible no escribe fuera del runtime
   const f = fixture();
   const child = spawn(
     process.execPath,
-    [publishScript, f.manifest, f.stage, f.runtime, f.state, "--apply"],
+    [publishScript, f.manifest, f.stage, f.runtime, f.state, f.source, "--apply"],
     { stdio: ["ignore", "pipe", "pipe"] },
   );
   // El pid del hijo se conoce en cuanto spawn regresa; el hijo tarda decenas

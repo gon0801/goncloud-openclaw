@@ -98,7 +98,7 @@ test("B6 control: build→stage→publish desde bytes commiteados sigue en verde
   const state = join(f.root, "state");
   mkdirSync(runtime);
   const published = spawnSync(
-    process.execPath, [publishScript, manifest, stage, runtime, state, "--apply"],
+    process.execPath, [publishScript, manifest, stage, runtime, state, f.source, "--apply"],
     { encoding: "utf8" },
   );
   assert.equal(published.status, 0, published.stderr);
@@ -108,28 +108,39 @@ test("B6 control: build→stage→publish desde bytes commiteados sigue en verde
 
 function backupFixture(linkSetup) {
   const root = mkdtempSync(join(tmpdir(), "u1-b7-"));
+  const source = join(root, "source");
   const stage = join(root, "stage");
   const runtime = join(root, "runtime");
   const state = join(root, "state");
   const outside = join(root, "fuera");
   mkdirSync(join(stage, "summa-gate"), { recursive: true });
+  mkdirSync(join(source, "summa-gate"), { recursive: true });
   mkdirSync(join(runtime, "summa-gate"), { recursive: true });
   mkdirSync(state);
   mkdirSync(outside);
   const staged = "nuevo\n";
   writeFileSync(join(stage, "summa-gate/index.ts"), staged);
+  // C1: lo staged está commiteado en la fuente para pasar la proveniencia de
+  // publish y llegar al gate del respaldo.
+  writeFileSync(join(source, "summa-gate/index.ts"), staged);
   writeFileSync(join(runtime, "summa-gate/index.ts"), "viejo\n");
   const sentinel = "SECRETO-NO-TOCAR\n";
   writeFileSync(join(outside, "sagrado.txt"), sentinel);
+  assert.equal(git(source, "init", "-q").status, 0);
+  assert.equal(git(source, "add", ".").status, 0);
+  assert.equal(
+    git(source, "-c", "user.email=u1@test", "-c", "user.name=u1", "commit", "-qm", "v1").status, 0,
+  );
   const manifest = join(root, "selection.json");
   writeFileSync(manifest, JSON.stringify({
     version: 1,
     policyVersion: 1,
+    commit: git(source, "rev-parse", "HEAD").stdout.trim(),
     files: [{ path: "summa-gate/index.ts", sha256: sha(staged) }],
   }));
   linkSetup(state, outside);
   const run = () => spawnSync(
-    process.execPath, [publishScript, manifest, stage, runtime, state, "--apply"],
+    process.execPath, [publishScript, manifest, stage, runtime, state, source, "--apply"],
     { encoding: "utf8" },
   );
   return { root, runtime, state, outside, sentinel, run };
@@ -166,19 +177,28 @@ test("B7: symlink en un intermedio del respaldo también falla cerrado", () => {
 
 test("B7 control: txn parcial legítima sin journal (respaldos reales) se recupera", () => {
   const root = mkdtempSync(join(tmpdir(), "u1-b7-"));
+  const source = join(root, "source");
   const stage = join(root, "stage");
   const runtime = join(root, "runtime");
   const state = join(root, "state");
   mkdirSync(join(stage, "summa-gate"), { recursive: true });
+  mkdirSync(join(source, "summa-gate"), { recursive: true });
   mkdirSync(join(runtime, "summa-gate"), { recursive: true });
   mkdirSync(state);
   const staged = "nuevo\n";
   writeFileSync(join(stage, "summa-gate/index.ts"), staged);
+  writeFileSync(join(source, "summa-gate/index.ts"), staged);
   writeFileSync(join(runtime, "summa-gate/index.ts"), "viejo\n");
+  assert.equal(git(source, "init", "-q").status, 0);
+  assert.equal(git(source, "add", ".").status, 0);
+  assert.equal(
+    git(source, "-c", "user.email=u1@test", "-c", "user.name=u1", "commit", "-qm", "v1").status, 0,
+  );
   const manifest = join(root, "selection.json");
   writeFileSync(manifest, JSON.stringify({
     version: 1,
     policyVersion: 1,
+    commit: git(source, "rev-parse", "HEAD").stdout.trim(),
     files: [{ path: "summa-gate/index.ts", sha256: sha(staged) }],
   }));
   // Corte mkdir→journal con respaldo parcial real (no symlink): se recupera.
@@ -186,7 +206,7 @@ test("B7 control: txn parcial legítima sin journal (respaldos reales) se recupe
   mkdirSync(dirname(partial), { recursive: true });
   writeFileSync(partial, "viejo\n");
   const result = spawnSync(
-    process.execPath, [publishScript, manifest, stage, runtime, state, "--apply"],
+    process.execPath, [publishScript, manifest, stage, runtime, state, source, "--apply"],
     { encoding: "utf8" },
   );
   assert.equal(result.status, 0, result.stderr);

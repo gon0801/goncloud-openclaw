@@ -44,8 +44,10 @@ function runStage(manifest, f, ...flags) {
 }
 
 function runPublish(manifest, f) {
+  // C1: --apply recibe la fuente (aquí un directorio existente; las pruebas de
+  // política fallan antes de la validación de proveniencia y no la alcanzan).
   return spawnSync(
-    process.execPath, [publishScript, manifest, f.stage, f.runtime, f.state, "--apply"],
+    process.execPath, [publishScript, manifest, f.stage, f.runtime, f.state, f.source, "--apply"],
     { encoding: "utf8" },
   );
 }
@@ -117,9 +119,57 @@ for (const [category, bad] of DENYLIST) {
   });
 }
 
+const CREDENCIALES_SKILLS = [
+  "agents/main/agent/workshop-skills/a/secrets.json",
+  "summa-gate/app-secrets.json",
+  "tablero-runbook/credentials.json",
+  "agents/main/agent/workshop-skills/a/secrets-prod.json",
+  "agents/main/agent/workshop-skills/a/credential_backup.json",
+  "summa-gate/secret-backup.json",
+];
+
+for (const bad of CREDENCIALES_SKILLS) {
+  test(`denylist (credenciales) rechaza almacén de secretos commiteado: ${bad} (C2)`, () => {
+    const f = fixture();
+    // C2 (Codex): la allowlist de skills admitía cualquier archivo, incluido
+    // un secrets.json commiteado. La fuente es un checkout git con commit y el
+    // manifiesto lo declara: ni así pasa.
+    plantFile(f.source, bad, '{"token":"NO-PUBLICAR"}\n');
+    plantFile(f.stage, bad, '{"token":"NO-PUBLICAR"}\n');
+    const git = (...args) => spawnSync("git", args, { cwd: f.source, encoding: "utf8" });
+    assert.equal(git("init", "-q").status, 0);
+    assert.equal(git("add", ".").status, 0);
+    assert.equal(
+      git("-c", "user.email=u1@test", "-c", "user.name=u1", "commit", "-qm", "v1").status, 0,
+    );
+    const manifest = join(f.root, "selection.json");
+    writeFileSync(manifest, JSON.stringify({
+      version: 1,
+      policyVersion: 1,
+      commit: git("rev-parse", "HEAD").stdout.trim(),
+      files: [{ path: bad, sha256: sha('{"token":"NO-PUBLICAR"}\n') }],
+    }));
+    const staged = runStage(manifest, f, "--apply");
+    assert.notEqual(staged.status, 0, `stage aceptó ${bad}`);
+    assert.match(staged.stderr, /denylisted credenciales/, bad);
+    const published = runPublish(manifest, f);
+    assert.notEqual(published.status, 0, `publish aceptó ${bad}`);
+    assert.match(published.stderr, /denylisted credenciales/, bad);
+    assert.equal(existsSync(f.state), false, bad);
+  });
+}
+
 test("rutas buenas pasan dry-run sin escribir (desactivado por defecto)", () => {
   const f = fixture();
-  const good = [GOOD, "agents/main/agent/workshop-skills/a/SKILL.md", "gateway-watchdog.ps1"];
+  // secretary-notes.md y accreditation.ts contienen "secret"/"credential" como
+  // subcadena pero no son almacenes: la denylist C2 no debe alcanzarlos.
+  const good = [
+    GOOD,
+    "agents/main/agent/workshop-skills/a/SKILL.md",
+    "agents/main/agent/workshop-skills/a/secretary-notes.md",
+    "summa-gate/accreditation.ts",
+    "gateway-watchdog.ps1",
+  ];
   const entries = good.map((path, i) => {
     plantFile(f.source, path, `file ${i}\n`);
     return { path, sha256: sha(`file ${i}\n`) };

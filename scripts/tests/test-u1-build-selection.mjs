@@ -60,6 +60,25 @@ test("falla cerrado con un secreto trackeado bajo fuente del runtime", () => {
   assert.equal(result.stdout, "");
 });
 
+test("falla cerrado con un almacén de secretos trackeado bajo skills (C2)", () => {
+  for (const bad of [
+    "agents/main/agent/workshop-skills/a/secrets.json",
+    "agents/main/agent/workshop-skills/a/credentials.json",
+    "agents/main/agent/workshop-skills/a/secrets-prod.json",
+    "agents/main/agent/workshop-skills/a/credential_backup.json",
+  ]) {
+    const f = fixture(["summa-gate/index.ts", bad]);
+    const result = f.run();
+    let accepted = "";
+    if (result.status === 0) {
+      const m = JSON.parse(readFileSync(f.output, "utf8"));
+      accepted = ` SELECCIONÓ ${JSON.stringify(m.files.map((e) => e.path))}`;
+    }
+    assert.notEqual(result.status, 0, `build debe rechazar ${bad}.${accepted}`);
+    assert.equal(result.stdout, "", bad);
+  }
+});
+
 test("exige revisión antes de seleccionar un ejecutable nuevo del plugin", () => {
   const f = fixture(["summa-gate/index.ts", "summa-gate/unreviewed.mjs"]);
   const result = f.run();

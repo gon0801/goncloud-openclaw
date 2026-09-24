@@ -49,15 +49,35 @@ function fixture(paths = ["summa-gate/index.ts", "tablero-runbook/index.ts"]) {
     encoding: "utf8",
   });
   assert.equal(staged.status, 0, staged.stderr);
+  // C1: --apply recibe la fuente git para re-validar proveniencia;
+  // --rollback conserva 4 argumentos.
   const run = (mode, env = {}) => spawnSync(
-    process.execPath, [publishScript, manifest, stage, runtime, state, mode],
+    process.execPath,
+    mode === "--apply"
+      ? [publishScript, manifest, stage, runtime, state, source, mode]
+      : [publishScript, manifest, stage, runtime, state, mode],
     { encoding: "utf8", env: { ...process.env, ...env } },
   );
   const runWith = (manifestPath, mode, env = {}) => spawnSync(
-    process.execPath, [publishScript, manifestPath, stage, runtime, state, mode],
+    process.execPath,
+    mode === "--apply"
+      ? [publishScript, manifestPath, stage, runtime, state, source, mode]
+      : [publishScript, manifestPath, stage, runtime, state, mode],
     { encoding: "utf8", env: { ...process.env, ...env } },
   );
   return { root, source, stage, runtime, state, manifest, files, run, runWith };
+}
+
+// C1: commitea el estado actual de la fuente y devuelve el HEAD. Los ciclos v2
+// escriben primero los mismos bytes en fuente y stage para que la proveniencia
+// de publish los acepte.
+function commitAll(source, message) {
+  const git = (...args) => spawnSync("git", args, { cwd: source, encoding: "utf8" });
+  assert.equal(git("add", ".").status, 0);
+  assert.equal(
+    git("-c", "user.email=u1@test", "-c", "user.name=u1", "commit", "-qm", message).status, 0,
+  );
+  return git("rev-parse", "HEAD").stdout.trim();
 }
 
 function snapshotMtimes(root) {
@@ -174,16 +194,19 @@ test("edición viva pendiente se conserva: se reporta y se sigue con el resto", 
   const v2 = f.files.map((entry, i) => {
     const content = `nuevo v2 ${i}\n`;
     writeFileSync(join(f.stage, entry.path), content);
+    writeFileSync(join(f.source, entry.path), content);
     return { path: entry.path, sha256: sha(content) };
   });
   const manifest2 = join(f.root, "selection2.json");
-  writeFileSync(manifest2, JSON.stringify({ version: 1, policyVersion: 1, files: v2 }));
+  writeFileSync(manifest2, JSON.stringify({
+    version: 1, policyVersion: 1, commit: commitAll(f.source, "v2"), files: v2,
+  }));
   // Pero el vivo del primero cambió por fuera (difiere del instalado y del staged).
   const live0 = join(f.runtime, f.files[0].path);
   writeFileSync(live0, "edición del operador\n");
   const state2 = join(f.root, "state2");
   const second = spawnSync(
-    process.execPath, [publishScript, manifest2, f.stage, f.runtime, state2, "--apply"],
+    process.execPath, [publishScript, manifest2, f.stage, f.runtime, state2, f.source, "--apply"],
     { encoding: "utf8" },
   );
   assert.equal(second.status, 0, second.stderr);
@@ -246,10 +269,13 @@ test("una transacción previa distinta aborta en vez de mezclarse", () => {
   const v2 = f.files.map((entry) => {
     const content = `otra versión ${entry.path}\n`;
     writeFileSync(join(f.stage, entry.path), content);
+    writeFileSync(join(f.source, entry.path), content);
     return { path: entry.path, sha256: sha(content) };
   });
   const manifest2 = join(f.root, "selection2.json");
-  writeFileSync(manifest2, JSON.stringify({ version: 1, policyVersion: 1, files: v2 }));
+  writeFileSync(manifest2, JSON.stringify({
+    version: 1, policyVersion: 1, commit: commitAll(f.source, "v2"), files: v2,
+  }));
   const again = f.runWith(manifest2, "--apply");
   assert.notEqual(again.status, 0);
   assert.match(again.stderr, /prior transaction pending/);
@@ -280,13 +306,16 @@ test("ya-publicado se adopta: v1 presente → edición viva → v2 la conserva (
   const v2 = f.files.map((entry, i) => {
     const content = `nuevo v2 ${i}\n`;
     writeFileSync(join(f.stage, entry.path), content);
+    writeFileSync(join(f.source, entry.path), content);
     return { path: entry.path, sha256: sha(content) };
   });
   const manifest2 = join(f.root, "selection2.json");
-  writeFileSync(manifest2, JSON.stringify({ version: 1, policyVersion: 1, files: v2 }));
+  writeFileSync(manifest2, JSON.stringify({
+    version: 1, policyVersion: 1, commit: commitAll(f.source, "v2"), files: v2,
+  }));
   const state2 = join(f.root, "state2");
   const second = spawnSync(
-    process.execPath, [publishScript, manifest2, f.stage, f.runtime, state2, "--apply"],
+    process.execPath, [publishScript, manifest2, f.stage, f.runtime, state2, f.source, "--apply"],
     { encoding: "utf8" },
   );
   assert.equal(second.status, 0, second.stderr);
