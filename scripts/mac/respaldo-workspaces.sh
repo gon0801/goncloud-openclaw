@@ -30,18 +30,22 @@ esac
 
 mkdir -p "$RESPALDO_DIR"
 LOCK="$RESPALDO_DIR/.lock"
+# Identidad de un proceso = PID + hora de inicio: tras un reinicio el PID de una
+# corrida muerta puede tenerlo otro proceso vivo, y eso no es dueño del lock.
+identidad() { printf '%s %s' "$1" "$(ps -o lstart= -p "$1" 2>/dev/null | tr -s ' ')"; }
 if ! mkdir "$LOCK" 2>/dev/null; then
   # Un lock huérfano (corte de luz, SIGKILL) no puede detener los respaldos para
   # siempre: si su dueño ya no vive, se recupera.
-  dueno="$(cat "$LOCK/pid" 2>/dev/null)"
-  if [ -n "$dueno" ] && kill -0 "$dueno" 2>/dev/null; then
-    log "ABORTO: otra corrida (pid $dueno) tiene el lock $LOCK"; exit 3
+  dueno="$(cat "$LOCK/dueno" 2>/dev/null)"
+  pid="${dueno%% *}"
+  if [ -n "$pid" ] && [ "$(identidad "$pid")" = "$dueno" ]; then
+    log "ABORTO: otra corrida (pid $pid) tiene el lock $LOCK"; exit 3
   fi
-  log "lock huérfano (pid ${dueno:-desconocido}); se recupera"
+  log "lock huérfano (${dueno:-sin dueño}); se recupera"
   rm -rf "$LOCK"
   mkdir "$LOCK" 2>/dev/null || { log "ABORTO: no se pudo tomar el lock $LOCK"; exit 3; }
 fi
-echo $$ > "$LOCK/pid"
+identidad $$ > "$LOCK/dueno"
 TMP="$(mktemp -d "$RESPALDO_DIR/.fuente.XXXXXX")"
 trap 'rm -rf "$TMP" "$LOCK"' EXIT
 
@@ -50,15 +54,14 @@ for par in $PARES; do dirs="$dirs ${par%%:*}"; done
 
 # 1. Copia de solo lectura de los workspaces vivos.
 if [ "$RESPALDO_FUENTE" = ssh ]; then
-  if ! destino="$(python3 -c "
-import json,os
-r=json.load(open(os.path.expanduser('~/.openclaw/openclaw.json')))['gateway']['remote']
-print(r['sshTarget'], os.path.expanduser(r['sshIdentity']))" 2>&1)"; then
-    log "ABORTO: no se pudo leer gateway.remote de ~/.openclaw/openclaw.json: $destino"; exit 4
-  fi
-  read -r SSH_TARGET SSH_ID <<< "$destino"
-  if [ -z "${SSH_TARGET:-}" ] || [ -z "${SSH_ID:-}" ]; then
-    log "ABORTO: gateway.remote sin sshTarget/sshIdentity"; exit 4
+  # El CLI de OpenClaw lee su config con su propia semántica (JSON5); no se
+  # parsea el archivo a mano.
+  OC="${OPENCLAW_BIN:-$HOME/.openclaw/bin/openclaw}"
+  campo() { "$OC" config get "gateway.remote.$1" --json 2>/dev/null | tail -1 \
+    | python3 -c 'import json,os,sys; print(os.path.expanduser(json.load(sys.stdin)))' 2>/dev/null; }
+  SSH_TARGET="$(campo sshTarget)"; SSH_ID="$(campo sshIdentity)"
+  if [ -z "$SSH_TARGET" ] || [ -z "$SSH_ID" ]; then
+    log "ABORTO: no se pudo leer gateway.remote.sshTarget/sshIdentity con $OC"; exit 4
   fi
   # shellcheck disable=SC2086
   if ! ssh -i "$SSH_ID" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 \

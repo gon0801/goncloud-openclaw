@@ -10,7 +10,8 @@
 #   6. Una rama que no es respaldo/*: se rechaza antes de tocar nada.
 #   7. Archivos enormes: se omiten, no rompen el push.
 #   8. Nunca --force; por SSH solo `tar -c`; el plist es válido y apunta al script.
-#   9-11. Lock huérfano se recupera, lock vivo se respeta, config SSH ilegible aborta.
+#   9-12. Lock huérfano se recupera, lock vivo se respeta, config SSH ilegible aborta,
+#         un PID reusado por otro proceso no retiene el lock.
 #
 # Uso: bash scripts/tests/test-respaldo-workspaces.sh
 set -u
@@ -95,23 +96,32 @@ git -C "$SB/remotos/goncloud-workspace-main.git" ls-tree -r --name-only respaldo
   && fail "el archivo enorme llegó al respaldo"
 
 # 9. Lock huérfano (dueño muerto): se recupera y el respaldo corre.
-mkdir -p "$SB/clones/.lock"; echo 999999 > "$SB/clones/.lock/pid"
+mkdir -p "$SB/clones/.lock"; echo "999999 Thu 1 Jan 00:00:00 1970" > "$SB/clones/.lock/dueno"
 correr env || { cat "$SB/salida"; fail "un lock huérfano detuvo el respaldo"; }
 grep -q "lock huérfano" "$SB/salida" || fail "no reportó la recuperación del lock huérfano"
 [ -e "$SB/clones/.lock" ] && fail "el lock quedó tomado al terminar"
 
 # 10. Lock con dueño vivo: se respeta y no se toca.
-mkdir -p "$SB/clones/.lock"; echo $$ > "$SB/clones/.lock/pid"
+yo="$$ $(ps -o lstart= -p $$ | tr -s ' ')"
+mkdir -p "$SB/clones/.lock"; printf '%s' "$yo" > "$SB/clones/.lock/dueno"
 correr env; rc=$?
 [ "$rc" -eq 3 ] || fail "con el lock de un proceso vivo no salió con 3 (rc=$rc)"
-[ "$(cat "$SB/clones/.lock/pid")" = "$$" ] || fail "se robó el lock de un proceso vivo"
+[ "$(cat "$SB/clones/.lock/dueno")" = "$yo" ] || fail "se robó el lock de un proceso vivo"
 rm -rf "$SB/clones/.lock"
 
 # 11. Config de SSH ilegible: aborta nombrando la causa, sin intentar SSH.
 mkdir -p "$SB/home/.openclaw"; printf '{ gateway: {} }\n' > "$SB/home/.openclaw/openclaw.json"
-HOME="$SB/home" RESPALDO_DIR="$SB/clones" RESPALDO_FUENTE=ssh bash "$S" > "$SB/salida" 2>&1; rc=$?
+printf '#!/bin/sh\nexit 1\n' > "$SB/oc-roto"; chmod +x "$SB/oc-roto"
+OPENCLAW_BIN="$SB/oc-roto" RESPALDO_DIR="$SB/clones" RESPALDO_FUENTE=ssh bash "$S" > "$SB/salida" 2>&1; rc=$?
 [ "$rc" -eq 4 ] || fail "config ilegible no salió con 4 (rc=$rc)"
 grep -q "no se pudo leer gateway.remote" "$SB/salida" || fail "config ilegible sin causa nombrada"
+grep -q "no se pudo copiar" "$SB/salida" && fail "con la config ilegible igual intentó SSH"
+
+# 12. PID reusado: el PID del lock existe (es este shell) pero con otra hora de
+#     inicio, así que es otro proceso y el lock se recupera.
+mkdir -p "$SB/clones/.lock"; echo "$$ Thu 1 Jan 00:00:00 1970" > "$SB/clones/.lock/dueno"
+correr env || { cat "$SB/salida"; fail "un PID reusado retuvo el lock"; }
+grep -q "lock huérfano" "$SB/salida" || fail "no trató el PID reusado como huérfano"
 
 # 8
 grep -vE '^[[:space:]]*#' "$S" | grep -nE -- '--force|push -f|\+HEAD:|\+refs/' && fail "el respaldo puede forzar un push"
