@@ -96,7 +96,7 @@ case "\$*" in
     # abrir ya no crea crons: si algo llama a cron add, queda anotado y la
     # prueba que vigila la ausencia lo pone en rojo.
     printf '{}';;
-  *message\ send*) [ "\${MSJ_SUENIO:-0}" != "0" ] && sleep "\${MSJ_SUENIO}"; [ "\${ENVIO_MODO:-ok}" = "mal" ] && exit 1; printf '{"messageId":"m1"}';;
+  *message\ send*) [ "\${MSJ_SUENIO:-0}" != "0" ] && sleep "\${MSJ_SUENIO}"; [ "\${ENVIO_MODO:-ok}" = "mal" ] && exit 1; printf '%s' "\${MSJ_PREAMBULO:-}"; printf '{"ok":true,"messageId":%s}' "\${MSJ_ID:-\"m1\"}";;
 esac
 exit 0
 STUB
@@ -290,6 +290,36 @@ bash "$CORR" abrir t-ns --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 
   || fail "abrir sin simulacro fallo"
 grep -q '"simulacro": *false' "$T/corridas/t-ns/registro.json" \
   || fail "el registro de t-ns no dice no-simulacro"
+
+# (6d) corrida_mensaje guarda la prueba del mensaje: messageId extraido de un
+# stdout con preambulo, at numerico, texto con el prefijo de simulacro; el
+# destino nunca queda escrito. Envio fallido -> message_id null, ok false.
+: > "$T/corridas/t1/mensajes.jsonl"
+export MSJ_PREAMBULO="ruido de arranque del CLI
+mas ruido
+" MSJ_ID=4242
+corrida_mensaje t1 DETENIDA "1 de 2 partes terminadas" "hubo un percance" "se retoma" "nada" \
+  || fail "DETENIDA con preambulo en el stdout fallo"
+unset MSJ_PREAMBULO MSJ_ID
+ultima=$(tail -n1 "$T/corridas/t1/mensajes.jsonl")
+printf '%s' "$ultima" | grep -q '"message_id": 4242' \
+  || fail "corrida_mensaje no extrajo el messageId del preambulo: $ultima"
+printf '%s' "$ultima" | grep -qE '"at": [0-9]+' \
+  || fail "corrida_mensaje no guardo un at numerico: $ultima"
+printf '%s' "$ultima" | grep -q '\[SIMULACRO\] \[DETENIDA\] Corrida' \
+  || fail "corrida_mensaje no guardo el texto con el prefijo de simulacro: $ultima"
+printf '%s' "$ultima" | grep -q "$DESTINO" \
+  && fail "corrida_mensaje dejo el destino escrito en mensajes.jsonl: $ultima"
+
+export ENVIO_MODO=mal
+corrida_mensaje t1 DETENIDA "1 de 2 partes terminadas" "hubo un percance" "se retoma" "nada" \
+  2>/dev/null && fail "el envio fallido debio devolver distinto de 0"
+unset ENVIO_MODO
+ultima=$(tail -n1 "$T/corridas/t1/mensajes.jsonl")
+printf '%s' "$ultima" | grep -q '"ok": false' \
+  || fail "el envio fallido no quedo con ok:false: $ultima"
+printf '%s' "$ultima" | grep -q '"message_id": null' \
+  || fail "el envio fallido no quedo con message_id:null: $ultima"
 
 # (9) con el entorno vacio se usa la misma tabla del registro.
 : > "$TMUX_LOG"
