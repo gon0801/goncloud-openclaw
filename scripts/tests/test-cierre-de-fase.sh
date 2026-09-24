@@ -941,4 +941,71 @@ sin_evidencia_usuario
 git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m limpia-evidencia-usuario 2>/dev/null
 git -C "$R" push -q -f origin HEAD:main
 
+# (15f) Dos archivos de evidencia con fechas distintas: gana el veredicto MAS
+# RECIENTE, no el primero que aparezca al concatenar. El contrato dice que el bloque
+# "termina" en su veredicto; sin este caso, un check que uniera todos los bloques de
+# una fila y se quedara con el primer FUNCIONA que encontrara daria por cerrada una
+# promesa que la ultima prueba dice rota -- justo lo que 9.12 existe para impedir.
+# Hallazgo del lead sobre 182fde0, reproducido antes de este arreglo.
+plan_promesa 'Promesa: la pantalla muestra "7 de 7" — ruta: abre http://x/tablero/5.' ''
+
+# (15f-1) Viejo FUNCIONA, nuevo NO FUNCIONA: ROJO nombrando la fila.
+sin_evidencia_usuario
+mkdir -p "$R/docs/evidence"
+cat >"$R/docs/evidence/usuario-5-2026-09-24.md" <<'EOF'
+## 5.0
+Promesa: la pantalla muestra "7 de 7"
+Ruta: abrí http://x/tablero/5
+FUNCIONA mostró "7 de 7" el día 24
+EOF
+cat >"$R/docs/evidence/usuario-5-2026-09-25.md" <<'EOF'
+## 5.0
+Promesa: la pantalla muestra "7 de 7"
+Ruta: abrí http://x/tablero/5
+NO FUNCIONA mostró un error 500 el día 25
+EOF
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m evidencia-15f-1 2>/dev/null
+git -C "$R" push -q -f origin HEAD:main
+out=$(CIERRE_SIN_GATEWAY=1 corre 5); rc=$?
+[ "$rc" -eq 1 ] || fail "(15f-1) un FUNCIONA viejo con un NO FUNCIONA mas nuevo debe salir 1; salio $rc:
+$out"
+printf '%s' "$out" | grep -q "^ROJO *usuario" \
+  || fail "(15f-1) el veredicto mas reciente (NO FUNCIONA) debe ganar, no el mas viejo (FUNCIONA):
+$out"
+printf '%s' "$out" | grep -q "5.0" \
+  || fail "(15f-1) el detalle debe nombrar la fila 5.0:
+$out"
+echo "ok (15f-1): con un FUNCIONA viejo y un NO FUNCIONA mas nuevo, gana el mas nuevo: ROJO"
+
+# (15f-2) El otro lado: viejo NO FUNCIONA, nuevo FUNCIONA: VERDE. Sin este caso, un
+# check que simplemente usara el ULTIMO archivo por nombre (en vez de el veredicto
+# mas reciente) podria pasar (15f-1) por casualidad de orden alfabetico y no defender
+# nada distinto.
+sin_evidencia_usuario
+mkdir -p "$R/docs/evidence"
+cat >"$R/docs/evidence/usuario-5-2026-09-24.md" <<'EOF'
+## 5.0
+Promesa: la pantalla muestra "7 de 7"
+Ruta: abrí http://x/tablero/5
+NO FUNCIONA mostró un error 500 el día 24
+EOF
+cat >"$R/docs/evidence/usuario-5-2026-09-25.md" <<'EOF'
+## 5.0
+Promesa: la pantalla muestra "7 de 7"
+Ruta: abrí http://x/tablero/5
+FUNCIONA mostró "7 de 7" el día 25, ya re-probado
+EOF
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m evidencia-15f-2 2>/dev/null
+git -C "$R" push -q -f origin HEAD:main
+out=$(CIERRE_SIN_GATEWAY=1 corre 5); rc=$?
+[ "$rc" -eq 0 ] || fail "(15f-2) un NO FUNCIONA viejo con un FUNCIONA mas nuevo debe salir 0; salio $rc:
+$out"
+printf '%s' "$out" | grep -q "^VERDE *usuario" \
+  || fail "(15f-2) el veredicto mas reciente (FUNCIONA) debe ganar, no el mas viejo (NO FUNCIONA):
+$out"
+echo "ok (15f-2): con un NO FUNCIONA viejo y un FUNCIONA mas nuevo (re-probado), gana el mas nuevo: VERDE"
+sin_evidencia_usuario
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m limpia-evidencia-15f 2>/dev/null
+git -C "$R" push -q -f origin HEAD:main
+
 echo "TODO VERDE: cierre-de-fase"

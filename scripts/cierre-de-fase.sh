@@ -485,7 +485,10 @@ elif [ -z "$plan" ]; then
 else
   filas_fase=$(printf '%s\n' "$plan" | grep -E "^\| $FASE\.[0-9]+[a-z]? \|") || true
   evidencia=""
-  if archivos=$(en_repo ls-tree -r --name-only "$REF" -- docs/evidence 2>/dev/null | grep -E "^docs/evidence/usuario-$FASE-[0-9-]+\.md$"); then
+  # Orden ascendente por nombre de archivo (usuario-<fase>-AAAA-MM-DD.md ordena igual
+  # que la fecha) para que, mas abajo, "el ultimo bloque de una fila" sea el mas
+  # reciente y no dependa de lo que ls-tree haya devuelto.
+  if archivos=$(en_repo ls-tree -r --name-only "$REF" -- docs/evidence 2>/dev/null | grep -E "^docs/evidence/usuario-$FASE-[0-9-]+\.md$" | sort); then
     for f in $archivos; do
       contenido=$(en_repo show "$REF:$f" 2>/dev/null) || continue
       evidencia="$evidencia
@@ -524,14 +527,19 @@ if not prometidas:
     print("VERDE ninguna fila de la fase " + FASE + " declara promesa observable")
     raise SystemExit
 
-# Bloques "## <tid>" de los archivos de evidencia, hasta el proximo encabezado.
+# Bloques "## <tid>" de los archivos de evidencia, hasta el proximo encabezado. Los
+# archivos llegan en orden ascendente por fecha (ver arriba); un encabezado repetido
+# SOBRESCRIBE el bloque anterior de esa fila, nunca lo acumula, asi que lo que cuenta
+# es siempre el bloque MAS RECIENTE -- el contrato de agents/usuario/agent/AGENTS.md
+# dice que el bloque "termina" en su veredicto, y una re-prueba mas nueva reemplaza a
+# la vieja en vez de sumarse a ella.
 bloques = {}
 actual = None
 for linea in evid.splitlines():
     m = re.match(r"^## (\S+)", linea)
     if m:
         actual = m.group(1)
-        bloques.setdefault(actual, [])
+        bloques[actual] = []
         continue
     if actual is not None:
         bloques[actual].append(linea)
@@ -544,8 +552,11 @@ for tid in prometidas:
         faltan.append(tid)
         continue
     texto = "\n".join(lineas_bloque)
-    m = re.search(r"^(FUNCIONA|NO FUNCIONA|NO PUDE PROBARLO)\b", texto, re.M)
-    if not m or m.group(1) != "FUNCIONA":
+    # Dentro del bloque mas reciente, el veredicto que cuenta es tambien el ultimo
+    # que aparezca (un bloque bien formado trae uno solo; si trajera varios, el
+    # ultimo es el que "termina" el bloque).
+    veredictos = re.findall(r"^(FUNCIONA|NO FUNCIONA|NO PUDE PROBARLO)\b", texto, re.M)
+    if not veredictos or veredictos[-1] != "FUNCIONA":
         sin_funciona.append(tid)
 
 if faltan or sin_funciona:
