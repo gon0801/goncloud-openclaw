@@ -1,6 +1,6 @@
 ---
 name: sellercentral-browser-census
-description: Read Amazon Seller Central and Seller Flex order queues with the claw browser profile — tab recovery, row extraction, ship-by quirks, the Odoo Q3 / MELI direct-API cross-checks that back a zero or silence conclusion, customization (personalizadas) capture. Use for census or packing reads of Amazon MX/US orders.
+description: Read Amazon Seller Central and Seller Flex order queues with the claw browser profile — tab recovery, row extraction, ship-by quirks, the Odoo Q3 / MELI direct-API cross-checks that back a zero or silence conclusion, customization (personalizadas) capture. Use for census or packing reads of Amazon MX/US orders, including when a labeled order still needs a packing backfill.
 ---
 
 # Seller Central Browser Census
@@ -10,7 +10,7 @@ Read-only order census from Seller Central (MX/US) and Seller Flex using browser
 ## Steps
 
 1. Open queue URLs directly (orders-v3 `mfn` unshipped/pending × easyship/selfship, MX and US; sellerflex dashboard). Queue tabs usually survive between runs — check with `openclaw browser --browser-profile claw tabs` before opening new ones. Flag and timeout rules for every call below: `browser-cli-claw-profile`.
-2. On transient `tab not found` errors: re-run `tabs`; the tab is normally still alive. Prefer the raw hex tab id over short suggested ids: pass it as `--target-id <id>`. If `tabs` responds but `evaluate`/`navigate`/`screenshot` consistently time out (wedged bridge after a gateway restart), stop retrying browser actions — report the browser limit and reroute through ssh, whose approval passes independently. Element-scoped screenshots (`--element <selector>`) hung repeatedly in this setup (observed on gestalt pages) while `tabs` still responded; do not build a flow that depends on them.
+2. On transient `tab not found` errors: re-run `tabs`; the tab is normally still alive. Prefer the raw hex tab id over short suggested ids: pass it as `--target-id <id>`.
 3. Read page text with `evaluate --fn 'document.body.innerText.slice(0,4000)'` — there is no `openclaw browser text` subcommand. If an `evaluate` times out, retry once — SC pages settle slowly.
 4. Compact snapshots truncate before the orders table. Extract order IDs with an evaluate over `a,span,div,button,td` matching `/^\d{3}-\d{7}-\d{7}$/` on exact `textContent`.
 5. Ship-by display quirk: the US queue shows PDT dates; the MX queue shows the same instant as `12:59 AM CST` of the next day (MX "Sep 10 12:59 AM" = US "Sep 9"). Compare instants, not labels.

@@ -97,10 +97,39 @@ node "$ss\publish-selected.mjs" "$pub\selection.json" "$pub\stage" $rt "$pub\tx"
 | 5 | `N selected files published; K live edits kept; rollback transaction retained`, o `N selected files already published` si no había nada nuevo |
 
 Cada `SKIPPED live-edit <ruta>` es un archivo que alguien editó en vivo después
-de la última publicación. **No se pisó.** Se concilia a mano: se lleva la
-edición a un PR o se acepta lo de `main` publicando otra vez después de
-conciliar. En la primera publicación, sin registro previo, no hay skips: lo que
-difiera se reemplaza con respaldo en `$pub\tx`.
+de la última publicación, casi siempre un agente mejorando su propia
+`workshop-skill`. **No se pisó.** En la primera publicación, sin registro
+previo, no hay skips: lo que difiera se reemplaza con respaldo en `$pub\tx`.
+
+### Conciliar una edición viva
+
+El script no tiene opción de «aceptar lo de `main`»: adopta un archivo solo si
+el vivo ya es igual a lo que se publica, y salta el que difiere del último
+instalado. Se concilia así, sin perder la edición:
+
+1. **Guardarla en el repo.** Leer el archivo vivo byte a byte (exec de solo
+   lectura, en base64 y comprobando el tamaño), revisar su diff contra `main`
+   y llevarlo a un PR. Si una prueba exige copias idénticas en varios agentes
+   (p. ej. `test-browser-profile-flag`), se replica en todas.
+2. **Mergear y publicar.** Si `main` quedó igual al vivo, el archivo se adopta
+   solo y no hay más que hacer.
+3. **Si `main` trae algo encima del vivo** (vuelve a salir `SKIPPED`): comprobar
+   que el vivo es exactamente la versión ya mergeada y apartarlo, sin borrarlo.
+   Después se vuelve a publicar el mismo SHA:
+
+   ```powershell
+   $f = 'C:\Users\ehven\.openclaw\<ruta con \>'
+   $esperado = '<sha256 del archivo en el commit que lo guardó>'
+   if ((Get-FileHash $f -Algorithm SHA256).Hash.ToLower() -ne $esperado) { throw 'el vivo no es la versión guardada: no se aparta' }
+   $d = 'C:\Users\ehven\.openclaw-publish\conciliados\' + (Get-Date -Format 'yyyyMMdd-HHmmss')
+   New-Item -ItemType Directory -Force $d | Out-Null
+   Move-Item $f $d
+   ```
+
+   Sin archivo vivo, el paso 5 lo instala con respaldo y la salida queda en
+   `0 live edits kept`.
+
+Con registro previo, el script nunca pisa un vivo que no está guardado en el repo. **Sin registro** (primera publicación de ese archivo, o tras un `--rollback` que lo borró del registro) sí lo reemplaza, y el respaldo queda solo en `$pub\tx`: antes de publicar un archivo así, compara el vivo con `main`.
 
 **Guarda `$id`**: el rollback lo necesita.
 
