@@ -591,6 +591,7 @@ bash "$CORR" abrir t-lento --runbook "$RB" --vigia claw --cli-modos "$T/modos.ts
 bash "$CORR" lanzar-sesion t-lento carril bueno "$T/ses" --nombre ses-lento --encargo "$T/encargo.txt" >/dev/null 2>&1 \
   || fail "lanzar ses-lento fallo (9.16)"
 (
+  trap - EXIT # no heredar el rm -rf $T de la prueba: lib.sh lo reinstalaria al soltar y este proceso borraria $T al salir
   CORRIDA_STATE="$T/corridas" TMUX_BIN="$T/bin/tmux-shim" OPENCLAW_BIN="$T/bin/openclaw"
   . scripts/mac/corrida/lib.sh
   marcas_lock_tomar || exit 1
@@ -614,6 +615,7 @@ bash "$CORR" abrir t-tope --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv
   || fail "abrir t-tope fallo"
 "$TM_REAL" -L "$L" new-session -d -s ses-tope -x 200 -y 50 >/dev/null 2>&1 || true
 (
+  trap - EXIT # no heredar el rm -rf $T de la prueba: lib.sh lo reinstalaria al soltar y este proceso borraria $T al salir
   CORRIDA_STATE="$T/corridas" TMUX_BIN="$T/bin/tmux-shim" OPENCLAW_BIN="$T/bin/openclaw"
   . scripts/mac/corrida/lib.sh
   marcas_lock_tomar || exit 1
