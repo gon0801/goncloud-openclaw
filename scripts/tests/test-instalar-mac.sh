@@ -185,8 +185,10 @@ grep -v "^#" "$INST" | grep -q "corrida-latido" && fail "el instalador toca el l
 # exige +x a los subcomandos de corrida/ (en git son 100644 y se cargan con `.`):
 # un `test -x` sobre ellos marcaba FALTA en una instalacion sana.
 RB9=docs/runbooks/autopilot-fase9.md
+grep -Eq 'bash scripts/mac/instalar-mac\.sh[[:space:]]*&&[[:space:]]*$' "$RB9" \
+  || fail "$RB9 no instala con instalar-mac.sh (encadenado con &&)"
 grep -qF 'bash scripts/mac/instalar-mac.sh --verificar' "$RB9" \
-  || fail "$RB9 no instala/verifica con instalar-mac.sh"
+  || fail "$RB9 no verifica con instalar-mac.sh --verificar"
 grep -qF 'test -x "$HOME/bin/corrida/' "$RB9" \
   && fail "$RB9 exige +x a subcomandos de corrida/ que no son ejecutables"
 
