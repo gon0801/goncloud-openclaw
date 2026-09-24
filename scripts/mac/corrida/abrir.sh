@@ -4,7 +4,7 @@
 corrida_abrir() {
   local id="$1"; shift
   corrida_id_valido "$id" || { echo "abrir: id invalido (solo letras, numeros, - y _): $id" >&2; return 2; }
-  local runbook="" vigia="" cli_modos="" canal_de="verif-sync-repos" sim="false"
+  local runbook="" vigia="" cli_modos="" canal_de="cuotas-proveedores" sim="false"
   while [ $# -gt 0 ]; do
     case "$1" in
       --runbook|--vigia|--cli-modos|--canal-de)

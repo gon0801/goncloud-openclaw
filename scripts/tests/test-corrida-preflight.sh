@@ -70,7 +70,7 @@ cat >"$T/bin/openclaw" <<STUB
 printf '%s\n' "OPENCLAW \$*" >> "$LLAMADAS"
 case "\$*" in
   *cron\ rm*) [ "\${CRON_RM_FAIL:-0}" = "1" ] && exit 1; printf '{}';;
-  *cron\ list*) printf '{"jobs":[{"name":"verif-sync-repos","delivery":{"to":"DESTINO-PRE-9X"}}]}';;
+  *cron\ list*) printf '{"jobs":[{"name":"cuotas-proveedores","delivery":{"to":"DESTINO-PRE-9X"}}]}';;
   *cron\ add*) printf '{"id":"cron-1"}';;
   *gateway\ call\ status*) [ "\${GW_MODO:-ok}" = "mal" ] && exit 1; printf '{"ok":true}';;
   *message\ send*) [ "\${ENVIO_MODO:-ok}" = "mal" ] && exit 1; printf '{"messageId":"m1"}';;

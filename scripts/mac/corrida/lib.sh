@@ -57,9 +57,13 @@ runbook_de() { # $1 runbook del registro: la absoluta, tal cual; la relativa, co
 # Parser unico de `cron list --json`: por nombre, el destino de entrega o TODOS los
 # ids (los duplicados homonimos existen: medido en vivo 2026-09-18). Sentinelas en
 # stdout: ILEGIBLE (lista sin leer) y NINGUNO (legible, sin ese nombre).
-cron_dest_de() { # $1 nombre -> destino de entrega. Con crons homonimos: si todos
-                 # traen createdAtMs, gana el mas reciente; si no, mismo destino en
-                 # todos -> ese; destinos DISTINTOS -> AMBIGUO (que abrir falle).
+cron_dest_de() { # $1 nombre -> destino de entrega. delivery.to manda; si esta
+                 # vacio, cae a failureAlert.to SOLO cuando failureAlert.channel es
+                 # "telegram" (los crons de negocio restaurados el 24/9 llevan ahi
+                 # el destino de David, con delivery en modo "none"). Con crons
+                 # homonimos: si todos traen createdAtMs, gana el mas reciente; si
+                 # no, mismo destino resuelto en todos -> ese; DISTINTOS -> AMBIGUO
+                 # (que abrir falle).
   printf '%s' "$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" cron list --json 2>/dev/null)" | NOMBRE_CRON="$1" python3 -c "
 import sys,json,os
 t=sys.stdin.read()
@@ -69,7 +73,12 @@ except Exception:
   print('ILEGIBLE'); raise SystemExit
 js=[j for j in d.get('jobs',[]) if j.get('name')==os.environ['NOMBRE_CRON']]
 if not js: print(''); raise SystemExit
-dests=[(j.get('delivery') or {}).get('to') or '' for j in js]
+def dest_de(j):
+  d=(j.get('delivery') or {}).get('to') or ''
+  if d: return d
+  fa=j.get('failureAlert') or {}
+  return fa.get('to') or '' if fa.get('channel')=='telegram' else ''
+dests=[dest_de(j) for j in js]
 def ms(j):
   v=j.get('createdAtMs')
   return v if isinstance(v,(int,float)) and not isinstance(v,bool) else None

@@ -82,9 +82,9 @@ case "\$*" in
     [ "\${LISTA_SUENIO:-0}" != "0" ] && sleep "\${LISTA_SUENIO}"
     n=\$([ -f "$T/lists" ] && wc -l < "$T/lists" || echo 0); n=\$((n + 1)); echo x >> "$T/lists"
     if [ "\${LISTA_MALA:-0}" != "0" ] && [ "\$n" -gt "\${LISTA_DESPUES_DE:-0}" ]; then exit 1; fi
-    printf '{"jobs":[{"name":"verif-sync-repos","delivery":{"to":"$DESTINO"}}'
+    printf '{"jobs":[{"name":"cuotas-proveedores","delivery":{"to":"$DESTINO"}}'
     if [ "\${DEST_AMBIGUO:-0}" = "1" ]; then
-      printf ',{"name":"verif-sync-repos","delivery":{"to":"OTRO-DESTINO-9Z"}}'
+      printf ',{"name":"cuotas-proveedores","delivery":{"to":"OTRO-DESTINO-9Z"}}'
     fi
     if [ -f "$T/cron-puesto" ]; then
       while IFS= read -r linea; do

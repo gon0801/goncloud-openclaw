@@ -39,7 +39,7 @@ printf '%s\n' "OPENCLAW \$*" >> "$LLAMADAS"
 case "\$*" in
   *cron\ list*)
     [ "\${LISTA_MALA:-0}" = "1" ] && exit 1
-    printf '{"jobs":[{"name":"verif-sync-repos","enabled":true,"delivery":{"to":"DESTINO-9G"}}'
+    printf '{"jobs":[{"name":"cuotas-proveedores","enabled":true,"delivery":{"to":"DESTINO-9G"}}'
     while IFS= read -r linea; do
       [ -n "\$linea" ] && printf ',%s' "\$linea"
     done < "$JOBS"
