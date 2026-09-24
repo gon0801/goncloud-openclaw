@@ -1,4 +1,5 @@
-# Tabla de modos del simulacro 9.9 (Fase 9, 9.2). La fila tui-falso apunta al TUI de
-# mentira en el worktree del lead; la comprobacion de barra es su linea final.
-tui-falso	/Users/dn/dev/wt-f9-lead/scripts/tests/fixtures/tui-falso.sh		TUI-FALSO	unknown	unknown	unknown
+# Tabla de modos del simulacro 9.9 (Fase 9, 9.2/9.9). La fila tui-falso NO lleva
+# ruta: bin_de_tabla rechaza binarios con "/", asi que el binario es el nombre
+# sim9-tui-falso y quien abre la corrida antepone su bin/ al PATH.
+tui-falso	sim9-tui-falso		TUI-FALSO	unknown	Enter	Escape
 glm	glm	--mode yolo	yolo	/mode yolo	unknown	unknown
