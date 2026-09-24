@@ -129,7 +129,7 @@ instalado. Se concilia así, sin perder la edición:
    Sin archivo vivo, el paso 5 lo instala con respaldo y la salida queda en
    `0 live edits kept`.
 
-Nunca se pisa un vivo que no está guardado en el repo.
+Con registro previo, el script nunca pisa un vivo que no está guardado en el repo. **Sin registro** (primera publicación de ese archivo, o tras un `--rollback` que lo borró del registro) sí lo reemplaza, y el respaldo queda solo en `$pub\tx`: antes de publicar un archivo así, compara el vivo con `main`.
 
 **Guarda `$id`**: el rollback lo necesita.
 
