@@ -1,0 +1,5 @@
+U2 carril I (9.10) — test en rojo antes de implementar
+
+$ bash scripts/tests/test-instalar-mac.sh
+FAIL: falta scripts/mac/instalar-mac.sh
+rc=1

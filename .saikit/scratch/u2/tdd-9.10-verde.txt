@@ -1,0 +1,8 @@
+U2 carril I (9.10) — verde + mutaciones
+
+$ bash scripts/tests/test-instalar-mac.sh
+OK test-instalar-mac
+rc=0
+mut1 (plist sin sustitucion) -> FAIL "el plist no apunta al HOME instalado" rc=1
+mut2 (sin fase_blobs) -> FAIL "instalo con blob adulterado" rc=1
+restaurado -> OK rc=0

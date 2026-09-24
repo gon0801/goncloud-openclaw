@@ -1,0 +1,116 @@
+#!/bin/bash
+# 9.10 instalar-mac.sh: instala las herramientas de corrida en un HOME de
+# mentira con uid inyectado. Nada toca el HOME real ni launchd real: HOME,
+# INSTALAR_UID, LAUNCHCTL_BIN y GIT_BIN se inyectan.
+# Uso: bash scripts/tests/test-instalar-mac.sh
+set -u
+cd "$(dirname "$0")/../.." || exit 1
+fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
+
+INST=scripts/mac/instalar-mac.sh
+[ -f "$INST" ] || fail "falta $INST"
+/bin/bash -n "$INST" || fail "$INST no parsea con /bin/bash"
+
+T=$(mktemp -d) || exit 1
+trap 'rm -rf "$T"' EXIT
+export HOME="$T/casa"
+mkdir -p "$HOME"
+export INSTALAR_UID=59999
+LAUNCHLOG="$T/launchctl.log"; export LAUNCHLOG
+mkdir -p "$T/bin"
+cat >"$T/bin/launchctl-falso" <<STUB
+#!/bin/sh
+printf '%s\n' "LAUNCHCTL \$*" >> "$LAUNCHLOG"
+exit 0
+STUB
+chmod +x "$T/bin/launchctl-falso"
+export LAUNCHCTL_BIN="$T/bin/launchctl-falso"
+
+# (1) --dry-run no toca nada e imprime que haria, con el uid inyectado.
+out="$(bash "$INST" --dry-run 2>&1)" || fail "dry-run fallo: $out"
+[ -z "$(ls -A "$HOME")" ] || fail "dry-run escribio en HOME: $(ls -A "$HOME")"
+printf '%s' "$out" | grep -q "corrida.sh" || fail "dry-run no anuncia corrida.sh"
+printf '%s' "$out" | grep -q "gui/59999" || fail "dry-run no usa el uid inyectado (falta gui/59999)"
+
+# (2) instala el conjunto completo.
+out="$(bash "$INST" 2>&1)" || fail "instalar fallo: $out"
+for f in corrida.sh cli-modos.tsv agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh; do
+  [ -f "$HOME/bin/$f" ] || fail "falta \$HOME/bin/$f"
+done
+[ -x "$HOME/bin/corrida.sh" ] || fail "corrida.sh quedo sin +x"
+ncorr="$(ls "$HOME/bin/corrida"/*.sh 2>/dev/null | wc -l)"
+[ "$ncorr" -eq 12 ] || fail "corrida/ trae $ncorr .sh, se esperaban 12"
+for f in abrir lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento lib; do
+  [ -f "$HOME/bin/corrida/$f.sh" ] || fail "falta \$HOME/bin/corrida/$f.sh"
+done
+PL="$HOME/Library/LaunchAgents/ai.goncloud.tmux-activity-watch.plist"
+[ -f "$PL" ] || fail "falta el plist generado"
+[ -f "$HOME/.tmux.conf" ] || fail "falta \$HOME/.tmux.conf"
+grep -qF "source ~/bin/agent-tmux-shell.zsh" "$HOME/.zshrc" 2>/dev/null \
+  || fail "falta la linea de source en .zshrc"
+printf '%s' "$out" | grep -q "instalado" || fail "no imprime que quedo instalado"
+
+# (3) el plist generado usa el HOME de mentira, sin rutas fijas (mutacion: /Users/dn a fuego).
+grep -qF "$HOME/bin/tmux-activity-watch.sh" "$PL" || fail "el plist no apunta al HOME instalado"
+grep -qF "/Users/dn" "$PL" && fail "el plist trae /Users/dn a fuego"
+
+# (4) el latido viejo ni se copia ni se carga.
+[ -e "$HOME/bin/corrida-latido.sh" ] && fail "copio un corrida-latido a bin"
+ls "$HOME/Library/LaunchAgents/" | grep -q "corrida-latido" && fail "copio el plist del latido viejo"
+grep -q "corrida-latido" "$LAUNCHLOG" 2>/dev/null && fail "cargo el latido viejo en launchd"
+grep -q "bootstrap gui/59999" "$LAUNCHLOG" || fail "no cargo el vigilante con gui/59999"
+
+# (5) idempotente: segunda corrida no cambia bytes ni mtimes.
+suma1="$(find "$HOME" -type f | sort | xargs md5 2>/dev/null | md5)"
+touch "$T/marca"; sleep 1
+bash "$INST" >/dev/null 2>&1 || fail "segunda corrida fallo"
+suma2="$(find "$HOME" -type f | sort | xargs md5 2>/dev/null | md5)"
+[ "$suma1" = "$suma2" ] || fail "la segunda corrida cambio bytes"
+[ -z "$(find "$HOME" -newer "$T/marca" -type f)" ] || fail "la segunda corrida toco mtimes: $(find "$HOME" -newer "$T/marca" -type f)"
+nlineas="$(grep -c "source ~/bin/agent-tmux-shell.zsh" "$HOME/.zshrc")"
+[ "$nlineas" -eq 1 ] || fail ".zshrc duplico la linea ($nlineas)"
+
+# (5b) respaldo .anterior al reemplazar un archivo cambiado a mano.
+echo MANO >>"$HOME/bin/shot.sh"
+bash "$INST" >/dev/null 2>&1 || fail "reinstalar tras cambio a mano fallo"
+grep -q MANO "$HOME/bin/shot.sh.anterior" 2>/dev/null || fail "no guardo .anterior del archivo reemplazado"
+cmp -s "$HOME/bin/shot.sh" scripts/mac/shot.sh || fail "no restauro shot.sh desde la fuente"
+
+# (6) --verificar: verde instalado, rojo nombrando el archivo tocado o ausente.
+bash "$INST" --verificar >/dev/null 2>&1 || fail "verificar fallo sobre instalacion sana"
+echo MANO >>"$HOME/bin/agent-tmux.sh"
+out="$(bash "$INST" --verificar 2>&1)" && fail "verificar paso con agent-tmux.sh modificado"
+printf '%s' "$out" | grep -q "agent-tmux.sh" || fail "verificar no nombra el archivo modificado: $out"
+rm "$HOME/bin/claude-stop-openclaw-event.sh"
+out="$(bash "$INST" --verificar 2>&1)" && fail "verificar paso con archivo ausente"
+printf '%s' "$out" | grep -q "claude-stop-openclaw-event.sh" || fail "verificar no nombra el archivo ausente: $out"
+
+# (7) blob contra la rama: fuente adulterada no se instala (mutacion: sin comprobar blob).
+export HOME="$T/casa2"; mkdir -p "$HOME"
+cat >"$T/bin/git-adulterado" <<STUB
+#!/bin/sh
+case "\$*" in
+  *rev-parse*cli-modos.tsv*) printf '0000000000000000000000000000000000000000\n';;
+  *) exec /usr/bin/git "\$@";;
+esac
+STUB
+chmod +x "$T/bin/git-adulterado"
+out="$(GIT_BIN="$T/bin/git-adulterado" bash "$INST" 2>&1)" && fail "instalo con blob adulterado"
+printf '%s' "$out" | grep -q "cli-modos.tsv" || fail "no nombra el archivo con blob distinto: $out"
+[ -e "$T/casa2/bin/corrida.sh" ] && fail "escribio archivos antes de fallar el blob"
+
+# (8) archivo ausente en la rama se declara y no aborta.
+cat >"$T/bin/git-ausente" <<STUB
+#!/bin/sh
+case "\$*" in
+  *rev-parse*shot.sh*) exit 1;;
+  *) exec /usr/bin/git "\$@";;
+esac
+STUB
+chmod +x "$T/bin/git-ausente"
+export HOME="$T/casa3"; mkdir -p "$HOME"
+out="$(GIT_BIN="$T/bin/git-ausente" bash "$INST" 2>&1)" || fail "aborto por archivo ausente en la rama: $out"
+printf '%s' "$out" | grep -qi "sin referencia" || fail "no declara el archivo ausente en la rama: $out"
+[ -f "$T/casa3/bin/shot.sh" ] || fail "omitio instalar el archivo declarado"
+
+echo "OK test-instalar-mac"
