@@ -68,6 +68,7 @@ grep -qF 'NEVER run `reset-profile` on `claw`' "$REF" || fail "$REF: falta la pr
 # CLI en Windows tarda 10-23 s en arrancar, asi que timeouts de 15-20 s lo matan antes de conectar.
 grep -qF 'One session drives the claw browser at a time' "$REF" || fail "$REF: falta la regla de una sola sesion"
 grep -qF 'timeoutSeconds >= 60' "$REF" || fail "$REF: falta el timeout minimo de 60 s"
+grep -qF 'raw CDP is a read-only exception' "$REF" || fail "$REF: falta el limite de solo lectura del fallback CDP"
 echo "ok (3): skill $SK en main/operaciones/ingenieria, identica y con sus anclas"
 
 # (4) Aislamiento de la copia instalada (B4): esta prueba es de FUENTE y su
