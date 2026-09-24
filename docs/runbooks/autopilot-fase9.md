@@ -26,7 +26,7 @@ PY
 open 'http://127.0.0.1:18789/runbook/tablero/9'
 ```
 
-Después corre el 0.0 del base, sustituyendo su línea de arranque por `bash scripts/arranque-de-fase.sh 9 --solo-watchdog-global`, y verifica: `origin/main` contiene PRs #81, #97, #98, #104 y #110; PR #100 sigue abierto sobre `fase9/docs`; `ai.goncloud.corrida-latido` no está cargado; el vigilante global vive. Una celda vieja de `Plans.md` no invalida un merge comprobado. Q0 es este plan/runbook si aún no está integrado.
+Después corre el 0.0 del base, sustituyendo su línea de arranque por `bash scripts/arranque-de-fase.sh 9 --solo-watchdog-global`, y verifica: `origin/main` contiene PRs #81, #97, #98, #104 y #110; PR #100 ya integrado (merge f87f27e, 2026-09-21); `ai.goncloud.corrida-latido` no está cargado; el vigilante global vive. Una celda vieja de `Plans.md` no invalida un merge comprobado. Q0 es este plan/runbook si aún no está integrado.
 
 Claw lanza con `bash scripts/lanzar-fase.sh 9 -- <cli> <flag-verificado>`. El sentinel solo arma las instrucciones del turno; el merge usa un recibo persistente del PR y no depende de sello, sesión, host ni cwd.
 
@@ -42,7 +42,7 @@ Claw elige al lead por disponibilidad. El lead dirige, registra y hace la audito
 | CLI real barato, reloj inyectado y sesiones `sim9-*` | simulacro 7/7, máximo 10 min de pared | Aprobado |
 | gateway config, secretos, otro cron, `ai.goncloud.corrida-latido`, borrado recursivo | toda la fase | Negado |
 
-Prohibido: reimplementar filas ya integradas; abrir reemplazo de PR #100; rebase, amend, force-push o `--no-verify`; cambiar de trabajador para escapar de una prueba/revisión; repetir batería completa para el mismo SHA; activar un segundo reloj; implementar Fases 14, 15, 23, 9.17 o 9.18.
+Prohibido: reimplementar filas ya integradas; abrir reemplazo de PR #100 (ya integrado); rebase, amend, force-push o `--no-verify`; cambiar de trabajador para escapar de una prueba/revisión; repetir batería completa para el mismo SHA; activar un segundo reloj; implementar Fases 14, 15, 23, 9.17 o 9.18.
 
 ## Carriles y archivos
 
@@ -50,7 +50,7 @@ Cada carril sigue los Tasks homónimos del plan, incluida su DoD y sus comandos 
 
 | Carril / rama | Filas | Propiedad |
 |---|---|---|
-| D `fase9/docs`, PR #100 | 9.7, 9.13 | alcance existente del PR; watcher/runner, loop, skill y guía |
+| D `fase9/docs`, PR #100 (integrado f87f27e) | 9.7, 9.13 | alcance integrado del PR; watcher/runner, loop, skill y guía |
 | I `fase9/instalacion-cierre` | 9.10, 9.16 | `scripts/mac/instalar-mac.sh`, corrida cerrar/lib y pruebas focalizadas |
 | U `fase9/usuario` | 9.11, 9.12 | `agents/usuario/`, cierre de fase, skill y pruebas focalizadas |
 | S sin rama de código | 9.9 | instalación integrada, simulacro y evidencia; 9.0 queda diferida |
@@ -67,18 +67,19 @@ Pruebas focalizadas al editar. Una batería completa por PR, en CI sobre el SHA 
 | Cola | Compuerta |
 |---|---|
 | Q0 plan/runbook | pruebas focalizadas de docs, CI final, recibo persistente; integrar antes de código |
-| Q1 PR #100 | 9.7 preservada; reproducción y arreglo de 9.13; cross-review, CodeRabbit, CI |
+| Q1 PR #100 (integrado f87f27e) | 9.7 en `main` por el merge; 9.13 se verifica contra `origin/main` sin reabrir el PR; cross-review, CodeRabbit, CI |
 | Q2 I | 9.10 y 9.16 verdes, ningún old heartbeat, revisión/CI |
 | Q3 U | 9.11 y 9.12 verdes, `usuario` no leyó código, revisión/CI |
 | Q4 S | instalado desde `origin/main`; 7/7 `FUNCIONA`; `[SIMULACRO]`; ≤10 min pared |
 | Q5 cierre | evidencia, estados honestos, `bash scripts/cierre-de-fase.sh 9` en VERDE |
 
-Antes de iniciar Q4, instala con `bash scripts/mac/instalar-mac.sh` desde el
-`origin/main` integrado y comprueba que no quedó una copia parcial de
-`corrida.sh`:
+Antes de iniciar Q4, instala a mano desde el `origin/main` integrado (no
+existe aún `scripts/mac/instalar-mac.sh`; fila 9.10 pendiente) y comprueba
+que no quedó una copia parcial de `corrida.sh`:
 
 ```bash
-bash scripts/mac/instalar-mac.sh &&
+cp scripts/mac/corrida.sh "$HOME/bin/corrida.sh" &&
+cp -r scripts/mac/corrida "$HOME/bin/corrida" &&
 for f in lib abrir lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento; do test -x "$HOME/bin/corrida/$f.sh" || { echo "FALTA $f" >&2; exit 1; }; done
 ```
 
@@ -92,7 +93,7 @@ El lead escribe progreso en cada cambio de estado. El watchdog global manda cada
 
 | Situación | Acción |
 |---|---|
-| PR #100 trae conflicto | resolver solo sus archivos declarados; prueba focalizada; push normal al mismo PR |
+| Alcance de PR #100 necesita corrección | PR ya integrado: corrección en PR nuevo desde `origin/main`; prueba focalizada; push normal |
 | cuota/auth/binario/arranque falla | detener candidato anterior y relevar al siguiente; registrar causa; no duplicar proceso vivo |
 | prueba o CI rojo | mismo carril corrige el fallo reproducido; no cambiar de modelo ni reiniciar CI sin SHA nuevo |
 | CodeRabbit sin cuota/20 min | declarar indisponible y continuar; no fingir aprobación |
