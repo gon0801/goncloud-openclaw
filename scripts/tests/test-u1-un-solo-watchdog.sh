@@ -67,11 +67,11 @@ if grep -rn -E "git add|sendMessage|telegram|Telegram|Start-ScheduledTask|Regist
 fi
 
 # Cero activaciones programadas del sync nuevo: solo sus scripts, sus pruebas,
-# su README y el apuntador del obsoleto lo nombran. El rastro documenta, no
-# ejecuta ni programa nada.
+# su README, el apuntador del obsoleto y su runbook de operación manual lo
+# nombran. El rastro documenta, no ejecuta ni programa nada.
 while IFS= read -r f; do
   case "$f" in
-    scripts/sync-seguro/*|scripts/tests/test-u1-*|scripts/sync-repos.ps1|.saikit/*) ;;
+    scripts/sync-seguro/*|scripts/tests/test-u1-*|scripts/sync-repos.ps1|.saikit/*|docs/runbooks/publicar-runtime-windows.md) ;;
     *) fail "sync-seguro referenciado fuera de su camino: $f" ;;
   esac
 done < <(git ls-files --cached --others --exclude-standard | xargs grep -l "sync-seguro" 2>/dev/null)
