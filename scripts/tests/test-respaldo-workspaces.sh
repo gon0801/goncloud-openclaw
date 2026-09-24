@@ -9,7 +9,8 @@
 #   5. Un workspace que no llegó entero: falla y su respaldo no se borra.
 #   6. Una rama que no es respaldo/*: se rechaza antes de tocar nada.
 #   7. Archivos enormes: se omiten, no rompen el push.
-#   8. Nunca --force; por SSH solo `tar -c`; el plist es válido y apunta al script.
+#   8. Nunca --force; por SSH solo `tar -c`; el plist es válido y apunta al script;
+#      el remoto por defecto es HTTPS (launchd no tiene agente SSH con llaves).
 #   9-12. Lock huérfano se recupera, lock vivo se respeta, config SSH ilegible aborta,
 #         un PID reusado por otro proceso no retiene el lock.
 #
@@ -127,6 +128,8 @@ grep -q "lock huérfano" "$SB/salida" || fail "no trató el PID reusado como hu�
 grep -vE '^[[:space:]]*#' "$S" | grep -nE -- '--force|push -f|\+HEAD:|\+refs/' && fail "el respaldo puede forzar un push"
 ssh_cmd="$(grep -E '^[[:space:]]*"\$SSH_TARGET"' "$S")"
 case "$ssh_cmd" in *'"tar -cf - -C'*) ;; *) fail "por SSH corre algo que no es tar -c: [$ssh_cmd]" ;; esac
+grep -q 'RESPALDO_REMOTO_BASE:-https://github.com/' "$S" \
+  || fail "el remoto por defecto no es HTTPS (bajo launchd no hay agente SSH con llaves)"
 python3 - "$P" <<'E' || fail "plist inválido o no apunta al script"
 import plistlib,sys
 d=plistlib.load(open(sys.argv[1],'rb'))
