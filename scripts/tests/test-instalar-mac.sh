@@ -1,7 +1,10 @@
 #!/bin/bash
 # 9.10 instalar-mac.sh: instala las herramientas de corrida en un HOME de
 # mentira con uid inyectado. Nada toca el HOME real ni launchd real: HOME,
-# INSTALAR_UID, LAUNCHCTL_BIN y GIT_BIN se inyectan.
+# INSTALAR_UID, LAUNCHCTL_BIN y GIT_BIN se inyectan. El stub de git de los
+# casos 1-6 simula el arbol integrado (la rama responde los blobs del arbol):
+# asi la mecanica se prueba igual en una rama de carril (arbol != main) que en
+# main; la ruta real por defecto se prueba en el caso (9).
 # Uso: bash scripts/tests/test-instalar-mac.sh
 set -u
 cd "$(dirname "$0")/../.." || exit 1
@@ -25,6 +28,21 @@ exit 0
 STUB
 chmod +x "$T/bin/launchctl-falso"
 export LAUNCHCTL_BIN="$T/bin/launchctl-falso"
+export REPO_ROOT="$PWD"
+cat >"$T/bin/git-integrado" <<STUB
+#!/bin/sh
+ultimo=""
+for a in "\$@"; do ultimo="\$a"; done
+case "\$ultimo" in
+  *:*)
+    rel="\${ultimo#*:}"
+    [ -n "\${REPO_ROOT:-}" ] && exec /usr/bin/git hash-object "\$REPO_ROOT/\$rel"
+    ;;
+esac
+exec /usr/bin/git "\$@"
+STUB
+chmod +x "$T/bin/git-integrado"
+export GIT_BIN="$T/bin/git-integrado"
 
 # (1) --dry-run no toca nada e imprime que haria, con el uid inyectado.
 out="$(bash "$INST" --dry-run 2>&1)" || fail "dry-run fallo: $out"
@@ -91,7 +109,7 @@ cat >"$T/bin/git-adulterado" <<STUB
 #!/bin/sh
 case "\$*" in
   *rev-parse*cli-modos.tsv*) printf '0000000000000000000000000000000000000000\n';;
-  *) exec /usr/bin/git "\$@";;
+  *) exec "$T/bin/git-integrado" "\$@";;
 esac
 STUB
 chmod +x "$T/bin/git-adulterado"
@@ -104,7 +122,7 @@ cat >"$T/bin/git-ausente" <<STUB
 #!/bin/sh
 case "\$*" in
   *rev-parse*shot.sh*) exit 1;;
-  *) exec /usr/bin/git "\$@";;
+  *) exec "$T/bin/git-integrado" "\$@";;
 esac
 STUB
 chmod +x "$T/bin/git-ausente"
@@ -112,5 +130,25 @@ export HOME="$T/casa3"; mkdir -p "$HOME"
 out="$(GIT_BIN="$T/bin/git-ausente" bash "$INST" 2>&1)" || fail "aborto por archivo ausente en la rama: $out"
 printf '%s' "$out" | grep -qi "sin referencia" || fail "no declara el archivo ausente en la rama: $out"
 [ -f "$T/casa3/bin/shot.sh" ] || fail "omitio instalar el archivo declarado"
+
+# (9) ruta real por defecto: con git real y ref por defecto, el instalador es
+# coherente con el estado del arbol. Si el arbol trae cambios sin integrar
+# (carril), se niega nombrando el archivo y sin escribir nada (fail closed);
+# si el arbol esta integrado, instala sano.
+export HOME="$T/casa4"; mkdir -p "$HOME"
+unset GIT_BIN
+out="$(bash "$INST" 2>&1)"; rc=$?
+if [ "$rc" -ne 0 ]; then
+  printf '%s' "$out" | grep -qE "blob distinto|sin referencia|sin comprobacion" \
+    || fail "se nego sin explicar el blob/rama: $out"
+  [ -e "$T/casa4/bin/corrida.sh" ] && fail "escribio antes de fallar el blob real"
+else
+  bash "$INST" --verificar >/dev/null 2>&1 || fail "instalo por defecto pero no verifica"
+fi
+
+# Anclas: la ref por defecto es la rama por defecto, y el latido viejo no esta
+# en el manifiesto (ni se copia ni se carga, en ningun modo).
+grep -qF 'INSTALAR_REF:-origin/main' "$INST" || fail "la ref por defecto no es origin/main"
+grep -v "^#" "$INST" | grep -q "corrida-latido" && fail "el instalador toca el latido viejo fuera de comentarios"
 
 echo "OK test-instalar-mac"

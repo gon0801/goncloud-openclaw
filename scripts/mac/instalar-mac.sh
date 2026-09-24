@@ -90,7 +90,7 @@ modo_dry() {
   di "  .tmux.conf  (blob $(blob_de "$AQUI/tmux.conf"))"
   di "  .zshrc: agregaria \`$LINEA_SOURCE\` si falta"
   di "  cargaria: $LC_BIN bootstrap gui/$QUIEN_UID $LA_DIR/$PL_NOMBRE"
-  di "  jamas: ai.goncloud.corrida-latido (reloj viejo, no se copia ni se carga)"
+  di "  jamas: el reloj viejo de 9.5 (retirado; no se copia ni se carga)"
 }
 
 modo_verificar() {
