@@ -654,16 +654,30 @@ open('$evtmp','w').write(json.dumps(d)+chr(10))
   [ "$sim" = "true" ] && sed -i.bak '1s/^/[SIMULACRO] /' "$M2" && rm -f "$M2.bak"
   local dest; dest="$(json_campo "$reg" canal.destino)"
   [ -n "$dest" ] || { echo "registro sin destino" >&2; rm -f "$M2"; return 1; }
-  local texto rc=0 sil=""
+  local texto rc=0 sil="" salida
   # seguimiento.v1: lo rutinario (CERRADA) en silencio; DETENIDA y
   # NECESITO TU RESPUESTA suenan: en la etiqueta que pide respuesta, fallar hacia
   # silencio es el peor sentido de fallar.
   case "$etq" in CERRADA) sil="--silent";; esac
   texto="$(cat "$M2")"
-  con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" message send --channel telegram -t "$dest" $sil --json -m "$texto" >/dev/null 2>&1 || rc=1
-  CORR_MSG_ETQ="$etq" CORR_MSG_OK="$rc" CORR_MSG_DIR="$CORRIDA_STATE/$id" python3 -c "
-import json,os
-d={'etiqueta':os.environ['CORR_MSG_ETQ'],'ok':os.environ['CORR_MSG_OK']=='0'}
+  salida="$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" message send --channel telegram -t "$dest" $sil --json -m "$texto" 2>/dev/null)" || rc=1
+  CORR_MSG_ETQ="$etq" CORR_MSG_OK="$rc" CORR_MSG_DIR="$CORRIDA_STATE/$id" CORR_MSG_TEXTO="$texto" CORR_MSG_SALIDA="$salida" python3 -c "
+import json,os,time
+ok=os.environ['CORR_MSG_OK']=='0'
+mid=None
+if ok:
+  sal=os.environ.get('CORR_MSG_SALIDA','')
+  try:
+    j=json.loads(sal[sal.index('{'):])
+    v=j.get('messageId')
+    if isinstance(v,int) and not isinstance(v,bool):
+      mid=v
+    elif isinstance(v,str) and v.lstrip('-').isdigit():
+      mid=int(v)
+  except Exception:
+    pass
+d={'at':int(time.time()),'etiqueta':os.environ['CORR_MSG_ETQ'],'ok':ok,
+   'message_id':mid,'texto':os.environ['CORR_MSG_TEXTO']}
 open(os.path.join(os.environ['CORR_MSG_DIR'],'mensajes.jsonl'),'a').write(json.dumps(d)+chr(10))
 " 2>/dev/null
   rm -f "$M2"
