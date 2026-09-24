@@ -361,10 +361,14 @@ CORR_CIERRE_ESPERA="${CORR_CIERRE_ESPERA:-60}"
 # respeta el lock, su token y su lease; solo espera mas que los ~10 s de un
 # intento suelto para cubrir un lanzamiento lento (sondeo de barra + entrega del
 # encargo) sin pedir reintento manual. Vencido el tope, diagnostico y distinto de 0.
+# El tope se revisa DESPUES de cada intento: con el tope ya vencido (el lock
+# global se tomo cerca del limite) el lock del registro igual se prueba una vez
+# en vez de fallar en seco con 0 intentos.
 cerrar_esperar_lock() { # $1 descripcion; resto: toma del lock
   local desc="$1"; shift
-  while [ "${SECONDS:-0}" -lt "${CIERRE_TOPE:-0}" ]; do
+  while :; do
     if "$@"; then return 0; fi
+    [ "${SECONDS:-0}" -lt "${CIERRE_TOPE:-0}" ] || break
     sleep 1
   done
   echo "cerrar: $desc no cedio en ${CORR_CIERRE_ESPERA}s; la corrida queda abierta, reintentar cierra" >&2

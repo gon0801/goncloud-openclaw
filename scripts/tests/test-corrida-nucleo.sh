@@ -630,6 +630,17 @@ grep -q '"estado": *"abierta"' "$T/corridas/t-tope/registro.json" || fail "t-top
 wait "$holdeador"
 bash "$CORR" cerrar t-tope >/dev/null 2>&1 || fail "cerrar tras liberar fallo (9.16)"
 
+# (9i3) 9.16: con el tope ya vencido, cerrar igual prueba el lock una vez antes
+# de rendirse (si el lock global se tomo cerca del limite, el del registro no
+# falla en seco con 0 intentos). Lock libre = lo toma; lock ocupado = un solo
+# intento y diagnostico, sin colgarse.
+tope0libre=$(bash -c '. scripts/mac/corrida/lib.sh; n=0; toma() { n=$((n+1)); return 0; }
+  CIERRE_TOPE=0 cerrar_esperar_lock "lock de prueba" toma; echo "rc=$? intentos=$n"')
+[ "$tope0libre" = "rc=0 intentos=1" ] || fail "tope vencido + lock libre debio tomarlo al 1er intento (9.16): $tope0libre"
+tope0dado=$(bash -c '. scripts/mac/corrida/lib.sh; n=0; toma() { n=$((n+1)); return 1; }
+  CIERRE_TOPE=0 cerrar_esperar_lock "lock de prueba" toma 2>/dev/null; echo "rc=$? intentos=$n"')
+[ "$tope0dado" = "rc=1 intentos=1" ] || fail "tope vencido + lock ocupado debio fallar con 1 intento (9.16): $tope0dado"
+
 # ancla de orden: cerrar toma el lock ANTES de listar sesiones (reordenarlo — la
 # mutacion que deja la carrera abierta por el lado de cerrar — pone esto en rojo).
 linelock=$(grep -n 'lock_tomar "$reg"' scripts/mac/corrida/cerrar.sh | head -1 | cut -d: -f1)
