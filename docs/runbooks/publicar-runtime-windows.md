@@ -158,8 +158,11 @@ app del iPhone y Telegram. Confirmar después con `config.get` (comparar
 
 ## Fuera de este camino
 
-- **`workspace`, `workspace-operaciones`, `workspace-ingenieria`**: en el
-  runtime ya no son clones git y la allowlist no los cubre. No hay camino
-  documentado para actualizarlos; hace falta una decisión.
+- **`workspace`, `workspace-operaciones`, `workspace-ingenieria`**: son
+  memoria viva de los agentes, no se publican: se **respaldan** del runtime a
+  la rama `respaldo/runtime` de cada repo `goncloud-workspace-*`, una vez al
+  día desde la Mac (`scripts/mac/respaldo-workspaces.sh`, instalación en
+  `scripts/mac/ai.goncloud.respaldo-workspaces.plist`). El respaldo solo lee
+  el runtime y nunca empuja a `master`.
 - **Watchdog**: `gateway-watchdog.ps1` se publica, pero la tarea programada
   `OpenClaw Gateway Watchdog` está deshabilitada. Publicar no la enciende.

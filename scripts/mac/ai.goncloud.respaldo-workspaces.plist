@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Respaldo diario de los workspaces vivos del gateway a la rama respaldo/runtime
+  de cada repo goncloud-workspace-* (scripts/mac/respaldo-workspaces.sh).
+  Install:
+    cp scripts/mac/respaldo-workspaces.sh ~/bin/ &&
+    cp scripts/mac/ai.goncloud.respaldo-workspaces.plist ~/Library/LaunchAgents/ &&
+    launchctl bootstrap gui/501 ~/Library/LaunchAgents/ai.goncloud.respaldo-workspaces.plist
+  Correr ya (sin esperar a las 04:30):
+    launchctl kickstart gui/501/ai.goncloud.respaldo-workspaces
+  Remove:
+    launchctl bootout gui/501/ai.goncloud.respaldo-workspaces
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.goncloud.respaldo-workspaces</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/dn/bin/respaldo-workspaces.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>/Users/dn</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/bin:/bin</string>
+  </dict>
+  <!-- Una vez al día, hora de la Mac. Si la Mac dormía, launchd la corre al despertar. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>4</integer>
+    <key>Minute</key>
+    <integer>30</integer>
+  </dict>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>/Users/dn/Library/Logs/respaldo-workspaces.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/dn/Library/Logs/respaldo-workspaces.log</string>
+</dict>
+</plist>
