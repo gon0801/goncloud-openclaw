@@ -3,6 +3,8 @@
 
 Read this when the SKILL.md trigger fires: `openclaw cron` denied by the approval binder (`approval cannot safely bind this command` / `approval script operand changed`, typically after gateway restarts, with `Approved executables: none` in context).
 
+**Contract check (AGENTS.md):** a confirmed cron CLI denial is a real block — report the exact command and the exact error to David, and do not route the same edit around it through another host or another profile. What follows is what may still work and how to keep the run verifiable while blocked (owner-run script, Control UI, post-run verification); it is not a licence to bypass the denial.
+
 ## Do not assume total lockout
 
 - Simple literal `ssh <host> "<command>"` exec shapes may still pass while the CLI is denied.
