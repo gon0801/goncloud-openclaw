@@ -1,11 +1,12 @@
 #!/bin/bash
-# 9.9 piezas (a) y (b): el arnes del simulacro de punta a punta, con los
-# casos 1-3 corriendo de verdad (4-7 siguen placeholder "NO OBSERVADO"). Con
-# --ensayo: tmux propio (-L), openclaw/gh/glm de mentira, vigia doblado del
-# checkout y CORRIDA_STATE temporal. Cubre prerrequisitos, arranque, limpieza
-# (trap y --limpiar), el generador de evidencia, y los tres casos vivos: sano
-# (1-3 FUNCIONA), glm que nunca dice LISTO (caso 1 NO FUNCIONA), responder
-# apagado (caso 2 NO FUNCIONA), message send sin id (caso 3 NO FUNCIONA).
+# 9.9 piezas (a)-(c): el arnes del simulacro de punta a punta, con los 7
+# casos corriendo de verdad. Con --ensayo: tmux propio (-L), openclaw/gh/glm
+# de mentira, vigia doblado del checkout y CORRIDA_STATE temporal. Cubre
+# prerrequisitos, arranque, limpieza (trap y --limpiar), el generador de
+# evidencia, y un escenario de fallo por caso: glm que nunca dice LISTO
+# (caso 1 NO FUNCIONA), responder apagado (caso 2 NO FUNCIONA), message send
+# sin id (casos 3, 4 y 7 NO FUNCIONA — los tres mandan con la misma via), y
+# "main" sin relanzar (casos 5 y 6 NO FUNCIONA).
 # Uso: bash scripts/tests/test-simulacro-fase9.sh
 set -u
 cd "$(dirname "$0")/../.." || exit 1
@@ -59,13 +60,14 @@ export GH_BIN="$FIX/gh-falso.sh"
 export CORRIDA_CANDADO_gh=permitido CORRIDA_CANDADO_ssh=permitido
 export CORRIDA_CANDADO_red_externa=permitido
 export PATH="$T/bin:$PATH"
-export SIM_TOPE_C1=15 SIM_TOPE_C2=15 SIM_TOPE_C3=20
+export SIM_TOPE_C1=15 SIM_TOPE_C2=15 SIM_TOPE_C3=20 SIM_TOPE_C4=20 SIM_TOPE_C5=30 SIM_TOPE_C6=30
+export SIM_ESPERA_DOBLE=6
 
 # ============================= (1) todo sano ================================
 EVID1="$T/evidencia-1.md"
-salida1="$(bash "$ARNES" --ensayo --salida "$EVID1" --tope-pared 120 2>&1)"
+salida1="$(bash "$ARNES" --ensayo --salida "$EVID1" --tope-pared 300 2>&1)"
 rc1=$?
-[ "$rc1" -eq 1 ] || fail "todo sano: se esperaba salida 1 (4-7 NO OBSERVADO), salio $rc1 -- $salida1"
+[ "$rc1" -eq 0 ] || fail "todo sano: se esperaba salida 0 (7/7 FUNCIONA), salio $rc1 -- $salida1"
 printf '%s\n' "$salida1" | grep -q '^arrancada sim9-' || fail "no se vio 'arrancada sim9-...': $salida1"
 [ -f "$EVID1" ] || fail "no se genero la evidencia en $EVID1"
 
@@ -76,16 +78,16 @@ sesiones_quedan="$("$TM_REAL" -L "$SOCKET" list-sessions -F '#{session_name}' 2>
 # (1c) la evidencia nunca trae el destino falso.
 grep -q "$SIM9_DESTINO" "$EVID1" && fail "la evidencia dejo escrito el destino falso"
 
-# (1d) casos 1-3 FUNCIONA, 4-7 siguen NO OBSERVADO.
+# (1d) los 7 casos FUNCIONA.
 n_funciona="$(grep -cE '\| FUNCIONA ' "$EVID1")"
-[ "$n_funciona" -eq 3 ] || fail "se esperaban 3 filas FUNCIONA (casos 1-3) en la evidencia, hay $n_funciona: $(grep '|' "$EVID1")"
-n_pendientes="$(grep -c 'NO OBSERVADO' "$EVID1")"
-[ "$n_pendientes" -eq 4 ] || fail "se esperaban 4 filas NO OBSERVADO (casos 4-7), hay $n_pendientes"
-grep -qE '^\| 1 .*\| FUNCIONA ' "$EVID1" || fail "el caso 1 no salio FUNCIONA en la evidencia"
-grep -qE '^\| 2 .*\| FUNCIONA ' "$EVID1" || fail "el caso 2 no salio FUNCIONA en la evidencia"
-grep -qE '^\| 3 .*\| FUNCIONA ' "$EVID1" || fail "el caso 3 no salio FUNCIONA en la evidencia"
+[ "$n_funciona" -eq 7 ] || fail "se esperaban 7 filas FUNCIONA en la evidencia, hay $n_funciona: $(grep '|' "$EVID1")"
+for i in 1 2 3 4 5 6 7; do
+  grep -qE "^\\| $i .*\\| FUNCIONA " "$EVID1" || fail "el caso $i no salio FUNCIONA en la evidencia"
+done
 grep -qE '^\| 1 .*no aplica: sin mensaje por diseno' "$EVID1" || fail "el caso 1 no trae 'no aplica: sin mensaje por diseno'"
 grep -qE '^\| 1 .*AVANZA' "$EVID1" || fail "el caso 1 no cita la linea AVANZA de eventos-seguimiento.jsonl"
+grep -qE '^\| 5 .*no aplica: sin mensaje por diseno' "$EVID1" || fail "el caso 5 no trae 'no aplica: sin mensaje por diseno'"
+grep -qE '^\| 6 .*no aplica: sin mensaje por diseno' "$EVID1" || fail "el caso 6 no trae 'no aplica: sin mensaje por diseno'"
 
 # (1e) el registro de esa corrida quedo cerrado (la limpieza del trap cerro).
 SIM_ID1="$(printf '%s\n' "$salida1" | sed -n 's/^arrancada //p')"
@@ -93,10 +95,21 @@ SIM_ID1="$(printf '%s\n' "$salida1" | sed -n 's/^arrancada //p')"
 grep -q '"estado": *"cerrada"' "$T/corridas/$SIM_ID1/registro.json" \
   || fail "el registro de $SIM_ID1 no quedo cerrado tras el trap"
 
-# (1f) decisiones.jsonl trae las decisiones de los casos 2 y 3.
+# (1f) decisiones.jsonl trae las decisiones de los casos 2 y 3; el registro
+# quedo con dos entradas para sim9-c5 y para sim9-lead (la original + el
+# relanzamiento del caso 5/6).
 DEC1="$T/corridas/$SIM_ID1/decisiones.jsonl"
 grep -q '"sesion": "sim9-t2"' "$DEC1" || fail "decisiones.jsonl no trae nada de sim9-t2"
 grep -q '"sesion": "sim9-t3"' "$DEC1" || fail "decisiones.jsonl no trae nada de sim9-t3"
+# lanzar-sesion siempre APPEND-ea (nunca reemplaza): la relanzada reusa el
+# mismo nombre de sesion Y el mismo dir, asi que quedan DOS entradas del
+# registro para ese par (la original, muerta, y la relanzada, viva) — "una
+# entrada mas" que antes del kill, tal como pide el diseno.
+n_c5="$(python3 -c "
+import json
+d=json.load(open('$T/corridas/$SIM_ID1/registro.json'))
+print(sum(1 for s in d['sesiones'] if s.get('nombre')=='sim9-c5'))")"
+[ "$n_c5" = "2" ] || fail "se esperaban 2 entradas del registro nombradas sim9-c5 (original + relanzada), hay $n_c5"
 
 # ============================= (2) prerrequisito roto: sin glm ==============
 T2="$T/sin-glm-path"
@@ -170,12 +183,30 @@ rc6=$?
 grep -qE '^\| 2 .*\| NO FUNCIONA ' "$EVID6" \
   || fail "responder apagado: el caso 2 no salio NO FUNCIONA: $(grep '^| 2 ' "$EVID6")"
 
-# ============================= (7) message send sin id: caso 3 NO FUNCIONA ==
+# ============================= (7) message send sin id: casos 3, 4 y 7 =======
+# NO FUNCIONA (los tres mandan por con_tope + message send --json de la
+# misma forma; sin messageId, ninguno de los tres puede confirmar el envio).
 EVID7="$T/evidencia-7.md"
-salida7="$(SIM9_MSG_ID='' bash "$ARNES" --ensayo --salida "$EVID7" --tope-pared 60 2>&1)"
+salida7="$(SIM9_MSG_ID='' bash "$ARNES" --ensayo --salida "$EVID7" --tope-pared 120 2>&1)"
 rc7=$?
 [ "$rc7" -eq 1 ] || fail "message send sin id: se esperaba salida 1, salio $rc7 -- $salida7"
 grep -qE '^\| 3 .*\| NO FUNCIONA ' "$EVID7" \
   || fail "message send sin id: el caso 3 no salio NO FUNCIONA: $(grep '^| 3 ' "$EVID7")"
+grep -qE '^\| 4 .*\| NO FUNCIONA ' "$EVID7" \
+  || fail "message send sin id: el caso 4 no salio NO FUNCIONA: $(grep '^| 4 ' "$EVID7")"
+grep -qE '^\| 7 .*\| NO FUNCIONA ' "$EVID7" \
+  || fail "message send sin id: el caso 7 no salio NO FUNCIONA: $(grep '^| 7 ' "$EVID7")"
 
-echo "TODO VERDE: simulacro-fase9 (piezas a y b)"
+# ============================= (8) "main" sin relanzar: casos 5 y 6 ==========
+EVID8="$T/evidencia-8.md"
+salida8="$(SIM9_SIN_MAIN=1 bash "$ARNES" --ensayo --salida "$EVID8" --tope-pared 120 2>&1)"
+rc8=$?
+[ "$rc8" -eq 1 ] || fail "main sin relanzar: se esperaba salida 1, salio $rc8 -- $salida8"
+grep -qE '^\| 5 .*\| NO FUNCIONA ' "$EVID8" \
+  || fail "main sin relanzar: el caso 5 no salio NO FUNCIONA: $(grep '^| 5 ' "$EVID8")"
+grep -qE '^\| 6 .*\| NO FUNCIONA ' "$EVID8" \
+  || fail "main sin relanzar: el caso 6 no salio NO FUNCIONA: $(grep '^| 6 ' "$EVID8")"
+sesiones8="$("$TM_REAL" -L "$SOCKET" list-sessions -F '#{session_name}' 2>/dev/null | grep -c 'sim9-')"
+[ "$sesiones8" -eq 0 ] || fail "main sin relanzar: quedaron sesiones sim9-* vivas"
+
+echo "TODO VERDE: simulacro-fase9 (piezas a-c)"

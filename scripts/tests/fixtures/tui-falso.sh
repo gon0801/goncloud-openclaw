@@ -28,7 +28,13 @@ while :; do
       $'\e') [ -f "$D/al-cancelar.txt" ] && cp "$D/al-cancelar.txt" "$D/pantalla.txt";;
     esac
   fi
-  printf '\033[H\033[2J'
-  [ -f "$D/pantalla.txt" ] && cat "$D/pantalla.txt"
-  printf 'TUI-FALSO\n'
+  # Un solo printf (una sola escritura) en vez de clear + cat + pie por
+  # separado: con un vigia de tope corto (--ensayo, TICK_SECS=1) un
+  # capture-pane podia caer justo entre el clear y el repintado y ver una
+  # pantalla vacia a mitad de camino — eso volvia inestable el "since" que
+  # el vigia guarda para una pantalla que en realidad nunca cambio (medido:
+  # el caso 4 del arnes, 30 min sin actividad, se veia "callado" de entrada).
+  pantalla=""
+  [ -f "$D/pantalla.txt" ] && pantalla="$(cat "$D/pantalla.txt")"
+  printf '\033[H\033[2J%s\nTUI-FALSO\n' "$pantalla"
 done

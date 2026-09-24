@@ -1,19 +1,23 @@
 #!/bin/bash
 # scripts/mac/simulacro-fase9.sh — arnes del simulacro 9.9 (Fase 9). Prerrequisitos,
 # arranque, limpieza, --limpiar y el generador de evidencia estan completos.
-# PIEZA (b): casos 1, 2 y 3 corren de verdad (contrato LISTO + recoger; dialogo
-# de confianza aceptado por politica; comando que escala a NECESITO TU
-# RESPUESTA). Casos 4-7 (piezas c-e, siguientes) siguen como placeholder
-# "NO OBSERVADO: pendiente de implementar".
+# Los 7 casos corren de verdad (piezas b y c): contrato LISTO + recoger;
+# dialogo de confianza aceptado por politica; comando que escala a NECESITO
+# TU RESPUESTA; reloj inyectado de 30 min sin actividad (DETENIDA + relanzar
+# + runbook.progress.decide inmediato); kill-session de un carril y del lead
+# con relanzamiento real (vigia -> system event -> "main"); corte de 30 min
+# de runbook.progress.decide con reporte-confirmado. Los casos 4 y 7 miden
+# hoy con reloj inyectado; subirlos a "observado real" (disparo real de
+# avance-tareas, ~35 min reales) es la pieza (d) -- el gancho ya existe
+# (--observar-avance se parsea; ver la nota en la evidencia).
 #
 # Uso:
 #   simulacro-fase9.sh [--ensayo] [--salida <md>] [--tope-pared <s>]
 #                       [--observar-avance <min>]
 #   simulacro-fase9.sh --limpiar <id>
 #
-# Salida: 0 solo con 7/7 FUNCIONA (hoy, nunca — casos 4-7 no estan implementados);
-# 1 si algun caso NO FUNCIONA o NO OBSERVADO; 2 NO APTO (no se lanzo nada: ni
-# registro, ni sesion, ni tabla).
+# Salida: 0 solo con 7/7 FUNCIONA; 1 si algun caso NO FUNCIONA o NO OBSERVADO;
+# 2 NO APTO (no se lanzo nada: ni registro, ni sesion, ni tabla).
 #
 # Variables inyectables. En vivo (sin --ensayo) OPENCLAW_BIN/TMUX_BIN/
 # CORRIDA_STATE/WATCH_STATE_DIR con un valor DISTINTO de su default es NO
@@ -83,10 +87,16 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-# --- lib.sh de la corrida que se va a usar (checkout o instalada) ----------
+# --- lib.sh/estado.sh de la corrida que se va a usar (checkout o instalada) -
 CORRIDA_DIR="$(cd "$(dirname "$CORRIDA_BIN")" 2>/dev/null && pwd)/corrida"
 [ -f "$CORRIDA_DIR/lib.sh" ] || { echo "simulacro-fase9: no encuentro $CORRIDA_DIR/lib.sh (CORRIDA_BIN=$CORRIDA_BIN)" >&2; exit 2; }
 . "$CORRIDA_DIR/lib.sh"
+# estado.sh solo define funciones (parte_calcular, corr_ahora...); se
+# sourcea para leer P_ACCIONES directo (el caso 4 necesita confirmar que la
+# accion interna es "relanzar", y corrida.sh estado nunca imprime P_ACCIONES
+# — eso solo lo consume corrida.sh latido).
+[ -f "$CORRIDA_DIR/estado.sh" ] || { echo "simulacro-fase9: no encuentro $CORRIDA_DIR/estado.sh" >&2; exit 2; }
+. "$CORRIDA_DIR/estado.sh"
 
 RUNBOOK="$REPO_RAIZ/scripts/tests/fixtures/corrida/runbook-simulacro.md"
 CANAL_DE="cuotas-proveedores"
@@ -403,6 +413,15 @@ CASOS_NOMBRE="1|contrato LISTO 0000000 y recoger|2|dialogo de confianza aceptado
 SIM_TOPE_C1="${SIM_TOPE_C1:-180}"
 SIM_TOPE_C2="${SIM_TOPE_C2:-90}"
 SIM_TOPE_C3="${SIM_TOPE_C3:-150}"
+SIM_TOPE_C4="${SIM_TOPE_C4:-60}"
+SIM_TOPE_C5="${SIM_TOPE_C5:-180}"
+SIM_TOPE_C6="${SIM_TOPE_C6:-240}"
+# Segunda mirada tras un relanzamiento (casos 5/6), para confirmar que no
+# hay un segundo relanzamiento indebido. No hace falta que sean los 60s
+# reales: el vigia solo dispara "closed" UNA vez por sesion que desaparece
+# (el .state se borra al mandar el evento, tmux-activity-watch.sh) — el
+# margen es una comprobacion de sanidad, no lo que impide el doble disparo.
+SIM_ESPERA_DOBLE="${SIM_ESPERA_DOBLE:-15}"
 
 escribir_caso() { # $1 numero; $2 resultado $3 detalle $4 hora_evento $5 hora_mensaje $6 msg_id $7 observable $8 simulado
   local n="$1"; shift
@@ -620,6 +639,243 @@ else:
 "
 }
 
+# ---------- caso 4: reloj inyectado, 30 min sin actividad -------------------
+# El reloj se inyecta en corrida.sh estado (CORR_AHORA); no hace falta
+# esperar 30 minutos de verdad, solo que el vigia deje una vez su .state con
+# "since" — de ahi sale S y CORR_AHORA=S+1800 simula el resto.
+caso4_decide() { # $1 ahora $2 texto del inmediato DETENIDA -> JSON de decidirSeguimiento
+  local ahora="$1" texto="$2"
+  CASO4_AHORA="$ahora" CASO4_TEXTO="$texto" python3 -c "
+import json,os
+d={'modo':'tick','ahora':int(os.environ['CASO4_AHORA']),
+'estado':{'schema':'seguimiento-clock.v1','corte':{'kind':'reporte-confirmado','ultimoReporteConfirmado':int(os.environ['CASO4_AHORA'])},'ultimoEstado':'','ultimoInmediato':None,'messageId':None,'trabajosActivos':[]},
+'inmediato':{'tipo':'DETENIDA','texto':os.environ['CASO4_TEXTO']}}
+print(json.dumps(d))
+" | con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" gateway call runbook.progress.decide --params "$(cat)" --timeout 30000 2>/dev/null
+}
+caso4_accion_relanzar() { # $1 ahora; 0 = P_ACCIONES trae "relanzar|..."
+  ( export CORR_AHORA="$1"; parte_calcular "$SIM_ID" >/dev/null 2>&1 \
+    && printf '%s\n' "$P_ACCIONES" | grep -q '^relanzar|' )
+}
+# El detalle POR SESION (P_DETALLE, via parte_calcular) en vez del texto
+# agregado de --solo-mensaje: con las sesiones de los casos 1-3 todavia
+# vivas, un "ahora" inyectado muy adelante (S+1799/1800) tambien las puede
+# ver "calladas" a ELLAS (comparten el mismo reloj artificial) — el texto
+# agregado ("un carril lleva..." vs "N carriles llevan...") deja de ser
+# discriminante. La linea propia de sim9-t4 en el detalle no tiene ese
+# problema: nombra la sesion.
+caso4_sesion_callada() { # $1 ahora; 0 = la linea de sim9-t4 dice "callada"
+  ( export CORR_AHORA="$1"; parte_calcular "$SIM_ID" >/dev/null 2>&1 \
+    && printf '%s\n' "$P_DETALLE" | grep -qE '^sesion sim9-t4 \([^)]*\): callada' )
+}
+correr_caso4() {
+  local dir="$DIR_SIM/trabajo/c4"
+  local simulado="sim9-t4 callado 30 min (reloj inyectado en corrida.sh estado); runbook.progress.decide con inmediato DETENIDA sintetico"
+  ruta_sin_reloj "trabajo/c4" && mkdir -p "$dir" || {
+    escribir_caso 4 "NO FUNCIONA" "no se pudo crear el directorio de trabajo" "" "" "" "" ""; return; }
+  printf 'trabajando en la parte 1 de 1\n' > "$dir/pantalla.txt"
+  local salida rc=0
+  salida="$("$CORRIDA_BIN" lanzar-sesion "$SIM_ID" carril tui-falso "$dir" --nombre sim9-t4 2>&1)" || rc=1
+  if [ "$rc" -ne 0 ]; then
+    escribir_caso 4 "NO FUNCIONA" "lanzar-sesion no dio rc 0: $salida" "" "" "" "" "$simulado"
+    return
+  fi
+  # "since" se toma solo cuando dos lecturas seguidas, con un respiro entre
+  # ellas, coinciden: la primera vez que el vigia ve la sesion usa su propio
+  # reloj de actividad (window_activity), que en --ensayo (TICK_SECS=1) puede
+  # correr una vuelta mas antes de asentarse en el hash de pantalla estable.
+  local tope="$SIM_TOPE_C4" ini=$SECONDS s="" s2=""
+  while [ "$((SECONDS-ini))" -lt "$tope" ]; do
+    s="$(awk -F= '$1=="since"{print $2}' "$WATCH_STATE_DIR/sim9-t4.state" 2>/dev/null)"
+    if [ -n "$s" ]; then
+      sleep 2
+      s2="$(awk -F= '$1=="since"{print $2}' "$WATCH_STATE_DIR/sim9-t4.state" 2>/dev/null)"
+      [ "$s2" = "$s" ] && break
+      s=""
+    fi
+    sleep 1
+  done
+  local t0_iso; t0_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [ -z "$s" ]; then
+    escribir_caso 4 "NO FUNCIONA" "el vigia nunca asento un since= estable para sim9-t4 en ${tope}s" "$t0_iso" "" "" "" "$simulado"
+    return
+  fi
+  if caso4_sesion_callada "$((s+1799))"; then
+    escribir_caso 4 "NO FUNCIONA" "el control negativo (S+1799) ya mostro sim9-t4 callada" "$t0_iso" "" "" "" "$simulado"
+    return
+  fi
+  local pos; pos="$(CORR_AHORA=$((s+1800)) "$CORRIDA_BIN" estado "$SIM_ID" --solo-mensaje 2>&1)"
+  if ! printf '%s\n' "$pos" | head -1 | grep -q '^\[DETENIDA\]'; then
+    escribir_caso 4 "NO FUNCIONA" "S+1800 no dio [DETENIDA]: $(printf '%s' "$pos" | tr '\n' ' ')" "$t0_iso" "" "" "" "$simulado"
+    return
+  fi
+  if ! caso4_sesion_callada "$((s+1800))"; then
+    escribir_caso 4 "NO FUNCIONA" "S+1800 no mostro sim9-t4 callada en el detalle" "$t0_iso" "" "" "" "$simulado"
+    return
+  fi
+  if ! caso4_accion_relanzar "$((s+1800))"; then
+    escribir_caso 4 "NO FUNCIONA" "S+1800 no calculo internamente la accion 'relanzar'" "$t0_iso" "" "" "" "$simulado"
+    return
+  fi
+  local decide_json; decide_json="$(caso4_decide "$((s+1800))" "$pos")"
+  if ! printf '%s' "$decide_json" | grep -q '"accion":"SEND"' || ! printf '%s' "$decide_json" | grep -q '"tipo":"inmediato"'; then
+    escribir_caso 4 "NO FUNCIONA" "runbook.progress.decide no dio SEND inmediato: $decide_json" "$t0_iso" "" "" "" "$simulado"
+    return
+  fi
+  local mensaje; mensaje="$(printf '%s' "$decide_json" | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("mensaje",""))
+except Exception: print("")' 2>/dev/null)"
+  [ -n "$mensaje" ] || { escribir_caso 4 "NO FUNCIONA" "SEND inmediato sin mensaje" "$t0_iso" "" "" "" "$simulado"; return; }
+  local texto="[SIMULACRO] $mensaje" salida_msg rc2=0
+  salida_msg="$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" message send --channel telegram \
+    -t "$(json_campo "$DIR_SIM/registro.json" canal.destino)" --json -m "$texto" 2>&1)" || rc2=1
+  if [ "$rc2" -ne 0 ]; then
+    escribir_caso 4 "NO FUNCIONA" "message send del inmediato DETENIDA fallo" "$t0_iso" "" "" "" "$simulado"
+    return
+  fi
+  local msg_id; msg_id="$(printf '%s' "$salida_msg" | python3 -c 'import json,sys
+t=sys.stdin.read()
+try:
+  d=json.loads(t[t.index("{"):]); print(d.get("messageId",""))
+except Exception:
+  print("")' 2>/dev/null)"
+  [ -n "$msg_id" ] || { escribir_caso 4 "NO FUNCIONA" "el message send del inmediato no devolvio messageId" "$t0_iso" "" "" "" "$simulado"; return; }
+  local hora_msg; hora_msg="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  escribir_caso 4 "FUNCIONA" "" "$t0_iso" "$hora_msg" "$msg_id" \
+    "corrida.sh estado --solo-mensaje: S+1799 sin 'sin actividad en su pantalla'; S+1800 [DETENIDA] '...sin actividad en su pantalla' + accion interna relanzar; runbook.progress.decide (modulo puro) SEND inmediato; mandado con message send --json" \
+    "$simulado"
+}
+
+# ---------- casos 5 y 6: kill-session y relanzamiento ------------------------
+entradas_para_dir() { # $1 dir -> cuantas sesiones del registro tienen ese dir
+  CORR_REG="$DIR_SIM/registro.json" CORR_DIR="$1" python3 -c "
+import json,os
+try: d=json.load(open(os.environ['CORR_REG']))
+except Exception: d={}
+print(sum(1 for s in d.get('sesiones',[]) if isinstance(s,dict) and s.get('dir')==os.environ['CORR_DIR']))
+" 2>/dev/null
+}
+hora_evento_cerrado() { # $1 nombre de sesion -> hora ISO del evento "closed" en eventos.jsonl (o vacio)
+  EV="$WATCH_STATE_DIR/eventos.jsonl" NOM="$1" python3 -c "
+import json,os,datetime
+try: lineas=open(os.environ['EV']).read().splitlines()
+except Exception: lineas=[]
+patron='%s closed' % os.environ['NOM']
+t=None
+for l in lineas:
+  try: d=json.loads(l)
+  except Exception: continue
+  if patron in str(d.get('evento','')):
+    t=d.get('t')
+if t is None:
+  print(''); raise SystemExit
+try: print(datetime.datetime.utcfromtimestamp(float(t)).strftime('%Y-%m-%dT%H:%M:%SZ'))
+except Exception: print('')
+" 2>/dev/null
+}
+correr_relanzo_kill() { # $1 numero de caso, $2 nombre de sesion, $3 rol, $4 tope
+  local n="$1" nombre="$2" rol="$3" tope="$4"
+  local dir="$DIR_SIM/trabajo/c$n"
+  local simulado="kill-session $nombre ($rol, glm, marcada); se espera el relanzamiento real via vigia -> system event -> main"
+  ruta_sin_reloj "trabajo/c$n" && mkdir -p "$dir" || {
+    escribir_caso "$n" "NO FUNCIONA" "no se pudo crear el directorio de trabajo" "" "" "" "" ""; return; }
+  local salida rc=0
+  salida="$("$CORRIDA_BIN" lanzar-sesion "$SIM_ID" "$rol" glm "$dir" --nombre "$nombre" 2>&1)" || rc=1
+  if [ "$rc" -ne 0 ]; then
+    escribir_caso "$n" "NO FUNCIONA" "lanzar-sesion no dio rc 0: $salida" "" "" "" "" "$simulado"
+    return
+  fi
+  local t0_iso; t0_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  local antes; antes="$(entradas_para_dir "$dir")"
+  # El vigia solo puede avisar "closed" de una sesion que YA vio viva al
+  # menos una vez (el barrido compara contra su propio .state); matarla
+  # antes de esa primera foto la deja invisible para siempre.
+  local ini_vigia=$SECONDS
+  while [ ! -f "$WATCH_STATE_DIR/$nombre.state" ] && [ "$((SECONDS-ini_vigia))" -lt 20 ]; do
+    sleep 1
+  done
+  "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null
+  local ini=$SECONDS ok=0
+  while [ "$((SECONDS-ini))" -lt "$tope" ]; do
+    if grep -qF "$nombre closed" "$WATCH_STATE_DIR/eventos.jsonl" 2>/dev/null \
+      && "$TMUX_BIN" has-session -t "=$nombre" 2>/dev/null; then
+      local marca; marca="$("$TMUX_BIN" show-environment -t "=$nombre" OPENCLAW_WATCH_RUN 2>/dev/null)" || marca=""
+      if [ "$marca" = "OPENCLAW_WATCH_RUN=$SIM_ID" ] && [ "$(entradas_para_dir "$dir")" = "$((antes+1))" ]; then
+        ok=1; break
+      fi
+    fi
+    sleep 3
+  done
+  if [ "$ok" -ne 1 ]; then
+    escribir_caso "$n" "NO FUNCIONA" "en ${tope}s no se vio 'closed' + sesion nueva marcada + registro con una entrada mas para $dir" \
+      "$t0_iso" "" "" "" "$simulado"
+    return
+  fi
+  sleep "$SIM_ESPERA_DOBLE"
+  local despues; despues="$(entradas_para_dir "$dir")"
+  if [ "$despues" != "$((antes+1))" ]; then
+    escribir_caso "$n" "NO FUNCIONA" "hubo un segundo relanzamiento (entradas para $dir: antes=$antes, despues=$despues)" \
+      "$t0_iso" "" "" "" "$simulado"
+    return
+  fi
+  local hora_evento; hora_evento="$(hora_evento_cerrado "$nombre")"
+  [ -n "$hora_evento" ] || hora_evento="$t0_iso"
+  escribir_caso "$n" "FUNCIONA" "" "$hora_evento" "no aplica: sin mensaje por diseno" "no aplica: sin mensaje por diseno" \
+    "eventos.jsonl del vigia: '$nombre closed'; sesion nueva $nombre con OPENCLAW_WATCH_RUN=$SIM_ID; registro con exactamente una entrada mas para $dir/; sin segundo relanzamiento en ${SIM_ESPERA_DOBLE}s" \
+    "$simulado"
+}
+correr_caso5() { correr_relanzo_kill 5 sim9-c5 carril "$SIM_TOPE_C5"; }
+correr_caso6() { correr_relanzo_kill 6 sim9-lead lead "$SIM_TOPE_C6"; }
+
+# ---------- caso 7: corte de 30 min con reporte-confirmado -------------------
+caso7_decide() { # $1 ahora $2 ultimoReporteConfirmado -> JSON de decidirSeguimiento
+  local ahora="$1" ultimo="$2"
+  CASO7_AHORA="$ahora" CASO7_ULTIMO="$ultimo" python3 -c "
+import json,os
+d={'modo':'tick','ahora':int(os.environ['CASO7_AHORA']),
+'estado':{'schema':'seguimiento-clock.v1','corte':{'kind':'reporte-confirmado','ultimoReporteConfirmado':int(os.environ['CASO7_ULTIMO'])},'ultimoEstado':'','ultimoInmediato':None,'messageId':None,'trabajosActivos':[]},
+'inmediato':None}
+print(json.dumps(d))
+" | con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" gateway call runbook.progress.decide --params "$(cat)" --timeout 30000 2>/dev/null
+}
+correr_caso7() {
+  local simulado="runbook.progress.decide modo:tick, estado sintetico {corte:{kind:reporte-confirmado, ultimoReporteConfirmado: ahora-3600}} (control negativo: ahora-1799); con seguimiento.v2 el latido de 60 min lo cubre el corte de 30"
+  local ahora; ahora="$(date +%s)"
+  local ahora_iso; ahora_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  local neg; neg="$(caso7_decide "$ahora" "$((ahora-1799))")"
+  if ! printf '%s' "$neg" | grep -q '"accion":"NO_REPLY"'; then
+    escribir_caso 7 "NO FUNCIONA" "el control negativo (ahora-1799) no dio NO_REPLY: $neg" "$ahora_iso" "" "" "" "$simulado"
+    return
+  fi
+  local pos; pos="$(caso7_decide "$ahora" "$((ahora-3600))")"
+  if ! printf '%s' "$pos" | grep -q '"accion":"SEND"' || ! printf '%s' "$pos" | grep -q '"tipo":"periodico"'; then
+    escribir_caso 7 "NO FUNCIONA" "el positivo (ahora-3600) no dio SEND periodico: $pos" "$ahora_iso" "" "" "" "$simulado"
+    return
+  fi
+  local mensaje; mensaje="$(printf '%s' "$pos" | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("mensaje",""))
+except Exception: print("")' 2>/dev/null)"
+  [ -n "$mensaje" ] || { escribir_caso 7 "NO FUNCIONA" "SEND periodico sin mensaje" "$ahora_iso" "" "" "" "$simulado"; return; }
+  local texto="[SIMULACRO] $mensaje" salida rc=0
+  salida="$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" message send --channel telegram \
+    -t "$(json_campo "$DIR_SIM/registro.json" canal.destino)" --json -m "$texto" 2>&1)" || rc=1
+  if [ "$rc" -ne 0 ]; then
+    escribir_caso 7 "NO FUNCIONA" "message send del periodico fallo" "$ahora_iso" "" "" "" "$simulado"
+    return
+  fi
+  local msg_id; msg_id="$(printf '%s' "$salida" | python3 -c 'import json,sys
+t=sys.stdin.read()
+try:
+  d=json.loads(t[t.index("{"):]); print(d.get("messageId",""))
+except Exception:
+  print("")' 2>/dev/null)"
+  [ -n "$msg_id" ] || { escribir_caso 7 "NO FUNCIONA" "el message send del periodico no devolvio messageId" "$ahora_iso" "" "" "" "$simulado"; return; }
+  local hora_msg; hora_msg="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  escribir_caso 7 "FUNCIONA" "" "$ahora_iso" "$hora_msg" "$msg_id" \
+    "runbook.progress.decide (modulo puro): control negativo ahora-1799 => NO_REPLY; ahora-3600 => SEND periodico; mandado con message send --json y prefijo" \
+    "$simulado"
+}
+
 correr_caso1
 correr_caso2 &
 CASO2_PID=$!
@@ -627,6 +883,17 @@ correr_caso3 &
 CASO3_PID=$!
 wait "$CASO2_PID"
 wait "$CASO3_PID"
+
+correr_caso4
+
+correr_caso5 &
+CASO5_PID=$!
+correr_caso6 &
+CASO6_PID=$!
+wait "$CASO5_PID"
+wait "$CASO6_PID"
+
+correr_caso7
 
 # ============================= observacion extendida (PIEZA a: sin correr) =
 OBS_NOTA="no pedida"
@@ -690,7 +957,7 @@ generar_evidencia() {
   mkdir -p "$dir" || return 1
   {
     printf '# Evidencia — simulacro 9.9 (%s)\n\n' "$FECHA_HOY"
-    printf 'Corrida de esta pasada: `%s`. Casos 1-3 corren de verdad (pieza b); 4-7 siguen pendientes (piezas c-e).\n\n' "$SIM_ID"
+    printf 'Corrida de esta pasada: `%s`. Los 7 casos corren de verdad (piezas b y c). Los casos 4 y 7 se miden hoy con reloj inyectado; "observado real" (disparo real de avance-tareas) queda para la pieza (d), ver seccion "Observacion extendida".\n\n' "$SIM_ID"
     printf '## Version\n\nSHA de origin/main: `%s`\n\n' "$(sha_origin_main)"
     printf '## Prerrequisitos\n\nTodos pasaron (si no, el arnes hubiera salido NO APTO antes de este punto).\n\n'
     printf '## `instalar-mac.sh --verificar`\n\n```\n%s\n```\n\n' "$(con_tope "$CORR_TOPE_RED" "$REPO_RAIZ/scripts/mac/instalar-mac.sh" --verificar 2>&1)"
@@ -700,8 +967,9 @@ generar_evidencia() {
       "$([ "${SIM_PROGRESS_SET_OK:-0}" = "1" ] && echo "ok" || echo "no confirmado (best-effort, no detiene el arnes)")"
     printf '## Los 7 casos\n\n'
     tabla_casos
-    printf '\n## Lo no observado\n\nCasos 4-7: pendientes de implementar (piezas c-e). '
-    printf 'Un caso 1-3 en NO FUNCIONA queda con su detalle en la fila de arriba, no aqui.\n\n'
+    printf '\n## Lo no observado\n\nCasos 4 y 7: solo con reloj inyectado (no observado real todavia — la pieza '
+    printf '(d) los sube a "observado real" con --observar-avance, ver la seccion de abajo). '
+    printf 'Un caso en NO FUNCIONA queda con su detalle en la fila de arriba, no aqui.\n\n'
     printf '## Observacion extendida\n\n%s\n\n' "$OBS_NOTA"
     printf '## Eventos del vigia filtrados por `sim9-`\n\n```\n%s\n```\n\n' "$(eventos_vigia_sim9)"
     printf '## Lo que quedo en disco\n\n'
