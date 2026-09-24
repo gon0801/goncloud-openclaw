@@ -28,7 +28,8 @@ Why (2026-09-11): the global flag made every browser command "ask for a key"; th
    Why: at 7:33 PDT on 2026-09-11 operaciones and an orphaned sub-agent drove the same tab at once (one navigating, one reading) and the gateway lost track of the running Edge.
 7. On the Windows gateway host every exec of the browser CLI needs `timeoutSeconds >= 60`: the CLI alone takes 10-23 s to start, so a 15-20 s timeout kills it before it connects.
    That shows up as exit code 1 with no output, not as a browser failure. Rerun a read-only command once with the longer timeout; before repeating an action, check `tabs` first.
-8. A gateway restart does not reliably restore the profile registration: after the 2026-09-16 04:54 restart the CLI still answered "Profile claw not found" and `create-profile` stayed refused over the node proxy, while the managed Edge was alive the whole time. The run finished on raw CDP at 127.0.0.1:18801 (read-only, Seller Central/Flex sessions intact). In that state work through CDP and report the missing registration — do NOT `reset-profile` (rule 4) and do NOT kill msedge to force a re-registration.
+8. If `tabs` responds but `evaluate`/`navigate`/`screenshot` consistently time out (wedged bridge after a gateway restart), stop retrying browser actions: report the browser limit and reroute through ssh, whose approval passes independently.
+9. A gateway restart does not reliably restore the profile registration: after the 2026-09-16 04:54 restart the CLI still answered "Profile claw not found" and `create-profile` stayed refused over the node proxy, while the managed Edge was alive the whole time. The run finished on raw CDP at 127.0.0.1:18801 (read-only, Seller Central/Flex sessions intact). In that state work through CDP and report the missing registration — do NOT `reset-profile` (rule 4) and do NOT kill msedge to force a re-registration.
 
 ## Completion check
 
