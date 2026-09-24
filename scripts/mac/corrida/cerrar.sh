@@ -13,7 +13,10 @@ corrida_cerrar() {
   # 9.16: espera acotada y compartida por las dos tomas: un lanzamiento lento
   # (sondeo de barra + entrega) retiene el lock global mas de los ~10 s de un
   # intento suelto; cerrar lo espera sin pedir reintento manual y sin robar nada.
-  CIERRE_TOPE=$((SECONDS + CORR_CIERRE_ESPERA))
+  case "$CORR_CIERRE_ESPERA" in
+    ''|*[!0-9]*) echo "cerrar: CORR_CIERRE_ESPERA='$CORR_CIERRE_ESPERA' no es un numero de segundos; no se ha hecho nada" >&2; return 2;;
+  esac
+  CIERRE_TOPE=$((SECONDS + 10#$CORR_CIERRE_ESPERA)) # 10#: un 08 son 8 s, no octal
   if ! cerrar_esperar_lock "lock global de marcas" marcas_lock_tomar; then
     echo "cerrar: no se ha hecho nada" >&2
     return 1

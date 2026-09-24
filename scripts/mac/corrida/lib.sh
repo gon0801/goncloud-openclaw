@@ -290,7 +290,7 @@ lock_tomar() { # $1 registro; 0 = tomado y registrado en el dispatcher EXIT
   dir="$(dirname "$1")"
   lock_abandonado_romper "$dir/.lock" "$CORR_LOCK_VIEJO" "lock_tomar" || true
   while ! mkdir "$dir/.lock" 2>/dev/null; do
-    i=$((i+1)); [ "$i" -gt 100 ] && return 1
+    i=$((i+1)); [ "$i" -gt "${CORR_LOCK_INTENTOS:-100}" ] && return 1
     sleep 0.1
   done
   token="$$-${RANDOM:-0}"
@@ -328,7 +328,7 @@ marcas_lock_tomar() {
   mkdir -p "$CORRIDA_STATE" || return 1
   lock_abandonado_romper "$d" "$CORR_LOCK_VIEJO" "marcas_lock_tomar" || true
   while ! mkdir "$d" 2>/dev/null; do
-    i=$((i+1)); [ "$i" -gt 100 ] && return 1
+    i=$((i+1)); [ "$i" -gt "${CORR_LOCK_INTENTOS:-100}" ] && return 1
     sleep 0.1
   done
   token="$$-${RANDOM:-0}"
@@ -367,7 +367,9 @@ CORR_CIERRE_ESPERA="${CORR_CIERRE_ESPERA:-60}"
 cerrar_esperar_lock() { # $1 descripcion; resto: toma del lock
   local desc="$1"; shift
   while :; do
-    if "$@"; then return 0; fi
+    # Una sola toma por intento (CORR_LOCK_INTENTOS=0): el reloj lo lleva este
+    # bucle, asi el tope se respeta aunque cada toma suelta espere ~10 s.
+    if CORR_LOCK_INTENTOS=0 "$@"; then return 0; fi
     [ "${SECONDS:-0}" -lt "${CIERRE_TOPE:-0}" ] || break
     sleep 1
   done

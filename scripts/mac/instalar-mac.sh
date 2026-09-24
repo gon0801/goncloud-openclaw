@@ -75,10 +75,14 @@ fase_blobs() {
   return 0
 }
 
+COPIO=0
 copiar_si_difiere() { # $1 fuente $2 destino: copia solo si difiere; respalda .anterior
+  COPIO=0
   if [ -f "$2" ] && cmp -s "$1" "$2"; then return 0; fi
-  [ -f "$2" ] && cp -p "$2" "$2.anterior"
+  # Sin respaldo no se pisa: el .anterior es la unica proteccion de un cambio a mano.
+  if [ -f "$2" ]; then cp -p "$2" "$2.anterior" || { avisa "no se pudo respaldar $2 en .anterior; no se reemplaza"; return 1; }; fi
   cp -p "$1" "$2" || return 1
+  COPIO=1
 }
 
 modo_dry() {
@@ -117,19 +121,34 @@ modo_verificar() {
 }
 
 modo_instalar() {
-  local f sha
+  local f sha reiniciar=0 n=0
   mkdir -p "$BIN_DIR" "$BIN_DIR/corrida" "$LA_DIR" || falla "no se pudieron crear directorios en $HOME"
-  for f in $BINS; do copiar_si_difiere "$AQUI/$f" "$BIN_DIR/$f" || falla "no se pudo instalar bin/$f"; done
+  for f in $BINS; do
+    copiar_si_difiere "$AQUI/$f" "$BIN_DIR/$f" || falla "no se pudo instalar bin/$f"
+    # El LaunchAgent ejecuta este script: si cambio, hay que reiniciarlo.
+    [ "$f" = "tmux-activity-watch.sh" ] && [ "$COPIO" = "1" ] && reiniciar=1
+  done
   for f in "$AQUI"/corrida/*.sh; do copiar_si_difiere "$f" "$BIN_DIR/corrida/$(basename "$f")" || falla "no se pudo instalar corrida/$(basename "$f")"; done
   local pl_tmp; pl_tmp="$(mktemp)" || falla "sin tmp para el plist"
   generar_plist "$pl_tmp" || { rm -f "$pl_tmp"; falla "no se pudo generar el plist"; }
   copiar_si_difiere "$pl_tmp" "$LA_DIR/$PL_NOMBRE" || { rm -f "$pl_tmp"; falla "no se pudo instalar el plist"; }
+  [ "$COPIO" = "1" ] && reiniciar=1
   rm -f "$pl_tmp"
   copiar_si_difiere "$AQUI/tmux.conf" "$HOME/.tmux.conf" || falla "no se pudo instalar .tmux.conf"
   [ -f "$HOME/.zshrc" ] || { touch "$HOME/.zshrc" || falla "no se pudo crear .zshrc"; }
   grep -qF "$LINEA_SOURCE" "$HOME/.zshrc" || printf '%s\n' "$LINEA_SOURCE" >>"$HOME/.zshrc"
-  "$LC_BIN" bootout "gui/$QUIEN_UID/$ETIQUETA" >/dev/null 2>&1 || true
-  "$LC_BIN" bootstrap "gui/$QUIEN_UID" "$LA_DIR/$PL_NOMBRE" >&2 || falla "launchctl no cargo $ETIQUETA"
+  # Sin cambios y cargado: no se toca (un bootout+bootstrap innecesario puede
+  # dejar el vigilante KeepAlive descargado si el bootstrap corre antes de que
+  # el bootout termine). Con cambios: bootout y bootstrap con reintentos.
+  if [ "$reiniciar" = "0" ] && "$LC_BIN" print "gui/$QUIEN_UID/$ETIQUETA" >/dev/null 2>&1; then
+    di "vigilante $ETIQUETA sin cambios y cargado: no se reinicia"
+  else
+    "$LC_BIN" bootout "gui/$QUIEN_UID/$ETIQUETA" >/dev/null 2>&1 || true
+    until "$LC_BIN" bootstrap "gui/$QUIEN_UID" "$LA_DIR/$PL_NOMBRE" >&2; do
+      n=$((n+1)); [ "$n" -ge 5 ] && falla "launchctl no cargo $ETIQUETA tras 5 intentos"
+      sleep 1
+    done
+  fi
   di "instalado desde $AQUI (ref $REF@$(ref_sha)):"
   for f in $BINS; do sha="$(blob_de "$AQUI/$f")"; di "  bin/$f  ${sha}"; done
   for f in "$AQUI"/corrida/*.sh; do sha="$(blob_de "$f")"; di "  bin/corrida/$(basename "$f")  ${sha}"; done

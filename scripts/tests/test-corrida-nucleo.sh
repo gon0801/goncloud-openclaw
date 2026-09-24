@@ -624,7 +624,9 @@ bash "$CORR" abrir t-tope --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv
 ) &
 holdeador=$!
 i=0; while [ ! -d "$T/corridas/.marcas.lock" ] && [ "$i" -lt 100 ]; do sleep 0.2; i=$((i+1)); done
+t0=$SECONDS
 out="$(CORR_CIERRE_ESPERA=3 bash "$CORR" cerrar t-tope 2>&1)" && fail "cerrar debio fallar con tope 3 s y lock ocupado (9.16)"
+[ $((SECONDS - t0)) -le 5 ] || fail "cerrar no respeto el tope de 3 s: tardo $((SECONDS - t0)) s (cada toma suelta no debe esperar ~10 s) (9.16)"
 printf '%s' "$out" | grep -q "no cedio" || fail "cerrar no diagnostico la espera agotada (9.16): $out"
 grep -q '"estado": *"abierta"' "$T/corridas/t-tope/registro.json" || fail "t-tope debio quedar abierta (9.16)"
 wait "$holdeador"
@@ -640,6 +642,17 @@ tope0libre=$(bash -c '. scripts/mac/corrida/lib.sh; n=0; toma() { n=$((n+1)); re
 tope0dado=$(bash -c '. scripts/mac/corrida/lib.sh; n=0; toma() { n=$((n+1)); return 1; }
   CIERRE_TOPE=0 cerrar_esperar_lock "lock de prueba" toma 2>/dev/null; echo "rc=$? intentos=$n"')
 [ "$tope0dado" = "rc=1 intentos=1" ] || fail "tope vencido + lock ocupado debio fallar con 1 intento (9.16): $tope0dado"
+
+# (9i4) 9.16: CORR_CIERRE_ESPERA se valida como segundos decimales: "08" son 8 s
+# (no un octal invalido que rompa la aritmetica) y un valor no numerico se
+# rechaza sin tocar nada.
+bash "$CORR" abrir t-octal --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir t-octal fallo"
+out="$(CORR_CIERRE_ESPERA=abc bash "$CORR" cerrar t-octal 2>&1)" && fail "cerrar acepto CORR_CIERRE_ESPERA=abc (9.16)"
+printf '%s' "$out" | grep -q "no es un numero de segundos" || fail "CORR_CIERRE_ESPERA invalido sin diagnostico (9.16): $out"
+grep -q '"estado": *"abierta"' "$T/corridas/t-octal/registro.json" || fail "t-octal debio seguir abierta tras el valor invalido (9.16)"
+CORR_CIERRE_ESPERA=08 bash "$CORR" cerrar t-octal >/dev/null 2>&1 || fail "cerrar con CORR_CIERRE_ESPERA=08 fallo (octal) (9.16)"
+grep -q '"estado": *"cerrada"' "$T/corridas/t-octal/registro.json" || fail "t-octal no quedo cerrada con 08 (9.16)"
 
 # ancla de orden: cerrar toma el lock ANTES de listar sesiones (reordenarlo — la
 # mutacion que deja la carrera abierta por el lado de cerrar — pone esto en rojo).

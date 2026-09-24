@@ -24,6 +24,11 @@ mkdir -p "$T/bin"
 cat >"$T/bin/launchctl-falso" <<STUB
 #!/bin/sh
 printf '%s\n' "LAUNCHCTL \$*" >> "$LAUNCHLOG"
+# bootstrap que falla N veces (N en \$T/fallar-bootstrap): simula un bootout que
+# todavia no termino.
+if [ "\$1" = bootstrap ] && [ -s "$T/fallar-bootstrap" ]; then
+  n=\$(cat "$T/fallar-bootstrap"); [ "\$n" -gt 0 ] && { echo \$((n-1)) > "$T/fallar-bootstrap"; exit 5; }
+fi
 exit 0
 STUB
 chmod +x "$T/bin/launchctl-falso"
@@ -43,6 +48,9 @@ exec /usr/bin/git "\$@"
 STUB
 chmod +x "$T/bin/git-integrado"
 export GIT_BIN="$T/bin/git-integrado"
+# Casos 1-8: ref fija a HEAD (siempre resoluble, tambien en el checkout del CI sin
+# origin/main); el stub responde los blobs del arbol. El caso (9) la suelta.
+export INSTALAR_REF=HEAD
 
 # (1) --dry-run no toca nada e imprime que haria, con el uid inyectado.
 out="$(bash "$INST" --dry-run 2>&1)" || fail "dry-run fallo: $out"
@@ -79,11 +87,14 @@ grep -q "corrida-latido" "$LAUNCHLOG" 2>/dev/null && fail "cargo el latido viejo
 grep -q "bootstrap gui/59999" "$LAUNCHLOG" || fail "no cargo el vigilante con gui/59999"
 
 # (5) idempotente: segunda corrida no cambia bytes ni mtimes.
-suma1="$(find "$HOME" -type f | sort | xargs md5 2>/dev/null | md5)"
+boot1="$(grep -c bootout "$LAUNCHLOG")"
+suma1="$(find "$HOME" -type f | sort | xargs cksum | cksum)"
 touch "$T/marca"; sleep 1
 bash "$INST" >/dev/null 2>&1 || fail "segunda corrida fallo"
-suma2="$(find "$HOME" -type f | sort | xargs md5 2>/dev/null | md5)"
+suma2="$(find "$HOME" -type f | sort | xargs cksum | cksum)"
+[ -n "$suma1" ] || fail "la suma de bytes salio vacia (el hash no corrio)"
 [ "$suma1" = "$suma2" ] || fail "la segunda corrida cambio bytes"
+[ "$(grep -c bootout "$LAUNCHLOG")" = "$boot1" ] || fail "la segunda corrida reinicio el vigilante sin cambios"
 [ -z "$(find "$HOME" -newer "$T/marca" -type f)" ] || fail "la segunda corrida toco mtimes: $(find "$HOME" -newer "$T/marca" -type f)"
 nlineas="$(grep -c "source ~/bin/agent-tmux-shell.zsh" "$HOME/.zshrc")"
 [ "$nlineas" -eq 1 ] || fail ".zshrc duplico la linea ($nlineas)"
@@ -93,6 +104,25 @@ echo MANO >>"$HOME/bin/shot.sh"
 bash "$INST" >/dev/null 2>&1 || fail "reinstalar tras cambio a mano fallo"
 grep -q MANO "$HOME/bin/shot.sh.anterior" 2>/dev/null || fail "no guardo .anterior del archivo reemplazado"
 cmp -s "$HOME/bin/shot.sh" scripts/mac/shot.sh || fail "no restauro shot.sh desde la fuente"
+
+# (5c) si el .anterior no se puede escribir, no se pisa el archivo cambiado a mano.
+if [ "$(id -u)" != "0" ]; then
+  echo MANO2 >>"$HOME/bin/shot.sh"
+  rm -f "$HOME/bin/shot.sh.anterior"; mkdir "$HOME/bin/shot.sh.anterior"; chmod 500 "$HOME/bin/shot.sh.anterior"
+  bash "$INST" >/dev/null 2>&1 && fail "instalo aunque no pudo respaldar .anterior"
+  grep -q MANO2 "$HOME/bin/shot.sh" || fail "piso el cambio a mano sin respaldo"
+  chmod 700 "$HOME/bin/shot.sh.anterior"; rm -rf "$HOME/bin/shot.sh.anterior"
+  bash "$INST" >/dev/null 2>&1 || fail "reinstalar tras liberar .anterior fallo"
+fi
+
+# (5d) un cambio en el script del vigilante lo reinicia, y un bootstrap que falla
+# una vez (bootout aun terminando) se reintenta hasta cargarlo.
+echo "# mano" >>"$HOME/bin/tmux-activity-watch.sh"
+echo 1 >"$T/fallar-bootstrap"
+nb="$(grep -c bootstrap "$LAUNCHLOG")"
+bash "$INST" >/dev/null 2>&1 || fail "no reintento el bootstrap tras un fallo"
+[ "$(grep -c bootstrap "$LAUNCHLOG")" -ge $((nb + 2)) ] || fail "no reintento el bootstrap"
+rm -f "$T/fallar-bootstrap"
 
 # (6) --verificar: verde instalado, rojo nombrando el archivo tocado o ausente.
 bash "$INST" --verificar >/dev/null 2>&1 || fail "verificar fallo sobre instalacion sana"
@@ -136,7 +166,7 @@ printf '%s' "$out" | grep -qi "sin referencia" || fail "no declara el archivo au
 # (carril), se niega nombrando el archivo y sin escribir nada (fail closed);
 # si el arbol esta integrado, instala sano.
 export HOME="$T/casa4"; mkdir -p "$HOME"
-unset GIT_BIN
+unset GIT_BIN INSTALAR_REF
 out="$(bash "$INST" 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ]; then
   printf '%s' "$out" | grep -qE "blob distinto|sin referencia|sin comprobacion" \
