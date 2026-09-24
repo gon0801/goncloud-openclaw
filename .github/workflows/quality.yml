@@ -467,6 +467,9 @@ jobs:
             for t in scripts/tests/*.sh; do
               if [ -e "$t" ]; then printf '%s\n' "${t##*/}"; fi
             done
+            for t in scripts/tests/*.mjs; do
+              if [ -e "$t" ]; then printf '%s\n' "${t##*/}"; fi
+            done
             printf '%s\n' sintaxis-summa-gate bateria-summa-gate sintaxis-tablero-runbook bateria-tablero-runbook verify-corpus
           } | LC_ALL=C sort >"$inv"
           bash scripts/valida-union-shards.sh auditoria "$inv"
