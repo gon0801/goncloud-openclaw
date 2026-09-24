@@ -75,16 +75,23 @@ export function selectionParts(path) {
 // decidir "sin cambios" se comparan los bytes canónicos (CRLF→LF); el SHA
 // que se registra y lo que se publica son siempre los bytes del blob
 // pinneado. Solo colapsa CR seguido de LF (igual que el clean de git).
+// Binarios (con NUL, que git nunca convierte) se comparan en bytes crudos.
+// La salida se escribe en un único buffer prealocado del tamaño de entrada
+// (lo canónico nunca es mayor): sin un view por par CRLF, que en un blob de
+// 64 MiB crearía ~33M de objetos y mataría el proceso.
 export function canonicalEolBytes(buffer) {
   const bytes = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
-  const parts = [];
-  let start = 0;
-  let at = bytes.indexOf("\r\n");
-  while (at !== -1) {
-    parts.push(bytes.subarray(start, at));
-    start = at + 1; // conserva el \n, descarta el \r
-    at = bytes.indexOf("\r\n", start);
+  if (bytes.includes(0)) return bytes;
+  const out = Buffer.allocUnsafe(bytes.length);
+  let read = 0;
+  let written = 0;
+  for (;;) {
+    const at = bytes.indexOf("\r\n", read);
+    const end = at === -1 ? bytes.length : at;
+    bytes.copy(out, written, read, end);
+    written += end - read;
+    if (at === -1) break;
+    read = at + 1; // salta el \r, conserva el \n
   }
-  parts.push(bytes.subarray(start));
-  return Buffer.concat(parts);
+  return out.subarray(0, written);
 }

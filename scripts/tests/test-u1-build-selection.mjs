@@ -125,6 +125,59 @@ test("D1: CRLF no enmascara cambios reales de contenido", () => {
   assert.match(result.stderr, /differs from pinned commit/);
 });
 
+function gitIn(root, ...args) {
+  return spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
+}
+
+test("D1: miles de CRLF se normalizan sin perder bytes", () => {
+  const f = fixture(["summa-gate/index.ts"]);
+  const full = join(f.root, "summa-gate/index.ts");
+  const lf = Buffer.from("línea de texto 0123456789\n".repeat(20000));
+  writeFileSync(full, lf);
+  assert.equal(gitIn(f.root, "add", ".").status, 0);
+  assert.equal(
+    gitIn(f.root, "-c", "user.email=u1@test", "-c", "user.name=u1", "commit", "-qm", "big").status, 0,
+  );
+  writeFileSync(full, Buffer.from(lf.toString("utf8").replaceAll("\n", "\r\n")));
+  const out = join(f.root, "selection-big.json");
+  const result = spawnSync(process.execPath, [script, f.root, out], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  const manifest = JSON.parse(readFileSync(out, "utf8"));
+  assert.equal(manifest.files[0].sha256, createHash("sha256").update(lf).digest("hex"));
+});
+
+test("D2: binario con NUL se compara en bytes crudos (difiere aunque lo canónico coincida)", () => {
+  const f = fixture(["agents/main/agent/workshop-skills/a/data.dat"]);
+  const full = join(f.root, "agents/main/agent/workshop-skills/a/data.dat");
+  const blob = Buffer.from([0x00, 0x01, 0x0d, 0x0a, 0x02, 0xff, 0x0d, 0x0a]);
+  writeFileSync(full, blob);
+  assert.equal(gitIn(f.root, "add", ".").status, 0);
+  assert.equal(
+    gitIn(f.root, "-c", "user.email=u1@test", "-c", "user.name=u1", "commit", "-qm", "bin").status, 0,
+  );
+  // El vivo pierde un \r: en bytes crudos difiere del blob, en canónico no.
+  writeFileSync(full, Buffer.from([0x00, 0x01, 0x0a, 0x02, 0xff, 0x0d, 0x0a]));
+  const out = join(f.root, "selection-bin.json");
+  const result = spawnSync(process.execPath, [script, f.root, out], { encoding: "utf8" });
+  assert.notEqual(result.status, 0, "build debe rechazar binario distinto en bytes crudos");
+  assert.match(result.stderr, /differs from pinned commit/);
+});
+
+test("D2 control: binario con NUL sin modificar se acepta con SHA del blob", () => {
+  const f = fixture(["agents/main/agent/workshop-skills/a/data.dat"]);
+  const full = join(f.root, "agents/main/agent/workshop-skills/a/data.dat");
+  const blob = Buffer.from([0x00, 0x01, 0x0d, 0x0a, 0x02, 0xff]);
+  writeFileSync(full, blob);
+  assert.equal(gitIn(f.root, "add", ".").status, 0);
+  assert.equal(
+    gitIn(f.root, "-c", "user.email=u1@test", "-c", "user.name=u1", "commit", "-qm", "bin").status, 0,
+  );
+  const result = f.run();
+  assert.equal(result.status, 0, result.stderr);
+  const manifest = JSON.parse(readFileSync(f.output, "utf8"));
+  assert.equal(manifest.files[0].sha256, createHash("sha256").update(blob).digest("hex"));
+});
+
 test("el manifiesto registra el SHA del commit pinned (B4)", () => {
   const f = fixture(["summa-gate/index.ts", "gateway-watchdog.ps1"]);
   const head = spawnSync("git", ["-C", f.root, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
