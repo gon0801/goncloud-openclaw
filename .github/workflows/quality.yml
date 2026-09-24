@@ -56,6 +56,9 @@ permissions:
 jobs:
   clasificador:
     runs-on: ubuntu-latest
+    # Sin timeout un clasificador colgado quema el default de 6 h: clasificar
+    # por archivos tarda segundos; 10 min es techo generoso.
+    timeout-minutes: 10
     # Los shas llegan por env y no interpolados en los run: el clasificador y
     # el doc-check validan lo que reciben y un evento sin base/head debe morir
     # aca (exit 2, job rojo), no filtrarse como condicion vacia mas abajo.
@@ -220,6 +223,7 @@ jobs:
   # con la misma condicion de carril que ya tenia el job quality.
   shards:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [clasificador]
     # `!= 'fast'` y no `== 'completo'`: si el output llegara vacio o con basura,
     # corre la bateria. La omision se autoriza SOLO con un fast exacto.
