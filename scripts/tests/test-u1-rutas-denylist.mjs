@@ -124,7 +124,21 @@ test("rutas buenas pasan dry-run sin escribir (desactivado por defecto)", () => 
     plantFile(f.source, path, `file ${i}\n`);
     return { path, sha256: sha(`file ${i}\n`) };
   });
-  const manifest = writeManifest(f, entries);
+  // B6: el dry-run también valida proveniencia — fuente commiteada y commit
+  // declarado en el manifiesto.
+  const git = (...args) => spawnSync("git", args, { cwd: f.source, encoding: "utf8" });
+  assert.equal(git("init", "-q").status, 0);
+  assert.equal(git("add", ".").status, 0);
+  assert.equal(
+    git("-c", "user.email=u1@test", "-c", "user.name=u1", "commit", "-qm", "v1").status, 0,
+  );
+  const manifest = join(f.root, "selection.json");
+  writeFileSync(manifest, JSON.stringify({
+    version: 1,
+    policyVersion: 1,
+    commit: git("rev-parse", "HEAD").stdout.trim(),
+    files: entries,
+  }));
   const dry = runStage(manifest, f);
   assert.equal(dry.status, 0, dry.stderr);
   assert.equal(existsSync(f.stage), false);

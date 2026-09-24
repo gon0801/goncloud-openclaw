@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import {
   copyFileSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
   readdirSync, realpathSync, renameSync,
@@ -60,6 +61,23 @@ const files = manifest.files.map((entry) => {
   }
   if (!lstatSync(cursor).isFile() || hash(cursor) !== entry.sha256.toLowerCase()) {
     throw new Error("selected source hash differs");
+  }
+  // B6: proveniencia de principio a fin. El hash contra el vivo no basta: un
+  // manifiesto preparado a mano (commit declarado + bytes sin commitear)
+  // pasaba stage y publish. Cada byte debe ser idéntico al del commit que el
+  // manifiesto declara, leído de la fuente git — igual que en build.
+  if (!/^[a-f0-9]{40}$/i.test(manifest.commit ?? "")) {
+    throw new Error("selection commit missing or invalid");
+  }
+  const pinned = spawnSync("git", ["-C", source, "show", `${manifest.commit}:${entry.path}`], {
+    encoding: "buffer",
+  });
+  if (pinned.status !== 0) {
+    throw new Error(`selected source missing from pinned commit ${manifest.commit}: ${entry.path}`);
+  }
+  const pinnedSha = createHash("sha256").update(pinned.stdout).digest("hex");
+  if (pinnedSha !== entry.sha256.toLowerCase()) {
+    throw new Error(`selected source differs from pinned commit ${manifest.commit}: ${entry.path}`);
   }
   return { path: entry.path, sourcePath: cursor, sha256: entry.sha256.toLowerCase() };
 });

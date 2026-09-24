@@ -28,8 +28,10 @@ publish-selected.mjs <selection.json> <staging> <runtime> <transacción> --rollb
    pinneados al SHA del commit registrado: cada byte debe ser idéntico al de
    ese commit (lo dirty o sin commit se rechaza, la fuente debe tener HEAD).
 2. **Staging** fuera del runtime vivo, con validación de set exacto y hashes
-   antes de publicar. Sin borrados recursivos: un resto se reporta, no se
-   limpia solo.
+   antes de publicar. La fuente debe ser un checkout git que contenga el
+   commit del manifiesto: cada byte se re-valida contra ese commit (un
+   manifiesto a mano con bytes sin commit se rechaza). Sin borrados
+   recursivos: un resto se reporta, no se limpia solo.
 3. **Publicación** por archivo: temporal de nombre impredecible creado con
    O_EXCL (nunca sigue symlinks), rechazo de symlinks en staging y destino,
    confinamiento dentro del runtime, journal + fsync antes de cada reemplazo,

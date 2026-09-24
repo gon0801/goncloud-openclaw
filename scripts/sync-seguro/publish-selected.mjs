@@ -138,9 +138,36 @@ function syncJsonExclusive(path, value) {
   }
 }
 
+// B7: respaldo confinado. Cada componente de backup/<ruta> se verifica con
+// lstat antes de crear o leer: un symlink plantado en backup/ (o en un
+// intermedio) redirigiría escrituras fuera de la transacción con rc=0. Los
+// padres se crean nivel por nivel — jamás mkdir recursivo, que sigue
+// symlinks — y todo symlink o tipo inesperado falla cerrado.
+function backupTarget(relative, createParents) {
+  const parts = ["backup", ...relative.split("/")];
+  let cursor = txn;
+  for (let i = 0; i < parts.length - 1; i += 1) {
+    cursor = join(cursor, parts[i]);
+    if (!inside(cursor, txn)) throw new Error("destination escapes root");
+    const stat = lstatSync(cursor, { throwIfNoEntry: false });
+    if (!stat) {
+      if (!createParents) break;
+      mkdirSync(cursor);
+    } else if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new Error("unsafe backup path component");
+    }
+  }
+  const target = join(txn, ...parts);
+  if (!inside(target, txn)) throw new Error("destination escapes root");
+  const finalStat = lstatSync(target, { throwIfNoEntry: false });
+  if (finalStat && (finalStat.isSymbolicLink() || !finalStat.isFile())) {
+    throw new Error("unsafe backup path component");
+  }
+  return target;
+}
+
 function storeBackup(entry) {
-  const backup = pathFor(txn, `backup/${entry.path}`);
-  mkdirSync(dirname(backup), { recursive: true });
+  const backup = backupTarget(entry.path, true);
   const bytes = readFileSync(pathFor(runtime, entry.path));
   const tmp = writeTempExclusive(dirname(backup), basename(backup), bytes);
   try {
@@ -354,7 +381,7 @@ if (existingTxn) {
     // respaldo previo que no coincida aborta en vez de sobrescribirse.
     for (const entry of changes) {
       if (!entry.oldSha) continue;
-      const backup = pathFor(txn, `backup/${entry.path}`);
+      const backup = backupTarget(entry.path, false);
       const backupStat = lstatSync(backup, { throwIfNoEntry: false });
       if (!backupStat) {
         storeBackup(entry);

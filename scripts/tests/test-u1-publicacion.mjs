@@ -34,8 +34,17 @@ function fixture(paths = ["summa-gate/index.ts", "tablero-runbook/index.ts"]) {
     writeFileSync(target, content);
     return { path, sha256: sha(content) };
   });
+  // B6: stage exige proveniencia — la fuente es un checkout git con commit y
+  // el manifiesto lo declara; stage re-valida cada byte contra ese commit.
+  const git = (...args) => spawnSync("git", args, { cwd: source, encoding: "utf8" });
+  assert.equal(git("init", "-q").status, 0);
+  assert.equal(git("add", ".").status, 0);
+  assert.equal(
+    git("-c", "user.email=u1@test", "-c", "user.name=u1", "commit", "-qm", "v1").status, 0,
+  );
+  const commit = git("rev-parse", "HEAD").stdout.trim();
   const manifest = join(root, "selection.json");
-  writeFileSync(manifest, JSON.stringify({ version: 1, policyVersion: 1, files }));
+  writeFileSync(manifest, JSON.stringify({ version: 1, policyVersion: 1, commit, files }));
   const staged = spawnSync(process.execPath, [stageScript, manifest, source, stage, "--apply"], {
     encoding: "utf8",
   });
