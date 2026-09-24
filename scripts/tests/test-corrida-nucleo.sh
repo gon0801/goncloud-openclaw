@@ -581,6 +581,53 @@ grep -q '"nombre": *"ses-jb"' "$T/corridas/t-jb/registro.json" \
 grep -q '"estado": *"cerrada"' "$T/corridas/t-jb/registro.json" || fail "t-jb no quedo cerrada"
 "$TM_REAL" -L "$L" has-session -t "=ses-jb" 2>/dev/null && fail "ses-jb quedo viva en corrida cerrada"
 
+# (9i) 9.16: cerrar espera de forma acotada a un lanzamiento lento sin pedir
+# reintento manual. Determinista y sin depender del reloj del sondeo: una
+# sesion normal ya lanzada y marcada, mas un tomador que retiene el lock global
+# 15 s (mas de los ~10 s que un intento suelto espera). Con el codigo actual
+# cerrar falla pidiendo reintento; con el arreglo espera, desmarca y cierra.
+bash "$CORR" abrir t-lento --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir t-lento fallo"
+bash "$CORR" lanzar-sesion t-lento carril bueno "$T/ses" --nombre ses-lento --encargo "$T/encargo.txt" >/dev/null 2>&1 \
+  || fail "lanzar ses-lento fallo (9.16)"
+(
+  CORRIDA_STATE="$T/corridas" TMUX_BIN="$T/bin/tmux-shim" OPENCLAW_BIN="$T/bin/openclaw"
+  . scripts/mac/corrida/lib.sh
+  marcas_lock_tomar || exit 1
+  sleep 15
+  marcas_lock_soltar
+) &
+retenedor=$!
+i=0; while [ ! -d "$T/corridas/.marcas.lock" ] && [ "$i" -lt 100 ]; do sleep 0.2; i=$((i+1)); done
+[ -d "$T/corridas/.marcas.lock" ] || fail "el retenedor no tomo el lock (9.16)"
+bash "$CORR" cerrar t-lento >"$T/cerrar-lento.out" 2>&1 || fail "cerrar no espero al lanzamiento lento (9.16): $(cat "$T/cerrar-lento.out")"
+wait "$retenedor"
+grep -q '"estado": *"cerrada"' "$T/corridas/t-lento/registro.json" || fail "t-lento no quedo cerrada (9.16)"
+"$TM_REAL" -L "$L" show-environment -t "=ses-lento" OPENCLAW_WATCH >/dev/null 2>&1 \
+  && fail "ses-lento quedo marcada despues de cerrar (9.16)"
+"$TM_REAL" -L "$L" has-session -t "=ses-lento" 2>/dev/null \
+  || fail "ses-lento murio: cerrar solo desmarca, no mata (9.16)"
+
+# (9i2) 9.16 acotada de verdad: con el lock ocupado y un tope chico, cerrar
+# falla con diagnostico en vez de colgarse (no espera eterna ni exito falso).
+bash "$CORR" abrir t-tope --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir t-tope fallo"
+"$TM_REAL" -L "$L" new-session -d -s ses-tope -x 200 -y 50 >/dev/null 2>&1 || true
+(
+  CORRIDA_STATE="$T/corridas" TMUX_BIN="$T/bin/tmux-shim" OPENCLAW_BIN="$T/bin/openclaw"
+  . scripts/mac/corrida/lib.sh
+  marcas_lock_tomar || exit 1
+  sleep 25
+  marcas_lock_soltar
+) &
+holdeador=$!
+i=0; while [ ! -d "$T/corridas/.marcas.lock" ] && [ "$i" -lt 100 ]; do sleep 0.2; i=$((i+1)); done
+out="$(CORR_CIERRE_ESPERA=3 bash "$CORR" cerrar t-tope 2>&1)" && fail "cerrar debio fallar con tope 3 s y lock ocupado (9.16)"
+printf '%s' "$out" | grep -q "no cedio" || fail "cerrar no diagnostico la espera agotada (9.16): $out"
+grep -q '"estado": *"abierta"' "$T/corridas/t-tope/registro.json" || fail "t-tope debio quedar abierta (9.16)"
+wait "$holdeador"
+bash "$CORR" cerrar t-tope >/dev/null 2>&1 || fail "cerrar tras liberar fallo (9.16)"
+
 # ancla de orden: cerrar toma el lock ANTES de listar sesiones (reordenarlo — la
 # mutacion que deja la carrera abierta por el lado de cerrar — pone esto en rojo).
 linelock=$(grep -n 'lock_tomar "$reg"' scripts/mac/corrida/cerrar.sh | head -1 | cut -d: -f1)

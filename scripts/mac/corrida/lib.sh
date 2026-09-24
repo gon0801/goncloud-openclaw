@@ -354,6 +354,23 @@ marcas_lock_soltar() {
   locks_exit_restaurar_si_libre
 }
 
+# Tope total (s) que cerrar espera por los locks antes de rendirse (9.16).
+CORR_CIERRE_ESPERA="${CORR_CIERRE_ESPERA:-60}"
+# Espera acotada por un lock de cerrar (9.16): reintenta la toma hasta CIERRE_TOPE
+# (lo fija quien cierra para las dos tomas juntas). No roba nada: cada intento
+# respeta el lock, su token y su lease; solo espera mas que los ~10 s de un
+# intento suelto para cubrir un lanzamiento lento (sondeo de barra + entrega del
+# encargo) sin pedir reintento manual. Vencido el tope, diagnostico y distinto de 0.
+cerrar_esperar_lock() { # $1 descripcion; resto: toma del lock
+  local desc="$1"; shift
+  while [ "${SECONDS:-0}" -lt "${CIERRE_TOPE:-0}" ]; do
+    if "$@"; then return 0; fi
+    sleep 1
+  done
+  echo "cerrar: $desc no cedio en ${CORR_CIERRE_ESPERA}s; la corrida queda abierta, reintentar cierra" >&2
+  return 1
+}
+
 # Retira marcas solo si la corrida indicada sigue siendo su dueña publicada.
 # Debe llamarse con el lock global de marcas tomado.
 marca_retirar_si_dueno() { # $1 corrida, $2 sesion; otro/ningun dueno = no-op

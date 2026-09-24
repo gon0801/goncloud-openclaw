@@ -10,13 +10,17 @@ corrida_cerrar() {
   corrida_id_valido "$id" || { echo "cerrar: id invalido: $id" >&2; return 2; }
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
-  if ! marcas_lock_tomar; then
-    echo "cerrar: lock global de marcas no cede; no se ha hecho nada" >&2
+  # 9.16: espera acotada y compartida por las dos tomas: un lanzamiento lento
+  # (sondeo de barra + entrega) retiene el lock global mas de los ~10 s de un
+  # intento suelto; cerrar lo espera sin pedir reintento manual y sin robar nada.
+  CIERRE_TOPE=$((SECONDS + CORR_CIERRE_ESPERA))
+  if ! cerrar_esperar_lock "lock global de marcas" marcas_lock_tomar; then
+    echo "cerrar: no se ha hecho nada" >&2
     return 1
   fi
-  if ! lock_tomar "$reg"; then
+  if ! cerrar_esperar_lock "lock del registro de $id" lock_tomar "$reg"; then
     marcas_lock_soltar
-    echo "cerrar: lock del registro de $id no cede; no se ha hecho nada (ni desmarcado ni cron) y el aviso NO salio — reintentar cierra" >&2
+    echo "cerrar: no se ha hecho nada (ni desmarcado ni cron) y el aviso NO salio — reintentar cierra" >&2
     return 1
   fi
   # Ya cerrada (leido bajo lock): segunda llamada = no-op con confirmacion.
