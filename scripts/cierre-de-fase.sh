@@ -471,6 +471,101 @@ else:
   esac
 fi
 
+# (10) usuario: por cada fila de la fase que declara una promesa observable (slot 16
+# de la skill autopilot-runbook, literal "Promesa: <...> — ruta: <...>." dentro de su
+# celda de Contenido), tiene que existir un bloque "## <fase>.<tarea>" que termine en
+# una linea FUNCIONA dentro de docs/evidence/usuario-<fase>-*.md. Una fila sin promesa
+# (sin la linea, o con "Promesa: sin promesa observable.") no exige nada, y eso se dice
+# en el detalle en vez de darlo por bueno en silencio. Solo se lee la linea literal:
+# prosa suelta en otra parte de la fila no cuenta como promesa ni como su ausencia.
+if [ "$ref_ok" = "0" ]; then
+  linea unknown usuario "no pude leer $REF; no se que filas de la fase $FASE declaran promesa"
+elif [ -z "$plan" ]; then
+  linea unknown usuario "no pude leer Plans.md en $REF"
+else
+  filas_fase=$(printf '%s\n' "$plan" | grep -E "^\| $FASE\.[0-9]+[a-z]? \|") || true
+  evidencia=""
+  if archivos=$(en_repo ls-tree -r --name-only "$REF" -- docs/evidence 2>/dev/null | grep -E "^docs/evidence/usuario-$FASE-[0-9-]+\.md$"); then
+    for f in $archivos; do
+      contenido=$(en_repo show "$REF:$f" 2>/dev/null) || continue
+      evidencia="$evidencia
+$contenido"
+    done
+  fi
+  det=$(FASE="$FASE" FILAS="$filas_fase" EVIDENCIA="$evidencia" timeout 30 python3 -c '
+import os, re, sys
+
+FASE = os.environ["FASE"]
+filas = os.environ.get("FILAS", "")
+evid = os.environ.get("EVIDENCIA", "")
+
+# Solo la linea literal "Promesa: <...> — ruta: <...>." dentro de la fila cuenta
+# como promesa observable. "Promesa: sin promesa observable." es una promesa
+# declarada explicitamente como ausente, y no exige evidencia.
+sin_promesa_re = re.compile(r"Promesa: sin promesa observable\.")
+promesa_re = re.compile(r"Promesa: .+? — ruta: .+?\.")
+
+prometidas = []
+for linea in filas.splitlines():
+    if not linea.strip():
+        continue
+    celdas = linea.split("|")
+    if len(celdas) < 2:
+        continue
+    tid = celdas[1].strip()
+    if not tid:
+        continue
+    if sin_promesa_re.search(linea):
+        continue
+    if promesa_re.search(linea):
+        prometidas.append(tid)
+
+if not prometidas:
+    print("VERDE ninguna fila de la fase " + FASE + " declara promesa observable")
+    raise SystemExit
+
+# Bloques "## <tid>" de los archivos de evidencia, hasta el proximo encabezado.
+bloques = {}
+actual = None
+for linea in evid.splitlines():
+    m = re.match(r"^## (\S+)", linea)
+    if m:
+        actual = m.group(1)
+        bloques.setdefault(actual, [])
+        continue
+    if actual is not None:
+        bloques[actual].append(linea)
+
+faltan = []
+sin_funciona = []
+for tid in prometidas:
+    lineas_bloque = bloques.get(tid)
+    if not lineas_bloque:
+        faltan.append(tid)
+        continue
+    texto = "\n".join(lineas_bloque)
+    m = re.search(r"^(FUNCIONA|NO FUNCIONA|NO PUDE PROBARLO)\b", texto, re.M)
+    if not m or m.group(1) != "FUNCIONA":
+        sin_funciona.append(tid)
+
+if faltan or sin_funciona:
+    partes = []
+    if faltan:
+        partes.append("sin evidencia: " + " ".join(sorted(faltan)))
+    if sin_funciona:
+        partes.append("sin FUNCIONA: " + " ".join(sorted(sin_funciona)))
+    print("ROJO " + "; ".join(partes))
+else:
+    print("OK %d filas con promesa, todas FUNCIONA" % len(prometidas))
+' || printf '%s' '""')
+  case "$det" in
+    "OK "*)    linea VERDE usuario "${det#OK }" ;;
+    "VERDE "*) linea VERDE usuario "${det#VERDE }" ;;
+    "ROJO "*)  linea ROJO usuario "${det#ROJO }" ;;
+    *)         linea unknown usuario "no pude comprobar las promesas observables de la fase" ;;
+  esac
+fi
+
 # (6) CI de la rama por defecto sobre su punta: una fase no cierra dejandola en rojo.
 if [ ! -x "$GH_BIN" ]; then
   linea unknown ci "sin gh en $GH_BIN"
