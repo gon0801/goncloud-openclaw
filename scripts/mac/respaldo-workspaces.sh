@@ -14,7 +14,9 @@ set -uo pipefail
 RESPALDO_DIR="${RESPALDO_DIR:-$HOME/.openclaw-respaldo}"      # clones dedicados, nunca los de trabajo
 RESPALDO_RAMA="${RESPALDO_RAMA:-respaldo/runtime}"
 RESPALDO_FUENTE="${RESPALDO_FUENTE:-ssh}"                       # ssh | <dir local> (pruebas)
-RESPALDO_REMOTO_BASE="${RESPALDO_REMOTO_BASE:-git@github.com:gon0801}"
+# HTTPS con la sesión de `gh` (credential helper global): bajo launchd no hay
+# agente SSH con llaves cargadas, así que git@github.com falla con publickey.
+RESPALDO_REMOTO_BASE="${RESPALDO_REMOTO_BASE:-https://github.com/gon0801}"
 RESPALDO_MAX_MB="${RESPALDO_MAX_MB:-50}"                         # GitHub rechaza archivos >100 MB
 RUNTIME_WIN='C:/Users/ehven/.openclaw'
 
