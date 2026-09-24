@@ -288,7 +288,7 @@ locks_exit_restaurar_si_libre() {
 lock_tomar() { # $1 registro; 0 = tomado y registrado en el dispatcher EXIT
   local dir i=0 token
   dir="$(dirname "$1")"
-  lock_abandonado_romper "$dir/.lock" "$CORR_LOCK_VIEJO" "lock_tomar" || true
+  [ "${CORR_LOCK_ROMPER:-1}" = "1" ] && { lock_abandonado_romper "$dir/.lock" "$CORR_LOCK_VIEJO" "lock_tomar" || true; }
   while ! mkdir "$dir/.lock" 2>/dev/null; do
     i=$((i+1)); [ "$i" -gt "${CORR_LOCK_INTENTOS:-100}" ] && return 1
     sleep 0.1
@@ -326,7 +326,7 @@ lock_soltar() { # $1 registro; solo suelta el token propio
 marcas_lock_tomar() {
   local d="$CORRIDA_STATE/.marcas.lock" i=0 token
   mkdir -p "$CORRIDA_STATE" || return 1
-  lock_abandonado_romper "$d" "$CORR_LOCK_VIEJO" "marcas_lock_tomar" || true
+  [ "${CORR_LOCK_ROMPER:-1}" = "1" ] && { lock_abandonado_romper "$d" "$CORR_LOCK_VIEJO" "marcas_lock_tomar" || true; }
   while ! mkdir "$d" 2>/dev/null; do
     i=$((i+1)); [ "$i" -gt "${CORR_LOCK_INTENTOS:-100}" ] && return 1
     sleep 0.1
@@ -367,11 +367,14 @@ CORR_CIERRE_ESPERA="${CORR_CIERRE_ESPERA:-45}"
 # global se tomo cerca del limite) el lock del registro igual se prueba una vez
 # en vez de fallar en seco con 0 intentos.
 cerrar_esperar_lock() { # $1 descripcion; resto: toma del lock
-  local desc="$1"; shift
+  local desc="$1" romper=1; shift
   while :; do
     # Una sola toma por intento (CORR_LOCK_INTENTOS=0): el reloj lo lleva este
     # bucle, asi el tope se respeta aunque cada toma suelta espere ~10 s.
-    if CORR_LOCK_INTENTOS=0 "$@"; then return 0; fi
+    # Solo el PRIMER intento puede romper un lock abandonado (CORR_LOCK_ROMPER):
+    # un lock que estaba tomado al empezar no se vuelve rompible por esperarlo.
+    if CORR_LOCK_ROMPER=$romper CORR_LOCK_INTENTOS=0 "$@"; then return 0; fi
+    romper=0
     [ "${SECONDS:-0}" -lt "${CIERRE_TOPE:-0}" ] || break
     sleep 1
   done

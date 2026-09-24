@@ -649,6 +649,18 @@ tope0dado=$(bash -c '. scripts/mac/corrida/lib.sh; n=0; toma() { n=$((n+1)); ret
   [ "$CORR_CIERRE_ESPERA" -lt "$CORR_LOCK_VIEJO" ] ) \
   || fail "CORR_CIERRE_ESPERA por defecto debe ser menor que CORR_LOCK_VIEJO (9.16)"
 
+# (9i6) 9.16: un lock tomado al empezar la espera no se rompe por envejecer
+# durante ella. Lock manual (sin token) fresco, umbral de abandono 3 s y tope
+# 7 s: a mitad de la espera cruza el umbral; cerrar debe rendirse, no romperlo.
+bash "$CORR" abrir t-edad --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir t-edad fallo"
+mkdir "$T/corridas/t-edad/.lock"
+out="$(CORR_LOCK_VIEJO=3 CORR_CIERRE_ESPERA=7 bash "$CORR" cerrar t-edad 2>&1)" \
+  && fail "cerrar rompio un lock que estaba tomado al empezar la espera (9.16): $out"
+[ -d "$T/corridas/t-edad/.lock" ] || fail "el lock tomado al empezar desaparecio durante la espera (9.16)"
+grep -q '"estado": *"abierta"' "$T/corridas/t-edad/registro.json" || fail "t-edad debio seguir abierta (9.16)"
+rmdir "$T/corridas/t-edad/.lock"
+
 # (9i4) 9.16: CORR_CIERRE_ESPERA se valida como segundos decimales: "08" son 8 s
 # (no un octal invalido que rompa la aritmetica) y un valor no numerico se
 # rechaza sin tocar nada.
