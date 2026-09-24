@@ -181,4 +181,13 @@ fi
 grep -qF 'INSTALAR_REF:-origin/main' "$INST" || fail "la ref por defecto no es origin/main"
 grep -v "^#" "$INST" | grep -q "corrida-latido" && fail "el instalador toca el latido viejo fuera de comentarios"
 
+# El runbook de Fase 9 instala con este script y verifica con --verificar; no
+# exige +x a los subcomandos de corrida/ (en git son 100644 y se cargan con `.`):
+# un `test -x` sobre ellos marcaba FALTA en una instalacion sana.
+RB9=docs/runbooks/autopilot-fase9.md
+grep -qF 'bash scripts/mac/instalar-mac.sh --verificar' "$RB9" \
+  || fail "$RB9 no instala/verifica con instalar-mac.sh"
+grep -qF 'test -x "$HOME/bin/corrida/' "$RB9" \
+  && fail "$RB9 exige +x a subcomandos de corrida/ que no son ejecutables"
+
 echo "OK test-instalar-mac"
