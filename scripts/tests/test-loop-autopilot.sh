@@ -91,7 +91,7 @@ for a in 'LISTO <sha>' \
          'bloqueante adjudicado que siga abierto' \
          'no bloqueante no abre ronda ni impide el merge' \
          'cero bloqueantes adjudicados abiertos' \
-         'residuales del recibo' \
+         'residuales del paso 8' \
          'No repite' \
          'test-runbooks-no-contradicen-entorno.sh' \
          'Jamás `--no-verify`' \
@@ -200,8 +200,8 @@ seccion() { # $1 numero -> texto de esa seccion
 s3=$(seccion 3)
 printf '%s' "$s3" | grep -qF 'bloqueante adjudicado que siga abierto' \
   || fail "$DOC: el paso 7 no manda adjudicar CodeRabbit: solo un bloqueante abierto vuelve al loop"
-printf '%s' "$s3" | grep -qF 'residuales del recibo' \
-  || fail "$DOC: el paso 7 no manda los comentarios no bloqueantes a los residuales del recibo"
+printf '%s' "$s3" | grep -qF 'residuales del paso 8' \
+  || fail "$DOC: el paso 7 no manda los comentarios no bloqueantes al cierre"
 viejo=$(printf '%s' "$s3" | grep -inE 'no deja nada nuevo|Lo accionable se corrige' || true)
 [ -z "$viejo" ] || fail "$DOC: el paso 7 volvio a exigir cero comentarios de CodeRabbit: $viejo"
 s5=$(seccion 5)
@@ -227,6 +227,30 @@ s10_manda=$(printf '%s' "$s10" | grep -v 'No hay una revisión' | grep -v '^Medi
 viejo=$(printf '%s' "$s10_manda" | grep -inE 'revisión completa|muta|mutar' || true)
 [ -z "$viejo" ] || fail "$DOC: la seccion 10 volvio a mandar una revision completa de cierre: $viejo"
 echo "ok (3c): CodeRabbit por adjudicacion, merge libre y cierre sin revision repetida"
+
+for file in "$DOC" "$BASE" docs/runbooks/base-summonaikit.md; do
+  grep -q 'CodeRabbit' "$file" || fail "$file: falta la compuerta de CodeRabbit"
+  stale=$(grep -nEi 'sin cuota no bloquea|sin cuota no se espera|CodeRabbit sin cuota[^|]*\|[^|]*no bloquea|re-APPROVE|sha aprobado|Mergeado por David|No mergea ni despliega' "$file" || true)
+  [ -z "$stale" ] || fail "$file: volvió un veto o una excepción obsoleta: $stale"
+done
+printf '%s' "$s3" | grep -qF 'El PR espera hasta tener su aprobación' \
+  || fail "$DOC: CodeRabbit sin respuesta no puede habilitar el merge"
+printf '%s' "$s6" | grep -qF 'CI y CodeRabbit estén aprobados' \
+  || fail "$DOC: falta la aprobación de CodeRabbit antes del merge"
+grep -qF 'los otros carriles continúan' "$BASE" \
+  || fail "$BASE: la espera de CodeRabbit detiene otros carriles"
+grep -qF 'los demás carriles continúan' docs/runbooks/base-summonaikit.md \
+  || fail 'base-summonaikit: la espera de CodeRabbit detiene otros carriles'
+grep -qF '6 Merge del PR' "$BASE" \
+  || fail "$BASE: el indice vuelve a enviar al kit de merge"
+grep -qF 'Completion: all three checks exit 0, the closure PR is `MERGED`' agents/main/agent/workshop-skills/post-merge-closure/SKILL.md \
+  || fail 'post-merge-closure: abrir el PR volvió a ser el cierre'
+grep -qF 'confirmed from the PR API' agents/main/agent/workshop-skills/post-merge-closure/SKILL.md \
+  || fail 'post-merge-closure: falta confirmar el SHA integrado'
+stale=$(grep -nE 'one PR open, nothing merged by you|owner.s to merge|Mergeado por David|Recibo de entrega.*APPROVE lead' \
+  agents/main/agent/workshop-skills/post-merge-closure/SKILL.md "$BASE" docs/runbooks/base-summonaikit.md || true)
+[ -z "$stale" ] || fail "volvió el veto de cierre o el recibo obligatorio: $stale"
+echo "ok (3c-gate): CodeRabbit obligatorio para el PR, sin veto de rol ni recibo"
 
 # (4) La fila del lead no nombra ningún modelo. Es la regla central del documento.
 hit=$(lead_nombra_modelo < "$DOC")

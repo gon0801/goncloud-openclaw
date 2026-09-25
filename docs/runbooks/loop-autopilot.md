@@ -13,11 +13,11 @@ Cada regla lleva su origen, `Medido:` con fecha. Si una regla no tiene un incide
 | Rol | Quién | Qué hace |
 |---|---|---|
 | **claw** | el agente `main` del gateway | Recibe "implementa las fases X e Y". Manda a hacer o valida el runbook. Elige y lanza al lead. Lo vigila por tmux. Contesta lo mecánico. Relanza al lead en otro host si se cae. Relaya el Telegram. Puede mergear y desplegar sin permiso adicional. |
-| **lead** | un CLI disponible que Claw pueda lanzar y verificar en tmux | Escribe encargos, lanza implementadores, audita, corre la revisión cruzada, aprueba, mergea por el kit, despliega, escribe progreso, cierra la fase. No escribe código de producto. |
+| **lead** | un CLI disponible que Claw pueda lanzar y verificar en tmux | Escribe encargos, lanza implementadores, audita, corre la revisión cruzada, mergea por GitHub, despliega, escribe progreso, cierra la fase. No escribe código de producto. |
 | **implementador** | muse, cursor, glm, u otro, según el brief | Escribe el código de un carril en su worktree. Reporta con la línea de contrato. No hace push ni abre PR. |
 | **verificador** | otro agente distinto del implementador | Ejecuta el comportamiento que la fila pide y deja la evidencia que el recibo enlaza: comando, resultado y SHA. Para un bug, demuestra que su regresión falla sin el arreglo. Nunca el modelo que implementó. |
 | **revisor cruzado** | otra IA por `cross-review.ps1` | Segunda opinión sobre el diff del bloque: es el rol `reviewer` del recibo, y no hay un revisor aparte de él. Nunca el modelo que implementó. |
-| **CodeRabbit** | bot en GitHub | Revisa cuando el PR se promueve a listo, nunca los pushes del borrador; después solo ve los pushes de corrección. Sus comentarios se leen y se adjudican: solo un bloqueante abierto bloquea. Sin cuota no bloquea, pero se declara. |
+| **CodeRabbit** | bot en GitHub | Revisa cuando el PR se promueve a listo, nunca los pushes del borrador; después solo ve los pushes de corrección. Su aprobación es obligatoria antes del merge; sus comentarios se leen y se adjudican. Sin cuota, ese PR espera y los otros carriles continúan. |
 | **David** | el dueño | Solo lee el Telegram de cierre y el tablero. Preaprobó por escrito lo que la fase necesita. |
 
 El kit ya no mantiene una allowlist de hosts para autorizar la entrega. La lista de preferencia pertenece a Claw y puede incluir cualquier CLI cuyo binario, modo de permisos y arranque haya verificado. Claw puede mergear y desplegar.
@@ -73,9 +73,9 @@ Medido: 2026-09-17, primera corrida de la Fase 7, de donde esta regla se muda al
 4. **PR en borrador.** El lead hace push y abre el PR **como draft**, desde el worktree, con el cuerpo en archivo. El CI corre la batería completa; CodeRabbit no. Si la unión de jobs no cubre la batería, el lead ejecuta localmente solo lo que falta y lo registra.
 5. **Rondas de revisión cruzada** sobre el SHA del PR, con la política de la sección 4. Cada hallazgo bloqueante se corrige con un encargo `BRIEF-r<N>.md` al mismo implementador y vuelve al paso 3. Lo no bloqueante va a una fila del plan.
 6. **Promoción.** Cuando una ronda no trae bloqueantes, el lead marca el PR como listo para revisión. Ahí CodeRabbit revisa una sola vez, sobre código que ya no va a cambiar.
-7. **CodeRabbit.** Se leen y se adjudican sus comentarios, no solo su check. Solo un bloqueante adjudicado que siga abierto —con el comando que lo reproduce— vuelve al paso 3 con un encargo de corrección. Un comentario no bloqueante no abre ronda ni impide el merge: si es de una línea se corrige en la misma ronda, y si no, queda en los residuales del recibo del paso 8. Cada push de corrección tras la promoción vuelve a pasar por CodeRabbit; el PR queda cuando no queda ningún bloqueante adjudicado abierto, o cuando CodeRabbit no tiene cuota, y eso se declara.
-8. **Cierre.** Registra los residuales y mergea por el flujo normal; no se exige `APPROVE lead`.
-9. **Merge** por GitHub, sección 6. Base al día antes, con `git merge origin/<default>` en el worktree del carril y push normal: **nunca rebase**, que exige force-push y está prohibido. CI verde del SHA nuevo, y re-APPROVE si `git diff <sha aprobado> HEAD -- <archivos del carril>` sale vacío, o vuelta al paso 5 si no. La rama por defecto avanza sola cada dos horas con los snapshots del gateway, así que esto pasa en casi todo merge.
+7. **CodeRabbit.** Se leen y se adjudican sus comentarios, no solo su check. Solo un bloqueante adjudicado que siga abierto —con el comando que lo reproduce— vuelve al paso 3 con un encargo de corrección. Un comentario no bloqueante no abre ronda ni impide el merge: si es de una línea se corrige en la misma ronda, y si no, queda en los residuales del paso 8. Cada push de corrección tras la promoción vuelve a pasar por CodeRabbit. El PR espera hasta tener su aprobación y cero bloqueantes adjudicados abiertos; si CodeRabbit no tiene cuota, se declara y se avanza con otros carriles.
+8. **Cierre.** Registra los residuales y comprueba CI y CodeRabbit aprobados para el SHA actual del PR; no se exige `APPROVE lead`.
+9. **Merge** por GitHub, sección 6. Base al día antes, con `git merge origin/<default>` en el worktree del carril y push normal: **nunca rebase**, que exige force-push y está prohibido. Después de actualizar la base, comprueba CI y CodeRabbit para el SHA actual; si la revisión revela un bloqueante, vuelve al paso 3. La rama por defecto avanza sola cada dos horas con los snapshots del gateway, así que esto pasa en casi todo merge.
 10. **Despliegue y verificación**, sección 7, si la fase lo pide.
 11. **Progreso escrito**, sección 8. Solo entonces, la siguiente tarea. Los mensajes que la corrida manda a David en cada cambio de estado cumplen `seguimiento.v1`.
 
@@ -111,7 +111,7 @@ Medido: 2026-09-16, lectura del script: `-Alcance branch` no es un valor válido
 - **Se repite mientras una ronda traiga un bloqueante, y para en la primera que no traiga ninguno.** No hay tope fijo: lo que acota el gasto es que solo un bloqueante abre ronda y que cada ronda ve solo los arreglos de la anterior.
 - **Si el mismo bloqueante vuelve en dos rondas seguidas, el arreglo no converge.** El carril se detiene con `ATORADO el mismo bloqueante volvio en dos rondas`, el progreso lo marca con `atencion_requerida` y decide el operador.
 - **Un PR nunca se promueve con un bloqueante abierto.** Un bloqueante nunca va a una fila del plan: se corrige o el carril queda `ATORADO` y decide el operador.
-- **Lo no bloqueante no abre ronda.** Se corrige en la misma si es de una línea; si no, va a una fila del plan con su razón y se nombra en el `APPROVE` del paso 8.
+- **Lo no bloqueante no abre ronda.** Se corrige en la misma si es de una línea; si no, va a una fila del plan con su razón y se nombra en los residuales del paso 8.
 - **Si el script sale con código 3** (ningún revisor externo disponible), el lead hace la revisión con un subagente propio y lo escribe en el PR como "revisión interna, sin cruzada". Nunca se espera a que la cadena vuelva.
 - **Un revisor que tarda más que el tope del script no es un revisor caído**: se anota y se sigue con el siguiente. El tope se fija por medición, no por número redondo.
 
@@ -126,7 +126,7 @@ Medido: 2026-09-18, en los repos del dueño: el criterio "sin tope, se sigue mie
 - **Un PR por carril, nunca por tarea.** Las tareas de un carril son commits del mismo PR.
 - **Borrador hasta la aprobación cruzada.** El PR nace como draft y solo se promueve cuando la sección 4 cerró. CodeRabbit no ve los pushes del borrador: ve el PR promovido y, después, solo los pushes de corrección, que son pocos porque el código ya pasó la cruzada.
 - **Tope de tres PRs abiertos a la vez** por corrida. Si hay que abrir un cuarto, se cierra uno primero.
-- **Sin cuota de CodeRabbit no se espera**: el PR sigue su curso, pero la línea "CodeRabbit sin cuota: no revisó este PR" va en el cuerpo del PR y en el Telegram. Que no bloquee no significa que no se diga.
+- **Sin cuota de CodeRabbit, ese PR espera**: la línea "CodeRabbit sin cuota: no revisó este PR" va en el cuerpo del PR y en el Telegram. Se consulta de nuevo cuando haya cuota; mientras tanto, siguen los carriles y PRs que no dependan de ese merge.
 - **Los comentarios de CodeRabbit se leen y se adjudican** antes de mergear. Un check en verde con comentarios sin leer no es una revisión aprobada; leídos, manda la regla de la sección 4: solo un bloqueante con reproducción abre ronda, y lo no bloqueante se nombra en los residuales del recibo. La compuerta nunca fue cero comentarios: es cero bloqueantes adjudicados abiertos.
 
 Medido: 2026-09-16, PR #48 se mergeó con el check de CodeRabbit en verde y trece comentarios accionables sin leer, seis de ellos altos; cuatro eran candados que daban verde con el defecto puesto. Y en la noche del 15, siete PRs abiertos a la vez agotaron la cuota del bot antes de la mitad de la corrida.
@@ -171,11 +171,11 @@ Medido: 2026-09-18, al cerrar la Fase 7. El documento estaba enviado y el tabler
 
 ## 9. El lead es reemplazable
 
-El estado de una corrida vive en **git y en los PRs**, nunca en la memoria del lead: cada carril tiene su rama y su worktree, cada aprobación es un comentario `APPROVE lead <sha>` en el PR, cada residual está escrito en el PR, y el progreso está en el archivo de la sección 8.
+El estado de una corrida vive en **git y en los PRs**, nunca en la memoria del lead: cada carril tiene su rama y su worktree, las comprobaciones de CI y CodeRabbit corresponden al SHA actual del PR, cada residual está escrito en el PR, y el progreso está en el archivo de la sección 8.
 
 Por eso, si el lead muere, se cuelga o se queda sin cuota, claw relanza **otro host de la lista de preferencia** con la misma instrucción, y ese lead nuevo:
 
-1. Lee `gh pr list` de los repos de la fase y los comentarios `APPROVE lead`.
+1. Lee `gh pr list` de los repos de la fase y el SHA actual de cada PR.
 2. Lee el archivo de progreso y los worktrees. Si el progreso detiene un carril por una causa que el PR ya no tiene —medido 2026-09-20 en la Fase 9: carriles «esperando sello» con el PR ya MERGED en GitHub—, lo reconcilia con `bash scripts/reconciliar-progreso.sh <progress.json>`: para el estado del PR manda GitHub, se limpia solo ese motivo y la corrida sigue sin repetir un merge ya hecho.
 3. Retoma cada carril donde quedó. No repite trabajo ya aprobado.
 4. Comprueba los checks y revisiones del SHA actual en GitHub. Reutiliza la evidencia vigente y verifica solo los cambios nuevos; no se exige recibo del lead.
@@ -224,7 +224,7 @@ Aplican en toda fase. El runbook de fase agrega las suyas y no repite estas.
 | El candado léxico rechaza un comando que solo *menciona* `main` o merge | Reescribe el comando sin la palabra; cuerpos largos van en archivo; `gh pr create` sin `--base`. |
 | Una prueba pasa igual sin el arreglo | Encargo de corrección al mismo implementador. El arreglo no existe hasta que la prueba lo atrape. |
 | El revisor cruzado sale 3 | Revisor interno, declarado en el PR. No se espera. |
-| CodeRabbit sin cuota o sin respuesta en 20 minutos | No bloquea. Línea en el PR y en el Telegram. Se reintenta tras el próximo push. |
+| CodeRabbit sin cuota o sin respuesta en 20 minutos | Ese PR espera su aprobación. Se anota en el PR y en el Telegram, se vuelve a consultar y se avanza con otros carriles y PRs independientes. |
 | Cuota agotada, auth, binario ausente o fallo de arranque del **proveedor de modelo** | Se detiene el proceso anterior y se releva al siguiente candidato compatible, conservando worktree, rama, brief y commits. No se usa el relevo para escapar de una prueba o revisión. CodeRabbit no es un proveedor de modelo: su fila es la de arriba y nunca detiene un carril. |
 | Una sesión queda esperando a una persona: permiso, confianza de la carpeta, límite de uso con cambio de modelo | Llega sola, sea el CLI que sea: el vigilante manda `waiting for approval`, y recuerda cada 30 minutos a toda sesión marcada que siga callada. Se contesta con la tabla de preaprobaciones del runbook; lo que no está en la tabla se rechaza y se declara. Si el CLI tiene modo sin preguntas, se cambia de modo en vez de contestar de una en una. Si el diálogo necesita a David, el mensaje cumple `seguimiento.v1`: pregunta en palabras simples con lo que implica cada opción. |
 | Nadie vigila una sesión | **Toda** sesión que la corrida lanza se marca al lanzarla, **la del lead incluida**. Sin marca el vigilante la ignora por diseño. Al terminar cada carril se ejecuta `~/bin/corrida.sh terminar-sesion <id> <sesion>`; `corrida.sh cerrar <id>` conserva el barrido final de la fase. |

@@ -21,7 +21,21 @@ if [ -f "$MAP" ]; then
   chk "skill goncloud-ssh-ops existe" test -f "agents/ingenieria/agent/workshop-skills/goncloud-ssh-ops/SKILL.md"
   # anclas de los dos tipos de go/no-go
   chk "go/no-go unico (merge y deploy)" grep -q 'sin permiso adicional' "$MAP"
-  chk "go/no-go separado (merge y deploy separados)" grep -q 'merge y luego deploy' "$MAP"
+  row7=$(awk -F '|' '$2 ~ /^ *7 *$/ {print; exit}' "$MAP")
+  row8=$(awk -F '|' '$2 ~ /^ *8 *$/ {print; exit}' "$MAP")
+  row9=$(awk -F '|' '$2 ~ /^ *9 *$/ {print; exit}' "$MAP")
+  if printf '%s' "$row7" | grep -q 'Permiso permanente' && ! printf '%s' "$row7" | grep -qE 'PR integrado|merge y luego deploy|comprueba la publicación'; then
+    echo "OK: paso 7 declara permiso sin repetir merge ni deploy"
+  else
+    echo "FALLO: paso 7 repite merge o deploy"
+    fails=$((fails+1))
+  fi
+  if printf '%s' "$row8" | grep -q 'PR `MERGED`' && printf '%s' "$row9" | grep -q 'Smoke verde'; then
+    echo "OK: merge en paso 8 y deploy en paso 9"
+  else
+    echo "FALLO: merge y deploy no están en sus pasos"
+    fails=$((fails+1))
+  fi
   section_h2() {
     awk -v h="$1" '
       index($0, h) == 1 {grab=1; print; next}
