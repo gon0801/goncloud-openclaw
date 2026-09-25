@@ -1119,7 +1119,7 @@ if [ -n "$OBSERVAR_AVANCE" ]; then
   else
     motivo="no se vio (a) el cron"
     [ "$OBS_A_OK" = "1" ] && motivo="se vio el cron (a) a las $OBS_A_HORA pero no (b) su scratch confirmado"
-    [ "$OBS_TURNO_OK" != "1" ] && motivo="el turno a main no se pudo mandar"
+    [ "$OBS_TURNO_OK" != "1" ] && motivo="el turno a main no completo (tope o error; el mensaje pudo haber llegado)"
     leer_caso 4; escribir_caso 4 "$CASO_RESULTADO" "NO OBSERVADO: disparo real ($motivo)" \
       "$CASO_HORA_EVENTO" "$CASO_HORA_MENSAJE" "$CASO_MSG_ID" "$CASO_OBSERVABLE" "$CASO_SIMULADO"
     leer_caso 7; escribir_caso 7 "$CASO_RESULTADO" "NO OBSERVADO: disparo real ($motivo)" \

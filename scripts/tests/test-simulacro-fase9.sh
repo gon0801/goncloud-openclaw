@@ -512,11 +512,11 @@ salida17b="$(SIM9_AGENT_RETARDO=6 SIM_TOPE_TURNO_MAIN=3 SIM_TOPE_OBS_POLL=2 SIM_
   bash "$ARNES" --ensayo --salida "$T/evidencia-17b.md" --tope-pared 300 --observar-avance 1 2>&1)"
 rc17b=$?
 [ "$rc17b" -eq 0 ] || fail "turno a main (tope propio corto): se esperaba salida 0 (las filas siguen FUNCIONA), salio $rc17b -- $salida17b"
-grep -A2 '## Observacion extendida' "$T/evidencia-17b.md" | grep -q 'el turno a main no se pudo mandar' \
-  || fail "turno a main (tope propio corto): no explico 'el turno a main no se pudo mandar': $(grep -A2 '## Observacion extendida' "$T/evidencia-17b.md")"
+grep -A2 '## Observacion extendida' "$T/evidencia-17b.md" | grep -q 'el turno a main no completo' \
+  || fail "turno a main (tope propio corto): no explico 'el turno a main no completo': $(grep -A2 '## Observacion extendida' "$T/evidencia-17b.md")"
 grep -A2 '## Observacion extendida' "$T/evidencia-17b.md" | grep -q 'FUNCIONA observado real' \
   && fail "turno a main (tope propio corto): declaro 'observado real' con un turno que murio bajo el tope"
-grep -qE '^\| 4 .*NO OBSERVADO: disparo real \(el turno a main no se pudo mandar\)' "$T/evidencia-17b.md" \
+grep -qE '^\| 4 .*NO OBSERVADO: disparo real \(el turno a main no completo' "$T/evidencia-17b.md" \
   || fail "turno a main (tope propio corto): el caso 4 no quedo con la nota NO OBSERVADO del turno"
 rm -rf "$T/corridas/.sim9-obs-cron"
 
