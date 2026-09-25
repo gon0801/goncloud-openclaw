@@ -26,6 +26,10 @@
 #                    ("system event ... closed") ni crea el cron falso al
 #                    recibir el turno de la observacion extendida. Por
 #                    defecto "main" SI actua en los dos casos.
+#   SIM9_NODE_BIN    el node (>=22, con type stripping nativo) que corre
+#                    decide-puro.mjs -- lo elige quien invoca este fixture
+#                    (test-simulacro-fase9.sh, con la misma receta de
+#                    scripts/run-checks.sh); sin el, cae al "node" ambiental.
 set -u
 DESTINO="${SIM9_DESTINO:-DESTINO-FALSO-SIM9}"
 MSGID="${SIM9_MSG_ID-9001}"
@@ -117,7 +121,7 @@ case "$*" in
     printf '{"ok":true}'
     ;;
   *"gateway call runbook.progress.decide"*)
-    printf '%s' "$PARAMS" | node "$AQUI/decide-puro.mjs" 2>>"${SIM9_LLAMADAS:-/dev/null}"
+    printf '%s' "$PARAMS" | "${SIM9_NODE_BIN:-node}" "$AQUI/decide-puro.mjs" 2>>"${SIM9_LLAMADAS:-/dev/null}"
     ;;
   *"gateway call status"*)
     printf '{"ok":true}'

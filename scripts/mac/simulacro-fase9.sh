@@ -136,8 +136,13 @@ ruta_sin_reloj() { # $1 ruta; 0 = segura
 
 # ============================= limpieza (idempotente, sin rm -r) ===========
 # Definida ANTES de --limpiar (que la llama de inmediato, sin abrir nada
-# nuevo) y antes de arrancar nada mas.
-LIMPIEZA_LOG="$(mktemp)" || { echo "simulacro-fase9: sin mktemp para el log de limpieza" >&2; exit 2; }
+# nuevo) y antes de arrancar nada mas. Un --dry-run PURO (sin --limpiar) no
+# reserva el log: no va a limpiar nada de verdad, y con `set -u` un archivo
+# que nadie necesita es una razon menos para que algo falle.
+LIMPIEZA_LOG=""
+if [ "$DRY_RUN" != "1" ] || [ -n "$LIMPIAR_ID" ]; then
+  LIMPIEZA_LOG="$(mktemp)" || { echo "simulacro-fase9: sin mktemp para el log de limpieza" >&2; exit 2; }
+fi
 limpiar_corrida() { # $1 id; nunca falla el script: todo es best-effort y anotado
   local id="$1"
   corrida_id_valido "$id" || return 0
@@ -249,6 +254,7 @@ SIM_ID="$(generar_id)"
 
 LIMPIEZA_HECHA=0
 VIGIA_PID=""
+WATCHDOG_PID=""
 limpieza_exit() {
   local rc=$?
   [ "$LIMPIEZA_HECHA" = "1" ] && exit "$rc"
@@ -258,11 +264,31 @@ limpieza_exit() {
     kill "$VIGIA_PID" 2>/dev/null
     wait "$VIGIA_PID" 2>/dev/null
   fi
+  [ -n "$WATCHDOG_PID" ] && kill "$WATCHDOG_PID" 2>/dev/null
   exit "$rc"
 }
-trap limpieza_exit EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+# --limpiar ya salio (exit 0) antes de llegar aqui, asi que a esta altura
+# DRY_RUN=1 solo puede ser un --dry-run PURO: no abre ni lanza nada, no hay
+# nada que limpiar, y el trap solo agregaria un `limpiar_corrida` de un id
+# que nunca se abrio (ademas de LIMPIEZA_LOG, que aqui puede no existir).
+if [ "$DRY_RUN" != "1" ]; then
+  trap limpieza_exit EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  # --tope-pared, exigido (BRIEF): un reloj de pared que solo se imprimia y
+  # nunca se aplicaba. Vencido el tope, termina el arnes por la via normal
+  # (SIGTERM -> el trap de arriba -> limpieza_exit), nunca a la fuerza.
+  # >/dev/null 2>&1 es obligatorio: sin redirigir sus propios descriptores,
+  # este job de fondo hereda el stdout/stderr del arnes, y quien lo capture
+  # con "$(...)" (la prueba, por ejemplo) queda esperando a que el WATCHDOG
+  # tambien cierre esos descriptores — hasta el tope entero, aunque el
+  # arnes ya haya terminado hace rato (medido: la bateria completa se colgaba
+  # varios minutos por esto).
+  if [ "$TOPE_PARED" -gt 0 ]; then
+    ( sleep "$TOPE_PARED"; kill -TERM $$ 2>/dev/null ) >/dev/null 2>&1 &
+    WATCHDOG_PID=$!
+  fi
+fi
 
 # ============================= --ensayo: vigia doblada ======================
 # Contradiccion real, resuelta aqui (documentada tambien en el reporte):
@@ -277,7 +303,10 @@ trap 'exit 143' TERM
 # WATCH_INSTALADO apunta a esa copia para que la comprobacion de blob de
 # preflight (contra origin/main) compare lo mismo que esta corriendo.
 VIGIA_PATRON="bin/tmux-activity-watch.sh"
-if [ "$ENSAYO" = "1" ]; then
+# --dry-run no lanza nada, ni siquiera el vigia doblado de --ensayo (la
+# comprobacion de que "el vigia esta vivo" tambien se salta mas abajo, en
+# prerrequisitos: nada lo levanto para que hubiera algo que encontrar).
+if [ "$ENSAYO" = "1" ] && [ "$DRY_RUN" != "1" ]; then
   VIGIA_ENSAYO_DIR="$CORRIDA_STATE/.arnes-vigia-bin"
   mkdir -p "$VIGIA_ENSAYO_DIR/bin" || { echo "simulacro-fase9: no se pudo preparar el vigia doblado" >&2; exit 2; }
   cp "$REPO_RAIZ/scripts/mac/tmux-activity-watch.sh" "$VIGIA_ENSAYO_DIR/bin/tmux-activity-watch.sh" \
@@ -320,7 +349,13 @@ prerrequisitos() {
     razon "el reloj viejo ai.goncloud.corrida-latido sigue cargado"
   fi
 
-  pgrep -f "$VIGIA_PATRON" >/dev/null 2>&1 || razon "el vigia no esta vivo ($VIGIA_PATRON)"
+  # En vivo, esta comprobacion mira al vigia global real (siempre vale, sea o
+  # no --dry-run). En --ensayo, el vigia lo lanza este mismo arnes un poco
+  # mas arriba -- y --dry-run no lo lanza a proposito, asi que aqui no habria
+  # nada que encontrar y no es una razon real para NO APTO.
+  if [ "$ENSAYO" != "1" ] || [ "$DRY_RUN" != "1" ]; then
+    pgrep -f "$VIGIA_PATRON" >/dev/null 2>&1 || razon "el vigia no esta vivo ($VIGIA_PATRON)"
+  fi
 
   command -v glm >/dev/null 2>&1 || razon "glm no esta en el PATH"
 
@@ -465,7 +500,15 @@ CASOS_NOMBRE="1|contrato LISTO 0000000 y recoger|2|dialogo de confianza aceptado
 escribir_caso() { # $1 numero; $2 resultado $3 detalle $4 hora_evento $5 hora_mensaje $6 msg_id $7 observable $8 simulado
   local n="$1"; shift
   mkdir -p "$DIR_SIM/casos" 2>/dev/null
-  printf '%s\n' "$1" "$2" "$3" "$4" "$5" "$6" "$7" > "$DIR_SIM/casos/$n.txt"
+  # leer_caso lee por NUMERO DE LINEA fijo: un campo con saltos de linea
+  # propios (p.ej. la salida de lanzar-sesion cuando falla, o un traceback de
+  # python de registro_escribir) correria los campos siguientes. Se
+  # aplastan a espacios ANTES de guardar -- el escape de Markdown (| y \)
+  # queda para tabla_casos, solo al momento de imprimir.
+  local c
+  for c in "$1" "$2" "$3" "$4" "$5" "$6" "$7"; do
+    printf '%s\n' "$(printf '%s' "$c" | tr '\n\r' '  ')"
+  done > "$DIR_SIM/casos/$n.txt"
 }
 leer_caso() { # $1 numero -> llena CASO_RESULTADO..CASO_SIMULADO
   local n="$1"
@@ -952,11 +995,13 @@ jobs=[j for j in (d.get("jobs") or d.get("result",{}).get("jobs") or []) if isin
 print(jobs[0].get("id","") if jobs else "")
 ' 2>/dev/null
 }
-obs_scratch_confirmado() { # $1 uuid -> "SI <messageId>" si corte.kind=reporte-confirmado con messageId; si no, ""
-  local uuid="$1"
+obs_scratch_confirmado() { # $1 uuid, $2 epoch minimo -> "SI <messageId>" si
+                           # corte.kind=reporte-confirmado, con messageId, Y
+                           # ultimoReporteConfirmado >= el epoch minimo; si no, ""
+  local uuid="$1" desde="$2"
   [ -n "$uuid" ] || return 1
-  con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" cron scratch "$uuid" 2>/dev/null | python3 -c '
-import json,sys
+  con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" cron scratch "$uuid" 2>/dev/null | OBS_DESDE="$desde" python3 -c '
+import json,os,sys
 t=sys.stdin.read()
 try:
   d=json.loads(t[t.index("{"):])
@@ -972,7 +1017,13 @@ if not (isinstance(nodo,dict) and nodo.get("schema")=="seguimiento-clock.v1"):
   raise SystemExit
 corte=nodo.get("corte") or {}
 mid=nodo.get("messageId")
-if corte.get("kind")=="reporte-confirmado" and mid is not None:
+urc=corte.get("ultimoReporteConfirmado")
+desde=int(os.environ["OBS_DESDE"])
+# Un scratch viejo (de un cron avance-tareas que ya existia de antes, rancio o
+# apagado) no puede colarse como si fuera el aviso de ESTA observacion: el
+# corte confirmado tiene que ser de al menos cuando se mando el turno a main.
+if (corte.get("kind")=="reporte-confirmado" and mid is not None
+    and isinstance(urc,(int,float)) and not isinstance(urc,bool) and urc>=desde):
   print("SI %s" % mid)
 ' 2>/dev/null
 }
@@ -984,6 +1035,7 @@ if [ -n "$OBSERVAR_AVANCE" ]; then
     printf 'Siguela segun tu seccion "Avisos de avance" (no hace falta que crees ningun cron: tu AGENTS.md ya lo hace al haber trabajo activo).\n'
   } > "$OBS_MSGFILE"
   OBS_T0=$SECONDS
+  OBS_T0_EPOCH="$(date +%s)"
   OBS_T0_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   OBS_TURNO_OK=0
   if con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" agent --agent main --session-key "agent:main:sim9-$SIM_ID" \
@@ -1001,7 +1053,7 @@ if [ -n "$OBSERVAR_AVANCE" ]; then
         if [ -n "$OBS_UUID_ENCONTRADO" ]; then OBS_A_OK=1; OBS_A_HORA="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; fi
       fi
       if [ "$OBS_A_OK" = "1" ] && [ "$OBS_B_OK" = "0" ] && [ "$((SECONDS-OBS_T0))" -ge "$SIM_TOPE_OBS_VENTANA" ]; then
-        OBS_RESP="$(obs_scratch_confirmado "$OBS_UUID_ENCONTRADO")"
+        OBS_RESP="$(obs_scratch_confirmado "$OBS_UUID_ENCONTRADO" "$OBS_T0_EPOCH")"
         if printf '%s' "$OBS_RESP" | grep -q '^SI '; then
           OBS_B_OK=1
           OBS_B_HORA="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -1073,6 +1125,13 @@ tabla_instalado() {
   done
 }
 
+# Escapa SOLO al renderizar (el registro en casos/<n>.txt queda tal cual, sin
+# escapar): una barra vertical suelta en un campo (p.ej. la salida cruda de
+# un comando fallido) crearia una columna de mas en la tabla Markdown.
+markdown_celda() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/|/\\|/g'
+}
+
 tabla_casos() {
   printf '| caso | como se provoco | hora del evento | hora del mensaje | id del mensaje | observable | resultado | que se simulo |\n'
   printf '|---|---|---|---|---|---|---|---|\n'
@@ -1086,8 +1145,16 @@ EOF
     leer_caso "$i"
     local col_resultado="$CASO_RESULTADO"
     [ -n "$CASO_DETALLE" ] && col_resultado="$CASO_RESULTADO ($CASO_DETALLE)"
+    local col_nombre col_hora_evento col_hora_mensaje col_msg_id col_observable col_simulado
+    col_nombre="$(markdown_celda "$nombre")"
+    col_hora_evento="$(markdown_celda "$CASO_HORA_EVENTO")"
+    col_hora_mensaje="$(markdown_celda "$CASO_HORA_MENSAJE")"
+    col_msg_id="$(markdown_celda "$CASO_MSG_ID")"
+    col_observable="$(markdown_celda "$CASO_OBSERVABLE")"
+    col_resultado="$(markdown_celda "$col_resultado")"
+    col_simulado="$(markdown_celda "$CASO_SIMULADO")"
     printf '| %s | %s | %s | %s | %s | %s | %s | %s |\n' \
-      "$i" "$nombre" "$CASO_HORA_EVENTO" "$CASO_HORA_MENSAJE" "$CASO_MSG_ID" "$CASO_OBSERVABLE" "$col_resultado" "$CASO_SIMULADO"
+      "$i" "$col_nombre" "$col_hora_evento" "$col_hora_mensaje" "$col_msg_id" "$col_observable" "$col_resultado" "$col_simulado"
     idx=$((idx+2))
   done
 }

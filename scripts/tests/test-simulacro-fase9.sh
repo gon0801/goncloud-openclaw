@@ -24,6 +24,37 @@ TM_REAL="$(command -v tmux 2>/dev/null || true)"
 [ -z "$TM_REAL" ] && [ -x /opt/homebrew/bin/tmux ] && TM_REAL=/opt/homebrew/bin/tmux
 [ -n "$TM_REAL" ] || fail "sin tmux no hay prueba del arnes"
 
+# decide-puro.mjs importa seguimiento-clock.ts (un .ts con sintaxis borrable):
+# necesita el mismo node >=22 con type stripping nativo que ya elige
+# scripts/run-checks.sh para el resto de la bateria (CodeRabbit, PR #153) —
+# nunca el "node" ambiental sin mas, que puede ser mas viejo o no estar. Sin
+# esto, un node incapaz de importar el .ts fallaria en silencio (el error
+# solo queda en SIM9_LLAMADAS) y los casos 4/7 saldrian "sin SEND" sin decir
+# por que: se falla aqui, alto y claro, antes de correr nada.
+elegir_node() {
+  local c
+  for c in "$(command -v node 2>/dev/null)" \
+           "$HOME/.openclaw/tools/node-v24.19.0/bin/node" \
+           /opt/homebrew/bin/node /usr/local/bin/node; do
+    [ -n "$c" ] && [ -x "$c" ] || continue
+    local v; v=$("$c" --version 2>/dev/null | sed 's/^v//;s/\..*//')
+    [ -n "$v" ] && [ "$v" -ge 22 ] 2>/dev/null && { echo "$c"; return 0; }
+  done
+  return 1
+}
+SIM9_NODE_BIN="$(elegir_node)" || fail "no hay un node >= 22 disponible (con type stripping nativo): decide-puro.mjs no puede correr sin el"
+export SIM9_NODE_BIN
+
+# SIM9_SOLO=<n>[,<n>...] corre solo esos escenarios numerados (para iterar
+# rojo/verde de un punto sin pagar los ~9 min de la bateria completa); sin
+# el, corren todos (asi debe correr la bateria completa, una sola vez).
+SIM9_SOLO="${SIM9_SOLO:-}"
+debe_correr() { # $1 numero de escenario; 0 = correrlo
+  [ -z "$SIM9_SOLO" ] && return 0
+  case ",$SIM9_SOLO," in *",$1,"*) return 0;; esac
+  return 1
+}
+
 T="$(mktemp -d)" || exit 1
 SOCKET="sim9ensayo$$"
 trap '"$TM_REAL" -L "$SOCKET" kill-server 2>/dev/null; rm -rf "$T"' EXIT
@@ -66,6 +97,7 @@ export PATH="$T/bin:$PATH"
 export SIM_TOPE_C1=15 SIM_TOPE_C2=15 SIM_TOPE_C3=20 SIM_TOPE_C4=20 SIM_TOPE_C5=30 SIM_TOPE_C6=30
 export SIM_ESPERA_DOBLE=6
 
+if debe_correr 1; then
 # ============================= (1) todo sano ================================
 EVID1="$T/evidencia-1.md"
 salida1="$(bash "$ARNES" --ensayo --salida "$EVID1" --tope-pared 300 2>&1)"
@@ -114,6 +146,9 @@ d=json.load(open('$T/corridas/$SIM_ID1/registro.json'))
 print(sum(1 for s in d['sesiones'] if s.get('nombre')=='sim9-c5'))")"
 [ "$n_c5" = "2" ] || fail "se esperaban 2 entradas del registro nombradas sim9-c5 (original + relanzada), hay $n_c5"
 
+fi
+
+if debe_correr 2; then
 # ============================= (2) prerrequisito roto: sin glm ==============
 T2="$T/sin-glm-path"
 mkdir -p "$T2"
@@ -133,6 +168,9 @@ despues_dirs="$(find "$T/corridas" -maxdepth 1 -name 'sim9-*' -type d 2>/dev/nul
 sesiones_tras_no_apto="$("$TM_REAL" -L "$SOCKET" list-sessions -F '#{session_name}' 2>/dev/null | grep -c 'sim9-')"
 [ "$sesiones_tras_no_apto" -eq 0 ] || fail "NO APTO igual dejo sesiones sim9-* vivas"
 
+fi
+
+if debe_correr 3; then
 # ============================= (3) --limpiar sobre una corrida a medias =====
 # Se abre por fuera del arnes (como si el arnes hubiera muerto con kill -9 a
 # mitad del arranque) y se comprueba que --limpiar la deja cerrada de verdad.
@@ -162,10 +200,16 @@ grep -q '"estado": *"cerrada"' "$T/corridas/$SIM_MEDIAS/registro.json" \
 "$TM_REAL" -L "$SOCKET" has-session -t "=sim9-huerfana-$$" 2>/dev/null \
   && fail "--limpiar no mato la sesion huerfana marcada con OPENCLAW_WATCH_RUN"
 
+fi
+
+if debe_correr 4; then
 # ============================= (4) grep del arnes: sin rm -r/-rf ============
 sed 's/#.*//' scripts/mac/simulacro-fase9.sh | grep -qE 'rm[[:space:]]+-[a-zA-Z]*r' \
   && fail "el arnes tiene un rm -r/-rf fuera de un comentario: la limpieza tiene que ser sin rm -r"
 
+fi
+
+if debe_correr 5; then
 # ============================= (5) glm que nunca dice LISTO: caso 1 NO FUNCIONA
 EVID5="$T/evidencia-5.md"
 salida5="$(SIM9_GLM_MUDO=1 bash "$ARNES" --ensayo --salida "$EVID5" --tope-pared 60 2>&1)"
@@ -178,6 +222,9 @@ grep -qE '^\| 3 .*\| FUNCIONA ' "$EVID5" || fail "glm mudo: el caso 3 debio segu
 sesiones5="$("$TM_REAL" -L "$SOCKET" list-sessions -F '#{session_name}' 2>/dev/null | grep -c 'sim9-')"
 [ "$sesiones5" -eq 0 ] || fail "glm mudo: quedaron sesiones sim9-* vivas (el caso 1 se colgo)"
 
+fi
+
+if debe_correr 6; then
 # ============================= (6) responder apagado: caso 2 NO FUNCIONA ====
 EVID6="$T/evidencia-6.md"
 salida6="$(SIM9_SIN_RESPONDER=1 bash "$ARNES" --ensayo --salida "$EVID6" --tope-pared 60 2>&1)"
@@ -186,6 +233,9 @@ rc6=$?
 grep -qE '^\| 2 .*\| NO FUNCIONA ' "$EVID6" \
   || fail "responder apagado: el caso 2 no salio NO FUNCIONA: $(grep '^| 2 ' "$EVID6")"
 
+fi
+
+if debe_correr 7; then
 # ============================= (7) message send sin id: casos 3, 4 y 7 =======
 # NO FUNCIONA (los tres mandan por con_tope + message send --json de la
 # misma forma; sin messageId, ninguno de los tres puede confirmar el envio).
@@ -200,6 +250,9 @@ grep -qE '^\| 4 .*\| NO FUNCIONA ' "$EVID7" \
 grep -qE '^\| 7 .*\| NO FUNCIONA ' "$EVID7" \
   || fail "message send sin id: el caso 7 no salio NO FUNCIONA: $(grep '^| 7 ' "$EVID7")"
 
+fi
+
+if debe_correr 8; then
 # ============================= (8) "main" sin relanzar: casos 5 y 6 ==========
 EVID8="$T/evidencia-8.md"
 salida8="$(SIM_MAIN=mudo bash "$ARNES" --ensayo --salida "$EVID8" --tope-pared 120 2>&1)"
@@ -212,6 +265,9 @@ grep -qE '^\| 6 .*\| NO FUNCIONA ' "$EVID8" \
 sesiones8="$("$TM_REAL" -L "$SOCKET" list-sessions -F '#{session_name}' 2>/dev/null | grep -c 'sim9-')"
 [ "$sesiones8" -eq 0 ] || fail "main sin relanzar: quedaron sesiones sim9-* vivas"
 
+fi
+
+if debe_correr 9; then
 # ============================= (9) observacion extendida: el aviso SALE =====
 # Reloj corto inyectado (solo el sondeo propio del arnes, nunca el de
 # corrida.sh estado): con un tope de 1 minuto y una ventana minima de pocos
@@ -230,6 +286,9 @@ grep -qE '^\| 7 .*observado real' "$EVID9" || fail "observacion (aviso sale): el
 grep -qE '^\| 4 .*\| FUNCIONA ' "$EVID9" || fail "observacion (aviso sale): el caso 4 dejo de ser FUNCIONA"
 grep -qE '^\| 7 .*\| FUNCIONA ' "$EVID9" || fail "observacion (aviso sale): el caso 7 dejo de ser FUNCIONA"
 
+fi
+
+if debe_correr 10; then
 # ============================= (10) observacion extendida: el aviso NO SALE =
 # Con "main" mudo, ni el cron ni su scratch aparecen: la observacion tiene
 # que decir "NO OBSERVADO: disparo real", nunca "no aplica" (BRIEF-lead). El
@@ -253,6 +312,39 @@ grep -qE '^\| 7 .*NO OBSERVADO: disparo real' "$EVID10" || fail "observacion (av
 grep -qE '^\| 4 .*\| FUNCIONA ' "$EVID10" || fail "observacion (aviso no sale): el caso 4 dejo de ser FUNCIONA"
 grep -qE '^\| 7 .*\| FUNCIONA ' "$EVID10" || fail "observacion (aviso no sale): el caso 7 dejo de ser FUNCIONA"
 
+fi
+
+if debe_correr 14; then
+# ===================== (14) observacion extendida: scratch VIEJO no cuela (CodeRabbit bloqueante) ==
+# CodeRabbit (PR #153, bloqueante): un cron avance-tareas que YA existia de
+# antes (rancio, con un reporte confirmado de mucho antes de esta corrida) no
+# puede colarse como si fuera el aviso de ESTA observacion. Se deja un
+# job.json + scratch.json ya escritos a mano, con un messageId real pero un
+# "ultimoReporteConfirmado" del pasado remoto (epoch 1000), y "main" mudo (no
+# lo toca de nuevo): el cron NUNCA dispara durante la ventana, pero su scratch
+# viejo sigue ahi con corte "reporte-confirmado".
+rm -rf "$T/corridas/.sim9-obs-cron"
+mkdir -p "$T/corridas/.sim9-obs-cron"
+printf '{"id":"sim9-avance-tareas-fake","name":"avance-tareas","declarationKey":"avance-tareas","enabled":true}' \
+  > "$T/corridas/.sim9-obs-cron/job.json"
+printf '{"schema":"seguimiento-clock.v1","corte":{"kind":"reporte-confirmado","ultimoReporteConfirmado":1000},"ultimoEstado":"","ultimoInmediato":null,"messageId":8001,"trabajosActivos":[]}' \
+  > "$T/corridas/.sim9-obs-cron/sim9-avance-tareas-fake.scratch.json"
+EVID14="$T/evidencia-14.md"
+salida14="$(SIM_MAIN=mudo SIM_TOPE_OBS_POLL=2 SIM_TOPE_OBS_VENTANA=5 \
+  bash "$ARNES" --ensayo --salida "$EVID14" --tope-pared 300 --observar-avance 1 2>&1)"
+rc14=$?
+[ "$rc14" -eq 1 ] || fail "observacion (scratch viejo): se esperaba salida 1, salio $rc14 -- $salida14"
+grep -A2 '## Observacion extendida' "$EVID14" | grep -q 'NO OBSERVADO: disparo real' \
+  || fail "observacion (scratch viejo): no se vio 'NO OBSERVADO: disparo real': $(grep -A2 '## Observacion extendida' "$EVID14")"
+grep -A2 '## Observacion extendida' "$EVID14" | grep -q 'FUNCIONA observado real' \
+  && fail "observacion (scratch viejo): acepto un scratch viejo (de antes del turno) como observado real"
+grep -qE '^\| 4 .*observado real' "$EVID14" && fail "observacion (scratch viejo): el caso 4 quedo anotado observado real"
+grep -qE '^\| 7 .*observado real' "$EVID14" && fail "observacion (scratch viejo): el caso 7 quedo anotado observado real"
+rm -rf "$T/corridas/.sim9-obs-cron"
+
+fi
+
+if debe_correr 11; then
 # ============================= (11) --dry-run: no toca nada =================
 T11="$T/dry-run-check"
 mkdir -p "$T11"
@@ -266,5 +358,56 @@ despues11="$(find "$T/corridas" -maxdepth 1 -name 'sim9-*' -type d 2>/dev/null |
 [ "$despues11" -eq "$antes11" ] || fail "--dry-run creo un directorio de corrida (se esperaba ninguno nuevo)"
 sesiones11="$("$TM_REAL" -L "$SOCKET" list-sessions -F '#{session_name}' 2>/dev/null | grep -c 'sim9-')"
 [ "$sesiones11" -eq 0 ] || fail "--dry-run dejo sesiones sim9-* vivas"
+
+fi
+
+if debe_correr 12; then
+# ============================= (12) tabla_casos: saneo y escape (CodeRabbit) =
+# Extrae escribir_caso/leer_caso/markdown_celda/tabla_casos DEL ARNES REAL (no
+# una reimplementacion) para probarlas aisladas: un detalle con un salto de
+# linea propio (como la salida de un `lanzar-sesion` fallido) no puede correr
+# los campos siguientes de leer_caso, y una barra vertical en cualquier campo
+# no puede crear una columna de mas en la tabla Markdown.
+T12="$T/tabla-check"
+mkdir -p "$T12/casos"
+FUNCS12="$T12/funcs.sh"
+awk '/^escribir_caso\(\)/,/^}/; /^leer_caso\(\)/,/^}/; /^markdown_celda\(\)/,/^}/; /^tabla_casos\(\)/,/^}/' \
+  "$ARNES" > "$FUNCS12"
+[ -s "$FUNCS12" ] || fail "no se pudieron extraer las funciones de la tabla del arnes"
+(
+  DIR_SIM="$T12"
+  CASOS_NOMBRE="1|primer caso de prueba"
+  . "$FUNCS12"
+  escribir_caso 1 "NO FUNCIONA" "linea uno
+linea dos | con una barra" "" "" "" "" "simulado | con barra"
+  tabla_casos > "$T12/tabla.md"
+)
+n_filas12="$(grep -c '^|' "$T12/tabla.md")"
+[ "$n_filas12" -eq 3 ] || fail "un detalle con salto de linea corrio la tabla a mas de 3 lineas (cabecera+separador+1 fila): $(cat "$T12/tabla.md")"
+grep -q 'linea uno linea dos \\| con una barra' "$T12/tabla.md" \
+  || fail "el detalle con salto de linea no quedo aplastado y con su barra escapada: $(cat "$T12/tabla.md")"
+grep -q 'simulado \\| con barra' "$T12/tabla.md" \
+  || fail "la celda 'que se simulo' no escapo su barra vertical: $(cat "$T12/tabla.md")"
+
+fi
+
+if debe_correr 13; then
+# ============================= (13) --tope-pared: reloj de pared aplicado ===
+# CodeRabbit: el tope se leia pero nunca se aplicaba. Un caso 1 colgado (glm
+# mudo, nunca dice LISTO) con un tope de pared corto tiene que cortar la
+# corrida por la via normal (SIGTERM -> limpieza_exit), sin sesiones vivas
+# ni que el proceso seco quede corriendo mas alla del tope.
+EVID13="$T/evidencia-13.md"
+ini13=$SECONDS
+salida13="$(timeout 60 env SIM9_GLM_MUDO=1 SIM_TOPE_C1=120 \
+  bash "$ARNES" --ensayo --salida "$EVID13" --tope-pared 5 2>&1)"
+rc13=$?
+dur13=$((SECONDS-ini13))
+[ "$dur13" -lt 40 ] || fail "--tope-pared 5 no corto la corrida colgada a tiempo (tardo ${dur13}s): $salida13"
+[ "$rc13" -eq 143 ] || fail "--tope-pared 5 con la corrida colgada: se esperaba salida 143 (SIGTERM via limpieza_exit), salio $rc13 -- $salida13"
+sesiones13="$("$TM_REAL" -L "$SOCKET" list-sessions -F '#{session_name}' 2>/dev/null | grep -c 'sim9-')"
+[ "$sesiones13" -eq 0 ] || fail "--tope-pared: quedaron sesiones sim9-* vivas tras el corte"
+
+fi
 
 echo "TODO VERDE: simulacro-fase9 (piezas a-e)"
