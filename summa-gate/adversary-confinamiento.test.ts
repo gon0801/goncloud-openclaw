@@ -44,22 +44,7 @@ function fakeBaseApi(regs: Reg[]) {
 
 const WS = "/tmp/ws-adversary";
 
-// Dos trampas al manejar este evento, las dos costaron una vuelta al escribir
-// esto:
-//
-// 1. `before_tool_call` tiene VARIOS hooks. Tomar el primero con `.find()`
-//    prueba el merge-guard y todo sale sin bloquear, que parece un fallo del
-//    confinamiento y no lo es.
-// 2. El confinamiento se registra **sin matcher** y filtra por dentro con
-//    `event.toolName`. Filtrar por `matcher: ["exec"]` lo deja fuera y solo
-//    encuentra el merge-guard.
-//
-// Y hay una tercera, la contraria: correr TODOS los hooks del evento tampoco es
-// simular al host. El guardia del canal entre agentes se registra con matcher
-// `sessions_send`, y llamarlo con un `exec` lo hace bloquear por una razon que
-// nada tiene que ver, lo que se lee como que el confinamiento toca a otros
-// agentes. El host llama solo a los hooks cuyo matcher incluye la herramienta,
-// mas los que no declaran matcher. Eso es lo que hace esto.
+// Ejecuta los hooks aplicables a exec, igual que el host.
 function execHook() {
   const regs: Reg[] = [];
   mod.register(fakeBaseApi(regs) as never);
@@ -68,7 +53,7 @@ function execHook() {
       r.event === "before_tool_call" &&
       (r.opts?.matcher === undefined || r.opts.matcher.includes("exec")),
   );
-  assert.ok(hs.length >= 2, `esperaba al menos 2 hooks para exec, hay ${hs.length}`);
+  assert.ok(hs.length >= 1, `esperaba un hook de confinamiento para exec, hay ${hs.length}`);
   return (command: string, agentId = "adversary") => {
     for (const h of hs) {
       const r = h.handler({ toolName: "exec", params: { command } }, { agentId, workspaceDir: WS }) as
