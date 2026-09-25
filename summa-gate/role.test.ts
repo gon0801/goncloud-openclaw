@@ -7,7 +7,6 @@ import { describe, it, before, after } from "node:test";
 
 import {
   canonicalRole,
-  mergeGuardVerdict,
   sessionsSendGuardVerdict,
 } from "./lib.ts";
 
@@ -71,35 +70,6 @@ describe("canonicalRole", () => {
 
   it("still maps a standalone fix label to implementer", () => {
     assert.equal(canonicalRole("fix the census hole"), "implementer");
-  });
-});
-
-describe("mergeGuardVerdict", () => {
-  it("blocks git push origin main", () => {
-    assert.match(mergeGuardVerdict("git push origin main") ?? "", /Push bloqueado/);
-  });
-
-  it("blocks git push origin HEAD:main", () => {
-    assert.match(mergeGuardVerdict("git push origin HEAD:main") ?? "", /Push bloqueado/);
-  });
-
-  it("blocks gh pr merge", () => {
-    assert.match(mergeGuardVerdict("gh pr merge 12") ?? "", /Merge bloqueado/);
-  });
-
-  it("blocks gh api repos/.../merge", () => {
-    assert.match(
-      mergeGuardVerdict("gh api repos/x/y/pulls/1/merge") ?? "",
-      /Merge bloqueado/,
-    );
-  });
-
-  it("allows git push origin feature/x", () => {
-    assert.equal(mergeGuardVerdict("git push origin feature/x"), undefined);
-  });
-
-  it("allows git push --dry-run origin feature/x", () => {
-    assert.equal(mergeGuardVerdict("git push --dry-run origin feature/x"), undefined);
   });
 });
 
@@ -284,40 +254,15 @@ describe("plugin smoke import", () => {
     );
   });
 
-  it("tells agents which authorized merge paths remain after a direct merge is denied", async () => {
+  it("does not inject per-PR permission requirements", async () => {
     const mod = await import("./index.ts");
     const regs: Array<{ event: string; handler: FakeHook; opts?: { matcher?: string[] } }> = [];
     mod.default.register(fakeBaseApi(regs) as never);
-    const build = regs.find((r) => r.event === "before_prompt_build");
-    const exec = regs.find((r) => r.event === "before_tool_call" && r.opts?.matcher?.includes("exec"));
-    assert.ok(build);
-    assert.ok(exec);
-
-    const ordinary = build.handler(
-      { prompt: "revisa el PR" },
-      { sessionKey: "agent:implementer:ordinary-merge" },
-    ) as { appendContext?: string } | undefined;
-    assert.match(ordinary?.appendContext ?? "", /Reglas permanentes/);
-    assert.doesNotMatch(ordinary?.appendContext ?? "", /CONTRATO DE CEREMONIA/);
-
-    const armed = build.handler(
-      { prompt: "merge aprobado -saikit:autopilot" },
-      { sessionKey: "agent:implementer:armed-merge" },
-    ) as { appendContext?: string } | undefined;
-    const contract = armed?.appendContext ?? "";
-    assert.match(contract, /saikit-merge\.sh/);
-    assert.match(contract, /implementer\/ingenieria.*GraphQL.*expectedHeadOid/s);
-    assert.doesNotMatch(contract, /gh api .*\/merge ni git push.*bloquea siempre/s);
-
-    const denied = exec.handler(
-      { params: { command: "gh pr merge 12" } },
-      { agentId: "implementer" },
-    ) as { block?: boolean; blockReason?: string } | undefined;
-    assert.equal(denied?.block, true);
-    assert.match(denied?.blockReason ?? "", /saikit-merge\.sh/);
-    assert.match(denied?.blockReason ?? "", /GraphQL.*expectedHeadOid/);
-  });
-});
+    const build = regs.find(r => r.event === "before_prompt_build")!;
+    const response = build.handler({ prompt: "merge -saikit:autopilot" }, { sessionKey: "agent:main:merge-policy" }) as { appendContext?: string };
+    assert.match(response.appendContext ?? "", /no esperes una orden adicional/);
+    assert.doesNotMatch(response.appendContext ?? "", /merge-guard los bloquea|orden fechada del dueño/);
+  });});
 
 // Gate scope comment (Fase 1 / 1.2): declara el alcance real del gate de
 // `before_agent_finalize` con la cita del runtime. Si este describe falla

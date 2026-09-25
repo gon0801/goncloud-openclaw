@@ -32,7 +32,7 @@ grep -qF 'Python 3.10+' "$PLAN" \
 grep -qF 'Cursor Agent conserva `--auto-review`, `--sandbox` y `--workspace`' "$SPEC" \
   || fail "la spec manda a Cursor crear otro worktree"
 
-grep -qF 'preaprobación versionada' "$ROOT" \
+grep -qF 'Cualquier agente Claw o CLI puede mergear y desplegar sin autorización adicional por operación.' "$ROOT" \
   || fail "el contrato superior no representa la autoridad autonoma aprobada"
 grep -qF 'authorization_ref' "$PLAN" \
   || fail "Task 7 no enlaza la corrida con la preaprobacion del dueño"

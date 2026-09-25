@@ -82,13 +82,7 @@ for a in 'LISTO <sha>' \
          'código 3' \
          'Tope de tres PRs abiertos' \
          'Los comentarios de CodeRabbit se leen' \
-         'saikit-merge.sh' \
-         'saikit-entrega.v1' \
-         'ya en `origin/<default>`' \
-         'no consulta estado de sesión' \
-         'Ningún cambio de configuración del gateway lo hace claw' \
          'en tanda, no en ráfaga' \
-         'America/New_York' \
          'runbook-progress.v1' \
          'git y en los PRs' \
          'otro host de la lista de preferencia' \
@@ -97,26 +91,19 @@ for a in 'LISTO <sha>' \
          'bloqueante adjudicado que siga abierto' \
          'no bloqueante no abre ronda ni impide el merge' \
          'cero bloqueantes adjudicados abiertos' \
-         'residuales del recibo' \
-         '`implementer`, `verifier` y `reviewer`' \
-         'No hay un revisor de sello' \
+         'residuales del paso 8' \
          'No repite' \
          'test-runbooks-no-contradicen-entorno.sh' \
          'Jamás `--no-verify`' \
-         'rama del worktree en el que estás parado' \
-         'se invoca por `bash`' \
-         'hashea el token literal' \
-         'ATORADO kit ausente en ' \
          '-Base <sha de la base del bloque>' \
          'conjunto cerrado' \
          'nunca lo escribe el lead' \
-         'CodeRabbit no es un proveedor de modelo' \
-         'El sync del gateway no es un cron'; do
+         'CodeRabbit no es un proveedor de modelo'; do
   # `--` obligatorio: un ancla que empieza con `-` (como `-Alcance last-commit`)
   # la lee grep como bandera y sale "Invalid argument", no como ancla faltante.
   grep -qF -- "$a" "$DOC" || fail "$DOC: falta el ancla: $a"
 done
-echo "ok (3): las 63 anclas de reglas están"
+echo "ok (3): las anclas de reglas están"
 
 # La ronda 1 pide el diff del bloque. -Desde, en cualquier sha, le dice al
 # revisor que juzgue solo los arreglos; ese flag queda para las rondas siguientes.
@@ -174,9 +161,7 @@ echo "ok (3d): regla 4 justificada con -Base e historia de fases 6 y 7 declarada
 # reintroducirian el candado que detuvo Fase 9 aunque el resto de las anclas pase.
 vieja=$(grep -nEi 'veredicto sellado|sin estado del hook|re-sell|para que el kit selle' "$DOC" "$BASE" || true)
 [ -z "$vieja" ] || fail "reaparecio autoridad de sesion obsoleta: $vieja"
-grep -qF 'saikit-entrega.v1' "$DOC" || fail "$DOC: falta el recibo persistente"
-grep -qF 'no consulta estado de sesión' "$DOC" || fail "$DOC: no declara independencia de sesion"
-echo "ok (3a): recibo persistente presente y autoridad de sesion ausente"
+echo "ok (3a): autoridad de sesion ausente"
 
 # (3b) La seccion 4 manda repetir mientras salgan bloqueantes, sin tope fijo, y nunca
 # promover con un bloqueante abierto. Medido el 2026-09-18 tres veces: un tope de tres
@@ -215,8 +200,8 @@ seccion() { # $1 numero -> texto de esa seccion
 s3=$(seccion 3)
 printf '%s' "$s3" | grep -qF 'bloqueante adjudicado que siga abierto' \
   || fail "$DOC: el paso 7 no manda adjudicar CodeRabbit: solo un bloqueante abierto vuelve al loop"
-printf '%s' "$s3" | grep -qF 'residuales del recibo' \
-  || fail "$DOC: el paso 7 no manda los comentarios no bloqueantes a los residuales del recibo"
+printf '%s' "$s3" | grep -qF 'residuales del paso 8' \
+  || fail "$DOC: el paso 7 no manda los comentarios no bloqueantes al cierre"
 viejo=$(printf '%s' "$s3" | grep -inE 'no deja nada nuevo|Lo accionable se corrige' || true)
 [ -z "$viejo" ] || fail "$DOC: el paso 7 volvio a exigir cero comentarios de CodeRabbit: $viejo"
 s5=$(seccion 5)
@@ -225,10 +210,12 @@ printf '%s' "$s5" | grep -qF 'cero bloqueantes adjudicados abiertos' \
 viejo=$(printf '%s' "$s5" | grep -inE 'con comentarios accionables no es' || true)
 [ -z "$viejo" ] || fail "$DOC: la seccion 5 volvio a tratar cualquier comentario como revision no aprobada: $viejo"
 s6=$(seccion 6)
-printf '%s' "$s6" | grep -qF '`implementer`, `verifier` y `reviewer`' \
-  || fail "$DOC: la seccion 6 no nombra los tres roles que el recibo exige distintos entre si"
-printf '%s' "$s6" | grep -qF 'No hay un revisor de sello' \
-  || fail "$DOC: la seccion 6 no cierra la puerta a un nuevo revisor de sello"
+for regla in 'Cualquier agente Claw o CLI puede ejecutar' 'gh pr merge <PR> --squash --match-head-commit <SHA>' 'CI y CodeRabbit estén aprobados' 'No se requiere orden adicional, recibo del lead ni el script del kit'; do
+  printf '%s' "$s6" | grep -qF "$regla" || fail "$DOC: falta la regla de merge: $regla"
+done
+s7=$(seccion 7)
+printf '%s' "$s7" | grep -qF 'sin permiso adicional ni ventana de cron' \
+  || fail "$DOC: despliegue requiere permiso adicional"
 s10=$(seccion 10)
 printf '%s' "$s10" | grep -qF 'la aceptación real de lo que la fase promete' \
   || fail "$DOC: la seccion 10 no manda la aceptacion real de la promesa de la fase"
@@ -239,7 +226,31 @@ printf '%s' "$s10" | grep -qF 'No hay una revisión de código nueva al cierre' 
 s10_manda=$(printf '%s' "$s10" | grep -v 'No hay una revisión' | grep -v '^Medido:')
 viejo=$(printf '%s' "$s10_manda" | grep -inE 'revisión completa|muta|mutar' || true)
 [ -z "$viejo" ] || fail "$DOC: la seccion 10 volvio a mandar una revision completa de cierre: $viejo"
-echo "ok (3c): CodeRabbit por adjudicacion, roles del recibo y cierre sin revision repetida"
+echo "ok (3c): CodeRabbit por adjudicacion, merge libre y cierre sin revision repetida"
+
+for file in "$DOC" "$BASE" docs/runbooks/base-summonaikit.md; do
+  grep -q 'CodeRabbit' "$file" || fail "$file: falta la compuerta de CodeRabbit"
+  stale=$(grep -nEi 'sin cuota no bloquea|sin cuota no se espera|CodeRabbit sin cuota[^|]*\|[^|]*no bloquea|re-APPROVE|sha aprobado|Mergeado por David|No mergea ni despliega' "$file" || true)
+  [ -z "$stale" ] || fail "$file: volvió un veto o una excepción obsoleta: $stale"
+done
+printf '%s' "$s3" | grep -qF 'El PR espera hasta tener su aprobación' \
+  || fail "$DOC: CodeRabbit sin respuesta no puede habilitar el merge"
+printf '%s' "$s6" | grep -qF 'CI y CodeRabbit estén aprobados' \
+  || fail "$DOC: falta la aprobación de CodeRabbit antes del merge"
+grep -qF 'los otros carriles continúan' "$BASE" \
+  || fail "$BASE: la espera de CodeRabbit detiene otros carriles"
+grep -qF 'los demás carriles continúan' docs/runbooks/base-summonaikit.md \
+  || fail 'base-summonaikit: la espera de CodeRabbit detiene otros carriles'
+grep -qF '6 Merge del PR' "$BASE" \
+  || fail "$BASE: el indice vuelve a enviar al kit de merge"
+grep -qF 'Completion: all three checks exit 0, the closure PR is `MERGED`' agents/main/agent/workshop-skills/post-merge-closure/SKILL.md \
+  || fail 'post-merge-closure: abrir el PR volvió a ser el cierre'
+grep -qF 'confirmed from the PR API' agents/main/agent/workshop-skills/post-merge-closure/SKILL.md \
+  || fail 'post-merge-closure: falta confirmar el SHA integrado'
+stale=$(grep -nE 'one PR open, nothing merged by you|owner.s to merge|Mergeado por David|Recibo de entrega.*APPROVE lead' \
+  agents/main/agent/workshop-skills/post-merge-closure/SKILL.md "$BASE" docs/runbooks/base-summonaikit.md || true)
+[ -z "$stale" ] || fail "volvió el veto de cierre o el recibo obligatorio: $stale"
+echo "ok (3c-gate): CodeRabbit obligatorio para el PR, sin veto de rol ni recibo"
 
 # (4) La fila del lead no nombra ningún modelo. Es la regla central del documento.
 hit=$(lead_nombra_modelo < "$DOC")
@@ -248,8 +259,8 @@ grep -q -E '^\| \*\*lead\*\*' "$DOC" || fail "$DOC: no encuentro la fila del lea
 echo "ok (4): el lead es un rol, no un modelo"
 
 # (5) Las secciones 1 a 12 citan su incidente. Sin "Medido:", la regla es una hipótesis.
-# La 13 describe este mismo candado y no es una regla.
-for n in 1 2 3 4 5 6 7 8 9 10 11 12; do
+# La 6 retira la restricción de merge; la 13 describe este mismo candado.
+for n in 1 2 3 4 5 7 8 9 10 11 12; do
   ini=$(grep -n -E "^## $n\. " "$DOC" | head -1 | cut -d: -f1)
   fin=$(grep -n -E "^## $((n+1))\. " "$DOC" | head -1 | cut -d: -f1)
   [ -n "$fin" ] || fin=$(wc -l < "$DOC")

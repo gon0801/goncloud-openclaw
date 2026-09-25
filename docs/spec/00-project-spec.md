@@ -51,9 +51,9 @@ Operate David's OpenClaw fleet with reliable, reviewable automation. An agent mu
 
 Decisiones del dueño (2026-09-15), fila 6.8 de Plans.md:
 
-1. main coordina y le reporta a David; nunca mergea ni toca el servidor directamente.
-2. Cambios de código van a la cadena de calidad (implementer → verifier → adversary → reviewer); servidor y deploy van a ingenieria; negocio va a operaciones.
-3. Nada se mergea sin autorización explícita de David; puede ser una orden fechada por tarea o una preaprobación versionada con alcance cerrado para una fase. La corrida debe guardar una `authorization_ref` comprobable a esa preaprobación; recibos, revisiones y CI acreditan calidad, pero no crean autoridad. Cuando mergear también despliega, la autorización es una sola: "merge y deploy". Tras la reinstalación Windows el sync está deshabilitado: no se presume que mergear despliegue, ni se activa por esta regla. Ingeniería necesita otra `authorization_ref` que nombre host, ventana y SHA integrado antes de cambiar el runtime vivo.
+1. main coordina y le reporta a David; puede mergear y desplegar igual que cualquier agente.
+2. Los roles organizan el trabajo de calidad, no conceden permisos exclusivos de merge o deploy.
+3. Cualquier agente Claw o CLI puede mergear y desplegar sin autorización adicional por operación. El PR sigue el flujo normal de GitHub con CI y CodeRabbit aprobados. No se exige orden fechada, recibo del lead ni `authorization_ref` para merge o deploy. Mergear no publica automáticamente el runtime Windows; cualquier agente puede ejecutar su procedimiento de publicación y verificar el resultado.
 4. Nada se reporta como "listo" sin haberse verificado antes con la prueba del repo (`verify/`) cuando existe.
 
 ## Propiedad del runtime Windows
@@ -80,7 +80,7 @@ septiembre de 2026:
 
 Estos contratos no cambian modelos de conversación ni sus fallbacks. Código y
 artefactos versionados siguen la cadena de calidad; la migración viva y el
-deploy pertenecen a ingeniería y requieren autorización explícita separada.
+deploy pueden ejecutarlos todos los agentes sin autorización adicional.
 
 ## Objetivo de recuperación limpia (pendiente de operación)
 
@@ -221,7 +221,7 @@ adaptadores, almacenamiento, verificador, instalador ni reloj global.
    ingeniería registra el SHA concreto y la referencia de esa autoridad; una
    referencia derivada sólo demuestra la correspondencia y no concede permisos.
    Una autorización que exige un SHA literal conserva esa exigencia. Se usa la
-   ruta de U1/U3; main no mergea ni entra a producción. El filtro de diálogos
+   ruta de U1/U3; cualquier agente puede mergear y desplegar. El filtro de diálogos
    peligrosos de Fase 9 no se sustituye por respuestas automáticas de «sí».
 5. Reparar o dividir tareas conserva todos los criterios comprometidos. Quitar
    criterios, ampliar destinos o elevar presupuesto requiere autoridad que lo

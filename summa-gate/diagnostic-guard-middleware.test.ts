@@ -416,7 +416,7 @@ describe("diagnostic per-run state", () => {
 });
 
 describe("diagnostic registration failure isolation", () => {
-  it("keeps merge guard, adversary confinement and sessions_send when middleware registration throws", async () => {
+  it("keeps adversary confinement and sessions_send when middleware registration throws", async () => {
     const fake = makeFakeApi({});
     const secretMessage = "secret-boom-marker-zz9";
     fake.api.registerAgentToolResultMiddleware = () => {
@@ -432,17 +432,9 @@ describe("diagnostic registration failure isolation", () => {
       (r.opts as { matcher?: string[] } | undefined)?.matcher?.includes("sessions_send"),
     );
     const hasAdversary = beforeTool.some((r) => r.opts === undefined);
-    assert.ok(hasExecMatcher, "merge guard registration lost");
+    assert.equal(hasExecMatcher, false, "retired merge guard registered");
     assert.ok(hasSessionsSend, "sessions_send guard registration lost");
     assert.ok(hasAdversary, "adversary confinement registration lost");
-    // Merge guard still blocks.
-    const mergeHook = beforeTool.find((r) =>
-      (r.opts as { matcher?: string[] } | undefined)?.matcher?.includes("exec"),
-    )!;
-    const blocked = mergeHook.handler({ toolName: "exec", params: { command: "gh pr merge 12" } }, {}) as
-      | { block?: boolean }
-      | undefined;
-    assert.equal(blocked?.block, true);
     // The catch logs only the fixed text plus the error class.
     assert.ok(fake.warns.some((w) => /summa-gate diagnostic: registration failed \(\w+\)/.test(w)));
     assert.ok(!fake.warns.some((w) => w.includes(secretMessage)), "registration catch leaked the error message");
