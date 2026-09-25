@@ -26,6 +26,9 @@
 #                    ("system event ... closed") ni crea el cron falso al
 #                    recibir el turno de la observacion extendida. Por
 #                    defecto "main" SI actua en los dos casos.
+#   SIM9_AGENT_RETARDO  segundos que el turno a "main" (observacion extendida)
+#                    tarda en responder (un main lento; el arnes le pone
+#                    tope propio SIM_TOPE_TURNO_MAIN, no CORR_TOPE_RED)
 #   SIM9_NODE_BIN    el node (>=22, con type stripping nativo) que corre
 #                    decide-puro.mjs -- lo elige quien invoca este fixture
 #                    (test-simulacro-fase9.sh, con la misma receta de
@@ -99,6 +102,11 @@ case "$*" in
     fi
     ;;
   *"agent --agent main"*)
+    # El turno de la observacion es sincrono y el arnes le pone tope propio
+    # (SIM_TOPE_TURNO_MAIN), no el tope corto de red: SIM9_AGENT_RETARDO
+    # duerme esos segundos ANTES de actuar, para probar con un "main" que
+    # tarda (medido en vivo 2026-09-24: ~2 min).
+    [ -n "${SIM9_AGENT_RETARDO:-}" ] && sleep "$SIM9_AGENT_RETARDO"
     if [ "${SIM_MAIN:-}" != "mudo" ] && [ -n "$OBS_DIR" ]; then
       mkdir -p "$OBS_DIR" 2>/dev/null
       printf '{"id":"%s","name":"avance-tareas","declarationKey":"avance-tareas","enabled":true}' \

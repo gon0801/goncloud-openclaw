@@ -113,6 +113,16 @@ SIM_TOPE_OBS_POLL="${SIM_TOPE_OBS_POLL:-60}"
 # esto, un scratch viejo que ya estuviera confirmado por otra razon se
 # leeria como si el aviso hubiera salido en la propia observacion.
 SIM_TOPE_OBS_VENTANA="${SIM_TOPE_OBS_VENTANA:-1800}"
+# Tope del turno de la observacion a main (pieza d). Ese turno es sincrono:
+# la CLI espera a que main TERMINE de trabajar antes de devolver control, y
+# main tarda minutos (medido 2026-09-24: ~2 min; lanzo un subagente de
+# ingenieria antes de seguir su seccion "Avisos de avance"). El tope general
+# de red CORR_TOPE_RED=30 lo mataba a mitad del turno, el arnes leia "no se
+# pudo mandar" aunque el turno SI llego, y los casos 4 y 7 quedaban en
+# NO OBSERVADO sin haber medido nada. Tope propio, holgado para un turno con
+# subagente, solo para este envio; el resto de las llamadas de red del arnes
+# siguen con su tope corto.
+SIM_TOPE_TURNO_MAIN="${SIM_TOPE_TURNO_MAIN:-300}"
 
 # --tope-pared (CodeRabbit, PR #153): con --observar-avance, el reloj de
 # pared tiene que alcanzar para los 7 casos Y para la observacion completa
@@ -1059,7 +1069,7 @@ if [ -n "$OBSERVAR_AVANCE" ]; then
   OBS_T0_EPOCH="$(date +%s)"
   OBS_T0_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   OBS_TURNO_OK=0
-  if con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" agent --agent main --session-key "agent:main:sim9-$SIM_ID" \
+  if con_tope "$SIM_TOPE_TURNO_MAIN" "$OPENCLAW_BIN" agent --agent main --session-key "agent:main:sim9-$SIM_ID" \
       --message-file "$OBS_MSGFILE" --json >/dev/null 2>&1; then
     OBS_TURNO_OK=1
   fi
