@@ -156,9 +156,12 @@ jobs:
                   *) echo "doc-check: $f no arranca con titulo '# '" >&2; rc=1 ;;
                 esac ;;
               Plans.md)
-                # Filas del ledger TOCADAS por el diff (agregadas o borradas,
-                # no todo el archivo): la forma | <n>.<n> | ... | ... | ... |
-                # cc:... | exige exactamente 5 columnas.
+                # Filas del ledger que el diff DEJA (solo las agregadas, no todo
+                # el archivo): la forma | <n>.<n> | ... | ... | ... | cc:... |
+                # exige exactamente 5 columnas. Las borradas no se miran: si se
+                # miraran, una fila que ya estaba mal en la base (p. ej. con \|
+                # escapado) no se podria arreglar nunca -- el PR que la corrige
+                # la borra y rebotaba por la version vieja (PR #165, fila 9.1).
                 while IFS= read -r linea; do
                   cuerpo=${linea:1}
                   if printf '%s\n' "$cuerpo" | grep -Eq '^\|[[:space:]]*[0-9]+\.[0-9]+[[:space:]]*\|'; then
@@ -167,7 +170,7 @@ jobs:
                       rc=1
                     fi
                   fi
-                done < <(git diff --unified=0 "$mb" "$hs" -- Plans.md | grep -E '^[+-]\|' || true) ;;
+                done < <(git diff --unified=0 "$mb" "$hs" -- Plans.md | grep -E '^\+\|' || true) ;;
             esac
           done < <(git -c core.quotepath=false diff --name-only --diff-filter=d -z "$mb" "$hs")
           echo "doc-check: $n archivo(s) cambiados en el rango; contratos documentales revisados"
