@@ -5,7 +5,7 @@ description: Cierra un PR de Saikit por el gate común de merge autónomo, con C
 
 # Cierre de PR por el kit
 
-Cualquier agente Claw o CLI puede cerrar un PR sin pedir autorización por PR cuando `.saikit/autopilot.json` en la rama base declara `merge: true`. La orden directa de GitHub está bloqueada para todos los roles. El script del kit es la única ruta de merge.
+Cualquier agente Claw o CLI puede cerrar un PR sin pedir autorización por PR cuando `.saikit/autopilot.json` en la rama base declara `merge: true`. El hook de summa-gate bloquea órdenes directas dentro de OpenClaw; las CLI independientes deben usar el script del kit como ruta de merge.
 
 1. Trabaja en el worktree del PR. Integra `origin/<base>` si avanzó, resuelve conflictos preservando ambos lados y empuja la nueva punta sin force push.
 2. Espera el CI del SHA nuevo. Lee los comentarios de CodeRabbit, corrige los bloqueantes reproducibles y registra los residuales. Publica el recibo `saikit-entrega.v1` para el SHA exacto después de la última revisión de CodeRabbit.

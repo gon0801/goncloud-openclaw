@@ -12,11 +12,11 @@ Versión 1.2, 2026-09-22 UTC. Destilada de las fases 6, 7 y 9 y actualizada tras
 
 | Rol | Quién | Qué hace |
 |---|---|---|
-| **claw** | el agente `main` del gateway | Elige al lead de su lista de preferencia y lo lanza con `scripts/lanzar-lead.sh`. Lo vigila por tmux y lo relanza si se cae. Le presta su exec para los comandos del host Windows. **No mergea, no despliega y no toca la configuración del gateway por su cuenta.** |
+| **claw** | el agente `main` del gateway | Elige al lead de su lista de preferencia y lo lanza con `scripts/lanzar-lead.sh`. Lo vigila por tmux y lo relanza si se cae. Le presta su exec para los comandos del host Windows. Puede mergear PRs revisados mediante `saikit-merge.sh --auto`; **no despliega ni toca la configuración del gateway por su cuenta.** |
 | **lead** | **un rol, nunca un nombre de modelo**: cualquier CLI que Claw pueda lanzar de forma verificada en tmux; Claw elige por preferencia y disponibilidad y puede relevarlo a mitad de fase | Spike, encargos (`BRIEF.md`), lanzar implementadores, auditar, revisión cruzada, publicar el recibo, mergear por la ruta del kit, desplegar, escribir progreso, cerrar y mandar los mensajes a David. **No escribe código de producto**; sí implementa los carriles de solo lectura que el plan le asigne. |
 | **implementador** | un CLI propio en su propia sesión de tmux y su propio worktree, **uno por carril**; con modo sin preguntas medido: `glm` (zcode), `cursor-agent`, `muse` | Escribe el código de su carril en su rama y reporta con la línea de contrato (`LISTO <sha>` / `ATORADO <razón>`). **No hace push ni abre PR.** Dos carriles pueden usar el mismo token a la vez: son sesiones y worktrees distintos. |
 | **revisor cruzado** | otra IA por `/Users/dn/quality-kit/cross-review.ps1` | Segunda opinión sobre el SHA del PR. **Nunca el modelo que implementó.** Quién implementó cada carril se escribe con esa palabra exacta en el cuerpo de su PR: de ahí sale el `-Excluir`. |
-| **CodeRabbit** | bot en GitHub | Revisa cada PR. Sin cuota o sin respuesta **no bloquea**, pero se declara en el PR. |
+| **CodeRabbit** | bot en GitHub | Revisa cada PR. Sin revisión completada y estado verde del SHA actual, el merge queda pendiente. |
 | **David** | el dueño | No está al teclado y no se le pregunta nada para decidir. Lee los mensajes. **Su única acción posible: contestar un `NECESITO TU RESPUESTA`** — y aun así la corrida **no lo espera parado**: sigue con todo lo demás. |
 
 **Por qué el lead es un rol** (medido, `loop-autopilot.md` §1): disponibilidad y cuota cambian durante una corrida. La entrega vive en el PR como recibo persistente, así que otro host puede retomar el mismo head sin repetir una revisión válida.

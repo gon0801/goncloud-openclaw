@@ -19,9 +19,8 @@ if [ -f "$MAP" ]; then
   chk "skill saikit-cierre-pr existe" test -f "agents/implementer/agent/workshop-skills/saikit-cierre-pr/SKILL.md"
   chk "skill goncloud-ssh-ops nombrada en el mapa" grep -q "goncloud-ssh-ops" "$MAP"
   chk "skill goncloud-ssh-ops existe" test -f "agents/ingenieria/agent/workshop-skills/goncloud-ssh-ops/SKILL.md"
-  # anclas de los dos tipos de go/no-go
-  chk "go/no-go unico (merge y deploy)" grep -q 'merge y deploy' "$MAP"
-  chk "go/no-go separado (merge y deploy separados)" grep -q 'merge y luego deploy' "$MAP"
+  chk "merge autonomo por kit" grep -q 'saikit-merge.sh --auto' "$MAP"
+  chk "publicacion con autoridad propia" grep -q 'Se autoriza el host, la ventana y el SHA integrado' "$MAP"
   section_h2() {
     awk -v h="$1" '
       index($0, h) == 1 {grab=1; print; next}

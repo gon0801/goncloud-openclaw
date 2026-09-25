@@ -426,7 +426,7 @@ export default definePluginEntry({
     const promptSeenSessions = new Set<string>();
 
     // -- 1. Merge-guard (siempre activo) ------------------------------------
-    // Las rutas directas se bloquean para todos; el kit es la única salida.
+    // Las rutas directas se bloquean para todos los roles que usan este hook exec.
     api.on(
       "before_tool_call",
       (event, ctx) => {
