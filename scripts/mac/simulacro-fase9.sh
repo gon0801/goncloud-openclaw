@@ -1063,7 +1063,13 @@ if [ -n "$OBSERVAR_AVANCE" ]; then
   OBS_MSGFILE="$(mktemp)"
   {
     printf '[SIMULACRO] Hay una corrida de simulacro abierta: %s\n' "$SIM_ID"
-    printf 'Siguela segun tu seccion "Avisos de avance" (no hace falta que crees ningun cron: tu AGENTS.md ya lo hace al haber trabajo activo).\n'
+    # Medido 2026-09-25: el parentesis viejo ("no hace falta que crees ningun
+    # cron") le decia a main lo contrario de lo que esta observacion mide (que
+    # el cron avance-tareas aparezca): main lo obedecio al pie de la letra y el
+    # disparo real quedo en "no se vio (a) el cron" en las dos corridas del 24
+    # y 25/09. El turno ahora pide seguir la seccion como con cualquier trabajo
+    # activo, que incluye crear el aviso que esa seccion manda.
+    printf 'Siguela segun tu seccion "Avisos de avance" como con cualquier trabajo activo (incluye crear el aviso que esa seccion manda).\n'
   } > "$OBS_MSGFILE"
   OBS_T0=$SECONDS
   OBS_T0_EPOCH="$(date +%s)"
