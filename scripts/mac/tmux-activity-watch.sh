@@ -99,6 +99,9 @@ LOG_FILE=${LOG_FILE:-$HOME/Library/Logs/tmux-activity-watch.log}
 # comporta exactamente como hoy.
 CORRIDA_BIN=${CORRIDA_BIN:-$HOME/bin/corrida.sh}
 WATCH_MARKER=OPENCLAW_WATCH
+# stderr de la ultima lectura de entorno de read_run: el vigilante es
+# single-thread, un archivo fijo alcanza y sobra.
+ENV_ERR_FILE="$STATE_DIR/.read-env.err"
 
 once=0
 if [[ ${1:-} == --once ]]; then
@@ -208,16 +211,31 @@ state_file() {
   printf '%s/%s.state\n' "$STATE_DIR" "$1"
 }
 
-read_run() { # $1 sesion -> valor de OPENCLAW_WATCH_RUN. rc 0 y vacio si la
-  # variable no esta (sesion marcada a mano, sin corrida): NO se hereda el run
-  # de un estado previo — una sesion NUEVA con el mismo nombre que una vieja de
-  # otra corrida no debe rutearse a la corrida vieja (CodeRabbit, PR #164).
-  # rc 1 solo si el entorno no se pudo leer (sesion muriendo a mitad de tick).
-  local v
-  if ! v=$("$TMUX_BIN" show-environment -t "$1" OPENCLAW_WATCH_RUN 2>/dev/null); then
+read_run() { # $1 sesion -> valor de OPENCLAW_WATCH_RUN. Tres salidas:
+  #   rc 0 + valor : la variable esta.
+  #   rc 0 + vacio : la variable NO esta — ausente o deseteada con -u. Manda lo
+  #                  que dice HOY la sesion: una sesion nueva con el mismo
+  #                  nombre que una vieja de otra corrida no hereda su run
+  #                  (CodeRabbit, PR #164, dos vueltas).
+  #   rc 1         : el entorno no se pudo leer (sesion muriendo a mitad de
+  #                  tick): el llamador conserva el ultimo conocido.
+  # Medido 2026-09-25: variable ausente y deseteada dan rc 1 con "unknown
+  # variable" en stderr; una sesion que ya no existe da rc 1 con otro error.
+  # Por eso se mira el stderr, no solo el rc. La forma "-OPENCLAW_WATCH_RUN"
+  # (algunas versiones de tmux listan asi las deseteadas) tambien es vacio.
+  local out rc
+  out=$("$TMUX_BIN" show-environment -t "$1" OPENCLAW_WATCH_RUN 2>"$ENV_ERR_FILE")
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    if head -1 "$ENV_ERR_FILE" 2>/dev/null | grep -q '^unknown variable'; then
+      return 0
+    fi
     return 1
   fi
-  printf '%s\n' "${v#OPENCLAW_WATCH_RUN=}"
+  case $out in
+    OPENCLAW_WATCH_RUN=*) printf '%s\n' "${out#OPENCLAW_WATCH_RUN=}" ;;
+    *) : ;;
+  esac
 }
 
 read_state_field() {
