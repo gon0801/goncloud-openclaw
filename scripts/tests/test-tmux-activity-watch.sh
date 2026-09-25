@@ -742,6 +742,14 @@ grep -qF -- '-u OPENCLAW_WATCH' "$DISP" || fail "$DISP: el paso 4 no desmarca al
 # sesion trabaja sin vigilancia.
 grep -qF 'corrida.sh lanzar-sesion' "$SK" || fail "$SK: no abre sesiones con corrida.sh lanzar-sesion"
 grep -qF 'BEFORE the first send-keys' "$SK" || fail "$SK: no marca BEFORE the first send-keys"
+# Fase 9, 9.9: al aviso closed de una sesion que figura en una corrida ABIERTA, main la
+# relanza aunque no haya fase activa: el registro de la corrida, no la fase, es lo que
+# vuelve relanzable una sesion (medido 2026-09-24, simulacro 9.9: cuatro avisos de
+# sesiones sim9-* de una corrida abierta cayeron en el vacio). Y una sola vez.
+grep -qF 'lanzar-sesion <run-id> <rol> <cli> <dir> --nombre <session>' "$SK" \
+  || fail "$SK: falta el relanzo por corrida abierta en el evento closed"
+grep -qF 'do NOT relaunch a second time' "$SK" \
+  || fail "$SK: falta el tope de un solo relanzo por sesion cerrada"
 grep -qF 'corrida.sh lanzar-sesion' "$DISP" || fail "$DISP: no abre sesiones con corrida.sh lanzar-sesion"
 grep -qF 'BEFORE the first send-keys' "$DISP" || fail "$DISP: no marca BEFORE the first send-keys"
 grep -qF 'unmark' "$DISP" || fail "$DISP: falta desmarcar la cadena terminada o abandonada"

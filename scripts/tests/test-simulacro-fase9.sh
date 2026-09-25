@@ -487,4 +487,39 @@ sesiones13="$("$TM_REAL" -L "$SOCKET" list-sessions -F '#{session_name}' 2>/dev/
 
 fi
 
+if debe_correr 17; then
+# ============== (17) turno a main: tope propio, no el tope corto de red =====
+# Medido en vivo 2026-09-24: el turno de la observacion es sincrono y "main"
+# trabaja ~2 min; con el tope general de red (CORR_TOPE_RED=30) el turno moria
+# a mitad, el arnes leia "no se pudo mandar" aunque SI habia llegado, y los
+# casos 4/7 quedaban NO OBSERVADO sin haber medido nada. El envio lleva tope
+# propio (SIM_TOPE_TURNO_MAIN, def. 300). (a) un "main" que tarda MAS que el
+# tope de red pero MENOS que el propio: la observacion sale "observado real".
+# (b) un "main" que tarda mas que el tope propio: NO OBSERVADO con esa razon
+# exacta, nunca "no aplica" — y las filas 4/7 conservan su FUNCIONA de reloj
+# inyectado (el codigo de salida cuenta filas; la nota es la que no miente).
+rm -rf "$T/corridas/.sim9-obs-cron"
+EVID17="$T/evidencia-17.md"
+salida17="$(CORR_TOPE_RED=2 SIM9_AGENT_RETARDO=4 SIM_TOPE_TURNO_MAIN=12 SIM_TOPE_OBS_POLL=2 SIM_TOPE_OBS_VENTANA=5 \
+  bash "$ARNES" --ensayo --salida "$EVID17" --tope-pared 300 --observar-avance 1 2>&1)"
+rc17=$?
+[ "$rc17" -eq 0 ] || fail "turno a main (tope propio): se esperaba salida 0, salio $rc17 -- $salida17"
+grep -A2 '## Observacion extendida' "$EVID17" | grep -q 'FUNCIONA observado real' \
+  || fail "turno a main (tope propio): un main lento (4s) con tope de red 2s no quedo observado real: $(grep -A2 '## Observacion extendida' "$EVID17")"
+rm -rf "$T/corridas/.sim9-obs-cron"
+
+salida17b="$(SIM9_AGENT_RETARDO=6 SIM_TOPE_TURNO_MAIN=3 SIM_TOPE_OBS_POLL=2 SIM_TOPE_OBS_VENTANA=5 \
+  bash "$ARNES" --ensayo --salida "$T/evidencia-17b.md" --tope-pared 300 --observar-avance 1 2>&1)"
+rc17b=$?
+[ "$rc17b" -eq 0 ] || fail "turno a main (tope propio corto): se esperaba salida 0 (las filas siguen FUNCIONA), salio $rc17b -- $salida17b"
+grep -A2 '## Observacion extendida' "$T/evidencia-17b.md" | grep -q 'el turno a main no completo' \
+  || fail "turno a main (tope propio corto): no explico 'el turno a main no completo': $(grep -A2 '## Observacion extendida' "$T/evidencia-17b.md")"
+grep -A2 '## Observacion extendida' "$T/evidencia-17b.md" | grep -q 'FUNCIONA observado real' \
+  && fail "turno a main (tope propio corto): declaro 'observado real' con un turno que murio bajo el tope"
+grep -qE '^\| 4 .*NO OBSERVADO: disparo real \(el turno a main no completo' "$T/evidencia-17b.md" \
+  || fail "turno a main (tope propio corto): el caso 4 no quedo con la nota NO OBSERVADO del turno"
+rm -rf "$T/corridas/.sim9-obs-cron"
+
+fi
+
 echo "TODO VERDE: simulacro-fase9 (piezas a-e)"
