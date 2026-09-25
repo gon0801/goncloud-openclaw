@@ -1,28 +1,36 @@
 #!/bin/bash
-# Doble de OPENCLAW_BIN para --ensayo (9.9, piezas a-c). Contesta lo que el
-# arnes necesita: cron list (destino falso), gateway call
-# runbook.progress.list/set/status, gateway call runbook.progress.decide
-# (corre el MODULO PURO real via decide-puro.mjs, no una respuesta
-# inventada), message send (con preambulo antes del JSON, como un CLI real
-# que imprime avisos), browser tabs (mecanismo del navegador que preflight
-# prueba), system event (el vigia doblado; "X closed" hace de "main falso":
-# relanza esa sesion desde su propio registro, igual que main lo haria de
-# verdad al recibir el mismo evento). Cualquier otra cosa sale 0 sin texto:
-# nunca se cuelga.
+# Doble de OPENCLAW_BIN para --ensayo (9.9, piezas a-d). Contesta lo que el
+# arnes necesita: cron list (destino falso, o --all para la observacion
+# extendida), gateway call runbook.progress.list/set/status, gateway call
+# runbook.progress.decide (corre el MODULO PURO real via decide-puro.mjs, no
+# una respuesta inventada), message send (con preambulo antes del JSON, como
+# un CLI real que imprime avisos), browser tabs (mecanismo del navegador que
+# preflight prueba), system event (el vigia doblado; "X closed" hace de
+# "main falso": relanza esa sesion desde su propio registro), agent (el
+# turno que la observacion extendida le manda a "main": tambien hace de
+# "main falso" y crea un cron avance-tareas con su scratch confirmado, para
+# poder ejercitar el sondeo con topes cortos), cron scratch (lee ese mismo
+# cron falso). Cualquier otra cosa sale 0 sin texto: nunca se cuelga.
 #
 # Env:
-#   SIM9_LLAMADAS   si esta puesto, cada invocacion se anota ahi (para
-#                   pruebas que necesiten confirmar que algo se llamo)
-#   SIM9_DESTINO    destino falso que "cron list" resuelve para
-#                   cuotas-proveedores (def. DESTINO-FALSO-SIM9)
-#   SIM9_MSG_ID     id que "message send" devuelve (def. 9001); vacio =
-#                   responde sin messageId (para probar la fila NO FUNCIONA)
-#   SIM9_SIN_MAIN=1 no relanza nada en "system event ... closed" (para medir
-#                   el caso 5/6 sin relanzamiento real, si algun dia hace
-#                   falta); por defecto SI relanza.
+#   SIM9_LLAMADAS    si esta puesto, cada invocacion se anota ahi (para
+#                    pruebas que necesiten confirmar que algo se llamo)
+#   SIM9_DESTINO     destino falso que "cron list" resuelve para
+#                    cuotas-proveedores (def. DESTINO-FALSO-SIM9)
+#   SIM9_MSG_ID      id que "message send" devuelve (def. 9001); vacio =
+#                    responde sin messageId (para probar la fila NO FUNCIONA)
+#   SIM9_OBS_MSG_ID  id que el scratch del cron falso trae ya confirmado
+#                    (def. 9101); vacio = el cron aparece pero SIN
+#                    confirmar (para probar que el aviso real "no aplica")
+#   SIM_MAIN=mudo    "main" no hace nada: ni relanza sesiones cerradas
+#                    ("system event ... closed") ni crea el cron falso al
+#                    recibir el turno de la observacion extendida. Por
+#                    defecto "main" SI actua en los dos casos.
 set -u
 DESTINO="${SIM9_DESTINO:-DESTINO-FALSO-SIM9}"
 MSGID="${SIM9_MSG_ID-9001}"
+OBS_UUID="sim9-avance-tareas-fake"
+OBS_DIR="${CORRIDA_STATE:-}/.sim9-obs-cron"
 AQUI="$(cd "$(dirname "$0")" && pwd)"
 [ -n "${SIM9_LLAMADAS:-}" ] && printf '%s\n' "openclaw $*" >> "$SIM9_LLAMADAS"
 
@@ -67,8 +75,40 @@ EOF2
 }
 
 case "$*" in
+  *"cron list --all"*)
+    if [ -f "$OBS_DIR/job.json" ]; then
+      printf '{"jobs":[%s]}' "$(cat "$OBS_DIR/job.json")"
+    else
+      printf '{"jobs":[]}'
+    fi
+    ;;
   *"cron list"*)
     printf '{"jobs":[{"name":"cuotas-proveedores","delivery":{"to":"%s"}}]}' "$DESTINO"
+    ;;
+  *"cron scratch "*)
+    todo="$*"
+    uuid="${todo##* }"
+    if [ "$uuid" = "$OBS_UUID" ] && [ -f "$OBS_DIR/$OBS_UUID.scratch.json" ]; then
+      cat "$OBS_DIR/$OBS_UUID.scratch.json"
+    else
+      printf '{}'
+    fi
+    ;;
+  *"agent --agent main"*)
+    if [ "${SIM_MAIN:-}" != "mudo" ] && [ -n "$OBS_DIR" ]; then
+      mkdir -p "$OBS_DIR" 2>/dev/null
+      printf '{"id":"%s","name":"avance-tareas","declarationKey":"avance-tareas","enabled":true}' \
+        "$OBS_UUID" > "$OBS_DIR/job.json"
+      OBSMID="${SIM9_OBS_MSG_ID-9101}"
+      if [ -n "$OBSMID" ]; then
+        printf '{"schema":"seguimiento-clock.v1","corte":{"kind":"reporte-confirmado","ultimoReporteConfirmado":%s},"ultimoEstado":"","ultimoInmediato":null,"messageId":%s,"trabajosActivos":["corrida:sim9-obs"]}' \
+          "$(date +%s)" "$OBSMID" > "$OBS_DIR/$OBS_UUID.scratch.json"
+      else
+        printf '{"schema":"seguimiento-clock.v1","corte":{"kind":"esperando-primer-reporte","inicioVentana":%s},"ultimoEstado":"","ultimoInmediato":null,"messageId":null,"trabajosActivos":[]}' \
+          "$(date +%s)" > "$OBS_DIR/$OBS_UUID.scratch.json"
+      fi
+    fi
+    printf '{"ok":true}'
     ;;
   *"gateway call runbook.progress.list"*)
     printf '{"ok":true,"result":{"documentos":[]}}'
@@ -99,7 +139,7 @@ case "$*" in
   *"system event"*)
     case "$TEXT" in
       "tmux: "*" closed"*)
-        if [ "${SIM9_SIN_MAIN:-0}" != "1" ]; then
+        if [ "${SIM_MAIN:-}" != "mudo" ]; then
           nombre="${TEXT#tmux: }"; nombre="${nombre%% closed*}"
           case "$nombre" in
             sim9-*) ( main_falso_relanzar "$nombre" ) & ;;

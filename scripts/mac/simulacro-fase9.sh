@@ -1,23 +1,25 @@
 #!/bin/bash
-# scripts/mac/simulacro-fase9.sh — arnes del simulacro 9.9 (Fase 9). Prerrequisitos,
-# arranque, limpieza, --limpiar y el generador de evidencia estan completos.
-# Los 7 casos corren de verdad (piezas b y c): contrato LISTO + recoger;
-# dialogo de confianza aceptado por politica; comando que escala a NECESITO
-# TU RESPUESTA; reloj inyectado de 30 min sin actividad (DETENIDA + relanzar
-# + runbook.progress.decide inmediato); kill-session de un carril y del lead
+# scripts/mac/simulacro-fase9.sh — arnes del simulacro 9.9 (Fase 9). Completo:
+# prerrequisitos, arranque, limpieza, --limpiar, --dry-run y el generador de
+# evidencia. Los 7 casos corren de verdad: contrato LISTO + recoger; dialogo
+# de confianza aceptado por politica; comando que escala a NECESITO TU
+# RESPUESTA; reloj inyectado de 30 min sin actividad (DETENIDA + relanzar +
+# runbook.progress.decide inmediato); kill-session de un carril y del lead
 # con relanzamiento real (vigia -> system event -> "main"); corte de 30 min
 # de runbook.progress.decide con reporte-confirmado. Los casos 4 y 7 miden
-# hoy con reloj inyectado; subirlos a "observado real" (disparo real de
-# avance-tareas, ~35 min reales) es la pieza (d) -- el gancho ya existe
-# (--observar-avance se parsea; ver la nota en la evidencia).
+# con reloj inyectado; con --observar-avance (opcion A de David, ~35 min en
+# vivo, SIN reloj falso) se suben a "observado real" si el cron avance-tareas
+# aparece de verdad y su scratch confirma un reporte con messageId.
 #
 # Uso:
-#   simulacro-fase9.sh [--ensayo] [--salida <md>] [--tope-pared <s>]
+#   simulacro-fase9.sh [--ensayo] [--dry-run] [--salida <md>] [--tope-pared <s>]
 #                       [--observar-avance <min>]
 #   simulacro-fase9.sh --limpiar <id>
 #
 # Salida: 0 solo con 7/7 FUNCIONA; 1 si algun caso NO FUNCIONA o NO OBSERVADO;
-# 2 NO APTO (no se lanzo nada: ni registro, ni sesion, ni tabla).
+# 2 NO APTO (no se lanzo nada: ni registro, ni sesion, ni tabla). --dry-run
+# corre los prerrequisitos de verdad (son de solo lectura) y sale 0/2 sin
+# abrir ninguna corrida.
 #
 # Variables inyectables. En vivo (sin --ensayo) OPENCLAW_BIN/TMUX_BIN/
 # CORRIDA_STATE/WATCH_STATE_DIR con un valor DISTINTO de su default es NO
@@ -68,6 +70,7 @@ export OPENCLAW_BIN TMUX_BIN CORRIDA_STATE WATCH_STATE_DIR
 
 # --- argumentos --------------------------------------------------------
 ENSAYO=0
+DRY_RUN=0
 SALIDA=""
 TOPE_PARED=570
 OBSERVAR_AVANCE=""
@@ -75,6 +78,7 @@ LIMPIAR_ID=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --ensayo) ENSAYO=1; shift;;
+    --dry-run) DRY_RUN=1; shift;;
     --salida) [ "$#" -ge 2 ] || { echo "simulacro-fase9: --salida sin valor" >&2; exit 2; }; SALIDA="$2"; shift 2;;
     --tope-pared) [ "$#" -ge 2 ] || { echo "simulacro-fase9: --tope-pared sin valor" >&2; exit 2; }
       case "$2" in ''|*[!0-9]*) echo "simulacro-fase9: --tope-pared no es un numero de segundos: $2" >&2; exit 2;; esac
@@ -86,6 +90,28 @@ while [ "$#" -gt 0 ]; do
     *) echo "simulacro-fase9: flag desconocido: $1" >&2; exit 2;;
   esac
 done
+
+# --- topes por caso (inyectables; solo --ensayo los acorta) ----------------
+SIM_TOPE_C1="${SIM_TOPE_C1:-180}"
+SIM_TOPE_C2="${SIM_TOPE_C2:-90}"
+SIM_TOPE_C3="${SIM_TOPE_C3:-150}"
+SIM_TOPE_C4="${SIM_TOPE_C4:-60}"
+SIM_TOPE_C5="${SIM_TOPE_C5:-180}"
+SIM_TOPE_C6="${SIM_TOPE_C6:-240}"
+# Segunda mirada tras un relanzamiento (casos 5/6), para confirmar que no
+# hay un segundo relanzamiento indebido. No hace falta que sean los 60s
+# reales: el vigia solo dispara "closed" UNA vez por sesion que desaparece
+# (el .state se borra al mandar el evento, tmux-activity-watch.sh) — el
+# margen es una comprobacion de sanidad, no lo que impide el doble disparo.
+SIM_ESPERA_DOBLE="${SIM_ESPERA_DOBLE:-15}"
+# Observacion extendida (pieza d): sondeo real cada 60s (opcion A, sin reloj
+# falso); solo se acorta con --ensayo para probarla con topes cortos.
+SIM_TOPE_OBS_POLL="${SIM_TOPE_OBS_POLL:-60}"
+# Ventana minima que tiene que pasar de verdad (reloj real, nunca inyectado)
+# antes de aceptar un scratch "reporte-confirmado" como el aviso real: sin
+# esto, un scratch viejo que ya estuviera confirmado por otra razon se
+# leeria como si el aviso hubiera salido en la propia observacion.
+SIM_TOPE_OBS_VENTANA="${SIM_TOPE_OBS_VENTANA:-1800}"
 
 # --- lib.sh/estado.sh de la corrida que se va a usar (checkout o instalada) -
 CORRIDA_DIR="$(cd "$(dirname "$CORRIDA_BIN")" 2>/dev/null && pwd)/corrida"
@@ -322,6 +348,32 @@ no_apto() {
 
 prerrequisitos || no_apto
 
+# --dry-run: los prerrequisitos SI se corrieron de verdad (son de solo
+# lectura: nada se abre, nada se lanza) — esto dice que iba a hacer el resto,
+# sin tocarlo. Pensado para que David o el lead lo corran antes de una
+# corrida real y sepan exactamente que se va a crear.
+if [ "$DRY_RUN" = "1" ]; then
+  [ -n "$SALIDA" ] || SALIDA="$REPO_RAIZ/docs/evidence/fase9-simulacro-$(date +%Y-%m-%d).md"
+  echo "DRY-RUN: prerrequisitos APTO (nada se toco todavia)"
+  echo "  id de la corrida: $SIM_ID"
+  echo "  runbook: $RUNBOOK"
+  echo "  canal: $CANAL_DE (su destino ya se resolvio en los prerrequisitos; nunca se imprime)"
+  echo "  tabla de modos que generaria: $CORRIDA_STATE/$SIM_ID/cli-modos.tsv (filas tui-falso -> sim9-tui-falso, glm -> glm)"
+  echo "  abriria con: corrida.sh abrir $SIM_ID --runbook $RUNBOOK --vigia claw --cli-modos <tabla> --simulacro"
+  echo "  encenderia: $CORRIDA_STATE/$SIM_ID/responder.on"
+  echo "  reloj global (tope de pared): ${TOPE_PARED}s"
+  echo "  casos que correria (con su tope): 1 (${SIM_TOPE_C1}s) | 2 (${SIM_TOPE_C2}s) y 3 (${SIM_TOPE_C3}s) en paralelo | 4 (${SIM_TOPE_C4}s) | 5 (${SIM_TOPE_C5}s) y 6 (${SIM_TOPE_C6}s) en paralelo | 7"
+  if [ -n "$OBSERVAR_AVANCE" ]; then
+    echo "  observacion extendida: SI, ${OBSERVAR_AVANCE} min en vivo (sin reloj falso) — manda un turno normal a main y sondea cada ${SIM_TOPE_OBS_POLL}s"
+  else
+    echo "  observacion extendida: no pedida (usa --observar-avance <min> para pedirla)"
+  fi
+  echo "  al terminar (o si algo falla a medio camino): cerraria la corrida $SIM_ID y mataria sus sesiones sim9-*"
+  echo "  evidencia que escribiria: $SALIDA"
+  echo "DRY-RUN: nada de esto se ejecuto"
+  exit 0
+fi
+
 # ============================= arranque =====================================
 DIR_SIM="$CORRIDA_STATE/$SIM_ID"
 generar_tabla() {
@@ -409,19 +461,6 @@ echo "arrancada $SIM_ID"
 # asi los casos 2 y 3, que corren en paralelo como procesos hijos, pueden
 # reportar su resultado sin depender de variables compartidas entre shells.
 CASOS_NOMBRE="1|contrato LISTO 0000000 y recoger|2|dialogo de confianza aceptado por politica|3|comando que escala y NECESITA TU RESPUESTA|4|reloj inyectado: 30 min sin actividad|5|kill-session de un carril y relanzamiento|6|kill-session del lead y relanzamiento|7|corte de 30 min con reporte-confirmado"
-
-SIM_TOPE_C1="${SIM_TOPE_C1:-180}"
-SIM_TOPE_C2="${SIM_TOPE_C2:-90}"
-SIM_TOPE_C3="${SIM_TOPE_C3:-150}"
-SIM_TOPE_C4="${SIM_TOPE_C4:-60}"
-SIM_TOPE_C5="${SIM_TOPE_C5:-180}"
-SIM_TOPE_C6="${SIM_TOPE_C6:-240}"
-# Segunda mirada tras un relanzamiento (casos 5/6), para confirmar que no
-# hay un segundo relanzamiento indebido. No hace falta que sean los 60s
-# reales: el vigia solo dispara "closed" UNA vez por sesion que desaparece
-# (el .state se borra al mandar el evento, tmux-activity-watch.sh) — el
-# margen es una comprobacion de sanidad, no lo que impide el doble disparo.
-SIM_ESPERA_DOBLE="${SIM_ESPERA_DOBLE:-15}"
 
 escribir_caso() { # $1 numero; $2 resultado $3 detalle $4 hora_evento $5 hora_mensaje $6 msg_id $7 observable $8 simulado
   local n="$1"; shift
@@ -895,10 +934,117 @@ wait "$CASO6_PID"
 
 correr_caso7
 
-# ============================= observacion extendida (PIEZA a: sin correr) =
+# ============================= observacion extendida (pieza d) =============
+# Opcion A de David: en vivo, SIN reloj inyectado (el "reloj corto" de
+# --ensayo solo acorta el sondeo propio del arnes — SIM_TOPE_OBS_POLL/
+# SIM_TOPE_OBS_VENTANA — nunca el de corrida.sh estado). Solo corre si se
+# pidio con --observar-avance.
 OBS_NOTA="no pedida"
+obs_cron_declarationkey_uuid() { # -> uuid del cron avance-tareas (vacio si no hay o esta ilegible)
+  con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" cron list --all --json 2>/dev/null | python3 -c '
+import json,sys
+t=sys.stdin.read()
+try:
+  d=json.loads(t[t.index("{"):])
+except Exception:
+  print(""); raise SystemExit
+jobs=[j for j in (d.get("jobs") or d.get("result",{}).get("jobs") or []) if isinstance(j,dict) and j.get("declarationKey")=="avance-tareas"]
+print(jobs[0].get("id","") if jobs else "")
+' 2>/dev/null
+}
+obs_scratch_confirmado() { # $1 uuid -> "SI <messageId>" si corte.kind=reporte-confirmado con messageId; si no, ""
+  local uuid="$1"
+  [ -n "$uuid" ] || return 1
+  con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" cron scratch "$uuid" 2>/dev/null | python3 -c '
+import json,sys
+t=sys.stdin.read()
+try:
+  d=json.loads(t[t.index("{"):])
+except Exception:
+  raise SystemExit
+nodo=d
+if not (isinstance(nodo,dict) and nodo.get("schema")=="seguimiento-clock.v1"):
+  for k in ("result","scratch","data","state"):
+    v=nodo.get(k) if isinstance(nodo,dict) else None
+    if isinstance(v,dict) and v.get("schema")=="seguimiento-clock.v1":
+      nodo=v; break
+if not (isinstance(nodo,dict) and nodo.get("schema")=="seguimiento-clock.v1"):
+  raise SystemExit
+corte=nodo.get("corte") or {}
+mid=nodo.get("messageId")
+if corte.get("kind")=="reporte-confirmado" and mid is not None:
+  print("SI %s" % mid)
+' 2>/dev/null
+}
 if [ -n "$OBSERVAR_AVANCE" ]; then
-  OBS_NOTA="pedida (--observar-avance $OBSERVAR_AVANCE); la pieza (a) todavia no la corre: queda para una pieza siguiente"
+  OBS_NOTA="pedida (--observar-avance $OBSERVAR_AVANCE)"
+  OBS_MSGFILE="$(mktemp)"
+  {
+    printf '[SIMULACRO] Hay una corrida de simulacro abierta: %s\n' "$SIM_ID"
+    printf 'Siguela segun tu seccion "Avisos de avance" (no hace falta que crees ningun cron: tu AGENTS.md ya lo hace al haber trabajo activo).\n'
+  } > "$OBS_MSGFILE"
+  OBS_T0=$SECONDS
+  OBS_T0_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  OBS_TURNO_OK=0
+  if con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" agent --agent main --session-key "agent:main:sim9-$SIM_ID" \
+      --message-file "$OBS_MSGFILE" --json >/dev/null 2>&1; then
+    OBS_TURNO_OK=1
+  fi
+  rm -f "$OBS_MSGFILE"
+  OBS_A_OK=0 OBS_A_HORA="" OBS_UUID_ENCONTRADO=""
+  OBS_B_OK=0 OBS_B_HORA="" OBS_MSG_ID=""
+  if [ "$OBS_TURNO_OK" = "1" ]; then
+    local_tope_obs=$((OBSERVAR_AVANCE * 60))
+    while [ "$((SECONDS-OBS_T0))" -lt "$local_tope_obs" ]; do
+      if [ "$OBS_A_OK" = "0" ]; then
+        OBS_UUID_ENCONTRADO="$(obs_cron_declarationkey_uuid)"
+        if [ -n "$OBS_UUID_ENCONTRADO" ]; then OBS_A_OK=1; OBS_A_HORA="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; fi
+      fi
+      if [ "$OBS_A_OK" = "1" ] && [ "$OBS_B_OK" = "0" ] && [ "$((SECONDS-OBS_T0))" -ge "$SIM_TOPE_OBS_VENTANA" ]; then
+        OBS_RESP="$(obs_scratch_confirmado "$OBS_UUID_ENCONTRADO")"
+        if printf '%s' "$OBS_RESP" | grep -q '^SI '; then
+          OBS_B_OK=1
+          OBS_B_HORA="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          OBS_MSG_ID="${OBS_RESP#SI }"
+        fi
+      fi
+      [ "$OBS_A_OK" = "1" ] && [ "$OBS_B_OK" = "1" ] && break
+      sleep "$SIM_TOPE_OBS_POLL"
+    done
+  fi
+  if [ "$OBS_A_OK" = "1" ] && [ "$OBS_B_OK" = "1" ]; then
+    leer_caso 4; escribir_caso 4 "$CASO_RESULTADO" "observado real: cron avance-tareas a las $OBS_A_HORA, scratch confirmado a las $OBS_B_HORA (messageId $OBS_MSG_ID)" \
+      "$CASO_HORA_EVENTO" "$CASO_HORA_MENSAJE" "$CASO_MSG_ID" "$CASO_OBSERVABLE" "$CASO_SIMULADO"
+    leer_caso 7; escribir_caso 7 "$CASO_RESULTADO" "observado real: cron avance-tareas a las $OBS_A_HORA, scratch confirmado a las $OBS_B_HORA (messageId $OBS_MSG_ID)" \
+      "$CASO_HORA_EVENTO" "$CASO_HORA_MENSAJE" "$CASO_MSG_ID" "$CASO_OBSERVABLE" "$CASO_SIMULADO"
+    OBS_NOTA="$OBS_NOTA; turno mandado a las $OBS_T0_ISO; (a) cron avance-tareas visto a las $OBS_A_HORA; (b) scratch reporte-confirmado a las $OBS_B_HORA con messageId $OBS_MSG_ID; casos 4 y 7: FUNCIONA observado real"
+  else
+    motivo="no se vio (a) el cron"
+    [ "$OBS_A_OK" = "1" ] && motivo="se vio el cron (a) a las $OBS_A_HORA pero no (b) su scratch confirmado"
+    [ "$OBS_TURNO_OK" != "1" ] && motivo="el turno a main no se pudo mandar"
+    leer_caso 4; escribir_caso 4 "$CASO_RESULTADO" "NO OBSERVADO: disparo real ($motivo)" \
+      "$CASO_HORA_EVENTO" "$CASO_HORA_MENSAJE" "$CASO_MSG_ID" "$CASO_OBSERVABLE" "$CASO_SIMULADO"
+    leer_caso 7; escribir_caso 7 "$CASO_RESULTADO" "NO OBSERVADO: disparo real ($motivo)" \
+      "$CASO_HORA_EVENTO" "$CASO_HORA_MENSAJE" "$CASO_MSG_ID" "$CASO_OBSERVABLE" "$CASO_SIMULADO"
+    OBS_NOTA="$OBS_NOTA; turno mandado a las $OBS_T0_ISO; NO OBSERVADO: disparo real ($motivo); casos 4 y 7 quedan con su evidencia de reloj inyectado"
+  fi
+  # Al cerrar, dato (no requisito): si "main" ya retiro el cron. Cierre
+  # explicito aqui (idempotente: el trap final ve "cerrada" y no repite
+  # nada) para poder mirar UN tick despues del cierre, acotado y corto.
+  if [ -n "$OBS_UUID_ENCONTRADO" ]; then
+    "$CORRIDA_BIN" cerrar "$SIM_ID" >/dev/null 2>&1
+    OBS_RETIRO="sin verificar (no se espero)"
+    local_ini_retiro=$SECONDS
+    while [ "$((SECONDS-local_ini_retiro))" -lt 120 ]; do
+      if [ -z "$(obs_cron_declarationkey_uuid)" ]; then
+        OBS_RETIRO="si, main lo retiro tras el cierre"
+        break
+      fi
+      sleep 20
+    done
+    [ "$OBS_RETIRO" = "sin verificar (no se espero)" ] && OBS_RETIRO="no se vio retirado en 2 min tras el cierre (dato, no bloqueante)"
+    OBS_NOTA="$OBS_NOTA; al cerrar, el cron avance-tareas: $OBS_RETIRO"
+  fi
 fi
 
 # ============================= evidencia ====================================
@@ -957,7 +1103,7 @@ generar_evidencia() {
   mkdir -p "$dir" || return 1
   {
     printf '# Evidencia — simulacro 9.9 (%s)\n\n' "$FECHA_HOY"
-    printf 'Corrida de esta pasada: `%s`. Los 7 casos corren de verdad (piezas b y c). Los casos 4 y 7 se miden hoy con reloj inyectado; "observado real" (disparo real de avance-tareas) queda para la pieza (d), ver seccion "Observacion extendida".\n\n' "$SIM_ID"
+    printf 'Corrida de esta pasada: `%s`. Los 7 casos corren de verdad. Los casos 4 y 7 se miden con reloj inyectado; con `--observar-avance` se suben a "observado real" (disparo real de avance-tareas), ver seccion "Observacion extendida".\n\n' "$SIM_ID"
     printf '## Version\n\nSHA de origin/main: `%s`\n\n' "$(sha_origin_main)"
     printf '## Prerrequisitos\n\nTodos pasaron (si no, el arnes hubiera salido NO APTO antes de este punto).\n\n'
     printf '## `instalar-mac.sh --verificar`\n\n```\n%s\n```\n\n' "$(con_tope "$CORR_TOPE_RED" "$REPO_RAIZ/scripts/mac/instalar-mac.sh" --verificar 2>&1)"
@@ -967,8 +1113,12 @@ generar_evidencia() {
       "$([ "${SIM_PROGRESS_SET_OK:-0}" = "1" ] && echo "ok" || echo "no confirmado (best-effort, no detiene el arnes)")"
     printf '## Los 7 casos\n\n'
     tabla_casos
-    printf '\n## Lo no observado\n\nCasos 4 y 7: solo con reloj inyectado (no observado real todavia — la pieza '
-    printf '(d) los sube a "observado real" con --observar-avance, ver la seccion de abajo). '
+    printf '\n## Lo no observado\n\n'
+    if [ -n "$OBSERVAR_AVANCE" ]; then
+      printf 'Ver el detalle del caso 4 y 7 arriba, y la seccion "Observacion extendida" de abajo.\n\n'
+    else
+      printf 'Casos 4 y 7: solo con reloj inyectado (no se pidio --observar-avance en esta corrida, asi que no se intento el disparo real).\n\n'
+    fi
     printf 'Un caso en NO FUNCIONA queda con su detalle en la fila de arriba, no aqui.\n\n'
     printf '## Observacion extendida\n\n%s\n\n' "$OBS_NOTA"
     printf '## Eventos del vigia filtrados por `sim9-`\n\n```\n%s\n```\n\n' "$(eventos_vigia_sim9)"
