@@ -25,24 +25,30 @@ TM_REAL="$(command -v tmux 2>/dev/null || true)"
 [ -n "$TM_REAL" ] || fail "sin tmux no hay prueba del arnes"
 
 # decide-puro.mjs importa seguimiento-clock.ts (un .ts con sintaxis borrable):
-# necesita el mismo node >=22 con type stripping nativo que ya elige
-# scripts/run-checks.sh para el resto de la bateria (CodeRabbit, PR #153) —
-# nunca el "node" ambiental sin mas, que puede ser mas viejo o no estar. Sin
-# esto, un node incapaz de importar el .ts fallaria en silencio (el error
-# solo queda en SIM9_LLAMADAS) y los casos 4/7 saldrian "sin SEND" sin decir
-# por que: se falla aqui, alto y claro, antes de correr nada.
+# necesita un node capaz de importar .ts SIN flags extra, con la misma
+# invocacion exacta que usa decide-puro.mjs ("node archivo.mjs", nada mas).
+# CodeRabbit (PR #153): un numero de version >=22 NO alcanza para saberlo —
+# el type stripping nativo sin flag es el default recien desde 22.18.0; una
+# 22.6-22.17 lo tiene detras de --experimental-strip-types y con la
+# invocacion pelada simplemente falla. Se prueba la capacidad REAL (importar
+# un .ts minimo) en vez de adivinar por el numero.
 elegir_node() {
-  local c
+  local c tmp
+  tmp="$(mktemp -d)" || return 1
+  printf 'export const SIM9_OK = "ok";\n' > "$tmp/prueba.ts"
+  printf 'import { SIM9_OK } from "./prueba.ts";\nif (SIM9_OK !== "ok") process.exit(1);\n' > "$tmp/prueba.mjs"
   for c in "$(command -v node 2>/dev/null)" \
            "$HOME/.openclaw/tools/node-v24.19.0/bin/node" \
            /opt/homebrew/bin/node /usr/local/bin/node; do
     [ -n "$c" ] && [ -x "$c" ] || continue
-    local v; v=$("$c" --version 2>/dev/null | sed 's/^v//;s/\..*//')
-    [ -n "$v" ] && [ "$v" -ge 22 ] 2>/dev/null && { echo "$c"; return 0; }
+    if "$c" "$tmp/prueba.mjs" >/dev/null 2>&1; then
+      echo "$c"; rm -rf "$tmp"; return 0
+    fi
   done
+  rm -rf "$tmp"
   return 1
 }
-SIM9_NODE_BIN="$(elegir_node)" || fail "no hay un node >= 22 disponible (con type stripping nativo): decide-puro.mjs no puede correr sin el"
+SIM9_NODE_BIN="$(elegir_node)" || fail "no hay un node capaz de importar un .ts sin flags extra (como decide-puro.mjs lo necesita)"
 export SIM9_NODE_BIN
 
 # SIM9_SOLO=<n>[,<n>...] corre solo esos escenarios numerados (para iterar
@@ -53,6 +59,33 @@ debe_correr() { # $1 numero de escenario; 0 = correrlo
   [ -z "$SIM9_SOLO" ] && return 0
   case ",$SIM9_SOLO," in *",$1,"*) return 0;; esac
   return 1
+}
+
+# `timeout` no viene de fabrica en macOS (coreutils lo instala como
+# `gtimeout`, salvo que se agregue su gnubin al PATH) — CodeRabbit (PR #153):
+# sin esto, el escenario del reloj de pared fallaba con "command not found"
+# ANTES de arrancar el arnes, en vez de probar lo que dice probar. `timeout`,
+# si no `gtimeout`, si no un limite portable (un job de fondo que mata al
+# comando si se pasa del plazo).
+elegir_timeout() {
+  command -v timeout >/dev/null 2>&1 && { command -v timeout; return 0; }
+  command -v gtimeout >/dev/null 2>&1 && { command -v gtimeout; return 0; }
+  return 1
+}
+TIMEOUT_BIN="$(elegir_timeout || true)"
+con_tope_prueba() { # $1 segundos; resto: comando -> mismo rc que el comando
+  local seg="$1"; shift
+  if [ -n "$TIMEOUT_BIN" ]; then
+    "$TIMEOUT_BIN" "$seg" "$@"
+    return $?
+  fi
+  "$@" &
+  local pid=$! rc
+  ( sleep "$seg"; kill -TERM "$pid" 2>/dev/null ) >/dev/null 2>&1 &
+  local vigia=$!
+  wait "$pid" 2>/dev/null; rc=$?
+  kill "$vigia" 2>/dev/null
+  return "$rc"
 }
 
 T="$(mktemp -d)" || exit 1
@@ -361,6 +394,50 @@ sesiones11="$("$TM_REAL" -L "$SOCKET" list-sessions -F '#{session_name}' 2>/dev/
 
 fi
 
+if debe_correr 15; then
+# ===================== (15) --tope-pared efectivo con --observar-avance =====
+# CodeRabbit (PR #153, bloqueante): el tope de pared (570s por defecto) mataba
+# la corrida mucho antes de que la observacion extendida pudiera confirmar
+# nada (la ventana minima real son 1800s). (a) sin --tope-pared explicito, el
+# arnes lo sube solo; --dry-run (sin abrir nada: la validacion corre ANTES de
+# sourcear lib.sh, ni siquiera necesita --ensayo) lo muestra. (b) con un
+# --tope-pared explicito insuficiente, rechaza la combinacion antes de tocar
+# nada.
+salida15a="$(bash "$ARNES" --ensayo --dry-run --observar-avance 35 2>&1)"
+rc15a=$?
+[ "$rc15a" -eq 0 ] || fail "--dry-run --observar-avance 35: se esperaba salida 0, salio $rc15a -- $salida15a"
+tope_efectivo15="$(printf '%s\n' "$salida15a" | sed -n 's/.*tope de pared efectivo): \([0-9]*\)s.*/\1/p')"
+[ -n "$tope_efectivo15" ] || fail "--dry-run --observar-avance 35: no se pudo leer el tope de pared efectivo: $salida15a"
+[ "$tope_efectivo15" -ge $((35*60)) ] || fail "--dry-run --observar-avance 35: el tope efectivo ($tope_efectivo15) es menor que 35*60: $salida15a"
+
+salida15b="$(bash "$ARNES" --observar-avance 35 --tope-pared 100 2>&1)"
+rc15b=$?
+[ "$rc15b" -eq 2 ] || fail "--observar-avance 35 --tope-pared 100 (insuficiente): se esperaba salida 2 (rechazo), salio $rc15b -- $salida15b"
+printf '%s\n' "$salida15b" | grep -q 'menor que lo que --observar-avance' \
+  || fail "--observar-avance 35 --tope-pared 100: no explico por que rechazo: $salida15b"
+fi
+
+if debe_correr 16; then
+# ===================== (16) ventana de observacion: chequeo al borde ========
+# CodeRabbit (PR #153, bloqueante): el bucle solo entraba mientras faltaban
+# MENOS de SIM_TOPE_OBS_VENTANA segundos reales; el chequeo del scratch solo
+# corria cuando ya habian pasado AL MENOS esos mismos segundos — con un
+# sondeo que salta justo por encima del borde, ninguna vuelta cae con las dos
+# cosas a la vez y el bucle terminaba sin comprobar nunca, aunque el reporte
+# ya estuviera confirmado. Ventana angosta a proposito (SIM_TOPE_OBS_VENTANA
+# apenas por debajo del tope de la observacion, con un sondeo grande) para
+# que la unica vuelta util caiga justo en el borde.
+rm -rf "$T/corridas/.sim9-obs-cron"
+EVID16="$T/evidencia-16.md"
+salida16="$(SIM_TOPE_OBS_POLL=30 SIM_TOPE_OBS_VENTANA=55 \
+  bash "$ARNES" --ensayo --salida "$EVID16" --tope-pared 300 --observar-avance 1 2>&1)"
+rc16=$?
+[ "$rc16" -eq 0 ] || fail "ventana al borde: se esperaba salida 0 (7/7 FUNCIONA), salio $rc16 -- $salida16"
+grep -A2 '## Observacion extendida' "$EVID16" | grep -q 'FUNCIONA observado real' \
+  || fail "ventana al borde: no se confirmo el aviso justo en el limite de la ventana: $(grep -A2 '## Observacion extendida' "$EVID16")"
+rm -rf "$T/corridas/.sim9-obs-cron"
+fi
+
 if debe_correr 12; then
 # ============================= (12) tabla_casos: saneo y escape (CodeRabbit) =
 # Extrae escribir_caso/leer_caso/markdown_celda/tabla_casos DEL ARNES REAL (no
@@ -399,7 +476,7 @@ if debe_correr 13; then
 # ni que el proceso seco quede corriendo mas alla del tope.
 EVID13="$T/evidencia-13.md"
 ini13=$SECONDS
-salida13="$(timeout 60 env SIM9_GLM_MUDO=1 SIM_TOPE_C1=120 \
+salida13="$(con_tope_prueba 60 env SIM9_GLM_MUDO=1 SIM_TOPE_C1=120 \
   bash "$ARNES" --ensayo --salida "$EVID13" --tope-pared 5 2>&1)"
 rc13=$?
 dur13=$((SECONDS-ini13))

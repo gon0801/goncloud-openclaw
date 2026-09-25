@@ -73,6 +73,7 @@ ENSAYO=0
 DRY_RUN=0
 SALIDA=""
 TOPE_PARED=570
+TOPE_PARED_EXPLICITO=0
 OBSERVAR_AVANCE=""
 LIMPIAR_ID=""
 while [ "$#" -gt 0 ]; do
@@ -82,7 +83,7 @@ while [ "$#" -gt 0 ]; do
     --salida) [ "$#" -ge 2 ] || { echo "simulacro-fase9: --salida sin valor" >&2; exit 2; }; SALIDA="$2"; shift 2;;
     --tope-pared) [ "$#" -ge 2 ] || { echo "simulacro-fase9: --tope-pared sin valor" >&2; exit 2; }
       case "$2" in ''|*[!0-9]*) echo "simulacro-fase9: --tope-pared no es un numero de segundos: $2" >&2; exit 2;; esac
-      TOPE_PARED="$2"; shift 2;;
+      TOPE_PARED="$2"; TOPE_PARED_EXPLICITO=1; shift 2;;
     --observar-avance) [ "$#" -ge 2 ] || { echo "simulacro-fase9: --observar-avance sin valor" >&2; exit 2; }
       case "$2" in ''|*[!0-9]*) echo "simulacro-fase9: --observar-avance no es un numero de minutos: $2" >&2; exit 2;; esac
       OBSERVAR_AVANCE="$2"; shift 2;;
@@ -112,6 +113,26 @@ SIM_TOPE_OBS_POLL="${SIM_TOPE_OBS_POLL:-60}"
 # esto, un scratch viejo que ya estuviera confirmado por otra razon se
 # leeria como si el aviso hubiera salido en la propia observacion.
 SIM_TOPE_OBS_VENTANA="${SIM_TOPE_OBS_VENTANA:-1800}"
+
+# --tope-pared (CodeRabbit, PR #153): con --observar-avance, el reloj de
+# pared tiene que alcanzar para los 7 casos Y para la observacion completa
+# (que no acepta un aviso confirmado antes de SIM_TOPE_OBS_VENTANA segundos
+# reales) — el default de 570s no alcanza ni de cerca para "opcion A" (~35
+# min). Minimo = los casos secuenciales en su peor momento (1, el peor de
+# 2/3 en paralelo, 4, el peor de 5/6 en paralelo — 7 es casi instantaneo) +
+# los minutos de observacion pedidos + un margen para arranque/cierre.
+if [ -n "$OBSERVAR_AVANCE" ]; then
+  MAX_23="$SIM_TOPE_C2"; [ "$SIM_TOPE_C3" -gt "$MAX_23" ] && MAX_23="$SIM_TOPE_C3"
+  MAX_56="$SIM_TOPE_C5"; [ "$SIM_TOPE_C6" -gt "$MAX_56" ] && MAX_56="$SIM_TOPE_C6"
+  CASOS_TOPE_TOTAL=$((SIM_TOPE_C1 + MAX_23 + SIM_TOPE_C4 + MAX_56))
+  MARGEN_OBS=120
+  TOPE_MINIMO=$((CASOS_TOPE_TOTAL + OBSERVAR_AVANCE*60 + MARGEN_OBS))
+  if [ "$TOPE_PARED_EXPLICITO" = "1" ] && [ "$TOPE_PARED" -lt "$TOPE_MINIMO" ]; then
+    echo "simulacro-fase9: --tope-pared $TOPE_PARED es menor que lo que --observar-avance $OBSERVAR_AVANCE necesita (minimo ${TOPE_MINIMO}s = casos ${CASOS_TOPE_TOTAL}s + observacion $((OBSERVAR_AVANCE*60))s + margen ${MARGEN_OBS}s); no se abre nada" >&2
+    exit 2
+  fi
+  [ "$TOPE_PARED" -lt "$TOPE_MINIMO" ] && TOPE_PARED="$TOPE_MINIMO"
+fi
 
 # --- lib.sh/estado.sh de la corrida que se va a usar (checkout o instalada) -
 CORRIDA_DIR="$(cd "$(dirname "$CORRIDA_BIN")" 2>/dev/null && pwd)/corrida"
@@ -396,7 +417,7 @@ if [ "$DRY_RUN" = "1" ]; then
   echo "  tabla de modos que generaria: $CORRIDA_STATE/$SIM_ID/cli-modos.tsv (filas tui-falso -> sim9-tui-falso, glm -> glm)"
   echo "  abriria con: corrida.sh abrir $SIM_ID --runbook $RUNBOOK --vigia claw --cli-modos <tabla> --simulacro"
   echo "  encenderia: $CORRIDA_STATE/$SIM_ID/responder.on"
-  echo "  reloj global (tope de pared): ${TOPE_PARED}s"
+  echo "  reloj global (tope de pared efectivo): ${TOPE_PARED}s"
   echo "  casos que correria (con su tope): 1 (${SIM_TOPE_C1}s) | 2 (${SIM_TOPE_C2}s) y 3 (${SIM_TOPE_C3}s) en paralelo | 4 (${SIM_TOPE_C4}s) | 5 (${SIM_TOPE_C5}s) y 6 (${SIM_TOPE_C6}s) en paralelo | 7"
   if [ -n "$OBSERVAR_AVANCE" ]; then
     echo "  observacion extendida: SI, ${OBSERVAR_AVANCE} min en vivo (sin reloj falso) — manda un turno normal a main y sondea cada ${SIM_TOPE_OBS_POLL}s"
@@ -1063,6 +1084,21 @@ if [ -n "$OBSERVAR_AVANCE" ]; then
       [ "$OBS_A_OK" = "1" ] && [ "$OBS_B_OK" = "1" ] && break
       sleep "$SIM_TOPE_OBS_POLL"
     done
+    # CodeRabbit (PR #153): el while SOLO entra mientras faltan menos de
+    # local_tope_obs; el chequeo del scratch SOLO corre cuando ya paso la
+    # ventana completa. Si ninguna vuelta cayo con los dos a la vez (topes
+    # ajustados, el sondeo salta justo por encima del borde), el bucle
+    # terminaba sin comprobar nunca — aunque el reporte ya estuviera
+    # confirmado. Una comprobacion final, al salir, cubre exactamente ese
+    # borde (basta con que el tope total alcance la ventana).
+    if [ "$OBS_A_OK" = "1" ] && [ "$OBS_B_OK" = "0" ] && [ "$local_tope_obs" -ge "$SIM_TOPE_OBS_VENTANA" ]; then
+      OBS_RESP="$(obs_scratch_confirmado "$OBS_UUID_ENCONTRADO" "$OBS_T0_EPOCH")"
+      if printf '%s' "$OBS_RESP" | grep -q '^SI '; then
+        OBS_B_OK=1
+        OBS_B_HORA="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        OBS_MSG_ID="${OBS_RESP#SI }"
+      fi
+    fi
   fi
   if [ "$OBS_A_OK" = "1" ] && [ "$OBS_B_OK" = "1" ]; then
     leer_caso 4; escribir_caso 4 "$CASO_RESULTADO" "observado real: cron avance-tareas a las $OBS_A_HORA, scratch confirmado a las $OBS_B_HORA (messageId $OBS_MSG_ID)" \
