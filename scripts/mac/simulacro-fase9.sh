@@ -97,8 +97,13 @@ SIM_TOPE_C1="${SIM_TOPE_C1:-180}"
 SIM_TOPE_C2="${SIM_TOPE_C2:-90}"
 SIM_TOPE_C3="${SIM_TOPE_C3:-150}"
 SIM_TOPE_C4="${SIM_TOPE_C4:-60}"
-SIM_TOPE_C5="${SIM_TOPE_C5:-180}"
-SIM_TOPE_C6="${SIM_TOPE_C6:-240}"
+# Tope de los casos 5/6 (relanzamiento real): la cadena medida en vivo el
+# 2026-09-25 (corrida sim9-20260925-0225) tarda ~4.5-5 min de punta a punta:
+# kill -> barrido del vigia (~60s) -> evento -> turno de main (~2-3 min) ->
+# relanzo. Con 180s el caso 5 se perdio el relanzo por ~90s (el caso 6, con
+# 240s, paso justo). 300s cubre la cadena medida con margen.
+SIM_TOPE_C5="${SIM_TOPE_C5:-300}"
+SIM_TOPE_C6="${SIM_TOPE_C6:-300}"
 # Segunda mirada tras un relanzamiento (casos 5/6), para confirmar que no
 # hay un segundo relanzamiento indebido. No hace falta que sean los 60s
 # reales: el vigia solo dispara "closed" UNA vez por sesion que desaparece
