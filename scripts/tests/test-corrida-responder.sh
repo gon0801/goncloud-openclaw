@@ -104,7 +104,9 @@ abrir() { # $1 id, $2 sesiones json, $3 preaprobaciones json
 import json,os
 E=os.environ
 d={'schema':'corrida.v1','id':E['RID'],'runbook':'docs/runbooks/autopilot-fase9.md','vigia':'claw',
-   'simulacro':True,'canal':{'cron':'verif-sync-repos','destino':'DESTINO-9X'},
+   # simulacro:False - estas corridas de prueba ejercitan la escalacion real
+   # (9.2: en practica, "Comando: ..." se omite y no se pide respuesta).
+   'simulacro':False,'canal':{'cron':'verif-sync-repos','destino':'DESTINO-9X'},
    'cli_modos':E['RMODOS'],'cron_vigia_id':'cron-falso','inicio':'2026-09-19T09:00:00+0200',
    'timebox_horas':6,'sesiones':json.loads(E['RSES']),'preaprobaciones':json.loads(E['RPRE']),
    'estado':'abierta'}
@@ -306,6 +308,12 @@ corre r3; [ $? -eq 1 ] || fail "(3) la lista dura no se contesta (rc 1)"
 [ "$(nteclas r3)" -eq 0 ] || fail "(3) ningún push a main se contesta con tecla"
 grep -qF 'NECESITO TU RESPUESTA' "$LLAMADAS" || fail "(3) debía escalar NECESITO TU RESPUESTA: $(cat "$LLAMADAS")"
 grep -qF 'Comando: git push origin main' "$LLAMADAS" || fail "(3) la escala debe citar el comando textual: $(cat "$LLAMADAS")"
+grep -qF 'Di sí para aceptar lo que la sesión pide o no para rechazarlo' "$LLAMADAS" \
+  || fail "(3) la pregunta real de NECESITO TU RESPUESTA perdio sus acentos: $(cat "$LLAMADAS")"
+grep -qF 'Di si para aceptar lo que la sesion pide' "$LLAMADAS" \
+  && fail "(3) la pregunta real de NECESITO TU RESPUESTA salio sin acentos: $(cat "$LLAMADAS")"
+grep -qF 'Qué cambió: Una parte de la corrida quedó esperando que decidas algo.' "$LLAMADAS" \
+  || fail "(3) una corrida real no trae el texto fijo de NECESITO TU RESPUESTA: $(cat "$LLAMADAS")"
 grep -qF '0 de 3 partes terminadas' "$LLAMADAS" || fail "(3) la escala habla de partes de la corrida: $(cat "$LLAMADAS")"
 D="$(udec c3)"
 [ "$(jcampo decision "$D")" = "escala" ] || fail "(3) decisión escala: $D"

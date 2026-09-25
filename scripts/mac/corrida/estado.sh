@@ -396,8 +396,27 @@ corrida_estado() {
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "estado: sin registro: $id" >&2; return 1; }
   parte_calcular "$id" || return 1
-  printf '[%s] Corrida, %s\nQue cambio: %s\nQue sigue: %s\nQue necesito de ti: %s\n' \
-    "$P_ETIQ" "$P_AVANCE" "$P_CAMBIO" "$P_SIGUE" "$P_NECESITO"
+  # El mismo encabezado (nombre + hora) y el mismo prefijo de practica que usa
+  # corrida_mensaje: quien reciba este parte suelto tiene que poder ubicar de
+  # que corrida es, igual que con los avisos que manda la corrida sola.
+  local enc pref sim cambio sigue necesito
+  enc="$(corrida_encabezado "$id")"
+  sim="$(json_campo "$reg" simulacro)"
+  pref="▶️ "
+  cambio="$P_CAMBIO"; sigue="$P_SIGUE"; necesito="$P_NECESITO"
+  if [ "$sim" = "true" ]; then
+    pref="🧪 PRÁCTICA — no contestes "
+    # En practica NINGUN campo del cuerpo pide una decision de verdad (mismo
+    # texto fijo que usa corrida_mensaje en lib.sh para NECESITO TU RESPUESTA):
+    # parte_calcular no sabe de practica, asi que aqui se reemplaza igual.
+    if [ "$P_ETIQ" = "NECESITO TU RESPUESTA" ]; then
+      cambio="Una parte de la prueba llegó a una pregunta de práctica."
+      sigue="Nada que hacer: la prueba sigue sola."
+      necesito="nada: es una prueba, se resuelve sola"
+    fi
+  fi
+  printf '%s[%s] %s, %s\nQué cambió: %s\nQué sigue: %s\nQué necesito de ti: %s\n' \
+    "$pref" "$P_ETIQ" "$enc" "$P_AVANCE" "$cambio" "$sigue" "$necesito"
   [ -n "$solo" ] && return 0
   printf -- '--- detalle (para el vigia; no va a David) ---\n%s\n' "$P_DETALLE"
   return 0

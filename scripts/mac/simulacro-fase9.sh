@@ -832,7 +832,7 @@ correr_caso4() {
     return
   fi
   local pos; pos="$(CORR_AHORA=$((s+1800)) "$CORRIDA_BIN" estado "$SIM_ID" --solo-mensaje 2>&1)"
-  if ! printf '%s\n' "$pos" | head -1 | grep -q '^\[DETENIDA\]'; then
+  if ! printf '%s\n' "$pos" | head -1 | grep -q '\[DETENIDA\]'; then
     escribir_caso 4 "NO FUNCIONA" "S+1800 no dio [DETENIDA]: $(printf '%s' "$pos" | tr '\n' ' ')" "$t0_iso" "" "" "" "$simulado"
     return
   fi
