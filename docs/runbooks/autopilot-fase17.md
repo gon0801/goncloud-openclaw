@@ -5,6 +5,15 @@
 > existen en la instalación nueva. El launcher en este documento no es un
 > permiso de ejecución ni sustituye la aceptación por host.
 
+La cola integral de este documento no sirve aún para lanzar U4 por separado.
+La división vigente está en el plan detallado, sección «Orden y responsables»:
+OpenClaw primero, Hermes después. El lead prepara la división de carriles,
+progreso y cola como cambio documental previo independiente, sin depender de
+17.6 ni 17.7 y sin lanzar procesos. Esa preparación habilita el documento para
+U4; 17.7 valida después el runbook contra las interfaces implementadas. No
+esperar 17.3 para aceptar el supervisor OpenClaw ni declarar Hermes probado
+con evidencia del otro host.
+
 Tú eres el lead de ejecución. David no está al teclado: no le haces preguntas durante la corrida. Heredas `docs/runbooks/base-openclaw.md` v1.1 y `docs/runbooks/loop-autopilot.md`. El qué y las DoD están en `Plans.md`, Fase 17; el contrato de producto está en `docs/superpowers/specs/2026-09-22-centro-tareas-design.md`. Si discrepan, manda el spec para producto y `Plans.md` para tareas; detén el carril afectado y corrige el documento inferior en el siguiente PR. Tablero: `/runbook/tablero/c/fase17-centro-tareas`. Localizador: `bash scripts/runbook.sh 17`. Lanzador, **sólo después de autorización para ejecutar y de Q0 integrado**: `bash scripts/lanzar-fase.sh 17 --sesion wt-f17-lead -- <cli-del-lead> <flag-sin-preguntas-verificado>`; nadie adivina el CLI ni su flag. Antes, se permite únicamente `bash scripts/lanzar-fase.sh 17 --sesion wt-f17-lead --dry-run -- <cli> <flag>`.
 
 ## Quién y autoridad

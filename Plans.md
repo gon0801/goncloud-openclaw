@@ -34,9 +34,11 @@ se cerró sin merge por bloqueantes. Fase 15 está cerrada y no se repite.
 | U3 | `[lane:gate] [tdd:required]` Fase 14: selector y adaptadores de CLI, reconciliación, revisión y entrega autónoma. | Primer canary con una CLI elegida y recibo verificable; después contratos y humos de las seis CLI previstas, sin procesos duplicados ni worktrees compartidos; merge/deploy sólo por la ruta autorizada del nuevo sync y SHA instalado leído de vuelta. | U2 | cc:TODO |
 | U4 | `[lane:gate] [tdd:required]` Fase 17 en OpenClaw: contrato de tarea, supervisor y panel de solo lectura. | Lista/detalle/historial indican responsable, agente, CLI, intento, avance, espera, próxima comprobación, recursos y evidencia; móvil/escritorio, datos viejos y errores distinguibles; sin secretos ni XSS. LobsterBoard se usa sólo si licencia, assets y dependencias del commit elegido pasan revisión; OpenGrokBot aporta patrones de seguimiento, no código ni otro runtime. | U3; 17.0–17.2, 17.4–17.5 | cc:TODO |
 | U5 | `[lane:gate] [tdd:required]` El mismo contrato y panel en la computadora Hermes, con estado, reloj e identidad propios. | Crear, seguir y cerrar la misma clase de tarea con OpenClaw inaccesible; diez recorridos de aceptación en cada host, instalador reversible, CI/revisión del SHA final y recibos por host. No se comparten sesiones ni credenciales. | U4; 17.3, 17.6–17.8 | cc:TODO |
+| U6 | `[lane:gate] [tdd:required]` Completar la autonomía de una meta compuesta: plan ejecutable, autoridad inicial coherente, avance entre tareas, control persistente y cierre agregado. Extiende U2–U5; no crea otro orquestador. | Un plan con dependencias termina sin preguntas dentro de su autorización, corrige un fallo, recupera una caída entre tareas y acredita cada criterio del alcance vigente; pausa/cancelación sobreviven al reinicio; aceptación por host, sin duplicar efectos ni reloj. Detalle en Fase U6. | U4 para OpenClaw; U5 adicional para Hermes y cierre bilateral | cc:TODO |
 
-U0 cerró como inventario y una prueba acotada de Telegram. La siguiente
-unidad de trabajo es **U1**. No se activa sync, no se mergea un PR ni se
+U0 cerró como inventario y una prueba acotada de Telegram; U1 tiene sus
+recibos de cierre abajo. La siguiente unidad de trabajo es **U2**.
+No se activa sync, no se mergea un PR ni se
 despliega por el hecho de existir este plan.
 Después de cada etapa se actualiza esta tabla en un único PR de cierre con
 recibos; no se reabre una fase cerrada ni se repite la batería para el mismo SHA.
@@ -44,7 +46,8 @@ recibos; no se reabre una fase cerrada ni se repite la batería para el mismo SH
 **Reconciliación de números antiguos:** 15 = cerrado; 18.0/18.4 = recuperación
 parcial que alimenta U0, no “terminado” retroactivo; 16 = piezas para U1,
 sin ejecutar el corte viejo 16.8; 9 = sólo faltantes para U2; 14 = U3; 17 =
-U4/U5. Fase 23 y los hardenings 9.17–9.18 quedan fuera de esta ruta salvo
+U4/U5. U6 sólo añade los faltantes identificados en su matriz de cobertura.
+Fase 23 y los hardenings 9.17–9.18 quedan fuera de esta ruta salvo
 un bloqueo reproducible. Los PR #128, #130, #131, #132 y #134 se deciden por
 diff y evidencia: ninguno se mergea automáticamente por aparecer aquí.
 
@@ -772,7 +775,7 @@ Las tareas siguientes son propuestas, no autorización de implementación o depl
 | 17.1 | `[lane:gate] [tdd:required]` Contrato de tareas, proyección redactada, porcentaje y maqueta escritorio/móvil. | Fixtures legacy/nuevos verdes; identidad y cierre verificable definidos; resumen y reporte coinciden; maqueta cubre estados degradados | 17.0 | cc:TODO |
 | 17.2 | `[lane:gate] [tdd:required]` Adaptador OpenClaw y observaciones de ejecución/recursos sobre Fase 14. | Tarea nativa visible con intento y proceso verificables; PID reutilizado y métricas ausentes no se atribuyen mal; guardas existentes pasan | 17.1, Fase 14 integrada y contratos de entrega sin sello | cc:TODO |
 | 17.3 | `[lane:gate] [tdd:required]` Adaptador Hermes sin dependencia de gateway OpenClaw. | Crear, observar, reportar y verificar con OpenClaw ausente; mismo contrato y capacidades requeridas; cobertura parcial explícita | 17.2 | cc:TODO |
-| 17.4 | `[lane:gate] [tdd:required]` Supervisión local independiente del coordinador y recuperación con presupuesto persistente. | Pruebas de crash sin intentos duplicados; efectos inciertos no se repiten; un reloj para dos tareas; recursos/permiso no se amplían al reiniciar | 17.2, 17.3 | cc:TODO |
+| 17.4 | `[lane:gate] [tdd:required]` Supervisión local independiente del coordinador y recuperación con presupuesto persistente. Primero OpenClaw en U4; adaptación y aceptación Hermes en U5. | Pruebas de crash sin intentos duplicados; efectos inciertos no se repiten; un reloj para dos tareas; recursos/permiso no se amplían al reiniciar. El recibo OpenClaw no acredita Hermes. | 17.2 para OpenClaw; 17.3 adicional para Hermes | cc:TODO |
 | 17.5 | `[lane:gate] [tdd:required]` Panel de solo lectura con lista, detalle, línea temporal, avisos de espera y evidencia; agente y CLI visibles. | Recorridos del diseño verdes en móvil/escritorio y sin OpenGrokBot instalado; teclado, errores y frescura visibles; API/HTML sin secretos sintéticos ni XSS; decisión de licencia/commit de LobsterBoard registrada antes de usar código o assets. | 17.1, 17.4 | cc:TODO |
 | 17.6 | `[lane:gate] [tdd:required]` Paquete común e instalación independiente por host, preflight y reversa. | Instalar dos veces converge; upgrade/reversa conserva tareas; identidades distintas; manifiesto común y credenciales separadas | 17.4, 17.5 | cc:TODO |
 | 17.7 | `[lane:gate] [tdd:required]` Integración, PR, revisión agrupada y runbook operativo verificado. | Hooks y batería completa en CI del head final; reviewer distinto; cero bloqueantes; launcher dry-run y lectura independiente del runbook | 17.6 | cc:TODO |
@@ -807,3 +810,36 @@ Fecha de ejecución: 2026-09-23. Ruta activa U1: fuente fuera del estado vivo y 
 | U1.2 | `[lane:gate] [tdd:required]` Endurecimiento de proveniencia y secretos: B1 admite rastro en vigilancia, B2 adopta ya-publicados en registro, B3 exige registro como directorio real, B4 pinning de selección a SHA de Git, B5 recuperación del corte sin journal, B6 re-validación de cada byte contra el commit declarado, B7 respaldo confinado anti-symlink, C1 proveniencia en publicación contra commit git, C2 denylist de secretos, D1 identidad canónica CRLF a LF con SHA del blob, D2 binarios con NUL en crudo sin OOM. | Cada fix con rojo previo verbatim y verde posterior, suite final 70 de 70 más vigilancia ok, rastro de decisiones con verificación independiente. | U1.1 | cc:完了 (commits 35abccc, 7d9e4d8, 78da34d, 9daaccc, 607c795, 21c552d, 64de6d8; rastro en .saikit/decisiones/u1-sync.tsv; PR #139 merge d50f4ed) |
 | U1.3 | `[lane:gate] [tdd:skip:docs-only]` Runbook de publicación al runtime Windows por sync seguro: hereda base-openclaw, trae solo sus carriles con la DoD verbatim, tabla de archivos, cola con compuertas y aviso al dueño. | Guía publicada con pasos explícitos de staging, publicación y reversa, sin activar nada por el hecho de existir. | U1.1, U1.2 | cc:完了 (PR #140 de82e2e; docs/runbooks/base-openclaw.md actualizado) |
 | U1.4 | `[lane:release] [tdd:skip:cierre-y-ci]` Cierre de U1: merge por la ruta del kit con CI verde del SHA final y revisión sin bloqueantes, más publicación al runtime Windows por el sync seguro con recibo. Sync desactivado por defecto tras publicar. | Merges d50f4ed y de82e2e en origin/main con CI del SHA final, cierre-de-fase U1 en VERDE salvo el plan que cierra esta fila, estado viejo recuperable. | U1.1–U1.3 | cc:完了 (merge PR #139 d50f4ed; publicación PR #140 de82e2e; este PR de cierre) |
+
+## Fase U6 — Metas compuestas con autonomía verificable
+
+Fecha: 2026-09-24. Estado: planificado, sin ejecución ni permisos nuevos.
+[Plan, matriz U2–U5 y aceptación](docs/superpowers/plans/2026-09-24-u6-metas-autonomas.md).
+`Spec delta`: sección «Metas compuestas, contrato objetivo de U6» de
+`docs/spec/00-project-spec.md`. `team_validation_mode: subagent`: producto,
+arquitectura y seguridad/QA. La solicitud actual cubre plan, rama, PR y validación.
+
+Purpose: recibir una meta o plan, ejecutar sus unidades sin reconfirmaciones
+dentro de la autoridad aplicable y cerrar sólo con todos los criterios acreditados.
+
+U2 ya cubre corrida, política y seguimiento; U3 adaptadores, reconciliación,
+revisión y entrega; U4/U5 contrato, supervisor, evidencia y panel por host.
+Se amplían esas piezas. No se crea otro orquestador, reloj ni base de autoridad.
+OpenClaw depende de U4; Hermes añade U5. La investigación/contrato U6.0–U6.1
+puede prepararse antes, pero no reemplaza dependencias pendientes con stubs en vivo.
+
+| Task | Contenido | DoD | Depends | Status |
+|---|---|---|---|---|
+| U6.0 | `[lane:fast] [tdd:skip:inventario]` Inventariar sólo huecos de U2–U5, interfaces/autoridad por host, rutas reales y baseline de calidad. | Matriz con commit, prueba y recibo o unknown; contratos públicos de continuación identificados; gap de lint/formatter registrado para resolver al iniciar U6.1; David ve qué falta por host. Sin capacidad probada se detiene sólo su integración. | Contratos U2–U5; recibos U4/U5 antes de integrar cada host | cc:TODO |
+| U6.1 | `[lane:gate] [tdd:required]` Extender el contrato U4 para importar/generar un plan de meta con criterios, dependencias, revisión y alcance estable. | Baseline de calidad configurado antes de código nuevo; plan válido conserva cobertura del encargo; ciclo, ID repetido, dependencia ausente o criterio omitido se rechazan sin lanzar; cambios de revisión quedan visibles. David ve unidades, dependencias y supuestos. | U6.0; contrato 17.1 para integración | cc:TODO |
+| U6.2 | `[lane:gate] [tdd:required]` Vincular autoridad de la meta y comprobar permisos efectivos de instrucciones, host, CLI y entrega al iniciar/reanudar. | Acción autorizada sin consulta en cada CLI/rol admitido; revocación, presupuesto y alcance negativo comprobados; merge/deploy reutilizan U1/U3 y no el contestador de diálogos. Política de SHA futuro sólo con autorización expresa de selección. | U6.1, U3, U4 | cc:TODO |
+| U6.3 | `[lane:gate] [tdd:required]` Extender reducer/supervisor para avanzar entre unidades verificadas y reparar dentro del alcance. | Tres unidades con dependencia real; espera de una no bloquea la independiente; caída entre cierre/despacho y dos reconciliadores no duplican escritor/efectos; conserva revisión y presupuesto. La siguiente unidad arranca sin otro mensaje de David. | U6.2, U4 | cc:TODO |
+| U6.4 | `[lane:gate] [tdd:required]` Persistir pausa/cancelación y reanudación autenticadas de meta en las entradas nativas. | Orden repetida, respuesta perdida, reinicio y evento tardío conservan control; no se admiten nuevos efectos tras pausa/cancelación; sólo orden válida reanuda pausa; cancelación terminal no revive. David ve estado y resultado parcial. | U6.3 | cc:TODO |
+| U6.5 | `[lane:gate] [tdd:required]` Comprobar cierre agregado y proyectarlo en el panel/seguimiento existente. | Evidencia vieja, criterio eliminado, artefacto cambiado, LISTO o reversa no fabrican 100%; aceptación integrada de todos los criterios actuales sí cierra. Panel y Telegram muestran el mismo resultado con evidencia. | U6.3, U6.4 | cc:TODO |
+| U6.6 | `[lane:release] [tdd:required]` Integrar arranque U6, runbook y doce escenarios de aceptación por host; publicar por rutas existentes con autoridad válida. | Alias U6 probado sin confundir Fase 6; hooks/CI completos del SHA final, revisión sin bloqueantes; canary sin intervención rutinaria y con fallos inducidos. Recibos separados OpenClaw/Hermes, otro runtime inaccesible; cierre bilateral sólo si ambos pasan. | U6.5, U4; U5 para Hermes; autorización operativa para efectos vivos | cc:TODO |
+
+Se conserva el bloqueo para decisión del operador si el mismo bloqueante
+reproducible vuelve en dos rondas consecutivas; no se mergea abierto. Trabajo
+independiente puede seguir. Este plan no promete resolver falta de autoridad,
+credenciales o servicios externos ignorando su estado. Un solo PR
+`faseu6/cierre` reunirá los recibos finales; ningún estado cambia ahora a completo.
