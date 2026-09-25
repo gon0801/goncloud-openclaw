@@ -11,6 +11,7 @@ done
 grep -qF 'The gateway hook blocks direct GitHub merge commands and API mutations for every OpenClaw role; standalone CLIs must follow the kit route.' agents/main/agent/workshop-skills/git-commit-push/SKILL.md || { echo 'FAIL: git-commit-push conserva bypass de merge'; exit 1; }
 grep -qF 'the OpenClaw gateway hook blocks direct GitHub API and GraphQL merges for every role; standalone CLIs must follow the kit route.' agents/ingenieria/agent/workshop-skills/mac-node-ops/SKILL.md || { echo 'FAIL: mac-node-ops conserva bypass de merge'; exit 1; }
 grep -qF '**Sin cuota de CodeRabbit el PR espera**' docs/runbooks/loop-autopilot.md || { echo 'FAIL: runbook omite espera de CodeRabbit'; exit 1; }
+grep -qF 'sin revisión completada y estado verde del SHA actual, el merge espera' docs/runbooks/loop-autopilot.md || { echo 'FAIL: tabla de roles permite merge sin CodeRabbit'; exit 1; }
 grep -qF 'Puede mergear PRs revisados mediante `saikit-merge.sh --auto`' docs/runbooks/base-openclaw.md || { echo 'FAIL: runbook base prohibe merge a claw'; exit 1; }
 grep -qF 'El merge del paso 8 usa la política permanente' docs/runbooks/camino-feliz-producto.md || { echo 'FAIL: camino feliz exige go/no-go por PR'; exit 1; }
 echo 'PASS test-cierre-pr-merge-comando'

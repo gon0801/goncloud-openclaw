@@ -17,7 +17,7 @@ Cada regla lleva su origen, `Medido:` con fecha. Si una regla no tiene un incide
 | **implementador** | muse, cursor, glm, u otro, según el brief | Escribe el código de un carril en su worktree. Reporta con la línea de contrato. No hace push ni abre PR. |
 | **verificador** | otro agente distinto del implementador | Ejecuta el comportamiento que la fila pide y deja la evidencia que el recibo enlaza: comando, resultado y SHA. Para un bug, demuestra que su regresión falla sin el arreglo. Nunca el modelo que implementó. |
 | **revisor cruzado** | otra IA por `cross-review.ps1` | Segunda opinión sobre el diff del bloque: es el rol `reviewer` del recibo, y no hay un revisor aparte de él. Nunca el modelo que implementó. |
-| **CodeRabbit** | bot en GitHub | Revisa cuando el PR se promueve a listo, nunca los pushes del borrador; después solo ve los pushes de corrección. Sus comentarios se leen y se adjudican: solo un bloqueante abierto bloquea. Sin cuota no bloquea, pero se declara. |
+| **CodeRabbit** | bot en GitHub | Revisa cuando el PR se promueve a listo, nunca los pushes del borrador; después solo ve los pushes de corrección. Sus comentarios se leen y se adjudican; sin revisión completada y estado verde del SHA actual, el merge espera. La falta de cuota se declara. |
 | **David** | el dueño | Solo lee el Telegram de cierre y el tablero. Preaprobó por escrito lo que la fase necesita. |
 
 El kit no limita el merge por identidad o rol del agente. La lista de preferencia pertenece a Claw y puede incluir cualquier CLI cuyo binario, modo de permisos y arranque haya verificado. Cualquier agente con acceso al worktree puede ejecutar la misma ruta del kit.
