@@ -1,7 +1,7 @@
-[AVANZA] Corrida, 2 de 5 partes terminadas
-Que cambio: un carril termino su parte y aun no se recoge
-Que sigue: trabajan 2 sesiones; quedan 4 horas y 58 minutos de ventana de trabajo; GitHub: sin verificar
-Que necesito de ti: nada
+▶️ [AVANZA] Fase 9: cierre de corridas autónomas (abrió 12:00), 2 de 5 partes terminadas
+Qué cambió: un carril termino su parte y aun no se recoge
+Qué sigue: trabajan 2 sesiones; quedan 4 horas y 58 minutos de ventana de trabajo; GitHub: sin verificar
+Qué necesito de ti: nada
 --- detalle (para el vigia; no va a David) ---
 corrida m-listo abierta desde 2026-09-19T12:00:00+0000, vigia claw
 sesion m-lead (lead, glm): trabajando

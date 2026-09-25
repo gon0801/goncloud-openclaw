@@ -27,6 +27,16 @@ export type TareaSuelta = {
  * descripción segura derivada del estado, nunca el texto crudo ni prosa
  * inventada. Los acentos y el lenguaje natural válido pasan siempre.
  */
+// `\b` de JS solo conoce `[A-Za-z0-9_]`: pegado a una palabra acentuada
+// ("práctica") corta el límite de la palabra JUSTO tras la parte ASCII y
+// "pr" (de `prs?`) queda "de palabra completa" por accidente, aunque la
+// palabra real sea otra. Estas tres listas van con un límite consciente de
+// Unicode (`(?<![\p{L}\p{N}_])`/`(?![\p{L}\p{N}_])`, con la bandera "u") para
+// no tumbar prosa en español con acentos — medido 2026-09-25 con "práctica".
+function limiteUnicode(alternativas: string): string {
+  return `(?<![\\p{L}\\p{N}_])(?:${alternativas})(?![\\p{L}\\p{N}_])`;
+}
+
 const JERGA_RE = new RegExp(
   "`"
   + "|\\\\[\\w.~$-]"
@@ -35,10 +45,10 @@ const JERGA_RE = new RegExp(
   + "|(^|[\\s(>\"'])(\\/[\\w.~_-]+|~\\/|\\.\\.?\\/)"
   + "|(?<=[\\s(>\"'^]|^)(?=[\\w.~_-]*[A-Za-z])[\\w.~_-]+\\/[\\w.~_-]+"
   + "|\\b[\\w-]+\\.(ts|js|tsx|jsx|mjs|cjs|json|md|markdown|sh|bash|ps1|psm1|py|rb|go|rs|java|kt|yml|yaml|toml|ini|cfg|conf|txt|log|csv|tsv)\\b"
-  + "|\\b(commit\\w*|merg\\w*|rebase\\w*|push\\w*|pull request|prs?|worktrees?|branches?|ramas?|repos?|ci|hooks?|scripts?)\\b"
-  + "|\\b(git|npm|node|openclaw|tmux|cron|docker|kubectl|gh|psql|ssh|curl|bash|pwsh)\\b"
-  + "|\\b(RPC|JSON|API|SHA|CLI|TDD|URL|SDK)\\b",
-  "i",
+  + "|" + limiteUnicode("commit\\w*|merg\\w*|rebase\\w*|push\\w*|pull request|prs?|worktrees?|branches?|ramas?|repos?|ci|hooks?|scripts?")
+  + "|" + limiteUnicode("git|npm|node|openclaw|tmux|cron|docker|kubectl|gh|psql|ssh|curl|bash|pwsh")
+  + "|" + limiteUnicode("RPC|JSON|API|SHA|CLI|TDD|URL|SDK"),
+  "iu",
 );
 
 function traeSha(s: string): boolean {
@@ -62,7 +72,7 @@ export function sanearTextoPropietario(s: string): string | null {
   return s;
 }
 
-const ETIQUETAS_V1 = ["AVANZA", "DETENIDA", "NECESITO TU RESPUESTA", "CERRADA"] as const;
+const ETIQUETAS_V1 = ["ABIERTA", "AVANZA", "DETENIDA", "NECESITO TU RESPUESTA", "CERRADA"] as const;
 
 export type EtiquetaV1 = (typeof ETIQUETAS_V1)[number];
 
@@ -72,31 +82,50 @@ function sinSaltoFinal(texto: string): string[] {
   return partes;
 }
 
+// Prefijos que puede traer la línea 1, antes de `[ETIQUETA]`: `▶️ ` en una
+// corrida real, `🧪 PRÁCTICA — no contestes ` en una de práctica, y el
+// `[SIMULACRO] ` histórico (mensajes viejos ya grabados).
+const PREFIJOS_LINEA1 = ["🧪 PRÁCTICA — no contestes ", "▶️ ", "[SIMULACRO] "];
+
+function quitarPrefijoLinea1(linea: string): string {
+  for (const p of PREFIJOS_LINEA1) {
+    if (linea.startsWith(p)) return linea.slice(p.length);
+  }
+  return linea;
+}
+
 /**
  * Equivalente TypeScript del validador compartido de `seguimiento.v1`
  * (`mensaje_valido` en `scripts/mac/corrida/lib.sh`): cuatro líneas, etiqueta
- * cerrada, avance `N de M partes` o `avance desconocido` (extensión mínima
- * para conteos que no se pueden expresar honestamente), prefijos `Que`
- * con contenido, reglas de `Comando: ` y la misma jerga del límite de
- * lenguaje. Devuelve la etiqueta cuando todo cuadra.
+ * cerrada (incluida `ABIERTA`), avance `N de M partes` o `avance
+ * desconocido` (extensión mínima para conteos que no se pueden expresar
+ * honestamente; `CERRADA` y `ABIERTA` no lo exigen — `ABIERTA` puede no
+ * saber todavía cuántas partes tiene), prefijos `Que`/`Qué` con contenido,
+ * reglas de `Comando: ` y la misma jerga del límite de lenguaje — aplicada
+ * solo al cuerpo (líneas 2 a 4): la línea 1 trae el nombre de la corrida, un
+ * dato que quien manda el mensaje no controla, y ya se saneó antes
+ * (`corrida_encabezado`). Devuelve la etiqueta cuando todo cuadra.
  */
 export function validarMensajeV1(texto: string): { ok: true; etiqueta: EtiquetaV1 } | { ok: false } {
   if (typeof texto !== "string") return { ok: false };
   const lineas = sinSaltoFinal(texto);
   if (lineas.length !== 4) return { ok: false };
   const [l1raw, l2, l3, l4raw] = lineas as [string, string, string, string];
-  const primera = l1raw.startsWith("[SIMULACRO] ") ? l1raw.slice("[SIMULACRO] ".length) : l1raw;
-  const m = /^\[(AVANZA|DETENIDA|NECESITO TU RESPUESTA|CERRADA)\] /.exec(primera);
+  const primera = quitarPrefijoLinea1(l1raw);
+  const m = /^\[(ABIERTA|AVANZA|DETENIDA|NECESITO TU RESPUESTA|CERRADA)\] /.exec(primera);
   if (m === null) return { ok: false };
   const etiqueta = m[1] as EtiquetaV1;
   const resto = primera.slice(m[0].length);
   if (resto === "") return { ok: false };
-  if (etiqueta !== "CERRADA" && !(/[0-9]+ de [0-9]+ partes/.test(resto) || /avance desconocido/.test(resto))) {
+  if (
+    etiqueta !== "CERRADA" && etiqueta !== "ABIERTA"
+    && !(/[0-9]+ de [0-9]+ partes/.test(resto) || /avance desconocido/.test(resto))
+  ) {
     return { ok: false };
   }
-  if (!/^Que cambio: .+/.test(l2)) return { ok: false };
-  if (!/^Que sigue: .+/.test(l3)) return { ok: false };
-  if (!/^Que necesito de ti: .+/.test(l4raw)) return { ok: false };
+  if (!/^(Que cambio|Qué cambió): .+/.test(l2)) return { ok: false };
+  if (!/^(Que sigue|Qué sigue): .+/.test(l3)) return { ok: false };
+  if (!/^(Que necesito de ti|Qué necesito de ti): .+/.test(l4raw)) return { ok: false };
   if (/Comando: /.test(l1raw) || /Comando: /.test(l2) || /Comando: /.test(l3)) return { ok: false };
   const marcas4 = l4raw.match(/Comando: /g) ?? [];
   let cuarta = l4raw;
@@ -110,12 +139,12 @@ export function validarMensajeV1(texto: string): { ok: true; etiqueta: EtiquetaV
   } else if (marcas4.length > 0) {
     return { ok: false };
   }
-  const cuerpo4 = cuarta.replace(/^Que necesito de ti: /, "").replace(/\s+$/, "");
+  const cuerpo4 = cuarta.replace(/^(Que necesito de ti|Qué necesito de ti): /, "").replace(/\s+$/, "");
   if (cuerpo4 === "") return { ok: false };
-  // El mensaje completo une líneas con `\n`, que el saneo correctamente
-  // rechaza: el límite de lenguaje se aplica por línea, sobre las mismas
-  // cuatro piezas que componían el mensaje entero.
-  if ([primera, l2, l3, cuarta].some((linea) => sanearTextoPropietario(linea) === null)) {
+  // El límite de lenguaje se aplica solo al cuerpo (líneas 2 a 4): la línea 1
+  // (`primera`) trae el nombre de la corrida y queda fuera, igual que en
+  // `mensaje_valido` de lib.sh.
+  if ([l2, l3, cuarta].some((linea) => sanearTextoPropietario(linea) === null)) {
     return { ok: false };
   }
   return { ok: true, etiqueta };

@@ -348,6 +348,31 @@ printf '%s' "$ultima" | grep -q '"ok": false' \
 printf '%s' "$ultima" | grep -q '"message_id": null' \
   || fail "el envio fallido no quedo con message_id:null: $ultima"
 
+# (6e) BLOQUEANTE del revisor: un runbook cuyo titulo trae jerga (aqui "CI")
+# no tumba los mensajes de esa corrida ni la deja atorada sin poder cerrar.
+# corrida_encabezado cae al id, y abrir/cerrar SIGUEN mandando su aviso.
+RB_JERGA="$PWD/scripts/tests/fixtures/corrida/runbook-titulo-jerga.md"
+bash "$CORR" abrir t-jerga --runbook "$RB_JERGA" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir con un runbook de titulo con jerga fallo"
+enc_jerga="$(corrida_encabezado t-jerga)"
+printf '%s' "$enc_jerga" | grep -q '^t-jerga (abrió' \
+  || fail "corrida_encabezado no cayo al id con un titulo con jerga: $enc_jerga"
+abierta_jerga="$(grep '"etiqueta": *"ABIERTA"' "$T/corridas/t-jerga/mensajes.jsonl" | tail -1)"
+[ -n "$abierta_jerga" ] || fail "abrir con titulo con jerga no dejo el aviso ABIERTA"
+printf '%s' "$abierta_jerga" | grep -q '"ok": *true' \
+  || fail "el aviso ABIERTA con titulo con jerga no salio ok: $abierta_jerga"
+bash "$CORR" cerrar t-jerga >/dev/null 2>&1 \
+  || fail "cerrar con un runbook de titulo con jerga fallo (la corrida quedaria atorada)"
+grep -q '"estado": *"cerrada"' "$T/corridas/t-jerga/registro.json" \
+  || fail "t-jerga no quedo cerrada"
+cerrada_jerga="$(grep '"etiqueta": *"CERRADA"' "$T/corridas/t-jerga/mensajes.jsonl" | tail -1)"
+[ -n "$cerrada_jerga" ] || fail "cerrar con titulo con jerga no dejo el aviso CERRADA"
+printf '%s' "$cerrada_jerga" | grep -q '"ok": *true' \
+  || fail "el aviso CERRADA con titulo con jerga no salio ok: $cerrada_jerga"
+# 9.2: en una corrida real TODOS los mensajes llevan el prefijo ▶️, no solo ABIERTA.
+texto_json "$cerrada_jerga" | grep -q '^▶️ \[CERRADA\]' \
+  || fail "el aviso CERRADA de una corrida real no trae su prefijo: $cerrada_jerga"
+
 # (9) con el entorno vacio se usa la misma tabla del registro.
 : > "$TMUX_LOG"
 env -i PATH="$T/bin:/opt/homebrew/bin:/usr/bin:/bin" HOME="$HOME" CORRIDA_STATE="$T/corridas" \
@@ -909,6 +934,14 @@ necesito_linea="$(grep "message send" "$LLAMADAS" | tail -1)"
 printf '%s' "$necesito_linea" | grep -q "NECESITO TU RESPUESTA" || fail "no salio la etiqueta NECESITO TU RESPUESTA"
 printf '%s' "$necesito_linea" | grep -q -- "--silent" && fail "NECESITO TU RESPUESTA salio silenciosa"
 printf '%s' "$necesito_linea" | grep -qF -- "-t $DESTINO" || fail "NECESITO TU RESPUESTA sin destino"
+# t1 es una corrida de practica (simulacro=true, abierta en (0)): el
+# "necesito" y el "Comando: " del llamador se ignoran por completo. Si se
+# revierte el if de simulacro en corrida_mensaje, esto se pone rojo.
+grep -q 'Comando: ' "$LLAMADAS" && fail "NECESITO TU RESPUESTA en practica mando un Comando: de referencia"
+grep -qF 'es una prueba, se resuelve sola' "$LLAMADAS" \
+  || fail "NECESITO TU RESPUESTA en practica no avisa que se resuelve sola: $(cat "$LLAMADAS")"
+grep -qF 'responder si o no' "$LLAMADAS" \
+  && fail "NECESITO TU RESPUESTA en practica mando el necesito real del llamador"
 corrida_mensaje t1 DETENIDA "1 de 2 partes terminadas" "la corrida se detuvo por un percance" "se retoma cuando este claro" "nada" \
   || fail "el mensaje DETENIDA fallo"
 detenida_linea="$(grep "message send" "$LLAMADAS" | tail -1)"
