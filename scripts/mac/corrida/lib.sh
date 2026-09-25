@@ -530,8 +530,13 @@ EOF
 # Validador de seguimiento.v1 — el criterio unico vive aqui y la prueba 9.1 lo
 # ejercita. Cuatro lineas: etiqueta cerrada y avance "N de M partes" en la linea 1
 # (CERRADA queda solo con resto no vacio: ya no hay nada que contar), prefijos
-# "Que cambio: ", "Que sigue: ", "Que necesito de ti: " con contenido no vacio.
-# El prefijo "[SIMULACRO] " se quita de la primera linea y se valida sobre una copia.
+# "Que cambio: "/"Qué cambió: ", "Que sigue: "/"Qué sigue: ",
+# "Que necesito de ti: "/"Qué necesito de ti: " con contenido no vacio (las dos
+# formas, con y sin acento, pasan: lo que emite corrida_mensaje ya lleva acento,
+# pero mensajes viejos sin acentuar siguen siendo validos).
+# El prefijo de practica ("PRACTICA — no contestes ") o de apertura real ("▶️ ")
+# se quita de la primera linea (junto con el "[SIMULACRO] " historico) y se
+# valida sobre una copia.
 # El marcador "Comando: " es la referencia textual del contrato: UN segmento al
 # final de la linea 4, solo en "NECESITO TU RESPUESTA", con contenido no vacio y
 # de hasta 200 caracteres; en las lineas 1-3, fuera de esa etiqueta o repetido es rojo.
@@ -541,9 +546,9 @@ mensaje_valido() { # $1 archivo; 0 = cumple seguimiento.v1
   [ "$(awk 'END{print NR}' "$m")" -eq 4 ] || return 1
   local C; C="$(mktemp)" || return 1
   cp "$m" "$C"
-  sed -i.bak '1s/^\[SIMULACRO\] //' "$C" && rm -f "$C.bak"
+  sed -E -i.bak '1s/^(🧪 PRÁCTICA — no contestes |▶️ |\[SIMULACRO\] )//' "$C" && rm -f "$C.bak"
   primera="$(head -1 "$C")"
-  printf '%s\n' "$primera" | grep -qE '^\[(AVANZA|DETENIDA|NECESITO TU RESPUESTA|CERRADA)\] ' || { rm -f "$C"; return 1; }
+  printf '%s\n' "$primera" | grep -qE '^\[(ABIERTA|AVANZA|DETENIDA|NECESITO TU RESPUESTA|CERRADA)\] ' || { rm -f "$C"; return 1; }
   etq="${primera%%]*}"; etq="${etq#[}"
   local pref; pref="[$etq] "
   resto="${primera#"$pref"}"
@@ -552,7 +557,7 @@ mensaje_valido() { # $1 archivo; 0 = cumple seguimiento.v1
   if [ "$etq" != "CERRADA" ]; then
     printf '%s\n' "$resto" | grep -qE '[0-9]+ de [0-9]+ partes|avance desconocido' || { rm -f "$C"; return 1; }
   fi
-  awk 'NR==2 && !/^Que cambio: .+/ {m=1} NR==3 && !/^Que sigue: .+/ {m=1} NR==4 && !/^Que necesito de ti: .+/ {m=1} END{exit m?1:0}' "$C" \
+  awk 'NR==2 && !/^(Que cambio|Qué cambió): .+/ {m=1} NR==3 && !/^(Que sigue|Qué sigue): .+/ {m=1} NR==4 && !/^(Que necesito de ti|Qué necesito de ti): .+/ {m=1} END{exit m?1:0}' "$C" \
     || { rm -f "$C"; return 1; }
   awk 'NR<=3 && /Comando: /{m=1} END{exit m?1:0}' "$C" || { rm -f "$C"; return 1; }
   nmarc="$(awk 'NR==4{print gsub(/Comando: /,"")}' "$C")"
@@ -567,11 +572,29 @@ mensaje_valido() { # $1 archivo; 0 = cumple seguimiento.v1
     [ "$nmarc" -eq 0 ] || { rm -f "$C"; return 1; }
   fi
   # La linea 4 siempre trae la pregunta: no vale solo el comando textual.
-  awk 'NR==4{sub(/^Que necesito de ti: /,""); sub(/[[:space:]]+$/,""); exit ($0=="")?1:0}' "$C" \
+  awk 'NR==4{sub(/^(Que necesito de ti|Qué necesito de ti): /,""); sub(/[[:space:]]+$/,""); exit ($0=="")?1:0}' "$C" \
     || { rm -f "$C"; return 1; }
   if jerga_en_texto "$C"; then rm -f "$C"; return 1; fi
   rm -f "$C"
   return 0
+}
+
+# corrida_encabezado <id> -> "<Nombre> (abrió HH:MM)". El nombre es la primera
+# linea "# " del runbook registrado (su titulo); sin runbook legible o sin esa
+# linea, cae al id. La hora sale de 'inicio' del registro, que ya quedo escrita
+# en la hora local de quien abrio (date +%z): no hay conversion de zona aqui.
+corrida_encabezado() {
+  local reg; reg="$(registro_de "$1")"
+  local runbook nombre hora
+  runbook="$(json_campo "$reg" runbook)"
+  nombre=""
+  if [ -n "$runbook" ] && [ -r "$runbook" ]; then
+    nombre="$(grep -m1 '^# ' "$runbook" 2>/dev/null | sed 's/^# *//')"
+  fi
+  [ -n "$nombre" ] || nombre="$1"
+  hora="$(json_campo "$reg" inicio | cut -c12-16)"
+  [ -n "$hora" ] || hora="?"
+  printf '%s (abrió %s)' "$nombre" "$hora"
 }
 
 tsv_fila() { # $1 tsv, $2 cli -> "binario|flag|barra" (vacio si no hay fila)
@@ -598,30 +621,42 @@ flag_de_tabla() { # $1 flag de la tabla; rc 2 = invalido (mensaje a stderr)
 }
 
 # corrida_mensaje <id> <ETIQUETA> <avance> <cambio> <sigue> <necesito>
-# El avance es la linea 1 tras "Corrida, " (p. ej. "2 de 5 partes terminadas").
+# El avance es la referencia de la linea 1 (p. ej. "2 de 5 partes terminadas" o
+# "avance desconocido"). La linea 1 lleva ademas el nombre humano de la corrida
+# (titulo del runbook, o el id) y la hora en que abrio (corrida_encabezado).
 # Caso cerrado por etiqueta:
 # - AVANZA: valida contra seguimiento.v1 y acumula {at,cambio,sigue,necesito}
 #   en eventos-seguimiento.jsonl para el proximo corte global. NO llama a
 #   message send ni anota entrega en mensajes.jsonl: los llamadores viejos que
 #   mandaban por cambio ya no pueden saltarse el consolidador de 30 minutos.
-# - NECESITO TU RESPUESTA, DETENIDA, CERRADA: entrega inmediata por
-#   seguimiento.v1 con su fila en mensajes.jsonl, como siempre.
+# - ABIERTA, NECESITO TU RESPUESTA, DETENIDA, CERRADA: entrega inmediata por
+#   seguimiento.v1 con su fila en mensajes.jsonl, como siempre (ABIERTA y
+#   CERRADA van en silencio; DETENIDA y NECESITO suenan).
 # - Cualquier otra etiqueta falla cerrada: no se acumula ni se manda nada.
+# En una corrida de practica (simulacro=true), NECESITO TU RESPUESTA jamas
+# pide una decision de verdad: el "necesito" que trae el llamador se ignora y
+# se reemplaza por el aviso de que es una prueba que se resuelve sola — el
+# comando de referencia del llamador tampoco se manda (no hay nada que
+# aprobar).
 corrida_mensaje() {
   local id="$1" etq="$2" avance="$3" cambio="$4" sigue="$5" necesito="$6"
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
   case "$etq" in
-    AVANZA|NECESITO\ TU\ RESPUESTA|DETENIDA|CERRADA) ;;
+    ABIERTA|AVANZA|NECESITO\ TU\ RESPUESTA|DETENIDA|CERRADA) ;;
     *) echo "corrida_mensaje: etiqueta fuera del conjunto: $etq" >&2; return 1;;
   esac
   local sim; sim="$(json_campo "$reg" simulacro)"
+  if [ "$etq" = "NECESITO TU RESPUESTA" ] && [ "$sim" = "true" ]; then
+    necesito="nada: es una prueba, se resuelve sola"
+  fi
+  local enc; enc="$(corrida_encabezado "$id")"
   local M; M="$(mktemp)" || return 1
   {
-    printf '[%s] Corrida, %s\n' "$etq" "$avance"
-    printf 'Que cambio: %s\n' "$cambio"
-    printf 'Que sigue: %s\n' "$sigue"
-    printf 'Que necesito de ti: %s\n' "$necesito"
+    printf '[%s] %s, %s\n' "$etq" "$enc" "$avance"
+    printf 'Qué cambió: %s\n' "$cambio"
+    printf 'Qué sigue: %s\n' "$sigue"
+    printf 'Qué necesito de ti: %s\n' "$necesito"
   } > "$M"
   mensaje_valido "$M" || { echo "mensaje fuera de contrato" >&2; rm -f "$M"; return 1; }
   rm -f "$M"
@@ -646,19 +681,28 @@ open('$evtmp','w').write(json.dumps(d)+chr(10))
   fi
   local M2; M2="$(mktemp)" || return 1
   {
-    printf '[%s] Corrida, %s\n' "$etq" "$avance"
-    printf 'Que cambio: %s\n' "$cambio"
-    printf 'Que sigue: %s\n' "$sigue"
-    printf 'Que necesito de ti: %s\n' "$necesito"
+    printf '[%s] %s, %s\n' "$etq" "$enc" "$avance"
+    printf 'Qué cambió: %s\n' "$cambio"
+    printf 'Qué sigue: %s\n' "$sigue"
+    printf 'Qué necesito de ti: %s\n' "$necesito"
   } > "$M2"
-  [ "$sim" = "true" ] && sed -i.bak '1s/^/[SIMULACRO] /' "$M2" && rm -f "$M2.bak"
+  # El prefijo de la primera linea: en practica, avisa que no hace falta
+  # contestar (reemplaza el viejo "[SIMULACRO] "); en una apertura real,
+  # marca que la corrida arranco.
+  local pref=""
+  if [ "$sim" = "true" ]; then
+    pref="🧪 PRÁCTICA — no contestes "
+  elif [ "$etq" = "ABIERTA" ]; then
+    pref="▶️ "
+  fi
+  [ -n "$pref" ] && sed -i.bak "1s#^#$pref#" "$M2" && rm -f "$M2.bak"
   local dest; dest="$(json_campo "$reg" canal.destino)"
   [ -n "$dest" ] || { echo "registro sin destino" >&2; rm -f "$M2"; return 1; }
   local texto rc=0 sil="" salida
-  # seguimiento.v1: lo rutinario (CERRADA) en silencio; DETENIDA y
+  # seguimiento.v1: lo rutinario (ABIERTA, CERRADA) en silencio; DETENIDA y
   # NECESITO TU RESPUESTA suenan: en la etiqueta que pide respuesta, fallar hacia
   # silencio es el peor sentido de fallar.
-  case "$etq" in CERRADA) sil="--silent";; esac
+  case "$etq" in CERRADA|ABIERTA) sil="--silent";; esac
   texto="$(cat "$M2")"
   salida="$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" message send --channel telegram -t "$dest" $sil --json -m "$texto" 2>/dev/null)" || rc=1
   CORR_MSG_ETQ="$etq" CORR_MSG_OK="$rc" CORR_MSG_DIR="$CORRIDA_STATE/$id" CORR_MSG_TEXTO="$texto" CORR_MSG_SALIDA="$salida" python3 -c "

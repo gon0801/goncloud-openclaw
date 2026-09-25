@@ -104,7 +104,9 @@ abrir() { # $1 id, $2 sesiones json, $3 preaprobaciones json
 import json,os
 E=os.environ
 d={'schema':'corrida.v1','id':E['RID'],'runbook':'docs/runbooks/autopilot-fase9.md','vigia':'claw',
-   'simulacro':True,'canal':{'cron':'verif-sync-repos','destino':'DESTINO-9X'},
+   # simulacro:False - estas corridas de prueba ejercitan la escalacion real
+   # (9.2: en practica, "Comando: ..." se omite y no se pide respuesta).
+   'simulacro':False,'canal':{'cron':'verif-sync-repos','destino':'DESTINO-9X'},
    'cli_modos':E['RMODOS'],'cron_vigia_id':'cron-falso','inicio':'2026-09-19T09:00:00+0200',
    'timebox_horas':6,'sesiones':json.loads(E['RSES']),'preaprobaciones':json.loads(E['RPRE']),
    'estado':'abierta'}
