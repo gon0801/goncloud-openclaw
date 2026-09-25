@@ -325,6 +325,39 @@ corre r3b; [ $? -eq 1 ] || fail "(3b) rm -rf con fila Aprobado no se contesta"
 grep -qF 'NECESITO TU RESPUESTA' "$LLAMADAS" || fail "(3b) rm -rf debía escalar: $(cat "$LLAMADAS")"
 echo "ok (3): push a main y rm -rf escalan aunque el registro los traiga Aprobados"
 
+# (3c) BUG DE PRODUCCION 2026-09-26: la misma escalada, pero en una corrida de
+# PRACTICA y con el responder corriendo bajo el mismo entorno pelado que un
+# LaunchAgent (env -i, sin LANG ni LC_ALL). Antes del arreglo del locale,
+# mensaje_valido rechazaba el acento de "práctica" y el NECESITO TU RESPUESTA
+# de practica nunca salia (decisiones.jsonl quedaba con enviado:false).
+RID="c3p" RSES="$(seses r3p glm)" RPRE="$(pres 'git push origin main' Aprobado)" RMODOS="$T/modos.tsv" \
+RREG="$CORRIDA_STATE/c3p/registro.json" python3 - <<'PY'
+import json,os
+E=os.environ
+d={'schema':'corrida.v1','id':E['RID'],'runbook':'docs/runbooks/autopilot-fase9.md','vigia':'claw',
+   'simulacro':True,'canal':{'cron':'verif-sync-repos','destino':'DESTINO-9X'},
+   'cli_modos':E['RMODOS'],'cron_vigia_id':'cron-falso','inicio':'2026-09-19T09:00:00+0200',
+   'timebox_horas':6,'sesiones':json.loads(E['RSES']),'preaprobaciones':json.loads(E['RPRE']),
+   'estado':'abierta'}
+os.makedirs(os.path.dirname(E['RREG']),exist_ok=True)
+open(E['RREG'],'w').write(json.dumps(d,indent=1)+chr(10))
+os.chmod(E['RREG'],0o600)
+PY
+encender c3p
+pan r3p "$FIXD/permiso-push.txt"; espera r3p 'Allow once'
+: >"$LLAMADAS"
+env -i PATH="/opt/homebrew/bin:/usr/bin:/bin" HOME="$HOME" CORRIDA_STATE="$CORRIDA_STATE" \
+  OPENCLAW_BIN="$OPENCLAW_BIN" TMUX_BIN="$TMUX_BIN" \
+  bash "$CORR" responder r3p >/dev/null 2>&1
+rc=$?
+[ "$rc" -eq 1 ] || fail "(3c) sin LANG/LC_ALL, la escala de practica no dio rc 1 (rc=$rc)"
+grep -qF 'NECESITO TU RESPUESTA' "$LLAMADAS" || fail "(3c) sin LANG/LC_ALL, no escalo: $(cat "$LLAMADAS")"
+grep -qF 'es una prueba, se resuelve sola' "$LLAMADAS" \
+  || fail "(3c) sin LANG/LC_ALL, el mensaje de practica no salio acentuado (locale roto): $(cat "$LLAMADAS")"
+D="$(udec c3p)"
+[ "$(jcampo enviado "$D")" = "true" ] || fail "(3c) sin LANG/LC_ALL, la escala de practica no quedo enviado:true: $D"
+echo "ok (3c): sin LANG/LC_ALL (LaunchAgent pelado), la escala de practica igual sale acentuada"
+
 # (4) Comandos por tabla: Aprobado => acepta, Negado => niega, sin fila => escala.
 abrir c4 "$(seses r4a claude r4b claude r4c glm r4d claude)" "$(pres 'echo hola' Aprobado 'npm publish' Negado)"
 encender c4

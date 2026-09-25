@@ -981,6 +981,22 @@ corrida_mensaje t1 AVANZA "1 de 2 partes terminadas" "todo sigue en orden" "cont
 grep -q '"cambio": *"todo sigue en orden"' "$T/corridas/t1/eventos-seguimiento.jsonl" \
   || fail "AVANZA no dejo el evento acumulado"
 
+# (11c) BUG DE PRODUCCION 2026-09-26: el vigia corre como LaunchAgent sin LANG
+# ni LC_ALL. Sin locale, grep/sed/awk tratan los acentos como bytes sueltos y
+# mensaje_valido rechazaba CUALQUIER mensaje acentuado ("Qué cambió:",
+# "práctica"): en una corrida de practica, NECESITO TU RESPUESTA nunca salia
+# ("mensaje fuera de contrato"). t1 sigue siendo la corrida de practica
+# abierta en (0); esta llamada corre bajo el mismo entorno pelado que un
+# LaunchAgent (env -i, sin LANG ni LC_ALL).
+: > "$LLAMADAS"
+env -i PATH="$T/bin:/opt/homebrew/bin:/usr/bin:/bin" HOME="$HOME" CORRIDA_STATE="$T/corridas" \
+  OPENCLAW_BIN="$T/bin/openclaw" \
+  bash -c '. scripts/mac/corrida/lib.sh
+corrida_mensaje t1 "NECESITO TU RESPUESTA" "1 de 2 partes terminadas" "x" "y" "z"' \
+  || fail "sin LANG/LC_ALL, corrida_mensaje de practica fallo (mensaje fuera de contrato por el locale)"
+grep -qF 'es una prueba, se resuelve sola' "$LLAMADAS" \
+  || fail "sin LANG/LC_ALL, el mensaje de practica no salio con su texto acentuado: $(cat "$LLAMADAS")"
+
 # (11b) el despachador no carga lib ni subcomandos con ruta.
 out="$(bash "$CORR" lib 2>&1)"; rc=$?
 [ "$rc" -eq 2 ] || fail "corrida.sh lib debio rechazarse con rc 2 (rc=$rc)"
