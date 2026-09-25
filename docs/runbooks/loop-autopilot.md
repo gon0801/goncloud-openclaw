@@ -178,7 +178,7 @@ Por eso, si el lead muere, se cuelga o se queda sin cuota, claw relanza **otro h
 1. Lee `gh pr list` de los repos de la fase y los comentarios `APPROVE lead`.
 2. Lee el archivo de progreso y los worktrees. Si el progreso detiene un carril por una causa que el PR ya no tiene —medido 2026-09-20 en la Fase 9: carriles «esperando sello» con el PR ya MERGED en GitHub—, lo reconcilia con `bash scripts/reconciliar-progreso.sh <progress.json>`: para el estado del PR manda GitHub, se limpia solo ese motivo y la corrida sigue sin repetir un merge ya hecho.
 3. Retoma cada carril donde quedó. No repite trabajo ya aprobado.
-4. Lee y valida el último recibo aplicable al head actual. Si sigue válido, continúa sin repetir revisión; si el head cambió, construye evidencia para el delta y publica un recibo nuevo.
+4. Comprueba los checks y revisiones del SHA actual en GitHub. Reutiliza la evidencia vigente y verifica solo los cambios nuevos; no se exige recibo del lead.
 
 Un implementador caído se relanza **una vez** con el mismo encargo. Si el proveedor no tiene cuota, auth, binario o arranque, se detiene ese proceso y se releva al siguiente candidato compatible, conservando worktree, rama y brief. Una prueba roja o una revisión negativa no justifican cambiarlo.
 

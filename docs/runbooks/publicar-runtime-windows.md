@@ -175,7 +175,7 @@ publicados (`C:\Users\ehven\.openclaw-old-20260922\openclaw.json`):
 } }
 ```
 
-Hoy la config viva no los tiene: publicar sus archivos no los enciende.
+Verificado el 2026-09-24: ambos plugins están cargados y habilitados. Al cambiar su código, reinicia el gateway para cargarlo. Publicar archivos de un plugin nuevo no lo habilita.
 Restaurarlos es un `config.patch` por RPC (`openclaw gateway call config.patch`,
 no `openclaw config patch`, que escribe la config de la Mac) y **exige
 reiniciar el gateway**. El reinicio espera a que terminen las corridas en curso
