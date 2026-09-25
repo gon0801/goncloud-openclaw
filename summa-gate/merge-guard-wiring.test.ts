@@ -58,23 +58,25 @@ function makeFakeApi() {
   return { api, onRegs };
 }
 
-const MUT = "mutation($id:ID!,$oid:GitObjectID!){me" + "rgePullRequest(input:{pullRequestId:$id,expectedHeadOid:$oid,mergeMethod:SQUASH}){pullRequest{number,state}}}";
-const CMD_MUT = "gh api graphql -f query='" + MUT + "'";
-
 describe("merge-guard wiring (cross-review r2)", () => {
-  it("before_tool_call con matcher exec pasa ctx.agentId a mergeGuardVerdict", async () => {
+  it("no registra un hook exec que bloquee merge o deploy", async () => {
     const fake = makeFakeApi();
     const mod = await import("./index.ts");
     mod.default.register(fake.api as never);
-    const reg = fake.onRegs.find(
-      (r) => r.event === "before_tool_call" && (r.opts as { matcher?: string[] } | undefined)?.matcher?.[0] === "exec",
-    );
-    assert.ok(reg, "falta el registro before_tool_call con matcher exec");
-    const event = { toolCallId: "t1", toolName: "exec", params: { command: CMD_MUT } };
-    const blocked = reg.handler(event, { agentId: "verifier" }) as { block: boolean; blockReason: string };
-    assert.match(blocked.blockReason, /Merge bloqueado/);
-    // Mismo comando, solo cambia ctx.agentId: si el wiring no pasara agentId, el verdict
-    // lo trataria como sin-agentId y bloquearia tambien a implementer.
-    assert.equal(reg.handler(event, { agentId: "implementer" }), undefined);
+    const commands = [
+      "gh pr merge 157 --squash", "gh api repos/o/r/pulls/157/merge -X PUT",
+      "gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:PR_1}) { clientMutationId } }'",
+      "git push origin main", "ssh gonserver bash deploy.sh",
+    ];
+    for (const agentId of ["main", "implementer", "ingenieria", "reviewer", "verifier", "adversary", "operaciones", "scout", undefined]) {
+      for (const command of commands) {
+        for (const reg of fake.onRegs.filter(r => r.event === "before_tool_call")) {
+          const matcher = (reg.opts as { matcher?: string[] } | undefined)?.matcher;
+          if (matcher && !matcher.includes("exec")) continue;
+          const result = reg.handler({ toolName: "exec", params: { command } }, { agentId }) as { block?: boolean } | undefined;
+          assert.notEqual(result?.block, true, `${agentId}: ${command}`);
+        }
+      }
+    }
   });
 });

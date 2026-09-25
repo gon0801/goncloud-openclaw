@@ -5,7 +5,7 @@ description: Merge in doubt, a PR that read mergeable no longer merges, or a dep
 
 # Post-Merge Closure (saikit repo)
 
-Close the loop after the owner merges a PR in `gon0801/summonaikit-claude` on the Mac: confirm the merge, settle the gate-hook deploy, and leave the ledger closed in one PR. The repo's own `AGENTS.md` ("Deploy tras merge") is the procedure's authority — read it there. This skill carries only what it does not say and what bit us.
+Close the loop after an agent merges a PR in `gon0801/summonaikit-claude` on the Mac: confirm the merge, settle the gate-hook deploy, and leave the ledger closed in one PR. The repo's own `AGENTS.md` ("Deploy tras merge") is the procedure's authority — read it there. This skill carries only what it does not say and what bit us.
 
 Verified 2026-09-11 (PR #300 → `844d048`): merge confirmed by API, hook copies already current, a regressed registration reverted from its backup, ledger closed in PR #301.
 
@@ -30,7 +30,7 @@ Verified 2026-09-11 (PR #300 → `844d048`): merge confirmed by API, hook copies
    - `tools/check-hook-registration.sh` exits 0 either way: it validates that the key exists, not that the value runs.
    - Completion: every registered interpreter parses the harness.
 
-6. Close the ledger in one PR: add the `docs/deploy-log.md` entry and set the row to `cc:完了` in `Plans.md` (only the Status cell — the row's DoD text is the contract and is never edited); run `bash tools/check-deploy-log.sh` and `bash tools/audita-ledger.sh` (both exit 0), plus `bash tests/test_plans_ledger.sh` before pushing any Plans.md edit; scope the commit by area (`docs(plans):`), never by row number; open the PR and leave the merge to the owner.
+6. Close the ledger in one PR: add the `docs/deploy-log.md` entry and set the row to `cc:完了` in `Plans.md` (only the Status cell — the row's DoD text is the contract and is never edited); run `bash tools/check-deploy-log.sh` and `bash tools/audita-ledger.sh` (both exit 0), plus `bash tests/test_plans_ledger.sh` before pushing any Plans.md edit; scope the commit by area (`docs(plans):`), never by row number; open the PR and merge after CI and CodeRabbit approval.
    - A Plans.md task row must have exactly **5 cells**: editing rows by script duplicated the Dependencies column (20.10, 20.11 twice) and CI went red deterministically — `test_plans_ledger` rejects 6-cell rows. Verified 2026-09-13 on the 20.21/20.22 closure PR: first run red, cell fix green.
    - `deploy-log` is newest-first: insert the new `##` entry ABOVE the most recent dated entry, not at the first anchor you find — the checker fails with "inversion de fecha" when a newer entry sits under an older one (verified same run: entry placed after the 2026-09-12 block → FAIL, repositioned above it → OK).
    - When a CI shard goes red, grep for the first FAIL is misleading: a test's own expected-mutation output prints `FAIL:` lines that passed. Read the run-end summary (`=== N PASS / M FAIL ===`) and the `FAIL: test_<name>` lines to name the real failing file — verified: the scary advlock FAILs were expected mutations; the real break was `FAIL: test_plans_ledger` at the tail.

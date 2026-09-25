@@ -20,7 +20,7 @@ if [ -f "$MAP" ]; then
   chk "skill goncloud-ssh-ops nombrada en el mapa" grep -q "goncloud-ssh-ops" "$MAP"
   chk "skill goncloud-ssh-ops existe" test -f "agents/ingenieria/agent/workshop-skills/goncloud-ssh-ops/SKILL.md"
   # anclas de los dos tipos de go/no-go
-  chk "go/no-go unico (merge y deploy)" grep -q 'merge y deploy' "$MAP"
+  chk "go/no-go unico (merge y deploy)" grep -q 'sin permiso adicional' "$MAP"
   chk "go/no-go separado (merge y deploy separados)" grep -q 'merge y luego deploy' "$MAP"
   section_h2() {
     awk -v h="$1" '

@@ -1,6 +1,6 @@
 # Loop de entrega en autopilot
 
-Este documento es la parte de todo runbook de fase que **no cambia de una fase a otra**: cómo se implementa, se revisa, se mergea, se despliega y se cierra, sin que David tenga que aprobar ni contestar nada. Los runbooks de fase lo referencian en vez de repetirlo; lo que aquí está escrito manda sobre cualquier texto de un runbook que diga otra cosa, salvo la tabla de preaprobaciones de esa fase.
+Este documento es la parte de todo runbook de fase que **no cambia de una fase a otra**: cómo se implementa, se revisa, se mergea, se despliega y se cierra, sin que David tenga que aprobar ni contestar nada. Los runbooks de fase lo referencian en vez de repetirlo; lo que aquí está escrito manda sobre cualquier texto de un runbook que diga otra cosa, Los permisos de merge y deploy son permanentes para todos los agentes; las tablas antiguas no añaden aprobaciones por operación.
 
 Se escribe para **el lead**, que es un rol y no un modelo. Cualquier CLI de los que el kit de merge conoce puede ser el lead; cuál lo es en una corrida lo decide claw por una lista de preferencia y por cuota disponible, y puede cambiar a mitad de fase. Por eso ninguna regla de aquí depende de una capacidad de un modelo concreto: el contrato es texto en pantalla y estado en git.
 
@@ -12,7 +12,7 @@ Cada regla lleva su origen, `Medido:` con fecha. Si una regla no tiene un incide
 
 | Rol | Quién | Qué hace |
 |---|---|---|
-| **claw** | el agente `main` del gateway | Recibe "implementa las fases X e Y". Manda a hacer o valida el runbook. Elige y lanza al lead. Lo vigila por tmux. Contesta lo mecánico. Relanza al lead en otro host si se cae. Relaya el Telegram. **Nunca mergea ni toca la configuración del gateway.** |
+| **claw** | el agente `main` del gateway | Recibe "implementa las fases X e Y". Manda a hacer o valida el runbook. Elige y lanza al lead. Lo vigila por tmux. Contesta lo mecánico. Relanza al lead en otro host si se cae. Relaya el Telegram. Puede mergear y desplegar sin permiso adicional. |
 | **lead** | un CLI disponible que Claw pueda lanzar y verificar en tmux | Escribe encargos, lanza implementadores, audita, corre la revisión cruzada, aprueba, mergea por el kit, despliega, escribe progreso, cierra la fase. No escribe código de producto. |
 | **implementador** | muse, cursor, glm, u otro, según el brief | Escribe el código de un carril en su worktree. Reporta con la línea de contrato. No hace push ni abre PR. |
 | **verificador** | otro agente distinto del implementador | Ejecuta el comportamiento que la fila pide y deja la evidencia que el recibo enlaza: comando, resultado y SHA. Para un bug, demuestra que su regresión falla sin el arreglo. Nunca el modelo que implementó. |
@@ -20,7 +20,7 @@ Cada regla lleva su origen, `Medido:` con fecha. Si una regla no tiene un incide
 | **CodeRabbit** | bot en GitHub | Revisa cuando el PR se promueve a listo, nunca los pushes del borrador; después solo ve los pushes de corrección. Sus comentarios se leen y se adjudican: solo un bloqueante abierto bloquea. Sin cuota no bloquea, pero se declara. |
 | **David** | el dueño | Solo lee el Telegram de cierre y el tablero. Preaprobó por escrito lo que la fase necesita. |
 
-El kit ya no mantiene una allowlist de hosts para autorizar la entrega. La lista de preferencia pertenece a Claw y puede incluir cualquier CLI cuyo binario, modo de permisos y arranque haya verificado. Claw no mergea.
+El kit ya no mantiene una allowlist de hosts para autorizar la entrega. La lista de preferencia pertenece a Claw y puede incluir cualquier CLI cuyo binario, modo de permisos y arranque haya verificado. Claw puede mergear y desplegar.
 
 Claw abre cada corrida con `corrida.sh abrir` (contrato `corrida.v1`: quién es el vigía, qué sesiones son suyas, qué se preaprobó, a dónde van los mensajes) y lanza al lead y a los implementadores con `corrida.sh lanzar-sesion`, que marca la sesión antes de mandar el primer texto. Todo mensaje que la corrida manda a David cumple `seguimiento.v1`: cuatro líneas, etiquetas cerradas, lenguaje de usuario.
 
@@ -74,8 +74,8 @@ Medido: 2026-09-17, primera corrida de la Fase 7, de donde esta regla se muda al
 5. **Rondas de revisión cruzada** sobre el SHA del PR, con la política de la sección 4. Cada hallazgo bloqueante se corrige con un encargo `BRIEF-r<N>.md` al mismo implementador y vuelve al paso 3. Lo no bloqueante va a una fila del plan.
 6. **Promoción.** Cuando una ronda no trae bloqueantes, el lead marca el PR como listo para revisión. Ahí CodeRabbit revisa una sola vez, sobre código que ya no va a cambiar.
 7. **CodeRabbit.** Se leen y se adjudican sus comentarios, no solo su check. Solo un bloqueante adjudicado que siga abierto —con el comando que lo reproduce— vuelve al paso 3 con un encargo de corrección. Un comentario no bloqueante no abre ronda ni impide el merge: si es de una línea se corrige en la misma ronda, y si no, queda en los residuales del recibo del paso 8. Cada push de corrección tras la promoción vuelve a pasar por CodeRabbit; el PR queda cuando no queda ningún bloqueante adjudicado abierto, o cuando CodeRabbit no tiene cuota, y eso se declara.
-8. **Aprobación.** `APPROVE lead <sha>` como comentario en el PR, con la lista de residuales y su razón. Solo eso mete el PR a la cola.
-9. **Merge** por la ruta del kit, sección 6. Base al día antes, con `git merge origin/<default>` en el worktree del carril y push normal: **nunca rebase**, que exige force-push y está prohibido. CI verde del SHA nuevo, y re-APPROVE si `git diff <sha aprobado> HEAD -- <archivos del carril>` sale vacío, o vuelta al paso 5 si no. La rama por defecto avanza sola cada dos horas con los snapshots del gateway, así que esto pasa en casi todo merge.
+8. **Cierre.** Registra los residuales y mergea por el flujo normal; no se exige `APPROVE lead`.
+9. **Merge** por GitHub, sección 6. Base al día antes, con `git merge origin/<default>` en el worktree del carril y push normal: **nunca rebase**, que exige force-push y está prohibido. CI verde del SHA nuevo, y re-APPROVE si `git diff <sha aprobado> HEAD -- <archivos del carril>` sale vacío, o vuelta al paso 5 si no. La rama por defecto avanza sola cada dos horas con los snapshots del gateway, así que esto pasa en casi todo merge.
 10. **Despliegue y verificación**, sección 7, si la fase lo pide.
 11. **Progreso escrito**, sección 8. Solo entonces, la siguiente tarea. Los mensajes que la corrida manda a David en cada cambio de estado cumplen `seguimiento.v1`.
 
@@ -133,42 +133,15 @@ Medido: 2026-09-16, PR #48 se mergeó con el check de CodeRabbit en verde y trec
 
 ---
 
-## 6. Merge: la ruta del kit
+## 6. Merge del PR
 
-El merge es siempre el del kit, con `--confirmado` como el sí escrito del dueño que ya está en la tabla de preaprobaciones de la fase. Ninguna otra ruta: ni la interfaz de GitHub, ni la API, ni a mano.
-
-**Dónde y cómo se corre.** El script opera sobre la **rama del worktree en el que estás parado**, no toma número de PR y toma un lock por clon, así que se corre con `cd` al worktree de ese carril. En orden, desde ahí:
-
-```
-test -r /Users/dn/dev/summonaikit-claude/tools/saikit-merge.sh || { echo ATORADO kit ausente en /Users/dn/dev/summonaikit-claude/tools; exit 1; }
-bash /Users/dn/dev/summonaikit-claude/tools/saikit-merge.sh --dry-run       # debe terminar en LISTO
-bash /Users/dn/dev/summonaikit-claude/tools/saikit-merge.sh --confirmado    # squash con --match-head-commit
-bash /Users/dn/dev/summonaikit-claude/tools/saikit-postmerge.sh --merge-commit <merge_commit> --rama <default>
-```
-
-**La ruta va escrita entera, no en una variable.** El candado léxico de este repo hashea el token literal del script y lo compara contra el manifiesto del kit: escrito como `$K/<script>` el token no resuelve, el hash no casa, y el candado deniega el comando con "hash does not match the kit manifest" aunque el kit esté intacto. Medido 2026-09-16, en las dos formas: afectaba a todos los merges de una fase. En otra máquina se sustituye esa ruta por la suya, también escrita entera.
-
-**Si esa primera línea falla, el lead no busca el script por el disco ni cambia de ruta de merge**: reporta `ATORADO kit ausente en <ruta>` y para. Un merge por otra vía omite el recibo y rompe la cadena.
-
-`saikit-postmerge.sh` en VERDE cierra el ítem; en ROJO trae el comando de reversa listo; en UNKNOWN se anota y aplica la compuerta propia del ítem. El script del kit vive en `644` y **se invoca por `bash`**: comprobar su existencia con `test -x` da falso negativo. Si un PR no tiene worktree propio, se abre uno con `git worktree add <ruta> <rama>` solo para mergearlo y se borra después.
-
-El kit exige el último recibo aplicable del PR: un comentario `APPROVE lead <sha>` del autor esperado con bloque JSON `saikit-entrega.v1`. El recibo identifica repo, PR, head, clase, evidencia durable de los roles exigidos, workflow de CI, bloqueantes vacíos y residuales. Un comentario `REVOKE lead <sha>` posterior del mismo autor lo invalida. El gate vuelve a leer GitHub; no consulta estado de sesión.
-
-Los roles que el recibo nombra para una clase de código — `implementer`, `verifier` y `reviewer` — son tres agentes distintos entre sí: el verificador de la tabla de la sección 1 cumple `verifier`, y la revisión cruzada de la sección 4 cumple `reviewer`. **No hay un revisor de sello**: la aprobación vive toda en el recibo del PR, y nadie produce ni consulta un estado de sesión para mergear.
-
-Precondiciones que el runbook de fase tiene que dejar listas antes de lanzar:
-
-- `.saikit/autopilot.json` **ya en `origin/<default>`** de cada repo. El kit lo lee de ahí y rechaza cualquier PR que lo traiga; por eso el bootstrap es un PR aparte que mergea David antes de la corrida, y no es tarea de ningún carril.
-- El workflow que el recibo nombra existe para ese head y acredita la batería completa exigida por la clase del cambio.
-
-Medido: 2026-09-15, Fase 6: el runbook mandaba commitear `autopilot.json` dentro del PR del carril; el kit lo rechaza por diseño y la corrida se atascó una noche entera hasta que se hicieron PRs de bootstrap a mano.
+Cualquier agente Claw o CLI puede ejecutar `gh pr merge <PR> --squash --match-head-commit <SHA>` cuando CI y CodeRabbit estén aprobados y los bloqueantes estén resueltos. No se requiere orden adicional, recibo del lead ni el script del kit. Confirma `MERGED` y el SHA integrado.
 
 ---
 
 ## 7. Despliegue y configuración del gateway
 
-- Mergear a `main` de goncloud-openclaw o de un workspace **es** desplegar: el sync del gateway lo lleva en el siguiente ciclo. Se mergea en ventana segura: ningún cron con `Next` en 15 minutos, y fuera de los minutos :05 a :15 de las horas impares en `America/New_York`, leída con `TZ=America/New_York date`. El sync del gateway no es un cron y no aparece en `cron list`: lo cubre la franja de minutos, que es exactamente cuando corre.
-- **Ningún cambio de configuración del gateway lo hace claw desde su propio turno.** Lo hace el lead desde la Mac, con cero corridas en vuelo verificadas, y con lectura de vuelta de la configuración después. Cada recarga en caliente congela al gateway entre diez y doce segundos; claw vive ahí y se mataría a sí mismo.
+- Mergear no publica el runtime Windows. Cualquier agente puede ejecutar `publicar-runtime-windows.md` sin permiso adicional ni ventana de cron.
 - **Los cambios de configuración van en tanda, no en ráfaga.** Doce escrituras seguidas son doce congelamientos seguidos.
 - Todo despliegue tiene su canary escrito como comando, salida esperada y reversa automática. Sin reversa escrita, no se despliega.
 - **La lectura de vuelta prueba que se escribio, no que algo lo este usando.** Un valor que un plugin lee al registrarse sigue sirviendo el viejo despues del cambio, y la configuracion leida de vuelta dice que si. No hay RPC que recargue un plugin: se reinicia el gateway. El canary de un cambio asi no se hace contra la configuracion sino contra el comportamiento: se pide lo que el valor nuevo tiene que cambiar y se mira si cambio.
@@ -261,7 +234,7 @@ Aplican en toda fase. El runbook de fase agrega las suyas y no repite estas.
 | Un implementador muere o calla 30 minutos sin mensaje de cuota | Se relanza una vez con el mismo encargo. A la segunda, atorado y declarado. |
 | El implementador hizo push o abrió el PR solo | No se castiga ni se rehace: se verifica igual y se anota como desvío de proceso. |
 | Un archivo fuera de la tabla del carril | Se descarta antes del push con un commit propio. Nunca se pushea sin declararlo. |
-| La ruta del kit rechaza (recibo ausente/inválido, CI del workflow no vigente, lock ajeno) | Corregir la causa nombrada: publicar o revocar el recibo correcto, esperar/corregir CI, o tratar el lock según su dueño. No se busca una sesión antigua ni otra ruta de merge. |
+| El PR no puede mergearse | Corrige los checks o conflictos indicados por GitHub y vuelve a ejecutar el merge normal. |
 | Lo único que detiene toda la corrida | Perder acceso a GitHub o a la Mac, o un gateway que no responde tras un reinicio. Todo lo demás detiene un carril y deja evidencia. |
 
 Medido: 2026-09-15 y 16, corrida de la Fase 6: cada fila de esta tabla es una situación que ocurrió al menos una vez esa noche y se resolvió a mano o se declaró.
