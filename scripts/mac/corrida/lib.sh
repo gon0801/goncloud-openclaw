@@ -591,8 +591,12 @@ mensaje_valido() { # $1 archivo; 0 = cumple seguimiento.v1
 # corrida_encabezado <id> -> "<Nombre> (abrió HH:MM)". El nombre es la primera
 # linea "# " del runbook registrado (su titulo), resuelto con runbook_de (las
 # rutas relativas del registro se resuelven igual que en cualquier otro
-# lector); sin runbook legible, sin esa linea, o si el titulo trae jerga
-# (mensaje_valido ya no la revisa en esta linea: se sanea aqui), cae al id.
+# lector); sin runbook legible, sin esa linea, si el titulo trae jerga
+# (mensaje_valido ya no la revisa en esta linea: se sanea aqui), o si el
+# titulo trae uno de los marcadores reservados del mensaje ("Comando: ",
+# "Que cambio:"/"Qué cambió:", "Que sigue:"/"Qué sigue:", "Que necesito de
+# ti:"/"Qué necesito de ti:") — un titulo asi rompe la forma del mensaje
+# aunque no sea jerga (CodeRabbit, 2026-09-25) — cae al id.
 # La hora sale de 'inicio' del registro, ya escrita en la hora local de quien
 # abrio (date +%z): no hay conversion de zona aqui, y si el formato no casa
 # queda "?" en vez de una hora inventada.
@@ -604,6 +608,11 @@ corrida_encabezado() {
   if [ -n "$runbook_crudo" ]; then
     runbook="$(runbook_de "$runbook_crudo")"
     [ -r "$runbook" ] && nombre="$(grep -m1 '^# ' "$runbook" 2>/dev/null | sed 's/^# *//')"
+  fi
+  if [ -n "$nombre" ]; then
+    printf '%s\n' "$nombre" \
+      | grep -qE 'Comando: |(Que cambio|Qué cambió): |(Que sigue|Qué sigue): |(Que necesito de ti|Qué necesito de ti): ' \
+      && nombre=""
   fi
   if [ -n "$nombre" ]; then
     local NT; NT="$(mktemp)" 2>/dev/null
@@ -659,11 +668,13 @@ flag_de_tabla() { # $1 flag de la tabla; rc 2 = invalido (mensaje a stderr)
 #   CERRADA van en silencio; DETENIDA y NECESITO suenan).
 # - Cualquier otra etiqueta falla cerrada: no se acumula ni se manda nada.
 # En una corrida de practica (simulacro=true), NECESITO TU RESPUESTA jamas
-# pide una decision de verdad: el "cambio" y el "necesito" que trae el
-# llamador se ignoran y se reemplazan por el aviso de que es una pregunta de
-# prueba que se resuelve sola — el comando de referencia del llamador tampoco
-# se manda (no hay nada que aprobar). En una corrida real, el "cambio" de
-# NECESITO TU RESPUESTA tambien se fija aqui (mismo texto para todo llamador).
+# pide una decision de verdad: NINGUN campo del cuerpo (cambio, sigue,
+# necesito) que trae el llamador se manda — los tres quedan fijos avisando
+# que es una pregunta de practica que se resuelve sola (mismo texto que usa
+# `estado --solo-mensaje` en estado.sh); el comando de referencia del
+# llamador tampoco se manda (no hay nada que aprobar). En una corrida real,
+# el "cambio" de NECESITO TU RESPUESTA tambien se fija aqui (mismo texto
+# para todo llamador).
 corrida_mensaje() {
   local id="$1" etq="$2" avance="$3" cambio="$4" sigue="$5" necesito="$6"
   local reg; reg="$(registro_de "$id")"
@@ -676,6 +687,7 @@ corrida_mensaje() {
   if [ "$etq" = "NECESITO TU RESPUESTA" ]; then
     if [ "$sim" = "true" ]; then
       cambio="Una parte de la prueba llegó a una pregunta de práctica."
+      sigue="Nada que hacer: la prueba sigue sola."
       necesito="nada: es una prueba, se resuelve sola"
     else
       cambio="Una parte de la corrida quedó esperando que decidas algo."

@@ -308,6 +308,10 @@ corre r3; [ $? -eq 1 ] || fail "(3) la lista dura no se contesta (rc 1)"
 [ "$(nteclas r3)" -eq 0 ] || fail "(3) ningún push a main se contesta con tecla"
 grep -qF 'NECESITO TU RESPUESTA' "$LLAMADAS" || fail "(3) debía escalar NECESITO TU RESPUESTA: $(cat "$LLAMADAS")"
 grep -qF 'Comando: git push origin main' "$LLAMADAS" || fail "(3) la escala debe citar el comando textual: $(cat "$LLAMADAS")"
+grep -qF 'Di sí para aceptar lo que la sesión pide o no para rechazarlo' "$LLAMADAS" \
+  || fail "(3) la pregunta real de NECESITO TU RESPUESTA perdio sus acentos: $(cat "$LLAMADAS")"
+grep -qF 'Di si para aceptar lo que la sesion pide' "$LLAMADAS" \
+  && fail "(3) la pregunta real de NECESITO TU RESPUESTA salio sin acentos: $(cat "$LLAMADAS")"
 grep -qF 'Qué cambió: Una parte de la corrida quedó esperando que decidas algo.' "$LLAMADAS" \
   || fail "(3) una corrida real no trae el texto fijo de NECESITO TU RESPUESTA: $(cat "$LLAMADAS")"
 grep -qF '0 de 3 partes terminadas' "$LLAMADAS" || fail "(3) la escala habla de partes de la corrida: $(cat "$LLAMADAS")"

@@ -373,6 +373,24 @@ printf '%s' "$cerrada_jerga" | grep -q '"ok": *true' \
 texto_json "$cerrada_jerga" | grep -q '^▶️ \[CERRADA\]' \
   || fail "el aviso CERRADA de una corrida real no trae su prefijo: $cerrada_jerga"
 
+# (6f) BLOQUEANTE del revisor (CodeRabbit, lib.sh:613): un titulo que repite
+# un marcador reservado del mensaje ("Comando: ") pasa jerga_en_texto pero
+# rompe la forma de la linea 1 igual que la jerga — tambien cae al id.
+RB_MARCADOR="$PWD/scripts/tests/fixtures/corrida/runbook-titulo-marcador.md"
+bash "$CORR" abrir t-marcador --runbook "$RB_MARCADOR" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir con un runbook de titulo con un marcador reservado fallo"
+enc_marcador="$(corrida_encabezado t-marcador)"
+printf '%s' "$enc_marcador" | grep -q '^t-marcador (abrió' \
+  || fail "corrida_encabezado no cayo al id con un titulo con un marcador reservado: $enc_marcador"
+abierta_marcador="$(grep '"etiqueta": *"ABIERTA"' "$T/corridas/t-marcador/mensajes.jsonl" | tail -1)"
+printf '%s' "$abierta_marcador" | grep -q '"ok": *true' \
+  || fail "el aviso ABIERTA con titulo-marcador no salio ok: $abierta_marcador"
+bash "$CORR" cerrar t-marcador >/dev/null 2>&1 \
+  || fail "cerrar con un runbook de titulo-marcador fallo (la corrida quedaria atorada)"
+cerrada_marcador="$(grep '"etiqueta": *"CERRADA"' "$T/corridas/t-marcador/mensajes.jsonl" | tail -1)"
+printf '%s' "$cerrada_marcador" | grep -q '"ok": *true' \
+  || fail "el aviso CERRADA con titulo-marcador no salio ok: $cerrada_marcador"
+
 # (9) con el entorno vacio se usa la misma tabla del registro.
 : > "$TMUX_LOG"
 env -i PATH="$T/bin:/opt/homebrew/bin:/usr/bin:/bin" HOME="$HOME" CORRIDA_STATE="$T/corridas" \
@@ -928,18 +946,28 @@ grep -q '"cron_vigia_id"' "$T/corridas/t1/registro.json" && fail "t1 conserva cr
 # (11) seguimiento.v1: NECESITO TU RESPUESTA y DETENIDA con notificacion;
 # AVANZA acumula para el corte global sin mandar.
 : > "$LLAMADAS"
-corrida_mensaje t1 "NECESITO TU RESPUESTA" "1 de 2 partes terminadas" "un dialogo espera tu decision" "la corrida sigue en marcha" "responder si o no" \
+corrida_mensaje t1 "NECESITO TU RESPUESTA" "1 de 2 partes terminadas" "un dialogo espera tu decision" \
+  "Di sí o no, decide y contesta esta respuesta. Comando: ~/bin/x" "responder si o no" \
   || fail "el mensaje NECESITO TU RESPUESTA fallo"
 necesito_linea="$(grep "message send" "$LLAMADAS" | tail -1)"
 printf '%s' "$necesito_linea" | grep -q "NECESITO TU RESPUESTA" || fail "no salio la etiqueta NECESITO TU RESPUESTA"
 printf '%s' "$necesito_linea" | grep -q -- "--silent" && fail "NECESITO TU RESPUESTA salio silenciosa"
 printf '%s' "$necesito_linea" | grep -qF -- "-t $DESTINO" || fail "NECESITO TU RESPUESTA sin destino"
-# t1 es una corrida de practica (simulacro=true, abierta en (0)): el
-# "necesito" y el "Comando: " del llamador se ignoran por completo. Si se
+# t1 es una corrida de practica (simulacro=true, abierta en (0)): NINGUN campo
+# del cuerpo (cambio, sigue, necesito) que trae el llamador se manda — ni
+# siquiera "sigue", con un texto que a proposito pide una decision. Si se
 # revierte el if de simulacro en corrida_mensaje, esto se pone rojo.
 grep -q 'Comando: ' "$LLAMADAS" && fail "NECESITO TU RESPUESTA en practica mando un Comando: de referencia"
+# El cuerpo son las lineas 2-4 del mensaje (linea 1 trae la etiqueta, que
+# incluye literalmente la palabra "RESPUESTA" y no cuenta como pedido de
+# decision del llamador).
+cuerpo_necesito="$(tail -n +2 "$LLAMADAS")"
+printf '%s' "$cuerpo_necesito" | grep -qiE 'Di s[ií]|decide|respuesta' \
+  && fail "NECESITO TU RESPUESTA en practica dejo pasar un pedido de decision del llamador: $cuerpo_necesito"
 grep -qF 'es una prueba, se resuelve sola' "$LLAMADAS" \
   || fail "NECESITO TU RESPUESTA en practica no avisa que se resuelve sola: $(cat "$LLAMADAS")"
+grep -qF 'Nada que hacer: la prueba sigue sola.' "$LLAMADAS" \
+  || fail "NECESITO TU RESPUESTA en practica no trae el sigue fijo: $(cat "$LLAMADAS")"
 grep -qF 'responder si o no' "$LLAMADAS" \
   && fail "NECESITO TU RESPUESTA en practica mando el necesito real del llamador"
 corrida_mensaje t1 DETENIDA "1 de 2 partes terminadas" "la corrida se detuvo por un percance" "se retoma cuando este claro" "nada" \

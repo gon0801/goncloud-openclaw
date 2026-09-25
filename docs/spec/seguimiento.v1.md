@@ -22,8 +22,9 @@ los traiga es rojo):
    hora es la de apertura, en la hora local de quien la abrió. El avance va
    como "N de M partes". En `CERRADA` basta un cierre en palabras: ya no
    queda nada que contar. En `ABIERTA`, si todavía no se sabe cuántas partes
-   tiene, el pedazo del avance se omite entero (la línea 1 termina en el
-   nombre); nunca se inventa un número ni se dice "desconocido" donde antes
+   tiene, se omite SOLO ese pedazo (la coma y el conteo): la línea 1 queda
+   `[ABIERTA] <Nombre> (abrió HH:MM)`, la hora de apertura se conserva
+   siempre; nunca se inventa un número ni se dice "desconocido" donde antes
    había datos. Fuera de esos dos casos, cuando el avance no se puede
    expresar honestamente con un conteo, la línea 1 admite el literal
    `avance desconocido` en lugar del conteo.
