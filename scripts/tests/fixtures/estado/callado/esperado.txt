@@ -1,6 +1,9 @@
-▶️ [DETENIDA] Fase 9: cierre de corridas autónomas (abrió 12:00), 2 de 5 partes terminadas
+▶️ 🔴 [DETENIDA] Fase 9: cierre de corridas autónomas (abrió 12:00), 2 de 5 partes terminadas
+
 Qué cambió: un carril lleva 31 minutos sin actividad en su pantalla
+
 Qué sigue: trabajan 2 sesiones; quedan 4 horas y 58 minutos de ventana de trabajo; GitHub: sin verificar
+
 Qué necesito de ti: nada
 --- detalle (para el vigia; no va a David) ---
 corrida m-callado abierta desde 2026-09-19T12:00:00+0000, vigia claw
