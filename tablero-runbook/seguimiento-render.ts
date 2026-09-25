@@ -85,13 +85,24 @@ function sinSaltoFinal(texto: string): string[] {
 // Prefijos que puede traer la línea 1, antes de `[ETIQUETA]`: `▶️ ` en una
 // corrida real, `🧪 PRÁCTICA — no contestes ` en una de práctica, y el
 // `[SIMULACRO] ` histórico (mensajes viejos ya grabados).
-const PREFIJOS_LINEA1 = ["🧪 PRÁCTICA — no contestes ", "▶️ ", "[SIMULACRO] "];
+const PREFIJOS_LINEA1 = ["🧪 PRÁCTICA — no contestes ", "▶️ ", "🟢 ", "🟠 ", "🔴 ", "✅ ", "[SIMULACRO] "];
 
 function quitarPrefijoLinea1(linea: string): string {
-  for (const p of PREFIJOS_LINEA1) {
-    if (linea.startsWith(p)) return linea.slice(p.length);
+  // v2: la linea 1 puede traer MAS DE UN prefijo (el de corrida y el emoji de
+  // estado, p. ej. "▶️ 🔴 [DETENIDA]"): se quitan todos, uno por vuelta.
+  let restante = linea;
+  let quito = true;
+  while (quito) {
+    quito = false;
+    for (const p of PREFIJOS_LINEA1) {
+      if (restante.startsWith(p)) {
+        restante = restante.slice(p.length);
+        quito = true;
+        break;
+      }
+    }
   }
-  return linea;
+  return restante;
 }
 
 /**
@@ -108,7 +119,9 @@ function quitarPrefijoLinea1(linea: string): string {
  */
 export function validarMensajeV1(texto: string): { ok: true; etiqueta: EtiquetaV1 } | { ok: false } {
   if (typeof texto !== "string") return { ok: false };
-  const lineas = sinSaltoFinal(texto);
+  // v2 (2026-09-25): el mensaje legible lleva lineas vacias entre bloques;
+  // no cuentan para la forma. Un v1 de 4 lineas pegadas sigue siendo valido.
+  const lineas = sinSaltoFinal(texto).filter((l: string) => l.trim() !== "");
   if (lineas.length !== 4) return { ok: false };
   const [l1raw, l2, l3, l4raw] = lineas as [string, string, string, string];
   const primera = quitarPrefijoLinea1(l1raw);
