@@ -66,7 +66,7 @@ EOF
   cmp -s "$T/$esc.out" "$FX/$esc/esperado.txt" \
     || fail "el parte de $esc no es el esperado byte a byte:
 $(diff "$FX/$esc/esperado.txt" "$T/$esc.out" | head -8)"
-  sed -n '1,4p' "$T/$esc.out" >"$T/$esc.msg"
+  sed '/^--- detalle/,$d' "$T/$esc.out" >"$T/$esc.msg"
   ( . scripts/mac/corrida/lib.sh && mensaje_valido "$T/$esc.msg" ) \
     || fail "el mensaje de $esc no pasa seguimiento.v1"
 done
@@ -138,7 +138,7 @@ grep -q "menos de un minuto" "$T/mb3.out" || fail "MB: un dialogo de segundos no
 PANEL_DIR="$T/paneles-avanza" WATCH_STATE_DIR="$T/watch-avanza" \
   bash "$CORR" estado m-avanza --solo-mensaje >"$T/solo.out" 2>/dev/null \
   || fail "--solo-mensaje fallo"
-[ "$(awk 'END{print NR}' "$T/solo.out")" = "4" ] || fail "--solo-mensaje no da cuatro lineas"
+[ "$(grep -cve '^[[:space:]]*$' "$T/solo.out")" = "4" ] || fail "--solo-mensaje no da las cuatro lineas del mensaje (con sus vacios de separacion v2)"
 cmp -s "$T/solo.out" "$T/avanza.msg" || fail "--solo-mensaje no es el mensaje del parte"
 
 # (2b) CodeRabbit (estado.sh:404-408): en practica, --solo-mensaje TAMBIEN

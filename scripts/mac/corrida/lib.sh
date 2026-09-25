@@ -546,10 +546,15 @@ EOF
 mensaje_valido() { # $1 archivo; 0 = cumple seguimiento.v1
   local m="$1" primera etq resto nmarc seg
   [ -f "$m" ] || return 1
-  [ "$(awk 'END{print NR}' "$m")" -eq 4 ] || return 1
   local C; C="$(mktemp)" || return 1
-  cp "$m" "$C"
+  # v2: las lineas vacias de separacion no cuentan (un mensaje v1 de 4 lineas
+  # pegadas sigue siendo valido).
+  grep -v '^[[:space:]]*$' "$m" > "$C"
+  [ "$(awk 'END{print NR}' "$C")" -eq 4 ] || { rm -f "$C"; return 1; }
+  # Dos pasadas: la linea 1 puede traer DOS prefijos (el de corrida y el emoji
+  # de estado, p. ej. "▶️ 🟢 [AVANZA]").
   sed -E -i.bak '1s/^(🧪 PRÁCTICA — no contestes |▶️ |\[SIMULACRO\] )//' "$C" && rm -f "$C.bak"
+  sed -E -i.bak '1s/^(🧪 PRÁCTICA — no contestes |▶️ |🟢 |🟠 |🔴 |✅ |\[SIMULACRO\] )//' "$C" && rm -f "$C.bak"
   primera="$(head -1 "$C")"
   printf '%s\n' "$primera" | grep -qE '^\[(ABIERTA|AVANZA|DETENIDA|NECESITO TU RESPUESTA|CERRADA)\] ' || { rm -f "$C"; return 1; }
   etq="${primera%%]*}"; etq="${etq#[}"
@@ -694,17 +699,27 @@ corrida_mensaje() {
     fi
   fi
   local enc; enc="$(corrida_encabezado "$id")"
+  # Emoji de estado (v2, pedido del dueño 2026-09-25: bloques separados y un
+  # vistazo basta): AVANZA 🟢, NECESITO TU RESPUESTA 🟠, DETENIDA 🔴, CERRADA
+  # ✅. ABIERTA no lleva otro: el prefijo de corrida (▶️ / 🧪) ya lo dice.
+  local emoji=""
+  case "$etq" in
+    AVANZA) emoji="🟢 " ;;
+    "NECESITO TU RESPUESTA") emoji="🟠 " ;;
+    DETENIDA) emoji="🔴 " ;;
+    CERRADA) emoji="✅ " ;;
+  esac
   local linea1
   if [ -n "$avance" ]; then
-    linea1="[$etq] $enc, $avance"
+    linea1="${emoji}[$etq] $enc, $avance"
   else
-    linea1="[$etq] $enc"
+    linea1="${emoji}[$etq] $enc"
   fi
   local M; M="$(mktemp)" || return 1
   {
-    printf '%s\n' "$linea1"
-    printf 'Qué cambió: %s\n' "$cambio"
-    printf 'Qué sigue: %s\n' "$sigue"
+    printf '%s\n\n' "$linea1"
+    printf 'Qué cambió: %s\n\n' "$cambio"
+    printf 'Qué sigue: %s\n\n' "$sigue"
     printf 'Qué necesito de ti: %s\n' "$necesito"
   } > "$M"
   mensaje_valido "$M" || { echo "mensaje fuera de contrato" >&2; rm -f "$M"; return 1; }
@@ -730,9 +745,9 @@ open('$evtmp','w').write(json.dumps(d)+chr(10))
   fi
   local M2; M2="$(mktemp)" || return 1
   {
-    printf '%s\n' "$linea1"
-    printf 'Qué cambió: %s\n' "$cambio"
-    printf 'Qué sigue: %s\n' "$sigue"
+    printf '%s\n\n' "$linea1"
+    printf 'Qué cambió: %s\n\n' "$cambio"
+    printf 'Qué sigue: %s\n\n' "$sigue"
     printf 'Qué necesito de ti: %s\n' "$necesito"
   } > "$M2"
   # El prefijo de la primera linea, en TODOS los mensajes de la corrida: en

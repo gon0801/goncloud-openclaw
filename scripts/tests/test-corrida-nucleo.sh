@@ -282,7 +282,7 @@ grep -q '"cambio": *"quedo lista la primera parte"' "$T/corridas/t1/eventos-segu
 corrida_mensaje t1 DETENIDA "1 de 2 partes terminadas" "quedo lista la primera parte" "sigue la parte de mensajes" "nada" \
   || fail "DETENIDA en simulacro fallo"
 enc_t1="$(corrida_encabezado t1)"
-printf '🧪 PRÁCTICA — no contestes [DETENIDA] %s, 1 de 2 partes terminadas\nQué cambió: quedo lista la primera parte\nQué sigue: sigue la parte de mensajes\nQué necesito de ti: nada\n' "$enc_t1" >"$T/esp-sim.txt"
+printf '🧪 PRÁCTICA — no contestes 🔴 [DETENIDA] %s, 1 de 2 partes terminadas\n\nQué cambió: quedo lista la primera parte\n\nQué sigue: sigue la parte de mensajes\n\nQué necesito de ti: nada\n' "$enc_t1" >"$T/esp-sim.txt"
 d=$(grep -n "OPENCLAW message send" "$LLAMADAS" | tail -1 | cut -d: -f1)
 tail -n +"$d" "$LLAMADAS" | sed '1s/.* -m //' >"$T/obtenido.txt"
 cmp -s "$T/esp-sim.txt" "$T/obtenido.txt" || fail "el texto enviado no es el de seguimiento.v1"
@@ -333,7 +333,7 @@ printf '%s' "$ultima" | grep -q '"message_id": 4242' \
   || fail "corrida_mensaje no extrajo el messageId del preambulo: $ultima"
 printf '%s' "$ultima" | grep -qE '"at": [0-9]+' \
   || fail "corrida_mensaje no guardo un at numerico: $ultima"
-texto_json "$ultima" | grep -q '🧪 PRÁCTICA — no contestes \[DETENIDA\]' \
+texto_json "$ultima" | grep -q '🧪 PRÁCTICA — no contestes 🔴 \[DETENIDA\]' \
   || fail "corrida_mensaje no guardo el texto con el prefijo de practica: $ultima"
 printf '%s' "$ultima" | grep -q "$DESTINO" \
   && fail "corrida_mensaje dejo el destino escrito en mensajes.jsonl: $ultima"
@@ -370,7 +370,7 @@ cerrada_jerga="$(grep '"etiqueta": *"CERRADA"' "$T/corridas/t-jerga/mensajes.jso
 printf '%s' "$cerrada_jerga" | grep -q '"ok": *true' \
   || fail "el aviso CERRADA con titulo con jerga no salio ok: $cerrada_jerga"
 # 9.2: en una corrida real TODOS los mensajes llevan el prefijo ▶️, no solo ABIERTA.
-texto_json "$cerrada_jerga" | grep -q '^▶️ \[CERRADA\]' \
+texto_json "$cerrada_jerga" | grep -q '^▶️ ✅ \[CERRADA\]' \
   || fail "el aviso CERRADA de una corrida real no trae su prefijo: $cerrada_jerga"
 
 # (6f) BLOQUEANTE del revisor (CodeRabbit, lib.sh:613): un titulo que repite
