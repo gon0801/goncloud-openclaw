@@ -1051,14 +1051,14 @@ fi
 FECHA_HOY="$(date +%Y-%m-%d)"
 [ -n "$SALIDA" ] || SALIDA="$REPO_RAIZ/docs/evidence/fase9-simulacro-$FECHA_HOY.md"
 
-sha_origin_main() { git -C "$REPO_RAIZ" rev-parse origin/main 2>/dev/null || echo "sin-resolver"; }
+sha_origin_main() { git -C "$REPO_RAIZ" rev-parse --verify -q origin/main 2>/dev/null || echo "sin-resolver"; }
 
 tabla_instalado() {
   local f
   printf '| archivo | blob en origin/main | blob instalado | igual |\n|---|---|---|---|\n'
   for f in corrida.sh cli-modos.tsv agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh; do
     local esp real igual
-    esp="$(git -C "$REPO_RAIZ" rev-parse "origin/main:scripts/mac/$f" 2>/dev/null || echo "sin-referencia")"
+    esp="$(git -C "$REPO_RAIZ" rev-parse --verify -q "origin/main:scripts/mac/$f" 2>/dev/null || echo "sin-referencia")"
     real="$(git -C "$REPO_RAIZ" hash-object "$HOME/bin/$f" 2>/dev/null || echo "sin-instalar")"
     [ "$esp" = "$real" ] && igual="si" || igual="no"
     printf '| %s | %s | %s | %s |\n' "$f" "$esp" "$real" "$igual"
@@ -1066,7 +1066,7 @@ tabla_instalado() {
   for f in "$REPO_RAIZ"/scripts/mac/corrida/*.sh; do
     local b esp real igual
     b="$(basename "$f")"
-    esp="$(git -C "$REPO_RAIZ" rev-parse "origin/main:scripts/mac/corrida/$b" 2>/dev/null || echo "sin-referencia")"
+    esp="$(git -C "$REPO_RAIZ" rev-parse --verify -q "origin/main:scripts/mac/corrida/$b" 2>/dev/null || echo "sin-referencia")"
     real="$(git -C "$REPO_RAIZ" hash-object "$HOME/bin/corrida/$b" 2>/dev/null || echo "sin-instalar")"
     [ "$esp" = "$real" ] && igual="si" || igual="no"
     printf '| corrida/%s | %s | %s | %s |\n' "$b" "$esp" "$real" "$igual"

@@ -82,7 +82,7 @@ corrida_preflight() {
     local def Esperado instalado
     def="$(git -C "$REPO" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')"
     [ -z "$def" ] && def="main"
-    Esperado="$(git -C "$REPO" rev-parse "origin/$def:scripts/mac/tmux-activity-watch.sh" 2>/dev/null)"
+    Esperado="$(git -C "$REPO" rev-parse --verify -q "origin/$def:scripts/mac/tmux-activity-watch.sh" 2>/dev/null)"
     instalado="$(git hash-object "$WATCH" 2>/dev/null)"
     if [ -n "$Esperado" ] && [ -n "$instalado" ]; then
       [ "$Esperado" = "$instalado" ] || razon "vigilante viejo"
