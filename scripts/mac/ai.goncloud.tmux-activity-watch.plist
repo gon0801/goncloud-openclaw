@@ -23,6 +23,11 @@
     <string>/Users/dn</string>
     <key>PATH</key>
     <string>/opt/homebrew/bin:/usr/bin:/bin</string>
+    <!-- Defensa en profundidad: lib.sh ya se autocorrige sin esto (2026-09-26),
+         pero un LaunchAgent sin locale rompe mas que corrida.sh (acentos en
+         general). -->
+    <key>LANG</key>
+    <string>en_US.UTF-8</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>

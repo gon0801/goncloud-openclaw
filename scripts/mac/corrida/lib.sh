@@ -2,6 +2,30 @@
 # corrida/lib.sh — biblioteca de corrida.sh (Fase 9, 9.2). No se ejecuta sola.
 # Todo subcomando lee del registro; nada del entorno salvo los _BIN y CORRIDA_STATE.
 # Compatible con /bin/bash 3.2 de macOS.
+#
+# El vigia corre como LaunchAgent sin LANG ni LC_ALL (medido en produccion,
+# 2026-09-26): con el locale en "C"/"POSIX", grep/sed/awk tratan los acentos
+# como bytes sueltos y mensaje_valido rechaza CUALQUIER mensaje con "Qué
+# cambió:" o "práctica" ("mensaje fuera de contrato"; en la corrida de
+# practica, el NECESITO nunca sale). Si el locale activo no es UTF-8, se fija
+# uno que si lo sea ANTES de que corra nada mas de este archivo — asi
+# corrida.sh, responder.sh, estado.sh y el vigia (que siempre cargan lib.sh
+# primero, nunca directo) quedan cubiertos con un solo arreglo.
+case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
+  *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) ;;
+  *)
+    CORR_LOCALE_UTF8=""
+    for CORR_LOCALE_CAND in en_US.UTF-8 C.UTF-8; do
+      if locale -a 2>/dev/null | grep -qiFx "$CORR_LOCALE_CAND"; then
+        CORR_LOCALE_UTF8="$CORR_LOCALE_CAND"
+        break
+      fi
+    done
+    [ -n "$CORR_LOCALE_UTF8" ] || CORR_LOCALE_UTF8="en_US.UTF-8"
+    export LC_ALL="$CORR_LOCALE_UTF8"
+    unset CORR_LOCALE_UTF8 CORR_LOCALE_CAND
+    ;;
+esac
 CORRIDA_STATE="${CORRIDA_STATE:-$HOME/.local/state/corridas}"
 OPENCLAW_BIN="${OPENCLAW_BIN:-$HOME/.openclaw/bin/openclaw}"
 if [ -z "${TMUX_BIN:-}" ]; then
