@@ -5,6 +5,9 @@
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
+texto_json() { # $1 linea de mensajes.jsonl -> su campo 'texto' decodificado (sin \uXXXX)
+  printf '%s' "$1" | python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('texto',''))"
+}
 
 CORR=scripts/mac/corrida.sh
 CORR_ABS="$PWD/scripts/mac/corrida.sh"
@@ -141,6 +144,20 @@ grep -q '"schema": *"corrida.v2"' "$T/corridas/t1/registro.json" || fail "abrir 
 grep -q '"seguimiento_global": *true' "$T/corridas/t1/registro.json" || fail "abrir no declara el reloj global"
 grep -q '"simulacro": *true' "$T/corridas/t1/registro.json" || fail "el registro no dice simulacro"
 
+# (0d) 9.2: abrir manda un aviso ABIERTA con el nombre de la corrida, y en
+# practica no pide respuesta ni deja el destino escrito.
+ultima_abierta="$(grep '"etiqueta": *"ABIERTA"' "$T/corridas/t1/mensajes.jsonl" | tail -1)"
+[ -n "$ultima_abierta" ] || fail "abrir no dejo el aviso ABIERTA en mensajes.jsonl"
+printf '%s' "$ultima_abierta" | grep -q '"ok": *true' \
+  || fail "el aviso ABIERTA no salio ok: $ultima_abierta"
+texto_json "$ultima_abierta" | grep -q "Runbook minimo del simulacro" \
+  || fail "el aviso ABIERTA no trae el nombre de la corrida: $ultima_abierta"
+texto_json "$ultima_abierta" | grep -q '🧪 PRÁCTICA — no contestes' \
+  || fail "el aviso ABIERTA en practica no trae el prefijo de practica: $ultima_abierta"
+printf '%s' "$ultima_abierta" | grep -q "$DESTINO" \
+  && fail "el aviso ABIERTA dejo el destino escrito: $ultima_abierta"
+: > "$LLAMADAS"
+
 # (0b) id invalido: nada de salir del directorio de estado ni inyectar comandos.
 bash "$CORR" abrir '../fuga' --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 \
   && fail "abrir acepto un id con ../"
@@ -253,8 +270,9 @@ corrida_mensaje t1 AVANZA "1 de 2 partes terminadas" "se integro el PR de mensaj
   && fail "el mensaje con jerga debio rechazarse"
 grep -q "se integro el PR" "$LLAMADAS" && fail "la jerga nunca sale del stub"
 
-# (6) simulacro: AVANZA acumula sin mandar; lo inmediato sale con prefijo y el
-# texto enviado ES el del contrato.
+# (6) simulacro: AVANZA acumula sin mandar; lo inmediato sale con el prefijo de
+# practica, el nombre de la corrida y el texto enviado ES el del contrato.
+: >"$LLAMADAS"
 corrida_mensaje t1 AVANZA "1 de 2 partes terminadas" "quedo lista la primera parte" "sigue la parte de mensajes" "nada" \
   || fail "AVANZA en simulacro debio acumular"
 grep -q 'message send' "$LLAMADAS" && fail "AVANZA en simulacro mando en vez de acumular"
@@ -263,15 +281,18 @@ grep -q '"cambio": *"quedo lista la primera parte"' "$T/corridas/t1/eventos-segu
 : >"$LLAMADAS"
 corrida_mensaje t1 DETENIDA "1 de 2 partes terminadas" "quedo lista la primera parte" "sigue la parte de mensajes" "nada" \
   || fail "DETENIDA en simulacro fallo"
-printf '[SIMULACRO] [DETENIDA] Corrida, 1 de 2 partes terminadas\nQue cambio: quedo lista la primera parte\nQue sigue: sigue la parte de mensajes\nQue necesito de ti: nada\n' >"$T/esp-sim.txt"
+enc_t1="$(corrida_encabezado t1)"
+printf '🧪 PRÁCTICA — no contestes 🔴 [DETENIDA] %s, 1 de 2 partes terminadas\n\nQué cambió: quedo lista la primera parte\n\nQué sigue: sigue la parte de mensajes\n\nQué necesito de ti: nada\n' "$enc_t1" >"$T/esp-sim.txt"
 d=$(grep -n "OPENCLAW message send" "$LLAMADAS" | tail -1 | cut -d: -f1)
 tail -n +"$d" "$LLAMADAS" | sed '1s/.* -m //' >"$T/obtenido.txt"
 cmp -s "$T/esp-sim.txt" "$T/obtenido.txt" || fail "el texto enviado no es el de seguimiento.v1"
+printf '%s' "$enc_t1" | grep -q "Runbook minimo del simulacro" \
+  || fail "corrida_encabezado no trae el titulo del runbook: $enc_t1"
 
-# (6b) el prefijo SIMULACRO de la primera linea no invalida; y no se reescribe el archivo.
-printf '[SIMULACRO] [AVANZA] Corrida, 1 de 2 partes terminadas\nQue cambio: quedo lista la primera parte\nQue sigue: sigue la parte de mensajes\nQue necesito de ti: nada\n' >"$T/prefijo.txt"
+# (6b) el prefijo de practica de la primera linea no invalida; y no se reescribe el archivo.
+printf '🧪 PRÁCTICA — no contestes [AVANZA] Fase 9, 1 de 2 partes terminadas\nQué cambió: quedo lista la primera parte\nQué sigue: sigue la parte de mensajes\nQué necesito de ti: nada\n' >"$T/prefijo.txt"
 cp "$T/prefijo.txt" "$T/prefijo.orig"
-mensaje_valido "$T/prefijo.txt" || fail "el prefijo SIMULACRO invalida un mensaje valido"
+mensaje_valido "$T/prefijo.txt" || fail "el prefijo de practica invalida un mensaje valido"
 cmp -s "$T/prefijo.txt" "$T/prefijo.orig" || fail "mensaje_valido reescribe el archivo de quien llama"
 
 # (6c) la ruta del cron es fisica y absoluta; una corrida NO simulacro no lleva prefijo.
@@ -290,9 +311,15 @@ bash "$CORR" abrir t-ns --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 
   || fail "abrir sin simulacro fallo"
 grep -q '"simulacro": *false' "$T/corridas/t-ns/registro.json" \
   || fail "el registro de t-ns no dice no-simulacro"
+ultima_abierta_ns="$(grep '"etiqueta": *"ABIERTA"' "$T/corridas/t-ns/mensajes.jsonl" | tail -1)"
+[ -n "$ultima_abierta_ns" ] || fail "abrir sin simulacro no dejo el aviso ABIERTA"
+texto_json "$ultima_abierta_ns" | grep -q '▶️ \[ABIERTA\]' \
+  || fail "el aviso ABIERTA de una corrida real no trae su prefijo: $ultima_abierta_ns"
+texto_json "$ultima_abierta_ns" | grep -q 'PRÁCTICA' \
+  && fail "el aviso ABIERTA de una corrida real trae el prefijo de practica: $ultima_abierta_ns"
 
 # (6d) corrida_mensaje guarda la prueba del mensaje: messageId extraido de un
-# stdout con preambulo, at numerico, texto con el prefijo de simulacro; el
+# stdout con preambulo, at numerico, texto con el prefijo de practica; el
 # destino nunca queda escrito. Envio fallido -> message_id null, ok false.
 : > "$T/corridas/t1/mensajes.jsonl"
 export MSJ_PREAMBULO="ruido de arranque del CLI
@@ -306,8 +333,8 @@ printf '%s' "$ultima" | grep -q '"message_id": 4242' \
   || fail "corrida_mensaje no extrajo el messageId del preambulo: $ultima"
 printf '%s' "$ultima" | grep -qE '"at": [0-9]+' \
   || fail "corrida_mensaje no guardo un at numerico: $ultima"
-printf '%s' "$ultima" | grep -q '\[SIMULACRO\] \[DETENIDA\] Corrida' \
-  || fail "corrida_mensaje no guardo el texto con el prefijo de simulacro: $ultima"
+texto_json "$ultima" | grep -q '🧪 PRÁCTICA — no contestes 🔴 \[DETENIDA\]' \
+  || fail "corrida_mensaje no guardo el texto con el prefijo de practica: $ultima"
 printf '%s' "$ultima" | grep -q "$DESTINO" \
   && fail "corrida_mensaje dejo el destino escrito en mensajes.jsonl: $ultima"
 
@@ -320,6 +347,49 @@ printf '%s' "$ultima" | grep -q '"ok": false' \
   || fail "el envio fallido no quedo con ok:false: $ultima"
 printf '%s' "$ultima" | grep -q '"message_id": null' \
   || fail "el envio fallido no quedo con message_id:null: $ultima"
+
+# (6e) BLOQUEANTE del revisor: un runbook cuyo titulo trae jerga (aqui "CI")
+# no tumba los mensajes de esa corrida ni la deja atorada sin poder cerrar.
+# corrida_encabezado cae al id, y abrir/cerrar SIGUEN mandando su aviso.
+RB_JERGA="$PWD/scripts/tests/fixtures/corrida/runbook-titulo-jerga.md"
+bash "$CORR" abrir t-jerga --runbook "$RB_JERGA" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir con un runbook de titulo con jerga fallo"
+enc_jerga="$(corrida_encabezado t-jerga)"
+printf '%s' "$enc_jerga" | grep -q '^t-jerga (abrió' \
+  || fail "corrida_encabezado no cayo al id con un titulo con jerga: $enc_jerga"
+abierta_jerga="$(grep '"etiqueta": *"ABIERTA"' "$T/corridas/t-jerga/mensajes.jsonl" | tail -1)"
+[ -n "$abierta_jerga" ] || fail "abrir con titulo con jerga no dejo el aviso ABIERTA"
+printf '%s' "$abierta_jerga" | grep -q '"ok": *true' \
+  || fail "el aviso ABIERTA con titulo con jerga no salio ok: $abierta_jerga"
+bash "$CORR" cerrar t-jerga >/dev/null 2>&1 \
+  || fail "cerrar con un runbook de titulo con jerga fallo (la corrida quedaria atorada)"
+grep -q '"estado": *"cerrada"' "$T/corridas/t-jerga/registro.json" \
+  || fail "t-jerga no quedo cerrada"
+cerrada_jerga="$(grep '"etiqueta": *"CERRADA"' "$T/corridas/t-jerga/mensajes.jsonl" | tail -1)"
+[ -n "$cerrada_jerga" ] || fail "cerrar con titulo con jerga no dejo el aviso CERRADA"
+printf '%s' "$cerrada_jerga" | grep -q '"ok": *true' \
+  || fail "el aviso CERRADA con titulo con jerga no salio ok: $cerrada_jerga"
+# 9.2: en una corrida real TODOS los mensajes llevan el prefijo ▶️, no solo ABIERTA.
+texto_json "$cerrada_jerga" | grep -q '^▶️ ✅ \[CERRADA\]' \
+  || fail "el aviso CERRADA de una corrida real no trae su prefijo: $cerrada_jerga"
+
+# (6f) BLOQUEANTE del revisor (CodeRabbit, lib.sh:613): un titulo que repite
+# un marcador reservado del mensaje ("Comando: ") pasa jerga_en_texto pero
+# rompe la forma de la linea 1 igual que la jerga — tambien cae al id.
+RB_MARCADOR="$PWD/scripts/tests/fixtures/corrida/runbook-titulo-marcador.md"
+bash "$CORR" abrir t-marcador --runbook "$RB_MARCADOR" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir con un runbook de titulo con un marcador reservado fallo"
+enc_marcador="$(corrida_encabezado t-marcador)"
+printf '%s' "$enc_marcador" | grep -q '^t-marcador (abrió' \
+  || fail "corrida_encabezado no cayo al id con un titulo con un marcador reservado: $enc_marcador"
+abierta_marcador="$(grep '"etiqueta": *"ABIERTA"' "$T/corridas/t-marcador/mensajes.jsonl" | tail -1)"
+printf '%s' "$abierta_marcador" | grep -q '"ok": *true' \
+  || fail "el aviso ABIERTA con titulo-marcador no salio ok: $abierta_marcador"
+bash "$CORR" cerrar t-marcador >/dev/null 2>&1 \
+  || fail "cerrar con un runbook de titulo-marcador fallo (la corrida quedaria atorada)"
+cerrada_marcador="$(grep '"etiqueta": *"CERRADA"' "$T/corridas/t-marcador/mensajes.jsonl" | tail -1)"
+printf '%s' "$cerrada_marcador" | grep -q '"ok": *true' \
+  || fail "el aviso CERRADA con titulo-marcador no salio ok: $cerrada_marcador"
 
 # (9) con el entorno vacio se usa la misma tabla del registro.
 : > "$TMUX_LOG"
@@ -876,12 +946,30 @@ grep -q '"cron_vigia_id"' "$T/corridas/t1/registro.json" && fail "t1 conserva cr
 # (11) seguimiento.v1: NECESITO TU RESPUESTA y DETENIDA con notificacion;
 # AVANZA acumula para el corte global sin mandar.
 : > "$LLAMADAS"
-corrida_mensaje t1 "NECESITO TU RESPUESTA" "1 de 2 partes terminadas" "un dialogo espera tu decision" "la corrida sigue en marcha" "responder si o no" \
+corrida_mensaje t1 "NECESITO TU RESPUESTA" "1 de 2 partes terminadas" "un dialogo espera tu decision" \
+  "Di sí o no, decide y contesta esta respuesta. Comando: ~/bin/x" "responder si o no" \
   || fail "el mensaje NECESITO TU RESPUESTA fallo"
 necesito_linea="$(grep "message send" "$LLAMADAS" | tail -1)"
 printf '%s' "$necesito_linea" | grep -q "NECESITO TU RESPUESTA" || fail "no salio la etiqueta NECESITO TU RESPUESTA"
 printf '%s' "$necesito_linea" | grep -q -- "--silent" && fail "NECESITO TU RESPUESTA salio silenciosa"
 printf '%s' "$necesito_linea" | grep -qF -- "-t $DESTINO" || fail "NECESITO TU RESPUESTA sin destino"
+# t1 es una corrida de practica (simulacro=true, abierta en (0)): NINGUN campo
+# del cuerpo (cambio, sigue, necesito) que trae el llamador se manda — ni
+# siquiera "sigue", con un texto que a proposito pide una decision. Si se
+# revierte el if de simulacro en corrida_mensaje, esto se pone rojo.
+grep -q 'Comando: ' "$LLAMADAS" && fail "NECESITO TU RESPUESTA en practica mando un Comando: de referencia"
+# El cuerpo son las lineas 2-4 del mensaje (linea 1 trae la etiqueta, que
+# incluye literalmente la palabra "RESPUESTA" y no cuenta como pedido de
+# decision del llamador).
+cuerpo_necesito="$(tail -n +2 "$LLAMADAS")"
+printf '%s' "$cuerpo_necesito" | grep -qiE 'Di s[ií]|decide|respuesta' \
+  && fail "NECESITO TU RESPUESTA en practica dejo pasar un pedido de decision del llamador: $cuerpo_necesito"
+grep -qF 'es una prueba, se resuelve sola' "$LLAMADAS" \
+  || fail "NECESITO TU RESPUESTA en practica no avisa que se resuelve sola: $(cat "$LLAMADAS")"
+grep -qF 'Nada que hacer: la prueba sigue sola.' "$LLAMADAS" \
+  || fail "NECESITO TU RESPUESTA en practica no trae el sigue fijo: $(cat "$LLAMADAS")"
+grep -qF 'responder si o no' "$LLAMADAS" \
+  && fail "NECESITO TU RESPUESTA en practica mando el necesito real del llamador"
 corrida_mensaje t1 DETENIDA "1 de 2 partes terminadas" "la corrida se detuvo por un percance" "se retoma cuando este claro" "nada" \
   || fail "el mensaje DETENIDA fallo"
 detenida_linea="$(grep "message send" "$LLAMADAS" | tail -1)"
@@ -892,6 +980,22 @@ corrida_mensaje t1 AVANZA "1 de 2 partes terminadas" "todo sigue en orden" "cont
 [ "$(grep -c "message send" "$LLAMADAS")" = "$envios_antes" ] || fail "AVANZA mando en vez de acumular"
 grep -q '"cambio": *"todo sigue en orden"' "$T/corridas/t1/eventos-seguimiento.jsonl" \
   || fail "AVANZA no dejo el evento acumulado"
+
+# (11c) BUG DE PRODUCCION 2026-09-26: el vigia corre como LaunchAgent sin LANG
+# ni LC_ALL. Sin locale, grep/sed/awk tratan los acentos como bytes sueltos y
+# mensaje_valido rechazaba CUALQUIER mensaje acentuado ("Qué cambió:",
+# "práctica"): en una corrida de practica, NECESITO TU RESPUESTA nunca salia
+# ("mensaje fuera de contrato"). t1 sigue siendo la corrida de practica
+# abierta en (0); esta llamada corre bajo el mismo entorno pelado que un
+# LaunchAgent (env -i, sin LANG ni LC_ALL).
+: > "$LLAMADAS"
+env -i PATH="$T/bin:/opt/homebrew/bin:/usr/bin:/bin" HOME="$HOME" CORRIDA_STATE="$T/corridas" \
+  OPENCLAW_BIN="$T/bin/openclaw" \
+  bash -c '. scripts/mac/corrida/lib.sh
+corrida_mensaje t1 "NECESITO TU RESPUESTA" "1 de 2 partes terminadas" "x" "y" "z"' \
+  || fail "sin LANG/LC_ALL, corrida_mensaje de practica fallo (mensaje fuera de contrato por el locale)"
+grep -qF 'es una prueba, se resuelve sola' "$LLAMADAS" \
+  || fail "sin LANG/LC_ALL, el mensaje de practica no salio con su texto acentuado: $(cat "$LLAMADAS")"
 
 # (11b) el despachador no carga lib ni subcomandos con ruta.
 out="$(bash "$CORR" lib 2>&1)"; rc=$?

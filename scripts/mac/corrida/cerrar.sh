@@ -88,7 +88,7 @@ except Exception:
   filas=[]
 print('true' if any(f.get('etiqueta')=='CERRADA' and f.get('ok') for f in filas) else 'false')" 2>/dev/null)"
   if [ "$ya" != "true" ]; then
-    if ! corrida_mensaje "$id" "CERRADA" "todas las partes terminadas" "la corrida termino" "no queda nada en curso" "nada"; then
+    if ! corrida_mensaje "$id" "CERRADA" "todas las partes terminadas" "la corrida terminó" "no queda nada en curso" "nada"; then
       lock_soltar "$reg"
       echo "cerrar: no salio el aviso de cierre de $id; las sesiones ya estan desmarcadas y el cron ya esta quitado — el registro queda abierto, reintentar cierra" >&2
       return 1

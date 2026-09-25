@@ -72,11 +72,12 @@ export OPENCLAW_BIN TMUX_BIN CORRIDA_STATE WATCH_STATE_DIR
 ENSAYO=0
 DRY_RUN=0
 SALIDA=""
-# 750s: el presupuesto peor de los casos secuenciales tras subir C5/C6 a 300s
-# (CodeRabbit, PR #162) es 180+150+60+300 = 690s antes del caso 7; con 570s el
-# watchdog de pared cortaba la corrida antes de que la ventana de relanzo
-# venciera. Con --observar-avance el tope se sigue subiendo solo al minimo.
-TOPE_PARED=750
+# 1080s: el presupuesto peor de los casos secuenciales con C5/C6 en 600s
+# (medido 2026-09-25, corrida 1000) es 180+150+60+600 = 990s antes del caso 7;
+# con 750s el watchdog de pared cortaria la corrida antes de que la ventana de
+# relanzo venciera. Con --observar-avance el tope se sigue subiendo solo al
+# minimo necesario.
+TOPE_PARED=1080
 TOPE_PARED_EXPLICITO=0
 OBSERVAR_AVANCE=""
 LIMPIAR_ID=""
@@ -101,13 +102,14 @@ SIM_TOPE_C1="${SIM_TOPE_C1:-180}"
 SIM_TOPE_C2="${SIM_TOPE_C2:-90}"
 SIM_TOPE_C3="${SIM_TOPE_C3:-150}"
 SIM_TOPE_C4="${SIM_TOPE_C4:-60}"
-# Tope de los casos 5/6 (relanzamiento real): la cadena medida en vivo el
-# 2026-09-25 (corrida sim9-20260925-0225) tarda ~4.5-5 min de punta a punta:
-# kill -> barrido del vigia (~60s) -> evento -> turno de main (~2-3 min) ->
-# relanzo. Con 180s el caso 5 se perdio el relanzo por ~90s (el caso 6, con
-# 240s, paso justo). 300s cubre la cadena medida con margen.
-SIM_TOPE_C5="${SIM_TOPE_C5:-300}"
-SIM_TOPE_C6="${SIM_TOPE_C6:-300}"
+# Tope de los casos 5/6 (relanzamiento real). Cadenas medidas en vivo el
+# 2026-09-25: ~4.5-5 min (corrida 0225) y ~7-8 min (corrida 1000, con los
+# closed rutados a la sesion de la corrida y el relanzo por lotes CORRECTO
+# pero con el turno encolado ~5-7 min en el gateway: kill 17:01:31Z ->
+# relanzo ~17:08:30Z). El cuello de botella es la cola de turnos del
+# gateway, no el mecanismo. 600s cubre la cadena medida con margen.
+SIM_TOPE_C5="${SIM_TOPE_C5:-600}"
+SIM_TOPE_C6="${SIM_TOPE_C6:-600}"
 # Segunda mirada tras un relanzamiento (casos 5/6), para confirmar que no
 # hay un segundo relanzamiento indebido. No hace falta que sean los 60s
 # reales: el vigia solo dispara "closed" UNA vez por sesion que desaparece
@@ -347,6 +349,9 @@ VIGIA_PATRON="bin/tmux-activity-watch.sh"
 # comprobacion de que "el vigia esta vivo" tambien se salta mas abajo, en
 # prerrequisitos: nada lo levanto para que hubiera algo que encontrar).
 if [ "$ENSAYO" = "1" ] && [ "$DRY_RUN" != "1" ]; then
+  # El vigia doblado es la copia del checkout: el preflight debe comparar contra
+  # HEAD de este checkout, no contra origin/<default> (ver preflight.sh).
+  export CORRIDA_PREFLIGHT_REF=HEAD
   VIGIA_ENSAYO_DIR="$CORRIDA_STATE/.arnes-vigia-bin"
   mkdir -p "$VIGIA_ENSAYO_DIR/bin" || { echo "simulacro-fase9: no se pudo preparar el vigia doblado" >&2; exit 2; }
   cp "$REPO_RAIZ/scripts/mac/tmux-activity-watch.sh" "$VIGIA_ENSAYO_DIR/bin/tmux-activity-watch.sh" \
@@ -827,7 +832,7 @@ correr_caso4() {
     return
   fi
   local pos; pos="$(CORR_AHORA=$((s+1800)) "$CORRIDA_BIN" estado "$SIM_ID" --solo-mensaje 2>&1)"
-  if ! printf '%s\n' "$pos" | head -1 | grep -q '^\[DETENIDA\]'; then
+  if ! printf '%s\n' "$pos" | head -1 | grep -q '\[DETENIDA\]'; then
     escribir_caso 4 "NO FUNCIONA" "S+1800 no dio [DETENIDA]: $(printf '%s' "$pos" | tr '\n' ' ')" "$t0_iso" "" "" "" "$simulado"
     return
   fi

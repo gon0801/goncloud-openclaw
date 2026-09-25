@@ -411,6 +411,14 @@ describe("esMensajeV1Valido", () => {
     "[NECESITO TU RESPUESTA] Corrida, avance desconocido\nQue cambio: la fase espera\nQue sigue: sigue igual\nQue necesito de ti: responde si o no.",
     "[CERRADA] Corrida, cierre en palabras\nQue cambio: x\nQue sigue: y\nQue necesito de ti: nada.",
     "[SIMULACRO] [AVANZA] Corrida, 2 de 5 partes terminadas\nQue cambio: queda lista\nQue sigue: sigue igual\nQue necesito de ti: nada.",
+    // Lo que emite corrida_mensaje ahora: nombre + hora, prefijo real, etiqueta ABIERTA
+    // (sin avance: no se sabe todavía cuántas partes tiene) y prefijos con acento.
+    "▶️ [ABIERTA] Fase 9: cierre de corridas autónomas (abrió 09:00)\nQué cambió: Arrancó la corrida.\nQué sigue: Se irá viendo cuántas partes tiene conforme avance.\nQué necesito de ti: nada",
+    // Un título de runbook con jerga en la línea 1 (CI) NO tumba el mensaje: la
+    // jerga solo se revisa en el cuerpo (regresión del bloqueante 2026-09-25).
+    "▶️ [AVANZA] Autopilot de la Fase 15 — CI completa (abrió 09:00), 2 de 5 partes terminadas\nQué cambió: sigue igual\nQué sigue: sigue igual\nQué necesito de ti: nada.",
+    // Corrida de práctica: prefijo nuevo, y NECESITO TU RESPUESTA sin Comando: ni pregunta real.
+    "🧪 PRÁCTICA — no contestes [NECESITO TU RESPUESTA] Fase 9 (abrió 09:00), 0 de 3 partes terminadas\nQué cambió: Una parte de la prueba llegó a una pregunta de práctica.\nQué sigue: Esa parte no avanza hasta tener la respuesta; el resto sigue como estaba.\nQué necesito de ti: nada: es una prueba, se resuelve sola",
   ];
   const V1_MAL = [
     "[ETIQUETA-RARA] Corrida, 1 de 2 partes terminadas\nQue cambio: x\nQue sigue: y\nQue necesito de ti: z.",

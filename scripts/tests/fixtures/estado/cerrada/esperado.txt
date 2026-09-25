@@ -1,7 +1,10 @@
-[CERRADA] Corrida, todas las partes terminadas
-Que cambio: la corrida cerro y no queda trabajo en curso
-Que sigue: no queda nada por hacer
-Que necesito de ti: nada
+▶️ ✅ [CERRADA] Fase 9: cierre de corridas autónomas (abrió 12:00), todas las partes terminadas
+
+Qué cambió: la corrida cerro y no queda trabajo en curso
+
+Qué sigue: no queda nada por hacer
+
+Qué necesito de ti: nada
 --- detalle (para el vigia; no va a David) ---
 corrida m-cerrada cerrada desde 2026-09-19T12:00:00+0000, vigia claw
 cerrada: nada que vigilar

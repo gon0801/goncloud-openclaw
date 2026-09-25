@@ -28,14 +28,25 @@ en `true` y sin `cron_vigia_id`. Cualquier otra combinación es
 
 ## Mensajes por etiqueta (`corrida_mensaje`, caso cerrado)
 
+- `ABIERTA`: entrega inmediata y silenciosa al abrir la corrida (`corrida.sh
+  abrir`), con su fila en `mensajes.jsonl`. Es la única forma de avisar que
+  una corrida arrancó — antes de esto solo el cierre avisaba.
 - `AVANZA`: valida contra `seguimiento.v1` y acumula
   `{at,cambio,sigue,necesito}` en `eventos-seguimiento.jsonl` (600, append
   atómico) para el próximo corte global. No llama a `message send` ni anota
   entrega en `mensajes.jsonl`. Así ningún llamador viejo se salta el
   consolidador de 30 minutos.
-- `NECESITO TU RESPUESTA`, `DETENIDA`, `CERRADA`: entrega inmediata por
-  `seguimiento.v1` con su fila en `mensajes.jsonl`, como siempre.
+- `NECESITO TU RESPUESTA`, `DETENIDA`: entrega inmediata por `seguimiento.v1`
+  con su fila en `mensajes.jsonl`, con notificación (no `--silent`).
+- `CERRADA`: entrega inmediata y silenciosa, con su fila en `mensajes.jsonl`.
 - Otra etiqueta: falla cerrada, no acumula ni manda.
+
+Cada mensaje lleva en la línea 1 el nombre de la corrida (título del runbook,
+o el `id`) y la hora en que abrió, más un prefijo: `▶️ ` en una corrida real,
+`🧪 PRÁCTICA — no contestes ` si `simulacro:true`. En una corrida de práctica,
+`NECESITO TU RESPUESTA` nunca pide una decisión real: el texto queda fijo
+avisando que es una pregunta de práctica que se resuelve sola, sin el
+`Comando: ` de referencia. Ver `docs/spec/seguimiento.v1.md`.
 
 ## Inventario (`corrida.sh seguimiento --json`)
 

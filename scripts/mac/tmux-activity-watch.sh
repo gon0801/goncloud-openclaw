@@ -130,11 +130,22 @@ is_marked() {
 }
 
 send_event() {
-  local text=$1
+  local text=$1 key_run=${2:-} key_args=()
+  # Enrutado por corrida (9.9b, medido 2026-09-25): los eventos de una sesion
+  # marcada con OPENCLAW_WATCH_RUN=<id de corrida> van a la sesion propia de
+  # esa corrida (agent:main:sim9-<id>) en vez de a la sesion principal de
+  # main, que ademas atiende a David, heartbeats y crons: ahi los closed de
+  # sim9-* se mezclaron con habitos viejos (delegar SOLO LECTURA) y los ticks
+  # del cron avance-tareas de una corrida viva se confundieron con los de un
+  # cron recien borrado. La sesion por corrida nace limpia y ya la usa el
+  # turno de observacion del simulacro; sin marca, todo igual que hoy.
+  if [[ -n $key_run ]]; then
+    key_args=(--session-key "agent:main:sim9-$key_run")
+  fi
   # FAIL-OPEN: if the send fails (gateway down, network hiccup, timeout), log it and return
   # non-zero WITHOUT marking notified — the caller must not flip its state, so the next tick
   # retries. The watcher itself never dies from a failed send.
-  if "$OPENCLAW_BIN" system event --mode now --timeout 15000 --text "$text" >>"$LOG_FILE" 2>&1; then
+  if "$OPENCLAW_BIN" system event --mode now --timeout 15000 "${key_args[@]+"${key_args[@]}"}" --text "$text" >>"$LOG_FILE" 2>&1; then
     log "sent: $text"
     # Carril P (9.6): todo evento enviado queda tambien en $STATE_DIR/eventos.jsonl
     # (t epoch + texto tal cual, escapado por python): es lo que un vigia puede
@@ -197,6 +208,38 @@ state_file() {
   printf '%s/%s.state\n' "$STATE_DIR" "$1"
 }
 
+read_run() { # $1 sesion -> valor de OPENCLAW_WATCH_RUN. Tres salidas:
+  #   rc 0 + valor : la variable esta.
+  #   rc 0 + vacio : la variable NO esta — ausente o deseteada con -u. Manda lo
+  #                  que dice HOY la sesion: una sesion nueva con el mismo
+  #                  nombre que una vieja de otra corrida no hereda su run
+  #                  (CodeRabbit, PR #164, dos vueltas).
+  #   rc 1         : el entorno no se pudo leer (sesion muriendo a mitad de
+  #                  tick): el llamador conserva el ultimo conocido.
+  # Medido 2026-09-25: variable ausente y deseteada dan rc 1 con "unknown
+  # variable" en stderr; una sesion que ya no existe da rc 1 con otro error.
+  # Por eso se mira el stderr, no solo el rc. La forma "-OPENCLAW_WATCH_RUN"
+  # (algunas versiones de tmux listan asi las deseteadas) tambien es vacio.
+  local out rc errf
+  # stderr POR LLAMADA (sufijo $$): un --once manual puede solaparse con el
+  # LaunchAgent compartiendo STATE_DIR, y un archivo fijo se pisarian entre si
+  # (CodeRabbit, PR #166). Se borra al salir de la funcion.
+  errf="$STATE_DIR/.read-env.err.$$"
+  out=$("$TMUX_BIN" show-environment -t "$1" OPENCLAW_WATCH_RUN 2>"$errf")
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    if head -1 "$errf" 2>/dev/null | grep -q '^unknown variable'; then
+      rm -f "$errf"; return 0
+    fi
+    rm -f "$errf"; return 1
+  fi
+  rm -f "$errf"
+  case $out in
+    OPENCLAW_WATCH_RUN=*) printf '%s\n' "${out#OPENCLAW_WATCH_RUN=}" ;;
+    *) : ;;
+  esac
+}
+
 read_state_field() {
   # $1 = state file, $2 = field name; empty if the file or field is missing. The path field may
   # itself contain '=', so split on the first '=' only.
@@ -207,8 +250,9 @@ read_state_field() {
 write_state() {
   local file=$1 hash=$2 since=$3 notified=$4 path=$5 approval=$6 approval_at=$7 approval_since=$8
   local notified_at=${9:-0}
-  printf 'hash=%s\nsince=%s\nnotified=%s\npath=%s\napproval=%s\napproval_at=%s\napproval_since=%s\nnotified_at=%s\n' \
-    "$hash" "$since" "$notified" "$path" "$approval" "$approval_at" "$approval_since" "$notified_at" >"$file"
+  local run=${10:-}
+  printf 'hash=%s\nsince=%s\nnotified=%s\npath=%s\napproval=%s\napproval_at=%s\napproval_since=%s\nnotified_at=%s\nrun=%s\n' \
+    "$hash" "$since" "$notified" "$path" "$approval" "$approval_at" "$approval_since" "$notified_at" "$run" >"$file"
 }
 
 # Checksum of stdin as one token. cksum is POSIX: same on the Mac and in Linux CI.
@@ -277,6 +321,7 @@ tick() {
     prev_approval=$(read_state_field "$sf" approval)
     prev_approval_at=$(read_state_field "$sf" approval_at)
     prev_approval_since=$(read_state_field "$sf" approval_since)
+    prev_run=$(read_state_field "$sf" run)
     [[ -n $prev_notified ]] || prev_notified=0
     [[ -n $prev_approval_at ]] || prev_approval_at=0
     [[ -n $prev_approval_since ]] || prev_approval_since=0
@@ -288,6 +333,16 @@ tick() {
       prev_notified_at=$now
     fi
     [[ -n $prev_notified_at ]] || prev_notified_at=0
+
+    # Run de corrida mientras la sesion VIVE: al morir ya no se puede leer su
+    # entorno, y el evento "closed" necesita el id para rutear a la sesion de
+    # la corrida. Se refresca en cada tick (set-environment lo cambia si la
+    # sesion se relanza en otra corrida) y cae al ultimo valor conocido.
+    if run=$(read_run "$session"); then
+      : # variable leida (aunque venga vacia): manda lo que dice HOY la sesion
+    else
+      run=$prev_run # entorno ilegible (muriendo a mitad de tick): ultimo conocido
+    fi
 
     # The session can vanish between list-sessions and here: skip it, the closed sweep of the
     # next tick reports it.
@@ -331,7 +386,7 @@ tick() {
       fi
       if [[ $due == 1 ]]; then
         text="tmux: $session waiting for approval for $((now - approval_since))s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"
-        if send_event "$text"; then
+        if send_event "$text" "$run"; then
           approval_at=$now
         else
           # Not recorded: the next tick sees it as unreported and tries again.
@@ -340,7 +395,7 @@ tick() {
         fi
       fi
       # Reported as a prompt, never ALSO as "quiet": notified=1 for this screen.
-      write_state "$sf" "$hash" "$since" 1 "$path" "$approval" "$approval_at" "$approval_since"
+      write_state "$sf" "$hash" "$since" 1 "$path" "$approval" "$approval_at" "$approval_since" "" "$run"
       continue
     fi
 
@@ -356,12 +411,12 @@ tick() {
     fi
     if [[ $due == 1 ]]; then
       text="tmux: $session quiet for ${elapsed}s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"
-      if send_event "$text"; then
+      if send_event "$text" "$run"; then
         notified=1
         notified_at=$now
       fi
     fi
-    write_state "$sf" "$hash" "$since" "$notified" "$path" "" 0 0 "$notified_at"
+    write_state "$sf" "$hash" "$since" "$notified" "$path" "" 0 0 "$notified_at" "$run"
   done <"$seen_file"
 
   # Sessions we have state for but that vanished from this tick's listing: closed.
@@ -372,7 +427,7 @@ tick() {
       last_path=$(read_state_field "$sf" path)
       [[ -n $last_path ]] || last_path=unknown
       text="tmux: $session closed | last cwd=$last_path"
-      if send_event "$text"; then
+      if send_event "$text" "$(read_state_field "$sf" run)"; then
         rm -f "$sf"
       fi
     fi
