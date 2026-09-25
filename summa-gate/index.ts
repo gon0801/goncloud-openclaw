@@ -2,8 +2,8 @@
  * summa-gate — port nativo (OpenClaw plugin) del harness bash `summonaikit`.
  *
  * Features:
- *  1. merge-guard (siempre activo): bloquea `gh pr merge`, `gh api …/merge`
- *     y `git push` a master/main en `before_tool_call` (matcher exec).
+ *  1. merge-guard (siempre activo): bloquea `gh pr merge` y `git push` a
+ *     master/main; las rutas API de merge exigen implementer/ingenieria.
  *  2. Sentinel `-saikit[:lane]` en `before_prompt_build`: arma la sesión,
  *     persiste estado en disco e inyecta el contrato de ceremonia.
  *  3. Standing rules ligeras en el primer prompt de cada sesión.
@@ -325,8 +325,13 @@ Escotillas (permiten cerrar SIN recibo, una sola por respuesta):
   resultado de un subagente.
 
 Recordatorios operativos:
-- No uses gh pr merge, gh api …/merge ni git push a master/main: el
-  merge-guard de este plugin los bloquea siempre, con o sin sentinel.
+- No uses gh pr merge ni git push a master/main: el merge-guard los bloquea
+  siempre, con o sin sentinel. Main y reviewer tampoco pueden usar rutas API de merge.
+- En autopilot del kit, seguí saikit-merge.sh después de la preaprobación de fase
+  y el recibo exigido por el repo.
+- Con una orden fechada del dueño en el brief para la lane SAIKIT, implementer/ingenieria
+  pueden ejecutar el merge GraphQL con expectedHeadOid. El guard también permite
+  rutas REST de merge a esos agentes; la orden del dueño determina la ruta autorizada.
 - El sentinel es por turno: un prompt sin -saikit desarma la ceremonia.`;
 }
 

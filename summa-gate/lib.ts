@@ -182,7 +182,7 @@ const GITHUB_HOST_GRAPHQL_RE = /api\.github\.com\/graphql(?![A-Za-z0-9_])/;
 // original y sobre una copia sin comillas (wrapper mas abajo).
 function mergeGuardCoreVerdict(command: string, allowlisted: boolean): string | undefined {
   if (GH_PR_MERGE_RE.test(command)) {
-    return "Merge bloqueado por summa-gate: `gh pr merge` está prohibido desde el agente (también encadenado con &&/;). El merge lo hace el operador o el flujo autorizado del repo.";
+    return "Merge bloqueado por summa-gate: `gh pr merge` está prohibido desde el agente (también encadenado con &&/;). Para autopilot del kit, usá saikit-merge.sh con preaprobación de fase y recibo. Con orden fechada del dueño en el brief para la lane SAIKIT, implementer/ingenieria pueden usar GraphQL con expectedHeadOid; main/reviewer no pueden ejecutar merges API.";
   }
   const restMerge = GH_API_RE.test(command) && GH_API_MERGE_PATH_RE.test(command);
   // El cliente de la mutación puede ser `gh api` o un curl al host: el endpoint es el mismo,
