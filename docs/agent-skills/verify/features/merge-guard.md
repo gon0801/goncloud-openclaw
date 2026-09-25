@@ -1,8 +1,9 @@
 # Merge guard
 
-Stops an agent from merging a pull request or pushing to a protected branch. It
-is the guard that makes the repo's merge ceremony mean anything: without it, an
-agent could land code without a sealed verdict.
+Blocks direct `gh pr merge` and pushes to a protected branch. API merges remain
+available to `implementer` and `ingenieria`; their workflow supplies the owner
+order or the kit's preapproval and receipt. The guard checks command text and
+agent identity, not that authorization evidence.
 
 Registered on `before_tool_call` with the `exec` matcher, so it sees the **text
 of the command** an agent is about to run. That is its strength and its limit:
@@ -75,7 +76,7 @@ to avoid those two.
 One of these, character for character:
 
 ```
-Merge bloqueado por summa-gate: `gh pr merge` está prohibido desde el agente (también encadenado con &&/;). El merge lo hace el operador o el flujo autorizado del repo.
+Merge bloqueado por summa-gate: `gh pr merge` está prohibido desde el agente (también encadenado con &&/;). Para autopilot del kit, usá saikit-merge.sh con preaprobación de fase y recibo. Con orden fechada del dueño en el brief para la lane SAIKIT, implementer/ingenieria pueden usar GraphQL con expectedHeadOid; main/reviewer no pueden ejecutar merges API.
 ```
 
 ```

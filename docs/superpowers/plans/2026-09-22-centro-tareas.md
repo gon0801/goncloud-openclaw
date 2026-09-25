@@ -35,6 +35,17 @@ sin asumir que los agentes disponibles en un equipo existen en el otro.
 | C. Panel e instalación | 17.5, 17.6 | UI completa y paquete reproducible |
 | D. Demostración | 17.7, 17.8 | Pruebas, revisión y aceptación viva por equipo |
 
+La tabla agrupa trabajo, no impone una barrera bilateral. Para U4 se ejecutan
+17.0–17.2, la parte OpenClaw de 17.4 y 17.5, con paquete, revisión y aceptación
+local de 17.6–17.8. U5 añade 17.3 y prueba esas mismas piezas en Hermes, sin
+reabrir evidencia OpenClaw vigente. Ninguna fila compartida se marca completa
+para ambos equipos con un recibo de uno solo. Así 17.4 no depende de Hermes
+para entregar U4, y U5 puede seguir dependiendo de U4 sin ciclo.
+Antes de ejecutar, el lead adapta documentalmente el runbook a esta división
+por host como preparación independiente, sin depender de 17.6 ni 17.7 y sin
+activar servicios. La tarea 17.7 conserva la validación final del runbook contra
+las interfaces implementadas; no es un requisito para preparar el arranque.
+
 No se estima duración cerrada antes de 17.0. La mayor incertidumbre es separar
 dependencias actuales de OpenClaw y comprobar la continuación soportada por Hermes.
 La UI sola no resuelve esa dependencia. Fase 14 pendiente no se carga a Fase 17
