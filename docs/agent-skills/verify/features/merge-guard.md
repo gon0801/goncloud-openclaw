@@ -1,30 +1,25 @@
 # Merge guard
 
-Blocks direct `gh pr merge` and pushes to a protected branch. API merges remain
-available to `implementer` and `ingenieria`; their workflow supplies the owner
-order or the kit's preapproval and receipt. The guard checks command text and
-agent identity, not that authorization evidence.
+Blocks direct `gh pr merge`, GitHub API merge routes and pushes to a protected
+branch for every role using OpenClaw's gateway `exec`. Any agent may use the
+kit's `saikit-merge.sh --auto` after its CI, CodeRabbit and receipt gates pass.
 
 Registered on `before_tool_call` with the `exec` matcher, so it sees the **text
 of the command** an agent is about to run. That is its strength and its limit:
 it reads text, so shell indirection and a query loaded from a file get past it,
-and both are declared limits in `summa-gate/lib.ts`, not bugs to fix here.
+and both are declared limits in `summa-gate/lib.ts`. A standalone CLI does not
+pass through this hook; its instruction is to use the kit route.
 
 ## Sub-features
 
-Four rules, and they do not all behave the same way:
+Four rules:
 
 | Rule | Who it stops |
 |---|---|
-| The CLI merge subcommand | Every agent, always. The allowlist is not consulted. |
-| The GraphQL merge mutation | Every agent except `implementer` and `ingenieria` |
-| The API merge routes | Every agent except `implementer` and `ingenieria` |
-| Push to a protected branch | Every agent, always |
-
-**The asymmetry is the thing people get wrong**, including a fresh reader and
-then me in the same session. The allowlist exists, and it does not cover the CLI
-subcommand. Read `mergeGuardCoreVerdict` before asserting otherwise: the first
-rule returns before `allowlisted` is ever read.
+| The CLI merge subcommand | Every gateway agent |
+| The GraphQL merge mutation | Every gateway agent |
+| The API merge routes | Every gateway agent |
+| Push to a protected branch | Every gateway agent |
 
 Matching runs over the original command and over a copy with quotes stripped,
 so a quoted token does not slip through. A verdict from either copy blocks.
@@ -44,10 +39,8 @@ cd /Users/dn/dev/goncloud-openclaw/summa-gate
 PATH="$(dirname "$(command -v node)"):$PATH" node --test role.test.ts merge-guard-wiring.test.ts
 ```
 
-**Los dos archivos, no solo el primero.** `role.test.ts` cubre el veredicto y el
-hook de `sessions_send`; el cableado del merge-guard, que es que el hook
-registrado reciba el agente, vive en `merge-guard-wiring.test.ts`. Correr solo
-uno deja sin probar justo la parte que decide si la allowlist aplica.
+`role.test.ts` cubre el veredicto y el hook de `sessions_send`; el cableado del
+merge-guard vive en `merge-guard-wiring.test.ts`.
 
 Live, inert by construction. Send a turn to `main` asking it to run, by exec:
 
@@ -66,32 +59,28 @@ kit script. Only by exec on the gateway host does the command reach the
 registered hook, whose message starts with "Merge bloqueado por summa-gate".
 If your proof quotes the kit message, you proved the wrong guard.
 
-Send it to `main`, not to `implementer` or `ingenieria`. Not because of the
-allowlist, which does not cover this rule, but because `main` is the agent this
-repo's runbooks already use for exec. A drive against the API routes would have
-to avoid those two.
+Send it to `main`, the agent this repo's runbooks already use for exec. The
+registered hook blocks the same merge command for all gateway roles.
 
 ## Expected output
 
 One of these, character for character:
 
 ```
-Merge bloqueado por summa-gate: `gh pr merge` está prohibido desde el agente (también encadenado con &&/;). Para autopilot del kit, usá saikit-merge.sh con preaprobación de fase y recibo. Con orden fechada del dueño en el brief para la lane SAIKIT, implementer/ingenieria pueden usar GraphQL con expectedHeadOid; main/reviewer no pueden ejecutar merges API.
+Merge bloqueado por summa-gate: usá saikit-merge.sh --auto. El kit comprueba CI, CodeRabbit, recibo y SHA para cualquier agente.
 ```
 
 ```
-Merge bloqueado por summa-gate: la mutación GraphQL de merge y las rutas de merge de api.github.com están prohibidas desde el agente salvo para implementer/ingenieria con la orden del dueño citada en el brief (6.5b).
+Merge bloqueado por summa-gate: usá saikit-merge.sh --auto; la API directa omite el gate de CodeRabbit.
 ```
 
 ```
-Merge bloqueado por summa-gate: `gh api …/merge` está prohibido desde el agente. El merge lo hace el operador o el flujo autorizado del repo.
+Merge bloqueado por summa-gate: usá saikit-merge.sh --auto; la API directa omite el gate de CodeRabbit.
 ```
 
 ```
 Push bloqueado por summa-gate: `git push` a master/main está prohibido desde el agente (incluye origin master, +master, HEAD:main, refs/heads/main y delete-ref :main).
 ```
-
-Note the ellipsis in the third one is a single character, not three dots.
 
 `scripts/tests/test-skill-verify.sh` registers the real plugin against the fake
 host and checks each of these against the live `blockReason`, so the four
