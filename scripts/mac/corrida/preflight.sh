@@ -77,12 +77,21 @@ corrida_preflight() {
   done
   fi
 
-  # (3) vigilante corriendo y con el mismo blob que origin/<default>.
+  # (3) vigilante corriendo y con el mismo blob que origin/<default>. El ensayo
+  # del simulacro corre la copia del CHECKOUT (la dobla en .arnes-vigia-bin): el
+  # mismo PR que cambia el vigilante no puede comparar contra un origin/<default>
+  # que aun no lo trae (medido 2026-09-25, PR #164: "vigilante viejo" en el CI).
+  # CORRIDA_PREFLIGHT_REF apunta la comparacion a otra ref (el ensayo usa HEAD);
+  # una corrida real compara contra origin/<default> siempre.
   if pgrep -f 'bin/tmux-activity-watch.sh' >/dev/null 2>&1; then
-    local def Esperado instalado
-    def="$(git -C "$REPO" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')"
-    [ -z "$def" ] && def="main"
-    Esperado="$(git -C "$REPO" rev-parse --verify -q "origin/$def:scripts/mac/tmux-activity-watch.sh" 2>/dev/null)"
+    local def Esperado instalado ref
+    ref="${CORRIDA_PREFLIGHT_REF:-}"
+    if [ -z "$ref" ]; then
+      def="$(git -C "$REPO" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')"
+      [ -z "$def" ] && def="main"
+      ref="origin/$def"
+    fi
+    Esperado="$(git -C "$REPO" rev-parse --verify -q "$ref:scripts/mac/tmux-activity-watch.sh" 2>/dev/null)"
     instalado="$(git hash-object "$WATCH" 2>/dev/null)"
     if [ -n "$Esperado" ] && [ -n "$instalado" ]; then
       [ "$Esperado" = "$instalado" ] || razon "vigilante viejo"
