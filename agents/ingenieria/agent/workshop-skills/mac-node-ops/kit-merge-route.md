@@ -10,7 +10,7 @@ Checked in order: repo match via `gh repo view`; the PR of the current branch; `
 
 ## Sequence
 
-`--dry-run` (prints `DRY-RUN: gate en verde; haria: gh pr merge … --match-head-commit …`) → plain run (repeats the gate, ends `LISTO` = operator go already given by preapproval) → `--confirmado` (repeats the whole gate again, merges squash with `--match-head-commit <sha> --body "Saikit-Merge: <sha>"`, records `.saikit/veredictos/<sha>.merge`, deletes the remote branch as a separate reported step). Reverts: `--revert-de <merge_commit> --confirmado` (single commit, exact tree equality with the pre-merge tree, Saikit-Merge trailer required, no receipt needed).
+`--dry-run` (prints `DRY-RUN: gate en verde; haria: gh pr merge … --match-head-commit …`) → `--auto` from any agent (rechecks CI, exact-head CodeRabbit review and green status, receipt posted after that review, base and SHA under lock; merges squash with `--match-head-commit <sha> --body "Saikit-Merge: <sha>"`, records `.saikit/veredictos/<sha>.merge`, deletes the remote branch as a separate reported step). No per-PR owner permission. Reverts: `--revert-de <merge_commit> --confirmado` (single commit, exact tree equality with the pre-merge tree, Saikit-Merge trailer required, no receipt needed).
 
 A head change (base integration, fix commit, author rewrite) invalidates the receipt: the gate wants a receipt for the exact head, and one for an earlier SHA is refused. Budget a fresh `APPROVE lead <new-sha>` comment with a fresh receipt after every base integration — not a ceremony: the receipt cites evidence that already exists for unchanged code, plus CI of the new SHA.
 

@@ -8,9 +8,9 @@ fails=0
 chk() { d=$1; shift; if "$@" >/dev/null 2>&1; then echo "OK: $d"; else echo "FALLO: $d"; fails=$((fails+1)); fi }
 chk "spec existe" test -f "$SPEC"
 chk "seccion Fleet roles and routing" grep -q "## Fleet roles and routing" "$SPEC"
-chk "regla 1 (main coordina, nunca mergea ni toca servidor)" grep -qF "main coordina y le reporta a David; nunca mergea ni toca el servidor directamente" "$SPEC"
+chk "regla 1 (main puede usar el kit)" grep -qF "main coordina y le reporta a David; puede cerrar un PR por la ruta del kit" "$SPEC"
 chk "regla 2 (cadena de calidad / ingenieria / operaciones)" grep -qF "Cambios de código van a la cadena de calidad (implementer → verifier → adversary → reviewer); servidor y deploy van a ingenieria; negocio va a operaciones" "$SPEC"
-chk "regla 3 (autorización única merge y deploy)" grep -qF "la autorización es una sola: \"merge y deploy\"" "$SPEC"
+chk "regla 3 (merge autónomo con CodeRabbit)" grep -qF "Cualquier agente Claw o CLI con acceso al worktree puede ejecutar \`saikit-merge.sh --auto\`" "$SPEC"
 chk "regla 4 (listo sin verify/ no se reporta)" grep -qF "Nada se reporta como \"listo\" sin haberse verificado antes con la prueba del repo" "$SPEC"
 chk "D2 registrada" grep -qF "no se adapta el verifier a \`.cursor/skills/verify-*\`" "$SPEC"
 chk "enlace al mapa 6.4" grep -qF "../runbooks/camino-feliz-producto.md" "$SPEC"

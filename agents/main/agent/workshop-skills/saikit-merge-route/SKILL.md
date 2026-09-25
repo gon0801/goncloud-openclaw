@@ -1,11 +1,11 @@
 ---
 name: saikit-merge-route
-description: Merge a lane's PR by the saikit kit route (dry-run → LISTO → --confirmado) instead of `gh pr merge`, when the gate answers NO-MERGE, when the receipt is missing or superseded, or when verifying an autopilot lane's gates before reporting it closed. Produces a merged squash SHA plus the per-PR review coverage and gateway evidence behind the closure.
+description: Merge an agent PR through saikit-merge.sh --auto after current-head CI, CodeRabbit and receipt pass. Any Claw or CLI role may use this gate without per-PR owner approval.
 ---
 
 # saikit Kit Merge Route
 
-Land a lane's PR through the kit's gate. `gh pr merge` is blocked by summa-gate (see `git-commit-push`); the kit is the sanctioned path. The gate prepares and stops: `--confirmado` is the operator's yes, already granted in the phase's preapproval table — never ask the owner per merge. Verified 2026-09-16 across seven Fase 6 lanes plus the closure PR; the authority moved from a sealed verdict to the PR receipt (`saikit-entrega.v1`) in entrega-sin-sello A.
+Land a lane's PR through the kit's gate. `gh pr merge` is blocked by summa-gate; any agent may use `saikit-merge.sh --auto` when the base branch has `merge: true`. No owner approval is requested per PR. The gate requires current-head CI, CodeRabbit review and green status, and a valid `saikit-entrega.v1` receipt with no blockers.
 
 ## Route
 
@@ -13,7 +13,7 @@ Land a lane's PR through the kit's gate. `gh pr merge` is blocked by summa-gate 
    - Completion: all confirmed from the remote, not from local state.
 
 2. Safe window — a merge here deploys by the sync: `TZ=America/New_York date` and `openclaw cron list --all`; no job with `Next` inside 15 minutes, and outside :05–:15 of odd hours. Then, from the lane's worktree:
-   `saikit-merge.sh --dry-run` → prints `DRY-RUN: gate en verde`; `saikit-merge.sh` → `LISTO`; `saikit-merge.sh --confirmado` → the squash merge.
+   `saikit-merge.sh --dry-run` → prints `DRY-RUN: gate en verde`; `saikit-merge.sh --auto` → the squash merge after all gates pass.
    - Completion: the PR reads `MERGED` with its squash SHA and the postmerge run for the default branch is green.
 
 3. The receipt must exist for the **exact head SHA** the gate checks: the latest `APPROVE lead <sha>` comment with the `saikit-entrega.v1` JSON — `implementer`, `verifier` (PASS) and `reviewer` (APPROVE) as three distinct agents for code classes, evidence links that resolve to PR/CI reports (command, result, SHA), `bloqueantes` empty. A `REVOKE lead <sha>` by the same author kills it. After any rebase or fix commit, publish a fresh `APPROVE lead <new-sha>` receipt for the new head — a receipt for a superseded SHA is refused (`NO-MERGE: sin recibo`), and fixing that is one new comment, not a re-review: unchanged code keeps its evidence, only the new CI run is cited.

@@ -1,6 +1,6 @@
 ---
 name: agent-dispatch
-description: Dispatch a brief to the engineering agent chain (implementer / verifier / reviewer) or to a spawned subagent, and recover full results; run the external Claude-on-the-Mac review loop (brief file, do-script delivery, verdict watch) until APROBADO; main is a go/no-go checkpoint and never lands PRs itself — the quoted owner order runs in the implementer chain. Use for a task brief or "-saikit" lane, when a sessions_send agent fails with "All models failed", when a completion result arrives truncated, when David asks for a fix→review loop until Claude approves a block, or when a lane's approved PRs reach the go/no-go (one unified go/no-go ("land and deploy" in a single step) for openclaw and the workspaces; two separate ones (first "land", then "deploy") for Orbit and accounting).
+description: Dispatch a brief to the engineering agent chain (implementer / verifier / reviewer) or to a spawned subagent, recover results, and close reviewed PRs through the shared saikit-merge.sh --auto gate.
 ---
 
 # Agent / Subagent Dispatch
@@ -60,7 +60,7 @@ David repeatedly orders a fix-then-review loop against the Claude Code tab in th
 
 ## Go/no-go and regression (6.4)
 
-Main's verdict at lane close is a go/no-go, never an execution of the landing itself. Two kinds: one unified go/no-go ("land and deploy" in a single step) for openclaw and the workspaces — landing deploys by the sync — and two separate ones for Orbit and accounting (first the "land" go/no-go, then the "deploy" go/no-go, run by engineering). The owner's quoted landing order from the brief runs in the implementer chain via saikit-cierre-pr, with the guard's allowlist (implementer/ingenieria). A regression found after close goes back to the brief ("regression back to the brief"): re-open the lane at the brief step, do not patch ad hoc.
+At lane close, main or any other agent may run `saikit-merge.sh --auto` from the PR worktree. The gate rechecks CI, CodeRabbit, receipt and SHA; it needs no quoted owner order and no per-PR go/no-go. Runtime deployment is a separate step with its own authorization. A regression found after close goes back to the brief ("regression back to the brief"): re-open the lane at the brief step, do not patch ad hoc.
 <!-- candado: test-agent-dispatch-no-[m]erge.sh -->
 
 ## A phase is closed only when a command says so

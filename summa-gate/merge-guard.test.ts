@@ -13,12 +13,12 @@ describe("mergeGuardVerdict (6.5c)", () => {
     assert.match(mergeGuardVerdict(CMD_MUT, "main") ?? "", /Merge bloqueado/);
   });
 
-  it("permite la mutacion GraphQL mergePullRequest desde implementer", () => {
-    assert.equal(mergeGuardVerdict(CMD_MUT, "implementer"), undefined);
+  it("bloquea la mutacion GraphQL directa desde implementer", () => {
+    assert.match(mergeGuardVerdict(CMD_MUT, "implementer") ?? "", /Merge bloqueado/);
   });
 
-  it("permite la mutacion GraphQL mergePullRequest desde ingenieria", () => {
-    assert.equal(mergeGuardVerdict(CMD_MUT, "ingenieria"), undefined);
+  it("bloquea la mutacion GraphQL directa desde ingenieria", () => {
+    assert.match(mergeGuardVerdict(CMD_MUT, "ingenieria") ?? "", /Merge bloqueado/);
   });
 
   it("agente sin allowlist sigue bloqueado", () => {
@@ -62,14 +62,14 @@ describe("mergeGuardVerdict (6.5c)", () => {
     const PUSH_PROT = "git push " + "origin " + "ma" + "in";
     assert.match(
       mergeGuardVerdict(CMD_MUT + " && " + PUSH_PROT, "implementer") ?? "",
-      /Push bloqueado/,
+      /Merge bloqueado/,
     );
-    assert.equal(mergeGuardVerdict(CMD_MUT, "implementer"), undefined);
+    assert.match(mergeGuardVerdict(CMD_MUT, "implementer") ?? "", /Merge bloqueado/);
   });
 
   it("cross-review r1: unificacion restMerge - mismo endpoint, mismo trato que curl para la allowlist", () => {
-    assert.equal(mergeGuardVerdict("gh api repos/x/y" + P_MERGES, "ingenieria"), undefined);
-    assert.equal(mergeGuardVerdict("gh api repos/x/y" + P_MERGES, "implementer"), undefined);
+    assert.match(mergeGuardVerdict("gh api repos/x/y" + P_MERGES, "ingenieria") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict("gh api repos/x/y" + P_MERGES, "implementer") ?? "", /Merge bloqueado/);
     assert.match(
       mergeGuardVerdict("gh api repos/x/y" + P_MERGES, "verifier") ?? "",
       /Merge bloqueado/,
@@ -77,8 +77,8 @@ describe("mergeGuardVerdict (6.5c)", () => {
   });
 
   it("cross-review r1: allowlist normalizada - implementer capitalizado o con espacios se comporta igual", () => {
-    assert.equal(mergeGuardVerdict(CMD_MUT, "Implementer"), undefined);
-    assert.equal(mergeGuardVerdict(CMD_MUT, " implementer "), undefined);
+    assert.match(mergeGuardVerdict(CMD_MUT, "Implementer") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict(CMD_MUT, " implementer ") ?? "", /Merge bloqueado/);
     assert.match(mergeGuardVerdict(CMD_MUT, "verifier") ?? "", /Merge bloqueado/);
   });
 
@@ -122,8 +122,8 @@ describe("mergeGuardVerdict (6.5c)", () => {
   });
 
   it("cross-review r2: las mutaciones hermanas respetan la allowlist (implementer pasa)", () => {
-    assert.equal(mergeGuardVerdict("gh api graphql -f query='" + MUT_BRANCH + "'", "implementer"), undefined);
-    assert.equal(mergeGuardVerdict("gh api graphql -f query='" + MUT_AUTO + "'", "ingenieria"), undefined);
+    assert.match(mergeGuardVerdict("gh api graphql -f query='" + MUT_BRANCH + "'", "implementer") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict("gh api graphql -f query='" + MUT_AUTO + "'", "ingenieria") ?? "", /Merge bloqueado/);
   });
 
   it("cross-review r2: mutacion GraphQL inocua NO se bloquea", () => {
@@ -165,7 +165,7 @@ describe("mergeGuardVerdict (6.5c)", () => {
 
   it("r3: el quoted pasa solo dentro de la allowlist", () => {
     const quoted = "'gh' api graphql -f query='" + MUT + "'";
-    assert.equal(mergeGuardVerdict(quoted, "implementer"), undefined);
+    assert.match(mergeGuardVerdict(quoted, "implementer") ?? "", /Merge bloqueado/);
   });
 
   it("r3: doble comilla en el cliente tambien bloquea (verifier)", () => {
@@ -199,8 +199,8 @@ describe("mergeGuardVerdict (6.5c)", () => {
   });
 
   it("r3: auto-merge respeta la allowlist (implementer pasa)", () => {
-    assert.equal(mergeGuardVerdict("gh api -X PUT repos/o/r/pulls/1/auto-merge -f merge_method=squash", "implementer"), undefined);
-    assert.equal(mergeGuardVerdict("gh api -X DELETE repos/o/r/pulls/1/auto-merge", "ingenieria"), undefined);
+    assert.match(mergeGuardVerdict("gh api -X PUT repos/o/r/pulls/1/auto-merge -f merge_method=squash", "implementer") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict("gh api -X DELETE repos/o/r/pulls/1/auto-merge", "ingenieria") ?? "", /Merge bloqueado/);
   });
 
   // turno de cola (re-review 2026-09-16, hallazgo 1 MEDIO): ruta REST merge-async —
@@ -215,7 +215,7 @@ describe("mergeGuardVerdict (6.5c)", () => {
   });
 
   it("turno de cola: merge-async respeta la allowlist (implementer pasa)", () => {
-    assert.equal(mergeGuardVerdict("gh api -X PUT repos/o/r/pulls/45/merge-async", "implementer"), undefined);
+    assert.match(mergeGuardVerdict("gh api -X PUT repos/o/r/pulls/45/merge-async", "implementer") ?? "", /Merge bloqueado/);
   });
 
   // r3 (hallazgo 5): controles negativos — las consultas de estado no blockean.
@@ -233,13 +233,13 @@ describe("mergeGuardVerdict (6.5c)", () => {
   it("r3: cliente gh con comillas escapadas por backslash tambien bloquea", () => {
     const escaped = "\\'gh\\' api graphql -f query='" + MUT + "'";
     assert.match(mergeGuardVerdict(escaped, "verifier") ?? "", /Merge bloqueado/);
-    assert.equal(mergeGuardVerdict(escaped, "implementer"), undefined);
+    assert.match(mergeGuardVerdict(escaped, "implementer") ?? "", /Merge bloqueado/);
   });
 
   it("r3: cliente gh entre backticks tambien bloquea", () => {
     const backticked = "`gh` api graphql -f query='" + MUT + "'";
     assert.match(mergeGuardVerdict(backticked, "verifier") ?? "", /Merge bloqueado/);
-    assert.equal(mergeGuardVerdict(backticked, "implementer"), undefined);
+    assert.match(mergeGuardVerdict(backticked, "implementer") ?? "", /Merge bloqueado/);
   });
 
   // turno de cierre (2026-09-16, hallazgo BLOQUEANTE ALTA): la frontera de ruta era un enum
@@ -304,11 +304,8 @@ describe("mergeGuardVerdict (6.5c)", () => {
     );
   });
 
-  it("cierre: la forma pegada respeta la allowlist (implementer pasa)", () => {
-    assert.equal(
-      mergeGuardVerdict("gh api -X PUT repos/o/r" + P_MERGE + ">/tmp/resp.json", "implementer"),
-      undefined,
-    );
+  it("cierre: la forma pegada bloquea tambien a implementer", () => {
+    assert.match(mergeGuardVerdict("gh api -X PUT repos/o/r" + P_MERGE + ">/tmp/resp.json", "implementer") ?? "", /Merge bloqueado/);
   });
 
   it("cierre: bloquea curl a api.github.com con > pegado a la ruta de merge", () => {
@@ -325,11 +322,8 @@ describe("mergeGuardVerdict (6.5c)", () => {
     );
   });
 
-  it("cierre: la forma pegada del host respeta la allowlist (ingenieria pasa)", () => {
-    assert.equal(
-      mergeGuardVerdict("curl -X PUT https://api.github.com/repos/o/r" + P_MERGE + ">/tmp/o.json", "ingenieria"),
-      undefined,
-    );
+  it("cierre: la forma pegada del host bloquea a ingenieria", () => {
+    assert.match(mergeGuardVerdict("curl -X PUT https://api.github.com/repos/o/r" + P_MERGE + ">/tmp/o.json", "ingenieria") ?? "", /Merge bloqueado/);
   });
 
   it("cierre: bloquea la orden de gh pr con > o ) pegado (frontera del cliente)", () => {
@@ -350,9 +344,9 @@ describe("mergeGuardVerdict (6.5c)", () => {
     assert.match(mergeGuardVerdict(CURL_GRAPHQL_MUT, "verifier") ?? "", /Merge bloqueado/);
   });
 
-  it("cierre: la mutacion GraphQL por curl al host pasa dentro de la allowlist", () => {
-    assert.equal(mergeGuardVerdict(CURL_GRAPHQL_MUT, "implementer"), undefined);
-    assert.equal(mergeGuardVerdict(CURL_GRAPHQL_MUT, "ingenieria"), undefined);
+  it("cierre: la mutacion GraphQL por curl bloquea a todos", () => {
+    assert.match(mergeGuardVerdict(CURL_GRAPHQL_MUT, "implementer") ?? "", /Merge bloqueado/);
+    assert.match(mergeGuardVerdict(CURL_GRAPHQL_MUT, "ingenieria") ?? "", /Merge bloqueado/);
   });
 
   it("cierre: consulta GraphQL inocua por curl al host NO se bloquea", () => {
@@ -593,13 +587,10 @@ describe("mergeGuardVerdict (6.5c)", () => {
     }
   });
 
-  it("r9: la allowlist sigue intacta - implementer PASA en las dos ramas con flag interpuesto", () => {
-    // Estas dos reglas son las de allowlist (no la incondicional de `gh pr <verbo>`): la orden del
-    // dueño la ejecutan implementer/ingenieria (decision D1), asi que cerrar la frontera izquierda
-    // NO puede convertir la allowlist en bloqueo.
+  it("r9: los flags interpuestos bloquean tambien a implementer e ingenieria", () => {
     for (const cmd of [...FORMAS_API_R9, ...FORMAS_GQL_R9, API_FLAG_COMILLAS]) {
-      assert.equal(mergeGuardVerdict(cmd, "implementer"), undefined, cmd);
-      assert.equal(mergeGuardVerdict(cmd, "ingenieria"), undefined, cmd);
+      assert.match(mergeGuardVerdict(cmd, "implementer") ?? "", /Merge bloqueado/, cmd);
+      assert.match(mergeGuardVerdict(cmd, "ingenieria") ?? "", /Merge bloqueado/, cmd);
     }
   });
 

@@ -3,7 +3,7 @@
  *
  * Features:
  *  1. merge-guard (siempre activo): bloquea `gh pr merge` y `git push` a
- *     master/main; las rutas API de merge exigen implementer/ingenieria.
+ *     master/main y las rutas API de merge para todos los agentes.
  *  2. Sentinel `-saikit[:lane]` en `before_prompt_build`: arma la sesión,
  *     persiste estado en disco e inyecta el contrato de ceremonia.
  *  3. Standing rules ligeras en el primer prompt de cada sesión.
@@ -325,13 +325,10 @@ Escotillas (permiten cerrar SIN recibo, una sola por respuesta):
   resultado de un subagente.
 
 Recordatorios operativos:
-- No uses gh pr merge ni git push a master/main: el merge-guard los bloquea
-  siempre, con o sin sentinel. Main y reviewer tampoco pueden usar rutas API de merge.
-- En autopilot del kit, seguí saikit-merge.sh después de la preaprobación de fase
-  y el recibo exigido por el repo.
-- Con una orden fechada del dueño en el brief para la lane SAIKIT, implementer/ingenieria
-  pueden ejecutar el merge GraphQL con expectedHeadOid. El guard también permite
-  rutas REST de merge a esos agentes; la orden del dueño determina la ruta autorizada.
+- No uses gh pr merge, rutas API directas de merge ni git push a master/main:
+  el merge-guard los bloquea para todos los agentes, con o sin sentinel.
+- Cualquier agente puede fusionar por saikit-merge.sh --auto sin permiso por PR
+  cuando la base tiene merge=true. El kit exige CI, CodeRabbit, recibo y SHA vigentes.
 - El sentinel es por turno: un prompt sin -saikit desarma la ceremonia.`;
 }
 
@@ -429,9 +426,7 @@ export default definePluginEntry({
     const promptSeenSessions = new Set<string>();
 
     // -- 1. Merge-guard (siempre activo) ------------------------------------
-    // 6.5c: pasa ctx.agentId — la mutacion GraphQL de merge y las rutas REST de merge de
-    // api.github.com se permiten solo a implementer/ingenieria (orden del dueño en el brief, 6.5b);
-    // main y el resto siguen bloqueados.
+    // Las rutas directas se bloquean para todos; el kit es la única salida.
     api.on(
       "before_tool_call",
       (event, ctx) => {

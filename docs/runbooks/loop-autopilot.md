@@ -12,7 +12,7 @@ Cada regla lleva su origen, `Medido:` con fecha. Si una regla no tiene un incide
 
 | Rol | Quién | Qué hace |
 |---|---|---|
-| **claw** | el agente `main` del gateway | Recibe "implementa las fases X e Y". Manda a hacer o valida el runbook. Elige y lanza al lead. Lo vigila por tmux. Contesta lo mecánico. Relanza al lead en otro host si se cae. Relaya el Telegram. **Nunca mergea ni toca la configuración del gateway.** |
+| **claw** | el agente `main` del gateway | Recibe "implementa las fases X e Y". Manda a hacer o valida el runbook. Elige y lanza al lead. Lo vigila por tmux. Contesta lo mecánico. Relanza al lead en otro host si se cae. Relaya el Telegram. Puede ejecutar el merge por `saikit-merge.sh --auto`; no toca la configuración del gateway sin autorización de despliegue. |
 | **lead** | un CLI disponible que Claw pueda lanzar y verificar en tmux | Escribe encargos, lanza implementadores, audita, corre la revisión cruzada, aprueba, mergea por el kit, despliega, escribe progreso, cierra la fase. No escribe código de producto. |
 | **implementador** | muse, cursor, glm, u otro, según el brief | Escribe el código de un carril en su worktree. Reporta con la línea de contrato. No hace push ni abre PR. |
 | **verificador** | otro agente distinto del implementador | Ejecuta el comportamiento que la fila pide y deja la evidencia que el recibo enlaza: comando, resultado y SHA. Para un bug, demuestra que su regresión falla sin el arreglo. Nunca el modelo que implementó. |
@@ -20,7 +20,7 @@ Cada regla lleva su origen, `Medido:` con fecha. Si una regla no tiene un incide
 | **CodeRabbit** | bot en GitHub | Revisa cuando el PR se promueve a listo, nunca los pushes del borrador; después solo ve los pushes de corrección. Sus comentarios se leen y se adjudican: solo un bloqueante abierto bloquea. Sin cuota no bloquea, pero se declara. |
 | **David** | el dueño | Solo lee el Telegram de cierre y el tablero. Preaprobó por escrito lo que la fase necesita. |
 
-El kit ya no mantiene una allowlist de hosts para autorizar la entrega. La lista de preferencia pertenece a Claw y puede incluir cualquier CLI cuyo binario, modo de permisos y arranque haya verificado. Claw no mergea.
+El kit no limita el merge por identidad o rol del agente. La lista de preferencia pertenece a Claw y puede incluir cualquier CLI cuyo binario, modo de permisos y arranque haya verificado. Cualquier agente con acceso al worktree puede ejecutar la misma ruta del kit.
 
 Claw abre cada corrida con `corrida.sh abrir` (contrato `corrida.v1`: quién es el vigía, qué sesiones son suyas, qué se preaprobó, a dónde van los mensajes) y lanza al lead y a los implementadores con `corrida.sh lanzar-sesion`, que marca la sesión antes de mandar el primer texto. Todo mensaje que la corrida manda a David cumple `seguimiento.v1`: cuatro líneas, etiquetas cerradas, lenguaje de usuario.
 
@@ -73,7 +73,7 @@ Medido: 2026-09-17, primera corrida de la Fase 7, de donde esta regla se muda al
 4. **PR en borrador.** El lead hace push y abre el PR **como draft**, desde el worktree, con el cuerpo en archivo. El CI corre la batería completa; CodeRabbit no. Si la unión de jobs no cubre la batería, el lead ejecuta localmente solo lo que falta y lo registra.
 5. **Rondas de revisión cruzada** sobre el SHA del PR, con la política de la sección 4. Cada hallazgo bloqueante se corrige con un encargo `BRIEF-r<N>.md` al mismo implementador y vuelve al paso 3. Lo no bloqueante va a una fila del plan.
 6. **Promoción.** Cuando una ronda no trae bloqueantes, el lead marca el PR como listo para revisión. Ahí CodeRabbit revisa una sola vez, sobre código que ya no va a cambiar.
-7. **CodeRabbit.** Se leen y se adjudican sus comentarios, no solo su check. Solo un bloqueante adjudicado que siga abierto —con el comando que lo reproduce— vuelve al paso 3 con un encargo de corrección. Un comentario no bloqueante no abre ronda ni impide el merge: si es de una línea se corrige en la misma ronda, y si no, queda en los residuales del recibo del paso 8. Cada push de corrección tras la promoción vuelve a pasar por CodeRabbit; el PR queda cuando no queda ningún bloqueante adjudicado abierto, o cuando CodeRabbit no tiene cuota, y eso se declara.
+7. **CodeRabbit.** Se leen y se adjudican sus comentarios, no solo su estado. Solo un bloqueante adjudicado que siga abierto —con el comando que lo reproduce— vuelve al paso 3 con un encargo de corrección. Un comentario no bloqueante no abre ronda ni impide el merge: si es de una línea se corrige en la misma ronda, y si no, queda en los residuales del recibo del paso 8. Cada push de corrección vuelve a pasar por CodeRabbit. Si CodeRabbit no completa revisión y estado verde para el SHA actual, el merge espera.
 8. **Aprobación.** `APPROVE lead <sha>` como comentario en el PR, con la lista de residuales y su razón. Solo eso mete el PR a la cola.
 9. **Merge** por la ruta del kit, sección 6. Base al día antes, con `git merge origin/<default>` en el worktree del carril y push normal: **nunca rebase**, que exige force-push y está prohibido. CI verde del SHA nuevo, y re-APPROVE si `git diff <sha aprobado> HEAD -- <archivos del carril>` sale vacío, o vuelta al paso 5 si no. La rama por defecto avanza sola cada dos horas con los snapshots del gateway, así que esto pasa en casi todo merge.
 10. **Despliegue y verificación**, sección 7, si la fase lo pide.
@@ -135,14 +135,14 @@ Medido: 2026-09-16, PR #48 se mergeó con el check de CodeRabbit en verde y trec
 
 ## 6. Merge: la ruta del kit
 
-El merge es siempre el del kit, con `--confirmado` como el sí escrito del dueño que ya está en la tabla de preaprobaciones de la fase. Ninguna otra ruta: ni la interfaz de GitHub, ni la API, ni a mano.
+El merge es siempre el del kit, con `--auto` para cualquier agente, sin orden ni permiso por PR. La política permanente del dueño está en `.saikit/autopilot.json` de la rama base (`merge: true`). El gate exige CI, revisión y estado de CodeRabbit del SHA actual y un recibo posterior a esa revisión. Ninguna otra ruta: ni la interfaz de GitHub, ni la API, ni a mano.
 
 **Dónde y cómo se corre.** El script opera sobre la **rama del worktree en el que estás parado**, no toma número de PR y toma un lock por clon, así que se corre con `cd` al worktree de ese carril. En orden, desde ahí:
 
 ```
 test -r /Users/dn/dev/summonaikit-claude/tools/saikit-merge.sh || { echo ATORADO kit ausente en /Users/dn/dev/summonaikit-claude/tools; exit 1; }
 bash /Users/dn/dev/summonaikit-claude/tools/saikit-merge.sh --dry-run       # debe terminar en LISTO
-bash /Users/dn/dev/summonaikit-claude/tools/saikit-merge.sh --confirmado    # squash con --match-head-commit
+bash /Users/dn/dev/summonaikit-claude/tools/saikit-merge.sh --auto          # squash con --match-head-commit
 bash /Users/dn/dev/summonaikit-claude/tools/saikit-postmerge.sh --merge-commit <merge_commit> --rama <default>
 ```
 

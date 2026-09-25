@@ -306,7 +306,7 @@ describe("plugin smoke import", () => {
     ) as { appendContext?: string } | undefined;
     const contract = armed?.appendContext ?? "";
     assert.match(contract, /saikit-merge\.sh/);
-    assert.match(contract, /implementer\/ingenieria.*GraphQL.*expectedHeadOid/s);
+    assert.match(contract, /Cualquier agente puede fusionar por saikit-merge\.sh --auto/);
     assert.doesNotMatch(contract, /gh api .*\/merge ni git push.*bloquea siempre/s);
 
     const denied = exec.handler(
@@ -315,7 +315,7 @@ describe("plugin smoke import", () => {
     ) as { block?: boolean; blockReason?: string } | undefined;
     assert.equal(denied?.block, true);
     assert.match(denied?.blockReason ?? "", /saikit-merge\.sh/);
-    assert.match(denied?.blockReason ?? "", /GraphQL.*expectedHeadOid/);
+    assert.match(denied?.blockReason ?? "", /CodeRabbit/);
   });
 });
 

@@ -62,7 +62,7 @@ const MUT = "mutation($id:ID!,$oid:GitObjectID!){me" + "rgePullRequest(input:{pu
 const CMD_MUT = "gh api graphql -f query='" + MUT + "'";
 
 describe("merge-guard wiring (cross-review r2)", () => {
-  it("before_tool_call con matcher exec pasa ctx.agentId a mergeGuardVerdict", async () => {
+  it("before_tool_call bloquea merge directo para cualquier agentId", async () => {
     const fake = makeFakeApi();
     const mod = await import("./index.ts");
     mod.default.register(fake.api as never);
@@ -73,8 +73,7 @@ describe("merge-guard wiring (cross-review r2)", () => {
     const event = { toolCallId: "t1", toolName: "exec", params: { command: CMD_MUT } };
     const blocked = reg.handler(event, { agentId: "verifier" }) as { block: boolean; blockReason: string };
     assert.match(blocked.blockReason, /Merge bloqueado/);
-    // Mismo comando, solo cambia ctx.agentId: si el wiring no pasara agentId, el verdict
-    // lo trataria como sin-agentId y bloquearia tambien a implementer.
-    assert.equal(reg.handler(event, { agentId: "implementer" }), undefined);
+    const implementer = reg.handler(event, { agentId: "implementer" }) as { block: boolean; blockReason: string };
+    assert.match(implementer.blockReason, /Merge bloqueado/);
   });
 });

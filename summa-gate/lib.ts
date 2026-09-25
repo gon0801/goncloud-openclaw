@@ -119,52 +119,10 @@ const GIT_PUSH_RE = /(?:^|[^A-Za-z0-9])git\s+push\b/;
 const GIT_PUSH_PROTECTED_RE =
   /push\s+.*(\sorigin\s+[+:]?(master|main)|\sHEAD:(master|main)|refs\/heads\/(master|main)|[A-Za-z0-9._/-]+:(master|main)|\s[+:]?(master|main))(\s|$)/;
 
-/**
- * Allowlist de agentes que pueden ejecutar la orden de merge del dueño (Fase 6, 6.5c, decisión D1:
- * la orden la ejecuta implementer o ingenieria; main no toca el merge).
- */
-const MERGE_AGENT_ALLOWLIST = new Set(["implementer", "ingenieria"]);
-
-// 6.5c: mutación GraphQL de merge (gh api graphql -f query=mutation … mergePullRequest(…) y llamadas a
-// api.github.com con path de merge. // la rama REST via gh api comparte la allowlist con el path de host: mismo endpoint, un solo trato sin importar el cliente (cross-review r1);
-// el host explícito cubre curl/plain-URL.
-// turno de cierre (2026-09-16, hallazgo MEDIA): la mutación también se consulta por HOST
-// (api.github.com/graphql), no solo cuando matchea el cliente `gh api`. Antes, un curl directo
-// al endpoint graphql pasaba entero, y la excusa "curl con token requeriría secret-read" no
-// aplicaba: `gh auth token` entrega el token desde un exec común. Asimetría cerrada — curl
-// queda cubierto en las DOS ramas: REST por path de host, GraphQL por host + nombre de mutación.
-//
-// ALCANCE DECLARADO. El guard es léxico sobre exec, así que quedan dos bypass INHERENTES
-// (límite del diseño, no defectos pendientes):
-//   (1) indirección de shell — variables, aliases, eval, base64: el texto del comando no lleva
-//       la orden de merge, así que ninguna regex léxica la ve;
-//   (2) query=@archivo — la mutación vive en el archivo, no en el comando (tiene prueba propia).
-// Ya NO es bypass, desde este turno: curl con token contra /graphql (cubierto por host).
-// Ya NO es bypass, desde r7 (rama `pr`), cerrado del todo en r8 (la cuarta forma) y extendido en
-// r9 a la rama `api`: el FLAG INTERPUESTO antes del subcomando, en sus CUATRO formas — valor
-// separado (`-R o/r`, `--repo o/r`), valor pegado con `=` (`-R=o/r`, `--repo=o/r`) y valor pegado
-// SIN `=` (`-Ro/r`, la forma de una sola pieza) — mas la forma separada con el valor
-// ENTRECOMILLADO que lleva un espacio adentro (`-H 'Accept: application/vnd.github+json'`), que no
-// es una quinta forma de attach sino la separada con una pieza que `\S*` no podia cruzar.
-// Mientras quedó una forma o una RAMA abierta esta declaración fue falsa tres veces seguidas: r7
-// enumeró tres formas con la cuarta pasando; r8 cerró la cuarta pero solo en `gh pr <verbo>` y
-// escribió "la frontera izquierda queda cubierta" mientras `gh api` —el que gatilla las DOS reglas
-// de merge con allowlist— seguía exigiendo contigüidad; el reviewer del sello encontró las dos.
-// Ninguna de esas formas entra en las dos clases inherentes —el texto del comando lleva la orden
-// completa y visible, o sea es corregible léxicamente— así que se cerraron en el código en vez de
-// re-escribir el conteo. AHORA SÍ son DOS, y la frontera izquierda queda cubierta en las DOS ramas
-// del cliente (`gh pr <verbo>` y `gh api`, REST y GraphQL) con prueba propia: las cuatro formas más
-// la entrecomillada, para main, reviewer y agentId ausente, con la allowlist (implementer/
-// ingenieria) verificada como PASA en la rama de allowlist para que cerrar la frontera no la
-// convierta en bloqueo, y con las lecturas (`api rate_limit` con `-X GET`/`--method GET`, `api`
-// leyendo un PR con `-H`/`--header`, `pr view`/`pr checks` también con el valor pegado) como
-// controles negativos.
-// Tampoco lo es el encadenado sin espacio (r3 hallazgo 1) ni el terminador pegado (turno de
-// cierre): la frontera por lookahead de arriba los corta a los dos, así que la promesa del
-// mensaje "(también encadenado con &&/;)" es verdadera.
-// La copia de esta declaración en la skill saikit-cierre-pr se alinea en este mismo SHA (r9: las
-// dos ramas del cliente), como se alineó en a679c5a y en r8: el texto y la regex tienen que decir
-// lo mismo.
+// La ruta directa REST o GraphQL queda bloqueada para todos los agentes.
+// El guard es léxico: variables, aliases y query=@archivo quedan fuera de su
+// alcance. La política real de integración vive en el gate del kit, que
+// comprueba CI, CodeRabbit, recibo y SHA antes de llamar GitHub.
 // cross-review r2 (grok): ademas de mergePullRequest se bloquean las mutaciones hermanas:
 // mergeBranch (equivale a POST /merges) y enablePullRequestAutoMerge (abre el mismo merge sin orden).
 // r3 (hallazgo 3): word-boundary puro, sin exigir `(` — un comentario GraphQL pegado al
@@ -180,9 +138,9 @@ const GITHUB_HOST_GRAPHQL_RE = /api\.github\.com\/graphql(?![A-Za-z0-9_])/;
 
 // r3 (hallazgo 2): nucleo del veredicto; mergeGuardVerdict lo corre sobre el comando
 // original y sobre una copia sin comillas (wrapper mas abajo).
-function mergeGuardCoreVerdict(command: string, allowlisted: boolean): string | undefined {
+function mergeGuardCoreVerdict(command: string): string | undefined {
   if (GH_PR_MERGE_RE.test(command)) {
-    return "Merge bloqueado por summa-gate: `gh pr merge` está prohibido desde el agente (también encadenado con &&/;). Para autopilot del kit, usá saikit-merge.sh con preaprobación de fase y recibo. Con orden fechada del dueño en el brief para la lane SAIKIT, implementer/ingenieria pueden usar GraphQL con expectedHeadOid; main/reviewer no pueden ejecutar merges API.";
+    return "Merge bloqueado por summa-gate: usá saikit-merge.sh --auto. El kit comprueba CI, CodeRabbit, recibo y SHA para cualquier agente.";
   }
   const restMerge = GH_API_RE.test(command) && GH_API_MERGE_PATH_RE.test(command);
   // El cliente de la mutación puede ser `gh api` o un curl al host: el endpoint es el mismo,
@@ -191,16 +149,11 @@ function mergeGuardCoreVerdict(command: string, allowlisted: boolean): string | 
     (GH_API_RE.test(command) || GITHUB_HOST_GRAPHQL_RE.test(command)) &&
     GRAPHQL_MERGE_RE.test(command);
   const hostMerge = GITHUB_HOST_MERGE_RE.test(command);
-  // El bypass de la allowlist aplica SOLO a la regla de merge que coincidio: el resto de
-  // las reglas se sigue evaluando (comando encadenado de agente allowlisted: la mutacion
-  // pasa, el push a rama protegida sigue bloqueado - cross-review r1, no retornar temprano).
-  if ((graphqlMerge || hostMerge) && !allowlisted) {
-    return (
-      "Merge bloqueado por summa-gate: la mutación GraphQL de merge y las rutas de merge de api.github.com están prohibidas desde el agente salvo para implementer/ingenieria con la orden del dueño citada en el brief (6.5b)."
-    );
+  if (graphqlMerge || hostMerge) {
+    return "Merge bloqueado por summa-gate: usá saikit-merge.sh --auto; la API directa omite el gate de CodeRabbit.";
   }
-  if (restMerge && !allowlisted) {
-    return "Merge bloqueado por summa-gate: `gh api …/merge` está prohibido desde el agente. El merge lo hace el operador o el flujo autorizado del repo.";
+  if (restMerge) {
+    return "Merge bloqueado por summa-gate: usá saikit-merge.sh --auto; la API directa omite el gate de CodeRabbit.";
   }
   if (GIT_PUSH_RE.test(command) && GIT_PUSH_PROTECTED_RE.test(command)) {
     return "Push bloqueado por summa-gate: `git push` a master/main está prohibido desde el agente (incluye origin master, +master, HEAD:main, refs/heads/main y delete-ref :main).";
@@ -208,10 +161,7 @@ function mergeGuardCoreVerdict(command: string, allowlisted: boolean): string | 
   return undefined;
 }
 
-export function mergeGuardVerdict(command: string, agentId?: unknown): string | undefined {
-  // Normalizacion del agentId (trim + lowercase), como en el resto del modulo:
-  // "Implementer" o " implementer " se comportan igual que "implementer" (cross-review r1).
-  const allowlisted = MERGE_AGENT_ALLOWLIST.has(normalized(agentId) ?? "");
+export function mergeGuardVerdict(command: string, _agentId?: unknown): string | undefined {
   // r3 (hallazgo 2): token entrecomillado — la comilla en la posicion del token
   // (`'gh' api ...`) cortaba la frontera del cliente. El matching corre sobre el comando
   // original Y sobre una copia sin comillas simples/dobles; fail-closed: los falsos
@@ -220,8 +170,8 @@ export function mergeGuardVerdict(command: string, agentId?: unknown): string | 
   // de shell (variables, aliases, eval, base64) y query=@archivo. curl con token contra
   // /graphql ya NO es bypass: quedo cubierto por host (ver la declaracion larga de arriba).
   return (
-    mergeGuardCoreVerdict(command, allowlisted) ??
-    mergeGuardCoreVerdict(command.replace(/['"\\`]/g, ""), allowlisted)
+    mergeGuardCoreVerdict(command) ??
+    mergeGuardCoreVerdict(command.replace(/['"\\`]/g, ""))
   );
 }
 
