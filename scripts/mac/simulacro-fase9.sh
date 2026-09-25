@@ -72,7 +72,11 @@ export OPENCLAW_BIN TMUX_BIN CORRIDA_STATE WATCH_STATE_DIR
 ENSAYO=0
 DRY_RUN=0
 SALIDA=""
-TOPE_PARED=570
+# 750s: el presupuesto peor de los casos secuenciales tras subir C5/C6 a 300s
+# (CodeRabbit, PR #162) es 180+150+60+300 = 690s antes del caso 7; con 570s el
+# watchdog de pared cortaba la corrida antes de que la ventana de relanzo
+# venciera. Con --observar-avance el tope se sigue subiendo solo al minimo.
+TOPE_PARED=750
 TOPE_PARED_EXPLICITO=0
 OBSERVAR_AVANCE=""
 LIMPIAR_ID=""
