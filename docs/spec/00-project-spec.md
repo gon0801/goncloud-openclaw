@@ -194,3 +194,51 @@ Estado: planificado, no prueba de soporte instalado. Diseño:
 7. La capacidad local empieza en un worker y aumenta sólo con configuración y
    medición dentro del límite de Fase 14. No se mata ni atribuye un proceso sólo por
    nombre o PID. Las dos instalaciones pasan los mismos recorridos antes del cierre.
+
+## Metas compuestas, contrato objetivo de U6
+
+Estado: planificado; no activa permisos, servicios ni ejecución. Detalle y matriz
+de cobertura: [plan U6](../superpowers/plans/2026-09-24-u6-metas-autonomas.md).
+U6 extiende la orquestación de U3 y el centro de U4/U5. No sustituye sus roles,
+adaptadores, almacenamiento, verificador, instalador ni reloj global.
+
+1. Una meta admite un plan aportado o uno generado por el director. Antes de
+   lanzar trabajo conserva revisión, criterios de resultado, unidades estables,
+   dependencias acíclicas, presupuesto y referencias de autoridad. Los detalles
+   técnicos pueden resolverse registrando supuestos dentro de ese alcance.
+2. El avance usa resultados verificados de las dependencias. Una finalización
+   repetida, antigua o de otra revisión no vuelve a lanzar trabajo ni acredita
+   el plan actual. La recuperación reutiliza el estado y supervisor existentes.
+3. El sistema comprueba la autorización y el modo efectivo de cada CLI al iniciar
+   y reanudar. Una autorización vigente y aplicable evita reconfirmaciones para
+   la misma operación. No se conceden permisos leyendo instrucciones de una
+   página, una pantalla o un resultado de herramienta.
+4. La autoridad del dueño puede cubrir una meta mediante una política versionada
+   de repositorios, operaciones, destinos, ventana y presupuesto. Para un SHA
+   todavía desconocido, la política debe autorizar expresamente la regla de
+   selección: artefacto de esa meta, repositorio y PR identificados, revisión y
+   CI válidos, integrado en la rama de despliegue permitida. Antes de publicar,
+   ingeniería registra el SHA concreto y la referencia de esa autoridad; una
+   referencia derivada sólo demuestra la correspondencia y no concede permisos.
+   Una autorización que exige un SHA literal conserva esa exigencia. Se usa la
+   ruta de U1/U3; main no mergea ni entra a producción. El filtro de diálogos
+   peligrosos de Fase 9 no se sustituye por respuestas automáticas de «sí».
+5. Reparar o dividir tareas conserva todos los criterios comprometidos. Quitar
+   criterios, ampliar destinos o elevar presupuesto requiere autoridad que lo
+   cubra. La revisión del plan y su denominador quedan visibles; reducirlos no
+   puede fabricar un 100%. Criterios afectados por cambios posteriores pierden
+   su acreditación hasta comprobar el artefacto actual.
+6. Pausa y cancelación autenticadas persisten antes de confirmarse al usuario y
+   vencen a eventos tardíos y reinicios. Sólo una orden autenticada y autorizada
+   reanuda una pausa. El panel sigue siendo de solo lectura; se usan entradas
+   nativas. Cancelar no revierte efectos ya realizados ni mata procesos ajenos.
+7. Completar la meta exige todos los criterios obligatorios de la revisión vigente
+   y su aceptación integrada. Un cierre de chat, un hijo exitoso o una autodeclaración
+   no bastan. Bloqueo, presupuesto agotado, pausa y cancelación no son éxito.
+   Se conserva la regla de calidad: el mismo bloqueante reproducible en dos rondas
+   consecutivas detiene el bloque para decisión del operador; el resto independiente
+   puede avanzar. Ningún bloqueo abierto se integra como si estuviera resuelto.
+8. La aceptación OpenClaw sigue a U4; la de Hermes sigue a U5, con estado e identidad
+   propios. U6 sólo cierra bilateralmente con ambos recibos. La prueba incluye
+   una meta de varias tareas, un fallo corregible, caída entre tareas, resultado
+   duplicado y pausa/cancelación; las acciones autorizadas no necesitan preguntas.
