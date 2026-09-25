@@ -317,6 +317,28 @@ printf '%s' "$out" | grep -q "vigilante viejo" || fail "NO APTO sin razon del vi
 $out"
 git -C "$T/repo" show "origin/main:scripts/mac/tmux-activity-watch.sh" >"$WATCH_INSTALADO"
 
+# CI #153: REPO_DIR sin origin/main (el checkout superficial de un shard no lo
+# trae) NO puede decir "vigilante viejo" en falso. Sin --verify, `git
+# rev-parse origin/main:<ruta>` en un repo sin ese remoto imprime el
+# ARGUMENTO LITERAL por stdout (con el "fatal:" solo en stderr, que aqui va a
+# /dev/null): "Esperado" quedaba no vacio, distinto del blob instalado, y
+# preflight declaraba viejo un vigilante que nunca se pudo comparar.
+mkdir -p "$T/repo-sin-origin/scripts/mac"
+cp scripts/mac/tmux-activity-watch.sh "$T/repo-sin-origin/scripts/mac/"
+git -C "$T/repo-sin-origin" init -q
+git -C "$T/repo-sin-origin" add -A
+git -C "$T/repo-sin-origin" -c user.email=t@t -c user.name=t commit -qm semilla
+# A proposito: SIN remoto origin, como el checkout superficial de un shard de CI.
+modos x ok cli-ok "--flag-ok-9" "BAR-OK-9"
+abrir t-sin-origin "$RB"
+out=$(REPO_DIR="$T/repo-sin-origin" bash "$CORR" preflight t-sin-origin 2>&1)
+printf '%s' "$out" | grep -q "vigilante viejo" \
+  && fail "REPO_DIR sin origin/main: el vigilante NO debia salir 'viejo' (regresion CI #153):
+$out"
+printf '%s' "$out" | grep -q "blob del vigilante sin comparar" \
+  || fail "REPO_DIR sin origin/main: se esperaba el unknown 'blob del vigilante sin comparar':
+$out"
+
 # ROJO con la tabla ilegible: nada de APTO ciego sin haber probado binarios.
 printf 'ok\tcli-ok\t--flag-ok-9\tBAR-OK-9\t--\t--\t--\n' >"$T/t-tabla.tsv"
 bash "$CORR" abrir t-tabla --runbook "$RB" --vigia claw --cli-modos "$T/t-tabla.tsv" >/dev/null \
