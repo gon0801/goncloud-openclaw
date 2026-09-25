@@ -767,6 +767,32 @@ if grep -Eiq '(send|deliver)[^.]*every[^.]*(turn|inspection)' "$ENTREGA"; then
 fi
 echo "ok (4c): owner-report-delivery clasifica el wake-up interno antes de entregar"
 
+# (2l) Enrutado por corrida (9.9b, medido 2026-09-25): los eventos de una sesion con
+# OPENCLAW_WATCH_RUN=<id> van con --session-key agent:main:sim9-<id> a la sesion propia
+# de la corrida; el "closed" tambien, con el id capturado en el .state ANTES de morir
+# (al cerrarse ya no se puede leer su entorno). Sin marca, el envio va igual que hoy
+# (sin --session-key): la sesion principal de main no deja de recibir lo demas.
+PANTALLA_R="$T/pantalla-ruta.txt"
+printf 'Run this command?\n$ echo hola\nrunning 9s\n' >"$PANTALLA_R"
+"$TM" -L "$L" new-session -d -s sim9-ruta -x 80 -y 20 "$TUI $PANTALLA_R" || fail "no se pudo crear sim9-ruta"
+mark sim9-ruta
+"$TM" -L "$L" set-environment -t sim9-ruta OPENCLAW_WATCH_RUN sim9-TEST-RUTA
+espera_pantalla sim9-ruta "running"
+: >"$CALLS"
+run_p || fail "--once (2l, prompt con run) fallo"
+grep -q -- '--session-key agent:main:sim9-sim9-TEST-RUTA' "$CALLS" \
+  || fail "(2l) el evento de una sesion con OPENCLAW_WATCH_RUN no lleva --session-key a la sesion de la corrida:
+$(cat "$CALLS")"
+"$TM" -L "$L" kill-session -t sim9-ruta
+: >"$CALLS"
+run_p || fail "--once (2l, closed con run) fallo"
+grep -q -- '--session-key agent:main:sim9-sim9-TEST-RUTA' "$CALLS" \
+  || fail "(2l) el evento 'closed' no lleva el --session-key del run capturado en .state:
+$(cat "$CALLS")"
+grep -q 'sim9-ruta closed' "$CALLS" || fail "(2l) no se vio el evento closed de sim9-ruta:
+$(cat "$CALLS")"
+echo "ok (2l): los eventos de una corrida se rutearon a su sesion, vivos y cerrados"
+
 # (5) Retirado en 15.1: la llamada anidada a scripts/tests/test-mac-tmux-control.sh.
 # Corria el detector DOS veces por bateria (una aqui, otra por el inventario del glob del
 # runner). El test independiente sigue en el inventario y con todas sus assertions: es el
