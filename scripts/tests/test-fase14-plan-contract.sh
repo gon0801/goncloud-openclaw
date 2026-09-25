@@ -32,8 +32,8 @@ grep -qF 'Python 3.10+' "$PLAN" \
 grep -qF 'Cursor Agent conserva `--auto-review`, `--sandbox` y `--workspace`' "$SPEC" \
   || fail "la spec manda a Cursor crear otro worktree"
 
-grep -qF 'preaprobación versionada' "$ROOT" \
-  || fail "el contrato superior no representa la autoridad autonoma aprobada"
+grep -qF 'Cualquier agente Claw o CLI con acceso al worktree puede ejecutar `saikit-merge.sh --auto`' "$ROOT" \
+  || fail "el contrato superior no representa el merge autonomo aprobado"
 grep -qF 'authorization_ref' "$PLAN" \
   || fail "Task 7 no enlaza la corrida con la preaprobacion del dueño"
 grep -qF 'Create: `scripts/tests/fixtures/corrida/v2-existing-without-workers.json`' "$PLAN" \

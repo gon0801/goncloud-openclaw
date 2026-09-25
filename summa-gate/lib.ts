@@ -131,10 +131,10 @@ const GIT_PUSH_PROTECTED_RE =
 const GRAPHQL_MERGE_RE = /\b(?:mergePullRequest|mergeBranch|enablePullRequestAutoMerge)\b/;
 // La misma alternacion enumerada y la misma frontera que la rama de `gh api` (re-review r6): un
 // solo trato por endpoint, sin importar el cliente. Si se agrega un sufijo, va en las DOS.
-const GITHUB_HOST_MERGE_RE = /api\.github\.com\/[^\s'"]*\/(?:merges?|auto-merge|merge-async|merge-upstream)(?![A-Za-z0-9_-])/;
+const GITHUB_HOST_MERGE_RE = /api\.github\.com\.?(?::[0-9]+)?\/[^\s'"]*\/(?:merges?|auto-merge|merge-async|merge-upstream)(?![A-Za-z0-9_-])/i;
 // turno de cierre (2026-09-16, hallazgo MEDIA): el endpoint GraphQL por host, para que la
 // mutación de merge se evalúe también cuando el cliente es curl y no `gh api`.
-const GITHUB_HOST_GRAPHQL_RE = /api\.github\.com\/graphql(?![A-Za-z0-9_])/;
+const GITHUB_HOST_GRAPHQL_RE = /api\.github\.com\.?(?::[0-9]+)?\/graphql(?![A-Za-z0-9_])/i;
 
 // r3 (hallazgo 2): nucleo del veredicto; mergeGuardVerdict lo corre sobre el comando
 // original y sobre una copia sin comillas (wrapper mas abajo).

@@ -40,6 +40,13 @@ describe("mergeGuardVerdict (6.5c)", () => {
     );
   });
 
+  it("bloquea variantes equivalentes del host GitHub para REST y GraphQL", () => {
+    for (const host of ["api.github.com:443", "API.GITHUB.COM", "api.github.com."]) {
+      assert.match(mergeGuardVerdict(`curl -X PUT https://${host}/repos/o/r/pulls/1/merge`, "implementer") ?? "", /Merge bloqueado/);
+      assert.match(mergeGuardVerdict(`curl https://${host}/graphql -d 'mutation{mergePullRequest(input:{pullRequestId:"x"}){pullRequest{number}}}'`, "ingenieria") ?? "", /Merge bloqueado/);
+    }
+  });
+
   it("NO bloquea gh pr view (consulta)", () => {
     assert.equal(mergeGuardVerdict("/opt/homebrew/bin/gh pr view 12 --json state", undefined), undefined);
   });
