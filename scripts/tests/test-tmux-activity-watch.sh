@@ -772,6 +772,7 @@ echo "ok (4c): owner-report-delivery clasifica el wake-up interno antes de entre
 # de la corrida; el "closed" tambien, con el id capturado en el .state ANTES de morir
 # (al cerrarse ya no se puede leer su entorno). Sin marca, el envio va igual que hoy
 # (sin --session-key): la sesion principal de main no deja de recibir lo demas.
+if [ -n "${TM:-}" ] && [ -n "${TUI:-}" ]; then
 PANTALLA_R="$T/pantalla-ruta.txt"
 printf 'Run this command?\n$ echo hola\nrunning 9s\n' >"$PANTALLA_R"
 "$TM" -L "$L" new-session -d -s sim9-ruta -x 80 -y 20 "$TUI $PANTALLA_R" || fail "no se pudo crear sim9-ruta"
@@ -792,6 +793,9 @@ $(cat "$CALLS")"
 grep -q 'sim9-ruta closed' "$CALLS" || fail "(2l) no se vio el evento closed de sim9-ruta:
 $(cat "$CALLS")"
 echo "ok (2l): los eventos de una corrida se rutearon a su sesion, vivos y cerrados"
+else
+  echo "SKIP (2l): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
+fi
 
 # (5) Retirado en 15.1: la llamada anidada a scripts/tests/test-mac-tmux-control.sh.
 # Corria el detector DOS veces por bateria (una aqui, otra por el inventario del glob del

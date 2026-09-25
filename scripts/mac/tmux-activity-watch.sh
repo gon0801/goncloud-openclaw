@@ -208,9 +208,15 @@ state_file() {
   printf '%s/%s.state\n' "$STATE_DIR" "$1"
 }
 
-read_run() { # $1 sesion -> valor de OPENCLAW_WATCH_RUN (vacio si no esta marcada)
+read_run() { # $1 sesion -> valor de OPENCLAW_WATCH_RUN. rc 0 y vacio si la
+  # variable no esta (sesion marcada a mano, sin corrida): NO se hereda el run
+  # de un estado previo — una sesion NUEVA con el mismo nombre que una vieja de
+  # otra corrida no debe rutearse a la corrida vieja (CodeRabbit, PR #164).
+  # rc 1 solo si el entorno no se pudo leer (sesion muriendo a mitad de tick).
   local v
-  v=$("$TMUX_BIN" show-environment -t "$1" OPENCLAW_WATCH_RUN 2>/dev/null) || return 0
+  if ! v=$("$TMUX_BIN" show-environment -t "$1" OPENCLAW_WATCH_RUN 2>/dev/null); then
+    return 1
+  fi
   printf '%s\n' "${v#OPENCLAW_WATCH_RUN=}"
 }
 
@@ -312,8 +318,11 @@ tick() {
     # entorno, y el evento "closed" necesita el id para rutear a la sesion de
     # la corrida. Se refresca en cada tick (set-environment lo cambia si la
     # sesion se relanza en otra corrida) y cae al ultimo valor conocido.
-    run=$(read_run "$session")
-    [[ -n $run ]] || run=$prev_run
+    if run=$(read_run "$session"); then
+      : # variable leida (aunque venga vacia): manda lo que dice HOY la sesion
+    else
+      run=$prev_run # entorno ilegible (muriendo a mitad de tick): ultimo conocido
+    fi
 
     # The session can vanish between list-sessions and here: skip it, the closed sweep of the
     # next tick reports it.
