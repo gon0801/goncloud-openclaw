@@ -13,5 +13,6 @@ grep -qF 'the OpenClaw gateway hook blocks direct GitHub API and GraphQL merges 
 grep -qF '**Sin cuota de CodeRabbit el PR espera**' docs/runbooks/loop-autopilot.md || { echo 'FAIL: runbook omite espera de CodeRabbit'; exit 1; }
 grep -qF 'sin revisión completada y estado verde del SHA actual, el merge espera' docs/runbooks/loop-autopilot.md || { echo 'FAIL: tabla de roles permite merge sin CodeRabbit'; exit 1; }
 grep -qF 'Puede mergear PRs revisados mediante `saikit-merge.sh --auto`' docs/runbooks/base-openclaw.md || { echo 'FAIL: runbook base prohibe merge a claw'; exit 1; }
-grep -qF 'El merge del paso 8 usa la política permanente' docs/runbooks/camino-feliz-producto.md || { echo 'FAIL: camino feliz exige go/no-go por PR'; exit 1; }
+grep -qF 'El merge usa la política permanente' docs/runbooks/camino-feliz-producto.md || { echo 'FAIL: camino feliz exige go/no-go por PR'; exit 1; }
+awk -F'|' '$2 ~ /^ *7 *$/ { if ($3 !~ /Merge autónomo/) exit 1; found=1 } END { if (!found) exit 1 }' docs/runbooks/camino-feliz-producto.md || { echo 'FAIL: merge debe preceder autorización del SHA integrado'; exit 1; }
 echo 'PASS test-cierre-pr-merge-comando'
