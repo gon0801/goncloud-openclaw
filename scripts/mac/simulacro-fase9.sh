@@ -347,6 +347,9 @@ VIGIA_PATRON="bin/tmux-activity-watch.sh"
 # comprobacion de que "el vigia esta vivo" tambien se salta mas abajo, en
 # prerrequisitos: nada lo levanto para que hubiera algo que encontrar).
 if [ "$ENSAYO" = "1" ] && [ "$DRY_RUN" != "1" ]; then
+  # El vigia doblado es la copia del checkout: el preflight debe comparar contra
+  # HEAD de este checkout, no contra origin/<default> (ver preflight.sh).
+  export CORRIDA_PREFLIGHT_REF=HEAD
   VIGIA_ENSAYO_DIR="$CORRIDA_STATE/.arnes-vigia-bin"
   mkdir -p "$VIGIA_ENSAYO_DIR/bin" || { echo "simulacro-fase9: no se pudo preparar el vigia doblado" >&2; exit 2; }
   cp "$REPO_RAIZ/scripts/mac/tmux-activity-watch.sh" "$VIGIA_ENSAYO_DIR/bin/tmux-activity-watch.sh" \
