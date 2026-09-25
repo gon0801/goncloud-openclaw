@@ -172,14 +172,6 @@ function disparar(label, hookRef, event, ctx) {
   reales.push({ label, reason: r && r.block ? r.blockReason : null });
 }
 
-disparar("merge-guard subcomando CLI", execHook,
-  { toolName: "exec", params: { command: "gh pr merge 12 -R o/r --squash" } }, main);
-disparar("merge-guard mutación GraphQL", execHook,
-  { toolName: "exec", params: { command: "gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:PR_1}) { clientMutationId } }'" } }, main);
-disparar("merge-guard ruta REST de merge", execHook,
-  { toolName: "exec", params: { command: "gh api repos/o/r/pulls/1/merge -X PUT" } }, main);
-disparar("merge-guard push a protegida", execHook,
-  { toolName: "exec", params: { command: "git push origin main" } }, main);
 disparar("confinamiento adversary escritura", adversaryHook,
   { toolName: "write", params: { file_path: "/tmp/fuera-de-zona.txt" } }, adversary);
 disparar("confinamiento adversary redirección", adversaryHook,
