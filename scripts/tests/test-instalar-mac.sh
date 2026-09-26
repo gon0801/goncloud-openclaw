@@ -65,8 +65,8 @@ for f in corrida.sh cli-modos.tsv agent-tmux.sh agent-tmux-shell.zsh tmux-activi
 done
 [ -x "$HOME/bin/corrida.sh" ] || fail "corrida.sh quedo sin +x"
 ncorr="$(ls "$HOME/bin/corrida"/*.sh 2>/dev/null | wc -l)"
-[ "$ncorr" -eq 12 ] || fail "corrida/ trae $ncorr .sh, se esperaban 12"
-for f in abrir lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento lib; do
+[ "$ncorr" -eq 15 ] || fail "corrida/ trae $ncorr .sh, se esperaban 15"
+for f in abrir lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento lib adaptador preparar-carril mostrar-terminal; do
   [ -f "$HOME/bin/corrida/$f.sh" ] || fail "falta \$HOME/bin/corrida/$f.sh"
 done
 PL="$HOME/Library/LaunchAgents/ai.goncloud.tmux-activity-watch.plist"
