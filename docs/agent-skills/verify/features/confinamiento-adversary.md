@@ -4,8 +4,10 @@ Keeps the `adversary` agent from writing outside its zone. That agent exists to
 attack the change and try to break things, so it is the one agent you least want
 able to edit the repo it is attacking.
 
-Registered on `before_tool_call` with the `exec` matcher, gated on the agent id,
-so it only applies to `adversary` and leaves every other agent alone.
+Registered on `before_tool_call` with no matcher, gated inside the handler on
+the agent id and the tool name, so it only applies to `adversary` and leaves
+every other agent alone. (It must not carry an `exec` matcher: the write-tool
+check fires on non-exec tools, so a matcher would disarm half the guard.)
 
 ## Sub-features
 

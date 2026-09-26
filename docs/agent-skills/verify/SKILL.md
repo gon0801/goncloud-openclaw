@@ -35,8 +35,11 @@ checks this list against those comments so it cannot.
 
 **There is exactly one gateway and it is production.** It runs on the Windows
 host at `C:\Users\ehven\.openclaw`. You cannot start a second one, and this
-repo's content reaches it only through a sync that runs every two hours at :10
-of odd hours in `America/New_York`.
+repo's content reaches it only through a **manual** `scripts/sync-seguro`
+publish: merging to main does not deploy. The old two-hour git sync is dead —
+`scripts/sync-repos.ps1` is obsolete since U1 (see `scripts/sync-seguro/README.md`),
+`sync-repos.log` no longer exists on the host, and the `GoncloudRepoSync`
+task last ran 2026-09-21 (all verified 2026-09-26).
 
 Three consequences that shape everything below:
 
@@ -44,8 +47,9 @@ Three consequences that shape everything below:
    allows are the inert ones in Drive, which fail by construction even if the
    guard were broken. Never invent a new live drive that would succeed if the
    guard failed.
-2. **The gateway runs a different commit than your checkout**, up to two hours
-   behind, and longer if the sync errored. Doctor tells you which.
+2. **The gateway runs whatever the last manual publish installed**, which can
+   be any commit, fresh or stale. Doctor tells you which by comparing the
+   publisher's ledger on the host against your checkout.
 3. **If two agents drive at once you cannot tell whose turn produced what.**
    Check for a live run before driving and refuse rather than interleave.
 
@@ -72,7 +76,7 @@ Doctor tells you whether it is worth driving.
 
 ## Doctor
 
-Four read-only questions, in this order. Stop at the first `no`.
+Three read-only questions, in this order. Stop at the first `no`.
 
 ```
 G=~/.openclaw/bin/openclaw
@@ -100,23 +104,34 @@ raise the timeout to "fix" it; the gateway answers in seconds when it answers at
 all, so a long wait buys nothing and hides a real outage behind a minute of
 silence.
 
-The other three run **by exec on the gateway host**, through a turn to `main`
+The other two run **by exec on the gateway host**, through a turn to `main`
 (see Drive for the mechanism), because they ask about that machine, not yours:
 
 ```
 openclaw plugins list
-git -C C:\Users\ehven\.openclaw log -1 --format=%H
-powershell -Command "Get-Content C:\Users\ehven\.openclaw\logs\sync-repos.log -Tail 20"
+powershell -Command "Get-Content C:\Users\ehven\.openclaw\.ledger\sync-seguro-installed.json -Raw"
 ```
 
 - `summa-gate` missing from `plugins list`: the plugin is not loaded. A drive
-  would prove nothing; the absence is the finding.
-- The gateway's commit is not an ancestor of your `origin/main`: it is running
-  something your checkout does not describe. Check with
-  `git merge-base --is-ancestor <sha> origin/main` and say which commit it is
-  before interpreting any live result.
-- The sync log ends in `CONFLICTO` or `FALLO`: the gateway stopped taking
-  updates. Every live result is about an old build until that clears.
+  would prove nothing; the absence is the finding. The plugin loads from
+  `C:\Users\ehven\.openclaw\summa-gate\index.ts`, deployed flat — the host dir
+  is not a git clone (no `.git`, verified 2026-09-26), so a `git log` there
+  fails with "not a git repository" and tells you nothing.
+- The ledger maps each published repo path to the sha256 of its canonical
+  (LF-normalized) bytes at publish time. Compare it against your checkout,
+  fetching first — `origin/main` is a remote-tracking ref and a stale one
+  turns this check into a verdict about an old snapshot:
+
+  ```
+  git fetch origin
+  git show origin/main:summa-gate/index.ts | shasum -a 256
+  ```
+
+  A match means the gateway runs exactly `origin/main` for that file
+  (verified equal on 2026-09-26). A mismatch means it runs something your
+  checkout does not describe: say which hash the ledger carries before
+  interpreting any live result. There is no sync-lag window to reason about —
+  deploys are manual, so the ledger is the whole truth.
 
 ## Drive
 
@@ -265,8 +280,9 @@ Keep the map honest with `/maintain-verification-skill` as the plugin changes.
 The canonical copy is tracked at `docs/agent-skills/verify/`, so it travels with
 the repo and any host can read it. Claude Code finds it because
 `.claude/skills/verify` is a symlink pointing here, and that link is machine
-local: `.claude/` is gitignored, since the gateway's clone is this repo's root
-and everything a session writes would otherwise ride the sync.
+local: `.claude/` is gitignored — it holds session state that should never be
+committed, and only committed, allowlisted files can ride a sync-seguro publish
+to the gateway anyway.
 
 **Edit the tracked copy, not the link.** On a host without the link, read this
 file directly; nothing here depends on being loaded as a slash command.
