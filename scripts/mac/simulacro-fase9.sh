@@ -1174,7 +1174,7 @@ sha_origin_main() { git -C "$REPO_RAIZ" rev-parse --verify -q origin/main 2>/dev
 tabla_instalado() {
   local f
   printf '| archivo | blob en origin/main | blob instalado | igual |\n|---|---|---|---|\n'
-  for f in corrida.sh cli-modos.tsv agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh; do
+  for f in corrida.sh cli-modos.tsv workers.v1.json agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh; do
     local esp real igual
     esp="$(git -C "$REPO_RAIZ" rev-parse --verify -q "origin/main:scripts/mac/$f" 2>/dev/null || echo "sin-referencia")"
     real="$(git -C "$REPO_RAIZ" hash-object "$HOME/bin/$f" 2>/dev/null || echo "sin-instalar")"
