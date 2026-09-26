@@ -1016,15 +1016,20 @@ printf '%s' "$cap" | grep -q "TUI-FALSO" || fail "el TUI no pinta su linea final
 # (12) Fase 14 Task 3: lanzar con --carril/--worker persiste worker,
 # harness, provider, reported_model y session antes de entregar; si la
 # entrega falla, persiste failed y detiene la sesion sin borrar su historial.
+# El carril llega preparado por preparar-carril (reserva completa); lanzar
+# sobre un carril inexistente o incompleto es error duro sin escritura parcial.
 # (t1 ya cerro en (10): este bloque abre su propia corrida.)
+. scripts/mac/corrida/lib.sh
 bash "$CORR" abrir t-carril --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" --simulacro >/dev/null \
   || fail "abrir t-carril fallo"
 python3 - "$T/corridas/t-carril/registro.json" <<'PY' || fail "no se preparo el carril lane-9x"
 import json,sys
 r=sys.argv[1]
 d=json.load(open(r))
-d.setdefault('carriles',{}).setdefault('lane-9x',{'mode':'write'})
-d['carriles'].setdefault('lane-9y',{'mode':'write'})
+def reserva(lane,wt,base):
+  return {'branch':'carril/'+lane,'worktree':wt,'base_remote_sha':base,'owner':lane,'mode':'write','estado':'reservado'}
+d.setdefault('carriles',{})['lane-9x']=reserva('lane-9x','/tmp/wt-9x','0'*40)
+d['carriles']['lane-9y']=reserva('lane-9y','/tmp/wt-9y','1'*40)
 json.dump(d,open(r,'w'),indent=1)
 PY
 S9=$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9 --encargo "$T/encargo.txt" --carril lane-9x --worker claude) \
@@ -1033,6 +1038,7 @@ S9=$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carr
 for campo in '"worker": *"claude"' '"harness": *"claude-code"' '"provider": *"anthropic"' '"reported_model": *"unknown"' '"session": *"ses-carril-9"' '"estado": *"activo"'; do
   grep -q "$campo" "$T/corridas/t-carril/registro.json" || fail "el carril no persiste $campo"
 done
+validar_registro "$T/corridas/t-carril/registro.json" || fail "el registro con el carril lanzado no pasa validar_registro"
 export SWALLOW=1 SWALLOW_N=2 SWALLOW_SES=ses-carril-9f
 rm -f "$T/tragado"
 bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9f --encargo "$T/encargo.txt" --carril lane-9y --worker codex >/dev/null 2>&1 \
@@ -1050,5 +1056,14 @@ bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9g
   && fail "--carril sin --worker debio rechazarse"
 bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9h --carril lane-9z --worker nosuch >/dev/null 2>&1 \
   && fail "--worker desconocido debio rechazarse"
+out="$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9r --encargo "$T/encargo.txt" --carril lane-9xq --worker claude 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "lanzar sobre un carril sin preparar debio rechazarse"
+printf '%s' "$out" | grep -q "no esta preparado" || fail "el rechazo del carril sin preparar no se explica: $out"
+"$TM_REAL" -L "$L" has-session -t "=ses-carril-9r" 2>/dev/null && fail "la sesion del carril sin preparar quedo viva"
+python3 - "$T/corridas/t-carril/registro.json" <<'PY' || fail "el carril rechazado dejo escritura parcial"
+import json,sys
+assert 'lane-9xq' not in json.load(open(sys.argv[1])).get('carriles',{}), 'escritura parcial'
+PY
+validar_registro "$T/corridas/t-carril/registro.json" || fail "tras el rechazo, el registro no pasa validar_registro"
 
 echo "TODO VERDE: test-corrida-nucleo"

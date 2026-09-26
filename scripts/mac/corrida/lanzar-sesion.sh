@@ -130,9 +130,22 @@ lanzar_sesion_marcar() { # $1 id $2 nombre $3 reg $4 carril $5 worker $6 barra
     provider="$(worker_atributo "$worker" provider)"
     lock_tomar "$reg" \
       || { echo "lanzar-sesion: lock del registro de $id no cede" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
+    # El carril lo prepara preparar-carril (reserva completa); lanzar jamas lo
+    # crea: un carril inexistente o sin los 5 campos del validador es error duro
+    # y la sesion muere sin escritura parcial.
+    CORR_C="$carril" CORR_REG="$reg" python3 -c "
+import json,os,sys
+d=json.load(open(os.environ['CORR_REG']))
+c=(d.get('carriles') or {}).get(os.environ['CORR_C'])
+if not isinstance(c,dict): sys.exit(1)
+for k in ('branch','worktree','base_remote_sha','owner','mode'):
+  if not c.get(k): sys.exit(1)
+" 2>/dev/null \
+      || { lock_soltar "$reg"
+           echo "lanzar-sesion: el carril $carril no esta preparado (falta o sin reserva completa)" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
     CORR_C="$carril" CORR_W="$worker" CORR_H="$harness" CORR_P="$provider" CORR_S="$nombre" \
       registro_escribir "$reg" "
-c=d.setdefault('carriles',{}).setdefault(os.environ['CORR_C'],{})
+c=d['carriles'][os.environ['CORR_C']]
 c.update({'worker':os.environ['CORR_W'],'harness':os.environ['CORR_H'],
 'provider':os.environ['CORR_P'],
 'reported_model':c.get('reported_model','unknown'),
