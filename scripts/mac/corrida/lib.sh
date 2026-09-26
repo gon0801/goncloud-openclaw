@@ -962,3 +962,41 @@ os.chmod(t,0o600)
 os.rename(t,r)
 " 2>/dev/null
 }
+
+# BAJO LOCK: libera las reservas huerfanas — estado reservado cuyo dueno
+# murio (token "PID-...") y cuyo worktree no existe (la reserva interrumpida
+# entre el unlock y el worktree add no consume cupo para siempre). Nunca toca
+# reservas vivas (PID vivo o sin permiso de senal = se asume vivo), tokens sin
+# PID atribuible, ni worktrees presentes (el add pudo completarse aunque el
+# dueno muriera despues). stdout: carriles liberados, uno por linea.
+registro_barrer_reservas_huerfanas() { # $1 reg
+  CORR_REG="$1" python3 -c "
+import json,os
+r=os.environ['CORR_REG']
+d=json.load(open(r))
+cs=d.get('carriles') or {}
+libres=[]
+for lane in list(cs):
+  c=cs[lane]
+  if not isinstance(c,dict) or c.get('estado')!='reservado': continue
+  pid=str(c.get('token') or '').split('-',1)[0]
+  if not pid.isdigit(): continue
+  try:
+    os.kill(int(pid),0)
+  except (ProcessLookupError,OverflowError,ValueError):
+    pass
+  except OSError:
+    continue
+  else:
+    continue
+  wt=c.get('worktree') or ''
+  if wt and os.path.exists(wt): continue
+  del cs[lane]; libres.append(lane)
+if libres:
+  t=r+'.tmp'
+  open(t,'w').write(json.dumps(d,indent=1)+chr(10))
+  os.chmod(t,0o600)
+  os.rename(t,r)
+print(chr(10).join(libres))
+" 2>/dev/null
+}

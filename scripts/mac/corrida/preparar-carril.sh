@@ -17,6 +17,10 @@ corrida_preparar_carril() {
   done
   corrida_id_valido "$id" || { echo "preparar-carril: id invalido: $id" >&2; return 2; }
   corrida_id_valido "$carril" || { echo "preparar-carril: carril invalido: $carril" >&2; return 2; }
+  # El entorno heredado manda sobre `git -C`: un GIT_DIR/GIT_WORK_TREE ajeno
+  # operaria sobre otro repo. Se sueltan antes de cada git (identidad y
+  # config —AUTHOR, CONFIG— no se tocan).
+  unset GIT_DIR GIT_WORK_TREE GIT_NAMESPACE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
   [ -d "$repo" ] || { echo "preparar-carril: sin repo: $repo" >&2; return 1; }
@@ -54,6 +58,10 @@ corrida_preparar_carril() {
   if ! lock_tomar "$reg"; then
     echo "preparar-carril: lock del registro de $id no cede" >&2; return 1
   fi
+  # Barrido best-effort de reservas huerfanas antes de contar: una reserva
+  # interrumpida (kill entre el unlock y el worktree add) no consume cupo
+  # para siempre. Si el barrido falla, se sigue como antes.
+  registro_barrer_reservas_huerfanas "$reg" >/dev/null 2>&1 || true
   local activos
   activos="$(registro_contar_harnesses_activos "$reg")"
   case "$activos" in ''|*[!0-9]*)

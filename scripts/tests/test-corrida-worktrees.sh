@@ -11,6 +11,9 @@ CORR=scripts/mac/corrida.sh
 T=$(mktemp -d) || exit 1
 trap 'rm -rf "$T"' EXIT
 export CORRIDA_STATE="$T/corridas" GIT_CONFIG_NOSYSTEM=1
+# Higiene como en produccion: la ubicacion del repo la manda el argumento,
+# nunca el entorno heredado (preparar-carril suelta estas mismas).
+unset GIT_DIR GIT_WORK_TREE GIT_NAMESPACE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 
 # Remoto bare + semilla con un commit; el clon queda atras a proposito para
@@ -109,5 +112,47 @@ while IFS= read -r wt; do
   [ -z "$(git -C "$wt" log --format=%H origin/main..HEAD 2>/dev/null)" ] \
     || fail "$wt nacio con historia sobre origin/main"
 done <"$T/wts"
+
+# Entorno git heredado: un GIT_DIR/GIT_WORK_TREE ajeno no desvia el fetch,
+# la base ni el worktree (repro del reviewer).
+mkdir -p "$T/corridas/run-g"
+python3 - "$T/corridas/run-g/registro.json" <<'PY' || fail "no se escribio run-g"
+import json,sys
+open(sys.argv[1],'w').write(json.dumps({"schema":"corrida.v2","id":"run-g","carriles":{}})+"\n")
+PY
+wtg="$(GIT_DIR=/no-existe-9 GIT_WORK_TREE=/no-existe-9 GIT_NAMESPACE=x-9 bash "$CORR" preparar-carril run-g lane-g "$T/repo" 2>"$T/gana-g.err")" \
+  || fail "preparar con GIT heredado fallo: $(cat "$T/gana-g.err")"
+[ -d "$wtg" ] && [ -f "$wtg/.git" ] || fail "sin worktree con GIT heredado: $wtg"
+[ "$(git -C "$wtg" log --format=%H origin/main..HEAD 2>/dev/null)" = "" ] \
+  || fail "lane-g nacio sobre base ajena con GIT heredado"
+
+# Barrido: dos reservas huerfanas (dueno muerto + sin worktree) llenan la
+# corrida a 4; la siguiente reserva las barre y entra (sin el barrido seria
+# "capacidad agotada" para siempre). La reserva con worktree presente y la
+# viva no se tocan.
+mkdir -p "$T/wt-viva-9"
+python3 - "$T/corridas/run-r/registro.json" "$T/wt-viva-9" <<'PY' || fail "no se plantaron fantasmas"
+import json,sys
+r=sys.argv[1]
+d=json.load(open(r))
+def fantasma(lane,wt,tok):
+  return {'branch':'carril/'+lane,'worktree':wt,'base_remote_sha':'0'*40,
+    'owner':lane,'mode':'write','estado':'reservado','token':tok}
+d['carriles']['lane-f1']=fantasma('lane-f1','/no-existe-9-f1','9999999999-1')
+d['carriles']['lane-f2']=fantasma('lane-f2','/no-existe-9-f2','9999999999-1')
+d['carriles']['lane-viva']=fantasma('lane-viva',sys.argv[2],'9999999999-2')
+json.dump(d,open(r,'w'),indent=1)
+PY
+wtn="$(bash "$CORR" preparar-carril run-r lane-nueva "$T/repo" 2>"$T/gana-n.err")" \
+  || fail "el barrido no libero cupo: $(cat "$T/gana-n.err")"
+[ -d "$wtn" ] || fail "lane-nueva sin worktree tras el barrido"
+python3 - "$T/corridas/run-r/registro.json" <<'PY' || fail "barrido barro de mas o de menos"
+import json,sys
+cs=json.load(open(sys.argv[1]))['carriles']
+assert 'lane-f1' not in cs and 'lane-f2' not in cs, 'huerfanas vivas'
+assert cs['lane-viva']['estado']=='reservado', 'viva con worktree barrida'
+assert cs['lane-r']['estado']=='reservado', 'reserva viva barrida'
+assert cs['lane-nueva']['estado']=='reservado', 'nueva sin reserva'
+PY
 
 echo "TODO VERDE: test-corrida-worktrees"
