@@ -1,0 +1,434 @@
+{
+ "max_external_sessions": 4,
+ "schema": "workers.v1",
+ "workers": [
+  {
+   "auth_patterns": [
+    "login required",
+    "authentication failed"
+   ],
+   "binary": "claude",
+   "blocked_patterns": [
+    "permission denied"
+   ],
+   "capabilities": [
+    "read",
+    "write",
+    "review"
+   ],
+   "commands": {
+    "health": [
+     "claude",
+     "--version"
+    ],
+    "resume:review": [
+     "claude",
+     "--resume",
+     "{session_id}",
+     "--permission-mode",
+     "plan"
+    ],
+    "resume:write": [
+     "claude",
+     "--resume",
+     "{session_id}",
+     "--permission-mode",
+     "acceptEdits"
+    ],
+    "start:review": [
+     "claude",
+     "--permission-mode",
+     "plan"
+    ],
+    "start:write": [
+     "claude",
+     "--permission-mode",
+     "acceptEdits"
+    ],
+    "stop": [
+     "tmux-stop",
+     "{session_name}"
+    ]
+   },
+   "harness": "claude-code",
+   "id": "claude",
+   "model": "router",
+   "permission_modes": {
+    "review": "plan",
+    "write": "acceptEdits"
+   },
+   "provider": "anthropic",
+   "quota_patterns": [
+    "usage limit",
+    "rate limit"
+   ],
+   "task_types": [
+    "general",
+    "backend",
+    "frontend",
+    "review"
+   ],
+   "transcript": {
+    "kind": "tmux-pane"
+   },
+   "version": "2.1.278"
+  },
+  {
+   "auth_patterns": [
+    "login required",
+    "authentication failed"
+   ],
+   "binary": "codex",
+   "blocked_patterns": [
+    "permission denied"
+   ],
+   "capabilities": [
+    "read",
+    "write",
+    "review"
+   ],
+   "commands": {
+    "health": [
+     "codex",
+     "--version"
+    ],
+    "resume:review": [
+     "codex",
+     "resume",
+     "{session_id}",
+     "--sandbox",
+     "read-only"
+    ],
+    "resume:write": [
+     "codex",
+     "resume",
+     "{session_id}",
+     "--sandbox",
+     "workspace-write"
+    ],
+    "start:review": [
+     "codex",
+     "--sandbox",
+     "read-only"
+    ],
+    "start:write": [
+     "codex",
+     "--sandbox",
+     "workspace-write"
+    ],
+    "stop": [
+     "tmux-stop",
+     "{session_name}"
+    ]
+   },
+   "harness": "codex-cli",
+   "id": "codex",
+   "model": "router",
+   "permission_modes": {
+    "review": "read-only",
+    "write": "workspace-write"
+   },
+   "provider": "openai",
+   "quota_patterns": [
+    "usage limit",
+    "rate limit"
+   ],
+   "task_types": [
+    "general",
+    "backend",
+    "frontend",
+    "review"
+   ],
+   "transcript": {
+    "kind": "tmux-pane"
+   },
+   "version": "0.155.1"
+  },
+  {
+   "auth_patterns": [
+    "login required",
+    "authentication failed"
+   ],
+   "binary": "zcode",
+   "blocked_patterns": [
+    "permission denied"
+   ],
+   "capabilities": [
+    "read",
+    "write",
+    "review"
+   ],
+   "commands": {
+    "health": [
+     "zcode",
+     "--version"
+    ],
+    "resume:review": [
+     "zcode",
+     "--resume",
+     "{session_id}",
+     "--mode",
+     "plan"
+    ],
+    "resume:write": [
+     "zcode",
+     "--resume",
+     "{session_id}",
+     "--mode",
+     "edit"
+    ],
+    "start:review": [
+     "zcode",
+     "--mode",
+     "plan"
+    ],
+    "start:write": [
+     "zcode",
+     "--mode",
+     "edit"
+    ],
+    "stop": [
+     "tmux-stop",
+     "{session_name}"
+    ]
+   },
+   "harness": "zcode",
+   "id": "zcode",
+   "model": "router",
+   "permission_modes": {
+    "review": "plan",
+    "write": "edit"
+   },
+   "provider": "glm",
+   "quota_patterns": [
+    "usage limit",
+    "rate limit"
+   ],
+   "task_types": [
+    "general",
+    "backend",
+    "frontend",
+    "review"
+   ],
+   "transcript": {
+    "kind": "tmux-pane"
+   },
+   "version": "0.16.5"
+  },
+  {
+   "auth_patterns": [
+    "login required",
+    "authentication failed"
+   ],
+   "binary": "kimi",
+   "blocked_patterns": [
+    "permission denied"
+   ],
+   "capabilities": [
+    "read",
+    "write",
+    "review"
+   ],
+   "commands": {
+    "health": [
+     "kimi",
+     "--version"
+    ],
+    "resume:review": [
+     "kimi",
+     "--resume",
+     "{session_id}",
+     "--read-only"
+    ],
+    "resume:write": [
+     "kimi",
+     "--resume",
+     "{session_id}",
+     "--auto"
+    ],
+    "start:review": [
+     "kimi",
+     "--read-only"
+    ],
+    "start:write": [
+     "kimi",
+     "--auto"
+    ],
+    "stop": [
+     "tmux-stop",
+     "{session_name}"
+    ]
+   },
+   "harness": "kimi-code",
+   "id": "kimi",
+   "model": "router",
+   "permission_modes": {
+    "review": "read-only",
+    "write": "auto"
+   },
+   "provider": "kimi",
+   "quota_patterns": [
+    "usage limit",
+    "rate limit"
+   ],
+   "task_types": [
+    "general",
+    "backend",
+    "frontend",
+    "review"
+   ],
+   "transcript": {
+    "kind": "tmux-pane"
+   },
+   "version": "0.39.1"
+  },
+  {
+   "auth_patterns": [
+    "login required",
+    "authentication failed"
+   ],
+   "binary": "cursor-agent",
+   "blocked_patterns": [
+    "permission denied"
+   ],
+   "capabilities": [
+    "read",
+    "write",
+    "review"
+   ],
+   "commands": {
+    "health": [
+     "cursor-agent",
+     "--version"
+    ],
+    "resume:review": [
+     "cursor-agent",
+     "resume",
+     "{session_id}",
+     "--mode",
+     "plan"
+    ],
+    "resume:write": [
+     "cursor-agent",
+     "resume",
+     "{session_id}",
+     "--auto-review",
+     "--sandbox",
+     "enabled",
+     "--trust",
+     "--workspace",
+     "{worktree}"
+    ],
+    "start:review": [
+     "cursor-agent",
+     "--mode",
+     "plan"
+    ],
+    "start:write": [
+     "cursor-agent",
+     "--auto-review",
+     "--sandbox",
+     "enabled",
+     "--trust",
+     "--workspace",
+     "{worktree}"
+    ],
+    "stop": [
+     "tmux-stop",
+     "{session_name}"
+    ]
+   },
+   "harness": "cursor-agent",
+   "id": "cursor",
+   "model": "router",
+   "permission_modes": {
+    "review": "plan",
+    "write": "auto-review"
+   },
+   "provider": "cursor",
+   "quota_patterns": [
+    "usage limit",
+    "rate limit"
+   ],
+   "task_types": [
+    "general",
+    "backend",
+    "frontend",
+    "review"
+   ],
+   "transcript": {
+    "kind": "tmux-pane"
+   },
+   "version": "2026.09.18-9a7762b"
+  },
+  {
+   "auth_patterns": [
+    "login required",
+    "authentication failed"
+   ],
+   "binary": "grok",
+   "blocked_patterns": [
+    "permission denied"
+   ],
+   "capabilities": [
+    "read",
+    "write",
+    "review"
+   ],
+   "commands": {
+    "health": [
+     "grok",
+     "--version"
+    ],
+    "resume:review": [
+     "grok",
+     "--resume",
+     "{session_id}",
+     "--read-only"
+    ],
+    "resume:write": [
+     "grok",
+     "--resume",
+     "{session_id}",
+     "--allow",
+     "{worktree}"
+    ],
+    "start:review": [
+     "grok",
+     "--read-only"
+    ],
+    "start:write": [
+     "grok",
+     "--allow",
+     "{worktree}"
+    ],
+    "stop": [
+     "tmux-stop",
+     "{session_name}"
+    ]
+   },
+   "harness": "grok-cli",
+   "id": "grok",
+   "model": "router",
+   "permission_modes": {
+    "review": "read-only",
+    "write": "repo-allow"
+   },
+   "provider": "xai",
+   "quota_patterns": [
+    "usage limit",
+    "rate limit"
+   ],
+   "task_types": [
+    "general",
+    "backend",
+    "frontend",
+    "review"
+   ],
+   "transcript": {
+    "kind": "tmux-pane"
+   },
+   "version": "1.0.34"
+  }
+ ]
+}

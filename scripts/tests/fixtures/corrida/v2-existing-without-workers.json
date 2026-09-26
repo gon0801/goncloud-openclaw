@@ -1,0 +1,31 @@
+{
+ "canal": {
+  "cron": "verif-sync-repos",
+  "destino": "DESTINO-FECHA-9X"
+ },
+ "cli_modos": "scripts/tests/fixtures/corrida/cli-modos-simulacro.tsv",
+ "estado": "abierta",
+ "id": "legada-sin-workers",
+ "inicio": "2026-09-18T10:00:00-04:00",
+ "preaprobaciones": [
+  {
+   "decision": "Aprobado",
+   "patron": "confianza de carpeta de un worktree de la corrida"
+  }
+ ],
+ "runbook": "docs/runbooks/autopilot-fase9.md",
+ "schema": "corrida.v2",
+ "seguimiento_global": true,
+ "sesiones": [
+  {
+   "cli": "tui-falso",
+   "dir": "/tmp/sim9-a",
+   "dueno": "lead",
+   "nombre": "sim9-falso",
+   "rol": "carril"
+  }
+ ],
+ "simulacro": true,
+ "timebox_horas": 6,
+ "vigia": "claw"
+}

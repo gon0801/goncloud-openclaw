@@ -1,0 +1,53 @@
+{
+ "authorization_ref": "docs/spec/00-project-spec.md",
+ "automatic_routing": {
+  "enabled": true
+ },
+ "canal": {
+  "cron": "verif-sync-repos",
+  "destino": "DESTINO-FECHA-9X"
+ },
+ "cli_modos": "scripts/tests/fixtures/corrida/cli-modos-simulacro.tsv",
+ "effects": [],
+ "estado": "abierta",
+ "evidence": {
+  "review": {
+   "sha": null,
+   "status": "pending"
+  }
+ },
+ "id": "nativa-con-workers",
+ "inicio": "2026-09-18T10:00:00-04:00",
+ "lanes": [
+  {
+   "id": "api",
+   "role": "write",
+   "session": "ses-codex-1",
+   "worker": "codex",
+   "worktree": "worktrees/carril-api"
+  }
+ ],
+ "outcome": "open",
+ "preaprobaciones": [
+  {
+   "decision": "Aprobado",
+   "patron": "confianza de carpeta de un worktree de la corrida"
+  }
+ ],
+ "runbook": "docs/runbooks/autopilot-fase9.md",
+ "schema": "corrida.v2",
+ "seguimiento_global": true,
+ "sesiones": [
+  {
+   "cli": "tui-falso",
+   "dir": "/tmp/sim9-a",
+   "dueno": "lead",
+   "nombre": "sim9-falso",
+   "rol": "carril"
+  }
+ ],
+ "simulacro": true,
+ "timebox_horas": 6,
+ "vigia": "claw",
+ "workers_registry": "scripts/mac/workers.v1.json"
+}
