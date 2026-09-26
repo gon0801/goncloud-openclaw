@@ -7,6 +7,33 @@
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
+. scripts/mac/corrida/lib.sh
+
+# Completa un registro de fixture con los campos del contrato que los
+# productores reales escriben (abrir), para que validar_registro juzgue solo
+# lo que el caso mueve: los carriles y sus estados.
+completar_registro() { # $1 reg $2 id $3 modos
+  python3 - "$1" "$2" "$3" <<'PY' || fail "no se completo $1"
+import json,sys
+p,i,modos=sys.argv[1:4]
+d=json.load(open(p))
+d.setdefault("vigia","claw")
+d["seguimiento_global"]=True
+d.setdefault("runbook","loop-autopilot")
+d.setdefault("canal",{"cron":"prueba","destino":"dest-prueba"})
+d.setdefault("cli_modos",modos)
+d.setdefault("inicio","2026-09-26T00:00:00+0000")
+d.setdefault("simulacro",False)
+d.setdefault("timebox_horas",6)
+d.setdefault("sesiones",[])
+d["id"]=i
+json.dump(d,open(p,"w"),sort_keys=True,indent=2)
+PY
+}
+registro_valido() { # $1 reg
+  validar_registro "$1" >/dev/null 2>&1 \
+    || fail "registro fuera de contrato $1: $(validar_registro "$1" 2>&1 | tr '\n' ' ')"
+}
 
 CORR=scripts/mac/corrida.sh
 PW=scripts/mac/corrida-worker.py
@@ -120,7 +147,7 @@ for fx in 01-duplicate-events 02-vanished-session 03-push-exists 04-pr-exists \
     09-auth-skips-resume 10-missing-binary-skips-resume 11-silent-alive-kept \
     12-predecessor-blocks 13-candidates-exhausted 14-repeated-launch-once \
     15-phase23-pending 16-test-failed-no-fallback 17-dirty-diff-survives \
-    18-handoff-exhausted-stops; do
+    18-handoff-exhausted-stops 19-reservado-sin-sesion; do
   materializar "$fx.json" "$T/py-$fx"
   cp "$T/py-$fx/record.json" "$T/py-$fx/r.json"
   if [ -f "$T/py-$fx/events.json" ]; then
@@ -156,12 +183,13 @@ for fx in 01-duplicate-events 02-vanished-session 03-push-exists 04-pr-exists \
   exp2="$(python3 -c "import json; print(' '.join(json.load(open('$FIX/$fx.json'))['expect_py2']))")"
   [ "$ops2" = "$exp2" ] || [ "$ops2" = "$exp2 " ] || fail "$fx inv2: ops [$ops2], esperadas [$exp2]"
 done
-echo "ok (2): los 18 fixtures proponen lo esperado y repiten byte-identico"
+echo "ok (2): los 19 fixtures proponen lo esperado y repiten byte-identico"
 
 e2e_prepara() { # $1 caso $2 fixture: registro en CORRIDA_STATE + obs listas
   materializar "$2" "$T/e2e-$1"
   mkdir -p "$T/corridas/$1"
   cp "$T/e2e-$1/record.json" "$T/corridas/$1/registro.json"
+  completar_registro "$T/corridas/$1/registro.json" "$1" "$T/modos.tsv"
   cp "$T/e2e-$1/obs1.json" "$T/e2e-$1-o1.json"
   cp "$T/e2e-$1/obs2.json" "$T/e2e-$1-o2.json"
 }
@@ -180,6 +208,7 @@ for par in "r3:03-push-exists" "r4:04-pr-exists" "r5:05-merge-exists" \
   grep -q '^CONVERGED ' "$T/e2e-$caso-2.out" || fail "$fx e2e inv2 no convergio"
   [ "$(grep -c '^EXECUTED ' "$T/e2e-$caso-2.out" || true)" -eq 0 ] \
     || fail "$fx e2e inv2 ejecuto de mas: $(cat "$T/e2e-$caso-2.out")"
+  registro_valido "$T/corridas/$caso/registro.json"
 done
 python3 - "$T/corridas/r3/registro.json" <<'PY' || fail "r3 sin push registrado"
 import json,sys
@@ -216,6 +245,7 @@ bash "$CORR" reconciliar r2 --observations "$T/e2e-r2-o2.json" >"$T/e2e-r2-2.out
   || fail "r2 e2e inv2 fallo"
 n2="$(grep -c '^EXECUTED resume_lane ' "$T/e2e-r2-1.out" "$T/e2e-r2-2.out" | awk -F: '{s+=$2} END {print s}')"
 [ "$n2" -eq 1 ] || fail "r2: resume ejecutado $n2 veces"
+registro_valido "$T/corridas/r2/registro.json"
 echo "ok (4): la sesion desvanecida reanuda una vez y converge"
 
 # (5) Reconciliacion repetida lanza al sucesor una sola vez.
@@ -229,6 +259,7 @@ bash "$CORR" reconciliar r14 --observations "$T/e2e-r14-o2.json" >"$T/e2e-r14-2.
 grep -q '^CONVERGED ' "$T/e2e-r14-2.out" || fail "r14 inv2 no convergio"
 n14="$(grep -c '^EXECUTED launch_successor ' "$T/e2e-r14-1.out" "$T/e2e-r14-2.out" | awk -F: '{s+=$2} END {print s}')"
 [ "$n14" -eq 1 ] || fail "r14: launch ejecutado $n14 veces"
+registro_valido "$T/corridas/r14/registro.json"
 python3 - "$T/corridas/r14/registro.json" <<'PY' || fail "r14 sin sucesor registrado"
 import json,sys
 c = json.load(open(sys.argv[1]))["lanes"][0]
@@ -245,6 +276,7 @@ grep -q 'handoff_lane\|launch_successor' "$T/e2e-r12-1.out" \
 bash "$CORR" reconciliar r12 --observations "$T/e2e-r12-o2.json" >"$T/e2e-r12-2.out" \
   || fail "r12 e2e inv2 fallo"
 grep -q '^EXECUTED handoff_lane l1$' "$T/e2e-r12-2.out" || fail "r12 inv2 sin handoff"
+registro_valido "$T/corridas/r12/registro.json"
 echo "ok (6): el predecesor vivo bloquea y su salida desbloquea"
 
 # (7) El diff sucio y los commits sobreviven al handoff.
@@ -253,6 +285,7 @@ e2e_prepara r17 17-dirty-diff-survives.json
 bash "$CORR" reconciliar r17 --observations "$T/e2e-r17-o1.json" >"$T/e2e-r17-1.out" \
   || fail "r17 e2e inv1 fallo"
 grep -q '^EXECUTED handoff_lane l1$' "$T/e2e-r17-1.out" || fail "r17 inv1 sin handoff"
+registro_valido "$T/corridas/r17/registro.json"
 grep -q 'sucio' "$T/wt/f.txt" || fail "r17: el handoff limpio el diff"
 python3 - "$T/corridas/r17/registro.json" <<'PY' || fail "r17 sin preserve"
 import json,sys
@@ -275,6 +308,7 @@ cs = {c["id"]: c for c in json.load(open(sys.argv[1]))["lanes"]}
 assert cs["l1"]["estado"] == "stopped", cs["l1"]
 assert cs["l2"]["estado"] == "activo" and cs["l2"]["events"] == [], cs["l2"]
 PY
+registro_valido "$T/corridas/r13/registro.json"
 echo "ok (8): el agotamiento detiene solo su carril"
 
 # (9) Cerrar archiva antes de detener: transcript, seleccion, eventos y
@@ -296,6 +330,7 @@ d = {"schema": "corrida.v2", "id": "r9", "estado": "abierta",
                 "handoff": {"attempts": [], "exhausted": False, "resumes": 0}}]}
 open(sys.argv[1], "w").write(json.dumps(d) + "\n")
 PY
+completar_registro "$T/corridas/r9/registro.json" "r9" "$T/modos.tsv"
 FAKE_HARNESS_MODE= "$TMUX_BIN" new-session -d -s "ses-cierre" -x 200 -y 50 -c "$T/wt" "$T/bin/codex" || fail "r9 sin sesion"
 "$TMUX_BIN" send-keys -t "=ses-cierre:" -l -- "reviso ghp_otropantalla9" || fail "r9 sin teclas"
 sleep 1
@@ -316,6 +351,7 @@ grep -q 'm-test' "$T/corridas/r9/archive/l1/selection.json" \
   && fail "r9: la sesion sigue viva tras el archivo"
 bash "$CORR" cerrar r9 >"$T/e2e-r9b.out" || fail "reintento de cerrar fallo"
 grep -q '^cerrada r9$' "$T/e2e-r9b.out" || fail "reintento no idempotente"
+registro_valido "$T/corridas/r9/registro.json"
 echo "ok (9): cerrar archiva redactado, detiene y reintenta limpio"
 
 # (10) Entradas rotas mueren con diagnostico, sin escribir nada.

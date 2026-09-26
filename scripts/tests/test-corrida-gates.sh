@@ -7,6 +7,30 @@
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
+. scripts/mac/corrida/lib.sh
+
+completar_registro() { # $1 reg $2 id $3 modos
+  python3 - "$1" "$2" "$3" <<'PY' || fail "no se completo $1"
+import json,sys
+p,i,modos=sys.argv[1:4]
+d=json.load(open(p))
+d.setdefault("vigia","claw")
+d["seguimiento_global"]=True
+d.setdefault("runbook","loop-autopilot")
+d.setdefault("canal",{"cron":"prueba","destino":"dest-prueba"})
+d.setdefault("cli_modos",modos)
+d.setdefault("inicio","2026-09-26T00:00:00+0000")
+d.setdefault("simulacro",False)
+d.setdefault("timebox_horas",6)
+d.setdefault("sesiones",[])
+d["id"]=i
+json.dump(d,open(p,"w"),sort_keys=True,indent=2)
+PY
+}
+registro_valido() { # $1 reg
+  validar_registro "$1" >/dev/null 2>&1 \
+    || fail "registro fuera de contrato $1: $(validar_registro "$1" 2>&1 | tr '\n' ' ')"
+}
 
 CORR=scripts/mac/corrida.sh
 PW=scripts/mac/corrida-worker.py
@@ -152,6 +176,7 @@ for fx in 01-merge-ok 02-merge-sin-recibo 03-merge-revocado 04-merge-otro-sha \
   run="g-${fx%%-*}"
   mkdir -p "$T/corridas/$run"
   cp "$T/e2e-$fx/record.json" "$T/corridas/$run/registro.json"
+  completar_registro "$T/corridas/$run/registro.json" "$run" "$T/modos.tsv"
   export GH_COMMENTS="$T/e2e-$fx/comments.json" GH_PR="$T/e2e-$fx/pr-gh.json"
   meta_accion="$(python3 -c "import json; print(json.load(open('$T/e2e-$fx/meta.json'))['action'])")"
   meta_sha="$(python3 -c "import json; print(json.load(open('$T/e2e-$fx/meta.json'))['sha'])")"
@@ -176,6 +201,7 @@ import json,sys
 evs = json.load(open(sys.argv[1]))["lanes"][0]["events"]
 assert any(e["kind"] == sys.argv[2] for e in evs), [e["kind"] for e in evs]
 PY
+  registro_valido "$T/corridas/$run/registro.json"
 done
 python3 - "$T/corridas/g-10/registro.json" <<'PY' || fail "10: la declaracion parece aprobacion"
 import json,sys

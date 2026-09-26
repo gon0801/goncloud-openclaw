@@ -231,6 +231,8 @@ def _handoff_effects(
     inspect = lane_obs.get("inspect")
     binary_ok = lane_obs.get("binary_exists", True) is not False
     session = lane.get("session") or ""
+    if not session:
+        return ()
 
     handed_off = lane.get("estado") == "handoff" or _has_kind(lane, "intent.handoff_lane")
     if handed_off:

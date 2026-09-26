@@ -526,7 +526,7 @@ if lan is not None:
         if not c.get(k): malo('carril sin '+k); break
       if c.get('mode') not in (None,'write','read-only'): malo('modo de carril fuera del conjunto')
       if c.get('role') not in (None,'write','review'): malo('rol de carril fuera del conjunto')
-      if 'estado' in c and c.get('estado') not in ('reservado','activo','failed'):
+      if 'estado' in c and c.get('estado') not in ('reservado','activo','failed','handoff','stopped'):
         malo('estado de carril fuera del conjunto')
       vis=c.get('visibility')
       if vis is not None:
