@@ -1163,4 +1163,47 @@ fi
 grep -q '"estado": *"cerrada"' "$T/corridas/t-carril/registro.json" || fail "t-carril no quedo cerrada"
 validar_registro "$T/corridas/t-carril/registro.json" || fail "tras el rechazo, el registro no pasa validar_registro"
 
+# (14.5r2 B1) handoff y stopped son estados de carril validos: el registro
+# sigue pasando validar_registro y estado, seguimiento y latido no se rompen.
+bash "$CORR" abrir t-estados --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" --simulacro >/dev/null \
+  || fail "abrir t-estados fallo"
+python3 - "$T/corridas/t-estados/registro.json" <<'PY' || fail "t-estados sin carriles"
+import json,sys
+p = sys.argv[1]
+d = json.load(open(p))
+d["lanes"] = [
+  {"id": "lh", "branch": "corrida/t-estados/lh", "worktree": "/tmp/wt-h",
+   "base_remote_sha": "a" * 40, "owner": "lh", "mode": "write", "role": "write",
+   "estado": "activo", "token": "9-h", "worker": "codex", "session": "ses-h",
+   "events": [], "evidence": {},
+   "handoff": {"attempts": [], "exhausted": False, "resumes": 0}},
+  {"id": "ls", "branch": "corrida/t-estados/ls", "worktree": "/tmp/wt-s",
+   "base_remote_sha": "a" * 40, "owner": "ls", "mode": "write", "role": "write",
+   "estado": "activo", "token": "9-s", "worker": "kimi", "session": "ses-s",
+   "events": [], "evidence": {},
+   "handoff": {"attempts": [], "exhausted": False, "resumes": 0}},
+]
+json.dump(d, open(p, "w"), sort_keys=True, indent=2)
+PY
+python3 - "$T/ev-estados.json" <<'PY' || fail "t-estados sin eventos"
+import json,sys
+json.dump([
+  {"lane": "lh", "kind": "intent.handoff_lane", "payload": {"reason": "quota"}},
+  {"lane": "ls", "kind": "intent.mark_lane_stopped", "payload": {"reason": "candidates-exhausted"}},
+  {"lane": "ls", "kind": "observed.lane.stopped", "payload": {"reason": "candidates-exhausted"}},
+], open(sys.argv[1], "w"))
+PY
+python3 scripts/mac/corrida-worker.py state reduce \
+  --record "$T/corridas/t-estados/registro.json" --events "$T/ev-estados.json" >/dev/null \
+  || fail "reduce de handoff/stopped fallo"
+validar_registro "$T/corridas/t-estados/registro.json" \
+  || fail "con handoff/stopped, el registro no pasa validar_registro"
+bash "$CORR" estado t-estados >/dev/null 2>&1 || fail "estado se rompe con handoff/stopped"
+bash "$CORR" seguimiento --json 2>/dev/null | grep -q "t-estados" \
+  || fail "seguimiento pierde la corrida con handoff/stopped"
+mkdir -p "$T/lat" && cp -r "$T/corridas/t-estados" "$T/lat/" \
+  || fail "sin copia para latido"
+( cd "$T" && CORRIDA_STATE="$T/lat" bash "$CORR_ABS" latido >/dev/null 2>&1 ) \
+  || fail "latido se rompe con handoff/stopped"
+
 echo "TODO VERDE: test-corrida-nucleo"

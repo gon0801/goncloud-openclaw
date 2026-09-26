@@ -526,7 +526,7 @@ if lan is not None:
         if not c.get(k): malo('carril sin '+k); break
       if c.get('mode') not in (None,'write','read-only'): malo('modo de carril fuera del conjunto')
       if c.get('role') not in (None,'write','review'): malo('rol de carril fuera del conjunto')
-      if 'estado' in c and c.get('estado') not in ('reservado','activo','failed'):
+      if 'estado' in c and c.get('estado') not in ('reservado','activo','failed','handoff','stopped'):
         malo('estado de carril fuera del conjunto')
       vis=c.get('visibility')
       if vis is not None:
@@ -918,6 +918,18 @@ resolver_bin_worker() { # $1 id; stdout ruta ejecutable; rc 1 si no resuelve
   res="$(command -v "$binario" 2>/dev/null)" || return 1
   [ -x "$res" ] || return 1
   printf '%s\n' "$res"
+}
+
+# --- Fase 14, Task 5: redaccion para el archivo de cierre. Lee stdin,
+# escribe stdout. Patrones de tokens conocidos y caracteres de control fuera;
+# lo demas pasa intacto (el transcript se conserva legible).
+redactar_texto() {
+  tr -d '\000-\010\013\014\016-\037\177' | sed -E \
+    -e 's/ghp_[A-Za-z0-9]+/ghp_[REDACTED]/g' \
+    -e 's/github_pat_[A-Za-z0-9_]+/github_pat_[REDACTED]/g' \
+    -e 's/sk-[A-Za-z0-9]+/sk-[REDACTED]/g' \
+    -e 's/xox[bpasr]-[A-Za-z0-9-]+/xox-[REDACTED]/g' \
+    -e 's/AKIA[0-9A-Z]{16}/AKIA[REDACTED]/g'
 }
 
 # --- Fase 14, Task 4: reservas de carriles bajo el lock del run. Sin lock
