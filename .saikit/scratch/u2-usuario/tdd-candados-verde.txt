@@ -1,0 +1,4 @@
+ok auto-prueba: los 4 estilos de ruta literal se detectan y exigen su marca
+ok ida: las 137 frases ancladas por 12 test(s) tienen su marca
+ok vuelta: las 77 marca(s) de agents/** y docs/agent-skills/** apuntan a tests que existen y afirman su frase
+TODO VERDE: candados declarados (137 frases, 77 marcas)

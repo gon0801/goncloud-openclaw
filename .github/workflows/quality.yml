@@ -48,8 +48,8 @@
 # redundantes (cada push corria la bateria entera y la anterior seguia viva)
 # y en correrla tambien en borradores. Tres frenos, sin tocar la politica de
 # seleccion (Plans.md, aprobada) ni los contratos que la custodian:
-#   1. `concurrency` + cancel-in-progress: solo la ULTIMA corrida por PR o
-#      rama llega a correr la bateria; las anteriores se cancelan solas.
+#   1. `concurrency` + cancel-in-progress: solo la ULTIMA corrida por PR
+#      llega a correr la bateria; las anteriores se cancelan solas.
 #   2. Borradores: en PR draft NO corre nada que cueste —ni clasificador, ni
 #      shards, ni contrato—; solo el gate (por contrato corre siempre) deja
 #      constancia de la pausa y sale verde. Todo arranca solo al marcar listo
@@ -72,17 +72,21 @@ on:
 permissions:
   contents: read
 
-# Si llega un push nuevo sobre la misma rama o PR, la corrida anterior se
-# cancela sola y solo la ULTIMA corre la bateria completa. El gate es
-# fail-closed ante cancelaciones, asi que una corrida vieja cancelada nunca
-# deja un verde falso: muere y la ultima decide.
+# Si llega un push nuevo sobre el mismo PR, la corrida anterior se cancela
+# sola y solo la ULTIMA corre la bateria completa. El gate es fail-closed ante
+# cancelaciones, asi que una corrida vieja cancelada nunca deja un verde falso.
+# En main NO se cancela: cada SHA mergeado conserva su veredicto (los cierres
+# reutilizan evidencia por SHA); dos merges seguidos solo esperan en fila.
 concurrency:
   group: quality-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   clasificador:
     runs-on: ubuntu-latest
+    # Sin timeout un clasificador colgado quema el default de 6 h: clasificar
+    # por archivos tarda segundos; 10 min es techo generoso.
+    timeout-minutes: 10
     # Pausa por borrador (freno 2): en PR draft sin etiqueta `ci-full` este
     # job se omite y no consume runner (ni siquiera el clone completo que la
     # clasificacion necesita). Push a main, PR listo o etiqueta: corre.
@@ -184,18 +188,14 @@ jobs:
                   *) echo "doc-check: $f no arranca con titulo '# '" >&2; rc=1 ;;
                 esac ;;
               Plans.md)
-                # Filas del ledger TOCADAS por el diff (agregadas o borradas,
-                # no todo el archivo): la forma | <n>.<n> | ... | ... | ... |
-                # cc:... | exige exactamente 5 columnas.
-                while IFS= read -r linea; do
-                  cuerpo=${linea:1}
-                  if printf '%s\n' "$cuerpo" | grep -Eq '^\|[[:space:]]*[0-9]+\.[0-9]+[[:space:]]*\|'; then
-                    if ! printf '%s\n' "$cuerpo" | grep -Eq '^\|[[:space:]]*[0-9]+\.[0-9]+[[:space:]]*\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|[[:space:]]*$'; then
-                      printf 'doc-check: Plans.md fila tocada sin 5 columnas: %s\n' "$cuerpo" >&2
-                      rc=1
-                    fi
-                  fi
-                done < <(git diff --unified=0 "$mb" "$hs" -- Plans.md | grep -E '^[+-]\|' || true) ;;
+                # Filas del ledger que el diff DEJA (solo las agregadas, no todo
+                # el archivo): la forma | <n>.<n> | ... | ... | ... | cc:... |
+                # exige exactamente 5 columnas. Las borradas no se miran: si se
+                # miraran, una fila que ya estaba mal en la base (p. ej. con \|
+                # escapado) no se podria arreglar nunca -- el PR que la corrige
+                # la borra y rebotaba por la version vieja (PR #165, fila 9.1).
+                git diff --unified=0 "$mb" "$hs" -- Plans.md | { grep -E '^\+\|' || true; } | cut -c2- \
+                  | bash scripts/plans-fila-check.sh || rc=1 ;;
             esac
           done < <(git -c core.quotepath=false diff --name-only --diff-filter=d -z "$mb" "$hs")
           echo "doc-check: $n archivo(s) cambiados en el rango; contratos documentales revisados"
@@ -251,6 +251,7 @@ jobs:
   # con la misma condicion de carril que ya tenia el job quality.
   shards:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [clasificador]
     # `!= 'fast'` y no `== 'completo'`: si el output llegara vacio o con basura,
     # corre la bateria. La omision por carril se autoriza SOLO con un fast exacto.
@@ -521,6 +522,9 @@ jobs:
           inv=$(mktemp)
           {
             for t in scripts/tests/*.sh; do
+              if [ -e "$t" ]; then printf '%s\n' "${t##*/}"; fi
+            done
+            for t in scripts/tests/*.mjs; do
               if [ -e "$t" ]; then printf '%s\n' "${t##*/}"; fi
             done
             printf '%s\n' sintaxis-summa-gate bateria-summa-gate sintaxis-tablero-runbook bateria-tablero-runbook verify-corpus

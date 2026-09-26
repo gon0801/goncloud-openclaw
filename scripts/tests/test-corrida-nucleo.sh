@@ -5,6 +5,9 @@
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
+texto_json() { # $1 linea de mensajes.jsonl -> su campo 'texto' decodificado (sin \uXXXX)
+  printf '%s' "$1" | python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('texto',''))"
+}
 
 CORR=scripts/mac/corrida.sh
 CORR_ABS="$PWD/scripts/mac/corrida.sh"
@@ -82,9 +85,9 @@ case "\$*" in
     [ "\${LISTA_SUENIO:-0}" != "0" ] && sleep "\${LISTA_SUENIO}"
     n=\$([ -f "$T/lists" ] && wc -l < "$T/lists" || echo 0); n=\$((n + 1)); echo x >> "$T/lists"
     if [ "\${LISTA_MALA:-0}" != "0" ] && [ "\$n" -gt "\${LISTA_DESPUES_DE:-0}" ]; then exit 1; fi
-    printf '{"jobs":[{"name":"verif-sync-repos","delivery":{"to":"$DESTINO"}}'
+    printf '{"jobs":[{"name":"cuotas-proveedores","delivery":{"to":"$DESTINO"}}'
     if [ "\${DEST_AMBIGUO:-0}" = "1" ]; then
-      printf ',{"name":"verif-sync-repos","delivery":{"to":"OTRO-DESTINO-9Z"}}'
+      printf ',{"name":"cuotas-proveedores","delivery":{"to":"OTRO-DESTINO-9Z"}}'
     fi
     if [ -f "$T/cron-puesto" ]; then
       while IFS= read -r linea; do
@@ -96,7 +99,7 @@ case "\$*" in
     # abrir ya no crea crons: si algo llama a cron add, queda anotado y la
     # prueba que vigila la ausencia lo pone en rojo.
     printf '{}';;
-  *message\ send*) [ "\${MSJ_SUENIO:-0}" != "0" ] && sleep "\${MSJ_SUENIO}"; [ "\${ENVIO_MODO:-ok}" = "mal" ] && exit 1; printf '{"messageId":"m1"}';;
+  *message\ send*) [ "\${MSJ_SUENIO:-0}" != "0" ] && sleep "\${MSJ_SUENIO}"; [ "\${ENVIO_MODO:-ok}" = "mal" ] && exit 1; printf '%s' "\${MSJ_PREAMBULO:-}"; printf '{"ok":true,"messageId":%s}' "\${MSJ_ID:-\"m1\"}";;
 esac
 exit 0
 STUB
@@ -140,6 +143,20 @@ grep -q "cron add" "$LLAMADAS" && fail "abrir creo un cron: el reloj es el unico
 grep -q '"schema": *"corrida.v2"' "$T/corridas/t1/registro.json" || fail "abrir no escribe v2"
 grep -q '"seguimiento_global": *true' "$T/corridas/t1/registro.json" || fail "abrir no declara el reloj global"
 grep -q '"simulacro": *true' "$T/corridas/t1/registro.json" || fail "el registro no dice simulacro"
+
+# (0d) 9.2: abrir manda un aviso ABIERTA con el nombre de la corrida, y en
+# practica no pide respuesta ni deja el destino escrito.
+ultima_abierta="$(grep '"etiqueta": *"ABIERTA"' "$T/corridas/t1/mensajes.jsonl" | tail -1)"
+[ -n "$ultima_abierta" ] || fail "abrir no dejo el aviso ABIERTA en mensajes.jsonl"
+printf '%s' "$ultima_abierta" | grep -q '"ok": *true' \
+  || fail "el aviso ABIERTA no salio ok: $ultima_abierta"
+texto_json "$ultima_abierta" | grep -q "Runbook minimo del simulacro" \
+  || fail "el aviso ABIERTA no trae el nombre de la corrida: $ultima_abierta"
+texto_json "$ultima_abierta" | grep -q '🧪 PRÁCTICA — no contestes' \
+  || fail "el aviso ABIERTA en practica no trae el prefijo de practica: $ultima_abierta"
+printf '%s' "$ultima_abierta" | grep -q "$DESTINO" \
+  && fail "el aviso ABIERTA dejo el destino escrito: $ultima_abierta"
+: > "$LLAMADAS"
 
 # (0b) id invalido: nada de salir del directorio de estado ni inyectar comandos.
 bash "$CORR" abrir '../fuga' --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null 2>&1 \
@@ -253,8 +270,9 @@ corrida_mensaje t1 AVANZA "1 de 2 partes terminadas" "se integro el PR de mensaj
   && fail "el mensaje con jerga debio rechazarse"
 grep -q "se integro el PR" "$LLAMADAS" && fail "la jerga nunca sale del stub"
 
-# (6) simulacro: AVANZA acumula sin mandar; lo inmediato sale con prefijo y el
-# texto enviado ES el del contrato.
+# (6) simulacro: AVANZA acumula sin mandar; lo inmediato sale con el prefijo de
+# practica, el nombre de la corrida y el texto enviado ES el del contrato.
+: >"$LLAMADAS"
 corrida_mensaje t1 AVANZA "1 de 2 partes terminadas" "quedo lista la primera parte" "sigue la parte de mensajes" "nada" \
   || fail "AVANZA en simulacro debio acumular"
 grep -q 'message send' "$LLAMADAS" && fail "AVANZA en simulacro mando en vez de acumular"
@@ -263,15 +281,18 @@ grep -q '"cambio": *"quedo lista la primera parte"' "$T/corridas/t1/eventos-segu
 : >"$LLAMADAS"
 corrida_mensaje t1 DETENIDA "1 de 2 partes terminadas" "quedo lista la primera parte" "sigue la parte de mensajes" "nada" \
   || fail "DETENIDA en simulacro fallo"
-printf '[SIMULACRO] [DETENIDA] Corrida, 1 de 2 partes terminadas\nQue cambio: quedo lista la primera parte\nQue sigue: sigue la parte de mensajes\nQue necesito de ti: nada\n' >"$T/esp-sim.txt"
+enc_t1="$(corrida_encabezado t1)"
+printf '🧪 PRÁCTICA — no contestes 🔴 [DETENIDA] %s, 1 de 2 partes terminadas\n\nQué cambió: quedo lista la primera parte\n\nQué sigue: sigue la parte de mensajes\n\nQué necesito de ti: nada\n' "$enc_t1" >"$T/esp-sim.txt"
 d=$(grep -n "OPENCLAW message send" "$LLAMADAS" | tail -1 | cut -d: -f1)
 tail -n +"$d" "$LLAMADAS" | sed '1s/.* -m //' >"$T/obtenido.txt"
 cmp -s "$T/esp-sim.txt" "$T/obtenido.txt" || fail "el texto enviado no es el de seguimiento.v1"
+printf '%s' "$enc_t1" | grep -q "Runbook minimo del simulacro" \
+  || fail "corrida_encabezado no trae el titulo del runbook: $enc_t1"
 
-# (6b) el prefijo SIMULACRO de la primera linea no invalida; y no se reescribe el archivo.
-printf '[SIMULACRO] [AVANZA] Corrida, 1 de 2 partes terminadas\nQue cambio: quedo lista la primera parte\nQue sigue: sigue la parte de mensajes\nQue necesito de ti: nada\n' >"$T/prefijo.txt"
+# (6b) el prefijo de practica de la primera linea no invalida; y no se reescribe el archivo.
+printf '🧪 PRÁCTICA — no contestes [AVANZA] Fase 9, 1 de 2 partes terminadas\nQué cambió: quedo lista la primera parte\nQué sigue: sigue la parte de mensajes\nQué necesito de ti: nada\n' >"$T/prefijo.txt"
 cp "$T/prefijo.txt" "$T/prefijo.orig"
-mensaje_valido "$T/prefijo.txt" || fail "el prefijo SIMULACRO invalida un mensaje valido"
+mensaje_valido "$T/prefijo.txt" || fail "el prefijo de practica invalida un mensaje valido"
 cmp -s "$T/prefijo.txt" "$T/prefijo.orig" || fail "mensaje_valido reescribe el archivo de quien llama"
 
 # (6c) la ruta del cron es fisica y absoluta; una corrida NO simulacro no lleva prefijo.
@@ -290,6 +311,85 @@ bash "$CORR" abrir t-ns --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 
   || fail "abrir sin simulacro fallo"
 grep -q '"simulacro": *false' "$T/corridas/t-ns/registro.json" \
   || fail "el registro de t-ns no dice no-simulacro"
+ultima_abierta_ns="$(grep '"etiqueta": *"ABIERTA"' "$T/corridas/t-ns/mensajes.jsonl" | tail -1)"
+[ -n "$ultima_abierta_ns" ] || fail "abrir sin simulacro no dejo el aviso ABIERTA"
+texto_json "$ultima_abierta_ns" | grep -q '▶️ \[ABIERTA\]' \
+  || fail "el aviso ABIERTA de una corrida real no trae su prefijo: $ultima_abierta_ns"
+texto_json "$ultima_abierta_ns" | grep -q 'PRÁCTICA' \
+  && fail "el aviso ABIERTA de una corrida real trae el prefijo de practica: $ultima_abierta_ns"
+
+# (6d) corrida_mensaje guarda la prueba del mensaje: messageId extraido de un
+# stdout con preambulo, at numerico, texto con el prefijo de practica; el
+# destino nunca queda escrito. Envio fallido -> message_id null, ok false.
+: > "$T/corridas/t1/mensajes.jsonl"
+export MSJ_PREAMBULO="ruido de arranque del CLI
+mas ruido
+" MSJ_ID=4242
+corrida_mensaje t1 DETENIDA "1 de 2 partes terminadas" "hubo un percance" "se retoma" "nada" \
+  || fail "DETENIDA con preambulo en el stdout fallo"
+unset MSJ_PREAMBULO MSJ_ID
+ultima=$(tail -n1 "$T/corridas/t1/mensajes.jsonl")
+printf '%s' "$ultima" | grep -q '"message_id": 4242' \
+  || fail "corrida_mensaje no extrajo el messageId del preambulo: $ultima"
+printf '%s' "$ultima" | grep -qE '"at": [0-9]+' \
+  || fail "corrida_mensaje no guardo un at numerico: $ultima"
+texto_json "$ultima" | grep -q '🧪 PRÁCTICA — no contestes 🔴 \[DETENIDA\]' \
+  || fail "corrida_mensaje no guardo el texto con el prefijo de practica: $ultima"
+printf '%s' "$ultima" | grep -q "$DESTINO" \
+  && fail "corrida_mensaje dejo el destino escrito en mensajes.jsonl: $ultima"
+
+export ENVIO_MODO=mal
+corrida_mensaje t1 DETENIDA "1 de 2 partes terminadas" "hubo un percance" "se retoma" "nada" \
+  2>/dev/null && fail "el envio fallido debio devolver distinto de 0"
+unset ENVIO_MODO
+ultima=$(tail -n1 "$T/corridas/t1/mensajes.jsonl")
+printf '%s' "$ultima" | grep -q '"ok": false' \
+  || fail "el envio fallido no quedo con ok:false: $ultima"
+printf '%s' "$ultima" | grep -q '"message_id": null' \
+  || fail "el envio fallido no quedo con message_id:null: $ultima"
+
+# (6e) BLOQUEANTE del revisor: un runbook cuyo titulo trae jerga (aqui "CI")
+# no tumba los mensajes de esa corrida ni la deja atorada sin poder cerrar.
+# corrida_encabezado cae al id, y abrir/cerrar SIGUEN mandando su aviso.
+RB_JERGA="$PWD/scripts/tests/fixtures/corrida/runbook-titulo-jerga.md"
+bash "$CORR" abrir t-jerga --runbook "$RB_JERGA" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir con un runbook de titulo con jerga fallo"
+enc_jerga="$(corrida_encabezado t-jerga)"
+printf '%s' "$enc_jerga" | grep -q '^t-jerga (abrió' \
+  || fail "corrida_encabezado no cayo al id con un titulo con jerga: $enc_jerga"
+abierta_jerga="$(grep '"etiqueta": *"ABIERTA"' "$T/corridas/t-jerga/mensajes.jsonl" | tail -1)"
+[ -n "$abierta_jerga" ] || fail "abrir con titulo con jerga no dejo el aviso ABIERTA"
+printf '%s' "$abierta_jerga" | grep -q '"ok": *true' \
+  || fail "el aviso ABIERTA con titulo con jerga no salio ok: $abierta_jerga"
+bash "$CORR" cerrar t-jerga >/dev/null 2>&1 \
+  || fail "cerrar con un runbook de titulo con jerga fallo (la corrida quedaria atorada)"
+grep -q '"estado": *"cerrada"' "$T/corridas/t-jerga/registro.json" \
+  || fail "t-jerga no quedo cerrada"
+cerrada_jerga="$(grep '"etiqueta": *"CERRADA"' "$T/corridas/t-jerga/mensajes.jsonl" | tail -1)"
+[ -n "$cerrada_jerga" ] || fail "cerrar con titulo con jerga no dejo el aviso CERRADA"
+printf '%s' "$cerrada_jerga" | grep -q '"ok": *true' \
+  || fail "el aviso CERRADA con titulo con jerga no salio ok: $cerrada_jerga"
+# 9.2: en una corrida real TODOS los mensajes llevan el prefijo ▶️, no solo ABIERTA.
+texto_json "$cerrada_jerga" | grep -q '^▶️ ✅ \[CERRADA\]' \
+  || fail "el aviso CERRADA de una corrida real no trae su prefijo: $cerrada_jerga"
+
+# (6f) BLOQUEANTE del revisor (CodeRabbit, lib.sh:613): un titulo que repite
+# un marcador reservado del mensaje ("Comando: ") pasa jerga_en_texto pero
+# rompe la forma de la linea 1 igual que la jerga — tambien cae al id.
+RB_MARCADOR="$PWD/scripts/tests/fixtures/corrida/runbook-titulo-marcador.md"
+bash "$CORR" abrir t-marcador --runbook "$RB_MARCADOR" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir con un runbook de titulo con un marcador reservado fallo"
+enc_marcador="$(corrida_encabezado t-marcador)"
+printf '%s' "$enc_marcador" | grep -q '^t-marcador (abrió' \
+  || fail "corrida_encabezado no cayo al id con un titulo con un marcador reservado: $enc_marcador"
+abierta_marcador="$(grep '"etiqueta": *"ABIERTA"' "$T/corridas/t-marcador/mensajes.jsonl" | tail -1)"
+printf '%s' "$abierta_marcador" | grep -q '"ok": *true' \
+  || fail "el aviso ABIERTA con titulo-marcador no salio ok: $abierta_marcador"
+bash "$CORR" cerrar t-marcador >/dev/null 2>&1 \
+  || fail "cerrar con un runbook de titulo-marcador fallo (la corrida quedaria atorada)"
+cerrada_marcador="$(grep '"etiqueta": *"CERRADA"' "$T/corridas/t-marcador/mensajes.jsonl" | tail -1)"
+printf '%s' "$cerrada_marcador" | grep -q '"ok": *true' \
+  || fail "el aviso CERRADA con titulo-marcador no salio ok: $cerrada_marcador"
 
 # (9) con el entorno vacio se usa la misma tabla del registro.
 : > "$TMUX_LOG"
@@ -581,6 +681,97 @@ grep -q '"nombre": *"ses-jb"' "$T/corridas/t-jb/registro.json" \
 grep -q '"estado": *"cerrada"' "$T/corridas/t-jb/registro.json" || fail "t-jb no quedo cerrada"
 "$TM_REAL" -L "$L" has-session -t "=ses-jb" 2>/dev/null && fail "ses-jb quedo viva en corrida cerrada"
 
+# (9i) 9.16: cerrar espera de forma acotada a un lanzamiento lento sin pedir
+# reintento manual. Determinista y sin depender del reloj del sondeo: una
+# sesion normal ya lanzada y marcada, mas un tomador que retiene el lock global
+# 15 s (mas de los ~10 s que un intento suelto espera). Con el codigo actual
+# cerrar falla pidiendo reintento; con el arreglo espera, desmarca y cierra.
+bash "$CORR" abrir t-lento --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir t-lento fallo"
+bash "$CORR" lanzar-sesion t-lento carril bueno "$T/ses" --nombre ses-lento --encargo "$T/encargo.txt" >/dev/null 2>&1 \
+  || fail "lanzar ses-lento fallo (9.16)"
+(
+  trap - EXIT # no heredar el rm -rf $T de la prueba: lib.sh lo reinstalaria al soltar y este proceso borraria $T al salir
+  CORRIDA_STATE="$T/corridas" TMUX_BIN="$T/bin/tmux-shim" OPENCLAW_BIN="$T/bin/openclaw"
+  . scripts/mac/corrida/lib.sh
+  marcas_lock_tomar || exit 1
+  sleep 15
+  marcas_lock_soltar
+) &
+retenedor=$!
+i=0; while [ ! -d "$T/corridas/.marcas.lock" ] && [ "$i" -lt 100 ]; do sleep 0.2; i=$((i+1)); done
+[ -d "$T/corridas/.marcas.lock" ] || fail "el retenedor no tomo el lock (9.16)"
+bash "$CORR" cerrar t-lento >"$T/cerrar-lento.out" 2>&1 || fail "cerrar no espero al lanzamiento lento (9.16): $(cat "$T/cerrar-lento.out")"
+wait "$retenedor"
+grep -q '"estado": *"cerrada"' "$T/corridas/t-lento/registro.json" || fail "t-lento no quedo cerrada (9.16)"
+"$TM_REAL" -L "$L" show-environment -t "=ses-lento" OPENCLAW_WATCH >/dev/null 2>&1 \
+  && fail "ses-lento quedo marcada despues de cerrar (9.16)"
+"$TM_REAL" -L "$L" has-session -t "=ses-lento" 2>/dev/null \
+  || fail "ses-lento murio: cerrar solo desmarca, no mata (9.16)"
+
+# (9i2) 9.16 acotada de verdad: con el lock ocupado y un tope chico, cerrar
+# falla con diagnostico en vez de colgarse (no espera eterna ni exito falso).
+bash "$CORR" abrir t-tope --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir t-tope fallo"
+"$TM_REAL" -L "$L" new-session -d -s ses-tope -x 200 -y 50 >/dev/null 2>&1 || true
+(
+  trap - EXIT # no heredar el rm -rf $T de la prueba: lib.sh lo reinstalaria al soltar y este proceso borraria $T al salir
+  CORRIDA_STATE="$T/corridas" TMUX_BIN="$T/bin/tmux-shim" OPENCLAW_BIN="$T/bin/openclaw"
+  . scripts/mac/corrida/lib.sh
+  marcas_lock_tomar || exit 1
+  sleep 25
+  marcas_lock_soltar
+) &
+holdeador=$!
+i=0; while [ ! -d "$T/corridas/.marcas.lock" ] && [ "$i" -lt 100 ]; do sleep 0.2; i=$((i+1)); done
+t0=$SECONDS
+out="$(CORR_CIERRE_ESPERA=3 bash "$CORR" cerrar t-tope 2>&1)" && fail "cerrar debio fallar con tope 3 s y lock ocupado (9.16)"
+[ $((SECONDS - t0)) -le 5 ] || fail "cerrar no respeto el tope de 3 s: tardo $((SECONDS - t0)) s (cada toma suelta no debe esperar ~10 s) (9.16)"
+printf '%s' "$out" | grep -q "no cedio" || fail "cerrar no diagnostico la espera agotada (9.16): $out"
+grep -q '"estado": *"abierta"' "$T/corridas/t-tope/registro.json" || fail "t-tope debio quedar abierta (9.16)"
+wait "$holdeador"
+bash "$CORR" cerrar t-tope >/dev/null 2>&1 || fail "cerrar tras liberar fallo (9.16)"
+
+# (9i3) 9.16: con el tope ya vencido, cerrar igual prueba el lock una vez antes
+# de rendirse (si el lock global se tomo cerca del limite, el del registro no
+# falla en seco con 0 intentos). Lock libre = lo toma; lock ocupado = un solo
+# intento y diagnostico, sin colgarse.
+tope0libre=$(bash -c '. scripts/mac/corrida/lib.sh; n=0; toma() { n=$((n+1)); return 0; }
+  CIERRE_TOPE=0 cerrar_esperar_lock "lock de prueba" toma; echo "rc=$? intentos=$n"')
+[ "$tope0libre" = "rc=0 intentos=1" ] || fail "tope vencido + lock libre debio tomarlo al 1er intento (9.16): $tope0libre"
+tope0dado=$(bash -c '. scripts/mac/corrida/lib.sh; n=0; toma() { n=$((n+1)); return 1; }
+  CIERRE_TOPE=0 cerrar_esperar_lock "lock de prueba" toma 2>/dev/null; echo "rc=$? intentos=$n"')
+[ "$tope0dado" = "rc=1 intentos=1" ] || fail "tope vencido + lock ocupado debio fallar con 1 intento (9.16): $tope0dado"
+
+# (9i5) 9.16: el tope por defecto de cerrar queda por debajo del umbral de lock
+# abandonado; si no, un lock fresco puede romperse al final de la espera.
+( unset CORR_CIERRE_ESPERA CORR_LOCK_VIEJO; . scripts/mac/corrida/lib.sh
+  [ "$CORR_CIERRE_ESPERA" -lt "$CORR_LOCK_VIEJO" ] ) \
+  || fail "CORR_CIERRE_ESPERA por defecto debe ser menor que CORR_LOCK_VIEJO (9.16)"
+
+# (9i6) 9.16: un lock tomado al empezar la espera no se rompe por envejecer
+# durante ella. Lock manual (sin token) fresco, umbral de abandono 3 s y tope
+# 7 s: a mitad de la espera cruza el umbral; cerrar debe rendirse, no romperlo.
+bash "$CORR" abrir t-edad --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir t-edad fallo"
+mkdir "$T/corridas/t-edad/.lock"
+out="$(CORR_LOCK_VIEJO=3 CORR_CIERRE_ESPERA=7 bash "$CORR" cerrar t-edad 2>&1)" \
+  && fail "cerrar rompio un lock que estaba tomado al empezar la espera (9.16): $out"
+[ -d "$T/corridas/t-edad/.lock" ] || fail "el lock tomado al empezar desaparecio durante la espera (9.16)"
+grep -q '"estado": *"abierta"' "$T/corridas/t-edad/registro.json" || fail "t-edad debio seguir abierta (9.16)"
+rmdir "$T/corridas/t-edad/.lock"
+
+# (9i4) 9.16: CORR_CIERRE_ESPERA se valida como segundos decimales: "08" son 8 s
+# (no un octal invalido que rompa la aritmetica) y un valor no numerico se
+# rechaza sin tocar nada.
+bash "$CORR" abrir t-octal --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" >/dev/null \
+  || fail "abrir t-octal fallo"
+out="$(CORR_CIERRE_ESPERA=abc bash "$CORR" cerrar t-octal 2>&1)" && fail "cerrar acepto CORR_CIERRE_ESPERA=abc (9.16)"
+printf '%s' "$out" | grep -q "no es un numero de segundos" || fail "CORR_CIERRE_ESPERA invalido sin diagnostico (9.16): $out"
+grep -q '"estado": *"abierta"' "$T/corridas/t-octal/registro.json" || fail "t-octal debio seguir abierta tras el valor invalido (9.16)"
+CORR_CIERRE_ESPERA=08 bash "$CORR" cerrar t-octal >/dev/null 2>&1 || fail "cerrar con CORR_CIERRE_ESPERA=08 fallo (octal) (9.16)"
+grep -q '"estado": *"cerrada"' "$T/corridas/t-octal/registro.json" || fail "t-octal no quedo cerrada con 08 (9.16)"
+
 # ancla de orden: cerrar toma el lock ANTES de listar sesiones (reordenarlo — la
 # mutacion que deja la carrera abierta por el lado de cerrar — pone esto en rojo).
 linelock=$(grep -n 'lock_tomar "$reg"' scripts/mac/corrida/cerrar.sh | head -1 | cut -d: -f1)
@@ -655,7 +846,9 @@ bash "$CORR" abrir t-lk --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" 
 bash "$CORR" lanzar-sesion t-lk carril bueno "$T/ses" --nombre ses-lk --encargo "$T/encargo.txt" >/dev/null \
   || fail "lanzar ses-lk fallo"
 mkdir "$T/corridas/t-lk/.lock"
-out="$(bash "$CORR" cerrar t-lk 2>&1)"; rc=$?
+# Tope corto: cerrar se rinde mucho antes de que el lock manual (sin token) cumpla
+# CORR_LOCK_VIEJO y sea rompible; asi el caso no depende de milisegundos (9.16).
+out="$(CORR_CIERRE_ESPERA=3 bash "$CORR" cerrar t-lk 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] || fail "con el lock tomado debio fallar"
 printf '%s' "$out" | grep -q "lock" || fail "el fallo del lock no se nombra"
 printf '%s' "$out" | grep -q "aviso NO salio" || fail "el fallo del lock no dice que el aviso no salio"
@@ -753,12 +946,30 @@ grep -q '"cron_vigia_id"' "$T/corridas/t1/registro.json" && fail "t1 conserva cr
 # (11) seguimiento.v1: NECESITO TU RESPUESTA y DETENIDA con notificacion;
 # AVANZA acumula para el corte global sin mandar.
 : > "$LLAMADAS"
-corrida_mensaje t1 "NECESITO TU RESPUESTA" "1 de 2 partes terminadas" "un dialogo espera tu decision" "la corrida sigue en marcha" "responder si o no" \
+corrida_mensaje t1 "NECESITO TU RESPUESTA" "1 de 2 partes terminadas" "un dialogo espera tu decision" \
+  "Di sí o no, decide y contesta esta respuesta. Comando: ~/bin/x" "responder si o no" \
   || fail "el mensaje NECESITO TU RESPUESTA fallo"
 necesito_linea="$(grep "message send" "$LLAMADAS" | tail -1)"
 printf '%s' "$necesito_linea" | grep -q "NECESITO TU RESPUESTA" || fail "no salio la etiqueta NECESITO TU RESPUESTA"
 printf '%s' "$necesito_linea" | grep -q -- "--silent" && fail "NECESITO TU RESPUESTA salio silenciosa"
 printf '%s' "$necesito_linea" | grep -qF -- "-t $DESTINO" || fail "NECESITO TU RESPUESTA sin destino"
+# t1 es una corrida de practica (simulacro=true, abierta en (0)): NINGUN campo
+# del cuerpo (cambio, sigue, necesito) que trae el llamador se manda — ni
+# siquiera "sigue", con un texto que a proposito pide una decision. Si se
+# revierte el if de simulacro en corrida_mensaje, esto se pone rojo.
+grep -q 'Comando: ' "$LLAMADAS" && fail "NECESITO TU RESPUESTA en practica mando un Comando: de referencia"
+# El cuerpo son las lineas 2-4 del mensaje (linea 1 trae la etiqueta, que
+# incluye literalmente la palabra "RESPUESTA" y no cuenta como pedido de
+# decision del llamador).
+cuerpo_necesito="$(tail -n +2 "$LLAMADAS")"
+printf '%s' "$cuerpo_necesito" | grep -qiE 'Di s[ií]|decide|respuesta' \
+  && fail "NECESITO TU RESPUESTA en practica dejo pasar un pedido de decision del llamador: $cuerpo_necesito"
+grep -qF 'es una prueba, se resuelve sola' "$LLAMADAS" \
+  || fail "NECESITO TU RESPUESTA en practica no avisa que se resuelve sola: $(cat "$LLAMADAS")"
+grep -qF 'Nada que hacer: la prueba sigue sola.' "$LLAMADAS" \
+  || fail "NECESITO TU RESPUESTA en practica no trae el sigue fijo: $(cat "$LLAMADAS")"
+grep -qF 'responder si o no' "$LLAMADAS" \
+  && fail "NECESITO TU RESPUESTA en practica mando el necesito real del llamador"
 corrida_mensaje t1 DETENIDA "1 de 2 partes terminadas" "la corrida se detuvo por un percance" "se retoma cuando este claro" "nada" \
   || fail "el mensaje DETENIDA fallo"
 detenida_linea="$(grep "message send" "$LLAMADAS" | tail -1)"
@@ -769,6 +980,22 @@ corrida_mensaje t1 AVANZA "1 de 2 partes terminadas" "todo sigue en orden" "cont
 [ "$(grep -c "message send" "$LLAMADAS")" = "$envios_antes" ] || fail "AVANZA mando en vez de acumular"
 grep -q '"cambio": *"todo sigue en orden"' "$T/corridas/t1/eventos-seguimiento.jsonl" \
   || fail "AVANZA no dejo el evento acumulado"
+
+# (11c) BUG DE PRODUCCION 2026-09-26: el vigia corre como LaunchAgent sin LANG
+# ni LC_ALL. Sin locale, grep/sed/awk tratan los acentos como bytes sueltos y
+# mensaje_valido rechazaba CUALQUIER mensaje acentuado ("Qué cambió:",
+# "práctica"): en una corrida de practica, NECESITO TU RESPUESTA nunca salia
+# ("mensaje fuera de contrato"). t1 sigue siendo la corrida de practica
+# abierta en (0); esta llamada corre bajo el mismo entorno pelado que un
+# LaunchAgent (env -i, sin LANG ni LC_ALL).
+: > "$LLAMADAS"
+env -i PATH="$T/bin:/opt/homebrew/bin:/usr/bin:/bin" HOME="$HOME" CORRIDA_STATE="$T/corridas" \
+  OPENCLAW_BIN="$T/bin/openclaw" \
+  bash -c '. scripts/mac/corrida/lib.sh
+corrida_mensaje t1 "NECESITO TU RESPUESTA" "1 de 2 partes terminadas" "x" "y" "z"' \
+  || fail "sin LANG/LC_ALL, corrida_mensaje de practica fallo (mensaje fuera de contrato por el locale)"
+grep -qF 'es una prueba, se resuelve sola' "$LLAMADAS" \
+  || fail "sin LANG/LC_ALL, el mensaje de practica no salio con su texto acentuado: $(cat "$LLAMADAS")"
 
 # (11b) el despachador no carga lib ni subcomandos con ruta.
 out="$(bash "$CORR" lib 2>&1)"; rc=$?

@@ -81,6 +81,7 @@ montar_arbol() {
   cp "$FX/preflight.sh" "$R/scripts/tests/test-corrida-preflight.sh"
   cp "$FX/resto-a.sh"   "$R/scripts/tests/test-aaa.sh"
   cp "$FX/resto-b.sh"   "$R/scripts/tests/test-zzz.sh"
+  cp "$FX/node.mjs"     "$R/scripts/tests/test-node-fixture.mjs"
   cat >"$R/tally.sh" <<'SH'
 #!/bin/sh
 printf '%s\n' "$1" >> "$TALLY_SHARDS"
@@ -137,6 +138,7 @@ test-corrida-preflight.sh
 test-tmux-activity-watch.sh
 test-aaa.sh
 test-zzz.sh
+test-node-fixture.mjs
 sintaxis-summa-gate
 bateria-summa-gate
 sintaxis-tablero-runbook
@@ -197,12 +199,12 @@ $(cat "$T/salida-ultimo-shard.log")"
 validar "$T/ok"
 [ "$RC_VALIDADOR" -eq 0 ] || fail "(1) el validador rechazo la union VALIDA (rc=$RC_VALIDADOR):
 $SALIDA_VALIDADOR"
-esperado_tally='bateria-summa bateria-tablero corpus nucleo preflight resto-a resto-b sintaxis-summa sintaxis-tablero watchdog'
+esperado_tally='bateria-summa bateria-tablero corpus node-test nucleo preflight resto-a resto-b sintaxis-summa sintaxis-tablero watchdog'
 got_tally=$(LC_ALL=C sort "$TALLY_GLOBAL" | uniq | tr '\n' ' ' | sed 's/ $//')
 [ "$got_tally" = "$esperado_tally" ] || fail "(1) la bateria logica corrida no es la completa.
   esperaba: $esperado_tally
   obtuvo  : $got_tally"
-echo "ok (1): union valida aceptada y las 10 entradas logicas corrieron"
+echo "ok (1): union valida aceptada y las 11 entradas logicas corrieron"
 
 echo "(2) cada shard exactamente una vez y ninguna entrada corre dos veces"
 n_inv=$(wc -l <"$INVOCACIONES" | tr -d ' ')
@@ -422,6 +424,9 @@ printf '%s\n' "$GL" | grep -qF "if: needs.shards.result == 'success'" \
 $GL"
 printf '%s\n' "$GL" | grep -qF 'scripts/tests/*.sh' \
   || fail "(w) el gate no genera el inventario desde el glob del checkout:
+$GL"
+printf '%s\n' "$GL" | grep -qF 'scripts/tests/*.mjs' \
+  || fail "(w) el gate no inventaria las pruebas Node del checkout:
 $GL"
 # En fast, la omision de shards sigue autorizada SOLO por clasificacion fast
 # (lo mide test-summa-gate-quality-entrypoints); aca se fija que la auditoria

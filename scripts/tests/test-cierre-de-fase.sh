@@ -836,4 +836,205 @@ printf '%s' "$out" | grep -q "^VERDE *entregables" \
 $out"
 echo "ok (14i): documento presente pero ilegible es unknown, no verde por vacio"
 
+# (15) usuario: por cada fila de la fase que declara una promesa observable (la
+# linea literal "Promesa: <...> — ruta: <...>." dentro de su celda de Contenido,
+# slot 16 de la skill autopilot-runbook), tiene que existir su linea FUNCIONA en
+# docs/evidence/usuario-<fase>-*.md. Medido 2026-09-17: la Fase 7 shippeo un
+# tablero que nadie abrio nunca -- este check es lo que impide cerrar una fase
+# sobre una promesa que nadie fue a comprobar.
+plan_promesa() { # $1 promesa (con marcador) de 5.0, $2 promesa (con marcador o vacio) de 5.1
+  cat >"$R/Plans.md" <<PLAN
+## Fase 5 — algo con plugin \`tablero-demo\` para ver cosas
+
+| Task | Contenido | DoD | Depends | Status |
+|------|-----------|-----|---------|--------|
+| 5.0 | trabajo uno. $1 | su DoD | - | cc:完了 |
+| 5.1 | trabajo dos. $2 | su DoD | 5.0 | cc:完了 |
+PLAN
+  git -C "$R" add -A >/dev/null 2>&1
+  git -C "$R" commit -q -m plan-promesa 2>/dev/null
+  git -C "$R" push -q -f origin HEAD:main
+}
+sin_evidencia_usuario() { rm -rf "$R/docs/evidence"; }
+
+# (15a) Promesa cumplida con su evidencia FUNCIONA: VERDE.
+plan_promesa 'Promesa: la pantalla de estado muestra "7 de 7" — ruta: abre http://x/tablero/5.' ''
+mkdir -p "$R/docs/evidence"
+cat >"$R/docs/evidence/usuario-5-2026-09-24.md" <<'EOF'
+## 5.0
+Promesa: la pantalla de estado muestra "7 de 7"
+Ruta: abrí http://x/tablero/5
+FUNCIONA la pantalla mostró "7 de 7" a las 10:32
+EOF
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m evidencia-15a 2>/dev/null
+git -C "$R" push -q -f origin HEAD:main
+out=$(CIERRE_SIN_GATEWAY=1 corre 5)
+printf '%s' "$out" | grep -q "^VERDE *usuario" \
+  || fail "(15a) una promesa cumplida con su FUNCIONA debe salir VERDE:
+$out"
+echo "ok (15a): promesa con evidencia FUNCIONA sale VERDE"
+
+# (15b) Promesa declarada y SIN evidencia: ROJO nombrando la fila.
+sin_evidencia_usuario
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m sin-evidencia-15b 2>/dev/null
+git -C "$R" push -q -f origin HEAD:main
+out=$(CIERRE_SIN_GATEWAY=1 corre 5); rc=$?
+[ "$rc" -eq 1 ] || fail "(15b) una promesa sin evidencia debe salir 1; salio $rc:
+$out"
+printf '%s' "$out" | grep -q "^ROJO *usuario" \
+  || fail "(15b) una promesa declarada sin evidencia debe salir ROJO:
+$out"
+printf '%s' "$out" | grep -q "5.0" \
+  || fail "(15b) el detalle debe nombrar la fila 5.0:
+$out"
+echo "ok (15b): promesa sin evidencia sale ROJO y nombra la fila"
+
+# (15c) Promesa declarada con evidencia que dice NO FUNCIONA: ROJO. Este es el caso
+# que mata la mutacion "aceptar el archivo sin mirar su contenido": si el check solo
+# comprobara que el archivo existe, este caso pasaria en VERDE.
+mkdir -p "$R/docs/evidence"
+cat >"$R/docs/evidence/usuario-5-2026-09-24.md" <<'EOF'
+## 5.0
+Promesa: la pantalla de estado muestra "7 de 7"
+Ruta: abrí http://x/tablero/5
+NO FUNCIONA la pantalla se quedó en blanco después de 20 segundos
+EOF
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m evidencia-15c 2>/dev/null
+git -C "$R" push -q -f origin HEAD:main
+out=$(CIERRE_SIN_GATEWAY=1 corre 5); rc=$?
+[ "$rc" -eq 1 ] || fail "(15c) una evidencia NO FUNCIONA debe salir 1; salio $rc:
+$out"
+printf '%s' "$out" | grep -q "^ROJO *usuario" \
+  || fail "(15c) una evidencia que dice NO FUNCIONA debe salir ROJO, no darse por buena por existir el archivo:
+$out"
+echo "ok (15c): una evidencia NO FUNCIONA sale ROJO -- el check mira el contenido, no solo si el archivo existe"
+
+# (15d) Ninguna fila declara promesa observable: VERDE con el detalle que lo dice.
+plan_promesa '' ''
+out=$(CIERRE_SIN_GATEWAY=1 corre 5)
+printf '%s' "$out" | grep -q "^VERDE *usuario" \
+  || fail "(15d) sin ninguna promesa declarada el check debe salir VERDE:
+$out"
+printf '%s' "$out" | grep -q "ninguna fila de la fase 5 declara promesa observable" \
+  || fail "(15d) el detalle debe decir explicitamente que ninguna fila declara promesa:
+$out"
+echo "ok (15d): sin ninguna promesa declarada, VERDE con el detalle que lo dice"
+
+# (15e) "Promesa: sin promesa observable." se lee como ausencia explicita, no como
+# una promesa a medio llenar: no exige evidencia y no rompe el parseo de la otra fila.
+plan_promesa 'Promesa: sin promesa observable.' 'Promesa: la pantalla de estado muestra "7 de 7" — ruta: abre http://x/tablero/5.'
+mkdir -p "$R/docs/evidence"
+cat >"$R/docs/evidence/usuario-5-2026-09-24.md" <<'EOF'
+## 5.1
+Promesa: la pantalla de estado muestra "7 de 7"
+Ruta: abrí http://x/tablero/5
+FUNCIONA la pantalla mostró "7 de 7" a las 10:32
+EOF
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m evidencia-15e 2>/dev/null
+git -C "$R" push -q -f origin HEAD:main
+out=$(CIERRE_SIN_GATEWAY=1 corre 5)
+printf '%s' "$out" | grep -q "^VERDE *usuario" \
+  || fail "(15e) sin promesa observable en 5.0 y FUNCIONA en 5.1 debe salir VERDE:
+$out"
+echo "ok (15e): 'sin promesa observable' no exige evidencia, y la otra fila con FUNCIONA cierra"
+sin_evidencia_usuario
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m limpia-evidencia-usuario 2>/dev/null
+git -C "$R" push -q -f origin HEAD:main
+
+# (15f) Dos archivos de evidencia con fechas distintas: gana el veredicto MAS
+# RECIENTE, no el primero que aparezca al concatenar. El contrato dice que el bloque
+# "termina" en su veredicto; sin este caso, un check que uniera todos los bloques de
+# una fila y se quedara con el primer FUNCIONA que encontrara daria por cerrada una
+# promesa que la ultima prueba dice rota -- justo lo que 9.12 existe para impedir.
+# Hallazgo del lead sobre 182fde0, reproducido antes de este arreglo.
+plan_promesa 'Promesa: la pantalla muestra "7 de 7" — ruta: abre http://x/tablero/5.' ''
+
+# (15f-1) Viejo FUNCIONA, nuevo NO FUNCIONA: ROJO nombrando la fila.
+sin_evidencia_usuario
+mkdir -p "$R/docs/evidence"
+cat >"$R/docs/evidence/usuario-5-2026-09-24.md" <<'EOF'
+## 5.0
+Promesa: la pantalla muestra "7 de 7"
+Ruta: abrí http://x/tablero/5
+FUNCIONA mostró "7 de 7" el día 24
+EOF
+cat >"$R/docs/evidence/usuario-5-2026-09-25.md" <<'EOF'
+## 5.0
+Promesa: la pantalla muestra "7 de 7"
+Ruta: abrí http://x/tablero/5
+NO FUNCIONA mostró un error 500 el día 25
+EOF
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m evidencia-15f-1 2>/dev/null
+git -C "$R" push -q -f origin HEAD:main
+out=$(CIERRE_SIN_GATEWAY=1 corre 5); rc=$?
+[ "$rc" -eq 1 ] || fail "(15f-1) un FUNCIONA viejo con un NO FUNCIONA mas nuevo debe salir 1; salio $rc:
+$out"
+printf '%s' "$out" | grep -q "^ROJO *usuario" \
+  || fail "(15f-1) el veredicto mas reciente (NO FUNCIONA) debe ganar, no el mas viejo (FUNCIONA):
+$out"
+printf '%s' "$out" | grep -q "5.0" \
+  || fail "(15f-1) el detalle debe nombrar la fila 5.0:
+$out"
+echo "ok (15f-1): con un FUNCIONA viejo y un NO FUNCIONA mas nuevo, gana el mas nuevo: ROJO"
+
+# (15f-2) El otro lado: viejo NO FUNCIONA, nuevo FUNCIONA: VERDE. Sin este caso, un
+# check que simplemente usara el ULTIMO archivo por nombre (en vez de el veredicto
+# mas reciente) podria pasar (15f-1) por casualidad de orden alfabetico y no defender
+# nada distinto.
+sin_evidencia_usuario
+mkdir -p "$R/docs/evidence"
+cat >"$R/docs/evidence/usuario-5-2026-09-24.md" <<'EOF'
+## 5.0
+Promesa: la pantalla muestra "7 de 7"
+Ruta: abrí http://x/tablero/5
+NO FUNCIONA mostró un error 500 el día 24
+EOF
+cat >"$R/docs/evidence/usuario-5-2026-09-25.md" <<'EOF'
+## 5.0
+Promesa: la pantalla muestra "7 de 7"
+Ruta: abrí http://x/tablero/5
+FUNCIONA mostró "7 de 7" el día 25, ya re-probado
+EOF
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m evidencia-15f-2 2>/dev/null
+git -C "$R" push -q -f origin HEAD:main
+out=$(CIERRE_SIN_GATEWAY=1 corre 5); rc=$?
+[ "$rc" -eq 0 ] || fail "(15f-2) un NO FUNCIONA viejo con un FUNCIONA mas nuevo debe salir 0; salio $rc:
+$out"
+printf '%s' "$out" | grep -q "^VERDE *usuario" \
+  || fail "(15f-2) el veredicto mas reciente (FUNCIONA) debe ganar, no el mas viejo (NO FUNCIONA):
+$out"
+echo "ok (15f-2): con un NO FUNCIONA viejo y un FUNCIONA mas nuevo (re-probado), gana el mas nuevo: VERDE"
+sin_evidencia_usuario
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m limpia-evidencia-15f 2>/dev/null
+git -C "$R" push -q -f origin HEAD:main
+
+# (15g) Una promesa real en Contenido y "Promesa: sin promesa observable." en el DoD
+# (OTRA celda de la misma fila): la regex tiene que mirar solo la celda de Contenido.
+# Mirar la fila entera dejaba que el "sin promesa observable" del DoD apagara la
+# exigencia de la promesa real -- hallazgo del lead sobre 182fde0, revision del PR
+# 150. Sin evidencia, tiene que salir ROJO nombrando la fila.
+cat >"$R/Plans.md" <<PLAN
+## Fase 5 — algo con plugin \`tablero-demo\` para ver cosas
+
+| Task | Contenido | DoD | Depends | Status |
+|------|-----------|-----|---------|--------|
+| 5.0 | trabajo uno. Promesa: la pantalla muestra "7 de 7" — ruta: abre http://x/tablero/5. | su DoD. Promesa: sin promesa observable. | - | cc:完了 |
+| 5.1 | trabajo dos | su DoD | 5.0 | cc:完了 |
+PLAN
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m plan-promesa-en-dod 2>/dev/null
+git -C "$R" push -q -f origin HEAD:main
+sin_evidencia_usuario
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m sin-evidencia-15g 2>/dev/null
+git -C "$R" push -q -f origin HEAD:main
+out=$(CIERRE_SIN_GATEWAY=1 corre 5); rc=$?
+[ "$rc" -eq 1 ] || fail "(15g) una promesa real en Contenido sin evidencia debe salir 1 aunque el DoD diga 'sin promesa observable'; salio $rc:
+$out"
+printf '%s' "$out" | grep -q "^ROJO *usuario" \
+  || fail "(15g) el 'sin promesa observable' de otra celda (DoD) no puede apagar la promesa real de Contenido:
+$out"
+printf '%s' "$out" | grep -q "5.0" \
+  || fail "(15g) el detalle debe nombrar la fila 5.0:
+$out"
+echo "ok (15g): la promesa se lee solo de la celda de Contenido; un 'sin promesa observable' en el DoD no la apaga"
+
 echo "TODO VERDE: cierre-de-fase"

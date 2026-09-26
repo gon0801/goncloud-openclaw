@@ -135,10 +135,18 @@ export TMUX_BARRA=READY
 
 # El procedimiento que instala corrida.sh debe copiar los subcomandos que el
 # runbook general manda usar. Una copia fija incompleta rompe solo en la Mac viva.
-grep -Eq 'for f in .*terminar-sesion.*reconciliar-marcas' "$INSTALA" \
-  || fail "la instalacion de corrida no incluye los subcomandos de marcas"
-grep -Eq 'bash scripts/mac/instalar-mac\.sh[[:space:]]*&&' "$INSTALA" \
+# Desde 9.10 el runbook instala con instalar-mac.sh, que copia corrida/*.sh
+# entero (no una lista a mano) y verifica cada archivo; la verificacion va
+# encadenada con && para no validar una instalacion vieja si el instalador falla.
+grep -Eq 'bash scripts/mac/instalar-mac\.sh[[:space:]]*&&[[:space:]]*$' "$INSTALA" \
   || fail "el runbook puede validar una instalacion vieja despues de fallar el instalador"
+grep -qF 'bash scripts/mac/instalar-mac.sh --verificar' "$INSTALA" \
+  || fail "el runbook no verifica la instalacion de corrida"
+grep -qF '"$AQUI"/corrida/*.sh' scripts/mac/instalar-mac.sh \
+  || fail "la instalacion de corrida no incluye los subcomandos de marcas"
+for sub in terminar-sesion reconciliar-marcas; do
+  [ -f "scripts/mac/corrida/$sub.sh" ] || fail "falta el subcomando $sub que la instalacion debe copiar"
+done
 
 # Una sesión registrada puede finalizar sin afectar a las demás de la corrida.
 bash "$CORR" terminar-sesion abierta ses-lista >/dev/null \

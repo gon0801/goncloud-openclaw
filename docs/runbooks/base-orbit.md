@@ -6,7 +6,7 @@ Versión 1.1, 2026-09-18 UTC (reglas 3 y 5 ajustadas por la Fase 11), destilada 
 
 **Cadena de mando**: `docs/runbooks/loop-autopilot.md` (salvo la tabla de preaprobaciones de cada fase) > `docs/CONTEXTO.md` de Orbit, reglas 1–10 > el spec del módulo > el plan del módulo (`plans/<plan>.md`) > este documento > el runbook de la fase. El plan y el spec mandan en el **qué** y en la DoD; este documento y el de la fase mandan en el **cómo**. Una contradicción entre el plan y un runbook la gana el plan y se declara como residual en el PR; un runbook nunca edita el cuerpo de una fila del plan, solo el ítem de cierre edita celdas de estado.
 
-> **Autoridad vigente (2026-09-21, entrega sin sello):** aprobar y mergear se rige por el recibo del PR (`saikit-entrega.v1`, `loop-autopilot.md` §6); el gate vuelve a leer GitHub y no consulta estado de sesión, host ni cwd. Donde este documento describe el sello del hook, el sondeo de `harness-state.env`, los veredictos de `.saikit/veredictos/` o el blast nivel 4 (regla 12 y su fila de atores), eso es historia de las Fases 8 y 10 y NO es una instrucción: un turno de merge hoy es Drive, recibo vigente del head y los comandos de la sección 6 del loop.
+> **Política vigente:** cualquier agente puede mergear y desplegar por el flujo normal de GitHub, con CI y CodeRabbit aprobados. Los recibos son evidencia, no permisos. Rige loop-autopilot.md §6 sobre los procedimientos históricos de las fases.
 
 ---
 
@@ -14,7 +14,7 @@ Versión 1.1, 2026-09-18 UTC (reglas 3 y 5 ajustadas por la Fase 11), destilada 
 
 | Rol | Quién | Qué hace |
 |---|---|---|
-| **claw** | el agente `main` del gateway | Lanza al lead con `scripts/lanzar-lead.sh`, lo vigila por tmux y lo relanza si se cae. Hace la limpieza que el lead no puede hacerse a sí mismo al cierre (ver «Cierre»). Si un runbook de fase no está en `main`, lo mergea David desde GitHub o claw lanza una sesión aparte para ese solo merge (ver «Runbook en main»). No mergea PRs de Orbit ni despliega. |
+| **claw** | el agente `main` del gateway | Lanza al lead con `scripts/lanzar-lead.sh`, lo vigila por tmux y lo relanza si se cae. Hace la limpieza que el lead no puede hacerse a sí mismo al cierre (ver «Cierre»). Si un runbook de fase no está en `main`, lo mergea David desde GitHub o claw lanza una sesión aparte para ese solo merge (ver «Runbook en main»). Puede mergear PRs y desplegar. |
 | **lead** | un CLI en tmux de cualquier host del kit (sección 1 del loop), **sesión `fase<N>-lead` con cwd `/Users/dn/dev/wt-fase<N>-lead`** | Escribe los encargos, audita, corre la cruzada, aprueba, mergea por la ruta del kit, escribe progreso y cierra. Implementa solo carriles de lectura que el plan le asigne. No escribe código de producto. |
 | **implementador** | **muse**, sesión `muse-goncloud-Orbit`, en el checkout principal `/Users/dn/dev/goncloud-Orbit`, **un encargo a la vez** | Escribe el código en la rama del carril y reporta con la línea de contrato por archivo. No hace push ni abre PR. |
 | **revisor cruzado** | otra IA por `cross-review.ps1` | Segunda opinión sobre el SHA del PR. Con muse de implementador va `-Excluir ''` (muse no es candidato). Cuando implementa el lead, se excluye su host con el valor del conjunto cerrado de `cross-review.ps1` (`claude`, `codex`, `grok`, `kimi`, `qwen`, `glm`): `zcode` → `-Excluir glm`; `dsh` no está en el conjunto → `-Excluir ''` y se anota en el PR. |
@@ -51,7 +51,7 @@ Devuelve la línea de contrato (código 0), `SIN-CONTRATO VIVA` (3: la pantalla 
 
 | Repo | Ruta local | Default | Copia desplegada |
 |---|---|---|---|
-| `gon0801/goncloud-Orbit` | `/Users/dn/dev/goncloud-Orbit` (checkout de muse) y `/Users/dn/dev/wt-fase<N>-lead` (worktree del lead, uno por fase) | `master` | `/mnt/data/appdata/orbit` en el host `goncloud` — **fuera de alcance de toda fase**: `merge_despliega` es `no` y el deploy es de David |
+| `gon0801/goncloud-Orbit` | `/Users/dn/dev/goncloud-Orbit` (checkout de muse) y `/Users/dn/dev/wt-fase<N>-lead` (worktree del lead, uno por fase) | `master` | `/mnt/data/appdata/orbit` en el host `goncloud` — el merge no despliega automáticamente; cualquier agente puede ejecutar el despliegue |
 | `gon0801/goncloud-openclaw` | `/Users/dn/dev/goncloud-openclaw` | `main` | el gateway, por sync — mergear ahí **es** desplegar (sección 7 del loop) |
 
 El kit de merge: `/Users/dn/dev/summonaikit-claude/tools/`; su estado por sesión, en `~/.claude/hooks/state/<host>/<cksum del cwd>/`. El Postgres de pruebas es el de Homebrew en `localhost:5432` (no hay Docker en la Mac), con el DSN `postgresql://orbit:orbit@localhost:5432/postgres`, idéntico al de CI, **local y desechable**: no sale de esta máquina.
@@ -154,10 +154,6 @@ Las universales del loop están en su sección 12 y no se repiten. Estas son las
 
 | Situación | Qué hace el lead |
 |---|---|
-| El kit no está en `/Users/dn/dev/summonaikit-claude/tools` | `ATORADO kit ausente …` y la fase para. No se busca el script ni se mergea por otra vía. |
-| `.saikit/autopilot.json` no está en `origin/master` | `ATORADO bootstrap ausente`, la fase para, `atencion_requerida.necesaria = true`. |
-| La ruta del kit rechaza por sello, estado del hook o lock | Una vez: se confirma el cwd del proceso (`tmux display-message -p -t "$TMUX_PANE" '#{pane_current_path}'` = el worktree del lead), se pide a claw un turno con el literal `-saikit` y se repite sello + merge en ese turno. Si sigue: el PR queda abierto con su `APPROVE lead <sha>` y la razón, y va al progreso. |
-| Un comando es denegado por nombrar el script del kit | Candado léxico (regla 11): se reescribe con la ruta absoluta sola. |
 | El checkout principal está sucio al arrancar un encargo o al limpiar | No se cambia de rama y no se borra nada; muse espera, los carriles del lead siguen; `siguiente_paso` nombra el archivo; a la segunda espera, `atorado`. |
 | `esperar-contrato.sh` sale con 3 (VIVA) | Se anota en `eventos` y se vuelve a esperar; nunca se reenvía a una sesión viva. |
 | `esperar-contrato.sh` sale con 4 (QUIETA), 5 (sin reporte) o la pantalla muestra `model stream idle timeout` | Se confirma `high` en la barra (si dice `max`, `/effort high`) y se reenvía la instrucción una vez con otra espera; si repite, el carril queda `atorado` con `detenido_por` = «muse sin respuesta». |

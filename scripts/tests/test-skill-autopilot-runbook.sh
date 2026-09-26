@@ -38,15 +38,18 @@ grep -q '^name: autopilot-runbook$' "$REPO" || fail "$REPO: el name no es autopi
 grep -q '^description: Use when ' "$REPO" || fail "$REPO: la description no arranca con 'Use when'"
 echo "ok (1): frontmatter con name y description"
 
-# (2) Los quince slots numerados, en orden. Sin ellos la receta no produce un
+# (2) Los dieciseis slots numerados, en orden. Sin ellos la receta no produce un
 # documento ejecutable: cada slot cerrado es una pregunta que el lector no hace.
 # Los slots 14 (Seguimiento) y 15 (Clases de comando) nacen en la Fase 9, 9.7:
 # sin ellos el runbook no dice quien le habla a David ni el preflight tiene que
-# leer. No se renumera: runbooks y pruebas citan "slot 12" y "slot 13" por numero.
-for n in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+# leer. El slot 16 (Promesa observable) nace en la Fase 9, 9.12: sin el, una
+# fila del plan puede cerrarse sin que nadie diga que veria un usuario si
+# funciona. No se renumera: runbooks y pruebas citan "slot 12" y "slot 13" por
+# numero.
+for n in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
   grep -q -E "^$n\. \*\*" "$REPO" || fail "$REPO: falta el slot $n de la receta"
 done
-echo "ok (2): los quince slots de la receta están"
+echo "ok (2): los dieciseis slots de la receta están"
 
 # (2-bis) El slot 13 no es prosa: nombra el comando que prueba la entrega y la
 # frase de una linea. Medido 2026-09-18: un runbook escrito, revisado y
@@ -78,10 +81,15 @@ for a in 'lead is written as a **role**' \
          'corrida.sh preflight' \
          '## Clases de comando' \
          'Plantilla del encargo del lead' \
-         'espejo de progreso'; do
+         'espejo de progreso' \
+         '16. **Promesa observable.**' \
+         'Promesa: <qué vería un humano si funciona> — ruta: <cómo llegaría ahí>.' \
+         'Promesa: sin promesa observable.' \
+         'agents/usuario/agent/AGENTS.md' \
+         'it never reads the diff, the tests or the PR'; do
   grep -qF "$a" "$REPO" || fail "$REPO: falta el ancla: $a"
 done
-echo "ok (3): las quince anclas de reglas están"
+echo "ok (3): las diecinueve anclas de reglas están"
 
 # (4) La copia de la Mac, cuando existe, no puede traer contenido que no esté
 # commiteado EN NINGUNA parte. Ojo con lo que NO se exige: que sea idéntica a la

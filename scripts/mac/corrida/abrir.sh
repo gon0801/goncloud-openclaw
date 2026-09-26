@@ -4,7 +4,7 @@
 corrida_abrir() {
   local id="$1"; shift
   corrida_id_valido "$id" || { echo "abrir: id invalido (solo letras, numeros, - y _): $id" >&2; return 2; }
-  local runbook="" vigia="" cli_modos="" canal_de="verif-sync-repos" sim="false"
+  local runbook="" vigia="" cli_modos="" canal_de="cuotas-proveedores" sim="false"
   while [ $# -gt 0 ]; do
     case "$1" in
       --runbook|--vigia|--cli-modos|--canal-de)
@@ -84,5 +84,15 @@ os.rename(t,E['CORR_REG'])
     return 1
   fi
   lock_soltar "$reg"
+  # El aviso de apertura (9.2: "recibe un mensaje cuando una corrida se abre y
+  # cuando se cierra"). El numero de partes no se sabe todavia (se sabe cuando
+  # cada una avisa): el avance va vacio, corrida_mensaje omite ese pedazo en
+  # vez de inventar una cifra. Un fallo de envio no deshace la apertura (la
+  # corrida ya quedo abierta y utilizable): solo se avisa por stderr.
+  corrida_mensaje "$id" "ABIERTA" "" \
+    "Arrancó la corrida." \
+    "Se irá viendo cuántas partes tiene conforme avance." \
+    "nada" \
+    || echo "abrir: no salio el aviso de apertura de $id (la corrida sigue abierta)" >&2
   echo "abierta $id"
 }

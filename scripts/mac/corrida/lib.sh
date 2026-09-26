@@ -2,6 +2,30 @@
 # corrida/lib.sh — biblioteca de corrida.sh (Fase 9, 9.2). No se ejecuta sola.
 # Todo subcomando lee del registro; nada del entorno salvo los _BIN y CORRIDA_STATE.
 # Compatible con /bin/bash 3.2 de macOS.
+#
+# El vigia corre como LaunchAgent sin LANG ni LC_ALL (medido en produccion,
+# 2026-09-26): con el locale en "C"/"POSIX", grep/sed/awk tratan los acentos
+# como bytes sueltos y mensaje_valido rechaza CUALQUIER mensaje con "Qué
+# cambió:" o "práctica" ("mensaje fuera de contrato"; en la corrida de
+# practica, el NECESITO nunca sale). Si el locale activo no es UTF-8, se fija
+# uno que si lo sea ANTES de que corra nada mas de este archivo — asi
+# corrida.sh, responder.sh, estado.sh y el vigia (que siempre cargan lib.sh
+# primero, nunca directo) quedan cubiertos con un solo arreglo.
+case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
+  *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) ;;
+  *)
+    CORR_LOCALE_UTF8=""
+    for CORR_LOCALE_CAND in en_US.UTF-8 C.UTF-8; do
+      if locale -a 2>/dev/null | grep -qiFx "$CORR_LOCALE_CAND"; then
+        CORR_LOCALE_UTF8="$CORR_LOCALE_CAND"
+        break
+      fi
+    done
+    [ -n "$CORR_LOCALE_UTF8" ] || CORR_LOCALE_UTF8="en_US.UTF-8"
+    export LC_ALL="$CORR_LOCALE_UTF8"
+    unset CORR_LOCALE_UTF8 CORR_LOCALE_CAND
+    ;;
+esac
 CORRIDA_STATE="${CORRIDA_STATE:-$HOME/.local/state/corridas}"
 OPENCLAW_BIN="${OPENCLAW_BIN:-$HOME/.openclaw/bin/openclaw}"
 if [ -z "${TMUX_BIN:-}" ]; then
@@ -57,9 +81,13 @@ runbook_de() { # $1 runbook del registro: la absoluta, tal cual; la relativa, co
 # Parser unico de `cron list --json`: por nombre, el destino de entrega o TODOS los
 # ids (los duplicados homonimos existen: medido en vivo 2026-09-18). Sentinelas en
 # stdout: ILEGIBLE (lista sin leer) y NINGUNO (legible, sin ese nombre).
-cron_dest_de() { # $1 nombre -> destino de entrega. Con crons homonimos: si todos
-                 # traen createdAtMs, gana el mas reciente; si no, mismo destino en
-                 # todos -> ese; destinos DISTINTOS -> AMBIGUO (que abrir falle).
+cron_dest_de() { # $1 nombre -> destino de entrega. delivery.to manda; si esta
+                 # vacio, cae a failureAlert.to SOLO cuando failureAlert.channel es
+                 # "telegram" (los crons de negocio restaurados el 24/9 llevan ahi
+                 # el destino de David, con delivery en modo "none"). Con crons
+                 # homonimos: si todos traen createdAtMs, gana el mas reciente; si
+                 # no, mismo destino resuelto en todos -> ese; DISTINTOS -> AMBIGUO
+                 # (que abrir falle).
   printf '%s' "$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" cron list --json 2>/dev/null)" | NOMBRE_CRON="$1" python3 -c "
 import sys,json,os
 t=sys.stdin.read()
@@ -69,7 +97,12 @@ except Exception:
   print('ILEGIBLE'); raise SystemExit
 js=[j for j in d.get('jobs',[]) if j.get('name')==os.environ['NOMBRE_CRON']]
 if not js: print(''); raise SystemExit
-dests=[(j.get('delivery') or {}).get('to') or '' for j in js]
+def dest_de(j):
+  d=(j.get('delivery') or {}).get('to') or ''
+  if d: return d
+  fa=j.get('failureAlert') or {}
+  return fa.get('to') or '' if fa.get('channel')=='telegram' else ''
+dests=[dest_de(j) for j in js]
 def ms(j):
   v=j.get('createdAtMs')
   return v if isinstance(v,(int,float)) and not isinstance(v,bool) else None
@@ -288,9 +321,9 @@ locks_exit_restaurar_si_libre() {
 lock_tomar() { # $1 registro; 0 = tomado y registrado en el dispatcher EXIT
   local dir i=0 token
   dir="$(dirname "$1")"
-  lock_abandonado_romper "$dir/.lock" "$CORR_LOCK_VIEJO" "lock_tomar" || true
+  [ "${CORR_LOCK_ROMPER:-1}" = "1" ] && { lock_abandonado_romper "$dir/.lock" "$CORR_LOCK_VIEJO" "lock_tomar" || true; }
   while ! mkdir "$dir/.lock" 2>/dev/null; do
-    i=$((i+1)); [ "$i" -gt 100 ] && return 1
+    i=$((i+1)); [ "$i" -gt "${CORR_LOCK_INTENTOS:-100}" ] && return 1
     sleep 0.1
   done
   token="$$-${RANDOM:-0}"
@@ -326,9 +359,9 @@ lock_soltar() { # $1 registro; solo suelta el token propio
 marcas_lock_tomar() {
   local d="$CORRIDA_STATE/.marcas.lock" i=0 token
   mkdir -p "$CORRIDA_STATE" || return 1
-  lock_abandonado_romper "$d" "$CORR_LOCK_VIEJO" "marcas_lock_tomar" || true
+  [ "${CORR_LOCK_ROMPER:-1}" = "1" ] && { lock_abandonado_romper "$d" "$CORR_LOCK_VIEJO" "marcas_lock_tomar" || true; }
   while ! mkdir "$d" 2>/dev/null; do
-    i=$((i+1)); [ "$i" -gt 100 ] && return 1
+    i=$((i+1)); [ "$i" -gt "${CORR_LOCK_INTENTOS:-100}" ] && return 1
     sleep 0.1
   done
   token="$$-${RANDOM:-0}"
@@ -352,6 +385,34 @@ marcas_lock_soltar() {
   MARCAS_LOCK_ACT=""; MARCAS_LOCK_TOKEN=""
   lock_directorio_soltar "$d" "$token"
   locks_exit_restaurar_si_libre
+}
+
+# Tope total (s) que cerrar espera por los locks antes de rendirse (9.16).
+# Debe quedar POR DEBAJO de CORR_LOCK_VIEJO (60): un lock fresco al empezar la
+# espera no puede volverse "abandonado" (y romperse) mientras cerrar lo espera.
+CORR_CIERRE_ESPERA="${CORR_CIERRE_ESPERA:-45}"
+# Espera acotada por un lock de cerrar (9.16): reintenta la toma hasta CIERRE_TOPE
+# (lo fija quien cierra para las dos tomas juntas). No roba nada: cada intento
+# respeta el lock, su token y su lease; solo espera mas que los ~10 s de un
+# intento suelto para cubrir un lanzamiento lento (sondeo de barra + entrega del
+# encargo) sin pedir reintento manual. Vencido el tope, diagnostico y distinto de 0.
+# El tope se revisa DESPUES de cada intento: con el tope ya vencido (el lock
+# global se tomo cerca del limite) el lock del registro igual se prueba una vez
+# en vez de fallar en seco con 0 intentos.
+cerrar_esperar_lock() { # $1 descripcion; resto: toma del lock
+  local desc="$1" romper=1; shift
+  while :; do
+    # Una sola toma por intento (CORR_LOCK_INTENTOS=0): el reloj lo lleva este
+    # bucle, asi el tope se respeta aunque cada toma suelta espere ~10 s.
+    # Solo el PRIMER intento puede romper un lock abandonado (CORR_LOCK_ROMPER):
+    # un lock que estaba tomado al empezar no se vuelve rompible por esperarlo.
+    if CORR_LOCK_ROMPER=$romper CORR_LOCK_INTENTOS=0 "$@"; then return 0; fi
+    romper=0
+    [ "${SECONDS:-0}" -lt "${CIERRE_TOPE:-0}" ] || break
+    sleep 1
+  done
+  echo "cerrar: $desc no cedio en ${CORR_CIERRE_ESPERA}s; la corrida queda abierta, reintentar cierra" >&2
+  return 1
 }
 
 # Retira marcas solo si la corrida indicada sigue siendo su dueña publicada.
@@ -492,30 +553,43 @@ EOF
 
 # Validador de seguimiento.v1 — el criterio unico vive aqui y la prueba 9.1 lo
 # ejercita. Cuatro lineas: etiqueta cerrada y avance "N de M partes" en la linea 1
-# (CERRADA queda solo con resto no vacio: ya no hay nada que contar), prefijos
-# "Que cambio: ", "Que sigue: ", "Que necesito de ti: " con contenido no vacio.
-# El prefijo "[SIMULACRO] " se quita de la primera linea y se valida sobre una copia.
+# (CERRADA y ABIERTA quedan solo con resto no vacio: la primera ya no tiene nada
+# que contar, la segunda puede no saber todavia cuantas partes tiene), prefijos
+# "Que cambio: "/"Qué cambió: ", "Que sigue: "/"Qué sigue: ",
+# "Que necesito de ti: "/"Qué necesito de ti: " con contenido no vacio (las dos
+# formas, con y sin acento, pasan: lo que emite corrida_mensaje ya lleva acento,
+# pero mensajes viejos sin acentuar siguen siendo validos).
+# El prefijo de practica ("PRACTICA — no contestes ") o de apertura real ("▶️ ")
+# se quita de la primera linea (junto con el "[SIMULACRO] " historico) y se
+# valida sobre una copia.
 # El marcador "Comando: " es la referencia textual del contrato: UN segmento al
 # final de la linea 4, solo en "NECESITO TU RESPUESTA", con contenido no vacio y
 # de hasta 200 caracteres; en las lineas 1-3, fuera de esa etiqueta o repetido es rojo.
+# La jerga (jerga_en_texto) solo se revisa en el cuerpo (lineas 2-4): la linea 1
+# trae el nombre de la corrida, que no lo controla quien llama a corrida_mensaje.
 mensaje_valido() { # $1 archivo; 0 = cumple seguimiento.v1
   local m="$1" primera etq resto nmarc seg
   [ -f "$m" ] || return 1
-  [ "$(awk 'END{print NR}' "$m")" -eq 4 ] || return 1
   local C; C="$(mktemp)" || return 1
-  cp "$m" "$C"
-  sed -i.bak '1s/^\[SIMULACRO\] //' "$C" && rm -f "$C.bak"
+  # v2: las lineas vacias de separacion no cuentan (un mensaje v1 de 4 lineas
+  # pegadas sigue siendo valido).
+  grep -v '^[[:space:]]*$' "$m" > "$C"
+  [ "$(awk 'END{print NR}' "$C")" -eq 4 ] || { rm -f "$C"; return 1; }
+  # Dos pasadas: la linea 1 puede traer DOS prefijos (el de corrida y el emoji
+  # de estado, p. ej. "▶️ 🟢 [AVANZA]").
+  sed -E -i.bak '1s/^(🧪 PRÁCTICA — no contestes |▶️ |\[SIMULACRO\] )//' "$C" && rm -f "$C.bak"
+  sed -E -i.bak '1s/^(🧪 PRÁCTICA — no contestes |▶️ |🟢 |🟠 |🔴 |✅ |\[SIMULACRO\] )//' "$C" && rm -f "$C.bak"
   primera="$(head -1 "$C")"
-  printf '%s\n' "$primera" | grep -qE '^\[(AVANZA|DETENIDA|NECESITO TU RESPUESTA|CERRADA)\] ' || { rm -f "$C"; return 1; }
+  printf '%s\n' "$primera" | grep -qE '^\[(ABIERTA|AVANZA|DETENIDA|NECESITO TU RESPUESTA|CERRADA)\] ' || { rm -f "$C"; return 1; }
   etq="${primera%%]*}"; etq="${etq#[}"
   local pref; pref="[$etq] "
   resto="${primera#"$pref"}"
   [ "$resto" = "$primera" ] && resto=""
   [ -n "$resto" ] || { rm -f "$C"; return 1; }
-  if [ "$etq" != "CERRADA" ]; then
+  if [ "$etq" != "CERRADA" ] && [ "$etq" != "ABIERTA" ]; then
     printf '%s\n' "$resto" | grep -qE '[0-9]+ de [0-9]+ partes|avance desconocido' || { rm -f "$C"; return 1; }
   fi
-  awk 'NR==2 && !/^Que cambio: .+/ {m=1} NR==3 && !/^Que sigue: .+/ {m=1} NR==4 && !/^Que necesito de ti: .+/ {m=1} END{exit m?1:0}' "$C" \
+  awk 'NR==2 && !/^(Que cambio|Qué cambió): .+/ {m=1} NR==3 && !/^(Que sigue|Qué sigue): .+/ {m=1} NR==4 && !/^(Que necesito de ti|Qué necesito de ti): .+/ {m=1} END{exit m?1:0}' "$C" \
     || { rm -f "$C"; return 1; }
   awk 'NR<=3 && /Comando: /{m=1} END{exit m?1:0}' "$C" || { rm -f "$C"; return 1; }
   nmarc="$(awk 'NR==4{print gsub(/Comando: /,"")}' "$C")"
@@ -530,11 +604,59 @@ mensaje_valido() { # $1 archivo; 0 = cumple seguimiento.v1
     [ "$nmarc" -eq 0 ] || { rm -f "$C"; return 1; }
   fi
   # La linea 4 siempre trae la pregunta: no vale solo el comando textual.
-  awk 'NR==4{sub(/^Que necesito de ti: /,""); sub(/[[:space:]]+$/,""); exit ($0=="")?1:0}' "$C" \
+  awk 'NR==4{sub(/^(Que necesito de ti|Qué necesito de ti): /,""); sub(/[[:space:]]+$/,""); exit ($0=="")?1:0}' "$C" \
     || { rm -f "$C"; return 1; }
-  if jerga_en_texto "$C"; then rm -f "$C"; return 1; fi
-  rm -f "$C"
+  # La jerga se revisa solo en el cuerpo (lineas 2-4): la linea 1 trae el
+  # nombre de la corrida (titulo del runbook), un dato que quien manda el
+  # mensaje no controla — corrida_encabezado ya lo saneo por su cuenta, pero
+  # el validador no vuelve a tumbar el mensaje entero por eso.
+  local CUERPO; CUERPO="$(mktemp)" || { rm -f "$C"; return 1; }
+  tail -n +2 "$C" > "$CUERPO"
+  if jerga_en_texto "$CUERPO"; then rm -f "$C" "$CUERPO"; return 1; fi
+  rm -f "$C" "$CUERPO"
   return 0
+}
+
+# corrida_encabezado <id> -> "<Nombre> (abrió HH:MM)". El nombre es la primera
+# linea "# " del runbook registrado (su titulo), resuelto con runbook_de (las
+# rutas relativas del registro se resuelven igual que en cualquier otro
+# lector); sin runbook legible, sin esa linea, si el titulo trae jerga
+# (mensaje_valido ya no la revisa en esta linea: se sanea aqui), o si el
+# titulo trae uno de los marcadores reservados del mensaje ("Comando: ",
+# "Que cambio:"/"Qué cambió:", "Que sigue:"/"Qué sigue:", "Que necesito de
+# ti:"/"Qué necesito de ti:") — un titulo asi rompe la forma del mensaje
+# aunque no sea jerga (CodeRabbit, 2026-09-25) — cae al id.
+# La hora sale de 'inicio' del registro, ya escrita en la hora local de quien
+# abrio (date +%z): no hay conversion de zona aqui, y si el formato no casa
+# queda "?" en vez de una hora inventada.
+corrida_encabezado() {
+  local reg; reg="$(registro_de "$1")"
+  local runbook_crudo runbook nombre hora
+  runbook_crudo="$(json_campo "$reg" runbook)"
+  nombre=""
+  if [ -n "$runbook_crudo" ]; then
+    runbook="$(runbook_de "$runbook_crudo")"
+    [ -r "$runbook" ] && nombre="$(grep -m1 '^# ' "$runbook" 2>/dev/null | sed 's/^# *//')"
+  fi
+  if [ -n "$nombre" ]; then
+    printf '%s\n' "$nombre" \
+      | grep -qE 'Comando: |(Que cambio|Qué cambió): |(Que sigue|Qué sigue): |(Que necesito de ti|Qué necesito de ti): ' \
+      && nombre=""
+  fi
+  if [ -n "$nombre" ]; then
+    local NT; NT="$(mktemp)" 2>/dev/null
+    if [ -n "$NT" ]; then
+      printf '%s\n' "$nombre" > "$NT"
+      jerga_en_texto "$NT" && nombre=""
+      rm -f "$NT"
+    else
+      nombre=""
+    fi
+  fi
+  [ -n "$nombre" ] || nombre="$1"
+  hora="$(json_campo "$reg" inicio | sed -nE 's/^[0-9]{4}-[0-9]{2}-[0-9]{2}T([0-9]{2}:[0-9]{2}).*/\1/p')"
+  [ -n "$hora" ] || hora="?"
+  printf '%s (abrió %s)' "$nombre" "$hora"
 }
 
 tsv_fila() { # $1 tsv, $2 cli -> "binario|flag|barra" (vacio si no hay fila)
@@ -561,30 +683,68 @@ flag_de_tabla() { # $1 flag de la tabla; rc 2 = invalido (mensaje a stderr)
 }
 
 # corrida_mensaje <id> <ETIQUETA> <avance> <cambio> <sigue> <necesito>
-# El avance es la linea 1 tras "Corrida, " (p. ej. "2 de 5 partes terminadas").
+# El avance es la referencia de la linea 1 (p. ej. "2 de 5 partes terminadas");
+# vacio omite ese pedazo entero (ABIERTA, cuando todavia no se sabe cuantas
+# partes tiene). La linea 1 lleva ademas el nombre humano de la corrida
+# (titulo del runbook, o el id) y la hora en que abrio (corrida_encabezado).
 # Caso cerrado por etiqueta:
 # - AVANZA: valida contra seguimiento.v1 y acumula {at,cambio,sigue,necesito}
 #   en eventos-seguimiento.jsonl para el proximo corte global. NO llama a
 #   message send ni anota entrega en mensajes.jsonl: los llamadores viejos que
 #   mandaban por cambio ya no pueden saltarse el consolidador de 30 minutos.
-# - NECESITO TU RESPUESTA, DETENIDA, CERRADA: entrega inmediata por
-#   seguimiento.v1 con su fila en mensajes.jsonl, como siempre.
+# - ABIERTA, NECESITO TU RESPUESTA, DETENIDA, CERRADA: entrega inmediata por
+#   seguimiento.v1 con su fila en mensajes.jsonl, como siempre (ABIERTA y
+#   CERRADA van en silencio; DETENIDA y NECESITO suenan).
 # - Cualquier otra etiqueta falla cerrada: no se acumula ni se manda nada.
+# En una corrida de practica (simulacro=true), NECESITO TU RESPUESTA jamas
+# pide una decision de verdad: NINGUN campo del cuerpo (cambio, sigue,
+# necesito) que trae el llamador se manda — los tres quedan fijos avisando
+# que es una pregunta de practica que se resuelve sola (mismo texto que usa
+# `estado --solo-mensaje` en estado.sh); el comando de referencia del
+# llamador tampoco se manda (no hay nada que aprobar). En una corrida real,
+# el "cambio" de NECESITO TU RESPUESTA tambien se fija aqui (mismo texto
+# para todo llamador).
 corrida_mensaje() {
   local id="$1" etq="$2" avance="$3" cambio="$4" sigue="$5" necesito="$6"
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
   case "$etq" in
-    AVANZA|NECESITO\ TU\ RESPUESTA|DETENIDA|CERRADA) ;;
+    ABIERTA|AVANZA|NECESITO\ TU\ RESPUESTA|DETENIDA|CERRADA) ;;
     *) echo "corrida_mensaje: etiqueta fuera del conjunto: $etq" >&2; return 1;;
   esac
   local sim; sim="$(json_campo "$reg" simulacro)"
+  if [ "$etq" = "NECESITO TU RESPUESTA" ]; then
+    if [ "$sim" = "true" ]; then
+      cambio="Una parte de la prueba llegó a una pregunta de práctica."
+      sigue="Nada que hacer: la prueba sigue sola."
+      necesito="nada: es una prueba, se resuelve sola"
+    else
+      cambio="Una parte de la corrida quedó esperando que decidas algo."
+    fi
+  fi
+  local enc; enc="$(corrida_encabezado "$id")"
+  # Emoji de estado (v2, pedido del dueño 2026-09-25: bloques separados y un
+  # vistazo basta): AVANZA 🟢, NECESITO TU RESPUESTA 🟠, DETENIDA 🔴, CERRADA
+  # ✅. ABIERTA no lleva otro: el prefijo de corrida (▶️ / 🧪) ya lo dice.
+  local emoji=""
+  case "$etq" in
+    AVANZA) emoji="🟢 " ;;
+    "NECESITO TU RESPUESTA") emoji="🟠 " ;;
+    DETENIDA) emoji="🔴 " ;;
+    CERRADA) emoji="✅ " ;;
+  esac
+  local linea1
+  if [ -n "$avance" ]; then
+    linea1="${emoji}[$etq] $enc, $avance"
+  else
+    linea1="${emoji}[$etq] $enc"
+  fi
   local M; M="$(mktemp)" || return 1
   {
-    printf '[%s] Corrida, %s\n' "$etq" "$avance"
-    printf 'Que cambio: %s\n' "$cambio"
-    printf 'Que sigue: %s\n' "$sigue"
-    printf 'Que necesito de ti: %s\n' "$necesito"
+    printf '%s\n\n' "$linea1"
+    printf 'Qué cambió: %s\n\n' "$cambio"
+    printf 'Qué sigue: %s\n\n' "$sigue"
+    printf 'Qué necesito de ti: %s\n' "$necesito"
   } > "$M"
   mensaje_valido "$M" || { echo "mensaje fuera de contrato" >&2; rm -f "$M"; return 1; }
   rm -f "$M"
@@ -609,24 +769,43 @@ open('$evtmp','w').write(json.dumps(d)+chr(10))
   fi
   local M2; M2="$(mktemp)" || return 1
   {
-    printf '[%s] Corrida, %s\n' "$etq" "$avance"
-    printf 'Que cambio: %s\n' "$cambio"
-    printf 'Que sigue: %s\n' "$sigue"
-    printf 'Que necesito de ti: %s\n' "$necesito"
+    printf '%s\n\n' "$linea1"
+    printf 'Qué cambió: %s\n\n' "$cambio"
+    printf 'Qué sigue: %s\n\n' "$sigue"
+    printf 'Qué necesito de ti: %s\n' "$necesito"
   } > "$M2"
-  [ "$sim" = "true" ] && sed -i.bak '1s/^/[SIMULACRO] /' "$M2" && rm -f "$M2.bak"
+  # El prefijo de la primera linea, en TODOS los mensajes de la corrida: en
+  # practica, avisa que no hace falta contestar (reemplaza el viejo
+  # "[SIMULACRO] "); en una corrida real, la marca como tal.
+  local pref="▶️ "
+  [ "$sim" = "true" ] && pref="🧪 PRÁCTICA — no contestes "
+  sed -i.bak "1s#^#$pref#" "$M2" && rm -f "$M2.bak"
   local dest; dest="$(json_campo "$reg" canal.destino)"
   [ -n "$dest" ] || { echo "registro sin destino" >&2; rm -f "$M2"; return 1; }
-  local texto rc=0 sil=""
-  # seguimiento.v1: lo rutinario (CERRADA) en silencio; DETENIDA y
+  local texto rc=0 sil="" salida
+  # seguimiento.v1: lo rutinario (ABIERTA, CERRADA) en silencio; DETENIDA y
   # NECESITO TU RESPUESTA suenan: en la etiqueta que pide respuesta, fallar hacia
   # silencio es el peor sentido de fallar.
-  case "$etq" in CERRADA) sil="--silent";; esac
+  case "$etq" in CERRADA|ABIERTA) sil="--silent";; esac
   texto="$(cat "$M2")"
-  con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" message send --channel telegram -t "$dest" $sil --json -m "$texto" >/dev/null 2>&1 || rc=1
-  CORR_MSG_ETQ="$etq" CORR_MSG_OK="$rc" CORR_MSG_DIR="$CORRIDA_STATE/$id" python3 -c "
-import json,os
-d={'etiqueta':os.environ['CORR_MSG_ETQ'],'ok':os.environ['CORR_MSG_OK']=='0'}
+  salida="$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" message send --channel telegram -t "$dest" $sil --json -m "$texto" 2>/dev/null)" || rc=1
+  CORR_MSG_ETQ="$etq" CORR_MSG_OK="$rc" CORR_MSG_DIR="$CORRIDA_STATE/$id" CORR_MSG_TEXTO="$texto" CORR_MSG_SALIDA="$salida" python3 -c "
+import json,os,time
+ok=os.environ['CORR_MSG_OK']=='0'
+mid=None
+if ok:
+  sal=os.environ.get('CORR_MSG_SALIDA','')
+  try:
+    j=json.loads(sal[sal.index('{'):])
+    v=j.get('messageId')
+    if isinstance(v,int) and not isinstance(v,bool):
+      mid=v
+    elif isinstance(v,str) and v.lstrip('-').isdigit():
+      mid=int(v)
+  except Exception:
+    pass
+d={'at':int(time.time()),'etiqueta':os.environ['CORR_MSG_ETQ'],'ok':ok,
+   'message_id':mid,'texto':os.environ['CORR_MSG_TEXTO']}
 open(os.path.join(os.environ['CORR_MSG_DIR'],'mensajes.jsonl'),'a').write(json.dumps(d)+chr(10))
 " 2>/dev/null
   rm -f "$M2"

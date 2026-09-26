@@ -7,7 +7,6 @@ import { describe, it, before, after } from "node:test";
 
 import {
   canonicalRole,
-  mergeGuardVerdict,
   sessionsSendGuardVerdict,
 } from "./lib.ts";
 
@@ -71,35 +70,6 @@ describe("canonicalRole", () => {
 
   it("still maps a standalone fix label to implementer", () => {
     assert.equal(canonicalRole("fix the census hole"), "implementer");
-  });
-});
-
-describe("mergeGuardVerdict", () => {
-  it("blocks git push origin main", () => {
-    assert.match(mergeGuardVerdict("git push origin main") ?? "", /Push bloqueado/);
-  });
-
-  it("blocks git push origin HEAD:main", () => {
-    assert.match(mergeGuardVerdict("git push origin HEAD:main") ?? "", /Push bloqueado/);
-  });
-
-  it("blocks gh pr merge", () => {
-    assert.match(mergeGuardVerdict("gh pr merge 12") ?? "", /Merge bloqueado/);
-  });
-
-  it("blocks gh api repos/.../merge", () => {
-    assert.match(
-      mergeGuardVerdict("gh api repos/x/y/pulls/1/merge") ?? "",
-      /Merge bloqueado/,
-    );
-  });
-
-  it("allows git push origin feature/x", () => {
-    assert.equal(mergeGuardVerdict("git push origin feature/x"), undefined);
-  });
-
-  it("allows git push --dry-run origin feature/x", () => {
-    assert.equal(mergeGuardVerdict("git push --dry-run origin feature/x"), undefined);
   });
 });
 
@@ -283,7 +253,16 @@ describe("plugin smoke import", () => {
       "las standing rules se reinyectan en cada turno; deberian ir una sola vez por sesion",
     );
   });
-});
+
+  it("does not inject per-PR permission requirements", async () => {
+    const mod = await import("./index.ts");
+    const regs: Array<{ event: string; handler: FakeHook; opts?: { matcher?: string[] } }> = [];
+    mod.default.register(fakeBaseApi(regs) as never);
+    const build = regs.find(r => r.event === "before_prompt_build")!;
+    const response = build.handler({ prompt: "merge -saikit:autopilot" }, { sessionKey: "agent:main:merge-policy" }) as { appendContext?: string };
+    assert.match(response.appendContext ?? "", /no esperes una orden adicional/);
+    assert.doesNotMatch(response.appendContext ?? "", /merge-guard los bloquea|orden fechada del dueño/);
+  });});
 
 // Gate scope comment (Fase 1 / 1.2): declara el alcance real del gate de
 // `before_agent_finalize` con la cita del runtime. Si este describe falla

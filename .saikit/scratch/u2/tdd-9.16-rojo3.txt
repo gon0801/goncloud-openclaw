@@ -1,0 +1,2 @@
+FAIL: cerrar no espero: cerrar: lock global de marcas no cede; no se ha hecho nada
+rc=1

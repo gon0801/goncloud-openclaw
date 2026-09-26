@@ -24,7 +24,7 @@ registro ya dice.
 | `id` | Identificador de la corrida (p. ej. `simulacro-9`) |
 | `runbook` | Ruta del runbook que manda, dentro del repo |
 | `vigia` | Cerrado: `claw` o `hermes`. Cualquier otro valor es rojo |
-| `simulacro` | `true` si es simulacro: `corrida_mensaje` antepone `[SIMULACRO] ` |
+| `simulacro` | `true` si es una corrida de práctica: `corrida_mensaje` antepone `🧪 PRÁCTICA — no contestes ` a cada mensaje (en vez de `▶️ ` de una corrida real) y, en `NECESITO TU RESPUESTA`, fija el texto avisando que es una prueba que se resuelve sola |
 | `canal.cron` | Nombre del cron existente del que `abrir` leyó el destino; el destino resuelto vive solo aquí, jamás en el repo ni en entorno |
 | `canal.destino` | El destino de entrega resuelto de ese cron; el validador lo exige (`ROTO:sin canal.destino`) |
 | `cron_vigia_id` | El `id` que devolvió `cron add --json` al crear el hombre-muerto; `cerrar` lo quita por ese id y falla ruidosamente si no puede |

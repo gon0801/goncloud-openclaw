@@ -66,7 +66,7 @@ EOF
   cmp -s "$T/$esc.out" "$FX/$esc/esperado.txt" \
     || fail "el parte de $esc no es el esperado byte a byte:
 $(diff "$FX/$esc/esperado.txt" "$T/$esc.out" | head -8)"
-  sed -n '1,4p' "$T/$esc.out" >"$T/$esc.msg"
+  sed '/^--- detalle/,$d' "$T/$esc.out" >"$T/$esc.msg"
   ( . scripts/mac/corrida/lib.sh && mensaje_valido "$T/$esc.msg" ) \
     || fail "el mensaje de $esc no pasa seguimiento.v1"
 done
@@ -138,8 +138,31 @@ grep -q "menos de un minuto" "$T/mb3.out" || fail "MB: un dialogo de segundos no
 PANEL_DIR="$T/paneles-avanza" WATCH_STATE_DIR="$T/watch-avanza" \
   bash "$CORR" estado m-avanza --solo-mensaje >"$T/solo.out" 2>/dev/null \
   || fail "--solo-mensaje fallo"
-[ "$(awk 'END{print NR}' "$T/solo.out")" = "4" ] || fail "--solo-mensaje no da cuatro lineas"
+[ "$(grep -cve '^[[:space:]]*$' "$T/solo.out")" = "4" ] || fail "--solo-mensaje no da las cuatro lineas del mensaje (con sus vacios de separacion v2)"
 cmp -s "$T/solo.out" "$T/avanza.msg" || fail "--solo-mensaje no es el mensaje del parte"
+
+# (2b) CodeRabbit (estado.sh:404-408): en practica, --solo-mensaje TAMBIEN
+# reemplaza el cuerpo de NECESITO TU RESPUESTA — parte_calcular no sabe de
+# practica, y su propio "necesito" ("con tu si sigue solo, con tu no se
+# detiene ahi") es justamente el tipo de pedido de decision que no debe
+# salir. Mismo montaje que MC (sin approval_since escala a NECESITO), pero
+# con simulacro:true en el registro.
+read -r id2 pan2 wat2 <<EOF
+$(montar dialogo)
+EOF
+sed -i.bak 's/"simulacro": *false/"simulacro": true/' "$CORRIDA_STATE/$id2/registro.json" && rm -f "$CORRIDA_STATE/$id2/registro.json.bak"
+sed -i.bak '/^approval_since=/d' "$wat2/m-a.state" && rm -f "$wat2/m-a.state.bak"
+PANEL_DIR="$pan2" WATCH_STATE_DIR="$wat2" bash "$CORR" estado "$id2" --solo-mensaje >"$T/solo-practica.out" 2>/dev/null \
+  || fail "2b: --solo-mensaje en practica fallo"
+sed -n '1p' "$T/solo-practica.out" | grep -q "NECESITO TU RESPUESTA" || fail "2b: sin approval_since no escalo"
+sed -n '1p' "$T/solo-practica.out" | grep -q '^🧪 PRÁCTICA — no contestes ' \
+  || fail "2b: --solo-mensaje en practica no trae el prefijo de practica: $(cat "$T/solo-practica.out")"
+tail -n +2 "$T/solo-practica.out" | grep -qiE 'Di s[ií]|decide|respuesta|con tu si|con tu no' \
+  && fail "2b: --solo-mensaje en practica dejo pasar un pedido de decision: $(cat "$T/solo-practica.out")"
+grep -qF 'es una prueba, se resuelve sola' "$T/solo-practica.out" \
+  || fail "2b: --solo-mensaje en practica no avisa que se resuelve sola: $(cat "$T/solo-practica.out")"
+grep -qF 'Nada que hacer: la prueba sigue sola.' "$T/solo-practica.out" \
+  || fail "2b: --solo-mensaje en practica no trae el sigue fijo: $(cat "$T/solo-practica.out")"
 
 # (3) rechazos: id invalido, corrida sin registro, registro fuera de contrato.
 bash "$CORR" estado '../fuga' >/dev/null 2>&1 && fail "estado acepto un id con ../"
