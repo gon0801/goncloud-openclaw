@@ -31,7 +31,8 @@
 #   (12) un artifact esperado sin su resumen.txt -> rechazo
 #   (13) una prueba no inventariada en la union -> rechazo
 #   (w)  el workflow llama al MISMO validador que este test ejecuta, desde un job
-#        propio ci-contract SIN condicion de omision, y el gate baja los tres
+#        propio ci-contract sin omision por carril (solo la pausa opt-in
+#        exacta), con cancel-in-progress y grupo por SHA en push, y el gate baja los tres
 #        artifacts y audita la union solo cuando la bateria corrio.
 #
 # El arbol de juguete es el MISMO contrato del que usa
@@ -382,12 +383,11 @@ sec_cc=$(seccion ci-contract "$Y")
 limpio "$sec_cc" | grep -qE '^[[:space:]]+run:.*bash scripts/tests/test-ci-coverage-contract\.sh' \
   || fail "(w) ci-contract no ejecuta ESTE contrato:
 $sec_cc"
-# Pausa por borrador SI admitida (freno 2, ahorro 2026-09): en PR draft sin
-# etiqueta ci-full nada costoso corre y todo vuelve al marcar listo. El unico
-# `if:` aceptado es ESA expresion exacta: comparar solo el texto
-# `pull_request.draft` dejaria pasar `draft == true`, que salta el contrato
-# justo en los PR listos.
-PAUSA_BORRADOR="if: github.event_name != 'pull_request' || github.event.pull_request.draft == false || contains(github.event.pull_request.labels.*.name, 'ci-full')"
+# Pausa opt-in SI admitida (freno 2, ahorro 2026-09): solo un PR en borrador
+# CON etiqueta ci-pausa se salta el contrato. El unico `if:` aceptado es ESA
+# expresion exacta: comparar solo el texto `pull_request.draft` dejaria pasar
+# `draft == true`, que salta el contrato justo en los PR listos.
+PAUSA_BORRADOR="if: github.event_name != 'pull_request' || github.event.pull_request.draft == false || !contains(github.event.pull_request.labels.*.name, 'ci-pausa')"
 ifs_cc=$(limpio "$sec_cc" | grep -E '^[[:space:]]+if:' | sed 's/^[[:space:]]*//' || true)
 if [ -n "$ifs_cc" ] && [ "$ifs_cc" != "$PAUSA_BORRADOR" ]; then
   fail "(w) ci-contract tiene condicion de omision que no es la pausa por borrador exacta:
@@ -397,6 +397,8 @@ fi
 # que GitHub cancele corridas pendientes de main y ese SHA queda sin veredicto.
 grep -qE '^[[:space:]]+group: quality-\$\{\{ github\.event\.pull_request\.number \|\| github\.sha \}\}' "$Y" \
   || fail "(w) el grupo de concurrencia no separa por SHA en push: main puede perder veredictos"
+grep -qE '^[[:space:]]+cancel-in-progress: true[[:space:]]*$' "$Y" \
+  || fail "(w) sin cancel-in-progress: true las corridas viejas de un PR siguen gastando"
 
 limpio "$sec_cc" | grep -q 'node-version' \
   || fail "(w) ci-contract no fija node: el arbol de juguete exige >= 22 y el default del runner puede ser viejo"
@@ -436,6 +438,6 @@ $GL"
 printf '%s\n' "$GL" | grep -qF 'R_SHARDS: ${{ needs.shards.result }}' \
   || fail "(w) el gate dejo de leer el resultado agregado de shards:
 $GL"
-echo "ok (w): mismo validador en YAML y test, ci-contract sin omision por carril (pausa por borrador admitida), gate audita la union"
+echo "ok (w): mismo validador en YAML y test, ci-contract sin omision por carril (solo pausa opt-in exacta), concurrencia por PR/SHA, gate audita la union"
 
 echo "TODO VERDE: ci-coverage-contract"
