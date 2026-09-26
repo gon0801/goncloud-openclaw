@@ -115,16 +115,38 @@ adaptador_registrar_sesion() { # $1 reg $2 carril $3 worker $4 sesion [$5 brief]
   harness="$(worker_atributo "$worker" harness)" || return 1
   provider="$(worker_atributo "$worker" provider)" || return 1
   lock_tomar "$reg" || return 1
+  local rrc=0
   CORR_C="$carril" CORR_W="$worker" CORR_H="$harness" CORR_P="$provider" \
   CORR_S="$sesion" CORR_B="$brief" registro_escribir "$reg" "
-c=d.setdefault('carriles',{}).setdefault(os.environ['CORR_C'],{})
+import sys
+cs=d.get('lanes') or []
+c=None
+for e in cs:
+  if isinstance(e,dict) and e.get('id')==os.environ['CORR_C']: c=e; break
+if not isinstance(c,dict):
+  sys.exit(10)
+if c.get('estado')=='activo' and c.get('session')==os.environ['CORR_S']:
+  pass
+elif c.get('estado')!='reservado':
+  sys.exit(11)
 c.update({'worker':os.environ['CORR_W'],'harness':os.environ['CORR_H'],
 'provider':os.environ['CORR_P'],
 'reported_model':c.get('reported_model','unknown'),
 'session':os.environ['CORR_S'],'estado':'activo'})
 b=os.environ['CORR_B']
 if b: c['brief']=b
-" || { lock_soltar "$reg"; return 1; }
+" 2>/dev/null; rrc=$?
+  if [ "$rrc" -eq 10 ]; then
+    lock_soltar "$reg"
+    echo "adaptador: el carril $carril no esta preparado (falta o sin reserva completa)" >&2
+    return 1
+  fi
+  if [ "$rrc" -eq 11 ]; then
+    lock_soltar "$reg"
+    echo "adaptador: el carril $carril ya esta activo (no se sobrescribe la sesion viva)" >&2
+    return 1
+  fi
+  [ "$rrc" -eq 0 ] || { lock_soltar "$reg"; return 1; }
   lock_soltar "$reg"
 }
 
@@ -133,10 +155,35 @@ if b: c['brief']=b
 # una sesion "del carril X" escribiendo en otro sitio. rc 1 si difieren.
 adaptador_worktree_de_carril() { # $1 reg $2 carril $3 worktree
   local reg="$1" carril="$2" wt="$3" res dado canon
-  res="$(json_campo "$reg" "carriles.$carril.worktree")"
+  res="$(lane_campo "$reg" "$carril" worktree)"
   dado="$(CDPATH= cd -P -- "$wt" 2>/dev/null && pwd)" || dado=""
   canon="$(CDPATH= cd -P -- "$res" 2>/dev/null && pwd)" || canon=""
   [ -n "$canon" ] && [ -n "$dado" ] && [ "$dado" = "$canon" ]
+}
+
+# Reserva exigida para start (espejo de lanzar_sesion_validar_carril sin dir):
+# el carril trae los 5 campos de preparar-carril y estado reservado. Solo un
+# reservado acepta sesion; sin reserva o con sesion viva es error duro antes
+# de crear nada.
+adaptador_validar_reserva() { # $1 reg $2 carril; 0 = reservado listo
+  local reg="$1" carril="$2"
+  CORR_C="$carril" CORR_REG="$reg" python3 -c "
+import json,os,sys
+d=json.load(open(os.environ['CORR_REG']))
+c=None
+for e in d.get('lanes') or []:
+  if isinstance(e,dict) and e.get('id')==os.environ['CORR_C']: c=e; break
+if not isinstance(c,dict): sys.exit(1)
+for k in ('branch','worktree','base_remote_sha','owner','mode'):
+  if not c.get(k): sys.exit(1)
+if c.get('estado')!='reservado': sys.exit(2)
+" 2>/dev/null; prc=$?
+  if [ "$prc" -eq 2 ]; then
+    echo "adaptador: el carril $carril no esta reservado (estado distinto)" >&2
+    return 1
+  fi
+  [ "$prc" -eq 0 ] \
+    || { echo "adaptador: el carril $carril no esta preparado (falta o sin reserva completa)" >&2; return 1; }
 }
 
 # start(run, lane, worktree, brief) -> session. La sesion existente se niega
@@ -151,8 +198,9 @@ adaptador_start() {
     || { echo "adaptador: worker desconocido: $worker" >&2; return 1; }
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
-  local rol; rol="$(adaptador_rol_de_modo "$(json_campo "$reg" "carriles.$carril.mode")")" \
+  local rol; rol="$(adaptador_rol_de_modo "$(lane_campo "$reg" "$carril" mode)")" \
     || { echo "adaptador: el carril $carril no trae modo persistido (write|read-only)" >&2; return 1; }
+  adaptador_validar_reserva "$reg" "$carril" || return 1
   local bin; bin="$(resolver_bin_worker "$worker")" \
     || { echo "adaptador: sin ejecutable para $worker" >&2; return 1; }
   [ -d "$wt" ] || { echo "adaptador: sin worktree: $wt" >&2; return 1; }
@@ -247,8 +295,8 @@ adaptador_carril_fallar() { # $1 reg $2 carril
   local reg="$1" carril="$2"
   lock_tomar "$reg" 2>/dev/null || return 0
   CORR_C="$carril" registro_escribir "$reg" "
-c=d.get('carriles',{}).get(os.environ['CORR_C'])
-if c is not None: c['estado']='failed'" 2>/dev/null || true
+for e in d.get('lanes') or []:
+  if isinstance(e,dict) and e.get('id')==os.environ['CORR_C']: e['estado']='failed'; break" 2>/dev/null || true
   lock_soltar "$reg"
 }
 
@@ -264,7 +312,7 @@ adaptador_resume() {
     || { echo "adaptador: worker desconocido: $worker" >&2; return 1; }
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
-  local rol; rol="$(adaptador_rol_de_modo "$(json_campo "$reg" "carriles.$carril.mode")")" \
+  local rol; rol="$(adaptador_rol_de_modo "$(lane_campo "$reg" "$carril" mode)")" \
     || { echo "unavailable"; return 0; }
   local bin; bin="$(resolver_bin_worker "$worker")" || { echo "unavailable"; return 0; }
   [ -d "$wt" ] || { echo "unavailable"; return 0; }
