@@ -3,7 +3,7 @@
 # Solo despacha y carga corrida/<subcomando>.sh relativo a si mismo: M y P agregan
 # subcomandos sin tocar este archivo. Instalado vive en ~/bin/corrida.sh con
 # ~/bin/corrida/ al lado, no en el repo.
-# Uso: corrida.sh <abrir|lanzar-sesion|terminar-sesion|reconciliar-marcas|cerrar|preflight|estado|latido|responder|seguimiento|migrar-seguimiento> ...
+# Uso: corrida.sh <abrir|lanzar-sesion|terminar-sesion|reconciliar-marcas|cerrar|preflight|estado|latido|responder|seguimiento|migrar-seguimiento|adaptador|preparar-carril|mostrar-terminal> ...
 set -u
 AQUI="$(cd "$(dirname "$0")" && pwd)"
 SUB="${1:-}"

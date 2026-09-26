@@ -493,6 +493,29 @@ else:
       if not (isinstance(s,dict) and s.get(c)): malo('sesion sin '+c); break
     if isinstance(s,dict) and s.get('rol') not in (None,'lead','carril'):
       malo('rol fuera del conjunto')
+# Carriles (Fase 14, Task 4): aditivos — un registro sin carriles sigue
+# valido (legado). Si estan, cada uno trae su reserva completa y ningun par
+# comparte worktree.
+car=d.get('carriles')
+if car is not None:
+  if not isinstance(car,dict): malo('carriles no es dict')
+  else:
+    vistos={}
+    for lane,c in car.items():
+      if not isinstance(c,dict): malo('carril sin forma'); continue
+      for k in ('branch','worktree','base_remote_sha','owner','mode'):
+        if not c.get(k): malo('carril sin '+k); break
+      if c.get('mode') not in (None,'write','read-only'): malo('modo de carril fuera del conjunto')
+      if 'estado' in c and c.get('estado') not in ('reservado','activo','failed'):
+        malo('estado de carril fuera del conjunto')
+      vis=c.get('visibility')
+      if vis is not None:
+        if not isinstance(vis,dict) or vis.get('state') not in ('visible','degraded') or not vis.get('attach_command'):
+          malo('visibilidad sin forma')
+      wt=c.get('worktree')
+      if wt:
+        if wt in vistos: malo('worktree compartido')
+        else: vistos[wt]=lane
 # Lista dura por regexes con bordes de palabra: "force push" cae y "emergencia" o
 # "dropbox" (que contienen "merge"/"drop" como substring) no. El rm recursivo va
 # aparte y mira el resto COMPLETO del patron desde el "rm": los flags se extraen
@@ -810,4 +833,147 @@ open(os.path.join(os.environ['CORR_MSG_DIR'],'mensajes.jsonl'),'a').write(json.d
 " 2>/dev/null
   rm -f "$M2"
   return $rc
+}
+
+# --- Fase 14, Task 3: lecturas puras del registro versionado de workers
+# nativos (workers.v1.json). La validacion estricta vive en
+# corrida-worker.py; aqui solo se lee lo ya validado. Sin eval: los
+# overrides de entorno se leen por nombre fijo con printenv, nunca con
+# expansion indirecta construida, y la argv sale por lineas para ejecutarse
+# como parametros posicionales, jamas dentro de un texto shell.
+corrida_workers_registry() { # stdout: ruta del registro (override o repo)
+  if [ -n "${CORRIDA_WORKERS_REGISTRY:-}" ]; then
+    printf '%s\n' "$CORRIDA_WORKERS_REGISTRY"; return 0
+  fi
+  local raiz
+  raiz="$(CDPATH= cd -P -- "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd || true)"
+  [ -n "$raiz" ] || raiz="$(pwd)/scripts/mac"
+  printf '%s\n' "$raiz/workers.v1.json"
+}
+
+worker_atributo() { # $1 id $2 atributo escalar; stdout valor; rc 1 si no hay
+  WREG="$(corrida_workers_registry)" WID="$1" WATR="$2" python3 -c "
+import json,os,sys
+try:
+  r=json.load(open(os.environ['WREG']))
+  w=[x for x in r['workers'] if x['id']==os.environ['WID']][0]
+  v=w[os.environ['WATR']]
+  assert isinstance(v,str)
+  print(v)
+except Exception:
+  sys.exit(1)
+" 2>/dev/null
+}
+
+worker_argv() { # $1 id $2 clave $3 worktree $4 brief $5 session_id $6 session_name
+                # stdout: argv[1:] del comando, un arg por linea, placeholders
+                # sustituidos; rc 1 si el worker o la clave no existen
+  WREG="$(corrida_workers_registry)" WID="$1" WK="$2" WWT="$3" WBR="$4" WSID="$5" WSN="$6" python3 -c "
+import json,os,sys
+try:
+  r=json.load(open(os.environ['WREG']))
+  w=[x for x in r['workers'] if x['id']==os.environ['WID']][0]
+  a=list(w['commands'][os.environ['WK']])
+  s={'{worktree}':os.environ['WWT'],'{brief}':os.environ['WBR'],
+     '{session_id}':os.environ['WSID'],'{session_name}':os.environ['WSN']}
+  sys.stdout.write('\n'.join(s.get(x,x) for x in a[1:]))
+  if len(a) > 1: sys.stdout.write('\n')
+except Exception:
+  sys.exit(1)
+" 2>/dev/null
+}
+
+worker_patrones() { # $1 id $2 quota|auth; stdout: un patron por linea
+  case "$2" in quota|auth) ;; *) return 1;; esac
+  WREG="$(corrida_workers_registry)" WID="$1" WK="$2" python3 -c "
+import json,os,sys
+try:
+  r=json.load(open(os.environ['WREG']))
+  w=[x for x in r['workers'] if x['id']==os.environ['WID']][0]
+  k='quota_patterns' if os.environ['WK']=='quota' else 'auth_patterns'
+  sys.stdout.write('\n'.join(w[k]))
+  if w[k]: sys.stdout.write('\n')
+except Exception:
+  sys.exit(1)
+" 2>/dev/null
+}
+
+# Espejo bash de registry.resolve_binary: el override
+# CORRIDA_WORKER_BIN_<ID> manda; si esta puesto pero no ejecuta, no hay
+# caida a PATH (el operador quiso ese binario y no otro).
+resolver_bin_worker() { # $1 id; stdout ruta ejecutable; rc 1 si no resuelve
+  local id="$1" binario var over res
+  binario="$(worker_atributo "$id" binary)" || return 1
+  var="CORRIDA_WORKER_BIN_$(printf '%s' "$id" | tr '[:lower:]' '[:upper:]')"
+  over="$(printenv "$var" 2>/dev/null || true)"
+  if [ -n "$over" ]; then
+    [ -x "$over" ] || return 1
+    printf '%s\n' "$over"; return 0
+  fi
+  res="$(command -v "$binario" 2>/dev/null)" || return 1
+  [ -x "$res" ] || return 1
+  printf '%s\n' "$res"
+}
+
+# --- Fase 14, Task 4: reservas de carriles bajo el lock del run. Sin lock
+# propio: quien llama lo toma con lock_tomar (misma convencion que
+# registro_escribir). Activo = reservado|activo; failed libera su lugar.
+registro_contar_harnesses_activos() { # $1 reg; stdout N
+  CORR_REG="$1" python3 -c "
+import json,os
+d=json.load(open(os.environ['CORR_REG']))
+cs=d.get('carriles') or {}
+print(sum(1 for c in cs.values() if isinstance(c,dict) and c.get('estado') in ('reservado','activo')))
+" 2>/dev/null
+}
+
+registro_worktree_libre() { # $1 reg $2 canon; 0 = nadie lo posee
+  CORR_REG="$1" CORR_WT="$2" python3 -c "
+import json,os,sys
+d=json.load(open(os.environ['CORR_REG']))
+cs=d.get('carriles') or {}
+sys.exit(1 if any(isinstance(c,dict) and c.get('worktree')==os.environ['CORR_WT'] for c in cs.values()) else 0)
+" 2>/dev/null
+}
+
+registro_reservar_carril() { # $1 reg $2 lane $3 canon $4 rama $5 base $6 modo $7 token
+                             # 0 = reservado; 2 = carril tomado; 3 = worktree tomado
+  local reg="$1" lane="$2" canon="$3" rama="$4" base="$5" modo="$6" token="$7"
+  case "$modo" in write|read-only) ;; *) return 1;; esac
+  CORR_REG="$reg" CORR_LANE="$lane" CORR_CANON="$canon" CORR_RAMA="$rama" \
+  CORR_BASE="$base" CORR_MODO="$modo" CORR_TOKEN="$token" python3 -c "
+import json,os,sys
+r=os.environ['CORR_REG']
+d=json.load(open(r))
+cs=d.setdefault('carriles',{})
+lane=os.environ['CORR_LANE']
+if lane in cs: sys.exit(2)
+if any(isinstance(c,dict) and c.get('worktree')==os.environ['CORR_CANON'] for c in cs.values()):
+  sys.exit(3)
+cs[lane]={'branch':os.environ['CORR_RAMA'],'worktree':os.environ['CORR_CANON'],
+'base_remote_sha':os.environ['CORR_BASE'],'owner':lane,'mode':os.environ['CORR_MODO'],
+'estado':'reservado','token':os.environ['CORR_TOKEN']}
+t=r+'.tmp'
+open(t,'w').write(json.dumps(d,indent=1)+chr(10))
+os.chmod(t,0o600)
+os.rename(t,r)
+" 2>/dev/null
+}
+
+registro_liberar_carril() { # $1 reg $2 lane $3 token; quita la reserva solo
+                            # si el token casa; 0 = el carril quedo libre
+  CORR_REG="$1" CORR_LANE="$2" CORR_TOKEN="$3" python3 -c "
+import json,os,sys
+r=os.environ['CORR_REG']
+d=json.load(open(r))
+cs=d.setdefault('carriles',{})
+lane=os.environ['CORR_LANE']
+if lane in cs and cs[lane].get('token')!=os.environ['CORR_TOKEN']:
+  sys.exit(1)
+cs.pop(lane,None)
+t=r+'.tmp'
+open(t,'w').write(json.dumps(d,indent=1)+chr(10))
+os.chmod(t,0o600)
+os.rename(t,r)
+" 2>/dev/null
 }

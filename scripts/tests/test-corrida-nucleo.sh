@@ -1013,4 +1013,42 @@ printf '%s' "$cap" | grep -q "ESCENARIO-9X" || fail "el TUI no pinta el contenid
 printf '%s' "$cap" | grep -q "TUI-FALSO" || fail "el TUI no pinta su linea final"
 "$TM_REAL" -L "$L" kill-session -t "=tui-falso-test" 2>/dev/null
 
+# (12) Fase 14 Task 3: lanzar con --carril/--worker persiste worker,
+# harness, provider, reported_model y session antes de entregar; si la
+# entrega falla, persiste failed y detiene la sesion sin borrar su historial.
+# (t1 ya cerro en (10): este bloque abre su propia corrida.)
+bash "$CORR" abrir t-carril --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" --simulacro >/dev/null \
+  || fail "abrir t-carril fallo"
+python3 - "$T/corridas/t-carril/registro.json" <<'PY' || fail "no se preparo el carril lane-9x"
+import json,sys
+r=sys.argv[1]
+d=json.load(open(r))
+d.setdefault('carriles',{}).setdefault('lane-9x',{'mode':'write'})
+d['carriles'].setdefault('lane-9y',{'mode':'write'})
+json.dump(d,open(r,'w'),indent=1)
+PY
+S9=$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9 --encargo "$T/encargo.txt" --carril lane-9x --worker claude) \
+  || fail "lanzar con carril fallo"
+[ "$S9" = "ses-carril-9" ] || fail "la sesion del carril se llama $S9"
+for campo in '"worker": *"claude"' '"harness": *"claude-code"' '"provider": *"anthropic"' '"reported_model": *"unknown"' '"session": *"ses-carril-9"' '"estado": *"activo"'; do
+  grep -q "$campo" "$T/corridas/t-carril/registro.json" || fail "el carril no persiste $campo"
+done
+export SWALLOW=1 SWALLOW_N=2 SWALLOW_SES=ses-carril-9f
+rm -f "$T/tragado"
+bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9f --encargo "$T/encargo.txt" --carril lane-9y --worker codex >/dev/null 2>&1 \
+  && fail "con la caja sin vaciarse, el carril debio fallar"
+unset SWALLOW SWALLOW_N SWALLOW_SES
+"$TM_REAL" -L "$L" has-session -t "=ses-carril-9f" 2>/dev/null && fail "la sesion del carril fallido quedo viva"
+python3 - "$T/corridas/t-carril/registro.json" <<'PY' || fail "el carril fallido no persiste failed con historial"
+import json,sys
+c=json.load(open(sys.argv[1]))['carriles']['lane-9y']
+assert c['estado']=='failed', c
+assert c['worker']=='codex' and c['session']=='ses-carril-9f', c
+PY
+grep -q '"nombre": *"ses-carril-9f"' "$T/corridas/t-carril/registro.json" && fail "la sesion fallida del carril quedo en sesiones"
+bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9g --carril lane-9z >/dev/null 2>&1 \
+  && fail "--carril sin --worker debio rechazarse"
+bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9h --carril lane-9z --worker nosuch >/dev/null 2>&1 \
+  && fail "--worker desconocido debio rechazarse"
+
 echo "TODO VERDE: test-corrida-nucleo"

@@ -154,10 +154,12 @@ mensaje_valido "$FX/mensaje-comando-doble.txt" 2>/dev/null && fail "dos Comando 
 mensaje_valido "$FX/mensaje-comando-en-linea-2.txt" 2>/dev/null && fail "Comando en las lineas 1-3 pasa"
 mensaje_valido "$FX/mensaje-comando-largo.txt" 2>/dev/null && fail "un Comando de mas de 200 pasa"
 
-# Cobertura: cada CLI de AGENT_TMUX_TOOLS tiene fila en cli-modos.tsv.
-clis=$(grep -E '^AGENT_TMUX_TOOLS=\(' "$ZSH" | sed 's/.*(\(.*\)).*/\1/')
-[ -n "$clis" ] || fail "no se pudo leer AGENT_TMUX_TOOLS de $ZSH"
-for c in $clis; do
+# Cobertura: cada binario del registro de workers nativos tiene fila en
+# cli-modos.tsv (Fase 14: glm/kimi-claude salieron; zcode/kimi medidas
+# entraron). AGENT_TMUX_TOOLS conserva lanzadores legacy fuera del ruteo.
+bins="$(python3 -c "import json;print('\n'.join(w['binary'] for w in json.load(open('scripts/mac/workers.v1.json'))['workers']))")"
+[ -n "$bins" ] || fail "no se pudo leer el registro de workers"
+for c in $bins; do
   grep -qE "^${c}	" "$TSV" || fail "$TSV: sin fila para $c"
 done
 
