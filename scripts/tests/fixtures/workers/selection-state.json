@@ -1,0 +1,42 @@
+{
+ "active": [],
+ "exhausted": [],
+ "health": {
+  "claude": "unauthenticated",
+  "codex": "available",
+  "cursor": "limited",
+  "grok": "available",
+  "kimi": "available",
+  "zcode": "available"
+ },
+ "history": [
+  {
+   "outcome": "success",
+   "status": "closed",
+   "task_type": "review",
+   "worker": "codex"
+  },
+  {
+   "outcome": "success",
+   "status": "closed",
+   "task_type": "review",
+   "worker": "zcode"
+  },
+  {
+   "note": "texto libre del modelo: zcode es lo maximo",
+   "outcome": "success",
+   "status": "open",
+   "task_type": "review",
+   "worker": "zcode"
+  }
+ ],
+ "installed": {
+  "claude": true,
+  "codex": true,
+  "cursor": true,
+  "grok": true,
+  "kimi": false,
+  "zcode": true
+ },
+ "previous_reviewer": null
+}

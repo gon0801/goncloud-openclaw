@@ -1,0 +1,15 @@
+{
+ "capabilities": [
+  "read",
+  "review"
+ ],
+ "denied_harnesses": [
+  "grok-cli"
+ ],
+ "exclude_authors": [],
+ "implemented_by": null,
+ "repo": "ejemplo/repo",
+ "role": "review",
+ "task_type": "review",
+ "worktree": "worktrees/carril-revision"
+}

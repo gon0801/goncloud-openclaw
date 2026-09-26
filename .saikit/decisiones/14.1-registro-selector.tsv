@@ -1,0 +1,2 @@
+cuando|etapa|decision|por_que|evidencia|resultado
+2026-09-26T04:56:55Z|verify|14.1 verificado: registro 6 workers + selector determinista, 3 tests verdes|DoD fila 14.1: test-worker-registry.sh y test-worker-selector.sh verdes, VALID workers.v1 6 en registro real, 20 corridas byte-identicas, test-corrida-preflight.sh sin regresion; mutaciones A y B confirman que los tests discriminan|.saikit/scratch/14.1/notas.md + logs; SHA 5ff18eb|ok

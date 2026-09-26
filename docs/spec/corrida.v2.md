@@ -82,3 +82,25 @@ el empuje propio. Ambos modos rechazan un `corrida-vigia-<fase>` todavía puesto
 `scripts/cierre-de-fase.sh` rechaza el vigía legado y solo
 pide ausente el reloj global cuando su scratch dice que no queda otro
 trabajo activo (el scratch se lee por UUID, nunca por nombre).
+
+## Campos opcionales de ruteo nativo (Fase 14.1)
+
+Una corrida v2 puede traer estos campos; todos son opcionales y su
+ausencia total deja un registro legado válido (`seguimiento_global:true`,
+sin `cron_vigia_id`, v1/v2 legibles, reloj global intacto). No se crea
+otro esquema v2 ni vuelve el cron por corrida.
+
+| Campo | Qué es |
+|---|---|
+| `workers_registry` | Ruta del registro `workers.v1` que usa la selección |
+| `automatic_routing` | Objeto con `enabled` (booleano): ruteo automático o flujo legado |
+| `lanes` | Carriles con `worker`, rol, worktree y sesión |
+| `effects` | Efectos externos ya ejecutados (para no repetirlos al reanudar) |
+| `evidence` | Evidencia de compuertas por SHA (revisión, CI, CodeRabbit, merge, deploy, canary) |
+| `outcome` | Resultado global (`open` mientras hay trabajo pendiente) |
+| `authorization_ref` | Referencia a la preaprobación del dueño que ampara el merge automático |
+
+`authorization_ref` sigue opcional para registros legados y de solo
+lectura; la Task 7 lo exige, lo resuelve contra la tabla versionada de
+preaprobaciones y falla cerrada cuando falta, es desconocido, no está
+aprobado o queda fuera de alcance, antes de cualquier merge automático.

@@ -1,0 +1,76 @@
+{
+ "max_external_sessions": 4,
+ "schema": "workers.v1",
+ "workers": [
+  {
+   "auth_patterns": [
+    "login required",
+    "authentication failed"
+   ],
+   "binary": "claude",
+   "blocked_patterns": [
+    "permission denied"
+   ],
+   "capabilities": [
+    "read",
+    "write",
+    "review"
+   ],
+   "commands": {
+    "health": [
+     "claude",
+     "--version"
+    ],
+    "resume:review": [
+     "claude",
+     "--resume",
+     "{session_id}",
+     "--permission-mode",
+     "plan"
+    ],
+    "resume:write": [
+     "claude",
+     "--resume",
+     "{session_id}",
+     "--permission-mode",
+     "acceptEdits"
+    ],
+    "start:review": [
+     "claude",
+     "--permission-mode",
+     "plan"
+    ],
+    "start:write": [
+     "claude",
+     "--permission-mode",
+     "acceptEdits"
+    ],
+    "stop": [
+     "tmux-stop",
+     "{session_name}"
+    ]
+   },
+   "harness": "claude-code",
+   "id": "claude",
+   "model": "router",
+   "permission_modes": {
+    "review": "plan",
+    "write": "acceptEdits"
+   },
+   "provider": "anthropic",
+   "quota_patterns": [
+    ""
+   ],
+   "task_types": [
+    "general",
+    "backend",
+    "frontend",
+    "review"
+   ],
+   "transcript": {
+    "kind": "tmux-pane"
+   },
+   "version": "2.1.278"
+  }
+ ]
+}
