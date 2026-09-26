@@ -13,7 +13,7 @@ corrida_mostrar_terminal() {
   corrida_id_valido "$carril" || { echo "mostrar-terminal: carril invalido: $carril" >&2; return 2; }
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
-  local sesion; sesion="$(json_campo "$reg" "carriles.$carril.session")"
+  local sesion; sesion="$(lane_campo "$reg" "$carril" session)"
   case "$sesion" in ''|*[!A-Za-z0-9_-]*)
     echo "mostrar-terminal: el carril $carril no trae sesion valida" >&2; return 1;; esac
   # El binario es el resuelto por lib.sh (TMUX_BIN), no uno fijo: instalado y
@@ -28,14 +28,23 @@ activate
 do script "'"$tmx"' attach -t =" & (item 1 of argv)
 end tell
 end run'
+  # La sesion debe existir: una sesion inexistente jamas es visible aunque
+  # osascript salga 0 (spec: Terminal degradada con attach exacto).
+  local tiene_sesion=0
+  "$tmx" has-session -t "=$sesion" >/dev/null 2>&1 && tiene_sesion=1
   local estado="visible"
-  "$osa" -e "$programa" "$sesion" >/dev/null 2>&1 || estado="degraded"
+  if [ "$tiene_sesion" -eq 1 ]; then
+    "$osa" -e "$programa" "$sesion" >/dev/null 2>&1 || estado="degraded"
+  else
+    estado="degraded"
+  fi
   if ! lock_tomar "$reg"; then
     echo "mostrar-terminal: lock del registro de $id no cede" >&2; return 1
   fi
   CORR_C="$carril" CORR_E="$estado" CORR_A="$attach" registro_escribir "$reg" "
-d['carriles'][os.environ['CORR_C']]['visibility']={'state':os.environ['CORR_E'],
-'attach_command':os.environ['CORR_A']}" \
+for e in d.get('lanes') or []:
+  if isinstance(e,dict) and e.get('id')==os.environ['CORR_C']:
+    e['visibility']={'state':os.environ['CORR_E'],'attach_command':os.environ['CORR_A']}; break" \
     || { lock_soltar "$reg"; echo "mostrar-terminal: no se pudo guardar visibilidad" >&2; return 1; }
   lock_soltar "$reg"
   printf '%s\n' "$estado"
