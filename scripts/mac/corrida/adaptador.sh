@@ -115,6 +115,11 @@ adaptador_registrar_sesion() { # $1 reg $2 carril $3 worker $4 sesion [$5 brief]
   harness="$(worker_atributo "$worker" harness)" || return 1
   provider="$(worker_atributo "$worker" provider)" || return 1
   lock_tomar "$reg" || return 1
+  if [ "$(json_campo "$reg" estado)" != "abierta" ]; then
+    lock_soltar "$reg"
+    echo "adaptador: la corrida se cerro; no se registra la sesion $sesion del carril $carril" >&2
+    return 1
+  fi
   local rrc=0
   CORR_C="$carril" CORR_W="$worker" CORR_H="$harness" CORR_P="$provider" \
   CORR_S="$sesion" CORR_B="$brief" registro_escribir "$reg" "
@@ -198,6 +203,8 @@ adaptador_start() {
     || { echo "adaptador: worker desconocido: $worker" >&2; return 1; }
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
+  local estado; estado="$(json_campo "$reg" estado)"
+  [ "$estado" = "abierta" ] || { echo "adaptador: la corrida $id no esta abierta (estado: $estado)" >&2; return 1; }
   local rol; rol="$(adaptador_rol_de_modo "$(lane_campo "$reg" "$carril" mode)")" \
     || { echo "adaptador: el carril $carril no trae modo persistido (write|read-only)" >&2; return 1; }
   adaptador_validar_reserva "$reg" "$carril" || return 1
@@ -312,6 +319,10 @@ adaptador_resume() {
     || { echo "adaptador: worker desconocido: $worker" >&2; return 1; }
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
+  if [ "$(json_campo "$reg" estado)" != "abierta" ]; then
+    echo "adaptador: la corrida $id no esta abierta" >&2
+    echo "unavailable"; return 0
+  fi
   local rol; rol="$(adaptador_rol_de_modo "$(lane_campo "$reg" "$carril" mode)")" \
     || { echo "unavailable"; return 0; }
   local bin; bin="$(resolver_bin_worker "$worker")" || { echo "unavailable"; return 0; }

@@ -35,7 +35,7 @@ NUEVO="$(git -C "$T/remoto.git" rev-parse main)"
 mkdir -p "$T/corridas/run-w"
 python3 - "$T/corridas/run-w/registro.json" <<'PY' || fail "no se escribio el registro"
 import json,sys
-d={"schema":"corrida.v2","id":"run-w","lanes":[]}
+d={"schema":"corrida.v2","id":"run-w","estado":"abierta","lanes":[]}
 open(sys.argv[1],'w').write(json.dumps(d)+"\n")
 PY
 
@@ -90,7 +90,7 @@ perd="$(grep -l "capacidad agotada" "$T"/gana-*.err | wc -l | tr -d ' ')"
 mkdir -p "$T/corridas/run-r"
 python3 - "$T/corridas/run-r/registro.json" <<'PY' || fail "no se escribio run-r"
 import json,sys
-d={"schema":"corrida.v2","id":"run-r","lanes":[]}
+d={"schema":"corrida.v2","id":"run-r","estado":"abierta","lanes":[]}
 open(sys.argv[1],'w').write(json.dumps(d)+"\n")
 PY
 wtr="$(bash "$CORR" preparar-carril run-r lane-r "$T/repo" --read-only)" \
@@ -119,7 +119,7 @@ done <"$T/wts"
 mkdir -p "$T/corridas/run-g"
 python3 - "$T/corridas/run-g/registro.json" <<'PY' || fail "no se escribio run-g"
 import json,sys
-open(sys.argv[1],'w').write(json.dumps({"schema":"corrida.v2","id":"run-g","lanes":[]})+"\n")
+open(sys.argv[1],'w').write(json.dumps({"schema":"corrida.v2","id":"run-g","estado":"abierta","lanes":[]})+"\n")
 PY
 wtg="$(GIT_DIR=/no-existe-9 GIT_WORK_TREE=/no-existe-9 GIT_NAMESPACE=x-9 bash "$CORR" preparar-carril run-g lane-g "$T/repo" 2>"$T/gana-g.err")" \
   || fail "preparar con GIT heredado fallo: $(cat "$T/gana-g.err")"

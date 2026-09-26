@@ -62,7 +62,7 @@ export CORRIDA_WORKER_BIN_CLAUDE="$T/bin/claude" CORRIDA_WORKER_BIN_CODEX="$T/bi
 # completas en lanes (el adaptador los lee; preparar-carril los escribe).
 python3 - "$T/corridas/run-1/registro.json" "$T/modos.tsv" "$T/wt" "$T/wt-r" <<'PY' || fail "no se escribio el registro"
 import json,sys
-d={"schema":"corrida.v2","id":"run-1","cli_modos":sys.argv[2],
+d={"schema":"corrida.v2","id":"run-1","estado":"abierta","cli_modos":sys.argv[2],
    "lanes":[{"id":"lane-1","branch":"corrida/run-1/lane-1","worktree":sys.argv[3],
      "base_remote_sha":"0"*40,"owner":"lane-1","mode":"write","role":"write",
      "estado":"reservado","token":"9-init"},

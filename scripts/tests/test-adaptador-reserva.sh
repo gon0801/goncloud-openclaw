@@ -43,7 +43,7 @@ llama() { # $1 archivo-salida; resto: funcion + args; deja rc en LLAMA_RC y sali
 reserva_completa() {
   python3 - "$REG" <<'PYE' || fail "no se escribio reserva completa"
 import json,sys
-d={"schema":"corrida.v2","id":"run-1",
+d={"schema":"corrida.v2","id":"run-1","estado":"abierta",
    "lanes":[{"id":"lane-1","branch":"corrida/run-1/lane-1","worktree":"/tmp/wt-f2",
    "base_remote_sha":"0"*40,"owner":"lane-1","mode":"write","role":"write",
    "estado":"reservado","token":"9-f2"}]}
@@ -54,7 +54,7 @@ PYE
 # (1) start sobre carril SIN reserva completa: rechazo antes de crear sesion.
 python3 - "$REG" "$T/wt" <<'PYE' || fail "no se escribio registro incompleto"
 import json,sys
-d={"schema":"corrida.v2","id":"run-1",
+d={"schema":"corrida.v2","id":"run-1","estado":"abierta",
    "lanes":[{"id":"lane-1","mode":"write","worktree":sys.argv[2]}]}
 open(sys.argv[1],"w").write(json.dumps(d)+"\n")
 PYE
@@ -109,5 +109,30 @@ assert c["estado"]=="activo", c
 assert c["worker"]=="codex", c
 PYE
 echo "ok (4): registrar sobre reservado activa la sesion"
+
+# (5) start sobre corrida CERRADA con carril reservado: rechazo antes de crear sesion.
+python3 - "$REG" <<'PYE' || fail "no se escribio corrida cerrada"
+import json,sys
+d={"schema":"corrida.v2","id":"run-1","estado":"cerrada",
+   "lanes":[{"id":"lane-1","branch":"corrida/run-1/lane-1","worktree":"/tmp/wt-f2",
+   "base_remote_sha":"0"*40,"owner":"lane-1","mode":"write","role":"write",
+   "estado":"reservado","token":"9-f2"}]}
+open(sys.argv[1],"w").write(json.dumps(d)+"\n")
+PYE
+antes="$(grep -c "new-session" "$T/tmux.log")"
+llama "$T/sal5.txt" adaptador_start run-1 lane-1 codex ses-cerrada "$T/wt"
+[ "$LLAMA_RC" -ne 0 ] || fail "start en corrida cerrada debio fallar (salio: $(cat "$T/sal5.txt"))"
+out="$(cat "$T/sal5.txt")"
+printf '%s' "$out" | grep -q "no esta abierta" \
+  || fail "start en corrida cerrada no diagnostica corrida: $out"
+despues="$(grep -c "new-session" "$T/tmux.log")"
+[ "$antes" = "$despues" ] || fail "start en corrida cerrada creo sesion"
+python3 - "$REG" <<'PYE' || fail "start en corrida cerrada toco el carril"
+import json,sys
+c=next((e for e in json.load(open(sys.argv[1]))["lanes"] if e.get("id")=="lane-1"), None)
+assert c["estado"]=="reservado", c
+assert "session" not in c, c
+PYE
+echo "ok (5): start en corrida cerrada se rechaza sin crear sesion"
 
 echo "TODO VERDE: test-adaptador-reserva"

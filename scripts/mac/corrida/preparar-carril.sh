@@ -23,6 +23,8 @@ corrida_preparar_carril() {
   unset GIT_DIR GIT_WORK_TREE GIT_NAMESPACE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
+  local estado; estado="$(json_campo "$reg" estado)"
+  [ "$estado" = "abierta" ] || { echo "preparar-carril: la corrida $id no esta abierta (estado: $estado)" >&2; return 1; }
   [ -d "$repo" ] || { echo "preparar-carril: sin repo: $repo" >&2; return 1; }
   git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 \
     || { echo "preparar-carril: no es repo git: $repo" >&2; return 1; }
@@ -57,6 +59,10 @@ corrida_preparar_carril() {
   local token="$$-${RANDOM:-0}"
   if ! lock_tomar "$reg"; then
     echo "preparar-carril: lock del registro de $id no cede" >&2; return 1
+  fi
+  if [ "$(json_campo "$reg" estado)" != "abierta" ]; then
+    lock_soltar "$reg"
+    echo "preparar-carril: la corrida $id se cerro; no se reserva $carril" >&2; return 1
   fi
   # Barrido best-effort de reservas huerfanas antes de contar: una reserva
   # interrumpida (kill entre el unlock y el worktree add) no consume cupo
