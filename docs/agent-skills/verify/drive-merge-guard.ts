@@ -2,12 +2,11 @@
 // Mismo patron que role.test.ts: se registra el plugin real contra un host
 // falso y se dispara el hook que quedo registrado.
 //
-// 13.4 (Fase 13): la rama del allowlist tenia cero cobertura aca porque todos
-// los casos mandaban el mismo agentId "main". La orden de merge del dueño la
-// ejecuta implementer o ingenieria (6.5c): esos dos pasan, verifier y un
-// agentId ausente siguen bloqueados. Los cuatro casos nuevos usan la ruta REST
-// de merge, que es la regla donde el allowlist decide; el subcomando de CLI
-// bloquea a todos y no prueba esta rama.
+// Historia: hasta a088618 (#159, 2026-09-24) existia un merge-guard con
+// allowlist por rol; ese commit lo retiro y hoy ningun comando de merge, push o
+// deploy se intercepta. Los diez casos de abajo esperan todos `false` (pasa):
+// cubren los patrones que el guardia retirado bloqueaba, para que una regresion
+// que lo reintroduzca quede en rojo.
 import mod from "../../../summa-gate/index.ts";
 
 type Reg = { event: string; handler: Function; opts?: { matcher?: string[] } };
@@ -45,7 +44,7 @@ mod.register(api as never);
 const hooks = regs.filter(r => r.event === "before_tool_call" && (!r.opts?.matcher || r.opts.matcher.includes("exec")));
 
 // [nombre, comando, debeBloquear, agentId] — agentId undefined = turno sin
-// agentId, que tambien debe quedar bloqueado fuera del allowlist.
+// agentId; desde a088618 todo pasa, con o sin rol.
 const casos: Array<[string, string, boolean, string | undefined]> = [
   ["subcomando de merge de la CLI", "gh pr merge 12 -R o/r --squash", false, "main"],
   ["misma orden encadenada", "echo hola && gh pr merge 12", false, "main"],
@@ -53,10 +52,10 @@ const casos: Array<[string, string, boolean, string | undefined]> = [
   ["ruta de merge de la API", "gh api repos/o/r/pulls/1/merge -X PUT", false, "main"],
   ["push a rama de trabajo", "git push origin feature/x", false, "main"],
   ["lectura inofensiva", "gh pr view 12 --json state", false, "main"],
-  ["allowlist: implementer ejecuta la orden", "gh api repos/o/r/pulls/1/merge -X PUT", false, "implementer"],
-  ["allowlist: ingenieria ejecuta la orden", "gh api repos/o/r/pulls/1/merge -X PUT", false, "ingenieria"],
-  ["allowlist: verifier puede mergear", "gh api repos/o/r/pulls/1/merge -X PUT", false, "verifier"],
-  ["allowlist: sin agentId puede mergear", "gh api repos/o/r/pulls/1/merge -X PUT", false, undefined],
+  ["guard no intercepta (implementer)", "gh api repos/o/r/pulls/1/merge -X PUT", false, "implementer"],
+  ["guard no intercepta (ingenieria)", "gh api repos/o/r/pulls/1/merge -X PUT", false, "ingenieria"],
+  ["guard no intercepta (verifier)", "gh api repos/o/r/pulls/1/merge -X PUT", false, "verifier"],
+  ["guard no intercepta (sin agentId)", "gh api repos/o/r/pulls/1/merge -X PUT", false, undefined],
 ];
 
 let fallas = 0;
