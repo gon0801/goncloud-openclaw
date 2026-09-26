@@ -29,8 +29,11 @@ PL_NOMBRE="ai.goncloud.tmux-activity-watch.plist"
 ETIQUETA="ai.goncloud.tmux-activity-watch"
 LINEA_SOURCE="source ~/bin/agent-tmux-shell.zsh"
 # Manifiesto binario: fuentes relativas a scripts/mac, destino ~/bin (cp -p
-# conserva el +x). El latido viejo NO esta en esta lista: ni se copia ni se carga.
-BINS="corrida.sh cli-modos.tsv agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh"
+# conserva el +x). workers.v1.json viaja aqui porque corrida_workers_registry
+# lo resuelve junto al bin instalado (~/bin/workers.v1.json); sin el, el
+# adaptador instalado no resuelve ningun worker. El latido viejo NO esta en
+# esta lista: ni se copia ni se carga.
+BINS="corrida.sh cli-modos.tsv workers.v1.json agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh"
 
 di() { printf '%s\n' "$1"; }
 falla() { printf 'instalar-mac: error: %s\n' "$1" >&2; exit 1; }

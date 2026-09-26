@@ -1,0 +1,6 @@
+{
+ "hecho": "R1 solo endurece lanzar-sesion (rechazo pre-escritura bajo lock, sin parciales) y borra codigo muerto sin llamadores; el flujo preparado sigue identico y nucleo+adapters+preflight estan verdes",
+ "comando": "bash scripts/tests/test-corrida-nucleo.sh && bash scripts/tests/test-native-harness-adapters.sh && test -z \"$(grep -rn worker_patrones scripts/ || true)\"",
+ "salida": "TODO VERDE: test-corrida-nucleo; TODO VERDE: test-native-harness-adapters; grep vacio",
+ "nivel": 5
+}

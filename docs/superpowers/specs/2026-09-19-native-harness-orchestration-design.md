@@ -128,7 +128,7 @@ Todos los adaptadores implementan el mismo contrato:
 health(worker, repo) -> available | limited | unauthenticated | broken
 start(run, lane, worktree, brief) -> session
 deliver(session, brief) -> accepted | blocked
-inspect(session) -> running | waiting | complete | failed
+inspect(session) -> running | waiting | complete | failed | quota | auth-vencida
 resume(session) -> resumed | unavailable
 stop(session) -> stopped | already_stopped
 ```

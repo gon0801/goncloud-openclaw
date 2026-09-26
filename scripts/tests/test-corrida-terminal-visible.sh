@@ -1,0 +1,152 @@
+#!/bin/bash
+# Task 4: mostrar-terminal abre Terminal sobre la sesion tmux del carril;
+# si la automatizacion se niega, visibilidad degraded con el attach exacto
+# y el worker sigue activo (nunca es fallo del worker).
+# Uso: bash scripts/tests/test-corrida-terminal-visible.sh
+set -u
+cd "$(dirname "$0")/../.." || exit 1
+fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
+
+CORR=scripts/mac/corrida.sh
+# El attach deriva del tmux resuelto (misma regla que lib.sh): la prueba no
+# fija una ruta a fuego.
+TMX="$(command -v tmux 2>/dev/null || true)"
+[ -z "$TMX" ] && [ -x /opt/homebrew/bin/tmux ] && TMX=/opt/homebrew/bin/tmux
+[ -n "$TMX" ] || fail "sin tmux no hay expectativa de attach"
+export TMX
+T=$(mktemp -d) || exit 1
+trap 'rm -rf "$T"' EXIT
+export CORRIDA_STATE="$T/corridas"
+export TMX_FAKE="$T/bin/tmux-falso-9"
+
+mkdir -p "$T/bin" "$T/corridas/run-1"
+# Dobles de osascript: ok anota su argv; negado simula la negativa de macOS.
+cat >"$T/bin/osascript-ok" <<STUB
+#!/bin/sh
+printf '%s\n' "\$@" > "$T/argv-ok.txt"
+exit 0
+STUB
+cat >"$T/bin/osascript-no" <<STUB
+#!/bin/sh
+printf '%s\n' "\$@" > "$T/argv-no.txt"
+echo "osascript: no se permite la automatizacion" >&2
+exit 1
+STUB
+chmod +x "$T/bin/osascript-ok" "$T/bin/osascript-no"
+# Dobles de tmux para has-session: hay dice que la sesion existe, nohay que no.
+# (mostrar-terminal decide visible solo con sesion viva + osascript 0.)
+cat >"$T/bin/tmux-hay" <<'STUB'
+#!/bin/sh
+if [ "${1:-}" = "has-session" ]; then exit 0; fi
+exit 0
+STUB
+cat >"$T/bin/tmux-nohay" <<'STUB'
+#!/bin/sh
+if [ "${1:-}" = "has-session" ]; then exit 1; fi
+exit 0
+STUB
+cat >"$T/bin/tmux-falso-9" <<'STUB'
+#!/bin/sh
+if [ "${1:-}" = "has-session" ]; then exit 0; fi
+exit 0
+STUB
+chmod +x "$T/bin/tmux-hay" "$T/bin/tmux-nohay" "$T/bin/tmux-falso-9"
+export TMXHAY="$T/bin/tmux-hay" TMXNOHAY="$T/bin/tmux-nohay"
+
+escribe_registro() {
+  python3 - "$T/corridas/run-1/registro.json" <<'PY' || fail "no se escribio el registro"
+import json,sys
+d={"schema":"corrida.v2","id":"run-1",
+   "lanes":[{"id":"lane-1","branch":"corrida/run-1/lane-1","worktree":"/tmp/wt-9",
+   "base_remote_sha":"abc","owner":"lane-1","mode":"write","role":"write",
+   "estado":"activo","worker":"codex","session":"ses-codex-run1"}]}
+open(sys.argv[1],'w').write(json.dumps(d)+"\n")
+PY
+}
+
+# Exito: sesion viva + osascript 0 => visible y el attach exacto guardado.
+escribe_registro
+got="$(TMUX_BIN="$T/bin/tmux-hay" OSASCRIPT_BIN="$T/bin/osascript-ok" bash "$CORR" mostrar-terminal run-1 lane-1)" \
+  || fail "mostrar-terminal ok fallo"
+[ "$got" = "visible" ] || fail "mostrar-terminal ok dio $got"
+python3 - "$T/corridas/run-1/registro.json" <<'PY' || fail "visibilidad visible mal guardada"
+import json,os,sys
+v=next(e for e in json.load(open(sys.argv[1]))['lanes'] if e.get('id')=='lane-1')['visibility']
+assert v['state']=='visible', v
+assert v['attach_command']==os.environ['TMXHAY']+' attach -t =ses-codex-run1', v
+PY
+# La sesion validada viaja como unico argv: -e, programa fijo, sesion. El
+# programa no trae la sesion interpolada (ni briefs ni rutas del registro).
+[ "$(head -n1 "$T/argv-ok.txt")" = "-e" ] || fail "osascript ok sin -e primero"
+[ "$(tail -n1 "$T/argv-ok.txt")" = "ses-codex-run1" ] || fail "la sesion no es el unico argv final"
+[ "$(grep -cx "ses-codex-run1" "$T/argv-ok.txt")" -eq 1 ] \
+  || fail "la sesion aparece fuera de su argv (interpolada)"
+grep -q "attach -t =" "$T/argv-ok.txt" || fail "el programa no trae el attach fijo"
+
+# Negacion: degraded con el attach exacto, worker activo, rc 0.
+escribe_registro
+got="$(TMUX_BIN="$T/bin/tmux-hay" OSASCRIPT_BIN="$T/bin/osascript-no" bash "$CORR" mostrar-terminal run-1 lane-1 2>/dev/null)" \
+  || fail "la negacion debio salir 0 (degraded, no fallo)"
+[ "$got" = "degraded" ] || fail "la negacion dio $got"
+python3 - "$T/corridas/run-1/registro.json" <<'PY' || fail "degraded mal guardado o worker tocado"
+import json,os,sys
+c=next(e for e in json.load(open(sys.argv[1]))['lanes'] if e.get('id')=='lane-1')
+assert c['visibility']['state']=='degraded', c
+assert c['visibility']['attach_command']==os.environ['TMXHAY']+' attach -t =ses-codex-run1', c
+assert c['estado']=='activo', c
+PY
+
+# Sesion inexistente: degraded aunque osascript salga 0, y osascript ni se invoca.
+escribe_registro
+rm -f "$T/argv-ok.txt"
+got="$(TMUX_BIN="$T/bin/tmux-nohay" OSASCRIPT_BIN="$T/bin/osascript-ok" bash "$CORR" mostrar-terminal run-1 lane-1 2>/dev/null)" \
+  || fail "sesion inexistente debio salir 0 (degraded, no fallo)"
+[ "$got" = "degraded" ] || fail "sesion inexistente dio $got (debía degraded)"
+python3 - "$T/corridas/run-1/registro.json" <<'PY' || fail "degraded sin sesion mal guardado"
+import json,os,sys
+c=next(e for e in json.load(open(sys.argv[1]))['lanes'] if e.get('id')=='lane-1')
+assert c['visibility']['state']=='degraded', c
+assert c['visibility']['attach_command']==os.environ['TMXNOHAY']+' attach -t =ses-codex-run1', c
+assert c['estado']=='activo', c
+PY
+[ ! -e "$T/argv-ok.txt" ] || fail "osascript no debio invocarse sin sesion viva"
+
+# TMUX_BIN explicito: el attach (guardado y programa) usa ese binario,
+# no el resuelto (repro del reviewer: ruta fija en AppleScript y registro).
+escribe_registro
+got="$(TMUX_BIN="$T/bin/tmux-falso-9" OSASCRIPT_BIN="$T/bin/osascript-ok" bash "$CORR" mostrar-terminal run-1 lane-1)" \
+  || fail "mostrar-terminal con TMUX_BIN fallo"
+[ "$got" = "visible" ] || fail "mostrar-terminal con TMUX_BIN dio $got"
+python3 - "$T/corridas/run-1/registro.json" <<'PY' || fail "attach con TMUX_BIN mal guardado"
+import json,os,sys
+v=next(e for e in json.load(open(sys.argv[1]))['lanes'] if e.get('id')=='lane-1')['visibility']
+assert v['attach_command']==os.environ['TMX_FAKE']+' attach -t =ses-codex-run1', v
+PY
+grep -qF "$T/bin/tmux-falso-9 attach -t =" "$T/argv-ok.txt" || fail "el programa no usa el TMUX_BIN explicito"
+
+# Sesion invalida: se rechaza antes de invocar osascript.
+python3 - "$T/corridas/run-1/registro.json" <<'PY' || fail "no se escribio sesion mala"
+import json,sys
+d={"schema":"corrida.v2","id":"run-1","lanes":[{"id":"lane-1","mode":"write","session":"ses;mala"}]}
+open(sys.argv[1],'w').write(json.dumps(d)+"\n")
+PY
+rm -f "$T/argv-ok.txt"
+OSASCRIPT_BIN="$T/bin/osascript-ok" bash "$CORR" mostrar-terminal run-1 lane-1 >/dev/null 2>&1 \
+  && fail "sesion invalida aceptada"
+[ ! -e "$T/argv-ok.txt" ] || fail "la sesion invalida llego a osascript"
+
+# Sin sesion persistida: error cerrado, sin visibilidad inventada.
+python3 - "$T/corridas/run-1/registro.json" <<'PY' || fail "no se escribio sin sesion"
+import json,sys
+d={"schema":"corrida.v2","id":"run-1","lanes":[{"id":"lane-1","mode":"write"}]}
+open(sys.argv[1],'w').write(json.dumps(d)+"\n")
+PY
+OSASCRIPT_BIN="$T/bin/osascript-ok" bash "$CORR" mostrar-terminal run-1 lane-1 >/dev/null 2>&1 \
+  && fail "sin sesion debio fallar"
+python3 - "$T/corridas/run-1/registro.json" <<'PY' || fail "sin sesion se invento visibilidad"
+import json,sys
+c=next(e for e in json.load(open(sys.argv[1]))['lanes'] if e.get('id')=='lane-1')
+assert 'visibility' not in c, c
+PY
+
+echo "TODO VERDE: test-corrida-terminal-visible"

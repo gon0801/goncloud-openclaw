@@ -60,13 +60,17 @@ printf '%s' "$out" | grep -q "gui/59999" || fail "dry-run no usa el uid inyectad
 
 # (2) instala el conjunto completo.
 out="$(bash "$INST" 2>&1)" || fail "instalar fallo: $out"
-for f in corrida.sh cli-modos.tsv agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh; do
+for f in corrida.sh cli-modos.tsv workers.v1.json agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh; do
   [ -f "$HOME/bin/$f" ] || fail "falta \$HOME/bin/$f"
 done
+# El registro de workers viaja instalado: el adaptador instalado lo resuelve
+# en $HOME/bin (repro del reviewer: ~/bin/workers.v1.json nunca creado).
+cmp -s scripts/mac/workers.v1.json "$HOME/bin/workers.v1.json" \
+  || fail "el registro instalado difiere de scripts/mac/workers.v1.json"
 [ -x "$HOME/bin/corrida.sh" ] || fail "corrida.sh quedo sin +x"
 ncorr="$(ls "$HOME/bin/corrida"/*.sh 2>/dev/null | wc -l)"
-[ "$ncorr" -eq 12 ] || fail "corrida/ trae $ncorr .sh, se esperaban 12"
-for f in abrir lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento lib; do
+[ "$ncorr" -eq 15 ] || fail "corrida/ trae $ncorr .sh, se esperaban 15"
+for f in abrir lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento lib adaptador preparar-carril mostrar-terminal; do
   [ -f "$HOME/bin/corrida/$f.sh" ] || fail "falta \$HOME/bin/corrida/$f.sh"
 done
 PL="$HOME/Library/LaunchAgents/ai.goncloud.tmux-activity-watch.plist"

@@ -1013,4 +1013,154 @@ printf '%s' "$cap" | grep -q "ESCENARIO-9X" || fail "el TUI no pinta el contenid
 printf '%s' "$cap" | grep -q "TUI-FALSO" || fail "el TUI no pinta su linea final"
 "$TM_REAL" -L "$L" kill-session -t "=tui-falso-test" 2>/dev/null
 
+# (12) Fase 14 Task 3: lanzar con --carril/--worker persiste worker,
+# harness, provider, reported_model y session antes de entregar; si la
+# entrega falla, persiste failed y detiene la sesion sin borrar su historial.
+# El carril llega preparado por preparar-carril (reserva completa); lanzar
+# sobre un carril inexistente o incompleto es error duro sin escritura parcial.
+# (t1 ya cerro en (10): este bloque abre su propia corrida.)
+. scripts/mac/corrida/lib.sh
+# Un dir real y distinto por carril: el validador prohibe worktrees
+# compartidos y lanzar exige el dir == worktree reservado.
+mkdir -p "$T/wt-9x" "$T/wt-9y" "$T/wt-9a" "$T/wt-9b" "$T/wt-9w" "$T/wt-9L" \
+  || fail "no se crearon worktrees del bloque carril"
+bash "$CORR" abrir t-carril --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" --simulacro >/dev/null \
+  || fail "abrir t-carril fallo"
+python3 - "$T/corridas/t-carril/registro.json" "$T/wt-9x" "$T/wt-9y" "$T/wt-9a" "$T/wt-9b" "$T/wt-9w" "$T/wt-9L" <<'PY' || fail "no se preparo el carril lane-9x"
+import json,sys
+r=sys.argv[1]
+W9=sys.argv[2]
+W9Y,W9A,W9B,W9W,W9L=sys.argv[3],sys.argv[4],sys.argv[5],sys.argv[6],sys.argv[7]
+d=json.load(open(r))
+def reserva(lane,wt,base,**kw):
+  c={'id':lane,'branch':'carril/'+lane,'worktree':wt,'base_remote_sha':base,'owner':lane,
+     'mode':'write','role':'write','estado':'reservado'}
+  c.update(kw)
+  return c
+d['lanes']=[reserva('lane-9x',W9,'0'*40),
+ reserva('lane-9y',W9Y,'1'*40),
+ reserva('lane-9a',W9A,'2'*40,estado='activo',worker='claude',session='ses-vieja-9'),
+ reserva('lane-9b',W9B,'3'*40),
+ reserva('lane-9w',W9W,'4'*40),
+ reserva('lane-9L',W9L,'5'*40)]
+json.dump(d,open(r,'w'),indent=1)
+PY
+S9=$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/wt-9x" --nombre ses-carril-9 --encargo "$T/encargo.txt" --carril lane-9x --worker claude) \
+  || fail "lanzar con carril fallo"
+[ "$S9" = "ses-carril-9" ] || fail "la sesion del carril se llama $S9"
+for campo in '"worker": *"claude"' '"harness": *"claude-code"' '"provider": *"anthropic"' '"reported_model": *"unknown"' '"session": *"ses-carril-9"' '"estado": *"activo"'; do
+  grep -q "$campo" "$T/corridas/t-carril/registro.json" || fail "el carril no persiste $campo"
+done
+validar_registro "$T/corridas/t-carril/registro.json" || fail "el registro con el carril lanzado no pasa validar_registro"
+export SWALLOW=1 SWALLOW_N=2 SWALLOW_SES=ses-carril-9f
+rm -f "$T/tragado"
+bash "$CORR" lanzar-sesion t-carril carril bueno "$T/wt-9y" --nombre ses-carril-9f --encargo "$T/encargo.txt" --carril lane-9y --worker codex >/dev/null 2>&1 \
+  && fail "con la caja sin vaciarse, el carril debio fallar"
+unset SWALLOW SWALLOW_N SWALLOW_SES
+"$TM_REAL" -L "$L" has-session -t "=ses-carril-9f" 2>/dev/null && fail "la sesion del carril fallido quedo viva"
+python3 - "$T/corridas/t-carril/registro.json" <<'PY' || fail "el carril fallido no persiste failed con historial"
+import json,sys
+c=next((e for e in json.load(open(sys.argv[1]))['lanes'] if e.get('id')=='lane-9y'), None)
+assert c['estado']=='failed', c
+assert c['worker']=='codex' and c['session']=='ses-carril-9f', c
+PY
+grep -q '"nombre": *"ses-carril-9f"' "$T/corridas/t-carril/registro.json" && fail "la sesion fallida del carril quedo en sesiones"
+bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9g --carril lane-9z >/dev/null 2>&1 \
+  && fail "--carril sin --worker debio rechazarse"
+bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9h --carril lane-9z --worker nosuch >/dev/null 2>&1 \
+  && fail "--worker desconocido debio rechazarse"
+out="$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9r --encargo "$T/encargo.txt" --carril lane-9xq --worker claude 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "lanzar sobre un carril sin preparar debio rechazarse"
+printf '%s' "$out" | grep -q "no esta preparado" || fail "el rechazo del carril sin preparar no se explica: $out"
+"$TM_REAL" -L "$L" has-session -t "=ses-carril-9r" 2>/dev/null && fail "la sesion del carril sin preparar quedo viva"
+python3 - "$T/corridas/t-carril/registro.json" <<'PY' || fail "el carril rechazado dejo escritura parcial"
+import json,sys
+assert 'lane-9xq' not in [e.get('id') for e in json.load(open(sys.argv[1])).get('lanes',[])], 'escritura parcial'
+PY
+# Fail-fast (M1 ai-review): el carril sin preparar se rechaza ANTES de crear
+# la sesion: la CLI no spawnea en un directorio no autorizado. Sin el
+# fail-fast, new-session queda en la bitacora del shim aunque luego se mate.
+: >"$TMUX_LOG"
+out="$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9q --encargo "$T/encargo.txt" --carril lane-9xq --worker claude 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "fail-fast: carril sin preparar aceptado"
+grep -q "new-session -d -s ses-carril-9q" "$TMUX_LOG" && fail "fail-fast: el carril sin preparar spawneo sesion"
+
+# Un carril ya activo no acepta otra sesion (repro del reviewer: segundo
+# lanzamiento sobre el mismo carril).
+out="$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/wt-9a" --nombre ses-carril-9a2 --encargo "$T/encargo.txt" --carril lane-9a --worker claude 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "lanzar sobre un carril activo aceptado"
+printf '%s' "$out" | grep -q "no esta reservado" || fail "el rechazo del carril activo no se explica: $out"
+"$TM_REAL" -L "$L" has-session -t "=ses-carril-9a2" 2>/dev/null && fail "la sesion del carril activo quedo viva"
+# El dir debe ser el worktree reservado: otro dir existente se rechaza sin
+# escritura (el repo principal o el worktree de otro carril no cuelan).
+out="$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/tui" --nombre ses-carril-9b2 --encargo "$T/encargo.txt" --carril lane-9b --worker claude 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "lanzar fuera del worktree aceptado"
+printf '%s' "$out" | grep -q "no es el worktree" || fail "el rechazo fuera del worktree no se explica: $out"
+"$TM_REAL" -L "$L" has-session -t "=ses-carril-9b2" 2>/dev/null && fail "la sesion fuera del worktree quedo viva"
+python3 - "$T/corridas/t-carril/registro.json" <<'PY' || fail "el rechazo fuera del worktree toco el carril"
+import json,sys
+c=next((e for e in json.load(open(sys.argv[1]))['lanes'] if e.get('id')=='lane-9b'), None)
+assert c['estado']=='reservado' and 'session' not in c, c
+PY
+# Lock retenido a media carrera: el retenedor cae durante la entrega (que no
+# necesita el lock) y la re-verificacion final no cede: sin sesion viva y
+# rc != 0. Si la maquina lenta adelanta el retenedor, el rechazo es en el
+# marcado: el mismo rc y la misma sesion muerta.
+( trap - EXIT; sleep 1; mkdir "$T/corridas/t-carril/.lock" 2>/dev/null ) &
+CORR_LOCK_INTENTOS=30 bash "$CORR" lanzar-sesion t-carril carril bueno "$T/wt-9L" --nombre ses-carril-9L --encargo "$T/encargo.txt" --carril lane-9L --worker claude >/dev/null 2>&1; rc=$?
+wait 2>/dev/null
+rmdir "$T/corridas/t-carril/.lock" 2>/dev/null
+[ "$rc" -ne 0 ] || fail "con el lock retenido debio fallar"
+"$TM_REAL" -L "$L" has-session -t "=ses-carril-9L" 2>/dev/null && fail "ses-carril-9L quedo viva con el lock retenido"
+# Anotacion imposible (registro sin sesiones): el carril marca failed y la
+# sesion muere (el fallo de escritura no deja activo fantasma).
+bash "$CORR" abrir t-carril3 --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" --simulacro >/dev/null \
+  || fail "abrir t-carril3 fallo"
+python3 - "$T/corridas/t-carril3/registro.json" "$T/ses" <<'PY' || fail "no se preparo lane-3x"
+import json,sys
+r,wt=sys.argv[1],sys.argv[2]
+d=json.load(open(r))
+d['lanes']=[{'id':'lane-3x','branch':'carril/lane-3x','worktree':wt,'base_remote_sha':'0'*40,
+  'owner':'lane-3x','mode':'write','role':'write','estado':'reservado'}]
+del d['sesiones']
+json.dump(d,open(r,'w'),indent=1)
+PY
+bash "$CORR" lanzar-sesion t-carril3 carril bueno "$T/ses" --nombre ses-carril-3x --carril lane-3x --worker claude >/dev/null 2>&1 \
+  && fail "con la anotacion imposible debio fallar"
+"$TM_REAL" -L "$L" has-session -t "=ses-carril-3x" 2>/dev/null && fail "ses-carril-3x quedo viva"
+python3 - "$T/corridas/t-carril3/registro.json" <<'PY' || fail "el carril sin anotacion no marco failed"
+import json,sys
+assert (next((e for e in json.load(open(sys.argv[1]))['lanes'] if e.get('id')=='lane-3x'), None))['estado']=='failed', 'sin failed'
+PY
+# Carrera cerrar x lanzar CON carril (mismo patron del repro 9h, ahora sobre
+# lane-9w): cerrar espera al lanzamiento (CIERRE_ESPERA 45 s) y lo normal es
+# que el lanzamiento gane y cerrar lo desmarque; si el cierre ganara, el
+# carril marcaria failed. NUNCA queda sesion viva y marcada en un registro
+# cerrado, en ninguna de las dos ramas.
+bash "$CORR" lanzar-sesion t-carril carril tarde "$T/wt-9w" --nombre ses-carril-9w --encargo "$T/encargo.txt" --carril lane-9w --worker claude >"$T/lanzar-9w.out" 2>&1 &
+plan9w=$!
+sleep 0.8
+bash "$CORR" cerrar t-carril >/dev/null 2>&1 || fail "cerrar t-carril fallo"
+wait "$plan9w"; rc=$?
+if [ "$rc" -ne 0 ]; then
+  grep -q "se cerro mientras se lanzaba" "$T/lanzar-9w.out" || fail "la negativa del carril no explica la carrera"
+  "$TM_REAL" -L "$L" has-session -t "=ses-carril-9w" 2>/dev/null && fail "ses-carril-9w quedo viva"
+  python3 - "$T/corridas/t-carril/registro.json" <<'PY' || fail "lane-9w no marco failed"
+import json,sys
+c=next((e for e in json.load(open(sys.argv[1]))['lanes'] if e.get('id')=='lane-9w'), None)
+assert c['estado']=='failed' and c['session']=='ses-carril-9w', c
+PY
+  grep -q '"nombre": *"ses-carril-9w"' "$T/corridas/t-carril/registro.json" && fail "ses-carril-9w quedo en sesiones"
+else
+  "$TM_REAL" -L "$L" show-environment -t "=ses-carril-9w" OPENCLAW_WATCH >/dev/null 2>&1 \
+    && fail "ses-carril-9w quedo marcada despues de que cerrar gano la serializacion"
+  python3 - "$T/corridas/t-carril/registro.json" <<'PY' || fail "lane-9w no quedo activo tras ganar la carrera"
+import json,sys
+c=next((e for e in json.load(open(sys.argv[1]))['lanes'] if e.get('id')=='lane-9w'), None)
+assert c['estado']=='activo' and c['session']=='ses-carril-9w', c
+PY
+fi
+grep -q '"estado": *"cerrada"' "$T/corridas/t-carril/registro.json" || fail "t-carril no quedo cerrada"
+validar_registro "$T/corridas/t-carril/registro.json" || fail "tras el rechazo, el registro no pasa validar_registro"
+
 echo "TODO VERDE: test-corrida-nucleo"
