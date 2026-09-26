@@ -119,7 +119,8 @@ for fx in 01-duplicate-events 02-vanished-session 03-push-exists 04-pr-exists \
     05-merge-exists 06-deploy-partial 07-failed-resumes-once 08-quota-skips-resume \
     09-auth-skips-resume 10-missing-binary-skips-resume 11-silent-alive-kept \
     12-predecessor-blocks 13-candidates-exhausted 14-repeated-launch-once \
-    15-phase23-pending 16-test-failed-no-fallback 17-dirty-diff-survives; do
+    15-phase23-pending 16-test-failed-no-fallback 17-dirty-diff-survives \
+    18-handoff-exhausted-stops; do
   materializar "$fx.json" "$T/py-$fx"
   cp "$T/py-$fx/record.json" "$T/py-$fx/r.json"
   if [ -f "$T/py-$fx/events.json" ]; then
@@ -155,7 +156,7 @@ for fx in 01-duplicate-events 02-vanished-session 03-push-exists 04-pr-exists \
   exp2="$(python3 -c "import json; print(' '.join(json.load(open('$FIX/$fx.json'))['expect_py2']))")"
   [ "$ops2" = "$exp2" ] || [ "$ops2" = "$exp2 " ] || fail "$fx inv2: ops [$ops2], esperadas [$exp2]"
 done
-echo "ok (2): los 17 fixtures proponen lo esperado y repiten byte-identico"
+echo "ok (2): los 18 fixtures proponen lo esperado y repiten byte-identico"
 
 e2e_prepara() { # $1 caso $2 fixture: registro en CORRIDA_STATE + obs listas
   materializar "$2" "$T/e2e-$1"
@@ -258,6 +259,8 @@ import json,sys
 evs = json.load(open(sys.argv[1]))["lanes"][0]["events"]
 h = [e for e in evs if e["kind"] == "intent.handoff_lane"]
 assert h and h[0]["payload"].get("preserve_worktree") is True, evs
+b = [e for e in evs if e["kind"] == "observed.handoff.blocked"]
+assert b and b[-1]["payload"].get("reason") == "stop-unconfirmed", evs
 PY
 echo "ok (7): diff y commits sobreviven al handoff"
 

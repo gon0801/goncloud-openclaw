@@ -234,7 +234,10 @@ def _handoff_effects(
 
     handed_off = lane.get("estado") == "handoff" or _has_kind(lane, "intent.handoff_lane")
     if handed_off:
-        return _successor_effects(lane, lane_obs, nxt, registry_workers, live, session_alive)
+        return _successor_effects(
+            lane, lane_obs, nxt, registry_workers, live, session_alive,
+            candidates.get("exhausted") or [],
+        )
     if inspect in ("quota", "auth-vencida"):
         reason = inspect
     elif not binary_ok:
@@ -293,6 +296,7 @@ def _successor_effects(
     registry_workers: list,
     live: Any,
     session_alive: bool,
+    exhausted: list,
 ) -> tuple[PlannedEffect, ...]:
     lane_id = str(lane.get("id") or "")
     if _has_kind(lane, "intent.launch_successor"):
@@ -305,6 +309,10 @@ def _successor_effects(
     session = lane.get("session") or ""
     if session and (live(session) or session_alive):
         if _has_kind(lane, "intent.stop_lane"):
+            if not _has_kind(lane, "observed.handoff.blocked"):
+                return (
+                    _record(lane_id, "handoff.blocked", {"reason": "stop-unconfirmed"}),
+                )
             return ()
         return (PlannedEffect("stop_lane", lane_id, {"session": session}),)
     if _has_kind(lane, "intent.stop_lane") and not _has_kind(
@@ -312,7 +320,6 @@ def _successor_effects(
     ):
         return (_record(lane_id, "session.stopped", {"session": session}),)
     if nxt is None:
-        exhausted = candidates.get("exhausted") or []
         if exhausted and not _has_kind(lane, "intent.mark_lane_stopped"):
             return (
                 PlannedEffect(

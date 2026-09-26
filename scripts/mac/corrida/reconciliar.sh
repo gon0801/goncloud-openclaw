@@ -5,7 +5,9 @@
 # Sin --observations construye tmux/worktree/remoto/PR/merge reales; la
 # evidencia fina, el canary y los candidatos los provee el director.
 # El lock se sostiene solo para leer y reducir, nunca durante un efecto
-# externo (los adaptadores toman su propio lock en su subproceso).
+# externo (los adaptadores toman su propio lock en su subproceso). Un solo
+# director reconcilia cada corrida: dos reconciliar concurrentes podrian
+# proponer el mismo efecto externo antes de que el otro registre su intent.
 # Uso: corrida.sh reconciliar <id> [--observations FILE]
 corrida_reconciliar() {
   [ "$#" -ge 1 ] || { echo "uso: corrida.sh reconciliar <id> [--observations FILE]" >&2; return 2; }
@@ -236,7 +238,9 @@ for c in reg.get("lanes") or []:
         except Exception:
             o["remote_branch"]=None
     o["session_alive"]=(c.get("session") or "") in obs["tmux"]["sessions"]
-    o["predecessor_alive"]=False; o["children_writing"]=False
+    # Desconocido en modo automatico (null, no False): solo el director, que
+    # ve al predecesor y a sus hijos, puede afirmarlo via --observations.
+    o["predecessor_alive"]=None; o["children_writing"]=None
     pr=None; merge=None
     try:
         p=subprocess.run(["gh","pr","list","--head",br,"--json","number,headRefOid,mergedAt,mergeCommit",

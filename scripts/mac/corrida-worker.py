@@ -317,8 +317,11 @@ def cmd_gate(args: argparse.Namespace) -> int:
     except (TypeError, ValueError):
         print("ERROR invalid gate input")
         return 2
-    # receipt_status es informativo (el wrapper lo registra en el evento);
-    # la decision usa el contenido del recibo y el motivo del kit.
+    # Contrato: recibo presente equivale a kit aceptado. Si el kit lo
+    # rechazo (status distinto de 0), el recibo no llega a la decision aunque
+    # el llamador lo haya pasado; el motivo del kit da el codigo.
+    if receipt_status != 0:
+        receipt = None
     decision = gate_decision(
         {
             "lane": lane,

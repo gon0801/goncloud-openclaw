@@ -321,7 +321,8 @@ def _decide_canary(lane: Mapping[str, Any], evidence: Mapping[str, Any], sha: st
     canary = evidence.get("canary")
     if not isinstance(canary, dict) or not canary.get("result"):
         return _deny("canary-sin-resultado", "canary sin resultado observable", projection)
-    return _allow("canary-ok", _projection(evidence, sha, "approved", _availability_of(evidence)),
+    result = "approved" if canary.get("result") == "pass" else "failed"
+    return _allow("canary-ok", _projection(evidence, sha, result, _availability_of(evidence)),
                   {"canary": dict(canary)})
 
 

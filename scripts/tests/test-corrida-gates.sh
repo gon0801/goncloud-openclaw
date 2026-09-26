@@ -77,6 +77,15 @@ entrega_recibo_del_pr "o/r" 7 "$H" >"$T/k8/recibo.json" \
 entrega_validar "$T/k8/recibo.json" "o/r" 7 "$H" 2>"$T/k8/err" \
   && fail "el doble valido identidad reutilizada"
 grep -q 'identidad reutilizada' "$T/k8/err" || fail "identidad: $(cat "$T/k8/err")"
+python3 - "$T/k1/recibo.json" "$T/k1f.json" <<'PY' || fail "sin recibo FAIL"
+import json,sys
+r = json.load(open(sys.argv[1]))
+r["verifier"]["resultado"] = "FAIL"
+json.dump(r, open(sys.argv[2], "w"))
+PY
+entrega_validar "$T/k1f.json" "o/r" 7 "$H" 2>"$T/k1f.err" \
+  && fail "el doble valido un verifier en FAIL"
+grep -q 'distinto de PASS' "$T/k1f.err" || fail "FAIL: $(cat "$T/k1f.err")"
 echo "ok (1): el doble del kit halla, revoca, ausenta y valida"
 
 # Lee el recibo de un caso materializado con el doble. Deja receipt.json
@@ -105,7 +114,7 @@ for fx in 01-merge-ok 02-merge-sin-recibo 03-merge-revocado 04-merge-otro-sha \
     15-pushpr-mismo-revisor 16-merge-bloqueante-repetido 17-merge-rebase-mecanico \
     18-deploy-mapea 19-canary-registra 20-rollback-sin-verificar \
     21-rollback-verificado 22-crossreview-autor 23-pushpr-sin-review \
-    24-deploy-sin-merge; do
+    24-deploy-sin-merge 25-merge-kit-rechaza 26-merge-bot-stale 27-merge-autor-evidencia; do
   materializar "$fx.json" "$T/py-$fx"
   leer_recibo "$T/py-$fx"
   meta_accion="$(python3 -c "import json; print(json.load(open('$T/py-$fx/meta.json'))['action'])")"
@@ -114,6 +123,7 @@ for fx in 01-merge-ok 02-merge-sin-recibo 03-merge-revocado 04-merge-otro-sha \
     --action "$meta_accion" --sha "$meta_sha" \
     --evidence "$T/py-$fx/evidence.json" --receipt "$T/py-$fx/receipt.json" \
     --receipt-status "$(cat "$T/py-$fx/receipt.status")" \
+    --receipt-error "$(cat "$T/py-$fx/recibo.err")" \
     --pr "$T/py-$fx/pr.json" >"$T/py-$fx/out.json" \
     || fail "$fx: gate rechazo la entrada"
   got="$(python3 -c "import json; d=json.load(open('$T/py-$fx/out.json')); print(d['verdict']+' '+d['code'])")"
@@ -126,7 +136,7 @@ for k in ("source_url", "repo", "pr", "reviewed_sha", "result", "availability"):
     assert p.get(k) not in (None, ""), (k, p)
 PY
 done
-echo "ok (2): los 24 fixtures dan su veredicto y codigo"
+echo "ok (2): los 27 fixtures dan su veredicto y codigo"
 
 # (3) Extremo a extremo: compuerta.sh relee el PR falso, valida con el kit,
 # decide, registra el evento y proyecta sin sustituir el recibo.
@@ -137,7 +147,7 @@ for fx in 01-merge-ok 02-merge-sin-recibo 03-merge-revocado 04-merge-otro-sha \
     15-pushpr-mismo-revisor 16-merge-bloqueante-repetido 17-merge-rebase-mecanico \
     18-deploy-mapea 19-canary-registra 20-rollback-sin-verificar \
     21-rollback-verificado 22-crossreview-autor 23-pushpr-sin-review \
-    24-deploy-sin-merge; do
+    24-deploy-sin-merge 25-merge-kit-rechaza 26-merge-bot-stale 27-merge-autor-evidencia; do
   materializar "$fx.json" "$T/e2e-$fx"
   run="g-${fx%%-*}"
   mkdir -p "$T/corridas/$run"
@@ -191,7 +201,7 @@ ev = json.load(open(sys.argv[1]))["lanes"][0]["evidence"]
 dp = ev.get("deploy") or {}
 assert dp.get("reviewed_head") == "1" * 40 and dp.get("merge_commit") == "2" * 40, ev
 PY
-echo "ok (3): compuerta.sh decide, registra y proyecta en 24 casos"
+echo "ok (3): compuerta.sh decide, registra y proyecta en 27 casos"
 
 # (4) Entradas rotas y kit ausente: diagnostico y fail-closed.
 materializar 01-merge-ok.json "$T/e4"
@@ -213,7 +223,7 @@ grep -q '^DENY merge kit-no-disponible' "$T/e4.out" \
 veredicto_gate() { # $1 dir $2 accion -> "verdict code"
   python3 "$PW" gate --record "$1/record.json" --lane l1 --action "$2" \
     --sha "$H4" --evidence "$1/evidence.json" --receipt "$1/receipt.json" \
-    --receipt-status "$(cat "$1/receipt.status")" --pr "$1/pr.json" \
+    --receipt-status "$(cat "$1/receipt.status")" --receipt-error "$(cat "$1/recibo.err")" --pr "$1/pr.json" \
     | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['verdict']+' '+d['code'])"
 }
 materializar 01-merge-ok.json "$T/e4b"
@@ -249,6 +259,24 @@ json.dump(d, open(sys.argv[1], "w"))
 PY
 [ "$(veredicto_gate "$T/e4b" merge)" = "deny ci-pendiente" ] \
   || fail "merge con CI pendiente"
+python3 - "$T/e4d/evidence.json" <<'PY' || fail "sin canary failed"
+import json,sys
+d = json.load(open(sys.argv[1]))
+d["canary"]["result"] = "failed"
+json.dump(d, open(sys.argv[1], "w"))
+PY
+python3 - "$T/e4d/record.json" <<'PY' || fail "sin deploy"
+import json,sys
+d = json.load(open(sys.argv[1]))
+d["lanes"][0]["delivery"] = {"deploy": {"sha": "2" * 40}}
+json.dump(d, open(sys.argv[1], "w"))
+PY
+got_cf="$(python3 "$PW" gate --record "$T/e4d/record.json" --lane l1 --action canary \
+  --sha "$H19" --evidence "$T/e4d/evidence.json" --receipt "$T/e4d/receipt.json" \
+  --receipt-status "$(cat "$T/e4d/receipt.status")" \
+  --receipt-error "$(cat "$T/e4d/recibo.err")" --pr "$T/e4d/pr.json" \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['verdict']+' '+d['code']+' '+d['projection']['result'])")"
+[ "$got_cf" = "allow canary-ok failed" ] || fail "canary failed: [$got_cf]"
 echo "ok (4): accion y evidencia rotas mueren; sin kit no hay merge"
 
 # (5) Mutacion de compuertas: sin cada condicion, el fixture que la exige
@@ -273,6 +301,7 @@ mutante() { # $1 nombre $2 patron-sed $3 fixture
     --lane l1 --action "$meta_accion" --sha "$meta_sha" \
     --evidence "$T/mut-$1/evidence.json" --receipt "$T/mut-$1/receipt.json" \
     --receipt-status "$(cat "$T/mut-$1/receipt.status")" \
+    --receipt-error "$(cat "$T/mut-$1/recibo.err")" \
     --pr "$T/mut-$1/pr.json" 2>/dev/null \
     | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['verdict']+' '+d['code'])" 2>/dev/null || true)"
   [ "$got" != "$orig" ] || fail "mutante $1 sobrevivio (dio $got)"
@@ -282,7 +311,7 @@ mutante sin-recibo 's/if receipt is None:/if False and receipt is None:/' \
 mutante sin-ci 's/if ci is None:/if False and ci is None:/' \
   06-merge-ci-ausente
 mutante sin-autor 's/reviewer in authors:/reviewer in []:/' \
-  08-merge-revisor-autor
+  27-merge-autor-evidencia
 mutante bot-aprueba 's/unavailable-declared/unavailable-declared-zzz/' \
   10-merge-bot-declarado
 mutante sin-bloqueante 's/if open_blockers:/if False and open_blockers:/' \

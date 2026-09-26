@@ -63,7 +63,11 @@ corrida_compuerta() {
       return 1
     fi
     if [ "$krc" -ne 0 ]; then
+      # El kit rechazo el recibo: no llega a la decision. El motivo queda en
+      # rerr para que la compuerta lo traduzca a codigo; un recibo rechazado
+      # jamas decide como valido.
       rstatus=1
+      : >"$rcf"
     fi
   fi
   local out
