@@ -36,7 +36,9 @@ adaptador_rol_de_modo() { # $1 modo persistido; stdout write|review; rc 1 si no
 
 # health(worker) -> available | limited | unauthenticated | broken.
 # Corre la argv health del registro con tope; la salida manda sobre el rc
-# (una CLI que avisa cuota saliendo 0 sigue limitada).
+# (una CLI que avisa cuota saliendo 0 sigue limitada; un bloqueo avisado
+# saliendo 0 sigue roto: mismo orden que corrida-worker.py).
+
 adaptador_health() {
   local worker="$1" bin rc=0 sal pant estado
   worker_atributo "$worker" binary >/dev/null \
@@ -59,8 +61,10 @@ w=[x for x in r['workers'] if x['id']==os.environ['WID']][0]
 def hay(ps): return any(p and p in t for p in ps)
 if hay(w.get('quota_patterns',[])): print('limited')
 elif hay(w.get('auth_patterns',[])): print('unauthenticated')
+elif hay(w.get('blocked_patterns',[])): print('broken')
 elif os.environ['WRC']=='0': print('available')
 else: print('broken')
+
 " 2>/dev/null)" || estado=""
   rm -f "$pant"
   [ -n "$estado" ] || { echo "adaptador: no se pudo clasificar la salud de $worker" >&2; return 1; }
@@ -226,6 +230,20 @@ else: print('running')
   printf '%s\n' "$estado"
 }
 
+# Resume que muere tras matar la sesion viva: persiste failed sin borrar el
+# historial (worker, sesion y demas campos quedan). Best effort bajo el lock
+# del run: si el lock no cede, el llamador igual devuelve unavailable.
+# Cierra el hueco CodeRabbit ronda 3 (relanzamiento o barra fallidos tras
+# el kill dejaban el carril activo con sesion huerfana).
+adaptador_carril_fallar() { # $1 reg $2 carril
+  local reg="$1" carril="$2"
+  lock_tomar "$reg" 2>/dev/null || return 0
+  CORR_C="$carril" registro_escribir "$reg" "
+c=d.get('carriles',{}).get(os.environ['CORR_C'])
+if c is not None: c['estado']='failed'" 2>/dev/null || true
+  lock_soltar "$reg"
+}
+
 # resume(session) -> resumed | unavailable. Relanza con la argv resume:<rol>
 # del registro; resuelve el binario ANTES de tocar la sesion viva.
 adaptador_resume() {
@@ -250,12 +268,13 @@ adaptador_resume() {
     || { rm -f "$argvf"; echo "unavailable"; return 0; }
   "$TMUX_BIN" kill-session -t "=$sesion" 2>/dev/null
   adaptador_nueva_sesion "$sesion" "$wt" "$bin" "$argvf" || {
-    rm -f "$argvf"; echo "unavailable"; return 0; }
+    rm -f "$argvf"; adaptador_carril_fallar "$reg" "$carril"; echo "unavailable"; return 0; }
   rm -f "$argvf"
   adaptador_esperar_barra "$reg" "$sesion" "$(worker_atributo "$worker" binary)" \
-    || { "$TMUX_BIN" kill-session -t "=$sesion" 2>/dev/null; echo "unavailable"; return 0; }
+    || { "$TMUX_BIN" kill-session -t "=$sesion" 2>/dev/null; adaptador_carril_fallar "$reg" "$carril"; echo "unavailable"; return 0; }
   adaptador_registrar_sesion "$reg" "$carril" "$worker" "$sesion" \
-    || { "$TMUX_BIN" kill-session -t "=$sesion" 2>/dev/null; echo "unavailable"; return 0; }
+    || { "$TMUX_BIN" kill-session -t "=$sesion" 2>/dev/null; adaptador_carril_fallar "$reg" "$carril"; echo "unavailable"; return 0; }
+
   echo "resumed"
 }
 

@@ -19,6 +19,8 @@ case " $* " in
       quota) echo "fake-$nombre: rate limit exceeded, retry later"; exit 1;;
       auth) echo "fake-$nombre: login required"; exit 1;;
       broken) exit 3;;
+      blocked) echo "fake-$nombre: permission denied"; exit 0;;
+
       *) echo "fake-$nombre 0.0-test"; exit 0;;
     esac
     ;;

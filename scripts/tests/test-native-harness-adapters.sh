@@ -106,6 +106,11 @@ for w in claude codex zcode kimi cursor grok; do
     || fail "$w: health sin auth no dio unauthenticated"
   [ "$(FAKE_HARNESS_MODE=broken bash "$CORR" adaptador health run-1 lane-1 "$w" ses-h)" = "broken" ] \
     || fail "$w: health roto no dio broken"
+  # blocked avisa saliendo 0 y sigue roto: paridad con corrida-worker.py,
+  # que mapea blocked_patterns antes del rc (L3 ai-review).
+  [ "$(FAKE_HARNESS_MODE=blocked bash "$CORR" adaptador health run-1 lane-1 "$w" ses-h)" = "broken" ] \
+    || fail "$w: health bloqueado no dio broken"
+
 
   # start write + review: sesion viva y argv exacta del registro.
   s="ses-$w"
@@ -235,6 +240,24 @@ got="$(bash "$CORR" adaptador resume run-1 lane-1 codex ses-recasa "$T/wt-r" SES
 "$TM_REAL" -L "$L" has-session -t "=ses-recasa" 2>/dev/null \
   || fail "resume unavailable toco la sesion viva"
 bash "$CORR" adaptador stop run-1 lane-1 codex ses-recasa >/dev/null
+# resume que muere tras matar la sesion: unavailable y el carril en failed.
+# Sin el marcado, el carril quedaba activo con sesion huerfana (CodeRabbit
+# ronda 3: relanzamiento o barra fallidos despues del kill).
+bash "$CORR" adaptador start run-1 lane-1 claude ses-resume-f "$T/wt" "$T/brief.txt" >/dev/null \
+  || fail "start para resume failed fallo"
+modo_fake nobar
+got="$(bash "$CORR" adaptador resume run-1 lane-1 claude ses-resume-f "$T/wt" SESID-9)"
+[ "$got" = "unavailable" ] || fail "resume sin barra dio $got"
+modo_fake ""
+"$TM_REAL" -L "$L" has-session -t "=ses-resume-f" 2>/dev/null \
+  && fail "resume fallido dejo la sesion viva"
+python3 - "$T/corridas/run-1/registro.json" <<PY || fail "resume fallido no marco failed"
+import json,sys
+c=json.load(open(sys.argv[1]))["carriles"]["lane-1"]
+assert c["estado"]=="failed", c
+PY
+bash "$CORR" adaptador stop run-1 lane-1 claude ses-resume-f >/dev/null 2>&1 || true
+
 
 # accion invalida y worker desconocido: error cerrado, nunca un estado.
 out="$(bash "$CORR" adaptador volar run-1 lane-1 claude ses-x 2>&1)"; rc=$?
