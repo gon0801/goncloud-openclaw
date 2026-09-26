@@ -1,7 +1,6 @@
 """Registro versionado de workers (workers.v1): tipos inmutables y validación estricta.
 
-Esquema cerrado, sin effort ni quota_group (enmienda 14.13 no integrada):
-una entrada por CLI con model router.
+Esquema cerrado de 14.1: una entrada por CLI con model router.
 """
 from __future__ import annotations
 

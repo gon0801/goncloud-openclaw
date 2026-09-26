@@ -19,7 +19,7 @@
  "sesiones": [
   {
    "cli": "tui-falso",
-   "dir": "/tmp/sim9-a",
+   "dir": "worktrees/sim9-a",
    "dueno": "lead",
    "nombre": "sim9-falso",
    "rol": "carril"
