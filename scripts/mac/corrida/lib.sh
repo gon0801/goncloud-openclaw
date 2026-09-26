@@ -920,6 +920,18 @@ resolver_bin_worker() { # $1 id; stdout ruta ejecutable; rc 1 si no resuelve
   printf '%s\n' "$res"
 }
 
+# --- Fase 14, Task 5: redaccion para el archivo de cierre. Lee stdin,
+# escribe stdout. Patrones de tokens conocidos y caracteres de control fuera;
+# lo demas pasa intacto (el transcript se conserva legible).
+redactar_texto() {
+  tr -d '\000-\010\013\014\016-\037\177' | sed -E \
+    -e 's/ghp_[A-Za-z0-9]+/ghp_[REDACTED]/g' \
+    -e 's/github_pat_[A-Za-z0-9_]+/github_pat_[REDACTED]/g' \
+    -e 's/sk-[A-Za-z0-9]+/sk-[REDACTED]/g' \
+    -e 's/xox[bpasr]-[A-Za-z0-9-]+/xox-[REDACTED]/g' \
+    -e 's/AKIA[0-9A-Z]{16}/AKIA[REDACTED]/g'
+}
+
 # --- Fase 14, Task 4: reservas de carriles bajo el lock del run. Sin lock
 # propio: quien llama lo toma con lock_tomar (misma convencion que
 # registro_escribir). Activo = reservado|activo; failed libera su lugar.

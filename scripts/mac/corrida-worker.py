@@ -5,6 +5,8 @@ registry validate|list: valida el registro cerrado workers.v1.
 record validate: valida un registro corrida.v2 legado o con workers nativos.
 health probe: sonda acotada por worker (sin binario timeout externo).
 select: selección determinista con un solo objeto JSON en stdout.
+state reduce: aplica eventos append-only al registro (Fase 14, Task 5).
+reconcile: propone efectos sin ejecutar nada (Fase 14, Task 5).
 """
 from __future__ import annotations
 
@@ -20,6 +22,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from corrida_worker.registry import RegistryError, Worker, load_registry, resolve_binary
 from corrida_worker.selector import select_worker
+from corrida_worker.state import (
+    EventError,
+    StateError,
+    load_record,
+    reduce_events,
+    state_from_record,
+    write_atomic,
+)
+from corrida_worker.reconcile import decision_digest, reconcile
 
 NATIVE_KEYS = (
     "workers_registry",
@@ -200,6 +211,62 @@ def probe_worker(worker: Worker, env: Mapping[str, str], timeout: float) -> tupl
     return ("broken", f"exit-{completed.returncode}")
 
 
+def cmd_state_reduce(args: argparse.Namespace) -> int:
+    try:
+        record = load_record(Path(args.record))
+    except StateError as exc:
+        print(exc.diagnostic)
+        return 1
+    try:
+        raws = json.loads(Path(args.events).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        print("ERROR invalid event")
+        return 1
+    if not isinstance(raws, list):
+        print("ERROR invalid event")
+        return 1
+    try:
+        next_record, applied, duplicated = reduce_events(record, raws)
+    except EventError as exc:
+        print(exc.diagnostic)
+        return 1
+    except StateError as exc:
+        print(exc.diagnostic)
+        return 1
+    try:
+        write_atomic(Path(args.record), next_record)
+    except OSError:
+        print("ERROR invalid record")
+        return 1
+    print(f"APPLIED {applied} DUPLICATED {duplicated}")
+    return 0
+
+
+def cmd_reconcile(args: argparse.Namespace) -> int:
+    try:
+        record = load_record(Path(args.record))
+    except StateError as exc:
+        print(exc.diagnostic)
+        return 1
+    try:
+        observations = json.loads(Path(args.observations).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        print("ERROR invalid observations")
+        return 1
+    if not isinstance(observations, dict):
+        print("ERROR invalid observations")
+        return 1
+    _, effects = reconcile(state_from_record(record), observations)
+    print(json.dumps(
+        {
+            "effects": [effect.to_json() for effect in effects],
+            "digest": decision_digest(record, observations),
+        },
+        sort_keys=True,
+    ))
+    return 0
+
+
 def cmd_health_probe(args: argparse.Namespace) -> int:
     try:
         registry = load_registry(Path(args.registry))
@@ -260,6 +327,18 @@ def build_parser() -> argparse.ArgumentParser:
     select.add_argument("--request", required=True)
     select.add_argument("--state", required=True)
     select.set_defaults(func=cmd_select)
+
+    state = sub.add_parser("state")
+    state_sub = state.add_subparsers(dest="action", required=True)
+    reduce = state_sub.add_parser("reduce")
+    reduce.add_argument("--record", required=True)
+    reduce.add_argument("--events", required=True)
+    reduce.set_defaults(func=cmd_state_reduce)
+
+    reconcile_cmd = sub.add_parser("reconcile")
+    reconcile_cmd.add_argument("--record", required=True)
+    reconcile_cmd.add_argument("--observations", required=True)
+    reconcile_cmd.set_defaults(func=cmd_reconcile)
 
     health = sub.add_parser("health")
     health_sub = health.add_subparsers(dest="action", required=True)
