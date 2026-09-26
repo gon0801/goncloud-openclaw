@@ -73,11 +73,18 @@ else: print('broken')
 }
 
 # Crea la sesion tmux con argv exacta (sin shell de por medio).
+# El PATH va embebido via /usr/bin/env (misma lista que lanzar-sesion.sh:
+# lanzar_sesion_crear): el server tmux arranca con PATH minimo y el shebang
+# de env-node del binario muere sin node a la vista (medido 2026-09-26:
+# server con PATH minimo + zcode real => env node ausente; con el PATH
+# embebido vive). Cubre start y resume: ambos pasan por aqui. env en
+# absoluta porque el server minimo tampoco lo resolveria por PATH.
 adaptador_nueva_sesion() { # $1 sesion $2 worktree $3 bin $4 argvf
   local sesion="$1" wt="$2" bin="$3" argvf="$4"
+  local camino="$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH"
   set --
   while IFS= read -r l; do set -- "$@" "$l"; done <"$argvf"
-  "$TMUX_BIN" new-session -d -s "$sesion" -x 200 -y 50 -c "$wt" "$bin" "$@"
+  "$TMUX_BIN" new-session -d -s "$sesion" -x 200 -y 50 -c "$wt" /usr/bin/env "PATH=$camino" "$bin" "$@"
 }
 
 # Espera la barra de la tabla de modos del registro (token = binario).
