@@ -65,9 +65,10 @@ on:
   pull_request:
     # En borrador nada costoso corre; todo arranca solo al marcar listo para
     # revision, al poner la etiqueta `ci-full` (`labeled`) o con pushes fuera
-    # de borrador. `converted_to_draft` existe para que volver a borrador
-    # cancele la bateria en curso (freno 1) dejando una corrida pausada.
-    types: [opened, synchronize, reopened, ready_for_review, labeled, converted_to_draft]
+    # de borrador. `converted_to_draft` y `unlabeled` (quitar `ci-full` en
+    # borrador) existen para que volver a pausa cancele la bateria en curso
+    # (freno 1) dejando una corrida pausada.
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled, converted_to_draft]
 
 permissions:
   contents: read
@@ -75,11 +76,13 @@ permissions:
 # Si llega un push nuevo sobre el mismo PR, la corrida anterior se cancela
 # sola y solo la ULTIMA corre la bateria completa. El gate es fail-closed ante
 # cancelaciones, asi que una corrida vieja cancelada nunca deja un verde falso.
-# En main NO se cancela: cada SHA mergeado conserva su veredicto (los cierres
-# reutilizan evidencia por SHA); dos merges seguidos solo esperan en fila.
+# En push (main) el grupo es el SHA, no la rama: cada SHA mergeado conserva su
+# veredicto (los cierres reutilizan evidencia por SHA). Agrupar por rama no
+# alcanza aun sin cancel-in-progress: GitHub retiene UNA sola corrida
+# pendiente por grupo y cancela la anterior pendiente al llegar una tercera.
 concurrency:
-  group: quality-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: quality-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   clasificador:
