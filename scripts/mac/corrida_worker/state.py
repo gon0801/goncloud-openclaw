@@ -52,6 +52,11 @@ EVENT_KINDS = frozenset(
         "evidence.ci",
         "evidence.review",
         "evidence.coderabbit",
+        "evidence.rebase",
+        "evidence.deploy",
+        "evidence.canary",
+        "evidence.rollback",
+        "evidence.push_pr",
     }
 )
 

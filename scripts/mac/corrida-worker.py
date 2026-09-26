@@ -31,6 +31,8 @@ from corrida_worker.state import (
     write_atomic,
 )
 from corrida_worker.reconcile import decision_digest, reconcile
+from corrida_worker.gates import ACTIONS as GATE_ACTIONS
+from corrida_worker.gates import gate_decision
 
 NATIVE_KEYS = (
     "workers_registry",
@@ -267,6 +269,72 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_gate(args: argparse.Namespace) -> int:
+    if args.action not in GATE_ACTIONS:
+        print("ERROR invalid gate input")
+        return 2
+    try:
+        record = load_record(Path(args.record))
+    except StateError as exc:
+        print(exc.diagnostic)
+        return 1
+    lane = next(
+        (
+            item
+            for item in record.get("lanes") or []
+            if isinstance(item, dict) and item.get("id") == args.lane
+        ),
+        None,
+    )
+    if lane is None:
+        print("ERROR invalid gate input")
+        return 2
+    try:
+        evidence = json.loads(Path(args.evidence).read_text(encoding="utf-8"))
+        pr = json.loads(Path(args.pr).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        print("ERROR invalid gate input")
+        return 2
+    if not isinstance(evidence, dict) or not isinstance(pr, dict):
+        print("ERROR invalid gate input")
+        return 2
+    try:
+        raw_receipt = Path(args.receipt).read_text(encoding="utf-8").strip()
+    except OSError:
+        raw_receipt = ""
+    receipt = None
+    if raw_receipt:
+        try:
+            receipt = json.loads(raw_receipt)
+        except json.JSONDecodeError:
+            print("ERROR invalid gate input")
+            return 2
+        if not isinstance(receipt, dict):
+            print("ERROR invalid gate input")
+            return 2
+    try:
+        receipt_status = int(args.receipt_status)
+    except (TypeError, ValueError):
+        print("ERROR invalid gate input")
+        return 2
+    # receipt_status es informativo (el wrapper lo registra en el evento);
+    # la decision usa el contenido del recibo y el motivo del kit.
+    decision = gate_decision(
+        {
+            "lane": lane,
+            "evidence": evidence,
+            "receipt": receipt,
+            "receipt_status": receipt_status,
+            "receipt_error": args.receipt_error or "",
+            "pr": pr,
+        },
+        args.action,
+        args.sha,
+    )
+    print(json.dumps(decision.to_json(), sort_keys=True))
+    return 0
+
+
 def cmd_health_probe(args: argparse.Namespace) -> int:
     try:
         registry = load_registry(Path(args.registry))
@@ -339,6 +407,18 @@ def build_parser() -> argparse.ArgumentParser:
     reconcile_cmd.add_argument("--record", required=True)
     reconcile_cmd.add_argument("--observations", required=True)
     reconcile_cmd.set_defaults(func=cmd_reconcile)
+
+    gate = sub.add_parser("gate")
+    gate.add_argument("--record", required=True)
+    gate.add_argument("--lane", required=True)
+    gate.add_argument("--action", required=True)
+    gate.add_argument("--sha", required=True)
+    gate.add_argument("--evidence", required=True)
+    gate.add_argument("--receipt", required=True)
+    gate.add_argument("--receipt-status", required=True)
+    gate.add_argument("--receipt-error", default="")
+    gate.add_argument("--pr", required=True)
+    gate.set_defaults(func=cmd_gate)
 
     health = sub.add_parser("health")
     health_sub = health.add_subparsers(dest="action", required=True)

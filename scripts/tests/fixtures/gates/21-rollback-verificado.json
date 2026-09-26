@@ -1,0 +1,101 @@
+{
+ "action": "rollback",
+ "comments": [
+  {
+   "body": "APPROVE lead 1111111111111111111111111111111111111111\n```json\n{\"bloqueantes\": [], \"ci\": {\"evidencia\": \"artifact:ci\", \"workflow\": \"quality\"}, \"clase\": \"codigo\", \"implementer\": {\"evidencia\": \"artifact:impl\", \"id\": \"muse\"}, \"pr\": 7, \"repo\": \"o/r\", \"residuales\": [], \"reviewer\": {\"evidencia\": \"artifact:rev\", \"id\": \"codex\", \"resultado\": \"APPROVE\"}, \"schema\": \"saikit-entrega.v1\", \"sha\": \"1111111111111111111111111111111111111111\", \"verifier\": {\"evidencia\": \"artifact:ver\", \"id\": \"cursor\", \"resultado\": \"PASS\"}}\n```",
+   "user": {
+    "login": "lead"
+   }
+  }
+ ],
+ "evidence": {
+  "authors": [
+   "muse"
+  ],
+  "blockers": [],
+  "canary": {
+   "command": "curl /health",
+   "result": "failed",
+   "sha": "2222222222222222222222222222222222222222"
+  },
+  "ci": {
+   "conclusion": "success",
+   "run_url": "https://x/run/1",
+   "sha": "1111111111111111111111111111111111111111",
+   "workflow": "quality"
+  },
+  "coderabbit": {
+   "sha": "1111111111111111111111111111111111111111",
+   "status": "clean"
+  },
+  "head": "2222222222222222222222222222222222222222",
+  "pr": 7,
+  "repo": "o/r",
+  "residuals": [],
+  "review": {
+   "reviewer": "codex",
+   "sha": "1111111111111111111111111111111111111111",
+   "verdict": "approve"
+  },
+  "rollback": {
+   "sha": "0000000000000000000000000000000000000000",
+   "verified": true
+  },
+  "source_url": "https://github.com/o/r/pull/7"
+ },
+ "expect": {
+  "code": "rollback-ok",
+  "verdict": "allow"
+ },
+ "pr": {
+  "head": "1111111111111111111111111111111111111111",
+  "merge_commit": "2222222222222222222222222222222222222222",
+  "merged": true,
+  "number": 7
+ },
+ "pr_gh": {
+  "headRefOid": "1111111111111111111111111111111111111111",
+  "mergeCommit": {
+   "oid": "2222222222222222222222222222222222222222"
+  },
+  "mergedAt": "2026-09-26T00:00:00Z",
+  "number": 7
+ },
+ "record": {
+  "estado": "abierta",
+  "id": "run-t",
+  "lanes": [
+   {
+    "base_remote_sha": "0000000000000000000000000000000000000000",
+    "branch": "corrida/run-t/l1",
+    "delivery": {
+     "deploy": {
+      "sha": "2222222222222222222222222222222222222222"
+     },
+     "merge": {
+      "merge_commit": "2222222222222222222222222222222222222222",
+      "reviewed_head": "1111111111111111111111111111111111111111"
+     }
+    },
+    "estado": "activo",
+    "events": [],
+    "evidence": {},
+    "handoff": {
+     "attempts": [],
+     "exhausted": false,
+     "resumes": 0
+    },
+    "id": "l1",
+    "mode": "write",
+    "owner": "l1",
+    "role": "write",
+    "session": "ses-g",
+    "token": "9-t",
+    "worker": "codex",
+    "worktree": "@WT@"
+   }
+  ],
+  "schema": "corrida.v2"
+ },
+ "sha": "2222222222222222222222222222222222222222"
+}
