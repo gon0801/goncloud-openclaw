@@ -883,21 +883,6 @@ except Exception:
 " 2>/dev/null
 }
 
-worker_patrones() { # $1 id $2 quota|auth; stdout: un patron por linea
-  case "$2" in quota|auth) ;; *) return 1;; esac
-  WREG="$(corrida_workers_registry)" WID="$1" WK="$2" python3 -c "
-import json,os,sys
-try:
-  r=json.load(open(os.environ['WREG']))
-  w=[x for x in r['workers'] if x['id']==os.environ['WID']][0]
-  k='quota_patterns' if os.environ['WK']=='quota' else 'auth_patterns'
-  sys.stdout.write('\n'.join(w[k]))
-  if w[k]: sys.stdout.write('\n')
-except Exception:
-  sys.exit(1)
-" 2>/dev/null
-}
-
 # Espejo bash de registry.resolve_binary: el override
 # CORRIDA_WORKER_BIN_<ID> manda; si esta puesto pero no ejecuta, no hay
 # caida a PATH (el operador quiso ese binario y no otro).
