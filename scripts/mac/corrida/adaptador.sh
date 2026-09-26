@@ -221,9 +221,9 @@ w=[x for x in r['workers'] if x['id']==os.environ['WID']][0]
 def hay(ps): return any(p and p.lower() in t for p in ps)
 if hay(w.get('quota_patterns',[])): print('quota')
 elif hay(w.get('auth_patterns',[])): print('auth-vencida')
-elif 'ADAPTADOR-MARCA: fallo' in t: print('failed')
-elif 'ADAPTADOR-MARCA: completo' in t: print('complete')
-elif 'ADAPTADOR-MARCA: esperando' in t: print('waiting')
+elif 'adaptador-marca: fallo' in t: print('failed')
+elif 'adaptador-marca: completo' in t: print('complete')
+elif 'adaptador-marca: esperando' in t: print('waiting')
 else: print('running')
 " 2>/dev/null)" || estado=""
   rm -f "$pant"
