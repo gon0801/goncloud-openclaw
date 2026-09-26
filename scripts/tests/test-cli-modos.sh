@@ -155,12 +155,33 @@ mensaje_valido "$FX/mensaje-comando-en-linea-2.txt" 2>/dev/null && fail "Comando
 mensaje_valido "$FX/mensaje-comando-largo.txt" 2>/dev/null && fail "un Comando de mas de 200 pasa"
 
 # Cobertura: cada binario del registro de workers nativos tiene fila en
-# cli-modos.tsv (Fase 14: glm/kimi-claude salieron; zcode/kimi medidas
-# entraron). AGENT_TMUX_TOOLS conserva lanzadores legacy fuera del ruteo.
+# cli-modos.tsv (Fase 14: kimi-claude salio; zcode/kimi medidas
+# entraron). glm es alias vivo de zcode (runbooks base-openclaw, base-summonaikit, loop-autopilot, autopilot-fase17). AGENT_TMUX_TOOLS conserva kimi-claude fuera del ruteo.
 bins="$(python3 -c "import json;print('\n'.join(w['binary'] for w in json.load(open('scripts/mac/workers.v1.json'))['workers']))")"
 [ -n "$bins" ] || fail "no se pudo leer el registro de workers"
 for c in $bins; do
   grep -qE "^${c}	" "$TSV" || fail "$TSV: sin fila para $c"
 done
+
+# Liga runbook <-> tsv (ronda 6: la guarda solo miraba workers.v1.json y la
+# eliminacion de glm paso en verde con runbooks vivos prescribiendolo).
+# Tokens que los runbooks vivos prescriben para carriles: cada uno exige fila.
+# El alias glm espeja zcode (mismo binario, flag y barra).
+python3 - "$TSV" <<PY || fail "liga runbook-tsv fallo"
+import sys
+filas = {}
+for l in open(sys.argv[1], encoding="utf-8").read().splitlines():
+    if not l or l.startswith("#"):
+        continue
+    c = l.split("	")
+    filas[c[0]] = c[1:4]
+for t in ("glm", "cursor-agent", "muse", "grok"):
+    if t not in filas:
+        print("sin fila para el token de runbook " + t)
+        sys.exit(1)
+if filas.get("glm") != filas.get("zcode"):
+    print("glm no espeja zcode")
+    sys.exit(1)
+PY
 
 echo "TODO VERDE: test-cli-modos"

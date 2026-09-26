@@ -1,8 +1,10 @@
-# cli-modos.tsv — una fila por CLI del ruteo nativo (binarios de workers.v1.json). Los lanzadores legacy de AGENT_TMUX_TOOLS (glm, kimi-claude) quedan fuera: lanzar-sesion con esos tokens falla con "sin fila de modos".
+# cli-modos.tsv — una fila por CLI del ruteo nativo (binarios de workers.v1.json). El lanzador legacy kimi-claude queda fuera: lanzar-sesion con ese token falla con "sin fila de modos".
 # Columnas: cli | binario | flag sin preguntas | texto de barra que lo comprueba | cambio a media corrida | tecla que acepta | tecla que niega.
 # unknown = no medido al escribir esto; ninguna fila posterior se apoya en un unknown sin decirlo.
+# glm es alias de zcode (mismo binario y flags): los runbooks vivos lo prescriben (base-openclaw, base-summonaikit, loop-autopilot, autopilot-fase17); compat hacia atras sin tocar runbooks.
 claude	claude	unknown	unknown	unknown	unknown	unknown
 zcode	zcode	--mode yolo	yolo	/mode yolo	unknown	unknown
+glm	zcode	--mode yolo	yolo	/mode yolo	unknown	unknown
 deepseek	deepseek	unknown	unknown	unknown	unknown	unknown
 kimi	kimi	--auto	auto	unknown	unknown	unknown
 muse	muse	--yolo	YOLO	unknown	unknown	unknown
