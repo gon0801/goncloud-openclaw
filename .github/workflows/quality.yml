@@ -43,42 +43,23 @@
 # docs|ledger|deploy-log|context) corren SIN argumentos y SIN dependencias
 # extra -- solo stdlib / bash. Un checker que importe paquetes del repo
 # deja este job rojo: es el contrato, no un smoke de la bateria.
-#
-# Ahorro de CI (2026-09, pedido del dueno): el gasto estaba en corridas
-# redundantes (cada push corria la bateria entera y la anterior seguia viva).
-# Tres frenos, sin tocar la politica de seleccion (Plans.md, aprobada) ni los
-# contratos que la custodian:
-#   1. `concurrency` + cancel-in-progress: solo la ULTIMA corrida por PR
-#      llega a correr la bateria; las anteriores se cancelan solas.
-#   2. Pausa OPT-IN: un PR en borrador CON la etiqueta `ci-pausa` no corre
-#      nada que cueste; solo el gate (por contrato corre siempre) deja
-#      constancia de la pausa. Por defecto los borradores SI corren la
-#      bateria: el loop del autopilot hace sus rondas de revision sobre
-#      borradores y cuenta con ese veredicto (docs/runbooks/loop-autopilot.md
-#      paso 4). Un PR listo nunca se pausa. La etiqueta se lee en el proximo
-#      push o al marcar listo: poner o quitar etiquetas no dispara corridas.
-#   3. Carriles fast/completo por archivos: ya existian y quedan igual.
 name: Quality
 
 on:
   push:
     branches: [main, master]
   pull_request:
-    # `ready_for_review` despierta la bateria de un borrador pausado. Sin
-    # `labeled`/`unlabeled`: con cancel-in-progress, CUALQUIER etiqueta
-    # (p. ej. autopilot:atorado) cancelaria y relanzaria la bateria entera.
-    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
 
-# Si llega un push nuevo sobre el mismo PR, la corrida anterior se cancela
-# sola y solo la ULTIMA corre la bateria completa. El gate es fail-closed ante
-# cancelaciones, asi que una corrida vieja cancelada nunca deja un verde falso.
-# En push (main) el grupo es el SHA, no la rama: cada SHA mergeado conserva su
-# veredicto (los cierres reutilizan evidencia por SHA). Agrupar por rama no
-# alcanza aun sin cancel-in-progress: GitHub retiene UNA sola corrida
-# pendiente por grupo y cancela la anterior pendiente al llegar una tercera.
+# Ahorro de CI (2026-09): si llega un push nuevo al mismo PR, la corrida
+# anterior se cancela sola y solo la ULTIMA corre la bateria. El gate es
+# fail-closed ante cancelaciones: una corrida vieja cancelada nunca deja un
+# verde falso. En push el grupo es el SHA, no la rama: cada SHA mergeado
+# conserva su veredicto (los cierres reutilizan evidencia por SHA), y agrupar
+# por rama no alcanza aun sin cancel-in-progress, porque GitHub retiene UNA
+# sola corrida pendiente por grupo y cancela la anterior al llegar otra.
 concurrency:
   group: quality-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
@@ -89,11 +70,6 @@ jobs:
     # Sin timeout un clasificador colgado quema el default de 6 h: clasificar
     # por archivos tarda segundos; 10 min es techo generoso.
     timeout-minutes: 10
-    # Pausa opt-in (freno 2): en PR draft CON etiqueta `ci-pausa` este job se
-    # omite y no consume runner (ni siquiera el clone completo que la
-    # clasificacion necesita). Push a main, PR listo o borrador sin etiqueta:
-    # corre.
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false || !contains(github.event.pull_request.labels.*.name, 'ci-pausa')
     # Los shas llegan por env y no interpolados en los run: el clasificador y
     # el doc-check validan lo que reciben y un evento sin base/head debe morir
     # aca (exit 2, job rojo), no filtrarse como condicion vacia mas abajo.
@@ -257,11 +233,8 @@ jobs:
     timeout-minutes: 30
     needs: [clasificador]
     # `!= 'fast'` y no `== 'completo'`: si el output llegara vacio o con basura,
-    # corre la bateria. La omision por carril se autoriza SOLO con un fast exacto.
-    # Pausa opt-in (freno 2): en un PR draft CON etiqueta `ci-pausa` la
-    # bateria no corre; el gate deja constancia de la pausa. Push a main, PR
-    # listo o borrador sin etiqueta: corre.
-    if: needs.clasificador.outputs.carril != 'fast' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false || !contains(github.event.pull_request.labels.*.name, 'ci-pausa'))
+    # corre la bateria. La omision se autoriza SOLO con un fast exacto.
+    if: needs.clasificador.outputs.carril != 'fast'
     strategy:
       fail-fast: false
       matrix:
@@ -325,21 +298,14 @@ jobs:
 
   # El contrato de cobertura (B1) corre FUERA de la matriz que valida: si
   # corriera dentro de un shard, un defecto del contrato quedaria escondido por
-  # la corrida que el propio shard hace de si mismo. Sin omision por CARRIL:
-  # corre en AMBOS carriles, porque en fast la matriz se omite y seria
-  # justamente ahi donde un contrato roto pasaria callado. La UNICA omision
-  # admitida es la pausa opt-in (freno 2, borrador CON etiqueta `ci-pausa`):
-  # un borrador no se mergea, y el contrato vuelve a correr al marcar listo
-  # para revision. El test (w) solo acepta esa condicion exacta. Ejecuta
+  # la corrida que el propio shard hace de si mismo. Sin condicion de omision
+  # (sin `if:`): corre en AMBOS carriles, porque en fast la matriz se omite y
+  # seria justamente ahi donde un contrato roto pasaria callado. Ejecuta
   # scripts/tests/test-ci-coverage-contract.sh, que ejercita el MISMO validador
   # (scripts/valida-union-shards.sh) que el gate usa abajo para auditar la
   # union real de los artifacts publicados por la matriz.
   ci-contract:
     runs-on: ubuntu-latest
-    # Pausa opt-in (freno 2): misma condicion que el clasificador. No es
-    # omision por carril (prohibida por el contrato): el borrador pausado no
-    # se mergea y el contrato vuelve a correr al marcar listo.
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false || !contains(github.event.pull_request.labels.*.name, 'ci-pausa')
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -418,12 +384,6 @@ jobs:
         env:
           R_CLASIFICADOR: ${{ needs.clasificador.result }}
           CARRIL: ${{ needs.clasificador.outputs.carril }}
-          # Borrador o no (vacio en push a main): condicion de la pausa.
-          DRAFT: ${{ github.event.pull_request.draft }}
-          # Etiqueta que pide la pausa opt-in (falsa si no esta).
-          PAUSA: ${{ contains(github.event.pull_request.labels.*.name, 'ci-pausa') }}
-          # Tipo de evento: la pausa total solo aplica a pull_request.
-          EVENT_NAME: ${{ github.event_name }}
           # Resultado AGREGADO de la matriz de shards: las tres patas comparten
           # la misma condicion de corrida (el carril del clasificador), asi que
           # el agregado es exacto — success solo con las tres verdes, skipped
@@ -434,16 +394,6 @@ jobs:
           # la via del skipped-autorizado-por-fast porque no depende del carril.
           R_CI_CONTRACT: ${{ needs.ci-contract.result }}
         run: |
-          # (0) Pausa opt-in (freno 2): PR draft CON etiqueta `ci-pausa`:
-          # nada costoso corrio y no hay nada que auditar. El gate —que por
-          # contrato corre siempre— sale verde, pero deja escrito en el
-          # resumen que NO es veredicto: ese SHA no tiene bateria.
-          if [ "$EVENT_NAME" = "pull_request" ] && [ "$DRAFT" = "true" ] && [ "$PAUSA" = "true" ]; then
-            msg="gate: PAUSADO por etiqueta ci-pausa en borrador; NO es veredicto: la bateria no corrio para este SHA"
-            echo "$msg"
-            echo "$msg" >>"$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
           rc=0
           printf 'clasificador=%s carril=%s\n' "$R_CLASIFICADOR" "${CARRIL:-}"
           # (a) Clasificacion valida: el job tiene que haber terminado success
@@ -458,7 +408,7 @@ jobs:
           esac
           # (b) Jobs de calidad: success pasa; skipped pasa SOLO con
           # clasificacion fast valida (omision autorizada); todo lo demas
-          # (failure, cancelled) rebota. La pausa opt-in sale antes, por (0).
+          # (failure, cancelled) rebota.
           for par in "shards=$R_SHARDS"; do
             printf '%s\n' "$par"
             case "$par" in
@@ -475,9 +425,9 @@ jobs:
                 rc=1 ;;
             esac
           done
-          # (c) El contrato de cobertura NO se omite por carril: corre en
-          # ambos carriles y cualquier resultado que no sea success (incluido
-          # skipped) rebota. La pausa opt-in no llega aca: sale por (0).
+          # (c) El contrato de cobertura NO se omite nunca: corre en ambos
+          # carriles y cualquier resultado que no sea success (incluido
+          # skipped) rebota.
           case "$R_CI_CONTRACT" in
             success) ;;
             *)
