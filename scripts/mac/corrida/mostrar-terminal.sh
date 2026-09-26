@@ -16,12 +16,16 @@ corrida_mostrar_terminal() {
   local sesion; sesion="$(json_campo "$reg" "carriles.$carril.session")"
   case "$sesion" in ''|*[!A-Za-z0-9_-]*)
     echo "mostrar-terminal: el carril $carril no trae sesion valida" >&2; return 1;; esac
-  local attach="/opt/homebrew/bin/tmux attach -t =$sesion"
+  # El binario es el resuelto por lib.sh (TMUX_BIN), no uno fijo: instalado y
+  # repo comparten codigo pero no la ruta. La sesion validada sigue viajando
+  # como unico argv, jamas interpolada en el programa.
+  local tmx="${TMUX_BIN:-/opt/homebrew/bin/tmux}"
+  local attach="$tmx attach -t =$sesion"
   local osa="${OSASCRIPT_BIN:-/usr/bin/osascript}"
   local programa='on run argv
 tell application "Terminal"
 activate
-do script "/opt/homebrew/bin/tmux attach -t =" & (item 1 of argv)
+do script "'"$tmx"' attach -t =" & (item 1 of argv)
 end tell
 end run'
   local estado="visible"

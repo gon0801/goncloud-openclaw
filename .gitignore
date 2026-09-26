@@ -46,6 +46,7 @@ archive/
 backups/
 staging/
 worktrees/
+.worktrees/
 summa-gate/state/
 summa-gate/node_modules/
 tablero-runbook/node_modules/

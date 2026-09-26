@@ -8,9 +8,16 @@ cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
 
 CORR=scripts/mac/corrida.sh
+# El attach deriva del tmux resuelto (misma regla que lib.sh): la prueba no
+# fija una ruta a fuego.
+TMX="$(command -v tmux 2>/dev/null || true)"
+[ -z "$TMX" ] && [ -x /opt/homebrew/bin/tmux ] && TMX=/opt/homebrew/bin/tmux
+[ -n "$TMX" ] || fail "sin tmux no hay expectativa de attach"
+export TMX
 T=$(mktemp -d) || exit 1
 trap 'rm -rf "$T"' EXIT
 export CORRIDA_STATE="$T/corridas"
+export TMX_FAKE="$T/bin/tmux-falso-9"
 
 mkdir -p "$T/bin" "$T/corridas/run-1"
 # Dobles de osascript: ok anota su argv; negado simula la negativa de macOS.
@@ -44,10 +51,10 @@ got="$(OSASCRIPT_BIN="$T/bin/osascript-ok" bash "$CORR" mostrar-terminal run-1 l
   || fail "mostrar-terminal ok fallo"
 [ "$got" = "visible" ] || fail "mostrar-terminal ok dio $got"
 python3 - "$T/corridas/run-1/registro.json" <<'PY' || fail "visibilidad visible mal guardada"
-import json,sys
+import json,os,sys
 v=json.load(open(sys.argv[1]))['carriles']['lane-1']['visibility']
 assert v['state']=='visible', v
-assert v['attach_command']=='/opt/homebrew/bin/tmux attach -t =ses-codex-run1', v
+assert v['attach_command']==os.environ['TMX']+' attach -t =ses-codex-run1', v
 PY
 # La sesion validada viaja como unico argv: -e, programa fijo, sesion. El
 # programa no trae la sesion interpolada (ni briefs ni rutas del registro).
@@ -63,12 +70,25 @@ got="$(OSASCRIPT_BIN="$T/bin/osascript-no" bash "$CORR" mostrar-terminal run-1 l
   || fail "la negacion debio salir 0 (degraded, no fallo)"
 [ "$got" = "degraded" ] || fail "la negacion dio $got"
 python3 - "$T/corridas/run-1/registro.json" <<'PY' || fail "degraded mal guardado o worker tocado"
-import json,sys
+import json,os,sys
 c=json.load(open(sys.argv[1]))['carriles']['lane-1']
 assert c['visibility']['state']=='degraded', c
-assert c['visibility']['attach_command']=='/opt/homebrew/bin/tmux attach -t =ses-codex-run1', c
+assert c['visibility']['attach_command']==os.environ['TMX']+' attach -t =ses-codex-run1', c
 assert c['estado']=='activo', c
 PY
+
+# TMUX_BIN explicito: el attach (guardado y programa) usa ese binario,
+# no el resuelto (repro del reviewer: ruta fija en AppleScript y registro).
+escribe_registro
+got="$(TMUX_BIN="$T/bin/tmux-falso-9" OSASCRIPT_BIN="$T/bin/osascript-ok" bash "$CORR" mostrar-terminal run-1 lane-1)" \
+  || fail "mostrar-terminal con TMUX_BIN fallo"
+[ "$got" = "visible" ] || fail "mostrar-terminal con TMUX_BIN dio $got"
+python3 - "$T/corridas/run-1/registro.json" <<'PY' || fail "attach con TMUX_BIN mal guardado"
+import json,os,sys
+v=json.load(open(sys.argv[1]))['carriles']['lane-1']['visibility']
+assert v['attach_command']==os.environ['TMX_FAKE']+' attach -t =ses-codex-run1', v
+PY
+grep -qF "$T/bin/tmux-falso-9 attach -t =" "$T/argv-ok.txt" || fail "el programa no usa el TMUX_BIN explicito"
 
 # Sesion invalida: se rechaza antes de invocar osascript.
 python3 - "$T/corridas/run-1/registro.json" <<'PY' || fail "no se escribio sesion mala"

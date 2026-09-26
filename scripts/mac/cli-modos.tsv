@@ -1,4 +1,4 @@
-# cli-modos.tsv — una fila por CLI de AGENT_TMUX_TOOLS (Fase 9, 9.1).
+# cli-modos.tsv — una fila por CLI del ruteo nativo (binarios de workers.v1.json). Los lanzadores legacy de AGENT_TMUX_TOOLS (glm, kimi-claude) quedan fuera: lanzar-sesion con esos tokens falla con "sin fila de modos".
 # Columnas: cli | binario | flag sin preguntas | texto de barra que lo comprueba | cambio a media corrida | tecla que acepta | tecla que niega.
 # unknown = no medido al escribir esto; ninguna fila posterior se apoya en un unknown sin decirlo.
 claude	claude	unknown	unknown	unknown	unknown	unknown
