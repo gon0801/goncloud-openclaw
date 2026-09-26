@@ -50,8 +50,17 @@ corrida_lanzar_sesion() {
   bin="$(bin_de_tabla "$binario")" || return 1
   [ -d "$dir" ] || { echo "sin directorio: $dir" >&2; return 1; }
   "$TMUX_BIN" has-session -t "=$nombre" 2>/dev/null && { echo "la sesion ya existe: $nombre" >&2; return 1; }
+  # Fail-fast del carril (M1 ai-review): reserva y worktree se verifican
+  # ANTES de crear la sesion; la CLI no spawnea en un directorio no
+  # autorizado. Al exito el lock queda retenido: se suelta aqui; la
+  # validacion autoritativa vive en lanzar_sesion_marcar.
+  if [ -n "$carril" ]; then
+    lanzar_sesion_validar_carril "$reg" "$carril" "$dir" "$id" || return 1
+    lock_soltar "$reg"
+  fi
   marcas_lock_tomar \
     || { echo "lanzar-sesion: lock global de marcas no cede" >&2; return 1; }
+
   lanzar_sesion_crear "$nombre" "$dir" "$bin" "$flag" \
     || { marcas_lock_soltar; return 1; }
   lanzar_sesion_marcar "$id" "$nombre" "$reg" "$carril" "$worker" "$barra" \
@@ -106,7 +115,52 @@ lanzar_sesion_crear() { # $1 nombre $2 dir $3 bin $4 flag
     || { echo "la sesion murio al arrancar" >&2; return 1; }
 }
 
+# Validacion del carril para lanzar-sesion (M1 ai-review): reserva completa
+# (los 5 campos), estado reservado y dir == worktree reservado (canonicos).
+# Sin escritura y sin matar sesiones. Contrato de lock: al EXITO devuelve
+# con el lock del registro RETENIDO (el llamador escribe y suelta); al
+# fallo lo suelta y devuelve 1 con el diagnostico ya impreso.
+lanzar_sesion_validar_carril() { # $1 reg $2 carril $3 dir $4 id
+  local reg="$1" carril="$2" dir="$3" id="$4"
+  lock_tomar "$reg" \
+    || { echo "lanzar-sesion: lock del registro de $id no cede" >&2; return 1; }
+  # El carril lo prepara preparar-carril (reserva completa); lanzar jamas lo
+  # crea: un carril inexistente o sin los 5 campos del validador es error duro
+  # sin escritura parcial. Solo un reservado acepta sesion
+  # (un activo ya tiene la suya; un failed ya conto su historia).
+  CORR_C="$carril" CORR_REG="$reg" python3 -c "
+import json,os,sys
+d=json.load(open(os.environ['CORR_REG']))
+c=(d.get('carriles') or {}).get(os.environ['CORR_C'])
+if not isinstance(c,dict): sys.exit(1)
+for k in ('branch','worktree','base_remote_sha','owner','mode'):
+  if not c.get(k): sys.exit(1)
+if c.get('estado')!='reservado': sys.exit(2)
+" 2>/dev/null; prc=$?
+  if [ "$prc" -eq 2 ]; then
+    lock_soltar "$reg"
+    echo "lanzar-sesion: el carril $carril no esta reservado (estado distinto)" >&2
+    return 1
+  fi
+  [ "$prc" -eq 0 ] \
+    || { lock_soltar "$reg"
+         echo "lanzar-sesion: el carril $carril no esta preparado (falta o sin reserva completa)" >&2; return 1; }
+  # La sesion nace DENTRO del worktree reservado: el dir canonico debe ser
+  # el worktree del carril. El repo principal o el worktree de otro carril
+  # es error duro: el registro seguiria afirmando un aislamiento falso.
+  local dir_canon wt_res wt_canon
+  dir_canon="$(CDPATH= cd -P -- "$dir" 2>/dev/null && pwd)" || dir_canon=""
+  wt_res="$(json_campo "$reg" "carriles.$carril.worktree")"
+  wt_canon="$(CDPATH= cd -P -- "$wt_res" 2>/dev/null && pwd)" || wt_canon=""
+  if [ -z "$wt_canon" ] || [ "$dir_canon" != "$wt_canon" ]; then
+    lock_soltar "$reg"
+    echo "lanzar-sesion: $dir no es el worktree reservado del carril $carril" >&2
+    return 1
+  fi
+}
+
 # Fase marcar-registrar: dueno, marca ANTES del primer send-keys (el orden
+
 # lo vigila la prueba con el log del shim), barra, y en un carril los datos
 # del worker antes de entregar nada.
 lanzar_sesion_marcar() { # $1 id $2 nombre $3 reg $4 carril $5 worker $6 barra
@@ -132,41 +186,11 @@ lanzar_sesion_marcar() { # $1 id $2 nombre $3 reg $4 carril $5 worker $6 barra
     local harness provider
     harness="$(worker_atributo "$worker" harness)"
     provider="$(worker_atributo "$worker" provider)"
-    lock_tomar "$reg" \
-      || { echo "lanzar-sesion: lock del registro de $id no cede" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
-    # El carril lo prepara preparar-carril (reserva completa); lanzar jamas lo
-    # crea: un carril inexistente o sin los 5 campos del validador es error duro
-    # y la sesion muere sin escritura parcial. Solo un reservado acepta sesion
-    # (un activo ya tiene la suya; un failed ya conto su historia).
-    CORR_C="$carril" CORR_REG="$reg" python3 -c "
-import json,os,sys
-d=json.load(open(os.environ['CORR_REG']))
-c=(d.get('carriles') or {}).get(os.environ['CORR_C'])
-if not isinstance(c,dict): sys.exit(1)
-for k in ('branch','worktree','base_remote_sha','owner','mode'):
-  if not c.get(k): sys.exit(1)
-if c.get('estado')!='reservado': sys.exit(2)
-" 2>/dev/null; prc=$?
-    if [ "$prc" -eq 2 ]; then
-      lock_soltar "$reg"
-      echo "lanzar-sesion: el carril $carril no esta reservado (estado distinto)" >&2
-      "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1
-    fi
-    [ "$prc" -eq 0 ] \
-      || { lock_soltar "$reg"
-           echo "lanzar-sesion: el carril $carril no esta preparado (falta o sin reserva completa)" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
-    # La sesion nace DENTRO del worktree reservado: el dir canonico debe ser
-    # el worktree del carril. El repo principal o el worktree de otro carril
-    # es error duro: el registro seguiria afirmando un aislamiento falso.
-    local dir_canon wt_res wt_canon
-    dir_canon="$(CDPATH= cd -P -- "$dir" 2>/dev/null && pwd)" || dir_canon=""
-    wt_res="$(json_campo "$reg" "carriles.$carril.worktree")"
-    wt_canon="$(CDPATH= cd -P -- "$wt_res" 2>/dev/null && pwd)" || wt_canon=""
-    if [ -z "$wt_canon" ] || [ "$dir_canon" != "$wt_canon" ]; then
-      lock_soltar "$reg"
-      echo "lanzar-sesion: $dir no es el worktree reservado del carril $carril" >&2
-      "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1
-    fi
+    # Validacion autoritativa bajo el lock (lo retiene al exito): cierra el
+    # TOCTOU entre el fail-fast y este registro. Al fallo, sesion muerta.
+    lanzar_sesion_validar_carril "$reg" "$carril" "$dir" "$id" \
+      || { "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
+
     CORR_C="$carril" CORR_W="$worker" CORR_H="$harness" CORR_P="$provider" CORR_S="$nombre" \
       registro_escribir "$reg" "
 c=d['carriles'][os.environ['CORR_C']]

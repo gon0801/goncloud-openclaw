@@ -66,7 +66,11 @@ corrida_preparar_carril() {
   activos="$(registro_contar_harnesses_activos "$reg")"
   case "$activos" in ''|*[!0-9]*)
     lock_soltar "$reg"; echo "preparar-carril: no se pudo contar carriles activos" >&2; return 1;; esac
-  [ "$activos" -lt 4 ] || { lock_soltar "$reg"; echo "capacidad agotada" >&2; return 1; }
+  local cupo
+  cupo="$(registro_cupo_maximo)"
+  case "$cupo" in ''|*[!0-9]*) cupo=4;; esac
+  [ "$activos" -lt "$cupo" ] || { lock_soltar "$reg"; echo "capacidad agotada" >&2; return 1; }
+
   registro_worktree_libre "$reg" "$canon" \
     || { lock_soltar "$reg"; echo "preparar-carril: worktree ya reservado: $canon" >&2; return 1; }
   local rrc=0

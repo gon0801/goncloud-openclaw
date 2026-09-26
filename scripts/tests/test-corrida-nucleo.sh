@@ -1076,6 +1076,14 @@ python3 - "$T/corridas/t-carril/registro.json" <<'PY' || fail "el carril rechaza
 import json,sys
 assert 'lane-9xq' not in json.load(open(sys.argv[1])).get('carriles',{}), 'escritura parcial'
 PY
+# Fail-fast (M1 ai-review): el carril sin preparar se rechaza ANTES de crear
+# la sesion: la CLI no spawnea en un directorio no autorizado. Sin el
+# fail-fast, new-session queda en la bitacora del shim aunque luego se mate.
+: >"$TMUX_LOG"
+out="$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9q --encargo "$T/encargo.txt" --carril lane-9xq --worker claude 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "fail-fast: carril sin preparar aceptado"
+grep -q "new-session -d -s ses-carril-9q" "$TMUX_LOG" && fail "fail-fast: el carril sin preparar spawneo sesion"
+
 # Un carril ya activo no acepta otra sesion (repro del reviewer: segundo
 # lanzamiento sobre el mismo carril).
 out="$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/wt-9a" --nombre ses-carril-9a2 --encargo "$T/encargo.txt" --carril lane-9a --worker claude 2>&1)"; rc=$?

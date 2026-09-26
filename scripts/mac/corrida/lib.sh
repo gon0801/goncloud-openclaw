@@ -912,6 +912,23 @@ print(sum(1 for c in cs.values() if isinstance(c,dict) and c.get('estado') in ('
 " 2>/dev/null
 }
 
+# Cupo operativo desde el registro versionado (M4 ai-review): una sola
+# fuente (workers.v1.json:max_external_sessions). Fallback 4 si el campo
+# falta o no es entero no negativo (registros viejos o rotos no cambian
+# el tope operativo en silencio).
+registro_cupo_maximo() { # stdout N
+  WREG="$(corrida_workers_registry)" python3 -c "
+import json,os
+try:
+  v=json.load(open(os.environ['WREG'])).get('max_external_sessions')
+  n=int(v)
+  print(n if n>=0 else 4)
+except Exception:
+  print(4)
+" 2>/dev/null
+}
+
+
 registro_worktree_libre() { # $1 reg $2 canon; 0 = nadie lo posee
   CORR_REG="$1" CORR_WT="$2" python3 -c "
 import json,os,sys
