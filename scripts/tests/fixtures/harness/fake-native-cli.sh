@@ -20,6 +20,7 @@ case " $* " in
       auth) echo "fake-$nombre: login required"; exit 1;;
       broken) exit 3;;
       blocked) echo "fake-$nombre: permission denied"; exit 0;;
+      blocked-cap) echo "fake-$nombre: Permission denied"; exit 0;;
 
       *) echo "fake-$nombre 0.0-test"; exit 0;;
     esac

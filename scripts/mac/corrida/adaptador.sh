@@ -36,8 +36,9 @@ adaptador_rol_de_modo() { # $1 modo persistido; stdout write|review; rc 1 si no
 
 # health(worker) -> available | limited | unauthenticated | broken.
 # Corre la argv health del registro con tope; la salida manda sobre el rc
-# (una CLI que avisa cuota saliendo 0 sigue limitada; un bloqueo avisado
-# saliendo 0 sigue roto: mismo orden que corrida-worker.py).
+# (una CLI que avisa auth/cuota saliendo 0 sigue sin-auth/limitada; un bloqueo
+# avisado saliendo 0 sigue roto: mismo orden y minusculas que corrida-worker.py,
+# auth antes que quota, patrones en minuscula).
 
 adaptador_health() {
   local worker="$1" bin rc=0 sal pant estado
@@ -55,12 +56,12 @@ adaptador_health() {
   printf '%s' "$sal" >"$pant"
   estado="$(WREG="$(corrida_workers_registry)" WID="$worker" WPANT="$pant" WRC="$rc" python3 -c "
 import json,os
-t=open(os.environ['WPANT']).read()
+t=open(os.environ['WPANT']).read().lower()
 r=json.load(open(os.environ['WREG']))
 w=[x for x in r['workers'] if x['id']==os.environ['WID']][0]
-def hay(ps): return any(p and p in t for p in ps)
-if hay(w.get('quota_patterns',[])): print('limited')
-elif hay(w.get('auth_patterns',[])): print('unauthenticated')
+def hay(ps): return any(p and p.lower() in t for p in ps)
+if hay(w.get('auth_patterns',[])): print('unauthenticated')
+elif hay(w.get('quota_patterns',[])): print('limited')
 elif hay(w.get('blocked_patterns',[])): print('broken')
 elif os.environ['WRC']=='0': print('available')
 else: print('broken')
@@ -214,10 +215,10 @@ adaptador_inspect() {
   local estado
   estado="$(WREG="$(corrida_workers_registry)" WID="$worker" WPANT="$pant" python3 -c "
 import json,os
-t=open(os.environ['WPANT']).read()
+t=open(os.environ['WPANT']).read().lower()
 r=json.load(open(os.environ['WREG']))
 w=[x for x in r['workers'] if x['id']==os.environ['WID']][0]
-def hay(ps): return any(p and p in t for p in ps)
+def hay(ps): return any(p and p.lower() in t for p in ps)
 if hay(w.get('quota_patterns',[])): print('quota')
 elif hay(w.get('auth_patterns',[])): print('auth-vencida')
 elif 'ADAPTADOR-MARCA: fallo' in t: print('failed')

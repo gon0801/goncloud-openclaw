@@ -110,6 +110,10 @@ for w in claude codex zcode kimi cursor grok; do
   # que mapea blocked_patterns antes del rc (L3 ai-review).
   [ "$(FAKE_HARNESS_MODE=blocked bash "$CORR" adaptador health run-1 lane-1 "$w" ses-h)" = "broken" ] \
     || fail "$w: health bloqueado no dio broken"
+  # Mayuscula (repro reviewer r4): Permission denied capital sale 0 y sigue
+  # roto; sin .lower() el adaptador diria available y el probe broken.
+  [ "$(FAKE_HARNESS_MODE=blocked-cap bash "$CORR" adaptador health run-1 lane-1 "$w" ses-h)" = "broken" ] \
+    || fail "$w: health bloqueado en mayuscula no dio broken"
 
 
   # start write + review: sesion viva y argv exacta del registro.
