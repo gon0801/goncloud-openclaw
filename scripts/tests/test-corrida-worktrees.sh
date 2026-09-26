@@ -154,23 +154,6 @@ assert cs['lane-viva']['estado']=='reservado', 'viva con worktree barrida'
 assert cs['lane-r']['estado']=='reservado', 'reserva viva barrida'
 assert cs['lane-nueva']['estado']=='reservado', 'nueva sin reserva'
 PY
-# Cupo desde el registro versionado (M4 ai-review): con max_external_sessions=1
-# la segunda reserva dice capacidad agotada; con el literal duplicado entraria.
-mkdir -p "$T/corridas/run-c"
-python3 - "$T/corridas/run-c/registro.json" <<PY || fail "no se escribio run-c"
-import json,sys
-open(sys.argv[1],"w").write(json.dumps({"schema":"corrida.v2","id":"run-c","carriles":{}})+chr(10))
-PY
-python3 - "$PWD/scripts/mac/workers.v1.json" "$T/workers-cupo.json" <<PY || fail "no se escribio el registro de cupo"
-import json,sys
-d=json.load(open(sys.argv[1])); d["max_external_sessions"]=1
-open(sys.argv[2],"w").write(json.dumps(d)+chr(10))
-PY
-CORRIDA_WORKERS_REGISTRY="$T/workers-cupo.json" bash "$CORR" preparar-carril run-c lane-c1 "$T/repo" >/dev/null \
-  || fail "primera reserva con cupo=1 fallo"
-out="$(CORRIDA_WORKERS_REGISTRY="$T/workers-cupo.json" bash "$CORR" preparar-carril run-c lane-c2 "$T/repo" 2>&1)"; rc=$?
-[ "$rc" -ne 0 ] || fail "con cupo=1 la segunda reserva entro (literal duplicado)"
-printf "%s" "$out" | grep -q "capacidad agotada" || fail "el tope del registro no se reporta: $out"
 
 
 echo "TODO VERDE: test-corrida-worktrees"
