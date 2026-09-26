@@ -35,7 +35,7 @@ NUEVO="$(git -C "$T/remoto.git" rev-parse main)"
 mkdir -p "$T/corridas/run-w"
 python3 - "$T/corridas/run-w/registro.json" <<'PY' || fail "no se escribio el registro"
 import json,sys
-d={"schema":"corrida.v2","id":"run-w","carriles":{}}
+d={"schema":"corrida.v2","id":"run-w","lanes":[]}
 open(sys.argv[1],'w').write(json.dumps(d)+"\n")
 PY
 
@@ -72,12 +72,13 @@ TRAIDO="$(git -C "$T/repo" rev-parse origin/main)"
 python3 - "$T/corridas/run-w/registro.json" "$NUEVO" <<'PY' || fail "bases o ramas mal registradas"
 import json,sys
 d=json.load(open(sys.argv[1]))
-cs=d['carriles']
+cs={c['id']:c for c in d['lanes']}
 assert len(cs)==4, sorted(cs.keys())
 for lane,c in cs.items():
   assert c['base_remote_sha']==sys.argv[2], (lane,c)
   assert c['branch']=='corrida/run-w/%s'%lane, (lane,c)
   assert c['owner']==lane and c['mode']=='write', (lane,c)
+  assert c['role']=='write', (lane,c)
   assert c['estado']=='reservado', (lane,c)
 PY
 
@@ -89,7 +90,7 @@ perd="$(grep -l "capacidad agotada" "$T"/gana-*.err | wc -l | tr -d ' ')"
 mkdir -p "$T/corridas/run-r"
 python3 - "$T/corridas/run-r/registro.json" <<'PY' || fail "no se escribio run-r"
 import json,sys
-d={"schema":"corrida.v2","id":"run-r","carriles":{}}
+d={"schema":"corrida.v2","id":"run-r","lanes":[]}
 open(sys.argv[1],'w').write(json.dumps(d)+"\n")
 PY
 wtr="$(bash "$CORR" preparar-carril run-r lane-r "$T/repo" --read-only)" \
@@ -97,8 +98,8 @@ wtr="$(bash "$CORR" preparar-carril run-r lane-r "$T/repo" --read-only)" \
 [ -d "$wtr" ] && [ -f "$wtr/.git" ] || fail "sin worktree read-only: $wtr"
 python3 - "$T/corridas/run-r/registro.json" <<'PY' || fail "lane-r no quedo read-only"
 import json,sys
-c=json.load(open(sys.argv[1]))['carriles']['lane-r']
-assert c['mode']=='read-only', c
+c=next(e for e in json.load(open(sys.argv[1]))['lanes'] if e.get('id')=='lane-r')
+assert c['mode']=='read-only' and c['role']=='review', c
 PY
 
 # Duplicado: un carril reservado no se reserva dos veces (en una corrida
@@ -118,7 +119,7 @@ done <"$T/wts"
 mkdir -p "$T/corridas/run-g"
 python3 - "$T/corridas/run-g/registro.json" <<'PY' || fail "no se escribio run-g"
 import json,sys
-open(sys.argv[1],'w').write(json.dumps({"schema":"corrida.v2","id":"run-g","carriles":{}})+"\n")
+open(sys.argv[1],'w').write(json.dumps({"schema":"corrida.v2","id":"run-g","lanes":[]})+"\n")
 PY
 wtg="$(GIT_DIR=/no-existe-9 GIT_WORK_TREE=/no-existe-9 GIT_NAMESPACE=x-9 bash "$CORR" preparar-carril run-g lane-g "$T/repo" 2>"$T/gana-g.err")" \
   || fail "preparar con GIT heredado fallo: $(cat "$T/gana-g.err")"
@@ -136,11 +137,11 @@ import json,sys
 r=sys.argv[1]
 d=json.load(open(r))
 def fantasma(lane,wt,tok):
-  return {'branch':'carril/'+lane,'worktree':wt,'base_remote_sha':'0'*40,
-    'owner':lane,'mode':'write','estado':'reservado','token':tok}
-d['carriles']['lane-f1']=fantasma('lane-f1','/no-existe-9-f1','9999999999-1')
-d['carriles']['lane-f2']=fantasma('lane-f2','/no-existe-9-f2','9999999999-1')
-d['carriles']['lane-viva']=fantasma('lane-viva',sys.argv[2],'9999999999-2')
+  return {'id':lane,'branch':'carril/'+lane,'worktree':wt,'base_remote_sha':'0'*40,
+    'owner':lane,'mode':'write','role':'write','estado':'reservado','token':tok}
+d['lanes'].append(fantasma('lane-f1','/no-existe-9-f1','9999999999-1'))
+d['lanes'].append(fantasma('lane-f2','/no-existe-9-f2','9999999999-1'))
+d['lanes'].append(fantasma('lane-viva',sys.argv[2],'9999999999-2'))
 json.dump(d,open(r,'w'),indent=1)
 PY
 wtn="$(bash "$CORR" preparar-carril run-r lane-nueva "$T/repo" 2>"$T/gana-n.err")" \
@@ -148,7 +149,7 @@ wtn="$(bash "$CORR" preparar-carril run-r lane-nueva "$T/repo" 2>"$T/gana-n.err"
 [ -d "$wtn" ] || fail "lane-nueva sin worktree tras el barrido"
 python3 - "$T/corridas/run-r/registro.json" <<'PY' || fail "barrido barro de mas o de menos"
 import json,sys
-cs=json.load(open(sys.argv[1]))['carriles']
+cs={c['id']:c for c in json.load(open(sys.argv[1]))['lanes']}
 assert 'lane-f1' not in cs and 'lane-f2' not in cs, 'huerfanas vivas'
 assert cs['lane-viva']['estado']=='reservado', 'viva con worktree barrida'
 assert cs['lane-r']['estado']=='reservado', 'reserva viva barrida'

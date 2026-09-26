@@ -64,6 +64,18 @@ print('' if v is None else (str(v).lower() if isinstance(v,bool) else v))
 " 2>/dev/null
 }
 
+lane_campo() { # $1 registro, $2 carril, $3 campo: escalar del carril en lanes (vacio si no hay)
+  LREG="$1" LANE="$2" LCAMPO="$3" python3 -c "
+import json,os
+d=json.load(open(os.environ['LREG']))
+v=None
+for c in d.get('lanes') or []:
+  if isinstance(c,dict) and c.get('id')==os.environ['LANE']:
+    v=c.get(os.environ['LCAMPO']); break
+print('' if v is None else (str(v).lower() if isinstance(v,bool) else v))
+" 2>/dev/null
+}
+
 runbook_de() { # $1 runbook del registro: la absoluta, tal cual; la relativa, contra
                # REPO_DIR si esta inyectado; si no, la raiz derivada del propio
                # lib.sh. pwd queda solo como ultimo recurso documentado si la
@@ -493,19 +505,27 @@ else:
       if not (isinstance(s,dict) and s.get(c)): malo('sesion sin '+c); break
     if isinstance(s,dict) and s.get('rol') not in (None,'lead','carril'):
       malo('rol fuera del conjunto')
-# Carriles (Fase 14, Task 4): aditivos — un registro sin carriles sigue
-# valido (legado). Si estan, cada uno trae su reserva completa y ningun par
-# comparte worktree.
-car=d.get('carriles')
-if car is not None:
-  if not isinstance(car,dict): malo('carriles no es dict')
+# Carriles (Fase 14, Task 4; ronda 7: lista `lanes` del contrato corrida.v2):
+# un registro sin lanes sigue valido (legado). Si estan, es la lista del
+# contrato — cada carril trae id + reserva completa y ningun par comparte
+# id ni worktree. La llave vieja `carriles` (dict) quedo fuera de contrato:
+# el productor escribe lanes y el validador la rechaza.
+if 'carriles' in d: malo('carriles fuera de contrato, usar lanes')
+lan=d.get('lanes')
+if lan is not None:
+  if not isinstance(lan,list): malo('lanes no es lista')
   else:
-    vistos={}
-    for lane,c in car.items():
+    vistos={}; vistos_id={}
+    for c in lan:
       if not isinstance(c,dict): malo('carril sin forma'); continue
+      lane=c.get('id')
+      if not lane: malo('carril sin id'); continue
+      if lane in vistos_id: malo('carril duplicado')
+      else: vistos_id[lane]=1
       for k in ('branch','worktree','base_remote_sha','owner','mode'):
         if not c.get(k): malo('carril sin '+k); break
       if c.get('mode') not in (None,'write','read-only'): malo('modo de carril fuera del conjunto')
+      if c.get('role') not in (None,'write','review'): malo('rol de carril fuera del conjunto')
       if 'estado' in c and c.get('estado') not in ('reservado','activo','failed'):
         malo('estado de carril fuera del conjunto')
       vis=c.get('visibility')
@@ -907,8 +927,8 @@ registro_contar_harnesses_activos() { # $1 reg; stdout N
   CORR_REG="$1" python3 -c "
 import json,os
 d=json.load(open(os.environ['CORR_REG']))
-cs=d.get('carriles') or {}
-print(sum(1 for c in cs.values() if isinstance(c,dict) and c.get('estado') in ('reservado','activo')))
+cs=d.get('lanes') or []
+print(sum(1 for c in cs if isinstance(c,dict) and c.get('estado') in ('reservado','activo')))
 " 2>/dev/null
 }
 
@@ -916,8 +936,8 @@ registro_worktree_libre() { # $1 reg $2 canon; 0 = nadie lo posee
   CORR_REG="$1" CORR_WT="$2" python3 -c "
 import json,os,sys
 d=json.load(open(os.environ['CORR_REG']))
-cs=d.get('carriles') or {}
-sys.exit(1 if any(isinstance(c,dict) and c.get('worktree')==os.environ['CORR_WT'] for c in cs.values()) else 0)
+cs=d.get('lanes') or []
+sys.exit(1 if any(isinstance(c,dict) and c.get('worktree')==os.environ['CORR_WT'] for c in cs) else 0)
 " 2>/dev/null
 }
 
@@ -930,14 +950,16 @@ registro_reservar_carril() { # $1 reg $2 lane $3 canon $4 rama $5 base $6 modo $
 import json,os,sys
 r=os.environ['CORR_REG']
 d=json.load(open(r))
-cs=d.setdefault('carriles',{})
+cs=d.setdefault('lanes',[])
 lane=os.environ['CORR_LANE']
-if lane in cs: sys.exit(2)
-if any(isinstance(c,dict) and c.get('worktree')==os.environ['CORR_CANON'] for c in cs.values()):
+if any(isinstance(c,dict) and c.get('id')==lane for c in cs): sys.exit(2)
+if any(isinstance(c,dict) and c.get('worktree')==os.environ['CORR_CANON'] for c in cs):
   sys.exit(3)
-cs[lane]={'branch':os.environ['CORR_RAMA'],'worktree':os.environ['CORR_CANON'],
-'base_remote_sha':os.environ['CORR_BASE'],'owner':lane,'mode':os.environ['CORR_MODO'],
-'estado':'reservado','token':os.environ['CORR_TOKEN']}
+modo=os.environ['CORR_MODO']
+cs.append({'id':lane,'branch':os.environ['CORR_RAMA'],'worktree':os.environ['CORR_CANON'],
+'base_remote_sha':os.environ['CORR_BASE'],'owner':lane,'mode':modo,
+'role':('write' if modo=='write' else 'review'),
+'estado':'reservado','token':os.environ['CORR_TOKEN']})
 t=r+'.tmp'
 open(t,'w').write(json.dumps(d,indent=1)+chr(10))
 os.chmod(t,0o600)
@@ -951,11 +973,14 @@ registro_liberar_carril() { # $1 reg $2 lane $3 token; quita la reserva solo
 import json,os,sys
 r=os.environ['CORR_REG']
 d=json.load(open(r))
-cs=d.setdefault('carriles',{})
+cs=d.get('lanes') or []
 lane=os.environ['CORR_LANE']
-if lane in cs and cs[lane].get('token')!=os.environ['CORR_TOKEN']:
-  sys.exit(1)
-cs.pop(lane,None)
+for i,c in enumerate(cs):
+  if isinstance(c,dict) and c.get('id')==lane:
+    if c.get('token')!=os.environ['CORR_TOKEN']:
+      sys.exit(1)
+    del cs[i]
+    break
 t=r+'.tmp'
 open(t,'w').write(json.dumps(d,indent=1)+chr(10))
 os.chmod(t,0o600)
@@ -974,11 +999,11 @@ registro_barrer_reservas_huerfanas() { # $1 reg
 import json,os
 r=os.environ['CORR_REG']
 d=json.load(open(r))
-cs=d.get('carriles') or {}
+cs=d.get('lanes') or []
 libres=[]
-for lane in list(cs):
-  c=cs[lane]
+for c in list(cs):
   if not isinstance(c,dict) or c.get('estado')!='reservado': continue
+  lane=c.get('id')
   pid=str(c.get('token') or '').split('-',1)[0]
   if not pid.isdigit(): continue
   try:
@@ -991,7 +1016,7 @@ for lane in list(cs):
     continue
   wt=c.get('worktree') or ''
   if wt and os.path.exists(wt): continue
-  del cs[lane]; libres.append(lane)
+  cs.remove(c); libres.append(lane)
 if libres:
   t=r+'.tmp'
   open(t,'w').write(json.dumps(d,indent=1)+chr(10))

@@ -64,7 +64,7 @@ E=os.environ
 d={'schema':'corrida.v2','id':E['CORR_ID'],'runbook':E['CORR_RUNBOOK'],'vigia':E['CORR_VIGIA'],
 'simulacro':E['CORR_SIM']=='true','canal':{'cron':E['CORR_CANAL'],'destino':E['CORR_DEST']},
 'cli_modos':E['CORR_MODOS'],'seguimiento_global':True,
-'inicio':'$(date +%Y-%m-%dT%H:%M:%S%z)','timebox_horas':6,'sesiones':[],'preaprobaciones':[],'estado':'abierta','carriles':{}}
+'inicio':'$(date +%Y-%m-%dT%H:%M:%S%z)','timebox_horas':6,'sesiones':[],'preaprobaciones':[],'estado':'abierta','lanes':[]}
 t=E['CORR_REG']+'.tmp'
 open(t,'w').write(json.dumps(d,indent=1)+chr(10))
 os.chmod(t,0o600)

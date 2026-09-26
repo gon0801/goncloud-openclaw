@@ -131,7 +131,9 @@ lanzar_sesion_validar_carril() { # $1 reg $2 carril $3 dir $4 id
   CORR_C="$carril" CORR_REG="$reg" python3 -c "
 import json,os,sys
 d=json.load(open(os.environ['CORR_REG']))
-c=(d.get('carriles') or {}).get(os.environ['CORR_C'])
+c=None
+for e in d.get('lanes') or []:
+  if isinstance(e,dict) and e.get('id')==os.environ['CORR_C']: c=e; break
 if not isinstance(c,dict): sys.exit(1)
 for k in ('branch','worktree','base_remote_sha','owner','mode'):
   if not c.get(k): sys.exit(1)
@@ -150,7 +152,7 @@ if c.get('estado')!='reservado': sys.exit(2)
   # es error duro: el registro seguiria afirmando un aislamiento falso.
   local dir_canon wt_res wt_canon
   dir_canon="$(CDPATH= cd -P -- "$dir" 2>/dev/null && pwd)" || dir_canon=""
-  wt_res="$(json_campo "$reg" "carriles.$carril.worktree")"
+  wt_res="$(lane_campo "$reg" "$carril" worktree)"
   wt_canon="$(CDPATH= cd -P -- "$wt_res" 2>/dev/null && pwd)" || wt_canon=""
   if [ -z "$wt_canon" ] || [ "$dir_canon" != "$wt_canon" ]; then
     lock_soltar "$reg"
@@ -193,7 +195,9 @@ lanzar_sesion_marcar() { # $1 id $2 nombre $3 reg $4 carril $5 worker $6 barra
 
     CORR_C="$carril" CORR_W="$worker" CORR_H="$harness" CORR_P="$provider" CORR_S="$nombre" \
       registro_escribir "$reg" "
-c=d['carriles'][os.environ['CORR_C']]
+c=None
+for e in d.get('lanes') or []:
+  if isinstance(e,dict) and e.get('id')==os.environ['CORR_C']: c=e; break
 c.update({'worker':os.environ['CORR_W'],'harness':os.environ['CORR_H'],
 'provider':os.environ['CORR_P'],
 'reported_model':c.get('reported_model','unknown'),
@@ -238,7 +242,7 @@ lanzar_sesion_fallar() { # $1 reg $2 carril
   local reg="$1" carril="$2"
   lock_tomar "$reg" 2>/dev/null || return 0
   CORR_C="$carril" registro_escribir "$reg" "
-c=d.get('carriles',{}).get(os.environ['CORR_C'])
-if c is not None: c['estado']='failed'" 2>/dev/null || true
+for e in d.get('lanes') or []:
+  if isinstance(e,dict) and e.get('id')==os.environ['CORR_C']: e['estado']='failed'; break" 2>/dev/null || true
   lock_soltar "$reg"
 }

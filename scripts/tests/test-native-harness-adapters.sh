@@ -58,15 +58,57 @@ export CORRIDA_WORKER_BIN_CLAUDE="$T/bin/claude" CORRIDA_WORKER_BIN_CODEX="$T/bi
   CORRIDA_WORKER_BIN_ZCODE="$T/bin/zcode" CORRIDA_WORKER_BIN_KIMI="$T/bin/kimi" \
   CORRIDA_WORKER_BIN_CURSOR="$T/bin/cursor-agent" CORRIDA_WORKER_BIN_GROK="$T/bin/grok"
 
-# Registro minimo de la prueba: carriles escritos a mano con su modo
-# persistido (el adaptador lo lee; preparar-carril lo escribira en Task 4).
+# Registro minimo de la prueba: carriles escritos a mano como reservas
+# completas en lanes (el adaptador los lee; preparar-carril los escribe).
 python3 - "$T/corridas/run-1/registro.json" "$T/modos.tsv" "$T/wt" "$T/wt-r" <<'PY' || fail "no se escribio el registro"
 import json,sys
 d={"schema":"corrida.v2","id":"run-1","cli_modos":sys.argv[2],
-   "carriles":{"lane-1":{"mode":"write","worktree":sys.argv[3]},
-               "lane-r":{"mode":"read-only","worktree":sys.argv[4]}}}
+   "lanes":[{"id":"lane-1","branch":"corrida/run-1/lane-1","worktree":sys.argv[3],
+     "base_remote_sha":"0"*40,"owner":"lane-1","mode":"write","role":"write",
+     "estado":"reservado","token":"9-init"},
+    {"id":"lane-r","branch":"corrida/run-1/lane-r","worktree":sys.argv[4],
+     "base_remote_sha":"0"*40,"owner":"lane-r","mode":"read-only","role":"review",
+     "estado":"reservado","token":"9-init-r"}]}
 open(sys.argv[1],'w').write(json.dumps(d)+"\n")
 PY
+
+# Reserva fresca por escenario: cada start independiente parte de un carril
+# reservado (el flujo real es un start por reserva; registrar ya no pisa la
+# sesion viva). Resume reusa la misma sesion y no necesita reset.
+reserva_lane() { # $1 lane $2 mode $3 worktree
+  python3 - "$T/corridas/run-1/registro.json" "$1" "$2" "$3" <<'PYR' || fail "no se reseteo $1"
+import json,sys
+r,lane,modo,wt=sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4]
+d=json.load(open(r))
+lanes=[e for e in d.get("lanes",[]) if e.get("id")!=lane]
+lanes.append({"id":lane,"branch":"corrida/run-1/"+lane,"worktree":wt,
+ "base_remote_sha":"0"*40,"owner":lane,"mode":modo,
+ "role":("write" if modo=="write" else "review"),
+ "estado":"reservado","token":"9-reset"})
+d["lanes"]=lanes
+json.dump(d,open(r,"w"),indent=1)
+PYR
+}
+lane_apunta() { # $1 lane $2 sesion: el carril vuelve a activo con su sesion
+  # viva (el bloque inspect deja otra sesion anotada; registrar ya no la pisa).
+  python3 - "$T/corridas/run-1/registro.json" "$1" "$2" <<'PYA' || fail "no se apunto $1"
+import json,sys
+r,lane,ses=sys.argv[1],sys.argv[2],sys.argv[3]
+d=json.load(open(r))
+for e in d.get("lanes",[]):
+  if e.get("id")==lane:
+    e["estado"]="activo"; e["session"]=ses
+json.dump(d,open(r,"w"),indent=1)
+PYA
+}
+ad_start() { # <id> <carril> <worker> <sesion> [wt] [brief]: resetea y arranca
+  case "$2" in
+    lane-1) reserva_lane lane-1 write "$T/wt";;
+    lane-r) reserva_lane lane-r read-only "$T/wt-r";;
+    *) fail "ad_start: carril sin reserva conocida: $2";;
+  esac
+  bash "$CORR" adaptador start "$@"
+}
 
 # argv_esperada <worker> <clave> <sesion>: resto de la argv (sin binario)
 # desde el registro versionado, con placeholders sustituidos como el adaptador.
@@ -118,14 +160,14 @@ for w in claude codex zcode kimi cursor grok; do
 
   # start write + review: sesion viva y argv exacta del registro.
   s="ses-$w"
-  got="$(bash "$CORR" adaptador start run-1 lane-1 "$w" "$s" "$T/wt" "$T/brief.txt")" \
+  got="$(ad_start run-1 lane-1 "$w" "$s" "$T/wt" "$T/brief.txt")" \
     || fail "$w: start write fallo"
   [ "$got" = "$s" ] || fail "$w: start devolvio $got"
   "$TM_REAL" -L "$L" has-session -t "=$s" 2>/dev/null || fail "$w: la sesion no vive"
   [ "$(tail -n1 "$T/argv/$b.argv")" = "$(argv_esperada "$w" start:write "$s")" ] \
     || fail "$w: argv write distinta: $(tail -n1 "$T/argv/$b.argv")"
   sr="ses-$w-r"
-  bash "$CORR" adaptador start run-1 lane-r "$w" "$sr" "$T/wt-r" "$T/brief.txt" >/dev/null \
+  ad_start run-1 lane-r "$w" "$sr" "$T/wt-r" "$T/brief.txt" >/dev/null \
     || fail "$w: start review fallo"
   [ "$(tail -n1 "$T/argv/$b.argv")" = "$(argv_esperada "$w" start:review "$sr")" ] \
     || fail "$w: argv review distinta: $(tail -n1 "$T/argv/$b.argv")"
@@ -143,7 +185,7 @@ for w in claude codex zcode kimi cursor grok; do
   for m in running waiting complete quota auth; do
     sm="ses-$w-$m"
     modo_fake "$m"
-    bash "$CORR" adaptador start run-1 lane-1 "$w" "$sm" "$T/wt" "$T/brief.txt" >/dev/null \
+    ad_start run-1 lane-1 "$w" "$sm" "$T/wt" "$T/brief.txt" >/dev/null \
       || fail "$w: start para inspect $m fallo"
     [ "$m" = running ] && sleep 2
     gotm="$(bash "$CORR" adaptador inspect run-1 lane-1 "$w" "$sm")" || fail "$w: inspect $m fallo"
@@ -153,7 +195,7 @@ for w in claude codex zcode kimi cursor grok; do
   done
   # failed: el doble muere tras la barra; el inspect lo ve caido.
   modo_fake failed
-  bash "$CORR" adaptador start run-1 lane-1 "$w" "ses-$w-f" "$T/wt" "$T/brief.txt" >/dev/null \
+  ad_start run-1 lane-1 "$w" "ses-$w-f" "$T/wt" "$T/brief.txt" >/dev/null \
     || fail "$w: start para inspect failed fallo"
   for _i in 1 2 3 4 5; do
     "$TM_REAL" -L "$L" has-session -t "=ses-$w-f" 2>/dev/null || break
@@ -163,7 +205,7 @@ for w in claude codex zcode kimi cursor grok; do
     || fail "$w: inspect failed no dio failed"
   # silencio jamas => complete: sesion idle sin marcadores sigue corriendo.
   modo_fake silence
-  bash "$CORR" adaptador start run-1 lane-1 "$w" "ses-$w-s" "$T/wt" "$T/brief.txt" >/dev/null \
+  ad_start run-1 lane-1 "$w" "ses-$w-s" "$T/wt" "$T/brief.txt" >/dev/null \
     || fail "$w: start silencio fallo"
   sleep 2
   got="$(bash "$CORR" adaptador inspect run-1 lane-1 "$w" "ses-$w-s")"
@@ -172,6 +214,7 @@ for w in claude codex zcode kimi cursor grok; do
   modo_fake ""
 
   # resume write + review: relanza con la argv de reanudacion del registro.
+  lane_apunta lane-1 "$s"
   got="$(bash "$CORR" adaptador resume run-1 lane-1 "$w" "$s" "$T/wt" "SESID-9")" \
     || fail "$w: resume write fallo"
   [ "$got" = "resumed" ] || fail "$w: resume write dio $got"
@@ -193,7 +236,7 @@ done
 
 # --- casos globales (una vez, no por worker) ---
 # deliver bloqueada: la caja nunca se vacia; la sesion sigue viva.
-bash "$CORR" adaptador start run-1 lane-1 claude ses-bloq "$T/wt" "$T/brief.txt" >/dev/null \
+ad_start run-1 lane-1 claude ses-bloq "$T/wt" "$T/brief.txt" >/dev/null \
   || fail "start para deliver bloqueada fallo"
 rm -f "$T/tragado"
 [ "$(SWALLOW=1 SWALLOW_N=2 SWALLOW_SES=ses-bloq bash "$CORR" adaptador deliver run-1 lane-1 claude ses-bloq "$T/brief.txt")" = "blocked" ] \
@@ -203,7 +246,7 @@ rm -f "$T/tragado"
 bash "$CORR" adaptador stop run-1 lane-1 claude ses-bloq >/dev/null
 
 # resume sin binario: unavailable y la sesion viva no se toca.
-bash "$CORR" adaptador start run-1 lane-1 codex ses-nobin "$T/wt" "$T/brief.txt" >/dev/null \
+ad_start run-1 lane-1 codex ses-nobin "$T/wt" "$T/brief.txt" >/dev/null \
   || fail "start para resume unavailable fallo"
 got="$(CORRIDA_WORKER_BIN_CODEX=/no-existe-codex-9 bash "$CORR" adaptador resume run-1 lane-1 codex ses-nobin "$T/wt" SESID-9)"
 [ "$got" = "unavailable" ] || fail "resume sin binario dio $got"
@@ -217,27 +260,27 @@ got="$(CORRIDA_WORKER_BIN_GROK=/no-existe-grok-9 bash "$CORR" adaptador health r
 
 # start sin barra: falla cerrado y no deja sesion huerfana.
 modo_fake nobar
-bash "$CORR" adaptador start run-1 lane-1 kimi ses-nobar "$T/wt" "$T/brief.txt" >/dev/null 2>&1 \
+ad_start run-1 lane-1 kimi ses-nobar "$T/wt" "$T/brief.txt" >/dev/null 2>&1 \
   && fail "start sin barra debio fallar"
 modo_fake ""
 "$TM_REAL" -L "$L" has-session -t "=ses-nobar" 2>/dev/null \
   && fail "start sin barra dejo la sesion viva"
 
 # start sobre una sesion existente: se niega, no la pisa.
-bash "$CORR" adaptador start run-1 lane-1 zcode ses-doble "$T/wt" "$T/brief.txt" >/dev/null \
+ad_start run-1 lane-1 zcode ses-doble "$T/wt" "$T/brief.txt" >/dev/null \
   || fail "primer start para sesion doble fallo"
 bash "$CORR" adaptador start run-1 lane-1 zcode ses-doble "$T/wt" "$T/brief.txt" >/dev/null 2>&1 \
   && fail "start sobre sesion existente debio negarse"
 bash "$CORR" adaptador stop run-1 lane-1 zcode ses-doble >/dev/null
 
 # start fuera del worktree reservado: se niega sin dejar sesion.
-bash "$CORR" adaptador start run-1 lane-1 claude ses-fuera "$T/wt-r" "$T/brief.txt" >/dev/null 2>&1 \
+ad_start run-1 lane-1 claude ses-fuera "$T/wt-r" "$T/brief.txt" >/dev/null 2>&1 \
   && fail "start fuera del worktree reservado aceptado"
 "$TM_REAL" -L "$L" has-session -t "=ses-fuera" 2>/dev/null \
   && fail "start fuera del worktree dejo la sesion viva"
 
 # resume fuera del worktree: unavailable y la sesion viva no se toca.
-bash "$CORR" adaptador start run-1 lane-1 codex ses-recasa "$T/wt" "$T/brief.txt" >/dev/null \
+ad_start run-1 lane-1 codex ses-recasa "$T/wt" "$T/brief.txt" >/dev/null \
   || fail "start para resume en casa fallo"
 got="$(bash "$CORR" adaptador resume run-1 lane-1 codex ses-recasa "$T/wt-r" SESID-9)"
 [ "$got" = "unavailable" ] || fail "resume fuera del worktree dio $got"
@@ -247,7 +290,7 @@ bash "$CORR" adaptador stop run-1 lane-1 codex ses-recasa >/dev/null
 # resume que muere tras matar la sesion: unavailable y el carril en failed.
 # Sin el marcado, el carril quedaba activo con sesion huerfana (CodeRabbit
 # ronda 3: relanzamiento o barra fallidos despues del kill).
-bash "$CORR" adaptador start run-1 lane-1 claude ses-resume-f "$T/wt" "$T/brief.txt" >/dev/null \
+ad_start run-1 lane-1 claude ses-resume-f "$T/wt" "$T/brief.txt" >/dev/null \
   || fail "start para resume failed fallo"
 modo_fake nobar
 got="$(bash "$CORR" adaptador resume run-1 lane-1 claude ses-resume-f "$T/wt" SESID-9)"
@@ -257,7 +300,7 @@ modo_fake ""
   && fail "resume fallido dejo la sesion viva"
 python3 - "$T/corridas/run-1/registro.json" <<PY || fail "resume fallido no marco failed"
 import json,sys
-c=json.load(open(sys.argv[1]))["carriles"]["lane-1"]
+c=next(e for e in json.load(open(sys.argv[1]))["lanes"] if e.get("id")=="lane-1")
 assert c["estado"]=="failed", c
 PY
 bash "$CORR" adaptador stop run-1 lane-1 claude ses-resume-f >/dev/null 2>&1 || true
