@@ -17,7 +17,7 @@ TM_REAL="$(command -v tmux 2>/dev/null || true)"
 T=$(mktemp -d) || exit 1
 L="adapta$$"
 trap '"$TM_REAL" -L "$L" kill-server 2>/dev/null; rm -rf "$T"' EXIT
-mkdir -p "$T/bin" "$T/wt" "$T/corridas/run-1" "$T/argv"
+mkdir -p "$T/bin" "$T/wt" "$T/wt-r" "$T/corridas/run-1" "$T/argv"
 
 FAKE=scripts/tests/fixtures/harness/fake-native-cli.sh
 [ -f "$FAKE" ] || fail "falta $FAKE"
@@ -60,10 +60,11 @@ export CORRIDA_WORKER_BIN_CLAUDE="$T/bin/claude" CORRIDA_WORKER_BIN_CODEX="$T/bi
 
 # Registro minimo de la prueba: carriles escritos a mano con su modo
 # persistido (el adaptador lo lee; preparar-carril lo escribira en Task 4).
-python3 - "$T/corridas/run-1/registro.json" "$T/modos.tsv" <<'PY' || fail "no se escribio el registro"
+python3 - "$T/corridas/run-1/registro.json" "$T/modos.tsv" "$T/wt" "$T/wt-r" <<'PY' || fail "no se escribio el registro"
 import json,sys
 d={"schema":"corrida.v2","id":"run-1","cli_modos":sys.argv[2],
-   "carriles":{"lane-1":{"mode":"write"},"lane-r":{"mode":"read-only"}}}
+   "carriles":{"lane-1":{"mode":"write","worktree":sys.argv[3]},
+               "lane-r":{"mode":"read-only","worktree":sys.argv[4]}}}
 open(sys.argv[1],'w').write(json.dumps(d)+"\n")
 PY
 
@@ -115,7 +116,7 @@ for w in claude codex zcode kimi cursor grok; do
   [ "$(tail -n1 "$T/argv/$b.argv")" = "$(argv_esperada "$w" start:write "$s")" ] \
     || fail "$w: argv write distinta: $(tail -n1 "$T/argv/$b.argv")"
   sr="ses-$w-r"
-  bash "$CORR" adaptador start run-1 lane-r "$w" "$sr" "$T/wt" "$T/brief.txt" >/dev/null \
+  bash "$CORR" adaptador start run-1 lane-r "$w" "$sr" "$T/wt-r" "$T/brief.txt" >/dev/null \
     || fail "$w: start review fallo"
   [ "$(tail -n1 "$T/argv/$b.argv")" = "$(argv_esperada "$w" start:review "$sr")" ] \
     || fail "$w: argv review distinta: $(tail -n1 "$T/argv/$b.argv")"
@@ -167,7 +168,7 @@ for w in claude codex zcode kimi cursor grok; do
   [ "$got" = "resumed" ] || fail "$w: resume write dio $got"
   [ "$(tail -n1 "$T/argv/$b.argv")" = "$(argv_esperada "$w" resume:write SESID-9)" ] \
     || fail "$w: argv resume write distinta: $(tail -n1 "$T/argv/$b.argv")"
-  got="$(bash "$CORR" adaptador resume run-1 lane-r "$w" "$sr" "$T/wt" "SESID-9")" \
+  got="$(bash "$CORR" adaptador resume run-1 lane-r "$w" "$sr" "$T/wt-r" "SESID-9")" \
     || fail "$w: resume review fallo"
   [ "$got" = "resumed" ] || fail "$w: resume review dio $got"
   [ "$(tail -n1 "$T/argv/$b.argv")" = "$(argv_esperada "$w" resume:review SESID-9)" ] \
@@ -220,11 +221,53 @@ bash "$CORR" adaptador start run-1 lane-1 zcode ses-doble "$T/wt" "$T/brief.txt"
   && fail "start sobre sesion existente debio negarse"
 bash "$CORR" adaptador stop run-1 lane-1 zcode ses-doble >/dev/null
 
+# start fuera del worktree reservado: se niega sin dejar sesion.
+bash "$CORR" adaptador start run-1 lane-1 claude ses-fuera "$T/wt-r" "$T/brief.txt" >/dev/null 2>&1 \
+  && fail "start fuera del worktree reservado aceptado"
+"$TM_REAL" -L "$L" has-session -t "=ses-fuera" 2>/dev/null \
+  && fail "start fuera del worktree dejo la sesion viva"
+
+# resume fuera del worktree: unavailable y la sesion viva no se toca.
+bash "$CORR" adaptador start run-1 lane-1 codex ses-recasa "$T/wt" "$T/brief.txt" >/dev/null \
+  || fail "start para resume en casa fallo"
+got="$(bash "$CORR" adaptador resume run-1 lane-1 codex ses-recasa "$T/wt-r" SESID-9)"
+[ "$got" = "unavailable" ] || fail "resume fuera del worktree dio $got"
+"$TM_REAL" -L "$L" has-session -t "=ses-recasa" 2>/dev/null \
+  || fail "resume unavailable toco la sesion viva"
+bash "$CORR" adaptador stop run-1 lane-1 codex ses-recasa >/dev/null
+
 # accion invalida y worker desconocido: error cerrado, nunca un estado.
 out="$(bash "$CORR" adaptador volar run-1 lane-1 claude ses-x 2>&1)"; rc=$?
 [ "$rc" -eq 2 ] || fail "accion invalida no dio rc 2"
 printf '%s' "$out" | grep -q "accion invalida" || fail "accion invalida sin diagnostico"
 bash "$CORR" adaptador health run-1 lane-1 nosuch ses-x >/dev/null 2>&1 \
   && fail "worker desconocido no fallo"
+
+# Tabla real (no la sintetica): los workers sin barra medida se rechazan
+# rapido y con diagnostico, sin quemar el sondeo; los medidos pasan la
+# guarda y el sondeo los ve (repro del reviewer: 4 de 6 en unknown).
+. scripts/mac/corrida/lib.sh
+. scripts/mac/corrida/adaptador.sh
+python3 - "$T/registro-real.json" "$PWD/scripts/mac/cli-modos.tsv" <<'PY2' || fail "no se escribio el registro real"
+import json,sys
+json.dump({"schema":"corrida.v2","id":"run-r","cli_modos":sys.argv[2]},open(sys.argv[1],'w'))
+PY2
+inicio="$SECONDS"
+for b in claude codex cursor-agent grok; do
+  out="$(adaptador_esperar_barra "$T/registro-real.json" "ses-irreal-9" "$b" 2>&1)" \
+    && fail "$b: barra unknown aceptada contra la tabla real"
+  printf '%s' "$out" | grep -q "sin barra medida" || fail "$b: rechazo sin diagnostico: $out"
+done
+[ "$((SECONDS-inicio))" -lt 10 ] || fail "el rechazo sin barra no fue rapido"
+"$TM_REAL" -L "$L" new-session -d -s ses-barra-yolo -x 80 -y 24 "printf 'yolo\n'; sleep 60" 2>/dev/null \
+  || fail "no se creo la sesion de barra"
+"$TM_REAL" -L "$L" new-session -d -s ses-barra-auto -x 80 -y 24 "printf 'auto\n'; sleep 60" 2>/dev/null \
+  || fail "no se creo la sesion de barra auto"
+adaptador_esperar_barra "$T/registro-real.json" ses-barra-yolo zcode >/dev/null 2>&1 \
+  || fail "zcode (barra medida yolo) no paso contra la tabla real"
+adaptador_esperar_barra "$T/registro-real.json" ses-barra-auto kimi >/dev/null 2>&1 \
+  || fail "kimi (barra medida auto) no paso contra la tabla real"
+"$TM_REAL" -L "$L" kill-session -t "=ses-barra-yolo" 2>/dev/null
+"$TM_REAL" -L "$L" kill-session -t "=ses-barra-auto" 2>/dev/null
 
 echo "TODO VERDE: test-native-harness-adapters"

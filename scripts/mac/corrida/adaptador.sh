@@ -76,11 +76,15 @@ adaptador_nueva_sesion() { # $1 sesion $2 worktree $3 bin $4 argvf
 }
 
 # Espera la barra de la tabla de modos del registro (token = binario).
+# unknown/--/vacia es "sin medir" (misma convencion que preflight y responder):
+# buscarla literal quema los 10 s y mata la sesion; se rechaza de inmediato.
 adaptador_esperar_barra() { # $1 reg $2 sesion $3 binario; rc 1 + sesion muerta
   local reg="$1" sesion="$2" binario="$3" tabla fila barra pantalla espera=0
   tabla="$(json_campo "$reg" cli_modos)"
   fila="$(tsv_fila "$tabla" "$binario")"
   barra="$(printf '%s' "$fila" | cut -d'|' -f3)"
+  case "$barra" in unknown|--)
+    echo "adaptador: sin barra medida para $binario" >&2; return 1;; esac
   [ -n "$barra" ] || { echo "adaptador: sin barra para $binario" >&2; return 1; }
   pantalla=""
   while [ "$espera" -lt 10 ]; do
@@ -112,6 +116,17 @@ if b: c['brief']=b
   lock_soltar "$reg"
 }
 
+# El worktree recibido debe ser el reservado del carril (canonicos): un
+# llamador que pase el repo principal o el worktree de otro carril obtendria
+# una sesion "del carril X" escribiendo en otro sitio. rc 1 si difieren.
+adaptador_worktree_de_carril() { # $1 reg $2 carril $3 worktree
+  local reg="$1" carril="$2" wt="$3" res dado canon
+  res="$(json_campo "$reg" "carriles.$carril.worktree")"
+  dado="$(CDPATH= cd -P -- "$wt" 2>/dev/null && pwd)" || dado=""
+  canon="$(CDPATH= cd -P -- "$res" 2>/dev/null && pwd)" || canon=""
+  [ -n "$canon" ] && [ -n "$dado" ] && [ "$dado" = "$canon" ]
+}
+
 # start(run, lane, worktree, brief) -> session. La sesion existente se niega
 # (no se pisa); resume es el camino idempotente.
 adaptador_start() {
@@ -129,6 +144,8 @@ adaptador_start() {
   local bin; bin="$(resolver_bin_worker "$worker")" \
     || { echo "adaptador: sin ejecutable para $worker" >&2; return 1; }
   [ -d "$wt" ] || { echo "adaptador: sin worktree: $wt" >&2; return 1; }
+  adaptador_worktree_de_carril "$reg" "$carril" "$wt" \
+    || { echo "adaptador: el worktree no es el reservado del carril $carril" >&2; return 1; }
   [ -n "${TMUX_BIN:-}" ] || { echo "adaptador: tmux no disponible" >&2; return 1; }
   "$TMUX_BIN" has-session -t "=$sesion" 2>/dev/null \
     && { echo "adaptador: la sesion ya existe: $sesion" >&2; return 1; }
@@ -225,6 +242,8 @@ adaptador_resume() {
     || { echo "unavailable"; return 0; }
   local bin; bin="$(resolver_bin_worker "$worker")" || { echo "unavailable"; return 0; }
   [ -d "$wt" ] || { echo "unavailable"; return 0; }
+  adaptador_worktree_de_carril "$reg" "$carril" "$wt" \
+    || { echo "unavailable"; return 0; }
   [ -n "${TMUX_BIN:-}" ] || { echo "adaptador: tmux no disponible" >&2; return 1; }
   local argvf; argvf="$(mktemp)" || return 1
   worker_argv "$worker" "resume:$rol" "$wt" "" "$sid" "$sesion" >"$argvf" \
