@@ -1,0 +1,2 @@
+cuando|etapa|decision|por_que|evidencia|resultado
+2026-09-26T08:45:14Z|verify|14.2 verificado: adaptadores 6 CLIs + reserva con tope 4 + terminal degradada, DoD verde|DoD fila 14.2: contrato verde en los seis workers, carrera 5=>4 ganadoras sin worktree compartido, Terminal negada => degraded con attach exacto; Step5 de Tasks 3-4 verdes, sin regresiones; mutaciones M1 y M2 confirman que los tests discriminan|.saikit/scratch/14.2/notas-verify.md + logs; SHA 9d2b103|ok
