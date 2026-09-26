@@ -162,15 +162,8 @@ jobs:
                 # miraran, una fila que ya estaba mal en la base (p. ej. con \|
                 # escapado) no se podria arreglar nunca -- el PR que la corrige
                 # la borra y rebotaba por la version vieja (PR #165, fila 9.1).
-                while IFS= read -r linea; do
-                  cuerpo=${linea:1}
-                  if printf '%s\n' "$cuerpo" | grep -Eq '^\|[[:space:]]*[0-9]+\.[0-9]+[[:space:]]*\|'; then
-                    if ! printf '%s\n' "$cuerpo" | grep -Eq '^\|[[:space:]]*[0-9]+\.[0-9]+[[:space:]]*\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|[[:space:]]*$'; then
-                      printf 'doc-check: Plans.md fila tocada sin 5 columnas: %s\n' "$cuerpo" >&2
-                      rc=1
-                    fi
-                  fi
-                done < <(git diff --unified=0 "$mb" "$hs" -- Plans.md | grep -E '^\+\|' || true) ;;
+                git diff --unified=0 "$mb" "$hs" -- Plans.md | { grep -E '^\+\|' || true; } | cut -c2- \
+                  | bash scripts/plans-fila-check.sh || rc=1 ;;
             esac
           done < <(git -c core.quotepath=false diff --name-only --diff-filter=d -z "$mb" "$hs")
           echo "doc-check: $n archivo(s) cambiados en el rango; contratos documentales revisados"
