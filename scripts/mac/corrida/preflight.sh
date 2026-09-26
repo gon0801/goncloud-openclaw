@@ -179,6 +179,34 @@ corrida_preflight() {
     unknown "CLI openclaw ausente ($oc_real): mecanismo del navegador sin probar"
   fi
 
+  # (8) Fase 14.1: sondas acotadas de workers nativos. Opt-in explícito:
+  # solo corre cuando CORRIDA_NATIVE_ROUTING pide ruteo (report|execute);
+  # con off o sin definir no hace nada y el veredicto 9.3 queda intacto.
+  # Una sonda por worker habilitado, cada una con su tope interno en
+  # Python (esta Mac no tiene binario timeout). NO APTO solo cuando no
+  # queda ningún worker compatible; un limited solo es fallback registrado.
+  if [ "${CORRIDA_NATIVE_ROUTING:-off}" != "off" ]; then
+    local WREG="${CORRIDA_WORKERS_REGISTRY:-$REPO/scripts/mac/workers.v1.json}"
+    local WPY="${CORRIDA_WORKER_PY:-$REPO/scripts/mac/corrida-worker.py}"
+    local PY3="${PYTHON3_BIN:-python3}"
+    if command -v "$PY3" >/dev/null 2>&1 && [ -r "$WREG" ] && [ -r "$WPY" ]; then
+      local wids wid wst wtotal=0 waptos=0
+      wids="$("$PY3" "$WPY" registry list --registry "$WREG" 2>/dev/null)" || wids=""
+      for wid in $wids; do
+        wtotal=$((wtotal+1))
+        wst="$("$PY3" "$WPY" health probe --registry "$WREG" --worker "$wid" --format status --timeout "${CORRIDA_WORKER_PROBE_TIMEOUT:-10}" 2>/dev/null)" || wst="broken"
+        case "$wst" in available|limited) waptos=$((waptos+1));; esac
+      done
+      if [ "$wtotal" -eq 0 ]; then
+        unknown "registro de workers sin entradas"
+      elif [ "$waptos" -eq 0 ]; then
+        razon "sin trabajador compatible"
+      fi
+    else
+      unknown "sondas nativas sin medir"
+    fi
+  fi
+
   if [ -n "$razones" ]; then
     printf 'NO APTO%s\n' "$razones"
     [ -n "$unknowns" ] && printf 'QUEDA unknown:%s\n' "$unknowns"
