@@ -53,6 +53,17 @@ on:
 permissions:
   contents: read
 
+# Ahorro de CI (2026-09): si llega un push nuevo al mismo PR, la corrida
+# anterior se cancela sola y solo la ULTIMA corre la bateria. El gate es
+# fail-closed ante cancelaciones: una corrida vieja cancelada nunca deja un
+# verde falso. En push el grupo es el SHA, no la rama: cada SHA mergeado
+# conserva su veredicto (los cierres reutilizan evidencia por SHA), y agrupar
+# por rama no alcanza aun sin cancel-in-progress, porque GitHub retiene UNA
+# sola corrida pendiente por grupo y cancela la anterior al llegar otra.
+concurrency:
+  group: quality-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 jobs:
   clasificador:
     runs-on: ubuntu-latest

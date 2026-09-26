@@ -31,7 +31,8 @@
 #   (12) un artifact esperado sin su resumen.txt -> rechazo
 #   (13) una prueba no inventariada en la union -> rechazo
 #   (w)  el workflow llama al MISMO validador que este test ejecuta, desde un job
-#        propio ci-contract SIN condicion de omision, y el gate baja los tres
+#        propio ci-contract SIN condicion de omision, la concurrencia cancela
+#        por PR y separa por SHA en push, y el gate baja los tres
 #        artifacts y audita la union solo cuando la bateria corrio.
 #
 # El arbol de juguete es el MISMO contrato del que usa
@@ -386,6 +387,13 @@ if limpio "$sec_cc" | grep -qE '^[[:space:]]+if:'; then
   fail "(w) ci-contract tiene condicion de omision: el contrato de cobertura no admite carril que lo salte:
 $sec_cc"
 fi
+# Concurrencia: por PR se cancela la corrida vieja (ahorro); en push cada SHA
+# es su propio grupo, porque agrupar por rama deja que GitHub cancele
+# corridas pendientes de la rama por defecto y ese SHA queda sin veredicto.
+grep -qE '^[[:space:]]+group: quality-\$\{\{ github\.event\.pull_request\.number \|\| github\.sha \}\}' "$Y" \
+  || fail "(w) el grupo de concurrencia no separa por SHA en push: un SHA mergeado puede quedar sin veredicto"
+grep -qE '^[[:space:]]+cancel-in-progress: true[[:space:]]*$' "$Y" \
+  || fail "(w) sin cancel-in-progress: true las corridas viejas de un PR siguen gastando"
 limpio "$sec_cc" | grep -q 'node-version' \
   || fail "(w) ci-contract no fija node: el arbol de juguete exige >= 22 y el default del runner puede ser viejo"
 
@@ -424,6 +432,6 @@ $GL"
 printf '%s\n' "$GL" | grep -qF 'R_SHARDS: ${{ needs.shards.result }}' \
   || fail "(w) el gate dejo de leer el resultado agregado de shards:
 $GL"
-echo "ok (w): mismo validador en YAML y test, ci-contract sin omision, gate audita la union"
+echo "ok (w): mismo validador en YAML y test, ci-contract sin omision, concurrencia por PR/SHA, gate audita la union"
 
 echo "TODO VERDE: ci-coverage-contract"
