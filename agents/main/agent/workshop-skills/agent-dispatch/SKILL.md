@@ -7,6 +7,13 @@ description: Dispatch work to agents, collect review results, and complete merge
 
 Route work to this Gateway's agents and collect complete results. Main orchestrates the team; `ingenieria` is a peer worker, not the orchestrator. Verified 2026-09-10: a full lane ran implementer -> verifier -> reviewer on the Mac repo, each role fed the previous role's commit and evidence paths; the same day a chain failed on rate-limited models and was re-dispatched on an alternate one.
 
+## Ruteo nativo vs. legado
+
+Pedidos de ingeniería nativa por harnesses de la Mac usan la skill
+`native-harness-orchestration` (Task 9). Con `CORRIDA_NATIVE_ROUTING=off` o
+con el gate de rollout por etapas sin aprobar, el pedido sigue la cadena
+agent-dispatch de abajo; no copies la máquina de estados del harness aquí.
+
 ## Chain dispatch (brief / "-saikit" lane)
 
 0. Multi-PR rounds need delivery sequencing: an external reviewer re-reading an OLD brief can race the implementer's push (it re-read the unchanged brief file, saw old PR heads, and re-stamped its previous verdict instead of reviewing the fixes — verified 2026-09-13). Write the brief file pointing at the NEW head SHAs, list the per-finding commits, and only then deliver; if a reviewer reports "nothing new", compare the PR heads it cites against the actual pushed heads before dispatching fixes.
@@ -56,7 +63,6 @@ David repeatedly orders a fix-then-review loop against the Claude Code tab in th
    - 2026-09-14 codex variant: the repo's own governance can veto the loop. `JAMÁS una tercera ronda` in the repo's AGENTS.md made Codex refuse a round-3 re-review outright and forbid substitute verdicts; the allowed close is the LEAD's evidence check (fixes + tests + green CI per finding, residuals declared in the PR), not another review. Read the repo's review-count policy before promising "loop until approved"; when the cap binds, propose the lead-closure or have the owner amend the policy — never ask the reviewer to violate its governance.
    - "Type the new prompt and press Enter" can half-deliver: the prompt text visibly sitting in the TUI's input line is NOT submission (watched for minutes, 2026-09-14). A synthetic Enter does not fix it; treat the next reviewer turn as only the watcher's marker — not the input line.
    - Subagent side: spawned subagents may lack `sessions_send` in their tool policy; the `expectsCompletionMessage` final reply is the reliable return path — brief them to report via the final reply, not via a sessions_send back to main.
-
 
 ## Merge, deployment and regression
 

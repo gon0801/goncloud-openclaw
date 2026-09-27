@@ -33,7 +33,8 @@ LINEA_SOURCE="source ~/bin/agent-tmux-shell.zsh"
 # lo resuelve junto al bin instalado (~/bin/workers.v1.json); sin el, el
 # adaptador instalado no resuelve ningun worker. El latido viejo NO esta en
 # esta lista: ni se copia ni se carga.
-BINS="corrida.sh cli-modos.tsv workers.v1.json agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh"
+BINS="corrida.sh cli-modos.tsv workers.v1.json corrida-worker.py agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh"
+CORRIDA_WORKER_PKG="corrida_worker"
 
 di() { printf '%s\n' "$1"; }
 falla() { printf 'instalar-mac: error: %s\n' "$1" >&2; exit 1; }
@@ -111,6 +112,17 @@ modo_verificar() {
     [ -f "$BIN_DIR/corrida/$b" ] || { di "FALTA: bin/corrida/$b"; mal=$((mal+1)); continue; }
     cmp -s "$f" "$BIN_DIR/corrida/$b" || { di "DIFIERE: bin/corrida/$b"; mal=$((mal+1)); continue; }
   done
+  for f in corrida-worker.py; do
+    [ -f "$BIN_DIR/$f" ] || { di "FALTA: bin/$f"; mal=$((mal+1)); continue; }
+    cmp -s "$AQUI/$f" "$BIN_DIR/$f" || { di "DIFIERE: bin/$f"; mal=$((mal+1)); continue; }
+    [ -x "$BIN_DIR/$f" ] || { di "SIN +x: bin/$f"; mal=$((mal+1)); continue; }
+  done
+  [ -d "$BIN_DIR/corrida_worker" ] || { di "FALTA: bin/corrida_worker"; mal=$((mal+1)); }
+  for f in "$AQUI"/corrida_worker/*.py; do
+    local b2; b2="$(basename "$f")"
+    [ -f "$BIN_DIR/corrida_worker/$b2" ] || { di "FALTA: bin/corrida_worker/$b2"; mal=$((mal+1)); continue; }
+    cmp -s "$f" "$BIN_DIR/corrida_worker/$b2" || { di "DIFIERE: bin/corrida_worker/$b2"; mal=$((mal+1)); continue; }
+  done
   [ -f "$BIN_DIR/corrida/preaprobaciones.v1.json" ] || { di "FALTA: bin/corrida/preaprobaciones.v1.json"; mal=$((mal+1)); }
   cmp -s "$AQUI/corrida/preaprobaciones.v1.json" "$BIN_DIR/corrida/preaprobaciones.v1.json" 2>/dev/null \
     || { di "DIFIERE: bin/corrida/preaprobaciones.v1.json"; mal=$((mal+1)); }
@@ -135,6 +147,16 @@ modo_instalar() {
     [ "$f" = "tmux-activity-watch.sh" ] && [ "$COPIO" = "1" ] && reiniciar=1
   done
   for f in "$AQUI"/corrida/*.sh; do copiar_si_difiere "$f" "$BIN_DIR/corrida/$(basename "$f")" || falla "no se pudo instalar corrida/$(basename "$f")"; done
+  # Task 9 Step 4: el plano de control nativo viaja atomico con el dispatcher:
+  # corrida-worker.py (+x, entrypoint), el paquete corrida_worker (sin +x),
+  # y la tabla de preaprobaciones junto al gate de autoridad.
+  copiar_si_difiere "$AQUI/corrida-worker.py" "$BIN_DIR/corrida-worker.py" || falla "no se pudo instalar bin/corrida-worker.py"
+  chmod 755 "$BIN_DIR/corrida-worker.py"
+  mkdir -p "$BIN_DIR/corrida_worker" || falla "no se pudo crear bin/corrida_worker"
+  for f in "$AQUI"/corrida_worker/*.py; do
+    copiar_si_difiere "$f" "$BIN_DIR/corrida_worker/$(basename "$f")" || falla "no se pudo instalar corrida_worker/$(basename "$f")"
+    chmod 644 "$BIN_DIR/corrida_worker/$(basename "$f")"
+  done
   copiar_si_difiere "$AQUI/corrida/preaprobaciones.v1.json" "$BIN_DIR/corrida/preaprobaciones.v1.json" || falla "no se pudo instalar corrida/preaprobaciones.v1.json"
   local pl_tmp; pl_tmp="$(mktemp)" || falla "sin tmp para el plist"
   generar_plist "$pl_tmp" || { rm -f "$pl_tmp"; falla "no se pudo generar el plist"; }
