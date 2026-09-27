@@ -14,6 +14,16 @@ U4; 17.7 valida después el runbook contra las interfaces implementadas. No
 esperar 17.3 para aceptar el supervisor OpenClaw ni declarar Hermes probado
 con evidencia del otro host.
 
+Decisión de David del 2026-09-26 para U4: en 17.0 se revisan licencia y
+dependencias de un commit de LobsterBoard y se prueba el producto original con
+una plantilla existente, antes de desarrollar UI. Registrar configuración,
+capturas en computadora/celular, conexión observada a Claw, cobertura y faltantes.
+17.1 valida esa configuración; 17.5 conserva lo que cumple y sólo conecta o ajusta
+faltantes pequeños con su prueba. Si adoptar LobsterBoard no es viable o exige
+cambios amplios, detener el carril UI y presentar alternativas acotadas; no
+construir automáticamente una app/plataforma propia. Esta actualización documental
+no instala ni activa el producto.
+
 Tú eres el lead de ejecución. David no está al teclado: no le haces preguntas durante la corrida. Heredas `docs/runbooks/base-openclaw.md` v1.1 y `docs/runbooks/loop-autopilot.md`. El qué y las DoD están en `Plans.md`, Fase 17; el contrato de producto está en `docs/superpowers/specs/2026-09-22-centro-tareas-design.md`. Si discrepan, manda el spec para producto y `Plans.md` para tareas; detén el carril afectado y corrige el documento inferior en el siguiente PR. Tablero: `/runbook/tablero/c/fase17-centro-tareas`. Localizador: `bash scripts/runbook.sh 17`. Lanzador, **sólo después de autorización para ejecutar y de Q0 integrado**: `bash scripts/lanzar-fase.sh 17 --sesion wt-f17-lead -- <cli-del-lead> <flag-sin-preguntas-verificado>`; nadie adivina el CLI ni su flag. Antes, se permite únicamente `bash scripts/lanzar-fase.sh 17 --sesion wt-f17-lead --dry-run -- <cli> <flag>`.
 
 ## Quién y autoridad
@@ -114,9 +124,9 @@ Cada rama sale de `origin/main` fresco, nunca de la rama de otro carril. La secu
 
 | Carril y rama | Filas y DoD de `Plans.md` | Puede tocar | No toca |
 |---|---|---|---|
-| A `fase17/contratos` | 17.0: Matriz con evidencia por capacidad/host, límites medibles y decisión UI; desconocido no se toma por ausente; gaps requeridos detienen sólo su carril. 17.1: Fixtures legacy/nuevos verdes; identidad y cierre verificable definidos; resumen y reporte coinciden; maqueta cubre estados degradados. | `docs/spec/centro-tareas*`, diseño/fixtures, tests de contrato en `tablero-runbook/` | scripts de instalación, credenciales, hosts vivos |
+| A `fase17/contratos` | 17.0: Prueba de LobsterBoard original con plantilla existente, capturas computadora/celular, cobertura/faltantes y decisión UI; desconocido no se toma por ausente; gaps requeridos detienen sólo su carril. 17.1: Fixtures legacy/nuevos verdes; identidad y cierre verificable definidos; resumen y reporte coinciden; configuración o maqueta de ajustes cubre estados degradados. | `docs/spec/centro-tareas*`, diseño/fixtures, tests de contrato en `tablero-runbook/` | scripts de instalación, credenciales, hosts vivos |
 | B `fase17/seguimiento` | 17.2: Tarea nativa visible con intento y proceso verificables; PID reutilizado y métricas ausentes no se atribuyen mal; guardas existentes pasan. 17.3: Crear, observar, reportar y verificar con OpenClaw ausente; mismo contrato y capacidades requeridas; cobertura parcial explícita. 17.4: Pruebas de crash sin intentos duplicados; efectos inciertos no se repiten; un reloj para dos tareas; recursos/permiso no se amplían al reiniciar. | `scripts/mac/corrida/**`, módulos de progreso y selector de Fase 14, adaptador Hermes y tests focalizados | `tablero-runbook/` UI, estado vivo, secretos |
-| C `fase17/panel` | 17.5: Recorridos del diseño verdes en móvil/escritorio; teclado, errores y frescura visibles; API/HTML sin secretos sintéticos ni XSS. 17.6: Instalar dos veces converge; upgrade/reversa conserva tareas; identidades distintas; manifiesto común y credenciales separadas. | `tablero-runbook/**`, instalador/manifiesto de Fase 14 y tests focalizados | código del supervisor B, credenciales o runtime vivo |
+| C `fase17/panel` | 17.5: Configuración de LobsterBoard y ajustes pequeños ligados a faltantes; detener UI si requiere desarrollo amplio. Recorridos del diseño verdes en móvil/escritorio; teclado, errores y frescura visibles; API/HTML sin secretos sintéticos ni XSS. 17.6: Instalar dos veces converge; upgrade/reversa conserva tareas; identidades distintas; manifiesto común y credenciales separadas. | `tablero-runbook/**`, instalador/manifiesto de Fase 14 y tests focalizados | código del supervisor B, credenciales o runtime vivo |
 | D `fase17/cierre` | 17.7: Hooks y batería completa en CI del head final; reviewer distinto; cero bloqueantes; launcher dry-run y lectura independiente del runbook. 17.8: Mismo sistema probado con el otro runtime inaccesible; recibos por host, checklist y aceptación del usuario; ninguna paridad declarada sin probar ambos. | runbook operativo de despliegue, `docs/evidence/**`, cierre de `Plans.md` tras evidencia | cambios de producto ajenos, secretos, instalación sin permiso |
 
 El lead escribe en cada `BRIEF.md` el resultado visible para David, archivo permitido, DoD literal, test focalizado, límite de recursos, instrucción de no limpiar y línea final `LISTO <sha>` o `ATORADO <razón>` en `.saikit/scratch/<carril>/contrato.txt`. No commitea `BRIEF*.md`. El implementador y el revisor no comparten carril ni sesión. Se aplica `loop-autopilot.md` §§1–5 para encargos, revisión y PR; §§6–10 para integración y cierre **sólo cuando haya permiso**; §§11–13 para atasco y prueba. La primera revisión agrupa hallazgos; otra ronda lee sólo el diff corregido y exige un bloqueante reproducible. No se ejecuta batería completa en la Mac si CI cubre el head final.
@@ -126,7 +136,7 @@ El lead escribe en cada `BRIEF.md` el resultado visible para David, archivo perm
 | Ítem | Compuerta observable | Si falla |
 |---|---|---|
 | Q0 plan/runbook | Ambos archivos figuran en `origin/main`; autorización de integración separada | No iniciar fase |
-| Q1 A | 17.0 documenta versión/plataforma/API, licencia de LobsterBoard, formatter y dependencias; 17.1 tiene tests de contratos y maqueta | `ATORADO` en capacidad faltante; seguir sólo diseño independiente |
+| Q1 A | 17.0 documenta versión/plataforma/API, licencia y prueba de LobsterBoard original, capturas computadora/celular, cobertura/faltantes, formatter y dependencias; 17.1 tiene tests de contratos y configuración/maqueta de ajustes | `ATORADO` en capacidad faltante; seguir sólo diseño independiente |
 | Q2 B | Q1 A aprobado e integrado en `origin/main`; Fase 14 y entrega sin sello con recibos; tests OpenClaw y Hermes con el otro ausente; crash y reloj único | No iniciar B sin Q1; no declarar paridad; corregir en B |
 | Q3 C | Q2 B aprobado e integrado en `origin/main`; UI y paquete pasan tests móvil/escritorio, XSS, instalación doble y reversa en entornos temporales | No iniciar C sin Q2; corregir C sin instalación viva |
 | Q4 revisión | PR por bloque con commits propios, hooks y CI del SHA final; cero bloqueantes; lectura externa del runbook | Mantener PR abierto y corregir sólo bloqueantes reproducibles |
@@ -142,7 +152,7 @@ Cada PR documenta implementador, pruebas focalizadas, residuales y head. CI corr
 | Q0 no integrado o falta permiso | Conservar PR y estado, imprimir `ATORADO autorización pendiente`; no lanzar |
 | Fase 14, entrega sin sello o Fase 16 sin recibo aplicable | Registrar evidencia faltante; seguir sólo tareas independientes; no inferir cerrado del chat |
 | Hermes carece de API pública de continuación | Marcar capacidad `unknown` o ausente con prueba; no usar RPC privadas ni prometer paridad; detener 17.3/17.4 |
-| Licencia de LobsterBoard no apta o no verificable | Usar `tablero-runbook/` con diseño propio; no copiar código del candidato |
+| Licencia de LobsterBoard no apta/no verificable o integración exige desarrollo amplio | Detener carril UI, documentar impedimento y presentar alternativas acotadas; no copiar código ni iniciar diseño propio automáticamente |
 | CI o revisor no disponibles | Conservar PR/head y registrar `unknown`; consultar cuando haya evento, sin polling continuo ni segunda batería |
 | Estado corrupto o envío fallido | Mostrar `desconocido`, conservar último dato válido y evidencia; nunca reiniciar corte ni repetir efecto externo incierto |
 | Presupuesto, cuota o recursos agotados | Detener nuevos lanzamientos y mantener el registro; reanudar sólo con presupuesto existente y capacidad medida |

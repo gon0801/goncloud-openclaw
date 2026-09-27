@@ -2,7 +2,9 @@
 
 > **Detalle de U4/U5.** La ruta activa y sus dependencias están al inicio de
 > `Plans.md`. Este plan no se inicia mientras U1–U3 sigan sin aceptación; 17.0
-> y 17.1 pueden prepararse sin activar servicios.
+> y 17.1 pueden prepararse sólo como inventario y contratos sin activar servicios.
+> La prueba funcional de LobsterBoard pertenece a la ejecución de U4; esa
+> preparación documental no completa 17.0.
 
 Fecha: 2026-09-22. Estado: plan listo para evaluación; implementación no iniciada.
 Base de investigación: `origin/main` en `31dfaf0`.
@@ -30,7 +32,7 @@ sin asumir que los agentes disponibles en un equipo existen en el otro.
 
 | Bloque | Tareas | Salida |
 |---|---|---|
-| A. Comprobar y fijar contratos | 17.0, 17.1 | Capacidades, dependencias y diseño de UI verificables |
+| A. Probar LobsterBoard y fijar contratos | 17.0, 17.1 | Prueba del original, cobertura/faltantes y contratos verificables |
 | B. Seguimiento portable | 17.2, 17.3, 17.4 | Dos adaptadores independientes y recuperación segura |
 | C. Panel e instalación | 17.5, 17.6 | UI completa y paquete reproducible |
 | D. Demostración | 17.7, 17.8 | Pruebas, revisión y aceptación viva por equipo |
@@ -65,17 +67,30 @@ capacidades y manifiestos de prueba. No leer archivos de credenciales.
   con entrega sin sello y Fase 16 sin modificar sus cierres por inferencia.
 - Registrar dependencias OpenClaw en `scripts/mac/corrida/`, reloj y RPC de progreso;
   asignar su eliminación o adaptación a 17.2–17.4.
-- Resolver licencia y commit de LobsterBoard; seleccionar tablero existente si
-  la adopción no está permitida o no aporta una integración mantenible.
+- Revisar licencia, dependencias y compatibilidad de un commit identificado de
+  LobsterBoard. Tras esa revisión y al ejecutar U4, probar el producto original
+  en un entorno de prueba reversible con una plantilla existente, sin modificar
+  su código. Configurar sólo los componentes necesarios para observar Claw.
+- Comprobar en computadora y celular lectura, navegación, uso táctil y refresco.
+  Registrar versión/commit, configuración reproducible, capturas, datos de Claw
+  disponibles y una matriz de requisitos cubiertos, faltantes y desconocidos.
+  Datos ficticios sólo prueban presentación; no acreditan conexión real a Claw.
+- Conservarlo si cumple. Para cada faltante, probar primero configuración; sólo
+  proponer una conexión o ajuste pequeño con alcance y prueba. Si licencia o
+  compatibilidad impiden adoptarlo, o requiere desarrollo amplio, detener el
+  carril UI y presentar alternativas acotadas. No iniciar automáticamente una
+  app/plataforma propia ni rediseñar el panel.
 - Identificar lint/formatter de los archivos a tocar. Si falta, configurar una
   base mínima focalizada antes del código, sin reformateo masivo.
 - Definir límites numéricos de frescura, muestreo, retención, presupuesto y recursos
   mediante medición; documentar dato no observado como desconocido.
 
-DoD: matriz con evidencia por capacidad y host, decisión UI justificada, comandos
-focalizados reproducibles y ninguna dependencia requerida marcada disponible sin
-prueba. Si falta una API pública indispensable, se detiene ese carril y se presenta
-la limitación; no se simula soporte.
+DoD: matriz con evidencia por capacidad y host, recibo de la prueba de LobsterBoard
+original en computadora/celular o impedimento documentado, cobertura/faltantes,
+decisión UI justificada y comandos focalizados reproducibles. Ninguna dependencia
+requerida se marca disponible sin prueba. Un impedimento no habilita 17.5. Si falta
+una API pública indispensable, se detiene ese carril y se presenta la limitación;
+no se simula soporte.
 
 ### 17.1. Modelo de tareas, proyección y maqueta
 
@@ -86,11 +101,13 @@ se concretan en 17.0, sin crear otro registro de workers.
 Fijar identidad, estados, observaciones, unidades verificadas, criterios de cierre
 por tipo de tarea y mapeos legacy. La proyección no es un nuevo escritor del progreso.
 Resolver la diferencia entre porcentaje de cola y unidades para que el encabezado
-y el aviso al usuario coincidan. Hacer maqueta escritorio/móvil con casos de espera,
-bloqueo, degradación y cierre, usando datos ficticios.
+y el aviso al usuario coincidan. Validar escritorio/móvil sobre la plantilla
+probada en 17.0 con casos de espera, bloqueo, degradación y cierre. Usar datos
+ficticios identificados para estados aún no disponibles; hacer maqueta sólo
+de los ajustes pequeños necesarios, sin diseñar de nuevo lo que ya cumple.
 
 DoD: tests de fixtures v1/v2 existentes y nuevos; cálculo de porcentaje único;
-revisión de maqueta contra el recorrido del diseño. No cambiar literal de schema
+revisión de configuración o maqueta de ajustes contra el recorrido del diseño. No cambiar literal de schema
 legacy ni rutas existentes inadvertidamente.
 
 ### 17.2. Adaptación OpenClaw y observaciones locales
@@ -133,10 +150,15 @@ siguen vigentes tras reiniciar y no se mata proceso ajeno. Dos tareas usan un re
 
 ### 17.5. Panel de tareas
 
-Extender `tablero-runbook/` o integrar el candidato permitido en 17.0. Tests de
-componentes y recorridos junto a UI. Consumir la proyección, nunca salidas crudas.
-Implementar lista, filtros por estado/responsable, detalle, historial, evidencias,
-recursos y cabecera de instalación. No añadir botones de ejecución.
+Configurar LobsterBoard adoptado en 17.0, conservando la plantilla y componentes
+que ya cumplen. Conectar la proyección de tareas, nunca salidas crudas. Antes de
+cada ajuste, identificar el faltante medido, archivos afectados y prueba de
+aceptación. Reutilizar lista, filtros, detalle, historial, evidencias, recursos y
+cabecera disponibles; añadir sólo conexiones o ajustes pequeños donde falten.
+Tests de componentes y recorridos junto a la integración. No añadir botones de
+ejecución. Si cumplir los recorridos exige una app/plataforma propia o cambios
+amplios, detener el carril UI y presentar alternativas acotadas, sin reducir
+los criterios de aceptación ni iniciar una reescritura automáticamente.
 
 DoD: los diez recorridos del diseño se representan sin estados ambiguos; pruebas
 UI con viewport móvil y escritorio, teclado, texto de estados y datos antiguos.
@@ -185,8 +207,10 @@ Required: 17.0–17.7; 17.8 requerida para declarar operación completa y condic
 a permiso vivo. Cobertura de seguimiento, independencia, seguridad y evidencia
 son criterios de pase, no puntos compensables por apariencia.
 
-Recommended: adoptar LobsterBoard si licencia e integración pasan 17.0; demo
-visual antes de cablear la UI; revisión cruzada del código de recuperación.
+Required para la UI, por decisión de David del 2026-09-26: probar LobsterBoard
+original con plantilla existente en 17.0 antes de desarrollar interfaz; conservarlo
+si cumple y limitar cambios a ajustes pequeños demostrados por la prueba.
+Recommended: demo visual de esa configuración; revisión cruzada de recuperación.
 
 Optional/deferred: botones de control, costos históricos, comparación de rendimiento
 entre motores, acceso remoto y un visor agregado de varios hosts.
@@ -201,6 +225,13 @@ en navegador, repetir efectos inciertos, cierre por autodeclaración y merge aut
 producto/QA y seguridad. Se incorporaron la dependencia real de Fase 14, transición
 de schema v1, reloj v2, porcentaje único, Hermes sin gateway, identidad de procesos,
 licencia condicionada y recuperación sin duplicar efectos.
+
+Enmienda del 2026-09-26: decisión del usuario de probar LobsterBoard original
+antes de desarrollar UI. `team_validation_mode: subagent`; dos lecturas
+independientes de producto/QA y arquitectura/seguridad verifican esta enmienda.
+Spec delta: el contrato de producto, diseño, ledger y runbook fijan original
+primero, prueba computadora/celular y ajustes pequeños según faltantes. Se elimina
+el fallback automático a diseño propio; no cambia la autoridad de instalación.
 
 Memoria reutilizada: contratos y decisiones versionados del repo. No se asume
 ausencia de memoria externa por no haberla consultado. Spec delta en
