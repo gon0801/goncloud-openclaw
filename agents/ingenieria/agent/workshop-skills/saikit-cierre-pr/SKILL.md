@@ -11,7 +11,6 @@ El merge automatico de la Fase 14 sigue UNA de dos rutas cerradas:
 <!-- candado: test-saikit-cierre-pr-merge-owner.sh -->
 
 Lee el registro de corrida (`corrida.v2`) y resuelve su `authorization_ref`
-<!-- candado: test-saikit-cierre-pr-merge-owner.sh -->
 contra la tabla versionada `scripts/mac/corrida/preaprobaciones.v1.json`:
 debe existir, estar `Aprobado` y cubrir repo, rama y operacion. Con la
 preaprobacion en alcance, el recibo del kit `saikit-entrega.v1` vigente para
@@ -27,9 +26,13 @@ GraphQL directo alterno. Registra la intencion antes de delegar y relee
 `state`, `mergedAt` y `mergeCommit` tras cada respuesta, incluido
 `UNPROCESSABLE`.
 
+## Flujo de cierre
+
+1. Lee el SHA actual del PR, CI y CodeRabbit; corrige los bloqueantes de revision.
+2. Con la ruta autorizada y el recibo del kit vigente, ejecuta `gh pr merge <PR> --squash --match-head-commit <SHA>` desde el worktree. En el nodo Mac usa `PATH=/opt/homebrew/bin:$PATH`.
+3. Comprueba `MERGED` y el SHA integrado. Si la tarea incluye despliegue, sigue el procedimiento del destino y verifica el resultado.
+
 ## Ruta 1 (legada): orden fechada del dueno
 
 Si existe una orden fechada del dueno para el cambio, el merge sigue el flujo
 normal de GitHub documentado abajo; la orden es la autorizacion.
-
-## Flujo de cierre
