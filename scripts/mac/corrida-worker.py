@@ -240,8 +240,18 @@ def probe_worker(worker: Worker, env: Mapping[str, str], timeout: float) -> tupl
     except subprocess.TimeoutExpired:
         # El binario puede dejar hijos vivos (launchers, wrappers): matar el
         # grupo entero, no solo el PID directo (14.20 punto 6).
-        os.killpg(process.pid, signal.SIGKILL)
-        process.communicate()
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass  # el grupo ya se fue solo
+        # Un hijo separado con setsid escapa al killpg y retiene stdout/stderr
+        # heredados: las pipes nunca se cierran y un communicate() sin tope
+        # colgaria la sonda (14.20 r2, B1). Cerrarlas y esperar solo al
+        # proceso directo, que si murio con el grupo.
+        for tuberia in (process.stdout, process.stderr):
+            if tuberia is not None:
+                tuberia.close()
+        process.wait()
         return ("broken", "timeout")
     # La salida del worker es dato, no contrato: decode tolerante para que un
     # byte raro en un banner no reviente la sonda (14.20 punto 8).

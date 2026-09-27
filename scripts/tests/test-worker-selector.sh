@@ -190,6 +190,36 @@ while [ "$i" -lt 20 ]; do
 done
 [ "$muerto" -eq 1 ] || fail "el hijo sobrevivio al tope de la sonda (se mato solo el PID)"
 
+# 14.20 r2 (B1): un hijo separado con setsid escapa al killpg y retiene
+# stdout/stderr heredados; la sonda no puede esperar esas pipes sin tope: tiene
+# que regresar dentro del tope de la prueba (el mismo repro del bloqueante).
+cat >"$T/bin/fake-daemon" <<CLI
+#!/bin/sh
+python3 -c 'import os, time
+p = "$T/daemon.pid"
+open(p, "w").write(str(os.getpid()))
+os.setsid()
+time.sleep(40)' >/dev/null &
+exec sleep 30
+CLI
+chmod +x "$T/bin/fake-daemon"
+rm -f "$T/daemon.pid" "$T/daemon.out"
+CORRIDA_WORKER_BIN_CLAUDE="$T/bin/fake-daemon" $CLI health probe --registry "$FIXREG" --worker claude --format status --timeout 1 \
+  >"$T/daemon.out" 2>&1 &
+probe_pid=$!
+regreso=0
+i=0
+while [ "$i" -lt 50 ]; do
+  kill -0 "$probe_pid" 2>/dev/null || { regreso=1; break; }
+  sleep 0.1
+  i=$((i+1))
+done
+[ "$regreso" -eq 1 ] || fail "la sonda no regreso en 5 s con un hijo setsid que hereda la salida (B1)"
+out=$(cat "$T/daemon.out")
+[ "$out" = "broken" ] || fail "la sonda del daemon dio $out"
+kill -9 "$(cat "$T/daemon.pid" 2>/dev/null)" 2>/dev/null
+rm -f "$T/daemon.pid"
+
 # 14.20 (8): la salida del worker es dato: bytes que no son UTF-8 se decodifican
 # con errors="replace" y no revientan la sonda.
 cat >"$T/bin/fake-utf8" <<'CLI'
