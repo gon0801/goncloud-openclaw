@@ -6,9 +6,9 @@ Decisión de David del 2026-09-26: planear la mejora sin interrumpir U3.
 
 ## Resultado esperado
 
-Cuando Muse entrega una implementación, Claw comienza la revisión sin esperar
-el próximo chequeo periódico. Cuando Claude entrega la revisión, Claw comprueba
-el resultado y continúa por la ruta autorizada.
+Cuando cualquier agente CLI habilitado entrega su trabajo, Claw comprueba el
+resultado y continúa por la ruta autorizada sin esperar el próximo chequeo
+periódico. Muse y Claude son ejemplos del flujo, no una lista de agentes admitidos.
 
 El objetivo es menos de 30 segundos entre la entrega del trabajador y la primera
 actividad verificable del siguiente trabajador, cuando sus requisitos están
@@ -18,6 +18,30 @@ gateway no acredita que Claw haya actuado.
 U3a reutiliza los adaptadores, el registro, el director y el vigilante que entregue
 U3. No agrega una aplicación, un orquestador, un servicio de colas ni otro reloj.
 Los criterios de cierre y las autorizaciones de U3 permanecen iguales.
+
+## Un contrato común para cualquier agente CLI
+
+El alcance incluye todos los agentes CLI habilitados en el registro que entregue
+U3, tanto implementadores como revisores. 19.0 conserva ese inventario y sus modos
+de ejecución. Una CLI activa no se excluye para aprobar las mediciones.
+
+Cada adaptador convierte una señal comprobada de su CLI al mismo aviso de fin.
+El almacenamiento, el envío, la recuperación y la decisión del director son
+comunes. No dependen de nombres como Muse o Claude ni del rol del trabajador.
+Una CLI nueva se incorpora por el adaptador y el registro existentes, sin cambiar
+el director ni agregar otra infraestructura de plugins.
+
+La señal puede ser un hook nativo, un resultado estructurado o la terminación
+observada por el lanzador cuando ese modo termina un proceso por encargo. Si el
+modo interactivo no ofrece una señal comprobable, se registra la limitación y
+se conserva el seguimiento previo. Eso no acredita seguimiento inmediato ni
+permite cerrar U3a mientras afecte a una CLI habilitada. No se confunde silencio
+con entrega ni se inventa un hook universal.
+
+La misma prueba de contrato se ejecuta para cada adaptador habilitado. Una CLI
+incorporada después del cierre necesita esa prueba y una medición real bajo el
+mismo umbral antes de anunciar compatibilidad. No se promete soporte automático
+para herramientas o modos que todavía no se han integrado.
 
 ## Hechos y preguntas pendientes
 
@@ -48,8 +72,8 @@ puede producir el síntoma descrito.
 | Reutilizar señales de fin y dirigirlas al dueño de la corrida | Elegida para comprobar | Aprovecha el hook y el vigilante existentes. Permite medir el recorrido completo. |
 | Añadir otro supervisor o servicio de colas | Fuera de alcance | Duplica componentes sin demostrar que sean necesarios. |
 
-Para Claude, el candidato es el evento `Stop`. Para Muse se usa un evento
-soportado o un resultado estructurado que 19.0 demuestre. Si no existe una señal
+Por ejemplo, para Claude el candidato es el evento `Stop`. Para Muse y las demás
+CLI se comprueba la señal que su adaptador pueda observar en 19.0. Si no existe una señal
 fiable, el plan registra la limitación antes de implementar. No se inventa un hook
 ni se sustituye la prueba por una instrucción al modelo de que recuerde avisar.
 El cierre de un proceso sólo sirve como señal si coincide con el modo de ejecución
@@ -136,14 +160,17 @@ afectadas por reinicios se identifican y no se inventan a partir de horas incomp
 
 La aceptación incluye:
 
-- Veinte transiciones reales: diez de Muse a Claude y diez de Claude al siguiente
-  trabajador autorizado. Cada transición sin espera externa queda por debajo de
-  30 segundos. Las condiciones se declaran antes de la prueba.
+- Al menos veinte transiciones reales, con al menos dos finalizaciones por cada
+  CLI habilitada en 19.0 y cada una como destino al menos una vez. Se amplía la
+  muestra si veinte no cubren el inventario. Incluye el flujo Muse a Claude y
+  Claude al siguiente trabajador cuando esos agentes estén habilitados. Cada
+  transición sin espera externa queda bajo 30 segundos. Las condiciones y el
+  inventario se declaran antes de la prueba.
 - Todas las muestras quedan registradas, incluidas fallidas y lentas. El reporte
   muestra mediana, máximo y cantidad bajo 30 segundos. Una espera del director
   no se elimina para mejorar el resultado.
 - CI pendiente, falta de permiso, cuota o capacidad se muestran como esperas
-  reales. No cuentan como éxitos rápidos. Las veinte transiciones normales se
+  reales. No cuentan como éxitos rápidos. Las transiciones normales exigidas se
   completan además de esos casos y no se rebajan por falta de muestras.
 - Avisos duplicados, aviso más tick simultáneos y reinicios producen un solo
   siguiente trabajador. Avisos antiguos, sesiones personales y corridas cerradas
