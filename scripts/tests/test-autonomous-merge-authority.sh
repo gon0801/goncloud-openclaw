@@ -34,7 +34,7 @@ d = {
     "automatic_routing": {"enabled": auto == "True"},
     "preaprobaciones": [],
     "lanes": [{
-        "id": "l1", "branch": "fase14/a", "worktree": "/tmp/wt-a",
+        "id": "l1", "branch": "corrida/r14-4/l1", "worktree": "/tmp/wt-a",
         "base_remote_sha": "9" * 40, "owner": "l1", "mode": "write",
         "role": "write", "estado": "activo", "token": "t",
         "repo": "gon0801/goncloud-openclaw",
@@ -141,6 +141,22 @@ out_otro="$(bash "$GATE" implementer r14-4 "$T/reg-ok.json" l1 "$SHA" "$T/ev-otr
 printf '%s\n' "$out_otro" | grep -q "authorization_ref fuera de alcance: repo" \
   || fail "sin el motivo de repo fuera de alcance: $out_otro"
 echo "ok (2b): la preaprobacion no autoriza merges en otros repos"
+
+# (2c) 14.4 r3 F1: la rama que preparar-carril produce de verdad es
+# corrida/<run>/<carril>; con la preaprobacion declarando ese patron el
+# registro real debe autorizar, no morir fuera de alcance.
+registro "$T/reg-rama-real.json" "fase14-merge-automatico" True
+python3 - "$T/reg-rama-real.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["lanes"][0]["branch"] = "corrida/r14-4/l1"
+json.dump(d, open(sys.argv[1], "w"), indent=1)
+PY
+out_rr="$(bash "$GATE" implementer r14-4 "$T/reg-rama-real.json" l1 "$SHA" "$T/ev.json" "$T/rc.json" 2>&1)"
+[ "$?" -eq 0 ] || fail "rama real de preparar-carril debio autorizar: $out_rr"
+printf '%s
+' "$out_rr" | grep -q "^DELEGAR:" || fail "sin DELEGAR con la rama real: $out_rr"
+echo "ok (2c): la rama corrida/<run>/<carril> de preparar-carril autoriza"
 
 # (3) Registro y routing.
 printf 'no-json' >"$T/reg-roto.json"
