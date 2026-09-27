@@ -9,6 +9,10 @@ ASSERT=scripts/tests/vigia_sync_prueba_assert.py
 T=$(mktemp -d) || exit 1
 trap 'rm -rf "$T"' EXIT
 
+# Hermeticidad (14.19): la prueba no deja rastro en el checkout real. Se
+# compara el git status al final; la copia del aplicador debe trabajar bajo $T.
+estado_antes=$(git status --porcelain)
+
 # --- fixtures ---
 # D1 bueno: run ok + linea de contrato
 python3 - "$T/d1_ok.json" <<'PY'
@@ -222,6 +226,17 @@ T = pathlib.Path(sys.argv[1])
 repo = pathlib.Path(".").resolve()
 src = (repo / "docs/cron-messages/APLICAR_VIGIA_SYNC.sh").read_text(encoding="utf-8")
 
+# Repo de juguete bajo $T: la copia corre ahi su camino seco (lee el mensaje
+# y escribe backup/) y el checkout real queda intacto (14.19).
+juguete = T / "repo"
+msg_real = repo / "docs/cron-messages/verif-sync-repos.v2.txt"
+if not msg_real.is_file():
+    raise SystemExit("falta docs/cron-messages/verif-sync-repos.v2.txt en el repo")
+(juguete / "docs/cron-messages").mkdir(parents=True)
+(juguete / "docs/cron-messages/verif-sync-repos.v2.txt").write_text(
+    msg_real.read_text(encoding="utf-8"), encoding="utf-8"
+)
+
 # Stub openclaw: cron get → JSON minimo valido para el seco
 oc = T / "oc_stub"
 oc.write_text(
@@ -245,10 +260,11 @@ oc.chmod(0o755)
 
 def make_copy(*, franja_true: bool, annul_guard: bool, name: str) -> pathlib.Path:
     body = src
-    # cd fijo al repo: la copia vive bajo $T, no bajo docs/cron-messages/
+    # cd al repo de juguete bajo $T: la copia vive (y escribe) fuera del
+    # checkout real; antes quedaba con cd fijo al repo y ensuciaba backup/.
     body = body.replace(
         'cd "$(dirname "$0")/../.." || exit 1',
-        f'cd "{repo}" || exit 1',
+        f'cd "{juguete}" || exit 1',
     )
     body = body.replace("OC=~/.openclaw/bin/openclaw", f"OC={oc}")
     # Evitar ventanas cerradas UTC y lock global
@@ -297,7 +313,7 @@ env["VIGIA_SYNC_EJECUTAR"] = "1"
 
 # Dentro de franja → exit != 0 + mensaje
 c_in = make_copy(franja_true=True, annul_guard=False, name="in")
-r = subprocess.run(["bash", str(c_in), "--test"], cwd=str(repo), capture_output=True, text=True, env=env)
+r = subprocess.run(["bash", str(c_in), "--test"], cwd=str(juguete), capture_output=True, text=True, env=env)
 if r.returncode == 0:
     print("ROJO: dentro de franja debio exit!=0", r.stdout, r.stderr, file=sys.stderr)
     sys.exit(1)
@@ -308,17 +324,21 @@ if "franja de silencio" not in blob:
 
 # Fuera de franja → no bloquea (stub ejecutar → exit 0)
 c_out = make_copy(franja_true=False, annul_guard=False, name="out")
-r = subprocess.run(["bash", str(c_out), "--test"], cwd=str(repo), capture_output=True, text=True, env=env)
+r = subprocess.run(["bash", str(c_out), "--test"], cwd=str(juguete), capture_output=True, text=True, env=env)
 if r.returncode != 0:
     print("ROJO: fuera de franja no debio abortar:", r.stdout, r.stderr, file=sys.stderr)
     sys.exit(1)
 if "franja de silencio" in (r.stdout + r.stderr):
     print("ROJO: fuera de franja no debio mencionar aborto de franja", file=sys.stderr)
     sys.exit(1)
+# El camino seco corrio de verdad, y bajo $T: pre/post quedan en el juguete.
+if not list((juguete / "docs/cron-messages/backup").glob("2d763be5-*.post.json")):
+    print("ROJO: la copia no dejo post.json bajo $T; su camino seco no corrio", file=sys.stderr)
+    sys.exit(1)
 
 # Guard anulado + mock dentro → la prueba conductual sale ROJA (no aborta)
 c_mut = make_copy(franja_true=True, annul_guard=True, name="mut")
-r = subprocess.run(["bash", str(c_mut), "--test"], cwd=str(repo), capture_output=True, text=True, env=env)
+r = subprocess.run(["bash", str(c_mut), "--test"], cwd=str(juguete), capture_output=True, text=True, env=env)
 if r.returncode != 0 and "franja de silencio" in (r.stdout + r.stderr):
     print("ROJO: mutante con guard anulado aun aborto por franja; no discrimina", file=sys.stderr)
     sys.exit(1)
@@ -332,5 +352,11 @@ else:
     )
     sys.exit(1)
 PY
+
+estado_despues=$(git status --porcelain)
+if [ "$estado_antes" != "$estado_despues" ]; then
+  diff <(printf '%s\n' "$estado_antes") <(printf '%s\n' "$estado_despues") >&2 || true
+  fail "la prueba escribio en el checkout real (git status --porcelain cambio)"
+fi
 
 echo "TODO VERDE: aplicar-vigia-sync-prueba"
