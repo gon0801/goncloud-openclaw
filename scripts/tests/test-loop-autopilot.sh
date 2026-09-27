@@ -69,6 +69,10 @@ for a in 'LISTO <sha>' \
          'la evidencia del verificador' \
          'no vuelve a correr la batería' \
          'como draft' \
+         'antes de cualquier push o PR' \
+         'el primer push y el primer PR ocurren después de cerrar la revisión local' \
+         'revisa solo el delta' \
+         'en el mismo PR' \
          'Un PR por carril, nunca por tarea' \
          'Solo un hallazgo bloqueante abre otra ronda' \
          'para en la primera que no traiga ninguno' \
@@ -251,6 +255,22 @@ stale=$(grep -nE 'one PR open, nothing merged by you|owner.s to merge|Mergeado p
   agents/main/agent/workshop-skills/post-merge-closure/SKILL.md "$BASE" docs/runbooks/base-summonaikit.md || true)
 [ -z "$stale" ] || fail "volvió el veto de cierre o el recibo obligatorio: $stale"
 echo "ok (3c-gate): CodeRabbit obligatorio para el PR, sin veto de rol ni recibo"
+
+# (3e) Fase 14, Task 6: la revision cruzada local precede al primer push y al
+# primer PR; la correccion tras CodeRabbit se revisa en local (delta) y se
+# publica en el mismo PR. Si el orden se invierte, el candado queda rojo
+# aunque las anclas nuevas sigan presentes.
+s3_ini=$(grep -n -E '^## 3\. ' "$DOC" | head -1 | cut -d: -f1)
+s3_fin=$(grep -n -E '^## 4\. ' "$DOC" | head -1 | cut -d: -f1)
+rev_local=$(sed -n "${s3_ini},${s3_fin}p" "$DOC" | grep -n 'cruzada local, antes de' | head -1 | cut -d: -f1)
+push_pr=$(sed -n "${s3_ini},${s3_fin}p" "$DOC" | grep -n 'Primer push y PR' | head -1 | cut -d: -f1)
+[ -n "$rev_local" ] && [ -n "$push_pr" ] \
+  || fail "$DOC: el paso 3 no ordena revision local y primer push"
+[ "$rev_local" -lt "$push_pr" ] \
+  || fail "$DOC: el primer push quedo antes de la revision local"
+printf '%s' "$s3" | grep -qF 'permanece abierto' \
+  || fail "$DOC: el paso 7 no manda mantener el PR abierto durante la correccion local"
+echo "ok (3e): revision local antes del primer push; correccion local al mismo PR"
 
 # (4) La fila del lead no nombra ningún modelo. Es la regla central del documento.
 hit=$(lead_nombra_modelo < "$DOC")

@@ -5,6 +5,55 @@
 # Idempotente y honesto, y serializado contra lanzar-sesion: el lock se toma ANTES
 # de listar las sesiones y se suelta al final — una sesion que entra, desmarca; una
 # que llega tarde, lanzar la retira (re-verifica bajo lock antes de anotar).
+# Archiva cada carril con sesion nativa y la detiene. BAJO LOCKS del
+# llamador. stdout: nada; 0 = todos archivados y detenidos.
+cerrar_archivar_lanes() { # $1 id $2 reg
+  local id="$1" reg="$2" lanes lane sesion dir pant sel evs evd
+  lanes="$(CORR_REG="$reg" python3 -c "
+import json,os
+d=json.load(open(os.environ['CORR_REG']))
+print(' '.join(c.get('id','') for c in d.get('lanes') or []
+if isinstance(c,dict) and c.get('session')))")" || return 1
+  for lane in $lanes; do
+    corrida_id_valido "$lane" || return 1
+    dir="$CORRIDA_STATE/$id/archive/$lane"
+    mkdir -p "$dir" || return 1
+    sesion="$(lane_campo "$reg" "$lane" session)"
+    if [ -n "${TMUX_BIN:-}" ] && pant="$("$TMUX_BIN" capture-pane -p -t "=$sesion:" 2>/dev/null)"; then
+      printf '%s\n' "$pant" | redactar_texto >"$dir/transcript.txt" || return 1
+    else
+      printf 'sesion ausente: %s\n' "$sesion" | redactar_texto >"$dir/transcript.txt" || return 1
+    fi
+    sel="$(CORR_REG="$reg" CORR_LANE="$lane" python3 -c "
+import json,os
+d=json.load(open(os.environ['CORR_REG']))
+c=[e for e in d.get('lanes') or [] if isinstance(e,dict) and e.get('id')==os.environ['CORR_LANE']][0]
+s=dict(c.get('selection') or {})
+for k in ('worker','harness','provider','reported_model','session','mode','role','branch','worktree','base_remote_sha'):
+  s.setdefault(k,c.get(k))
+print(json.dumps(s,sort_keys=True,indent=2))")" || return 1
+    printf '%s\n' "$sel" | redactar_texto >"$dir/selection.json" || return 1
+    evs="$(CORR_REG="$reg" CORR_LANE="$lane" python3 -c "
+import json,os
+d=json.load(open(os.environ['CORR_REG']))
+c=[e for e in d.get('lanes') or [] if isinstance(e,dict) and e.get('id')==os.environ['CORR_LANE']][0]
+print(''.join(json.dumps(e,sort_keys=True)+chr(10) for e in c.get('events') or []))")" || return 1
+    printf '%s' "$evs" | redactar_texto >"$dir/events.jsonl" || return 1
+    evd="$(CORR_REG="$reg" CORR_LANE="$lane" python3 -c "
+import json,os
+d=json.load(open(os.environ['CORR_REG']))
+c=[e for e in d.get('lanes') or [] if isinstance(e,dict) and e.get('id')==os.environ['CORR_LANE']][0]
+print(json.dumps(c.get('evidence') or {},sort_keys=True,indent=2))")" || return 1
+    printf '%s\n' "$evd" | redactar_texto >"$dir/evidence.json" || return 1
+    chmod 600 "$dir/transcript.txt" "$dir/selection.json" "$dir/events.jsonl" "$dir/evidence.json" || return 1
+    # Solo tras archivar: detener. already_stopped tambien vale (reintento).
+    if [ -n "${TMUX_BIN:-}" ]; then
+      bash "$AQUI/corrida.sh" adaptador stop "$id" "$lane" x "$sesion" >/dev/null 2>&1 || true
+    fi
+  done
+  return 0
+}
+
 corrida_cerrar() {
   local id="$1"
   corrida_id_valido "$id" || { echo "cerrar: id invalido: $id" >&2; return 2; }
@@ -32,6 +81,16 @@ corrida_cerrar() {
     marcas_lock_soltar
     echo "cerrada $id"
     return 0
+  fi
+  # Fase 14, Task 5: antes de soltar nada, cada carril nativo con sesion deja
+  # su archivo (transcript, seleccion, eventos, evidencia) redactado y en
+  # 600; solo tras archivar se detiene su sesion. Si archivar falla, no se ha
+  # desmarcado nada y reintentar archiva de nuevo.
+  if ! cerrar_archivar_lanes "$id" "$reg"; then
+    lock_soltar "$reg"
+    marcas_lock_soltar
+    echo "cerrar: no se pudo archivar un carril de $id; no se ha desmarcado nada — reintentar archiva" >&2
+    return 1
   fi
   local s nombres
   nombres="$(CORR_REG="$reg" python3 -c "
