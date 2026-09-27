@@ -1,0 +1,236 @@
+{
+  "atencion_requerida": {
+    "desde": null,
+    "motivo": null,
+    "necesaria": false
+  },
+  "carriles": [
+    {
+      "approve_lead": null,
+      "ci": "verde",
+      "coderabbit": "limpio",
+      "delivery": {
+        "canary": {
+          "sha": null,
+          "status": "pending"
+        },
+        "deploy": {
+          "sha": "2222222222222222222222222222222222222222",
+          "status": "clean"
+        },
+        "merge": {
+          "sha": "2222222222222222222222222222222222222222",
+          "status": "clean"
+        },
+        "rollback": {
+          "sha": null,
+          "status": "pending"
+        }
+      },
+      "detenido_por": null,
+      "estado": "implementando",
+      "evidence": {
+        "ci": {
+          "sha": "1111111111111111111111111111111111111111",
+          "status": "clean"
+        },
+        "coderabbit": {
+          "sha": "1111111111111111111111111111111111111111",
+          "status": "clean"
+        },
+        "review": {
+          "sha": "1111111111111111111111111111111111111111",
+          "status": "clean"
+        }
+      },
+      "execution": {
+        "attach_command": "/opt/homebrew/bin/tmux attach -t =ses-f14-a",
+        "session": "ses-f14-a",
+        "started_at": "2026-09-27T10:05:00Z",
+        "visibility": "visible",
+        "worktree": "/Users/dn/dev/wt/f14-a"
+      },
+      "head": "2222222222222222222222222222222222222222",
+      "id": "A",
+      "nombre": "Canary",
+      "paso_loop": 3,
+      "pr": 7,
+      "rama": "fase14/a",
+      "repo": "gon0801/goncloud-openclaw",
+      "residuales": [],
+      "tareas": [
+        "14.7"
+      ],
+      "ultimo_evento": {
+        "at": "2026-09-27T11:30:00Z",
+        "que": "canary en curso"
+      },
+      "worker": {
+        "effort": "high",
+        "harness": "claude-code",
+        "health": "available",
+        "id": "claude_fable",
+        "model": "claude-fable-5-1",
+        "provider": "anthropic",
+        "reported_model": "claude-fable-5-1"
+      }
+    },
+    {
+      "approve_lead": null,
+      "ci": "pendiente",
+      "coderabbit": "pendiente",
+      "delivery": {
+        "canary": {
+          "sha": null,
+          "status": "pending"
+        },
+        "deploy": {
+          "sha": null,
+          "status": "pending"
+        },
+        "merge": {
+          "sha": null,
+          "status": "pending"
+        },
+        "rollback": {
+          "sha": null,
+          "status": "pending"
+        }
+      },
+      "detenido_por": null,
+      "estado": "implementando",
+      "evidence": {
+        "review": {
+          "sha": null,
+          "status": "pending"
+        }
+      },
+      "execution": {
+        "attach_command": "/opt/homebrew/bin/tmux attach -t =ses-f14-b",
+        "session": "ses-f14-b",
+        "started_at": "2026-09-27T11:45:00Z",
+        "visibility": "degraded",
+        "worktree": "/Users/dn/dev/wt/f14-b"
+      },
+      "head": "3333333333333333333333333333333333333333",
+      "id": "B",
+      "nombre": "Relevo",
+      "paso_loop": 1,
+      "pr": null,
+      "rama": "fase14/b",
+      "repo": "gon0801/goncloud-openclaw",
+      "residuales": [],
+      "tareas": [
+        "14.8"
+      ],
+      "ultimo_evento": {
+        "at": "2026-09-27T11:50:00Z",
+        "que": "sucesor alzado"
+      },
+      "worker": {
+        "effort": null,
+        "harness": "kimi-code",
+        "health": "limited",
+        "id": "kimi_k3",
+        "model": "kimi-code/k3",
+        "provider": "kimi",
+        "reported_model": "kimi-code/k3"
+      }
+    },
+    {
+      "approve_lead": "APPROVE",
+      "ci": "verde",
+      "coderabbit": "unknown",
+      "delivery": {
+        "canary": {
+          "sha": null,
+          "status": "pending"
+        },
+        "deploy": {
+          "sha": null,
+          "status": "pending"
+        },
+        "merge": {
+          "sha": null,
+          "status": "pending"
+        },
+        "rollback": {
+          "sha": null,
+          "status": "blocked"
+        }
+      },
+      "detenido_por": null,
+      "estado": "revision-cruzada",
+      "execution": {
+        "attach_command": null,
+        "session": "ses-f14-c",
+        "started_at": "2026-09-27T10:40:00Z",
+        "visibility": "detached",
+        "worktree": "/Users/dn/dev/wt/f14-c"
+      },
+      "head": "4444444444444444444444444444444444444444",
+      "id": "C",
+      "nombre": "Revision cruzada",
+      "paso_loop": 5,
+      "pr": 9,
+      "rama": "fase14/c",
+      "repo": "gon0801/goncloud-openclaw",
+      "residuales": [
+        "doc de compuerta pendiente"
+      ],
+      "tareas": [
+        "14.9"
+      ],
+      "ultimo_evento": {
+        "at": "2026-09-27T11:55:00Z",
+        "que": "esperando coderabbit"
+      },
+      "worker": {
+        "effort": null,
+        "harness": "codex-cli",
+        "health": "available",
+        "id": "codex",
+        "model": "router",
+        "provider": "openai",
+        "reported_model": "gpt-5.3"
+      }
+    }
+  ],
+  "cierre": {
+    "at": null,
+    "resumen": null,
+    "telegram_message_id": null
+  },
+  "cola": [
+    {
+      "avance": 60,
+      "detenido_por": null,
+      "estado": "pendiente",
+      "id": "14.7",
+      "merge_commits": [],
+      "prs": [],
+      "ventana": null,
+      "verificado": null
+    }
+  ],
+  "corrida": "fase14-nativos",
+  "eventos": [
+    {
+      "at": "2026-09-27T12:00:00Z",
+      "carril": "A",
+      "que": "canary en curso",
+      "situacion": null
+    }
+  ],
+  "fase": "14",
+  "lead": {
+    "actualizado": "2026-09-27T12:00:00Z",
+    "agente": "claude",
+    "inicio": "2026-09-27T10:00:00Z"
+  },
+  "proyecto": "goncloud-openclaw",
+  "runbook": "docs/runbooks/autopilot-fase14.md",
+  "schema": "runbook-progress.v1",
+  "siguiente_paso": "Canary del carril A y relevo del B",
+  "titulo": "Fase 14 \u2014 harness nativo"
+}

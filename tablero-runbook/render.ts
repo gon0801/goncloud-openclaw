@@ -5,7 +5,11 @@ import {
   type Carril,
   type ColaItem,
   type Derivado,
+  type DeliveryBloque,
+  type EvidenceBloque,
+  type ExecutionBloque,
   type ProgresoDoc,
+  type WorkerBloque,
   validarFase,
 } from "./contrato.ts";
 
@@ -148,6 +152,68 @@ function residualesBajo(carril: Carril | undefined): string {
   return `<tr class="bajo"><td colspan="6"><ul class="res">${rs.map((r) => `<li>${t(r)}</li>`).join("")}</ul></td></tr>`;
 }
 
+/** Fila clave: valor de una evidencia/delivery con su SHA (o su estado solo). */
+function filaEvidencia(clave: string, item: { status?: unknown; sha?: unknown } | undefined): string {
+  if (!item || typeof item !== "object") return "";
+  const status = t((item as Record<string, unknown>)["status"], 20);
+  const shaRaw = (item as Record<string, unknown>)["sha"];
+  const sha = typeof shaRaw === "string" ? `<span class="mono">${t(shaRaw, 40)}</span>` : "";
+  return `<li>${t(clave, 20)}: ${status}${sha ? ` ${sha}` : ""}</li>`;
+}
+
+/**
+ * Detalle compacto del carril nativo (Task 8): worker, execution, evidencia y
+ * delivery dentro de un <details>. Cada valor externo pasa por t() (truncar y
+ * escapar); el attach_command SOLO se imprime dentro de <code> cuando la
+ * visibilidad es degraded, y nunca dentro de un botón, form o script.
+ */
+function detalleBajo(
+  carril: Carril | undefined,
+  atencion: string[] | undefined,
+): string {
+  if (!carril) return "";
+  const w = carril.worker as WorkerBloque | undefined;
+  const ex = carril.execution as ExecutionBloque | undefined;
+  const ev = carril.evidence as EvidenceBloque | undefined;
+  const del = carril.delivery as DeliveryBloque | undefined;
+  const at = atencion ?? [];
+  if (!w && !ex && !ev && !del && at.length === 0) return "";
+  const lineas: string[] = [];
+  if (at.length > 0) {
+    lineas.push(`<li class="atn">atención: ${at.map((r) => t(r, 60)).join(", ")}</li>`);
+  }
+  if (w) {
+    const effort = w.effort ? `/${t(w.effort, 60)}` : "";
+    lineas.push(
+      `<li>worker: <span class="mono">${t(w.id, 100)}</span> · ${t(w.harness, 60)} · ` +
+        `${t(w.provider, 60)}/${t(w.model, 120)}${effort} · salud ${t(w.health, 20)}</li>`,
+    );
+  }
+  if (ex) {
+    const attach =
+      ex.visibility === "degraded" && typeof ex.attach_command === "string"
+        ? `<div>attach: <code class="mono">${t(ex.attach_command, 200)}</code></div>`
+        : "";
+    lineas.push(
+      `<li>execution: ${t(ex.worktree, 160)} · sesión <span class="mono">${t(ex.session, 100)}</span> · ` +
+        `visibilidad ${t(ex.visibility, 20)}${attach}</li>`,
+    );
+  }
+  if (ev) {
+    const items = (Object.keys(ev) as (keyof EvidenceBloque)[])
+      .map((k) => filaEvidencia(k, ev[k] as { status?: unknown; sha?: unknown }))
+      .join("");
+    if (items) lineas.push(`<li>evidencia:<ul>${items}</ul></li>`);
+  }
+  if (del) {
+    const items = (Object.keys(del) as (keyof DeliveryBloque)[])
+      .map((k) => filaEvidencia(k, del[k] as { status?: unknown; sha?: unknown }))
+      .join("");
+    if (items) lineas.push(`<li>delivery:<ul>${items}</ul></li>`);
+  }
+  return `<tr class="bajo"><td colspan="6"><details class="nativo"><summary>nativo</summary><ul class="res">${lineas.join("")}</ul></details></td></tr>`;
+}
+
 function pintarAvance(avance: unknown): string {
   if (typeof avance !== "number") return "";
   const w = Math.min(100, Math.max(0, avance));
@@ -160,7 +226,11 @@ function celdaEstado(estado: string, detenido: string | null | undefined): strin
   }`;
 }
 
-function pintarFila(f: Fila, github: GithubCruce | undefined): string {
+function pintarFila(
+  f: Fila,
+  github: GithubCruce | undefined,
+  atenciones: Map<string, string[]>,
+): string {
   if (f.kind === "cola") {
     const estado = f.carril?.estado ?? f.item.estado;
     const detenido = f.carril?.detenido_por ?? f.item.detenido_por;
@@ -173,7 +243,7 @@ function pintarFila(f: Fila, github: GithubCruce | undefined): string {
 <td>${pintarPrs(github, f.carril, f.item)}</td>
 <td>${pintarAvance(f.item.avance)}</td>
 </tr>
-${residualesBajo(f.carril)}`;
+${residualesBajo(f.carril)}${detalleBajo(f.carril, f.carril ? atenciones.get(f.carril.id) : undefined)}`;
   }
   const c = f.carril;
   return `<tr>
@@ -184,7 +254,7 @@ ${residualesBajo(f.carril)}`;
 <td>${pintarPrs(github, c, undefined)}</td>
 <td></td>
 </tr>
-${residualesBajo(c)}`;
+${residualesBajo(c)}${detalleBajo(c, atenciones.get(c.id))}`;
 }
 
 function cabecera(doc: ProgresoDoc): string {
@@ -237,7 +307,10 @@ export function renderTablero(
   const filas = armarFilas(doc);
   const pct = porcentajeGlobalDe(filas);
   const master = conteoMaster(filas);
-  const cuerpo = filas.map((f) => pintarFila(f, github)).join("\n");
+  const atenciones = new Map<string, string[]>(
+    (derivado.atencionWorker ?? []).map((a) => [a.carril, a.razones]),
+  );
+  const cuerpo = filas.map((f) => pintarFila(f, github, atenciones)).join("\n");
 
   const eventos = (Array.isArray(doc.eventos) ? doc.eventos : [])
     .slice(-20)
