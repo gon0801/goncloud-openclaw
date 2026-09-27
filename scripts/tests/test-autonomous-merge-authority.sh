@@ -120,6 +120,28 @@ PY
 verifica "authorization_ref fuera de alcance (rama)" implementer "$T/reg-scope.json" 1 "fuera de alcance: rama"
 echo "ok (2): authorization_ref falla cerrado en los cuatro defectos"
 
+# (2b) 14.4 r2 B1: el alcance de la preaprobacion es obligatorio. La
+# evidencia y el recibo de OTRO repo no pueden aprovechar la preaprobacion
+# de este repo (el repo del carril es opcional en el contrato de 14.16).
+evidencia "$T/ev-otro.json" "$SHA" success
+python3 - "$T/ev-otro.json" "$T/rc-otro.json" <<'PY'
+import json, sys
+ev = json.load(open(sys.argv[1]))
+ev["repo"] = "otro-dueno/otro-repo"
+json.dump(ev, open(sys.argv[1], "w"), indent=1)
+rc = {"schema": "saikit-entrega.v1", "repo": "otro-dueno/otro-repo", "pr": 7,
+      "headRefOid": "1" * 40}
+json.dump(rc, open(sys.argv[2], "w"), indent=1)
+PY
+out_aj="$(bash "$GATE" implementer r14-4 "$T/reg-ok.json" l1 "$SHA" "$T/ev-otro.json" "$T/rc-otro.json" 2>&1)"
+[ "$?" -ne 0 ] || fail "la preaprobacion autorizo un merge en otro repo: $out_aj"
+printf '%s\n' "$out_aj" | grep -q "authorization_ref fuera de alcance: repo" \
+  || fail "sin el motivo de repo fuera de alcance: $out_aj"
+out_otro="$(bash "$GATE" implementer r14-4 "$T/reg-ok.json" l1 "$SHA" "$T/ev-otro.json" "$T/rc-otro.json" 2>&1)"
+printf '%s\n' "$out_otro" | grep -q "authorization_ref fuera de alcance: repo" \
+  || fail "sin el motivo de repo fuera de alcance: $out_otro"
+echo "ok (2b): la preaprobacion no autoriza merges en otros repos"
+
 # (3) Registro y routing.
 printf 'no-json' >"$T/reg-roto.json"
 verifica "registro malformado" implementer "$T/reg-roto.json" 1 "registro de corrida ilegible"

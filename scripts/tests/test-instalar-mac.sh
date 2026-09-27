@@ -68,16 +68,16 @@ done
 cmp -s scripts/mac/workers.v1.json "$HOME/bin/workers.v1.json" \
   || fail "el registro instalado difiere de scripts/mac/workers.v1.json"
 [ -x "$HOME/bin/corrida.sh" ] || fail "corrida.sh quedo sin +x"
-ncorr="$(ls "$HOME/bin/corrida"/*.sh 2>/dev/null | wc -l)"
-[ "$ncorr" -eq 17 ] || fail "corrida/ trae $ncorr .sh, se esperaban 17"
-for f in abrir lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento lib adaptador preparar-carril mostrar-terminal reconciliar compuerta; do
+ncorr="$(ls "$HOME/bin/corrida"/*.sh 2>/dev/null | wc -l | tr -d ' ')"
+[ "$ncorr" -eq 18 ] || fail "corrida/ trae $ncorr .sh, se esperaban 18"
+for f in abrir lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento lib adaptador preparar-carril mostrar-terminal autoridad-merge reconciliar compuerta; do
   [ -f "$HOME/bin/corrida/$f.sh" ] || fail "falta \$HOME/bin/corrida/$f.sh"
 done
 # 14.21 punto 7: la lista explicita de arriba debe cubrir TODOS los
 # corrida/*.sh del repo; un script instalado y no listado se escapa del candado.
 for ruta in scripts/mac/corrida/*.sh; do
   b="$(basename "$ruta" .sh)"
-  case " abrir lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento lib adaptador preparar-carril mostrar-terminal reconciliar compuerta " in
+  case " abrir lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento lib adaptador preparar-carril mostrar-terminal autoridad-merge reconciliar compuerta " in
     *" $b "*) ;;
     *) fail "corrida/$b.sh se instala pero no esta listado en la prueba" ;;
   esac
@@ -85,6 +85,8 @@ done
 PL="$HOME/Library/LaunchAgents/ai.goncloud.tmux-activity-watch.plist"
 [ -f "$PL" ] || fail "falta el plist generado"
 [ -f "$HOME/.tmux.conf" ] || fail "falta \$HOME/.tmux.conf"
+cmp -s scripts/mac/corrida/preaprobaciones.v1.json "$HOME/bin/corrida/preaprobaciones.v1.json" \
+  || fail "la tabla de preaprobaciones instalada difiere de scripts/mac"
 grep -qF "source ~/bin/agent-tmux-shell.zsh" "$HOME/.zshrc" 2>/dev/null \
   || fail "falta la linea de source en .zshrc"
 printf '%s' "$out" | grep -q "instalado" || fail "no imprime que quedo instalado"

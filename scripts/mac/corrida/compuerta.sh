@@ -105,7 +105,14 @@ mc=d.get('mergeCommit') or {}
 # 14.21 punto 3: releer los checks del head en CADA lectura, para que la
 # decision de merge use el CI vigente y no el de una lectura anterior.
 rollup=d.get('statusCheckRollup') or []
-concl=rollup[0].get('conclusion').lower() if rollup and isinstance(rollup[0],dict) and isinstance(rollup[0].get('conclusion'),str) else None
+# 14.21 punto 3 (14.4 r2 B2): JUNTAR todo el rollup; basta con que un check
+# COMPLETED haya fallado para que el resultado sea fallido.
+conclusions=[str(i.get('conclusion')).lower() for i in rollup
+             if isinstance(i,dict) and i.get('status')=='COMPLETED']
+if 'failure' in conclusions: concl='failure'
+elif conclusions and all(c=='success' for c in conclusions): concl='success'
+elif any(c=='pending' for c in conclusions) or len(conclusions)<len(rollup): concl='pending'
+else: concl=None
 open(os.environ['GH_OUT'],'w').write(json.dumps({
 'number':d.get('number'),'head':d.get('headRefOid'),
 'merged':bool(d.get('mergedAt')),

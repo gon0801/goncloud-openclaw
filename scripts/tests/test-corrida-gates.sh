@@ -68,8 +68,20 @@ rec = json.loads(json.dumps(d["record"]).replace("@WT@", sys.argv[3]))
 json.dump(rec, open(os.path.join(sys.argv[2], "record.json"), "w"), sort_keys=True)
 json.dump(d["evidence"], open(os.path.join(sys.argv[2], "evidence.json"), "w"), sort_keys=True)
 json.dump(d["comments"], open(os.path.join(sys.argv[2], "comments.json"), "w"))
-json.dump(d["pr"], open(os.path.join(sys.argv[2], "pr.json"), "w"), sort_keys=True)
-json.dump(d["pr_gh"], open(os.path.join(sys.argv[2], "pr-gh.json"), "w"))
+pr = json.loads(json.dumps(d["pr"]))
+# 14.4 r2 B2: los checks que GitHub devolveria para el head del fixture,
+# derivados del CI de la evidencia SOLO cuando el fixture declara CI; si el
+# fixture no declara CI, el pr queda sin checks (ci-ausente). Si el fixture
+# trae sus propios checks, se respetan.
+ci_fixture = (d.get("evidence", {}).get("ci", {}) or {}).get("conclusion")
+if ci_fixture and "checks" not in pr:
+    pr["checks"] = {"sha": pr["head"], "conclusion": ci_fixture}
+json.dump(pr, open(os.path.join(sys.argv[2], "pr.json"), "w"), sort_keys=True)
+pr_gh = json.loads(json.dumps(d["pr_gh"]))
+rollup_conclusion = (pr.get("checks") or {}).get("conclusion") or ci_fixture
+if rollup_conclusion:
+    pr_gh["statusCheckRollup"] = [{"conclusion": rollup_conclusion, "status": "COMPLETED"}]
+json.dump(pr_gh, open(os.path.join(sys.argv[2], "pr-gh.json"), "w"))
 json.dump({"action": d["action"], "sha": d["sha"], "expect": d["expect"]},
           open(os.path.join(sys.argv[2], "meta.json"), "w"), sort_keys=True)
 PY
@@ -139,7 +151,7 @@ for fx in 01-merge-ok 02-merge-sin-recibo 03-merge-revocado 04-merge-otro-sha \
     18-deploy-mapea 19-canary-registra 20-rollback-sin-verificar \
     21-rollback-verificado 22-crossreview-autor 23-pushpr-sin-review \
     24-deploy-sin-merge 25-merge-kit-rechaza 26-merge-bot-stale 27-merge-autor-evidencia \
-    28-canary-fallo 29-canary-otro-sha; do
+    28-canary-fallo 29-canary-otro-sha 30-checks-fallo 31-rollup-mixto; do
   materializar "$fx.json" "$T/py-$fx"
   leer_recibo "$T/py-$fx"
   meta_accion="$(python3 -c "import json; print(json.load(open('$T/py-$fx/meta.json'))['action'])")"
@@ -161,7 +173,7 @@ for k in ("source_url", "repo", "pr", "reviewed_sha", "result", "availability"):
     assert p.get(k) not in (None, ""), (k, p)
 PY
 done
-echo "ok (2): los 29 fixtures dan su veredicto y codigo"
+echo "ok (2): los 31 fixtures dan su veredicto y codigo"
 
 # (3) Extremo a extremo: compuerta.sh relee el PR falso, valida con el kit,
 # decide, registra el evento y proyecta sin sustituir el recibo.
@@ -173,7 +185,7 @@ for fx in 01-merge-ok 02-merge-sin-recibo 03-merge-revocado 04-merge-otro-sha \
     18-deploy-mapea 19-canary-registra 20-rollback-sin-verificar \
     21-rollback-verificado 22-crossreview-autor 23-pushpr-sin-review \
     24-deploy-sin-merge 25-merge-kit-rechaza 26-merge-bot-stale 27-merge-autor-evidencia \
-    28-canary-fallo 29-canary-otro-sha; do
+    28-canary-fallo 29-canary-otro-sha 30-checks-fallo 31-rollup-mixto; do
   materializar "$fx.json" "$T/e2e-$fx"
   run="g-${fx%%-*}"
   mkdir -p "$T/corridas/$run"
@@ -337,8 +349,8 @@ mutante() { # $1 nombre $2 patron-sed $3 fixture
 }
 mutante sin-recibo 's/if receipt is None:/if False and receipt is None:/' \
   02-merge-sin-recibo
-mutante sin-ci 's/if ci is None:/if False and ci is None:/' \
-  06-merge-ci-ausente
+mutante sin-ci 's/checks = pr.get("checks") or {}/checks = {"sha": sha, "conclusion": "success"}/' \
+  31-rollup-mixto
 mutante sin-autor 's/reviewer in authors:/reviewer in []:/' \
   27-merge-autor-evidencia
 mutante bot-aprueba 's/unavailable-declared/unavailable-declared-zzz/' \

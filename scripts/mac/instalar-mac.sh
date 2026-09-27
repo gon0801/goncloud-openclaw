@@ -111,6 +111,9 @@ modo_verificar() {
     [ -f "$BIN_DIR/corrida/$b" ] || { di "FALTA: bin/corrida/$b"; mal=$((mal+1)); continue; }
     cmp -s "$f" "$BIN_DIR/corrida/$b" || { di "DIFIERE: bin/corrida/$b"; mal=$((mal+1)); continue; }
   done
+  [ -f "$BIN_DIR/corrida/preaprobaciones.v1.json" ] || { di "FALTA: bin/corrida/preaprobaciones.v1.json"; mal=$((mal+1)); }
+  cmp -s "$AQUI/corrida/preaprobaciones.v1.json" "$BIN_DIR/corrida/preaprobaciones.v1.json" 2>/dev/null \
+    || { di "DIFIERE: bin/corrida/preaprobaciones.v1.json"; mal=$((mal+1)); }
   tmp="$(mktemp)" || falla "sin tmp para comparar el plist"
   generar_plist "$tmp" || { rm -f "$tmp"; falla "no se pudo generar el plist esperado"; }
   if [ ! -f "$LA_DIR/$PL_NOMBRE" ]; then di "FALTA: LaunchAgents/$PL_NOMBRE"; mal=$((mal+1));
@@ -132,6 +135,7 @@ modo_instalar() {
     [ "$f" = "tmux-activity-watch.sh" ] && [ "$COPIO" = "1" ] && reiniciar=1
   done
   for f in "$AQUI"/corrida/*.sh; do copiar_si_difiere "$f" "$BIN_DIR/corrida/$(basename "$f")" || falla "no se pudo instalar corrida/$(basename "$f")"; done
+  copiar_si_difiere "$AQUI/corrida/preaprobaciones.v1.json" "$BIN_DIR/corrida/preaprobaciones.v1.json" || falla "no se pudo instalar corrida/preaprobaciones.v1.json"
   local pl_tmp; pl_tmp="$(mktemp)" || falla "sin tmp para el plist"
   generar_plist "$pl_tmp" || { rm -f "$pl_tmp"; falla "no se pudo generar el plist"; }
   copiar_si_difiere "$pl_tmp" "$LA_DIR/$PL_NOMBRE" || { rm -f "$pl_tmp"; falla "no se pudo instalar el plist"; }

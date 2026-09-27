@@ -89,6 +89,31 @@ if rec.get("headRefOid") != sha:
     muere("recibo de un head distinto (expectedHeadOid)")
 if rec.get("ci") and rec["ci"].get("sha") not in (None, sha):
     muere("recibo de CI viejo")
+
+# 14.4 r2 B1: el alcance es obligatorio y cierra ante la duda. El repo que
+# manda es el de la EVIDENCIA y del RECIBO (la compuerta mergea ese repo);
+# el carril puede no traer repo, pero entonces no hay alcance verificable.
+repo_evidencia = ev.get("repo") or ""
+repo_recibo = rec.get("repo") or ""
+repo_preaprobacion = str(entrada.get("repo") or "")
+if not repo_evidencia:
+    muere("authorization_ref sin alcance: la evidencia no trae repo")
+if not repo_recibo:
+    muere("authorization_ref sin alcance: el recibo no trae repo")
+if not repo_preaprobacion:
+    muere("authorization_ref sin alcance: la preaprobacion no declara repo")
+if repo_evidencia != repo_recibo:
+    muere(f"authorization_ref fuera de alcance: evidencia y recibo de repos distintos ({repo_evidencia} vs {repo_recibo})")
+if repo_evidencia != repo_preaprobacion:
+    muere(f"authorization_ref fuera de alcance: repo {repo_evidencia} no casa la preaprobacion {repo_preaprobacion}")
+rama_pre = str(entrada.get("rama") or "")
+if not rama_pre:
+    muere("authorization_ref sin alcance: la preaprobacion no declara rama")
+if rama and not rama.startswith(rama_pre.rstrip("*").rstrip("/")):
+    muere(f"authorization_ref fuera de alcance: rama {rama} no casa {rama_pre}")
+if entrada.get("operacion") not in (None, "", "merge"):
+    muere("authorization_ref fuera de alcance: operacion")
+
 print("OK")
 PY
   local rc=$?
