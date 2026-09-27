@@ -18,6 +18,10 @@ case " $* " in
     case "${FAKE_HARNESS_MODE:-}" in
       quota) echo "fake-$nombre: rate limit exceeded, retry later"; exit 1;;
       auth) echo "fake-$nombre: login required"; exit 1;;
+      cuota-auth)
+        echo "fake-$nombre: login required"
+        echo "fake-$nombre: rate limit exceeded, retry later"
+        exit 1;;
       broken) exit 3;;
       blocked) echo "fake-$nombre: permission denied"; exit 0;;
       blocked-cap) echo "fake-$nombre: Permission denied"; exit 0;;
@@ -34,6 +38,7 @@ case "${FAKE_HARNESS_MODE:-}" in
   failed) printf 'ADAPTADOR-MARCA: fallo\n'; sleep 2; exit 1;;
   quota) printf 'fake-%s: rate limit exceeded, retry later\n' "$nombre";;
   auth) printf 'fake-%s: login required\n' "$nombre";;
+  cuota-auth) printf 'fake-%s: login required\nfake-%s: rate limit exceeded, retry later\n' "$nombre" "$nombre";;
   *) :;;
 esac
 # Como un TUI: consume el encargo por stdin y deja recibo en pantalla (la

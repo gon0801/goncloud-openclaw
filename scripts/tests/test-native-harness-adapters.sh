@@ -193,6 +193,16 @@ for w in claude codex zcode kimi cursor grok; do
     [ "$gotm" = "$want" ] || fail "$w: inspect $m dio $gotm"
     bash "$CORR" adaptador stop run-1 lane-1 "$w" "$sm" >/dev/null
   done
+  # 14.17: con las dos marcas en pantalla gana auth (mismo orden que health y
+  # que probe_worker: auth antes que quota; el relevo correcto es el de auth).
+  modo_fake cuota-auth
+  ad_start run-1 lane-1 "$w" "ses-$w-ca" "$T/wt" "$T/brief.txt" >/dev/null \
+    || fail "$w: start para inspect cuota+auth fallo"
+  [ "$(bash "$CORR" adaptador inspect run-1 lane-1 "$w" "ses-$w-ca")" = "auth-vencida" ] \
+    || fail "$w: inspect con cuota y auth no dio auth-vencida"
+  [ "$(FAKE_HARNESS_MODE=cuota-auth bash "$CORR" adaptador health run-1 lane-1 "$w" ses-h)" = "unauthenticated" ] \
+    || fail "$w: health con cuota y auth no dio unauthenticated"
+  bash "$CORR" adaptador stop run-1 lane-1 "$w" "ses-$w-ca" >/dev/null
   # failed: el doble muere tras la barra; el inspect lo ve caido.
   modo_fake failed
   ad_start run-1 lane-1 "$w" "ses-$w-f" "$T/wt" "$T/brief.txt" >/dev/null \

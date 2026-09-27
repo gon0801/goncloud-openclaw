@@ -281,8 +281,10 @@ t=open(os.environ['WPANT']).read().lower()
 r=json.load(open(os.environ['WREG']))
 w=[x for x in r['workers'] if x['id']==os.environ['WID']][0]
 def hay(ps): return any(p and p.lower() in t for p in ps)
-if hay(w.get('quota_patterns',[])): print('quota')
-elif hay(w.get('auth_patterns',[])): print('auth-vencida')
+# Mismo orden que adaptador_health y probe_worker: auth antes que quota
+# (14.17); una sesion con las dos marcas dispara el relevo de auth.
+if hay(w.get('auth_patterns',[])): print('auth-vencida')
+elif hay(w.get('quota_patterns',[])): print('quota')
 elif 'adaptador-marca: fallo' in t: print('failed')
 elif 'adaptador-marca: completo' in t: print('complete')
 elif 'adaptador-marca: esperando' in t: print('waiting')
