@@ -52,8 +52,8 @@ y las decisiones de recuperación/U1 del ledger y `.saikit/decisiones/u1-sync.ts
 - Un único mecanismo de vigilancia y entrega por instalación; eventos y tick
   existentes despiertan la reconciliación. Sin cron por meta ni segundo servicio
   periódico. Se conservan `corrida.sh` y los recibos `saikit-entrega.v1`.
-- Dependencia técnica OpenClaw: U4 aceptada, que incluye U2/U3. Hermes añade U5.
-  La prioridad de la ruta sigue U2, U3, U4, U5, U6; investigación/contratos de
+- Dependencia técnica OpenClaw: U4 aceptada, que incluye U2, U3 y U3a (Fase 19). Hermes añade U5.
+  La prioridad de la ruta sigue U2, U3, U3a, U4, U5, U6; investigación/contratos de
   U6.0–U6.1 pueden prepararse antes sin activar ejecución. Si se implementa
   primero la parte OpenClaw de U6, no acredita Hermes ni el cierre bilateral.
 - Se corrige el ciclo documental U4 → 17.4 → 17.3/U5 → U4: 17.4 empieza con

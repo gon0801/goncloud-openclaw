@@ -32,12 +32,16 @@ se cerró sin merge por bloqueantes. Fase 15 está cerrada y no se repite.
 | U1 | `[lane:gate] [tdd:required]` Fuente fuera del estado vivo y deploy/sync selectivo seguro en Windows. Reutilizar sólo piezas válidas de Fase 16/PR #128 y resolver bloqueantes de PR #134. | Proveniencia de instalador/plugin/herramientas; allowlist y denylist, rollback y dos ciclos idempotentes con read-back; un solo dueño de watchdog y avisos; CI completo del SHA final y revisión sin bloqueantes antes de activar el sync. El estado viejo sigue recuperable. | U0 | cc:完了 — merge PR #139 (d50f4ed) y publicación PR #140 (de82e2e); detalle y recibos en Fase U1 abajo |
 | U2 | `[lane:gate] [tdd:required]` Cerrar sólo los faltantes de Fase 9 y probar un goal acotado de principio a fin en OpenClaw. | PR #100 ya integrado; filas 9.7, 9.9–9.13 y 9.16 reconciliadas con evidencia; un encargo persiste tras terminar el turno del agente, muestra espera real, envía avances por Telegram sin segundo reloj y cierra con evidencia o bloqueo explícito; no responde preguntas fuera de la política. Al cerrar (2026-09-25), 9.5, 9.8 y 9.9 pasaron a U3 como filas 14.8-14.10 por decisión de David. | U1; entrega sin sello B/C integrada | cc:完了 [PR #165, merge cc2d650; cierre-de-fase 9 en VERDE; 9.5/9.8/9.9 pasan a U3 como 14.8-14.10] |
 | U3 | `[lane:gate] [tdd:required]` Fase 14: selector y adaptadores de CLI, reconciliación, revisión y entrega autónoma. | Primer canary con una CLI elegida y recibo verificable; después contratos y humos de las seis CLI previstas, sin procesos duplicados ni worktrees compartidos; merge/deploy sólo por la ruta autorizada del nuevo sync y SHA instalado leído de vuelta. Hereda de U2 (2026-09-25): 9.5, David recibe un aviso de avance y nunca pasan más de 30 min sin uno mientras hay algo pendiente; 9.9, el simulacro completo pasa 7/7, incluidos relanzar sesiones caídas y el aviso de avance real. 9.8: si la rama principal queda rota por un cambio automático, David recibe un aviso diciendo que se está revisando. Pedidos de David del cierre de U2: el aviso DETENIDA del preflight dice qué faltó (hoy solo "la revision previa no paso"); los mensajes llevan negritas y más formato para leerlos fácil. Pedido del 2026-09-25: el selector elige también modelo y effort, y el relevo por cuota descarta la cuenta entera (14.13). Las promesas heredadas y los pedidos viven como filas 14.8-14.13, con su línea Promesa que exige cierre-de-fase 14. | U2 | cc:TODO |
-| U4 | `[lane:gate] [tdd:required]` Fase 17 en OpenClaw: contrato de tarea, supervisor y panel de solo lectura. | Lista/detalle/historial indican responsable, agente, CLI, intento, avance, espera, próxima comprobación, recursos y evidencia; móvil/escritorio, datos viejos y errores distinguibles; sin secretos ni XSS. LobsterBoard se usa sólo si licencia, assets y dependencias del commit elegido pasan revisión; OpenGrokBot aporta patrones de seguimiento, no código ni otro runtime. | U3; 17.0–17.2, 17.4–17.5 | cc:TODO |
+| U3a | `[lane:gate] [tdd:required]` Fase 19: seguimiento inmediato entre trabajadores, después de cerrar U3. | Al menos veinte transiciones reales bajo 30 segundos sin espera externa, con dos finalizaciones por CLI habilitada y cada CLI como destino; avisos duplicados no duplican trabajo; recuperación en 60 segundos con servicios disponibles; evidencia y reversa verificadas. | U3; 19.0–19.2 | cc:TODO |
+| U4 | `[lane:gate] [tdd:required]` Fase 17 en OpenClaw: contrato de tarea, supervisor y panel de solo lectura. | Lista/detalle/historial indican responsable, agente, CLI, intento, avance, espera, próxima comprobación, recursos y evidencia; móvil/escritorio, datos viejos y errores distinguibles; sin secretos ni XSS. Primero probar LobsterBoard original con una plantilla existente, en computadora y celular, tras revisar licencia y dependencias del commit elegido; registrar cobertura y faltantes antes de desarrollar UI. Conservarlo si cumple y limitar cambios a ajustes pequeños justificados. OpenGrokBot aporta patrones de seguimiento, no código ni otro runtime. | U3a; 17.0–17.2, 17.4–17.5 | cc:TODO |
 | U5 | `[lane:gate] [tdd:required]` El mismo contrato y panel en la computadora Hermes, con estado, reloj e identidad propios. | Crear, seguir y cerrar la misma clase de tarea con OpenClaw inaccesible; diez recorridos de aceptación en cada host, instalador reversible, CI/revisión del SHA final y recibos por host. No se comparten sesiones ni credenciales. | U4; 17.3, 17.6–17.8 | cc:TODO |
 | U6 | `[lane:gate] [tdd:required]` Completar la autonomía de una meta compuesta: plan ejecutable, autoridad inicial coherente, avance entre tareas, control persistente y cierre agregado. Extiende U2–U5; no crea otro orquestador. | Un plan con dependencias termina sin preguntas dentro de su autorización, corrige un fallo, recupera una caída entre tareas y acredita cada criterio del alcance vigente; pausa/cancelación sobreviven al reinicio; aceptación por host, sin duplicar efectos ni reloj. Detalle en Fase U6. | U4 para OpenClaw; U5 adicional para Hermes y cierre bilateral | cc:TODO |
 
 U0 cerró como inventario y una prueba acotada de Telegram; U1 tiene sus
-recibos de cierre abajo. La siguiente unidad de trabajo es **U2**.
+recibos de cierre abajo. U2 está cerrado. David confirma que U3 está en ejecución
+(2026-09-26); sus filas conservan los estados respaldados por evidencia.
+El orden acordado es **U3 → U3a → U4**. U3a se planifica ahora, pero su ejecución
+espera al cierre de U3 y no añade requisitos a las tareas 14.x en curso.
 No se activa sync, no se mergea un PR ni se
 despliega por el hecho de existir este plan.
 Después de cada etapa se actualiza esta tabla en un único PR de cierre con
@@ -776,8 +780,10 @@ bases en bloque, cambiar modelos sin consentimiento o crear otro reloj.
 ## Fase 17 — Centro de tareas común para OpenClaw y Hermes
 
 **Detalle subordinado a U4/U5.** La fase está planificada, no implementada.
-Su runbook no se lanza mientras Fase 14 y la ruta segura de deploy sigan sin
+Su runbook no se lanza mientras U3a, Fase 14 y la ruta segura de deploy sigan sin
 aceptación; las filas 17.0–17.1 sí pueden investigarse sin activar servicios.
+Esa preparación documental no completa 17.0: la prueba funcional de LobsterBoard
+se realiza al ejecutar U4.
 
 Fecha: 2026-09-22. [Plan detallado](docs/superpowers/plans/2026-09-22-centro-tareas.md).
 [Diseño y aceptación](docs/superpowers/specs/2026-09-22-centro-tareas-design.md).
@@ -793,21 +799,24 @@ Las tareas siguientes son propuestas, no autorización de implementación o depl
 
 | Task | Contenido | DoD | Depends | Status |
 |---|---|---|---|---|
-| 17.0 | `[lane:fast] [tdd:skip:investigacion]` Inventario de interfaces, dependencias instaladas, licencia UI, plataformas y baseline de lint/formatter antes del código. | Matriz con evidencia por capacidad/host, límites medibles y decisión UI; desconocido no se toma por ausente; gaps requeridos detienen sólo su carril | - | cc:TODO |
-| 17.1 | `[lane:gate] [tdd:required]` Contrato de tareas, proyección redactada, porcentaje y maqueta escritorio/móvil. | Fixtures legacy/nuevos verdes; identidad y cierre verificable definidos; resumen y reporte coinciden; maqueta cubre estados degradados | 17.0 | cc:TODO |
+| 17.0 | `[lane:fast] [tdd:skip:investigacion]` Inventario de interfaces, plataformas y baseline; revisar licencia/dependencias y probar LobsterBoard original con una plantilla existente antes de desarrollar UI. | Versión/commit, licencia y permisos de reutilización de código/assets registrados antes de adoptar o empaquetar; configuración registrada; prueba en computadora y celular, capturas y matriz de lo que muestra de Claw, faltantes y ajustes pequeños; adopción justificada o limitación explícita, sin fallback automático a UI propia; desconocido no se toma por ausente | - | cc:TODO |
+| 17.1 | `[lane:gate] [tdd:required]` Contrato de tareas, proyección redactada, porcentaje y validación escritorio/móvil sobre la plantilla probada en 17.0. | Fixtures legacy/nuevos verdes; identidad y cierre verificable definidos; resumen y reporte coinciden; configuración o maqueta de ajustes cubre estados degradados sin rediseñar lo que ya cumple | 17.0 | cc:TODO |
 | 17.2 | `[lane:gate] [tdd:required]` Adaptador OpenClaw y observaciones de ejecución/recursos sobre Fase 14. | Tarea nativa visible con intento y proceso verificables; PID reutilizado y métricas ausentes no se atribuyen mal; guardas existentes pasan | 17.1, Fase 14 integrada y contratos de entrega sin sello | cc:TODO |
 | 17.3 | `[lane:gate] [tdd:required]` Adaptador Hermes sin dependencia de gateway OpenClaw. | Crear, observar, reportar y verificar con OpenClaw ausente; mismo contrato y capacidades requeridas; cobertura parcial explícita | 17.2 | cc:TODO |
 | 17.4 | `[lane:gate] [tdd:required]` Supervisión local independiente del coordinador y recuperación con presupuesto persistente. Primero OpenClaw en U4; adaptación y aceptación Hermes en U5. | Pruebas de crash sin intentos duplicados; efectos inciertos no se repiten; un reloj para dos tareas; recursos/permiso no se amplían al reiniciar. El recibo OpenClaw no acredita Hermes. | 17.2 para OpenClaw; 17.3 adicional para Hermes | cc:TODO |
-| 17.5 | `[lane:gate] [tdd:required]` Panel de solo lectura con lista, detalle, línea temporal, avisos de espera y evidencia; agente y CLI visibles. | Recorridos del diseño verdes en móvil/escritorio y sin OpenGrokBot instalado; teclado, errores y frescura visibles; API/HTML sin secretos sintéticos ni XSS; decisión de licencia/commit de LobsterBoard registrada antes de usar código o assets. | 17.1, 17.4 | cc:TODO |
+| 17.5 | `[lane:gate] [tdd:required]` Configurar LobsterBoard adoptado en 17.0 y conectar el seguimiento con ajustes pequeños ligados a faltantes medidos; panel de solo lectura, agente y CLI visibles. | Recorridos del diseño verdes en móvil/escritorio y sin OpenGrokBot instalado; teclado, errores y frescura visibles; API/HTML sin secretos sintéticos ni XSS; cada ajuste tiene faltante y prueba, sin app/plataforma propia ni reescritura amplia; si requiere desarrollo grande, detener el carril UI y presentar alternativas acotadas. | 17.1, 17.4 | cc:TODO |
 | 17.6 | `[lane:gate] [tdd:required]` Paquete común e instalación independiente por host, preflight y reversa. | Instalar dos veces converge; upgrade/reversa conserva tareas; identidades distintas; manifiesto común y credenciales separadas | 17.4, 17.5 | cc:TODO |
 | 17.7 | `[lane:gate] [tdd:required]` Integración, PR, revisión agrupada y runbook operativo verificado. | Hooks y batería completa en CI del head final; reviewer distinto; cero bloqueantes; launcher dry-run y lectura independiente del runbook | 17.6 | cc:TODO |
 | 17.8 | `[lane:release] [tdd:skip:aceptacion-viva]` Instalación autorizada y demo real en cada computadora. | Mismo sistema probado con el otro runtime inaccesible; recibos por host, checklist y aceptación del usuario; ninguna paridad declarada sin probar ambos | 17.7, permiso vivo, Fase 16 aceptada donde aplique | cc:TODO |
 
 ### Clasificación y 事前確認 de Fase 17
 
-Required: 17.0–17.7; 17.8 para cierre operativo tras autorización. Recommended:
-LobsterBoard si licencia/compatibilidad permiten, demo visual y revisión cruzada
-de recuperación. Optional/deferred: controles desde navegador, costos históricos,
+Required: 17.0–17.7; 17.8 para cierre operativo tras autorización. La decisión de
+David del 2026-09-26 exige probar primero LobsterBoard original con una plantilla
+existente y registrar cobertura/faltantes antes de desarrollar UI. Conservarlo si
+cumple; sólo ajustes pequeños justificados. Si requiere una app/plataforma propia
+o cambios amplios, detener ese carril y presentar alternativas acotadas.
+Recommended: demo visual y revisión cruzada de recuperación. Optional/deferred: controles desde navegador, costos históricos,
 visor multi-host y acceso remoto. Reject: otro orquestador, segundo reloj, shell
 libre, copiar secretos, failover entre equipos o cierre por autodeclaración.
 
@@ -821,6 +830,29 @@ libre, copiar secretos, failover entre equipos o cierre por autodeclaración.
 No se cambian estados de Fases 14/16 por lo dicho en chat. `team_validation_mode:
 subagent`; arquitectura, producto/QA y seguridad revisaron el alcance. Detalles,
 archivos previstos, pruebas y guía de inicio están en el plan enlazado.
+
+## Fase 19 — Seguimiento inmediato entre trabajadores (U3a)
+
+Decisión de David del 2026-09-26: ejecutar después del cierre de U3 y antes de U4.
+El plan de U3 y sus tareas en curso no cambian. Esta sección es planificación,
+no evidencia de implementación ni autorización de instalación.
+
+[Plan de trabajo](docs/superpowers/plans/2026-09-26-seguimiento-inmediato.md).
+[Diseño y aceptación](docs/superpowers/specs/2026-09-26-seguimiento-inmediato-design.md).
+Spec delta: `docs/spec/00-project-spec.md`, contrato objetivo de U3a.
+`team_validation_mode: subagent`; arquitectura, producto y QA, y seguridad.
+
+| Task | Contenido | DoD | Depends | Status |
+|---|---|---|---|---|
+| 19.0 | `[lane:release] [tdd:skip:medicion-viva]` Medir el recorrido sobre el SHA que cierre U3. Inventariar todas las CLI habilitadas, sus señales de fin, destinatario, dueño y tiempos. Fijar el contrato mínimo y las pruebas. Promesa: David conoce dónde se pierden los minutos antes de cambiar el seguimiento; ruta: evidencia de una transición de base por cada CLI habilitada. | Recibos de U3, inventario y señales de cada CLI habilitada comprobados; transiciones de base por CLI con detección, envío, atención e inicio; contrato, límites, rutas y comandos de validación documentados. Sin señal fiable o con necesidad de reescritura amplia, detener y presentar la limitación. | U3 cerrada; autorización de prueba U3a | cc:TODO |
+| 19.1 | `[lane:gate] [tdd:required]` Conectar avisos persistentes al dueño existente y continuar una sola vez por la ruta de U3. Reutilizar hook, adaptadores y vigilante. Promesa: al terminar una entrega válida, Claw inicia el siguiente paso sin esperar al chequeo por silencio; ruta: corrida de prueba con eventos normalizados de todas las CLI habilitadas. | Contrato común probado por cada adaptador habilitado y uno de prueba sin cambios en el director; pruebas focalizadas de duplicados, evento viejo, sesión ajena, aviso más tick, caída, dueño ocupado, pregunta y fin sin sucesor; un solo consumidor y lanzamiento, sin pérdida del pendiente; hooks, revisión sin bloqueantes y CI completa del head final. Sin nuevo servicio, cron ni aplicación. | 19.0 | cc:TODO |
+| 19.2 | `[lane:release] [tdd:skip:medicion-viva]` Instalar el SHA validado y medir el recorrido completo. Publicar un único cierre de U3a con recibos y reversa. Promesa: David ve que el trabajo siguiente comienza en menos de 30 segundos cuando sus requisitos están cumplidos; ruta: al menos veinte transiciones reales con cobertura del inventario y reporte con todas las muestras. | Al menos veinte transiciones bajo 30 segundos, con dos finalizaciones por CLI habilitada y cada CLI como destino; mediana, máximo y conteo publicados sin ocultar fallos o esperas del dueño; recuperación en 60 segundos con servicios disponibles, sin duplicados; SHA leído de vuelta y reversa probada. | 19.1; autorización operativa U3a | cc:TODO |
+
+El aviso sólo solicita comprobar una entrega. No certifica éxito ni concede
+permisos. La detección rápida no cambia el consolidado de Telegram, las compuertas
+de entrega ni el alcance de U6. Si U3 cambia las interfaces, 19.0 reconcilia este
+plan con lo realmente integrado antes de modificar código. U4 espera el cierre
+de U3a. Se conserva el seguimiento previo como reversa.
 
 ## Fase U1 — Sync selectivo seguro fuente a runtime en Windows
 
