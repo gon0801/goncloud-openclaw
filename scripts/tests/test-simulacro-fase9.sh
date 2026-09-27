@@ -307,10 +307,23 @@ if debe_correr 9; then
 # segundos, "main" (el openclaw falso) crea el cron avance-tareas con su
 # scratch YA confirmado al recibir el turno.
 EVID9="$T/evidencia-9.md"
+# 14.15: en --ensayo el chequeo de retiro del cron no espera el tope de la
+# corrida real (SIM_TOPE_OBS_RETIRO, def. 120): el cron falso nunca se retira
+# y cada escenario con --observar-avance sumaba ~2 min fijos. Presupuesto de
+# pared del escenario, inyectable para hosts lentos.
+SIM9_PRESUPUESTO_OBS="${SIM9_PRESUPUESTO_OBS:-120}"
+ini9=$SECONDS
 salida9="$(SIM_TOPE_OBS_POLL=2 SIM_TOPE_OBS_VENTANA=5 \
   bash "$ARNES" --ensayo --salida "$EVID9" --tope-pared 300 --observar-avance 1 2>&1)"
 rc9=$?
+dur9=$((SECONDS-ini9))
 [ "$rc9" -eq 0 ] || fail "observacion (aviso sale): se esperaba salida 0, salio $rc9 -- $salida9"
+[ "$dur9" -le "$SIM9_PRESUPUESTO_OBS" ] \
+  || fail "observacion (aviso sale): tardo ${dur9}s, sobre el presupuesto de ${SIM9_PRESUPUESTO_OBS}s (el chequeo de retiro volvio a esperar el tope fijo?): $salida9"
+grep -q 'al cerrar, el cron avance-tareas: sin verificar' "$EVID9" \
+  || fail "observacion (aviso sale): el ensayo debio declarar el retiro 'sin verificar' y no esperarlo: $(grep -o 'al cerrar, el cron avance-tareas: [^;]*' "$EVID9" || true)"
+grep -q 'SIM_TOPE_OBS_RETIRO="${SIM_TOPE_OBS_RETIRO:-120}"' "$ARNES" \
+  || fail "el tope de retiro de la corrida real dejo de ser 120 (SIM_TOPE_OBS_RETIRO)"
 grep -q '## Observacion extendida' "$EVID9" || fail "observacion (aviso sale): falta la seccion en la evidencia"
 grep -A2 '## Observacion extendida' "$EVID9" | grep -q 'FUNCIONA observado real' \
   || fail "observacion (aviso sale): no se vio 'FUNCIONA observado real': $(grep -A2 '## Observacion extendida' "$EVID9")"

@@ -134,6 +134,10 @@ SIM_TOPE_OBS_VENTANA="${SIM_TOPE_OBS_VENTANA:-1800}"
 # subagente, solo para este envio; el resto de las llamadas de red del arnes
 # siguen con su tope corto.
 SIM_TOPE_TURNO_MAIN="${SIM_TOPE_TURNO_MAIN:-300}"
+# Mirada al retiro del cron tras el cierre (14.15), solo corrida real: tope
+# inyectable. --ensayo no la espera nunca (el cron falso nunca se retira) y
+# la declara "sin verificar".
+SIM_TOPE_OBS_RETIRO="${SIM_TOPE_OBS_RETIRO:-120}"
 
 # --tope-pared (CodeRabbit, PR #153): con --observar-avance, el reloj de
 # pared tiene que alcanzar para los 7 casos Y para la observacion completa
@@ -1151,16 +1155,22 @@ if [ -n "$OBSERVAR_AVANCE" ]; then
   # nada) para poder mirar UN tick despues del cierre, acotado y corto.
   if [ -n "$OBS_UUID_ENCONTRADO" ]; then
     "$CORRIDA_BIN" cerrar "$SIM_ID" >/dev/null 2>&1
-    OBS_RETIRO="sin verificar (no se espero)"
-    local_ini_retiro=$SECONDS
-    while [ "$((SECONDS-local_ini_retiro))" -lt 120 ]; do
-      if [ -z "$(obs_cron_declarationkey_uuid)" ]; then
-        OBS_RETIRO="si, main lo retiro tras el cierre"
-        break
-      fi
-      sleep 20
-    done
-    [ "$OBS_RETIRO" = "sin verificar (no se espero)" ] && OBS_RETIRO="no se vio retirado en 2 min tras el cierre (dato, no bloqueante)"
+    if [ "$ENSAYO" = "1" ]; then
+      # 14.15: en ensayo el cron falso nunca se retira; esperar aqui quemaba
+      # el tope completo (120 s) en cada escenario con --observar-avance.
+      OBS_RETIRO="sin verificar (ensayo)"
+    else
+      OBS_RETIRO="sin verificar (no se espero)"
+      local_ini_retiro=$SECONDS
+      while [ "$((SECONDS-local_ini_retiro))" -lt "$SIM_TOPE_OBS_RETIRO" ]; do
+        if [ -z "$(obs_cron_declarationkey_uuid)" ]; then
+          OBS_RETIRO="si, main lo retiro tras el cierre"
+          break
+        fi
+        sleep 20
+      done
+      [ "$OBS_RETIRO" = "sin verificar (no se espero)" ] && OBS_RETIRO="no se vio retirado en ${SIM_TOPE_OBS_RETIRO}s tras el cierre (dato, no bloqueante)"
+    fi
     OBS_NOTA="$OBS_NOTA; al cerrar, el cron avance-tareas: $OBS_RETIRO"
   fi
 fi
