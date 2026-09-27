@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -72,6 +73,26 @@ def validate_record(path: Path) -> str:
     return "VALID corrida.v2 legacy"
 
 
+LANE_REQUIRED = ("id", "branch", "worktree", "base_remote_sha", "owner", "mode")
+
+
+def _check_lanes(value: object) -> None:
+    # Misma forma de la reserva que validar_registro (corrida/lib.sh): un solo
+    # contrato de carril en los dos validadores (14.16).
+    if not isinstance(value, list):
+        raise RecordError("lanes is not a list")
+    for lane in value:
+        if not isinstance(lane, dict):
+            raise RecordError("lane is not an object")
+        for field in LANE_REQUIRED:
+            if not lane.get(field):
+                raise RecordError(f"lane without {field}")
+        if lane.get("mode") not in ("write", "read-only"):
+            raise RecordError("lane mode outside the set")
+        if lane.get("role") not in (None, "write", "review"):
+            raise RecordError("lane role outside the set")
+
+
 def _check_native_field(key: str, value: object) -> None:
     if key == "workers_registry":
         if not isinstance(value, str) or not value:
@@ -79,9 +100,11 @@ def _check_native_field(key: str, value: object) -> None:
     elif key == "automatic_routing":
         if not isinstance(value, dict) or not isinstance(value.get("enabled"), bool):
             raise RecordError("bad automatic_routing")
-    elif key in ("lanes", "effects"):
+    elif key == "lanes":
+        _check_lanes(value)
+    elif key == "effects":
         if not isinstance(value, list):
-            raise RecordError(f"bad {key}")
+            raise RecordError("bad effects")
     elif key == "evidence":
         if not isinstance(value, dict):
             raise RecordError("bad evidence")
@@ -118,7 +141,7 @@ def cmd_record_validate(args: argparse.Namespace) -> int:
     try:
         print(validate_record(Path(args.record)))
     except RecordError as exc:
-        print(exc.diagnostic)
+        print(f"{exc.diagnostic}: {exc}")
         return 1
     return 0
 
@@ -151,17 +174,30 @@ def cmd_select(args: argparse.Namespace) -> int:
         health = state.get("health", {})
         history = state.get("history", [])
         active = state.get("active", [])
+        installed = state.get("installed")
+        exhausted = state.get("exhausted") or []
+        previous_reviewer = state.get("previous_reviewer")
         if not isinstance(health, dict) or not isinstance(history, list) or not isinstance(active, list):
             raise SelectionError("bad state shape")
+        if not all(isinstance(item, dict) for item in history) or not all(
+            isinstance(item, dict) for item in active
+        ):
+            raise SelectionError("bad state entries")
+        if installed is not None and not isinstance(installed, dict):
+            raise SelectionError("bad installed shape")
+        if not isinstance(exhausted, list):
+            raise SelectionError("bad exhausted shape")
+        if previous_reviewer is not None and not isinstance(previous_reviewer, str):
+            raise SelectionError("bad previous_reviewer shape")
         decision = select_worker(
             registry,
             request,
             health,
             history,
             active,
-            installed=state.get("installed"),
-            exhausted=state.get("exhausted") or [],
-            previous_reviewer=state.get("previous_reviewer"),
+            installed=installed,
+            exhausted=exhausted,
+            previous_reviewer=previous_reviewer,
         )
     except SelectionError as exc:
         print(exc.diagnostic)
@@ -180,6 +216,12 @@ def cmd_select(args: argparse.Namespace) -> int:
             for item in decision.discarded
         ],
     }
+    if decision.winner is not None:
+        # 14.13: la decision registra el modelo y effort configurados del
+        # ganador (lo que el argv de arranque va a usar).
+        ganador = next(w for w in registry.workers if w.id == decision.winner)
+        payload["model"] = ganador.model
+        payload["effort"] = ganador.effort
     print(json.dumps(payload, sort_keys=True))
     return 0
 
@@ -191,26 +233,44 @@ def probe_worker(worker: Worker, env: Mapping[str, str], timeout: float) -> tupl
         return ("broken", "missing-executable")
     argv = [str(binary) if item == worker.binary else item for item in worker.commands["health"]]
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             [argv[0], *argv[1:]],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
         )
     except OSError:
         return ("broken", "launch-failed")
+    try:
+        out, err = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
+        # El binario puede dejar hijos vivos (launchers, wrappers): matar el
+        # grupo entero, no solo el PID directo (14.20 punto 6).
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass  # el grupo ya se fue solo
+        # Un hijo separado con setsid escapa al killpg y retiene stdout/stderr
+        # heredados: las pipes nunca se cierran y un communicate() sin tope
+        # colgaria la sonda (14.20 r2, B1). Cerrarlas y esperar solo al
+        # proceso directo, que si murio con el grupo.
+        for tuberia in (process.stdout, process.stderr):
+            if tuberia is not None:
+                tuberia.close()
+        process.wait()
         return ("broken", "timeout")
-    output = f"{completed.stdout}\n{completed.stderr}".lower()
+    # La salida del worker es dato, no contrato: decode tolerante para que un
+    # byte raro en un banner no reviente la sonda (14.20 punto 8).
+    output = f"{out.decode('utf-8', 'replace')}\n{err.decode('utf-8', 'replace')}".lower()
     if any(pattern.lower() in output for pattern in worker.auth_patterns):
         return ("unauthenticated", "auth-pattern")
     if any(pattern.lower() in output for pattern in worker.quota_patterns):
         return ("limited", "quota-pattern")
     if any(pattern.lower() in output for pattern in worker.blocked_patterns):
         return ("broken", "blocked-pattern")
-    if completed.returncode == 0:
+    if process.returncode == 0:
         return ("available", "ok")
-    return ("broken", f"exit-{completed.returncode}")
+    return ("broken", f"exit-{process.returncode}")
 
 
 def cmd_state_reduce(args: argparse.Namespace) -> int:

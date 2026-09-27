@@ -316,13 +316,19 @@ def _decide_deploy(
 def _decide_canary(lane: Mapping[str, Any], evidence: Mapping[str, Any], sha: str) -> GateDecision:
     delivery = lane.get("delivery") or {}
     projection = _projection(evidence, sha, "missing", _availability_of(evidence))
-    if not (delivery.get("deploy") or {}):
+    deploy = delivery.get("deploy") or {}
+    if not deploy:
         return _deny("sin-deploy", "canary sin deploy registrado", projection)
     canary = evidence.get("canary")
     if not isinstance(canary, dict) or not canary.get("result"):
         return _deny("canary-sin-resultado", "canary sin resultado observable", projection)
-    result = "approved" if canary.get("result") == "pass" else "failed"
-    return _allow("canary-ok", _projection(evidence, sha, result, _availability_of(evidence)),
+    # 14.21 punto 2: el canary responde por el SHA desplegado y con resultado
+    # de pase; un canary fallido o de otro SHA jamas permiten.
+    if str(canary.get("sha") or "") != str(deploy.get("sha") or ""):
+        return _deny("canary-otro-sha", "canary de un SHA distinto al desplegado", projection)
+    if canary.get("result") != "pass":
+        return _deny("canary-fallo", "canary con resultado fallido", projection)
+    return _allow("canary-ok", _projection(evidence, sha, "approved", _availability_of(evidence)),
                   {"canary": dict(canary)})
 
 

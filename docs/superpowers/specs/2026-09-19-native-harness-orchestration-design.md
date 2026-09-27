@@ -105,7 +105,7 @@ Cursor Agent es un trabajador administrado por Cursor. Si Cursor enruta internam
 El selector aplica filtros antes de puntuar. Descarta un trabajador si ocurre una de estas condiciones:
 
 - El ejecutable no está instalado.
-- La autenticación vencida no permite iniciar el trabajo.
+- La autenticación vencida: igual que con la cuota, el descarte alcanza a todas las entradas de su `quota_group` (una entrada sin el campo lo deriva de su `provider`); el runbook de la fase ordena ese mismo descarte por grupo para cuota, auth y binario.
 - La cuota agotada: el descarte por `quota_group` alcanza a todas las entradas del grupo, no sólo al trabajador agotado; una entrada sin el campo lo deriva de su `provider`.
 - El harness no tiene una capacidad requerida.
 - El repo prohíbe ese harness o su modo de permisos.

@@ -47,9 +47,32 @@ corrida_id_valido() { # $1 id; 0 = solo [A-Za-z0-9_-] (nada de /, .., :, ;)
 # Tope de reloj para las llamadas de red: cerrar retiene el lock mientras habla
 # con el gateway, y una llamada colgada no puede superar el umbral de locks viejos
 # (un proceso vivo con el lock roto es peor que un error oportuno).
-con_tope() { # $1 segundos; resto: comando a correr con tope (SIGALRM al vencer)
-  local seg="$1"; shift
-  perl -e 'alarm shift; exec(@ARGV) or exit 127' "$seg" "$@"
+con_tope() { # $1 segundos; resto: comando a correr con tope. El comando corre
+             # en su propio grupo de procesos y al vencer el tope muere el
+             # grupo entero (14.18), no solo el hijo directo: los nietos que
+             # el comando lanzo no sobreviven. Sin nietos, salida y codigo
+             # igual que antes (el 127 del exec fallido incluido).
+  local seg="$1" pid vig rc=0; shift
+  perl -e 'setpgrp(0,0); exec(@ARGV) or exit 127' "$@" &
+  pid=$!
+  # Vigilante externo: el SIGALRM viejo solo alcanzaba al hijo directo. Sondeo
+  # de 1 s para poder matar al vigilante sin dejar hijos huerfanos de sleep.
+  (
+    fin=$(( SECONDS + seg ))
+    while [ "$SECONDS" -lt "$fin" ]; do
+      kill -0 "$pid" 2>/dev/null || exit 0
+      sleep 1
+    done
+    kill -0 "$pid" 2>/dev/null || exit 0
+    kill -TERM -- "-$pid" 2>/dev/null
+    sleep 1
+    kill -KILL -- "-$pid" 2>/dev/null
+  ) &
+  vig=$!
+  wait "$pid" || rc=$?
+  kill "$vig" 2>/dev/null
+  wait "$vig" 2>/dev/null
+  return "$rc"
 }
 CORR_TOPE_RED="${CORR_TOPE_RED:-30}"
 
@@ -887,7 +910,8 @@ except Exception:
 
 worker_argv() { # $1 id $2 clave $3 worktree $4 brief $5 session_id $6 session_name
                 # stdout: argv[1:] del comando, un arg por linea, placeholders
-                # sustituidos; rc 1 si el worker o la clave no existen
+                # sustituidos; rc 1 si el worker o la clave no existen, o si
+                # hay {effort} sin effort (14.13: jamas un argumento vacio)
   WREG="$(corrida_workers_registry)" WID="$1" WK="$2" WWT="$3" WBR="$4" WSID="$5" WSN="$6" python3 -c "
 import json,os,sys
 try:
@@ -896,7 +920,14 @@ try:
   a=list(w['commands'][os.environ['WK']])
   s={'{worktree}':os.environ['WWT'],'{brief}':os.environ['WBR'],
      '{session_id}':os.environ['WSID'],'{session_name}':os.environ['WSN']}
-  sys.stdout.write('\n'.join(s.get(x,x) for x in a[1:]))
+  e=w.get('effort')
+  def sub(x):
+    if '{effort}' in x:
+      if not e:
+        raise ValueError('marcador {effort} sin campo effort en la entrada')
+      return x.replace('{effort}', e)
+    return s.get(x,x)
+  sys.stdout.write('\n'.join(sub(x) for x in a[1:]))
   if len(a) > 1: sys.stdout.write('\n')
 except Exception:
   sys.exit(1)
@@ -925,9 +956,9 @@ resolver_bin_worker() { # $1 id; stdout ruta ejecutable; rc 1 si no resuelve
 # lo demas pasa intacto (el transcript se conserva legible).
 redactar_texto() {
   tr -d '\000-\010\013\014\016-\037\177' | sed -E \
-    -e 's/ghp_[A-Za-z0-9]+/ghp_[REDACTED]/g' \
+    -e 's/gh([pousr])_[A-Za-z0-9]+/gh\1_[REDACTED]/g' \
     -e 's/github_pat_[A-Za-z0-9_]+/github_pat_[REDACTED]/g' \
-    -e 's/sk-[A-Za-z0-9]+/sk-[REDACTED]/g' \
+    -e 's/sk-[A-Za-z0-9_-]+/sk-[REDACTED]/g' \
     -e 's/xox[bpasr]-[A-Za-z0-9-]+/xox-[REDACTED]/g' \
     -e 's/AKIA[0-9A-Z]{16}/AKIA[REDACTED]/g'
 }

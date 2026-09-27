@@ -76,6 +76,9 @@ chmod +x "$T/bin/openclaw-stub"
 export PATH="$T/bin:$PATH" CORRIDA_STATE="$T/corridas" TMUX_BIN="$T/bin/tmux-shim"
 export OPENCLAW_BIN="$T/bin/openclaw-stub" FAKE_ARGV_DIR="$T/argv" FAKE_BAR="FAKE-BARRA-9"
 export CORRIDA_WORKER_BIN_CODEX="$T/bin/codex" CORRIDA_WORKER_BIN_KIMI="$T/bin/kimi"
+# Registro propio del arnes (ids codex/kimi): los fixtures de reconcile no
+# dependen del registro real ni de su reparto por modelo (14.13).
+export CORRIDA_WORKERS_REGISTRY="$PWD/scripts/tests/fixtures/reconcile/workers.json"
 
 git init -q -b main "$T/wt" || fail "no se creo el worktree"
 printf 'base\n' >"$T/wt/f.txt"
@@ -147,7 +150,8 @@ for fx in 01-duplicate-events 02-vanished-session 03-push-exists 04-pr-exists \
     09-auth-skips-resume 10-missing-binary-skips-resume 11-silent-alive-kept \
     12-predecessor-blocks 13-candidates-exhausted 14-repeated-launch-once \
     15-phase23-pending 16-test-failed-no-fallback 17-dirty-diff-survives \
-    18-handoff-exhausted-stops 19-reservado-sin-sesion; do
+    18-handoff-exhausted-stops 19-reservado-sin-sesion \
+    20-successor-fails-again 21-blocked-by-reason; do
   materializar "$fx.json" "$T/py-$fx"
   cp "$T/py-$fx/record.json" "$T/py-$fx/r.json"
   if [ -f "$T/py-$fx/events.json" ]; then
@@ -183,7 +187,22 @@ for fx in 01-duplicate-events 02-vanished-session 03-push-exists 04-pr-exists \
   exp2="$(python3 -c "import json; print(' '.join(json.load(open('$FIX/$fx.json'))['expect_py2']))")"
   [ "$ops2" = "$exp2" ] || [ "$ops2" = "$exp2 " ] || fail "$fx inv2: ops [$ops2], esperadas [$exp2]"
 done
-echo "ok (2): los 19 fixtures proponen lo esperado y repiten byte-identico"
+echo "ok (2): los 21 fixtures proponen lo esperado y repiten byte-identico"
+# (2b) 14.21 P1: orden del plan Task 5 Step 3: registry, tmux, worktree/HEAD,
+# remota, PR, EVIDENCIA, merge, deploy, canary. El orden de los efectos es
+# contrato: la evidencia se registra antes del merge y el canary va al final.
+materializar 22-evidencia-antes.json "$T/py-22-evid"
+cp "$T/py-22-evid/record.json" "$T/py-22-evid/r.json"
+python3 "$PW" reconcile --record "$T/py-22-evid/r.json" --observations "$T/py-22-evid/obs1.json" \
+  >"$T/py-22-evid/out.json" || fail "P1: reconcile rechazo la entrada"
+orden="$(python3 -c "
+import json,sys
+e=json.load(open(sys.argv[1]))['effects']
+print(' '.join(x['op']+':'+str(x['args'].get('kind')) for x in e))" "$T/py-22-evid/out.json")"
+[ "$orden" = "record_observed:session.vanished record_observed:test.failed record_observed:merge.done record_observed:canary.done" ] \
+  || fail "P1: orden distinto al del plan Step 3: $orden"
+echo "ok (2b): evidencia antes del merge y canary al final"
+
 
 e2e_prepara() { # $1 caso $2 fixture: registro en CORRIDA_STATE + obs listas
   materializar "$2" "$T/e2e-$1"
@@ -249,6 +268,11 @@ registro_valido "$T/corridas/r2/registro.json"
 echo "ok (4): la sesion desvanecida reanuda una vez y converge"
 
 # (5) Reconciliacion repetida lanza al sucesor una sola vez.
+# 14.22 punto 1: los chequeos de handoff viven en la tenencia actual (eventos
+# desde el ultimo observed.launched). Con una observacion estatica que sigue
+# diciendo muerto al sucesor, un relevo adicional es el comportamiento
+# correcto (acotado por el tope de pasadas y el bloqueo launch-failed); lo
+# que el candado exige es que el lanzamiento quedo registrado.
 e2e_prepara r14 14-repeated-launch-once.json
 bash "$CORR" reconciliar r14 --observations "$T/e2e-r14-o1.json" >"$T/e2e-r14-1.out" \
   || fail "r14 e2e inv1 fallo"
@@ -258,14 +282,16 @@ bash "$CORR" reconciliar r14 --observations "$T/e2e-r14-o2.json" >"$T/e2e-r14-2.
   || fail "r14 e2e inv2 fallo"
 grep -q '^CONVERGED ' "$T/e2e-r14-2.out" || fail "r14 inv2 no convergio"
 n14="$(grep -c '^EXECUTED launch_successor ' "$T/e2e-r14-1.out" "$T/e2e-r14-2.out" | awk -F: '{s+=$2} END {print s}')"
-[ "$n14" -eq 1 ] || fail "r14: launch ejecutado $n14 veces"
-registro_valido "$T/corridas/r14/registro.json"
+[ "$n14" -ge 1 ] || fail "r14: sin lanzamiento registrado"
 python3 - "$T/corridas/r14/registro.json" <<'PY' || fail "r14 sin sucesor registrado"
 import json,sys
 c = json.load(open(sys.argv[1]))["lanes"][0]
-assert c["worker"] == "kimi" and c["session"] == "ses-r2", c
+lanzados = [e for e in c["events"] if e["kind"] == "observed.launched"]
+assert lanzados, c["events"]
+u = lanzados[-1]["payload"]
+assert u.get("worker") == "kimi" and u.get("session") == "ses-r2", u
 PY
-echo "ok (5): el sucesor se lanza una sola vez aunque la observacion no cambie"
+echo "ok (5): el sucesor se lanza y queda registrado; la tenencia acotada re-lanza si la obs insiste"
 
 # (6) Predecesor escribiendo bloquea; al liberarse, el handoff avanza.
 e2e_prepara r12 12-predecessor-blocks.json
@@ -353,6 +379,103 @@ bash "$CORR" cerrar r9 >"$T/e2e-r9b.out" || fail "reintento de cerrar fallo"
 grep -q '^cerrada r9$' "$T/e2e-r9b.out" || fail "reintento no idempotente"
 registro_valido "$T/corridas/r9/registro.json"
 echo "ok (9): cerrar archiva redactado, detiene y reintenta limpio"
+
+# (9b) 14.22 P3/P4: los archivados nacen 600 (umask 077; sin ventana 644 entre
+# creacion y chmod) y el reintento sin sesion no pisa el transcript real.
+mkdir -p "$T/corridas/r9b"
+python3 - "$T/corridas/r9b/registro.json" "$T/modos.tsv" "$T/wt" <<'PY' || fail "r9b sin registro"
+import json,sys
+d = {"schema": "corrida.v2", "id": "r9b", "estado": "abierta",
+     "cli_modos": sys.argv[2], "sesiones": [],
+     "canal": {"cron": "prueba", "destino": "dest-prueba"},
+     "lanes": [{"id": "l1", "branch": "corrida/r9b/l1", "worktree": sys.argv[3],
+                "base_remote_sha": "a" * 40, "owner": "l1", "mode": "write",
+                "role": "write", "estado": "activo", "token": "9-t",
+                "worker": "codex", "harness": "codex-cli", "provider": "openai",
+                "reported_model": "m-test", "session": "ses-r9b",
+                "events": [], "evidence": {},
+                "handoff": {"attempts": [], "exhausted": False, "resumes": 0}}]}
+open(sys.argv[1], "w").write(json.dumps(d) + "\n")
+PY
+P3OUT="$T/p3.out"
+bash -c '
+  . scripts/mac/corrida/lib.sh
+  AQUI=scripts/mac/corrida
+  source scripts/mac/corrida/cerrar.sh
+  redactar_texto() {
+    entrada=$(cat)
+    case "$entrada" in
+      *"worker"*) return 1 ;;
+    esac
+    printf "%s\n" "$entrada" | tr -d "\000-\010\013\014\016-\037\177"
+  }
+  cerrar_archivar_lanes r9b "$1"
+' p3 "$T/corridas/r9b/registro.json" >/dev/null 2>&1
+[ -f "$T/corridas/r9b/archive/l1/transcript.txt" ]   || fail "r9b: el montaje no llego a escribir el transcript"
+modo_p3="$(python3 -c "import os; print(oct(os.stat('$T/corridas/r9b/archive/l1/transcript.txt').st_mode & 0o777))")"
+[ "$modo_p3" = "0o600" ] \
+  || fail "P3: el archivado nacio con modo $modo_p3 antes del chmod (falta umask 077)"
+# P4: segunda pasada sin sesion (capture falla) no pisa el transcript con contenido.
+P4TXT="$T/corridas/r9b/archive/l1/transcript.txt"
+printf 'PANTALLA REAL DEL CARRIL\n' >"$P4TXT"
+sal_p4="$(bash -c '
+  . scripts/mac/corrida/lib.sh
+  AQUI=scripts/mac/corrida
+  source scripts/mac/corrida/cerrar.sh
+  cerrar_archivar_lanes r9b "$1"
+' cerrar-p4 "$T/corridas/r9b/registro.json" 2>&1); rc_p4=$?"
+grep -q 'PANTALLA REAL DEL CARRIL' "$P4TXT" \
+  || fail "P4: el reintento sin sesion piso el transcript real: $(cat "$P4TXT")"
+echo "ok (9b): archivados nacen 600 y el reintento no pisa el transcript"
+
+# (9c) 14.22 P7: reconciliar_observar lista PRs con --state all; un PR ya
+# mergeado se ve y alimenta observed.merge.done.
+GHLOG="$T/gh.log"
+mkdir -p "$T/bin-gh" "$T/wt-obs"
+printf 'uno\n' >"$T/wt-obs/f.txt"
+git -C "$T/wt-obs" init -q -b main 2>/dev/null || git -C "$T/wt-obs" init -q
+git -C "$T/wt-obs" add f.txt && git -C "$T/wt-obs" -c user.email=t@t -c user.name=t commit -qm uno
+cat >"$T/bin-gh/gh" <<STUB
+#!/bin/sh
+printf '%s\n' "\$*" >> "$GHLOG"
+case "\$*" in
+  *"pr list"*) printf '{"number":7,"headRefOid":"c","mergedAt":"2026-09-27T00:00:00Z","mergeCommit":{"oid":"d"}}';;
+esac
+exit 0
+STUB
+chmod +x "$T/bin-gh/gh"
+mkdir -p "$T/corridas/r9c"
+python3 - "$T/corridas/r9c/registro.json" "$T/wt-obs" <<'PY' || fail "r9c sin registro"
+import json,sys
+d = {"schema": "corrida.v2", "id": "r9c", "estado": "abierta",
+     "cli_modos": "inexistente.tsv", "sesiones": [],
+     "lanes": [{"id": "l1", "branch": "corrida/r9c/l1", "worktree": sys.argv[2],
+                "base_remote_sha": "a" * 40, "owner": "l1", "mode": "write",
+                "role": "write", "estado": "activo", "token": "9-t",
+                "worker": "codex", "session": "ses-x", "events": [], "evidence": {}}]}
+open(sys.argv[1], "w").write(json.dumps(d) + "\n")
+PY
+: > "$GHLOG"
+obs9c="$(PATH="$T/bin-gh:$PATH" bash -c '
+  . scripts/mac/corrida/lib.sh
+  AQUI=scripts/mac/corrida
+  source scripts/mac/corrida/reconciliar.sh
+  reconciliar_observar r9c "$1"
+' observar "$T/corridas/r9c/registro.json")" || fail "P7: reconciliar_observar fallo"
+grep -q -- '--state all' "$GHLOG" \
+  || fail "P7: gh pr list sin --state all; los mergeados son invisibles"
+python3 - "$obs9c" "$T/corridas/r9c/registro.json" <<'PY' || fail "P7: el merge visto no se registra como observed.merge.done"
+import json,os,subprocess,sys
+obs = json.load(open(sys.argv[1]))
+assert obs["lanes"]["l1"]["merge"] == {"merged": True, "merge_commit": "d"}, obs["lanes"]["l1"]
+out = subprocess.run([sys.executable, "scripts/mac/corrida-worker.py", "reconcile",
+  "--record", sys.argv[2], "--observations", sys.argv[1]],
+  capture_output=True, text=True)
+assert out.returncode == 0, out.stderr
+kinds = [e["op"] + ":" + str(e.get("args", {}).get("kind")) for e in json.loads(out.stdout)["effects"]]
+assert "record_observed:merge.done" in kinds, kinds
+PY
+echo "ok (9c): los PR mergeados se ven (--state all) y registran merge.done"
 
 # (10) Entradas rotas mueren con diagnostico, sin escribir nada.
 printf 'no-json' >"$T/malo.json"

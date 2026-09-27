@@ -1,0 +1,158 @@
+{
+  "expect_py1": [
+    "record_observed",
+    "launch_successor"
+  ],
+  "expect_py2": [],
+  "obs1": {
+    "candidates": {
+      "exhausted": [],
+      "next": {
+        "session": "ses-n1",
+        "worker": "codex"
+      }
+    },
+    "lanes": {
+      "l1": {
+        "binary_exists": true,
+        "children_writing": false,
+        "commits_ahead": 1,
+        "dirty": false,
+        "head": "cccccccccccccccccccccccccccccccccccccccc",
+        "inspect": "failed",
+        "predecessor_alive": false,
+        "remote_branch": false,
+        "session_alive": false,
+        "successor_session": null,
+        "worktree_exists": true
+      }
+    },
+    "registry": {
+      "workers": [
+        "codex",
+        "kimi"
+      ]
+    },
+    "tmux": {
+      "sessions": []
+    }
+  },
+  "obs2": {
+    "candidates": {
+      "exhausted": [],
+      "next": {
+        "session": "ses-n1",
+        "worker": "codex"
+      }
+    },
+    "lanes": {
+      "l1": {
+        "binary_exists": true,
+        "children_writing": false,
+        "commits_ahead": 1,
+        "dirty": false,
+        "head": "cccccccccccccccccccccccccccccccccccccccc",
+        "inspect": "failed",
+        "predecessor_alive": false,
+        "remote_branch": false,
+        "session_alive": false,
+        "successor_session": null,
+        "worktree_exists": true
+      }
+    },
+    "registry": {
+      "workers": [
+        "codex",
+        "kimi"
+      ]
+    },
+    "tmux": {
+      "sessions": []
+    }
+  },
+  "record": {
+    "cli_modos": "@MODOS@",
+    "estado": "abierta",
+    "id": "run-t",
+    "lanes": [
+      {
+        "base_remote_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "branch": "corrida/run-t/l1",
+        "delivery": {},
+        "estado": "handoff",
+        "events": [
+          {
+            "id": "l1:intent.handoff_lane:01",
+            "kind": "intent.handoff_lane",
+            "lane": "l1",
+            "payload": {
+              "commits_ahead": 1,
+              "dirty": false,
+              "from_session": "ses-1",
+              "from_worker": "codex",
+              "preserve_worktree": true,
+              "reason": "quota",
+              "to_session": "ses-r2",
+              "to_worker": "kimi"
+            }
+          },
+          {
+            "id": "l1:intent.stop_lane:02",
+            "kind": "intent.stop_lane",
+            "lane": "l1",
+            "payload": {
+              "session": "ses-1"
+            }
+          },
+          {
+            "id": "l1:observed.session.stopped:03",
+            "kind": "observed.session.stopped",
+            "lane": "l1",
+            "payload": {
+              "session": "ses-1"
+            }
+          },
+          {
+            "id": "l1:intent.launch_successor:04",
+            "kind": "intent.launch_successor",
+            "lane": "l1",
+            "payload": {
+              "preserve_worktree": true,
+              "session": "ses-r2",
+              "worker": "kimi",
+              "worktree": "@WT@"
+            }
+          },
+          {
+            "id": "l1:observed.launched:05",
+            "kind": "observed.launched",
+            "lane": "l1",
+            "payload": {
+              "session": "ses-r2",
+              "worker": "kimi"
+            }
+          }
+        ],
+        "evidence": {},
+        "handoff": {
+          "attempts": [],
+          "exhausted": false,
+          "resumes": 0
+        },
+        "harness": "kimi-code",
+        "id": "l1",
+        "mode": "write",
+        "owner": "l1",
+        "provider": "kimi",
+        "reported_model": "unknown",
+        "role": "write",
+        "session": "ses-1",
+        "token": "9-t",
+        "worker": "kimi",
+        "worktree": "@WT@"
+      }
+    ],
+    "schema": "corrida.v2",
+    "seguimiento_global": true
+  }
+}

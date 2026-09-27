@@ -87,7 +87,7 @@ corrida_compuerta() {
   projection="$(printf '%s' "$out" | python3 -c "import json,sys; print(json.dumps(json.load(sys.stdin)['projection']))")"
   updates="$(printf '%s' "$out" | python3 -c "import json,sys; print(json.dumps(json.load(sys.stdin)['updates']))")"
   compuerta_veredicto "$id" "$reg" "$carril" "$accion" "$sha" "$verdict" "$code" "$reason" \
-    "$projection" "$updates" "$rstatus"
+    "$projection" "$updates" "$rstatus" || return 1
   [ "$verdict" = "allow" ]
 }
 
@@ -144,23 +144,38 @@ compuerta_veredicto() { # $1 id $2 reg $3 lane $4 accion $5 sha $6 verdict $7 co
     printf 'DENY %s %s %s\n' "$accion" "$code" "$reason"
   fi
   printf '%s\n' "$proj"
-  local evf kind
-  evf="$(mktemp)" || return 0
+  # 14.22 punto 5: el veredicto vale cuando queda GRABADO. Si el lock no cede
+  # o el reduce falla, un ALLOW no puede salir 0 (fail-closed); un DENY
+  # informado se imprime y sale 0.
+  local evf kind grabado=1
+  evf="$(mktemp)" || grabado=0
   kind="gate.allow"
   [ "$verdict" = "allow" ] || kind="gate.deny"
-  CORR_LANE="$lane" CORR_KIND="$kind" CORR_ACC="$accion" CORR_SHA="$sha" \
-  CORR_CODE="$code" CORR_REASON="$reason" CORR_PROJ="$proj" CORR_RS="$rstatus" \
-  CORR_EVF="$evf" python3 -c "
+  if [ "$grabado" -eq 1 ]; then
+    CORR_LANE="$lane" CORR_KIND="$kind" CORR_ACC="$accion" CORR_SHA="$sha" \
+    CORR_CODE="$code" CORR_REASON="$reason" CORR_PROJ="$proj" CORR_RS="$rstatus" \
+    CORR_EVF="$evf" python3 -c "
 import json,os
 pay={'action':os.environ['CORR_ACC'],'sha':os.environ['CORR_SHA'],'code':os.environ['CORR_CODE'],
 'reason':os.environ['CORR_REASON'],'projection':json.loads(os.environ['CORR_PROJ'] or '{}'),
 'receipt_status':int(os.environ['CORR_RS'] or 0)}
 ev=[{'lane':os.environ['CORR_LANE'],'kind':os.environ['CORR_KIND'],'payload':pay}]
 open(os.environ['CORR_EVF'],'w').write(json.dumps(ev))
-" 2>/dev/null || { rm -f "$evf"; return 0; }
-  lock_tomar "$reg" 2>/dev/null || { rm -f "$evf"; return 0; }
-  python3 "$AQUI/corrida-worker.py" state reduce --record "$reg" --events "$evf" >/dev/null 2>&1 || true
+" 2>/dev/null || grabado=0
+  fi
+  if [ "$grabado" -eq 1 ]; then
+    if ! lock_tomar "$reg" 2>/dev/null; then
+      grabado=0
+    else
+      python3 "$AQUI/corrida-worker.py" state reduce --record "$reg" --events "$evf" >/dev/null 2>&1 \
+        || grabado=0
+    fi
+  fi
   rm -f "$evf"
+  if [ "$grabado" -eq 0 ]; then
+    [ "$verdict" = "allow" ] && return 1
+    return 0
+  fi
   if [ "$verdict" = "allow" ] && [ "$upd" != "{}" ] && [ -n "$upd" ]; then
     local evf2
     evf2="$(mktemp)" || { lock_soltar "$reg"; return 0; }

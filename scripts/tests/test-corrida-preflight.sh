@@ -136,7 +136,7 @@ export WATCH_INSTALADO="$T/wbin/tmux-activity-watch.sh" ARGV_LOG
 # Proceso con su nombre para que pgrep lo encuentre; muere en el trap del EXIT.
 git -C "$T/repo" show "origin/main:scripts/mac/tmux-activity-watch.sh" >"$WATCH_INSTALADO" \
   || fail "sin blob de referencia del vigilante"
-bash -c "exec -a \"$T/wbin/tmux-activity-watch.sh\" sleep 120" &
+bash -c "exec -a \"$T/wbin/tmux-activity-watch.sh\" sleep 600" &
 VPID=$!
 
 modos() { # $1 archivo: filas "cli binario flag barra"
@@ -496,6 +496,72 @@ out="$(PATH="$T/nopgrep:$PATH" bash "$CORR" preflight t-novig 2>&1)"; rc=$?
 [ $rc -ne 0 ] || fail "sin vigilante debio dar NO APTO"
 printf '%s' "$out" | grep -q "vigilante no corre" || fail "NO APTO sin razon de vigilante:
 $out"
+
+# 14.20 (4) y (5): el bloque de sondas nativas (8) cubierto de punta a punta.
+# Ruteo apagado no toca el veredicto; con ruteo activo, un registro de workers
+# VACIO es NO APTO (dato, no unknown), un worker sano no agrega razones, uno
+# muerto deja "sin trabajador compatible" y un arnes ilegible queda unknown.
+REGW="$T/workers-nat.json"
+cp scripts/tests/fixtures/workers/valid.json "$REGW"
+cat >"$T/bin/worker-ok" <<'CLI'
+#!/bin/sh
+echo "worker falso 1.0"
+exit 0
+CLI
+cat >"$T/bin/worker-muerto" <<'CLI'
+#!/bin/sh
+exit 9
+CLI
+chmod +x "$T/bin/worker-ok" "$T/bin/worker-muerto"
+WPY_REAL="$PWD/scripts/mac/corrida-worker.py"
+vaciar_registro() {
+  python3 - "$REGW" <<'PY'
+import json, sys
+rec = json.load(open(sys.argv[1]))
+rec["workers"] = []
+json.dump(rec, open(sys.argv[1], "w"), indent=1, sort_keys=True)
+PY
+}
+modos x ok cli-ok "--flag-ok-9" "BAR-OK-9"
+
+vaciar_registro
+abrir t-nat-off "$RB"
+out=$(CORRIDA_NATIVE_ROUTING=off CORRIDA_WORKER_PY="$WPY_REAL" CORRIDA_WORKERS_REGISTRY="$REGW" \
+  bash "$CORR" preflight t-nat-off 2>&1)
+printf '%s\n' "$out" | head -1 | grep -q '^APTO' \
+  || fail "con ruteo off el preflight dejo de ser APTO: $out"
+printf '%s' "$out" | grep -q 'registro de workers sin entradas' \
+  && fail "con ruteo off el bloque de sondas no debio correr: $out"
+
+abrir t-nat-vacio "$RB"
+out=$(CORRIDA_NATIVE_ROUTING=report CORRIDA_WORKER_PY="$WPY_REAL" CORRIDA_WORKERS_REGISTRY="$REGW" \
+  bash "$CORR" preflight t-nat-vacio 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "con el registro de workers vacio debio dar NO APTO: $out"
+printf '%s' "$out" | grep -q 'registro de workers sin entradas' \
+  || fail "NO APTO sin la razon del registro vacio: $out"
+
+cp scripts/tests/fixtures/workers/valid.json "$REGW"
+abrir t-nat-ok "$RB"
+out=$(CORRIDA_NATIVE_ROUTING=report CORRIDA_WORKER_PY="$WPY_REAL" CORRIDA_WORKERS_REGISTRY="$REGW" \
+  CORRIDA_WORKER_BIN_CLAUDE="$T/bin/worker-ok" bash "$CORR" preflight t-nat-ok 2>&1)
+printf '%s\n' "$out" | head -1 | grep -q '^APTO' || fail "con un worker sano debio dar APTO: $out"
+printf '%s' "$out" | grep -q 'sin trabajador compatible' \
+  && fail "un worker sano debio contar como apto: $out"
+
+abrir t-nat-muerto "$RB"
+out=$(CORRIDA_NATIVE_ROUTING=report CORRIDA_WORKER_PY="$WPY_REAL" CORRIDA_WORKERS_REGISTRY="$REGW" \
+  CORRIDA_WORKER_BIN_CLAUDE="$T/bin/worker-muerto" bash "$CORR" preflight t-nat-muerto 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "con el unico worker muerto debio dar NO APTO: $out"
+printf '%s' "$out" | grep -q 'sin trabajador compatible' \
+  || fail "NO APTO sin la razon de sin trabajador compatible: $out"
+
+abrir t-nat-sinpy "$RB"
+out=$(CORRIDA_NATIVE_ROUTING=report CORRIDA_WORKER_PY="$T/bin/no-existe.py" CORRIDA_WORKERS_REGISTRY="$REGW" \
+  bash "$CORR" preflight t-nat-sinpy 2>&1)
+printf '%s\n' "$out" | head -1 | grep -q '^APTO' \
+  || fail "con el arnes ilegible el veredicto no cambia: $out"
+printf '%s' "$out" | grep -q 'sondas nativas sin medir' \
+  || fail "sin el arnes de workers debio quedar unknown explicito: $out"
 
 kill "$VPID" 2>/dev/null
 wait "$VPID" 2>/dev/null

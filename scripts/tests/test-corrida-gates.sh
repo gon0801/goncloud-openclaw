@@ -138,7 +138,8 @@ for fx in 01-merge-ok 02-merge-sin-recibo 03-merge-revocado 04-merge-otro-sha \
     15-pushpr-mismo-revisor 16-merge-bloqueante-repetido 17-merge-rebase-mecanico \
     18-deploy-mapea 19-canary-registra 20-rollback-sin-verificar \
     21-rollback-verificado 22-crossreview-autor 23-pushpr-sin-review \
-    24-deploy-sin-merge 25-merge-kit-rechaza 26-merge-bot-stale 27-merge-autor-evidencia; do
+    24-deploy-sin-merge 25-merge-kit-rechaza 26-merge-bot-stale 27-merge-autor-evidencia \
+    28-canary-fallo 29-canary-otro-sha; do
   materializar "$fx.json" "$T/py-$fx"
   leer_recibo "$T/py-$fx"
   meta_accion="$(python3 -c "import json; print(json.load(open('$T/py-$fx/meta.json'))['action'])")"
@@ -160,7 +161,7 @@ for k in ("source_url", "repo", "pr", "reviewed_sha", "result", "availability"):
     assert p.get(k) not in (None, ""), (k, p)
 PY
 done
-echo "ok (2): los 27 fixtures dan su veredicto y codigo"
+echo "ok (2): los 29 fixtures dan su veredicto y codigo"
 
 # (3) Extremo a extremo: compuerta.sh relee el PR falso, valida con el kit,
 # decide, registra el evento y proyecta sin sustituir el recibo.
@@ -171,7 +172,8 @@ for fx in 01-merge-ok 02-merge-sin-recibo 03-merge-revocado 04-merge-otro-sha \
     15-pushpr-mismo-revisor 16-merge-bloqueante-repetido 17-merge-rebase-mecanico \
     18-deploy-mapea 19-canary-registra 20-rollback-sin-verificar \
     21-rollback-verificado 22-crossreview-autor 23-pushpr-sin-review \
-    24-deploy-sin-merge 25-merge-kit-rechaza 26-merge-bot-stale 27-merge-autor-evidencia; do
+    24-deploy-sin-merge 25-merge-kit-rechaza 26-merge-bot-stale 27-merge-autor-evidencia \
+    28-canary-fallo 29-canary-otro-sha; do
   materializar "$fx.json" "$T/e2e-$fx"
   run="g-${fx%%-*}"
   mkdir -p "$T/corridas/$run"
@@ -302,7 +304,8 @@ got_cf="$(python3 "$PW" gate --record "$T/e4d/record.json" --lane l1 --action ca
   --receipt-status "$(cat "$T/e4d/receipt.status")" \
   --receipt-error "$(cat "$T/e4d/recibo.err")" --pr "$T/e4d/pr.json" \
   | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['verdict']+' '+d['code']+' '+d['projection']['result'])")"
-[ "$got_cf" = "allow canary-ok failed" ] || fail "canary failed: [$got_cf]"
+# 14.21 punto 2: un canary fallido con el SHA desplegado DENY, jamas allow.
+[ "$got_cf" = "deny canary-fallo missing" ] || fail "canary failed: [$got_cf]"
 echo "ok (4): accion y evidencia rotas mueren; sin kit no hay merge"
 
 # (5) Mutacion de compuertas: sin cada condicion, el fixture que la exige
@@ -343,5 +346,29 @@ mutante bot-aprueba 's/unavailable-declared/unavailable-declared-zzz/' \
 mutante sin-bloqueante 's/if open_blockers:/if False and open_blockers:/' \
   09-merge-bloqueante
 echo "ok (5): cinco mutantes caen"
+
+# (6) 14.22 P5: un ALLOW con el veredicto sin grabar (lock que no cede) no
+# sale 0: la compuerta propaga el fallo porque el registro es la memoria del
+# permiso. La linea ALLOW igual queda impresa para auditar.
+fx=01-merge-ok
+materializar "$fx.json" "$T/e2e-$fx-p5"
+run="g2-01"
+mkdir -p "$T/corridas/$run"
+cp "$T/e2e-$fx-p5/record.json" "$T/corridas/$run/registro.json"
+completar_registro "$T/corridas/$run/registro.json" "$run" "$T/modos.tsv"
+export GH_COMMENTS="$T/e2e-$fx-p5/comments.json" GH_PR="$T/e2e-$fx-p5/pr-gh.json"
+meta_accion="$(python3 -c "import json; print(json.load(open('$T/e2e-$fx-p5/meta.json'))['action'])")"
+meta_sha="$(python3 -c "import json; print(json.load(open('$T/e2e-$fx-p5/meta.json'))['sha'])")"
+: >"$T/corridas/$run/.lock"
+CORR_LOCK_INTENTOS=1 bash "$CORR" compuerta "$run" l1 "$meta_accion" --sha "$meta_sha" \
+  --evidence "$T/e2e-$fx-p5/evidence.json" >"$T/p5.out" 2>&1 \
+  && fail "P5: ALLOW con el veredicto sin grabar salio 0"
+grep -q "^ALLOW $meta_accion " "$T/p5.out" || fail "P5: sin la linea ALLOW para auditar"
+python3 - "$T/corridas/$run/registro.json" <<'PY' || fail "P5: inconsistencia inesperada"
+import json,sys
+evs = json.load(open(sys.argv[1]))["lanes"][0]["events"]
+assert not any(e["kind"] == "gate.allow" for e in evs), evs
+PY
+echo "ok (6): ALLOW sin veredicto grabado no sale 0"
 
 echo "TODO VERDE: corrida-gates"

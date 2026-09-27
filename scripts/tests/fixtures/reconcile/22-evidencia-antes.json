@@ -1,38 +1,39 @@
 {
-  "expect_launch_count_e2e": 1,
   "expect_py1": [
     "record_observed",
-    "handoff_lane"
-  ],
-  "expect_py2": [
+    "record_observed",
     "record_observed"
   ],
+  "expect_py2": [],
   "obs1": {
     "candidates": {
       "exhausted": [],
-      "next": {
-        "session": "ses-r2",
-        "worker": "kimi"
-      }
+      "next": null
     },
     "lanes": {
       "l1": {
+        "canary": {
+          "result": "pass",
+          "sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
         "children_writing": false,
         "commits_ahead": 1,
         "dirty": false,
-        "head": "4444444444444444444444444444444444444444",
-        "inspect": "failed",
+        "head": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "inspect": "running",
+        "merge": {
+          "merge_commit": "dddddddddddddddddddddddddddddddddddddddd",
+          "merged": true
+        },
         "predecessor_alive": false,
         "remote_branch": false,
         "session_alive": false,
-        "successor_session": null,
         "worktree_exists": true
       }
     },
     "registry": {
       "workers": [
-        "codex",
-        "kimi"
+        "codex"
       ]
     },
     "tmux": {
@@ -42,35 +43,36 @@
   "obs2": {
     "candidates": {
       "exhausted": [],
-      "next": {
-        "session": "ses-r2",
-        "worker": "kimi"
-      }
+      "next": null
     },
     "lanes": {
       "l1": {
+        "canary": {
+          "result": "pass",
+          "sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
         "children_writing": false,
         "commits_ahead": 1,
         "dirty": false,
-        "head": "4444444444444444444444444444444444444444",
+        "head": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         "inspect": "running",
+        "merge": {
+          "merge_commit": "dddddddddddddddddddddddddddddddddddddddd",
+          "merged": true
+        },
         "predecessor_alive": false,
         "remote_branch": false,
-        "session_alive": true,
-        "successor_session": null,
+        "session_alive": false,
         "worktree_exists": true
       }
     },
     "registry": {
       "workers": [
-        "codex",
-        "kimi"
+        "codex"
       ]
     },
     "tmux": {
-      "sessions": [
-        "ses-r2"
-      ]
+      "sessions": []
     }
   },
   "record": {
@@ -79,27 +81,18 @@
     "id": "run-t",
     "lanes": [
       {
-        "base_remote_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "base_remote_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "branch": "corrida/run-t/l1",
+        "delivery": {},
         "estado": "activo",
-        "events": [
-          {
-            "id": "l1:intent.resume_lane:01",
-            "kind": "intent.resume_lane",
-            "lane": "l1",
-            "payload": {
-              "session": "ses-r"
-            }
+        "events": [],
+        "evidence": {
+          "test": {
+            "result": "failed"
           }
-        ],
-        "evidence": {},
+        },
         "handoff": {
-          "attempts": [
-            {
-              "at": "2026-09-26T00:00:00Z",
-              "kind": "intent.resume_lane"
-            }
-          ],
+          "attempts": [],
           "exhausted": false,
           "resumes": 1
         },
@@ -110,12 +103,13 @@
         "provider": "openai",
         "reported_model": "unknown",
         "role": "write",
-        "session": "ses-r",
+        "session": "ses-1",
         "token": "9-t",
         "worker": "codex",
         "worktree": "@WT@"
       }
     ],
-    "schema": "corrida.v2"
+    "schema": "corrida.v2",
+    "seguimiento_global": true
   }
 }

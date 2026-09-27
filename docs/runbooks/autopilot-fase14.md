@@ -142,6 +142,8 @@ Tick interno global de 15 minutos más eventos tmux; Telegram consolidado cada 3
 | Lead reinicia | Leer registro, worktree, PR/recibo, CI y efectos reales antes de repetir una acción |
 | Canary o rollback falla | Rollback documentado y verificación; si falla la reversa, atención requerida con evidencia |
 
+Nota de reconciliación (14.21 punto 5): en modo automático `candidates.next` llega siempre `None` — la selección no publica la cola de candidatos; el relevo lo decide el director aportando observaciones (`--observations`). Por eso un handoff con `next=None` y sin agotamiento declarado queda bloqueado y visible (`handoff.blocked`, razón `no-candidate`) en lugar de lanzar a ciegas: no es un fallo del relevo, es el contrato de datos.
+
 ## Clases de comando
 
 | Clase | Uso |

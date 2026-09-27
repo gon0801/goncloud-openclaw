@@ -104,6 +104,19 @@ cuota=$($CLI select --registry "$REG" --request "$REQ" --state "$T/cuota.json") 
   || fail "la cuota agotada no debe reciclarse: $cuota"
 printf '%s' "$cuota" | grep -q 'quota-exhausted' || fail "cuota agotada no registrada"
 
+# 14.13/13a: relevo por quota_group. Cuota agotada en claude_fable: el relevo
+# NO elige claude_opus (misma cuenta: una entrada sin quota_group deriva su
+# grupo del provider); salta a codex. La decision registra modelo y effort.
+relay=$($CLI select --registry scripts/tests/fixtures/workers/selection-quota-group.json \
+  --request "$REQ" --state scripts/tests/fixtures/workers/selection-quota-state.json) \
+  || fail "select del relevo fallo"
+[ "$(printf '%s' "$relay" | jget 'json.load(sys.stdin)["winner"]')" = "codex" ] \
+  || fail "el relevo eligio el mismo quota_group: $relay"
+printf '%s' "$relay" | grep -q 'quota-group' \
+  || fail "el descarte de grupo no quedo registrado: $relay"
+printf '%s' "$relay" | grep -q '"model"' || fail "la decision no registra el modelo: $relay"
+printf '%s' "$relay" | grep -q '"effort"' || fail "la decision no registra el effort: $relay"
+
 # Sondas acotadas: CLIs de mentira vía override, sin tocar PATH ni la red.
 mkdir -p "$T/bin"
 cat >"$T/bin/fake-ok" <<'CLI'
@@ -146,5 +159,90 @@ out=$(CORRIDA_WORKER_BIN_CLAUDE="$T/bin/fake-lento" $CLI health probe --registry
 out=$(CORRIDA_WORKER_BIN_CLAUDE="$T/bin/no-existe" $CLI health probe --registry "$FIXREG" --worker claude --format status) \
   || fail "probe con override ausente fallo"
 [ "$out" = "broken" ] || fail "override ausente dio $out"
+
+# 14.20 (2): cmd_select valida los tipos del estado antes de pasarselos al
+# selector; un estado mal tipado da el diagnostico limpio, nunca un traceback.
+estado_malo() { # $1 mutacion python sobre el state, $2 descripcion
+  python3 - scripts/tests/fixtures/workers/selection-state.json "$T/malo.json" "$1" <<'PY'
+import json, sys
+state = json.load(open(sys.argv[1]))
+exec(sys.argv[3])
+json.dump(state, open(sys.argv[2], "w"), indent=1, sort_keys=True)
+PY
+  if out=$($CLI select --registry "$REG" --request "$REQ" --state "$T/malo.json" 2>&1); then
+    fail "select acepto un estado con $2"
+  fi
+  printf '%s\n' "$out" | grep -q 'ERROR invalid selection input' \
+    || fail "select con $2 revento sin diagnostico limpio: $(printf '%s\n' "$out" | head -2)"
+}
+estado_malo 'state["installed"] = []' "installed lista"
+estado_malo 'state["exhausted"] = "claude"' "exhausted cadena"
+estado_malo 'state["previous_reviewer"] = 17' "previous_reviewer numero"
+estado_malo 'state["history"] = ["x"]' "history con una cadena"
+
+# 14.20 (6): al vencer el tope se mata el GRUPO (killpg), no solo el PID: un
+# binario que deja un hijo vivo no puede sobrevivir a la sonda.
+cat >"$T/bin/fake-hijo" <<CLI
+#!/bin/sh
+sh -c 'echo \$\$ > "$T/hijo.pid"; while :; do sleep 1; done' >/dev/null 2>&1 &
+exec sleep 30
+CLI
+chmod +x "$T/bin/fake-hijo"
+rm -f "$T/hijo.pid"
+out=$(CORRIDA_WORKER_BIN_CLAUDE="$T/bin/fake-hijo" $CLI health probe --registry "$FIXREG" --worker claude --format status --timeout 1) \
+  || fail "probe de un binario con hijo fallo"
+[ "$out" = "broken" ] || fail "probe de un binario con hijo dio $out"
+[ -s "$T/hijo.pid" ] || fail "el hijo nunca escribio su pid"
+muerto=0
+i=0
+while [ "$i" -lt 20 ]; do
+  estado_hijo="$(ps -o stat= -p "$(cat "$T/hijo.pid")" 2>/dev/null || true)"
+  case "$estado_hijo" in ""|Z*) muerto=1; break;; esac
+  sleep 0.1
+  i=$((i+1))
+done
+[ "$muerto" -eq 1 ] || fail "el hijo sobrevivio al tope de la sonda (se mato solo el PID)"
+
+# 14.20 r2 (B1): un hijo separado con setsid escapa al killpg y retiene
+# stdout/stderr heredados; la sonda no puede esperar esas pipes sin tope: tiene
+# que regresar dentro del tope de la prueba (el mismo repro del bloqueante).
+cat >"$T/bin/fake-daemon" <<CLI
+#!/bin/sh
+python3 -c 'import os, time
+p = "$T/daemon.pid"
+open(p, "w").write(str(os.getpid()))
+os.setsid()
+time.sleep(40)' >/dev/null &
+exec sleep 30
+CLI
+chmod +x "$T/bin/fake-daemon"
+rm -f "$T/daemon.pid" "$T/daemon.out"
+CORRIDA_WORKER_BIN_CLAUDE="$T/bin/fake-daemon" $CLI health probe --registry "$FIXREG" --worker claude --format status --timeout 1 \
+  >"$T/daemon.out" 2>&1 &
+probe_pid=$!
+regreso=0
+i=0
+while [ "$i" -lt 50 ]; do
+  kill -0 "$probe_pid" 2>/dev/null || { regreso=1; break; }
+  sleep 0.1
+  i=$((i+1))
+done
+[ "$regreso" -eq 1 ] || fail "la sonda no regreso en 5 s con un hijo setsid que hereda la salida (B1)"
+out=$(cat "$T/daemon.out")
+[ "$out" = "broken" ] || fail "la sonda del daemon dio $out"
+kill -9 "$(cat "$T/daemon.pid" 2>/dev/null)" 2>/dev/null
+rm -f "$T/daemon.pid"
+
+# 14.20 (8): la salida del worker es dato: bytes que no son UTF-8 se decodifican
+# con errors="replace" y no revientan la sonda.
+cat >"$T/bin/fake-utf8" <<'CLI'
+#!/bin/sh
+printf 'fake \xff\xfe basura\n'
+exit 0
+CLI
+chmod +x "$T/bin/fake-utf8"
+out=$(CORRIDA_WORKER_BIN_CLAUDE="$T/bin/fake-utf8" $CLI health probe --registry "$FIXREG" --worker claude --format status 2>&1) \
+  || fail "probe con salida no-utf8 revento: $out"
+[ "$out" = "available" ] || fail "probe con salida no-utf8 dio $out"
 
 echo "TODO VERDE: selector de workers"

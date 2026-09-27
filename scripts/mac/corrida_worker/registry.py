@@ -14,7 +14,7 @@ from typing import Mapping
 SCHEMA = "workers.v1"
 MAX_EXTERNAL_SESSIONS = 4
 
-ALLOWED_PLACEHOLDERS = frozenset({"session_id", "session_name", "worktree", "brief"})
+ALLOWED_PLACEHOLDERS = frozenset({"session_id", "session_name", "worktree", "brief", "effort"})
 ALLOWED_CAPABILITIES = frozenset({"read", "write", "review", "browser"})
 ALLOWED_ROLES = ("write", "review")
 ALLOWED_COMMANDS = frozenset(
@@ -37,8 +37,13 @@ WORKER_KEYS = frozenset(
         "auth_patterns",
         "blocked_patterns",
         "transcript",
+        "effort",
+        "quota_group",
     }
 )
+OPTIONAL_WORKER_KEYS = frozenset({"effort", "quota_group"})
+WORKER_ID_RE = re.compile(r"^[a-z0-9_]+$")
+EFFORT_COMMANDS = ("start:write", "start:review", "resume:write", "resume:review")
 TASK_TYPE_RE = re.compile(r"^[a-z0-9_-]+$")
 PLACEHOLDER_RE = re.compile(r"\{([^{}]*)\}")
 SHELL_CHARS = frozenset(";|&$`\"'\\<>()*?!#~^")
@@ -62,6 +67,24 @@ class PatternError(RegistryError):
     diagnostic = "ERROR invalid pattern"
 
 
+class TranscriptError(RegistryError):
+    """Transcript con clave fuera del esquema cerrado."""
+
+    diagnostic = "ERROR invalid transcript"
+
+
+class EffortError(RegistryError):
+    """Effort sin argv que lo reciba, o marcador {effort} sin effort."""
+
+    diagnostic = "ERROR invalid effort"
+
+
+class IdError(RegistryError):
+    """Id fuera de [a-z0-9_] (alteraria tmux y CORRIDA_WORKER_BIN_<ID>)."""
+
+    diagnostic = "ERROR invalid id"
+
+
 @dataclass(frozen=True)
 class Worker:
     id: str
@@ -78,6 +101,8 @@ class Worker:
     auth_patterns: tuple[str, ...]
     blocked_patterns: tuple[str, ...]
     transcript_kind: str
+    effort: str | None = None
+    quota_group: str | None = None
 
 
 @dataclass(frozen=True)
@@ -171,6 +196,10 @@ def _check_id(raw: object) -> str:
         raise RegistryError("non-ascii worker id")
     if any(ch.isspace() for ch in raw):
         raise RegistryError("worker id with whitespace")
+    # Solo [a-z0-9_] (14.13): el id nombre la sesion tmux y el override
+    # CORRIDA_WORKER_BIN_<ID>; punto o guion los alterarian.
+    if not WORKER_ID_RE.match(raw):
+        raise IdError(f"bad worker id {raw!r}: solo [a-z0-9_]")
     return raw
 
 
@@ -178,7 +207,9 @@ def _check_capabilities(raw: object) -> tuple[str, ...]:
     if not isinstance(raw, list) or not raw:
         raise RegistryError("missing required capabilities")
     for item in raw:
-        if item not in ALLOWED_CAPABILITIES:
+        # isinstance primero: un elemento no hashable (dict/list) reventaria el
+        # `in` contra el frozenset con un TypeError en vez del diagnostico.
+        if not isinstance(item, str) or item not in ALLOWED_CAPABILITIES:
             raise RegistryError(f"unknown capability {item!r}")
     return tuple(raw)
 
@@ -207,9 +238,15 @@ def _check_permission_modes(raw: object, capabilities: tuple[str, ...]) -> dict[
     return dict(raw)
 
 
+TRANSCRIPT_KEYS = frozenset({"kind", "path"})
+
+
 def _check_transcript(raw: object) -> str:
     if not isinstance(raw, dict):
         raise RegistryError("transcript is not a mapping")
+    unknown = set(raw) - TRANSCRIPT_KEYS
+    if unknown:
+        raise TranscriptError(f"unknown transcript key: {sorted(unknown)[0]}")
     path = raw.get("path")
     if path is not None:
         if not isinstance(path, str) or not path:
@@ -228,9 +265,15 @@ def _check_worker(raw: object) -> Worker:
     unknown = set(raw) - WORKER_KEYS
     if unknown:
         raise RegistryError(f"unknown worker key: {sorted(unknown)[0]}")
-    missing = WORKER_KEYS - set(raw)
+    missing = (WORKER_KEYS - OPTIONAL_WORKER_KEYS) - set(raw)
     if missing:
         raise RegistryError(f"missing worker key: {sorted(missing)[0]}")
+    effort = raw.get("effort")
+    if effort is not None and (not isinstance(effort, str) or not effort):
+        raise EffortError("empty effort")
+    quota_group = raw.get("quota_group")
+    if quota_group is not None and (not isinstance(quota_group, str) or not quota_group):
+        raise RegistryError("bad quota_group")
     capabilities = _check_capabilities(raw["capabilities"])
     for field in ("harness", "provider"):
         value = raw[field]
@@ -240,6 +283,20 @@ def _check_worker(raw: object) -> Worker:
         value = raw[field]
         if not isinstance(value, str) or not value:
             raise RegistryError(f"bad {field}")
+    commands = _check_commands(raw["commands"], capabilities)
+    # El par effort/marcador va cerrado en ambas direcciones (14.13, 14.13c):
+    # effort sin {effort} en start/resume, o {effort} sin effort, es ERROR;
+    # jamas una expansion a argumento vacio.
+    marcador = any(
+        "{effort}" in elemento
+        for clave, argv in commands.items()
+        if clave in EFFORT_COMMANDS
+        for elemento in argv
+    )
+    if effort is not None and not marcador:
+        raise EffortError("effort without an {effort} placeholder in start/resume argv")
+    if effort is None and marcador:
+        raise EffortError("{effort} placeholder without effort")
     return Worker(
         id=_check_id(raw["id"]),
         harness=raw["harness"],
@@ -250,11 +307,13 @@ def _check_worker(raw: object) -> Worker:
         task_types=_check_task_types(raw["task_types"]),
         permission_modes=_check_permission_modes(raw["permission_modes"], capabilities),
         version=raw["version"],
-        commands=_check_commands(raw["commands"], capabilities),
+        commands=commands,
         quota_patterns=_check_patterns(raw["quota_patterns"], "quota_patterns"),
         auth_patterns=_check_patterns(raw["auth_patterns"], "auth_patterns"),
         blocked_patterns=_check_patterns(raw["blocked_patterns"], "blocked_patterns"),
         transcript_kind=_check_transcript(raw["transcript"]),
+        effort=effort,
+        quota_group=quota_group,
     )
 
 

@@ -9,6 +9,11 @@
 # llamador. stdout: nada; 0 = todos archivados y detenidos.
 cerrar_archivar_lanes() { # $1 id $2 reg
   local id="$1" reg="$2" lanes lane sesion dir pant sel evs evd
+  # 14.22 punto 3: todo el archivado corre con umask 077 dentro de un subshell:
+  # los archivos nacen 600 y el chmod de abajo queda de cinta, no de defensa.
+  # punto 4: en un reintento la sesion ya no existe y capture falla; el
+  # transcript real jamas se pisa con el aviso, solo se completa si falta.
+  umask 077
   lanes="$(CORR_REG="$reg" python3 -c "
 import json,os
 d=json.load(open(os.environ['CORR_REG']))
@@ -21,7 +26,7 @@ if isinstance(c,dict) and c.get('session')))")" || return 1
     sesion="$(lane_campo "$reg" "$lane" session)"
     if [ -n "${TMUX_BIN:-}" ] && pant="$("$TMUX_BIN" capture-pane -p -t "=$sesion:" 2>/dev/null)"; then
       printf '%s\n' "$pant" | redactar_texto >"$dir/transcript.txt" || return 1
-    else
+    elif [ ! -s "$dir/transcript.txt" ]; then
       printf 'sesion ausente: %s\n' "$sesion" | redactar_texto >"$dir/transcript.txt" || return 1
     fi
     sel="$(CORR_REG="$reg" CORR_LANE="$lane" python3 -c "
