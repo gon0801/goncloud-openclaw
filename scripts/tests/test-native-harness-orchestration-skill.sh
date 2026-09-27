@@ -70,7 +70,7 @@ fi
 # Puntero unico: agent-dispatch apunta a la skill una sola vez y respeta el off.
 grep -qF "native-harness-orchestration" "$DISPATCH" \
   || fail "agent-dispatch no apunta a la skill nativa"
-n=$(grep -c "native-harness-orchestration" "$DISPATCH")
+n=$(grep -v "candado:" "$DISPATCH" | grep -c "native-harness-orchestration")
 [ "$n" -eq 1 ] || fail "agent-dispatch nombra la skill $n veces (puntero unico = 1)"
 grep -qF "CORRIDA_NATIVE_ROUTING=off" "$DISPATCH" \
   || fail "agent-dispatch no documenta el ruteo con off"

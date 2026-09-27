@@ -11,6 +11,7 @@ Route work to this Gateway's agents and collect complete results. Main orchestra
 
 Pedidos de ingeniería nativa por harnesses de la Mac usan la skill
 `native-harness-orchestration` (Task 9). Con `CORRIDA_NATIVE_ROUTING=off` o
+<!-- candado: test-native-harness-orchestration-skill.sh -->
 con el gate de rollout por etapas sin aprobar, el pedido sigue la cadena
 agent-dispatch de abajo; no copies la máquina de estados del harness aquí.
 
