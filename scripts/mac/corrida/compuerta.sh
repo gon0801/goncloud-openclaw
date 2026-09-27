@@ -94,7 +94,7 @@ corrida_compuerta() {
 # Lee el PR autoritativo a $3. 0 = leido.
 compuerta_leer_pr() { # $1 repo $2 pr $3 salida
   local raw
-  raw="$(gh pr view "$2" --repo "$1" --json number,headRefOid,mergedAt,mergeCommit 2>/dev/null)" \
+  raw="$(gh pr view "$2" --repo "$1" --json number,headRefOid,mergedAt,mergeCommit,statusCheckRollup 2>/dev/null)" \
     || return 1
   GH_RAW="$raw" GH_OUT="$3" python3 -c "
 import json,os
@@ -102,10 +102,15 @@ try: d=json.loads(os.environ['GH_RAW'])
 except Exception: raise SystemExit(1)
 if not isinstance(d,dict) or not d.get('number'): raise SystemExit(1)
 mc=d.get('mergeCommit') or {}
+# 14.21 punto 3: releer los checks del head en CADA lectura, para que la
+# decision de merge use el CI vigente y no el de una lectura anterior.
+rollup=d.get('statusCheckRollup') or []
+concl=rollup[0].get('conclusion').lower() if rollup and isinstance(rollup[0],dict) and isinstance(rollup[0].get('conclusion'),str) else None
 open(os.environ['GH_OUT'],'w').write(json.dumps({
 'number':d.get('number'),'head':d.get('headRefOid'),
 'merged':bool(d.get('mergedAt')),
-'merge_commit':mc.get('oid') if isinstance(mc,dict) else None},sort_keys=True))
+'merge_commit':mc.get('oid') if isinstance(mc,dict) else None,
+'checks':{'sha':d.get('headRefOid'),'conclusion':concl}},sort_keys=True))
 " 2>/dev/null || return 1
 }
 

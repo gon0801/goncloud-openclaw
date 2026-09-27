@@ -371,4 +371,49 @@ assert not any(e["kind"] == "gate.allow" for e in evs), evs
 PY
 echo "ok (6): ALLOW sin veredicto grabado no sale 0"
 
+# (7) 14.21 punto 3: compuerta_leer_pr relee los checks de GitHub del head.
+GHLOG2="$T/gh-checks.log"
+export T
+mkdir -p "$T/bin-ci"
+cat >"$T/bin-ci/gh" <<'STUB'
+#!/bin/sh
+printf '%s\n' "$*" >> "$GHLOG2"
+case "$*" in
+  *"pr view"*)
+    pasada=$(cat "$T/pasada" 2>/dev/null || echo 1)
+    echo $((pasada + 1)) > "$T/pasada"
+    if [ "$pasada" = 1 ]; then
+      printf '{"number":7,"headRefOid":"1111111111111111111111111111111111111111","mergedAt":null,"mergeCommit":null,"statusCheckRollup":[{"conclusion":"success","status":"COMPLETED"}]}'
+    else
+      printf '{"number":7,"headRefOid":"1111111111111111111111111111111111111111","mergedAt":null,"mergeCommit":null,"statusCheckRollup":[{"conclusion":"FAILURE","status":"COMPLETED"}]}'
+    fi
+    ;;
+esac
+exit 0
+STUB
+chmod +x "$T/bin-ci/gh"
+PATH="$T/bin-ci:$PATH" bash -c '
+  . scripts/mac/corrida/lib.sh
+  AQUI=scripts/mac/corrida
+  source scripts/mac/corrida/compuerta.sh
+  compuerta_leer_pr o/r 7 "$1"
+' leer1 "$T/pr-lectura1.json" >/dev/null 2>&1
+python3 - "$T/pr-lectura1.json" <<'PY' || fail "P3: la primera lectura no trae checks"
+import json, sys
+pr = json.load(open(sys.argv[1]))
+assert pr["checks"]["conclusion"] == "success", pr
+PY
+PATH="$T/bin-ci:$PATH" bash -c '
+  . scripts/mac/corrida/lib.sh
+  AQUI=scripts/mac/corrida
+  source scripts/mac/corrida/compuerta.sh
+  compuerta_leer_pr o/r 7 "$1"
+' leer2 "$T/pr-lectura2.json" >/dev/null 2>&1
+python3 - "$T/pr-lectura2.json" <<'PY' || fail "P3: la segunda lectura no ve el CI nuevo del head"
+import json, sys
+pr = json.load(open(sys.argv[1]))
+assert pr["checks"]["conclusion"] == "failure", pr
+PY
+echo "ok (7): compuerta_leer_pr relee los checks del head en cada lectura"
+
 echo "TODO VERDE: corrida-gates"
