@@ -136,7 +136,7 @@ export WATCH_INSTALADO="$T/wbin/tmux-activity-watch.sh" ARGV_LOG
 # Proceso con su nombre para que pgrep lo encuentre; muere en el trap del EXIT.
 git -C "$T/repo" show "origin/main:scripts/mac/tmux-activity-watch.sh" >"$WATCH_INSTALADO" \
   || fail "sin blob de referencia del vigilante"
-bash -c "exec -a \"$T/wbin/tmux-activity-watch.sh\" sleep 120" &
+bash -c "exec -a \"$T/wbin/tmux-activity-watch.sh\" sleep 600" &
 VPID=$!
 
 modos() { # $1 archivo: filas "cli binario flag barra"
