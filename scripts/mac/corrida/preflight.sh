@@ -33,10 +33,14 @@ corrida_preflight() {
   local GH="${GH_BIN:-$(command -v gh 2>/dev/null || echo gh)}"
   local REPO="${REPO_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
   local WATCH="${WATCH_INSTALADO:-$HOME/bin/tmux-activity-watch.sh}"
-  local razones="" unknowns=""
+  local razones="" unknowns="" razones_usuario=""
 
+  # razon <forma-operador> [forma-usuario] (14.11): la forma operador sigue en
+  # razones (el NO APTO queda igual); la forma usuario (default: la misma $1)
+  # alimenta el aviso DETENIDA, unida en una sola linea.
   razon() { razones="$razones
-- $1"; }
+- $1"; razon_usuario "${2:-$1}"; }
+  razon_usuario() { razones_usuario="${razones_usuario:+$razones_usuario, }$1"; }
   unknown() { unknowns="$unknowns
 - $1"; }
 
@@ -52,7 +56,7 @@ corrida_preflight() {
   # (2) cada binario con flag conocido arranca bajo PATH minimo y el flag entra.
   local tabla; tabla="$(json_campo "$reg" cli_modos)"
   if [ ! -r "$tabla" ]; then
-    razon "tabla de modos ilegible: $tabla"
+    razon "tabla de modos ilegible: $tabla" "la tabla de modos no se puede leer"
   else
   local cli binario flag barra fila
   for cli in $(awk -F'\t' '$1 !~ /^#/ && $1 != "" {print $1}' "$tabla" 2>/dev/null); do
@@ -153,7 +157,7 @@ corrida_preflight() {
       [ "$cr" -eq 2 ] && unknown "clase sin medir: $clase"
     done
   else
-    razon "runbook sin leer: $runbook"
+    razon "runbook sin leer: $runbook" "el runbook de la corrida no se puede leer"
   fi
 
   # (7) mecanismo del flag del navegador con el binario REAL (B4: la paridad
@@ -170,17 +174,20 @@ corrida_preflight() {
     if [ -n "$pf_home" ]; then
       sal_mal="$(HOME="$pf_home" "$oc_real" browser tabs --profile claw --json 2>&1)"
       printf '%s' "$sal_mal" | grep -q '\.openclaw-claw/openclaw\.json' \
-        || razon "CLI instalado divergente: --profile claw ya no desvia la config"
+        || razon "CLI instalado divergente: --profile claw ya no desvia la config" \
+                 "el binario instalado no es el que espera la corrida"
       # Un exit distinto de 0 solo es rechazo del flag si la salida no muestra
       # que se parseo: el CLI bueno deja la config en .openclaw/openclaw.json
       # y puede salir 1 despues, porque no hay gateway.
       rc_bien=0
       sal_bien="$(HOME="$pf_home" "$oc_real" browser tabs --browser-profile claw --json 2>&1)" || rc_bien=$?
       if [ "$rc_bien" -ne 0 ] && ! printf '%s' "$sal_bien" | grep -q '\.openclaw/openclaw\.json'; then
-        razon "el CLI rechazo --browser-profile (exit $rc_bien): el flag que el runbook usa no existe en este binario"
+        razon "el CLI rechazo --browser-profile (exit $rc_bien): el flag que el runbook usa no existe en este binario" \
+          "el runbook pide un modo de navegador que el binario no tiene"
       fi
       printf '%s' "$sal_bien" | grep -q '\.openclaw-claw' \
-        && razon "CLI instalado divergente: --browser-profile tambien desvia la config"
+        && razon "CLI instalado divergente: --browser-profile tambien desvia la config" \
+                 "el binario instalado no es el que espera la corrida"
     else
       unknown "mecanismo del navegador sin probar (mktemp fallo)"
     fi
@@ -221,7 +228,20 @@ corrida_preflight() {
   if [ -n "$razones" ]; then
     printf 'NO APTO%s\n' "$razones"
     [ -n "$unknowns" ] && printf 'QUEDA unknown:%s\n' "$unknowns"
-    corrida_mensaje "$id" "DETENIDA" "0 de 1 partes terminadas" "la revision previa no paso y no se arranca" \
+    # 14.11: el aviso trae la razon en lenguaje de usuario. Cinturon de
+    # silencio: el cambio compuesto pasa por jerga_en_texto (lib.sh) antes de
+    # salir; sucio o sin mktemp, la frase generica de hoy (jamas un mensaje
+    # ausente: el NO APTO ya salio por stdout).
+    local cambio="la revision previa no paso y no se arranca"
+    if [ -n "$razones_usuario" ]; then
+      local det; det="$(mktemp)" 2>/dev/null || det=""
+      if [ -n "$det" ]; then
+        printf 'la revision previa no paso y no se arranca; falta: %s' "$razones_usuario" > "$det"
+        jerga_en_texto "$det" || cambio="$(cat "$det")"
+        rm -f "$det"
+      fi
+    fi
+    corrida_mensaje "$id" "DETENIDA" "0 de 1 partes terminadas" "$cambio" \
       "se revisa lo encontrado y se vuelve a intentar" "nada" >/dev/null 2>&1
     return 1
   fi
