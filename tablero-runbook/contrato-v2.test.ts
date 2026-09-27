@@ -7,6 +7,7 @@ import {
   FASE_RE,
   SCHEMA_LITERAL,
   type ProgresoDoc,
+  derivar,
   validarProgreso,
 } from "./lib.ts";
 
@@ -163,6 +164,29 @@ describe("bloques nativos del carril (Task 8)", () => {
     assert.ok(
       v.razones.some((r) => r.includes("worker.effort")),
       `falta la razón de effort: ${JSON.stringify(v.razones)}`,
+    );
+  });
+});
+
+// 14.3 r2 B1: el squash mapea el head del PR al merge commit; la evidencia
+// del head revisado sigue vigente y un carril mergeado no queda "vencido".
+describe("atencion por evidencia (r2 B1)", () => {
+  it("el carril mergeado de la fixture valida NO queda vencido por el mapeo", () => {
+    const doc = fixture("v2-native-workers.json") as ProgresoDoc;
+    const d = derivar(doc, Date.parse("2026-09-27T11:05:00Z"));
+    const a = d.atencionWorker.find((x) => x.carril === "A");
+    const vencidas = (a?.razones ?? []).filter((r) => r.includes("-vencida"));
+    assert.deepEqual(vencidas, [], `carril A vencido de mas: ${JSON.stringify(a)}`);
+  });
+
+  it("evidencia de un head distinto SIN merge si queda vencida", () => {
+    const doc = fixture("v2-native-workers-invalid.json") as ProgresoDoc;
+    const d = derivar(doc, Date.parse("2026-09-27T11:05:00Z"));
+    const f = d.atencionWorker.find((x) => x.carril === "F");
+    assert.ok(f, `carril F sin atencion: ${JSON.stringify(d.atencionWorker)}`);
+    assert.ok(
+      f.razones.includes("evidence-review-vencida"),
+      `faltaba evidence-review-vencida: ${JSON.stringify(f.razones)}`,
     );
   });
 });

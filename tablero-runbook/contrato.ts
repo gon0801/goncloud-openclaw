@@ -97,7 +97,8 @@ export type EvidenciaItem = {
   sha: string | null;
 };
 export type EvidenceBloque = Partial<Record<(typeof EVIDENCIA_CLAVES)[number], EvidenciaItem>>;
-export type DeliveryBloque = Record<(typeof DELIVERY_CLAVES)[number], EvidenciaItem>;
+export type DeliveryItem = EvidenciaItem & { reviewed_head?: string | null };
+export type DeliveryBloque = Record<(typeof DELIVERY_CLAVES)[number], DeliveryItem>;
 
 export type Carril = {
   id: string;
@@ -312,6 +313,14 @@ function validarBloquesNativos(
         }
         if (it["status"] === "pending" && sha !== null) {
           razones.push(`${donde}.delivery.${clave}.sha: pending lleva sha null`);
+        }
+        // 14.3 r2 B1: merge lleva el head revisado que el squash mapeó al
+        // merge commit; así la evidencia del PR sigue vigente tras el squash.
+        if (clave === "merge") {
+          const rh = it["reviewed_head"];
+          if (rh !== null && rh !== undefined && (typeof rh !== "string" || !SHA_RE.test(rh))) {
+            razones.push(`${donde}.delivery.merge.reviewed_head: debe ser sha1 hex de 40 en minúsculas o null`);
+          }
         }
       }
     }
@@ -662,6 +671,24 @@ export function derivar(doc: ProgresoDoc, ahora: number = Date.now()): Derivado 
       if (w["health"] === "broken") razones.push("worker-broken");
     }
     const head = typeof c["head"] === "string" ? (c["head"] as string) : null;
+    const del = (c as Record<string, unknown>)["delivery"] as Record<string, unknown> | undefined;
+    // 14.3 r2 B1: el squash mapea el head del PR al merge commit (decisión de
+    // 14.5, se guardan los dos SHAs y no se exige que sean iguales). La
+    // evidencia del head revisado sigue vigente cuando el merge está limpio y
+    // el mapeo casa; sin eso, todo carril mergeado quedaría "vencido".
+    const mergeDel =
+      del && typeof del === "object"
+        ? ((del as Record<string, unknown>)["merge"] as Record<string, unknown> | undefined)
+        : undefined;
+    const mapeoSquash =
+      !!mergeDel &&
+      mergeDel["status"] === "clean" &&
+      typeof mergeDel["sha"] === "string" &&
+      mergeDel["sha"] === head &&
+      typeof mergeDel["reviewed_head"] === "string";
+    const revisado = mapeoSquash ? (mergeDel!["reviewed_head"] as string) : null;
+    const vigente = (sha: unknown): boolean =>
+      typeof sha === "string" && (sha === head || (revisado !== null && sha === revisado));
     const ev = (c as Record<string, unknown>)["evidence"] as Record<string, unknown> | undefined;
     if (ev && typeof ev === "object" && head) {
       for (const clave of EVIDENCIA_CLAVES) {
@@ -670,14 +697,13 @@ export function derivar(doc: ProgresoDoc, ahora: number = Date.now()): Derivado 
         if (it["status"] === "blocked") razones.push(`evidence-${clave}-bloqueada`);
         if (
           typeof it["sha"] === "string" &&
-          (it["sha"] as string) !== head &&
+          !vigente(it["sha"]) &&
           it["status"] !== "pending"
         ) {
           razones.push(`evidence-${clave}-vencida`);
         }
       }
     }
-    const del = (c as Record<string, unknown>)["delivery"] as Record<string, unknown> | undefined;
     if (del && typeof del === "object") {
       const rb = del["rollback"] as Record<string, unknown> | undefined;
       if (rb && typeof rb === "object" && rb["status"] === "blocked") {

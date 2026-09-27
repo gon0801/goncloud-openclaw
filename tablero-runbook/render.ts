@@ -170,6 +170,7 @@ function filaEvidencia(clave: string, item: { status?: unknown; sha?: unknown } 
 function detalleBajo(
   carril: Carril | undefined,
   atencion: string[] | undefined,
+  cierreVentana: string | null,
 ): string {
   if (!carril) return "";
   const w = carril.worker as WorkerBloque | undefined;
@@ -194,9 +195,18 @@ function detalleBajo(
       ex.visibility === "degraded" && typeof ex.attach_command === "string"
         ? `<div>attach: <code class="mono">${t(ex.attach_command, 200)}</code></div>`
         : "";
+    // 14.3 r2 B2: inicio y transcurrido, contra lead.actualizado (el "ahora"
+    // del documento) para mantener el HTML determinístico entre RPC y HTTP.
+    const inicioIso = typeof ex.started_at === "string" ? ex.started_at : "";
+    let transcurrido = "";
+    const iniMs = Date.parse(inicioIso);
+    const finMs = cierreVentana ? Date.parse(cierreVentana) : NaN;
+    if (!Number.isNaN(iniMs) && !Number.isNaN(finMs) && finMs >= iniMs) {
+      transcurrido = ` · ${t(Math.floor((finMs - iniMs) / 60000), 6)} min`;
+    }
     lineas.push(
       `<li>execution: ${t(ex.worktree, 160)} · sesión <span class="mono">${t(ex.session, 100)}</span> · ` +
-        `visibilidad ${t(ex.visibility, 20)}${attach}</li>`,
+        `visibilidad ${t(ex.visibility, 20)} · inicio ${t(inicioIso, 40)}${transcurrido}${attach}</li>`,
     );
   }
   if (ev) {
@@ -230,6 +240,7 @@ function pintarFila(
   f: Fila,
   github: GithubCruce | undefined,
   atenciones: Map<string, string[]>,
+  cierreVentana: string | null,
 ): string {
   if (f.kind === "cola") {
     const estado = f.carril?.estado ?? f.item.estado;
@@ -243,7 +254,7 @@ function pintarFila(
 <td>${pintarPrs(github, f.carril, f.item)}</td>
 <td>${pintarAvance(f.item.avance)}</td>
 </tr>
-${residualesBajo(f.carril)}${detalleBajo(f.carril, f.carril ? atenciones.get(f.carril.id) : undefined)}`;
+${residualesBajo(f.carril)}${detalleBajo(f.carril, f.carril ? atenciones.get(f.carril.id) : undefined, cierreVentana)}`;
   }
   const c = f.carril;
   return `<tr>
@@ -254,7 +265,7 @@ ${residualesBajo(f.carril)}${detalleBajo(f.carril, f.carril ? atenciones.get(f.c
 <td>${pintarPrs(github, c, undefined)}</td>
 <td></td>
 </tr>
-${residualesBajo(c)}${detalleBajo(c, atenciones.get(c.id))}`;
+${residualesBajo(c)}${detalleBajo(c, atenciones.get(c.id), cierreVentana)}`;
 }
 
 function cabecera(doc: ProgresoDoc): string {
@@ -310,7 +321,8 @@ export function renderTablero(
   const atenciones = new Map<string, string[]>(
     (derivado.atencionWorker ?? []).map((a) => [a.carril, a.razones]),
   );
-  const cuerpo = filas.map((f) => pintarFila(f, github, atenciones)).join("\n");
+  const cierreVentana = typeof doc.lead?.actualizado === "string" ? doc.lead.actualizado : null;
+  const cuerpo = filas.map((f) => pintarFila(f, github, atenciones, cierreVentana)).join("\n");
 
   const eventos = (Array.isArray(doc.eventos) ? doc.eventos : [])
     .slice(-20)

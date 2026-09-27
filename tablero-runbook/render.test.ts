@@ -256,3 +256,45 @@ describe("bloques nativos del carril (Task 8)", () => {
     assert.match(html, /rollback-fallido/);
   });
 });
+
+// 14.3 r2 B2: la linea de execution pinta el inicio y el transcurrido,
+// calculados contra lead.actualizado (determinista: nada de Date.now()).
+describe("elapsed del carril nativo (r2 B2)", () => {
+  function docConInicio(startedAt: string): ProgresoDoc {
+    const doc = baseDoc();
+    const c = carril({ id: "N2", estado: "implementando" }) as Record<string, unknown>;
+    c["worker"] = {
+      id: "claude_fable",
+      harness: "claude-code",
+      provider: "anthropic",
+      model: "claude-fable-5-1",
+      effort: null,
+      reported_model: null,
+      health: "available",
+    };
+    c["execution"] = {
+      worktree: "/Users/dn/dev/wt/f14-a",
+      session: "ses-f14-a",
+      visibility: "visible",
+      attach_command: "/opt/homebrew/bin/tmux attach -t =ses-f14-a",
+      started_at: startedAt,
+    };
+    (doc as Record<string, unknown>)["carriles"] = [c];
+    (doc as Record<string, unknown>)["cola"] = [];
+    return doc as ProgresoDoc;
+  }
+
+  it("pinta inicio y minutos transcurridos hasta lead.actualizado", () => {
+    const doc = docConInicio("2026-09-27T10:05:00Z");
+    doc.lead.actualizado = "2026-09-27T12:05:00Z"; // 120 min de tenencia
+    const html = renderTablero(doc, derivar(doc, Date.parse("2026-09-27T12:05:00Z")));
+    assert.match(html, /10:05:00/, "sin la hora de inicio");
+    assert.match(html, /120 min/, "sin el transcurrido");
+  });
+
+  it("started_at ausente no pinta transcurrido inventado", () => {
+    const doc = docConInicio("");
+    const html = renderTablero(doc, derivar(doc, Date.parse("2026-09-27T12:05:00Z")));
+    assert.ok(!html.includes("NaN"), "transcurrido con NaN");
+  });
+});
