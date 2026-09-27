@@ -1206,4 +1206,42 @@ mkdir -p "$T/lat" && cp -r "$T/corridas/t-estados" "$T/lat/" \
 ( cd "$T" && CORRIDA_STATE="$T/lat" bash "$CORR_ABS" latido >/dev/null 2>&1 ) \
   || fail "latido se rompe con handoff/stopped"
 
+# 14.18: con_tope mata el GRUPO entero al vencer el tope. Un comando que lanza
+# un nieto de larga duracion no puede dejarlo vivo tras el tope, y los caminos
+# sin nietos conservan salida y codigo (el 127 del exec fallido incluido).
+CT="$T/con-tope"
+mkdir -p "$CT"
+cat >"$CT/comando-nieto.sh" <<STUB
+#!/bin/bash
+sh -c 'echo \$\$ > "$CT/nieto.pid"; sleep 60' &
+echo \$\$ > "$CT/hijo.pid"
+sleep 60
+STUB
+chmod +x "$CT/comando-nieto.sh"
+rm -f "$CT/hijo.pid" "$CT/nieto.pid"
+bash -c '. scripts/mac/corrida/lib.sh; con_tope 2 bash "'"$CT/comando-nieto.sh"'" >/dev/null 2>&1'
+[ $? -ne 0 ] || fail "con_tope debio cortar el comando al vencer el tope"
+[ -s "$CT/hijo.pid" ] && [ -s "$CT/nieto.pid" ] \
+  || fail "el comando de prueba no registro sus pids"
+limpio=0
+i=0
+while [ "$i" -lt 20 ]; do
+  vivos=0
+  for p in "$(cat "$CT/hijo.pid")" "$(cat "$CT/nieto.pid")"; do
+    estado="$(ps -o stat= -p "$p" 2>/dev/null || true)"
+    case "$estado" in ""|Z*) ;; *) vivos=$((vivos + 1));; esac
+  done
+  [ "$vivos" -eq 0 ] && { limpio=1; break; }
+  sleep 0.2
+  i=$((i + 1))
+done
+[ "$limpio" -eq 1 ] \
+  || fail "quedo un proceso del grupo vivo tras el tope (hijo=$(cat "$CT/hijo.pid") nieto=$(cat "$CT/nieto.pid"))"
+sal="$(bash -c '. scripts/mac/corrida/lib.sh; con_tope 5 echo hola-con-tope; exit $?')"
+[ "$sal" = "hola-con-tope" ] || fail "con_tope altero la salida del comando: $sal"
+bash -c '. scripts/mac/corrida/lib.sh; con_tope 5 true' \
+  || fail "con_tope rompio el exit 0 de un comando sano"
+[ "$(bash -c '. scripts/mac/corrida/lib.sh; con_tope 5 no-existe-absoluto-xyz >/dev/null 2>&1; echo $?')" = "127" ] \
+  || fail "el 127 del exec fallido ya no es 127"
+
 echo "TODO VERDE: test-corrida-nucleo"

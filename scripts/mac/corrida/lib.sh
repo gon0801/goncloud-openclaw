@@ -47,9 +47,32 @@ corrida_id_valido() { # $1 id; 0 = solo [A-Za-z0-9_-] (nada de /, .., :, ;)
 # Tope de reloj para las llamadas de red: cerrar retiene el lock mientras habla
 # con el gateway, y una llamada colgada no puede superar el umbral de locks viejos
 # (un proceso vivo con el lock roto es peor que un error oportuno).
-con_tope() { # $1 segundos; resto: comando a correr con tope (SIGALRM al vencer)
-  local seg="$1"; shift
-  perl -e 'alarm shift; exec(@ARGV) or exit 127' "$seg" "$@"
+con_tope() { # $1 segundos; resto: comando a correr con tope. El comando corre
+             # en su propio grupo de procesos y al vencer el tope muere el
+             # grupo entero (14.18), no solo el hijo directo: los nietos que
+             # el comando lanzo no sobreviven. Sin nietos, salida y codigo
+             # igual que antes (el 127 del exec fallido incluido).
+  local seg="$1" pid vig rc=0; shift
+  perl -e 'setpgrp(0,0); exec(@ARGV) or exit 127' "$@" &
+  pid=$!
+  # Vigilante externo: el SIGALRM viejo solo alcanzaba al hijo directo. Sondeo
+  # de 1 s para poder matar al vigilante sin dejar hijos huerfanos de sleep.
+  (
+    fin=$(( SECONDS + seg ))
+    while [ "$SECONDS" -lt "$fin" ]; do
+      kill -0 "$pid" 2>/dev/null || exit 0
+      sleep 1
+    done
+    kill -0 "$pid" 2>/dev/null || exit 0
+    kill -TERM -- "-$pid" 2>/dev/null
+    sleep 1
+    kill -KILL -- "-$pid" 2>/dev/null
+  ) &
+  vig=$!
+  wait "$pid" || rc=$?
+  kill "$vig" 2>/dev/null
+  wait "$vig" 2>/dev/null
+  return "$rc"
 }
 CORR_TOPE_RED="${CORR_TOPE_RED:-30}"
 
