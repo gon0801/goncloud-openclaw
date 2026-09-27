@@ -166,6 +166,26 @@ describe("plugin smoke import (7.4)", () => {
     mod.default.register(host.api as never);
     return host;
   };
+// 14.3: HTML byte-identico por RPC y HTTP con los bloques nativos presentes.
+it("v2-native-workers: el HTML del tablero es identico por RPC y HTTP", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "tablero-143-rpc-http-"));
+  const host = await cargar({ stateDir: dir });
+  const doc = fixtureDoc("v2-native-workers.json");
+  await llamarMetodo(host.metodos, "runbook.progress.set", doc);
+
+  const rpc = await llamarMetodo(host.metodos, "runbook.progress.get", {
+    corrida: "fase14-nativos",
+  });
+  assert.equal(rpc.ok, true, `RPC fallo: ${JSON.stringify(rpc)}`);
+
+  const res = await llamarRuta(host.rutas, "/runbook/tablero/c/fase14-nativos");
+  assert.equal(res.statusCode, 200);
+
+  assert.equal(rpc.html, res.body, "el HTML por RPC difiere del HTML por HTTP");
+  assert.ok(rpc.html.includes("claude_fable"), "sin worker en el HTML");
+  assert.ok(rpc.html.includes("kimi-code/k3"), "sin modelo del sucesor en el HTML");
+});
+
 
   it("default export expone register", async () => {
     const mod = await import("./index.ts");

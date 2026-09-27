@@ -158,3 +158,143 @@ describe("renderTablero (12.3)", () => {
     assert.match(html, /ítems en master/);
   });
 });
+
+// Task 8 + 14.13d: detalle nativo del carril dentro de <details>.
+describe("bloques nativos del carril (Task 8)", () => {
+  function docNativo(worker: Record<string, unknown>, execution?: Record<string, unknown>): ProgresoDoc {
+    const doc = baseDoc();
+    const nuevo = carril({ id: "N1", estado: "implementando" }) as Record<string, unknown>;
+    nuevo["worker"] = worker;
+    if (execution) nuevo["execution"] = execution;
+    (doc as Record<string, unknown>)["carriles"] = [nuevo];
+    (doc as Record<string, unknown>)["cola"] = [];
+    return doc as ProgresoDoc;
+  }
+
+  const workerBase = {
+    id: "claude_fable",
+    harness: "claude-code",
+    provider: "anthropic",
+    model: "claude-fable-5-1",
+    effort: "high",
+    reported_model: "claude-fable-5-1",
+    health: "available",
+  };
+  const executionBase = {
+    worktree: "/Users/dn/dev/wt/f14-a",
+    session: "ses-f14-a",
+    visibility: "visible",
+    attach_command: "/opt/homebrew/bin/tmux attach -t =ses-f14-a",
+    started_at: "2026-09-27T10:05:00Z",
+  };
+
+  it("muestra worker, harness, provider/model/effort, salud, worktree, sesión y visibilidad", () => {
+    const html = htmlDe(docNativo(workerBase, executionBase));
+    for (const esperado of [
+      "claude_fable",
+      "claude-code",
+      "anthropic",
+      "claude-fable-5-1",
+      "high",
+      "available",
+      "/Users/dn/dev/wt/f14-a",
+      "ses-f14-a",
+      "visible",
+    ]) {
+      assert.ok(html.includes(esperado), `falta ${esperado} en el HTML`);
+    }
+    assert.match(html, /<details class="nativo">/);
+    assert.match(html, /<summary>nativo<\/summary>/);
+  });
+
+  it("escapa el effort y el model: nada de <script> ni <b> crudos", () => {
+    const html = htmlDe(
+      docNativo({
+        ...workerBase,
+        effort: "<script>alert(1)</script>",
+        model: "<b>negrita</b>",
+      }),
+    );
+    assert.ok(!html.includes("<script>alert"), `script crudo: ${html.slice(0, 400)}`);
+    assert.ok(!html.includes("<b>negrita"), "b crudo");
+    assert.ok(html.includes("&lt;script&gt;"), "effort sin escapar");
+    assert.ok(html.includes("&lt;b&gt;negrita&lt;/b&gt;"), "model sin escapar");
+  });
+
+  it("el attach_command solo aparece dentro de <code> cuando la visibilidad es degraded", () => {
+    const degradado = htmlDe(docNativo(workerBase, { ...executionBase, visibility: "degraded" }));
+    const codeIdx = degradado.indexOf("<code");
+    assert.ok(codeIdx >= 0, "degraded sin <code>");
+    const attachIdx = degradado.indexOf("attach -t =ses-f14-a");
+    assert.ok(attachIdx > codeIdx, "attach fuera del <code> en degraded");
+    const visible = htmlDe(docNativo(workerBase, executionBase));
+    assert.ok(!visible.includes("<code"), "visible no debe pintar el attach en code");
+  });
+
+  it("trunca un model gigante a 300 caracteres", () => {
+    const html = htmlDe(docNativo({ ...workerBase, model: "m".repeat(400) }));
+    assert.ok(!html.includes("m".repeat(301)), "el model no se trunco");
+  });
+
+  it("sin button ni form: el attach jamas es ejecutable", () => {
+    const html = htmlDe(docNativo(workerBase, { ...executionBase, visibility: "degraded" }));
+    assert.ok(!html.includes("<button"), "button");
+    assert.ok(!html.includes("<form"), "form");
+    assert.ok(!html.includes("onclick"), "onclick");
+  });
+
+  it("atencion derivada: worker roto y rollback fallido quedan anotados", () => {
+    const doc = docNativo({ ...workerBase, health: "broken" }, executionBase);
+    (doc.carriles[0] as Record<string, unknown>)["delivery"] = {
+      merge: { status: "pending", sha: null },
+      deploy: { status: "pending", sha: null },
+      canary: { status: "pending", sha: null },
+      rollback: { status: "blocked", sha: null },
+    };
+    const html = htmlDe(doc);
+    assert.match(html, /atenci[oó]n: worker-broken/);
+    assert.match(html, /rollback-fallido/);
+  });
+});
+
+// 14.3 r2 B2: la linea de execution pinta el inicio y el transcurrido,
+// calculados contra lead.actualizado (determinista: nada de Date.now()).
+describe("elapsed del carril nativo (r2 B2)", () => {
+  function docConInicio(startedAt: string): ProgresoDoc {
+    const doc = baseDoc();
+    const c = carril({ id: "N2", estado: "implementando" }) as Record<string, unknown>;
+    c["worker"] = {
+      id: "claude_fable",
+      harness: "claude-code",
+      provider: "anthropic",
+      model: "claude-fable-5-1",
+      effort: null,
+      reported_model: null,
+      health: "available",
+    };
+    c["execution"] = {
+      worktree: "/Users/dn/dev/wt/f14-a",
+      session: "ses-f14-a",
+      visibility: "visible",
+      attach_command: "/opt/homebrew/bin/tmux attach -t =ses-f14-a",
+      started_at: startedAt,
+    };
+    (doc as Record<string, unknown>)["carriles"] = [c];
+    (doc as Record<string, unknown>)["cola"] = [];
+    return doc as ProgresoDoc;
+  }
+
+  it("pinta inicio y minutos transcurridos hasta lead.actualizado", () => {
+    const doc = docConInicio("2026-09-27T10:05:00Z");
+    doc.lead.actualizado = "2026-09-27T12:05:00Z"; // 120 min de tenencia
+    const html = renderTablero(doc, derivar(doc, Date.parse("2026-09-27T12:05:00Z")));
+    assert.match(html, /10:05:00/, "sin la hora de inicio");
+    assert.match(html, /120 min/, "sin el transcurrido");
+  });
+
+  it("started_at ausente no pinta transcurrido inventado", () => {
+    const doc = docConInicio("");
+    const html = renderTablero(doc, derivar(doc, Date.parse("2026-09-27T12:05:00Z")));
+    assert.ok(!html.includes("NaN"), "transcurrido con NaN");
+  });
+});

@@ -230,6 +230,19 @@ def _decide_merge(
     if pr.get("head") != sha:
         return _deny("pr-avanzado", "el head del PR ya no es el revisado",
                       _projection(evidence, sha, "stale", _availability_of(evidence)))
+    # 14.4 r2 B2: los checks releidos de GitHub mandan. Deben ser del SHA
+    # pedido y exitosos; cualquier check fallido en el rollup lo falla todo.
+    checks = pr.get("checks") or {}
+    if not isinstance(checks, dict) or not checks:
+        return _deny("ci-ausente", "sin checks releidos de GitHub para el head",
+                      _projection(evidence, sha, "missing", _availability_of(evidence)))
+    if checks.get("sha") != sha:
+        return _deny("ci-stale", "los checks releidos son de otro sha",
+                      _projection(evidence, sha, "stale", _availability_of(evidence)))
+    if checks.get("conclusion") != "success":
+        code = "ci-rojo" if checks.get("conclusion") == "failure" else "ci-pendiente"
+        return _deny(code, "los checks releidos no dan success",
+                      _projection(evidence, sha, "blocked", _availability_of(evidence)))
     ci = evidence.get("ci")
     if ci is None:
         return _deny("ci-ausente", "sin CI para el head",

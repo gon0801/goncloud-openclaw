@@ -94,7 +94,7 @@ corrida_compuerta() {
 # Lee el PR autoritativo a $3. 0 = leido.
 compuerta_leer_pr() { # $1 repo $2 pr $3 salida
   local raw
-  raw="$(gh pr view "$2" --repo "$1" --json number,headRefOid,mergedAt,mergeCommit 2>/dev/null)" \
+  raw="$(gh pr view "$2" --repo "$1" --json number,headRefOid,mergedAt,mergeCommit,statusCheckRollup 2>/dev/null)" \
     || return 1
   GH_RAW="$raw" GH_OUT="$3" python3 -c "
 import json,os
@@ -102,10 +102,42 @@ try: d=json.loads(os.environ['GH_RAW'])
 except Exception: raise SystemExit(1)
 if not isinstance(d,dict) or not d.get('number'): raise SystemExit(1)
 mc=d.get('mergeCommit') or {}
+# 14.21 punto 3: releer los checks del head en CADA lectura, para que la
+# decision de merge use el CI vigente y no el de una lectura anterior.
+rollup=d.get('statusCheckRollup') or []
+# 14.21 punto 3 (14.4 r2 B2): JUNTAR todo el rollup; basta con que un check
+# COMPLETED haya fallado para que el resultado sea fallido.
+# 14.4 r3 B4: el rollup real trae tipos mezclados. CheckRun: si status no es
+# COMPLETED cuenta como pendiente y si no manda su conclusion; StatusContext
+# manda su state. Fallo: FAILURE/ERROR/CANCELLED/TIMED_OUT/ACTION_REQUIRED.
+# Aceptable: SUCCESS/SKIPPED/NEUTRAL. Pendiente: PENDING/EXPECTED/QUEUED/
+# IN_PROGRESS y todo lo desconocido. Success solo si todo es aceptable y hay
+# al menos un check.
+FALLO={'FAILURE','ERROR','CANCELLED','TIMED_OUT','ACTION_REQUIRED'}
+OK={'SUCCESS','SKIPPED','NEUTRAL'}
+PEND={'PENDING','EXPECTED','QUEUED','IN_PROGRESS'}
+concl=None
+clases=[]
+for i in rollup:
+    if not isinstance(i,dict): clases.append('pendiente'); continue
+    if i.get('__typename')=='StatusContext' or ('state' in i and 'conclusion' not in i):
+        estado=str(i.get('state') or '').upper()
+    elif i.get('status')!='COMPLETED':
+        clases.append('pendiente'); continue
+    else:
+        estado=str(i.get('conclusion') or '').upper()
+    if estado in FALLO: clases.append('fallo')
+    elif estado in OK: clases.append('ok')
+    else: clases.append('pendiente')
+if clases and all(c=='ok' for c in clases): concl='success'
+elif 'fallo' in clases: concl='failure'
+elif clases: concl='pending'
+else: concl=None
 open(os.environ['GH_OUT'],'w').write(json.dumps({
 'number':d.get('number'),'head':d.get('headRefOid'),
 'merged':bool(d.get('mergedAt')),
-'merge_commit':mc.get('oid') if isinstance(mc,dict) else None},sort_keys=True))
+'merge_commit':mc.get('oid') if isinstance(mc,dict) else None,
+'checks':{'sha':d.get('headRefOid'),'conclusion':concl}},sort_keys=True))
 " 2>/dev/null || return 1
 }
 

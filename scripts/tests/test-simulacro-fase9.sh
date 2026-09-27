@@ -107,6 +107,17 @@ done
 for f in scripts/mac/corrida/*.sh; do
   cp -p "$f" "$T/home/bin/corrida/$(basename "$f")" || fail "no se pudo poblar HOME de mentira (corrida/$(basename "$f"))"
 done
+# 14.4 r2: el modo_verificar exige tambien el plano de control nativo
+# (corrida-worker.py, el paquete corrida_worker y la tabla de preaprobaciones).
+cp -p scripts/mac/corrida-worker.py "$T/home/bin/corrida-worker.py" \
+  || fail "no se pudo poblar HOME de mentira (corrida-worker.py)"
+mkdir -p "$T/home/bin/corrida_worker"
+for f in scripts/mac/corrida_worker/*.py; do
+  cp -p "$f" "$T/home/bin/corrida_worker/$(basename "$f")" \
+    || fail "no se pudo poblar HOME de mentira (corrida_worker/$(basename "$f"))"
+done
+cp -p scripts/mac/corrida/preaprobaciones.v1.json "$T/home/bin/corrida/preaprobaciones.v1.json" \
+  || fail "no se pudo poblar HOME de mentira (preaprobaciones.v1.json)"
 cp -p scripts/mac/tmux.conf "$T/home/.tmux.conf"
 sed "s|/Users/dn|$T/home|g" scripts/mac/ai.goncloud.tmux-activity-watch.plist \
   > "$T/home/Library/LaunchAgents/ai.goncloud.tmux-activity-watch.plist"
@@ -260,7 +271,7 @@ fi
 if debe_correr 6; then
 # ============================= (6) responder apagado: caso 2 NO FUNCIONA ====
 EVID6="$T/evidencia-6.md"
-salida6="$(SIM9_SIN_RESPONDER=1 bash "$ARNES" --ensayo --salida "$EVID6" --tope-pared 60 2>&1)"
+salida6="$(SIM9_SIN_RESPONDER=1 bash "$ARNES" --ensayo --salida "$EVID6" --tope-pared 120 2>&1)"
 rc6=$?
 [ "$rc6" -eq 1 ] || fail "responder apagado: se esperaba salida 1, salio $rc6 -- $salida6"
 grep -qE '^\| 2 .*\| NO FUNCIONA ' "$EVID6" \

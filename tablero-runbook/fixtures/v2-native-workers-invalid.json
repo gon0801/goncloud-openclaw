@@ -1,0 +1,382 @@
+{
+  "atencion_requerida": {
+    "desde": null,
+    "motivo": null,
+    "necesaria": false
+  },
+  "carriles": [
+    {
+      "approve_lead": null,
+      "ci": "verde",
+      "coderabbit": "limpio",
+      "delivery": {
+        "canary": {
+          "sha": null,
+          "status": "pending"
+        },
+        "deploy": {
+          "sha": null,
+          "status": "pending"
+        },
+        "merge": {
+          "sha": null,
+          "status": "pending"
+        },
+        "rollback": {
+          "sha": null,
+          "status": "pending"
+        }
+      },
+      "detenido_por": null,
+      "estado": "implementando",
+      "evidence": {
+        "review": {
+          "sha": "1111111111111111111111111111111111111111",
+          "status": "clean"
+        }
+      },
+      "execution": {
+        "attach_command": "/opt/homebrew/bin/tmux attach -t =ses-f14-a",
+        "session": "ses-f14-a",
+        "started_at": "2026-09-27T10:05:00Z",
+        "visibility": "visible",
+        "worktree": "/Users/dn/dev/wt/f14-a"
+      },
+      "head": "2222222222222222222222222222222222222222",
+      "id": "A",
+      "nombre": "Uno",
+      "paso_loop": 1,
+      "pr": 7,
+      "rama": "fase14/a",
+      "repo": "gon0801/goncloud-openclaw",
+      "residuales": [],
+      "tareas": [
+        "14.7"
+      ],
+      "ultimo_evento": null,
+      "worker": {
+        "effort": null,
+        "harness": "claude-code",
+        "health": "broken",
+        "id": "claude_fable",
+        "model": "claude-fable-5-1",
+        "provider": "anthropic",
+        "reported_model": null
+      }
+    },
+    {
+      "approve_lead": null,
+      "ci": "pendiente",
+      "coderabbit": "pendiente",
+      "delivery": {
+        "canary": {
+          "sha": null,
+          "status": "pending"
+        },
+        "deploy": {
+          "sha": null,
+          "status": "pending"
+        },
+        "merge": {
+          "sha": null,
+          "status": "pending"
+        },
+        "rollback": {
+          "sha": null,
+          "status": "pending"
+        }
+      },
+      "detenido_por": null,
+      "estado": "implementando",
+      "evidence": {
+        "review": {
+          "sha": null,
+          "status": "pending"
+        }
+      },
+      "execution": {
+        "attach_command": "/opt/homebrew/bin/tmux attach -t =ses-f14-b",
+        "session": "ses-f14-b",
+        "started_at": "2026-09-27T10:06:00Z",
+        "visibility": "visible",
+        "worktree": "/Users/dn/dev/wt/f14-b"
+      },
+      "head": "3333333333333333333333333333333333333333",
+      "id": "B",
+      "nombre": "Dos",
+      "paso_loop": 1,
+      "pr": null,
+      "rama": "fase14/b",
+      "repo": "gon0801/goncloud-openclaw",
+      "residuales": [],
+      "tareas": [
+        "14.8"
+      ],
+      "ultimo_evento": null,
+      "worker": {
+        "effort": null,
+        "harness": "claude-code",
+        "health": "available",
+        "id": "claude_opus",
+        "model": "claude-opus-5-5",
+        "provider": "anthropic",
+        "reported_model": null
+      }
+    },
+    {
+      "approve_lead": null,
+      "ci": "pendiente",
+      "coderabbit": "pendiente",
+      "delivery": {
+        "canary": {
+          "sha": null,
+          "status": "pending"
+        },
+        "deploy": {
+          "sha": null,
+          "status": "pending"
+        },
+        "merge": {
+          "sha": null,
+          "status": "pending"
+        },
+        "rollback": {
+          "sha": null,
+          "status": "pending"
+        }
+      },
+      "detenido_por": null,
+      "estado": "implementando",
+      "evidence": {
+        "review": {
+          "sha": null,
+          "status": "pending"
+        }
+      },
+      "execution": {
+        "attach_command": null,
+        "session": "ses-f14-c",
+        "started_at": "2026-09-27T10:07:00Z",
+        "visibility": "detached",
+        "worktree": "/Users/dn/dev/wt/f14-c"
+      },
+      "head": "4444444444444444444444444444444444444444",
+      "id": "C",
+      "nombre": "Tres",
+      "paso_loop": 1,
+      "pr": null,
+      "rama": "fase14/c",
+      "repo": "gon0801/goncloud-openclaw",
+      "residuales": [],
+      "tareas": [
+        "14.9"
+      ],
+      "ultimo_evento": null,
+      "worker": {
+        "effort": null,
+        "harness": "kimi-code",
+        "health": "available",
+        "id": "kimi_k3",
+        "model": "kimi-code/k3",
+        "provider": "kimi",
+        "reported_model": null
+      }
+    },
+    {
+      "approve_lead": null,
+      "ci": "pendiente",
+      "coderabbit": "pendiente",
+      "delivery": {
+        "canary": {
+          "sha": null,
+          "status": "pending"
+        },
+        "deploy": {
+          "sha": null,
+          "status": "pending"
+        },
+        "merge": {
+          "sha": null,
+          "status": "pending"
+        },
+        "rollback": {
+          "sha": null,
+          "status": "pending"
+        }
+      },
+      "detenido_por": null,
+      "estado": "implementando",
+      "evidence": {
+        "review": {
+          "sha": null,
+          "status": "pending"
+        }
+      },
+      "execution": {
+        "attach_command": "/opt/homebrew/bin/tmux attach -t =ses-f14-d",
+        "session": "ses-f14-d",
+        "started_at": "2026-09-27T10:08:00Z",
+        "visibility": "visible",
+        "worktree": "/Users/dn/dev/wt/f14-d"
+      },
+      "head": "5555555555555555555555555555555555555555",
+      "id": "D",
+      "nombre": "Cuatro",
+      "paso_loop": 1,
+      "pr": null,
+      "rama": "fase14/d",
+      "repo": "gon0801/goncloud-openclaw",
+      "residuales": [],
+      "tareas": [
+        "14.10"
+      ],
+      "ultimo_evento": null,
+      "worker": {
+        "effort": null,
+        "harness": "zcode",
+        "health": "available",
+        "id": "zcode",
+        "model": "router",
+        "provider": "glm",
+        "reported_model": null
+      }
+    },
+    {
+      "approve_lead": null,
+      "ci": "pendiente",
+      "coderabbit": "pendiente",
+      "delivery": {
+        "canary": {
+          "sha": null,
+          "status": "pending"
+        },
+        "deploy": {
+          "sha": null,
+          "status": "pending"
+        },
+        "merge": {
+          "sha": null,
+          "status": "pending"
+        },
+        "rollback": {
+          "sha": null,
+          "status": "pending"
+        }
+      },
+      "detenido_por": null,
+      "estado": "implementando",
+      "evidence": {
+        "review": {
+          "sha": null,
+          "status": "pending"
+        }
+      },
+      "execution": {
+        "attach_command": "/opt/homebrew/bin/tmux attach -t =ses-f14-e",
+        "session": "ses-f14-e",
+        "started_at": "2026-09-27T10:09:00Z",
+        "visibility": "degraded",
+        "worktree": "/Users/dn/dev/wt/f14-e"
+      },
+      "head": "6666666666666666666666666666666666666666",
+      "id": "E",
+      "nombre": "Cinco",
+      "paso_loop": 1,
+      "pr": null,
+      "rama": "fase14/e",
+      "repo": "gon0801/goncloud-openclaw",
+      "residuales": [],
+      "tareas": [
+        "14.11"
+      ],
+      "ultimo_evento": null,
+      "worker": {
+        "effort": null,
+        "harness": "cursor-agent",
+        "health": "available",
+        "id": "cursor",
+        "model": "router",
+        "provider": "cursor",
+        "reported_model": null
+      }
+    },
+    {
+      "approve_lead": null,
+      "ci": "rojo",
+      "coderabbit": "con-hallazgos",
+      "delivery": {
+        "canary": {
+          "sha": null,
+          "status": "pending"
+        },
+        "deploy": {
+          "sha": null,
+          "status": "pending"
+        },
+        "merge": {
+          "sha": null,
+          "status": "pending"
+        },
+        "rollback": {
+          "sha": null,
+          "status": "pending"
+        }
+      },
+      "detenido_por": null,
+      "estado": "implementando",
+      "evidence": {
+        "review": {
+          "sha": "9999999999999999999999999999999999999999",
+          "status": "clean"
+        }
+      },
+      "execution": {
+        "attach_command": "/opt/homebrew/bin/tmux attach -t =ses-ajena",
+        "session": "ses-otra-sesion",
+        "started_at": "2026-09-27T10:10:00Z\u0007",
+        "visibility": "degraded",
+        "worktree": "/Users/dn/dev/wt/f14-f"
+      },
+      "head": "7777777777777777777777777777777777777777",
+      "id": "F",
+      "nombre": "Seis",
+      "paso_loop": 1,
+      "pr": 8,
+      "rama": "fase14/f",
+      "repo": "gon0801/goncloud-openclaw",
+      "residuales": [],
+      "tareas": [
+        "14.12"
+      ],
+      "ultimo_evento": null,
+      "worker": {
+        "effort": null,
+        "harness": "grok-cli",
+        "health": "available",
+        "id": "grok",
+        "model": "sk-pro-secreto-largo",
+        "provider": "xai",
+        "reported_model": null
+      }
+    }
+  ],
+  "cierre": {
+    "at": null,
+    "resumen": null,
+    "telegram_message_id": null
+  },
+  "cola": [],
+  "corrida": "fase14-nativos-malo",
+  "eventos": [],
+  "fase": "14",
+  "lead": {
+    "actualizado": "2026-09-27T12:00:00Z",
+    "agente": "claude",
+    "inicio": "2026-09-27T10:00:00Z"
+  },
+  "proyecto": "goncloud-openclaw",
+  "runbook": "docs/runbooks/autopilot-fase14.md",
+  "schema": "runbook-progress.v1",
+  "siguiente_paso": "nada",
+  "titulo": "Fase 14 \u2014 harness nativo (invalido)"
+}

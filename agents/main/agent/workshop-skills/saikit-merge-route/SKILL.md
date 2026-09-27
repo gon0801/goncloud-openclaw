@@ -1,13 +1,18 @@
 ---
 name: saikit-merge-route
-description: Mergea un PR por GitHub cuando CI y CodeRabbit están aprobados.
+description: main elige quien cierra y le pasa la ruta verificada de la corrida; no ejecuta el merge.
+<!-- candado: test-saikit-cierre-pr-merge-owner.sh -->
 ---
 
-# Merge de PR
+# Merge de PR (rol main)
+<!-- candado: test-saikit-cierre-pr-merge-owner.sh -->
 
-Cualquier agente puede mergear y desplegar sin permiso adicional del dueño.
-Lee el SHA actual y confirma CI y CodeRabbit aprobados; corrige los bloqueantes.
-Ejecuta `gh pr merge <PR> --squash --match-head-commit <SHA>` y comprueba `MERGED`.
+`main` elige quien cierra (implementer o ingenieria) y le pasa la ruta
+<!-- candado: test-saikit-cierre-pr-merge-owner.sh -->
+verificada de la corrida: registro con `authorization_ref` en alcance, recibo
+`saikit-entrega.v1` vigente para el head y CI en verde. Solo el closer invoca la ruta
+(`corrida.sh compuerta ... merge` + el entrypoint del kit); `main` recibe solo el
+resultado. La allowlist dura no incluye a `main`.
+<!-- candado: test-saikit-cierre-pr-merge-owner.sh -->
+<!-- candado: test-saikit-cierre-pr-merge-owner.sh -->
 En el nodo Mac usa `PATH=/opt/homebrew/bin:$PATH`.
-No se exige el script del kit, un recibo del lead ni una orden fechada.
-El despliegue sigue el procedimiento del destino; verifica el SHA publicado.

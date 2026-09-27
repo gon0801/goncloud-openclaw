@@ -1,0 +1,23 @@
+{
+  "preaprobaciones": [
+    {
+      "decision": "Aprobado",
+      "id": "fase14-merge-automatico",
+      "operacion": "merge",
+      "orden": "Pedido de David 2026-09-25: merge autom\u00e1tico de la Fase 14 por la compuerta del Task 6",
+      "patron": "fase14",
+      "rama": "corrida/*",
+      "repo": "gon0801/goncloud-openclaw"
+    },
+    {
+      "decision": "Pendiente",
+      "id": "fase14-merge-pendiente",
+      "operacion": "merge",
+      "orden": "Ejemplo de preaprobaci\u00f3n sin decisi\u00f3n del due\u00f1o",
+      "patron": "fase14-pendiente",
+      "rama": "fase14-pendiente/*",
+      "repo": "gon0801/goncloud-openclaw"
+    }
+  ],
+  "schema": "preaprobaciones.v1"
+}

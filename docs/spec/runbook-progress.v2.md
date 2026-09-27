@@ -97,6 +97,8 @@ Siguen valiendo los de v1. Lo que cambia o se suma:
 | `carriles[].worker.model` | el modelo configurado de la entrada del registro; el que la CLI reporta vive en `reported_model` |
 | `carriles[].worker.effort` | el effort configurado de la entrada elegida, o `null` cuando la entrada no declara effort |
 | `carriles[].worker.reported_model` | el modelo que la CLI reporta al arrancar, o `null` |
+| `carriles[].evidence.{review,ci,coderabbit}` | `{status, sha}` con `status` en `pending · clean · blocked · unknown` y `sha` sha1 de 40 en minúsculas o `null` (pending lleva null) |
+| `carriles[].delivery.{merge,deploy,canary,rollback}` | `{status, sha}` igual que evidence, las cuatro claves presentes; `merge` suma `reviewed_head`: el head del PR revisado que el squash mapeó al merge commit (14.3 r2 B1) |
 | `cola[].estado` | `pendiente` · `esperando-ventana` · `mergeando` · `sync` · `verificado` · `revertido` · `atorado` |
 | `cola[].verificado` | `null` (no aplica aún) · `pendiente` · `ok` · `fallo` · `unknown`: resultado de la compuerta del ítem (por ejemplo, SHA del gateway igual al mergeado tras el sync) |
 | `cola[].detenido_por` | `null` o el texto de la fila de atores que aplicó; obligatorio cuando `estado` es `atorado` |

@@ -45,6 +45,24 @@ export const PLAN_RUTA_MAX = 200;
 export const NOTAS_TOPE = 8;
 export const PR_MAX = 10_000_000;
 export const PASO_LOOP_MAX = 8;
+export const SESIONES_EXTERNAS_MAX = 4;
+
+// Bloques nativos del carril (Task 8; escritos por main, opcionales).
+export const WORKER_HEALTH = [
+  "available",
+  "limited",
+  "unauthenticated",
+  "broken",
+] as const;
+export const EJECUCION_VISIBILIDAD = ["visible", "detached", "degraded"] as const;
+export const EVIDENCIA_ESTADOS = ["pending", "clean", "blocked", "unknown"] as const;
+export const EVIDENCIA_CLAVES = ["review", "ci", "coderabbit"] as const;
+export const DELIVERY_CLAVES = ["merge", "deploy", "canary", "rollback"] as const;
+export const ATTACH_PREFIJO = "/opt/homebrew/bin/tmux attach -t =";
+export const SHA_RE = /^[0-9a-f]{40}$/;
+// Formas de token/secret que jamás pueden aparecer en un campo de pantalla.
+export const SECRETO_RE =
+  /gh[pousr]_[A-Za-z0-9]|github_pat_[A-Za-z0-9_]|sk-[A-Za-z0-9_-]{8,}|AKIA[0-9A-Z]{16}/;
 
 const ISO_LIGERO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
 
@@ -56,6 +74,31 @@ export type Evento = {
 };
 
 export type PrRef = { repo: string; pr: number | null };
+
+// Bloques nativos (Task 8, opcional en el carril; los escribe main).
+export type WorkerBloque = {
+  id: string;
+  harness: string;
+  provider: string;
+  model: string;
+  effort: string | null;
+  reported_model: string | null;
+  health: (typeof WORKER_HEALTH)[number];
+};
+export type ExecutionBloque = {
+  worktree: string;
+  session: string;
+  visibility: (typeof EJECUCION_VISIBILIDAD)[number];
+  attach_command: string | null;
+  started_at: string;
+};
+export type EvidenciaItem = {
+  status: (typeof EVIDENCIA_ESTADOS)[number];
+  sha: string | null;
+};
+export type EvidenceBloque = Partial<Record<(typeof EVIDENCIA_CLAVES)[number], EvidenciaItem>>;
+export type DeliveryItem = EvidenciaItem & { reviewed_head?: string | null };
+export type DeliveryBloque = Record<(typeof DELIVERY_CLAVES)[number], DeliveryItem>;
 
 export type Carril = {
   id: string;
@@ -74,6 +117,10 @@ export type Carril = {
   residuales: string[];
   detenido_por: string | null;
   ultimo_evento: { at: string; que: string } | null;
+  worker?: WorkerBloque;
+  execution?: ExecutionBloque;
+  evidence?: EvidenceBloque;
+  delivery?: DeliveryBloque;
 };
 
 export type ColaItem = {
@@ -128,6 +175,157 @@ function esRutaPlan(v: unknown): boolean {
 }
 
 type Veredicto = { ok: boolean; razones: string[] };
+
+function secretoEn(v: unknown): boolean {
+  return typeof v === "string" && SECRETO_RE.test(v);
+}
+
+/**
+ * Bloques nativos del carril (Task 8): worker, execution, evidence y delivery.
+ * Opcionales: un carril sin ellos valida igual que siempre. Cuando vienen, la
+ * forma es cerrada: enums de la lista, textos acotados, sin secretos, el
+ * attach derivado EXACTAMENTE de la sesión validada, y los SHAs de evidencia
+ * con forma de SHA corto en minúsculas o null.
+ */
+function validarBloquesNativos(
+  o: Record<string, unknown>,
+  donde: string,
+  razones: string[],
+): void {
+  const campos = (v: unknown): string[] | null => {
+    if (v === null || typeof v !== "object" || Array.isArray(v)) return null;
+    return Object.entries(v as Record<string, unknown>)
+      .filter(([, valor]) => secretoEn(valor))
+      .map(([clave]) => `con forma de secreto en ${clave}`);
+  };
+  const empujar = (prefijo: string, hallazgos: string[] | null): void => {
+    for (const h of hallazgos ?? []) razones.push(`${donde}.${prefijo}: ${h}`);
+  };
+
+  const worker = o["worker"];
+  if (worker !== null && worker !== undefined) {
+    if (typeof worker !== "object" || Array.isArray(worker)) {
+      razones.push(`${donde}.worker: debe ser objeto o null`);
+    } else {
+      const w = worker as Record<string, unknown>;
+      empujar("worker", campos(w));
+      for (const k of ["id", "harness", "provider", "model"] as const) {
+        if (!esTexto(w[k], TEXTO_MAX)) razones.push(`${donde}.worker.${k}: falta o vacío`);
+      }
+      if (w["effort"] !== null && !esTexto(w["effort"], TEXTO_MAX)) {
+        razones.push(`${donde}.worker.effort: texto acotado o null (14.13d)`);
+      }
+      if (w["reported_model"] !== null && !esTexto(w["reported_model"], TEXTO_MAX)) {
+        razones.push(`${donde}.worker.reported_model: texto acotado o null`);
+      }
+      if (!(WORKER_HEALTH as readonly string[]).includes(w["health"] as string)) {
+        razones.push(`${donde}.worker.health: valor fuera de la lista cerrada`);
+      }
+    }
+  }
+
+  const execution = o["execution"];
+  if (execution !== null && execution !== undefined) {
+    if (typeof execution !== "object" || Array.isArray(execution)) {
+      razones.push(`${donde}.execution: debe ser objeto o null`);
+    } else {
+      const e = execution as Record<string, unknown>;
+      empujar("execution", campos(e));
+      if (!esTexto(e["worktree"], TEXTO_MAX)) razones.push(`${donde}.execution.worktree: falta o vacío`);
+      if (!esTexto(e["session"], 100)) razones.push(`${donde}.execution.session: falta o vacío`);
+      if (!(EJECUCION_VISIBILIDAD as readonly string[]).includes(e["visibility"] as string)) {
+        razones.push(`${donde}.execution.visibility: valor fuera de la lista cerrada`);
+      }
+      if (
+        !esIsoLigero(e["started_at"]) ||
+        /[\u0000-\u001f\u007f]/.test(String(e["started_at"]))
+      ) {
+        razones.push(
+          `${donde}.execution.started_at: no tiene forma ISO o trae caracteres de control`,
+        );
+      }
+      const vis = e["visibility"];
+      const attachOk =
+        vis === "detached"
+          ? e["attach_command"] === null
+          : e["attach_command"] === `${ATTACH_PREFIJO}${String(e["session"])}`;
+      if (!attachOk) {
+        razones.push(
+          `${donde}.execution.attach_command: debe derivarse exactamente de la sesión validada (null cuando detached)`,
+        );
+      }
+    }
+  }
+
+  const evidencia = o["evidence"];
+  if (evidencia !== null && evidencia !== undefined) {
+    if (typeof evidencia !== "object" || Array.isArray(evidencia)) {
+      razones.push(`${donde}.evidence: debe ser objeto o null`);
+    } else {
+      const eb = evidencia as Record<string, unknown>;
+      empujar("evidence", campos(eb));
+      for (const clave of EVIDENCIA_CLAVES) {
+        const item = eb[clave];
+        if (item === undefined) continue;
+        if (item === null || typeof item !== "object" || Array.isArray(item)) {
+          razones.push(`${donde}.evidence.${clave}: debe ser objeto o ausente`);
+          continue;
+        }
+        const it = item as Record<string, unknown>;
+        if (!(EVIDENCIA_ESTADOS as readonly string[]).includes(it["status"] as string)) {
+          razones.push(`${donde}.evidence.${clave}.status: valor fuera de la lista cerrada`);
+        }
+        const sha = it["sha"];
+        if (sha !== null && (typeof sha !== "string" || !SHA_RE.test(sha))) {
+          razones.push(`${donde}.evidence.${clave}.sha: debe ser sha1 hex de 40 en minúsculas o null`);
+        }
+        if (it["status"] === "pending" && sha !== null) {
+          razones.push(`${donde}.evidence.${clave}.sha: pending lleva sha null`);
+        }
+      }
+    }
+  }
+
+  const delivery = o["delivery"];
+  if (delivery !== null && delivery !== undefined) {
+    if (typeof delivery !== "object" || Array.isArray(delivery)) {
+      razones.push(`${donde}.delivery: debe ser objeto o null`);
+    } else {
+      const db = delivery as Record<string, unknown>;
+      empujar("delivery", campos(db));
+      for (const clave of DELIVERY_CLAVES) {
+        const item = db[clave];
+        if (item === undefined) {
+          razones.push(`${donde}.delivery.${clave}: falta (las cuatro claves son obligatorias)`);
+          continue;
+        }
+        if (item === null || typeof item !== "object" || Array.isArray(item)) {
+          razones.push(`${donde}.delivery.${clave}: debe ser objeto`);
+          continue;
+        }
+        const it = item as Record<string, unknown>;
+        if (!(EVIDENCIA_ESTADOS as readonly string[]).includes(it["status"] as string)) {
+          razones.push(`${donde}.delivery.${clave}.status: valor fuera de la lista cerrada`);
+        }
+        const sha = it["sha"];
+        if (sha !== null && (typeof sha !== "string" || !SHA_RE.test(sha))) {
+          razones.push(`${donde}.delivery.${clave}.sha: debe ser sha1 hex de 40 en minúsculas o null`);
+        }
+        if (it["status"] === "pending" && sha !== null) {
+          razones.push(`${donde}.delivery.${clave}.sha: pending lleva sha null`);
+        }
+        // 14.3 r2 B1: merge lleva el head revisado que el squash mapeó al
+        // merge commit; así la evidencia del PR sigue vigente tras el squash.
+        if (clave === "merge") {
+          const rh = it["reviewed_head"];
+          if (rh !== null && rh !== undefined && (typeof rh !== "string" || !SHA_RE.test(rh))) {
+            razones.push(`${donde}.delivery.merge.reviewed_head: debe ser sha1 hex de 40 en minúsculas o null`);
+          }
+        }
+      }
+    }
+  }
+}
 
 /**
  * Valida un documento `runbook-progress.v1` contra los valores cerrados del
@@ -294,7 +492,22 @@ export function validarProgreso(doc: unknown): Veredicto {
           if (!esTexto(u["que"], TEXTO_MAX)) razones.push(`${donde}.ultimo_evento.que: falta o vacío`);
         }
       }
+
+      validarBloquesNativos(o, donde, razones);
     });
+    // Regla de las cuatro sesiones externas activas (Task 8 Step 3).
+    const activas = (carriles as Record<string, unknown>[]).filter(
+      (c: Record<string, unknown>) =>
+        c !== null &&
+        typeof c === "object" &&
+        c["execution"] !== null &&
+        typeof c["execution"] === "object",
+    ).length;
+    if (activas > SESIONES_EXTERNAS_MAX) {
+      razones.push(
+        `carriles: ${activas} bloques execution exceden el tope de ${SESIONES_EXTERNAS_MAX} sesiones externas`,
+      );
+    }
   }
 
   // Cola.
@@ -419,6 +632,7 @@ export type Derivado = {
   colaAtorada: string[];
   siguienteCola: { id: string; estado: string; prs: number } | null;
   minutosDesdeUltimoEvento: number | null;
+  atencionWorker: { carril: string; razones: string[] }[];
 };
 
 const COLA_TERMINADA = new Set(["verificado", "revertido"]);
@@ -443,6 +657,62 @@ export function derivar(doc: ProgresoDoc, ahora: number = Date.now()): Derivado 
   const minutos =
     ultimoMs === null ? null : Math.max(0, Math.floor((ahora - ultimoMs) / 60000));
 
+  // Atención derivada de los bloques nativos (Task 8 Step 3): worker sin
+  // autenticar o roto, evidencia vencida (sha distinto al head del carril),
+  // evidencia requerida sin resolver y rollback fallido. La indisponibilidad
+  // DECLARADA de CodeRabbit ("unknown") no pide atención por sí sola.
+  const atencionWorker: { carril: string; razones: string[] }[] = [];
+  for (const c of carriles) {
+    if (c === null || typeof c !== "object") continue;
+    const razones: string[] = [];
+    const w = (c as Record<string, unknown>)["worker"] as Record<string, unknown> | undefined;
+    if (w && typeof w === "object") {
+      if (w["health"] === "unauthenticated") razones.push("worker-unauthenticated");
+      if (w["health"] === "broken") razones.push("worker-broken");
+    }
+    const head = typeof c["head"] === "string" ? (c["head"] as string) : null;
+    const del = (c as Record<string, unknown>)["delivery"] as Record<string, unknown> | undefined;
+    // 14.3 r2 B1: el squash mapea el head del PR al merge commit (decisión de
+    // 14.5, se guardan los dos SHAs y no se exige que sean iguales). La
+    // evidencia del head revisado sigue vigente cuando el merge está limpio y
+    // el mapeo casa; sin eso, todo carril mergeado quedaría "vencido".
+    const mergeDel =
+      del && typeof del === "object"
+        ? ((del as Record<string, unknown>)["merge"] as Record<string, unknown> | undefined)
+        : undefined;
+    const mapeoSquash =
+      !!mergeDel &&
+      mergeDel["status"] === "clean" &&
+      typeof mergeDel["sha"] === "string" &&
+      mergeDel["sha"] === head &&
+      typeof mergeDel["reviewed_head"] === "string";
+    const revisado = mapeoSquash ? (mergeDel!["reviewed_head"] as string) : null;
+    const vigente = (sha: unknown): boolean =>
+      typeof sha === "string" && (sha === head || (revisado !== null && sha === revisado));
+    const ev = (c as Record<string, unknown>)["evidence"] as Record<string, unknown> | undefined;
+    if (ev && typeof ev === "object" && head) {
+      for (const clave of EVIDENCIA_CLAVES) {
+        const it = ev[clave] as Record<string, unknown> | undefined;
+        if (!it || typeof it !== "object") continue;
+        if (it["status"] === "blocked") razones.push(`evidence-${clave}-bloqueada`);
+        if (
+          typeof it["sha"] === "string" &&
+          !vigente(it["sha"]) &&
+          it["status"] !== "pending"
+        ) {
+          razones.push(`evidence-${clave}-vencida`);
+        }
+      }
+    }
+    if (del && typeof del === "object") {
+      const rb = del["rollback"] as Record<string, unknown> | undefined;
+      if (rb && typeof rb === "object" && rb["status"] === "blocked") {
+        razones.push("rollback-fallido");
+      }
+    }
+    if (razones.length > 0) atencionWorker.push({ carril: String(c["id"]), razones });
+  }
+
   return {
     totalCarriles: carriles.length,
     mergeados,
@@ -453,6 +723,7 @@ export function derivar(doc: ProgresoDoc, ahora: number = Date.now()): Derivado 
       ? { id: String(siguiente.id), estado: String(siguiente.estado), prs: Array.isArray(siguiente.prs) ? siguiente.prs.length : 0 }
       : null,
     minutosDesdeUltimoEvento: minutos,
+    atencionWorker,
   };
 }
 
