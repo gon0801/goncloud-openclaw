@@ -428,4 +428,55 @@ assert pr["checks"]["conclusion"] == "failure", pr
 PY
 echo "ok (7): compuerta_leer_pr relee los checks del head en cada lectura"
 
+# (7b) 14.4 r3 B4: el rollup REAL de GitHub trae tipos mezclados (CheckRun
+# con conclusion, CheckRun SKIPPED y StatusContext con state). El resultado
+# agregado del PR 193 (todo en verde con skips) debe ser success, no pending.
+GH_REAL=scripts/tests/fixtures/gates/rollup-193-real.json
+mkdir -p "$T/bin-gh193"
+cat >"$T/bin-gh193/gh" <<STUB
+#!/bin/sh
+case "\$*" in
+  *"pr view"*)
+    python3 -c "import json,sys; base={'number':193,'headRefOid':'8db0f549ae56be23d16d1b88777648d4af0c19ee','mergedAt':'2026-09-27T14:32:26Z','mergeCommit':{'oid':'96f361216e54ef0ae76e69fe4073a4fb24cd3c31'}}; base['statusCheckRollup']=json.load(open(sys.argv[1])); print(json.dumps(base))" "$GH_REAL"
+    ;;
+esac
+exit 0
+STUB
+chmod +x "$T/bin-gh193/gh"
+PATH="$T/bin-gh193:$PATH" bash -c '
+  . scripts/mac/corrida/lib.sh
+  AQUI=scripts/mac/corrida
+  source scripts/mac/corrida/compuerta.sh
+  compuerta_leer_pr gon0801/goncloud-openclaw 193 "$1"
+' leer193 "$T/pr-193.json" >/dev/null 2>&1
+python3 - "$T/pr-193.json" <<'PY' || fail "B4: el rollup real del PR 193 no da success"
+import json, sys
+pr = json.load(open(sys.argv[1]))
+assert pr["checks"]["conclusion"] == "success", pr
+PY
+echo "ok (7b): el rollup real de 193 da success (SKIPPED y StatusContext incluidos)"
+
+# (7c) B4: un StatusContext en FAILURE da failure (el stub reescribe el state).
+cat >"$T/bin-gh193/gh" <<STUB
+#!/bin/sh
+case "\$*" in
+  *"pr view"*)
+    python3 -c "import json,sys; base={'number':193,'headRefOid':'8db0f549ae56be23d16d1b88777648d4af0c19ee','mergedAt':'2026-09-27T14:32:26Z','mergeCommit':{'oid':'96f361216e54ef0ae76e69fe4073a4fb24cd3c31'}}; r=json.load(open(sys.argv[1])); [i.update(state='FAILURE') for i in r if i.get('__typename')=='StatusContext']; base['statusCheckRollup']=r; print(json.dumps(base))" "$GH_REAL"
+    ;;
+esac
+exit 0
+STUB
+PATH="$T/bin-gh193:$PATH" bash -c '
+  . scripts/mac/corrida/lib.sh
+  AQUI=scripts/mac/corrida
+  source scripts/mac/corrida/compuerta.sh
+  compuerta_leer_pr gon0801/goncloud-openclaw 193 "$1"
+' fctx "$T/pr-failctx.json" >/dev/null 2>&1
+python3 - "$T/pr-failctx.json" <<'PY' || fail "B4: un StatusContext en FAILURE debe dar failure"
+import json, sys
+pr = json.load(open(sys.argv[1]))
+assert pr["checks"]["conclusion"] == "failure", pr
+PY
+echo "ok (7c): StatusContext FAILURE da failure"
+
 echo "TODO VERDE: corrida-gates"

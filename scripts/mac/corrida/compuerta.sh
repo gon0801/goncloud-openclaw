@@ -107,11 +107,31 @@ mc=d.get('mergeCommit') or {}
 rollup=d.get('statusCheckRollup') or []
 # 14.21 punto 3 (14.4 r2 B2): JUNTAR todo el rollup; basta con que un check
 # COMPLETED haya fallado para que el resultado sea fallido.
-conclusions=[str(i.get('conclusion')).lower() for i in rollup
-             if isinstance(i,dict) and i.get('status')=='COMPLETED']
-if 'failure' in conclusions: concl='failure'
-elif conclusions and all(c=='success' for c in conclusions): concl='success'
-elif any(c=='pending' for c in conclusions) or len(conclusions)<len(rollup): concl='pending'
+# 14.4 r3 B4: el rollup real trae tipos mezclados. CheckRun: si status no es
+# COMPLETED cuenta como pendiente y si no manda su conclusion; StatusContext
+# manda su state. Fallo: FAILURE/ERROR/CANCELLED/TIMED_OUT/ACTION_REQUIRED.
+# Aceptable: SUCCESS/SKIPPED/NEUTRAL. Pendiente: PENDING/EXPECTED/QUEUED/
+# IN_PROGRESS y todo lo desconocido. Success solo si todo es aceptable y hay
+# al menos un check.
+FALLO={'FAILURE','ERROR','CANCELLED','TIMED_OUT','ACTION_REQUIRED'}
+OK={'SUCCESS','SKIPPED','NEUTRAL'}
+PEND={'PENDING','EXPECTED','QUEUED','IN_PROGRESS'}
+concl=None
+clases=[]
+for i in rollup:
+    if not isinstance(i,dict): clases.append('pendiente'); continue
+    if i.get('__typename')=='StatusContext' or ('state' in i and 'conclusion' not in i):
+        estado=str(i.get('state') or '').upper()
+    elif i.get('status')!='COMPLETED':
+        clases.append('pendiente'); continue
+    else:
+        estado=str(i.get('conclusion') or '').upper()
+    if estado in FALLO: clases.append('fallo')
+    elif estado in OK: clases.append('ok')
+    else: clases.append('pendiente')
+if clases and all(c=='ok' for c in clases): concl='success'
+elif 'fallo' in clases: concl='failure'
+elif clases: concl='pending'
 else: concl=None
 open(os.environ['GH_OUT'],'w').write(json.dumps({
 'number':d.get('number'),'head':d.get('headRefOid'),
