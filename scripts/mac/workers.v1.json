@@ -24,7 +24,7 @@
     "resume:review": [
      "claude",
      "--model",
-     "anthropic/claude-fable-5-1",
+     "claude-fable-5-1",
      "--resume",
      "{session_id}",
      "--permission-mode",
@@ -33,7 +33,7 @@
     "resume:write": [
      "claude",
      "--model",
-     "anthropic/claude-fable-5-1",
+     "claude-fable-5-1",
      "--resume",
      "{session_id}",
      "--permission-mode",
@@ -42,14 +42,14 @@
     "start:review": [
      "claude",
      "--model",
-     "anthropic/claude-fable-5-1",
+     "claude-fable-5-1",
      "--permission-mode",
      "plan"
     ],
     "start:write": [
      "claude",
      "--model",
-     "anthropic/claude-fable-5-1",
+     "claude-fable-5-1",
      "--permission-mode",
      "acceptEdits"
     ],
@@ -60,7 +60,7 @@
    },
    "harness": "claude-code",
    "id": "claude_fable",
-   "model": "anthropic/claude-fable-5-1",
+   "model": "claude-fable-5-1",
    "permission_modes": {
     "review": "plan",
     "write": "acceptEdits"
@@ -103,7 +103,7 @@
     "resume:review": [
      "claude",
      "--model",
-     "anthropic/claude-opus-5",
+     "claude-opus-5-5",
      "--resume",
      "{session_id}",
      "--permission-mode",
@@ -112,7 +112,7 @@
     "resume:write": [
      "claude",
      "--model",
-     "anthropic/claude-opus-5",
+     "claude-opus-5-5",
      "--resume",
      "{session_id}",
      "--permission-mode",
@@ -121,14 +121,14 @@
     "start:review": [
      "claude",
      "--model",
-     "anthropic/claude-opus-5",
+     "claude-opus-5-5",
      "--permission-mode",
      "plan"
     ],
     "start:write": [
      "claude",
      "--model",
-     "anthropic/claude-opus-5",
+     "claude-opus-5-5",
      "--permission-mode",
      "acceptEdits"
     ],
@@ -139,7 +139,7 @@
    },
    "harness": "claude-code",
    "id": "claude_opus",
-   "model": "anthropic/claude-opus-5",
+   "model": "claude-opus-5-5",
    "permission_modes": {
     "review": "plan",
     "write": "acceptEdits"
@@ -182,7 +182,7 @@
     "resume:review": [
      "kimi",
      "--model",
-     "kimi/k3",
+     "kimi-code/k3",
      "--resume",
      "{session_id}",
      "--read-only"
@@ -190,7 +190,7 @@
     "resume:write": [
      "kimi",
      "--model",
-     "kimi/k3",
+     "kimi-code/k3",
      "--resume",
      "{session_id}",
      "--auto"
@@ -198,13 +198,13 @@
     "start:review": [
      "kimi",
      "--model",
-     "kimi/k3",
+     "kimi-code/k3",
      "--read-only"
     ],
     "start:write": [
      "kimi",
      "--model",
-     "kimi/k3",
+     "kimi-code/k3",
      "--auto"
     ],
     "stop": [
@@ -214,7 +214,7 @@
    },
    "harness": "kimi-code",
    "id": "kimi_k3",
-   "model": "kimi/k3",
+   "model": "kimi-code/k3",
    "permission_modes": {
     "review": "read-only",
     "write": "auto"
@@ -257,7 +257,7 @@
     "resume:review": [
      "kimi",
      "--model",
-     "kimi/kimi-for-coding",
+     "kimi-code/kimi-for-coding",
      "--resume",
      "{session_id}",
      "--read-only"
@@ -265,7 +265,7 @@
     "resume:write": [
      "kimi",
      "--model",
-     "kimi/kimi-for-coding",
+     "kimi-code/kimi-for-coding",
      "--resume",
      "{session_id}",
      "--auto"
@@ -273,13 +273,13 @@
     "start:review": [
      "kimi",
      "--model",
-     "kimi/kimi-for-coding",
+     "kimi-code/kimi-for-coding",
      "--read-only"
     ],
     "start:write": [
      "kimi",
      "--model",
-     "kimi/kimi-for-coding",
+     "kimi-code/kimi-for-coding",
      "--auto"
     ],
     "stop": [
@@ -289,7 +289,7 @@
    },
    "harness": "kimi-code",
    "id": "kimi_coding",
-   "model": "kimi/kimi-for-coding",
+   "model": "kimi-code/kimi-for-coding",
    "permission_modes": {
     "review": "read-only",
     "write": "auto"

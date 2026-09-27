@@ -1,0 +1,7 @@
+# ids de modelo validos para kimi (binary kimi): seccion [models.*] de
+# ~/.kimi-code/config.toml, medido el 2026-09-27 (14.13 r2 B1). Solo ids,
+# sin secretos.
+kimi-code/k3
+kimi-code/k3-256k
+kimi-code/kimi-for-coding
+kimi-code/kimi-for-coding-highspeed

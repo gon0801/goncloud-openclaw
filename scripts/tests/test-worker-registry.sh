@@ -97,4 +97,29 @@ mutar_registro "$T/id-guion.json" 'rec["workers"][0]["id"] = "claude-fable"'
 python3 scripts/mac/corrida-worker.py registry validate --registry "$T/id-guion.json" >/dev/null 2>&1 \
   && fail "acepto un id con guion"
 
+# 14.13 r2 (B1): los ids de modelo son los MEDIDOS en cada CLI, no los del
+# ejemplo de la fila. Cada --model y el campo model de una entrada kimi deben
+# existir entre los models del config.toml (fixture versionado, sin secretos).
+KMODELS=scripts/tests/fixtures/workers/kimi-models.txt
+[ -s "$KMODELS" ] || fail "falta el fixture de models de kimi"
+python3 - scripts/mac/workers.v1.json "$KMODELS" <<'PY' || fail "un model de kimi no esta entre los medidos del config.toml"
+import json, sys
+reg = json.load(open(sys.argv[1]))
+validos = {l.strip() for l in open(sys.argv[2]) if l.strip() and not l.startswith("#")}
+malos = []
+for w in reg["workers"]:
+    if not w["id"].startswith("kimi"):
+        continue
+    if w.get("model") not in validos:
+        malos.append(f"{w['id']}: model {w.get('model')!r} no medido")
+    for clave, argv in w["commands"].items():
+        if "--model" in argv:
+            slug = argv[argv.index("--model") + 1]
+            if slug not in validos:
+                malos.append(f"{w['id']}/{clave}: --model {slug!r} no medido")
+        elif clave in ("start:write", "start:review", "resume:write", "resume:review"):
+            malos.append(f"{w['id']}/{clave}: sin --model")
+assert not malos, malos
+PY
+
 echo "TODO VERDE: registro de workers"
