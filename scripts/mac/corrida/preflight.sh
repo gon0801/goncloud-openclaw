@@ -3,6 +3,15 @@
 # de arrancar. Imprime APTO o NO APTO <razones>; NO APTO no lanza y manda mensaje.
 # Inyectables para pruebas: CORRIDA_STATE, OPENCLAW_BIN, TMUX_BIN, GH_BIN, REPO_DIR,
 # WATCH_INSTALADO, CORRIDA_CANDADO_<CLASE> (permitido|negado|unknown). Bash 3.2.
+# Variables de la comparacion del vigilante: CORRIDA_PREFLIGHT_REF apunta la ref
+# git contra la que se compara el blob (una corrida real usa origin/<default>).
+# Variables de las sondas nativas de workers (bloque 8, documentado en 14.20
+# punto 7): CORRIDA_NATIVE_ROUTING (off|report|execute; con off o sin definir el
+# bloque no corre), CORRIDA_WORKERS_REGISTRY (ruta del workers.v1; default
+# scripts/mac/workers.v1.json), CORRIDA_WORKER_PY (ruta de corrida-worker.py;
+# default scripts/mac/corrida-worker.py), PYTHON3_BIN (interprete; default
+# python3) y CORRIDA_WORKER_PROBE_TIMEOUT (tope en segundos de cada sonda de
+# health; default 10).
 corrida_preflight() {
   unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX
   local id="$1"
@@ -198,7 +207,9 @@ corrida_preflight() {
         case "$wst" in available|limited) waptos=$((waptos+1));; esac
       done
       if [ "$wtotal" -eq 0 ]; then
-        unknown "registro de workers sin entradas"
+        # 14.20 punto 4: un registro de workers vacio con ruteo activo no es
+        # un unknown tolerable; sin workers no hay carril que arrancar.
+        razon "registro de workers sin entradas"
       elif [ "$waptos" -eq 0 ]; then
         razon "sin trabajador compatible"
       fi

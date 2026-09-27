@@ -62,6 +62,12 @@ class PatternError(RegistryError):
     diagnostic = "ERROR invalid pattern"
 
 
+class TranscriptError(RegistryError):
+    """Transcript con clave fuera del esquema cerrado."""
+
+    diagnostic = "ERROR invalid transcript"
+
+
 @dataclass(frozen=True)
 class Worker:
     id: str
@@ -178,7 +184,9 @@ def _check_capabilities(raw: object) -> tuple[str, ...]:
     if not isinstance(raw, list) or not raw:
         raise RegistryError("missing required capabilities")
     for item in raw:
-        if item not in ALLOWED_CAPABILITIES:
+        # isinstance primero: un elemento no hashable (dict/list) reventaria el
+        # `in` contra el frozenset con un TypeError en vez del diagnostico.
+        if not isinstance(item, str) or item not in ALLOWED_CAPABILITIES:
             raise RegistryError(f"unknown capability {item!r}")
     return tuple(raw)
 
@@ -207,9 +215,15 @@ def _check_permission_modes(raw: object, capabilities: tuple[str, ...]) -> dict[
     return dict(raw)
 
 
+TRANSCRIPT_KEYS = frozenset({"kind", "path"})
+
+
 def _check_transcript(raw: object) -> str:
     if not isinstance(raw, dict):
         raise RegistryError("transcript is not a mapping")
+    unknown = set(raw) - TRANSCRIPT_KEYS
+    if unknown:
+        raise TranscriptError(f"unknown transcript key: {sorted(unknown)[0]}")
     path = raw.get("path")
     if path is not None:
         if not isinstance(path, str) or not path:

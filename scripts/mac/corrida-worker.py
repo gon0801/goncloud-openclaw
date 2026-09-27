@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -173,17 +174,30 @@ def cmd_select(args: argparse.Namespace) -> int:
         health = state.get("health", {})
         history = state.get("history", [])
         active = state.get("active", [])
+        installed = state.get("installed")
+        exhausted = state.get("exhausted") or []
+        previous_reviewer = state.get("previous_reviewer")
         if not isinstance(health, dict) or not isinstance(history, list) or not isinstance(active, list):
             raise SelectionError("bad state shape")
+        if not all(isinstance(item, dict) for item in history) or not all(
+            isinstance(item, dict) for item in active
+        ):
+            raise SelectionError("bad state entries")
+        if installed is not None and not isinstance(installed, dict):
+            raise SelectionError("bad installed shape")
+        if not isinstance(exhausted, list):
+            raise SelectionError("bad exhausted shape")
+        if previous_reviewer is not None and not isinstance(previous_reviewer, str):
+            raise SelectionError("bad previous_reviewer shape")
         decision = select_worker(
             registry,
             request,
             health,
             history,
             active,
-            installed=state.get("installed"),
-            exhausted=state.get("exhausted") or [],
-            previous_reviewer=state.get("previous_reviewer"),
+            installed=installed,
+            exhausted=exhausted,
+            previous_reviewer=previous_reviewer,
         )
     except SelectionError as exc:
         print(exc.diagnostic)
@@ -213,26 +227,34 @@ def probe_worker(worker: Worker, env: Mapping[str, str], timeout: float) -> tupl
         return ("broken", "missing-executable")
     argv = [str(binary) if item == worker.binary else item for item in worker.commands["health"]]
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             [argv[0], *argv[1:]],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
         )
     except OSError:
         return ("broken", "launch-failed")
+    try:
+        out, err = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
+        # El binario puede dejar hijos vivos (launchers, wrappers): matar el
+        # grupo entero, no solo el PID directo (14.20 punto 6).
+        os.killpg(process.pid, signal.SIGKILL)
+        process.communicate()
         return ("broken", "timeout")
-    output = f"{completed.stdout}\n{completed.stderr}".lower()
+    # La salida del worker es dato, no contrato: decode tolerante para que un
+    # byte raro en un banner no reviente la sonda (14.20 punto 8).
+    output = f"{out.decode('utf-8', 'replace')}\n{err.decode('utf-8', 'replace')}".lower()
     if any(pattern.lower() in output for pattern in worker.auth_patterns):
         return ("unauthenticated", "auth-pattern")
     if any(pattern.lower() in output for pattern in worker.quota_patterns):
         return ("limited", "quota-pattern")
     if any(pattern.lower() in output for pattern in worker.blocked_patterns):
         return ("broken", "blocked-pattern")
-    if completed.returncode == 0:
+    if process.returncode == 0:
         return ("available", "ok")
-    return ("broken", f"exit-{completed.returncode}")
+    return ("broken", f"exit-{process.returncode}")
 
 
 def cmd_state_reduce(args: argparse.Namespace) -> int:

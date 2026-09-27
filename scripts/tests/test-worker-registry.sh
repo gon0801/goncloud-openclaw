@@ -52,4 +52,28 @@ PY
     || fail "record validate no nombro la razon (lane without $campo)"
 done
 
+# 14.20 (1) y (3): capabilities con elementos de tipo basura dan el diagnostico
+# limpio del registro (no un TypeError de unhashable) y el esquema del
+# transcript es cerrado (solo kind y path).
+mutar_registro() { # $1 destino, $2 expresion python sobre rec
+  python3 - "$1" "$2" <<'PY'
+import json, sys
+rec = json.load(open("scripts/tests/fixtures/workers/valid.json"))
+exec(sys.argv[2])
+json.dump(rec, open(sys.argv[1], "w"), indent=1, sort_keys=True)
+PY
+}
+mutar_registro "$T/caps-basura.json" 'rec["workers"][0]["capabilities"] = ["read", {"malicia": 1}]'
+if out=$(python3 scripts/mac/corrida-worker.py registry validate --registry "$T/caps-basura.json" 2>&1); then
+  fail "capabilities con un dict debio fallar"
+fi
+printf '%s\n' "$out" | grep -q 'ERROR invalid registry' \
+  || fail "capabilities con un dict dio traceback y no el diagnostico limpio: $(printf '%s\n' "$out" | head -2)"
+mutar_registro "$T/transcript-rara.json" 'rec["workers"][0]["transcript"] = {"kind": "tmux-pane", "cualquier": "cosa"}'
+if out=$(python3 scripts/mac/corrida-worker.py registry validate --registry "$T/transcript-rara.json" 2>&1); then
+  fail "un transcript con clave desconocida debio fallar"
+fi
+printf '%s\n' "$out" | grep -q 'ERROR invalid transcript' \
+  || fail "el esquema del transcript acepto una clave desconocida: $out"
+
 echo "TODO VERDE: registro de workers"

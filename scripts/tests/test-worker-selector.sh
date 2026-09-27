@@ -147,4 +147,59 @@ out=$(CORRIDA_WORKER_BIN_CLAUDE="$T/bin/no-existe" $CLI health probe --registry 
   || fail "probe con override ausente fallo"
 [ "$out" = "broken" ] || fail "override ausente dio $out"
 
+# 14.20 (2): cmd_select valida los tipos del estado antes de pasarselos al
+# selector; un estado mal tipado da el diagnostico limpio, nunca un traceback.
+estado_malo() { # $1 mutacion python sobre el state, $2 descripcion
+  python3 - scripts/tests/fixtures/workers/selection-state.json "$T/malo.json" "$1" <<'PY'
+import json, sys
+state = json.load(open(sys.argv[1]))
+exec(sys.argv[3])
+json.dump(state, open(sys.argv[2], "w"), indent=1, sort_keys=True)
+PY
+  if out=$($CLI select --registry "$REG" --request "$REQ" --state "$T/malo.json" 2>&1); then
+    fail "select acepto un estado con $2"
+  fi
+  printf '%s\n' "$out" | grep -q 'ERROR invalid selection input' \
+    || fail "select con $2 revento sin diagnostico limpio: $(printf '%s\n' "$out" | head -2)"
+}
+estado_malo 'state["installed"] = []' "installed lista"
+estado_malo 'state["exhausted"] = "claude"' "exhausted cadena"
+estado_malo 'state["previous_reviewer"] = 17' "previous_reviewer numero"
+estado_malo 'state["history"] = ["x"]' "history con una cadena"
+
+# 14.20 (6): al vencer el tope se mata el GRUPO (killpg), no solo el PID: un
+# binario que deja un hijo vivo no puede sobrevivir a la sonda.
+cat >"$T/bin/fake-hijo" <<CLI
+#!/bin/sh
+sh -c 'echo \$\$ > "$T/hijo.pid"; while :; do sleep 1; done' >/dev/null 2>&1 &
+exec sleep 30
+CLI
+chmod +x "$T/bin/fake-hijo"
+rm -f "$T/hijo.pid"
+out=$(CORRIDA_WORKER_BIN_CLAUDE="$T/bin/fake-hijo" $CLI health probe --registry "$FIXREG" --worker claude --format status --timeout 1) \
+  || fail "probe de un binario con hijo fallo"
+[ "$out" = "broken" ] || fail "probe de un binario con hijo dio $out"
+[ -s "$T/hijo.pid" ] || fail "el hijo nunca escribio su pid"
+muerto=0
+i=0
+while [ "$i" -lt 20 ]; do
+  estado_hijo="$(ps -o stat= -p "$(cat "$T/hijo.pid")" 2>/dev/null || true)"
+  case "$estado_hijo" in ""|Z*) muerto=1; break;; esac
+  sleep 0.1
+  i=$((i+1))
+done
+[ "$muerto" -eq 1 ] || fail "el hijo sobrevivio al tope de la sonda (se mato solo el PID)"
+
+# 14.20 (8): la salida del worker es dato: bytes que no son UTF-8 se decodifican
+# con errors="replace" y no revientan la sonda.
+cat >"$T/bin/fake-utf8" <<'CLI'
+#!/bin/sh
+printf 'fake \xff\xfe basura\n'
+exit 0
+CLI
+chmod +x "$T/bin/fake-utf8"
+out=$(CORRIDA_WORKER_BIN_CLAUDE="$T/bin/fake-utf8" $CLI health probe --registry "$FIXREG" --worker claude --format status 2>&1) \
+  || fail "probe con salida no-utf8 revento: $out"
+[ "$out" = "available" ] || fail "probe con salida no-utf8 dio $out"
+
 echo "TODO VERDE: selector de workers"
