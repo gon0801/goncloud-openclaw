@@ -1,0 +1,18 @@
+{
+ "active": [],
+ "exhausted": [
+  "claude_fable"
+ ],
+ "health": {
+  "claude_fable": "available",
+  "claude_opus": "available",
+  "codex": "available"
+ },
+ "history": [],
+ "installed": {
+  "claude_fable": true,
+  "claude_opus": true,
+  "codex": true
+ },
+ "previous_reviewer": null
+}
