@@ -47,6 +47,35 @@ def _has_kind(lane: Mapping[str, Any], kind: str) -> bool:
     return any(event.get("kind") == kind for event in _lane_events(lane))
 
 
+def _tenencia_events(lane: Mapping[str, Any]) -> list:
+    """Eventos de la tenencia ACTUAL del carril: los posteriores al ultimo
+    observed.launched (14.22 punto 1). Un lanzamiento abre tenencia nueva:
+    los intents y bloqueos del trabajador anterior no pueden frenar el
+    relevo del que esta vivo ahora."""
+    events = _lane_events(lane)
+    for indice in range(len(events) - 1, -1, -1):
+        if events[indice].get("kind") == "observed.launched":
+            return events[indice + 1 :]
+    return events
+
+
+def _has_kind_tenencia(lane: Mapping[str, Any], kind: str) -> bool:
+    return any(event.get("kind") == kind for event in _tenencia_events(lane))
+
+
+def _bloqueo_anotado(lane: Mapping[str, Any], reason: str) -> bool:
+    """El bloqueo ya quedo anotado CON ESA razon (14.22 punto 2): la dedupe es
+    por reason del payload, no por kind, para que un bloqueo distinto se
+    anote y quede memoria del porqué de cada uno."""
+    for event in _lane_events(lane):
+        if (
+            event.get("kind") == "observed.handoff.blocked"
+            and (event.get("payload") or {}).get("reason") == reason
+        ):
+            return True
+    return False
+
+
 def _handoff(lane: Mapping[str, Any]) -> Mapping[str, Any]:
     handoff = lane.get("handoff") or {}
     return handoff if isinstance(handoff, dict) else {}
@@ -234,7 +263,7 @@ def _handoff_effects(
     if not session:
         return ()
 
-    handed_off = lane.get("estado") == "handoff" or _has_kind(lane, "intent.handoff_lane")
+    handed_off = lane.get("estado") == "handoff" or _has_kind_tenencia(lane, "intent.handoff_lane")
     if handed_off:
         return _successor_effects(
             lane, lane_obs, nxt, registry_workers, live, session_alive,
@@ -249,29 +278,29 @@ def _handoff_effects(
     else:
         return ()
 
-    if reason == "failed" and resumes == 0 and not _has_kind(lane, "intent.resume_lane"):
+    if reason == "failed" and resumes == 0 and not _has_kind_tenencia(lane, "intent.resume_lane"):
         return (PlannedEffect("resume_lane", lane_id, {"session": session}),)
     blocked = _blocked(lane_obs)
     if blocked:
-        if not _has_kind(lane, "observed.handoff.blocked"):
+        if not _bloqueo_anotado(lane, blocked):
             return (_record(lane_id, "handoff.blocked", {"reason": blocked}),)
         return ()
     if nxt is None:
         exhausted = candidates.get("exhausted") or []
-        if exhausted and not _has_kind(lane, "intent.mark_lane_stopped"):
+        if exhausted and not _has_kind_tenencia(lane, "intent.mark_lane_stopped"):
             return (
                 PlannedEffect(
                     "mark_lane_stopped", lane_id, {"reason": "candidates-exhausted"}
                 ),
             )
-        if not exhausted and not _has_kind(lane, "observed.handoff.blocked"):
+        if not exhausted and not _bloqueo_anotado(lane, "no-candidate"):
             return (_record(lane_id, "handoff.blocked", {"reason": "no-candidate"}),)
         return ()
     if nxt.get("worker") not in registry_workers:
-        if not _has_kind(lane, "observed.handoff.blocked"):
+        if not _bloqueo_anotado(lane, "unknown-worker"):
             return (_record(lane_id, "handoff.blocked", {"reason": "unknown-worker"}),)
         return ()
-    if _has_kind(lane, "intent.handoff_lane"):
+    if _has_kind_tenencia(lane, "intent.handoff_lane"):
         return ()
     return (
         PlannedEffect(
@@ -301,38 +330,38 @@ def _successor_effects(
     exhausted: list,
 ) -> tuple[PlannedEffect, ...]:
     lane_id = str(lane.get("id") or "")
-    if _has_kind(lane, "intent.launch_successor"):
+    if _has_kind_tenencia(lane, "intent.launch_successor"):
         return ()
     blocked = _blocked(lane_obs)
     if blocked:
-        if not _has_kind(lane, "observed.handoff.blocked"):
+        if not _bloqueo_anotado(lane, blocked):
             return (_record(lane_id, "handoff.blocked", {"reason": blocked}),)
         return ()
     session = lane.get("session") or ""
     if session and (live(session) or session_alive):
-        if _has_kind(lane, "intent.stop_lane"):
-            if not _has_kind(lane, "observed.handoff.blocked"):
+        if _has_kind_tenencia(lane, "intent.stop_lane"):
+            if not _bloqueo_anotado(lane, "stop-unconfirmed"):
                 return (
                     _record(lane_id, "handoff.blocked", {"reason": "stop-unconfirmed"}),
                 )
             return ()
         return (PlannedEffect("stop_lane", lane_id, {"session": session}),)
-    if _has_kind(lane, "intent.stop_lane") and not _has_kind(
+    if _has_kind_tenencia(lane, "intent.stop_lane") and not _has_kind_tenencia(
         lane, "observed.session.stopped"
     ):
         return (_record(lane_id, "session.stopped", {"session": session}),)
     if nxt is None:
-        if exhausted and not _has_kind(lane, "intent.mark_lane_stopped"):
+        if exhausted and not _has_kind_tenencia(lane, "intent.mark_lane_stopped"):
             return (
                 PlannedEffect(
                     "mark_lane_stopped", lane_id, {"reason": "candidates-exhausted"}
                 ),
             )
-        if not exhausted and not _has_kind(lane, "observed.handoff.blocked"):
+        if not exhausted and not _bloqueo_anotado(lane, "no-candidate"):
             return (_record(lane_id, "handoff.blocked", {"reason": "no-candidate"}),)
         return ()
     if nxt.get("worker") not in registry_workers:
-        if not _has_kind(lane, "observed.handoff.blocked"):
+        if not _bloqueo_anotado(lane, "unknown-worker"):
             return (_record(lane_id, "handoff.blocked", {"reason": "unknown-worker"}),)
         return ()
     return (

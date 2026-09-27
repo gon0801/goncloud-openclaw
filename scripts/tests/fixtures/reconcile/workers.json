@@ -1,0 +1,144 @@
+{
+ "max_external_sessions": 4,
+ "schema": "workers.v1",
+ "workers": [
+  {
+   "auth_patterns": [
+    "login required",
+    "authentication failed"
+   ],
+   "binary": "codex",
+   "blocked_patterns": [
+    "permission denied"
+   ],
+   "capabilities": [
+    "read",
+    "write",
+    "review"
+   ],
+   "commands": {
+    "health": [
+     "codex",
+     "--version"
+    ],
+    "resume:review": [
+     "codex",
+     "resume",
+     "{session_id}",
+     "--sandbox",
+     "read-only"
+    ],
+    "resume:write": [
+     "codex",
+     "resume",
+     "{session_id}",
+     "--sandbox",
+     "workspace-write"
+    ],
+    "start:review": [
+     "codex",
+     "--sandbox",
+     "read-only"
+    ],
+    "start:write": [
+     "codex",
+     "--sandbox",
+     "workspace-write"
+    ],
+    "stop": [
+     "tmux-stop",
+     "{session_name}"
+    ]
+   },
+   "harness": "codex-cli",
+   "id": "codex",
+   "model": "router",
+   "permission_modes": {
+    "review": "read-only",
+    "write": "workspace-write"
+   },
+   "provider": "openai",
+   "quota_patterns": [
+    "usage limit",
+    "rate limit"
+   ],
+   "task_types": [
+    "general",
+    "backend",
+    "frontend",
+    "review"
+   ],
+   "transcript": {
+    "kind": "tmux-pane"
+   },
+   "version": "0.155.1"
+  },
+  {
+   "auth_patterns": [
+    "login required",
+    "authentication failed"
+   ],
+   "binary": "kimi",
+   "blocked_patterns": [
+    "permission denied"
+   ],
+   "capabilities": [
+    "read",
+    "write",
+    "review"
+   ],
+   "commands": {
+    "health": [
+     "kimi",
+     "--version"
+    ],
+    "resume:review": [
+     "kimi",
+     "--resume",
+     "{session_id}",
+     "--read-only"
+    ],
+    "resume:write": [
+     "kimi",
+     "--resume",
+     "{session_id}",
+     "--auto"
+    ],
+    "start:review": [
+     "kimi",
+     "--read-only"
+    ],
+    "start:write": [
+     "kimi",
+     "--auto"
+    ],
+    "stop": [
+     "tmux-stop",
+     "{session_name}"
+    ]
+   },
+   "harness": "kimi-code",
+   "id": "kimi",
+   "model": "router",
+   "permission_modes": {
+    "review": "read-only",
+    "write": "auto"
+   },
+   "provider": "kimi",
+   "quota_patterns": [
+    "usage limit",
+    "rate limit"
+   ],
+   "task_types": [
+    "general",
+    "backend",
+    "frontend",
+    "review"
+   ],
+   "transcript": {
+    "kind": "tmux-pane"
+   },
+   "version": "0.39.1"
+  }
+ ]
+}

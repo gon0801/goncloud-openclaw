@@ -243,7 +243,7 @@ for c in reg.get("lanes") or []:
     o["predecessor_alive"]=None; o["children_writing"]=None
     pr=None; merge=None
     try:
-        p=subprocess.run(["gh","pr","list","--head",br,"--json","number,headRefOid,mergedAt,mergeCommit",
+        p=subprocess.run(["gh","pr","list","--state","all","--head",br,"--json","number,headRefOid,mergedAt,mergeCommit",
         "--jq",".[0]"],capture_output=True,text=True,timeout=30,cwd=wt or None)
         if p.returncode==0 and p.stdout.strip() and p.stdout.strip()!="null":
             pr=json.loads(p.stdout)

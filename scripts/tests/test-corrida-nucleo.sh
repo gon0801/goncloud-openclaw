@@ -1269,4 +1269,16 @@ if CORRIDA_WORKERS_REGISTRY="$CT/eff-reg.json" bash -c '. scripts/mac/corrida/li
   fail "worker_argv expandio {effort} sin campo effort"
 fi
 
+# 14.22 P6: la redaccion cubre mas prefijos de token de GitHub (ghp, gho, ghu,
+# ghs, ghr) y los sk- con guiones y guiones bajos (sk-pro-ghi completo).
+redactada="$(printf 'gho_falso9 sk-pro-ghi ghp_viejo1 sk_largo_9' | bash -c '. scripts/mac/corrida/lib.sh; redactar_texto')"
+printf '%s\n' "$redactada" | grep -qF 'gho_[REDACTED]' \
+  || fail "P6: gho_ quedo sin redactar: $redactada"
+printf '%s\n' "$redactada" | grep -qF 'sk-[REDACTED]' \
+  || fail "P6: sk- con guiones no quedo redactado: $redactada"
+printf '%s\n' "$redactada" | grep -q 'sk-pro-ghi' \
+  && fail "P6: sk-pro-ghi quedo legible: $redactada"
+printf '%s\n' "$redactada" | grep -qF 'ghp_[REDACTED]' \
+  || fail "P6: la redaccion de ghp_ se rompio: $redactada"
+
 echo "TODO VERDE: test-corrida-nucleo"

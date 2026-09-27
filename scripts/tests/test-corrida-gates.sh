@@ -344,4 +344,28 @@ mutante sin-bloqueante 's/if open_blockers:/if False and open_blockers:/' \
   09-merge-bloqueante
 echo "ok (5): cinco mutantes caen"
 
+# (6) 14.22 P5: un ALLOW con el veredicto sin grabar (lock que no cede) no
+# sale 0: la compuerta propaga el fallo porque el registro es la memoria del
+# permiso. La linea ALLOW igual queda impresa para auditar.
+fx=01-merge-ok
+materializar "$fx.json" "$T/e2e-$fx-p5"
+run="g2-01"
+mkdir -p "$T/corridas/$run"
+cp "$T/e2e-$fx-p5/record.json" "$T/corridas/$run/registro.json"
+completar_registro "$T/corridas/$run/registro.json" "$run" "$T/modos.tsv"
+export GH_COMMENTS="$T/e2e-$fx-p5/comments.json" GH_PR="$T/e2e-$fx-p5/pr-gh.json"
+meta_accion="$(python3 -c "import json; print(json.load(open('$T/e2e-$fx-p5/meta.json'))['action'])")"
+meta_sha="$(python3 -c "import json; print(json.load(open('$T/e2e-$fx-p5/meta.json'))['sha'])")"
+: >"$T/corridas/$run/.lock"
+CORR_LOCK_INTENTOS=1 bash "$CORR" compuerta "$run" l1 "$meta_accion" --sha "$meta_sha" \
+  --evidence "$T/e2e-$fx-p5/evidence.json" >"$T/p5.out" 2>&1 \
+  && fail "P5: ALLOW con el veredicto sin grabar salio 0"
+grep -q "^ALLOW $meta_accion " "$T/p5.out" || fail "P5: sin la linea ALLOW para auditar"
+python3 - "$T/corridas/$run/registro.json" <<'PY' || fail "P5: inconsistencia inesperada"
+import json,sys
+evs = json.load(open(sys.argv[1]))["lanes"][0]["events"]
+assert not any(e["kind"] == "gate.allow" for e in evs), evs
+PY
+echo "ok (6): ALLOW sin veredicto grabado no sale 0"
+
 echo "TODO VERDE: corrida-gates"
