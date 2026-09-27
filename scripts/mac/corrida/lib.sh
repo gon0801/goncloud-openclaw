@@ -910,7 +910,8 @@ except Exception:
 
 worker_argv() { # $1 id $2 clave $3 worktree $4 brief $5 session_id $6 session_name
                 # stdout: argv[1:] del comando, un arg por linea, placeholders
-                # sustituidos; rc 1 si el worker o la clave no existen
+                # sustituidos; rc 1 si el worker o la clave no existen, o si
+                # hay {effort} sin effort (14.13: jamas un argumento vacio)
   WREG="$(corrida_workers_registry)" WID="$1" WK="$2" WWT="$3" WBR="$4" WSID="$5" WSN="$6" python3 -c "
 import json,os,sys
 try:
@@ -919,7 +920,14 @@ try:
   a=list(w['commands'][os.environ['WK']])
   s={'{worktree}':os.environ['WWT'],'{brief}':os.environ['WBR'],
      '{session_id}':os.environ['WSID'],'{session_name}':os.environ['WSN']}
-  sys.stdout.write('\n'.join(s.get(x,x) for x in a[1:]))
+  e=w.get('effort')
+  def sub(x):
+    if '{effort}' in x:
+      if not e:
+        raise ValueError('marcador {effort} sin campo effort en la entrada')
+      return x.replace('{effort}', e)
+    return s.get(x,x)
+  sys.stdout.write('\n'.join(sub(x) for x in a[1:]))
   if len(a) > 1: sys.stdout.write('\n')
 except Exception:
   sys.exit(1)

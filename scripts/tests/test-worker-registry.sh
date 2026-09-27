@@ -17,7 +17,7 @@ fi
 printf '%s\n' "$out" | grep -qx 'ERROR invalid pattern' || fail "wrong invalid-pattern diagnostic: $out"
 
 python3 scripts/mac/corrida-worker.py registry validate --registry scripts/mac/workers.v1.json \
-  | grep -qx 'VALID workers.v1 6' || fail "el registro real no valida como 6 workers"
+  | grep -qx 'VALID workers.v1 8' || fail "el registro real no valida como 8 workers (14.13e)"
 
 python3 scripts/mac/corrida-worker.py record validate --record scripts/tests/fixtures/corrida/v2-existing-without-workers.json \
   | grep -qx 'VALID corrida.v2 legacy' || fail "el fixture legado no valida"
@@ -75,5 +75,26 @@ if out=$(python3 scripts/mac/corrida-worker.py registry validate --registry "$T/
 fi
 printf '%s\n' "$out" | grep -q 'ERROR invalid transcript' \
   || fail "el esquema del transcript acepto una clave desconocida: $out"
+
+# 14.13: esquema cerrado con effort y quota_group. effort sin marcador
+# {effort} en start/resume, o marcador sin effort, da ERROR invalid effort en
+# ambas direcciones (fixtures de la enmienda), y los ids solo admiten
+# [a-z0-9_]: punto o guion rompen tmux y el override CORRIDA_WORKER_BIN_<ID>.
+if out=$(python3 scripts/mac/corrida-worker.py registry validate --registry scripts/tests/fixtures/workers/invalid-effort.json 2>&1); then
+  fail "acepto un effort sin argv que lo reciba"
+fi
+printf '%s\n' "$out" | grep -qx 'ERROR invalid effort' || fail "wrong invalid-effort diagnostic: $out"
+if out=$(python3 scripts/mac/corrida-worker.py registry validate --registry scripts/tests/fixtures/workers/invalid-effort-argv.json 2>&1); then
+  fail "acepto un marcador de effort sin campo effort"
+fi
+printf '%s\n' "$out" | grep -qx 'ERROR invalid effort' || fail "wrong invalid-effort diagnostic: $out"
+mutar_registro "$T/id-punto.json" 'rec["workers"][0]["id"] = "claude.fable"'
+if out=$(python3 scripts/mac/corrida-worker.py registry validate --registry "$T/id-punto.json" 2>&1); then
+  fail "acepto un id con punto"
+fi
+printf '%s\n' "$out" | grep -qx 'ERROR invalid id' || fail "id con punto sin diagnostico de id: $out"
+mutar_registro "$T/id-guion.json" 'rec["workers"][0]["id"] = "claude-fable"'
+python3 scripts/mac/corrida-worker.py registry validate --registry "$T/id-guion.json" >/dev/null 2>&1 \
+  && fail "acepto un id con guion"
 
 echo "TODO VERDE: registro de workers"

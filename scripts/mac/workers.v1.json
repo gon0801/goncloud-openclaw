@@ -23,6 +23,8 @@
     ],
     "resume:review": [
      "claude",
+     "--model",
+     "anthropic/claude-fable-5-1",
      "--resume",
      "{session_id}",
      "--permission-mode",
@@ -30,6 +32,8 @@
     ],
     "resume:write": [
      "claude",
+     "--model",
+     "anthropic/claude-fable-5-1",
      "--resume",
      "{session_id}",
      "--permission-mode",
@@ -37,11 +41,15 @@
     ],
     "start:review": [
      "claude",
+     "--model",
+     "anthropic/claude-fable-5-1",
      "--permission-mode",
      "plan"
     ],
     "start:write": [
      "claude",
+     "--model",
+     "anthropic/claude-fable-5-1",
      "--permission-mode",
      "acceptEdits"
     ],
@@ -51,8 +59,8 @@
     ]
    },
    "harness": "claude-code",
-   "id": "claude",
-   "model": "router",
+   "id": "claude_fable",
+   "model": "anthropic/claude-fable-5-1",
    "permission_modes": {
     "review": "plan",
     "write": "acceptEdits"
@@ -72,6 +80,235 @@
     "kind": "tmux-pane"
    },
    "version": "2.1.278"
+  },
+  {
+   "auth_patterns": [
+    "login required",
+    "authentication failed"
+   ],
+   "binary": "claude",
+   "blocked_patterns": [
+    "permission denied"
+   ],
+   "capabilities": [
+    "read",
+    "write",
+    "review"
+   ],
+   "commands": {
+    "health": [
+     "claude",
+     "--version"
+    ],
+    "resume:review": [
+     "claude",
+     "--model",
+     "anthropic/claude-opus-5",
+     "--resume",
+     "{session_id}",
+     "--permission-mode",
+     "plan"
+    ],
+    "resume:write": [
+     "claude",
+     "--model",
+     "anthropic/claude-opus-5",
+     "--resume",
+     "{session_id}",
+     "--permission-mode",
+     "acceptEdits"
+    ],
+    "start:review": [
+     "claude",
+     "--model",
+     "anthropic/claude-opus-5",
+     "--permission-mode",
+     "plan"
+    ],
+    "start:write": [
+     "claude",
+     "--model",
+     "anthropic/claude-opus-5",
+     "--permission-mode",
+     "acceptEdits"
+    ],
+    "stop": [
+     "tmux-stop",
+     "{session_name}"
+    ]
+   },
+   "harness": "claude-code",
+   "id": "claude_opus",
+   "model": "anthropic/claude-opus-5",
+   "permission_modes": {
+    "review": "plan",
+    "write": "acceptEdits"
+   },
+   "provider": "anthropic",
+   "quota_patterns": [
+    "usage limit",
+    "rate limit"
+   ],
+   "task_types": [
+    "general",
+    "backend",
+    "frontend",
+    "review"
+   ],
+   "transcript": {
+    "kind": "tmux-pane"
+   },
+   "version": "2.1.278"
+  },
+  {
+   "auth_patterns": [
+    "login required",
+    "authentication failed"
+   ],
+   "binary": "kimi",
+   "blocked_patterns": [
+    "permission denied"
+   ],
+   "capabilities": [
+    "read",
+    "write",
+    "review"
+   ],
+   "commands": {
+    "health": [
+     "kimi",
+     "--version"
+    ],
+    "resume:review": [
+     "kimi",
+     "--model",
+     "kimi/k3",
+     "--resume",
+     "{session_id}",
+     "--read-only"
+    ],
+    "resume:write": [
+     "kimi",
+     "--model",
+     "kimi/k3",
+     "--resume",
+     "{session_id}",
+     "--auto"
+    ],
+    "start:review": [
+     "kimi",
+     "--model",
+     "kimi/k3",
+     "--read-only"
+    ],
+    "start:write": [
+     "kimi",
+     "--model",
+     "kimi/k3",
+     "--auto"
+    ],
+    "stop": [
+     "tmux-stop",
+     "{session_name}"
+    ]
+   },
+   "harness": "kimi-code",
+   "id": "kimi_k3",
+   "model": "kimi/k3",
+   "permission_modes": {
+    "review": "read-only",
+    "write": "auto"
+   },
+   "provider": "kimi",
+   "quota_patterns": [
+    "usage limit",
+    "rate limit"
+   ],
+   "task_types": [
+    "general",
+    "backend",
+    "frontend",
+    "review"
+   ],
+   "transcript": {
+    "kind": "tmux-pane"
+   },
+   "version": "0.39.1"
+  },
+  {
+   "auth_patterns": [
+    "login required",
+    "authentication failed"
+   ],
+   "binary": "kimi",
+   "blocked_patterns": [
+    "permission denied"
+   ],
+   "capabilities": [
+    "read",
+    "write",
+    "review"
+   ],
+   "commands": {
+    "health": [
+     "kimi",
+     "--version"
+    ],
+    "resume:review": [
+     "kimi",
+     "--model",
+     "kimi/kimi-for-coding",
+     "--resume",
+     "{session_id}",
+     "--read-only"
+    ],
+    "resume:write": [
+     "kimi",
+     "--model",
+     "kimi/kimi-for-coding",
+     "--resume",
+     "{session_id}",
+     "--auto"
+    ],
+    "start:review": [
+     "kimi",
+     "--model",
+     "kimi/kimi-for-coding",
+     "--read-only"
+    ],
+    "start:write": [
+     "kimi",
+     "--model",
+     "kimi/kimi-for-coding",
+     "--auto"
+    ],
+    "stop": [
+     "tmux-stop",
+     "{session_name}"
+    ]
+   },
+   "harness": "kimi-code",
+   "id": "kimi_coding",
+   "model": "kimi/kimi-for-coding",
+   "permission_modes": {
+    "review": "read-only",
+    "write": "auto"
+   },
+   "provider": "kimi",
+   "quota_patterns": [
+    "usage limit",
+    "rate limit"
+   ],
+   "task_types": [
+    "general",
+    "backend",
+    "frontend",
+    "review"
+   ],
+   "transcript": {
+    "kind": "tmux-pane"
+   },
+   "version": "0.39.1"
   },
   {
    "auth_patterns": [
@@ -214,73 +451,6 @@
     "kind": "tmux-pane"
    },
    "version": "0.16.5"
-  },
-  {
-   "auth_patterns": [
-    "login required",
-    "authentication failed"
-   ],
-   "binary": "kimi",
-   "blocked_patterns": [
-    "permission denied"
-   ],
-   "capabilities": [
-    "read",
-    "write",
-    "review"
-   ],
-   "commands": {
-    "health": [
-     "kimi",
-     "--version"
-    ],
-    "resume:review": [
-     "kimi",
-     "--resume",
-     "{session_id}",
-     "--read-only"
-    ],
-    "resume:write": [
-     "kimi",
-     "--resume",
-     "{session_id}",
-     "--auto"
-    ],
-    "start:review": [
-     "kimi",
-     "--read-only"
-    ],
-    "start:write": [
-     "kimi",
-     "--auto"
-    ],
-    "stop": [
-     "tmux-stop",
-     "{session_name}"
-    ]
-   },
-   "harness": "kimi-code",
-   "id": "kimi",
-   "model": "router",
-   "permission_modes": {
-    "review": "read-only",
-    "write": "auto"
-   },
-   "provider": "kimi",
-   "quota_patterns": [
-    "usage limit",
-    "rate limit"
-   ],
-   "task_types": [
-    "general",
-    "backend",
-    "frontend",
-    "review"
-   ],
-   "transcript": {
-    "kind": "tmux-pane"
-   },
-   "version": "0.39.1"
   },
   {
    "auth_patterns": [

@@ -216,6 +216,12 @@ def cmd_select(args: argparse.Namespace) -> int:
             for item in decision.discarded
         ],
     }
+    if decision.winner is not None:
+        # 14.13: la decision registra el modelo y effort configurados del
+        # ganador (lo que el argv de arranque va a usar).
+        ganador = next(w for w in registry.workers if w.id == decision.winner)
+        payload["model"] = ganador.model
+        payload["effort"] = ganador.effort
     print(json.dumps(payload, sort_keys=True))
     return 0
 

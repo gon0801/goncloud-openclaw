@@ -1039,16 +1039,16 @@ def reserva(lane,wt,base,**kw):
   return c
 d['lanes']=[reserva('lane-9x',W9,'0'*40),
  reserva('lane-9y',W9Y,'1'*40),
- reserva('lane-9a',W9A,'2'*40,estado='activo',worker='claude',session='ses-vieja-9'),
+ reserva('lane-9a',W9A,'2'*40,estado='activo',worker='claude_fable',session='ses-vieja-9'),
  reserva('lane-9b',W9B,'3'*40),
  reserva('lane-9w',W9W,'4'*40),
  reserva('lane-9L',W9L,'5'*40)]
 json.dump(d,open(r,'w'),indent=1)
 PY
-S9=$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/wt-9x" --nombre ses-carril-9 --encargo "$T/encargo.txt" --carril lane-9x --worker claude) \
+S9=$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/wt-9x" --nombre ses-carril-9 --encargo "$T/encargo.txt" --carril lane-9x --worker claude_fable) \
   || fail "lanzar con carril fallo"
 [ "$S9" = "ses-carril-9" ] || fail "la sesion del carril se llama $S9"
-for campo in '"worker": *"claude"' '"harness": *"claude-code"' '"provider": *"anthropic"' '"reported_model": *"unknown"' '"session": *"ses-carril-9"' '"estado": *"activo"'; do
+for campo in '"worker": *"claude_fable"' '"harness": *"claude-code"' '"provider": *"anthropic"' '"reported_model": *"unknown"' '"session": *"ses-carril-9"' '"estado": *"activo"'; do
   grep -q "$campo" "$T/corridas/t-carril/registro.json" || fail "el carril no persiste $campo"
 done
 validar_registro "$T/corridas/t-carril/registro.json" || fail "el registro con el carril lanzado no pasa validar_registro"
@@ -1069,7 +1069,7 @@ bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9g
   && fail "--carril sin --worker debio rechazarse"
 bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9h --carril lane-9z --worker nosuch >/dev/null 2>&1 \
   && fail "--worker desconocido debio rechazarse"
-out="$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9r --encargo "$T/encargo.txt" --carril lane-9xq --worker claude 2>&1)"; rc=$?
+out="$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9r --encargo "$T/encargo.txt" --carril lane-9xq --worker claude_fable 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] || fail "lanzar sobre un carril sin preparar debio rechazarse"
 printf '%s' "$out" | grep -q "no esta preparado" || fail "el rechazo del carril sin preparar no se explica: $out"
 "$TM_REAL" -L "$L" has-session -t "=ses-carril-9r" 2>/dev/null && fail "la sesion del carril sin preparar quedo viva"
@@ -1081,19 +1081,19 @@ PY
 # la sesion: la CLI no spawnea en un directorio no autorizado. Sin el
 # fail-fast, new-session queda en la bitacora del shim aunque luego se mate.
 : >"$TMUX_LOG"
-out="$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9q --encargo "$T/encargo.txt" --carril lane-9xq --worker claude 2>&1)"; rc=$?
+out="$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/ses" --nombre ses-carril-9q --encargo "$T/encargo.txt" --carril lane-9xq --worker claude_fable 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] || fail "fail-fast: carril sin preparar aceptado"
 grep -q "new-session -d -s ses-carril-9q" "$TMUX_LOG" && fail "fail-fast: el carril sin preparar spawneo sesion"
 
 # Un carril ya activo no acepta otra sesion (repro del reviewer: segundo
 # lanzamiento sobre el mismo carril).
-out="$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/wt-9a" --nombre ses-carril-9a2 --encargo "$T/encargo.txt" --carril lane-9a --worker claude 2>&1)"; rc=$?
+out="$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/wt-9a" --nombre ses-carril-9a2 --encargo "$T/encargo.txt" --carril lane-9a --worker claude_fable 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] || fail "lanzar sobre un carril activo aceptado"
 printf '%s' "$out" | grep -q "no esta reservado" || fail "el rechazo del carril activo no se explica: $out"
 "$TM_REAL" -L "$L" has-session -t "=ses-carril-9a2" 2>/dev/null && fail "la sesion del carril activo quedo viva"
 # El dir debe ser el worktree reservado: otro dir existente se rechaza sin
 # escritura (el repo principal o el worktree de otro carril no cuelan).
-out="$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/tui" --nombre ses-carril-9b2 --encargo "$T/encargo.txt" --carril lane-9b --worker claude 2>&1)"; rc=$?
+out="$(bash "$CORR" lanzar-sesion t-carril carril bueno "$T/tui" --nombre ses-carril-9b2 --encargo "$T/encargo.txt" --carril lane-9b --worker claude_fable 2>&1)"; rc=$?
 [ "$rc" -ne 0 ] || fail "lanzar fuera del worktree aceptado"
 printf '%s' "$out" | grep -q "no es el worktree" || fail "el rechazo fuera del worktree no se explica: $out"
 "$TM_REAL" -L "$L" has-session -t "=ses-carril-9b2" 2>/dev/null && fail "la sesion fuera del worktree quedo viva"
@@ -1107,7 +1107,7 @@ PY
 # rc != 0. Si la maquina lenta adelanta el retenedor, el rechazo es en el
 # marcado: el mismo rc y la misma sesion muerta.
 ( trap - EXIT; sleep 1; mkdir "$T/corridas/t-carril/.lock" 2>/dev/null ) &
-CORR_LOCK_INTENTOS=30 bash "$CORR" lanzar-sesion t-carril carril bueno "$T/wt-9L" --nombre ses-carril-9L --encargo "$T/encargo.txt" --carril lane-9L --worker claude >/dev/null 2>&1; rc=$?
+CORR_LOCK_INTENTOS=30 bash "$CORR" lanzar-sesion t-carril carril bueno "$T/wt-9L" --nombre ses-carril-9L --encargo "$T/encargo.txt" --carril lane-9L --worker claude_fable >/dev/null 2>&1; rc=$?
 wait 2>/dev/null
 rmdir "$T/corridas/t-carril/.lock" 2>/dev/null
 [ "$rc" -ne 0 ] || fail "con el lock retenido debio fallar"
@@ -1125,7 +1125,7 @@ d['lanes']=[{'id':'lane-3x','branch':'carril/lane-3x','worktree':wt,'base_remote
 del d['sesiones']
 json.dump(d,open(r,'w'),indent=1)
 PY
-bash "$CORR" lanzar-sesion t-carril3 carril bueno "$T/ses" --nombre ses-carril-3x --carril lane-3x --worker claude >/dev/null 2>&1 \
+bash "$CORR" lanzar-sesion t-carril3 carril bueno "$T/ses" --nombre ses-carril-3x --carril lane-3x --worker claude_fable >/dev/null 2>&1 \
   && fail "con la anotacion imposible debio fallar"
 "$TM_REAL" -L "$L" has-session -t "=ses-carril-3x" 2>/dev/null && fail "ses-carril-3x quedo viva"
 python3 - "$T/corridas/t-carril3/registro.json" <<'PY' || fail "el carril sin anotacion no marco failed"
@@ -1137,7 +1137,7 @@ PY
 # que el lanzamiento gane y cerrar lo desmarque; si el cierre ganara, el
 # carril marcaria failed. NUNCA queda sesion viva y marcada en un registro
 # cerrado, en ninguna de las dos ramas.
-bash "$CORR" lanzar-sesion t-carril carril tarde "$T/wt-9w" --nombre ses-carril-9w --encargo "$T/encargo.txt" --carril lane-9w --worker claude >"$T/lanzar-9w.out" 2>&1 &
+bash "$CORR" lanzar-sesion t-carril carril tarde "$T/wt-9w" --nombre ses-carril-9w --encargo "$T/encargo.txt" --carril lane-9w --worker claude_fable >"$T/lanzar-9w.out" 2>&1 &
 plan9w=$!
 sleep 0.8
 bash "$CORR" cerrar t-carril >/dev/null 2>&1 || fail "cerrar t-carril fallo"
@@ -1243,5 +1243,30 @@ bash -c '. scripts/mac/corrida/lib.sh; con_tope 5 true' \
   || fail "con_tope rompio el exit 0 de un comando sano"
 [ "$(bash -c '. scripts/mac/corrida/lib.sh; con_tope 5 no-existe-absoluto-xyz >/dev/null 2>&1; echo $?')" = "127" ] \
   || fail "el 127 del exec fallido ya no es 127"
+
+# 14.13: el marcador {effort} se expande con el valor de la entrada en el argv
+# de arranque; sin effort, worker_argv falla y jamas genera un argumento vacio.
+python3 - "$PWD/scripts/mac/workers.v1.json" "$CT/eff-reg.json" <<'PY'
+import json, sys
+reg = json.load(open(sys.argv[1]))
+w = [x for x in reg["workers"] if x["id"] == "claude_fable"][0]
+w["effort"] = "high"
+w["commands"]["start:write"] = w["commands"]["start:write"] + ["--effort", "{effort}"]
+json.dump(reg, open(sys.argv[2], "w"), indent=1, sort_keys=True)
+PY
+argv_eff="$(CORRIDA_WORKERS_REGISTRY="$CT/eff-reg.json" bash -c '. scripts/mac/corrida/lib.sh; worker_argv claude_fable start:write wt brief ses ses')"
+printf '%s\n' "$argv_eff" | grep -qx -- '--effort' \
+  || fail "el argv de arranque perdio la bandera de effort: $argv_eff"
+printf '%s\n' "$argv_eff" | grep -qx 'high' \
+  || fail "el marcador {effort} no se expandio con el valor de la entrada: $argv_eff"
+python3 - "$CT/eff-reg.json" <<'PY'
+import json, sys
+reg = json.load(open(sys.argv[1]))
+del reg["workers"][0]["effort"]  # marcador sin campo: worker_argv debe fallar
+json.dump(reg, open(sys.argv[1], "w"), indent=1, sort_keys=True)
+PY
+if CORRIDA_WORKERS_REGISTRY="$CT/eff-reg.json" bash -c '. scripts/mac/corrida/lib.sh; worker_argv claude_fable start:write wt brief ses ses' >/dev/null 2>&1; then
+  fail "worker_argv expandio {effort} sin campo effort"
+fi
 
 echo "TODO VERDE: test-corrida-nucleo"

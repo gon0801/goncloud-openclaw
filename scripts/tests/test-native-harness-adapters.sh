@@ -54,8 +54,9 @@ chmod +x "$T/bin/tmux-shim"
 
 export PATH="$T/bin:$PATH" CORRIDA_STATE="$T/corridas" TMUX_BIN="$T/bin/tmux-shim"
 export FAKE_ARGV_DIR="$T/argv" FAKE_BAR="FAKE-BARRA-9"
-export CORRIDA_WORKER_BIN_CLAUDE="$T/bin/claude" CORRIDA_WORKER_BIN_CODEX="$T/bin/codex" \
-  CORRIDA_WORKER_BIN_ZCODE="$T/bin/zcode" CORRIDA_WORKER_BIN_KIMI="$T/bin/kimi" \
+export CORRIDA_WORKER_BIN_CLAUDE_FABLE="$T/bin/claude" CORRIDA_WORKER_BIN_CLAUDE_OPUS="$T/bin/claude" \
+  CORRIDA_WORKER_BIN_CODEX="$T/bin/codex" CORRIDA_WORKER_BIN_ZCODE="$T/bin/zcode" \
+  CORRIDA_WORKER_BIN_KIMI_K3="$T/bin/kimi" CORRIDA_WORKER_BIN_KIMI_CODING="$T/bin/kimi" \
   CORRIDA_WORKER_BIN_CURSOR="$T/bin/cursor-agent" CORRIDA_WORKER_BIN_GROK="$T/bin/grok"
 
 # Registro minimo de la prueba: carriles escritos a mano como reservas
@@ -124,7 +125,13 @@ print(' '.join(s.get(x,x) for x in a[1:]))
 "
 }
 bin_de() {
-  case "$1" in cursor) printf 'cursor-agent';; *) printf '%s' "$1";; esac
+  # 14.13: ids partidos por modelo; el binario (token de cli-modos.tsv) no cambia.
+  case "$1" in
+    cursor) printf 'cursor-agent';;
+    claude_fable|claude_opus) printf 'claude';;
+    kimi_k3|kimi_coding) printf 'kimi';;
+    *) printf '%s' "$1";;
+  esac
 }
 
 # El doble corre bajo el servidor tmux, que fija el entorno al arrancar:
@@ -137,7 +144,7 @@ modo_fake() {
   "$TM_REAL" -L "$L" set-environment -g FAKE_HARNESS_MODE "$1"
 }
 
-for w in claude codex zcode kimi cursor grok; do
+for w in claude_fable claude_opus codex zcode kimi_k3 kimi_coding cursor grok; do
   b="$(bin_de "$w")"
   # health: los cuatro estados normalizados.
   [ "$(bash "$CORR" adaptador health run-1 lane-1 "$w" ses-h)" = "available" ] \
@@ -246,14 +253,14 @@ done
 
 # --- casos globales (una vez, no por worker) ---
 # deliver bloqueada: la caja nunca se vacia; la sesion sigue viva.
-ad_start run-1 lane-1 claude ses-bloq "$T/wt" "$T/brief.txt" >/dev/null \
+ad_start run-1 lane-1 claude_fable ses-bloq "$T/wt" "$T/brief.txt" >/dev/null \
   || fail "start para deliver bloqueada fallo"
 rm -f "$T/tragado"
-[ "$(SWALLOW=1 SWALLOW_N=2 SWALLOW_SES=ses-bloq bash "$CORR" adaptador deliver run-1 lane-1 claude ses-bloq "$T/brief.txt")" = "blocked" ] \
+[ "$(SWALLOW=1 SWALLOW_N=2 SWALLOW_SES=ses-bloq bash "$CORR" adaptador deliver run-1 lane-1 claude_fable ses-bloq "$T/brief.txt")" = "blocked" ] \
   || fail "deliver con caja congelada no dio blocked"
 "$TM_REAL" -L "$L" has-session -t "=ses-bloq" 2>/dev/null \
   || fail "deliver bloqueada mato la sesion"
-bash "$CORR" adaptador stop run-1 lane-1 claude ses-bloq >/dev/null
+bash "$CORR" adaptador stop run-1 lane-1 claude_fable ses-bloq >/dev/null
 
 # resume sin binario: unavailable y la sesion viva no se toca.
 ad_start run-1 lane-1 codex ses-nobin "$T/wt" "$T/brief.txt" >/dev/null \
@@ -284,7 +291,7 @@ bash "$CORR" adaptador start run-1 lane-1 zcode ses-doble "$T/wt" "$T/brief.txt"
 bash "$CORR" adaptador stop run-1 lane-1 zcode ses-doble >/dev/null
 
 # start fuera del worktree reservado: se niega sin dejar sesion.
-ad_start run-1 lane-1 claude ses-fuera "$T/wt-r" "$T/brief.txt" >/dev/null 2>&1 \
+ad_start run-1 lane-1 claude_fable ses-fuera "$T/wt-r" "$T/brief.txt" >/dev/null 2>&1 \
   && fail "start fuera del worktree reservado aceptado"
 "$TM_REAL" -L "$L" has-session -t "=ses-fuera" 2>/dev/null \
   && fail "start fuera del worktree dejo la sesion viva"
@@ -300,10 +307,10 @@ bash "$CORR" adaptador stop run-1 lane-1 codex ses-recasa >/dev/null
 # resume que muere tras matar la sesion: unavailable y el carril en failed.
 # Sin el marcado, el carril quedaba activo con sesion huerfana (CodeRabbit
 # ronda 3: relanzamiento o barra fallidos despues del kill).
-ad_start run-1 lane-1 claude ses-resume-f "$T/wt" "$T/brief.txt" >/dev/null \
+ad_start run-1 lane-1 claude_fable ses-resume-f "$T/wt" "$T/brief.txt" >/dev/null \
   || fail "start para resume failed fallo"
 modo_fake nobar
-got="$(bash "$CORR" adaptador resume run-1 lane-1 claude ses-resume-f "$T/wt" SESID-9)"
+got="$(bash "$CORR" adaptador resume run-1 lane-1 claude_fable ses-resume-f "$T/wt" SESID-9)"
 [ "$got" = "unavailable" ] || fail "resume sin barra dio $got"
 modo_fake ""
 "$TM_REAL" -L "$L" has-session -t "=ses-resume-f" 2>/dev/null \
@@ -313,11 +320,11 @@ import json,sys
 c=next(e for e in json.load(open(sys.argv[1]))["lanes"] if e.get("id")=="lane-1")
 assert c["estado"]=="failed", c
 PY
-bash "$CORR" adaptador stop run-1 lane-1 claude ses-resume-f >/dev/null 2>&1 || true
+bash "$CORR" adaptador stop run-1 lane-1 claude_fable ses-resume-f >/dev/null 2>&1 || true
 
 
 # accion invalida y worker desconocido: error cerrado, nunca un estado.
-out="$(bash "$CORR" adaptador volar run-1 lane-1 claude ses-x 2>&1)"; rc=$?
+out="$(bash "$CORR" adaptador volar run-1 lane-1 claude_fable ses-x 2>&1)"; rc=$?
 [ "$rc" -eq 2 ] || fail "accion invalida no dio rc 2"
 printf '%s' "$out" | grep -q "accion invalida" || fail "accion invalida sin diagnostico"
 bash "$CORR" adaptador health run-1 lane-1 nosuch ses-x >/dev/null 2>&1 \

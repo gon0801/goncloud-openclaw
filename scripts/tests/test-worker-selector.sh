@@ -104,6 +104,19 @@ cuota=$($CLI select --registry "$REG" --request "$REQ" --state "$T/cuota.json") 
   || fail "la cuota agotada no debe reciclarse: $cuota"
 printf '%s' "$cuota" | grep -q 'quota-exhausted' || fail "cuota agotada no registrada"
 
+# 14.13/13a: relevo por quota_group. Cuota agotada en claude_fable: el relevo
+# NO elige claude_opus (misma cuenta: una entrada sin quota_group deriva su
+# grupo del provider); salta a codex. La decision registra modelo y effort.
+relay=$($CLI select --registry scripts/tests/fixtures/workers/selection-quota-group.json \
+  --request "$REQ" --state scripts/tests/fixtures/workers/selection-quota-state.json) \
+  || fail "select del relevo fallo"
+[ "$(printf '%s' "$relay" | jget 'json.load(sys.stdin)["winner"]')" = "codex" ] \
+  || fail "el relevo eligio el mismo quota_group: $relay"
+printf '%s' "$relay" | grep -q 'quota-group' \
+  || fail "el descarte de grupo no quedo registrado: $relay"
+printf '%s' "$relay" | grep -q '"model"' || fail "la decision no registra el modelo: $relay"
+printf '%s' "$relay" | grep -q '"effort"' || fail "la decision no registra el effort: $relay"
+
 # Sondas acotadas: CLIs de mentira vía override, sin tocar PATH ni la red.
 mkdir -p "$T/bin"
 cat >"$T/bin/fake-ok" <<'CLI'

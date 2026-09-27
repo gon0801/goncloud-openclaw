@@ -2,6 +2,9 @@
 
 Solo usa resultados cerrados; el texto libre del modelo no puntúa.
 Sin empates por red: un empate usa el orden estable del registro.
+El agotamiento tiene una sola forma (R3 de 14.23): la lista `exhausted`
+del estado, una observacion acotada y explicita; `limited` es fallback
+registrado, no agotamiento, y jamas descarta.
 """
 from __future__ import annotations
 
@@ -13,6 +16,12 @@ from .registry import MAX_EXTERNAL_SESSIONS, Registry, Worker
 WEIGHTS = {"affinity": 40, "history": 25, "availability": 15, "quota": 10, "diversity": 10}
 KNOWN_HEALTH = frozenset({"available", "limited", "unauthenticated", "broken"})
 FAIL_OUTCOMES = frozenset({"failure", "blocked", "reversed"})
+
+
+def quota_group(worker: Worker) -> str:
+    """Grupo de cuota de la entrada: el campo declarado o, por defecto, el
+    proveedor (14.13a); olvidar el campo no parte una cuenta en dos."""
+    return worker.quota_group or worker.provider
 
 
 @dataclass(frozen=True)
@@ -74,6 +83,7 @@ def hard_filter_reasons(
     *,
     installed: bool = True,
     exhausted: Sequence[str] = (),
+    exhausted_groups: frozenset[str] = frozenset(),
 ) -> list[str]:
     reasons: list[str] = []
     if not installed:
@@ -87,6 +97,10 @@ def hard_filter_reasons(
         reasons.append("broken")
     if worker.id in exhausted:
         reasons.append("quota-exhausted")
+    elif quota_group(worker) in exhausted_groups:
+        # 14.13: el relevo nunca cicla por una cuenta agotada; una entrada
+        # del mismo quota_group queda descartada aunque este sana.
+        reasons.append("quota-group")
     if not set(_required_capabilities(request)) <= set(worker.capabilities):
         reasons.append("missing-capability")
     denied = request.get("denied_harnesses") or []
@@ -165,12 +179,22 @@ def select_worker(
     active_ids = frozenset(
         str(entry.get("worker")) for entry in active if isinstance(entry, Mapping)
     )
+    exhausted_ids = frozenset(exhausted)
+    grupos_agotados = frozenset(
+        quota_group(worker) for worker in registry.workers if worker.id in exhausted_ids
+    )
     candidates: list[tuple[int, int, Worker, dict[str, int]]] = []
     discarded: list[Discard] = []
     for order, worker in enumerate(registry.workers):
         present = True if installed is None else bool(installed.get(worker.id, True))
         reasons = hard_filter_reasons(
-            worker, request, normalized, active, installed=present, exhausted=exhausted
+            worker,
+            request,
+            normalized,
+            active,
+            installed=present,
+            exhausted=exhausted,
+            exhausted_groups=grupos_agotados,
         )
         if reasons:
             discarded.append(Discard(worker.id, tuple(reasons)))
