@@ -40,6 +40,13 @@ los traiga es rojo):
 — también pasan el validador, por si queda algún mensaje viejo grabado; lo que
 emite `corrida_mensaje` ya sale siempre acentuado.)
 
+Negritas (14.12): lo que emite `aviso_cuerpo` sale con el avance de la línea 1
+y el valor de `Qué cambió` en `**negrita**` (el gateway lo entrega en negrita
+de Telegram); `Qué sigue` es rutina y no lleva; en `NECESITO TU RESPUESTA` el
+valor de `Qué necesito de ti` va en negrita, partida antes del `Comando: ` de
+referencia. El validador acepta el mensaje con y sin negritas, y las negritas
+viven dentro de cada línea: jamás en los prefijos ni en los marcadores.
+
 Etiquetas cerradas: `ABIERTA`, `AVANZA`, `DETENIDA`, `NECESITO TU RESPUESTA`,
 `CERRADA`. Cualquier otra etiqueta es rojo. Tope: un `AVANZA` a menos de
 15 minutos del anterior se junta con el siguiente cambio; las otras cuatro

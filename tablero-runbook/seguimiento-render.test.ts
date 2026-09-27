@@ -419,6 +419,9 @@ describe("esMensajeV1Valido", () => {
     "▶️ [AVANZA] Autopilot de la Fase 15 — CI completa (abrió 09:00), 2 de 5 partes terminadas\nQué cambió: sigue igual\nQué sigue: sigue igual\nQué necesito de ti: nada.",
     // Corrida de práctica: prefijo nuevo, y NECESITO TU RESPUESTA sin Comando: ni pregunta real.
     "🧪 PRÁCTICA — no contestes [NECESITO TU RESPUESTA] Fase 9 (abrió 09:00), 0 de 3 partes terminadas\nQué cambió: Una parte de la prueba llegó a una pregunta de práctica.\nQué sigue: Esa parte no avanza hasta tener la respuesta; el resto sigue como estaba.\nQué necesito de ti: nada: es una prueba, se resuelve sola",
+    // Negritas de 14.12: el validador tolera el mensaje con las negritas del
+    // contrato (avance y cambio en **; en DETENIDA el necesito sin).
+    "🧪 PRÁCTICA — no contestes 🔴 [DETENIDA] Fase 9 (abrió 09:00), **1 de 2 partes terminadas**\nQué cambió: **hubo un percance**\nQué sigue: se retoma\nQué necesito de ti: nada",
   ];
   const V1_MAL = [
     "[ETIQUETA-RARA] Corrida, 1 de 2 partes terminadas\nQue cambio: x\nQue sigue: y\nQue necesito de ti: z.",

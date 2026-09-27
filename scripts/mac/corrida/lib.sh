@@ -725,6 +725,45 @@ corrida_encabezado() {
   printf '%s (abrió %s)' "$nombre" "$hora"
 }
 
+# aviso_cuerpo <pref> <etq> <enc> <avance> <cambio> <sigue> <necesito>
+# El cuerpo completo de un aviso de corrida (seguimiento.v2), la UNICA fuente
+# del formato: corrida_mensaje lo valida y lo manda, y estado lo emite igual
+# para su parte (14.12). Linea 1 "{pref}{emoji}[{ETIQUETA}] {enc}{, {avance}}";
+# luego "Qué cambió: ", "Qué sigue: " y "Qué necesito de ti: " separados por
+# linea en blanco. Negritas (14.12, "lo importante en negritas"; el gateway
+# convierte **x** a negrita HTML de Telegram, aqui solo se compone el texto):
+# el avance de la linea 1 y el cambio SIEMPRE; "Qué sigue" es rutina y no
+# lleva; el necesito SOLO en NECESITO TU RESPUESTA, y si el valor trae
+# " Comando: ", la negrita cubre solo lo anterior (el segmento del comando es
+# referencia textual y queda fuera). El emoji de estado lo pone esta funcion
+# (AVANZA 🟢, NECESITO TU RESPUESTA 🟠, DETENIDA 🔴, CERRADA ✅; ABIERTA no
+# lleva: el prefijo de corrida que trae pref ya lo dice). Las negritas viven
+# dentro de cada linea, jamas en los prefijos ni en los marcadores que
+# mensaje_valido revisa: el texto que emite pasa el validador tal cual.
+aviso_cuerpo() {
+  local pref="$1" etq="$2" enc="$3" avance="$4" cambio="$5" sigue="$6" necesito="$7"
+  local emoji=""
+  case "$etq" in
+    AVANZA) emoji="🟢 " ;;
+    "NECESITO TU RESPUESTA") emoji="🟠 " ;;
+    DETENIDA) emoji="🔴 " ;;
+    CERRADA) emoji="✅ " ;;
+  esac
+  local linea1="${pref}${emoji}[$etq] $enc"
+  if [ -n "$avance" ]; then
+    linea1="$linea1, **$avance**"
+  fi
+  local necesito_txt="$necesito"
+  if [ "$etq" = "NECESITO TU RESPUESTA" ]; then
+    case "$necesito" in
+      *" Comando: "*) necesito_txt="**${necesito%% Comando: *}** Comando: ${necesito#* Comando: }" ;;
+      *) necesito_txt="**$necesito**" ;;
+    esac
+  fi
+  printf '%s\n\nQué cambió: **%s**\n\nQué sigue: %s\n\nQué necesito de ti: %s\n' \
+    "$linea1" "$cambio" "$sigue" "$necesito_txt"
+}
+
 tsv_fila() { # $1 tsv, $2 cli -> "binario|flag|barra" (vacio si no hay fila)
   awk -F'\t' -v c="$2" '$1==c && $1 !~ /^#/ {print $2"|"$3"|"$4; exit}' "$1"
 }
@@ -789,29 +828,11 @@ corrida_mensaje() {
     fi
   fi
   local enc; enc="$(corrida_encabezado "$id")"
-  # Emoji de estado (v2, pedido del dueño 2026-09-25: bloques separados y un
-  # vistazo basta): AVANZA 🟢, NECESITO TU RESPUESTA 🟠, DETENIDA 🔴, CERRADA
-  # ✅. ABIERTA no lleva otro: el prefijo de corrida (▶️ / 🧪) ya lo dice.
-  local emoji=""
-  case "$etq" in
-    AVANZA) emoji="🟢 " ;;
-    "NECESITO TU RESPUESTA") emoji="🟠 " ;;
-    DETENIDA) emoji="🔴 " ;;
-    CERRADA) emoji="✅ " ;;
-  esac
-  local linea1
-  if [ -n "$avance" ]; then
-    linea1="${emoji}[$etq] $enc, $avance"
-  else
-    linea1="${emoji}[$etq] $enc"
-  fi
   local M; M="$(mktemp)" || return 1
-  {
-    printf '%s\n\n' "$linea1"
-    printf 'Qué cambió: %s\n\n' "$cambio"
-    printf 'Qué sigue: %s\n\n' "$sigue"
-    printf 'Qué necesito de ti: %s\n' "$necesito"
-  } > "$M"
+  # El cuerpo sale de aviso_cuerpo (unica fuente del formato y de las
+  # negritas, 14.12), sin el prefijo de corrida: ese lo añade el sed de la
+  # linea 1 sobre la copia que se manda, como en toda corrida.
+  aviso_cuerpo "" "$etq" "$enc" "$avance" "$cambio" "$sigue" "$necesito" > "$M"
   mensaje_valido "$M" || { echo "mensaje fuera de contrato" >&2; rm -f "$M"; return 1; }
   rm -f "$M"
   if [ "$etq" = "AVANZA" ]; then
@@ -834,12 +855,7 @@ open('$evtmp','w').write(json.dumps(d)+chr(10))
     return 0
   fi
   local M2; M2="$(mktemp)" || return 1
-  {
-    printf '%s\n\n' "$linea1"
-    printf 'Qué cambió: %s\n\n' "$cambio"
-    printf 'Qué sigue: %s\n\n' "$sigue"
-    printf 'Qué necesito de ti: %s\n' "$necesito"
-  } > "$M2"
+  aviso_cuerpo "" "$etq" "$enc" "$avance" "$cambio" "$sigue" "$necesito" > "$M2"
   # El prefijo de la primera linea, en TODOS los mensajes de la corrida: en
   # practica, avisa que no hace falta contestar (reemplaza el viejo
   # "[SIMULACRO] "); en una corrida real, la marca como tal.
