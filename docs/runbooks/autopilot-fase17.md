@@ -1,7 +1,7 @@
 # Fase 17: centro de tareas para OpenClaw y Hermes
 
 > **NO LANZAR AÚN.** Este runbook es el detalle propuesto para U4/U5 de
-> `Plans.md`. Primero se aceptan U1–U3 y se comprueba en 17.0 qué interfaces
+> `Plans.md`. Primero se aceptan U1–U3 y U3a, y se comprueba en 17.0 qué interfaces
 > existen en la instalación nueva. El launcher en este documento no es un
 > permiso de ejecución ni sustituye la aceptación por host.
 

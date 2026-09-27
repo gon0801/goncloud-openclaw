@@ -1,7 +1,7 @@
 # Plan 17: centro de tareas común para OpenClaw y Hermes
 
 > **Detalle de U4/U5.** La ruta activa y sus dependencias están al inicio de
-> `Plans.md`. Este plan no se inicia mientras U1–U3 sigan sin aceptación; 17.0
+> `Plans.md`. Este plan no se inicia mientras U1–U3 y U3a sigan sin aceptación; 17.0
 > y 17.1 pueden prepararse sólo como inventario y contratos sin activar servicios.
 > La prueba funcional de LobsterBoard pertenece a la ejecución de U4; esa
 > preparación documental no completa 17.0.
