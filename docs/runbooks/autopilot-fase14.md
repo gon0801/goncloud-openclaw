@@ -102,7 +102,7 @@ Default OpenClaw: `origin/main`. Default SummonAIKit: `origin/master`, solo lect
 
 | Bloque / rama | Tasks / filas | Puede tocar | No toca |
 |---|---|---|---|
-| B1 `fase14/registro-adaptadores` | 1–4 / 14.1–14.2 | Registro, selector, adaptadores, aislamiento, Terminal y tests listados por Task | Gates, tablero, kit, CI |
+| B1 `fase14/registro-adaptadores` | 1–4 / 14.1–14.2 y la implementación de la enmienda 14.13 | Registro, selector, adaptadores, aislamiento, Terminal y tests listados por Task | Gates, tablero, kit, CI |
 | B2 `fase14/estado-entrega` | 5–7 / 14.5 y 14.4 | Estado, compuertas, consumidores del recibo, copias de autoridad y tests listados | Implementación del hook/kit, CI, tablero |
 | B3 `fase14/tablero-direccion` | 8–9 / 14.3 y 14.6 | Tablero, skill, extensión del único instalador de Fase 9 y tests listados | Segundo instalador, relojes, hook, CI |
 | B4 `fase14/rollout` | 10 / 14.7 | Driver de smokes, test falso y guía de rollout | Código fuera del Task sin hallazgo reproducible |
@@ -129,7 +129,7 @@ Tick interno global de 15 minutos más eventos tmux; Telegram consolidado cada 3
 | Situación | Acción |
 |---|---|
 | Falta integración de Fase 9/15 o kit sin recibos | Declarar dependencia pendiente una vez; no lanzar implementadores |
-| Cuota/auth/binario de worker falla | Descartar candidato; confirmar escritor anterior detenido; relevar al siguiente compatible conservando worktree/diff/commits |
+| Cuota/auth/binario de worker falla | Descartar el `quota_group` del candidato; confirmar escritor anterior detenido; relevar al siguiente compatible conservando worktree/diff/commits |
 | Caída ordinaria | Una reanudación; luego relevo registrado |
 | Ningún candidato compatible | Detener solo ese carril con evidencia; continuar independientes |
 | CI pendiente | Continuar trabajo independiente y leer finalización; sin watch bloqueante |

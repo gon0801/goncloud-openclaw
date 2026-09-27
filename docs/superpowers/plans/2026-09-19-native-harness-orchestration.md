@@ -78,6 +78,8 @@ CodeRabbit is requested once after local review. Read its comments on the curren
 - Create: `scripts/tests/fixtures/workers/valid.json`
 - Create: `scripts/tests/fixtures/workers/invalid-command.json`
 - Create: `scripts/tests/fixtures/workers/invalid-pattern.json`
+- Create: `scripts/tests/fixtures/workers/invalid-effort.json`
+- Create: `scripts/tests/fixtures/workers/invalid-effort-argv.json`
 - Create: `scripts/tests/fixtures/corrida/v2-existing-without-workers.json`
 - Create: `scripts/tests/fixtures/corrida/v2-native-workers.json`
 - Create: `scripts/tests/test-worker-registry.sh`
@@ -119,7 +121,9 @@ CodeRabbit is requested once after local review. Read its comments on the curren
 }
 ```
 
-The production file repeats that closed shape for `codex`, `zcode`, `kimi`, `cursor`, and `grok`. Command values are argv arrays, never shell strings. Every worker with both `write` and `review` capabilities has explicit `start:<role>` and `resume:<role>` argv plus a `permission_modes` entry for each role. Validation rejects a missing role command or permission. It permits only the closed placeholders `{session_id}`, `{session_name}`, `{worktree}`, and `{brief}`. The measured write modes are Claude `--permission-mode acceptEdits`, Codex `--sandbox workspace-write`, ZCode `--mode edit`, Kimi `--auto`, Cursor `--auto-review --sandbox enabled --trust --workspace {worktree}`, and Grok with repo-scoped `--allow` rules. Review commands use the read-only modes exposed by their CLI, including Cursor `--mode plan`, and never inherit the writer's permission argv.
+The production file repeats that closed shape for `codex`, `zcode`, `kimi`, `cursor`, and `grok`. Command values are argv arrays, never shell strings. Every worker with both `write` and `review` capabilities has explicit `start:<role>` and `resume:<role>` argv plus a `permission_modes` entry for each role. Validation rejects a missing role command or permission. It permits only the closed placeholders `{session_id}`, `{session_name}`, `{worktree}`, `{brief}`, and `{effort}`. The measured write modes are Claude `--permission-mode acceptEdits`, Codex `--sandbox workspace-write`, ZCode `--mode edit`, Kimi `--auto`, Cursor `--auto-review --sandbox enabled --trust --workspace {worktree}`, and Grok with repo-scoped `--allow` rules. Review commands use the read-only modes exposed by their CLI, including Cursor `--mode plan`, and never inherit the writer's permission argv.
+
+An entry declares an optional `effort` (a non-empty string) and the start or resume argv that receives it through `{effort}`; entries repeat per real model, so ids match `[a-z0-9_]+` (no dots or hyphens) and the `cli-modos.tsv` row is looked up by the entry's `binary` token, never by id. An entry that declares `effort` without a `{effort}` placeholder, or that carries a `{effort}` placeholder without `effort`, fails validation with `ERROR invalid effort`; the placeholder never expands to an empty argument. An optional `quota_group` labels a distinct account, and an entry without it derives its quota group from its `provider`. The production registry therefore carries eight entries: `claude_fable` (model `anthropic/claude-fable-5-1` fixed in its start and resume argv), `claude_opus` (`anthropic/claude-opus-5`), `codex`, `zcode`, `kimi_k3` (`kimi/k3`), `kimi_coding` (`kimi/kimi-for-coding`), `cursor`, and `grok`; the four split entries carry their model as a fixed argv argument, while the single-model CLIs keep the harness-administered router.
 
 - [ ] **Step 2: Write the failing registry test**
 
@@ -134,6 +138,14 @@ if out=$(python3 scripts/mac/corrida-worker.py registry validate --registry scri
   fail "accepted an empty or control-bearing pattern"
 fi
 printf '%s\n' "$out" | grep -qx 'ERROR invalid pattern' || fail "wrong invalid-pattern diagnostic: $out"
+if out=$(python3 scripts/mac/corrida-worker.py registry validate --registry scripts/tests/fixtures/workers/invalid-effort.json 2>&1); then
+  fail "accepted an effort without an effort-receiving argv"
+fi
+printf '%s\n' "$out" | grep -qx 'ERROR invalid effort' || fail "wrong invalid-effort diagnostic: $out"
+if out=$(python3 scripts/mac/corrida-worker.py registry validate --registry scripts/tests/fixtures/workers/invalid-effort-argv.json 2>&1); then
+  fail "accepted an effort placeholder without an effort field"
+fi
+printf '%s\n' "$out" | grep -qx 'ERROR invalid effort' || fail "wrong invalid-effort diagnostic: $out"
 ```
 
 - [ ] **Step 3: Run the focused test and confirm the missing CLI failure**
@@ -152,6 +164,8 @@ class Worker:
     binary: str
     provider: str
     model: str
+    effort: str | None
+    quota_group: str | None
     capabilities: tuple[str, ...]
     task_types: tuple[str, ...]
     permission_modes: Mapping[str, str]
@@ -168,7 +182,7 @@ def resolve_binary(worker: Worker, env: Mapping[str, str]) -> Path | None:
     return Path(candidate).resolve() if candidate else None
 ```
 
-Reject unknown top-level and worker keys, duplicate IDs, non-ASCII identifiers, binaries containing whitespace or shell metacharacters, command arrays with unknown placeholders or shell operators, empty/control-bearing patterns, absolute transcript paths, missing required capabilities, and any session limit other than `4`.
+Reject unknown top-level and worker keys, duplicate IDs, identifiers outside `[a-z0-9_]`, binaries containing whitespace or shell metacharacters, command arrays with unknown placeholders or shell operators, an `effort` without a `{effort}` placeholder or a `{effort}` placeholder without `effort`, empty/control-bearing patterns, absolute transcript paths, missing required capabilities, and any session limit other than `4`.
 
 - [ ] **Step 5: Extend the existing `corrida.v2` contract compatibly**
 
@@ -187,7 +201,7 @@ python3 scripts/mac/corrida-worker.py record validate --record scripts/tests/fix
 
 Run: `bash scripts/tests/test-worker-registry.sh && python3 -m py_compile scripts/mac/corrida-worker.py scripts/mac/corrida_worker/*.py`
 
-Expected: PASS, `VALID workers.v1 6` for the production registry, and both `corrida.v2` compatibility fixtures accepted with their exact diagnostics.
+Expected: PASS, `VALID workers.v1 8` for the production registry, and both `corrida.v2` compatibility fixtures accepted with their exact diagnostics.
 
 - [ ] **Step 7: Commit**
 
@@ -203,6 +217,8 @@ git commit -m "feat: add native worker registry"
 - Create: `scripts/tests/fixtures/workers/selection.json`
 - Create: `scripts/tests/fixtures/workers/request-review.json`
 - Create: `scripts/tests/fixtures/workers/selection-state.json`
+- Create: `scripts/tests/fixtures/workers/selection-quota-group.json`
+- Create: `scripts/tests/fixtures/workers/selection-quota-state.json`
 - Create: `scripts/tests/test-worker-selector.sh`
 - Modify: `scripts/mac/corrida-worker.py`
 - Modify: `scripts/mac/corrida/preflight.sh`
@@ -220,11 +236,18 @@ decision=$(python3 scripts/mac/corrida-worker.py select \
   --state scripts/tests/fixtures/workers/selection-state.json)
 [ "$(printf '%s' "$decision" | json_get winner)" = "codex" ] || fail "unstable winner"
 printf '%s' "$decision" | grep -q 'unauthenticated' || fail "auth discard not recorded"
+
+relay=$(python3 scripts/mac/corrida-worker.py select \
+  --registry scripts/tests/fixtures/workers/selection-quota-group.json \
+  --request scripts/tests/fixtures/workers/request-review.json \
+  --state scripts/tests/fixtures/workers/selection-quota-state.json)
+[ "$(printf '%s' "$relay" | json_get winner)" = "codex" ] || fail "quota relay chose the same quota_group"
+printf '%s' "$relay" | grep -q 'quota-group' || fail "group discard not recorded"
 ```
 
-Cover absent executable, `limited`, `unauthenticated`, missing capability, repo prohibition, four active sessions, occupied worktree, implementer-as-only-reviewer, reuse of the previous round's reviewer, closed-history-only scoring, and a score tie resolved by registry order.
+Cover absent executable, `limited`, `unauthenticated`, missing capability, repo prohibition, four active sessions, occupied worktree, implementer-as-only-reviewer, reuse of the previous round's reviewer, closed-history-only scoring, a score tie resolved by registry order, and a quota discard that removes every entry of the derived `quota_group`.
 
-Also exclude every effective author of a handed-off change from its independent review and persist attempted/discarded candidates for the incident. Selection must never cycle through an already exhausted account. Unknown quota is not proof of exhaustion; use an explicit bounded failure observation. Preserve the existing score-based selection rather than introducing a second ranked router in SummonAIKit.
+Also exclude every effective author of a handed-off change from its independent review and persist attempted/discarded candidates for the incident. Selection must never cycle through an already exhausted account: a quota discard removes every entry that shares the discarded worker's `quota_group`, which an entry without the field derives from its `provider`. Unknown quota is not proof of exhaustion; use an explicit bounded failure observation. Preserve the existing score-based selection rather than introducing a second ranked router in SummonAIKit.
 
 - [ ] **Step 2: Run the focused test and confirm selection is unavailable**
 
@@ -322,11 +345,11 @@ corrida_adaptador() {
 }
 ```
 
-Build argv from closed `case` branches. Do not concatenate registry text into a shell command. Replace obsolete `glm` and `kimi-claude` rows with measured `zcode` and `kimi` rows while preserving other legacy tokens used outside automatic routing.
+Build argv from closed `case` branches. Do not concatenate registry text into a shell command. Replace obsolete `glm` and `kimi-claude` rows with measured `zcode` and `kimi` rows while preserving other legacy tokens used outside automatic routing. The `cli-modos.tsv` row is resolved by the worker's `binary` token, never by its id.
 
 - [ ] **Step 4: Make session registration precede delivery**
 
-Split `lanzar-sesion` into create, mark/register, and deliver phases. Persist `worker`, `harness`, `provider`, `reported_model`, and `session` before the first `send-keys`; if delivery fails, persist `failed` and stop the session rather than deleting its history.
+Split `lanzar-sesion` into create, mark/register, and deliver phases. Persist `worker`, `harness`, `provider`, `effort`, `reported_model`, and `session` before the first `send-keys`; `model` is the registry entry's configured model and `reported_model` is what the CLI reports; if delivery fails, persist `failed` and stop the session rather than deleting its history.
 
 - [ ] **Step 5: Run adapter and existing session tests**
 
@@ -582,6 +605,7 @@ type WorkerView = {
   harness: string;
   provider: string;
   model: string;
+  effort: string | null;
   health: "available" | "limited" | "unauthenticated" | "broken";
 };
 type ExecutionView = {
@@ -595,7 +619,7 @@ type EvidenceView = { status: "pending" | "clean" | "blocked" | "unknown"; sha: 
 type DeliveryView = { merge: EvidenceView; deploy: EvidenceView; canary: EvidenceView; rollback: EvidenceView };
 ```
 
-The valid fixtures collectively cover pending, working, limited, waiting, cross-review, CI, CodeRabbit, deploy, reverted, and finished. The invalid fixture includes a fifth active harness, evidence applied to an unrelated PR head, an attach command for the wrong session, control characters, and a token-shaped value.
+The valid fixtures collectively cover pending, working, limited, waiting, cross-review, CI, CodeRabbit, deploy, reverted, and finished. `model` is the entry's configured model, `reported_model` names what the CLI reports and stays out of `WorkerView`, and `effort` mirrors the entry's configured effort or null. The invalid fixture includes a fifth active harness, evidence applied to an unrelated PR head, an attach command for the wrong session, control characters, and a token-shaped value.
 
 - [ ] **Step 2: Run the focused contract test and confirm rejection is not implemented**
 
@@ -609,7 +633,7 @@ Validate all enum values and text limits, at most four active external sessions,
 
 - [ ] **Step 4: Write and run failing render assertions**
 
-Assert visible text for worker, harness, provider/model, repo/branch/worktree, tmux session, elapsed time, last event, health, cross-review/CI/CodeRabbit SHA, PR/merge/deploy/canary, and visibility. Assert HTML escaping, 300-character truncation, no token fixture substring, and no button/form/script capable of executing the attach command.
+Assert visible text for worker, harness, provider/model/effort, repo/branch/worktree, tmux session, elapsed time, last event, health, cross-review/CI/CodeRabbit SHA, PR/merge/deploy/canary, and visibility. Assert HTML escaping, 300-character truncation, no token fixture substring, and no button/form/script capable of executing the attach command.
 
 Run: `cd tablero-runbook && node --test render.test.ts`
 

@@ -77,9 +77,11 @@ Un archivo versionado define los trabajadores disponibles. Cada entrada contiene
 - El modo de permisos permitido.
 - Los comandos de `health`, inicio, reanudación y cierre.
 - Los patrones de cuota, autenticación vencida y bloqueo.
+- El `quota_group` opcional de la cuenta; una entrada sin él deriva su grupo de su `provider`.
+- El `effort` opcional y el argv que lo recibe por el marcador `{effort}`; declarar uno sin el otro es un error de validación.
 - La ubicación de su transcript o el comando que devuelve la pantalla.
 
-La primera versión incluye estas entradas:
+La primera versión incluye estos harnesses:
 
 | Trabajador | Harness | Comando instalado medido el 2026-09-19 |
 |---|---|---|
@@ -89,6 +91,8 @@ La primera versión incluye estas entradas:
 | Kimi | Kimi Code CLI | `kimi` 0.39.1 |
 | Cursor | Cursor Agent CLI | `cursor-agent` 2026.09.18-9a7762b |
 | Grok | Grok CLI | `grok` 1.0.34 |
+
+El registro arranca con ocho entradas: `claude_fable` y `claude_opus` para Claude Code, `kimi_k3` y `kimi_coding` para Kimi, y una entrada para cada uno de `codex`, `zcode`, `cursor` y `grok`. El identificador usa sólo `[a-z0-9_]`, sin punto ni guion, y la fila de `cli-modos.tsv` se busca por el token `binary` de la entrada, no por su id. Las entradas de una misma cuenta comparten `quota_group`; una entrada sin el campo deriva su grupo de su `provider`.
 
 Las rutas absolutas viven en la instalación de la Mac o en configuración local. El archivo versionado no contiene rutas de usuario, tokens ni credenciales.
 
@@ -101,7 +105,8 @@ Cursor Agent es un trabajador administrado por Cursor. Si Cursor enruta internam
 El selector aplica filtros antes de puntuar. Descarta un trabajador si ocurre una de estas condiciones:
 
 - El ejecutable no está instalado.
-- La autenticación o la cuota no permiten iniciar el trabajo.
+- La autenticación vencida no permite iniciar el trabajo.
+- La cuota agotada: el descarte por `quota_group` alcanza a todas las entradas del grupo, no sólo al trabajador agotado; una entrada sin el campo lo deriva de su `provider`.
 - El harness no tiene una capacidad requerida.
 - El repo prohíbe ese harness o su modo de permisos.
 - Otro escritor posee el worktree.

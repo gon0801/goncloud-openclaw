@@ -1,0 +1,219 @@
+{
+ "max_external_sessions": 4,
+ "schema": "workers.v1",
+ "workers": [
+  {
+   "auth_patterns": [
+    "login required",
+    "authentication failed"
+   ],
+   "binary": "claude",
+   "blocked_patterns": [
+    "permission denied"
+   ],
+   "capabilities": [
+    "read",
+    "write",
+    "review"
+   ],
+   "commands": {
+    "health": [
+     "claude",
+     "--version"
+    ],
+    "resume:review": [
+     "claude",
+     "--resume",
+     "{session_id}",
+     "--permission-mode",
+     "plan"
+    ],
+    "resume:write": [
+     "claude",
+     "--resume",
+     "{session_id}",
+     "--permission-mode",
+     "acceptEdits"
+    ],
+    "start:review": [
+     "claude",
+     "--permission-mode",
+     "plan"
+    ],
+    "start:write": [
+     "claude",
+     "--permission-mode",
+     "acceptEdits"
+    ],
+    "stop": [
+     "tmux-stop",
+     "{session_name}"
+    ]
+   },
+   "harness": "claude-code",
+   "id": "claude_fable",
+   "model": "router",
+   "permission_modes": {
+    "review": "plan",
+    "write": "acceptEdits"
+   },
+   "provider": "anthropic",
+   "quota_patterns": [
+    "usage limit",
+    "rate limit"
+   ],
+   "task_types": [
+    "general",
+    "backend",
+    "frontend",
+    "review"
+   ],
+   "transcript": {
+    "kind": "tmux-pane"
+   },
+   "version": "2.1.278"
+  },
+  {
+   "auth_patterns": [
+    "login required",
+    "authentication failed"
+   ],
+   "binary": "claude",
+   "blocked_patterns": [
+    "permission denied"
+   ],
+   "capabilities": [
+    "read",
+    "write",
+    "review"
+   ],
+   "commands": {
+    "health": [
+     "claude",
+     "--version"
+    ],
+    "resume:review": [
+     "claude",
+     "--resume",
+     "{session_id}",
+     "--permission-mode",
+     "plan"
+    ],
+    "resume:write": [
+     "claude",
+     "--resume",
+     "{session_id}",
+     "--permission-mode",
+     "acceptEdits"
+    ],
+    "start:review": [
+     "claude",
+     "--permission-mode",
+     "plan"
+    ],
+    "start:write": [
+     "claude",
+     "--permission-mode",
+     "acceptEdits"
+    ],
+    "stop": [
+     "tmux-stop",
+     "{session_name}"
+    ]
+   },
+   "harness": "claude-code",
+   "id": "claude_opus",
+   "model": "router",
+   "permission_modes": {
+    "review": "plan",
+    "write": "acceptEdits"
+   },
+   "provider": "anthropic",
+   "quota_patterns": [
+    "usage limit",
+    "rate limit"
+   ],
+   "task_types": [
+    "general",
+    "backend",
+    "frontend",
+    "review"
+   ],
+   "transcript": {
+    "kind": "tmux-pane"
+   },
+   "version": "2.1.278"
+  },
+  {
+   "auth_patterns": [
+    "login required",
+    "authentication failed"
+   ],
+   "binary": "codex",
+   "blocked_patterns": [
+    "permission denied"
+   ],
+   "capabilities": [
+    "read",
+    "write",
+    "review"
+   ],
+   "commands": {
+    "health": [
+     "codex",
+     "--version"
+    ],
+    "resume:review": [
+     "codex",
+     "resume",
+     "{session_id}",
+     "--sandbox",
+     "read-only"
+    ],
+    "resume:write": [
+     "codex",
+     "resume",
+     "{session_id}",
+     "--sandbox",
+     "workspace-write"
+    ],
+    "start:review": [
+     "codex",
+     "--sandbox",
+     "read-only"
+    ],
+    "start:write": [
+     "codex",
+     "--sandbox",
+     "workspace-write"
+    ],
+    "stop": [
+     "tmux-stop",
+     "{session_name}"
+    ]
+   },
+   "harness": "codex-cli",
+   "id": "codex",
+   "model": "router",
+   "permission_modes": {
+    "review": "read-only",
+    "write": "workspace-write"
+   },
+   "provider": "openai",
+   "quota_patterns": [
+    "usage limit",
+    "rate limit"
+   ],
+   "task_types": [
+    "general",
+    "backend",
+    "frontend",
+    "review"
+   ],
+   "transcript": {
+    "kind": "tmux-pane"
+   },
+   "version": "0.155.1"
+  }
+ ]
+}

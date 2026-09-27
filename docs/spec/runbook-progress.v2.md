@@ -94,10 +94,15 @@ Siguen valiendo los de v1. Lo que cambia o se suma:
 | `carriles[].paso_loop` | entero 0 a 8, el paso del loop de cross-review en curso (0 = no empezó) |
 | `carriles[].ci` | `pendiente` · `verde` · `rojo` · `sin-ci` · `unknown` |
 | `carriles[].coderabbit` | `pendiente` · `limpio` · `con-hallazgos` · `sin-cuota` · `unknown` |
+| `carriles[].worker.model` | el modelo configurado de la entrada del registro; el que la CLI reporta vive en `reported_model` |
+| `carriles[].worker.effort` | el effort configurado de la entrada elegida, o `null` cuando la entrada no declara effort |
+| `carriles[].worker.reported_model` | el modelo que la CLI reporta al arrancar, o `null` |
 | `cola[].estado` | `pendiente` · `esperando-ventana` · `mergeando` · `sync` · `verificado` · `revertido` · `atorado` |
 | `cola[].verificado` | `null` (no aplica aún) · `pendiente` · `ok` · `fallo` · `unknown`: resultado de la compuerta del ítem (por ejemplo, SHA del gateway igual al mergeado tras el sync) |
 | `cola[].detenido_por` | `null` o el texto de la fila de atores que aplicó; obligatorio cuando `estado` es `atorado` |
 | `eventos[].situacion` | `null` o el texto literal de la primera columna de la tabla "Cuando algo se atora" que aplicó |
+
+Los campos `carriles[].worker.*` llegan con la Fase 14 y se validan cuando están presentes.
 
 ### Reglas
 
