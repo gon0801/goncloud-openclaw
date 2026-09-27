@@ -138,7 +138,8 @@ for fx in 01-merge-ok 02-merge-sin-recibo 03-merge-revocado 04-merge-otro-sha \
     15-pushpr-mismo-revisor 16-merge-bloqueante-repetido 17-merge-rebase-mecanico \
     18-deploy-mapea 19-canary-registra 20-rollback-sin-verificar \
     21-rollback-verificado 22-crossreview-autor 23-pushpr-sin-review \
-    24-deploy-sin-merge 25-merge-kit-rechaza 26-merge-bot-stale 27-merge-autor-evidencia; do
+    24-deploy-sin-merge 25-merge-kit-rechaza 26-merge-bot-stale 27-merge-autor-evidencia \
+    28-canary-fallo 29-canary-otro-sha; do
   materializar "$fx.json" "$T/py-$fx"
   leer_recibo "$T/py-$fx"
   meta_accion="$(python3 -c "import json; print(json.load(open('$T/py-$fx/meta.json'))['action'])")"
@@ -160,7 +161,7 @@ for k in ("source_url", "repo", "pr", "reviewed_sha", "result", "availability"):
     assert p.get(k) not in (None, ""), (k, p)
 PY
 done
-echo "ok (2): los 27 fixtures dan su veredicto y codigo"
+echo "ok (2): los 29 fixtures dan su veredicto y codigo"
 
 # (3) Extremo a extremo: compuerta.sh relee el PR falso, valida con el kit,
 # decide, registra el evento y proyecta sin sustituir el recibo.
@@ -171,7 +172,8 @@ for fx in 01-merge-ok 02-merge-sin-recibo 03-merge-revocado 04-merge-otro-sha \
     15-pushpr-mismo-revisor 16-merge-bloqueante-repetido 17-merge-rebase-mecanico \
     18-deploy-mapea 19-canary-registra 20-rollback-sin-verificar \
     21-rollback-verificado 22-crossreview-autor 23-pushpr-sin-review \
-    24-deploy-sin-merge 25-merge-kit-rechaza 26-merge-bot-stale 27-merge-autor-evidencia; do
+    24-deploy-sin-merge 25-merge-kit-rechaza 26-merge-bot-stale 27-merge-autor-evidencia \
+    28-canary-fallo 29-canary-otro-sha; do
   materializar "$fx.json" "$T/e2e-$fx"
   run="g-${fx%%-*}"
   mkdir -p "$T/corridas/$run"
@@ -302,7 +304,8 @@ got_cf="$(python3 "$PW" gate --record "$T/e4d/record.json" --lane l1 --action ca
   --receipt-status "$(cat "$T/e4d/receipt.status")" \
   --receipt-error "$(cat "$T/e4d/recibo.err")" --pr "$T/e4d/pr.json" \
   | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['verdict']+' '+d['code']+' '+d['projection']['result'])")"
-[ "$got_cf" = "allow canary-ok failed" ] || fail "canary failed: [$got_cf]"
+# 14.21 punto 2: un canary fallido con el SHA desplegado DENY, jamas allow.
+[ "$got_cf" = "deny canary-fallo missing" ] || fail "canary failed: [$got_cf]"
 echo "ok (4): accion y evidencia rotas mueren; sin kit no hay merge"
 
 # (5) Mutacion de compuertas: sin cada condicion, el fixture que la exige

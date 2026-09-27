@@ -140,6 +140,26 @@ def reconcile_lane(
             launched.setdefault("session", successor)
             effects.append(_record(lane_id, "launched", launched))
 
+    # 14.21 punto 1 (plan Task 5 Step 3): el orden es contrato — registry,
+    # tmux, worktree/HEAD, remota, PR, EVIDENCIA, merge, deploy, canary. La
+    # evidencia se registra antes del merge y el canary va al final.
+    # Evidencia: el inspect accionable y el test fallido se anotan; un test
+    # fallido jamas produce un observado de pase o aprobado.
+    inspect = lane_obs.get("inspect")
+    if inspect in ACTIONABLE_INSPECT and evidence.get("inspect") != inspect:
+        kind = f"inspect.{inspect}"
+        if not _has_kind(lane, f"observed.{kind}"):
+            effects.append(_record(lane_id, kind, {"session": session}))
+    test_evidence = evidence.get("test") or {}
+    if test_evidence.get("result") == "failed" and not _has_kind(lane, "observed.test.failed"):
+        effects.append(
+            _record(
+                lane_id,
+                "test.failed",
+                {"result": "failed", "fallback": bool(test_evidence.get("fallback"))},
+            )
+        )
+
     # Rama remota, PR, merge, deploy y canary ya ocurridos se registran; jamas
     # se propone repetir un efecto externo consumado.
     if lane_obs.get("remote_branch") and not (delivery.get("push") or {}):
@@ -204,23 +224,6 @@ def reconcile_lane(
                     {"sha": canary_obs.get("sha"), "result": "failed"},
                 )
             )
-
-    # Evidencia: el inspect accionable y el test fallido se anotan; un test
-    # fallido jamas produce un observado de pase o aprobado.
-    inspect = lane_obs.get("inspect")
-    if inspect in ACTIONABLE_INSPECT and evidence.get("inspect") != inspect:
-        kind = f"inspect.{inspect}"
-        if not _has_kind(lane, f"observed.{kind}"):
-            effects.append(_record(lane_id, kind, {"session": session}))
-    test_evidence = evidence.get("test") or {}
-    if test_evidence.get("result") == "failed" and not _has_kind(lane, "observed.test.failed"):
-        effects.append(
-            _record(
-                lane_id,
-                "test.failed",
-                {"result": "failed", "fallback": bool(test_evidence.get("fallback"))},
-            )
-        )
 
     effects.extend(_handoff_effects(lane, lane_obs, observations, live, session_alive))
     return tuple(effects)

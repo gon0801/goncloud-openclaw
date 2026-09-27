@@ -1,0 +1,115 @@
+{
+  "expect_py1": [
+    "record_observed",
+    "record_observed",
+    "record_observed"
+  ],
+  "expect_py2": [],
+  "obs1": {
+    "candidates": {
+      "exhausted": [],
+      "next": null
+    },
+    "lanes": {
+      "l1": {
+        "canary": {
+          "result": "pass",
+          "sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "children_writing": false,
+        "commits_ahead": 1,
+        "dirty": false,
+        "head": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "inspect": "running",
+        "merge": {
+          "merge_commit": "dddddddddddddddddddddddddddddddddddddddd",
+          "merged": true
+        },
+        "predecessor_alive": false,
+        "remote_branch": false,
+        "session_alive": false,
+        "worktree_exists": true
+      }
+    },
+    "registry": {
+      "workers": [
+        "codex"
+      ]
+    },
+    "tmux": {
+      "sessions": []
+    }
+  },
+  "obs2": {
+    "candidates": {
+      "exhausted": [],
+      "next": null
+    },
+    "lanes": {
+      "l1": {
+        "canary": {
+          "result": "pass",
+          "sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "children_writing": false,
+        "commits_ahead": 1,
+        "dirty": false,
+        "head": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "inspect": "running",
+        "merge": {
+          "merge_commit": "dddddddddddddddddddddddddddddddddddddddd",
+          "merged": true
+        },
+        "predecessor_alive": false,
+        "remote_branch": false,
+        "session_alive": false,
+        "worktree_exists": true
+      }
+    },
+    "registry": {
+      "workers": [
+        "codex"
+      ]
+    },
+    "tmux": {
+      "sessions": []
+    }
+  },
+  "record": {
+    "cli_modos": "@MODOS@",
+    "estado": "abierta",
+    "id": "run-t",
+    "lanes": [
+      {
+        "base_remote_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "branch": "corrida/run-t/l1",
+        "delivery": {},
+        "estado": "activo",
+        "events": [],
+        "evidence": {
+          "test": {
+            "result": "failed"
+          }
+        },
+        "handoff": {
+          "attempts": [],
+          "exhausted": false,
+          "resumes": 1
+        },
+        "harness": "codex-cli",
+        "id": "l1",
+        "mode": "write",
+        "owner": "l1",
+        "provider": "openai",
+        "reported_model": "unknown",
+        "role": "write",
+        "session": "ses-1",
+        "token": "9-t",
+        "worker": "codex",
+        "worktree": "@WT@"
+      }
+    ],
+    "schema": "corrida.v2",
+    "seguimiento_global": true
+  }
+}

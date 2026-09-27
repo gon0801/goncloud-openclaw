@@ -188,6 +188,21 @@ for fx in 01-duplicate-events 02-vanished-session 03-push-exists 04-pr-exists \
   [ "$ops2" = "$exp2" ] || [ "$ops2" = "$exp2 " ] || fail "$fx inv2: ops [$ops2], esperadas [$exp2]"
 done
 echo "ok (2): los 21 fixtures proponen lo esperado y repiten byte-identico"
+# (2b) 14.21 P1: orden del plan Task 5 Step 3: registry, tmux, worktree/HEAD,
+# remota, PR, EVIDENCIA, merge, deploy, canary. El orden de los efectos es
+# contrato: la evidencia se registra antes del merge y el canary va al final.
+materializar 22-evidencia-antes.json "$T/py-22-evid"
+cp "$T/py-22-evid/record.json" "$T/py-22-evid/r.json"
+python3 "$PW" reconcile --record "$T/py-22-evid/r.json" --observations "$T/py-22-evid/obs1.json" \
+  >"$T/py-22-evid/out.json" || fail "P1: reconcile rechazo la entrada"
+orden="$(python3 -c "
+import json,sys
+e=json.load(open(sys.argv[1]))['effects']
+print(' '.join(x['op']+':'+str(x['args'].get('kind')) for x in e))" "$T/py-22-evid/out.json")"
+[ "$orden" = "record_observed:session.vanished record_observed:test.failed record_observed:merge.done record_observed:canary.done" ] \
+  || fail "P1: orden distinto al del plan Step 3: $orden"
+echo "ok (2b): evidencia antes del merge y canary al final"
+
 
 e2e_prepara() { # $1 caso $2 fixture: registro en CORRIDA_STATE + obs listas
   materializar "$2" "$T/e2e-$1"
