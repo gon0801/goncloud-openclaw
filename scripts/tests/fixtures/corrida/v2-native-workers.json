@@ -20,7 +20,11 @@
  "inicio": "2026-09-18T10:00:00-04:00",
  "lanes": [
   {
+   "base_remote_sha": "0f1e2d3c4b5a69788796a5b4c3d2e1f009182736",
+   "branch": "fase14/api",
    "id": "api",
+   "mode": "write",
+   "owner": "api",
    "role": "write",
    "session": "ses-codex-1",
    "worker": "codex",

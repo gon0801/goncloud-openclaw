@@ -94,7 +94,7 @@ otro esquema v2 ni vuelve el cron por corrida.
 |---|---|
 | `workers_registry` | Ruta del registro `workers.v1` que usa la selección |
 | `automatic_routing` | Objeto con `enabled` (booleano): ruteo automático o flujo legado |
-| `lanes` | Carriles con `worker`, rol, worktree y sesión |
+| `lanes` | Carriles con `worker`, rol, worktree, sesión y la reserva completa (`branch`, `base_remote_sha`, `owner`, `mode`) |
 | `effects` | Efectos externos ya ejecutados (para no repetirlos al reanudar) |
 | `evidence` | Evidencia de compuertas por SHA (revisión, CI, CodeRabbit, merge, deploy, canary) |
 | `outcome` | Resultado global (`open` mientras hay trabajo pendiente) |

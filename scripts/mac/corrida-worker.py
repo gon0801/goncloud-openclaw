@@ -72,6 +72,26 @@ def validate_record(path: Path) -> str:
     return "VALID corrida.v2 legacy"
 
 
+LANE_REQUIRED = ("id", "branch", "worktree", "base_remote_sha", "owner", "mode")
+
+
+def _check_lanes(value: object) -> None:
+    # Misma forma de la reserva que validar_registro (corrida/lib.sh): un solo
+    # contrato de carril en los dos validadores (14.16).
+    if not isinstance(value, list):
+        raise RecordError("lanes is not a list")
+    for lane in value:
+        if not isinstance(lane, dict):
+            raise RecordError("lane is not an object")
+        for field in LANE_REQUIRED:
+            if not lane.get(field):
+                raise RecordError(f"lane without {field}")
+        if lane.get("mode") not in ("write", "read-only"):
+            raise RecordError("lane mode outside the set")
+        if lane.get("role") not in (None, "write", "review"):
+            raise RecordError("lane role outside the set")
+
+
 def _check_native_field(key: str, value: object) -> None:
     if key == "workers_registry":
         if not isinstance(value, str) or not value:
@@ -79,9 +99,11 @@ def _check_native_field(key: str, value: object) -> None:
     elif key == "automatic_routing":
         if not isinstance(value, dict) or not isinstance(value.get("enabled"), bool):
             raise RecordError("bad automatic_routing")
-    elif key in ("lanes", "effects"):
+    elif key == "lanes":
+        _check_lanes(value)
+    elif key == "effects":
         if not isinstance(value, list):
-            raise RecordError(f"bad {key}")
+            raise RecordError("bad effects")
     elif key == "evidence":
         if not isinstance(value, dict):
             raise RecordError("bad evidence")
@@ -118,7 +140,7 @@ def cmd_record_validate(args: argparse.Namespace) -> int:
     try:
         print(validate_record(Path(args.record)))
     except RecordError as exc:
-        print(exc.diagnostic)
+        print(f"{exc.diagnostic}: {exc}")
         return 1
     return 0
 
