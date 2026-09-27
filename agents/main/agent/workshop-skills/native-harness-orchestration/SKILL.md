@@ -7,7 +7,7 @@ description: Dirige ingenieria por harnesses nativos de la Mac (Claude Code, Cod
 
 Dirige carriles de ingeniería por harnesses nativos de la Mac. La máquina
 ejecuta; este contrato decide. Tabla de decisión ejecutable: cada paso de
-efecto EMPIEZA reconciliando (`corrida.sh reconciliar`) y TERMINA escribiendo
+efecto EMPIEZA reconciliando (`corrida.sh reconciliar <id>`) y TERMINA escribiendo
 su observación (`observed.*` en el registro).
 
 ## Reglas que no se negocian
@@ -31,6 +31,7 @@ su observación (`observed.*` en el registro).
 - **Revisión cruzada local antes del primer push**, y el loop de corrección
   de CodeRabbit corre en el mismo PR (delta review, no nueva revisión).
 - **Modelo y effort visibles:** el tablero y la selección muestran el `model` y el `effort` del worker elegido; `reported_model` es lo que la CLI reporta y se registra aparte (14.13d).
+- **Modelo y effort visibles:** el tablero y la selección muestran el `model` y el `effort` del worker elegido; `reported_model` es lo que la CLI reporta y se registra aparte (14.13d).
 - **Canary vivo verificado** antes de declarar éxito; un canary fallido
   obliga reversa documentada.
 - **Routea off a la cadena existente:** con `CORRIDA_NATIVE_ROUTING=off` o el
@@ -46,11 +47,11 @@ su observación (`observed.*` en el registro).
 | Abrir corrida | `corrida.sh abrir <id> --runbook ... --vigia claw --cli-modos <tsv>` | registro abierto |
 | Preflight | `corrida.sh preflight <id>` | `APTO` / `NO APTO <razones>` |
 | Seleccionar worker | `corrida-worker.py select --registry workers.v1.json --request <req> --state <st>` | `winner` + score + razones |
-| Preparar carril | `corrida.sh preparar-carril <id> <lane> <wt> <rama> <sha> <modo>` | reserva escrita |
-| Arrancar sesión | `corrida.sh adaptador <id> <lane> start <worker> <sesion> <wt> <brief>` | `session` registrada |
-| Entregar brief | `corrida.sh adaptador <id> <lane> deliver <worker> <sesion> <brief>` | `accepted`/`blocked` |
-| Terminal | `corrida.sh mostrar-terminal <id> <lane> <sesion>` | visible/degraded |
-| Inspeccionar | `corrida.sh adaptador <id> <lane> inspect <worker> <sesion>` | running/waiting/complete/failed/quota/auth-vencida |
+| Preparar carril | `corrida.sh preparar-carril <id> <carril> <repo> [--read-only]` | reserva escrita |
+| Arrancar sesión | `corrida.sh adaptador start <id> <carril> <worker> <sesion> <wt> <brief>` | `session` registrada |
+| Entregar brief | `corrida.sh adaptador deliver <id> <carril> <worker> <sesion> <brief>` | `accepted`/`blocked` |
+| Terminal | `corrida.sh mostrar-terminal <id> <carril>` | visible/degraded |
+| Inspeccionar | `corrida.sh adaptador inspect <id> <carril> <worker> <sesion>` | running/waiting/complete/failed/quota/auth-vencida |
 | Reconciliar | `corrida.sh reconciliar <id> --observations <json>` | efectos ejecutados + `CONVERGED` |
 | Evidencia | `corrida.sh compuerta <id> <lane> cross-review|push-pr|ci|coderabbit --sha <sha> --evidence <json>` | `ALLOW`/`DENY` + proyección |
 | Delegar merge | `corrida.sh compuerta <id> <lane> merge --sha <sha> --evidence <json>` | `ALLOW merge-ok` |

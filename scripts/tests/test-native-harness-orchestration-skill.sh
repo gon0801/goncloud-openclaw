@@ -46,6 +46,22 @@ done
 exige "effort" "muestra el effort del worker"
 exige "reported_model" "distingue model (configurado) de reported_model (reportado)"
 
+# 14.6 r2 B1: la tabla manda COMANDOS CORRIBLES, no palabras. Cada fila se
+# ejecuta con valores de mentira en un CORRIDA_STATE temporal y no puede
+# fallar por error de uso (uso:/accion invalida/flag desconocido ⇒ rc=2).
+CS="$(mktemp -d)/cs"
+grep -oE '`corrida\.sh [^`]*`' "$SKILL" | sed 's/`//g; s/ \[[^]]*\]//g' |
+while IFS= read -r cmd; do
+  [ -n "$cmd" ] || continue
+  firma="$(printf '%s' "$cmd" | sed -E 's/<([a-z-]+)\|[^>]*>/\1/g; s/<[^>]+>/VAL/g')"
+  out="$(CORRIDA_STATE="$CS" PATH="$PWD/scripts/mac:$PATH" bash -c "$firma" 2>&1)"; rc=$?
+  case "$out" in
+    *"uso:"*|*"Uso:"*|*"accion invalida"*|*"flag desconocido"*)
+      printf 'FAIL: firma invalida en la tabla (%s): %s\n' "$cmd" "$out"; exit 1;;
+  esac
+done || fail "la tabla trae un comando que la CLI rechaza por forma"
+rm -rf "$CS"
+
 # DoD 14.6: sin rutas absolutas de binarios especificos de usuario.
 if grep -qE "/Users/[a-z]+|/home/[a-z]+" "$SKILL"; then
   fail "la skill trae rutas absolutas de usuario"
