@@ -61,6 +61,17 @@ Propósito: no construir sobre capacidades supuestas.
 Archivos previstos: `docs/spec/centro-tareas-capabilities.md`, fixtures de
 capacidades y manifiestos de prueba. No leer archivos de credenciales.
 
+Al autorizar la ejecución de U4, el alcance de 17.0 incluye instalar y arrancar
+LobsterBoard sólo en un directorio temporal nuevo del equipo de prueba, registrado
+en el recibo, sin instalación global ni servicio persistente. El original y su
+estado quedan ahí; guardar configuración sin secretos y capturas redactadas en
+`docs/evidence/fase17-lobsterboard/`. Para observar Claw, usar únicamente acceso
+soportado ya autorizado, sin cambiar el gateway ni copiar credenciales. Registrar
+el acceso del celular al entorno de prueba sin publicación a internet. Si no se
+puede verificar la conexión real, queda pendiente; las fixtures no la sustituyen.
+Detener el proceso al terminar y documentar cómo retirar sólo los archivos de la
+prueba. La preparación documental previa no incluye arrancar este entorno.
+
 - Inventariar versiones, plataformas, interfaces públicas de eventos, continuación,
   progreso y notificación. Probar que Hermes no necesita gateway OpenClaw.
 - Mapear Fase 14 a commits, pruebas y recibos instalados. Reconciliar dependencias
@@ -68,7 +79,8 @@ capacidades y manifiestos de prueba. No leer archivos de credenciales.
 - Registrar dependencias OpenClaw en `scripts/mac/corrida/`, reloj y RPC de progreso;
   asignar su eliminación o adaptación a 17.2–17.4.
 - Revisar licencia, dependencias y compatibilidad de un commit identificado de
-  LobsterBoard. Tras esa revisión y al ejecutar U4, probar el producto original
+  LobsterBoard y registrar permisos de reutilización de código/assets antes de
+  adoptar o empaquetar. Tras esa revisión y al ejecutar U4, probar el producto original
   en un entorno de prueba reversible con una plantilla existente, sin modificar
   su código. Configurar sólo los componentes necesarios para observar Claw.
 - Comprobar en computadora y celular lectura, navegación, uso táctil y refresco.
@@ -149,6 +161,11 @@ Matar el coordinador mantiene panel/seguimiento degradado disponible. Límites
 siguen vigentes tras reiniciar y no se mata proceso ajeno. Dos tareas usan un reloj.
 
 ### 17.5. Panel de tareas
+
+Archivos propios de configuración, manifiesto de versión y conexiones pequeñas:
+`integrations/lobsterboard/`, sin vendorear el producto ni guardar estado o secretos.
+El original se ejecuta en el directorio temporal registrado en 17.0; la ubicación
+instalada definitiva la resuelve 17.6 para la aceptación por host de 17.8.
 
 Configurar LobsterBoard adoptado en 17.0, conservando la plantilla y componentes
 que ya cumplen. Conectar la proyección de tareas, nunca salidas crudas. Antes de
@@ -250,7 +267,13 @@ corregido. El mismo bloqueante repetido dos veces detiene el ciclo para decisió
   pedido y validar documentación en CI. Scope: planificación Fase 17.
 - Evento: implementar 17.0–17.7, pruebas focalizadas y PRs de código. Razón:
   construir lo propuesto. Scope: futuro pedido de implementación; no concedido aquí.
-- Evento: instalación, cambios de servicio/config, notificaciones de prueba y tareas
+- Evento: instalar/arrancar LobsterBoard temporal y configurar su prueba de
+  17.0/17.5, con conexión observacional ya autorizada a Claw y acceso del celular.
+  Razón: comprobar el original antes de desarrollar UI. Scope: incluido en el
+  futuro pedido de ejecución U4, sólo entorno temporal registrado, sin instalación
+  global, servicio persistente, cambios al gateway ni publicación a internet;
+  no concedido por esta actualización documental.
+- Evento: instalación persistente, cambios de servicio/config, notificaciones de prueba y tareas
   reales en dos hosts. Razón: 17.8. Scope: permiso posterior por equipo y ventana.
 - Evento: merge/deploy. Razón: distribución del sistema. Scope: permiso separado;
   calidad, PR verde o este documento no lo conceden.
@@ -262,7 +285,8 @@ preaprobación para permisos aún no otorgados.
 ## Inicio posterior
 
 Nueva sesión desde un worktree de implementación basado en `origin/main`: `claude`.
-Primera instrucción: `/harness-work 17.0` con este plan como contexto y alcance de
-inventario, sin instalación ni secretos. Conviene empezar sólo por esa tarea para
-confirmar interfaces y dependencias antes de autorizar bloques de código.
+Antes de autorizar U4, sólo preparar el inventario y contratos, sin instalar ni
+arrancar procesos; esto no completa 17.0. Con el pedido de ejecución U4, la primera
+instrucción es `/harness-work 17.0` con este plan, incluyendo la prueba temporal
+acotada descrita arriba. Confirmar su evidencia antes de desarrollar UI.
 Esto es una guía para el siguiente pedido, no una sesión lanzada ni permiso vivo.
