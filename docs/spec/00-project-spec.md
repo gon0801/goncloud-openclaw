@@ -188,6 +188,13 @@ Estado: planificado, no prueba de soporte instalado. Diseño:
 5. El panel inicial es de solo lectura y proyecta campos permitidos, sin prompts,
    entorno, argv ni transcripciones crudas. Los contratos/rutas legacy se conservan,
    incluido el literal v1 exigido por el validador de progreso durante su transición.
+   En U4 se prueba primero LobsterBoard original con una plantilla existente, tras
+   revisar licencia y dependencias de un commit identificado. La prueba verifica
+   uso en computadora y celular, datos de Claw disponibles y faltantes concretos.
+   Se conserva si cumple y sólo se hacen ajustes pequeños justificados por esa
+   evidencia. No se inicia una app/plataforma propia ni una reescritura amplia como
+   alternativa automática; si hace falta, se detiene el carril UI y se presentan
+   alternativas acotadas. La prueba no sustituye los criterios de cierre de U4.
 6. El inventario/seguimiento sobrevive al coordinador. Continuar requiere interfaz
    pública soportada, presupuesto persistente e identidad del intento. Un efecto
    incierto se reconcilia antes de repetir; no se inventa garantía de ejecución única.

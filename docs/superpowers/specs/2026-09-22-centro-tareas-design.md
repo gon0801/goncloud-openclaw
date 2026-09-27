@@ -143,11 +143,22 @@ con teclado. El detalle técnico es desplegable. Se diseñan estados vacío, err
 desconocido, sin conexión y datos antiguos. El usuario puede encontrar responsable,
 ejecutor, bloqueo, siguiente paso y evidencia sin leer código.
 
-LobsterBoard es candidato visual, condicionado a revisar la licencia del commit
-elegido, sus dependencias y compatibilidad. No se importa código antes de esa
-decisión. Si no resulta apto, se extiende el tablero existente con diseño propio;
-no se bloquea el contrato de tareas por elegir un frontend. OpenGrokBot queda
-como referencia de experiencia, no dependencia.
+Decisión de David del 2026-09-26: probar primero LobsterBoard original con una
+plantilla existente, antes de desarrollar una interfaz. Revisar licencia,
+dependencias y compatibilidad del commit elegido antes de instalarlo. Registrar
+versión/commit, configuración, capturas en computadora y celular, datos de Claw
+que muestra y faltantes respecto de los recorridos de este diseño. Una captura
+de escritorio no prueba comodidad en celular; observar lectura, navegación,
+uso táctil y actualización de datos. Lo no probado queda como desconocido.
+
+Conservar LobsterBoard si cumple. Configurar sus componentes existentes primero
+y limitar el desarrollo a conexiones o ajustes pequeños ligados a un faltante
+medido y una prueba. No construir una app/plataforma propia ni rediseñar lo que
+ya funciona. Si la licencia impide adoptarlo o exige cambios amplios, registrar
+la limitación y presentar alternativas acotadas antes de continuar el carril UI;
+no se activa automáticamente un frontend propio. El contrato de tareas puede
+avanzar por separado, pero la prueba no acredita el cierre de U4 ni paridad Hermes.
+OpenGrokBot queda como referencia de experiencia, no dependencia.
 
 De esa referencia se toman requisitos observables, no su runtime: una línea
 temporal de actividad por tarea, identificación visible del agente y la CLI
