@@ -168,6 +168,31 @@ y `seguimiento.v1` (contratos en `docs/spec/corrida.v1.md` y
    control antes de entrar a un mensaje o a un evento, y nunca se interpreta como
    instrucción.
 
+## Seguimiento inmediato, contrato objetivo de U3a
+
+Estado: planificado. Se ejecuta después de cerrar U3 y antes de U4, por decisión
+de David del 2026-09-26. No modifica los requisitos de U3 mientras se implementa.
+[Diseño y aceptación](../superpowers/specs/2026-09-26-seguimiento-inmediato-design.md).
+
+1. El fin de cualquier agente CLI habilitado despierta al dueño mediante una señal
+   comprobada por su adaptador. Todos usan el mismo aviso y la misma ruta de U3.
+   El dueño verifica la entrega antes de continuar. Agregar otra CLI no cambia
+   el director; requiere validar su adaptador y medir su señal real.
+2. El objetivo de aceptación es menos de 30 segundos entre fin del trabajador e
+   inicio verificable del siguiente, en al menos veinte transiciones normales.
+   Cada CLI habilitada termina al menos dos y recibe trabajo al menos una vez.
+   Se amplía la muestra cuando el inventario lo exige. Se publican todas las
+   muestras, los fallos y las esperas reales.
+3. Los avisos pendientes sobreviven a una caída. Un aviso repetido, un tick o un
+   reinicio no duplican el siguiente trabajador. Sólo el dueño registrado decide.
+4. El vigilante existente recupera un aviso perdido en 60 segundos con gateway,
+   dueño y capacidad disponibles. Tras una caída, el plazo empieza al recuperarse.
+5. El cambio conserva el reloj global, el reporte de Telegram y las autorizaciones.
+   No agrega otra aplicación, servicio de colas ni supervisor. El seguimiento
+   previo queda disponible como reversa. Las señales reales de todas las CLI
+   habilitadas se verifican antes de implementar. Una CLI sin señal fiable queda
+   como limitación explícita y no permite acreditar el cierre de U3a.
+
 ## Centro de tareas portable, contrato objetivo de Fase 17
 
 Estado: planificado, no prueba de soporte instalado. Diseño:
