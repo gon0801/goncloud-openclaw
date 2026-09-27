@@ -168,11 +168,13 @@ jobs:
                 esac ;;
               Plans.md)
                 # Filas del ledger que el diff DEJA (solo las agregadas, no todo
-                # el archivo): la forma | <n>.<n> | ... | ... | ... | cc:... |
-                # exige exactamente 5 columnas. Las borradas no se miran: si se
-                # miraran, una fila que ya estaba mal en la base (p. ej. con \|
-                # escapado) no se podria arreglar nunca -- el PR que la corrige
-                # la borra y rebotaba por la version vieja (PR #165, fila 9.1).
+                # el archivo): la forma | <n>.<n>[letra] | ... | ... | ... |
+                # cc:... | (14.13a) exige exactamente 5 columnas, y la
+                # comprobacion vive en scripts/plans-fila-check.sh. Las
+                # borradas no se miran: si se miraran, una fila que ya estaba
+                # mal en la base (p. ej. con \| escapado) no se podria arreglar
+                # nunca -- el PR que la corrige la borra y rebotaba por la
+                # version vieja (PR #165, fila 9.1).
                 git diff --unified=0 "$mb" "$hs" -- Plans.md | { grep -E '^\+\|' || true; } | cut -c2- \
                   | bash scripts/plans-fila-check.sh || rc=1 ;;
             esac

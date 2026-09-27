@@ -58,7 +58,11 @@ trap 'rm -rf "$T"' EXIT INT TERM
 
 sembrar_sim() { # $1: repo de juguete con la semilla y su commit base
   local d=$1
-  mkdir -p "$d/docs/evidence" "$d/.saikit/progress" "$d/summa-gate"
+  mkdir -p "$d/docs/evidence" "$d/.saikit/progress" "$d/summa-gate" "$d/scripts"
+  # El brazo de Plans.md del doc-check llama scripts/plans-fila-check.sh
+  # relativo al repo: sin sembrarlo, el paso muere con "No such file or
+  # directory" y los escenarios quedan rojos por la razon equivocada.
+  cp "$RAIZ/scripts/plans-fila-check.sh" "$d/scripts/plans-fila-check.sh"
   printf '| Task | Contenido | DoD | Depends | Status |\n' > "$d/Plans.md"
   printf '|---|---|---|---|---|\n'                          >> "$d/Plans.md"
   printf '| 14.1 | algo | algo | - | cc:TODO |\n'            >> "$d/Plans.md"
@@ -86,11 +90,14 @@ correr_clasificador() { # $1: repo
 }
 
 correr_gate() { # $1: repo; usa SIM_CARRIL/SIM_CLAS_RC/SIM_DOC_RC; devuelve SIM_GATE_RC
-  local d=$1 r_clas r_qual
+  local d=$1 r_clas r_shards
   if [ "$SIM_CLAS_RC" -eq 0 ] && [ "$SIM_DOC_RC" -eq 0 ]; then r_clas=success; else r_clas=failure; fi
-  if [ "$SIM_CARRIL" = "fast" ]; then r_qual=skipped; else r_qual=success; fi
-  ( cd "$d" && R_CLASIFICADOR="$r_clas" CARRIL="$SIM_CARRIL" R_QUALITY="$r_qual" \
-      bash -c "$PASO_GATE" ) >"$T/gate.log" 2>&1
+  # El gate de hoy consume R_SHARDS (resultado agregado de la matriz: se
+  # omite en fast, corre en completo) y R_CI_CONTRACT (corre en ambos
+  # carriles, nunca se omite); el R_QUALITY de la r1 ya no existe.
+  if [ "$SIM_CARRIL" = "fast" ]; then r_shards=skipped; else r_shards=success; fi
+  ( cd "$d" && R_CLASIFICADOR="$r_clas" CARRIL="$SIM_CARRIL" R_SHARDS="$r_shards" \
+      R_CI_CONTRACT=success bash -c "$PASO_GATE" ) >"$T/gate.log" 2>&1
   SIM_GATE_RC=$?
 }
 
