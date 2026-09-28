@@ -8,8 +8,8 @@ description: Merge in doubt, a PR that read mergeable no longer merges, or a dep
 Close the loop after an agent merges a PR in `gon0801/summonaikit-claude` on the Mac: confirm the merge, settle the gate-hook deploy, and leave the ledger closed in one PR. The repo's own `AGENTS.md` ("Deploy tras merge") is the procedure's authority — read it there. This skill carries only what it does not say and what bit us.
 
 <!-- candado: test-merge-sin-kit.sh -->
-The kit is off since 2026-09-27: the live hook copies are stubs on purpose. Skip steps 3 to 5
-(no hook deploy, no installer run) and close only the ledger.
+The kit is off since 2026-09-27, so skip steps 3 to 5: do not deploy the hook or run the installer.
+The live hook copies are stubs on purpose; close only the ledger.
 
 Verified 2026-09-11 (PR #300 → `844d048`): merge confirmed by API, hook copies already current, a regressed registration reverted from its backup, ledger closed in PR #301.
 

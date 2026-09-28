@@ -16,6 +16,5 @@ resultado. La allowlist dura no incluye a `main`.
 <!-- candado: test-saikit-cierre-pr-merge-owner.sh -->
 <!-- candado: test-saikit-cierre-pr-merge-owner.sh -->
 <!-- candado: test-merge-sin-kit.sh -->
-Con el kit apagado no hay ruta del kit que pasar: `main` encarga el cierre a
-implementer o ingenieria con la sección «Kit apagado» de `saikit-cierre-pr`.
+Con el kit apagado, lo anterior no aplica: `main` encarga el cierre a implementer o ingenieria con la sección «Kit apagado» de `saikit-cierre-pr`.
 En el nodo Mac usa `PATH=/opt/homebrew/bin:$PATH`.
