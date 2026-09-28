@@ -1,8 +1,12 @@
 /**
- * tablero-runbook/seguimiento-clock.ts — reloj 15/30 del seguimiento.
+ * tablero-runbook/seguimiento-clock.ts — reloj 15 del seguimiento, reporte
+ * periodico en la cuadrícula de 15 minutos.
  *
  * La vigilancia interna corre cada 15 minutos; el Telegram consolidado sale
- * cada 30. `decidirSeguimiento` es puro: nunca llama a Telegram, al disco ni
+ * en esa cuadrícula: con la ventana de 25 minutos (R12), el primer tick que
+ * la cumple envía — en cuadrícula sana ese tick es el de +1800 desde el
+ * corte, y un tick desfasado del cron que caiga entre 1500 y 1800 también
+ * envía (tolerancia de desfase, el alcance que R12 promete). `decidirSeguimiento` es puro: nunca llama a Telegram, al disco ni
  * al reloj. Dada la época actual, los resúmenes activos, las tareas sueltas,
  * el último estado confirmado (scratch de la automatización `avance-tareas`)
  * y un eventual evento inmediato, devuelve `NO_REPLY` o `SEND`.
@@ -19,12 +23,16 @@ import { renderSeguimientoV2, sanearTextoPropietario, validarMensajeV1, type Tar
 export const SCHEMA_SEGUIMIENTO_CLOCK = "seguimiento-clock.v1";
 
 /**
- * 30 minutos entre reportes periódicos; la vigilancia interna corre cada 15.
+ * Ventana de 25 minutos para el reporte periodico (R12: tolerancia de desfase
+ * del cron de 15 min — un tick que caiga entre 1500 y 1800 desde el corte
+ * ahora envía; el primer tick de cuadrícula que la cumple es +1800, y eliminar
+ * el doble mensaje con el latido es otra decisión, no de esta constante); la
+ * vigilancia interna corre cada 15.
  * El `ahora` de este módulo es época en SEGUNDOS (el RPC convierte los ms de
  * `Date.now` en la frontera): los ticks del plan se escriben 900/1800 y el
  * scratch guarda segundos.
  */
-export const VENTANA_REPORTE_SECS = 1800;
+export const VENTANA_REPORTE_SECS = 1500;
 
 export type CorteSeguimiento =
   | { kind: "esperando-primer-reporte"; inicioVentana: number }

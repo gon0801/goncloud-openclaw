@@ -543,6 +543,9 @@ json.dump(rec, open(sys.argv[1], "w"), indent=1, sort_keys=True)
 PY
 }
 modos x ok cli-ok "--flag-ok-9" "BAR-OK-9"
+# F2: estos casos cruzan con el registro del fixture (binario claude); la
+# tabla del registro debe traer su fila medida o el candado vuelve todo NO APTO.
+printf 'claude\tcli-ok\tx\tBAR-OK-9\t--\t--\t--\n' >>"$T/m.tsv"
 
 vaciar_registro
 abrir t-nat-off "$RB"
@@ -582,6 +585,113 @@ printf '%s\n' "$out" | head -1 | grep -q '^APTO' \
   || fail "con el arnes ilegible el veredicto no cambia: $out"
 printf '%s' "$out" | grep -q 'sondas nativas sin medir' \
   || fail "sin el arnes de workers debio quedar unknown explicito: $out"
+
+# 14.7 F2 (decision de David, 2026-09-27): preflight cruza la tabla de modos
+# con el registro de workers. La barra de un binario seleccionable (uno que el
+# registro puede arrancar) sin medir es razon de NO APTO: verde implica que
+# adaptador start puede arrancar. Un worker futuro agregado al registro sin
+# fila en la tabla tambien bloquea. Las filas legacy fuera del registro no
+# bloquean el verde (siguen como unknown explicito).
+REGF2="$T/workers-f2.json"
+python3 - "$REGF2" <<'PY'
+import json, sys
+ws = [{"id": b, "binary": b} for b in ("claude", "codex", "zcode", "kimi", "cursor-agent", "grok")]
+json.dump({"schema": "workers.v1", "max_external_sessions": 4, "workers": ws},
+          open(sys.argv[1], "w"), indent=1, sort_keys=True)
+PY
+for b in claude codex zcode kimi cursor-agent grok; do
+  cp "$T/bin/cli-ok" "$T/bin/$b" || fail "sin stub de $b"
+done
+modos_f2() { # $1 flag de claude, $2 barra de claude; las otras cinco filas verdes.
+  # Columna 1 = el seleccionable que cruza el registro; columna 2 = binario de
+  # mentira: los reales estan instalados en esta Mac y bin_de_tabla los
+  # resuelve antes que los stubs (medido en el primer rojo: codex real con
+  # flag "x" dio "flag no entra").
+  rm -f "$T/m.tsv"
+  printf 'claude\tcli-ok\t%s\t%s\t--\t--\t--\n' "$1" "$2" >>"$T/m.tsv"
+  local b
+  for b in codex zcode kimi cursor-agent grok; do
+    printf '%s\tcli-ok\tx\tBAR-OK-9\t--\t--\t--\n' "$b" >>"$T/m.tsv"
+  done
+}
+export CORRIDA_WORKERS_REGISTRY="$REGF2"
+
+# F2-a: barra de claude sin medir (flag tambien unknown, como la tabla real de
+# hoy) => NO APTO con la razon de la barra.
+modos_f2 unknown unknown
+abrir t-f2-claude "$RB"
+out=$(bash "$CORR" preflight t-f2-claude 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "F2: la barra de un seleccionable sin medir debio dar NO APTO:
+$out"
+printf '%s' "$out" | grep -q "barra de claude sin medir" || fail "F2: NO APTO sin la razon de la barra sin medir:
+$out"
+
+# F2-b: las seis barras medidas => APTO (verde ahora dice que se puede arrancar).
+modos_f2 x BAR-OK-9
+abrir t-f2-verde "$RB"
+out=$(bash "$CORR" preflight t-f2-verde 2>&1); rc=$?
+[ $rc -eq 0 ] || fail "F2: con las seis barras medidas debio dar APTO:
+$out"
+
+# F2-c (mutacion in-suite del contrato): volver la barra de claude a unknown,
+# con el flag ya medido, => NO APTO otra vez.
+modos_f2 x unknown
+abrir t-f2-mut "$RB"
+out=$(bash "$CORR" preflight t-f2-mut 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "F2: la mutacion barra->unknown debio dar NO APTO:
+$out"
+printf '%s' "$out" | grep -q "barra de claude sin medir" || fail "F2: la mutacion no cayo por la razon de la barra:
+$out"
+
+# F2-d: worker futuro en el registro sin fila en la tabla => NO APTO.
+python3 - "$REGF2" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["workers"].append({"id": "futuro", "binary": "futuro"})
+json.dump(d, open(sys.argv[1], "w"), indent=1, sort_keys=True)
+PY
+modos_f2 x BAR-OK-9
+abrir t-f2-futuro "$RB"
+out=$(bash "$CORR" preflight t-f2-futuro 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "F2: un worker futuro sin fila en la tabla debio dar NO APTO:
+$out"
+printf '%s' "$out" | grep -q "sin fila en la tabla de modos: futuro" || fail "F2: NO APTO sin la razon del worker futuro:
+$out"
+
+# restaurar el registro sin el worker futuro: el caso legacy necesita el
+# registro limpio de seis seleccionables.
+python3 - "$REGF2" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["workers"] = [w for w in d["workers"] if w.get("binary") != "futuro"]
+json.dump(d, open(sys.argv[1], "w"), indent=1, sort_keys=True)
+PY
+
+# F2-e: una fila legacy (deepseek) fuera del registro no bloquea el verde y
+# queda como unknown explicito.
+modos_f2 x BAR-OK-9
+printf 'deepseek\tcli-ok\tunknown\tunknown\t--\t--\t--\n' >>"$T/m.tsv"
+abrir t-f2-legacy "$RB"
+out=$(bash "$CORR" preflight t-f2-legacy 2>&1); rc=$?
+[ $rc -eq 0 ] || fail "F2: una fila legacy fuera del registro no debe bloquear el verde:
+$out"
+printf '%s' "$out" | grep -q "flag de deepseek sin medir" || fail "F2: la fila legacy debio quedar como unknown explicito:
+$out"
+# F2-f: barra doble-guion en un seleccionable es "sin medir" (el adaptador
+# la rechaza igual que unknown: adaptador.sh, caso unknown|--); no puede dar
+# APTO ni caer por "flag no entra".
+rm -f "$T/m.tsv"
+printf 'claude\tcli-ok\tx\t--\t--\t--\t--\n' >>"$T/m.tsv"
+for b in codex zcode kimi cursor-agent grok; do
+  printf '%s\tcli-ok\tx\tBAR-OK-9\t--\t--\t--\n' "$b" >>"$T/m.tsv"
+done
+abrir t-f2-dash "$RB"
+out=$(bash "$CORR" preflight t-f2-dash 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "F2-f: la barra doble-guion de un seleccionable debio dar NO APTO:
+$out"
+printf '%s' "$out" | grep -q "barra de claude sin medir" || fail "F2-f: la barra doble-guion no cayo por sin medir:
+$out"
+unset CORRIDA_WORKERS_REGISTRY
 
 kill "$VPID" 2>/dev/null
 wait "$VPID" 2>/dev/null

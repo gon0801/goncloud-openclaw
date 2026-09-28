@@ -2,15 +2,20 @@
 # Columnas: cli | binario | flag sin preguntas | texto de barra que lo comprueba | cambio a media corrida | tecla que acepta | tecla que niega.
 # unknown = no medido al escribir esto; ninguna fila posterior se apoya en un unknown sin decirlo.
 # glm es alias de zcode (mismo binario y flags): los runbooks vivos lo prescriben (base-openclaw, base-summonaikit, loop-autopilot, autopilot-fase17); compat hacia atras sin tocar runbooks.
-claude	claude	unknown	unknown	unknown	unknown	unknown
-zcode	zcode	--mode yolo	yolo	/mode yolo	unknown	unknown
-glm	zcode	--mode yolo	yolo	/mode yolo	unknown	unknown
+# Barras de los seis seleccionables medidas en vivo 2026-09-27 en esta Mac
+# (comandos, salidas y capturas: ~/.local/state/u3-loop/mediciones-14.7);
+# cada barra aparece bajo la argv start:write y start:review de workers.v1.json
+# y bajo el flag de sondeo. kimi/grok start:review con argv invalida en el
+# registro: hallazgo ortogonal, ajeno a esta tabla.
+claude	claude	--permission-mode acceptEdits	(shift+tab to cycle)	unknown	unknown	unknown
+zcode	zcode	--mode yolo	zai/glm	/mode yolo	unknown	unknown
+glm	zcode	--mode yolo	zai/glm	/mode yolo	unknown	unknown
 deepseek	deepseek	unknown	unknown	unknown	unknown	unknown
 kimi	kimi	--auto	auto	unknown	unknown	unknown
 muse	muse	--yolo	YOLO	unknown	unknown	unknown
-codex	codex	unknown	unknown	unknown	unknown	unknown
-cursor-agent	cursor-agent	-f --trust	unknown	unknown	unknown	unknown
-grok	grok	unknown	unknown	unknown	unknown	unknown
+codex	codex	--sandbox workspace-write	Ask Codex to do anything	unknown	unknown	unknown
+cursor-agent	cursor-agent	-f --trust	Cursor Agent	unknown	unknown	unknown
+grok	grok	--always-approve	always-approve	unknown	unknown	unknown
 opencode	opencode	unknown	unknown	unknown	unknown	unknown
 qwen	qwen	unknown	unknown	unknown	unknown	unknown
 dsh	dsh	unknown	unknown	unknown	unknown	unknown

@@ -531,8 +531,9 @@ export SCRATCH_FILE="$T/scratch.json"
 tick "$T0" || fail "tardanza: el tick revinto"
 grep -q "se debía a las " "$LLAMADAS" \
   || fail "tardanza: el latido no mando su aviso por el camino directo"
-# r4: la hora anunciada es la REAL, corte_base + 1800 (VENTANA_REPORTE_SECS
-# del consolidador), no corte_base + LAT_SILENCIO (residual owed de r3).
+# r4 + R12 r3: la hora anunciada es la REAL: el primer tick de la cuadricula
+# de 15 min que cumple VENTANA_REPORTE_SECS = corte_base + 1800 (ceil(1500/900)*900),
+# no corte_base + LAT_SILENCIO (residual owed de r3).
 HORA_DEBIDA="$(python3 -c "import datetime; print(datetime.datetime.fromtimestamp($((T0 - 1900 + 1800))).strftime('%H:%M'))")"
 grep -q "se debía a las $HORA_DEBIDA y no ha llegado" "$LLAMADAS" \
   || fail "tardanza: la hora anunciada no es corte_base + 1800 (salio $HORA_DEBIDA como debida?)"
@@ -564,13 +565,13 @@ tick "$T0" || fail "fresco: el tick revinto"
 [ "$(msgs)" = "0" ] || fail "fresco: con el scratch al dia salieron $(msgs) avisos de tardanza"
 unset SCRATCH_FILE
 
-# (13) 14.8 r4: en la ventana de 30 min el aviso sale UNA vez y dice la
-# verdad. El umbral sigue en 1500 s (r3: el aviso sale antes de los 30 min
-# aun en el peor caso de ticks cada 300 s), pero el consolidador sano a 4 min
-# de su proximo reporte (corte hace 1560 s; el reporte solo esta atrasado
-# pasado corte_base + 1800) no puede recibir un aviso que diga "no ha
-# llegado". Y no se repite dentro de la ventana: el propio aviso anotado con
-# ok avanza la senal.
+# (13) 14.8 r4 + R12 r3: en la ventana de 30 min el aviso sale UNA vez y dice
+# la verdad. El umbral de silencio sigue en 1500 s (r3: el aviso sale antes de
+# los 30 min aun en el peor caso de ticks cada 300 s), pero el consolidador
+# sano a 4 min de su proximo reporte REAL (corte hace 1560 s; el reporte solo
+# esta atrasado pasado corte_base + 1800, el primer tick de cuadricula que
+# cumple la ventana) no puede recibir un aviso que diga "no ha llegado". Y no
+# se repite: el propio aviso anotado con ok avanza la senal.
 LLAMADAS="$T/l17.log"; export LLAMADAS; : > "$LLAMADAS"
 solo_dejar t-limite
 montar_corrida t-limite avanza
@@ -589,6 +590,23 @@ antes="$(grep -c "te aviso desde el latido" "$LLAMADAS")"
 tick "$((T0 + 300))" || fail "limite: el segundo tick revinto"
 [ "$(grep -c "te aviso desde el latido" "$LLAMADAS")" = "$antes" ] \
   || fail "limite: el aviso se repitio dentro de la ventana"
+unset SCRATCH_FILE
+
+# (14) R12 r3 B3: el grito de atraso sale SOLO pasado corte_base + 1800 (el
+# primer tick de la cuadricula de 15 min que cumple VENTANA_REPORTE_SECS),
+# con la hora de corte + 1800. Con silencio 1860 s el reporte de verdad no
+# llego; entre el tick mudo de +900 y el reporte de +1800 nada se debe.
+LLAMADAS="$T/l18.log"; export LLAMADAS; : > "$LLAMADAS"
+solo_dejar t-intermedio
+montar_corrida t-intermedio avanza
+: > "$CORRIDA_STATE/t-intermedio/mensajes.jsonl"
+trabajando_en "$T0"
+printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((T0-1860))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-intermedio\"]}" > "$T/scratch-intermedio.json"
+export SCRATCH_FILE="$T/scratch-intermedio.json"
+tick "$T0" || fail "intermedio: el tick revinto"
+HORA_DEBIDA="$(python3 -c "import datetime; print(datetime.datetime.fromtimestamp($((T0 - 1860 + 1800))).strftime('%H:%M'))")"
+grep -q "se debía a las $HORA_DEBIDA y no ha llegado" "$LLAMADAS" \
+  || fail "intermedio: con silencio 1860 s el reporte esta atrasado y debia gritar corte_base + 1800 ($HORA_DEBIDA)"
 unset SCRATCH_FILE
 
 echo "TODO VERDE: test-corrida-latido"

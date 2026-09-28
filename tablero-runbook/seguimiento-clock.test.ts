@@ -110,6 +110,22 @@ describe("decidirSeguimiento", () => {
     assert.equal(segundo.tipo, "periodico");
   });
 
+  it("R12: cuadricula de 15 min — tick 900 mudo, tick desfasado 1795 envia (tolerancia), tick 1800 envia; ciclo nuevo 2700 mudo y 3600 envia", () => {
+    const activas = [resumen14(1, 4, 25)];
+    const d900 = decidirSeguimiento({ ahora: 900, previo: corteEn(0, activas), activas, inmediato: null });
+    assert.equal(d900.accion, "NO_REPLY");
+    const dDesfase = decidirSeguimiento({ ahora: 1795, previo: corteEn(0, activas), activas, inmediato: null });
+    assert.equal(dDesfase.accion, "SEND");
+    if (dDesfase.accion !== "SEND") throw new Error("desfase R12 inesperado");
+    assert.equal(dDesfase.tipo, "periodico");
+    const d1800 = decidirSeguimiento({ ahora: 1800, previo: corteEn(0, activas), activas, inmediato: null });
+    assert.equal(d1800.accion, "SEND");
+    const d2700 = decidirSeguimiento({ ahora: 2700, previo: corteEn(1800, activas), activas, inmediato: null });
+    assert.equal(d2700.accion, "NO_REPLY");
+    const d3600 = decidirSeguimiento({ ahora: 3600, previo: corteEn(1800, activas), activas, inmediato: null });
+    assert.equal(d3600.accion, "SEND");
+  });
+
   it("a failed delivery does not advance the confirmed cut", () => {
     const activas = [resumen14(1, 4, 25)];
     const d1 = decidirSeguimiento({ ahora: 1800, previo: corteEn(0, activas), activas, inmediato: null });

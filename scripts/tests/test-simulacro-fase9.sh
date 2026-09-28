@@ -137,6 +137,18 @@ export SIM9_MSG_ID=9001
 export GH_BIN="$FIX/gh-falso.sh"
 export CORRIDA_CANDADO_gh=permitido CORRIDA_CANDADO_ssh=permitido
 export CORRIDA_CANDADO_red_externa=permitido
+# launchctl de mentira: el ensayo corre en un mundo sin launchd (14.7-r4 B4),
+# igual que el runner de CI; el agente real de esta Mac queda cargado e
+# intacto, solo el `list` que mira el chequeo del reloj viejo sale sin el.
+cat >"$T/bin/launchctl" <<'STUB'
+#!/bin/sh
+if [ "${1:-}" = "list" ]; then
+  /bin/launchctl list 2>/dev/null | grep -vF 'ai.goncloud.corrida-latido'
+  exit 0
+fi
+exec /bin/launchctl "$@"
+STUB
+chmod +x "$T/bin/launchctl"
 export PATH="$T/bin:$PATH"
 export SIM_TOPE_C1=15 SIM_TOPE_C2=15 SIM_TOPE_C3=20 SIM_TOPE_C4=20 SIM_TOPE_C5=30 SIM_TOPE_C6=30
 export SIM_ESPERA_DOBLE=6
@@ -147,7 +159,13 @@ EVID1="$T/evidencia-1.md"
 salida1="$(bash "$ARNES" --ensayo --salida "$EVID1" --tope-pared 300 2>&1)"
 rc1=$?
 [ "$rc1" -eq 0 ] || fail "todo sano: se esperaba salida 0 (7/7 FUNCIONA), salio $rc1 -- $salida1"
-printf '%s\n' "$salida1" | grep -q '^arrancada sim9-' || fail "no se vio 'arrancada sim9-...': $salida1"
+# R12/14.7-r4 B4: el ensayo trae mundo sintetico (tabla con tui-falso), asi
+# que lleva SU PROPIO registro de workers: el candado F2 del preflight jamas
+# puede cruzar esa tabla con el registro real del checkout.
+printf '%s\n' "$salida1" | grep -q "sin fila en la tabla de modos:" \
+  && fail "el ensayo no trajo su propio registro de workers (el candado F2 cruzo la tabla sintetica con el registro real):
+$salida1"
+printf '%s\n' "$salida1" | grep -q "arrancada sim9-" || fail "no se vio 'arrancada sim9-...': $salida1"
 [ -f "$EVID1" ] || fail "no se genero la evidencia en $EVID1"
 
 # (1b) tras el trap: cero sesiones y cero marcas en el socket propio.

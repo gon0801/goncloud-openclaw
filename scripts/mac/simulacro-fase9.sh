@@ -468,6 +468,11 @@ generar_tabla() {
     printf 'tui-falso\tsim9-tui-falso\t\tTUI-FALSO\tunknown\tEnter\tEscape\n'
     printf 'glm\tglm\t--mode yolo\tyolo\t/mode yolo\tunknown\tunknown\n'
   } > "$DIR_SIM/cli-modos.tsv" || return 1
+  # El ensayo trae mundo sintetico, registro de workers incluido (14.7-r4 B4):
+  # el candado F2 del preflight cruza la tabla contra ESTE registro, no contra
+  # el real del checkout (una tabla de ensayo no trae filas de los seis reales).
+  printf '%s\n' '{"schema":"workers.v1","max_external_sessions":4,"workers":[{"id":"tui-falso","binary":"tui-falso"}]}' \
+    > "$DIR_SIM/workers.v1.json" || return 1
   TABLA="$DIR_SIM/cli-modos.tsv"
 }
 
@@ -529,7 +534,7 @@ arrancar || { RAZONES="
 # APTO, se limpia igual que un prerrequisito fallido y se sale NO APTO —
 # ningun caso ni sesion del simulacro llego a lanzarse (ver nota de diseno
 # arriba).
-PF_SALIDA="$("$CORRIDA_BIN" preflight "$SIM_ID" 2>&1)"
+PF_SALIDA="$(CORRIDA_WORKERS_REGISTRY="$DIR_SIM/workers.v1.json" "$CORRIDA_BIN" preflight "$SIM_ID" 2>&1)"
 if ! printf '%s\n' "$PF_SALIDA" | head -1 | grep -q '^APTO'; then
   RAZONES="
 - corrida.sh preflight no dio APTO:
@@ -970,12 +975,12 @@ print(json.dumps(d))
 " | con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" gateway call runbook.progress.decide --params "$(cat)" --timeout 30000 2>/dev/null
 }
 correr_caso7() {
-  local simulado="runbook.progress.decide modo:tick, estado sintetico {corte:{kind:reporte-confirmado, ultimoReporteConfirmado: ahora-3600}} (control negativo: ahora-1799); con seguimiento.v2 el latido de 60 min lo cubre el corte de 30"
+  local simulado="runbook.progress.decide modo:tick, estado sintetico {corte:{kind:reporte-confirmado, ultimoReporteConfirmado: ahora-3600}} (control negativo: ahora-1400, bajo la ventana de 1500 del R12); con seguimiento.v2 el latido de 60 min lo cubre el corte de 30"
   local ahora; ahora="$(date +%s)"
   local ahora_iso; ahora_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  local neg; neg="$(caso7_decide "$ahora" "$((ahora-1799))")"
+  local neg; neg="$(caso7_decide "$ahora" "$((ahora-1400))")"
   if ! printf '%s' "$neg" | grep -q '"accion":"NO_REPLY"'; then
-    escribir_caso 7 "NO FUNCIONA" "el control negativo (ahora-1799) no dio NO_REPLY: $neg" "$ahora_iso" "" "" "" "$simulado"
+    escribir_caso 7 "NO FUNCIONA" "el control negativo (ahora-1400) no dio NO_REPLY: $neg" "$ahora_iso" "" "" "" "$simulado"
     return
   fi
   local pos; pos="$(caso7_decide "$ahora" "$((ahora-3600))")"
@@ -1003,7 +1008,7 @@ except Exception:
   [ -n "$msg_id" ] || { escribir_caso 7 "NO FUNCIONA" "el message send del periodico no devolvio messageId" "$ahora_iso" "" "" "" "$simulado"; return; }
   local hora_msg; hora_msg="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   escribir_caso 7 "FUNCIONA" "" "$ahora_iso" "$hora_msg" "$msg_id" \
-    "runbook.progress.decide (modulo puro): control negativo ahora-1799 => NO_REPLY; ahora-3600 => SEND periodico; mandado con message send --json y prefijo" \
+    "runbook.progress.decide (modulo puro): control negativo ahora-1400 => NO_REPLY; ahora-3600 => SEND periodico; mandado con message send --json y prefijo" \
     "$simulado"
 }
 
