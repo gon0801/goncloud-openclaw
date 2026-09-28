@@ -19,12 +19,14 @@ import { renderSeguimientoV2, sanearTextoPropietario, validarMensajeV1, type Tar
 export const SCHEMA_SEGUIMIENTO_CLOCK = "seguimiento-clock.v1";
 
 /**
- * 30 minutos entre reportes periódicos; la vigilancia interna corre cada 15.
+ * 25 minutos entre reportes periódicos (R12: el consolidador reporta antes de
+ * que el latido de 25-30 minutos actúe, para no duplicar mensaje); la
+ * vigilancia interna corre cada 15.
  * El `ahora` de este módulo es época en SEGUNDOS (el RPC convierte los ms de
- * `Date.now` en la frontera): los ticks del plan se escriben 900/1800 y el
+ * `Date.now` en la frontera): los ticks del plan se escriben 900/1500 y el
  * scratch guarda segundos.
  */
-export const VENTANA_REPORTE_SECS = 1800;
+export const VENTANA_REPORTE_SECS = 1500;
 
 export type CorteSeguimiento =
   | { kind: "esperando-primer-reporte"; inicioVentana: number }

@@ -110,6 +110,14 @@ describe("decidirSeguimiento", () => {
     assert.equal(segundo.tipo, "periodico");
   });
 
+  it("R12: la ventana de 25 minutos reporta periodico a los 1500 (con 1800 seria NO_REPLY)", () => {
+    const activas = [resumen14(1, 4, 25)];
+    const d = decidirSeguimiento({ ahora: 1500, previo: corteEn(0, activas), activas, inmediato: null });
+    assert.equal(d.accion, "SEND");
+    if (d.accion !== "SEND") throw new Error("tick R12 inesperado");
+    assert.equal(d.tipo, "periodico");
+  });
+
   it("a failed delivery does not advance the confirmed cut", () => {
     const activas = [resumen14(1, 4, 25)];
     const d1 = decidirSeguimiento({ ahora: 1800, previo: corteEn(0, activas), activas, inmediato: null });
