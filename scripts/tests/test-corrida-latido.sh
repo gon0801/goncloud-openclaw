@@ -42,6 +42,13 @@ printf '%s\n' "GH $*" >> "${GH_LOG:-/dev/null}"
 case "$1" in
   run)
     case "$*" in *"--workflow quality.yml"*) ;; *) exit 5;; esac
+    # fiel al gh real: el filtro --branch decide que corridas existen; con
+    # GH_RAMA_STRICTA solo esa rama tiene historial y el resto devuelve [].
+    if [ -n "${GH_RAMA_STRICTA:-}" ]; then
+      rama=""; prev=""
+      for a in "$@"; do [ "$prev" = "--branch" ] && rama="$a"; prev="$a"; done
+      [ "$rama" = "$GH_RAMA_STRICTA" ] || { printf '[]\n'; exit 0; }
+    fi
     # fiel al gh real (2.98.0): --json rechaza campos desconocidos
     campos=""; prev=""
     for a in "$@"; do [ "$prev" = "--json" ] && campos="$a"; prev="$a"; done
@@ -465,6 +472,48 @@ grep -q "no se pudo anotar el fallo" "$T/tc.err" || fail "TC: la persistencia ca
 # SA: la consulta caida deja rastro (stderr + evento), no un salto en silencio.
 grep -q "no se pudo consultar" "$T/ghc.err" || fail "SA: la consulta de CI caida no avisa en stderr"
 [ "$(evjson lat-gh gh-fallo)" = "1" ] || fail "SA: la consulta de CI caida no dejo evento gh-fallo"
+
+# (11d) 14.9: provocacion sin tocar la rama real. Un repo de mentira cuyo
+# origin/HEAD apunta a una rama de prueba desechable hace de "rama por
+# defecto" vigilada (la derivacion real del latido: symbolic-ref de
+# REPO_DIR). El gh de mentira es FIEL con GH_RAMA_STRICTA: solo esa rama
+# tiene historial y una consulta a main u otra devuelve []. El fallo de
+# quality.yml en la rama de prueba dispara el aviso claro al usuario
+# (DETENIDA en lenguaje de usuario que dice que ya se esta revisando), sin
+# sha en el mensaje y con registro local donde el lead lo lee.
+LLAMADAS="$T/l18.log"; export LLAMADAS; : > "$LLAMADAS"
+GH149="$T/gh149.log"; : > "$GH149"
+solo_dejar lat-149
+montar_corrida lat-149 avanza
+trabajando_en "$T0"
+FIX149="$T/repo-149"
+mkdir -p "$FIX149"
+git -C "$FIX149" init -q
+git -C "$FIX149" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/prueba-14.9
+( REPO_DIR="$FIX149" GH_LOG="$GH149" GH_RAMA_STRICTA="prueba-14.9" \
+  GH_CI=rojo GH_SHA=feed888777666 tick "$T0" ) || fail "14.9: el tick de la provocacion revinto"
+[ "$(msgs)" = "1" ] || fail "14.9: salieron $(msgs) mensajes (debia 1: el aviso de rojo)"
+grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[DETENIDA\]" \
+  || fail "14.9: la provocacion no salio como DETENIDA"
+grep -qi "quedo en rojo" "$LLAMADAS" || fail "14.9: el aviso no habla en palabras de usuario"
+grep -q "ya se esta revisando" "$LLAMADAS" \
+  || fail "14.9: el aviso no dice que ya se esta revisando"
+grep -q -- "--branch prueba-14.9" "$GH149" \
+  || fail "14.9: la verificacion no consulto la rama de prueba derivada de origin/HEAD"
+grep -q -- "--branch main" "$GH149" \
+  && fail "14.9: la provocacion consulto la rama real (main)"
+d="$(grep -n "OPENCLAW message send" "$LLAMADAS" | tail -1 | cut -d: -f1)"
+tail -n +"$d" "$LLAMADAS" | sed '1s/.* -m //' >"$T/ci149-msg.txt"
+( . scripts/mac/corrida/lib.sh && mensaje_valido "$T/ci149-msg.txt" ) \
+  || fail "14.9: el aviso no pasa el validador de lenguaje de usuario"
+grep -qE '[0-9a-f]{7,}' "$T/ci149-msg.txt" && fail "14.9: el aviso se filtro un sha"
+[ -f "$CORRIDA_STATE/lat-149/ci-rojo.json" ] || fail "14.9: sin registro local donde el lead lee"
+CIC="$CORRIDA_STATE/lat-149/ci-rojo.json" python3 -c "
+import json,os
+d=json.load(open(os.environ['CIC']))
+assert d.get('sha')=='feed888777666', d
+assert d.get('autor')=='gon0801', d
+" || fail "14.9: el registro local no trae sha y autor del cambio automatico"
 
 # (12) 14.8 r2: el consolidador callado no deja al avance sin aviso. Con el
 # scratch del cron avance-tareas legible pero congelado hace 31m40s y NINGUN
