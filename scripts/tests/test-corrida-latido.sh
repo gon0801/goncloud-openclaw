@@ -482,6 +482,11 @@ export SCRATCH_FILE="$T/scratch.json"
 tick "$T0" || fail "tardanza: el tick revinto"
 grep -q "se debía a las " "$LLAMADAS" \
   || fail "tardanza: el latido no mando su aviso por el camino directo"
+# r4: la hora anunciada es la REAL, corte_base + 1800 (VENTANA_REPORTE_SECS
+# del consolidador), no corte_base + LAT_SILENCIO (residual owed de r3).
+HORA_DEBIDA="$(python3 -c "import datetime; print(datetime.datetime.fromtimestamp($((T0 - 1900 + 1800))).strftime('%H:%M'))")"
+grep -q "se debía a las $HORA_DEBIDA y no ha llegado" "$LLAMADAS" \
+  || fail "tardanza: la hora anunciada no es corte_base + 1800 (salio $HORA_DEBIDA como debida?)"
 MSJ="$CORRIDA_STATE/t-tarda/mensajes.jsonl" python3 -c "
 import json,os
 ls=[json.loads(l) for l in open(os.environ['MSJ']) if l.strip()]
@@ -510,11 +515,13 @@ tick "$T0" || fail "fresco: el tick revinto"
 [ "$(msgs)" = "0" ] || fail "fresco: con el scratch al dia salieron $(msgs) avisos de tardanza"
 unset SCRATCH_FILE
 
-# (13) 14.8 r3: el umbral es 30 min MENOS un intervalo del tick. El latido
-# corre cada 300 s: con umbral 1800, una senal de 1799 s no avisaba en ese
-# tick y el siguiente llegaba a los 2099 s (peor hueco de 35 min). Con la
-# senal hace 1560 s (26 min) el aviso ya tiene que salir; con el umbral viejo
-# de 1800 este caso quedaba en rojo.
+# (13) 14.8 r4: en la ventana de 30 min el aviso sale UNA vez y dice la
+# verdad. El umbral sigue en 1500 s (r3: el aviso sale antes de los 30 min
+# aun en el peor caso de ticks cada 300 s), pero el consolidador sano a 4 min
+# de su proximo reporte (corte hace 1560 s; el reporte solo esta atrasado
+# pasado corte_base + 1800) no puede recibir un aviso que diga "no ha
+# llegado". Y no se repite dentro de la ventana: el propio aviso anotado con
+# ok avanza la senal.
 LLAMADAS="$T/l17.log"; export LLAMADAS; : > "$LLAMADAS"
 solo_dejar t-limite
 montar_corrida t-limite avanza
@@ -523,9 +530,16 @@ trabajando_en "$T0"
 printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((T0-1560))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-limite\"]}" > "$T/scratch-limite.json"
 export SCRATCH_FILE="$T/scratch-limite.json"
 tick "$T0" || fail "limite: el tick revinto"
-grep -q "se debía a las " "$LLAMADAS" \
+grep -q "te aviso desde el latido" "$LLAMADAS" \
   || fail "limite: con la senal hace 1560 s el aviso ya tiene que salir"
+if grep -q "no ha llegado" "$LLAMADAS"; then
+  fail "limite: con el consolidador sano (el reporte aun no esta atrasado) el aviso dice que no ha llegado"
+fi
 [ "$(evjson t-limite avance-tardanza)" = "1" ] || fail "limite: no quedo constancia en eventos.jsonl"
+antes="$(grep -c "te aviso desde el latido" "$LLAMADAS")"
+tick "$((T0 + 300))" || fail "limite: el segundo tick revinto"
+[ "$(grep -c "te aviso desde el latido" "$LLAMADAS")" = "$antes" ] \
+  || fail "limite: el aviso se repitio dentro de la ventana"
 unset SCRATCH_FILE
 
 echo "TODO VERDE: test-corrida-latido"

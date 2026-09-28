@@ -16,6 +16,11 @@ LAT_HORA_MSJ=3600   # sin mensaje aunque todo avance: a la hora, uno
 LAT_SILENCIO=1500   # 30 min menos un intervalo del tick (300 s): el aviso
                     # sale ANTES de los 30 min aun en el peor caso (ticks
                     # cada 300 s => maximo 1799 s de hueco), 14.8 r3
+LAT_VENTANA=1800    # la ventana REAL del reporte periodico (VENTANA_REPORTE_
+                    # SECS en tablero-runbook/seguimiento-clock.ts; no hay
+                    # constante compartida: bash contra plugin del gateway).
+                    # Solo pasado corte_base + ella el reporte esta atrasado
+                    # y el aviso grita; antes, avance normal, 14.8 r4
 
 evento_jsonl() { # $1 dir de la corrida; pares EVT_<campo>=valor en el entorno.
                  # Solo los campos del evento van en la linea: la linea ya vive
@@ -146,17 +151,23 @@ latido_de() { # $1 dir de la corrida (con el registro adentro)
 
   # (1b) 14.8 r2: el aviso de avance lo manda el corte del consolidador (cron
   # avance-tareas), y cuando ese corte calla nadie avisa — el silencio de sim9.
-  # Este bloque es la garantia del latido: con corrida abierta y mas de 30 min
-  # sin NINGUNA senal de avance (ni confirmacion del consolidador ni mensaje
-  # entregado a David), manda su PROPIO aviso por el camino directo
-  # (corrida_aviso_directo, sin pasar por la acumulacion del AVANZA, que es lo
-  # callado) y deja constancia en eventos.jsonl AUNQUE el envio falle (el
-  # proximo tick reintenta: mensajes.jsonl no cambio). La autodeduplicacion no
-  # necesita estado nuevo: el aviso entregado queda anotado en mensajes.jsonl
-  # con ok, la senal avanza sola y el proximo tick no reavisa hasta otro rago
-  # de 30 min. Con el gateway sin respuesta (cron list ilegible) el control se
-  # salta este tick con su rastro en stderr: contra un gateway callado no hay
-  # envio posible; al volver, si el corte sigue callado, avisa.
+  # Este bloque es la garantia del latido: con corrida abierta y mas de
+  # LAT_SILENCIO (25 min) sin NINGUNA senal de avance (ni confirmacion del
+  # consolidador ni mensaje entregado a David), manda su PROPIO aviso por el
+  # camino directo (corrida_aviso_directo, sin pasar por la acumulacion del
+  # AVANZA, que es lo callado) y deja constancia en eventos.jsonl AUNQUE el
+  # envio falle (el proximo tick reintenta: mensajes.jsonl no cambio). La
+  # autodeduplicacion no necesita estado nuevo: el aviso entregado queda
+  # anotado en mensajes.jsonl con ok, la senal avanza sola y el proximo tick
+  # no reavisa hasta otro rago de LAT_SILENCIO. Con el gateway sin respuesta
+  # (cron list ilegible) el control se salta este tick con su rastro en
+  # stderr: contra un gateway callado no hay envio posible; al volver, si el
+  # corte sigue callado, avisa. r4: el aviso no grita atraso antes de tiempo.
+  # El umbral de silencio (1500) es MENOR que la ventana del consolidador
+  # (1800): dentro de la ventana el reporte no esta atrasado y el aviso sale
+  # como avance normal; pasado corte_base + LAT_VENTANA el reporte de verdad
+  # no llego y "se debía ... y no ha llegado" dice la verdad (con la hora
+  # real: owed es corte_base + 1800, no + LAT_SILENCIO).
   local lect senal corte_base apertura owed cambio_td rc_td
   lect="$(lat_avance_ultima_senal "$dir")"
   if [ "$lect" = "ILEGIBLE" ]; then
@@ -172,11 +183,16 @@ except Exception: print(0)" 2>/dev/null)"
     [ "$apertura" -gt "$senal" ] && senal="$apertura"
     if [ $(( now - senal )) -ge "$LAT_SILENCIO" ]; then
       if [ "$corte_base" -gt 0 ]; then
-        owed=$(( corte_base + LAT_SILENCIO ))
-        cambio_td="el reporte de avance se debía a las $(OWED_HM="$owed" python3 -c "
+        owed=$(( corte_base + LAT_VENTANA ))
+        if [ "$now" -ge "$owed" ]; then
+          cambio_td="el reporte de avance se debía a las $(OWED_HM="$owed" python3 -c "
 import os
 from datetime import datetime
 print(datetime.fromtimestamp(int(os.environ['OWED_HM'])).strftime('%H:%M'))" 2>/dev/null) y no ha llegado; te aviso desde el latido"
+        else
+          owed=""
+          cambio_td="el reporte de avance no está atrasado; te aviso desde el latido"
+        fi
       else
         owed=""
         cambio_td="el reloj de avance no dejó rastro legible; te aviso desde el latido"
