@@ -675,6 +675,8 @@ abrir t-f2-legacy "$RB"
 out=$(bash "$CORR" preflight t-f2-legacy 2>&1); rc=$?
 [ $rc -eq 0 ] || fail "F2: una fila legacy fuera del registro no debe bloquear el verde:
 $out"
+printf '%s' "$out" | grep -q "flag de deepseek sin medir" || fail "F2: la fila legacy debio quedar como unknown explicito:
+$out"
 # F2-f: barra doble-guion en un seleccionable es "sin medir" (el adaptador
 # la rechaza igual que unknown: adaptador.sh, caso unknown|--); no puede dar
 # APTO ni caer por "flag no entra".
