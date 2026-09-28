@@ -787,6 +787,52 @@ flag_de_tabla() { # $1 flag de la tabla; rc 2 = invalido (mensaje a stderr)
   return 0
 }
 
+# _corrida_entregar <id> <sim> <etq> <archivo> — la cola comun de entrega:
+# prefijo de la linea 1 (practica o real, con el sed de siempre), destino del
+# registro, envio por Telegram y anotacion honesta (at, etiqueta, ok,
+# message_id, texto) en mensajes.jsonl. La usan el camino inmediato de
+# corrida_mensaje y corrida_aviso_directo, para que ambos entregen EXACTAMENTE
+# igual (14.8 r2). Consume $4 (el mktemp del llamador).
+_corrida_entregar() { # rc 0 = envio confirmado; rc 1 = fallo (queda anotado ok:false)
+  local id="$1" sim="$2" etq="$3" m="$4" dest texto rc=0 sil="" salida pref
+  # El prefijo de la primera linea, en TODOS los mensajes de la corrida: en
+  # practica, avisa que no hace falta contestar (reemplaza el viejo
+  # "[SIMULACRO] "); en una corrida real, la marca como tal.
+  pref="▶️ "
+  [ "$sim" = "true" ] && pref="🧪 PRÁCTICA — no contestes "
+  sed -i.bak "1s#^#$pref#" "$m" && rm -f "$m.bak"
+  dest="$(json_campo "$(registro_de "$id")" canal.destino)"
+  [ -n "$dest" ] || { echo "registro sin destino" >&2; rm -f "$m"; return 1; }
+  # seguimiento.v1: lo rutinario (ABIERTA, CERRADA y el AVANZA directo del
+  # latido) en silencio; DETENIDA y NECESITO TU RESPUESTA suenan: en la
+  # etiqueta que pide respuesta, fallar hacia silencio es el peor sentido de
+  # fallar.
+  case "$etq" in CERRADA|ABIERTA|AVANZA) sil="--silent";; esac
+  texto="$(cat "$m")"
+  salida="$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" message send --channel telegram -t "$dest" $sil --json -m "$texto" 2>/dev/null)" || rc=1
+  CORR_MSG_ETQ="$etq" CORR_MSG_OK="$rc" CORR_MSG_DIR="$CORRIDA_STATE/$id" CORR_MSG_TEXTO="$texto" CORR_MSG_SALIDA="$salida" python3 -c "
+import json,os,time
+ok=os.environ['CORR_MSG_OK']=='0'
+mid=None
+if ok:
+  sal=os.environ.get('CORR_MSG_SALIDA','')
+  try:
+    j=json.loads(sal[sal.index('{'):])
+    v=j.get('messageId')
+    if isinstance(v,int) and not isinstance(v,bool):
+      mid=v
+    elif isinstance(v,str) and v.lstrip('-').isdigit():
+      mid=int(v)
+  except Exception:
+    pass
+d={'at':int(time.time()),'etiqueta':os.environ['CORR_MSG_ETQ'],'ok':ok,
+   'message_id':mid,'texto':os.environ['CORR_MSG_TEXTO']}
+open(os.path.join(os.environ['CORR_MSG_DIR'],'mensajes.jsonl'),'a').write(json.dumps(d)+chr(10))
+" 2>/dev/null
+  rm -f "$m"
+  return $rc
+}
+
 # corrida_mensaje <id> <ETIQUETA> <avance> <cambio> <sigue> <necesito>
 # El avance es la referencia de la linea 1 (p. ej. "2 de 5 partes terminadas");
 # vacio omite ese pedazo entero (ABIERTA, cuando todavia no se sabe cuantas
@@ -856,42 +902,34 @@ open('$evtmp','w').write(json.dumps(d)+chr(10))
   fi
   local M2; M2="$(mktemp)" || return 1
   aviso_cuerpo "" "$etq" "$enc" "$avance" "$cambio" "$sigue" "$necesito" > "$M2"
-  # El prefijo de la primera linea, en TODOS los mensajes de la corrida: en
-  # practica, avisa que no hace falta contestar (reemplaza el viejo
-  # "[SIMULACRO] "); en una corrida real, la marca como tal.
-  local pref="▶️ "
-  [ "$sim" = "true" ] && pref="🧪 PRÁCTICA — no contestes "
-  sed -i.bak "1s#^#$pref#" "$M2" && rm -f "$M2.bak"
-  local dest; dest="$(json_campo "$reg" canal.destino)"
-  [ -n "$dest" ] || { echo "registro sin destino" >&2; rm -f "$M2"; return 1; }
-  local texto rc=0 sil="" salida
-  # seguimiento.v1: lo rutinario (ABIERTA, CERRADA) en silencio; DETENIDA y
-  # NECESITO TU RESPUESTA suenan: en la etiqueta que pide respuesta, fallar hacia
-  # silencio es el peor sentido de fallar.
-  case "$etq" in CERRADA|ABIERTA) sil="--silent";; esac
-  texto="$(cat "$M2")"
-  salida="$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" message send --channel telegram -t "$dest" $sil --json -m "$texto" 2>/dev/null)" || rc=1
-  CORR_MSG_ETQ="$etq" CORR_MSG_OK="$rc" CORR_MSG_DIR="$CORRIDA_STATE/$id" CORR_MSG_TEXTO="$texto" CORR_MSG_SALIDA="$salida" python3 -c "
-import json,os,time
-ok=os.environ['CORR_MSG_OK']=='0'
-mid=None
-if ok:
-  sal=os.environ.get('CORR_MSG_SALIDA','')
-  try:
-    j=json.loads(sal[sal.index('{'):])
-    v=j.get('messageId')
-    if isinstance(v,int) and not isinstance(v,bool):
-      mid=v
-    elif isinstance(v,str) and v.lstrip('-').isdigit():
-      mid=int(v)
-  except Exception:
-    pass
-d={'at':int(time.time()),'etiqueta':os.environ['CORR_MSG_ETQ'],'ok':ok,
-   'message_id':mid,'texto':os.environ['CORR_MSG_TEXTO']}
-open(os.path.join(os.environ['CORR_MSG_DIR'],'mensajes.jsonl'),'a').write(json.dumps(d)+chr(10))
-" 2>/dev/null
-  rm -f "$M2"
-  return $rc
+  # El prefijo de la linea 1, el envio y la anotacion en mensajes.jsonl van
+  # por la cola comun de entrega (14.8 r2): la misma que usa el camino directo
+  # del latido, para que ambos entregen exactamente igual.
+  _corrida_entregar "$id" "$sim" "$etq" "$M2"
+}
+
+# corrida_aviso_directo <id> <ETIQUETA> <avance> <cambio> <sigue> <necesito>
+# La entrega DIRECTA de un aviso, sin pasar por la acumulacion del AVANZA ni
+# por el corte del consolidador: el latido la usa para mandar su PROPIO aviso
+# cuando el consolidador calla (14.8 r2). Mismas validaciones de entrada que
+# corrida_mensaje (registro existe, etiqueta en el conjunto cerrado), mismo
+# cuerpo (aviso_cuerpo, unica fuente del formato y de las negritas), mismo
+# gate mensaje_valido (fail cerrado) y la MISMA cola de entrega
+# (_corrida_entregar): su fila en mensajes.jsonl con el ok de la entrega.
+corrida_aviso_directo() {
+  local id="$1" etq="$2" avance="$3" cambio="$4" sigue="$5" necesito="$6"
+  local reg; reg="$(registro_de "$id")"
+  [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
+  case "$etq" in
+    ABIERTA|AVANZA|NECESITO\ TU\ RESPUESTA|DETENIDA|CERRADA) ;;
+    *) echo "corrida_aviso_directo: etiqueta fuera del conjunto: $etq" >&2; return 1;;
+  esac
+  local sim; sim="$(json_campo "$reg" simulacro)"
+  local enc; enc="$(corrida_encabezado "$id")"
+  local M; M="$(mktemp)" || return 1
+  aviso_cuerpo "" "$etq" "$enc" "$avance" "$cambio" "$sigue" "$necesito" > "$M"
+  mensaje_valido "$M" || { echo "mensaje fuera de contrato" >&2; rm -f "$M"; return 1; }
+  _corrida_entregar "$id" "$sim" "$etq" "$M"
 }
 
 # --- Fase 14, Task 3: lecturas puras del registro versionado de workers

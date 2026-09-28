@@ -13,6 +13,7 @@
 
 LAT_TOPE_MSG=900    # 15 min entre mensajes, salvo NECESITO
 LAT_HORA_MSJ=3600   # sin mensaje aunque todo avance: a la hora, uno
+LAT_SILENCIO=1800   # 30 min sin NINGUNA senal de avance: el latido avisa solo
 
 evento_jsonl() { # $1 dir de la corrida; pares EVT_<campo>=valor en el entorno.
                  # Solo los campos del evento van en la linea: la linea ya vive
@@ -22,6 +23,64 @@ import json,os
 p={k[4:]:v for k,v in os.environ.items() if k.startswith('EVT_') and k not in ('EVT_DIR','EVT_AT')}
 p['at']=os.environ['EVT_AT']
 open(os.path.join(os.environ['EVT_DIR'],'eventos.jsonl'),'a').write(json.dumps(p)+chr(10))" 2>/dev/null
+}
+
+lat_consolidador_corte() { # -> "ILEGIBLE" (el gateway no entrego la lista de
+                           # crons) o "<epoch>": la base del corte del
+                           # consolidador (cron avance-tareas) tomada de su
+                           # scratch, ultimoReporteConfirmado o inicioVentana
+                           # segun kind. 0 = sin rastro legible (sin cron, o
+                           # scratch ausente/roto/otra version).
+  local ids id0 out
+  ids="$(cron_jobs_de avance-tareas)"
+  case "$ids" in
+    ILEGIBLE|"") printf 'ILEGIBLE\n'; return 0;;
+    NINGUNO) printf '0\n'; return 0;;
+  esac
+  id0="$(printf '%s\n' "$ids" | sed -n '1p')"
+  [ -n "$id0" ] || { printf '0\n'; return 0; }
+  out="$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" cron scratch "$id0" 2>/dev/null)" || out=""
+  SCRATCH_RAW="$out" python3 -c "
+import json,os
+try:
+  t=os.environ['SCRATCH_RAW']
+  d=json.loads(t[t.index('{'):])
+  if d.get('schema')!='seguimiento-clock.v1': raise ValueError
+  c=d.get('corte') or {}
+  k=c.get('kind')
+  v=c.get('ultimoReporteConfirmado') if k=='reporte-confirmado' else (c.get('inicioVentana') if k=='esperando-primer-reporte' else None)
+  if isinstance(v,bool) or not isinstance(v,(int,float)) or v<=0: raise ValueError
+  print(int(v))
+except Exception:
+  print(0)" 2>/dev/null
+}
+
+lat_avance_ultima_senal() { # $1 dir de la corrida -> "ILEGIBLE" o "<senal> <corte>".
+                            # senal: la ultima vez que hubo señal de avance,
+                            # el max entre el ultimo mensaje entregado (linea
+                            # con ok en mensajes.jsonl) y la confirmacion del
+                            # consolidador (funcion de arriba). corte: la base
+                            # del consolidador, para decir a que hora se debia
+                            # el reporte que falta.
+  local at cr
+  cr="$(lat_consolidador_corte)"
+  [ "$cr" = "ILEGIBLE" ] && { printf 'ILEGIBLE\n'; return 0; }
+  at="$(MJL="$1/mensajes.jsonl" python3 -c "
+import json,os
+at=0
+try:
+  for l in open(os.environ['MJL']):
+    try: d=json.loads(l)
+    except Exception: continue
+    if d.get('ok') is True:
+      v=d.get('at')
+      if isinstance(v,(int,float)) and not isinstance(v,bool) and v>at: at=v
+except Exception:
+  pass
+print(int(at))" 2>/dev/null)"
+  [ -n "$at" ] || at=0
+  [ "$cr" -gt "$at" ] && at="$cr"
+  printf '%s %s\n' "$at" "$cr"
 }
 
 lat_escribir() { # $1 latido.json $2 firma $3 ult_msj $4 etq $5 firma_vigia $6 ci_sha
@@ -80,6 +139,50 @@ latido_de() { # $1 dir de la corrida (con el registro adentro)
     else
       # sin memoria nueva: el proximo tick reintenta con el mismo cambio.
       EVT_tipo=mensaje EVT_etiqueta="$P_ETIQ" EVT_ok=false evento_jsonl "$dir"
+    fi
+  fi
+
+  # (1b) 14.8 r2: el aviso de avance lo manda el corte del consolidador (cron
+  # avance-tareas), y cuando ese corte calla nadie avisa — el silencio de sim9.
+  # Este bloque es la garantia del latido: con corrida abierta y mas de 30 min
+  # sin NINGUNA senal de avance (ni confirmacion del consolidador ni mensaje
+  # entregado a David), manda su PROPIO aviso por el camino directo
+  # (corrida_aviso_directo, sin pasar por la acumulacion del AVANZA, que es lo
+  # callado) y deja constancia en eventos.jsonl AUNQUE el envio falle (el
+  # proximo tick reintenta: mensajes.jsonl no cambio). La autodeduplicacion no
+  # necesita estado nuevo: el aviso entregado queda anotado en mensajes.jsonl
+  # con ok, la senal avanza sola y el proximo tick no reavisa hasta otro rago
+  # de 30 min. Con el gateway sin respuesta (cron list ilegible) el control se
+  # salta este tick con su rastro en stderr: contra un gateway callado no hay
+  # envio posible; al volver, si el corte sigue callado, avisa.
+  local lect senal corte_base apertura owed cambio_td rc_td
+  lect="$(lat_avance_ultima_senal "$dir")"
+  if [ "$lect" = "ILEGIBLE" ]; then
+    echo "latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick" >&2
+  else
+    senal="${lect%% *}"; corte_base="${lect#* }"
+    apertura="$(REG_AP="$reg" python3 -c "
+import json,os
+from datetime import datetime
+try: print(int(datetime.fromisoformat(json.load(open(os.environ['REG_AP'])).get('inicio') or '').timestamp()))
+except Exception: print(0)" 2>/dev/null)"
+    [ -n "$apertura" ] || apertura=0
+    [ "$apertura" -gt "$senal" ] && senal="$apertura"
+    if [ $(( now - senal )) -ge "$LAT_SILENCIO" ]; then
+      if [ "$corte_base" -gt 0 ]; then
+        owed=$(( corte_base + LAT_SILENCIO ))
+        cambio_td="el reporte de avance se debía a las $(OWED_HM="$owed" python3 -c "
+import os
+from datetime import datetime
+print(datetime.fromtimestamp(int(os.environ['OWED_HM'])).strftime('%H:%M'))" 2>/dev/null) y no ha llegado; te aviso desde el latido"
+      else
+        owed=""
+        cambio_td="el reloj de avance no dejó rastro legible; te aviso desde el latido"
+      fi
+      rc_td=0
+      corrida_aviso_directo "$id" "AVANZA" "$P_AVANCE" "$cambio_td" "$P_SIGUE" "$P_NECESITO" || rc_td=1
+      EVT_tipo=avance-tardanza EVT_owed="$(epoch_a_iso "$owed")" \
+        EVT_ok="$([ "$rc_td" -eq 0 ] && echo true || echo false)" evento_jsonl "$dir"
     fi
   fi
 

@@ -88,10 +88,6 @@ esta forma (`schema: "seguimiento-clock.v1"`):
 
 - `corte`: `{kind:"esperando-primer-reporte", inicioVentana}` o
   `{kind:"reporte-confirmado", ultimoReporteConfirmado}` (época en segundos).
-- `vencidoDesde`: época en segundos en que quedó debido el reporte que se
-  entrega (`null` antes del primero). Junto con `ultimoReporteConfirmado`
-  deja el hueco de silencio por escrito (cuándo se debía vs. cuándo
-  aterrizó): un envío no confirmado reintenta trayendo el mismo valor.
 - `ultimoEstado`: resumen estable (identificadores de trabajo, conteos y
   porcentajes por fase) del último corte confirmado; contra él se calcula el
   `Que cambió`.

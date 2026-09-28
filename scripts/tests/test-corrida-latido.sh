@@ -74,6 +74,8 @@ printf '%s\n' "OPENCLAW $*" >> "$LLAMADAS"
 case "$*" in
   *"message send"*) [ "${ENVIO_MODO:-ok}" = "mal" ] && exit 1; exit 0;;
   *"system event"*) [ "${EVENTO_FALLA:-0}" = "1" ] && exit 1; exit 0;;
+  *"cron list"*) [ -n "${SCRATCH_FILE:-}" ] && printf '%s\n' '{"jobs":[{"name":"avance-tareas","id":"cron-av-1"}]}'; exit 0;;
+  *"cron scratch"*) cat "${SCRATCH_FILE:-}" 2>/dev/null; exit 0;;
 esac
 exit 0
 STUB
@@ -463,5 +465,49 @@ grep -q "no se pudo anotar el fallo" "$T/tc.err" || fail "TC: la persistencia ca
 # SA: la consulta caida deja rastro (stderr + evento), no un salto en silencio.
 grep -q "no se pudo consultar" "$T/ghc.err" || fail "SA: la consulta de CI caida no avisa en stderr"
 [ "$(evjson lat-gh gh-fallo)" = "1" ] || fail "SA: la consulta de CI caida no dejo evento gh-fallo"
+
+# (12) 14.8 r2: el consolidador callado no deja al avance sin aviso. Con el
+# scratch del cron avance-tareas legible pero congelado hace 31m40s y NINGUN
+# mensaje entregado, el latido manda su PROPIO aviso por el camino directo
+# (sin pasar por la acumulacion del AVANZA), lo anota en mensajes.jsonl y deja
+# constancia en eventos.jsonl; el tick siguiente no reavisa (la senal avanzo
+# sola con el mensaje anotado).
+LLAMADAS="$T/l15.log"; export LLAMADAS; : > "$LLAMADAS"
+solo_dejar t-tarda
+montar_corrida t-tarda avanza
+: > "$CORRIDA_STATE/t-tarda/mensajes.jsonl"
+trabajando_en "$T0"
+printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((T0-1900))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-tarda\"]}" > "$T/scratch.json"
+export SCRATCH_FILE="$T/scratch.json"
+tick "$T0" || fail "tardanza: el tick revinto"
+grep -q "se debía a las " "$LLAMADAS" \
+  || fail "tardanza: el latido no mando su aviso por el camino directo"
+MSJ="$CORRIDA_STATE/t-tarda/mensajes.jsonl" python3 -c "
+import json,os
+ls=[json.loads(l) for l in open(os.environ['MSJ']) if l.strip()]
+u=ls[-1]
+assert u.get('ok') is True, u
+assert u.get('etiqueta')=='AVANZA', u
+assert 'se debía a las ' in u.get('texto',''), u
+assert 'te aviso desde el latido' in u.get('texto',''), u
+" || fail "tardanza: la entrega no quedo anotada con ok y su texto en mensajes.jsonl"
+[ "$(evjson t-tarda avance-tardanza)" = "1" ] || fail "tardanza: no quedo constancia en eventos.jsonl"
+antes="$(msgs)"
+tick "$((T0 + 300))" || fail "tardanza: el segundo tick revinto"
+[ "$(msgs)" = "$antes" ] || fail "tardanza: el segundo tick reaviso ($(msgs) sends contra $antes)"
+[ "$(grep -c "te aviso desde el latido" "$LLAMADAS")" = "1" ] || fail "tardanza: el aviso se duplico"
+
+# Guarda: con el scratch FRESCO y sin mensajes, el tick no avisa tardanza
+# (no avisar de mas).
+LLAMADAS="$T/l16.log"; export LLAMADAS; : > "$LLAMADAS"
+solo_dejar t-fresco
+montar_corrida t-fresco avanza
+: > "$CORRIDA_STATE/t-fresco/mensajes.jsonl"
+trabajando_en "$T0"
+printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((T0-300))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-fresco\"]}" > "$T/scratch-fresco.json"
+export SCRATCH_FILE="$T/scratch-fresco.json"
+tick "$T0" || fail "fresco: el tick revinto"
+[ "$(msgs)" = "0" ] || fail "fresco: con el scratch al dia salieron $(msgs) avisos de tardanza"
+unset SCRATCH_FILE
 
 echo "TODO VERDE: test-corrida-latido"

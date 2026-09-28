@@ -118,41 +118,6 @@ describe("decidirSeguimiento", () => {
     assert.equal(d2.accion, "SEND");
   });
 
-  it("el envío no confirmado deja constancia y el reintento trae la misma hora de vencimiento", () => {
-    const t0 = 1_700_000_000;
-    const activas = [resumen14(1, 4, 25)];
-    const d1 = decidirSeguimiento({
-      ahora: t0 + 1800, previo: crearEstadoInicial(t0, activas), activas, inmediato: null,
-    });
-    assert.equal(d1.accion, "SEND");
-    if (d1.accion !== "SEND") throw new Error("primer periodico inesperado");
-    assert.equal(d1.tipo, "periodico");
-    // El reporte entregado venció en t0: ese es el inicio del hueco.
-    assert.equal(d1.estadoTrasConfirmar.vencidoDesde, t0);
-    // Envío NO confirmado: el llamador conserva el estado previo (scratch
-    // intacto) y el tick de los 47 minutos del defecto reintenta trayendo
-    // EL MISMO vencidoDesde: el hueco crece visible.
-    const d2 = decidirSeguimiento({
-      ahora: t0 + 2820, previo: crearEstadoInicial(t0, activas), activas, inmediato: null,
-    });
-    assert.equal(d2.accion, "SEND");
-    if (d2.accion !== "SEND") throw new Error("reintento inesperado");
-    assert.equal(d2.tipo, "periodico");
-    assert.equal(d2.estadoTrasConfirmar.vencidoDesde, t0);
-    // Confirmado el reintento (messageId 77): cuándo aterrizó y cuándo se
-    // debía quedan por escrito; los 17 minutos de silencio no se borran.
-    const conf = { ...d2.estadoTrasConfirmar, messageId: 77 };
-    const leido = parseEstadoSeguimiento(JSON.parse(JSON.stringify(conf)));
-    assert.equal(leido.vencidoDesde, t0);
-    assert.deepEqual(leido.corte, { kind: "reporte-confirmado", ultimoReporteConfirmado: t0 + 2820 });
-    // Un scratch viejo SIN el campo sigue válido (ausente vale null); un
-    // valor presente que no es número finito lanza estado-invalido.
-    const viejo: Record<string, unknown> = JSON.parse(JSON.stringify(conf));
-    delete viejo["vencidoDesde"];
-    assert.equal(parseEstadoSeguimiento(viejo).vencidoDesde, null);
-    assert.throws(() => parseEstadoSeguimiento({ ...viejo, vencidoDesde: "x" }), /estado/i);
-  });
-
   it("immediate decisions bypass the periodic cut", () => {
     const activas = [resumen14(1, 4, 25)];
     const inmediato: EventoInmediato = { tipo: "NECESITO TU RESPUESTA", texto: V1_NECESITO };

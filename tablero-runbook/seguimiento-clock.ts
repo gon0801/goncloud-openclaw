@@ -33,14 +33,6 @@ export type CorteSeguimiento =
 export type EstadoSeguimiento = {
   schema: "seguimiento-clock.v1";
   corte: CorteSeguimiento;
-  /**
-   * Constancia del hueco: al confirmar, `corte` escribe cuándo aterrizó el
-   * reporte (`ultimoReporteConfirmado`) y `vencidoDesde` cuándo se debía
-   * (el inicio de la ventana previa). Así el silencio de un envío no
-   * confirmado queda por escrito en vez de borrarse: el reintento trae el
-   * MISMO `vencidoDesde` y el hueco crece visible tick a tick.
-   */
-  vencidoDesde: number | null;
   ultimoEstado: string;
   ultimoInmediato: { firma: string; messageId: number | null } | null;
   messageId: number | null;
@@ -265,7 +257,6 @@ export function crearEstadoInicial(
   return {
     schema: SCHEMA_SEGUIMIENTO_CLOCK,
     corte: { kind: "esperando-primer-reporte", inicioVentana: ahora },
-    vencidoDesde: null,
     ultimoEstado: resumenEstable(activas, sueltas, null),
     ultimoInmediato: null,
     messageId: null,
@@ -349,8 +340,6 @@ export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
         estadoTrasConfirmar: {
           schema: SCHEMA_SEGUIMIENTO_CLOCK,
           corte: previo.corte,
-          // El inmediato no mueve el corte ni la constancia del periódico.
-          vencidoDesde: previo.vencidoDesde,
           ultimoEstado: previo.ultimoEstado,
           ultimoInmediato: { firma: firma ?? "", messageId: null },
           trabajosActivos: ids,
@@ -400,10 +389,6 @@ export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
       estadoTrasConfirmar: {
         schema: SCHEMA_SEGUIMIENTO_CLOCK,
         corte: { kind: "reporte-confirmado", ultimoReporteConfirmado: ahora },
-        // El momento en que este reporte venció: si el envío falla, el
-        // siguiente SEND reintenta con EL MISMO vencidoDesde (el hueco
-        // crece visible) en vez de resetear la constancia al confirmar.
-        vencidoDesde: inicioVentanaDe(previo.corte),
         ultimoEstado: resumenEstable(activas, sueltas, null),
         // Regla del spec: la condición desaparecida se registra inactiva
         // (null); si vuelve, es un evento nuevo y sale otra vez.
@@ -446,14 +431,6 @@ export function parseEstadoSeguimiento(raw: unknown): EstadoSeguimiento {
   if (!Array.isArray(trabajos) || trabajos.some((t) => typeof t !== "string")) {
     throw new Error(invalido);
   }
-  // Sin despliegue vivo anterior, el scratch viejo no trae vencidoDesde:
-  // ausente (o null) vale null. Presente, debe ser número finito.
-  const vencidoRaw = raw["vencidoDesde"];
-  let vencidoDesde: number | null = null;
-  if (vencidoRaw !== undefined && vencidoRaw !== null) {
-    if (!esNumeroFinito(vencidoRaw)) throw new Error(invalido);
-    vencidoDesde = vencidoRaw;
-  }
   // Sin despliegue vivo anterior, el scratch viejo no trae ultimoInmediato:
   // ausente vale null. Presente, debe traer firma y messageId válidos.
   let ultimoInmediato: EstadoSeguimiento["ultimoInmediato"] = null;
@@ -471,7 +448,6 @@ export function parseEstadoSeguimiento(raw: unknown): EstadoSeguimiento {
   return {
     schema: SCHEMA_SEGUIMIENTO_CLOCK,
     corte,
-    vencidoDesde,
     ultimoEstado,
     ultimoInmediato,
     messageId,
