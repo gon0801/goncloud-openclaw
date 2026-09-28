@@ -23,13 +23,13 @@ import { renderSeguimientoV2, sanearTextoPropietario, validarMensajeV1, type Tar
 export const SCHEMA_SEGUIMIENTO_CLOCK = "seguimiento-clock.v1";
 
 /**
- * 25 minutos entre reportes periódicos (R12: tolerancia de desfase del cron
- * de 15 min — un tick que caiga entre 1500 y 1800 desde el corte ahora
- * envía; en cuadrícula sana el primer envío del ciclo sigue siendo el tick
- * de +1800, y eliminar el doble mensaje con el latido es otra decisión, no
- * de esta constante); la vigilancia interna corre cada 15.
+ * Ventana de 25 minutos para el reporte periodico (R12: tolerancia de desfase
+ * del cron de 15 min — un tick que caiga entre 1500 y 1800 desde el corte
+ * ahora envía; el primer tick de cuadrícula que la cumple es +1800, y eliminar
+ * el doble mensaje con el latido es otra decisión, no de esta constante); la
+ * vigilancia interna corre cada 15.
  * El `ahora` de este módulo es época en SEGUNDOS (el RPC convierte los ms de
- * `Date.now` en la frontera): los ticks del plan se escriben 900/1500 y el
+ * `Date.now` en la frontera): los ticks del plan se escriben 900/1800 y el
  * scratch guarda segundos.
  */
 export const VENTANA_REPORTE_SECS = 1500;
