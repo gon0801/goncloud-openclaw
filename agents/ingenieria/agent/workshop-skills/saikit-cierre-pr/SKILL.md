@@ -11,7 +11,7 @@ description: Cierra un PR con la ruta autorizada de la Fase 14: recibo del kit, 
 Mientras el SummonAI Kit siga apagado, esta sección reemplaza las dos rutas y el paso 2 del flujo de abajo.
 No hay recibo `saikit-entrega.v1` ni entrypoint de merge del kit: no los pidas.
 <!-- candado: test-merge-sin-kit.sh -->
-Con CI y CodeRabbit aprobados y los bloqueantes resueltos, ejecuta `gh pr merge <PR> --squash --match-head-commit <SHA>` (`docs/runbooks/loop-autopilot.md` §6).
+Con CI y CodeRabbit aprobados y los bloqueantes resueltos, ejecuta `gh pr merge <PR> --squash --match-head-commit <SHA>` (`docs/runbooks/loop-autopilot.md` §6). En el nodo Mac usa `PATH=/opt/homebrew/bin:$PATH`.
 Confirma `MERGED` y el SHA integrado.
 
 El merge automatico de la Fase 14 sigue UNA de dos rutas cerradas:

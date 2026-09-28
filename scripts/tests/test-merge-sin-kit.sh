@@ -9,10 +9,14 @@ grep -qF 'esta sección reemplaza las dos rutas y el paso 2 del flujo de abajo' 
   || fail 'saikit-cierre-pr (implementer): la seccion Kit apagado no reemplaza la Ruta 2'
 grep -qF 'ejecuta `gh pr merge <PR> --squash --match-head-commit <SHA>` (`docs/runbooks/loop-autopilot.md` §6)' agents/implementer/agent/workshop-skills/saikit-cierre-pr/SKILL.md \
   || fail 'saikit-cierre-pr (implementer): sin la instruccion de merge de §6'
+grep -qF '§6). En el nodo Mac usa `PATH=/opt/homebrew/bin:$PATH`.' agents/implementer/agent/workshop-skills/saikit-cierre-pr/SKILL.md \
+  || fail 'saikit-cierre-pr (implementer): la via sin kit pierde el PATH del nodo Mac'
 grep -qF 'esta sección reemplaza las dos rutas y el paso 2 del flujo de abajo' agents/ingenieria/agent/workshop-skills/saikit-cierre-pr/SKILL.md \
   || fail 'saikit-cierre-pr (ingenieria): la seccion Kit apagado no reemplaza la Ruta 2'
 grep -qF 'ejecuta `gh pr merge <PR> --squash --match-head-commit <SHA>` (`docs/runbooks/loop-autopilot.md` §6)' agents/ingenieria/agent/workshop-skills/saikit-cierre-pr/SKILL.md \
   || fail 'saikit-cierre-pr (ingenieria): sin la instruccion de merge de §6'
+grep -qF '§6). En el nodo Mac usa `PATH=/opt/homebrew/bin:$PATH`.' agents/ingenieria/agent/workshop-skills/saikit-cierre-pr/SKILL.md \
+  || fail 'saikit-cierre-pr (ingenieria): la via sin kit pierde el PATH del nodo Mac'
 grep -qF 'Con el kit apagado, lo anterior no aplica: `main` encarga el cierre' agents/main/agent/workshop-skills/saikit-merge-route/SKILL.md \
   || fail 'saikit-merge-route no manda al cierre sin kit'
 grep -qF 'The kit is off since 2026-09-27, so skip steps 3 to 5' agents/main/agent/workshop-skills/post-merge-closure/SKILL.md \
