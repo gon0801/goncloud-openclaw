@@ -11,6 +11,9 @@ unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_AUTHOR_DATE
 unset GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL GIT_COMMITTER_DATE
 cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
+texto_json() { # $1 linea de mensajes.jsonl -> su campo 'texto' decodificado (sin \uXXXX)
+  printf '%s' "$1" | python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('texto',''))"
+}
 
 CORR=scripts/mac/corrida.sh
 TM_REAL="$(command -v tmux 2>/dev/null || true)"
@@ -173,6 +176,13 @@ $out"
 printf '%s' "$out" | grep -q "gh sin autenticar" || fail "NO APTO sin razon de gh:
 $out"
 grep -q "DETENIDA" "$T/corridas/t-gh/mensajes.jsonl" || fail "NO APTO no mando mensaje"
+texto_json "$(tail -n 1 "$T/corridas/t-gh/mensajes.jsonl")" >"$T/det-gh.txt"
+grep -q "falta: " "$T/det-gh.txt" \
+  || fail "el aviso DETENIDA no dice que falta:
+$(cat "$T/det-gh.txt")"
+grep -q "gh sin autenticar" "$T/det-gh.txt" \
+  || fail "el aviso DETENIDA no nombra la razon de gh:
+$(cat "$T/det-gh.txt")"
 unset GH_MODO
 
 # ROJO con binario que muere.
@@ -305,6 +315,16 @@ $out"
 printf '%s' "$out" | grep -q "CLI openclaw ausente" \
   || fail "sin CLI instalado la ausencia debia quedar como unknown explicito:
 $out"
+texto_json "$(tail -n 1 "$T/corridas/t-bro-ausente/mensajes.jsonl")" >"$T/det-bro.txt"
+sed -n '3p' "$T/det-bro.txt" | grep -q "gateway no responde" \
+  || fail "el Que cambio del aviso no nombra gateway no responde:
+$(cat "$T/det-bro.txt")"
+sed -n '3p' "$T/det-bro.txt" | grep -q "sin envio al canal" \
+  || fail "el Que cambio del aviso no nombra sin envio al canal:
+$(cat "$T/det-bro.txt")"
+grep -q "falta: " "$T/det-bro.txt" \
+  || fail "las razones no quedaron unidas en una sola linea:
+$(cat "$T/det-bro.txt")"
 
 # ROJO con vigilante viejo (y el instalado se restaura: los casos que siguen no
 # heredan el watch roto).

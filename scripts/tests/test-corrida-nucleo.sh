@@ -282,7 +282,7 @@ grep -q '"cambio": *"quedo lista la primera parte"' "$T/corridas/t1/eventos-segu
 corrida_mensaje t1 DETENIDA "1 de 2 partes terminadas" "quedo lista la primera parte" "sigue la parte de mensajes" "nada" \
   || fail "DETENIDA en simulacro fallo"
 enc_t1="$(corrida_encabezado t1)"
-printf '🧪 PRÁCTICA — no contestes 🔴 [DETENIDA] %s, 1 de 2 partes terminadas\n\nQué cambió: quedo lista la primera parte\n\nQué sigue: sigue la parte de mensajes\n\nQué necesito de ti: nada\n' "$enc_t1" >"$T/esp-sim.txt"
+printf '🧪 PRÁCTICA — no contestes 🔴 [DETENIDA] %s, **1 de 2 partes terminadas**\n\nQué cambió: **quedo lista la primera parte**\n\nQué sigue: sigue la parte de mensajes\n\nQué necesito de ti: nada\n' "$enc_t1" >"$T/esp-sim.txt"
 d=$(grep -n "OPENCLAW message send" "$LLAMADAS" | tail -1 | cut -d: -f1)
 tail -n +"$d" "$LLAMADAS" | sed '1s/.* -m //' >"$T/obtenido.txt"
 cmp -s "$T/esp-sim.txt" "$T/obtenido.txt" || fail "el texto enviado no es el de seguimiento.v1"

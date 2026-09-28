@@ -415,17 +415,10 @@ corrida_estado() {
       necesito="nada: es una prueba, se resuelve sola"
     fi
   fi
-  # v2: emoji de estado y bloques separados (misma regla que corrida_mensaje;
-  # ABIERTA usa el prefijo de corrida que $pref ya trae).
-  local emoji=""
-  case "$P_ETIQ" in
-    AVANZA) emoji="🟢 " ;;
-    "NECESITO TU RESPUESTA") emoji="🟠 " ;;
-    DETENIDA) emoji="🔴 " ;;
-    CERRADA) emoji="✅ " ;;
-  esac
-  printf '%s%s[%s] %s, %s\n\nQué cambió: %s\n\nQué sigue: %s\n\nQué necesito de ti: %s\n' \
-    "$pref" "$emoji" "$P_ETIQ" "$enc" "$P_AVANCE" "$cambio" "$sigue" "$necesito"
+  # v2: emoji de estado y bloques separados, y las mismas negritas que los
+  # avisos de corrida_mensaje: el cuerpo sale de aviso_cuerpo, la unica fuente
+  # del formato (14.12). ABIERTA usa el prefijo de corrida que $pref ya trae.
+  aviso_cuerpo "$pref" "$P_ETIQ" "$enc" "$P_AVANCE" "$cambio" "$sigue" "$necesito"
   [ -n "$solo" ] && return 0
   printf -- '--- detalle (para el vigia; no va a David) ---\n%s\n' "$P_DETALLE"
   return 0

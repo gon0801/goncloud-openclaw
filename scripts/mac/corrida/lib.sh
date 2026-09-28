@@ -725,6 +725,45 @@ corrida_encabezado() {
   printf '%s (abrió %s)' "$nombre" "$hora"
 }
 
+# aviso_cuerpo <pref> <etq> <enc> <avance> <cambio> <sigue> <necesito>
+# El cuerpo completo de un aviso de corrida (seguimiento.v2), la UNICA fuente
+# del formato: corrida_mensaje lo valida y lo manda, y estado lo emite igual
+# para su parte (14.12). Linea 1 "{pref}{emoji}[{ETIQUETA}] {enc}{, {avance}}";
+# luego "Qué cambió: ", "Qué sigue: " y "Qué necesito de ti: " separados por
+# linea en blanco. Negritas (14.12, "lo importante en negritas"; el gateway
+# convierte **x** a negrita HTML de Telegram, aqui solo se compone el texto):
+# el avance de la linea 1 y el cambio SIEMPRE; "Qué sigue" es rutina y no
+# lleva; el necesito SOLO en NECESITO TU RESPUESTA, y si el valor trae
+# " Comando: ", la negrita cubre solo lo anterior (el segmento del comando es
+# referencia textual y queda fuera). El emoji de estado lo pone esta funcion
+# (AVANZA 🟢, NECESITO TU RESPUESTA 🟠, DETENIDA 🔴, CERRADA ✅; ABIERTA no
+# lleva: el prefijo de corrida que trae pref ya lo dice). Las negritas viven
+# dentro de cada linea, jamas en los prefijos ni en los marcadores que
+# mensaje_valido revisa: el texto que emite pasa el validador tal cual.
+aviso_cuerpo() {
+  local pref="$1" etq="$2" enc="$3" avance="$4" cambio="$5" sigue="$6" necesito="$7"
+  local emoji=""
+  case "$etq" in
+    AVANZA) emoji="🟢 " ;;
+    "NECESITO TU RESPUESTA") emoji="🟠 " ;;
+    DETENIDA) emoji="🔴 " ;;
+    CERRADA) emoji="✅ " ;;
+  esac
+  local linea1="${pref}${emoji}[$etq] $enc"
+  if [ -n "$avance" ]; then
+    linea1="$linea1, **$avance**"
+  fi
+  local necesito_txt="$necesito"
+  if [ "$etq" = "NECESITO TU RESPUESTA" ]; then
+    case "$necesito" in
+      *" Comando: "*) necesito_txt="**${necesito%% Comando: *}** Comando: ${necesito#* Comando: }" ;;
+      *) necesito_txt="**$necesito**" ;;
+    esac
+  fi
+  printf '%s\n\nQué cambió: **%s**\n\nQué sigue: %s\n\nQué necesito de ti: %s\n' \
+    "$linea1" "$cambio" "$sigue" "$necesito_txt"
+}
+
 tsv_fila() { # $1 tsv, $2 cli -> "binario|flag|barra" (vacio si no hay fila)
   awk -F'\t' -v c="$2" '$1==c && $1 !~ /^#/ {print $2"|"$3"|"$4; exit}' "$1"
 }
@@ -746,6 +785,52 @@ flag_de_tabla() { # $1 flag de la tabla; rc 2 = invalido (mensaje a stderr)
   case "$1" in *[!A-Za-z0-9_.\ =-]*)
     echo "flag invalido en la tabla de modos: $1" >&2; return 2;; esac
   return 0
+}
+
+# _corrida_entregar <id> <sim> <etq> <archivo> — la cola comun de entrega:
+# prefijo de la linea 1 (practica o real, con el sed de siempre), destino del
+# registro, envio por Telegram y anotacion honesta (at, etiqueta, ok,
+# message_id, texto) en mensajes.jsonl. La usan el camino inmediato de
+# corrida_mensaje y corrida_aviso_directo, para que ambos entregen EXACTAMENTE
+# igual (14.8 r2). Consume $4 (el mktemp del llamador).
+_corrida_entregar() { # rc 0 = envio confirmado; rc 1 = fallo (queda anotado ok:false)
+  local id="$1" sim="$2" etq="$3" m="$4" dest texto rc=0 sil="" salida pref
+  # El prefijo de la primera linea, en TODOS los mensajes de la corrida: en
+  # practica, avisa que no hace falta contestar (reemplaza el viejo
+  # "[SIMULACRO] "); en una corrida real, la marca como tal.
+  pref="▶️ "
+  [ "$sim" = "true" ] && pref="🧪 PRÁCTICA — no contestes "
+  sed -i.bak "1s#^#$pref#" "$m" && rm -f "$m.bak"
+  dest="$(json_campo "$(registro_de "$id")" canal.destino)"
+  [ -n "$dest" ] || { echo "registro sin destino" >&2; rm -f "$m"; return 1; }
+  # seguimiento.v1: lo rutinario (ABIERTA, CERRADA y el AVANZA directo del
+  # latido) en silencio; DETENIDA y NECESITO TU RESPUESTA suenan: en la
+  # etiqueta que pide respuesta, fallar hacia silencio es el peor sentido de
+  # fallar.
+  case "$etq" in CERRADA|ABIERTA|AVANZA) sil="--silent";; esac
+  texto="$(cat "$m")"
+  salida="$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" message send --channel telegram -t "$dest" $sil --json -m "$texto" 2>/dev/null)" || rc=1
+  CORR_MSG_ETQ="$etq" CORR_MSG_OK="$rc" CORR_MSG_DIR="$CORRIDA_STATE/$id" CORR_MSG_TEXTO="$texto" CORR_MSG_SALIDA="$salida" python3 -c "
+import json,os,time
+ok=os.environ['CORR_MSG_OK']=='0'
+mid=None
+if ok:
+  sal=os.environ.get('CORR_MSG_SALIDA','')
+  try:
+    j=json.loads(sal[sal.index('{'):])
+    v=j.get('messageId')
+    if isinstance(v,int) and not isinstance(v,bool):
+      mid=v
+    elif isinstance(v,str) and v.lstrip('-').isdigit():
+      mid=int(v)
+  except Exception:
+    pass
+d={'at':int(time.time()),'etiqueta':os.environ['CORR_MSG_ETQ'],'ok':ok,
+   'message_id':mid,'texto':os.environ['CORR_MSG_TEXTO']}
+open(os.path.join(os.environ['CORR_MSG_DIR'],'mensajes.jsonl'),'a').write(json.dumps(d)+chr(10))
+" 2>/dev/null
+  rm -f "$m"
+  return $rc
 }
 
 # corrida_mensaje <id> <ETIQUETA> <avance> <cambio> <sigue> <necesito>
@@ -789,29 +874,11 @@ corrida_mensaje() {
     fi
   fi
   local enc; enc="$(corrida_encabezado "$id")"
-  # Emoji de estado (v2, pedido del dueño 2026-09-25: bloques separados y un
-  # vistazo basta): AVANZA 🟢, NECESITO TU RESPUESTA 🟠, DETENIDA 🔴, CERRADA
-  # ✅. ABIERTA no lleva otro: el prefijo de corrida (▶️ / 🧪) ya lo dice.
-  local emoji=""
-  case "$etq" in
-    AVANZA) emoji="🟢 " ;;
-    "NECESITO TU RESPUESTA") emoji="🟠 " ;;
-    DETENIDA) emoji="🔴 " ;;
-    CERRADA) emoji="✅ " ;;
-  esac
-  local linea1
-  if [ -n "$avance" ]; then
-    linea1="${emoji}[$etq] $enc, $avance"
-  else
-    linea1="${emoji}[$etq] $enc"
-  fi
   local M; M="$(mktemp)" || return 1
-  {
-    printf '%s\n\n' "$linea1"
-    printf 'Qué cambió: %s\n\n' "$cambio"
-    printf 'Qué sigue: %s\n\n' "$sigue"
-    printf 'Qué necesito de ti: %s\n' "$necesito"
-  } > "$M"
+  # El cuerpo sale de aviso_cuerpo (unica fuente del formato y de las
+  # negritas, 14.12), sin el prefijo de corrida: ese lo añade el sed de la
+  # linea 1 sobre la copia que se manda, como en toda corrida.
+  aviso_cuerpo "" "$etq" "$enc" "$avance" "$cambio" "$sigue" "$necesito" > "$M"
   mensaje_valido "$M" || { echo "mensaje fuera de contrato" >&2; rm -f "$M"; return 1; }
   rm -f "$M"
   if [ "$etq" = "AVANZA" ]; then
@@ -834,48 +901,35 @@ open('$evtmp','w').write(json.dumps(d)+chr(10))
     return 0
   fi
   local M2; M2="$(mktemp)" || return 1
-  {
-    printf '%s\n\n' "$linea1"
-    printf 'Qué cambió: %s\n\n' "$cambio"
-    printf 'Qué sigue: %s\n\n' "$sigue"
-    printf 'Qué necesito de ti: %s\n' "$necesito"
-  } > "$M2"
-  # El prefijo de la primera linea, en TODOS los mensajes de la corrida: en
-  # practica, avisa que no hace falta contestar (reemplaza el viejo
-  # "[SIMULACRO] "); en una corrida real, la marca como tal.
-  local pref="▶️ "
-  [ "$sim" = "true" ] && pref="🧪 PRÁCTICA — no contestes "
-  sed -i.bak "1s#^#$pref#" "$M2" && rm -f "$M2.bak"
-  local dest; dest="$(json_campo "$reg" canal.destino)"
-  [ -n "$dest" ] || { echo "registro sin destino" >&2; rm -f "$M2"; return 1; }
-  local texto rc=0 sil="" salida
-  # seguimiento.v1: lo rutinario (ABIERTA, CERRADA) en silencio; DETENIDA y
-  # NECESITO TU RESPUESTA suenan: en la etiqueta que pide respuesta, fallar hacia
-  # silencio es el peor sentido de fallar.
-  case "$etq" in CERRADA|ABIERTA) sil="--silent";; esac
-  texto="$(cat "$M2")"
-  salida="$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" message send --channel telegram -t "$dest" $sil --json -m "$texto" 2>/dev/null)" || rc=1
-  CORR_MSG_ETQ="$etq" CORR_MSG_OK="$rc" CORR_MSG_DIR="$CORRIDA_STATE/$id" CORR_MSG_TEXTO="$texto" CORR_MSG_SALIDA="$salida" python3 -c "
-import json,os,time
-ok=os.environ['CORR_MSG_OK']=='0'
-mid=None
-if ok:
-  sal=os.environ.get('CORR_MSG_SALIDA','')
-  try:
-    j=json.loads(sal[sal.index('{'):])
-    v=j.get('messageId')
-    if isinstance(v,int) and not isinstance(v,bool):
-      mid=v
-    elif isinstance(v,str) and v.lstrip('-').isdigit():
-      mid=int(v)
-  except Exception:
-    pass
-d={'at':int(time.time()),'etiqueta':os.environ['CORR_MSG_ETQ'],'ok':ok,
-   'message_id':mid,'texto':os.environ['CORR_MSG_TEXTO']}
-open(os.path.join(os.environ['CORR_MSG_DIR'],'mensajes.jsonl'),'a').write(json.dumps(d)+chr(10))
-" 2>/dev/null
-  rm -f "$M2"
-  return $rc
+  aviso_cuerpo "" "$etq" "$enc" "$avance" "$cambio" "$sigue" "$necesito" > "$M2"
+  # El prefijo de la linea 1, el envio y la anotacion en mensajes.jsonl van
+  # por la cola comun de entrega (14.8 r2): la misma que usa el camino directo
+  # del latido, para que ambos entregen exactamente igual.
+  _corrida_entregar "$id" "$sim" "$etq" "$M2"
+}
+
+# corrida_aviso_directo <id> <ETIQUETA> <avance> <cambio> <sigue> <necesito>
+# La entrega DIRECTA de un aviso, sin pasar por la acumulacion del AVANZA ni
+# por el corte del consolidador: el latido la usa para mandar su PROPIO aviso
+# cuando el consolidador calla (14.8 r2). Mismas validaciones de entrada que
+# corrida_mensaje (registro existe, etiqueta en el conjunto cerrado), mismo
+# cuerpo (aviso_cuerpo, unica fuente del formato y de las negritas), mismo
+# gate mensaje_valido (fail cerrado) y la MISMA cola de entrega
+# (_corrida_entregar): su fila en mensajes.jsonl con el ok de la entrega.
+corrida_aviso_directo() {
+  local id="$1" etq="$2" avance="$3" cambio="$4" sigue="$5" necesito="$6"
+  local reg; reg="$(registro_de "$id")"
+  [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
+  case "$etq" in
+    ABIERTA|AVANZA|NECESITO\ TU\ RESPUESTA|DETENIDA|CERRADA) ;;
+    *) echo "corrida_aviso_directo: etiqueta fuera del conjunto: $etq" >&2; return 1;;
+  esac
+  local sim; sim="$(json_campo "$reg" simulacro)"
+  local enc; enc="$(corrida_encabezado "$id")"
+  local M; M="$(mktemp)" || return 1
+  aviso_cuerpo "" "$etq" "$enc" "$avance" "$cambio" "$sigue" "$necesito" > "$M"
+  mensaje_valido "$M" || { echo "mensaje fuera de contrato" >&2; rm -f "$M"; return 1; }
+  _corrida_entregar "$id" "$sim" "$etq" "$M"
 }
 
 # --- Fase 14, Task 3: lecturas puras del registro versionado de workers
