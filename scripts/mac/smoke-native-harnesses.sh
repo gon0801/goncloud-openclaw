@@ -11,13 +11,20 @@
 # El ciclo (abrir/preparar-carril/adaptador/cerrar) es el mismo corrida.sh de
 # las corridas reales; este driver no reimplementa nada del ciclo. Pasar
 # --repo apuntando al repo principal cuando se corre desde un worktree ligado.
-# Inyectables de operacion y prueba: CORRIDA_STATE, TMUX_BIN, OPENCLAW_BIN,
+# Inyectables de operacion y prueba: CORRIDA_STATE, OPENCLAW_BIN,
 # CORRIDA_WORKERS_REGISTRY, CORRIDA_CLI_MODOS, CORRIDA_RUNBOOK,
 # CORRIDA_WORKER_BIN_<ID> (los mismos que resuelve el adaptador) y
-# SMOKE_REDACT=0 (solo pruebas: desactiva la redaccion de tokens).
+# SMOKE_REDACT=0 (solo pruebas: desactiva la redaccion de tokens). TMUX_BIN es
+# opcional: sin definir se resuelve igual que corrida/lib.sh (B1 de 14.7-r2;
+# el runbook no lo exporta).
 set -u
 unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX
 umask 077
+if [ -z "${TMUX_BIN:-}" ]; then
+  TMUX_BIN="$(command -v tmux 2>/dev/null || true)"
+  [ -z "$TMUX_BIN" ] && [ -x /opt/homebrew/bin/tmux ] && TMUX_BIN=/opt/homebrew/bin/tmux
+fi
+[ -n "${TMUX_BIN:-}" ] || { echo "sin tmux no hay humo" >&2; exit 1; }
 
 uso() { echo "uso: smoke-native-harnesses.sh --worker <claude|codex|zcode|kimi|cursor|grok|all> [--repo DIR] [--ref origin/main] [--evidence-dir DIR] [--tope SEG]" >&2; }
 

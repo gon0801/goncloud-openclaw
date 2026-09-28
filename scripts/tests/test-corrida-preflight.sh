@@ -675,7 +675,19 @@ abrir t-f2-legacy "$RB"
 out=$(bash "$CORR" preflight t-f2-legacy 2>&1); rc=$?
 [ $rc -eq 0 ] || fail "F2: una fila legacy fuera del registro no debe bloquear el verde:
 $out"
-printf '%s' "$out" | grep -q "flag de deepseek sin medir" || fail "F2: la fila legacy debio quedar como unknown explicito:
+# F2-f: barra doble-guion en un seleccionable es "sin medir" (el adaptador
+# la rechaza igual que unknown: adaptador.sh, caso unknown|--); no puede dar
+# APTO ni caer por "flag no entra".
+rm -f "$T/m.tsv"
+printf 'claude\tcli-ok\tx\t--\t--\t--\t--\n' >>"$T/m.tsv"
+for b in codex zcode kimi cursor-agent grok; do
+  printf '%s\tcli-ok\tx\tBAR-OK-9\t--\t--\t--\n' "$b" >>"$T/m.tsv"
+done
+abrir t-f2-dash "$RB"
+out=$(bash "$CORR" preflight t-f2-dash 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "F2-f: la barra doble-guion de un seleccionable debio dar NO APTO:
+$out"
+printf '%s' "$out" | grep -q "barra de claude sin medir" || fail "F2-f: la barra doble-guion no cayo por sin medir:
 $out"
 unset CORRIDA_WORKERS_REGISTRY
 

@@ -71,12 +71,14 @@ exit 0
 STUB
 chmod +x "$T/bin/openclaw"
 
-# tmux con servidor propio.
+# tmux con servidor propio (y un shim tambien llamado tmux: el driver sin
+# TMUX_BIN debe resolverlo del PATH igual que corrida/lib.sh).
 cat >"$T/bin/tmux-shim" <<STUB
 #!/bin/sh
 exec $TM_REAL -L $L "\$@"
 STUB
-chmod +x "$T/bin/tmux-shim"
+cp "$T/bin/tmux-shim" "$T/bin/tmux"
+chmod +x "$T/bin/tmux-shim" "$T/bin/tmux"
 
 export PATH="$T/bin:$PATH" CORRIDA_STATE="$T/corridas" TMUX_BIN="$T/bin/tmux-shim"
 export OPENCLAW_BIN="$T/bin/openclaw" CORRIDA_CLI_MODOS="$T/modos.tsv"
@@ -172,5 +174,32 @@ d = json.load(open(sys.argv[1]))
 assert [r["worker"] for r in d["resultados"]] == ["kimi"], d
 assert d["resultados"][0]["outcome"] == "passed", d
 PY
+
+# RUN 4 (B1 de Claude, 14.7-r2): el runbook NO exporta TMUX_BIN; el driver no
+# puede morir por variable sin definir ni salir failed cuando el harness si
+# termino. Sin TMUX_BIN el driver debe resolver tmux del PATH (misma regla de
+# corrida/lib.sh) y el humo debe salir passed.
+out="$(env -u TMUX_BIN bash "$DRIVER" --worker kimi --repo "$T/origin" --evidence-dir "$T/ev4" 2>&1)"; rc=$?
+[ $rc -eq 0 ] || fail "sin TMUX_BIN el driver debio resolver tmux y salir 0:
+$out"
+python3 - "$T/ev4/resumen.json" <<'PY' || fail "el resumen del run 4 no pasa"
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["resultados"][0]["outcome"] == "passed", d
+assert d["resultados"][0]["chequeos"]["transcripcion"] is True, d
+PY
+sin_humos || fail "el driver dejo sesiones de tmux vivas (run 4)"
+
+# Firma de parada del corte (B2 de Claude, 14.7-r2): la forma corta de
+# adaptador stop muere por uso (rc 2) y en reversa dejaria el harness vivo;
+# el runbook debe traer la firma completa id carril worker sesion.
+out="$(bash scripts/mac/corrida.sh adaptador stop ses-inexistente-x 2>&1)"; rc=$?
+[ $rc -eq 2 ] || fail "la forma corta de stop debio morir por uso (rc 2), dio rc=$rc: $out"
+out="$(bash scripts/mac/corrida.sh adaptador stop x c1 claude_fable ses-inexistente-x 2>&1)"; rc=$?
+[ $rc -eq 0 ] || fail "la forma completa de stop debio ser idempotente (rc 0), dio rc=$rc: $out"
+cmd="$(grep -o 'corrida\.sh adaptador stop [^`]*' docs/runbooks/native-harness-rollout.md | head -1)"
+# corrida.sh + adaptador + stop son tres tokens; la firma completa agrega cuatro.
+[ "$(printf '%s' "$cmd" | awk '{print NF-3}')" = "4" ] \
+  || fail "el runbook no trae adaptador stop con id carril worker sesion: <$cmd>"
 
 echo "TODO VERDE: test-smoke-native-harnesses"

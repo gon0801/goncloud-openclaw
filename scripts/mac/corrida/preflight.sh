@@ -76,7 +76,7 @@ corrida_preflight() {
           continue
         fi
         fbar="$(printf '%s' "$ffila" | cut -d'|' -f3)"
-        if [ "$fbar" = "unknown" ] || [ -z "$fbar" ]; then
+        if [ "$fbar" = "unknown" ] || [ "$fbar" = "--" ] || [ -z "$fbar" ]; then
           razon "barra de $sel sin medir"
         fi
       done

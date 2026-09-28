@@ -197,7 +197,7 @@ for l in open(sys.argv[1], encoding="utf-8").read().splitlines():
     c = l.split("\t")
     filas[c[0]] = c[1:]
 bins = sorted({w["binary"] for w in json.load(open(sys.argv[2]))["workers"]})
-mal = [b for b in bins if not filas.get(b) or filas[b][2] in ("unknown", "")]
+mal = [b for b in bins if not filas.get(b) or filas[b][2] in ("unknown", "", "--")]
 if mal:
     print("barra sin medir o fila ausente para: " + ", ".join(mal))
     sys.exit(1)

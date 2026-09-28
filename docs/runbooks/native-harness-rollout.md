@@ -12,9 +12,10 @@ launchctl setenv CORRIDA_NATIVE_ROUTING off
 
 En una shell ya abierta, además `export CORRIDA_NATIVE_ROUTING=off`. Los
 harnesses vivos al momento del corte se detienen con
-`corrida.sh adaptador stop <sesion>` (idempotente). El corte es la primera
-respuesta ante cualquier humo o canary rojo: se corta, se registra la
-evidencia y recién entonces se diagnostica.
+`corrida.sh adaptador stop <id> <carril> <worker> <sesion>` (idempotente; la
+forma corta con solo la sesión muere por uso y en reversa dejaría el harness
+vivo). El corte es la primera respuesta ante cualquier humo o canary rojo: se
+corta, se registra la evidencia y recién entonces se diagnostica.
 
 El driver de humos es `scripts/mac/smoke-native-harnesses.sh`; su prueba en
 falso, `scripts/tests/test-smoke-native-harnesses.sh`. Las barras medidas
