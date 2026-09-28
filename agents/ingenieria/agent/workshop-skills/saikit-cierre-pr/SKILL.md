@@ -5,6 +5,15 @@ description: Cierra un PR con la ruta autorizada de la Fase 14: recibo del kit, 
 
 # Cierre de PR
 
+## Kit apagado (desde 2026-09-27)
+
+<!-- candado: test-merge-sin-kit.sh -->
+Mientras el SummonAI Kit siga apagado, la Ruta 2 no puede completarse: no hay
+recibo `saikit-entrega.v1` ni entrypoint de merge del kit. Cierra con
+`docs/runbooks/loop-autopilot.md` §6: con CI y CodeRabbit aprobados y los
+bloqueantes resueltos, ejecuta `gh pr merge <PR> --squash --match-head-commit <SHA>`
+y confirma `MERGED` y el SHA integrado.
+
 El merge automatico de la Fase 14 sigue UNA de dos rutas cerradas:
 
 ## Ruta 2 (automatica, Task 7): solo implementer/ingenieria
