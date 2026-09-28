@@ -76,8 +76,11 @@ aprobado byte por byte.
 
 ## Reloj y scratch (`seguimiento-clock.v1`)
 
-La vigilancia interna corre cada 15 minutos; el consolidado sale cada 30.
-`tablero-runbook/seguimiento-clock.ts` (`decidirSeguimiento`) es puro: dadas
+La vigilancia interna corre cada 15 minutos; el consolidado sale en esa
+cuadrícula: con la ventana de 25 minutos (R12), el primer tick que la cumple
+envía — en cuadrícula sana ese tick es el de +1800 desde el corte, y un tick
+desfasado del cron que caiga entre 1500 y 1800 también envía (tolerancia de
+desfase). `tablero-runbook/seguimiento-clock.ts` (`decidirSeguimiento`) es puro: dadas
 la época actual (en segundos), los resúmenes activos, las tareas sueltas, el
 último estado confirmado y un eventual evento inmediato, devuelve `NO_REPLY`
 o `SEND` (`periodico` o `inmediato`). Nunca llama a Telegram, al disco ni al

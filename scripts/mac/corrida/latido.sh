@@ -16,11 +16,14 @@ LAT_HORA_MSJ=3600   # sin mensaje aunque todo avance: a la hora, uno
 LAT_SILENCIO=1500   # 30 min menos un intervalo del tick (300 s): el aviso
                     # sale ANTES de los 30 min aun en el peor caso (ticks
                     # cada 300 s => maximo 1799 s de hueco), 14.8 r3
-LAT_VENTANA=1800    # la ventana REAL del reporte periodico (VENTANA_REPORTE_
+LAT_VENTANA=1500    # la ventana REAL del reporte periodico (VENTANA_REPORTE_
                     # SECS en tablero-runbook/seguimiento-clock.ts; no hay
                     # constante compartida: bash contra plugin del gateway).
                     # Solo pasado corte_base + ella el reporte esta atrasado
-                    # y el aviso grita; antes, avance normal, 14.8 r4
+                    # y el aviso grita; antes, avance normal, 14.8 r4.
+                    # R12 r2: se mueve JUNTO con la constante del gateway
+                    # (1500); con ella, silencio y ventana coinciden y todo
+                    # aviso de silencio con corte pasado nombra la hora real.
 
 evento_jsonl() { # $1 dir de la corrida; pares EVT_<campo>=valor en el entorno.
                  # Solo los campos del evento van en la linea: la linea ya vive
@@ -163,11 +166,11 @@ latido_de() { # $1 dir de la corrida (con el registro adentro)
   # (cron list ilegible) el control se salta este tick con su rastro en
   # stderr: contra un gateway callado no hay envio posible; al volver, si el
   # corte sigue callado, avisa. r4: el aviso no grita atraso antes de tiempo.
-  # El umbral de silencio (1500) es MENOR que la ventana del consolidador
-  # (1800): dentro de la ventana el reporte no esta atrasado y el aviso sale
-  # como avance normal; pasado corte_base + LAT_VENTANA el reporte de verdad
-  # no llego y "se debía ... y no ha llegado" dice la verdad (con la hora
-  # real: owed es corte_base + 1800, no + LAT_SILENCIO).
+  # R12 r2: la ventana del consolidador (1500) y el umbral de silencio (1500)
+  # coinciden, asi que el aviso de silencio con corte vencido ya grita con la
+  # hora real; antes de corte_base + LAT_VENTANA el reporte no esta atrasado
+  # y el aviso sale como avance normal (la hora real: owed es corte_base +
+  # LAT_VENTANA, no + LAT_SILENCIO).
   local lect senal corte_base apertura owed cambio_td rc_td
   lect="$(lat_avance_ultima_senal "$dir")"
   if [ "$lect" = "ILEGIBLE" ]; then
