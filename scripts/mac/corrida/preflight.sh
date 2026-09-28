@@ -59,6 +59,33 @@ corrida_preflight() {
     razon "tabla de modos ilegible: $tabla" "la tabla de modos no se puede leer"
   else
   local cli binario flag barra fila
+  # 14.7 F2: la tabla cruza con el registro de workers. La barra de un binario
+  # seleccionable (uno que el registro puede arrancar) sin medir es razon de
+  # NO APTO: verde implica que adaptador start puede arrancar. Un worker
+  # futuro agregado al registro sin fila en la tabla tambien bloquea; las
+  # filas legacy fuera del registro siguen como unknown explicito.
+  local WREGF2="${CORRIDA_WORKERS_REGISTRY:-$REPO/scripts/mac/workers.v1.json}"
+  local sel_bins sel ffila fbar
+  if command -v python3 >/dev/null 2>&1 && [ -r "$WREGF2" ]; then
+    sel_bins="$(python3 -c 'import json,sys;print("\n".join(sorted({w["binary"] for w in json.load(open(sys.argv[1]))["workers"]})))' "$WREGF2" 2>/dev/null)" || sel_bins=""
+    if [ -n "$sel_bins" ]; then
+      for sel in $sel_bins; do
+        ffila="$(tsv_fila "$tabla" "$sel")"
+        if [ -z "$ffila" ]; then
+          razon "sin fila en la tabla de modos: $sel"
+          continue
+        fi
+        fbar="$(printf '%s' "$ffila" | cut -d'|' -f3)"
+        if [ "$fbar" = "unknown" ] || [ -z "$fbar" ]; then
+          razon "barra de $sel sin medir"
+        fi
+      done
+    else
+      unknown "cruce de barras con el registro de workers sin medir"
+    fi
+  else
+    unknown "cruce de barras con el registro de workers sin medir"
+  fi
   for cli in $(awk -F'\t' '$1 !~ /^#/ && $1 != "" {print $1}' "$tabla" 2>/dev/null); do
     fila="$(tsv_fila "$tabla" "$cli")"
     binario="$(printf '%s' "$fila" | cut -d'|' -f1)"

@@ -330,31 +330,43 @@ printf '%s' "$out" | grep -q "accion invalida" || fail "accion invalida sin diag
 bash "$CORR" adaptador health run-1 lane-1 nosuch ses-x >/dev/null 2>&1 \
   && fail "worker desconocido no fallo"
 
-# Tabla real (no la sintetica): los workers sin barra medida se rechazan
-# rapido y con diagnostico, sin quemar el sondeo; los medidos pasan la
-# guarda y el sondeo los ve (repro del reviewer: 4 de 6 en unknown).
+# Tabla real contra las barras medidas (F2): las seis seleccionables pasan la
+# guarda cuando la sesion muestra su barra (texto real de pantalla 2026-09-27,
+# comun a la argv start:write/start:review del registro y al sondeo). El
+# rechazo "sin barra medida" sigue cerrado, ahora contra una tabla sintetica
+# con unknown: el contrato no depende de que la tabla real tenga unknowns.
 . scripts/mac/corrida/lib.sh
 . scripts/mac/corrida/adaptador.sh
+printf 'claude\tclaude\t--x\tunknown\t--\t--\t--\ncodex\tcodex\t--x\tunknown\t--\t--\t--\ncursor-agent\tcursor-agent\t--x\tunknown\t--\t--\t--\ngrok\tgrok\t--x\tunknown\t--\t--\t--\n' >"$T/modos-unknown.tsv"
+python3 - "$T/registro-unknown.json" "$T/modos-unknown.tsv" <<'PY2' || fail "no se escribio el registro sintetico"
+import json,sys
+json.dump({"schema":"corrida.v2","id":"run-r","cli_modos":sys.argv[2]},open(sys.argv[1],'w'))
+PY2
 python3 - "$T/registro-real.json" "$PWD/scripts/mac/cli-modos.tsv" <<'PY2' || fail "no se escribio el registro real"
 import json,sys
 json.dump({"schema":"corrida.v2","id":"run-r","cli_modos":sys.argv[2]},open(sys.argv[1],'w'))
 PY2
 inicio="$SECONDS"
 for b in claude codex cursor-agent grok; do
-  out="$(adaptador_esperar_barra "$T/registro-real.json" "ses-irreal-9" "$b" 2>&1)" \
-    && fail "$b: barra unknown aceptada contra la tabla real"
+  out="$(adaptador_esperar_barra "$T/registro-unknown.json" "ses-irreal-9" "$b" 2>&1)" \
+    && fail "$b: barra unknown aceptada contra la tabla sintetica"
   printf '%s' "$out" | grep -q "sin barra medida" || fail "$b: rechazo sin diagnostico: $out"
 done
 [ "$((SECONDS-inicio))" -lt 10 ] || fail "el rechazo sin barra no fue rapido"
-"$TM_REAL" -L "$L" new-session -d -s ses-barra-yolo -x 80 -y 24 "printf 'yolo\n'; sleep 60" 2>/dev/null \
-  || fail "no se creo la sesion de barra"
-"$TM_REAL" -L "$L" new-session -d -s ses-barra-auto -x 80 -y 24 "printf 'auto\n'; sleep 60" 2>/dev/null \
-  || fail "no se creo la sesion de barra auto"
-adaptador_esperar_barra "$T/registro-real.json" ses-barra-yolo zcode >/dev/null 2>&1 \
-  || fail "zcode (barra medida yolo) no paso contra la tabla real"
-adaptador_esperar_barra "$T/registro-real.json" ses-barra-auto kimi >/dev/null 2>&1 \
-  || fail "kimi (barra medida auto) no paso contra la tabla real"
-"$TM_REAL" -L "$L" kill-session -t "=ses-barra-yolo" 2>/dev/null
-"$TM_REAL" -L "$L" kill-session -t "=ses-barra-auto" 2>/dev/null
+for par in \
+  "claude|(shift+tab to cycle)" \
+  "codex|Ask Codex to do anything" \
+  "zcode|zai/glm" \
+  "kimi|auto" \
+  "cursor-agent|Cursor Agent" \
+  "grok|always-approve"; do
+  b="${par%%|*}"; texto="${par#*|}"
+  ses="ses-barra-$b"
+  "$TM_REAL" -L "$L" new-session -d -s "$ses" -x 80 -y 24 "printf '%s\n' \"$texto\"; sleep 60" 2>/dev/null \
+    || fail "no se creo la sesion de barra de $b"
+  adaptador_esperar_barra "$T/registro-real.json" "$ses" "$b" >/dev/null 2>&1 \
+    || fail "$b (barra medida) no paso contra la tabla real"
+  "$TM_REAL" -L "$L" kill-session -t "=$ses" 2>/dev/null
+done
 
 echo "TODO VERDE: test-native-harness-adapters"
