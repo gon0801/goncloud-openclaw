@@ -13,7 +13,9 @@
 
 LAT_TOPE_MSG=900    # 15 min entre mensajes, salvo NECESITO
 LAT_HORA_MSJ=3600   # sin mensaje aunque todo avance: a la hora, uno
-LAT_SILENCIO=1800   # 30 min sin NINGUNA senal de avance: el latido avisa solo
+LAT_SILENCIO=1500   # 30 min menos un intervalo del tick (300 s): el aviso
+                    # sale ANTES de los 30 min aun en el peor caso (ticks
+                    # cada 300 s => maximo 1799 s de hueco), 14.8 r3
 
 evento_jsonl() { # $1 dir de la corrida; pares EVT_<campo>=valor en el entorno.
                  # Solo los campos del evento van en la linea: la linea ya vive

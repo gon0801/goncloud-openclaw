@@ -510,4 +510,22 @@ tick "$T0" || fail "fresco: el tick revinto"
 [ "$(msgs)" = "0" ] || fail "fresco: con el scratch al dia salieron $(msgs) avisos de tardanza"
 unset SCRATCH_FILE
 
+# (13) 14.8 r3: el umbral es 30 min MENOS un intervalo del tick. El latido
+# corre cada 300 s: con umbral 1800, una senal de 1799 s no avisaba en ese
+# tick y el siguiente llegaba a los 2099 s (peor hueco de 35 min). Con la
+# senal hace 1560 s (26 min) el aviso ya tiene que salir; con el umbral viejo
+# de 1800 este caso quedaba en rojo.
+LLAMADAS="$T/l17.log"; export LLAMADAS; : > "$LLAMADAS"
+solo_dejar t-limite
+montar_corrida t-limite avanza
+: > "$CORRIDA_STATE/t-limite/mensajes.jsonl"
+trabajando_en "$T0"
+printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((T0-1560))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-limite\"]}" > "$T/scratch-limite.json"
+export SCRATCH_FILE="$T/scratch-limite.json"
+tick "$T0" || fail "limite: el tick revinto"
+grep -q "se debía a las " "$LLAMADAS" \
+  || fail "limite: con la senal hace 1560 s el aviso ya tiene que salir"
+[ "$(evjson t-limite avance-tardanza)" = "1" ] || fail "limite: no quedo constancia en eventos.jsonl"
+unset SCRATCH_FILE
+
 echo "TODO VERDE: test-corrida-latido"
