@@ -94,7 +94,7 @@ El porcentaje nunca lo estima un modelo; sale de las unidades del plan que ya cr
 - Solo `mergeado` cuenta como terminada. `pendiente` e `implementando` cuentan como no terminadas.
 - Un carril `omitido` no entra en el denominador de la fase: las tareas que solo viven en carriles omitidos se excluyen. Una tarea compartida por dos carriles incluidos cuenta una sola vez a nivel de fase.
 - Un carril `atorado` sí entra mientras no haya sido omitido formalmente.
-- Si el plan no se puede verificar (`sin-verificar`, `ruta-no-encontrada`, `nulo`) o una tarea falta del cruce o llega `unknown`, el conteo es `desconocido`, nunca 0%. Un conjunto vacío verificado es `0/0`, 0%.
+- Si el plan no se puede verificar (`sin-verificar`, `ruta-no-encontrada`) o una tarea falta del cruce o llega `unknown`, el conteo es `desconocido`, nunca 0%. Un conjunto vacío verificado es `0/0`, 0%. Un documento con `plan: null` explícito (`nulo`) cuenta sus carriles como partes: ver [seguimiento.v2.md](seguimiento.v2.md).
 - `actividad.detalle` sale de `detenido_por`, o del estado del carril; `iniciadaEn` y `ultimaEvidencia` salen de `ultimo_evento`, o de `lead.inicio` y el estado. No se inventa prosa ni marcas de tiempo.
 - Cada resumen lleva un `trabajoId` estable: `corrida:<id>` cuando el documento trae `corrida`, o `fase:<fase>`. La lista solo expone documentos abiertos (`cierre.at` nulo).
 - Un archivo que nombra una fase o corrida pero está roto (ilegible, JSON inválido o documento inválido) conserva su `trabajoId` con progreso `desconocido` y su causa aparte: nunca se confunde con "nada activo".

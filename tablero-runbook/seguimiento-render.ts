@@ -105,6 +105,15 @@ function quitarPrefijoLinea1(linea: string): string {
   return restante;
 }
 
+// Marcadores que `validarMensajeV1` lee como estructura del mensaje. Un nombre
+// de trabajo que trae alguno cae a su id (mismo guardia que
+// `corrida_encabezado` en lib.sh): si no, el mensaje entero sale inválido.
+const COMANDO = "Comando: ";
+const CAMBIO = "(Que cambio|Qué cambió): ";
+const SIGUE = "(Que sigue|Qué sigue): ";
+const NECESITO = "(Que necesito de ti|Qué necesito de ti): ";
+const MARCADOR_RESERVADO_RE = new RegExp([COMANDO, CAMBIO, SIGUE, NECESITO].join("|"));
+
 /**
  * Equivalente TypeScript del validador compartido de `seguimiento.v1`
  * (`mensaje_valido` en `scripts/mac/corrida/lib.sh`): cuatro líneas, etiqueta
@@ -136,23 +145,23 @@ export function validarMensajeV1(texto: string): { ok: true; etiqueta: EtiquetaV
   ) {
     return { ok: false };
   }
-  if (!/^(Que cambio|Qué cambió): .+/.test(l2)) return { ok: false };
-  if (!/^(Que sigue|Qué sigue): .+/.test(l3)) return { ok: false };
-  if (!/^(Que necesito de ti|Qué necesito de ti): .+/.test(l4raw)) return { ok: false };
-  if (/Comando: /.test(l1raw) || /Comando: /.test(l2) || /Comando: /.test(l3)) return { ok: false };
-  const marcas4 = l4raw.match(/Comando: /g) ?? [];
+  if (!new RegExp(`^${CAMBIO}.+`).test(l2)) return { ok: false };
+  if (!new RegExp(`^${SIGUE}.+`).test(l3)) return { ok: false };
+  if (!new RegExp(`^${NECESITO}.+`).test(l4raw)) return { ok: false };
+  if ([l1raw, l2, l3].some((l) => l.includes(COMANDO))) return { ok: false };
+  const marcas4 = l4raw.match(new RegExp(COMANDO, "g")) ?? [];
   let cuarta = l4raw;
   if (etiqueta === "NECESITO TU RESPUESTA") {
     if (marcas4.length > 1) return { ok: false };
     if (marcas4.length === 1) {
-      const seg = l4raw.slice(l4raw.lastIndexOf("Comando: ") + "Comando: ".length);
+      const seg = l4raw.slice(l4raw.lastIndexOf(COMANDO) + COMANDO.length);
       if (seg === "" || seg.length > 200) return { ok: false };
-      cuarta = l4raw.slice(0, l4raw.lastIndexOf("Comando: "));
+      cuarta = l4raw.slice(0, l4raw.lastIndexOf(COMANDO));
     }
   } else if (marcas4.length > 0) {
     return { ok: false };
   }
-  const cuerpo4 = cuarta.replace(/^(Que necesito de ti|Qué necesito de ti): /, "").replace(/\s+$/, "");
+  const cuerpo4 = cuarta.replace(new RegExp(`^${NECESITO}`), "").replace(/\s+$/, "");
   if (cuerpo4 === "") return { ok: false };
   // El límite de lenguaje se aplica solo al cuerpo (líneas 2 a 4): la línea 1
   // (`primera`) trae el nombre de la corrida y queda fuera, igual que en
@@ -194,14 +203,20 @@ function bloqueContable(b: BloqueContable): string {
 
 type NombrableTrabajo = Pick<ResumenSeguimiento, "trabajoId" | "fase" | "titulo">;
 
+function tituloApto(titulo: string): string | null {
+  const t = sanearTextoPropietario(titulo);
+  return t !== null && !MARCADOR_RESERVADO_RE.test(t) ? t : null;
+}
+
 /**
  * Nombre de un trabajo en la línea 1 (encabezado), exenta del límite de
  * lenguaje igual que en `corrida_encabezado` de lib.sh: una fase por su
- * número; una corrida por su título, o por su id si el título trae jerga.
+ * número; una corrida por su título, o por su id si el título trae jerga o
+ * un marcador reservado.
  */
 export function nombreEncabezado(r: NombrableTrabajo): string {
   if (!r.trabajoId.startsWith("corrida:")) return `Fase ${r.fase}`;
-  return sanearTextoPropietario(r.titulo) ?? r.trabajoId.slice("corrida:".length);
+  return tituloApto(r.titulo) ?? r.trabajoId.slice("corrida:".length);
 }
 
 /**
@@ -211,7 +226,7 @@ export function nombreEncabezado(r: NombrableTrabajo): string {
 export function nombreCuerpo(r: NombrableTrabajo): string {
   if (!r.trabajoId.startsWith("corrida:")) return `Fase ${r.fase}`;
   const id = r.trabajoId.slice("corrida:".length);
-  return sanearTextoPropietario(r.titulo) ?? (sanearTextoPropietario(id) !== null ? `Trabajo ${id}` : "Trabajo en curso");
+  return tituloApto(r.titulo) ?? (sanearTextoPropietario(id) !== null ? `Trabajo ${id}` : "Trabajo en curso");
 }
 
 function nombreSano(nombre: string, id: string, indice: number, clase: string): string {

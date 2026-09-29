@@ -122,6 +122,10 @@ printf '%s' "$out" | grep -q "rechazo inyectado" || fail "(7) no muestra las raz
 # El rechazo real del validador tambien llega: un titulo de puros espacios no se manda.
 tt abrir otro-trabajo "   " "Parte" >/dev/null 2>&1 && fail "(7) titulo vacio debe fallar"
 tt abrir "Mal/Id" "T" "P" >/dev/null 2>&1 && fail "(7) id fuera de CORRIDA_RE debe fallar"
+out=$(tt abrir otro-trabajo "Revisar Comando: pendiente" "Parte" 2>&1); rc=$?
+[ "$rc" = 2 ] || fail "(7) un titulo con marcador reservado debe salir 2, salio $rc: $out"
+printf '%s' "$out" | grep -q "Comando: " || fail "(7) el rechazo no nombra el marcador: $out"
+[ ! -f "$STORE/otro-trabajo.json" ] || fail "(7) guardo un titulo con marcador reservado"
 echo "ok (7): los rechazos salen distinto de 0"
 
 # (8) un gateway que no contesta JSON es un fallo, no un exito callado.
@@ -131,6 +135,8 @@ out=$(TABLERO_TOPE_SEG=abc tt ver migrar-correo 2>&1); rc=$?
 [ "$rc" = 2 ] || fail "(8) TABLERO_TOPE_SEG invalido debe salir 2, salio $rc: $out"
 printf '%s' "$out" | grep -q "Traceback" && fail "(8) TABLERO_TOPE_SEG invalido revienta con traceback: $out"
 printf '%s' "$out" | grep -q "TABLERO_TOPE_SEG" || fail "(8) el error no nombra TABLERO_TOPE_SEG: $out"
+out=$(TABLERO_TOPE_SEG=² tt ver migrar-correo 2>&1); rc=$?
+[ "$rc" = 2 ] || fail "(8) TABLERO_TOPE_SEG con digito Unicode debe salir 2, salio $rc: $out"
 echo "ok (8): gateway sin respuesta falla"
 
 # (9) el reloj de avance-tareas lo reporta mientras esta abierto y lo suelta al cerrar:

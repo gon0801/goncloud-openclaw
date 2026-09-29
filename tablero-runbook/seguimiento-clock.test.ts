@@ -313,6 +313,27 @@ describe("decidirSeguimiento con una corrida", () => {
     assert.equal(validarMensajeV1(d.mensaje).ok, true);
   });
 
+  it("a title carrying a reserved marker falls back to the id and never breaks the tick", () => {
+    const titulo = "Revisar Comando: pendiente";
+    const atencion = [{ ...resumenCorrida(1, titulo), atencionRequerida: { necesaria: true, motivo: null } }];
+    const d = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, atencion), activas: atencion, inmediato: null });
+    if (d.accion !== "SEND") throw new Error("atencion inesperada");
+    assert.match(d.mensaje, /^\[NECESITO TU RESPUESTA\] migrar-correo, 1 de 3 partes terminadas$/m);
+    assert.match(d.mensaje, /^Que cambio: Trabajo migrar-correo llegó a una decisión/m);
+    assert.equal(validarMensajeV1(d.mensaje).ok, true);
+
+    const activas = [resumenCorrida(1, titulo)];
+    const p = decidirSeguimiento({ ahora: 1800, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
+    if (p.accion !== "SEND") throw new Error("periódico esperado");
+    assert.match(p.mensaje, /^\[AVANZA\] migrar-correo — 33% \(1\/3 partes\)$/m);
+    assert.doesNotMatch(p.mensaje, /Comando: /);
+
+    const rancia = [{ ...resumenCorrida(1, titulo), actualizado: "2026-09-01T00:00:00Z" }];
+    const r = decidirSeguimiento({ ahora: Date.parse("2026-09-29T12:00:00Z") / 1000, previo: crearEstadoInicial(0, rancia), activas: rancia, inmediato: null });
+    if (r.accion !== "SEND") throw new Error("rancia esperada");
+    assert.equal(validarMensajeV1(r.mensaje).ok, true);
+  });
+
   it("a corrida entering the cut is described in the unit it was counted in", () => {
     const primero = decidirSeguimiento({ ahora: 1800, previo: crearEstadoInicial(0, [resumen14(1, 4, 25)]), activas: [resumen14(1, 4, 25)], inmediato: null });
     if (primero.accion !== "SEND") throw new Error("primer corte inesperado");

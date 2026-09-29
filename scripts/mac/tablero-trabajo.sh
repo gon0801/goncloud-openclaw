@@ -28,6 +28,8 @@ CORRIDA_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 REPO_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,38}/[A-Za-z0-9._-]{1,100}$")
 FASE = "0"
 REPO_DEF = "gon0801/goncloud-openclaw"
+# Los mismos marcadores reservados que validarMensajeV1 y corrida_encabezado.
+MARCADOR_RE = re.compile(r"Comando: |(Que cambio|Qué cambió): |(Que sigue|Qué sigue): |(Que necesito de ti|Qué necesito de ti): ")
 EVENTOS_TOPE = 200
 USO = "uso: tablero-trabajo.sh abrir|agregar|paso|atencion|cerrar|ver <id> ..."
 
@@ -50,7 +52,7 @@ def texto(s, tope, campo):
 
 def tope():
     v = os.environ.get("TABLERO_TOPE_SEG", "60")
-    if not v.isdigit() or int(v) < 1:
+    if not (v.isascii() and v.isdigit()) or int(v) < 1:
         morir(f"TABLERO_TOPE_SEG invalido {v!r}: segundos, entero positivo", 2)
     return int(v)
 
@@ -152,6 +154,9 @@ def cmd_abrir(args):
         morir('abrir <id> "<titulo>" "<parte1>" ["<parte2>" ...] [--siguiente "..."] [--repo owner/repo]', 2)
     id_, titulo, partes = pos[0], pos[1], pos[2:]
     validar_id(id_)
+    m = MARCADOR_RE.search(titulo)
+    if m:
+        morir(f"el titulo no puede traer {m.group(0)!r}: los avisos a David lo leen como parte del mensaje", 2)
     repo = ops.get("--repo", REPO_DEF)
     if not REPO_RE.match(repo):
         morir(f"--repo invalido {repo!r}: owner/repo", 2)
