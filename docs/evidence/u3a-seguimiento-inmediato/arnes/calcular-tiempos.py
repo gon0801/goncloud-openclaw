@@ -85,7 +85,7 @@ resumen["vigia_log"] = sent_lines[-6:]
 
 transporte = None
 if eventos and sent_lines:
-    paredes = [mono_de_wall(l[0:20]) for l in sent_lines if l.startswith("20")]
+    paredes = [mono_de_wall(l[0:20]) for l in sent_lines if l.startswith("20") and " sent: " in l]
     paredes = [p for p in paredes if p and p <= eventos[0]["mono_ns"]]
     if paredes:
         transporte = s(eventos[0]["mono_ns"] - max(paredes))
