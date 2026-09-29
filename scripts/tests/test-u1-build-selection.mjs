@@ -87,6 +87,20 @@ test("exige revisión antes de seleccionar un ejecutable nuevo del plugin", () =
   assert.match(result.stderr, /unreviewed plugin file/i);
 });
 
+// PR #211 metio avance-tick.mjs sin nombrarlo como revisado y toda publicacion
+// al gateway quedo bloqueada con CI verde; se descubrio en la PC al publicar.
+test("el arbol real del repo no trae archivos de plugin sin revisar", () => {
+  const out = join(mkdtempSync(join(tmpdir(), "u1-real-")), "selection.json");
+  const result = spawnSync(process.execPath, [script, resolve("."), out], { encoding: "utf8" });
+  assert.doesNotMatch(result.stderr, /unreviewed plugin file/i,
+    "un archivo nuevo del plugin no esta en reviewedPluginFiles de build-selection.mjs");
+  // Un arbol local con cambios sin commitear es la unica falla tolerada (CI siempre
+  // esta limpio); cualquier otro error del publicador tambien pone la prueba en rojo.
+  if (result.status !== 0) {
+    assert.match(result.stderr, /differs from pinned commit/, result.stderr);
+  }
+});
+
 test("un ejecutable revisado del plugin entra; su prueba .test.mjs no, y otro .mjs sigue sin revisar", () => {
   const ok = fixture([
     "tablero-runbook/index.ts",
