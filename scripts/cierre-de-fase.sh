@@ -256,6 +256,50 @@ print("OTROS" if any(t != "fase:" + fase for t in trab) else "SOLO")
     esac
   fi
 fi
+# (11) Seguimiento en el tablero: un documento de progreso sin cierre.at sigue en la
+# lista activa del reloj avance-tareas, que reporta la fase para siempre. Medido el
+# 2026-09-29 con la Fase 9: 11 dias de [AVANZA] sin que nada lo marcara. Se mira el
+# vivo aunque la fase no tenga tablero versionado, porque (7) solo cubre ese caso.
+# `desconocida` es lo que contesta la RPC cuando no hay documento para la fase.
+if [ "${CIERRE_SIN_GATEWAY:-0}" = "1" ] || [ ! -x "$OPENCLAW_BIN" ]; then
+  linea unknown seguimiento "no consulte el gateway"
+else
+  if ! seg=$(timeout 60 "$OPENCLAW_BIN" gateway call runbook.progress.get \
+         --params "{\"fase\":\"$FASE\"}" --json 2>/dev/null); then
+    seg=""
+  fi
+  if [ -z "$seg" ]; then
+    linea unknown seguimiento "el gateway no contesto"
+  else
+    estado_seg=$(printf '%s' "$seg" | timeout 30 python3 -c '
+import json, sys
+bruto = sys.stdin.read()
+try:
+    d = json.loads(bruto[bruto.find("{"):])
+    d = d.get("result", d)
+except Exception:
+    print("ILEGIBLE"); raise SystemExit
+if d.get("ok") is False and d.get("razon") == "desconocida":
+    print("SIN"); raise SystemExit
+doc = d.get("doc") if d.get("ok") is True else None
+cierre = doc.get("cierre") if isinstance(doc, dict) else None
+if not isinstance(cierre, dict) or "at" not in cierre:
+    print("ILEGIBLE")
+elif cierre["at"] is None:
+    print("ABIERTO")
+elif isinstance(cierre["at"], str) and cierre["at"]:
+    print("CERRADO")
+else:
+    print("ILEGIBLE")
+' || printf '%s' 'ILEGIBLE')
+    case "$estado_seg" in
+      ABIERTO) linea ROJO seguimiento "el seguimiento de la fase sigue abierto en el tablero (cierre.at vacío)";;
+      CERRADO) linea VERDE seguimiento "el seguimiento de la fase esta cerrado en el tablero";;
+      SIN) linea VERDE seguimiento "la fase no tiene seguimiento en el tablero";;
+      *) linea unknown seguimiento "el gateway no devolvio un seguimiento legible";;
+    esac
+  fi
+fi
 # (7) El tablero publicado: lo que el dueno abre tiene que decir lo mismo que el
 # documento versionado, y tiene que estar cerrado. Medido el 2026-09-18: este mismo
 # comprobador imprimio VERDE mientras el tablero de la Fase 7 mostraba 75% y el carril
