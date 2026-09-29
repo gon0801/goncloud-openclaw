@@ -34,6 +34,9 @@
 #                     del vigia; solo se usa de verdad con --ensayo, que
 #                     lanza una segunda instancia del vigia del checkout)
 #   CORRIDA_BIN       def. $HOME/bin/corrida.sh (--ensayo: apunta al checkout)
+#   SIM_VIGIA_CORRIDA_BIN  solo --ensayo: el CORRIDA_BIN del vigia doblado
+#                     (def. CORRIDA_BIN). La prueba le pone uno con el relanzo
+#                     automatico roto para ver 5 y 6 NO FUNCIONA.
 # glm se resuelve por PATH (igual que lanzar-sesion): con --ensayo, quien
 # invoca este arnes pone un "glm" de mentira delante en el PATH.
 #
@@ -364,7 +367,7 @@ if [ "$ENSAYO" = "1" ] && [ "$DRY_RUN" != "1" ]; then
   export WATCH_INSTALADO="$VIGIA_ENSAYO_DIR/bin/tmux-activity-watch.sh"
   VIGIA_LOG="${SIM9_VIGIA_LOG:-$(mktemp)}"
   STATE_DIR="$WATCH_STATE_DIR" LOG_FILE="$VIGIA_LOG" TICK_SECS=1 \
-    TMUX_BIN="$TMUX_BIN" OPENCLAW_BIN="$OPENCLAW_BIN" CORRIDA_BIN="$CORRIDA_BIN" \
+    TMUX_BIN="$TMUX_BIN" OPENCLAW_BIN="$OPENCLAW_BIN" CORRIDA_BIN="${SIM_VIGIA_CORRIDA_BIN:-$CORRIDA_BIN}" \
     "$WATCH_INSTALADO" >>"$VIGIA_LOG" 2>&1 &
   VIGIA_PID=$!
   sleep 0.3
@@ -912,7 +915,7 @@ except Exception: print('')
 correr_relanzo_kill() { # $1 numero de caso, $2 nombre de sesion, $3 rol, $4 tope
   local n="$1" nombre="$2" rol="$3" tope="$4"
   local dir="$DIR_SIM/trabajo/c$n"
-  local simulado="kill-session $nombre ($rol, glm, marcada); se espera el relanzamiento real via vigia -> system event -> main"
+  local simulado="kill-session $nombre ($rol, glm, marcada); se espera el relanzamiento real del vigia (corrida.sh lanzar-sesion), sin pasar por main"
   ruta_sin_reloj "trabajo/c$n" && mkdir -p "$dir" || {
     escribir_caso "$n" "NO FUNCIONA" "no se pudo crear el directorio de trabajo" "" "" "" "" ""; return; }
   local salida rc=0

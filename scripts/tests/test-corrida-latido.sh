@@ -238,6 +238,10 @@ grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[DETENIDA\]" || fail "el c
 [ "$(evts)" = "1" ] || fail "el vigia no se desperto con el carril callado (evts=$(evts))"
 grep "system event" "$LLAMADAS" | tail -1 | grep -q "relanzar" || fail "el evento al vigia no trae la accion"
 grep "system event" "$LLAMADAS" | tail -1 | grep -q "DETENIDA" || fail "el evento al vigia no trae el parte"
+# El parte va a la sesion de la corrida, la misma que usan los closed del
+# vigilante (tmux-activity-watch.sh send_event); sin clave caia en agent:main:main.
+grep "system event" "$LLAMADAS" | tail -1 | grep -q -- "--session-key agent:main:sim9-lat-1 " \
+  || fail "el evento al vigia no va a la sesion de la corrida: $(grep "system event" "$LLAMADAS" | tail -1)"
 [ "$(evjson lat-1 evento-vigia)" = "1" ] || fail "el evento al vigia no quedo en eventos.jsonl"
 
 # (6) dialogo de 10 min => NECESITO aunque no haya pasado el tope; y no duplica.
