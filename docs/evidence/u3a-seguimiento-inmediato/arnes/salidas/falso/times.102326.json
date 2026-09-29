@@ -1,0 +1,46 @@
+{
+ "token": "falso",
+ "config_arnes": {
+  "QUIET_SECS": 10.0,
+  "TICK_SECS": 2.0
+ },
+ "config_produccion": {
+  "QUIET_SECS": 900,
+  "TICK_SECS": 15,
+  "nota": "valores por defecto instalados, no medidos aqui"
+ },
+ "t_fin_wall": "2026-09-29T17:21:05.749Z",
+ "avisos_recibidos": [
+  {
+   "mono_ns": 640637696069083,
+   "delta_fin_s": 10.68,
+   "texto": "tmux: medicion-falso quiet for 11s | cmd=bash cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-falso-102059/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t medicion-falso -S -80"
+  },
+  {
+   "mono_ns": 640648362072750,
+   "delta_fin_s": 21.35,
+   "texto": "tmux: medicion-falso closed | last cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-falso-102059/repo | relanzada automaticamente: corrida.sh lanzar-sesion arnes19-falso lead falso /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-falso-102059/repo --nombre medicion-falso"
+  },
+  {
+   "mono_ns": 640659003575083,
+   "delta_fin_s": 31.99,
+   "texto": "tmux: medicion-falso quiet for 11s | cmd=bash cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-falso-102059/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t medicion-falso -S -80"
+  }
+ ],
+ "deteccion_a_envio_s": 10.68,
+ "vigia_log": [
+  "2026-09-29T17:21:16Z sent: tmux: medicion-falso quiet for 11s | cmd=bash cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-falso-102059/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t medicion-falso -S -80",
+  "2026-09-29T17:21:27Z relanzo automatico: medicion-falso (corrida arnes19-falso)",
+  "2026-09-29T17:21:27Z sent: tmux: medicion-falso closed | last cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-falso-102059/repo | relanzada automaticamente: corrida.sh lanzar-sesion arnes19-falso lead falso /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-falso-102059/repo --nombre medicion-falso",
+  "2026-09-29T17:21:37Z sent: tmux: medicion-falso quiet for 11s | cmd=bash cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-falso-102059/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t medicion-falso -S -80"
+ ],
+ "transporte_script_s_aprox": 0.43,
+ "resolucion_pared": "±0.5 s",
+ "relevo": {
+  "cierre_simulado_wall": "2026-09-29T17:21:25",
+  "deteccion_cierre_a_sesion_viva_s": 1.58,
+  "nota": "cierre provocado por el arnes (ficticio); deteccion, relevo y actividad son reales"
+ },
+ "resultado.txt": "MEDICION-19.0-falso\n",
+ "veredicto": "OK"
+}

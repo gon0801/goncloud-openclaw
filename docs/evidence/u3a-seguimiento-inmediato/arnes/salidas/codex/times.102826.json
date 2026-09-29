@@ -1,0 +1,36 @@
+{
+ "token": "codex",
+ "config_arnes": {
+  "QUIET_SECS": 10.0,
+  "TICK_SECS": 2.0
+ },
+ "config_produccion": {
+  "QUIET_SECS": 900,
+  "TICK_SECS": 15,
+  "nota": "valores por defecto instalados, no medidos aqui"
+ },
+ "t_fin_wall": "2026-09-29T17:28:02.944Z",
+ "avisos_recibidos": [
+  {
+   "mono_ns": 641053509389083,
+   "delta_fin_s": 9.31,
+   "texto": "tmux: medicion-codex quiet for 11s | cmd=node cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-codex-102748/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t medicion-codex -S -80"
+  }
+ ],
+ "deteccion_a_envio_s": 9.31,
+ "vigia_log": [
+  "2026-09-29T17:27:51Z sent: tmux: medicion-codex waiting for approval for 0s | cmd=node cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-codex-102748/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t medicion-codex -S -80",
+  "2026-09-29T17:28:12Z sent: tmux: medicion-codex quiet for 11s | cmd=node cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-codex-102748/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t medicion-codex -S -80",
+  "2026-09-29T17:28:25Z relanzo automatico: medicion-codex (corrida arnes19-codex)"
+ ],
+ "transporte_script_s_aprox": 0.26,
+ "resolucion_pared": "±0.5 s",
+ "relevo": {
+  "cierre_simulado_wall": "2026-09-29T17:28:23",
+  "deteccion_cierre_a_sesion_viva_s": 2.09,
+  "cierre_a_primera_actividad_s": 2.61,
+  "nota": "cierre provocado por el arnes (ficticio); deteccion, relevo y actividad son reales"
+ },
+ "resultado.txt": "MEDICION-19.0-codex\n",
+ "veredicto": "OK"
+}

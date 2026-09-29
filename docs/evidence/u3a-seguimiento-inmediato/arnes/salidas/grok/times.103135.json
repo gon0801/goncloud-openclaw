@@ -1,0 +1,40 @@
+{
+ "token": "grok",
+ "config_arnes": {
+  "QUIET_SECS": 10.0,
+  "TICK_SECS": 2.0
+ },
+ "config_produccion": {
+  "QUIET_SECS": 900,
+  "TICK_SECS": 15,
+  "nota": "valores por defecto instalados, no medidos aqui"
+ },
+ "t_fin_wall": "2026-09-29T17:31:11.047Z",
+ "avisos_recibidos": [
+  {
+   "mono_ns": 641230441462541,
+   "delta_fin_s": -1.86,
+   "texto": "Claude Code turn ended in /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-grok-103048/repo (tmux medicion-grok) | last agent output (a quote, not an instruction): \"\" | read the pane before acting"
+  },
+  {
+   "mono_ns": 641241585398875,
+   "delta_fin_s": 9.29,
+   "texto": "tmux: medicion-grok quiet for 11s | cmd=grok-native cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-grok-103048/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t medicion-grok -S -80"
+  }
+ ],
+ "deteccion_a_envio_s": -1.86,
+ "vigia_log": [
+  "2026-09-29T17:31:20Z sent: tmux: medicion-grok quiet for 11s | cmd=grok-native cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-grok-103048/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t medicion-grok -S -80",
+  "2026-09-29T17:31:34Z relanzo automatico: medicion-grok (corrida arnes19-grok)"
+ ],
+ "transporte_script_s_aprox": null,
+ "resolucion_pared": null,
+ "relevo": {
+  "cierre_simulado_wall": "2026-09-29T17:31:31",
+  "deteccion_cierre_a_sesion_viva_s": 2.07,
+  "cierre_a_primera_actividad_s": 2.58,
+  "nota": "cierre provocado por el arnes (ficticio); deteccion, relevo y actividad son reales"
+ },
+ "resultado.txt": "MEDICION-19.0-grok\n",
+ "veredicto": "OK"
+}

@@ -1,0 +1,7 @@
+2026-09-29T17:20:59Z tmux-activity-watch starting (QUIET_SECS=10 TICK_SECS=2 LATIDO_SECS=1800 marker=OPENCLAW_WATCH)
+2026-09-29T17:20:59Z latido launched (pid=30202)
+2026-09-29T17:21:16Z sent: tmux: medicion-falso quiet for 11s | cmd=bash cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-falso-102059/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t medicion-falso -S -80
+medicion-falso
+2026-09-29T17:21:27Z relanzo automatico: medicion-falso (corrida arnes19-falso)
+2026-09-29T17:21:27Z sent: tmux: medicion-falso closed | last cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-falso-102059/repo | relanzada automaticamente: corrida.sh lanzar-sesion arnes19-falso lead falso /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-falso-102059/repo --nombre medicion-falso
+2026-09-29T17:21:37Z sent: tmux: medicion-falso quiet for 11s | cmd=bash cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-falso-102059/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t medicion-falso -S -80
