@@ -159,7 +159,7 @@ corrida_preflight() {
     Esperado="$(git -C "$REPO" rev-parse --verify -q "$ref:scripts/mac/tmux-activity-watch.sh" 2>/dev/null)"
     instalado="$(git hash-object "$WATCH" 2>/dev/null)"
     if [ -n "$Esperado" ] && [ -n "$instalado" ]; then
-      [ "$Esperado" = "$instalado" ] || razon "vigilante viejo DEBUG ref=$ref esperado=$Esperado instalado=$instalado"
+      [ "$Esperado" = "$instalado" ] || razon "vigilante viejo"
     else
       unknown "blob del vigilante sin comparar"
     fi
