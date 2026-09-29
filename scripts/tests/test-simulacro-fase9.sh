@@ -592,4 +592,31 @@ rm -rf "$T/corridas/.sim9-obs-cron"
 
 fi
 
+if debe_correr 18; then
+# ===== (18) observacion extendida sobre un caso 4/7 NO FUNCIONA: el motivo se conserva =====
+# Medido en vivo 2026-09-29 (sim9-20260929-0229): la parte con reloj
+# inyectado de los casos 4 y 7 fallo, la observacion real salio bien, y el
+# arnes reescribio el detalle con "observado real: ..." conservando el
+# veredicto NO FUNCIONA: la evidencia decia NO FUNCIONA sin decir por que.
+# Regla: el veredicto es el de la parte inyectada; la observacion se SUMA al
+# detalle detras del motivo, nunca lo sustituye. message send sin id hace
+# fallar 3, 4 y 7 con un motivo literal conocido; el cron falso confirma.
+rm -rf "$T/corridas/.sim9-obs-cron"
+EVID18="$T/evidencia-18.md"
+salida18="$(SIM9_MSG_ID='' SIM_TOPE_OBS_POLL=2 SIM_TOPE_OBS_VENTANA=5 \
+  bash "$ARNES" --ensayo --salida "$EVID18" --tope-pared 300 --observar-avance 1 2>&1)"
+rc18=$?
+[ "$rc18" -eq 1 ] || fail "observacion sobre NO FUNCIONA: se esperaba salida 1, salio $rc18 -- $salida18"
+grep -qE '^\| 4 .*\| NO FUNCIONA \(el message send del inmediato no devolvio messageId; observado real: cron avance-tareas' "$EVID18" \
+  || fail "observacion sobre NO FUNCIONA: el caso 4 perdio su motivo o la observacion: $(grep '^| 4 ' "$EVID18")"
+grep -qE '^\| 7 .*\| NO FUNCIONA \(el message send del periodico no devolvio messageId; observado real: cron avance-tareas' "$EVID18" \
+  || fail "observacion sobre NO FUNCIONA: el caso 7 perdio su motivo o la observacion: $(grep '^| 7 ' "$EVID18")"
+grep -A2 '## Observacion extendida' "$EVID18" | grep -q 'FUNCIONA observado real' \
+  && fail "observacion sobre NO FUNCIONA: la nota declaro 'FUNCIONA observado real' con los casos 4 y 7 en NO FUNCIONA"
+grep -A2 '## Observacion extendida' "$EVID18" | grep -q 'caso 4 NO FUNCIONA / caso 7 NO FUNCIONA' \
+  || fail "observacion sobre NO FUNCIONA: la nota no dice el veredicto real de 4 y 7: $(grep -A2 '## Observacion extendida' "$EVID18")"
+rm -rf "$T/corridas/.sim9-obs-cron"
+
+fi
+
 echo "TODO VERDE: simulacro-fase9 (piezas a-e)"
