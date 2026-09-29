@@ -9,11 +9,13 @@
 #   health (--version en argv): quota|auth|broken|ok
 #   TUI: complete|waiting|failed|quota|auth|silence|obedece|cualquiera (idle)
 #   obedece: sin marca al arrancar; imprime la de completo solo si la linea
-#   recibida trae la orden de adaptador_deliver (ADAPTADOR_ORDEN_MARCA).
+#   recibida trae la orden de adaptador_deliver (ADAPTADOR_ORDEN_MARCA), y
+#   hace la edicion del brief de humo en README.md salvo FAKE_NO_EDITA=1.
 #   confianza-claude|confianza-codex|confianza-kimi: pinta el dialogo de
 #   confianza medido 2026-09-28 con la ruta $FAKE_CONFIANZA_RUTA y solo pinta
 #   la barra si recibe las teclas exactas que aceptan (claude: Down Enter;
-#   codex y kimi: Enter).
+#   codex y kimi: Enter). $FAKE_CONFIANZA_PREVIA, si viene, sale antes en una
+#   linea propia (un cwd pintado fuera del dialogo).
 #   sin-uso: aviso de cuota de cursor-agent medido 2026-09-28.
 # Los marcadores ADAPTADOR-MARCA son el contrato con adaptador_inspect.
 set -u
@@ -45,6 +47,9 @@ confianza() { # $1 linea que las teclas aceptadas dejan en el tty cocido
 }
 ruta="${FAKE_CONFIANZA_RUTA:-}"
 case "${FAKE_HARNESS_MODE:-}" in
+  confianza-*) [ -n "${FAKE_CONFIANZA_PREVIA:-}" ] && printf '%s\n' "$FAKE_CONFIANZA_PREVIA";;
+esac
+case "${FAKE_HARNESS_MODE:-}" in
   confianza-claude)
     printf ' Accessing workspace:\n %s\n Claude Code'"'"'ll be able to read, edit, and execute files here.\n ❯ No, exit\n   Yes, I trust this folder\n Enter to confirm · Esc to cancel\n' "$ruta"
     confianza "$(printf '\033[B')";;
@@ -72,6 +77,12 @@ esac
 while IFS= read -r linea; do
   printf 'RECIBIDO: %s\n' "$linea"
   if [ "${FAKE_HARNESS_MODE:-}" = obedece ]; then
+    case "$linea" in
+      *'anade la linea final "'*)
+        if [ "${FAKE_NO_EDITA:-}" != 1 ]; then
+          l="${linea#*anade la linea final \"}"; printf '%s\n' "${l%%\"*}" >>README.md
+        fi;;
+    esac
     case "$linea" in
       *"linea sola con ADAPTADOR-MARCA seguido de dos puntos"*) printf 'ADAPTADOR-MARCA: completo\n';;
     esac

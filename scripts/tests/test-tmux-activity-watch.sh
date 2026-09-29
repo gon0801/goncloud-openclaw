@@ -206,6 +206,8 @@ TUISH
   chmod +x "$TUI"
   # Bajo carga el TUI de mentira puede tardar mas de 1 s en pintar; una captura vacia se veria
   # como "sin prompt" y la prueba fallaria sin que el vigilante tenga culpa (paso 1 vez en 16).
+  # Por eso cada cambio de pantalla espera a verse pintado, no un sleep fijo (14.30: (2f) cayo
+  # asi en el shard 2/3 del PR #204).
   espera_pantalla() { # $1 sesion, $2 texto que debe verse
     local i=0
     while [ "$i" -lt 50 ]; do
@@ -227,7 +229,7 @@ TUISH
   n=$(grep -c 'glm-repinta quiet for' "$CALLS")
   [ "$n" -eq 1 ] || fail "(2e) un TUI que repinta la MISMA pantalla debe contar como callado y avisar una vez; hubo $n:
 $(cat "$CALLS")"
-  printf 'trabajando en el encargo\npaso nuevo\n' >"$PANTALLA_E"; sleep 1
+  printf 'trabajando en el encargo\npaso nuevo\n' >"$PANTALLA_E"; espera_pantalla glm-repinta 'paso nuevo'
   run_once || fail "--once (2e, contenido nuevo) fallo"
   sleep 2
   run_once || fail "--once (2e, callado otra vez) fallo"
@@ -250,13 +252,13 @@ $(cat "$CALLS")"
   [ "$n" -eq 1 ] || fail "(2f) un prompt de permiso a la vista avisa DE INMEDIATO, sin esperar QUIET_SECS; hubo $n:
 $(cat "$CALLS")"
   # El reloj del TUI avanza ("running 3s" -> "running 4s"): sigue siendo EL MISMO prompt.
-  sed -i.bak 's/running 3s/running 4s/' "$PANTALLA_F"; sleep 1
+  sed -i.bak 's/running 3s/running 4s/' "$PANTALLA_F"; espera_pantalla glm-permiso 'running 4s'
   run_p || fail "--once (2f, mismo prompt) fallo"
   n=$(wc -l <"$CALLS" | tr -d ' ')
   [ "$n" -eq 1 ] || fail "(2f) el mismo prompt no se repite ni sale ademas como 'quiet' aunque el reloj del TUI avance; hubo $n:
 $(cat "$CALLS")"
   # Otro prompt distinto (otro comando) es otra pregunta: avisa otra vez.
-  sed -i.bak 's/sed -n 1,2p tipos.d.ts/git push origin fase7/' "$PANTALLA_F"; sleep 1
+  sed -i.bak 's/sed -n 1,2p tipos.d.ts/git push origin fase7/' "$PANTALLA_F"; espera_pantalla glm-permiso 'git push origin fase7'
   run_p || fail "--once (2f, prompt distinto) fallo"
   n=$(grep -c 'glm-permiso waiting for approval' "$CALLS")
   [ "$n" -eq 2 ] || fail "(2f) un prompt DISTINTO debe avisar otra vez; hubo $n:
@@ -268,7 +270,7 @@ $(cat "$CALLS")"
   [ "$n" -eq 3 ] || fail "(2f) un prompt sin contestar debe RECORDARSE al pasar APPROVAL_REMIND_SECS; hubo $n:
 $(cat "$CALLS")"
   # Contestado: la pantalla ya no trae prompt. No avisa por eso, y el silencio posterior si.
-  printf 'comando aprobado, sigo trabajando\n' >"$PANTALLA_F"; sleep 1
+  printf 'comando aprobado, sigo trabajando\n' >"$PANTALLA_F"; espera_pantalla glm-permiso 'comando aprobado'
   run_p || fail "--once (2f, ya sin prompt) fallo"
   n=$(wc -l <"$CALLS" | tr -d ' ')
   [ "$n" -eq 3 ] || fail "(2f) al desaparecer el prompt no debe avisar nada; hubo $n:
@@ -646,7 +648,7 @@ exit "\$(cat "$LAT_RC")"
 STUB
   chmod +x "$STUB_LAT"
   corre_lat() { # $1 CORRIDA_BIN $2 STATE_DIR
-    CORRIDA_BIN="$1" TMUX_BIN="$TMUX_SHIM" OPENCLAW_BIN="$STUB_OPENCLAW" \
+    LATIDO_ONCE="${LATIDO_ONCE-1}" CORRIDA_BIN="$1" TMUX_BIN="$TMUX_SHIM" OPENCLAW_BIN="$STUB_OPENCLAW" \
       STATE_DIR="$2" LOG_FILE="$LOG_FILE" bash "$W" --once
   }
   corre_lat "$STUB_LAT" "$STATE_LAT" || fail "--once (2o, primer tick) fallo"
@@ -670,6 +672,35 @@ STUB
   grep -q 'latido failed (rc=1)' "$LOG_FILE" || fail "(2o) el latido fallido debe quedar en el log: $(cat "$LOG_FILE")"
   grep -q '^at=[0-9]' "$STATE_LAT/latido.stamp" || fail "(2o) el latido fallido tambien deja la marca (no se reintenta cada tick)"
   echo "ok (2o): el vigilante lanza el latido cada LATIDO_SECS, sin corrida.sh no lanza, y un fallo no lo tumba"
+
+  # (2p) 14.30: un --once manual no lanza el latido real salvo LATIDO_ONCE=1; una
+  # marca en el futuro con un pid vivo (reloj atrasado, pid reusado) no lo calla;
+  # el candado compartido con el LaunchAgent lo serializa y el de un vigilante
+  # muerto se retoma; LATIDO_SECS/LATIDO_TOPE no enteros no tumban el vigilante.
+  echo 0 >"$LAT_RC"; : >"$LAT_ARGV"; rm -rf "$STATE_LAT"
+  LATIDO_ONCE= corre_lat "$STUB_LAT" "$STATE_LAT" || fail "(2p) --once sin LATIDO_ONCE fallo"
+  [ -s "$LAT_ARGV" ] && fail "(2p) --once sin LATIDO_ONCE=1 no debe lanzar el latido: <$(cat "$LAT_ARGV")>"
+  [ -e "$STATE_LAT/latido.stamp" ] && fail "(2p) --once sin LATIDO_ONCE=1 no debe dejar marca de latido"
+  printf 'at=%s\npid=%s\n' "$(( $(date +%s) + 3600 ))" "$$" >"$STATE_LAT/latido.stamp"
+  corre_lat "$STUB_LAT" "$STATE_LAT" || fail "(2p) marca futura fallo"
+  [ "$(grep -cx latido "$LAT_ARGV")" -eq 1 ] || fail "(2p) una marca futura con pid vivo no debe callar el latido"
+  : >"$LAT_ARGV"; rm -f "$STATE_LAT/latido.stamp"
+  mkdir "$STATE_LAT/latido.lock"; printf '%s\n' "$$" >"$STATE_LAT/latido.lock/pid"
+  corre_lat "$STUB_LAT" "$STATE_LAT" || fail "(2p) candado ajeno fallo"
+  [ -s "$LAT_ARGV" ] && fail "(2p) con el candado en manos de un vigilante vivo no se lanza otro latido"
+  [ -d "$STATE_LAT/latido.lock" ] || fail "(2p) el candado ajeno no se toca"
+  sh -c 'exit 0' & muerto=$!; wait "$muerto"
+  printf '%s\n' "$muerto" >"$STATE_LAT/latido.lock/pid"
+  corre_lat "$STUB_LAT" "$STATE_LAT" || fail "(2p) candado muerto fallo"
+  [ "$(grep -cx latido "$LAT_ARGV")" -eq 1 ] || fail "(2p) el candado de un vigilante muerto se retoma y el latido sale"
+  [ -e "$STATE_LAT/latido.lock" ] && fail "(2p) el candado se suelta al terminar el tick"
+  : >"$LAT_ARGV"; rm -rf "$STATE_LAT"; : >"$LOG_FILE"
+  LATIDO_SECS=abc LATIDO_TOPE=4m corre_lat "$STUB_LAT" "$STATE_LAT" \
+    || fail "(2p) LATIDO_SECS/LATIDO_TOPE no enteros tumbaron al vigilante: $(cat "$LOG_FILE")"
+  [ "$(grep -cx latido "$LAT_ARGV")" -eq 1 ] || fail "(2p) con valores invalidos el latido sale con los de fabrica"
+  grep -q 'LATIDO_SECS invalid (abc), using 300' "$LOG_FILE" || fail "(2p) LATIDO_SECS invalido debe quedar en el log"
+  grep -q 'LATIDO_TOPE invalid (4m), using 240' "$LOG_FILE" || fail "(2p) LATIDO_TOPE invalido debe quedar en el log"
+  echo "ok (2p): --once no lanza el latido sin LATIDO_ONCE=1, marca futura no lo calla, candado serializa, enteros validados"
 
   "$TM" -L "$L" kill-server 2>/dev/null
   echo "ok (2): maquina de estados del vigilante verificada con tmux real ($TM)"

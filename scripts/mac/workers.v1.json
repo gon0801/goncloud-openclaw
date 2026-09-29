@@ -555,7 +555,8 @@
      "grok",
      "--resume",
      "{session_id}",
-     "--read-only"
+     "--permission-mode",
+     "plan"
     ],
     "resume:write": [
      "grok",
@@ -566,7 +567,8 @@
     ],
     "start:review": [
      "grok",
-     "--read-only"
+     "--permission-mode",
+     "plan"
     ],
     "start:write": [
      "grok",
@@ -582,7 +584,7 @@
    "id": "grok",
    "model": "router",
    "permission_modes": {
-    "review": "read-only",
+    "review": "plan",
     "write": "repo-allow"
    },
    "provider": "xai",

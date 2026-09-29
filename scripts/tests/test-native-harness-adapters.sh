@@ -363,6 +363,16 @@ $("$TM_REAL" -L "$L" capture-pane -p -t "=ses-conf-$b:" 2>/dev/null)"
     && fail "$b: se enviaron teclas a un dialogo con ruta ajena"
   "$TM_REAL" -L "$L" has-session -t "=ses-ajena-$b" 2>/dev/null \
     && fail "$b: ruta ajena dejo la sesion viva"
+
+  # 14.30: el dialogo pide el padre y el worktree sale solo en otra linea.
+  "$TM_REAL" -L "$L" set-environment -g FAKE_CONFIANZA_RUTA "$(dirname "$WT_CANON")"
+  "$TM_REAL" -L "$L" set-environment -g FAKE_CONFIANZA_PREVIA "$WT_CANON"
+  : >"$TMUX_LOG"
+  ad_start run-1 lane-1 "$w" "ses-padre-$b" "$T/wt" "$T/brief.txt" >/dev/null 2>"$T/conf.err" \
+    && fail "$b: dialogo que pide el padre se respondio porque el worktree salia en otra linea"
+  grep -q "send-keys -t =ses-padre-$b:" "$TMUX_LOG" \
+    && fail "$b: se enviaron teclas a un dialogo que pide el padre"
+  "$TM_REAL" -L "$L" set-environment -gu FAKE_CONFIANZA_PREVIA
 done
 modo_fake ""
 

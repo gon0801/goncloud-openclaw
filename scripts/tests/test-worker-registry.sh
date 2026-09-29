@@ -122,4 +122,19 @@ for w in reg["workers"]:
 assert not malos, malos
 PY
 
+# 14.30: grok 1.0.41 no tiene --read-only (sale rc 2, "unexpected argument");
+# toda argv de grok usa solo flags medidos en su --help (fixture versionado).
+GFLAGS=scripts/tests/fixtures/workers/grok-flags.txt
+[ -s "$GFLAGS" ] || fail "falta el fixture de flags de grok"
+python3 - scripts/mac/workers.v1.json "$GFLAGS" <<'PY' || fail "una argv de grok usa un flag que grok --help no trae"
+import json, sys
+reg = json.load(open(sys.argv[1]))
+validos = {l.strip() for l in open(sys.argv[2]) if l.strip() and not l.startswith("#")}
+malos = [f"{w['id']}/{clave}: {a}"
+         for w in reg["workers"] if w["harness"] == "grok-cli"
+         for clave, argv in w["commands"].items()
+         for a in argv if a.startswith("--") and a not in validos]
+assert not malos, malos
+PY
+
 echo "TODO VERDE: registro de workers"

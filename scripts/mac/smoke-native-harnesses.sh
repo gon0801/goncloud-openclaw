@@ -219,6 +219,10 @@ print(ws[0] if ws else "")
     sleep 2
     espera=$((espera+2))
   done
+  # La marca sola no es el trabajo: passed exige la linea del brief en README.md.
+  if [ "$completitud" = 1 ] && ! grep -qF "humo $w $FECHA" "$wt/README.md" 2>/dev/null; then
+    completitud=0; st="complete sin la linea en README.md"
+  fi
   "$TMUX_BIN" capture-pane -p -t "=$ses:" 2>/dev/null | redacta > "$evw/pantalla.txt"
   [ -s "$evw/pantalla.txt" ] && transcripcion=1
   s="$(bash "$CORRIDA" adaptador stop "$cid" c1 "$wid" "$ses" 2>>"$evw/fallos.log")"

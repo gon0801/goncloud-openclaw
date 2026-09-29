@@ -191,6 +191,18 @@ assert d["resultados"][0]["chequeos"]["transcripcion"] is True, d
 PY
 sin_humos || fail "el driver dejo sesiones de tmux vivas (run 4)"
 
+# RUN 5 (14.28 R-d): el doble imprime la marca pero no edita README.md => el
+# humo no cuenta como passed (la marca sola no es el trabajo) y rc != 0.
+out="$(FAKE_NO_EDITA=1 bash "$DRIVER" --worker kimi --repo "$T/origin" --evidence-dir "$T/ev5" 2>&1)"; rc=$?
+[ $rc -ne 0 ] || fail "con la marca sin la edicion el driver debio salir distinto de 0:
+$out"
+python3 - "$T/ev5/resumen.json" <<'PY' || fail "el resumen del run 5 no pasa"
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["resultados"][0]["outcome"] == "failed", d
+PY
+sin_humos || fail "el driver dejo sesiones de tmux vivas (run 5)"
+
 # Firma de parada del corte (B2 de Claude, 14.7-r2): la forma corta de
 # adaptador stop muere por uso (rc 2) y en reversa dejaria el harness vivo;
 # el runbook debe traer la firma completa id carril worker sesion.

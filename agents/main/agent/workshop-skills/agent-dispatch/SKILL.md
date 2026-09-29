@@ -67,7 +67,7 @@ David repeatedly orders a fix-then-review loop against the Claude Code tab in th
 
 ## Merge, deployment and regression
 
-Any agent, including main, may merge and deploy without additional owner permission. Use the normal GitHub PR flow after CI and CodeRabbit approval. Follow the target deployment procedure and verify its result. A regression goes back to the brief.
+Any agent, including main, may merge and deploy without additional owner permission. Use the normal GitHub PR flow after CI and CodeRabbit approval. Follow the target deployment procedure and verify its result. A regression goes back to the brief. With native routing on, the native skill named in the routing section governs: main does not merge or deploy.
 
 ## A phase is closed only when a command says so
 

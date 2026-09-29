@@ -31,7 +31,6 @@ su observación (`observed.*` en el registro).
 - **Revisión cruzada local antes del primer push**, y el loop de corrección
   de CodeRabbit corre en el mismo PR (delta review, no nueva revisión).
 - **Modelo y effort visibles:** el tablero y la selección muestran el `model` y el `effort` del worker elegido; `reported_model` es lo que la CLI reporta y se registra aparte (14.13d).
-- **Modelo y effort visibles:** el tablero y la selección muestran el `model` y el `effort` del worker elegido; `reported_model` es lo que la CLI reporta y se registra aparte (14.13d).
 - **Canary vivo verificado** antes de declarar éxito; un canary fallido
   obliga reversa documentada.
 - **Routea off a la cadena existente:** con `CORRIDA_NATIVE_ROUTING=off` o el

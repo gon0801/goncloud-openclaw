@@ -38,10 +38,10 @@ GraphQL directo alterno. Registra la intencion antes de delegar y relee
 ## Flujo de cierre
 
 1. Lee el SHA actual del PR, CI y CodeRabbit; corrige los bloqueantes de revision.
-2. Con la ruta autorizada y el recibo del kit vigente (con el kit apagado, sigue «Kit apagado»), ejecuta `gh pr merge <PR> --squash --match-head-commit <SHA>` desde el worktree. En el nodo Mac usa `PATH=/opt/homebrew/bin:$PATH`.
+2. Por la Ruta 1 (la Ruta 2 delega en la compuerta, no en este paso) y con el recibo del kit vigente (con el kit apagado, sigue «Kit apagado»), ejecuta `gh pr merge <PR> --squash --match-head-commit <SHA>` desde el worktree. En el nodo Mac usa `PATH=/opt/homebrew/bin:$PATH`.
 3. Comprueba `MERGED` y el SHA integrado. Si la tarea incluye despliegue, sigue el procedimiento del destino y verifica el resultado.
 
 ## Ruta 1 (legada): orden fechada del dueno
 
 Si existe una orden fechada del dueno para el cambio, el merge sigue el flujo
-normal de GitHub documentado abajo; la orden es la autorizacion.
+normal de GitHub documentado arriba (Flujo de cierre); la orden es la autorizacion.
