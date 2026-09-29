@@ -421,7 +421,7 @@ for par in \
   "zcode|zai/glm" \
   "kimi|thinking:" \
   "cursor-agent|Cursor Agent" \
-  "grok|always-approve"; do
+  "grok|[stable]"; do
   b="${par%%|*}"; texto="${par#*|}"
   ses="ses-barra-$b"
   "$TM_REAL" -L "$L" new-session -d -s "$ses" -x 80 -y 24 "printf '%s\n' \"$texto\"; sleep 60" 2>/dev/null \
