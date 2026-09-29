@@ -3,7 +3,9 @@
 # --sha SHA --evidence FILE: relee el PR autoritativo y valida contra el
 # contrato del kit instalado, decide puro en corrida-worker.py, registra el
 # veredicto y proyecta evidencia de solo lectura. La proyeccion jamas
-# sustituye al recibo del kit. Sin kit no hay merge (fail-closed).
+# sustituye al recibo del kit. Sin kit no hay merge (fail-closed), salvo que
+# la preaprobacion del registro declare modo_recibo ci-y-revisor: entonces el
+# recibo lo reemplaza el veredicto del revisor leido de GitHub para el head.
 # Uso: corrida.sh compuerta <id> <carril> <cross-review|push-pr|ci|coderabbit|merge|deploy|canary|rollback> --sha SHA --evidence FILE
 corrida_compuerta() {
   [ "$#" -ge 3 ] || { echo "uso: corrida.sh compuerta <id> <carril> <accion> --sha SHA --evidence FILE" >&2; return 2; }
@@ -46,8 +48,25 @@ corrida_compuerta() {
   fi
   rcf="$(mktemp)" || { rm -f "$prf"; return 1; }
   rerr="$(mktemp)" || { rm -f "$prf" "$rcf"; return 1; }
-  local rstatus=0
+  local rstatus=0 tabla="$AQUI/corrida/preaprobaciones.v1.json" modo=""
+  local rvc="" rvr=""
   if [ "$accion" = "merge" ]; then
+    if ! modo="$(python3 "$AQUI/corrida-worker.py" receipt-mode --record "$reg" \
+        --preaprobaciones "$tabla" 2>/dev/null)"; then
+      rm -f "$prf" "$rcf" "$rerr"
+      compuerta_veredicto "$id" "$reg" "$carril" "$accion" "$sha" deny modo-recibo-invalido \
+        "la tabla de preaprobaciones no declara un modo de recibo valido" "{}"
+      return 1
+    fi
+  fi
+  if [ "$modo" = "ci-y-revisor" ]; then
+    rvc="$(mktemp)" || { rm -f "$prf" "$rcf" "$rerr"; return 1; }
+    rvr="$(mktemp)" || { rm -f "$prf" "$rcf" "$rerr" "$rvc"; return 1; }
+    # Una lectura fallida borra los archivos: la decision la ve ilegible y
+    # niega, jamas la confunde con "sin revisor".
+    gh api "repos/$repo/issues/$prn/comments" --paginate >"$rvc" 2>/dev/null || rm -f "$rvc"
+    gh api "repos/$repo/pulls/$prn/reviews" --paginate >"$rvr" 2>/dev/null || rm -f "$rvr"
+  elif [ "$accion" = "merge" ]; then
     compuerta_kit_merge "$repo" "$prn" "$sha" "$rcf" "$rerr"
     local krc=$?
     if [ "$krc" -eq 3 ]; then
@@ -74,12 +93,13 @@ corrida_compuerta() {
   if ! out="$(python3 "$AQUI/corrida-worker.py" gate --record "$reg" --lane "$carril" \
       --action "$accion" --sha "$sha" --evidence "$evidence" --receipt "$rcf" \
       --receipt-status "$rstatus" --receipt-error "$(cat "$rerr" 2>/dev/null)" \
-      --pr "$prf" 2>/dev/null)"; then
-    rm -f "$prf" "$rcf" "$rerr"
+      --pr "$prf" ${modo:+--preaprobaciones "$tabla"} \
+      ${rvc:+--reviewer-comments "$rvc" --reviewer-reviews "$rvr"} 2>/dev/null)"; then
+    rm -f "$prf" "$rcf" "$rerr" "$rvc" "$rvr"
     echo "compuerta: entrada invalida para la compuerta" >&2
     return 2
   fi
-  rm -f "$prf" "$rcf" "$rerr"
+  rm -f "$prf" "$rcf" "$rerr" "$rvc" "$rvr"
   local verdict code reason projection updates
   verdict="$(printf '%s' "$out" | python3 -c "import json,sys; print(json.load(sys.stdin)['verdict'])")"
   code="$(printf '%s' "$out" | python3 -c "import json,sys; print(json.load(sys.stdin)['code'])")"

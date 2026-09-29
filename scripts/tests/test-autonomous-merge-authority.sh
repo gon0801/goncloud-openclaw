@@ -180,12 +180,64 @@ verifica "CI de otro SHA" implementer "$T/reg-ok.json" 1 "CI no corresponde"
 evidencia "$T/ev.json" "$SHA" failure
 verifica "CI fallido" implementer "$T/reg-ok.json" 1 "CI no vigente"
 evidencia "$T/ev.json" "$SHA" success
+# Modo kit: copia del gate con la tabla declarando saikit-entrega.v1 (la
+# tabla real declara el kit apagado desde el 2026-09-28).
+KITD="$T/modo-kit"
+mkdir -p "$KITD/corrida"
+cp "$GATE" "$KITD/corrida/autoridad-merge.sh"
+cp -R scripts/mac/corrida_worker "$KITD/corrida_worker"
+tabla_con_modo() { # $1 salida $2 modo_recibo
+  python3 - "$TABLA" "$1" "$2" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["preaprobaciones"][0]["modo_recibo"] = sys.argv[3]
+json.dump(d, open(sys.argv[2], "w"), indent=1)
+PY
+}
+tabla_con_modo "$KITD/corrida/preaprobaciones.v1.json" saikit-entrega.v1
+GATE_KIT="$KITD/corrida/autoridad-merge.sh"
+bash "$GATE_KIT" implementer r14-4 "$T/reg-ok.json" l1 "$SHA" "$T/ev.json" "$T/rc.json" >/dev/null 2>&1 \
+  || fail "modo kit con recibo vigente debio autorizar"
 recibo "$T/rc-viejo.json" "$(printf '9%.0s' $(seq 40))"
-out_rh="$(bash "$GATE" implementer r14-4 "$T/reg-ok.json" l1 "$SHA" "$T/ev.json" "$T/rc-viejo.json" 2>&1)"
+out_rh="$(bash "$GATE_KIT" implementer r14-4 "$T/reg-ok.json" l1 "$SHA" "$T/ev.json" "$T/rc-viejo.json" 2>&1)"
 [ "$?" -ne 0 ] || fail "recibo de otro head debio fallar: $out_rh"
 printf '%s\n' "$out_rh" | grep -q "recibo de un head distinto" \
   || fail "sin motivo del recibo: $out_rh"
+out_nr="$(bash "$GATE_KIT" implementer r14-4 "$T/reg-ok.json" l1 "$SHA" "$T/ev.json" "$T/no-hay-recibo.json" 2>&1)"
+[ "$?" -ne 0 ] || fail "modo kit sin recibo debio fallar: $out_nr"
+printf '%s\n' "$out_nr" | grep -q "recibo del kit ilegible" \
+  || fail "sin motivo de recibo ausente: $out_nr"
 echo "ok (4): recibo del kit y CI vigentes para el head"
+
+# (4b) Kit apagado por la tabla real (modo_recibo ci-y-revisor): no hay
+# recibo que exigir, el resto del alcance y el CI siguen mandando, y el
+# veredicto del revisor lo relee la compuerta.
+python3 - "$TABLA" <<'PY' || fail "la tabla real no declara el kit apagado"
+import json, sys
+e = [p for p in json.load(open(sys.argv[1]))["preaprobaciones"] if p["id"] == "fase14-merge-automatico"][0]
+assert e["modo_recibo"] == "ci-y-revisor", e
+assert "David 2026-09-28" in e["orden_modo_recibo"], e
+PY
+python3 - "$T/ev.json" "$T/ev-sin-kit.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+d.pop("schema")
+json.dump(d, open(sys.argv[2], "w"), indent=1)
+PY
+out_sk="$(bash "$GATE" implementer r14-4 "$T/reg-ok.json" l1 "$SHA" "$T/ev-sin-kit.json" "$T/no-hay-recibo.json" 2>&1)"
+[ "$?" -eq 0 ] || fail "kit apagado sin recibo debio autorizar: $out_sk"
+printf '%s\n' "$out_sk" | grep -q '^DELEGAR: bash scripts/mac/corrida.sh compuerta r14-4 l1 merge' \
+  || fail "kit apagado sin delegacion a la compuerta: $out_sk"
+evidencia "$T/ev-rojo.json" "$SHA" failure
+out_skr="$(bash "$GATE" implementer r14-4 "$T/reg-ok.json" l1 "$SHA" "$T/ev-rojo.json" "$T/no-hay-recibo.json" 2>&1)"
+[ "$?" -ne 0 ] || fail "kit apagado con CI rojo autorizo: $out_skr"
+printf '%s\n' "$out_skr" | grep -q "CI no vigente" || fail "sin motivo de CI: $out_skr"
+tabla_con_modo "$KITD/corrida/preaprobaciones.v1.json" sin-kit-a-ojo
+out_mi="$(bash "$GATE_KIT" implementer r14-4 "$T/reg-ok.json" l1 "$SHA" "$T/ev.json" "$T/rc.json" 2>&1)"
+[ "$?" -ne 0 ] || fail "modo_recibo fuera del conjunto autorizo: $out_mi"
+printf '%s\n' "$out_mi" | grep -q "modo_recibo fuera del conjunto" \
+  || fail "sin motivo de modo invalido: $out_mi"
+echo "ok (4b): kit apagado solo por declaracion; CI y modo cerrado siguen mandando"
 
 # (5) Ruta legada: orden fechada del dueno sigue funcionando (skills la
 # documentan como camino historico; el gate nuevo solo gobierna la ruta

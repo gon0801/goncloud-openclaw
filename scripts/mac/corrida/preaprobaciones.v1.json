@@ -3,8 +3,10 @@
     {
       "decision": "Aprobado",
       "id": "fase14-merge-automatico",
+      "modo_recibo": "ci-y-revisor",
       "operacion": "merge",
       "orden": "Pedido de David 2026-09-25: merge autom\u00e1tico de la Fase 14 por la compuerta del Task 6",
+      "orden_modo_recibo": "Decisi\u00f3n de David 2026-09-28: con el kit SummonAI apagado desde 2026-09-27 ning\u00fan PR trae recibo saikit-entrega.v1; lo reemplazan CI verde en el head del PR y el veredicto de un revisor independiente sobre ese mismo head sin hallazgo bloqueante abierto",
       "patron": "fase14",
       "rama": "corrida/*",
       "repo": "gon0801/goncloud-openclaw"

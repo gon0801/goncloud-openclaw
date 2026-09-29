@@ -1,13 +1,16 @@
 """Compuertas de calidad por SHA (Fase 14, Task 6).
 
 Decide puro sobre datos ya releidos por el wrapper: el recibo validado por
-el contrato del kit instalado, el PR autoritativo y la evidencia aportada.
+el contrato del kit instalado (o, con el kit apagado por declaracion en la
+tabla de preaprobaciones, el veredicto del revisor leido de GitHub), el PR
+autoritativo y la evidencia aportada.
 Cada veredicto trae una proyeccion de solo lectura (fuente, repo, PR, SHA
 revisado, resultado, disponibilidad) que jamas sustituye al recibo del kit.
 La indisponibilidad declarada de un bot se registra y no es aprobacion.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
@@ -21,6 +24,15 @@ ACTIONS = (
     "canary",
     "rollback",
 )
+
+KIT_RECEIPT = "saikit-entrega.v1"
+REVIEWER_RECEIPT = "ci-y-revisor"
+RECEIPT_MODES = (KIT_RECEIPT, REVIEWER_RECEIPT)
+
+DEEPSEEK_LOGINS = frozenset({"github-actions[bot]", "github-actions"})
+CODERABBIT_LOGINS = frozenset({"coderabbitai[bot]", "coderabbitai"})
+BLOCKING_SEVERITIES = frozenset({"critical", "high"})
+FINDINGS_MARK = "<!-- ai-review:findings="
 
 
 @dataclass(frozen=True)
@@ -89,6 +101,100 @@ def _receipt_error_code(error: str) -> str:
     return "sin-recibo"
 
 
+def receipt_mode(record: Mapping[str, Any], table: Mapping[str, Any]) -> str:
+    """Modo de recibo que declara la preaprobacion aprobada del registro.
+
+    Apagar el kit exige una declaracion versionada; que falte la libreria del
+    kit jamas lo apaga. Un valor fuera del conjunto en CUALQUIER entrada
+    invalida la tabla entera (ValueError).
+    """
+    entries = table.get("preaprobaciones")
+    if not isinstance(entries, list):
+        raise ValueError("tabla sin lista de preaprobaciones")
+    for entry in entries:
+        if isinstance(entry, dict) and entry.get("modo_recibo", KIT_RECEIPT) not in RECEIPT_MODES:
+            raise ValueError(f"modo_recibo fuera del conjunto: {entry.get('modo_recibo')}")
+    ref = record.get("authorization_ref")
+    for entry in entries:
+        if (
+            isinstance(ref, str)
+            and ref
+            and isinstance(entry, dict)
+            and entry.get("id") == ref
+            and entry.get("decision") == "Aprobado"
+        ):
+            return str(entry.get("modo_recibo", KIT_RECEIPT))
+    return KIT_RECEIPT
+
+
+@dataclass(frozen=True)
+class ReviewerVerdict:
+    source: str
+    reason: str
+
+
+def _bot(item: Mapping[str, Any], logins: frozenset) -> bool:
+    user = item.get("user")
+    return isinstance(user, dict) and user.get("type") == "Bot" and user.get("login") in logins
+
+
+def _deepseek_blocking(body: str) -> str:
+    """'' si el comentario completo no trae High/Critical abiertos; si no, el motivo."""
+    lines = [line.strip() for line in body.splitlines() if line.strip().startswith(FINDINGS_MARK)]
+    if len(lines) != 1 or not lines[0].endswith("-->"):
+        return "el comentario de DeepSeek no trae hallazgos legibles"
+    try:
+        data = json.loads(lines[0][len(FINDINGS_MARK):-3].strip())
+    except json.JSONDecodeError:
+        return "el comentario de DeepSeek no trae hallazgos legibles"
+    findings = data.get("findings") if isinstance(data, dict) else None
+    if not isinstance(findings, list) or not all(isinstance(f, dict) for f in findings):
+        return "el comentario de DeepSeek no trae hallazgos legibles"
+    for finding in findings:
+        if finding.get("state") == "open" and str(finding.get("severity") or "").lower() in BLOCKING_SEVERITIES:
+            return f"DeepSeek tiene abierto un hallazgo {finding.get('severity')} en el head"
+    return ""
+
+
+def reviewer_verdict(sha: str, comments: list, reviews: list) -> ReviewerVerdict:
+    """Veredicto de revisor independiente sobre ESTE head, leido de GitHub.
+
+    Vale el comentario de DeepSeek completo para el head sin High/Critical
+    abiertos (Medium/Low no bloquean, igual que al mergear a mano) o una
+    review de CodeRabbit con commit_id del head. Un High abierto bloquea
+    aunque CodeRabbit haya revisado.
+    """
+    completion = f"<!-- ai-review:completion={sha}:complete -->"
+    deepseek_ok = False
+    stale = False
+    for comment in comments:
+        if not isinstance(comment, dict) or not _bot(comment, DEEPSEEK_LOGINS):
+            continue
+        body = str(comment.get("body") or "")
+        if completion not in [line.strip() for line in body.splitlines()]:
+            if "<!-- ai-review:completion=" in body:
+                stale = True
+            continue
+        blocking = _deepseek_blocking(body)
+        if blocking:
+            return ReviewerVerdict("", blocking)
+        deepseek_ok = True
+    if deepseek_ok:
+        return ReviewerVerdict("deepseek", "")
+    for review in reviews:
+        if not isinstance(review, dict) or not _bot(review, CODERABBIT_LOGINS):
+            continue
+        if review.get("commit_id") != sha:
+            stale = True
+            continue
+        if review.get("state") in ("CHANGES_REQUESTED", "DISMISSED"):
+            continue
+        return ReviewerVerdict("coderabbit", "")
+    if stale:
+        return ReviewerVerdict("", "el veredicto del revisor es de otro head")
+    return ReviewerVerdict("", "sin veredicto de revisor independiente para el head")
+
+
 def gate_decision(state: Mapping[str, Any], action: str, sha: str) -> GateDecision:
     """Decide una compuerta. state trae lane, evidence, receipt, pr frescos."""
     lane = state.get("lane") or {}
@@ -112,6 +218,8 @@ def gate_decision(state: Mapping[str, Any], action: str, sha: str) -> GateDecisi
     if action == "coderabbit":
         return _decide_coderabbit(evidence, sha)
     if action == "merge":
+        if state.get("receipt_mode") == REVIEWER_RECEIPT:
+            return _decide_merge_reviewer(evidence, state.get("reviewer"), pr, sha)
         return _decide_merge(evidence, receipt, receipt_error, pr, sha)
     if action == "deploy":
         return _decide_deploy(lane, evidence, pr, sha)
@@ -227,6 +335,35 @@ def _decide_merge(
     if receipt.get("sha") != sha:
         return _deny("recibo-otro-sha", "el recibo es de otro sha",
                       _projection(evidence, sha, "stale", _availability_of(evidence)))
+    reviewer = (receipt.get("reviewer") or {}).get("id") or ""
+    implementer = (receipt.get("implementer") or {}).get("id") or ""
+    return _merge_after_authority(evidence, pr, sha, reviewer, implementer, str(receipt.get("sha", sha)))
+
+
+def _decide_merge_reviewer(
+    evidence: Mapping[str, Any],
+    reviewer_reads: Mapping[str, Any] | None,
+    pr: Mapping[str, Any],
+    sha: str,
+) -> GateDecision:
+    if not isinstance(reviewer_reads, dict):
+        return _deny("revisor-ilegible", "no se pudo leer el veredicto del revisor en GitHub",
+                      _projection(evidence, sha, "missing", _availability_of(evidence)))
+    verdict = reviewer_verdict(sha, reviewer_reads.get("comments") or [], reviewer_reads.get("reviews") or [])
+    if not verdict.source:
+        return _deny("sin-veredicto-revisor", verdict.reason,
+                      _projection(evidence, sha, "missing", _availability_of(evidence)))
+    return _merge_after_authority(evidence, pr, sha, verdict.source, "", sha)
+
+
+def _merge_after_authority(
+    evidence: Mapping[str, Any],
+    pr: Mapping[str, Any],
+    sha: str,
+    reviewer: str,
+    implementer: str,
+    authority_sha: str,
+) -> GateDecision:
     if pr.get("head") != sha:
         return _deny("pr-avanzado", "el head del PR ya no es el revisado",
                       _projection(evidence, sha, "stale", _availability_of(evidence)))
@@ -255,10 +392,8 @@ def _decide_merge(
         return _deny(code, "CI sin verde vigente",
                       _projection(evidence, sha, "blocked", _availability_of(evidence)))
     authors = list(evidence.get("authors") or [])
-    implementer = (receipt.get("implementer") or {}).get("id")
     if implementer:
         authors.append(implementer)
-    reviewer = (receipt.get("reviewer") or {}).get("id") or ""
     if reviewer in authors:
         return _deny("revisor-es-autor", "el autor actua como revisor independiente",
                       _projection(evidence, sha, "blocked", _availability_of(evidence)))
@@ -297,7 +432,7 @@ def _decide_merge(
         if violation:
             return _deny(violation, "la correccion la revisa otro revisor",
                           _projection(evidence, sha, "blocked", _availability_of(evidence)))
-    reviewed = review.get("sha", sha) if review is not None else receipt.get("sha", sha)
+    reviewed = review.get("sha", sha) if review is not None else authority_sha
     availability = _availability_of(evidence)
     result = "approved" if availability == "available" else "conditional"
     updates: dict = {

@@ -34,6 +34,7 @@ from corrida_worker.state import (
 from corrida_worker.reconcile import decision_digest, reconcile
 from corrida_worker.gates import ACTIONS as GATE_ACTIONS
 from corrida_worker.gates import gate_decision
+from corrida_worker.gates import KIT_RECEIPT, receipt_mode
 
 NATIVE_KEYS = (
     "workers_registry",
@@ -329,6 +330,33 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
     return 0
 
 
+def _json_stream_items(text: str) -> list:
+    """Items de la salida de gh api --paginate: arreglos JSON concatenados."""
+    decoder = json.JSONDecoder()
+    items: list = []
+    pos = 0
+    while True:
+        while pos < len(text) and text[pos].isspace():
+            pos += 1
+        if pos >= len(text):
+            return items
+        value, pos = decoder.raw_decode(text, pos)
+        if not isinstance(value, list):
+            raise ValueError("pagina de gh api que no es arreglo")
+        items.extend(value)
+
+
+def cmd_receipt_mode(args: argparse.Namespace) -> int:
+    try:
+        record = json.loads(Path(args.record).read_text(encoding="utf-8"))
+        table = json.loads(Path(args.preaprobaciones).read_text(encoding="utf-8"))
+        print(receipt_mode(record, table))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError, AttributeError) as exc:
+        print(f"ERROR modo de recibo: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_gate(args: argparse.Namespace) -> int:
     if args.action not in GATE_ACTIONS:
         print("ERROR invalid gate input")
@@ -377,6 +405,22 @@ def cmd_gate(args: argparse.Namespace) -> int:
     except (TypeError, ValueError):
         print("ERROR invalid gate input")
         return 2
+    mode = KIT_RECEIPT
+    if args.preaprobaciones:
+        try:
+            mode = receipt_mode(record, json.loads(Path(args.preaprobaciones).read_text(encoding="utf-8")))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError, AttributeError):
+            print("ERROR invalid gate input")
+            return 2
+    reviewer = None
+    if args.reviewer_comments and args.reviewer_reviews:
+        try:
+            reviewer = {
+                "comments": _json_stream_items(Path(args.reviewer_comments).read_text(encoding="utf-8")),
+                "reviews": _json_stream_items(Path(args.reviewer_reviews).read_text(encoding="utf-8")),
+            }
+        except (OSError, UnicodeDecodeError, ValueError):
+            reviewer = None
     # Contrato: recibo presente equivale a kit aceptado. Si el kit lo
     # rechazo (status distinto de 0), el recibo no llega a la decision aunque
     # el llamador lo haya pasado; el motivo del kit da el codigo.
@@ -389,6 +433,8 @@ def cmd_gate(args: argparse.Namespace) -> int:
             "receipt": receipt,
             "receipt_status": receipt_status,
             "receipt_error": args.receipt_error or "",
+            "receipt_mode": mode,
+            "reviewer": reviewer,
             "pr": pr,
         },
         args.action,
@@ -481,7 +527,14 @@ def build_parser() -> argparse.ArgumentParser:
     gate.add_argument("--receipt-status", required=True)
     gate.add_argument("--receipt-error", default="")
     gate.add_argument("--pr", required=True)
+    gate.add_argument("--preaprobaciones", default="")
+    gate.add_argument("--reviewer-comments", default="")
+    gate.add_argument("--reviewer-reviews", default="")
     gate.set_defaults(func=cmd_gate)
+    mode = sub.add_parser("receipt-mode")
+    mode.add_argument("--record", required=True)
+    mode.add_argument("--preaprobaciones", required=True)
+    mode.set_defaults(func=cmd_receipt_mode)
 
     health = sub.add_parser("health")
     health_sub = health.add_subparsers(dest="action", required=True)
