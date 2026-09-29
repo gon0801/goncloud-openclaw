@@ -19,12 +19,14 @@ import {
   type EventoInmediato,
   type ProblemaSeguimiento,
 } from "./seguimiento-clock.ts";
+import { validarMensajeV1 } from "./seguimiento-render.ts";
 
 function resumen14(completadas: number, total: number, porcentaje: number): ResumenSeguimiento {
   return {
     trabajoId: "fase:14",
     fase: "14",
     titulo: "Fase 14",
+    unidad: "tareas",
     progreso: { kind: "conocido", completadas, total, porcentaje },
     carriles: [
       {
@@ -50,6 +52,7 @@ function resumen15(): ResumenSeguimiento {
     trabajoId: "fase:15",
     fase: "15",
     titulo: "Fase 15",
+    unidad: "tareas",
     progreso: { kind: "conocido", completadas: 1, total: 2, porcentaje: 50 },
     carriles: [
       {
@@ -67,6 +70,17 @@ function resumen15(): ResumenSeguimiento {
     siguientePaso: "Cerrar el pendiente.",
     atencionRequerida: { necesaria: false, motivo: null },
     actualizado: "2026-09-19T10:30:00Z",
+  };
+}
+
+function resumenCorrida(completadas: number, titulo = "Migrar el correo"): ResumenSeguimiento {
+  const porcentaje = Math.round((100 * completadas) / 3);
+  return {
+    ...resumen14(completadas, 3, porcentaje),
+    trabajoId: "corrida:migrar-correo",
+    fase: "0",
+    titulo,
+    unidad: "partes",
   };
 }
 
@@ -252,6 +266,94 @@ describe("decidirSeguimiento", () => {
   });
 });
 
+describe("decidirSeguimiento con una corrida", () => {
+  it("names the corrida by its title in the advance, never as Fase 0", () => {
+    const primero = decidirSeguimiento({ ahora: 1800, previo: crearEstadoInicial(0, [resumenCorrida(0)]), activas: [resumenCorrida(0)], inmediato: null });
+    if (primero.accion !== "SEND") throw new Error("primer corte inesperado");
+    const segundo = decidirSeguimiento({
+      ahora: 3600, previo: confirmado(primero.estadoTrasConfirmar, 7), activas: [resumenCorrida(1)], inmediato: null,
+    });
+    if (segundo.accion !== "SEND") throw new Error("segundo corte inesperado");
+    assert.match(segundo.mensaje, /Migrar el correo avanzó de 0\/3 a 1\/3\./);
+    assert.doesNotMatch(segundo.mensaje, /Fase 0/);
+  });
+
+  it("an attention request names the corrida and its parts and stays valid v1", () => {
+    const activas = [{ ...resumenCorrida(1), atencionRequerida: { necesaria: true, motivo: "Necesito el código del banco" } }];
+    const d = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
+    if (d.accion !== "SEND") throw new Error("atencion inesperada");
+    assert.equal(d.mensaje, [
+      "[NECESITO TU RESPUESTA] Migrar el correo, 1 de 3 partes terminadas",
+      "Que cambio: Migrar el correo llegó a una decisión que no está preaprobada.",
+      "Que sigue: El trabajo espera tu respuesta antes de continuar.",
+      "Que necesito de ti: Necesito el código del banco.",
+    ].join("\n"));
+    assert.equal(validarMensajeV1(d.mensaje).ok, true);
+  });
+
+  it("a title that is not owner language falls back and the attention still validates", () => {
+    const activas = [{ ...resumenCorrida(1, "Arreglar el merge del repo"), atencionRequerida: { necesaria: true, motivo: null } }];
+    const d = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
+    if (d.accion !== "SEND") throw new Error("atencion inesperada");
+    assert.match(d.mensaje, /^\[NECESITO TU RESPUESTA\] migrar-correo, 1 de 3 partes terminadas$/m);
+    assert.match(d.mensaje, /^Que cambio: Trabajo migrar-correo llegó a una decisión/m);
+    assert.equal(validarMensajeV1(d.mensaje).ok, true);
+  });
+
+  it("fase15-ci: line 1 keeps the id, the body falls back to a plain phrase, and it stays valid v1", () => {
+    const activas = [{
+      ...resumenCorrida(1, "Autopilot de la Fase 15 — CI completa sin siete minutos de espera"),
+      trabajoId: "corrida:fase15-ci",
+      atencionRequerida: { necesaria: true, motivo: null },
+    }];
+    const d = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
+    if (d.accion !== "SEND") throw new Error("atencion inesperada");
+    assert.match(d.mensaje, /^\[NECESITO TU RESPUESTA\] fase15-ci, 1 de 3 partes terminadas$/m);
+    assert.match(d.mensaje, /^Que cambio: Trabajo en curso llegó a una decisión/m);
+    assert.equal(validarMensajeV1(d.mensaje).ok, true);
+  });
+
+  it("a title carrying a reserved marker falls back to the id and never breaks the tick", () => {
+    const titulo = "Revisar Comando: pendiente";
+    const atencion = [{ ...resumenCorrida(1, titulo), atencionRequerida: { necesaria: true, motivo: null } }];
+    const d = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, atencion), activas: atencion, inmediato: null });
+    if (d.accion !== "SEND") throw new Error("atencion inesperada");
+    assert.match(d.mensaje, /^\[NECESITO TU RESPUESTA\] migrar-correo, 1 de 3 partes terminadas$/m);
+    assert.match(d.mensaje, /^Que cambio: Trabajo migrar-correo llegó a una decisión/m);
+    assert.equal(validarMensajeV1(d.mensaje).ok, true);
+
+    const activas = [resumenCorrida(1, titulo)];
+    const p = decidirSeguimiento({ ahora: 1800, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
+    if (p.accion !== "SEND") throw new Error("periódico esperado");
+    assert.match(p.mensaje, /^\[AVANZA\] migrar-correo — 33% \(1\/3 partes\)$/m);
+    assert.doesNotMatch(p.mensaje, /Comando: /);
+
+    const rancia = [{ ...resumenCorrida(1, titulo), actualizado: "2026-09-01T00:00:00Z" }];
+    const r = decidirSeguimiento({ ahora: Date.parse("2026-09-29T12:00:00Z") / 1000, previo: crearEstadoInicial(0, rancia), activas: rancia, inmediato: null });
+    if (r.accion !== "SEND") throw new Error("rancia esperada");
+    assert.equal(validarMensajeV1(r.mensaje).ok, true);
+  });
+
+  it("an attention reason carrying a reserved marker is neutralized and never breaks the tick", () => {
+    for (const motivo of ["Revisa Comando: x", `Revisa Comando: ${"x".repeat(250)}`, "Dime Que sigue: algo"]) {
+      const activas = [{ ...resumenCorrida(1), atencionRequerida: { necesaria: true, motivo } }];
+      const d = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
+      if (d.accion !== "SEND") throw new Error("atencion inesperada");
+      assert.match(d.mensaje, /^Que necesito de ti: Tienes una decisión pendiente\.$/m, motivo);
+      assert.equal(validarMensajeV1(d.mensaje).ok, true, motivo);
+    }
+  });
+
+  it("a corrida entering the cut is described in the unit it was counted in", () => {
+    const primero = decidirSeguimiento({ ahora: 1800, previo: crearEstadoInicial(0, [resumen14(1, 4, 25)]), activas: [resumen14(1, 4, 25)], inmediato: null });
+    if (primero.accion !== "SEND") throw new Error("primer corte inesperado");
+    const activas = [resumen14(1, 4, 25), resumenCorrida(1)];
+    const segundo = decidirSeguimiento({ ahora: 3600, previo: confirmado(primero.estadoTrasConfirmar, 7), activas, inmediato: null });
+    if (segundo.accion !== "SEND") throw new Error("segundo corte inesperado");
+    assert.match(segundo.mensaje, /Migrar el correo entró al seguimiento con 1\/3 partes\./);
+  });
+});
+
 describe("parseEstadoSeguimiento", () => {
   it("round-trips a created state and rejects malformed scratch", () => {
     const estado = crearEstadoInicial(100, [resumen14(1, 4, 25)]);
@@ -336,6 +438,7 @@ describe("trabajo ilegible", () => {
       trabajoId: "fase:14",
       fase: "14",
       titulo: "Fase 14",
+      unidad: "tareas",
       progreso: { kind: "desconocido", motivo: "plan-sin-verificar" },
       carriles: [],
       siguientePaso: "",
@@ -669,12 +772,27 @@ describe("seguimiento rancio", () => {
     assert.ok(d25.mensaje.includes("La Fase 14 no se mueve desde el 28 de septiembre: ¿sigue viva o la cierro?"), d25.mensaje);
   });
 
-  it("a stale corrida is named as a corrida; an unreadable date counts as stale", () => {
-    const corrida: ResumenSeguimiento = { ...nueve, trabajoId: "corrida:c9", actualizado: "" };
+  it("a stale corrida is named by its title; an unreadable date counts as stale", () => {
+    const corrida: ResumenSeguimiento = { ...nueve, trabajoId: "corrida:c9", fase: "0", titulo: "Revisar facturas", actualizado: "" };
     const d = decidirSeguimiento({ ahora: T0, previo: corteEn(T0, []), activas: [corrida], inmediato: null });
     assert.equal(d.accion, "SEND");
     if (d.accion !== "SEND") throw new Error("rancia esperada");
-    assert.ok(d.mensaje.includes("La corrida c9 no registra avance: ¿sigue viva o la cierro?"), d.mensaje);
+    assert.ok(d.mensaje.includes("Revisar facturas no registra avance: ¿sigue viva o la cierro?"), d.mensaje);
+  });
+
+  it("the NECESITO of a stale corrida names it by its title in every line, never as La fase 0", () => {
+    const corrida: ResumenSeguimiento = {
+      ...resumenCorrida(1, "Revisar facturas"), actualizado: "2026-09-19T10:30:00Z",
+    };
+    const d = decidirSeguimiento({ ahora: T0, previo: corteEn(T0 - 1800, [corrida]), activas: [corrida], inmediato: null });
+    if (d.accion !== "SEND") throw new Error("rancia esperada");
+    assert.equal(d.mensaje, [
+      "[NECESITO TU RESPUESTA] Revisar facturas, 1 de 3 partes terminadas",
+      "Que cambio: Revisar facturas lleva más de un día sin avance.",
+      "Que sigue: Queda fuera del reporte periódico hasta que se cierre o vuelva a moverse.",
+      "Que necesito de ti: Revisar facturas no se mueve desde el 19 de septiembre: ¿sigue viva o la cierro?",
+    ].join("\n"));
+    assert.equal(validarMensajeV1(d.mensaje).ok, true);
   });
 
   it("an unreadable doc stays DETENIDA and in the periodic report, not asked as stale", () => {

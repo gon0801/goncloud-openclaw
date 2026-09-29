@@ -102,7 +102,11 @@ cp "$FIX/glm-falso.sh" "$T/bin/glm" && chmod +x "$T/bin/glm"
 # HOME de mentira, pre-poblado como si instalar-mac.sh ya hubiera corrido —
 # a mano, con cp, NUNCA con el modo instalar real (ese carga LaunchAgents de
 # verdad; instalar-mac.sh --verificar solo compara archivos, no toca nada).
-for f in corrida.sh cli-modos.tsv workers.v1.json agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh; do
+# La lista sale del propio instalador: una lista a mano se quedo corta cuando
+# BINS sumo tablero-trabajo.sh y --verificar dejo de salir 0.
+BINS_INST=$(sed -n 's/^BINS="\(.*\)"$/\1/p' scripts/mac/instalar-mac.sh)
+[ -n "$BINS_INST" ] || fail "no se pudo leer BINS de instalar-mac.sh"
+for f in $BINS_INST; do
   cp -p "scripts/mac/$f" "$T/home/bin/$f" || fail "no se pudo poblar HOME de mentira ($f)"
 done
 for f in scripts/mac/corrida/*.sh; do

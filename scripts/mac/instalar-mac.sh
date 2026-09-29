@@ -34,7 +34,7 @@ LINEA_SOURCE="source ~/bin/agent-tmux-shell.zsh"
 # lo resuelve junto al bin instalado (~/bin/workers.v1.json); sin el, el
 # adaptador instalado no resuelve ningun worker. El latido viejo NO esta en
 # esta lista: ni se copia ni se carga.
-BINS="corrida.sh cli-modos.tsv workers.v1.json corrida-worker.py agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh"
+BINS="corrida.sh cli-modos.tsv workers.v1.json corrida-worker.py agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh"
 CORRIDA_WORKER_PKG="corrida_worker"
 
 di() { printf '%s\n' "$1"; }

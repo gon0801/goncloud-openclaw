@@ -7,11 +7,14 @@
  * en el denominador; los atorados sí; lo no verificable es `desconocido`.
  */
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import { type ProgresoDoc } from "./lib.ts";
 import { type EstadoPlan, type PlanCruce } from "./plan.ts";
-import { resumirSeguimiento } from "./seguimiento.ts";
+import { listarSeguimientoActivo, resumirSeguimiento } from "./seguimiento.ts";
 
 function carrilBase(over: Record<string, unknown>): Record<string, unknown> {
   return {
@@ -123,6 +126,22 @@ function planCruzado(estados: Record<string, EstadoPlan>): PlanCruce {
 }
 
 const sinVerificar: PlanCruce = { kind: "sin-verificar", rotulo: "plan: sin verificar" };
+const noDeclarado: PlanCruce = { kind: "nulo", rotulo: "plan: no declarado" };
+
+function docDeClaw(over: Record<string, unknown> = {}): ProgresoDoc {
+  return docBase({
+    corrida: "migrar-correo",
+    fase: "0",
+    titulo: "Migrar el correo",
+    carriles: [
+      carrilBase({ id: "p1", nombre: "Exportar", estado: "mergeado" }),
+      carrilBase({ id: "p2", nombre: "Importar", estado: "implementando" }),
+      carrilBase({ id: "p3", nombre: "Cambiar DNS", estado: "atorado", detenido_por: "falta el 2FA" }),
+      carrilBase({ id: "p4", nombre: "Viejo", estado: "omitido", detenido_por: "cancelado" }),
+    ],
+    ...over,
+  });
+}
 
 describe("resumirSeguimiento", () => {
   it("derives phase and lane counts from plan units", () => {
@@ -142,8 +161,9 @@ describe("resumirSeguimiento", () => {
   });
 
   it("does not turn an unavailable plan into zero", () => {
-    assert.deepEqual(resumirSeguimiento(docConCarriles(), sinVerificar).progreso,
-      { kind: "desconocido", motivo: "plan-sin-verificar" });
+    const r = resumirSeguimiento(docConCarriles(), sinVerificar);
+    assert.deepEqual(r.progreso, { kind: "desconocido", motivo: "plan-sin-verificar" });
+    assert.equal(r.unidad, "tareas");
   });
 
   it("an unknown plan unit poisons the count instead of guessing", () => {
@@ -186,5 +206,48 @@ describe("resumirSeguimiento", () => {
     });
     const rc = resumirSeguimiento(conCorrida, planCruzado({ "14.1": "implementando" }));
     assert.equal(rc.trabajoId, "corrida:vigia-test");
+  });
+
+  it("without a declared plan, counts lanes: merged over the non-omitted ones", () => {
+    const r = resumirSeguimiento(docDeClaw(), noDeclarado);
+    assert.equal(r.unidad, "partes");
+    assert.deepEqual(r.progreso, { kind: "conocido", completadas: 1, total: 3, porcentaje: 33 });
+    assert.deepEqual(r.carriles.map((c) => [c.id, c.progreso]), [
+      ["p1", { kind: "conocido", completadas: 1, total: 1, porcentaje: 100 }],
+      ["p2", { kind: "conocido", completadas: 0, total: 1, porcentaje: 0 }],
+      ["p3", { kind: "conocido", completadas: 0, total: 1, porcentaje: 0 }],
+      ["p4", { kind: "conocido", completadas: 0, total: 1, porcentaje: 0 }],
+    ]);
+  });
+});
+
+describe("listarSeguimientoActivo", () => {
+  async function listar(doc: ProgresoDoc) {
+    const dir = mkdtempSync(join(tmpdir(), "seguimiento-"));
+    try {
+      mkdirSync(join(dir, "progress", "c"), { recursive: true });
+      const ruta = doc.corrida ? join(dir, "progress", "c", `${doc.corrida}.json`) : join(dir, "progress", `${doc.fase}.json`);
+      writeFileSync(ruta, JSON.stringify(doc));
+      return await listarSeguimientoActivo({ stateDir: dir }, { ghPath: "/sin/gh" });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it("a doc that says plan: null is counted by its lanes, in parts", async () => {
+    const lista = await listar(docDeClaw({ plan: null }));
+    assert.deepEqual(lista.activas[0]?.progreso, { kind: "conocido", completadas: 1, total: 3, porcentaje: 33 });
+    assert.equal(lista.activas[0]?.unidad, "partes");
+  });
+
+  it("a doc with no plan block at all (a real phase doc) stays unknown, never counted by lanes", async () => {
+    const lista = await listar(docDeClaw({ corrida: undefined, fase: "7", titulo: "Fase 7" }));
+    assert.deepEqual(lista.activas[0]?.progreso, { kind: "desconocido", motivo: "plan-sin-verificar" });
+    assert.equal(lista.activas[0]?.unidad, "tareas");
+  });
+
+  it("a declared plan that cannot be crossed stays unknown instead of guessing from lanes", async () => {
+    const lista = await listar(docDeClaw({ plan: { repo: "gon0801/goncloud-openclaw", ruta: "Plans.md", seccion: null } }));
+    assert.deepEqual(lista.activas[0]?.progreso, { kind: "desconocido", motivo: "plan-sin-verificar" });
   });
 });
