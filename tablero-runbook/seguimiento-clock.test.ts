@@ -26,6 +26,7 @@ function resumen14(completadas: number, total: number, porcentaje: number): Resu
     trabajoId: "fase:14",
     fase: "14",
     titulo: "Fase 14",
+    unidad: "tareas",
     progreso: { kind: "conocido", completadas, total, porcentaje },
     carriles: [
       {
@@ -51,6 +52,7 @@ function resumen15(): ResumenSeguimiento {
     trabajoId: "fase:15",
     fase: "15",
     titulo: "Fase 15",
+    unidad: "tareas",
     progreso: { kind: "conocido", completadas: 1, total: 2, porcentaje: 50 },
     carriles: [
       {
@@ -78,6 +80,7 @@ function resumenCorrida(completadas: number, titulo = "Migrar el correo"): Resum
     trabajoId: "corrida:migrar-correo",
     fase: "0",
     titulo,
+    unidad: "partes",
   };
 }
 
@@ -292,8 +295,31 @@ describe("decidirSeguimiento con una corrida", () => {
     const activas = [{ ...resumenCorrida(1, "Arreglar el merge del repo"), atencionRequerida: { necesaria: true, motivo: null } }];
     const d = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
     if (d.accion !== "SEND") throw new Error("atencion inesperada");
+    assert.match(d.mensaje, /^\[NECESITO TU RESPUESTA\] migrar-correo, 1 de 3 partes terminadas$/m);
     assert.match(d.mensaje, /^Que cambio: Trabajo migrar-correo llegó a una decisión/m);
     assert.equal(validarMensajeV1(d.mensaje).ok, true);
+  });
+
+  it("fase15-ci: line 1 keeps the id, the body falls back to a plain phrase, and it stays valid v1", () => {
+    const activas = [{
+      ...resumenCorrida(1, "Autopilot de la Fase 15 — CI completa sin siete minutos de espera"),
+      trabajoId: "corrida:fase15-ci",
+      atencionRequerida: { necesaria: true, motivo: null },
+    }];
+    const d = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
+    if (d.accion !== "SEND") throw new Error("atencion inesperada");
+    assert.match(d.mensaje, /^\[NECESITO TU RESPUESTA\] fase15-ci, 1 de 3 partes terminadas$/m);
+    assert.match(d.mensaje, /^Que cambio: Trabajo en curso llegó a una decisión/m);
+    assert.equal(validarMensajeV1(d.mensaje).ok, true);
+  });
+
+  it("a corrida entering the cut is described in the unit it was counted in", () => {
+    const primero = decidirSeguimiento({ ahora: 1800, previo: crearEstadoInicial(0, [resumen14(1, 4, 25)]), activas: [resumen14(1, 4, 25)], inmediato: null });
+    if (primero.accion !== "SEND") throw new Error("primer corte inesperado");
+    const activas = [resumen14(1, 4, 25), resumenCorrida(1)];
+    const segundo = decidirSeguimiento({ ahora: 3600, previo: confirmado(primero.estadoTrasConfirmar, 7), activas, inmediato: null });
+    if (segundo.accion !== "SEND") throw new Error("segundo corte inesperado");
+    assert.match(segundo.mensaje, /Migrar el correo entró al seguimiento con 1\/3 partes\./);
   });
 });
 
@@ -381,6 +407,7 @@ describe("trabajo ilegible", () => {
       trabajoId: "fase:14",
       fase: "14",
       titulo: "Fase 14",
+      unidad: "tareas",
       progreso: { kind: "desconocido", motivo: "plan-sin-verificar" },
       carriles: [],
       siguientePaso: "",

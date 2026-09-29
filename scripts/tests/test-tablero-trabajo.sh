@@ -55,6 +55,8 @@ out=$(tt abrir migrar-correo "Migrar el correo a Fastmail" "Exportar buzones" "I
 [ "$(doc migrar-correo "[c['estado'] for c in d['carriles']]")" = "['implementando', 'pendiente', 'pendiente']" ] \
   || fail "(1) la primera parte arranca en implementando y el resto pendiente"
 [ "$(doc migrar-correo "d['siguiente_paso']")" = "exportar los buzones de Gmail" ] || fail "(1) --siguiente no llego"
+# plan: null dice "sin plan, cuenta mis partes"; sin el bloque el tablero lo trata como fase sin cruzar.
+[ "$(doc migrar-correo "'plan' in d and d['plan'] is None")" = "True" ] || fail "(1) el documento no declara plan: null"
 printf '%s' "$out" | grep -q "0 de 3 partes terminadas" || fail "(1) abrir no imprime el resumen: $out"
 echo "ok (1): abrir"
 
@@ -125,6 +127,10 @@ echo "ok (7): los rechazos salen distinto de 0"
 # (8) un gateway que no contesta JSON es un fallo, no un exito callado.
 printf '#!/bin/sh\necho "gateway caido" >&2; exit 1\n' >"$T/caido"; chmod +x "$T/caido"
 OPENCLAW_BIN="$T/caido" tt ver migrar-correo >/dev/null 2>&1 && fail "(8) CLI sin JSON debe fallar"
+out=$(TABLERO_TOPE_SEG=abc tt ver migrar-correo 2>&1); rc=$?
+[ "$rc" = 2 ] || fail "(8) TABLERO_TOPE_SEG invalido debe salir 2, salio $rc: $out"
+printf '%s' "$out" | grep -q "Traceback" && fail "(8) TABLERO_TOPE_SEG invalido revienta con traceback: $out"
+printf '%s' "$out" | grep -q "TABLERO_TOPE_SEG" || fail "(8) el error no nombra TABLERO_TOPE_SEG: $out"
 echo "ok (8): gateway sin respuesta falla"
 
 # (9) el reloj de avance-tareas lo reporta mientras esta abierto y lo suelta al cerrar:

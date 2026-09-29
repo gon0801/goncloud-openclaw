@@ -47,6 +47,7 @@ function fase14(): ResumenSeguimiento {
     trabajoId: "fase:14",
     fase: "14",
     titulo: "Fase 14",
+    unidad: "tareas",
     progreso: { kind: "conocido", completadas: 6, total: 13, porcentaje: 46 },
     carriles: [
       carril("M", "Implementación", "implementando",
@@ -107,6 +108,7 @@ describe("renderSeguimientoV2", () => {
       trabajoId: "fase:15",
       fase: "15",
       titulo: "Fase 15",
+      unidad: "tareas",
       progreso: { kind: "conocido", completadas: 1, total: 2, porcentaje: 50 },
       carriles: [
         carril("A", "Trabajo", "implementando",
@@ -172,6 +174,7 @@ describe("renderSeguimientoV2", () => {
       trabajoId: "corrida:migrar-correo",
       fase: "0",
       titulo: "Migrar el correo",
+      unidad: "partes",
       progreso: { kind: "conocido", completadas: 1, total: 3, porcentaje: 33 },
     };
     const text = renderSeguimientoV2({ ...entradaEjemplo(), fases: [corrida, fase14()] });
@@ -180,15 +183,25 @@ describe("renderSeguimientoV2", () => {
     assert.doesNotMatch(text, /Fase 0/);
   });
 
-  it("a corrida whose title is not owner language falls back to a plain name", () => {
+  it("a corrida whose title is not owner language is headed by its id, like corrida_encabezado", () => {
     const corrida: ResumenSeguimiento = {
       ...fase14(),
-      trabajoId: "corrida:arreglo",
-      fase: "0",
-      titulo: "Arreglar scripts/mac/foo.sh",
+      trabajoId: "corrida:fase15-ci",
+      fase: "15",
+      titulo: "Autopilot de la Fase 15 — CI completa sin siete minutos de espera",
+      unidad: "partes",
     };
     const text = renderSeguimientoV2({ ...entradaEjemplo(), fases: [corrida] });
-    assert.match(text, /^\[AVANZA\] Trabajo arreglo — 46% \(6\/13 partes\)$/m);
+    assert.match(text, /^\[AVANZA\] fase15-ci — 46% \(6\/13 partes\)$/m);
+    assert.doesNotMatch(text, /Trabajo en curso/);
+  });
+
+  it("the header unit follows how the work was counted, not its kind", () => {
+    const corridaConPlan: ResumenSeguimiento = {
+      ...fase14(), trabajoId: "corrida:con-plan", titulo: "Corrida con plan", unidad: "tareas",
+    };
+    const text = renderSeguimientoV2({ ...entradaEjemplo(), fases: [corridaConPlan] });
+    assert.match(text, /^\[AVANZA\] Corrida con plan — 46% \(6\/13 tareas\)$/m);
   });
 
   it("emits owner language without paths, SHAs, PR numbers, flags or backticks", () => {
@@ -230,6 +243,7 @@ describe("renderSeguimientoV2", () => {
       trabajoId: "fase:14",
       fase: "14",
       titulo: "Fase 14",
+      unidad: "tareas",
       progreso: { kind: "desconocido", motivo: "plan-sin-verificar" },
       carriles: [],
       siguientePaso: "",

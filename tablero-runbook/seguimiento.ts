@@ -5,10 +5,11 @@
  * nunca de estimaciones: solo `mergeado` cuenta como terminada. Un carril
  * `omitido` no entra en el denominador de la fase (sus tareas exclusivas se
  * excluyen); un carril `atorado` sí cuenta mientras no se omita. Un documento
- * que no declara plan (`nulo`: los encargos directos de claw) cuenta sus
- * carriles como partes. Un plan declarado que no se puede verificar
- * (`sin-verificar`, `ruta-no-encontrada`, unidad `unknown` o tarea ausente
- * del cruce) es `desconocido`, nunca 0% ni un conteo por carriles.
+ * con `plan: null` explícito (`nulo`: los encargos directos de claw) cuenta
+ * sus carriles como partes. Sin bloque `plan` (un documento de fase de
+ * siempre) o con un plan que no se puede verificar (`sin-verificar`,
+ * `ruta-no-encontrada`, unidad `unknown` o tarea ausente del cruce) es
+ * `desconocido`, nunca 0% ni un conteo por carriles.
  *
  * Puro salvo `listarSeguimientoActivo`, que lee el stateDir existente y el
  * cruce acotado de `plan.ts`. No agrega otro directorio de estado. Los valores
@@ -37,6 +38,8 @@ export type ResumenSeguimiento = {
   trabajoId: `fase:${string}` | `corrida:${string}`;
   fase: string;
   titulo: string;
+  /** En qué se contó `progreso`: partes = carriles (sin plan), tareas = unidades del plan. */
+  unidad: "partes" | "tareas";
   progreso: ConteoObjetivo;
   carriles: ResumenCarril[];
   siguientePaso: string;
@@ -85,6 +88,7 @@ export function resumirSeguimiento(doc: ProgresoDoc, plan: PlanCruce): ResumenSe
     trabajoId,
     fase: doc.fase,
     titulo: doc.titulo,
+    unidad: plan.kind === "nulo" ? "partes" as const : "tareas" as const,
     siguientePaso: doc.siguiente_paso,
     atencionRequerida: {
       necesaria: doc.atencion_requerida.necesaria,
@@ -166,6 +170,7 @@ function resumenConservador(
     trabajoId,
     fase,
     titulo,
+    unidad: "tareas",
     progreso: { kind: "desconocido", motivo: "unidad-desconocida" },
     carriles: [],
     siguientePaso: "",
@@ -257,9 +262,8 @@ export async function listarSeguimientoActivo(
       continue;
     }
     if (crudoDoc.cierre.at !== null) continue;
-    let plan: PlanCruce = NO_DECLARADO;
+    let plan: PlanCruce = crudoDoc.plan === null ? NO_DECLARADO : SIN_VERIFICAR;
     if (crudoDoc.plan !== undefined && crudoDoc.plan !== null) {
-      plan = SIN_VERIFICAR;
       try {
         const cruzado = await cruzarPlan(crudoDoc, { ghPath: cfgGithub.ghPath });
         if (cruzado !== undefined) plan = cruzado;

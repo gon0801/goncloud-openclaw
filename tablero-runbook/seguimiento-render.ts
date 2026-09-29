@@ -192,12 +192,23 @@ function bloqueContable(b: BloqueContable): string {
   return `${b.nombre} — ${fraccion(b.progreso)}\n${b.detalle}`;
 }
 
+type NombrableTrabajo = Pick<ResumenSeguimiento, "trabajoId" | "fase" | "titulo">;
+
 /**
- * Cómo se le nombra un trabajo a David: una fase por su número, una corrida
- * por su título. Un título con jerga cae a su id, y un id con jerga a una
- * frase fija: el nombre entra al cuerpo de los mensajes, que no la admite.
+ * Nombre de un trabajo en la línea 1 (encabezado), exenta del límite de
+ * lenguaje igual que en `corrida_encabezado` de lib.sh: una fase por su
+ * número; una corrida por su título, o por su id si el título trae jerga.
  */
-export function nombreTrabajo(r: Pick<ResumenSeguimiento, "trabajoId" | "fase" | "titulo">): string {
+export function nombreEncabezado(r: NombrableTrabajo): string {
+  if (!r.trabajoId.startsWith("corrida:")) return `Fase ${r.fase}`;
+  return sanearTextoPropietario(r.titulo) ?? r.trabajoId.slice("corrida:".length);
+}
+
+/**
+ * Nombre de un trabajo dentro del cuerpo, que sí pasa el límite de lenguaje:
+ * el título, o `Trabajo <id>`, o una frase fija si el id también trae jerga.
+ */
+export function nombreCuerpo(r: NombrableTrabajo): string {
   if (!r.trabajoId.startsWith("corrida:")) return `Fase ${r.fase}`;
   const id = r.trabajoId.slice("corrida:".length);
   return sanearTextoPropietario(r.titulo) ?? (sanearTextoPropietario(id) !== null ? `Trabajo ${id}` : "Trabajo en curso");
@@ -273,10 +284,9 @@ export function renderSeguimientoV2(input: EntradaSeguimientoV2): string {
   const partes: string[] = [];
   for (const fase of input.fases) {
     const p = fase.progreso;
-    const unidad = fase.trabajoId.startsWith("corrida:") ? "partes" : "tareas";
     const encabezado = p.kind === "desconocido"
-      ? `[AVANZA] ${nombreTrabajo(fase)} — desconocido`
-      : `[AVANZA] ${nombreTrabajo(fase)} — ${p.porcentaje}% (${p.completadas}/${p.total} ${unidad})`;
+      ? `[AVANZA] ${nombreEncabezado(fase)} — desconocido`
+      : `[AVANZA] ${nombreEncabezado(fase)} — ${p.porcentaje}% (${p.completadas}/${p.total} ${fase.unidad})`;
     partes.push(encabezado);
     fase.carriles.filter((c) => c.estado !== "omitido").forEach((c, i) => {
       partes.push(bloqueContable({

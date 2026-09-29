@@ -18,7 +18,7 @@
  * Un `SEND` no expone un próximo estado de nombre general.
  */
 import type { ConteoObjetivo, ProblemaSeguimiento, ResumenSeguimiento } from "./seguimiento.ts";
-import { nombreTrabajo, renderSeguimientoV2, sanearTextoPropietario, validarMensajeV1, type TareaSuelta } from "./seguimiento-render.ts";
+import { nombreCuerpo, nombreEncabezado, renderSeguimientoV2, sanearTextoPropietario, validarMensajeV1, type TareaSuelta } from "./seguimiento-render.ts";
 
 export const SCHEMA_SEGUIMIENTO_CLOCK = "seguimiento-clock.v1";
 
@@ -167,9 +167,9 @@ function derivarCambio(
     if (r.progreso.kind === "desconocido") continue;
     const p = prev.get(r.trabajoId);
     if (p === undefined) {
-      lineas.push(`${nombreTrabajo(r)} entró al seguimiento con ${r.progreso.completadas}/${r.progreso.total} tareas.`);
+      lineas.push(`${nombreCuerpo(r)} entró al seguimiento con ${r.progreso.completadas}/${r.progreso.total} ${r.unidad}.`);
     } else if (p.c !== r.progreso.completadas || p.n !== r.progreso.total) {
-      lineas.push(`${nombreTrabajo(r)} avanzó de ${p.c}/${p.n} a ${r.progreso.completadas}/${r.progreso.total}.`);
+      lineas.push(`${nombreCuerpo(r)} avanzó de ${p.c}/${p.n} a ${r.progreso.completadas}/${r.progreso.total}.`);
     }
   }
   return lineas.join(" ");
@@ -216,7 +216,7 @@ function partirPorFrescura(
 
 /** Motivo estable entre ticks (fecha, no "hace N horas") para que la firma no cambie. */
 function motivoRancio(r: ResumenSeguimiento): string {
-  const nombre = r.trabajoId.startsWith("corrida:") ? nombreTrabajo(r) : `La Fase ${r.fase}`;
+  const nombre = r.trabajoId.startsWith("corrida:") ? nombreCuerpo(r) : `La Fase ${r.fase}`;
   const ms = Date.parse(r.actualizado);
   if (!Number.isFinite(ms)) return `${nombre} no registra avance: ¿sigue viva o la cierro?`;
   const d = new Date(ms);
@@ -249,9 +249,10 @@ function textoAtencion(pendientes: AtencionPendiente[], activas: ResumenSeguimie
     return motivo !== null ? puntuarFinal(motivo) : "Tienes una decisión pendiente.";
   }).join(" ");
   const esCorrida = doc !== undefined && primera.trabajoId.startsWith("corrida:");
-  const quien = esCorrida ? nombreTrabajo(doc) : `La fase ${primera.fase}`;
+  const quien = esCorrida ? nombreCuerpo(doc) : `La fase ${primera.fase}`;
+  // La línea 1 exige "N de M partes" (seguimiento.v1) sea cual sea la unidad.
   return [
-    `[NECESITO TU RESPUESTA] ${esCorrida ? nombreTrabajo(doc) : "Corrida"}, ${avance}`,
+    `[NECESITO TU RESPUESTA] ${esCorrida ? nombreEncabezado(doc) : "Corrida"}, ${avance}`,
     primera.rancia
       ? `Que cambio: ${quien} lleva más de un día sin avance.`
       : `Que cambio: ${quien} llegó a una decisión que no está preaprobada.`,

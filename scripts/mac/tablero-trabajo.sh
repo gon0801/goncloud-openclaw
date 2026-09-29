@@ -5,7 +5,8 @@
 # Instalado vive en ~/bin/tablero-trabajo.sh. Habla con el gateway por el CLI
 # de openclaw (runbook.progress.get/set); el documento lleva `corrida` para
 # vivir bajo su propia clave y `fase` 0, que ninguna fase real usa (el set
-# tambien lo guarda bajo la fase).
+# tambien lo guarda bajo la fase), y `plan: null` para que el tablero cuente
+# sus partes en vez de tratarlo como una fase cuyo plan no pudo cruzar.
 # Uso:
 #   tablero-trabajo.sh abrir <id> "<titulo>" "<parte1>" ["<parte2>" ...] [--siguiente "..."] [--repo owner/repo]
 #   tablero-trabajo.sh agregar <id> "<parte>"
@@ -47,11 +48,18 @@ def texto(s, tope, campo):
     return s if len(s) <= tope else s[: tope - 1] + "…"
 
 
+def tope():
+    v = os.environ.get("TABLERO_TOPE_SEG", "60")
+    if not v.isdigit() or int(v) < 1:
+        morir(f"TABLERO_TOPE_SEG invalido {v!r}: segundos, entero positivo", 2)
+    return int(v)
+
+
 def llamar(metodo, params):
     cmd = [os.environ["OPENCLAW_BIN"], "gateway", "call", metodo, "--params", json.dumps(params, ensure_ascii=False),
            "--json", "--timeout", "30000"]
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=int(os.environ.get("TABLERO_TOPE_SEG", "60")))
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=tope())
     except (OSError, subprocess.TimeoutExpired) as e:
         morir(f"{metodo}: el CLI de openclaw no contesto ({e.__class__.__name__})")
     # El CLI puede anteponer avisos de config: se parsea desde la primera linea que abre un objeto.
@@ -163,6 +171,7 @@ def cmd_abrir(args):
         "runbook": "encargo directo de David a claw (sin runbook)",
         "fase": FASE,
         "corrida": id_,
+        "plan": None,
         "titulo": texto(titulo, 300, "titulo"),
         "lead": {"agente": "claw", "inicio": t, "actualizado": t},
         "atencion_requerida": {"necesaria": False, "motivo": None, "desde": None},
