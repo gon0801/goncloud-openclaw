@@ -369,6 +369,8 @@ tail -n +"$d" "$LLAMADAS" | sed '1s/.* -m //' >"$T/ci-msg.txt"
 ( . scripts/mac/corrida/lib.sh && mensaje_valido "$T/ci-msg.txt" ) \
   || fail "CI rojo: el aviso no pasa el validador de lenguaje de usuario"
 grep -qE '[0-9a-f]{7,}' "$T/ci-msg.txt" && fail "CI rojo: el aviso se filtro un sha o similar"
+# 14.27 R14: el autor puede ser humano (gon0801); el aviso no afirma lo que no sabe.
+grep -qi "automatico" "$T/ci-msg.txt" && fail "CI rojo: el aviso atribuye el rojo a un cambio automatico"
 [ -f "$CORRIDA_STATE/lat-ci/ci-rojo.json" ] || fail "CI rojo: sin registro local donde el lead lee"
 CIC="$CORRIDA_STATE/lat-ci/ci-rojo.json" python3 -c "
 import json,os
@@ -607,6 +609,50 @@ tick "$T0" || fail "intermedio: el tick revinto"
 HORA_DEBIDA="$(python3 -c "import datetime; print(datetime.datetime.fromtimestamp($((T0 - 1860 + 1800))).strftime('%H:%M'))")"
 grep -q "se debía a las $HORA_DEBIDA y no ha llegado" "$LLAMADAS" \
   || fail "intermedio: con silencio 1860 s el reporte esta atrasado y debia gritar corte_base + 1800 ($HORA_DEBIDA)"
+unset SCRATCH_FILE
+
+tardanza_ok() { # $1 corrida -> los valores de ok de sus avance-tardanza, en orden
+  EVTJ="$CORRIDA_STATE/$1/eventos.jsonl" python3 -c "
+import json,os
+print(' '.join(d.get('ok','') for d in map(json.loads, open(os.environ['EVTJ'])) if d.get('tipo')=='avance-tardanza'))" 2>/dev/null
+}
+
+# (15) 14.27 R9: el aviso de silencio con el envio caido deja constancia
+# ok:false, no anota nada entregado, y el tick siguiente reintenta y entrega.
+LLAMADAS="$T/l19.log"; export LLAMADAS; : > "$LLAMADAS"
+solo_dejar t-tcae
+montar_corrida t-tcae avanza
+trabajando_en "$T0"
+printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((T0-1900))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-tcae\"]}" > "$T/scratch-tcae.json"
+export SCRATCH_FILE="$T/scratch-tcae.json"
+ENVIO_MODO=mal tick "$T0" >/dev/null 2>&1
+[ "$(tardanza_ok t-tcae)" = "false" ] || fail "envio caido: la constancia no es un avance-tardanza ok:false ($(tardanza_ok t-tcae))"
+grep -q '"ok": true' "$CORRIDA_STATE/t-tcae/mensajes.jsonl" && fail "envio caido: quedo anotado como entregado"
+trabajando_en "$((T0 + 300))"
+tick "$((T0 + 300))" || fail "envio caido: el reintento revinto"
+[ "$(tardanza_ok t-tcae)" = "false true" ] || fail "envio caido: el tick siguiente no reintento y entrego ($(tardanza_ok t-tcae))"
+[ "$(grep -c "te aviso desde el latido" "$LLAMADAS")" = "2" ] \
+  || fail "envio caido: el reintento no mando el aviso de silencio"
+unset SCRATCH_FILE
+
+# (16) 14.27 R16: una corrida DETENIDA en silencio no recibe un aviso
+# etiquetado AVANZA. Memoria crafteada (como 9d) con la firma DETENIDA ya
+# avisada hace poco, para que (1) calle y solo hable el control de silencio,
+# con el consolidador congelado.
+LLAMADAS="$T/l20.log"; export LLAMADAS; : > "$LLAMADAS"
+solo_dejar t-det
+montar_corrida t-det avanza
+watch_a m-a "$((T0 - 1900))"; watch_a m-lead "$((T0 - 120))"; watch_a m-b "$((T0 - 120))"
+FDET='e=DETENIDA|av=2/5|pr=GitHub: sin verificar|ses=m-lead:trabajando,m-a:callada,m-b:trabajando,'
+printf '{"firma": "%s", "ult_msj": %s, "etq": "DETENIDA", "firma_vigia": "%s", "ci_sha": ""}\n' \
+  "$FDET" "$((T0 - 600))" "$FDET" > "$CORRIDA_STATE/t-det/latido.json"
+printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((T0-1900))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-det\"]}" > "$T/scratch-det.json"
+export SCRATCH_FILE="$T/scratch-det.json"
+tick "$T0" >/dev/null 2>&1 || fail "detenida: el tick revinto"
+[ "$(msgs)" = "1" ] && [ "$(grep -c "te aviso desde el latido" "$LLAMADAS")" = "1" ] \
+  || fail "detenida: el silencio no produjo un solo aviso del latido (msgs=$(msgs))"
+grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[DETENIDA\]" \
+  || fail "detenida: el aviso de silencio no lleva la etiqueta del parte: $(grep "message send" "$LLAMADAS" | tail -1)"
 unset SCRATCH_FILE
 
 echo "TODO VERDE: test-corrida-latido"

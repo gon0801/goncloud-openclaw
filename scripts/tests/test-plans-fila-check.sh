@@ -70,17 +70,29 @@ brazo() { # el paso extraido, sobre el rango semilla..fila del repo de juguete
       PUSH_HEAD="$(git -C "$T/repo" rev-parse HEAD)" \
       bash -c "$PASO_DOCS" ) 2>&1
 }
+brazo_pr() { # el mismo paso con el evento de un PR (14.24 R2): rango en PR_*
+  ( cd "$T/repo" && EVENTO=pull_request PUSH_BASE= PUSH_HEAD= \
+      PR_BASE="$(git -C "$T/repo" rev-parse HEAD~1)" \
+      PR_HEAD="$(git -C "$T/repo" rev-parse HEAD)" \
+      bash -c "$PASO_DOCS" ) 2>&1
+}
 
 juguete '| 14.13a | a | b | cc:TODO |'
 salida=$(brazo); rc=$?
 [ "$rc" -ne 0 ] || fail "el brazo real acepto una fila 14.13a de 4 columnas: $salida"
 printf '%s\n' "$salida" | grep -q 'doc-check: RECHAZADO' \
   || fail "fila 14.13a de 4 columnas sin RECHAZADO: $salida"
+salida=$(brazo_pr); rc=$?
+[ "$rc" -ne 0 ] || fail "en pull_request el brazo real acepto una fila 14.13a de 4 columnas: $salida"
+printf '%s\n' "$salida" | grep -q 'doc-check: RECHAZADO' \
+  || fail "en pull_request, fila 14.13a de 4 columnas sin RECHAZADO: $salida"
 
 juguete '| 14.13a | a | b | c | cc:TODO |'
 salida=$(brazo); rc=$?
 [ "$rc" -eq 0 ] || fail "el brazo real rechazo una fila 14.13a valida: $salida"
 printf '%s\n' "$salida" | grep -q 'doc-check: OK' \
   || fail "fila 14.13a valida sin 'doc-check: OK': $salida"
+salida=$(brazo_pr); rc=$?
+[ "$rc" -eq 0 ] || fail "en pull_request el brazo real rechazo una fila 14.13a valida: $salida"
 
 echo "VERDE: plans-fila-check"
