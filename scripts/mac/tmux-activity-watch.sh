@@ -73,6 +73,14 @@
 #   STATE_DIR=$HOME/.local/state/tmux-activity-watch
 #   LOG_FILE=$HOME/Library/Logs/tmux-activity-watch.log
 #   CORRIDA_BIN=$HOME/bin/corrida.sh   (policy engine offered each dialog first; unset = today's behavior)
+#   LATIDO_SECS=300    (seconds between two `$CORRIDA_BIN latido` launches)
+#   LATIDO_TOPE=240    (hard timeout of one latido; it runs in the background, never blocks a tick)
+#
+# Latido (Plans.md 14.29 D1): the LaunchAgent ai.goncloud.corrida-latido stays unloaded and no
+# other clock may exist (Plans.md:368), so this watcher launches `corrida.sh latido` at the end of
+# a tick when LATIDO_SECS passed since the last launch and no previous latido is alive. The
+# launch time and pid live in $STATE_DIR/latido.stamp (not *.state: the closed sweep globs those).
+# The stamp is written at launch, so a failing latido is retried after LATIDO_SECS, not every tick.
 #
 # Install: cp scripts/mac/tmux-activity-watch.sh ~/bin/ && chmod +x ~/bin/tmux-activity-watch.sh
 # (the LaunchAgent in scripts/mac/ai.goncloud.tmux-activity-watch.plist runs it under launchd).
@@ -98,7 +106,11 @@ LOG_FILE=${LOG_FILE:-$HOME/Library/Logs/tmux-activity-watch.log}
 # Si no existe o no es ejecutable (la instalación es del lead), el vigilante se
 # comporta exactamente como hoy.
 CORRIDA_BIN=${CORRIDA_BIN:-$HOME/bin/corrida.sh}
+LATIDO_SECS=${LATIDO_SECS:-300}
+LATIDO_TOPE=${LATIDO_TOPE:-240}
+LATIDO_STAMP="$STATE_DIR/latido.stamp"
 WATCH_MARKER=OPENCLAW_WATCH
+latido_pid=""
 
 once=0
 if [[ ${1:-} == --once ]]; then
@@ -436,12 +448,48 @@ tick() {
   rm -f "$seen_file"
 }
 
+latido_tick() {
+  local now at pid
+  latido_pid=""
+  [[ -x $CORRIDA_BIN ]] || return 0
+  now=$(date +%s)
+  at=$(read_state_field "$LATIDO_STAMP" at)
+  pid=$(read_state_field "$LATIDO_STAMP" pid)
+  [[ $at =~ ^[0-9]+$ ]] || at=0
+  # A clock set backwards (at in the future) must not silence the latido until it catches up.
+  if [[ $((now - at)) -lt $LATIDO_SECS && $at -le $now ]]; then
+    return 0
+  fi
+  # Past LATIDO_TOPE the alarm already killed that latido: a live pid is a reused one.
+  if [[ $pid =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null && [[ $((now - at)) -lt $LATIDO_TOPE ]]; then
+    return 0
+  fi
+  (
+    rc=0
+    WATCH_STATE_DIR="$STATE_DIR" TMUX_BIN="$TMUX_BIN" OPENCLAW_BIN="$OPENCLAW_BIN" \
+      perl -e 'alarm shift; exec(@ARGV) or exit 127' "$LATIDO_TOPE" "$CORRIDA_BIN" latido \
+      </dev/null >>"$LOG_FILE" 2>&1 || rc=$?
+    if [[ $rc -ne 0 ]]; then
+      log "latido failed (rc=$rc)"
+    fi
+  ) &
+  latido_pid=$!
+  log "latido launched (pid=$latido_pid)"
+  printf 'at=%s\npid=%s\n' "$now" "$latido_pid" >"$LATIDO_STAMP" 2>/dev/null ||
+    log "latido stamp not written: $LATIDO_STAMP"
+}
+
 if [[ $once -eq 1 ]]; then
   tick
+  latido_tick
+  if [[ -n $latido_pid ]]; then
+    wait "$latido_pid" || true
+  fi
 else
-  log "tmux-activity-watch starting (QUIET_SECS=$QUIET_SECS TICK_SECS=$TICK_SECS marker=$WATCH_MARKER)"
+  log "tmux-activity-watch starting (QUIET_SECS=$QUIET_SECS TICK_SECS=$TICK_SECS LATIDO_SECS=$LATIDO_SECS marker=$WATCH_MARKER)"
   while true; do
     tick
+    latido_tick
     sleep "$TICK_SECS"
   done
 fi

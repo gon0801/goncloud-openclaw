@@ -28,6 +28,11 @@
          general). -->
     <key>LANG</key>
     <string>en_US.UTF-8</string>
+    <!-- 14.29 D1: este vigilante lanza corrida.sh latido; bajo launchd no hay
+         repo a mano y el chequeo de rama en rojo resuelve gh contra el clon
+         de ESTE repo (lo que el plist del reloj viejo inyectaba). -->
+    <key>REPO_DIR</key>
+    <string>/Users/dn/dev/goncloud-openclaw</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>

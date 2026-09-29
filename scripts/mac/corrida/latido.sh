@@ -1,6 +1,8 @@
 #!/bin/bash
 # corrida/latido.sh (9.5). latido: el seguimiento garantizado, sin modelo.
-# Lo corre el LaunchAgent ai.goncloud.corrida-latido cada 5 min. Por cada
+# Lo lanza el vigilante tmux-activity-watch.sh al final de un tick, cada
+# LATIDO_SECS (300 s) y con tope LATIDO_TOPE (14.29 D1: el LaunchAgent
+# ai.goncloud.corrida-latido sigue descargado y no hay otro reloj). Por cada
 # corrida abierta calcula el parte (9.4), manda el mensaje a David cuando
 # cambio el estado (o a la hora sin mensaje, o NECESITO cuando un dialogo
 # lleva 10 min o la politica no lo cubre), y despierta al vigia con el parte y

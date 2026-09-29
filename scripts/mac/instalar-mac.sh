@@ -6,9 +6,10 @@
 # otra maquina no arranca ni avisa). Comprueba el blob de cada fuente contra
 # la rama por defecto ANTES de tocar disco: adulterado = error sin escribir
 # nada; ausente en la rama = se declara y se sigue. Nunca copia ni carga
-# ai.goncloud.corrida-latido (reloj viejo; el watchdog global de PR #110 es
-# el unico que manda progreso). Idempotente: solo escribe lo que difiere y
-# respalda lo reemplazado en .anterior.
+# ai.goncloud.corrida-latido (reloj viejo): el latido lo lanza el vigilante
+# tmux-activity-watch.sh cada 5 min con ~/bin/corrida.sh (14.29 D1).
+# Idempotente: solo escribe lo que difiere y respalda lo reemplazado en
+# .anterior.
 # Uso: instalar-mac.sh [--dry-run|--verificar]
 # Env: HOME, INSTALAR_UID (def. id -u), INSTALAR_REF (def. origin/main),
 #      LAUNCHCTL_BIN (def. launchctl), GIT_BIN (def. git).

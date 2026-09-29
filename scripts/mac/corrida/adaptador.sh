@@ -233,9 +233,16 @@ adaptador_start() {
   printf '%s\n' "$sesion"
 }
 
+# 14.29 D2: sin esta orden ningun CLI real imprime la marca y inspect nunca
+# da complete. La pantalla muestra el texto tecleado e inspect busca
+# subcadenas: la orden DESCRIBE la marca y jamas la escribe literal, o toda
+# entrega se marcaria completa sola.
+ADAPTADOR_ORDEN_MARCA='Al terminar, escribe una linea sola con ADAPTADOR-MARCA seguido de dos puntos, un espacio y la palabra completo; si no pudiste terminar, la misma linea con la palabra fallo; si necesitas la respuesta de una persona, la misma linea con la palabra esperando.'
+
 # deliver(session, brief) -> accepted | blocked. Un exit 0 de send-keys no
 # prueba la entrega: la caja debe vaciarse (reintento unico del Enter, como
 # lanzar-sesion). Bloqueada no mata: el llamador decide (relevo en Task 5).
+# La orden de la marca va en la MISMA linea: un salto enviaria antes de tiempo.
 adaptador_deliver() {
   [ "$#" -ge 2 ] || { echo "adaptador deliver: faltan argumentos" >&2; return 2; }
   local sesion="$1" brief="$2"
@@ -244,7 +251,7 @@ adaptador_deliver() {
   [ -f "$brief" ] || { echo "adaptador: sin brief: $brief" >&2; return 1; }
   "$TMUX_BIN" has-session -t "=$sesion" 2>/dev/null || { echo "blocked"; return 0; }
   local texto escrito despues despues2
-  texto="$(cat "$brief")"
+  texto="$(cat "$brief") $ADAPTADOR_ORDEN_MARCA"
   "$TMUX_BIN" send-keys -t "=$sesion:" -l -- "$texto" 2>/dev/null || { echo "blocked"; return 0; }
   sleep 1
   escrito="$("$TMUX_BIN" capture-pane -p -t "=$sesion:" 2>/dev/null)" || { echo "blocked"; return 0; }
