@@ -87,6 +87,25 @@ test("exige revisión antes de seleccionar un ejecutable nuevo del plugin", () =
   assert.match(result.stderr, /unreviewed plugin file/i);
 });
 
+test("un ejecutable revisado del plugin entra; su prueba .test.mjs no, y otro .mjs sigue sin revisar", () => {
+  const ok = fixture([
+    "tablero-runbook/index.ts",
+    "tablero-runbook/avance-tick.mjs",
+    "tablero-runbook/avance-tick.test.mjs",
+  ]);
+  const result = ok.run();
+  assert.equal(result.status, 0, result.stderr);
+  const manifest = JSON.parse(readFileSync(ok.output, "utf8"));
+  assert.deepEqual(manifest.files.map((entry) => entry.path), [
+    "tablero-runbook/avance-tick.mjs",
+    "tablero-runbook/index.ts",
+  ]);
+  const otro = fixture(["tablero-runbook/index.ts", "tablero-runbook/otro-tick.mjs"]);
+  const rechazo = otro.run();
+  assert.notEqual(rechazo.status, 0);
+  assert.match(rechazo.stderr, /unreviewed plugin file/i);
+});
+
 test("rechaza bytes dirty: lo modificado sin commit no entra al manifiesto (B4)", () => {
   const f = fixture(["summa-gate/index.ts"]);
   writeFileSync(join(f.root, "summa-gate/index.ts"), "dirty sin commit\n");
