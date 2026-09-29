@@ -92,9 +92,14 @@ corrida_lanzar_sesion() {
     return 1
   fi
   CORR_SES_NOMBRE="$nombre" CORR_SES_ROL="$rol" CORR_SES_CLI="$token" CORR_SES_DIR="$dir" \
-    registro_escribir "$reg" "d['sesiones'].append({'nombre':os.environ['CORR_SES_NOMBRE'],
+    CORR_SES_ENCARGO="$encargo" \
+    registro_escribir "$reg" "e={'nombre':os.environ['CORR_SES_NOMBRE'],
 'rol':os.environ['CORR_SES_ROL'],'cli':os.environ['CORR_SES_CLI'],'dueno':'lead',
-'dir':os.environ['CORR_SES_DIR']})" \
+'dir':os.environ['CORR_SES_DIR']}
+# Hallazgo 7: la ruta del encargo queda en la entrada para que el relanzo
+# automatico del vigia la re-entregue con --encargo.
+if os.environ['CORR_SES_ENCARGO']: e['encargo']=os.environ['CORR_SES_ENCARGO']
+d['sesiones'].append(e)" \
     || { lock_soltar "$reg"
          echo "no se pudo anotar la sesion en el registro" >&2
          [ -n "$carril" ] && lanzar_sesion_fallar "$reg" "$carril"

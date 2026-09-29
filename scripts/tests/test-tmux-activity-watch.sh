@@ -964,7 +964,9 @@ nace() { # $1 sesion $2 run
   "$TM" -L "$L" set-environment -t "$1" OPENCLAW_WATCH_RUN "$2"
   mark "$1"
 }
-run_r() { CORRIDA_BIN="$STUB_REL" QUIET_SECS=100000 run_once; }
+# CORRIDA_AVISOS=0: este bloque mide la ruta de eventos + relanzo, que sin la
+# reversa sigue siendo la de hoy para corridas; la ruta de avisos es el (2q).
+run_r() { CORRIDA_BIN="$STUB_REL" CORRIDA_AVISOS=0 QUIET_SECS=100000 run_once; }
 n_lanzar() { grep -c '^lanzar-sesion' "$RARGV"; }
 ev_rel() { # $1 id $2 True|False -> lineas relanzo-automatico con ese ok
   python3 -c "
@@ -1031,6 +1033,193 @@ run_r || fail "--once (2m, tick tras el fallo) fallo"
 echo "ok (2m): el vigilante relanza una vez las sesiones de una corrida abierta y reporta; ni dos veces, ni cerradas, ni fuera del registro"
 else
   echo "SKIP (2m): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
+fi
+
+# (2q) 19.1 B2: la ruta de avisos. Una sesion marcada con OPENCLAW_WATCH_RUN y
+# corrida.sh ejecutable avisa por el pendiente durable (corrida.sh avisos emitir)
+# y no por system event; la llave de aprobacion es el hash de SOLO las lineas del
+# dialogo, asi el repintado del TUI no la cambia (hallazgo 4); los pendientes
+# viejos se despiertan una vez por tick con tope (sin cron nuevo); y el relanzo
+# re-entrega el --encargo registrado (hallazgo 7).
+if [ -n "${TM:-}" ]; then
+AARGV="$T/avisos-argv.txt"; : >"$AARGV"
+STUB_AV="$T/corrida-avisos-stub"
+cat >"$STUB_AV" <<STUB
+#!/bin/sh
+printf '%s\n' "\$*" >> "$AARGV"
+[ "\$1" = responder ] && exit 1
+exit 0
+STUB
+chmod +x "$STUB_AV"
+run_av() { CORRIDA_BIN="$STUB_AV" run_once; }
+run_avsin() { CORRIDA_BIN="$STUB_AV" CORRIDA_AVISOS=0 run_once; }
+
+# Purga: los casos anteriores dejan sesiones muertas cuyo closed sale en el
+# primer tick que las ve; se consume antes de medir.
+run_av >/dev/null 2>&1 || fail "--once (2q, purga) fallo"
+: >"$AARGV"
+
+# (2q-1) quiet y closed de una sesion de corrida: por avisos, cero system events.
+"$TM" -L "$L" new-session -d -s sim9-avq -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avq"
+mark sim9-avq
+"$TM" -L "$L" set-environment -t sim9-avq OPENCLAW_WATCH_RUN sim9-AVQ
+: >"$CALLS"
+sleep 2
+run_av || fail "--once (2q-1, quiet con avisos) fallo"
+n=$(grep -c '^avisos emitir sim9-AVQ sim9-avq fin-turno --llave ' "$AARGV")
+[ "$n" -eq 1 ] || fail "(2q-1) el quiet de una sesion con corrida debia ir por avisos; hubo $n:
+$(cat "$AARGV")"
+n=$(wc -l <"$CALLS" | tr -d ' ')
+[ "$n" -eq 0 ] || fail "(2q-1) la ruta avisos no debe mandar system events: $(cat "$CALLS")"
+run_av || fail "--once (2q-1, segundo tick) fallo"
+[ "$(wc -l <"$AARGV" | tr -d ' ')" -eq 1 ] || fail "(2q-1) el segundo tick repitio el aviso (notified debia quedar 1): $(cat "$AARGV")"
+"$TM" -L "$L" kill-session -t sim9-avq
+: >"$AARGV"
+run_av || fail "--once (2q-1, closed) fallo"
+grep -q '^avisos emitir sim9-AVQ sim9-avq cierre --llave closed$' "$AARGV" \
+  || fail "(2q-1) el closed debia ir por avisos con llave closed: $(cat "$AARGV")"
+[ -f "$STATE_DIR/sim9-avq.state" ] && fail "(2q-1) el aviso de cierre salio pero el estado no se borro"
+echo "ok (2q-1): quiet y closed de una corrida van por avisos, sin system events y sin repetirse"
+
+# (2q-2) aprobacion y repintado (hallazgo 4): el reloj del TUI no cambia la llave
+# (un aviso por episodio) y un dialogo distinto da llave nueva.
+PANTALLA_Q="$T/pantalla-q.txt"
+printf 'Permission - Bash\necho aviso-q\n> Allow once\n  Deny\n girando |\n' >"$PANTALLA_Q"
+"$TM" -L "$L" new-session -d -s sim9-avp -x 80 -y 20 "$TUI $PANTALLA_Q" || fail "no se pudo crear sim9-avp"
+mark sim9-avp
+"$TM" -L "$L" set-environment -t sim9-avp OPENCLAW_WATCH_RUN sim9-AVP
+espera_pantalla sim9-avp 'Allow once'
+sleep 1
+run_pav() { APPROVAL_REMIND_SECS=3 CORRIDA_BIN="$STUB_AV" run_once; }
+run_pav || fail "--once (2q-2, primer dialogo) fallo"
+n=$(grep -c '^avisos emitir sim9-AVP sim9-avp aprobacion --llave ' "$AARGV")
+[ "$n" -eq 1 ] || fail "(2q-2) el dialogo debia emitir un aviso de aprobacion; hubo $n:
+$(cat "$AARGV")"
+# Un spinner ASCII repinta la cola (el hash de la cola cambia) pero NO las lineas
+# del dialogo: la llave se mantiene y el aviso deduplica.
+sed -i.bak 's/girando |/girando \//' "$PANTALLA_Q"; rm -f "$PANTALLA_Q.bak"
+espera_pantalla sim9-avp 'girando /'
+run_pav || fail "--once (2q-2, repintado con spinner) fallo"
+n=$(grep -c '^avisos emitir sim9-AVP sim9-avp aprobacion --llave ' "$AARGV")
+[ "$n" -eq 2 ] || fail "(2q-2) el repintado debia reevaluar el dialogo (2 llamadas); hubo $n:
+$(cat "$AARGV")"
+n=$(grep '^avisos emitir sim9-AVP sim9-avp aprobacion --llave ' "$AARGV" | sort -u | wc -l | tr -d ' ')
+[ "$n" -eq 1 ] || fail "(2q-2) el repintado del TUI cambio la llave del dialogo (esperaba 1 llave unica, hubo $n):
+$(cat "$AARGV")"
+# Un dialogo DISTINTO (otra pregunta) cambia las lineas que casan: llave nueva.
+sed -i.bak 's/> Allow once/> Do you want to proceed?/' "$PANTALLA_Q"; rm -f "$PANTALLA_Q.bak"
+espera_pantalla sim9-avp 'Do you want to proceed'
+run_pav || fail "--once (2q-2, dialogo distinto) fallo"
+n=$(grep '^avisos emitir sim9-AVP sim9-avp aprobacion --llave ' "$AARGV" | sort -u | wc -l | tr -d ' ')
+[ "$n" -eq 2 ] || fail "(2q-2) un dialogo distinto debia dar una llave nueva (esperaba 2 llaves unicas, hubo $n):
+$(cat "$AARGV")"
+"$TM" -L "$L" kill-session -t sim9-avp
+run_av >/dev/null 2>&1 || true
+echo "ok (2q-2): el repintado no cambia la llave del dialogo (un aviso por episodio); un dialogo distinto, si"
+
+# (2q-3) sin OPENCLAW_WATCH_RUN, o con CORRIDA_AVISOS=0: la ruta de siempre.
+"$TM" -L "$L" new-session -d -s sim9-avs -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avs"
+mark sim9-avs
+: >"$CALLS"; : >"$AARGV"
+sleep 2
+run_av || fail "--once (2q-3, sin run) fallo"
+grep -q '^avisos' "$AARGV" && fail "(2q-3) sin OPENCLAW_WATCH_RUN no debe haber ruta avisos: $(cat "$AARGV")"
+grep -q 'sim9-avs quiet for' "$CALLS" || fail "(2q-3) sin run el evento debia salir como hoy: $(cat "$CALLS")"
+"$TM" -L "$L" set-environment -t sim9-avs OPENCLAW_WATCH_RUN sim9-AVS
+"$TM" -L "$L" kill-session -t sim9-avs
+: >"$CALLS"; : >"$AARGV"
+run_avsin || fail "--once (2q-3, CORRIDA_AVISOS=0) fallo"
+grep -q '^avisos' "$AARGV" && fail "(2q-3) con CORRIDA_AVISOS=0 no debe haber ruta avisos: $(cat "$AARGV")"
+grep -q 'sim9-avs closed' "$CALLS" || fail "(2q-3) con la reversa el closed debia salir como hoy: $(cat "$CALLS")"
+echo "ok (2q-3): sin corrida marcada o con la reversa, los eventos salen por agent:main:vigia-mac como siempre"
+
+# (2q-4) reintento: pendientes con mtime viejo despiertan una vez por corrida y
+# tick, con tope de 5 corridas; los frescos (menos de 30 s) no.
+mkdir -p "$CORRIDA_STATE/sim9-RT1/avisos" "$CORRIDA_STATE/sim9-RT2/avisos" "$CORRIDA_STATE/sim9-FRESCO/avisos"
+printf '{"schema":"corrida-aviso.v1"}\n' >"$CORRIDA_STATE/sim9-RT1/avisos/a.json"
+printf '{"schema":"corrida-aviso.v1"}\n' >"$CORRIDA_STATE/sim9-RT2/avisos/a.json"
+printf '{"schema":"corrida-aviso.v1"}\n' >"$CORRIDA_STATE/sim9-FRESCO/avisos/a.json"
+python3 -c 'import os,sys,time; t=time.time()-31
+for p in sys.argv[1:]: os.utime(p,(t,t))' \
+  "$CORRIDA_STATE/sim9-RT1/avisos/a.json" "$CORRIDA_STATE/sim9-RT2/avisos/a.json"
+: >"$AARGV"
+run_av || fail "--once (2q-4, reintento) fallo"
+[ "$(grep -c '^avisos despertar sim9-RT1$' "$AARGV")" -eq 1 ] || fail "(2q-4) falta el despertar de sim9-RT1: $(cat "$AARGV")"
+[ "$(grep -c '^avisos despertar sim9-RT2$' "$AARGV")" -eq 1 ] || fail "(2q-4) falta el despertar de sim9-RT2: $(cat "$AARGV")"
+grep -q 'despertar sim9-FRESCO' "$AARGV" && fail "(2q-4) un pendiente fresco no debe despertarse: $(cat "$AARGV")"
+[ -f "$CORRIDA_STATE/sim9-RT1/avisos/a.json" ] || fail "(2q-4) el despertar no debe consumir el pendiente"
+i=0
+while [ "$i" -lt 7 ]; do
+  mkdir -p "$CORRIDA_STATE/sim9-TOPE$i/avisos"
+  printf '{"schema":"corrida-aviso.v1"}\n' >"$CORRIDA_STATE/sim9-TOPE$i/avisos/a.json"
+  python3 -c 'import os,sys,time; t=time.time()-31; os.utime(sys.argv[1],(t,t))' "$CORRIDA_STATE/sim9-TOPE$i/avisos/a.json"
+  i=$((i + 1))
+done
+: >"$AARGV"
+run_av || fail "--once (2q-4, tope) fallo"
+n=$(grep -c '^avisos despertar sim9-' "$AARGV")
+[ "$n" -eq 5 ] || fail "(2q-4) el tope de 5 corridas por tick no se respetó (hubo $n): $(cat "$AARGV")"
+rm -rf "$CORRIDA_STATE"/sim9-RT1 "$CORRIDA_STATE"/sim9-RT2 "$CORRIDA_STATE"/sim9-FRESCO "$CORRIDA_STATE"/sim9-TOPE*
+echo "ok (2q-4): los pendientes de mas de 30 s despiertan una vez por tick, con tope de 5 corridas y sin consumirse"
+
+# (2q-5) relanzo con encargo (hallazgo 7): lanzar-sesion re-entrega el --encargo
+# del registro; sin encargo registrado, el comando queda como siempre.
+RARGV="$T/relanzo-enc-argv.txt"; : >"$RARGV"
+STUB_RE="$T/corrida-relanzo-enc"
+cat >"$STUB_RE" <<STUB
+#!/bin/sh
+printf '%s\n' "\$*" >> "$RARGV"
+[ "\$1" = lanzar-sesion ] || exit 1
+last=""
+for a in "\$@"; do last="\$a"; done
+"$TMUX_SHIM" new-session -d -s "\$last" -x 80 -y 20 cat || exit 1
+"$TMUX_SHIM" set-environment -t "\$last" OPENCLAW_WATCH_RUN "\$2"
+"$TMUX_SHIM" set-environment -t "\$last" OPENCLAW_WATCH 1
+echo "\$last"
+STUB
+chmod +x "$STUB_RE"
+ENC="$T/encargo-rel.txt"; printf 'trabaja la parte 3\n' >"$ENC"
+registro_enc() { # $1 id $2 estado $3 sesion $4 encargo ('-' = sin encargo)
+  mkdir -p "$CORRIDA_STATE/$1"
+  R_ID="$1" R_EST="$2" R_SES="$3" R_ENC="$4" R_DIR="$CORRIDA_STATE/$1" python3 - <<'PY'
+import json, os
+e = {'nombre': os.environ['R_SES'], 'rol': 'carril', 'cli': 'glm', 'dueno': 'lead', 'dir': '/tmp'}
+if os.environ['R_ENC'] != '-':
+    e['encargo'] = os.environ['R_ENC']
+json.dump({'id': os.environ['R_ID'], 'estado': os.environ['R_EST'], 'sesiones': [e]},
+          open(os.path.join(os.environ['R_DIR'], 'registro.json'), 'w'))
+PY
+}
+nace_enc() { # $1 sesion $2 run
+  "$TM" -L "$L" new-session -d -s "$1" -x 80 -y 20 cat || fail "no se pudo crear $1"
+  "$TM" -L "$L" set-environment -t "$1" OPENCLAW_WATCH_RUN "$2"
+  mark "$1"
+}
+run_re() { CORRIDA_BIN="$STUB_RE" CORRIDA_AVISOS=0 QUIET_SECS=100000 run_once; }
+registro_enc sim9-ENC abierta sim9-enc "$ENC"
+nace_enc sim9-enc sim9-ENC
+run_re >/dev/null 2>&1 || fail "--once (2q-5, foto) fallo"
+: >"$CALLS"
+"$TM" -L "$L" kill-session -t sim9-enc
+run_re || fail "--once (2q-5, closed con encargo) fallo"
+grep -q "^lanzar-sesion sim9-ENC carril glm /tmp --encargo $ENC --nombre sim9-enc$" "$RARGV" \
+  || fail "(2q-5) el relanzo no re-entrego el encargo del registro: $(cat "$RARGV")"
+"$TM" -L "$L" kill-session -t sim9-enc 2>/dev/null
+run_re >/dev/null 2>&1 || true
+registro_enc sim9-SINENC abierta sim9-sinenc -
+nace_enc sim9-sinenc sim9-SINENC
+run_re >/dev/null 2>&1 || fail "--once (2q-5, foto sin encargo) fallo"
+: >"$RARGV"; : >"$CALLS"
+"$TM" -L "$L" kill-session -t sim9-sinenc
+run_re || fail "--once (2q-5, closed sin encargo) fallo"
+grep -q '^lanzar-sesion sim9-SINENC carril glm /tmp --nombre sim9-sinenc$' "$RARGV" \
+  || fail "(2q-5) sin encargo el comando debia quedar como siempre: $(cat "$RARGV")"
+grep -q -- '--encargo' "$RARGV" && fail "(2q-5) se invento un encargo que no estaba en el registro: $(cat "$RARGV")"
+"$TM" -L "$L" kill-session -t sim9-sinenc 2>/dev/null
+run_re >/dev/null 2>&1 || true
+echo "ok (2q-5): el relanzo re-entrega el --encargo registrado y sin encargo queda igual que siempre"
+else
+  echo "SKIP (2q): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
 fi
 
 # (5) Retirado en 15.1: la llamada anidada a scripts/tests/test-mac-tmux-control.sh.

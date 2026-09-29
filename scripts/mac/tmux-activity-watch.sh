@@ -80,9 +80,23 @@
 # Automatic relaunch: a closed session whose state names a run, when that run's registro is
 # "abierta" and lists the session with rol/cli/dir, is relaunched here with
 # `$CORRIDA_BIN lanzar-sesion <id> <rol> <cli> <dir> --nombre <session>`, once per (run, session)
-# ($STATE_DIR/relanzos/<run>.<session>). The "closed" event still goes out, as a report of what
-# happened. Measured 2026-09-29, sim9-20260928-2039 cases 5/6: the event alone landed in a gateway
-# session in queue mode "steer", got folded into an unrelated run, and nobody relaunched for 32 min.
+# ($STATE_DIR/relanzos/<run>.<session>). When the registro entry carries 'encargo' (19.1 B2,
+# finding 7), the relaunch re-delivers it with --encargo. The "closed" event still goes out, as
+# a report of what happened. Measured 2026-09-29, sim9-20260928-2039 cases 5/6: the event alone
+# landed in a gateway session in queue mode "steer", got folded into an unrelated run, and
+# nobody relaunched for 32 min.
+#
+# Avisos de corrida (19.1 B2): a marked session carrying OPENCLAW_WATCH_RUN=<id> whose
+# CORRIDA_BIN is executable reports through the durable avisos queue instead of the system
+# event: `$CORRIDA_BIN avisos emitir <id> <session> <tipo> --llave <llave>` (quiet -> fin-turno,
+# approval -> aprobacion, closed -> cierre). CORRIDA_AVISOS=0 or no run keeps today's event
+# route. The approval key is the checksum of ONLY the lines matching APPROVAL_RE (finding 4:
+# the full tail that was hashed before changes when the TUI repaints with a spinner, breaking
+# the dedupe; the matching lines ARE the dialog identity, so one aviso per episode, and a
+# different dialog changes them and gets a new key). Once per tick, pendientes whose mtime is
+# older than AVISOS_REINTENTO_SECS (a wake-up that never landed: busy owner, lead gone at emit
+# time) are re-woken via `$CORRIDA_BIN avisos despertar <id>`, at most AVISOS_REINTENTO_TOPE
+# runs per tick — no new cron, the watcher already IS the retry clock.
 #   LATIDO_SECS=300    (seconds between two `$CORRIDA_BIN latido` launches)
 #   LATIDO_TOPE=240    (hard timeout of one latido; it runs in the background, never blocks a tick)
 #   LATIDO_ONCE=       (1: --once also launches the latido)
@@ -120,6 +134,8 @@ LOG_FILE=${LOG_FILE:-$HOME/Library/Logs/tmux-activity-watch.log}
 # comporta exactamente como hoy.
 CORRIDA_BIN=${CORRIDA_BIN:-$HOME/bin/corrida.sh}
 CORRIDA_STATE=${CORRIDA_STATE:-$HOME/.local/state/corridas}
+AVISOS_REINTENTO_SECS=${AVISOS_REINTENTO_SECS:-30}
+AVISOS_REINTENTO_TOPE=5
 RELANZO_DIR="$STATE_DIR/relanzos"
 RELANZO_TOPE=60
 LATIDO_SECS=${LATIDO_SECS:-300}
@@ -220,6 +236,18 @@ send_event() {
   fi
 }
 
+# 19.1 B2: la ruta de avisos para sesiones de una corrida marcada. Estados:
+#   0 = ruta avisos tomada y el emitir salio (o dedupó): el llamador marca notificado.
+#   1 = fuera de la ruta (sin run, CORRIDA_BIN no ejecutable, CORRIDA_AVISOS=0):
+#       el llamador hace lo de siempre (send_event).
+#   2 = ruta tomada y el emitir fallo: sin evento y sin marcar; el siguiente
+#       tick reintenta (igual que un envio fallido).
+aviso_dueno() { # $1 run $2 sesion $3 tipo $4 llave
+  [[ -n $1 && -x $CORRIDA_BIN && ${CORRIDA_AVISOS:-1} != 0 ]] || return 1
+  "$CORRIDA_BIN" avisos emitir "$1" "$2" "$3" --llave "$4" >>"$LOG_FILE" 2>&1 || return 2
+  return 0
+}
+
 # Carril P (9.6): la politica de dialogos contesta primero. El vigilante le pasa
 # la sesion a "corrida.sh responder" y solo despierta al agente si la politica no
 # contesta (rc != 0: no existe, corrida sin registro de esa sesion, politica
@@ -272,7 +300,7 @@ open(os.environ['REL_F'],'a').write(json.dumps(p)+chr(10))" 2>/dev/null ||
 # (" | relanzada automaticamente: ..." / " | no se pudo relanzar: ..." / " | ya se
 # relanzo ...") o nada si la sesion no es relanzable (el evento sale como antes).
 relanzo_automatico() {
-  local session=$1 run=$2 datos estado rol cli dir marca salida rc razon
+  local session=$1 run=$2 datos estado rol cli dir encargo marca salida rc razon
   [[ -n $run && -x $CORRIDA_BIN ]] || return 0
   [[ $run =~ ^[A-Za-z0-9_-]+$ ]] || return 0
   datos=$(REL_REG="$CORRIDA_STATE/$run/registro.json" REL_S="$session" python3 -c "
@@ -282,9 +310,9 @@ e=None
 for s in d.get('sesiones') or []:
   if isinstance(s,dict) and s.get('nombre')==os.environ['REL_S']: e=s
 if e and all(e.get(k) for k in ('rol','cli','dir')):
-  print('\t'.join([str(d.get('estado','')),e['rol'],e['cli'],e['dir']]))" 2>/dev/null) || datos=""
+  print('\t'.join([str(d.get('estado','')),e['rol'],e['cli'],e['dir'],str(e.get('encargo') or '')]))" 2>/dev/null) || datos=""
   [[ -n $datos ]] || return 0
-  IFS=$'\t' read -r estado rol cli dir <<<"$datos"
+  IFS=$'\t' read -r estado rol cli dir encargo <<<"$datos"
   [[ $estado == abierta ]] || return 0
   mkdir -p "$RELANZO_DIR" 2>/dev/null || true
   marca="$RELANZO_DIR/$run.$session"
@@ -296,13 +324,22 @@ if e and all(e.get(k) for k in ('rol','cli','dir')):
     return 0
   fi
   rc=0
+  # Hallazgo 7: si el registro guarda la ruta del --encargo de la sesion, el
+  # relanzo la re-entrega; sin encargo registrado, el comando queda igual que siempre.
+  local encargo_args=() cmd_txt
+  cmd_txt="corrida.sh lanzar-sesion $run $rol $cli $dir"
+  if [[ -n $encargo ]]; then
+    encargo_args=(--encargo "$encargo")
+    cmd_txt="$cmd_txt --encargo $encargo"
+  fi
+  cmd_txt="$cmd_txt --nombre $session"
   salida=$(perl -e 'alarm shift; exec(@ARGV) or exit 127' "$RELANZO_TOPE" \
-    "$CORRIDA_BIN" lanzar-sesion "$run" "$rol" "$cli" "$dir" --nombre "$session" </dev/null 2>&1) || rc=$?
+    "$CORRIDA_BIN" lanzar-sesion "$run" "$rol" "$cli" "$dir" ${encargo_args[@]+"${encargo_args[@]}"} --nombre "$session" </dev/null 2>&1) || rc=$?
   printf '%s\n' "$salida" >>"$LOG_FILE" 2>/dev/null || true
   if [[ $rc -eq 0 ]]; then
     log "relanzo automatico: $session (corrida $run)"
-    relanzo_evento "$run" "$session" true "corrida.sh lanzar-sesion $run $rol $cli $dir --nombre $session"
-    printf ' | relanzada automaticamente: corrida.sh lanzar-sesion %s %s %s %s --nombre %s' "$run" "$rol" "$cli" "$dir" "$session"
+    relanzo_evento "$run" "$session" true "$cmd_txt"
+    printf ' | relanzada automaticamente: %s' "$cmd_txt"
   else
     razon=$(printf '%s\n' "$salida" | grep -v '^[[:space:]]*$' | tail -1 | tr -d '\r' | cut -c1-200)
     [[ $rc -eq 142 ]] && razon="sin respuesta en ${RELANZO_TOPE}s"
@@ -383,7 +420,7 @@ tick() {
   local session activity cmd path sf prev_hash prev_since prev_notified now seen_file err_file
   local prev_approval prev_approval_at prev_approval_since screen hash since notified tailtxt
   local approval approval_at approval_since due elapsed text last_path rc prev_notified_at notified_at
-  local run prev_run sufijo
+  local run prev_run sufijo rc_av llave_av
   seen_file=$(mktemp "${TMPDIR:-/tmp}/tmux-activity-watch.seen.XXXXXX")
   err_file=$(mktemp "${TMPDIR:-/tmp}/tmux-activity-watch.err.XXXXXX")
 
@@ -491,13 +528,26 @@ tick() {
         log "dialog answered by policy: $session"
       fi
       if [[ $due == 1 ]]; then
-        text="tmux: $session waiting for approval for $((now - approval_since))s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"
-        if send_event "$text" "$run"; then
+        # Hallazgo 4: la llave del aviso es el hash de SOLO las lineas que casan
+        # APPROVAL_RE, no la cola completa: el repintado del TUI (spinner,
+        # porcentaje) cambia la cola y romperia el dedupe; un dialogo distinto
+        # cambia las lineas que casan y da llave nueva.
+        llave_av=$(printf '%s\n' "$tailtxt" | grep -Ei -- "$APPROVAL_RE" | sum_of)
+        rc_av=0
+        aviso_dueno "$run" "$session" aprobacion "$llave_av" || rc_av=$?
+        if [[ $rc_av == 0 ]]; then
           approval_at=$now
+        elif [[ $rc_av == 2 ]]; then
+          : # el emitir fallo: sin evento, el proximo tick reintenta
         else
-          # Not recorded: the next tick sees it as unreported and tries again.
-          approval=$prev_approval
-          approval_since=$prev_approval_since
+          text="tmux: $session waiting for approval for $((now - approval_since))s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"
+          if send_event "$text" "$run"; then
+            approval_at=$now
+          else
+            # Not recorded: the next tick sees it as unreported and tries again.
+            approval=$prev_approval
+            approval_since=$prev_approval_since
+          fi
         fi
       fi
       # Reported as a prompt, never ALSO as "quiet": notified=1 for this screen.
@@ -516,10 +566,19 @@ tick() {
       due=1
     fi
     if [[ $due == 1 ]]; then
-      text="tmux: $session quiet for ${elapsed}s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"
-      if send_event "$text" "$run"; then
+      rc_av=0
+      aviso_dueno "$run" "$session" fin-turno "$hash" || rc_av=$?
+      if [[ $rc_av == 0 ]]; then
         notified=1
         notified_at=$now
+      elif [[ $rc_av == 2 ]]; then
+        : # el emitir fallo: sin evento, el proximo tick reintenta
+      else
+        text="tmux: $session quiet for ${elapsed}s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"
+        if send_event "$text" "$run"; then
+          notified=1
+          notified_at=$now
+        fi
       fi
     fi
     write_state "$sf" "$hash" "$since" "$notified" "$path" "" 0 0 "$notified_at" "$run"
@@ -540,14 +599,55 @@ tick() {
         sufijo=$(relanzo_automatico "$session" "$run") || sufijo=""
         [[ -z $sufijo ]] || printf 'relanzo=%s\n' "$sufijo" >>"$sf"
       fi
-      text="tmux: $session closed | last cwd=$last_path$sufijo"
-      if send_event "$text" "$run"; then
+      rc_av=0
+      aviso_dueno "$run" "$session" cierre closed || rc_av=$?
+      if [[ $rc_av == 0 ]]; then
         rm -f "$sf"
+      elif [[ $rc_av == 2 ]]; then
+        : # el emitir fallo: el estado no se borra y el proximo tick reintenta
+      else
+        text="tmux: $session closed | last cwd=$last_path$sufijo"
+        if send_event "$text" "$run"; then
+          rm -f "$sf"
+        fi
       fi
     fi
   done
 
   rm -f "$seen_file"
+
+  # 19.1 B2: reintento del despertar para pendientes de avisos viejos (una vez
+  # por tick; el vigilante ya ES el reloj, no hay cron nuevo).
+  avisos_reintento_tick
+}
+
+# Scan $CORRIDA_STATE/*/avisos/*.json y despierta (avisos despertar) las corridas
+# con al menos un pendiente cuyo mtime supera AVISOS_REINTENTO_SECS: son envios
+# que no aterrizaron (dueno ocupado en un dialogo, lead inexistente al emitir).
+# El pendiente no se toca aqui: despertar solo reintenta las teclas.
+avisos_reintento_tick() {
+  local d f corrida mt edad n=0
+  [[ ${CORRIDA_AVISOS:-1} != 0 && -x $CORRIDA_BIN && -d $CORRIDA_STATE ]] || return 0
+  for d in "$CORRIDA_STATE"/*/avisos; do
+    [[ -d $d ]] || continue
+    [[ $n -lt $AVISOS_REINTENTO_TOPE ]] || break
+    corrida=$(basename "$(dirname "$d")")
+    for f in "$d"/*.json; do
+      [[ -f $f ]] || continue
+      # GNU primero: en Linux `stat -f` es el estado del sistema de archivos, no el mtime.
+      mt=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null) || mt=""
+      [[ $mt =~ ^[0-9]+$ ]] || continue
+      edad=$(( $(date +%s) - mt ))
+      if [[ $edad -ge $AVISOS_REINTENTO_SECS ]]; then
+        if ! "$CORRIDA_BIN" avisos despertar "$corrida" >>"$LOG_FILE" 2>&1; then
+          log "avisos despertar fallo (corrida $corrida)"
+        fi
+        n=$((n + 1))
+        break
+      fi
+    done
+  done
+  return 0
 }
 
 # mkdir is the atomic step. The holder's pid goes inside so a watcher killed while holding it
