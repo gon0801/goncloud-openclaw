@@ -23,13 +23,17 @@ viven en `scripts/mac/cli-modos.tsv` y el preflight hace NO APTO cualquier
 binario seleccionable del registro sin barra medida (F2 de 14.7): un verde
 del preflight significa que `adaptador start` puede arrancar.
 
+Los hosts son los workers del registro `scripts/mac/workers.v1.json` (hoy
+cinco harnesses). Cursor salió del registro el
+2026-09-29 por decisión de David; vuelve solo con su propio humo real `passed`.
+
 ## Etapa 1 — Selección en modo reporte
 
 Qué permite: `CORRIDA_NATIVE_ROUTING=report`. El preflight corre sus sondas
 de salud por worker y el selector anota su decisión; nada se ejecuta en un
 carril. No se lanzan sesiones nativas.
 
-Evidencia de promoción a Etapa 2: salida `APTO` del preflight con las seis
+Evidencia de promoción a Etapa 2: salida `APTO` del preflight con las
 barras medidas en `cli-modos.tsv` (cero `unknown` entre los seleccionables),
 salud `available` observada por sonda en los candidatos, y la decisión del
 selector registrada por corrida. Comando de medición de humos que alimenta la
@@ -39,7 +43,7 @@ etapa siguiente:
 bash scripts/mac/smoke-native-harnesses.sh --worker all --evidence-dir "$CORRIDA_STATE/native-smoke-<fecha>"
 ```
 
-## Etapa 2 — Seis humos reales desechables
+## Etapa 2 — Humos reales desechables de los workers del registro
 
 Qué permite: ejecutar el driver de humos contra CLIs reales en repos
 desechables creados desde `origin/main`. Nada fusiona ni despliega.
@@ -53,8 +57,8 @@ deshabilita el host para ruteo vivo y se registra; jamás se cuenta como
 bloqueante. Despliegue parcial: se habilitan solo los hosts con `passed`
 siempre que sean al menos dos, incluyendo un revisor independiente.
 
-Evidencia de promoción a Etapa 3: `resumen.json` del driver con los seis
-workers, la tabla real `cli-modos.tsv` sin `unknown` entre los seis, y la
+Evidencia de promoción a Etapa 3: `resumen.json` del driver con todos los
+workers del registro, la tabla real `cli-modos.tsv` sin `unknown` entre ellos, y la
 lista explícita de hosts habilitados y deshabilitados con su razón.
 
 ## Etapa 3 — Implementación y PR, sin merge ni despliegue

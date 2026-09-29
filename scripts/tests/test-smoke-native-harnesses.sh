@@ -1,6 +1,6 @@
 #!/bin/bash
 # 14.7 Task 10 Step 1: humos en falso del driver de humos nativos. Stubs para
-# las seis CLIs (doble fake del harness), openclaw y tmux propios (-L). El
+# las CLIs del registro (doble fake del harness), openclaw y tmux propios (-L). El
 # driver debe: crear repo desechable desde origin/main, entregar la edicion
 # minima, observar transcripcion y completion, archivar evidencia redactada
 # (ningun token en pantalla), cerrar tmux y la corrida, y salir != 0 si omite
@@ -34,10 +34,10 @@ git -C "$T/origin" add -A
 git -C "$T/origin" -c user.email=t@t -c user.name=t commit -qm base
 OSHA="$(git -C "$T/origin" rev-parse HEAD)"
 
-# Dobles de las seis CLIs: el mismo fake del contrato del adaptador.
+# Dobles de las CLIs del registro: el mismo fake del contrato del adaptador.
 FAKE=scripts/tests/fixtures/harness/fake-native-cli.sh
 [ -f "$FAKE" ] || fail "falta $FAKE"
-for b in claude codex zcode kimi cursor-agent grok; do
+for b in claude codex zcode kimi grok; do
   cp "$FAKE" "$T/bin/$b" || fail "sin doble $b"
 done
 chmod +x "$T/bin/"*
@@ -54,7 +54,7 @@ chmod +x "$T/bin/claude"
 # Tabla de modos y registro: los binarios reales del registro resuelven a los
 # dobles por CORRIDA_WORKER_BIN_<ID> (los reales de la Mac no se tocan).
 printf 'recibido\n' >"$T/brief-marker.txt"
-for b in claude codex zcode kimi cursor-agent grok; do
+for b in claude codex zcode kimi grok; do
   printf '%s\t%s\t--fake-9\tFAKE-BARRA-9\t--\t--\t--\n' "$b" "$b" >>"$T/modos.tsv"
 done
 
@@ -86,7 +86,7 @@ export OPENCLAW_BIN="$T/bin/openclaw" CORRIDA_CLI_MODOS="$T/modos.tsv"
 export FAKE_ARGV_DIR="$T/argv" FAKE_BAR="FAKE-BARRA-9" FAKE_HARNESS_MODE=obedece
 export CORRIDA_WORKER_BIN_CLAUDE_FABLE="$T/bin/claude" CORRIDA_WORKER_BIN_CODEX="$T/bin/codex" \
   CORRIDA_WORKER_BIN_ZCODE="$T/bin/zcode" CORRIDA_WORKER_BIN_KIMI_CODING="$T/bin/kimi" \
-  CORRIDA_WORKER_BIN_CURSOR="$T/bin/cursor-agent" CORRIDA_WORKER_BIN_GROK="$T/bin/grok"
+  CORRIDA_WORKER_BIN_GROK="$T/bin/grok"
 
 sin_humos() { # ningun resto de sesion del driver en el server de prueba
   if "$TM_REAL" -L "$L" list-sessions -F '#{session_name}' 2>/dev/null | grep -q '^smoke-'; then
@@ -97,7 +97,7 @@ sin_humos() { # ningun resto de sesion del driver en el server de prueba
 
 chequea_evidencia() { # $1 dir de evidencia; contratos transversales
   local ev="$1" w
-  for w in claude codex zcode kimi cursor grok; do
+  for w in claude codex zcode kimi grok; do
     [ -f "$ev/$w/resultado.json" ] || fail "sin resultado.json de $w"
     [ -f "$ev/$w/pantalla.txt" ] || fail "sin transcripcion de $w"
     grep -q "RECIBIDO: humo $w" "$ev/$w/pantalla.txt" \
@@ -118,7 +118,7 @@ $(head -5 "$ev/$w/pantalla.txt")"
 import json, sys
 d = json.load(open(sys.argv[1]))
 rs = d["resultados"]
-assert len(rs) == 6, rs
+assert len(rs) == 5, rs
 for r in rs:
     assert r["outcome"] == "passed", r
     assert r["version"].strip(), r
@@ -129,10 +129,10 @@ for r in rs:
 PY
 }
 
-# RUN 1: los seis con dobles sanos => rc 0, seis passed, evidencia redactada,
+# RUN 1: los cinco con dobles sanos => rc 0, cinco passed, evidencia redactada,
 # repo desechable desde origin/main, tmux y corridas cerradas.
 out="$(bash "$DRIVER" --worker all --repo "$T/origin" --evidence-dir "$T/ev" 2>&1)"; rc=$?
-[ $rc -eq 0 ] || fail "con los seis dobles sanos el driver debio salir 0:
+[ $rc -eq 0 ] || fail "con los cinco dobles sanos el driver debio salir 0:
 $out"
 grep -q "humo claude: passed" <<<"$out" || fail "sin linea de resultado de claude:
 $out"
@@ -142,14 +142,22 @@ chequea_evidencia "$T/ev"
 python3 - "$T/corridas" <<'PY' || fail "las corridas de humo no quedaron cerradas"
 import glob, json, sys
 regs = glob.glob(sys.argv[1] + "/smoke-*/registro.json")
-assert len(regs) == 6, regs
+assert len(regs) == 5, regs
 for r in regs:
     assert json.load(open(r))["estado"] == "cerrada", r
 PY
 sin_humos || fail "el driver dejo sesiones de tmux vivas (run 1)"
+# --worker all cubre justo los binarios del registro real: un worker que entra
+# o sale del registro (cursor salio el 2026-09-29) no deja al humo desfasado.
+python3 - "$T/ev/resumen.json" scripts/mac/workers.v1.json <<'PY' || fail "--worker all no cubre los binarios del registro"
+import json, sys
+humo = sorted(r["binario"] for r in json.load(open(sys.argv[1]))["resultados"])
+reg = sorted({w["binary"] for w in json.load(open(sys.argv[2]))["workers"]})
+assert humo == reg, (humo, reg)
+PY
 
-# RUN 2: sin binario de grok => rc != 0, grok unavailable, cinco passed, y las
-# seis filas igual escritas (un omittedo jamas cuenta como passed).
+# RUN 2: sin binario de grok => rc != 0, grok unavailable, cuatro passed, y las
+# cinco filas igual escritas (un omittedo jamas cuenta como passed).
 rm -f "$T/bin/grok"
 out="$(bash "$DRIVER" --worker all --repo "$T/origin" --evidence-dir "$T/ev2" 2>&1)"; rc=$?
 [ $rc -ne 0 ] || fail "con grok sin binario el driver debio salir distinto de 0:
@@ -158,9 +166,9 @@ python3 - "$T/ev2/resumen.json" <<'PY' || fail "el resumen del run 2 no pasa"
 import json, sys
 d = json.load(open(sys.argv[1]))
 por = {r["worker"]: r for r in d["resultados"]}
-assert len(por) == 6, por
+assert len(por) == 5, por
 assert por["grok"]["outcome"] == "unavailable", por["grok"]
-for w in ("claude", "codex", "zcode", "kimi", "cursor"):
+for w in ("claude", "codex", "zcode", "kimi"):
     assert por[w]["outcome"] == "passed", por[w]
 PY
 sin_humos || fail "el driver dejo sesiones de tmux vivas (run 2)"

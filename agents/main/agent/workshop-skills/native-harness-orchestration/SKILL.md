@@ -1,11 +1,13 @@
 ---
 name: native-harness-orchestration
-description: Dirige ingenieria por harnesses nativos de la Mac (Claude Code, Codex, ZCode, Kimi, Cursor, Grok) con reconciliation, evidencia y merge autorizado; conserva la cadena legada con CORRIDA_NATIVE_ROUTING=off.
+description: Dirige ingenieria por los harnesses nativos del registro de workers de la Mac (scripts/mac/workers.v1.json) con reconciliation, evidencia y merge autorizado; conserva la cadena legada con CORRIDA_NATIVE_ROUTING=off.
 ---
 
 # Orquestación nativa de ingeniería (Fase 14)
 
-Dirige carriles de ingeniería por harnesses nativos de la Mac. La máquina
+Dirige carriles de ingeniería por harnesses nativos de la Mac: los workers del
+registro `scripts/mac/workers.v1.json`. Cursor salió del registro el 2026-09-29
+por decisión de David; vuelve solo con su propio humo real `passed`. La máquina
 ejecuta; este contrato decide. Tabla de decisión ejecutable: cada paso de
 efecto EMPIEZA reconciliando (`corrida.sh reconciliar <id>`) y TERMINA escribiendo
 su observación (`observed.*` en el registro).

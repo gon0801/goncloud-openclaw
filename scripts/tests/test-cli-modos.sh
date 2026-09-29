@@ -186,8 +186,8 @@ PY
 
 # F2 (14.7, decision de David 2026-09-27): la tabla REAL cruza con el registro
 # REAL: ningun binario seleccionable queda con barra unknown o sin fila. Asi,
-# un verde del preflight implica que adaptador start puede arrancar en los
-# seis; medir una barra nueva es editar la tabla, nunca el codigo.
+# un verde del preflight implica que adaptador start puede arrancar en todos
+# los del registro; medir una barra nueva es editar la tabla, nunca el codigo.
 python3 - "$TSV" scripts/mac/workers.v1.json <<'PY' || fail "guarda F2: la tabla real trae barras sin medir para el registro"
 import json, sys
 filas = {}

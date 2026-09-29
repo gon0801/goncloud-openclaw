@@ -1,8 +1,8 @@
 #!/bin/sh
-# scripts/tests/fixtures/harness/fake-native-cli.sh — doble de las seis CLIs
-# nativas para el contrato del adaptador (Fase 14, Task 3). Se copia con el
-# nombre de cada binario (claude, codex, zcode, kimi, cursor-agent, grok) y
-# el adaptador lo resuelve por CORRIDA_WORKER_BIN_<ID>.
+# scripts/tests/fixtures/harness/fake-native-cli.sh — doble de las CLIs
+# nativas del registro para el contrato del adaptador (Fase 14, Task 3). Se
+# copia con el nombre de cada binario (claude, codex, zcode, kimi, grok) y el
+# adaptador lo resuelve por CORRIDA_WORKER_BIN_<ID>.
 #
 # Anota cada invocacion (argv) en $FAKE_ARGV_DIR/<nombre>.argv, pinta
 # $FAKE_BAR y simula el modo de $FAKE_HARNESS_MODE:
@@ -16,7 +16,6 @@
 #   la barra si recibe las teclas exactas que aceptan (claude: Down Enter;
 #   codex y kimi: Enter). $FAKE_CONFIANZA_PREVIA, si viene, sale antes en una
 #   linea propia (un cwd pintado fuera del dialogo).
-#   sin-uso: aviso de cuota de cursor-agent medido 2026-09-28.
 # Los marcadores ADAPTADOR-MARCA son el contrato con adaptador_inspect.
 set -u
 nombre="$(basename "$0")"
@@ -68,7 +67,6 @@ case "${FAKE_HARNESS_MODE:-}" in
   failed) printf 'ADAPTADOR-MARCA: fallo\n'; sleep 2; exit 1;;
   quota) printf 'fake-%s: rate limit exceeded, retry later\n' "$nombre";;
   auth) printf 'fake-%s: login required\n' "$nombre";;
-  sin-uso) printf "  You're out of usage. Switch to Auto, or ask your admin to increase your limit to continue.\n";;
   cuota-auth) printf 'fake-%s: login required\nfake-%s: rate limit exceeded, retry later\n' "$nombre" "$nombre";;
   *) :;;
 esac

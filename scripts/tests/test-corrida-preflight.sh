@@ -613,14 +613,14 @@ printf '%s' "$out" | grep -q 'sondas nativas sin medir' \
 REGF2="$T/workers-f2.json"
 python3 - "$REGF2" <<'PY'
 import json, sys
-ws = [{"id": b, "binary": b} for b in ("claude", "codex", "zcode", "kimi", "cursor-agent", "grok")]
+ws = [{"id": b, "binary": b} for b in ("claude", "codex", "zcode", "kimi", "grok")]
 json.dump({"schema": "workers.v1", "max_external_sessions": 4, "workers": ws},
           open(sys.argv[1], "w"), indent=1, sort_keys=True)
 PY
-for b in claude codex zcode kimi cursor-agent grok; do
+for b in claude codex zcode kimi grok; do
   cp "$T/bin/cli-ok" "$T/bin/$b" || fail "sin stub de $b"
 done
-modos_f2() { # $1 flag de claude, $2 barra de claude; las otras cinco filas verdes.
+modos_f2() { # $1 flag de claude, $2 barra de claude; las otras cuatro filas verdes.
   # Columna 1 = el seleccionable que cruza el registro; columna 2 = binario de
   # mentira: los reales estan instalados en esta Mac y bin_de_tabla los
   # resuelve antes que los stubs (medido en el primer rojo: codex real con
@@ -628,7 +628,7 @@ modos_f2() { # $1 flag de claude, $2 barra de claude; las otras cinco filas verd
   rm -f "$T/m.tsv"
   printf 'claude\tcli-ok\t%s\t%s\t--\t--\t--\n' "$1" "$2" >>"$T/m.tsv"
   local b
-  for b in codex zcode kimi cursor-agent grok; do
+  for b in codex zcode kimi grok; do
     printf '%s\tcli-ok\tx\tBAR-OK-9\t--\t--\t--\n' "$b" >>"$T/m.tsv"
   done
 }
@@ -644,11 +644,11 @@ $out"
 printf '%s' "$out" | grep -q "barra de claude sin medir" || fail "F2: NO APTO sin la razon de la barra sin medir:
 $out"
 
-# F2-b: las seis barras medidas => APTO (verde ahora dice que se puede arrancar).
+# F2-b: las cinco barras medidas => APTO (verde ahora dice que se puede arrancar).
 modos_f2 x BAR-OK-9
 abrir t-f2-verde "$RB"
 out=$(bash "$CORR" preflight t-f2-verde 2>&1); rc=$?
-[ $rc -eq 0 ] || fail "F2: con las seis barras medidas debio dar APTO:
+[ $rc -eq 0 ] || fail "F2: con las cinco barras medidas debio dar APTO:
 $out"
 
 # F2-c (mutacion in-suite del contrato): volver la barra de claude a unknown,
@@ -677,7 +677,7 @@ printf '%s' "$out" | grep -q "sin fila en la tabla de modos: futuro" || fail "F2
 $out"
 
 # restaurar el registro sin el worker futuro: el caso legacy necesita el
-# registro limpio de seis seleccionables.
+# registro limpio de cinco seleccionables.
 python3 - "$REGF2" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
@@ -700,7 +700,7 @@ $out"
 # APTO ni caer por "flag no entra".
 rm -f "$T/m.tsv"
 printf 'claude\tcli-ok\tx\t--\t--\t--\t--\n' >>"$T/m.tsv"
-for b in codex zcode kimi cursor-agent grok; do
+for b in codex zcode kimi grok; do
   printf '%s\tcli-ok\tx\tBAR-OK-9\t--\t--\t--\n' "$b" >>"$T/m.tsv"
 done
 abrir t-f2-dash "$RB"
