@@ -49,7 +49,10 @@ try {
     inmediato: req.inmediato ?? null,
     problemas: [],
   });
-  process.stdout.write(JSON.stringify(r));
+  // Con sangria, como imprime la CLI real ("accion": "SEND", espacio tras los
+  // dos puntos): un arnes que busque '"accion":"SEND"' con grep pasa con el
+  // JSON compacto y falla en vivo (sim9-20260929-0229, casos 4 y 7).
+  process.stdout.write(JSON.stringify(r, null, 2));
 } catch (err) {
   process.stderr.write(`decide-puro: ${err instanceof Error ? err.message : String(err)}\n`);
   process.exit(1);

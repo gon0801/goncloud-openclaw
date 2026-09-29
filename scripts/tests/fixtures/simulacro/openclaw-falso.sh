@@ -3,7 +3,8 @@
 # arnes necesita: cron list (destino falso, o --all para la observacion
 # extendida), gateway call runbook.progress.list/set/status, gateway call
 # runbook.progress.decide (corre el MODULO PURO real via decide-puro.mjs, no
-# una respuesta inventada), message send (con preambulo antes del JSON, como
+# una respuesta inventada, impreso como la CLI real: preambulo y JSON con
+# sangria), message send (con preambulo antes del JSON, como
 # un CLI real que imprime avisos), browser tabs (mecanismo del navegador que
 # preflight prueba), system event (el vigia doblado; "X closed" hace de
 # "main falso": relanza esa sesion desde su propio registro), agent (el
@@ -129,6 +130,9 @@ case "$*" in
     printf '{"ok":true}'
     ;;
   *"gateway call runbook.progress.decide"*)
+    # Misma forma que `openclaw gateway call` real (OpenClaw 2026.9.6, medido
+    # 2026-09-29): una linea de preambulo y luego el JSON con sangria.
+    printf 'Gateway call: runbook.progress.decide\n'
     printf '%s' "$PARAMS" | "${SIM9_NODE_BIN:-node}" "$AQUI/decide-puro.mjs" 2>>"${SIM9_LLAMADAS:-/dev/null}"
     ;;
   *"gateway call status"*)

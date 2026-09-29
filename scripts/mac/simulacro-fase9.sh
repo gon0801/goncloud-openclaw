@@ -7,9 +7,13 @@
 # runbook.progress.decide inmediato); kill-session de un carril y del lead
 # con relanzamiento real (vigia -> system event -> "main"); corte de 30 min
 # de runbook.progress.decide con reporte-confirmado. Los casos 4 y 7 miden
-# con reloj inyectado; con --observar-avance (opcion A de David, ~35 min en
-# vivo, SIN reloj falso) se suben a "observado real" si el cron avance-tareas
-# aparece de verdad y su scratch confirma un reporte con messageId.
+# con reloj inyectado y ese es su veredicto; con --observar-avance (opcion A
+# de David, ~35 min en vivo, SIN reloj falso) la observacion real (el cron
+# avance-tareas aparece de verdad y su scratch confirma un reporte con
+# messageId) se SUMA al detalle de los dos: un FUNCIONA queda "FUNCIONA
+# (observado real: ...)" y un NO FUNCIONA conserva su motivo delante de la
+# observacion. La observacion nunca cambia el veredicto (autopilot-fase9.md:
+# sin 7/7 se deja la fila abierta con evidencia; 14.10 pide evidencia literal).
 #
 # Uso:
 #   simulacro-fase9.sh [--ensayo] [--dry-run] [--salida <md>] [--tope-pared <s>]
@@ -584,6 +588,36 @@ leer_caso() { # $1 numero -> llena CASO_RESULTADO..CASO_SIMULADO
     CASO_OBSERVABLE="pendiente"; CASO_SIMULADO="pendiente"
   fi
 }
+# La observacion extendida se SUMA al detalle del caso, detras del motivo que
+# el caso ya tenia, y deja el veredicto tal cual. En sim9-20260929-0229 la
+# reescritura del detalle borro el motivo de los casos 4 y 7 y la evidencia
+# quedo con un NO FUNCIONA sin explicacion.
+anotar_observacion() { # $1 numero, $2 nota
+  leer_caso "$1"
+  local detalle="$2"
+  [ -z "$CASO_DETALLE" ] || detalle="$CASO_DETALLE; $2"
+  escribir_caso "$1" "$CASO_RESULTADO" "$detalle" "$CASO_HORA_EVENTO" "$CASO_HORA_MENSAJE" "$CASO_MSG_ID" "$CASO_OBSERVABLE" "$CASO_SIMULADO"
+}
+
+# Salida de la CLI real (`openclaw gateway call ...`, `message send --json`):
+# una linea de preambulo ("Gateway call: runbook.progress.decide") y el JSON
+# con sangria y espacio tras los dos puntos (OpenClaw 2026.9.6, medido
+# 2026-09-29). Se lee parseando desde la primera llave; un grep de
+# '"accion":"SEND"' no casa nunca con esa forma (sim9-20260929-0229: los
+# casos 4 y 7 cayeron ahi con decide contestando bien).
+cli_json_campo() { # $1 salida cruda de la CLI, $2 campo -> valor (vacio si no hay JSON o falta)
+  CLI_TXT="$1" CLI_CAMPO="$2" python3 -c '
+import json,os
+t=os.environ["CLI_TXT"]
+try:
+  d,_=json.JSONDecoder().raw_decode(t[t.index("{"):])
+except Exception:
+  raise SystemExit
+v=d.get(os.environ["CLI_CAMPO"]) if isinstance(d,dict) else None
+if v is None: raise SystemExit
+print(v if isinstance(v,str) else json.dumps(v))
+' 2>/dev/null
+}
 
 # Cero teclas de humano en cada sondeo: si alguien se conecto a la sesion
 # mientras el arnes esperaba, el caso no puede declararse FUNCIONA por su
@@ -857,13 +891,11 @@ correr_caso4() {
     return
   fi
   local decide_json; decide_json="$(caso4_decide "$((s+1800))" "$pos")"
-  if ! printf '%s' "$decide_json" | grep -q '"accion":"SEND"' || ! printf '%s' "$decide_json" | grep -q '"tipo":"inmediato"'; then
+  if [ "$(cli_json_campo "$decide_json" accion)" != "SEND" ] || [ "$(cli_json_campo "$decide_json" tipo)" != "inmediato" ]; then
     escribir_caso 4 "NO FUNCIONA" "runbook.progress.decide no dio SEND inmediato: $decide_json" "$t0_iso" "" "" "" "$simulado"
     return
   fi
-  local mensaje; mensaje="$(printf '%s' "$decide_json" | python3 -c 'import json,sys
-try: print(json.load(sys.stdin).get("mensaje",""))
-except Exception: print("")' 2>/dev/null)"
+  local mensaje; mensaje="$(cli_json_campo "$decide_json" mensaje)"
   [ -n "$mensaje" ] || { escribir_caso 4 "NO FUNCIONA" "SEND inmediato sin mensaje" "$t0_iso" "" "" "" "$simulado"; return; }
   local texto="[SIMULACRO] $mensaje" salida_msg rc2=0
   salida_msg="$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" message send --channel telegram \
@@ -872,12 +904,7 @@ except Exception: print("")' 2>/dev/null)"
     escribir_caso 4 "NO FUNCIONA" "message send del inmediato DETENIDA fallo" "$t0_iso" "" "" "" "$simulado"
     return
   fi
-  local msg_id; msg_id="$(printf '%s' "$salida_msg" | python3 -c 'import json,sys
-t=sys.stdin.read()
-try:
-  d=json.loads(t[t.index("{"):]); print(d.get("messageId",""))
-except Exception:
-  print("")' 2>/dev/null)"
+  local msg_id; msg_id="$(cli_json_campo "$salida_msg" messageId)"
   [ -n "$msg_id" ] || { escribir_caso 4 "NO FUNCIONA" "el message send del inmediato no devolvio messageId" "$t0_iso" "" "" "" "$simulado"; return; }
   local hora_msg; hora_msg="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   escribir_caso 4 "FUNCIONA" "" "$t0_iso" "$hora_msg" "$msg_id" \
@@ -982,18 +1009,16 @@ correr_caso7() {
   local ahora; ahora="$(date +%s)"
   local ahora_iso; ahora_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   local neg; neg="$(caso7_decide "$ahora" "$((ahora-1400))")"
-  if ! printf '%s' "$neg" | grep -q '"accion":"NO_REPLY"'; then
+  if [ "$(cli_json_campo "$neg" accion)" != "NO_REPLY" ]; then
     escribir_caso 7 "NO FUNCIONA" "el control negativo (ahora-1400) no dio NO_REPLY: $neg" "$ahora_iso" "" "" "" "$simulado"
     return
   fi
   local pos; pos="$(caso7_decide "$ahora" "$((ahora-3600))")"
-  if ! printf '%s' "$pos" | grep -q '"accion":"SEND"' || ! printf '%s' "$pos" | grep -q '"tipo":"periodico"'; then
+  if [ "$(cli_json_campo "$pos" accion)" != "SEND" ] || [ "$(cli_json_campo "$pos" tipo)" != "periodico" ]; then
     escribir_caso 7 "NO FUNCIONA" "el positivo (ahora-3600) no dio SEND periodico: $pos" "$ahora_iso" "" "" "" "$simulado"
     return
   fi
-  local mensaje; mensaje="$(printf '%s' "$pos" | python3 -c 'import json,sys
-try: print(json.load(sys.stdin).get("mensaje",""))
-except Exception: print("")' 2>/dev/null)"
+  local mensaje; mensaje="$(cli_json_campo "$pos" mensaje)"
   [ -n "$mensaje" ] || { escribir_caso 7 "NO FUNCIONA" "SEND periodico sin mensaje" "$ahora_iso" "" "" "" "$simulado"; return; }
   local texto="[SIMULACRO] $mensaje" salida rc=0
   salida="$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" message send --channel telegram \
@@ -1002,12 +1027,7 @@ except Exception: print("")' 2>/dev/null)"
     escribir_caso 7 "NO FUNCIONA" "message send del periodico fallo" "$ahora_iso" "" "" "" "$simulado"
     return
   fi
-  local msg_id; msg_id="$(printf '%s' "$salida" | python3 -c 'import json,sys
-t=sys.stdin.read()
-try:
-  d=json.loads(t[t.index("{"):]); print(d.get("messageId",""))
-except Exception:
-  print("")' 2>/dev/null)"
+  local msg_id; msg_id="$(cli_json_campo "$salida" messageId)"
   [ -n "$msg_id" ] || { escribir_caso 7 "NO FUNCIONA" "el message send del periodico no devolvio messageId" "$ahora_iso" "" "" "" "$simulado"; return; }
   local hora_msg; hora_msg="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   escribir_caso 7 "FUNCIONA" "" "$ahora_iso" "$hora_msg" "$msg_id" \
@@ -1142,22 +1162,25 @@ if [ -n "$OBSERVAR_AVANCE" ]; then
       fi
     fi
   fi
+  leer_caso 4; OBS_R4="$CASO_RESULTADO"
+  leer_caso 7; OBS_R7="$CASO_RESULTADO"
   if [ "$OBS_A_OK" = "1" ] && [ "$OBS_B_OK" = "1" ]; then
-    leer_caso 4; escribir_caso 4 "$CASO_RESULTADO" "observado real: cron avance-tareas a las $OBS_A_HORA, scratch confirmado a las $OBS_B_HORA (messageId $OBS_MSG_ID)" \
-      "$CASO_HORA_EVENTO" "$CASO_HORA_MENSAJE" "$CASO_MSG_ID" "$CASO_OBSERVABLE" "$CASO_SIMULADO"
-    leer_caso 7; escribir_caso 7 "$CASO_RESULTADO" "observado real: cron avance-tareas a las $OBS_A_HORA, scratch confirmado a las $OBS_B_HORA (messageId $OBS_MSG_ID)" \
-      "$CASO_HORA_EVENTO" "$CASO_HORA_MENSAJE" "$CASO_MSG_ID" "$CASO_OBSERVABLE" "$CASO_SIMULADO"
-    OBS_NOTA="$OBS_NOTA; turno mandado a las $OBS_T0_ISO; (a) cron avance-tareas visto a las $OBS_A_HORA; (b) scratch reporte-confirmado a las $OBS_B_HORA con messageId $OBS_MSG_ID; casos 4 y 7: FUNCIONA observado real"
+    OBS_TEXTO="observado real: cron avance-tareas a las $OBS_A_HORA, scratch confirmado a las $OBS_B_HORA (messageId $OBS_MSG_ID)"
+    OBS_NOTA="$OBS_NOTA; turno mandado a las $OBS_T0_ISO; (a) cron avance-tareas visto a las $OBS_A_HORA; (b) scratch reporte-confirmado a las $OBS_B_HORA con messageId $OBS_MSG_ID"
+    if [ "$OBS_R4" = "FUNCIONA" ] && [ "$OBS_R7" = "FUNCIONA" ]; then
+      OBS_NOTA="$OBS_NOTA; casos 4 y 7: FUNCIONA observado real"
+    else
+      OBS_NOTA="$OBS_NOTA; casos 4 y 7: el disparo real se observo, pero su parte con reloj inyectado dio caso 4 $OBS_R4 / caso 7 $OBS_R7 (ese es el veredicto; la observacion solo se suma al detalle)"
+    fi
   else
     motivo="no se vio (a) el cron"
     [ "$OBS_A_OK" = "1" ] && motivo="se vio el cron (a) a las $OBS_A_HORA pero no (b) su scratch confirmado"
     [ "$OBS_TURNO_OK" != "1" ] && motivo="el turno a main no completo (tope o error; el mensaje pudo haber llegado)"
-    leer_caso 4; escribir_caso 4 "$CASO_RESULTADO" "NO OBSERVADO: disparo real ($motivo)" \
-      "$CASO_HORA_EVENTO" "$CASO_HORA_MENSAJE" "$CASO_MSG_ID" "$CASO_OBSERVABLE" "$CASO_SIMULADO"
-    leer_caso 7; escribir_caso 7 "$CASO_RESULTADO" "NO OBSERVADO: disparo real ($motivo)" \
-      "$CASO_HORA_EVENTO" "$CASO_HORA_MENSAJE" "$CASO_MSG_ID" "$CASO_OBSERVABLE" "$CASO_SIMULADO"
-    OBS_NOTA="$OBS_NOTA; turno mandado a las $OBS_T0_ISO; NO OBSERVADO: disparo real ($motivo); casos 4 y 7 quedan con su evidencia de reloj inyectado"
+    OBS_TEXTO="NO OBSERVADO: disparo real ($motivo)"
+    OBS_NOTA="$OBS_NOTA; turno mandado a las $OBS_T0_ISO; NO OBSERVADO: disparo real ($motivo); casos 4 y 7 quedan con su evidencia de reloj inyectado (caso 4 $OBS_R4 / caso 7 $OBS_R7)"
   fi
+  anotar_observacion 4 "$OBS_TEXTO"
+  anotar_observacion 7 "$OBS_TEXTO"
   # Al cerrar, dato (no requisito): si "main" ya retiro el cron. Cierre
   # explicito aqui (idempotente: el trap final ve "cerrada" y no repite
   # nada) para poder mirar UN tick despues del cierre, acotado y corto.
@@ -1254,7 +1277,7 @@ generar_evidencia() {
   mkdir -p "$dir" || return 1
   {
     printf '# Evidencia — simulacro 9.9 (%s)\n\n' "$FECHA_HOY"
-    printf 'Corrida de esta pasada: `%s`. Los 7 casos corren de verdad. Los casos 4 y 7 se miden con reloj inyectado; con `--observar-avance` se suben a "observado real" (disparo real de avance-tareas), ver seccion "Observacion extendida".\n\n' "$SIM_ID"
+    printf 'Corrida de esta pasada: `%s`. Los 7 casos corren de verdad. Los casos 4 y 7 se miden con reloj inyectado y ese es su veredicto; con `--observar-avance` la observacion real (disparo real de avance-tareas) se suma a su detalle sin cambiarlo, ver seccion "Observacion extendida".\n\n' "$SIM_ID"
     printf '## Version\n\nSHA de origin/main: `%s`\n\n' "$(sha_origin_main)"
     printf '## Prerrequisitos\n\nTodos pasaron (si no, el arnes hubiera salido NO APTO antes de este punto).\n\n'
     printf '## `instalar-mac.sh --verificar`\n\n```\n%s\n```\n\n' "$(con_tope "$CORR_TOPE_RED" "$REPO_RAIZ/scripts/mac/instalar-mac.sh" --verificar 2>&1)"
