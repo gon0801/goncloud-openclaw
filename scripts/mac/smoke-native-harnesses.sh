@@ -6,7 +6,7 @@
 # worker (version, outcome, duracion y ruta de archivo; la transcripcion jamas
 # va dentro del JSON) y cierre de tmux y corrida. rc != 0 si un worker pedido
 # no llega a passed: un unavailable/skipped nunca cuenta como passed.
-# Uso: smoke-native-harnesses.sh --worker <claude|codex|zcode|kimi|cursor|grok|all>
+# Uso: smoke-native-harnesses.sh --worker <claude|codex|zcode|kimi|grok|all>
 #      [--repo DIR] [--ref origin/main] [--evidence-dir DIR] [--tope SEG]
 # El ciclo (abrir/preparar-carril/adaptador/cerrar) es el mismo corrida.sh de
 # las corridas reales; este driver no reimplementa nada del ciclo. Pasar
@@ -26,7 +26,7 @@ if [ -z "${TMUX_BIN:-}" ]; then
 fi
 [ -n "${TMUX_BIN:-}" ] || { echo "sin tmux no hay humo" >&2; exit 1; }
 
-uso() { echo "uso: smoke-native-harnesses.sh --worker <claude|codex|zcode|kimi|cursor|grok|all> [--repo DIR] [--ref origin/main] [--evidence-dir DIR] [--tope SEG]" >&2; }
+uso() { echo "uso: smoke-native-harnesses.sh --worker <claude|codex|zcode|kimi|grok|all> [--repo DIR] [--ref origin/main] [--evidence-dir DIR] [--tope SEG]" >&2; }
 
 AQUI="$(cd "$(dirname "$0")" && pwd)"
 RAIZ="$(cd "$AQUI/../.." && pwd)"
@@ -41,8 +41,8 @@ while [ $# -gt 0 ]; do
     --worker)
       [ $# -ge 2 ] || { uso; exit 2; }
       case "$2" in
-        all) pedidos="$pedidos claude codex zcode kimi cursor grok";;
-        claude|codex|zcode|kimi|cursor|grok) pedidos="$pedidos $2";;
+        all) pedidos="$pedidos claude codex zcode kimi grok";;
+        claude|codex|zcode|kimi|grok) pedidos="$pedidos $2";;
         *) echo "worker fuera del conjunto: $2" >&2; exit 2;;
       esac
       shift 2;;
@@ -66,14 +66,14 @@ EV="${ev:-${CORRIDA_STATE:-$HOME/.local/state/u3-loop}/native-smoke-$FECHA}"
 mkdir -p "$EV" || exit 1
 
 # Un harness real por binario; el id del registro es el representante que el
-# selector usaria (fable para claude, coding para kimi).
+# selector usaria (fable para claude, coding para kimi). cursor salio del
+# registro el 2026-09-29 (decision de David): vuelve con su propio humo.
 map_worker() {
   case "$1" in
     claude) printf 'claude_fable\n';;
     codex) printf 'codex\n';;
     zcode) printf 'zcode\n';;
     kimi) printf 'kimi_coding\n';;
-    cursor) printf 'cursor\n';;
     grok) printf 'grok\n';;
   esac
 }

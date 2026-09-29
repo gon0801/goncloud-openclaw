@@ -55,8 +55,9 @@ for f in "$FILA" "$PROGRESS"; do
   [ -r "$f" ] || fail "falta $f"
 done
 
-grep -qF 'VALID workers.v1 8' "$PLAN" \
-  || fail "el plan no fija el N=8 del registro real (14.13e)"
+N_REAL=$(python3 -c 'import json; print(len(json.load(open("scripts/mac/workers.v1.json"))["workers"]))')
+grep -qF "VALID workers.v1 $N_REAL" "$PLAN" \
+  || fail "el plan no fija el N=$N_REAL del registro real (14.13e)"
 grep -qF 'claude_fable' "$PLAN" || fail "el plan no enumera claude_fable (14.13)"
 grep -qF 'claude_opus' "$PLAN" || fail "el plan no enumera claude_opus (14.13)"
 grep -qF 'kimi_k3' "$PLAN" || fail "el plan no enumera kimi_k3 (14.13)"

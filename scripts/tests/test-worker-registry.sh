@@ -17,7 +17,7 @@ fi
 printf '%s\n' "$out" | grep -qx 'ERROR invalid pattern' || fail "wrong invalid-pattern diagnostic: $out"
 
 python3 scripts/mac/corrida-worker.py registry validate --registry scripts/mac/workers.v1.json \
-  | grep -qx 'VALID workers.v1 8' || fail "el registro real no valida como 8 workers (14.13e)"
+  | grep -qx 'VALID workers.v1 7' || fail "el registro real no valida como 7 workers (14.13e; cursor salio el 2026-09-29)"
 
 python3 scripts/mac/corrida-worker.py record validate --record scripts/tests/fixtures/corrida/v2-existing-without-workers.json \
   | grep -qx 'VALID corrida.v2 legacy' || fail "el fixture legado no valida"

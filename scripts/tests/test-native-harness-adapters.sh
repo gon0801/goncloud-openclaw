@@ -1,5 +1,5 @@
 #!/bin/bash
-# Task 3: contrato table-driven del adaptador sobre las seis CLIs nativas.
+# Task 3: contrato table-driven del adaptador sobre las CLIs nativas del registro.
 # Cada worker se dobla con fake-native-cli.sh bajo tmux propio (-L);
 # CORRIDA_WORKER_BIN_<ID> apunta al doble. La argv esperada sale del
 # registro versionado (oraculo independiente), no del adaptador.
@@ -21,15 +21,15 @@ mkdir -p "$T/bin" "$T/wt" "$T/wt-r" "$T/corridas/run-1" "$T/argv"
 
 FAKE=scripts/tests/fixtures/harness/fake-native-cli.sh
 [ -f "$FAKE" ] || fail "falta $FAKE"
-for b in claude codex zcode kimi cursor-agent grok; do
+for b in claude codex zcode kimi grok; do
   cp "$FAKE" "$T/bin/$b" || fail "no se pudo copiar el doble $b"
 done
 chmod +x "$T/bin/"*
-for b in claude codex zcode kimi cursor-agent grok; do
+for b in claude codex zcode kimi grok; do
   [ -x "$T/bin/$b" ] || fail "el doble $b no quedo ejecutable"
 done
 
-for b in claude codex zcode kimi cursor-agent grok; do
+for b in claude codex zcode kimi grok; do
   printf '%s\t%s\t--fake-9\tFAKE-BARRA-9\t--\t--\t--\n' "$b" "$b" >>"$T/modos.tsv"
 done
 printf 'haz lo pedido y termina\n' >"$T/brief.txt"
@@ -57,7 +57,7 @@ export FAKE_ARGV_DIR="$T/argv" FAKE_BAR="FAKE-BARRA-9"
 export CORRIDA_WORKER_BIN_CLAUDE_FABLE="$T/bin/claude" CORRIDA_WORKER_BIN_CLAUDE_OPUS="$T/bin/claude" \
   CORRIDA_WORKER_BIN_CODEX="$T/bin/codex" CORRIDA_WORKER_BIN_ZCODE="$T/bin/zcode" \
   CORRIDA_WORKER_BIN_KIMI_K3="$T/bin/kimi" CORRIDA_WORKER_BIN_KIMI_CODING="$T/bin/kimi" \
-  CORRIDA_WORKER_BIN_CURSOR="$T/bin/cursor-agent" CORRIDA_WORKER_BIN_GROK="$T/bin/grok"
+  CORRIDA_WORKER_BIN_GROK="$T/bin/grok"
 
 # Registro minimo de la prueba: carriles escritos a mano como reservas
 # completas en lanes (el adaptador los lee; preparar-carril los escribe).
@@ -127,7 +127,6 @@ print(' '.join(s.get(x,x) for x in a[1:]))
 bin_de() {
   # 14.13: ids partidos por modelo; el binario (token de cli-modos.tsv) no cambia.
   case "$1" in
-    cursor) printf 'cursor-agent';;
     claude_fable|claude_opus) printf 'claude';;
     kimi_k3|kimi_coding) printf 'kimi';;
     *) printf '%s' "$1";;
@@ -144,7 +143,8 @@ modo_fake() {
   "$TM_REAL" -L "$L" set-environment -g FAKE_HARNESS_MODE "$1"
 }
 
-for w in claude_fable claude_opus codex zcode kimi_k3 kimi_coding cursor grok; do
+# Los ids salen del registro: el contrato cubre a todo worker seleccionable.
+for w in $(python3 -c 'import json,sys; print(" ".join(x["id"] for x in json.load(open(sys.argv[1]))["workers"]))' "$REG"); do
   b="$(bin_de "$w")"
   # health: los cuatro estados normalizados.
   [ "$(bash "$CORR" adaptador health run-1 lane-1 "$w" ses-h)" = "available" ] \
@@ -376,15 +376,6 @@ $("$TM_REAL" -L "$L" capture-pane -p -t "=ses-conf-$b:" 2>/dev/null)"
 done
 modo_fake ""
 
-# cursor-agent 2026.09.26 avisa la cuota con "You're out of usage".
-modo_fake sin-uso
-ad_start run-1 lane-1 cursor ses-sin-uso "$T/wt" "$T/brief.txt" >/dev/null \
-  || fail "start para cuota de cursor fallo"
-got="$(bash "$CORR" adaptador inspect run-1 lane-1 cursor ses-sin-uso)"
-[ "$got" = "quota" ] || fail "cursor sin uso dio $got, no quota"
-bash "$CORR" adaptador stop run-1 lane-1 cursor ses-sin-uso >/dev/null
-modo_fake ""
-
 # accion invalida y worker desconocido: error cerrado, nunca un estado.
 out="$(bash "$CORR" adaptador volar run-1 lane-1 claude_fable ses-x 2>&1)"; rc=$?
 [ "$rc" -eq 2 ] || fail "accion invalida no dio rc 2"
@@ -392,14 +383,14 @@ printf '%s' "$out" | grep -q "accion invalida" || fail "accion invalida sin diag
 bash "$CORR" adaptador health run-1 lane-1 nosuch ses-x >/dev/null 2>&1 \
   && fail "worker desconocido no fallo"
 
-# Tabla real contra las barras medidas (F2): las seis seleccionables pasan la
+# Tabla real contra las barras medidas (F2): las seleccionables del registro pasan la
 # guarda cuando la sesion muestra su barra (texto real de pantalla 2026-09-27,
 # comun a la argv start:write/start:review del registro y al sondeo). El
 # rechazo "sin barra medida" sigue cerrado, ahora contra una tabla sintetica
 # con unknown: el contrato no depende de que la tabla real tenga unknowns.
 . scripts/mac/corrida/lib.sh
 . scripts/mac/corrida/adaptador.sh
-printf 'claude\tclaude\t--x\tunknown\t--\t--\t--\ncodex\tcodex\t--x\tunknown\t--\t--\t--\ncursor-agent\tcursor-agent\t--x\tunknown\t--\t--\t--\ngrok\tgrok\t--x\tunknown\t--\t--\t--\n' >"$T/modos-unknown.tsv"
+printf 'claude\tclaude\t--x\tunknown\t--\t--\t--\ncodex\tcodex\t--x\tunknown\t--\t--\t--\ngrok\tgrok\t--x\tunknown\t--\t--\t--\n' >"$T/modos-unknown.tsv"
 python3 - "$T/registro-unknown.json" "$T/modos-unknown.tsv" <<'PY2' || fail "no se escribio el registro sintetico"
 import json,sys
 json.dump({"schema":"corrida.v2","id":"run-r","cli_modos":sys.argv[2]},open(sys.argv[1],'w'))
@@ -409,7 +400,7 @@ import json,sys
 json.dump({"schema":"corrida.v2","id":"run-r","cli_modos":sys.argv[2]},open(sys.argv[1],'w'))
 PY2
 inicio="$SECONDS"
-for b in claude codex cursor-agent grok; do
+for b in claude codex grok; do
   out="$(adaptador_esperar_barra "$T/registro-unknown.json" "ses-irreal-9" "$b" 2>&1)" \
     && fail "$b: barra unknown aceptada contra la tabla sintetica"
   printf '%s' "$out" | grep -q "sin barra medida" || fail "$b: rechazo sin diagnostico: $out"
@@ -420,7 +411,6 @@ for par in \
   "codex|Ask Codex to do anything" \
   "zcode|zai/glm" \
   "kimi|thinking:" \
-  "cursor-agent|Cursor Agent" \
   "grok|[stable]"; do
   b="${par%%|*}"; texto="${par#*|}"
   ses="ses-barra-$b"

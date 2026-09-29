@@ -2,7 +2,7 @@
 # Columnas: cli | binario | flag sin preguntas | texto de barra que lo comprueba | cambio a media corrida | tecla que acepta | tecla que niega.
 # unknown = no medido al escribir esto; ninguna fila posterior se apoya en un unknown sin decirlo.
 # glm es alias de zcode (mismo binario y flags): los runbooks vivos lo prescriben (base-openclaw, base-summonaikit, loop-autopilot, autopilot-fase17); compat hacia atras sin tocar runbooks.
-# Barras de los seis seleccionables medidas en vivo 2026-09-27 en esta Mac
+# Barras de los seleccionables medidas en vivo 2026-09-27 en esta Mac
 # (comandos, salidas y capturas: ~/.local/state/u3-loop/mediciones-14.7);
 # cada barra aparece bajo la argv start:write y start:review de workers.v1.json
 # y bajo el flag de sondeo.
@@ -11,6 +11,10 @@
 # always-approve; lo comun a --allow y a plan es el canal "[stable]" del pie.
 # kimi remedido 2026-09-28 (kimi 2.1.1): la linea de estado ya no dice auto;
 # "thinking:" sale igual con --auto y con --plan.
+# cursor-agent es fila legacy desde 2026-09-29: salio de workers.v1.json por
+# decision de David (cuota agotada, sin uso); preflight trata las filas fuera
+# del registro como legacy explicita. La fila sigue porque runbooks vivos
+# prescriben el token cursor-agent (liga runbook-tsv de test-cli-modos).
 claude	claude	--permission-mode acceptEdits	(shift+tab to cycle)	unknown	unknown	unknown
 zcode	zcode	--mode yolo	zai/glm	/mode yolo	unknown	unknown
 glm	zcode	--mode yolo	zai/glm	/mode yolo	unknown	unknown

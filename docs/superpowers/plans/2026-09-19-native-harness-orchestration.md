@@ -201,7 +201,7 @@ python3 scripts/mac/corrida-worker.py record validate --record scripts/tests/fix
 
 Run: `bash scripts/tests/test-worker-registry.sh && python3 -m py_compile scripts/mac/corrida-worker.py scripts/mac/corrida_worker/*.py`
 
-Expected: PASS, `VALID workers.v1 8` for the production registry, and both `corrida.v2` compatibility fixtures accepted with their exact diagnostics.
+Expected: PASS, `VALID workers.v1 7` for the production registry (8 until 2026-09-29, when David removed `cursor` from the registry), and both `corrida.v2` compatibility fixtures accepted with their exact diagnostics.
 
 - [ ] **Step 7: Commit**
 
@@ -728,7 +728,9 @@ Expected: FAIL because the smoke driver is absent.
 
 - [ ] **Step 2: Implement the smoke driver with explicit worker selection**
 
-The driver accepts `--worker claude|codex|zcode|kimi|cursor|grok|all`, calls the same production adapter, and writes one result object per worker. It never commits evidence containing the transcript; committed documentation records only version, outcome, duration, and archive path.
+The driver accepts `--worker claude|codex|zcode|kimi|grok|all`, calls the same production adapter, and writes one result object per worker. It never commits evidence containing the transcript; committed documentation records only version, outcome, duration, and archive path.
+
+Since 2026-09-29 the smoke set is the registry's workers (five harnesses): David removed `cursor` from the registry because its quota is exhausted and he does not use it. Where the steps below say six, read the registry's workers; `cursor` returns only with its own real smoke.
 
 - [ ] **Step 3: Write the five-stage rollout runbook and kill-switch checks**
 
