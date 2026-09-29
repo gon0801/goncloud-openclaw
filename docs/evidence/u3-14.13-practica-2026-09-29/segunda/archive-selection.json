@@ -1,0 +1,274 @@
+{
+  "at": "2026-09-29T14:50:01Z",
+  "base_remote_sha": "5d435d2e4fde685d96c96bfcb53d6020e2a80e98",
+  "branch": "corrida/practica-1413b/relevo",
+  "candidates": [
+    {
+      "parts": {
+        "affinity": 40,
+        "availability": 15,
+        "diversity": 10,
+        "history": 10,
+        "quota": 10
+      },
+      "score": 85,
+      "worker": "codex"
+    },
+    {
+      "parts": {
+        "affinity": 40,
+        "availability": 15,
+        "diversity": 10,
+        "history": 10,
+        "quota": 10
+      },
+      "score": 85,
+      "worker": "zcode"
+    },
+    {
+      "parts": {
+        "affinity": 40,
+        "availability": 15,
+        "diversity": 10,
+        "history": 10,
+        "quota": 10
+      },
+      "score": 85,
+      "worker": "grok"
+    }
+  ],
+  "discarded": [
+    {
+      "reasons": [
+        "repo-denied"
+      ],
+      "worker": "claude_fable"
+    },
+    {
+      "reasons": [
+        "repo-denied"
+      ],
+      "worker": "claude_opus"
+    },
+    {
+      "reasons": [
+        "quota-exhausted"
+      ],
+      "worker": "kimi_k3"
+    },
+    {
+      "reasons": [
+        "quota-group"
+      ],
+      "worker": "kimi_coding"
+    }
+  ],
+  "effort": "medium",
+  "harness": "codex-cli",
+  "health": "available",
+  "mode": "write",
+  "model": "router",
+  "parts": {
+    "affinity": 40,
+    "availability": 15,
+    "diversity": 10,
+    "history": 10,
+    "quota": 10
+  },
+  "provider": "openai",
+  "reported_model": "unknown",
+  "request": {
+    "denied_harnesses": [
+      "claude-code"
+    ],
+    "role": "write",
+    "task_type": "general"
+  },
+  "role": "write",
+  "score": 85,
+  "selections": [
+    {
+      "at": "2026-09-29T14:46:37Z",
+      "candidates": [
+        {
+          "parts": {
+            "affinity": 40,
+            "availability": 15,
+            "diversity": 10,
+            "history": 10,
+            "quota": 10
+          },
+          "score": 85,
+          "worker": "kimi_k3"
+        },
+        {
+          "parts": {
+            "affinity": 40,
+            "availability": 15,
+            "diversity": 10,
+            "history": 10,
+            "quota": 10
+          },
+          "score": 85,
+          "worker": "kimi_coding"
+        },
+        {
+          "parts": {
+            "affinity": 40,
+            "availability": 15,
+            "diversity": 10,
+            "history": 10,
+            "quota": 10
+          },
+          "score": 85,
+          "worker": "codex"
+        },
+        {
+          "parts": {
+            "affinity": 40,
+            "availability": 15,
+            "diversity": 10,
+            "history": 10,
+            "quota": 10
+          },
+          "score": 85,
+          "worker": "zcode"
+        },
+        {
+          "parts": {
+            "affinity": 40,
+            "availability": 15,
+            "diversity": 10,
+            "history": 10,
+            "quota": 10
+          },
+          "score": 85,
+          "worker": "grok"
+        }
+      ],
+      "discarded": [
+        {
+          "reasons": [
+            "repo-denied"
+          ],
+          "worker": "claude_fable"
+        },
+        {
+          "reasons": [
+            "repo-denied"
+          ],
+          "worker": "claude_opus"
+        }
+      ],
+      "effort": null,
+      "health": "available",
+      "model": "kimi-code/k3",
+      "parts": {
+        "affinity": 40,
+        "availability": 15,
+        "diversity": 10,
+        "history": 10,
+        "quota": 10
+      },
+      "request": {
+        "denied_harnesses": [
+          "claude-code"
+        ],
+        "role": "write",
+        "task_type": "general"
+      },
+      "score": 85,
+      "status": "selected",
+      "winner": "kimi_k3"
+    },
+    {
+      "at": "2026-09-29T14:50:01Z",
+      "candidates": [
+        {
+          "parts": {
+            "affinity": 40,
+            "availability": 15,
+            "diversity": 10,
+            "history": 10,
+            "quota": 10
+          },
+          "score": 85,
+          "worker": "codex"
+        },
+        {
+          "parts": {
+            "affinity": 40,
+            "availability": 15,
+            "diversity": 10,
+            "history": 10,
+            "quota": 10
+          },
+          "score": 85,
+          "worker": "zcode"
+        },
+        {
+          "parts": {
+            "affinity": 40,
+            "availability": 15,
+            "diversity": 10,
+            "history": 10,
+            "quota": 10
+          },
+          "score": 85,
+          "worker": "grok"
+        }
+      ],
+      "discarded": [
+        {
+          "reasons": [
+            "repo-denied"
+          ],
+          "worker": "claude_fable"
+        },
+        {
+          "reasons": [
+            "repo-denied"
+          ],
+          "worker": "claude_opus"
+        },
+        {
+          "reasons": [
+            "quota-exhausted"
+          ],
+          "worker": "kimi_k3"
+        },
+        {
+          "reasons": [
+            "quota-group"
+          ],
+          "worker": "kimi_coding"
+        }
+      ],
+      "effort": "medium",
+      "health": "available",
+      "model": "router",
+      "parts": {
+        "affinity": 40,
+        "availability": 15,
+        "diversity": 10,
+        "history": 10,
+        "quota": 10
+      },
+      "request": {
+        "denied_harnesses": [
+          "claude-code"
+        ],
+        "role": "write",
+        "task_type": "general"
+      },
+      "score": 85,
+      "status": "selected",
+      "winner": "codex"
+    }
+  ],
+  "session": "practica-1413b-codex",
+  "status": "selected",
+  "winner": "codex",
+  "worker": "codex",
+  "worktree": "/Users/dn/dev/goncloud-openclaw/.worktrees/practica-1413b-relevo"
+}

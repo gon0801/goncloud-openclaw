@@ -1,0 +1,144 @@
+{
+ "canal": {
+  "cron": "cuotas-proveedores",
+  "destino": "<omitido>"
+ },
+ "cli_modos": "/Users/dn/bin/cli-modos.tsv",
+ "estado": "abierta",
+ "id": "practica-1413",
+ "inicio": "2026-09-29T03:13:06-0700",
+ "lanes": [
+  {
+   "base_remote_sha": "5c57c7d8ac859f953166e74e8f453365eaa27b74",
+   "branch": "corrida/practica-1413/relevo",
+   "brief": "<scratchpad>/brief1.txt",
+   "estado": "activo",
+   "events": [
+    {
+     "at": "2026-09-29T10:17:02Z",
+     "id": "relevo:observed.inspect.quota:702227feb4e9",
+     "kind": "observed.inspect.quota",
+     "lane": "relevo",
+     "payload": {
+      "session": "practica-1413-kimi"
+     }
+    },
+    {
+     "at": "2026-09-29T10:17:02Z",
+     "id": "relevo:intent.handoff_lane:fa9c72c6051f",
+     "kind": "intent.handoff_lane",
+     "lane": "relevo",
+     "payload": {
+      "commits_ahead": 1,
+      "dirty": true,
+      "from_session": "practica-1413-kimi",
+      "from_worker": "kimi_k3",
+      "preserve_worktree": true,
+      "reason": "quota",
+      "to_session": "practica-1413-codex",
+      "to_worker": "codex"
+     }
+    },
+    {
+     "at": "2026-09-29T10:17:02Z",
+     "id": "relevo:intent.stop_lane:862cb9865734",
+     "kind": "intent.stop_lane",
+     "lane": "relevo",
+     "payload": {
+      "session": "practica-1413-kimi"
+     }
+    },
+    {
+     "at": "2026-09-29T10:17:03Z",
+     "id": "relevo:observed.handoff.blocked:b73dd859394c",
+     "kind": "observed.handoff.blocked",
+     "lane": "relevo",
+     "payload": {
+      "reason": "stop-unconfirmed"
+     }
+    },
+    {
+     "at": "2026-09-29T10:17:10Z",
+     "id": "relevo:observed.session.vanished:0e459c29225b",
+     "kind": "observed.session.vanished",
+     "lane": "relevo",
+     "payload": {
+      "commits_ahead": 1,
+      "head": "7921ae10db3093eb5366f8e2e7f26b3bbd8d032f",
+      "session": "practica-1413-kimi"
+     }
+    },
+    {
+     "at": "2026-09-29T10:17:10Z",
+     "id": "relevo:observed.session.stopped:a5105469c162",
+     "kind": "observed.session.stopped",
+     "lane": "relevo",
+     "payload": {
+      "session": "practica-1413-kimi"
+     }
+    },
+    {
+     "at": "2026-09-29T10:17:10Z",
+     "id": "relevo:intent.launch_successor:5565f4d16f28",
+     "kind": "intent.launch_successor",
+     "lane": "relevo",
+     "payload": {
+      "preserve_worktree": true,
+      "session": "practica-1413-codex",
+      "worker": "codex",
+      "worktree": "/Users/dn/dev/goncloud-openclaw/.worktrees/practica-1413-relevo"
+     }
+    },
+    {
+     "at": "2026-09-29T10:17:12Z",
+     "id": "relevo:observed.launched:92ff2f35069a",
+     "kind": "observed.launched",
+     "lane": "relevo",
+     "payload": {
+      "session": "practica-1413-codex",
+      "worker": "codex"
+     }
+    }
+   ],
+   "evidence": {
+    "inspect": "quota"
+   },
+   "handoff": {
+    "attempts": [
+     {
+      "at": "2026-09-29T10:17:02Z",
+      "kind": "intent.handoff_lane"
+     },
+     {
+      "at": "2026-09-29T10:17:02Z",
+      "kind": "intent.stop_lane"
+     },
+     {
+      "at": "2026-09-29T10:17:10Z",
+      "kind": "intent.launch_successor"
+     }
+    ],
+    "resumes": 0
+   },
+   "id": "relevo",
+   "mode": "write",
+   "owner": "relevo",
+   "role": "write",
+   "token": "74800-8360",
+   "worktree": "/Users/dn/dev/goncloud-openclaw/.worktrees/practica-1413-relevo",
+   "worker": "codex",
+   "harness": "codex-cli",
+   "provider": "openai",
+   "reported_model": "unknown",
+   "session": "practica-1413-codex"
+  }
+ ],
+ "preaprobaciones": [],
+ "runbook": "<scratchpad>/practica-1413.md",
+ "schema": "corrida.v2",
+ "seguimiento_global": true,
+ "sesiones": [],
+ "simulacro": true,
+ "timebox_horas": 6,
+ "vigia": "hermes"
+}

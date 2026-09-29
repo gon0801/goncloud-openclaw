@@ -1,0 +1,7 @@
+# Pantalla tmux de kimi_k3 con la cuota simulada, práctica 14.13 segunda, 2026-09-29
+
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │ > SIMULACION 14.13: You've hit your usage limit for this account. Try again later.                                                                                                                 │
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Never Ask  K3 thinking: max  …/goncloud-openclaw/.worktrees/practica-1413b-relevo  corrida/practica-1413b/relevo [+1 ↑1]                 ctrl+o expand | /compact compresses context when it gets long
+                                                                                                                                                                                 context: 3% (28.4k/1M)
