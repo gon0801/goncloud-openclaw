@@ -34,8 +34,9 @@ import json,os
 d=json.load(open(os.environ['CORR_REG']))
 c=[e for e in d.get('lanes') or [] if isinstance(e,dict) and e.get('id')==os.environ['CORR_LANE']][0]
 s=dict(c.get('selection') or {})
-for k in ('worker','harness','provider','reported_model','session','mode','role','branch','worktree','base_remote_sha'):
+for k in ('worker','harness','provider','model','effort','reported_model','session','mode','role','branch','worktree','base_remote_sha'):
   s.setdefault(k,c.get(k))
+s['selections']=c.get('selections') or []
 print(json.dumps(s,sort_keys=True,indent=2))")" || return 1
     printf '%s\n' "$sel" | redactar_texto >"$dir/selection.json" || return 1
     evs="$(CORR_REG="$reg" CORR_LANE="$lane" python3 -c "

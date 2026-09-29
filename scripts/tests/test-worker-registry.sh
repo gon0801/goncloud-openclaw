@@ -170,4 +170,42 @@ malos = [f"{w['id']}/{clave}: {a}"
 assert not malos, malos
 PY
 
+# B21 (2026-09-29, medido en esta Mac en tmux privado sobre un clon limpio):
+# cada effort declarado viaja por el flag que su CLI acepta y que su barra
+# confirma (claude "--effort", codex "-c model_reasoning_effort=", grok
+# "--reasoning-effort"); kimi y zcode no traen flag y quedan null (corre el de
+# la CLI). Resume no usa {session_id}: nada registra el id propio de la CLI, y
+# el nombre tmux no lo es; retoma la conversacion mas reciente del worktree.
+python3 - scripts/mac/workers.v1.json <<'PY' || fail "effort o resume fuera de lo medido por CLI"
+import json, sys
+FLAG = {"claude-code": ("--effort", "{effort}"), "codex-cli": ("-c", "model_reasoning_effort={effort}"),
+        "grok-cli": ("--reasoning-effort", "{effort}")}
+NIVELES = {"claude-code": {"low", "medium", "high", "xhigh", "max"},
+           "codex-cli": {"minimal", "low", "medium", "high", "xhigh"},
+           "grok-cli": {"low", "medium", "high"}}
+SIN_FLAG = {"kimi-code", "zcode"}
+CONTINUAR = {"claude-code": "--continue", "codex-cli": "--last", "kimi-code": "--continue",
+             "zcode": "--continue", "grok-cli": "--continue"}
+malos = []
+for w in json.load(open(sys.argv[1]))["workers"]:
+    h = w["harness"]
+    if h in FLAG:
+        if w.get("effort") not in NIVELES[h]:
+            malos.append(f"{w['id']}: effort {w.get('effort')!r} fuera de {sorted(NIVELES[h])}")
+        for k in ("start:write", "start:review", "resume:write", "resume:review"):
+            a = w["commands"][k]
+            if not any(tuple(a[i:i + 2]) == FLAG[h] for i in range(len(a))):
+                malos.append(f"{w['id']}/{k}: sin {' '.join(FLAG[h])}")
+    elif h in SIN_FLAG:
+        if w.get("effort") is not None:
+            malos.append(f"{w['id']}: {h} no acepta effort por flag y declara {w.get('effort')!r}")
+    else:
+        malos.append(f"{w['id']}: harness {h} sin medicion de effort")
+    for k in ("resume:write", "resume:review"):
+        a = w["commands"][k]
+        if "{session_id}" in a or CONTINUAR.get(h) not in a:
+            malos.append(f"{w['id']}/{k}: no retoma por {CONTINUAR.get(h)}: {a}")
+assert not malos, malos
+PY
+
 echo "TODO VERDE: registro de workers"

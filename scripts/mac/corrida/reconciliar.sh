@@ -8,6 +8,8 @@
 # externo (los adaptadores toman su propio lock en su subproceso). Un solo
 # director reconcilia cada corrida: dos reconciliar concurrentes podrian
 # proponer el mismo efecto externo antes de que el otro registre su intent.
+# Con --observations, un efecto externo (resume, stop, launch) cierra la
+# llamada con "REOBSERVAR n": el director observa de nuevo y repite.
 # Uso: corrida.sh reconciliar <id> [--observations FILE]
 corrida_reconciliar() {
   [ "$#" -ge 1 ] || { echo "uso: corrida.sh reconciliar <id> [--observations FILE]" >&2; return 2; }
@@ -61,6 +63,21 @@ corrida_reconciliar() {
     lock_soltar "$reg"
     ejecutados=$((ejecutados+1))
     printf 'EXECUTED %s %s\n' "$op" "$lane"
+    # Tras un efecto externo la foto previa ya no describe tmux: reusarla
+    # tomaba al sucesor recien lanzado por desaparecido y lo mataba (B1 de
+    # la practica 14.13). Sin --observations se vuelve a observar aqui; con
+    # ellas solo el director puede re-observar, asi que la llamada termina.
+    case "$op" in
+      resume_lane|stop_lane|launch_successor)
+        if [ -n "$obs_given" ]; then
+          rm -f "$errf"
+          printf 'REOBSERVAR %s\n' "$ejecutados"
+          return 0
+        fi
+        rm -f "$obs"
+        obs="$(reconciliar_observar "$id" "$reg")" || { rm -f "$errf"; return 1; }
+        ;;
+    esac
   done
   rm -f "$errf"
   echo "reconciliar: sin converger tras 8 pasadas; el mundo cambio bajo los pies" >&2
@@ -126,7 +143,9 @@ reconciliar_externo() { # $1 id $2 reg $3 pw $4 op $5 lane $6 args-json
       sesion="$(printf '%s' "$args" | python3 -c "import json,sys; print(json.load(sys.stdin).get('session',''))")"
       worker="$(lane_campo "$reg" "$lane" worker)"
       wt="$(lane_campo "$reg" "$lane" worktree)"
-      res="$(bash "$AQUI/corrida.sh" adaptador resume "$id" "$lane" "$worker" "$sesion" "$wt" "$sesion" 2>/dev/null)" || rc=$?
+      # Sin session_id: el nombre tmux no es el id de la CLI; el registro
+      # retoma la conversacion mas reciente del worktree del carril (B5).
+      res="$(bash "$AQUI/corrida.sh" adaptador resume "$id" "$lane" "$worker" "$sesion" "$wt" 2>/dev/null)" || rc=$?
       if [ "$res" != "resumed" ]; then
         reconciliar_reducir_con_lock "$reg" "$pw" "$lane" "observed.handoff.blocked" \
           '{"reason":"resume-unavailable"}' || true
@@ -147,6 +166,7 @@ reconciliar_externo() { # $1 id $2 reg $3 pw $4 op $5 lane $6 args-json
       if res="$(bash "$AQUI/corrida.sh" adaptador start "$id" "$lane" "$worker" "$sesion" "$wt" "$brief" 2>/dev/null)"; then
         reconciliar_reducir_con_lock "$reg" "$pw" "$lane" "observed.launched" \
           "$(printf '{"worker":"%s","session":"%s"}' "$worker" "$sesion")" || true
+        reconciliar_anunciar_relevo "$id" "$reg" "$lane" "$worker"
       else
         reconciliar_reducir_con_lock "$reg" "$pw" "$lane" "observed.handoff.blocked" \
           '{"reason":"launch-failed"}' || true
@@ -154,6 +174,41 @@ reconciliar_externo() { # $1 id $2 reg $3 pw $4 op $5 lane $6 args-json
       ;;
   esac
   return 0
+}
+
+# Un relevo se anuncia, no se descubre: un solo aviso por Telegram en
+# palabras del dueno y el mismo texto como evento del carril en el tablero.
+# Corre una vez por lanzamiento confirmado; si el envio falla queda anotado
+# en mensajes.jsonl (ok:false) y el trabajo sigue.
+reconciliar_anunciar_relevo() { # $1 id $2 reg $3 lane $4 worker sucesor
+  local id="$1" reg="$2" lane="$3" worker="$4" txt avance cambio sigue
+  txt="$(CORR_REG="$reg" CORR_LANE="$lane" CORR_W="$worker" CORR_WREG="$(corrida_workers_registry)" python3 - <<'PY' 2>/dev/null
+import json, os
+reg = json.load(open(os.environ["CORR_REG"]))
+lanes = [x for x in reg.get("lanes") or [] if isinstance(x, dict)]
+c = next(x for x in lanes if x.get("id") == os.environ["CORR_LANE"])
+h = [e for e in c.get("events") or [] if e.get("kind") == "intent.handoff_lane"][-1]["payload"]
+ws = {w["id"]: w for w in json.load(open(os.environ["CORR_WREG"]))["workers"]}
+nombre = {"anthropic": "Claude", "openai": "OpenAI (Codex)", "kimi": "Kimi", "glm": "Z.AI (GLM)", "xai": "Grok"}
+a, b = ws[h["from_worker"]], ws[os.environ["CORR_W"]]
+de, a_ = nombre.get(a["provider"], a["provider"]), nombre.get(b["provider"], b["provider"])
+if de == a_:
+    de, a_ = f"{de} ({a['model']})", f"{a_} ({b['model']})"
+motivo = {"quota": "se acabó la cuota", "auth-vencida": "venció el acceso a la cuenta",
+          "missing-binary": "el programa no está instalado"}.get(h.get("reason"), "el trabajador se cayó")
+hechas = sum(1 for x in lanes if (x.get("delivery") or {}).get("merge"))
+print(f"{hechas} de {len(lanes)} partes terminadas")
+print(f"El trabajo de la parte {c['id']} pasó de {de} a {a_} porque {motivo}; lo avanzado se conservó.")
+print(f"{a_} sigue esa parte donde quedó.")
+PY
+)" || return 0
+  avance="$(printf '%s\n' "$txt" | sed -n 1p)"
+  cambio="$(printf '%s\n' "$txt" | sed -n 2p)"
+  sigue="$(printf '%s\n' "$txt" | sed -n 3p)"
+  [ -n "$cambio" ] || return 0
+  corrida_aviso_directo "$id" "AVANZA" "$avance" "$cambio" "$sigue" "nada" >/dev/null 2>&1 \
+    || echo "reconciliar: el aviso del relevo de $lane no salio" >&2
+  tablero_carril_publicar "$id" "$lane" "$cambio"
 }
 
 # Reduce tomando y soltando el lock (para los efectos externos, que corren
@@ -181,7 +236,7 @@ if not isinstance(c,dict): sys.exit(1)
 for k in ('branch','worktree','base_remote_sha','owner','mode'):
   if not c.get(k): sys.exit(1)
 c['estado']='reservado'
-for k in ('worker','harness','provider','reported_model','session'):
+for k in ('worker','harness','provider','model','effort','reported_model','session'):
   c.pop(k,None)
 " 2>/dev/null
   local rc=$?

@@ -104,17 +104,25 @@ def event_id(lane: str, kind: str, payload: Mapping[str, Any], tenencia: int = 0
 
 
 def _tenencia(record: Mapping[str, Any], lane_id: str, kind: str, payload: Mapping[str, Any]) -> int:
-    lanzados = [
-        event.get("payload")
+    eventos = [
+        event
         for lane in record.get("lanes") or []
         if isinstance(lane, dict) and lane.get("id") == lane_id
         for event in lane.get("events") or []
-        if isinstance(event, dict) and event.get("kind") == "observed.launched"
+        if isinstance(event, dict)
     ]
+    lanzados = [e.get("payload") for e in eventos if e.get("kind") == "observed.launched"]
     # Reintentar el lanzamiento que abrio la tenencia actual es el mismo
-    # evento, no una tenencia nueva.
+    # evento, no una tenencia nueva; pero si despues hubo otro
+    # intent.launch_successor, es un relanzamiento real del mismo trabajador
+    # y sesion y abre tenencia (sin esto quedaba DUPLICATED para siempre).
     if kind == "observed.launched" and lanzados and lanzados[-1] == dict(payload):
-        return len(lanzados) - 1
+        ultimo = max(i for i, e in enumerate(eventos) if e.get("kind") == "observed.launched")
+        relanzado = any(
+            e.get("kind") == "intent.launch_successor" for e in eventos[ultimo + 1 :]
+        )
+        if not relanzado:
+            return len(lanzados) - 1
     return len(lanzados)
 
 

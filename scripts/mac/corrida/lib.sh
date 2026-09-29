@@ -978,7 +978,8 @@ except Exception:
 worker_argv() { # $1 id $2 clave $3 worktree $4 brief $5 session_id $6 session_name
                 # stdout: argv[1:] del comando, un arg por linea, placeholders
                 # sustituidos; rc 1 si el worker o la clave no existen, o si
-                # hay {effort} sin effort (14.13: jamas un argumento vacio)
+                # un marcador queda vacio ({effort} sin effort, {session_id}
+                # sin id real de la CLI): jamas un argumento vacio (14.13, B5)
   WREG="$(corrida_workers_registry)" WID="$1" WK="$2" WWT="$3" WBR="$4" WSID="$5" WSN="$6" python3 -c "
 import json,os,sys
 try:
@@ -993,6 +994,8 @@ try:
       if not e:
         raise ValueError('marcador {effort} sin campo effort en la entrada')
       return x.replace('{effort}', e)
+    if x in s and not s[x]:
+      raise ValueError('marcador '+x+' sin valor')
     return s.get(x,x)
   sys.stdout.write('\n'.join(sub(x) for x in a[1:]))
   if len(a) > 1: sys.stdout.write('\n')
@@ -1016,6 +1019,87 @@ resolver_bin_worker() { # $1 id; stdout ruta ejecutable; rc 1 si no resuelve
   res="$(command -v "$binario" 2>/dev/null)" || return 1
   [ -x "$res" ] || return 1
   printf '%s\n' "$res"
+}
+
+# tablero_carril_publicar <id> <carril> [que] (B21): pone en el tablero de la
+# corrida el worker que corre el carril (modelo y effort del registro, lo que
+# va en la argv), el porque de su seleccion en una nota y un evento. El
+# documento es entero (runbook-progress.v2 regla 2): se lee, se cambian solo
+# esos campos del carril y se reescribe. Sin documento de la corrida o sin el
+# carril no se inventa nada; una escritura fallida avisa en stderr y nunca
+# detiene el trabajo. Siempre rc 0, nada en stdout.
+tablero_carril_publicar() {
+  local id="$1" lane="$2" que="${3:-}" reg sal nuevo
+  reg="$(registro_de "$id")"
+  [ -f "$reg" ] || return 0
+  sal="$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" gateway call runbook.progress.get \
+    --params "{\"corrida\":\"$id\"}" --timeout 30000 2>/dev/null)" || return 0
+  nuevo="$(mktemp)" || return 0
+  if ! CORR_SAL="$sal" CORR_REG="$reg" CORR_LANE="$lane" CORR_QUE="$que" \
+      CORR_WREG="$(corrida_workers_registry)" CORR_OUT="$nuevo" python3 - <<'PY' 2>/dev/null
+import datetime, json, os, sys
+sal = os.environ["CORR_SAL"]
+try:
+    r = json.loads(sal[sal.index("{"):])
+except ValueError:
+    sys.exit(1)
+if not isinstance(r, dict) or r.get("ok") is not True or not isinstance(r.get("doc"), dict):
+    sys.exit(1)
+doc = r["doc"]
+lane_id = os.environ["CORR_LANE"]
+reg = json.load(open(os.environ["CORR_REG"]))
+c = next((x for x in reg.get("lanes") or [] if isinstance(x, dict) and x.get("id") == lane_id), None)
+car = next((x for x in doc.get("carriles") or [] if isinstance(x, dict) and x.get("id") == lane_id), None)
+if c is None or car is None or not c.get("worker"):
+    sys.exit(1)
+w = next((x for x in json.load(open(os.environ["CORR_WREG"]))["workers"] if x["id"] == c["worker"]), None)
+if w is None:
+    sys.exit(1)
+sel = c.get("selection")
+sel = sel if isinstance(sel, dict) and sel.get("winner") == w["id"] else None
+salud = (sel or {}).get("health")
+# Sin salud medida en la seleccion vale la barra que el arranque ya vio.
+if salud not in ("available", "limited", "unauthenticated", "broken"):
+    salud = "available"
+rm = c.get("reported_model")
+car["worker"] = {"id": w["id"], "harness": w["harness"], "provider": w["provider"],
+                 "model": w["model"], "effort": w.get("effort"),
+                 "reported_model": rm if rm and rm != "unknown" else None, "health": salud}
+esf = w.get("effort") or "el de la CLI (no acepta flag)"
+nota = f"{lane_id} seleccion: {w['id']} ({w['model']}, effort {esf})"
+if sel:
+    partes = ", ".join(f"{k} {v}" for k, v in sorted((sel.get("parts") or {}).items()))
+    nota += f", puntaje {sel.get('score')} ({partes})"
+    empate = [x["worker"] for x in sel.get("candidates") or []
+              if x.get("worker") != w["id"] and x.get("score") == sel.get("score")]
+    if empate:
+        nota += f"; empate con {', '.join(empate)}, desempata el orden del registro"
+    desc = "; ".join(f"{d['worker']} ({', '.join(d.get('reasons') or [])})" for d in sel.get("discarded") or [])
+    if desc:
+        nota += f"; descartados: {desc}"
+else:
+    nota += ", sin seleccion registrada"
+prefijo = lane_id + " seleccion: "
+notas = [n for n in doc.get("notas") or [] if not (isinstance(n, str) and n.startswith(prefijo))]
+notas.append(nota[:300])
+doc["notas"] = notas[-8:]
+ahora = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+que = (os.environ["CORR_QUE"] or f"arranco {w['id']} ({w['model']}, effort {esf})")[:300]
+doc.setdefault("eventos", []).append({"at": ahora, "carril": lane_id, "que": que, "situacion": None})
+car["ultimo_evento"] = {"at": ahora, "que": que}
+if isinstance(doc.get("lead"), dict):
+    doc["lead"]["actualizado"] = ahora
+json.dump(doc, open(os.environ["CORR_OUT"], "w"), ensure_ascii=False)
+PY
+  then
+    rm -f "$nuevo"; return 0
+  fi
+  sal="$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" gateway call runbook.progress.set \
+    --params "$(cat "$nuevo")" --timeout 30000 2>/dev/null)" || sal=""
+  rm -f "$nuevo"
+  printf '%s' "$sal" | grep -q '"ok"[[:space:]]*:[[:space:]]*true' \
+    || echo "tablero: no se pudo publicar el carril $lane de $id; se reintenta en el siguiente cambio" >&2
+  return 0
 }
 
 # --- Fase 14, Task 5: redaccion para el archivo de cierre. Lee stdin,

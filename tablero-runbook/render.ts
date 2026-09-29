@@ -184,7 +184,8 @@ function detalleBajo(
     lineas.push(`<li class="atn">atención: ${at.map((r) => t(r, 60)).join(", ")}</li>`);
   }
   if (w) {
-    const effort = w.effort ? `/${t(w.effort, 60)}` : "";
+    // B21: sin effort declarado corre el de la CLI; se dice, no se inventa un nivel.
+    const effort = w.effort ? `/${t(w.effort, 60)}` : " · effort de la CLI";
     lineas.push(
       `<li>worker: <span class="mono">${t(w.id, 100)}</span> · ${t(w.harness, 60)} · ` +
         `${t(w.provider, 60)}/${t(w.model, 120)}${effort} · salud ${t(w.health, 20)}</li>`,

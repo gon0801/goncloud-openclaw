@@ -147,7 +147,7 @@ EOF
   echo "adaptador: $binario pidio confianza para el worktree del carril ($wt); respondido si" >&2
 }
 
-# Persiste worker,harness,provider,reported_model,session en el carril,
+# Persiste worker,harness,provider,model,effort,reported_model,session en el carril,
 # bajo lock, antes de la primera entrega.
 adaptador_registrar_sesion() { # $1 reg $2 carril $3 worker $4 sesion [$5 brief]
   local reg="$1" carril="$2" worker="$3" sesion="$4" brief="${5:-}"
@@ -162,8 +162,9 @@ adaptador_registrar_sesion() { # $1 reg $2 carril $3 worker $4 sesion [$5 brief]
   fi
   local rrc=0
   CORR_C="$carril" CORR_W="$worker" CORR_H="$harness" CORR_P="$provider" \
-  CORR_S="$sesion" CORR_B="$brief" registro_escribir "$reg" "
-import sys
+  CORR_S="$sesion" CORR_B="$brief" CORR_WREG="$(corrida_workers_registry)" registro_escribir "$reg" "
+import sys,json
+w=[x for x in json.load(open(os.environ['CORR_WREG']))['workers'] if x['id']==os.environ['CORR_W']][0]
 cs=d.get('lanes') or []
 c=None
 for e in cs:
@@ -175,7 +176,7 @@ if c.get('estado')=='activo' and c.get('session')==os.environ['CORR_S']:
 elif c.get('estado')!='reservado':
   sys.exit(11)
 c.update({'worker':os.environ['CORR_W'],'harness':os.environ['CORR_H'],
-'provider':os.environ['CORR_P'],
+'provider':os.environ['CORR_P'],'model':w['model'],'effort':w.get('effort'),
 'reported_model':c.get('reported_model','unknown'),
 'session':os.environ['CORR_S'],'estado':'activo'})
 b=os.environ['CORR_B']
@@ -270,6 +271,7 @@ adaptador_start() {
   adaptador_registrar_sesion "$reg" "$carril" "$worker" "$sesion" "$brief" \
     || { "$TMUX_BIN" kill-session -t "=$sesion" 2>/dev/null
          echo "adaptador: no se pudo registrar la sesion" >&2; return 1; }
+  tablero_carril_publicar "$id" "$carril"
   printf '%s\n' "$sesion"
 }
 
@@ -357,10 +359,13 @@ for e in d.get('lanes') or []:
 }
 
 # resume(session) -> resumed | unavailable. Relanza con la argv resume:<rol>
-# del registro; resuelve el binario ANTES de tocar la sesion viva.
+# del registro; resuelve el binario ANTES de tocar la sesion viva. El
+# session_id es el de la CLI y es opcional: las argv del registro retoman la
+# conversacion mas reciente del worktree; una argv con {session_id} sin id
+# real da unavailable (relevo), jamas el nombre tmux como id (B5).
 adaptador_resume() {
-  [ "$#" -ge 6 ] || { echo "adaptador resume: faltan argumentos" >&2; return 2; }
-  local id="$1" carril="$2" worker="$3" sesion="$4" wt="$5" sid="$6"
+  [ "$#" -ge 5 ] || { echo "adaptador resume: faltan argumentos" >&2; return 2; }
+  local id="$1" carril="$2" worker="$3" sesion="$4" wt="$5" sid="${6:-}"
   corrida_id_valido "$id" || { echo "adaptador: id invalido: $id" >&2; return 2; }
   corrida_id_valido "$carril" || { echo "adaptador: carril invalido: $carril" >&2; return 2; }
   adaptador_sesion_valida "$sesion" || return 2
