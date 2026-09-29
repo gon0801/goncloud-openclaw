@@ -49,6 +49,7 @@ cat >"$T/bin/gh" <<'STUB'
 #!/bin/sh
 case "$*" in
   *issues/*/comments*) cat "${GH_COMMENTS:?sin GH_COMMENTS}";;
+  *pulls/*/reviews*) cat "${GH_REVIEWS:?sin GH_REVIEWS}";;
   *pr\ view*) cat "${GH_PR:?sin GH_PR}";;
   *) echo "gh falso: $*" >&2; exit 1;;
 esac
@@ -318,6 +319,21 @@ got_cf="$(python3 "$PW" gate --record "$T/e4d/record.json" --lane l1 --action ca
   | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['verdict']+' '+d['code']+' '+d['projection']['result'])")"
 # 14.21 punto 2: un canary fallido con el SHA desplegado DENY, jamas allow.
 [ "$got_cf" = "deny canary-fallo missing" ] || fail "canary failed: [$got_cf]"
+# 14.25 R27: canary de pase sobre lo desplegado, pedido para otro SHA: DENY.
+H3="3333333333333333333333333333333333333333"
+python3 - "$T/e4d/evidence.json" "$H3" <<'PY' || fail "sin canary de otro pedido"
+import json,sys
+d = json.load(open(sys.argv[1]))
+d["canary"]["result"] = "pass"
+d["head"] = sys.argv[2]
+json.dump(d, open(sys.argv[1], "w"))
+PY
+got_os="$(python3 "$PW" gate --record "$T/e4d/record.json" --lane l1 --action canary \
+  --sha "$H3" --evidence "$T/e4d/evidence.json" --receipt "$T/e4d/receipt.json" \
+  --receipt-status "$(cat "$T/e4d/receipt.status")" \
+  --receipt-error "$(cat "$T/e4d/recibo.err")" --pr "$T/e4d/pr.json" \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['verdict']+' '+d['code'])")"
+[ "$got_os" = "deny canary-otro-sha" ] || fail "canary pedido para un SHA no desplegado: [$got_os]"
 echo "ok (4): accion y evidencia rotas mueren; sin kit no hay merge"
 
 # (5) Mutacion de compuertas: sin cada condicion, el fixture que la exige
@@ -478,5 +494,94 @@ pr = json.load(open(sys.argv[1]))
 assert pr["checks"]["conclusion"] == "failure", pr
 PY
 echo "ok (7c): StatusContext FAILURE da failure"
+
+# (8) Kit apagado por declaracion (David 2026-09-28): modo_recibo
+# ci-y-revisor en la preaprobacion del registro cambia el recibo por el
+# veredicto del revisor que la compuerta relee de GitHub para el head. Las
+# formas vienen de PRs reales (revisor-real.json); sin kit instalado.
+REV=scripts/tests/fixtures/gates/revisor-real.json
+caso_revisor() { # $1 nombre $2 fixture $3 ref $4 comentarios,.. $5 reviews,.. -> "rc linea1"
+  local d="$T/rv-$1" run="rv-$1" h
+  materializar "$2.json" "$d"
+  h="$(python3 -c "import json; print(json.load(open('$d/meta.json'))['sha'])")"
+  mkdir -p "$T/corridas/$run"
+  cp "$d/record.json" "$T/corridas/$run/registro.json"
+  completar_registro "$T/corridas/$run/registro.json" "$run" "$T/modos.tsv"
+  python3 - "$T/corridas/$run/registro.json" "$3" "$REV" "$h" "$4" "$5" "$d" <<'PY' || fail "caso $1 sin armar"
+import json, sys
+reg, ref, rev, head, coms, revs, d = sys.argv[1:8]
+r = json.load(open(reg))
+if ref:
+    r["authorization_ref"] = ref
+json.dump(r, open(reg, "w"), sort_keys=True, indent=2)
+R = json.load(open(rev))
+def al_head(x):
+    return json.loads(json.dumps(x).replace(R["real_head"], head))
+hechos = {
+    "ds-head": al_head(R["deepseek_completo"]),
+    "ds-viejo": R["deepseek_completo"],
+    "ds-high": json.loads(json.dumps(al_head(R["deepseek_completo"])).replace(
+        '\\"severity\\":\\"Medium\\"', '\\"severity\\":\\"High\\"')),
+    "ds-fallido": R["deepseek_fallido"],
+    "ds-humano": dict(al_head(R["deepseek_completo"]), user={"login": "gon0801", "type": "User"}),
+    "cr-head": al_head(R["coderabbit_review"]),
+    "cr-viejo": R["coderabbit_review"],
+}
+assert "High" in hechos["ds-high"]["body"], hechos["ds-high"]["body"]
+for nombre, lista in (("comments", coms), ("reviews", revs)):
+    if lista == "falla":
+        continue
+    items = [hechos[k] for k in lista.split(",") if k != "nada"]
+    json.dump(items, open(f"{d}/{nombre}-rv.json", "w"))
+PY
+  GH_COMMENTS="$d/comments-rv.json" GH_REVIEWS="$d/reviews-rv.json" GH_PR="$d/pr-gh.json" \
+    SAIKIT_KIT_DIR="$T/sin-kit" bash "$CORR" compuerta "$run" l1 merge --sha "$h" \
+    --evidence "$d/evidence.json" >"$d.out" 2>&1
+  printf '%s %s' "$?" "$(head -1 "$d.out")"
+}
+FASE14=fase14-merge-automatico
+espera_rv() { # $1 nombre $2 esperado ... resto: argumentos de caso_revisor
+  local nombre="$1" esp="$2" got; shift 2
+  got="$(caso_revisor "$nombre" "$@")"
+  [ "$got" = "$esp" ] || fail "kit apagado $nombre: [$got], esperado [$esp]"
+}
+espera_rv bajos "0 ALLOW merge merge-ok" 01-merge-ok "$FASE14" ds-head nada
+espera_rv coderabbit "0 ALLOW merge merge-ok" 01-merge-ok "$FASE14" ds-fallido cr-head
+espera_rv viejo "1 DENY merge sin-veredicto-revisor el veredicto del revisor es de otro head" \
+  01-merge-ok "$FASE14" ds-viejo cr-viejo
+espera_rv high "1 DENY merge sin-veredicto-revisor DeepSeek tiene abierto un hallazgo High en el head" \
+  01-merge-ok "$FASE14" ds-high cr-head
+espera_rv nada "1 DENY merge sin-veredicto-revisor sin veredicto de revisor independiente para el head" \
+  01-merge-ok "$FASE14" ds-fallido nada
+espera_rv humano "1 DENY merge sin-veredicto-revisor sin veredicto de revisor independiente para el head" \
+  01-merge-ok "$FASE14" ds-humano nada
+espera_rv ilegible "1 DENY merge revisor-ilegible no se pudo leer el veredicto del revisor en GitHub" \
+  01-merge-ok "$FASE14" ds-head falla
+espera_rv ci-rojo "1 DENY merge ci-rojo los checks releidos no dan success" \
+  05-merge-ci-rojo "$FASE14" ds-head cr-head
+espera_rv sin-declarar "1 DENY merge kit-no-disponible sin contrato del kit instalado" \
+  01-merge-ok "" ds-head cr-head
+espera_rv pendiente "1 DENY merge kit-no-disponible sin contrato del kit instalado" \
+  01-merge-ok fase14-merge-pendiente ds-head cr-head
+python3 - "$T/corridas/rv-bajos/registro.json" <<'PY' || fail "kit apagado: el allow no registra quien reviso"
+import json, sys
+ev = json.load(open(sys.argv[1]))["lanes"][0]["evidence"]
+assert ev["receipt"]["reviewer"] == "deepseek", ev
+assert ev["last_gate"]["kind"] == "gate.allow", ev
+PY
+registro_valido "$T/corridas/rv-bajos/registro.json"
+python3 - scripts/mac/corrida/preaprobaciones.v1.json "$T/tabla-mala.json" <<'PY' || fail "sin tabla mala"
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["preaprobaciones"][1]["modo_recibo"] = "sin-kit"
+json.dump(d, open(sys.argv[2], "w"))
+PY
+python3 "$PW" receipt-mode --record "$T/corridas/rv-bajos/registro.json" \
+  --preaprobaciones "$T/tabla-mala.json" >/dev/null 2>&1 \
+  && fail "un modo_recibo fuera del conjunto en otra entrada paso"
+[ "$(python3 "$PW" receipt-mode --record "$T/corridas/rv-bajos/registro.json" \
+  --preaprobaciones scripts/mac/corrida/preaprobaciones.v1.json)" = "ci-y-revisor" ] \
+  || fail "la tabla real no da ci-y-revisor para fase14"
+echo "ok (8): kit apagado por declaracion: CI y revisor del head deciden; sin declarar sigue sin merge"
 
 echo "TODO VERDE: corrida-gates"

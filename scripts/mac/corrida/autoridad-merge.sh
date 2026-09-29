@@ -4,7 +4,9 @@
 # la tabla versionada de preaprobaciones, alcance (repo/rama/operacion),
 # automatic_routing, recibo saikit-entrega.v1 del head y CI vigente; si todo
 # pasa, imprime UNA linea de delegacion a corrida.sh compuerta ... merge,
-# que es la unica ruta (sin bypass GraphQL directo). 0 = autorizado.
+# que es la unica ruta (sin bypass GraphQL directo). 0 = autorizado. Con
+# modo_recibo ci-y-revisor en la preaprobacion no hay recibo que validar: el
+# veredicto del revisor lo relee la compuerta de GitHub para el head.
 autoridad_merge_verificar() { # $1 rol $2 run $3 reg $4 lane $5 sha $6 evidence $7 receipt
   local rol="$1" run="$2" reg="$3" lane="$4" sha="$5" evidence="$6" receipt="$7"
   ATABLA="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/preaprobaciones.v1.json" \
@@ -71,9 +73,16 @@ if pat and rama:
         muere(f"authorization_ref fuera de alcance: rama {rama}")
 if entrada.get("operacion") not in (None, "", "merge"):
     muere("authorization_ref fuera de alcance: operacion")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.environ["ATABLA"])))
+from corrida_worker.gates import KIT_RECEIPT, receipt_mode
+try:
+    modo = receipt_mode(reg, tabla)
+except (ValueError, AttributeError) as exc:
+    muere(f"tabla de preaprobaciones invalida: {exc}")
+con_kit = modo == KIT_RECEIPT
 
 ev = cargar_json(os.environ["AEV"], "evidence ilegible")
-if ev.get("schema") != "saikit-entrega.v1":
+if con_kit and ev.get("schema") != "saikit-entrega.v1":
     muere("evidence sin saikit-entrega.v1")
 ci = ev.get("ci") or {}
 if ci.get("sha") != sha:
@@ -81,13 +90,15 @@ if ci.get("sha") != sha:
 if ci.get("conclusion") not in ("success", "verde"):
     muere("CI no vigente para el SHA pedido")
 
-rec = cargar_json(os.environ["ARCP"], "recibo del kit ilegible")
-if rec.get("schema") != "saikit-entrega.v1":
-    muere("recibo sin saikit-entrega.v1")
-if rec.get("headRefOid") != sha:
-    muere("recibo de un head distinto (expectedHeadOid)")
-if rec.get("ci") and rec["ci"].get("sha") not in (None, sha):
-    muere("recibo de CI viejo")
+rec = {}
+if con_kit:
+    rec = cargar_json(os.environ["ARCP"], "recibo del kit ilegible")
+    if rec.get("schema") != "saikit-entrega.v1":
+        muere("recibo sin saikit-entrega.v1")
+    if rec.get("headRefOid") != sha:
+        muere("recibo de un head distinto (expectedHeadOid)")
+    if rec.get("ci") and rec["ci"].get("sha") not in (None, sha):
+        muere("recibo de CI viejo")
 
 # 14.4 r2 B1: el alcance es obligatorio y cierra ante la duda. El repo que
 # manda es el de la EVIDENCIA y del RECIBO (la compuerta mergea ese repo);
@@ -97,11 +108,11 @@ repo_recibo = rec.get("repo") or ""
 repo_preaprobacion = str(entrada.get("repo") or "")
 if not repo_evidencia:
     muere("authorization_ref sin alcance: la evidencia no trae repo")
-if not repo_recibo:
+if con_kit and not repo_recibo:
     muere("authorization_ref sin alcance: el recibo no trae repo")
 if not repo_preaprobacion:
     muere("authorization_ref sin alcance: la preaprobacion no declara repo")
-if repo_evidencia != repo_recibo:
+if con_kit and repo_evidencia != repo_recibo:
     muere(f"authorization_ref fuera de alcance: evidencia y recibo de repos distintos ({repo_evidencia} vs {repo_recibo})")
 if repo_evidencia != repo_preaprobacion:
     muere(f"authorization_ref fuera de alcance: repo {repo_evidencia} no casa la preaprobacion {repo_preaprobacion}")
@@ -117,8 +128,8 @@ print("OK")
 PY
   local rc=$?
   [ "$rc" -ne 0 ] && return 1
-  # Unica ruta de ejecucion: la compuerta del Task 6 (delega al kit del
-  # SummonAIKit, que fija expectedHeadOid). Sin bypass GraphQL directo.
+  # Unica ruta de ejecucion: la compuerta del Task 6; la mutacion queda fijada
+  # al head (expectedHeadOid) con o sin kit. Sin bypass GraphQL directo.
   printf 'DELEGAR: bash scripts/mac/corrida.sh compuerta %s %s merge --sha %s --evidence %s\n' \
     "$run" "$lane" "$sha" "$evidence"
   return 0

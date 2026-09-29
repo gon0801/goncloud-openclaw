@@ -202,7 +202,7 @@ Este diseño cambia reglas que hoy están versionadas. La implementación actual
 
 - `docs/runbooks/loop-autopilot.md` deja de abrir un PR draft antes del cross-review. El primer push y el primer PR ocurren después de cerrar la revisión local.
 - Se conserva la política canónica de CodeRabbit indisponible declarado; no se introduce un veto por cuota específico de esta ruta.
-- La ruta de merge consume el recibo `saikit-entrega.v1` persistente en el PR y la autorización de la corrida. No consulta el estado efímero del hook ni exige un modelo firmante.
+- La ruta de merge consume el recibo `saikit-entrega.v1` persistente en el PR y la autorización de la corrida. No consulta el estado efímero del hook ni exige un modelo firmante. Con el kit apagado (decisión de David 2026-09-28), la preaprobación declara `modo_recibo: ci-y-revisor` y el recibo lo reemplazan el CI verde del head y un veredicto de revisor independiente sobre ese mismo head (DeepSeek completo sin High/Critical abiertos o review de CodeRabbit de ese commit); la falta de la librería del kit nunca activa ese modo.
 - El contrato de la Fase 6 que prohíbe a `main` mergear se conserva. `main` decide y un agente de la allowlist ejecuta.
 - Los runbooks base y las copias de `agent-dispatch` apuntan al contrato único. No reescriben el ciclo.
 

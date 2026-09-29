@@ -51,12 +51,16 @@ con_tope() { # $1 segundos; resto: comando a correr con tope. El comando corre
              # en su propio grupo de procesos y al vencer el tope muere el
              # grupo entero (14.18), no solo el hijo directo: los nietos que
              # el comando lanzo no sobreviven. Sin nietos, salida y codigo
-             # igual que antes (el 127 del exec fallido incluido).
+             # igual que antes (el 127 del exec fallido incluido). Corre en
+             # segundo plano, asi que su stdin es /dev/null: lo que necesite
+             # entrada la recibe en argv (p.ej. --params "$(cat)").
   local seg="$1" pid vig rc=0; shift
   perl -e 'setpgrp(0,0); exec(@ARGV) or exit 127' "$@" &
   pid=$!
   # Vigilante externo: el SIGALRM viejo solo alcanzaba al hijo directo. Sondeo
   # de 1 s para poder matar al vigilante sin dejar hijos huerfanos de sleep.
+  # Su salida va a /dev/null: el sleep que sobrevive al kill no puede retener
+  # el stdout de un $(con_tope ...) y sumarle 1 s a cada llamada (14.25 R8).
   (
     fin=$(( SECONDS + seg ))
     while [ "$SECONDS" -lt "$fin" ]; do
@@ -67,7 +71,7 @@ con_tope() { # $1 segundos; resto: comando a correr con tope. El comando corre
     kill -TERM -- "-$pid" 2>/dev/null
     sleep 1
     kill -KILL -- "-$pid" 2>/dev/null
-  ) &
+  ) >/dev/null 2>&1 &
   vig=$!
   wait "$pid" || rc=$?
   kill "$vig" 2>/dev/null

@@ -52,6 +52,39 @@ PY
     || fail "record validate no nombro la razon (lane without $campo)"
 done
 
+# 14.25 R1: las demas reglas de carril de validar_registro (id repetido,
+# worktree compartido, estado fuera del conjunto, visibilidad sin forma)
+# tambien las rechaza record validate.
+dos_carriles() { # $1 caso $2 expresion python sobre rec
+  python3 - "scripts/tests/fixtures/corrida/v2-native-workers.json" "$T/$1.json" "$2" <<'PY2'
+import copy, json, sys
+rec = json.load(open(sys.argv[1]))
+otro = copy.deepcopy(rec["lanes"][0])
+otro.update(id="web", owner="web", branch="fase14/web", worktree="worktrees/carril-web")
+rec["lanes"].append(otro)
+exec(sys.argv[3])
+json.dump(rec, open(sys.argv[2], "w"), indent=1, sort_keys=True)
+PY2
+}
+carril_malo() { # $1 caso $2 expresion python sobre rec $3 razon shell $4 razon python
+  dos_carriles "$1" "$2"
+  validar_registro "$T/$1.json" 2>&1 | grep -q "$3" \
+    || fail "validar_registro no rechazo $1 con '$3'"
+  if python3 scripts/mac/corrida-worker.py record validate --record "$T/$1.json" >/dev/null 2>&1; then
+    fail "record validate acepto $1"
+  fi
+  python3 scripts/mac/corrida-worker.py record validate --record "$T/$1.json" 2>&1 | grep -q "$4" \
+    || fail "record validate no nombro la razon de $1 ($4)"
+}
+dos_carriles dos-sanos 'pass'
+validar_registro "$T/dos-sanos.json" >/dev/null 2>&1 || fail "dos carriles sanos no pasan validar_registro"
+python3 scripts/mac/corrida-worker.py record validate --record "$T/dos-sanos.json" | grep -qx 'VALID corrida.v2 native-workers' \
+  || fail "dos carriles sanos no validan"
+carril_malo id-repetido 'rec["lanes"][1]["id"] = "api"' 'carril duplicado' 'duplicate lane'
+carril_malo wt-compartido 'rec["lanes"][1]["worktree"] = rec["lanes"][0]["worktree"]' 'worktree compartido' 'shared worktree'
+carril_malo estado-raro 'rec["lanes"][1]["estado"] = "zombi"' 'estado de carril fuera del conjunto' 'lane estado outside the set'
+carril_malo vis-sin-forma 'rec["lanes"][1]["visibility"] = {"state": "visible"}' 'visibilidad sin forma' 'lane visibility without shape'
+
 # 14.20 (1) y (3): capabilities con elementos de tipo basura dan el diagnostico
 # limpio del registro (no un TypeError de unhashable) y el esquema del
 # transcript es cerrado (solo kind y path).
