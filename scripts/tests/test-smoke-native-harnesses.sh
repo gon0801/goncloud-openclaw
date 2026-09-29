@@ -82,7 +82,8 @@ chmod +x "$T/bin/tmux-shim" "$T/bin/tmux"
 
 export PATH="$T/bin:$PATH" CORRIDA_STATE="$T/corridas" TMUX_BIN="$T/bin/tmux-shim"
 export OPENCLAW_BIN="$T/bin/openclaw" CORRIDA_CLI_MODOS="$T/modos.tsv"
-export FAKE_ARGV_DIR="$T/argv" FAKE_BAR="FAKE-BARRA-9" FAKE_HARNESS_MODE=complete
+# obedece: el doble solo imprime la marca si deliver la ordeno (14.29 D2).
+export FAKE_ARGV_DIR="$T/argv" FAKE_BAR="FAKE-BARRA-9" FAKE_HARNESS_MODE=obedece
 export CORRIDA_WORKER_BIN_CLAUDE_FABLE="$T/bin/claude" CORRIDA_WORKER_BIN_CODEX="$T/bin/codex" \
   CORRIDA_WORKER_BIN_ZCODE="$T/bin/zcode" CORRIDA_WORKER_BIN_KIMI_CODING="$T/bin/kimi" \
   CORRIDA_WORKER_BIN_CURSOR="$T/bin/cursor-agent" CORRIDA_WORKER_BIN_GROK="$T/bin/grok"

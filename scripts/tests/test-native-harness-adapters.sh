@@ -262,6 +262,22 @@ rm -f "$T/tragado"
   || fail "deliver bloqueada mato la sesion"
 bash "$CORR" adaptador stop run-1 lane-1 claude_fable ses-bloq >/dev/null
 
+# 14.29 D2: deliver ordena la marca en la misma linea del encargo. La pantalla
+# muestra lo tecleado; un doble que nunca imprime marca debe seguir running
+# tras la entrega (la orden no puede traer la marca literal).
+ORDEN="$(. scripts/mac/corrida/adaptador.sh && printf '%s' "$ADAPTADOR_ORDEN_MARCA")"
+[ -n "$ORDEN" ] || fail "adaptador.sh no define ADAPTADOR_ORDEN_MARCA"
+ad_start run-1 lane-1 claude_fable ses-orden "$T/wt" "$T/brief.txt" >/dev/null \
+  || fail "start para la orden de la marca fallo"
+[ "$(bash "$CORR" adaptador deliver run-1 lane-1 claude_fable ses-orden "$T/brief.txt")" = "accepted" ] \
+  || fail "deliver con la orden de la marca no fue aceptada"
+"$TM_REAL" -L "$L" capture-pane -p -J -t "=ses-orden:" | grep -qF -- "RECIBIDO: haz lo pedido y termina $ORDEN" \
+  || fail "la pantalla no muestra la orden de la marca en la linea del encargo:
+$("$TM_REAL" -L "$L" capture-pane -p -J -t "=ses-orden:")"
+got="$(bash "$CORR" adaptador inspect run-1 lane-1 claude_fable ses-orden)"
+[ "$got" = "running" ] || fail "la orden tecleada se marco sola: inspect dio $got tras deliver sin marca del CLI"
+bash "$CORR" adaptador stop run-1 lane-1 claude_fable ses-orden >/dev/null
+
 # resume sin binario: unavailable y la sesion viva no se toca.
 ad_start run-1 lane-1 codex ses-nobin "$T/wt" "$T/brief.txt" >/dev/null \
   || fail "start para resume unavailable fallo"

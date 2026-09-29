@@ -7,7 +7,9 @@
 # Anota cada invocacion (argv) en $FAKE_ARGV_DIR/<nombre>.argv, pinta
 # $FAKE_BAR y simula el modo de $FAKE_HARNESS_MODE:
 #   health (--version en argv): quota|auth|broken|ok
-#   TUI: complete|waiting|failed|quota|auth|silence|cualquiera (idle)
+#   TUI: complete|waiting|failed|quota|auth|silence|obedece|cualquiera (idle)
+#   obedece: sin marca al arrancar; imprime la de completo solo si la linea
+#   recibida trae la orden de adaptador_deliver (ADAPTADOR_ORDEN_MARCA).
 # Los marcadores ADAPTADOR-MARCA son el contrato con adaptador_inspect.
 set -u
 nombre="$(basename "$0")"
@@ -45,4 +47,9 @@ esac
 # caja se vacia al entrar la linea); sin entrada, silencio = sigue corriendo.
 while IFS= read -r linea; do
   printf 'RECIBIDO: %s\n' "$linea"
+  if [ "${FAKE_HARNESS_MODE:-}" = obedece ]; then
+    case "$linea" in
+      *"linea sola con ADAPTADOR-MARCA seguido de dos puntos"*) printf 'ADAPTADOR-MARCA: completo\n';;
+    esac
+  fi
 done
