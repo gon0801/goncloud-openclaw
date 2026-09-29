@@ -633,3 +633,128 @@ describe("atencion requerida", () => {
     assert.match(r4.mensaje, /documento inválido/);
   });
 });
+
+describe("seguimiento rancio", () => {
+  // Medido el 2026-09-29: la Fase 9 quedó sin cierre desde el 19 y el reporte
+  // periódico la mandó como "[AVANZA] Fase 9 — desconocido" 11 días seguidos.
+  const T0 = Date.parse("2026-09-29T12:00:00Z") / 1000;
+  const haceSecs = (s: number): string => new Date((T0 - s) * 1000).toISOString();
+  const fase = (id: string, actualizado: string): ResumenSeguimiento => ({
+    ...resumen15(),
+    trabajoId: `fase:${id}`,
+    fase: id,
+    titulo: `Fase ${id}`,
+    actualizado,
+  });
+  const nueve = fase("9", "2026-09-19T10:30:00Z");
+  const MOTIVO_9 = "La Fase 9 no se mueve desde el 19 de septiembre: ¿sigue viva o la cierro?";
+
+  it("a stale doc asks once whether it is still alive, and never goes into the periodic report", () => {
+    const activas = [nueve];
+    const r1 = decidirSeguimiento({ ahora: T0, previo: corteEn(T0 - 1800, activas), activas, inmediato: null });
+    assert.equal(r1.accion, "SEND");
+    if (r1.accion !== "SEND") throw new Error("rancia esperada");
+    assert.equal(r1.tipo, "inmediato");
+    assert.match(r1.mensaje, /^\[NECESITO TU RESPUESTA\] /);
+    assert.ok(r1.mensaje.includes(`Que necesito de ti: ${MOTIVO_9}`), r1.mensaje);
+    assert.doesNotMatch(r1.mensaje, /AVANZA|minutos/);
+    assert.deepEqual(r1.estadoTrasConfirmar.trabajosActivos, ["fase:9"]);
+
+    const r2 = decidirSeguimiento({
+      ahora: T0 + 1800, previo: confirmado(r1.estadoTrasConfirmar, 7), activas, inmediato: null,
+    });
+    assert.equal(r2.accion, "NO_REPLY");
+    if (r2.accion !== "NO_REPLY") throw new Error("repetición inesperada");
+    assert.deepEqual(r2.estado.trabajosActivos, ["fase:9"]);
+
+    const r3 = decidirSeguimiento({ ahora: T0 + 3 * 86400, previo: r2.estado, activas, inmediato: null });
+    assert.equal(r3.accion, "NO_REPLY");
+  });
+
+  it("with one live and one stale doc the periodic report names only the live one", () => {
+    const quince = fase("15", haceSecs(3600));
+    const activas = [quince, nueve];
+    const r1 = decidirSeguimiento({ ahora: T0, previo: corteEn(T0 - 1800, activas), activas, inmediato: null });
+    assert.equal(r1.accion, "SEND");
+    if (r1.accion !== "SEND") throw new Error("rancia esperada");
+    assert.equal(r1.tipo, "inmediato");
+    assert.ok(r1.mensaje.includes(MOTIVO_9), r1.mensaje);
+
+    const r2 = decidirSeguimiento({
+      ahora: T0 + 60, previo: confirmado(r1.estadoTrasConfirmar, 8), activas, inmediato: null,
+    });
+    assert.equal(r2.accion, "SEND");
+    if (r2.accion !== "SEND") throw new Error("periódico esperado");
+    assert.equal(r2.tipo, "periodico");
+    assert.match(r2.mensaje, /\[AVANZA\] Fase 15/);
+    assert.doesNotMatch(r2.mensaje, /Fase 9/);
+    assert.deepEqual(r2.estadoTrasConfirmar.trabajosActivos, ["fase:15", "fase:9"]);
+
+    const r3 = decidirSeguimiento({
+      ahora: T0 + 120, previo: confirmado(r2.estadoTrasConfirmar, 9), activas, inmediato: null,
+    });
+    assert.equal(r3.accion, "NO_REPLY");
+  });
+
+  it("a doc updated 23 hours ago is still live; 25 hours ago is stale", () => {
+    const d23 = decidirSeguimiento({
+      ahora: T0, previo: corteEn(T0 - 1800, []), activas: [fase("14", haceSecs(23 * 3600))], inmediato: null,
+    });
+    assert.equal(d23.accion, "SEND");
+    if (d23.accion !== "SEND") throw new Error("periódico esperado");
+    assert.equal(d23.tipo, "periodico");
+    assert.match(d23.mensaje, /\[AVANZA\] Fase 14/);
+
+    const d25 = decidirSeguimiento({
+      ahora: T0, previo: corteEn(T0 - 1800, []), activas: [fase("14", haceSecs(25 * 3600))], inmediato: null,
+    });
+    assert.equal(d25.accion, "SEND");
+    if (d25.accion !== "SEND") throw new Error("rancia esperada");
+    assert.equal(d25.tipo, "inmediato");
+    assert.ok(d25.mensaje.includes("La Fase 14 no se mueve desde el 28 de septiembre: ¿sigue viva o la cierro?"), d25.mensaje);
+  });
+
+  it("a stale corrida is named by its title; an unreadable date counts as stale", () => {
+    const corrida: ResumenSeguimiento = { ...nueve, trabajoId: "corrida:c9", fase: "0", titulo: "Revisar facturas", actualizado: "" };
+    const d = decidirSeguimiento({ ahora: T0, previo: corteEn(T0, []), activas: [corrida], inmediato: null });
+    assert.equal(d.accion, "SEND");
+    if (d.accion !== "SEND") throw new Error("rancia esperada");
+    assert.ok(d.mensaje.includes("Revisar facturas no registra avance: ¿sigue viva o la cierro?"), d.mensaje);
+  });
+
+  it("the NECESITO of a stale corrida names it by its title in every line, never as La fase 0", () => {
+    const corrida: ResumenSeguimiento = {
+      ...resumenCorrida(1, "Revisar facturas"), actualizado: "2026-09-19T10:30:00Z",
+    };
+    const d = decidirSeguimiento({ ahora: T0, previo: corteEn(T0 - 1800, [corrida]), activas: [corrida], inmediato: null });
+    if (d.accion !== "SEND") throw new Error("rancia esperada");
+    assert.equal(d.mensaje, [
+      "[NECESITO TU RESPUESTA] Revisar facturas, 1 de 3 partes terminadas",
+      "Que cambio: Revisar facturas lleva más de un día sin avance.",
+      "Que sigue: Queda fuera del reporte periódico hasta que se cierre o vuelva a moverse.",
+      "Que necesito de ti: Revisar facturas no se mueve desde el 19 de septiembre: ¿sigue viva o la cierro?",
+    ].join("\n"));
+    assert.equal(validarMensajeV1(d.mensaje).ok, true);
+  });
+
+  it("an unreadable doc stays DETENIDA and in the periodic report, not asked as stale", () => {
+    const conservador: ResumenSeguimiento = {
+      ...fase("14", ""),
+      progreso: { kind: "desconocido", motivo: "unidad-desconocida" },
+      carriles: [],
+    };
+    const problemas: ProblemaSeguimiento[] = [{ trabajoId: "fase:14", motivo: "ilegible" }];
+    const r1 = decidirSeguimiento({
+      ahora: T0, previo: corteEn(T0 - 1800, [conservador]), activas: [conservador], problemas, inmediato: null,
+    });
+    assert.equal(r1.accion, "SEND");
+    if (r1.accion !== "SEND") throw new Error("detenida esperada");
+    assert.match(r1.mensaje, /^\[DETENIDA\] /);
+    const r2 = decidirSeguimiento({
+      ahora: T0 + 60, previo: confirmado(r1.estadoTrasConfirmar, 3), activas: [conservador], problemas, inmediato: null,
+    });
+    assert.equal(r2.accion, "SEND");
+    if (r2.accion !== "SEND") throw new Error("periódico esperado");
+    assert.match(r2.mensaje, /\[AVANZA\] Fase 14 — desconocido/);
+  });
+});
