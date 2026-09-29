@@ -79,6 +79,5 @@ grep -qF "CORRIDA_NATIVE_ROUTING=off" "$DISPATCH" \
 for pieza in "corrida-worker.py" "corrida_worker" "workers.v1.json" "preaprobaciones.v1.json"; do
   grep -qF -- "$pieza" "$INST" || fail "el instalador no instala $pieza"
 done
-grep -qF "test-native-harness-orchestration-skill" "$INST" >/dev/null 2>&1 || true
 
 echo "TODO VERDE: native-harness-orchestration-skill"

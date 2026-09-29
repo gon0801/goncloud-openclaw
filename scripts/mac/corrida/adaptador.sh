@@ -134,6 +134,15 @@ adaptador_confianza_responder() { # $1 binario $2 sesion $3 worktree
 $pant
 EOF
   [ -n "$ok" ] || return 1
+  # Criterio de responder.sh (confianza): TODA ruta absoluta de la pantalla es la
+  # del carril. Si no, un dialogo que pide otra carpeta (el padre) pasaria solo
+  # porque el cwd sale en otra linea. Dos segmentos: /init o /help no son rutas.
+  while IFS= read -r l; do
+    [ -n "$l" ] || continue
+    [ "$l" = "$wt" ] || { [ -n "$canon" ] && [ "$l" = "$canon" ]; } || return 1
+  done <<EOF
+$(printf '%s\n' "$pant" | LC_ALL=C grep -oE '(^|[[:space:]])/[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]*' | sed 's/^[[:space:]]*//' | sort -u)
+EOF
   for t in "${teclas[@]}"; do "$TMUX_BIN" send-keys -t "=$sesion:" "$t" 2>/dev/null || return 1; done
   echo "adaptador: $binario pidio confianza para el worktree del carril ($wt); respondido si" >&2
 }

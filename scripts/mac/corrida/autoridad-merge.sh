@@ -30,7 +30,6 @@ def cargar_json(ruta, motivo):
     except Exception:
         muere(motivo)
 
-import re
 reg = cargar_json(os.environ["AREG"], "registro de corrida ilegible")
 if not isinstance(reg, dict) or reg.get("schema") != "corrida.v2":
     muere("el registro no es corrida.v2")

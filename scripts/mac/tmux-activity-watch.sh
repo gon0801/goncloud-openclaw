@@ -45,7 +45,9 @@
 #
 # Modes:
 #   tmux-activity-watch.sh          loop forever, sleeping TICK_SECS between passes
-#   tmux-activity-watch.sh --once   a single pass (used by tests and manual checks)
+#   tmux-activity-watch.sh --once   a single pass (used by tests and manual checks); it launches
+#                                   the latido only with LATIDO_ONCE=1, so a manual check never
+#                                   fires the real one by accident
 #
 # State machine per session, one file per session under STATE_DIR:
 #   hash=<cksum>       checksum of the visible screen the last time it was looked at
@@ -75,12 +77,15 @@
 #   CORRIDA_BIN=$HOME/bin/corrida.sh   (policy engine offered each dialog first; unset = today's behavior)
 #   LATIDO_SECS=300    (seconds between two `$CORRIDA_BIN latido` launches)
 #   LATIDO_TOPE=240    (hard timeout of one latido; it runs in the background, never blocks a tick)
+#   LATIDO_ONCE=       (1: --once also launches the latido)
 #
 # Latido (Plans.md 14.29 D1): the LaunchAgent ai.goncloud.corrida-latido stays unloaded and no
 # other clock may exist (Plans.md:368), so this watcher launches `corrida.sh latido` at the end of
 # a tick when LATIDO_SECS passed since the last launch and no previous latido is alive. The
 # launch time and pid live in $STATE_DIR/latido.stamp (not *.state: the closed sweep globs those).
 # The stamp is written at launch, so a failing latido is retried after LATIDO_SECS, not every tick.
+# The check and the stamp go under $STATE_DIR/latido.lock: a manual --once with LATIDO_ONCE=1 and
+# the LaunchAgent share STATE_DIR and would otherwise both read an old stamp and launch twice.
 #
 # Install: cp scripts/mac/tmux-activity-watch.sh ~/bin/ && chmod +x ~/bin/tmux-activity-watch.sh
 # (the LaunchAgent in scripts/mac/ai.goncloud.tmux-activity-watch.plist runs it under launchd).
@@ -108,7 +113,10 @@ LOG_FILE=${LOG_FILE:-$HOME/Library/Logs/tmux-activity-watch.log}
 CORRIDA_BIN=${CORRIDA_BIN:-$HOME/bin/corrida.sh}
 LATIDO_SECS=${LATIDO_SECS:-300}
 LATIDO_TOPE=${LATIDO_TOPE:-240}
+LATIDO_ONCE=${LATIDO_ONCE:-}
 LATIDO_STAMP="$STATE_DIR/latido.stamp"
+LATIDO_LOCK="$STATE_DIR/latido.lock"
+LATIDO_LOCK_STALE=60
 WATCH_MARKER=OPENCLAW_WATCH
 latido_pid=""
 
@@ -132,6 +140,17 @@ log() {
   fi
   printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >>"$LOG_FILE"
 }
+
+# A non-integer here would kill the watcher under set -u (or, as TOPE, give perl an alarm of 0:
+# no timeout at all) and take the approval events down with it.
+if [[ ! $LATIDO_SECS =~ ^[1-9][0-9]*$ ]]; then
+  log "LATIDO_SECS invalid ($LATIDO_SECS), using 300"
+  LATIDO_SECS=300
+fi
+if [[ ! $LATIDO_TOPE =~ ^[1-9][0-9]*$ ]]; then
+  log "LATIDO_TOPE invalid ($LATIDO_TOPE), using 240"
+  LATIDO_TOPE=240
+fi
 
 # The marker lives in the session's tmux environment; `show-environment` prints "NAME=value"
 # and exits 0 when set; when unset it exits 1 ("unknown variable" on stderr in tmux 3.7).
@@ -448,10 +467,38 @@ tick() {
   rm -f "$seen_file"
 }
 
+# mkdir is the atomic step. The holder's pid goes inside so a watcher killed while holding it
+# does not silence the latido forever: a dead holder's lock is taken over.
+latido_lock() {
+  local holder since age
+  if ! mkdir "$LATIDO_LOCK" 2>/dev/null; then
+    holder=$(cat "$LATIDO_LOCK/pid" 2>/dev/null) || holder=""
+    # GNU primero: en Linux `stat -f` es el estado del sistema de archivos, no el mtime.
+    since=$(stat -c %Y "$LATIDO_LOCK" 2>/dev/null || stat -f %m "$LATIDO_LOCK" 2>/dev/null) || since=""
+    [[ $since =~ ^[0-9]+$ ]] || since=$(date +%s)
+    age=$(($(date +%s) - since))
+    # The lock is held for milliseconds (check + launch). Past LATIDO_LOCK_STALE it is orphaned
+    # (a watcher killed between mkdir and the pid write, or a reused pid) and must be taken back,
+    # or the latido stays off forever.
+    if [[ $age -lt $LATIDO_LOCK_STALE ]] && { [[ ! $holder =~ ^[0-9]+$ ]] || kill -0 "$holder" 2>/dev/null; }; then
+      return 1
+    fi
+    rm -rf "$LATIDO_LOCK"
+    mkdir "$LATIDO_LOCK" 2>/dev/null || return 1
+  fi
+  printf '%s\n' "$$" >"$LATIDO_LOCK/pid"
+}
+
 latido_tick() {
-  local now at pid
   latido_pid=""
   [[ -x $CORRIDA_BIN ]] || return 0
+  latido_lock || { log "latido skipped: lock held by another watcher"; return 0; }
+  latido_launch_if_due
+  rm -rf "$LATIDO_LOCK"
+}
+
+latido_launch_if_due() {
+  local now at pid
   now=$(date +%s)
   at=$(read_state_field "$LATIDO_STAMP" at)
   pid=$(read_state_field "$LATIDO_STAMP" pid)
@@ -460,8 +507,9 @@ latido_tick() {
   if [[ $((now - at)) -lt $LATIDO_SECS && $at -le $now ]]; then
     return 0
   fi
-  # Past LATIDO_TOPE the alarm already killed that latido: a live pid is a reused one.
-  if [[ $pid =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null && [[ $((now - at)) -lt $LATIDO_TOPE ]]; then
+  # Past LATIDO_TOPE the alarm already killed that latido: a live pid is a reused one. So is a
+  # live pid next to a future stamp: that stamp was written before the clock went back.
+  if [[ $pid =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null && [[ $at -le $now && $((now - at)) -lt $LATIDO_TOPE ]]; then
     return 0
   fi
   (
@@ -481,7 +529,9 @@ latido_tick() {
 
 if [[ $once -eq 1 ]]; then
   tick
-  latido_tick
+  if [[ $LATIDO_ONCE == 1 ]]; then
+    latido_tick
+  fi
   if [[ -n $latido_pid ]]; then
     wait "$latido_pid" || true
   fi

@@ -5,8 +5,10 @@
 # Barras de los seis seleccionables medidas en vivo 2026-09-27 en esta Mac
 # (comandos, salidas y capturas: ~/.local/state/u3-loop/mediciones-14.7);
 # cada barra aparece bajo la argv start:write y start:review de workers.v1.json
-# y bajo el flag de sondeo. grok start:review con argv invalida en el
-# registro: hallazgo ortogonal, ajeno a esta tabla.
+# y bajo el flag de sondeo.
+# grok remedido 2026-09-28 (grok 1.0.41): --read-only no existe (rc 2); la
+# revision usa --permission-mode plan, y con ella la barra NO pinta
+# always-approve; lo comun a --allow y a plan es el canal "[stable]" del pie.
 # kimi remedido 2026-09-28 (kimi 2.1.1): la linea de estado ya no dice auto;
 # "thinking:" sale igual con --auto y con --plan.
 claude	claude	--permission-mode acceptEdits	(shift+tab to cycle)	unknown	unknown	unknown
@@ -17,7 +19,7 @@ kimi	kimi	--auto	thinking:	unknown	unknown	unknown
 muse	muse	--yolo	YOLO	unknown	unknown	unknown
 codex	codex	--sandbox workspace-write	Ask Codex to do anything	unknown	unknown	unknown
 cursor-agent	cursor-agent	-f --trust	Cursor Agent	unknown	unknown	unknown
-grok	grok	--always-approve	always-approve	unknown	unknown	unknown
+grok	grok	--always-approve	[stable]	unknown	unknown	unknown
 opencode	opencode	unknown	unknown	unknown	unknown	unknown
 qwen	qwen	unknown	unknown	unknown	unknown	unknown
 dsh	dsh	unknown	unknown	unknown	unknown	unknown
