@@ -201,13 +201,15 @@ $(cat "$CALLS")"
   TUI="$T/tui-repinta.sh"
   cat >"$TUI" <<'TUISH'
 #!/bin/sh
-while :; do printf '\033[H\033[2J'; cat "$1"; sleep 0.2; done
+while :; do s=$(cat "$1"); printf '\033[H\033[2J%s\n' "$s"; sleep 0.2; done
 TUISH
   chmod +x "$TUI"
   # Bajo carga el TUI de mentira puede tardar mas de 1 s en pintar; una captura vacia se veria
   # como "sin prompt" y la prueba fallaria sin que el vigilante tenga culpa (paso 1 vez en 16).
-  # Por eso cada cambio de pantalla espera a verse pintado, no un sleep fijo (14.30: (2f) cayo
-  # asi en el shard 2/3 del PR #204).
+  # Por eso cada cambio de pantalla espera a verse pintado, no un sleep fijo, y el TUI repinta
+  # con UNA escritura (borrado y contenido juntos): con dos, una captura entre ambas veia la
+  # pantalla a medias, otro hash, y el silencio volvia a cero (14.30: (2f) cayo asi en el
+  # shard 2/3 del PR #204).
   espera_pantalla() { # $1 sesion, $2 texto que debe verse
     local i=0
     while [ "$i" -lt 50 ]; do
