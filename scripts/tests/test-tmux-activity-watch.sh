@@ -38,7 +38,8 @@ d = plistlib.load(open(sys.argv[1], 'rb'))
 assert d.get('Label') == 'ai.goncloud.tmux-activity-watch', 'Label incorrecto'
 assert d.get('KeepAlive') is True, 'falta KeepAlive'
 assert d.get('RunAtLoad') is True, 'falta RunAtLoad'
-" "$P" || fail "$P: no parsea como plist valido o le faltan Label/KeepAlive/RunAtLoad"
+assert d.get('EnvironmentVariables', {}).get('REPO_DIR'), 'falta REPO_DIR (el latido lo necesita bajo launchd)'
+" "$P" || fail "$P: no parsea como plist valido o le faltan Label/KeepAlive/RunAtLoad/REPO_DIR"
 echo "ok (1): los tres scripts parsean (bash 3.2 y homebrew bash) y el plist es un LaunchAgent valido"
 
 # (2) y (3) necesitan un servidor tmux de verdad.
@@ -50,6 +51,9 @@ else
   T=$(mktemp -d) || exit 1
   trap '"$TM" -L "$L" kill-server 2>/dev/null; rm -rf "$T"' EXIT
   L="taw$$"
+  # Ninguna corrida del vigilante en esta prueba puede alcanzar el ~/bin/corrida.sh
+  # real: desde 14.29 D1 el tick lanza "latido" contra las corridas reales.
+  export CORRIDA_BIN="$T/no-hay-corrida"
 
   STATE_DIR="$T/state"
   LOG_FILE="$T/watch.log"
@@ -469,6 +473,8 @@ PY
   STUB_CORR="$T/corrida-stub"
   cat >"$STUB_CORR" <<STUB
 #!/bin/sh
+# 14.29 D1: el vigilante tambien corre "latido"; ese no es un dialogo.
+[ "\$1" = latido ] && exit 0
 printf '%s\n' "CORR \$*" >> "$CORR_CALLS"
 rc=\$(cat "$COR_RC")
 # BRIEF-r2 QA: con rc 0 y CONSUME=1 el CLI de mentira se come la tecla (la
@@ -624,6 +630,46 @@ $(cat "$CALLS")"
 $(cat "$CALLS")"
   "$TM" -L "$L" kill-session -t cad-default
   echo "ok (2n): la cadencia por defecto es 15 min de silencio y 15 min de recordatorio"
+
+  # (2o) 14.29 D1: el latido vive en el vigilante. Un --once lanza "latido" una
+  # vez; el siguiente tick inmediato no (LATIDO_SECS por defecto: 300 s); con la
+  # marca envejecida vuelve a lanzar; sin corrida.sh no lanza y sale 0; un latido
+  # que falla queda en el log y el vigilante sale 0.
+  STATE_LAT="$T/state-latido"
+  LAT_ARGV="$T/latido-argv.txt"; : >"$LAT_ARGV"
+  LAT_RC="$T/latido-rc"; echo 0 >"$LAT_RC"
+  STUB_LAT="$T/corrida-latido-stub"
+  cat >"$STUB_LAT" <<STUB
+#!/bin/sh
+printf '%s\n' "\$*" >> "$LAT_ARGV"
+exit "\$(cat "$LAT_RC")"
+STUB
+  chmod +x "$STUB_LAT"
+  corre_lat() { # $1 CORRIDA_BIN $2 STATE_DIR
+    CORRIDA_BIN="$1" TMUX_BIN="$TMUX_SHIM" OPENCLAW_BIN="$STUB_OPENCLAW" \
+      STATE_DIR="$2" LOG_FILE="$LOG_FILE" bash "$W" --once
+  }
+  corre_lat "$STUB_LAT" "$STATE_LAT" || fail "--once (2o, primer tick) fallo"
+  [ "$(cat "$LAT_ARGV")" = "latido" ] || fail "(2o) el primer tick debia lanzar 'latido' una vez: <$(cat "$LAT_ARGV")>"
+  grep -q 'latido launched (pid=[0-9]' "$LOG_FILE" || fail "(2o) el lanzamiento del latido debe quedar en el log: $(cat "$LOG_FILE")"
+  corre_lat "$STUB_LAT" "$STATE_LAT" || fail "--once (2o, tick inmediato) fallo"
+  n=$(wc -l <"$LAT_ARGV" | tr -d ' ')
+  [ "$n" -eq 1 ] || fail "(2o) un tick antes de LATIDO_SECS no debe relanzar el latido; hubo $n"
+  printf 'at=%s\npid=\n' "$(( $(date +%s) - 301 ))" >"$STATE_LAT/latido.stamp"
+  corre_lat "$STUB_LAT" "$STATE_LAT" || fail "--once (2o, marca vieja) fallo"
+  n=$(grep -cx 'latido' "$LAT_ARGV")
+  [ "$n" -eq 2 ] || fail "(2o) con la marca de hace 301 s el latido debia relanzarse; hubo $n"
+  rm -rf "$STATE_LAT"
+  corre_lat "$T/no-hay-corrida" "$STATE_LAT" || fail "(2o) sin corrida.sh el vigilante debia salir 0"
+  [ -e "$STATE_LAT/latido.stamp" ] && fail "(2o) sin corrida.sh no debe quedar marca de latido"
+  n=$(wc -l <"$LAT_ARGV" | tr -d ' ')
+  [ "$n" -eq 2 ] || fail "(2o) sin corrida.sh no debe lanzarse nada; hubo $n"
+  echo 1 >"$LAT_RC"
+  : >"$LOG_FILE"
+  corre_lat "$STUB_LAT" "$STATE_LAT" || fail "(2o) un latido que sale 1 no debe tumbar al vigilante"
+  grep -q 'latido failed (rc=1)' "$LOG_FILE" || fail "(2o) el latido fallido debe quedar en el log: $(cat "$LOG_FILE")"
+  grep -q '^at=[0-9]' "$STATE_LAT/latido.stamp" || fail "(2o) el latido fallido tambien deja la marca (no se reintenta cada tick)"
+  echo "ok (2o): el vigilante lanza el latido cada LATIDO_SECS, sin corrida.sh no lanza, y un fallo no lo tumba"
 
   "$TM" -L "$L" kill-server 2>/dev/null
   echo "ok (2): maquina de estados del vigilante verificada con tmux real ($TM)"
