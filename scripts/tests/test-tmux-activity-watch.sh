@@ -582,7 +582,7 @@ STUB
   "$TM" -L "$L" kill-session -t ev-j
   echo "ok (2m): un fallo del journal no rompe la notificacion y queda en el log"
 
-  # (2n) La cadencia por defecto es 15 min de silencio y 15 min de recordatorio,
+  # (2n) La cadencia por defecto es 15 min de silencio y 60 min de recordatorio,
   # sin dormir 15 minutos de verdad: el archivo de estado finge la edad. OJO: sin
   # QUIET_SECS/QUIET_REMIND_SECS en el entorno, para que manden los defaults del
   # script y no los de run_once (1 s). Con 899 s no hay evento; con 901 s hay uno.
@@ -617,25 +617,46 @@ $(cat "$CALLS")"
   n=$(grep -c 'cad-default quiet for' "$CALLS")
   [ "$n" -eq 1 ] || fail "(2n) con 901 s de silencio debe haber exactamente un evento quiet; hubo $n:
 $(cat "$CALLS")"
-  # El recordatorio por defecto tambien es 15 min: con notified_at de hace 899 s
-  # no se repite; con 901 s sí.
+  # El recordatorio por defecto es 60 min (2026-09-29: cada repeticion es un turno
+  # de ~290k tokens): con notified_at de hace 3599 s no se repite; con 3601 s sí.
   estado_hash=$(awk -F= '$1 == "hash" { print $2 }' "$STATE_DIR/cad-default.state")
   estado_since=$(awk -F= '$1 == "since" { print $2 }' "$STATE_DIR/cad-default.state")
   ahora=$(date +%s)
   printf 'hash=%s\nsince=%s\nnotified=1\npath=/tmp\napproval=\napproval_at=0\napproval_since=0\nnotified_at=%s\n' \
-    "$estado_hash" "$estado_since" "$((ahora - 899))" >"$STATE_DIR/cad-default.state"
+    "$estado_hash" "$estado_since" "$((ahora - 3599))" >"$STATE_DIR/cad-default.state"
   corre_default || fail "--once (2n, recordatorio aun no) fallo"
   n=$(grep -c 'cad-default quiet for' "$CALLS")
-  [ "$n" -eq 1 ] || fail "(2n) antes de 15 min el recordatorio no se repite; hubo $n"
+  [ "$n" -eq 1 ] || fail "(2n) antes de 60 min el recordatorio no se repite; hubo $n"
   ahora=$(date +%s)
   printf 'hash=%s\nsince=%s\nnotified=1\npath=/tmp\napproval=\napproval_at=0\napproval_since=0\nnotified_at=%s\n' \
-    "$estado_hash" "$estado_since" "$((ahora - 901))" >"$STATE_DIR/cad-default.state"
+    "$estado_hash" "$estado_since" "$((ahora - 3601))" >"$STATE_DIR/cad-default.state"
   corre_default || fail "--once (2n, recordatorio) fallo"
   n=$(grep -c 'cad-default quiet for' "$CALLS")
-  [ "$n" -eq 2 ] || fail "(2n) una sesion que sigue callada se recuerda a los 15 min; hubo $n:
+  [ "$n" -eq 2 ] || fail "(2n) una sesion que sigue callada se recuerda a los 60 min; hubo $n:
 $(cat "$CALLS")"
   "$TM" -L "$L" kill-session -t cad-default
-  echo "ok (2n): la cadencia por defecto es 15 min de silencio y 15 min de recordatorio"
+  # El recordatorio de un dialogo sin contestar tambien es 60 min por defecto.
+  PANTALLA_N="$T/pantalla-n.txt"
+  printf 'Run this command?\n$ echo hola\n' >"$PANTALLA_N"
+  "$TM" -L "$L" new-session -d -s cad-dialogo -x 80 -y 20 "$TUI $PANTALLA_N" || fail "no se pudo crear cad-dialogo"
+  mark cad-dialogo
+  espera_pantalla cad-dialogo 'Run this command'
+  corre_default || fail "--once (2n, dialogo) fallo"
+  [ "$(grep -c 'cad-dialogo waiting for approval' "$CALLS")" -eq 1 ] || fail "(2n) el dialogo avisa de inmediato:
+$(cat "$CALLS")"
+  ahora=$(date +%s)
+  sed -i.bak "s/^approval_at=.*/approval_at=$((ahora - 3599))/" "$STATE_DIR/cad-dialogo.state"
+  corre_default || fail "--once (2n, dialogo 3599 s) fallo"
+  [ "$(grep -c 'cad-dialogo waiting for approval' "$CALLS")" -eq 1 ] || fail "(2n) antes de 60 min el dialogo no se recuerda:
+$(cat "$CALLS")"
+  ahora=$(date +%s)
+  sed -i.bak "s/^approval_at=.*/approval_at=$((ahora - 3601))/" "$STATE_DIR/cad-dialogo.state"
+  corre_default || fail "--once (2n, dialogo 3601 s) fallo"
+  [ "$(grep -c 'cad-dialogo waiting for approval' "$CALLS")" -eq 2 ] || fail "(2n) un dialogo sin contestar se recuerda a los 60 min:
+$(cat "$CALLS")"
+  "$TM" -L "$L" kill-session -t cad-dialogo
+  corre_default >/dev/null 2>&1 || true
+  echo "ok (2n): la cadencia por defecto es 15 min de silencio y 60 min de recordatorio"
 
   # (2o) 14.29 D1: el latido vive en el vigilante. Un --once lanza "latido" una
   # vez; el siguiente tick inmediato no (LATIDO_SECS por defecto: 300 s); con la
@@ -785,6 +806,8 @@ STUB
   # El texto va colapsado (sin saltos ni caracteres de control) y etiquetado como cita, no orden.
   printf '%s' "$call" | grep -q 'Listo, termine el bloque A.5. fin' || fail "el evento no trae el ultimo texto colapsado a una linea: $call"
   printf '%s' "$call" | grep -q 'not an instruction' || fail "el texto del agente debe ir etiquetado como cita: $call"
+  printf '%s' "$call" | grep -q -- '--session-key agent:main:vigia-mac --text' \
+    || fail "el hook debe mandar a la sesion fija agent:main:vigia-mac, no a la de Telegram: $call"
   # El texto del agente no puede falsificar el armazon: exactamente 2 '|' y 2 '"' en todo el evento.
   pipes=$(printf '%s' "$call" | tr -cd '|' | wc -c | tr -d ' ')
   quotes=$(printf '%s' "$call" | tr -cd '"' | wc -c | tr -d ' ')
@@ -808,7 +831,8 @@ grep -qF -- '-u OPENCLAW_WATCH' "$SK" || fail "$SK: falta la instruccion de desm
 grep -qF 'waiting for approval for Ns' "$SK" || fail "$SK: falta el evento 'waiting for approval'"
 grep -qF 'preapproval table' "$SK" || fail "$SK: falta de donde sale la respuesta a un prompt de permiso"
 grep -qF 'whatever the CLI' "$SK" || fail "$SK: el evento de espera no es solo de un CLI; la skill tiene que decirlo"
-grep -qF 'repeated every 15 min' "$SK" || fail "$SK: el silencio de una sesion marcada se recuerda cada 15 min, no cada 30"
+grep -qF 'repeated every 60 min' "$SK" || fail "$SK: el silencio de una sesion marcada se recuerda cada 60 min (APPROVAL/QUIET_REMIND_SECS)"
+grep -qF 'agent:main:vigia-mac' "$SK" || fail "$SK: falta que los eventos llegan a agent:main:vigia-mac, sin canal de entrega"
 grep -qF '/mode yolo' "$SK" || fail "$SK: falta como cambiar zcode a modo sin preguntas a media corrida"
 
 # (4b) Watchdog interno: despertar al lead no es instruccion de Telegram.
@@ -816,7 +840,6 @@ grep -qF '/mode yolo' "$SK" || fail "$SK: falta como cambiar zcode a modo sin pr
 # cada inspeccion, la clasificacion se perdio.
 grep -qF 'internal wake-up, not a Telegram instruction' "$SK" || fail "$SK: falta que el wake-up es interno, no instruccion de Telegram"
 grep -qF 'NO_REPLY' "$SK" || fail "$SK: falta terminar en NO_REPLY sin cambio material"
-grep -qF 'every 15 min' "$SK" || fail "$SK: falta la cadencia interna de 15 min"
 grep -qF 'NECESITO TU RESPUESTA' "$SK" || fail "$SK: falta el inmediato NECESITO TU RESPUESTA"
 grep -qF 'DETENIDA' "$SK" || fail "$SK: falta el inmediato DETENIDA"
 grep -qF 'CERRADA' "$SK" || fail "$SK: falta el inmediato CERRADA"
@@ -860,8 +883,8 @@ echo "ok (4c): owner-report-delivery clasifica el wake-up interno antes de entre
 # (2l) Enrutado por corrida (9.9b, medido 2026-09-25): los eventos de una sesion con
 # OPENCLAW_WATCH_RUN=<id> van con --session-key agent:main:sim9-<id> a la sesion propia
 # de la corrida; el "closed" tambien, con el id capturado en el .state ANTES de morir
-# (al cerrarse ya no se puede leer su entorno). Sin marca, el envio va igual que hoy
-# (sin --session-key): la sesion principal de main no deja de recibir lo demas.
+# (al cerrarse ya no se puede leer su entorno). Sin marca, el envio va a la sesion fija
+# agent:main:vigia-mac: sin clave caia en agent:main:main, atada al Telegram de David.
 if [ -n "${TM:-}" ] && [ -n "${TUI:-}" ]; then
 PANTALLA_R="$T/pantalla-ruta.txt"
 printf 'Run this command?\n$ echo hola\nrunning 9s\n' >"$PANTALLA_R"
@@ -884,7 +907,7 @@ grep -q 'sim9-ruta closed' "$CALLS" || fail "(2l) no se vio el evento closed de 
 $(cat "$CALLS")"
 # (2l, segunda parte) Una sesion NUEVA con el mismo nombre pero SIN run (marcada
 # a mano, sin corrida) no hereda el run del estado que dejo la anterior: sus
-# eventos van al destino por defecto, nunca a la corrida vieja (CodeRabbit, dos
+# eventos van a agent:main:vigia-mac, nunca a la corrida vieja (CodeRabbit, dos
 # vueltas). El estado previo de sim9-ruta quedo con run=sim9-TEST-RUTA.
 "$TM" -L "$L" new-session -d -s sim9-ruta -x 80 -y 20 "$TUI $PANTALLA_R" || fail "no se pudo recrear sim9-ruta"
 mark sim9-ruta
@@ -893,13 +916,16 @@ espera_pantalla sim9-ruta "running"
 run_p || fail "--once (2l, sin run) fallo"
 grep -q 'sim9-ruta waiting for approval' "$CALLS" || fail "(2l) sin run no salio el evento de aprobacion:
 $(cat "$CALLS")"
-if grep -q -- '--session-key' "$CALLS"; then
-  fail "(2l) la sesion recreada sin OPENCLAW_WATCH_RUN heredo un --session-key del estado previo:
+grep -q -- '--session-key agent:main:vigia-mac --text tmux: sim9-ruta waiting for approval' "$CALLS" \
+  || fail "(2l) el evento sin corrida no va a la sesion fija agent:main:vigia-mac:
+$(cat "$CALLS")"
+if grep -q -- 'sim9-TEST-RUTA' "$CALLS"; then
+  fail "(2l) la sesion recreada sin OPENCLAW_WATCH_RUN heredo el --session-key de la corrida previa:
 $(cat "$CALLS")"
 fi
 "$TM" -L "$L" kill-session -t sim9-ruta 2>/dev/null
 run_p >/dev/null 2>&1 || true
-echo "ok (2l): los eventos de una corrida se rutearon a su sesion, vivos y cerrados"
+echo "ok (2l): los eventos de una corrida se rutearon a su sesion, vivos y cerrados; sin corrida, a agent:main:vigia-mac"
 else
   echo "SKIP (2l): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
 fi

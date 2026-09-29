@@ -19,6 +19,8 @@ set -uo pipefail
 TMUX_BIN=${TMUX_BIN:-/opt/homebrew/bin/tmux}
 OPENCLAW_BIN=${OPENCLAW_BIN:-$HOME/.openclaw/bin/openclaw}
 WATCH_MARKER=OPENCLAW_WATCH
+# Same key as VIGIA_SESSION_KEY in tmux-activity-watch.sh (the why lives there).
+VIGIA_SESSION_KEY=agent:main:vigia-mac
 
 # Read the hook's JSON payload from stdin once, regardless of whether we end up using it, so the
 # pipe does not stay open under Claude Code.
@@ -105,6 +107,6 @@ event_text="Claude Code turn ended in ${cwd} (tmux ${session}) | last agent outp
 
 # Send in the background: the hook must return control to Claude Code immediately, never wait on
 # the gateway. nohup detaches it from this process's stdio/session so it survives our exit.
-nohup "$OPENCLAW_BIN" system event --mode now --timeout 10000 --text "$event_text" >/dev/null 2>&1 &
+nohup "$OPENCLAW_BIN" system event --mode now --timeout 10000 --session-key "$VIGIA_SESSION_KEY" --text "$event_text" >/dev/null 2>&1 &
 
 exit 0

@@ -68,10 +68,10 @@
 #   OPENCLAW_BIN=$HOME/.openclaw/bin/openclaw
 #   QUIET_SECS=900
 #   TICK_SECS=15
-#   QUIET_REMIND_SECS=900
+#   QUIET_REMIND_SECS=3600
 #   APPROVAL_RE=<measured questions + dialog signature, see DEFAULT_APPROVAL_RE below>
 #   APPROVAL_TAIL_LINES=15
-#   APPROVAL_REMIND_SECS=900
+#   APPROVAL_REMIND_SECS=3600
 #   STATE_DIR=$HOME/.local/state/tmux-activity-watch
 #   LOG_FILE=$HOME/Library/Logs/tmux-activity-watch.log
 #   CORRIDA_BIN=$HOME/bin/corrida.sh   (policy engine offered each dialog first; unset = today's behavior)
@@ -106,13 +106,13 @@ TMUX_BIN=${TMUX_BIN:-/opt/homebrew/bin/tmux}
 OPENCLAW_BIN=${OPENCLAW_BIN:-$HOME/.openclaw/bin/openclaw}
 QUIET_SECS=${QUIET_SECS:-900}
 TICK_SECS=${TICK_SECS:-15}
-QUIET_REMIND_SECS=${QUIET_REMIND_SECS:-900}
+QUIET_REMIND_SECS=${QUIET_REMIND_SECS:-3600}
 # ASCII only: it is matched against the screen tail AFTER non-ASCII is stripped, with grep -i.
 DEFAULT_APPROVAL_RE='allow once|always allow|would you like to allow|do you want to proceed|run this command\?|waiting for approval|do you trust|trust this (folder|workspace)'
 DEFAULT_APPROVAL_RE="$DEFAULT_APPROVAL_RE"'|enter (to )?(select|confirm|continue)|esc (to )?(cancel|go back|exit)|arrow keys to navigate|[[(]y/n[])]|[(]yes/no[)]'
 APPROVAL_RE=${APPROVAL_RE:-$DEFAULT_APPROVAL_RE}
 APPROVAL_TAIL_LINES=${APPROVAL_TAIL_LINES:-15}
-APPROVAL_REMIND_SECS=${APPROVAL_REMIND_SECS:-900}
+APPROVAL_REMIND_SECS=${APPROVAL_REMIND_SECS:-3600}
 STATE_DIR=${STATE_DIR:-$HOME/.local/state/tmux-activity-watch}
 LOG_FILE=${LOG_FILE:-$HOME/Library/Logs/tmux-activity-watch.log}
 # Carril P (9.6): el despachador de corridas que contesta diálogos por política.
@@ -129,6 +129,13 @@ LATIDO_STAMP="$STATE_DIR/latido.stamp"
 LATIDO_LOCK="$STATE_DIR/latido.lock"
 LATIDO_LOCK_STALE=60
 WATCH_MARKER=OPENCLAW_WATCH
+# Sesion fija del gateway para todo evento de maquina sin corrida. Sin clave el
+# evento cae en agent:main:main, atada al DM de Telegram de David: cada respuesta
+# final del turno le llegaba (medido 2026-09-29: 32 mensajes/hora, ~290k tokens por
+# despertar porque esa sesion nunca se reinicia). Esta sesion no tiene canal de
+# entrega; si algo es para David, el agente se lo manda con su herramienta de
+# mensajes. El Stop hook (claude-stop-openclaw-event.sh) repite el mismo literal.
+VIGIA_SESSION_KEY=agent:main:vigia-mac
 latido_pid=""
 
 once=0
@@ -180,9 +187,11 @@ send_event() {
   # sim9-* se mezclaron con habitos viejos (delegar SOLO LECTURA) y los ticks
   # del cron avance-tareas de una corrida viva se confundieron con los de un
   # cron recien borrado. La sesion por corrida nace limpia y ya la usa el
-  # turno de observacion del simulacro; sin marca, todo igual que hoy.
+  # turno de observacion del simulacro; sin marca, a VIGIA_SESSION_KEY.
   if [[ -n $key_run ]]; then
     key_args=(--session-key "agent:main:sim9-$key_run")
+  else
+    key_args=(--session-key "$VIGIA_SESSION_KEY")
   fi
   # FAIL-OPEN: if the send fails (gateway down, network hiccup, timeout), log it and return
   # non-zero WITHOUT marking notified — the caller must not flip its state, so the next tick
@@ -229,7 +238,7 @@ responder_contesta() {
 # dialogo solo cuenta como atendido cuando su prompt DESAPARECIO (visto ausente
 # en dos capturas seguidas, por si el TUI estaba a mitad de repintado). Si el
 # prompt sigue, devuelve 1 y la escalada sale como hoy: suprimirla sin prueba
-# dejaria un dialogo sin resolver mudo hasta el recordatorio (900 s).
+# dejaria un dialogo sin resolver mudo hasta el recordatorio (APPROVAL_REMIND_SECS).
 dialog_gone() { # $1 session; 0 = the dialog prompt is gone from the screen
   local i screen2
   for i in 1 2 3 4 5 6 7 8; do

@@ -65,7 +65,11 @@ Drive CLI agents by **tmux session name** through `exec` with `host="node"` and 
 <!-- candado: test-tmux-activity-watch.sh -->
 
 A watcher (`tmux-activity-watch.sh`, launchd on the Mac) and Claude Code's own Stop hook wake you
-with `openclaw system event` instead of you polling tmux on a cron. Events you will see:
+with `openclaw system event` instead of you polling tmux on a cron. Events of a run go to that
+run's session (`agent:main:sim9-<run>`); every other one goes to `agent:main:vigia-mac`, a session
+with no delivery channel: your final reply there reaches nobody, and neither does a `message`
+call without a target. When David must know something, send it with your message tool and an
+explicit target (his Telegram DM). Events you will see:
 
 - `tmux: <session> quiet for Ns | cmd=<cmd> cwd=<path> | read it before acting: ...` — the visible
   screen did not change for at least 15 min. A TUI that keeps repainting the same screen (zcode,
@@ -76,8 +80,8 @@ with `openclaw system event` instead of you polling tmux on a cron. Events you w
   proceed?`, `Allow once`, `Run this command?`), a folder-trust dialog, or something that is not a
   permission at all (codex stops on "usage limit, switch model? Press enter to confirm"). The
   watcher recognizes the shape of the dialog, not only the question. Sent at once, once per
-  distinct prompt, and again every 15 min while nobody answers. A marked session that simply stays
-  quiet gets its `quiet` event repeated every 15 min until you act on it or unmark it. Answer it
+  distinct prompt, and again every 60 min while nobody answers. A marked session that simply stays
+  quiet gets its `quiet` event repeated every 60 min until you act on it or unmark it. Answer it
   from the preapproval table of the runbook or brief that launched that session: approved → accept,
 <!-- candado: test-tmux-activity-watch.sh -->
   denied or not listed → reject. If the same session keeps asking, stop answering one by one and
