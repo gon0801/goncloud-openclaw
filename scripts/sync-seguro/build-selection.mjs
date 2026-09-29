@@ -26,10 +26,17 @@ if (head.status !== 0 || !/^[a-f0-9]{40}\n?$/.test(head.stdout)) {
 }
 const commit = head.stdout.trim();
 
+// Ejecutables del plugin que no son .ts y ya pasaron revision: cada uno se
+// nombra aqui a proposito; un archivo nuevo de otro tipo sigue fallando cerrado.
+const reviewedPluginFiles = new Set([
+  "tablero-runbook/avance-tick.mjs", // PR #211: tick de avance-tareas sin modelo
+]);
+
 function candidate(path) {
   if (path === "gateway-watchdog.ps1") return true;
   if (path.startsWith("summa-gate/") || path.startsWith("tablero-runbook/")) {
-    if (path.endsWith(".test.ts") || path.includes("/fixtures/")) return false;
+    if (path.endsWith(".test.ts") || path.endsWith(".test.mjs") || path.includes("/fixtures/")) return false;
+    if (reviewedPluginFiles.has(path)) return true;
     if ([
       "summa-gate/backfill-rendiciones.mjs",
       "summa-gate/leer-rendiciones.mjs",
