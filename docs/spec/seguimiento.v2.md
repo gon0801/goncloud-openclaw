@@ -139,3 +139,11 @@ Reglas del corte:
   conserva intacto. Nunca sale crudo.
 - `runbook.progress.decide` es la única entrada que la regla del director
   nombra; el agente no reproduce estas transiciones en prosa.
+
+Quien llama en cada tick es `tablero-runbook/avance-tick.mjs`, el payload de
+comando de `avance-tareas` (sin modelo): encuentra el cron por
+`declarationKey`, pasa el scratch a `modo:"tick"`, manda el `SEND` por
+`message send` y escribe `estadoTrasConfirmar` más `messageId` con la revisión
+leída. `avance-tick.mjs iniciar` hace la creación sobre un scratch vacío. Solo
+ve el trabajo que el gateway conoce (documentos de progreso de fases y
+corridas); las tareas sueltas del director ya no entran al corte.
