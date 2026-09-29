@@ -151,20 +151,25 @@ const d = decidirSeguimiento({
 process.stdout.write(`${lista.activas.map((a) => a.trabajoId).join(",")}|${d.accion}|${d.tipo ?? ""}\n${d.mensaje ?? ""}`);
 JS
 tick() { "$NODE" --experimental-strip-types "$T/tick.mjs" "$RAIZ" "$STORE/revisar-facturas.json" "$T/state"; }
-tt abrir revisar-facturas "Revisar facturas de septiembre" "Bajar facturas" "Cuadrar contra el banco" \
+tt abrir revisar-facturas "Revisar facturas de septiembre" "Bajar facturas" "Cuadrar contra el banco" "Pagar lo pendiente" \
   --siguiente "cuadrar contra el banco" >/dev/null || fail "(9) abrir fallo"
+tt paso revisar-facturas 1 mergeado "facturas bajadas" >/dev/null || fail "(9) paso fallo"
 out=$(tick) || fail "(9) el tick fallo: $out"
 printf '%s' "$out" | head -1 | grep -qx "corrida:revisar-facturas|SEND|periodico" || fail "(9) el tick no lo reporta: $out"
-printf '%s' "$out" | grep -q "^\[AVANZA\]" || fail "(9) sin encabezado AVANZA: $out"
+printf '%s' "$out" | grep -qx "\[AVANZA\] Revisar facturas de septiembre — 33% (1/3 partes)" \
+  || fail "(9) el AVANZA no dice el titulo y 1 de 3 partes: $out"
+printf '%s' "$out" | grep -q "Fase 0\|desconocido" && fail "(9) el AVANZA dice Fase 0 o desconocido: $out"
 printf '%s' "$out" | grep -A1 "^Que sigue:" | grep -q "cuadrar contra el banco" || fail "(9) Que sigue no trae el siguiente paso: $out"
 tt atencion revisar-facturas "Necesito el acceso al banco" >/dev/null || fail "(9) atencion fallo"
 out=$(tick) || fail "(9) el tick fallo: $out"
 printf '%s' "$out" | head -1 | grep -qx "corrida:revisar-facturas|SEND|inmediato" || fail "(9) atencion no sale de inmediato: $out"
 printf '%s' "$out" | grep -q "Necesito el acceso al banco" || fail "(9) el inmediato no trae el motivo: $out"
+printf '%s' "$out" | grep -qx "\[NECESITO TU RESPUESTA\] Revisar facturas de septiembre, 1 de 3 partes terminadas" \
+  || fail "(9) el inmediato no nombra el trabajo ni sus partes: $out"
 tt cerrar revisar-facturas "Facturas cuadradas" >/dev/null || fail "(9) cerrar fallo"
 out=$(tick) || fail "(9) el tick fallo: $out"
 [ "$(printf '%s' "$out" | head -1)" = "|NO_REPLY|" ] || fail "(9) cerrado y el tick lo sigue viendo: $out"
-echo "ok (9): el tick lo reporta abierto, pide a David con atencion y lo suelta al cerrar"
+echo "ok (9): el tick lo reporta con su titulo y sus partes, pide a David con atencion y lo suelta al cerrar"
 
 # (10) los comandos que la skill de claw le muestra funcionan tal cual, en orden.
 SK=agents/main/agent/workshop-skills/seguimiento-tablero/SKILL.md

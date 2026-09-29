@@ -1,6 +1,6 @@
 ---
 name: seguimiento-tablero
-description: Registra en el tablero un trabajo largo que David te encarga directo (por Telegram, sin prompt de Claude) para que el reloj avance-tareas le mande el [AVANZA] cada 30 minutos sin gastar tu turno. Usar antes de arrancar cualquier encargo de más de un paso o de más de ~30 min, o cualquier loop o corrida larga que lleves a mano; actualizarlo en cada paso real y cerrarlo al terminar.
+description: Úsala SIEMPRE que David te encargue directo (por Telegram, sin prompt de Claude) algo de más de un paso o de más de ~30 minutos, o cuando arranques a mano un loop o una corrida larga. Antes de empezar lo abres en el tablero, lo marcas en cada paso real y lo cierras al terminar; así el reloj avance-tareas le manda a David el [AVANZA] cada 30 minutos con el título y cuántas partes van, sin gastar tu turno.
 ---
 
 # Seguimiento en el tablero
@@ -30,7 +30,7 @@ Todo corre en la Mac: `exec` con `host="node"` y `node="David's MacBook Pro"`. E
    /Users/dn/bin/tablero-trabajo.sh paso migrar-correo 2 revision-cruzada "PR abierto, en revisión" --pr 231
    /Users/dn/bin/tablero-trabajo.sh paso migrar-correo 3 atorado "el registrador pide 2FA"
    ```
-   Estados: `pendiente` (no empieza), `implementando` (trabajando), `revision-cruzada` (en revisión), `en-cola` (lista para merge), `mergeado` (terminada), `atorado` (parada, di por qué), `omitido` (cancelada). Una parte que aparece a mitad de camino: `tablero-trabajo.sh agregar migrar-correo "Avisar a los contactos"`.
+   Estados: `pendiente` (no empieza), `implementando` (trabajando), `revision-cruzada` (en revisión), `en-cola` (lista para merge), `mergeado` (parte terminada: es la única que cuenta en "1 de 3 partes"), `atorado` (parada, di por qué), `omitido` (cancelada, sale de la cuenta). Una parte que aparece a mitad de camino: `tablero-trabajo.sh agregar migrar-correo "Avisar a los contactos"`.
 3. **Cuando necesitas a David**, dilo en el tablero; el reloj le manda `[NECESITO TU RESPUESTA]` en el siguiente tick. Cuando responde, suéltalo:
    ```bash
    /Users/dn/bin/tablero-trabajo.sh atencion migrar-correo "Necesito el código 2FA del registrador"

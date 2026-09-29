@@ -4,9 +4,11 @@
  * Los porcentajes salen de las unidades del plan que ya consume `plan.ts`,
  * nunca de estimaciones: solo `mergeado` cuenta como terminada. Un carril
  * `omitido` no entra en el denominador de la fase (sus tareas exclusivas se
- * excluyen); un carril `atorado` sí cuenta mientras no se omita. Lo que no se
- * puede verificar (`sin-verificar`, `ruta-no-encontrada`, `nulo`, unidad
- * `unknown` o tarea ausente del cruce) es `desconocido`, nunca 0%.
+ * excluyen); un carril `atorado` sí cuenta mientras no se omita. Un documento
+ * que no declara plan (`nulo`: los encargos directos de claw) cuenta sus
+ * carriles como partes. Un plan declarado que no se puede verificar
+ * (`sin-verificar`, `ruta-no-encontrada`, unidad `unknown` o tarea ausente
+ * del cruce) es `desconocido`, nunca 0% ni un conteo por carriles.
  *
  * Puro salvo `listarSeguimientoActivo`, que lee el stateDir existente y el
  * cruce acotado de `plan.ts`. No agrega otro directorio de estado. Los valores
@@ -43,6 +45,7 @@ export type ResumenSeguimiento = {
 };
 
 const SIN_VERIFICAR: PlanCruce = { kind: "sin-verificar", rotulo: "plan: sin verificar" };
+const NO_DECLARADO: PlanCruce = { kind: "nulo", rotulo: "plan: no declarado" };
 
 function esProgresoDoc(v: unknown): v is ProgresoDoc {
   return validarProgreso(v).ok;
@@ -69,6 +72,11 @@ function contarTareas(tareas: string[], items: Record<string, { estado: string }
   return { kind: "conocido", completadas, total: tareas.length, porcentaje: porcentajeDe(completadas, tareas.length) };
 }
 
+function contarPartes(carriles: ProgresoDoc["carriles"]): ConteoObjetivo {
+  const completadas = carriles.filter((c) => c.estado === "mergeado").length;
+  return { kind: "conocido", completadas, total: carriles.length, porcentaje: porcentajeDe(completadas, carriles.length) };
+}
+
 export function resumirSeguimiento(doc: ProgresoDoc, plan: PlanCruce): ResumenSeguimiento {
   const trabajoId = typeof doc.corrida === "string" && doc.corrida.length > 0
     ? `corrida:${doc.corrida}`
@@ -85,10 +93,13 @@ export function resumirSeguimiento(doc: ProgresoDoc, plan: PlanCruce): ResumenSe
     actualizado: doc.lead.actualizado,
   };
 
-  const carriles: ResumenCarril[] = (Array.isArray(doc.carriles) ? doc.carriles : []).map((c) => {
+  const lista = Array.isArray(doc.carriles) ? doc.carriles : [];
+  const carriles: ResumenCarril[] = lista.map((c) => {
     const progresoCarril: ConteoObjetivo = plan.kind === "cruzado"
       ? contarTareas(Array.isArray(c.tareas) ? c.tareas : [], plan.items)
-      : { kind: "desconocido", motivo: "plan-sin-verificar" };
+      : plan.kind === "nulo"
+        ? contarPartes([c])
+        : { kind: "desconocido", motivo: "plan-sin-verificar" };
     return {
       id: String(c.id),
       nombre: String(c.nombre),
@@ -103,7 +114,9 @@ export function resumirSeguimiento(doc: ProgresoDoc, plan: PlanCruce): ResumenSe
   });
 
   let progreso: ConteoObjetivo;
-  if (plan.kind !== "cruzado") {
+  if (plan.kind === "nulo") {
+    progreso = contarPartes(lista.filter((c) => c.estado !== "omitido"));
+  } else if (plan.kind !== "cruzado") {
     progreso = { kind: "desconocido", motivo: "plan-sin-verificar" };
   } else {
     // Denominador de fase: tareas distintas de carriles no omitidos. Una tarea
@@ -244,8 +257,9 @@ export async function listarSeguimientoActivo(
       continue;
     }
     if (crudoDoc.cierre.at !== null) continue;
-    let plan: PlanCruce = SIN_VERIFICAR;
+    let plan: PlanCruce = NO_DECLARADO;
     if (crudoDoc.plan !== undefined && crudoDoc.plan !== null) {
+      plan = SIN_VERIFICAR;
       try {
         const cruzado = await cruzarPlan(crudoDoc, { ghPath: cfgGithub.ghPath });
         if (cruzado !== undefined) plan = cruzado;

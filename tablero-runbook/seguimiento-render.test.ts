@@ -166,6 +166,31 @@ describe("renderSeguimientoV2", () => {
     assert.doesNotMatch(text, /0%/);
   });
 
+  it("a corrida is headed by its title and counts parts; a real phase keeps Fase N", () => {
+    const corrida: ResumenSeguimiento = {
+      ...fase14(),
+      trabajoId: "corrida:migrar-correo",
+      fase: "0",
+      titulo: "Migrar el correo",
+      progreso: { kind: "conocido", completadas: 1, total: 3, porcentaje: 33 },
+    };
+    const text = renderSeguimientoV2({ ...entradaEjemplo(), fases: [corrida, fase14()] });
+    assert.match(text, /^\[AVANZA\] Migrar el correo — 33% \(1\/3 partes\)$/m);
+    assert.match(text, /^\[AVANZA\] Fase 14 — 46% \(6\/13 tareas\)$/m);
+    assert.doesNotMatch(text, /Fase 0/);
+  });
+
+  it("a corrida whose title is not owner language falls back to a plain name", () => {
+    const corrida: ResumenSeguimiento = {
+      ...fase14(),
+      trabajoId: "corrida:arreglo",
+      fase: "0",
+      titulo: "Arreglar scripts/mac/foo.sh",
+    };
+    const text = renderSeguimientoV2({ ...entradaEjemplo(), fases: [corrida] });
+    assert.match(text, /^\[AVANZA\] Trabajo arreglo — 46% \(6\/13 partes\)$/m);
+  });
+
   it("emits owner language without paths, SHAs, PR numbers, flags or backticks", () => {
     const text = renderSeguimientoV2(entradaEjemplo());
     assert.doesNotMatch(text, /`/);

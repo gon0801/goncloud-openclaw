@@ -43,6 +43,11 @@ nada.
   fase grande no vuelca su tabla entera: quien arma el insumo pasa solo los
   carriles del corte.
 - Un plan no verificable se escribe `desconocido`, nunca `0%`.
+- Un trabajo sin plan declarado (un encargo directo que claw registra con
+  `tablero-trabajo.sh`) cuenta sus carriles como partes: cada carril no
+  omitido es una y está terminada cuando llega a `mergeado`. Una corrida se
+  nombra por su título (`[AVANZA] Migrar el correo — 33% (1/3 partes)`); una
+  fase real sigue siendo `Fase N`.
 - `Que cambió` compara contra el último reporte enviado, no contra el inicio
   de la fase.
 - `Que sigue` nombra la siguiente unidad verificable.

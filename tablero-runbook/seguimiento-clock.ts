@@ -18,7 +18,7 @@
  * Un `SEND` no expone un próximo estado de nombre general.
  */
 import type { ConteoObjetivo, ProblemaSeguimiento, ResumenSeguimiento } from "./seguimiento.ts";
-import { renderSeguimientoV2, sanearTextoPropietario, validarMensajeV1, type TareaSuelta } from "./seguimiento-render.ts";
+import { nombreTrabajo, renderSeguimientoV2, sanearTextoPropietario, validarMensajeV1, type TareaSuelta } from "./seguimiento-render.ts";
 
 export const SCHEMA_SEGUIMIENTO_CLOCK = "seguimiento-clock.v1";
 
@@ -160,9 +160,9 @@ function derivarCambio(
     if (r.progreso.kind === "desconocido") continue;
     const p = prev.get(r.trabajoId);
     if (p === undefined) {
-      lineas.push(`Fase ${r.fase} entró al seguimiento con ${r.progreso.completadas}/${r.progreso.total} tareas.`);
+      lineas.push(`${nombreTrabajo(r)} entró al seguimiento con ${r.progreso.completadas}/${r.progreso.total} tareas.`);
     } else if (p.c !== r.progreso.completadas || p.n !== r.progreso.total) {
-      lineas.push(`Fase ${r.fase} avanzó de ${p.c}/${p.n} a ${r.progreso.completadas}/${r.progreso.total}.`);
+      lineas.push(`${nombreTrabajo(r)} avanzó de ${p.c}/${p.n} a ${r.progreso.completadas}/${r.progreso.total}.`);
     }
   }
   return lineas.join(" ");
@@ -206,9 +206,11 @@ function textoAtencion(pendientes: AtencionPendiente[], activas: ResumenSeguimie
     const motivo = p.motivo !== null ? sanearTextoPropietario(p.motivo) : null;
     return motivo !== null ? puntuarFinal(motivo) : "Tienes una decisión pendiente.";
   }).join(" ");
+  const esCorrida = doc !== undefined && primera.trabajoId.startsWith("corrida:");
+  const quien = esCorrida ? nombreTrabajo(doc) : `La fase ${primera.fase}`;
   return [
-    `[NECESITO TU RESPUESTA] Corrida, ${avance}`,
-    `Que cambio: La fase ${primera.fase} llegó a una decisión que no está preaprobada.`,
+    `[NECESITO TU RESPUESTA] ${esCorrida ? nombreTrabajo(doc) : "Corrida"}, ${avance}`,
+    `Que cambio: ${quien} llegó a una decisión que no está preaprobada.`,
     "Que sigue: El trabajo espera tu respuesta antes de continuar.",
     `Que necesito de ti: ${necesita}`,
   ].join("\n");

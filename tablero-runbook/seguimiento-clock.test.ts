@@ -19,6 +19,7 @@ import {
   type EventoInmediato,
   type ProblemaSeguimiento,
 } from "./seguimiento-clock.ts";
+import { validarMensajeV1 } from "./seguimiento-render.ts";
 
 function resumen14(completadas: number, total: number, porcentaje: number): ResumenSeguimiento {
   return {
@@ -67,6 +68,16 @@ function resumen15(): ResumenSeguimiento {
     siguientePaso: "Cerrar el pendiente.",
     atencionRequerida: { necesaria: false, motivo: null },
     actualizado: "2026-09-19T10:30:00Z",
+  };
+}
+
+function resumenCorrida(completadas: number, titulo = "Migrar el correo"): ResumenSeguimiento {
+  const porcentaje = Math.round((100 * completadas) / 3);
+  return {
+    ...resumen14(completadas, 3, porcentaje),
+    trabajoId: "corrida:migrar-correo",
+    fase: "0",
+    titulo,
   };
 }
 
@@ -249,6 +260,40 @@ describe("decidirSeguimiento", () => {
     assert.equal(tercero.accion, "SEND");
     if (tercero.accion !== "SEND") throw new Error("tercer corte inesperado");
     assert.match(tercero.mensaje, /sigue en curso/);
+  });
+});
+
+describe("decidirSeguimiento con una corrida", () => {
+  it("names the corrida by its title in the advance, never as Fase 0", () => {
+    const primero = decidirSeguimiento({ ahora: 1800, previo: crearEstadoInicial(0, [resumenCorrida(0)]), activas: [resumenCorrida(0)], inmediato: null });
+    if (primero.accion !== "SEND") throw new Error("primer corte inesperado");
+    const segundo = decidirSeguimiento({
+      ahora: 3600, previo: confirmado(primero.estadoTrasConfirmar, 7), activas: [resumenCorrida(1)], inmediato: null,
+    });
+    if (segundo.accion !== "SEND") throw new Error("segundo corte inesperado");
+    assert.match(segundo.mensaje, /Migrar el correo avanzó de 0\/3 a 1\/3\./);
+    assert.doesNotMatch(segundo.mensaje, /Fase 0/);
+  });
+
+  it("an attention request names the corrida and its parts and stays valid v1", () => {
+    const activas = [{ ...resumenCorrida(1), atencionRequerida: { necesaria: true, motivo: "Necesito el código del banco" } }];
+    const d = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
+    if (d.accion !== "SEND") throw new Error("atencion inesperada");
+    assert.equal(d.mensaje, [
+      "[NECESITO TU RESPUESTA] Migrar el correo, 1 de 3 partes terminadas",
+      "Que cambio: Migrar el correo llegó a una decisión que no está preaprobada.",
+      "Que sigue: El trabajo espera tu respuesta antes de continuar.",
+      "Que necesito de ti: Necesito el código del banco.",
+    ].join("\n"));
+    assert.equal(validarMensajeV1(d.mensaje).ok, true);
+  });
+
+  it("a title that is not owner language falls back and the attention still validates", () => {
+    const activas = [{ ...resumenCorrida(1, "Arreglar el merge del repo"), atencionRequerida: { necesaria: true, motivo: null } }];
+    const d = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
+    if (d.accion !== "SEND") throw new Error("atencion inesperada");
+    assert.match(d.mensaje, /^Que cambio: Trabajo migrar-correo llegó a una decisión/m);
+    assert.equal(validarMensajeV1(d.mensaje).ok, true);
   });
 });
 

@@ -192,6 +192,17 @@ function bloqueContable(b: BloqueContable): string {
   return `${b.nombre} — ${fraccion(b.progreso)}\n${b.detalle}`;
 }
 
+/**
+ * Cómo se le nombra un trabajo a David: una fase por su número, una corrida
+ * por su título. Un título con jerga cae a su id, y un id con jerga a una
+ * frase fija: el nombre entra al cuerpo de los mensajes, que no la admite.
+ */
+export function nombreTrabajo(r: Pick<ResumenSeguimiento, "trabajoId" | "fase" | "titulo">): string {
+  if (!r.trabajoId.startsWith("corrida:")) return `Fase ${r.fase}`;
+  const id = r.trabajoId.slice("corrida:".length);
+  return sanearTextoPropietario(r.titulo) ?? (sanearTextoPropietario(id) !== null ? `Trabajo ${id}` : "Trabajo en curso");
+}
+
 function nombreSano(nombre: string, id: string, indice: number, clase: string): string {
   return sanearTextoPropietario(nombre)
     ?? (sanearTextoPropietario(id) ? `${clase} ${id}` : `${clase} ${indice + 1}`);
@@ -262,9 +273,10 @@ export function renderSeguimientoV2(input: EntradaSeguimientoV2): string {
   const partes: string[] = [];
   for (const fase of input.fases) {
     const p = fase.progreso;
+    const unidad = fase.trabajoId.startsWith("corrida:") ? "partes" : "tareas";
     const encabezado = p.kind === "desconocido"
-      ? `[AVANZA] Fase ${fase.fase} — desconocido`
-      : `[AVANZA] Fase ${fase.fase} — ${p.porcentaje}% (${p.completadas}/${p.total} tareas)`;
+      ? `[AVANZA] ${nombreTrabajo(fase)} — desconocido`
+      : `[AVANZA] ${nombreTrabajo(fase)} — ${p.porcentaje}% (${p.completadas}/${p.total} ${unidad})`;
     partes.push(encabezado);
     fase.carriles.filter((c) => c.estado !== "omitido").forEach((c, i) => {
       partes.push(bloqueContable({
