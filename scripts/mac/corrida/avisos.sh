@@ -223,24 +223,26 @@ avisos_atender() {
 
 avisos_despertar() {
   [ "${CORRIDA_AVISOS:-1}" = "0" ] && return 0
-  if [ "$#" -ne 1 ]; then
-    echo "uso: corrida.sh avisos despertar <corrida>" >&2
-    return 2
-  fi
-  local corrida="$1" reg dir f hay=""
-  corrida_id_valido "$corrida" || return 0
-  reg="$(registro_de "$corrida")"
-  [ -f "$reg" ] || return 0
-  [ "$(json_campo "$reg" estado)" = "abierta" ] || return 0
-  dir="$CORRIDA_STATE/$corrida/avisos"
-  [ -d "$dir" ] || return 0
-  for f in "$dir"/*.json; do
-    [ -f "$f" ] || { continue; }
-    hay=1
-    break
+  [ "$#" -ge 1 ] || { echo "uso: corrida.sh avisos despertar <corrida> [corrida ...]" >&2; return 2; }
+  # Varios ids en UNA invocacion: el reintento del vigia corre una vez por tick
+  # y un spawn de corrida.sh por pendiente retrasaba el tick entero.
+  local corrida reg dir f hay
+  for corrida in "$@"; do
+    corrida_id_valido "$corrida" || continue
+    reg="$(registro_de "$corrida")"
+    [ -f "$reg" ] || continue
+    [ "$(json_campo "$reg" estado)" = "abierta" ] || continue
+    dir="$CORRIDA_STATE/$corrida/avisos"
+    [ -d "$dir" ] || continue
+    hay=""
+    for f in "$dir"/*.json; do
+      [ -f "$f" ] || { continue; }
+      hay=1
+      break
+    done
+    [ -n "$hay" ] || continue
+    avisos_despertar_dueno "$corrida" "$reg"
   done
-  [ -n "$hay" ] || return 0
-  avisos_despertar_dueno "$corrida" "$reg"
   return 0
 }
 

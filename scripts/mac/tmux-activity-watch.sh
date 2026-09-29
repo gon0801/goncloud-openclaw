@@ -136,6 +136,11 @@ CORRIDA_BIN=${CORRIDA_BIN:-$HOME/bin/corrida.sh}
 CORRIDA_STATE=${CORRIDA_STATE:-$HOME/.local/state/corridas}
 AVISOS_REINTENTO_SECS=${AVISOS_REINTENTO_SECS:-30}
 AVISOS_REINTENTO_TOPE=5
+# Tope de reloj de las llamadas a corrida.sh avisos (emitir y despertar): un
+# tick no puede quedarse colgado tras ellas (mismo criterio que responder y
+# relanzo); vencido el tope la senal queda como no entregada y el siguiente
+# tick reintenta.
+AVISOS_TOPE=${AVISOS_TOPE:-15}
 RELANZO_DIR="$STATE_DIR/relanzos"
 RELANZO_TOPE=60
 LATIDO_SECS=${LATIDO_SECS:-300}
@@ -214,25 +219,31 @@ send_event() {
   # retries. The watcher itself never dies from a failed send.
   if "$OPENCLAW_BIN" system event --mode now --timeout 15000 "${key_args[@]+"${key_args[@]}"}" --text "$text" >>"$LOG_FILE" 2>&1; then
     log "sent: $text"
-    # Carril P (9.6): todo evento enviado queda tambien en $STATE_DIR/eventos.jsonl
-    # (t epoch + texto tal cual, escapado por python): es lo que un vigia puede
-    # leer sin pasar por el gateway. BRIEF-r2 QE: serializacion y append se
-    # comprueban por separado — jamas queda una linea vacia o a medias — y un
-    # fallo del journal se loguea pero NO toca el estado de notificacion del
-    # llamador (el evento ya viajo).
-    local jline
-    jline=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$text" 2>/dev/null) || jline=""
-    if [[ -n $jline ]]; then
-      if ! printf '{"t":%s,"evento":%s}\n' "$(date +%s)" "$jline" >>"$STATE_DIR/eventos.jsonl" 2>/dev/null; then
-        log "journal append failed (event delivered but not recorded): $text"
-      fi
-    else
-      log "journal serialize failed (event delivered but not recorded): $text"
-    fi
+    journal_evento "$text"
     return 0
   else
     log "SEND FAILED (will retry next tick): $text"
     return 1
+  fi
+}
+
+# Carril P (9.6): toda senal entregada queda tambien en $STATE_DIR/eventos.jsonl
+# (t epoch + texto tal cual, escapado por python): es lo que un vigia puede
+# leer sin pasar por el gateway. BRIEF-r2 QE: serializacion y append se
+# comprueban por separado — jamas queda una linea vacia o a medias — y un
+# fallo del journal se loguea pero NO toca el estado de notificacion del
+# llamador (la senal ya viajo). La ruta de avisos (19.1 B2) la usa igual: el
+# pendiente durable y el diario local no se excluyen (contrato del simulacro
+# 9.9 casos 5/6).
+journal_evento() { # $1 text
+  local jline
+  jline=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1" 2>/dev/null) || jline=""
+  if [[ -n $jline ]]; then
+    if ! printf '{"t":%s,"evento":%s}\n' "$(date +%s)" "$jline" >>"$STATE_DIR/eventos.jsonl" 2>/dev/null; then
+      log "journal append failed (event delivered but not recorded): $1"
+    fi
+  else
+    log "journal serialize failed (event delivered but not recorded): $1"
   fi
 }
 
@@ -242,9 +253,11 @@ send_event() {
 #       el llamador hace lo de siempre (send_event).
 #   2 = ruta tomada y el emitir fallo: sin evento y sin marcar; el siguiente
 #       tick reintenta (igual que un envio fallido).
-aviso_dueno() { # $1 run $2 sesion $3 tipo $4 llave
+aviso_dueno() { # $1 run $2 sesion $3 tipo $4 llave $5 text
   [[ -n $1 && -x $CORRIDA_BIN && ${CORRIDA_AVISOS:-1} != 0 ]] || return 1
-  "$CORRIDA_BIN" avisos emitir "$1" "$2" "$3" --llave "$4" >>"$LOG_FILE" 2>&1 || return 2
+  perl -e 'alarm shift; exec(@ARGV) or exit 127' "$AVISOS_TOPE" \
+    "$CORRIDA_BIN" avisos emitir "$1" "$2" "$3" --llave "$4" >>"$LOG_FILE" 2>&1 || return 2
+  journal_evento "$5"
   return 0
 }
 
@@ -421,6 +434,7 @@ tick() {
   local prev_approval prev_approval_at prev_approval_since screen hash since notified tailtxt
   local approval approval_at approval_since due elapsed text last_path rc prev_notified_at notified_at
   local run prev_run sufijo rc_av llave_av
+  local tick_t0=$(date +%s)
   seen_file=$(mktemp "${TMPDIR:-/tmp}/tmux-activity-watch.seen.XXXXXX")
   err_file=$(mktemp "${TMPDIR:-/tmp}/tmux-activity-watch.err.XXXXXX")
 
@@ -534,7 +548,8 @@ tick() {
         # cambia las lineas que casan y da llave nueva.
         llave_av=$(printf '%s\n' "$tailtxt" | grep -Ei -- "$APPROVAL_RE" | sum_of)
         rc_av=0
-        aviso_dueno "$run" "$session" aprobacion "$llave_av" || rc_av=$?
+        text="tmux: $session waiting for approval for $((now - approval_since))s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"
+        aviso_dueno "$run" "$session" aprobacion "$llave_av" "$text" || rc_av=$?
         if [[ $rc_av == 0 ]]; then
           approval_at=$now
         elif [[ $rc_av == 2 ]]; then
@@ -567,7 +582,8 @@ tick() {
     fi
     if [[ $due == 1 ]]; then
       rc_av=0
-      aviso_dueno "$run" "$session" fin-turno "$hash" || rc_av=$?
+      text="tmux: $session quiet for ${elapsed}s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"
+      aviso_dueno "$run" "$session" fin-turno "$hash" "$text" || rc_av=$?
       if [[ $rc_av == 0 ]]; then
         notified=1
         notified_at=$now
@@ -600,7 +616,8 @@ tick() {
         [[ -z $sufijo ]] || printf 'relanzo=%s\n' "$sufijo" >>"$sf"
       fi
       rc_av=0
-      aviso_dueno "$run" "$session" cierre closed || rc_av=$?
+      text="tmux: $session closed | last cwd=$last_path$sufijo"
+      aviso_dueno "$run" "$session" cierre closed "$text" || rc_av=$?
       if [[ $rc_av == 0 ]]; then
         rm -f "$sf"
       elif [[ $rc_av == 2 ]]; then
@@ -615,6 +632,8 @@ tick() {
   done
 
   rm -f "$seen_file"
+  local tick_duracion=$(( $(date +%s) - tick_t0 ))
+  [ "$tick_duracion" -le "$TICK_SECS" ] || log "tick lento: ${tick_duracion}s (TICK_SECS=$TICK_SECS)"
 
   # 19.1 B2: reintento del despertar para pendientes de avisos viejos (una vez
   # por tick; el vigilante ya ES el reloj, no hay cron nuevo).
@@ -626,11 +645,22 @@ tick() {
 # que no aterrizaron (dueno ocupado en un dialogo, lead inexistente al emitir).
 # El pendiente no se toca aqui: despertar solo reintenta las teclas.
 avisos_reintento_tick() {
-  local d f corrida mt edad n=0
+  local d f corrida mt edad ids="" n=0
   [[ ${CORRIDA_AVISOS:-1} != 0 && -x $CORRIDA_BIN && -d $CORRIDA_STATE ]] || return 0
+  # Escaneo sin spawns (stat por archivo); UNA invocacion con hasta
+  # AVISOS_REINTENTO_TOPE corridas: un corrida.sh por pendiente retrasaba el
+  # tick entero y tiraba la ventana de relanzo del simulacro (19.1-r2).
   for d in "$CORRIDA_STATE"/*/avisos; do
     [[ -d $d ]] || continue
     [[ $n -lt $AVISOS_REINTENTO_TOPE ]] || break
+    # Retroceso por corrida (19.1-r2): un sello fresco frena el despertar; sin
+    # el, cada tick re-tecleaba al lead y colapsaba la ventana de relanzo del
+    # simulacro.
+    sello="$d/.despertado"
+    if [[ -f $sello ]]; then
+      mt=$(stat -c %Y "$sello" 2>/dev/null || stat -f %m "$sello" 2>/dev/null) || mt=""
+      [[ $mt =~ ^[0-9]+$ ]] && (( $(date +%s) - mt < AVISOS_REINTENTO_SECS )) && continue
+    fi
     corrida=$(basename "$(dirname "$d")")
     for f in "$d"/*.json; do
       [[ -f $f ]] || continue
@@ -639,14 +669,19 @@ avisos_reintento_tick() {
       [[ $mt =~ ^[0-9]+$ ]] || continue
       edad=$(( $(date +%s) - mt ))
       if [[ $edad -ge $AVISOS_REINTENTO_SECS ]]; then
-        if ! "$CORRIDA_BIN" avisos despertar "$corrida" >>"$LOG_FILE" 2>&1; then
-          log "avisos despertar fallo (corrida $corrida)"
-        fi
+        ids="${ids:+$ids }$corrida"
         n=$((n + 1))
         break
       fi
     done
   done
+  if [[ -n $ids ]]; then
+    if ! perl -e 'alarm shift; exec(@ARGV) or exit 127' "$AVISOS_TOPE" \
+      "$CORRIDA_BIN" avisos despertar ${ids+"$ids"} >>"$LOG_FILE" 2>&1; then
+      log "avisos despertar fallo (corridas: $ids)"
+    fi
+    for corrida in $ids; do touch "$CORRIDA_STATE/$corrida/avisos/.despertado" 2>/dev/null || true; done
+  fi
   return 0
 }
 

@@ -541,7 +541,10 @@ arrancar || { RAZONES="
 # APTO, se limpia igual que un prerrequisito fallido y se sale NO APTO —
 # ningun caso ni sesion del simulacro llego a lanzarse (ver nota de diseno
 # arriba).
-PF_SALIDA="$(CORRIDA_WORKERS_REGISTRY="$DIR_SIM/workers.v1.json" "$CORRIDA_BIN" preflight "$SIM_ID" 2>&1)"
+# El preflight compara el vigia instalado contra una ref git: sin este export
+# compararia contra origin/<default>, que en un PR que TOCA el vigia difiere
+# del checkout y da NO APTO "vigilante viejo" (19.1-r2, CI del PR #226).
+PF_SALIDA="$(CORRIDA_PREFLIGHT_REF=HEAD CORRIDA_WORKERS_REGISTRY="$DIR_SIM/workers.v1.json" "$CORRIDA_BIN" preflight "$SIM_ID" 2>&1)"
 if ! printf '%s\n' "$PF_SALIDA" | head -1 | grep -q '^APTO'; then
   RAZONES="
 - corrida.sh preflight no dio APTO:
@@ -1307,7 +1310,12 @@ generar_evidencia() {
 TOTAL_FUNCIONA=0
 for _n in 1 2 3 4 5 6 7; do
   leer_caso "$_n"
-  [ "$CASO_RESULTADO" = "FUNCIONA" ] && TOTAL_FUNCIONA=$((TOTAL_FUNCIONA+1))
+  # La variante con observacion real ("FUNCIONA (observado real: ...)", opcion A
+  # de David) tambien es un FUNCIONA: en un host con el cron avance-tareas real
+  # vivo, los casos 4 y 7 salen anotados y el conteo exacto los tiraba (19.1-r2).
+  case "$CASO_RESULTADO" in
+    FUNCIONA*) TOTAL_FUNCIONA=$((TOTAL_FUNCIONA+1));;
+  esac
 done
 
 generar_evidencia

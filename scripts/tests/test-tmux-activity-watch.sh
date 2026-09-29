@@ -1144,8 +1144,10 @@ for p in sys.argv[1:]: os.utime(p,(t,t))' \
   "$CORRIDA_STATE/sim9-RT1/avisos/a.json" "$CORRIDA_STATE/sim9-RT2/avisos/a.json"
 : >"$AARGV"
 run_av || fail "--once (2q-4, reintento) fallo"
-[ "$(grep -c '^avisos despertar sim9-RT1$' "$AARGV")" -eq 1 ] || fail "(2q-4) falta el despertar de sim9-RT1: $(cat "$AARGV")"
-[ "$(grep -c '^avisos despertar sim9-RT2$' "$AARGV")" -eq 1 ] || fail "(2q-4) falta el despertar de sim9-RT2: $(cat "$AARGV")"
+# Una sola invocacion por tick con TODOS los ids (19.1-r2): un spawn de
+# corrida.sh por pendiente retrasaba el tick y tiraba la ventana de relanzo
+# del simulacro (SIM_ESPERA_DOBLE=6).
+[ "$(grep -c '^avisos despertar sim9-RT1 sim9-RT2$' "$AARGV")" -eq 1 ] || fail "(2q-4) falta el despertar en una sola llamada de RT1 y RT2: $(cat "$AARGV")"
 grep -q 'despertar sim9-FRESCO' "$AARGV" && fail "(2q-4) un pendiente fresco no debe despertarse: $(cat "$AARGV")"
 [ -f "$CORRIDA_STATE/sim9-RT1/avisos/a.json" ] || fail "(2q-4) el despertar no debe consumir el pendiente"
 i=0
@@ -1157,8 +1159,10 @@ while [ "$i" -lt 7 ]; do
 done
 : >"$AARGV"
 run_av || fail "--once (2q-4, tope) fallo"
-n=$(grep -c '^avisos despertar sim9-' "$AARGV")
-[ "$n" -eq 5 ] || fail "(2q-4) el tope de 5 corridas por tick no se respetó (hubo $n): $(cat "$AARGV")"
+n=$(grep -c '^avisos despertar ' "$AARGV")
+[ "$n" -eq 1 ] || fail "(2q-4) el reintento debe ser UNA llamada por tick (hubo $n): $(cat "$AARGV")"
+ids=$(grep '^avisos despertar ' "$AARGV" | head -1 | wc -w | tr -d ' ')
+[ "$ids" -eq 7 ] || fail "(2q-4) el tope de 5 corridas por tick no se respeto (ids en la llamada: $((ids - 2)), tope 5): $(cat "$AARGV")"
 rm -rf "$CORRIDA_STATE"/sim9-RT1 "$CORRIDA_STATE"/sim9-RT2 "$CORRIDA_STATE"/sim9-FRESCO "$CORRIDA_STATE"/sim9-TOPE*
 echo "ok (2q-4): los pendientes de mas de 30 s despiertan una vez por tick, con tope de 5 corridas y sin consumirse"
 
@@ -1218,6 +1222,53 @@ grep -q -- '--encargo' "$RARGV" && fail "(2q-5) se invento un encargo que no est
 "$TM" -L "$L" kill-session -t sim9-sinenc 2>/dev/null
 run_re >/dev/null 2>&1 || true
 echo "ok (2q-5): el relanzo re-entrega el --encargo registrado y sin encargo queda igual que siempre"
+
+# (2q-7) diario local (contrato del simulacro 5/6): con la ruta de avisos, la
+# senal SIGUE quedando en eventos.jsonl del vigia: es lo que un vigia lee sin
+# pasar por el gateway, y los casos 5/6 del simulacro 9.9 la assertan.
+"$TM" -L "$L" new-session -d -s sim9-avj -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avj"
+mark sim9-avj
+"$TM" -L "$L" set-environment -t sim9-avj OPENCLAW_WATCH_RUN sim9-AVJ
+sleep 2
+run_av || fail "--once (2q-7, quiet con avisos) fallo"
+grep -qF "sim9-avj quiet" "$STATE_DIR/eventos.jsonl" 2>/dev/null \
+  || fail "(2q-7) la ruta de avisos debe anotar la senal en eventos.jsonl: $(cat "$STATE_DIR/eventos.jsonl" 2>/dev/null | tail -2)"
+echo "ok (2q-7): la ruta de avisos journaliza la senal en eventos.jsonl"
+
+# (2q-8) tope de reloj: un corrida.sh colgado en avisos emitir NO puede
+# colgar el tick (19.1-r2, simulacro etapa 8): el vigia reintenta en el
+# siguiente tick y sigue vivo.
+CORRIDA_CUELGA="$T/corrida-cuelga"
+printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then sleep 45; fi\nexit 0\n' > "$CORRIDA_CUELGA"
+chmod +x "$CORRIDA_CUELGA"
+"$TM" -L "$L" new-session -d -s sim9-avh -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avh"
+mark sim9-avh
+"$TM" -L "$L" set-environment -t sim9-avh OPENCLAW_WATCH_RUN sim9-AVH
+sleep 2
+inicio8=$(date +%s)
+export AVISOS_TOPE=3
+CORRIDA_BIN="$CORRIDA_CUELGA" run_once || fail "--once (2q-8, emitir colgado) fallo"
+unset AVISOS_TOPE
+duracion8=$(( $(date +%s) - inicio8 ))
+[ "$duracion8" -lt 20 ] || fail "(2q-8) el tick quedo colgado ${duracion8}s en el emitir (tope 3s)"
+run_av || fail "(2q-8) el vigia no sobrevivio al tick colgado"
+echo "ok (2q-8): el emitir colgado no cuelga el tick (tope de reloj y reintento)"
+
+# (2q-9) retroceso del despertar: un pendiente viejo despierta UNA vez; mientras
+# el sello del despertar sea fresco, los ticks siguientes no repiten teclas
+# (19.1-r2: despertar cada tick colapsaba la ventana de relanzo del simulacro).
+mkdir -p "$CORRIDA_STATE/sim9-BK1/avisos"
+printf '{"schema":"corrida-aviso.v1"}\n' >"$CORRIDA_STATE/sim9-BK1/avisos/a.json"
+python3 -c 'import os,sys,time; t=time.time()-31; os.utime(sys.argv[1],(t,t))' \
+  "$CORRIDA_STATE/sim9-BK1/avisos/a.json"
+: >"$AARGV"
+run_av || fail "--once (2q-9, primer despertar) fallo"
+[ "$(grep -c '^avisos despertar sim9-BK1$' "$AARGV")" -eq 1 ] || fail "(2q-9) falta el primer despertar de sim9-BK1: $(cat "$AARGV")"
+: >"$AARGV"
+run_av || fail "--once (2q-9, segundo tick) fallo"
+grep -q 'despertar sim9-BK1' "$AARGV" \
+  && fail "(2q-9) el sello fresco debia frenar el segundo despertar: $(cat "$AARGV")"
+echo "ok (2q-9): el despertar respeta el sello de retroceso por corrida"
 else
   echo "SKIP (2q): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
 fi

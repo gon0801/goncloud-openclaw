@@ -41,7 +41,9 @@ consumidores concurrentes no duplican.
    diálogo de aprobación (dueño ocupado: el pendiente espera). El vigilante
    reintenta una vez por tick, con tope de 5 corridas y pendientes de más de
    30 s (`avisos despertar`): el tick existente es el único reloj de
-   reintento.
+   reintento. La señal entregada por la ruta de avisos sigue anotándose en
+   `eventos.jsonl` del vigilante (el diario local que un vigía lee sin pasar
+   por el gateway): pendiente durable y diario no se excluyen.
 3. **Atender** (`corrida.sh avisos atender <corrida>`): lo corre el dueño
    (lead de la corrida), nunca un hook ni el vigilante en paralelo. Reclama
    los pendientes por rename, revalida bajo lock (corrida abierta, sesiones
