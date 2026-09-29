@@ -744,6 +744,15 @@ corrida_encabezado() {
 # lleva: el prefijo de corrida que trae pref ya lo dice). Las negritas viven
 # dentro de cada linea, jamas en los prefijos ni en los marcadores que
 # mensaje_valido revisa: el texto que emite pasa el validador tal cual.
+# negrita <texto>: **texto** sin los ** que ya traiga (anidados rompen el
+# formato); vacio queda vacio, asi el validador sigue rechazando un campo sin
+# contenido en vez de ver "****" (14.27 R3).
+negrita() {
+  local v="${1//\*\*/}"
+  [ -n "$v" ] && printf '**%s**' "$v"
+  return 0
+}
+
 aviso_cuerpo() {
   local pref="$1" etq="$2" enc="$3" avance="$4" cambio="$5" sigue="$6" necesito="$7"
   local emoji=""
@@ -755,17 +764,17 @@ aviso_cuerpo() {
   esac
   local linea1="${pref}${emoji}[$etq] $enc"
   if [ -n "$avance" ]; then
-    linea1="$linea1, **$avance**"
+    linea1="$linea1, $(negrita "$avance")"
   fi
   local necesito_txt="$necesito"
   if [ "$etq" = "NECESITO TU RESPUESTA" ]; then
     case "$necesito" in
-      *" Comando: "*) necesito_txt="**${necesito%% Comando: *}** Comando: ${necesito#* Comando: }" ;;
-      *) necesito_txt="**$necesito**" ;;
+      *" Comando: "*) necesito_txt="$(negrita "${necesito%% Comando: *}") Comando: ${necesito#* Comando: }" ;;
+      *) necesito_txt="$(negrita "$necesito")" ;;
     esac
   fi
-  printf '%s\n\nQué cambió: **%s**\n\nQué sigue: %s\n\nQué necesito de ti: %s\n' \
-    "$linea1" "$cambio" "$sigue" "$necesito_txt"
+  printf '%s\n\nQué cambió: %s\n\nQué sigue: %s\n\nQué necesito de ti: %s\n' \
+    "$linea1" "$(negrita "$cambio")" "$sigue" "$necesito_txt"
 }
 
 tsv_fila() { # $1 tsv, $2 cli -> "binario|flag|barra" (vacio si no hay fila)

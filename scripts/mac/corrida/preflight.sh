@@ -40,7 +40,14 @@ corrida_preflight() {
   # alimenta el aviso DETENIDA, unida en una sola linea.
   razon() { razones="$razones
 - $1"; razon_usuario "${2:-$1}"; }
-  razon_usuario() { razones_usuario="${razones_usuario:+$razones_usuario, }$1"; }
+  # Cada razon pasa sola por jerga_en_texto (14.27 R4): una con jerga queda
+  # fuera del aviso sin arrastrar a las limpias a la frase generica.
+  razon_usuario() {
+    local f; f="$(mktemp)" 2>/dev/null || return 0
+    printf '%s' "$1" > "$f"
+    jerga_en_texto "$f" || razones_usuario="${razones_usuario:+$razones_usuario, }$1"
+    rm -f "$f"
+  }
   unknown() { unknowns="$unknowns
 - $1"; }
 

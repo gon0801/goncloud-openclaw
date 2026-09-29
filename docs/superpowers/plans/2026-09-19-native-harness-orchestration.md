@@ -313,7 +313,7 @@ git commit -m "feat: select native workers deterministically"
 - [ ] **Step 1: Write a table-driven failing contract test for all six workers**
 
 ```bash
-for worker in claude codex zcode kimi cursor grok; do
+for worker in claude_fable claude_opus codex zcode kimi_k3 kimi_coding cursor grok; do
   got=$(FAKE_HARNESS_MODE=complete bash scripts/mac/corrida.sh adaptador inspect run-1 lane-1 "$worker" "ses-$worker")
   [ "$got" = complete ] || fail "$worker inspect: $got"
 done
