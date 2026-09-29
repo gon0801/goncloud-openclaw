@@ -225,4 +225,92 @@ grep -q 'send-keys -t =lead-main: -l -- corrida.sh avisos atender t10' "$TECLAS"
 [ "$(n_pend t10)" -eq 1 ] || fail "(j) despertar no debe reescribir ni consumir pendientes"
 echo "ok (j): despertar reintenta el despertar del lead sin tocar los pendientes"
 
-echo "TODO VERDE: test-corrida-avisos (U1)"
+# (k) El Stop hook con identidad de corrida (19.1 U3). Invocacion con env y
+# dobles propios: nunca se ejecuta el hook instalado de nadie ni el openclaw real.
+H=scripts/mac/claude-stop-openclaw-event.sh
+if [ -f "$H" ]; then
+  /bin/bash -n "$H" || fail "(k) $H no parsea con /bin/bash"
+  HOOK_T="$T/hook"; mkdir -p "$HOOK_T"
+  TRANSCRIPT="$HOOK_T/transcript.jsonl"
+  printf '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"listo"}]}}\n' >"$TRANSCRIPT"
+  MTIME=$(python3 -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))' "$TRANSCRIPT")
+  HOOK_JSON=$(python3 -c "
+import json
+print(json.dumps({'cwd': '/tmp/hook', 'session_id': 'abc123', 'transcript_path': '$TRANSCRIPT', 'hook_event_name': 'Stop', 'stop_hook_active': False}))
+")
+  OCALLS="$T/hook-openclaw.log"; : >"$OCALLS"
+  STUB_OC="$T/openclaw-stub"
+  cat >"$STUB_OC" <<STUB
+#!/bin/sh
+printf '%s\n' "\$*" >> "$OCALLS"
+STUB
+  chmod +x "$STUB_OC"
+  HCALLS="$T/hook-corrida.log"; : >"$HCALLS"
+  STUB_HC="$T/corrida-stub"
+  cat >"$STUB_HC" <<STUB
+#!/bin/sh
+printf '%s\n' "\$*" >> "$HCALLS"
+exit 0
+STUB
+  chmod +x "$STUB_HC"
+  RUN_FILE="$T/hook-run"; : >"$RUN_FILE"
+  MARK_FILE="$T/hook-mark"; echo 1 >"$MARK_FILE"
+  DISPLAY_STUB="$T/tmux-display-stub"
+  cat >"$DISPLAY_STUB" <<STUB
+#!/bin/sh
+if [ "\$1" = "display-message" ]; then echo "claude-orbit"; exit 0; fi
+if [ "\$2" = "OPENCLAW_WATCH" ]; then
+  if [ "\$(cat "$MARK_FILE")" = "1" ]; then echo "OPENCLAW_WATCH=1"; exit 0; fi
+  echo "unknown variable: OPENCLAW_WATCH" >&2; exit 1
+fi
+if [ "\$2" = "OPENCLAW_WATCH_RUN" ]; then
+  r=\$(cat "$RUN_FILE")
+  if [ -n "\$r" ]; then echo "OPENCLAW_WATCH_RUN=\$r"; exit 0; fi
+  echo "unknown variable: OPENCLAW_WATCH_RUN" >&2; exit 1
+fi
+exit 0
+STUB
+  chmod +x "$DISPLAY_STUB"
+  hook_run() {
+    TMUX=fake TMUX_BIN="$DISPLAY_STUB" OPENCLAW_BIN="$STUB_OC" CORRIDA_BIN="$STUB_HC" \
+      bash -c "printf '%s' '$HOOK_JSON' | bash '$H'; echo \$?" | tail -1
+  }
+  espera_log() { # $1 archivo, $2 lineas esperadas
+    local i=0
+    while [ "$(wc -l <"$1" | tr -d ' ')" -lt "$2" ] && [ "$i" -lt 50 ]; do
+      sleep 0.1; i=$((i + 1))
+    done
+  }
+
+  echo "sim9-HOOK" >"$RUN_FILE"
+  rc=$(hook_run)
+  [ "$rc" = "0" ] || fail "(k) el hook con run debio salir 0, salio $rc"
+  espera_log "$HCALLS" 1
+  grep -q "^avisos emitir sim9-HOOK claude-orbit fin-turno --llave $MTIME\$" "$HCALLS" \
+    || fail "(k) el hook con run no mando el aviso fin-turno con la llave del mtime: $(cat "$HCALLS")"
+  [ "$(wc -l <"$OCALLS" | tr -d ' ')" -eq 0 ] || fail "(k) el hook con run NO debia mandar el evento: $(cat "$OCALLS")"
+  echo "ok (k-con-run): el hook de una corrida manda avisos emitir con la llave del mtime y nada a vigia-mac"
+
+  : >"$HCALLS"; : >"$OCALLS"; : >"$RUN_FILE"
+  rc=$(hook_run)
+  [ "$rc" = "0" ] || fail "(k) el hook sin run debio salir 0, salio $rc"
+  espera_log "$OCALLS" 1
+  grep -q -- '--session-key agent:main:vigia-mac' "$OCALLS" \
+    || fail "(k) sin run el hook debia mandar a agent:main:vigia-mac: $(cat "$OCALLS")"
+  grep -q 'claude-orbit' "$OCALLS" || fail "(k) el evento sin run perdio la sesion: $(cat "$OCALLS")"
+  [ "$(wc -l <"$HCALLS" | tr -d ' ')" -eq 0 ] || fail "(k) sin run no debia llamarse a corrida.sh: $(cat "$HCALLS")"
+  echo "ok (k-sin-run): sin corrida la llamada del hook es identica a la de siempre"
+
+  echo "sim9-HOOK" >"$RUN_FILE"; : >"$HCALLS"; : >"$OCALLS"
+  rc=$(CORRIDA_AVISOS=0 hook_run)
+  [ "$rc" = "0" ] || fail "(k) el hook con la reversa debio salir 0, salio $rc"
+  espera_log "$OCALLS" 1
+  grep -q -- '--session-key agent:main:vigia-mac' "$OCALLS" \
+    || fail "(k) con CORRIDA_AVISOS=0 el evento debia salir como hoy: $(cat "$OCALLS")"
+  [ "$(wc -l <"$HCALLS" | tr -d ' ')" -eq 0 ] || fail "(k) la reversa no debia llamar a corrida.sh: $(cat "$HCALLS")"
+  echo "ok (k-reversa): CORRIDA_AVISOS=0 devuelve el hook a la ruta de vigia-mac"
+else
+  echo "SKIP (k): falta $H"
+fi
+
+echo "TODO VERDE: test-corrida-avisos (U1 + U3 hook)"
