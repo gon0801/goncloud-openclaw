@@ -34,6 +34,13 @@ export const SCHEMA_SEGUIMIENTO_CLOCK = "seguimiento-clock.v1";
  */
 export const VENTANA_REPORTE_SECS = 1500;
 
+/**
+ * Un documento cuyo `actualizado` tiene más de un día sale del reporte
+ * periódico y se pregunta UNA vez si sigue vivo. Medido el 2026-09-29: la
+ * Fase 9 quedó sin cierre y salió 11 días seguidos como avance desconocido.
+ */
+export const RANCIO_SECS = 86400;
+
 export type CorteSeguimiento =
   | { kind: "esperando-primer-reporte"; inicioVentana: number }
   | { kind: "reporte-confirmado"; ultimoReporteConfirmado: number };
@@ -181,14 +188,51 @@ function derivarNecesita(activas: ResumenSeguimiento[]): string {
   return "nada";
 }
 
-type AtencionPendiente = { trabajoId: string; fase: string; motivo: string | null };
+type AtencionPendiente = { trabajoId: string; fase: string; motivo: string | null; rancia: boolean };
 
-/** Fases que piden una decisión, en orden estable. Solo cuenta `necesaria: true`. */
-function atencionPendiente(activas: ResumenSeguimiento[]): AtencionPendiente[] {
-  return activas
-    .filter((r) => r.atencionRequerida.necesaria)
-    .map((r) => ({ trabajoId: r.trabajoId, fase: r.fase, motivo: r.atencionRequerida.motivo }))
-    .sort((a, b) => (a.trabajoId < b.trabajoId ? -1 : a.trabajoId > b.trabajoId ? 1 : 0));
+const MESES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+/** Una fecha ilegible cuenta como rancia: no hay forma de saber que se mueve. */
+function partirPorFrescura(
+  activas: ResumenSeguimiento[],
+  ahora: number,
+  problemas: ProblemaSeguimiento[],
+): { vivas: ResumenSeguimiento[]; rancias: ResumenSeguimiento[] } {
+  // El resumen conservador de un documento ilegible trae `actualizado` vacío;
+  // ese trabajo ya sale como DETENIDA y sigue en el reporte como desconocido.
+  const conProblema = new Set<string>(problemas.map((p) => p.trabajoId));
+  const vivas: ResumenSeguimiento[] = [];
+  const rancias: ResumenSeguimiento[] = [];
+  for (const r of activas) {
+    const ms = Date.parse(r.actualizado);
+    const rancia = !conProblema.has(r.trabajoId) && (!Number.isFinite(ms) || ahora - ms / 1000 > RANCIO_SECS);
+    (rancia ? rancias : vivas).push(r);
+  }
+  return { vivas, rancias };
+}
+
+/** Motivo estable entre ticks (fecha, no "hace N horas") para que la firma no cambie. */
+function motivoRancio(r: ResumenSeguimiento): string {
+  const nombre = r.trabajoId.startsWith("corrida:")
+    ? `La corrida ${r.trabajoId.slice("corrida:".length)}`
+    : `La Fase ${r.fase}`;
+  const ms = Date.parse(r.actualizado);
+  if (!Number.isFinite(ms)) return `${nombre} no registra avance: ¿sigue viva o la cierro?`;
+  const d = new Date(ms);
+  return `${nombre} no se mueve desde el ${d.getUTCDate()} de ${MESES[d.getUTCMonth()]}: ¿sigue viva o la cierro?`;
+}
+
+/** Fases que piden una decisión, en orden estable: las que la piden y las rancias. */
+function atencionPendiente(vivas: ResumenSeguimiento[], rancias: ResumenSeguimiento[]): AtencionPendiente[] {
+  return [
+    ...vivas
+      .filter((r) => r.atencionRequerida.necesaria)
+      .map((r) => ({ trabajoId: r.trabajoId, fase: r.fase, motivo: r.atencionRequerida.motivo, rancia: false })),
+    ...rancias.map((r) => ({ trabajoId: r.trabajoId, fase: r.fase, motivo: motivoRancio(r), rancia: true })),
+  ].sort((a, b) => (a.trabajoId < b.trabajoId ? -1 : a.trabajoId > b.trabajoId ? 1 : 0));
 }
 
 function puntuarFinal(s: string): string {
@@ -208,8 +252,12 @@ function textoAtencion(pendientes: AtencionPendiente[], activas: ResumenSeguimie
   }).join(" ");
   return [
     `[NECESITO TU RESPUESTA] Corrida, ${avance}`,
-    `Que cambio: La fase ${primera.fase} llegó a una decisión que no está preaprobada.`,
-    "Que sigue: El trabajo espera tu respuesta antes de continuar.",
+    primera.rancia
+      ? `Que cambio: La fase ${primera.fase} lleva más de un día sin avance.`
+      : `Que cambio: La fase ${primera.fase} llegó a una decisión que no está preaprobada.`,
+    primera.rancia
+      ? "Que sigue: Queda fuera del reporte periódico hasta que se cierre o vuelva a moverse."
+      : "Que sigue: El trabajo espera tu respuesta antes de continuar.",
     `Que necesito de ti: ${necesita}`,
   ].join("\n");
 }
@@ -319,7 +367,8 @@ export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
   // inmediata tratada viven en campos separados: confirmar uno nunca borra
   // ni bloquea al otro, así un inmediato confirmado no silencia el próximo
   // corte debido.
-  const pendientes = atencionPendiente(activas);
+  const { vivas, rancias } = partirPorFrescura(activas, ahora, problemas);
+  const pendientes = atencionPendiente(vivas, rancias);
   const derivado = explicito === null ? componerInmediato(problemas, pendientes, activas) : null;
   const efectivo = explicito ?? derivado;
   if (efectivo !== null) {
@@ -367,7 +416,7 @@ export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
     ultimoInmediato: sinCondicion ? null : previo.ultimoInmediato,
   });
 
-  if (activas.length === 0 && sueltas.length === 0) {
+  if (vivas.length === 0 && sueltas.length === 0) {
     return { accion: "NO_REPLY", estado: silencio() };
   }
 
@@ -383,12 +432,12 @@ export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
 
   if (ahora - inicioVentanaDe(previo.corte) >= VENTANA_REPORTE_SECS) {
     const mensaje = renderSeguimientoV2({
-      fases: activas,
+      fases: vivas,
       tareasSueltas: sueltas,
       ahora: ahora * 1000,
-      cambio: derivarCambio(previo.ultimoEstado, activas),
-      siguiente: derivarSiguiente(activas),
-      necesita: derivarNecesita(activas),
+      cambio: derivarCambio(previo.ultimoEstado, vivas),
+      siguiente: derivarSiguiente(vivas),
+      necesita: derivarNecesita(vivas),
     });
     return {
       accion: "SEND",
@@ -397,7 +446,7 @@ export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
       estadoTrasConfirmar: {
         schema: SCHEMA_SEGUIMIENTO_CLOCK,
         corte: { kind: "reporte-confirmado", ultimoReporteConfirmado: ahora },
-        ultimoEstado: resumenEstable(activas, sueltas, null),
+        ultimoEstado: resumenEstable(vivas, sueltas, null),
         // Regla del spec: la condición desaparecida se registra inactiva
         // (null); si vuelve, es un evento nuevo y sale otra vez.
         ultimoInmediato: sinCondicion ? null : previo.ultimoInmediato,

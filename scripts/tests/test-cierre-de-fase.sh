@@ -1037,4 +1037,79 @@ printf '%s' "$out" | grep -q "5.0" \
 $out"
 echo "ok (15g): la promesa se lee solo de la celda de Contenido; un 'sin promesa observable' en el DoD no la apaga"
 
+# (16) El seguimiento de la fase en el tablero. Medido el 2026-09-29: el documento de
+# la Fase 9 quedo sin cierre.at, el reloj avance-tareas lo siguio listando como activo
+# y le mando a David un [AVANZA] de "15955 minutos" cada ventana durante 11 dias.
+# Ningun check lo miraba. Todo lo demas queda en verde para que el codigo de salida
+# dependa solo de esta linea.
+plan 'cc:完了'
+sin_evidencia_usuario
+git -C "$R" rm -q -r --ignore-unmatch .saikit/progress >/dev/null 2>&1
+git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -q -m seguimiento-16 >/dev/null 2>&1
+git -C "$R" push -q -f origin HEAD:main
+reloj_crons '{"jobs":[]}'
+printf 'completed success' >"$CI"
+
+# (16a) Documento vivo sin cierre.at: ROJO, y la fase no cierra por eso.
+cat >"$TAB" <<'DOC'
+{"ok":true,"doc":{"fase":"5","carriles":[{"id":"A","estado":"mergeado"}],"cierre":{"at":null}}}
+DOC
+out=$(corre 5); rc=$?
+printf '%s' "$out" | grep -q "^ROJO *seguimiento *el seguimiento de la fase sigue abierto en el tablero (cierre.at vacío)" \
+  || fail "(16a) un seguimiento sin cierre.at debe salir ROJO:
+$out"
+[ "$rc" -eq 1 ] || fail "(16a) con el seguimiento abierto la fase debe salir 1; salio $rc:
+$out"
+[ "$(printf '%s\n' "$out" | grep -c '^ROJO ')" -eq 1 ] || fail "(16a) el unico ROJO debe ser el seguimiento:
+$out"
+echo "ok (16a): un seguimiento abierto en el tablero impide el cierre"
+
+# (16b) Documento cerrado: VERDE y la fase cierra.
+cat >"$TAB" <<'DOC'
+{"ok":true,"doc":{"fase":"5","carriles":[{"id":"A","estado":"mergeado"}],"cierre":{"at":"2026-09-29T00:00:00Z"}}}
+DOC
+out=$(corre 5); rc=$?
+printf '%s' "$out" | grep -q "^VERDE *seguimiento" || fail "(16b) un seguimiento cerrado debe salir VERDE:
+$out"
+[ "$rc" -eq 0 ] || fail "(16b) con el seguimiento cerrado la fase debe salir 0; salio $rc:
+$out"
+echo "ok (16b): un seguimiento cerrado no bloquea"
+
+# (16c) Sin documento en el tablero la RPC contesta ok:false: VERDE.
+printf '%s\n' '{"ok":false,"razon":"desconocida"}' >"$TAB"
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^VERDE *seguimiento *la fase no tiene seguimiento en el tablero" \
+  || fail "(16c) una fase sin documento en el tablero debe salir VERDE:
+$out"
+echo "ok (16c): una fase sin seguimiento en el tablero no bloquea"
+
+# (16d) Sin gateway, sin binario, respuesta ilegible o consulta fallida: unknown.
+out=$(CIERRE_SIN_GATEWAY=1 corre 5)
+printf '%s' "$out" | grep -q "^unknown *seguimiento" || fail "(16d) sin gateway el seguimiento es unknown:
+$out"
+out=$(REPO="$R" REF=origin/main TMUX_BIN="${TM:-/no/hay}" OPENCLAW_BIN="$T/bin/no-existe" GH_BIN="$T/bin/gh" bash "$S" 5)
+printf '%s' "$out" | grep -q "^unknown *seguimiento" || fail "(16d) sin binario el seguimiento es unknown:
+$out"
+printf 'no es json\n' >"$TAB"
+out=$(corre 5)
+printf '%s' "$out" | grep -q "^unknown *seguimiento" || fail "(16d) una respuesta ilegible es unknown:
+$out"
+cat >"$TAB" <<'DOC'
+{"ok":true,"doc":{"fase":"5","cierre":{"at":null}}}
+DOC
+mv "$T/bin/openclaw" "$T/bin/openclaw.ok"
+cat >"$T/bin/openclaw" <<STUB
+#!/bin/sh
+for a in "\$@"; do
+  [ "\$a" = "runbook.progress.get" ] && { cat "$TAB"; exit 1; }
+done
+cat "$CFG"
+STUB
+chmod +x "$T/bin/openclaw"
+out=$(corre 5)
+mv -f "$T/bin/openclaw.ok" "$T/bin/openclaw"
+printf '%s' "$out" | grep -q "^unknown *seguimiento" || fail "(16d) una consulta fallida es unknown aunque haya escrito algo:
+$out"
+echo "ok (16d): sin respuesta legible del gateway el seguimiento queda unknown"
+
 echo "TODO VERDE: cierre-de-fase"
