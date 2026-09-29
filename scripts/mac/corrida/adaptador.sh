@@ -90,8 +90,8 @@ adaptador_nueva_sesion() { # $1 sesion $2 worktree $3 bin $4 argvf
 # Espera la barra de la tabla de modos del registro (token = binario).
 # unknown/--/vacia es "sin medir" (misma convencion que preflight y responder):
 # buscarla literal quema los 10 s y mata la sesion; se rechaza de inmediato.
-adaptador_esperar_barra() { # $1 reg $2 sesion $3 binario; rc 1 + sesion muerta
-  local reg="$1" sesion="$2" binario="$3" tabla fila barra pantalla espera=0
+adaptador_esperar_barra() { # $1 reg $2 sesion $3 binario [$4 worktree]; rc 1 + sesion muerta
+  local reg="$1" sesion="$2" binario="$3" wt="${4:-}" tabla fila barra pantalla espera=0 respondio=""
   tabla="$(json_campo "$reg" cli_modos)"
   fila="$(tsv_fila "$tabla" "$binario")"
   barra="$(printf '%s' "$fila" | cut -d'|' -f3)"
@@ -102,9 +102,40 @@ adaptador_esperar_barra() { # $1 reg $2 sesion $3 binario; rc 1 + sesion muerta
   while [ "$espera" -lt 10 ]; do
     pantalla="$("$TMUX_BIN" capture-pane -p -t "=$sesion:" 2>/dev/null)" || pantalla=""
     printf '%s' "$pantalla" | grep -qF -- "$barra" && return 0
+    [ -z "$respondio" ] && adaptador_confianza_responder "$binario" "$sesion" "$wt" && respondio=1
     sleep 1; espera=$((espera+1))
   done
   return 1
+}
+
+# Dialogo de confianza de carpeta (medido 2026-09-28: claude 2.1.284, codex
+# 0.158.0, kimi 2.1.1) que tapa la barra en un worktree nuevo. Autorizado por
+# el operador: se acepta SOLO si imprime el worktree reservado del carril en
+# una linea propia (cd -P: /tmp vs /private/tmp). Los fragmentos incluyen el
+# resaltado por defecto: las teclas asumen esa posicion. rc 0 = respondio.
+adaptador_confianza_responder() { # $1 binario $2 sesion $3 worktree
+  local binario="$1" sesion="$2" wt="$3" canon pant f l t ok=""
+  local -a frags teclas
+  case "$binario" in
+    claude) frags=('Accessing workspace:' '❯ No, exit' 'Yes, I trust this folder'); teclas=(Down Enter);;
+    codex)  frags=('Folder access' 'Trust this folder?' '› 1. Trust and continue'); teclas=(Enter);;
+    kimi)   frags=('Trust this folder?' '❯ Trust this folder' "Don't trust"); teclas=(Enter);;
+    *) return 1;;
+  esac
+  [ -n "$wt" ] || return 1
+  # -J une la ruta si pasa del ancho del panel.
+  pant="$("$TMUX_BIN" capture-pane -p -J -t "=$sesion:" 2>/dev/null)" || return 1
+  for f in "${frags[@]}"; do printf '%s' "$pant" | grep -qF -- "$f" || return 1; done
+  canon="$(CDPATH= cd -P -- "$wt" 2>/dev/null && pwd)" || canon=""
+  while IFS= read -r l; do
+    l="${l#"${l%%[![:space:]]*}"}"; l="${l%"${l##*[![:space:]]}"}"
+    if [ "$l" = "$wt" ] || { [ -n "$canon" ] && [ "$l" = "$canon" ]; }; then ok=1; break; fi
+  done <<EOF
+$pant
+EOF
+  [ -n "$ok" ] || return 1
+  for t in "${teclas[@]}"; do "$TMUX_BIN" send-keys -t "=$sesion:" "$t" 2>/dev/null || return 1; done
+  echo "adaptador: $binario pidio confianza para el worktree del carril ($wt); respondido si" >&2
 }
 
 # Persiste worker,harness,provider,reported_model,session en el carril,
@@ -224,7 +255,7 @@ adaptador_start() {
   rm -f "$argvf"
   "$TMUX_BIN" has-session -t "=$sesion" 2>/dev/null \
     || { echo "adaptador: la sesion murio al arrancar" >&2; return 1; }
-  adaptador_esperar_barra "$reg" "$sesion" "$(worker_atributo "$worker" binary)" \
+  adaptador_esperar_barra "$reg" "$sesion" "$(worker_atributo "$worker" binary)" "$wt" \
     || { "$TMUX_BIN" kill-session -t "=$sesion" 2>/dev/null
          echo "adaptador: la barra no aparecio en $sesion" >&2; return 1; }
   adaptador_registrar_sesion "$reg" "$carril" "$worker" "$sesion" "$brief" \
@@ -346,7 +377,7 @@ adaptador_resume() {
   adaptador_nueva_sesion "$sesion" "$wt" "$bin" "$argvf" || {
     rm -f "$argvf"; adaptador_carril_fallar "$reg" "$carril"; echo "unavailable"; return 0; }
   rm -f "$argvf"
-  adaptador_esperar_barra "$reg" "$sesion" "$(worker_atributo "$worker" binary)" \
+  adaptador_esperar_barra "$reg" "$sesion" "$(worker_atributo "$worker" binary)" "$wt" \
     || { "$TMUX_BIN" kill-session -t "=$sesion" 2>/dev/null; adaptador_carril_fallar "$reg" "$carril"; echo "unavailable"; return 0; }
   adaptador_registrar_sesion "$reg" "$carril" "$worker" "$sesion" \
     || { "$TMUX_BIN" kill-session -t "=$sesion" 2>/dev/null; adaptador_carril_fallar "$reg" "$carril"; echo "unavailable"; return 0; }

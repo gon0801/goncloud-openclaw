@@ -79,7 +79,7 @@
    "transcript": {
     "kind": "tmux-pane"
    },
-   "version": "2.1.278"
+   "version": "2.1.284"
   },
   {
    "auth_patterns": [
@@ -158,7 +158,7 @@
    "transcript": {
     "kind": "tmux-pane"
    },
-   "version": "2.1.278"
+   "version": "2.1.284"
   },
   {
    "auth_patterns": [
@@ -183,15 +183,15 @@
      "kimi",
      "--model",
      "kimi-code/k3",
-     "--resume",
+     "--session",
      "{session_id}",
-     "--read-only"
+     "--plan"
     ],
     "resume:write": [
      "kimi",
      "--model",
      "kimi-code/k3",
-     "--resume",
+     "--session",
      "{session_id}",
      "--auto"
     ],
@@ -199,7 +199,7 @@
      "kimi",
      "--model",
      "kimi-code/k3",
-     "--read-only"
+     "--plan"
     ],
     "start:write": [
      "kimi",
@@ -216,7 +216,7 @@
    "id": "kimi_k3",
    "model": "kimi-code/k3",
    "permission_modes": {
-    "review": "read-only",
+    "review": "plan",
     "write": "auto"
    },
    "provider": "kimi",
@@ -233,7 +233,7 @@
    "transcript": {
     "kind": "tmux-pane"
    },
-   "version": "0.39.1"
+   "version": "2.1.1"
   },
   {
    "auth_patterns": [
@@ -258,15 +258,15 @@
      "kimi",
      "--model",
      "kimi-code/kimi-for-coding",
-     "--resume",
+     "--session",
      "{session_id}",
-     "--read-only"
+     "--plan"
     ],
     "resume:write": [
      "kimi",
      "--model",
      "kimi-code/kimi-for-coding",
-     "--resume",
+     "--session",
      "{session_id}",
      "--auto"
     ],
@@ -274,7 +274,7 @@
      "kimi",
      "--model",
      "kimi-code/kimi-for-coding",
-     "--read-only"
+     "--plan"
     ],
     "start:write": [
      "kimi",
@@ -291,7 +291,7 @@
    "id": "kimi_coding",
    "model": "kimi-code/kimi-for-coding",
    "permission_modes": {
-    "review": "read-only",
+    "review": "plan",
     "write": "auto"
    },
    "provider": "kimi",
@@ -308,7 +308,7 @@
    "transcript": {
     "kind": "tmux-pane"
    },
-   "version": "0.39.1"
+   "version": "2.1.1"
   },
   {
    "auth_patterns": [
@@ -379,7 +379,7 @@
    "transcript": {
     "kind": "tmux-pane"
    },
-   "version": "0.155.1"
+   "version": "0.158.0"
   },
   {
    "auth_patterns": [
@@ -450,7 +450,7 @@
    "transcript": {
     "kind": "tmux-pane"
    },
-   "version": "0.16.5"
+   "version": "3.10.2-18"
   },
   {
    "auth_patterns": [
@@ -518,7 +518,8 @@
    "provider": "cursor",
    "quota_patterns": [
     "usage limit",
-    "rate limit"
+    "rate limit",
+    "out of usage"
    ],
    "task_types": [
     "general",
@@ -529,7 +530,7 @@
    "transcript": {
     "kind": "tmux-pane"
    },
-   "version": "2026.09.18-9a7762b"
+   "version": "2026.09.26-dd393fe"
   },
   {
    "auth_patterns": [
@@ -598,7 +599,7 @@
    "transcript": {
     "kind": "tmux-pane"
    },
-   "version": "1.0.34"
+   "version": "1.0.41"
   }
  ]
 }
