@@ -17,7 +17,10 @@ LOG="$T/doble.jsonl"
 REAL="$T/real-falso"
 REAL_SENAL="$T/llamado-real"
 export REAL_SENAL
-printf '#!/bin/bash\nprintf "real-llamado\\n" >> "$REAL_SENAL"\n' > "$REAL"
+# El doble del binario real deja constancia del argv EXACTO que recibio (F2):
+# su primera linea debe empezar en system|cron|message, sin nada de la
+# pasarela al frente.
+printf '#!/bin/bash\nprintf "real-llamado\\n" >> "$REAL_SENAL"\nprintf "%%s\\n" "$@" >> "$REAL_SENAL"\n' > "$REAL"
 chmod +x "$REAL"
 fallas=0
 correr() { # $1 descripcion, $2 espera-real (si|no), resto argv
@@ -28,7 +31,10 @@ correr() { # $1 descripcion, $2 espera-real (si|no), resto argv
   local rc=$?
   if [ "$espera" = si ]; then
     if [ "$rc" -eq 0 ] && grep -q real-llamado "$REAL_SENAL" 2>/dev/null && grep -q '"mono_ns"' "$LOG"; then
-      echo "ok: $desc"
+      case "$(sed -n 2p "$REAL_SENAL" 2>/dev/null)" in
+        system|cron|message) echo "ok: $desc";;
+        *) echo "FALLA: $desc (argv del real empieza en '$(sed -n 2p "$REAL_SENAL" 2>/dev/null)')"; fallas=$((fallas+1));;
+      esac
     else
       echo "FALLA: $desc (rc=$rc)"; fallas=$((fallas+1))
     fi
@@ -44,6 +50,7 @@ correr "main:main negado"       no system event --mode now --session-key agent:m
 correr "vigia-mac negado"       no system event --mode now --session-key agent:main:vigia-mac --text x
 correr "sesion propia real"     si system event --mode now --timeout 10000 --session-key agent:main:sim9-arnes19-zcode --text x
 correr "clave forastera negada" no system event --mode now --session-key agent:otro:algo --text x
+correr "comando forastero negado" no status --json
 rm -f "$REAL_SENAL"; : > "$LOG"
 out=$(DOBLE_LOG="$LOG" OPENCLAW_REAL_BIN="$REAL" bash "$PASARELA" message send --channel telegram -t destino --json -m hola 2>/dev/null)
 if printf '%s' "$out" | grep -q '"messageId"' && [ ! -f "$REAL_SENAL" ] && grep -q '"mono_ns"' "$LOG"; then
