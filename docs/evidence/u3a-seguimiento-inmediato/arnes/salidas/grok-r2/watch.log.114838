@@ -1,0 +1,7 @@
+2026-09-29T18:45:52Z tmux-activity-watch starting (QUIET_SECS=10 TICK_SECS=2 LATIDO_SECS=1800 marker=OPENCLAW_WATCH)
+2026-09-29T18:45:52Z latido launched (pid=93416)
+ok
+2026-09-29T18:46:26Z sent: tmux: medicion-grok quiet for 11s | cmd=grok-native cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r2-grok/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t medicion-grok -S -80
+responder: sucesor-grok escala (sin fila que case en la tabla del registro)
+ok
+2026-09-29T18:47:17Z sent: tmux: sucesor-grok waiting for approval for 0s | cmd=2.1.284 cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r2-grok/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t sucesor-grok -S -80

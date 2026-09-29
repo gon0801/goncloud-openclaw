@@ -1,0 +1,21 @@
+{
+ "token": "zcode",
+ "sucesor": "codex",
+ "config_arnes": {
+  "QUIET_SECS": "10",
+  "TICK_SECS": "2"
+ },
+ "offset_gateway_mac_ms": -555,
+ "breve_rc": "0",
+ "t_fin_wall": "2026-09-29T18:54:18.597Z",
+ "deteccion_a_envio_s": 8.83,
+ "turno_started_gw_ms": 1790708075119,
+ "envio_a_atencion_s": 8.25,
+ "nota_reloj": "atencion del audit (reloj gateway) llevada al reloj Mac con el offset medido por ssh; resolucion de sondas ~1 s",
+ "turno_del_dueno_s": 34.27,
+ "lanzador_sucesor": "lead",
+ "envio_a_sesion_sucesor_s": 53.94,
+ "envio_a_actividad_sucesor_s": 54.95,
+ "resultado-r2.txt": "MEDICION-R2-codex\n",
+ "veredicto": "OK"
+}

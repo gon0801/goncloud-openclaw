@@ -1,0 +1,60 @@
+#!/bin/bash
+# Pasarela de openclaw para el arnes 19.0-r2: el unico punto que habla con el
+# gateway real. Solo `system event` hacia la sesion propia de la corrida de
+# prueba (agent:main:sim9-arnes19-*) sale de verdad, con argv intacto; todo lo
+# demas queda doblado y lo demas de system event queda NEGADO cerrado (rc 1,
+# asentado en el log). Cada llamada deja sello monotono y pared en DOBLE_LOG.
+set -u
+log=${DOBLE_LOG:?DOBLE_LOG requerido}
+real=${OPENCLAW_REAL_BIN:?OPENCLAW_REAL_BIN requerido}
+
+registrar() { # $1 estado; resto argv
+  ESTADO=$1 LOG=$log python3 -c '
+import json, os, sys, time
+rec = {"mono_ns": time.monotonic_ns(),
+       "wall": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + ".%03dZ" % (int(time.time() * 1000) % 1000),
+       "estado": os.environ["ESTADO"], "argv": sys.argv[1:]}
+with open(os.environ["LOG"], "a") as f:
+    f.write(json.dumps(rec) + "\n")
+' "$@" 2>/dev/null
+}
+
+clave_de() { # imprime el valor de --session-key o vacio
+  anterior=""
+  for a in "$@"; do
+    [ "$anterior" = SI ] && { printf '%s\n' "$a"; return 0; }
+    [ "$a" = "--session-key" ] && anterior=SI || anterior=""
+  done
+}
+
+if [ "${1:-}" = "system" ] && [ "${2:-}" = "event" ]; then
+  clave="$(clave_de "$@")"
+  case "$clave" in
+    agent:main:sim9-arnes19-*)
+      registrar "REAL" "$@"
+      exec "$real" "$@"
+      ;;
+    *)
+      registrar "NEGADO" "$@"
+      echo "pasarela: system event NEGADO para clave '$clave' (solo salen sim9-arnes19-*)" >&2
+      exit 1
+      ;;
+  esac
+fi
+
+if [ "${1:-}" = "cron" ] && [ "${2:-}" = "list" ]; then
+  registrar "DOBLADO" "$@"
+  printf '%s\n' '{"jobs":[{"name":"arnes-canal","createdAtMs":1,"delivery":{"to":"arnes:destino","channel":"telegram"}}]}'
+  exit 0
+fi
+
+if [ "${1:-}" = "message" ] && [ "${2:-}" = "send" ]; then
+  registrar "DOBLADO" "$@"
+  mid=19000000
+  [ -f "$log" ] && mid=$((mid + $(wc -l < "$log" | tr -d ' ') + 1))
+  printf '{"messageId": %d}\n' "$mid"
+  exit 0
+fi
+
+registrar "DOBLADO" "$@"
+exit 0

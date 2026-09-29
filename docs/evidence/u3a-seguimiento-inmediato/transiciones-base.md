@@ -64,19 +64,29 @@ Artefactos crudos por corrida en `arnes/salidas/<token>/`: `times.*.json`
 relevo en monótono), `watch.*.log` (pared del vigía), `registro.*.json`,
 `lanzar.*.out` y `pane-final.*.log`.
 
-## Qué no se observó (pendiente, no cerrado)
+## Qué no se observó aquí y cómo se cerró en r2
 
-- **Atención por el dueño real y arranque del siguiente rol**: en producción
-  el aviso despierta a la sesión de la corrida (`sim9-<id>`) o a `vigia-mac`
-  en el gateway, y ese dueño decide con `reconciliar`. Con el transporte
-  doblado no hay gateway, así que la espera del dueño y el inicio del
-  siguiente rol no son observables aquí. El recibo real más cercano es la
-  práctica 14.13 de U3: de `inspect quota` a sucesor vivo pasaron 38 s con
-  claude→codex reales (`docs/evidence/u3-14.13-practica-2026-09-29.md`).
-- **Recordatorios a 60 min** (`QUIET_REMIND_SECS`): constantes verificadas en
-  código, no esperados en vivo.
-- **Compactación de main con reinicio diario**: configuración del gateway,
-  fuera de este host.
+La atención del dueño y el inicio del siguiente rol con transporte real
+estaban pendientes en esta medición; la revisión la devolvió por eso
+(bloqueante B1) y r2 la completó con el aviso real a la sesión propia de la
+corrida de prueba, la atención leída del audit del gateway y el arranque del
+sucesor: `transiciones-atencion-r2.md`. Queda allí una limitación declarada:
+el lanzamiento del sucesor lo ejecuta el lead registrado de la corrida de
+prueba, no el dueño despertado, porque el sistema previo no tiene ruta de
+ejecución del gateway al host de las CLI. Todo lo demás de esta sección
+está resuelto en el documento r2; los tiempos de detección, transporte y
+relevo de esta página siguen siendo la base de comparación.
+
+Reproducir una transición de señal (r1):
+
+```sh
+bash docs/evidence/u3a-seguimiento-inmediato/arnes/medir.sh zcode --relanzo
+```
+
+Siguen pendientes, ajenos al bloqueante: los recordatorios a 60 min
+(`QUIET_REMIND_SECS`, constantes verificadas en código, no esperados en
+vivo) y la compactación de main con reinicio diario (configuración del
+gateway en Windows, no verificable desde esta Mac).
 
 ## Hallazgos de la medición
 
