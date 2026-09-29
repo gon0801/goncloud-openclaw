@@ -54,6 +54,8 @@ else
   # Ninguna corrida del vigilante en esta prueba puede alcanzar el ~/bin/corrida.sh
   # real: desde 14.29 D1 el tick lanza "latido" contra las corridas reales.
   export CORRIDA_BIN="$T/no-hay-corrida"
+  # Ni el registro real: el barrido de closed relanza desde $CORRIDA_STATE.
+  export CORRIDA_STATE="$T/corridas"
 
   STATE_DIR="$T/state"
   LOG_FILE="$T/watch.log"
@@ -900,6 +902,109 @@ run_p >/dev/null 2>&1 || true
 echo "ok (2l): los eventos de una corrida se rutearon a su sesion, vivos y cerrados"
 else
   echo "SKIP (2l): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
+fi
+
+# (2m) Relanzo sin modelo (medido 2026-09-29, sim9-20260928-2039 casos 5 y 6): el
+# closed de una sesion de una corrida ABIERTA que figura en su registro lo relanza el
+# vigilante con corrida.sh lanzar-sesion, una sola vez por (corrida, sesion); el evento
+# sale igual, como reporte. El system event solo caia en una sesion del gateway en modo
+# steer, se mezclaba con otro turno y nadie relanzaba en 32 min.
+if [ -n "${TM:-}" ]; then
+RARGV="$T/relanzo-argv.txt"; : >"$RARGV"
+STUB_REL="$T/corrida-relanzo"
+cat >"$STUB_REL" <<STUB
+#!/bin/sh
+printf '%s\n' "\$*" >>"$RARGV"
+[ "\$1" = lanzar-sesion ] || exit 1
+if [ -f "$T/relanzo-falla" ]; then echo "lanzar-sesion: sin fila de modos para glm" >&2; exit 1; fi
+"$TMUX_SHIM" new-session -d -s "\$7" -x 80 -y 20 cat || exit 1
+"$TMUX_SHIM" set-environment -t "\$7" OPENCLAW_WATCH_RUN "\$2"
+"$TMUX_SHIM" set-environment -t "\$7" OPENCLAW_WATCH 1
+echo "\$7"
+STUB
+chmod +x "$STUB_REL"
+TRAB="$T/trabajo-rel"; mkdir -p "$TRAB"
+registro() { # $1 id $2 estado $3.. nombres de sesion en el registro
+  local id=$1 estado=$2; shift 2
+  mkdir -p "$CORRIDA_STATE/$id"
+  python3 -c "
+import json,sys
+p,i,e,d=sys.argv[1:5]
+json.dump({'id':i,'estado':e,'sesiones':[{'nombre':n,'rol':'carril','cli':'glm','dueno':'lead','dir':d} for n in sys.argv[5:]]},open(p,'w'))
+" "$CORRIDA_STATE/$id/registro.json" "$id" "$estado" "$TRAB" "$@"
+}
+nace() { # $1 sesion $2 run
+  "$TM" -L "$L" new-session -d -s "$1" -x 80 -y 20 cat || fail "no se pudo crear $1"
+  "$TM" -L "$L" set-environment -t "$1" OPENCLAW_WATCH_RUN "$2"
+  mark "$1"
+}
+run_r() { CORRIDA_BIN="$STUB_REL" QUIET_SECS=100000 run_once; }
+n_lanzar() { grep -c '^lanzar-sesion' "$RARGV"; }
+ev_rel() { # $1 id $2 True|False -> lineas relanzo-automatico con ese ok
+  python3 -c "
+import json,sys
+n=0
+for l in open(sys.argv[1]):
+  d=json.loads(l)
+  if d.get('tipo')=='relanzo-automatico' and d.get('ok') is (sys.argv[2]=='True'): n+=1
+print(n)" "$CORRIDA_STATE/$1/eventos.jsonl" "$2" 2>/dev/null || echo 0
+}
+registro r-abierta abierta sim9-rel
+nace sim9-rel r-abierta
+nace sim9-fuera r-abierta
+run_r || fail "--once (2m, primera foto) fallo"
+: >"$CALLS"
+"$TM" -L "$L" kill-session -t sim9-rel
+run_r || fail "--once (2m, closed de una corrida abierta) fallo"
+[ "$(n_lanzar)" -eq 1 ] || fail "(2m) se esperaba un lanzar-sesion; hubo $(n_lanzar):
+$(cat "$RARGV")"
+[ "$(grep '^lanzar-sesion' "$RARGV")" = "lanzar-sesion r-abierta carril glm $TRAB --nombre sim9-rel" ] \
+  || fail "(2m) lanzar-sesion con argumentos distintos a los del registro: $(cat "$RARGV")"
+"$TM" -L "$L" show-environment -t sim9-rel OPENCLAW_WATCH_RUN 2>/dev/null | grep -qx 'OPENCLAW_WATCH_RUN=r-abierta' \
+  || fail "(2m) la sesion relanzada no quedo viva con OPENCLAW_WATCH_RUN=r-abierta"
+[ "$(ev_rel r-abierta True)" = 1 ] || fail "(2m) eventos.jsonl de la corrida sin relanzo-automatico ok true: $(cat "$CORRIDA_STATE/r-abierta/eventos.jsonl" 2>&1)"
+grep -q 'sim9-rel closed | last cwd=.* | relanzada automaticamente: corrida.sh lanzar-sesion r-abierta carril glm' "$CALLS" \
+  || fail "(2m) el evento closed no reporta el relanzo: $(cat "$CALLS")"
+grep -q -- '--session-key agent:main:sim9-r-abierta' "$CALLS" || fail "(2m) el reporte no va a la sesion de la corrida: $(cat "$CALLS")"
+run_r || fail "--once (2m, segundo tick) fallo"
+[ "$(n_lanzar)" -eq 1 ] || fail "(2m) el segundo tick relanzo otra vez: $(cat "$RARGV")"
+: >"$CALLS"
+"$TM" -L "$L" kill-session -t sim9-rel
+run_r || fail "--once (2m, segunda caida) fallo"
+[ "$(n_lanzar)" -eq 1 ] || fail "(2m) la sesion ya relanzada que murio otra vez se relanzo de nuevo: $(cat "$RARGV")"
+grep -q 'sim9-rel closed .*ya se relanzo automaticamente una vez y volvio a cerrarse: NO se relanza otra vez' "$CALLS" \
+  || fail "(2m) la segunda caida no escala en el evento: $(cat "$CALLS")"
+[ "$(ev_rel r-abierta False)" = 1 ] || fail "(2m) la segunda caida no quedo en eventos.jsonl con ok false"
+: >"$CALLS"
+"$TM" -L "$L" kill-session -t sim9-fuera
+run_r || fail "--once (2m, sesion fuera del registro) fallo"
+[ "$(n_lanzar)" -eq 1 ] || fail "(2m) se relanzo una sesion que no figura en el registro: $(cat "$RARGV")"
+grep -q 'sim9-fuera closed | last cwd=[^|]*$' "$CALLS" || fail "(2m) la sesion fuera del registro no dio el closed de siempre: $(cat "$CALLS")"
+registro r-cerrada cerrada sim9-cer
+nace sim9-cer r-cerrada
+run_r || fail "--once (2m, foto de la corrida cerrada) fallo"
+: >"$CALLS"
+"$TM" -L "$L" kill-session -t sim9-cer
+run_r || fail "--once (2m, closed de una corrida cerrada) fallo"
+[ "$(n_lanzar)" -eq 1 ] || fail "(2m) se relanzo una sesion de una corrida cerrada: $(cat "$RARGV")"
+grep -q 'sim9-cer closed | last cwd=[^|]*$' "$CALLS" || fail "(2m) la corrida cerrada no dio el closed de siempre: $(cat "$CALLS")"
+registro r-falla abierta sim9-fal
+nace sim9-fal r-falla
+run_r || fail "--once (2m, foto de la que falla) fallo"
+: >"$CALLS"; : >"$T/relanzo-falla"
+"$TM" -L "$L" kill-session -t sim9-fal
+run_r || fail "(2m) un lanzar-sesion que falla tumbo al vigilante"
+rm -f "$T/relanzo-falla"
+[ "$(n_lanzar)" -eq 2 ] || fail "(2m) no se intento el relanzo de sim9-fal: $(cat "$RARGV")"
+grep -q 'sim9-fal closed .*no se pudo relanzar: lanzar-sesion: sin fila de modos para glm (corrida r-falla)' "$CALLS" \
+  || fail "(2m) el fallo del relanzo no quedo en el evento: $(cat "$CALLS")"
+[ "$(ev_rel r-falla False)" = 1 ] || fail "(2m) el fallo del relanzo no quedo en eventos.jsonl con ok false"
+run_r || fail "--once (2m, tick tras el fallo) fallo"
+[ "$(n_lanzar)" -eq 2 ] || fail "(2m) un relanzo fallido se reintento solo: $(cat "$RARGV")"
+"$TM" -L "$L" kill-session -t sim9-rel 2>/dev/null
+echo "ok (2m): el vigilante relanza una vez las sesiones de una corrida abierta y reporta; ni dos veces, ni cerradas, ni fuera del registro"
+else
+  echo "SKIP (2m): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
 fi
 
 # (5) Retirado en 15.1: la llamada anidada a scripts/tests/test-mac-tmux-control.sh.

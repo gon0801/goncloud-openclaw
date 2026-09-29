@@ -219,7 +219,11 @@ print(datetime.fromtimestamp(int(os.environ['OWED_HM'])).strftime('%H:%M'))" 2>/
     vigia="$(json_campo "$reg" vigia)"
     acc_claves="$(printf '%s\n' "$P_ACCIONES" | cut -d'|' -f1 | paste -sd, -)"
     if [ "$vigia" = "claw" ]; then
+      # Misma sesion de la corrida que usa send_event del vigilante
+      # (tmux-activity-watch.sh): sin la clave el parte caia en agent:main:main
+      # y los closed de la misma corrida en otra sesion.
       con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" system event --mode now --timeout 15000 \
+        --session-key "agent:main:sim9-$id" \
         --text "corrida $id | accion: ${P_ACCIONES//$LF/ ; } | parte: $parte4 | estado: $dir" \
         >/dev/null 2>&1 || rc=1
       EVT_tipo=evento-vigia EVT_vigia="$vigia" EVT_accion="$acc_claves" \

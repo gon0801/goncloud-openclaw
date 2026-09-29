@@ -75,6 +75,14 @@
 #   STATE_DIR=$HOME/.local/state/tmux-activity-watch
 #   LOG_FILE=$HOME/Library/Logs/tmux-activity-watch.log
 #   CORRIDA_BIN=$HOME/bin/corrida.sh   (policy engine offered each dialog first; unset = today's behavior)
+#   CORRIDA_STATE=$HOME/.local/state/corridas   (where corrida.sh keeps <id>/registro.json)
+#
+# Automatic relaunch: a closed session whose state names a run, when that run's registro is
+# "abierta" and lists the session with rol/cli/dir, is relaunched here with
+# `$CORRIDA_BIN lanzar-sesion <id> <rol> <cli> <dir> --nombre <session>`, once per (run, session)
+# ($STATE_DIR/relanzos/<run>.<session>). The "closed" event still goes out, as a report of what
+# happened. Measured 2026-09-29, sim9-20260928-2039 cases 5/6: the event alone landed in a gateway
+# session in queue mode "steer", got folded into an unrelated run, and nobody relaunched for 32 min.
 #   LATIDO_SECS=300    (seconds between two `$CORRIDA_BIN latido` launches)
 #   LATIDO_TOPE=240    (hard timeout of one latido; it runs in the background, never blocks a tick)
 #   LATIDO_ONCE=       (1: --once also launches the latido)
@@ -111,6 +119,9 @@ LOG_FILE=${LOG_FILE:-$HOME/Library/Logs/tmux-activity-watch.log}
 # Si no existe o no es ejecutable (la instalación es del lead), el vigilante se
 # comporta exactamente como hoy.
 CORRIDA_BIN=${CORRIDA_BIN:-$HOME/bin/corrida.sh}
+CORRIDA_STATE=${CORRIDA_STATE:-$HOME/.local/state/corridas}
+RELANZO_DIR="$STATE_DIR/relanzos"
+RELANZO_TOPE=60
 LATIDO_SECS=${LATIDO_SECS:-300}
 LATIDO_TOPE=${LATIDO_TOPE:-240}
 LATIDO_ONCE=${LATIDO_ONCE:-}
@@ -239,6 +250,60 @@ state_file() {
   printf '%s/%s.state\n' "$STATE_DIR" "$1"
 }
 
+relanzo_evento() { # $1 run $2 sesion $3 ok(true|false) $4 detalle -> una linea en eventos.jsonl de la corrida
+  REL_F="$CORRIDA_STATE/$1/eventos.jsonl" REL_S="$2" REL_OK="$3" REL_D="$4" python3 -c "
+import json,os,time
+p={'tipo':'relanzo-automatico','sesion':os.environ['REL_S'],'ok':os.environ['REL_OK']=='true',
+   'detalle':os.environ['REL_D'],'at':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())}
+open(os.environ['REL_F'],'a').write(json.dumps(p)+chr(10))" 2>/dev/null ||
+    log "relanzo: no se pudo anotar en $CORRIDA_STATE/$1/eventos.jsonl ($2 ok=$3)"
+}
+
+# $1 sesion cerrada, $2 run del .state. Imprime el sufijo del evento closed
+# (" | relanzada automaticamente: ..." / " | no se pudo relanzar: ..." / " | ya se
+# relanzo ...") o nada si la sesion no es relanzable (el evento sale como antes).
+relanzo_automatico() {
+  local session=$1 run=$2 datos estado rol cli dir marca salida rc razon
+  [[ -n $run && -x $CORRIDA_BIN ]] || return 0
+  [[ $run =~ ^[A-Za-z0-9_-]+$ ]] || return 0
+  datos=$(REL_REG="$CORRIDA_STATE/$run/registro.json" REL_S="$session" python3 -c "
+import json,os
+d=json.load(open(os.environ['REL_REG']))
+e=None
+for s in d.get('sesiones') or []:
+  if isinstance(s,dict) and s.get('nombre')==os.environ['REL_S']: e=s
+if e and all(e.get(k) for k in ('rol','cli','dir')):
+  print('\t'.join([str(d.get('estado','')),e['rol'],e['cli'],e['dir']]))" 2>/dev/null) || datos=""
+  [[ -n $datos ]] || return 0
+  IFS=$'\t' read -r estado rol cli dir <<<"$datos"
+  [[ $estado == abierta ]] || return 0
+  mkdir -p "$RELANZO_DIR" 2>/dev/null || true
+  marca="$RELANZO_DIR/$run.$session"
+  # mkdir atomico: dos vigias con el mismo STATE_DIR (un --once manual y el
+  # LaunchAgent) no relanzan dos veces la misma caida.
+  if ! mkdir "$marca" 2>/dev/null; then
+    relanzo_evento "$run" "$session" false "ya se relanzo automaticamente una vez; no se relanza otra vez"
+    printf ' | ya se relanzo automaticamente una vez y volvio a cerrarse: NO se relanza otra vez, decide que hacer (corrida %s)' "$run"
+    return 0
+  fi
+  rc=0
+  salida=$(perl -e 'alarm shift; exec(@ARGV) or exit 127' "$RELANZO_TOPE" \
+    "$CORRIDA_BIN" lanzar-sesion "$run" "$rol" "$cli" "$dir" --nombre "$session" </dev/null 2>&1) || rc=$?
+  printf '%s\n' "$salida" >>"$LOG_FILE" 2>/dev/null || true
+  if [[ $rc -eq 0 ]]; then
+    log "relanzo automatico: $session (corrida $run)"
+    relanzo_evento "$run" "$session" true "corrida.sh lanzar-sesion $run $rol $cli $dir --nombre $session"
+    printf ' | relanzada automaticamente: corrida.sh lanzar-sesion %s %s %s %s --nombre %s' "$run" "$rol" "$cli" "$dir" "$session"
+  else
+    razon=$(printf '%s\n' "$salida" | grep -v '^[[:space:]]*$' | tail -1 | tr -d '\r' | cut -c1-200)
+    [[ $rc -eq 142 ]] && razon="sin respuesta en ${RELANZO_TOPE}s"
+    [[ -n $razon ]] || razon="rc=$rc"
+    log "relanzo automatico FALLO: $session (corrida $run): $razon"
+    relanzo_evento "$run" "$session" false "$razon"
+    printf ' | no se pudo relanzar: %s (corrida %s)' "$razon" "$run"
+  fi
+}
+
 read_run() { # $1 sesion -> valor de OPENCLAW_WATCH_RUN. Tres salidas:
   #   rc 0 + valor : la variable esta.
   #   rc 0 + vacio : la variable NO esta — ausente o deseteada con -u. Manda lo
@@ -309,6 +374,7 @@ tick() {
   local session activity cmd path sf prev_hash prev_since prev_notified now seen_file err_file
   local prev_approval prev_approval_at prev_approval_since screen hash since notified tailtxt
   local approval approval_at approval_since due elapsed text last_path rc prev_notified_at notified_at
+  local run prev_run sufijo
   seen_file=$(mktemp "${TMPDIR:-/tmp}/tmux-activity-watch.seen.XXXXXX")
   err_file=$(mktemp "${TMPDIR:-/tmp}/tmux-activity-watch.err.XXXXXX")
 
@@ -457,8 +523,16 @@ tick() {
     if ! session_listed "$session" "$seen_file"; then
       last_path=$(read_state_field "$sf" path)
       [[ -n $last_path ]] || last_path=unknown
-      text="tmux: $session closed | last cwd=$last_path"
-      if send_event "$text" "$(read_state_field "$sf" run)"; then
+      run=$(read_state_field "$sf" run)
+      # El resultado del relanzo queda en el .state: si el envio falla, el
+      # proximo tick reenvia el mismo reporte en vez de decidir otra vez.
+      sufijo=$(read_state_field "$sf" relanzo)
+      if [[ -z $sufijo ]]; then
+        sufijo=$(relanzo_automatico "$session" "$run") || sufijo=""
+        [[ -z $sufijo ]] || printf 'relanzo=%s\n' "$sufijo" >>"$sf"
+      fi
+      text="tmux: $session closed | last cwd=$last_path$sufijo"
+      if send_event "$text" "$run"; then
         rm -f "$sf"
       fi
     fi
