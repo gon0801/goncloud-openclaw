@@ -90,4 +90,27 @@ printf '🧪 PRÁCTICA — no contestes 🟢 [AVANZA] Titulo de practica (abrió
 mensaje_valido "$T/d-sin.txt" || fail "(d) un mensaje v2 sin negritas dejo de ser valido"
 mensaje_valido "$T/d-con.txt" || fail "(d) un mensaje v2 con las negritas del contrato no pasa el validador"
 
+# (e) 14.27 R3: un cambio vacio sigue fuera de contrato (antes salia
+# "Qué cambió: ****" y el validador lo daba por bueno) y no se manda nada.
+antes="$(grep -c . "$T/corridas/t9/mensajes.jsonl")"
+rc=0
+corrida_mensaje t9 DETENIDA "1 de 2 partes terminadas" "" "se retoma" "nada" 2>"$T/e.err" || rc=$?
+[ "$rc" -ne 0 ] || fail "(e) un cambio vacio salio como mensaje valido"
+grep -q 'fuera de contrato' "$T/e.err" || fail "(e) el rechazo no dice fuera de contrato: $(cat "$T/e.err")"
+[ "$(grep -c . "$T/corridas/t9/mensajes.jsonl")" = "$antes" ] || fail "(e) el cambio vacio llego a la cola de entrega"
+
+# (f) 14.27 R3: NECESITO real con la pregunta vacia antes de "Comando: " no
+# pasa por el relleno de la negrita.
+rc=0
+corrida_mensaje t9r "NECESITO TU RESPUESTA" "1 de 2 partes terminadas" "c" "s" " Comando: gh pr view 187" \
+  2>"$T/f.err" || rc=$?
+[ "$rc" -ne 0 ] || fail "(f) una pregunta vacia antes de Comando: salio como mensaje valido"
+
+# (g) 14.27 R3: los ** que trae el llamador no se anidan dentro de la negrita.
+corrida_mensaje t9 DETENIDA "1 de 2 partes terminadas" "hubo un **gran** percance" "se retoma" "nada" \
+  2>"$T/g.err" || fail "(g) DETENIDA con ** del llamador fallo: $(cat "$T/g.err")"
+texto_json "$(tail -n1 "$T/corridas/t9/mensajes.jsonl")" >"$T/g.txt"
+grep -qxF 'Qué cambió: **hubo un gran percance**' "$T/g.txt" \
+  || fail "(g) los ** del llamador quedaron anidados: $(cat "$T/g.txt")"
+
 echo "TODO VERDE: test-corrida-negritas"
