@@ -116,6 +116,7 @@ LATIDO_TOPE=${LATIDO_TOPE:-240}
 LATIDO_ONCE=${LATIDO_ONCE:-}
 LATIDO_STAMP="$STATE_DIR/latido.stamp"
 LATIDO_LOCK="$STATE_DIR/latido.lock"
+LATIDO_LOCK_STALE=60
 WATCH_MARKER=OPENCLAW_WATCH
 latido_pid=""
 
@@ -469,10 +470,16 @@ tick() {
 # mkdir is the atomic step. The holder's pid goes inside so a watcher killed while holding it
 # does not silence the latido forever: a dead holder's lock is taken over.
 latido_lock() {
-  local holder
+  local holder since age
   if ! mkdir "$LATIDO_LOCK" 2>/dev/null; then
     holder=$(cat "$LATIDO_LOCK/pid" 2>/dev/null) || holder=""
-    if [[ ! $holder =~ ^[0-9]+$ ]] || kill -0 "$holder" 2>/dev/null; then
+    since=$(stat -f %m "$LATIDO_LOCK" 2>/dev/null || stat -c %Y "$LATIDO_LOCK" 2>/dev/null) || since=""
+    [[ $since =~ ^[0-9]+$ ]] || since=$(date +%s)
+    age=$(($(date +%s) - since))
+    # The lock is held for milliseconds (check + launch). Past LATIDO_LOCK_STALE it is orphaned
+    # (a watcher killed between mkdir and the pid write, or a reused pid) and must be taken back,
+    # or the latido stays off forever.
+    if [[ $age -lt $LATIDO_LOCK_STALE ]] && { [[ ! $holder =~ ^[0-9]+$ ]] || kill -0 "$holder" 2>/dev/null; }; then
       return 1
     fi
     rm -rf "$LATIDO_LOCK"
