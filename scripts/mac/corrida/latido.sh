@@ -205,7 +205,10 @@ print(datetime.fromtimestamp(int(os.environ['OWED_HM'])).strftime('%H:%M'))" 2>/
         cambio_td="el reloj de avance no dejó rastro legible; te aviso desde el latido"
       fi
       rc_td=0
-      corrida_aviso_directo "$id" "AVANZA" "$P_AVANCE" "$cambio_td" "$P_SIGUE" "$P_NECESITO" || rc_td=1
+      # La etiqueta es la del parte (14.27 R16): una corrida DETENIDA no sale
+      # como AVANZA. No se limita a AVANZA porque (1) solo reenvia un DETENIDO
+      # igual a la hora y la promesa de 14.8 es un aviso cada 30 min.
+      corrida_aviso_directo "$id" "$P_ETIQ" "$P_AVANCE" "$cambio_td" "$P_SIGUE" "$P_NECESITO" || rc_td=1
       EVT_tipo=avance-tardanza EVT_owed="$(epoch_a_iso "$owed")" \
         EVT_ok="$([ "$rc_td" -eq 0 ] && echo true || echo false)" evento_jsonl "$dir"
     fi
@@ -248,7 +251,8 @@ print(datetime.fromtimestamp(int(os.environ['OWED_HM'])).strftime('%H:%M'))" 2>/
   # (solo campos que el gh real soporta: con "actor" rechaza la invocacion
   # entera y el chequeo moria en silencio); si concluyo en fallo (incluido
   # timeout y fallo de arranque) y ese sha no se aviso, sale un DETENIDA en
-  # lenguaje de usuario y el sha, el autor y los archivos — sacados de la
+  # lenguaje de usuario (sin decir "automatico": el rojo puede venir de un
+  # merge humano, 14.27 R14) y el sha, el autor y los archivos — sacados de la
   # MISMA llamada al commit — quedan en el registro local de la corrida, que
   # es donde el lead los lee (el validador de 9.1 no deja citarlos en el
   # mensaje, y esta fila no es excepcion). gh caido: cero avisos, el latido
@@ -310,7 +314,7 @@ print(chr(10).join(f.get('filename','') for f in d.get('files',[]) if f.get('fil
           EVT_tipo=gh-fallo EVT_rama="$def" EVT_motivo="commit sin metadatos" evento_jsonl "$dir" \
             || echo "latido: y no se pudo anotar el fallo de gh en eventos.jsonl" >&2
         elif corrida_mensaje "$id" "DETENIDA" "$P_AVANCE" \
-            "el repositorio central quedo en rojo tras un cambio automatico; ya se esta revisando" \
+            "el repositorio central quedo en rojo tras un cambio; ya se esta revisando" \
             "$P_SIGUE" "nada"; then
           if CIDIR="$dir" CI_SHA="$sha" CI_AUTOR="$autor" CI_ARCH="$archivos" \
              CI_AT="$(epoch_a_iso "$now")" python3 -c "

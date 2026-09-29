@@ -185,6 +185,22 @@ $(cat "$T/det-gh.txt")"
 grep -q "gh sin autenticar" "$T/det-gh.txt" \
   || fail "el aviso DETENIDA no nombra la razon de gh:
 $(cat "$T/det-gh.txt")"
+
+# 14.27 R4: una razon con jerga (el CLI "script" que muere) queda fuera del
+# aviso, pero la razon limpia de gh sigue diciendo que falta.
+modos x script cli-muere "--flag-9" "BAR-OK-9"
+abrir t-gh-jerga "$RB"
+out=$(bash "$CORR" preflight t-gh-jerga 2>&1); rc=$?
+[ $rc -ne 0 ] || fail "con gh en 401 y binario que muere debio dar NO APTO"
+printf '%s' "$out" | grep -q "binario muere al arrancar: script" || fail "NO APTO sin la razon del binario:
+$out"
+texto_json "$(tail -n 1 "$T/corridas/t-gh-jerga/mensajes.jsonl")" >"$T/det-gh-jerga.txt"
+grep -q "falta: gh sin autenticar" "$T/det-gh-jerga.txt" \
+  || fail "una razon con jerga borro del aviso la razon limpia de gh:
+$(cat "$T/det-gh-jerga.txt")"
+grep -q "script" "$T/det-gh-jerga.txt" \
+  && fail "la razon con jerga llego al aviso:
+$(cat "$T/det-gh-jerga.txt")"
 unset GH_MODO
 
 # ROJO con binario que muere.

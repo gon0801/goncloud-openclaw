@@ -547,7 +547,8 @@ latido_lock() {
   local holder since age
   if ! mkdir "$LATIDO_LOCK" 2>/dev/null; then
     holder=$(cat "$LATIDO_LOCK/pid" 2>/dev/null) || holder=""
-    since=$(stat -f %m "$LATIDO_LOCK" 2>/dev/null || stat -c %Y "$LATIDO_LOCK" 2>/dev/null) || since=""
+    # GNU primero: en Linux `stat -f` es el estado del sistema de archivos, no el mtime.
+    since=$(stat -c %Y "$LATIDO_LOCK" 2>/dev/null || stat -f %m "$LATIDO_LOCK" 2>/dev/null) || since=""
     [[ $since =~ ^[0-9]+$ ]] || since=$(date +%s)
     age=$(($(date +%s) - since))
     # The lock is held for milliseconds (check + launch). Past LATIDO_LOCK_STALE it is orphaned
