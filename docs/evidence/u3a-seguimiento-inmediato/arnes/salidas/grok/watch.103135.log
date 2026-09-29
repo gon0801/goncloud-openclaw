@@ -1,0 +1,5 @@
+2026-09-29T17:30:48Z tmux-activity-watch starting (QUIET_SECS=10 TICK_SECS=2 LATIDO_SECS=1800 marker=OPENCLAW_WATCH)
+2026-09-29T17:30:48Z latido launched (pid=63850)
+2026-09-29T17:31:20Z sent: tmux: medicion-grok quiet for 11s | cmd=grok-native cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-grok-103048/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t medicion-grok -S -80
+medicion-grok
+2026-09-29T17:31:34Z relanzo automatico: medicion-grok (corrida arnes19-grok)

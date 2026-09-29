@@ -1,0 +1,21 @@
+{
+ "token": "codex",
+ "sucesor": "kimi",
+ "config_arnes": {
+  "QUIET_SECS": "10",
+  "TICK_SECS": "2"
+ },
+ "offset_gateway_mac_ms": -525,
+ "breve_rc": "0",
+ "t_fin_wall": "2026-09-29T18:42:26.071Z",
+ "deteccion_a_envio_s": 10.48,
+ "turno_started_gw_ms": 1790707362709,
+ "envio_a_atencion_s": 6.68,
+ "nota_reloj": "atencion del audit (reloj gateway) llevada al reloj Mac con el offset medido por ssh; resolucion de sondas ~1 s",
+ "turno_del_dueno_s": 29.16,
+ "lanzador_sucesor": "lead",
+ "envio_a_sesion_sucesor_s": 44.76,
+ "envio_a_actividad_sucesor_s": 45.28,
+ "resultado-r2.txt": "MEDICION-R2-kimi\n",
+ "veredicto": "OK"
+}

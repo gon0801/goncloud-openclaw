@@ -1,0 +1,21 @@
+{
+ "token": "zcode",
+ "sucesor": "codex",
+ "config_arnes": {
+  "QUIET_SECS": "10",
+  "TICK_SECS": "2"
+ },
+ "offset_gateway_mac_ms": null,
+ "breve_rc": "0",
+ "t_fin_wall": "2026-09-29T18:32:40.252Z",
+ "deteccion_a_envio_s": 10.16,
+ "turno_started_gw_ms": 1790706774656,
+ "envio_a_atencion_s": null,
+ "nota_reloj": "sin sondas ssh: offset desconocido, atencion no comparable con el envio",
+ "turno_del_dueno_s": 60.92,
+ "lanzador_sucesor": "lead",
+ "envio_a_sesion_sucesor_s": 75.15,
+ "envio_a_actividad_sucesor_s": 76.18,
+ "resultado-r2.txt": "",
+ "veredicto": "OK-CON-RESERVAS"
+}

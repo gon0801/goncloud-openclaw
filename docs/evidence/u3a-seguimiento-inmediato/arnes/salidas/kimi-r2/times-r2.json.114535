@@ -1,0 +1,21 @@
+{
+ "token": "kimi",
+ "sucesor": "grok",
+ "config_arnes": {
+  "QUIET_SECS": "10",
+  "TICK_SECS": "2"
+ },
+ "offset_gateway_mac_ms": -510,
+ "breve_rc": "0",
+ "t_fin_wall": "2026-09-29T18:43:48.470Z",
+ "deteccion_a_envio_s": 10.08,
+ "turno_started_gw_ms": 1790707445349,
+ "envio_a_atencion_s": 7.31,
+ "nota_reloj": "atencion del audit (reloj gateway) llevada al reloj Mac con el offset medido por ssh; resolucion de sondas ~1 s",
+ "turno_del_dueno_s": 63.85,
+ "lanzador_sucesor": "lead",
+ "envio_a_sesion_sucesor_s": 81.15,
+ "envio_a_actividad_sucesor_s": 81.67,
+ "resultado-r2.txt": "MEDICION-R2-grok\n",
+ "veredicto": "OK"
+}

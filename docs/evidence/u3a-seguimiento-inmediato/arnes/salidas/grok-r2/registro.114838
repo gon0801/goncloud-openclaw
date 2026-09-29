@@ -1,0 +1,34 @@
+{
+ "schema": "corrida.v2",
+ "id": "arnes19-grok",
+ "runbook": "/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r2-grok/runbook.md",
+ "vigia": "hermes",
+ "simulacro": true,
+ "canal": {
+  "cron": "arnes-canal",
+  "destino": "arnes:destino"
+ },
+ "cli_modos": "/Users/dn/dev/wt/u3a-b1/scripts/mac/cli-modos.tsv",
+ "seguimiento_global": true,
+ "inicio": "2026-09-29T11:45:53-0700",
+ "timebox_horas": 6,
+ "sesiones": [
+  {
+   "nombre": "medicion-grok",
+   "rol": "lead",
+   "cli": "grok",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r2-grok/repo"
+  },
+  {
+   "nombre": "sucesor-grok",
+   "rol": "lead",
+   "cli": "claude",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r2-grok/repo"
+  }
+ ],
+ "preaprobaciones": [],
+ "estado": "cerrada",
+ "lanes": []
+}

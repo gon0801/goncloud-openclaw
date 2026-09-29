@@ -1,0 +1,21 @@
+{
+ "token": "grok",
+ "sucesor": "claude",
+ "config_arnes": {
+  "QUIET_SECS": "10",
+  "TICK_SECS": "2"
+ },
+ "offset_gateway_mac_ms": -573,
+ "breve_rc": "0",
+ "t_fin_wall": "2026-09-29T18:46:13.463Z",
+ "deteccion_a_envio_s": 10.67,
+ "turno_started_gw_ms": 1790707591629,
+ "envio_a_atencion_s": 8.07,
+ "nota_reloj": "atencion del audit (reloj gateway) llevada al reloj Mac con el offset medido por ssh; resolucion de sondas ~1 s",
+ "turno_del_dueno_s": 23.73,
+ "lanzador_sucesor": "lead",
+ "envio_a_sesion_sucesor_s": 42.11,
+ "envio_a_actividad_sucesor_s": 43.13,
+ "resultado-r2.txt": "",
+ "veredicto": "OK-CON-RESERVAS"
+}

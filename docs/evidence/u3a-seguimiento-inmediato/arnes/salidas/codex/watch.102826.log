@@ -1,0 +1,7 @@
+2026-09-29T17:27:48Z tmux-activity-watch starting (QUIET_SECS=10 TICK_SECS=2 LATIDO_SECS=1800 marker=OPENCLAW_WATCH)
+2026-09-29T17:27:49Z latido launched (pid=52650)
+responder: medicion-codex no está en ninguna corrida abierta; no se toca
+2026-09-29T17:27:51Z sent: tmux: medicion-codex waiting for approval for 0s | cmd=node cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-codex-102748/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t medicion-codex -S -80
+2026-09-29T17:28:12Z sent: tmux: medicion-codex quiet for 11s | cmd=node cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-codex-102748/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t medicion-codex -S -80
+medicion-codex
+2026-09-29T17:28:25Z relanzo automatico: medicion-codex (corrida arnes19-codex)

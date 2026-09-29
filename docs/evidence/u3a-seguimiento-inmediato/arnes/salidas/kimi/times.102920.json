@@ -1,0 +1,35 @@
+{
+ "token": "kimi",
+ "config_arnes": {
+  "QUIET_SECS": 10.0,
+  "TICK_SECS": 2.0
+ },
+ "config_produccion": {
+  "QUIET_SECS": 900,
+  "TICK_SECS": 15,
+  "nota": "valores por defecto instalados, no medidos aqui"
+ },
+ "t_fin_wall": "2026-09-29T17:28:56.747Z",
+ "avisos_recibidos": [
+  {
+   "mono_ns": 641106732275583,
+   "delta_fin_s": 8.73,
+   "texto": "tmux: medicion-kimi quiet for 11s | cmd=node cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-kimi-102842/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t medicion-kimi -S -80"
+  }
+ ],
+ "deteccion_a_envio_s": 8.73,
+ "vigia_log": [
+  "2026-09-29T17:29:05Z sent: tmux: medicion-kimi quiet for 11s | cmd=node cwd=/Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/arnes19-kimi-102842/repo | read it before acting: /Users/dn/dev/wt/u3a-b1/docs/evidence/u3a-seguimiento-inmediato/arnes/tmux-arnes capture-pane -p -t medicion-kimi -S -80",
+  "2026-09-29T17:29:19Z relanzo automatico: medicion-kimi (corrida arnes19-kimi)"
+ ],
+ "transporte_script_s_aprox": 0.48,
+ "resolucion_pared": "±0.5 s",
+ "relevo": {
+  "cierre_simulado_wall": "2026-09-29T17:29:16",
+  "deteccion_cierre_a_sesion_viva_s": 1.56,
+  "cierre_a_primera_actividad_s": 2.08,
+  "nota": "cierre provocado por el arnes (ficticio); deteccion, relevo y actividad son reales"
+ },
+ "resultado.txt": "MEDICION-19.0-kimi\n",
+ "veredicto": "OK"
+}

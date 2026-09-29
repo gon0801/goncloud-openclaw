@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+"""Doble de openclaw para el arnes 19.0: registra cada llamada y responde exito.
+
+Nunca toca el gateway real. Su unica funcion es dejar prueba del transporte
+(mono_ns + wall + argv) y contestar lo minimo para que corrida.sh converja:
+cron list devuelve el fixture del canal del arnes; message send devuelve un
+messageId creciente. El resto sale con exito sin salida.
+"""
+import json
+import os
+import sys
+import time
+
+log = os.environ.get("DOBLE_LOG")
+if not log:
+    sys.stderr.write("openclaw-falso: DOBLE_LOG requerido\n")
+    sys.exit(1)
+
+args = sys.argv[1:]
+rec = {
+    "mono_ns": time.monotonic_ns(),
+    "wall": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
+    + ".%03dZ" % (int(time.time() * 1000) % 1000),
+    "argv": args,
+}
+
+if args[:2] == ["cron", "list"]:
+    print(json.dumps({"jobs": [{
+        "name": "arnes-canal", "createdAtMs": 1,
+        "delivery": {"to": "arnes:destino", "channel": "telegram"},
+    }]}))
+elif args[:2] == ["message", "send"]:
+    mid = 19000000 + sum(1 for _ in open(log)) + 1
+    print(json.dumps({"messageId": mid}))
+
+with open(log, "a") as f:
+    f.write(json.dumps(rec) + "\n")
+sys.exit(0)
