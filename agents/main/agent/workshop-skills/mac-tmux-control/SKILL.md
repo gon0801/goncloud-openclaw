@@ -67,6 +67,7 @@ Drive CLI agents by **tmux session name** through `exec` with `host="node"` and 
 A watcher (`tmux-activity-watch.sh`, launchd on the Mac) and Claude Code's own Stop hook wake you
 with `openclaw system event` instead of you polling tmux on a cron. Events of a run go to that
 run's session (`agent:main:sim9-<run>`); every other one goes to `agent:main:vigia-mac`, a session
+<!-- candado: test-tmux-activity-watch.sh -->
 with no delivery channel: your final reply there reaches nobody, and neither does a `message`
 call without a target. When David must know something, send it with your message tool and an
 explicit target (his Telegram DM). Events you will see:
