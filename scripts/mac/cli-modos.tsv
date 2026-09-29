@@ -5,13 +5,15 @@
 # Barras de los seis seleccionables medidas en vivo 2026-09-27 en esta Mac
 # (comandos, salidas y capturas: ~/.local/state/u3-loop/mediciones-14.7);
 # cada barra aparece bajo la argv start:write y start:review de workers.v1.json
-# y bajo el flag de sondeo. kimi/grok start:review con argv invalida en el
+# y bajo el flag de sondeo. grok start:review con argv invalida en el
 # registro: hallazgo ortogonal, ajeno a esta tabla.
+# kimi remedido 2026-09-28 (kimi 2.1.1): la linea de estado ya no dice auto;
+# "thinking:" sale igual con --auto y con --plan.
 claude	claude	--permission-mode acceptEdits	(shift+tab to cycle)	unknown	unknown	unknown
 zcode	zcode	--mode yolo	zai/glm	/mode yolo	unknown	unknown
 glm	zcode	--mode yolo	zai/glm	/mode yolo	unknown	unknown
 deepseek	deepseek	unknown	unknown	unknown	unknown	unknown
-kimi	kimi	--auto	auto	unknown	unknown	unknown
+kimi	kimi	--auto	thinking:	unknown	unknown	unknown
 muse	muse	--yolo	YOLO	unknown	unknown	unknown
 codex	codex	--sandbox workspace-write	Ask Codex to do anything	unknown	unknown	unknown
 cursor-agent	cursor-agent	-f --trust	Cursor Agent	unknown	unknown	unknown

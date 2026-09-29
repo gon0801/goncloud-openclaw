@@ -338,6 +338,42 @@ assert c["estado"]=="failed", c
 PY
 bash "$CORR" adaptador stop run-1 lane-1 claude_fable ses-resume-f >/dev/null 2>&1 || true
 
+# Dialogo de confianza de carpeta (2026-09-28): se acepta solo si muestra el
+# worktree reservado del carril. La ruta pintada es la canonica (cd -P), como
+# la imprimen las CLIs reales; el carril guarda la de mktemp.
+WT_CANON="$(cd -P "$T/wt" && pwd)"
+for par in claude_fable:claude codex:codex kimi_k3:kimi; do
+  w="${par%%:*}"; b="${par#*:}"
+  "$TM_REAL" -L "$L" set-environment -g FAKE_CONFIANZA_RUTA "$WT_CANON"
+  modo_fake "confianza-$b"
+  ad_start run-1 lane-1 "$w" "ses-conf-$b" "$T/wt" "$T/brief.txt" >"$T/conf.out" 2>"$T/conf.err" \
+    || fail "$b: dialogo con el worktree del carril no se respondio: $(cat "$T/conf.err")
+$("$TM_REAL" -L "$L" capture-pane -p -t "=ses-conf-$b:" 2>/dev/null)"
+  grep -q "pidio confianza para el worktree del carril" "$T/conf.err" \
+    || fail "$b: respondio sin dejar la linea en stderr"
+  bash "$CORR" adaptador stop run-1 lane-1 "$w" "ses-conf-$b" >/dev/null
+
+  "$TM_REAL" -L "$L" set-environment -g FAKE_CONFIANZA_RUTA "$(cd -P "$T/wt-r" && pwd)"
+  : >"$TMUX_LOG"
+  ad_start run-1 lane-1 "$w" "ses-ajena-$b" "$T/wt" "$T/brief.txt" >/dev/null 2>"$T/conf.err" \
+    && fail "$b: dialogo con una ruta ajena se respondio"
+  grep -q "la barra no aparecio" "$T/conf.err" \
+    || fail "$b: ruta ajena sin el fallo de hoy: $(cat "$T/conf.err")"
+  grep -q "send-keys -t =ses-ajena-$b:" "$TMUX_LOG" \
+    && fail "$b: se enviaron teclas a un dialogo con ruta ajena"
+  "$TM_REAL" -L "$L" has-session -t "=ses-ajena-$b" 2>/dev/null \
+    && fail "$b: ruta ajena dejo la sesion viva"
+done
+modo_fake ""
+
+# cursor-agent 2026.09.26 avisa la cuota con "You're out of usage".
+modo_fake sin-uso
+ad_start run-1 lane-1 cursor ses-sin-uso "$T/wt" "$T/brief.txt" >/dev/null \
+  || fail "start para cuota de cursor fallo"
+got="$(bash "$CORR" adaptador inspect run-1 lane-1 cursor ses-sin-uso)"
+[ "$got" = "quota" ] || fail "cursor sin uso dio $got, no quota"
+bash "$CORR" adaptador stop run-1 lane-1 cursor ses-sin-uso >/dev/null
+modo_fake ""
 
 # accion invalida y worker desconocido: error cerrado, nunca un estado.
 out="$(bash "$CORR" adaptador volar run-1 lane-1 claude_fable ses-x 2>&1)"; rc=$?
@@ -373,7 +409,7 @@ for par in \
   "claude|(shift+tab to cycle)" \
   "codex|Ask Codex to do anything" \
   "zcode|zai/glm" \
-  "kimi|auto" \
+  "kimi|thinking:" \
   "cursor-agent|Cursor Agent" \
   "grok|always-approve"; do
   b="${par%%|*}"; texto="${par#*|}"
