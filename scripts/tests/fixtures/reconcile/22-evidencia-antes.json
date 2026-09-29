@@ -2,6 +2,9 @@
   "expect_py1": [
     "record_observed",
     "record_observed",
+    "record_observed",
+    "record_observed",
+    "record_observed",
     "record_observed"
   ],
   "expect_py2": [],
@@ -25,8 +28,12 @@
           "merge_commit": "dddddddddddddddddddddddddddddddddddddddd",
           "merged": true
         },
+        "pr": {
+          "head": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "number": 7
+        },
         "predecessor_alive": false,
-        "remote_branch": false,
+        "remote_branch": true,
         "session_alive": false,
         "worktree_exists": true
       }
@@ -60,8 +67,12 @@
           "merge_commit": "dddddddddddddddddddddddddddddddddddddddd",
           "merged": true
         },
+        "pr": {
+          "head": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "number": 7
+        },
         "predecessor_alive": false,
-        "remote_branch": false,
+        "remote_branch": true,
         "session_alive": false,
         "worktree_exists": true
       }

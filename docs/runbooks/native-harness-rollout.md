@@ -66,8 +66,10 @@ ramas protegidas y despliegue. `main` queda fuera del allowlist de merge
 
 Evidencia de promoción a Etapa 4: al menos un PR nativo completo (cruzada
 local, CI vigente en el head, CodeRabbit leído o indisponibilidad declarada)
-y la recepción del cambio por la ruta autorizada del kit. El merge lo ejecuta
-el closer autorizado, no un harness.
+y la recepción del cambio por la ruta autorizada: recibo del kit o, con
+`modo_recibo: ci-y-revisor` declarado en `preaprobaciones.v1.json` (kit
+apagado, David 2026-09-28), CI verde y veredicto de revisor sobre el mismo
+head. El merge lo ejecuta el closer autorizado, no un harness.
 
 ## Etapa 4 — Canary integral
 

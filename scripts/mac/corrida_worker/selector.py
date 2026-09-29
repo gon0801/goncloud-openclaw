@@ -97,9 +97,14 @@ def hard_filter_reasons(
         reasons.append("broken")
     if worker.id in exhausted:
         reasons.append("quota-exhausted")
-    elif quota_group(worker) in exhausted_groups:
-        # 14.13: el relevo nunca cicla por una cuenta agotada; una entrada
-        # del mismo quota_group queda descartada aunque este sana.
+    elif (
+        quota_group(worker) in exhausted_groups
+        and installed
+        and status != "unauthenticated"
+    ):
+        # 14.13: el relevo nunca cicla por una cuenta caida (cuota, auth o
+        # binario); una entrada del mismo quota_group queda descartada aunque
+        # este sana. La que cayo ya lleva su propia razon.
         reasons.append("quota-group")
     if not set(_required_capabilities(request)) <= set(worker.capabilities):
         reasons.append("missing-capability")
@@ -180,8 +185,14 @@ def select_worker(
         str(entry.get("worker")) for entry in active if isinstance(entry, Mapping)
     )
     exhausted_ids = frozenset(exhausted)
+    # Spec y runbook de Fase 14: cuota, auth vencida o binario ausente
+    # descartan el quota_group entero (14.25 R12/R26).
     grupos_agotados = frozenset(
-        quota_group(worker) for worker in registry.workers if worker.id in exhausted_ids
+        quota_group(worker)
+        for worker in registry.workers
+        if worker.id in exhausted_ids
+        or normalized.get(worker.id) == "unauthenticated"
+        or (installed is not None and not installed.get(worker.id, True))
     )
     candidates: list[tuple[int, int, Worker, dict[str, int]]] = []
     discarded: list[Discard] = []

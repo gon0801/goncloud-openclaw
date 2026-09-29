@@ -137,9 +137,11 @@ export WATCH_INSTALADO="$T/wbin/tmux-activity-watch.sh" ARGV_LOG
 
 # Vigilante de mentira: instalado = el blob de origin que preflight compara.
 # Proceso con su nombre para que pgrep lo encuentre; muere en el trap del EXIT.
+# Vive mientras viva esta prueba, sin tope fijo: un tope se queda corto si la
+# suite tarda mas (14.25 R25) y aun asi no deja huerfanos si la matan con -9.
 git -C "$T/repo" show "origin/main:scripts/mac/tmux-activity-watch.sh" >"$WATCH_INSTALADO" \
   || fail "sin blob de referencia del vigilante"
-bash -c "exec -a \"$T/wbin/tmux-activity-watch.sh\" sleep 600" &
+bash -c "exec -a \"$T/wbin/tmux-activity-watch.sh\" bash -c 'while kill -0 $$ 2>/dev/null; do sleep 1; done'" &
 VPID=$!
 
 modos() { # $1 archivo: filas "cli binario flag barra"

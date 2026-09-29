@@ -47,7 +47,9 @@ done
 
 # Variantes derivadas del fixture: capacidad, worktree, autor, revisor previo, cuota.
 T=$(mktemp -d) || exit 1
-trap 'rm -rf "$T"' EXIT
+# Si una asercion falla a media prueba, la sonda y sus hijos (el daemon
+# setsid, el hijo que retiene el grupo) no pueden quedar vivos (14.25 R5).
+trap 'kill -9 $(cat "$T/daemon.pid" "$T/hijo.pid" 2>/dev/null) ${probe_pid:-} 2>/dev/null; rm -rf "$T"' EXIT
 python3 - "$ST" "$T" <<'PY'
 import json, sys
 src, tmp = sys.argv[1], sys.argv[2]
@@ -117,6 +119,25 @@ printf '%s' "$relay" | grep -q 'quota-group' \
 printf '%s' "$relay" | grep -q '"model"' || fail "la decision no registra el modelo: $relay"
 printf '%s' "$relay" | grep -q '"effort"' || fail "la decision no registra el effort: $relay"
 
+# 14.25 R12/R26: auth vencida o binario ausente descartan el quota_group
+# entero, igual que la cuota (spec "Selección de un trabajador" y runbook).
+for caida in 'state["health"]["claude_fable"] = "unauthenticated"' \
+    'state["installed"]["claude_fable"] = False'; do
+  python3 - scripts/tests/fixtures/workers/selection-quota-state.json "$T/caida.json" "$caida" <<'PY'
+import json, sys
+state = json.load(open(sys.argv[1]))
+state["exhausted"] = []
+exec(sys.argv[3])
+json.dump(state, open(sys.argv[2], "w"), indent=1, sort_keys=True)
+PY
+  grupo=$($CLI select --registry scripts/tests/fixtures/workers/selection-quota-group.json \
+    --request "$REQ" --state "$T/caida.json") || fail "select con [$caida] fallo"
+  [ "$(printf '%s' "$grupo" | jget 'json.load(sys.stdin)["winner"]')" = "codex" ] \
+    || fail "con [$caida] el relevo eligio el mismo quota_group: $grupo"
+  [ "$(printf '%s' "$grupo" | jget '[d["reasons"] for d in json.load(sys.stdin)["discarded"] if d["worker"]=="claude_opus"]')" = "[['quota-group']]" ] \
+    || fail "con [$caida] claude_opus no quedo fuera por quota-group: $grupo"
+done
+
 # Sondas acotadas: CLIs de mentira vía override, sin tocar PATH ni la red.
 mkdir -p "$T/bin"
 cat >"$T/bin/fake-ok" <<'CLI'
@@ -179,6 +200,10 @@ estado_malo 'state["installed"] = []' "installed lista"
 estado_malo 'state["exhausted"] = "claude"' "exhausted cadena"
 estado_malo 'state["previous_reviewer"] = 17' "previous_reviewer numero"
 estado_malo 'state["history"] = ["x"]' "history con una cadena"
+# 14.25 R30/R35: exhausted falsey que no es lista, o con elementos que no son
+# cadena, da el diagnostico limpio (no se vuelve [] ni revienta en frozenset).
+estado_malo 'state["exhausted"] = ""' "exhausted cadena vacia"
+estado_malo 'state["exhausted"] = [["claude"]]' "exhausted con una lista adentro"
 
 # 14.20 (6): al vencer el tope se mata el GRUPO (killpg), no solo el PID: un
 # binario que deja un hijo vivo no puede sobrevivir a la sonda.
@@ -202,6 +227,7 @@ while [ "$i" -lt 20 ]; do
   i=$((i+1))
 done
 [ "$muerto" -eq 1 ] || fail "el hijo sobrevivio al tope de la sonda (se mato solo el PID)"
+rm -f "$T/hijo.pid"
 
 # 14.20 r2 (B1): un hijo separado con setsid escapa al killpg y retiene
 # stdout/stderr heredados; la sonda no puede esperar esas pipes sin tope: tiene
@@ -228,6 +254,7 @@ while [ "$i" -lt 50 ]; do
   i=$((i+1))
 done
 [ "$regreso" -eq 1 ] || fail "la sonda no regreso en 5 s con un hijo setsid que hereda la salida (B1)"
+probe_pid=
 out=$(cat "$T/daemon.out")
 [ "$out" = "broken" ] || fail "la sonda del daemon dio $out"
 kill -9 "$(cat "$T/daemon.pid" 2>/dev/null)" 2>/dev/null

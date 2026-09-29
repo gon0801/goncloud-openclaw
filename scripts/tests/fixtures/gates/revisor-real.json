@@ -1,0 +1,27 @@
+{
+ "_origen": "gh api repos/gon0801/goncloud-openclaw/{issues/204/comments,issues/200/comments,pulls/204/reviews} leidos 2026-09-28, recortados",
+ "real_head": "2ef50e8a365ded37dc113b166478ba80d6ce881f",
+ "deepseek_completo": {
+  "user": {
+   "login": "github-actions[bot]",
+   "type": "Bot"
+  },
+  "body": "<!-- ai-review:sticky -->\n<!-- ai-review:sha=2ef50e8a365ded37dc113b166478ba80d6ce881f -->\n<!-- ai-review:completion=2ef50e8a365ded37dc113b166478ba80d6ce881f:complete -->\n<!-- ai-review:findings={\"findings\":[{\"id\":\"F1\",\"file\":\"scripts/mac/tmux-activity-watch.sh\",\"line\":482,\"severity\":\"Medium\",\"title\":\"el modo --once lanza un latido real y espera hasta 240 s\",\"state\":\"open\"},{\"id\":\"F2\",\"file\":\"scripts/mac/ai.goncloud.tmux-activity-watch.plist\",\"line\":35,\"severity\":\"Low\",\"title\":\"REPO_DIR es una ruta adivinada y la prueba nueva solo mira que exista\",\"state\":\"open\",\"files\":[\"scripts/mac/instalar-mac.sh\",\"scripts/tests/test-tmux-activity-watch.sh\",\"scripts/mac/corrida/latido.sh\"]},{\"id\":\"F3\",\"file\":\"scripts/mac/tmux-activity-watch.sh\",\"line\":470,\"severity\":\"Low\",\"title\":\"el tope duro (240 s) es menor que la suma de los topes de red del latido\",\"state\":\"open\",\"files\":[\"scripts/mac/corrida/latido.sh\",\"scripts/mac/corrida/lib.sh\"]}],\"next\":4} -->\n### Revisión automática · DeepSeek V4.1 Flash · API DeepSeek · 2ef50e8\n\n**Veredicto:** 1 Medium, 2 Low abiertos."
+ },
+ "deepseek_fallido": {
+  "user": {
+   "login": "github-actions[bot]",
+   "type": "Bot"
+  },
+  "body": "<!-- ai-review:sticky -->\n> [!CAUTION]\n> **No se pudo revisar el commit d383c4f:** la revisión falló en todos los intentos (proveedor no disponible por ahora)."
+ },
+ "coderabbit_review": {
+  "user": {
+   "login": "coderabbitai[bot]",
+   "type": "Bot"
+  },
+  "commit_id": "2ef50e8a365ded37dc113b166478ba80d6ce881f",
+  "state": "COMMENTED",
+  "body": "**Actionable comments posted: 3**"
+ }
+}
