@@ -207,6 +207,13 @@ describe("bloques nativos del carril (Task 8)", () => {
     assert.match(html, /<summary>nativo<\/summary>/);
   });
 
+  it("B21: sin effort declarado dice que corre el de la CLI y no inventa un nivel", () => {
+    const html = htmlDe(docNativo({ ...workerBase, effort: null }));
+    assert.ok(html.includes("anthropic/claude-fable-5-1 · effort de la CLI · salud available"), html);
+    const conEffort = htmlDe(docNativo(workerBase));
+    assert.ok(!conEffort.includes("effort de la CLI"), "con effort declarado no dice el de la CLI");
+  });
+
   it("escapa el effort y el model: nada de <script> ni <b> crudos", () => {
     const html = htmlDe(
       docNativo({

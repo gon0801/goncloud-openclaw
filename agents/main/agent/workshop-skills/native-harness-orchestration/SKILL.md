@@ -36,7 +36,7 @@ su observación (`observed.*` en el registro).
   CodeRabbit de ese commit.
 - **Revisión cruzada local antes del primer push**, y el loop de corrección
   de CodeRabbit corre en el mismo PR (delta review, no nueva revisión).
-- **Modelo y effort visibles:** el tablero y la selección muestran el `model` y el `effort` del worker elegido; `reported_model` es lo que la CLI reporta y se registra aparte (14.13d).
+- **Modelo y effort visibles:** el tablero y la selección muestran el `model` y el `effort` del worker elegido; `reported_model` es lo que la CLI reporta y se registra aparte (14.13d). Sin flag de effort en la CLI queda `null` y el tablero dice que corre el de la CLI. `adaptador start` publica el worker del carril y el porqué de su selección en el tablero; un relevo lanzado por `reconciliar` lo anuncia una vez por Telegram.
 - **Canary vivo verificado** antes de declarar éxito; un canary fallido
   obliga reversa documentada.
 - **Routea off a la cadena existente:** con `CORRIDA_NATIVE_ROUTING=off` o el
@@ -51,13 +51,13 @@ su observación (`observed.*` en el registro).
 |---|---|---|
 | Abrir corrida | `corrida.sh abrir <id> --runbook ... --vigia claw --cli-modos <tsv>` | registro abierto |
 | Preflight | `corrida.sh preflight <id>` | `APTO` / `NO APTO <razones>` |
-| Seleccionar worker | `corrida-worker.py select --registry workers.v1.json --request <req> --state <st>` | `winner` + score + razones |
 | Preparar carril | `corrida.sh preparar-carril <id> <carril> <repo> [--read-only]` | reserva escrita |
+| Seleccionar worker | `corrida.sh seleccionar <id> <carril> --request <req> --state <st>` | `winner` + score + razones de `corrida-worker.py select`, guardados en el carril |
 | Arrancar sesión | `corrida.sh adaptador start <id> <carril> <worker> <sesion> <wt> <brief>` | `session` registrada |
 | Entregar brief | `corrida.sh adaptador deliver <id> <carril> <worker> <sesion> <brief>` | `accepted`/`blocked` |
 | Terminal | `corrida.sh mostrar-terminal <id> <carril>` | visible/degraded |
 | Inspeccionar | `corrida.sh adaptador inspect <id> <carril> <worker> <sesion>` | running/waiting/complete/failed/quota/auth-vencida |
-| Reconciliar | `corrida.sh reconciliar <id> --observations <json>` | efectos ejecutados + `CONVERGED` |
+| Reconciliar | `corrida.sh reconciliar <id> --observations <json>` | efectos ejecutados + `CONVERGED`; `REOBSERVAR` tras un efecto externo: observa de nuevo y repite |
 | Evidencia | `corrida.sh compuerta <id> <lane> cross-review|push-pr|ci|coderabbit --sha <sha> --evidence <json>` | `ALLOW`/`DENY` + proyección |
 | Delegar merge | `corrida.sh compuerta <id> <lane> merge --sha <sha> --evidence <json>` | `ALLOW merge-ok` |
 | Deploy | `corrida.sh compuerta <id> <lane> deploy --sha <sha> --evidence <json>` | `ALLOW`/`DENY` |

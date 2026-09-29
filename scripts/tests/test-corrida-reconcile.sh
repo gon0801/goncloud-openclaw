@@ -225,6 +225,16 @@ c = json.load(open(sys.argv[1]))["lanes"][0]
 assert c["worker"] == "B" and c["session"] == "sB", (c["worker"], c["session"])
 assert [e["payload"]["worker"] for e in c["events"] if e["kind"] == "observed.launched"] == ["B", "A", "B"], c["events"]
 PY2
+# B21: relanzar el MISMO trabajador y sesion tras un intent nuevo (el sucesor
+# murio y el relevo cae otra vez en el) es un lanzamiento nuevo, no un
+# duplicado eterno que deja el intent colgado en la tenencia.
+printf '[{"lane":"l1","kind":"intent.launch_successor","payload":{"worker":"B","session":"sB","preserve_worktree":true}},{"lane":"l1","kind":"observed.launched","payload":{"worker":"B","session":"sB"}}]\n' \
+  >"$T/py-r20/ev.json"
+got_rl="$(python3 "$PW" state reduce --record "$T/py-r20/r.json" --events "$T/py-r20/ev.json")"
+[ "$got_rl" = "APPLIED 2 DUPLICATED 0" ] || fail "B21: el relanzamiento del mismo trabajador dio [$got_rl]"
+printf '[{"lane":"l1","kind":"observed.launched","payload":{"worker":"B","session":"sB"}}]\n' >"$T/py-r20/ev.json"
+[ "$(python3 "$PW" state reduce --record "$T/py-r20/r.json" --events "$T/py-r20/ev.json")" = "APPLIED 0 DUPLICATED 1" ] \
+  || fail "B21: el reintento del relanzamiento no fue duplicado"
 
 # (2d) 14.25 R21/R29: lo anotado en la tenencia anterior no tapa la actual.
 # R21: un sucesor lanzado tras un relevo previo se confirma contra la
@@ -335,6 +345,10 @@ bash "$CORR" reconciliar r2 --observations "$T/e2e-r2-o1.json" >"$T/e2e-r2-1.out
   || fail "r2 e2e inv1 fallo"
 grep -q '^EXECUTED resume_lane l1$' "$T/e2e-r2-1.out" || fail "r2 inv1 no reanudo: $(cat "$T/e2e-r2-1.out")"
 "$TMUX_BIN" has-session -t "=ses-v" 2>/dev/null || fail "r2: la sesion no vive tras el resume"
+# B5: el nombre tmux no es el id de sesion de la CLI; el resume retoma la
+# conversacion mas reciente del worktree y jamas recibe el nombre tmux.
+[ "$(tail -n1 "$T/argv/codex.argv")" = "resume --last --sandbox workspace-write" ] \
+  || fail "r2: argv de resume inesperada: $(tail -n1 "$T/argv/codex.argv")"
 bash "$CORR" reconciliar r2 --observations "$T/e2e-r2-o2.json" >"$T/e2e-r2-2.out" \
   || fail "r2 e2e inv2 fallo"
 n2="$(grep -c '^EXECUTED resume_lane ' "$T/e2e-r2-1.out" "$T/e2e-r2-2.out" | awk -F: '{s+=$2} END {print s}')"
@@ -342,13 +356,36 @@ n2="$(grep -c '^EXECUTED resume_lane ' "$T/e2e-r2-1.out" "$T/e2e-r2-2.out" | awk
 registro_valido "$T/corridas/r2/registro.json"
 echo "ok (4): la sesion desvanecida reanuda una vez y converge"
 
+# (4c) B21 sin --observations: tras el resume, reconciliar vuelve a observar
+# y ve viva la sesion reanudada; con la foto vieja la daba por caida y
+# anotaba un bloqueo de relevo sin candidato.
+mkdir -p "$T/corridas/r4c" "$T/bin-gh4c"
+printf '#!/bin/sh\nexit 0\n' >"$T/bin-gh4c/gh"; chmod +x "$T/bin-gh4c/gh"
+python3 - "$T/corridas/r4c/registro.json" "$T/wt" <<'PY' || fail "r4c sin registro"
+import json,sys
+lane = {"id":"l1","branch":"corrida/r4c/l1","worktree":sys.argv[2],"base_remote_sha":"a"*40,
+        "owner":"l1","mode":"write","role":"write","estado":"activo","token":"9-t",
+        "worker":"codex","harness":"codex-cli","provider":"openai","reported_model":"unknown",
+        "session":"ses-auto","events":[],"evidence":{},"handoff":{"attempts":[],"resumes":0}}
+json.dump({"schema":"corrida.v2","id":"r4c","estado":"abierta","lanes":[lane]},open(sys.argv[1],"w"))
+PY
+completar_registro "$T/corridas/r4c/registro.json" "r4c" "$T/modos.tsv"
+PATH="$T/bin-gh4c:$PATH" bash "$CORR" reconciliar r4c >"$T/r4c.out" || fail "r4c fallo: $(cat "$T/r4c.out")"
+grep -q '^EXECUTED resume_lane l1$' "$T/r4c.out" || fail "r4c no reanudo: $(cat "$T/r4c.out")"
+grep -q '^CONVERGED ' "$T/r4c.out" || fail "r4c no convergio: $(cat "$T/r4c.out")"
+"$TMUX_BIN" has-session -t "=ses-auto" 2>/dev/null || fail "r4c: la sesion reanudada no vive"
+python3 - "$T/corridas/r4c/registro.json" <<'PY' || fail "r4c: la sesion reanudada se tomo por caida"
+import json,sys
+kinds = [e["kind"] for e in json.load(open(sys.argv[1]))["lanes"][0]["events"]]
+assert "observed.resumed" in kinds and "observed.handoff.blocked" not in kinds, kinds
+PY
+"$TMUX_BIN" kill-session -t "=ses-auto" 2>/dev/null
+echo "ok (4c): sin --observations re-observa tras el resume y confirma la sesion viva"
+
 # (5) Reconciliacion repetida: el sucesor queda lanzado y registrado (el
 # fixture conserva su nombre historico "launch-once").
-# 14.22 punto 1: los chequeos de handoff viven en la tenencia actual (eventos
-# desde el ultimo observed.launched). Con una observacion estatica que sigue
-# diciendo muerto al sucesor, un relevo adicional es el comportamiento
-# correcto (acotado por el tope de pasadas y el bloqueo launch-failed); lo
-# que el candado exige es que el lanzamiento quedo registrado.
+# B21: tras el launch la llamada termina (REOBSERVAR) y la segunda, con la
+# foto nueva, converge sin tocar al sucesor.
 e2e_prepara r14 14-repeated-launch-once.json
 bash "$CORR" reconciliar r14 --observations "$T/e2e-r14-o1.json" >"$T/e2e-r14-1.out" \
   || fail "r14 e2e inv1 fallo"
@@ -367,7 +404,116 @@ assert lanzados, c["events"]
 u = lanzados[-1]["payload"]
 assert u.get("worker") == "kimi" and u.get("session") == "ses-r2", u
 PY
-echo "ok (5): el sucesor se lanza y queda registrado; la tenencia acotada re-lanza si la obs insiste"
+echo "ok (5): el sucesor se lanza una vez y queda registrado"
+
+# (5b) B1 de la practica 14.13: relevo por cuota con el predecesor ya
+# detenido. La foto del director no trae al sucesor (aun no existia); tras
+# lanzarlo, reconciliar no puede tomarlo por desaparecido ni matarlo.
+mkdir -p "$T/corridas/r5b"
+python3 - "$T/corridas/r5b/registro.json" "$T/wt" "$T/brief.txt" "$T/r5b-o1.json" "$T/r5b-o2.json" <<'PY' || fail "r5b sin registro"
+import json,sys
+reg,wt,brief,o1,o2 = sys.argv[1:6]
+def ev(n,kind,payload): return {"id":"l1:%s:%02d"%(kind,n),"lane":"l1","kind":kind,"payload":payload,"at":"2026-09-29T10:17:02Z"}
+lane = {"id":"l1","branch":"corrida/r5b/l1","worktree":wt,"base_remote_sha":"a"*40,
+        "owner":"l1","mode":"write","role":"write","estado":"handoff","token":"9-t",
+        "worker":"codex","harness":"codex-cli","provider":"openai","reported_model":"unknown",
+        "session":"ses-pred","brief":brief,"evidence":{"inspect":"quota"},
+        "handoff":{"attempts":[],"resumes":0},
+        "events":[ev(1,"observed.inspect.quota",{"session":"ses-pred"}),
+                  ev(2,"intent.handoff_lane",{"reason":"quota","from_worker":"codex","from_session":"ses-pred",
+                     "to_worker":"kimi","to_session":"ses-suc","preserve_worktree":True,"dirty":True,"commits_ahead":1}),
+                  ev(3,"intent.stop_lane",{"session":"ses-pred"})]}
+json.dump({"schema":"corrida.v2","id":"r5b","estado":"abierta","lanes":[lane]},open(reg,"w"))
+base = {"registry":{"workers":["codex","kimi"]},"candidates":{"exhausted":["codex"],"next":{"worker":"kimi","session":"ses-suc"}}}
+lo = {"session_alive":False,"predecessor_alive":False,"children_writing":False,"worktree_exists":True,
+      "dirty":True,"commits_ahead":1,"remote_branch":False}
+json.dump(dict(base,tmux={"sessions":[]},lanes={"l1":lo}),open(o1,"w"))
+json.dump(dict(base,tmux={"sessions":["ses-suc"]},
+               lanes={"l1":dict(lo,session_alive=True,successor_session="ses-suc",successor={"worker":"kimi"})}),open(o2,"w"))
+PY
+completar_registro "$T/corridas/r5b/registro.json" "r5b" "$T/modos.tsv"
+# B3/B4: el director elige al sucesor con el selector (la decision queda en
+# el carril) y el relevo publica en el tablero y avisa una vez por Telegram.
+cat >"$T/bin/openclaw-r5b" <<STUB
+#!/bin/sh
+printf '%s\\n' "OPENCLAW \$*" >> "$T/r5b-openclaw.log"
+case "\$*" in
+  *"message send"*) printf '{"messageId":"77"}\\n';;
+  *"runbook.progress.get"*) printf '{"ok":true,"doc":%s}\\n' "\$(cat "$T/r5b-tablero.json")";;
+  *"runbook.progress.set"*)
+    while [ \$# -gt 0 ]; do [ "\$1" = "--params" ] && printf '%s' "\$2" >"$T/r5b-tablero.json"; shift; done
+    printf '{"ok":true}\\n';;
+esac
+exit 0
+STUB
+chmod +x "$T/bin/openclaw-r5b"
+python3 - "$T/r5b-tablero.json" <<'PY' || fail "r5b sin tablero"
+import json,sys
+car={"id":"l1","nombre":"relevo","repo":"gon0801/goncloud-openclaw","rama":None,"tareas":["14.13"],
+  "estado":"implementando","paso_loop":1,"pr":None,"head":None,"approve_lead":None,"ci":"sin-ci",
+  "coderabbit":"pendiente","residuales":[],"detenido_por":None,"ultimo_evento":None}
+json.dump({"schema":"runbook-progress.v1","runbook":"docs/runbooks/x.md","fase":"14.13","corrida":"r5b",
+  "titulo":"relevo","lead":{"agente":"claude","inicio":"2026-09-29T10:00:00Z","actualizado":"2026-09-29T10:00:00Z"},
+  "atencion_requerida":{"necesaria":False,"motivo":None,"desde":None},"siguiente_paso":"relevo",
+  "carriles":[car],"cola":[],"notas":[],"eventos":[],
+  "cierre":{"at":None,"telegram_message_id":None,"resumen":None}},open(sys.argv[1],"w"))
+PY
+printf '{"role":"write","task_type":"general"}\n' >"$T/r5b-req.json"
+printf '{"health":{"codex":"available","kimi":"available"},"exhausted":["codex"]}\n' >"$T/r5b-st.json"
+bash "$CORR" seleccionar r5b l1 --request "$T/r5b-req.json" --state "$T/r5b-st.json" >"$T/r5b-sel.out" \
+  || fail "r5b: seleccionar fallo: $(cat "$T/r5b-sel.out")"
+export OPENCLAW_BIN="$T/bin/openclaw-r5b"
+bash "$CORR" reconciliar r5b --observations "$T/r5b-o1.json" >"$T/r5b-1.out" || fail "r5b inv1 fallo: $(cat "$T/r5b-1.out")"
+grep -q '^EXECUTED launch_successor l1$' "$T/r5b-1.out" || fail "r5b inv1 sin launch: $(cat "$T/r5b-1.out")"
+grep -q 'resume_lane\|handoff_lane' "$T/r5b-1.out" && fail "r5b: tomo al sucesor recien lanzado por caido: $(cat "$T/r5b-1.out")"
+tail -n1 "$T/r5b-1.out" | grep -q '^REOBSERVAR ' || fail "r5b: tras el launch no pidio re-observar: $(cat "$T/r5b-1.out")"
+"$TMUX_BIN" has-session -t "=ses-suc" 2>/dev/null || fail "r5b: el sucesor no sigue vivo tras reconciliar"
+bash "$CORR" reconciliar r5b --observations "$T/r5b-o2.json" >"$T/r5b-2.out" || fail "r5b inv2 fallo"
+[ "$(cat "$T/r5b-2.out")" = "CONVERGED 0" ] || fail "r5b inv2 no convergio limpio: $(cat "$T/r5b-2.out")"
+"$TMUX_BIN" has-session -t "=ses-suc" 2>/dev/null || fail "r5b: la segunda pasada mato al sucesor"
+python3 - "$T/corridas/r5b/registro.json" <<'PY' || fail "r5b: registro del relevo inesperado"
+import json,sys
+c = json.load(open(sys.argv[1]))["lanes"][0]
+kinds = [e["kind"] for e in c["events"]]
+assert kinds.count("observed.launched") == 1, kinds
+assert "observed.handoff.blocked" not in kinds and "intent.resume_lane" not in kinds, kinds
+assert c["worker"] == "kimi" and c["session"] == "ses-suc" and c["estado"] == "activo", c
+PY
+registro_valido "$T/corridas/r5b/registro.json"
+AVISO_R5B="El trabajo de la parte l1 pasó de OpenAI (Codex) a Kimi porque se acabó la cuota; lo avanzado se conservó."
+[ "$(grep -c 'message send' "$T/r5b-openclaw.log")" -eq 1 ] \
+  || fail "r5b: el relevo no mando exactamente un aviso: $(cat "$T/r5b-openclaw.log")"
+grep -qF "$AVISO_R5B" "$T/r5b-openclaw.log" \
+  || fail "r5b: el aviso no dice el relevo en palabras del dueno: $(cat "$T/r5b-openclaw.log")"
+python3 - "$T/r5b-tablero.json" "$T/corridas/r5b" "$AVISO_R5B" <<'PY' || fail "r5b: tablero o seleccion del relevo sin publicar"
+import json,os,sys
+d=json.load(open(sys.argv[1]))
+c=d["carriles"][0]
+assert c["worker"]["id"]=="kimi" and c["worker"]["provider"]=="kimi" and c["worker"]["effort"] is None, c["worker"]
+assert any(e["que"]==sys.argv[3] and e["carril"]=="l1" for e in d["eventos"]), d["eventos"]
+nota=[n for n in d["notas"] if n.startswith("l1 seleccion: kimi")]
+assert nota and "codex (quota-exhausted)" in nota[0], d["notas"]
+lane=json.load(open(os.path.join(sys.argv[2],"registro.json")))["lanes"][0]
+assert lane["selection"]["winner"]=="kimi" and lane["selection"]["discarded"]==[{"worker":"codex","reasons":["quota-exhausted"]}], lane["selection"]
+filas=[json.loads(l) for l in open(os.path.join(sys.argv[2],"mensajes.jsonl"))]
+assert [(f["etiqueta"],f["ok"]) for f in filas]==[("AVANZA",True)], filas
+PY
+node --experimental-strip-types --input-type=module - "$T/r5b-tablero.json" <<'JS' || fail "r5b: el tablero publicado no pasa el validador del plugin"
+import fs from "node:fs";
+import { validarProgreso } from "./tablero-runbook/contrato.ts";
+const r = validarProgreso(JSON.parse(fs.readFileSync(process.argv[2], "utf8")));
+if (!r.ok) { console.error(r.razones.join("\n")); process.exit(1); }
+JS
+bash "$CORR" cerrar r5b >/dev/null 2>&1 || fail "r5b: cerrar fallo"
+python3 - "$T/corridas/r5b/archive/l1/selection.json" <<'PY' || fail "r5b: el archivo no guarda el porque de la seleccion"
+import json,sys
+s=json.load(open(sys.argv[1]))
+assert s["winner"]=="kimi" and s["worker"]=="kimi" and s["model"]=="router" and s["effort"] is None, s
+assert s["parts"] and s["score"]==s["candidates"][0]["score"] and s["discarded"], s
+assert len(s["selections"])==1, s["selections"]
+PY
+export OPENCLAW_BIN="$T/bin/openclaw-stub"
+echo "ok (5b): el relevo lanza al sucesor una vez, no lo mata, lo publica y lo avisa una vez"
 
 # (6) Predecesor escribiendo bloquea; al liberarse, el handoff avanza.
 e2e_prepara r12 12-predecessor-blocks.json
@@ -394,9 +540,12 @@ import json,sys
 evs = json.load(open(sys.argv[1]))["lanes"][0]["events"]
 h = [e for e in evs if e["kind"] == "intent.handoff_lane"]
 assert h and h[0]["payload"].get("preserve_worktree") is True, evs
-b = [e for e in evs if e["kind"] == "observed.handoff.blocked"]
-assert b and b[-1]["payload"].get("reason") == "stop-unconfirmed", evs
+# B21: la foto previa al stop ya no decide nada; antes anotaba un
+# stop-unconfirmed falso contra la sesion que el stop acababa de cerrar.
+assert not [e for e in evs if e["kind"] == "observed.handoff.blocked"], evs
 PY
+tail -n1 "$T/e2e-r17-1.out" | grep -qx 'REOBSERVAR 3' \
+  || fail "r17: tras el stop la llamada no pidio re-observar: $(cat "$T/e2e-r17-1.out")"
 echo "ok (7): diff y commits sobreviven al handoff"
 
 # (8) Sin candidatos solo se detiene su carril.

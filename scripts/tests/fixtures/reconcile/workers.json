@@ -24,14 +24,14 @@
     "resume:review": [
      "codex",
      "resume",
-     "{session_id}",
+     "--last",
      "--sandbox",
      "read-only"
     ],
     "resume:write": [
      "codex",
      "resume",
-     "{session_id}",
+     "--last",
      "--sandbox",
      "workspace-write"
     ],
@@ -94,14 +94,12 @@
     ],
     "resume:review": [
      "kimi",
-     "--resume",
-     "{session_id}",
+     "--continue",
      "--read-only"
     ],
     "resume:write": [
      "kimi",
-     "--resume",
-     "{session_id}",
+     "--continue",
      "--auto"
     ],
     "start:review": [

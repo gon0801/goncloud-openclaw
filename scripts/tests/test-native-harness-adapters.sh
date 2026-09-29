@@ -52,6 +52,24 @@ exec $TM_REAL -L $L "\$@"
 STUB
 chmod +x "$T/bin/tmux-shim"
 
+# Doble de openclaw: la prueba jamas habla con el gateway real. Con
+# FAKE_TABLERO_DOC, runbook.progress.get devuelve ese documento y set guarda
+# lo publicado en FAKE_TABLERO_SET; sin el, get no trae documento.
+cat >"$T/bin/openclaw" <<'STUB'
+#!/bin/sh
+printf '%s\n' "$*" >>"${FAKE_OPENCLAW_LOG:-/dev/null}"
+case "$*" in
+  *"runbook.progress.get"*)
+    [ -n "${FAKE_TABLERO_DOC:-}" ] || { printf '{"ok":false,"razon":"desconocida"}\n'; exit 0; }
+    printf 'aviso de config\n{"ok":true,"doc":%s}\n' "$(cat "$FAKE_TABLERO_DOC")";;
+  *"runbook.progress.set"*)
+    while [ $# -gt 0 ]; do [ "$1" = "--params" ] && printf '%s' "$2" >"$FAKE_TABLERO_SET"; shift; done
+    printf '{"ok":true}\n';;
+esac
+exit 0
+STUB
+chmod +x "$T/bin/openclaw"
+export OPENCLAW_BIN="$T/bin/openclaw" FAKE_OPENCLAW_LOG="$T/openclaw.log"
 export PATH="$T/bin:$PATH" CORRIDA_STATE="$T/corridas" TMUX_BIN="$T/bin/tmux-shim"
 export FAKE_ARGV_DIR="$T/argv" FAKE_BAR="FAKE-BARRA-9"
 export CORRIDA_WORKER_BIN_CLAUDE_FABLE="$T/bin/claude" CORRIDA_WORKER_BIN_CLAUDE_OPUS="$T/bin/claude" \
@@ -121,7 +139,8 @@ w=[x for x in r['workers'] if x['id']==os.environ['W']][0]
 a=list(w['commands'][os.environ['K']])
 s={'{worktree}':os.environ['WT'],'{brief}':os.environ['BRIEF'],
    '{session_id}':os.environ['SES'],'{session_name}':os.environ['SES']}
-print(' '.join(s.get(x,x) for x in a[1:]))
+e=w.get('effort') or ''
+print(' '.join(s.get(x,x).replace('{effort}',e) for x in a[1:]))
 "
 }
 bin_de() {
@@ -173,6 +192,16 @@ for w in $(python3 -c 'import json,sys; print(" ".join(x["id"] for x in json.loa
   "$TM_REAL" -L "$L" has-session -t "=$s" 2>/dev/null || fail "$w: la sesion no vive"
   [ "$(tail -n1 "$T/argv/$b.argv")" = "$(argv_esperada "$w" start:write "$s")" ] \
     || fail "$w: argv write distinta: $(tail -n1 "$T/argv/$b.argv")"
+  # B2: lo que el carril registra (y el tablero muestra) es lo que la argv
+  # lleva: modelo y effort de la entrada; sin effort declarado queda null.
+  python3 - "$T/corridas/run-1/registro.json" "$REG" "$w" "$(tail -n1 "$T/argv/$b.argv")" <<'PYE' || fail "$w: el carril no registra modelo y effort de su argv"
+import json,sys
+c=next(e for e in json.load(open(sys.argv[1]))["lanes"] if e.get("id")=="lane-1")
+w=next(x for x in json.load(open(sys.argv[2]))["workers"] if x["id"]==sys.argv[3])
+assert c["model"]==w["model"] and c["effort"]==w.get("effort"), (c.get("model"), c.get("effort"))
+if w.get("effort"):
+    assert w["effort"] in sys.argv[4].split() or "model_reasoning_effort="+w["effort"] in sys.argv[4].split(), sys.argv[4]
+PYE
   sr="ses-$w-r"
   ad_start run-1 lane-r "$w" "$sr" "$T/wt-r" "$T/brief.txt" >/dev/null \
     || fail "$w: start review fallo"
@@ -231,16 +260,19 @@ for w in $(python3 -c 'import json,sys; print(" ".join(x["id"] for x in json.loa
   modo_fake ""
 
   # resume write + review: relanza con la argv de reanudacion del registro.
+  # B5: sin id de la CLI (reconciliar no tiene uno real) cada worker retoma
+  # la conversacion mas reciente de su worktree; el nombre tmux jamas viaja.
   lane_apunta lane-1 "$s"
-  got="$(bash "$CORR" adaptador resume run-1 lane-1 "$w" "$s" "$T/wt" "SESID-9")" \
+  got="$(bash "$CORR" adaptador resume run-1 lane-1 "$w" "$s" "$T/wt")" \
     || fail "$w: resume write fallo"
-  [ "$got" = "resumed" ] || fail "$w: resume write dio $got"
-  [ "$(tail -n1 "$T/argv/$b.argv")" = "$(argv_esperada "$w" resume:write SESID-9)" ] \
+  [ "$got" = "resumed" ] || fail "$w: resume write sin id de la CLI dio $got"
+  [ "$(tail -n1 "$T/argv/$b.argv")" = "$(argv_esperada "$w" resume:write "")" ] \
     || fail "$w: argv resume write distinta: $(tail -n1 "$T/argv/$b.argv")"
-  got="$(bash "$CORR" adaptador resume run-1 lane-r "$w" "$sr" "$T/wt-r" "SESID-9")" \
+  case " $(tail -n1 "$T/argv/$b.argv") " in *" $s "*) fail "$w: el resume recibio el nombre tmux como id";; esac
+  got="$(bash "$CORR" adaptador resume run-1 lane-r "$w" "$sr" "$T/wt-r")" \
     || fail "$w: resume review fallo"
-  [ "$got" = "resumed" ] || fail "$w: resume review dio $got"
-  [ "$(tail -n1 "$T/argv/$b.argv")" = "$(argv_esperada "$w" resume:review SESID-9)" ] \
+  [ "$got" = "resumed" ] || fail "$w: resume review sin id de la CLI dio $got"
+  [ "$(tail -n1 "$T/argv/$b.argv")" = "$(argv_esperada "$w" resume:review "")" ] \
     || fail "$w: argv resume review distinta: $(tail -n1 "$T/argv/$b.argv")"
 
   # stop: detenida y ya-detenida.
@@ -281,11 +313,95 @@ bash "$CORR" adaptador stop run-1 lane-1 claude_fable ses-orden >/dev/null
 # resume sin binario: unavailable y la sesion viva no se toca.
 ad_start run-1 lane-1 codex ses-nobin "$T/wt" "$T/brief.txt" >/dev/null \
   || fail "start para resume unavailable fallo"
-got="$(CORRIDA_WORKER_BIN_CODEX=/no-existe-codex-9 bash "$CORR" adaptador resume run-1 lane-1 codex ses-nobin "$T/wt" SESID-9)"
+got="$(CORRIDA_WORKER_BIN_CODEX=/no-existe-codex-9 bash "$CORR" adaptador resume run-1 lane-1 codex ses-nobin "$T/wt")"
 [ "$got" = "unavailable" ] || fail "resume sin binario dio $got"
 "$TM_REAL" -L "$L" has-session -t "=ses-nobin" 2>/dev/null \
   || fail "resume unavailable toco la sesion viva"
 bash "$CORR" adaptador stop run-1 lane-1 codex ses-nobin >/dev/null
+
+# B5: una argv con {session_id} y sin id real de la CLI no se lanza con un
+# argumento vacio ni con el nombre tmux: unavailable (el relevo decide) y la
+# sesion viva no se toca. Con id real, el id viaja tal cual.
+python3 - "$REG" "$T/reg-sid.json" <<'PYS' || fail "no se armo el registro con {session_id}"
+import json,sys
+d=json.load(open(sys.argv[1]))
+for w in d["workers"]:
+    if w["id"]=="codex":
+        for k in ("resume:write","resume:review"):
+            w["commands"][k]=[x if x!="--last" else "{session_id}" for x in w["commands"][k]]
+json.dump(d,open(sys.argv[2],"w"))
+PYS
+ad_start run-1 lane-1 codex ses-sid "$T/wt" "$T/brief.txt" >/dev/null || fail "start para resume sin id fallo"
+got="$(CORRIDA_WORKERS_REGISTRY="$T/reg-sid.json" bash "$CORR" adaptador resume run-1 lane-1 codex ses-sid "$T/wt")"
+[ "$got" = "unavailable" ] || fail "resume con {session_id} y sin id dio $got"
+"$TM_REAL" -L "$L" has-session -t "=ses-sid" 2>/dev/null || fail "resume sin id toco la sesion viva"
+got="$(CORRIDA_WORKERS_REGISTRY="$T/reg-sid.json" bash "$CORR" adaptador resume run-1 lane-1 codex ses-sid "$T/wt" 0199-uuid-real)"
+[ "$got" = "resumed" ] || fail "resume con id real dio $got"
+tail -n1 "$T/argv/codex.argv" | grep -q '^resume 0199-uuid-real ' || fail "el id real no viajo: $(tail -n1 "$T/argv/codex.argv")"
+bash "$CORR" adaptador stop run-1 lane-1 codex ses-sid >/dev/null
+
+# B4: al arrancar, el tablero de la corrida recibe el worker del carril con el
+# modelo y el effort de su argv y el porque de la seleccion en una nota. Sin
+# effort declarado queda null y la nota dice que corre el de la CLI. El
+# documento publicado sigue pasando el validador del plugin.
+python3 - "$T/tablero.json" <<'PYT' || fail "no se armo el documento del tablero"
+import json,sys
+car = lambda i: {"id":i,"nombre":i,"repo":"gon0801/goncloud-openclaw","rama":None,"tareas":["14.13"],
+  "estado":"implementando","paso_loop":1,"pr":None,"head":None,"approve_lead":None,"ci":"sin-ci",
+  "coderabbit":"pendiente","residuales":[],"detenido_por":None,"ultimo_evento":None}
+doc={"schema":"runbook-progress.v1","runbook":"docs/runbooks/x.md","fase":"14.13","corrida":"run-1",
+  "titulo":"prueba","lead":{"agente":"claude","inicio":"2026-09-29T10:00:00Z","actualizado":"2026-09-29T10:00:00Z"},
+  "atencion_requerida":{"necesaria":False,"motivo":None,"desde":None},"siguiente_paso":"probar",
+  "carriles":[car("lane-1"),car("lane-r")],"cola":[],"notas":["nota del lead"],"eventos":[],
+  "cierre":{"at":None,"telegram_message_id":None,"resumen":None}}
+json.dump(doc,open(sys.argv[1],"w"))
+PYT
+printf '{"role":"write","task_type":"general","denied_harnesses":["claude-code"]}\n' >"$T/req.json"
+printf '{"health":{"claude_fable":"available","claude_opus":"available","kimi_k3":"available","kimi_coding":"available","codex":"available","zcode":"available","grok":"limited"},"exhausted":[]}\n' >"$T/st.json"
+reserva_lane lane-1 write "$T/wt"
+bash "$CORR" seleccionar run-1 lane-1 --request "$T/req.json" --state "$T/st.json" >"$T/sel.json" \
+  || fail "seleccionar fallo: $(cat "$T/sel.json")"
+ganador="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['winner'])" "$T/sel.json")"
+[ "$ganador" = "kimi_k3" ] || fail "el selector eligio $ganador, se esperaba kimi_k3"
+FAKE_TABLERO_DOC="$T/tablero.json" FAKE_TABLERO_SET="$T/tablero-set.json" \
+  bash "$CORR" adaptador start run-1 lane-1 kimi_k3 ses-tab "$T/wt" "$T/brief.txt" >/dev/null \
+  || fail "start con tablero fallo"
+[ -s "$T/tablero-set.json" ] || fail "el arranque no publico el carril en el tablero"
+python3 - "$T/tablero-set.json" <<'PYT' || fail "el tablero publicado no trae worker, effort y porque: $(cat "$T/tablero-set.json")"
+import json,sys
+d=json.load(open(sys.argv[1]))
+c=next(x for x in d["carriles"] if x["id"]=="lane-1")
+assert c["worker"]=={"id":"kimi_k3","harness":"kimi-code","provider":"kimi","model":"kimi-code/k3",
+  "effort":None,"reported_model":None,"health":"available"}, c["worker"]
+nota=[n for n in d["notas"] if n.startswith("lane-1 seleccion: ")]
+assert len(nota)==1 and "effort el de la CLI" in nota[0] and "puntaje 85" in nota[0], d["notas"]
+assert "empate con" in nota[0] and "claude_fable (repo-denied)" in nota[0], nota[0]
+assert "nota del lead" in d["notas"], d["notas"]
+assert d["eventos"][-1]["carril"]=="lane-1" and "kimi_k3" in d["eventos"][-1]["que"], d["eventos"]
+assert next(x for x in d["carriles"] if x["id"]=="lane-r").get("worker") is None
+PYT
+node --experimental-strip-types --input-type=module - "$T/tablero-set.json" <<'JS' || fail "el tablero publicado no pasa el validador del plugin"
+import fs from "node:fs";
+import { validarProgreso } from "./tablero-runbook/contrato.ts";
+const r = validarProgreso(JSON.parse(fs.readFileSync(process.argv[2], "utf8")));
+if (!r.ok) { console.error(r.razones.join("\n")); process.exit(1); }
+JS
+bash "$CORR" adaptador stop run-1 lane-1 kimi_k3 ses-tab >/dev/null
+# Con effort declarado el bloque lo lleva tal cual (lo que va en la argv).
+reserva_lane lane-1 write "$T/wt"
+FAKE_TABLERO_DOC="$T/tablero.json" FAKE_TABLERO_SET="$T/tablero-set2.json" \
+  bash "$CORR" adaptador start run-1 lane-1 codex ses-tab2 "$T/wt" "$T/brief.txt" >/dev/null \
+  || fail "start codex con tablero fallo"
+python3 - "$T/tablero-set2.json" "$REG" <<'PYT' || fail "el effort del tablero no es el de la argv"
+import json,sys
+c=next(x for x in json.load(open(sys.argv[1]))["carriles"] if x["id"]=="lane-1")
+w=next(x for x in json.load(open(sys.argv[2]))["workers"] if x["id"]=="codex")
+assert w["effort"] and c["worker"]["effort"]==w["effort"], (c["worker"], w.get("effort"))
+PYT
+grep -q "model_reasoning_effort=$(python3 -c "import json,sys; print(next(x for x in json.load(open(sys.argv[1]))['workers'] if x['id']=='codex')['effort'])" "$REG")" "$T/argv/codex.argv" \
+  || fail "la argv de codex no lleva el effort que el tablero muestra"
+bash "$CORR" adaptador stop run-1 lane-1 codex ses-tab2 >/dev/null
+grep -q 'gateway call' "$T/openclaw.log" || fail "el doble de openclaw no recibio las llamadas del tablero"
 
 # health sin binario: broken (el override manda, sin caida a PATH).
 got="$(CORRIDA_WORKER_BIN_GROK=/no-existe-grok-9 bash "$CORR" adaptador health run-1 lane-1 grok ses-h)"
@@ -315,7 +431,7 @@ ad_start run-1 lane-1 claude_fable ses-fuera "$T/wt-r" "$T/brief.txt" >/dev/null
 # resume fuera del worktree: unavailable y la sesion viva no se toca.
 ad_start run-1 lane-1 codex ses-recasa "$T/wt" "$T/brief.txt" >/dev/null \
   || fail "start para resume en casa fallo"
-got="$(bash "$CORR" adaptador resume run-1 lane-1 codex ses-recasa "$T/wt-r" SESID-9)"
+got="$(bash "$CORR" adaptador resume run-1 lane-1 codex ses-recasa "$T/wt-r")"
 [ "$got" = "unavailable" ] || fail "resume fuera del worktree dio $got"
 "$TM_REAL" -L "$L" has-session -t "=ses-recasa" 2>/dev/null \
   || fail "resume unavailable toco la sesion viva"
@@ -326,7 +442,7 @@ bash "$CORR" adaptador stop run-1 lane-1 codex ses-recasa >/dev/null
 ad_start run-1 lane-1 claude_fable ses-resume-f "$T/wt" "$T/brief.txt" >/dev/null \
   || fail "start para resume failed fallo"
 modo_fake nobar
-got="$(bash "$CORR" adaptador resume run-1 lane-1 claude_fable ses-resume-f "$T/wt" SESID-9)"
+got="$(bash "$CORR" adaptador resume run-1 lane-1 claude_fable ses-resume-f "$T/wt")"
 [ "$got" = "unavailable" ] || fail "resume sin barra dio $got"
 modo_fake ""
 "$TM_REAL" -L "$L" has-session -t "=ses-resume-f" 2>/dev/null \
