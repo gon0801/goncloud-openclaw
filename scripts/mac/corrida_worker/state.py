@@ -88,14 +88,37 @@ class RunState:
     applied_event_ids: frozenset = frozenset()
 
 
-def event_id(lane: str, kind: str, payload: Mapping[str, Any]) -> str:
-    """Id determinista: la misma terna da el mismo id en cada corrida."""
+def event_id(lane: str, kind: str, payload: Mapping[str, Any], tenencia: int = 0) -> str:
+    """Id determinista: la misma terna en la misma tenencia da el mismo id.
+
+    La tenencia (cuantos observed.launched lleva el carril) entra al id para
+    que un carril que vuelve a un trabajador anterior (A->B->A->B) no vea su
+    intent o su lanzamiento nuevos como duplicados del de una tenencia vieja
+    (14.25 R20). La tenencia 0 conserva el id de siempre."""
     canon = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    digest = hashlib.sha1(f"{lane}\x00{kind}\x00{canon}".encode("utf-8")).hexdigest()[:12]
+    base = f"{lane}\x00{kind}\x00{canon}"
+    if tenencia:
+        base += f"\x00{tenencia}"
+    digest = hashlib.sha1(base.encode("utf-8")).hexdigest()[:12]
     return f"{lane}:{kind}:{digest}"
 
 
-def coerce_event(raw: Any) -> Event:
+def _tenencia(record: Mapping[str, Any], lane_id: str, kind: str, payload: Mapping[str, Any]) -> int:
+    lanzados = [
+        event.get("payload")
+        for lane in record.get("lanes") or []
+        if isinstance(lane, dict) and lane.get("id") == lane_id
+        for event in lane.get("events") or []
+        if isinstance(event, dict) and event.get("kind") == "observed.launched"
+    ]
+    # Reintentar el lanzamiento que abrio la tenencia actual es el mismo
+    # evento, no una tenencia nueva.
+    if kind == "observed.launched" and lanzados and lanzados[-1] == dict(payload):
+        return len(lanzados) - 1
+    return len(lanzados)
+
+
+def coerce_event(raw: Any, record: Mapping[str, Any] | None = None) -> Event:
     if not isinstance(raw, dict):
         raise EventError("event is not an object")
     lane = raw.get("lane")
@@ -110,7 +133,9 @@ def coerce_event(raw: Any) -> Event:
     at = raw.get("at", "")
     if not isinstance(at, str):
         raise EventError("event at is not a string")
-    ident = raw.get("id") or event_id(lane, kind, payload)
+    ident = raw.get("id") or event_id(
+        lane, kind, payload, _tenencia(record, lane, kind, payload) if record else 0
+    )
     if not isinstance(ident, str) or not ident:
         raise EventError("event without id")
     return Event(id=ident, lane=lane, kind=kind, payload=payload, at=at)
@@ -209,7 +234,7 @@ def reduce_events(record: Mapping[str, Any], raws: list[Any]) -> tuple[dict, int
     applied = 0
     duplicated = 0
     for raw in raws:
-        event = coerce_event(raw)
+        event = coerce_event(raw, state.record)
         before = len(state.applied_event_ids)
         state = reduce_state(state, event)
         if len(state.applied_event_ids) == before:

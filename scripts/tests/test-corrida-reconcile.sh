@@ -199,9 +199,84 @@ orden="$(python3 -c "
 import json,sys
 e=json.load(open(sys.argv[1]))['effects']
 print(' '.join(x['op']+':'+str(x['args'].get('kind')) for x in e))" "$T/py-22-evid/out.json")"
-[ "$orden" = "record_observed:session.vanished record_observed:test.failed record_observed:merge.done record_observed:canary.done" ] \
+[ "$orden" = "record_observed:session.vanished record_observed:push.done record_observed:pr.open record_observed:test.failed record_observed:merge.done record_observed:canary.done" ] \
   || fail "P1: orden distinto al del plan Step 3: $orden"
-echo "ok (2b): evidencia antes del merge y canary al final"
+echo "ok (2b): remota y PR antes de la evidencia, evidencia antes del merge y canary al final"
+
+# (2c) 14.25 R20: un carril que vuelve a un trabajador anterior (A->B->A->B)
+# registra el lanzamiento nuevo aunque su payload repita el de una tenencia
+# vieja; reintentar el mismo lanzamiento sigue siendo duplicado.
+mkdir -p "$T/py-r20"
+printf '{"schema":"corrida.v2","lanes":[{"id":"l1","worker":"A","session":"sA","estado":"activo"}]}\n' \
+  >"$T/py-r20/r.json"
+for paso in 'B sB' 'A sA' 'B sB'; do
+  set -- $paso
+  printf '[{"lane":"l1","kind":"intent.launch_successor","payload":{"worker":"%s","session":"%s"}},{"lane":"l1","kind":"observed.launched","payload":{"worker":"%s","session":"%s"}}]\n' \
+    "$1" "$2" "$1" "$2" >"$T/py-r20/ev.json"
+  python3 "$PW" state reduce --record "$T/py-r20/r.json" --events "$T/py-r20/ev.json" >"$T/py-r20/out" \
+    || fail "R20: state reduce rechazo el paso $paso"
+done
+printf '[{"lane":"l1","kind":"observed.launched","payload":{"worker":"B","session":"sB"}}]\n' >"$T/py-r20/ev.json"
+[ "$(python3 "$PW" state reduce --record "$T/py-r20/r.json" --events "$T/py-r20/ev.json")" = "APPLIED 0 DUPLICATED 1" ] \
+  || fail "R20: el reintento del ultimo lanzamiento no fue duplicado"
+python3 - "$T/py-r20/r.json" <<'PY2' || fail "R20: la vuelta a B no quedo registrada"
+import json, sys
+c = json.load(open(sys.argv[1]))["lanes"][0]
+assert c["worker"] == "B" and c["session"] == "sB", (c["worker"], c["session"])
+assert [e["payload"]["worker"] for e in c["events"] if e["kind"] == "observed.launched"] == ["B", "A", "B"], c["events"]
+PY2
+
+# (2d) 14.25 R21/R29: lo anotado en la tenencia anterior no tapa la actual.
+# R21: un sucesor lanzado tras un relevo previo se confirma contra la
+# observacion; R29: un bloqueo del trabajador anterior no impide anotar el
+# mismo bloqueo del actual.
+mkdir -p "$T/py-r21"
+python3 - "$T/py-r21" <<'PY2' || fail "R21/R29: no se armaron los casos"
+import json, os, sys
+d = sys.argv[1]
+def ev(i, kind, payload):
+    return {"id": f"l1:{kind}:{i:02d}", "lane": "l1", "kind": kind, "payload": payload}
+base = {"id": "l1", "estado": "handoff", "worker": "B", "session": "sB",
+        "handoff": {"resumes": 1}, "delivery": {}, "evidence": {}}
+r21 = dict(base, events=[
+    ev(1, "intent.launch_successor", {"worker": "B", "session": "sB"}),
+    ev(2, "observed.launched", {"worker": "B", "session": "sB"}),
+    ev(3, "intent.launch_successor", {"worker": "A", "session": "sA"}),
+])
+r29 = dict(base, estado="activo", events=[
+    ev(1, "observed.handoff.blocked", {"reason": "predecessor-writing"}),
+    ev(2, "intent.launch_successor", {"worker": "B", "session": "sB"}),
+    ev(3, "observed.launched", {"worker": "B", "session": "sB"}),
+])
+obs_r21 = {"tmux": {"sessions": ["sA"]}, "registry": {"workers": ["A", "B"]},
+           "candidates": {"exhausted": [], "next": None},
+           "lanes": {"l1": {"session_alive": False, "successor_session": "sA",
+                            "successor": {"worker": "A"}}}}
+obs_r29 = {"tmux": {"sessions": []}, "registry": {"workers": ["A", "B"]},
+           "candidates": {"exhausted": [], "next": {"worker": "A", "session": "sA"}},
+           "lanes": {"l1": {"session_alive": False, "inspect": "failed",
+                            "predecessor_alive": True}}}
+for nombre, carril, obs in (("r21", r21, obs_r21), ("r29", r29, obs_r29)):
+    json.dump({"schema": "corrida.v2", "lanes": [carril]}, open(os.path.join(d, nombre + ".json"), "w"))
+    json.dump(obs, open(os.path.join(d, nombre + "-obs.json"), "w"))
+PY2
+python3 "$PW" reconcile --record "$T/py-r21/r21.json" --observations "$T/py-r21/r21-obs.json" >"$T/py-r21/r21.out" \
+  || fail "R21: reconcile rechazo la entrada"
+python3 - "$T/py-r21/r21.out" <<'PY2' || fail "R21: el sucesor vivo de la segunda tenencia no se confirmo: $(cat "$T/py-r21/r21.out")"
+import json, sys
+e = json.load(open(sys.argv[1]))["effects"]
+assert any(x["op"] == "record_observed" and x["args"]["kind"] == "launched"
+           and x["args"]["payload"] == {"worker": "A", "session": "sA"} for x in e), e
+PY2
+python3 "$PW" reconcile --record "$T/py-r21/r29.json" --observations "$T/py-r21/r29-obs.json" >"$T/py-r21/r29.out" \
+  || fail "R29: reconcile rechazo la entrada"
+python3 - "$T/py-r21/r29.out" <<'PY2' || fail "R29: el bloqueo de la tenencia actual no se anoto: $(cat "$T/py-r21/r29.out")"
+import json, sys
+e = json.load(open(sys.argv[1]))["effects"]
+assert any(x["op"] == "record_observed" and x["args"]["kind"] == "handoff.blocked"
+           and x["args"]["payload"] == {"reason": "predecessor-writing"} for x in e), e
+PY2
+echo "ok (2c/2d): la tenencia entra al id del evento y acota tmux y bloqueos"
 
 
 e2e_prepara() { # $1 caso $2 fixture: registro en CORRIDA_STATE + obs listas
@@ -267,7 +342,8 @@ n2="$(grep -c '^EXECUTED resume_lane ' "$T/e2e-r2-1.out" "$T/e2e-r2-2.out" | awk
 registro_valido "$T/corridas/r2/registro.json"
 echo "ok (4): la sesion desvanecida reanuda una vez y converge"
 
-# (5) Reconciliacion repetida lanza al sucesor una sola vez.
+# (5) Reconciliacion repetida: el sucesor queda lanzado y registrado (el
+# fixture conserva su nombre historico "launch-once").
 # 14.22 punto 1: los chequeos de handoff viven en la tenencia actual (eventos
 # desde el ultimo observed.launched). Con una observacion estatica que sigue
 # diciendo muerto al sucesor, un relevo adicional es el comportamiento
@@ -426,6 +502,17 @@ sal_p4="$(bash -c '
 ' cerrar-p4 "$T/corridas/r9b/registro.json" 2>&1); rc_p4=$?"
 grep -q 'PANTALLA REAL DEL CARRIL' "$P4TXT" \
   || fail "P4: el reintento sin sesion piso el transcript real: $(cat "$P4TXT")"
+# 14.25 R18: el umask 077 queda encerrado en el archivado; el resto de cerrar
+# (mensajes, registro) sigue con el umask del llamador.
+umask_r18="$(bash -c '
+  . scripts/mac/corrida/lib.sh
+  AQUI=scripts/mac/corrida
+  source scripts/mac/corrida/cerrar.sh
+  umask 022
+  cerrar_archivar_lanes r9b "$1" >/dev/null 2>&1
+  umask
+' cerrar-r18 "$T/corridas/r9b/registro.json")"
+[ "$umask_r18" = "0022" ] || fail "R18: el archivado dejo el umask en $umask_r18 para el resto de cerrar"
 echo "ok (9b): archivados nacen 600 y el reintento no pisa el transcript"
 
 # (9c) 14.22 P7: reconciliar_observar lista PRs con --state all; un PR ya

@@ -319,6 +319,21 @@ got_cf="$(python3 "$PW" gate --record "$T/e4d/record.json" --lane l1 --action ca
   | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['verdict']+' '+d['code']+' '+d['projection']['result'])")"
 # 14.21 punto 2: un canary fallido con el SHA desplegado DENY, jamas allow.
 [ "$got_cf" = "deny canary-fallo missing" ] || fail "canary failed: [$got_cf]"
+# 14.25 R27: canary de pase sobre lo desplegado, pedido para otro SHA: DENY.
+H3="3333333333333333333333333333333333333333"
+python3 - "$T/e4d/evidence.json" "$H3" <<'PY' || fail "sin canary de otro pedido"
+import json,sys
+d = json.load(open(sys.argv[1]))
+d["canary"]["result"] = "pass"
+d["head"] = sys.argv[2]
+json.dump(d, open(sys.argv[1], "w"))
+PY
+got_os="$(python3 "$PW" gate --record "$T/e4d/record.json" --lane l1 --action canary \
+  --sha "$H3" --evidence "$T/e4d/evidence.json" --receipt "$T/e4d/receipt.json" \
+  --receipt-status "$(cat "$T/e4d/receipt.status")" \
+  --receipt-error "$(cat "$T/e4d/recibo.err")" --pr "$T/e4d/pr.json" \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['verdict']+' '+d['code'])")"
+[ "$got_os" = "deny canary-otro-sha" ] || fail "canary pedido para un SHA no desplegado: [$got_os]"
 echo "ok (4): accion y evidencia rotas mueren; sin kit no hay merge"
 
 # (5) Mutacion de compuertas: sin cada condicion, el fixture que la exige
