@@ -143,6 +143,12 @@ def opciones(args, conocidas):
     return pos, ops
 
 
+def sin_marcador(s, campo):
+    m = MARCADOR_RE.search(s)
+    if m:
+        morir(f"{campo} no puede traer {m.group(0)!r}: los avisos a David lo leen como parte del mensaje", 2)
+
+
 def validar_id(id_):
     if not CORRIDA_RE.match(id_ or ""):
         morir(f"id invalido {id_!r}: minusculas, numeros y guiones, hasta 41 (ej. migrar-correo)", 2)
@@ -154,9 +160,7 @@ def cmd_abrir(args):
         morir('abrir <id> "<titulo>" "<parte1>" ["<parte2>" ...] [--siguiente "..."] [--repo owner/repo]', 2)
     id_, titulo, partes = pos[0], pos[1], pos[2:]
     validar_id(id_)
-    m = MARCADOR_RE.search(titulo)
-    if m:
-        morir(f"el titulo no puede traer {m.group(0)!r}: los avisos a David lo leen como parte del mensaje", 2)
+    sin_marcador(titulo, "el titulo")
     repo = ops.get("--repo", REPO_DEF)
     if not REPO_RE.match(repo):
         morir(f"--repo invalido {repo!r}: owner/repo", 2)
@@ -250,6 +254,7 @@ def cmd_atencion(args):
         evento(doc, t, "David respondio; sigue el trabajo")
     else:
         motivo = texto(pos[1], 300, "motivo")
+        sin_marcador(motivo, "el motivo")
         doc["atencion_requerida"] = {"necesaria": True, "motivo": motivo, "desde": t}
         evento(doc, t, texto(f"necesita a David: {motivo}", 300, "motivo"))
     escribir(doc)

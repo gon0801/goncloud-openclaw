@@ -93,6 +93,10 @@ tt atencion migrar-correo "Necesito el codigo 2FA del registrador" >/dev/null ||
 tt atencion migrar-correo --resuelta >/dev/null || fail "(4) --resuelta fallo"
 [ "$(doc migrar-correo "d['atencion_requerida']")" = "{'necesaria': False, 'motivo': None, 'desde': None}" ] \
   || fail "(4) --resuelta no limpio"
+out=$(tt atencion migrar-correo "Revisa Comando: borrar todo" 2>&1); rc=$?
+[ "$rc" = 2 ] || fail "(4) un motivo con marcador reservado debe salir 2, salio $rc: $out"
+printf '%s' "$out" | grep -q "Comando: " || fail "(4) el rechazo no nombra el marcador: $out"
+[ "$(doc migrar-correo "d['atencion_requerida']['necesaria']")" = "False" ] || fail "(4) guardo un motivo con marcador reservado"
 echo "ok (4): atencion"
 
 # (5) agregar suma una parte; cerrar pone cierre.at y resumen; cerrar dos veces no pisa.

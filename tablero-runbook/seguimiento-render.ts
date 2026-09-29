@@ -114,6 +114,11 @@ const SIGUE = "(Que sigue|Qué sigue): ";
 const NECESITO = "(Que necesito de ti|Qué necesito de ti): ";
 const MARCADOR_RESERVADO_RE = new RegExp([COMANDO, CAMBIO, SIGUE, NECESITO].join("|"));
 
+/** Texto de un documento que, interpolado en un v1, se leería como estructura. */
+export function tieneMarcadorReservado(s: string): boolean {
+  return MARCADOR_RESERVADO_RE.test(s);
+}
+
 /**
  * Equivalente TypeScript del validador compartido de `seguimiento.v1`
  * (`mensaje_valido` en `scripts/mac/corrida/lib.sh`): cuatro líneas, etiqueta
@@ -205,7 +210,7 @@ type NombrableTrabajo = Pick<ResumenSeguimiento, "trabajoId" | "fase" | "titulo"
 
 function tituloApto(titulo: string): string | null {
   const t = sanearTextoPropietario(titulo);
-  return t !== null && !MARCADOR_RESERVADO_RE.test(t) ? t : null;
+  return t !== null && !tieneMarcadorReservado(t) ? t : null;
 }
 
 /**

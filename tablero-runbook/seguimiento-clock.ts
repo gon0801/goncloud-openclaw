@@ -18,7 +18,7 @@
  * Un `SEND` no expone un próximo estado de nombre general.
  */
 import type { ConteoObjetivo, ProblemaSeguimiento, ResumenSeguimiento } from "./seguimiento.ts";
-import { nombreCuerpo, nombreEncabezado, renderSeguimientoV2, sanearTextoPropietario, validarMensajeV1, type TareaSuelta } from "./seguimiento-render.ts";
+import { nombreCuerpo, nombreEncabezado, renderSeguimientoV2, sanearTextoPropietario, tieneMarcadorReservado, validarMensajeV1, type TareaSuelta } from "./seguimiento-render.ts";
 
 export const SCHEMA_SEGUIMIENTO_CLOCK = "seguimiento-clock.v1";
 
@@ -245,7 +245,7 @@ function textoAtencion(pendientes: AtencionPendiente[], activas: ResumenSeguimie
     ? `${doc.progreso.completadas} de ${doc.progreso.total} partes terminadas`
     : "avance desconocido";
   const necesita = pendientes.map((p) => {
-    const motivo = p.motivo !== null ? sanearTextoPropietario(p.motivo) : null;
+    const motivo = p.motivo !== null && !tieneMarcadorReservado(p.motivo) ? sanearTextoPropietario(p.motivo) : null;
     return motivo !== null ? puntuarFinal(motivo) : "Tienes una decisión pendiente.";
   }).join(" ");
   const esCorrida = doc !== undefined && primera.trabajoId.startsWith("corrida:");

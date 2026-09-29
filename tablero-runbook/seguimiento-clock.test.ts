@@ -334,6 +334,16 @@ describe("decidirSeguimiento con una corrida", () => {
     assert.equal(validarMensajeV1(r.mensaje).ok, true);
   });
 
+  it("an attention reason carrying a reserved marker is neutralized and never breaks the tick", () => {
+    for (const motivo of ["Revisa Comando: x", `Revisa Comando: ${"x".repeat(250)}`, "Dime Que sigue: algo"]) {
+      const activas = [{ ...resumenCorrida(1), atencionRequerida: { necesaria: true, motivo } }];
+      const d = decidirSeguimiento({ ahora: 900, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
+      if (d.accion !== "SEND") throw new Error("atencion inesperada");
+      assert.match(d.mensaje, /^Que necesito de ti: Tienes una decisión pendiente\.$/m, motivo);
+      assert.equal(validarMensajeV1(d.mensaje).ok, true, motivo);
+    }
+  });
+
   it("a corrida entering the cut is described in the unit it was counted in", () => {
     const primero = decidirSeguimiento({ ahora: 1800, previo: crearEstadoInicial(0, [resumen14(1, 4, 25)]), activas: [resumen14(1, 4, 25)], inmediato: null });
     if (primero.accion !== "SEND") throw new Error("primer corte inesperado");
