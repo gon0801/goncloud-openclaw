@@ -112,9 +112,11 @@ exit 0
 STUB
 chmod +x "$T/bin"/gh "$T/bin"/openclaw
 
-# tmux con servidor propio.
+# tmux con servidor propio. Cada llamada queda anotada: el caso F2-g prueba
+# que la sesion de una fila legacy NUNCA se crea.
 cat >"$T/bin/tmux-shim" <<STUB
 #!/bin/sh
+printf 'TMUX %s\n' "\$*" >> "$T/tmux-llamadas.log"
 exec $TM_REAL -L $L "\$@"
 STUB
 chmod +x "$T/bin/tmux-shim"
@@ -709,6 +711,38 @@ out=$(bash "$CORR" preflight t-f2-dash 2>&1); rc=$?
 $out"
 printf '%s' "$out" | grep -q "barra de claude sin medir" || fail "F2-f: la barra doble-guion no cayo por sin medir:
 $out"
+
+# F2-g: una fila legacy con flag y barra MEDIDOS cuyo binario (columna 2) ya
+# no esta en el registro (la forma del defecto cursor-agent, observado en vivo
+# 2026-09-29 como NO APTO "flag no entra: cursor-agent") no se lanza: queda
+# como legacy explicita y el verde se mantiene. Sin el arreglo el binario de
+# mentira muere al arrancar y el preflight da NO APTO por una CLI que nadie
+# selecciona. La fila cuyo binario SI esta en el registro se sigue lanzando.
+REGL="$T/workers-legacy.json"
+python3 - "$REGL" <<'PY'
+import json, sys
+ws = [{"id": "ok", "binary": "cli-ok"}]
+json.dump({"schema": "workers.v1", "max_external_sessions": 4, "workers": ws},
+          open(sys.argv[1], "w"), indent=1, sort_keys=True)
+PY
+: > "$ARGV_LOG"
+rm -f "$T/m.tsv"
+printf 'cli-ok\tcli-ok\tx\tBAR-OK-9\t--\t--\t--\n' >>"$T/m.tsv"
+printf 'legado\tcli-muere\t--flag-legado-9\tBAR-OK-9\t--\t--\t--\n' >>"$T/m.tsv"
+abrir t-f2leg "$RB"
+out=$(CORRIDA_WORKERS_REGISTRY="$REGL" bash "$CORR" preflight t-f2leg 2>&1); rc=$?
+[ $rc -eq 0 ] || fail "F2-g: la fila legacy fuera del registro debio seguir APTO:
+$out"
+printf '%s' "$out" | grep -q "fila legacy fuera del registro: legado" \
+  || fail "F2-g: la fila legacy no quedo como unknown explicito:
+$out"
+grep -q -- "--flag-legado-9" "$ARGV_LOG" \
+  && fail "F2-g: el binario legacy se lanzo (su flag llego al argv)"
+grep -q "new-session.*preflight-t-f2leg-legado" "$T/tmux-llamadas.log" \
+  && fail "F2-g: se creo la sesion tmux de la fila legacy"
+grep -q "new-session.*preflight-t-f2leg-cli-ok" "$T/tmux-llamadas.log" \
+  || fail "F2-g: la fila del registro dejo de lanzarse"
+grep -q "^x$" "$ARGV_LOG" || fail "F2-g: el flag de la fila del registro no llego al binario"
 unset CORRIDA_WORKERS_REGISTRY
 
 kill "$VPID" 2>/dev/null
