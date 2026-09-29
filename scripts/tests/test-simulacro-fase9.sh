@@ -8,7 +8,8 @@
 # y un escenario de fallo por caso: glm que nunca dice LISTO (caso 1 NO
 # FUNCIONA), responder apagado (caso 2 NO FUNCIONA), message send sin id
 # (casos 3, 4 y 7 NO FUNCIONA — los tres mandan con la misma via), "main"
-# sin relanzar (casos 5 y 6 NO FUNCIONA), y "main" mudo en la observacion
+# mudo (el vigia relanza igual: 5 y 6 FUNCIONA), "main" mudo y el relanzo del
+# vigia roto (casos 5 y 6 NO FUNCIONA), y "main" mudo en la observacion
 # extendida (el aviso real no sale: NO OBSERVADO, nunca "no aplica").
 # Uso: bash scripts/tests/test-simulacro-fase9.sh
 set -u
@@ -315,17 +316,42 @@ grep -qE '^\| 7 .*\| NO FUNCIONA ' "$EVID7" \
 fi
 
 if debe_correr 8; then
-# ============================= (8) "main" sin relanzar: casos 5 y 6 ==========
+# ============================= (8) "main" mudo: el vigia relanza solo ==========
+# Medido 2026-09-29 (sim9-20260928-2039, casos 5 y 6): el closed que despertaba
+# a main caia en una sesion en modo steer y nadie relanzaba en 600 s. El
+# relanzo es del vigia: con "main" mudo, 5 y 6 siguen FUNCIONA y la corrida
+# anota relanzo-automatico ok para las dos sesiones.
 EVID8="$T/evidencia-8.md"
 salida8="$(SIM_MAIN=mudo bash "$ARNES" --ensayo --salida "$EVID8" --tope-pared 120 2>&1)"
 rc8=$?
-[ "$rc8" -eq 1 ] || fail "main sin relanzar: se esperaba salida 1, salio $rc8 -- $salida8"
-grep -qE '^\| 5 .*\| NO FUNCIONA ' "$EVID8" \
-  || fail "main sin relanzar: el caso 5 no salio NO FUNCIONA: $(grep '^| 5 ' "$EVID8")"
-grep -qE '^\| 6 .*\| NO FUNCIONA ' "$EVID8" \
-  || fail "main sin relanzar: el caso 6 no salio NO FUNCIONA: $(grep '^| 6 ' "$EVID8")"
+[ "$rc8" -eq 0 ] || fail "main mudo: se esperaba salida 0 (el vigia relanza solo), salio $rc8 -- $salida8"
+grep -qE '^\| 5 .*\| FUNCIONA ' "$EVID8" || fail "main mudo: el caso 5 no salio FUNCIONA: $(grep '^| 5 ' "$EVID8")"
+grep -qE '^\| 6 .*\| FUNCIONA ' "$EVID8" || fail "main mudo: el caso 6 no salio FUNCIONA: $(grep '^| 6 ' "$EVID8")"
+SIM_ID8="$(printf '%s\n' "$salida8" | sed -n 's/^arrancada //p')"
+for s8 in sim9-c5 sim9-lead; do
+  python3 -c "
+import json,sys
+ok=any(d.get('tipo')=='relanzo-automatico' and d.get('sesion')==sys.argv[2] and d.get('ok') is True
+       for d in (json.loads(l) for l in open(sys.argv[1])))
+sys.exit(0 if ok else 1)" "$T/corridas/$SIM_ID8/eventos.jsonl" "$s8" 2>/dev/null \
+    || fail "main mudo: sin relanzo-automatico ok de $s8 en eventos.jsonl de $SIM_ID8"
+done
 sesiones8="$("$TM_REAL" -L "$SOCKET" list-sessions -F '#{session_name}' 2>/dev/null | grep -c 'sim9-')"
-[ "$sesiones8" -eq 0 ] || fail "main sin relanzar: quedaron sesiones sim9-* vivas"
+[ "$sesiones8" -eq 0 ] || fail "main mudo: quedaron sesiones sim9-* vivas"
+
+# ============================= (8b) nadie relanza: casos 5 y 6 ================
+# "main" mudo y el relanzo del vigia roto: el arnes tiene que decir NO FUNCIONA.
+EVID8B="$T/evidencia-8b.md"
+salida8b="$(SIM_MAIN=mudo SIM_VIGIA_CORRIDA_BIN="$FIX/corrida-sin-relanzo.sh" \
+  bash "$ARNES" --ensayo --salida "$EVID8B" --tope-pared 120 2>&1)"
+rc8b=$?
+[ "$rc8b" -eq 1 ] || fail "nadie relanza: se esperaba salida 1, salio $rc8b -- $salida8b"
+grep -qE '^\| 5 .*\| NO FUNCIONA ' "$EVID8B" \
+  || fail "nadie relanza: el caso 5 no salio NO FUNCIONA: $(grep '^| 5 ' "$EVID8B")"
+grep -qE '^\| 6 .*\| NO FUNCIONA ' "$EVID8B" \
+  || fail "nadie relanza: el caso 6 no salio NO FUNCIONA: $(grep '^| 6 ' "$EVID8B")"
+sesiones8b="$("$TM_REAL" -L "$SOCKET" list-sessions -F '#{session_name}' 2>/dev/null | grep -c 'sim9-')"
+[ "$sesiones8b" -eq 0 ] || fail "nadie relanza: quedaron sesiones sim9-* vivas"
 
 fi
 
@@ -375,7 +401,9 @@ EVID10="$T/evidencia-10.md"
 salida10="$(SIM_MAIN=mudo SIM_TOPE_OBS_POLL=2 SIM_TOPE_OBS_VENTANA=5 \
   bash "$ARNES" --ensayo --salida "$EVID10" --tope-pared 300 --observar-avance 1 2>&1)"
 rc10=$?
-[ "$rc10" -eq 1 ] || fail "observacion (aviso no sale): se esperaba salida 1 (5 y 6 tambien NO FUNCIONA con main mudo), salio $rc10 -- $salida10"
+# Salida 0: el vigia relanza 5 y 6 sin main y 4 y 7 siguen FUNCIONA por reloj
+# inyectado; el disparo no observado vive en la evidencia, no en la salida.
+[ "$rc10" -eq 0 ] || fail "observacion (aviso no sale): se esperaba salida 0 (7/7 FUNCIONA, disparo NO OBSERVADO en la evidencia), salio $rc10 -- $salida10"
 grep -A2 '## Observacion extendida' "$EVID10" | grep -q 'NO OBSERVADO: disparo real' \
   || fail "observacion (aviso no sale): no se vio 'NO OBSERVADO: disparo real': $(grep -A2 '## Observacion extendida' "$EVID10")"
 grep -A2 '## Observacion extendida' "$EVID10" | grep -q 'no aplica' \
@@ -408,7 +436,7 @@ EVID14="$T/evidencia-14.md"
 salida14="$(SIM_MAIN=mudo SIM_TOPE_OBS_POLL=2 SIM_TOPE_OBS_VENTANA=5 \
   bash "$ARNES" --ensayo --salida "$EVID14" --tope-pared 300 --observar-avance 1 2>&1)"
 rc14=$?
-[ "$rc14" -eq 1 ] || fail "observacion (scratch viejo): se esperaba salida 1, salio $rc14 -- $salida14"
+[ "$rc14" -eq 0 ] || fail "observacion (scratch viejo): se esperaba salida 0 (7/7 FUNCIONA, como en 10), salio $rc14 -- $salida14"
 grep -A2 '## Observacion extendida' "$EVID14" | grep -q 'NO OBSERVADO: disparo real' \
   || fail "observacion (scratch viejo): no se vio 'NO OBSERVADO: disparo real': $(grep -A2 '## Observacion extendida' "$EVID14")"
 grep -A2 '## Observacion extendida' "$EVID14" | grep -q 'FUNCIONA observado real' \
