@@ -1243,6 +1243,13 @@ bash -c '. scripts/mac/corrida/lib.sh; con_tope 5 true' \
   || fail "con_tope rompio el exit 0 de un comando sano"
 [ "$(bash -c '. scripts/mac/corrida/lib.sh; con_tope 5 no-existe-absoluto-xyz >/dev/null 2>&1; echo $?')" = "127" ] \
   || fail "el 127 del exec fallido ya no es 127"
+# 14.25 R8: dentro de $(...) el sleep del vigilante no retiene la salida: un
+# comando instantaneo regresa en menos de 0.5 s, no en 1 s.
+ms="$(bash -c '. scripts/mac/corrida/lib.sh
+t0=$(perl -MTime::HiRes=time -e "print time")
+x="$(con_tope 5 true)"
+perl -MTime::HiRes=time -e "printf \"%d\", (time - \$ARGV[0]) * 1000" "$t0"')"
+[ "${ms:-9999}" -lt 500 ] || fail "con_tope 5 true dentro de \$(...) tardo ${ms} ms (el vigilante retiene la salida)"
 
 # 14.13: el marcador {effort} se expande con el valor de la entrada en el argv
 # de arranque; sin effort, worker_argv falla y jamas genera un argumento vacio.

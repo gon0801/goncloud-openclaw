@@ -7,7 +7,7 @@
 # que llega tarde, lanzar la retira (re-verifica bajo lock antes de anotar).
 # Archiva cada carril con sesion nativa y la detiene. BAJO LOCKS del
 # llamador. stdout: nada; 0 = todos archivados y detenidos.
-cerrar_archivar_lanes() { # $1 id $2 reg
+cerrar_archivar_lanes() ( # $1 id $2 reg
   local id="$1" reg="$2" lanes lane sesion dir pant sel evs evd
   # 14.22 punto 3: todo el archivado corre con umask 077 dentro de un subshell:
   # los archivos nacen 600 y el chmod de abajo queda de cinta, no de defensa.
@@ -57,7 +57,7 @@ print(json.dumps(c.get('evidence') or {},sort_keys=True,indent=2))")" || return 
     fi
   done
   return 0
-}
+)
 
 corrida_cerrar() {
   local id="$1"

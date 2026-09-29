@@ -74,6 +74,7 @@ def validate_record(path: Path) -> str:
 
 
 LANE_REQUIRED = ("id", "branch", "worktree", "base_remote_sha", "owner", "mode")
+LANE_STATES = ("reservado", "activo", "failed", "handoff", "stopped")
 
 
 def _check_lanes(value: object) -> None:
@@ -81,6 +82,8 @@ def _check_lanes(value: object) -> None:
     # contrato de carril en los dos validadores (14.16).
     if not isinstance(value, list):
         raise RecordError("lanes is not a list")
+    ids: set[str] = set()
+    worktrees: set[str] = set()
     for lane in value:
         if not isinstance(lane, dict):
             raise RecordError("lane is not an object")
@@ -91,6 +94,21 @@ def _check_lanes(value: object) -> None:
             raise RecordError("lane mode outside the set")
         if lane.get("role") not in (None, "write", "review"):
             raise RecordError("lane role outside the set")
+        if "estado" in lane and lane.get("estado") not in LANE_STATES:
+            raise RecordError("lane estado outside the set")
+        vis = lane.get("visibility")
+        if vis is not None and (
+            not isinstance(vis, dict)
+            or vis.get("state") not in ("visible", "degraded")
+            or not vis.get("attach_command")
+        ):
+            raise RecordError("lane visibility without shape")
+        if str(lane["id"]) in ids:
+            raise RecordError("duplicate lane")
+        ids.add(str(lane["id"]))
+        if str(lane["worktree"]) in worktrees:
+            raise RecordError("shared worktree")
+        worktrees.add(str(lane["worktree"]))
 
 
 def _check_native_field(key: str, value: object) -> None:
@@ -175,7 +193,9 @@ def cmd_select(args: argparse.Namespace) -> int:
         history = state.get("history", [])
         active = state.get("active", [])
         installed = state.get("installed")
-        exhausted = state.get("exhausted") or []
+        exhausted = state.get("exhausted")
+        if exhausted is None:
+            exhausted = []
         previous_reviewer = state.get("previous_reviewer")
         if not isinstance(health, dict) or not isinstance(history, list) or not isinstance(active, list):
             raise SelectionError("bad state shape")
@@ -185,7 +205,7 @@ def cmd_select(args: argparse.Namespace) -> int:
             raise SelectionError("bad state entries")
         if installed is not None and not isinstance(installed, dict):
             raise SelectionError("bad installed shape")
-        if not isinstance(exhausted, list):
+        if not isinstance(exhausted, list) or not all(isinstance(item, str) for item in exhausted):
             raise SelectionError("bad exhausted shape")
         if previous_reviewer is not None and not isinstance(previous_reviewer, str):
             raise SelectionError("bad previous_reviewer shape")

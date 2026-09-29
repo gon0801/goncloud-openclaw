@@ -339,6 +339,10 @@ def _decide_canary(lane: Mapping[str, Any], evidence: Mapping[str, Any], sha: st
     # de pase; un canary fallido o de otro SHA jamas permiten.
     if str(canary.get("sha") or "") != str(deploy.get("sha") or ""):
         return _deny("canary-otro-sha", "canary de un SHA distinto al desplegado", projection)
+    # 14.25 R27: el SHA pedido tambien es el desplegado; un canary de pase
+    # sobre lo desplegado no aprueba otro SHA.
+    if sha != str(deploy.get("sha") or ""):
+        return _deny("canary-otro-sha", "el SHA pedido no es el desplegado", projection)
     if canary.get("result") != "pass":
         return _deny("canary-fallo", "canary con resultado fallido", projection)
     return _allow("canary-ok", _projection(evidence, sha, "approved", _availability_of(evidence)),

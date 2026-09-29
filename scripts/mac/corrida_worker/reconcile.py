@@ -67,7 +67,7 @@ def _bloqueo_anotado(lane: Mapping[str, Any], reason: str) -> bool:
     """El bloqueo ya quedo anotado CON ESA razon (14.22 punto 2): la dedupe es
     por reason del payload, no por kind, para que un bloqueo distinto se
     anote y quede memoria del porqué de cada uno."""
-    for event in _lane_events(lane):
+    for event in _tenencia_events(lane):
         if (
             event.get("kind") == "observed.handoff.blocked"
             and (event.get("payload") or {}).get("reason") == reason
@@ -110,13 +110,15 @@ def reconcile_lane(
 
     # tmux: la sesion registrada que no vive se anota una vez; un intent
     # pendiente se confirma solo contra la observacion, nunca por el intent.
+    # Todo dentro de la tenencia actual: lo observado para el trabajador
+    # anterior no confirma ni tapa lo del que esta ahora (14.25 R21).
     if (
         session
         and not live(session)
         and not session_alive
         and lane_obs.get("inspect") not in ACTIONABLE_INSPECT
     ):
-        if not _has_kind(lane, "observed.session.vanished") and not _has_kind(
+        if not _has_kind_tenencia(lane, "observed.session.vanished") and not _has_kind_tenencia(
             lane, "observed.session.stopped"
         ):
             effects.append(
@@ -130,15 +132,41 @@ def reconcile_lane(
                     },
                 )
             )
-    if _has_kind(lane, "intent.resume_lane") and not _has_kind(lane, "observed.resumed"):
+    if _has_kind_tenencia(lane, "intent.resume_lane") and not _has_kind_tenencia(
+        lane, "observed.resumed"
+    ):
         if live(session) or session_alive:
             effects.append(_record(lane_id, "resumed", {"session": session}))
-    if _has_kind(lane, "intent.launch_successor") and not _has_kind(lane, "observed.launched"):
+    # La tenencia corta en el ultimo observed.launched: un intent de sucesor
+    # dentro de ella todavia no tiene lanzamiento observado.
+    if _has_kind_tenencia(lane, "intent.launch_successor"):
         successor = lane_obs.get("successor_session")
         if isinstance(successor, str) and live(successor):
             launched = dict(lane_obs.get("successor") or {})
             launched.setdefault("session", successor)
             effects.append(_record(lane_id, "launched", launched))
+
+    # Rama remota y PR (y abajo merge, deploy y canary) ya ocurridos se
+    # registran; jamas se propone repetir un efecto externo consumado.
+    if lane_obs.get("remote_branch") and not (delivery.get("push") or {}):
+        if not _has_kind(lane, "observed.push.done"):
+            effects.append(
+                _record(
+                    lane_id,
+                    "push.done",
+                    {"branch": lane.get("branch"), "head": lane_obs.get("head")},
+                )
+            )
+    pr_obs = lane_obs.get("pr")
+    if isinstance(pr_obs, dict) and not (delivery.get("pr") or {}):
+        if not _has_kind(lane, "observed.pr.open"):
+            effects.append(
+                _record(
+                    lane_id,
+                    "pr.open",
+                    {"number": pr_obs.get("number"), "head": pr_obs.get("head")},
+                )
+            )
 
     # 14.21 punto 1 (plan Task 5 Step 3): el orden es contrato — registry,
     # tmux, worktree/HEAD, remota, PR, EVIDENCIA, merge, deploy, canary. La
@@ -160,27 +188,6 @@ def reconcile_lane(
             )
         )
 
-    # Rama remota, PR, merge, deploy y canary ya ocurridos se registran; jamas
-    # se propone repetir un efecto externo consumado.
-    if lane_obs.get("remote_branch") and not (delivery.get("push") or {}):
-        if not _has_kind(lane, "observed.push.done"):
-            effects.append(
-                _record(
-                    lane_id,
-                    "push.done",
-                    {"branch": lane.get("branch"), "head": lane_obs.get("head")},
-                )
-            )
-    pr_obs = lane_obs.get("pr")
-    if isinstance(pr_obs, dict) and not (delivery.get("pr") or {}):
-        if not _has_kind(lane, "observed.pr.open"):
-            effects.append(
-                _record(
-                    lane_id,
-                    "pr.open",
-                    {"number": pr_obs.get("number"), "head": pr_obs.get("head")},
-                )
-            )
     merge_obs = lane_obs.get("merge") or {}
     if merge_obs.get("merged") and not (delivery.get("merge") or {}):
         if not _has_kind(lane, "observed.merge.done"):
