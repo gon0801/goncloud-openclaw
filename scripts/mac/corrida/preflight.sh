@@ -60,7 +60,11 @@ corrida_preflight() {
     razon "gh sin autenticar"
   fi
 
-  # (2) cada binario con flag conocido arranca bajo PATH minimo y el flag entra.
+  # (2) cada binario del registro con flag conocido arranca bajo PATH minimo y
+  # el flag entra. Una fila con flag medido cuyo binario (columna 2) ya no
+  # esta en el registro de workers (legacy, p.ej. cursor-agent) no se lanza:
+  # queda como legacy explicita en QUEDA unknown. Sin el cruce medido (sin
+  # python3 o registro ilegible) se conserva lo de hoy: lanzar todas.
   local tabla; tabla="$(json_campo "$reg" cli_modos)"
   if [ ! -r "$tabla" ]; then
     razon "tabla de modos ilegible: $tabla" "la tabla de modos no se puede leer"
@@ -70,12 +74,14 @@ corrida_preflight() {
   # seleccionable (uno que el registro puede arrancar) sin medir es razon de
   # NO APTO: verde implica que adaptador start puede arrancar. Un worker
   # futuro agregado al registro sin fila en la tabla tambien bloquea; las
-  # filas legacy fuera del registro siguen como unknown explicito.
+  # filas legacy fuera del registro no se lanzan y quedan como unknown
+  # explicito.
   local WREGF2="${CORRIDA_WORKERS_REGISTRY:-$REPO/scripts/mac/workers.v1.json}"
-  local sel_bins sel ffila fbar
+  local sel_bins sel ffila fbar cruce_registro=0
   if command -v python3 >/dev/null 2>&1 && [ -r "$WREGF2" ]; then
     sel_bins="$(python3 -c 'import json,sys;print("\n".join(sorted({w["binary"] for w in json.load(open(sys.argv[1]))["workers"]})))' "$WREGF2" 2>/dev/null)" || sel_bins=""
     if [ -n "$sel_bins" ]; then
+      cruce_registro=1
       for sel in $sel_bins; do
         ffila="$(tsv_fila "$tabla" "$sel")"
         if [ -z "$ffila" ]; then
@@ -100,6 +106,18 @@ corrida_preflight() {
     barra="$(printf '%s' "$fila" | cut -d'|' -f3)"
     [ "$flag" = "unknown" ] || [ -z "$flag" ] && { unknown "flag de $cli sin medir"; continue; }
     [ "$barra" != "unknown" ] && [ -z "$barra" ] && { razon "barra vacia en la tabla: $cli"; continue; }
+    # Fila legacy: con el cruce medido, un binario que ya no esta en el
+    # registro no se lanza (nadie lo selecciona; ausente o sin barra daria un
+    # NO APTO por una CLI muerta, medido 2026-09-29 con cursor-agent). Queda
+    # como unknown explicito. Va antes de bin_de_tabla: un legacy
+    # desinstalado no es "binario no arranca".
+    if [ "$cruce_registro" = "1" ]; then
+      local bsel en_reg=0
+      for bsel in $sel_bins; do
+        [ "$bsel" = "$binario" ] && { en_reg=1; break; }
+      done
+      [ "$en_reg" = "0" ] && { unknown "fila legacy fuera del registro: $cli"; continue; }
+    fi
     flag_de_tabla "$flag" || { razon "flag invalido: $cli"; continue; }
     local bin
     bin="$(bin_de_tabla "$binario")" || { razon "binario no arranca: $cli"; continue; }
