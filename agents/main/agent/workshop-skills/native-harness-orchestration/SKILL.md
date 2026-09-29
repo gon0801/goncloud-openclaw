@@ -27,7 +27,11 @@ su observación (`observed.*` en el registro).
   tokens viven en el gateway, no en pantalla ni en texto.
 - **Main nunca mergea ni despliega:** delega merge/deploy por la compuerta
   con `authorization_ref` en alcance, recibo `saikit-entrega.v1` vigente y CI
-  del head; `expectedHeadOid` fija la mutación.
+  del head; `expectedHeadOid` fija la mutación. Con el kit apagado
+  (`modo_recibo: ci-y-revisor` en `preaprobaciones.v1.json`, David
+  2026-09-28), el recibo lo reemplaza un veredicto de revisor sobre el mismo
+  head: DeepSeek completo sin High/Critical abiertos o una review de
+  CodeRabbit de ese commit.
 - **Revisión cruzada local antes del primer push**, y el loop de corrección
   de CodeRabbit corre en el mismo PR (delta review, no nueva revisión).
 - **Modelo y effort visibles:** el tablero y la selección muestran el `model` y el `effort` del worker elegido; `reported_model` es lo que la CLI reporta y se registra aparte (14.13d).
