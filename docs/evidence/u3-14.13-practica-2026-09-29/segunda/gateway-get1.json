@@ -1,0 +1,101 @@
+{
+  "ok": true,
+  "doc": {
+    "schema": "runbook-progress.v1",
+    "runbook": "docs/runbooks/autopilot-fase14.md",
+    "fase": "14.13",
+    "corrida": "practica-1413b",
+    "proyecto": "goncloud-openclaw",
+    "titulo": "Practica 14.13 (segunda): relevo por cuota",
+    "lead": {
+      "agente": "claude",
+      "inicio": "2026-09-29T14:46:02Z",
+      "actualizado": "2026-09-29T14:47:10Z"
+    },
+    "atencion_requerida": {
+      "necesaria": false,
+      "motivo": null,
+      "desde": null
+    },
+    "siguiente_paso": "Arranca el primer trabajador del carril; despues se simula que su cuenta se queda sin cuota.",
+    "carriles": [
+      {
+        "id": "relevo",
+        "nombre": "Relevo por cuota (practica)",
+        "repo": "gon0801/goncloud-openclaw",
+        "rama": "corrida/practica-1413b/relevo",
+        "tareas": [
+          "14.13"
+        ],
+        "estado": "implementando",
+        "paso_loop": 0,
+        "pr": null,
+        "head": "5d435d2e4fde685d96c96bfcb53d6020e2a80e98",
+        "approve_lead": null,
+        "ci": "sin-ci",
+        "coderabbit": "unknown",
+        "residuales": [],
+        "detenido_por": null,
+        "ultimo_evento": {
+          "at": "2026-09-29T14:47:10Z",
+          "que": "arranco kimi_k3 (kimi-code/k3, effort el de la CLI (no acepta flag))"
+        },
+        "worker": {
+          "id": "kimi_k3",
+          "harness": "kimi-code",
+          "provider": "kimi",
+          "model": "kimi-code/k3",
+          "effort": null,
+          "reported_model": null,
+          "health": "available"
+        }
+      }
+    ],
+    "cola": [],
+    "notas": [
+      "relevo seleccion: kimi_k3 (kimi-code/k3, effort el de la CLI (no acepta flag)), puntaje 85 (affinity 40, availability 15, diversity 10, history 10, quota 10); empate con kimi_coding, codex, zcode, grok, desempata el orden del registro; descartados: claude_fable (repo-denied); claude_opus (repo-denie"
+    ],
+    "eventos": [
+      {
+        "at": "2026-09-29T14:46:02Z",
+        "carril": null,
+        "que": "corrida de practica abierta",
+        "situacion": null
+      },
+      {
+        "at": "2026-09-29T14:46:26Z",
+        "carril": null,
+        "que": "preflight APTO",
+        "situacion": null
+      },
+      {
+        "at": "2026-09-29T14:46:30Z",
+        "carril": "relevo",
+        "que": "carril preparado desde origin/main",
+        "situacion": null
+      },
+      {
+        "at": "2026-09-29T14:47:10Z",
+        "carril": "relevo",
+        "que": "arranco kimi_k3 (kimi-code/k3, effort el de la CLI (no acepta flag))",
+        "situacion": null
+      }
+    ],
+    "cierre": {
+      "at": null,
+      "telegram_message_id": null,
+      "resumen": null
+    }
+  },
+  "derivado": {
+    "totalCarriles": 1,
+    "mergeados": 0,
+    "porcentajeMergeado": 0,
+    "carrilesAtorados": [],
+    "colaAtorada": [],
+    "siguienteCola": null,
+    "minutosDesdeUltimoEvento": 1,
+    "atencionWorker": []
+  },
+  "html": "<!doctype html>\n<html lang=\"es\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Practica 14.13 (segunda): relevo por cuota</title>\n<style>:root{color-scheme:dark}\n*{box-sizing:border-box}\nbody{font:14px/1.45 ui-sans-serif,system-ui,Segoe UI,sans-serif;margin:0;padding:24px;background:#12141a;color:#e7eaf0}\nmain{max-width:1100px;margin:0 auto}\nh1{font-size:22px;margin:0 0 8px}\nh2{font-size:13px;margin:28px 0 8px;text-transform:uppercase;letter-spacing:.06em;color:#8b93a7}\n.atencion{background:#8a1c1c;color:#fff;padding:12px 16px;border-radius:8px;margin:0 0 16px;font-weight:600}\n.siguiente{font-size:16px;margin:8px 0 20px;padding:10px 14px;background:#1c2433;border-left:4px solid #5b8def;border-radius:6px}\n.global{font-size:22px;font-weight:700;margin:0 0 6px;letter-spacing:.02em}\n.sub{color:#8b93a7;margin:0 0 12px}\n.barra{height:8px;background:#2a3140;border-radius:4px;overflow:hidden;margin:6px 0 16px}\n.barra.av{margin:4px 0 2px;max-width:120px}\n.barra i{display:block;height:100%;background:#3dba6b}\ntable{border-collapse:collapse;width:100%;background:#1a1d26;border:1px solid #2a3140;border-radius:8px}\nth,td{text-align:left;padding:7px 10px;border-top:1px solid #2a3140;vertical-align:top;font-size:13px}\nth{border-top:0;background:#222733;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#8b93a7}\n.estado{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:600;background:#2a3140}\n.estado.mergeado{background:#1e4d32}.estado.atorado{background:#5a2222}.estado.omitido{background:#3a3f4d;color:#8b93a7}\n.estado.en-cola,.estado.esperando-ventana{background:#5a4a1e}\n.gh{display:inline-block;margin-top:3px;font-size:12px;padding:1px 7px;border-radius:8px}\n.gh-off{background:#2a3140;color:#c5c9d3}.gh-ok{background:#1e334d}.gh-unk{background:#4a3220}\n.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}\nul.res{margin:0;padding-left:16px}\n.eventos li,.notas li{margin:4px 0}\n.det{margin-top:4px;color:#f0b4b4}\nfooter{margin-top:28px;color:#8b93a7;font-size:12px;border-top:1px solid #2a3140;padding-top:10px}\nnav.fases a{margin-right:10px}\na{color:#8bb4ff}</style>\n</head>\n<body>\n\n<main>\n<h1>14.13 · goncloud-openclaw — Practica 14.13 (segunda): relevo por cuota</h1>\n<div class=\"global\">%GLOBAL 0 %</div>\n<div class=\"barra\"><i style=\"width:0%\"></i></div>\n<p class=\"sub\">2026-09-29T14:47:10Z · 0 de 0 ítems en master · 0 atorados</p>\n<p class=\"siguiente\">Arranca el primer trabajador del carril; despues se simula que su cuenta se queda sin cuota.</p>\n<h2>Carriles</h2>\n<table>\n<tr><th>ÍTEM</th><th>CARRIL</th><th>ESTADO</th><th>RONDAS</th><th>PR</th><th>AVANCE</th></tr>\n<tr>\n<td></td>\n<td>relevo</td>\n<td><span class=\"estado implementando\">implementando</span></td>\n<td></td>\n<td></td>\n<td></td>\n</tr>\n<tr class=\"bajo\"><td colspan=\"6\"><details class=\"nativo\"><summary>nativo</summary><ul class=\"res\"><li>worker: <span class=\"mono\">kimi_k3</span> · kimi-code · kimi/kimi-code/k3 · salud available</li></ul></details></td></tr>\n</table>\n<ul class=\"notas\"><li>relevo seleccion: kimi_k3 (kimi-code/k3, effort el de la CLI (no acepta flag)), puntaje 85 (affinity 40, availability 15, diversity 10, history 10, quota 10); empate con kimi_coding, codex, zcode, grok, desempata el orden del registro; descartados: claude_fable (repo-denied); claude_opus (repo-denie</li></ul>\n<ul class=\"eventos\">\n<li><span class=\"mono\">2026-09-29T14:47:10Z</span> [relevo] arranco kimi_k3 (kimi-code/k3, effort el de la CLI (no acepta flag))</li>\n<li><span class=\"mono\">2026-09-29T14:46:30Z</span> [relevo] carril preparado desde origin/main</li>\n<li><span class=\"mono\">2026-09-29T14:46:26Z</span> preflight APTO</li>\n<li><span class=\"mono\">2026-09-29T14:46:02Z</span> corrida de practica abierta</li>\n</ul>\n<nav class=\"fases\">Fases: <a href=\"/runbook/tablero/10\">Fase 10</a><a href=\"/runbook/tablero/11\">Fase 11</a><a href=\"/runbook/tablero/12\">Fase 12</a><a href=\"/runbook/tablero/13\">Fase 13</a><a href=\"/runbook/tablero/15\">Fase 15</a><a href=\"/runbook/tablero/6\">Fase 6</a><a href=\"/runbook/tablero/7\">Fase 7</a><a href=\"/runbook/tablero/9\">Fase 9</a></nav>\n<footer>La fuente de verdad es el runbook (docs/runbooks/autopilot-fase14.md); este tablero es una copia que solo pinta lo que el lead escribió. Lo rotulado \"GitHub\" viene del cruce vivo; lo demás lo reportó el lead.</footer>\n<nav class=\"corridas\"><a href=\"/runbook/tablero/c/fase13-candados\">fase13-candados</a><a href=\"/runbook/tablero/c/fase15-ci\">fase15-ci</a><a href=\"/runbook/tablero/c/practica-1413\">practica-1413</a></nav></main>\n</body>\n</html>\n"
+}

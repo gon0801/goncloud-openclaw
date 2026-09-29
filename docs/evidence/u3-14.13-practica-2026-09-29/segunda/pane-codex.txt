@@ -1,0 +1,16 @@
+# Pantalla tmux de codex tras el relevo, práctica 14.13 segunda, 2026-09-29
+
+• Ran pre-commit run --files docs/practica-1413.md
+  └ check for added large files..............................................Passed
+    check json...........................................(no files to check)Skipped
+    check yaml...........................................(no files to check)Skipped
+    + Show details
+• Ran python3 -c 'from pathlib import Path; p=Path("docs/practica-1413.md"); assert p.read_text()=="# Practica 14.13\nPrimera parte: escrita por el primer trabajador.\nSegunda parte: cambio sin commi…
+  └ contenido exacto: OK
+     M docs/practica-1413.md
+    + Show details
+• ADAPTADOR-MARCA: completo
+  7:52 AM
+› Ask Codex to do anything
+  GPT-6-Sol medium · ~/dev/goncloud-openclaw/.worktrees/practica-1413b-relevo · Agrega cuarta línea de práctica
+  ? for shortcuts                                                                                                                                                             ⚠ 2 warnings · f2 to view

@@ -1,0 +1,23 @@
+# Texto del tablero publicado (tablero2), práctica 14.13 segunda, 2026-09-29
+
+Practica 14.13 (segunda): relevo por cuota
+14.13 · goncloud-openclaw — Practica 14.13 (segunda): relevo por cuota
+%GLOBAL 0 %
+2026-09-29T14:50:39Z · 0 de 0 ítems en master · 0 atorados
+Arranca el primer trabajador del carril; despues se simula que su cuenta se queda sin cuota.
+Carriles
+ÍTEM CARRIL ESTADO RONDAS PR AVANCE
+relevo
+implementando
+nativo
+worker: codex · codex-cli · openai/router/medium · salud available
+relevo seleccion: codex (router, effort medium), puntaje 85 (affinity 40, availability 15, diversity 10, history 10, quota 10); empate con zcode, grok, desempata el orden del registro; descartados: claude_fable (repo-denied); claude_opus (repo-denied); kimi_k3 (quota-exhausted); kimi_coding (quota-g
+2026-09-29T14:50:39Z [relevo] El trabajo de la parte relevo pasó de Kimi a OpenAI (Codex) porque se acabó la cuota; lo avanzado se conservó.
+2026-09-29T14:50:34Z [relevo] arranco codex (router, effort medium)
+2026-09-29T14:47:10Z [relevo] arranco kimi_k3 (kimi-code/k3, effort el de la CLI (no acepta flag))
+2026-09-29T14:46:30Z [relevo] carril preparado desde origin/main
+2026-09-29T14:46:26Z preflight APTO
+2026-09-29T14:46:02Z corrida de practica abierta
+Fases: Fase 10 Fase 11 Fase 12 Fase 13 Fase 15 Fase 6 Fase 7 Fase 9
+La fuente de verdad es el runbook (docs/runbooks/autopilot-fase14.md); este tablero es una copia que solo pinta lo que el lead escribió. Lo rotulado "GitHub" viene del cruce vivo; lo demás lo reportó el lead.
+fase13-candados fase15-ci practica-1413
