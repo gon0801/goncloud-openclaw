@@ -10,14 +10,23 @@ Sin push (el push lo hace claw tras el APROBADO).
 
 El trabajador k (CLI del anillo zcode->codex->kimi->grok->claude) termina su
 turno con requisitos cumplidos (resultado-k.txt completo; el reloj arranca
-ahi, con `--solo-archivo`: la entrega es el archivo) -> la maquinaria real lo
-entrega (vigia + aviso durable fin-turno + atender; el propio despertar del
-emitir le teclea al lead `corrida.sh avisos atender`, ruta real de 19.1,
-medida en vivo) -> el brazo mecanico del dueno (declarado: anillo
-pre-planificado, sin red ni esperas humanas) lanza al trabajador k+1 -> la
-transicion cierra cuando k+1 muestra sesion viva (actividad como
+ahi, con `--solo-archivo`: la entrega es el archivo) -> la maquinaria real
+produce el aviso durable fin-turno (vigia + emitir; 20/20 avisos) -> el
+CONSUMO lo hizo el brazo mecanico del dueno en 20/20 (`el brazo atiende` en
+`brazo.log`; por la ruta real del despertar, 0/20) y lanza al trabajador k+1
+-> la transicion cierra cuando k+1 muestra sesion viva (actividad como
 corroboracion). Umbral de la DoD: 30 s. Reloj monotono del mismo host para
 fin e inicio.
+
+**Limitacion declarada del consumo**: el despertar del emitir le teclea
+`corrida.sh avisos atender` a la sesion marcada como lead, y cada trabajador
+de esta cadena se lanza con rol lead: el comando vuelve a caer en el
+propio trabajador que acaba de terminar. En las 20 transiciones el brazo
+consumio el pendiente antes (20/20 `el brazo atiende`, 0/20 `consumido por
+la ruta real`): la atencion por la ruta real del lead queda sin muestra en
+esta medicion. La ventana de 30 s cubre deteccion + pendiente durable +
+lanzamiento por el dueno mecanico; la DECISION del dueno real (que trabajo
+sigue y con que CLI) esta fuera de esta medicion y va a Fase 20.
 
 ## Resultado: 20/20 transiciones, todas bajo 30 s
 
@@ -67,7 +76,11 @@ fin e inicio.
   emitirse pierde la senal (el pendiente ES la garantia durable); el
   recordatorio no la recupero en la ventana observada porque el despertar al
   lead (que corre atender y cambia el panel) reinicia el reloj de silencio
-  del trabajador. `salidas/19-2-casos/A-*/veredicto` = SIN-RECUPERACION.
+  del trabajador. Misma limitacion de consumo declarada arriba: el despertar
+  le teclea `corrida.sh avisos atender` al PROPIO trabajador (cada uno se
+  lanza con rol lead), no a un dueno aparte, y en esta medicion quien
+  consumio fue siempre el brazo mecanico (20/20; ruta real 0/20).
+  `salidas/19-2-casos/A-*/veredicto` = SIN-RECUPERACION.
   **PENDIENTE**: remediar (no reiniciar el reloj por el wake propio o ventana
   de recordatorio por session) y medir la recuperacion.
 - **Caida recuperable**: OK. Vigia muerto antes del fin; medido desde su
