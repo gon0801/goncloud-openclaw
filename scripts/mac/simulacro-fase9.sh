@@ -368,6 +368,12 @@ if [ "$ENSAYO" = "1" ] && [ "$DRY_RUN" != "1" ]; then
   cp "$REPO_RAIZ/scripts/mac/tmux-activity-watch.sh" "$VIGIA_ENSAYO_DIR/bin/tmux-activity-watch.sh" \
     && chmod +x "$VIGIA_ENSAYO_DIR/bin/tmux-activity-watch.sh" \
     || { echo "simulacro-fase9: no se pudo copiar el vigia doblado" >&2; exit 2; }
+  # r9: el vigia carga corrida/lib.sh hermano al arrancar (APROBACION_RE
+  # unica). El bin/ doblado necesita el mismo vecindario que el ~/bin/ real;
+  # sin el hermano, el vigia muere en el arranque y pgrep no lo encuentra.
+  mkdir -p "$VIGIA_ENSAYO_DIR/bin/corrida" \
+    && cp "$REPO_RAIZ/scripts/mac/corrida/lib.sh" "$VIGIA_ENSAYO_DIR/bin/corrida/lib.sh" \
+    || { echo "simulacro-fase9: no se pudo copiar corrida/lib.sh junto al vigia doblado" >&2; exit 2; }
   export WATCH_INSTALADO="$VIGIA_ENSAYO_DIR/bin/tmux-activity-watch.sh"
   VIGIA_LOG="${SIM9_VIGIA_LOG:-$(mktemp)}"
   STATE_DIR="$WATCH_STATE_DIR" LOG_FILE="$VIGIA_LOG" TICK_SECS=1 \
