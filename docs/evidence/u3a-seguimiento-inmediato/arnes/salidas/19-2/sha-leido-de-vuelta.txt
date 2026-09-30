@@ -1,3 +1,4 @@
+# SHA leido de vuelta (instalado ~/bin vs HEAD)
 SHA leido de vuelta: instalado ~/bin vs HEAD a1840b2
 corrida.sh                                 coincide
 cli-modos.tsv                              coincide

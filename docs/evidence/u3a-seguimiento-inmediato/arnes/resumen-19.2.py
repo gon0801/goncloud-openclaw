@@ -43,7 +43,7 @@ lanzados = []
 ruta_l = os.path.join(work, "lanzados.txt")
 if os.path.isfile(ruta_l):
     with open(ruta_l) as f:
-        lanzados = [ln.split()[-2] for ln in f if ln.strip()]
+        lanzados = [ln.split()[-2] for ln in f if ln.strip() and not ln.strip().startswith('#')]
 total_workers = len(lanzados)
 n_trans = max(0, total_workers - 1)
 
