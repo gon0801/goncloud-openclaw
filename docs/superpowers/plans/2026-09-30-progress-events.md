@@ -19,3 +19,6 @@
       agrupada y batería completa una sola vez sobre el SHA final en CI.
 - [ ] Verificar lectura real del gateway y estado local antes de pedir la
       aprobación final de despliegue/integración.
+- [ ] Dividir el shard 3 de Quality: en el SHA `cd0afe1` tardó 21 minutos;
+      `test-simulacro-fase9.sh` consumió 654 segundos por sí sola. Mantener
+      la unión exacta de la batería al cambiar el reparto.
