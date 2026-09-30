@@ -1,0 +1,95 @@
+2026-09-30T17:38:13Z pendiente trab-0 (el brazo atiende)
+avisos: 1 atendidos, 0 descartados
+2026-09-30T17:38:18Z lanzado trab-1
+2026-09-30T17:38:42Z pendiente trab-1 (el brazo atiende)
+avisos: 1 atendidos, 0 descartados
+2026-09-30T17:38:52Z lanzamiento fallo (intento 1, cli kimi)
+2026-09-30T17:39:07Z lanzamiento fallo (intento 2, cli kimi)
+2026-09-30T17:39:23Z lanzamiento fallo (intento 3, cli kimi)
+2026-09-30T17:39:30Z lanzamiento fallo (intento 4, cli grok)
+2026-09-30T17:39:37Z lanzamiento fallo (intento 5, cli grok)
+2026-09-30T17:39:44Z lanzamiento fallo (intento 6, cli grok)
+2026-09-30T17:39:54Z lanzado trab-2
+2026-09-30T17:40:05Z pendiente trab-2 (el brazo atiende)
+avisos: 1 atendidos, 0 descartados
+2026-09-30T17:40:07Z lanzamiento fallo (intento 1, cli grok)
+2026-09-30T17:40:14Z lanzamiento fallo (intento 2, cli grok)
+2026-09-30T17:40:22Z lanzamiento fallo (intento 3, cli grok)
+2026-09-30T17:40:33Z lanzado trab-3
+2026-09-30T17:40:58Z consumido por la ruta real (tratados); el brazo lanza
+2026-09-30T17:41:03Z lanzado trab-4
+2026-09-30T17:41:14Z pendiente trab-4 (el brazo atiende)
+avisos: 2 atendidos, 0 descartados
+2026-09-30T17:41:18Z lanzado trab-5
+2026-09-30T17:41:44Z pendiente trab-5 (el brazo atiende)
+avisos: 1 atendidos, 0 descartados
+2026-09-30T17:41:48Z lanzado trab-6
+2026-09-30T17:42:11Z pendiente trab-6 (el brazo atiende)
+avisos: 2 atendidos, 0 descartados
+2026-09-30T17:42:21Z lanzamiento fallo (intento 1, cli kimi)
+2026-09-30T17:42:37Z lanzamiento fallo (intento 2, cli kimi)
+2026-09-30T17:42:52Z lanzamiento fallo (intento 3, cli kimi)
+2026-09-30T17:42:59Z lanzamiento fallo (intento 4, cli grok)
+2026-09-30T17:43:06Z lanzamiento fallo (intento 5, cli grok)
+2026-09-30T17:43:14Z lanzamiento fallo (intento 6, cli grok)
+2026-09-30T17:43:23Z lanzado trab-7
+2026-09-30T17:43:33Z pendiente trab-7 (el brazo atiende)
+avisos: 1 atendidos, 0 descartados
+2026-09-30T17:43:35Z lanzamiento fallo (intento 1, cli grok)
+2026-09-30T17:43:43Z lanzamiento fallo (intento 2, cli grok)
+2026-09-30T17:43:50Z lanzamiento fallo (intento 3, cli grok)
+2026-09-30T17:43:59Z lanzado trab-8
+2026-09-30T17:44:12Z pendiente trab-8 (el brazo atiende)
+avisos: 1 atendidos, 0 descartados
+2026-09-30T17:44:17Z lanzado trab-9
+2026-09-30T17:44:34Z pendiente trab-9 (el brazo atiende)
+avisos: 1 atendidos, 0 descartados
+2026-09-30T17:44:39Z lanzado trab-10
+2026-09-30T17:44:59Z pendiente trab-10 (el brazo atiende)
+avisos: 1 atendidos, 0 descartados
+2026-09-30T17:45:03Z lanzado trab-11
+2026-09-30T17:45:28Z pendiente trab-11 (el brazo atiende)
+avisos: 1 atendidos, 0 descartados
+2026-09-30T17:45:39Z lanzamiento fallo (intento 1, cli kimi)
+2026-09-30T17:45:54Z lanzamiento fallo (intento 2, cli kimi)
+2026-09-30T17:46:09Z lanzamiento fallo (intento 3, cli kimi)
+2026-09-30T17:46:16Z lanzamiento fallo (intento 4, cli grok)
+2026-09-30T17:46:24Z lanzamiento fallo (intento 5, cli grok)
+2026-09-30T17:46:31Z lanzamiento fallo (intento 6, cli grok)
+2026-09-30T17:46:40Z lanzado trab-12
+2026-09-30T17:46:56Z pendiente trab-12 (el brazo atiende)
+avisos: 1 atendidos, 0 descartados
+2026-09-30T17:46:59Z lanzamiento fallo (intento 1, cli grok)
+2026-09-30T17:47:06Z lanzamiento fallo (intento 2, cli grok)
+2026-09-30T17:47:13Z lanzamiento fallo (intento 3, cli grok)
+2026-09-30T17:47:22Z lanzado trab-13
+2026-09-30T17:47:32Z pendiente trab-13 (el brazo atiende)
+avisos: 1 atendidos, 0 descartados
+2026-09-30T17:47:36Z lanzado trab-14
+2026-09-30T17:47:45Z pendiente trab-14 (el brazo atiende)
+avisos: 1 atendidos, 0 descartados
+2026-09-30T17:47:50Z lanzado trab-15
+2026-09-30T17:48:14Z consumido por la ruta real (tratados); el brazo lanza
+2026-09-30T17:48:18Z lanzado trab-16
+2026-09-30T17:48:43Z pendiente trab-16 (el brazo atiende)
+avisos: 1 atendidos, 0 descartados
+2026-09-30T17:48:53Z lanzamiento fallo (intento 1, cli kimi)
+2026-09-30T17:49:09Z lanzamiento fallo (intento 2, cli kimi)
+2026-09-30T17:49:24Z lanzamiento fallo (intento 3, cli kimi)
+2026-09-30T17:49:31Z lanzamiento fallo (intento 4, cli grok)
+2026-09-30T17:49:38Z lanzamiento fallo (intento 5, cli grok)
+2026-09-30T17:49:46Z lanzamiento fallo (intento 6, cli grok)
+2026-09-30T17:49:55Z lanzado trab-17
+2026-09-30T17:50:13Z pendiente trab-17 (el brazo atiende)
+avisos: 1 atendidos, 0 descartados
+2026-09-30T17:50:16Z lanzamiento fallo (intento 1, cli grok)
+2026-09-30T17:50:23Z lanzamiento fallo (intento 2, cli grok)
+2026-09-30T17:50:30Z lanzamiento fallo (intento 3, cli grok)
+2026-09-30T17:50:39Z lanzado trab-18
+2026-09-30T17:50:47Z pendiente trab-18 (el brazo atiende)
+avisos: 1 atendidos, 0 descartados
+2026-09-30T17:50:52Z lanzado trab-19
+2026-09-30T17:51:02Z pendiente trab-19 (el brazo atiende)
+avisos: 1 atendidos, 0 descartados
+2026-09-30T17:51:06Z lanzado trab-20
+2026-09-30T17:51:07Z brazo termina

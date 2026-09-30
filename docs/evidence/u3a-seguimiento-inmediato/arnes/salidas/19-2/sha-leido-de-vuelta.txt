@@ -1,0 +1,34 @@
+SHA leido de vuelta: instalado ~/bin vs HEAD a1840b2
+corrida.sh                                 coincide
+cli-modos.tsv                              coincide
+workers.v1.json                            coincide
+tmux-activity-watch.sh                     coincide
+agent-tmux.sh                              coincide
+agent-tmux-shell.zsh                       coincide
+claude-stop-openclaw-event.sh              coincide
+shot.sh                                    coincide
+corrida/abrir.sh                           coincide
+corrida/adaptador.sh                       coincide
+corrida/autoridad-merge.sh                 coincide
+corrida/avisos.sh                          coincide
+corrida/cerrar.sh                          coincide
+corrida/compuerta.sh                       coincide
+corrida/estado.sh                          coincide
+corrida/lanzar-sesion.sh                   coincide
+corrida/latido.sh                          coincide
+corrida/lib.sh                             coincide
+corrida/migrar-seguimiento.sh              coincide
+corrida/mostrar-terminal.sh                coincide
+corrida/preaprobaciones.v1.json            coincide
+corrida/preflight.sh                       coincide
+corrida/preparar-carril.sh                 coincide
+corrida/reconciliar-marcas.sh              coincide
+corrida/reconciliar.sh                     coincide
+corrida/responder.sh                       coincide
+corrida/seguimiento.sh                     coincide
+corrida/seleccionar.sh                     coincide
+corrida/simulacro-fase9.sh                 DIFIERE
+corrida/smoke-native-harnesses.sh          DIFIERE
+corrida/terminar-sesion.sh                 coincide
+RESULTADO: HAY DIFERENCIAS: corrida/simulacro-fase9.sh,corrida/smoke-native-harnesses.sh (31 archivos verificados, 2 difieren)
+nota: corrida/simulacro-fase9.sh y corrida/smoke-native-harnesses.sh son artefactos de desarrollo que instalar-mac.sh no gestiona (copias viejas de una ruta manual previa; sin rol en la maquinaria instalada). Todo lo que el instalador instala coincide con HEAD.

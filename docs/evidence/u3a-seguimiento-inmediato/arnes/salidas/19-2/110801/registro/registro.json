@@ -1,0 +1,36 @@
+{
+ "schema": "corrida.v2",
+ "id": "arnes192-110714",
+ "runbook": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/runbook.md",
+ "vigia": "hermes",
+ "simulacro": true,
+ "canal": {
+  "cron": "arnes-canal",
+  "destino": "arnes:destino"
+ },
+ "cli_modos": "/Users/dn/dev/wt/u3a-b3/scripts/mac/cli-modos.tsv",
+ "seguimiento_global": true,
+ "inicio": "2026-09-30T11:07:18-0700",
+ "timebox_horas": 6,
+ "sesiones": [
+  {
+   "nombre": "trab-0",
+   "rol": "lead",
+   "cli": "zcode",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-0.txt"
+  },
+  {
+   "nombre": "trab-1",
+   "rol": "lead",
+   "cli": "codex",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-1.txt"
+  }
+ ],
+ "preaprobaciones": [],
+ "estado": "cerrada",
+ "lanes": []
+}

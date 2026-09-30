@@ -1,0 +1,36 @@
+{
+ "schema": "corrida.v2",
+ "id": "caso192-B-120420",
+ "runbook": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/caso-B/runbook.md",
+ "vigia": "hermes",
+ "simulacro": true,
+ "canal": {
+  "cron": "arnes-canal",
+  "destino": "arnes:destino"
+ },
+ "cli_modos": "/Users/dn/dev/wt/u3a-b3/scripts/mac/cli-modos.tsv",
+ "seguimiento_global": true,
+ "inicio": "2026-09-30T12:04:20-0700",
+ "timebox_horas": 6,
+ "sesiones": [
+  {
+   "nombre": "trab-0",
+   "rol": "lead",
+   "cli": "zcode",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/caso-B/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/caso-B/encargo-0.txt"
+  },
+  {
+   "nombre": "trab-1",
+   "rol": "lead",
+   "cli": "zcode",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/caso-B/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/caso-B/encargo-1.txt"
+  }
+ ],
+ "preaprobaciones": [],
+ "estado": "abierta",
+ "lanes": []
+}

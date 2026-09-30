@@ -1,0 +1,28 @@
+{
+ "schema": "corrida.v2",
+ "id": "caso192-C-121504",
+ "runbook": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/caso-C/runbook.md",
+ "vigia": "hermes",
+ "simulacro": true,
+ "canal": {
+  "cron": "arnes-canal",
+  "destino": "arnes:destino"
+ },
+ "cli_modos": "/Users/dn/dev/wt/u3a-b3/scripts/mac/cli-modos.tsv",
+ "seguimiento_global": true,
+ "inicio": "2026-09-30T12:15:04-0700",
+ "timebox_horas": 6,
+ "sesiones": [
+  {
+   "nombre": "trab-0",
+   "rol": "lead",
+   "cli": "zcode",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/caso-C/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/caso-C/encargo-0.txt"
+  }
+ ],
+ "preaprobaciones": [],
+ "estado": "abierta",
+ "lanes": []
+}
