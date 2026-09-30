@@ -2,6 +2,9 @@
 """Resumen de las transiciones del arnes 19.2 a partir de los JSONL del work.
 
 Entrada: <work> (fin-*.jsonl, ini-*.jsonl, lanzados.txt) y el anillo de CLIs.
+lanzados.txt NO lleva cabecera a proposito (la rechaza el doc-check de CI);
+cada linea es `<stamp UTC> <sesion> <cli>` y este resumidor la lee sin
+esperar encabezados (F3 19.8).
 Salida: JSON con la tabla por transicion, conteo/mediana/maximo/cumplen, la
 cobertura por CLI (finalizaciones y destinos) y los faltantes. El umbral de
 30 s es el de la DoD; cambiarlo aqui cambia los veredictos (y la prueba

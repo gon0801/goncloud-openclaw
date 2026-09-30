@@ -64,4 +64,13 @@ if printf '%s' "$out" | grep -q arnes-canal && [ ! -f "$REAL_SENAL" ]; then
 else
   echo "FALLA: cron list doblado"; fallas=$((fallas+1))
 fi
+# F2 (19.5): el argv registrado en doble.jsonl empieza en el subcomando de
+# openclaw; el estado viaja en su propio campo, no al frente del argv.
+python3 - "$LOG" <<'PY' || { echo "FALLA: el argv del log no empieza en system|cron|message"; fallas=$((fallas+1)); }
+import json, sys
+filas = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
+malas = [r for r in filas if not r.get("argv") or r["argv"][0] not in ("system", "cron", "message")]
+assert not malas, malas
+PY
+
 [ "$fallas" -eq 0 ] && echo "PASARELA: 6/6 ok" || { echo "PASARELA: $fallas fallas"; exit 1; }

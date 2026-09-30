@@ -19,12 +19,13 @@ corroboracion). Umbral de la DoD: 30 s. Reloj monotono del mismo host para
 fin e inicio.
 
 **Limitacion declarada del consumo**: el despertar del emitir le teclea
-`corrida.sh avisos atender` a la sesion marcada como lead, y cada trabajador
-de esta cadena se lanza con rol lead: el comando vuelve a caer en el
-propio trabajador que acaba de terminar. En las 20 transiciones el brazo
-consumio el pendiente antes (20/20 `el brazo atiende`, 0/20 `consumido por
-la ruta real`): la atencion por la ruta real del lead queda sin muestra en
-esta medicion. La ventana de 30 s cubre deteccion + pendiente durable +
+`corrida.sh avisos atender` a la sesion que `avisos_lead_de` elija: la
+PRIMERA con rol lead del registro. Las 21 sesiones medidas se lanzaron con
+rol lead, asi que el comando apunta siempre a trab-0 (la primera), no al
+trabajador que acaba de terminar. En las 20 transiciones el brazo consumio
+el pendiente antes (20/20 `el brazo atiende`, 0/20 `consumido por la ruta
+real`): la atencion por la ruta real del lead queda sin muestra en esta
+medicion. La ventana de 30 s cubre deteccion + pendiente durable +
 lanzamiento por el dueno mecanico; la DECISION del dueno real (que trabajo
 sigue y con que CLI) esta fuera de esta medicion y va a Fase 20.
 
@@ -83,6 +84,10 @@ sigue y con que CLI) esta fuera de esta medicion y va a Fase 20.
   `salidas/19-2-casos/A-*/veredicto` = SIN-RECUPERACION.
   **PENDIENTE**: remediar (no reiniciar el reloj por el wake propio o ventana
   de recordatorio por session) y medir la recuperacion.
+
+**Nota del arnes (F3 19.8)**: `lanzados.txt` no lleva cabecera a proposito
+(el doc-check de CI la rechazaria) y el resumidor la ignora: cada linea es
+`<stamp UTC> <sesion> <cli>`.
 - **Caida recuperable**: OK. Vigia muerto antes del fin; medido desde su
   relanzamiento (gateway y dueno disponibles): **14.8 s < 60 s**, 1 solo
   lanzamiento del sucesor, sin duplicados (`caso-B.json`).

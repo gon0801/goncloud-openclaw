@@ -8,8 +8,11 @@ set -u
 log=${DOBLE_LOG:?DOBLE_LOG requerido}
 real=${OPENCLAW_REAL_BIN:?OPENCLAW_REAL_BIN requerido}
 
-registrar() { # $1 estado; resto argv
-  ESTADO=$1 LOG=$log python3 -c '
+registrar() { # $1 estado; resto argv (F2 19.5: el estado NO viaja dentro
+  # del argv logueado; va en su propio campo del registro)
+  local estado=$1
+  shift
+  ESTADO="$estado" LOG=$log python3 -c '
 import json, os, sys, time
 rec = {"mono_ns": time.monotonic_ns(),
        "wall": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + ".%03dZ" % (int(time.time() * 1000) % 1000),

@@ -48,9 +48,10 @@ trabajador a envío, con el temporizador de ensayo `QUIET_SECS=10`,
 | grok | 8.92 | 7.29 | 54.06 | 71.61 | 72.64 | claude, sí | OK |
 | claude | −55.97¹ | 67.54¹ | 39.31 | 118.73 | 119.76 | zcode, sí | OK |
 
-¹ El aviso del vigía salió 56 s ANTES del fin y fue un evento de aprobación,
-no quietud: a las 18:49:20 el vigía vio un diálogo "waiting for approval" en
-el panel y avisó al momento (`salidas/claude-r2/doble.*`, primera fila REAL).
+¹ El aviso del vigía salió 56 s ANTES del fin y fue el evento de aprobación
+`waiting for approval for 0s` (apareció y se contestó en el mismo segundo),
+no quietud: a las 18:49:20 el vigía vio ese diálogo en el panel y avisó al
+momento (`salidas/claude-r2/doble.*`, primera fila REAL).
 El trabajador completó su tarea después: ni un diálogo visto a mitad de turno
 ni el silencio acreditan entrega (hallazgo 1 de r1, observado en vivo). La
 atención de claude se mide desde ese aviso prematuro; el dueño arrancó 11.5 s
@@ -62,7 +63,12 @@ anteriores al arreglo de identidad única de esta ronda): tres de zcode — el
 piloto 18:32 con sesión compartida y cola arrastrada, un relanzamiento fallido
 por registro ya existente, y la corrida 18:39 limpia en datos pero con la
 atención contaminada por la cola del piloto — y una de grok cuyo sucesor
-claude no entregó dentro de la ventana. Quedan como antecedente en
+claude no entregó dentro de la ventana. Conteo completado en C1-r1 (F4): a
+esos tres juegos de zcode se suman la corrida de la r1 del arnés
+(`salidas/zcode/`, estampa 102610) y un lanzamiento abortado de zcode antes
+del registro (sin artefactos), con lo que el total descartado de zcode es
+seis; también son anteriores al sello de identidad las corridas de claude,
+codex y kimi de esta tabla (F1). Quedan como antecedente en
 `arnes/salidas/<token>-r2/` con todas sus estampas. Artefactos crudos:
 `doble.*` (envíos REAL y NEGADO), `times-r2.*`, `sondeo*.jsonl`,
 `watch.log`, `breve.out`, `registro.*`, `pane-final.log`.
