@@ -31,7 +31,7 @@ registro ya dice.
 | `cli_modos` | Ruta de la tabla de modos que usa esta corrida (por defecto la instalada) |
 | `inicio` | Cuándo se abrió, con zona horaria |
 | `timebox_horas` | 6 por carril; vuelve a 6 completas al salir de un diálogo |
-| `sesiones[]` | `nombre`, `rol` (`lead` o `carril`, siempre presente), `cli`, `dueno`, `dir` |
+| `sesiones[]` | `nombre`, `rol` (`lead` o `carril`, siempre presente), `cli`, `dueno`, `dir`, `encargo` (opcional: ruta del `--encargo` con que se lanzó la sesión; la guarda `lanzar-sesion` y el relanzo automático del vigilante la re-entrega al relanzarla) |
 | `preaprobaciones[]` | `patron` + `decision` (`Aprobado` o `Negado`); lo no casado escala |
 | `estado` | `abierta` o `cerrada` |
 

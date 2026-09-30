@@ -6,7 +6,7 @@
 # (comandos, salidas y capturas: ~/.local/state/u3-loop/mediciones-14.7);
 # cada barra aparece bajo la argv start:write y start:review de workers.v1.json
 # y bajo el flag de sondeo.
-# grok remedido 2026-09-28 (grok 1.0.41): --read-only no existe (rc 2); la
+# grok remedido 2026-09-28 (1.0.41) y re-remediado 2026-09-29 (1.0.44, 19.4): --read-only no existe (rc 2); la
 # revision usa --permission-mode plan, y con ella la barra NO pinta
 # always-approve; lo comun a --allow y a plan es el canal "[stable]" del pie.
 # kimi remedido 2026-09-28 (kimi 2.1.1): la linea de estado ya no dice auto;

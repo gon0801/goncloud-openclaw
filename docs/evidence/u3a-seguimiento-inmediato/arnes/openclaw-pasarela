@@ -19,6 +19,17 @@ with open(os.environ["LOG"], "a") as f:
 ' "$@" 2>/dev/null
 }
 
+# El argv de la pasarela empieza SIEMPRE en el subcomando de openclaw (F2):
+# nada de la pasarela viaja al frente del exec.
+case "${1:-}" in
+  system|cron|message) ;;
+  *)
+    registrar "NEGADO" "$@"
+    echo "pasarela: comando forastero '${1:-}' NEGADO (solo system|cron|message)" >&2
+    exit 1
+    ;;
+esac
+
 clave_de() { # imprime el valor de --session-key o vacio
   anterior=""
   for a in "$@"; do

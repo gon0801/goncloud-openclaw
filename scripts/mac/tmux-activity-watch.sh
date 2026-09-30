@@ -69,7 +69,7 @@
 #   QUIET_SECS=900
 #   TICK_SECS=15
 #   QUIET_REMIND_SECS=3600
-#   APPROVAL_RE=<measured questions + dialog signature, see DEFAULT_APPROVAL_RE below>
+#   APPROVAL_RE=<measured questions + dialog signature, see APROBACION_RE in corrida/lib.sh>
 #   APPROVAL_TAIL_LINES=15
 #   APPROVAL_REMIND_SECS=3600
 #   STATE_DIR=$HOME/.local/state/tmux-activity-watch
@@ -80,9 +80,23 @@
 # Automatic relaunch: a closed session whose state names a run, when that run's registro is
 # "abierta" and lists the session with rol/cli/dir, is relaunched here with
 # `$CORRIDA_BIN lanzar-sesion <id> <rol> <cli> <dir> --nombre <session>`, once per (run, session)
-# ($STATE_DIR/relanzos/<run>.<session>). The "closed" event still goes out, as a report of what
-# happened. Measured 2026-09-29, sim9-20260928-2039 cases 5/6: the event alone landed in a gateway
-# session in queue mode "steer", got folded into an unrelated run, and nobody relaunched for 32 min.
+# ($STATE_DIR/relanzos/<run>.<session>). When the registro entry carries 'encargo' (19.1 B2,
+# finding 7), the relaunch re-delivers it with --encargo. The "closed" event still goes out, as
+# a report of what happened. Measured 2026-09-29, sim9-20260928-2039 cases 5/6: the event alone
+# landed in a gateway session in queue mode "steer", got folded into an unrelated run, and
+# nobody relaunched for 32 min.
+#
+# Avisos de corrida (19.1 B2): a marked session carrying OPENCLAW_WATCH_RUN=<id> whose
+# CORRIDA_BIN is executable reports through the durable avisos queue instead of the system
+# event: `$CORRIDA_BIN avisos emitir <id> <session> <tipo> --llave <llave>` (quiet -> fin-turno,
+# approval -> aprobacion, closed -> cierre). CORRIDA_AVISOS=0 or no run keeps today's event
+# route. The approval key is the checksum of ONLY the lines matching APPROVAL_RE (finding 4:
+# the full tail that was hashed before changes when the TUI repaints with a spinner, breaking
+# the dedupe; the matching lines ARE the dialog identity, so one aviso per episode, and a
+# different dialog changes them and gets a new key). Once per tick, pendientes whose mtime is
+# older than AVISOS_REINTENTO_SECS (a wake-up that never landed: busy owner, lead gone at emit
+# time) are re-woken via `$CORRIDA_BIN avisos despertar <id>`, at most AVISOS_REINTENTO_TOPE
+# runs per tick — no new cron, the watcher already IS the retry clock.
 #   LATIDO_SECS=300    (seconds between two `$CORRIDA_BIN latido` launches)
 #   LATIDO_TOPE=240    (hard timeout of one latido; it runs in the background, never blocks a tick)
 #   LATIDO_ONCE=       (1: --once also launches the latido)
@@ -102,15 +116,18 @@
 # arrays, no `mapfile`, no `${var,,}`.
 set -euo pipefail
 
+# Fuente unica de la expresion de dialogos (F2 r9): APROBACION_RE vive en
+# corrida/lib.sh y la cargan el vigia y corrida/avisos.sh por igual. La copia
+# local de aqui y la estrecha de alla divergieron: el guard de avisos tecleaba
+# dentro de dialogos como "Run this command?".
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/corrida/lib.sh"
+
 TMUX_BIN=${TMUX_BIN:-/opt/homebrew/bin/tmux}
 OPENCLAW_BIN=${OPENCLAW_BIN:-$HOME/.openclaw/bin/openclaw}
 QUIET_SECS=${QUIET_SECS:-900}
 TICK_SECS=${TICK_SECS:-15}
 QUIET_REMIND_SECS=${QUIET_REMIND_SECS:-3600}
-# ASCII only: it is matched against the screen tail AFTER non-ASCII is stripped, with grep -i.
-DEFAULT_APPROVAL_RE='allow once|always allow|would you like to allow|do you want to proceed|run this command\?|waiting for approval|do you trust|trust this (folder|workspace)'
-DEFAULT_APPROVAL_RE="$DEFAULT_APPROVAL_RE"'|enter (to )?(select|confirm|continue)|esc (to )?(cancel|go back|exit)|arrow keys to navigate|[[(]y/n[])]|[(]yes/no[)]'
-APPROVAL_RE=${APPROVAL_RE:-$DEFAULT_APPROVAL_RE}
+APPROVAL_RE=${APPROVAL_RE:-$APROBACION_RE}
 APPROVAL_TAIL_LINES=${APPROVAL_TAIL_LINES:-15}
 APPROVAL_REMIND_SECS=${APPROVAL_REMIND_SECS:-3600}
 STATE_DIR=${STATE_DIR:-$HOME/.local/state/tmux-activity-watch}
@@ -120,6 +137,14 @@ LOG_FILE=${LOG_FILE:-$HOME/Library/Logs/tmux-activity-watch.log}
 # comporta exactamente como hoy.
 CORRIDA_BIN=${CORRIDA_BIN:-$HOME/bin/corrida.sh}
 CORRIDA_STATE=${CORRIDA_STATE:-$HOME/.local/state/corridas}
+AVISOS_REINTENTO_SECS=${AVISOS_REINTENTO_SECS:-30}
+AVISOS_REINTENTO_TOPE=5
+AVISOS_FALLIDO_TOPE=${AVISOS_FALLIDO_TOPE:-8}
+# Tope de reloj de las llamadas a corrida.sh avisos (emitir y despertar): un
+# tick no puede quedarse colgado tras ellas (mismo criterio que responder y
+# relanzo); vencido el tope la senal queda como no entregada y el siguiente
+# tick reintenta.
+AVISOS_TOPE=${AVISOS_TOPE:-15}
 RELANZO_DIR="$STATE_DIR/relanzos"
 RELANZO_TOPE=60
 LATIDO_SECS=${LATIDO_SECS:-300}
@@ -198,27 +223,128 @@ send_event() {
   # retries. The watcher itself never dies from a failed send.
   if "$OPENCLAW_BIN" system event --mode now --timeout 15000 "${key_args[@]+"${key_args[@]}"}" --text "$text" >>"$LOG_FILE" 2>&1; then
     log "sent: $text"
-    # Carril P (9.6): todo evento enviado queda tambien en $STATE_DIR/eventos.jsonl
-    # (t epoch + texto tal cual, escapado por python): es lo que un vigia puede
-    # leer sin pasar por el gateway. BRIEF-r2 QE: serializacion y append se
-    # comprueban por separado — jamas queda una linea vacia o a medias — y un
-    # fallo del journal se loguea pero NO toca el estado de notificacion del
-    # llamador (el evento ya viajo).
-    local jline
-    jline=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$text" 2>/dev/null) || jline=""
-    if [[ -n $jline ]]; then
-      if ! printf '{"t":%s,"evento":%s}\n' "$(date +%s)" "$jline" >>"$STATE_DIR/eventos.jsonl" 2>/dev/null; then
-        log "journal append failed (event delivered but not recorded): $text"
-      fi
-    else
-      log "journal serialize failed (event delivered but not recorded): $text"
-    fi
+    journal_evento "$text"
     return 0
   else
     log "SEND FAILED (will retry next tick): $text"
     return 1
   fi
 }
+
+# Carril P (9.6): toda senal entregada queda tambien en $STATE_DIR/eventos.jsonl
+# (t epoch + texto tal cual, escapado por python): es lo que un vigia puede
+# leer sin pasar por el gateway. BRIEF-r2 QE: serializacion y append se
+# comprueban por separado — jamas queda una linea vacia o a medias — y un
+# fallo del journal se loguea pero NO toca el estado de notificacion del
+# llamador (la senal ya viajo). La ruta de avisos (19.1 B2) la usa igual: el
+# pendiente durable y el diario local no se excluyen (contrato del simulacro
+# 9.9 casos 5/6).
+journal_evento() { # $1 text
+  local jline
+  jline=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1" 2>/dev/null) || jline=""
+  if [[ -n $jline ]]; then
+    if ! printf '{"t":%s,"evento":%s}\n' "$(date +%s)" "$jline" >>"$STATE_DIR/eventos.jsonl" 2>/dev/null; then
+      log "journal append failed (event delivered but not recorded): $1"
+    fi
+  else
+    log "journal serialize failed (event delivered but not recorded): $1"
+  fi
+}
+
+# 19.1 B2/r5: la ruta de avisos para sesiones de una corrida marcada. Estados:
+#   0 = ruta avisos tomada: el emitir va DESACOPLADO y el vigia deja un fallo
+#       durable en $STATE_DIR/avisos-fallidos/ en el momento del lanzamiento;
+#       el tick relanza los fallos viejos hasta emitir bien (entonces se
+#       borran). El llamador marca la senal notificada en cuanto lanza: la
+#       entrega la garantiza el fallo durable, no el proceso en marcha.
+#   1 = fuera de la ruta (sin run, CORRIDA_BIN no ejecutable, CORRIDA_AVISOS=0):
+#       el llamador hace lo de siempre (send_event).
+# Emision desacoplada (19.1-r5): 3 intentos a AVISOS_TOPE; al emitir bien
+# borra el registro de fallo ($AV_F).
+avisos_emitir_bg() { # $1 bin $2 run $3 sesion $4 tipo $5 llave $6 fallido
+  AV_BIN="$1" AV_RUN="$2" AV_S="$3" AV_T="$4" AV_K="$5" AV_F="$6" \
+  AV_LOG="$LOG_FILE" AV_TOPE="$AVISOS_TOPE" \
+    nohup bash -c '
+      set +e
+      for _i in 1 2 3; do
+        perl -e "alarm shift; exec(@ARGV) or exit 127" "$AV_TOPE" \
+          "$AV_BIN" avisos emitir "$AV_RUN" "$AV_S" "$AV_T" --llave "$AV_K" >>"$AV_LOG" 2>&1
+        _av_rc=$?
+        if [ "$_av_rc" -eq 0 ]; then
+          [ "$AV_F" = "-" ] || rm -f "$AV_F"
+          exit 0
+        fi
+        if [ "$_av_rc" -eq 3 ]; then
+          [ "$AV_F" = "-" ] || rm -f "$AV_F"
+          echo "avisos bg: RECHAZO DEFINITIVO (exit 3): $AV_RUN $AV_S $AV_T registro descartado" >>"$AV_LOG"
+          exit 0
+        fi
+        sleep 3
+      done
+      exit 1
+    ' _ >/dev/null 2>&1 &
+}
+
+
+# Reintento de fallos durables del emitir (19.1-r5): cada registro con mtime
+# viejo se vuelve a lanzar desacoplado (el lanzamiento refresca su mtime =
+# backoff, y el emitir borra el registro al emitir bien). Sin cron nuevo: el
+# mismo tick del vigilante es el reloj.
+
+aviso_dueno() { # $1 run $2 sesion $3 tipo $4 llave [$5 text]
+  local texto="${5:-avisos $2 $3}"
+  [[ -n $1 && -x $CORRIDA_BIN && ${CORRIDA_AVISOS:-1} != 0 ]] || return 1
+  # El diario registra la senal CUANDO EL VIGIA LA VIO; el fallo durable se
+  # escribe AQUI (vigia), antes de lanzar el emitir desacoplado: si el
+  # proceso desacoplado muere, el registro queda y el tick reintenta
+  # (19.1-r5). El tick jamas espera a los spawns de corrida.sh (19.1-r4).
+  journal_evento "$texto"
+  mkdir -p "$STATE_DIR/avisos-fallidos" 2>/dev/null
+  AV_F="$STATE_DIR/avisos-fallidos/$1-$2-$3-$4.json"
+  printf '{"schema":"avisos-fallido.v1","run":"%s","sesion":"%s","tipo":"%s","llave":"%s","intentos":0,"actualizado":%s000}\n' \
+    "$1" "$2" "$3" "$4" "$(date +%s)" > "$AV_F"
+  avisos_emitir_bg "$CORRIDA_BIN" "$1" "$2" "$3" "$4" "$AV_F"
+  return 0
+}
+
+# Reintento de fallos durables del emitir (19.1-r5): cada registro con mtime
+# viejo se vuelve a lanzar desacoplado; el lanzamiento borra el registro al
+# emitir bien o refresca su mtime al agotar (backoff). Sin cron nuevo: el
+# mismo tick del vigilante es el reloj.
+avisos_fallidos_tick() {
+  local f="" mt="" datos="" fr="" fs="" ft="" fk="" n=0
+  [[ ${CORRIDA_AVISOS:-1} != 0 && -x $CORRIDA_BIN && -d $STATE_DIR/avisos-fallidos ]] || return 0
+  for f in "$STATE_DIR/avisos-fallidos"/*.json; do
+    [[ -f $f ]] || continue
+    [[ $n -lt $AVISOS_REINTENTO_TOPE ]] || break
+    mt=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null) || mt=""
+    [[ $mt =~ ^[0-9]+$ ]] && (( $(date +%s) - mt < AVISOS_REINTENTO_SECS )) && continue
+    datos=$(AV_F="$f" python3 -c "
+import json, os
+d = json.load(open(os.environ[\"AV_F\"]))
+print(chr(9).join([str(d.get(k) or \"\") for k in (\"run\", \"sesion\", \"tipo\", \"llave\", \"intentos\")]))" 2>/dev/null) || datos=""
+    fr=""; fs=""; ft=""; fk=""; intentos=0
+    IFS="$(printf '\t')" read -r fr fs ft fk intentos <<<"$datos" 2>/dev/null || true
+    case "$intentos" in ''|*[!0-9]*) intentos=0;; esac
+    [[ -n $fr && -n $fs && -n $ft && -n $fk ]] || { rm -f "$f"; continue; }
+    if [ "$intentos" -ge "$AVISOS_FALLIDO_TOPE" ]; then
+      rm -f "$f"
+      log "fallidos: descartado tras $intentos reintentos sin exito: $fr $fs $ft"
+      continue
+    fi
+    touch "$f" 2>/dev/null || true
+    intentos=$((intentos + 1))
+    printf '{"schema":"avisos-fallido.v1","run":"%s","sesion":"%s","tipo":"%s","llave":"%s","intentos":%s,"actualizado":%s000}\n' \
+      "$fr" "$fs" "$ft" "$fk" "$intentos" "$(date +%s)" > "$f"
+    avisos_emitir_bg "$CORRIDA_BIN" "$fr" "$fs" "$ft" "$fk" "$f"
+    n=$((n + 1))
+  done
+  [ "$n" -gt 0 ] && log "fallidos: $n reintentados; primero: run=$fr sesion=$fs tipo=$ft"
+  return 0
+  return 0
+}
+
+# 19.1 B2: reintento del despertar
 
 # Carril P (9.6): la politica de dialogos contesta primero. El vigilante le pasa
 # la sesion a "corrida.sh responder" y solo despierta al agente si la politica no
@@ -272,7 +398,7 @@ open(os.environ['REL_F'],'a').write(json.dumps(p)+chr(10))" 2>/dev/null ||
 # (" | relanzada automaticamente: ..." / " | no se pudo relanzar: ..." / " | ya se
 # relanzo ...") o nada si la sesion no es relanzable (el evento sale como antes).
 relanzo_automatico() {
-  local session=$1 run=$2 datos estado rol cli dir marca salida rc razon
+  local session=$1 run=$2 datos estado rol cli dir encargo marca salida rc razon
   [[ -n $run && -x $CORRIDA_BIN ]] || return 0
   [[ $run =~ ^[A-Za-z0-9_-]+$ ]] || return 0
   datos=$(REL_REG="$CORRIDA_STATE/$run/registro.json" REL_S="$session" python3 -c "
@@ -282,9 +408,9 @@ e=None
 for s in d.get('sesiones') or []:
   if isinstance(s,dict) and s.get('nombre')==os.environ['REL_S']: e=s
 if e and all(e.get(k) for k in ('rol','cli','dir')):
-  print('\t'.join([str(d.get('estado','')),e['rol'],e['cli'],e['dir']]))" 2>/dev/null) || datos=""
+  print('\t'.join([str(d.get('estado','')),e['rol'],e['cli'],e['dir'],str(e.get('encargo') or '')]))" 2>/dev/null) || datos=""
   [[ -n $datos ]] || return 0
-  IFS=$'\t' read -r estado rol cli dir <<<"$datos"
+  IFS=$'\t' read -r estado rol cli dir encargo <<<"$datos"
   [[ $estado == abierta ]] || return 0
   mkdir -p "$RELANZO_DIR" 2>/dev/null || true
   marca="$RELANZO_DIR/$run.$session"
@@ -296,13 +422,22 @@ if e and all(e.get(k) for k in ('rol','cli','dir')):
     return 0
   fi
   rc=0
+  # Hallazgo 7: si el registro guarda la ruta del --encargo de la sesion, el
+  # relanzo la re-entrega; sin encargo registrado, el comando queda igual que siempre.
+  local encargo_args=() cmd_txt
+  cmd_txt="corrida.sh lanzar-sesion $run $rol $cli $dir"
+  if [[ -n $encargo ]]; then
+    encargo_args=(--encargo "$encargo")
+    cmd_txt="$cmd_txt --encargo $encargo"
+  fi
+  cmd_txt="$cmd_txt --nombre $session"
   salida=$(perl -e 'alarm shift; exec(@ARGV) or exit 127' "$RELANZO_TOPE" \
-    "$CORRIDA_BIN" lanzar-sesion "$run" "$rol" "$cli" "$dir" --nombre "$session" </dev/null 2>&1) || rc=$?
+    "$CORRIDA_BIN" lanzar-sesion "$run" "$rol" "$cli" "$dir" ${encargo_args[@]+"${encargo_args[@]}"} --nombre "$session" </dev/null 2>&1) || rc=$?
   printf '%s\n' "$salida" >>"$LOG_FILE" 2>/dev/null || true
   if [[ $rc -eq 0 ]]; then
     log "relanzo automatico: $session (corrida $run)"
-    relanzo_evento "$run" "$session" true "corrida.sh lanzar-sesion $run $rol $cli $dir --nombre $session"
-    printf ' | relanzada automaticamente: corrida.sh lanzar-sesion %s %s %s %s --nombre %s' "$run" "$rol" "$cli" "$dir" "$session"
+    relanzo_evento "$run" "$session" true "$cmd_txt"
+    printf ' | relanzada automaticamente: %s' "$cmd_txt"
   else
     razon=$(printf '%s\n' "$salida" | grep -v '^[[:space:]]*$' | tail -1 | tr -d '\r' | cut -c1-200)
     [[ $rc -eq 142 ]] && razon="sin respuesta en ${RELANZO_TOPE}s"
@@ -383,7 +518,8 @@ tick() {
   local session activity cmd path sf prev_hash prev_since prev_notified now seen_file err_file
   local prev_approval prev_approval_at prev_approval_since screen hash since notified tailtxt
   local approval approval_at approval_since due elapsed text last_path rc prev_notified_at notified_at
-  local run prev_run sufijo
+  local run prev_run sufijo rc_av llave_av
+  local tick_t0=$(date +%s)
   seen_file=$(mktemp "${TMPDIR:-/tmp}/tmux-activity-watch.seen.XXXXXX")
   err_file=$(mktemp "${TMPDIR:-/tmp}/tmux-activity-watch.err.XXXXXX")
 
@@ -491,13 +627,27 @@ tick() {
         log "dialog answered by policy: $session"
       fi
       if [[ $due == 1 ]]; then
+        # Hallazgo 4: la llave del aviso es el hash de SOLO las lineas que casan
+        # APPROVAL_RE, no la cola completa: el repintado del TUI (spinner,
+        # porcentaje) cambia la cola y romperia el dedupe; un dialogo distinto
+        # cambia las lineas que casan y da llave nueva.
+        llave_av=$(printf '%s\n' "$tailtxt" | grep -Ei -- "$APPROVAL_RE" | sum_of)
+        rc_av=0
         text="tmux: $session waiting for approval for $((now - approval_since))s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"
-        if send_event "$text" "$run"; then
+        aviso_dueno "$run" "$session" aprobacion "$llave_av" "$text" || rc_av=$?
+        if [[ $rc_av == 0 ]]; then
           approval_at=$now
+        elif [[ $rc_av == 2 ]]; then
+          : # el emitir fallo: sin evento, el proximo tick reintenta
         else
-          # Not recorded: the next tick sees it as unreported and tries again.
-          approval=$prev_approval
-          approval_since=$prev_approval_since
+          text="tmux: $session waiting for approval for $((now - approval_since))s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"
+          if send_event "$text" "$run"; then
+            approval_at=$now
+          else
+            # Not recorded: the next tick sees it as unreported and tries again.
+            approval=$prev_approval
+            approval_since=$prev_approval_since
+          fi
         fi
       fi
       # Reported as a prompt, never ALSO as "quiet": notified=1 for this screen.
@@ -516,10 +666,20 @@ tick() {
       due=1
     fi
     if [[ $due == 1 ]]; then
+      rc_av=0
       text="tmux: $session quiet for ${elapsed}s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"
-      if send_event "$text" "$run"; then
+      aviso_dueno "$run" "$session" fin-turno "$hash" "$text" || rc_av=$?
+      if [[ $rc_av == 0 ]]; then
         notified=1
         notified_at=$now
+      elif [[ $rc_av == 2 ]]; then
+        : # el emitir fallo: sin evento, el proximo tick reintenta
+      else
+        text="tmux: $session quiet for ${elapsed}s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"
+        if send_event "$text" "$run"; then
+          notified=1
+          notified_at=$now
+        fi
       fi
     fi
     write_state "$sf" "$hash" "$since" "$notified" "$path" "" 0 0 "$notified_at" "$run"
@@ -540,14 +700,77 @@ tick() {
         sufijo=$(relanzo_automatico "$session" "$run") || sufijo=""
         [[ -z $sufijo ]] || printf 'relanzo=%s\n' "$sufijo" >>"$sf"
       fi
+      rc_av=0
       text="tmux: $session closed | last cwd=$last_path$sufijo"
-      if send_event "$text" "$run"; then
+      aviso_dueno "$run" "$session" cierre closed "$text" || rc_av=$?
+      if [[ $rc_av == 0 ]]; then
         rm -f "$sf"
+      elif [[ $rc_av == 2 ]]; then
+        : # el emitir fallo: el estado no se borra y el proximo tick reintenta
+      else
+        text="tmux: $session closed | last cwd=$last_path$sufijo"
+        if send_event "$text" "$run"; then
+          rm -f "$sf"
+        fi
       fi
     fi
   done
 
   rm -f "$seen_file"
+  local tick_duracion=$(( $(date +%s) - tick_t0 ))
+  [ "$tick_duracion" -le "$TICK_SECS" ] || log "tick lento: ${tick_duracion}s (TICK_SECS=$TICK_SECS)"
+
+  # 19.1 B2: reintento del despertar para pendientes de avisos viejos (una vez
+  # por tick; el vigilante ya ES el reloj, no hay cron nuevo).
+  avisos_reintento_tick
+}
+
+# Scan $CORRIDA_STATE/*/avisos/*.json y despierta (avisos despertar) las corridas
+# con al menos un pendiente cuyo mtime supera AVISOS_REINTENTO_SECS: son envios
+# que no aterrizaron (dueno ocupado en un dialogo, lead inexistente al emitir).
+# El pendiente no se toca aqui: despertar solo reintenta las teclas.
+avisos_reintento_tick() {
+  local d f corrida mt edad ids="" n=0
+  [[ ${CORRIDA_AVISOS:-1} != 0 && -x $CORRIDA_BIN && -d $CORRIDA_STATE ]] || return 0
+  # Escaneo sin spawns (stat por archivo); UNA invocacion con hasta
+  # AVISOS_REINTENTO_TOPE corridas: un corrida.sh por pendiente retrasaba el
+  # tick entero y tiraba la ventana de relanzo del simulacro (19.1-r2).
+  for d in "$CORRIDA_STATE"/*/avisos; do
+    [[ -d $d ]] || continue
+    [[ $n -lt $AVISOS_REINTENTO_TOPE ]] || break
+    # Retroceso por corrida (19.1-r2): un sello fresco frena el despertar; sin
+    # el, cada tick re-tecleaba al lead y colapsaba la ventana de relanzo del
+    # simulacro.
+    sello="$d/.despertado"
+    if [[ -f $sello ]]; then
+      mt=$(stat -c %Y "$sello" 2>/dev/null || stat -f %m "$sello" 2>/dev/null) || mt=""
+      [[ $mt =~ ^[0-9]+$ ]] && (( $(date +%s) - mt < AVISOS_REINTENTO_SECS )) && continue
+    fi
+    corrida=$(basename "$(dirname "$d")")
+    for f in "$d"/*.json; do
+      [[ -f $f ]] || continue
+      # GNU primero: en Linux `stat -f` es el estado del sistema de archivos, no el mtime.
+      mt=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null) || mt=""
+      [[ $mt =~ ^[0-9]+$ ]] || continue
+      edad=$(( $(date +%s) - mt ))
+      if [[ $edad -ge $AVISOS_REINTENTO_SECS ]]; then
+        ids="${ids:+$ids }$corrida"
+        n=$((n + 1))
+        break
+      fi
+    done
+  done
+  if [[ -n $ids ]]; then
+    # Sin comillas a proposito: cada corrida es un argumento propio (B2 r11).
+    # Los ids solo llevan [A-Za-z0-9_-] (corrida_id_valido), sin espacios ni globs.
+    if ! perl -e 'alarm shift; exec(@ARGV) or exit 127' "$AVISOS_TOPE" \
+      "$CORRIDA_BIN" avisos despertar $ids >>"$LOG_FILE" 2>&1; then
+      log "avisos despertar fallo (corridas: $ids)"
+    fi
+    for corrida in $ids; do touch "$CORRIDA_STATE/$corrida/avisos/.despertado" 2>/dev/null || true; done
+  fi
+  avisos_fallidos_tick
+  return 0
 }
 
 # mkdir is the atomic step. The holder's pid goes inside so a watcher killed while holding it

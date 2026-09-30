@@ -49,7 +49,7 @@ if [ -z "$TM" ]; then
   echo "SKIP (3): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
 else
   T=$(mktemp -d) || exit 1
-  trap '"$TM" -L "$L" kill-server 2>/dev/null; rm -rf "$T"' EXIT
+  trap '"$TM" -L "$L" kill-server 2>/dev/null; rm -rf /tmp/taw-r9; cp -r "$T" /tmp/taw-r9 2>/dev/null; rm -rf "$T"' EXIT
   L="taw$$"
   # Ninguna corrida del vigilante en esta prueba puede alcanzar el ~/bin/corrida.sh
   # real: desde 14.29 D1 el tick lanza "latido" contra las corridas reales.
@@ -585,7 +585,9 @@ STUB
   # (2n) La cadencia por defecto es 15 min de silencio y 60 min de recordatorio,
   # sin dormir 15 minutos de verdad: el archivo de estado finge la edad. OJO: sin
   # QUIET_SECS/QUIET_REMIND_SECS en el entorno, para que manden los defaults del
-  # script y no los de run_once (1 s). Con 899 s no hay evento; con 901 s hay uno.
+  # script y no los de run_once (1 s). Los bordes negativos van a 60 s del tope:
+  # el arranque del vigia bajo carga tarda ~1 s y un margen de 1 s (899/3599)
+  # disparaba el evento antes de tiempo (rojo intermitente de la ronda r7).
   "$TM" -L "$L" new-session -d -s cad-default -x 80 -y 20 'cat' || fail "no se pudo crear cad-default"
   mark cad-default
   corre_default() {
@@ -605,10 +607,10 @@ STUB
   pantalla_txt=$("$TM" -L "$L" capture-pane -p -t cad-default 2>/dev/null)
   pantalla=$(printf '%s' "$pantalla_txt" | cksum | awk '{ print $1 "-" $2 }')
   printf 'hash=%s\nsince=%s\nnotified=0\npath=/tmp\napproval=\napproval_at=0\napproval_since=0\nnotified_at=0\n' \
-    "$pantalla" "$((ahora - 899))" >"$STATE_DIR/cad-default.state"
-  corre_default || fail "--once (2n, 899 s) fallo"
+    "$pantalla" "$((ahora - 840))" >"$STATE_DIR/cad-default.state"
+  corre_default || fail "--once (2n, 840 s) fallo"
   n=$(wc -l <"$CALLS" | tr -d ' ')
-  [ "$n" -eq 0 ] || fail "(2n) con 899 s de silencio y cadencia por defecto (15 min) no debe haber evento; hubo $n:
+  [ "$n" -eq 0 ] || fail "(2n) con 840 s de silencio y cadencia por defecto (15 min) no debe haber evento; hubo $n:
 $(cat "$CALLS")"
   ahora=$(date +%s)
   printf 'hash=%s\nsince=%s\nnotified=0\npath=/tmp\napproval=\napproval_at=0\napproval_since=0\nnotified_at=0\n' \
@@ -618,12 +620,12 @@ $(cat "$CALLS")"
   [ "$n" -eq 1 ] || fail "(2n) con 901 s de silencio debe haber exactamente un evento quiet; hubo $n:
 $(cat "$CALLS")"
   # El recordatorio por defecto es 60 min (2026-09-29: cada repeticion es un turno
-  # de ~290k tokens): con notified_at de hace 3599 s no se repite; con 3601 s sí.
+  # de ~290k tokens): con notified_at de hace 3540 s no se repite; con 3601 s sí.
   estado_hash=$(awk -F= '$1 == "hash" { print $2 }' "$STATE_DIR/cad-default.state")
   estado_since=$(awk -F= '$1 == "since" { print $2 }' "$STATE_DIR/cad-default.state")
   ahora=$(date +%s)
   printf 'hash=%s\nsince=%s\nnotified=1\npath=/tmp\napproval=\napproval_at=0\napproval_since=0\nnotified_at=%s\n' \
-    "$estado_hash" "$estado_since" "$((ahora - 3599))" >"$STATE_DIR/cad-default.state"
+    "$estado_hash" "$estado_since" "$((ahora - 3540))" >"$STATE_DIR/cad-default.state"
   corre_default || fail "--once (2n, recordatorio aun no) fallo"
   n=$(grep -c 'cad-default quiet for' "$CALLS")
   [ "$n" -eq 1 ] || fail "(2n) antes de 60 min el recordatorio no se repite; hubo $n"
@@ -645,8 +647,8 @@ $(cat "$CALLS")"
   [ "$(grep -c 'cad-dialogo waiting for approval' "$CALLS")" -eq 1 ] || fail "(2n) el dialogo avisa de inmediato:
 $(cat "$CALLS")"
   ahora=$(date +%s)
-  sed -i.bak "s/^approval_at=.*/approval_at=$((ahora - 3599))/" "$STATE_DIR/cad-dialogo.state"
-  corre_default || fail "--once (2n, dialogo 3599 s) fallo"
+  sed -i.bak "s/^approval_at=.*/approval_at=$((ahora - 3540))/" "$STATE_DIR/cad-dialogo.state"
+  corre_default || fail "--once (2n, dialogo 3540 s) fallo"
   [ "$(grep -c 'cad-dialogo waiting for approval' "$CALLS")" -eq 1 ] || fail "(2n) antes de 60 min el dialogo no se recuerda:
 $(cat "$CALLS")"
   ahora=$(date +%s)
@@ -964,7 +966,9 @@ nace() { # $1 sesion $2 run
   "$TM" -L "$L" set-environment -t "$1" OPENCLAW_WATCH_RUN "$2"
   mark "$1"
 }
-run_r() { CORRIDA_BIN="$STUB_REL" QUIET_SECS=100000 run_once; }
+# CORRIDA_AVISOS=0: este bloque mide la ruta de eventos + relanzo, que sin la
+# reversa sigue siendo la de hoy para corridas; la ruta de avisos es el (2q).
+run_r() { CORRIDA_BIN="$STUB_REL" CORRIDA_AVISOS=0 QUIET_SECS=100000 run_once; }
 n_lanzar() { grep -c '^lanzar-sesion' "$RARGV"; }
 ev_rel() { # $1 id $2 True|False -> lineas relanzo-automatico con ese ok
   python3 -c "
@@ -1031,6 +1035,446 @@ run_r || fail "--once (2m, tick tras el fallo) fallo"
 echo "ok (2m): el vigilante relanza una vez las sesiones de una corrida abierta y reporta; ni dos veces, ni cerradas, ni fuera del registro"
 else
   echo "SKIP (2m): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
+fi
+
+# (2q) 19.1 B2: la ruta de avisos. Una sesion marcada con OPENCLAW_WATCH_RUN y
+# corrida.sh ejecutable avisa por el pendiente durable (corrida.sh avisos emitir)
+# y no por system event; la llave de aprobacion es el hash de SOLO las lineas del
+# dialogo, asi el repintado del TUI no la cambia (hallazgo 4); los pendientes
+# viejos se despiertan una vez por tick con tope (sin cron nuevo); y el relanzo
+# re-entrega el --encargo registrado (hallazgo 7).
+if [ -n "${TM:-}" ]; then
+AARGV="$T/avisos-argv.txt"; : >"$AARGV"
+STUB_AV="$T/corrida-avisos-stub"
+cat >"$STUB_AV" <<STUB
+#!/bin/sh
+printf '%s\n' "\$*" >> "$AARGV"
+[ "\$1" = responder ] && exit 1
+exit 0
+STUB
+chmod +x "$STUB_AV"
+run_av() { CORRIDA_BIN="$STUB_AV" run_once; }
+esperar_aviso() { # $1 regex; 0 si aparece en AARGV dentro de 6s (el emitir va desacoplado)
+  local i=0
+  while [ "$i" -lt 30 ]; do
+    grep -Eq -- "$1" "$AARGV" 2>/dev/null && return 0
+    sleep 0.2
+    i=$((i + 1))
+  done
+  return 1
+}
+run_avsin() { CORRIDA_BIN="$STUB_AV" CORRIDA_AVISOS=0 run_once; }
+
+# Purga: los casos anteriores dejan sesiones muertas cuyo closed sale en el
+# primer tick que las ve; se consume antes de medir.
+run_av >/dev/null 2>&1 || fail "--once (2q, purga) fallo"
+: >"$AARGV"
+
+# (2q-1) quiet y closed de una sesion de corrida: por avisos, cero system events.
+STATE_DIR="$T/state-2q-1"; mkdir -p "$STATE_DIR"
+"$TM" -L "$L" new-session -d -s sim9-avq -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avq"
+mark sim9-avq
+"$TM" -L "$L" set-environment -t sim9-avq OPENCLAW_WATCH_RUN sim9-AVQ
+: >"$CALLS"
+sleep 2
+run_av || fail "--once (2q-1, quiet con avisos) fallo"
+esperar_aviso 'avisos emitir sim9-AVQ sim9-avq fin-turno' \
+  || fail "(2q-1) el quiet de una sesion con corrida debia ir por avisos (desacoplado):
+$(cat "$AARGV")"
+n=$(grep -c '^avisos emitir sim9-AVQ sim9-avq fin-turno --llave ' "$AARGV")
+[ "$n" -eq 1 ] || fail "(2q-1) el quiet de una sesion con corrida debia ir por avisos; hubo $n:
+$(cat "$AARGV")"
+n=$(wc -l <"$CALLS" | tr -d ' ')
+[ "$n" -eq 0 ] || fail "(2q-1) la ruta avisos no debe mandar system events: $(cat "$CALLS")"
+run_av || fail "--once (2q-1, segundo tick) fallo"
+[ "$(wc -l <"$AARGV" | tr -d ' ')" -eq 1 ] || fail "(2q-1) el segundo tick repitio el aviso (notified debia quedar 1): $(cat "$AARGV")"
+"$TM" -L "$L" kill-session -t sim9-avq
+: >"$AARGV"
+run_av || fail "--once (2q-1, closed) fallo"
+esperar_aviso 'avisos emitir sim9-AVQ sim9-avq cierre'
+grep -q '^avisos emitir sim9-AVQ sim9-avq cierre --llave closed$' "$AARGV" \
+  || fail "(2q-1) el closed debia ir por avisos con llave closed: $(cat "$AARGV")"
+[ -f "$STATE_DIR/sim9-avq.state" ] && fail "(2q-1) el aviso de cierre salio pero el estado no se borro"
+"$TM" -L "$L" kill-session -t sim9-avq 2>/dev/null
+echo "ok (2q-1): quiet y closed de una corrida van por avisos, sin system events y sin repetirse"
+
+# (2q-2) aprobacion y repintado (hallazgo 4): el reloj del TUI no cambia la llave
+STATE_DIR="$T/state-2q-2"; mkdir -p "$STATE_DIR"
+# (un aviso por episodio) y un dialogo distinto da llave nueva.
+PANTALLA_Q="$T/pantalla-q.txt"
+printf 'Permission - Bash\necho aviso-q\n> Allow once\n  Deny\n girando |\n' >"$PANTALLA_Q"
+"$TM" -L "$L" new-session -d -s sim9-avp -x 80 -y 20 "$TUI $PANTALLA_Q" || fail "no se pudo crear sim9-avp"
+mark sim9-avp
+"$TM" -L "$L" set-environment -t sim9-avp OPENCLAW_WATCH_RUN sim9-AVP
+espera_pantalla sim9-avp 'Allow once'
+sleep 1
+run_pav() { APPROVAL_REMIND_SECS=3 CORRIDA_BIN="$STUB_AV" run_once; }
+run_pav || fail "--once (2q-2, primer dialogo) fallo"
+esperar_aviso 'avisos emitir sim9-AVP sim9-avp aprobacion'
+n=$(grep -c '^avisos emitir sim9-AVP sim9-avp aprobacion --llave ' "$AARGV")
+[ "$n" -eq 1 ] || fail "(2q-2) el dialogo debia emitir un aviso de aprobacion; hubo $n:
+$(cat "$AARGV")"
+# Un spinner ASCII repinta la cola (el hash de la cola cambia) pero NO las lineas
+# del dialogo: la llave se mantiene y el aviso deduplica.
+sed -i.bak 's/girando |/girando \//' "$PANTALLA_Q"; rm -f "$PANTALLA_Q.bak"
+espera_pantalla sim9-avp 'girando /'
+run_pav || fail "--once (2q-2, repintado con spinner) fallo"
+esperar_aviso 'avisos emitir sim9-AVP sim9-avp aprobacion'
+n=$(grep -c '^avisos emitir sim9-AVP sim9-avp aprobacion --llave ' "$AARGV")
+[ "$n" -eq 2 ] || fail "(2q-2) el repintado debia reevaluar el dialogo (2 llamadas); hubo $n:
+$(cat "$AARGV")"
+n=$(grep '^avisos emitir sim9-AVP sim9-avp aprobacion --llave ' "$AARGV" | sort -u | wc -l | tr -d ' ')
+[ "$n" -eq 1 ] || fail "(2q-2) el repintado del TUI cambio la llave del dialogo (esperaba 1 llave unica, hubo $n):
+$(cat "$AARGV")"
+# Un dialogo DISTINTO (otra pregunta) cambia las lineas que casan: llave nueva.
+sed -i.bak 's/> Allow once/> Do you want to proceed?/' "$PANTALLA_Q"; rm -f "$PANTALLA_Q.bak"
+espera_pantalla sim9-avp 'Do you want to proceed'
+run_pav || fail "--once (2q-2, dialogo distinto) fallo"
+n=$(grep '^avisos emitir sim9-AVP sim9-avp aprobacion --llave ' "$AARGV" | sort -u | wc -l | tr -d ' ')
+[ "$n" -eq 2 ] || fail "(2q-2) un dialogo distinto debia dar una llave nueva (esperaba 2 llaves unicas, hubo $n):
+$(cat "$AARGV")"
+"$TM" -L "$L" kill-session -t sim9-avp
+run_av >/dev/null 2>&1 || true
+echo "ok (2q-2): el repintado no cambia la llave del dialogo (un aviso por episodio); un dialogo distinto, si"
+
+# (2q-3) sin OPENCLAW_WATCH_RUN, o con CORRIDA_AVISOS=0: la ruta de siempre.
+STATE_DIR="$T/state-2q-3"; mkdir -p "$STATE_DIR"
+"$TM" -L "$L" new-session -d -s sim9-avs -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avs"
+mark sim9-avs
+: >"$CALLS"; : >"$AARGV"
+sleep 2
+run_av || fail "--once (2q-3, sin run) fallo"
+grep -q '^avisos' "$AARGV" && fail "(2q-3) sin OPENCLAW_WATCH_RUN no debe haber ruta avisos: $(cat "$AARGV")"
+grep -q 'sim9-avs quiet for' "$CALLS" || fail "(2q-3) sin run el evento debia salir como hoy: $(cat "$CALLS")"
+"$TM" -L "$L" set-environment -t sim9-avs OPENCLAW_WATCH_RUN sim9-AVS
+"$TM" -L "$L" kill-session -t sim9-avs
+: >"$CALLS"; : >"$AARGV"
+run_avsin || fail "--once (2q-3, CORRIDA_AVISOS=0) fallo"
+grep -q '^avisos' "$AARGV" && fail "(2q-3) con CORRIDA_AVISOS=0 no debe haber ruta avisos: $(cat "$AARGV")"
+grep -q 'sim9-avs closed' "$CALLS" || fail "(2q-3) con la reversa el closed debia salir como hoy: $(cat "$CALLS")"
+echo "ok (2q-3): sin corrida marcada o con la reversa, los eventos salen por agent:main:vigia-mac como siempre"
+
+# (2q-4) reintento: pendientes con mtime viejo despiertan una vez por corrida y
+STATE_DIR="$T/state-2q-4"; mkdir -p "$STATE_DIR"
+# tick, con tope de 5 corridas; los frescos (menos de 30 s) no.
+mkdir -p "$CORRIDA_STATE/sim9-RT1/avisos" "$CORRIDA_STATE/sim9-RT2/avisos" "$CORRIDA_STATE/sim9-FRESCO/avisos"
+printf '{"schema":"corrida-aviso.v1"}\n' >"$CORRIDA_STATE/sim9-RT1/avisos/a.json"
+printf '{"schema":"corrida-aviso.v1"}\n' >"$CORRIDA_STATE/sim9-RT2/avisos/a.json"
+printf '{"schema":"corrida-aviso.v1"}\n' >"$CORRIDA_STATE/sim9-FRESCO/avisos/a.json"
+python3 -c 'import os,sys,time; t=time.time()-31
+for p in sys.argv[1:]: os.utime(p,(t,t))' \
+  "$CORRIDA_STATE/sim9-RT1/avisos/a.json" "$CORRIDA_STATE/sim9-RT2/avisos/a.json"
+: >"$AARGV"
+run_av || fail "--once (2q-4, reintento) fallo"
+# Una sola invocacion por tick con TODOS los ids (19.1-r2): un spawn de
+# corrida.sh por pendiente retrasaba el tick y tiraba la ventana de relanzo
+# del simulacro (SIM_ESPERA_DOBLE=6).
+[ "$(grep -c '^avisos despertar sim9-RT1 sim9-RT2$' "$AARGV")" -eq 1 ] || fail "(2q-4) falta el despertar en una sola llamada de RT1 y RT2: $(cat "$AARGV")"
+grep -q 'despertar sim9-FRESCO' "$AARGV" && fail "(2q-4) un pendiente fresco no debe despertarse: $(cat "$AARGV")"
+# B2 r11: cada corrida viaja como su propio argumento. Un solo argumento con
+# todos los ids no despierta a nadie y el retroceso suprime el reintento.
+ARGC_LOG="$T/despertar-argc.txt"; : >"$ARGC_LOG"
+STUB_ARGC="$T/corrida-argc"
+printf '#!/bin/sh\n[ "$2" = despertar ] && printf "%%s\\n" "$#" >> "%s"\nexit 0\n' "$ARGC_LOG" > "$STUB_ARGC"
+chmod +x "$STUB_ARGC"
+rm -f "$CORRIDA_STATE/sim9-RT1/avisos/.despertado" "$CORRIDA_STATE/sim9-RT2/avisos/.despertado"
+CORRIDA_BIN="$STUB_ARGC" run_once || fail "--once (2q-4, argumentos) fallo"
+[ "$(head -1 "$ARGC_LOG")" = "4" ] || fail "(2q-4) despertar debia recibir cada corrida como argumento propio (avisos despertar RT1 RT2 = 4 argumentos); recibio: $(cat "$ARGC_LOG")"
+[ -f "$CORRIDA_STATE/sim9-RT1/avisos/a.json" ] || fail "(2q-4) el despertar no debe consumir el pendiente"
+i=0
+while [ "$i" -lt 7 ]; do
+  mkdir -p "$CORRIDA_STATE/sim9-TOPE$i/avisos"
+  printf '{"schema":"corrida-aviso.v1"}\n' >"$CORRIDA_STATE/sim9-TOPE$i/avisos/a.json"
+  python3 -c 'import os,sys,time; t=time.time()-31; os.utime(sys.argv[1],(t,t))' "$CORRIDA_STATE/sim9-TOPE$i/avisos/a.json"
+  i=$((i + 1))
+done
+: >"$AARGV"
+run_av || fail "--once (2q-4, tope) fallo"
+n=$(grep -c '^avisos despertar ' "$AARGV")
+[ "$n" -eq 1 ] || fail "(2q-4) el reintento debe ser UNA llamada por tick (hubo $n): $(cat "$AARGV")"
+ids=$(grep '^avisos despertar ' "$AARGV" | head -1 | wc -w | tr -d ' ')
+[ "$ids" -eq 7 ] || fail "(2q-4) el tope de 5 corridas por tick no se respeto (ids en la llamada: $((ids - 2)), tope 5): $(cat "$AARGV")"
+rm -rf "$CORRIDA_STATE"/sim9-RT1 "$CORRIDA_STATE"/sim9-RT2 "$CORRIDA_STATE"/sim9-FRESCO "$CORRIDA_STATE"/sim9-TOPE*
+echo "ok (2q-4): los pendientes de mas de 30 s despiertan una vez por tick, con tope de 5 corridas y sin consumirse"
+
+# (2q-5) relanzo con encargo (hallazgo 7): lanzar-sesion re-entrega el --encargo
+STATE_DIR="$T/state-2q-5"; mkdir -p "$STATE_DIR"
+# del registro; sin encargo registrado, el comando queda como siempre.
+RARGV="$T/relanzo-enc-argv.txt"; : >"$RARGV"
+STUB_RE="$T/corrida-relanzo-enc"
+cat >"$STUB_RE" <<STUB
+#!/bin/sh
+printf '%s\n' "\$*" >> "$RARGV"
+[ "\$1" = lanzar-sesion ] || exit 1
+last=""
+for a in "\$@"; do last="\$a"; done
+"$TMUX_SHIM" new-session -d -s "\$last" -x 80 -y 20 cat || exit 1
+"$TMUX_SHIM" set-environment -t "\$last" OPENCLAW_WATCH_RUN "\$2"
+"$TMUX_SHIM" set-environment -t "\$last" OPENCLAW_WATCH 1
+echo "\$last"
+STUB
+chmod +x "$STUB_RE"
+ENC="$T/encargo-rel.txt"; printf 'trabaja la parte 3\n' >"$ENC"
+registro_enc() { # $1 id $2 estado $3 sesion $4 encargo ('-' = sin encargo)
+  mkdir -p "$CORRIDA_STATE/$1"
+  R_ID="$1" R_EST="$2" R_SES="$3" R_ENC="$4" R_DIR="$CORRIDA_STATE/$1" python3 - <<'PY'
+import json, os
+e = {'nombre': os.environ['R_SES'], 'rol': 'carril', 'cli': 'glm', 'dueno': 'lead', 'dir': '/tmp'}
+if os.environ['R_ENC'] != '-':
+    e['encargo'] = os.environ['R_ENC']
+json.dump({'id': os.environ['R_ID'], 'estado': os.environ['R_EST'], 'sesiones': [e]},
+          open(os.path.join(os.environ['R_DIR'], 'registro.json'), 'w'))
+PY
+}
+nace_enc() { # $1 sesion $2 run
+  "$TM" -L "$L" new-session -d -s "$1" -x 80 -y 20 cat || fail "no se pudo crear $1"
+  "$TM" -L "$L" set-environment -t "$1" OPENCLAW_WATCH_RUN "$2"
+  mark "$1"
+}
+run_re() { CORRIDA_BIN="$STUB_RE" CORRIDA_AVISOS=0 QUIET_SECS=100000 run_once; }
+registro_enc sim9-ENC abierta sim9-enc "$ENC"
+nace_enc sim9-enc sim9-ENC
+run_re >/dev/null 2>&1 || fail "--once (2q-5, foto) fallo"
+: >"$CALLS"
+"$TM" -L "$L" kill-session -t sim9-enc
+run_re || fail "--once (2q-5, closed con encargo) fallo"
+grep -q "^lanzar-sesion sim9-ENC carril glm /tmp --encargo $ENC --nombre sim9-enc$" "$RARGV" \
+  || fail "(2q-5) el relanzo no re-entrego el encargo del registro: $(cat "$RARGV")"
+"$TM" -L "$L" kill-session -t sim9-enc 2>/dev/null
+run_re >/dev/null 2>&1 || true
+registro_enc sim9-SINENC abierta sim9-sinenc -
+nace_enc sim9-sinenc sim9-SINENC
+run_re >/dev/null 2>&1 || fail "--once (2q-5, foto sin encargo) fallo"
+: >"$RARGV"; : >"$CALLS"
+"$TM" -L "$L" kill-session -t sim9-sinenc
+run_re || fail "--once (2q-5, closed sin encargo) fallo"
+grep -q '^lanzar-sesion sim9-SINENC carril glm /tmp --nombre sim9-sinenc$' "$RARGV" \
+  || fail "(2q-5) sin encargo el comando debia quedar como siempre: $(cat "$RARGV")"
+grep -q -- '--encargo' "$RARGV" && fail "(2q-5) se invento un encargo que no estaba en el registro: $(cat "$RARGV")"
+"$TM" -L "$L" kill-session -t sim9-sinenc 2>/dev/null
+run_re >/dev/null 2>&1 || true
+echo "ok (2q-5): el relanzo re-entrega el --encargo registrado y sin encargo queda igual que siempre"
+
+# (2q-7) diario local (contrato del simulacro 5/6): con la ruta de avisos, la
+STATE_DIR="$T/state-2q-7"; mkdir -p "$STATE_DIR"
+# senal SIGUE quedando en eventos.jsonl del vigia: es lo que un vigia lee sin
+# pasar por el gateway, y los casos 5/6 del simulacro 9.9 la assertan.
+"$TM" -L "$L" new-session -d -s sim9-avj -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avj"
+mark sim9-avj
+"$TM" -L "$L" set-environment -t sim9-avj OPENCLAW_WATCH_RUN sim9-AVJ
+sleep 2
+run_av || fail "--once (2q-7, quiet con avisos) fallo"
+grep -qF "sim9-avj quiet" "$STATE_DIR/eventos.jsonl" 2>/dev/null \
+  || fail "(2q-7) la ruta de avisos debe anotar la senal en eventos.jsonl: $(cat "$STATE_DIR/eventos.jsonl" 2>/dev/null | tail -2)"
+echo "ok (2q-7): la ruta de avisos journaliza la senal en eventos.jsonl"
+"$TM" -L "$L" kill-session -t sim9-avj 2>/dev/null
+
+# (2q-8) tope de reloj: un corrida.sh colgado en avisos emitir NO puede
+STATE_DIR="$T/state-2q-8"; mkdir -p "$STATE_DIR"
+# colgar el tick (19.1-r2, simulacro etapa 8): el vigia reintenta en el
+# siguiente tick y sigue vivo.
+CORRIDA_CUELGA="$T/corrida-cuelga"
+printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then sleep 45; fi\nexit 0\n' > "$CORRIDA_CUELGA"
+chmod +x "$CORRIDA_CUELGA"
+"$TM" -L "$L" new-session -d -s sim9-avh -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avh"
+mark sim9-avh
+"$TM" -L "$L" set-environment -t sim9-avh OPENCLAW_WATCH_RUN sim9-AVH
+sleep 2
+inicio8=$(date +%s)
+export AVISOS_TOPE=3
+CORRIDA_BIN="$CORRIDA_CUELGA" run_once || fail "--once (2q-8, emitir colgado) fallo"
+unset AVISOS_TOPE
+duracion8=$(( $(date +%s) - inicio8 ))
+[ "$duracion8" -lt 20 ] || fail "(2q-8) el tick quedo colgado ${duracion8}s en el emitir (tope 3s)"
+run_av || fail "(2q-8) el vigia no sobrevivio al tick colgado"
+rm -f "$STATE_DIR/avisos-fallidos/"sim9-AVH*
+"$TM" -L "$L" kill-session -t sim9-avh 2>/dev/null
+echo "ok (2q-8): el emitir colgado no cuelga el tick (tope de reloj y reintento)"
+
+# (2q-9) retroceso del despertar: un pendiente viejo despierta UNA vez; mientras
+STATE_DIR="$T/state-2q-9"; mkdir -p "$STATE_DIR"
+# el sello del despertar sea fresco, los ticks siguientes no repiten teclas
+# (19.1-r2: despertar cada tick colapsaba la ventana de relanzo del simulacro).
+mkdir -p "$CORRIDA_STATE/sim9-BK1/avisos"
+printf '{"schema":"corrida-aviso.v1"}\n' >"$CORRIDA_STATE/sim9-BK1/avisos/a.json"
+python3 -c 'import os,sys,time; t=time.time()-31; os.utime(sys.argv[1],(t,t))' \
+  "$CORRIDA_STATE/sim9-BK1/avisos/a.json"
+: >"$AARGV"
+run_av || fail "--once (2q-9, primer despertar) fallo"
+[ "$(grep -c '^avisos despertar sim9-BK1$' "$AARGV")" -eq 1 ] || fail "(2q-9) falta el primer despertar de sim9-BK1: $(cat "$AARGV")"
+: >"$AARGV"
+run_av || fail "--once (2q-9, segundo tick) fallo"
+grep -q 'despertar sim9-BK1' "$AARGV" \
+  && fail "(2q-9) el sello fresco debia frenar el segundo despertar: $(cat "$AARGV")"
+"$TM" -L "$L" kill-session -t sim9-bk 2>/dev/null
+echo "ok (2q-9): el despertar respeta el sello de retroceso por corrida"
+
+# (2q-10) el tick no paga el coste del emitir: un corrida.sh que TARDA (8s,
+STATE_DIR="$T/state-2q-10"; mkdir -p "$STATE_DIR"
+# dentro del tope) no debe retrasar el tick: el emitir va desacoplado y el
+# pendiente lo escribe el proceso desacoplado (19.1-r4, etapa 8 del simulacro).
+CORRIDA_TARDA="$T/corrida-tarda"
+printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then sleep 8; fi\nexit 0\n' > "$CORRIDA_TARDA"
+chmod +x "$CORRIDA_TARDA"
+"$TM" -L "$L" new-session -d -s sim9-avt -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avt"
+mark sim9-avt
+"$TM" -L "$L" set-environment -t sim9-avt OPENCLAW_WATCH_RUN sim9-AVT
+sleep 2
+inicio10=$(date +%s)
+CORRIDA_BIN="$CORRIDA_TARDA" run_once || fail "--once (2q-10, emitir lento) fallo"
+duracion10=$(( $(date +%s) - inicio10 ))
+[ "$duracion10" -lt 5 ] || fail "(2q-10) el tick espero ${duracion10}s al emitir lento (debia ir desacoplado)"
+rm -f "$STATE_DIR/avisos-fallidos/"sim9-AVT*
+"$TM" -L "$L" kill-session -t sim9-avt 2>/dev/null
+echo "ok (2q-10): el emitir lento va desacoplado y el tick no lo espera"
+
+# (2q-11) fallo durable del emitir desacoplado: un corrida.sh que SIEMPRE
+STATE_DIR="$T/state-2q-11"; mkdir -p "$STATE_DIR"
+export AVISOS_REINTENTO_SECS=3 AVISOS_FALLIDO_TOPE=8
+CORRIDA_FALLA="$T/corrida-falla"
+FALLA_LOG="$T/falla-llamadas.txt"; : >"$FALLA_LOG"
+FALLA_OK="$T/falla-ok"; rm -f "$FALLA_OK"
+# OJO: el stub se genera con UNA conversion %s por printf (el printf de bash
+# reusa el formato con los argumentos sobrantes y un formato corto producia un
+# stub doble que salia 0 siempre: el registro de fallo se borraba en el primer
+# intento y 2q-11 caia en rojo, ronda r7).
+{
+  printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then\n'
+  printf '  printf "%%s %%s\\n" "$(date -u +%%H:%%M:%%S)" "$*" >> "%s"\n' "$FALLA_LOG"
+  printf '  [ -f "%s" ] || exit 1\nfi\nexit 0\n' "$FALLA_OK"
+} > "$CORRIDA_FALLA"
+chmod +x "$CORRIDA_FALLA"
+run_falla() { CORRIDA_BIN="$CORRIDA_FALLA" run_once; }
+"$TM" -L "$L" new-session -d -s sim9-fl -x 80 -y 20 'cat' || fail "no se pudo crear sim9-fl"
+mark sim9-fl
+"$TM" -L "$L" set-environment -t sim9-fl OPENCLAW_WATCH_RUN sim9-FL
+sleep 2
+# Tick 1: el vigia escribe el fallo durable y lanza el emitir desacoplado
+# (3 intentos que fallan con este stub: el registro queda con intentos 0).
+run_falla || fail "--once (2q-11, emitir falla) fallo"
+# El silencio vence en el SEGUNDO tick (el primero solo ceba el estado):
+# el sondeo del registro tica.
+i=0
+while [ "$i" -lt 8 ]; do
+  ls "$STATE_DIR/avisos-fallidos/"sim9-FL*.json >/dev/null 2>&1 && break
+  sleep 1
+  run_falla >/dev/null 2>&1 || true
+  i=$((i + 1))
+done
+[ "$(ls "$STATE_DIR/avisos-fallidos/"sim9-FL*.json 2>/dev/null | wc -l | tr -d ' ')" -ge 1 ] \
+  || fail "(2q-11) el emitir que agota intentos debia dejar fallo durable en avisos-fallidos [fallidos: $(ls "$STATE_DIR/avisos-fallidos/" 2>/dev/null | tr '\n' ' ') | log: $(tail -4 "$LOG_FILE" 2>/dev/null | tr '\n' '/')]"
+# Los 3 intentos del desacoplado llegan en los ~7s siguientes.
+i=0
+while [ "$i" -lt 30 ]; do
+  llamadas1=$(wc -l <"$FALLA_LOG" | tr -d ' ')
+  [ "$llamadas1" -ge 3 ] && break
+  sleep 0.5
+  i=$((i + 1))
+done
+[ "$llamadas1" -ge 3 ] || fail "(2q-11) el desacoplado debia intentar 3 veces; hizo $llamadas1 [llamadas: $(cat "$FALLA_LOG" 2>/dev/null | tr '\n' '/')]"
+# Tick 2 tras el retroceso: el escaneo relanza el fallo (touch + emitir) y
+# los intentos nuevos hacen crecer el log de llamadas.
+sleep 4
+run_falla || fail "--once (2q-11, reintento del fallo) fallo"
+i=0
+while [ "$i" -lt 30 ]; do
+  llamadas2=$(wc -l <"$FALLA_LOG" | tr -d ' ')
+  [ "$llamadas2" -ge 6 ] && break
+  sleep 0.5
+  i=$((i + 1))
+done
+[ "$(wc -l <"$FALLA_LOG" | tr -d ' ')" -ge 6 ] \
+  || fail "(2q-11) el tick debia reintentar el fallo durable (se quedo en $(wc -l <"$FALLA_LOG" | tr -d ' ') llamadas)"
+# Recuperacion: con el stub emitiendo bien, el siguiente relanzamiento emite
+# bien y borra el registro.
+: >"$FALLA_OK"
+sleep 4
+run_falla || fail "--once (2q-11, recuperacion) fallo"
+i=0
+while [ "$i" -lt 30 ]; do
+  ls "$STATE_DIR/avisos-fallidos/"sim9-FL*.json >/dev/null 2>&1 || break
+  sleep 0.5
+  i=$((i + 1))
+done
+[ "$(ls "$STATE_DIR/avisos-fallidos/"sim9-FL*.json 2>/dev/null | wc -l | tr -d ' ')" -eq 0 ] \
+  || fail "(2q-11) al emitir bien el fallo durable debia borrarse"
+"$TM" -L "$L" kill-session -t sim9-fl 2>/dev/null
+rm -rf "$STATE_DIR/avisos-fallidos" "$CORRIDA_STATE/sim9-FL"
+"$TM" -L "$L" kill-session -t sim9-fl 2>/dev/null
+echo "ok (2q-11): fallo durable del emitir con reintento por tick y borrado al emitir bien"
+
+# (2q-12) rechazo definitivo descartado: un emitir que sale 3 (corrida
+STATE_DIR="$T/state-2q-12"; mkdir -p "$STATE_DIR"
+# cerrada, sesion ajena: corrida/avisos.sh) borra el registro de fallo en el
+# primer intento y NO se relanza para siempre.
+CORRIDA_RJ="$T/corrida-rechaza"
+printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then exit 3; fi\nexit 0\n' > "$CORRIDA_RJ"
+chmod +x "$CORRIDA_RJ"
+"$TM" -L "$L" new-session -d -s sim9-rj -x 80 -y 20 'cat' || fail "no se pudo crear sim9-rj"
+mark sim9-rj
+"$TM" -L "$L" set-environment -t sim9-rj OPENCLAW_WATCH_RUN sim9-RJ
+sleep 2
+CORRIDA_BIN="$CORRIDA_RJ" AVISOS_TOPE=2 run_once || fail "--once (2q-12, rechazo definitivo) fallo"
+i=0
+while [ "$i" -lt 30 ]; do
+  ls "$STATE_DIR/avisos-fallidos/"sim9-RJ*.json >/dev/null 2>&1 || break
+  sleep 0.5
+  i=$((i + 1))
+done
+[ "$(ls "$STATE_DIR/avisos-fallidos/"sim9-RJ*.json 2>/dev/null | wc -l | tr -d ' ')" -eq 0 ] \
+  || fail "(2q-12) un rechazo definitivo (exit 3) debia descartar el registro de fallo, no reintentarlo para siempre"
+grep -q "descartado" "$LOG_FILE" 2>/dev/null || fail "(2q-12) el descarte debia quedar en el log del vigia"
+rm -rf "$CORRIDA_STATE/sim9-RJ" "$STATE_DIR/avisos-fallidos/"sim9-RJ*
+rm -f "$STATE_DIR/avisos-fallidos/"sim9-RJ*
+"$TM" -L "$L" kill-session -t sim9-rj 2>/dev/null
+echo "ok (2q-12): el rechazo definitivo descarta el registro y queda en el log"
+
+# (2q-13) backoff del reintento: cada relanzamiento hace touch al registro
+STATE_DIR="$T/state-2q-13"; mkdir -p "$STATE_DIR"
+# antes de lanzar (el mtime fresco es el retroceso); sin touch, un fallo
+# pasajero se relanza cada tick y el mtime queda viejo.
+CORRIDA_TARDE="$T/corrida-tarde"
+printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then exit 1; fi\nexit 0\n' > "$CORRIDA_TARDE"
+chmod +x "$CORRIDA_TARDE"
+"$TM" -L "$L" new-session -d -s sim9-bk -x 80 -y 20 'cat' || fail "no se pudo crear sim9-bk"
+mark sim9-bk
+"$TM" -L "$L" set-environment -t sim9-bk OPENCLAW_WATCH_RUN sim9-BK
+sleep 2
+CORRIDA_BIN="$CORRIDA_TARDE" AVISOS_TOPE=2 run_once || fail "--once (2q-13, primer fallo) fallo"
+sleep 4
+REC_BK=$(ls "$STATE_DIR/avisos-fallidos/"sim9-BK*.json 2>/dev/null | head -1)
+[ -n "$REC_BK" ] || fail "(2q-13) sin registro de fallo tras el primer intento"
+antes=$(stat -c %Y "$REC_BK" 2>/dev/null || stat -f %m "$REC_BK" 2>/dev/null)
+sleep 2
+CORRIDA_BIN="$CORRIDA_TARDE" AVISOS_TOPE=2 run_once || fail "--once (2q-13, reintento) fallo"
+despues=$(stat -c %Y "$REC_BK" 2>/dev/null || stat -f %m "$REC_BK" 2>/dev/null)
+[ -n "$despues" ] && [ "$despues" -gt "$antes" ] \
+  || fail "(2q-13) el relanzamiento debia hacer touch al registro (mtime $antes no avanzo a $despues)"
+"$TM" -L "$L" kill-session -t sim9-bk 2>/dev/null
+echo "ok (2q-13): el relanzamiento hace touch al registro (backoff por mtime)"
+
+# (2q-14) tope total por registro: un fallo que agoto AVISOS_FALLIDO_TOPE
+STATE_DIR="$T/state-2q-14"; mkdir -p "$STATE_DIR"
+# reintentos se DESCARTA (registro fuera + linea en el log) y ya no ocupa
+# ranura de reintento (19.1-r5: un emitir que siempre agota su tope de reloj
+# no puede tapar los demas registros para siempre).
+CORRIDA_CAP="$T/corrida-cap"
+printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then exit 1; fi\nexit 0\n' > "$CORRIDA_CAP"
+chmod +x "$CORRIDA_CAP"
+mkdir -p "$STATE_DIR/avisos-fallidos"
+printf '{"schema":"avisos-fallido.v1","run":"sim9-CAP","sesion":"sim9-cap","tipo":"fin-turno","llave":"cafe","intentos":99,"actualizado":1790733000000}\n' > "$STATE_DIR/avisos-fallidos/sim9-CAP-sim9-cap-fin-turno-cafe.json"
+python3 -c 'import os,time; t=time.time()-40; os.utime("'"$STATE_DIR"'/avisos-fallidos/sim9-CAP-sim9-cap-fin-turno-cafe.json",(t,t))'
+CORRIDA_BIN="$CORRIDA_CAP" AVISOS_TOPE=2 run_once || fail "--once (2q-14, tope) fallo"
+sleep 1
+[ -f "$STATE_DIR/avisos-fallidos/sim9-CAP-sim9-cap-fin-turno-cafe.json" ] \
+  && fail "(2q-14) el registro en el tope debia descartarse: $(cat "$STATE_DIR/avisos-fallidos/sim9-CAP-sim9-cap-fin-turno-cafe.json" 2>/dev/null)"
+grep -q "descartado tras 99 reintentos" "$LOG_FILE" 2>/dev/null \
+  || fail "(2q-14) el descarte por tope debia quedar en el log del vigia"
+rm -f "$STATE_DIR/avisos-fallidos/"sim9-CAP*
+echo "ok (2q-14): el registro en el tope se descarta con su linea en el log"
+rm -rf "$CORRIDA_STATE/sim9-BK" "$STATE_DIR/avisos-fallidos/"sim9-BK*
+else
+  echo "SKIP (2q): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
 fi
 
 # (5) Retirado en 15.1: la llamada anidada a scripts/tests/test-mac-tmux-control.sh.

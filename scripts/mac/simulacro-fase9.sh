@@ -368,6 +368,12 @@ if [ "$ENSAYO" = "1" ] && [ "$DRY_RUN" != "1" ]; then
   cp "$REPO_RAIZ/scripts/mac/tmux-activity-watch.sh" "$VIGIA_ENSAYO_DIR/bin/tmux-activity-watch.sh" \
     && chmod +x "$VIGIA_ENSAYO_DIR/bin/tmux-activity-watch.sh" \
     || { echo "simulacro-fase9: no se pudo copiar el vigia doblado" >&2; exit 2; }
+  # r9: el vigia carga corrida/lib.sh hermano al arrancar (APROBACION_RE
+  # unica). El bin/ doblado necesita el mismo vecindario que el ~/bin/ real;
+  # sin el hermano, el vigia muere en el arranque y pgrep no lo encuentra.
+  mkdir -p "$VIGIA_ENSAYO_DIR/bin/corrida" \
+    && cp "$REPO_RAIZ/scripts/mac/corrida/lib.sh" "$VIGIA_ENSAYO_DIR/bin/corrida/lib.sh" \
+    || { echo "simulacro-fase9: no se pudo copiar corrida/lib.sh junto al vigia doblado" >&2; exit 2; }
   export WATCH_INSTALADO="$VIGIA_ENSAYO_DIR/bin/tmux-activity-watch.sh"
   VIGIA_LOG="${SIM9_VIGIA_LOG:-$(mktemp)}"
   STATE_DIR="$WATCH_STATE_DIR" LOG_FILE="$VIGIA_LOG" TICK_SECS=1 \
@@ -541,7 +547,10 @@ arrancar || { RAZONES="
 # APTO, se limpia igual que un prerrequisito fallido y se sale NO APTO —
 # ningun caso ni sesion del simulacro llego a lanzarse (ver nota de diseno
 # arriba).
-PF_SALIDA="$(CORRIDA_WORKERS_REGISTRY="$DIR_SIM/workers.v1.json" "$CORRIDA_BIN" preflight "$SIM_ID" 2>&1)"
+# El preflight compara el vigia instalado contra una ref git: sin este export
+# compararia contra origin/<default>, que en un PR que TOCA el vigia difiere
+# del checkout y da NO APTO "vigilante viejo" (19.1-r2, CI del PR #226).
+PF_SALIDA="$(CORRIDA_PREFLIGHT_REF=HEAD CORRIDA_WORKERS_REGISTRY="$DIR_SIM/workers.v1.json" "$CORRIDA_BIN" preflight "$SIM_ID" 2>&1)"
 if ! printf '%s\n' "$PF_SALIDA" | head -1 | grep -q '^APTO'; then
   RAZONES="
 - corrida.sh preflight no dio APTO:
@@ -1307,7 +1316,12 @@ generar_evidencia() {
 TOTAL_FUNCIONA=0
 for _n in 1 2 3 4 5 6 7; do
   leer_caso "$_n"
-  [ "$CASO_RESULTADO" = "FUNCIONA" ] && TOTAL_FUNCIONA=$((TOTAL_FUNCIONA+1))
+  # La variante con observacion real ("FUNCIONA (observado real: ...)", opcion A
+  # de David) tambien es un FUNCIONA: en un host con el cron avance-tareas real
+  # vivo, los casos 4 y 7 salen anotados y el conteo exacto los tiraba (19.1-r2).
+  case "$CASO_RESULTADO" in
+    FUNCIONA*) TOTAL_FUNCIONA=$((TOTAL_FUNCIONA+1));;
+  esac
 done
 
 generar_evidencia

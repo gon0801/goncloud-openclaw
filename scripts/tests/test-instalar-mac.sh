@@ -70,15 +70,15 @@ cmp -s scripts/mac/workers.v1.json "$HOME/bin/workers.v1.json" \
 [ -x "$HOME/bin/corrida.sh" ] || fail "corrida.sh quedo sin +x"
 [ -x "$HOME/bin/tablero-trabajo.sh" ] || fail "tablero-trabajo.sh quedo sin +x (claw lo corre directo)"
 ncorr="$(ls "$HOME/bin/corrida"/*.sh 2>/dev/null | wc -l | tr -d ' ')"
-[ "$ncorr" -eq 19 ] || fail "corrida/ trae $ncorr .sh, se esperaban 19"
-for f in abrir lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento lib adaptador preparar-carril mostrar-terminal autoridad-merge reconciliar compuerta seleccionar; do
+[ "$ncorr" -eq 20 ] || fail "corrida/ trae $ncorr .sh, se esperaban 20"
+for f in abrir avisos lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento lib adaptador preparar-carril mostrar-terminal autoridad-merge reconciliar compuerta seleccionar; do
   [ -f "$HOME/bin/corrida/$f.sh" ] || fail "falta \$HOME/bin/corrida/$f.sh"
 done
 # 14.21 punto 7: la lista explicita de arriba debe cubrir TODOS los
 # corrida/*.sh del repo; un script instalado y no listado se escapa del candado.
 for ruta in scripts/mac/corrida/*.sh; do
   b="$(basename "$ruta" .sh)"
-  case " abrir lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento lib adaptador preparar-carril mostrar-terminal autoridad-merge reconciliar compuerta seleccionar " in
+  case " abrir avisos lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento lib adaptador preparar-carril mostrar-terminal autoridad-merge reconciliar compuerta seleccionar " in
     *" $b "*) ;;
     *) fail "corrida/$b.sh se instala pero no esta listado en la prueba" ;;
   esac

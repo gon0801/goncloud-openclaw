@@ -48,16 +48,22 @@ trabajador a envío, con el temporizador de ensayo `QUIET_SECS=10`,
 | grok | 8.92 | 7.29 | 54.06 | 71.61 | 72.64 | claude, sí | OK |
 | claude | −55.97¹ | 67.54¹ | 39.31 | 118.73 | 119.76 | zcode, sí | OK |
 
-¹ El aviso del vigía salió 56 s ANTES del fin: la pausa de pensamiento de
-claude dejó el panel quieto y el vigía la tomó por silencio (silencio no es
-entrega, el hallazgo 1 de r1 observado en vivo). La atención de claude se
-mide desde ese aviso prematuro; el dueño arrancó 11.5 s después del fin real
-del trabajador. Con el envío alineado al fin real, la atención fue de ~11.5 s.
+¹ El aviso del vigía salió 56 s ANTES del fin y fue un evento de aprobación,
+no quietud: a las 18:49:20 el vigía vio un diálogo "waiting for approval" en
+el panel y avisó al momento (`salidas/claude-r2/doble.*`, primera fila REAL).
+El trabajador completó su tarea después: ni un diálogo visto a mitad de turno
+ni el silencio acreditan entrega (hallazgo 1 de r1, observado en vivo). La
+atención de claude se mide desde ese aviso prematuro; el dueño arrancó 11.5 s
+después del fin real del trabajador. Con el envío alineado al fin real, la
+atención fue de ~11.5 s.
 
-Corridas previas de la misma jornada, conservadas como antecedente y no en
-la tabla: la primera pasada de zcode (sesión compartida con cola arrastrada,
-atención contaminada) y una corrida de grok cuyo sucesor claude no entregó
-dentro de la ventana. Artefactos crudos en `arnes/salidas/<token>-r2/`:
+Corridas descartadas de la tabla, inventario completo (F1/F4, corridas
+anteriores al arreglo de identidad única de esta ronda): tres de zcode — el
+piloto 18:32 con sesión compartida y cola arrastrada, un relanzamiento fallido
+por registro ya existente, y la corrida 18:39 limpia en datos pero con la
+atención contaminada por la cola del piloto — y una de grok cuyo sucesor
+claude no entregó dentro de la ventana. Quedan como antecedente en
+`arnes/salidas/<token>-r2/` con todas sus estampas. Artefactos crudos:
 `doble.*` (envíos REAL y NEGADO), `times-r2.*`, `sondeo*.jsonl`,
 `watch.log`, `breve.out`, `registro.*`, `pane-final.log`.
 

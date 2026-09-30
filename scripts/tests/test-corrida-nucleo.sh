@@ -1288,4 +1288,11 @@ printf '%s\n' "$redactada" | grep -q 'sk-pro-ghi' \
 printf '%s\n' "$redactada" | grep -qF 'ghp_[REDACTED]' \
   || fail "P6: la redaccion de ghp_ se rompio: $redactada"
 
+# (spec) F3 r9: `encargo` es un campo de contrato versionado de sesiones[]:
+# lo escribe lanzar-sesion cuando hay --encargo y lo re-entrega el relanzo
+# automatico del vigia. La spec del registro debe documentarlo.
+grep -q 'sesiones\[\].*encargo' docs/spec/corrida.v1.md \
+  || fail "F3: la fila sesiones[] de docs/spec/corrida.v1.md no documenta el campo encargo"
+echo "ok (spec): corrida.v1.md documenta encargo en sesiones[] del registro"
+
 echo "TODO VERDE: test-corrida-nucleo"

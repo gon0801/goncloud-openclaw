@@ -203,4 +203,32 @@ if mal:
     sys.exit(1)
 PY
 
+# Drift de version registro vs host (19.4): la version declarada de cada binario
+# del registro debe coincidir con la del binario instalado. Sin binario en el
+# host (CI, otro host) la entrada se salta: el registro manda para el ruteo.
+versiones=$(python3 - <<'PY'
+import json, shutil, subprocess, sys
+wreg = json.load(open("scripts/mac/workers.v1.json"))["workers"]
+vistos = {}
+mal = []
+for w in wreg:
+    b = w["binary"]
+    if b in vistos:
+        continue
+    vistos[b] = w["version"]
+    if shutil.which(b) is None:
+        continue
+    try:
+        out = subprocess.run([b, "--version"], capture_output=True, text=True, timeout=20)
+        primera = (out.stdout + out.stderr).strip().splitlines()[0] if (out.stdout + out.stderr).strip() else ""
+    except Exception:
+        continue
+    if w["version"] not in primera:
+        mal.append(b + ": registro " + w["version"] + " vs host '" + primera[:40] + "'")
+if mal:
+    print("; ".join(mal))
+    sys.exit(1)
+PY
+) || fail "drift de version registro vs host: $versiones"
+
 echo "TODO VERDE: test-cli-modos"
