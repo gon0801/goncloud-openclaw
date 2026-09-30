@@ -1268,6 +1268,7 @@ duracion8=$(( $(date +%s) - inicio8 ))
 [ "$duracion8" -lt 20 ] || fail "(2q-8) el tick quedo colgado ${duracion8}s en el emitir (tope 3s)"
 run_av || fail "(2q-8) el vigia no sobrevivio al tick colgado"
 rm -f "$STATE_DIR/avisos-fallidos/"sim9-AVH*
+rm -f "$STATE_DIR/avisos-fallidos/"sim9-AVH*
 echo "ok (2q-8): el emitir colgado no cuelga el tick (tope de reloj y reintento)"
 
 # (2q-9) retroceso del despertar: un pendiente viejo despierta UNA vez; mientras
@@ -1300,6 +1301,7 @@ inicio10=$(date +%s)
 CORRIDA_BIN="$CORRIDA_TARDA" run_once || fail "--once (2q-10, emitir lento) fallo"
 duracion10=$(( $(date +%s) - inicio10 ))
 [ "$duracion10" -lt 5 ] || fail "(2q-10) el tick espero ${duracion10}s al emitir lento (debia ir desacoplado)"
+rm -f "$STATE_DIR/avisos-fallidos/"sim9-AVT*
 echo "ok (2q-10): el emitir lento va desacoplado y el tick no lo espera"
 
 # (2q-11) fallo durable del emitir desacoplado: un corrida.sh que SIEMPRE
@@ -1308,7 +1310,7 @@ echo "ok (2q-10): el emitir lento va desacoplado y el tick no lo espera"
 CORRIDA_FALLA="$T/corrida-falla"
 FALLA_LOG="$T/falla-llamadas.txt"; : >"$FALLA_LOG"
 FALLA_OK="$T/falla-ok"; rm -f "$FALLA_OK"
-printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then\n  printf "%%s\n" "$*" >> "%s"\n  [ -f "%s" ] || exit 1\nfi\nexit 0\n' "$FALLA_LOG" "$FALLA_OK" > "$CORRIDA_FALLA"
+printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then\n  printf "%s %s\\n" "$(date -u +%%H:%%M:%%S)" "$*" >> "%s"\n  [ -f "%s" ] || exit 1\nfi\nexit 0\n' "$FALLA_LOG" "$FALLA_OK" > "$CORRIDA_FALLA"
 chmod +x "$CORRIDA_FALLA"
 "$TM" -L "$L" new-session -d -s sim9-fl -x 80 -y 20 'cat' || fail "no se pudo crear sim9-fl"
 mark sim9-fl
@@ -1345,7 +1347,7 @@ CORRIDA_BIN="$CORRIDA_FALLA" # El reintento exige un tick posterior al lanzamien
 i=0
 while [ "$i" -lt 3 ]; do
   sleep 4
-  run_av >/dev/null 2>&1 || true
+  CORRIDA_BIN="$CORRIDA_FALLA" run_av >/dev/null 2>&1 || true
   n=$(wc -l <"$FALLA_LOG" | tr -d ' ')
   [ "$n" -gt "$llamadas1" ] && i=99
   i=$((i + 1))
@@ -1366,6 +1368,73 @@ done
 unset AVISOS_REINTENTO_SECS AVISOS_TOPE
 rm -rf "$STATE_DIR/avisos-fallidos" "$CORRIDA_STATE/sim9-FL"
 echo "ok (2q-11): fallo durable del emitir con reintento por tick y borrado al emitir bien"
+
+# (2q-12) rechazo definitivo descartado: un emitir que sale 3 (corrida
+# cerrada, sesion ajena: corrida/avisos.sh) borra el registro de fallo en el
+# primer intento y NO se relanza para siempre.
+CORRIDA_RJ="$T/corrida-rechaza"
+printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then exit 3; fi\nexit 0\n' > "$CORRIDA_RJ"
+chmod +x "$CORRIDA_RJ"
+"$TM" -L "$L" new-session -d -s sim9-rj -x 80 -y 20 'cat' || fail "no se pudo crear sim9-rj"
+mark sim9-rj
+"$TM" -L "$L" set-environment -t sim9-rj OPENCLAW_WATCH_RUN sim9-RJ
+sleep 2
+CORRIDA_BIN="$CORRIDA_RJ" AVISOS_TOPE=2 run_once || fail "--once (2q-12, rechazo definitivo) fallo"
+i=0
+while [ "$i" -lt 30 ]; do
+  ls "$STATE_DIR/avisos-fallidos/"sim9-RJ*.json >/dev/null 2>&1 || break
+  sleep 0.5
+  i=$((i + 1))
+done
+[ "$(ls "$STATE_DIR/avisos-fallidos/"sim9-RJ*.json 2>/dev/null | wc -l | tr -d ' ')" -eq 0 ] \
+  || fail "(2q-12) un rechazo definitivo (exit 3) debia descartar el registro de fallo, no reintentarlo para siempre"
+grep -q "descartado" "$LOG_FILE" 2>/dev/null || fail "(2q-12) el descarte debia quedar en el log del vigia"
+rm -rf "$CORRIDA_STATE/sim9-RJ" "$STATE_DIR/avisos-fallidos/"sim9-RJ*
+rm -f "$STATE_DIR/avisos-fallidos/"sim9-RJ*
+echo "ok (2q-12): el rechazo definitivo descarta el registro y queda en el log"
+
+# (2q-13) backoff del reintento: cada relanzamiento hace touch al registro
+# antes de lanzar (el mtime fresco es el retroceso); sin touch, un fallo
+# pasajero se relanza cada tick y el mtime queda viejo.
+CORRIDA_TARDE="$T/corrida-tarde"
+printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then exit 1; fi\nexit 0\n' > "$CORRIDA_TARDE"
+chmod +x "$CORRIDA_TARDE"
+"$TM" -L "$L" new-session -d -s sim9-bk -x 80 -y 20 'cat' || fail "no se pudo crear sim9-bk"
+mark sim9-bk
+"$TM" -L "$L" set-environment -t sim9-bk OPENCLAW_WATCH_RUN sim9-BK
+sleep 2
+CORRIDA_BIN="$CORRIDA_TARDE" AVISOS_TOPE=2 run_once || fail "--once (2q-13, primer fallo) fallo"
+sleep 4
+REC_BK=$(ls "$STATE_DIR/avisos-fallidos/"sim9-BK*.json 2>/dev/null | head -1)
+[ -n "$REC_BK" ] || fail "(2q-13) sin registro de fallo tras el primer intento"
+antes=$(stat -f %m "$REC_BK" 2>/dev/null || stat -c %Y "$REC_BK" 2>/dev/null)
+sleep 2
+CORRIDA_BIN="$CORRIDA_TARDE" AVISOS_TOPE=2 run_once || fail "--once (2q-13, reintento) fallo"
+despues=$(stat -f %m "$REC_BK" 2>/dev/null || stat -c %Y "$REC_BK" 2>/dev/null)
+[ -n "$despues" ] && [ "$despues" -gt "$antes" ] \
+  || fail "(2q-13) el relanzamiento debia hacer touch al registro (mtime $antes no avanzo a $despues)"
+echo "ok (2q-13): el relanzamiento hace touch al registro (backoff por mtime)"
+
+# (2q-14) tope total por registro: un fallo que agoto AVISOS_FALLIDO_TOPE
+# reintentos se DESCARTA (registro fuera + linea en el log) y ya no ocupa
+# ranura de reintento (19.1-r5: un emitir que siempre agota su tope de reloj
+# no puede tapar los demas registros para siempre).
+CORRIDA_CAP="$T/corrida-cap"
+printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then exit 1; fi\nexit 0\n' > "$CORRIDA_CAP"
+chmod +x "$CORRIDA_CAP"
+mkdir -p "$STATE_DIR/avisos-fallidos"
+printf '{"schema":"avisos-fallido.v1","run":"sim9-CAP","sesion":"sim9-cap","tipo":"fin-turno","llave":"cafe","intentos":99,"actualizado":1790733000000}\n' > "$STATE_DIR/avisos-fallidos/sim9-CAP-sim9-cap-fin-turno-cafe.json"
+python3 -c 'import os,time; t=time.time()-40; os.utime("'"$STATE_DIR"'/avisos-fallidos/sim9-CAP-sim9-cap-fin-turno-cafe.json",(t,t))'
+: >"$CALLS_CAP"
+CORRIDA_BIN="$CORRIDA_CAP" AVISOS_TOPE=2 run_once || fail "--once (2q-14, tope) fallo"
+sleep 1
+[ -f "$STATE_DIR/avisos-fallidos/sim9-CAP-sim9-cap-fin-turno-cafe.json" ] \
+  && fail "(2q-14) el registro en el tope debia descartarse: $(cat "$STATE_DIR/avisos-fallidos/sim9-CAP-sim9-cap-fin-turno-cafe.json" 2>/dev/null)"
+grep -q "descartado tras 99 reintentos" "$LOG_FILE" 2>/dev/null \
+  || fail "(2q-14) el descarte por tope debia quedar en el log del vigia"
+rm -f "$STATE_DIR/avisos-fallidos/"sim9-CAP*
+echo "ok (2q-14): el registro en el tope se descarta con su linea en el log"
+rm -rf "$CORRIDA_STATE/sim9-BK" "$STATE_DIR/avisos-fallidos/"sim9-BK*
 else
   echo "SKIP (2q): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
 fi

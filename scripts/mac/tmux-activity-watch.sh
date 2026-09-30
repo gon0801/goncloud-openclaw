@@ -136,6 +136,7 @@ CORRIDA_BIN=${CORRIDA_BIN:-$HOME/bin/corrida.sh}
 CORRIDA_STATE=${CORRIDA_STATE:-$HOME/.local/state/corridas}
 AVISOS_REINTENTO_SECS=${AVISOS_REINTENTO_SECS:-30}
 AVISOS_REINTENTO_TOPE=5
+AVISOS_FALLIDO_TOPE=${AVISOS_FALLIDO_TOPE:-8}
 # Tope de reloj de las llamadas a corrida.sh avisos (emitir y despertar): un
 # tick no puede quedarse colgado tras ellas (mismo criterio que responder y
 # relanzo); vencido el tope la senal queda como no entregada y el siguiente
@@ -263,10 +264,17 @@ avisos_emitir_bg() { # $1 bin $2 run $3 sesion $4 tipo $5 llave $6 fallido
     nohup bash -c '
       for _i in 1 2 3; do
         perl -e "alarm shift; exec(@ARGV) or exit 127" "$AV_TOPE" \
-          "$AV_BIN" avisos emitir "$AV_RUN" "$AV_S" "$AV_T" --llave "$AV_K" >>"$AV_LOG" 2>&1 && {
-            [ "$AV_F" = "-" ] || rm -f "$AV_F"
-            exit 0
-          }
+          "$AV_BIN" avisos emitir "$AV_RUN" "$AV_S" "$AV_T" --llave "$AV_K" >>"$AV_LOG" 2>&1
+        _av_rc=$?
+        if [ "$_av_rc" -eq 0 ]; then
+          [ "$AV_F" = "-" ] || rm -f "$AV_F"
+          exit 0
+        fi
+        if [ "$_av_rc" -eq 3 ]; then
+          [ "$AV_F" = "-" ] || rm -f "$AV_F"
+          echo "avisos bg: RECHAZO DEFINITIVO (exit 3): $AV_RUN $AV_S $AV_T registro descartado" >>"$AV_LOG"
+          exit 0
+        fi
         sleep 3
       done
       exit 1
@@ -311,9 +319,19 @@ avisos_fallidos_tick() {
 import json, os
 d = json.load(open(os.environ[\"AV_F\"]))
 print(chr(9).join([str(d.get(k) or \"\") for k in (\"run\", \"sesion\", \"tipo\", \"llave\")]))" 2>/dev/null) || datos=""
-    fr=""; fs=""; ft=""; fk=""
-    IFS="$(printf '\t')" read -r fr fs ft fk <<<"$datos"
+    fr=""; fs=""; ft=""; fk=""; intentos=0
+    IFS="$(printf '\t')" read -r fr fs ft fk intentos <<<"$datos" 2>/dev/null || true
+    case "$intentos" in ''|*[!0-9]*) intentos=0;; esac
     [[ -n $fr && -n $fs && -n $ft && -n $fk ]] || { rm -f "$f"; continue; }
+    if [ "$intentos" -ge "$AVISOS_FALLIDO_TOPE" ]; then
+      rm -f "$f"
+      log "fallidos: descartado tras $intentos reintentos sin exito: $fr $fs $ft"
+      continue
+    fi
+    touch "$f" 2>/dev/null || true
+    intentos=$((intentos + 1))
+    printf '{"schema":"avisos-fallido.v1","run":"%s","sesion":"%s","tipo":"%s","llave":"%s","intentos":%s,"actualizado":%s000}\n' \
+      "$fr" "$fs" "$ft" "$fk" "$intentos" "$(date +%s)" > "$f"
     avisos_emitir_bg "$CORRIDA_BIN" "$fr" "$fs" "$ft" "$fk" "$f"
     n=$((n + 1))
   done

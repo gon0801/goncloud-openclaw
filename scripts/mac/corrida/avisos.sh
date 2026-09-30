@@ -139,9 +139,13 @@ avisos_emitir() {
   esac
   [ -n "$llave" ] || { echo "avisos emitir: llave vacia" >&2; return 2; }
   [ "${#detalle}" -le 200 ] || { echo "avisos emitir: el detalle supera 200 caracteres" >&2; return 2; }
-  corrida_id_valido "$corrida" || { echo "avisos emitir: id invalido: $corrida" >&2; return 1; }
+  # Codigos de salida de emitir: 0 = emitido o deduplicado; 2 = uso invalido;
+  # 1 = fallo pasajero (el lock no cedio: el reintento del vigia aplica); 3 =
+  # RECHAZO DEFINITIVO (no existe, corrida cerrada o sesion ajena: ningun
+  # reintento puede arreglarlo y el vigia descarta el registro).
+  corrida_id_valido "$corrida" || { echo "avisos emitir: id invalido: $corrida" >&2; return 3; }
   reg="$(registro_de "$corrida")"
-  [ -f "$reg" ] || { echo "avisos emitir: sin registro: $corrida" >&2; return 1; }
+  [ -f "$reg" ] || { echo "avisos emitir: sin registro: $corrida" >&2; return 3; }
   lock_tomar "$reg" || { echo "avisos emitir: el lock de $corrida no cedio" >&2; return 1; }
   datos="$(avisos_datos_de "$reg" "$sesion")"
   estado="$(printf '%s' "$datos" | cut -f1)"
@@ -150,12 +154,12 @@ avisos_emitir() {
   if [ "$estado" != "abierta" ]; then
     lock_soltar "$reg"
     echo "avisos emitir: la corrida $corrida no esta abierta (estado: $estado)" >&2
-    return 1
+    return 3
   fi
   if [ -z "$rol" ]; then
     lock_soltar "$reg"
     echo "avisos emitir: la sesion $sesion no esta en el registro de $corrida" >&2
-    return 1
+    return 3
   fi
   id="${corrida}-${sesion}-${tipo}-$(avisos_sha1 "$llave")"
   if [ -e "$CORRIDA_STATE/$corrida/avisos/$id.json" ]; then

@@ -94,14 +94,14 @@ emitir t1 ses-c1 fin-turno --llave senal-2 || fail "(b) otra llave debio emitir"
 [ "$(n_pend t1)" -eq 2 ] || fail "(b) la otra llave debio dejar otro archivo"
 echo "ok (b): la misma llave deduplica por identidad, otra llave emite otro aviso"
 
-# (c) Sesion ajena, corrida cerrada y corrida inexistente: rc 1, motivo, sin escribir.
+# (c) Sesion ajena, corrida cerrada y corrida inexistente: rc 3 (rechazo definitivo, no se reintenta), motivo, sin escribir.
 emitir t1 ses-fantasma fin-turno --llave k 2>"$T/err-c1" && fail "(c) la sesion ajena debio fallar"
 grep -q . "$T/err-c1" || fail "(c) el rechazo de la sesion ajena no da motivo"
 registro t2 cerrada lead-main:lead:zcode,ses-c2:carril:glm
 emitir t2 ses-c2 fin-turno --llave k 2>/dev/null && fail "(c) la corrida cerrada debio fallar"
 [ "$(n_pend t2)" -eq 0 ] || fail "(c) la corrida cerrada dejo un aviso escrito"
 emitir t-inexistente ses-c1 fin-turno --llave k 2>/dev/null && fail "(c) la corrida inexistente debio fallar"
-echo "ok (c): sesion ajena, corrida cerrada e inexistente caen con rc 1 y sin escritura"
+echo "ok (c): sesion ajena, corrida cerrada e inexistente caen con rc 3 y sin escritura"
 
 # (d) Dueno ocupado (dialogo en pantalla) o lead inexistente: sin teclas, pendiente persiste.
 registro t3 abierta lead-main:lead:zcode,ses-c3:carril:glm
