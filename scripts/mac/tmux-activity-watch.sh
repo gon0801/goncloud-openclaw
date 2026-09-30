@@ -262,6 +262,7 @@ avisos_emitir_bg() { # $1 bin $2 run $3 sesion $4 tipo $5 llave $6 fallido
   AV_BIN="$1" AV_RUN="$2" AV_S="$3" AV_T="$4" AV_K="$5" AV_F="$6" \
   AV_LOG="$LOG_FILE" AV_TOPE="$AVISOS_TOPE" \
     nohup bash -c '
+      set +e
       for _i in 1 2 3; do
         perl -e "alarm shift; exec(@ARGV) or exit 127" "$AV_TOPE" \
           "$AV_BIN" avisos emitir "$AV_RUN" "$AV_S" "$AV_T" --llave "$AV_K" >>"$AV_LOG" 2>&1
@@ -318,7 +319,7 @@ avisos_fallidos_tick() {
     datos=$(AV_F="$f" python3 -c "
 import json, os
 d = json.load(open(os.environ[\"AV_F\"]))
-print(chr(9).join([str(d.get(k) or \"\") for k in (\"run\", \"sesion\", \"tipo\", \"llave\")]))" 2>/dev/null) || datos=""
+print(chr(9).join([str(d.get(k) or \"\") for k in (\"run\", \"sesion\", \"tipo\", \"llave\", \"intentos\")]))" 2>/dev/null) || datos=""
     fr=""; fs=""; ft=""; fk=""; intentos=0
     IFS="$(printf '\t')" read -r fr fs ft fk intentos <<<"$datos" 2>/dev/null || true
     case "$intentos" in ''|*[!0-9]*) intentos=0;; esac
