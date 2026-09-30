@@ -69,7 +69,7 @@
 #   QUIET_SECS=900
 #   TICK_SECS=15
 #   QUIET_REMIND_SECS=3600
-#   APPROVAL_RE=<measured questions + dialog signature, see DEFAULT_APPROVAL_RE below>
+#   APPROVAL_RE=<measured questions + dialog signature, see APROBACION_RE in corrida/lib.sh>
 #   APPROVAL_TAIL_LINES=15
 #   APPROVAL_REMIND_SECS=3600
 #   STATE_DIR=$HOME/.local/state/tmux-activity-watch
@@ -116,15 +116,18 @@
 # arrays, no `mapfile`, no `${var,,}`.
 set -euo pipefail
 
+# Fuente unica de la expresion de dialogos (F2 r9): APROBACION_RE vive en
+# corrida/lib.sh y la cargan el vigia y corrida/avisos.sh por igual. La copia
+# local de aqui y la estrecha de alla divergieron: el guard de avisos tecleaba
+# dentro de dialogos como "Run this command?".
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/corrida/lib.sh"
+
 TMUX_BIN=${TMUX_BIN:-/opt/homebrew/bin/tmux}
 OPENCLAW_BIN=${OPENCLAW_BIN:-$HOME/.openclaw/bin/openclaw}
 QUIET_SECS=${QUIET_SECS:-900}
 TICK_SECS=${TICK_SECS:-15}
 QUIET_REMIND_SECS=${QUIET_REMIND_SECS:-3600}
-# ASCII only: it is matched against the screen tail AFTER non-ASCII is stripped, with grep -i.
-DEFAULT_APPROVAL_RE='allow once|always allow|would you like to allow|do you want to proceed|run this command\?|waiting for approval|do you trust|trust this (folder|workspace)'
-DEFAULT_APPROVAL_RE="$DEFAULT_APPROVAL_RE"'|enter (to )?(select|confirm|continue)|esc (to )?(cancel|go back|exit)|arrow keys to navigate|[[(]y/n[])]|[(]yes/no[)]'
-APPROVAL_RE=${APPROVAL_RE:-$DEFAULT_APPROVAL_RE}
+APPROVAL_RE=${APPROVAL_RE:-$APROBACION_RE}
 APPROVAL_TAIL_LINES=${APPROVAL_TAIL_LINES:-15}
 APPROVAL_REMIND_SECS=${APPROVAL_REMIND_SECS:-3600}
 STATE_DIR=${STATE_DIR:-$HOME/.local/state/tmux-activity-watch}

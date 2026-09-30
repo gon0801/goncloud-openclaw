@@ -313,4 +313,33 @@ else
   echo "SKIP (k): falta $H"
 fi
 
+# (l) F1 r9: el lock no cede -> atender sale 1 SIN reclamar nada. Los
+# pendientes siguen en avisos/ (el reintento del vigia sigue vivo) y no
+# queda nada varado en tratados/ sin marca de estado.
+registro tl abierta lead-main:lead:zcode,ses-l1:carril:glm
+emitir tl ses-l1 fin-turno --llave l1 "parte l lista" >/dev/null || fail "(l) precondicion: emitir l1"
+mkdir "$CORRIDA_STATE/tl/.lock"
+out=$(CORR_LOCK_INTENTOS=5 bash "$CORR_ABS" avisos atender tl 2>&1); rc=$?
+rmdir "$CORRIDA_STATE/tl/.lock" 2>/dev/null
+[ "$rc" -eq 1 ] || fail "(l) atender con lock ajeno debia salir 1 (rc=$rc): $out"
+printf '%s' "$out" | grep -q 'no cedio' || fail "(l) la razon del fallo debia decirse: $out"
+[ "$(n_pend tl)" -ge 1 ] || fail "(l) el pendiente debia seguir en avisos/, no varado en tratados/"
+[ "$(ls "$CORRIDA_STATE/tl/avisos/tratados"/*.json 2>/dev/null | wc -l | tr -d ' ')" -eq 0 ] \
+  || fail "(l) tratados/ debia quedar vacio si el lock no cedio"
+echo "ok (l): con el lock no cedido, atender no reclama nada y sale 1"
+
+# (m) F2 r9: un dialogo que SOLO casa con la expresion completa del vigia
+# ("Run this command?" no esta en la copia estrecha) frena el despertar:
+# ni una tecla dentro del dialogo y el pendiente sigue para el reintento.
+registro tm abierta lead-main:lead:zcode,ses-m1:carril:glm
+printf 'trabajando en la parte 3\n\nRun this command?\n' >"$PANTALLA_LEAD"
+: >"$TECLAS"
+emitir tm ses-m1 fin-turno --llave m1 "parte m" >/dev/null || fail "(m) precondicion: emitir m1"
+if grep -q 'send-keys' "$TECLAS"; then
+  fail "(m) el guard tecleo dentro del dialogo 'Run this command?': $(grep 'send-keys' "$TECLAS" | head -2 | tr '\n' ';')"
+fi
+[ "$(n_pend tm)" -ge 1 ] || fail "(m) el pendiente debia seguir en avisos/ tras el guard"
+echo "ok (m): un dialogo Run this command? frena el despertar sin teclear"
+printf 'trabajando en la parte 2\n' >"$PANTALLA_LEAD"
+
 echo "TODO VERDE: test-corrida-avisos (U1 + U3 hook)"

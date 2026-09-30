@@ -19,7 +19,8 @@
 #   que ya existen, sin reescribirlos; lo llama el reintento del vigia.
 # Reversa: CORRIDA_AVISOS=0 deja los tres subcomandos en no-op rc 0.
 # Compatible con /bin/bash 3.2: sin arrays asociativos, sin mapfile, sin ${var,,}.
-AVISOS_APROB_RE='allow once|always allow|would you like to allow|waiting for approval|do you trust|\[y/n\]|\(yes/no\)'
+# La expresion de dialogos viene de lib.sh (APROBACION_RE, fuente unica con el
+# vigia); la copia local estrecha de aqui tecleaba dentro de dialogos del lead.
 
 avisos_sha1() { # $1 cadena -> sha1 hex corto; la identidad dedupable de un aviso
   local h
@@ -106,7 +107,7 @@ avisos_despertar_dueno() { # $1 corrida $2 reg; 0 = desperto (o no habia a quien
   pantalla="$("$TMUX_BIN" capture-pane -p -t "=$lead:" 2>/dev/null)" || return 0
   # Solo la cola del panel es un dialogo: un lead que HABLA de aprobaciones mas
   # arriba no esta ocupado (mismo criterio conservador del vigia).
-  if printf '%s\n' "$pantalla" | grep -v '^[[:space:]]*$' | tail -n 15 | grep -Eqi -- "$AVISOS_APROB_RE"; then
+  if printf '%s\n' "$pantalla" | grep -v '^[[:space:]]*$' | tail -n 15 | grep -Eqi -- "${APPROVAL_RE:-$APROBACION_RE}"; then
     return 0
   fi
   "$TMUX_BIN" send-keys -t "=$lead:" -l -- "corrida.sh avisos atender $corrida" 2>/dev/null || return 0
@@ -189,13 +190,16 @@ avisos_atender() {
   dir="$CORRIDA_STATE/$corrida/avisos"
   [ -d "$dir" ] || { echo "sin pendientes"; return 0; }
   mkdir -p "$dir/tratados" || { echo "avisos atender: no se pudo crear tratados" >&2; return 1; }
+  # F1 (r9): el lock ANTES del reclamo. Si no cede, sale 1 sin haber movido
+  # nada: un pendiente en avisos/ lo reintenta el vigia; uno en tratados/
+  # sin marca queda huerfano.
+  lock_tomar "$reg" || { echo "avisos atender: el lock de $corrida no cedio" >&2; return 1; }
   for f in "$dir"/*.json; do
     [ -f "$f" ] || continue
     mv "$f" "$dir/tratados/" || continue
     n=$((n + 1))
   done
-  [ "$n" -gt 0 ] || { echo "sin pendientes"; return 0; }
-  lock_tomar "$reg" || { echo "avisos atender: el lock de $corrida no cedio" >&2; return 1; }
+  [ "$n" -gt 0 ] || { lock_soltar "$reg"; echo "sin pendientes"; return 0; }
   estado="$(json_campo "$reg" estado)"
   ses="$(avisos_registradas_de "$reg")"
   lock_soltar "$reg"

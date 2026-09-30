@@ -37,6 +37,13 @@ fi
 # (documentado): ahi mandan REPO_DIR o los runbooks absolutos del registro.
 CORR_REPO_RAIZ="$(CDPATH= cd -P -- "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd || true)"
 
+# La expresion de dialogo de aprobacion es UNA para todo el sistema (F2 r9):
+# la consumen el vigia (su APPROVAL_RE) y corrida/avisos.sh (el guard del
+# despertar). Sin copias locales: la copia estrecha de avisos.sh no veia
+# dialogos como "Run this command?" y tecleaba dentro de ellos. ASCII, se
+# compara con grep -Eqi sobre la cola del panel.
+APROBACION_RE='allow once|always allow|would you like to allow|do you want to proceed|run this command\?|waiting for approval|do you trust|trust this (folder|workspace)|enter (to )?(select|confirm|continue)|esc (to )?(cancel|go back|exit)|arrow keys to navigate|[[(]y/n[])]|[(]yes/no[)]'
+
 registro_de() { printf '%s/%s/registro.json' "$CORRIDA_STATE" "$1"; }
 
 corrida_id_valido() { # $1 id; 0 = solo [A-Za-z0-9_-] (nada de /, .., :, ;)
