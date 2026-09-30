@@ -1052,6 +1052,15 @@ exit 0
 STUB
 chmod +x "$STUB_AV"
 run_av() { CORRIDA_BIN="$STUB_AV" run_once; }
+esperar_aviso() { # $1 regex; 0 si aparece en AARGV dentro de 6s (el emitir va desacoplado)
+  local i=0
+  while [ "$i" -lt 30 ]; do
+    grep -Eq -- "$1" "$AARGV" 2>/dev/null && return 0
+    sleep 0.2
+    i=$((i + 1))
+  done
+  return 1
+}
 run_avsin() { CORRIDA_BIN="$STUB_AV" CORRIDA_AVISOS=0 run_once; }
 
 # Purga: los casos anteriores dejan sesiones muertas cuyo closed sale en el
@@ -1066,6 +1075,9 @@ mark sim9-avq
 : >"$CALLS"
 sleep 2
 run_av || fail "--once (2q-1, quiet con avisos) fallo"
+esperar_aviso 'avisos emitir sim9-AVQ sim9-avq fin-turno' \
+  || fail "(2q-1) el quiet de una sesion con corrida debia ir por avisos (desacoplado):
+$(cat "$AARGV")"
 n=$(grep -c '^avisos emitir sim9-AVQ sim9-avq fin-turno --llave ' "$AARGV")
 [ "$n" -eq 1 ] || fail "(2q-1) el quiet de una sesion con corrida debia ir por avisos; hubo $n:
 $(cat "$AARGV")"
@@ -1076,6 +1088,7 @@ run_av || fail "--once (2q-1, segundo tick) fallo"
 "$TM" -L "$L" kill-session -t sim9-avq
 : >"$AARGV"
 run_av || fail "--once (2q-1, closed) fallo"
+esperar_aviso 'avisos emitir sim9-AVQ sim9-avq cierre'
 grep -q '^avisos emitir sim9-AVQ sim9-avq cierre --llave closed$' "$AARGV" \
   || fail "(2q-1) el closed debia ir por avisos con llave closed: $(cat "$AARGV")"
 [ -f "$STATE_DIR/sim9-avq.state" ] && fail "(2q-1) el aviso de cierre salio pero el estado no se borro"
@@ -1092,6 +1105,7 @@ espera_pantalla sim9-avp 'Allow once'
 sleep 1
 run_pav() { APPROVAL_REMIND_SECS=3 CORRIDA_BIN="$STUB_AV" run_once; }
 run_pav || fail "--once (2q-2, primer dialogo) fallo"
+esperar_aviso 'avisos emitir sim9-AVP sim9-avp aprobacion'
 n=$(grep -c '^avisos emitir sim9-AVP sim9-avp aprobacion --llave ' "$AARGV")
 [ "$n" -eq 1 ] || fail "(2q-2) el dialogo debia emitir un aviso de aprobacion; hubo $n:
 $(cat "$AARGV")"
@@ -1100,6 +1114,7 @@ $(cat "$AARGV")"
 sed -i.bak 's/girando |/girando \//' "$PANTALLA_Q"; rm -f "$PANTALLA_Q.bak"
 espera_pantalla sim9-avp 'girando /'
 run_pav || fail "--once (2q-2, repintado con spinner) fallo"
+esperar_aviso 'avisos emitir sim9-AVP sim9-avp aprobacion'
 n=$(grep -c '^avisos emitir sim9-AVP sim9-avp aprobacion --llave ' "$AARGV")
 [ "$n" -eq 2 ] || fail "(2q-2) el repintado debia reevaluar el dialogo (2 llamadas); hubo $n:
 $(cat "$AARGV")"
@@ -1269,6 +1284,22 @@ run_av || fail "--once (2q-9, segundo tick) fallo"
 grep -q 'despertar sim9-BK1' "$AARGV" \
   && fail "(2q-9) el sello fresco debia frenar el segundo despertar: $(cat "$AARGV")"
 echo "ok (2q-9): el despertar respeta el sello de retroceso por corrida"
+
+# (2q-10) el tick no paga el coste del emitir: un corrida.sh que TARDA (8s,
+# dentro del tope) no debe retrasar el tick: el emitir va desacoplado y el
+# pendiente lo escribe el proceso desacoplado (19.1-r4, etapa 8 del simulacro).
+CORRIDA_TARDA="$T/corrida-tarda"
+printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then sleep 8; fi\nexit 0\n' > "$CORRIDA_TARDA"
+chmod +x "$CORRIDA_TARDA"
+"$TM" -L "$L" new-session -d -s sim9-avt -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avt"
+mark sim9-avt
+"$TM" -L "$L" set-environment -t sim9-avt OPENCLAW_WATCH_RUN sim9-AVT
+sleep 2
+inicio10=$(date +%s)
+CORRIDA_BIN="$CORRIDA_TARDA" run_once || fail "--once (2q-10, emitir lento) fallo"
+duracion10=$(( $(date +%s) - inicio10 ))
+[ "$duracion10" -lt 5 ] || fail "(2q-10) el tick espero ${duracion10}s al emitir lento (debia ir desacoplado)"
+echo "ok (2q-10): el emitir lento va desacoplado y el tick no lo espera"
 else
   echo "SKIP (2q): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
 fi

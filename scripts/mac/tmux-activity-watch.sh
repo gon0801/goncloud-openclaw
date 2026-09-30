@@ -255,9 +255,21 @@ journal_evento() { # $1 text
 #       tick reintenta (igual que un envio fallido).
 aviso_dueno() { # $1 run $2 sesion $3 tipo $4 llave $5 text
   [[ -n $1 && -x $CORRIDA_BIN && ${CORRIDA_AVISOS:-1} != 0 ]] || return 1
-  perl -e 'alarm shift; exec(@ARGV) or exit 127' "$AVISOS_TOPE" \
-    "$CORRIDA_BIN" avisos emitir "$1" "$2" "$3" --llave "$4" >>"$LOG_FILE" 2>&1 || return 2
+  # El diario registra la senal CUANDO EL VIGIA LA VIO (no cuando aterriza):
+  # el pendiente durable lo escribe el proceso desacoplado de abajo, ANTES de
+  # despertar al dueño y con 3 reintentos propios; el tick jamas espera a la
+  # cadena de spawns de corrida.sh (19.1-r4: etapa 8 del simulacro).
   journal_evento "$5"
+  AV_BIN="$CORRIDA_BIN" AV_RUN="$1" AV_S="$2" AV_T="$3" AV_K="$4" \
+  AV_LOG="$LOG_FILE" AV_TOPE="$AVISOS_TOPE" \
+    nohup bash -c '
+      for _i in 1 2 3; do
+        perl -e "alarm shift; exec(@ARGV) or exit 127" "$AV_TOPE" \
+          "$AV_BIN" avisos emitir "$AV_RUN" "$AV_S" "$AV_T" --llave "$AV_K" >>"$AV_LOG" 2>&1 && exit 0
+        sleep 3
+      done
+      exit 1
+    ' _ >/dev/null 2>&1 &
   return 0
 }
 
