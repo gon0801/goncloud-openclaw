@@ -1,0 +1,188 @@
+{
+ "schema": "corrida.v2",
+ "id": "arnes192-115137",
+ "runbook": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/runbook.md",
+ "vigia": "hermes",
+ "simulacro": true,
+ "canal": {
+  "cron": "arnes-canal",
+  "destino": "arnes:destino"
+ },
+ "cli_modos": "/Users/dn/dev/wt/u3a-b3/scripts/mac/cli-modos.tsv",
+ "seguimiento_global": true,
+ "inicio": "2026-09-30T11:51:41-0700",
+ "timebox_horas": 6,
+ "sesiones": [
+  {
+   "nombre": "trab-0",
+   "rol": "lead",
+   "cli": "zcode",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-0.txt"
+  },
+  {
+   "nombre": "trab-1",
+   "rol": "lead",
+   "cli": "codex",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-1.txt"
+  },
+  {
+   "nombre": "trab-2",
+   "rol": "lead",
+   "cli": "kimi",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-2.txt"
+  },
+  {
+   "nombre": "trab-3",
+   "rol": "lead",
+   "cli": "grok",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-3.txt"
+  },
+  {
+   "nombre": "trab-4",
+   "rol": "lead",
+   "cli": "claude",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-4.txt"
+  },
+  {
+   "nombre": "trab-5",
+   "rol": "lead",
+   "cli": "zcode",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-5.txt"
+  },
+  {
+   "nombre": "trab-6",
+   "rol": "lead",
+   "cli": "codex",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-6.txt"
+  },
+  {
+   "nombre": "trab-7",
+   "rol": "lead",
+   "cli": "kimi",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-7.txt"
+  },
+  {
+   "nombre": "trab-8",
+   "rol": "lead",
+   "cli": "grok",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-8.txt"
+  },
+  {
+   "nombre": "trab-9",
+   "rol": "lead",
+   "cli": "claude",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-9.txt"
+  },
+  {
+   "nombre": "trab-10",
+   "rol": "lead",
+   "cli": "zcode",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-10.txt"
+  },
+  {
+   "nombre": "trab-11",
+   "rol": "lead",
+   "cli": "codex",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-11.txt"
+  },
+  {
+   "nombre": "trab-12",
+   "rol": "lead",
+   "cli": "kimi",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-12.txt"
+  },
+  {
+   "nombre": "trab-13",
+   "rol": "lead",
+   "cli": "grok",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-13.txt"
+  },
+  {
+   "nombre": "trab-14",
+   "rol": "lead",
+   "cli": "claude",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-14.txt"
+  },
+  {
+   "nombre": "trab-15",
+   "rol": "lead",
+   "cli": "zcode",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-15.txt"
+  },
+  {
+   "nombre": "trab-16",
+   "rol": "lead",
+   "cli": "codex",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-16.txt"
+  },
+  {
+   "nombre": "trab-17",
+   "rol": "lead",
+   "cli": "kimi",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-17.txt"
+  },
+  {
+   "nombre": "trab-18",
+   "rol": "lead",
+   "cli": "grok",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-18.txt"
+  },
+  {
+   "nombre": "trab-19",
+   "rol": "lead",
+   "cli": "claude",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-19.txt"
+  },
+  {
+   "nombre": "trab-20",
+   "rol": "lead",
+   "cli": "zcode",
+   "dueno": "lead",
+   "dir": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/repo",
+   "encargo": "/Users/dn/dev/wt/u3a-b3/docs/evidence/u3a-seguimiento-inmediato/arnes/.tmp/r19-2/encargo-20.txt"
+  }
+ ],
+ "preaprobaciones": [],
+ "estado": "cerrada",
+ "lanes": []
+}

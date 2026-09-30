@@ -18,6 +18,7 @@ import time
 socket, sesion, resultado, salida = sys.argv[1:5]
 tope = 240.0
 quiere_actividad = "--actividad" in sys.argv[5:]
+solo_archivo = "--solo-archivo" in sys.argv[5:]
 if "--tope" in sys.argv[5:]:
     tope = float(sys.argv[sys.argv.index("--tope") + 1])
 
@@ -66,7 +67,7 @@ while time.monotonic() - inicio < tope:
     if not fin_dado and os.path.isfile(resultado):
         with open(resultado, "rb") as f:
             datos = f.read()
-        if datos and cola_estable >= 3:
+        if datos and (solo_archivo or cola_estable >= 3):
             fin_dado = True
             fila("fin", bytes=len(datos))
     if fin_dado and not quiere_actividad:

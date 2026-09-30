@@ -1,0 +1,13 @@
+2026-09-30T17:18:03Z tmux-activity-watch starting (QUIET_SECS=10 TICK_SECS=2 LATIDO_SECS=1800 marker=OPENCLAW_WATCH)
+2026-09-30T17:18:03Z latido launched (pid=73128)
+responder: trab-1 no está en ninguna corrida abierta; no se toca
+avisos emitir: la sesion trab-1 no esta en el registro de arnes192-101802
+avisos bg: RECHAZO DEFINITIVO (exit 3): arnes192-101802 trab-1 aprobacion registro descartado
+trab-1
+2026-09-30T17:18:39Z relanzo automatico: trab-1 (corrida arnes192-101802)
+2026-09-30T17:18:39Z tick lento: 7s (TICK_SECS=2)
+responder: trab-2 no está en ninguna corrida abierta; no se toca
+avisos emitir: la sesion trab-2 no esta en el registro de arnes192-101802
+avisos bg: RECHAZO DEFINITIVO (exit 3): arnes192-101802 trab-2 aprobacion registro descartado
+avisos emitir: la sesion trab-2 no esta en el registro de arnes192-101802
+avisos bg: RECHAZO DEFINITIVO (exit 3): arnes192-101802 trab-2 cierre registro descartado
