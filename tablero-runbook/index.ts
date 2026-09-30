@@ -58,6 +58,15 @@ import {
 import type { TareaSuelta } from "./seguimiento-render.ts";
 import { validarMensajeV1 } from "./seguimiento-render.ts";
 import { syncProgress } from "./live-bus.ts";
+import {
+  isManagedProgress,
+  isManagedPhase,
+  readManagedSnapshot,
+  readManagedPhaseSnapshot,
+  readProgressEvents,
+  submitProgressEvent,
+  withLegacyProgressLock,
+} from "./progress-store.ts";
 
 // ---------------------------------------------------------------------------
 // Configuración (configSchema del manifest).
@@ -134,7 +143,14 @@ function descubrirNav(stateDir: string): { fases: string[]; corridas: string[] }
       if (validarCorrida(base)) corridas.push(base);
     }
   } catch {}
-  return { fases, corridas };
+  try {
+    for (const name of readdirSync(join(stateDir, "progress", "e"))) {
+      if (!name.endsWith(".json")) continue;
+      const base = name.slice(0, -5);
+      if (validarCorrida(base)) corridas.push(base);
+    }
+  } catch {}
+  return { fases: [...new Set(fases)], corridas: [...new Set(corridas)] };
 }
 
 function extrasHtml(plan: PlanCruce | undefined, corridas: string[], clave: ClaveTablero): string {
@@ -231,7 +247,7 @@ type Logger = {
 type RespuestaSet =
   | { ok: true }
   | { ok: false; razones: string[] }
-  | { ok: false; razon: "disco" };
+  | { ok: false; razon: "disco" | "event-managed" };
 
 function manejarSet(log: Logger, cfg: Config, params: unknown): RespuestaSet {
   const p = params !== null && typeof params === "object" ? (params as Record<string, unknown>) : {};
@@ -255,26 +271,33 @@ function manejarSet(log: Logger, cfg: Config, params: unknown): RespuestaSet {
     return { ok: false, razones };
   }
 
+  const corrida = (doc as ProgresoDoc).corrida;
+  let result: RespuestaSet;
   try {
-    guardarDoc(cfg.stateDir, fase, doc as ProgresoDoc);
-    const corrida = (doc as ProgresoDoc).corrida;
-    if (validarCorrida(corrida)) {
-      guardarDocCorrida(cfg.stateDir, corrida, doc as ProgresoDoc);
-    }
-    agregarEventos(cfg.stateDir, fase, (doc as ProgresoDoc).eventos ?? []);
+    result = withLegacyProgressLock(cfg.stateDir, fase, validarCorrida(corrida) ? corrida : undefined, () => {
+      if (isManagedPhase(cfg.stateDir, fase) ||
+          (validarCorrida(corrida) && isManagedProgress(cfg.stateDir, corrida))) {
+        return { ok: false, razon: "event-managed" } as const;
+      }
+      guardarDoc(cfg.stateDir, fase, doc as ProgresoDoc);
+      if (validarCorrida(corrida)) guardarDocCorrida(cfg.stateDir, corrida, doc as ProgresoDoc);
+      agregarEventos(cfg.stateDir, fase, (doc as ProgresoDoc).eventos ?? []);
+      return { ok: true } as const;
+    });
   } catch (err) {
     const ctor = err !== null && typeof err === "object" ? (err as { constructor?: { name?: unknown } }).constructor : undefined;
     const nombre = typeof ctor?.name === "string" && ctor.name ? ctor.name : "Error";
     log.warn(`tablero-runbook: fallo de disco al persistir progreso (${nombre})`);
     return { ok: false, razon: "disco" };
   }
+  if (!result.ok) return result;
   // Live bus (opcional): avisa al BFF sin bloquear ni tumbar el set.
   syncProgress(fase);
-  return { ok: true };
+  return result;
 }
 
 type RespuestaTablero =
-  | { ok: true; doc: ProgresoDoc; derivado: ReturnType<typeof derivar>; html: string; plan?: PlanCruce }
+  | { ok: true; doc: ProgresoDoc; derivado: ReturnType<typeof derivar>; html: string; plan?: PlanCruce; revision?: number }
   | { ok: false; razon: "desconocida" | "disco" };
 
 async function armarTablero(
@@ -283,8 +306,15 @@ async function armarTablero(
   clave: ClaveTablero,
 ): Promise<RespuestaTablero> {
   let crudo: string;
+  let revision: number | undefined;
   try {
-    crudo = readFileSync(rutaDoc(cfg.stateDir, clave), "utf8");
+    const managed = clave.kind === "corrida"
+      ? readManagedSnapshot(cfg.stateDir, clave.id)
+      : readManagedPhaseSnapshot(cfg.stateDir, clave.id);
+    revision = managed?.revision;
+    crudo = managed === undefined
+      ? readFileSync(rutaDoc(cfg.stateDir, clave), "utf8")
+      : JSON.stringify(managed.doc);
   } catch {
     return { ok: false, razon: "desconocida" };
   }
@@ -315,7 +345,7 @@ async function armarTablero(
   let html = renderTablero(doc, derivado, github, nav.fases);
   const extra = extrasHtml(plan, nav.corridas, clave);
   if (extra) html = html.replace("</main>", `${extra}</main>`);
-  return { ok: true, doc, derivado, html, plan };
+  return { ok: true, doc, derivado, html, plan, revision };
 }
 
 const HEADERS_HTML = {
@@ -610,7 +640,7 @@ export default definePluginEntry({
   id: "tablero-runbook",
   name: "Tablero de Runbook",
   description:
-    "Guarda y pinta el progreso runbook-progress.v1 que el lead escribe: RPC set/get, tablero HTML y JSON por ruta autenticada del gateway. Sin hooks de agente ni tools.",
+    "Guarda eventos de progreso por ronda y pinta su proyección runbook-progress.v1 por RPC, HTML y JSON autenticados.",
   register(api) {
     const log: Logger = api.logger;
     const cfg = leerConfig((api as { pluginConfig?: unknown }).pluginConfig);
@@ -623,6 +653,41 @@ export default definePluginEntry({
         respond(true, manejarSet(log, cfg, params));
       },
       { scope: "operator.write" },
+    );
+
+    api.registerGatewayMethod(
+      "runbook.progress.event",
+      ({ params, respond }) => {
+        const result = submitProgressEvent(cfg.stateDir, params);
+        if (result.ok) syncProgress(result.doc.fase);
+        respond(true, result.ok
+          ? { ok: true, revision: result.revision, duplicate: result.duplicate }
+          : result);
+      },
+      { scope: "operator.write" },
+    );
+
+    api.registerGatewayMethod(
+      "runbook.progress.events.get",
+      ({ params, respond }) => {
+        const p = params !== null && typeof params === "object" ? params as Record<string, unknown> : {};
+        if (!validarCorrida(p["corrida"])) {
+          respond(true, { ok: false, razon: "corrida inválida" });
+          return;
+        }
+        const after = p["after"] === undefined ? 0 : p["after"];
+        const limit = p["limit"] === undefined ? 100 : p["limit"];
+        if (!Number.isInteger(after) || (after as number) < 0 || !Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > 200) {
+          respond(true, { ok: false, razon: "paginación inválida" });
+          return;
+        }
+        try {
+          respond(true, { ok: true, ...readProgressEvents(cfg.stateDir, p["corrida"], after as number, limit as number) });
+        } catch {
+          respond(true, { ok: false, razon: "disco" });
+        }
+      },
+      { scope: "operator.read" },
     );
 
     api.registerGatewayMethod(
@@ -657,6 +722,7 @@ export default definePluginEntry({
           derivado: respuesta.derivado,
           html: respuesta.html,
         };
+        if (respuesta.revision !== undefined) payload["revision"] = respuesta.revision;
         if (respuesta.plan !== undefined) payload["plan"] = respuesta.plan;
         respond(true, payload);
       },

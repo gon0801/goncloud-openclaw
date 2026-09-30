@@ -1028,40 +1028,46 @@ resolver_bin_worker() { # $1 id; stdout ruta ejecutable; rc 1 si no resuelve
   printf '%s\n' "$res"
 }
 
-# tablero_carril_publicar <id> <carril> [que] (B21): pone en el tablero de la
-# corrida el worker que corre el carril (modelo y effort del registro, lo que
-# va en la argv), el porque de su seleccion en una nota y un evento. El
-# documento es entero (runbook-progress.v2 regla 2): se lee, se cambian solo
-# esos campos del carril y se reescribe. Sin documento de la corrida o sin el
-# carril no se inventa nada; una escritura fallida avisa en stderr y nunca
-# detiene el trabajo. Siempre rc 0, nada en stdout.
+# Publica la tenencia de worker del registro nativo como evento durable.
+# La sesion y el contador de tenencia del registro identifican al worker;
+# reintentos conservan el mismo ID aun al confirmar observed.launched.
 tablero_carril_publicar() {
-  local id="$1" lane="$2" que="${3:-}" reg sal nuevo
+  local id="$1" lane="$2" que="${3:-}" reg sal nuevo cliente estado apertura
   reg="$(registro_de "$id")"
   [ -f "$reg" ] || return 0
-  sal="$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" gateway call runbook.progress.get \
-    --params "{\"corrida\":\"$id\"}" --timeout 30000 2>/dev/null)" || return 0
+  cliente="${PROGRESS_EVENTS_BIN:-$HOME/bin/progress-events.py}"
+  estado="${PROGRESS_EVENTS_STATE_DIR:-$HOME/.local/state/runbook-progress-events}"
+  [ -f "$cliente" ] || { echo "tablero: falta progress-events.py" >&2; return 0; }
   nuevo="$(mktemp)" || return 0
-  if ! CORR_SAL="$sal" CORR_REG="$reg" CORR_LANE="$lane" CORR_QUE="$que" \
-      CORR_WREG="$(corrida_workers_registry)" CORR_OUT="$nuevo" python3 - <<'PY' 2>/dev/null
-import datetime, json, os, sys
-sal = os.environ["CORR_SAL"]
-try:
-    r = json.loads(sal[sal.index("{"):])
-except ValueError:
-    sys.exit(1)
-if not isinstance(r, dict) or r.get("ok") is not True or not isinstance(r.get("doc"), dict):
-    sys.exit(1)
-doc = r["doc"]
+  if ! CORR_REG="$reg" CORR_LANE="$lane" CORR_QUE="$que" \
+      CORR_WREG="$(corrida_workers_registry)" CORR_OUT="$nuevo" CORR_STATE="$estado" python3 - <<'PY' 2>/dev/null
+import datetime, hashlib, json, os, pathlib, sys
 lane_id = os.environ["CORR_LANE"]
 reg = json.load(open(os.environ["CORR_REG"]))
 c = next((x for x in reg.get("lanes") or [] if isinstance(x, dict) and x.get("id") == lane_id), None)
-car = next((x for x in doc.get("carriles") or [] if isinstance(x, dict) and x.get("id") == lane_id), None)
-if c is None or car is None or not c.get("worker"):
+if c is None or not c.get("worker") or not c.get("session") or reg.get("id") is None:
     sys.exit(1)
 w = next((x for x in json.load(open(os.environ["CORR_WREG"]))["workers"] if x["id"] == c["worker"]), None)
 if w is None:
     sys.exit(1)
+run = reg["id"]
+events = [e for e in c.get("events") or [] if isinstance(e, dict)]
+tenure = c.get("progress_worker_generation")
+if not isinstance(tenure, int) or isinstance(tenure, bool) or tenure < 0:
+    launches = [i for i, e in enumerate(events) if e.get("kind") == "intent.launch_successor"]
+    tenure = len(launches)
+    if launches and not any(e.get("kind") == "observed.launched" for e in events[launches[-1] + 1:]):
+        # Registro legado: el intent ya existe, pero el predecesor aun ocupa
+        # el carril. La confirmacion del relevo pertenece a la nueva tenencia.
+        tenure -= 1
+key = json.dumps([run, lane_id, c["session"], w["id"], c.get("token"), tenure],
+                 ensure_ascii=False, separators=(",", ":"))
+identifier = "worker-" + hashlib.sha256(key.encode()).hexdigest()[:32]
+for directory in ("queue", "sent"):
+    old = pathlib.Path(os.environ["CORR_STATE"]) / "runs" / run / directory / (identifier + ".json")
+    if old.exists():
+        pathlib.Path(os.environ["CORR_OUT"]).write_bytes(old.read_bytes())
+        sys.exit(0)
 sel = c.get("selection")
 sel = sel if isinstance(sel, dict) and sel.get("winner") == w["id"] else None
 salud = (sel or {}).get("health")
@@ -1069,7 +1075,7 @@ salud = (sel or {}).get("health")
 if salud not in ("available", "limited", "unauthenticated", "broken"):
     salud = "available"
 rm = c.get("reported_model")
-car["worker"] = {"id": w["id"], "harness": w["harness"], "provider": w["provider"],
+worker = {"id": w["id"], "harness": w["harness"], "provider": w["provider"],
                  "model": w["model"], "effort": w.get("effort"),
                  "reported_model": rm if rm and rm != "unknown" else None, "health": salud}
 esf = w.get("effort") or "el de la CLI (no acepta flag)"
@@ -1086,26 +1092,70 @@ if sel:
         nota += f"; descartados: {desc}"
 else:
     nota += ", sin seleccion registrada"
-prefijo = lane_id + " seleccion: "
-notas = [n for n in doc.get("notas") or [] if not (isinstance(n, str) and n.startswith(prefijo))]
-notas.append(nota[:300])
-doc["notas"] = notas[-8:]
 ahora = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-que = (os.environ["CORR_QUE"] or f"arranco {w['id']} ({w['model']}, effort {esf})")[:300]
-doc.setdefault("eventos", []).append({"at": ahora, "carril": lane_id, "que": que, "situacion": None})
-car["ultimo_evento"] = {"at": ahora, "que": que}
-if isinstance(doc.get("lead"), dict):
-    doc["lead"]["actualizado"] = ahora
-json.dump(doc, open(os.environ["CORR_OUT"], "w"), ensure_ascii=False)
+if os.environ["CORR_QUE"]:
+    nota += "; " + os.environ["CORR_QUE"]
+event = {"kind": "part.worker", "id": identifier, "corrida": run, "at": ahora,
+         "carril": lane_id, "worker": worker, "note": nota[:300], "source": "native",
+         "generation": tenure}
+json.dump(event, open(os.environ["CORR_OUT"], "w"), ensure_ascii=False)
 PY
   then
     rm -f "$nuevo"; return 0
   fi
-  sal="$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" gateway call runbook.progress.set \
-    --params "$(cat "$nuevo")" --timeout 30000 2>/dev/null)" || sal=""
+  if ! python3 "$cliente" --state-dir "$estado" --openclaw-bin "$OPENCLAW_BIN" \
+      queue-event --event-json "$nuevo" >/dev/null 2>&1; then
+    rm -f "$nuevo"
+    echo "tablero: no se pudo encolar el carril $lane de $id" >&2
+    return 0
+  fi
   rm -f "$nuevo"
-  printf '%s' "$sal" | grep -q '"ok"[[:space:]]*:[[:space:]]*true' \
-    || echo "tablero: no se pudo publicar el carril $lane de $id; se reintenta en el siguiente cambio" >&2
+  sal="$(con_tope "$CORR_TOPE_RED" "$OPENCLAW_BIN" gateway call runbook.progress.get \
+    --params "{\"corrida\":\"$id\"}" --timeout 30000 2>/dev/null)" || sal=""
+  apertura="$(mktemp)" || return 0
+  if ! CORR_SAL="$sal" CORR_ID="$id" CORR_OUT="$apertura" CORR_STATE="$estado" python3 - <<'PY' 2>/dev/null
+import hashlib, json, os, pathlib, sys
+raw = os.environ["CORR_SAL"]
+try:
+    result = json.loads(raw[raw.index("{"):])
+except ValueError:
+    sys.exit(1)
+if result.get("ok") is not True or not isinstance(result.get("doc"), dict):
+    sys.exit(1)
+if isinstance(result.get("revision"), int):
+    sys.exit(0)
+run = os.environ["CORR_ID"]
+doc = result["doc"]
+if doc.get("corrida") != run:
+    sys.exit(1)
+identifier = "open-" + hashlib.sha256(run.encode()).hexdigest()[:32]
+for directory in ("queue", "sent"):
+    old = pathlib.Path(os.environ["CORR_STATE"]) / "runs" / run / directory / (identifier + ".json")
+    if old.exists():
+        pathlib.Path(os.environ["CORR_OUT"]).write_bytes(old.read_bytes())
+        sys.exit(0)
+event = {"kind": "run.opened", "id": identifier, "corrida": run,
+         "at": doc.get("lead", {}).get("inicio"), "doc": doc,
+         "roundBudget": {}, "importLegacy": True, "source": "native-import"}
+json.dump(event, open(os.environ["CORR_OUT"], "w"), ensure_ascii=False)
+PY
+  then
+    rm -f "$apertura"
+    echo "tablero: no se pudo leer el tablero de $id; el evento queda en cola" >&2
+    return 0
+  fi
+  if [ -s "$apertura" ]; then
+    if ! python3 "$cliente" --state-dir "$estado" --openclaw-bin "$OPENCLAW_BIN" \
+        queue-event --event-json "$apertura" >/dev/null 2>&1; then
+      rm -f "$apertura"
+      echo "tablero: no se pudo encolar la importacion de $id" >&2
+      return 0
+    fi
+  fi
+  rm -f "$apertura"
+  python3 "$cliente" --state-dir "$estado" --openclaw-bin "$OPENCLAW_BIN" \
+    publish --corrida "$id" >/dev/null 2>&1 \
+    || echo "tablero: no se pudo publicar el carril $lane de $id; queda en cola" >&2
   return 0
 }
 

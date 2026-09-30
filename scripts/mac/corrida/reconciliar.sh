@@ -215,6 +215,20 @@ PY
 # sin lock). Falla si el lock no cede: no se escribe sin dueno.
 reconciliar_reducir_con_lock() { # $1 reg $2 pw $3 lane $4 kind $5 args-json
   lock_tomar "$1" || return 1
+  if [ "$4" = "intent.launch_successor" ]; then
+    # Fija la tenencia del predecesor antes de anotar el intent.
+    if ! CORR_C="$3" registro_escribir "$1" "
+import sys
+c=next((x for x in d.get('lanes') or [] if isinstance(x,dict) and x.get('id')==os.environ['CORR_C']),None)
+if c is None or not c.get('worker') or not c.get('session'): sys.exit(1)
+generation=c.get('progress_worker_generation')
+if not isinstance(generation,int) or isinstance(generation,bool) or generation<0:
+  c['progress_worker_generation']=sum(e.get('kind')=='intent.launch_successor' for e in c.get('events') or [] if isinstance(e,dict))
+"; then
+      lock_soltar "$1"
+      return 1
+    fi
+  fi
   reconciliar_reducir "$1" "$2" "$3" "$4" "$5"
   local rc=$?
   lock_soltar "$1"

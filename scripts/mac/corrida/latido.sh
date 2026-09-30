@@ -347,6 +347,14 @@ os.rename(t+'.tmp',t)" 2>/dev/null; then
 }
 
 corrida_latido() {
+  # El vigilante llama este tick aunque no haya corridas nativas abiertas. El
+  # outbox también contiene tableros manuales y fases; se reintenta sin esperar
+  # a que ocurra otro cambio de estado.
+  local progress_bin="${PROGRESS_EVENTS_BIN:-$HOME/bin/progress-events.py}"
+  if [ -x "$progress_bin" ]; then
+    con_tope 20 "$progress_bin" publish-all >/dev/null 2>&1 \
+      || echo "latido: progreso pendiente; se reintentará en el próximo tick" >&2
+  fi
   [ -d "$CORRIDA_STATE" ] || return 0
   local dir reg rcg=0
   for dir in "$CORRIDA_STATE"/*/; do

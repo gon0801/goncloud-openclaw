@@ -79,6 +79,25 @@ DOC
 
 corre() { CORR_AHORA="$NOW" GH_BIN="$T/bin/gh" bash "$S" "$@"; }
 
+progreso "$T/event-managed.json"
+cp "$T/event-managed.json" "$T/event-managed-original.json"
+printf '{"revision":2}\n' >"$T/event-managed.json.revision.json"
+if corre "$T/event-managed.json" >"$T/managed.out" 2>&1; then
+  fail "un documento administrado por eventos acepto la escritura legacy"
+fi
+cmp "$T/event-managed.json" "$T/event-managed-original.json" || fail "se modifico la proyeccion administrada"
+grep -q 'runbook.progress.event' "$T/managed.out" || fail "falta instruccion para publicar un evento"
+mkdir -p "$T/gateway/progress/c" "$T/gateway/progress/e"
+progreso "$T/gateway/progress/c/gateway-run.json"
+cp "$T/gateway/progress/c/gateway-run.json" "$T/gateway/progress/9.json"
+printf '{"events":[{"command":{"kind":"run.opened","phaseAlias":true,"doc":{"fase":"9"}}}]}\n' >"$T/gateway/progress/e/gateway-run.json"
+for managed_file in "$T/gateway/progress/c/gateway-run.json" "$T/gateway/progress/9.json"; do
+  cp "$managed_file" "$managed_file.original"
+  corre "$managed_file" >"$T/managed.out" 2>&1 && fail "(1-bis) acepto una proyeccion del gateway administrada por eventos"
+  cmp "$managed_file" "$managed_file.original" || fail "(1-bis) modifico una proyeccion del gateway"
+done
+echo "ok (1-bis): no escribe proyecciones administradas por eventos"
+
 carril() { # $1 archivo, $2 id, $3 campo -> valor plano (null si es None)
   F="$1" CID="$2" CAMP="$3" python3 -c "
 import json, os

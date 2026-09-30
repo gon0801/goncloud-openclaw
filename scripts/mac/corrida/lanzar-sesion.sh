@@ -203,6 +203,12 @@ lanzar_sesion_marcar() { # $1 id $2 nombre $3 reg $4 carril $5 worker $6 barra
 c=None
 for e in d.get('lanes') or []:
   if isinstance(e,dict) and e.get('id')==os.environ['CORR_C']: c=e; break
+generation=c.get('progress_worker_generation')
+if not isinstance(generation,int) or isinstance(generation,bool) or generation<0:
+  generation=sum(e.get('kind')=='intent.launch_successor' for e in c.get('events') or [] if isinstance(e,dict))
+else:
+  generation+=1
+c['progress_worker_generation']=generation
 c.update({'worker':os.environ['CORR_W'],'harness':os.environ['CORR_H'],
 'provider':os.environ['CORR_P'],
 'reported_model':c.get('reported_model','unknown'),

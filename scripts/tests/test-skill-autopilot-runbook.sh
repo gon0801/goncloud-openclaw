@@ -62,6 +62,15 @@ grep -q -E 'FIRST command opens the run on the board' "$REPO" \
 grep -qF '`corrida`' "$REPO" || fail "$REPO: el slot 12 no nombra la clave corrida"
 grep -qF '`proyecto`' "$REPO" || fail "$REPO: el slot 12 no nombra la clave proyecto"
 grep -qF '`plan`' "$REPO" || fail "$REPO: el slot 12 no nombra la clave plan"
+grep -qF 'runbook.progress.event' "$REPO" \
+  || fail "$REPO: el slot 12 no abre la corrida por la API de eventos"
+grep -qF 'record-ready' "$REPO" \
+  || fail "$REPO: el slot 12 no persiste LISTO por ronda"
+grep -qF 'record-verdict' "$REPO" \
+  || fail "$REPO: el slot 12 no persiste VEREDICTO por ronda"
+if sed -n '/^12\. \*\*Progreso\.\*\*/,/^13\. /p' "$REPO" | grep -qF 'runbook.progress.set'; then
+  fail "$REPO: el slot 12 aún instruye escrituras completas que pisan rondas"
+fi
 echo "ok (2-bis): la entrega se prueba con un comando, y la corrida nace con el runbook"
 
 # (3) Las reglas que trece lecturas dejaron, cada una porque un runbook falló

@@ -21,6 +21,7 @@ import { join } from "node:path";
 
 import { CORRIDA_RE, validarFase, validarProgreso, type ProgresoDoc } from "./lib.ts";
 import { cruzarPlan, type PlanCruce } from "./plan.ts";
+import { isManagedPhase, isManagedProgress, readManagedPhase, readManagedProgress } from "./progress-store.ts";
 
 export type ConteoObjetivo =
   | { kind: "conocido"; completadas: number; total: number; porcentaje: number }
@@ -237,6 +238,17 @@ export async function listarSeguimientoActivo(
   } catch {
     // Sin corridas no hay nada que sumar.
   }
+  try {
+    for (const name of readdirSync(join(cfg.stateDir, "progress", "e"))) {
+      if (!name.endsWith(".json")) continue;
+      const base = name.slice(0, -5);
+      if (CORRIDA_RE.test(base) && !rutas.some((entry) => entry.trabajoId === `corrida:${base}`)) {
+        rutas.push({ ruta: join(cfg.stateDir, "progress", "c", name), trabajoId: `corrida:${base}` });
+      }
+    }
+  } catch {
+    // Los tableros legacy no tienen registro de eventos.
+  }
 
   const vistos = new Set<string>();
   const activas: ResumenSeguimiento[] = [];
@@ -245,7 +257,10 @@ export async function listarSeguimientoActivo(
     if (vistos.has(trabajoId)) continue;
     let crudo: string;
     try {
-      crudo = readFileSync(ruta, "utf8");
+      const managed = trabajoId.startsWith("corrida:")
+        ? isManagedProgress(cfg.stateDir, trabajoId.slice(8)) && readManagedProgress(cfg.stateDir, trabajoId.slice(8))
+        : isManagedPhase(cfg.stateDir, trabajoId.slice(5)) && readManagedPhase(cfg.stateDir, trabajoId.slice(5));
+      crudo = managed ? JSON.stringify(managed) : readFileSync(ruta, "utf8");
     } catch {
       reportarRoto(trabajoId, "ilegible", vistos, activas, problemas);
       continue;

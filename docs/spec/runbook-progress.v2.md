@@ -2,6 +2,8 @@
 
 Fecha: 2026-09-19. Estado: contrato publicado; un documento v1 sigue siendo válido y se sigue sirviendo por su ruta vieja (`/runbook/progress/<fase>.json`, RPC por `fase`). Este texto describe la forma v2. No sustituye a [runbook-progress.v1.md](runbook-progress.v1.md): lo extiende.
 
+Para corridas nuevas, [runbook-progress-events.v1](runbook-progress-events.v1.md) define la escritura por eventos. El gateway deriva la vista `runbook-progress.v1`; las instrucciones de escritura completa de abajo corresponden a tableros históricos.
+
 ## Transición del `schema` (candado de la Fase 7)
 
 El literal de **este** contrato es `runbook-progress.v2`. El validador del plugin `tablero-runbook` **sigue exigiendo** `schema: "runbook-progress.v1"` (candado de la Fase 7). Un documento cuyo `schema` sea `runbook-progress.v2` se rechaza. Eso lo clava `tablero-runbook/progress.test.ts` (el caso que asigna el literal `runbook-progress.v2` y exige una razón que nombre `schema`).

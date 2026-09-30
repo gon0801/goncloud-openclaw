@@ -220,6 +220,71 @@ it("v2-native-workers: el HTML del tablero es identico por RPC y HTTP", async ()
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it("eventos de rondas actualizan un tablero sin aceptar un snapshot atrasado", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tablero-rondas-rpc-"));
+    try {
+      const host = await cargar({ stateDir: dir });
+      const doc = fixtureDoc("v2-native-workers.json");
+      doc.corrida = "rondas-genericas";
+      doc.fase = "91";
+      doc.plan = null;
+      doc.carriles = doc.carriles.map((c, i) => ({
+        ...c,
+        id: `B${i + 1}`,
+        tareas: [`91.${i + 1}`],
+        estado: i < 2 ? "mergeado" : "implementando",
+        ronda: i < 2 ? undefined : 1,
+      }));
+      doc.cola = doc.carriles.map((c) => ({
+        id: c.tareas[0], prs: [], estado: "pendiente", ventana: null,
+        merge_commits: [], verificado: null, detenido_por: null,
+      }));
+      const at = "2026-09-30T20:00:00Z";
+      const sha = "a".repeat(40);
+      const evidence = { ref: "evidence/VEREDICTO-91.3-r1.json", sha: "b".repeat(64) };
+      const opened = await llamarMetodo(host.metodos, "runbook.progress.event", {
+        kind: "run.opened", id: "open-rondas-genericas", corrida: doc.corrida, at, doc,
+        roundBudget: { B1: 1, B2: 1, B3: 3 }, phaseAlias: true,
+      });
+      assert.equal(opened.ok, true);
+      let board = await llamarMetodo(host.metodos, "runbook.progress.get", { corrida: doc.corrida });
+      assert.equal(board.ok, true);
+      assert.match(board.html, /%GLOBAL 67 %/);
+      assert.equal(board.doc.carriles[1].estado, "mergeado");
+      assert.equal(board.doc.carriles[2].estado, "implementando");
+      const started = await llamarMetodo(host.metodos, "runbook.progress.event", {
+        kind: "round.started", id: "start-b3-r1", corrida: doc.corrida, at,
+        expectedRevision: opened.revision, carril: "B3", intento: "impl-1", ronda: 1, baseSha: sha,
+      });
+      assert.equal(started.ok, true);
+      const ready = await llamarMetodo(host.metodos, "runbook.progress.event", {
+        kind: "round.ready", id: "ready-b3-r1", corrida: doc.corrida, at,
+        expectedRevision: started.revision, carril: "B3", intento: "impl-1", ronda: 1, sha, evidence,
+      });
+      assert.equal(ready.ok, true, JSON.stringify(ready));
+      const verdict = await llamarMetodo(host.metodos, "runbook.progress.event", {
+        kind: "round.verdict", id: "verdict-b3-r1", corrida: doc.corrida, at,
+        expectedRevision: ready.revision, carril: "B3", intento: "impl-1", ronda: 1,
+        sha, verdict: "cambios", evidence,
+      });
+      assert.equal(verdict.ok, true);
+      board = await llamarMetodo(host.metodos, "runbook.progress.get", { corrida: doc.corrida });
+      assert.equal(board.ok, true);
+      assert.match(board.html, /%GLOBAL 78 %/);
+      const phase = await llamarMetodo(host.metodos, "runbook.progress.get", { fase: "91" });
+      assert.equal(phase.ok, true);
+      assert.equal(phase.doc.corrida, doc.corrida);
+      assert.equal(JSON.parse(readFileSync(join(dir, "progress", "91.json"), "utf8")).carriles[2].estado, "implementando");
+      const stale = await llamarMetodo(host.metodos, "runbook.progress.set", doc);
+      assert.deepEqual(stale, { ok: false, razon: "event-managed" });
+      const after = await llamarMetodo(host.metodos, "runbook.progress.get", { corrida: doc.corrida });
+      assert.equal(after.doc.carriles[1].estado, "mergeado");
+      assert.match(after.html, /%GLOBAL 78 %/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("set con documento inválido → {ok:false, razones} y CERO writes", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tablero-74-invalido-"));
     const host = await cargar({ stateDir: dir });

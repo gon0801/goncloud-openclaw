@@ -154,7 +154,7 @@ Medido: 2026-09-18, encendiendo el tablero de la Fase 7. Se agrego la fase a la 
 
 ## 8. Progreso escrito, no contado
 
-En cada cambio de estado de un carril o de la cola, y al cierre, el lead escribe `.saikit/progress/<fase>.json` en el formato `runbook-progress.v1` y lo envía con `openclaw gateway call runbook.progress.set --params "$(cat <archivo>)"`. La CLI **no** acepta la forma arroba-archivo: contesta `--params must be valid JSON` (medido 2026-09-16 y otra vez el 2026-09-17), así que el JSON va en línea. Un envío fallido no bloquea y se reintenta en el siguiente cambio. Cada escritura lleva `atencion_requerida` y `siguiente_paso` en lenguaje llano. Lo que no está en ese archivo no es progreso.
+Las corridas nuevas escriben eventos `runbook.progress.event` según [el contrato](../spec/runbook-progress-events.v1.md). El primer comando abre la corrida con el alcance y los presupuestos de ronda declarados. En cada cambio de carril, cola o atención se encola un evento con ID estable y se publica; LISTO y VEREDICTO se persisten como archivos de evidencia antes de anunciar el cierre de la ronda. `~/bin/progress-events.py publish --corrida <id>` reintenta la cola tras fallos de red incluso si no hubo otro cambio. `sync` genera `estado.md` y `.saikit/progress/<fase>.json` desde la misma revisión aceptada. `runbook.progress.set` queda solo para tableros históricos: la corrida administrada por eventos lo rechaza para impedir que una foto vieja borre rondas nuevas.
 
 El lead manda a David un Telegram en cada cambio de estado. Mientras la corrida siga activa, claw o Hermes manda otro al menos cada 30 minutos. Los recordatorios del vigilante son internos y no cuentan como seguimiento al dueño. Todos los mensajes de la corrida a David (seguimiento, parte, cierre) cumplen `seguimiento.v1`: `[ETIQUETA]`, `Que cambio`, `Que sigue`, `Que necesito de ti`, en lenguaje de usuario. `corrida.sh` los manda a través de `corrida_mensaje` (la llaman sus subcomandos por dentro), que valida cada uno contra ese contrato antes de mandarlo; un envío fallido se anota y se reintenta en el siguiente cambio, igual que el progreso.
 
@@ -176,7 +176,7 @@ El estado de una corrida vive en **git y en los PRs**, nunca en la memoria del l
 Por eso, si el lead muere, se cuelga o se queda sin cuota, claw relanza **otro host de la lista de preferencia** con la misma instrucción, y ese lead nuevo:
 
 1. Lee `gh pr list` de los repos de la fase y el SHA actual de cada PR.
-2. Lee el archivo de progreso y los worktrees. Si el progreso detiene un carril por una causa que el PR ya no tiene —medido 2026-09-20 en la Fase 9: carriles «esperando sello» con el PR ya MERGED en GitHub—, lo reconcilia con `bash scripts/reconciliar-progreso.sh <progress.json>`: para el estado del PR manda GitHub, se limpia solo ese motivo y la corrida sigue sin repetir un merge ya hecho.
+2. Lee el archivo de progreso y los worktrees. Si el progreso detiene un carril por una causa que el PR ya no tiene, consulta GitHub. En una corrida nueva publica `part.status` con el PR y evidencia de merge, luego ejecuta `sync`; en un tablero histórico usa `bash scripts/reconciliar-progreso.sh <progress.json>`. Así se limpia el motivo obsoleto sin repetir el merge.
 3. Retoma cada carril donde quedó. No repite trabajo ya aprobado.
 4. Comprueba los checks y revisiones del SHA actual en GitHub. Reutiliza la evidencia vigente y verifica solo los cambios nuevos; no se exige recibo del lead.
 
