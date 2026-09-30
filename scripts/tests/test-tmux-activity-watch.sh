@@ -1171,6 +1171,15 @@ run_av || fail "--once (2q-4, reintento) fallo"
 # del simulacro (SIM_ESPERA_DOBLE=6).
 [ "$(grep -c '^avisos despertar sim9-RT1 sim9-RT2$' "$AARGV")" -eq 1 ] || fail "(2q-4) falta el despertar en una sola llamada de RT1 y RT2: $(cat "$AARGV")"
 grep -q 'despertar sim9-FRESCO' "$AARGV" && fail "(2q-4) un pendiente fresco no debe despertarse: $(cat "$AARGV")"
+# B2 r11: cada corrida viaja como su propio argumento. Un solo argumento con
+# todos los ids no despierta a nadie y el retroceso suprime el reintento.
+ARGC_LOG="$T/despertar-argc.txt"; : >"$ARGC_LOG"
+STUB_ARGC="$T/corrida-argc"
+printf '#!/bin/sh\n[ "$2" = despertar ] && printf "%%s\\n" "$#" >> "%s"\nexit 0\n' "$ARGC_LOG" > "$STUB_ARGC"
+chmod +x "$STUB_ARGC"
+rm -f "$CORRIDA_STATE/sim9-RT1/avisos/.despertado" "$CORRIDA_STATE/sim9-RT2/avisos/.despertado"
+CORRIDA_BIN="$STUB_ARGC" run_once || fail "--once (2q-4, argumentos) fallo"
+[ "$(head -1 "$ARGC_LOG")" = "4" ] || fail "(2q-4) despertar debia recibir cada corrida como argumento propio (avisos despertar RT1 RT2 = 4 argumentos); recibio: $(cat "$ARGC_LOG")"
 [ -f "$CORRIDA_STATE/sim9-RT1/avisos/a.json" ] || fail "(2q-4) el despertar no debe consumir el pendiente"
 i=0
 while [ "$i" -lt 7 ]; do

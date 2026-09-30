@@ -761,8 +761,10 @@ avisos_reintento_tick() {
     done
   done
   if [[ -n $ids ]]; then
+    # Sin comillas a proposito: cada corrida es un argumento propio (B2 r11).
+    # Los ids solo llevan [A-Za-z0-9_-] (corrida_id_valido), sin espacios ni globs.
     if ! perl -e 'alarm shift; exec(@ARGV) or exit 127' "$AVISOS_TOPE" \
-      "$CORRIDA_BIN" avisos despertar ${ids+"$ids"} >>"$LOG_FILE" 2>&1; then
+      "$CORRIDA_BIN" avisos despertar $ids >>"$LOG_FILE" 2>&1; then
       log "avisos despertar fallo (corridas: $ids)"
     fi
     for corrida in $ids; do touch "$CORRIDA_STATE/$corrida/avisos/.despertado" 2>/dev/null || true; done

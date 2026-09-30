@@ -183,7 +183,7 @@ avisos_atender() {
     echo "uso: corrida.sh avisos atender <corrida>" >&2
     return 2
   fi
-  local corrida="$1" reg dir f estado ses salida rc=0 n=0 validos=0
+  local corrida="$1" reg dir f estado ses salida rc=0 n=0 validos=0 reclamados=""
   corrida_id_valido "$corrida" || { echo "avisos atender: id invalido: $corrida" >&2; return 1; }
   reg="$(registro_de "$corrida")"
   [ -f "$reg" ] || { echo "avisos atender: sin registro: $corrida" >&2; return 1; }
@@ -197,13 +197,17 @@ avisos_atender() {
   for f in "$dir"/*.json; do
     [ -f "$f" ] || continue
     mv "$f" "$dir/tratados/" || continue
+    reclamados="$reclamados$dir/tratados/${f##*/}
+"
     n=$((n + 1))
   done
   [ "$n" -gt 0 ] || { lock_soltar "$reg"; echo "sin pendientes"; return 0; }
   estado="$(json_campo "$reg" estado)"
   ses="$(avisos_registradas_de "$reg")"
   lock_soltar "$reg"
-  for f in "$dir/tratados"/*.json; do
+  # Solo lo reclamado en esta pasada: un tratado viejo conserva su sello y su
+  # descarte (B1 r11).
+  while IFS= read -r f; do
     [ -f "$f" ] || continue
     if [ "$estado" != "abierta" ]; then
       avisos_marcar "$f" descartado "la corrida $corrida no esta abierta"
@@ -216,7 +220,9 @@ avisos_atender() {
     else
       avisos_marcar "$f" descartado "la sesion $(json_campo "$f" sesion) ya no esta registrada"
     fi
-  done
+  done <<EOF_RECLAMADOS
+$reclamados
+EOF_RECLAMADOS
   printf 'avisos: %s atendidos, %s descartados\n' "$validos" "$((n - validos))"
   [ "$validos" -gt 0 ] || return 0
   local corr_bin="${CORRIDA_BIN:-}"

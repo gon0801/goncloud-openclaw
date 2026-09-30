@@ -342,4 +342,40 @@ fi
 echo "ok (m): un dialogo Run this command? frena el despertar sin teclear"
 printf 'trabajando en la parte 2\n' >"$PANTALLA_LEAD"
 
+# (n) B1 r11: un segundo atender solo trata lo que reclamo en esa pasada.
+# Los tratados viejos conservan su sello, un descartado viejo no pasa a
+# atendido aunque su sesion vuelva al registro, y el conteo no da negativo.
+registro tn abierta lead-main:lead:zcode,ses-n1:carril:glm,ses-n2:carril:glm
+emitir tn ses-n1 fin-turno --llave n1 >/dev/null || fail "(n) precondicion: emitir n1"
+CORRIDA_BIN="$CC" bash "$CORR_ABS" avisos atender tn >/dev/null || fail "(n) primer atender fallo"
+TN="$CORRIDA_STATE/tn/avisos/tratados"
+FN1=$(ls "$TN"/tn-ses-n1-*.json)
+sello1=$(json_leer "$FN1" atendido)
+emitir tn ses-n2 fin-turno --llave n2 >/dev/null || fail "(n) precondicion: emitir n2"
+registro tn abierta lead-main:lead:zcode,ses-n1:carril:glm
+CORRIDA_BIN="$CC" bash "$CORR_ABS" avisos atender tn >/dev/null || fail "(n) segundo atender fallo"
+FN2=$(ls "$TN"/tn-ses-n2-*.json)
+[ -n "$(json_leer "$FN2" descartado)" ] || fail "(n) precondicion: n2 debia quedar descartado"
+registro tn abierta lead-main:lead:zcode,ses-n1:carril:glm,ses-n2:carril:glm
+sleep 1
+emitir tn ses-n1 fin-turno --llave n3 >/dev/null || fail "(n) precondicion: emitir n3"
+out=$(CORRIDA_BIN="$CC" bash "$CORR_ABS" avisos atender tn) || fail "(n) tercer atender fallo"
+[ "$out" = "avisos: 1 atendidos, 0 descartados" ] || fail "(n) el tercer atender debia tratar solo n3: $out"
+[ "$(json_leer "$FN1" atendido)" = "$sello1" ] || fail "(n) el atendido viejo de n1 recibio un sello nuevo"
+[ -z "$(json_leer "$FN2" atendido)" ] || fail "(n) el descartado viejo de n2 quedo atendido y descartado a la vez"
+echo "ok (n): atender solo trata lo que reclamo en su pasada"
+
+# (o) B2 r11: despertar recibe varias corridas en una llamada y despierta a cada una.
+registro to1 abierta lead-main:lead:zcode,ses-o1:carril:glm
+registro to2 abierta lead-main:lead:zcode,ses-o2:carril:glm
+printf 'Permission - Bash\nwaiting for approval\n' >"$PANTALLA_LEAD"
+emitir to1 ses-o1 fin-turno --llave o1 >/dev/null || fail "(o) precondicion: emitir o1"
+emitir to2 ses-o2 fin-turno --llave o2 >/dev/null || fail "(o) precondicion: emitir o2"
+printf 'trabajando en la parte 2\n' >"$PANTALLA_LEAD"
+: >"$TECLAS"
+bash "$CORR_ABS" avisos despertar to1 to2 || fail "(o) despertar con dos corridas fallo"
+grep -q -- '-- corrida.sh avisos atender to1$' "$TECLAS" || fail "(o) no desperto a to1: $(cat "$TECLAS")"
+grep -q -- '-- corrida.sh avisos atender to2$' "$TECLAS" || fail "(o) no desperto a to2: $(cat "$TECLAS")"
+echo "ok (o): despertar con varias corridas despierta a cada una"
+
 echo "TODO VERDE: test-corrida-avisos (U1 + U3 hook)"
