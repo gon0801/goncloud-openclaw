@@ -1435,10 +1435,10 @@ CORRIDA_BIN="$CORRIDA_TARDE" AVISOS_TOPE=2 run_once || fail "--once (2q-13, prim
 sleep 4
 REC_BK=$(ls "$STATE_DIR/avisos-fallidos/"sim9-BK*.json 2>/dev/null | head -1)
 [ -n "$REC_BK" ] || fail "(2q-13) sin registro de fallo tras el primer intento"
-antes=$(stat -f %m "$REC_BK" 2>/dev/null || stat -c %Y "$REC_BK" 2>/dev/null)
+antes=$(stat -c %Y "$REC_BK" 2>/dev/null || stat -f %m "$REC_BK" 2>/dev/null)
 sleep 2
 CORRIDA_BIN="$CORRIDA_TARDE" AVISOS_TOPE=2 run_once || fail "--once (2q-13, reintento) fallo"
-despues=$(stat -f %m "$REC_BK" 2>/dev/null || stat -c %Y "$REC_BK" 2>/dev/null)
+despues=$(stat -c %Y "$REC_BK" 2>/dev/null || stat -f %m "$REC_BK" 2>/dev/null)
 [ -n "$despues" ] && [ "$despues" -gt "$antes" ] \
   || fail "(2q-13) el relanzamiento debia hacer touch al registro (mtime $antes no avanzo a $despues)"
 "$TM" -L "$L" kill-session -t sim9-bk 2>/dev/null
