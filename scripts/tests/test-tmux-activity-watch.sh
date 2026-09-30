@@ -49,7 +49,7 @@ if [ -z "$TM" ]; then
   echo "SKIP (3): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
 else
   T=$(mktemp -d) || exit 1
-  trap '"$TM" -L "$L" kill-server 2>/dev/null; rm -rf "$T"' EXIT
+  trap '"$TM" -L "$L" kill-server 2>/dev/null; rm -rf /tmp/taw-r8; cp -r "$T" /tmp/taw-r8 2>/dev/null; rm -rf "$T"' EXIT
   L="taw$$"
   # Ninguna corrida del vigilante en esta prueba puede alcanzar el ~/bin/corrida.sh
   # real: desde 14.29 D1 el tick lanza "latido" contra las corridas reales.
@@ -1069,6 +1069,7 @@ run_av >/dev/null 2>&1 || fail "--once (2q, purga) fallo"
 : >"$AARGV"
 
 # (2q-1) quiet y closed de una sesion de corrida: por avisos, cero system events.
+STATE_DIR="$T/state-2q-1"; mkdir -p "$STATE_DIR"
 "$TM" -L "$L" new-session -d -s sim9-avq -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avq"
 mark sim9-avq
 "$TM" -L "$L" set-environment -t sim9-avq OPENCLAW_WATCH_RUN sim9-AVQ
@@ -1092,9 +1093,11 @@ esperar_aviso 'avisos emitir sim9-AVQ sim9-avq cierre'
 grep -q '^avisos emitir sim9-AVQ sim9-avq cierre --llave closed$' "$AARGV" \
   || fail "(2q-1) el closed debia ir por avisos con llave closed: $(cat "$AARGV")"
 [ -f "$STATE_DIR/sim9-avq.state" ] && fail "(2q-1) el aviso de cierre salio pero el estado no se borro"
+"$TM" -L "$L" kill-session -t sim9-avq 2>/dev/null
 echo "ok (2q-1): quiet y closed de una corrida van por avisos, sin system events y sin repetirse"
 
 # (2q-2) aprobacion y repintado (hallazgo 4): el reloj del TUI no cambia la llave
+STATE_DIR="$T/state-2q-2"; mkdir -p "$STATE_DIR"
 # (un aviso por episodio) y un dialogo distinto da llave nueva.
 PANTALLA_Q="$T/pantalla-q.txt"
 printf 'Permission - Bash\necho aviso-q\n> Allow once\n  Deny\n girando |\n' >"$PANTALLA_Q"
@@ -1133,6 +1136,7 @@ run_av >/dev/null 2>&1 || true
 echo "ok (2q-2): el repintado no cambia la llave del dialogo (un aviso por episodio); un dialogo distinto, si"
 
 # (2q-3) sin OPENCLAW_WATCH_RUN, o con CORRIDA_AVISOS=0: la ruta de siempre.
+STATE_DIR="$T/state-2q-3"; mkdir -p "$STATE_DIR"
 "$TM" -L "$L" new-session -d -s sim9-avs -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avs"
 mark sim9-avs
 : >"$CALLS"; : >"$AARGV"
@@ -1149,6 +1153,7 @@ grep -q 'sim9-avs closed' "$CALLS" || fail "(2q-3) con la reversa el closed debi
 echo "ok (2q-3): sin corrida marcada o con la reversa, los eventos salen por agent:main:vigia-mac como siempre"
 
 # (2q-4) reintento: pendientes con mtime viejo despiertan una vez por corrida y
+STATE_DIR="$T/state-2q-4"; mkdir -p "$STATE_DIR"
 # tick, con tope de 5 corridas; los frescos (menos de 30 s) no.
 mkdir -p "$CORRIDA_STATE/sim9-RT1/avisos" "$CORRIDA_STATE/sim9-RT2/avisos" "$CORRIDA_STATE/sim9-FRESCO/avisos"
 printf '{"schema":"corrida-aviso.v1"}\n' >"$CORRIDA_STATE/sim9-RT1/avisos/a.json"
@@ -1182,6 +1187,7 @@ rm -rf "$CORRIDA_STATE"/sim9-RT1 "$CORRIDA_STATE"/sim9-RT2 "$CORRIDA_STATE"/sim9
 echo "ok (2q-4): los pendientes de mas de 30 s despiertan una vez por tick, con tope de 5 corridas y sin consumirse"
 
 # (2q-5) relanzo con encargo (hallazgo 7): lanzar-sesion re-entrega el --encargo
+STATE_DIR="$T/state-2q-5"; mkdir -p "$STATE_DIR"
 # del registro; sin encargo registrado, el comando queda como siempre.
 RARGV="$T/relanzo-enc-argv.txt"; : >"$RARGV"
 STUB_RE="$T/corrida-relanzo-enc"
@@ -1239,6 +1245,7 @@ run_re >/dev/null 2>&1 || true
 echo "ok (2q-5): el relanzo re-entrega el --encargo registrado y sin encargo queda igual que siempre"
 
 # (2q-7) diario local (contrato del simulacro 5/6): con la ruta de avisos, la
+STATE_DIR="$T/state-2q-7"; mkdir -p "$STATE_DIR"
 # senal SIGUE quedando en eventos.jsonl del vigia: es lo que un vigia lee sin
 # pasar por el gateway, y los casos 5/6 del simulacro 9.9 la assertan.
 "$TM" -L "$L" new-session -d -s sim9-avj -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avj"
@@ -1251,6 +1258,7 @@ grep -qF "sim9-avj quiet" "$STATE_DIR/eventos.jsonl" 2>/dev/null \
 echo "ok (2q-7): la ruta de avisos journaliza la senal en eventos.jsonl"
 
 # (2q-8) tope de reloj: un corrida.sh colgado en avisos emitir NO puede
+STATE_DIR="$T/state-2q-8"; mkdir -p "$STATE_DIR"
 # colgar el tick (19.1-r2, simulacro etapa 8): el vigia reintenta en el
 # siguiente tick y sigue vivo.
 CORRIDA_CUELGA="$T/corrida-cuelga"
@@ -1272,6 +1280,7 @@ rm -f "$STATE_DIR/avisos-fallidos/"sim9-AVH*
 echo "ok (2q-8): el emitir colgado no cuelga el tick (tope de reloj y reintento)"
 
 # (2q-9) retroceso del despertar: un pendiente viejo despierta UNA vez; mientras
+STATE_DIR="$T/state-2q-9"; mkdir -p "$STATE_DIR"
 # el sello del despertar sea fresco, los ticks siguientes no repiten teclas
 # (19.1-r2: despertar cada tick colapsaba la ventana de relanzo del simulacro).
 mkdir -p "$CORRIDA_STATE/sim9-BK1/avisos"
@@ -1285,9 +1294,11 @@ run_av || fail "--once (2q-9, primer despertar) fallo"
 run_av || fail "--once (2q-9, segundo tick) fallo"
 grep -q 'despertar sim9-BK1' "$AARGV" \
   && fail "(2q-9) el sello fresco debia frenar el segundo despertar: $(cat "$AARGV")"
+"$TM" -L "$L" kill-session -t sim9-bk 2>/dev/null
 echo "ok (2q-9): el despertar respeta el sello de retroceso por corrida"
 
 # (2q-10) el tick no paga el coste del emitir: un corrida.sh que TARDA (8s,
+STATE_DIR="$T/state-2q-10"; mkdir -p "$STATE_DIR"
 # dentro del tope) no debe retrasar el tick: el emitir va desacoplado y el
 # pendiente lo escribe el proceso desacoplado (19.1-r4, etapa 8 del simulacro).
 CORRIDA_TARDA="$T/corrida-tarda"
@@ -1302,33 +1313,37 @@ CORRIDA_BIN="$CORRIDA_TARDA" run_once || fail "--once (2q-10, emitir lento) fall
 duracion10=$(( $(date +%s) - inicio10 ))
 [ "$duracion10" -lt 5 ] || fail "(2q-10) el tick espero ${duracion10}s al emitir lento (debia ir desacoplado)"
 rm -f "$STATE_DIR/avisos-fallidos/"sim9-AVT*
+"$TM" -L "$L" kill-session -t sim9-avt 2>/dev/null
 echo "ok (2q-10): el emitir lento va desacoplado y el tick no lo espera"
 
 # (2q-11) fallo durable del emitir desacoplado: un corrida.sh que SIEMPRE
-# falla en avisos emitir deja registro en avisos-fallidos del estado del
-# vigia, el tick lo reintenta desacoplado y al emitir bien se borra.
+STATE_DIR="$T/state-2q-11"; mkdir -p "$STATE_DIR"
+export AVISOS_REINTENTO_SECS=3 AVISOS_FALLIDO_TOPE=8
 CORRIDA_FALLA="$T/corrida-falla"
 FALLA_LOG="$T/falla-llamadas.txt"; : >"$FALLA_LOG"
 FALLA_OK="$T/falla-ok"; rm -f "$FALLA_OK"
-printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then\n  printf "%s %s\\n" "$(date -u +%%H:%%M:%%S)" "$*" >> "%s"\n  [ -f "%s" ] || exit 1\nfi\nexit 0\n' "$FALLA_LOG" "$FALLA_OK" > "$CORRIDA_FALLA"
+printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then\n  printf "%%s %%s\\n" "$(date -u +%%H:%%M:%%S)" "$*" >> "%s"\n  [ -f "%s" ] || exit 1\nfi\nexit 0\n' "$FALLA_LOG" "$FALLA_LOG" "$FALLA_OK" > "$CORRIDA_FALLA"
 chmod +x "$CORRIDA_FALLA"
+run_falla() { CORRIDA_BIN="$CORRIDA_FALLA" run_once; }
 "$TM" -L "$L" new-session -d -s sim9-fl -x 80 -y 20 'cat' || fail "no se pudo crear sim9-fl"
 mark sim9-fl
 "$TM" -L "$L" set-environment -t sim9-fl OPENCLAW_WATCH_RUN sim9-FL
 sleep 2
-export AVISOS_REINTENTO_SECS=3 AVISOS_TOPE=2
-CORRIDA_BIN="$CORRIDA_FALLA" run_once || fail "--once (2q-11, emitir falla) fallo"
+# Tick 1: el vigia escribe el fallo durable y lanza el emitir desacoplado
+# (3 intentos que fallan con este stub: el registro queda con intentos 0).
+run_falla || fail "--once (2q-11, emitir falla) fallo"
+# El silencio vence en el SEGUNDO tick (el primero solo ceba el estado):
+# el sondeo del registro tica.
 i=0
-while [ "$i" -lt 40 ]; do
+while [ "$i" -lt 8 ]; do
   ls "$STATE_DIR/avisos-fallidos/"sim9-FL*.json >/dev/null 2>&1 && break
-  sleep 0.5
+  sleep 1
+  run_falla >/dev/null 2>&1 || true
   i=$((i + 1))
 done
 [ "$(ls "$STATE_DIR/avisos-fallidos/"sim9-FL*.json 2>/dev/null | wc -l | tr -d ' ')" -ge 1 ] \
-  || fail "(2q-11) el emitir que agota intentos debia dejar fallo durable en avisos-fallidos"
-# El registro existe desde el lanzamiento (escrito por el vigia); los 3
-# intentos del desacoplado llegan en los ~7s siguientes: esperar a que
-# se estabilicen antes de contar.
+  || fail "(2q-11) el emitir que agota intentos debia dejar fallo durable en avisos-fallidos [fallidos: $(ls "$STATE_DIR/avisos-fallidos/" 2>/dev/null | tr '\n' ' ') | log: $(tail -4 "$LOG_FILE" 2>/dev/null | tr '\n' '/')]"
+# Los 3 intentos del desacoplado llegan en los ~7s siguientes.
 i=0
 while [ "$i" -lt 30 ]; do
   llamadas1=$(wc -l <"$FALLA_LOG" | tr -d ' ')
@@ -1337,39 +1352,39 @@ while [ "$i" -lt 30 ]; do
   i=$((i + 1))
 done
 [ "$llamadas1" -ge 3 ] || fail "(2q-11) el desacoplado debia intentar 3 veces; hizo $llamadas1"
-# El retroceso del reintento (AVISOS_REINTENTO_SECS=3 en este caso) debe
-# vencer ANTES del tick que relanza el fallo durable. El reintento corre con
-# el MISMO stub que falla: el tick que relanza no debe confundirse con una
-# emision exitosa.
+# Tick 2 tras el retroceso: el escaneo relanza el fallo (touch + emitir) y
+# los intentos nuevos hacen crecer el log de llamadas.
 sleep 4
-CORRIDA_BIN="$CORRIDA_FALLA" # El reintento exige un tick posterior al lanzamiento (el registro nace con
-# el retroceso fresco): tical tres veces separadas por el retroceso.
+run_falla || fail "--once (2q-11, reintento del fallo) fallo"
 i=0
-while [ "$i" -lt 3 ]; do
-  sleep 4
-  CORRIDA_BIN="$CORRIDA_FALLA" run_av >/dev/null 2>&1 || true
-  n=$(wc -l <"$FALLA_LOG" | tr -d ' ')
-  [ "$n" -gt "$llamadas1" ] && i=99
+while [ "$i" -lt 30 ]; do
+  llamadas2=$(wc -l <"$FALLA_LOG" | tr -d ' ')
+  [ "$llamadas2" -ge 6 ] && break
+  sleep 0.5
   i=$((i + 1))
 done
-[ "$i" -eq 99 ] || true
-[ "$(wc -l <"$FALLA_LOG" | tr -d ' ')" -gt "$llamadas1" ] \
-  || fail "(2q-11) el tick debia reintentar el fallo durable (se quedo en $llamadas1 llamadas) [fallidos: $(ls -la "$STATE_DIR/avisos-fallidos/" 2>/dev/null | tail -n +2 | awk '{print $NF, $6, $7, $8}' | tr '\n' ' ') | ahora: $(date -u +%H:%M:%S) | ultima llamada: $(tail -1 "$FALLA_LOG" 2>/dev/null) | total llamadas: $(wc -l <"$FALLA_LOG" 2>/dev/null | tr -d ' ') | log vigia (cola): $(tail -30 "$LOG_FILE" 2>/dev/null | tr '\n' '/')] | ventana: 30s"
+[ "$(wc -l <"$FALLA_LOG" | tr -d ' ')" -ge 6 ] \
+  || fail "(2q-11) el tick debia reintentar el fallo durable (se quedo en $(wc -l <"$FALLA_LOG" | tr -d ' ') llamadas)"
+# Recuperacion: con el stub emitiendo bien, el siguiente relanzamiento emite
+# bien y borra el registro.
 : >"$FALLA_OK"
-CORRIDA_BIN="$CORRIDA_FALLA" run_av || fail "--once (2q-11, recuperacion) fallo"
+sleep 4
+run_falla || fail "--once (2q-11, recuperacion) fallo"
 i=0
-while [ "$i" -lt 40 ]; do
+while [ "$i" -lt 30 ]; do
   ls "$STATE_DIR/avisos-fallidos/"sim9-FL*.json >/dev/null 2>&1 || break
   sleep 0.5
   i=$((i + 1))
 done
 [ "$(ls "$STATE_DIR/avisos-fallidos/"sim9-FL*.json 2>/dev/null | wc -l | tr -d ' ')" -eq 0 ] \
   || fail "(2q-11) al emitir bien el fallo durable debia borrarse"
-unset AVISOS_REINTENTO_SECS AVISOS_TOPE
+"$TM" -L "$L" kill-session -t sim9-fl 2>/dev/null
 rm -rf "$STATE_DIR/avisos-fallidos" "$CORRIDA_STATE/sim9-FL"
+"$TM" -L "$L" kill-session -t sim9-fl 2>/dev/null
 echo "ok (2q-11): fallo durable del emitir con reintento por tick y borrado al emitir bien"
 
 # (2q-12) rechazo definitivo descartado: un emitir que sale 3 (corrida
+STATE_DIR="$T/state-2q-12"; mkdir -p "$STATE_DIR"
 # cerrada, sesion ajena: corrida/avisos.sh) borra el registro de fallo en el
 # primer intento y NO se relanza para siempre.
 CORRIDA_RJ="$T/corrida-rechaza"
@@ -1391,9 +1406,11 @@ done
 grep -q "descartado" "$LOG_FILE" 2>/dev/null || fail "(2q-12) el descarte debia quedar en el log del vigia"
 rm -rf "$CORRIDA_STATE/sim9-RJ" "$STATE_DIR/avisos-fallidos/"sim9-RJ*
 rm -f "$STATE_DIR/avisos-fallidos/"sim9-RJ*
+"$TM" -L "$L" kill-session -t sim9-rj 2>/dev/null
 echo "ok (2q-12): el rechazo definitivo descarta el registro y queda en el log"
 
 # (2q-13) backoff del reintento: cada relanzamiento hace touch al registro
+STATE_DIR="$T/state-2q-13"; mkdir -p "$STATE_DIR"
 # antes de lanzar (el mtime fresco es el retroceso); sin touch, un fallo
 # pasajero se relanza cada tick y el mtime queda viejo.
 CORRIDA_TARDE="$T/corrida-tarde"
@@ -1413,9 +1430,11 @@ CORRIDA_BIN="$CORRIDA_TARDE" AVISOS_TOPE=2 run_once || fail "--once (2q-13, rein
 despues=$(stat -f %m "$REC_BK" 2>/dev/null || stat -c %Y "$REC_BK" 2>/dev/null)
 [ -n "$despues" ] && [ "$despues" -gt "$antes" ] \
   || fail "(2q-13) el relanzamiento debia hacer touch al registro (mtime $antes no avanzo a $despues)"
+"$TM" -L "$L" kill-session -t sim9-bk 2>/dev/null
 echo "ok (2q-13): el relanzamiento hace touch al registro (backoff por mtime)"
 
 # (2q-14) tope total por registro: un fallo que agoto AVISOS_FALLIDO_TOPE
+STATE_DIR="$T/state-2q-14"; mkdir -p "$STATE_DIR"
 # reintentos se DESCARTA (registro fuera + linea en el log) y ya no ocupa
 # ranura de reintento (19.1-r5: un emitir que siempre agota su tope de reloj
 # no puede tapar los demas registros para siempre).

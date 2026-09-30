@@ -91,7 +91,7 @@ con_tope_prueba() { # $1 segundos; resto: comando -> mismo rc que el comando
 
 T="$(mktemp -d)" || exit 1
 SOCKET="sim9ensayo$$"
-trap '"$TM_REAL" -L "$SOCKET" kill-server 2>/dev/null; rm -rf "$T"' EXIT
+trap '"$TM_REAL" -L "$SOCKET" kill-server 2>/dev/null; cp -r "$T" /tmp/sim-r7-ev 2>/dev/null; rm -rf "$T"' EXIT
 
 mkdir -p "$T/bin" "$T/home/bin/corrida" "$T/home/Library/LaunchAgents" "$T/corridas" "$T/watch-state"
 
