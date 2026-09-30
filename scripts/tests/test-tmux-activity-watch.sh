@@ -1267,6 +1267,7 @@ unset AVISOS_TOPE
 duracion8=$(( $(date +%s) - inicio8 ))
 [ "$duracion8" -lt 20 ] || fail "(2q-8) el tick quedo colgado ${duracion8}s en el emitir (tope 3s)"
 run_av || fail "(2q-8) el vigia no sobrevivio al tick colgado"
+rm -f "$STATE_DIR/avisos-fallidos/"sim9-AVH*
 echo "ok (2q-8): el emitir colgado no cuelga el tick (tope de reloj y reintento)"
 
 # (2q-9) retroceso del despertar: un pendiente viejo despierta UNA vez; mientras
@@ -1300,6 +1301,71 @@ CORRIDA_BIN="$CORRIDA_TARDA" run_once || fail "--once (2q-10, emitir lento) fall
 duracion10=$(( $(date +%s) - inicio10 ))
 [ "$duracion10" -lt 5 ] || fail "(2q-10) el tick espero ${duracion10}s al emitir lento (debia ir desacoplado)"
 echo "ok (2q-10): el emitir lento va desacoplado y el tick no lo espera"
+
+# (2q-11) fallo durable del emitir desacoplado: un corrida.sh que SIEMPRE
+# falla en avisos emitir deja registro en avisos-fallidos del estado del
+# vigia, el tick lo reintenta desacoplado y al emitir bien se borra.
+CORRIDA_FALLA="$T/corrida-falla"
+FALLA_LOG="$T/falla-llamadas.txt"; : >"$FALLA_LOG"
+FALLA_OK="$T/falla-ok"; rm -f "$FALLA_OK"
+printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then\n  printf "%%s\n" "$*" >> "%s"\n  [ -f "%s" ] || exit 1\nfi\nexit 0\n' "$FALLA_LOG" "$FALLA_OK" > "$CORRIDA_FALLA"
+chmod +x "$CORRIDA_FALLA"
+"$TM" -L "$L" new-session -d -s sim9-fl -x 80 -y 20 'cat' || fail "no se pudo crear sim9-fl"
+mark sim9-fl
+"$TM" -L "$L" set-environment -t sim9-fl OPENCLAW_WATCH_RUN sim9-FL
+sleep 2
+export AVISOS_REINTENTO_SECS=3 AVISOS_TOPE=2
+CORRIDA_BIN="$CORRIDA_FALLA" run_once || fail "--once (2q-11, emitir falla) fallo"
+i=0
+while [ "$i" -lt 40 ]; do
+  ls "$STATE_DIR/avisos-fallidos/"sim9-FL*.json >/dev/null 2>&1 && break
+  sleep 0.5
+  i=$((i + 1))
+done
+[ "$(ls "$STATE_DIR/avisos-fallidos/"sim9-FL*.json 2>/dev/null | wc -l | tr -d ' ')" -ge 1 ] \
+  || fail "(2q-11) el emitir que agota intentos debia dejar fallo durable en avisos-fallidos"
+# El registro existe desde el lanzamiento (escrito por el vigia); los 3
+# intentos del desacoplado llegan en los ~7s siguientes: esperar a que
+# se estabilicen antes de contar.
+i=0
+while [ "$i" -lt 30 ]; do
+  llamadas1=$(wc -l <"$FALLA_LOG" | tr -d ' ')
+  [ "$llamadas1" -ge 3 ] && break
+  sleep 0.5
+  i=$((i + 1))
+done
+[ "$llamadas1" -ge 3 ] || fail "(2q-11) el desacoplado debia intentar 3 veces; hizo $llamadas1"
+# El retroceso del reintento (AVISOS_REINTENTO_SECS=3 en este caso) debe
+# vencer ANTES del tick que relanza el fallo durable. El reintento corre con
+# el MISMO stub que falla: el tick que relanza no debe confundirse con una
+# emision exitosa.
+sleep 4
+CORRIDA_BIN="$CORRIDA_FALLA" # El reintento exige un tick posterior al lanzamiento (el registro nace con
+# el retroceso fresco): tical tres veces separadas por el retroceso.
+i=0
+while [ "$i" -lt 3 ]; do
+  sleep 4
+  run_av >/dev/null 2>&1 || true
+  n=$(wc -l <"$FALLA_LOG" | tr -d ' ')
+  [ "$n" -gt "$llamadas1" ] && i=99
+  i=$((i + 1))
+done
+[ "$i" -eq 99 ] || true
+[ "$(wc -l <"$FALLA_LOG" | tr -d ' ')" -gt "$llamadas1" ] \
+  || fail "(2q-11) el tick debia reintentar el fallo durable (se quedo en $llamadas1 llamadas) [fallidos: $(ls -la "$STATE_DIR/avisos-fallidos/" 2>/dev/null | tail -n +2 | awk '{print $NF, $6, $7, $8}' | tr '\n' ' ') | ahora: $(date -u +%H:%M:%S) | ultima llamada: $(tail -1 "$FALLA_LOG" 2>/dev/null) | total llamadas: $(wc -l <"$FALLA_LOG" 2>/dev/null | tr -d ' ') | log vigia (cola): $(tail -30 "$LOG_FILE" 2>/dev/null | tr '\n' '/')] | ventana: 30s"
+: >"$FALLA_OK"
+CORRIDA_BIN="$CORRIDA_FALLA" run_av || fail "--once (2q-11, recuperacion) fallo"
+i=0
+while [ "$i" -lt 40 ]; do
+  ls "$STATE_DIR/avisos-fallidos/"sim9-FL*.json >/dev/null 2>&1 || break
+  sleep 0.5
+  i=$((i + 1))
+done
+[ "$(ls "$STATE_DIR/avisos-fallidos/"sim9-FL*.json 2>/dev/null | wc -l | tr -d ' ')" -eq 0 ] \
+  || fail "(2q-11) al emitir bien el fallo durable debia borrarse"
+unset AVISOS_REINTENTO_SECS AVISOS_TOPE
+rm -rf "$STATE_DIR/avisos-fallidos" "$CORRIDA_STATE/sim9-FL"
+echo "ok (2q-11): fallo durable del emitir con reintento por tick y borrado al emitir bien"
 else
   echo "SKIP (2q): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
 fi

@@ -247,31 +247,82 @@ journal_evento() { # $1 text
   fi
 }
 
-# 19.1 B2: la ruta de avisos para sesiones de una corrida marcada. Estados:
-#   0 = ruta avisos tomada y el emitir salio (o dedupó): el llamador marca notificado.
+# 19.1 B2/r5: la ruta de avisos para sesiones de una corrida marcada. Estados:
+#   0 = ruta avisos tomada: el emitir va DESACOPLADO y el vigia deja un fallo
+#       durable en $STATE_DIR/avisos-fallidos/ en el momento del lanzamiento;
+#       el tick relanza los fallos viejos hasta emitir bien (entonces se
+#       borran). El llamador marca la senal notificada en cuanto lanza: la
+#       entrega la garantiza el fallo durable, no el proceso en marcha.
 #   1 = fuera de la ruta (sin run, CORRIDA_BIN no ejecutable, CORRIDA_AVISOS=0):
 #       el llamador hace lo de siempre (send_event).
-#   2 = ruta tomada y el emitir fallo: sin evento y sin marcar; el siguiente
-#       tick reintenta (igual que un envio fallido).
-aviso_dueno() { # $1 run $2 sesion $3 tipo $4 llave $5 text
-  [[ -n $1 && -x $CORRIDA_BIN && ${CORRIDA_AVISOS:-1} != 0 ]] || return 1
-  # El diario registra la senal CUANDO EL VIGIA LA VIO (no cuando aterriza):
-  # el pendiente durable lo escribe el proceso desacoplado de abajo, ANTES de
-  # despertar al dueño y con 3 reintentos propios; el tick jamas espera a la
-  # cadena de spawns de corrida.sh (19.1-r4: etapa 8 del simulacro).
-  journal_evento "$5"
-  AV_BIN="$CORRIDA_BIN" AV_RUN="$1" AV_S="$2" AV_T="$3" AV_K="$4" \
+# Emision desacoplada (19.1-r5): 3 intentos a AVISOS_TOPE; al emitir bien
+# borra el registro de fallo ($AV_F).
+avisos_emitir_bg() { # $1 bin $2 run $3 sesion $4 tipo $5 llave $6 fallido
+  AV_BIN="$1" AV_RUN="$2" AV_S="$3" AV_T="$4" AV_K="$5" AV_F="$6" \
   AV_LOG="$LOG_FILE" AV_TOPE="$AVISOS_TOPE" \
     nohup bash -c '
       for _i in 1 2 3; do
         perl -e "alarm shift; exec(@ARGV) or exit 127" "$AV_TOPE" \
-          "$AV_BIN" avisos emitir "$AV_RUN" "$AV_S" "$AV_T" --llave "$AV_K" >>"$AV_LOG" 2>&1 && exit 0
+          "$AV_BIN" avisos emitir "$AV_RUN" "$AV_S" "$AV_T" --llave "$AV_K" >>"$AV_LOG" 2>&1 && {
+            [ "$AV_F" = "-" ] || rm -f "$AV_F"
+            exit 0
+          }
         sleep 3
       done
       exit 1
     ' _ >/dev/null 2>&1 &
+}
+
+
+# Reintento de fallos durables del emitir (19.1-r5): cada registro con mtime
+# viejo se vuelve a lanzar desacoplado (el lanzamiento refresca su mtime =
+# backoff, y el emitir borra el registro al emitir bien). Sin cron nuevo: el
+# mismo tick del vigilante es el reloj.
+
+aviso_dueno() { # $1 run $2 sesion $3 tipo $4 llave [$5 text]
+  local texto="${5:-avisos $2 $3}"
+  [[ -n $1 && -x $CORRIDA_BIN && ${CORRIDA_AVISOS:-1} != 0 ]] || return 1
+  # El diario registra la senal CUANDO EL VIGIA LA VIO; el fallo durable se
+  # escribe AQUI (vigia), antes de lanzar el emitir desacoplado: si el
+  # proceso desacoplado muere, el registro queda y el tick reintenta
+  # (19.1-r5). El tick jamas espera a los spawns de corrida.sh (19.1-r4).
+  journal_evento "$texto"
+  mkdir -p "$STATE_DIR/avisos-fallidos" 2>/dev/null
+  AV_F="$STATE_DIR/avisos-fallidos/$1-$2-$3-$4.json"
+  printf '{"schema":"avisos-fallido.v1","run":"%s","sesion":"%s","tipo":"%s","llave":"%s","intentos":0,"actualizado":%s000}\n' \
+    "$1" "$2" "$3" "$4" "$(date +%s)" > "$AV_F"
+  avisos_emitir_bg "$CORRIDA_BIN" "$1" "$2" "$3" "$4" "$AV_F"
   return 0
 }
+
+# Reintento de fallos durables del emitir (19.1-r5): cada registro con mtime
+# viejo se vuelve a lanzar desacoplado; el lanzamiento borra el registro al
+# emitir bien o refresca su mtime al agotar (backoff). Sin cron nuevo: el
+# mismo tick del vigilante es el reloj.
+avisos_fallidos_tick() {
+  local f="" mt="" datos="" fr="" fs="" ft="" fk="" n=0
+  [[ ${CORRIDA_AVISOS:-1} != 0 && -x $CORRIDA_BIN && -d $STATE_DIR/avisos-fallidos ]] || return 0
+  for f in "$STATE_DIR/avisos-fallidos"/*.json; do
+    [[ -f $f ]] || continue
+    [[ $n -lt $AVISOS_REINTENTO_TOPE ]] || break
+    mt=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null) || mt=""
+    [[ $mt =~ ^[0-9]+$ ]] && (( $(date +%s) - mt < AVISOS_REINTENTO_SECS )) && continue
+    datos=$(AV_F="$f" python3 -c "
+import json, os
+d = json.load(open(os.environ[\"AV_F\"]))
+print(chr(9).join([str(d.get(k) or \"\") for k in (\"run\", \"sesion\", \"tipo\", \"llave\")]))" 2>/dev/null) || datos=""
+    fr=""; fs=""; ft=""; fk=""
+    IFS="$(printf '\t')" read -r fr fs ft fk <<<"$datos"
+    [[ -n $fr && -n $fs && -n $ft && -n $fk ]] || { rm -f "$f"; continue; }
+    avisos_emitir_bg "$CORRIDA_BIN" "$fr" "$fs" "$ft" "$fk" "$f"
+    n=$((n + 1))
+  done
+  [ "$n" -gt 0 ] && log "fallidos: $n reintentados; primero: run=$fr sesion=$fs tipo=$ft"
+  return 0
+  return 0
+}
+
+# 19.1 B2: reintento del despertar
 
 # Carril P (9.6): la politica de dialogos contesta primero. El vigilante le pasa
 # la sesion a "corrida.sh responder" y solo despierta al agente si la politica no
@@ -694,6 +745,7 @@ avisos_reintento_tick() {
     fi
     for corrida in $ids; do touch "$CORRIDA_STATE/$corrida/avisos/.despertado" 2>/dev/null || true; done
   fi
+  avisos_fallidos_tick
   return 0
 }
 
