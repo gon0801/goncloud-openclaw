@@ -41,7 +41,7 @@ se cerró sin merge por bloqueantes. Fase 15 está cerrada y no se repite.
 U0 cerró como inventario y una prueba acotada de Telegram; U1 tiene sus
 recibos de cierre abajo. U2 está cerrado. David confirma que U3 está en ejecución
 (2026-09-26); sus filas conservan los estados respaldados por evidencia.
-El orden acordado es **U3 → U3a → U4**. U3a se planifica ahora, pero su ejecución
+El orden acordado es **U3 → U3a → U3b → U4**; U3b arranca solo con U3a cerrada al 100% (decisión de David, 2026-09-30). U3a se planifica ahora, pero su ejecución
 espera al cierre de U3 y no añade requisitos a las tareas 14.x en curso.
 No se activa sync, no se mergea un PR ni se
 despliega por el hecho de existir este plan.
