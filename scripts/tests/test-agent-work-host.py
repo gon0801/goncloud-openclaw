@@ -109,6 +109,74 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(reopened.apply(self.key, self.operation,
                                         lambda *_: self.fail("duplicate delivery")).status, "acknowledged")
 
+    def test_host_receipts_snapshot_survives_workspace_mutation_restart_and_lost_ack(self):
+        self.host.apply(self.key, self.operation, lambda *_: None)
+        report = self.report()
+        original = self.artifact.read_bytes()
+        result_id = self.host.report("mac-test", report).result_id
+        self.artifact.write_text("changed after ACK\n")
+        restarted = Host("mac-test", self.root / "host")
+        self.assertEqual(restarted.result_snapshot("mac-test", self.key), (report, original))
+        calls = []
+        def runtime(result):
+            calls.append((result, restarted.result_snapshot("mac-test", self.key)[1]))
+            if len(calls) == 1:
+                raise TimeoutError("runtime ACK lost")
+            return {"hostId": "mac-test", "taskId": "task-1", "generation": 2,
+                    "instanceId": "instance-1", "producerId": "reviewer",
+                    "resultId": result_id, "receiptId": "native-r1"}
+        with self.assertRaises(TimeoutError):
+            restarted.flush("mac-test", runtime)
+        self.artifact.unlink()
+        self.assertEqual(restarted.report("mac-test", report).result_id, result_id)
+        self.assertEqual(Host("mac-test", self.root / "host").flush("mac-test", runtime)[0]["resultId"], result_id)
+        self.assertEqual(calls, [(report, original), (report, original)])
+
+    def test_host_receipts_tampered_snapshot_blocks_delivery(self):
+        self.host.apply(self.key, self.operation, lambda *_: None)
+        report = self.report()
+        self.host.report("mac-test", report)
+        second = OperationKey("mac-test", "task-2", 2, "instance-2")
+        self.host.apply(second, replace(self.operation, key=second, session="worker-2"), lambda *_: None)
+        second_report = self.report(taskId="task-2", instanceId="instance-2")
+        second_id = self.host.report("mac-test", second_report).result_id
+        snapshot = self.root / "host" / "artifacts" / operation_id(self.key) / (digest(json.dumps(
+            report, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()) + ".bin")
+        self.assertEqual(snapshot.stat().st_mode & 0o777, 0o400)
+        snapshot.chmod(0o600)
+        snapshot.write_bytes(b"tampered")
+        sent = []
+        with self.assertRaisesRegex(ValueError, "snapshot digest"):
+            self.host.result_snapshot("mac-test", self.key)
+        def runtime(result):
+            sent.append(result["taskId"])
+            return {"hostId": "mac-test", "taskId": "task-2", "generation": 2,
+                    "instanceId": "instance-2", "producerId": "reviewer",
+                    "resultId": second_id, "receiptId": "native-r2"}
+        self.assertEqual(len(self.host.flush("mac-test", runtime)), 1)
+        self.assertEqual(sent, ["task-2"])
+        self.assertEqual(self.host.inbox_errors("mac-test"), [{"operationId": operation_id(self.key),
+                                                               "taskId": "task-1",
+                                                               "error": "artifact snapshot digest mismatch"}])
+
+    def test_host_receipts_restart_after_snapshot_before_result_record(self):
+        self.host.apply(self.key, self.operation, lambda *_: None)
+        report = self.report()
+        inbox = self.root / "host" / "inbox" / f"{operation_id(self.key)}.json"
+        inbox.write_text(json.dumps(report))
+        original = self.artifact.read_bytes()
+        record = self.host.spool.record
+        def interrupted(*args):
+            raise OSError("crash before result record")
+        self.host.spool.record = interrupted
+        with self.assertRaisesRegex(OSError, "crash before result record"):
+            self.host.report("mac-test", report)
+        self.host.spool.record = record
+        self.artifact.unlink()
+        restarted = Host("mac-test", self.root / "host")
+        self.assertEqual(restarted.pending("mac-test"), [report])
+        self.assertEqual(restarted.result_snapshot("mac-test", self.key), (report, original))
+
     def test_host_receipts_reject_partial_foreign_old_and_exit_only(self):
         self.host.apply(self.key, self.operation, lambda *_: None)
         for changed in (

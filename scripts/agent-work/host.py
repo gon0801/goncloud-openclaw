@@ -3,8 +3,10 @@ import hashlib
 import hmac
 import json
 import os
+import stat
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Callable
 
@@ -36,6 +38,53 @@ class Host:
     def _host(self, host_id: str) -> None:
         if host_id != self.host_id:
             raise ValueError("hostId mismatch")
+
+    def _snapshot_path(self, op_id: str, result_id: str) -> Path:
+        return self.state_dir / "artifacts" / op_id / f"{result_id}.bin"
+
+    @staticmethod
+    def _snapshot_bytes(path: Path, expected_digest: str) -> bytes:
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        except FileNotFoundError:
+            raise
+        except OSError as exc:
+            raise ValueError("artifact snapshot unavailable") from exc
+        with os.fdopen(fd, "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_ARTIFACT_BYTES:
+                raise ValueError("artifact snapshot invalid")
+            raw = stream.read(MAX_ARTIFACT_BYTES + 1)
+        if len(raw) > MAX_ARTIFACT_BYTES or hashlib.sha256(raw).hexdigest() != expected_digest:
+            raise ValueError("artifact snapshot digest mismatch")
+        return raw
+
+    @staticmethod
+    def _write_snapshot(path: Path, raw: bytes) -> None:
+        root = path.parent.parent
+        for directory in (root, path.parent):
+            if directory.is_symlink():
+                raise ValueError("artifact snapshot directory is a symlink")
+            directory.mkdir(mode=0o700, exist_ok=True)
+            directory.chmod(0o700)
+        fd, pending = tempfile.mkstemp(prefix=".pending-", dir=path.parent)
+        try:
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(raw)
+                stream.flush()
+                os.fsync(stream.fileno())
+                os.fchmod(stream.fileno(), 0o400)
+            try:
+                os.link(pending, path)
+            except FileExistsError:
+                pass
+            directory = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
+            os.unlink(pending)
 
     def apply(self, key: OperationKey, operation: AuthorizedOperation,
               deliver: Callable[[str, str], None]) -> HostObservation:
@@ -111,17 +160,42 @@ class Host:
             raise ValueError("producer capability mismatch")
         if not result["observedRevision"]:
             raise ValueError("missing observed revision")
-        artifact = under(result["artifactRef"], assignment["workspaceRef"])
-        if artifact.stat().st_size > MAX_ARTIFACT_BYTES:
-            raise ValueError("artifact too large")
-        if hashlib.sha256(artifact.read_bytes()).hexdigest() != result["digest"]:
-            raise ValueError("artifact digest mismatch")
         encoded = canonical(result).encode()
         if len(encoded) > 1024 * 1024:
             raise ValueError("result too large")
         result_id = hashlib.sha256(encoded).hexdigest()
+        snapshot = self._snapshot_path(op_id, result_id)
+        try:
+            self._snapshot_bytes(snapshot, result["digest"])
+        except FileNotFoundError:
+            if current["result_id"]:
+                raise ValueError("recorded artifact snapshot missing")
+            artifact = under(result["artifactRef"], assignment["workspaceRef"])
+            with artifact.open("rb") as stream:
+                raw = stream.read(MAX_ARTIFACT_BYTES + 1)
+            if len(raw) > MAX_ARTIFACT_BYTES:
+                raise ValueError("artifact too large")
+            if hashlib.sha256(raw).hexdigest() != result["digest"]:
+                raise ValueError("artifact digest mismatch")
+            self._write_snapshot(snapshot, raw)
+            self._snapshot_bytes(snapshot, result["digest"])
         self.spool.record(op_id, result_id, result, self.state_dir / "results" / f"{op_id}.json")
         return ResultReceipt(result_id)
+
+    def result_snapshot(self, host_id: str, key: OperationKey) -> tuple[dict, bytes]:
+        self._host(host_id)
+        self._host(key.host_id)
+        row = self.spool.get(operation_id(key))
+        if row is None or not row["result_id"] or not row["result_json"]:
+            raise ValueError("result is not recorded for this identity")
+        result = json.loads(row["result_json"])
+        if hashlib.sha256(canonical(result).encode()).hexdigest() != row["result_id"]:
+            raise ValueError("recorded result identity mismatch")
+        try:
+            raw = self._snapshot_bytes(self._snapshot_path(operation_id(key), row["result_id"]), result["digest"])
+        except FileNotFoundError as exc:
+            raise ValueError("recorded artifact snapshot missing") from exc
+        return result, raw
 
     def collect(self, host_id: str, key: OperationKey) -> ResultReceipt | None:
         self._host(host_id)
@@ -163,13 +237,21 @@ class Host:
         receipts = []
         for result in self.pending(host_id):
             result_id = hashlib.sha256(canonical(result).encode()).hexdigest()
+            key = OperationKey(result["hostId"], result["taskId"], result["generation"], result["instanceId"])
+            op_id = operation_id(key)
+            try:
+                if self.result_snapshot(host_id, key)[0] != result:
+                    raise ValueError("pending result identity mismatch")
+            except (ValueError, OSError) as exc:
+                self.spool.note_inbox_error(op_id, str(exc))
+                continue
+            self.spool.clear_inbox_error(op_id)
             receipt = report_to_runtime(result)
             identity = ("hostId", "taskId", "generation", "instanceId", "producerId")
             if not isinstance(receipt, dict) or any(receipt.get(field) != result[field] for field in identity) \
                     or receipt.get("resultId") != result_id or not receipt.get("receiptId"):
                 raise ValueError("runtime receipt identity mismatch")
-            key = OperationKey(result["hostId"], result["taskId"], result["generation"], result["instanceId"])
-            self.spool.acknowledge(operation_id(key), receipt)
+            self.spool.acknowledge(op_id, receipt)
             receipts.append(receipt)
         return receipts
 
