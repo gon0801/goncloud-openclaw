@@ -142,7 +142,8 @@ Añade estos casos a `ProgressClientTest` y ejecútalos durante la implementaci�
       Registra comandos, resultados y SHA en el plan general.
 - [x] Solicita una revisión independiente del cambio de recuperación con un
       revisor distinto al de la última ronda. Adjunta la reproducción original.
-      Agrupa los hallazgos y aplica la política de rondas del AGENTS.md.
+      Agrupa los hallazgos y aplica la sección 4 de
+      [loop-autopilot.md](../../runbooks/loop-autopilot.md).
       Si vuelve el mismo bloqueo en dos rondas seguidas, detén la implementación.
 - [x] Ejecuta los hooks con `pre-commit run --files` y los archivos del commit.
       Corrige los fallos antes de crear el commit. No uses `--no-verify`.
