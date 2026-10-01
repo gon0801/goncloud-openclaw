@@ -55,6 +55,10 @@ class Spool:
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS one_active_per_instance
                     ON operations(instance_id) WHERE status != 'acknowledged';
+                CREATE TABLE IF NOT EXISTS inbox_errors (
+                    operation_id TEXT PRIMARY KEY,
+                    error TEXT NOT NULL
+                );
             """)
             db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT value FROM metadata WHERE key='host_id'").fetchone()
@@ -136,6 +140,22 @@ class Spool:
         with self.connection() as db:
             rows = db.execute("SELECT operation_json FROM operations WHERE result_id IS NULL ORDER BY operation_id").fetchall()
             return [json.loads(row[0]) for row in rows]
+
+    def note_inbox_error(self, operation_id: str, error: str) -> None:
+        with self.connection() as db:
+            db.execute("INSERT INTO inbox_errors VALUES (?,?) ON CONFLICT(operation_id) DO UPDATE SET error=excluded.error",
+                       (operation_id, error[:512]))
+
+    def clear_inbox_error(self, operation_id: str) -> None:
+        with self.connection() as db:
+            db.execute("DELETE FROM inbox_errors WHERE operation_id=?", (operation_id,))
+
+    def inbox_errors(self) -> list[dict]:
+        with self.connection() as db:
+            rows = db.execute("SELECT e.operation_id,o.operation_json,e.error FROM inbox_errors e "
+                              "JOIN operations o ON o.operation_id=e.operation_id ORDER BY e.operation_id").fetchall()
+            return [{"operationId": row[0], "taskId": json.loads(row[1])["taskId"], "error": row[2]}
+                    for row in rows]
 
     def acknowledge(self, operation_id: str, receipt: dict) -> None:
         with self.connection() as db:

@@ -170,6 +170,38 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(restarted.flush("mac-test", lambda _: receipt), [receipt])
         self.assertEqual(Host("mac-test", self.root / "host").pending("mac-test"), [])
 
+    def test_host_receipts_invalid_inbox_does_not_block_other_results(self):
+        self.host.apply(self.key, self.operation, lambda *_: None)
+        key2 = OperationKey("mac-test", "task-2", 2, "instance-2")
+        op2 = replace(self.operation, key=key2, session="worker-2")
+        self.host.apply(key2, op2, lambda *_: None)
+        bad = self.root / "host" / "inbox" / f"{operation_id(self.key)}.json"
+        bad.mkdir()
+        good = self.root / "host" / "inbox" / f"{operation_id(key2)}.json"
+        report2 = self.report(taskId="task-2", instanceId="instance-2")
+        partial = good.with_suffix(".tmp")
+        partial.write_text(json.dumps(report2))
+        os.replace(partial, good)
+        restarted = Host("mac-test", self.root / "host")
+        sent = []
+        def runtime_report(result):
+            sent.append(result)
+            return {"hostId": "mac-test", "taskId": "task-2", "generation": 2,
+                    "instanceId": "instance-2", "producerId": "reviewer",
+                    "resultId": digest(json.dumps(result, ensure_ascii=False, sort_keys=True,
+                                                  separators=(",", ":")).encode()),
+                    "receiptId": "native-receipt-2"}
+        receipts = restarted.flush("mac-test", runtime_report)
+        self.assertEqual(len(receipts), 1)
+        self.assertEqual([item["taskId"] for item in sent], ["task-2"])
+        self.assertEqual(restarted.inbox_errors("mac-test"), [{
+            "operationId": operation_id(self.key), "taskId": "task-1",
+            "error": "result reference is not a regular file"}])
+        bad.rmdir()
+        bad.write_text(json.dumps(self.report()))
+        self.assertEqual([result["taskId"] for result in restarted.pending("mac-test")], ["task-1"])
+        self.assertEqual(restarted.inbox_errors("mac-test"), [])
+
     def test_host_receipts_tmux_cli_without_hooks(self):
         if not shutil.which("tmux"):
             self.skipTest("tmux not installed")

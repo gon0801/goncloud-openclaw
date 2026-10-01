@@ -138,6 +138,8 @@ class Host:
             raise ValueError("result reference is a symlink")
         if not result_ref.exists():
             return None
+        if not result_ref.is_file():
+            raise ValueError("result reference is not a regular file")
         if result_ref.stat().st_size > 1024 * 1024:
             raise ValueError("result too large")
         return self.report(host_id, json.loads(result_ref.read_text()))
@@ -147,11 +149,18 @@ class Host:
         for assignment in self.spool.awaiting_results():
             key = OperationKey(assignment["hostId"], assignment["taskId"],
                                assignment["generation"], assignment["instanceId"])
+            op_id = operation_id(key)
             try:
                 self.collect(host_id, key)
-            except ValueError:
+            except (ValueError, OSError) as exc:
+                self.spool.note_inbox_error(op_id, str(exc))
                 continue
+            self.spool.clear_inbox_error(op_id)
         return self.spool.pending()
+
+    def inbox_errors(self, host_id: str) -> list[dict]:
+        self._host(host_id)
+        return self.spool.inbox_errors()
 
     def flush(self, host_id: str, report_to_runtime: Callable[[dict], dict]) -> list[dict]:
         self._host(host_id)
