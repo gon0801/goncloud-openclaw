@@ -2,10 +2,12 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 
 
 SHA = re.compile(r"[0-9a-f]{40}\Z")
@@ -79,7 +81,7 @@ def transfer_projection(pending, *, host_id, evidence_root, progress_state_dir,
     progress_kind = "round.ready" if kind == "ready" else "round.verdict"
     if pending.get("eventId") != event_id(progress_kind, destination):
         raise ValueError("ID de evento distinto")
-    path, raw = evidence_bytes(evidence_root, result.get("evidenceRef"))
+    _, raw = evidence_bytes(evidence_root, result.get("evidenceRef"))
     if hashlib.sha256(raw).hexdigest() != result["contentHash"]:
         raise ValueError("bytes de evidencia distintos")
     command = [sys.executable, str(progress_client), "--state-dir", str(progress_state_dir),
@@ -87,10 +89,17 @@ def transfer_projection(pending, *, host_id, evidence_root, progress_state_dir,
     for key in ("corrida", "carril", "intento"):
         command.extend(("--" + key, str(destination[key])))
     command.extend(("--ronda", str(destination["ronda"]), "--sha", result["sha"],
-                    "--event-id", pending["eventId"], "--evidence-file", str(path)))
+                    "--event-id", pending["eventId"]))
     if kind == "verdict":
         command.extend(("--verdict", result["verdict"]))
-    completed = subprocess.run(command, capture_output=True, text=True, timeout=30)
+    with tempfile.TemporaryDirectory(prefix="agent-work-projection-") as private:
+        snapshot = Path(private) / "evidence.txt"
+        with snapshot.open("xb") as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        completed = subprocess.run(command + ["--evidence-file", str(snapshot)],
+                                   capture_output=True, text=True, timeout=30)
     if completed.returncode:
         raise RuntimeError(f"cola de progreso rechazó la proyección: {completed.stderr.strip()}")
     try:

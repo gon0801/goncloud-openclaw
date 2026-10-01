@@ -136,6 +136,24 @@ class ProjectionTransferTest(unittest.TestCase):
         event = self.state_dir / "runs" / "run-1" / "queue" / (receipt["eventId"] + ".json")
         self.assertEqual(json.loads(event.read_text())["kind"], "round.ready")
 
+    def test_mutating_source_after_validation_cannot_poison_event_id(self):
+        original_run = subprocess.run
+        original_bytes = self.evidence.read_bytes()
+
+        def replace_source_before_client_reads(*args, **kwargs):
+            self.evidence.write_text("VEREDICTO cambios\n", encoding="utf-8")
+            return original_run(*args, **kwargs)
+
+        with mock.patch("progress_bridge.subprocess.run",
+                        side_effect=replace_source_before_client_reads):
+            receipt = self.transfer(lambda value: value)
+        base = self.state_dir / "runs" / "run-1"
+        evidence = json.loads((base / "evidence" / (receipt["eventId"] + ".json")).read_text())
+        self.assertEqual(evidence["contentHash"], self.pending["result"]["contentHash"])
+        self.assertEqual(evidence["content"], original_bytes.decode())
+        self.evidence.write_bytes(original_bytes)
+        self.assertEqual(self.transfer(lambda value: value), receipt)
+
 
 if __name__ == "__main__":
     unittest.main()
