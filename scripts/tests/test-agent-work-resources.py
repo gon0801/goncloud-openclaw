@@ -2,10 +2,12 @@
 import json
 import hashlib
 import os
+import signal
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -257,6 +259,55 @@ class ResourceTests(unittest.TestCase):
                 self.assertEqual(tmux_cmd("kill-session", "-t", "=worker").returncode, 0)
         finally:
             tmux_cmd("kill-server")
+
+    def test_resource_detached_child_keeps_mac_closure_pending(self):
+        if sys.platform != "darwin":
+            self.skipTest("macOS process proof")
+        tmux = shutil.which("tmux")
+        if not tmux:
+            self.skipTest("tmux not installed")
+        socket = f"agent-work-detached-{os.getpid()}"
+        def tmux_cmd(*args):
+            return subprocess.run([tmux, "-L", socket, *args], capture_output=True, text=True)
+        backend = TmuxBackend(tmux, socket)
+        manager = ResourceManager(self.host.spool, "host-test", backend)
+        child_ref = Path(self.tmp.name) / "detached-child.json"
+        token = f"agent-work-detached-{os.getpid()}"
+        launcher = Path(self.tmp.name) / "launch-detached.py"
+        launcher.write_text(
+            "import json,subprocess,sys,time\n"
+            "from pathlib import Path\n"
+            "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)',sys.argv[2]],"
+            "start_new_session=True)\n"
+            "start=subprocess.run(['ps','-o','lstart=','-p',str(child.pid)],capture_output=True,text=True).stdout.strip()\n"
+            "Path(sys.argv[1]).write_text(json.dumps({'pid':child.pid,'start':start}))\n"
+            "time.sleep(60)\n"
+        )
+        child = None
+        try:
+            self.assertEqual(tmux_cmd("new-session", "-d", "-s", "owned", sys.executable,
+                                      str(launcher), str(child_ref), token).returncode, 0)
+            deadline = time.monotonic() + 5
+            while not child_ref.exists() and time.monotonic() < deadline:
+                time.sleep(.05)
+            self.assertTrue(child_ref.exists(), "detached child did not start")
+            child = json.loads(child_ref.read_text())
+            held = manager.reserve(self.key, "owned", "TaskCreated")
+            manager.begin_launch(self.key)
+            backend.mark("owned", held.nonce)
+            self.assertEqual(manager.attach(self.key).state, "Running")
+            self.assertEqual(manager.close(self.key, {"kind": "cancel", "receipt": "detached-test"}).state,
+                             "CleanupPending")
+            self.assertNotEqual(tmux_cmd("has-session", "-t", "=owned").returncode, 0)
+            self.assertEqual(backend._start(str(child["pid"])), child["start"])
+            self.assertEqual(manager.counts()["active"], 1)
+        finally:
+            tmux_cmd("kill-server")
+            if child and backend._start(str(child["pid"])) == child["start"]:
+                command = subprocess.run(["ps", "-o", "command=", "-p", str(child["pid"])],
+                                         capture_output=True, text=True).stdout
+                if token in command:
+                    os.kill(child["pid"], signal.SIGTERM)
 
     def _managed_shell(self):
         root = Path(self.tmp.name)

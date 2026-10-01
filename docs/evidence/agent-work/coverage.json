@@ -32,5 +32,10 @@
     }
   },
   "resourceSandboxEvidence": "bash scripts/tests/test-agent-work-host.sh resource_identity; resource_close; resource_100_cycles",
+  "macDescendantProof": {
+    "status": "unavailable",
+    "evidence": "ResourceTests.test_resource_detached_child_keeps_mac_closure_pending (isolated tmux socket)",
+    "limitation": "A child can call setsid and outlive its tmux pane. After the pane exits, the observed session/PID identity cannot enumerate or prove absence of that reparented child. The tested adapter therefore retains CleanupPending and host capacity; no Mac CLI combination is certified."
+  },
   "certificationRequired": ["authenticated requester identity", "finite budget", "durable admission", "portable result", "verified resource close"]
 }

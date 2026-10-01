@@ -285,6 +285,9 @@ class TmuxBackend:
     def prove_absent(self, identity: dict) -> bool | None:
         if self.observe(identity["sessionName"]) == identity:
             return False
+        # tmux can only prove that its pane is gone. A child can call setsid,
+        # outlive the pane, and be reparented; PID and session scans cannot
+        # prove that every such child has exited.
         return None
 
     def revoke(self, identity: dict) -> bool:
