@@ -6,7 +6,7 @@
     "sourceBaseSha": "c074824a27c96d3983043f9eeb33823cd1772d8c",
     "sourceTag": "v2026.9.7",
     "sourceVersion": "2026.9.7",
-    "localCheckout": "/Users/dn/dev/openclaw-agent-work",
+    "localCheckout": "/Users/dn/dev/openclaw-agent-work-integration",
     "installedVersionAtProbe": "2026.9.7",
     "installedPackageJsonSha256": "927716ef228eeba5c840f2e271a8a0b6b45241266a1c7347cd46578876b28c4f",
     "installedEntrySha256": "e0da0d1c3f2debcdff4930e646b4698682889aef5252d8785a91fcc2e4c5a9f3",

@@ -24,6 +24,8 @@ El ejecutor de G enlazó `waiting_reason` en T5 y pasó 3/3 sobre R limpio `8c84
 
 El caso `recovery_limit` pasó 2/2 sobre el mismo SHA: la única recuperación permitida por raíz sobrevive al reinicio y el reintento interno de Responses se bloquea antes del segundo HTTP. Falta la recuperación de una tarea desde la cola nativa, por lo que B2 continúa abierto.
 
+`runtime-map.json` apunta ahora por defecto al checkout de integración R, que contiene estos commits. `test-runtime.sh budget_tree` pasó 3/3 sin variable de entorno y registró R `8c84e65233` con diff vacío. El mapa conserva `sourceBaseSha` original; no se ha cambiado la versión base ni una ruta mapeada.
+
 T5 tiene una preparación aislada en R (`bc6c8cf75e..6ebf81e7fe`): observaciones de espera por episodio y causa, cierre durable aun cuando llega antes de la observación, consulta por solicitante y migración v26. La primera revisión reprodujo la reapertura tras entrega desordenada; la segunda aprobó la corrección. Pasaron 6 pruebas de espera, 22 pruebas focalizadas de almacén/proyección/consumo, tipos, lint y hooks. Falta conectar los eventos reales del ejecutor, recuperación acotada, pruebas de 72 horas sin inferencia y contador externo; T5 no está terminada.
 
 T8 tiene preparación en G (`55ee4cb`, `4ab369b`, `249cb94`): el cliente de progreso confirma ID y hashes después de guardar evidencia y evento; el puente reutiliza ese recibo tras perder respuestas y puede publicar bytes archivados por el host tras borrar el archivo de trabajo. Pasaron 32 pruebas del cliente y 8 del puente. La primera revisión del enlace Host detectó que faltaba comprobar SHA/veredicto; el delta `4ab369b..249cb94` lo corrigió con regresiones rojas y recibió aprobación independiente.
