@@ -39,3 +39,5 @@ R `86855193f4` añadió la captura interna del solicitante desde el turno admiti
 R `9a6a7e311b` impide que un submit con autoridad revocada se confirme en el almacén y valida el encargo completo antes de persistirlo. Sigue faltando construir la herramienta que oculte el token del productor, reserve presupuesto y emita admisión nativa.
 
 R `a38a766b16` creó `managed_tasks_submit` y `managed_tasks_inspect` como fábrica interna: presupuesto de host, token oculto e instancia de sesión protegida, con 2/2 pruebas focalizadas. Todavía no está montada en el runtime productivo ni emite admisiones; `coverage.json` no cambia.
+
+R `0bbb8cebeb` enlazó `managed_tasks_admit` con `spawnSubagentDirect` y la capacidad nativa de admisión. El replay conserva el reclamo y un digest alterado no reserva ni lanza; 4/4 casos de la herramienta pasaron. Aún faltan ensamblaje productivo, resolución del brief desde un host concreto, informe del productor, resolución/cancelación y prueba completa del gateway.
