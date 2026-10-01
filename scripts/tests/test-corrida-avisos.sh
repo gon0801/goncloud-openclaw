@@ -365,6 +365,28 @@ out=$(CORRIDA_BIN="$CC" bash "$CORR_ABS" avisos atender tn) || fail "(n) tercer 
 [ -z "$(json_leer "$FN2" atendido)" ] || fail "(n) el descartado viejo de n2 quedo atendido y descartado a la vez"
 echo "ok (n): atender solo trata lo que reclamo en su pasada"
 
+# (p) F11 C2-r1: el recordatorio (misma llave -> mismo id) no debe pisar el
+# tratado previo: el tratado conserva su sello y el duplicado queda en
+# tratados como descartado con motivo.
+registro tp abierta lead-main:lead:zcode,ses-p1:carril:glm
+emitir tp ses-p1 aprobacion --llave p1 "parte p1" >/dev/null || fail "(p) precondicion: emitir p1"
+CORRIDA_BIN="$CC" bash "$CORR_ABS" avisos atender tp >/dev/null || fail "(p) primer atender fallo"
+VIEJO=$(ls "$CORRIDA_STATE/tp/avisos/tratados/"*p1*.json | head -1)
+SELLO_VIEJO=$(json_leer "$VIEJO" atendido)
+[ -n "$SELLO_VIEJO" ] || fail "(p) precondicion: el primer atender no anoto atendido"
+sleep 1
+emitir tp ses-p1 aprobacion --llave p1 "recordatorio 60 min" >/dev/null || fail "(p) precondicion: emitir recordatorio"
+[ "$(n_pend tp)" -eq 1 ] || fail "(p) el recordatorio debia dejar un pendiente (misma llave, mismo id)"
+out=$(CORRIDA_BIN="$CC" bash "$CORR_ABS" avisos atender tp); rc=$?
+[ "$rc" -eq 0 ] || fail "(p) segundo atender fallo (rc=$rc): $out"
+[ "$(json_leer "$VIEJO" atendido)" = "$SELLO_VIEJO" ]   || fail "(p) el tratado previo fue pisado por el recordatorio con el mismo id ($SELLO_VIEJO -> $(json_leer "$VIEJO" atendido))"
+DUP=$(ls "$CORRIDA_STATE/tp/avisos/tratados/"duplicado-*p1*.json 2>/dev/null | head -1)
+[ -n "$DUP" ] || fail "(p) el duplicado debia quedar en tratados con marca propia"
+[ "$(json_leer "$DUP" descartado)" != "" ] || fail "(p) el duplicado debia quedar descartado con motivo"
+printf '%s' "$out" | grep -q 'avisos: 0 atendidos, 1 descartados'   || fail "(p) el segundo atender debia contar 0 atendidos y 1 descartado: $out"
+echo "ok (p): el recordatorio con la misma llave no pisa el tratado previo"
+
+
 # (o) B2 r11: despertar recibe varias corridas en una llamada y despierta a cada una.
 registro to1 abierta lead-main:lead:zcode,ses-o1:carril:glm
 registro to2 abierta lead-main:lead:zcode,ses-o2:carril:glm

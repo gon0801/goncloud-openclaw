@@ -54,6 +54,7 @@ git add README.md && git commit -qm "arnes 19.2"
 
 ID="arnes192-$(date +%H%M%S)"
 printf '# Corrida de cierre 19.2\n\nCadena de %s transiciones reales.\n' "$N" > "$WORK/runbook.md"
+printf '%s\n' "$N" > "$WORK/exigidas.txt"  # F1 (C2-r1): la N PEDIDA, contra la que se compara cumplen
 TOTAL=$((N + 1))
 k=0
 while [ "$k" -lt "$TOTAL" ]; do
@@ -148,14 +149,16 @@ brazo() {
     if [ -n "$pend" ]; then
       printf '%s pendiente trab-%s (el brazo atiende)\n' "$(date -u +%FT%TZ)" "$k" >> "$WORK/brazo.log"
       CORRIDA_BIN="$CORRIDA" bash "$CORRIDA" avisos atender "$ID" >>"$WORK/brazo.log" 2>&1
-      lanzar_slot $((k + 1))
+      lanzar_slot $((k + 1)) \
+        || printf '%s FALLO-LANZAMIENTO: ningun CLI levanto para trab-%s\n' "$(date -u +%FT%TZ)" "$((k + 1))" >> "$WORK/brazo.log"
       t_lanz=$(date +%s)
       printf '%s lanzado trab-%s\n' "$(date -u +%FT%TZ)" "$((k + 1))" >> "$WORK/brazo.log"
       k=$((k + 1))
       sleep 1
     elif [ -n "$trat" ]; then
       printf '%s consumido por la ruta real (tratados); el brazo lanza\n' "$(date -u +%FT%TZ)" >> "$WORK/brazo.log"
-      lanzar_slot $((k + 1))
+      lanzar_slot $((k + 1)) \
+        || printf '%s FALLO-LANZAMIENTO: ningun CLI levanto para trab-%s\n' "$(date -u +%FT%TZ)" "$((k + 1))" >> "$WORK/brazo.log"
       t_lanz=$(date +%s)
       printf '%s lanzado trab-%s\n' "$(date -u +%FT%TZ)" "$((k + 1))" >> "$WORK/brazo.log"
       k=$((k + 1))
@@ -168,7 +171,8 @@ brazo() {
       printf 'trab-%s\n' "$k" >> "$WORK/fallos.txt"
       "$TMUX_BIN" kill-session -t "=trab-$k:" 2>/dev/null
       t_lanz=0
-      lanzar_slot $((k + 1))
+      lanzar_slot $((k + 1)) \
+        || printf '%s FALLO-LANZAMIENTO: ningun CLI levanto para trab-%s\n' "$(date -u +%FT%TZ)" "$((k + 1))" >> "$WORK/brazo.log"
       t_lanz=$(date +%s)
       k=$((k + 1))
       sleep 1
@@ -235,7 +239,8 @@ kill "$WATCH_PID" 2>/dev/null; WATCH_PID=""
 
 ESTAMPA="$(date +%H%M%S)"
 mkdir -p "$SALIDA/$ESTAMPA"
-cp "$WORK"/fin-*.jsonl "$WORK"/ini-*.jsonl "$WORK/lanzados.txt" "$WORK/brazo.log" \
+cp "$WORK"/fin-*.jsonl "$WORK"/ini-*.jsonl "$WORK/lanzados.txt" "$WORK/slot-cli.txt" \
+   "$WORK/exigidas.txt" "$WORK/brazo.log" \
    "$WORK/doble.jsonl" "$WORK/watch.log" "$SALIDA/$ESTAMPA/" 2>/dev/null
 cp -r "$CORRIDA_STATE/$ID" "$SALIDA/$ESTAMPA/registro" 2>/dev/null
 printf '%s\n' "$ESTAMPA" > "$SALIDA/ultima"

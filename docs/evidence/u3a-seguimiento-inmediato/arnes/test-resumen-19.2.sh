@@ -49,4 +49,28 @@ assert r["tabla"][0]["veredicto"] == "TARDIO", r["tabla"][0]
 assert r["tabla"][1]["veredicto"] == "TARDIO", r["tabla"][1]
 ' || fail "con umbral 5 ambas debian caer a TARDIO: $out5"
 
+
+# F1 (C2-r1): la N pedida manda. Cadena con exigidas=20 y solo 3 trabajadores
+# (2 transiciones con datos): exigidas=20 y cadena incompleta, nunca verde falso.
+T2=$(mktemp -d)
+mk2() { printf '{"ev":"%s","mono_ns":%s,"wall":"%s"}\n' "$2" "$3" "$4" >> "$T2/$1"; }
+mk2 fin-0.jsonl fin 1000000000 "2026-09-30T12:00:00.000Z"
+mk2 ini-1.jsonl sesion-viva 11000000000 "2026-09-30T12:00:11.000Z"
+mk2 ini-1.jsonl actividad 11100000000 "2026-09-30T12:00:11.000Z"
+mk2 fin-1.jsonl fin 20000000000 "2026-09-30T12:00:20.000Z"
+mk2 ini-2.jsonl sesion-viva 30500000000 "2026-09-30T12:00:30.500Z"
+printf '2026-09-30T12:00:00Z trab-0 zcode\n2026-09-30T12:00:20Z trab-1 codex\n2026-09-30T12:00:40Z trab-2 kimi\n' > "$T2/lanzados.txt"
+printf '0 zcode\n1 codex\n2 kimi\n' > "$T2/slot-cli.txt"
+printf '20\n' > "$T2/exigidas.txt"
+out20=$(python3 resumen-19.2.py "$T2")
+echo "$out20" | python3 -c '
+import json, sys
+r = json.load(sys.stdin)
+assert r["transiciones_exigidas"] == 20, r
+assert r["cadena_incompleta"] is True, r
+assert r["transiciones_con_datos"] == 2, r
+assert r["tabla"][1]["duracion_s"] == 10.5, r
+' || fail "F1: la N pedida (20) no se respeta en la cadena incompleta: $out20"
+rm -rf "$T2"
+
 echo "TODO VERDE: test-resumen-19.2"

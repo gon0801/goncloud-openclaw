@@ -196,7 +196,17 @@ avisos_atender() {
   lock_tomar "$reg" || { echo "avisos atender: el lock de $corrida no cedio" >&2; return 1; }
   for f in "$dir"/*.json; do
     [ -f "$f" ] || continue
-    mv "$f" "$dir/tratados/" || continue
+    # F11 (C2-r1): mv -n no pisa un tratado previo con el mismo id (el
+    # recordatorio re-emite la misma llave y sustituir el tratado borraba su
+    # sello). Un pendiente duplicado queda descartado con motivo y movido a
+    # tratados con nombre propio.
+    mv -n "$f" "$dir/tratados/" 2>/dev/null
+    if [ -f "$f" ]; then
+      avisos_marcar "$f" descartado "duplicado de un aviso ya tratado (recordatorio de la misma llave)"         || { echo "avisos atender: no se pudo anotar el duplicado $f" >&2; continue; }
+      mv -f "$f" "$dir/tratados/duplicado-$n-${f##*/}" 2>/dev/null || rm -f "$f"
+      n=$((n + 1))
+      continue
+    fi
     reclamados="$reclamados$dir/tratados/${f##*/}
 "
     n=$((n + 1))

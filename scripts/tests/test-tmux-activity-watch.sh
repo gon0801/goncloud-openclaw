@@ -49,7 +49,9 @@ if [ -z "$TM" ]; then
   echo "SKIP (3): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
 else
   T=$(mktemp -d) || exit 1
-  trap '"$TM" -L "$L" kill-server 2>/dev/null; rm -rf /tmp/taw-r9; cp -r "$T" /tmp/taw-r9 2>/dev/null; rm -rf "$T"' EXIT
+  # F5 (C2-r1): la copia de depuracion a /tmp solo con TAW_KEEP=1 (sin restos
+# en rutas fijas entre corridas).
+trap '"$TM" -L "$L" kill-server 2>/dev/null; if [ "${TAW_KEEP:-}" = "1" ]; then rm -rf /tmp/taw-r9; cp -r "$T" /tmp/taw-r9 2>/dev/null; fi; rm -rf "$T"' EXIT
   L="taw$$"
   # Ninguna corrida del vigilante en esta prueba puede alcanzar el ~/bin/corrida.sh
   # real: desde 14.29 D1 el tick lanza "latido" contra las corridas reales.
@@ -1473,6 +1475,41 @@ grep -q "descartado tras 99 reintentos" "$LOG_FILE" 2>/dev/null \
 rm -f "$STATE_DIR/avisos-fallidos/"sim9-CAP*
 echo "ok (2q-14): el registro en el tope se descarta con su linea en el log"
 rm -rf "$CORRIDA_STATE/sim9-BK" "$STATE_DIR/avisos-fallidos/"sim9-BK*
+
+# (2q-16) R2 C2-r1: el wake propio no reinicia el reloj de recordatorio. El
+# aviso sale, el lead procesa el atender (el panel cambia: cat hace eco) y el
+# RECORDATORIO sale igual a QUIET_REMIND_SECS sobre la sesion quieta. Sin el
+# guard, el cambio de hash reiniciaba notified=0 y la segunda senal salia a
+# ~1 s como episodio nuevo (el caso A de 19.2 quedo SIN-RECUPERACION por eso).
+STATE_DIR="$T/state-2q-16"; mkdir -p "$STATE_DIR"
+QUIET_SECS=1 QUIET_REMIND_SECS=6 \
+"$TM" -L "$L" new-session -d -s rem-r2 -x 80 -y 20 'cat' || fail "no se pudo crear rem-r2"
+mark rem-r2
+"$TM" -L "$L" set-environment -t rem-r2 OPENCLAW_WATCH_RUN rem-R2
+sleep 2
+: >"$AARGV"
+t1=""; t2=""; i=0
+while [ "$i" -lt 80 ]; do
+  QUIET_REMIND_SECS=6 CORRIDA_BIN="$STUB_AV" run_av || fail "--once (2q-16) fallo"
+  n=$(grep -c 'avisos emitir rem-R2 rem-r2 fin-turno' "$AARGV" 2>/dev/null)
+  if [ -z "$t1" ] && [ "${n:-0}" -ge 1 ]; then
+    t1=$(date +%s)
+    # El eco del wake: el lead procesa el comando y el panel cambia.
+    "$TM" -L "$L" send-keys -t "=rem-r2:" "eco del wake" Enter
+  fi
+  if [ -n "$t1" ] && [ "${n:-0}" -ge 2 ]; then
+    t2=$(date +%s)
+    break
+  fi
+  sleep 0.7
+  i=$((i + 1))
+done
+[ -n "$t1" ] || fail "(2q-16) el primer quiet debia salir por avisos: $(cat "$AARGV")"
+[ -n "$t2" ] || fail "(2q-16) el recordatorio debia salir tras el wake propio: $(cat "$AARGV")"
+delta=$((t2 - t1))
+[ "$delta" -ge 5 ] || fail "(2q-16) la segunda senal llego ${delta}s tras la primera (< REMIND 6s): fue reinicio de reloj, no recordatorio"
+"$TM" -L "$L" kill-session -t "=rem-r2:" 2>/dev/null
+echo "ok (2q-16): el wake propio no reinicia el reloj de recordatorio (R2)"
 else
   echo "SKIP (2q): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
 fi

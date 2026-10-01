@@ -341,7 +341,6 @@ print(chr(9).join([str(d.get(k) or \"\") for k in (\"run\", \"sesion\", \"tipo\"
   done
   [ "$n" -gt 0 ] && log "fallidos: $n reintentados; primero: run=$fr sesion=$fs tipo=$ft"
   return 0
-  return 0
 }
 
 # 19.1 B2: reintento del despertar
@@ -598,7 +597,17 @@ tick() {
       since=$activity
     elif [[ $prev_hash != "$hash" ]]; then
       since=$now
-      prev_notified=0
+      # R2 (C2-r1): si el cambio de panel lo provoco el WAKE PROPIO (el
+      # aviso recien enviado tecleo atender en la sesion), el reloj de
+      # recordatorio no se reinicia: notified/notified_at sobreviven y el
+      # recordatorio a QUIET_REMIND_SECS sigue su curso.
+      # R2 (C2-r1): mientras el aviso fin-turno de la sesion siga SIN
+      # consumar (en avisos/ o perdido), los cambios de panel no reinician el
+      # reloj de recordatorio: solo su consumo en tratados/ lo cierra. Asi el
+      # wake propio no lo atrasa y la perdida se recupera por recordatorio.
+      if [[ -z $run ]] || ls "$CORRIDA_STATE/$run/avisos/tratados/"*-"$session"-fin-turno-*.json >/dev/null 2>&1; then
+        prev_notified=0
+      fi
     else
       since=$prev_since
     fi
@@ -637,8 +646,6 @@ tick() {
         aviso_dueno "$run" "$session" aprobacion "$llave_av" "$text" || rc_av=$?
         if [[ $rc_av == 0 ]]; then
           approval_at=$now
-        elif [[ $rc_av == 2 ]]; then
-          : # el emitir fallo: sin evento, el proximo tick reintenta
         else
           text="tmux: $session waiting for approval for $((now - approval_since))s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"
           if send_event "$text" "$run"; then
@@ -672,8 +679,6 @@ tick() {
       if [[ $rc_av == 0 ]]; then
         notified=1
         notified_at=$now
-      elif [[ $rc_av == 2 ]]; then
-        : # el emitir fallo: sin evento, el proximo tick reintenta
       else
         text="tmux: $session quiet for ${elapsed}s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"
         if send_event "$text" "$run"; then

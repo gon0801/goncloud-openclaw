@@ -205,9 +205,11 @@ caso_C() {
   local wp=$!
   esperar_resultado0 || { echo "caso C: SIN-RESULTADO" | tee -a "$CASE_DIR/veredicto"; kill $wp 2>/dev/null; return 1; }
   sleep 14
-  local pend_rev ev_vigia
+  local pend_rev
   pend_rev=$(ls "$WORK/estado/$ID/avisos/"*.json 2>/dev/null | wc -l | tr -d ' ')
-  ev_vigia=$(grep -c 'vigia-mac' "$DOBLE_LOG" 2>/dev/null); ev_vigia=${ev_vigia:-0}
+  # F2 (C2-r1): el contador eventos_vigia_mac_en_log se retira: daba siempre 0
+  # POR DISENO — con la reversa el hook hereda CORRIDA_AVISOS=0 y su emitir es
+  # no-op rc 0, asi que no hay system event que contar.
   kill $wp 2>/dev/null; wait $wp 2>/dev/null
   # Reversa OFF: se quita del entorno del servidor y la ruta de avisos vuelve.
   "$TMUX_BIN" set-environment -g -u CORRIDA_AVISOS
@@ -221,7 +223,7 @@ caso_C() {
   done
   kill $wp 2>/dev/null; wait $wp 2>/dev/null
   cat > "$CASE_DIR/caso-C.json" <<PY
-{"caso": "C_reversa", "pendientes_con_reversa": $pend_rev, "eventos_vigia_mac_en_log": $ev_vigia, "pendientes_sin_reversa": $pend_on, "veredicto": "$( [ "$pend_rev" -eq 0 ] && [ "$pend_on" -ge 1 ] && echo OK || echo REVISAR)"}
+{"caso": "C_reversa", "pendientes_con_reversa": $pend_rev, "pendientes_sin_reversa": $pend_on, "nota": "con la reversa el hook no manda system event (emitir es no-op rc 0)", "veredicto": "$( [ "$pend_rev" -eq 0 ] && [ "$pend_on" -ge 1 ] && echo OK || echo REVISAR)"}
 PY
   cat "$CASE_DIR/caso-C.json"
   cp -r "$WORK/estado/$ID" "$CASE_DIR/registro" 2>/dev/null
