@@ -180,6 +180,34 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(restarted.pending("mac-test"), [report])
         self.assertEqual(restarted.result_snapshot("mac-test", self.key), (report, original))
 
+    def test_host_receipts_fifo_snapshot_does_not_block_other_results(self):
+        self.host.apply(self.key, self.operation, lambda *_: None)
+        report = self.report()
+        self.host.report("mac-test", report)
+        second = OperationKey("mac-test", "task-2", 2, "instance-2")
+        self.host.apply(second, replace(self.operation, key=second, session="worker-2"), lambda *_: None)
+        second_report = self.report(taskId="task-2", instanceId="instance-2")
+        second_id = self.host.report("mac-test", second_report).result_id
+        snapshot = self.root / "host" / "artifacts" / operation_id(self.key) / (
+            digest(json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()) + ".bin")
+        snapshot.unlink()
+        os.mkfifo(snapshot)
+        script = (
+            "import json,sys; from pathlib import Path; from host import Host; "
+            "host=Host('mac-test',Path(sys.argv[1])); sent=[]; "
+            "receipt=lambda result: sent.append(result['taskId']) or "
+            "{'hostId':'mac-test','taskId':'task-2','generation':2,'instanceId':'instance-2',"
+            "'producerId':'reviewer','resultId':sys.argv[2],'receiptId':'native-r2'}; "
+            "host.flush('mac-test',receipt); print(json.dumps({'sent':sent,'errors':host.inbox_errors('mac-test')}))"
+        )
+        completed = subprocess.run([sys.executable, "-c", script, str(self.root / "host"), second_id],
+                                   env=dict(os.environ, PYTHONPATH=str(ROOT / "scripts" / "agent-work")),
+                                   capture_output=True, text=True, timeout=3)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        output = json.loads(completed.stdout)
+        self.assertEqual(output["sent"], ["task-2"])
+        self.assertEqual(output["errors"][0]["operationId"], operation_id(self.key))
+
     def test_host_receipts_reject_partial_foreign_old_and_exit_only(self):
         self.host.apply(self.key, self.operation, lambda *_: None)
         for changed in (

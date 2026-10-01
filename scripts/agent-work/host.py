@@ -45,7 +45,7 @@ class Host:
     @staticmethod
     def _snapshot_bytes(path: Path, expected_digest: str) -> bytes:
         try:
-            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
         except FileNotFoundError:
             raise
         except OSError as exc:
