@@ -1,6 +1,6 @@
 # Implementar encargos durables para todos los agentes
 
-> Para quien ejecute este plan: usa `superpowers:executing-plans` o `superpowers:subagent-driven-development` cuando exista una instrucción posterior de implementar. Las casillas registran ejecución futura. Este documento no autoriza ejecutar las tareas.
+> Plan de ejecución. Las casillas reflejan trabajo comprobado; la autorización vigente viene de la instrucción posterior del usuario de implementarlo.
 
 **Objetivo:** entregar resultados a su solicitante, continuar el trabajo tras una caída y verificar los límites de consumo y el cierre de trabajadores propios.
 
@@ -10,7 +10,7 @@
 
 **Especificación:** [Encargos y continuaciones comunes](../specs/2026-09-30-encargos-agentes-design.md). Consulta las decisiones en [la comparación de arquitecturas](../specs/2026-09-30-encargos-agentes-rationale.md).
 
-**Estado:** plan escrito. Ninguna tarea de implementación, medición viva o despliegue está ejecutada.
+**Estado:** T0 implementada y comprobada en entornos aislados. T1–T12 pendientes. Sin medición viva ni despliegue.
 
 ## Conserva estas condiciones en todas las tareas
 
@@ -66,12 +66,12 @@ Este plan admite desarrollo secuencial. T6 y T7 pueden prepararse después de T0
 
 ## Aplica autorización, calidad y evidencia
 
-La instrucción actual autoriza documentación. Esta tabla también limita lo que el plan puede asumir para una ejecución posterior:
+La instrucción posterior del usuario autoriza implementar el plan en entornos aislados. La tabla conserva los límites de efectos vivos:
 
 | Operación | Alcance | Decisión actual |
 |---|---|---|
 | Leer código y escribir el plan | Checkout de documentación | Aprobado |
-| Implementar y ejecutar pruebas aisladas | Bloques B0 a B4 | Pendiente de instrucción posterior |
+| Implementar y ejecutar pruebas aisladas | Bloques B0 a B4 | Autorizado |
 | Enviar cambios o abrir PR | Repositorios identificados en T0 | Pendiente de instrucción posterior |
 | Llamar modelos reales, enviar avisos o tocar sesiones vivas | Cualquier host | No autorizado por esta tarea |
 | Instalar, migrar base viva o desplegar | B5 | No autorizado por esta tarea |
@@ -105,20 +105,20 @@ Las interfaces de las tareas son nombres de contrato propuestos. Fija su ubicaci
 
 Dependencias: ninguna. No escribas implementación del servicio en esta tarea.
 
-Archivos por crear en `G`: `docs/evidence/agent-work/runtime-map.json`, `block-bases.json`, `capabilities.md`, `coverage.json`, `status.md` y `scripts/tests/test-agent-work-runtime.sh`. En `R`, guarda el ensayo junto a sus pruebas nativas según el mapa.
+Archivos por crear en `G`: `docs/evidence/agent-work/runtime-map.json`, `block-bases.json`, `capabilities.md`, `coverage.json`, `status.md` y `scripts/agent-work/test-runtime.sh`. En `R`, guarda el ensayo junto a sus pruebas nativas según el mapa.
 
-Interfaz de salida: mapa de fuente y ejecutor de pruebas `test-agent-work-runtime.sh <caso>`. El ejecutor valida SHA, rutas y argumentos; invoca la prueba nativa real. No sustituye el runtime por un mock para declarar resuelta su admisión.
+Interfaz de salida: mapa de fuente y ejecutor de pruebas `test-agent-work-runtime.sh <caso>`. El ejecutor valida SHA, rutas y argumentos; invoca la prueba nativa real. Vive fuera de `scripts/tests/` porque ese director entra automáticamente en la batería de G, cuyos jobs no contienen el checkout de R. El job nativo lo invoca de forma explícita con `AGENT_WORK_RUNTIME_SOURCE`. No sustituye el runtime por un mock para declarar resuelta su admisión.
 
-- [ ] Inspecciona los metadatos de los artefactos instalados sin modificarlos.
-- [ ] Obtén un checkout de fuente trazable y fija su SHA completo. Registra el repositorio de entrega y el origen autorizado de sus artefactos.
-- [ ] Completa el mapa de rutas, build, pruebas, migraciones y compatibilidad de cliente, gateway y aplicación local.
-- [ ] Registra las bases iniciales de ambos repositorios y las ramas de B0 a B5 en `block-bases.json`. Deja las bases de bloques posteriores pendientes de su cierre predecesor; no uses un SHA supuesto.
-- [ ] Prepara un perfil aislado con directorios, puertos y sockets propios. Usa proveedor simulado y registra sus solicitudes desde fuera del runtime.
-- [ ] Reproduce la pérdida de deduplicación tras reinicio con el mismo encargo. Guarda el resultado como limitación de la base, no como fallo del entorno.
-- [ ] Prueba las capacidades de identidad de turno, consulta, presupuesto y cierre. Marca cada una `available`, `requires-change` o `unsupported`, con su evidencia.
-- [ ] Registra agentes, destinos, CLI, hosts y rutas de delegación en `coverage.json`. Distingue nativo, CLI y sesiones adoptadas.
+- [x] Inspecciona los metadatos de los artefactos instalados sin modificarlos.
+- [x] Obtén un checkout de fuente trazable y fija su SHA completo. Registra el repositorio de entrega y el origen autorizado de sus artefactos.
+- [x] Completa el mapa de rutas, build, pruebas, migraciones y compatibilidad de cliente, gateway y aplicación local.
+- [x] Registra las bases iniciales de ambos repositorios y las ramas de B0 a B5 en `block-bases.json`. Deja las bases de bloques posteriores pendientes de su cierre predecesor; no uses un SHA supuesto.
+- [x] Prepara un perfil aislado con directorios, puertos y sockets propios. Usa proveedor simulado y registra sus solicitudes desde fuera del runtime.
+- [x] Reproduce la pérdida de deduplicación tras reinicio con el mismo encargo. Guarda el resultado como limitación de la base, no como fallo del entorno.
+- [x] Prueba las capacidades de identidad de turno, consulta, presupuesto y cierre. Marca cada una `available`, `requires-change` o `unsupported`, con su evidencia.
+- [x] Registra agentes, destinos, CLI, hosts y rutas de delegación en `coverage.json`. Distingue nativo, CLI y sesiones adoptadas.
 
-Verifica con `bash scripts/tests/test-agent-work-runtime.sh baseline`. Exige fuente trazable y evidencia de la limitación esperada. Si la versión ya la corrigió, conserva una prueba positiva y reutiliza la capacidad. Si no puedes obtener fuente o build reproducible, marca B0 bloqueado y no inventes un módulo alternativo.
+Verifica con `bash scripts/agent-work/test-runtime.sh baseline`. Exige fuente trazable y evidencia de la limitación esperada. Si la versión ya la corrigió, conserva una prueba positiva y reutiliza la capacidad. Si no puedes obtener fuente o build reproducible, marca B0 bloqueado y no inventes un módulo alternativo.
 
 ### T1. Registra encargos, identidad y resultados durables
 
@@ -132,7 +132,7 @@ Produce `submit(Caller, TaskKey, Assignment)`, `report(ProducerCapability, gener
 - [ ] Implementa las transacciones y la migración versionada dentro del almacén nativo. Persiste resultado, pendiente de manejo y `ProjectionPending` antes del ACK cuando corresponda.
 - [ ] Repite las pruebas con reinicio entre escrituras y confirma los recibos recuperados.
 
-Verifica con `bash scripts/tests/test-agent-work-runtime.sh registration_identity` y `bash scripts/tests/test-agent-work-runtime.sh result_receipt`. Espera código cero y todas las aserciones, sin saltos.
+Verifica con `bash scripts/agent-work/test-runtime.sh registration_identity` y `bash scripts/agent-work/test-runtime.sh result_receipt`. Espera código cero y todas las aserciones, sin saltos.
 
 ### T2. Haz durable la admisión y la cola de la sesión
 

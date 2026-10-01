@@ -1,0 +1,15 @@
+{
+  "schema": "agent-work-coverage.v1",
+  "source": "agents/main/agent/workshop-skills/agent-dispatch/SKILL.md and scripts/mac/workers.v1.json at G base 84efcb0",
+  "status": "inventory-only",
+  "requesters": ["main", "ingenieria", "adversary", "operaciones", "implementer", "verifier", "reviewer", "scout"],
+  "routes": [
+    {"kind": "native-subagent", "owner": "OpenClaw sessions_spawn", "certified": false},
+    {"kind": "configured-agent", "owner": "OpenClaw sessions_send", "certified": false},
+    {"kind": "cli-tmux", "owner": "scripts/mac/corrida/adaptador.sh", "certified": false},
+    {"kind": "user-adopted-session", "owner": "user", "certified": false}
+  ],
+  "cliAdapters": ["claude_fable", "claude_opus", "kimi_k3", "kimi_coding", "codex", "zcode", "grok"],
+  "hosts": [{"id": "mac-local", "platform": "macOS", "status": "inventory-only"}, {"id": "windows-remote", "platform": "Windows", "status": "unverified"}],
+  "certificationRequired": ["authenticated requester identity", "finite budget", "durable admission", "portable result", "verified resource close"]
+}

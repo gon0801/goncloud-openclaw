@@ -1,0 +1,14 @@
+{
+  "schema": "agent-work-block-bases.v1",
+  "blocks": {
+    "B0": {
+      "G": {"repository": "gon0801/goncloud-openclaw", "path": "/Users/dn/dev/goncloud-openclaw/.worktrees/agent-work-b0", "branch": "feat/agent-work-b0", "baseSha": "84efcb0"},
+      "R": {"repository": "openclaw/openclaw", "path": "/Users/dn/dev/openclaw-agent-work", "branch": "feat/agent-work-b0", "baseSha": "c074824a27c96d3983043f9eeb33823cd1772d8c"}
+    },
+    "B1": {"branch": "feat/agent-work-b1", "baseSha": null},
+    "B2": {"branch": "feat/agent-work-b2", "baseSha": null},
+    "B3": {"branch": "feat/agent-work-b3", "baseSha": null},
+    "B4": {"branch": "feat/agent-work-b4", "baseSha": null},
+    "B5": {"branch": "feat/agent-work-b5", "baseSha": null}
+  }
+}

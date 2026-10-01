@@ -1,0 +1,55 @@
+{"candidateDiffSha256": "d40447045717c2c0f758a0d153b804d43fa4d0ccb1c7f180c2571b4ee8b0a81e", "candidateSha": "c074824a27c96d3983043f9eeb33823cd1772d8c"}
+[test] starting test/vitest/vitest.gateway.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work
+
+[vitest-workers] local cache hit after 1981ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared bf0e0e3ab9fd in 2011ms (16664 inputs, 17227 outputs)
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > loses an accepted request replay after gateway lifecycle restart 5ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > waits for replayable ok after execution ends (active) 4ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > waits for replayable ok after execution ends (retired) 3ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > waits for replayable ok after execution ends (sessionless) 2ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > waits for replayable error after execution ends (active) 2ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > waits for replayable error after execution ends (retired) 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > waits for replayable error after execution ends (sessionless) 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > waits for replayable timeout after execution ends (active) 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > waits for replayable timeout after execution ends (retired) 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > waits for replayable timeout after execution ends (sessionless) 2ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > retires a sticky terminal only for an admitted new attempt: undefined 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > retires a sticky terminal only for an admitted new attempt: true 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > expires terminal observations from their latest write without extending unrelated runs 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > keeps visible queued waits available after the terminal observation expires 280ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > keeps a pending wait bound to its original registration after compaction 477ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > keeps a pending wait bound to its original registration after replacement 457ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > retains chat input identity when terminal writers replace admission metadata 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > uses the agent abort entry to select the run observation 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > uses the chat abort entry to select the run observation 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > binds queued observation to the queue entry selected after waiting 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > resolves concurrent undefined waiters when the terminal dedupe entry lands 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > resolves concurrent agent waiters when the terminal dedupe entry lands 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > resolves concurrent chat waiters when the terminal dedupe entry lands 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > retires only its scope's observer without ending the shared run 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > keeps undefined observation timeout after 0 ms nonterminal 2ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > keeps undefined observation timeout after 10 ms nonterminal 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > keeps agent observation timeout after 0 ms nonterminal 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > keeps agent observation timeout after 10 ms nonterminal 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > keeps chat observation timeout after 0 ms nonterminal 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > keeps chat observation timeout after 10 ms nonterminal 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > attributes lifecycle reset without caching a terminal run outcome 93ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > merges late completion across agent and chat observations 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > merges late restart cancellation across agent and chat observations 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > merges earlier user cancellation across agent and chat observations 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > merges earlier writer supersession across agent and chat observations 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > keeps terminal evidence when sticky status arrives lifecycle-first 1ms
+ ✓ |gateway-core| src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > keeps terminal evidence when sticky status arrives dedupe-first 1ms
+
+ Test Files  1 passed (1)
+      Tests  37 passed (37)
+   Start at  23:23:28
+   Duration  8.13s (transform 60%, import 19%, tests 17%, worker 2%, setup 1%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 9.54s
+{"duplicateAdmitted": true, "first": {"runId": "agent-work-t0-stable", "status": "started"}, "firstOutcome": "ok", "markedProviderCallsAfterRestart": 3, "markedProviderCallsBeforeRestart": 2, "second": {"runId": "agent-work-t0-stable", "status": "started"}, "secondOutcome": "ok", "sessionKey": "agent:main:dashboard:e473e60a-af68-4649-b2d0-05725b27cb8a", "source": "/Users/dn/dev/openclaw-agent-work"}
