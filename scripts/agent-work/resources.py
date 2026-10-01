@@ -171,6 +171,15 @@ class ResourceManager:
         if identity is None:
             if original["state"] == "Reserved":
                 return self._state(key, revision, "AbsenceVerified")
+            if self.backend.boot_id != original["boot_id"]:
+                return self._state(key, revision, "AbsenceVerified")
+            try:
+                observed = self.backend.observe(original["session_name"])
+            except OSError:
+                return self._state(key, revision, "CleanupPending", "host unavailable")
+            if (observed is not None and observed.get("nonce") == original["nonce"]
+                    and observed.get("bootId") == original["boot_id"]):
+                return self._state(key, revision, "CleanupPending", "launch identity recovered", observed)
             return self._state(key, revision, "CleanupPending", "launch outcome uncertain")
         if self.backend.boot_id != identity["bootId"]:
             return self._state(key, revision, "AbsenceVerified")

@@ -130,6 +130,25 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual(self.manager.counts()["active"], 0)
         self.assertEqual(reserved.state, "Reserved")
 
+    def test_resource_close_recovers_marked_launch_without_prior_attach(self):
+        held = self.manager.reserve(self.key, "worker-1", "TaskCreated")
+        self.manager.begin_launch(self.key)
+        self.backend.launch("worker-1", held.nonce, 603)
+        evidence = {"kind": "cancel", "receipt": "c1"}
+        self.assertEqual(self.manager.close(self.key, evidence).state, "CleanupPending")
+        self.assertEqual(self.manager.close(self.key, evidence).state, "AbsenceVerified")
+        self.assertEqual(len(self.backend.stops), 1)
+        self.assertEqual(self.backend.live, {})
+
+        foreign = OperationKey("host-test", "task-2", 1, "instance-2")
+        self.manager.reserve(foreign, "worker-2", "TaskCreated")
+        self.manager.begin_launch(foreign)
+        self.backend.launch("worker-2", "foreign-nonce", 604)
+        self.assertEqual(self.manager.close(foreign, {"kind": "cancel", "receipt": "c2"}).state,
+                         "CleanupPending")
+        self.assertEqual(len(self.backend.stops), 1)
+        self.assertIn("worker-2", self.backend.live)
+
     def test_resource_close_pending_holds_host_capacity_and_pool_is_separate(self):
         manager = ResourceManager(self.host.spool, "host-test", self.backend, capacity=2)
         manager.reserve(self.key, "worker-1", "TaskCreated")
