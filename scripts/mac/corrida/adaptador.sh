@@ -13,6 +13,7 @@ corrida_adaptador() {
     health)  adaptador_health "$worker" ;;
     start)   adaptador_start "$id" "$carril" "$worker" "$sesion" "$@" ;;
     deliver) adaptador_deliver "$sesion" "$@" ;;
+    deliver-ref) adaptador_deliver_ref "$sesion" "$@" ;;
     inspect) adaptador_inspect "$worker" "$sesion" ;;
     resume)  adaptador_resume "$id" "$carril" "$worker" "$sesion" "$@" ;;
     stop)    adaptador_stop "$sesion" ;;
@@ -298,9 +299,26 @@ adaptador_deliver() {
   adaptador_sesion_valida "$sesion" || return 2
   [ -n "${TMUX_BIN:-}" ] || { echo "adaptador: tmux no disponible" >&2; return 1; }
   [ -f "$brief" ] || { echo "adaptador: sin brief: $brief" >&2; return 1; }
+  adaptador_enviar_texto "$sesion" "$(cat "$brief") $ADAPTADOR_ORDEN_MARCA"
+}
+
+adaptador_deliver_ref() {
+  [ "$#" -eq 3 ] || { echo "adaptador deliver-ref: sesion, hostId y referencia requeridos" >&2; return 2; }
+  local sesion="$1" host_id="$2" ref="$3"
+  adaptador_sesion_valida "$sesion" || return 2
+  [ -f "$ref" ] || { echo "adaptador: sin referencia: $ref" >&2; return 1; }
+  [ -n "${AGENT_WORK_HOST_STATE_DIR:-}" ] \
+    || { echo "adaptador: falta AGENT_WORK_HOST_STATE_DIR" >&2; return 1; }
+  local host_bin="${AGENT_WORK_HOST_BIN:-$(dirname "$AQUI")/agent-work/host.py}"
+  python3 "$host_bin" verify-ref "$host_id" "$AGENT_WORK_HOST_STATE_DIR" "$sesion" "$ref" \
+    || { echo "adaptador: referencia ajena o invalida" >&2; return 1; }
+  adaptador_enviar_texto "$sesion" "Abre el encargo JSON en $ref. Sigue briefRef y escribe agent-work.result.v1 en resultRef con renombre atomico."
+}
+
+adaptador_enviar_texto() {
+  local sesion="$1" texto="$2" escrito despues despues2
+  [ -n "${TMUX_BIN:-}" ] || { echo "adaptador: tmux no disponible" >&2; return 1; }
   "$TMUX_BIN" has-session -t "=$sesion" 2>/dev/null || { echo "blocked"; return 0; }
-  local texto escrito despues despues2
-  texto="$(cat "$brief") $ADAPTADOR_ORDEN_MARCA"
   "$TMUX_BIN" send-keys -t "=$sesion:" -l -- "$texto" 2>/dev/null || { echo "blocked"; return 0; }
   sleep 1
   escrito="$("$TMUX_BIN" capture-pane -p -t "=$sesion:" 2>/dev/null)" || { echo "blocked"; return 0; }

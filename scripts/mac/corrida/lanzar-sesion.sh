@@ -10,14 +10,16 @@
 corrida_lanzar_sesion() {
   local id="$1" rol="$2" token="$3" dir="$4"; shift 4
   corrida_id_valido "$id" || { echo "lanzar-sesion: id invalido: $id" >&2; return 2; }
-  local nombre="$token-$id" encargo="" carril="" worker=""
+  local nombre="$token-$id" encargo="" encargo_ref="" host_id="" carril="" worker=""
   while [ $# -gt 0 ]; do
     case "$1" in
-      --nombre|--encargo|--carril|--worker)
+      --nombre|--encargo|--encargo-ref|--host-id|--carril|--worker)
         [ $# -ge 2 ] || { echo "lanzar-sesion: $1 sin valor" >&2; return 2; };; esac
     case "$1" in
       --nombre) nombre="$2"; shift 2;;
       --encargo) encargo="$2"; shift 2;;
+      --encargo-ref) encargo_ref="$2"; shift 2;;
+      --host-id) host_id="$2"; shift 2;;
       --carril) carril="$2"; shift 2;;
       --worker) worker="$2"; shift 2;;
       *) echo "lanzar-sesion: flag desconocido $1" >&2; return 2;;
@@ -27,6 +29,15 @@ corrida_lanzar_sesion() {
     echo "lanzar-sesion: nombre invalido (solo letras, numeros, - y _): $nombre" >&2; return 2;; esac
   case "$rol" in lead|carril) ;; *)
     echo "lanzar-sesion: rol fuera del conjunto (lead o carril): $rol" >&2; return 2;; esac
+  if [ -n "$encargo_ref" ] || [ -n "$host_id" ]; then
+    [ -z "$encargo" ] && [ -n "$encargo_ref" ] && [ -n "$host_id" ] \
+      || { echo "lanzar-sesion: usa --encargo-ref y --host-id juntos, sin --encargo" >&2; return 2; }
+    [ -n "${AGENT_WORK_HOST_STATE_DIR:-}" ] \
+      || { echo "lanzar-sesion: falta AGENT_WORK_HOST_STATE_DIR" >&2; return 1; }
+    local host_bin="${AGENT_WORK_HOST_BIN:-$(dirname "$AQUI")/agent-work/host.py}"
+    python3 "$host_bin" verify-ref "$host_id" "$AGENT_WORK_HOST_STATE_DIR" "$nombre" "$encargo_ref" \
+      || { echo "lanzar-sesion: referencia ajena o invalida" >&2; return 1; }
+  fi
   if [ -n "$carril" ] || [ -n "$worker" ]; then
     corrida_id_valido "$carril" || { echo "lanzar-sesion: carril invalido: $carril" >&2; return 2; }
     [ -n "$worker" ] || { echo "lanzar-sesion: --carril requiere --worker" >&2; return 2; }
@@ -69,6 +80,10 @@ corrida_lanzar_sesion() {
     lanzar_sesion_entregar "$nombre" "$encargo" \
       || { [ -n "$carril" ] && lanzar_sesion_fallar "$reg" "$carril"
            "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; marcas_lock_soltar; return 1; }
+  elif [ -n "$encargo_ref" ]; then
+    lanzar_sesion_entregar_referencia "$nombre" "$encargo_ref" \
+      || { [ -n "$carril" ] && lanzar_sesion_fallar "$reg" "$carril"
+           "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; marcas_lock_soltar; return 1; }
   else
     marcas_lock_refrescar
   fi
@@ -92,13 +107,16 @@ corrida_lanzar_sesion() {
     return 1
   fi
   CORR_SES_NOMBRE="$nombre" CORR_SES_ROL="$rol" CORR_SES_CLI="$token" CORR_SES_DIR="$dir" \
-    CORR_SES_ENCARGO="$encargo" \
+    CORR_SES_ENCARGO="$encargo" CORR_SES_ENCARGO_REF="$encargo_ref" CORR_SES_HOST_ID="$host_id" \
     registro_escribir "$reg" "e={'nombre':os.environ['CORR_SES_NOMBRE'],
 'rol':os.environ['CORR_SES_ROL'],'cli':os.environ['CORR_SES_CLI'],'dueno':'lead',
 'dir':os.environ['CORR_SES_DIR']}
 # Hallazgo 7: la ruta del encargo queda en la entrada para que el relanzo
 # automatico del vigia la re-entregue con --encargo.
 if os.environ['CORR_SES_ENCARGO']: e['encargo']=os.environ['CORR_SES_ENCARGO']
+if os.environ['CORR_SES_ENCARGO_REF']:
+  e['encargo_ref']=os.environ['CORR_SES_ENCARGO_REF']
+  e['host_id']=os.environ['CORR_SES_HOST_ID']
 d['sesiones'].append(e)" \
     || { lock_soltar "$reg"
          echo "no se pudo anotar la sesion en el registro" >&2
@@ -244,6 +262,16 @@ lanzar_sesion_entregar() { # $1 nombre $2 encargo; 0 = entregado
       && { echo "la caja no se vacio tras reintentar el Enter" >&2; return 1; }
   fi
   marcas_lock_refrescar
+}
+
+lanzar_sesion_entregar_referencia() {
+  local nombre="$1" ref="$2" prompt
+  prompt="$(mktemp)" || return 1
+  printf 'Abre el encargo JSON en %s. Sigue briefRef y escribe agent-work.result.v1 en resultRef con renombre atomico.\n' "$ref" >"$prompt"
+  lanzar_sesion_entregar "$nombre" "$prompt"
+  local rc=$?
+  rm -f "$prompt"
+  return "$rc"
 }
 
 # Entrega fallida en un carril: persiste failed sin borrar el historial
