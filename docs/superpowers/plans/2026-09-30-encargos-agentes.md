@@ -157,10 +157,10 @@ Produce `resolve(Caller, HandlingReceipt, Decision)` y `cancel(AuthorizedCaller,
 
 - [x] Añade `handling_atomic`: decisión, hijos y recibo aparecen juntos o no aparece ninguno, incluso con dos consumidores.
 - [x] Añade `handling_unresolved`: `agent_end` sin `resolve` conserva el resultado pendiente.
-- [ ] Añade cancelación concurrente, callback tardío y herramienta externa con efecto incierto. Exige evidencia conservada y ningún reenvío ciego.
+- [x] Añade cancelación concurrente, callback tardío y herramienta externa con efecto incierto. Exige evidencia conservada y ningún reenvío ciego.
 - [ ] Ejecuta los casos en rojo.
 - [ ] Implementa consumo, cancelación y recuperación de la misma decisión. Captura resultados antes de cualquier eliminación automática de hijos.
-- [ ] Repite con pérdida del ACK de consumo. Recupera los mismos hijos, sin nueva revisión.
+- [x] Repite con pérdida del ACK de consumo. Recupera los mismos hijos, sin nueva revisión.
 
 Verifica con `handling_atomic` y `handling_unresolved`. Al cerrar B1, ejecuta la batería nativa completa sobre su SHA final y registra el artefacto construido.
 
