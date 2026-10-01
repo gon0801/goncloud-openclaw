@@ -144,7 +144,7 @@ Consume el registro de T1. Produce `admit(AdmissionKey, ExecutionTarget, InputRe
 - [x] Añade `requester_queue`: una sesión ocupada recibe su continuación después de reiniciar; una sesión eliminada produce bloqueo y no otra conversación.
 - [x] Añade revocación de permiso entre registro y admisión. Exige rechazo sin ejecutar herramientas.
 - [x] Ejecuta las pruebas en rojo.
-- [ ] Implementa reclamación exclusiva, cola persistente y consulta con exclusión durable de solicitudes anteriores. No traduzcas timeout a `NeverStarted`.
+- [x] Implementa reclamación exclusiva, cola persistente y consulta con exclusión durable de solicitudes anteriores. No traduzcas timeout a `NeverStarted`.
 - [x] Comprueba también una solicitud retrasada que llega después de una consulta de ausencia.
 
 Verifica con los casos `admission_restart` y `requester_queue` del ejecutor nativo. Exige los mismos IDs tras reinicio y cero peticiones adicionales por reenvío.
