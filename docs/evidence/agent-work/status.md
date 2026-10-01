@@ -54,6 +54,8 @@ R `a956b5dd10` sustituyó la hidratación manual del ensayo T4 por `prepareGatew
 
 R `8a1e902865` cerró la regresión de informe para hijos cuya clave de política difiere de la sesión durable. El caso ejecutó la herramienta real: rojo antes del arreglo, verde 5/5 después. T9 sigue parcial hasta conectar la configuración productiva y el transporte R–G.
 
-R `0f0f9f0187` y G `bc477f6..b1b11f2` enlazan la cola de proyecciones con una entrada de drenaje autenticada, fijan la URL y permiten usar el snapshot duradero del host. El recibo `T8.md` distingue los ensayos de cada lado de la prueba E2E pendiente. Pasaron 13/13 casos de integración, 20/20 de host y 32/32 del cliente de progreso. Falta instalar un sondeo de código, enlazar el director y comprobar el Gateway real hasta G; T8 continúa abierta y la admisión productiva deshabilitada.
+R `0f0f9f0187` y G `bc477f6..b1b11f2` enlazan la cola de proyecciones con una entrada de drenaje autenticada, fijan la URL y permiten usar el snapshot duradero del host. Pasaron 13/13 casos de integración, 20/20 de host y 32/32 del cliente de progreso. Faltan el sondeo instalado y el director; T8 continúa abierta y la admisión productiva deshabilitada.
 
-R `9c3b46cba7` añadió y pasó la prueba de lista y ACK sobre una conexión autenticada a un Gateway de ensayo real. Falta cruzar desde la CLI de G hasta ese Gateway y la cola de progreso en una sola prueba; no se atribuye a este ensayo cobertura E2E ni se habilita la capacidad.
+R `9c3b46cba7` añadió y pasó la prueba de lista y ACK sobre una conexión autenticada a un Gateway de ensayo real. Ese ensayo por sí solo no acreditó la cadena hasta G ni habilitó la capacidad.
+
+El par G `11bec9e` / R `dda8d27d2a` pasó `projection_gateway` con diff de R vacío: una proyección nativa cruzó el Gateway real y la CLI autenticada hasta la cola de G, y el ACK la retiró. El test descubrió y corrigió la incompatibilidad con Python 3.9 del host Mac. El recibo `T8.md` registra comandos y el límite del artefacto CLI construido antes del commit de pruebas. T8 aún necesita sondeo instalado, director e informe de CLI enlazado a R; ninguna capacidad se habilitó.
