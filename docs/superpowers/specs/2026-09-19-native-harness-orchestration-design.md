@@ -92,7 +92,7 @@ La primera versión incluye estos harnesses:
 | Cursor | Cursor Agent CLI | `cursor-agent` 2026.09.18-9a7762b |
 | Grok | Grok CLI | `grok` 1.0.34 |
 
-El registro arranca con ocho entradas: `claude_fable` y `claude_opus` para Claude Code, `kimi_k3` y `kimi_coding` para Kimi, y una entrada para cada uno de `codex`, `zcode`, `cursor` y `grok`. El identificador usa sólo `[a-z0-9_]`, sin punto ni guion, y la fila de `cli-modos.tsv` se busca por el token `binary` de la entrada, no por su id. Las entradas de una misma cuenta comparten `quota_group`; una entrada sin el campo deriva su grupo de su `provider`.
+El registro arranca con siete entradas: `claude_fable` y `claude_opus` para Claude Code, `kimi_k3` y `kimi_coding` para Kimi, y una entrada para cada uno de `codex`, `zcode` y `grok` (`cursor` salio del registro el 2026-09-29 por decision de David; su fila queda como legacy explicita en `cli-modos.tsv`). El identificador usa sólo `[a-z0-9_]`, sin punto ni guion, y la fila de `cli-modos.tsv` se busca por el token `binary` de la entrada, no por su id. Las entradas de una misma cuenta comparten `quota_group`; una entrada sin el campo deriva su grupo de su `provider`.
 
 Las rutas absolutas viven en la instalación de la Mac o en configuración local. El archivo versionado no contiene rutas de usuario, tokens ni credenciales.
 
