@@ -46,7 +46,16 @@ class HostReceipts(unittest.TestCase):
             brief_digest=digest(self.brief.read_bytes()),
             input_revision={"kind": "code", "repository": "repo", "sha": "a" * 40},
             result_contract="review.v1",
+            claim_id="claim-1",
         )
+
+    def admit(self, assignment):
+        return {"state": "host-admitted", "claimId": assignment["claimId"],
+                "hostId": assignment["hostId"], "instanceId": assignment["instanceId"],
+                "generation": assignment["generation"]}
+
+    def apply(self, key, operation, deliver):
+        return self.host.apply(key, operation, deliver, self.admit)
 
     def report(self, **overrides):
         body = {
@@ -68,17 +77,18 @@ class HostReceipts(unittest.TestCase):
 
     def test_host_receipts_replay_and_lost_ack(self):
         deliveries = []
-        first = self.host.apply(self.key, self.operation, lambda ref, session: deliveries.append((ref, session)))
+        first = self.apply(self.key, self.operation, lambda ref, session: deliveries.append((ref, session)))
         self.assertEqual(first.status, "delivered")
         self.assertEqual(len(deliveries), 1)
         self.assertEqual(deliveries[0][1], "worker-1")
         assignment = json.loads(Path(deliveries[0][0]).read_text())
         self.assertEqual(assignment["taskId"], "task-1")
         self.assertEqual(assignment["generation"], 2)
+        self.assertEqual(assignment["claimId"], "claim-1")
 
         with self.assertRaisesRegex(ValueError, "active instance"):
             other_key = OperationKey("mac-test", "task-2", 1, "instance-1")
-            self.host.apply(other_key, replace(self.operation, key=other_key), lambda *_: None)
+            self.apply(other_key, replace(self.operation, key=other_key), lambda *_: None)
 
         report = self.report()
         results = [self.host.report("mac-test", report) for _ in range(100)]
@@ -109,10 +119,38 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(reopened.report("mac-test", report).result_id, results[0].result_id)
         self.assertEqual(reopened.receipt("mac-test", self.key), expected)
         self.assertEqual(reopened.apply(self.key, self.operation,
-                                        lambda *_: self.fail("duplicate delivery")).status, "acknowledged")
+                                        lambda *_: self.fail("duplicate delivery"),
+                                        self.admit).status, "acknowledged")
+
+    def test_host_requires_native_admission_before_delivery(self):
+        delivered = []
+        with self.assertRaisesRegex(ValueError, "admission receipt mismatch"):
+            self.host.apply(self.key, self.operation, lambda *_: delivered.append(True),
+                            lambda a: {**self.admit(a), "instanceId": "foreign"})
+        self.assertEqual(delivered, [])
+        self.assertEqual(self.host.spool.get(operation_id(self.key))["status"], "registered")
+        self.assertEqual(self.apply(self.key, self.operation,
+                                    lambda *_: delivered.append(True)).status, "delivered")
+        self.assertEqual(delivered, [True])
+
+    def test_lost_native_admission_ack_retries_before_first_delivery(self):
+        delivered = []
+        admissions = []
+
+        def lost_ack(assignment):
+            admissions.append(assignment["claimId"])
+            raise TimeoutError("native admission committed but ACK lost")
+
+        with self.assertRaises(TimeoutError):
+            self.host.apply(self.key, self.operation, lambda *_: delivered.append(True), lost_ack)
+        self.assertEqual(self.host.spool.get(operation_id(self.key))["status"], "registered")
+        self.assertEqual(self.apply(self.key, self.operation,
+                                    lambda *_: delivered.append(True)).status, "delivered")
+        self.assertEqual(admissions, ["claim-1"])
+        self.assertEqual(delivered, [True])
 
     def test_host_receipts_snapshot_survives_workspace_mutation_restart_and_lost_ack(self):
-        self.host.apply(self.key, self.operation, lambda *_: None)
+        self.apply(self.key, self.operation, lambda *_: None)
         report = self.report()
         original = self.artifact.read_bytes()
         result_id = self.host.report("mac-test", report).result_id
@@ -138,11 +176,11 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(calls, [(report, original), (report, original)])
 
     def test_host_receipts_tampered_snapshot_blocks_delivery(self):
-        self.host.apply(self.key, self.operation, lambda *_: None)
+        self.apply(self.key, self.operation, lambda *_: None)
         report = self.report()
         self.host.report("mac-test", report)
         second = OperationKey("mac-test", "task-2", 2, "instance-2")
-        self.host.apply(second, replace(self.operation, key=second, session="worker-2"), lambda *_: None)
+        self.apply(second, replace(self.operation, key=second, session="worker-2"), lambda *_: None)
         second_report = self.report(taskId="task-2", instanceId="instance-2")
         second_id = self.host.report("mac-test", second_report).result_id
         snapshot = self.root / "host" / "artifacts" / operation_id(self.key) / (digest(json.dumps(
@@ -165,7 +203,7 @@ class HostReceipts(unittest.TestCase):
                                                                "error": "artifact snapshot digest mismatch"}])
 
     def test_host_receipts_restart_after_snapshot_before_result_record(self):
-        self.host.apply(self.key, self.operation, lambda *_: None)
+        self.apply(self.key, self.operation, lambda *_: None)
         report = self.report()
         inbox = self.root / "host" / "inbox" / f"{operation_id(self.key)}.json"
         inbox.write_text(json.dumps(report))
@@ -183,11 +221,11 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(restarted.result_snapshot("mac-test", self.key), (report, original))
 
     def test_host_receipts_fifo_snapshot_does_not_block_other_results(self):
-        self.host.apply(self.key, self.operation, lambda *_: None)
+        self.apply(self.key, self.operation, lambda *_: None)
         report = self.report()
         self.host.report("mac-test", report)
         second = OperationKey("mac-test", "task-2", 2, "instance-2")
-        self.host.apply(second, replace(self.operation, key=second, session="worker-2"), lambda *_: None)
+        self.apply(second, replace(self.operation, key=second, session="worker-2"), lambda *_: None)
         second_report = self.report(taskId="task-2", instanceId="instance-2")
         second_id = self.host.report("mac-test", second_report).result_id
         snapshot = self.root / "host" / "artifacts" / operation_id(self.key) / (
@@ -211,7 +249,7 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(output["errors"][0]["operationId"], operation_id(self.key))
 
     def test_host_receipts_reject_partial_foreign_old_and_exit_only(self):
-        self.host.apply(self.key, self.operation, lambda *_: None)
+        self.apply(self.key, self.operation, lambda *_: None)
         for changed in (
             {"artifactRef": str(self.workspace / "missing.txt")},
             {"capability": "someone-else"},
@@ -233,13 +271,13 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(len(self.host.pending("mac-test")), 1)
 
     def test_host_receipts_exit_zero_without_report_is_not_a_result(self):
-        self.host.apply(self.key, self.operation, lambda *_: None)
+        self.apply(self.key, self.operation, lambda *_: None)
         self.assertEqual(subprocess.run(["true"], check=False).returncode, 0)
         self.assertIsNone(self.host.collect("mac-test", self.key))
         self.assertEqual(self.host.pending("mac-test"), [])
 
     def test_host_receipts_concurrent_finals_keep_one_file_and_one_result(self):
-        self.host.apply(self.key, self.operation, lambda *_: None)
+        self.apply(self.key, self.operation, lambda *_: None)
         reports = [self.report(), self.report(typedPayload={"verdict": "changes", "findingsRef": "review.txt"})]
         def send(report):
             try:
@@ -255,7 +293,7 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(len(self.host.pending("mac-test")), 1)
 
     def test_host_receipts_restart_collects_registered_inbox_before_flush(self):
-        self.host.apply(self.key, self.operation, lambda *_: None)
+        self.apply(self.key, self.operation, lambda *_: None)
         inbox = self.root / "host" / "inbox" / f"{operation_id(self.key)}.json"
         partial = inbox.with_suffix(".tmp")
         partial.write_text(json.dumps(self.report()))
@@ -273,10 +311,10 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(Host("mac-test", self.root / "host").pending("mac-test"), [])
 
     def test_host_receipts_invalid_inbox_does_not_block_other_results(self):
-        self.host.apply(self.key, self.operation, lambda *_: None)
+        self.apply(self.key, self.operation, lambda *_: None)
         key2 = OperationKey("mac-test", "task-2", 2, "instance-2")
         op2 = replace(self.operation, key=key2, session="worker-2")
-        self.host.apply(key2, op2, lambda *_: None)
+        self.apply(key2, op2, lambda *_: None)
         bad = self.root / "host" / "inbox" / f"{operation_id(self.key)}.json"
         bad.mkdir()
         good = self.root / "host" / "inbox" / f"{operation_id(key2)}.json"
@@ -331,7 +369,7 @@ class HostReceipts(unittest.TestCase):
             self.assertEqual(tmux_cmd("new-session", "-d", "-s", "worker-1", "-c", str(self.workspace),
                                       sys.executable, str(cli)).returncode, 0)
             transport = TmuxTransport("tmux", socket)
-            observation = self.host.apply(self.key, self.operation, transport.deliver)
+            observation = self.apply(self.key, self.operation, transport.deliver)
             self.assertEqual(observation.status, "delivered")
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline and not self.host.collect("mac-test", self.key):
@@ -349,7 +387,7 @@ class HostReceipts(unittest.TestCase):
             op2 = replace(self.operation, key=key2, session="worker-2")
             adapter = ShellAdapterTransport(ROOT / "scripts" / "mac" / "corrida.sh", "run-test", "lane-test",
                                             "worker-test", "mac-test", self.root / "host", str(shim))
-            self.assertEqual(self.host.apply(key2, op2, adapter.deliver).status, "delivered")
+            self.assertEqual(self.apply(key2, op2, adapter.deliver).status, "delivered")
             ref = str(self.root / "host" / "assignments" / f"{operation_id(key2)}.json")
             env = dict(os.environ, TMUX_BIN=str(shim), AGENT_WORK_HOST_STATE_DIR=str(self.root / "host"))
             foreign = subprocess.run(["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "adaptador",
@@ -373,7 +411,7 @@ class HostReceipts(unittest.TestCase):
                 sent = subprocess.run(["bash", "-c", command], env=env, capture_output=True, text=True)
                 self.assertEqual(sent.returncode, 0, sent.stderr)
 
-            self.assertEqual(self.host.apply(key3, op3, via_launcher).status, "delivered")
+            self.assertEqual(self.apply(key3, op3, via_launcher).status, "delivered")
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline and not self.host.collect("mac-test", key3):
                 time.sleep(0.1)

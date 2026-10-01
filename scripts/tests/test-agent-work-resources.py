@@ -193,8 +193,11 @@ class ResourceTests(unittest.TestCase):
                 workspace_ref=self.tmp.name, brief_ref=str(brief),
                 brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
                 input_revision={"kind": "code", "repository": "repo", "sha": "a" * 40},
-                result_contract="review.v1")
-            reference = self.host.apply(self.key, assignment, lambda *_: None).assignment_ref
+                result_contract="review.v1", claim_id="sandbox-claim")
+            reference = self.host.apply(self.key, assignment, lambda *_: None,
+                                        lambda a: {"state": "host-admitted", "claimId": a["claimId"],
+                                                   "hostId": a["hostId"], "instanceId": a["instanceId"],
+                                                   "generation": a["generation"]}).assignment_ref
             owned = manager.reserve(self.key, "owned", "TaskCreated")
             self.assertTrue(manager.begin_launch(self.key).launch_now)
             backend.mark("owned", owned.nonce)

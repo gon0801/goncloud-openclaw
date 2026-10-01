@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "agent-work"))
 
 from contracts import AuthorizedOperation, OperationKey  # noqa: E402
 from host import Host  # noqa: E402
+from native_gateway import GatewayProjectionClient  # noqa: E402
 
 
 def main():
@@ -24,6 +25,7 @@ def main():
     artifact.write_text("VEREDICTO aprobado\n")
     key = OperationKey(spec["hostId"], spec["taskId"], spec["generation"], "instance-gateway")
     host = Host(spec["hostId"], root / "host")
+    gateway = GatewayProjectionClient(spec["openclawBin"], spec["hostId"], spec["gatewayUrl"])
     host.apply(key, AuthorizedOperation(
         key=key,
         producer_id=spec["producerId"],
@@ -34,7 +36,8 @@ def main():
         brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
         input_revision=spec["revision"],
         result_contract="review.v1",
-    ), lambda *_: None)
+        claim_id=spec["claimId"],
+    ), lambda *_: None, gateway.admit_host)
     host.report(spec["hostId"], {
         "schema": "agent-work.result.v1",
         "kind": "produced",

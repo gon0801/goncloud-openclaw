@@ -65,6 +65,26 @@ class GatewayProjectionClient:
             "hostId": self.host_id, "resultId": result_id, "result": result,
         })
 
+    def admit_host(self, assignment):
+        if not isinstance(assignment, dict) or assignment.get("hostId") != self.host_id:
+            raise ValueError("host admission identity mismatch")
+        fields = ("taskId", "generation", "instanceId", "producerId", "capability", "claimId")
+        if any(not assignment.get(field) for field in fields):
+            raise ValueError("host admission assignment incomplete")
+        params = {"hostId": self.host_id, "instanceId": assignment["instanceId"],
+                  "claimId": assignment["claimId"],
+                  "capability": {"taskId": assignment["taskId"],
+                                 "generation": assignment["generation"],
+                                 "producerId": assignment["producerId"],
+                                 "token": assignment["capability"]}}
+        receipt = self._call("managedTasks.host.admit", params)
+        expected = {"state": "host-admitted", "claimId": assignment["claimId"],
+                    "hostId": self.host_id, "instanceId": assignment["instanceId"],
+                    "generation": assignment["generation"]}
+        if receipt != expected:
+            raise RuntimeError("native host admission receipt identity mismatch")
+        return receipt
+
 
 def transfer_gateway_projections(client, *, evidence_root, progress_state_dir, progress_client, host=None):
     """Drain bounded pages; a lost response leaves the same native intent for retry."""

@@ -212,6 +212,27 @@ class ProjectionTransferTest(unittest.TestCase):
         self.assertEqual(json.loads(commands[0][commands[0].index("--params") + 1]),
                          {"hostId": "host-one", "resultId": result_id, "result": result})
 
+    def test_gateway_host_admission_binds_claim_before_delivery(self):
+        assignment = {"hostId": "host-one", "taskId": "task-one", "generation": 1,
+                      "instanceId": "instance-one", "producerId": "codex",
+                      "capability": "secret", "claimId": "claim-one"}
+        receipt = {"state": "host-admitted", "hostId": "host-one",
+                   "instanceId": "instance-one", "claimId": "claim-one", "generation": 1}
+        client = GatewayProjectionClient("/isolated/openclaw", "host-one", "ws://127.0.0.1:18789")
+        with mock.patch("native_gateway.subprocess.run", return_value=subprocess.CompletedProcess(
+                [], 0, json.dumps(receipt), "")) as invoke:
+            self.assertEqual(client.admit_host(assignment), receipt)
+        command = invoke.call_args.args[0]
+        self.assertEqual(command[3], "managedTasks.host.admit")
+        self.assertEqual(json.loads(command[command.index("--params") + 1]), {
+            "hostId": "host-one", "instanceId": "instance-one", "claimId": "claim-one",
+            "capability": {"taskId": "task-one", "generation": 1,
+                           "producerId": "codex", "token": "secret"}})
+        with mock.patch("native_gateway.subprocess.run", return_value=subprocess.CompletedProcess(
+                [], 0, json.dumps({**receipt, "instanceId": "foreign"}), "")):
+            with self.assertRaisesRegex(RuntimeError, "identity mismatch"):
+                client.admit_host(assignment)
+
     def test_gateway_drain_entrypoint_requires_pinned_gateway_and_passes_paths(self):
         args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "host-one",
                 "--expect-url", "ws://127.0.0.1:18789", "--evidence-root", str(self.evidence_root),
@@ -320,8 +341,11 @@ class ProjectionTransferTest(unittest.TestCase):
                           "sha": revision or self.pending["result"]["sha"]}
         operation = AuthorizedOperation(key, "adversary", "capability", "worker-one",
                                         str(workspace), str(brief), hashlib.sha256(brief.read_bytes()).hexdigest(),
-                                        input_revision, "review.v1")
-        host.apply(key, operation, lambda *_: None)
+                                        input_revision, "review.v1", "integration-claim")
+        host.apply(key, operation, lambda *_: None,
+                   lambda a: {"state": "host-admitted", "claimId": a["claimId"],
+                              "hostId": a["hostId"], "instanceId": a["instanceId"],
+                              "generation": a["generation"]})
         host.report("host-one", {
             "schema": "agent-work.result.v1", "kind": "produced", "hostId": "host-one",
             "taskId": key.task_id, "generation": key.generation, "instanceId": key.instance_id,

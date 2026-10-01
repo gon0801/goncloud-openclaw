@@ -89,12 +89,14 @@ class Host:
             os.unlink(pending)
 
     def apply(self, key: OperationKey, operation: AuthorizedOperation,
-              deliver: Callable[[str, str], None]) -> HostObservation:
+              deliver: Callable[[str, str], None],
+              admit: Callable[[dict], dict]) -> HostObservation:
         self._host(key.host_id)
         if operation.key != key:
             raise ValueError("operation key mismatch")
         if key.generation < 0 or not all((key.task_id, key.instance_id, operation.producer_id,
-                                           operation.capability, operation.session, operation.result_contract)) \
+                                           operation.capability, operation.session, operation.result_contract,
+                                           operation.claim_id)) \
                 or not isinstance(operation.input_revision, dict):
             raise ValueError("invalid authorized operation")
         brief = under(operation.brief_ref, operation.workspace_ref)
@@ -110,6 +112,7 @@ class Host:
             "instanceId": key.instance_id,
             "producerId": operation.producer_id,
             "capability": operation.capability,
+            "claimId": operation.claim_id,
             "session": operation.session,
             "workspaceRef": str(Path(operation.workspace_ref).resolve()),
             "briefRef": str(brief),
@@ -131,6 +134,15 @@ class Host:
                 raise ValueError("assignment reference changed")
         else:
             atomic_json(assignment_ref, assignment)
+        status = self.spool.get(op_id)["status"]
+        if status == "registered":
+            receipt = admit(assignment)
+            if (not isinstance(receipt, dict) or receipt.get("state") != "host-admitted"
+                    or receipt.get("claimId") != operation.claim_id
+                    or receipt.get("hostId") != key.host_id
+                    or receipt.get("instanceId") != key.instance_id
+                    or receipt.get("generation") != key.generation):
+                raise ValueError("native host admission receipt mismatch")
         if not self.spool.begin_delivery(op_id):
             status = self.spool.get(op_id)["status"]
             return HostObservation("uncertain" if status == "attempted" else status, str(assignment_ref))

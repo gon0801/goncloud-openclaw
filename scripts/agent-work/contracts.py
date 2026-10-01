@@ -27,6 +27,7 @@ class AuthorizedOperation:
     brief_digest: str
     input_revision: dict
     result_contract: str
+    claim_id: str
 
 
 @dataclass(frozen=True)
