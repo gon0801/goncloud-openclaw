@@ -1510,6 +1510,44 @@ delta=$((t2 - t1))
 [ "$delta" -ge 5 ] || fail "(2q-16) la segunda senal llego ${delta}s tras la primera (< REMIND 6s): fue reinicio de reloj, no recordatorio"
 "$TM" -L "$L" kill-session -t "=rem-r2:" 2>/dev/null
 echo "ok (2q-16): el wake propio no reinicia el reloj de recordatorio (R2)"
+
+# (2q-17) B1 C2-r2: la proteccion mira el aviso VIGENTE, no cualquier tratado
+# de la sesion. Con un tratado VIEJO de la misma sesion ya en tratados/, el
+# wake propio de un aviso NUEVO no reinicia el reloj: el recordatorio del
+# aviso nuevo sale a QUIET_REMIND_SECS (sin el guard por id, el tratado viejo
+# hacia que el cambio de hash reiniciara notified=0 y el recordatorio jamas
+# salia).
+STATE_DIR="$T/state-2q-17"; mkdir -p "$STATE_DIR"
+CORRIDA_STATE17="$T/corrida-17"; mkdir -p "$CORRIDA_STATE17/rem-R17/avisos/tratados"
+"$TM" -L "$L" new-session -d -s rem-2q17 -x 80 -y 20 'cat' || fail "no se pudo crear rem-2q17"
+mark rem-2q17
+"$TM" -L "$L" set-environment -t rem-2q17 OPENCLAW_WATCH_RUN rem-R17
+sleep 2
+: >"$AARGV"
+t1=""; t2=""; h1=""; i=0
+while [ "$i" -lt 120 ]; do
+  CORRIDA_BIN="$STUB_AV" CORRIDA_STATE="$CORRIDA_STATE17" run_av || fail "--once (2q-17) fallo"
+  n=$(grep -c 'avisos emitir rem-R17 rem-2q17 fin-turno' "$AARGV" 2>/dev/null)
+  if [ -z "$t1" ] && [ "${n:-0}" -ge 1 ]; then
+    t1=$(date +%s)
+    h1=$(grep 'avisos emitir rem-R17 rem-2q17 fin-turno' "$AARGV" | head -1 | sed 's/.*--llave //')
+    # Consumo del aviso v1: aparece el tratado con su id (como el atender).
+    id1="rem-R17-rem-2q17-fin-turno-$(printf '%s' "$h1" | shasum -a 1 | awk '{print substr($1,1,10)}')"
+    : > "$CORRIDA_STATE17/rem-R17/avisos/tratados/$id1.json"
+    "$TM" -L "$L" send-keys -t "=rem-2q17:" "eco del wake 1" Enter
+  fi
+  if [ -n "$t1" ] && [ "${n:-0}" -ge 2 ]; then
+    t2=$(date +%s)
+    break
+  fi
+  sleep 0.7; i=$((i + 1))
+done
+[ -n "$t1" ] || fail "(2q-17) el primer quiet debia salir por avisos: $(cat "$AARGV")"
+[ -n "$t2" ] || fail "(2q-17) con un tratado viejo, el aviso nuevo debia avisar y ser recordado: $(cat "$AARGV")"
+delta=$((t2 - t1))
+[ "$delta" -ge 5 ] || fail "(2q-17) la senal nueva llego ${delta}s tras el wake (< REMIND 6s): el tratado viejo anulo la proteccion"
+"$TM" -L "$L" kill-session -t "=rem-2q17:" 2>/dev/null
+echo "ok (2q-17): la proteccion mira el aviso vigente, no tratados viejos"
 else
   echo "SKIP (2q): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
 fi

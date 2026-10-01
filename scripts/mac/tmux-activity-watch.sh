@@ -291,6 +291,17 @@ avisos_emitir_bg() { # $1 bin $2 run $3 sesion $4 tipo $5 llave $6 fallido
 # backoff, y el emitir borra el registro al emitir bien). Sin cron nuevo: el
 # mismo tick del vigilante es el reloj.
 
+aviso_id_de() { # $1 llave -> sha1 hex corto; el vigia computa el mismo id
+  # que corrida/avisos.sh (B1 C2-r2: el guard de R2 mira el aviso VIGENTE).
+  local h
+  if command -v shasum >/dev/null 2>&1; then
+    h="$(printf '%s' "$1" | shasum -a 1)"
+  else
+    h="$(printf '%s' "$1" | sha1sum 2>/dev/null)"
+  fi
+  printf '%s\n' "$h" | awk '{ print substr($1, 1, 10) }'
+}
+
 aviso_dueno() { # $1 run $2 sesion $3 tipo $4 llave [$5 text]
   local texto="${5:-avisos $2 $3}"
   [[ -n $1 && -x $CORRIDA_BIN && ${CORRIDA_AVISOS:-1} != 0 ]] || return 1
@@ -303,6 +314,7 @@ aviso_dueno() { # $1 run $2 sesion $3 tipo $4 llave [$5 text]
   AV_F="$STATE_DIR/avisos-fallidos/$1-$2-$3-$4.json"
   printf '{"schema":"avisos-fallido.v1","run":"%s","sesion":"%s","tipo":"%s","llave":"%s","intentos":0,"actualizado":%s000}\n' \
     "$1" "$2" "$3" "$4" "$(date +%s)" > "$AV_F"
+  AVISO_ID="$1-$2-$3-$(aviso_id_de "$4")"
   avisos_emitir_bg "$CORRIDA_BIN" "$1" "$2" "$3" "$4" "$AV_F"
   return 0
 }
@@ -490,8 +502,9 @@ write_state() {
   local file=$1 hash=$2 since=$3 notified=$4 path=$5 approval=$6 approval_at=$7 approval_since=$8
   local notified_at=${9:-0}
   local run=${10:-}
-  printf 'hash=%s\nsince=%s\nnotified=%s\npath=%s\napproval=%s\napproval_at=%s\napproval_since=%s\nnotified_at=%s\nrun=%s\n' \
-    "$hash" "$since" "$notified" "$path" "$approval" "$approval_at" "$approval_since" "$notified_at" "$run" >"$file"
+  local aviso=${11:-}
+  printf 'hash=%s\nsince=%s\nnotified=%s\npath=%s\napproval=%s\napproval_at=%s\napproval_since=%s\nnotified_at=%s\nrun=%s\naviso=%s\n' \
+    "$hash" "$since" "$notified" "$path" "$approval" "$approval_at" "$approval_since" "$notified_at" "$run" "$aviso" >"$file"
 }
 
 # Checksum of stdin as one token. cksum is POSIX: same on the Mac and in Linux CI.
@@ -514,7 +527,7 @@ session_listed() {
 }
 
 tick() {
-  local session activity cmd path sf prev_hash prev_since prev_notified now seen_file err_file
+  local session activity cmd path sf prev_hash prev_since prev_notified now seen_file err_file prev_aviso=""
   local prev_approval prev_approval_at prev_approval_since screen hash since notified tailtxt
   local approval approval_at approval_since due elapsed text last_path rc prev_notified_at notified_at
   local run prev_run sufijo rc_av llave_av
@@ -559,6 +572,7 @@ tick() {
     prev_hash=$(read_state_field "$sf" hash)
     prev_since=$(read_state_field "$sf" since)
     prev_notified=$(read_state_field "$sf" notified)
+    prev_aviso=$(read_state_field "$sf" aviso)
     prev_approval=$(read_state_field "$sf" approval)
     prev_approval_at=$(read_state_field "$sf" approval_at)
     prev_approval_since=$(read_state_field "$sf" approval_since)
@@ -597,15 +611,11 @@ tick() {
       since=$activity
     elif [[ $prev_hash != "$hash" ]]; then
       since=$now
-      # R2 (C2-r1): si el cambio de panel lo provoco el WAKE PROPIO (el
-      # aviso recien enviado tecleo atender en la sesion), el reloj de
-      # recordatorio no se reinicia: notified/notified_at sobreviven y el
-      # recordatorio a QUIET_REMIND_SECS sigue su curso.
-      # R2 (C2-r1): mientras el aviso fin-turno de la sesion siga SIN
-      # consumar (en avisos/ o perdido), los cambios de panel no reinician el
-      # reloj de recordatorio: solo su consumo en tratados/ lo cierra. Asi el
-      # wake propio no lo atrasa y la perdida se recupera por recordatorio.
-      if [[ -z $run ]] || ls "$CORRIDA_STATE/$run/avisos/tratados/"*-"$session"-fin-turno-*.json >/dev/null 2>&1; then
+      # R2 (C2-r2): los cambios de panel no reinician el reloj mientras el
+      # aviso VIGENTE (el ultimo fin-turno emitido para esta sesion) no este
+      # consumado en tratados/ (en avisos/ sigue pendiente o se perdio).
+      # Un tratado VIEJO de otra ronda no anula la proteccion (B1 C2-r2).
+      if [[ -z $run || -z $prev_aviso ]] || [[ -n $run && -f "$CORRIDA_STATE/$run/avisos/tratados/$prev_aviso" ]]; then
         prev_notified=0
       fi
     else
@@ -664,6 +674,7 @@ tick() {
 
     notified=$prev_notified
     notified_at=$prev_notified_at
+    aviso_aviso=$prev_aviso
     elapsed=$((now - since))
     due=0
     if [[ $prev_notified == 0 ]]; then
@@ -679,15 +690,17 @@ tick() {
       if [[ $rc_av == 0 ]]; then
         notified=1
         notified_at=$now
+        aviso_aviso="$AVISO_ID"
       else
         text="tmux: $session quiet for ${elapsed}s | cmd=$cmd cwd=$path | read it before acting: $TMUX_BIN capture-pane -p -t $session -S -80"
         if send_event "$text" "$run"; then
           notified=1
           notified_at=$now
+          aviso_aviso=""
         fi
       fi
     fi
-    write_state "$sf" "$hash" "$since" "$notified" "$path" "" 0 0 "$notified_at" "$run"
+    write_state "$sf" "$hash" "$since" "$notified" "$path" "" 0 0 "$notified_at" "$run" "$aviso_aviso"
   done <"$seen_file"
 
   # Sessions we have state for but that vanished from this tick's listing: closed.
