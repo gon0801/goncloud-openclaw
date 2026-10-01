@@ -26,7 +26,9 @@ El caso `recovery_limit` pasó 2/2 sobre el mismo SHA: la única recuperación p
 
 `runtime-map.json` apunta ahora por defecto al checkout de integración R, que contiene estos commits. `test-runtime.sh budget_tree` pasó 3/3 sin variable de entorno y registró R `8c84e65233` con diff vacío. El mapa conserva `sourceBaseSha` original; no se ha cambiado la versión base ni una ruta mapeada.
 
-`idle_72h` pasó 1/1 sobre el R limpio actual después de un build completo. G prepara T6 con la revisión nativa completa en la asignación del host: el ensayo rojo demostró que antes aceptaba una revisión diferente; ahora la rechaza antes de persistirla. Pasaron 11 pruebas de recibos, 7 de recursos y 14 de integración. Falta el RPC autenticado que entrega el spool al `report` nativo; T6 sigue abierta. Ver `T5.md` y `T6.md`.
+`idle_72h` pasó 1/1 sobre R `8c84e65233` limpio después de un build completo. G preparó T6 con la revisión nativa completa en la asignación del host: el ensayo rojo demostró que antes aceptaba una revisión diferente; ahora la rechaza antes de persistirla. Pasaron 11 pruebas de recibos, 7 de recursos y 14 de integración. Esta fue la preparación antes del RPC registrado abajo. Ver `T5.md` y `T6.md`.
+
+R `cb395bdf06` y el puente de G completaron una entrega aislada del spool CLI al `report` nativo por Gateway autenticado; el segundo vaciado no creó otro resultado. La prueba cruzada pasó 1/1 y el build de R pasó. T6 sigue abierta por el vínculo de la instancia a la admisión y el acceso durable a evidencia sin workspace; `coverage.json` permanece deshabilitado. Ver `T6.md`.
 
 T5 tiene una preparación aislada en R (`bc6c8cf75e..6ebf81e7fe`): observaciones de espera por episodio y causa, cierre durable aun cuando llega antes de la observación, consulta por solicitante y migración v26. La primera revisión reprodujo la reapertura tras entrega desordenada; la segunda aprobó la corrección. Pasaron 6 pruebas de espera, 22 pruebas focalizadas de almacén/proyección/consumo, tipos, lint y hooks. Falta conectar los eventos reales del ejecutor, recuperación acotada, pruebas de 72 horas sin inferencia y contador externo; T5 no está terminada.
 

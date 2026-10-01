@@ -200,11 +200,11 @@ Depende de T0 para preparar dobles y de B1–B2 para aceptar la integración. Cr
 
 Produce `Host.apply(OperationKey, AuthorizedOperation)` y el informe portable que consume `report`. Un CLI ficticio sin hooks debe cumplir el mismo contrato.
 
-- [ ] Añade `host_receipts`: registro antes de entrega, ACK vinculado al encargo y un solo encargo activo por instancia.
-- [ ] Añade informe parcial, credencial ajena, versión antigua y salida cero sin informe. Ninguno acredita entrega válida.
+- [x] Añade `host_receipts`: registro antes de entrega, ACK vinculado al encargo y un solo encargo activo por instancia.
+- [x] Añade informe parcial, credencial ajena, versión antigua y salida cero sin informe. Ninguno acredita entrega válida.
 - [ ] Ejecuta las pruebas en rojo con socket tmux y directorios de ensayo.
-- [ ] Implementa entrega por referencia, escritura atómica de resultados y spool hasta recibo durable. Usa `hostId` explícito para cada lectura.
-- [ ] Repite cien veces el informe y pierde su ACK. Exige un resultado y el mismo recibo.
+- [x] Implementa entrega por referencia, escritura atómica de resultados y spool hasta recibo durable. Usa `hostId` explícito para cada lectura.
+- [x] Repite cien veces el informe y pierde su ACK. Exige un resultado y el mismo recibo.
 
 Verifica con `bash scripts/tests/test-agent-work-host.sh host_receipts`. Corre además `bash scripts/tests/test-native-harness-adapters.sh` cuando cambie su adaptador. No uses `~/bin`, el tmux personal ni un proveedor real.
 

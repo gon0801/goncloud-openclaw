@@ -17,6 +17,7 @@ from contracts import AuthorizedOperation, OperationKey  # noqa: E402
 from host import Host  # noqa: E402
 from native_gateway import GatewayProjectionClient, main as gateway_main, transfer_gateway_projections  # noqa: E402
 from progress_bridge import event_id, projection_digest, transfer_host_projection, transfer_projection  # noqa: E402
+from spool import canonical  # noqa: E402
 
 
 class ProjectionTransferTest(unittest.TestCase):
@@ -186,6 +187,31 @@ class ProjectionTransferTest(unittest.TestCase):
         self.assertEqual(json.loads(ack_command[ack_command.index("--params") + 1]),
                          {"publisherHostId": "host-one", "receipt": receipt})
 
+    def test_host_spool_reports_to_gateway_once_after_lost_response(self):
+        host, key, _ = self.reported_host()
+        result = host.result_snapshot("host-one", key)[0]
+        result_id = hashlib.sha256(canonical(result).encode()).hexdigest()
+        receipt = {"hostId": "host-one", "taskId": key.task_id,
+                   "generation": key.generation, "instanceId": key.instance_id,
+                   "producerId": result["producerId"], "resultId": result_id,
+                   "receiptId": "native-result-digest"}
+        responses = [
+            subprocess.CompletedProcess([], 1, "", "lost Gateway response"),
+            subprocess.CompletedProcess([], 0, json.dumps(receipt), ""),
+        ]
+        client = GatewayProjectionClient("/isolated/openclaw", "host-one", "ws://127.0.0.1:18789")
+        with mock.patch("native_gateway.subprocess.run", side_effect=responses) as invoke:
+            with self.assertRaisesRegex(RuntimeError, "rejected request"):
+                host.flush("host-one", client.report_host_result)
+            self.assertEqual(host.pending("host-one"), [result])
+            self.assertEqual(host.flush("host-one", client.report_host_result), [receipt])
+        self.assertEqual(host.flush("host-one", client.report_host_result), [])
+        commands = [call.args[0] for call in invoke.call_args_list]
+        self.assertEqual(commands[0], commands[1])
+        self.assertEqual(commands[0][3], "managedTasks.host.report")
+        self.assertEqual(json.loads(commands[0][commands[0].index("--params") + 1]),
+                         {"hostId": "host-one", "resultId": result_id, "result": result})
+
     def test_gateway_drain_entrypoint_requires_pinned_gateway_and_passes_paths(self):
         args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "host-one",
                 "--expect-url", "ws://127.0.0.1:18789", "--evidence-root", str(self.evidence_root),
@@ -211,6 +237,19 @@ class ProjectionTransferTest(unittest.TestCase):
                 gateway_main(args + ["--host-state-dir", str(self.root / "host")])
         self.assertEqual(transfer.call_args.kwargs["host"].host_id, "host-one")
         self.assertEqual(transfer.call_args.kwargs["host"].state_dir, self.root / "host")
+
+    def test_gateway_flush_entrypoint_requires_host_spool(self):
+        args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "host-one",
+                "--expect-url", "ws://127.0.0.1:18789", "--flush-results"]
+        with mock.patch("sys.stderr"):
+            with self.assertRaises(SystemExit):
+                gateway_main(args)
+        with mock.patch("native_gateway.Host") as host_type:
+            host_type.return_value.flush.return_value = [{"receiptId": "native-one"}]
+            with mock.patch("builtins.print") as output:
+                self.assertEqual(gateway_main(args + ["--host-state-dir", str(self.root / "host")]), 0)
+        host_type.assert_called_once_with("host-one", str(self.root / "host"))
+        output.assert_called_once_with('{"reported": 1}')
 
     def test_gateway_entrypoint_imports_with_mac_system_python(self):
         system_python = Path("/usr/bin/python3")
