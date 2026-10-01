@@ -1,0 +1,5 @@
+# T2 — reclamación durable, aún parcial
+
+Fuente R: `a841c0bb29cb018e09b486968dd52c3bbda2e0d0`. La regresión roja documentó ausencia de `claimManagedTaskAdmission`: [log rojo](T2-red.txt). Comando focalizado: `node scripts/run-vitest.mjs src/agents/tasks/managed-task.admission.test.ts src/agents/tasks/managed-task.spawn-pipeline.test.ts src/agents/tasks/managed-task.store.test.ts --maxWorkers=1`. Resultado: 11/11, [log completo](T2-partial-focused.txt). `pnpm tsgo:core`, oxlint focalizado y hook de commit pasaron. Una verificación amplia de tipos de pruebas se canceló después de pasar los fragmentos `agents-root` y `agents-other`; no se cuenta como batería completa.
+
+El slice fija la reclamación antes de inicializar un hijo, conserva incertidumbre tras caída, impide una segunda admisión por reenvío y enlaza el ID de ejecución nativo. Falta probar y conectar `requester_queue`: sesión ocupada→reinicio→entrega y sesión eliminada→bloqueo. La confirmación debe comprobar el registro nativo exacto antes de habilitar la entrada productiva. T2 sigue abierta.
