@@ -141,7 +141,7 @@ Depende de T1. Modifica `R.scheduler`, `R.taskStore`, `R.toolContext` y sus prue
 Consume el registro de T1. Produce `admit(AdmissionKey, ExecutionTarget, InputRefs, BudgetReservation)` y consulta durable de admisión. Revalida permisos al admitir. Mantén deshabilitada la entrada productiva hasta disponer del presupuesto de T4.
 
 - [x] Añade `admission_restart`: dos emisores y reinicio antes o después de admitir generan una sola admisión lógica.
-- [ ] Añade `requester_queue`: una sesión ocupada recibe su continuación después de reiniciar; una sesión eliminada produce bloqueo y no otra conversación.
+- [x] Añade `requester_queue`: una sesión ocupada recibe su continuación después de reiniciar; una sesión eliminada produce bloqueo y no otra conversación.
 - [x] Añade revocación de permiso entre registro y admisión. Exige rechazo sin ejecutar herramientas.
 - [x] Ejecuta las pruebas en rojo.
 - [ ] Implementa reclamación exclusiva, cola persistente y consulta con exclusión durable de solicitudes anteriores. No traduzcas timeout a `NeverStarted`.
@@ -155,8 +155,8 @@ Depende de T2. Modifica `R.taskDomain`, `R.taskStore`, `R.sessionLifecycle` y su
 
 Produce `resolve(Caller, HandlingReceipt, Decision)` y `cancel(AuthorizedCaller, TaskId, reason)`. Deriva claves de hijos del recibo y del `slot`.
 
-- [ ] Añade `handling_atomic`: decisión, hijos y recibo aparecen juntos o no aparece ninguno, incluso con dos consumidores.
-- [ ] Añade `handling_unresolved`: `agent_end` sin `resolve` conserva el resultado pendiente.
+- [x] Añade `handling_atomic`: decisión, hijos y recibo aparecen juntos o no aparece ninguno, incluso con dos consumidores.
+- [x] Añade `handling_unresolved`: `agent_end` sin `resolve` conserva el resultado pendiente.
 - [ ] Añade cancelación concurrente, callback tardío y herramienta externa con efecto incierto. Exige evidencia conservada y ningún reenvío ciego.
 - [ ] Ejecuta los casos en rojo.
 - [ ] Implementa consumo, cancelación y recuperación de la misma decisión. Captura resultados antes de cualquier eliminación automática de hijos.
