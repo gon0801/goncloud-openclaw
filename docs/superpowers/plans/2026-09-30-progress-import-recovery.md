@@ -146,10 +146,11 @@ Añade estos casos a `ProgressClientTest` y ejecútalos durante la implementaci�
       Si vuelve el mismo bloqueo en dos rondas seguidas, detén la implementación.
 - [x] Ejecuta los hooks con `pre-commit run --files` y los archivos del commit.
       Corrige los fallos antes de crear el commit. No uses `--no-verify`.
-- [ ] Valida la batería completa una sola vez sobre el SHA final en CI.
-      Conserva los resultados del mismo SHA. No reutilices CI de `7a2a358`
-      para afirmar que estos cambios nuevos pasaron.
-- [ ] Informa por separado si el código está verificado, si el PR está integrado
+- [x] Valida la batería completa una sola vez sobre el último SHA de código
+      en CI. `d506ffc` pasó los tres shards, el contrato y el gate en
+      [Quality run 36797045197](https://github.com/gon0801/goncloud-openclaw/actions/runs/36797045197).
+      Un commit posterior que solo documente el cierre usa el carril fast.
+- [x] Informa por separado si el código está verificado, si el PR está integrado
       y si el gateway real usa el cambio. La prueba local no demuestra despliegue.
 
 Ejecuta estas tareas en serie porque comparten el cliente y su prueba de recuperación.
