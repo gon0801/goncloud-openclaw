@@ -333,4 +333,12 @@ FAKE_EVENT_RACE_STATUS=1 tt paso carrera-estado 1 mergeado "paso anterior" >/dev
   = "('revision-cruzada', 'revisor ya entro')" ] || fail "(15) el paso obsoleto piso el estado nuevo"
 echo "ok (15): conflicto no pisa estado mas nuevo"
 
+# (16) 19.3-18: una corrida cerrada se pinta cerrada, no "implementando".
+tt abrir parte-cerrada "Parte cerrada" "Primera" >/dev/null || fail "(16) abrir fallo"
+tt cerrar parte-cerrada "Trabajo terminado" >/dev/null || fail "(16) cerrar fallo"
+out=$(tt ver parte-cerrada) || fail "(16) ver fallo: $out"
+printf '%s' "$out" | grep -q "cerrado" || fail "(16) el ver no dice cerrado: $out"
+printf '%s' "$out" | grep -q "\[implementando\]" && fail "(16) la corrida cerrada sigue pintada implementando: $out"
+echo "ok (16): el ver de una corrida cerrada la pinta cerrada"
+
 echo "TODO VERDE: tablero-trabajo"

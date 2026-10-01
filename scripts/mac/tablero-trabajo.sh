@@ -219,7 +219,10 @@ def carril_nuevo(n, nombre, repo):
 def resumen(doc):
     hechas = sum(1 for c in doc["carriles"] if c["estado"] == "mergeado")
     lineas = [f"{doc['corrida']}: {doc['titulo']} ({hechas} de {len(doc['carriles'])} partes terminadas)"]
-    lineas += [f"  {c['id']} [{c['estado']}] {c['nombre']}" for c in doc["carriles"]]
+    # 19.3-18: cerrada se pinta cerrada; el estado del carril es su ultima
+    # fase activa y ya no describe un trabajo terminado.
+    cerrada = bool(doc["cierre"]["at"])
+    lineas += [f"  {c['id']} [{'cerrado' if cerrada else c['estado']}] {c['nombre']}" for c in doc["carriles"]]
     lineas.append(f"  sigue: {doc['siguiente_paso']}")
     if doc["atencion_requerida"]["necesaria"]:
         lineas.append(f"  necesita a David: {doc['atencion_requerida']['motivo']}")
