@@ -164,6 +164,8 @@ class Host:
         if len(encoded) > 1024 * 1024:
             raise ValueError("result too large")
         result_id = hashlib.sha256(encoded).hexdigest()
+        if current["result_id"] and current["result_id"] != result_id:
+            raise ValueError("conflicting final result")
         snapshot = self._snapshot_path(op_id, result_id)
         try:
             self._snapshot_bytes(snapshot, result["digest"])

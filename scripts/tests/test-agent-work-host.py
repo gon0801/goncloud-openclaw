@@ -129,6 +129,9 @@ class HostReceipts(unittest.TestCase):
             restarted.flush("mac-test", runtime)
         self.artifact.unlink()
         self.assertEqual(restarted.report("mac-test", report).result_id, result_id)
+        with self.assertRaisesRegex(ValueError, "conflicting final result"):
+            restarted.report("mac-test", dict(report, observedRevision="other-revision"))
+        self.assertEqual(len(list((self.root / "host" / "artifacts" / operation_id(self.key)).glob("*.bin"))), 1)
         self.assertEqual(Host("mac-test", self.root / "host").flush("mac-test", runtime)[0]["resultId"], result_id)
         self.assertEqual(calls, [(report, original), (report, original)])
 
