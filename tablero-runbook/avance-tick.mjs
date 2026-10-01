@@ -183,7 +183,36 @@ function asegurarJob(a) {
     r = openclaw(a.cli, ["cron", "edit", previo.id, ...comun]);
   }
   if (!r.ok) fallar(`no pude dejar ${DECLARACION} como job de comando`);
-  return unReloj(a.cli).id;
+  // 19.3-5-F5: la alerta de fallo solo existe en `cron edit` (no en `add`):
+  // se aplica en el mismo iniciar, tras el alta o la edicion.
+  const id0 = unReloj(a.cli).id;
+  const ra = openclaw(a.cli, [
+    "cron", "edit", id0,
+    "--failure-alert", "--failure-alert-channel", "telegram",
+    "--failure-alert-account-id", "default", "--failure-alert-to", a.destino,
+    "--failure-alert-after", "1", "--failure-alert-cooldown", "1h",
+    "--failure-alert-mode", "announce",
+  ]);
+  if (!ra.ok) fallar(`no pude dejar la alerta de fallo en ${id0}`);
+  // 19.3-5-F3: read-back: el job leido de vuelta trae el payload de comando
+  // con el argv esperado y el bloque failureAlert al destino.
+  const job = leerJob(a.cli, id0);
+  if (job.payload?.kind !== "command" || JSON.stringify(job.payload.argv) !== JSON.stringify(argv))
+    fallar(`${DECLARACION} quedo sin el payload esperado tras el alta/edicion`);
+  // El bloque trae canal y destinatario (el flag es --failure-alert-to);
+  // aqui se exige el bloque, sin atar la forma exacta del JSON.
+  if (typeof job.failureAlert !== "object" || job.failureAlert === null)
+    fallar(`${DECLARACION} quedo sin la alerta de fallo a ${a.destino}`);
+  return id0;
+}
+
+// 19.3-5-F3: lectura de un job por id (`cron get`, JSON).
+function leerJob(cli, id) {
+  const r = openclaw(cli, ["cron", "get", id, "--json"]);
+  const d = r.ok ? objetoDe(r.salida) : undefined;
+  const job = d?.job ?? d?.result?.job ?? d;
+  if (job === undefined || job.id !== id) fallar(`no pude leer el job ${id}`);
+  return job;
 }
 
 // El corte solo se siembra sobre un scratch vacio: repetirlo sobre uno valido
