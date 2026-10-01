@@ -28,6 +28,10 @@ case "$case_name" in
     test_file='src/agents/tasks/managed-task.handling.test.ts'
     test_pattern='keeps a result pending across agent_end|archives a result received after cancellation|preserves an uncertain external effect'
     probe_restart=0 ;;
+  idle_72h)
+    test_file='src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts'
+    test_pattern="restores a managed collector's requester wake after restart \(idle requester\)"
+    probe_restart=0 ;;
   *) printf 'Unknown or unimplemented agent-work runtime case: %s\n' "${1:-}" >&2; exit 2 ;;
 esac
 
