@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 from contracts import AuthorizedOperation, OperationKey  # noqa: E402
 from host import Host  # noqa: E402
+from native_gateway import GatewayProjectionClient, main as gateway_main, transfer_gateway_projections  # noqa: E402
 from progress_bridge import event_id, projection_digest, transfer_host_projection, transfer_projection  # noqa: E402
 
 
@@ -137,6 +138,99 @@ class ProjectionTransferTest(unittest.TestCase):
         receipt = self.transfer(lambda value: value)
         event = self.state_dir / "runs" / "run-1" / "queue" / (receipt["eventId"] + ".json")
         self.assertEqual(json.loads(event.read_text())["kind"], "round.ready")
+
+    def test_gateway_projection_drain_publishes_once_and_acknowledges(self):
+        pending = self.pending.copy()
+        class Client:
+            host_id = "host-one"
+            rows = [pending]
+            receipts = []
+
+            def list_pending(self, after_task_id=None, limit=100):
+                return [row for row in self.rows if not after_task_id or row["taskId"] > after_task_id]
+
+            def ack(self, receipt):
+                self.receipts.append(receipt)
+                self.rows = []
+                return receipt
+
+        client = Client()
+        self.assertEqual(transfer_gateway_projections(
+            client, evidence_root=self.evidence_root, progress_state_dir=self.state_dir,
+            progress_client=ROOT / "scripts" / "mac" / "progress-events.py",
+        ), 1)
+        self.assertEqual(len(client.receipts), 1)
+        self.assertEqual(client.rows, [])
+        queued = list((self.state_dir / "runs" / "run-1" / "queue").glob("*.json"))
+        self.assertEqual(len(queued), 1)
+
+    def test_gateway_client_uses_authenticated_cli_rpc_with_exact_receipt(self):
+        receipt = {"taskId": "task-one", "queueHash": "f" * 64}
+        responses = [
+            subprocess.CompletedProcess([], 0, json.dumps({"projections": [self.pending]}), ""),
+            subprocess.CompletedProcess([], 0, json.dumps(receipt), ""),
+        ]
+        client = GatewayProjectionClient("/isolated/openclaw", "host-one", "ws://127.0.0.1:18789")
+        with mock.patch("native_gateway.subprocess.run", side_effect=responses) as invoke:
+            self.assertEqual(client.list_pending(), [self.pending])
+            self.assertEqual(client.ack(receipt), receipt)
+        list_command = invoke.call_args_list[0].args[0]
+        ack_command = invoke.call_args_list[1].args[0]
+        self.assertEqual(list_command[:4], ["/isolated/openclaw", "gateway", "call",
+                                            "managedTasks.projections.list"])
+        self.assertEqual(json.loads(list_command[list_command.index("--params") + 1]),
+                         {"publisherHostId": "host-one", "limit": 100})
+        self.assertEqual(ack_command[3], "managedTasks.projections.ack")
+        self.assertEqual(list_command[list_command.index("--expect-url") + 1],
+                         "ws://127.0.0.1:18789")
+        self.assertEqual(json.loads(ack_command[ack_command.index("--params") + 1]),
+                         {"publisherHostId": "host-one", "receipt": receipt})
+
+    def test_gateway_drain_entrypoint_requires_pinned_gateway_and_passes_paths(self):
+        args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "host-one",
+                "--expect-url", "ws://127.0.0.1:18789", "--evidence-root", str(self.evidence_root),
+                "--progress-state-dir", str(self.state_dir), "--progress-client", "/isolated/progress.py"]
+        with mock.patch("native_gateway.transfer_gateway_projections", return_value=2) as transfer:
+            with mock.patch("builtins.print") as output:
+                self.assertEqual(gateway_main(args), 0)
+        self.assertEqual(transfer.call_args.kwargs, {
+            "evidence_root": str(self.evidence_root),
+            "progress_state_dir": str(self.state_dir),
+            "progress_client": "/isolated/progress.py",
+        })
+        self.assertEqual(transfer.call_args.args[0].expected_url, "ws://127.0.0.1:18789")
+        output.assert_called_once_with('{"transferred": 2}')
+        with mock.patch("sys.stderr"):
+            with self.assertRaises(SystemExit):
+                gateway_main([arg for arg in args
+                              if arg != "--expect-url" and arg != "ws://127.0.0.1:18789"])
+
+    def test_gateway_ack_loss_keeps_one_queued_event(self):
+        pending = self.pending.copy()
+        class Client:
+            host_id = "host-one"
+            rows = [pending]
+
+            def list_pending(self, after_task_id=None, limit=100):
+                return self.rows
+
+            def ack(self, receipt):
+                self.rows = []
+                raise ConnectionError("native ACK response lost")
+
+        client = Client()
+        with self.assertRaises(ConnectionError):
+            transfer_gateway_projections(
+                client, evidence_root=self.evidence_root, progress_state_dir=self.state_dir,
+                progress_client=ROOT / "scripts" / "mac" / "progress-events.py",
+            )
+        queued = list((self.state_dir / "runs" / "run-1" / "queue").glob("*.json"))
+        self.assertEqual(len(queued), 1)
+        self.assertEqual(transfer_gateway_projections(
+            client, evidence_root=self.evidence_root, progress_state_dir=self.state_dir,
+            progress_client=ROOT / "scripts" / "mac" / "progress-events.py",
+        ), 0)
+        self.assertEqual(len(list((self.state_dir / "runs" / "run-1" / "queue").glob("*.json"))), 1)
 
     def test_mutating_source_after_validation_cannot_poison_event_id(self):
         original_run = subprocess.run

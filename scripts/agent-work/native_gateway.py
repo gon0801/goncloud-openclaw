@@ -1,0 +1,99 @@
+"""Authenticated Gateway transport for the native projection queue."""
+
+import argparse
+import json
+import subprocess
+
+from progress_bridge import transfer_projection
+
+
+class GatewayProjectionClient:
+    def __init__(self, openclaw_bin, host_id, expected_url=None):
+        if not host_id or not isinstance(host_id, str):
+            raise ValueError("publisher host required")
+        self.openclaw_bin = str(openclaw_bin)
+        self.host_id = host_id
+        self.expected_url = expected_url
+
+    def _call(self, method, params):
+        command = [self.openclaw_bin, "gateway", "call", method,
+                   "--params", json.dumps(params, sort_keys=True, separators=(",", ":")),
+                   "--json", "--timeout", "30000"]
+        if self.expected_url:
+            command.extend(("--expect-url", self.expected_url))
+        try:
+            response = subprocess.run(command, capture_output=True, text=True, timeout=35)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise RuntimeError("native projection Gateway unavailable") from exc
+        if response.returncode:
+            raise RuntimeError("native projection Gateway rejected request")
+        try:
+            parsed = json.loads(response.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("native projection Gateway returned invalid JSON") from exc
+        if not isinstance(parsed, dict):
+            raise RuntimeError("native projection Gateway returned invalid response")
+        return parsed
+
+    def list_pending(self, after_task_id=None, limit=100):
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 100:
+            raise ValueError("projection page limit invalid")
+        params = {"publisherHostId": self.host_id, "limit": limit}
+        if after_task_id is not None:
+            params["afterTaskId"] = after_task_id
+        response = self._call("managedTasks.projections.list", params)
+        rows = response.get("projections")
+        if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+            raise RuntimeError("native projection Gateway returned invalid page")
+        return rows
+
+    def ack(self, receipt):
+        response = self._call("managedTasks.projections.ack",
+                              {"publisherHostId": self.host_id, "receipt": receipt})
+        if response != receipt:
+            raise RuntimeError("native projection Gateway ACK differs from queue receipt")
+        return response
+
+
+def transfer_gateway_projections(client, *, evidence_root, progress_state_dir, progress_client):
+    """Drain bounded pages; a lost response leaves the same native intent for retry."""
+    processed = 0
+    after_task_id = None
+    for _ in range(100):
+        rows = client.list_pending(after_task_id=after_task_id, limit=100)
+        if not rows:
+            return processed
+        for row in rows:
+            task_id = row.get("taskId")
+            if not isinstance(task_id, str) or not task_id or (after_task_id and task_id <= after_task_id):
+                raise RuntimeError("native projection Gateway page is unordered")
+            transfer_projection(row, host_id=client.host_id, evidence_root=evidence_root,
+                                progress_state_dir=progress_state_dir,
+                                progress_client=progress_client, acknowledge_native=client.ack)
+            processed += 1
+            after_task_id = task_id
+        if len(rows) < 100:
+            return processed
+    raise RuntimeError("native projection Gateway page limit exceeded")
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Transfer native task results to progress events")
+    parser.add_argument("--openclaw-bin", required=True)
+    parser.add_argument("--host-id", required=True)
+    parser.add_argument("--expect-url", required=True)
+    parser.add_argument("--evidence-root", required=True)
+    parser.add_argument("--progress-state-dir", required=True)
+    parser.add_argument("--progress-client", required=True)
+    args = parser.parse_args(argv)
+    client = GatewayProjectionClient(args.openclaw_bin, args.host_id, args.expect_url)
+    count = transfer_gateway_projections(
+        client, evidence_root=args.evidence_root, progress_state_dir=args.progress_state_dir,
+        progress_client=args.progress_client,
+    )
+    print(json.dumps({"transferred": count}))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
