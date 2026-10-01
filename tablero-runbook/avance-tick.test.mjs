@@ -240,4 +240,12 @@ describe("avance-tick iniciar", () => {
     assert.equal(r.rc, 1);
     assert.deepEqual(llamadas(), []);
   });
+
+  it("19.3-5-F2: cli .cmd se rechaza con el mensaje que pide el .mjs", () => {
+    escenario({ scratch: null });
+    const r = correr("iniciar", {}, join(dir, "openclaw.cmd"));
+    assert.equal(r.rc, 1);
+    assert.match(r.stderr, /\.cmd.*shell|\.mjs/);
+    assert.deepEqual(llamadas(), []);
+  });
 });

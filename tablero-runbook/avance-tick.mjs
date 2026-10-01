@@ -11,7 +11,8 @@
 // las comillas. `tick` es lo que corre el cron cada 15 minutos.
 //
 // `--cli` es el CLI de openclaw: un .js/.mjs/.cjs se corre con este mismo
-// node (en Windows un .cmd no se lanza sin shell); otra ruta se lanza directo.
+// node; un .cmd/.bat se rechaza con mensaje (en Windows no se lanza sin
+// shell); otra ruta se lanza directo.
 //
 // Contrato (docs/spec/seguimiento.v2.md, tablero-runbook/seguimiento-clock.ts):
 // el scratch solo se escribe tras entrega confirmada (sin `ok:false`, con
@@ -45,6 +46,9 @@ function leerArgs(argv) {
 }
 
 function openclaw(cli, args, input) {
+  // 19.3-5-F2: un .cmd/.bat sin shell muere con EINVAL opaco; se rechaza
+  // con el mensaje que pide el .mjs absoluto en vez de lanzarlo.
+  if (/\.(cmd|bat)$/i.test(cli)) fallar(`--cli no puede ser ${cli}: un .cmd/.bat no se lanza sin shell; usa la ruta absoluta al openclaw.mjs`);
   const [cmd, previos] = /\.[cm]?js$/i.test(cli) ? [process.execPath, [cli]] : [cli, []];
   const r = spawnSync(cmd, [...previos, ...args], {
     encoding: "utf8",
