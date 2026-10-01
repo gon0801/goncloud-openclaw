@@ -10,6 +10,27 @@
     {"kind": "user-adopted-session", "owner": "user", "certified": false}
   ],
   "cliAdapters": ["claude_fable", "claude_opus", "kimi_k3", "kimi_coding", "codex", "zcode", "grok"],
-  "hosts": [{"id": "mac-local", "platform": "macOS", "status": "inventory-only"}, {"id": "windows-remote", "platform": "Windows", "status": "unverified"}],
+  "hosts": [{"id": "mac-local", "platform": "macOS", "status": "sandbox-tested-uncertified"}, {"id": "windows-remote", "platform": "Windows", "status": "disabled-unverified"}],
+  "hostAdapterCoverage": {
+    "mac-local": {
+      "claude_fable": "disabled-descendant-proof-pending",
+      "claude_opus": "disabled-descendant-proof-pending",
+      "kimi_k3": "disabled-descendant-proof-pending",
+      "kimi_coding": "disabled-descendant-proof-pending",
+      "codex": "disabled-descendant-proof-pending",
+      "zcode": "disabled-descendant-proof-pending",
+      "grok": "disabled-descendant-proof-pending"
+    },
+    "windows-remote": {
+      "claude_fable": "disabled-host-unverified",
+      "claude_opus": "disabled-host-unverified",
+      "kimi_k3": "disabled-host-unverified",
+      "kimi_coding": "disabled-host-unverified",
+      "codex": "disabled-host-unverified",
+      "zcode": "disabled-host-unverified",
+      "grok": "disabled-host-unverified"
+    }
+  },
+  "resourceSandboxEvidence": "bash scripts/tests/test-agent-work-host.sh resource_identity; resource_close; resource_100_cycles",
   "certificationRequired": ["authenticated requester identity", "finite budget", "durable admission", "portable result", "verified resource close"]
 }

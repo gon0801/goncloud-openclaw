@@ -33,6 +33,7 @@ def atomic_json(path: Path, data: object) -> None:
 class Spool:
     def __init__(self, root: Path, host_id: str):
         self.root = root
+        self.host_id = host_id
         root.mkdir(mode=0o700, parents=True, exist_ok=True)
         root.chmod(0o700)
         self.path = root / "host.sqlite"

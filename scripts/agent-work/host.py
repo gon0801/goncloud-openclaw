@@ -8,15 +8,11 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from contracts import AuthorizedOperation, HostObservation, OperationKey, ResultReceipt
+from contracts import AuthorizedOperation, HostObservation, OperationKey, ResultReceipt, operation_id
 from spool import Spool, atomic_json, canonical
 
 MAX_ARTIFACT_BYTES = 10 * 1024 * 1024
 RESULT_SCHEMA = "agent-work.result.v1"
-
-
-def operation_id(key: OperationKey) -> str:
-    return hashlib.sha256(canonical([key.host_id, key.task_id, key.generation, key.instance_id]).encode()).hexdigest()
 
 
 def under(path: str, root: str) -> Path:

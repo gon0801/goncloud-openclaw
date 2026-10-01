@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+import hashlib
+import json
 
 
 @dataclass(frozen=True)
@@ -7,6 +9,11 @@ class OperationKey:
     task_id: str
     generation: int
     instance_id: str
+
+
+def operation_id(key: OperationKey) -> str:
+    identity = [key.host_id, key.task_id, key.generation, key.instance_id]
+    return hashlib.sha256(json.dumps(identity, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
 
 
 @dataclass(frozen=True)
