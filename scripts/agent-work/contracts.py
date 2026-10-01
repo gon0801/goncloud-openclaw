@@ -25,6 +25,8 @@ class AuthorizedOperation:
     workspace_ref: str
     brief_ref: str
     brief_digest: str
+    input_revision: dict
+    result_contract: str
 
 
 @dataclass(frozen=True)

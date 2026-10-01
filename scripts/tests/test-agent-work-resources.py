@@ -172,7 +172,9 @@ class ResourceTests(unittest.TestCase):
             assignment = AuthorizedOperation(
                 key=self.key, producer_id="fake", capability="sandbox-secret", session="owned",
                 workspace_ref=self.tmp.name, brief_ref=str(brief),
-                brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest())
+                brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
+                input_revision={"kind": "code", "repository": "repo", "sha": "a" * 40},
+                result_contract="review.v1")
             reference = self.host.apply(self.key, assignment, lambda *_: None).assignment_ref
             owned = manager.reserve(self.key, "owned", "TaskCreated")
             self.assertTrue(manager.begin_launch(self.key).launch_now)

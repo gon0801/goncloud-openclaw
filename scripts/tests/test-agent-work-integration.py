@@ -277,14 +277,17 @@ class ProjectionTransferTest(unittest.TestCase):
         artifact.write_bytes(original)
         host = Host("host-one", self.root / "host")
         key = OperationKey("host-one", self.pending["taskId"], 1, "instance-one")
+        input_revision = {"kind": "code", "repository": "repo",
+                          "sha": revision or self.pending["result"]["sha"]}
         operation = AuthorizedOperation(key, "adversary", "capability", "worker-one",
-                                        str(workspace), str(brief), hashlib.sha256(brief.read_bytes()).hexdigest())
+                                        str(workspace), str(brief), hashlib.sha256(brief.read_bytes()).hexdigest(),
+                                        input_revision, "review.v1")
         host.apply(key, operation, lambda *_: None)
         host.report("host-one", {
             "schema": "agent-work.result.v1", "kind": "produced", "hostId": "host-one",
             "taskId": key.task_id, "generation": key.generation, "instanceId": key.instance_id,
             "producerId": "adversary", "capability": "capability",
-            "observedRevision": revision or self.pending["result"]["sha"],
+            "observedRevision": input_revision,
             "typedPayload": payload or {"verdict": "approved", "evidenceRef": "review.txt"},
             "artifactRef": str(artifact),
             "digest": hashlib.sha256(original).hexdigest(),

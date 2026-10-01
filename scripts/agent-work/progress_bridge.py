@@ -137,7 +137,8 @@ def transfer_host_projection(pending, *, host, operation_key, progress_state_dir
             result.get("digest") != pending["result"].get("contentHash")):
         raise ValueError("snapshot no corresponde a la proyección nativa")
     projected = pending["result"]
-    if result.get("observedRevision") != projected.get("sha"):
+    revision = result.get("observedRevision")
+    if not isinstance(revision, dict) or revision.get("kind") != "code" or revision.get("sha") != projected.get("sha"):
         raise ValueError("revisión del host distinta de la proyección")
     if projected.get("kind") == "ready":
         expected_payload = {"evidenceRef": projected.get("evidenceRef")}

@@ -94,7 +94,8 @@ class Host:
         if operation.key != key:
             raise ValueError("operation key mismatch")
         if key.generation < 0 or not all((key.task_id, key.instance_id, operation.producer_id,
-                                           operation.capability, operation.session)):
+                                           operation.capability, operation.session, operation.result_contract)) \
+                or not isinstance(operation.input_revision, dict):
             raise ValueError("invalid authorized operation")
         brief = under(operation.brief_ref, operation.workspace_ref)
         if hashlib.sha256(brief.read_bytes()).hexdigest() != operation.brief_digest:
@@ -113,6 +114,8 @@ class Host:
             "workspaceRef": str(Path(operation.workspace_ref).resolve()),
             "briefRef": str(brief),
             "briefDigest": operation.brief_digest,
+            "inputRevision": operation.input_revision,
+            "resultContract": operation.result_contract,
             "resultRef": str(self.state_dir / "inbox" / f"{op_id}.json"),
         }
         digest = hashlib.sha256(canonical(assignment).encode()).hexdigest()
@@ -160,8 +163,8 @@ class Host:
                 raise ValueError(f"result {field} mismatch")
         if not hmac.compare_digest(str(result["capability"]), assignment["capability"]):
             raise ValueError("producer capability mismatch")
-        if not result["observedRevision"]:
-            raise ValueError("missing observed revision")
+        if result["observedRevision"] != assignment["inputRevision"]:
+            raise ValueError("observed revision mismatch")
         encoded = canonical(result).encode()
         if len(encoded) > 1024 * 1024:
             raise ValueError("result too large")

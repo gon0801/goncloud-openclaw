@@ -44,6 +44,8 @@ class HostReceipts(unittest.TestCase):
             workspace_ref=str(self.workspace),
             brief_ref=str(self.brief),
             brief_digest=digest(self.brief.read_bytes()),
+            input_revision={"kind": "code", "repository": "repo", "sha": "a" * 40},
+            result_contract="review.v1",
         )
 
     def report(self, **overrides):
@@ -56,8 +58,8 @@ class HostReceipts(unittest.TestCase):
             "instanceId": "instance-1",
             "producerId": "reviewer",
             "capability": self.operation.capability,
-            "observedRevision": "abc123",
-            "typedPayload": {"verdict": "pass"},
+            "observedRevision": self.operation.input_revision,
+            "typedPayload": {"verdict": "approved", "evidenceRef": "evidence.txt"},
             "artifactRef": str(self.artifact),
             "digest": digest(self.artifact.read_bytes()),
         }
@@ -129,7 +131,7 @@ class HostReceipts(unittest.TestCase):
             restarted.flush("mac-test", runtime)
         self.artifact.unlink()
         self.assertEqual(restarted.report("mac-test", report).result_id, result_id)
-        with self.assertRaisesRegex(ValueError, "conflicting final result"):
+        with self.assertRaisesRegex(ValueError, "observed revision mismatch"):
             restarted.report("mac-test", dict(report, observedRevision="other-revision"))
         self.assertEqual(len(list((self.root / "host" / "artifacts" / operation_id(self.key)).glob("*.bin"))), 1)
         self.assertEqual(Host("mac-test", self.root / "host").flush("mac-test", runtime)[0]["resultId"], result_id)
@@ -214,6 +216,7 @@ class HostReceipts(unittest.TestCase):
             {"artifactRef": str(self.workspace / "missing.txt")},
             {"capability": "someone-else"},
             {"generation": 1},
+            {"observedRevision": "another-revision"},
             {"digest": "0" * 64},
             {"schema": "agent-work.result.v0"},
         ):
@@ -237,7 +240,7 @@ class HostReceipts(unittest.TestCase):
 
     def test_host_receipts_concurrent_finals_keep_one_file_and_one_result(self):
         self.host.apply(self.key, self.operation, lambda *_: None)
-        reports = [self.report(observedRevision="revision-one"), self.report(observedRevision="revision-two")]
+        reports = [self.report(), self.report(typedPayload={"verdict": "changes", "findingsRef": "review.txt"})]
         def send(report):
             try:
                 return self.host.report("mac-test", report).result_id
@@ -318,7 +321,7 @@ class HostReceipts(unittest.TestCase):
             "r={'schema':'agent-work.result.v1','kind':'produced','hostId':a['hostId'],"
             "'taskId':a['taskId'],'generation':a['generation'],'instanceId':a['instanceId'],"
             "'producerId':a['producerId'],'capability':a['capability'],"
-            "'observedRevision':'abc123','typedPayload':{'verdict':'pass'},"
+            "'observedRevision':a['inputRevision'],'typedPayload':{'verdict':'approved','evidenceRef':'evidence.txt'},"
             "'artifactRef':str(p),'digest':hashlib.sha256(p.read_bytes()).hexdigest()}\n"
             "tmp=out.with_suffix('.tmp');tmp.write_text(json.dumps(r));os.replace(tmp,out)\n"
             "print('FAKE-RESULT-WRITTEN',flush=True)\n"
@@ -334,7 +337,8 @@ class HostReceipts(unittest.TestCase):
             while time.monotonic() < deadline and not self.host.collect("mac-test", self.key):
                 time.sleep(0.1)
             self.assertEqual(len(self.host.pending("mac-test")), 1, tmux_cmd("capture-pane", "-p", "-t", "=worker-1:").stdout)
-            self.assertEqual(self.host.pending("mac-test")[0]["typedPayload"], {"verdict": "pass"})
+            self.assertEqual(self.host.pending("mac-test")[0]["typedPayload"],
+                             {"verdict": "approved", "evidenceRef": "evidence.txt"})
 
             self.assertEqual(tmux_cmd("new-session", "-d", "-s", "worker-2", "-c", str(self.workspace),
                                       sys.executable, str(cli)).returncode, 0)
