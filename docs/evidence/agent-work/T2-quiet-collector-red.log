@@ -1,0 +1,43 @@
+Plugin "vitest:mocks:interceptor" defines Vite-specific hooks (configureServer) in a plugin returned from applyToEnvironment. These hooks will be ignored.
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+ ↓ |agents-support| src/agents/tasks/managed-task.spawn-pipeline.test.ts > managed admission in native spawn pipeline > does not dispatch an ordinary parent after its authority closes
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.spawn-pipeline.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.spawn-pipeline.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.spawn-pipeline.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.spawn-pipeline.test.ts: retiring openclaw.sharedStateWorkerOwner
+
+ × |agents-support| src/agents/tasks/managed-task.spawn-pipeline.test.ts > managed admission in native spawn pipeline > claims before initialization and never dispatches a second time after a crash 1130ms
+   → expected false to be true // Object.is equality
+ ↓ |agents-support| src/agents/tasks/managed-task.spawn-pipeline.test.ts > managed admission in native spawn pipeline > leaves a claim uncertain when initialization fails and does not retry dispatch
+ ↓ |agents-support| src/agents/tasks/managed-task.spawn-pipeline.test.ts > managed admission in native spawn pipeline > does not dispatch a task cancelled while native initialization is pending
+ ↓ |agents-support| src/agents/tasks/managed-task.spawn-pipeline.test.ts > managed admission in native spawn pipeline > refuses a managed collector bound to a different requester turn
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |agents-support| src/agents/tasks/managed-task.spawn-pipeline.test.ts > managed admission in native spawn pipeline > claims before initialization and never dispatches a second time after a crash
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/agents/tasks/managed-task.spawn-pipeline.test.ts:159:49
+    157|       },
+    158|     };
+    159|     expect((await runSpawnPipeline(params)).ok).toBe(true);
+       |                                                 ^
+    160|     expect((await runSpawnPipeline(params)).ok).toBe(false);
+    161|     expect(initialize).toHaveBeenCalledTimes(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 skipped (5)
+   Start at  11:02:39
+   Duration  1.80s (tests 71%, worker 10%, transform 9%, setup 5%, import 5%)
