@@ -8,4 +8,4 @@ El build aislado terminó y su entrypoint coincide por SHA-256 con el instalado.
 
 En el SHA final de B0 de R (`00e289c344af4cff10aafbf7b7f807822b54fa77`), `pnpm build` terminó correctamente ([log](B0-source-final-build.txt)) y `test-runtime.sh baseline` pasó 37/37 más la reproducción de dos admisiones tras reinicio ([log](B0-source-final-baseline.txt)). El gateway de ensayo y sus descendientes terminaron. La batería nativa amplia que empezó sobre el SHA anterior se detuvo al detectar dos fallos de UI ya corregidos; no se cuenta como evidencia final de B0.
 
-Siguiente acción: cerrar T1 con contrato de resultado e incidencia no terminal; terminar T2 con una prueba de cola del solicitante que sobreviva a un reinicio y con confirmación vinculada al registro nativo. Después se implementa T3. La admisión productiva permanece deshabilitada.
+Siguiente acción: terminar T2 con una prueba de cola del solicitante que sobreviva a un reinicio. El contrato `review.v1`, la incidencia no terminal y la confirmación vinculada al registro nativo ya pasaron pruebas focalizadas. Después se implementa T3. La admisión productiva permanece deshabilitada.

@@ -12,6 +12,10 @@ case "$case_name" in
     test_file='src/agents/tasks/managed-task.store.test.ts'
     test_pattern='accepts only the current producer|does not store malformed JSON|rejects an empty or unversioned review|persists PermissionRequired'
     probe_restart=0 ;;
+  admission_restart)
+    test_file='src/agents/tasks/managed-task.admission.test.ts'
+    test_pattern=''
+    probe_restart=0 ;;
   *) printf 'Unknown or unimplemented agent-work runtime case: %s\n' "${1:-}" >&2; exit 2 ;;
 esac
 

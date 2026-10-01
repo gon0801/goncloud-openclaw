@@ -1,0 +1,27 @@
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "761fe0ca64b40b8b10ec76b49e3ee355df5a0c73"}
+[test] starting test/vitest/vitest.agents-support.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-b1
+
+[vitest-workers] local cache hit after 1691ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 9926e4c4ddf4 in 1719ms (16668 inputs, 17227 outputs)
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > lets one emitter claim, keeps a crash uncertain, and recovers the exact native run 1116ms
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rejects revoked authority before claiming and fences a delayed prior request 369ms
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rechecks authority inside the worker before persisting a claim 58ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.admission.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.admission.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.admission.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.admission.test.ts: retiring openclaw.sharedStateWorkerOwner
+
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > upgrades a version 20 task ledger without losing its registered tasks 122ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  00:39:27
+   Duration  4.64s (transform 55%, tests 38%, worker 3%, import 2%, setup 2%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 5.74s

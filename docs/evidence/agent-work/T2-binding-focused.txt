@@ -1,0 +1,47 @@
+[test] starting test/vitest/vitest.agents-support.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-b1
+
+[vitest-workers] local cache hit after 1793ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 97858caef260 in 1823ms (16668 inputs, 17227 outputs)
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates a logical key within one requester across turns and restarts 814ms
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > accepts only the current producer, generation, digest, and revision 394ms
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > upgrades a version 19 database before the first managed task 450ms
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > does not store malformed JSON or a result without its required fields 373ms
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > rejects an empty or unversioned review while leaving the final slot available 372ms
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > persists PermissionRequired as an incident without consuming the final result 718ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.sharedStateWorkerOwner
+
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates director retries within a corrida without crossing corrida authority 375ms
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > lets one emitter claim, keeps a crash uncertain, and recovers the exact native run 1090ms
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rejects revoked authority before claiming and fences a delayed prior request 396ms
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rechecks authority inside the worker before persisting a claim 61ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.admission.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.admission.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.admission.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.admission.test.ts: retiring openclaw.sharedStateWorkerOwner
+
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > upgrades a version 20 task ledger without losing its registered tasks 147ms
+ ✓ |agents-support| src/agents/tasks/managed-task.spawn-pipeline.test.ts > managed admission in native spawn pipeline > claims before initialization and never dispatches a second time after a crash 433ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.spawn-pipeline.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.spawn-pipeline.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.spawn-pipeline.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.spawn-pipeline.test.ts: retiring openclaw.sharedStateWorkerOwner
+
+ ✓ |agents-support| src/agents/tasks/managed-task.spawn-pipeline.test.ts > managed admission in native spawn pipeline > leaves a claim uncertain when initialization fails and does not retry dispatch 371ms
+
+ Test Files  3 passed (3)
+      Tests  13 passed (13)
+   Start at  00:37:07
+   Duration  9.24s (tests 67%, transform 29%, worker 2%, setup 1%, import 1%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 10.39s
