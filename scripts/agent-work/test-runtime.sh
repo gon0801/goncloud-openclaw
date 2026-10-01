@@ -36,6 +36,14 @@ case "$case_name" in
     test_file='src/gateway/server-methods/managed-tasks.test.ts'
     test_pattern='serves and acknowledges a durable projection over an authenticated Gateway connection'
     probe_restart=0 ;;
+  budget_tree)
+    test_file='src/agents/tasks/managed-task.budget.test.ts'
+    test_pattern='shares model-call capacity across children|holds uncertain call capacity across retries and restart|allows one automatic recovery call per root'
+    probe_restart=0 ;;
+  budget_context)
+    test_file='src/agents/tasks/managed-task.budget.test.ts'
+    test_pattern='rejects incomplete runtime budget and context shapes|counts context components once|retains full reservation when terminal provider usage is absent'
+    probe_restart=0 ;;
   *) printf 'Unknown or unimplemented agent-work runtime case: %s\n' "${1:-}" >&2; exit 2 ;;
 esac
 

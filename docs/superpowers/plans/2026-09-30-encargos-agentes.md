@@ -170,9 +170,9 @@ Depende de T3. Modifica `R.providerBoundary`, `R.taskStore`, `R.sessionLifecycle
 
 Produce `reserveModelCall(rootId, requestUsageBound)` y `settleModelCall(reservationId, providerUsage)`, integradas en todas las llamadas gestionadas. Los nombres se enlazan a la frontera real fijada en T0.
 
-- [ ] Añade `budget_tree`: hijos concurrentes, reintentos y padre cuyo turno termina conservan el límite agregado.
-- [ ] Añade `budget_context`: cuenta sistema, historial, herramientas, adjuntos, salida y caché sin doble suma.
-- [ ] Prueba ausencia de métricas y proveedor sin límite de salida. Conserva reserva o rechaza la garantía estricta.
+- [x] Añade `budget_tree`: hijos concurrentes, reintentos y padre cuyo turno termina conservan el límite agregado.
+- [x] Añade `budget_context`: cuenta sistema, historial, herramientas, adjuntos, salida y caché sin doble suma.
+- [x] Prueba ausencia de métricas y proveedor sin límite de salida. Conserva reserva o rechaza la garantía estricta.
 - [ ] Ejecuta las pruebas en rojo.
 - [ ] Implementa reserva previa, liquidación y perfiles finitos. Incluye límites de concurrencia, profundidad, hijos y llamadas.
 - [ ] Intenta eludir el límite con un hijo nuevo, una sesión nueva y la recuperación nativa. Exige rechazo antes del proveedor.
