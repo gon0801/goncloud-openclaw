@@ -199,6 +199,14 @@ class Host:
             raise ValueError("recorded artifact snapshot missing") from exc
         return result, raw
 
+    def operation_key_for(self, host_id: str, task_id: str, generation: int) -> OperationKey | None:
+        self._host(host_id)
+        assignment = self.spool.find_assignment(task_id, generation)
+        if assignment is None:
+            return None
+        return OperationKey(assignment["hostId"], assignment["taskId"],
+                            assignment["generation"], assignment["instanceId"])
+
     def collect(self, host_id: str, key: OperationKey) -> ResultReceipt | None:
         self._host(host_id)
         self._host(key.host_id)

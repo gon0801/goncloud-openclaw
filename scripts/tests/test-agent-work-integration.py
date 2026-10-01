@@ -197,6 +197,7 @@ class ProjectionTransferTest(unittest.TestCase):
             "evidence_root": str(self.evidence_root),
             "progress_state_dir": str(self.state_dir),
             "progress_client": "/isolated/progress.py",
+            "host": None,
         })
         self.assertEqual(transfer.call_args.args[0].expected_url, "ws://127.0.0.1:18789")
         output.assert_called_once_with('{"transferred": 2}')
@@ -287,6 +288,31 @@ class ProjectionTransferTest(unittest.TestCase):
         restarted, key, original = self.reported_host()
         receipt = self.transfer_from_host(restarted, key, lambda value: value)
         event = self.state_dir / "runs" / "run-1" / "evidence" / (receipt["eventId"] + ".json")
+        self.assertEqual(json.loads(event.read_text())["content"], original.decode())
+
+    def test_gateway_drain_uses_host_snapshot_after_workspace_disappears(self):
+        restarted, _, original = self.reported_host()
+        self.evidence.unlink()
+
+        class Client:
+            host_id = "host-one"
+            receipts = []
+
+            def list_pending(self, after_task_id=None, limit=100):
+                return [] if after_task_id else [self_pending]
+
+            def ack(self, receipt):
+                self.receipts.append(receipt)
+                return receipt
+
+        self_pending = self.pending
+        client = Client()
+        self.assertEqual(transfer_gateway_projections(
+            client, host=restarted, evidence_root=self.evidence_root,
+            progress_state_dir=self.state_dir,
+            progress_client=ROOT / "scripts" / "mac" / "progress-events.py",
+        ), 1)
+        event = self.state_dir / "runs" / "run-1" / "evidence" / (client.receipts[0]["eventId"] + ".json")
         self.assertEqual(json.loads(event.read_text())["content"], original.decode())
 
     def test_host_revision_mismatch_never_queues_or_acknowledges(self):

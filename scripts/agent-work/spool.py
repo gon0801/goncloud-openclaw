@@ -100,6 +100,18 @@ class Spool:
             row = db.execute("SELECT * FROM operations WHERE operation_id=?", (operation_id,)).fetchone()
             return dict(row) if row else None
 
+    def find_assignment(self, task_id: str, generation: int) -> dict | None:
+        with self.connection() as db:
+            rows = db.execute("SELECT operation_json FROM operations").fetchall()
+        matches = []
+        for row in rows:
+            assignment = json.loads(row[0])
+            if assignment["taskId"] == task_id and assignment["generation"] == generation:
+                matches.append(assignment)
+        if len(matches) > 1:
+            raise ValueError("multiple host operations for task generation")
+        return matches[0] if matches else None
+
     def begin_delivery(self, operation_id: str) -> bool:
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")

@@ -4,7 +4,8 @@ import argparse
 import json
 import subprocess
 
-from progress_bridge import transfer_projection
+from host import Host
+from progress_bridge import transfer_host_projection, transfer_projection
 
 
 class GatewayProjectionClient:
@@ -55,7 +56,7 @@ class GatewayProjectionClient:
         return response
 
 
-def transfer_gateway_projections(client, *, evidence_root, progress_state_dir, progress_client):
+def transfer_gateway_projections(client, *, evidence_root, progress_state_dir, progress_client, host=None):
     """Drain bounded pages; a lost response leaves the same native intent for retry."""
     processed = 0
     after_task_id = None
@@ -67,9 +68,16 @@ def transfer_gateway_projections(client, *, evidence_root, progress_state_dir, p
             task_id = row.get("taskId")
             if not isinstance(task_id, str) or not task_id or (after_task_id and task_id <= after_task_id):
                 raise RuntimeError("native projection Gateway page is unordered")
-            transfer_projection(row, host_id=client.host_id, evidence_root=evidence_root,
-                                progress_state_dir=progress_state_dir,
-                                progress_client=progress_client, acknowledge_native=client.ack)
+            operation_key = (host.operation_key_for(client.host_id, task_id, row.get("generation"))
+                             if host is not None else None)
+            if operation_key is None:
+                transfer_projection(row, host_id=client.host_id, evidence_root=evidence_root,
+                                    progress_state_dir=progress_state_dir,
+                                    progress_client=progress_client, acknowledge_native=client.ack)
+            else:
+                transfer_host_projection(row, host=host, operation_key=operation_key,
+                                         progress_state_dir=progress_state_dir,
+                                         progress_client=progress_client, acknowledge_native=client.ack)
             processed += 1
             after_task_id = task_id
         if len(rows) < 100:
@@ -85,11 +93,13 @@ def main(argv=None):
     parser.add_argument("--evidence-root", required=True)
     parser.add_argument("--progress-state-dir", required=True)
     parser.add_argument("--progress-client", required=True)
+    parser.add_argument("--host-state-dir")
     args = parser.parse_args(argv)
     client = GatewayProjectionClient(args.openclaw_bin, args.host_id, args.expect_url)
     count = transfer_gateway_projections(
         client, evidence_root=args.evidence_root, progress_state_dir=args.progress_state_dir,
         progress_client=args.progress_client,
+        host=Host(args.host_id, args.host_state_dir) if args.host_state_dir else None,
     )
     print(json.dumps({"transferred": count}))
     return 0
