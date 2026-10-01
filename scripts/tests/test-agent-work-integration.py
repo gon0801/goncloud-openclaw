@@ -13,7 +13,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
-from progress_bridge import projection_digest, transfer_projection  # noqa: E402
+from progress_bridge import event_id, projection_digest, transfer_projection  # noqa: E402
 
 
 class ProjectionTransferTest(unittest.TestCase):
@@ -120,6 +120,21 @@ class ProjectionTransferTest(unittest.TestCase):
         receipt = self.transfer(lambda value: acknowledged.append(value) or value)
         self.assertEqual(queued[0].read_bytes(), first_bytes)
         self.assertEqual(acknowledged, [receipt])
+
+    def test_ready_result_uses_the_same_durable_transfer(self):
+        sha = "c" * 40
+        self.evidence.write_text("LISTO " + sha + "\n", encoding="utf-8")
+        self.pending["result"] = {
+            "kind": "ready",
+            "sha": sha,
+            "evidenceRef": "review.txt",
+            "contentHash": hashlib.sha256(self.evidence.read_bytes()).hexdigest(),
+        }
+        self.pending["eventId"] = event_id("round.ready", self.pending["destination"])
+        self.pending["projectionDigest"] = projection_digest(self.pending)
+        receipt = self.transfer(lambda value: value)
+        event = self.state_dir / "runs" / "run-1" / "queue" / (receipt["eventId"] + ".json")
+        self.assertEqual(json.loads(event.read_text())["kind"], "round.ready")
 
 
 if __name__ == "__main__":
