@@ -281,6 +281,6 @@ La prueba viva posterior será acotada: dos entregas controladas y una incidenci
 
 Tres capacidades deben demostrarse antes de habilitar el circuito: transacción durable de admisión y consulta; identidad de ejecución verificable para entrega y consumo; presupuesto y cierre efectivos para cada ejecutor. Si la versión instalada no las ofrece, se amplía y versiona el runtime de forma explícita. No se oculta esa dependencia con una base privada que vuelva a coordinar el mismo turno.
 
-La primera tarea futura será probar esas fronteras en un perfil aislado con proveedor falso y reinicios entre cada escritura. Después se podrá escribir el plan de implementación contra este contrato. Este diseño no ejecuta esa tarea.
+La primera tarea futura será probar esas fronteras en un perfil aislado con proveedor falso y reinicios entre cada escritura. El [plan de implementación](../plans/2026-09-30-encargos-agentes.md) comienza con esa comprobación y condiciona las tareas siguientes a su resultado. La redacción del plan no ejecuta esa tarea ni autoriza implementación.
 
 La [decisión de arquitectura](2026-09-30-encargos-agentes-rationale.md) registra las alternativas, puntuaciones, integración de propuestas y límites conocidos.
