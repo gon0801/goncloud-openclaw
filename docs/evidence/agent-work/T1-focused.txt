@@ -1,0 +1,27 @@
+[test] starting test/vitest/vitest.agents-support.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-b1
+
+[vitest-workers] local cache hit after 2253ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared e4210258777c in 2292ms (16668 inputs, 17227 outputs)
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates a logical key within one requester across turns and restarts 1056ms
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > accepts only the current producer, generation, digest, and revision 521ms
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > upgrades a version 19 database before the first managed task 545ms
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > does not store malformed JSON or a result without its required fields 466ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.sharedStateWorkerOwner
+
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates director retries within a corrida without crossing corrida authority 477ms
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  00:10:17
+   Duration  7.31s (transform 50%, tests 43%, worker 3%, import 2%, setup 1%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 8.76s

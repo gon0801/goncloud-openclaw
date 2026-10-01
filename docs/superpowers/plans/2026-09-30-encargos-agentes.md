@@ -10,7 +10,7 @@
 
 **Especificación:** [Encargos y continuaciones comunes](../specs/2026-09-30-encargos-agentes-design.md). Consulta las decisiones en [la comparación de arquitecturas](../specs/2026-09-30-encargos-agentes-rationale.md).
 
-**Estado:** T0 implementada y comprobada en entornos aislados. T1–T12 pendientes. Sin medición viva ni despliegue.
+**Estado:** T0 comprobada; T1 y T2 tienen commits parciales. T1–T12 siguen abiertas. Sin medición viva ni despliegue.
 
 ## Conserva estas condiciones en todas las tareas
 
@@ -126,11 +126,11 @@ Depende de T0. Modifica `R.taskDomain`, `R.taskStore`, `R.toolContext` y `R.migr
 
 Produce `submit(Caller, TaskKey, Assignment)`, `report(ProducerCapability, generation, FinalResult)` e `inspect(AuthorizedCaller, TaskId)`. Usa los tipos del diseño. Conserva `TaskKey` entre turnos y separa estado de entrega y manejo.
 
-- [ ] Añade `registration_identity`: misma clave y contenido devuelve el mismo ID; otro contenido da conflicto; dos solicitantes no colisionan.
-- [ ] Añade `result_receipt`: productor ajeno, generación antigua, digest incorrecto y revisión equivocada no avanzan la tarea. Una incidencia de permiso no ocupa el resultado final.
-- [ ] Ejecuta ambos casos y conserva las aserciones rojas.
-- [ ] Implementa las transacciones y la migración versionada dentro del almacén nativo. Persiste resultado, pendiente de manejo y `ProjectionPending` antes del ACK cuando corresponda.
-- [ ] Repite las pruebas con reinicio entre escrituras y confirma los recibos recuperados.
+- [x] Añade `registration_identity`: misma clave y contenido devuelve el mismo ID; otro contenido da conflicto; dos solicitantes no colisionan.
+- [ ] Añade `result_receipt`: productor ajeno, generación antigua, digest incorrecto y revisión equivocada no avanzan la tarea. Una incidencia de permiso no ocupa el resultado final. Falta la regresión de incidencia no terminal y la validación semántica de `resultContract`.
+- [x] Ejecuta ambos casos y conserva las aserciones rojas.
+- [x] Implementa las transacciones y la migración versionada dentro del almacén nativo. Persiste resultado, pendiente de manejo y `ProjectionPending` antes del ACK cuando corresponda.
+- [x] Repite las pruebas con reinicio entre escrituras y confirma los recibos recuperados.
 
 Verifica con `bash scripts/agent-work/test-runtime.sh registration_identity` y `bash scripts/agent-work/test-runtime.sh result_receipt`. Espera código cero y todas las aserciones, sin saltos.
 
