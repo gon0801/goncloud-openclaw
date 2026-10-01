@@ -149,7 +149,8 @@ Añade estos casos a `ProgressClientTest` y ejecútalos durante la implementaci�
 - [x] Valida la batería completa una sola vez sobre el último SHA de código
       en CI. `d506ffc` pasó los tres shards, el contrato y el gate en
       [Quality run 36797045197](https://github.com/gon0801/goncloud-openclaw/actions/runs/36797045197).
-      Un commit posterior que solo documente el cierre usa el carril fast.
+      En este PR mixto, un commit documental posterior también activa la
+      batería del PR completo porque el clasificador compara base y punta.
 - [x] Informa por separado si el código está verificado, si el PR está integrado
       y si el gateway real usa el cambio. La prueba local no demuestra despliegue.
 

@@ -26,7 +26,7 @@ fase 19 devuelve B1, B2 y B3 mergeados con avance 100, igual que el JSON y
       runbooks futuros. U3a ya cerró: se conserva como histórico sin importar
       una secuencia de rondas que no quedó registrada en archivos.
 - [x] Ejecutar pruebas focalizadas por cambio, hooks de pre-commit, revisión
-      agrupada y batería completa una sola vez sobre el último SHA de código en CI.
+      agrupada y batería completa sobre el último SHA de código en CI.
 - [x] Verificar lectura real del gateway y estado local antes de pedir la
       aprobación final de despliegue/integración.
 - [ ] Dividir el shard 3 de Quality: en el SHA `cd0afe1` tardó 21 minutos;
