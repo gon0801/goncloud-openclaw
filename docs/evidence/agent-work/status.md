@@ -45,3 +45,5 @@ R `0bbb8cebeb` enlazó `managed_tasks_admit` con `spawnSubagentDirect` y la capa
 R `2b14dfbf81` añadió resolución y cancelación autenticadas a la fábrica interna, con 11/11 pruebas de manejo y 5/5 del borde de herramienta. Las cinco operaciones del solicitante tienen ya rutas internas, pero no están ensambladas en el runtime ni certificadas en `coverage.json`; falta el canal de informe del productor, el host real y la cadena completa.
 
 R `63cdfa6c1e` añadió el informe del productor nativo con identidad derivada del run durable y admisión confirmada, sin entregar el token al modelo. La revocación antes del commit revierte la escritura; 25/25 pruebas focalizadas y tipos pasaron. La herramienta sigue sin montarse en el runtime productivo, así que T9 continúa parcial y la admisión permanece deshabilitada.
+
+R `f089245b2d` expone `managed_tasks_report` al hijo nativo gestionado desde la fábrica real; un run o sesión distintos no reciben la herramienta. Pasaron 39/39 pruebas focalizadas, tipos y lint. Siguen pendientes el ensamblaje de las cinco operaciones del solicitante y la prueba de gateway completo.
