@@ -67,7 +67,7 @@ claude no entregó dentro de la ventana. Conteo completado en C1-r1 (F4): a
 esos tres juegos de zcode se suman la corrida de la r1 del arnés
 (`salidas/zcode/`, estampa 102610) y un lanzamiento abortado de zcode antes
 del registro (sin artefactos), con lo que el total descartado de zcode es
-seis; también son anteriores al sello de identidad las corridas de claude,
+cinco; también son anteriores al sello de identidad las corridas de claude,
 codex y kimi de esta tabla (F1). Quedan como antecedente en
 `arnes/salidas/<token>-r2/` con todas sus estampas. Artefactos crudos:
 `doble.*` (envíos REAL y NEGADO), `times-r2.*`, `sondeo*.jsonl`,
