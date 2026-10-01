@@ -615,7 +615,7 @@ tick() {
       # aviso VIGENTE (el ultimo fin-turno emitido para esta sesion) no este
       # consumado en tratados/ (en avisos/ sigue pendiente o se perdio).
       # Un tratado VIEJO de otra ronda no anula la proteccion (B1 C2-r2).
-      if [[ -z $run || -z $prev_aviso ]] || [[ -n $run && -f "$CORRIDA_STATE/$run/avisos/tratados/$prev_aviso" ]]; then
+      if [[ -z $run || -z $prev_aviso ]] || [[ -n $run && -f "$CORRIDA_STATE/$run/avisos/tratados/$prev_aviso.json" ]]; then
         prev_notified=0
       fi
     else

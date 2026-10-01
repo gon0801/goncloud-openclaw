@@ -1511,12 +1511,12 @@ delta=$((t2 - t1))
 "$TM" -L "$L" kill-session -t "=rem-r2:" 2>/dev/null
 echo "ok (2q-16): el wake propio no reinicia el reloj de recordatorio (R2)"
 
-# (2q-17) B1 C2-r2: la proteccion mira el aviso VIGENTE, no cualquier tratado
-# de la sesion. Con un tratado VIEJO de la misma sesion ya en tratados/, el
-# wake propio de un aviso NUEVO no reinicia el reloj: el recordatorio del
-# aviso nuevo sale a QUIET_REMIND_SECS (sin el guard por id, el tratado viejo
-# hacia que el cambio de hash reiniciara notified=0 y el recordatorio jamas
-# salia).
+# (2q-17) B1 C2-r3: caso completo del guard. El aviso v1 sale, se CONSUME
+# (el atender lo mueve a tratados/<id>.json, CON extension) y el panel cambia
+# por un turno nuevo. El fin de turno nuevo debe avisar DE INMEDIATO (episodio
+# nuevo a QUIET_SECS), no a los 60 minutos (QUIET_REMIND_SECS default 3600).
+# Sin la extension .json en el guard (B1 C2-r3), el tratado nunca se encontraba
+# y la proteccion bloqueaba la senal nueva hasta el recordatorio.
 STATE_DIR="$T/state-2q-17"; mkdir -p "$STATE_DIR"
 CORRIDA_STATE17="$T/corrida-17"; mkdir -p "$CORRIDA_STATE17/rem-R17/avisos/tratados"
 "$TM" -L "$L" new-session -d -s rem-2q17 -x 80 -y 20 'cat' || fail "no se pudo crear rem-2q17"
@@ -1543,11 +1543,11 @@ while [ "$i" -lt 120 ]; do
   sleep 0.7; i=$((i + 1))
 done
 [ -n "$t1" ] || fail "(2q-17) el primer quiet debia salir por avisos: $(cat "$AARGV")"
-[ -n "$t2" ] || fail "(2q-17) con un tratado viejo, el aviso nuevo debia avisar y ser recordado: $(cat "$AARGV")"
+[ -n "$t2" ] || fail "(2q-17) con el aviso consumido y un turno nuevo, el fin de turno debia avisar de inmediato, no a los 60 minutos: $(cat "$AARGV")"
 delta=$((t2 - t1))
-[ "$delta" -ge 5 ] || fail "(2q-17) la senal nueva llego ${delta}s tras el wake (< REMIND 6s): el tratado viejo anulo la proteccion"
+[ "$delta" -lt 5 ] || fail "(2q-17) la senal nueva llego ${delta}s tras el wake (>= 5s): el tratado consumido no solto la proteccion (falta .json en el guard?)"
 "$TM" -L "$L" kill-session -t "=rem-2q17:" 2>/dev/null
-echo "ok (2q-17): la proteccion mira el aviso vigente, no tratados viejos"
+echo "ok (2q-17): aviso consumido + turno nuevo -> fin de turno nuevo avisa de inmediato, no a los 60 min"
 else
   echo "SKIP (2q): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
 fi
