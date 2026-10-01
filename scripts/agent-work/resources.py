@@ -199,6 +199,8 @@ class ResourceManager:
 
 
 class TmuxBackend:
+    NONCE_OPTION = "@agent_work_resource_nonce"
+
     def __init__(self, tmux_bin: str, socket: str, boot_id: str | None = None):
         if not socket or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in socket):
             raise ValueError("an explicit isolated tmux socket is required")
@@ -223,31 +225,49 @@ class TmuxBackend:
         result = subprocess.run(["ps", "-o", "lstart=", "-p", pid], capture_output=True, text=True)
         return result.stdout.strip() if result.returncode == 0 else ""
 
-    def mark(self, session: str, nonce: str) -> None:
-        current = self._tmux("show-environment", "-t", f"={session}", "AGENT_WORK_RESOURCE_NONCE")
-        if current.returncode == 0 and current.stdout.strip() != f"AGENT_WORK_RESOURCE_NONCE={nonce}":
-            raise ValueError("tmux session already belongs to another resource")
-        result = self._tmux("set-environment", "-t", f"={session}", "AGENT_WORK_RESOURCE_NONCE", nonce)
+    def _fields(self, target: str) -> tuple[str, str, str, str, str] | None:
+        result = self._tmux("display-message", "-p", "-t", target,
+                            f"#{{pid}}|#{{session_id}}|#{{pane_id}}|#{{pane_pid}}|#{{{self.NONCE_OPTION}}}")
         if result.returncode:
+            return None
+        parts = result.stdout.strip().split("|")
+        return tuple(parts) if len(parts) == 5 else None
+
+    def _guarded(self, fields: tuple[str, str, str, str, str], command: str) -> bool:
+        session_id = fields[1]
+        expected = "|".join(fields)
+        condition = (f"#{{==:#{{pid}}|#{{session_id}}|#{{pane_id}}|#{{pane_pid}}|"
+                     f"#{{{self.NONCE_OPTION}}},{expected}}}")
+        return self._tmux("if-shell", "-F", "-t", session_id, condition, command).returncode == 0
+
+    def mark(self, session: str, nonce: str) -> None:
+        if not session or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in session):
+            raise ValueError("invalid tmux session")
+        if not nonce or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in nonce):
+            raise ValueError("invalid tmux resource nonce")
+        current = self._fields(f"={session}:")
+        if current is None:
+            raise OSError("tmux session unavailable before delivery")
+        if current[4] and current[4] != nonce:
+            raise ValueError("tmux session already belongs to another resource")
+        session_id = current[1]
+        if not self._guarded(current, f"set-option -t {session_id} {self.NONCE_OPTION} {nonce}"):
             raise OSError("cannot mark tmux resource before delivery")
+        marked = self._fields(f"{session_id}:")
+        if marked != (*current[:4], nonce):
+            raise OSError("tmux resource identity changed before delivery")
 
     def observe(self, session: str) -> dict | None:
         if not session or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in session):
             raise ValueError("invalid tmux session")
-        result = self._tmux("display-message", "-p", "-t", f"={session}:",
-                            "#{pid}|#{session_id}|#{pane_id}|#{pane_pid}")
-        if result.returncode:
+        parts = self._fields(f"={session}:")
+        if parts is None:
             return None
-        parts = result.stdout.strip().split("|")
-        if len(parts) != 4:
-            return None
-        server_pid, session_id, pane_id, pane_pid = parts
+        server_pid, session_id, pane_id, pane_pid, nonce = parts
         server_start = self._start(server_pid)
         pane_start = self._start(pane_pid)
         if not server_start or not pane_start:
             return None
-        marker = self._tmux("show-environment", "-t", f"={session}", "AGENT_WORK_RESOURCE_NONCE")
-        nonce = marker.stdout.strip().partition("=")[2] if marker.returncode == 0 else ""
         return {"bootId": self.boot_id, "nonce": nonce, "socket": self.socket,
                 "sessionName": session, "serverPid": int(server_pid), "serverStart": server_start,
                 "sessionId": session_id, "paneId": pane_id, "panePid": int(pane_pid),
@@ -256,7 +276,11 @@ class TmuxBackend:
     def stop(self, identity: dict) -> bool:
         if self.observe(identity["sessionName"]) != identity:
             return False
-        return self._tmux("kill-session", "-t", f"={identity['sessionName']}").returncode == 0
+        fields = (str(identity["serverPid"]), identity["sessionId"], identity["paneId"],
+                  str(identity["panePid"]), identity["nonce"])
+        if not self._guarded(fields, f"kill-session -t {identity['sessionId']}"):
+            return False
+        return self._fields(f"{identity['sessionId']}:") is None
 
     def prove_absent(self, identity: dict) -> bool | None:
         if self.observe(identity["sessionName"]) == identity:
@@ -266,8 +290,11 @@ class TmuxBackend:
     def revoke(self, identity: dict) -> bool:
         if self.observe(identity["sessionName"]) != identity:
             return False
-        return self._tmux("set-environment", "-t", f"={identity['sessionName']}", "-u",
-                          "AGENT_WORK_RESOURCE_NONCE").returncode == 0
+        fields = (str(identity["serverPid"]), identity["sessionId"], identity["paneId"],
+                  str(identity["panePid"]), identity["nonce"])
+        if not self._guarded(fields, f"set-option -u -t {identity['sessionId']} {self.NONCE_OPTION}"):
+            return False
+        return self._fields(f"{identity['sessionId']}:") == (*fields[:4], "")
 
 
 def main() -> int:

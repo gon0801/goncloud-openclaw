@@ -199,7 +199,62 @@ class ResourceTests(unittest.TestCase):
             self.assertEqual(manager.close(key2, {"kind": "result", "receipt": "r2"}).state,
                              "ReleasedAdopted")
             self.assertEqual(tmux_cmd("has-session", "-t", "=adopted").returncode, 0)
-            self.assertNotIn("AGENT_WORK_RESOURCE_NONCE", tmux_cmd("show-environment", "-t", "=adopted").stdout)
+            self.assertEqual(tmux_cmd("display-message", "-p", "-t", "=adopted:",
+                                      "#{@agent_work_resource_nonce}").stdout.strip(), "")
+        finally:
+            tmux_cmd("kill-server")
+
+    def test_resource_tmux_replacement_is_never_marked_stopped_or_revoked(self):
+        tmux = shutil.which("tmux")
+        if not tmux:
+            self.skipTest("tmux not installed")
+        socket = f"agent-work-race-{os.getpid()}"
+        def tmux_cmd(*args):
+            return subprocess.run([tmux, "-L", socket, *args], capture_output=True, text=True)
+        backend = TmuxBackend(tmux, socket)
+        def new_worker():
+            self.assertEqual(tmux_cmd("new-session", "-d", "-s", "worker", "/bin/sleep 30").returncode, 0)
+        def replace():
+            self.assertEqual(tmux_cmd("kill-session", "-t", "=worker").returncode, 0)
+            new_worker()
+        try:
+            for action in ("mark", "stop", "revoke"):
+                new_worker()
+                backend.mark("worker", "old_nonce")
+                old = backend.observe("worker")
+                if action == "mark":
+                    original = backend._tmux
+                    swapped = False
+                    def swap_on_read(*args):
+                        nonlocal swapped
+                        result = original(*args)
+                        if not swapped and args[0] in ("show-environment", "display-message"):
+                            swapped = True
+                            replace()
+                        return result
+                    backend._tmux = swap_on_read
+                    try:
+                        with self.assertRaises((OSError, ValueError)):
+                            backend.mark("worker", "old_nonce")
+                    finally:
+                        backend._tmux = original
+                else:
+                    original = backend.observe
+                    def swap_on_observe(session):
+                        seen = original(session)
+                        self.assertEqual(seen, old)
+                        replace()
+                        backend.mark("worker", "replacement_nonce")
+                        return seen
+                    backend.observe = swap_on_observe
+                    try:
+                        self.assertFalse(getattr(backend, action)(old))
+                    finally:
+                        backend.observe = original
+                self.assertEqual(tmux_cmd("has-session", "-t", "=worker").returncode, 0)
+                marker = backend.observe("worker")["nonce"]
+                self.assertEqual(marker, "" if action == "mark" else "replacement_nonce")
+                self.assertEqual(tmux_cmd("kill-session", "-t", "=worker").returncode, 0)
         finally:
             tmux_cmd("kill-server")
 
