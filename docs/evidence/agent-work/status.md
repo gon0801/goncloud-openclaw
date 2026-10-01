@@ -1,6 +1,6 @@
 # Estado de implementación de encargos
 
-Bloque activo: B1 en integración; T4 se prepara en una rama posterior aislada. B0 terminó con el recibo `T0.md`. La base de B1 está fijada en `block-bases.json`. T1, T2 y T3 tienen implementación nativa aislada, aún sin cierre del bloque.
+Bloque activo: B1 en integración; B2 y B4 tienen preparaciones aisladas. B0 terminó con el recibo `T0.md`. La base de B1 está fijada en `block-bases.json`. T1, T2 y T3 tienen implementación nativa aislada, aún sin cierre del bloque.
 
 La fuente de OpenClaw 2026.9.7 está en un checkout aislado. La deduplicación del gateway tras reinicio necesita ampliación nativa. La admisión productiva permanece deshabilitada.
 
@@ -12,4 +12,10 @@ En R, `e2eaae212c` reúne T1–T3 y la prueba de la cola del solicitante tras re
 
 T6 y T7 están integradas como preparación aislada en G (`759a51c`). Pasaron las 7 pruebas de entrega/recibos, las 9 de recursos de host y el contrato del adaptador CLI. La revisión cruzada de T7 aprobó el arreglo de las carreras tmux (`c925363..b7974d3` en la rama de preparación). No se aceptan aún T6/T7: falta enlazar el informe portable al contrato nativo y certificar el cierre de descendientes por cada pareja host/adaptador. La prueba con un hijo desacoplado demuestra que el adaptador Mac actual conserva `CleanupPending` y cupo, pero no puede probar ausencia. `coverage.json` mantiene todas las parejas deshabilitadas.
 
-T8 tiene una preparación aislada en G (`55ee4cb`): el cliente de progreso confirma ID y hashes después de guardar evidencia y evento, y el puente reutiliza ese recibo tras perder respuestas. Pasaron 32 pruebas del cliente y 5 del puente, incluidas ambas clases de ACK perdido y el cambio concurrente de la evidencia; la corrección de esa carrera recibió revisión cruzada. Falta la consulta y confirmación nativa de `ProjectionPending`, el enlace al director y la cadena E2E; no se marca T8 terminada.
+El snapshot del host quedó integrado en G (`82f510e..d1a6fa0`): guarda bytes verificados antes del ACK, conserva la evidencia ante cambios, borrado, reinicio y ACK perdido, y no bloquea `flush` si el archivo privado fue sustituido por un FIFO. Pasaron 11 pruebas focalizadas y la revisión del bloqueo FIFO aprobó el delta. Sigue pendiente el enlace del informe portable a `report` nativo.
+
+T4 tiene núcleo nativo en R (`51e3ab940e`): perfil raíz finito, reservas de admisión y llamadas de modelo ligadas a tarea/run, liquidación e incertidumbre. Pasaron 26 pruebas focalizadas, tipos, lint, formato, tipos SQLite y hooks. El perfil pequeño de ensayo está en `limits.json`; el perfil productivo es nulo y la admisión productiva sigue deshabilitada. La conexión a las llamadas reales del proveedor está en curso; sin ella no se acepta T4 ni se promete presupuesto global.
+
+T8 tiene preparación en G (`55ee4cb`, `4ab369b`, `249cb94`): el cliente de progreso confirma ID y hashes después de guardar evidencia y evento; el puente reutiliza ese recibo tras perder respuestas y puede publicar bytes archivados por el host tras borrar el archivo de trabajo. Pasaron 32 pruebas del cliente y 8 del puente. La primera revisión del enlace Host detectó que faltaba comprobar SHA/veredicto; el delta `4ab369b..249cb94` lo corrigió con regresiones rojas y recibió aprobación independiente.
+
+En R, `412bf5be19..104dc80eb7` prepara `ProjectionPending` transaccional y las operaciones list/ACK por host, con migración v25, `ready.v1` y digest compatible con Python. Pasaron 21 pruebas focalizadas del primer commit y 7 del archivo de proyección tras corregir una revocación entre el host y la transacción; tipos y hooks pasaron. La segunda revisión del delta de autoridad está pendiente. Falta el transporte autenticado entre R y G, vincular evidencia portable a resultado nativo, el director y la cadena E2E; no se marca T8 terminada.
