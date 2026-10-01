@@ -1,8 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-case "${1:-}" in
-  baseline) ;;
+case_name="${1:-}"
+case "$case_name" in
+  baseline) test_file='src/gateway/agent-turn/agent-wait-dedupe.test.ts'; test_pattern=''; probe_restart=1 ;;
+  registration_identity)
+    test_file='src/agents/tasks/managed-task.store.test.ts'
+    test_pattern='deduplicates a logical key|deduplicates director retries'
+    probe_restart=0 ;;
+  result_receipt)
+    test_file='src/agents/tasks/managed-task.store.test.ts'
+    test_pattern='accepts only the current producer|does not store malformed JSON|rejects an empty or unversioned review|persists PermissionRequired'
+    probe_restart=0 ;;
   *) printf 'Unknown or unimplemented agent-work runtime case: %s\n' "${1:-}" >&2; exit 2 ;;
 esac
 
@@ -29,5 +38,11 @@ diff = subprocess.check_output(['git', '-C', str(root), 'diff', '--binary', 'HEA
 print(json.dumps({'candidateSha': head, 'candidateDiffSha256': hashlib.sha256(diff).hexdigest()}, sort_keys=True), flush=True)
 PY
 cd "$source_root"
-node scripts/run-vitest.mjs src/gateway/agent-turn/agent-wait-dedupe.test.ts
-AGENT_WORK_RUNTIME_SOURCE="$source_root" python3 "$repo_root/scripts/agent-work/probe-native-restart.py"
+if [ -n "$test_pattern" ]; then
+  node scripts/run-vitest.mjs "$test_file" --testNamePattern "$test_pattern"
+else
+  node scripts/run-vitest.mjs "$test_file"
+fi
+if [ "$probe_restart" -eq 1 ]; then
+  AGENT_WORK_RUNTIME_SOURCE="$source_root" python3 "$repo_root/scripts/agent-work/probe-native-restart.py"
+fi
