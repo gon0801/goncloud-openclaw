@@ -51,7 +51,7 @@ def evidence_bytes(root, ref):
 
 
 def transfer_projection(pending, *, host_id, evidence_root, progress_state_dir,
-                        progress_client, acknowledge_native):
+                        progress_client, acknowledge_native, _verified_bytes=None):
     """ACK only after the queue confirms the same event and evidence bytes."""
     if not isinstance(pending, dict):
         raise ValueError("proyección inválida")
@@ -81,7 +81,12 @@ def transfer_projection(pending, *, host_id, evidence_root, progress_state_dir,
     progress_kind = "round.ready" if kind == "ready" else "round.verdict"
     if pending.get("eventId") != event_id(progress_kind, destination):
         raise ValueError("ID de evento distinto")
-    _, raw = evidence_bytes(evidence_root, result.get("evidenceRef"))
+    if _verified_bytes is None:
+        _, raw = evidence_bytes(evidence_root, result.get("evidenceRef"))
+    else:
+        if not isinstance(_verified_bytes, bytes) or len(_verified_bytes) > 1_000_000:
+            raise ValueError("snapshot de evidencia inválido")
+        raw = _verified_bytes
     if hashlib.sha256(raw).hexdigest() != result["contentHash"]:
         raise ValueError("bytes de evidencia distintos")
     command = [sys.executable, str(progress_client), "--state-dir", str(progress_state_dir),
@@ -118,3 +123,21 @@ def transfer_projection(pending, *, host_id, evidence_root, progress_state_dir,
     if acknowledged != receipt:
         raise RuntimeError("ACK nativo no coincide con la transferencia")
     return receipt
+
+
+def transfer_host_projection(pending, *, host, operation_key, progress_state_dir,
+                             progress_client, acknowledge_native):
+    """Project bytes retained by a managed Host, even after workspace deletion."""
+    if not isinstance(pending, dict) or not isinstance(pending.get("result"), dict):
+        raise ValueError("proyección inválida")
+    result, raw = host.result_snapshot(host.host_id, operation_key)
+    if (result.get("hostId") != host.host_id or
+            result.get("taskId") != pending.get("taskId") or
+            result.get("generation") != pending.get("generation") or
+            result.get("digest") != pending["result"].get("contentHash")):
+        raise ValueError("snapshot no corresponde a la proyección nativa")
+    return transfer_projection(pending, host_id=host.host_id, evidence_root=None,
+                               progress_state_dir=progress_state_dir,
+                               progress_client=progress_client,
+                               acknowledge_native=acknowledge_native,
+                               _verified_bytes=raw)

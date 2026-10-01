@@ -13,7 +13,9 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
-from progress_bridge import event_id, projection_digest, transfer_projection  # noqa: E402
+from contracts import AuthorizedOperation, OperationKey  # noqa: E402
+from host import Host  # noqa: E402
+from progress_bridge import event_id, projection_digest, transfer_host_projection, transfer_projection  # noqa: E402
 
 
 class ProjectionTransferTest(unittest.TestCase):
@@ -153,6 +155,38 @@ class ProjectionTransferTest(unittest.TestCase):
         self.assertEqual(evidence["content"], original_bytes.decode())
         self.evidence.write_bytes(original_bytes)
         self.assertEqual(self.transfer(lambda value: value), receipt)
+
+    def test_host_snapshot_survives_workspace_deletion_before_projection(self):
+        workspace = self.root / "workspace"
+        workspace.mkdir()
+        brief = workspace / "brief.txt"
+        brief.write_text("review")
+        artifact = workspace / "review.txt"
+        original = self.evidence.read_bytes()
+        artifact.write_bytes(original)
+        host = Host("host-one", self.root / "host")
+        key = OperationKey("host-one", self.pending["taskId"], 1, "instance-one")
+        operation = AuthorizedOperation(key, "adversary", "capability", "worker-one",
+                                        str(workspace), str(brief), hashlib.sha256(brief.read_bytes()).hexdigest())
+        host.apply(key, operation, lambda *_: None)
+        host.report("host-one", {
+            "schema": "agent-work.result.v1", "kind": "produced", "hostId": "host-one",
+            "taskId": key.task_id, "generation": key.generation, "instanceId": key.instance_id,
+            "producerId": "adversary", "capability": "capability",
+            "observedRevision": self.pending["result"]["sha"],
+            "typedPayload": {"verdict": "approved"}, "artifactRef": str(artifact),
+            "digest": hashlib.sha256(original).hexdigest(),
+        })
+        artifact.unlink()
+        restarted = Host("host-one", self.root / "host")
+        receipt = transfer_host_projection(
+            self.pending, host=restarted, operation_key=key,
+            progress_state_dir=self.state_dir,
+            progress_client=ROOT / "scripts" / "mac" / "progress-events.py",
+            acknowledge_native=lambda value: value,
+        )
+        event = self.state_dir / "runs" / "run-1" / "evidence" / (receipt["eventId"] + ".json")
+        self.assertEqual(json.loads(event.read_text())["content"], original.decode())
 
 
 if __name__ == "__main__":
