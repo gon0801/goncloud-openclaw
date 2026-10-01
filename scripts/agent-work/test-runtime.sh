@@ -50,6 +50,11 @@ case "$case_name" in
     extra_test_files=('src/agents/tasks/managed-task.store.test.ts' 'src/agents/tasks/managed-task.provider-stream.test.ts')
     test_pattern='lets one emitter claim, keeps a crash uncertain|does not store malformed JSON|persists a transport wait when the reserved HTTP request loses its connection'
     probe_restart=0 ;;
+  recovery_limit)
+    test_file='src/agents/tasks/managed-task.budget.test.ts'
+    extra_test_files=('src/agents/tasks/managed-task.provider-stream.test.ts')
+    test_pattern='allows one automatic recovery call per root|blocks an SDK Responses retry before its second HTTP dispatch'
+    probe_restart=0 ;;
   *) printf 'Unknown or unimplemented agent-work runtime case: %s\n' "${1:-}" >&2; exit 2 ;;
 esac
 
