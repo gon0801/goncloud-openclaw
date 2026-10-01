@@ -156,7 +156,7 @@ class ProjectionTransferTest(unittest.TestCase):
         self.evidence.write_bytes(original_bytes)
         self.assertEqual(self.transfer(lambda value: value), receipt)
 
-    def test_host_snapshot_survives_workspace_deletion_before_projection(self):
+    def reported_host(self, *, revision=None, payload=None):
         workspace = self.root / "workspace"
         workspace.mkdir()
         brief = workspace / "brief.txt"
@@ -173,20 +173,43 @@ class ProjectionTransferTest(unittest.TestCase):
             "schema": "agent-work.result.v1", "kind": "produced", "hostId": "host-one",
             "taskId": key.task_id, "generation": key.generation, "instanceId": key.instance_id,
             "producerId": "adversary", "capability": "capability",
-            "observedRevision": self.pending["result"]["sha"],
-            "typedPayload": {"verdict": "approved"}, "artifactRef": str(artifact),
+            "observedRevision": revision or self.pending["result"]["sha"],
+            "typedPayload": payload or {"verdict": "approved", "evidenceRef": "review.txt"},
+            "artifactRef": str(artifact),
             "digest": hashlib.sha256(original).hexdigest(),
         })
         artifact.unlink()
-        restarted = Host("host-one", self.root / "host")
-        receipt = transfer_host_projection(
-            self.pending, host=restarted, operation_key=key,
+        return Host("host-one", self.root / "host"), key, original
+
+    def transfer_from_host(self, host, key, acknowledge):
+        return transfer_host_projection(
+            self.pending, host=host, operation_key=key,
             progress_state_dir=self.state_dir,
             progress_client=ROOT / "scripts" / "mac" / "progress-events.py",
-            acknowledge_native=lambda value: value,
+            acknowledge_native=acknowledge,
         )
+
+    def test_host_snapshot_survives_workspace_deletion_before_projection(self):
+        restarted, key, original = self.reported_host()
+        receipt = self.transfer_from_host(restarted, key, lambda value: value)
         event = self.state_dir / "runs" / "run-1" / "evidence" / (receipt["eventId"] + ".json")
         self.assertEqual(json.loads(event.read_text())["content"], original.decode())
+
+    def test_host_revision_mismatch_never_queues_or_acknowledges(self):
+        restarted, key, _ = self.reported_host(revision="c" * 40)
+        acknowledged = []
+        with self.assertRaisesRegex(ValueError, "revisión"):
+            self.transfer_from_host(restarted, key, acknowledged.append)
+        self.assertEqual(acknowledged, [])
+        self.assertFalse((self.state_dir / "runs" / "run-1" / "queue").exists())
+
+    def test_host_verdict_mismatch_never_queues_or_acknowledges(self):
+        restarted, key, _ = self.reported_host(payload={"verdict": "changes", "findingsRef": "review.txt"})
+        acknowledged = []
+        with self.assertRaisesRegex(ValueError, "veredicto"):
+            self.transfer_from_host(restarted, key, acknowledged.append)
+        self.assertEqual(acknowledged, [])
+        self.assertFalse((self.state_dir / "runs" / "run-1" / "queue").exists())
 
 
 if __name__ == "__main__":

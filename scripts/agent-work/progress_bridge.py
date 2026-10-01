@@ -136,6 +136,21 @@ def transfer_host_projection(pending, *, host, operation_key, progress_state_dir
             result.get("generation") != pending.get("generation") or
             result.get("digest") != pending["result"].get("contentHash")):
         raise ValueError("snapshot no corresponde a la proyección nativa")
+    projected = pending["result"]
+    if result.get("observedRevision") != projected.get("sha"):
+        raise ValueError("revisión del host distinta de la proyección")
+    if projected.get("kind") == "ready":
+        expected_payload = {"evidenceRef": projected.get("evidenceRef")}
+    elif projected.get("kind") == "verdict":
+        verdict = {"aprobado": "approved", "cambios": "changes"}.get(projected.get("verdict"))
+        if verdict is None:
+            raise ValueError("veredicto de proyección inválido")
+        reference_field = "evidenceRef" if verdict == "approved" else "findingsRef"
+        expected_payload = {"verdict": verdict, reference_field: projected.get("evidenceRef")}
+    else:
+        raise ValueError("tipo de proyección inválido")
+    if result.get("typedPayload") != expected_payload:
+        raise ValueError("veredicto o evidencia del host distintos de la proyección")
     return transfer_projection(pending, host_id=host.host_id, evidence_root=None,
                                progress_state_dir=progress_state_dir,
                                progress_client=progress_client,
