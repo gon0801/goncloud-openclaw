@@ -11,7 +11,8 @@
 // las comillas. `tick` es lo que corre el cron cada 15 minutos.
 //
 // `--cli` es el CLI de openclaw: un .js/.mjs/.cjs se corre con este mismo
-// node (en Windows un .cmd no se lanza sin shell); otra ruta se lanza directo.
+// node; un .cmd/.bat se rechaza con mensaje (en Windows no se lanza sin
+// shell); otra ruta se lanza directo.
 //
 // Contrato (docs/spec/seguimiento.v2.md, tablero-runbook/seguimiento-clock.ts):
 // el scratch solo se escribe tras entrega confirmada (sin `ok:false`, con
@@ -45,6 +46,9 @@ function leerArgs(argv) {
 }
 
 function openclaw(cli, args, input) {
+  // 19.3-5-F2: un .cmd/.bat sin shell muere con EINVAL opaco; se rechaza
+  // con el mensaje que pide el .mjs absoluto en vez de lanzarlo.
+  if (/\.(cmd|bat)$/i.test(cli)) fallar(`--cli no puede ser ${cli}: un .cmd/.bat no se lanza sin shell; usa la ruta absoluta al openclaw.mjs`);
   const [cmd, previos] = /\.[cm]?js$/i.test(cli) ? [process.execPath, [cli]] : [cli, []];
   const r = spawnSync(cmd, [...previos, ...args], {
     encoding: "utf8",
@@ -179,7 +183,36 @@ function asegurarJob(a) {
     r = openclaw(a.cli, ["cron", "edit", previo.id, ...comun]);
   }
   if (!r.ok) fallar(`no pude dejar ${DECLARACION} como job de comando`);
-  return unReloj(a.cli).id;
+  // 19.3-5-F5: la alerta de fallo solo existe en `cron edit` (no en `add`):
+  // se aplica en el mismo iniciar, tras el alta o la edicion.
+  const id0 = unReloj(a.cli).id;
+  const ra = openclaw(a.cli, [
+    "cron", "edit", id0,
+    "--failure-alert", "--failure-alert-channel", "telegram",
+    "--failure-alert-account-id", "default", "--failure-alert-to", a.destino,
+    "--failure-alert-after", "1", "--failure-alert-cooldown", "1h",
+    "--failure-alert-mode", "announce",
+  ]);
+  if (!ra.ok) fallar(`no pude dejar la alerta de fallo en ${id0}`);
+  // 19.3-5-F3: read-back: el job leido de vuelta trae el payload de comando
+  // con el argv esperado y el bloque failureAlert al destino.
+  const job = leerJob(a.cli, id0);
+  if (job.payload?.kind !== "command" || JSON.stringify(job.payload.argv) !== JSON.stringify(argv))
+    fallar(`${DECLARACION} quedo sin el payload esperado tras el alta/edicion`);
+  // El bloque trae canal y destinatario (el flag es --failure-alert-to);
+  // aqui se exige el bloque, sin atar la forma exacta del JSON.
+  if (typeof job.failureAlert !== "object" || job.failureAlert === null)
+    fallar(`${DECLARACION} quedo sin la alerta de fallo a ${a.destino}`);
+  return id0;
+}
+
+// 19.3-5-F3: lectura de un job por id (`cron get`, JSON).
+function leerJob(cli, id) {
+  const r = openclaw(cli, ["cron", "get", id, "--json"]);
+  const d = r.ok ? objetoDe(r.salida) : undefined;
+  const job = d?.job ?? d?.result?.job ?? d;
+  if (job === undefined || job.id !== id) fallar(`no pude leer el job ${id}`);
+  return job;
 }
 
 // El corte solo se siembra sobre un scratch vacio: repetirlo sobre uno valido

@@ -144,4 +144,49 @@ events=json.loads((b/'legacy-gateway.json').read_text())['events']
 assert [e['kind'] for e in events]==['run.opened','part.worker'], events
 assert events[0]['doc']['titulo']=='version 3', events[0]
 PY
+# 19.3-11-G2: una nota de mas de 300 cae en borde de palabra.
+# La seccion legacy dejo doc.json en run-legacy: se devuelve a run-1.
+python3 - "$tmp/doc.json" <<'PY'
+import json,sys
+p=sys.argv[1]; d=json.load(open(p)); d['corrida']='run-1'
+json.dump(d,open(p,'w'))
+PY
+python3 - "$tmp/corridas/run-1/registro.json" <<'PY'
+import json,sys
+p=sys.argv[1]; d=json.load(open(p)); c=d['lanes'][0]
+c['worker']='codex'; c['session']='s2'
+c['selection']={'winner':'codex','health':'available','score':90,
+ 'parts':{'fit':90},'candidates':[],
+ 'discarded':[{'worker':'kimi_coding','reasons':['quota-group agotado '+'q'*260]}]}
+json.dump(d,open(p,'w'))
+PY
+bash -c '. scripts/mac/corrida/lib.sh; tablero_carril_publicar run-1 lane-1' >"$tmp/out" 2>"$tmp/err"
+[ ! -s "$tmp/err" ] || { cat "$tmp/err"; exit 1; }
+python3 - "$tmp" <<'PY'
+import json,sys
+from pathlib import Path
+b=Path(sys.argv[1])
+# La nota queda fijada al encolar (queue o sent tras publicar): el falso solo
+# transporta, asi que se lee del outbox y no de su memoria.
+candidatos=[]
+for d in ('queue','sent'):
+    p=b/'outbox'/'runs'/'run-1'/d
+    if p.is_dir():
+        for f in p.glob('worker-*.json'):
+            e=json.loads(f.read_text())
+            if e.get('carril')=='lane-1' and 'descartados' in e.get('note',''):
+                candidatos.append(e['note'])
+assert candidatos, 'sin evento part.worker de lane-1 con la nota larga'
+nota=candidatos[-1]
+completa=("lane-1 seleccion: codex (router, effort medium), puntaje 90 (fit 90)"
+ "; descartados: kimi_coding (quota-group agotado " + "q"*260 + ")")
+assert len(completa) > 300, len(completa)
+assert len(nota) <= 300, len(nota)
+assert completa.startswith(nota), (nota, completa[:len(nota)+10])
+# Borde de palabra: o cupo entera, o lo que sigue al corte es un espacio.
+assert len(nota) == len(completa) or completa[len(nota)] == " ", repr(nota[-20:])
+print('nota de', len(nota), 'letras, corte en borde de palabra')
+PY
+echo 'ok: 19.3-11-G2 la nota larga cae en borde de palabra'
+
 echo 'ok: worker event imports once and retries durably'

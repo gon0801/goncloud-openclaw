@@ -23,6 +23,10 @@ viven en `scripts/mac/cli-modos.tsv` y el preflight hace NO APTO cualquier
 binario seleccionable del registro sin barra medida (F2 de 14.7): un verde
 del preflight significa que `adaptador start` puede arrancar.
 
+El preflight se corre desde el checkout principal
+(`/Users/dn/dev/goncloud-openclaw`): cada CLI pide confianza en su carpeta y
+solo ese checkout pasa las seis (19.3-9, medido en el canary 2026-09-29).
+
 Los hosts son los workers del registro `scripts/mac/workers.v1.json` (hoy
 cinco harnesses). Cursor salió del registro el
 2026-09-29 por decisión de David; vuelve solo con su propio humo real `passed`.

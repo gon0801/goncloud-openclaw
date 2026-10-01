@@ -113,4 +113,24 @@ texto_json "$(tail -n1 "$T/corridas/t9/mensajes.jsonl")" >"$T/g.txt"
 grep -qxF 'Qué cambió: **hubo un gran percance**' "$T/g.txt" \
   || fail "(g) los ** del llamador quedaron anidados: $(cat "$T/g.txt")"
 
+# (h) 19.3-3-F1: el camino directo fija el mismo texto de NECESITO que
+# corrida_mensaje (seguimiento.v1: el texto es fijo, no lo decide el llamador).
+rc=0
+corrida_aviso_directo t9r "NECESITO TU RESPUESTA" "1 de 2 partes terminadas" \
+  "cambio del llamador" "sigue del llamador" "pregunta del llamador" \
+  2>"$T/h.err" || rc=$?
+[ "$rc" -eq 0 ] || fail "(h) NECESITO directo fallo (rc=$rc): $(cat "$T/h.err")"
+grep -qxF 'Qué cambió: **Una parte de la corrida quedó esperando que decidas algo.**' "$T/captura.txt" \
+  || fail "(h) el directo no fijo la linea 2: $(cat "$T/captura.txt")"
+rc=0
+corrida_aviso_directo t9 "NECESITO TU RESPUESTA" "1 de 2 partes terminadas" \
+  "cambio del llamador" "sigue del llamador" "pregunta del llamador" \
+  2>"$T/h2.err" || rc=$?
+[ "$rc" -eq 0 ] || fail "(h) NECESITO directo en practica fallo (rc=$rc): $(cat "$T/h2.err")"
+grep -qxF 'Qué cambió: **Una parte de la prueba llegó a una pregunta de práctica.**' "$T/captura.txt" \
+  || fail "(h) el directo no fijo la linea 2 de practica: $(cat "$T/captura.txt")"
+grep -qxF 'Qué necesito de ti: **nada: es una prueba, se resuelve sola**' "$T/captura.txt" \
+  || fail "(h) el directo no fijo la linea 4 de practica: $(cat "$T/captura.txt")"
+echo "ok (h): el directo fija el texto de NECESITO"
+
 echo "TODO VERDE: test-corrida-negritas"

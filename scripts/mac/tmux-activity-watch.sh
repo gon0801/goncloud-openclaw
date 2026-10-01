@@ -721,10 +721,10 @@ tick() {
       rc_av=0
       text="tmux: $session closed | last cwd=$last_path$sufijo"
       aviso_dueno "$run" "$session" cierre closed "$text" || rc_av=$?
+      # 19.3 (F9 de 19.7): aviso_dueno solo devuelve 0 o 1; la rama
+      # rc_av == 2 era inalcanzable (C2-r1 quito dos; esta es la tercera).
       if [[ $rc_av == 0 ]]; then
         rm -f "$sf"
-      elif [[ $rc_av == 2 ]]; then
-        : # el emitir fallo: el estado no se borra y el proximo tick reintenta
       else
         text="tmux: $session closed | last cwd=$last_path$sufijo"
         if send_event "$text" "$run"; then
