@@ -35,3 +35,5 @@ R `571eee9e26` enlazó la capacidad interna de admisión al lanzador de colector
 R `f7b82b1e67` creó la capacidad nativa que liga reclamo, turno y confirmación. R `9a257c4dc7` revalidó su autoridad en la transacción de confirmación tras reproducir la carrera de revocación; 32/32 pruebas focalizadas y tipos pasaron. Falta el emisor autenticado de T9 y las pruebas de integración para cerrar B1.
 
 R `86855193f4` añadió la captura interna del solicitante desde el turno admitido y comprobó separación de remitentes, generación de sesión y revocación (5/5). El recibo `T9.md` conserva el alcance: todavía no existe el emisor público ni la ruta de admisión con presupuesto.
+
+R `9a6a7e311b` impide que un submit con autoridad revocada se confirme en el almacén y valida el encargo completo antes de persistirlo. Sigue faltando construir la herramienta que oculte el token del productor, reserve presupuesto y emita admisión nativa.
