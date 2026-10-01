@@ -59,3 +59,5 @@ R `0f0f9f0187` y G `bc477f6..b1b11f2` enlazan la cola de proyecciones con una en
 R `9c3b46cba7` añadió y pasó la prueba de lista y ACK sobre una conexión autenticada a un Gateway de ensayo real. Ese ensayo por sí solo no acreditó la cadena hasta G ni habilitó la capacidad.
 
 El par G `11bec9e` / R `dda8d27d2a` pasó `projection_gateway` con diff de R vacío: una proyección nativa cruzó el Gateway real y la CLI autenticada hasta la cola de G, y el ACK la retiró. El test descubrió y corrigió la incompatibilidad con Python 3.9 del host Mac. El recibo `T8.md` registra comandos y el límite del artefacto CLI construido antes del commit de pruebas. T8 aún necesita sondeo instalado, director e informe de CLI enlazado a R; ninguna capacidad se habilitó.
+
+R `9aa6284d74..393d37c69a` corrigió la pérdida de la capacidad de encargos entre el run nativo y el constructor normal de herramientas. El rojo, el verde 19/19 y la ausencia de herramientas sin capacidad están en `T9.md`. Sigue faltando un suministro autenticado desde el Gateway y un perfil medido; la integración no habilita agentes todavía.
