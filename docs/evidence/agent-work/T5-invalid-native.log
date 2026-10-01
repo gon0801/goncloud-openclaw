@@ -1,0 +1,68 @@
+[test] starting test/vitest/vitest.agents-support.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+[vitest-workers] local cache hit after 1856ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 427d131b93c3 in 1889ms (16675 inputs, 17229 outputs)
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rejects an invented budget reservation before claiming a native run 471ms
+ ✓ |agents-support| src/agents/tasks/managed-task.wait.test.ts > managed task waiting observations > keeps one stable wait episode across duplicate observations and restart 870ms
+ ✓ |agents-support| src/agents/tasks/managed-task.wait.test.ts > managed task waiting observations > shows a changed cause without exposing another requester's task 456ms
+ ✓ |agents-support| src/agents/tasks/managed-task.wait.test.ts > managed task waiting observations > does not report waiting after a final result 468ms
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > lets one emitter claim, keeps a crash uncertain, and recovers the exact native run 1762ms
+ ✓ |agents-support| src/agents/tasks/managed-task.wait.test.ts > managed task waiting observations > clears a resolved episode durably without reopening it on replay 852ms
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rejects revoked authority before claiming and fences a delayed prior request 440ms
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rechecks authority inside the worker before persisting a claim 441ms
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > refuses admission after cancellation and cannot confirm an outstanding claim 71ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.admission.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.admission.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.admission.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.admission.test.ts: retiring openclaw.sharedStateWorkerOwner
+
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > upgrades a version 20 task ledger without losing its registered tasks 144ms
+ ✓ |agents-support| src/agents/tasks/managed-task.wait.test.ts > managed task waiting observations > keeps a close delivered before its observation across restart 854ms
+ ✓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > rejects extra children atomically when the root child budget is exhausted 453ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.wait.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.wait.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.wait.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.wait.test.ts: retiring openclaw.sharedStateWorkerOwner
+
+ ✓ |agents-support| src/agents/tasks/managed-task.wait.test.ts > managed task waiting observations > upgrades a v25 database before recording its first wait 524ms
+ ✓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > shares concurrent admission capacity across children of a finished parent 451ms
+ ✓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > commits one decision, child, and receipt and recovers them after a lost ACK 449ms
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates a logical key within one requester across turns and restarts 824ms
+ ✓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > rolls back the whole decision when one child is invalid 493ms
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > accepts only the current producer, generation, digest, and revision 446ms
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > upgrades a version 19 database before the first managed task 497ms
+ ✓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > keeps a result pending across agent_end and cancels without replaying late output 845ms
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > does not store malformed JSON or a result without its required fields 427ms
+ ✓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > archives a result received after cancellation without creating a continuation 463ms
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > rejects an empty or unversioned review while leaving the final slot available 824ms
+ ✓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > preserves an uncertain external effect without replaying a child after restart 850ms
+ ✓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > propagates cancellation to children committed before the parent was cancelled 445ms
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > persists PermissionRequired as an incident without consuming the final result 812ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.sharedStateWorkerOwner
+
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates director retries within a corrida without crossing corrida authority 431ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.handling.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.handling.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.handling.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.handling.test.ts: retiring openclaw.sharedStateWorkerOwner
+
+ ✓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > upgrades a version 22 database before resolving its first result 491ms
+
+ Test Files  4 passed (4)
+      Tests  28 passed (28)
+   Start at  10:34:55
+   Duration  11.64s (tests 73%, transform 24%, worker 2%, setup 1%, import 1%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 12.89s
