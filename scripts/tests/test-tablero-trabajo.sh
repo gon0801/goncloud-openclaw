@@ -125,6 +125,26 @@ tt paso manual-antiguo 1 implementando "retoma el trabajo anterior" >/dev/null |
 [ "$(cat "$STORE/manual-antiguo.rev")" = 2 ] || fail "(1-bis) no convirtió el trabajo a revisión por eventos"
 echo "ok (1-bis): un trabajo manual legacy se importa antes del siguiente paso"
 
+# Una importacion vieja en cola no puede bloquear el tablero si un escritor
+# legacy cambia el snapshot mientras el gateway estuvo caido.
+python3 - "$STORE/migrar-correo.json" "$STORE/manual-cambio.json" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1])); d['corrida']='manual-cambio'
+json.dump(d,open(sys.argv[2],'w'))
+PY
+FAKE_EVENT_OFFLINE=1 tt paso manual-cambio 1 implementando "primer intento" >/dev/null 2>&1 \
+  && fail "(1-ter) el gateway caido debio dejar la importacion en cola"
+python3 - "$STORE/manual-cambio.json" <<'PY'
+import json,sys
+p=sys.argv[1]; d=json.load(open(p)); d['siguiente_paso']='snapshot corregido'
+json.dump(d,open(p,'w'))
+PY
+tt paso manual-cambio 1 implementando "retoma el snapshot corregido" >/dev/null \
+  || fail "(1-ter) la importacion vieja bloqueo el snapshot nuevo"
+[ "$(doc manual-cambio "d['siguiente_paso']")" = "snapshot corregido" ] \
+  || fail "(1-ter) la importacion piso el snapshot nuevo"
+echo "ok (1-ter): la importacion obsoleta no bloquea una corrida legacy"
+
 # (2) abrir otra vez no pisa el documento abierto.
 tt paso migrar-correo 1 mergeado "buzones exportados" >/dev/null || fail "(2) paso previo fallo"
 antes=$(cat "$STORE/migrar-correo.json")

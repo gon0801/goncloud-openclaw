@@ -24,7 +24,7 @@ responder éxito; reconstruye la proyección si quedó atrás tras una caída.
 | `part.added` | `carril`, `queueItem?`, `roundBudget?` | Amplía el alcance declarado. |
 | `round.started` | `carril`, `intento`, `ronda`, `baseSha` | Abre una ronda identificada. |
 | `round.ready` | `carril`, `intento`, `ronda`, `sha`, `evidence` | Persiste LISTO para el SHA entregado. |
-| `round.verdict` | los mismos identificadores, `verdict: aprobado|cambios`, `evidence` | Cierra esa ronda solo si revisó el SHA de LISTO. |
+| `round.verdict` | los mismos identificadores, `verdict` (`aprobado` o `cambios`), `evidence` | Cierra esa ronda solo si revisó el SHA de LISTO. |
 | `part.status` | `carril`, `estado`, `que?`, `pr?`, `nextStep?`, `evidence?` | Cambia el carril; mergeado exige aprobación/evidencia salvo un encargo manual declarado. |
 | `part.worker` | `carril`, `worker`, `note`, `generation` para el productor nativo | Actualiza el trabajador sin sobrescribir otros carriles. La tenencia nativa crece en cada relevo y ordena dos cambios ocurridos en el mismo segundo. |
 | `attention.changed` | `necesaria`, `motivo` | Actualiza la atención requerida. |
@@ -61,6 +61,16 @@ caída de red. `sync --corrida <id> --estado <estado.md> --phase-json
 JSON de fase conserva el formato `runbook-progress.v1` y su revisión/hora van
 en `<fase.json>.revision.json`. Si las revisiones no coinciden tras una caída a
 mitad de sincronización, repetir `sync` las repara.
+
+Cuando el gateway sustituye una importación histórica, el cliente guarda en
+`superseded/<id>.superseded.json` el motivo y el SHA-256 del evento original.
+Después copia el evento a `superseded/<id>.json` y lo retira de `queue/`.
+Tras una caída, `publish` valida el ID, la corrida y el hash guardados, y
+termina el archivado antes de consultar el gateway. Un reintento conserva
+la primera decisión y deja pasar los eventos siguientes. Si los metadatos
+no permiten comprobar la identidad, el cliente conserva la cola y muestra
+la ruta del registro que requiere reparación. Un rechazo sin decisión
+guardada conserva la validación de los carriles actuales.
 
 Los runbooks futuros abren el tablero con `run.opened` como primer comando,
 antes de lanzar agentes. Cada nueva ronda se abre, entrega y revisa con los

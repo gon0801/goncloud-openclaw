@@ -662,7 +662,7 @@ export default definePluginEntry({
         if (result.ok) syncProgress(result.doc.fase);
         respond(true, result.ok
           ? { ok: true, revision: result.revision, duplicate: result.duplicate }
-          : result);
+          : { ...result, razon: result.reason });
       },
       { scope: "operator.write" },
     );

@@ -2,6 +2,14 @@
 
 [Diseño](../specs/2026-09-30-progress-events-design.md).
 
+El [plan de recuperación](2026-09-30-progress-import-recovery.md) cubre una
+importación interrumpida cuando cambian los carriles remotos. La prueba de
+B3 seguido por B4 reprodujo el rechazo original. La recuperación pasa las
+pruebas focalizadas del cliente, productor y tablero. Una primera revisión
+detectó una carrera entre dos publicadores. Tres pruebas cubren la corrección
+y una segunda revisión no encontró bloqueantes. Falta verificar el SHA final
+en CI antes de cerrar la validación.
+
 - [x] Reproducir con prueba focalizada el porcentaje inmóvil y el overwrite de
       un snapshot posterior por `set`.
 - [x] Implementar contrato de eventos, reductor y cálculo de estimación para
@@ -22,3 +30,9 @@
 - [ ] Dividir el shard 3 de Quality: en el SHA `cd0afe1` tardó 21 minutos;
       `test-simulacro-fase9.sh` consumió 654 segundos por sí sola. Mantener
       la unión exacta de la batería al cambiar el reparto.
+- [ ] Validar el objeto completo de `part.added` antes de proyectarlo; una
+      lista `tareas` malformada hoy devuelve un error de tipo genérico.
+- [ ] Actualizar el candado de la skill para exigir `runbook.progress.event`
+      en runbooks nuevos y reservar `runbook.progress.set` para históricos.
+- [ ] Reducir escrituras de reparación del snapshot que solo difieren en
+      formato y comprobar el límite del log antes de calcular la proyección.

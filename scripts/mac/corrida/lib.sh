@@ -1128,7 +1128,8 @@ run = os.environ["CORR_ID"]
 doc = result["doc"]
 if doc.get("corrida") != run:
     sys.exit(1)
-identifier = "open-" + hashlib.sha256(run.encode()).hexdigest()[:32]
+snapshot = json.dumps(doc, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+identifier = "open-" + hashlib.sha256(snapshot.encode()).hexdigest()[:32]
 for directory in ("queue", "sent"):
     old = pathlib.Path(os.environ["CORR_STATE"]) / "runs" / run / directory / (identifier + ".json")
     if old.exists():

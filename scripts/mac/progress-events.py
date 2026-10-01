@@ -237,6 +237,10 @@ def queue_event(args):
     base = run_dir(args, corrida)
     if (base / "rejected" / (identifier + ".json")).exists():
         raise ValueError(f"evento {identifier} ya fue rechazado; usa otro ID tras resolverlo")
+    queued = base / "queue" / (identifier + ".json")
+    if recover_superseded_import(base, queued, event):
+        print(json.dumps({"id": identifier, "queued": False, "superseded": True}))
+        return
     for directory in ("queue", "sent"):
         target = base / directory / (identifier + ".json")
         if target.exists():
@@ -247,6 +251,86 @@ def queue_event(args):
     print(json.dumps({"id": identifier, "queued": True}))
 
 
+def recover_superseded_import(base: Path, path: Path, event: dict) -> bool:
+    archive = base / "superseded" / path.name
+    decision_path = archive.with_suffix(".superseded.json")
+    has_decision = decision_path.exists() or decision_path.is_symlink()
+    has_archive = archive.exists() or archive.is_symlink()
+    if not has_decision and not has_archive:
+        return False
+    identifier = event["id"]
+    content = encoded(event)
+    if (event.get("kind") != "run.opened" or event.get("corrida") != base.name
+            or path.name != identifier + ".json"):
+        raise ValueError(f"importación sustituida inválida: {identifier}: {path}")
+    if has_decision:
+        if decision_path.is_symlink():
+            raise ValueError(f"metadatos de importación simbólicos: {decision_path}")
+        try:
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+        except (UnicodeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"metadatos de importación inválidos: {decision_path}") from exc
+        reason = decision.get("reason") if isinstance(decision, dict) else None
+        valid_reason = reason == "corrida ya existe" or (reason == "legacy projection changed or invalid" and event.get("importLegacy") is True)
+        if (not isinstance(decision, dict) or decision.get("id") != identifier
+                or not valid_reason):
+            raise ValueError(f"metadatos de importación inválidos: {decision_path}")
+        if "eventHash" in decision:
+            if (decision.get("schema") != "progress-import-superseded.v1"
+                    or decision.get("corrida") != base.name
+                    or decision["eventHash"] != hashlib.sha256(content).hexdigest()
+                    or not isinstance(decision.get("at"), str)
+                    or (decision.get("revision") is not None
+                        and (type(decision["revision"]) is not int or decision["revision"] < 0))):
+                raise ValueError(f"metadatos de importación no coinciden: {decision_path}")
+        elif not has_archive:
+            raise ValueError(f"metadatos de importación sin hash verificable: {decision_path}")
+    if has_archive:
+        if archive.is_symlink() or archive.read_bytes() != content:
+            raise ValueError(f"importación sustituida con otro contenido: {archive}")
+    else:
+        try:
+            queued_content = path.read_bytes()
+        except FileNotFoundError:
+            queued_content = None
+        if queued_content is None:
+            if archive.is_symlink() or not archive.exists() or archive.read_bytes() != content:
+                raise ValueError(f"importación sustituida sin evento coincidente: {path}")
+        else:
+            if path.is_symlink() or queued_content != content:
+                raise ValueError(f"importación sustituida sin evento coincidente en cola: {path}")
+            create_immutable(archive, content)
+    if path.exists() or path.is_symlink():
+        try:
+            queued_content = path.read_bytes()
+        except FileNotFoundError:
+            queued_content = None
+        if path.is_symlink() or (queued_content is not None and queued_content != content):
+            raise ValueError(f"evento en cola con otro contenido: {path}")
+        if queued_content is not None:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+            fsync_dir(path.parent)
+    return True
+
+
+def supersede_import(base, path, event, reason, revision=None):
+    identifier = event["id"]
+    decision_path = (base / "superseded" / path.name).with_suffix(".superseded.json")
+    if not decision_path.exists():
+        decision = {"schema": "progress-import-superseded.v1", "corrida": base.name,
+                    "id": identifier, "eventHash": hashlib.sha256(encoded(event)).hexdigest(),
+                    "reason": reason, "revision": revision, "at": now()}
+        try:
+            create_immutable(decision_path, encoded(decision))
+        except ValueError:
+            if not decision_path.exists():
+                raise
+    recover_superseded_import(base, path, event)
+
+
 def publish(args, max_events=None, quiet=False):
     base = run_dir(args, args.corrida)
     queue = base / "queue"
@@ -255,15 +339,28 @@ def publish(args, max_events=None, quiet=False):
             print(json.dumps({"published": 0}))
         return 0
     count = 0
-    paths = list(queue.glob("*.json"))
-    paths.sort(key=lambda path: (json.loads(path.read_text(encoding="utf-8")).get("kind") != "run.opened", path.stat().st_mtime_ns, path.name))
+    paths = []
+    for path in queue.glob("*.json"):
+        try:
+            event = json.loads(path.read_text(encoding="utf-8"))
+            paths.append((event.get("kind") != "run.opened", path.stat().st_mtime_ns, path.name, path))
+        except FileNotFoundError:
+            continue
+    paths.sort()
+    paths = [item[3] for item in paths]
     if max_events is not None:
         paths = paths[:max_events]
     for path in paths:
-        event = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            event = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            continue
         identifier = check(event.get("id"), ID_RE, "ID")
         if path.name != identifier + ".json" or event.get("corrida") != args.corrida:
             raise ValueError("comando en cola inválido")
+        if recover_superseded_import(base, path, event):
+            continue
+        original_event = event.copy()
         attempt_path = base / "attempts" / path.name
         if attempt_path.exists():
             attempt = json.loads(attempt_path.read_text(encoding="utf-8"))
@@ -277,7 +374,11 @@ def publish(args, max_events=None, quiet=False):
             replace_atomic(attempt_path, encoded({"id": identifier, "expectedRevision": event["expectedRevision"]}))
         response = gateway(args, "runbook.progress.event", event)
         if response.get("ok") is not True:
-            if event.get("kind") == "run.opened" and (response.get("reason") or response.get("razon")) == "corrida ya existe":
+            reason = response.get("reason") or response.get("razon")
+            if event.get("kind") == "run.opened" and event.get("importLegacy") and reason == "legacy projection changed or invalid":
+                supersede_import(base, path, original_event, reason, response.get("revision"))
+                continue
+            if event.get("kind") == "run.opened" and reason == "corrida ya existe":
                 accepted = get(args, args.corrida)
                 intended_doc = event.get("doc")
                 intended = intended_doc.get("carriles", []) if isinstance(intended_doc, dict) else []
@@ -287,20 +388,7 @@ def publish(args, max_events=None, quiet=False):
                 if (accepted["revision"] < 1 or not intended_ids
                         or len(intended_ids) != len(intended) or not intended_ids.issubset(accepted_ids)):
                     raise RuntimeError(f"evento {identifier} rechazado: corrida existente no coincide con importación")
-                superseded = base / "superseded" / path.name
-                metadata = {"id": identifier, "reason": "corrida ya existe", "revision": accepted["revision"], "at": now()}
-                metadata_path = superseded.with_suffix(".superseded.json")
-                if metadata_path.exists():
-                    previous = json.loads(metadata_path.read_text(encoding="utf-8"))
-                    if {key: previous.get(key) for key in metadata if key != "at"} != {key: value for key, value in metadata.items() if key != "at"}:
-                        raise ValueError(f"importación sustituida con otra revisión: {identifier}")
-                else:
-                    create_immutable(metadata_path, encoded(metadata))
-                if superseded.exists():
-                    raise ValueError(f"importación sustituida ya existe: {identifier}")
-                os.replace(path, superseded)
-                fsync_dir(queue)
-                fsync_dir(superseded.parent)
+                supersede_import(base, path, original_event, reason, accepted["revision"])
                 continue
             # A stale revision is only reconsidered after reading the authoritative state.
             conflict = response.get("reason") == "revision conflict" or response.get("razon") == "conflicto"

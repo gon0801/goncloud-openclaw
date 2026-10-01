@@ -2,6 +2,7 @@
 """Behavior tests for the durable Mac progress event client."""
 
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 CLI = Path(__file__).resolve().parents[1] / "mac" / "progress-events.py"
@@ -57,6 +59,10 @@ if method == 'runbook.progress.get':
     print(json.dumps({'ok':True,'revision':7,'doc':{'schema':'runbook-progress.v1','corrida':'run-1','fase':'9','lead':{'actualizado':'now'},'carriles':lanes}}))
 elif mode in ('open-race', 'open-race-mismatch') and method == 'runbook.progress.event' and params['kind'] == 'run.opened':
     print(json.dumps({'ok':False,'reason':'corrida ya existe'}))
+elif mode == 'legacy-stale' and method == 'runbook.progress.event' and params['kind'] == 'run.opened':
+    print(json.dumps({'ok':False,'reason':'legacy projection changed or invalid'}))
+elif mode == 'legacy-stale-old' and method == 'runbook.progress.event' and params['id'] == 'opened-old':
+    print(json.dumps({'ok':False,'reason':'legacy projection changed or invalid'}))
 elif mode == 'wrong-sha':
     print(json.dumps({'ok':False,'razon':'SHA revisado distinto'}))
 elif mode == 'worker-stale-generation':
@@ -283,6 +289,8 @@ else:
         self.assertEqual(payload["schema"], "runbook-progress.v1")
         self.assertIn("revisión: 7", estado.read_text())
         self.assertIn(metadata["syncedAt"], estado.read_text())
+        state_doc = json.loads(estado.read_text().split("```json\n", 1)[1].split("\n```", 1)[0])
+        self.assertEqual(state_doc, payload)
 
     def test_gateway_warning_before_json_is_ignored(self):
         self.mode.write_text("warning-prefix")
@@ -340,6 +348,364 @@ else:
         base = self.state / "runs" / "run-1"
         self.assertTrue((base / "queue" / "opened-1.json").exists())
         self.assertFalse((base / "superseded" / "opened-1.json").exists())
+
+    def test_superseded_import_cannot_be_requeued_ahead_of_current_snapshot(self):
+        old = {"kind": "run.opened", "id": "opened-old", "corrida": "run-1",
+               "at": "2026-09-30T00:00:00Z", "doc": {"corrida": "run-1", "titulo": "old"},
+               "roundBudget": {}, "importLegacy": True}
+        source = self.root / "open.json"
+        source.write_text(json.dumps(old))
+        self.cli("queue-event", "--event-json", str(source))
+        self.mode.write_text("legacy-stale")
+        self.cli("publish", "--corrida", "run-1")
+        base = self.state / "runs" / "run-1"
+        self.assertTrue((base / "superseded" / "opened-old.json").exists())
+        retry = json.loads(self.cli("queue-event", "--event-json", str(source)).stdout)
+        self.assertFalse(retry["queued"])
+        self.assertFalse((base / "queue" / "opened-old.json").exists())
+        # Un segundo publicador pudo haberla puesto en cola antes del archivado.
+        (base / "queue" / "opened-old.json").write_bytes((base / "superseded" / "opened-old.json").read_bytes())
+        current = {**old, "id": "opened-current", "doc": {"corrida": "run-1", "titulo": "current"}}
+        source.write_text(json.dumps(current))
+        self.cli("queue-event", "--event-json", str(source))
+        self.mode.write_text("legacy-stale-old")
+        self.cli("publish", "--corrida", "run-1")
+        self.assertTrue((base / "sent" / "opened-current.json").exists())
+        self.assertFalse((base / "queue" / "opened-old.json").exists())
+        self.assertEqual([call["params"]["id"] for call in self.calls() if call["method"] == "runbook.progress.event"],
+                         ["opened-old", "opened-current"])
+
+    def test_crash_after_supersede_metadata_finishes_with_original_decision(self):
+        spec = importlib.util.spec_from_file_location("progress_client", CLI)
+        client = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(client)
+        base = self.state / "runs" / "run-1"
+        queue = base / "queue"
+        queue.mkdir(parents=True)
+        doc = {"corrida": "run-1", "carriles": [{"id": "B3"}]}
+        event = {"kind": "run.opened", "id": "opened-old", "corrida": "run-1",
+                 "at": "2026-09-30T00:00:00Z", "doc": doc, "roundBudget": {}, "importLegacy": True}
+        (queue / "opened-old.json").write_bytes(client.encoded(event))
+        args = type("Args", (), {"state_dir": str(self.state), "corrida": "run-1"})()
+        save = client.create_immutable
+
+        def crash_before_archive(path, data):
+            if path.name == "opened-old.json":
+                raise OSError("caida")
+            return save(path, data)
+
+        with mock.patch.object(client, "gateway", return_value={"ok": False, "reason": "legacy projection changed or invalid"}), \
+             mock.patch.object(client, "create_immutable", side_effect=crash_before_archive):
+            with self.assertRaises(OSError):
+                client.publish(args)
+        metadata = base / "superseded" / "opened-old.superseded.json"
+        self.assertTrue(metadata.exists())
+        self.assertTrue((queue / "opened-old.json").exists())
+        with mock.patch.object(client, "gateway", return_value={"ok": False, "reason": "corrida ya existe"}), \
+             mock.patch.object(client, "get", return_value={"revision": 1, "doc": doc}):
+            client.publish(args)
+        self.assertFalse((queue / "opened-old.json").exists())
+        self.assertTrue((base / "superseded" / "opened-old.json").exists())
+        self.assertEqual(json.loads(metadata.read_text())["reason"], "legacy projection changed or invalid")
+
+    def test_recovery_ignores_changed_remote_lanes(self):
+        spec = importlib.util.spec_from_file_location("progress_client", CLI)
+        client = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(client)
+        base = self.state / "runs" / "run-1"
+        queue = base / "queue"
+        queue.mkdir(parents=True)
+        old = {"kind": "run.opened", "id": "opened-old", "corrida": "run-1",
+               "at": "2026-09-30T00:00:00Z", "doc": {"corrida": "run-1", "carriles": [{"id": "B3"}]},
+               "roundBudget": {}, "importLegacy": True}
+        current = {**old, "id": "opened-current", "doc": {"corrida": "run-1", "carriles": [{"id": "B4"}]}}
+        (queue / "opened-old.json").write_bytes(client.encoded(old))
+        args = type("Args", (), {"state_dir": str(self.state), "corrida": "run-1"})()
+        save = client.create_immutable
+
+        def crash_before_archive(path, data):
+            if path.name == "opened-old.json":
+                raise OSError("caida")
+            return save(path, data)
+
+        with mock.patch.object(client, "gateway", return_value={"ok": False, "reason": "legacy projection changed or invalid"}), \
+             mock.patch.object(client, "create_immutable", side_effect=crash_before_archive):
+            with self.assertRaises(OSError):
+                client.publish(args)
+        self.assertTrue((base / "superseded" / "opened-old.superseded.json").exists())
+        (queue / "opened-current.json").write_bytes(client.encoded(current))
+        calls = []
+
+        def remote(_args, _method, event):
+            calls.append(event["id"])
+            if event["id"] == "opened-old":
+                return {"ok": False, "reason": "corrida ya existe"}
+            return {"ok": True, "revision": 2}
+
+        with mock.patch.object(client, "gateway", side_effect=remote), \
+             mock.patch.object(client, "get", return_value={"revision": 1, "doc": {"corrida": "run-1", "carriles": [{"id": "B4"}]}}):
+            client.publish(args)
+        self.assertEqual(calls, ["opened-current"])
+        self.assertFalse((queue / "opened-old.json").exists())
+        self.assertTrue((base / "superseded" / "opened-old.json").exists())
+        self.assertTrue((base / "sent" / "opened-current.json").exists())
+
+    def test_recovery_survives_archive_before_queue_removal_and_offline_gateway(self):
+        spec = importlib.util.spec_from_file_location("progress_client", CLI)
+        client = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(client)
+        base = self.state / "runs" / "run-1"
+        queue = base / "queue"
+        queue.mkdir(parents=True)
+        event = {"kind": "run.opened", "id": "opened-old", "corrida": "run-1",
+                 "at": "2026-09-30T00:00:00Z", "doc": {"corrida": "run-1"},
+                 "roundBudget": {}, "importLegacy": True}
+        pending = queue / "opened-old.json"
+        pending.write_bytes(client.encoded(event))
+        args = type("Args", (), {"state_dir": str(self.state), "corrida": "run-1"})()
+        with mock.patch.object(client, "gateway", return_value={"ok": False, "reason": "legacy projection changed or invalid"}), \
+             mock.patch.object(client.Path, "unlink", side_effect=OSError("caida")):
+            with self.assertRaises(OSError):
+                client.publish(args)
+        archive = base / "superseded" / pending.name
+        self.assertTrue(archive.exists())
+        self.assertTrue(pending.exists())
+        original_decision = archive.with_suffix(".superseded.json").read_bytes()
+        with mock.patch.object(client, "gateway", side_effect=AssertionError("consulta remota durante recuperación")):
+            client.publish(args)
+            client.publish(args)
+        self.assertFalse(pending.exists())
+        self.assertEqual(archive.read_bytes(), client.encoded(event))
+        self.assertEqual(archive.with_suffix(".superseded.json").read_bytes(), original_decision)
+
+    def test_recovery_rejects_mismatched_identity_and_requeue(self):
+        spec = importlib.util.spec_from_file_location("progress_client", CLI)
+        client = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(client)
+        base = self.state / "runs" / "run-1"
+        queue = base / "queue"
+        queue.mkdir(parents=True)
+        event = {"kind": "run.opened", "id": "opened-old", "corrida": "run-1",
+                 "at": "2026-09-30T00:00:00Z", "doc": {"corrida": "run-1", "carriles": [{"id": "B3"}]},
+                 "roundBudget": {}, "importLegacy": True}
+        pending = queue / "opened-old.json"
+        pending.write_bytes(client.encoded(event))
+        client.supersede_import(base, pending, event, "legacy projection changed or invalid")
+        archive = base / "superseded" / pending.name
+        original_archive = archive.read_bytes()
+        source = self.root / "event.json"
+        source.write_bytes(client.encoded(event))
+        self.assertFalse(json.loads(self.cli("queue-event", "--event-json", str(source)).stdout)["queued"])
+        changed = {**event, "doc": {"corrida": "run-1", "carriles": [{"id": "B4"}]}}
+        source.write_bytes(client.encoded(changed))
+        self.assertIn("no coinciden", self.cli("queue-event", "--event-json", str(source), ok=False).stderr)
+        pending.write_bytes(client.encoded(changed))
+        with mock.patch.object(client, "gateway", side_effect=AssertionError("envío de evento ajeno")):
+            with self.assertRaisesRegex(ValueError, "no coinciden"):
+                client.publish(type("Args", (), {"state_dir": str(self.state), "corrida": "run-1"})())
+        for invalid in ({**event, "id": "another-id"}, {**event, "corrida": "another-run"}):
+            with self.assertRaises(ValueError):
+                client.recover_superseded_import(base, pending, invalid)
+        self.assertEqual(archive.read_bytes(), original_archive)
+        self.assertTrue(pending.exists())
+
+    def test_recovery_rejects_unverifiable_metadata(self):
+        spec = importlib.util.spec_from_file_location("progress_client", CLI)
+        client = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(client)
+        base = self.state / "runs" / "run-1"
+        queue = base / "queue"
+        queue.mkdir(parents=True)
+        event = {"kind": "run.opened", "id": "opened-old", "corrida": "run-1",
+                 "at": "2026-09-30T00:00:00Z", "doc": {"corrida": "run-1"},
+                 "roundBudget": {}, "importLegacy": True}
+        pending = queue / "opened-old.json"
+        pending.write_bytes(client.encoded(event))
+        decision = base / "superseded" / "opened-old.superseded.json"
+        decision.parent.mkdir(parents=True)
+        decision.write_text(json.dumps({"id": "opened-old", "reason": "legacy projection changed or invalid"}))
+        with self.assertRaisesRegex(ValueError, "sin hash verificable"):
+            client.publish(type("Args", (), {"state_dir": str(self.state), "corrida": "run-1"})())
+        self.assertTrue(pending.exists())
+        self.assertFalse((decision.parent / "opened-old.json").exists())
+        decision.write_text("{")
+        with self.assertRaisesRegex(ValueError, "metadatos de importación inválidos"):
+            client.publish(type("Args", (), {"state_dir": str(self.state), "corrida": "run-1"})())
+        self.assertTrue(pending.exists())
+
+    def test_recovery_converges_for_two_publishers(self):
+        spec = importlib.util.spec_from_file_location("progress_client", CLI)
+        client = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(client)
+        base = self.state / "runs" / "run-1"
+        queue = base / "queue"
+        queue.mkdir(parents=True)
+        event = {"kind": "run.opened", "id": "opened-old", "corrida": "run-1",
+                 "at": "2026-09-30T00:00:00Z", "doc": {"corrida": "run-1"},
+                 "roundBudget": {}, "importLegacy": True}
+        pending = queue / "opened-old.json"
+        pending.write_bytes(client.encoded(event))
+        decision_path = base / "superseded" / "opened-old.superseded.json"
+        first = {"schema": "progress-import-superseded.v1", "corrida": "run-1", "id": "opened-old",
+                 "eventHash": hashlib.sha256(client.encoded(event)).hexdigest(),
+                 "reason": "corrida ya existe", "revision": 1, "at": "2026-09-30T00:00:01Z"}
+        save = client.create_immutable
+
+        def interleave(path, data):
+            if path == decision_path:
+                save(path, client.encoded(first))
+            return save(path, data)
+
+        with mock.patch.object(client, "create_immutable", side_effect=interleave):
+            client.supersede_import(base, pending, event, "legacy projection changed or invalid", 2)
+        self.assertEqual(json.loads(decision_path.read_text()), first)
+        self.assertFalse(pending.exists())
+        self.assertEqual((base / "superseded" / "opened-old.json").read_bytes(), client.encoded(event))
+
+    def test_requeue_during_pending_recovery_is_idempotent(self):
+        spec = importlib.util.spec_from_file_location("progress_client", CLI)
+        client = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(client)
+        base = self.state / "runs" / "run-1"
+        queue = base / "queue"
+        queue.mkdir(parents=True)
+        event = {"kind": "run.opened", "id": "opened-old", "corrida": "run-1",
+                 "at": "2026-09-30T00:00:00Z", "doc": {"corrida": "run-1"},
+                 "roundBudget": {}, "importLegacy": True}
+        source = self.root / "open.json"
+        source.write_bytes(client.encoded(event))
+        pending = queue / "opened-old.json"
+        pending.write_bytes(client.encoded(event))
+        decision = base / "superseded" / "opened-old.superseded.json"
+        decision.parent.mkdir(parents=True)
+        decision.write_bytes(client.encoded({
+            "schema": "progress-import-superseded.v1", "corrida": "run-1", "id": "opened-old",
+            "eventHash": hashlib.sha256(client.encoded(event)).hexdigest(),
+            "reason": "legacy projection changed or invalid", "revision": None,
+            "at": "2026-09-30T00:00:01Z"}))
+        result = json.loads(self.cli("queue-event", "--event-json", str(source)).stdout)
+        self.assertEqual(result, {"id": "opened-old", "queued": False, "superseded": True})
+        self.assertFalse(pending.exists())
+        self.assertEqual((decision.parent / pending.name).read_bytes(), client.encoded(event))
+        self.assertEqual(json.loads(self.cli("publish", "--corrida", "run-1").stdout)["published"], 0)
+        self.assertFalse(self.calls())
+
+    def test_other_publisher_finishes_archive_during_retry(self):
+        spec = importlib.util.spec_from_file_location("progress_client", CLI)
+        client = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(client)
+        base = self.state / "runs" / "run-1"
+        queue = base / "queue"
+        queue.mkdir(parents=True)
+        old = {"kind": "run.opened", "id": "opened-old", "corrida": "run-1",
+               "at": "2026-09-30T00:00:00Z", "doc": {"corrida": "run-1"},
+               "roundBudget": {}, "importLegacy": True}
+        current = {**old, "id": "opened-current"}
+        pending = queue / "opened-old.json"
+        pending.write_bytes(client.encoded(old))
+        (queue / "opened-current.json").write_bytes(client.encoded(current))
+        decision = base / "superseded" / "opened-old.superseded.json"
+        decision.parent.mkdir(parents=True)
+        decision.write_bytes(client.encoded({
+            "schema": "progress-import-superseded.v1", "corrida": "run-1", "id": "opened-old",
+            "eventHash": hashlib.sha256(client.encoded(old)).hexdigest(),
+            "reason": "legacy projection changed or invalid", "revision": None,
+            "at": "2026-09-30T00:00:01Z"}))
+        read = Path.read_text
+        raced = False
+        calls = []
+
+        def other_publisher_finishes(path, *args, **kwargs):
+            nonlocal raced
+            if path == decision and not raced:
+                raced = True
+                client.recover_superseded_import(base, pending, old)
+            return read(path, *args, **kwargs)
+
+        def remote(_args, _method, event):
+            calls.append(event["id"])
+            return {"ok": True, "revision": 2}
+
+        args = type("Args", (), {"state_dir": str(self.state), "corrida": "run-1"})()
+        with mock.patch.object(client.Path, "read_text", other_publisher_finishes), \
+             mock.patch.object(client, "gateway", side_effect=remote):
+            client.publish(args)
+        self.assertEqual(calls, ["opened-current"])
+        self.assertFalse(pending.exists())
+        self.assertTrue((base / "superseded" / pending.name).exists())
+        self.assertTrue((base / "sent" / "opened-current.json").exists())
+
+    def test_other_publisher_removes_queue_during_recovery_read(self):
+        spec = importlib.util.spec_from_file_location("progress_client", CLI)
+        client = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(client)
+        base = self.state / "runs" / "run-1"
+        queue = base / "queue"
+        queue.mkdir(parents=True)
+        event = {"kind": "run.opened", "id": "opened-old", "corrida": "run-1",
+                 "at": "2026-09-30T00:00:00Z", "doc": {"corrida": "run-1"},
+                 "roundBudget": {}, "importLegacy": True}
+        pending = queue / "opened-old.json"
+        pending.write_bytes(client.encoded(event))
+        client.supersede_import(base, pending, event, "legacy projection changed or invalid")
+        pending.write_bytes(client.encoded(event))
+        read = Path.read_bytes
+        raced = False
+
+        def other_publisher_removes(path):
+            nonlocal raced
+            if path == pending and not raced:
+                raced = True
+                path.unlink()
+                raise FileNotFoundError(path)
+            return read(path)
+
+        with mock.patch.object(client.Path, "read_bytes", other_publisher_removes), \
+             mock.patch.object(client, "gateway", side_effect=AssertionError("envío duplicado")):
+            client.publish(type("Args", (), {"state_dir": str(self.state), "corrida": "run-1"})())
+        self.assertTrue(raced)
+        self.assertFalse(pending.exists())
+        self.assertEqual((base / "superseded" / pending.name).read_bytes(), client.encoded(event))
+
+    def test_other_publisher_removes_queue_during_publish_scan(self):
+        spec = importlib.util.spec_from_file_location("progress_client", CLI)
+        client = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(client)
+        base = self.state / "runs" / "run-1"
+        queue = base / "queue"
+        queue.mkdir(parents=True)
+        old = {"kind": "run.opened", "id": "opened-old", "corrida": "run-1",
+               "at": "2026-09-30T00:00:00Z", "doc": {"corrida": "run-1"},
+               "roundBudget": {}, "importLegacy": True}
+        current = {**old, "id": "opened-current"}
+        pending = queue / "opened-old.json"
+        pending.write_bytes(client.encoded(old))
+        client.supersede_import(base, pending, old, "legacy projection changed or invalid")
+        pending.write_bytes(client.encoded(old))
+        (queue / "opened-current.json").write_bytes(client.encoded(current))
+        read = Path.read_text
+        raced = False
+
+        def other_publisher_removes(path, *args, **kwargs):
+            nonlocal raced
+            if path == pending and not raced:
+                raced = True
+                path.unlink()
+                raise FileNotFoundError(path)
+            return read(path, *args, **kwargs)
+
+        calls = []
+
+        def remote(_args, _method, event):
+            calls.append(event["id"])
+            return {"ok": True, "revision": 2}
+
+        with mock.patch.object(client.Path, "read_text", other_publisher_removes), \
+             mock.patch.object(client, "gateway", side_effect=remote):
+            client.publish(type("Args", (), {"state_dir": str(self.state), "corrida": "run-1"})())
+        self.assertTrue(raced)
+        self.assertEqual(calls, ["opened-current"])
+        self.assertTrue((base / "sent" / "opened-current.json").exists())
 
 
 if __name__ == "__main__":

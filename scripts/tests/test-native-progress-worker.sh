@@ -39,7 +39,12 @@ if method=='runbook.progress.get':
     response={'ok':True,'doc':doc}
     if state['events']: response['revision']=len(state['events'])
 elif method=='runbook.progress.event':
-    if params['kind']=='part.worker' and state['fail_worker_once']:
+    if params['kind']=='run.opened' and state.get('reject_open_count',0):
+        state['reject_open_count']-=1
+        response={'ok':False,'reason':'legacy projection changed or invalid'}
+    elif params['kind']=='run.opened' and params['doc']!=doc:
+        response={'ok':False,'reason':'legacy projection changed or invalid'}
+    elif params['kind']=='part.worker' and state['fail_worker_once']:
         state['fail_worker_once']=False
         response={'ok':False,'reason':'network'}
     elif any(e['id']==params['id'] for e in state['events']):
@@ -107,5 +112,36 @@ assert events[2]['id']!=worker['id'] and events[2]['worker']['id']=='codex', eve
 assert json.load(open(pathlib.Path(sys.argv[1]).parent/'corridas/run-1/registro.json'))['lanes'][0]['progress_worker_generation']==1
 assert len(list(pathlib.Path(sys.argv[2]).glob('runs/run-1/queue/*.json')))==0
 assert len(list(pathlib.Path(sys.argv[2]).glob('runs/run-1/sent/*.json')))==3
+PY
+# Tres versiones del mismo snapshot legacy durante una caida conservan tres
+# IDs de importacion. Las dos obsoletas se archivan y la ultima se publica.
+python3 - "$tmp" <<'PY'
+import json,sys
+from pathlib import Path
+b=Path(sys.argv[1]); d=json.loads((b/'doc.json').read_text()); d['corrida']='run-legacy'
+(b/'doc.json').write_text(json.dumps(d))
+reg={'schema':'corrida.v2','id':'run-legacy','estado':'abierta','lanes':[
+ {'id':'lane-1','estado':'activo','worker':'codex','session':'session-legacy','events':[]}]}
+p=b/'corridas/run-legacy/registro.json'; p.parent.mkdir(parents=True); p.write_text(json.dumps(reg))
+(b/'legacy-gateway.json').write_text(json.dumps({'events':[],'fail_worker_once':False,'reject_open_count':2}))
+PY
+export FAKE_PROGRESS_STATE="$tmp/legacy-gateway.json"
+for version in 1 2 3; do
+  python3 - "$tmp/doc.json" "$version" <<'PY'
+import json,sys
+p=sys.argv[1]; d=json.load(open(p)); d['titulo']='version '+sys.argv[2]
+json.dump(d,open(p,'w'))
+PY
+  bash -c '. scripts/mac/corrida/lib.sh; tablero_carril_publicar run-legacy lane-1' >"$tmp/out" 2>"$tmp/err"
+done
+python3 - "$tmp" <<'PY'
+import json,sys
+from pathlib import Path
+b=Path(sys.argv[1]); root=b/'outbox/runs/run-legacy'
+assert len([p for p in (root/'superseded').glob('open-*.json') if not p.name.endswith('.superseded.json')])==2, list((root/'superseded').glob('*.json'))
+assert len(list((root/'sent').glob('open-*.json')))==1, list((root/'sent').glob('*.json'))
+events=json.loads((b/'legacy-gateway.json').read_text())['events']
+assert [e['kind'] for e in events]==['run.opened','part.worker'], events
+assert events[0]['doc']['titulo']=='version 3', events[0]
 PY
 echo 'ok: worker event imports once and retries durably'

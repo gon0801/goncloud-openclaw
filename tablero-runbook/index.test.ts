@@ -247,6 +247,13 @@ it("v2-native-workers: el HTML del tablero es identico por RPC y HTTP", async ()
         roundBudget: { B1: 1, B2: 1, B3: 3 }, phaseAlias: true,
       });
       assert.equal(opened.ok, true);
+      const conflict = await llamarMetodo(host.metodos, "runbook.progress.event", {
+        kind: "part.status", id: "status-stale", corrida: doc.corrida, at,
+        expectedRevision: 0, carril: "B3", estado: "implementando",
+      });
+      assert.equal(conflict.ok, false);
+      assert.equal(conflict.razon, "revision conflict");
+      assert.equal(conflict.revision, opened.revision);
       let board = await llamarMetodo(host.metodos, "runbook.progress.get", { corrida: doc.corrida });
       assert.equal(board.ok, true);
       assert.match(board.html, /%GLOBAL 67 %/);
