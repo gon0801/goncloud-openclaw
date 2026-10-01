@@ -144,12 +144,19 @@ class Host:
 
     def pending(self, host_id: str) -> list[dict]:
         self._host(host_id)
+        for assignment in self.spool.awaiting_results():
+            key = OperationKey(assignment["hostId"], assignment["taskId"],
+                               assignment["generation"], assignment["instanceId"])
+            try:
+                self.collect(host_id, key)
+            except ValueError:
+                continue
         return self.spool.pending()
 
     def flush(self, host_id: str, report_to_runtime: Callable[[dict], dict]) -> list[dict]:
         self._host(host_id)
         receipts = []
-        for result in self.spool.pending():
+        for result in self.pending(host_id):
             result_id = hashlib.sha256(canonical(result).encode()).hexdigest()
             receipt = report_to_runtime(result)
             identity = ("hostId", "taskId", "generation", "instanceId", "producerId")

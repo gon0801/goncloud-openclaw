@@ -106,6 +106,8 @@ class HostReceipts(unittest.TestCase):
         reopened = Host("mac-test", self.root / "host")
         self.assertEqual(reopened.report("mac-test", report).result_id, results[0].result_id)
         self.assertEqual(reopened.receipt("mac-test", self.key), expected)
+        self.assertEqual(reopened.apply(self.key, self.operation,
+                                        lambda *_: self.fail("duplicate delivery")).status, "acknowledged")
 
     def test_host_receipts_reject_partial_foreign_old_and_exit_only(self):
         self.host.apply(self.key, self.operation, lambda *_: None)
@@ -149,6 +151,24 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(digest(json.dumps(stored, ensure_ascii=False, sort_keys=True,
                                            separators=(",", ":")).encode()), next(x for x in outcomes if x != "conflict"))
         self.assertEqual(len(self.host.pending("mac-test")), 1)
+
+    def test_host_receipts_restart_collects_registered_inbox_before_flush(self):
+        self.host.apply(self.key, self.operation, lambda *_: None)
+        inbox = self.root / "host" / "inbox" / f"{operation_id(self.key)}.json"
+        partial = inbox.with_suffix(".tmp")
+        partial.write_text(json.dumps(self.report()))
+        restarted = Host("mac-test", self.root / "host")
+        self.assertEqual(restarted.pending("mac-test"), [])
+        os.replace(partial, inbox)
+        self.assertEqual(len(restarted.pending("mac-test")), 1)
+        expected_id = digest(json.dumps(self.report(), ensure_ascii=False, sort_keys=True,
+                                        separators=(",", ":")).encode())
+        self.assertEqual(restarted.pending("mac-test")[0]["taskId"], "task-1")
+        receipt = {"hostId": "mac-test", "taskId": "task-1", "generation": 2,
+                   "instanceId": "instance-1", "producerId": "reviewer",
+                   "resultId": expected_id, "receiptId": "native-receipt-after-restart"}
+        self.assertEqual(restarted.flush("mac-test", lambda _: receipt), [receipt])
+        self.assertEqual(Host("mac-test", self.root / "host").pending("mac-test"), [])
 
     def test_host_receipts_tmux_cli_without_hooks(self):
         if not shutil.which("tmux"):

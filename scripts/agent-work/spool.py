@@ -132,6 +132,11 @@ class Spool:
             rows = db.execute("SELECT result_json FROM operations WHERE result_id IS NOT NULL AND receipt_json IS NULL ORDER BY operation_id").fetchall()
             return [json.loads(row[0]) for row in rows]
 
+    def awaiting_results(self) -> list[dict]:
+        with self.connection() as db:
+            rows = db.execute("SELECT operation_json FROM operations WHERE result_id IS NULL ORDER BY operation_id").fetchall()
+            return [json.loads(row[0]) for row in rows]
+
     def acknowledge(self, operation_id: str, receipt: dict) -> None:
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
