@@ -32,6 +32,10 @@ case "$case_name" in
     test_file='src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts'
     test_pattern="restores a managed collector's requester wake after restart \(idle requester\)"
     probe_restart=0 ;;
+  projection_gateway)
+    test_file='src/gateway/server-methods/managed-tasks.test.ts'
+    test_pattern='serves and acknowledges a durable projection over an authenticated Gateway connection'
+    probe_restart=0 ;;
   *) printf 'Unknown or unimplemented agent-work runtime case: %s\n' "${1:-}" >&2; exit 2 ;;
 esac
 
@@ -58,6 +62,13 @@ diff = subprocess.check_output(['git', '-C', str(root), 'diff', '--binary', 'HEA
 print(json.dumps({'candidateSha': head, 'candidateDiffSha256': hashlib.sha256(diff).hexdigest()}, sort_keys=True), flush=True)
 PY
 cd "$source_root"
+if [ "$case_name" = projection_gateway ]; then
+  if [ ! -f dist/entry.js ]; then
+    printf 'Build the isolated OpenClaw CLI before projection_gateway\n' >&2
+    exit 2
+  fi
+  export AGENT_WORK_G_ROOT="$repo_root"
+fi
 if [ -n "$test_pattern" ]; then
   node scripts/run-vitest.mjs "$test_file" --testNamePattern "$test_pattern"
 else

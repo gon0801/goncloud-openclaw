@@ -212,6 +212,16 @@ class ProjectionTransferTest(unittest.TestCase):
         self.assertEqual(transfer.call_args.kwargs["host"].host_id, "host-one")
         self.assertEqual(transfer.call_args.kwargs["host"].state_dir, self.root / "host")
 
+    def test_gateway_entrypoint_imports_with_mac_system_python(self):
+        system_python = Path("/usr/bin/python3")
+        if not system_python.exists():
+            self.skipTest("macOS system Python unavailable")
+        completed = subprocess.run(
+            [str(system_python), "-c", "import native_gateway"],
+            cwd=ROOT / "scripts" / "agent-work", capture_output=True, text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
     def test_gateway_ack_loss_keeps_one_queued_event(self):
         pending = self.pending.copy()
         class Client:
