@@ -33,3 +33,5 @@ R `143d41aad8` hizo compatible el colector nativo silencioso con la admisión ge
 R `571eee9e26` enlazó la capacidad interna de admisión al lanzador de colectores nativos y verificó 92/92 pruebas de spawn/pipeline. T2 aún no está cerrada: falta construir esa capacidad desde una operación autenticada y probar el gateway completo; T9 debe migrar las entradas reales antes de afirmar cobertura de agentes.
 
 R `f7b82b1e67` creó la capacidad nativa que liga reclamo, turno y confirmación. R `9a257c4dc7` revalidó su autoridad en la transacción de confirmación tras reproducir la carrera de revocación; 32/32 pruebas focalizadas y tipos pasaron. Falta el emisor autenticado de T9 y las pruebas de integración para cerrar B1.
+
+R `86855193f4` añadió la captura interna del solicitante desde el turno admitido y comprobó separación de remitentes, generación de sesión y revocación (5/5). El recibo `T9.md` conserva el alcance: todavía no existe el emisor público ni la ruta de admisión con presupuesto.
