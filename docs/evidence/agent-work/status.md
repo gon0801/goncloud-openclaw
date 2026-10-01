@@ -27,3 +27,5 @@ La rama R de integración `feat/agent-work-integration` combina T4 parcial, T5 p
 El delta R `ac01041630` ya guarda `transport-unavailable` ante rechazo real de `fetch` sobre una reserva nativa verificada; el episodio sobrevive al reinicio y HTTP 503 no recibe esa causa. Aún quedan las demás fronteras y el recuperador automático de T5.
 
 R `6939694e5a` completó la detección de stream SSE truncado: EOF sin `[DONE]` y corte de socket tras encabezados dejan una espera durable. El rojo previo y el verde 12/12 están en `T5.md`. La integración de admisión de `runSpawnPipeline` solo tiene llamadores de prueba; `subagent-spawn.ts` y `acp-spawn.ts` todavía no le pasan `managedAdmission`. Por eso B1/T2 no se marca cerrado aunque sus pruebas nativas estén verdes.
+
+R `143d41aad8` hizo compatible el colector nativo silencioso con la admisión gestionada; su fallo previo y prueba 5/5 están en `T2.md`. R `cad2017738` conserva `invalid-result` también para informes JSON mal formados tras autenticar al productor; la prueba focalizada ampliada pasó 30/30 y el rojo está en `T5.md`. Ninguno de estos commits habilita aún una entrada productiva.
