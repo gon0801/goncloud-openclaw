@@ -752,4 +752,20 @@ ops_nc="$(python3 "$PW" reconcile --record "$T/nocand-r.json" --observations "$T
 [ "$ops_nc" = "record_observed record_observed" ] || fail "no-candidate: [$ops_nc]"
 echo "ok (10): entradas rotas con diagnostico"
 
+# (11) 19.3-2 y 19.3-10-F2: sin campo muerto en el fixture y sin
+# silencio cuando el aviso del relevo no se puede armar.
+grep -q "expect_launch_count_e2e" "$FIX/14-repeated-launch-once.json" \
+  && fail "(11) el fixture trae el campo muerto expect_launch_count_e2e"
+. scripts/mac/corrida/reconciliar.sh
+TR="$T/relevo-falla"
+mkdir -p "$TR/rr"
+printf '{"id":"rr","lanes":[]}' >"$TR/rr/registro.json"
+printf '{"schema":"workers.v1","workers":[]}' >"$TR/w.json"
+out=$(CORRIDA_STATE="$TR" CORRIDA_WORKERS_REGISTRY="$TR/w.json" \
+  reconciliar_anunciar_relevo rr "$TR/rr/registro.json" l1 kimi_k3 2>&1) \
+  || fail "(11) el relevo fallido debio salir 0 con aviso, no error: $out"
+printf '%s' "$out" | grep -q "no se pudo armar el aviso del relevo de l1" \
+  || fail "(11) el relevo que no se arma cayo en silencio: [$out]"
+echo "ok (11): sin campo muerto y el relevo fallido avisa por stderr"
+
 echo "TODO VERDE: corrida-reconcile"

@@ -201,11 +201,12 @@ print(f"{hechas} de {len(lanes)} partes terminadas")
 print(f"El trabajo de la parte {c['id']} pasó de {de} a {a_} porque {motivo}; lo avanzado se conservó.")
 print(f"{a_} sigue esa parte donde quedó.")
 PY
-)" || return 0
+)" || { echo "reconciliar: no se pudo armar el aviso del relevo de $lane" >&2; return 0; }
   avance="$(printf '%s\n' "$txt" | sed -n 1p)"
   cambio="$(printf '%s\n' "$txt" | sed -n 2p)"
   sigue="$(printf '%s\n' "$txt" | sed -n 3p)"
-  [ -n "$cambio" ] || return 0
+  # 19.3-10-F2: si el aviso no se pudo armar no cae en silencio: queda en el stderr.
+  [ -n "$cambio" ] || { echo "reconciliar: no se pudo armar el aviso del relevo de $lane" >&2; return 0; }
   corrida_aviso_directo "$id" "AVANZA" "$avance" "$cambio" "$sigue" "nada" >/dev/null 2>&1 \
     || echo "reconciliar: el aviso del relevo de $lane no salio" >&2
   tablero_carril_publicar "$id" "$lane" "$cambio"
