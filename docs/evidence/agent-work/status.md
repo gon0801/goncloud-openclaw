@@ -31,3 +31,5 @@ R `6939694e5a` completó la detección de stream SSE truncado: EOF sin `[DONE]` 
 R `143d41aad8` hizo compatible el colector nativo silencioso con la admisión gestionada; su fallo previo y prueba 5/5 están en `T2.md`. R `cad2017738` conserva `invalid-result` también para informes JSON mal formados tras autenticar al productor; la prueba focalizada ampliada pasó 30/30 y el rojo está en `T5.md`. Ninguno de estos commits habilita aún una entrada productiva.
 
 R `571eee9e26` enlazó la capacidad interna de admisión al lanzador de colectores nativos y verificó 92/92 pruebas de spawn/pipeline. T2 aún no está cerrada: falta construir esa capacidad desde una operación autenticada y probar el gateway completo; T9 debe migrar las entradas reales antes de afirmar cobertura de agentes.
+
+R `f7b82b1e67` creó la capacidad nativa que liga reclamo, turno y confirmación. R `9a257c4dc7` revalidó su autoridad en la transacción de confirmación tras reproducir la carrera de revocación; 32/32 pruebas focalizadas y tipos pasaron. Falta el emisor autenticado de T9 y las pruebas de integración para cerrar B1.
