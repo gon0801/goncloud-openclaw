@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Crash boundaries between native task results and the progress queue."""
 
+import base64
 import hashlib
 import json
 from pathlib import Path
@@ -188,7 +189,7 @@ class ProjectionTransferTest(unittest.TestCase):
                          {"publisherHostId": "host-one", "receipt": receipt})
 
     def test_host_spool_reports_to_gateway_once_after_lost_response(self):
-        host, key, _ = self.reported_host()
+        host, key, artifact_bytes = self.reported_host()
         result = host.result_snapshot("host-one", key)[0]
         result_id = hashlib.sha256(canonical(result).encode()).hexdigest()
         receipt = {"hostId": "host-one", "taskId": key.task_id,
@@ -210,7 +211,28 @@ class ProjectionTransferTest(unittest.TestCase):
         self.assertEqual(commands[0], commands[1])
         self.assertEqual(commands[0][3], "managedTasks.host.report")
         self.assertEqual(json.loads(commands[0][commands[0].index("--params") + 1]),
-                         {"hostId": "host-one", "resultId": result_id, "result": result})
+                         {"hostId": "host-one", "resultId": result_id, "result": result,
+                          "artifactBase64": base64.b64encode(artifact_bytes).decode("ascii")})
+
+    def test_large_host_artifact_uses_private_params_file_and_cleans_it(self):
+        artifact_bytes = b"a" * 100_000
+        result = {"hostId": "host-one", "digest": hashlib.sha256(artifact_bytes).hexdigest()}
+        seen = []
+
+        def invoke(command, **_):
+            self.assertNotIn("--params", command)
+            path = Path(command[command.index("--params-file") + 1])
+            self.assertEqual(path.stat().st_mode & 0o077, 0)
+            seen.append(path)
+            payload = json.loads(path.read_text())
+            self.assertEqual(base64.b64decode(payload["artifactBase64"]), artifact_bytes)
+            return subprocess.CompletedProcess(command, 0, json.dumps({"ok": True}), "")
+
+        client = GatewayProjectionClient("/isolated/openclaw", "host-one")
+        with mock.patch("native_gateway.subprocess.run", side_effect=invoke):
+            self.assertEqual(client.report_host_result(result, artifact_bytes), {"ok": True})
+        self.assertEqual(len(seen), 1)
+        self.assertFalse(seen[0].exists())
 
     def test_gateway_host_admission_binds_claim_before_delivery(self):
         assignment = {"hostId": "host-one", "taskId": "task-one", "generation": 1,

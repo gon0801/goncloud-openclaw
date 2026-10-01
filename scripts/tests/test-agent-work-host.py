@@ -102,8 +102,8 @@ class HostReceipts(unittest.TestCase):
             "resultId": results[0].result_id, "receiptId": "native-receipt-1",
         }
         calls = []
-        def runtime_report(payload):
-            calls.append(payload)
+        def runtime_report(payload, artifact_bytes):
+            calls.append((payload, artifact_bytes))
             if len(calls) == 1:
                 raise TimeoutError("runtime stored receipt but its ACK was lost")
             return expected
@@ -114,7 +114,7 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(self.host.flush("mac-test", runtime_report), [expected])
         self.assertEqual(self.host.flush("mac-test", runtime_report), [])
         self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[0], calls[1])
+        self.assertEqual(calls, [(report, self.artifact.read_bytes())] * 2)
         reopened = Host("mac-test", self.root / "host")
         self.assertEqual(reopened.report("mac-test", report).result_id, results[0].result_id)
         self.assertEqual(reopened.receipt("mac-test", self.key), expected)
@@ -158,8 +158,8 @@ class HostReceipts(unittest.TestCase):
         restarted = Host("mac-test", self.root / "host")
         self.assertEqual(restarted.result_snapshot("mac-test", self.key), (report, original))
         calls = []
-        def runtime(result):
-            calls.append((result, restarted.result_snapshot("mac-test", self.key)[1]))
+        def runtime(result, artifact_bytes):
+            calls.append((result, artifact_bytes))
             if len(calls) == 1:
                 raise TimeoutError("runtime ACK lost")
             return {"hostId": "mac-test", "taskId": "task-1", "generation": 2,
@@ -191,7 +191,7 @@ class HostReceipts(unittest.TestCase):
         sent = []
         with self.assertRaisesRegex(ValueError, "snapshot digest"):
             self.host.result_snapshot("mac-test", self.key)
-        def runtime(result):
+        def runtime(result, artifact_bytes):
             sent.append(result["taskId"])
             return {"hostId": "mac-test", "taskId": "task-2", "generation": 2,
                     "instanceId": "instance-2", "producerId": "reviewer",
@@ -235,7 +235,7 @@ class HostReceipts(unittest.TestCase):
         script = (
             "import json,sys; from pathlib import Path; from host import Host; "
             "host=Host('mac-test',Path(sys.argv[1])); sent=[]; "
-            "receipt=lambda result: sent.append(result['taskId']) or "
+            "receipt=lambda result, artifact_bytes: sent.append(result['taskId']) or "
             "{'hostId':'mac-test','taskId':'task-2','generation':2,'instanceId':'instance-2',"
             "'producerId':'reviewer','resultId':sys.argv[2],'receiptId':'native-r2'}; "
             "host.flush('mac-test',receipt); print(json.dumps({'sent':sent,'errors':host.inbox_errors('mac-test')}))"
@@ -267,7 +267,7 @@ class HostReceipts(unittest.TestCase):
             Host("other-host", self.root / "host")
         self.host.report("mac-test", self.report())
         with self.assertRaisesRegex(ValueError, "receipt"):
-            self.host.flush("mac-test", lambda _: {"receiptId": "wrong"})
+            self.host.flush("mac-test", lambda _, artifact_bytes: {"receiptId": "wrong"})
         self.assertEqual(len(self.host.pending("mac-test")), 1)
 
     def test_host_receipts_exit_zero_without_report_is_not_a_result(self):
@@ -307,7 +307,7 @@ class HostReceipts(unittest.TestCase):
         receipt = {"hostId": "mac-test", "taskId": "task-1", "generation": 2,
                    "instanceId": "instance-1", "producerId": "reviewer",
                    "resultId": expected_id, "receiptId": "native-receipt-after-restart"}
-        self.assertEqual(restarted.flush("mac-test", lambda _: receipt), [receipt])
+        self.assertEqual(restarted.flush("mac-test", lambda _, artifact_bytes: receipt), [receipt])
         self.assertEqual(Host("mac-test", self.root / "host").pending("mac-test"), [])
 
     def test_host_receipts_invalid_inbox_does_not_block_other_results(self):
@@ -324,7 +324,7 @@ class HostReceipts(unittest.TestCase):
         os.replace(partial, good)
         restarted = Host("mac-test", self.root / "host")
         sent = []
-        def runtime_report(result):
+        def runtime_report(result, artifact_bytes):
             sent.append(result)
             return {"hostId": "mac-test", "taskId": "task-2", "generation": 2,
                     "instanceId": "instance-2", "producerId": "reviewer",

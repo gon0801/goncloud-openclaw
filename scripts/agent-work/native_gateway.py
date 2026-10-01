@@ -1,9 +1,12 @@
 """Authenticated Gateway transport for the native projection queue."""
 
 import argparse
+import base64
 import hashlib
 import json
+import os
 import subprocess
+import tempfile
 
 from host import Host
 from progress_bridge import transfer_host_projection, transfer_projection
@@ -19,15 +22,28 @@ class GatewayProjectionClient:
         self.expected_url = expected_url
 
     def _call(self, method, params):
+        serialized = json.dumps(params, sort_keys=True, separators=(",", ":"))
         command = [self.openclaw_bin, "gateway", "call", method,
-                   "--params", json.dumps(params, sort_keys=True, separators=(",", ":")),
                    "--json", "--timeout", "30000"]
         if self.expected_url:
             command.extend(("--expect-url", self.expected_url))
+        pending = None
         try:
+            if len(serialized.encode()) > 100_000:
+                descriptor, pending = tempfile.mkstemp(prefix="agent-work-gateway-", suffix=".json")
+                with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                    stream.write(serialized)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                command.extend(("--params-file", pending))
+            else:
+                command.extend(("--params", serialized))
             response = subprocess.run(command, capture_output=True, text=True, timeout=35)
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise RuntimeError("native projection Gateway unavailable") from exc
+        finally:
+            if pending is not None:
+                os.unlink(pending)
         if response.returncode:
             raise RuntimeError("native projection Gateway rejected request")
         try:
@@ -57,12 +73,16 @@ class GatewayProjectionClient:
             raise RuntimeError("native projection Gateway ACK differs from queue receipt")
         return response
 
-    def report_host_result(self, result):
+    def report_host_result(self, result, artifact_bytes):
         if not isinstance(result, dict) or result.get("hostId") != self.host_id:
             raise ValueError("host report identity mismatch")
+        if (not isinstance(artifact_bytes, bytes) or len(artifact_bytes) > 10 * 1024 * 1024
+                or hashlib.sha256(artifact_bytes).hexdigest() != result.get("digest")):
+            raise ValueError("host artifact digest or size mismatch")
         result_id = hashlib.sha256(canonical(result).encode()).hexdigest()
         return self._call("managedTasks.host.report", {
             "hostId": self.host_id, "resultId": result_id, "result": result,
+            "artifactBase64": base64.b64encode(artifact_bytes).decode("ascii"),
         })
 
     def admit_host(self, assignment):

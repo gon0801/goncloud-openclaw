@@ -259,7 +259,7 @@ class Host:
         self._host(host_id)
         return self.spool.inbox_errors()
 
-    def flush(self, host_id: str, report_to_runtime: Callable[[dict], dict]) -> list[dict]:
+    def flush(self, host_id: str, report_to_runtime: Callable[[dict, bytes], dict]) -> list[dict]:
         self._host(host_id)
         receipts = []
         for result in self.pending(host_id):
@@ -267,13 +267,14 @@ class Host:
             key = OperationKey(result["hostId"], result["taskId"], result["generation"], result["instanceId"])
             op_id = operation_id(key)
             try:
-                if self.result_snapshot(host_id, key)[0] != result:
+                snapshot_result, artifact_bytes = self.result_snapshot(host_id, key)
+                if snapshot_result != result:
                     raise ValueError("pending result identity mismatch")
             except (ValueError, OSError) as exc:
                 self.spool.note_inbox_error(op_id, str(exc))
                 continue
             self.spool.clear_inbox_error(op_id)
-            receipt = report_to_runtime(result)
+            receipt = report_to_runtime(result, artifact_bytes)
             identity = ("hostId", "taskId", "generation", "instanceId", "producerId")
             if not isinstance(receipt, dict) or any(receipt.get(field) != result[field] for field in identity) \
                     or receipt.get("resultId") != result_id or not receipt.get("receiptId"):

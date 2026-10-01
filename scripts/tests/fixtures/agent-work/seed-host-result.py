@@ -4,6 +4,7 @@
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import sys
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -52,6 +53,7 @@ def main():
         "artifactRef": str(artifact),
         "digest": hashlib.sha256(artifact.read_bytes()).hexdigest(),
     })
+    shutil.rmtree(workspace)
 
 
 if __name__ == "__main__":
