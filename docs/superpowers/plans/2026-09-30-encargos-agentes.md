@@ -127,7 +127,7 @@ Depende de T0. Modifica `R.taskDomain`, `R.taskStore`, `R.toolContext` y `R.migr
 Produce `submit(Caller, TaskKey, Assignment)`, `report(ProducerCapability, generation, FinalResult)` e `inspect(AuthorizedCaller, TaskId)`. Usa los tipos del diseño. Conserva `TaskKey` entre turnos y separa estado de entrega y manejo.
 
 - [x] Añade `registration_identity`: misma clave y contenido devuelve el mismo ID; otro contenido da conflicto; dos solicitantes no colisionan.
-- [ ] Añade `result_receipt`: productor ajeno, generación antigua, digest incorrecto y revisión equivocada no avanzan la tarea. Una incidencia de permiso no ocupa el resultado final. Falta la regresión de incidencia no terminal y la validación semántica de `resultContract`.
+- [x] Añade `result_receipt`: productor ajeno, generación antigua, digest incorrecto y revisión equivocada no avanzan la tarea. Una incidencia de permiso no ocupa el resultado final. El contrato `review.v1` valida el payload; otros contratos requieren esquema antes de habilitar sus rutas.
 - [x] Ejecuta ambos casos y conserva las aserciones rojas.
 - [x] Implementa las transacciones y la migración versionada dentro del almacén nativo. Persiste resultado, pendiente de manejo y `ProjectionPending` antes del ACK cuando corresponda.
 - [x] Repite las pruebas con reinicio entre escrituras y confirma los recibos recuperados.
