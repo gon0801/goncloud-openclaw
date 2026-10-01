@@ -87,7 +87,7 @@ for a in 'LISTO <sha>' \
          'Tope de tres PRs abiertos' \
          'Los comentarios de CodeRabbit se leen' \
          'en tanda, no en ráfaga' \
-         'runbook-progress.v1' \
+         'runbook-progress-events.v1' \
          'git y en los PRs' \
          'otro host de la lista de preferencia' \
          'la aceptación real de lo que la fase promete' \

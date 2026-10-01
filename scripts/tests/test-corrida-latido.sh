@@ -190,6 +190,16 @@ sed -i.bak 's/"m-cerrada"/"lat-cerrada"/' "$CORRIDA_STATE/lat-cerrada/registro.j
 tick "$T0" || fail "el latido fallo sin corridas abiertas"
 [ "$(msgs)" = "0" ] || fail "sin corridas abiertas salieron $(msgs) llamadas"
 [ "$(evts)" = "0" ] || fail "sin corridas abiertas desperto al vigia"
+cat >"$T/bin/progress-events-falso" <<'STUB'
+#!/bin/sh
+printf '%s\n' "$*" >> "$PROGRESS_EVENTS_LOG"
+exit 0
+STUB
+chmod +x "$T/bin/progress-events-falso"
+export PROGRESS_EVENTS_BIN="$T/bin/progress-events-falso" PROGRESS_EVENTS_LOG="$T/progress-events.log"
+tick "$T0" || fail "el latido fallo al reintentar progreso pendiente"
+grep -qx 'publish-all' "$PROGRESS_EVENTS_LOG" || fail "el latido no reintento el outbox de progreso sin otro cambio"
+unset PROGRESS_EVENTS_BIN PROGRESS_EVENTS_LOG
 [ ! -e "$CORRIDA_STATE/basura/latido.json" ] || fail "el latido le hablo a un dir sin registro valido"
 
 # (2) primer tick: un AVANZA acumulado (sin mandar); dos ticks seguidos no duplican.

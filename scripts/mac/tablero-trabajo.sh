@@ -3,9 +3,9 @@
 # claw lleva a mano (encargo directo de David, sin corrida.sh), para que el
 # tick sin modelo de avance-tareas lo reporte y lo deje de reportar al cerrar.
 # Instalado vive en ~/bin/tablero-trabajo.sh. Habla con el gateway por el CLI
-# de openclaw (runbook.progress.get/set); el documento lleva `corrida` para
-# vivir bajo su propia clave y `fase` 0, que ninguna fase real usa (el set
-# tambien lo guarda bajo la fase), y `plan: null` para que el tablero cuente
+# de openclaw (runbook.progress.get/event); el documento lleva `corrida` para
+# vivir bajo su propia clave y `fase` 0, que ninguna fase real usa, y
+# `plan: null` para que el tablero cuente
 # sus partes en vez de tratarlo como una fase cuyo plan no pudo cruzar.
 # Uso:
 #   tablero-trabajo.sh abrir <id> "<titulo>" "<parte1>" ["<parte2>" ...] [--siguiente "..."] [--repo owner/repo]
@@ -16,11 +16,13 @@
 #   tablero-trabajo.sh ver <id>
 # <parte> es el numero (1, 2, ...) o el id (p1, p2, ...). Sale 0 solo si el
 # gateway contesto "ok": true; si no, imprime sus razones y sale 1.
-# Env: OPENCLAW_BIN (def. ~/.openclaw/bin/openclaw), TABLERO_TOPE_SEG (def. 60).
+# Env: OPENCLAW_BIN, PROGRESS_EVENTS_BIN, PROGRESS_EVENTS_STATE_DIR,
+# TABLERO_TOPE_SEG (def. 60).
 set -u
 export OPENCLAW_BIN="${OPENCLAW_BIN:-$HOME/.openclaw/bin/openclaw}"
+export PROGRESS_EVENTS_BIN="${PROGRESS_EVENTS_BIN:-$(dirname "$0")/progress-events.py}"
 exec python3 - "$@" <<'PY'
-import datetime, json, os, re, subprocess, sys
+import datetime, hashlib, json, os, pathlib, re, subprocess, sys, tempfile, uuid
 
 ESTADOS = ["pendiente", "implementando", "revision-cruzada", "coderabbit", "auditoria-lead",
            "en-cola", "mergeado", "atorado", "revertido", "omitido"]
@@ -30,7 +32,6 @@ FASE = "0"
 REPO_DEF = "gon0801/goncloud-openclaw"
 # Los mismos marcadores reservados que validarMensajeV1 y corrida_encabezado.
 MARCADOR_RE = re.compile(r"Comando: |(Que cambio|Qué cambió): |(Que sigue|Qué sigue): |(Que necesito de ti|Qué necesito de ti): ")
-EVENTOS_TOPE = 200
 USO = "uso: tablero-trabajo.sh abrir|agregar|paso|atencion|cerrar|ver <id> ..."
 
 
@@ -75,21 +76,123 @@ def llamar(metodo, params):
     return d
 
 
-def leer(id_):
+REVISION = {}
+
+
+def leer(id_, imported=False):
     d = llamar("runbook.progress.get", {"corrida": id_})
     if d.get("ok") is True and isinstance(d.get("doc"), dict):
+        if not isinstance(d.get("revision"), int):
+            if imported:
+                morir("el gateway no devolvio revision tras importar el trabajo")
+            importar_legacy(id_, d["doc"])
+            return leer(id_, imported=True)
+        REVISION[id_] = d["revision"]
         return d["doc"]
-    if d.get("razon") == "desconocida":
+    if (d.get("razon") or d.get("reason")) == "desconocida":
+        REVISION[id_] = 0
         return None
-    morir(f"runbook.progress.get: {d.get('razon') or d}")
+    morir(f"runbook.progress.get: {d.get('razon') or d.get('reason') or d}")
 
 
-def escribir(doc):
-    doc["eventos"] = doc["eventos"][-EVENTOS_TOPE:]
-    d = llamar("runbook.progress.set", doc)
-    if d.get("ok") is not True:
-        razones = d.get("razones") or [d.get("razon") or json.dumps(d, ensure_ascii=False)]
-        morir("el gateway rechazo el documento: " + " | ".join(map(str, razones)))
+def estado_local():
+    return pathlib.Path(os.environ.get("PROGRESS_EVENTS_STATE_DIR", str(pathlib.Path.home() / ".local/state/runbook-progress-events")))
+
+
+def cliente(*args):
+    cmd = [sys.executable, os.environ["PROGRESS_EVENTS_BIN"], "--state-dir", str(estado_local()),
+           "--openclaw-bin", os.environ["OPENCLAW_BIN"], *args]
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=tope() + 10)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        morir(f"progress-events: no contesto ({e.__class__.__name__})")
+
+
+def encolar(comando):
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".json", delete=False) as f:
+        json.dump(comando, f, ensure_ascii=False)
+        path = f.name
+    try:
+        r = cliente("queue-event", "--event-json", path)
+    finally:
+        os.unlink(path)
+    if r.returncode:
+        morir("no se pudo guardar el evento: " + r.stderr.strip())
+
+
+def pendientes(id_):
+    cola = estado_local() / "runs" / id_ / "queue"
+    if not cola.is_dir():
+        return []
+    try:
+        return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(cola.glob("*.json"))]
+    except (OSError, ValueError) as e:
+        morir(f"cola local ilegible: {e}")
+
+
+def publicar_cola(id_, event_id=None):
+    for _ in range(3):
+        r = cliente("publish", "--corrida", id_)
+        if r.returncode == 0:
+            return True
+        if event_id and (estado_local() / "runs" / id_ / "rejected" / (event_id + ".conflict.json")).exists():
+            return False
+    morir("no se pudo publicar el evento; quedo en la cola: " + r.stderr.strip())
+
+
+def importar_legacy(id_, doc):
+    if doc.get("corrida") != id_:
+        morir("el documento legacy no corresponde a la corrida")
+    raw = json.dumps(doc, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    identifier = "import-manual-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+    comando = {"kind": "run.opened", "id": identifier, "corrida": id_,
+               "at": doc.get("lead", {}).get("inicio") or ahora(), "source": "manual-import",
+               "doc": doc, "roundBudget": {}, "importLegacy": True}
+    encolar(comando)
+    publicar_cola(id_)
+
+
+def coincide(event, firma):
+    if event.get("source") != "manual":
+        return False
+    for k, v in firma.items():
+        actual = event.get(k)
+        if isinstance(v, dict):
+            if not isinstance(actual, dict) or any(actual.get(clave) != valor for clave, valor in v.items()):
+                return False
+        elif actual != v:
+            return False
+    return True
+
+
+def publicar(id_, construir, firma):
+    queued = pendientes(id_)
+    matched = next((e for e in queued if coincide(e, firma)), None)
+    if queued:
+        if publicar_cola(id_, matched["id"] if matched else None):
+            if matched:
+                print(resumen(leer(id_)))
+                return
+        elif matched and firma["kind"] == "part.status":
+            leer(id_)
+            morir("el tablero cambio mientras se publicaba el paso; revisa el estado actual antes de repetirlo")
+    for _ in range(3):
+        doc = abierto(id_)
+        t = ahora()
+        comando = {"kind": None, "id": uuid.uuid4().hex, "corrida": id_, "at": t,
+                   "expectedRevision": REVISION[id_], "source": "manual"}
+        comando.update(construir(doc, t))
+        encolar(comando)
+        if publicar_cola(id_, comando["id"]):
+            nuevo = leer(id_)
+            if nuevo is None:
+                morir("el gateway acepto el evento pero no devuelve el trabajo")
+            print(resumen(nuevo))
+            return
+        if firma["kind"] == "part.status":
+            leer(id_)
+            morir("el tablero cambio mientras se publicaba el paso; revisa el estado actual antes de repetirlo")
+    morir("el tablero cambio durante la operacion; vuelve a intentarlo")
 
 
 def abierto(id_):
@@ -161,9 +264,20 @@ def cmd_abrir(args):
     id_, titulo, partes = pos[0], pos[1], pos[2:]
     validar_id(id_)
     sin_marcador(titulo, "el titulo")
+    titulo = texto(titulo, 300, "titulo")
+    partes = [texto(p, 300, "parte") for p in partes]
     repo = ops.get("--repo", REPO_DEF)
     if not REPO_RE.match(repo):
         morir(f"--repo invalido {repo!r}: owner/repo", 2)
+    queued = pendientes(id_)
+    if queued:
+        same = any(e.get("kind") == "run.opened" and e.get("source") == "manual"
+                   and e.get("doc", {}).get("titulo") == titulo
+                   and [c.get("nombre") for c in e.get("doc", {}).get("carriles", [])] == partes
+                   and all(c.get("repo") == repo for c in e.get("doc", {}).get("carriles", [])) for e in queued)
+        if not same:
+            morir(f"hay otra apertura pendiente para {id_}; publicala antes de cambiar sus datos")
+        publicar_cola(id_)
     previo = leer(id_)
     if previo is not None:
         if previo.get("cierre", {}).get("at"):
@@ -191,8 +305,11 @@ def cmd_abrir(args):
         "cierre": {"at": None, "telegram_message_id": None, "resumen": None},
     }
     evento(doc, t, texto(f"abierto: {titulo}", 300, "titulo"))
-    escribir(doc)
-    print(resumen(doc))
+    comando = {"kind": "run.opened", "id": uuid.uuid4().hex, "corrida": id_, "at": t,
+               "source": "manual", "doc": doc, "roundBudget": {}}
+    encolar(comando)
+    publicar_cola(id_)
+    print(resumen(leer(id_)))
 
 
 def buscar_carril(doc, ref):
@@ -209,13 +326,12 @@ def cmd_agregar(args):
     pos, _ = opciones(args, set())
     if len(pos) != 2:
         morir('agregar <id> "<parte>"', 2)
-    doc = abierto(pos[0])
-    repo = doc["carriles"][-1]["repo"] if doc["carriles"] else REPO_DEF
-    c = carril_nuevo(len(doc["carriles"]) + 1, pos[1], repo)
-    doc["carriles"].append(c)
-    evento(doc, ahora(), texto(f"parte nueva: {c['nombre']}", 300, "parte"), c["id"])
-    escribir(doc)
-    print(resumen(doc))
+    nombre = texto(pos[1], 300, "parte")
+    def construir(doc, _):
+        repo = doc["carriles"][-1]["repo"] if doc["carriles"] else REPO_DEF
+        c = carril_nuevo(len(doc["carriles"]) + 1, nombre, repo)
+        return {"kind": "part.added", "carril": c}
+    publicar(pos[0], construir, {"kind": "part.added", "carril": {"nombre": nombre}})
 
 
 def cmd_paso(args):
@@ -225,46 +341,51 @@ def cmd_paso(args):
     id_, ref, estado, que = pos
     if estado not in ESTADOS:
         morir(f"estado {estado!r} fuera de la lista: {', '.join(ESTADOS)}", 2)
-    doc = abierto(id_)
-    c = buscar_carril(doc, ref)
-    t = ahora()
     que = texto(que, 300, "que paso")
-    c["estado"] = estado
-    c["ultimo_evento"] = {"at": t, "que": que}
-    c["detenido_por"] = que if estado == "atorado" else None
+    pr = None
     if "--pr" in ops:
         if not ops["--pr"].isdigit() or int(ops["--pr"]) < 1:
             morir(f"--pr invalido {ops['--pr']!r}", 2)
-        c["pr"] = int(ops["--pr"])
+        pr = int(ops["--pr"])
+    siguiente = None
     if "--siguiente" in ops:
-        doc["siguiente_paso"] = texto(ops["--siguiente"], 160, "siguiente")
-    evento(doc, t, que, c["id"])
-    escribir(doc)
-    print(resumen(doc))
+        siguiente = texto(ops["--siguiente"], 160, "siguiente")
+    def construir(doc, _):
+        c = buscar_carril(doc, ref)
+        result = {"kind": "part.status", "carril": c["id"], "estado": estado, "que": que}
+        if pr is not None:
+            result["pr"] = pr
+        if siguiente is not None:
+            result["nextStep"] = siguiente
+        return result
+    carril_id = f"p{int(ref)}" if ref.isdigit() else ref
+    firma = {"kind": "part.status", "carril": carril_id, "estado": estado, "que": que}
+    if pr is not None:
+        firma["pr"] = pr
+    if siguiente is not None:
+        firma["nextStep"] = siguiente
+    publicar(id_, construir, firma)
 
 
 def cmd_atencion(args):
     pos, _ = opciones(args, set())
     if len(pos) != 2:
         morir('atencion <id> "<que necesito de David>"  |  atencion <id> --resuelta', 2)
-    doc = abierto(pos[0])
-    t = ahora()
     if pos[1] == "--resuelta":
-        doc["atencion_requerida"] = {"necesaria": False, "motivo": None, "desde": None}
-        evento(doc, t, "David respondio; sigue el trabajo")
+        payload = {"kind": "attention.changed", "necesaria": False, "motivo": None}
     else:
         motivo = texto(pos[1], 300, "motivo")
         sin_marcador(motivo, "el motivo")
-        doc["atencion_requerida"] = {"necesaria": True, "motivo": motivo, "desde": t}
-        evento(doc, t, texto(f"necesita a David: {motivo}", 300, "motivo"))
-    escribir(doc)
-    print(resumen(doc))
+        payload = {"kind": "attention.changed", "necesaria": True, "motivo": motivo}
+    publicar(pos[0], lambda _doc, _t: payload, payload)
 
 
 def cmd_cerrar(args):
     pos, _ = opciones(args, set())
     if len(pos) != 2:
         morir('cerrar <id> "<resumen de una linea>"', 2)
+    if pendientes(pos[0]):
+        publicar_cola(pos[0])
     doc = leer(pos[0])
     if doc is None:
         morir(f"no hay trabajo {pos[0]} en el tablero")
@@ -272,13 +393,9 @@ def cmd_cerrar(args):
         print("ya estaba cerrado; no se toca:")
         print(resumen(doc))
         return
-    t = ahora()
     r = texto(pos[1], 300, "resumen")
-    doc["cierre"] = {"at": t, "telegram_message_id": None, "resumen": r}
-    doc["atencion_requerida"] = {"necesaria": False, "motivo": None, "desde": None}
-    evento(doc, t, texto(f"cerrado: {r}", 300, "resumen"))
-    escribir(doc)
-    print(resumen(doc))
+    payload = {"kind": "run.closed", "resumen": r}
+    publicar(pos[0], lambda _doc, _t: payload, payload)
 
 
 def cmd_ver(args):

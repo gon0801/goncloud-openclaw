@@ -56,6 +56,27 @@ GH="${GH_BIN:-$(command -v gh 2>/dev/null || true)}"
 archivos=""
 for f in "$@"; do
   [ -f "$f" ] || { echo "reconciliar: no encuentro el documento: $f" >&2; exit 2; }
+  if F="$f" python3 - <<'PY'
+import json, os, pathlib, sys
+path = pathlib.Path(os.environ["F"]).resolve()
+managed = pathlib.Path(str(path) + ".revision.json").exists()
+if path.parent.name == "c" and path.parent.parent.name == "progress":
+    managed |= (path.parent.parent / "e" / path.name).exists()
+elif path.parent.name == "progress":
+    root = path.parent
+    managed |= (root / "phase-owners" / path.name).exists()
+    for log in (root / "e").glob("*.json"):
+        try:
+            opened = json.loads(log.read_text())["events"][0]["command"]
+            managed |= opened.get("kind") == "run.opened" and opened.get("phaseAlias") is True and opened.get("doc", {}).get("fase") == path.stem
+        except (OSError, ValueError, KeyError, IndexError, TypeError):
+            managed = True
+sys.exit(0 if managed else 1)
+PY
+  then
+    echo "reconciliar: $f lo administra runbook.progress.event; publica un evento part.status" >&2
+    exit 2
+  fi
   case "$LF$archivos" in *"$LF$f$LF"*) ;; *) archivos="$archivos$f$LF";; esac
 done
 

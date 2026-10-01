@@ -53,24 +53,32 @@ STUB
 chmod +x "$T/bin/tmux-shim"
 
 # Doble de openclaw: la prueba jamas habla con el gateway real. Con
-# FAKE_TABLERO_DOC, runbook.progress.get devuelve ese documento y set guarda
-# lo publicado en FAKE_TABLERO_SET; sin el, get no trae documento.
+# FAKE_TABLERO_DOC, runbook.progress.get devuelve el legado; los eventos
+# quedan en una bitacora local del doble. Sin el, get no trae documento.
 cat >"$T/bin/openclaw" <<'STUB'
 #!/bin/sh
 printf '%s\n' "$*" >>"${FAKE_OPENCLAW_LOG:-/dev/null}"
 case "$*" in
   *"runbook.progress.get"*)
     [ -n "${FAKE_TABLERO_DOC:-}" ] || { printf '{"ok":false,"razon":"desconocida"}\n'; exit 0; }
-    printf 'aviso de config\n{"ok":true,"doc":%s}\n' "$(cat "$FAKE_TABLERO_DOC")";;
-  *"runbook.progress.set"*)
-    while [ $# -gt 0 ]; do [ "$1" = "--params" ] && printf '%s' "$2" >"$FAKE_TABLERO_SET"; shift; done
-    printf '{"ok":true}\n';;
+    if [ -s "${FAKE_TABLERO_EVENTS:-/dev/null}" ]; then
+      n=$(wc -l < "$FAKE_TABLERO_EVENTS" | tr -d ' ')
+      printf '{"ok":true,"doc":%s,"revision":%s}\n' "$(cat "$FAKE_TABLERO_DOC")" "$n"
+    else
+      printf '{"ok":true,"doc":%s}\n' "$(cat "$FAKE_TABLERO_DOC")"
+    fi;;
+  *"runbook.progress.event"*)
+    while [ $# -gt 0 ]; do [ "$1" = "--params" ] && printf '%s\n' "$2" >>"$FAKE_TABLERO_EVENTS"; shift; done
+    n=$(wc -l < "$FAKE_TABLERO_EVENTS" | tr -d ' ')
+    printf '{"ok":true,"revision":%s}\n' "$n";;
 esac
 exit 0
 STUB
 chmod +x "$T/bin/openclaw"
 export OPENCLAW_BIN="$T/bin/openclaw" FAKE_OPENCLAW_LOG="$T/openclaw.log"
 export PATH="$T/bin:$PATH" CORRIDA_STATE="$T/corridas" TMUX_BIN="$T/bin/tmux-shim"
+export PROGRESS_EVENTS_STATE_DIR="$T/progress-outbox-before-board"
+export PROGRESS_EVENTS_BIN="$PWD/scripts/mac/progress-events.py"
 export FAKE_ARGV_DIR="$T/argv" FAKE_BAR="FAKE-BARRA-9"
 export CORRIDA_WORKER_BIN_CLAUDE_FABLE="$T/bin/claude" CORRIDA_WORKER_BIN_CLAUDE_OPUS="$T/bin/claude" \
   CORRIDA_WORKER_BIN_CODEX="$T/bin/codex" CORRIDA_WORKER_BIN_ZCODE="$T/bin/zcode" \
@@ -363,24 +371,23 @@ bash "$CORR" seleccionar run-1 lane-1 --request "$T/req.json" --state "$T/st.jso
   || fail "seleccionar fallo: $(cat "$T/sel.json")"
 ganador="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['winner'])" "$T/sel.json")"
 [ "$ganador" = "kimi_k3" ] || fail "el selector eligio $ganador, se esperaba kimi_k3"
-FAKE_TABLERO_DOC="$T/tablero.json" FAKE_TABLERO_SET="$T/tablero-set.json" \
-  bash "$CORR" adaptador start run-1 lane-1 kimi_k3 ses-tab "$T/wt" "$T/brief.txt" >/dev/null \
+export FAKE_TABLERO_DOC="$T/tablero.json" FAKE_TABLERO_EVENTS="$T/tablero-events.ndjson"
+export PROGRESS_EVENTS_STATE_DIR="$T/progress-outbox"
+bash "$CORR" adaptador start run-1 lane-1 kimi_k3 ses-tab "$T/wt" "$T/brief.txt" >/dev/null \
   || fail "start con tablero fallo"
-[ -s "$T/tablero-set.json" ] || fail "el arranque no publico el carril en el tablero"
-python3 - "$T/tablero-set.json" <<'PYT' || fail "el tablero publicado no trae worker, effort y porque: $(cat "$T/tablero-set.json")"
+[ -s "$T/tablero-events.ndjson" ] || fail "el arranque no publico eventos"
+python3 - "$T/tablero-events.ndjson" <<'PYT' || fail "el evento no trae worker, effort y porque"
 import json,sys
-d=json.load(open(sys.argv[1]))
-c=next(x for x in d["carriles"] if x["id"]=="lane-1")
-assert c["worker"]=={"id":"kimi_k3","harness":"kimi-code","provider":"kimi","model":"kimi-code/k3",
-  "effort":None,"reported_model":None,"health":"available"}, c["worker"]
-nota=[n for n in d["notas"] if n.startswith("lane-1 seleccion: ")]
-assert len(nota)==1 and "effort el de la CLI" in nota[0] and "puntaje 85" in nota[0], d["notas"]
-assert "empate con" in nota[0] and "claude_fable (repo-denied)" in nota[0], nota[0]
-assert "nota del lead" in d["notas"], d["notas"]
-assert d["eventos"][-1]["carril"]=="lane-1" and "kimi_k3" in d["eventos"][-1]["que"], d["eventos"]
-assert next(x for x in d["carriles"] if x["id"]=="lane-r").get("worker") is None
+events=[json.loads(line) for line in open(sys.argv[1])]
+assert [e['kind'] for e in events]==['run.opened','part.worker'], events
+assert events[0]['roundBudget']=={} and events[0]['importLegacy'] is True and events[0]['doc']['notas']==['nota del lead'], events[0]
+e=events[1]
+assert e['carril']=='lane-1' and e['worker']=={'id':'kimi_k3','harness':'kimi-code','provider':'kimi',
+  'model':'kimi-code/k3','effort':None,'reported_model':None,'health':'available'}, e
+assert 'effort el de la CLI' in e['note'] and 'puntaje 85' in e['note'], e['note']
+assert 'empate con' in e['note'] and 'claude_fable (repo-denied)' in e['note'], e['note']
 PYT
-node --experimental-strip-types --input-type=module - "$T/tablero-set.json" <<'JS' || fail "el tablero publicado no pasa el validador del plugin"
+node --experimental-strip-types --input-type=module - "$T/tablero.json" <<'JS' || fail "el documento importado no pasa el validador"
 import fs from "node:fs";
 import { validarProgreso } from "./tablero-runbook/contrato.ts";
 const r = validarProgreso(JSON.parse(fs.readFileSync(process.argv[2], "utf8")));
@@ -389,14 +396,15 @@ JS
 bash "$CORR" adaptador stop run-1 lane-1 kimi_k3 ses-tab >/dev/null
 # Con effort declarado el bloque lo lleva tal cual (lo que va en la argv).
 reserva_lane lane-1 write "$T/wt"
-FAKE_TABLERO_DOC="$T/tablero.json" FAKE_TABLERO_SET="$T/tablero-set2.json" \
-  bash "$CORR" adaptador start run-1 lane-1 codex ses-tab2 "$T/wt" "$T/brief.txt" >/dev/null \
+bash "$CORR" adaptador start run-1 lane-1 codex ses-tab2 "$T/wt" "$T/brief.txt" >/dev/null \
   || fail "start codex con tablero fallo"
-python3 - "$T/tablero-set2.json" "$REG" <<'PYT' || fail "el effort del tablero no es el de la argv"
+python3 - "$T/tablero-events.ndjson" "$REG" <<'PYT' || fail "el effort del evento no es el de la argv"
 import json,sys
-c=next(x for x in json.load(open(sys.argv[1]))["carriles"] if x["id"]=="lane-1")
-w=next(x for x in json.load(open(sys.argv[2]))["workers"] if x["id"]=="codex")
-assert w["effort"] and c["worker"]["effort"]==w["effort"], (c["worker"], w.get("effort"))
+events=[json.loads(line) for line in open(sys.argv[1])]
+assert [e['kind'] for e in events]==['run.opened','part.worker','part.worker'], events
+worker=events[-1]['worker']
+w=next(x for x in json.load(open(sys.argv[2]))['workers'] if x['id']=='codex')
+assert w['effort'] and worker['effort']==w['effort'], (worker,w.get('effort'))
 PYT
 grep -q "model_reasoning_effort=$(python3 -c "import json,sys; print(next(x for x in json.load(open(sys.argv[1]))['workers'] if x['id']=='codex')['effort'])" "$REG")" "$T/argv/codex.argv" \
   || fail "la argv de codex no lleva el effort que el tablero muestra"

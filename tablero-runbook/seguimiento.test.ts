@@ -7,7 +7,7 @@
  * en el denominador; los atorados sí; lo no verificable es `desconocido`.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -15,6 +15,7 @@ import { describe, it } from "node:test";
 import { type ProgresoDoc } from "./lib.ts";
 import { type EstadoPlan, type PlanCruce } from "./plan.ts";
 import { listarSeguimientoActivo, resumirSeguimiento } from "./seguimiento.ts";
+import { submitProgressEvent } from "./progress-store.ts";
 
 function carrilBase(over: Record<string, unknown>): Record<string, unknown> {
   return {
@@ -222,6 +223,21 @@ describe("resumirSeguimiento", () => {
 });
 
 describe("listarSeguimientoActivo", () => {
+  it("recovers an active run from its event log when its projection is missing", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "seguimiento-events-"));
+    try {
+      const doc = docDeClaw({ corrida: "replay-run", plan: null });
+      const opened = submitProgressEvent(dir, { kind: "run.opened", id: "open-replay", corrida: "replay-run", at: "2026-09-30T12:00:00Z", doc, roundBudget: {} });
+      assert.equal(opened.ok, true);
+      unlinkSync(join(dir, "progress", "c", "replay-run.json"));
+      const lista = await listarSeguimientoActivo({ stateDir: dir }, { ghPath: "/sin/gh" });
+      assert.equal(lista.activas[0]?.trabajoId, "corrida:replay-run");
+      assert.equal(lista.problemas.length, 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   async function listar(doc: ProgresoDoc) {
     const dir = mkdtempSync(join(tmpdir(), "seguimiento-"));
     try {

@@ -439,10 +439,18 @@ cat >"$T/bin/openclaw-r5b" <<STUB
 printf '%s\\n' "OPENCLAW \$*" >> "$T/r5b-openclaw.log"
 case "\$*" in
   *"message send"*) printf '{"messageId":"77"}\\n';;
-  *"runbook.progress.get"*) printf '{"ok":true,"doc":%s}\\n' "\$(cat "$T/r5b-tablero.json")";;
+  *"runbook.progress.get"*)
+    if [ -s "$T/r5b-events.jsonl" ]; then
+      printf '{"ok":true,"revision":%s,"doc":%s}\\n' "\$(wc -l <"$T/r5b-events.jsonl" | tr -d ' ')" "\$(cat "$T/r5b-tablero.json")"
+    else
+      printf '{"ok":true,"doc":%s}\\n' "\$(cat "$T/r5b-tablero.json")"
+    fi;;
   *"runbook.progress.set"*)
     while [ \$# -gt 0 ]; do [ "\$1" = "--params" ] && printf '%s' "\$2" >"$T/r5b-tablero.json"; shift; done
     printf '{"ok":true}\\n';;
+  *"runbook.progress.event"*)
+    while [ \$# -gt 0 ]; do [ "\$1" = "--params" ] && printf '%s' "\$2" >>"$T/r5b-events.jsonl" && printf '\\n' >>"$T/r5b-events.jsonl"; shift; done
+    printf '{"ok":true,"revision":%s}\\n' "\$(wc -l <"$T/r5b-events.jsonl" | tr -d ' ')";;
 esac
 exit 0
 STUB
@@ -463,6 +471,7 @@ printf '{"health":{"codex":"available","kimi":"available"},"exhausted":["codex"]
 bash "$CORR" seleccionar r5b l1 --request "$T/r5b-req.json" --state "$T/r5b-st.json" >"$T/r5b-sel.out" \
   || fail "r5b: seleccionar fallo: $(cat "$T/r5b-sel.out")"
 export OPENCLAW_BIN="$T/bin/openclaw-r5b"
+export PROGRESS_EVENTS_BIN="$PWD/scripts/mac/progress-events.py" PROGRESS_EVENTS_STATE_DIR="$T/r5b-progress-events"
 bash "$CORR" reconciliar r5b --observations "$T/r5b-o1.json" >"$T/r5b-1.out" || fail "r5b inv1 fallo: $(cat "$T/r5b-1.out")"
 grep -q '^EXECUTED launch_successor l1$' "$T/r5b-1.out" || fail "r5b inv1 sin launch: $(cat "$T/r5b-1.out")"
 grep -q 'resume_lane\|handoff_lane' "$T/r5b-1.out" && fail "r5b: tomo al sucesor recien lanzado por caido: $(cat "$T/r5b-1.out")"
@@ -485,14 +494,14 @@ AVISO_R5B="El trabajo de la parte l1 pasó de OpenAI (Codex) a Kimi porque se ac
   || fail "r5b: el relevo no mando exactamente un aviso: $(cat "$T/r5b-openclaw.log")"
 grep -qF "$AVISO_R5B" "$T/r5b-openclaw.log" \
   || fail "r5b: el aviso no dice el relevo en palabras del dueno: $(cat "$T/r5b-openclaw.log")"
-python3 - "$T/r5b-tablero.json" "$T/corridas/r5b" "$AVISO_R5B" <<'PY' || fail "r5b: tablero o seleccion del relevo sin publicar"
+python3 - "$T/r5b-tablero.json" "$T/corridas/r5b" "$AVISO_R5B" "$T/r5b-events.jsonl" <<'PY' || fail "r5b: tablero o seleccion del relevo sin publicar"
 import json,os,sys
 d=json.load(open(sys.argv[1]))
-c=d["carriles"][0]
-assert c["worker"]["id"]=="kimi" and c["worker"]["provider"]=="kimi" and c["worker"]["effort"] is None, c["worker"]
-assert any(e["que"]==sys.argv[3] and e["carril"]=="l1" for e in d["eventos"]), d["eventos"]
-nota=[n for n in d["notas"] if n.startswith("l1 seleccion: kimi")]
-assert nota and "codex (quota-exhausted)" in nota[0], d["notas"]
+events=[json.loads(line) for line in open(sys.argv[4])]
+workers=[e for e in events if e.get("kind")=="part.worker"]
+assert len(workers)==1 and workers[0]["worker"]["id"]=="kimi", workers
+assert workers[0]["worker"]["provider"]=="kimi" and workers[0]["worker"]["effort"] is None, workers
+assert "codex (quota-exhausted)" in workers[0]["note"], workers
 lane=json.load(open(os.path.join(sys.argv[2],"registro.json")))["lanes"][0]
 assert lane["selection"]["winner"]=="kimi" and lane["selection"]["discarded"]==[{"worker":"codex","reasons":["quota-exhausted"]}], lane["selection"]
 filas=[json.loads(l) for l in open(os.path.join(sys.argv[2],"mensajes.jsonl"))]

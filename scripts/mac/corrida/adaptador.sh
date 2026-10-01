@@ -171,10 +171,17 @@ for e in cs:
   if isinstance(e,dict) and e.get('id')==os.environ['CORR_C']: c=e; break
 if not isinstance(c,dict):
   sys.exit(10)
-if c.get('estado')=='activo' and c.get('session')==os.environ['CORR_S']:
+same_tenure=c.get('estado')=='activo' and c.get('session')==os.environ['CORR_S'] and c.get('worker')==os.environ['CORR_W']
+if same_tenure:
   pass
 elif c.get('estado')!='reservado':
   sys.exit(11)
+generation=c.get('progress_worker_generation')
+if not isinstance(generation,int) or isinstance(generation,bool) or generation<0:
+  generation=sum(e.get('kind')=='intent.launch_successor' for e in c.get('events') or [] if isinstance(e,dict))
+elif not same_tenure:
+  generation+=1
+c['progress_worker_generation']=generation
 c.update({'worker':os.environ['CORR_W'],'harness':os.environ['CORR_H'],
 'provider':os.environ['CORR_P'],'model':w['model'],'effort':w.get('effort'),
 'reported_model':c.get('reported_model','unknown'),
