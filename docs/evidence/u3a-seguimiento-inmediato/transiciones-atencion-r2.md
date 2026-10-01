@@ -63,12 +63,16 @@ anteriores al arreglo de identidad única de esta ronda): tres de zcode — el
 piloto 18:32 con sesión compartida y cola arrastrada, un relanzamiento fallido
 por registro ya existente, y la corrida 18:39 limpia en datos pero con la
 atención contaminada por la cola del piloto — y una de grok cuyo sucesor
-claude no entregó dentro de la ventana. Conteo completado en C1-r1 (F4): a
-esos tres juegos de zcode se suman la corrida de la r1 del arnés
-(`salidas/zcode/`, estampa 102610) y un lanzamiento abortado de zcode antes
-del registro (sin artefactos), con lo que el total descartado de zcode es
-cinco; también son anteriores al sello de identidad las corridas de claude,
-codex y kimi de esta tabla (F1). Quedan como antecedente en
+claude no entregó dentro de la ventana. **Conteo corregido en C1-r5 (F4): el
+total descartado de zcode es TRES, no cinco ni seis.** Las trazas reales son
+tres: los sellos 113406 (piloto) y 114005 (18:39), y el lanzamiento abortado
+`salidas/zcode-r2/lanzar.113849.out` ("abrir: ya existe la corrida"), que ES
+el relanzamiento fallido ya contado entre los tres. El completion de C1-r1
+infló la cuenta al sumar la corrida de la r1 (`salidas/zcode/`, estampa
+102610, veredicto OK) que es la MEDIDA de la tabla base, no un descarte, y al
+contar dos lanzamientos abortados cuando la traza muestra uno. También son
+anteriores al sello de identidad las corridas de claude, codex y kimi de esta
+tabla (F1). Quedan como antecedente en
 `arnes/salidas/<token>-r2/` con todas sus estampas. Artefactos crudos:
 `doble.*` (envíos REAL y NEGADO), `times-r2.*`, `sondeo*.jsonl`,
 `watch.log`, `breve.out`, `registro.*`, `pane-final.log`.
