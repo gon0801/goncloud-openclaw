@@ -206,6 +206,12 @@ class ProjectionTransferTest(unittest.TestCase):
                 gateway_main([arg for arg in args
                               if arg != "--expect-url" and arg != "ws://127.0.0.1:18789"])
 
+        with mock.patch("native_gateway.transfer_gateway_projections", return_value=0) as transfer:
+            with mock.patch("builtins.print"):
+                gateway_main(args + ["--host-state-dir", str(self.root / "host")])
+        self.assertEqual(transfer.call_args.kwargs["host"].host_id, "host-one")
+        self.assertEqual(transfer.call_args.kwargs["host"].state_dir, self.root / "host")
+
     def test_gateway_ack_loss_keeps_one_queued_event(self):
         pending = self.pending.copy()
         class Client:
