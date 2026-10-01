@@ -1,0 +1,72 @@
+Plugin "vitest:mocks:interceptor" defines Vite-specific hooks (configureServer) in a plugin returned from applyToEnvironment. These hooks will be ignored.
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+ ↓ |agents-support| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > derives managed identity from the native run rather than model fields
+ ↓ |agents-support| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > restores managed identity from SQLite and charges the next HTTP request
+ ↓ |agents-support| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > persists a transport wait when the reserved HTTP request loses its connection
+ ↓ |agents-support| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > does not label an HTTP rejection as a transport outage
+ × |agents-support| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > persists a transport wait when an accepted SSE response ends before DONE 1205ms
+   → expected 'stop' to be 'error' // Object.is equality
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.provider-stream.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.provider-stream.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.provider-stream.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.provider-stream.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.provider-stream.test.ts: retiring openclaw.agentDatabaseLifecycle
+
+ × |agents-support| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > persists a transport wait when the SSE socket drops after headers 1139ms
+   → expected { …(4) } to match object { cause: 'transport-unavailable' }
+(3 matching properties omitted from actual)
+ ↓ |agents-support| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > rejects uncertified provider routes before opening a connection
+ ↓ |agents-support| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > reserves each real request before HTTP, verifies the wire output cap, and blocks a third call
+ ↓ |agents-support| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > retains an unknown-use HTTP call and rejects later work at the call cap
+ ↓ |agents-support| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > rejects Responses native retries before the first HTTP request
+ ↓ |agents-support| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > rejects a cancelled managed run before the HTTP boundary
+ ↓ |agents-support| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > blocks server-endpoint compaction above the output allowance before HTTP
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |agents-support| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > persists a transport wait when an accepted SSE response ends before DONE
+AssertionError: expected 'stop' to be 'error' // Object.is equality
+
+Expected: "error"
+Received: "stop"
+
+ ❯ src/agents/tasks/managed-task.provider-stream.test.ts:305:50
+    303|         expect(event.type).toBeTruthy();
+    304|       }
+    305|       expect((await stream.result()).stopReason).toBe("error");
+       |                                                  ^
+    306|       expect(provider.requests).toHaveLength(1);
+    307|       expect((await inspectManagedTask({ caller, taskId: run.taskId })…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |agents-support| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > persists a transport wait when the SSE socket drops after headers
+AssertionError: expected { …(4) } to match object { cause: 'transport-unavailable' }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "cause": "transport-unavailable",
++   "cause": "queue-busy",
+  }
+
+ ❯ src/agents/tasks/managed-task.provider-stream.test.ts:333:83
+    331|       expect((await stream.result()).stopReason).toBe("error");
+    332|       expect(provider.requests).toHaveLength(1);
+    333|       expect((await inspectManagedTask({ caller, taskId: run.taskId })…
+       |                                                                                   ^
+    334|         cause: "transport-unavailable",
+    335|       });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 10 skipped (12)
+   Start at  11:00:16
+   Duration  4.53s (tests 54%, transform 21%, import 19%, worker 4%, setup 2%)
