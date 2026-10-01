@@ -2,6 +2,7 @@
 set -euo pipefail
 
 case_name="${1:-}"
+extra_test_files=()
 case "$case_name" in
   baseline) test_file='src/gateway/agent-turn/agent-wait-dedupe.test.ts'; test_pattern=''; probe_restart=1 ;;
   registration_identity)
@@ -44,6 +45,11 @@ case "$case_name" in
     test_file='src/agents/tasks/managed-task.budget.test.ts'
     test_pattern='rejects incomplete runtime budget and context shapes|counts context components once|retains full reservation when terminal provider usage is absent'
     probe_restart=0 ;;
+  waiting_reason)
+    test_file='src/agents/tasks/managed-task.admission.test.ts'
+    extra_test_files=('src/agents/tasks/managed-task.store.test.ts' 'src/agents/tasks/managed-task.provider-stream.test.ts')
+    test_pattern='lets one emitter claim, keeps a crash uncertain|does not store malformed JSON|persists a transport wait when the reserved HTTP request loses its connection'
+    probe_restart=0 ;;
   *) printf 'Unknown or unimplemented agent-work runtime case: %s\n' "${1:-}" >&2; exit 2 ;;
 esac
 
@@ -78,9 +84,9 @@ if [ "$case_name" = projection_gateway ]; then
   export AGENT_WORK_G_ROOT="$repo_root"
 fi
 if [ -n "$test_pattern" ]; then
-  node scripts/run-vitest.mjs "$test_file" --testNamePattern "$test_pattern"
+  node scripts/run-vitest.mjs "$test_file" "${extra_test_files[@]}" --testNamePattern "$test_pattern"
 else
-  node scripts/run-vitest.mjs "$test_file"
+  node scripts/run-vitest.mjs "$test_file" "${extra_test_files[@]}"
 fi
 if [ "$probe_restart" -eq 1 ]; then
   AGENT_WORK_RUNTIME_SOURCE="$source_root" python3 "$repo_root/scripts/agent-work/probe-native-restart.py"

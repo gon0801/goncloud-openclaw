@@ -20,6 +20,8 @@ R `9347938830` añadió la reserva por envío real de OpenAI Responses y el cier
 
 R `8c84e65233` eliminó el atajo de memoria que podía clasificar un run gestionado persistido como ordinario antes de la hidratación. La nueva regresión falló primero y pasó después; también pasó la prueba de Gateway autenticado. T4 sigue abierta para la matriz de rutas y la batería final.
 
+El ejecutor de G enlazó `waiting_reason` en T5 y pasó 3/3 sobre R limpio `8c84e65233`: admisión incierta, cola ocupada, resultado inválido y transporte caído. Faltan la medición de 120 segundos y la recuperación automática de la cola; T5 sigue abierta.
+
 T5 tiene una preparación aislada en R (`bc6c8cf75e..6ebf81e7fe`): observaciones de espera por episodio y causa, cierre durable aun cuando llega antes de la observación, consulta por solicitante y migración v26. La primera revisión reprodujo la reapertura tras entrega desordenada; la segunda aprobó la corrección. Pasaron 6 pruebas de espera, 22 pruebas focalizadas de almacén/proyección/consumo, tipos, lint y hooks. Falta conectar los eventos reales del ejecutor, recuperación acotada, pruebas de 72 horas sin inferencia y contador externo; T5 no está terminada.
 
 T8 tiene preparación en G (`55ee4cb`, `4ab369b`, `249cb94`): el cliente de progreso confirma ID y hashes después de guardar evidencia y evento; el puente reutiliza ese recibo tras perder respuestas y puede publicar bytes archivados por el host tras borrar el archivo de trabajo. Pasaron 32 pruebas del cliente y 8 del puente. La primera revisión del enlace Host detectó que faltaba comprobar SHA/veredicto; el delta `4ab369b..249cb94` lo corrigió con regresiones rojas y recibió aprobación independiente.
