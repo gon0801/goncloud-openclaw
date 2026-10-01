@@ -1,9 +1,11 @@
 # Estado de implementación de encargos
 
-Bloque activo: B1, T1. B0 terminó con el recibo `T0.md`. Base de G: `84efcb0`. Base de R: `c074824a27c96d3983043f9eeb33823cd1772d8c`.
+Bloque activo: B1. B0 terminó con el recibo `T0.md`. La base de B1 está fijada en `block-bases.json`; T1 y T2 tienen commits parciales de implementación nativa aislada.
 
 La fuente de OpenClaw 2026.9.7 está en un checkout aislado. La deduplicación del gateway tras reinicio necesita ampliación nativa. La admisión productiva permanece deshabilitada.
 
 El build aislado terminó y su entrypoint coincide por SHA-256 con el instalado. La prueba de gateway con proveedor falso confirmó una segunda admisión tras reinicio.
 
-Siguiente acción: fijar la autoridad común de encargos junto al registro nativo de subagentes y añadir las regresiones rojas de identidad y recibo de resultado de T1. La admisión productiva permanece deshabilitada.
+En el SHA final de B0 de R (`00e289c344af4cff10aafbf7b7f807822b54fa77`), `pnpm build` terminó correctamente ([log](B0-source-final-build.txt)) y `test-runtime.sh baseline` pasó 37/37 más la reproducción de dos admisiones tras reinicio ([log](B0-source-final-baseline.txt)). El gateway de ensayo y sus descendientes terminaron. La batería nativa amplia que empezó sobre el SHA anterior se detuvo al detectar dos fallos de UI ya corregidos; no se cuenta como evidencia final de B0.
+
+Siguiente acción: cerrar T1 con contrato de resultado e incidencia no terminal; terminar T2 con una prueba de cola del solicitante que sobreviva a un reinicio y con confirmación vinculada al registro nativo. Después se implementa T3. La admisión productiva permanece deshabilitada.
