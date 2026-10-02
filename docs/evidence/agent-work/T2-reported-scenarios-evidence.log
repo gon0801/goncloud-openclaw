@@ -1,0 +1,49 @@
+T2 requester_queue positive scenarios evidence (casilla «Revalida requester_queue...»), 2026-10-02
+R source SHA: 2046bd9516ceedbe21b20986208b31f1da6195c0 (branch feat/agent-work-integration,
+fast-forwarded from 9f99e2264c012dd4cf5bd9dbac10bc7e534ffc05). The commit touches only
+src/gateway/server.managed-task-requester.e2e.test.ts (+505/-1); no production change.
+
+New scenarios (brother it.each; original 5 rows untouched):
+  delivers a durably reported managed result after restart to a busy requester (restart: true)
+  delivers a durably reported managed result after restart to a deleted requester (restart: true)
+Both titles match the G executor selector (restart: true), so scripts/agent-work/test-runtime.sh
+needed no change.
+
+busy: the fake provider withholds its answer to the requester's 4th request until the child's
+result is durable in managed_tasks.result_json AND the wake is parked as a session system event
+(contextKey task:<id>), so the report lands mid-turn. Asserts the 4th request carries no
+continuation text (no mid-turn injection), the pending queue row stays parked (1), and after a
+gateway restart the same session receives exactly one continuation (7 requester requests total:
+inspect, resolve, final), one managed_task_handlings row with the complete decision, zero extra
+requests after a replayed report during the admitted turn (replayedAfterTurnStart), and the
+requester session list still exactly [agent:ingenieria:managed-requester].
+Run: node scripts/run-vitest.mjs src/gateway/server.managed-task-requester.e2e.test.ts
+  --testNamePattern 'to a busy requester'  -> exit 0, 1 passed | 6 skipped.
+Raw log: t2-busy-reported-green.log
+
+deleted: after the requester turn completes, the session entry agent:ingenieria:managed-requester
+is removed with applySessionEntryLifecycleMutation (same mechanism as the registry deleted case;
+sessions.delete was rejected because it cancels the live child run). Then the child reports.
+Asserts the requester stays at 4 requests across the restart, zero sessions for the requester
+agent (no replacement conversation), the delivery row consumed terminally (pending 0; status
+failed or purged) instead of parked, the result retained byte-identical in managed_tasks,
+zero managed_task_handlings (blocked), and exactly 1 child report.
+Run: --testNamePattern 'to a deleted requester'  -> exit 0. Raw log: t2-deleted-reported-green.log
+
+Full file with all 7 rows: exit 0, 7 passed (7), 61.15s. Raw log: t2-full-file-7of7.log
+Baseline of the untouched restart rows on the base tree: exit 0, 2 passed | 3 skipped.
+Raw log: t2-baseline-filas-restart.log
+
+Mutation bites (isolated clone at 9f99e2264c + cherry-pick 38d253fb0c; checkout untouched):
+A) deleted bite: disabled the expectedSessionId guard in server-restart-sentinel.ts
+   (if (false && ...)). Result: exit 1,
+   AssertionError: expected 1 to be +0 on the pending-queue poll - without the guard the row
+   stays parked forever instead of dead-lettering. Raw log: t2-mutacion-guarda-sesion-borrada.log
+B) busy bite: disabled the managed-delivery deferral (admitted-turn parking). Result: exit 1,
+   AssertionError: expected +0 to be 1 on the pre-restart pending-row poll - without the
+   deferral the delivery is consumed immediately instead of waiting. A first form of this
+   mutation (if (false && ...)) broke the declaration build with TS2339 and was discarded for
+   a type-preserving form. Raw log: t2-mutacion-sin-aplazamiento.log
+Both clones were restored (git checkout/reset; clean tree verified).
+
+Executor revalidation from G (casilla measurement) is recorded in T2.md.
