@@ -13,6 +13,15 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
+# El job shards hace checkout superficial sin origin/main (fetch --depth=1 del
+# merge): sin base resolvible no hay rango que auditar y el doc-check real
+# corre en clasificador con fetch-depth 0. Mismo fallo que ya tuvo
+# test-corrida-preflight.sh (CI #153).
+if ! git rev-parse --verify --quiet 'origin/main^{commit}' >/dev/null 2>&1; then
+  echo "doc-check-repro: omitido: sin origin/main (checkout superficial); el doc-check real corre en clasificador con fetch-depth 0"
+  exit 0
+fi
+
 hs=${1:-HEAD}
 mb=$(git merge-base origin/main "$hs")
 rc=0
