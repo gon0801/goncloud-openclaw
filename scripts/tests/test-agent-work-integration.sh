@@ -4,6 +4,10 @@ if [ "${1:-}" = "agents_routing" ]; then
   shift
   exec python3 "$(dirname "$0")/test-agent-work-routing.py" "$@"
 fi
+if [ "${1:-}" = "delegation_bypass" ]; then
+  shift
+  exec bash "$(dirname "$0")/../agent-work/test-runtime.sh" delegation_bypass "$@"
+fi
 if [ "${1:-}" = "hook_is_observation" ]; then
   shift
   if [ "$#" -ne 0 ]; then

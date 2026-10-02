@@ -55,6 +55,10 @@ case "$case_name" in
     extra_test_files=('src/agents/tasks/managed-task.provider-stream.test.ts')
     test_pattern='allows one automatic recovery call per root|blocks an SDK Responses retry before its second HTTP dispatch'
     probe_restart=0 ;;
+  delegation_bypass)
+    test_file='src/agents/tools/sessions-managed-delegation.test.ts'
+    test_pattern='rejects sessions_spawn before any child is created|rejects sessions_send before Gateway delivery|does not apply the managed guard to an ordinary run'
+    probe_restart=0 ;;
   *) printf 'Unknown or unimplemented agent-work runtime case: %s\n' "${1:-}" >&2; exit 2 ;;
 esac
 

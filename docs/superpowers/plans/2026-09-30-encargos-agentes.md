@@ -246,8 +246,8 @@ Depende de T8. Modifica las entradas nativas identificadas en T0, `scripts/mac/c
 Consume las cinco operaciones del diseño. Produce un único camino gestionado por encargo, con identidad y presupuesto heredados.
 
 - [ ] Añade `agents_routing`: ingeniería solicita a adversary, operaciones solicita a ingeniería y un agente solicita a un CLI remoto. Incluye un agente registrado que no se llame `main`.
-- [ ] Añade `delegation_bypass`: una ruta gestionada intenta enviar o crear un hijo sin contrato. Exige rechazo sin eludir la política de permisos.
-- [ ] Añade `hook_is_observation`: Stop o quietud sin informe no despierta un modelo.
+- [x] Añade `delegation_bypass`: una ruta gestionada intenta enviar o crear un hijo sin contrato. Exige rechazo sin eludir la política de permisos.
+- [x] Añade `hook_is_observation`: Stop o quietud sin informe no despierta un modelo.
 - [ ] Ejecuta los casos en rojo.
 - [ ] Migra cada entrada del inventario y actualiza sus instrucciones en el mismo cambio. Los cron de negocio conservan horarios y función.
 - [ ] Conserva las rutas anteriores fuera del perímetro gestionado hasta su adopción explícita. Dentro del perímetro, impide que un reparador recree el vigía antiguo.
@@ -259,7 +259,7 @@ Verifica con `test-agent-work-integration.sh agents_routing`, `delegation_bypass
 Depende de T9. Crea `G/scripts/tests/test-agent-work-e2e.sh`, `docs/evidence/agent-work/acceptance.md` y `followups.md`. Conecta las nuevas pruebas al runner de su repositorio sin excluir pruebas existentes.
 
 - [ ] Añade `review_tail_restart`: el revisor entrega, la respuesta sale de las últimas 80 líneas y el solicitante reinicia. Exige una corrección registrada y aceptada sin recordatorio humano.
-- [ ] Añade `delivery_latency` con reloj controlado: desde la escritura durable del informe hasta su detección, hasta 5 segundos; desde la detección hasta el recibo durable, hasta otros 5 segundos. Simula hosts despiertos y red sana; guarda ambas mediciones por separado.
+- [x] Añade `delivery_latency` con reloj controlado: desde la escritura durable del informe hasta su detección, hasta 5 segundos; desde la detección hasta el recibo durable, hasta otros 5 segundos. Simula hosts despiertos y red sana; guarda ambas mediciones por separado.
 - [ ] Añade las fronteras de caída de la especificación con un contador externo de procesos y peticiones. Comprueba los resultados de dominio, no solo filas de la base.
 - [ ] Ejecuta los casos en rojo antes de corregir cualquier fallo de integración.
 - [ ] Completa la matriz de aceptación enlazando cada caso con su prueba y el par de SHA de `G` y `R`.
