@@ -29,7 +29,7 @@ PR #153 estaba abierto al revisar: ninguno equivale al cierre completo de U2.
 | Permisos sin preguntas rutinarias | U2: 9.1–9.3, 9.6, política y diálogos; U3: 14.1–14.2 modos CLI y 14.4 autoridad persistente | Vincular la meta a la política y comprobar coherencia efectiva entre instrucciones, CLI, host y ruta de entrega al iniciar y reanudar |
 | Meta convertida en trabajo verificable | U4: 17.1, identidades, unidades, criterios y revisión del plan | Generar/importar un plan ejecutable, validar dependencias y cobertura, conservar criterios al dividir o reparar tareas |
 | Ejecución encadenada | U3: 14.1–14.2 selector/CLI/worktree; 14.5 reducer; 14.6 director | Elegir unidades habilitadas por resultados, avanzar entre ellas y reconciliar revisiones de una meta completa |
-| Recuperación sin duplicados | U3: 14.5 intenciones y reconciliación; U4/U5: 17.4 supervisor y presupuesto | Caída en la transición entre unidades, eventos tardíos y control persistente de pausa/cancelación de la meta |
+| Recuperación sin duplicados | U3: 14.5 intenciones y reconciliación; U4/U5: 17.4 supervisor y presupuesto; encargos nativos: registro, admisión, resultado y consumo durables | Caída en la transición entre unidades, vínculo de cada unidad con su encargo nativo, eventos tardíos y control persistente de pausa/cancelación de la meta |
 | Cierre por evidencia | U2: 9.11–9.12 usuario y cierre; U3: 14.5/14.7 recibos/canary; U4: 17.1 y aceptación 8 | Agregar aceptación de todos los criterios del plan vigente, invalidando evidencia afectada por cambios posteriores |
 | Merge/deploy autónomos | U1 sync seguro; U3: 14.4 autoridad y 14.5/14.7 entrega/read-back/reversa | Reutilizar esas rutas con autoridad inicial suficiente para la meta, incluida selección de artefacto futuro cuando esté expresamente autorizada |
 | Seguimiento y Hermes | U2 reloj global; U4 panel; U5 misma aceptación con identidad/estado propios | Proyectar la meta agregada y comprobar su recorrido por host; no crear panel, reloj ni failover nuevos |
@@ -49,10 +49,25 @@ y las decisiones de recuperación/U1 del ledger y `.saikit/decisiones/u1-sync.ts
   Sólo se usan a través de la frontera de U3/U4 si está probada. Un flujo
   persistido no demuestra un lanzamiento ni una reanudación soportada.
   Referencia: [Task Flow oficial](https://docs.openclaw.ai/automation/taskflow).
+- La [base de encargos gestionados](2026-09-30-encargos-agentes.md) aporta la
+  identidad de tarea y raíz, generación, admisión, resultado, consumo y reservas.
+  U6 consume su contrato nativo verificado; el plan de la meta sólo decide qué
+  unidad queda habilitada y si se cumplieron los criterios agregados. No guarda
+  otro estado autoritativo de tarea ni despacha por una ruta anterior en paralelo.
+  El código U6 y sus pruebas aisladas pueden avanzar contra una base integrada
+  y verificada para las rutas bajo prueba. La aceptación viva de cada host exige
+  además el recibo de adopción de esas rutas en ese host; no exige adoptar todos
+  los CLI ni esperar al otro host. Un módulo aislado o un recibo ajeno no acredita
+  una ruta viva.
 - Un único mecanismo de vigilancia y entrega por instalación; eventos y tick
   existentes despiertan la reconciliación. Sin cron por meta ni segundo servicio
   periódico. Se conservan `corrida.sh` y los recibos `saikit-entrega.v1`.
-- Dependencia técnica OpenClaw: U4 aceptada, que incluye U2, U3 y U3a (Fase 19). Hermes añade U5.
+- Dependencia técnica OpenClaw: U4 aceptada, que incluye U2, U3 y U3a (Fase 19),
+  más la base nativa de encargos integrada y verificada para las rutas usadas.
+  Su aceptación viva exige adoptar esas rutas. Hermes añade U5 y una base
+  equivalente verificada y adoptada en su propio host, sin consultar el gateway,
+  la cola ni las credenciales de OpenClaw. Si falta esa capacidad, Hermes queda
+  bloqueado; OpenClaw puede acreditarse por separado, sin declarar paridad.
   La prioridad de la ruta sigue U2, U3, U3a, U4, U5, U6; investigación/contratos de
   U6.0–U6.1 pueden prepararse antes sin activar ejecución. Si se implementa
   primero la parte OpenClaw de U6, no acredita Hermes ni el cierre bilateral.
@@ -68,6 +83,22 @@ Extensión aditiva del modelo U4, con nombre propuesto `meta-autonoma.v1`:
 alcance, `authorization_ref`, referencias de presupuesto/intento/evidencia y
 control persistente. Los nombres definitivos se fijan en U6.1 contra el contrato
 U4 disponible; no se crean identidades o contadores paralelos.
+
+El vínculo versionado propuesto `goal-task-binding.v1` relaciona la clave estable
+`(goal_id, unit_id, plan_revision)` con `(task_id, root_id, generation)` y la
+identidad del runtime y host propietarios. U6.1 fija su esquema y migración;
+al implementarlo, se registra antes de intentar la admisión. Repetir la misma
+clave y contenido recupera el vínculo; otro contenido da conflicto. El vínculo
+conserva revisiones y generaciones anteriores
+para conciliar resultados tardíos, pero sólo la revisión vigente puede acreditar un
+criterio vigente. `task_id`, `root_id`, generación, estado, resultado y reserva
+se leen de la base nativa. El vínculo no es otra cola ni permite inferir que
+una unidad empezó por el solo hecho de estar registrada.
+
+Una meta con unidades independientes necesita una raíz nativa común. U6.0
+comprueba que el contrato del host permite agruparlas bajo esa raíz sin
+serializarlas. Si falta, se amplía la base en su repositorio dueño y se prueba
+antes de habilitar U6.3; U6 no fabrica raíces o reservas equivalentes.
 
 Antes de ejecutar se rechazan ciclos, dependencias desconocidas, unidades sin
 criterios y criterios obligatorios sin cobertura. Para una meta en lenguaje natural,
@@ -88,11 +119,17 @@ futuro del PR de la meta se vincula al SHA resuelto antes del deploy. Un permiso
 que exija SHA literal no se transforma en otro más amplio. Esta es una extensión
 de contrato prevista; la autorización operativa concreta sigue sin emitirse.
 
-Pausa/cancelación se guardan antes de acusar recibo; eventos de workers antiguos
-pueden aportar resultados para reconciliar, pero no autorizan nuevos efectos.
-Reanudar exige orden autenticada, autoridad vigente y revisión del estado. Una
-cancelación es terminal para esa ejecución; retomarla crea una nueva ejecución
-autorizada que reconcilia resultados anteriores. No deshace efectos ya publicados.
+Pausa/cancelación se guardan antes de acusar recibo y cercan la admisión nativa,
+el despacho y los efectos del host de cada unidad afectada. Un despacho que ya
+cruzó su frontera de efecto se consulta por su identidad; una respuesta perdida
+o un timeout no autorizan repetirlo. Los eventos de generaciones antiguas pueden
+aportar resultados para reconciliar, pero no habilitan nuevos efectos ni
+acreditan la revisión vigente sin validación. Reanudar exige orden autenticada,
+autoridad vigente y revisión del estado nativo. Conserva el mismo `root_id`, las
+reservas consumidas y el presupuesto restante; no registra otra raíz para
+obtener cupo. Una cancelación es terminal para esa ejecución; retomarla crea una
+nueva ejecución autorizada que reconcilia resultados anteriores. No deshace
+efectos ya publicados.
 
 El cierre agregado requiere criterios vigentes, evidencia del artefacto actual y
 aceptación integrada. Una reversa verificada conserva un resultado fallido o
@@ -113,6 +150,16 @@ registro de workers y formato de estado. Mapear cada punto de la matriz a códig
 prueba y recibo o `unknown`. Archivos propuestos de evidencia:
 `docs/evidence/u6-cobertura.md` y `docs/evidence/u6-capacidades.md`.
 
+Por host, inventariar la versión y el recibo de adopción de la base nativa de
+encargos, sus operaciones autenticadas `submit`, `inspect`, `resolve` y `cancel`,
+la admisión real de cada ruta, el presupuesto de raíz y el cierre de ejecutores.
+Registrar qué rutas certificadas aceptan una unidad U6 y cuáles siguen
+deshabilitadas. Si falta una operación, U6.1 puede fijar el contrato, pero U6.3
+puede codificarse y probarse de forma aislada; su ejecución viva en ese host
+espera la adopción de la ruta nativa correspondiente.
+Comprobar también la raíz común y el presupuesto compartido de dos unidades
+independientes; una carencia queda en el dueño de la base nativa.
+
 Medir inicio, fin y continuación con el adaptador existente en entorno desechable
 cuando esté autorizado; sin interfaz soportada, bloquear sólo la integración de ese
 host. No parchear `dist` ni simular éxito. Registrar lint/formatter existentes;
@@ -131,8 +178,21 @@ en la frontera existente. Módulo sugerido `plan.py` junto al reducer U3; ubicac
 final portable fijada por U6.0. Tests de comportamiento en `scripts/tests/` y
 fixtures bajo `scripts/tests/fixtures/metas/`.
 
+Definir `goal-task-binding.v1` como vínculo recuperable, no como segundo registro
+de tareas. Derivar la `TaskKey` nativa de `(goal_id, unit_id, plan_revision)`
+dentro del alcance del solicitante autenticado y guardar el digest del encargo.
+Repetir la clave con otro contenido da conflicto. Tras una caída entre `submit`
+y guardar el vínculo, repetir `submit` recupera el mismo `task_id`. Sólo un
+recibo o consulta nativos actualizan `root_id` y `generation`. Un cambio de plan
+crea otra clave de revisión sin borrar el vínculo anterior ni reiniciar el
+presupuesto de la raíz vigente.
+
 Probar plan aportado y meta natural, cobertura semántica, DAG válido, ciclo,
 referencia inexistente, criterio omitido, IDs repetidos y revisión desactualizada.
+Probar también `submit` repetido, conflicto de contenido, caída entre recibo y
+vínculo, versión de vínculo desconocida y resultado tardío de otra revisión.
+Una migración de versión conserva los vínculos y recibos anteriores. El DAG y
+la cobertura pertenecen a U6; el estado del encargo se consulta a la base nativa.
 Ninguna entrada inválida lanza procesos. Resultado visible: unidades y criterios
 del encargo, con dependencias y supuestos consultables.
 
@@ -146,6 +206,9 @@ la allowlist global. U6.0 fija los archivos exactos y sus repos antes de editar.
 Probar por CLI admitida y rol, en `start` y `resume`, una operación autorizada
 que normalmente solicite permiso. Registrar versión, política efectiva y cero
 consultas; los nombres `acceptEdits`, `workspace-write` o `yolo` no son evidencia.
+Comprobar que la autoridad autenticada de la meta se reduce al alcance de cada
+`submit` y `resolve` nativos. Una revocación entre selección de unidad y
+admisión impide efectos; la revisión de permisos no se delega al texto del plan.
 Probar autoridad caducada, revocada, host/PR incorrecto y política de SHA literal
 frente a selección autorizada de SHA futuro. Verificar con un doble de CLI la
 negativa de acciones ajenas; no habilitar permisos globales para probar el rechazo.
@@ -158,12 +221,20 @@ lo ajeno queda bloqueado con motivo y no detiene unidades independientes.
 Extender reducer/reconciliación de 14.5 y supervisor 17.4. Los archivos previstos
 por U3 son `scripts/mac/corrida_worker/{state,reconcile}.py` y la frontera
 `corrida-worker.py`; U6.0 debe resolverlos al código portable real, no duplicarlos.
-Admitir sólo unidades con dependencias verificadas; persistir selección/intención
-con la concurrencia y revisiones existentes antes de lanzar. Una respuesta tardía
-de otro intento se reconcilia sin sobrescribir el actual.
+Admitir sólo unidades con dependencias verificadas. Persistir la decisión de
+elegibilidad y el vínculo versionado; enviar el encargo por la admisión nativa
+certificada con clave estable y consultar su recibo antes de afirmar que empezó.
+Consumir cada resultado mediante `resolve`, que guarda el recibo y los hijos
+atómicamente. La selección U6 conserva el DAG y la revisión; la base nativa
+conserva cola, resultado, manejo y presupuesto. Una respuesta tardía de otro
+intento se reconcilia sin sobrescribir la revisión vigente.
 
 Probar caída antes/después de cerrar una unidad y antes/después de lanzar la
 siguiente, dos reconciliadores concurrentes, evento repetido y cambio de plan.
+Exigir un solo `task_id` por vínculo, un solo consumo lógico por recibo y ninguna
+admisión nueva por ACK perdido. Dos unidades paralelas comparten la misma raíz
+y su presupuesto restante; la revisión nueva no permite crear otra raíz para
+eludir el límite.
 Con dos ramas independientes, la espera de CI de una no bloquea la otra. Un fallo
 corregible vuelve al ciclo de calidad vigente. No resetear presupuesto al reiniciar.
 Resultado visible: la siguiente tarea empieza sin mensaje de David después del
@@ -175,11 +246,22 @@ Extender el control de meta en las entradas autenticadas OpenClaw/Hermes y el
 registro existente. Reutilizar `stop/inspect/resume` de adaptadores U3, comprobando
 identidad del proceso. Sin botones nuevos en el panel ni rutas HTTP de shell.
 
+Persistir la intención de pausa o cancelación antes del ACK y aplicarla a cada
+tarea nativa vinculada. Cercar una admisión que aún no cruzó su frontera de
+efecto; si ya la cruzó, conservar su identidad y conciliar resultado y cierre.
+La reanudación de una pausa verifica de nuevo autoridad, revisión, generación,
+recibos pendientes y presupuesto. Continúa bajo el mismo `root_id` y sus
+reservas; no crea otro árbol ni repite un efecto incierto. La cancelación ordena
+al runtime nativo impedir continuaciones de la generación cancelada y conserva
+los resultados tardíos para consulta.
+
 Probar pausa/cancelación concurrentes con despacho, caída antes de la respuesta,
 repetición de la orden, evento tardío y reinicio. Tras persistir el control no se
 admiten nuevas acciones; las ya iniciadas se observan/reconcilian. Sólo una orden
 válida reanuda una pausa; cancelar no revive por fallback. Resultado visible:
 «pausada» o «cancelada» permanece tras reiniciar y conserva el resultado parcial.
+La prueba de reanudación compara `root_id`, reservas consumidas y presupuesto
+restante antes y después; una identidad de ejecutor incierta mantiene el bloqueo.
 
 ### U6.5 — Cierre integrado y proyección
 
@@ -187,6 +269,14 @@ Extender cierre U2/U3 y resumen/proyección de U4. El tablero y Telegram consume
 el mismo resultado agregado redactado; se conserva el literal legacy
 `runbook-progress.v1` hasta una migración específica. Un plan vacío no cumple
 una meta; cualquier caso sin trabajo exige prueba explícita del resultado pedido.
+
+U6 es propietario del DAG, los criterios, la revisión vigente y el veredicto
+agregado. Cada criterio apunta al recibo nativo y a la evidencia del artefacto
+vigente; una tarea en `registered`, `admitted`, `pending-handling` o
+`NeedsReconciliation` no cuenta como aceptada. El cierre exige el consumo nativo
+de todos los resultados requeridos y una comprobación integrada de la meta.
+El porcentaje usa el conjunto de criterios vigente con trazabilidad a los
+originales; reparar o retirar una unidad no borra una obligación.
 
 Probar evidencia vieja, pruebas rojas, autodeclaración `LISTO`, criterio eliminado,
 artefacto cambiado tras verificación y reversa exitosa de una meta incumplida.
@@ -208,26 +298,36 @@ La aceptación cubre los doce escenarios siguientes. OpenClaw requiere U4; Herme
 requiere además U5 y corre con OpenClaw inaccesible. Mantener recibos separados
 `docs/evidence/u6-aceptacion-openclaw.md` y `u6-aceptacion-hermes.md`. Si sólo uno
 pasa, se declara cobertura parcial y U6 permanece pendiente de cierre bilateral.
+Cada recibo incluye la versión efectiva del vínculo fijado en U6.1, las
+identidades de raíz y tareas, la generación efectiva, el presupuesto restante y
+el recibo de la base nativa adoptada en ese host. El ensayo de Hermes usa su
+propio registro, cola,
+credenciales y ejecutores con OpenClaw inaccesible; no presenta un proxy al
+gateway de OpenClaw como independencia.
 
 ## Aceptación integral
 
 1. Plan importado y meta natural producen unidades que cubren el encargo original.
 2. Ciclo, referencia ausente y criterio sin cobertura se rechazan antes de lanzar.
-3. Dependientes esperan verificación; otra rama avanza mientras la primera espera CI.
+3. Dependientes esperan verificación; otra rama avanza mientras la primera espera
+   CI. Ambas conservan una raíz y presupuesto común por meta.
 4. Finaliza el turno del director y continúa el plan sin una nueva orden del dueño.
 5. Un test falla, se corrige y se acredita el resultado actual antes de avanzar.
-6. Caída entre unidades y evento duplicado convergen sin otro escritor ni nuevo reloj.
+6. Una caída entre `submit` y vínculo recupera el mismo `task_id`. Caída entre
+   unidades y evento duplicado convergen sin otro escritor ni nuevo reloj.
 7. Efecto sin recibo se consulta: si ya ocurrió no se repite; si es incierto no se
    declara éxito ni se repite a ciegas. Reutilizar la reconciliación U3/U4.
 8. Operaciones autorizadas no preguntan en inicio/reanudación; las ajenas no se
    ejecutan. Una política revocada o agotada sigue así después de reiniciar.
-9. Pausa/cancelación persisten; respuesta perdida y eventos tardíos no reviven trabajo.
+9. Pausa/cancelación cercan admisión y efectos nativos; respuesta perdida y
+   eventos tardíos no reviven trabajo. Reanudar conserva raíz, reservas y presupuesto.
 10. Borrar criterio, reciclar evidencia, decir `LISTO` o completar rollback no produce
     cumplimiento ficticio; modificar el artefacto invalida los criterios afectados.
 11. El mismo bloqueante reproducible en dos rondas detiene ese bloque sin merge;
     el bloqueo queda visible y no se convierte en un pendiente para cerrar falsamente.
-12. Todos los criterios vigentes y aceptación integrada permiten cerrar, con un
-    recibo por host y evidencia del otro runtime inaccesible en la prueba de independencia.
+12. Todos los criterios vigentes y aceptación integrada permiten cerrar tras
+    consumir sus resultados nativos, con un recibo por host y evidencia del otro
+    runtime inaccesible en la prueba de independencia.
 
 ## Entrega, verificaciones y autoridad
 
