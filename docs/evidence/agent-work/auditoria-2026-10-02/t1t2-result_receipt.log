@@ -1,0 +1,27 @@
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "9f99e2264c012dd4cf5bd9dbac10bc7e534ffc05"}
+[vitest-workers] local cache hit after 1832ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared fae8824a3f4c in 1865ms (16692 inputs, 17249 outputs)
+[test] starting test/vitest/vitest.infra.config.ts
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.1 [39m[90m/Users/dn/dev/openclaw-agent-work-integration[39m
+
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22mdoes not commit a tool-issued task after its turn authority is revoked
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22mrejects model-authored assignment fields outside the task contract
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22mdeduplicates a logical key within one requester across turns and restarts
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22maccepts only the current producer, generation, digest, and revision[33m 469[2mms[22m[39m
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22mupgrades a version 19 database before the first managed task
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22mdoes not store malformed JSON or a result without its required fields[33m 397[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22mrejects an empty or unversioned review while leaving the final slot available[33m 757[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22mpersists PermissionRequired as an incident without consuming the final result[33m 739[2mms[22m[39m
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22mdeduplicates director retries within a corrida without crossing corrida authority
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m4 passed[39m[22m[2m | [22m[33m5 skipped[39m[90m (9)[39m
+[2m   Start at [22m 21:55:51
+[2m   Duration [22m 4.09s[2m (tests 61%, transform 23%, import 11%, setup 5%)[22m
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 7.19s
+EXIT=0

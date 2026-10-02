@@ -1,0 +1,29 @@
+== rerun admission_restart ==
+G_HEAD=f734f2a3351dd4540ee57381e5a7bc151a27c177
+R_HEAD=9f99e2264c012dd4cf5bd9dbac10bc7e534ffc05
+UTC=2026-10-02T05:20:08Z
+$ bash scripts/agent-work/test-runtime.sh admission_restart
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "9f99e2264c012dd4cf5bd9dbac10bc7e534ffc05"}
+[vitest-workers] local cache hit after 1794ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 5820e56e7a08 in 1825ms (16692 inputs, 17249 outputs)
+[test] starting test/vitest/vitest.infra.config.ts
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.1 [39m[90m/Users/dn/dev/openclaw-agent-work-integration[39m
+
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.admission.test.ts[2m > [22mmanaged task admission_restart[2m > [22mrejects an invented budget reservation before claiming a native run[33m 385[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.admission.test.ts[2m > [22mmanaged task admission_restart[2m > [22mlets one emitter claim, keeps a crash uncertain, and recovers the exact native run[33m 1496[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.admission.test.ts[2m > [22mmanaged task admission_restart[2m > [22mrejects revoked authority before claiming and fences a delayed prior request[33m 374[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.admission.test.ts[2m > [22mmanaged task admission_restart[2m > [22mrechecks authority inside the worker before persisting a claim[33m 376[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.admission.test.ts[2m > [22mmanaged task admission_restart[2m > [22mrefuses admission after cancellation and cannot confirm an outstanding claim[32m 61[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.admission.test.ts[2m > [22mmanaged task admission_restart[2m > [22mupgrades a version 20 task ledger without losing its registered tasks[32m 128[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m6 passed[39m[22m[90m (6)[39m
+[2m   Start at [22m 22:20:11
+[2m   Duration [22m 4.56s[2m (tests 65%, transform 21%, import 10%, setup 4%)[22m
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 7.61s
+EXIT=0

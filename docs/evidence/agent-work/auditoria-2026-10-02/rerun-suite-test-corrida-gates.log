@@ -1,0 +1,16 @@
+== rerun suite test-corrida-gates ==
+G_HEAD=f734f2a3351dd4540ee57381e5a7bc151a27c177
+UTC=2026-10-02T05:35:18Z
+$ bash scripts/tests/test-corrida-gates.sh
+ok (1): el doble del kit halla, revoca, ausenta y valida
+ok (2): los 31 fixtures dan su veredicto y codigo
+ok (3): compuerta.sh decide, registra y proyecta en 27 casos
+ok (4): accion y evidencia rotas mueren; sin kit no hay merge
+ok (5): cinco mutantes caen
+ok (6): ALLOW sin veredicto grabado no sale 0
+ok (7): compuerta_leer_pr relee los checks del head en cada lectura
+ok (7b): el rollup real de 193 da success (SKIPPED y StatusContext incluidos)
+ok (7c): StatusContext FAILURE da failure
+ok (8): kit apagado por declaracion: CI y revisor del head deciden; sin declarar sigue sin merge
+TODO VERDE: corrida-gates
+EXIT=0

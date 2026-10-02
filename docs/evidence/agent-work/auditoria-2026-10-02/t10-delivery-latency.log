@@ -1,0 +1,8 @@
+{"reported": 1, "transferred": 0}
+DELIVERY_LATENCY {"detection_to_persisted_receipt_s": 0.25, "write_to_detection_s": 4.999}
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.007s
+
+OK
+EXIT=0

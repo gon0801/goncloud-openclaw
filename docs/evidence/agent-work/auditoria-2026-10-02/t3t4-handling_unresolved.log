@@ -1,0 +1,30 @@
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "9f99e2264c012dd4cf5bd9dbac10bc7e534ffc05"}
+[vitest-workers] local cache hit after 1897ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared b474a37d5179 in 1930ms (16692 inputs, 17249 outputs)
+[test] starting test/vitest/vitest.infra.config.ts
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.1 [39m[90m/Users/dn/dev/openclaw-agent-work-integration[39m
+
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mkeeps a pending result and cancellation untouched when tool authority is revoked
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mrejects extra children atomically when the root child budget is exhausted
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mkeeps the root depth limit when a child returns a result
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mshares concurrent admission capacity across children of a finished parent
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mcommits one decision, child, and receipt and recovers them after a lost ACK
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mrolls back the whole decision when one child is invalid
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mkeeps a result pending across agent_end and cancels without replaying late output[33m 826[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22marchives a result received after cancellation without creating a continuation[33m 460[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mserializes cancellation against a competing continuation and preserves the result[33m 425[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mpreserves an uncertain external effect without replaying a child after restart[33m 752[2mms[22m[39m
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mpropagates cancellation to children committed before the parent was cancelled
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mupgrades a version 22 database before resolving its first result
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m4 passed[39m[22m[2m | [22m[33m8 skipped[39m[90m (12)[39m
+[2m   Start at [22m 22:03:25
+[2m   Duration [22m 4.26s[2m (tests 61%, transform 23%, import 12%, setup 5%)[22m
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 7.44s
+EXIT=0

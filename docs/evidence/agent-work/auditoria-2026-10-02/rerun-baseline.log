@@ -1,0 +1,61 @@
+== rerun baseline ==
+G_HEAD=f734f2a3351dd4540ee57381e5a7bc151a27c177
+R_HEAD=9f99e2264c012dd4cf5bd9dbac10bc7e534ffc05
+UTC=2026-10-02T05:20:50Z
+$ bash scripts/agent-work/test-runtime.sh baseline
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "9f99e2264c012dd4cf5bd9dbac10bc7e534ffc05"}
+[test] starting test/vitest/vitest.gateway.config.ts
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.1 [39m[90m/Users/dn/dev/openclaw-agent-work-integration[39m
+
+[vitest-workers] local cache hit after 1844ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared a93611b7709d in 1877ms (16692 inputs, 17249 outputs)
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mloses an accepted request replay after gateway lifecycle restart[32m 7[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mwaits for replayable ok after execution ends (active)[32m 4[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mwaits for replayable ok after execution ends (retired)[32m 2[2mms[22m[39m
+ ✓  gateway-core  src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > waits for replayable ok after execution ends (sessionless) 2ms
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mwaits for replayable error after execution ends (active)[32m 2[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mwaits for replayable error after execution ends (retired)[32m 1[2mms[22m[39m
+ ✓  gateway-core  src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > waits for replayable error after execution ends (sessionless) 1ms
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mwaits for replayable timeout after execution ends (active)[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mwaits for replayable timeout after execution ends (retired)[32m 1[2mms[22m[39m
+ ✓  gateway-core  src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > waits for replayable timeout after execution ends (sessionless) 1ms
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mretires a sticky terminal only for an admitted new attempt: undefined[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mretires a sticky terminal only for an admitted new attempt: true[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mexpires terminal observations from their latest write without extending unrelated runs[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mkeeps visible queued waits available after the terminal observation expires[33m 330[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mkeeps a pending wait bound to its original registration after compaction[33m 492[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mkeeps a pending wait bound to its original registration after replacement[33m 471[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mretains chat input identity when terminal writers replace admission metadata[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22muses the agent abort entry to select the run observation[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22muses the chat abort entry to select the run observation[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mbinds queued observation to the queue entry selected after waiting[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mresolves concurrent undefined waiters when the terminal dedupe entry lands[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mresolves concurrent agent waiters when the terminal dedupe entry lands[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mresolves concurrent chat waiters when the terminal dedupe entry lands[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mretires only its scope's observer without ending the shared run[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mkeeps undefined observation timeout after 0 ms nonterminal[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mkeeps undefined observation timeout after 10 ms nonterminal[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mkeeps agent observation timeout after 0 ms nonterminal[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mkeeps agent observation timeout after 10 ms nonterminal[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mkeeps chat observation timeout after 0 ms nonterminal[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mkeeps chat observation timeout after 10 ms nonterminal[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mattributes lifecycle reset without caching a terminal run outcome[32m 28[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mmerges late completion across agent and chat observations[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mmerges late restart cancellation across agent and chat observations[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mmerges earlier user cancellation across agent and chat observations[32m 1[2mms[22m[39m
+ ✓  gateway-core  src/gateway/agent-turn/agent-wait-dedupe.test.ts > agent.wait gateway dedupe observations > merges earlier writer supersession across agent and chat observations 1ms
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mkeeps terminal evidence when sticky status arrives lifecycle-first[32m 1[2mms[22m[39m
+ [32m✓[39m [30m[42m gateway-core [49m[39m src/gateway/agent-turn/agent-wait-dedupe.test.ts[2m > [22magent.wait gateway dedupe observations[2m > [22mkeeps terminal evidence when sticky status arrives dedupe-first[32m 1[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m37 passed[39m[22m[90m (37)[39m
+[2m   Start at [22m 22:20:51
+[2m   Duration [22m 7.91s[2m (transform 59%, import 20%, tests 18%, worker 2%, setup 1%)[22m
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 9.31s
+{"duplicateAdmitted": true, "first": {"runId": "agent-work-t0-stable", "status": "started"}, "firstOutcome": "ok", "markedProviderCallsAfterRestart": 3, "markedProviderCallsBeforeRestart": 2, "second": {"runId": "agent-work-t0-stable", "status": "started"}, "secondOutcome": "ok", "sessionKey": "agent:main:dashboard:78905fb2-5db0-45e7-a6d2-97584c51d161", "source": "/Users/dn/dev/openclaw-agent-work-integration"}
+EXIT=0

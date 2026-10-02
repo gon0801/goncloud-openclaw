@@ -27,7 +27,7 @@ ensayo `bash scripts/tests/test-agent-work-e2e.sh cli_gateway`, ejecutado con
 `AGENT_WORK_RUNTIME_SOURCE=/Users/dn/dev/openclaw-agent-work-integration`.
 Pasó 1/1: `submit=1 admit=1 delivery=1 report=1 blocked=1`. El replay no
 duplicó entrega y el cierre conservó la sesión adoptada. Los archivos del
-consumidor y del E2E integrado son idénticos a los probados en G `270b2faa`.
+consumidor y del E2E integrado son idénticos a los probados en G `3d377ed` (equivalente integrado de `270b2faa`, que vive solo en `feat/agent-work-t9-e2e`).
 La integración conservó además `prove_absent` en el doble de la regresión de
 propiedad; esa prueba pasó otra vez tras resolver el conflicto. No quedaron
 procesos propios del Gateway de ensayo ni del ejecutor E2E.
