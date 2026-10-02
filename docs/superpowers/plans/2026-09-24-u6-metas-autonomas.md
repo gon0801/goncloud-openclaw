@@ -87,18 +87,21 @@ U4 disponible; no se crean identidades o contadores paralelos.
 El vínculo versionado propuesto `goal-task-binding.v1` relaciona la clave estable
 `(goal_id, unit_id, plan_revision)` con `(task_id, root_id, generation)` y la
 identidad del runtime y host propietarios. U6.1 fija su esquema y migración;
-al implementarlo, se registra antes de intentar la admisión. Repetir la misma
-clave y contenido recupera el vínculo; otro contenido da conflicto. El vínculo
-conserva revisiones y generaciones anteriores
-para conciliar resultados tardíos, pero sólo la revisión vigente puede acreditar un
-criterio vigente. `task_id`, `root_id`, generación, estado, resultado y reserva
+al implementarlo, se registra la intención antes de pedir al runtime nativo la
+operación correspondiente. La meta obtiene una sola raíz mediante `submit`;
+cada unidad se admite como hijo o continuación nativa de esa raíz. Un reintento
+consulta o repite esa operación por su identidad nativa estable y concilia el
+recibo antes de crear otro trabajo. El vínculo conserva revisiones y generaciones
+anteriores para conciliar resultados tardíos, pero sólo la revisión vigente puede
+acreditar un criterio vigente. `task_id`, `root_id`, generación, estado, resultado y reserva
 se leen de la base nativa. El vínculo no es otra cola ni permite inferir que
 una unidad empezó por el solo hecho de estar registrada.
 
 Una meta con unidades independientes necesita una raíz nativa común. U6.0
-comprueba que el contrato del host permite agruparlas bajo esa raíz sin
-serializarlas. Si falta, se amplía la base en su repositorio dueño y se prueba
-antes de habilitar U6.3; U6 no fabrica raíces o reservas equivalentes.
+comprueba que el contrato del host permite crear hijos o continuaciones bajo esa
+raíz sin serializarlos y recuperar cada operación tras una caída. Si falta, se
+amplía la API nativa en su repositorio dueño y se prueba antes de ejecutar U6.3
+en ese host; U6 no fabrica raíces, reservas ni una admisión paralela.
 
 Antes de ejecutar se rechazan ciclos, dependencias desconocidas, unidades sin
 criterios y criterios obligatorios sin cobertura. Para una meta en lenguaje natural,
@@ -152,11 +155,13 @@ prueba y recibo o `unknown`. Archivos propuestos de evidencia:
 
 Por host, inventariar la versión y el recibo de adopción de la base nativa de
 encargos, sus operaciones autenticadas `submit`, `inspect`, `resolve` y `cancel`,
-la admisión real de cada ruta, el presupuesto de raíz y el cierre de ejecutores.
+la API de hijos o continuaciones con recuperación idempotente, la admisión real
+de cada ruta, el presupuesto de raíz y el cierre de ejecutores.
 Registrar qué rutas certificadas aceptan una unidad U6 y cuáles siguen
-deshabilitadas. Si falta una operación, U6.1 puede fijar el contrato, pero U6.3
-puede codificarse y probarse de forma aislada; su ejecución viva en ese host
-espera la adopción de la ruta nativa correspondiente.
+deshabilitadas. U6.1 puede proponer la extensión de una operación ausente; U6.3
+puede codificarse y probarse de forma aislada contra la API nativa integrada y
+verificada. Su ejecución viva espera el recibo de adopción de las rutas usadas
+en ese host.
 Comprobar también la raíz común y el presupuesto compartido de dos unidades
 independientes; una carencia queda en el dueño de la base nativa.
 
@@ -179,18 +184,24 @@ final portable fijada por U6.0. Tests de comportamiento en `scripts/tests/` y
 fixtures bajo `scripts/tests/fixtures/metas/`.
 
 Definir `goal-task-binding.v1` como vínculo recuperable, no como segundo registro
-de tareas. Derivar la `TaskKey` nativa de `(goal_id, unit_id, plan_revision)`
-dentro del alcance del solicitante autenticado y guardar el digest del encargo.
-Repetir la clave con otro contenido da conflicto. Tras una caída entre `submit`
-y guardar el vínculo, repetir `submit` recupera el mismo `task_id`. Sólo un
-recibo o consulta nativos actualizan `root_id` y `generation`. Un cambio de plan
-crea otra clave de revisión sin borrar el vínculo anterior ni reiniciar el
-presupuesto de la raíz vigente.
+de tareas. Definir una identidad estable para el `submit` de la meta y otra para
+la operación nativa de cada unidad bajo la misma raíz, con alcance autenticado y
+digest del encargo. Registrar el vínculo de la meta con su raíz y los vínculos
+de cada unidad con su tarea. U6.1 verifica qué identidades de reintento ofrece la API;
+si no admite hijos o continuaciones recuperables, especifica su extensión en el
+dueño nativo antes de depender de ella. No presupone que el caller pueda fijar
+una `TaskKey` ni llama `submit` por unidad. Tras una caída entre operación nativa
+y vínculo, consultar o repetir esa misma operación recupera el `task_id` previo;
+el mismo identificador con otro contenido da conflicto. Sólo un recibo o
+consulta nativos actualizan `root_id` y `generation`. Un cambio de plan crea
+otra revisión sin borrar el vínculo anterior ni reiniciar el presupuesto de la
+raíz vigente.
 
 Probar plan aportado y meta natural, cobertura semántica, DAG válido, ciclo,
 referencia inexistente, criterio omitido, IDs repetidos y revisión desactualizada.
-Probar también `submit` repetido, conflicto de contenido, caída entre recibo y
-vínculo, versión de vínculo desconocida y resultado tardío de otra revisión.
+Probar también `submit` repetido de la raíz, reintento de hijo o continuación,
+conflicto de contenido, caída entre cada recibo nativo y su vínculo, versión de
+vínculo desconocida y resultado tardío de otra revisión.
 Una migración de versión conserva los vínculos y recibos anteriores. El DAG y
 la cobertura pertenecen a U6; el estado del encargo se consulta a la base nativa.
 Ninguna entrada inválida lanza procesos. Resultado visible: unidades y criterios
@@ -206,9 +217,10 @@ la allowlist global. U6.0 fija los archivos exactos y sus repos antes de editar.
 Probar por CLI admitida y rol, en `start` y `resume`, una operación autorizada
 que normalmente solicite permiso. Registrar versión, política efectiva y cero
 consultas; los nombres `acceptEdits`, `workspace-write` o `yolo` no son evidencia.
-Comprobar que la autoridad autenticada de la meta se reduce al alcance de cada
-`submit` y `resolve` nativos. Una revocación entre selección de unidad y
-admisión impide efectos; la revisión de permisos no se delega al texto del plan.
+Comprobar que la autoridad autenticada de la meta se reduce al alcance del
+`submit` de raíz y de cada admisión de hijo, continuación y `resolve` nativos.
+Una revocación entre selección de unidad y admisión impide efectos; la revisión
+de permisos no se delega al texto del plan.
 Probar autoridad caducada, revocada, host/PR incorrecto y política de SHA literal
 frente a selección autorizada de SHA futuro. Verificar con un doble de CLI la
 negativa de acciones ajenas; no habilitar permisos globales para probar el rechazo.
@@ -222,8 +234,10 @@ Extender reducer/reconciliación de 14.5 y supervisor 17.4. Los archivos previst
 por U3 son `scripts/mac/corrida_worker/{state,reconcile}.py` y la frontera
 `corrida-worker.py`; U6.0 debe resolverlos al código portable real, no duplicarlos.
 Admitir sólo unidades con dependencias verificadas. Persistir la decisión de
-elegibilidad y el vínculo versionado; enviar el encargo por la admisión nativa
-certificada con clave estable y consultar su recibo antes de afirmar que empezó.
+elegibilidad y la intención del vínculo versionado; crear la raíz nativa una vez
+por meta y enviar cada unidad como hijo o continuación por una ruta certificada
+de esa raíz. Conciliar el recibo de la operación nativa antes de afirmar que
+empezó; un ACK perdido se recupera por la identidad de esa operación.
 Consumir cada resultado mediante `resolve`, que guarda el recibo y los hijos
 atómicamente. La selección U6 conserva el DAG y la revisión; la base nativa
 conserva cola, resultado, manejo y presupuesto. Una respuesta tardía de otro
@@ -313,8 +327,9 @@ gateway de OpenClaw como independencia.
    CI. Ambas conservan una raíz y presupuesto común por meta.
 4. Finaliza el turno del director y continúa el plan sin una nueva orden del dueño.
 5. Un test falla, se corrige y se acredita el resultado actual antes de avanzar.
-6. Una caída entre `submit` y vínculo recupera el mismo `task_id`. Caída entre
-   unidades y evento duplicado convergen sin otro escritor ni nuevo reloj.
+6. Una caída entre `submit` de raíz o admisión nativa de unidad y su vínculo
+   recupera el mismo `task_id`. Caída entre unidades y evento duplicado
+   convergen sin otro escritor, nueva raíz ni nuevo reloj.
 7. Efecto sin recibo se consulta: si ya ocurrió no se repite; si es incierto no se
    declara éxito ni se repite a ciegas. Reutilizar la reconciliación U3/U4.
 8. Operaciones autorizadas no preguntan en inicio/reanudación; las ajenas no se
