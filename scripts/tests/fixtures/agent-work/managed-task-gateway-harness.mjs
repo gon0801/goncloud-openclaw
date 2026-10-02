@@ -66,6 +66,14 @@ async function execute(command) {
         continuation: { kind: "director", corridaId: caller.corridaId },
       },
     });
+    if (command.budgetProfile) {
+      const budget = await load("src/agents/tasks/managed-task.budget.store.ts");
+      await budget.createManagedTaskBudget({
+        caller,
+        rootTaskId: task.taskId,
+        profile: command.budgetProfile,
+      });
+    }
     const result = await store.reportManagedTaskResult({
       capability: task.producerCapability,
       result: {

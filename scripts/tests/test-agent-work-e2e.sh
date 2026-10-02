@@ -10,15 +10,27 @@ run_delivery_latency() {
     ProjectionTransferTest.test_delivery_latency_acceptance_records_both_legs
 }
 
+run_review_tail_restart() {
+  python3 scripts/tests/test_agent_work_review_tail_restart.py
+}
+
 case "${1:-all}" in
   all)
     run_delivery_latency
+    run_review_tail_restart
     ;;
   delivery_latency)
     run_delivery_latency
     ;;
+  review_tail_restart)
+    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
+      echo "review_tail_restart requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
+      exit 2
+    fi
+    run_review_tail_restart
+    ;;
   *)
-    echo "casos disponibles: delivery_latency" >&2
+    echo "casos disponibles: delivery_latency, review_tail_restart" >&2
     exit 2
     ;;
 esac
