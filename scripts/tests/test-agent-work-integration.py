@@ -558,21 +558,47 @@ class ProjectionTransferTest(unittest.TestCase):
 
     def test_delivery_latency_acceptance_records_both_legs(self):
         _, key, _, result, _ = self.registered_host()
-        stop = threading.Event()
         times = {}
+        result_path = self.root / "host" / "inbox" / (operation_id(key) + ".json")
+
+        class ControlledClock:
+            now = 0.0
+            stopped = False
+            published = False
+
+            def is_set(self):
+                return self.stopped
+
+            def set(self):
+                self.stopped = True
+
+            def wait(self, interval):
+                if not self.published:
+                    self.now += 0.001
+                    atomic_json(result_path, result)
+                    times["written"] = self.now
+                    self.published = True
+                    self.now += interval - 0.001
+                else:
+                    self.now += interval
+                if self.now >= 15:
+                    self.set()
+
+        clock = ControlledClock()
 
         class TimedHost(Host):
             def report(self, host_id, value):
-                times.setdefault("detected", time.monotonic())
+                times.setdefault("detected", clock.now)
                 return super().report(host_id, value)
 
         host = TimedHost("host-one", self.root / "host")
         persist_receipt = host.spool.acknowledge
 
         def timed_acknowledge(operation_id, receipt):
+            clock.now += float(os.environ.get("AGENT_WORK_TEST_ACK_DELAY_SECONDS", "0"))
             persist_receipt(operation_id, receipt)
-            times["receipt_persisted"] = time.monotonic()
-            stop.set()
+            times["receipt_persisted"] = clock.now
+            clock.set()
 
         host.spool.acknowledge = timed_acknowledge
 
@@ -580,6 +606,7 @@ class ProjectionTransferTest(unittest.TestCase):
             host_id = "host-one"
 
             def report_host_result(self, value, artifact):
+                clock.now += 0.25
                 return {field: value[field] for field in
                         ("hostId", "taskId", "generation", "instanceId", "producerId")} | {
                     "resultId": hashlib.sha256(canonical(value).encode()).hexdigest(),
@@ -589,28 +616,12 @@ class ProjectionTransferTest(unittest.TestCase):
             def list_pending(self, after_task_id=None, limit=100):
                 return []
 
-        result_path = self.root / "host" / "inbox" / (operation_id(key) + ".json")
-
-        def publish():
-            atomic_json(result_path, result)
-            times["written"] = time.monotonic()
-
-        writer = threading.Timer(0.1, publish)
-        deadline = threading.Timer(30, stop.set)
-        writer.start()
-        deadline.start()
-        try:
-            native_gateway.watch_pump(
-                Client(), host=host,
-                evidence_root=self.evidence_root, progress_state_dir=self.state_dir,
-                progress_client=ROOT / "scripts" / "mac" / "progress-events.py",
-                stop_event=stop, interval=0.05,
-            )
-        finally:
-            stop.set()
-            writer.join()
-            deadline.cancel()
-            deadline.join()
+        native_gateway.watch_pump(
+            Client(), host=host,
+            evidence_root=self.evidence_root, progress_state_dir=self.state_dir,
+            progress_client=ROOT / "scripts" / "mac" / "progress-events.py",
+            stop_event=clock, interval=5.0,
+        )
         self.assertIsNotNone(host.receipt("host-one", key),
                              "receipt must persist durably before timing assertions")
         write_to_detection = times["detected"] - times["written"]

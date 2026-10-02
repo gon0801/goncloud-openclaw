@@ -10,8 +10,10 @@ Ruta real `watch_pump` → `pump_once` → `Host.flush` → `Spool` (`native_gat
 `host.py`, `spool.py`), sin cambios de producción. La escritura durable es
 `atomic_json` al inbox del host (fsync de archivo y directorio); la detección es la
 primera llamada a `Host.report` desde el bucle del pump; el recibo durable es el commit
-de `Spool.acknowledge` en `host.sqlite`. El cliente nativo es un falso en proceso
-(respuesta inmediata = red sana); el pump corre con `interval=0.05`.
+de `Spool.acknowledge` en `host.sqlite`. Un reloj simulado controla el
+intervalo de sondeo de 5 s y una respuesta nativa de 0,25 s; el cliente nativo
+es un falso en proceso. El informe aparece 0,001 s después del primer sondeo,
+para medir el peor caso del siguiente ciclo sin esperar tiempo real.
 
 Comando: `bash scripts/tests/test-agent-work-e2e.sh delivery_latency`
 (prueba: `ProjectionTransferTest.test_delivery_latency_acceptance_records_both_legs`
@@ -19,31 +21,31 @@ en `scripts/tests/test-agent-work-integration.py`).
 
 ## Mediciones (misma corrida verde, por separado)
 
-- escritura durable → detección: **0.005 s** (límite 5 s)
-- detección → recibo persistido: **0.003 s** (límite 5 s)
+- escritura durable → detección: **4,999 s simulados** (límite 5 s)
+- detección → recibo persistido: **0,25 s simulados** (límite 5 s)
 
 La prueba imprime ambas en una línea `DELIVERY_LATENCY {...}` y además verifica que el
 recibo quedó persistido de forma durable (`Host.receipt` no nulo) antes de medir.
 
 ## Discriminación rojo → verde
 
-Rojo: se añadió localmente `time.sleep(6)` al inicio de `Spool.acknowledge`
-(producción, sin commitear) para demorar la persistencia del recibo. La prueba falló
-solo en el tramo dos: `detection_to_persisted_receipt_s: 6.008` > 5 mientras
-`write_to_detection_s: 0.004` siguió en verde — los dos tramos se miden por separado.
-Log completo: `T10-delivery-latency-red.log`. Se restauró `spool.py`
-(`git checkout`, diff de producción limpio) y la prueba volvió a verde.
+Rojo reproducible: `AGENT_WORK_TEST_ACK_DELAY_SECONDS=6 bash
+scripts/tests/test-agent-work-e2e.sh delivery_latency` adelanta el reloj simulado
+seis segundos antes de persistir el recibo. La prueba falla solo en el tramo dos:
+`detection_to_persisted_receipt_s: 6.25` > 5 mientras
+`write_to_detection_s: 4.999` sigue en verde. El comando sale con código 1;
+`T10-delivery-latency-red.log` guarda la salida. Sin esa variable, vuelve a verde.
 
 Batería focalizada: `ProjectionTransferTest` completa, 23/23 en verde.
 
 ## Limitación precisa
 
 La sondeada instalada NO está probada: la aceptación conduce `watch_pump` en proceso
-con `interval=0.05` y un cliente nativo falso. No ejercita el vigilante instalado
+con un reloj simulado y un cliente nativo falso. No ejercita el vigilante instalado
 (launchd/systemd con el intervalo por defecto de 1.0 s), el transporte real
 `openclaw gateway call` ni el runtime R real; los límites de 5 s valen para la ruta de
 código bajo host despierto y red sana simulados. El tramo de detección está acotado
-estructuralmente por el intervalo de sondeo (`watch_pump` exige `interval <= 5`), pero
+por el intervalo de sondeo (`watch_pump` exige `interval <= 5`), pero
 el intervalo instalado real y el costo del transporte Gateway quedan fuera de esta
 prueba. SHA de G: el commit que introduce este archivo (hijo de `cecf243`). SHA de R:
 no aplica — el lado nativo está simulado por el cliente falso.
