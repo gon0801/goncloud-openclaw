@@ -10,6 +10,8 @@
 
 **Especificación:** [Encargos y continuaciones comunes](../specs/2026-09-30-encargos-agentes-design.md). Consulta las decisiones en [la comparación de arquitecturas](../specs/2026-09-30-encargos-agentes-rationale.md).
 
+**Compatibilidad posterior:** [revisión U3b–U6](../../evidence/agent-work/compatibility-u3b-u6.md). Antes de integrar otra fase que toque `corrida`, conserva un solo decisor, un solo reloj y las identidades/recibos nativos; la revisión identifica las fronteras que aún faltan.
+
 **Estado:** T0 comprobada; T1 y T2 tienen commits parciales. T1–T12 siguen abiertas. Sin medición viva ni despliegue.
 
 ## Conserva estas condiciones en todas las tareas
