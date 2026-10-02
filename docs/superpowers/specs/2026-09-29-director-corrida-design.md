@@ -6,6 +6,15 @@ ese mismo día. [Plan de trabajo](../plans/2026-09-29-director-corrida.md).
 [Tabla de transiciones, tipos y estado en disco](2026-09-29-director-corrida-transiciones.md).
 [Ledger](../../../Plans.md), Fase 20.
 
+Este diseño se integra sobre el [plan de encargos durables](../plans/2026-09-30-encargos-agentes.md).
+Su ruta gestionada exige la base T0–T10 comprobada para la entrada concreta, pero
+no exige T11–T12, despliegue total ni un ejecutor Hermes. El director conserva la
+decisión de ingeniería en `reconcile()`. El runtime nativo conserva el encargo, el
+resultado y su consumo; `task_handoffs.py` conecta ambas autoridades. Las entradas
+sin cobertura certificada conservan su ruta anterior hasta una adopción por
+generación. Este documento describe el objetivo integrado, no evidencia de que
+la ruta gestionada ya esté activa.
+
 ## Por qué hace falta un director
 
 `corrida.sh` ya tiene las piezas de una corrida: reserva de carril, selector,
@@ -96,7 +105,8 @@ el director como efecto de una transición.
 
 ### Tres sitios de llamada sin modelo
 
-El director corre en tres lugares. Ninguno usa un modelo.
+El director se invoca desde tres lugares. Sus decisiones por código no usan modelo;
+solo una excepción dirigida a su dueño puede iniciar un turno.
 
 1. `corrida/latido.sh`, al final de `latido_de`. El vigilante de la Mac corre el
    latido cada 300 segundos. Si el registro tiene `director.activo`, el latido
@@ -112,6 +122,11 @@ El director corre en tres lugares. Ninguno usa un modelo.
    el sistema. Va a la sesión corta `agent:main:dir-<id>` con un texto de 12
    líneas como máximo: qué pasó, dónde está el detalle y los comandos `decidir`
    que acepta, y termina en "Luego termina con NO_REPLY".
+
+Los puntos 2 y 3 describen entradas CLI anteriores. En una entrada gestionada,
+Stop, quietud y latido solo observan; un `report` válido despierta al solicitante
+autenticado por la cola nativa. La excepción se entrega a ese mismo dueño, sin
+crear una sesión supervisora `dir-<id>` ni un empujón con modelo por silencio.
 
 ## Forma
 
@@ -145,6 +160,12 @@ ejecuta con la disciplina de siempre: escribe `intent.*` bajo lock, hace el efec
 externo sin lock y escribe `observed.*`. Luego re-observa y repite, con un tope de
 8 pasadas. Un `intent` sin su `observed` nunca se repite.
 
+En la ruta gestionada, `task_handoffs.py` convierte el resultado tipado de la tarea
+en un efecto de ese mismo reconciliador. Conserva `intent.task_handling`, la
+decisión y el recibo de `resolve` bajo sus IDs; un ACK perdido recupera la misma
+decisión. `corrida` no crea otra bandeja ni guarda otra bandera autoritativa de
+consumo. El resultado del trabajador no autoriza merge ni despliegue.
+
 `observe.py` sale del heredoc de `reconciliar.sh` y observa solo lo que pide
 `sondas(fase_de_log)`. Mientras se implementa no se llama a `gh`. Durante CI no se
 lee la pantalla. `inspect` sí se produce en automático, hasta 4 por pasada y 10
@@ -152,24 +173,23 @@ segundos cada uno.
 
 ### Rondas de revisión y relevo del implementador
 
-Todo bloque, chico o grande, tiene hasta 5 rondas de revisión cruzada con el mismo
-implementador. Si la quinta sigue en CAMBIOS, el director releva al implementador a
-otro modelo por la ruta de `handoff_lane` que ya existe, y ese modelo tiene otras 5
-rondas. Si el segundo modelo tampoco llega a APROBADO, sale la excepción
-`RONDAS_AGOTADAS` para David.
+Todo bloque, chico o grande, aplica la regla vigente de quality-kit. Agrupa los
+hallazgos y corrígelos en una ronda. Solo un bloqueante reproducible abre otra;
+esa ronda revisa el diff de la corrección y usa otro revisor. Si el mismo
+bloqueante aparece en dos rondas seguidas, el director detiene el bloque con
+`BLOQUEANTE_REPETIDO` y espera la decisión del operador. Un hallazgo no bloqueante
+no abre otra ronda. El relevo de implementador por cuota o fallo sigue disponible,
+pero no omite ese paro.
 
 El revisor siempre es de un harness distinto al del implementador vigente. El
 selector ya tiene el filtro `denied_harnesses` en `selector.py`, que nadie llenaba.
 Si el relevo trae un implementador del mismo harness que el revisor, el director
 también cambia al revisor.
 
-El veredicto usa claves de bloqueante (`B1`, `B2`). Desde la ronda 2 el revisor
-marca cada clave previa como `RESUELTO` o `PERSISTE`. Un bloqueante que persiste ya
-no detiene el trabajo. Se cuenta dentro de las rondas, va literal en el siguiente
-encargo y queda en el detalle si la excepción llega a David. Para las corridas del
-director, esta decisión de David reemplaza la regla 4 de quality-kit ("si el mismo
-bloqueante vuelve en dos rondas seguidas, se para y decide el operador"). El
-operador ya decidió de antemano el relevo a las 5 rondas y la pregunta a las 10.
+El veredicto usa claves de bloqueante (`B1`, `B2`) y un comando de reproducción.
+Desde la ronda 2, el revisor marca cada clave previa como `RESUELTO` o `PERSISTE`.
+`PERSISTE` para el mismo bloqueante abre `BLOQUEANTE_REPETIDO`; el director no
+prepara un tercer encargo por esa clave.
 
 ### Excepciones tipadas
 
@@ -182,7 +202,7 @@ después sale una excepción.
 Once tipos de excepción cubren todo lo que despierta a claw o pregunta a David.
 Cuatro van a David: `CONFIRMAR_PLAN` (pedido grande, una vez), `NECESITA_DAVID`
 (publicar el gateway, deploy de Orbit mientras no tenga script, filas
-`[lane:release]` y un repo nuevo), `AUTH_VENCIDA` y `RONDAS_AGOTADAS`. Los otros
+`[lane:release]` y un repo nuevo), `AUTH_VENCIDA` y `BLOQUEANTE_REPETIDO`. Los otros
 siete van a claw. `corrida.sh decidir` rechaza cualquier decisión fuera del conjunto
 de cada tipo, así que claw no improvisa transiciones. Una excepción abierta se
 vuelve a avisar como mucho cada 60 minutos. La lista completa está en la
@@ -241,8 +261,10 @@ VEREDICTO. La garantía de que no tocó código no es el modo de la CLI. `observ
 cuenta el veredicto solo si, en la misma lectura, el worktree `-rev` está limpio y
 su HEAD es el head del brief.
 
-Las excepciones para claw van a `agent:main:dir-<id>`, una sesión por corrida. Se
-crea con la primera excepción y `cerrar` la barre con `sessions cleanup delete`. Al
+Las excepciones de corridas anteriores fuera del perímetro gestionado van a
+`agent:main:dir-<id>`, una sesión por corrida. Se
+crea con la primera excepción y `cerrar` la retira solo si es propia y no tiene
+trabajo pendiente. Al
 sexto turno la siguiente excepción rota a `agent:main:dir-<id>-2`. Una sesión por
 excepción agregaría registro, transcript y eventos al gateway, y la memoria del
 gateway crece con los eventos de sesión sin liberarse con `restart --safe`.
@@ -280,12 +302,12 @@ Estas decisiones no se vuelven a discutir en la implementación.
 | 1 | Merge libre con CI verde en el head y revisor sin bloqueantes, con `--match-head-commit`. Sin preaprobaciones. claw mergea directo a través del director. Se borra la regla "main nunca mergea". | `gate_merge` y `merge`; se borran `autoridad-merge.sh` y `preaprobaciones.v1.json`; `ci-y-revisor` es el único modo; se reescribe la skill `native-harness-orchestration`. |
 | 2 | Construir sobre `corrida.sh`. | `reconcile()` y `reconciliar.sh`. No hay orquestador aparte. |
 | 3 | El sistema elige el revisor, siempre de otro harness. | `denied_harnesses` desde el registro; el relevo lo vuelve a validar. |
-| 4 | El vigía de 5 minutos cuesta 0 tokens y claw despierta solo por excepción. El aviso de fin de turno y el latido pasan al director. | El latido llama a `reconciliar`; los avisos lanzan `atender`; `notify_excepcion` es el único despertar. El vigía con modelo de U3a se borra cuando el director esté listo. |
+| 4 | El vigía de 5 minutos cuesta 0 tokens y claw despierta solo por una excepción dirigida a su dueño. | El latido llama a `reconciliar`; los avisos de la ruta anterior lanzan `atender`. En la ruta gestionada, `report` despierta al solicitante autenticado. El cron con modelo se retira tras drenar su entrada y transferirla por generación. |
 | 5 | Pedidos chico y grande con mini-plan en el directorio de la corrida. | `pedido` y `plan.clasificar`; `PLAN.md` y `SPEC.md` en `~/.local/state/corridas/<id>/`. |
 | 6 | Mapa de repos que incluye Orbit (rama `master`, quality y ai-review, docker en goncloud, tarea EHV en AppFlowy). | `repos.v1.json`. |
 | 7 | Tope global de 4 sesiones de CLI. | `cupo_lock` y conteo en todos los registros abiertos; par implementador y revisor. |
 | 8 | Tablero con una parte por fila; el avance lo manda `avance-tareas`. | `abrir` crea una parte por fila; el director publica `paso` y nunca manda `[AVANZA]`. |
-| 9 | Hasta 5 rondas con el mismo implementador; relevo a otro modelo con otras 5; después pregunta a David. Vale también para bloques chicos. | `RONDAS_POR_TANDA = 5`, `TANDAS_ANTES_DE_DAVID = 2`, efecto `relevar_impl`, excepción `RONDAS_AGOTADAS`. |
+| 9 | Un bloqueante repetido en dos rondas seguidas detiene el bloque para decisión del operador. | `claves_que_persisten` detecta la repetición; `BLOQUEANTE_REPETIDO` impide crear otra ronda. `relevar_impl` queda para cuota o fallo, sin eludir el paro. |
 | 10 | Un pedido grande con repo nuevo siempre pregunta antes de crearlo. | `NECESITA_DAVID` antes del bloque de planificación. |
 | 11 | El chat dedicado de Telegram se pospone. David usa `/new`. | Sin slice de chat dedicado; 20.0 mide la base de un turno tras `/new`. |
 
@@ -320,10 +342,10 @@ con los hechos, que solo un modelo estima. Tratar el sync seguro como comando de
 paso gateway ignora que lo corre David en la PC.
 
 Otras dos formas quedaron fuera. Calcular la fase solo desde archivos, sin reducer,
-no distingue un push intentado de uno pendiente y pierde idempotencia. La bandeja de
-eventos en el gateway (plan cli-eventos-sin-vigias) necesita un plugin, RPCs y una
-API de admisión que la versión instalada no ha probado. Queda como posible
-transporte futuro de `notify_excepcion`.
+no distingue un push intentado de uno pendiente y pierde idempotencia. La propuesta
+antigua de bandeja en un plugin del gateway requería RPCs y una API de admisión que
+no estaban probados. El plan de encargos durables eligió ampliar las tareas del
+runtime nativo; U3b no añade esa bandeja de plugin.
 
 ## Lo que el director no hace
 
@@ -335,7 +357,8 @@ de harness sin anunciarlo.
 
 ## Riesgos y mediciones pendientes
 
-- Falta elegir el verbo que despierta a `agent:main:dir-<id>`:
+- Para corridas anteriores fuera del perímetro gestionado, falta elegir el verbo
+  que despierta a `agent:main:dir-<id>`:
   `openclaw system event --mode now --session-key ...` o
   `openclaw agent --agent main --session-key ... --message ...`. Un comentario en
   `scripts/mac/tmux-activity-watch.sh` registra un `system event` que cayó en una
@@ -347,17 +370,15 @@ de harness sin anunciarlo.
 - Falta confirmar que cada CLI del registro escribe `.corrida/VEREDICTO-*` sin
   diálogo de permisos cuando arranca con permiso de escritura en un worktree
   detached. Grok y Kimi son los más dudosos. Se mide en 20.4.
-- El relevo por rondas necesita que el selector excluya al implementador vigente en
-  el rol `write`. Hoy `exclude_authors` se aplica solo al rol `review`. 20.6 extiende
-  esa condición con su prueba.
-- Los nombres de las decisiones de `RONDAS_AGOTADAS` (`sí` para otra tanda de 5 con
-  un tercer modelo, `salta` y `cancela`) son de este documento. La decisión de David
-  fija solo que la pregunta llega a él. Se confirma con David antes de 20.8.
+- Un relevo permitido necesita que el selector excluya al implementador vigente
+  en el rol `write`. 20.6 comprueba esa condición sin usar el relevo para evadir
+  `BLOQUEANTE_REPETIDO`.
 - `LATIDO_TOPE` es de 240 segundos. Un `reconciliar` con `gh` y un deploy largo como
   `instalar-mac.sh` puede no caber. El deploy va en segundo plano con su propio
   `intent` y se observa en la pasada siguiente.
-- La memoria dice que `sessions cleanup` desde la Mac es local. Barrer
-  `agent:main:dir-<id>` puede requerir `exec` en el gateway. Se comprueba en 20.8.
+- La memoria dice que `sessions cleanup` desde la Mac es local. Barrer una sesión
+  `agent:main:dir-<id>` propia y sin trabajo puede requerir `exec` en el gateway.
+  Se comprueba en 20.8. Una sesión adoptada o con un hijo activo no se borra.
 - Reservar 2 cupos por bloque desde el inicio deja al revisor ocupando cupo aunque
   todavía no trabaje. Es el precio de no tener nunca un implementador sin revisor.
 - Lo que no llega por aviso (CI, bot, respuesta de David) puede tardar hasta 300
@@ -381,8 +402,9 @@ de harness sin anunciarlo.
   director. Las corridas sin director lo conservan.
 - En la skill `native-harness-orchestration`, la regla "Main nunca mergea ni
   despliega" y la secuencia manual de compuertas.
-- El cron vigía con modelo de U3a en el gateway, cuando la primera corrida completa
-  con director termine en 20.10.
+- El cron vigía con modelo de U3a en el gateway, por entrada adoptada en 20.10 y
+  solo después de suspensión, drenaje, transferencia por generación y prueba de
+  cero peticiones posteriores.
 
 Se quedan, aunque sus nombres se parecen: `registro.preaprobaciones[]`, que es la
 política de diálogos de `responder.sh`, y el verbo `corrida.sh responder`, que

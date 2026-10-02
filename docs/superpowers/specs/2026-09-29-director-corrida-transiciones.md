@@ -8,6 +8,13 @@ Este documento describe el objetivo. Los módulos nuevos no existen todavía en
 `origin/main`. En 20.1 la tupla `director.TABLA` y las tablas de este documento
 deben coincidir fila por fila, y una prueba lo comprueba.
 
+La integración usa la base T0–T10 comprobada del
+[plan de encargos durables](../plans/2026-09-30-encargos-agentes.md) para cada
+entrada gestionada. No requiere T11–T12, despliegue total ni Hermes antes de
+desarrollar U3b. `reconcile()` es el único decisor de ingeniería; el runtime
+nativo conserva encargo, resultado y consumo. Una entrada sin cobertura permanece
+fuera del perímetro gestionado hasta su adopción por generación.
+
 ## Convenciones
 
 - La fase es calculada. `phase_of` es `fase_de_log` ajustada con las
@@ -19,27 +26,33 @@ deben coincidir fila por fila, y una prueba lo comprueba.
   `tablero-trabajo.sh paso <id> <fila> <estado>`, salvo que `observed.tablero` ya
   tenga ese estado.
 - `F` es la fila vigente y `R` su ronda (`punto_vigente`).
-- `T` es la tanda del bloque: 1 con el primer implementador, 2 después del primer
-  relevo por rondas y 3 si David pide otra tanda. `r_tanda` es la cantidad de veredictos CAMBIOS del bloque desde que
-  entró el implementador vigente.
+- `claves_que_persisten` compara el veredicto actual con el de la ronda previa.
+  El mismo bloqueante reproducible en ambas rondas detiene el bloque antes de
+  crear otro encargo o relevar al implementador.
 - `sondas(fase_de_log)` fija qué se observa en cada fase.
+- Para una entrada gestionada, `report` y `resolve` del runtime nativo son la
+  fuente de resultado y consumo. `task_handoffs.py` traduce el resultado tipado
+  al mismo `reconcile()`. Un hook o una pantalla quieta nunca acreditan entrega.
 
 ## Constantes
 
 | Nombre | Valor | Significado |
 |---|---|---|
 | `CUPO_GLOBAL` | 4 | Sesiones de CLI en toda la Mac. |
-| `RONDAS_POR_TANDA` | 5 | Rondas de revisión cruzada con el mismo implementador. |
-| `TANDAS_ANTES_DE_DAVID` | 2 | Tandas antes de la excepción `RONDAS_AGOTADAS`. |
 | `RENOTIFICAR_S` | 3600 | Intervalo mínimo entre avisos de una excepción abierta. |
 | `BOT_CALLADO_S` | 3600 | Tiempo sin veredicto del revisor automático en el head, desde `ready`. |
-| `SILENCIO_EMPUJON_S` | 1200 | Sesión quieta sin LISTO ni VEREDICTO antes de un empujón. |
+| `SILENCIO_EMPUJON_S` | 1200 | Solo entradas CLI anteriores: sesión quieta sin LISTO ni VEREDICTO antes de un empujón. No aplica a tareas gestionadas. |
 | `MAX_RONDAS_CI` | 2 | Filas `ci-rN` antes de `CI_ROJO`. |
 | `INSPECT_TOPE` | 4 | `adaptador inspect` por pasada. |
 | `INSPECT_TIMEOUT_S` | 10 | Tope de cada `inspect`. |
 | `GH_TIMEOUT_S` | 30 | Tope de cada llamada a `gh`. |
 
 ## Ciclo de un bloque
+
+Antes de aplicar una fila que abre otra revisión, un relevo o una fila automática,
+comprueba si el mismo bloqueante reproducible apareció en las dos últimas rondas
+del bloque. En ese caso, `BLOQUEANTE_REPETIDO` tiene prioridad y no se ejecuta el
+otro efecto. El guard también rige para los veredictos del bot.
 
 | Fase | Condición | Efecto | Nota |
 |---|---|---|---|
@@ -70,9 +83,9 @@ deben coincidir fila por fila, y una prueba lo comprueba.
 | Revisando | lo mismo, con descarte previo | `raise_excepcion INESPERADO` | |
 | Revisando | veredicto confiable | `archive_handoff` y `observed.veredicto` | Pasa a Cambios o Aprobado. |
 | Revisando | `silencio_s > 1200` sin veredicto | `nudge`, luego `raise_excepcion INESPERADO` | |
-| Cambios | `r_tanda < 5` | `write_encargo (F, R+1, origen=cambios)` con los bloqueantes literales y las claves que persisten | Mismo implementador. |
-| Cambios | `r_tanda == 5` y `T < 2` | `relevar_impl` | `handoff_lane` a otro modelo; el selector excluye al implementador vigente. |
-| Cambios | `r_tanda == 5` y `T >= 2` | `raise_excepcion RONDAS_AGOTADAS` | Destinatario David. |
+| Cambios | el mismo bloqueante reproducible persiste en dos rondas seguidas | `raise_excepcion BLOQUEANTE_REPETIDO` | Detiene el bloque; no crea otra ronda ni releva al implementador. |
+| Cambios | hay un bloqueante nuevo reproducible y no hay repetición | `write_encargo (F, R+1, origen=cambios)` | La siguiente revisión cubre solo el diff de la corrección y usa otro revisor. |
+| Cambios | solo hay hallazgos no bloqueantes | `record_residual` | Escribe una fila del plan y continúa sin otra revisión. |
 | Aprobado | hay fila siguiente | `write_encargo (siguiente, 1)` | |
 | Aprobado | última fila, rama sin push en el head | `push` | |
 | Publicando | push hecho, sin PR | `open_pr` en draft con `--body-file` | |
@@ -98,7 +111,7 @@ deben coincidir fila por fila, y una prueba lo comprueba.
 | Ledger | mergeado | `stop_sessions`, luego `close_lane mergeado` | |
 
 Las filas automáticas `ci-rN`, `revisor-rN` y `rebase-rN` siguen el mismo ciclo,
-con revisión solo del delta. Sus rondas cuentan en `r_tanda`.
+con revisión solo del delta. No reinician el historial de bloqueantes de su bloque.
 
 ## Nivel corrida
 
@@ -128,14 +141,14 @@ mucho. `corrida.sh decidir <id> <exc-id> <decisión> [arg]` valida contra
 | `BOT_CALLADO` | claw | `seguir`: vuelve a lanzar el workflow del bot. `cancelar`. |
 | `CONFIRMAR_PLAN` | David | `sí`: `parse_plan` del `PLAN.md` generado y agrega los bloques. `cancela`. |
 | `NECESITA_DAVID` | David | `listo`: `observed.deploy.paso.hecho` o fila habilitada. `salta`: paso omitido y anotado. `cancela`. |
-| `RONDAS_AGOTADAS` | David | `sí`: otra tanda de 5 rondas con un modelo que elige el selector. `salta`: `close_lane omitido`. `cancela`: `close_run DETENIDA`. |
+| `BLOQUEANTE_REPETIDO` | David | El bloque queda detenido. `salta`: `close_lane omitido`. `cancela`: `close_run DETENIDA`. Reanudar exige una decisión explícita que cumpla quality-kit; no autoriza otra ronda automática. |
 | `DEPLOY_FALLO` | claw | `seguir`: reintenta el paso. `hecho`: claw lo arregló a mano. `cancelar`. |
 | `CIERRE_ROJO` | claw | `seguir`: vuelve a correr `cierre-de-fase`. `hecho`. `cancelar`. |
 | `INESPERADO` | claw | `seguir`: vuelve a evaluar la fila que la abrió, con el contador en cero. `omitir`. `cancelar`. |
 
 `PALABRAS_DAVID` traduce la palabra de Telegram a una decisión: `sí` y `si` son
 `SI`, `listo` y `hecho` son `HECHO`, `salta` es `OMITIR` y `cancela` es `CANCELAR`.
-Para `RONDAS_AGOTADAS`, `SI` se aplica como `SEGUIR`.
+`SI` no reanuda automáticamente `BLOQUEANTE_REPETIDO`.
 
 El despertar de claw tiene 12 líneas como máximo:
 
@@ -173,7 +186,7 @@ disco, red, tmux ni reloj; el reloj llega en `GlobalObs.ahora`.
 | `reconcile.py` | cambia | `reconcile()` llama a `director.next_effect` después de `reconcile_lane`. |
 | `state.py` | cambia | Catálogo de eventos nuevo y proyecciones. |
 | `gates.py` | cambia | `ci-y-revisor` como único modo de merge; el bot exige check-run en el head. |
-| `selector.py` | cambia | `exclude_authors` también en `role=write`, para el relevo por rondas. |
+| `selector.py` | cambia | `exclude_authors` también en `role=write`, para un relevo permitido por cuota o fallo. |
 
 ### Tipos del plan y de los repos
 
@@ -193,8 +206,8 @@ cada vez desde el diff mergeado y nunca se guarda.
 | Fase (`Phase`) | Sondas |
 |---|---|
 | `pendiente`, `esperando-cupo`, `reservado` | ninguna |
-| `encargado`, `implementando` | `archivos`, `sesion` |
-| `listo`, `revisando`, `cambios` | `archivos`, `sesion`, `rev-arbol` |
+| `encargado`, `implementando` | Entrada anterior: `archivos`, `sesion`. Entrada gestionada: `inspect` autenticado de la tarea. |
+| `listo`, `revisando`, `cambios` | Entrada anterior: `archivos`, `sesion`, `rev-arbol`. Entrada gestionada: resultado tipado y revisión observada. |
 | `aprobado`, `publicando`, `ci`, `revisor-auto`, `mergeable` | `pr` |
 | `mergeado` | `pr`, `deploy` |
 | `ledger` | `pr` |
@@ -210,6 +223,8 @@ cada vez desde el diff mergeado y nunca se guarda.
 5. PR abierto: `ci`.
 6. `observed.push.done` con todas las filas aprobadas: `publicando`.
 7. Veredicto confiable de la fila y ronda vigentes: `aprobado` o `cambios`.
+   `observed.residual` deja el carril `aprobado` después de escribir la fila del
+   plan y antes de publicar el PR.
 8. Brief entregado de la fila y ronda vigentes: `revisando`.
 9. LISTO válido de la fila y ronda vigentes: `listo`.
 10. Encargo entregado: `implementando`.
@@ -225,7 +240,7 @@ cada vez desde el diff mergeado y nunca se guarda.
 | `sondas` | `(fase_log) -> frozenset[Sonda]` | Qué observa `observe.py` para el carril. |
 | `phase_of` | `(lane, rev, obs, rev_obs, block) -> Phase` | Fase ajustada con observaciones. |
 | `punto_vigente` | `(lane, block) -> tuple[Row, int]` | Primera fila sin veredicto aprobado y su ronda. |
-| `claves_que_persisten` | `(actual, previo) -> tuple[str, ...]` | Claves marcadas `PERSISTE` que ya estaban abiertas. Van al encargo y al detalle. |
+| `claves_que_persisten` | `(actual, previo) -> tuple[str, ...]` | Claves reproducibles marcadas `PERSISTE` que ya estaban abiertas. Proponen `BLOQUEANTE_REPETIDO` antes de otro encargo. |
 | `excepcion_id` | `(corrida, lane, tipo, lane_events) -> str` | Id determinista; el mismo hecho produce el mismo id. |
 | `validar_decision` | `(exc, decision, arg) -> str \| None` | `None` si vale; si no, el motivo. |
 | `evidence_for` | `(lane, obs, repo, rev_worker) -> dict` | Evidencia de `compuerta merge`: head, repo, pr, CI, bot, review y autores. |
@@ -249,7 +264,7 @@ ejecutarlo.
 | Tipo | Campos |
 |---|---|
 | `Listo` | `fila`, `ronda`, `sha`, `valido`, `motivo`. |
-| `Veredicto` | `fila`, `ronda`, `sha_revisado`, `aprobado`, `bloqueantes` (clave y texto), `seguimiento` (clave a `RESUELTO` o `PERSISTE`), `residuales`, `arbol_confiable`. |
+| `Veredicto` | `fila`, `ronda`, `sha_revisado`, `aprobado`, `bloqueantes` (clave, texto y comando que reproduce), `seguimiento` (clave a `RESUELTO` o `PERSISTE`), `residuales`, `arbol_confiable`. |
 | `PRObs` | `number`, `head`, `draft`, `merged`, `merge_commit`, `mergeable`, `checks`, `ci_flake`, `ci_log_resumen`, `bot`, `bot_hallazgos`, `ready_desde`, `archivos`. |
 | `LaneObs` | `worktree_exists`, `head`, `session_alive`, `inspect`, `silencio_s`, `listo`, `veredicto`, `rev_head`, `rev_limpio`, `pr`, `remote_branch`, `deploy_verificado`. |
 | `GlobalObs` | `cupo_usado`, `health`, `historial`, `ahora`. |
@@ -263,7 +278,7 @@ Un valor no observado es `None`, nunca `False`.
 | `prepare_pair` | `repo`, `block` |
 | `select_worker` | `lane`, `role`, `task_type`, `denied_harnesses`, `exclude_authors` |
 | `launch_worker` | `lane`, `worker`, `session`, `worktree`, `role` |
-| `relevar_impl` | `lane`, `saliente`, `tanda` |
+| `relevar_impl` | `lane`, `saliente`, `motivo` (`quota` o `failed`); nunca ante `BLOQUEANTE_REPETIDO` |
 | `relevar_rev` | `lane`, `saliente` |
 | `write_encargo` | `fila`, `ronda`, `origen`, `bloqueantes`, `path` |
 | `move_review_tree` | `at_sha` |
@@ -276,6 +291,7 @@ Un valor no observado es `None`, nunca `False`.
 | `open_pr` | `repo`, `branch`, `title`, `body_path` |
 | `rerun_ci` | `repo`, `pr`, `head` |
 | `add_fila_auto` | `fila`, `motivo`, `bloqueantes` |
+| `record_residual` | `fila`, `hallazgos`, `plan_row` |
 | `mark_ready` | `repo`, `pr` |
 | `gate_merge` | `sha`, `evidence_path` |
 | `merge` | `repo`, `pr`, `head`, `method` |
@@ -343,7 +359,7 @@ Campos nuevos del registro, todos opcionales:
 
 | Campo | Valores |
 |---|---|
-| `director` | `activo`, `modo` (`sombra` o `vivo`), `plan`, `sesion_claw`, `turnos_claw`. |
+| `director` | `activo`, `modo` (`sombra` o `vivo`), `plan`; `sesion_claw` y `turnos_claw` solo para corridas anteriores fuera del perímetro gestionado. |
 | `sesiones[].dueno` | Nuevo valor `director`. `rol` sigue en `lead` o `carril`. |
 | `lanes[].kind` | `trabajo`, `revisor` o `ledger`, con `par`, `revisa` o `cierra`. |
 
@@ -353,7 +369,9 @@ Campos nuevos del registro, todos opcionales:
 |---|---|
 | Par y handoff | `intent.pair`, `observed.pair.reserved`, `intent.encargo`, `observed.encargo.written`, `intent.brief`, `observed.brief.written`, `intent.deliver`, `observed.delivered`, `observed.deliver.blocked`, `observed.nudge` |
 | Entregas | `observed.listo`, `observed.listo.invalido`, `observed.veredicto`, `observed.veredicto.descartado`, `intent.review_tree`, `observed.review_tree` |
-| Relevo por rondas | `intent.relevo_rondas`, `observed.relevo_rondas` con `tanda`, `saliente` y `entrante` |
+| Manejo nativo | Conserva `intent.task_handling` y `observed.task_handled` de la base integrada; no crea otra bandera de consumo. |
+| Residuales | `intent.residual`, `observed.residual` con la fila del plan y el veredicto de origen. |
+| Relevo por cuota o fallo | `intent.relevo`, `observed.relevo` con `motivo`, `saliente` y `entrante`; no elude `BLOQUEANTE_REPETIDO` |
 | Publicación | `observed.fila.auto`, `intent.pr_ready`, `observed.pr.ready`, `intent.rerun_ci`, `observed.ci.rerun` |
 | Deploy y cierre | `intent.deploy.paso`, `observed.deploy.paso.hecho`, `observed.deploy.paso.fallo`, `intent.hooks`, `observed.hooks.done`, `intent.ledger`, `observed.ledger.lane`, `intent.cierre_fase`, `observed.cierre_fase` |
 | Tablero | `observed.tablero` |
@@ -382,7 +400,8 @@ Todos usan el patrón de `marcas_lock_tomar` y `marcas_lock_soltar`: `mkdir`, to
 
 | Clave | Uso |
 |---|---|
-| `agent:main:dir-<id>` | Una por corrida. Recibe solo excepciones para claw y sus re-avisos. Nace con el primer `notify_excepcion` y `cerrar` la barre. Con `turnos_claw` en 6, la siguiente excepción rota a `agent:main:dir-<id>-2`. |
+| Sesión autenticada del solicitante | Ruta gestionada: recibe el resultado por la cola nativa y solo las excepciones que le corresponden. No nace una sesión supervisora. |
+| `agent:main:dir-<id>` | Solo corridas anteriores fuera del perímetro gestionado: recibe excepciones de claw y sus re-avisos. `cerrar` solo la retira si es recurso propio y no tiene trabajo pendiente. |
 | `agent:main:sim9-<id>` | Deja de recibir partes del latido cuando `director.activo`. |
 | `agent:main:main` | El director nunca escribe ahí. Las respuestas de David por Telegram caen ahí. |
 
