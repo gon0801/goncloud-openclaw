@@ -121,6 +121,8 @@ class Host:
             "resultContract": operation.result_contract,
             "resultRef": str(self.state_dir / "inbox" / f"{op_id}.json"),
         }
+        if operation.adapter_id:
+            assignment["adapterId"] = operation.adapter_id
         digest = hashlib.sha256(canonical(assignment).encode()).hexdigest()
         current = self.spool.get(op_id)
         if current and current["operation_digest"] != digest:

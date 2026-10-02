@@ -248,7 +248,7 @@ class ProjectionTransferTest(unittest.TestCase):
 
     def test_gateway_host_admission_binds_claim_before_delivery(self):
         assignment = {"hostId": "host-one", "taskId": "task-one", "generation": 1,
-                      "instanceId": "instance-one", "producerId": "codex",
+                      "instanceId": "instance-one", "producerId": "codex", "adapterId": "codex",
                       "capability": "secret", "claimId": "claim-one"}
         receipt = {"state": "host-admitted", "hostId": "host-one",
                    "instanceId": "instance-one", "claimId": "claim-one", "generation": 1}
@@ -259,7 +259,7 @@ class ProjectionTransferTest(unittest.TestCase):
         command = invoke.call_args.args[0]
         self.assertEqual(command[3], "managedTasks.host.admit")
         self.assertEqual(json.loads(command[command.index("--params") + 1]), {
-            "hostId": "host-one", "instanceId": "instance-one", "claimId": "claim-one",
+            "hostId": "host-one", "adapterId": "codex", "instanceId": "instance-one", "claimId": "claim-one",
             "capability": {"taskId": "task-one", "generation": 1,
                            "producerId": "codex", "token": "secret"}})
         with mock.patch("native_gateway.subprocess.run", return_value=subprocess.CompletedProcess(
@@ -1514,6 +1514,142 @@ class DirectorHandlingTest(unittest.TestCase):
             for stream in (harness.stdin, harness.stdout):
                 if stream is not None:
                     stream.close()
+
+
+class CliClaimTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.host = Host("host-one", self.root / "host")
+        self.brief = b"Review the assigned change.\n" * 190
+        self.digest = hashlib.sha256(self.brief).hexdigest()
+        self.assignment = {
+            "target": {"kind": "cli", "hostId": "host-one", "adapterId": "codex"},
+            "instructionRef": {"ref": "artifact:" + self.digest,
+                               "digest": "sha256:" + self.digest},
+            "inputRevision": {"kind": "artifact", "digest": "sha256:" + "a" * 64},
+            "resultContract": "review.v1",
+            "continuation": {"kind": "requester"},
+        }
+        self.claim = {
+            "taskId": "task-one", "generation": 0, "claimId": "claim-one",
+            "hostId": "host-one", "adapterId": "codex", "instanceId": "instance-one",
+            "capability": {"taskId": "task-one", "generation": 0,
+                           "producerId": "codex", "token": "secret"},
+            "assignment": self.assignment,
+        }
+        self.coverage = {"hostAdapterCoverage": {"host-one": {"codex": "certified"}}}
+
+    def test_gateway_claim_and_brief_use_bound_identity_and_bounded_ranges(self):
+        responses = [
+            subprocess.CompletedProcess([], 0, json.dumps(self.claim), ""),
+            subprocess.CompletedProcess([], 0, json.dumps({
+                "taskId": "task-one", "claimId": "claim-one",
+                "digest": "sha256:" + self.digest, "size": len(self.brief),
+                "offset": 4096, "dataBase64": base64.b64encode(self.brief[4096:]).decode(),
+            }), ""),
+            subprocess.CompletedProcess([], 0, "null", ""),
+        ]
+        client = GatewayProjectionClient("/isolated/openclaw", "host-one", "ws://127.0.0.1:18789")
+        with mock.patch("native_gateway.subprocess.run", side_effect=responses) as invoke:
+            self.assertEqual(client.claim_host("codex", "instance-one"), self.claim)
+            self.assertEqual(client.brief_chunk("codex", "instance-one", "task-one",
+                                                "claim-one", 4096, 4096)["offset"], 4096)
+            self.assertIsNone(client.claim_host("codex", "instance-one"))
+        commands = [entry.args[0] for entry in invoke.call_args_list]
+        self.assertEqual([command[3] for command in commands],
+                         ["managedTasks.host.claim", "managedTasks.host.brief", "managedTasks.host.claim"])
+        self.assertEqual(json.loads(commands[0][commands[0].index("--params") + 1]),
+                         {"hostId": "host-one", "adapterId": "codex", "instanceId": "instance-one"})
+        self.assertEqual(json.loads(commands[1][commands[1].index("--params") + 1]),
+                         {"hostId": "host-one", "adapterId": "codex", "instanceId": "instance-one",
+                          "taskId": "task-one", "claimId": "claim-one", "offset": 4096,
+                          "length": 4096})
+
+    def test_claim_download_reserve_and_delivery_replay_once(self):
+        class Backend:
+            boot_id = "boot-one"
+
+            def __init__(self):
+                self.live = {}
+
+            def mark(self, session, nonce):
+                self.live[session] = {"bootId": self.boot_id, "nonce": nonce,
+                                      "sessionName": session}
+
+            def observe(self, session):
+                return self.live.get(session)
+
+        class Client:
+            host_id = "host-one"
+
+            def __init__(self, outer):
+                self.outer = outer
+                self.offsets = []
+                self.admitted = []
+
+            def claim_host(self, adapter_id, instance_id):
+                return self.outer.claim
+
+            def brief_chunk(self, adapter_id, instance_id, task_id, claim_id, offset, length):
+                self.offsets.append(offset)
+                raw = self.outer.brief[offset:offset + length]
+                return {"taskId": task_id, "claimId": claim_id,
+                        "digest": "sha256:" + self.outer.digest,
+                        "size": len(self.outer.brief), "offset": offset,
+                        "dataBase64": base64.b64encode(raw).decode("ascii")}
+
+            def admit_host(self, assignment):
+                self.admitted.append(assignment)
+                return {"state": "host-admitted", "hostId": "host-one",
+                        "instanceId": "instance-one", "claimId": "claim-one", "generation": 0}
+
+        backend = Backend()
+        from resources import ResourceManager
+        manager = ResourceManager(self.host.spool, "host-one", backend)
+        client = Client(self)
+        deliveries = []
+        kwargs = dict(host=self.host, manager=manager, adapter_id="codex",
+                      instance_id="instance-one", session="worker-one",
+                      workspace_root=self.root / "workspace", deliver=lambda ref, session: deliveries.append(
+                          (json.loads(Path(ref).read_text()), session)), coverage=self.coverage)
+        first = native_gateway.claim_cli_once(client, **kwargs)
+        second = native_gateway.claim_cli_once(client, **kwargs)
+        self.assertEqual((first.status, second.status), ("delivered", "delivered"))
+        self.assertEqual(len(deliveries), 1)
+        self.assertEqual(deliveries[0][1], "worker-one")
+        self.assertEqual(deliveries[0][0]["briefDigest"], self.digest)
+        self.assertEqual(Path(deliveries[0][0]["briefRef"]).read_bytes(), self.brief)
+        self.assertEqual(manager.counts()["active"], 1)
+        self.assertEqual(client.offsets, [0, 4096])
+        self.assertEqual(client.admitted[0]["adapterId"], "codex")
+
+    def test_uncertified_route_never_claims(self):
+        class Client:
+            host_id = "host-one"
+
+            def claim_host(self, *_):
+                raise AssertionError("disabled route must not call gateway")
+
+        with self.assertRaisesRegex(ValueError, "not certified"):
+            native_gateway.claim_cli_once(Client(), host=self.host, manager=None,
+                                          adapter_id="codex", instance_id="instance-one",
+                                          session="worker-one", workspace_root=self.root,
+                                          deliver=lambda *_: None,
+                                          coverage={"hostAdapterCoverage": {"host-one": {"codex": "disabled"}}})
+
+    def test_changed_brief_chunk_is_rejected_before_materialization(self):
+        class Client:
+            def brief_chunk(self, adapter_id, instance_id, task_id, claim_id, offset, length):
+                return {"taskId": task_id, "claimId": claim_id,
+                        "digest": "sha256:" + self_digest, "size": 3, "offset": offset,
+                        "dataBase64": base64.b64encode(b"bad").decode()}
+
+        self_digest = self.digest
+        with self.assertRaisesRegex(ValueError, "brief digest mismatch"):
+            native_gateway._brief_to_workspace(Client(), self.claim, self.root / "workspace")
+        self.assertEqual(list((self.root / "workspace" / "managed-briefs").iterdir()), [])
 
 
 if __name__ == "__main__":
