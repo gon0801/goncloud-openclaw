@@ -17,3 +17,23 @@ Fuentes: `Plans.md` Fase 20 y Fase U6; `docs/superpowers/plans/2026-09-29-direct
 - R `e6abc6fa19` impide en la transacción de registro que un worker gestionado cree una raíz y presupuesto independientes. Las tres regresiones fallaron antes del arreglo. Activo, cancelado y recuperado se rechazan sin nuevas filas; un run ordinario posterior al fin nativo sí puede crear raíz. Pasaron 30 pruebas focalizadas y después 9 del archivo ampliado.
 
 Las correcciones y los contratos alineados permiten preparar las fases siguientes contra el perímetro integrado y probado. No certifican rutas CLI/Hermes no ensayadas ni una ejecución futura de U3b–U6. La aceptación viva requiere cobertura y recibo del host utilizado.
+
+## Verificación del conjunto corregido
+
+R `9f99e2264c012dd4cf5bd9dbac10bc7e534ffc05` pasó `pnpm tsgo:core` y
+`pnpm build`. Los dos sellos de build y `build-info.json` registran ese SHA
+con entradas limpias. G `3d377ed` integra el consumidor `--device-auth` y el
+ensayo `bash scripts/tests/test-agent-work-e2e.sh cli_gateway`, ejecutado con
+`AGENT_WORK_RUNTIME_SOURCE=/Users/dn/dev/openclaw-agent-work-integration`.
+Pasó 1/1: `submit=1 admit=1 delivery=1 report=1 blocked=1`. El replay no
+duplicó entrega y el cierre conservó la sesión adoptada. Los archivos del
+consumidor y del E2E integrado son idénticos a los probados en G `270b2faa`.
+La integración conservó además `prove_absent` en el doble de la regresión de
+propiedad; esa prueba pasó otra vez tras resolver el conflicto. No quedaron
+procesos propios del Gateway de ensayo ni del ejecutor E2E.
+
+Los candados de commit pasaron. Los checks focalizados cubrieron apertura de
+Fase 17 por eventos, selección vigente de pruebas de cola, estructura del
+ledger, enlaces locales, localización de runbooks y reglas de entorno. La
+batería completa y la aceptación productiva de T0–T12 permanecen pendientes;
+no se cerró ningún bloque ni se habilitó una fila de cobertura con este recibo.

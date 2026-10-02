@@ -1,6 +1,6 @@
 # Estado de implementación de encargos
 
-Actualización de compatibilidad: implementación general pausada por el operador; se corrigieron propiedad de sesiones preexistentes en G `82d3817` y raíces independientes desde workers en R `e6abc6fa19`. Los planes de encargos, U3b, U4/U5, U6 y la especificación maestra se alinearon por perímetro usado. La cobertura productiva sigue deshabilitada. Véase [compatibilidad](compatibility-u3b-u6.md) para los límites y pruebas. Los párrafos siguientes conservan el historial y no sustituyen esta situación actual.
+Actualización de compatibilidad: implementación general pausada por el operador; se corrigieron propiedad de sesiones preexistentes en G `82d3817` y raíces independientes desde workers en R `e6abc6fa19`. Los planes de encargos, U3b, U4/U5, U6 y la especificación maestra se alinearon por perímetro usado. La cobertura productiva sigue deshabilitada. Véase [compatibilidad](compatibility-u3b-u6.md) para los límites y pruebas. El conjunto R `9f99e2264c` pasó tipos/build y la prueba G–R CLI autenticada pasó 1/1, integrada en G `3d377ed`. La aceptación positiva de cola ocupada/eliminada sigue pendiente tras retirar la prueba heredada. Los párrafos siguientes conservan el historial y no sustituyen esta situación actual.
 
 Bloque activo: B1 en integración; B2 y B4 tienen preparaciones aisladas. B0 terminó con el recibo `T0.md`. La base de B1 está fijada en `block-bases.json`. T1, T2 y T3 tienen implementación nativa aislada, aún sin cierre del bloque.
 
