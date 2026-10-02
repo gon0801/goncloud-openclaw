@@ -7,13 +7,34 @@
 # que llega tarde, lanzar la retira (re-verifica bajo lock antes de anotar).
 # Archiva cada carril con sesion nativa y la detiene. BAJO LOCKS del
 # llamador. stdout: nada; 0 = todos archivados y detenidos.
+. "$(dirname "${BASH_SOURCE[0]}")/terminar-sesion.sh"
 cerrar_archivar_lanes() ( # $1 id $2 reg
-  local id="$1" reg="$2" lanes lane sesion dir pant sel evs evd
+  local id="$1" reg="$2" lanes lane sesion dir pant sel evs evd recurso host_id encargo_ref evidencia
   # 14.22 punto 3: todo el archivado corre con umask 077 dentro de un subshell:
   # los archivos nacen 600 y el chmod de abajo queda de cinta, no de defensa.
   # punto 4: en un reintento la sesion ya no existe y capture falla; el
   # transcript real jamas se pisa con el aviso, solo se completa si falta.
   umask 077
+  CORR_REG="$reg" python3 -c '
+import json,os,sys
+d=json.load(open(os.environ["CORR_REG"]))
+rows=[s for s in d.get("sesiones",[]) if isinstance(s,dict)]
+sessions={s.get("nombre"):s for s in rows}
+if len(sessions)!=len(rows):
+  sys.exit("duplicate session identity")
+lanes=[lane for lane in d.get("lanes",[]) if isinstance(lane,dict)]
+for name,session in sessions.items():
+  if session.get("host_id") or session.get("encargo_ref"):
+    matching=[lane for lane in lanes if lane.get("session")==name]
+    if (not session.get("host_id") or not session.get("encargo_ref")
+        or len(matching)!=1 or not matching[0].get("resource_receipt_ref")):
+      sys.exit("managed session has incomplete lane or resource binding")
+for lane in lanes:
+  if lane.get("resource_receipt_ref"):
+    session=sessions.get(lane.get("session"),{})
+    if not session.get("host_id") or not session.get("encargo_ref"):
+      sys.exit("managed lane has no complete resource binding")
+' || return 1
   lanes="$(CORR_REG="$reg" python3 -c "
 import json,os
 d=json.load(open(os.environ['CORR_REG']))
@@ -52,6 +73,22 @@ c=[e for e in d.get('lanes') or [] if isinstance(e,dict) and e.get('id')==os.env
 print(json.dumps(c.get('evidence') or {},sort_keys=True,indent=2))")" || return 1
     printf '%s\n' "$evd" | redactar_texto >"$dir/evidence.json" || return 1
     chmod 600 "$dir/transcript.txt" "$dir/selection.json" "$dir/events.jsonl" "$dir/evidence.json" || return 1
+    recurso="$(CORR_REG="$reg" CORR_SESION="$sesion" python3 -c '
+import json,os
+d=json.load(open(os.environ["CORR_REG"]))
+for s in d.get("sesiones",[]):
+  if s.get("nombre")==os.environ["CORR_SESION"] and s.get("encargo_ref"):
+    print(s.get("host_id","")+"\t"+s["encargo_ref"])
+    break
+')" || return 1
+    if [ -n "$recurso" ]; then
+      host_id="${recurso%%$'\t'*}"
+      encargo_ref="${recurso#*$'\t'}"
+      evidencia="$(lane_campo "$reg" "$lane" resource_receipt_ref)"
+      [ -n "$host_id" ] && [ -n "$evidencia" ] \
+        && recurso_cerrar_gestionado "$host_id" "$encargo_ref" "$evidencia" || return 1
+      continue
+    fi
     # Solo tras archivar: detener. already_stopped tambien vale (reintento).
     if [ -n "${TMUX_BIN:-}" ]; then
       bash "$AQUI/corrida.sh" adaptador stop "$id" "$lane" x "$sesion" >/dev/null 2>&1 || true

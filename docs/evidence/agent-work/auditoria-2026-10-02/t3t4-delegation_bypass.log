@@ -1,0 +1,26 @@
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "9f99e2264c012dd4cf5bd9dbac10bc7e534ffc05"}
+[test] starting test/vitest/vitest.agents-tools.config.ts
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.1 [39m[90m/Users/dn/dev/openclaw-agent-work-integration[39m
+
+[vitest-workers] local cache hit after 1848ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared a658a1149e52 in 1880ms (16692 inputs, 17249 outputs)
+[90mstderr[2m | unknown test
+[22m[39m[sqlite-test-lifecycle] src/agents/tools/sessions-managed-delegation.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tools/sessions-managed-delegation.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tools/sessions-managed-delegation.test.ts: retiring openclaw.agentDatabaseLifecycle
+
+ ✓  agents-tools  src/agents/tools/sessions-managed-delegation.test.ts > managed native delegation boundary > rejects sessions_spawn before any child is created 8ms
+ ✓  agents-tools  src/agents/tools/sessions-managed-delegation.test.ts > managed native delegation boundary > rejects sessions_send before Gateway delivery 2ms
+ ✓  agents-tools  src/agents/tools/sessions-managed-delegation.test.ts > managed native delegation boundary > does not apply the managed guard to an ordinary run 2ms
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m   Start at [22m 22:03:44
+[2m   Duration [22m 7.85s[2m (transform 83%, import 11%, worker 4%, setup 1%)[22m
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 9.06s
+EXIT=0

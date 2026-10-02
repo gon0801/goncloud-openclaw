@@ -150,7 +150,11 @@ primer_comando_abre_corrida() {
     }
     n == 1 { print }
   ' "$1") || return 1
-  printf '%s\n' "$cuerpo" | grep -qF 'runbook.progress.set' || return 1
+  # El primer comando abre la corrida por el evento duradero run.opened
+  # (runbooks nuevos, fase 17 en adelante) o por la escritura completa
+  # runbook.progress.set (fase 13-16); el candado es que abra la corrida con
+  # su identidad, no la grafia de la API.
+  printf '%s\n' "$cuerpo" | grep -qE 'runbook\.progress\.set|run\.opened' || return 1
   printf '%s\n' "$cuerpo" | grep -qF 'corrida' || return 1
   printf '%s\n' "$cuerpo" | grep -qF 'proyecto' || return 1
   printf '%s\n' "$cuerpo" | grep -qF 'plan' || return 1

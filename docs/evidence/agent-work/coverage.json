@@ -1,0 +1,46 @@
+{
+  "schema": "agent-work-coverage.v1",
+  "source": "agents/main/agent/workshop-skills/agent-dispatch/SKILL.md and scripts/mac/workers.v1.json at G base 84efcb0",
+  "status": "inventory-only",
+  "managedRequesterRoutes": [
+    {"requester": "ingenieria", "target": "adversary", "kind": "agent", "preparation": "scripts/agent-work/routing.py", "integration": "native tool", "certified": false, "reason": "G preparation tested; native end-to-end evidence is in R and rollout is not enabled"},
+    {"requester": "operaciones", "target": "ingenieria", "kind": "agent", "preparation": "scripts/agent-work/routing.py", "integration": "native tool", "certified": false, "reason": "G preparation tested; native end-to-end execution and rollout remain unverified"},
+    {"requester": "ingenieria", "target": "windows-remote/codex", "kind": "cli", "preparation": "scripts/agent-work/routing.py", "integration": "native tool and host", "certified": false, "reason": "hostAdapterCoverage disables this combination; no requester-side CLI admission"}
+  ],
+  "requesters": ["main", "ingenieria", "adversary", "operaciones", "implementer", "verifier", "reviewer", "scout"],
+  "routes": [
+    {"kind": "native-subagent", "owner": "OpenClaw sessions_spawn", "certified": false},
+    {"kind": "configured-agent", "owner": "OpenClaw sessions_send", "certified": false},
+    {"kind": "cli-tmux", "owner": "scripts/mac/corrida/adaptador.sh", "certified": false},
+    {"kind": "user-adopted-session", "owner": "user", "certified": false}
+  ],
+  "cliAdapters": ["claude_fable", "claude_opus", "kimi_k3", "kimi_coding", "codex", "zcode", "grok"],
+  "hosts": [{"id": "mac-local", "platform": "macOS", "status": "sandbox-tested-uncertified"}, {"id": "windows-remote", "platform": "Windows", "status": "disabled-unverified"}],
+  "hostAdapterCoverage": {
+    "mac-local": {
+      "claude_fable": "disabled-descendant-proof-pending",
+      "claude_opus": "disabled-descendant-proof-pending",
+      "kimi_k3": "disabled-descendant-proof-pending",
+      "kimi_coding": "disabled-descendant-proof-pending",
+      "codex": "disabled-descendant-proof-pending",
+      "zcode": "disabled-descendant-proof-pending",
+      "grok": "disabled-descendant-proof-pending"
+    },
+    "windows-remote": {
+      "claude_fable": "disabled-host-unverified",
+      "claude_opus": "disabled-host-unverified",
+      "kimi_k3": "disabled-host-unverified",
+      "kimi_coding": "disabled-host-unverified",
+      "codex": "disabled-host-unverified",
+      "zcode": "disabled-host-unverified",
+      "grok": "disabled-host-unverified"
+    }
+  },
+  "resourceSandboxEvidence": "bash scripts/tests/test-agent-work-host.sh resource_identity; resource_close; resource_100_cycles",
+  "macDescendantProof": {
+    "status": "unavailable",
+    "evidence": "ResourceTests.test_resource_detached_child_keeps_mac_closure_pending (isolated tmux socket)",
+    "limitation": "A child can call setsid and outlive its tmux pane. After the pane exits, the observed session/PID identity cannot enumerate or prove absence of that reparented child. The tested adapter therefore retains CleanupPending and host capacity; no Mac CLI combination is certified."
+  },
+  "certificationRequired": ["authenticated requester identity", "finite budget", "durable admission", "portable result", "verified resource close"]
+}

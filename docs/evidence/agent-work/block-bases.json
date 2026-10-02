@@ -1,0 +1,17 @@
+{
+  "schema": "agent-work-block-bases.v1",
+  "blocks": {
+    "B0": {
+      "G": {"repository": "gon0801/goncloud-openclaw", "path": "/Users/dn/dev/goncloud-openclaw/.worktrees/agent-work-b0", "branch": "feat/agent-work-b0", "baseSha": "84efcb0"},
+      "R": {"repository": "openclaw/openclaw", "path": "/Users/dn/dev/openclaw-agent-work", "branch": "feat/agent-work-b0", "baseSha": "c074824a27c96d3983043f9eeb33823cd1772d8c"}
+    },
+    "B1": {
+      "G": {"repository": "gon0801/goncloud-openclaw", "path": "/Users/dn/dev/goncloud-openclaw/.worktrees/agent-work-b1", "branch": "feat/agent-work-b1", "baseSha": "97838a60598671d6a3d7812583778aae86d49ff3"},
+      "R": {"repository": "openclaw/openclaw", "path": "/Users/dn/dev/openclaw-agent-work-b1", "branch": "feat/agent-work-b1", "baseSha": "00e289c344af4cff10aafbf7b7f807822b54fa77"}
+    },
+    "B2": {"branch": "feat/agent-work-b2", "baseSha": null},
+    "B3": {"branch": "feat/agent-work-b3", "baseSha": null},
+    "B4": {"branch": "feat/agent-work-b4", "baseSha": null},
+    "B5": {"branch": "feat/agent-work-b5", "baseSha": null}
+  }
+}

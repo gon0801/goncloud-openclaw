@@ -193,6 +193,46 @@ de David del 2026-09-26. No modifica los requisitos de U3 mientras se implementa
    habilitadas se verifican antes de implementar. Una CLI sin señal fiable queda
    como limitación explícita y no permite acreditar el cierre de U3a.
 
+## Base de encargos durables y fronteras entre fases
+
+El [plan de encargos T0–T12](../superpowers/plans/2026-09-30-encargos-agentes.md)
+se integra y verifica antes de U3b y de la integración OpenClaw de U4. La
+compuerta exige las capacidades del perímetro que cada fase usa, con evidencia
+de sus artefactos G/R; no exige desplegar todos los hosts ni acreditar Hermes.
+La adopción viva se coordina por entrada mediante T11–T12. Hasta entonces,
+las rutas sin certificar siguen deshabilitadas y los planes futuros no se
+declaran ejecutados por reutilizar sus contratos.
+
+1. El runtime nativo posee registro, admisión, resultado, consumo, hijos y
+   presupuesto de árbol. Un hijo no puede registrar una raíz independiente
+   para obtener presupuesto nuevo o escapar de cancelación. El director de
+   U3b conserva las decisiones de ingeniería; U6 añade elegibilidad de unidades
+   y aceptación agregada, sin crear otra cola ni otra marca de consumo.
+2. El host conserva identidad y existencia de sus procesos. Una sesión
+   preexistente sin prueba de creación propia es adoptada, no un pool propio;
+   cerrar el encargo revoca solo sus marcas/capacidades y no detiene esa sesión.
+   Cupo del host, carriles de corrida y presupuesto de árbol son límites
+   distintos y se presentan con su causa, sin sustituir uno por otro.
+3. En el perímetro gestionado, fin de turno o quietud son observaciones: solo
+   un resultado válido inicia manejo. No se añaden sesiones supervisoras con
+   modelo ni empujones por silencio. El transporte puede sondear con código;
+   la política de recuperación y los avisos mantienen un único dueño. El
+   retiro de emisores antiguos drena sus turnos y transfiere generación antes
+   de habilitar al nuevo; los cron de negocio conservan su función.
+4. La regla vigente de quality-kit prevalece en U3b y U6: solo un bloqueante
+   reproducible abre otra ronda; el mismo en dos rondas consecutivas detiene
+   el bloque para decisión del operador. Un relevo no reinicia ese contador.
+5. U4 proyecta estos recibos y estados, sin otro registro de workers ni escritor
+   de progreso. Resultado recibido, manejo completo, recurso liberado y unidad
+   aceptada son hechos diferentes. El porcentaje principal del nuevo centro y
+   su aviso se deriva de las mismas unidades verificadas; el porcentaje de cola
+   del tablero histórico conserva su etiqueta y semántica durante la transición.
+6. U5 adapta el contrato a la autoridad nativa de Hermes y lo prueba con
+   OpenClaw ausente. U6 fija un vínculo versionado entre meta/unidad/revisión
+   y tarea/root/generación. La pausa cerca admisión y efectos nativos; reanudar
+   conserva presupuesto y requiere autoridad. Cerrar un encargo no acredita
+   todos los criterios de una meta. Cada host conserva su aceptación propia.
+
 ## Centro de tareas portable, contrato objetivo de Fase 17
 
 Estado: planificado, no prueba de soporte instalado. Diseño:
@@ -201,7 +241,8 @@ Estado: planificado, no prueba de soporte instalado. Diseño:
 1. Dos instalaciones independientes, una OpenClaw y otra Hermes, comparten versión,
    reglas y pruebas. Cada una conserva identidad, estado y credenciales propios y
    debe funcionar sin el otro runtime. No hay failover ni sesiones compartidas.
-2. Se reutilizan lifecycle, registro de workers, reconciliación y entrega de Fase 14.
+2. Se reutilizan lifecycle, registro de workers, reconciliación y entrega de Fase 14
+   y las interfaces de encargos verificadas para ese host, sin duplicarlas.
    Su disponibilidad exige evidencia. Un único reloj de seguimiento por instalación
    conserva vigilancia de 15 minutos y consolidado de 30; no hay cron por tarea.
 3. El centro distingue tarea, agente responsable, CLI, intento, sesión y proceso.
@@ -231,7 +272,7 @@ Estado: planificado, no prueba de soporte instalado. Diseño:
 
 Estado: planificado; no activa permisos, servicios ni ejecución. Detalle y matriz
 de cobertura: [plan U6](../superpowers/plans/2026-09-24-u6-metas-autonomas.md).
-U6 extiende la orquestación de U3 y el centro de U4/U5. No sustituye sus roles,
+U6 extiende la orquestación de U3, los encargos nativos y el centro de U4/U5. No sustituye sus roles,
 adaptadores, almacenamiento, verificador, instalador ni reloj global.
 
 1. Una meta admite un plan aportado o uno generado por el director. Antes de

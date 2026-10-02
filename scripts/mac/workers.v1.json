@@ -86,7 +86,7 @@
    "transcript": {
     "kind": "tmux-pane"
    },
-   "version": "2.1.284"
+   "version": "2.1.285"
   },
   {
    "auth_patterns": [
@@ -172,7 +172,7 @@
    "transcript": {
     "kind": "tmux-pane"
    },
-   "version": "2.1.284"
+   "version": "2.1.285"
   },
   {
    "auth_patterns": [
@@ -398,7 +398,7 @@
    "transcript": {
     "kind": "tmux-pane"
    },
-   "version": "0.158.0"
+   "version": "0.159.2"
   },
   {
    "auth_patterns": [

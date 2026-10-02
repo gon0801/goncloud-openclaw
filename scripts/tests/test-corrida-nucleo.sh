@@ -1288,6 +1288,24 @@ printf '%s\n' "$redactada" | grep -q 'sk-pro-ghi' \
 printf '%s\n' "$redactada" | grep -qF 'ghp_[REDACTED]' \
   || fail "P6: la redaccion de ghp_ se rompio: $redactada"
 
+# B0-1-r2: relanzar con el mismo --nombre deja el registro usable en una
+# corrida ordinaria. El vigia relanza asi tras una muerte; terminar-sesion y
+# cerrar deben seguir cerrando y la identidad del nombre debe seguir unica.
+bash "$CORR" abrir t-relanzo --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" --simulacro >/dev/null \
+  || fail "B0-1-r2: abrir t-relanzo fallo"
+bash "$CORR" lanzar-sesion t-relanzo carril bueno "$T/ses" --nombre ses-relanzo >/dev/null \
+  || fail "B0-1-r2: lanzar-sesion ses-relanzo fallo"
+"$TM_REAL" -L "$L" kill-session -t "=ses-relanzo" 2>/dev/null
+bash "$CORR" lanzar-sesion t-relanzo carril bueno "$T/ses" --nombre ses-relanzo >/dev/null \
+  || fail "B0-1-r2: el relanzo de ses-relanzo fallo"
+n_relanzada="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(sum(1 for s in d.get("sesiones",[]) if s.get("nombre")=="ses-relanzo"))' "$T/corridas/t-relanzo/registro.json")"
+[ "$n_relanzada" = "1" ] || fail "B0-1-r2: el relanzo dejo $n_relanzada entradas de ses-relanzo (identidad duplicada)"
+bash "$CORR" terminar-sesion t-relanzo ses-relanzo >/dev/null 2>&1 \
+  || fail "B0-1-r2: terminar-sesion fallo tras relanzo con el mismo nombre"
+bash "$CORR" cerrar t-relanzo >/dev/null 2>&1 \
+  || fail "B0-1-r2: cerrar fallo tras relanzo con el mismo nombre"
+echo "ok (B0-1-r2): relanzo con el mismo nombre deja una corrida ordinaria cerrable"
+
 # (spec) F3 r9: `encargo` es un campo de contrato versionado de sesiones[]:
 # lo escribe lanzar-sesion cuando hay --encargo y lo re-entrega el relanzo
 # automatico del vigia. La spec del registro debe documentarlo.

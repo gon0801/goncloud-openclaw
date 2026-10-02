@@ -1,0 +1,11 @@
+== rerun host_receipts ==
+G_HEAD=f734f2a3351dd4540ee57381e5a7bc151a27c177
+R_HEAD=9f99e2264c012dd4cf5bd9dbac10bc7e534ffc05
+UTC=2026-10-02T05:21:45Z
+$ bash scripts/tests/test-agent-work-host.sh host_receipts
+.............
+----------------------------------------------------------------------
+Ran 13 tests in 6.757s
+
+OK
+EXIT=0

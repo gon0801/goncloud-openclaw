@@ -1,0 +1,9 @@
+# T2 — reclamación durable, aún parcial
+
+Fuente R: `a841c0bb29cb018e09b486968dd52c3bbda2e0d0`. La regresión roja documentó ausencia de `claimManagedTaskAdmission`: [log rojo](T2-red.txt). Comando focalizado: `node scripts/run-vitest.mjs src/agents/tasks/managed-task.admission.test.ts src/agents/tasks/managed-task.spawn-pipeline.test.ts src/agents/tasks/managed-task.store.test.ts --maxWorkers=1`. Resultado: 11/11, [log completo](T2-partial-focused.txt). `pnpm tsgo:core`, oxlint focalizado y hook de commit pasaron. Una verificación amplia de tipos de pruebas se canceló después de pasar los fragmentos `agents-root` y `agents-other`; no se cuenta como batería completa.
+
+El slice fija la reclamación antes de inicializar un hijo, conserva incertidumbre tras caída, impide una segunda admisión por reenvío y enlaza el ID de ejecución nativo. Falta probar y conectar `requester_queue`: sesión ocupada→reinicio→entrega y sesión eliminada→bloqueo. T2 sigue abierta.
+
+El follow-up R `515d54d4bbf9fefc3075d7ae01fdeec1ea583369` añadió esa comprobación del registro nativo: rechaza run ausente, tarea ajena, generación incorrecta y solicitante incorrecto antes de confirmar. La regresión falló primero ([log](T2-binding-red.txt)); después la prueba combinada pasó 13/13 ([log](T2-binding-focused.txt)), con tipo core, oxlint, hook y revisión independiente en verde. El commit `761fe0ca64b40b8b10ec76b49e3ee355df5a0c73` regeneró los tipos de la tabla de incidencias y dejó limpio el checkout.
+
+El ejecutor de G rechazaba `admission_restart` ([rojo](T2-wrapper-red.txt)); ahora `AGENT_WORK_RUNTIME_SOURCE=/Users/dn/dev/openclaw-agent-work-b1 bash scripts/agent-work/test-runtime.sh admission_restart` pasa 4/4 sobre el SHA limpio `761fe0ca64b40b8b10ec76b49e3ee355df5a0c73` ([log](T2-wrapper-admission.txt)). Falta la prueba `requester_queue` y su ruta productiva sigue deshabilitada por presupuesto.

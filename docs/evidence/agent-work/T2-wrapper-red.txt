@@ -1,0 +1,2 @@
+# T2 — salida roja del ejecutor de G: caso admission_restart sin implementar (captura)
+Unknown or unimplemented agent-work runtime case: admission_restart

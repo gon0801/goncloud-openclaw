@@ -122,6 +122,18 @@ $(cat "$CALLS")"
   echo "ok (2a-unmark): desmarcar borra el estado y el cierre posterior no despierta a nadie"
   : >"$CALLS"
 
+  "$TM" -L "$L" new-session -d -s managed-idle -x 80 -y 20 'cat' || fail "no se pudo crear managed-idle"
+  mark managed-idle
+  "$TM" -L "$L" set-environment -t managed-idle AGENT_WORK_MANAGED 1
+  sleep 2
+  run_once || fail "--once gestionado fallo"
+  [ ! -s "$CALLS" ] || fail "quiet gestionado desperto un modelo: $(cat "$CALLS")"
+  [ ! -f "$STATE_DIR/managed-idle.state" ] || fail "quiet gestionado conservo estado del vigia"
+  "$TM" -L "$L" kill-session -t managed-idle
+  run_once || fail "--once tras cierre gestionado fallo"
+  [ ! -s "$CALLS" ] || fail "cierre gestionado desperto un modelo: $(cat "$CALLS")"
+  echo "ok (2a-managed): quiet y cierre gestionados no despiertan modelo"
+
   # CON marcador (lo pone el despachador al mandar una orden), la misma sesion callada si avisa.
   mark muse-orbit
   run_once || fail "--once con marcador fallo"

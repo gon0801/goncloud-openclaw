@@ -1,0 +1,29 @@
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "e921a7b8b32addf0938caceb1683a53329855441"}
+[test] starting test/vitest/vitest.agents-support.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+[vitest-workers] local cache hit after 1918ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared ec8ff070f1e1 in 1948ms (16675 inputs, 17229 outputs)
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rejects an invented budget reservation before claiming a native run 399ms
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > lets one emitter claim, keeps a crash uncertain, and recovers the exact native run 1513ms
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rejects revoked authority before claiming and fences a delayed prior request 379ms
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rechecks authority inside the worker before persisting a claim 378ms
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > refuses admission after cancellation and cannot confirm an outstanding claim 61ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.admission.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.admission.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.admission.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.admission.test.ts: retiring openclaw.sharedStateWorkerOwner
+
+ ✓ |agents-support| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > upgrades a version 20 task ledger without losing its registered tasks 127ms
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  10:47:26
+   Duration  6.16s (tests 48%, transform 46%, worker 3%, setup 2%, import 2%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 7.39s

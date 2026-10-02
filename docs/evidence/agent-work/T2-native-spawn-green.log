@@ -1,0 +1,107 @@
+Plugin "vitest:mocks:interceptor" defines Vite-specific hooks (configureServer) in a plugin returned from applyToEnvironment. These hooks will be ignored.
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+ ✓ |agents-support| src/agents/tasks/managed-task.spawn-pipeline.test.ts > managed admission in native spawn pipeline > does not dispatch an ordinary parent after its authority closes 12ms
+ ✓ |agents-support| src/agents/tasks/managed-task.spawn-pipeline.test.ts > managed admission in native spawn pipeline > claims before initialization and never dispatches a second time after a crash 1175ms
+ ✓ |agents-support| src/agents/tasks/managed-task.spawn-pipeline.test.ts > managed admission in native spawn pipeline > leaves a claim uncertain when initialization fails and does not retry dispatch 1092ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.spawn-pipeline.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.spawn-pipeline.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.spawn-pipeline.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.spawn-pipeline.test.ts: retiring openclaw.sharedStateWorkerOwner
+
+ ✓ |agents-support| src/agents/tasks/managed-task.spawn-pipeline.test.ts > managed admission in native spawn pipeline > does not dispatch a task cancelled while native initialization is pending 1108ms
+ ✓ |agents-support| src/agents/tasks/managed-task.spawn-pipeline.test.ts > managed admission in native spawn pipeline > refuses a managed collector bound to a different requester turn 1ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > rejects unsupported private completion combinations before child effects: {"collect":true} 5ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > rejects unsupported private completion combinations before child effects: {"thread":true} 1ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > rejects unsupported private completion combinations before child effects: {"mode":"session"} 1ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > rejects unsupported private completion combinations before child effects: {"expectsCompletionMessage":false} 1ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > binds private completion to the admitted completion owner rather than the controller 385ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > rejects private completion without an existing parent incarnation 1ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > rejects direct swarm parameters while tools.swarm is disabled 1ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > requires a requesting run id when a collector omits groupId 1ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > rejects interactive collector mode at the direct spawn boundary 2ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > rejects interactive collector mode at the direct spawn boundary 1ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > rejects explicit same-agent targets when allowAgents excludes the requester 1ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > allows omitted agentId to default to requester even when allowAgents excludes requester 129ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > defaults collector group id from requester session and requesting run 120ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > keeps the existing receipt for explicit group 113ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > keeps the existing receipt for Code Mode implicit group 112ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > keeps the existing receipt for ordinary spawn 112ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > persists a host-reserved collector launch identity 113ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > carries explicit model authorization through a queued collector launch 110ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > carries a managed admission through the real collector spawn boundary 111ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > rejects a managed spawn with the wrong collector, target, or requester turn before effects 1ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > returns the model owner's policy refusal before creating child state 44ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > returns the model owner's unsupported native model before creating child state 44ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > returns the model owner's unowned provider before creating child state 44ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > accepts plugin-provider/new-model when the model owner supplies its supported descriptor 110ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > accepts loopback/new-model when the model owner supplies its supported descriptor 110ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > persists the model owner's canonical selection for fast 108ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > persists the model owner's canonical selection for gpt-5.4 108ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > checks automatic default support without requesting manual override permission 44ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > rejects failed model preparation without creating child state 46ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > aborts a collector cancelled while its gateway launch is in flight 159ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > holds the collector slot until an accepted run is confirmed stopped 163ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > retains the collector slot through publication and retrying rollback termination 165ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > holds the collector slot while an indeterminate launch session is deleted 164ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > emits collector deletion after an asynchronous launch failure 165ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > keeps failed-launch cleanup pending when context rollback fails 170ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > uses and validates tools.swarm.defaultAgentId for collector children 1070ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > rejects collector live and lifetime caps with config-key errors 1ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > enforces group caps atomically across concurrent collector registration 115ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > enforces ordinary child caps while accepted gateway dispatches are still pending 112ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > returns ordinary child capacity after gateway dispatch fails 110ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > reconciles a transport-ambiguous dispatch so an accepted run is surfaced instead of misreported as an error 916ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > does not register a child when reconciliation finds a terminal run 142ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > shares pending child capacity between native and visible spawn paths 1507ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > admits a sixth live collector under the swarm group cap 129ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > admits an announce child when 50 collectors are active 109ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > rejects invalid collector output schemas before creating a child session 1ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > rejects schema collection for a model that cannot call tools 108ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > rejects a group id outside collector mode 1ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > uses the global requester sandbox mode off for cross-agent spawns 132ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > uses the global requester sandbox mode all for cross-agent spawns 2ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > accepts a spawned run across session patching, runtime-model persistence, registry registration, and lifecycle emission 125ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > inherits native child profile provenance from a required parent (false) with sandbox=inherit 243ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > inherits native child profile provenance from a required parent (true) with sandbox=inherit 218ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > inherits native child profile provenance from a required parent (true) with sandbox=require 214ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > inherits native child channel provenance from a required parent (true) with sandbox=inherit 209ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > inherits native child unknown provenance from a required parent (true) with sandbox=inherit 207ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > rejects a configured-sandbox parent spawning an unsandboxed native child before side effects 1ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > rejects a split-key sandboxed requester spawning an unsandboxed native child via the explicit sandboxed flag 1ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > dispatches spawned agent runs in process when a gateway context is available 112ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > authorizes explicit model overrides for in-process child launches 115ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > keeps admin-scoped cleanup on in-process spawn failure 113ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > inherits the parent's default permission mode in a hidden child 106ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > inherits the parent's guarded permission mode in a hidden child 108ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > inherits active-turn Ultra instead of t… 80ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > inherits active-turn off instead of a s… 76ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > keeps explicit child thinking ahead of … 72ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > inherits requester fast mode for collec… 107ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > inherits requester fast mode for ordina… 105ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > persists inherited requester thinking o… 73ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > inherits global thinkingDefault when ca… 72ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > applies requester-agent subagent thinki… 72ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > uses requester agent thinkingDefault after a failed preference read 1ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > prefers requester agent thinkingDefault… 74ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > inherits requester selected-model think… 73ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > inherits requester runtime-model thinki… 2ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > inherits provider/model thinking when n… 74ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > keeps controller ownership separate from completion ownership 106ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > persists the spawning session as the stable swarm limit owner 107ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > keeps spawn cwd separate from inherited agent workspace 106ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > omits requesterOrigin threadId when no requester thread is provided 105ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > pins admin-only methods to operator.admin and preserves least-privilege for others (#59428) 106ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > forwards normalized thinking to the agent run 106ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > does not forward inherited requester thinking as an explicit agent override 88ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > does not duplicate long subagent task text in the initial user message (#72019) 111ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > returns an error without child effects when the requester session read fails 1ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > returns an error when the initial parent snapshot fails 106ms
+ ✓ |infra| src/agents/subagents/spawn/subagent-spawn.test.ts > spawnSubagentDirect seam flow > returns an error when the initial child patch fails 105ms
+
+ Test Files  2 passed (2)
+      Tests  92 passed (92)
+   Start at  11:14:27
+   Duration  17.15s (tests 89%, transform 5%, import 4%, setup 2%, worker 1%)

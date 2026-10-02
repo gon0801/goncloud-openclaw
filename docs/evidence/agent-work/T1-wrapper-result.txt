@@ -1,0 +1,31 @@
+# T1 — wrapper de G: test-runtime.sh result_receipt 4/4 (captura)
+{"candidateDiffSha256": "9ac823e338a73a813d9a4a14fe9c3b2fc9d352ed7d8eb5b4a276b87975d424b3", "candidateSha": "ef6215698a14b20b7ccf03e315be971af78cccce"}
+[test] starting test/vitest/vitest.agents-support.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-b1
+
+[vitest-workers] local cache hit after 1725ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 6242a776dd99 in 1753ms (16668 inputs, 17227 outputs)
+ ↓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates a logical key within one requester across turns and restarts
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > accepts only the current producer, generation, digest, and revision 406ms
+ ↓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > upgrades a version 19 database before the first managed task
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > does not store malformed JSON or a result without its required fields 376ms
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > rejects an empty or unversioned review while leaving the final slot available 381ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.sharedStateWorkerOwner
+
+ ✓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > persists PermissionRequired as an incident without consuming the final result 709ms
+ ↓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates director retries within a corrida without crossing corrida authority
+
+ Test Files  1 passed (1)
+      Tests  4 passed | 3 skipped (7)
+   Start at  00:36:43
+   Duration  4.85s (transform 53%, tests 40%, worker 3%, setup 2%, import 2%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 5.95s

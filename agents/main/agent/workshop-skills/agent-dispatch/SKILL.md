@@ -9,6 +9,16 @@ Route work to this Gateway's agents and collect complete results. Main orchestra
 
 ## Ruteo nativo vs. legado
 
+Las rutas marcadas expresamente como encargos gestionados de ingeniería a
+adversary y de operaciones a ingeniería usan el preparador
+`scripts/agent-work/routing.py` y las tools nativas `managed_tasks_submit`,
+`managed_tasks_admit`, `managed_tasks_inspect` y `managed_tasks_resolve`.
+Cada solicitante conserva su identidad y recibe el resultado en su propia
+sesión. Consulta las skills `managed-task-routing` de esos agentes. Si la
+tool o la combinación host/adaptador no está habilitada, el encargo queda
+bloqueado; no uses el despacho legado para un encargo gestionado. Los pedidos
+fuera de ese perímetro conservan el flujo de esta skill.
+
 Pedidos de ingeniería nativa por harnesses de la Mac usan la skill
 `native-harness-orchestration` (Task 9). Con `CORRIDA_NATIVE_ROUTING=off` o
 <!-- candado: test-native-harness-orchestration-skill.sh -->

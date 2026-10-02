@@ -12,6 +12,16 @@ fila 19.1). Antes de cambiar shell, comprueba en `origin/main` que 19.1 está
 mergeado y que U3a cerró con 19.2. 20.0 y 20.1 no tocan shell y pueden empezar con
 19.1 mergeado. El resto espera el cierre de U3a.
 
+Antes de integrar 20.1 con `reconcile.py` o cambiar las entradas de 20.4 a 20.10,
+usa las interfaces de T0 y los contratos de [encargos durables](2026-09-30-encargos-agentes.md)
+que consume la entrada concreta. Comprueba sus pruebas focalizadas y registra el
+par de SHA de G y R en el recibo de U3b. Para habilitar esa entrada como gestionada,
+comprueba además su cobertura en `docs/evidence/agent-work/coverage.json`. No
+exijas cerrar todas las tareas T0–T10 ni certificar otras rutas, CLI o Hermes para
+desarrollar U3b. Una entrada sin cobertura conserva la ruta anterior y no acredita
+continuación nativa. Rebasea cada PR de U3b sobre el último commit integrado de G
+antes de editar archivos comunes.
+
 Si U3a cambió interfaces que este plan nombra (`avisos_despertar_dueno`,
 `avisos atender`, `latido_de`), reconcilia las rutas del plan en 20.1 antes de
 tocar código. No reabras filas de U3a.
@@ -29,6 +39,16 @@ Reglas que aplican a todas las tareas:
 - Bash 3.2 en los scripts de corrida. La lógica de decisión va en Python, en
   `scripts/mac/corrida_worker/`.
 - Corre los hooks de pre-commit antes de cada commit. No uses `--no-verify`.
+- `reconcile()` sigue siendo el único decisor de ingeniería. La tarea nativa
+  conserva encargo, resultado y consumo; `task_handoffs.py` traduce el resultado
+  a un efecto del director. No abras otra bandeja ni un segundo decisor.
+- Para cada entrada gestionada, `submit`, `report` y `resolve` son la ruta de
+  entrega y continuación. Stop, quietud y el latido solo observan. No crean
+  sesiones supervisoras, empujones por silencio ni turnos de modelo.
+- Aplica la regla vigente de quality-kit: un bloqueante repetido en dos rondas
+  seguidas detiene el bloque y exige decisión del operador. Una revisión posterior
+  examina solo el diff de la corrección y usa otro revisor. No heredes la excepción
+  de cinco rondas del diseño original de U3b.
 
 ## 20.0. Medir el despertar de claw y la base de un turno nuevo
 
@@ -65,9 +85,10 @@ Depende de: 19.1 mergeado.
 
 Objetivo: `fase_de_log`, `phase_of`, `punto_vigente`, `claves_que_persisten`,
 `next_effect`, `TABLA`, `DECISIONES` y `PALABRAS_DAVID` según la
-[referencia](../specs/2026-09-29-director-corrida-transiciones.md). Incluye las
-rondas por tanda (`RONDAS_POR_TANDA = 5`, `TANDAS_ANTES_DE_DAVID = 2`), el efecto
-`relevar_impl` y la excepción `RONDAS_AGOTADAS`. No toca shell.
+[referencia](../specs/2026-09-29-director-corrida-transiciones.md). Integra
+`task_handoffs.py` y conserva los eventos `intent.task_handling` y
+`observed.task_handled` existentes. Un bloqueante repetido propone la excepción
+`BLOQUEANTE_REPETIDO` antes de otro relevo o revisión. No toca shell.
 
 Archivos:
 
@@ -79,14 +100,19 @@ Archivos:
 
 Prueba en rojo primero:
 
-- Una fila de la tabla de transiciones es un caso: registro y observaciones
-  sintéticos, efecto esperado literal.
+- Una fila de cada tabla de transiciones es un caso: registro, `delivery_mode`,
+  observaciones y efecto esperado literal. Un archivo LISTO o un panel quieto
+  no hacen casar una fila `legacy` cuando el bloque es `managed`.
 - La tupla `TABLA` y las tablas de la referencia coinciden fila por fila.
 - Replay de U3a B1 (19.0: r1 `cebb151`, cambios, r2 `ae72063`, aprobado, PR #222,
   merge, ledger #223) como secuencia de registro y observaciones. Los efectos salen
   en el orden del loop que se hizo a mano.
-- Cinco veredictos CAMBIOS en la tanda 1 proponen `relevar_impl`. Cinco más en la
-  tanda 2 proponen `RONDAS_AGOTADAS`.
+- Dos veredictos consecutivos con el mismo bloqueante reproducible proponen
+  `BLOQUEANTE_REPETIDO` y no crean otra ronda ni otro encargo. Un hallazgo sin
+  reproducción queda como no bloqueante y no abre otra ronda.
+- Un resultado nativo con `Changes` prepara una sola corrección mediante
+  `task_handoffs.py`; un ACK perdido de `resolve` recupera el mismo recibo. El
+  registro de corrida no crea otra bandera de consumo.
 - Mutación: sin el chequeo de `intent` pendiente, `next_effect` propone el mismo
   efecto dos veces y la prueba falla.
 - Leyes del director, probadas con secuencias aleatorias de observaciones
@@ -104,6 +130,7 @@ Verificación:
 
 ```bash
 bash scripts/tests/test-corrida-director.sh
+bash scripts/tests/test-agent-work-integration.sh director_handling
 ```
 
 Depende de: 19.1 mergeado. Puede ir en paralelo con 20.0 y 20.2.
@@ -239,10 +266,16 @@ Depende de: 20.1 y 20.4.
 
 ## 20.6. Llevar un bloque vivo hasta Aprobado
 
-Objetivo: el director ejecuta `write_encargo`, `write_brief`, `deliver`, `nudge`,
-`move_review_tree`, `discard_verdict`, `relevar_impl` y `relevar_rev`. El dueño de
-los avisos es el director. El latido llama a `reconciliar` y deja de despertar a
-`sim9`. Con esto el aviso de fin de turno y el latido pasan al director, a 0 tokens.
+Objetivo: el director ejecuta `submit_managed_task`, `record_task_handling` y
+`resolve_task_handling` para entradas gestionadas. Conserva `write_encargo`,
+`write_brief`, `deliver`, `nudge`, `move_review_tree`, `discard_verdict`,
+`relevar_impl` y `relevar_rev` solo para la ruta CLI anterior. El latido llama a
+`reconciliar` y deja de despertar a `sim9`.
+
+En una entrada gestionada, el director solicita el trabajo mediante la tarea
+nativa y consume el resultado con `task_handoffs.py`. `deliver` y `nudge` quedan
+solo para entradas CLI anteriores aún no adoptadas. La observación de una pantalla
+quieta no acredita LISTO, VEREDICTO ni justifica despertar un modelo.
 
 Archivos:
 
@@ -260,8 +293,17 @@ Prueba en rojo primero:
   tmux falla si recibe `send-keys`.
 - Con `director.activo`, el latido no manda `system event` a `agent:main:sim9-<id>`
   y sí lanza `reconciliar`.
-- El request de relevo por rondas excluye al implementador saliente y el selector
-  no lo elige.
+- Un relevo permitido excluye al implementador saliente y el selector no lo elige.
+- Un bloqueante repetido en dos rondas detiene el bloque antes de `relevar_impl`,
+  incluso si la entrada usa la ruta CLI anterior.
+- Con `delivery_mode=managed`, la tabla no llama a `launch_worker`, `deliver` ni
+  `nudge`. Un informe válido produce una intención de manejo; perder el ACK de
+  `resolve` conserva un solo hijo de corrección y el mismo recibo. El caso cruza
+  G y R con `AGENT_WORK_RUNTIME_SOURCE` fijado; una prueba omitida no acredita
+  esta ruta.
+- Dos filas gestionadas comparten raíz y presupuesto: `Approved` de la primera
+  crea la segunda mediante `Continue` en el mismo `resolve`. Si la base nativa
+  aún solo devuelve `Complete`, no habilites bloques gestionados de varias filas.
 
 Verificación:
 
@@ -269,6 +311,7 @@ Verificación:
 bash scripts/tests/test-corrida-avisos.sh
 bash scripts/tests/test-corrida-latido.sh
 bash scripts/tests/test-corrida-reconcile.sh
+bash scripts/tests/test-agent-work-integration.sh director_handling
 ```
 
 Prueba real: un pedido chico en openclaw en modo vivo hasta Aprobado. Push, PR y
@@ -312,11 +355,10 @@ Depende de: 20.6.
 ## 20.8. Excepciones, decisiones y respuestas de David
 
 Objetivo: `raise_excepcion`, `notify_excepcion`, `decidir` y `contestar`; re-aviso
-cada 60 minutos como mucho; una sesión de gateway por corrida con rotación al
-sexto turno; barrido en `cerrar`; la regla de una línea en `main`.
-
-Antes de empezar, confirma con David las palabras de `RONDAS_AGOTADAS`: `sí` para
-otra tanda de 5 con otro modelo, `salta` y `cancela`.
+cada 60 minutos como mucho para una excepción que requiere al operador. En la
+ruta gestionada, entrega la excepción al solicitante autenticado y conserva su
+sesión. La sesión corta `dir-<id>` solo sirve a corridas anteriores fuera del
+perímetro gestionado; `cerrar` no borra una sesión adoptada ni un hijo activo.
 
 Archivos:
 
@@ -333,7 +375,10 @@ Prueba en rojo primero:
 - No hay re-aviso antes de 60 minutos.
 - `contestar` con 0, 1 y 2 excepciones abiertas para David: con 1 la resuelve, con
   0 o 2 lista y sale con código 3.
-- Con `turnos_claw` en 6, la siguiente excepción va a `agent:main:dir-<id>-2`.
+- En una entrada gestionada, una excepción llega al solicitante registrado sin
+  crear `agent:main:dir-<id>` ni una sesión de vigilancia.
+- `BLOQUEANTE_REPETIDO` detiene el bloque y solo acepta una decisión explícita del
+  operador; un re-aviso no inicia otra revisión.
 
 Verificación:
 
@@ -387,8 +432,28 @@ Objetivo: probar el director de punta a punta y retirar el vigía con modelo de 
 2. Corre una fila de `Plans.md` con PR de ledger y `cierre-de-fase`.
 3. Corre un pedido grande con su `CONFIRMAR_PLAN`.
 4. Cuenta los turnos de modelo de claw y sus `totalTokens` en cada corrida.
-5. Cuando las tres corridas cierran, borra el cron vigía con modelo de U3a en el
-   gateway y confirma con `openclaw cron list` que ya no está.
+5. Inventaría qué entradas despierta cada cron vigía con modelo de U3a. Para
+   cada entrada adoptada, registra su ID de cron, configuración y generación;
+   suspende su emisión anterior, drena turnos y resultados en vuelo y comprueba
+   un solo emisor, recibos durables y cero peticiones posteriores del cron para
+   esa entrada. Si el cron es compartido con entradas no adoptadas, mantenlo
+   activo para ellas mediante un filtro probado; si no puede separarlas, no lo
+   retires ni declares completado 20.10. Borra el cron y confirma su ausencia en
+   `openclaw cron list` solo cuando todas las entradas que atendía estén migradas
+   y drenadas. Conserva los cron de negocio.
+
+Antes de la primera transferencia viva, ejecuta
+`bash scripts/tests/test-agent-work-cutover.sh` sobre el par de artefactos elegido.
+La prueba cubre la generación, el cron suspendido, los turnos antiguos en vuelo,
+la preservación de resultados pendientes y el bloqueo ante incertidumbre. La
+autorización y el recibo vivo de T12
+son necesarios para adoptar la entrada y retirar su cron, pero no para desarrollar
+el director en pruebas aisladas.
+
+Añade a `test-corrida-latido.sh` el caso de dos entradas atendidas por un cron:
+una gestionada y otra anterior. La primera no recibe despertares antiguos, la
+segunda conserva su servicio y el borrado del cron se rechaza. Después de migrar
+y drenar ambas, el mismo caso permite retirarlo. Exige ese verde antes del paso 5.
 
 Archivos: `docs/evidence/u3b-director/primera-corrida-2026-MM-DD.md` y
 `docs/evidence/usuario-20-2026-MM-DD.md` con el FUNCIONA de David.
@@ -438,6 +503,13 @@ Esta tabla limita el alcance. No obliga a tocar todos los archivos.
 No cambian `scripts/mac/tmux-activity-watch.sh`, `scripts/mac/tablero-trabajo.sh`,
 `scripts/mac/corrida/seleccionar.sh` ni `tablero-runbook/`.
 
+`reconcile.py`, `state.py`, `reconciliar.sh`, `adaptador.sh`, `avisos.sh` e
+`instalar-mac.sh` también reciben cambios del plan de encargos durables. Integra
+los commits de ese plan antes de abrir el PR correspondiente de U3b. Usa un solo
+escritor por archivo y corre las pruebas focalizadas de ambos planes sobre el
+commit combinado. El hecho de que U3b no edite `tmux-activity-watch.sh` no
+revierte la migración de T9.
+
 ## Alcance de las autorizaciones
 
 | Operación | Alcance | Estado actual |
@@ -448,7 +520,7 @@ No cambian `scripts/mac/tmux-activity-watch.sh`, `scripts/mac/tablero-trabajo.sh
 | Mergear PRs de U3b | Merge libre con CI verde en el head y revisor sin bloqueantes, con `--match-head-commit`. | Autorizado por David el 2026-09-29 para las corridas del director. |
 | Desplegar en la Mac | `scripts/mac/instalar-mac.sh` desde un checkout igual a `origin/main`. | Parte del ciclo del director una vez mergeado 20.7. |
 | Publicar al gateway | Sync seguro en la PC. | Lo hace David. El director solo pregunta. |
-| Borrar el cron vigía con modelo de U3a | Un cron del gateway. | Autorizado por David, al cerrar 20.10. |
+| Borrar el cron vigía con modelo de U3a | Todas las entradas que sirve deben estar migradas y drenadas; una entrada no adoptada conserva su ruta anterior. | Autorizado por David al cerrar 20.10 y cumplir el candado de T11–T12. |
 | Deploy de Orbit en goncloud | `scripts/deploy-goncloud.sh`. | Pregunta a David hasta cerrar 20.11. |
 
 ## Revisión

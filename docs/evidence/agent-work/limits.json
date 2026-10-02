@@ -1,0 +1,25 @@
+{
+  "schema": "agent-work-limits.v1",
+  "status": "test-only",
+  "source": {
+    "repository": "openclaw/openclaw",
+    "commit": "51e3ab940e675e03c9325c3a62a65b9d6396b945",
+    "file": "src/agents/tasks/managed-task.budget.test.ts",
+    "lines": "38-49",
+    "method": "synthetic fixture; no production measurement"
+  },
+  "testProfile": {
+    "maxConcurrentTasks": 2,
+    "maxDepth": 2,
+    "maxChildren": 2,
+    "maxModelCalls": 2,
+    "maxInputTokens": 20,
+    "maxOutputTokens": 10,
+    "maxCacheReadTokens": 20,
+    "maxContextTokens": 12,
+    "maxTreeTokens": 30,
+    "maxAutomaticRecoveryCalls": 1
+  },
+  "productionProfile": null,
+  "productionAdmissionEnabled": false
+}

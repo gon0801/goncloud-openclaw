@@ -1,0 +1,6 @@
+== rerun suite test-cli-modos ==
+G_HEAD=f734f2a3351dd4540ee57381e5a7bc151a27c177
+UTC=2026-10-02T05:36:27Z
+$ bash scripts/tests/test-cli-modos.sh
+FAIL: drift de version registro vs host: claude: registro 2.1.285 vs host '2.1.287 (Claude Code)'
+EXIT=1

@@ -1,0 +1,42 @@
+Plugin "vitest:mocks:interceptor" defines Vite-specific hooks (configureServer) in a plugin returned from applyToEnvironment. These hooks will be ignored.
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+ ↓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates a logical key within one requester across turns and restarts
+ ↓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > accepts only the current producer, generation, digest, and revision
+ ↓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > upgrades a version 19 database before the first managed task
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.store.test.ts: retiring openclaw.sharedStateWorkerOwner
+
+ × |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > does not store malformed JSON or a result without its required fields 1125ms
+   → expected [Function] to throw error including 'producer' but got 'Managed task result is invalid'
+ ↓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > rejects an empty or unversioned review while leaving the final slot available
+ ↓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > persists PermissionRequired as an incident without consuming the final result
+ ↓ |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates director retries within a corrida without crossing corrida authority
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |agents-support| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > does not store malformed JSON or a result without its required fields
+AssertionError: expected [Function] to throw error including 'producer' but got 'Managed task result is invalid'
+
+Expected: "producer"
+Received: "Managed task result is invalid"
+
+ ❯ src/agents/tasks/managed-task.store.test.ts:184:6
+    182|         result: "{malformed",
+    183|       }),
+    184|     ).rejects.toThrow("producer");
+       |      ^
+    185|     expect((await inspectManagedTask({ caller, taskId: registered.task…
+    186|     await expect(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 skipped (7)
+   Start at  11:07:17
+   Duration  1.78s (tests 71%, worker 10%, transform 8%, setup 6%, import 5%)

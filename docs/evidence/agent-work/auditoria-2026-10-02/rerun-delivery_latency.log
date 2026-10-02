@@ -1,0 +1,13 @@
+== rerun delivery_latency ==
+G_HEAD=f734f2a3351dd4540ee57381e5a7bc151a27c177
+R_HEAD=9f99e2264c012dd4cf5bd9dbac10bc7e534ffc05
+UTC=2026-10-02T05:21:52Z
+$ bash scripts/tests/test-agent-work-e2e.sh delivery_latency
+{"reported": 1, "transferred": 0}
+DELIVERY_LATENCY {"detection_to_persisted_receipt_s": 0.25, "write_to_detection_s": 4.999}
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.007s
+
+OK
+EXIT=0

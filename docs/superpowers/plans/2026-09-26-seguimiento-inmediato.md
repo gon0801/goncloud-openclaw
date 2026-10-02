@@ -1,9 +1,21 @@
 # Reducir la espera entre trabajadores CLI
 
 Estado: plan propuesto para U3a. No inicia implementación ni instala componentes.
-Orden elegido por David el 2026-09-26: cerrar U3, ejecutar U3a y después U4.
+Orden inicial del 2026-09-26: U3, U3a y U4. La integración posterior de U3b
+y U4 consume primero la base de encargos verificada en el perímetro usado.
 [Diseño y aceptación](../specs/2026-09-26-seguimiento-inmediato-design.md).
 [Ledger](../../../Plans.md), Fase 19.
+
+## Compatibilidad con la base de encargos
+
+Los estados actuales y los residuales de U3a se consultan en `Plans.md`; este
+plan conserva el procedimiento original y no obliga a repetir filas cerradas.
+Los cambios pendientes en avisos, reconciliación y seguimiento parten del SHA
+integrado de [encargos](2026-09-30-encargos-agentes.md). En entradas gestionadas,
+Stop o quietud no sustituyen `report` ni abren una entrega paralela. La adopción
+se coordina por entrada con T11–T12; no se elimina un cron compartido mientras
+atienda entradas no migradas. Los cambios sobre esos archivos se integran en
+secuencia y conservan las pruebas de ambas rutas.
 
 ## Conservar el trabajo de U3 en curso
 

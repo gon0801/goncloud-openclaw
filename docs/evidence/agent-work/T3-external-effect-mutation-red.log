@@ -1,0 +1,26 @@
+T3 external-effect replay mutation proof, 2026-10-01
+R source SHA: 3332b89cbc69ca97fb38e7a3833f0343ff358c08
+Isolation: detached temporary R worktree at that SHA; production checkout was unchanged.
+
+Mutation in src/agents/tasks/managed-task.admission.worker.ts, claim() existing-row branch:
+- return receipt(existing);
++ return { state: "claimed", claimId: existing.claim_id ?? input.claimId };
+
+Command from temporary worktree:
+./node_modules/.bin/vitest run --config test/vitest/vitest.infra.config.ts src/agents/tasks/managed-tasks-tool.test.ts -t 'retains an uncertain external launch through restart and resolves its result once'
+
+Mutated result: exit 1; 1 failed, 10 skipped. The retry failed with
+"ACK lost after external launch" at managed-tasks-tool.test.ts:323. That throw
+occurs only after the mock external launcher appends "launched\n" to its
+separate effects file. The first launch produced the same error and was caught;
+therefore this second error proves the replay entered the effect again.
+
+After git restore of the single mutation (git diff --exit-code passed), the
+identical command exited 0: 1 passed, 10 skipped. The temporary worktree was
+removed. This mutation run proves the test detects loss of the admission replay
+fence; it is not a historical pre-implementation red test.
+
+The repository's run-vitest wrapper could not compile the symlinked temporary
+workspace due to a dependency-resolution topology check. Direct Vitest ran
+the same infra configuration and test file in isolation. This setup failure
+was excluded from the red evidence.

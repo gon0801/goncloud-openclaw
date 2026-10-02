@@ -1,0 +1,78 @@
+{
+  "schema": "agent-work-runtime-map.v1",
+  "runtime": {
+    "repository": "https://github.com/openclaw/openclaw.git",
+    "deliveryRepository": "https://github.com/openclaw/openclaw.git",
+    "sourceBaseSha": "c074824a27c96d3983043f9eeb33823cd1772d8c",
+    "sourceTag": "v2026.9.7",
+    "sourceVersion": "2026.9.7",
+    "localCheckout": "/Users/dn/dev/openclaw-agent-work-integration",
+    "installedVersionAtProbe": "2026.9.7",
+    "installedPackageJsonSha256": "927716ef228eeba5c840f2e271a8a0b6b45241266a1c7347cd46578876b28c4f",
+    "installedEntrySha256": "e0da0d1c3f2debcdff4930e646b4698682889aef5252d8785a91fcc2e4c5a9f3",
+    "registryTarballIntegrity": "sha512-/8N2LnfTFQPvnZizi8qKSFfnLQaPvSG3Cb4xo1YV7b4JhYiUc43ZNRpXJ01bWghLK0Ezk3HVeo/DGHcIRQwRWA==",
+    "sourceBuildEntrySha256": "e0da0d1c3f2debcdff4930e646b4698682889aef5252d8785a91fcc2e4c5a9f3"
+  },
+  "paths": {
+    "taskDomain": "src/agents/subagents/registry/subagent-registry.types.ts",
+    "taskStore": "src/agents/subagents/registry/subagent-registry.store.sqlite.ts",
+    "scheduler": "src/agents/spawn-pipeline.ts",
+    "toolContext": "src/agents/tools/sessions-spawn-tool.ts",
+    "providerBoundary": "src/agents/provider-stream.ts",
+    "sessionLifecycle": "src/agents/subagents/registry/subagent-registry-lifecycle-completion.ts",
+    "migrations": "src/state/openclaw-state-schema.sql",
+    "nativeTests": "src/gateway/agent-turn/agent-wait-dedupe.test.ts"
+  },
+  "relatedPaths": [
+    "src/agents/subagents/spawn/subagent-spawn-request.ts",
+    "src/agents/subagents/registry/subagent-registry-run-launch.ts",
+    "src/agents/subagents/completion/subagent-completion-admission.store.ts",
+    "src/agents/subagents/announce/subagent-announce.requester-settle-wake.ts",
+    "src/gateway/agent-turn/agent-dedupe.ts",
+    "src/gateway/agent-turn/agent-job.ts",
+    "src/cron/store/run-history.kernel.ts",
+    "src/state/openclaw-state-db-additive-columns.ts",
+    "src/infra/agent-run-registry.ts"
+  ],
+  "commands": {
+    "installDependencies": [
+      "pnpm",
+      "install",
+      "--frozen-lockfile"
+    ],
+    "baselineTest": [
+      "node",
+      "scripts/run-vitest.mjs",
+      "src/gateway/agent-turn/agent-wait-dedupe.test.ts"
+    ],
+    "build": [
+      "pnpm",
+      "build"
+    ],
+    "nativeSuite": [
+      "pnpm",
+      "test"
+    ],
+    "isolateTrial": [
+      "pnpm",
+      "openclaw",
+      "--profile",
+      "agent-work-isolated",
+      "--help"
+    ],
+    "isolatedRestartProbe": [
+      "bash",
+      "scripts/agent-work/test-runtime.sh",
+      "baseline"
+    ]
+  },
+  "limits": {
+    "generalTaskOwner": "requires-change",
+    "installedArtifactMatchesSourceBuild": "unverified",
+    "profileCommand": "verified-help-only",
+    "commonTaskOwner": "requires-change",
+    "nativeSubagentOwner": "available",
+    "taskRunsOwner": "cron-history-only",
+    "installedEntryMatchesSourceBuild": "verified-sha256"
+  }
+}

@@ -1,0 +1,2 @@
+# T1 — salida roja del ejecutor de G: caso registration_identity sin implementar (captura)
+Unknown or unimplemented agent-work runtime case: registration_identity

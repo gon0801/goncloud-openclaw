@@ -1,0 +1,25 @@
+== rerun suite test-corrida-reconcile ==
+G_HEAD=f734f2a3351dd4540ee57381e5a7bc151a27c177
+UTC=2026-10-02T05:35:45Z
+$ bash scripts/tests/test-corrida-reconcile.sh
+ok (1): duplicados colapsan, el replay es byte-identico y el modo es 600
+ok (2): los 21 fixtures proponen lo esperado y repiten byte-identico
+ok (2b): remota y PR antes de la evidencia, evidencia antes del merge y canary al final
+ok (2c/2d): la tenencia entra al id del evento y acota tmux y bloqueos
+ok (3): push/PR/merge/deploy/canary/test convergen en dos invocaciones
+ok (4): la sesion desvanecida reanuda una vez y converge
+ok (4c): sin --observations re-observa tras el resume y confirma la sesion viva
+tablero: no se pudo leer el tablero de r14; el evento queda en cola
+ok (5): el sucesor se lanza una vez y queda registrado
+ok (5b): el relevo lanza al sucesor una vez, no lo mata, lo publica y lo avisa una vez
+tablero: no se pudo leer el tablero de r12; el evento queda en cola
+ok (6): el predecesor vivo bloquea y su salida desbloquea
+ok (7): diff y commits sobreviven al handoff
+ok (8): el agotamiento detiene solo su carril
+ok (9): cerrar archiva redactado, detiene y reintenta limpio
+ok (9b): archivados nacen 600 y el reintento no pisa el transcript
+ok (9c): los PR mergeados se ven (--state all) y registran merge.done
+ok (10): entradas rotas con diagnostico
+ok (11): sin campo muerto y el relevo fallido avisa por stderr
+TODO VERDE: corrida-reconcile
+EXIT=0

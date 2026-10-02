@@ -214,10 +214,16 @@ def record(args):
             stored = json.loads(path.read_text(encoding="utf-8"))
             if {k: v for k, v in stored.items() if k != "expectedRevision"} != {k: v for k, v in event.items() if k != "expectedRevision"}:
                 raise ValueError(f"ID existente con comando distinto: {identifier}")
-            print(json.dumps({"id": identifier, "queued": path == queue_path}))
+            print(json.dumps({"id": identifier, "queued": path == queue_path,
+                              "contentHash": content_hash,
+                              "queueHash": hashlib.sha256(path.read_bytes()).hexdigest(),
+                              "durable": True}))
             return
     create_immutable(queue_path, encoded(event))
-    print(json.dumps({"id": identifier, "queued": True}))
+    print(json.dumps({"id": identifier, "queued": True,
+                      "contentHash": content_hash,
+                      "queueHash": hashlib.sha256(queue_path.read_bytes()).hexdigest(),
+                      "durable": True}))
 
 
 def queue_event(args):

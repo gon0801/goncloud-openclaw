@@ -1,0 +1,81 @@
+== rerun native-harness-adapters ==
+G_HEAD=f734f2a3351dd4540ee57381e5a7bc151a27c177
+R_HEAD=9f99e2264c012dd4cf5bd9dbac10bc7e534ffc05
+UTC=2026-10-02T05:21:52Z
+$ bash scripts/tests/test-native-harness-adapters.sh
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+tablero: no se pudo leer el tablero de run-1; el evento queda en cola
+TODO VERDE: test-native-harness-adapters
+EXIT=0

@@ -1,0 +1,31 @@
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "34d0a6e945b632041ee569e33de924072a598437"}
+[test] starting test/vitest/vitest.agents-support.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+[vitest-workers] local cache hit after 1812ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared b0c0a4e45ccf in 1844ms (16675 inputs, 17229 outputs)
+ ✓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > rejects extra children atomically when the root child budget is exhausted 423ms
+ ↓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > shares concurrent admission capacity across children of a finished parent
+ ✓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > commits one decision, child, and receipt and recovers them after a lost ACK 402ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.handling.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.handling.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.handling.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.handling.test.ts: retiring openclaw.sharedStateWorkerOwner
+
+ ✓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > rolls back the whole decision when one child is invalid 449ms
+ ↓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > keeps a result pending across agent_end and cancels without replaying late output
+ ↓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > archives a result received after cancellation without creating a continuation
+ ↓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > propagates cancellation to children committed before the parent was cancelled
+ ↓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > upgrades a version 22 database before resolving its first result
+
+ Test Files  1 passed (1)
+      Tests  3 passed | 5 skipped (8)
+   Start at  08:16:35
+   Duration  4.46s (transform 62%, tests 30%, worker 4%, setup 2%, import 2%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 5.62s

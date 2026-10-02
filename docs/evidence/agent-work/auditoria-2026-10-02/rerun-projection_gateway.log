@@ -1,0 +1,40 @@
+== rerun projection_gateway ==
+G_HEAD=f734f2a3351dd4540ee57381e5a7bc151a27c177
+R_HEAD=9f99e2264c012dd4cf5bd9dbac10bc7e534ffc05
+UTC=2026-10-02T05:21:19Z
+$ bash scripts/agent-work/test-runtime.sh projection_gateway
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "9f99e2264c012dd4cf5bd9dbac10bc7e534ffc05"}
+[test] starting test/vitest/vitest.gateway-database-workers.config.ts
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.1 [39m[90m/Users/dn/dev/openclaw-agent-work-integration[39m
+
+[vitest-workers] local cache hit after 2288ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared d19a9c78a878 in 2319ms (16692 inputs, 17249 outputs)
+ [2m[90m↓[39m[22m [30m[42m gateway-database-workers [49m[39m src/gateway/server-methods/managed-tasks.test.ts[2m > [22mmanaged task projection gateway authority[2m > [22mprebinds the oldest CLI claim to one authenticated host instance before admission
+ [2m[90m↓[39m[22m [30m[42m gateway-database-workers [49m[39m src/gateway/server-methods/managed-tasks.test.ts[2m > [22mmanaged task projection gateway authority[2m > [22mserves a bounded brief only to the prebound authenticated host
+ [2m[90m↓[39m[22m [30m[42m gateway-database-workers [49m[39m src/gateway/server-methods/managed-tasks.test.ts[2m > [22mmanaged task projection gateway authority[2m > [22mrequires operator admin authority for host reports and projections
+ [2m[90m↓[39m[22m [30m[42m gateway-database-workers [49m[39m src/gateway/server-methods/managed-tasks.test.ts[2m > [22mmanaged task projection gateway authority[2m > [22mresolves one director decision through the guarded Gateway handler and replays its receipt
+ [2m[90m↓[39m[22m [30m[42m gateway-database-workers [49m[39m src/gateway/server-methods/managed-tasks.test.ts[2m > [22mmanaged task projection gateway authority[2m > [22maccepts one CLI host result, rejects another host, and replays the same native receipt
+ [2m[90m↓[39m[22m [30m[42m gateway-database-workers [49m[39m src/gateway/server-methods/managed-tasks.test.ts[2m > [22mmanaged task projection gateway authority[2m > [22mlists a durable projection and acknowledges only its exact host receipt
+ [2m[90m↓[39m[22m [30m[42m gateway-database-workers [49m[39m src/gateway/server-methods/managed-tasks.test.ts[2m > [22mmanaged task projection gateway authority[2m > [22mrejects malformed or revoked requests before confirming a projection
+[90mstderr[2m | unknown test
+[22m[39m[sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.stateReadWorkers
+[sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.sessionGroupCatalog
+
+ [32m✓[39m [30m[42m gateway-database-workers [49m[39m src/gateway/server-methods/managed-tasks.test.ts[2m > [22mmanaged task projection gateway authority[2m > [22mserves and acknowledges a durable projection over an authenticated Gateway connection[33m 19130[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m1 passed[39m[22m[2m | [22m[33m7 skipped[39m[90m (8)[39m
+[2m   Start at [22m 22:21:20
+[2m   Duration [22m 23.94s[2m (tests 81%, transform 16%, import 2%, worker 1%)[22m
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 25.61s
+EXIT=0

@@ -975,28 +975,33 @@ correr_relanzo_kill() { # $1 numero de caso, $2 nombre de sesion, $3 rol, $4 top
     if grep -qF "$nombre closed" "$WATCH_STATE_DIR/eventos.jsonl" 2>/dev/null \
       && "$TMUX_BIN" has-session -t "=$nombre" 2>/dev/null; then
       local marca; marca="$("$TMUX_BIN" show-environment -t "=$nombre" OPENCLAW_WATCH_RUN 2>/dev/null)" || marca=""
-      if [ "$marca" = "OPENCLAW_WATCH_RUN=$SIM_ID" ] && [ "$(entradas_para_dir "$dir")" = "$((antes+1))" ]; then
+      # 19e3ee3: el relanzo del mismo nombre REEMPLAZA la entrada del registro,
+      # no agrega una segunda; el conteo para el dir se mantiene en $antes.
+      if [ "$marca" = "OPENCLAW_WATCH_RUN=$SIM_ID" ] && [ "$(entradas_para_dir "$dir")" = "$antes" ]; then
         ok=1; break
       fi
     fi
     sleep 3
   done
   if [ "$ok" -ne 1 ]; then
-    escribir_caso "$n" "NO FUNCIONA" "en ${tope}s no se vio 'closed' + sesion nueva marcada + registro con una entrada mas para $dir" \
+    escribir_caso "$n" "NO FUNCIONA" "en ${tope}s no se vio 'closed' + sesion nueva marcada + registro con la entrada reemplazada para $dir" \
       "$t0_iso" "" "" "" "$simulado"
     return
   fi
   sleep "$SIM_ESPERA_DOBLE"
   local despues; despues="$(entradas_para_dir "$dir")"
-  if [ "$despues" != "$((antes+1))" ]; then
-    escribir_caso "$n" "NO FUNCIONA" "hubo un segundo relanzamiento (entradas para $dir: antes=$antes, despues=$despues)" \
+  # Con reemplazo, un segundo relanzamiento no cambia el conteo del registro:
+  # se detecta por los eventos relanzo-automatico de la corrida (uno por sesion).
+  local relanzos; relanzos="$(grep -cF "\"tipo\": \"relanzo-automatico\", \"sesion\": \"$nombre\"" "$DIR_SIM/eventos.jsonl" 2>/dev/null)" || relanzos=0
+  if [ "$despues" != "$antes" ] || [ "$relanzos" != "1" ]; then
+    escribir_caso "$n" "NO FUNCIONA" "registro incoherente o segundo relanzamiento (entradas para $dir: antes=$antes, despues=$despues; relanzos=$relanzos)" \
       "$t0_iso" "" "" "" "$simulado"
     return
   fi
   local hora_evento; hora_evento="$(hora_evento_cerrado "$nombre")"
   [ -n "$hora_evento" ] || hora_evento="$t0_iso"
   escribir_caso "$n" "FUNCIONA" "" "$hora_evento" "no aplica: sin mensaje por diseno" "no aplica: sin mensaje por diseno" \
-    "eventos.jsonl del vigia: '$nombre closed'; sesion nueva $nombre con OPENCLAW_WATCH_RUN=$SIM_ID; registro con exactamente una entrada mas para $dir/; sin segundo relanzamiento en ${SIM_ESPERA_DOBLE}s" \
+    "eventos.jsonl del vigia: '$nombre closed'; sesion nueva $nombre con OPENCLAW_WATCH_RUN=$SIM_ID; registro con la entrada del mismo nombre reemplazada (una sola para $dir/); un solo relanzo-automatico en eventos.jsonl; sin segundo relanzamiento en ${SIM_ESPERA_DOBLE}s" \
     "$simulado"
 }
 correr_caso5() { correr_relanzo_kill 5 sim9-c5 carril "$SIM_TOPE_C5"; }

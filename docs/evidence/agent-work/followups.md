@@ -1,0 +1,16 @@
+# Hallazgos pendientes de integración
+
+| Bloque | Hallazgo | Condición de cierre |
+|---|---|---|
+| B3→B4 | El informe portable T6 usa `observedRevision` textual y `digest` del archivo; el resultado nativo T1 usa `Revision` estructurada y digest del payload. Son pruebas distintas. | En T8, un puente validado comprueba bytes y propietario del artefacto, revisión observada y contrato del payload antes de `report`; conserva ambos digests explícitos y prueba revisión antigua y archivo alterado. No declarar T6 aceptada ni habilitar entrega CLI antes de esa prueba. |
+| B0 (auditoría 2026-10-02) | Drift de inventario: `workers.v1.json` declara claude `2.1.285`, el host tiene `2.1.287` y `main` declara `2.1.284`; `test-cli-modos` sale rojo en esta Mac con ambos árboles. En CI la entrada se salta al no haber CLI de host; no es un fallo del diff. | Subir la versión del inventario a la vigente del host en la ronda que toque `workers.v1.json`, con la suite verde en el host que declara la versión. |
+| B3/T7 | `scripts/mac/corrida/lanzar-sesion.sh` (línea del reemplazo de entrada) también reemplaza una entrada gestionada que trae `host_id`/`encargo_ref` cuando el relanzo no los pasa. Hoy falla de forma segura (si el carril tiene `resource_receipt_ref`, `cerrar` y `terminar-sesion` salen 1) y la admisión sigue deshabilitada, pero sin ese carril el enlace al recurso gestionado se pierde sin aviso. Origen: residual 1 del `VEREDICTO-B0-1-r2`. | Rechazar el reemplazo de una entrada gestionada salvo que el relanzo lleve el mismo `encargo_ref`/`host_id`. |
+
+## Residuales B0-1-r1 (no reabren, van al PR)
+- Motivo del salto invisible en CI: `test-agent-work-e2e.sh` sin argumentos (como lo invoca `run-checks.sh`) imprime OK (skipped=1) dos veces sin el motivo. Arreglo de una línea: correr con `-v` o imprimir el motivo en el wrapper.
+- La auditoría dice que el "job nativo" invoca `test-runtime.sh`, pero ningún job de `.github/workflows/` lo hace todavía. Es el diseño del plan (casilla abierta de T10): corregir la frase.
+- Conteo de la clase R: salen 88 citas o 77 commits únicos contra 84 declarados (citas corta y larga del mismo commit). Solo contabilidad.
+- Paquete B5/T11 (antes de T12, no afecta nada vivo): R sube la base de estado v19 a v26 aunque `managedTasks` esté apagado (`src/state/openclaw-state-db-contract.ts:28` dice 26, `package.json` sigue en 19, Swift en máximo 19; un rollback a 2026.9.7 rechazaría la base); heartbeat de restart-sentinel sin evento termina en `no-pending-event` (`heartbeat-runner-prompt.ts:157-171`); el interruptor real es `managedTasks.enabled` de `openclaw.json` (R no lee `coverage.json`); consulta SQLite por turno sin try/catch (`attempt-stream-settle.ts:473-485`). Todo como fila del plan en T11.
+
+## Residual B0-1-r2 (no reabre, va al PR)
+- `lanzar-sesion.sh:127` reemplaza la entrada vieja aunque traiga `host_id`/`encargo_ref` (sesión gestionada) y el relanzo no los pase. Hoy falla de forma segura (si el carril tiene `resource_receipt_ref`, cerrar y terminar-sesion salen 1), pero sin ese carril el enlace al recurso gestionado se pierde sin aviso. Va como fila de B3/T7: rechazar el reemplazo de una entrada gestionada salvo que lleve el mismo `encargo_ref`/`host_id`.

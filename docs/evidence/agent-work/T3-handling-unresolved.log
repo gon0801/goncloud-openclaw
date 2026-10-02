@@ -1,0 +1,32 @@
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "7ba2ef2357be2d01769960ee5a184aa0753fc319"}
+[test] starting test/vitest/vitest.agents-support.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+[vitest-workers] local cache hit after 1773ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 69a425da93eb in 1802ms (16675 inputs, 17229 outputs)
+ ↓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > rejects extra children atomically when the root child budget is exhausted
+ ↓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > shares concurrent admission capacity across children of a finished parent
+ ↓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > commits one decision, child, and receipt and recovers them after a lost ACK
+ ↓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > rolls back the whole decision when one child is invalid
+ ✓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > keeps a result pending across agent_end and cancels without replaying late output 769ms
+ ✓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > archives a result received after cancellation without creating a continuation 436ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.handling.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.handling.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.handling.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.handling.test.ts: retiring openclaw.sharedStateWorkerOwner
+
+ ✓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > preserves an uncertain external effect without replaying a child after restart 743ms
+ ↓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > propagates cancellation to children committed before the parent was cancelled
+ ↓ |agents-support| src/agents/tasks/managed-task.handling.test.ts > managed task handling > upgrades a version 22 database before resolving its first result
+
+ Test Files  1 passed (1)
+      Tests  3 passed | 6 skipped (9)
+   Start at  08:18:09
+   Duration  5.01s (transform 53%, tests 41%, worker 3%, setup 2%, import 2%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 6.14s

@@ -125,6 +125,17 @@ for f in scripts/mac/corrida_worker/*.py; do
 done
 cp -p scripts/mac/corrida/preaprobaciones.v1.json "$T/home/bin/corrida/preaprobaciones.v1.json" \
   || fail "no se pudo poblar HOME de mentira (preaprobaciones.v1.json)"
+# 4eaf41a: el modo_verificar exige bin/agent-work/ identico a
+# scripts/agent-work/ y cutover.py con +x; la lista sale del propio
+# instalador, como BINS.
+AW_INST=$(sed -n 's/^AGENT_WORK_FILES="\(.*\)"$/\1/p' scripts/mac/instalar-mac.sh)
+[ -n "$AW_INST" ] || fail "no se pudo leer AGENT_WORK_FILES de instalar-mac.sh"
+mkdir -p "$T/home/bin/agent-work"
+for f in $AW_INST; do
+  cp -p "scripts/agent-work/$f" "$T/home/bin/agent-work/$f" \
+    || fail "no se pudo poblar HOME de mentira (agent-work/$f)"
+done
+chmod 755 "$T/home/bin/agent-work/cutover.py"
 cp -p scripts/mac/tmux.conf "$T/home/.tmux.conf"
 sed "s|/Users/dn|$T/home|g" scripts/mac/ai.goncloud.tmux-activity-watch.plist \
   > "$T/home/Library/LaunchAgents/ai.goncloud.tmux-activity-watch.plist"
@@ -200,20 +211,18 @@ grep -q '"estado": *"cerrada"' "$T/corridas/$SIM_ID1/registro.json" \
   || fail "el registro de $SIM_ID1 no quedo cerrado tras el trap"
 
 # (1f) decisiones.jsonl trae las decisiones de los casos 2 y 3; el registro
-# quedo con dos entradas para sim9-c5 y para sim9-lead (la original + el
-# relanzamiento del caso 5/6).
+# quedo con una entrada para sim9-c5 (la relanzada).
 DEC1="$T/corridas/$SIM_ID1/decisiones.jsonl"
 grep -q '"sesion": "sim9-t2"' "$DEC1" || fail "decisiones.jsonl no trae nada de sim9-t2"
 grep -q '"sesion": "sim9-t3"' "$DEC1" || fail "decisiones.jsonl no trae nada de sim9-t3"
-# lanzar-sesion siempre APPEND-ea (nunca reemplaza): la relanzada reusa el
-# mismo nombre de sesion Y el mismo dir, asi que quedan DOS entradas del
-# registro para ese par (la original, muerta, y la relanzada, viva) — "una
-# entrada mas" que antes del kill, tal como pide el diseno.
+# 19e3ee3: lanzar-sesion REEMPLAZA la entrada del mismo nombre (la sesion
+# vieja esta muerta); la relanzada reusa el mismo nombre Y el mismo dir, asi
+# que queda UNA sola entrada del registro para ese par, viva.
 n_c5="$(python3 -c "
 import json
 d=json.load(open('$T/corridas/$SIM_ID1/registro.json'))
 print(sum(1 for s in d['sesiones'] if s.get('nombre')=='sim9-c5'))")"
-[ "$n_c5" = "2" ] || fail "se esperaban 2 entradas del registro nombradas sim9-c5 (original + relanzada), hay $n_c5"
+[ "$n_c5" = "1" ] || fail "se esperaba 1 entrada del registro nombrada sim9-c5 (el relanzo reemplaza la muerta, 19e3ee3), hay $n_c5"
 
 fi
 

@@ -1,0 +1,6 @@
+== rerun suite test-fase17-progress-event-atomic ==
+G_HEAD=f734f2a3351dd4540ee57381e5a7bc151a27c177
+UTC=2026-10-02T05:36:09Z
+$ bash scripts/tests/test-fase17-progress-event-atomic.sh
+VERDE: apertura segura, durable e idempotente; proyección previa intacta
+EXIT=0

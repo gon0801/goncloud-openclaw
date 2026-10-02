@@ -255,6 +255,7 @@ STUB
   chmod +x "$STUB_HC"
   RUN_FILE="$T/hook-run"; : >"$RUN_FILE"
   MARK_FILE="$T/hook-mark"; echo 1 >"$MARK_FILE"
+  MANAGED_FILE="$T/hook-managed"; : >"$MANAGED_FILE"
   DISPLAY_STUB="$T/tmux-display-stub"
   cat >"$DISPLAY_STUB" <<STUB
 #!/bin/sh
@@ -267,6 +268,10 @@ if [ "\$2" = "OPENCLAW_WATCH_RUN" ]; then
   r=\$(cat "$RUN_FILE")
   if [ -n "\$r" ]; then echo "OPENCLAW_WATCH_RUN=\$r"; exit 0; fi
   echo "unknown variable: OPENCLAW_WATCH_RUN" >&2; exit 1
+fi
+if [ "\$2" = "AGENT_WORK_MANAGED" ]; then
+  if [ "\$(cat "$MANAGED_FILE")" = "1" ]; then echo "AGENT_WORK_MANAGED=1"; exit 0; fi
+  echo "unknown variable: AGENT_WORK_MANAGED" >&2; exit 1
 fi
 exit 0
 STUB
@@ -309,6 +314,14 @@ STUB
     || fail "(k) con CORRIDA_AVISOS=0 el evento debia salir como hoy: $(cat "$OCALLS")"
   [ "$(wc -l <"$HCALLS" | tr -d ' ')" -eq 0 ] || fail "(k) la reversa no debia llamar a corrida.sh: $(cat "$HCALLS")"
   echo "ok (k-reversa): CORRIDA_AVISOS=0 devuelve el hook a la ruta de vigia-mac"
+
+  echo 1 >"$MANAGED_FILE"; : >"$HCALLS"; : >"$OCALLS"
+  rc=$(hook_run)
+  [ "$rc" = "0" ] || fail "(k-managed) el hook gestionado debio salir 0, salio $rc"
+  sleep 0.2
+  [ ! -s "$HCALLS" ] && [ ! -s "$OCALLS" ] \
+    || fail "(k-managed) Stop sin informe desperto un modelo: $(cat "$HCALLS" "$OCALLS")"
+  echo "ok (k-managed): Stop gestionado sin informe no despierta modelo"
 else
   echo "SKIP (k): falta $H"
 fi

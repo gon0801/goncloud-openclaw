@@ -44,3 +44,14 @@ fase 19 devuelve B1, B2 y B3 mergeados con avance 100, igual que el JSON y
       válido posterior a un rechazo permanente.
 - [ ] Reintentar la adquisición del lock de progreso si otro proceso lo borra
       durante la inspección y `statSync` devuelve `ENOENT`.
+
+## Consumo por encargos y fases posteriores
+
+T8 del [plan de encargos](2026-09-30-encargos-agentes.md) proyecta sus resultados
+a este almacén de eventos y conserva sus revisiones y recibos. U3b y U4 no añaden
+un escritor de snapshots ni otra fuente de porcentaje. La recepción, el manejo
+nativo y la aceptación de producto son hechos distintos: publicar avance no
+consume una tarea ni acredita su criterio. U4 define el porcentaje principal
+de unidades verificadas sin reinterpretar silenciosamente el avance legacy.
+La [recuperación de importaciones](2026-09-30-progress-import-recovery.md) sigue
+siendo la ruta de reparación; no se repiten importaciones para reiniciar estados.
