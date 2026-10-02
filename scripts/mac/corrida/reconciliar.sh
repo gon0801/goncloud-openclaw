@@ -124,9 +124,22 @@ reconciliar_ejecutar() { # $1 id $2 reg $3 pw $4 op $5 lane $6 args-json
     record_task_handling)
       reconciliar_reducir "$reg" "$pw" "$lane" "intent.task_handling" "$args" || return 1
       ;;
+    record_task_gate)
+      reconciliar_reducir "$reg" "$pw" "$lane" "intent.task_gate" "$args" || return 1
+      ;;
+    record_task_gate_receipt)
+      reconciliar_reducir "$reg" "$pw" "$lane" "observed.task_gate" "$args" || return 1
+      ;;
     resolve_task_handling)
       lock_soltar "$reg"
       reconciliar_tarea_resolver "$reg" "$pw" "$lane" "$args"
+      local rc=$?
+      lock_tomar "$reg" || return 1
+      return "$rc"
+      ;;
+    execute_task_gate)
+      lock_soltar "$reg"
+      reconciliar_tarea_gate "$id" "$reg" "$pw" "$lane" "$args"
       local rc=$?
       lock_tomar "$reg" || return 1
       return "$rc"
@@ -198,6 +211,91 @@ reconciliar_tarea_resolver() { # $1 reg $2 pw $3 lane $4 request-json
     --request-json "$args" 2>/dev/null)" || return 1
   [ -n "$receipt" ] || return 1
   reconciliar_reducir_con_lock "$reg" "$pw" "$lane" "observed.task_handled" "$receipt" || return 1
+  return 0
+}
+
+# Run the existing gate command after a native task result was consumed.  The
+# gate is read-only: compuerta.sh records gate.allow/deny and never performs a
+# merge or deploy.  A matching gate event is required before this function
+# records observed.task_gate, so an invalid or non-portable evidence path
+# remains an explicit pending effect instead of a fake completion.
+reconciliar_tarea_gate() { # $1 id $2 reg $3 pw $4 lane $5 gate-json
+  local id="$1" reg="$2" pw="$3" lane="$4" args="$5"
+  local action sha evidence evidence_digest task_id decision_id decision_digest receipt rc=0
+  action="$(printf '%s' "$args" | python3 -c "import json,sys; print(json.load(sys.stdin).get('action',''))")"
+  sha="$(printf '%s' "$args" | python3 -c "import json,sys; print(json.load(sys.stdin).get('sha',''))")"
+  evidence="$(printf '%s' "$args" | python3 -c "import json,sys; print(json.load(sys.stdin).get('evidencePath',''))")"
+  evidence_digest="$(printf '%s' "$args" | python3 -c "import json,sys; print(json.load(sys.stdin).get('evidenceDigest',''))")"
+  task_id="$(printf '%s' "$args" | python3 -c "import json,sys; print(json.load(sys.stdin).get('taskId',''))")"
+  decision_id="$(printf '%s' "$args" | python3 -c "import json,sys; print(json.load(sys.stdin).get('decisionId',''))")"
+  decision_digest="$(printf '%s' "$args" | python3 -c "import json,sys; print(json.load(sys.stdin).get('decisionDigest',''))")"
+  receipt="$(CORR_GATE_ARGS="$args" python3 - <<'PY'
+import hashlib, json, os
+from pathlib import Path
+try:
+    value = json.loads(os.environ["CORR_GATE_ARGS"])
+    path = Path(value["evidencePath"])
+except (KeyError, TypeError, ValueError):
+    raise SystemExit(1)
+if not path.is_absolute() or path.is_symlink() or not path.is_file():
+    raise SystemExit(1)
+try:
+    raw = path.read_bytes()
+except OSError:
+    raise SystemExit(1)
+if hashlib.sha256(raw).hexdigest() != value.get("evidenceDigest"):
+    raise SystemExit(1)
+print("ok")
+PY
+  )" || return 1
+  [ "$receipt" = "ok" ] || return 1
+
+  if bash "$AQUI/corrida.sh" compuerta "$id" "$lane" "$action" \
+      --sha "$sha" --evidence "$evidence" --task-id "$task_id" \
+      --decision-id "$decision_id" --decision-digest "$decision_digest" \
+      >/dev/null 2>&1; then
+    rc=0
+  else
+    rc=$?
+  fi
+  receipt="$(CORR_REG="$reg" CORR_LANE="$lane" CORR_GATE_ARGS="$args" \
+    CORR_GATE_EXIT="$rc" python3 - <<'PY'
+import json, os
+try:
+    wanted = json.loads(os.environ["CORR_GATE_ARGS"])
+    record = json.load(open(os.environ["CORR_REG"], encoding="utf-8"))
+except (OSError, TypeError, ValueError):
+    raise SystemExit(1)
+lanes = [lane for lane in record.get("lanes") or [] if isinstance(lane, dict)]
+lane = next((item for item in lanes if item.get("id") == os.environ["CORR_LANE"]), None)
+if lane is None:
+    raise SystemExit(1)
+for event in reversed(lane.get("events") or []):
+    if not isinstance(event, dict) or event.get("kind") not in ("gate.allow", "gate.deny"):
+        continue
+    payload = event.get("payload") or {}
+    if not isinstance(payload, dict):
+        continue
+    if all(payload.get(source) == wanted.get(target) for source, target in (
+        ("task_id", "taskId"), ("decision_id", "decisionId"),
+        ("decision_digest", "decisionDigest"), ("action", "action"),
+        ("sha", "sha"), ("evidence_path", "evidencePath"),
+        ("evidence_digest", "evidenceDigest"))):
+        result = dict(wanted)
+        result.update({
+            "verdict": "allow" if event["kind"] == "gate.allow" else "deny",
+            "gateKind": event["kind"],
+            "code": payload.get("code", ""),
+            "reason": payload.get("reason", ""),
+            "commandExit": int(os.environ.get("CORR_GATE_EXIT", "1")),
+        })
+        print(json.dumps(result, sort_keys=True))
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+  )" || return 1
+  [ -n "$receipt" ] || return 1
+  reconciliar_reducir_con_lock "$reg" "$pw" "$lane" "observed.task_gate" "$receipt" || return 1
   return 0
 }
 

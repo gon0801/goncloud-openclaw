@@ -31,6 +31,7 @@ EVENT_KINDS = frozenset(
         "intent.stop_lane",
         "intent.mark_lane_stopped",
         "intent.task_handling",
+        "intent.task_gate",
         "observed.session.vanished",
         "observed.resumed",
         "observed.launched",
@@ -47,6 +48,7 @@ EVENT_KINDS = frozenset(
         "observed.session.stopped",
         "observed.test.failed",
         "observed.task_handled",
+        "observed.task_gate",
         "observed.canary.failed",
         "gate.allow",
         "gate.deny",
@@ -215,8 +217,12 @@ def apply_event(record: Mapping[str, Any], event: Event) -> dict:
         lane.setdefault("evidence", {})["test_observed"] = True
     elif kind == "intent.task_handling":
         lane.setdefault("task_handling", {})["intent"] = payload
+    elif kind == "intent.task_gate":
+        lane.setdefault("task_handling", {})["gate_intent"] = payload
     elif kind == "observed.task_handled":
         lane.setdefault("task_handling", {})["receipt"] = payload
+    elif kind == "observed.task_gate":
+        lane.setdefault("task_handling", {})["gate_receipt"] = payload
     elif kind.startswith("gate."):
         lane.setdefault("evidence", {})["last_gate"] = {"kind": kind, "payload": payload}
     elif kind.startswith("evidence."):

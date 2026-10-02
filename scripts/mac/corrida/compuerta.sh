@@ -6,17 +6,23 @@
 # sustituye al recibo del kit. Sin kit no hay merge (fail-closed), salvo que
 # la preaprobacion del registro declare modo_recibo ci-y-revisor: entonces el
 # recibo lo reemplaza el veredicto del revisor leido de GitHub para el head.
-# Uso: corrida.sh compuerta <id> <carril> <cross-review|push-pr|ci|coderabbit|merge|deploy|canary|rollback> --sha SHA --evidence FILE
+# Uso: corrida.sh compuerta <id> <carril> <cross-review|push-pr|ci|coderabbit|merge|deploy|canary|rollback> --sha SHA --evidence FILE [--task-id ID --decision-id ID --decision-digest DIGEST]
 corrida_compuerta() {
   [ "$#" -ge 3 ] || { echo "uso: corrida.sh compuerta <id> <carril> <accion> --sha SHA --evidence FILE" >&2; return 2; }
   local id="$1" carril="$2" accion="$3"; shift 3
-  local sha="" evidence=""
+  local sha="" evidence="" task_id="" decision_id="" decision_digest=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --sha) [ $# -ge 2 ] || { echo "compuerta: --sha sin valor" >&2; return 2; }
         sha="$2"; shift 2;;
       --evidence) [ $# -ge 2 ] || { echo "compuerta: --evidence sin valor" >&2; return 2; }
         evidence="$2"; shift 2;;
+      --task-id) [ $# -ge 2 ] || { echo "compuerta: --task-id sin valor" >&2; return 2; }
+        task_id="$2"; shift 2;;
+      --decision-id) [ $# -ge 2 ] || { echo "compuerta: --decision-id sin valor" >&2; return 2; }
+        decision_id="$2"; shift 2;;
+      --decision-digest) [ $# -ge 2 ] || { echo "compuerta: --decision-digest sin valor" >&2; return 2; }
+        decision_digest="$2"; shift 2;;
       *) echo "compuerta: flag desconocido $1" >&2; return 2;;
     esac
   done
@@ -31,6 +37,17 @@ corrida_compuerta() {
   local reg; reg="$(registro_de "$id")"
   [ -f "$reg" ] || { echo "sin registro: $id" >&2; return 1; }
   [ -n "$(lane_campo "$reg" "$carril" id)" ] || { echo "compuerta: sin carril: $carril" >&2; return 1; }
+  CORR_GATE_TASK_ID="$task_id"
+  CORR_GATE_DECISION_ID="$decision_id"
+  CORR_GATE_DECISION_DIGEST="$decision_digest"
+  CORR_GATE_EVIDENCE_PATH="$evidence"
+  CORR_GATE_EVIDENCE_DIGEST="$(EVIDENCE_PATH="$evidence" python3 -c '
+import hashlib, os
+try:
+    print(hashlib.sha256(open(os.environ["EVIDENCE_PATH"], "rb").read()).hexdigest())
+except OSError:
+    raise SystemExit(1)
+')" || return 1
   local repo prn
   repo="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('repo',''))" "$evidence" 2>/dev/null)"
   prn="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('pr',''))" "$evidence" 2>/dev/null)"
@@ -206,11 +223,22 @@ compuerta_veredicto() { # $1 id $2 reg $3 lane $4 accion $5 sha $6 verdict $7 co
   if [ "$grabado" -eq 1 ]; then
     CORR_LANE="$lane" CORR_KIND="$kind" CORR_ACC="$accion" CORR_SHA="$sha" \
     CORR_CODE="$code" CORR_REASON="$reason" CORR_PROJ="$proj" CORR_RS="$rstatus" \
+    CORR_TASK_ID="${CORR_GATE_TASK_ID:-}" CORR_DECISION_ID="${CORR_GATE_DECISION_ID:-}" \
+    CORR_DECISION_DIGEST="${CORR_GATE_DECISION_DIGEST:-}" \
+    CORR_EVIDENCE_PATH="${CORR_GATE_EVIDENCE_PATH:-}" \
+    CORR_EVIDENCE_DIGEST="${CORR_GATE_EVIDENCE_DIGEST:-}" \
     CORR_EVF="$evf" python3 -c "
 import json,os
 pay={'action':os.environ['CORR_ACC'],'sha':os.environ['CORR_SHA'],'code':os.environ['CORR_CODE'],
 'reason':os.environ['CORR_REASON'],'projection':json.loads(os.environ['CORR_PROJ'] or '{}'),
 'receipt_status':int(os.environ['CORR_RS'] or 0)}
+for env_name, payload_name in (('CORR_TASK_ID', 'task_id'),
+                               ('CORR_DECISION_ID', 'decision_id'),
+                               ('CORR_DECISION_DIGEST', 'decision_digest')):
+    if os.environ.get(env_name): pay[payload_name] = os.environ[env_name]
+if os.environ.get('CORR_TASK_ID'):
+    pay['evidence_path'] = os.environ.get('CORR_EVIDENCE_PATH', '')
+    pay['evidence_digest'] = os.environ.get('CORR_EVIDENCE_DIGEST', '')
 ev=[{'lane':os.environ['CORR_LANE'],'kind':os.environ['CORR_KIND'],'payload':pay}]
 open(os.environ['CORR_EVF'],'w').write(json.dumps(ev))
 " 2>/dev/null || grabado=0

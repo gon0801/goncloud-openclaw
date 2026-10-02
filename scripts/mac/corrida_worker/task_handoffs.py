@@ -15,6 +15,7 @@ import argparse
 import hashlib
 import json
 import os
+from pathlib import Path
 import subprocess
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Optional
@@ -120,6 +121,24 @@ def _requester_assignment(
     return dict(assignment)
 
 
+def _verified_gate_evidence(gate: Mapping[str, Any]) -> tuple[str, str]:
+    evidence_path = _required_text(gate.get("evidencePath"), "current gate evidencePath")
+    path = Path(evidence_path)
+    if not path.is_absolute() or path.is_symlink() or not path.is_file():
+        raise TaskHandlingError("current gate evidencePath is not a regular local file")
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise TaskHandlingError("current gate evidencePath is unreadable") from exc
+    if len(raw) > 1_000_000:
+        raise TaskHandlingError("current gate evidence is too large")
+    digest = hashlib.sha256(raw).hexdigest()
+    claimed = gate.get("evidenceDigest")
+    if claimed is not None and claimed != digest:
+        raise TaskHandlingError("current gate evidence digest differs")
+    return str(path), digest
+
+
 def _decision_from_review(
     raw: Mapping[str, Any],
     lane_observation: Mapping[str, Any],
@@ -146,11 +165,14 @@ def _decision_from_review(
             raise TaskHandlingError("approved review result is missing current gate")
         gate_action = gate.get("action") or raw.get("gateAction")
         _required_text(gate_action, "approved review gate action")
+        evidence_path, evidence_digest = _verified_gate_evidence(gate)
         decision = {"kind": "complete", "evidenceRef": evidence_ref}
         return decision, {
             "action": gate_action,
             "sha": revision["sha"],
             "evidenceRef": evidence_ref,
+            "evidencePath": evidence_path,
+            "evidenceDigest": evidence_digest,
         }
     if verdict in ("judgment-required", "judgment_required", "needs-judgment"):
         return {
@@ -213,7 +235,12 @@ def _task_payload(lane_observation: Mapping[str, Any]) -> Optional[dict]:
     # only the Decision contract; the existing gate runner remains the owner
     # of the external gate effect.
     if gate is not None:
-        payload["gate"] = gate
+        payload["gate"] = {
+            **gate,
+            "taskId": task_id,
+            "decisionId": caller["decisionId"],
+            "decisionDigest": digest,
+        }
     return payload
 
 
@@ -231,6 +258,95 @@ def _handled_events(lane: Mapping[str, Any]) -> list[Mapping[str, Any]]:
         for event in lane.get("events") or []
         if isinstance(event, dict) and event.get("kind") == "observed.task_handled"
     ]
+
+
+def _gate_intent_events(lane: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    return [
+        event
+        for event in lane.get("events") or []
+        if isinstance(event, dict) and event.get("kind") == "intent.task_gate"
+    ]
+
+
+def _gate_receipt_events(lane: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    return [
+        event
+        for event in lane.get("events") or []
+        if isinstance(event, dict) and event.get("kind") == "observed.task_gate"
+    ]
+
+
+def _same_gate(payload: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
+    return all(payload.get(field) == expected.get(field) for field in (
+        "taskId", "decisionId", "decisionDigest", "action", "sha",
+        "evidencePath", "evidenceDigest",
+    ))
+
+
+def _gate_event_receipt(
+    lane: Mapping[str, Any], expected: Mapping[str, Any]
+) -> Optional[dict]:
+    for event in reversed(lane.get("events") or []):
+        if not isinstance(event, dict) or event.get("kind") not in ("gate.allow", "gate.deny"):
+            continue
+        payload = event.get("payload") or {}
+        if not isinstance(payload, dict):
+            continue
+        if (
+            payload.get("task_id") == expected.get("taskId")
+            and payload.get("decision_id") == expected.get("decisionId")
+            and payload.get("decision_digest") == expected.get("decisionDigest")
+            and payload.get("action") == expected.get("action")
+            and payload.get("sha") == expected.get("sha")
+            and payload.get("evidence_path") == expected.get("evidencePath")
+            and payload.get("evidence_digest") == expected.get("evidenceDigest")
+        ):
+            return {
+                **dict(expected),
+                "verdict": "allow" if event.get("kind") == "gate.allow" else "deny",
+                "gateKind": event.get("kind"),
+                "code": payload.get("code", ""),
+                "reason": payload.get("reason", ""),
+            }
+    return None
+
+
+def _gate_handling_effects(
+    lane: Mapping[str, Any], gate: Mapping[str, Any]
+) -> tuple[HandlingEffect, ...]:
+    intents = _gate_intent_events(lane)
+    matching = [
+        event.get("payload") or {}
+        for event in intents
+        if isinstance(event.get("payload"), dict)
+        and _same_gate(event["payload"], gate)
+    ]
+    if not matching:
+        other = [
+            event.get("payload") or {}
+            for event in intents
+            if isinstance(event.get("payload"), dict)
+            and event["payload"].get("taskId") == gate.get("taskId")
+        ]
+        if other:
+            raise TaskHandlingError("task gate conflicts with durable intent")
+        return (HandlingEffect("record_task_gate", gate),)
+
+    intent = matching[-1]
+    if not _same_gate(intent, gate):
+        raise TaskHandlingError("task gate conflicts with durable intent")
+    receipts = [
+        event.get("payload") or {}
+        for event in _gate_receipt_events(lane)
+        if isinstance(event.get("payload"), dict)
+        and _same_gate(event["payload"], gate)
+    ]
+    if receipts:
+        return ()
+    observed_gate = _gate_event_receipt(lane, gate)
+    if observed_gate is not None:
+        return (HandlingEffect("record_task_gate_receipt", observed_gate),)
+    return (HandlingEffect("execute_task_gate", intent),)
 
 
 def _same_task(payload: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
@@ -303,6 +419,9 @@ def director_handling_effects(
         and event["payload"].get("decisionDigest") == expected["decisionDigest"]
     ]
     if handled:
+        gate = expected.get("gate")
+        if isinstance(gate, dict):
+            return _gate_handling_effects(lane, gate)
         return ()
     return (HandlingEffect("resolve_task_handling", intent),)
 

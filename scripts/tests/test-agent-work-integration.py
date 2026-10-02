@@ -600,6 +600,8 @@ class ProjectionTransferTest(unittest.TestCase):
 
 class DirectorHandlingTest(unittest.TestCase):
     def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="agent-work-director-unit-")
+        self.addCleanup(self.tmp.cleanup)
         self.record = {
             "schema": "corrida.v2",
             "lanes": [{
@@ -640,7 +642,11 @@ class DirectorHandlingTest(unittest.TestCase):
         }
 
     def _apply(self, record, effect):
-        kind = "intent.task_handling" if effect.op == "record_task_handling" else "observed.task_handled"
+        kind = {
+            "record_task_handling": "intent.task_handling",
+            "record_task_gate": "intent.task_gate",
+            "record_task_gate_receipt": "observed.task_gate",
+        }.get(effect.op, "observed.task_handled")
         next_record, applied, duplicated = reduce_events(record, [{
             "lane": effect.lane,
             "kind": kind,
@@ -694,7 +700,14 @@ class DirectorHandlingTest(unittest.TestCase):
                 "children": [{"slot": "corregir", "assignment": {"bad": "decision"}}],
             },
         )
-        observation["lanes"]["l1"]["gate"] = {"action": "merge"}
+        evidence = Path(self.tmp.name) / "approved-gate.json"
+        evidence.write_text(json.dumps({"repo": "o/r", "pr": 7}), encoding="utf-8")
+        evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+        observation["lanes"]["l1"]["gate"] = {
+            "action": "merge",
+            "evidencePath": str(evidence),
+            "evidenceDigest": evidence_digest,
+        }
 
         _, effects = reconcile(state_from_record(self.record), observation)
 
@@ -704,7 +717,61 @@ class DirectorHandlingTest(unittest.TestCase):
         })
         self.assertEqual(effects[0].args["gate"], {
             "action": "merge", "sha": "b" * 40, "evidenceRef": "artifact:review",
+            "evidencePath": str(evidence), "evidenceDigest": evidence_digest,
+            "taskId": "task-1", "decisionId": "decision-1",
+            "decisionDigest": effects[0].args["decisionDigest"],
         })
+
+    def test_approved_receipt_plans_existing_gate_effect(self):
+        evidence = Path(self.tmp.name) / "gate-evidence.json"
+        evidence.write_text(
+            json.dumps({"repo": "o/r", "pr": 7, "head": "b" * 40}),
+            encoding="utf-8",
+        )
+        evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+        observation = self._review_observation(
+            {"verdict": "approved", "evidenceRef": "artifact:review"},
+            decision={"kind": "complete", "evidenceRef": "attacker-controlled"},
+        )
+        observation["lanes"]["l1"]["gate"] = {
+            "action": "ci",
+            "evidencePath": str(evidence),
+            "evidenceDigest": evidence_digest,
+        }
+        _, effects = reconcile(state_from_record(self.record), observation)
+        durable = self._apply(self.record, effects[0])
+        _, effects = reconcile(state_from_record(durable), observation)
+        receipt = {
+            "taskId": "task-1",
+            "resultDigest": "sha256:" + "b" * 64,
+            "decisionDigest": effects[0].args["decisionDigest"],
+            "childTaskIds": [],
+        }
+        handled = self._apply(
+            durable,
+            type(effects[0])("observed.task_handled", "l1", receipt),
+        )
+
+        _, effects = reconcile(state_from_record(handled), observation)
+
+        self.assertEqual([effect.op for effect in effects], ["record_task_gate"])
+        gate = effects[0].args
+        self.assertEqual(gate["action"], "ci")
+        self.assertEqual(gate["sha"], "b" * 40)
+        self.assertEqual(gate["evidencePath"], str(evidence))
+        self.assertEqual(gate["evidenceDigest"], evidence_digest)
+        gated = self._apply(handled, effects[0])
+        _, effects = reconcile(state_from_record(gated), observation)
+        self.assertEqual([effect.op for effect in effects], ["execute_task_gate"])
+
+    def test_approved_without_portable_gate_evidence_fails_closed(self):
+        observation = self._review_observation(
+            {"verdict": "approved", "evidenceRef": "artifact:review"},
+        )
+        observation["lanes"]["l1"]["gate"] = {"action": "ci"}
+
+        with self.assertRaisesRegex(task_handoffs.TaskHandlingError, "evidencePath"):
+            reconcile(state_from_record(self.record), observation)
 
     def test_new_director_identity_cannot_reuse_same_task_intent(self):
         _, effects = reconcile(state_from_record(self.record), self.observation)
@@ -865,6 +932,121 @@ class DirectorHandlingTest(unittest.TestCase):
             "intent.task_handling", "observed.task_handled",
         ])
         self.assertEqual(len(calls.read_text(encoding="utf-8").splitlines()), 1)
+
+    def test_existing_reconciler_runs_approved_gate_once_with_real_evidence(self):
+        state_dir = Path(tempfile.mkdtemp(prefix="agent-work-director-gate-"))
+        self.addCleanup(lambda: shutil.rmtree(state_dir, ignore_errors=True))
+        corrida_dir = state_dir / "run-1"
+        corrida_dir.mkdir()
+        record_path = corrida_dir / "registro.json"
+        record_path.write_text(json.dumps({
+            "schema": "corrida.v2",
+            "id": "run-1",
+            "estado": "abierta",
+            "lanes": [{"id": "l1", "estado": "activo", "events": []}],
+        }), encoding="utf-8")
+
+        evidence = state_dir / "gate-evidence.json"
+        evidence.write_text(json.dumps({
+            "repo": "o/r",
+            "pr": 7,
+            "head": "b" * 40,
+            "ci": {"sha": "b" * 40, "conclusion": "success"},
+        }), encoding="utf-8")
+        evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+        observation = self._review_observation(
+            {"verdict": "approved", "evidenceRef": "artifact:review"},
+            decision={"kind": "complete", "evidenceRef": "attacker-controlled"},
+        )
+        observation["lanes"]["l1"]["gate"] = {
+            "action": "ci",
+            "evidencePath": str(evidence),
+            "evidenceDigest": evidence_digest,
+        }
+        observation_path = state_dir / "observation.json"
+        observation_path.write_text(json.dumps(observation), encoding="utf-8")
+
+        fake_openclaw = state_dir / "openclaw"
+        resolve_calls = state_dir / "resolve-calls.jsonl"
+        fake_openclaw.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, pathlib, sys\n"
+            "params = json.loads(sys.argv[sys.argv.index('--params') + 1])\n"
+            f"path = pathlib.Path({str(resolve_calls)!r})\n"
+            "with path.open('a', encoding='utf-8') as stream:\n"
+            "    stream.write(json.dumps(params, sort_keys=True) + '\\n')\n"
+            "print(json.dumps({'taskId': params['receipt']['taskId'],\n"
+            "                  'resultDigest': params['receipt']['resultDigest'],\n"
+            "                  'decisionDigest': params['decisionDigest'],\n"
+            "                  'childTaskIds': []}))\n",
+            encoding="utf-8",
+        )
+        fake_openclaw.chmod(0o700)
+
+        fake_gh = state_dir / "gh"
+        fake_gh.write_text(
+            "#!/bin/sh\n"
+            "cat \"$T8_FAKE_PR\"\n",
+            encoding="utf-8",
+        )
+        fake_gh.chmod(0o700)
+        fake_pr = state_dir / "pr.json"
+        fake_pr.write_text(json.dumps({
+            "number": 7,
+            "headRefOid": "b" * 40,
+            "mergedAt": None,
+            "mergeCommit": None,
+            "statusCheckRollup": [{"status": "COMPLETED", "conclusion": "SUCCESS"}],
+        }), encoding="utf-8")
+
+        env = dict(os.environ)
+        env.update({
+            "CORRIDA_STATE": str(state_dir),
+            "OPENCLAW_BIN": str(fake_openclaw),
+            "OPENCLAW_EXPECT_URL": "ws://gateway",
+            "CORR_TOPE_RED": "8",
+            "T8_FAKE_PR": str(fake_pr),
+            "PATH": str(state_dir) + os.pathsep + env["PATH"],
+        })
+        command = [
+            "bash", str(ROOT / "scripts" / "mac" / "corrida.sh"),
+            "reconciliar", "run-1", "--observations", str(observation_path),
+        ]
+        first = subprocess.run(
+            command, cwd=ROOT, env=env, capture_output=True, text=True, timeout=20,
+        )
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        self.assertIn("EXECUTED record_task_handling l1", first.stdout)
+        self.assertIn("EXECUTED resolve_task_handling l1", first.stdout)
+        self.assertIn("EXECUTED record_task_gate l1", first.stdout)
+        self.assertIn("EXECUTED execute_task_gate l1", first.stdout)
+        self.assertIn("CONVERGED", first.stdout)
+
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        events = record["lanes"][0]["events"]
+        self.assertEqual([event["kind"] for event in events], [
+            "intent.task_handling", "observed.task_handled", "intent.task_gate",
+            "gate.allow", "evidence.ci", "observed.task_gate",
+        ])
+        gate_event = next(event for event in events if event["kind"] == "gate.allow")
+        self.assertEqual(gate_event["payload"]["action"], "ci")
+        self.assertEqual(gate_event["payload"]["sha"], "b" * 40)
+        self.assertEqual(gate_event["payload"]["task_id"], "task-1")
+        self.assertEqual(gate_event["payload"]["decision_id"], "decision-1")
+        self.assertEqual(gate_event["payload"]["evidence_path"], str(evidence))
+        self.assertEqual(gate_event["payload"]["evidence_digest"], evidence_digest)
+        self.assertNotIn("intent.merge", [event["kind"] for event in events])
+        self.assertNotIn("intent.deploy", [event["kind"] for event in events])
+        self.assertEqual(len(resolve_calls.read_text(encoding="utf-8").splitlines()), 1)
+
+        second = subprocess.run(
+            command, cwd=ROOT, env=env, capture_output=True, text=True, timeout=20,
+        )
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIn("CONVERGED 0", second.stdout)
+        record_after_retry = json.loads(record_path.read_text(encoding="utf-8"))
+        self.assertEqual(record_after_retry, record)
+        self.assertEqual(len(resolve_calls.read_text(encoding="utf-8").splitlines()), 1)
 
 
 if __name__ == "__main__":
