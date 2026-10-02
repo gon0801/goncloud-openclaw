@@ -14,3 +14,8 @@
 
 ## Residual B0-1-r2 (no reabre, va al PR)
 - `lanzar-sesion.sh:127` reemplaza la entrada vieja aunque traiga `host_id`/`encargo_ref` (sesión gestionada) y el relanzo no los pase. Hoy falla de forma segura (si el carril tiene `resource_receipt_ref`, cerrar y terminar-sesion salen 1), pero sin ese carril el enlace al recurso gestionado se pierde sin aviso. Va como fila de B3/T7: rechazar el reemplazo de una entrada gestionada salvo que lleve el mismo `encargo_ref`/`host_id`.
+
+## Residual B0-2-r2 (viene a B1, no reabre B0)
+- Sin prueba local commiteada que arme un clon sin `origin/main`; hoy lo cubre la CI, porque el shard 3/3 hace checkout superficial en cada PR (las corridas manuales quedaron en el recibo B0-shard33.md). Condición de cierre: regresión local commiteada o decisión de no hacerlo.
+- Duración del shard 3/3: el simulacro tarda 667 s en la CI de main (run 36950733382, shard3 total 21m23s); con la rama, el shard 3/3 queda en ~22-25 min contra `timeout-minutes: 30` (`quality.yml:235`). Condición de cierre: dividir el shard (regla 8 de quality-kit).
+- Un "segundo relanzo" solo se detecta por los eventos `relanzo-automatico` del vigía; hoy no hay otro camino, porque `lanzar-sesion` exige el nombre libre. Si algún día se relanza por otra vía, este chequeo no la vería. Condición de cierre: detector para relanzos por otra vía o decisión de no hacerlo.
