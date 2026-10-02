@@ -36,6 +36,7 @@ LINEA_SOURCE="source ~/bin/agent-tmux-shell.zsh"
 # esta lista: ni se copia ni se carga.
 BINS="corrida.sh cli-modos.tsv workers.v1.json corrida-worker.py progress-events.py agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh"
 CORRIDA_WORKER_PKG="corrida_worker"
+AGENT_WORK_FILES="contracts.py host.py native_gateway.py progress_bridge.py resources.py routing.py spool.py cutover.py"
 
 di() { printf '%s\n' "$1"; }
 falla() { printf 'instalar-mac: error: %s\n' "$1" >&2; exit 1; }
@@ -70,6 +71,12 @@ fase_blobs() {
     real="$("$GIT_BIN" -C "$RAIZ" hash-object "$AQUI/$f" 2>/dev/null)" || falla "no se pudo leer $f"
     [ "$esperado" = "$real" ] || falla "blob distinto de $REF en $rel (rama ${esperado} vs arbol ${real})"
   done
+  for f in $AGENT_WORK_FILES; do
+    rel="scripts/agent-work/$f"
+    esperado="$("$GIT_BIN" -C "$RAIZ" rev-parse "$REF:$rel" 2>/dev/null)" || { avisa "sin referencia en $REF: $rel (se declara y se sigue)"; continue; }
+    real="$("$GIT_BIN" -C "$RAIZ" hash-object "$RAIZ/agent-work/$f" 2>/dev/null)" || falla "no se pudo leer $rel"
+    [ "$esperado" = "$real" ] || falla "blob distinto de $REF en $rel"
+  done
   local c
   for c in "$AQUI"/corrida/*.sh; do
     f="$(basename "$c")"; rel="scripts/mac/corrida/$f"
@@ -95,6 +102,7 @@ modo_dry() {
   di "instalaria desde $AQUI (ref $REF@$(ref_sha)) a HOME=$HOME uid=$QUIEN_UID:"
   for f in $BINS; do sha="$(blob_de "$AQUI/$f")"; di "  bin/$f  (blob ${sha})"; done
   for f in "$AQUI"/corrida/*.sh; do sha="$(blob_de "$f")"; di "  bin/corrida/$(basename "$f")  (blob ${sha})"; done
+  for f in $AGENT_WORK_FILES; do sha="$(blob_de "$RAIZ/agent-work/$f")"; di "  bin/agent-work/$f  (blob ${sha})"; done
   di "  Library/LaunchAgents/$PL_NOMBRE  (generada con HOME=$HOME)"
   di "  .tmux.conf  (blob $(blob_de "$AQUI/tmux.conf"))"
   di "  .zshrc: agregaria \`$LINEA_SOURCE\` si falta"
@@ -118,6 +126,10 @@ modo_verificar() {
     cmp -s "$AQUI/$f" "$BIN_DIR/$f" || { di "DIFIERE: bin/$f"; mal=$((mal+1)); continue; }
     [ -x "$BIN_DIR/$f" ] || { di "SIN +x: bin/$f"; mal=$((mal+1)); continue; }
   done
+  for f in $AGENT_WORK_FILES; do
+    [ -f "$BIN_DIR/agent-work/$f" ] && cmp -s "$RAIZ/agent-work/$f" "$BIN_DIR/agent-work/$f" || { di "DIFIERE: bin/agent-work/$f"; mal=$((mal+1)); continue; }
+  done
+  [ -x "$BIN_DIR/agent-work/cutover.py" ] || { di "SIN +x: bin/agent-work/cutover.py"; mal=$((mal+1)); }
   [ -d "$BIN_DIR/corrida_worker" ] || { di "FALTA: bin/corrida_worker"; mal=$((mal+1)); }
   for f in "$AQUI"/corrida_worker/*.py; do
     local b2; b2="$(basename "$f")"
@@ -141,13 +153,17 @@ modo_verificar() {
 
 modo_instalar() {
   local f sha reiniciar=0 n=0
-  mkdir -p "$BIN_DIR" "$BIN_DIR/corrida" "$LA_DIR" || falla "no se pudieron crear directorios en $HOME"
+  mkdir -p "$BIN_DIR" "$BIN_DIR/corrida" "$BIN_DIR/agent-work" "$LA_DIR" || falla "no se pudieron crear directorios en $HOME"
   for f in $BINS; do
     copiar_si_difiere "$AQUI/$f" "$BIN_DIR/$f" || falla "no se pudo instalar bin/$f"
     # El LaunchAgent ejecuta este script: si cambio, hay que reiniciarlo.
     [ "$f" = "tmux-activity-watch.sh" ] && [ "$COPIO" = "1" ] && reiniciar=1
   done
   for f in "$AQUI"/corrida/*.sh; do copiar_si_difiere "$f" "$BIN_DIR/corrida/$(basename "$f")" || falla "no se pudo instalar corrida/$(basename "$f")"; done
+  for f in $AGENT_WORK_FILES; do
+    copiar_si_difiere "$RAIZ/agent-work/$f" "$BIN_DIR/agent-work/$f" || falla "no se pudo instalar agent-work/$f"
+  done
+  chmod 755 "$BIN_DIR/agent-work/cutover.py"
   # Task 9 Step 4: el plano de control nativo viaja atomico con el dispatcher:
   # corrida-worker.py (+x, entrypoint), el paquete corrida_worker (sin +x),
   # y la tabla de preaprobaciones junto al gate de autoridad.
@@ -183,6 +199,7 @@ modo_instalar() {
   di "instalado desde $AQUI (ref $REF@$(ref_sha)):"
   for f in $BINS; do sha="$(blob_de "$AQUI/$f")"; di "  bin/$f  ${sha}"; done
   for f in "$AQUI"/corrida/*.sh; do sha="$(blob_de "$f")"; di "  bin/corrida/$(basename "$f")  ${sha}"; done
+  for f in $AGENT_WORK_FILES; do sha="$(blob_de "$RAIZ/agent-work/$f")"; di "  bin/agent-work/$f  ${sha}"; done
   di "  LaunchAgents/$PL_NOMBRE  (generada HOME=$HOME)"
   di "  .tmux.conf  $(blob_de "$AQUI/tmux.conf")"
   di "  .zshrc: $LINEA_SOURCE"
