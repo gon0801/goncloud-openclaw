@@ -556,6 +556,74 @@ class ProjectionTransferTest(unittest.TestCase):
         self.assertLessEqual(times["detected"] - times["write_started"], 5)
         self.assertLessEqual(times["receipt"] - times["detected"], 5)
 
+    def test_delivery_latency_acceptance_records_both_legs(self):
+        _, key, _, result, _ = self.registered_host()
+        stop = threading.Event()
+        times = {}
+
+        class TimedHost(Host):
+            def report(self, host_id, value):
+                times.setdefault("detected", time.monotonic())
+                return super().report(host_id, value)
+
+        host = TimedHost("host-one", self.root / "host")
+        persist_receipt = host.spool.acknowledge
+
+        def timed_acknowledge(operation_id, receipt):
+            persist_receipt(operation_id, receipt)
+            times["receipt_persisted"] = time.monotonic()
+            stop.set()
+
+        host.spool.acknowledge = timed_acknowledge
+
+        class Client:
+            host_id = "host-one"
+
+            def report_host_result(self, value, artifact):
+                return {field: value[field] for field in
+                        ("hostId", "taskId", "generation", "instanceId", "producerId")} | {
+                    "resultId": hashlib.sha256(canonical(value).encode()).hexdigest(),
+                    "receiptId": "native-one",
+                }
+
+            def list_pending(self, after_task_id=None, limit=100):
+                return []
+
+        result_path = self.root / "host" / "inbox" / (operation_id(key) + ".json")
+
+        def publish():
+            atomic_json(result_path, result)
+            times["written"] = time.monotonic()
+
+        writer = threading.Timer(0.1, publish)
+        deadline = threading.Timer(30, stop.set)
+        writer.start()
+        deadline.start()
+        try:
+            native_gateway.watch_pump(
+                Client(), host=host,
+                evidence_root=self.evidence_root, progress_state_dir=self.state_dir,
+                progress_client=ROOT / "scripts" / "mac" / "progress-events.py",
+                stop_event=stop, interval=0.05,
+            )
+        finally:
+            stop.set()
+            writer.join()
+            deadline.cancel()
+            deadline.join()
+        self.assertIsNotNone(host.receipt("host-one", key),
+                             "receipt must persist durably before timing assertions")
+        write_to_detection = times["detected"] - times["written"]
+        detection_to_receipt = times["receipt_persisted"] - times["detected"]
+        print("DELIVERY_LATENCY " + json.dumps({
+            "write_to_detection_s": round(write_to_detection, 3),
+            "detection_to_persisted_receipt_s": round(detection_to_receipt, 3),
+        }, sort_keys=True), flush=True)
+        self.assertLessEqual(write_to_detection, 5,
+                             "durable write to detection exceeded five seconds")
+        self.assertLessEqual(detection_to_receipt, 5,
+                             "detection to persisted receipt exceeded five seconds")
+
     def test_gateway_drain_uses_host_snapshot_after_workspace_disappears(self):
         restarted, _, original = self.reported_host()
         self.evidence.unlink()
