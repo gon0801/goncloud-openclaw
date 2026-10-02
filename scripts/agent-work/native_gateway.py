@@ -31,6 +31,8 @@ class GatewayProjectionClient:
         serialized = json.dumps(params, sort_keys=True, separators=(",", ":"))
         command = [self.openclaw_bin, "gateway", "call", method,
                    "--json", "--timeout", "30000"]
+        if method.startswith("managedTasks.host."):
+            command.append("--device-auth")
         if self.expected_url:
             command.extend(("--expect-url", self.expected_url))
         pending = None

@@ -14,10 +14,15 @@ run_review_tail_restart() {
   python3 scripts/tests/test_agent_work_review_tail_restart.py
 }
 
+run_cli_gateway() {
+  python3 scripts/tests/test_agent_work_cli_gateway_e2e.py
+}
+
 case "${1:-all}" in
   all)
     run_delivery_latency
     run_review_tail_restart
+    run_cli_gateway
     ;;
   delivery_latency)
     run_delivery_latency
@@ -29,8 +34,15 @@ case "${1:-all}" in
     fi
     run_review_tail_restart
     ;;
+  cli_gateway)
+    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
+      echo "cli_gateway requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
+      exit 2
+    fi
+    run_cli_gateway
+    ;;
   *)
-    echo "casos disponibles: delivery_latency, review_tail_restart" >&2
+    echo "casos disponibles: delivery_latency, review_tail_restart, cli_gateway" >&2
     exit 2
     ;;
 esac

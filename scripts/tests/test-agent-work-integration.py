@@ -222,6 +222,7 @@ class ProjectionTransferTest(unittest.TestCase):
         commands = [call.args[0] for call in invoke.call_args_list]
         self.assertEqual(commands[0], commands[1])
         self.assertEqual(commands[0][3], "managedTasks.host.report")
+        self.assertIn("--device-auth", commands[0])
         self.assertEqual(json.loads(commands[0][commands[0].index("--params") + 1]),
                          {"hostId": "host-one", "resultId": result_id, "result": result,
                           "artifactBase64": base64.b64encode(artifact_bytes).decode("ascii")})
@@ -258,6 +259,7 @@ class ProjectionTransferTest(unittest.TestCase):
             self.assertEqual(client.admit_host(assignment), receipt)
         command = invoke.call_args.args[0]
         self.assertEqual(command[3], "managedTasks.host.admit")
+        self.assertIn("--device-auth", command)
         self.assertEqual(json.loads(command[command.index("--params") + 1]), {
             "hostId": "host-one", "adapterId": "codex", "instanceId": "instance-one", "claimId": "claim-one",
             "capability": {"taskId": "task-one", "generation": 1,
@@ -1560,6 +1562,7 @@ class CliClaimTest(unittest.TestCase):
         commands = [entry.args[0] for entry in invoke.call_args_list]
         self.assertEqual([command[3] for command in commands],
                          ["managedTasks.host.claim", "managedTasks.host.brief", "managedTasks.host.claim"])
+        self.assertTrue(all("--device-auth" in command for command in commands))
         self.assertEqual(json.loads(commands[0][commands[0].index("--params") + 1]),
                          {"hostId": "host-one", "adapterId": "codex", "instanceId": "instance-one"})
         self.assertEqual(json.loads(commands[1][commands[1].index("--params") + 1]),
@@ -1634,7 +1637,8 @@ class CliClaimTest(unittest.TestCase):
                           (json.loads(Path(ref).read_text()), session)), coverage=self.coverage)
         first = native_gateway.claim_cli_once(client, **kwargs)
         second = native_gateway.claim_cli_once(client, **kwargs)
-        self.assertEqual((first.status, second.status), ("delivered", "delivered"))
+        self.assertEqual(first.status, "delivered")
+        self.assertEqual(second.status, "delivered")
         self.assertEqual(len(deliveries), 1)
         self.assertEqual(deliveries[0][1], "worker-one")
         self.assertEqual(deliveries[0][0]["briefDigest"], self.digest)
