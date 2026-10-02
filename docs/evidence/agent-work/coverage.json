@@ -2,6 +2,11 @@
   "schema": "agent-work-coverage.v1",
   "source": "agents/main/agent/workshop-skills/agent-dispatch/SKILL.md and scripts/mac/workers.v1.json at G base 84efcb0",
   "status": "inventory-only",
+  "managedRequesterRoutes": [
+    {"requester": "ingenieria", "target": "adversary", "kind": "agent", "preparation": "scripts/agent-work/routing.py", "integration": "native tool", "certified": false, "reason": "G preparation tested; native end-to-end evidence is in R and rollout is not enabled"},
+    {"requester": "operaciones", "target": "ingenieria", "kind": "agent", "preparation": "scripts/agent-work/routing.py", "integration": "native tool", "certified": false, "reason": "G preparation tested; native end-to-end execution and rollout remain unverified"},
+    {"requester": "ingenieria", "target": "windows-remote/codex", "kind": "cli", "preparation": "scripts/agent-work/routing.py", "integration": "native tool and host", "certified": false, "reason": "hostAdapterCoverage disables this combination; no requester-side CLI admission"}
+  ],
   "requesters": ["main", "ingenieria", "adversary", "operaciones", "implementer", "verifier", "reviewer", "scout"],
   "routes": [
     {"kind": "native-subagent", "owner": "OpenClaw sessions_spawn", "certified": false},
