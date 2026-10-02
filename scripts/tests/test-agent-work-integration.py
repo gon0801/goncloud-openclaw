@@ -828,6 +828,39 @@ class DirectorHandlingTest(unittest.TestCase):
         self.assertEqual(effects[0].args["gateKind"], "gate.allow")
         self.assertEqual(effects[0].args["evidenceDigest"], evidence_digest)
 
+    def test_new_task_cannot_reuse_old_gate_verification(self):
+        evidence = Path(self.tmp.name) / "first-task-gate.json"
+        evidence.write_text(
+            json.dumps({"repo": "o/r", "pr": 7, "head": "b" * 40}),
+            encoding="utf-8",
+        )
+        observation = self._review_observation(
+            {"verdict": "approved", "evidenceRef": "artifact:review"},
+        )
+        observation["lanes"]["l1"]["gate"] = {
+            "action": "ci",
+            "evidencePath": str(evidence),
+            "evidenceDigest": hashlib.sha256(evidence.read_bytes()).hexdigest(),
+        }
+        _, effects = reconcile(state_from_record(self.record), observation)
+        durable = self._apply(self.record, effects[0])
+
+        new_observation = copy.deepcopy(observation)
+        managed = new_observation["lanes"]["l1"]["managed_task"]
+        managed["caller"]["decisionId"] = "decision-2"
+        managed["receipt"]["taskId"] = "task-2"
+        managed["result"]["typedPayload"]["evidenceRef"] = "artifact:new-review"
+        managed["result"]["artifactRef"] = "artifact:new-review"
+        managed["gate"] = {
+            "action": "ci",
+            "evidencePath": str(self.tmp.name + "/missing-new-task-gate.json"),
+            "evidenceDigest": "0" * 64,
+        }
+        new_observation["lanes"]["l1"]["gate"] = managed["gate"]
+
+        with self.assertRaisesRegex(task_handoffs.TaskHandlingError, "evidencePath"):
+            reconcile(state_from_record(durable), new_observation)
+
     def test_new_director_identity_cannot_reuse_same_task_intent(self):
         _, effects = reconcile(state_from_record(self.record), self.observation)
         durable = self._apply(self.record, effects[0])

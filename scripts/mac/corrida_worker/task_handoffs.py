@@ -405,6 +405,22 @@ def _same_task(payload: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
     )
 
 
+def _same_task_identity(payload: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
+    caller = payload.get("caller") or {}
+    expected_caller = expected.get("caller") or {}
+    if not isinstance(caller, dict) or not isinstance(expected_caller, dict):
+        return False
+    return (
+        _same_task(payload, expected)
+        and payload.get("decisionId", caller.get("decisionId"))
+        == expected.get("decisionId")
+        and all(
+            caller.get(field) == expected_caller.get(field)
+            for field in ("kind", "authority", "corridaId", "decisionId", "fence")
+        )
+    )
+
+
 def _same_decision(payload: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
     caller = payload.get("caller") or {}
     expected_caller = expected.get("caller") or {}
@@ -434,23 +450,29 @@ def director_handling_effects(
     executor reopens the evidence file.
     """
     intents = _intent_events(lane)
+    current_task = lane_observation.get("managed_task")
     durable_intent = next(
         (
             event.get("payload")
             for event in reversed(intents)
-            if isinstance(event.get("payload"), dict)
+            if (
+                isinstance(current_task, dict)
+                and isinstance(event.get("payload"), dict)
+                and _same_task_identity(current_task, event["payload"])
+            )
         ),
         None,
     )
+    reuse_durable_intent = durable_intent is not None
     durable_gate = (
         durable_intent.get("gate")
-        if isinstance(durable_intent, dict)
+        if reuse_durable_intent
         and isinstance(durable_intent.get("gate"), dict)
         else None
     )
     expected = _task_payload(
         lane_observation,
-        verify_gate_evidence=durable_intent is None,
+        verify_gate_evidence=not reuse_durable_intent,
         fallback_gate=durable_gate,
     )
     if expected is None:
