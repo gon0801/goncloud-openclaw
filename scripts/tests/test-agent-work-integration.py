@@ -5,20 +5,24 @@ import base64
 import hashlib
 import json
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
-from contracts import AuthorizedOperation, OperationKey  # noqa: E402
+from contracts import AuthorizedOperation, OperationKey, operation_id  # noqa: E402
 from host import Host  # noqa: E402
+import native_gateway  # noqa: E402
 from native_gateway import GatewayProjectionClient, main as gateway_main, transfer_gateway_projections  # noqa: E402
 from progress_bridge import event_id, projection_digest, transfer_host_projection, transfer_projection  # noqa: E402
-from spool import canonical  # noqa: E402
+from spool import atomic_json, canonical  # noqa: E402
 
 
 class ProjectionTransferTest(unittest.TestCase):
@@ -294,6 +298,22 @@ class ProjectionTransferTest(unittest.TestCase):
         host_type.assert_called_once_with("host-one", str(self.root / "host"))
         output.assert_called_once_with('{"reported": 1}')
 
+    def test_watch_entrypoint_requires_host_and_restores_signal_handlers(self):
+        args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "host-one",
+                "--expect-url", "ws://127.0.0.1:18789", "--evidence-root", str(self.evidence_root),
+                "--progress-state-dir", str(self.state_dir),
+                "--progress-client", "/isolated/progress.py", "--watch"]
+        with mock.patch("sys.stderr"):
+            with self.assertRaises(SystemExit):
+                gateway_main(args)
+        old_term = signal.getsignal(signal.SIGTERM)
+        old_int = signal.getsignal(signal.SIGINT)
+        with mock.patch("native_gateway.watch_pump") as watch:
+            self.assertEqual(gateway_main(args + ["--host-state-dir", str(self.root / "host")]), 0)
+        self.assertEqual(watch.call_args.args[0].host_id, "host-one")
+        self.assertEqual(signal.getsignal(signal.SIGTERM), old_term)
+        self.assertEqual(signal.getsignal(signal.SIGINT), old_int)
+
     def test_gateway_entrypoint_imports_with_mac_system_python(self):
         system_python = Path("/usr/bin/python3")
         if not system_python.exists():
@@ -349,7 +369,7 @@ class ProjectionTransferTest(unittest.TestCase):
         self.evidence.write_bytes(original_bytes)
         self.assertEqual(self.transfer(lambda value: value), receipt)
 
-    def reported_host(self, *, revision=None, payload=None):
+    def registered_host(self, *, revision=None, payload=None):
         workspace = self.root / "workspace"
         workspace.mkdir()
         brief = workspace / "brief.txt"
@@ -368,7 +388,7 @@ class ProjectionTransferTest(unittest.TestCase):
                    lambda a: {"state": "host-admitted", "claimId": a["claimId"],
                               "hostId": a["hostId"], "instanceId": a["instanceId"],
                               "generation": a["generation"]})
-        host.report("host-one", {
+        result = {
             "schema": "agent-work.result.v1", "kind": "produced", "hostId": "host-one",
             "taskId": key.task_id, "generation": key.generation, "instanceId": key.instance_id,
             "producerId": "adversary", "capability": "capability",
@@ -376,7 +396,13 @@ class ProjectionTransferTest(unittest.TestCase):
             "typedPayload": payload or {"verdict": "approved", "evidenceRef": "review.txt"},
             "artifactRef": str(artifact),
             "digest": hashlib.sha256(original).hexdigest(),
-        })
+        }
+        return host, key, original, result, artifact
+
+    def reported_host(self, *, revision=None, payload=None):
+        host, key, original, result, artifact = self.registered_host(
+            revision=revision, payload=payload)
+        host.report("host-one", result)
         artifact.unlink()
         return Host("host-one", self.root / "host"), key, original
 
@@ -393,6 +419,135 @@ class ProjectionTransferTest(unittest.TestCase):
         receipt = self.transfer_from_host(restarted, key, lambda value: value)
         event = self.state_dir / "runs" / "run-1" / "evidence" / (receipt["eventId"] + ".json")
         self.assertEqual(json.loads(event.read_text())["content"], original.decode())
+
+    def test_pump_reports_then_projects_once_across_repeated_idle_polls(self):
+        host, _, _ = self.reported_host()
+        pending = self.pending
+
+        class Client:
+            host_id = "host-one"
+
+            def __init__(self):
+                self.reports = []
+                self.projections = []
+
+            def report_host_result(self, result, artifact):
+                self.reports.append((result, artifact))
+                self.projections = [pending]
+                return {field: result[field] for field in
+                        ("hostId", "taskId", "generation", "instanceId", "producerId")} | {
+                    "resultId": hashlib.sha256(canonical(result).encode()).hexdigest(),
+                    "receiptId": "native-one",
+                }
+
+            def list_pending(self, after_task_id=None, limit=100):
+                return self.projections
+
+            def ack(self, receipt):
+                self.projections = []
+                return receipt
+
+        client = Client()
+        args = {"evidence_root": self.evidence_root, "progress_state_dir": self.state_dir,
+                "progress_client": ROOT / "scripts" / "mac" / "progress-events.py"}
+        self.assertEqual(native_gateway.pump_once(client, host=host, **args),
+                         {"reported": 1, "transferred": 1})
+        for _ in range(100):
+            self.assertEqual(native_gateway.pump_once(client, host=host, **args),
+                             {"reported": 0, "transferred": 0})
+        self.assertEqual(len(client.reports), 1)
+        self.assertEqual(len(list((self.state_dir / "runs" / "run-1" / "queue").glob("*.json"))), 1)
+
+    def test_pump_transfers_existing_projection_when_host_report_fails(self):
+        class FailingHost:
+            def flush(self, *_):
+                raise RuntimeError("host report unavailable")
+
+            def operation_key_for(self, *_):
+                return None
+
+        class Client:
+            host_id = "host-one"
+
+            def __init__(self):
+                self.receipts = []
+
+            def report_host_result(self, *_):
+                raise AssertionError("host failure must precede Gateway report")
+
+            def list_pending(self, after_task_id=None, limit=100):
+                return [] if self.receipts else [pending]
+
+            def ack(self, receipt):
+                self.receipts.append(receipt)
+                return receipt
+
+        pending = self.pending
+        client = Client()
+        with self.assertRaisesRegex(RuntimeError, "host report unavailable"):
+            native_gateway.pump_once(
+                client, host=FailingHost(), evidence_root=self.evidence_root,
+                progress_state_dir=self.state_dir,
+                progress_client=ROOT / "scripts" / "mac" / "progress-events.py",
+            )
+        self.assertEqual(len(client.receipts), 1)
+        self.assertEqual(len(list((self.state_dir / "runs" / "run-1" / "queue").glob("*.json"))), 1)
+
+    def test_delivery_latency_separates_detection_from_native_receipt(self):
+        _, key, _, result, _ = self.registered_host()
+        stop = threading.Event()
+        times = {}
+
+        class TimedHost(Host):
+            def report(self, host_id, value):
+                times["detected"] = time.monotonic()
+                return super().report(host_id, value)
+
+        class Client:
+            host_id = "host-one"
+
+            def __init__(self):
+                self.calls = 0
+
+            def report_host_result(self, value, artifact):
+                self.calls += 1
+                times["receipt"] = time.monotonic()
+                stop.set()
+                return {field: value[field] for field in
+                        ("hostId", "taskId", "generation", "instanceId", "producerId")} | {
+                    "resultId": hashlib.sha256(canonical(value).encode()).hexdigest(),
+                    "receiptId": "native-one",
+                }
+
+            def list_pending(self, after_task_id=None, limit=100):
+                return []
+
+        client = Client()
+        result_path = self.root / "host" / "inbox" / (operation_id(key) + ".json")
+
+        def publish():
+            times["write_started"] = time.monotonic()
+            atomic_json(result_path, result)
+
+        writer = threading.Timer(0.1, publish)
+        deadline = threading.Timer(5, stop.set)
+        writer.start()
+        deadline.start()
+        try:
+            native_gateway.watch_pump(
+                client, host=TimedHost("host-one", self.root / "host"),
+                evidence_root=self.evidence_root, progress_state_dir=self.state_dir,
+                progress_client=ROOT / "scripts" / "mac" / "progress-events.py",
+                stop_event=stop, interval=0.05,
+            )
+        finally:
+            stop.set()
+            writer.join()
+            deadline.cancel()
+            deadline.join()
+        self.assertEqual(client.calls, 1)
+        self.assertLessEqual(times["detected"] - times["write_started"], 5)
+        self.assertLessEqual(times["receipt"] - times["detected"], 5)
 
     def test_gateway_drain_uses_host_snapshot_after_workspace_disappears(self):
         restarted, _, original = self.reported_host()

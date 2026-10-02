@@ -5,8 +5,11 @@ import base64
 import hashlib
 import json
 import os
+import signal
 import subprocess
+import sys
 import tempfile
+import threading
 
 from host import Host
 from progress_bridge import transfer_host_projection, transfer_projection
@@ -135,6 +138,47 @@ def transfer_gateway_projections(client, *, evidence_root, progress_state_dir, p
     raise RuntimeError("native projection Gateway page limit exceeded")
 
 
+def pump_once(client, *, host, evidence_root, progress_state_dir, progress_client):
+    """Deliver host results before draining projections in one code-only pass."""
+    receipts = []
+    report_error = None
+    try:
+        receipts = host.flush(client.host_id, client.report_host_result)
+    except (OSError, RuntimeError, ValueError) as exc:
+        report_error = exc
+    transferred = transfer_gateway_projections(
+        client, evidence_root=evidence_root, progress_state_dir=progress_state_dir,
+        progress_client=progress_client, host=host,
+    )
+    if report_error is not None:
+        raise report_error
+    return {"reported": len(receipts), "transferred": transferred}
+
+
+def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_client,
+               stop_event, interval=1.0):
+    """Poll with code; a failed pass leaves durable host and native work for retry."""
+    if not 0 < interval <= 5:
+        raise ValueError("poll interval must be between zero and five seconds")
+    last_error = None
+    while not stop_event.is_set():
+        try:
+            result = pump_once(
+                client, host=host, evidence_root=evidence_root,
+                progress_state_dir=progress_state_dir, progress_client=progress_client,
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            error = str(exc)
+            if error != last_error:
+                print("agent-work pump: " + error, file=sys.stderr, flush=True)
+            last_error = error
+        else:
+            last_error = None
+            if any(result.values()):
+                print(json.dumps(result, sort_keys=True), flush=True)
+        stop_event.wait(interval)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Transfer native task results to progress events")
     parser.add_argument("--openclaw-bin", required=True)
@@ -145,8 +189,27 @@ def main(argv=None):
     parser.add_argument("--progress-client")
     parser.add_argument("--host-state-dir")
     parser.add_argument("--flush-results", action="store_true")
+    parser.add_argument("--watch", action="store_true")
     args = parser.parse_args(argv)
     client = GatewayProjectionClient(args.openclaw_bin, args.host_id, args.expect_url)
+    if args.watch:
+        if args.flush_results or not args.host_state_dir:
+            parser.error("--watch requires --host-state-dir and excludes --flush-results")
+        if not all((args.evidence_root, args.progress_state_dir, args.progress_client)):
+            parser.error("--watch requires evidence and progress paths")
+        stop = threading.Event()
+        old_term = signal.signal(signal.SIGTERM, lambda *_: stop.set())
+        old_int = signal.signal(signal.SIGINT, lambda *_: stop.set())
+        try:
+            watch_pump(
+                client, host=Host(args.host_id, args.host_state_dir),
+                evidence_root=args.evidence_root, progress_state_dir=args.progress_state_dir,
+                progress_client=args.progress_client, stop_event=stop,
+            )
+        finally:
+            signal.signal(signal.SIGTERM, old_term)
+            signal.signal(signal.SIGINT, old_int)
+        return 0
     if args.flush_results:
         if not args.host_state_dir:
             parser.error("--flush-results requires --host-state-dir")
