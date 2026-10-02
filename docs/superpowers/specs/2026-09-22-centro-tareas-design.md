@@ -40,6 +40,14 @@ capacidad, reconciliación, evidencias, entrega e instalación. En la base revis
 La Fase 17 consume esas piezas; adapta sus fronteras dependientes de OpenClaw
 para que Hermes opere solo. No introduce otro orquestador.
 
+En encargos gestionados de OpenClaw, el centro consume las interfaces y recibos
+T1–T8 del [plan de encargos](../plans/2026-09-30-encargos-agentes.md) que estén
+verificados en el perímetro instalado: identidad, admisión, resultado, consumo,
+reservas, recursos y proyección. No crea un segundo store, scheduler, registro de
+workers ni contador de consumo. La dependencia es esa base comprobada donde se
+usa, no el cierre de U3b ni de todas las rutas CLI/Hermes. Las tareas ajenas a ese
+perímetro conservan sus contratos existentes hasta verificar su integración.
+
 Antes de conectar ejecución se exige evidencia de las interfaces de Fase 14
 mergeadas, sus pruebas y el manifiesto instalado. Hereda requisitos de Fases 9/15
 y de entrega sin sello A/B/C. La instalación en Windows exige además la aceptación
@@ -47,10 +55,11 @@ del arreglo de Fase 16 cuando corresponda al host. El diseño y los fixtures de 
 pueden avanzar sin tocar máquinas vivas ni dar por cerradas esas fases.
 
 Se mantienen `corrida.sh`, `corrida.v2`, `seguimiento.v2` y el escritor de progreso
-del director. Hay un solo reloj local `avance-tareas`, con vigilancia cada 15
-minutos, consolidado cada 30 y avisos excepcionales inmediatos. No hay cron por
-tarea. La supervisión independiente debe reutilizar o sustituir de forma explícita
-el mecanismo existente, sin dejar dos propietarios activos del reloj.
+del director. La vigilancia, el consolidado y los avisos tienen un solo dueño por
+host: el reloj local `avance-tareas`, cada 15 minutos, consolida cada 30 y emite
+avisos excepcionales inmediatos. No hay cron por tarea ni un segundo reportero
+para encargos gestionados. La supervisión independiente debe reutilizar o
+sustituir de forma explícita el mecanismo existente, sin dos propietarios activos.
 
 `runbook-progress.v2.md` describe campos aditivos pero el validador vivo exige
 el literal `runbook-progress.v1`. Se preservan ese literal y las rutas antiguas.
@@ -68,6 +77,7 @@ El contrato propuesto del centro enlaza, sin confundirlos:
 | Runtime, CLI, proveedor y modelo | OpenClaw/Hermes y ejecutor real; desconocido si no se observa |
 | Intento y sesión | Historial estable ante reintentos, sesión nativa y tmux si aplica |
 | Proceso | Equipo, arranque del sistema, PID y fecha de creación o equivalente |
+| Recibos de encargo | Informe recibido, decisión de manejo, reserva y cierre de recurso, cada uno con autoridad propia |
 
 El director conserva la propiedad del progreso declarado. Las observaciones de
 procesos, recursos y proveedor se guardan aparte, con origen y fecha, y no
@@ -87,6 +97,14 @@ del modelo. Un cambio de alcance registra nueva revisión y denominador. Sin pla
 verificable se muestra desconocido. Los porcentajes legados conservan su etiqueta
 y semántica; no se presentan como otro porcentaje global de la misma tarea.
 El consolidado y el centro usan el mismo resumen de unidades.
+En concreto, `%GLOBAL` del tablero histórico puede diferir del avance por
+unidades verificadas en `seguimiento.v2`. El porcentaje principal del centro y
+su aviso futuro usan este último; la diferencia no modifica el schema ni la
+semántica de `%GLOBAL` legado.
+Un `report` recibido o un `resolve` durable confirma etapas del encargo, no la
+aceptación de la unidad de producto. Tampoco la confirma el cierre del proceso.
+La unidad entra al numerador sólo cuando su criterio vigente tiene evidencia de
+aceptación; las otras etapas se muestran por separado.
 
 Terminar exige el resultado prometido y evidencia de aceptación del artefacto
 actual. Para código puede ser un SHA con checks; para un diagnóstico, un informe
@@ -108,8 +126,12 @@ el destino o su clave de idempotencia; si no se puede resolver, queda resultado
 desconocido hasta reconciliar. No se promete "exactly once" con un journal local.
 
 La política local fija capacidad, presupuesto total y límite de reintentos antes
-de ejecutar. Los reinicios no reinician esos contadores. Inicio conservador de
-un worker local; ampliar capacidad requiere configuración explícita y medición,
+de ejecutar. Los reinicios no reinician esos contadores. Para encargos gestionados,
+el runtime reserva y liquida el presupuesto de todo el árbol antes y después de
+cada llamada; el adaptador de host retiene su cupo hasta verificar ausencia del
+recurso; los carriles de `corrida` acotan el trabajo de ingeniería. La vista
+separa los tres límites y nunca usa uno como sustituto de otro. Inicio conservador
+de un worker local; ampliar capacidad requiere configuración explícita y medición,
 siempre dentro del límite de Fase 14. No se matan procesos ajenos por nombre o PID
 solo. Veinte minutos sin avance no equivalen a proceso muerto.
 
@@ -204,6 +226,11 @@ Los mismos escenarios corren en cada adaptador, con el otro runtime ausente:
 10. Una tarea real de bajo riesgo en cada equipo termina con evidencia; el otro
     equipo permanece apagado o inaccesible. Se entregan capturas móvil/escritorio
     y comparación de la misma versión/capacidades, sin secretos.
+
+En OpenClaw, los escenarios de encargos gestionados leen la consulta y los
+recibos nativos del perímetro comprobado. En Hermes se ejecutan de nuevo contra
+su autoridad y transporte locales, con ejecutable y gateway OpenClaw ausentes;
+la misma forma de contrato no acredita por sí sola su aceptación.
 
 ## Fuentes y asuntos no comprobados
 

@@ -14,6 +14,15 @@ U4; 17.7 valida después el runbook contra las interfaces implementadas. No
 esperar 17.3 para aceptar el supervisor OpenClaw ni declarar Hermes probado
 con evidencia del otro host.
 
+Para encargos gestionados, 17.0 coteja el SHA instalado y los recibos T1–T8
+del [plan de encargos](../superpowers/plans/2026-09-30-encargos-agentes.md) en el
+perímetro que usará cada host. Exige allí identidad, admisión, `report`/`resolve`,
+reserva y liquidación del árbol, cierre de recursos y proyección probados; no
+convierte el cierre de U3b ni las rutas CLI/Hermes que U4 no usa en compuerta de
+la UI. Si falta una pieza, detén su conexión y conserva el inventario y la
+maqueta independientes. U5 hace su propia comprobación local y no consume el
+almacén, scheduler ni gateway de OpenClaw.
+
 Decisión de David del 2026-09-26 para U4: en 17.0 se revisan licencia y
 dependencias de un commit de LobsterBoard y se prueba el producto original con
 una plantilla existente, antes de desarrollar UI. Registrar configuración,
@@ -45,7 +54,7 @@ El lead comprueba la autorización aplicable antes de cada ítem. Un CI verde, u
 
 Q0 es el [PR de planificación](https://github.com/gon0801/goncloud-openclaw/pull/131). Antes de ejecutar, comprueba `git cat-file -e origin/main:docs/runbooks/autopilot-fase17.md` y `git cat-file -e origin/main:docs/superpowers/plans/2026-09-22-centro-tareas.md`. Ambos deben salir 0; si no, Q0 sigue pendiente y se detiene. El launcher puede localizar Q0 en una rama, pero eso **no** autoriza integrarlo. El repositorio es `gon0801/goncloud-openclaw`, default `main`, clon local `/Users/dn/dev/goncloud-openclaw`. Destino OpenClaw Windows: la ruta fuente y la raíz runtime se validan contra los recibos de Fase 16 antes de 17.8. Destino Hermes: `unknown` hasta 17.0; no se inventa ruta ni plataforma.
 
-Tras Q0 integrado y autorización para ejecutar, comprueba sin instalar nada: `test -x /Users/dn/bin/corrida.sh`, `test -r /Users/dn/bin/cli-modos.tsv`, `test -x /Users/dn/bin/tmux-activity-watch.sh` y `test -x /Users/dn/.openclaw/bin/openclaw`. Todos deben salir 0. En la Mac revisada al redactar este documento faltan los dos primeros: es una dependencia de la instalación de Fase 9, no un paso que se improvisa en esta fase. Si falta cualquiera, `ATORADO Fase 9 no instalada` antes de lanzar; 17.0 puede seguir sólo como investigación sin corrida viva. Después de comprobarlos, **el primer bloque de comandos abre la corrida en el tablero** desde el worktree del lead. Reanudar conserva el JSON existente; no vuelve a poner tareas en pendiente. `python3` escribe sólo el estado local inicial, sin secretos:
+Tras Q0 integrado y autorización para ejecutar U4, comprueba sin instalar nada: `test -x /Users/dn/bin/corrida.sh`, `test -r /Users/dn/bin/cli-modos.tsv`, `test -x /Users/dn/bin/tmux-activity-watch.sh` y `test -x /Users/dn/.openclaw/bin/openclaw`. Todos deben salir 0 para este arranque OpenClaw. En la Mac revisada al redactar este documento faltan los dos primeros: es una dependencia de la instalación de Fase 9, no un paso que se improvisa en esta fase. Si falta cualquiera, `ATORADO Fase 9 no instalada` antes de lanzar U4; 17.0 puede seguir sólo como investigación sin corrida viva. U5 no ejecuta esta comprobación OpenClaw: 17.3 documenta su preflight y transporte locales, con OpenClaw ausente, antes de arrancar allí. Después de comprobar el preflight OpenClaw, **el primer bloque de comandos abre su corrida en el tablero** desde el worktree del lead. Reanudar conserva el JSON existente; no vuelve a poner tareas en pendiente. `python3` escribe sólo el estado local inicial, sin secretos:
 
 ```bash
 python3 - <<'PY' || exit 1
@@ -96,7 +105,7 @@ PY
 fi
 ```
 
-El RPC sólo publica el tablero OpenClaw. El propio trabajo de 17.3 debe sustituir esa frontera para Hermes; una futura corrida en la otra computadora usa su almacenamiento y transporte local, nunca este gateway. Si falla la publicación inicial, registra el fallo en `eventos` y continúa el lanzamiento; reintenta en el siguiente cambio de estado, igual que ante un fallo posterior. Si no puede guardar el evento, detiene el arranque y conserva el último JSON válido. El lanzador usa el nombre estable `wt-f17-lead`, que también busca `arranque-de-fase.sh` y reconocerá al reanudar. El lead confirma su marca `OPENCLAW_WATCH=1` y escribe su línea en `.saikit/progress/17-sesiones.txt` antes del chequeo:
+El RPC sólo publica el tablero OpenClaw; su JSON es una proyección, no el store ni el contador de consumo de encargos. Antes de ejecutar este bloque, 17.0 debe contrastar el RPC con el contrato de eventos y progreso instalado; si el comando quedó obsoleto, se corrige el runbook y se valida en dry-run, sin crear otro escritor autoritativo. El propio trabajo de 17.3 debe sustituir esa frontera para Hermes; una futura corrida en la otra computadora usa su almacenamiento y transporte local, nunca este gateway. Si falla la publicación inicial, registra el fallo en `eventos` y continúa el lanzamiento; reintenta en el siguiente cambio de estado, igual que ante un fallo posterior. Si no puede guardar el evento, detiene el arranque y conserva el último JSON válido. El lanzador usa el nombre estable `wt-f17-lead`, que también busca `arranque-de-fase.sh` y reconocerá al reanudar. El lead confirma su marca `OPENCLAW_WATCH=1` y escribe su línea en `.saikit/progress/17-sesiones.txt` antes del chequeo:
 
 ```bash
 T=/opt/homebrew/bin/tmux
@@ -121,7 +130,7 @@ Lanza cada implementador con `corrida.sh lanzar-sesion`:
 
 ## Carriles y archivos
 
-Cada rama sale de `origin/main` fresco, nunca de la rama de otro carril. La secuencia es A aprobado e integrado antes de B; B aprobado e integrado antes de C; C antes de D. Se comprueba con `git cat-file -e origin/main:docs/spec/centro-tareas.v1.md` para A y con el SHA de merge del PR correspondiente como ancestro de `origin/main` para B/C. Ese contrato es la salida prevista de 17.1; si falta, no se inicia B. No se inicia código que consuma Fase 14 hasta comprobar sus commits mergeados, manifiesto instalado y aceptación; 17.0 y la maqueta de 17.1 pueden avanzar primero. Se comprueban igualmente entrega sin sello A/B/C. Si falta evidencia, queda `unknown` y se detiene sólo el carril dependiente.
+Cada rama sale de `origin/main` fresco, nunca de la rama de otro carril. La secuencia es A aprobado e integrado antes de B; B aprobado e integrado antes de C; C antes de D. Se comprueba con `git cat-file -e origin/main:docs/spec/centro-tareas.v1.md` para A y con el SHA de merge del PR correspondiente como ancestro de `origin/main` para B/C. Ese contrato es la salida prevista de 17.1; si falta, no se inicia B. No se inicia código que consuma Fase 14 hasta comprobar sus commits mergeados, manifiesto instalado y aceptación; 17.0 y la maqueta de 17.1 pueden avanzar primero. Para la ruta gestionada, se comprueban además interfaces y recibos T1–T8 del perímetro usado con sus SHA y pruebas; las filas de U3b no son una dependencia nueva. Se comprueban igualmente entrega sin sello A/B/C. Si falta evidencia, queda `unknown` y se detiene sólo el carril dependiente.
 
 | Carril y rama | Filas y DoD de `Plans.md` | Puede tocar | No toca |
 |---|---|---|---|
@@ -138,10 +147,10 @@ El lead escribe en cada `BRIEF.md` el resultado visible para David, archivo perm
 |---|---|---|
 | Q0 plan/runbook | Ambos archivos figuran en `origin/main`; autorización de integración separada | No iniciar fase |
 | Q1 A | 17.0 documenta versión/plataforma/API, licencia y prueba de LobsterBoard original, capturas computadora/celular, cobertura/faltantes, formatter y dependencias; 17.1 tiene tests de contratos y configuración/maqueta de ajustes | `ATORADO` en capacidad faltante; seguir sólo diseño independiente |
-| Q2 B | Q1 A aprobado e integrado en `origin/main`; Fase 14 y entrega sin sello con recibos; tests OpenClaw y Hermes con el otro ausente; crash y reloj único | No iniciar B sin Q1; no declarar paridad; corregir en B |
-| Q3 C | Q2 B aprobado e integrado en `origin/main`; UI y paquete pasan tests móvil/escritorio, XSS, instalación doble y reversa en entornos temporales | No iniciar C sin Q2; corregir C sin instalación viva |
+| Q2 B por host | Q1 A aprobado e integrado en `origin/main`; Fase 14 y entrega sin sello con recibos aplicables; base T1–T8 verificada en el perímetro usado; test OpenClaw para U4 o Hermes para U5 con el otro ausente; crash y reloj único local | No iniciar el tramo B sin Q1; no declarar paridad ni bloquear U4 por la ruta Hermes; corregir sólo el tramo afectado |
+| Q3 C por host | Tramo Q2 B del mismo host aprobado e integrado en `origin/main`; UI y paquete pasan tests móvil/escritorio, XSS, instalación doble y reversa en entornos temporales | No iniciar C para ese host sin su Q2; corregir C sin instalación viva |
 | Q4 revisión | PR por bloque con commits propios, hooks y CI del SHA final; cero bloqueantes; lectura externa del runbook | Mantener PR abierto y corregir sólo bloqueantes reproducibles |
-| Q5 aceptación | Autorización por equipo/ventana; Fase 16 aceptada donde aplique; tarea real de bajo riesgo en cada host con otro inaccesible | Conservar 17.8 `cc:TODO`; no llamar completa a la fase |
+| Q5 aceptación | Autorización por equipo/ventana; Fase 16 aceptada donde aplique; tarea real de bajo riesgo y recibo propio en cada host con otro inaccesible | Conservar 17.8 `cc:TODO` para el host sin recibo; no llamar completa a la fase |
 | Q6 cierre | Recibos de ambos hosts, checklist una vez por SHA, `bash scripts/cierre-de-fase.sh 17` VERDE y PR único de ledger | Declarar pendiente la fila sin evidencia |
 
 Cada PR documenta implementador, pruebas focalizadas, residuales y head. CI corre batería completa una vez por bloque en los shards del PR; lectura de docs/ledger va en el job corto. Si CI no cubre la batería completa, ejecutar sólo lo faltante. `git log origin/main..HEAD` debe listar sólo commits del carril. Un follow-up no bloqueante se registra en una fila nueva del plan y en el PR; no entra a la cola de integración de otro bloque. El lead no mergea por cuenta propia: espera autorización explícita y usa la ruta del kit definida en el base, en ventana segura. Un head nuevo invalida el CI y recibo previos. El PR de cierre `fase17/cierre-ledger` nace de `origin/main` después de los bloques y actualiza sólo estados con evidencia.
@@ -157,17 +166,18 @@ Cada PR documenta implementador, pruebas focalizadas, residuales y head. CI corr
 | CI o revisor no disponibles | Conservar PR/head y registrar `unknown`; consultar cuando haya evento, sin polling continuo ni segunda batería |
 | Estado corrupto o envío fallido | Mostrar `desconocido`, conservar último dato válido y evidencia; nunca reiniciar corte ni repetir efecto externo incierto |
 | Presupuesto, cuota o recursos agotados | Detener nuevos lanzamientos y mantener el registro; reanudar sólo con presupuesto existente y capacidad medida |
+| Recibo de encargo disponible pero falta aceptación de producto | Mostrar `report`, `resolve` y cierre de recurso por separado; no aumentar unidades verificadas ni declarar 100% hasta aceptar el criterio vigente |
 | Instalación o reversa falla | Conservar recibos, parar sólo ese host; no afectar el otro ni borrar datos |
 
 ## Inventario, seguimiento y cierre
 
-Un repo y un PR por bloque más el PR de cierre; cuatro carriles, un implementador escritor por carril, reviewer distinto y una instalación por equipo. Presupuesto de compras: cero. El límite inicial de ejecución es un worker local; 17.0 fija cifras medibles de muestreo, retención y presupuesto. OpenClaw Windows y Hermes se aceptan por separado; plataforma/ruta Hermes siguen `unknown` hasta 17.0. No hay transferencia de tareas entre equipos, visor agregado, botones de ejecución, acceso remoto ni segundo reloj.
+Un repo y un PR por bloque más el PR de cierre; cuatro carriles, un implementador escritor por carril, reviewer distinto y una instalación por equipo. Presupuesto de compras: cero. El límite inicial de ejecución es un worker local; 17.0 fija cifras medibles de muestreo, retención y presupuesto. En encargos gestionados, el presupuesto del árbol pertenece al runtime nativo, el cupo de host al adaptador de recursos y los carriles a `corrida`; cada límite conserva su recibo y ninguno se libera por cerrar otro. OpenClaw Windows y Hermes se aceptan por separado; plataforma/ruta Hermes siguen `unknown` hasta 17.0. No hay transferencia de tareas entre equipos, visor agregado, botones de ejecución, acceso remoto ni segundo reloj.
 
 La condición terminal de implementación es 17.0–17.7 con revisión y CI del head final. El cierre operativo exige también 17.8. Si falta autorización viva, conservar el estado y reportar `ATORADO aceptación por host pendiente`; no imprimir `LISTO` de fase. Tras Q0 y autorización de ejecución, David sólo necesita decir: «empieza la Fase 17».
 
 ## Seguimiento
 
-El lead informa a David en cada cambio de estado mediante `corrida.sh` y `seguimiento.v2`. El canal es Telegram, con el destino leído del cron que ya entrega; no se escribe aquí. El vigía corre cada 15 minutos y el consolidado sale al menos cada 30 minutos mientras haya trabajo activo. Los avisos excepcionales usan `seguimiento.v1` de inmediato. El lead actualiza `.saikit/progress/17.json` y su copia del gateway en cada cambio y cierre. Durante 17.3, la instalación Hermes debe demostrar su propio transporte y reloj con la misma cadencia; hasta entonces no se afirma que esté cubierta. No manda un aviso por CLI ni por carril.
+El lead informa a David en cada cambio de estado mediante `corrida.sh` y `seguimiento.v2`. El canal es Telegram, con el destino leído del cron que ya entrega; no se escribe aquí. Hay un dueño de vigilancia y reportes por host: el vigía corre cada 15 minutos y el consolidado sale al menos cada 30 minutos mientras haya trabajo activo. Los avisos excepcionales usan `seguimiento.v1` de inmediato. La proyección de encargos T8 alimenta ese mismo emisor; sus hooks no abren otro cron ni invocan un modelo para vigilar. El lead actualiza `.saikit/progress/17.json` y su copia del gateway en cada cambio y cierre. Durante 17.3, la instalación Hermes debe demostrar su propio transporte y reloj con la misma cadencia; hasta entonces no se afirma que esté cubierta. No manda un aviso por CLI ni por carril.
 
 ## Clases de comando
 

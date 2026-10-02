@@ -53,6 +53,16 @@ dependencias actuales de OpenClaw y comprobar la continuación soportada por Her
 La UI sola no resuelve esa dependencia. Fase 14 pendiente no se carga a Fase 17
 como trabajo supuestamente terminado.
 
+Para encargos gestionados, 17.0 comprueba en el perímetro que usará U4 la base
+de T1–T8 del [plan de encargos](2026-09-30-encargos-agentes.md): versión y SHA,
+interfaces nativas de identidad, admisión, resultados, consumo y presupuesto,
+recibos de host, proyección y pruebas de integración. Una fila marcada en el plan
+no sustituye esa prueba. Si falta una interfaz, se detiene sólo la conexión que
+la necesita; 17.0, contratos y maqueta independientes pueden continuar. No se
+exige cerrar U3b ni completar rutas CLI/Hermes ajenas al perímetro usado por U4.
+U5 verifica por separado la base equivalente en su host; no hereda la aceptación
+de OpenClaw.
+
 ## Contratos de tarea
 
 ### 17.0. Inventario y decisiones de compatibilidad
@@ -78,6 +88,10 @@ prueba. La preparación documental previa no incluye arrancar este entorno.
   con entrega sin sello y Fase 16 sin modificar sus cierres por inferencia.
 - Registrar dependencias OpenClaw en `scripts/mac/corrida/`, reloj y RPC de progreso;
   asignar su eliminación o adaptación a 17.2–17.4.
+- Inventariar los contratos y recibos T1–T8 realmente instalados en el perímetro
+  usado: consulta nativa, admisión, `report`/`resolve`, reservas del árbol,
+  recibos de recursos y proyección. Registrar SHA, prueba y huecos por host; no
+  inferir compatibilidad de la existencia de archivos o casillas marcadas.
 - Revisar licencia, dependencias y compatibilidad de un commit identificado de
   LobsterBoard y registrar permisos de reutilización de código/assets antes de
   adoptar o empaquetar. Tras esa revisión y al ejecutar U4, probar el producto original
@@ -112,9 +126,16 @@ se concretan en 17.0, sin crear otro registro de workers.
 
 Fijar identidad, estados, observaciones, unidades verificadas, criterios de cierre
 por tipo de tarea y mapeos legacy. La proyección no es un nuevo escritor del progreso.
+Para encargos gestionados, enlazar la identidad y los recibos T1–T8 sin crear un
+segundo store, scheduler, registro de workers o contador de consumo. Distinguir
+`report` recibido, `resolve` durable, recurso cerrado y unidad aceptada: ninguno
+de los tres primeros incrementa por sí solo el porcentaje de producto.
 Resolver la diferencia entre porcentaje de cola y unidades para que el encabezado
-y el aviso al usuario coincidan. Validar escritorio/móvil sobre la plantilla
-probada en 17.0 con casos de espera, bloqueo, degradación y cierre. Usar datos
+y el aviso al usuario coincidan en unidades verificadas. Conservar `%GLOBAL`
+histórico con su etiqueta y semántica: puede diferir de `seguimiento.v2` sin ser
+un error ni justificar un cambio de schema legacy. Validar escritorio/móvil
+sobre la plantilla probada en 17.0 con casos de espera, bloqueo, degradación
+y cierre. Usar datos
 ficticios identificados para estados aún no disponibles; hacer maqueta sólo
 de los ajustes pequeños necesarios, sin diseñar de nuevo lo que ya cumple.
 
@@ -130,6 +151,9 @@ Conservar `corrida.sh` como entrada de ciclo de vida y las políticas de autorid
 Enlazar identidad de tarea con intentos, sesiones y procesos verificados. Exponer
 actividad redactada y métricas con origen, cobertura y fecha. No instrumentar
 CLIs con hooks privados ni interceptar prompts.
+En el perímetro de encargos gestionados, consumir consulta y recibos nativos
+T1–T8; `corrida` proyecta y coordina trabajo de ingeniería, sin admitir, resolver
+ni contabilizar de nuevo una tarea que pertenece al scheduler nativo.
 
 DoD: una tarea fixture llega desde entrada nativa a proyección; un PID reutilizado
 no se atribuye al intento anterior; métricas faltantes no son cero; tests de
@@ -141,6 +165,10 @@ Crear el adaptador Hermes en la misma frontera, con fixtures y pruebas de contra
 compartidas. Extraer sólo el núcleo puro necesario para progreso y reloj; el
 transporte específico queda en adaptadores. Eliminar la dependencia obligatoria
 de `openclaw cron list` o RPC OpenClaw en el camino Hermes.
+Compartir la forma portable de consulta, recibos y proyección, no el almacén ni
+el scheduler de OpenClaw. Hermes aporta autoridad nativa/local, transporte y
+recibos propios; si faltan, 17.3 permanece pendiente y no se sustituye con una
+RPC a OpenClaw.
 
 DoD: iniciar, registrar, observar, reportar y verificar una tarea con ejecutable y
 gateway OpenClaw ausentes; mismo contrato y capacidades requeridas que 17.2.
@@ -151,14 +179,20 @@ completa a un simple copiado de skills.
 
 Extender reconciliación Fase 14 y el mecanismo global de seguimiento existente.
 Separar inventario/monitor del coordinador sin añadir un reloj competidor.
-Persistir intención, intento, presupuesto y resultado de reconciliación. Medir
-recursos sin lanzar procesos por cada tarea y refresco. Comprobar unicidad del
-servicio, backoff y conservación del checkpoint después de fallo de entrega.
+Para encargos gestionados, consumir intención, intento, reservas, liquidación y
+recibos de reconciliación T1–T8; no duplicar su store, scheduler ni marca de
+consumo. El presupuesto del árbol limita llamadas gestionadas y descendientes;
+el cupo de host limita procesos propios hasta cierre verificado; los carriles de
+`corrida` limitan trabajo de ingeniería. Mostrar los tres por separado y no
+liberar uno por un recibo que sólo cierra otro. Medir recursos sin lanzar procesos
+por cada tarea y refresco. Comprobar un dueño de vigilancia y reportes por host,
+backoff y conservación del checkpoint después de fallo de entrega.
 
 DoD: inyectar muerte antes/después de lanzar y recibir efectos; no duplicar
 intentos conocidos; efecto incierto queda desconocido sin repetición automática.
 Matar el coordinador mantiene panel/seguimiento degradado disponible. Límites
-siguen vigentes tras reiniciar y no se mata proceso ajeno. Dos tareas usan un reloj.
+siguen vigentes tras reiniciar y no se mata proceso ajeno. Dos tareas usan un reloj
+y un emisor de reportes, sin sondeo con modelo por falta de novedades.
 
 ### 17.5. Panel de tareas
 
