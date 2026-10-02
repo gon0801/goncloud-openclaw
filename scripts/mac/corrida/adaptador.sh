@@ -312,6 +312,8 @@ adaptador_deliver_ref() {
   local host_bin="${AGENT_WORK_HOST_BIN:-$(dirname "$AQUI")/agent-work/host.py}"
   python3 "$host_bin" verify-ref "$host_id" "$AGENT_WORK_HOST_STATE_DIR" "$sesion" "$ref" \
     || { echo "adaptador: referencia ajena o invalida" >&2; return 1; }
+  "$TMUX_BIN" set-environment -t "=$sesion" AGENT_WORK_MANAGED 1 \
+    || { echo "adaptador: no se pudo marcar la sesion gestionada" >&2; return 1; }
   adaptador_enviar_texto "$sesion" "Abre el encargo JSON en $ref. Sigue briefRef y escribe agent-work.result.v1 en resultRef con renombre atomico."
 }
 

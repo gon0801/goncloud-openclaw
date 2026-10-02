@@ -314,6 +314,8 @@ class TmuxTransport:
         if not session.replace("-", "").replace("_", "").isalnum():
             raise ValueError("invalid session")
         text = f"Open assignment JSON at {assignment_ref}. Follow briefRef and write agent-work.result.v1 atomically to resultRef."
+        subprocess.run([self.tmux_bin, "-L", self.socket, "set-environment", "-t", f"={session}",
+                        "AGENT_WORK_MANAGED", "1"], check=True, capture_output=True)
         command = [self.tmux_bin, "-L", self.socket, "send-keys", "-t", f"={session}:"]
         subprocess.run(command + ["-l", "--", text], check=True, capture_output=True)
         subprocess.run(command + ["Enter"], check=True, capture_output=True)

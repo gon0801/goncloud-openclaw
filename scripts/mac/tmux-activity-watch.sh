@@ -196,11 +196,13 @@ if [[ ! $LATIDO_TOPE =~ ^[1-9][0-9]*$ ]]; then
 fi
 
 # The marker lives in the session's tmux environment; `show-environment` prints "NAME=value"
-# and exits 0 when set; when unset it exits 1 ("unknown variable" on stderr in tmux 3.7).
+# and exits 0 when set. Managed tasks use their durable result instead of this watcher.
 is_marked() {
   local session=$1 v
   v=$("$TMUX_BIN" show-environment -t "$session" "$WATCH_MARKER" 2>/dev/null) || return 1
-  [[ $v == "$WATCH_MARKER=1" ]]
+  [[ $v == "$WATCH_MARKER=1" ]] || return 1
+  v=$("$TMUX_BIN" show-environment -t "$session" AGENT_WORK_MANAGED 2>/dev/null) || v=""
+  [[ $v != AGENT_WORK_MANAGED=1 ]]
 }
 
 send_event() {

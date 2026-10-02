@@ -371,6 +371,8 @@ class HostReceipts(unittest.TestCase):
             transport = TmuxTransport("tmux", socket)
             observation = self.apply(self.key, self.operation, transport.deliver)
             self.assertEqual(observation.status, "delivered")
+            self.assertEqual(tmux_cmd("show-environment", "-t", "=worker-1", "AGENT_WORK_MANAGED").stdout.strip(),
+                             "AGENT_WORK_MANAGED=1")
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline and not self.host.collect("mac-test", self.key):
                 time.sleep(0.1)
@@ -388,6 +390,8 @@ class HostReceipts(unittest.TestCase):
             adapter = ShellAdapterTransport(ROOT / "scripts" / "mac" / "corrida.sh", "run-test", "lane-test",
                                             "worker-test", "mac-test", self.root / "host", str(shim))
             self.assertEqual(self.apply(key2, op2, adapter.deliver).status, "delivered")
+            self.assertEqual(tmux_cmd("show-environment", "-t", "=worker-2", "AGENT_WORK_MANAGED").stdout.strip(),
+                             "AGENT_WORK_MANAGED=1")
             ref = str(self.root / "host" / "assignments" / f"{operation_id(key2)}.json")
             env = dict(os.environ, TMUX_BIN=str(shim), AGENT_WORK_HOST_STATE_DIR=str(self.root / "host"))
             foreign = subprocess.run(["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "adaptador",
@@ -412,6 +416,8 @@ class HostReceipts(unittest.TestCase):
                 self.assertEqual(sent.returncode, 0, sent.stderr)
 
             self.assertEqual(self.apply(key3, op3, via_launcher).status, "delivered")
+            self.assertEqual(tmux_cmd("show-environment", "-t", "=worker-3", "AGENT_WORK_MANAGED").stdout.strip(),
+                             "AGENT_WORK_MANAGED=1")
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline and not self.host.collect("mac-test", key3):
                 time.sleep(0.1)

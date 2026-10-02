@@ -38,6 +38,11 @@ if [[ $marker != "$WATCH_MARKER=1" ]]; then
   exit 0
 fi
 
+managed=$("$TMUX_BIN" show-environment AGENT_WORK_MANAGED 2>/dev/null || true)
+if [[ $managed == AGENT_WORK_MANAGED=1 ]]; then
+  exit 0
+fi
+
 cwd=$(printf '%s' "$input" | python3 -c 'import json,sys
 try:
     print(json.load(sys.stdin).get("cwd",""))

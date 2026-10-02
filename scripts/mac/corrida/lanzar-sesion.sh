@@ -74,6 +74,10 @@ corrida_lanzar_sesion() {
 
   lanzar_sesion_crear "$nombre" "$dir" "$bin" "$flag" \
     || { marcas_lock_soltar; return 1; }
+  if [ -n "$encargo_ref" ]; then
+    "$TMUX_BIN" set-environment -t "=$nombre" AGENT_WORK_MANAGED 1 \
+      || { "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; marcas_lock_soltar; return 1; }
+  fi
   lanzar_sesion_marcar "$id" "$nombre" "$reg" "$carril" "$worker" "$barra" \
     || { marcas_lock_soltar; return 1; }
   if [ -n "$encargo" ]; then
@@ -266,6 +270,8 @@ lanzar_sesion_entregar() { # $1 nombre $2 encargo; 0 = entregado
 
 lanzar_sesion_entregar_referencia() {
   local nombre="$1" ref="$2" prompt
+  "$TMUX_BIN" set-environment -t "=$nombre" AGENT_WORK_MANAGED 1 \
+    || { echo "no se pudo marcar la sesion gestionada" >&2; return 1; }
   prompt="$(mktemp)" || return 1
   printf 'Abre el encargo JSON en %s. Sigue briefRef y escribe agent-work.result.v1 en resultRef con renombre atomico.\n' "$ref" >"$prompt"
   lanzar_sesion_entregar "$nombre" "$prompt"
