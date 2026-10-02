@@ -7,8 +7,10 @@ ese mismo día. [Plan de trabajo](../plans/2026-09-29-director-corrida.md).
 [Ledger](../../../Plans.md), Fase 20.
 
 Este diseño se integra sobre el [plan de encargos durables](../plans/2026-09-30-encargos-agentes.md).
-Su ruta gestionada exige la base T0–T10 comprobada para la entrada concreta, pero
-no exige T11–T12, despliegue total ni un ejecutor Hermes. El director conserva la
+U3b usa las interfaces de T0 y los contratos probados que consume cada entrada.
+Puede desarrollarse sin cerrar todas las tareas T0–T10 ni certificar otras rutas,
+CLI o Hermes. La entrada gestionada se habilita solo cuando su cobertura concreta
+está verificada. El director conserva la
 decisión de ingeniería en `reconcile()`. El runtime nativo conserva el encargo, el
 resultado y su consumo; `task_handoffs.py` conecta ambas autoridades. Las entradas
 sin cobertura certificada conservan su ruta anterior hasta una adopción por

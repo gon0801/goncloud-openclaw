@@ -13,13 +13,14 @@ mergeado y que U3a cerró con 19.2. 20.0 y 20.1 no tocan shell y pueden empezar 
 19.1 mergeado. El resto espera el cierre de U3a.
 
 Antes de integrar 20.1 con `reconcile.py` o cambiar las entradas de 20.4 a 20.10,
-integra la base comprobada de [encargos durables](2026-09-30-encargos-agentes.md)
-T0–T10. No exige T11–T12, despliegue total ni Hermes: la ruta gestionada puede
-seguir deshabilitada en producción. Comprueba el par de SHA de G y R en
-`docs/evidence/agent-work/acceptance.md` y la cobertura de la entrada en
-`docs/evidence/agent-work/coverage.json`. Si faltan, conserva esa entrada en la
-ruta anterior y no declares probada su continuación nativa. Rebasea cada PR de
-U3b sobre el último commit integrado de G antes de editar archivos comunes.
+usa las interfaces de T0 y los contratos de [encargos durables](2026-09-30-encargos-agentes.md)
+que consume la entrada concreta. Comprueba sus pruebas focalizadas y registra el
+par de SHA de G y R en el recibo de U3b. Para habilitar esa entrada como gestionada,
+comprueba además su cobertura en `docs/evidence/agent-work/coverage.json`. No
+exijas cerrar todas las tareas T0–T10 ni certificar otras rutas, CLI o Hermes para
+desarrollar U3b. Una entrada sin cobertura conserva la ruta anterior y no acredita
+continuación nativa. Rebasea cada PR de U3b sobre el último commit integrado de G
+antes de editar archivos comunes.
 
 Si U3a cambió interfaces que este plan nombra (`avisos_despertar_dueno`,
 `avisos atender`, `latido_de`), reconcilia las rutas del plan en 20.1 antes de
@@ -417,8 +418,11 @@ Objetivo: probar el director de punta a punta y retirar el vigía con modelo de 
    cron. Solo entonces retíralo y confirma con `openclaw cron list` que ya no está.
    Conserva los cron de negocio y las entradas no adoptadas.
 
-Antes de la primera transferencia viva, ejecuta el ensayo `cutover_fencing` de
-T11 sobre el par de artefactos elegido. La autorización y el recibo vivo de T12
+Antes de la primera transferencia viva, ejecuta
+`bash scripts/tests/test-agent-work-cutover.sh` sobre el par de artefactos elegido.
+La prueba cubre la generación, el cron suspendido, los turnos antiguos en vuelo,
+la preservación de resultados pendientes y el bloqueo ante incertidumbre. La
+autorización y el recibo vivo de T12
 son necesarios para adoptar la entrada y retirar su cron, pero no para desarrollar
 el director en pruebas aisladas.
 

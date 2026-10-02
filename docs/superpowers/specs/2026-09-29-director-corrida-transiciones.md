@@ -8,10 +8,10 @@ Este documento describe el objetivo. Los módulos nuevos no existen todavía en
 `origin/main`. En 20.1 la tupla `director.TABLA` y las tablas de este documento
 deben coincidir fila por fila, y una prueba lo comprueba.
 
-La integración usa la base T0–T10 comprobada del
-[plan de encargos durables](../plans/2026-09-30-encargos-agentes.md) para cada
-entrada gestionada. No requiere T11–T12, despliegue total ni Hermes antes de
-desarrollar U3b. `reconcile()` es el único decisor de ingeniería; el runtime
+La integración usa las interfaces de T0 y los contratos probados del
+[plan de encargos durables](../plans/2026-09-30-encargos-agentes.md) que consume
+cada entrada. Desarrollar U3b no exige cerrar todas las tareas T0–T10 ni
+certificar otras rutas, CLI o Hermes. `reconcile()` es el único decisor de ingeniería; el runtime
 nativo conserva encargo, resultado y consumo. Una entrada sin cobertura permanece
 fuera del perímetro gestionado hasta su adopción por generación.
 
