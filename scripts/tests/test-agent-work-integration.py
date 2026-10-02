@@ -1567,12 +1567,15 @@ class CliClaimTest(unittest.TestCase):
                           "taskId": "task-one", "claimId": "claim-one", "offset": 4096,
                           "length": 4096})
 
-    def test_claim_download_reserve_and_delivery_replay_once(self):
+    def test_claim_replay_and_close_preserve_preexisting_user_session(self):
         class Backend:
             boot_id = "boot-one"
 
             def __init__(self):
-                self.live = {}
+                self.live = {"worker-one": {"bootId": self.boot_id, "nonce": "",
+                                           "sessionName": "worker-one"}}
+                self.stops = []
+                self.revocations = []
 
             def mark(self, session, nonce):
                 self.live[session] = {"bootId": self.boot_id, "nonce": nonce,
@@ -1580,6 +1583,21 @@ class CliClaimTest(unittest.TestCase):
 
             def observe(self, session):
                 return self.live.get(session)
+
+            def stop(self, identity):
+                self.stops.append(identity)
+                self.live.pop(identity["sessionName"], None)
+                return True
+
+            def prove_absent(self, identity):
+                return identity["sessionName"] not in self.live
+
+            def revoke(self, identity):
+                if self.observe(identity["sessionName"]) != identity:
+                    return False
+                self.revocations.append(identity)
+                self.live[identity["sessionName"]] = {**identity, "nonce": ""}
+                return True
 
         class Client:
             host_id = "host-one"
@@ -1624,6 +1642,15 @@ class CliClaimTest(unittest.TestCase):
         self.assertEqual(manager.counts()["active"], 1)
         self.assertEqual(client.offsets, [0, 4096])
         self.assertEqual(client.admitted[0]["adapterId"], "codex")
+        key = OperationKey("host-one", "task-one", 0, "instance-one")
+        evidence = {"kind": "result", "receipt": "durable-result-one"}
+        self.assertEqual(manager.close(key, evidence).state, "ReleasedAdopted")
+        self.assertEqual(manager.close(key, evidence).state, "ReleasedAdopted")
+        self.assertEqual(backend.stops, [])
+        self.assertEqual(len(backend.revocations), 1)
+        self.assertEqual(backend.observe("worker-one"),
+                         {"bootId": "boot-one", "nonce": "", "sessionName": "worker-one"})
+        self.assertEqual(manager.counts()["active"], 0)
 
     def test_uncertified_route_never_claims(self):
         class Client:

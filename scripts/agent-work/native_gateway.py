@@ -200,6 +200,7 @@ def _brief_to_workspace(client, claim, workspace_root):
 
 def claim_cli_once(client, *, host, manager, adapter_id, instance_id, session,
                    workspace_root, deliver, coverage):
+    """Deliver to an existing session; adopting it never grants permission to stop it."""
     if coverage.get("hostAdapterCoverage", {}).get(client.host_id, {}).get(adapter_id) != "certified":
         raise ValueError("host adapter route is not certified")
     claim = client.claim_host(adapter_id, instance_id)
@@ -228,7 +229,7 @@ def claim_cli_once(client, *, host, manager, adapter_id, instance_id, session,
         raise ValueError("host claim contract invalid")
     brief = _brief_to_workspace(client, claim, workspace_root)
     key = OperationKey(client.host_id, claim["taskId"], claim["generation"], instance_id)
-    reservation = manager.reserve(key, session, "IntentionalPool")
+    reservation = manager.reserve(key, session, "UserAdopted")
     launch = manager.begin_launch(key)
     if launch.launch_now:
         manager.backend.mark(session, reservation.nonce)
