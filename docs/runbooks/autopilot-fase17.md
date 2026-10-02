@@ -54,13 +54,13 @@ El lead comprueba la autorización aplicable antes de cada ítem. Un CI verde, u
 
 Q0 es el [PR de planificación](https://github.com/gon0801/goncloud-openclaw/pull/131). Antes de ejecutar, comprueba `git cat-file -e origin/main:docs/runbooks/autopilot-fase17.md` y `git cat-file -e origin/main:docs/superpowers/plans/2026-09-22-centro-tareas.md`. Ambos deben salir 0; si no, Q0 sigue pendiente y se detiene. El launcher puede localizar Q0 en una rama, pero eso **no** autoriza integrarlo. El repositorio es `gon0801/goncloud-openclaw`, default `main`, clon local `/Users/dn/dev/goncloud-openclaw`. Destino OpenClaw Windows: la ruta fuente y la raíz runtime se validan contra los recibos de Fase 16 antes de 17.8. Destino Hermes: `unknown` hasta 17.0; no se inventa ruta ni plataforma.
 
-Tras Q0 integrado y autorización para ejecutar U4, comprueba sin instalar nada: `test -x /Users/dn/bin/corrida.sh`, `test -r /Users/dn/bin/cli-modos.tsv`, `test -x /Users/dn/bin/tmux-activity-watch.sh` y `test -x /Users/dn/.openclaw/bin/openclaw`. Todos deben salir 0 para este arranque OpenClaw. En la Mac revisada al redactar este documento faltan los dos primeros: es una dependencia de la instalación de Fase 9, no un paso que se improvisa en esta fase. Si falta cualquiera, `ATORADO Fase 9 no instalada` antes de lanzar U4; 17.0 puede seguir sólo como investigación sin corrida viva. U5 no ejecuta esta comprobación OpenClaw: 17.3 documenta su preflight y transporte locales, con OpenClaw ausente, antes de arrancar allí. Después de comprobar el preflight OpenClaw, **el primer bloque de comandos abre su corrida en el tablero** desde el worktree del lead. Reanudar conserva el JSON existente; no vuelve a poner tareas en pendiente. `python3` escribe sólo el estado local inicial, sin secretos:
+Tras Q0 integrado y autorización para ejecutar U4, comprueba sin instalar nada: `test -x /Users/dn/bin/corrida.sh`, `test -r /Users/dn/bin/cli-modos.tsv`, `test -x /Users/dn/bin/tmux-activity-watch.sh`, `test -x /Users/dn/bin/progress-events.py` y `test -x /Users/dn/.openclaw/bin/openclaw`. Todos deben salir 0 para este arranque OpenClaw. En la Mac revisada al redactar este documento faltan los dos primeros: es una dependencia de la instalación de Fase 9, no un paso que se improvisa en esta fase. Si falta cualquiera, `ATORADO preflight OpenClaw incompleto` antes de lanzar U4; 17.0 puede seguir sólo como investigación sin corrida viva. U5 no ejecuta esta comprobación OpenClaw: 17.3 documenta su preflight y transporte locales, con OpenClaw ausente, antes de arrancar allí. Después de comprobar el preflight OpenClaw, **el primer bloque de comandos abre su corrida en el tablero** desde el worktree del lead. La apertura conserva un ID estable en disco; reanudar publica esa misma cola y nunca vuelve a poner tareas en pendiente. `sync` genera el JSON de fase desde la revisión aceptada, sin secretos:
 
 ```bash
 python3 - <<'PY' || exit 1
-import datetime, json, os, pathlib, stat
+import datetime, json, os, pathlib, stat, tempfile
 os.umask(0o077)
-p = pathlib.Path('.saikit/progress/17.json')
+p = pathlib.Path('.saikit/progress/17-opened.event.json')
 for directory in (p.parent.parent, p.parent):
     if directory.is_symlink():
         raise SystemExit(f'ATORADO ruta de progreso enlazada: {directory}')
@@ -77,35 +77,32 @@ if not p.exists():
     lanes = [dict(id=i, nombre=n, repo=repo, rama=None, tareas=t, estado='pendiente', paso_loop=0, pr=None, head=None, approve_lead=None, ci='pendiente', coderabbit='pendiente', residuales=[], detenido_por=None) for i,n,t in groups]
     queue = [dict(id=f'Q{i}', prs=[], estado='verificado' if i == 0 else 'pendiente', ventana=None, merge_commits=[], verificado='ok' if i == 0 else None, detenido_por=None, avance=100 if i == 0 else 0) for i in range(7)]
     doc = dict(schema='runbook-progress.v1', runbook='docs/runbooks/autopilot-fase17.md', fase='17', corrida='fase17-centro-tareas', proyecto='goncloud-openclaw', titulo='Fase 17: centro de tareas', plan=dict(repo=repo, ruta='Plans.md', seccion='Fase 17'), lead=dict(agente='lead', inicio=at, actualizado=at), atencion_requerida=dict(necesaria=False, motivo=None, desde=None), siguiente_paso='Verificar capacidades y dependencias de la fase', carriles=lanes, cola=queue, eventos=[], cierre=dict(at=None, telegram_message_id=None, resumen=None))
-    p.write_text(json.dumps(doc, ensure_ascii=False, separators=(',', ':')) + '\n', encoding='utf-8')
+    event = dict(kind='run.opened', id='fase17-opened-v1', corrida=doc['corrida'],
+                 at=at, doc=doc, roundBudget={i: 2 for i, _, _ in groups},
+                 phaseAlias=True)
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=p.parent,
+                                     prefix='.17-opened.', delete=False) as tmp:
+        tmp.write(json.dumps(event, ensure_ascii=False, separators=(',', ':')) + '\n')
+        tmp.flush()
+        os.fsync(tmp.fileno())
+        temp = pathlib.Path(tmp.name)
+    temp.chmod(0o600)
+    os.replace(temp, p)
+    fd = os.open(p.parent, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 p.chmod(0o600)
 if stat.S_IMODE(p.stat().st_mode) != 0o600 or any(stat.S_IMODE(d.stat().st_mode) != 0o700 for d in (p.parent.parent, p.parent)):
     raise SystemExit('ATORADO permisos de progreso no privados')
 PY
-if ! ~/.openclaw/bin/openclaw gateway call runbook.progress.set --params "$(cat .saikit/progress/17.json)" --timeout 30000; then
-  python3 - <<'PY' || exit 1
-import datetime, json, os, pathlib, tempfile
-p = pathlib.Path('.saikit/progress/17.json')
-doc = json.loads(p.read_text(encoding='utf-8'))
-at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00', 'Z')
-doc['eventos'].append(dict(at=at, carril=None, que='publicación inicial de progreso falló; reintentar en el siguiente cambio de estado', situacion=None))
-tmp_path = None
-try:
-    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=p.parent, prefix='.17.', delete=False) as tmp:
-        tmp_path = pathlib.Path(tmp.name)
-        tmp.write(json.dumps(doc, ensure_ascii=False, separators=(',', ':')) + '\n')
-        tmp.flush()
-        os.fsync(tmp.fileno())
-    tmp_path.chmod(0o600)
-    os.replace(tmp_path, p)
-finally:
-    if tmp_path is not None:
-        tmp_path.unlink(missing_ok=True)
-PY
-fi
+~/bin/progress-events.py --openclaw-bin /Users/dn/.openclaw/bin/openclaw queue-event --event-json .saikit/progress/17-opened.event.json || exit 1
+~/bin/progress-events.py --openclaw-bin /Users/dn/.openclaw/bin/openclaw publish --corrida fase17-centro-tareas || exit 1
+~/bin/progress-events.py --openclaw-bin /Users/dn/.openclaw/bin/openclaw sync --corrida fase17-centro-tareas --estado .saikit/progress/17-estado.md --phase-json .saikit/progress/17.json || exit 1
 ```
 
-El RPC sólo publica el tablero OpenClaw; su JSON es una proyección, no el store ni el contador de consumo de encargos. Antes de ejecutar este bloque, 17.0 debe contrastar el RPC con el contrato de eventos y progreso instalado; si el comando quedó obsoleto, se corrige el runbook y se valida en dry-run, sin crear otro escritor autoritativo. El propio trabajo de 17.3 debe sustituir esa frontera para Hermes; una futura corrida en la otra computadora usa su almacenamiento y transporte local, nunca este gateway. Si falla la publicación inicial, registra el fallo en `eventos` y continúa el lanzamiento; reintenta en el siguiente cambio de estado, igual que ante un fallo posterior. Si no puede guardar el evento, detiene el arranque y conserva el último JSON válido. El lanzador usa el nombre estable `wt-f17-lead`, que también busca `arranque-de-fase.sh` y reconocerá al reanudar. El lead confirma su marca `OPENCLAW_WATCH=1` y escribe su línea en `.saikit/progress/17-sesiones.txt` antes del chequeo:
+El evento `run.opened` reclama la ruta de fase para esta corrida OpenClaw. Si `publish` falla, el evento queda en cola durable: no se lanza un carril hasta publicarlo y sincronizarlo; al reanudar se repiten los tres comandos con el mismo ID. `sync` deriva `.saikit/progress/17.json` y `17-estado.md` de la misma revisión aceptada. Esas vistas no son el store ni el contador de consumo de encargos. Cada cambio de carril, cola o atención usa un evento tipado con ID estable; cada LISTO y VEREDICTO usa `record-ready` y `record-verdict` con evidencia y SHA completo antes de anunciarlo. Se ejecuta `publish --corrida fase17-centro-tareas` al reanudar y en cada tick, aunque no haya novedades. El propio trabajo de 17.3 debe sustituir el transporte OpenClaw para Hermes; su corrida usa almacenamiento y transporte locales, nunca este gateway. El lanzador usa el nombre estable `wt-f17-lead`, que también busca `arranque-de-fase.sh` y reconocerá al reanudar. El lead confirma su marca `OPENCLAW_WATCH=1` y escribe su línea en `.saikit/progress/17-sesiones.txt` antes del chequeo:
 
 ```bash
 T=/opt/homebrew/bin/tmux

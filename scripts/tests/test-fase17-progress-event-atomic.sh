@@ -1,46 +1,63 @@
 #!/usr/bin/env bash
-# Un fallo al guardar un evento no debe corromper el ultimo progreso valido.
+# La apertura de Fase 17 usa un evento durable y no pisa la proyección previa.
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 runbook=$PWD/docs/runbooks/autopilot-fase17.md
+client=$PWD/scripts/mac/progress-events.py
+for action in 'queue-event --event-json' 'publish --corrida' 'sync --corrida'; do
+  grep -qF "$action" "$runbook" || { echo "FAIL: falta $action" >&2; exit 1; }
+done
+if grep -qF 'runbook.progress.set' "$runbook"; then
+  echo 'FAIL: la corrida nueva usa escritura completa obsoleta' >&2
+  exit 1
+fi
 tmp_progress=$(mktemp -d) || exit 1
-trap 'chmod 0700 "$tmp_progress/.saikit/progress" 2>/dev/null; rm -r "$tmp_progress"' EXIT
+trap 'rm -r "$tmp_progress"' EXIT
 mkdir -p "$tmp_progress/.saikit/progress" || exit 1
 progress=$tmp_progress/.saikit/progress/17.json
-printf '%s\n' '{"eventos":[],"estado":"valido"}' > "$progress" || exit 1
-chmod 0600 "$progress" || exit 1
-chmod 0500 "$tmp_progress/.saikit/progress" || exit 1
+event=$tmp_progress/.saikit/progress/17-opened.event.json
+printf '%s\n' '{"estado":"valido"}' > "$progress" || exit 1
+printf '%s\n' 'sin modificar' > "$tmp_progress/foreign" || exit 1
 
-out=$(
-  {
-    awk '/^  python3 - <<.PY./{capture=1} capture {print; if ($0=="PY") exit}' "$runbook"
-    printf '%s\n' 'printf "CONTINUO_TRAS_FALLO\\n"'
-  } | (cd "$tmp_progress" && bash) 2>&1
-)
+opening=$(awk '/^python3 - <<.PY./{capture=1} capture {print; if ($0=="PY") exit}' "$runbook")
+[ -n "$opening" ] || { echo 'FAIL: falta bloque de apertura' >&2; exit 1; }
+ln -s "$tmp_progress/foreign" "$event" || exit 1
+out=$(printf '%s\nprintf "CONTINUO_TRAS_FALLO\\n"\n' "$opening" | (cd "$tmp_progress" && bash) 2>&1)
 rc=$?
-chmod 0700 "$tmp_progress/.saikit/progress" || exit 1
-[ "$rc" -ne 0 ] || { printf 'FAIL: continuo tras fallo al guardar evento\n' >&2; exit 1; }
+[ "$rc" -ne 0 ] || { echo 'FAIL: continuo tras ruta insegura' >&2; exit 1; }
 case "$out" in
-  *CONTINUO_TRAS_FALLO*) printf 'FAIL: el bloque siguio tras el fallo\n' >&2; exit 1 ;;
+  *CONTINUO_TRAS_FALLO*) echo 'FAIL: el bloque siguio tras fallo' >&2; exit 1 ;;
 esac
-[ "$(cat "$progress")" = '{"eventos":[],"estado":"valido"}' ] || {
-  printf 'FAIL: el progreso valido fue modificado\n' >&2
+[ "$(cat "$progress")" = '{"estado":"valido"}' ] || {
+  echo 'FAIL: la proyección previa fue modificada' >&2
+  exit 1
+}
+[ "$(cat "$tmp_progress/foreign")" = 'sin modificar' ] || {
+  echo 'FAIL: el destino del enlace fue modificado' >&2
   exit 1
 }
 
-awk '/^  python3 - <<.PY./{capture=1} capture {print; if ($0=="PY") exit}' "$runbook" |
-  (cd "$tmp_progress" && bash) || exit 1
-python3 - "$progress" <<'PY' || exit 1
+rm "$event" || exit 1
+for attempt in 1 2; do
+  printf '%s\n' "$opening" | (cd "$tmp_progress" && bash) || exit 1
+  python3 "$client" --state-dir "$tmp_progress/client" queue-event --event-json "$event" >/dev/null || exit 1
+done
+python3 - "$tmp_progress" <<'PY' || exit 1
 import json
-import pathlib
+from pathlib import Path
 import stat
 import sys
 
-p = pathlib.Path(sys.argv[1])
-doc = json.loads(p.read_text(encoding='utf-8'))
-assert doc['estado'] == 'valido'
-assert len(doc['eventos']) == 1
-assert doc['eventos'][0]['que'] == 'publicación inicial de progreso falló; reintentar en el siguiente cambio de estado'
-assert stat.S_IMODE(p.stat().st_mode) == 0o600
+root = Path(sys.argv[1])
+event = json.loads((root / '.saikit/progress/17-opened.event.json').read_text())
+assert event['kind'] == 'run.opened'
+assert event['id'] == 'fase17-opened-v1'
+assert event['corrida'] == event['doc']['corrida'] == 'fase17-centro-tareas'
+assert event['phaseAlias'] is True
+assert event['roundBudget'] == {'A': 2, 'B': 2, 'C': 2, 'D': 2}
+queue = list((root / 'client/runs/fase17-centro-tareas/queue').glob('*.json'))
+assert len(queue) == 1 and json.loads(queue[0].read_text()) == event
+assert stat.S_IMODE((root / '.saikit/progress/17-opened.event.json').stat().st_mode) == 0o600
+assert (root / '.saikit/progress/17.json').read_text() == '{"estado":"valido"}\n'
 PY
-printf 'VERDE: un fallo de escritura conserva el progreso y detiene el arranque\n'
+printf 'VERDE: apertura segura, durable e idempotente; proyección previa intacta\n'
