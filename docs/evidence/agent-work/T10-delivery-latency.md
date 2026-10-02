@@ -47,5 +47,5 @@ con un reloj simulado y un cliente nativo falso. No ejercita el vigilante instal
 código bajo host despierto y red sana simulados. El tramo de detección está acotado
 por el intervalo de sondeo (`watch_pump` exige `interval <= 5`), pero
 el intervalo instalado real y el costo del transporte Gateway quedan fuera de esta
-prueba. SHA de G: el commit que introduce este archivo (hijo de `cecf243`). SHA de R:
-no aplica — el lado nativo está simulado por el cliente falso.
+prueba. El caso entró en G con `9a18540` y el reloj simulado con `4687b0b`.
+SHA de R: no aplica — el lado nativo está simulado por el cliente falso.
