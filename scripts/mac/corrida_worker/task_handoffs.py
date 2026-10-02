@@ -139,10 +139,22 @@ def _verified_gate_evidence(gate: Mapping[str, Any]) -> tuple[str, str]:
     return str(path), digest
 
 
+def _durable_gate_evidence(gate: Mapping[str, Any]) -> tuple[str, str]:
+    """Read the already verified identity without reopening its artifact."""
+    evidence_path = _required_text(gate.get("evidencePath"), "durable gate evidencePath")
+    evidence_digest = _required_text(
+        gate.get("evidenceDigest"), "durable gate evidenceDigest"
+    )
+    return evidence_path, evidence_digest
+
+
 def _decision_from_review(
     raw: Mapping[str, Any],
     lane_observation: Mapping[str, Any],
     typed_payload: Mapping[str, Any],
+    *,
+    verify_gate_evidence: bool = True,
+    fallback_gate: Optional[Mapping[str, Any]] = None,
 ) -> tuple[dict, Optional[dict]]:
     verdict = str(typed_payload.get("verdict") or "").lower()
     if verdict in ("changes", "cambios"):
@@ -160,12 +172,26 @@ def _decision_from_review(
         evidence_ref = typed_payload.get("evidenceRef") or result.get("artifactRef")
         _required_text(evidence_ref, "approved review evidenceRef")
         revision = _review_revision(raw)
-        gate = raw.get("gate") or lane_observation.get("gate")
+        gate = next(
+            (
+                candidate
+                for candidate in (raw.get("gate"), lane_observation.get("gate"))
+                if isinstance(candidate, dict)
+            ),
+            None,
+        )
+        if gate is None and isinstance(fallback_gate, dict):
+            gate = dict(fallback_gate)
+        elif isinstance(fallback_gate, dict) and not verify_gate_evidence:
+            gate = {**dict(fallback_gate), **gate}
         if not isinstance(gate, dict):
             raise TaskHandlingError("approved review result is missing current gate")
         gate_action = gate.get("action") or raw.get("gateAction")
         _required_text(gate_action, "approved review gate action")
-        evidence_path, evidence_digest = _verified_gate_evidence(gate)
+        if verify_gate_evidence:
+            evidence_path, evidence_digest = _verified_gate_evidence(gate)
+        else:
+            evidence_path, evidence_digest = _durable_gate_evidence(gate)
         decision = {"kind": "complete", "evidenceRef": evidence_ref}
         return decision, {
             "action": gate_action,
@@ -186,11 +212,21 @@ def _decision_from_review(
 
 
 def _decision_payload(
-    raw: Mapping[str, Any], lane_observation: Mapping[str, Any]
+    raw: Mapping[str, Any],
+    lane_observation: Mapping[str, Any],
+    *,
+    verify_gate_evidence: bool = True,
+    fallback_gate: Optional[Mapping[str, Any]] = None,
 ) -> tuple[dict, Optional[dict]]:
     typed_payload = _typed_review_payload(raw)
     if typed_payload is not None:
-        return _decision_from_review(raw, lane_observation, typed_payload)
+        return _decision_from_review(
+            raw,
+            lane_observation,
+            typed_payload,
+            verify_gate_evidence=verify_gate_evidence,
+            fallback_gate=fallback_gate,
+        )
     if raw.get("resultContract") == "review.v1":
         raise TaskHandlingError("review.v1 result is missing typed review payload")
     decision = raw.get("decision")
@@ -199,7 +235,12 @@ def _decision_payload(
     return dict(decision), None
 
 
-def _task_payload(lane_observation: Mapping[str, Any]) -> Optional[dict]:
+def _task_payload(
+    lane_observation: Mapping[str, Any],
+    *,
+    verify_gate_evidence: bool = True,
+    fallback_gate: Optional[Mapping[str, Any]] = None,
+) -> Optional[dict]:
     raw = lane_observation.get("managed_task")
     if raw is None:
         return None
@@ -211,7 +252,12 @@ def _task_payload(lane_observation: Mapping[str, Any]) -> Optional[dict]:
         raise TaskHandlingError("managed task caller is not a director")
     if not isinstance(receipt, dict):
         raise TaskHandlingError("managed task result receipt is missing")
-    decision, gate = _decision_payload(raw, lane_observation)
+    decision, gate = _decision_payload(
+        raw,
+        lane_observation,
+        verify_gate_evidence=verify_gate_evidence,
+        fallback_gate=fallback_gate,
+    )
     for field in ("authority", "corridaId", "decisionId", "fence"):
         _required_text(caller.get(field), "director " + field)
     task_id = _required_text(receipt.get("taskId"), "taskId")
@@ -383,13 +429,33 @@ def director_handling_effects(
 
     Existing event reduction supplies serialization and replay protection.  A
     second consumer may calculate the same effect, but the stable native
-    decision digest and the recorded receipt make the effect converge.
+    decision digest and the recorded receipt make the effect converge.  Once
+    an intent exists, its verified gate identity is reused; only the gate
+    executor reopens the evidence file.
     """
-    expected = _task_payload(lane_observation)
+    intents = _intent_events(lane)
+    durable_intent = next(
+        (
+            event.get("payload")
+            for event in reversed(intents)
+            if isinstance(event.get("payload"), dict)
+        ),
+        None,
+    )
+    durable_gate = (
+        durable_intent.get("gate")
+        if isinstance(durable_intent, dict)
+        and isinstance(durable_intent.get("gate"), dict)
+        else None
+    )
+    expected = _task_payload(
+        lane_observation,
+        verify_gate_evidence=durable_intent is None,
+        fallback_gate=durable_gate,
+    )
     if expected is None:
         return ()
     _required_text(lane.get("id"), "lane id")
-    intents = _intent_events(lane)
     matching = [
         event.get("payload") or {}
         for event in intents

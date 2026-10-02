@@ -773,6 +773,61 @@ class DirectorHandlingTest(unittest.TestCase):
         with self.assertRaisesRegex(task_handoffs.TaskHandlingError, "evidencePath"):
             reconcile(state_from_record(self.record), observation)
 
+    def test_gate_receipt_recovers_after_evidence_file_disappears(self):
+        evidence = Path(self.tmp.name) / "recoverable-gate.json"
+        evidence.write_text(
+            json.dumps({"repo": "o/r", "pr": 7, "head": "b" * 40}),
+            encoding="utf-8",
+        )
+        evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+        observation = self._review_observation(
+            {"verdict": "approved", "evidenceRef": "artifact:review"},
+        )
+        observation["lanes"]["l1"]["gate"] = {
+            "action": "ci",
+            "evidencePath": str(evidence),
+            "evidenceDigest": evidence_digest,
+        }
+        _, effects = reconcile(state_from_record(self.record), observation)
+        durable = self._apply(self.record, effects[0])
+        _, effects = reconcile(state_from_record(durable), observation)
+        receipt = {
+            "taskId": "task-1",
+            "resultDigest": "sha256:" + "b" * 64,
+            "decisionDigest": effects[0].args["decisionDigest"],
+            "childTaskIds": [],
+        }
+        handled = self._apply(
+            durable,
+            type(effects[0])("observed.task_handled", "l1", receipt),
+        )
+        _, effects = reconcile(state_from_record(handled), observation)
+        gated = self._apply(handled, effects[0])
+        gate = effects[0].args
+        gate_event = {
+            "lane": "l1",
+            "kind": "gate.allow",
+            "payload": {
+                "action": gate["action"],
+                "sha": gate["sha"],
+                "task_id": gate["taskId"],
+                "decision_id": gate["decisionId"],
+                "decision_digest": gate["decisionDigest"],
+                "evidence_path": gate["evidencePath"],
+                "evidence_digest": gate["evidenceDigest"],
+                "code": "ci-ok",
+                "reason": "",
+            },
+        }
+        after_gate = reduce_events(gated, [gate_event])[0]
+        evidence.unlink()
+
+        _, effects = reconcile(state_from_record(after_gate), observation)
+
+        self.assertEqual([effect.op for effect in effects], ["record_task_gate_receipt"])
+        self.assertEqual(effects[0].args["gateKind"], "gate.allow")
+        self.assertEqual(effects[0].args["evidenceDigest"], evidence_digest)
+
     def test_new_director_identity_cannot_reuse_same_task_intent(self):
         _, effects = reconcile(state_from_record(self.record), self.observation)
         durable = self._apply(self.record, effects[0])
