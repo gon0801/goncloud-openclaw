@@ -191,6 +191,8 @@ Una sesión solicitante ocupada conserva su cola nativa. Reiniciar debe reconstr
 
 El perfil de límites es obligatorio y finito: concurrencia, profundidad y número total de hijos, llamadas al proveedor, entrada, salida, caché y contexto por petición, además del presupuesto agregado del árbol. Sus valores se fijan con la configuración efectiva del entorno antes de habilitar admisión. No existe un valor implícito ilimitado ni un presupuesto nuevo al abrir un hijo. Un perfil sin límites válidos se rechaza.
 
+El registro comprueba la identidad durable del run solicitante. Un trabajador gestionado no puede usar `submit` para crear otra raíz independiente, incluso tras cancelación o reinicio. Sus continuaciones usan los hijos nativos con raíz y presupuesto heredados; la protección vive en la frontera de registro, no solo en la visibilidad de herramientas.
+
 Cada llamada reserva antes su máximo permitido. El límite de contexto incluye instrucciones del sistema, historial, herramientas, resultados y adjuntos. El uso reportado liquida la reserva; si falta medición, se conserva la reserva máxima. Las categorías del proveedor se normalizan para no sumar dos veces caché ya incluida en entrada. No se deduce un precio en dinero sin tarifas y facturación verificadas.
 
 El sobre añadido por una entrega tiene un máximo inicial de 8 KiB, con resumen de hasta 1 KiB por resultado y referencias paginables al resto. Esto limita bytes añadidos; no demuestra un contexto total pequeño. Si el contexto efectivo de la sesión excede el presupuesto, la admisión se bloquea con causa. No se abre otra sesión para esquivar el límite.
@@ -222,6 +224,8 @@ Los ejecutores deben contener o rastrear sus descendientes. Si un proceso puede 
 
 Las sesiones `UserAdopted` nunca se matan ni se borran: se retiran únicamente capacidades y marcas propias del encargo. Cada instancia de ejecutor mantiene como máximo un encargo activo; el siguiente espera aceptación real, sin interrumpir trabajo del usuario ni forzar un mensaje encolado. Los workers de un pool intencional mantienen propietario, cupo y plazo de retención aunque no ejecuten una tarea. La retención de historial es independiente. Expirar un plazo no autoriza matar un recurso que aún tiene trabajo o identidad incierta.
 
+La ausencia de nonce no prueba propiedad. Una entrada que recibe una sesión ya existente sin recibo de creación o pertenencia a un pool la trata como `UserAdopted`. Una reserva antigua de otro tipo no se convierte silenciosamente: exige conciliación explícita antes de reutilizarla.
+
 El runtime archiva o cierra sus hijos mediante su API soportada después de capturar resultado y cierre. `cleanup: delete` por sí solo no demuestra que un proceso externo terminó. Ninguna limpieza recorre o modifica tablas internas para borrar sesiones que parecen antiguas.
 
 ## Observabilidad sin modelos
@@ -239,6 +243,8 @@ El diseño previo `cli-eventos.v1` aportó informes portables, cola local, bande
 El director U3b conserva las decisiones del flujo de ingeniería. Su propuesta de sesiones supervisoras `dir-<id>` y empujones por silencio no se hereda en los encargos gestionados por este contrato. Sus excepciones se entregan a su propietario registrado. Las políticas de calidad no se modifican mediante el transporte.
 
 El tablero conserva el contrato de progreso de PR #232. El evento de resultado sirve tanto al manejo del encargo como a la proyección, con identidades enlazadas y reintento durable; ninguna publicación exitosa prueba que un trabajador haya comenzado.
+
+Esta base se integra y verifica antes de U3b y del adaptador OpenClaw de U4 en el perímetro que usan. U4 presenta los estados nativos, recursos y unidades verificadas sin nueva autoridad de consumo; conserva la semántica del porcentaje de cola legacy hasta su transición explícita. U5 comparte contratos portables y pruebas, pero necesita autoridad/estado/recibo Hermes independientes y un camino sin OpenClaw. U6 añade vínculo versionado de meta/unidad/revisión, dependencias y criterios; su pausa/reanudación deberá cercar la admisión y los efectos nativos. Ninguna de estas capacidades futuras queda acreditada por implementar encargos. El despliegue sigue la adopción por entrada, no una obligación de habilitar todos los hosts a la vez.
 
 ## Adopción y reversa
 

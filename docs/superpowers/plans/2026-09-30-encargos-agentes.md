@@ -12,7 +12,7 @@
 
 **Compatibilidad posterior:** [revisión U3b–U6](../../evidence/agent-work/compatibility-u3b-u6.md). Antes de integrar otra fase que toque `corrida`, conserva un solo decisor, un solo reloj y las identidades/recibos nativos; la revisión identifica las fronteras que aún faltan.
 
-**Estado:** T0 comprobada; T1 y T2 tienen commits parciales. T1–T12 siguen abiertas. Sin medición viva ni despliegue.
+**Estado:** T0 comprobada; T1–T12 tienen implementación parcial y pruebas según sus casillas y recibos. T2 requiere revalidar la cola con entrega nativa tras retirar el despertar heredado. Sin adopción productiva. Las correcciones de presupuesto y propiedad de sesiones se verifican antes de integrar fases dependientes.
 
 ## Conserva estas condiciones en todas las tareas
 
@@ -103,6 +103,17 @@ Guarda los recibos de tarea como `docs/evidence/agent-work/T<n>.md`: SHA, comand
 
 Las interfaces de las tareas son nombres de contrato propuestos. Fija su ubicación real en T0 y conserva los nombres entre tareas.
 
+## Integra esta base antes de U3b y del adaptador OpenClaw de U4
+
+La compuerta de integración exige código, revisión y pruebas de las interfaces que la fase siguiente usa, con el par G/R y la cobertura explícita de cada host/adaptador. No exige desplegar todas las combinaciones para desarrollar U3b o U4; tampoco permite declarar T0–T12 completos con un subconjunto. La activación de entradas certificadas se coordina con T11–T12 y conserva las demás deshabilitadas.
+
+- U3b parte del reconciliador y los adaptadores integrados aquí. Conserva las decisiones de ingeniería, las reglas quality-kit vigentes y un solo emisor por generación. No implementa otra admisión ni sesiones supervisoras con modelo para encargos gestionados.
+- U4 adapta identidades, recibos y recursos de T1–T8 para presentación y seguimiento. No duplica almacén de tareas, consumo, presupuesto o recuperación. Un sondeo de transporte no crea otro dueño de avisos; cupo de host y presupuesto de árbol mantienen causas diferentes.
+- U5 reutiliza el contrato portable y las pruebas, pero conecta la autoridad nativa de Hermes. El camino Hermes debe funcionar sin ejecutable ni Gateway OpenClaw y conserva recibo propio. Este plan no implementa ni acredita Hermes por equivalencia.
+- U6 conserva su alcance de DAG, revisión de plan, criterios y control de meta. Define en U6.1 el vínculo versionado a tarea/root/generación y exige que pausa/reanudación cercen efectos nativos sin reiniciar presupuesto. El manejo `complete` de un encargo nunca acredita por sí solo la meta completa.
+
+Antes de integrar otra fase se actualizan juntos su plan, diseño, runbook y el ledger. Los cambios compartidos en `corrida` se integran en secuencia; la prueba del puente y las regresiones del módulo cambiado deben pasar sobre ese resultado. La [matriz de compatibilidad](../../evidence/agent-work/compatibility-u3b-u6.md) conserva riesgos y evidencia; una promesa escrita no sustituye su prueba.
+
 ### T0. Fija la fuente y reproduce la limitación nativa
 
 Dependencias: ninguna. No escribas implementación del servicio en esta tarea.
@@ -143,7 +154,7 @@ Depende de T1. Modifica `R.scheduler`, `R.taskStore`, `R.toolContext` y sus prue
 Consume el registro de T1. Produce `admit(AdmissionKey, ExecutionTarget, InputRefs, BudgetReservation)` y consulta durable de admisión. Revalida permisos al admitir. Mantén deshabilitada la entrada productiva hasta disponer del presupuesto de T4.
 
 - [x] Añade `admission_restart`: dos emisores y reinicio antes o después de admitir generan una sola admisión lógica.
-- [x] Añade `requester_queue`: una sesión ocupada recibe su continuación después de reiniciar; una sesión eliminada produce bloqueo y no otra conversación.
+- [ ] Revalida `requester_queue` en la entrega gestionada actual: una sesión ocupada recibe su continuación después de reiniciar; una sesión eliminada produce bloqueo y no otra conversación. La evidencia antigua del despertar heredado no acredita esta ruta.
 - [x] Añade revocación de permiso entre registro y admisión. Exige rechazo sin ejecutar herramientas.
 - [x] Ejecuta las pruebas en rojo.
 - [x] Implementa reclamación exclusiva, cola persistente y consulta con exclusión durable de solicitudes anteriores. No traduzcas timeout a `NeverStarted`.
@@ -177,7 +188,7 @@ Produce `reserveModelCall(rootId, requestUsageBound)` y `settleModelCall(reserva
 - [x] Prueba ausencia de métricas y proveedor sin límite de salida. Conserva reserva o rechaza la garantía estricta.
 - [ ] Ejecuta las pruebas en rojo.
 - [ ] Implementa reserva previa, liquidación y perfiles finitos. Incluye límites de concurrencia, profundidad, hijos y llamadas.
-- [ ] Intenta eludir el límite con un hijo nuevo, una sesión nueva y la recuperación nativa. Exige rechazo antes del proveedor.
+- [ ] Intenta eludir el límite con un hijo nuevo, una sesión nueva y la recuperación nativa. Incluye `managed_tasks_submit` desde un run hijo activo, cancelado y recuperado: no crea otra raíz/presupuesto ni escapa del árbol de cancelación. Exige rechazo antes del proveedor; los hijos válidos siguen la continuación nativa con la raíz original.
 
 Verifica con `budget_tree` y `budget_context`. El perfil productivo se fija en T11 usando configuración y medición reales; no extrapoles el perfil pequeño del ensayo ni cambies silenciosamente un límite existente.
 
@@ -216,7 +227,7 @@ Depende de T6. Crea `G/scripts/agent-work/resources.py`. Modifica `host.py`, `sc
 
 Produce reserva idempotente de host, identidad resistente a reutilización y `AbsenceVerified` o `CleanupPending`. El runtime conserva la reserva del árbol hasta recibir prueba válida.
 
-- [ ] Añade `resource_identity`: PID reutilizado, reinicio del host, cambio de servidor tmux y sesión adoptada. Exige cero señales a recursos ajenos.
+- [ ] Añade `resource_identity`: PID reutilizado, reinicio del host, cambio de servidor tmux y sesión adoptada. Una sesión preexistente sin prueba de creación no se clasifica como pool propio por carecer de nonce. Cubre claim, replay, cierre y cierre repetido; exige cero señales a recursos ajenos.
 - [ ] Añade `resource_close`: caída entre reserva y lanzamiento, descendiente desacoplado, ACK perdido y stop fallido.
 - [ ] Ejecuta los casos en rojo.
 - [ ] Implementa captura de evidencia, contención o rastreo de descendientes, detención y verificación. Sustituye éxito aparente tras fallo de stop por cierre pendiente en la ruta gestionada.
@@ -348,4 +359,4 @@ No declares completado el arreglo si el único verde es el tablero. Exige contin
 
 El alcance comprende trece tareas, de T0 a T12. No fija duración ni costo monetario sin medir el runtime y los ejecutores. No incluye reconstruir todo U3b, cambiar la política de calidad ni limpiar sesiones personales.
 
-Entrega final futura: recibo del par de artefactos instalados, pruebas asociadas a sus SHA, continuidad observada, consumo atribuible y recursos propios restantes. En esta entrega documental, todas las casillas permanecen sin marcar.
+Entrega final: recibo del par de artefactos instalados, pruebas asociadas a sus SHA, continuidad observada, consumo atribuible y recursos propios restantes. Las casillas se actualizan solo con evidencia; alinear los planes dependientes no completa sus fases ni este plan.

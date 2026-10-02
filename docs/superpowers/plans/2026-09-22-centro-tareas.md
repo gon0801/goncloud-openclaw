@@ -50,8 +50,9 @@ las interfaces implementadas; no es un requisito para preparar el arranque.
 
 No se estima duración cerrada antes de 17.0. La mayor incertidumbre es separar
 dependencias actuales de OpenClaw y comprobar la continuación soportada por Hermes.
-La UI sola no resuelve esa dependencia. Fase 14 pendiente no se carga a Fase 17
-como trabajo supuestamente terminado.
+La UI sola no resuelve esa dependencia. Fase 14 figura cerrada en el ledger
+vigente; 17.0 comprueba sus recibos e interfaces aplicables, sin repetir la fase
+ni inferir soporte de rutas que no fueron aceptadas.
 
 Para encargos gestionados, 17.0 comprueba en el perímetro que usará U4 la base
 de T1–T8 del [plan de encargos](2026-09-30-encargos-agentes.md): versión y SHA,

@@ -20,9 +20,10 @@ Es un plan de implementación; no es un runbook listo para lanzar una fase viva.
 ## Qué ya cubren U2–U5
 
 La comparación usa los contratos versionados, no sólo el estado instalado.
-`cc:TODO` significa pendiente de aceptación, no falta de diseño. U2, U3, U4 y
-U5 siguen pendientes en el ledger. PR #152 aporta previos del simulacro 9.9;
-PR #153 estaba abierto al revisar: ninguno equivale al cierre completo de U2.
+`cc:TODO` significa pendiente de aceptación, no falta de diseño. En la revisión
+inicial U2 y U3 aún estaban abiertos. El ledger vigente ya acredita sus cierres;
+U4 y U5 siguen pendientes. Usa los recibos actuales de `Plans.md`, no el estado
+histórico de PR #152 o #153, para decidir dependencias.
 
 | Necesidad | Dueño y cobertura existente | Residuo que sí pertenece a U6 |
 |---|---|---|

@@ -35,8 +35,9 @@ teclas ni ejecuta texto del navegador.
 ## Reutilización y dependencias
 
 La Fase 14 ya posee registro y selección de workers, adaptadores CLI, worktrees,
-capacidad, reconciliación, evidencias, entrega e instalación. En la base revisada
-`31dfaf0` todas sus filas siguen pendientes. No se presume implementada.
+capacidad, reconciliación, evidencias, entrega e instalación. En la base inicial
+`31dfaf0` sus filas estaban pendientes; el ledger vigente acredita su cierre.
+La integración comprueba los recibos actuales y la capacidad de la ruta usada.
 La Fase 17 consume esas piezas; adapta sus fronteras dependientes de OpenClaw
 para que Hermes opere solo. No introduce otro orquestador.
 

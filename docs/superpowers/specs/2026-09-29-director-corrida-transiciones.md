@@ -61,6 +61,10 @@ de 20.1 compara también el modo de cada fila. Las filas de la ruta anterior no
 casan con un bloque gestionado, incluso si existen archivos LISTO o VEREDICTO en
 su worktree.
 
+Las dos rutas comprueban autorización antes de registrar o admitir trabajo.
+Si una fila requiere decisión operativa pendiente, `NECESITA_DAVID` tiene
+prioridad también en modo gestionado; cambiar de modo no concede permisos.
+
 ### Ruta gestionada
 
 | Fase | Condición | Efecto | Nota |

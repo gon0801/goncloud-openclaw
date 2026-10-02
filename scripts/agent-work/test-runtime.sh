@@ -18,8 +18,9 @@ case "$case_name" in
     test_pattern=''
     probe_restart=0 ;;
   requester_queue)
-    test_file='src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts'
-    test_pattern="restores a managed collector's requester wake after restart"
+    test_file='src/gateway/server.managed-task-requester.e2e.test.ts'
+    extra_test_files=('src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts')
+    test_pattern='restart: true|does not deliver an unreported managed result after restart \((busy|deleted) requester\)'
     probe_restart=0 ;;
   handling_atomic)
     test_file='src/agents/tasks/managed-task.handling.test.ts'
@@ -31,7 +32,7 @@ case "$case_name" in
     probe_restart=0 ;;
   idle_72h)
     test_file='src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts'
-    test_pattern="restores a managed collector's requester wake after restart \(idle_72h requester\)"
+    test_pattern="does not deliver an unreported managed result after restart \(idle_72h requester\)"
     probe_restart=0 ;;
   projection_gateway)
     test_file='src/gateway/server-methods/managed-tasks.test.ts'
