@@ -121,6 +121,16 @@ reconciliar_ejecutar() { # $1 id $2 reg $3 pw $4 op $5 lane $6 args-json
       reconciliar_reducir "$reg" "$pw" "$lane" "intent.mark_lane_stopped" "$args" || return 1
       reconciliar_reducir "$reg" "$pw" "$lane" "observed.lane.stopped" "$args" || return 1
       ;;
+    record_task_handling)
+      reconciliar_reducir "$reg" "$pw" "$lane" "intent.task_handling" "$args" || return 1
+      ;;
+    resolve_task_handling)
+      lock_soltar "$reg"
+      reconciliar_tarea_resolver "$reg" "$pw" "$lane" "$args"
+      local rc=$?
+      lock_tomar "$reg" || return 1
+      return "$rc"
+      ;;
     resume_lane|stop_lane|launch_successor)
       lock_soltar "$reg"
       reconciliar_externo "$id" "$reg" "$pw" "$op" "$lane" "$args"
@@ -173,6 +183,21 @@ reconciliar_externo() { # $1 id $2 reg $3 pw $4 op $5 lane $6 args-json
       fi
       ;;
   esac
+  return 0
+}
+
+# Consume one durable task-handling intent. The native endpoint owns the
+# transaction that creates children and the handling receipt. If the Gateway
+# response is lost, this function leaves the intent untouched so the next
+# reconciliation retries the identical request.
+reconciliar_tarea_resolver() { # $1 reg $2 pw $3 lane $4 request-json
+  local reg="$1" pw="$2" lane="$3" args="$4" receipt
+  receipt="$(con_tope "$CORR_TOPE_RED" env OPENCLAW_BIN="$OPENCLAW_BIN" \
+    OPENCLAW_EXPECT_URL="${OPENCLAW_EXPECT_URL:-}" \
+    python3 "$AQUI/corrida_worker/task_handoffs.py" resolve \
+    --request-json "$args" 2>/dev/null)" || return 1
+  [ -n "$receipt" ] || return 1
+  reconciliar_reducir_con_lock "$reg" "$pw" "$lane" "observed.task_handled" "$receipt" || return 1
   return 0
 }
 

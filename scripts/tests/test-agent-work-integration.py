@@ -4,8 +4,10 @@
 import base64
 import hashlib
 import json
+import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,12 +19,16 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
+sys.path.insert(0, str(ROOT / "scripts" / "mac"))
 from contracts import AuthorizedOperation, OperationKey, operation_id  # noqa: E402
 from host import Host  # noqa: E402
 import native_gateway  # noqa: E402
 from native_gateway import GatewayProjectionClient, main as gateway_main, transfer_gateway_projections  # noqa: E402
 from progress_bridge import event_id, projection_digest, transfer_host_projection, transfer_projection  # noqa: E402
 from spool import atomic_json, canonical  # noqa: E402
+from corrida_worker import task_handoffs  # noqa: E402
+from corrida_worker.reconcile import reconcile  # noqa: E402
+from corrida_worker.state import reduce_events, state_from_record  # noqa: E402
 
 
 class ProjectionTransferTest(unittest.TestCase):
@@ -589,6 +595,200 @@ class ProjectionTransferTest(unittest.TestCase):
             self.transfer_from_host(restarted, key, acknowledged.append)
         self.assertEqual(acknowledged, [])
         self.assertFalse((self.state_dir / "runs" / "run-1" / "queue").exists())
+
+
+class DirectorHandlingTest(unittest.TestCase):
+    def setUp(self):
+        self.record = {
+            "schema": "corrida.v2",
+            "lanes": [{
+                "id": "l1",
+                "estado": "activo",
+                "events": [],
+            }],
+        }
+        self.decision = {
+            "kind": "continue",
+            "children": [{
+                "slot": "corregir",
+                "assignment": {
+                    "target": {"kind": "agent", "agentId": "ingenieria"},
+                    "instructionRef": {"ref": "artifact:fix", "digest": "sha256:fix"},
+                    "inputRevision": {"kind": "code", "repository": "repo", "sha": "a" * 40},
+                    "resultContract": "review.v1",
+                    "continuation": {"kind": "requester"},
+                },
+            }],
+        }
+        self.observation = {
+            "lanes": {"l1": {"managed_task": {
+                "caller": {
+                    "kind": "director",
+                    "authority": "director-token",
+                    "corridaId": "run-1",
+                    "decisionId": "decision-1",
+                    "fence": "fence-1",
+                },
+                "receipt": {
+                    "taskId": "task-1",
+                    "generation": 1,
+                    "resultDigest": "sha256:" + "b" * 64,
+                },
+                "decision": self.decision,
+            }}}
+        }
+
+    def _apply(self, record, effect):
+        kind = "intent.task_handling" if effect.op == "record_task_handling" else "observed.task_handled"
+        next_record, applied, duplicated = reduce_events(record, [{
+            "lane": effect.lane,
+            "kind": kind,
+            "payload": effect.args,
+        }])
+        self.assertEqual((applied, duplicated), (1, 0))
+        return next_record
+
+    def test_director_persists_decision_before_native_resolve(self):
+        _, effects = reconcile(state_from_record(self.record), self.observation)
+        self.assertEqual([effect.op for effect in effects], ["record_task_handling"])
+        durable = self._apply(self.record, effects[0])
+
+        _, effects = reconcile(state_from_record(durable), self.observation)
+        self.assertEqual([effect.op for effect in effects], ["resolve_task_handling"])
+        self.assertEqual(effects[0].args["decision"], self.decision)
+
+    def test_lost_resolve_ack_retries_the_same_correction(self):
+        _, effects = reconcile(state_from_record(self.record), self.observation)
+        durable = self._apply(self.record, effects[0])
+        _, effects = reconcile(state_from_record(durable), self.observation)
+        request = effects[0].args
+        calls = []
+
+        def resolver(value):
+            calls.append(value)
+            if len(calls) == 1:
+                raise ConnectionError("resolve ACK lost")
+            return {
+                "taskId": value["receipt"]["taskId"],
+                "resultDigest": value["receipt"]["resultDigest"],
+                "decisionDigest": value["decisionDigest"],
+                "childTaskIds": ["child-1"],
+            }
+
+        with self.assertRaises(ConnectionError):
+            task_handoffs.resolve_task_handling(request, resolver)
+        receipt = task_handoffs.resolve_task_handling(request, resolver)
+        self.assertEqual(calls[0], calls[1])
+        handled = self._apply(durable, type(effects[0])(
+            "observed.task_handled", effects[0].lane, receipt
+        ))
+        _, remaining = reconcile(state_from_record(handled), self.observation)
+        self.assertEqual(remaining, ())
+
+    def test_two_consumers_share_one_native_effect(self):
+        _, effects = reconcile(state_from_record(self.record), self.observation)
+        durable = self._apply(self.record, effects[0])
+        _, effects = reconcile(state_from_record(durable), self.observation)
+        request = effects[0].args
+        native_effects = []
+        receipts = {}
+
+        def idempotent_resolver(value):
+            key = (value["receipt"]["taskId"], value["decisionDigest"])
+            if key not in receipts:
+                native_effects.append(value["decision"])
+                receipts[key] = {
+                    "taskId": value["receipt"]["taskId"],
+                    "resultDigest": value["receipt"]["resultDigest"],
+                    "decisionDigest": value["decisionDigest"],
+                    "childTaskIds": ["child-1"],
+                }
+            return receipts[key]
+
+        first = task_handoffs.resolve_task_handling(request, idempotent_resolver)
+        second = task_handoffs.resolve_task_handling(request, idempotent_resolver)
+        self.assertEqual(first, second)
+        self.assertEqual(native_effects, [self.decision])
+
+    def test_gateway_resolver_sends_the_durable_intent_without_child_tokens(self):
+        _, effects = reconcile(state_from_record(self.record), self.observation)
+        durable = self._apply(self.record, effects[0])
+        _, effects = reconcile(state_from_record(durable), self.observation)
+        request = effects[0].args
+        receipt = {
+            "taskId": request["receipt"]["taskId"],
+            "resultDigest": request["receipt"]["resultDigest"],
+            "decisionDigest": request["decisionDigest"],
+            "childTaskIds": ["child-1"],
+        }
+        with mock.patch(
+            "corrida_worker.task_handoffs.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0, json.dumps(receipt), ""),
+        ) as invoke:
+            self.assertEqual(
+                task_handoffs.resolve_via_gateway(
+                    request, openclaw_bin="/isolated/openclaw", expected_url="ws://gateway"
+                ),
+                receipt,
+            )
+        command = invoke.call_args.args[0]
+        self.assertEqual(command[3], "managedTasks.resolve")
+        params = json.loads(command[command.index("--params") + 1])
+        self.assertEqual(params["decisionDigest"], request["decisionDigest"])
+        self.assertNotIn("childProducerTokens", params)
+
+    def test_existing_reconciler_persists_then_resolves_task_handling(self):
+        # Keep the shell integration isolated from any user corrida state.
+        state_dir = Path(tempfile.mkdtemp(prefix="agent-work-director-"))
+        self.addCleanup(lambda: shutil.rmtree(state_dir, ignore_errors=True))
+        corrida_dir = state_dir / "run-1"
+        corrida_dir.mkdir()
+        record_path = corrida_dir / "registro.json"
+        record_path.write_text(json.dumps({
+            "schema": "corrida.v2",
+            "id": "run-1",
+            "estado": "abierta",
+            "lanes": [{"id": "l1", "estado": "activo", "events": []}],
+        }), encoding="utf-8")
+        observation_path = state_dir / "observation.json"
+        observation_path.write_text(json.dumps(self.observation), encoding="utf-8")
+        fake = state_dir / "openclaw"
+        calls = state_dir / "resolve-calls.jsonl"
+        fake.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, pathlib, sys\n"
+            "params = json.loads(sys.argv[sys.argv.index('--params') + 1])\n"
+            f"path = pathlib.Path({str(calls)!r})\n"
+            "with path.open('a', encoding='utf-8') as stream:\n"
+            "    stream.write(json.dumps(params, sort_keys=True) + '\\n')\n"
+            "print(json.dumps({'taskId': params['receipt']['taskId'],\n"
+            "                  'resultDigest': params['receipt']['resultDigest'],\n"
+            "                  'decisionDigest': params['decisionDigest'],\n"
+            "                  'childTaskIds': ['child-1']}))\n",
+            encoding="utf-8",
+        )
+        fake.chmod(0o700)
+        env = dict(os.environ)
+        env.update({
+            "CORRIDA_STATE": str(state_dir),
+            "OPENCLAW_BIN": str(fake),
+            "OPENCLAW_EXPECT_URL": "ws://gateway",
+            "CORR_TOPE_RED": "5",
+        })
+        completed = subprocess.run(
+            ["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "reconciliar", "run-1",
+             "--observations", str(observation_path)],
+            cwd=ROOT, env=env, capture_output=True, text=True, timeout=20,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("EXECUTED record_task_handling l1", completed.stdout)
+        self.assertIn("EXECUTED resolve_task_handling l1", completed.stdout)
+        self.assertIn("CONVERGED", completed.stdout)
+        events = json.loads(record_path.read_text(encoding="utf-8"))["lanes"][0]["events"]
+        self.assertEqual([event["kind"] for event in events], [
+            "intent.task_handling", "observed.task_handled",
+        ])
+        self.assertEqual(len(calls.read_text(encoding="utf-8").splitlines()), 1)
 
 
 if __name__ == "__main__":

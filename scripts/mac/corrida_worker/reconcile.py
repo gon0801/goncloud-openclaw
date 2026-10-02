@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from corrida_worker.state import RunState
+from corrida_worker.task_handoffs import director_handling_effects
 
 OPS = (
     "record_observed",
@@ -233,6 +234,8 @@ def reconcile_lane(
             )
 
     effects.extend(_handoff_effects(lane, lane_obs, observations, live, session_alive))
+    for task_effect in director_handling_effects(lane, lane_obs):
+        effects.append(PlannedEffect(task_effect.op, lane_id, task_effect.args))
     return tuple(effects)
 
 
