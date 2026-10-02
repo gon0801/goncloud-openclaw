@@ -31,7 +31,7 @@ case "$case_name" in
     probe_restart=0 ;;
   idle_72h)
     test_file='src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts'
-    test_pattern="restores a managed collector's requester wake after restart \(idle requester\)"
+    test_pattern="restores a managed collector's requester wake after restart \(idle_72h requester\)"
     probe_restart=0 ;;
   projection_gateway)
     test_file='src/gateway/server-methods/managed-tasks.test.ts'
