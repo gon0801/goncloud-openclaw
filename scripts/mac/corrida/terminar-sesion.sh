@@ -50,11 +50,19 @@ sys.exit(0 if os.environ["CORR_SESION"] in nombres else 1)
 
   local recurso host_id encargo_ref
   recurso="$(CORR_REG="$reg" CORR_SESION="$sesion" python3 -c '
-import json,os
+import json,os,sys
 d=json.load(open(os.environ["CORR_REG"]))
-s=next(x for x in d["sesiones"] if x.get("nombre")==os.environ["CORR_SESION"])
-if s.get("encargo_ref"):
-  print(s.get("host_id","")+"\t"+s["encargo_ref"])
+matches=[x for x in d["sesiones"] if x.get("nombre")==os.environ["CORR_SESION"]]
+if len(matches)!=1:
+  sys.exit("session identity is not unique")
+s=matches[0]
+managed=bool(s.get("host_id") or s.get("encargo_ref") or any(
+  lane.get("session")==os.environ["CORR_SESION"] and lane.get("resource_receipt_ref")
+  for lane in d.get("lanes",[]) if isinstance(lane,dict)))
+if managed:
+  if not s.get("host_id") or not s.get("encargo_ref"):
+    sys.exit("managed resource binding incomplete")
+  print(s["host_id"]+"\t"+s["encargo_ref"])
 ')" || { lock_soltar "$reg"; marcas_lock_soltar; return 1; }
   if [ -n "$recurso" ]; then
     host_id="${recurso%%$'\t'*}"

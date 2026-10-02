@@ -15,6 +15,26 @@ cerrar_archivar_lanes() ( # $1 id $2 reg
   # punto 4: en un reintento la sesion ya no existe y capture falla; el
   # transcript real jamas se pisa con el aviso, solo se completa si falta.
   umask 077
+  CORR_REG="$reg" python3 -c '
+import json,os,sys
+d=json.load(open(os.environ["CORR_REG"]))
+rows=[s for s in d.get("sesiones",[]) if isinstance(s,dict)]
+sessions={s.get("nombre"):s for s in rows}
+if len(sessions)!=len(rows):
+  sys.exit("duplicate session identity")
+lanes=[lane for lane in d.get("lanes",[]) if isinstance(lane,dict)]
+for name,session in sessions.items():
+  if session.get("host_id") or session.get("encargo_ref"):
+    matching=[lane for lane in lanes if lane.get("session")==name]
+    if (not session.get("host_id") or not session.get("encargo_ref")
+        or len(matching)!=1 or not matching[0].get("resource_receipt_ref")):
+      sys.exit("managed session has incomplete lane or resource binding")
+for lane in lanes:
+  if lane.get("resource_receipt_ref"):
+    session=sessions.get(lane.get("session"),{})
+    if not session.get("host_id") or not session.get("encargo_ref"):
+      sys.exit("managed lane has no complete resource binding")
+' || return 1
   lanes="$(CORR_REG="$reg" python3 -c "
 import json,os
 d=json.load(open(os.environ['CORR_REG']))

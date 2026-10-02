@@ -390,6 +390,74 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual(verified.returncode, 0, verified.stderr)
         self.assertIn("set-environment", (root / "tmux.log").read_text())
 
+    def test_resource_close_partial_binding_keeps_marked_session(self):
+        root, reg, evidence, env = self._managed_shell()
+        record = json.loads(reg.read_text())
+        del record["sesiones"][0]["encargo_ref"]
+        reg.write_text(json.dumps(record))
+        command = ["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "terminar-sesion",
+                   "run-1", "managed-1", "--evidence", str(evidence)]
+        result = subprocess.run(command, env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"),
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        log = root / "tmux.log"
+        self.assertNotIn("set-environment", log.read_text() if log.exists() else "")
+
+    def test_resource_close_termination_rejects_duplicate_session_identity(self):
+        root, reg, evidence, env = self._managed_shell()
+        record = json.loads(reg.read_text())
+        record["sesiones"].insert(0, dict(record["sesiones"][0]))
+        reg.write_text(json.dumps(record))
+        command = ["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "terminar-sesion",
+                   "run-1", "managed-1", "--evidence", str(evidence)]
+        result = subprocess.run(command, env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"),
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        log = root / "tmux.log"
+        self.assertNotIn("set-environment", log.read_text() if log.exists() else "")
+
+    def test_resource_close_cerrar_rejects_duplicate_session_identity(self):
+        root, reg, _, env = self._managed_shell()
+        record = json.loads(reg.read_text())
+        record["sesiones"].insert(0, {"nombre": "managed-1"})
+        reg.write_text(json.dumps(record))
+        shell = ('. "' + str(ROOT / "scripts" / "mac" / "corrida" / "lib.sh") + '"; '
+                 'AQUI="' + str(ROOT / "scripts" / "mac" / "corrida") + '"; '
+                 '. "' + str(ROOT / "scripts" / "mac" / "corrida" / "cerrar.sh") + '"; '
+                 'cerrar_archivar_lanes run-1 "' + str(reg) + '"')
+        result = subprocess.run(["bash", "-c", shell], env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"),
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertFalse((root / "resource.log").exists())
+
+    def test_resource_close_cerrar_rejects_unbound_duplicate_lane(self):
+        root, reg, _, env = self._managed_shell()
+        record = json.loads(reg.read_text())
+        record["lanes"].append({"id": "lane-2", "session": "managed-1"})
+        reg.write_text(json.dumps(record))
+        shell = ('. "' + str(ROOT / "scripts" / "mac" / "corrida" / "lib.sh") + '"; '
+                 'AQUI="' + str(ROOT / "scripts" / "mac" / "corrida") + '"; '
+                 '. "' + str(ROOT / "scripts" / "mac" / "corrida" / "cerrar.sh") + '"; '
+                 'cerrar_archivar_lanes run-1 "' + str(reg) + '"')
+        result = subprocess.run(["bash", "-c", shell], env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"),
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertFalse((root / "resource.log").exists())
+
+    def test_resource_close_cerrar_requires_lane_for_managed_session(self):
+        root, reg, _, env = self._managed_shell()
+        record = json.loads(reg.read_text())
+        record["lanes"] = []
+        reg.write_text(json.dumps(record))
+        shell = ('. "' + str(ROOT / "scripts" / "mac" / "corrida" / "lib.sh") + '"; '
+                 'AQUI="' + str(ROOT / "scripts" / "mac" / "corrida") + '"; '
+                 '. "' + str(ROOT / "scripts" / "mac" / "corrida" / "cerrar.sh") + '"; '
+                 'cerrar_archivar_lanes run-1 "' + str(reg) + '"')
+        result = subprocess.run(["bash", "-c", shell], env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"),
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertFalse((root / "resource.log").exists())
+
     def test_resource_close_cerrar_blocks_on_managed_pending(self):
         root, reg, evidence, env = self._managed_shell()
         shell = ('. "' + str(ROOT / "scripts" / "mac" / "corrida" / "lib.sh") + '"; '
