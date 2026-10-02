@@ -1,5 +1,4 @@
-# docs/evidence/agent-work/T2-partial-focused.txt
-
+# T2 — salida focalizada de admission, spawn-pipeline y store 11/11 (captura)
 [test] starting test/vitest/vitest.agents-support.config.ts
 
  RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-b1

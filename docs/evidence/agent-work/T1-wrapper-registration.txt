@@ -1,5 +1,4 @@
-# docs/evidence/agent-work/T1-wrapper-registration.txt
-
+# T1 — wrapper de G: test-runtime.sh registration_identity 2/2 (captura)
 {"candidateDiffSha256": "9ac823e338a73a813d9a4a14fe9c3b2fc9d352ed7d8eb5b4a276b87975d424b3", "candidateSha": "ef6215698a14b20b7ccf03e315be971af78cccce"}
 [test] starting test/vitest/vitest.agents-support.config.ts
 

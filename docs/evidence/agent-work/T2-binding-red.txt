@@ -1,5 +1,4 @@
-# docs/evidence/agent-work/T2-binding-red.txt
-
+# T2 — regresión roja de la comprobación del registro nativo (captura)
 [test] starting test/vitest/vitest.agents-support.config.ts
 
  RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-b1
