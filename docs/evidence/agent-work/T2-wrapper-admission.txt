@@ -1,3 +1,5 @@
+# docs/evidence/agent-work/T2-wrapper-admission.txt
+
 {"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "761fe0ca64b40b8b10ec76b49e3ee355df5a0c73"}
 [test] starting test/vitest/vitest.agents-support.config.ts
 

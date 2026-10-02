@@ -1,3 +1,5 @@
+# docs/evidence/agent-work/T2-binding-red.txt
+
 [test] starting test/vitest/vitest.agents-support.config.ts
 
  RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-b1

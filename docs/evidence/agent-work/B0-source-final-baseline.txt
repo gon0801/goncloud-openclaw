@@ -1,3 +1,5 @@
+# docs/evidence/agent-work/B0-source-final-baseline.txt
+
 {"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "00e289c344af4cff10aafbf7b7f807822b54fa77"}
 [test] starting test/vitest/vitest.gateway.config.ts
 

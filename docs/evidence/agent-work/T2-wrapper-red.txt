@@ -1,1 +1,3 @@
+# docs/evidence/agent-work/T2-wrapper-red.txt
+
 Unknown or unimplemented agent-work runtime case: admission_restart

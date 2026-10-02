@@ -1,3 +1,5 @@
+# docs/evidence/agent-work/B0-source-final-build.txt
+
 $ node --import ./scripts/tsx.mjs scripts/build-all.mts
 [build-all] plugins:assets:build
 $ node --import ./scripts/tsx.mjs scripts/bundled-plugin-assets.mts --phase build
