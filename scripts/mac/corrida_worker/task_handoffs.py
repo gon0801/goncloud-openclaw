@@ -4,6 +4,10 @@ The corrida record remains the only local authority.  A task-handling intent
 is appended before the native ``resolve`` call; a receipt is appended only
 after that call returns.  Reconciliation therefore retries a lost response
 with the same task, result, decision, and decision digest.
+
+The Gateway ``managedTasks.resolve`` operation is supplied by the native R
+runtime.  It is not present in this repository; tests therefore inject or
+mock that boundary and do not claim a live native consume.
 """
 from __future__ import annotations
 
@@ -47,6 +51,132 @@ def _required_text(value: Any, name: str) -> str:
     return value
 
 
+def _typed_review_payload(raw: Mapping[str, Any]) -> Optional[dict]:
+    """Read the native review result, never a model-selected decision.
+
+    ``agent-work.result.v1`` stores the typed result under ``typedPayload``.
+    Observers may expose that result directly or under ``result``; accepting
+    both shapes keeps this boundary independent of the host projection while
+    preserving one source of truth for the review verdict.
+    """
+    result = raw.get("result")
+    candidates = [raw.get("typedPayload"), raw.get("review")]
+    if isinstance(result, dict):
+        candidates.extend((result.get("typedPayload"), result))
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        if not isinstance(candidate, dict):
+            raise TaskHandlingError("managed task typed review result is not an object")
+        if "verdict" in candidate:
+            return dict(candidate)
+    return None
+
+
+def _review_revision(raw: Mapping[str, Any]) -> dict:
+    result = raw.get("result")
+    candidates = [raw.get("reviewedRevision"), raw.get("observedRevision")]
+    if isinstance(result, dict):
+        candidates.extend((result.get("observedRevision"), result.get("reviewedRevision")))
+    for candidate in candidates:
+        if isinstance(candidate, dict):
+            sha = candidate.get("sha")
+            if candidate.get("kind") == "code" and isinstance(sha, str) and sha:
+                return dict(candidate)
+    raise TaskHandlingError("approved review result is missing its code revision")
+
+
+def _correction_assignment(
+    raw: Mapping[str, Any], lane_observation: Mapping[str, Any]
+) -> dict:
+    correction = (
+        raw.get("correctionAssignment")
+        or raw.get("correction")
+        or lane_observation.get("correctionAssignment")
+        or lane_observation.get("correction")
+    )
+    if not isinstance(correction, dict):
+        raise TaskHandlingError("Changes review result is missing correction assignment")
+    assignment = correction.get("assignment", correction)
+    if not isinstance(assignment, dict) or not assignment:
+        raise TaskHandlingError("Changes review correction assignment is invalid")
+    return dict(assignment)
+
+
+def _requester_assignment(
+    raw: Mapping[str, Any], lane_observation: Mapping[str, Any]
+) -> dict:
+    requester = (
+        raw.get("requesterAssignment")
+        or raw.get("requester")
+        or lane_observation.get("requesterAssignment")
+        or lane_observation.get("requester")
+    )
+    if not isinstance(requester, dict):
+        raise TaskHandlingError("judgment-required result is missing requester assignment")
+    assignment = requester.get("assignment", requester)
+    if not isinstance(assignment, dict) or not assignment:
+        raise TaskHandlingError("requester assignment is invalid")
+    return dict(assignment)
+
+
+def _decision_from_review(
+    raw: Mapping[str, Any],
+    lane_observation: Mapping[str, Any],
+    typed_payload: Mapping[str, Any],
+) -> tuple[dict, Optional[dict]]:
+    verdict = str(typed_payload.get("verdict") or "").lower()
+    if verdict in ("changes", "cambios"):
+        decision = {
+            "kind": "continue",
+            "children": [{
+                "slot": "corregir",
+                "assignment": _correction_assignment(raw, lane_observation),
+            }],
+        }
+        return decision, None
+    if verdict in ("approved", "aprobado"):
+        result = raw.get("result")
+        result = result if isinstance(result, dict) else {}
+        evidence_ref = typed_payload.get("evidenceRef") or result.get("artifactRef")
+        _required_text(evidence_ref, "approved review evidenceRef")
+        revision = _review_revision(raw)
+        gate = raw.get("gate") or lane_observation.get("gate")
+        if not isinstance(gate, dict):
+            raise TaskHandlingError("approved review result is missing current gate")
+        gate_action = gate.get("action") or raw.get("gateAction")
+        _required_text(gate_action, "approved review gate action")
+        decision = {"kind": "complete", "evidenceRef": evidence_ref}
+        return decision, {
+            "action": gate_action,
+            "sha": revision["sha"],
+            "evidenceRef": evidence_ref,
+        }
+    if verdict in ("judgment-required", "judgment_required", "needs-judgment"):
+        return {
+            "kind": "continue",
+            "children": [{
+                "slot": "solicitante",
+                "assignment": _requester_assignment(raw, lane_observation),
+            }],
+        }, None
+    raise TaskHandlingError("managed task review verdict is unsupported")
+
+
+def _decision_payload(
+    raw: Mapping[str, Any], lane_observation: Mapping[str, Any]
+) -> tuple[dict, Optional[dict]]:
+    typed_payload = _typed_review_payload(raw)
+    if typed_payload is not None:
+        return _decision_from_review(raw, lane_observation, typed_payload)
+    if raw.get("resultContract") == "review.v1":
+        raise TaskHandlingError("review.v1 result is missing typed review payload")
+    decision = raw.get("decision")
+    if not isinstance(decision, dict):
+        raise TaskHandlingError("managed task decision is missing")
+    return dict(decision), None
+
+
 def _task_payload(lane_observation: Mapping[str, Any]) -> Optional[dict]:
     raw = lane_observation.get("managed_task")
     if raw is None:
@@ -55,13 +185,11 @@ def _task_payload(lane_observation: Mapping[str, Any]) -> Optional[dict]:
         raise TaskHandlingError("managed task observation is not an object")
     caller = raw.get("caller")
     receipt = raw.get("receipt")
-    decision = raw.get("decision")
     if not isinstance(caller, dict) or caller.get("kind") != "director":
         raise TaskHandlingError("managed task caller is not a director")
     if not isinstance(receipt, dict):
         raise TaskHandlingError("managed task result receipt is missing")
-    if not isinstance(decision, dict):
-        raise TaskHandlingError("managed task decision is missing")
+    decision, gate = _decision_payload(raw, lane_observation)
     for field in ("authority", "corridaId", "decisionId", "fence"):
         _required_text(caller.get(field), "director " + field)
     task_id = _required_text(receipt.get("taskId"), "taskId")
@@ -70,7 +198,7 @@ def _task_payload(lane_observation: Mapping[str, Any]) -> Optional[dict]:
     if isinstance(generation, bool) or not isinstance(generation, int) or generation < 1:
         raise TaskHandlingError("managed task generation is invalid")
     digest = decision_digest(decision)
-    return {
+    payload = {
         "caller": dict(caller),
         "receipt": {
             "taskId": task_id,
@@ -81,6 +209,12 @@ def _task_payload(lane_observation: Mapping[str, Any]) -> Optional[dict]:
         "decisionDigest": digest,
         "decisionId": caller["decisionId"],
     }
+    # ``gate`` is local continuation metadata.  The native resolver receives
+    # only the Decision contract; the existing gate runner remains the owner
+    # of the external gate effect.
+    if gate is not None:
+        payload["gate"] = gate
+    return payload
 
 
 def _intent_events(lane: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -110,9 +244,19 @@ def _same_task(payload: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
 
 
 def _same_decision(payload: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
+    caller = payload.get("caller") or {}
+    expected_caller = expected.get("caller") or {}
+    if not isinstance(caller, dict) or not isinstance(expected_caller, dict):
+        return False
     return (
         payload.get("decisionDigest") == expected.get("decisionDigest")
         and payload.get("decision") == expected.get("decision")
+        and payload.get("decisionId") == expected.get("decisionId")
+        and all(
+            caller.get(field) == expected_caller.get(field)
+            for field in ("kind", "authority", "corridaId", "decisionId", "fence")
+        )
+        and payload.get("gate") == expected.get("gate")
     )
 
 

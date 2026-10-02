@@ -2,6 +2,7 @@
 """Crash boundaries between native task results and the progress queue."""
 
 import base64
+import copy
 import hashlib
 import json
 import os
@@ -648,6 +649,79 @@ class DirectorHandlingTest(unittest.TestCase):
         self.assertEqual((applied, duplicated), (1, 0))
         return next_record
 
+    def _review_observation(self, typed_payload, *, decision=None):
+        observation = copy.deepcopy(self.observation)
+        managed = observation["lanes"]["l1"]["managed_task"]
+        managed["result"] = {
+            "kind": "produced",
+            "observedRevision": {
+                "kind": "code", "repository": "repo", "sha": "b" * 40,
+            },
+            "typedPayload": typed_payload,
+            "artifactRef": "artifact:review",
+        }
+        if decision is not None:
+            managed["decision"] = decision
+        return observation
+
+    def test_changes_derives_correction_from_typed_review_result(self):
+        correction = {
+            "target": {"kind": "agent", "agentId": "ingenieria"},
+            "instructionRef": {"ref": "artifact:findings", "digest": "sha256:findings"},
+            "inputRevision": {"kind": "code", "repository": "repo", "sha": "b" * 40},
+            "resultContract": "review.v1",
+            "continuation": {"kind": "requester"},
+        }
+        observation = self._review_observation(
+            {"verdict": "changes", "findingsRef": "artifact:findings"},
+            decision={"kind": "complete", "evidenceRef": "attacker-controlled"},
+        )
+        observation["lanes"]["l1"]["managed_task"]["correctionAssignment"] = correction
+
+        _, effects = reconcile(state_from_record(self.record), observation)
+
+        self.assertEqual([effect.op for effect in effects], ["record_task_handling"])
+        self.assertEqual(effects[0].args["decision"], {
+            "kind": "continue",
+            "children": [{"slot": "corregir", "assignment": correction}],
+        })
+
+    def test_approved_derives_complete_and_current_gate_from_typed_review_result(self):
+        observation = self._review_observation(
+            {"verdict": "approved", "evidenceRef": "artifact:review"},
+            decision={
+                "kind": "continue",
+                "children": [{"slot": "corregir", "assignment": {"bad": "decision"}}],
+            },
+        )
+        observation["lanes"]["l1"]["gate"] = {"action": "merge"}
+
+        _, effects = reconcile(state_from_record(self.record), observation)
+
+        self.assertEqual([effect.op for effect in effects], ["record_task_handling"])
+        self.assertEqual(effects[0].args["decision"], {
+            "kind": "complete", "evidenceRef": "artifact:review",
+        })
+        self.assertEqual(effects[0].args["gate"], {
+            "action": "merge", "sha": "b" * 40, "evidenceRef": "artifact:review",
+        })
+
+    def test_new_director_identity_cannot_reuse_same_task_intent(self):
+        _, effects = reconcile(state_from_record(self.record), self.observation)
+        durable = self._apply(self.record, effects[0])
+        for field, value in (
+            ("authority", "another-director"),
+            ("decisionId", "decision-2"),
+            ("fence", "fence-2"),
+        ):
+            with self.subTest(field=field):
+                observation = copy.deepcopy(self.observation)
+                observation["lanes"]["l1"]["managed_task"]["caller"][field] = value
+                with self.assertRaisesRegex(
+                    task_handoffs.TaskHandlingError, "conflicts with durable intent"
+                ):
+                    reconcile(state_from_record(durable), observation)
+
     def test_director_persists_decision_before_native_resolve(self):
         _, effects = reconcile(state_from_record(self.record), self.observation)
         self.assertEqual([effect.op for effect in effects], ["record_task_handling"])
@@ -686,6 +760,8 @@ class DirectorHandlingTest(unittest.TestCase):
         self.assertEqual(remaining, ())
 
     def test_two_consumers_share_one_native_effect(self):
+        # Contract test: the injected resolver models R's idempotent resolve.
+        # The live R Gateway operation remains an explicit dependency.
         _, effects = reconcile(state_from_record(self.record), self.observation)
         durable = self._apply(self.record, effects[0])
         _, effects = reconcile(state_from_record(durable), self.observation)
