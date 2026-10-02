@@ -121,6 +121,10 @@ if os.environ['CORR_SES_ENCARGO']: e['encargo']=os.environ['CORR_SES_ENCARGO']
 if os.environ['CORR_SES_ENCARGO_REF']:
   e['encargo_ref']=os.environ['CORR_SES_ENCARGO_REF']
   e['host_id']=os.environ['CORR_SES_HOST_ID']
+# El relanzo con el mismo nombre llega aqui solo con la sesion vieja muerta
+# (crear la nueva exige el nombre libre) y reemplaza su entrada: los guardias
+# de identidad de cerrar y terminar-sesion exigen nombres unicos.
+d['sesiones']=[x for x in d['sesiones'] if not (isinstance(x,dict) and x.get('nombre')==os.environ['CORR_SES_NOMBRE'])]
 d['sesiones'].append(e)" \
     || { lock_soltar "$reg"
          echo "no se pudo anotar la sesion en el registro" >&2
