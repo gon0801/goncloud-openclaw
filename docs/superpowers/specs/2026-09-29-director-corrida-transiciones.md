@@ -54,6 +54,32 @@ comprueba si el mismo bloqueante reproducible apareció en las dos últimas rond
 del bloque. En ese caso, `BLOQUEANTE_REPETIDO` tiene prioridad y no se ejecuta el
 otro efecto. El guard también rige para los veredictos del bot.
 
+La entrada fija `delivery_mode=managed` o `delivery_mode=legacy` al abrir el
+bloque. Una generación nueva puede cambiar el modo solo tras drenar el anterior.
+`director.TABLA` contiene las tres secciones siguientes en este orden; la prueba
+de 20.1 compara también el modo de cada fila. Las filas de la ruta anterior no
+casan con un bloque gestionado, incluso si existen archivos LISTO o VEREDICTO en
+su worktree.
+
+### Ruta gestionada
+
+| Fase | Condición | Efecto | Nota |
+|---|---|---|---|
+| Pendiente | no hay recibo de registro nativo | `submit_managed_task` | Usa la identidad estable de corrida, fila, ronda y generación; reintentar recupera el mismo recibo. El runtime admite el trabajo y el host reclama la tarea. El director no llama a `prepare_pair` ni `launch_worker`. |
+| Encargado o Implementando | hay recibo y no hay `report` nativo válido | `wait` | Consulta autenticada sin modelo; conserva causa de espera y presupuesto. Stop, pantalla quieta y LISTO local no acreditan entrega. |
+| Implementando o Revisando | hay resultado nativo válido sin `intent.task_handling` | `record_task_handling` | `task_handoffs.py` persiste la decisión con task ID, resultado, generación y digest. |
+| Implementando o Revisando | hay `intent.task_handling` sin recibo de consumo | `resolve_task_handling` | Repite los mismos IDs ante ACK perdido. `Changes` y la siguiente fila aprobada crean hijos mediante `Continue` en la transacción nativa; no ejecuta `write_encargo` ni otra admisión local. |
+| Cambios | hay hijo de corrección nativo pendiente | `wait` | La revisión siguiente usa otro revisor y solo el diff de la corrección. El mismo bloqueante repetido detiene el bloque antes de admitirla. |
+| Aprobado | hay recibo de manejo y falta compuerta vigente | `record_task_gate`, luego `execute_task_gate` | Usa la compuerta de ingeniería existente; un `Approved` no concede permiso de merge. |
+
+No se aplican `deliver`, `nudge`, `discard_verdict`, `launch_worker`,
+`write_encargo` ni `write_brief` a esta ruta. Un resultado inválido queda con su
+causa consultable y sin `resolve`; un resultado de generación antigua no abre
+otra revisión. Las filas comunes de publicación comienzan solo después del
+recibo de manejo y de la compuerta vigente.
+
+### Ruta anterior de CLI
+
 | Fase | Condición | Efecto | Nota |
 |---|---|---|---|
 | Pendiente | fila `F` con `necesita_david_antes` sin decisión | `raise_excepcion NECESITA_DAVID` | Tag `[lane:release]` o autorización operativa. |
@@ -86,7 +112,13 @@ otro efecto. El guard también rige para los veredictos del bot.
 | Cambios | el mismo bloqueante reproducible persiste en dos rondas seguidas | `raise_excepcion BLOQUEANTE_REPETIDO` | Detiene el bloque; no crea otra ronda ni releva al implementador. |
 | Cambios | hay un bloqueante nuevo reproducible y no hay repetición | `write_encargo (F, R+1, origen=cambios)` | La siguiente revisión cubre solo el diff de la corrección y usa otro revisor. |
 | Cambios | solo hay hallazgos no bloqueantes | `record_residual` | Escribe una fila del plan y continúa sin otra revisión. |
-| Aprobado | hay fila siguiente | `write_encargo (siguiente, 1)` | |
+
+### Publicación y cierre comunes
+
+| Fase | Condición | Efecto | Nota |
+|---|---|---|---|
+| Aprobado | `delivery_mode=managed` y hay fila siguiente | `wait` | Lee el hijo de la siguiente fila del recibo de `resolve`. Si ese contrato aún no existe, no habilites un bloque gestionado de varias filas; nunca hagas otro `submit` de raíz. |
+| Aprobado | `delivery_mode=legacy` y hay fila siguiente | `write_encargo (siguiente, 1)` | |
 | Aprobado | última fila, rama sin push en el head | `push` | |
 | Publicando | push hecho, sin PR | `open_pr` en draft con `--body-file` | |
 | CI | `checks == pending` | `wait` | |
@@ -106,9 +138,13 @@ otro efecto. El guard también rige para los veredictos del bot.
 | Mergeado | primer paso aplicable pendiente con operador | `raise_excepcion NECESITA_DAVID` | Los pasos siguientes esperan. |
 | Mergeado | `deploy_step` sin `expect` | `raise_excepcion DEPLOY_FALLO` | |
 | Mergeado | pasos hechos, fuente `plans-md` | `open_ledger` | Vía rápida: CI y bot, sin revisión cruzada. |
-| Mergeado | pasos hechos, sin ledger | `stop_sessions`, luego `close_lane mergeado` | Escribe `historial.jsonl`. |
+| Mergeado | `delivery_mode=legacy`, pasos hechos, sin ledger | `stop_sessions`, luego `close_lane mergeado` | Detiene solo sesiones propias. Escribe `historial.jsonl`. |
+| Mergeado | `delivery_mode=managed`, pasos hechos, sin ledger, cierre nativo pendiente | `wait` | Conserva la reserva y `CleanupPending`; no detiene una sesión adoptada. |
+| Mergeado | `delivery_mode=managed`, pasos hechos, sin ledger, cierre nativo verificado | `close_lane mergeado` | Escribe `historial.jsonl` con recibo de cierre. |
 | Ledger | PR de ledger `clean` con checks en `success` | `gate_merge`, luego `merge` | |
-| Ledger | mergeado | `stop_sessions`, luego `close_lane mergeado` | |
+| Ledger | `delivery_mode=legacy` y mergeado | `stop_sessions`, luego `close_lane mergeado` | Solo sesiones propias. |
+| Ledger | `delivery_mode=managed`, mergeado y cierre nativo pendiente | `wait` | Conserva cupo y causa. |
+| Ledger | `delivery_mode=managed`, mergeado y cierre nativo verificado | `close_lane mergeado` | |
 
 Las filas automáticas `ci-rN`, `revisor-rN` y `rebase-rN` siguen el mismo ciclo,
 con revisión solo del delta. No reinician el historial de bloqueantes de su bloque.
@@ -216,6 +252,12 @@ cada vez desde el diff mergeado y nunca se guarda.
 
 `phase_of` aplica esta precedencia; gana la primera que casa:
 
+Para `delivery_mode=managed`, los pasos 7–12 leen el recibo de registro, el
+resultado, `intent.task_handling`, el recibo de `resolve` y la compuerta vigente.
+No leen LISTO, VEREDICTO, el panel ni `observed.delivered` de una generación
+anterior. Si no hay resultado válido, el carril sigue esperando con la causa que
+devuelve `inspect`. Las fases de publicación y cierre conservan las filas comunes.
+
 1. `observed.lane.closed`: `cerrado`.
 2. Excepción abierta del carril: `detenido`.
 3. `observed.merge.done`: `mergeado` o `ledger`.
@@ -278,6 +320,10 @@ Un valor no observado es `None`, nunca `False`.
 | `prepare_pair` | `repo`, `block` |
 | `select_worker` | `lane`, `role`, `task_type`, `denied_harnesses`, `exclude_authors` |
 | `launch_worker` | `lane`, `worker`, `session`, `worktree`, `role` |
+| `submit_managed_task` | `lane`, `fila`, `ronda`, `generation`, `assignment_ref`, `task_key`; devuelve recibo nativo estable |
+| `record_task_handling` | `task_id`, `result_receipt`, `generation`, `decision_digest` |
+| `resolve_task_handling` | mismos IDs y decisión persistida; devuelve el recibo nativo de manejo |
+| `record_task_gate`, `execute_task_gate` | tarea aprobada, SHA y evidencia de la compuerta vigente |
 | `relevar_impl` | `lane`, `saliente`, `motivo` (`quota` o `failed`); nunca ante `BLOQUEANTE_REPETIDO` |
 | `relevar_rev` | `lane`, `saliente` |
 | `write_encargo` | `fila`, `ronda`, `origen`, `bloqueantes`, `path` |
@@ -302,7 +348,7 @@ Un valor no observado es `None`, nunca `False`.
 | `raise_excepcion` | `tipo`, `lane`, `detalle` |
 | `notify_excepcion` | `id`, `destinatario`, `completo` |
 | `apply_decision` | `id`, `decision`, `arg` |
-| `stop_sessions` | `lane` |
+| `stop_sessions` | `lane`; solo en la ruta anterior y solo con identidad de propiedad |
 | `close_lane` | `lane`, `resultado` (`mergeado`, `omitido` o `atorado`) |
 | `close_run` | `etiqueta` (`CERRADA` o `DETENIDA`) |
 | `wait` | ninguno |
@@ -360,6 +406,8 @@ Campos nuevos del registro, todos opcionales:
 | Campo | Valores |
 |---|---|
 | `director` | `activo`, `modo` (`sombra` o `vivo`), `plan`; `sesion_claw` y `turnos_claw` solo para corridas anteriores fuera del perímetro gestionado. |
+| `lanes[].delivery_mode` | `legacy` o `managed`, fijado al abrir el bloque. Solo cambia con una generación nueva después de drenar tareas y avisos anteriores. |
+| `lanes[].managed_task_ref` | ID y recibo de registro nativo usados para correlación; estado, consumo, reserva y cierre se consultan al runtime. |
 | `sesiones[].dueno` | Nuevo valor `director`. `rol` sigue en `lead` o `carril`. |
 | `lanes[].kind` | `trabajo`, `revisor` o `ledger`, con `par`, `revisa` o `cierra`. |
 
@@ -368,6 +416,7 @@ Campos nuevos del registro, todos opcionales:
 | Grupo | Eventos |
 |---|---|
 | Par y handoff | `intent.pair`, `observed.pair.reserved`, `intent.encargo`, `observed.encargo.written`, `intent.brief`, `observed.brief.written`, `intent.deliver`, `observed.delivered`, `observed.deliver.blocked`, `observed.nudge` |
+| Registro gestionado | `intent.managed_submit`, `observed.managed_submit` con clave y recibo nativos; no son otra autoridad de tarea. |
 | Entregas | `observed.listo`, `observed.listo.invalido`, `observed.veredicto`, `observed.veredicto.descartado`, `intent.review_tree`, `observed.review_tree` |
 | Manejo nativo | Conserva `intent.task_handling` y `observed.task_handled` de la base integrada; no crea otra bandera de consumo. |
 | Residuales | `intent.residual`, `observed.residual` con la fila del plan y el veredicto de origen. |

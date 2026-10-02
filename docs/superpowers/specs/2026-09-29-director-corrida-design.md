@@ -151,7 +151,9 @@ crear una sesión supervisora `dir-<id>` ni un empujón con modelo por silencio.
   que admite, un texto para David y el detalle. Se escribe a disco antes de avisar.
 - Cada CLI escribe solo en `.corrida/` de su propio worktree: el implementador
   escribe `LISTO-<fila>-r<ronda>.md` y el revisor `VEREDICTO-<fila>-r<ronda>.md`.
-  `.corrida/` va en `info/exclude`, así que nunca entra a un commit.
+  `.corrida/` va en `info/exclude`, así que nunca entra a un commit. Esta regla
+  describe `delivery_mode=legacy`. Una entrada `managed` usa el resultado nativo,
+  incluso si quedan archivos de una generación anterior en el worktree.
 
 ### Un solo decisor, un efecto por pasada
 
@@ -167,6 +169,19 @@ en un efecto de ese mismo reconciliador. Conserva `intent.task_handling`, la
 decisión y el recibo de `resolve` bajo sus IDs; un ACK perdido recupera la misma
 decisión. `corrida` no crea otra bandeja ni guarda otra bandera autoritativa de
 consumo. El resultado del trabajador no autoriza merge ni despliegue.
+
+Cada bloque fija `delivery_mode=managed` o `delivery_mode=legacy` al abrirlo.
+El modo gestionado registra por clave estable con el runtime nativo y espera su
+`report`; no ejecuta `launch_worker`, `deliver`, `nudge` ni lectura de LISTO para
+acreditar trabajo. La decisión del director pasa por `record_task_handling` y
+`resolve_task_handling`. `Changes` registra el hijo de corrección en la transacción
+nativa. Si hay otra fila tras `Approved`, U3b debe extender `task_handoffs.py` para
+decidir `Continue` y crearla como hijo en ese mismo `resolve`. La base actual decide
+`Complete` para ese veredicto y no acredita una corrida gestionada de varias filas.
+No se llama a otro `submit` de raíz para avanzar. Solo una generación nueva, tras
+drenar tareas y avisos del modo anterior,
+puede cambiar la ruta del bloque. La tabla de transiciones prueba el modo de cada
+fila para impedir que los dos emisores actúen sobre el mismo encargo.
 
 `observe.py` sale del heredoc de `reconciliar.sh` y observa solo lo que pide
 `sondas(fase_de_log)`. Mientras se implementa no se llama a `gh`. Durante CI no se
@@ -304,7 +319,7 @@ Estas decisiones no se vuelven a discutir en la implementación.
 | 1 | Merge libre con CI verde en el head y revisor sin bloqueantes, con `--match-head-commit`. Sin preaprobaciones. claw mergea directo a través del director. Se borra la regla "main nunca mergea". | `gate_merge` y `merge`; se borran `autoridad-merge.sh` y `preaprobaciones.v1.json`; `ci-y-revisor` es el único modo; se reescribe la skill `native-harness-orchestration`. |
 | 2 | Construir sobre `corrida.sh`. | `reconcile()` y `reconciliar.sh`. No hay orquestador aparte. |
 | 3 | El sistema elige el revisor, siempre de otro harness. | `denied_harnesses` desde el registro; el relevo lo vuelve a validar. |
-| 4 | El vigía de 5 minutos cuesta 0 tokens y claw despierta solo por una excepción dirigida a su dueño. | El latido llama a `reconciliar`; los avisos de la ruta anterior lanzan `atender`. En la ruta gestionada, `report` despierta al solicitante autenticado. El cron con modelo se retira tras drenar su entrada y transferirla por generación. |
+| 4 | El vigía de 5 minutos cuesta 0 tokens y claw despierta solo por una excepción dirigida a su dueño. | El latido llama a `reconciliar`; los avisos de la ruta anterior lanzan `atender`. En la ruta gestionada, `report` despierta al solicitante autenticado. Un cron con modelo compartido se retira solo tras migrar y drenar todas las entradas que sirve. |
 | 5 | Pedidos chico y grande con mini-plan en el directorio de la corrida. | `pedido` y `plan.clasificar`; `PLAN.md` y `SPEC.md` en `~/.local/state/corridas/<id>/`. |
 | 6 | Mapa de repos que incluye Orbit (rama `master`, quality y ai-review, docker en goncloud, tarea EHV en AppFlowy). | `repos.v1.json`. |
 | 7 | Tope global de 4 sesiones de CLI. | `cupo_lock` y conteo en todos los registros abiertos; par implementador y revisor. |
@@ -404,9 +419,11 @@ de harness sin anunciarlo.
   director. Las corridas sin director lo conservan.
 - En la skill `native-harness-orchestration`, la regla "Main nunca mergea ni
   despliega" y la secuencia manual de compuertas.
-- El cron vigía con modelo de U3a en el gateway, por entrada adoptada en 20.10 y
-  solo después de suspensión, drenaje, transferencia por generación y prueba de
-  cero peticiones posteriores.
+- El cron vigía con modelo de U3a en el gateway, solo después de migrar y drenar
+  todas las entradas que atiende. Una entrada adoptada deja de recibir sus
+  peticiones por un filtro probado o conserva el cron sin declarar 20.10 cerrado.
+  La transferencia usa generación y prueba cero peticiones posteriores para cada
+  entrada migrada.
 
 Se quedan, aunque sus nombres se parecen: `registro.preaprobaciones[]`, que es la
 política de diálogos de `responder.sh`, y el verbo `corrida.sh responder`, que

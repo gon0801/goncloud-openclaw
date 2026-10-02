@@ -100,8 +100,9 @@ Archivos:
 
 Prueba en rojo primero:
 
-- Una fila de la tabla de transiciones es un caso: registro y observaciones
-  sintéticos, efecto esperado literal.
+- Una fila de cada tabla de transiciones es un caso: registro, `delivery_mode`,
+  observaciones y efecto esperado literal. Un archivo LISTO o un panel quieto
+  no hacen casar una fila `legacy` cuando el bloque es `managed`.
 - La tupla `TABLA` y las tablas de la referencia coinciden fila por fila.
 - Replay de U3a B1 (19.0: r1 `cebb151`, cambios, r2 `ae72063`, aprobado, PR #222,
   merge, ledger #223) como secuencia de registro y observaciones. Los efectos salen
@@ -255,10 +256,11 @@ Depende de: 20.1 y 20.4.
 
 ## 20.6. Llevar un bloque vivo hasta Aprobado
 
-Objetivo: el director ejecuta `write_encargo`, `write_brief`, `deliver`, `nudge`,
-`move_review_tree`, `discard_verdict`, `relevar_impl` y `relevar_rev`. El dueño de
-los avisos es el director. El latido llama a `reconciliar` y deja de despertar a
-`sim9`. Con esto el aviso de fin de turno y el latido pasan al director, a 0 tokens.
+Objetivo: el director ejecuta `submit_managed_task`, `record_task_handling` y
+`resolve_task_handling` para entradas gestionadas. Conserva `write_encargo`,
+`write_brief`, `deliver`, `nudge`, `move_review_tree`, `discard_verdict`,
+`relevar_impl` y `relevar_rev` solo para la ruta CLI anterior. El latido llama a
+`reconciliar` y deja de despertar a `sim9`.
 
 En una entrada gestionada, el director solicita el trabajo mediante la tarea
 nativa y consume el resultado con `task_handoffs.py`. `deliver` y `nudge` quedan
@@ -284,6 +286,14 @@ Prueba en rojo primero:
 - Un relevo permitido excluye al implementador saliente y el selector no lo elige.
 - Un bloqueante repetido en dos rondas detiene el bloque antes de `relevar_impl`,
   incluso si la entrada usa la ruta CLI anterior.
+- Con `delivery_mode=managed`, la tabla no llama a `launch_worker`, `deliver` ni
+  `nudge`. Un informe válido produce una intención de manejo; perder el ACK de
+  `resolve` conserva un solo hijo de corrección y el mismo recibo. El caso cruza
+  G y R con `AGENT_WORK_RUNTIME_SOURCE` fijado; una prueba omitida no acredita
+  esta ruta.
+- Dos filas gestionadas comparten raíz y presupuesto: `Approved` de la primera
+  crea la segunda mediante `Continue` en el mismo `resolve`. Si la base nativa
+  aún solo devuelve `Complete`, no habilites bloques gestionados de varias filas.
 
 Verificación:
 
@@ -412,11 +422,15 @@ Objetivo: probar el director de punta a punta y retirar el vigía con modelo de 
 2. Corre una fila de `Plans.md` con PR de ledger y `cierre-de-fase`.
 3. Corre un pedido grande con su `CONFIRMAR_PLAN`.
 4. Cuenta los turnos de modelo de claw y sus `totalTokens` en cada corrida.
-5. Para la entrada adoptada, suspende el cron vigía con modelo de U3a y registra
-   su ID, configuración y generación. Drena sus turnos y resultados en vuelo;
-   comprueba un solo emisor, recibos durables y cero peticiones posteriores del
-   cron. Solo entonces retíralo y confirma con `openclaw cron list` que ya no está.
-   Conserva los cron de negocio y las entradas no adoptadas.
+5. Inventaría qué entradas despierta cada cron vigía con modelo de U3a. Para
+   cada entrada adoptada, registra su ID de cron, configuración y generación;
+   suspende su emisión anterior, drena turnos y resultados en vuelo y comprueba
+   un solo emisor, recibos durables y cero peticiones posteriores del cron para
+   esa entrada. Si el cron es compartido con entradas no adoptadas, mantenlo
+   activo para ellas mediante un filtro probado; si no puede separarlas, no lo
+   retires ni declares completado 20.10. Borra el cron y confirma su ausencia en
+   `openclaw cron list` solo cuando todas las entradas que atendía estén migradas
+   y drenadas. Conserva los cron de negocio.
 
 Antes de la primera transferencia viva, ejecuta
 `bash scripts/tests/test-agent-work-cutover.sh` sobre el par de artefactos elegido.
@@ -425,6 +439,11 @@ la preservación de resultados pendientes y el bloqueo ante incertidumbre. La
 autorización y el recibo vivo de T12
 son necesarios para adoptar la entrada y retirar su cron, pero no para desarrollar
 el director en pruebas aisladas.
+
+Añade a `test-corrida-latido.sh` el caso de dos entradas atendidas por un cron:
+una gestionada y otra anterior. La primera no recibe despertares antiguos, la
+segunda conserva su servicio y el borrado del cron se rechaza. Después de migrar
+y drenar ambas, el mismo caso permite retirarlo. Exige ese verde antes del paso 5.
 
 Archivos: `docs/evidence/u3b-director/primera-corrida-2026-MM-DD.md` y
 `docs/evidence/usuario-20-2026-MM-DD.md` con el FUNCIONA de David.
@@ -491,7 +510,7 @@ revierte la migración de T9.
 | Mergear PRs de U3b | Merge libre con CI verde en el head y revisor sin bloqueantes, con `--match-head-commit`. | Autorizado por David el 2026-09-29 para las corridas del director. |
 | Desplegar en la Mac | `scripts/mac/instalar-mac.sh` desde un checkout igual a `origin/main`. | Parte del ciclo del director una vez mergeado 20.7. |
 | Publicar al gateway | Sync seguro en la PC. | Lo hace David. El director solo pregunta. |
-| Borrar el cron vigía con modelo de U3a | Solo la entrada adoptada, tras suspensión, drenaje y transferencia por generación. | Autorizado por David al cerrar 20.10 y cumplir el candado de T11–T12. |
+| Borrar el cron vigía con modelo de U3a | Todas las entradas que sirve deben estar migradas y drenadas; una entrada no adoptada conserva su ruta anterior. | Autorizado por David al cerrar 20.10 y cumplir el candado de T11–T12. |
 | Deploy de Orbit en goncloud | `scripts/deploy-goncloud.sh`. | Pregunta a David hasta cerrar 20.11. |
 
 ## Revisión
