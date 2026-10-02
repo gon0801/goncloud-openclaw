@@ -79,8 +79,8 @@ grep -qF 'Persist `worker`, `harness`, `provider`, `effort`, `reported_model`, a
 grep -qF 'effort: string | null;' "$PLAN" \
   || fail "WorkerView no tiene effort (14.13d)"
 
-grep -qF 'ocho entradas' "$SPEC" \
-  || fail "la spec no fija las ocho entradas del registro (14.13)"
+grep -qF 'siete entradas' "$SPEC" \
+  || fail "la spec no fija las siete entradas del registro (14.13, sin cursor desde 2026-09-29)"
 grep -qF 'descarte por `quota_group`' "$SPEC" \
   || fail "la spec sigue descartando un trabajador a la vez (14.13b)"
 grep -qF 'lo deriva de su `provider`' "$SPEC" \

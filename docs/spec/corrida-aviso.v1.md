@@ -61,9 +61,10 @@ consumidores concurrentes no duplican.
 
 El dueño del aviso es la sesión **lead registrada de la corrida**, que vive
 en el host de las CLI: la ruta de despertar es local (send-keys de tmux),
-probada en las suites con dobles. El agente del gateway (`agent:main:*`)
-queda como notificado, no como decisor: sus `exec` no alcanzan el host de
-las CLI (medido en 19.0-r2). La limitación de r2 queda así cerrada por
+probada en las suites con dobles. Por esta ruta el gateway **no recibe
+señal alguna**: el registro durable vive en la Mac (pendientes, tratados y
+`eventos.jsonl`), no en el gateway; el agente `agent:main:*` nunca fue el
+decisor y sus `exec` no alcanzan el host de las CLI (medido en 19.0-r2). La limitación de r2 queda así cerrada por
 diseño: la decisión y el lanzamiento ocurren donde están las manos.
 
 ## Descartes y límites escritos

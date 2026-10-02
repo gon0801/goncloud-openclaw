@@ -1,0 +1,3 @@
+{"mono_ns": 765019582285333, "wall": "2026-10-01T03:54:18.188Z", "estado": "DOBLADO", "argv": ["cron", "list", "--json"]}
+{"mono_ns": 765019786554666, "wall": "2026-10-01T03:54:18.392Z", "estado": "DOBLADO", "argv": ["message", "send", "--channel", "telegram", "-t", "arnes:destino", "--silent", "--json", "-m", "\ud83e\uddea PR\u00c1CTICA \u2014 no contestes [ABIERTA] Caso A (abri\u00f3 20:54)\n\nQu\u00e9 cambi\u00f3: **Arranc\u00f3 la corrida.**\n\nQu\u00e9 sigue: Se ir\u00e1 viendo cu\u00e1ntas partes tiene conforme avance.\n\nQu\u00e9 necesito de ti: nada"]}
+{"mono_ns": 765033361386416, "wall": "2026-10-01T03:54:31.967Z", "estado": "DOBLADO", "argv": ["cron", "list", "--json"]}

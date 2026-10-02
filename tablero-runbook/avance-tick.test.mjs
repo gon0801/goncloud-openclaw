@@ -35,17 +35,36 @@ if (a === "cron" && b === "scratch") {
 }
 if (a === "cron" && (b === "add" || b === "edit")) {
   const jobs = JSON.parse(leer("jobs.json"));
-  const payload = { kind: "command", argv: JSON.parse(opt("--command-argv")) };
-  if (b === "add") jobs.jobs.push({ id: "reloj-nuevo", name: opt("--name"), declarationKey: opt("--declaration-key"), payload });
-  else jobs.jobs = jobs.jobs.map((j) => (j.id === args[2] ? { ...j, payload } : j));
+  const conPayload = opt("--command-argv") !== undefined && !process.env.FALSO_EDIT_SIN_PAYLOAD;
+  const conAlerta = args.includes("--failure-alert") && !process.env.FALSO_EDIT_SIN_ALERTA;
+  const toca = (j) => {
+    const n = { ...j };
+    if (conPayload) n.payload = { kind: "command", argv: JSON.parse(opt("--command-argv")) };
+    if (conAlerta) n.failureAlert = { channel: opt("--failure-alert-channel"), to: opt("--failure-alert-to") };
+    return n;
+  };
+  if (b === "add") jobs.jobs.push(toca({ id: "reloj-nuevo", name: opt("--name"), declarationKey: opt("--declaration-key") }));
+  else jobs.jobs = jobs.jobs.map((j) => (j.id === args[2] ? toca(j) : j));
   writeFileSync(join(dir, "jobs.json"), JSON.stringify(jobs));
   salir("{}");
+}
+if (a === "cron" && b === "get") {
+  const jobs = JSON.parse(leer("jobs.json"));
+  const j = jobs.jobs.find((x) => x.id === args[2]);
+  if (!j) salir("job desconocido", 1);
+  salir(JSON.stringify({ job: j }));
 }
 if (a === "gateway" && b === "call") {
   if (!existsSync(join(dir, "decide.json"))) salir("gateway closed (1006)", 1);
   salir("{\\n" + leer("decide.json").trim().slice(1));
 }
 if (a === "message" && b === "send") {
+  // 19.3-5-F4: rig para el camino de CAS en conflicto: otro tick mueve la
+  // revision entre el envio confirmado y la escritura del scratch.
+  if (process.env.FALSO_CAS_BUMP) {
+    const sc = JSON.parse(leer("scratch.json"));
+    writeFileSync(join(dir, "scratch.json"), JSON.stringify({ content: sc.content, revision: sc.revision + 1 }));
+  }
   const envio = process.env.ENVIO ?? "ok";
   if (envio === "falla") salir(JSON.stringify({ ok: false, error: { message: "telegram 502" } }), 1);
   if (envio === "ok-false") salir(JSON.stringify({ ok: false, action: "send", error: { message: "rechazado" } }));
@@ -149,6 +168,16 @@ describe("avance-tick tick", () => {
     });
   }
 
+  it("19.3-5-F4: CAS en conflicto: un solo envio, salida 1 y sin estado nuevo", () => {
+    escenario();
+    const r = correr("tick", { FALSO_CAS_BUMP: "1" });
+    assert.equal(r.rc, 1);
+    assert.match(r.stderr, /scratch no se escribio/);
+    assert.equal(envios().length, 1);
+    assert.equal(JSON.parse(scratchCrudo()).content, JSON.stringify(PREVIO));
+    assert.equal(llamadas().filter((l) => l.entrada !== undefined).length, 1);
+  });
+
   it("decide caido: sale con error, no manda, scratch intacto", () => {
     escenario({ decide: null });
     const antes = scratchCrudo();
@@ -193,20 +222,24 @@ describe("avance-tick iniciar", () => {
     escenario({ scratch: null, decide: { accion: "NO_REPLY", estado: INICIAL }, jobs: { jobs: [JOBS.jobs[0]] } });
     const r = correr("iniciar");
     assert.equal(r.rc, 0, r.stderr);
-    assert.deepEqual(mutaciones(), [[
+    assert.deepEqual(mutaciones()[0], [
       "cron", "add", "--name", "avance-tareas", "--declaration-key", "avance-tareas", "--every", "15m",
       ...COMUN, JSON.stringify(argvDelJob()), "--json",
-    ]]);
+    ]);
     assert.deepEqual(decideParams(), { modo: "iniciar", estado: null });
     assert.deepEqual(JSON.parse(JSON.parse(scratchCrudo()).content), INICIAL);
     assert.equal(r.stdout, '{"accion":"iniciado","job":"reloj-nuevo"}\n');
+    const ed1 = llamadas().filter((l) => l.args[0] === "cron" && l.args[1] === "edit");
+    assert.equal(ed1.length, 1);
+    assert.ok(ed1[0].args.includes("--failure-alert") && ed1[0].args.includes("6470689715"));
   });
 
   it("reloj de turno de agente: lo edita en su id a comando y siembra el corte", () => {
     escenario({ scratch: null, decide: { accion: "NO_REPLY", estado: INICIAL } });
     const r = correr("iniciar");
     assert.equal(r.rc, 0, r.stderr);
-    assert.deepEqual(mutaciones(), [["cron", "edit", "reloj-1", ...COMUN, JSON.stringify(argvDelJob())]]);
+    assert.deepEqual(mutaciones()[0], ["cron", "edit", "reloj-1", ...COMUN, JSON.stringify(argvDelJob())]);
+    assert.ok(mutaciones()[1].includes("--failure-alert"));
     assert.deepEqual(JSON.parse(JSON.parse(scratchCrudo()).content), INICIAL);
     assert.equal(r.stdout, '{"accion":"iniciado","job":"reloj-1"}\n');
   });
@@ -220,9 +253,24 @@ describe("avance-tick iniciar", () => {
     const r = correr("iniciar");
     assert.equal(r.rc, 0, r.stderr);
     assert.equal(r.stdout, '{"accion":"ya-iniciado","job":"reloj-1"}\n');
-    assert.deepEqual(mutaciones(), []);
+    assert.equal(mutaciones().length, 1);
+    assert.ok(mutaciones()[0].includes("--failure-alert") && mutaciones()[0].includes("6470689715"));
     assert.equal(llamadas().filter((l) => l.args[0] === "gateway").length, 0);
     assert.equal(scratchCrudo(), antes);
+  });
+
+  it("19.3-5-F3: el alta que no deja el payload falla en el read-back", () => {
+    escenario({ scratch: null, decide: { accion: "NO_REPLY", estado: INICIAL } });
+    const r = correr("iniciar", { FALSO_EDIT_SIN_PAYLOAD: "1" });
+    assert.equal(r.rc, 1);
+    assert.match(r.stderr, /sin el payload esperado/);
+  });
+
+  it("19.3-5-F5: sin bloque de alerta el iniciar falla", () => {
+    escenario({ scratch: null, decide: { accion: "NO_REPLY", estado: INICIAL } });
+    const r = correr("iniciar", { FALSO_EDIT_SIN_ALERTA: "1" });
+    assert.equal(r.rc, 1);
+    assert.match(r.stderr, /sin la alerta de fallo/);
   });
 
   it("scratch malformado: no lo pisa", () => {
@@ -238,6 +286,14 @@ describe("avance-tick iniciar", () => {
     escenario({ scratch: null });
     const r = correr("iniciar", {}, "openclaw-falso.mjs");
     assert.equal(r.rc, 1);
+    assert.deepEqual(llamadas(), []);
+  });
+
+  it("19.3-5-F2: cli .cmd se rechaza con el mensaje que pide el .mjs", () => {
+    escenario({ scratch: null });
+    const r = correr("iniciar", {}, join(dir, "openclaw.cmd"));
+    assert.equal(r.rc, 1);
+    assert.match(r.stderr, /\.cmd.*shell|\.mjs/);
     assert.deepEqual(llamadas(), []);
   });
 });

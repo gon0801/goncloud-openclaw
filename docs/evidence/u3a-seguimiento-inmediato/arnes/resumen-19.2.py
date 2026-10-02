@@ -50,6 +50,18 @@ if os.path.isfile(ruta_l):
 total_workers = len(lanzados)
 n_trans = max(0, total_workers - 1)
 
+# F1 (C2-r1): la N PEDIDA vive en exigidas.txt; una cadena con menos
+# trabajadores que N es INCOMPLETA aunque las transiciones que alcanzo sean
+# todas OK. El veredicto del bloque compara cumplen contra la N pedida.
+exigidas = None
+ruta_e = os.path.join(work, "exigidas.txt")
+if os.path.isfile(ruta_e):
+    with open(ruta_e) as f:
+        try:
+            exigidas = int(f.read().strip())
+        except ValueError:
+            exigidas = None
+
 # CLIs REALES por slot (slot-cli.txt): con fallback de lanzamiento el indice no
 # determina el CLI; la tabla usa lo que de verdad quedo lanzado.
 slot_cli = {}
@@ -107,7 +119,8 @@ faltan_dest = [c for c in ANILLO if destinos_cli.get(c, 0) < 1]
 
 resumen = {
     "umbral_s": UMBRAL_S,
-    "transiciones_exigidas": n_trans,
+    "transiciones_exigidas": exigidas if exigidas is not None else n_trans,
+    "cadena_incompleta": exigidas is not None and total_workers < exigidas + 1,
     "transiciones_con_datos": len(duraciones),
     "cumplen": len(ok),
     "mediana_s": round(statistics.median(duraciones), 2) if duraciones else None,

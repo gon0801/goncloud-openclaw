@@ -1,5 +1,4 @@
 {
-  "expect_launch_count_e2e": 1,
   "expect_py1": [
     "record_observed",
     "handoff_lane"

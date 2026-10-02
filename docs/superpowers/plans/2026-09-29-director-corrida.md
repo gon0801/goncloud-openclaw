@@ -115,6 +115,16 @@ Prueba en rojo primero:
   registro de corrida no crea otra bandera de consumo.
 - Mutación: sin el chequeo de `intent` pendiente, `next_effect` propone el mismo
   efecto dos veces y la prueba falla.
+- Leyes del director, probadas con secuencias aleatorias de observaciones
+  generadas con `random.Random(semilla)` y semillas fijas, para que la prueba sea
+  reproducible y no agregue dependencias en la Mac ni en la CI. Cada ley corre
+  sobre unas 500 secuencias y tiene su mutación en rojo:
+  - nunca `push` ni `merge` sin un `VEREDICTO: APROBADO` del head vigente;
+  - el revisor nunca es del harness del implementador vigente, también después de
+    `relevar_impl`;
+  - nunca más de 4 sesiones reservadas sumando todas las corridas;
+  - nunca el mismo efecto externo dos veces mientras su `intent` siga pendiente.
+  Si una ley falla, la prueba imprime la semilla y la secuencia mínima que la rompe.
 
 Verificación:
 

@@ -945,6 +945,18 @@ corrida_aviso_directo() {
     *) echo "corrida_aviso_directo: etiqueta fuera del conjunto: $etq" >&2; return 1;;
   esac
   local sim; sim="$(json_campo "$reg" simulacro)"
+  # 19.3-3-F1: el texto de NECESITO es fijo (seguimiento.v1) tambien por el
+  # camino directo: mismas lineas que fija corrida_mensaje; el caso (h) de
+  # test-corrida-negritas.sh fija que ambos caminos coincidan.
+  if [ "$etq" = "NECESITO TU RESPUESTA" ]; then
+    if [ "$sim" = "true" ]; then
+      cambio="Una parte de la prueba llegó a una pregunta de práctica."
+      sigue="Nada que hacer: la prueba sigue sola."
+      necesito="nada: es una prueba, se resuelve sola"
+    else
+      cambio="Una parte de la corrida quedó esperando que decidas algo."
+    fi
+  fi
   local enc; enc="$(corrida_encabezado "$id")"
   local M; M="$(mktemp)" || return 1
   aviso_cuerpo "" "$etq" "$enc" "$avance" "$cambio" "$sigue" "$necesito" > "$M"
@@ -1095,8 +1107,15 @@ else:
 ahora = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 if os.environ["CORR_QUE"]:
     nota += "; " + os.environ["CORR_QUE"]
+# 19.3-11-G2: el tope de 300 cae en borde de palabra, no a media
+# palabra (antes "kimi_coding (quota-g"): se recorta al ultimo espacio.
+nota_corta = nota[:300]
+if len(nota) > 300:
+    borde = nota_corta.rfind(" ")
+    if borde > 0:
+        nota_corta = nota_corta[:borde]
 event = {"kind": "part.worker", "id": identifier, "corrida": run, "at": ahora,
-         "carril": lane_id, "worker": worker, "note": nota[:300], "source": "native",
+         "carril": lane_id, "worker": worker, "note": nota_corta, "source": "native",
          "generation": tenure}
 json.dump(event, open(os.environ["CORR_OUT"], "w"), ensure_ascii=False)
 PY

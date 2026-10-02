@@ -49,7 +49,9 @@ if [ -z "$TM" ]; then
   echo "SKIP (3): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
 else
   T=$(mktemp -d) || exit 1
-  trap '"$TM" -L "$L" kill-server 2>/dev/null; rm -rf /tmp/taw-r9; cp -r "$T" /tmp/taw-r9 2>/dev/null; rm -rf "$T"' EXIT
+  # F5 (C2-r1): la copia de depuracion a /tmp solo con TAW_KEEP=1 (sin restos
+# en rutas fijas entre corridas).
+trap '"$TM" -L "$L" kill-server 2>/dev/null; if [ "${TAW_KEEP:-}" = "1" ]; then rm -rf /tmp/taw-r9; cp -r "$T" /tmp/taw-r9 2>/dev/null; fi; rm -rf "$T"' EXIT
   L="taw$$"
   # Ninguna corrida del vigilante en esta prueba puede alcanzar el ~/bin/corrida.sh
   # real: desde 14.29 D1 el tick lanza "latido" contra las corridas reales.
@@ -1485,6 +1487,79 @@ grep -q "descartado tras 99 reintentos" "$LOG_FILE" 2>/dev/null \
 rm -f "$STATE_DIR/avisos-fallidos/"sim9-CAP*
 echo "ok (2q-14): el registro en el tope se descarta con su linea en el log"
 rm -rf "$CORRIDA_STATE/sim9-BK" "$STATE_DIR/avisos-fallidos/"sim9-BK*
+
+# (2q-16) R2 C2-r1: el wake propio no reinicia el reloj de recordatorio. El
+# aviso sale, el lead procesa el atender (el panel cambia: cat hace eco) y el
+# RECORDATORIO sale igual a QUIET_REMIND_SECS sobre la sesion quieta. Sin el
+# guard, el cambio de hash reiniciaba notified=0 y la segunda senal salia a
+# ~1 s como episodio nuevo (el caso A de 19.2 quedo SIN-RECUPERACION por eso).
+STATE_DIR="$T/state-2q-16"; mkdir -p "$STATE_DIR"
+QUIET_SECS=1 QUIET_REMIND_SECS=6 \
+"$TM" -L "$L" new-session -d -s rem-r2 -x 80 -y 20 'cat' || fail "no se pudo crear rem-r2"
+mark rem-r2
+"$TM" -L "$L" set-environment -t rem-r2 OPENCLAW_WATCH_RUN rem-R2
+sleep 2
+: >"$AARGV"
+t1=""; t2=""; i=0
+while [ "$i" -lt 80 ]; do
+  QUIET_REMIND_SECS=6 CORRIDA_BIN="$STUB_AV" run_av || fail "--once (2q-16) fallo"
+  n=$(grep -c 'avisos emitir rem-R2 rem-r2 fin-turno' "$AARGV" 2>/dev/null)
+  if [ -z "$t1" ] && [ "${n:-0}" -ge 1 ]; then
+    t1=$(date +%s)
+    # El eco del wake: el lead procesa el comando y el panel cambia.
+    "$TM" -L "$L" send-keys -t "=rem-r2:" "eco del wake" Enter
+  fi
+  if [ -n "$t1" ] && [ "${n:-0}" -ge 2 ]; then
+    t2=$(date +%s)
+    break
+  fi
+  sleep 0.7
+  i=$((i + 1))
+done
+[ -n "$t1" ] || fail "(2q-16) el primer quiet debia salir por avisos: $(cat "$AARGV")"
+[ -n "$t2" ] || fail "(2q-16) el recordatorio debia salir tras el wake propio: $(cat "$AARGV")"
+delta=$((t2 - t1))
+[ "$delta" -ge 5 ] || fail "(2q-16) la segunda senal llego ${delta}s tras la primera (< REMIND 6s): fue reinicio de reloj, no recordatorio"
+"$TM" -L "$L" kill-session -t "=rem-r2:" 2>/dev/null
+echo "ok (2q-16): el wake propio no reinicia el reloj de recordatorio (R2)"
+
+# (2q-17) B1 C2-r3: caso completo del guard. El aviso v1 sale, se CONSUME
+# (el atender lo mueve a tratados/<id>.json, CON extension) y el panel cambia
+# por un turno nuevo. El fin de turno nuevo debe avisar DE INMEDIATO (episodio
+# nuevo a QUIET_SECS), no a los 60 minutos (QUIET_REMIND_SECS default 3600).
+# Sin la extension .json en el guard (B1 C2-r3), el tratado nunca se encontraba
+# y la proteccion bloqueaba la senal nueva hasta el recordatorio.
+STATE_DIR="$T/state-2q-17"; mkdir -p "$STATE_DIR"
+CORRIDA_STATE17="$T/corrida-17"; mkdir -p "$CORRIDA_STATE17/rem-R17/avisos/tratados"
+"$TM" -L "$L" new-session -d -s rem-2q17 -x 80 -y 20 'cat' || fail "no se pudo crear rem-2q17"
+mark rem-2q17
+"$TM" -L "$L" set-environment -t rem-2q17 OPENCLAW_WATCH_RUN rem-R17
+sleep 2
+: >"$AARGV"
+t1=""; t2=""; h1=""; i=0
+while [ "$i" -lt 120 ]; do
+  CORRIDA_BIN="$STUB_AV" CORRIDA_STATE="$CORRIDA_STATE17" run_av || fail "--once (2q-17) fallo"
+  n=$(grep -c 'avisos emitir rem-R17 rem-2q17 fin-turno' "$AARGV" 2>/dev/null)
+  if [ -z "$t1" ] && [ "${n:-0}" -ge 1 ]; then
+    t1=$(date +%s)
+    h1=$(grep 'avisos emitir rem-R17 rem-2q17 fin-turno' "$AARGV" | head -1 | sed 's/.*--llave //')
+    # Consumo del aviso v1: aparece el tratado con su id (como el atender).
+    id1="rem-R17-rem-2q17-fin-turno-$(printf '%s' "$h1" | shasum -a 1 | awk '{print substr($1,1,10)}')"
+    : > "$CORRIDA_STATE17/rem-R17/avisos/tratados/$id1.json"
+    "$TM" -L "$L" send-keys -t "=rem-2q17:" "eco del wake 1" Enter
+  fi
+  if [ -n "$t1" ] && [ "${n:-0}" -ge 2 ]; then
+    t2=$(date +%s)
+    break
+  fi
+  sleep 0.7; i=$((i + 1))
+done
+[ -n "$t1" ] || fail "(2q-17) el primer quiet debia salir por avisos: $(cat "$AARGV")"
+[ -n "$t2" ] || fail "(2q-17) con el aviso consumido y un turno nuevo, el fin de turno debia avisar de inmediato, no a los 60 minutos: $(cat "$AARGV")"
+delta=$((t2 - t1))
+[ "$delta" -lt 5 ] || fail "(2q-17) la senal nueva llego ${delta}s tras el wake (>= 5s): el tratado consumido no solto la proteccion (falta .json en el guard?)"
+"$TM" -L "$L" kill-session -t "=rem-2q17:" 2>/dev/null
+echo "ok (2q-17): aviso consumido + turno nuevo -> fin de turno nuevo avisa de inmediato, no a los 60 min"
 else
   echo "SKIP (2q): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
 fi
