@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import queue
 import signal
 import shutil
 import subprocess
@@ -1214,6 +1215,305 @@ class DirectorHandlingTest(unittest.TestCase):
         record_after_retry = json.loads(record_path.read_text(encoding="utf-8"))
         self.assertEqual(record_after_retry, record)
         self.assertEqual(len(resolve_calls.read_text(encoding="utf-8").splitlines()), 1)
+
+    def test_real_authenticated_gateway_resolve_replays_after_lost_response(self):
+        """Exercise R registration/result, G intent/retry, and one gate effect."""
+        runtime_source = os.environ.get("AGENT_WORK_RUNTIME_SOURCE")
+        if not runtime_source:
+            self.skipTest("set AGENT_WORK_RUNTIME_SOURCE to run the cross-repository Gateway test")
+        runtime_root = Path(runtime_source).resolve()
+        required = (
+            runtime_root / "openclaw.mjs",
+            runtime_root / "scripts" / "tsx.mjs",
+            runtime_root / "src" / "gateway" / "test-helpers.e2e.ts",
+        )
+        missing = [str(path) for path in required if not path.is_file()]
+        if missing:
+            self.fail("R Gateway test harness is incomplete: " + ", ".join(missing))
+
+        state_dir = Path(tempfile.mkdtemp(prefix="agent-work-director-gateway-"))
+        self.addCleanup(lambda: shutil.rmtree(state_dir, ignore_errors=True))
+        gateway_state = state_dir / "gateway-state"
+        gateway_state.mkdir()
+        config_path = gateway_state / "openclaw.json"
+        token = "t8-cross-repository-gateway-token"
+        output_queue = queue.Queue()
+        harness = subprocess.Popen(
+            [
+                "node",
+                "--import",
+                str(runtime_root / "scripts" / "tsx.mjs"),
+                str(ROOT / "scripts/tests/fixtures/agent-work/managed-task-gateway-harness.mjs"),
+            ],
+            cwd=runtime_root,
+            env={
+                **os.environ,
+                "AGENT_WORK_RUNTIME_SOURCE": str(runtime_root),
+                "OPENCLAW_STATE_DIR": str(gateway_state),
+                "OPENCLAW_CONFIG_PATH": str(config_path),
+                "OPENCLAW_GATEWAY_TOKEN": token,
+                "CROSS_GATEWAY_TOKEN": token,
+            },
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+
+        def collect_output():
+            assert harness.stdout is not None
+            for line in harness.stdout:
+                output_queue.put(line)
+
+        threading.Thread(target=collect_output, daemon=True).start()
+
+        def next_message(timeout=120):
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                try:
+                    line = output_queue.get(timeout=min(1, deadline - time.monotonic()))
+                except queue.Empty:
+                    if harness.poll() is not None:
+                        break
+                    continue
+                try:
+                    message = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(message, dict) and message.get("type") in ("ready", "result", "error"):
+                    return message
+            captured = []
+            while True:
+                try:
+                    captured.append(output_queue.get_nowait())
+                except queue.Empty:
+                    break
+            self.fail("R Gateway harness did not answer: " + "".join(captured)[-4000:])
+
+        def request(command):
+            assert harness.stdin is not None
+            harness.stdin.write(json.dumps(command, ensure_ascii=False) + "\n")
+            harness.stdin.flush()
+            message = next_message()
+            if message.get("type") == "error":
+                self.fail("R Gateway harness error: " + str(message.get("error")))
+            return message.get("result")
+
+        try:
+            ready = next_message()
+            self.assertEqual(ready.get("type"), "ready")
+            gateway_url = ready["url"]
+            caller = {
+                "kind": "director",
+                "authority": "director-cross-test",
+                "corridaId": "cross-run",
+                "decisionId": "cross-decision",
+                "fence": "cross-fence",
+            }
+            seeded = request({"op": "seed", "caller": caller})
+            task = seeded["task"]
+            result = seeded["result"]
+            revision = seeded["revision"]
+            payload = seeded["payload"]
+            receipt = {
+                "taskId": result["taskId"],
+                "generation": result["generation"],
+                "resultDigest": result["resultDigest"],
+            }
+            self.assertEqual(task["taskId"], receipt["taskId"])
+            self.assertEqual(payload["verdict"], "approved")
+
+            corrida_dir = state_dir / "run-1"
+            corrida_dir.mkdir()
+            record_path = corrida_dir / "registro.json"
+            record_path.write_text(json.dumps({
+                "schema": "corrida.v2",
+                "id": "run-1",
+                "estado": "abierta",
+                "lanes": [{"id": "l1", "estado": "activo", "events": []}],
+            }), encoding="utf-8")
+            evidence = state_dir / "gate-evidence.json"
+            evidence.write_text(json.dumps({
+                "repo": "o/r",
+                "pr": 7,
+                "head": revision["sha"],
+                "ci": {"sha": revision["sha"], "conclusion": "success"},
+            }), encoding="utf-8")
+            evidence_digest = hashlib.sha256(evidence.read_bytes()).hexdigest()
+            managed_task = {
+                "caller": caller,
+                "receipt": receipt,
+                "result": {
+                    "kind": "produced",
+                    "observedRevision": revision,
+                    "typedPayload": payload,
+                    "artifactRef": "artifact:review",
+                },
+            }
+            observation_path = state_dir / "observation.json"
+            observation_path.write_text(json.dumps({
+                "lanes": {"l1": {
+                    "managed_task": managed_task,
+                    "gate": {
+                        "action": "ci",
+                        "evidencePath": str(evidence),
+                        "evidenceDigest": evidence_digest,
+                    },
+                }},
+            }), encoding="utf-8")
+
+            lost_response = state_dir / "lost-response.json"
+            call_count = state_dir / "gateway-call-count"
+            gateway_bin = state_dir / "openclaw-lost-response"
+            gateway_bin.write_text(
+                "#!/usr/bin/env python3\n"
+                "import pathlib, subprocess, sys\n"
+                f"actual = {str(runtime_root / 'openclaw.mjs')!r}\n"
+                f"count_path = pathlib.Path({str(call_count)!r})\n"
+                f"lost_path = pathlib.Path({str(lost_response)!r})\n"
+                "count = int(count_path.read_text()) if count_path.exists() else 0\n"
+                "count += 1\n"
+                "count_path.write_text(str(count))\n"
+                "completed = subprocess.run([actual, *sys.argv[1:]], capture_output=True, text=True)\n"
+                "if count == 1:\n"
+                "    lost_path.write_text(completed.stdout)\n"
+                "    sys.stderr.write('simulated lost Gateway response\\n')\n"
+                "    raise SystemExit(75)\n"
+                "sys.stdout.write(completed.stdout)\n"
+                "sys.stderr.write(completed.stderr)\n"
+                "raise SystemExit(completed.returncode)\n",
+                encoding="utf-8",
+            )
+            gateway_bin.chmod(0o700)
+            fake_gh = state_dir / "gh"
+            fake_gh.write_text(
+                "#!/bin/sh\n"
+                f"cat {str(state_dir / 'pr.json')!r}\n",
+                encoding="utf-8",
+            )
+            fake_gh.chmod(0o700)
+            (state_dir / "pr.json").write_text(json.dumps({
+                "number": 7,
+                "headRefOid": revision["sha"],
+                "mergedAt": None,
+                "mergeCommit": None,
+                "statusCheckRollup": [{"status": "COMPLETED", "conclusion": "SUCCESS"}],
+            }), encoding="utf-8")
+            env = {
+                **os.environ,
+                "AGENT_WORK_RUNTIME_SOURCE": str(runtime_root),
+                "CORRIDA_STATE": str(state_dir),
+                "CORR_REPO_RAIZ": str(ROOT),
+                "OPENCLAW_BIN": str(gateway_bin),
+                "OPENCLAW_EXPECT_URL": gateway_url,
+                "OPENCLAW_GATEWAY_TOKEN": token,
+                "OPENCLAW_CONFIG_PATH": str(config_path),
+                "OPENCLAW_STATE_DIR": str(gateway_state),
+                "CORR_TOPE_RED": "45",
+                "PATH": str(state_dir) + os.pathsep + os.environ["PATH"],
+            }
+            command = [
+                "bash",
+                str(ROOT / "scripts/mac/corrida.sh"),
+                "reconciliar",
+                "run-1",
+                "--observations",
+                str(observation_path),
+            ]
+            first = subprocess.run(
+                command,
+                cwd=ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            self.assertNotEqual(first.returncode, 0, first.stdout + first.stderr)
+            self.assertIn("EXECUTED record_task_handling l1", first.stdout)
+            self.assertTrue(lost_response.is_file(), first.stdout + first.stderr)
+            self.assertEqual(call_count.read_text(encoding="utf-8"), "1")
+            first_record = json.loads(record_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                [event["kind"] for event in first_record["lanes"][0]["events"]],
+                ["intent.task_handling"],
+            )
+
+            second = subprocess.run(
+                command,
+                cwd=ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+            self.assertIn("EXECUTED resolve_task_handling l1", second.stdout)
+            self.assertIn("EXECUTED execute_task_gate l1", second.stdout)
+            self.assertIn("CONVERGED", second.stdout)
+            self.assertEqual(call_count.read_text(encoding="utf-8"), "2")
+            final_record = json.loads(record_path.read_text(encoding="utf-8"))
+            events = final_record["lanes"][0]["events"]
+            self.assertEqual([event["kind"] for event in events], [
+                "intent.task_handling",
+                "observed.task_handled",
+                "intent.task_gate",
+                "gate.allow",
+                "evidence.ci",
+                "observed.task_gate",
+            ])
+            self.assertEqual(sum(event["kind"] == "gate.allow" for event in events), 1)
+            gate_event = next(event for event in events if event["kind"] == "gate.allow")
+            self.assertEqual(gate_event["payload"]["task_id"], receipt["taskId"])
+            self.assertEqual(gate_event["payload"]["decision_id"], caller["decisionId"])
+            self.assertEqual(gate_event["payload"]["evidence_digest"], evidence_digest)
+            lost_receipt = json.loads(lost_response.read_text(encoding="utf-8"))
+            self.assertEqual(lost_receipt["taskId"], receipt["taskId"])
+            self.assertEqual(lost_receipt["childTaskIds"], [])
+
+            inspected = request({
+                "op": "inspect",
+                "caller": caller,
+                "taskId": receipt["taskId"],
+            })
+            self.assertEqual(inspected["handlingState"], "handled")
+            self.assertEqual(inspected["handlingDecision"], {
+                "kind": "complete",
+                "evidenceRef": payload["evidenceRef"],
+            })
+            self.assertEqual(inspected["handlingReceipt"]["childTaskIds"], [])
+            self.assertEqual(inspected["handlingReceipt"], lost_receipt)
+
+            second_retry = subprocess.run(
+                command,
+                cwd=ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            self.assertEqual(second_retry.returncode, 0, second_retry.stderr)
+            self.assertIn("CONVERGED 0", second_retry.stdout)
+            self.assertEqual(json.loads(record_path.read_text(encoding="utf-8")), final_record)
+            self.assertEqual(call_count.read_text(encoding="utf-8"), "2")
+        finally:
+            if harness.poll() is None:
+                try:
+                    request({"op": "stop"})
+                except (BrokenPipeError, OSError, AssertionError):
+                    pass
+                try:
+                    harness.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    harness.terminate()
+                    try:
+                        harness.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        harness.kill()
+                        harness.wait()
+            for stream in (harness.stdin, harness.stdout):
+                if stream is not None:
+                    stream.close()
 
 
 if __name__ == "__main__":
