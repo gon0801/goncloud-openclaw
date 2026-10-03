@@ -215,7 +215,7 @@ Produce `Host.apply(OperationKey, AuthorizedOperation)` y el informe portable qu
 
 - [x] Añade `host_receipts`: registro antes de entrega, ACK vinculado al encargo y un solo encargo activo por instancia.
 - [x] Añade informe parcial, credencial ajena, versión antigua y salida cero sin informe. Ninguno acredita entrega válida.
-- [ ] Ejecuta las pruebas en rojo con socket tmux y directorios de ensayo.
+- [x] Ejecuta las pruebas en rojo con socket tmux y directorios de ensayo.
 - [x] Implementa entrega por referencia, escritura atómica de resultados y spool hasta recibo durable. Usa `hostId` explícito para cada lectura.
 - [x] Repite cien veces el informe y pierde su ACK. Exige un resultado y el mismo recibo.
 
@@ -227,12 +227,12 @@ Depende de T6. Crea `G/scripts/agent-work/resources.py`. Modifica `host.py`, `sc
 
 Produce reserva idempotente de host, identidad resistente a reutilización y `AbsenceVerified` o `CleanupPending`. El runtime conserva la reserva del árbol hasta recibir prueba válida.
 
-- [ ] Añade `resource_identity`: PID reutilizado, reinicio del host, cambio de servidor tmux y sesión adoptada. Una sesión preexistente sin prueba de creación no se clasifica como pool propio por carecer de nonce. Cubre claim, replay, cierre y cierre repetido; exige cero señales a recursos ajenos.
-- [ ] Añade `resource_close`: caída entre reserva y lanzamiento, descendiente desacoplado, ACK perdido y stop fallido.
-- [ ] Ejecuta los casos en rojo.
+- [x] Añade `resource_identity`: PID reutilizado, reinicio del host, cambio de servidor tmux y sesión adoptada. Una sesión preexistente sin prueba de creación no se clasifica como pool propio por carecer de nonce. Cubre claim, replay, cierre y cierre repetido; exige cero señales a recursos ajenos.
+- [x] Añade `resource_close`: caída entre reserva y lanzamiento, descendiente desacoplado, ACK perdido y stop fallido.
+- [x] Ejecuta los casos en rojo.
 - [ ] Implementa captura de evidencia, contención o rastreo de descendientes, detención y verificación. Sustituye éxito aparente tras fallo de stop por cierre pendiente en la ruta gestionada.
 - [ ] Comprueba que terminar el turno del padre no abandona al hijo y que un host inaccesible no libera cupo.
-- [ ] Ejecuta `resource_100_cycles`. Exige cero procesos propios abandonados y cuentas separadas para historial y pool intencional.
+- [x] Ejecuta `resource_100_cycles`. Exige cero procesos propios abandonados y cuentas separadas para historial y pool intencional.
 
 Verifica los tres casos con `test-agent-work-host.sh`. Certifica cada combinación de host y adaptador de `coverage.json`; una combinación sin prueba permanece deshabilitada. Cierra B3 con la batería de `G` y la integración nativa del mismo par de artefactos.
 

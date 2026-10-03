@@ -177,8 +177,8 @@ class ResourceTests(unittest.TestCase):
 
     def test_resource_100_cycles_real_tmux_processes_leave_no_own_processes(self):
         tmux = shutil.which("tmux")
-        if not tmux:
-            self.skipTest("tmux not installed")
+        if not tmux or not shutil.which("pgrep"):
+            self.skipTest("tmux or pgrep not installed")
         socket = f"b31-cycles-{os.getpid()}"
         def tmux_cmd(*args):
             return subprocess.run([tmux, "-L", socket, *args], capture_output=True, text=True)
@@ -225,8 +225,12 @@ class ResourceTests(unittest.TestCase):
             for nonce in nonces:
                 out = subprocess.run(["pgrep", "-f", "--", nonce], capture_output=True, text=True)
                 for pid in out.stdout.split():
-                    if pid.isdigit():
+                    if not pid.isdigit():
+                        continue
+                    try:
                         os.kill(int(pid), signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
 
     def test_resource_identity_adopted_without_nonce_and_claim_replay_close_reclose(self):
         naked = OperationKey("host-test", "task-2", 1, "instance-2")

@@ -36,11 +36,11 @@
       "grok": "disabled-host-unverified"
     }
   },
-  "resourceSandboxEvidence": "bash scripts/tests/test-agent-work-host.sh resource_identity; resource_close; resource_100_cycles",
+  "resourceSandboxEvidence": "bash scripts/tests/test-agent-work-host.sh resource_identity (4); resource_close (12); resource_100_cycles (2, con ciclos de procesos reales en tmux aislado b31-* y contador externo pgrep del nonce en argv)",
   "macDescendantProof": {
     "status": "unavailable",
-    "evidence": "ResourceTests.test_resource_detached_child_keeps_mac_closure_pending (isolated tmux socket)",
-    "limitation": "A child can call setsid and outlive its tmux pane. After the pane exits, the observed session/PID identity cannot enumerate or prove absence of that reparented child. The tested adapter therefore retains CleanupPending and host capacity; no Mac CLI combination is certified."
+    "evidence": "ResourceTests.test_resource_close_detached_child_keeps_mac_closure_pending (isolated tmux socket); test_resource_100_cycles_real_tmux_processes_leave_no_own_processes (pgrep nonce counter reaches zero for pane-group children)",
+    "limitation": "A child can call setsid and outlive its tmux pane. After the pane exits, the observed session/PID identity cannot enumerate or prove absence of that reparented child; the pgrep nonce counter of the real-process cycles only sees processes that still carry the nonce in argv, so a descendant that discards it or receives it through another channel escapes the count. The tested adapter therefore retains CleanupPending and host capacity; no Mac CLI combination is certified."
   },
   "certificationRequired": ["authenticated requester identity", "finite budget", "durable admission", "portable result", "verified resource close"]
 }
