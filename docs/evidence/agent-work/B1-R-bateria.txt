@@ -1,0 +1,90 @@
+B1 — batería de R (paso 1 del cierre). Corrida única `pnpm test`, detenida por decisión del operador.
+Fecha: 2026-10-02. Host local: macOS (darwin 25.6.0, arm64). No es CI.
+R SHA: 2046bd9516ceedbe21b20986208b31f1da6195c0 (feat/agent-work-integration, árbol limpio; verificado antes de lanzar).
+Comando: cd /Users/dn/dev/openclaw-agent-work-integration && pnpm test
+  (= node --import ./scripts/tsx.mjs scripts/test-projects.mts)
+Duración: lanzada hacia las 12:45 PDT, detenida manualmente ~17:20 PDT (~4,5 h) con SIGTERM a
+petición del operador (camino dos). El log conserva el punto de corte y termina con la línea
+«exited by signal SIGTERM» más una anotación de parada manual.
+
+Log completo (24 MB, 121.697 líneas):
+  ~/.local/state/encargos-loop/artifacts/B1-R-bateria-completo.log
+Este fichero es el destilado comprometido en G. El completo no entra al repo porque el hook
+pre-commit check-added-large-files usa el límite por defecto (500 kB) y el encargo prohíbe
+--no-verify; la desviación queda documentada aquí y en el LISTO.
+
+Cobertura antes del corte
+- 17 configs arrancadas, de 128 disponibles en test/vitest/: boundary, bundled,
+  contracts-channel-{config, registry, session, surface}, contracts-plugin, infra, tooling,
+  tooling-docker, tooling-isolated, unit-fast, unit-fast-fake-timers, unit-fast-isolated,
+  unit-security, unit-src, unit-support. Nunca arrancaron las de gateway, agentes, UI ni e2e.
+- 861 lotes de worker en verde. Resúmenes finales de config con fallos (sin ANSI):
+    16x  Test Files  1 failed | 1 passed (2)     [lotes de worker]
+     1x  Test Files  1 failed | 137 passed | 1 skipped (139)
+     1x  Test Files  1 failed | 144 passed (145)
+     1x  Test Files  1 failed | 62 passed | 1 skipped (64)
+     1x  Test Files  1 failed | 63 passed (64)
+     1x  Test Files  1 failed | 66 passed | 1 skipped (68)
+     1x  Test Files  1 failed | 67 passed (68)
+     1x  Test Files  3 failed | 134 passed | 1 skipped (138)
+
+Inventario de ficheros caídos (17) con config de la batería y síntoma
+- unit-fast :: src/infra/outbound/sanitize-text.test.ts — «expected '🙂5s' to be
+  '🙂<limit and wait>5s'».
+- unit-fast :: test/scripts/check-native-state-schema-version.test.ts — «Native state schema
+  version drift: Swift supports 19, TypeScript owns 26».
+- unit-fast-isolated :: src/agents/embedded-agent-runner/run/attempt.code-mode-continuation.test.ts.
+- unit-src :: src/claws/read-only-state-compat.test.ts — «no such column: projection_json» en
+  idx_managed_tasks_projection_pending tras drop column (2 casos).
+- unit-src :: src/state/openclaw-database-preflight.test.ts — «expected { state: 19, agent: 24 }
+  to deeply equal { state: 26, agent: 24 }».
+- unit-src :: src/state/openclaw-database-maintenance.test.ts — mismo índice projection_json.
+- unit-src :: src/state/secret-state-tables.test.ts — «credential-bearing tables must be
+  redacted or reviewed safe», con avisos «Plugin feishu read authority is no longer active».
+- tooling :: test/scripts/check-openclaw-package-tarball.test.ts — «tar preflight completed in 2ms».
+- tooling :: test/scripts/eager-import-closure.test.ts — «src/config/zod-schema.root-shape.ts:
+  unresolved ./zod-schema.managed-tasks.js» (2 casos).
+- tooling :: test/scripts/fs-safe-prebuild.test.ts — binding nativo linux ausente (4 casos).
+- tooling :: test/scripts/ios-release-fastlane-gates.test.ts — eventos de gates (1 caso).
+- tooling :: test/scripts/oxlint-config.test.ts — spawnSync del binario oxlint.
+- tooling :: test/scripts/plugin-npm-extended-stable-workflow.test.ts — bin npm del workspace.
+- tooling :: test/scripts/pr-worktree-provision.test.ts — provisiones git en TMPDIR (3 casos).
+- tooling :: test/scripts/upgrade-survivor-migration-order.test.ts — baseline sin fixture plugin
+  y avisos de Doctor IPC.
+- infra :: src/auto-reply/reply/get-reply.timeout.test.ts — «Test timed out in 120000ms».
+- infra :: src/infra/heartbeat-runner.model-override.test.ts — «expected 'heartbeat' to be
+  'cron'».
+Observación sin fichero caído: la matriz sintética
+test/scripts/code-mode-model-matrix.gateway-evidence.test.ts registró celdas harness_error
+(inventory-join, repetición 2, executor node y quickjs, «synthetic Gateway cell failed») en su
+stdout; el fichero no está entre los caídos.
+
+Triage contra la base c074824a27 (regla del encargo)
+Método: worktree base en c074824a27 y clon head en 2046bd9516, ambos aislados en /tmp/b1-1-r1
+con dependencias propias, y cada fichero corrido en serie y aislado con la misma config vitest
+con la que la batería lo ejecutó (./node_modules/.bin/vitest run --config ...). Los 34 corridas
+(17 ficheros × head/base) y su tabla quedan en
+~/.local/state/encargos-loop/artifacts/B1-R-bateria-triage/ (resumen.tsv + un log por corrida).
+Tabla resumen (arbol, fichero, exit, resumen de Tests):
+A) Limitación de la base — fallan igual en head y base (4):
+   sanitize-text (1 caso), check-openclaw-package-tarball (1), fs-safe-prebuild (4),
+   ios-release-fastlane-gates (1).
+B) Introducidos por el programa — pasan en base, fallan en head (8):
+   check-native-state-schema-version (drift Swift 19 vs TS 26; ya está como fila B5/T11 en
+   followups.md), openclaw-database-preflight (estado 19 vs 26), read-only-state-compat y
+   openclaw-database-maintenance (índice projection_json), secret-state-tables,
+   attempt.code-mode-continuation, eager-import-closure (zod-schema.managed-tasks.js sin
+   resolver), pr-worktree-provision (3), heartbeat-runner.model-override (heartbeat vs cron).
+   Ninguno corresponde al cambio de B1 (un único fichero E2E de pruebas de gateway); son de la
+   serie del programa previa al SHA aprobado.
+C) No reproducibles en aislado — pasan en head y base corridos solos (3; fallo de carga u orden
+   dentro de la batería): oxlint-config, upgrade-survivor-migration-order, get-reply.timeout.
+
+Conclusión
+- La batería íntegra no converge en una sesión local en este host: ~4,5 h sin alcanzar las
+  configs de gateway, agentes ni UI.
+- 4 fallos son limitación de la base; 8 son del programa y se REPORTAN sin corregir (fila de
+  followups); 3 son de carga. Ninguno abre corrección sobre el SHA aprobado por no proceder del
+  diff de B1.
+- El SHA 2046bd9516 conserva además su evidencia focalizada previa: requester_queue 6/6,
+  admission_restart 6/6 y el fichero E2E completo 7/7.
