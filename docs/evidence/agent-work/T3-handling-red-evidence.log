@@ -1,0 +1,41 @@
+T3 handling red evidence (casilla «Ejecuta los casos en rojo»), 2026-10-02
+R source SHA: 9f99e2264c012dd4cf5bd9dbac10bc7e534ffc05 (clean shared clone at
+/tmp/b1-1-r1/t3-head; the production checkout was untouched).
+The handling test file was born together with the atomic resolve implementation
+in R a493a8f47e ("feat(managed-tasks): atomically resolve results into decisions
+and children"), so no pre-implementation run of the same file exists. Two real
+reds document the casilla; both trees are isolated copies.
+
+1) Historical red at the parent of the implementing commit.
+Tree: a493a8f47e^ = 761fe0ca64b40b8b10ec76b49e3ee355df5a0c73
+(worktree /tmp/b1-1-r1/t3-prefix of the clone). The current test file was copied
+in uncommitted; the file does not exist at that SHA.
+Command: node scripts/run-vitest.mjs src/agents/tasks/managed-task.handling.test.ts
+Result: exit 1; the suite fails to collect:
+  Error: Cannot find module './managed-task.budget.store.js' imported from
+  /private/tmp/b1-1-r1/t3-prefix/src/agents/tasks/managed-task.handling.test.ts
+resolveManagedTask/cancelManagedTask and the budget store do not exist at that
+SHA; the cases cannot pass before the atomic resolve lands.
+Raw log: T3-handling-red-historico.log (Test Files 1 failed, Tests no tests)
+
+2) Mutation red on the current head (proves the atomic executor cases bite).
+Tree: 9f99e2264c clone; the mutation stayed uncommitted and was reverted right
+after with git checkout (git status clean again).
+Mutation in src/agents/tasks/managed-task.handling.worker.ts,
+resolveManagedTaskHandling: removed the managed_task_handlings existing-row
+branch, which is the idempotent same-receipt recovery after a lost consumer ACK
+and carries the handling-conflict guard.
+Command: node scripts/run-vitest.mjs src/agents/tasks/managed-task.handling.test.ts
+  --testNamePattern 'commits one decision, child, and receipt|rolls back the whole decision|rejects extra children atomically'
+Mutated result: exit 1; the lost-ACK recovery case failed with
+  Error: UNIQUE constraint failed: managed_tasks.requester_scope, managed_tasks.task_key
+because the retry re-inserted the continuation children instead of returning the
+same receipt. Raw log: T3-atomic-mutacion-roja.log
+After git restore of the single mutation, the identical command exited 0:
+3 passed | 9 skipped. Raw log: T3-atomic-mutacion-restaurada-verde.log
+
+Full-file green baseline at 9f99e2264c before the mutation: exit 0,
+12 passed (12). Raw log: T3-handling-green-baseline.log
+
+The external-effect frontier keeps its own conserved mutation red in
+T3-external-effect-mutation-red.log (R 3332b89cbc).

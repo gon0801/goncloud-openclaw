@@ -154,7 +154,7 @@ Depende de T1. Modifica `R.scheduler`, `R.taskStore`, `R.toolContext` y sus prue
 Consume el registro de T1. Produce `admit(AdmissionKey, ExecutionTarget, InputRefs, BudgetReservation)` y consulta durable de admisión. Revalida permisos al admitir. Mantén deshabilitada la entrada productiva hasta disponer del presupuesto de T4.
 
 - [x] Añade `admission_restart`: dos emisores y reinicio antes o después de admitir generan una sola admisión lógica.
-- [ ] Revalida `requester_queue` en la entrega gestionada actual: una sesión ocupada recibe su continuación después de reiniciar; una sesión eliminada produce bloqueo y no otra conversación. La evidencia antigua del despertar heredado no acredita esta ruta.
+- [x] Revalida `requester_queue` en la entrega gestionada actual: una sesión ocupada recibe su continuación después de reiniciar; una sesión eliminada produce bloqueo y no otra conversación. La evidencia antigua del despertar heredado no acredita esta ruta.
 - [x] Añade revocación de permiso entre registro y admisión. Exige rechazo sin ejecutar herramientas.
 - [x] Ejecuta las pruebas en rojo.
 - [x] Implementa reclamación exclusiva, cola persistente y consulta con exclusión durable de solicitudes anteriores. No traduzcas timeout a `NeverStarted`.
@@ -171,7 +171,7 @@ Produce `resolve(Caller, HandlingReceipt, Decision)` y `cancel(AuthorizedCaller,
 - [x] Añade `handling_atomic`: decisión, hijos y recibo aparecen juntos o no aparece ninguno, incluso con dos consumidores.
 - [x] Añade `handling_unresolved`: `agent_end` sin `resolve` conserva el resultado pendiente.
 - [x] Añade cancelación concurrente, callback tardío y herramienta externa con efecto incierto. Exige evidencia conservada y ningún reenvío ciego.
-- [ ] Ejecuta los casos en rojo.
+- [x] Ejecuta los casos en rojo.
 - [x] Implementa consumo, cancelación y recuperación de la misma decisión. Captura resultados antes de cualquier eliminación automática de hijos.
 - [x] Repite con pérdida del ACK de consumo. Recupera los mismos hijos, sin nueva revisión.
 
