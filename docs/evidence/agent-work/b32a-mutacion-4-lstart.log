@@ -1,0 +1,22 @@
+test_resource_close_agentes_lstart_change_skips_signal (__main__.ResourceTests.test_resource_close_agentes_lstart_change_skips_signal) ... FAIL
+
+======================================================================
+FAIL: test_resource_close_agentes_lstart_change_skips_signal (__main__.ResourceTests.test_resource_close_agentes_lstart_change_skips_signal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b3/scripts/tests/test-agent-work-resources.py", line 735, in test_resource_close_agentes_lstart_change_skips_signal
+    self.assertEqual(calls, [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^
+AssertionError: Lists differ: [['ps', '-o', 'lstart=,command=', '-p', '700']] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+['ps', '-o', 'lstart=,command=', '-p', '700']
+
+- [['ps', '-o', 'lstart=,command=', '-p', '700']]
++ []
+
+----------------------------------------------------------------------
+Ran 1 test in 0.011s
+
+FAILED (failures=1)

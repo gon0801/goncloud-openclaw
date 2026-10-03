@@ -1,0 +1,71 @@
+test_resource_close_agentes_reader_failure_pending_without_signals (__main__.ResourceTests.test_resource_close_agentes_reader_failure_pending_without_signals) ...
+  test_resource_close_agentes_reader_failure_pending_without_signals (__main__.ResourceTests.test_resource_close_agentes_reader_failure_pending_without_signals) [launchd-rc] ... FAIL
+  test_resource_close_agentes_reader_failure_pending_without_signals (__main__.ResourceTests.test_resource_close_agentes_reader_failure_pending_without_signals) [services-block-missing] ... FAIL
+  test_resource_close_agentes_reader_failure_pending_without_signals (__main__.ResourceTests.test_resource_close_agentes_reader_failure_pending_without_signals) [ps-rc] ... FAIL
+  test_resource_close_agentes_reader_failure_pending_without_signals (__main__.ResourceTests.test_resource_close_agentes_reader_failure_pending_without_signals) [launchd-rc-valid-text] ... FAIL
+  test_resource_close_agentes_reader_failure_pending_without_signals (__main__.ResourceTests.test_resource_close_agentes_reader_failure_pending_without_signals) [ps-rc-valid-text] ... FAIL
+
+======================================================================
+FAIL: test_resource_close_agentes_reader_failure_pending_without_signals (__main__.ResourceTests.test_resource_close_agentes_reader_failure_pending_without_signals) [launchd-rc]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b3/scripts/tests/test-agent-work-resources.py", line 713, in test_resource_close_agentes_reader_failure_pending_without_signals
+    self.assertEqual(view.state, "CleanupPending")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'AbsenceVerified' != 'CleanupPending'
+- AbsenceVerified
++ CleanupPending
+
+
+======================================================================
+FAIL: test_resource_close_agentes_reader_failure_pending_without_signals (__main__.ResourceTests.test_resource_close_agentes_reader_failure_pending_without_signals) [services-block-missing]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b3/scripts/tests/test-agent-work-resources.py", line 713, in test_resource_close_agentes_reader_failure_pending_without_signals
+    self.assertEqual(view.state, "CleanupPending")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'AbsenceVerified' != 'CleanupPending'
+- AbsenceVerified
++ CleanupPending
+
+
+======================================================================
+FAIL: test_resource_close_agentes_reader_failure_pending_without_signals (__main__.ResourceTests.test_resource_close_agentes_reader_failure_pending_without_signals) [ps-rc]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b3/scripts/tests/test-agent-work-resources.py", line 713, in test_resource_close_agentes_reader_failure_pending_without_signals
+    self.assertEqual(view.state, "CleanupPending")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'AbsenceVerified' != 'CleanupPending'
+- AbsenceVerified
++ CleanupPending
+
+
+======================================================================
+FAIL: test_resource_close_agentes_reader_failure_pending_without_signals (__main__.ResourceTests.test_resource_close_agentes_reader_failure_pending_without_signals) [launchd-rc-valid-text]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b3/scripts/tests/test-agent-work-resources.py", line 713, in test_resource_close_agentes_reader_failure_pending_without_signals
+    self.assertEqual(view.state, "CleanupPending")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'AbsenceVerified' != 'CleanupPending'
+- AbsenceVerified
++ CleanupPending
+
+
+======================================================================
+FAIL: test_resource_close_agentes_reader_failure_pending_without_signals (__main__.ResourceTests.test_resource_close_agentes_reader_failure_pending_without_signals) [ps-rc-valid-text]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b3/scripts/tests/test-agent-work-resources.py", line 713, in test_resource_close_agentes_reader_failure_pending_without_signals
+    self.assertEqual(view.state, "CleanupPending")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'AbsenceVerified' != 'CleanupPending'
+- AbsenceVerified
++ CleanupPending
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.029s
+
+FAILED (failures=5)

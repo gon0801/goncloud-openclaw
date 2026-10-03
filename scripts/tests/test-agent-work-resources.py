@@ -16,8 +16,8 @@ sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 
 from contracts import AuthorizedOperation, OperationKey
 from host import Host
-from resources import (AccountBusyError, AgentesBackend, CommandOutcome, ResourceManager,
-                       TmuxBackend, parse_agent_ps)
+from resources import (AccountBusyError, AGENT_USER, AgentesBackend, CommandOutcome,
+                       LOCK_ARGV, ResourceManager, TmuxBackend, parse_agent_ps)
 
 
 class FakeBackend:
@@ -637,17 +637,22 @@ class ResourceTests(unittest.TestCase):
         def launchd_reader():
             return CommandOutcome(0, self.AGENTES_LD)
 
-        def killer(argv):
+        def runner(argv):
             calls.append(list(argv))
+            if argv[:1] == ["ps"]:
+                return CommandOutcome(0, "Sat Oct  3 09:00:00 2026 "
+                                         "/opt/homebrew/bin/python3 -c import time; "
+                                         "time.sleep(30) b32nonce1\n")
             state["ps"] = self.AGENTES_PS_AFTER_TERM
             return CommandOutcome(0, "")
 
         backend = AgentesBackend("/usr/bin/true", "ag-exclude", ps_reader=ps_reader,
-                                 launchd_reader=launchd_reader, killer=killer, grace_seconds=0.5)
+                                 launchd_reader=launchd_reader, runner=runner, grace_seconds=0.5)
         manager, key = self._agentes_running(backend, "ag-1")
         view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
         self.assertEqual(view.state, "CleanupPending")
-        self.assertEqual(calls, [self.KILL_ARGV_PREFIX + ["4242"]])
+        kills = [call for call in calls if "/bin/kill" in call]
+        self.assertEqual(kills, [self.KILL_ARGV_PREFIX + ["4242"]])
         containment = backend.last_containment
         self.assertEqual([entry["pid"] for entry in containment["before"]], [4242, 4243])
         self.assertFalse(containment["before"][1]["signalable"])
@@ -669,7 +674,7 @@ class ResourceTests(unittest.TestCase):
         backend = AgentesBackend("/usr/bin/true", "ag-ghost",
                                  ps_reader=lambda: CommandOutcome(0, ""),
                                  launchd_reader=lambda: CommandOutcome(0, ld_ghost),
-                                 killer=lambda argv: calls.append(list(argv)) or CommandOutcome(0, ""),
+                                 runner=lambda argv: calls.append(list(argv)) or CommandOutcome(0, ""),
                                  grace_seconds=0.2)
         manager, key = self._agentes_running(backend, "ag-ghost-1")
         view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
@@ -683,7 +688,7 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual([entry["label"] for entry in backend.last_containment["after"]],
                          ["b32-feedface"])
 
-    def test_resource_close_agentes_reader_failure_closes_without_signals(self):
+    def test_resource_close_agentes_reader_failure_pending_without_signals(self):
         variants = (
             ("launchd-rc", lambda: CommandOutcome(0, self.AGENTES_PS_FULL),
              lambda: CommandOutcome(1, "launchctl: operation failed\n")),
@@ -691,15 +696,19 @@ class ResourceTests(unittest.TestCase):
              lambda: CommandOutcome(0, "user/502 = {\n\ttype = user\n}\n")),
             ("ps-rc", lambda: CommandOutcome(1, "ps: nobody\n"),
              lambda: CommandOutcome(0, self.AGENTES_LD)),
+            ("launchd-rc-valid-text", lambda: CommandOutcome(0, self.AGENTES_PS_FULL),
+             lambda: CommandOutcome(1, self.AGENTES_LD)),
+            ("ps-rc-valid-text", lambda: CommandOutcome(1, self.AGENTES_PS_FULL),
+             lambda: CommandOutcome(0, self.AGENTES_LD)),
         )
         for name, ps_reader, launchd_reader in variants:
             with self.subTest(name):
                 calls = []
                 backend = AgentesBackend("/usr/bin/true", f"ag-fail-{name}",
                                          ps_reader=ps_reader, launchd_reader=launchd_reader,
-                                         killer=lambda argv: calls.append(list(argv)) or CommandOutcome(0, ""),
+                                         runner=lambda argv: calls.append(list(argv)) or CommandOutcome(0, ""),
                                          grace_seconds=0.2)
-                manager, key = self._agentes_running(backend, f"ag-fail-session-{name}", capacity=3)
+                manager, key = self._agentes_running(backend, f"ag-fail-session-{name}", capacity=5)
                 view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
                 self.assertEqual(view.state, "CleanupPending")
                 self.assertEqual(view.reason, "host unavailable")
@@ -718,7 +727,7 @@ class ResourceTests(unittest.TestCase):
 
         backend = AgentesBackend("/usr/bin/true", "ag-lstart", ps_reader=ps_reader,
                                  launchd_reader=lambda: CommandOutcome(0, self.AGENTES_LD),
-                                 killer=lambda argv: calls.append(list(argv)) or CommandOutcome(0, ""),
+                                 runner=lambda argv: calls.append(list(argv)) or CommandOutcome(0, ""),
                                  grace_seconds=0.2)
         manager, key = self._agentes_running(backend, "ag-lstart-1")
         view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
@@ -734,7 +743,7 @@ class ResourceTests(unittest.TestCase):
         backend = AgentesBackend(str(shim), "ag-busy",
                                  ps_reader=lambda: CommandOutcome(0, busy_ps),
                                  launchd_reader=lambda: CommandOutcome(0, self.AGENTES_LD),
-                                 killer=lambda argv: calls.append(list(argv)) or CommandOutcome(0, ""))
+                                 runner=lambda argv: calls.append(list(argv)) or CommandOutcome(0, ""))
         with self.assertRaisesRegex(AccountBusyError, "999"):
             backend.launch("ag-x", ["/usr/bin/true"])
         self.assertEqual(calls, [])
@@ -749,33 +758,71 @@ class ResourceTests(unittest.TestCase):
         def ps_reader():
             return CommandOutcome(0, state["ps"])
 
-        def killer(argv):
+        def runner(argv):
             calls.append(list(argv))
+            if argv[:1] == ["ps"]:
+                return CommandOutcome(0, "Sat Oct  3 09:00:00 2026 "
+                                         "/opt/homebrew/bin/python3 -c import time; "
+                                         "time.sleep(30) b32n6\n")
             return CommandOutcome(0, "")
 
         backend = AgentesBackend("/usr/bin/true", "ag-survivor", ps_reader=ps_reader,
                                  launchd_reader=lambda: CommandOutcome(0, self.AGENTES_LD),
-                                 killer=killer, grace_seconds=0.3)
+                                 runner=runner, grace_seconds=0.3)
         manager, key = self._agentes_running(backend, "ag-survivor-1")
         view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
         self.assertEqual(view.state, "CleanupPending")
         self.assertEqual(view.reason, "descendant absence unverified")
         self.assertEqual(manager.counts()["active"], 1)
-        self.assertEqual(len(calls), 1)
+        kills = [call for call in calls if "/bin/kill" in call]
+        self.assertEqual(len(kills), 1)
         state["ps"] = ""
         view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
         self.assertEqual(view.state, "AbsenceVerified")
         self.assertEqual(manager.counts()["active"], 0)
-        self.assertEqual(len(calls), 1)
+        self.assertEqual(len([call for call in calls if "/bin/kill" in call]), 1)
         self.assertEqual(backend.last_containment["before"], [])
         self.assertEqual(backend.last_containment["after"], [])
+
+    def test_resource_close_agentes_stop_failed_holds_without_signals_until_retried(self):
+        state = {"observe": "identity", "stop": False}
+        calls = []
+        identity_box = {}
+
+        backend = AgentesBackend("/usr/bin/true", "ag-stopfail",
+                                 ps_reader=lambda: CommandOutcome(0, ""),
+                                 launchd_reader=lambda: CommandOutcome(0, self.AGENTES_LD),
+                                 runner=lambda argv: calls.append(list(argv)) or CommandOutcome(0, ""),
+                                 grace_seconds=0.2)
+        manager, key = self._agentes_running(backend, "ag-stopfail-1")
+        identity_box["value"] = backend.observe("ag-stopfail-1")
+
+        def observe(_session):
+            return identity_box["value"] if state["observe"] == "identity" else None
+
+        def stop(_identity):
+            return state["stop"]
+
+        backend.observe = observe
+        backend.stop = stop
+        view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
+        self.assertEqual(view.state, "CleanupPending")
+        self.assertEqual(view.reason, "stop failed")
+        self.assertEqual(calls, [])
+        self.assertEqual(manager.counts()["active"], 1)
+        state["stop"] = True
+        state["observe"] = "gone"
+        view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
+        self.assertEqual(view.state, "AbsenceVerified")
+        self.assertEqual(calls, [])
+        self.assertEqual(manager.counts()["active"], 0)
 
     def test_resource_identity_agentes_happy_launch_and_presence_clear(self):
         shim, _log = self._tmux_shim()
         calls = []
         workdir = "/private/tmp/b32-ag-fixed"
 
-        def killer(argv):
+        def runner(argv):
             calls.append(list(argv))
             if "/usr/bin/mktemp" in argv:
                 return CommandOutcome(0, workdir + "\n")
@@ -784,13 +831,15 @@ class ResourceTests(unittest.TestCase):
         backend = AgentesBackend(str(shim), "ag-happy",
                                  ps_reader=lambda: CommandOutcome(0, ""),
                                  launchd_reader=lambda: CommandOutcome(0, self.AGENTES_LD),
-                                 killer=killer)
+                                 runner=runner)
         made = backend.launch("ag-x", ["/opt/homebrew/bin/python3", "-c",
                                        "import time; time.sleep(30)", "b32n7"])
         self.assertEqual(made, workdir)
         self.assertEqual(len(calls), 2)
         self.assertIn("/usr/bin/mktemp", calls[0])
+        self.assertEqual(calls[0][:len(LOCK_ARGV)], LOCK_ARGV)
         panel = calls[1]
+        self.assertEqual(panel[:len(LOCK_ARGV)], LOCK_ARGV)
         for token in ("new-session", "sudo", "-n", "-u", "agentes"):
             self.assertIn(token, panel)
         self.assertIn("PATH=/opt/homebrew/bin:/usr/bin:/bin", panel)
@@ -798,6 +847,25 @@ class ResourceTests(unittest.TestCase):
         self.assertIn(str(shim), panel)
         self.assertIn("run", panel)
         self.assertEqual(backend.account_presence(), ())
+
+    def test_resource_identity_agentes_multiline_argv_never_makes_a_phantom_row(self):
+        multiline_ps = ("4242 1 Sat Oct  3 09:00:00 2026 /opt/homebrew/bin/python3 -c 'import os\n"
+                        "701 1 Sat Oct  3 09:00:00 2026 /bin/injected -c fake\n"
+                        "time.sleep(30)' b32n8\n")
+        calls = []
+        backend = AgentesBackend("/usr/bin/true", "ag-multiline",
+                                 ps_reader=lambda: CommandOutcome(0, multiline_ps),
+                                 launchd_reader=lambda: CommandOutcome(0, self.AGENTES_LD),
+                                 runner=lambda argv: calls.append(list(argv))
+                                 or (CommandOutcome(1, "") if argv[:1] == ["ps"] else CommandOutcome(0, "")),
+                                 grace_seconds=0.2)
+        manager, key = self._agentes_running(backend, "ag-multiline-1")
+        presence = backend.account_presence()
+        self.assertEqual([entry.pid for entry in presence], [701, 4242])
+        self.assertIn("/bin/injected -c fake", presence[0].command)
+        view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
+        self.assertEqual(view.state, "CleanupPending")
+        self.assertEqual([call for call in calls if "/bin/kill" in call], [])
 
     REAL_DETACHED_LAUNCHER = (
         "import os,sys,time\n"
@@ -845,9 +913,8 @@ class ResourceTests(unittest.TestCase):
         for row in self._agentes_rows():
             if nonce not in row.command or (row.pid, row.lstart) not in registered:
                 continue
-            subprocess.run(["/usr/bin/lockf", "-t", "30", "-k", "/private/tmp/b32-agentes.lock",
-                            "sudo", "-n", "-u", "agentes", "/bin/kill", "-TERM", str(row.pid)],
-                           capture_output=True)
+            argv = LOCK_ARGV + ["sudo", "-n", "-u", AGENT_USER, "/bin/kill", "-TERM", str(row.pid)]
+            subprocess.run(argv, capture_output=True)
 
     def _nonce_gone(self, nonce, timeout=10.0):
         deadline = time.monotonic() + timeout
@@ -881,6 +948,10 @@ class ResourceTests(unittest.TestCase):
             self.assertTrue(registered, "detached grandchild did not reach the agent account")
             self.assertEqual(manager.close(self.key, {"kind": "cancel", "receipt": "c1"}).state,
                              "AbsenceVerified")
+            self.assertTrue(backend.last_containment,
+                            "account proof must record its containment report")
+            self.assertTrue(backend.last_containment["signals"],
+                            "the detached grandchild must be swept by a recorded signal")
             self.assertTrue(self._nonce_gone(nonce), "nonce processes survived an AbsenceVerified close")
         finally:
             tmux_cmd("kill-server")
@@ -926,10 +997,9 @@ class ResourceTests(unittest.TestCase):
             bootstrapped = subprocess.run(["sudo", "-n", "-u", "agentes", "/bin/launchctl",
                                            "bootstrap", "user/502", str(plist)],
                                           capture_output=True, text=True)
-            if bootstrapped.returncode == 5:
-                self.skipTest("user/502 solo tiene sesion Background creada por mds: no aloja "
-                              "etiquetas hasta que David inicie sesion real de agentes "
-                              "(medido: submit es stub sin registro, bootstrap y load dan EIO 5)")
+            if bootstrapped.returncode == 5 and "Input/output error" in bootstrapped.stderr:
+                self.skipTest("user/502 Background-only: bootstrap/load give EIO 5 "
+                              "until David starts a real agentes login session")
             self.assertEqual(bootstrapped.returncode, 0, bootstrapped.stderr)
             backend.mark("ag-sub", nonce)
             self.assertEqual(manager.attach(self.key).state, "Running")

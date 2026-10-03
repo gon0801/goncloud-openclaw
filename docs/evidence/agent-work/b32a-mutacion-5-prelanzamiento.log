@@ -1,0 +1,17 @@
+test_resource_identity_agentes_prelaunch_busy_refuses_launch (__main__.ResourceTests.test_resource_identity_agentes_prelaunch_busy_refuses_launch) ... ERROR
+
+======================================================================
+ERROR: test_resource_identity_agentes_prelaunch_busy_refuses_launch (__main__.ResourceTests.test_resource_identity_agentes_prelaunch_busy_refuses_launch)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b3/scripts/tests/test-agent-work-resources.py", line 748, in test_resource_identity_agentes_prelaunch_busy_refuses_launch
+    backend.launch("ag-x", ["/usr/bin/true"])
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b3/scripts/agent-work/resources.py", line 566, in launch
+    raise OSError("agent workdir creation failed")
+OSError: agent workdir creation failed
+
+----------------------------------------------------------------------
+Ran 1 test in 0.007s
+
+FAILED (errors=1)

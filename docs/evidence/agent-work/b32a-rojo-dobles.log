@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b3/scripts/tests/test-agent-work-resources.py", line 19, in <module>
+    from resources import (AccountBusyError, AgentesBackend, CommandOutcome, ResourceManager,
+                           TmuxBackend, parse_agent_ps)
+ImportError: cannot import name 'AccountBusyError' from 'resources' (/Users/dn/dev/wt/encargos-b3/scripts/agent-work/resources.py)

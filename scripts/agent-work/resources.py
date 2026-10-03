@@ -316,6 +316,9 @@ LAUNCHD_DOMAIN = "user/502"
 AGENT_PATH = "/opt/homebrew/bin:/usr/bin:/bin"
 LOCK_PATH = "/private/tmp/b32-agentes.lock"
 WORKROOT = "/private/tmp"
+# Every account mutation (spawn, mktemp, kill) and the privileged launchctl
+# read take lockf so they never interleave with another process's containment;
+# ps is an advisory read and runs unlocked. Never wrap the pane CLI itself.
 LOCK_ARGV = ["/usr/bin/lockf", "-t", "30", "-k", LOCK_PATH]
 APPLE_LABEL_PREFIX = "com.apple."
 NEVER_SIGNAL_PREFIXES = ("/System/", "/usr/libexec/", "/usr/sbin/")
@@ -330,7 +333,6 @@ class CommandOutcome:
 @dataclass(frozen=True)
 class AgentProcess:
     pid: int
-    ppid: int
     lstart: str
     command: str
 
@@ -356,15 +358,24 @@ class AccountBusyError(RuntimeError):
 
 
 def parse_agent_ps(text: str) -> tuple[AgentProcess, ...]:
-    processes = []
+    # ps prints an argv-embedded newline as a raw line break, so any line that
+    # is not a full pid row belongs to the previous process's command text.
+    # Joining it there keeps a multi-line command from blocking every future
+    # read, and keeps injected look-alike rows inert instead of signal targets.
+    processes: list[AgentProcess] = []
     for line in text.splitlines():
         if not line.strip():
             continue
         parts = line.split(maxsplit=7)
-        if len(parts) < 8 or not parts[0].isdigit() or not parts[1].isdigit():
+        if len(parts) >= 8 and parts[0].isdigit() and parts[1].isdigit():
+            processes.append(AgentProcess(int(parts[0]),
+                                          " ".join(parts[2:7]), parts[7]))
+        elif processes:
+            previous = processes[-1]
+            processes[-1] = AgentProcess(previous.pid, previous.lstart,
+                                         previous.command + "\n" + line)
+        else:
             raise OSError(f"agent ps line unreadable: {line!r}")
-        processes.append(AgentProcess(int(parts[0]), int(parts[1]),
-                                      " ".join(parts[2:7]), parts[7]))
     return tuple(processes)
 
 
@@ -390,20 +401,29 @@ def parse_launchd_services(text: str) -> tuple[LaunchdService, ...]:
     return tuple(services)
 
 
+def protected_command(command: str) -> bool:
+    # xpcproxy and OS binaries under /System, /usr/libexec and /usr/sbin are
+    # never signal targets, no matter what labels or argv text claim.
+    executable = command.split()[0] if command.split() else ""
+    return executable == "xpcproxy" or executable.startswith(NEVER_SIGNAL_PREFIXES)
+
+
 def classify_presence(processes: tuple[AgentProcess, ...],
                       services: tuple[LaunchdService, ...]) -> tuple[Presence, ...]:
-    excluded = {service.pid for service in services
-                if service.pid > 0 and service.label.startswith(APPLE_LABEL_PREFIX)}
+    apple_live = {service.pid for service in services
+                  if service.pid > 0 and service.label.startswith(APPLE_LABEL_PREFIX)}
     label_by_pid = {}
     for service in services:
         if service.pid > 0:
             label_by_pid.setdefault(service.pid, service.label)
     presences = []
     for process in processes:
-        if process.pid in excluded:
+        # Only a live com.apple.* label backed by an OS binary is excluded. A
+        # label alone is forgeable by any process of the account once user/502
+        # hosts labels, and a forged exclusion would fake AbsenceVerified.
+        if process.pid in apple_live and protected_command(process.command):
             continue
-        executable = process.command.split()[0] if process.command.split() else ""
-        forbidden = executable == "xpcproxy" or executable.startswith(NEVER_SIGNAL_PREFIXES)
+        forbidden = protected_command(process.command)
         presences.append(Presence(process.pid, process.lstart, process.command,
                                   label_by_pid.get(process.pid), not forbidden,
                                   "system binary not signalable" if forbidden
@@ -437,19 +457,25 @@ def default_launchd_reader():
     return read
 
 
-def default_killer():
+def default_runner():
     def run_argv(argv: list[str]) -> CommandOutcome:
         return _subprocess_outcome(argv, 35)
     return run_argv
 
 
 class AgentesBackend(TmuxBackend):
+    """TaskCreated backend whose pane tree runs as the dedicated `agentes`
+    account. Absence is proven at the account boundary (ps -U + launchctl
+    user/502), not by process tree: the account must stay exclusive to this
+    system while a task is active, or this backend will sweep foreign work
+    and foreign presence will wedge the single capacity slot."""
+
     def __init__(self, tmux_bin: str, socket: str, boot_id: str | None = None, *,
-                 ps_reader=None, launchd_reader=None, killer=None, grace_seconds: float = 5.0):
+                 ps_reader=None, launchd_reader=None, runner=None, grace_seconds: float = 5.0):
         super().__init__(tmux_bin, socket, boot_id)
         self._ps_reader = ps_reader if ps_reader is not None else default_ps_reader()
         self._launchd_reader = launchd_reader if launchd_reader is not None else default_launchd_reader()
-        self._killer = killer if killer is not None else default_killer()
+        self._runner = runner if runner is not None else default_runner()
         self.grace_seconds = grace_seconds
         self.last_containment = None
 
@@ -463,7 +489,29 @@ class AgentesBackend(TmuxBackend):
             raise OSError("launchd read failed")
         return classify_presence(processes, parse_launchd_services(ld_out.stdout))
 
+    def _process_truth(self, pid: int) -> tuple[str, str] | None:
+        # Kernel truth for one pid: a forged ps row (argv text injected by any
+        # process of the account) never survives this direct read, so a signal
+        # only ever lands on a pid whose real birth time and real command were
+        # both confirmed.
+        out = self._runner(["ps", "-o", "lstart=,command=", "-p", str(pid)])
+        if out.rc != 0:
+            return None
+        lines = [line for line in out.stdout.splitlines() if line.strip()]
+        if len(lines) != 1:
+            return None
+        parts = lines[0].split(maxsplit=5)
+        if len(parts) < 6:
+            return None
+        return " ".join(parts[:5]), parts[5]
+
     def prove_absent(self, identity: dict) -> bool | None:
+        # Contain and prove, despite the name: ResourceManager.close skips
+        # stop() whenever observe() returns None (pane already dead, detached
+        # child alive), so this is the only method both closure paths reach.
+        # Read failures raise OSError instead of returning None, which close()
+        # maps to CleanupPending with no signal sent.
+        self.last_containment = None
         before = self.account_presence()
         self.last_containment = {"session": identity.get("sessionName"),
                                  "nonce": identity.get("nonce"),
@@ -478,9 +526,12 @@ class AgentesBackend(TmuxBackend):
         for candidate in before:
             if not candidate.signalable or (candidate.pid, candidate.lstart) not in alive:
                 continue
+            truth = self._process_truth(candidate.pid)
+            if truth is None or truth[0] != candidate.lstart or protected_command(truth[1]):
+                continue
             argv = LOCK_ARGV + ["sudo", "-n", "-u", AGENT_USER, "/bin/kill",
                                 "-TERM", str(candidate.pid)]
-            outcome = self._killer(argv)
+            outcome = self._runner(argv)
             self.last_containment["signals"].append({"argv": argv, "rc": outcome.rc})
             signaled.append((candidate.pid, candidate.lstart))
         if signaled:
@@ -500,6 +551,8 @@ class AgentesBackend(TmuxBackend):
         return not after
 
     def launch(self, session: str, command: list[str]) -> str:
+        if not session or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in session):
+            raise ValueError("invalid tmux session")
         present = self.account_presence()
         if present:
             detail = "; ".join(f"pid={entry.pid} label={entry.label} {entry.reason}"
@@ -507,20 +560,20 @@ class AgentesBackend(TmuxBackend):
             raise AccountBusyError(f"agent account busy ({len(present)} present): {detail}")
         mktemp = LOCK_ARGV + ["sudo", "-n", "-u", AGENT_USER, "/usr/bin/mktemp",
                               "-d", f"{WORKROOT}/b32-ag-XXXXXX"]
-        made = self._killer(mktemp)
+        made = self._runner(mktemp)
         workdir = made.stdout.strip()
         if made.rc != 0 or not workdir:
             raise OSError("agent workdir creation failed")
-        # sh recibe workdir como $1 ("run" es solo $0); shift+exec deja al CLI
-        # como proceso del pane en lugar de un sh envolvente.
-        # TMPDIR explicito: sin el, el dirhelper XPC de la cuenta en sesion
-        # Background deja colgado a todo CLI que llame temp_dir (codex medido).
+        # sh receives workdir as $1 ("run" is just $0); shift+exec leaves the
+        # CLI as the pane process instead of a wrapping sh.
+        # TMPDIR is required: without it the account's Background-session
+        # dirhelper XPC hangs every CLI that calls temp_dir (codex, measured).
         panel = LOCK_ARGV + [self.tmux_bin, "-L", self.socket, "new-session", "-d",
                              "-s", session, "--", "sudo", "-n", "-u", AGENT_USER,
                              "-H", "env", "PATH=" + AGENT_PATH, "TMPDIR=" + workdir,
                              "/bin/sh", "-c",
                              'cd "$1" && shift && exec "$@"', "run", workdir, *command]
-        if self._killer(panel).rc != 0:
+        if self._runner(panel).rc != 0:
             raise OSError("agent panel spawn failed")
         return workdir
 
@@ -548,14 +601,15 @@ def main() -> int:
         receipt = host.receipt(args.host_id, key)
         if not receipt or receipt["receiptId"] != evidence.get("receipt"):
             raise ValueError("result receipt is not durable for this task")
-    backend = (AgentesBackend(args.tmux_bin, args.tmux_socket) if args.backend == "agentes"
-               else TmuxBackend(args.tmux_bin, args.tmux_socket))
+    if args.backend == "agentes":
+        backend = AgentesBackend(args.tmux_bin, args.tmux_socket)
+    else:
+        backend = TmuxBackend(args.tmux_bin, args.tmux_socket)
     manager = ResourceManager(host.spool, args.host_id, backend)
     view = manager.close(key, evidence)
     report = {"state": view.state, "reason": view.reason}
-    containment = getattr(backend, "last_containment", None)
-    if containment is not None:
-        report["containment"] = containment
+    if isinstance(backend, AgentesBackend) and backend.last_containment is not None:
+        report["containment"] = backend.last_containment
     print(canonical(report))
     return 0
 

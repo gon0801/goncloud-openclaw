@@ -1,0 +1,27 @@
+F
+======================================================================
+FAIL: test_resource_close_agentes_apple_services_excluded_and_kill_argv (__main__.ResourceTests.test_resource_close_agentes_apple_services_excluded_and_kill_argv)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b3/scripts/tests/test-agent-work-resources.py", line 657, in test_resource_close_agentes_apple_services_excluded_and_kill_argv
+    self.assertEqual([entry["pid"] for entry in containment["before"]], [4242, 4243])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [515, 4242, 4243] != [4242, 4243]
+
+First differing element 0:
+515
+4242
+
+First list contains 1 additional elements.
+First extra element 2:
+4243
+
+- [515, 4242, 4243]
+?  -----
+
++ [4242, 4243]
+
+----------------------------------------------------------------------
+Ran 1 test in 0.009s
+
+FAILED (failures=1)
