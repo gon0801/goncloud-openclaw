@@ -190,7 +190,7 @@ Produce `reserveModelCall(rootId, requestUsageBound)` y `settleModelCall(reserva
 - [x] Implementa reserva previa, liquidación y perfiles finitos. Incluye límites de concurrencia, profundidad, hijos y llamadas.
 - [x] Intenta eludir el límite con un hijo nuevo, una sesión nueva y la recuperación nativa. Incluye `managed_tasks_submit` desde un run hijo activo, cancelado y recuperado: no crea otra raíz/presupuesto ni escapa del árbol de cancelación. Exige rechazo antes del proveedor; los hijos válidos siguen la continuación nativa con la raíz original.
 
-Verifica con `budget_tree` y `budget_context`. El perfil productivo se fija en T11 usando configuración y medición reales; no extrapoles el perfil pequeño del ensayo ni cambies silenciosamente un límite existente.
+Verifica con `budget_tree`, `budget_context` y `budget_evasion`. El perfil productivo se fija en T11 usando configuración y medición reales; no extrapoles el perfil pequeño del ensayo ni cambies silenciosamente un límite existente.
 
 ### T5. Recupera pendientes y muestra su causa sin inferencia
 
@@ -205,7 +205,7 @@ Consume `inspect`, admisión y recibos. Produce recuperación determinista por i
 - [ ] Implementa la recuperación sobre la cola nativa y sus eventos de capacidad. No abras supervisores ni scouts de lectura.
 - [x] Comprueba el contador externo del proveedor y la ausencia de rutas de recuperación que lo evadan.
 
-Verifica con `idle_72h`, `recovery_limit` y `waiting_reason`. Cierra B2 con la batería nativa del SHA final.
+Verifica con `idle_72h`, `recovery_limit`, `waiting_reason` y `recovery_queue`. Cierra B2 con la batería nativa del SHA final.
 
 ### T6. Entrega y recoge resultados de los CLI por identidad
 

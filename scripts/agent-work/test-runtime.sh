@@ -46,6 +46,10 @@ case "$case_name" in
     test_file='src/agents/tasks/managed-task.budget.test.ts'
     test_pattern='rejects incomplete runtime budget and context shapes|counts context components once|retains full reservation when terminal provider usage is absent'
     probe_restart=0 ;;
+  budget_evasion)
+    test_file='src/agents/tasks/managed-task.native-report.test.ts'
+    test_pattern='keeps root creation within the managed run lifetime'
+    probe_restart=0 ;;
   waiting_reason)
     test_file='src/agents/tasks/managed-task.admission.test.ts'
     extra_test_files=('src/agents/tasks/managed-task.store.test.ts' 'src/agents/tasks/managed-task.provider-stream.test.ts')

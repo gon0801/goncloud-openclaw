@@ -1,4 +1,4 @@
-# B2: batería de R — corrida única de pnpm test, abortada por el propio runner a ~4 h
+# B2: batería de R — corrida única de pnpm test, abortada por el propio runner a 2 h 58 m
 
 B2 — batería de R (paso 1 del cierre). Corrida única `pnpm test`. No la detuvo el operador: el
 driver de pruebas abortó solo por un fallo de limpieza de procesos y terminó con exit 1.
@@ -8,7 +8,7 @@ SHA y limpieza verificados antes de lanzar, y la batería no toca el árbol).
 Comando: cd /Users/dn/dev/openclaw-agent-work-integration && pnpm test
   (= node --import ./scripts/tsx.mjs scripts/test-projects.mts)
 Duración: inicio 2026-10-03T07:15:14Z (00:15 PDT), fin 2026-10-03T10:13:35Z (03:13 PDT),
-~3 h 58 m. Exit final: 1. La última línea del log es
+~2 h 58 m (07:15:14Z a 10:13:35Z). Exit final: 1. La última línea del log es
 «=== B2-R-bateria — fin 2026-10-03T10:13:35Z — exit=1».
 
 Log completo (20 MB, 152.972 líneas):
@@ -29,7 +29,7 @@ Cómo terminó (difiere de B1: no hubo corte manual)
   arrancaron (entre otros: e2e, tooling-isolated restante, isolated varios). La ausencia de un
   fichero en el inventario de abajo NO es un pase.
 
-Inventario de tests caídos (14, en 10 ficheros)
+Inventario de tests caídos (13 casos en 11 ficheros: 5 nuevos en 4 ficheros y 8 conocidos en 7)
 Nuevos frente a la lista de B1 (la batería de B1 nunca llegó a UI; este sí corrió el shard ui):
 - ui :: ui/src/components/provider-usage.test.ts — 2 casos: «expected ... to contain
   '$5.00 / $20.00'» y «expected [ '2026-10-03: JP¥13', ... ] to deeply equal
@@ -64,9 +64,9 @@ Lo que este encargo NO incluye
   decidir corrección.
 
 Conclusión
-- Exit 1 con dos componentes: 14 tests caídos (10 ficheros) y un aborto de infraestructura del
+- Exit 1 con dos componentes: 13 tests caídos (11 ficheros) y un aborto de infraestructura del
   driver que dejó la batería incompleta (~571/700 shards sin arrancar).
 - La batería íntegra vuelve a no converger en una sesión local en este host (B1: cortada a
-  4,5 h; B2: abortada a 4 h por el propio runner).
+  4,5 h; B2: abortada a 2 h 58 m por el propio runner).
 - Ningún fallo conocido de B1 se corrigió ni desapareció donde hubo comparable; los nuevos
   (ui ×4, backup-create timeout) quedan para triage de claw.
