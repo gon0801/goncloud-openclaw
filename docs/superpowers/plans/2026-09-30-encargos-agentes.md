@@ -264,8 +264,11 @@ Consume las cinco operaciones del diseño. Produce un único camino gestionado p
 - [ ] Ejecuta los casos en rojo.
 - [ ] Migra cada entrada del inventario y actualiza sus instrucciones en el mismo cambio. Los cron de negocio conservan horarios y función.
 - [ ] Conserva las rutas anteriores fuera del perímetro gestionado hasta su adopción explícita. Dentro del perímetro, impide que un reparador recree el vigía antiguo.
+- [ ] Añade `main_cli_loop`: `main` solicita a un CLI en una sesión adoptada de `mac-local`, como en los loops de claw. El encargo sale de una sesión durable de `main`, nunca de un turno `isolated` de cron. El CLI entrega `agent-work.result.v1` por referencia en lugar de los archivos `LISTO`/`VEREDICTO`, y el informe despierta solo a la sesión que hizo `submit`. Mientras el CLI trabaja, cero solicitudes al proveedor. Registra la ruta en `coverage.json` y `routing.py` y actualiza `agent-dispatch` de `main`. La sesión adoptada se retira sin matar procesos, como `UserAdopted`; sin prueba, la ruta queda deshabilitada y su vigía se conserva.
+- [ ] Añade `cli_silent_failure`: el CLI de esa ruta cierra su sesión sin informe, abre un diálogo de permiso, vence su plazo o entrega un informe inválido. Cada caso produce una sola incidencia durable con causa (`PermissionRequired`, `DeadlineMissed`, `TransportUnavailable` o resultado inválido) que despierta una vez a la sesión solicitante. Ningún caso abre turnos periódicos de modelo.
+- [ ] Inventaría en `coverage.json` los despertares con modelo de cada entrada: cron `*-vigia`, `corrida/latido.sh` con `vigia=claw` y avisos a `agent:main:vigia-mac`. Guarda ID, cadencia y recreadores, incluidos el `PROMPT.md` y `arranque.txt` de cada loop y la plantilla `~/.claude/skills/prompt-claw/SKILL.md`, que crea un `<loop>-vigia` por loop.
 
-Verifica con `test-agent-work-integration.sh agents_routing`, `delegation_bypass` y `hook_is_observation`. Reutiliza `test-agent-dispatch-spawn.sh` y `test-corrida-avisos.sh` para sus contratos modificados. No declares cobertura total mientras quede una fila gestionada sin prueba.
+Verifica con `test-agent-work-integration.sh agents_routing`, `delegation_bypass`, `hook_is_observation`, `main_cli_loop` y `cli_silent_failure`. Reutiliza `test-agent-dispatch-spawn.sh` y `test-corrida-avisos.sh` para sus contratos modificados. No declares cobertura total mientras quede una fila gestionada sin prueba.
 
 ### T10. Prueba la cadena completa y prepara la integración
 
@@ -311,6 +314,7 @@ Depende de T11, artefactos revisados e instrucción posterior de despliegue. Est
 - [ ] Comprueba la proyección del tablero y el cierre verificado de todos los trabajadores de prueba.
 - [ ] Con los turnos anteriores drenados y los trabajadores de prueba cerrados, mide 30 minutos sin novedades. Usa contadores externos de proveedor, sesiones y procesos del perímetro adoptado. Exige cero inferencia atribuible a vigilancia.
 - [ ] Tras comprobar consumo y esa ventana, retira definitivamente los despertares suspendidos y sus recreadores automáticos de la entrada migrada. Continúa con las entradas certificadas de `coverage.json` repitiendo la suspensión y transferencia verificadas.
+- [ ] Repite la suspensión, la ventana de 30 minutos y el retiro con la ruta `main` → CLI adoptado de los loops de claw. Después, cambia la plantilla `prompt-claw` para que un loop nuevo sobre esa ruta no cree `<loop>-vigia`. Un loop que no pueda usarla conserva su vigía y lo declara.
 - [ ] Ante fallo, congela admisión nueva, conserva resultados y ejecuta la reversa probada. No repitas el canary como carga continua.
 - [ ] Ejecuta el checklist posterior una vez. Guarda `docs/evidence/agent-work/deploy-receipt.md` con hashes, generación, contadores, recursos restantes y cobertura efectiva.
 
