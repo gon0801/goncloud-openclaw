@@ -198,7 +198,7 @@ Depende de T4. Modifica `R.scheduler`, `R.taskDomain`, `R.providerBoundary` y su
 
 Consume `inspect`, admisión y recibos. Produce recuperación determinista por identidad e incidencias deduplicadas. Expón edad, causa, recibo, hijos, reservas y uso del árbol mediante consulta autenticada.
 
-- [ ] Añade `idle_72h`: adelanta el reloj 72 horas con reconexiones y hooks repetidos. Exige cero solicitudes al proveedor y cero sesiones de vigilancia.
+- [x] Añade `idle_72h`: adelanta el reloj 72 horas con reconexiones y hooks repetidos. Exige cero solicitudes al proveedor y cero sesiones de vigilancia.
 - [x] Añade `recovery_limit`: un fallo elegible permite una recuperación automática adicional por raíz; el siguiente conserva bloqueo sin otra llamada.
 - [x] Añade `waiting_reason`: distingue cola ocupada, transporte caído, resultado inválido y admisión incierta en hasta 120 segundos.
 - [x] Ejecuta las pruebas en rojo.
