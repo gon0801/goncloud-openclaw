@@ -1,3 +1,5 @@
+# B1: batería de R — corrida única de pnpm test detenida por el operador, con triage contra la base c074824a27
+
 B1 — batería de R (paso 1 del cierre). Corrida única `pnpm test`, detenida por decisión del operador.
 Fecha: 2026-10-02. Host local: macOS (darwin 25.6.0, arm64). No es CI.
 R SHA: 2046bd9516ceedbe21b20986208b31f1da6195c0 (feat/agent-work-integration, árbol limpio; verificado antes de lanzar).
