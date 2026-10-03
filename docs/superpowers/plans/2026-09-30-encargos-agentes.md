@@ -230,7 +230,7 @@ Produce reserva idempotente de host, identidad resistente a reutilización y `Ab
 - [x] Añade `resource_identity`: PID reutilizado, reinicio del host, cambio de servidor tmux y sesión adoptada. Una sesión preexistente sin prueba de creación no se clasifica como pool propio por carecer de nonce. Cubre claim, replay, cierre y cierre repetido; exige cero señales a recursos ajenos.
 - [x] Añade `resource_close`: caída entre reserva y lanzamiento, descendiente desacoplado, ACK perdido y stop fallido.
 - [x] Ejecuta los casos en rojo.
-- [ ] Implementa captura de evidencia, contención o rastreo de descendientes, detención y verificación. Sustituye éxito aparente tras fallo de stop por cierre pendiente en la ruta gestionada.
+- [x] Implementa captura de evidencia, contención o rastreo de descendientes, detención y verificación. Sustituye éxito aparente tras fallo de stop por cierre pendiente en la ruta gestionada.
 - [ ] Comprueba que terminar el turno del padre no abandona al hijo y que un host inaccesible no libera cupo.
 - [x] Ejecuta `resource_100_cycles`. Exige cero procesos propios abandonados y cuentas separadas para historial y pool intencional.
 
