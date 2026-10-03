@@ -13,7 +13,7 @@ Configure the bot's automatic emoji reaction to inbound messages, and diagnose t
    - Completion: you have an emoji confirmed present in that chat's allowed reactions.
 
 2. Set `channels.telegram.ackReaction` to that emoji (system expert `config.set`).
-   - Completion: `gateway config.get channels.telegram.ackReaction` (or CLI `openclaw config get`) returns the value.
+   - Completion: `gateway config.get channels.telegram.ackReaction` (or CLI `openclaw config get`) returns the value. If it answers `config path not found`, the key was never set (not a broken config system) — set it and read back.
 
 3. Set `messages.ackReactionScope` to `direct` (DMs only) or `all` (DMs + groups). The default is `group-mentions`, which fires only when the bot is mentioned in groups — **never in DMs**. This is the most common reason "nothing happens" even with a valid emoji.
    - Completion: `gateway config.get messages.ackReactionScope` returns the intended scope.
