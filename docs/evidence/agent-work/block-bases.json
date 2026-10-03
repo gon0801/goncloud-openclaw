@@ -58,6 +58,20 @@
         "branch": "feat/agent-work-integration",
         "baseSha": "9f99e2264c012dd4cf5bd9dbac10bc7e534ffc05"
       }
+    },
+    "encargos-b2": {
+      "G": {
+        "repository": "gon0801/goncloud-openclaw",
+        "path": "/Users/dn/dev/wt/encargos-b2",
+        "branch": "encargos/b2",
+        "baseSha": "25a80e218d99b7c4febb2d01d3dfb97147276213"
+      },
+      "R": {
+        "repository": "openclaw/openclaw",
+        "path": "/Users/dn/dev/openclaw-agent-work-integration",
+        "branch": "feat/agent-work-integration",
+        "baseSha": "2046bd9516ceedbe21b20986208b31f1da6195c0"
+      }
     }
   }
 }
