@@ -1,0 +1,51 @@
+[vitest-workers] local cache hit after 1840ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 27983a12d138 in 1872ms (16692 inputs, 17249 outputs)
+[test] starting test/vitest/vitest.infra.config.ts
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.1 [39m[90m/Users/dn/dev/openclaw-agent-work-integration[39m
+
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mrejects invented admission reservations and preserves the root reservation on restart
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mrejects incomplete runtime budget and context shapes before provider dispatch
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mholds uncertain call capacity across retries and restart
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mcounts context components once, includes cached input, and rejects missing output enforcement
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mreserves before provider dispatch and retains an uncertain stream after failure
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mretains full reservation when terminal provider usage is absent
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mrejects a cancelled managed run before provider invocation
+ [31m×[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mallows one automatic recovery call per root across restart and blocks the next before invoke[33m 829[2mms[22m[39m
+[31m   → promise resolved "'completed'" instead of rejecting[39m
+ [2m[90m↓[39m[22m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mshares model-call capacity across children after the parent turn ends and after restart
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mallows one automatic recovery call per root across restart and blocks the next before invoke
+[31m[1mAssertionError[22m: promise resolved "'completed'" instead of rejecting[39m
+
+[32m- Expected:[39m
+Error {
+  "message": "rejected promise",
+}
+
+[31m+ Received:[39m
+"completed"
+
+[36m [2m❯[22m src/agents/tasks/managed-task.budget.test.ts:[2m367:6[22m[39m
+    [90m365|[39m         invoke,
+    [90m366|[39m       }),
+    [90m367|[39m     ).rejects.toThrow("budget");
+    [90m   |[39m      [31m^[39m
+    [90m368|[39m     expect(invoke).toHaveBeenCalledTimes(2);
+    [90m369|[39m     const snapshot = await inspectManagedTask({ caller, taskId: run.ta…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[33m8 skipped[39m[90m (9)[39m
+[2m   Start at [22m 19:15:39
+[2m   Duration [22m 2.58s[2m (transform 39%, tests 35%, import 19%, setup 8%)[22m
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] failed 1 Vitest shard in 5.70s
+[test] FAILED (exit 1)

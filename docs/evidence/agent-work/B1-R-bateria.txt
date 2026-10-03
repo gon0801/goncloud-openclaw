@@ -71,7 +71,7 @@ Tabla resumen (arbol, fichero, exit, resumen de Tests):
 A) Limitación de la base — fallan igual en head y base (4):
    sanitize-text (1 caso), check-openclaw-package-tarball (1), fs-safe-prebuild (4),
    ios-release-fastlane-gates (1).
-B) Introducidos por el programa — pasan en base, fallan en head (8):
+B) Introducidos por el programa — pasan en base, fallan en head (9):
    check-native-state-schema-version (drift Swift 19 vs TS 26; ya está como fila B5/T11 en
    followups.md), openclaw-database-preflight (estado 19 vs 26), read-only-state-compat y
    openclaw-database-maintenance (índice projection_json), secret-state-tables,
@@ -79,14 +79,16 @@ B) Introducidos por el programa — pasan en base, fallan en head (8):
    resolver), pr-worktree-provision (3), heartbeat-runner.model-override (heartbeat vs cron).
    Ninguno corresponde al cambio de B1 (un único fichero E2E de pruebas de gateway); son de la
    serie del programa previa al SHA aprobado.
-C) No reproducibles en aislado — pasan en head y base corridos solos (3; fallo de carga u orden
-   dentro de la batería): oxlint-config, upgrade-survivor-migration-order, get-reply.timeout.
+C) No reproducibles en aislado — pasan en head y base corridos solos (4; fallo de carga u orden
+   dentro de la batería): oxlint-config, plugin-npm-extended-stable-workflow (61/61 en aislado
+   en ambos árboles, cae en batería por el bin npm del workspace),
+   upgrade-survivor-migration-order, get-reply.timeout.
 
 Conclusión
 - La batería íntegra no converge en una sesión local en este host: ~4,5 h sin alcanzar las
   configs de gateway, agentes ni UI.
-- 4 fallos son limitación de la base; 8 son del programa y se REPORTAN sin corregir (fila de
-  followups); 3 son de carga. Ninguno abre corrección sobre el SHA aprobado por no proceder del
+- 4 fallos son limitación de la base; 9 son del programa y se REPORTAN sin corregir (fila de
+  followups); 4 son de carga. Ninguno abre corrección sobre el SHA aprobado por no proceder del
   diff de B1.
 - El SHA 2046bd9516 conserva además su evidencia focalizada previa: requester_queue 6/6,
   admission_restart 6/6 y el fichero E2E completo 7/7.

@@ -1,0 +1,101 @@
+[vitest-workers] local cache hit after 1861ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 768dc956fb99 in 1892ms (16693 inputs, 17250 outputs)
+[test] starting test/vitest/vitest.infra.config.ts
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.1 [39m[90m/Users/dn/dev/openclaw-agent-work-integration[39m
+
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.native-report.test.ts[2m > [22mmanaged native producer report[2m > [22mkeeps root creation within the managed run lifetime (active)[33m 1203[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.native-report.test.ts[2m > [22mmanaged native producer report[2m > [22mkeeps root creation within the managed run lifetime (cancelled)[33m 606[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.native-report.test.ts[2m > [22mmanaged native producer report[2m > [22mkeeps root creation within the managed run lifetime (recovered)[33m 988[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.native-report.test.ts[2m > [22mmanaged native producer report[2m > [22mkeeps root creation within the managed run lifetime (released)[33m 598[2mms[22m[39m
+ ✓  infra  src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > stores one final result and replays its receipt without exposing a producer token 535ms
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.native-report.test.ts[2m > [22mmanaged native producer report[2m > [22massembles the report tool only for the bound managed child run[33m 596[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.native-report.test.ts[2m > [22mmanaged native producer report[2m > [22mrefuses another run and a replaced native generation[33m 541[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.native-report.test.ts[2m > [22mmanaged native producer report[2m > [22mrolls back the result if authority is revoked before commit[33m 530[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.native-report.test.ts[2m > [22mmanaged native producer report[2m > [22mrecords an invalid report only for the bound native producer[33m 555[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.wait.test.ts[2m > [22mmanaged task waiting observations[2m > [22mkeeps one stable wait episode across duplicate observations and restart[33m 751[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.wait.test.ts[2m > [22mmanaged task waiting observations[2m > [22mshows a changed cause without exposing another requester's task[33m 419[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.wait.test.ts[2m > [22mmanaged task waiting observations[2m > [22mdoes not report waiting after a final result[33m 414[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.wait.test.ts[2m > [22mmanaged task waiting observations[2m > [22mclears a resolved episode durably without reopening it on replay[33m 759[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.wait.test.ts[2m > [22mmanaged task waiting observations[2m > [22mkeeps a close delivered before its observation across restart[33m 770[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.wait.test.ts[2m > [22mmanaged task waiting observations[2m > [22mupgrades a v25 database before recording its first wait[33m 482[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.admission.test.ts[2m > [22mmanaged task admission_restart[2m > [22mrejects an invented budget reservation before claiming a native run[33m 408[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.admission.test.ts[2m > [22mmanaged task admission_restart[2m > [22mlets one emitter claim, keeps a crash uncertain, and recovers the exact native run[33m 1595[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.admission.test.ts[2m > [22mmanaged task admission_restart[2m > [22mrejects revoked authority before claiming and fences a delayed prior request[33m 403[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.admission.test.ts[2m > [22mmanaged task admission_restart[2m > [22mrechecks authority inside the worker before persisting a claim[33m 395[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.admission.test.ts[2m > [22mmanaged task admission_restart[2m > [22mrefuses admission after cancellation and cannot confirm an outstanding claim[32m 67[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.admission.test.ts[2m > [22mmanaged task admission_restart[2m > [22mupgrades a version 20 task ledger without losing its registered tasks[32m 136[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mkeeps a pending result and cancellation untouched when tool authority is revoked[33m 441[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mrejects extra children atomically when the root child budget is exhausted[33m 411[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mkeeps the root depth limit when a child returns a result[33m 480[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mshares concurrent admission capacity across children of a finished parent[33m 438[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mcommits one decision, child, and receipt and recovers them after a lost ACK[33m 408[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mrolls back the whole decision when one child is invalid[33m 418[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mkeeps a result pending across agent_end and cancels without replaying late output[33m 774[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22marchives a result received after cancellation without creating a continuation[33m 436[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mserializes cancellation against a competing continuation and preserves the result[33m 457[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mpreserves an uncertain external effect without replaying a child after restart[33m 781[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mpropagates cancellation to children committed before the parent was cancelled[33m 419[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.handling.test.ts[2m > [22mmanaged task handling[2m > [22mupgrades a version 22 database before resolving its first result[33m 466[2mms[22m[39m
+ ✓  infra  src/agents/tasks/managed-task.provider-tree.test.ts > managed native provider tree budget > reserves before HTTP and settles one shared call across child sessions and restart 962ms
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mrejects invented admission reservations and preserves the root reservation on restart[33m 411[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mrejects incomplete runtime budget and context shapes before provider dispatch[33m 481[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mholds uncertain call capacity across retries and restart[33m 793[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mcounts context components once, includes cached input, and rejects missing output enforcement[32m 95[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mreserves before provider dispatch and retains an uncertain stream after failure[32m 91[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mretains full reservation when terminal provider usage is absent[32m 116[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mrejects a cancelled managed run before provider invocation[32m 103[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mallows one automatic recovery call per root across restart and blocks the next before invoke[32m 115[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.budget.test.ts[2m > [22mmanaged budget_tree and budget_context[2m > [22mshares model-call capacity across children after the parent turn ends and after restart[32m 194[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.provider-stream.test.ts[2m > [22mmanaged provider HTTP budget[2m > [22mderives managed identity from the native run rather than model fields[33m 486[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.provider-stream.test.ts[2m > [22mmanaged provider HTTP budget[2m > [22mrestores managed identity from SQLite and charges the next HTTP request[33m 452[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.provider-stream.test.ts[2m > [22mmanaged provider HTTP budget[2m > [22mfinds a managed run in SQLite before the registry is hydrated[33m 417[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.provider-stream.test.ts[2m > [22mmanaged provider HTTP budget[2m > [22mpersists a transport wait when the reserved HTTP request loses its connection[33m 750[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.provider-stream.test.ts[2m > [22mmanaged provider HTTP budget[2m > [22mdoes not label an HTTP rejection as a transport outage[33m 437[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.provider-stream.test.ts[2m > [22mmanaged provider HTTP budget[2m > [22mpersists a transport wait when an accepted SSE response ends before DONE[33m 431[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.provider-stream.test.ts[2m > [22mmanaged provider HTTP budget[2m > [22mpersists a transport wait when the SSE socket drops after headers[33m 449[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.provider-stream.test.ts[2m > [22mmanaged provider HTTP budget[2m > [22mrejects uncertified provider routes before opening a connection[33m 420[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.provider-stream.test.ts[2m > [22mmanaged provider HTTP budget[2m > [22mreserves each real request before HTTP, verifies the wire output cap, and blocks a third call[33m 429[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.provider-stream.test.ts[2m > [22mmanaged provider HTTP budget[2m > [22mretains an unknown-use HTTP call and rejects later work at the call cap[33m 424[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.provider-stream.test.ts[2m > [22mmanaged provider HTTP budget[2m > [22mreserves a Responses request at the HTTP boundary and settles its reported usage[33m 429[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.provider-stream.test.ts[2m > [22mmanaged provider HTTP budget[2m > [22mblocks an SDK Responses retry before its second HTTP dispatch when recovery is exhausted[33m 425[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.provider-stream.test.ts[2m > [22mmanaged provider HTTP budget[2m > [22mrecords a Responses transport outage against its reserved HTTP call[33m 429[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.provider-stream.test.ts[2m > [22mmanaged provider HTTP budget[2m > [22mrejects a cancelled managed run before the HTTP boundary[33m 428[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.provider-stream.test.ts[2m > [22mmanaged provider HTTP budget[2m > [22mblocks server-endpoint compaction above the output allowance before HTTP[33m 421[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22mdoes not commit a tool-issued task after its turn authority is revoked[32m 110[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22mrejects model-authored assignment fields outside the task contract[32m 2[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22mdeduplicates a logical key within one requester across turns and restarts[33m 757[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22maccepts only the current producer, generation, digest, and revision[33m 422[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22mupgrades a version 19 database before the first managed task[33m 443[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22mdoes not store malformed JSON or a result without its required fields[33m 395[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22mrejects an empty or unversioned review while leaving the final slot available[33m 752[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22mpersists PermissionRequired as an incident without consuming the final result[33m 742[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.store.test.ts[2m > [22mmanaged task durable registration and result[2m > [22mdeduplicates director retries within a corrida without crossing corrida authority[33m 392[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m8 passed[39m[22m[90m (8)[39m
+[2m      Tests [22m [1m[32m67 passed[39m[22m[90m (67)[39m
+[2m   Start at [22m 19:58:26
+[2m   Duration [22m 47.23s[2m (tests 72%, transform 14%, import 11%, setup 3%)[22m
+
+[test] starting test/vitest/vitest.agents-tools.config.ts
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.1 [39m[90m/Users/dn/dev/openclaw-agent-work-integration[39m
+
+[90mstderr[2m | unknown test
+[22m[39m[sqlite-test-lifecycle] src/agents/tools/sessions-managed-delegation.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tools/sessions-managed-delegation.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tools/sessions-managed-delegation.test.ts: retiring openclaw.agentDatabaseLifecycle
+
+ ✓  agents-tools  src/agents/tools/sessions-managed-delegation.test.ts > managed native delegation boundary > rejects sessions_spawn before any child is created 10ms
+ ✓  agents-tools  src/agents/tools/sessions-managed-delegation.test.ts > managed native delegation boundary > rejects sessions_send before Gateway delivery 2ms
+ ✓  agents-tools  src/agents/tools/sessions-managed-delegation.test.ts > managed native delegation boundary > does not apply the managed guard to an ordinary run 2ms
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m   Start at [22m 19:59:14
+[2m   Duration [22m 5.91s[2m (transform 78%, import 15%, worker 6%, setup 2%)[22m
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 2 Vitest shards in 56.85s

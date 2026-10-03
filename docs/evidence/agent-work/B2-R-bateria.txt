@@ -1,0 +1,72 @@
+# B2: batería de R — corrida única de pnpm test, abortada por el propio runner a ~4 h
+
+B2 — batería de R (paso 1 del cierre). Corrida única `pnpm test`. No la detuvo el operador: el
+driver de pruebas abortó solo por un fallo de limpieza de procesos y terminó con exit 1.
+Fecha: 2026-10-03. Host local: macOS (darwin, arm64). No es CI.
+R SHA: 5b14e9e563a4f3802aa5e95e57e1d35904ea0c85 (feat/agent-work-integration, árbol limpio;
+SHA y limpieza verificados antes de lanzar, y la batería no toca el árbol).
+Comando: cd /Users/dn/dev/openclaw-agent-work-integration && pnpm test
+  (= node --import ./scripts/tsx.mjs scripts/test-projects.mts)
+Duración: inicio 2026-10-03T07:15:14Z (00:15 PDT), fin 2026-10-03T10:13:35Z (03:13 PDT),
+~3 h 58 m. Exit final: 1. La última línea del log es
+«=== B2-R-bateria — fin 2026-10-03T10:13:35Z — exit=1».
+
+Log completo (20 MB, 152.972 líneas):
+  ~/.local/state/encargos-loop/artifacts/B2-R-bateria-completo.log
+Este fichero es el destilado comprometido en G. El completo no entra al repo porque el hook
+pre-commit check-added-large-files usa el límite por defecto (500 kB) y el encargo prohíbe
+--no-verify; la desviación queda documentada aquí y en el LISTO.
+
+Cómo terminó (difiere de B1: no hubo corte manual)
+- El runner anunció «running 700 Vitest shards with parallelism 2»; el log registra 129
+  arranques de shard (25 configs distintas) y 136 bloques de resumen «Test Files».
+- Tras completar el último lote de infra en verde (Test Files 64 passed (64), Tests 750 passed
+  (750), 332,76 s), el worker de vitest no pudo verificar la muerte del grupo de procesos 39134
+  («remained alive 1000ms after SIGKILL») y retuvo su namespace temporal
+  (/private/var/folders/.../T/oc-vt-v90wyK). El driver abortó con AggregateError en
+  runVitestPlans y reportó «[test] FAILED (exit 1)».
+- Consecuencia: la batería quedó INCOMPLETA. ~571 de los 700 shards anunciados nunca
+  arrancaron (entre otros: e2e, tooling-isolated restante, isolated varios). La ausencia de un
+  fichero en el inventario de abajo NO es un pase.
+
+Inventario de tests caídos (14, en 10 ficheros)
+Nuevos frente a la lista de B1 (la batería de B1 nunca llegó a UI; este sí corrió el shard ui):
+- ui :: ui/src/components/provider-usage.test.ts — 2 casos: «expected ... to contain
+  '$5.00 / $20.00'» y «expected [ '2026-10-03: JP¥13', ... ] to deeply equal
+  [ '2026-10-03: ¥13', ... ]» (formato de divisa JP¥ vs ¥).
+- ui :: ui/src/pages/chat/chat-composer-context.test.ts — «expected
+  [ '5-hour limit Resets 2h 22%', ... ] to deeply equal [...]».
+- ui :: ui/src/pages/usage/view.test.ts — «expected [ ...(2) ] to deeply equal [ Array(2) ]».
+- infra :: src/infra/backup-create.test.ts — «still running with no output for 120000ms»,
+  «Test timed out in 120000ms» (1 caso, private agent DB=true; el resto del fichero pasó).
+Coincidentes 1:1 con fallos ya conocidos del triage de B1 (fila B1/batería en followups.md):
+- unit-src :: src/claws/read-only-state-compat.test.ts — «no such column: projection_json»
+  (2 casos).
+- unit-src :: src/state/openclaw-database-preflight.test.ts — estado 19 vs 26.
+- unit-src :: src/state/openclaw-database-maintenance.test.ts — índice projection_json.
+- unit-src :: src/state/secret-state-tables.test.ts — tablas con columnas de credenciales.
+- unit-fast :: src/infra/outbound/sanitize-text.test.ts — emoji 🙂<limit and wait>5s.
+- unit-fast :: test/scripts/check-native-state-schema-version.test.ts — drift Swift 19 vs
+  TS 26 (ya está como fila B5/T11 en followups.md).
+- infra :: src/infra/heartbeat-runner.model-override.test.ts — «expected 'heartbeat' to be
+  'cron'».
+Conocidos de B1 que NO aparecieron aquí por no arrancar su shard (no son pases):
+check-openclaw-package-tarball, fs-safe-prebuild, ios-release-fastlane-gates,
+attempt.code-mode-continuation, eager-import-closure, pr-worktree-provision, oxlint-config,
+upgrade-survivor-migration-order, get-reply.timeout.
+
+Lo que este encargo NO incluye
+- Sin triage head/base: el encargo pide correr la batería UNA vez y guardar el log; la regla
+  «fallo de la base vs fallo del diff» (PROMPT §5.1) queda para claw. En particular, los 4
+  fallos de ui y el timeout de backup-create son nuevos frente al triage de B1 y NO se sabe aún
+  si proceden del diff B1→B2 de R (2046bd9516 → 5b14e9e563a4) o de carga/orden: los de ui
+  formatean divisas y costes (territorio de presupuesto, tema de B2) y merecen triage antes de
+  decidir corrección.
+
+Conclusión
+- Exit 1 con dos componentes: 14 tests caídos (10 ficheros) y un aborto de infraestructura del
+  driver que dejó la batería incompleta (~571/700 shards sin arrancar).
+- La batería íntegra vuelve a no converger en una sesión local en este host (B1: cortada a
+  4,5 h; B2: abortada a 4 h por el propio runner).
+- Ningún fallo conocido de B1 se corrigió ni desapareció donde hubo comparable; los nuevos
+  (ui ×4, backup-create timeout) quedan para triage de claw.
