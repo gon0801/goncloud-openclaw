@@ -1,0 +1,171 @@
+[test] starting test/vitest/vitest.agents-support.config.ts
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.1 [39m[90m/Users/dn/dev/openclaw-agent-work-integration[39m
+
+[vitest-workers] local cache hit after 1880ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 0ab89ce7f30c in 1910ms (16692 inputs, 17249 outputs)
+ [31m×[39m [30m[45m agents-support [49m[39m src/agents/tasks/managed-task.recovery.test.ts[2m > [22mmanaged task recovery over the native queue[2m > [22mrecovers an eligible transport failure once through the native queue within the root recovery budget[33m 467[2mms[22m[39m
+[31m   → expected { …(3) } to deeply equal { …(4) }[39m
+ [31m×[39m [30m[45m agents-support [49m[39m src/agents/tasks/managed-task.recovery.test.ts[2m > [22mmanaged task recovery over the native queue[2m > [22mkeeps the durable block without another call once the root recovery budget is exhausted[33m 419[2mms[22m[39m
+[31m   → expected [ { model: 'test-model', …(5) } ] to have a length of 2 but got 1[39m
+ [31m×[39m [30m[45m agents-support [49m[39m src/agents/tasks/managed-task.recovery.test.ts[2m > [22mmanaged task recovery over the native queue[2m > [22mrecovers exactly once across a real restart[33m 759[2mms[22m[39m
+[31m   → expected { …(3) } to deeply equal { …(4) }[39m
+ [31m×[39m [30m[45m agents-support [49m[39m src/agents/tasks/managed-task.recovery.test.ts[2m > [22mmanaged task recovery over the native queue[2m > [22mqueues the recovery behind native lane capacity and starts it when the lane releases[33m 15466[2mms[22m[39m
+[31m   → expected { …(4) } to match object { cause: 'queue-busy' }
+(3 matching properties omitted from actual)[39m
+ [31m×[39m [30m[45m agents-support [49m[39m src/agents/tasks/managed-task.recovery.test.ts[2m > [22mmanaged task recovery over the native queue[2m > [22mleaves no recovery path that evades the external provider counter[33m 15481[2mms[22m[39m
+[31m   → expected [] to deeply equal [ 'error' ][39m
+ [31m×[39m [30m[45m agents-support [49m[39m src/agents/tasks/managed-task.recovery.test.ts[2m > [22mmanaged task recovery over the native queue[2m > [22mdoes not recover a cancelled tree[33m 468[2mms[22m[39m
+[31m   → expected null to deeply equal { state: 'refused', …(1) }[39m
+[90mstderr[2m | unknown test
+[22m[39m[sqlite-test-lifecycle] src/agents/tasks/managed-task.recovery.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.recovery.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.recovery.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.recovery.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.recovery.test.ts: retiring openclaw.agentDatabaseLifecycle
+
+ [32m✓[39m [30m[45m agents-support [49m[39m src/agents/tasks/managed-task.recovery.test.ts[2m > [22mmanaged task recovery over the native queue[2m > [22mshows each waiting cause within 120 seconds[33m 449[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 6 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m [30m[45m agents-support [49m[39m src/agents/tasks/managed-task.recovery.test.ts[2m > [22mmanaged task recovery over the native queue[2m > [22mrecovers an eligible transport failure once through the native queue within the root recovery budget
+[31m[1mAssertionError[22m: expected { …(3) } to deeply equal { …(4) }[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  {[22m
+[2m    "nativeGeneration": 1,[22m
+[2m    "nativeRunId": "native-managed-recovery",[22m
+[32m-   "recovery": false,[39m
+[2m    "taskId": "6d1da146-21c3-401b-b8b4-52198dca7323",[22m
+[2m  }[22m
+
+[36m [2m❯[22m src/agents/tasks/managed-task.recovery.test.ts:[2m263:23[22m[39m
+    [90m261|[39m       const taskId = await admittedRun();
+    [90m262|[39m       const binding = await resolveManagedProviderRunBinding(NATIVE_RU…
+    [90m263|[39m       expect(binding).toEqual({
+    [90m   |[39m                       [31m^[39m
+    [90m264|[39m         taskId,
+    [90m265|[39m         nativeRunId: NATIVE_RUN_ID,
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m [30m[45m agents-support [49m[39m src/agents/tasks/managed-task.recovery.test.ts[2m > [22mmanaged task recovery over the native queue[2m > [22mkeeps the durable block without another call once the root recovery budget is exhausted
+[31m[1mAssertionError[22m: expected [ { model: 'test-model', …(5) } ] to have a length of 2 but got 1[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m src/agents/tasks/managed-task.recovery.test.ts:[2m343:33[22m[39m
+    [90m341|[39m       await drain(first);
+    [90m342|[39m       expect((await first.result()).stopReason).toBe("error");
+    [90m343|[39m       expect(provider.requests).toHaveLength(2);
+    [90m   |[39m                                 [31m^[39m
+    [90m344|[39m       expect((await inspectManagedTask({ caller, taskId }))?.budget?.u…
+    [90m345|[39m         .toBe(1);
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m [30m[45m agents-support [49m[39m src/agents/tasks/managed-task.recovery.test.ts[2m > [22mmanaged task recovery over the native queue[2m > [22mrecovers exactly once across a real restart
+[31m[1mAssertionError[22m: expected { …(3) } to deeply equal { …(4) }[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  {[22m
+[2m    "nativeGeneration": 1,[22m
+[2m    "nativeRunId": "native-managed-recovery",[22m
+[32m-   "recovery": false,[39m
+[2m    "taskId": "7ebe2409-11a1-4536-bf68-9640849bbc82",[22m
+[2m  }[22m
+
+[36m [2m❯[22m src/agents/tasks/managed-task.recovery.test.ts:[2m412:31[22m[39m
+    410|         CHILD_SESSION_KEY,
+    411|       );
+    412|       expect(restoredBinding).toEqual({
+       |                               ^
+    413|         taskId,
+    414|         nativeRunId: NATIVE_RUN_ID,
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m [30m[45m agents-support [49m[39m src/agents/tasks/managed-task.recovery.test.ts[2m > [22mmanaged task recovery over the native queue[2m > [22mqueues the recovery behind native lane capacity and starts it when the lane releases
+[31m[1mAssertionError[22m: expected { …(4) } to match object { cause: 'queue-busy' }
+(3 matching properties omitted from actual)[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  {[22m
+[32m-   "cause": "queue-busy",[39m
+[31m+   "cause": "transport-unavailable",[39m
+[2m  }[22m
+
+[36m [2m❯[22m vi.waitFor.timeout src/agents/tasks/managed-task.recovery.test.ts:[2m501:75[22m[39m
+    [90m499|[39m       await vi.waitFor(
+    [90m500|[39m         async () => {
+    [90m501|[39m           expect((await inspectManagedTask({ caller, taskId }))?.waiti…
+    [90m   |[39m                                                                           [31m^[39m
+    [90m502|[39m             cause: "queue-busy",
+    [90m503|[39m           });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m [30m[45m agents-support [49m[39m src/agents/tasks/managed-task.recovery.test.ts[2m > [22mmanaged task recovery over the native queue[2m > [22mleaves no recovery path that evades the external provider counter
+[31m[1mAssertionError[22m: expected [] to deeply equal [ 'error' ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [[39m
+[32m-   "error",[39m
+[32m- ][39m
+[31m+ [][39m
+
+[36m [2m❯[22m vi.waitFor.timeout src/agents/tasks/managed-task.recovery.test.ts:[2m576:40[22m[39m
+    [90m574|[39m       await vi.waitFor(
+    [90m575|[39m         () => {
+    [90m576|[39m           expect(recoveredStopReasons).toEqual(["error"]);
+    [90m   |[39m                                        [31m^[39m
+    [90m577|[39m         },
+    [90m578|[39m         { timeout: 15_000 },
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m [30m[45m agents-support [49m[39m src/agents/tasks/managed-task.recovery.test.ts[2m > [22mmanaged task recovery over the native queue[2m > [22mdoes not recover a cancelled tree
+[31m[1mAssertionError[22m: expected null to deeply equal { state: 'refused', …(1) }[39m
+
+[32m- Expected:[39m
+{
+  "reason": "cancelled",
+  "state": "refused",
+}
+
+[31m+ Received:[39m
+null
+
+[36m [2m❯[22m src/agents/tasks/managed-task.recovery.test.ts:[2m652:58[22m[39m
+    [90m650|[39m       expect(provider.requests).toHaveLength(1);
+    [90m651|[39m       await cancelManagedTask({ caller, taskId, reason: "operator-stop…
+    [90m652|[39m       expect(await scheduleManagedTaskRecovery(binding)).toEqual({
+    [90m   |[39m                                                          [31m^[39m
+    [90m653|[39m         state: "refused",
+    [90m654|[39m         reason: "cancelled",
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m6 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (7)[39m
+[2m   Start at [22m 19:45:50
+[2m   Duration [22m 37.49s[2m (tests 90%, transform 8%, import 1%)[22m
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] failed 1 Vitest shard in 38.65s
+[test] FAILED (exit 1)

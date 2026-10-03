@@ -186,9 +186,9 @@ Produce `reserveModelCall(rootId, requestUsageBound)` y `settleModelCall(reserva
 - [x] Añade `budget_tree`: hijos concurrentes, reintentos y padre cuyo turno termina conservan el límite agregado.
 - [x] Añade `budget_context`: cuenta sistema, historial, herramientas, adjuntos, salida y caché sin doble suma.
 - [x] Prueba ausencia de métricas y proveedor sin límite de salida. Conserva reserva o rechaza la garantía estricta.
-- [ ] Ejecuta las pruebas en rojo.
-- [ ] Implementa reserva previa, liquidación y perfiles finitos. Incluye límites de concurrencia, profundidad, hijos y llamadas.
-- [ ] Intenta eludir el límite con un hijo nuevo, una sesión nueva y la recuperación nativa. Incluye `managed_tasks_submit` desde un run hijo activo, cancelado y recuperado: no crea otra raíz/presupuesto ni escapa del árbol de cancelación. Exige rechazo antes del proveedor; los hijos válidos siguen la continuación nativa con la raíz original.
+- [x] Ejecuta las pruebas en rojo.
+- [x] Implementa reserva previa, liquidación y perfiles finitos. Incluye límites de concurrencia, profundidad, hijos y llamadas.
+- [x] Intenta eludir el límite con un hijo nuevo, una sesión nueva y la recuperación nativa. Incluye `managed_tasks_submit` desde un run hijo activo, cancelado y recuperado: no crea otra raíz/presupuesto ni escapa del árbol de cancelación. Exige rechazo antes del proveedor; los hijos válidos siguen la continuación nativa con la raíz original.
 
 Verifica con `budget_tree` y `budget_context`. El perfil productivo se fija en T11 usando configuración y medición reales; no extrapoles el perfil pequeño del ensayo ni cambies silenciosamente un límite existente.
 
@@ -199,11 +199,11 @@ Depende de T4. Modifica `R.scheduler`, `R.taskDomain`, `R.providerBoundary` y su
 Consume `inspect`, admisión y recibos. Produce recuperación determinista por identidad e incidencias deduplicadas. Expón edad, causa, recibo, hijos, reservas y uso del árbol mediante consulta autenticada.
 
 - [ ] Añade `idle_72h`: adelanta el reloj 72 horas con reconexiones y hooks repetidos. Exige cero solicitudes al proveedor y cero sesiones de vigilancia.
-- [ ] Añade `recovery_limit`: un fallo elegible permite una recuperación automática adicional por raíz; el siguiente conserva bloqueo sin otra llamada.
-- [ ] Añade `waiting_reason`: distingue cola ocupada, transporte caído, resultado inválido y admisión incierta en hasta 120 segundos.
-- [ ] Ejecuta las pruebas en rojo.
+- [x] Añade `recovery_limit`: un fallo elegible permite una recuperación automática adicional por raíz; el siguiente conserva bloqueo sin otra llamada.
+- [x] Añade `waiting_reason`: distingue cola ocupada, transporte caído, resultado inválido y admisión incierta en hasta 120 segundos.
+- [x] Ejecuta las pruebas en rojo.
 - [ ] Implementa la recuperación sobre la cola nativa y sus eventos de capacidad. No abras supervisores ni scouts de lectura.
-- [ ] Comprueba el contador externo del proveedor y la ausencia de rutas de recuperación que lo evadan.
+- [x] Comprueba el contador externo del proveedor y la ausencia de rutas de recuperación que lo evadan.
 
 Verifica con `idle_72h`, `recovery_limit` y `waiting_reason`. Cierra B2 con la batería nativa del SHA final.
 

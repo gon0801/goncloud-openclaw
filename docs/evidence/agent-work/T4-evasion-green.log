@@ -1,0 +1,25 @@
+[vitest-workers] local cache hit after 1815ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 8c4acab69151 in 1846ms (16692 inputs, 17249 outputs)
+[test] starting test/vitest/vitest.infra.config.ts
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.1 [39m[90m/Users/dn/dev/openclaw-agent-work-integration[39m
+
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.native-report.test.ts[2m > [22mmanaged native producer report[2m > [22mkeeps root creation within the managed run lifetime (active)[33m 1151[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.native-report.test.ts[2m > [22mmanaged native producer report[2m > [22mkeeps root creation within the managed run lifetime (cancelled)[33m 602[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.native-report.test.ts[2m > [22mmanaged native producer report[2m > [22mkeeps root creation within the managed run lifetime (recovered)[33m 984[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.native-report.test.ts[2m > [22mmanaged native producer report[2m > [22mkeeps root creation within the managed run lifetime (released)[33m 579[2mms[22m[39m
+ ✓  infra  src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > stores one final result and replays its receipt without exposing a producer token 541ms
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.native-report.test.ts[2m > [22mmanaged native producer report[2m > [22massembles the report tool only for the bound managed child run[33m 593[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.native-report.test.ts[2m > [22mmanaged native producer report[2m > [22mrefuses another run and a replaced native generation[33m 543[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.native-report.test.ts[2m > [22mmanaged native producer report[2m > [22mrolls back the result if authority is revoked before commit[33m 537[2mms[22m[39m
+ [32m✓[39m [30m[42m infra [49m[39m src/agents/tasks/managed-task.native-report.test.ts[2m > [22mmanaged native producer report[2m > [22mrecords an invalid report only for the bound native producer[33m 552[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m9 passed[39m[22m[90m (9)[39m
+[2m   Start at [22m 19:18:15
+[2m   Duration [22m 10.11s[2m (tests 64%, transform 21%, import 13%, setup 2%)[22m
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 13.21s
