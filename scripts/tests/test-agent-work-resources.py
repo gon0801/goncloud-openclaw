@@ -175,6 +175,112 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual(self.backend.live, {})
         self.assertEqual(self.manager.counts(), {"active": 0, "history": 100, "pool": 0})
 
+    def test_resource_100_cycles_real_tmux_processes_leave_no_own_processes(self):
+        tmux = shutil.which("tmux")
+        if not tmux:
+            self.skipTest("tmux not installed")
+        socket = f"b31-cycles-{os.getpid()}"
+        def tmux_cmd(*args):
+            return subprocess.run([tmux, "-L", socket, *args], capture_output=True, text=True)
+        backend = TmuxBackend(tmux, socket)
+        manager = ResourceManager(self.host.spool, "host-test", backend, capacity=130)
+        cli = Path(self.tmp.name) / "b31-cycles-cli.py"
+        cli.write_text(
+            "import subprocess,sys,time\n"
+            "subprocess.Popen([sys.executable,'-c','import time; time.sleep(120)',sys.argv[1]])\n"
+            "time.sleep(120)\n"
+        )
+        nonces = []
+
+        def nonce_gone(nonce):
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if subprocess.run(["pgrep", "-f", "--", nonce], capture_output=True).returncode != 0:
+                    return True
+                time.sleep(0.05)
+            return False
+
+        try:
+            for number in range(100):
+                key = OperationKey("host-test", f"b31-cycle-{number}", 1, f"b31-instance-{number}")
+                session = f"b31c{number}"
+                ownership = "IntentionalPool" if number % 10 == 0 else "TaskCreated"
+                held = manager.reserve(key, session, ownership)
+                manager.begin_launch(key)
+                self.assertEqual(tmux_cmd("new-session", "-d", "-s", session, sys.executable,
+                                          str(cli), held.nonce).returncode, 0)
+                backend.mark(session, held.nonce)
+                self.assertEqual(manager.attach(key).state, "Running")
+                self.assertEqual(manager.close(key, {"kind": "result", "receipt": f"cycle-{number}"}).state,
+                                 "CleanupPending")
+                self.assertNotEqual(tmux_cmd("has-session", "-t", f"={session}").returncode, 0)
+                nonces.append(held.nonce)
+                self.assertTrue(nonce_gone(held.nonce), f"cycle {number} left processes with its nonce")
+            self.assertEqual(manager.counts(), {"active": 100, "history": 0, "pool": 10})
+            for nonce in nonces:
+                self.assertNotEqual(subprocess.run(["pgrep", "-f", "--", nonce],
+                                                   capture_output=True).returncode, 0)
+        finally:
+            tmux_cmd("kill-server")
+            for nonce in nonces:
+                out = subprocess.run(["pgrep", "-f", "--", nonce], capture_output=True, text=True)
+                for pid in out.stdout.split():
+                    if pid.isdigit():
+                        os.kill(int(pid), signal.SIGTERM)
+
+    def test_resource_identity_adopted_without_nonce_and_claim_replay_close_reclose(self):
+        naked = OperationKey("host-test", "task-2", 1, "instance-2")
+        self.manager.reserve(naked, "user-naked", "UserAdopted")
+        self.manager.begin_launch(naked)
+        self.backend.launch("user-naked", "", 502)
+        self.assertEqual(self.manager.attach(naked).state, "CleanupPending")
+        self.assertEqual(self.manager.close(naked, {"kind": "result", "receipt": "r2"}).state,
+                         "CleanupPending")
+        self.assertEqual(self.backend.stops, [])
+        self.assertEqual(self.backend.revokes, [])
+        self.assertIn("user-naked", self.backend.live)
+
+        claimed = OperationKey("host-test", "task-3", 1, "instance-3")
+        held = self.manager.reserve(claimed, "user-claimed", "UserAdopted")
+        self.assertTrue(self.manager.begin_launch(claimed).launch_now)
+        self.backend.launch("user-claimed", held.nonce, 503)
+        self.assertEqual(self.manager.attach(claimed).state, "Running")
+        self.assertEqual(self.manager.reserve(claimed, "user-claimed", "UserAdopted").state, "Running")
+        self.assertFalse(self.manager.begin_launch(claimed).launch_now)
+        self.assertEqual(self.manager.close(claimed, {"kind": "result", "receipt": "r3"}).state,
+                         "ReleasedAdopted")
+        self.assertEqual(self.manager.close(claimed, {"kind": "result", "receipt": "r3"}).state,
+                         "ReleasedAdopted")
+        self.assertEqual(len(self.backend.revokes), 1)
+        self.assertEqual(self.backend.stops, [])
+        self.assertIn("user-claimed", self.backend.live)
+        self.assertEqual(self.manager.counts(), {"active": 1, "history": 1, "pool": 0})
+
+    def test_resource_close_lost_result_ack_never_closes_the_resource(self):
+        brief = Path(self.tmp.name) / "brief.txt"
+        brief.write_text("ack lost sandbox")
+        assignment = AuthorizedOperation(
+            key=self.key, producer_id="fake", capability="ack-secret", session="acked",
+            workspace_ref=self.tmp.name, brief_ref=str(brief),
+            brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
+            input_revision={"kind": "code", "repository": "repo", "sha": "a" * 40},
+            result_contract="review.v1", claim_id="ack-claim")
+        reference = self.host.apply(self.key, assignment, lambda *_: None,
+                                    lambda a: {"state": "host-admitted", "claimId": a["claimId"],
+                                               "hostId": a["hostId"], "instanceId": a["instanceId"],
+                                               "generation": a["generation"]}).assignment_ref
+        self.manager.reserve(self.key, "acked", "TaskCreated")
+        evidence = Path(self.tmp.name) / "result.json"
+        evidence.write_text('{"kind":"result","receipt":"lost-ack-1"}')
+        closed = subprocess.run([sys.executable, str(ROOT / "scripts" / "agent-work" / "resources.py"),
+                                 "close", "--host-id", "host-test", "--state-dir", str(self.host.state_dir),
+                                 "--assignment", reference, "--evidence", str(evidence),
+                                 "--tmux-socket", f"b31-ack-{os.getpid()}"],
+                                capture_output=True, text=True)
+        self.assertNotEqual(closed.returncode, 0, closed.stdout)
+        self.assertIn("receipt", closed.stderr)
+        self.assertEqual(self.manager.counts()["active"], 1)
+
     def test_resource_identity_tmux_socket_and_adopted_session(self):
         tmux = shutil.which("tmux")
         if not tmux:
@@ -230,7 +336,7 @@ class ResourceTests(unittest.TestCase):
         finally:
             tmux_cmd("kill-server")
 
-    def test_resource_tmux_replacement_is_never_marked_stopped_or_revoked(self):
+    def test_resource_identity_tmux_replacement_never_marks_stops_or_revokes(self):
         tmux = shutil.which("tmux")
         if not tmux:
             self.skipTest("tmux not installed")
@@ -284,7 +390,7 @@ class ResourceTests(unittest.TestCase):
         finally:
             tmux_cmd("kill-server")
 
-    def test_resource_detached_child_keeps_mac_closure_pending(self):
+    def test_resource_close_detached_child_keeps_mac_closure_pending(self):
         if sys.platform != "darwin":
             self.skipTest("macOS process proof")
         tmux = shutil.which("tmux")

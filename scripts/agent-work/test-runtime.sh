@@ -62,6 +62,7 @@ case "$case_name" in
     probe_restart=0 ;;
   recovery_queue)
     test_file='src/agents/tasks/managed-task.recovery.test.ts'
+    extra_test_files=('src/agents/tasks/managed-task.recovery.siblings.test.ts')
     test_pattern=''
     probe_restart=0 ;;
   delegation_bypass)
