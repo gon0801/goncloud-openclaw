@@ -16,7 +16,8 @@ sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 
 from contracts import AuthorizedOperation, OperationKey
 from host import Host
-from resources import ResourceManager, TmuxBackend
+from resources import (AccountBusyError, AgentesBackend, CommandOutcome, ResourceManager,
+                       TmuxBackend, parse_agent_ps)
 
 
 class FakeBackend:
@@ -585,6 +586,448 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual(verified.stderr, "")
         self.assertEqual((root / "resource.log").read_text().splitlines(),
                          ["CleanupPending", "AbsenceVerified"])
+
+    AGENTES_LD = (
+        "user/502 = {\n"
+        "\ttype = user\n"
+        "\tservices = {\n"
+        "\t\t    9042   (pe) \tcom.apple.accessibility.mediaaccessibilityd\n"
+        "\t\t     515      - \tcom.apple.lsd\n"
+        "\t}\n"
+        "}\n"
+    )
+    AGENTES_PS_FULL = (
+        "4242 1 Sat Oct  3 09:00:00 2026 /opt/homebrew/bin/python3 -c import time; time.sleep(30) b32nonce1\n"
+        "4243 1 Sat Oct  3 09:00:01 2026 /usr/libexec/remotemanagementd worker\n"
+        "515 1 Sat Oct  3 09:00:02 2026 /usr/libexec/xpcproxy com.apple.lsd\n"
+    )
+    AGENTES_PS_AFTER_TERM = (
+        "4243 1 Sat Oct  3 09:00:01 2026 /usr/libexec/remotemanagementd worker\n"
+    )
+    KILL_ARGV_PREFIX = ["/usr/bin/lockf", "-t", "30", "-k", "/private/tmp/b32-agentes.lock",
+                        "sudo", "-n", "-u", "agentes", "/bin/kill", "-TERM"]
+
+    def _agentes_running(self, backend, session, capacity=1):
+        manager = ResourceManager(self.host.spool, "host-test", backend, capacity=capacity)
+        key = OperationKey("host-test", f"task-{session}", 1, f"instance-{session}")
+        held = manager.reserve(key, session, "TaskCreated")
+        manager.begin_launch(key)
+        identity = {"bootId": backend.boot_id, "nonce": held.nonce, "socket": backend.socket,
+                    "sessionName": session, "serverPid": 400, "serverStart": "server-birth",
+                    "sessionId": "@9", "paneId": "%9", "panePid": 4242, "paneStart": "pane-birth"}
+        backend.observe = lambda _session: identity
+        backend.stop = lambda _identity: True
+        self.assertEqual(manager.attach(key).state, "Running")
+        return manager, key
+
+    def _tmux_shim(self):
+        log = Path(self.tmp.name) / "tmux.log"
+        shim = Path(self.tmp.name) / "tmux-shim"
+        shim.write_text("#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"" + str(log) + "\"\n")
+        shim.chmod(0o700)
+        return shim, log
+
+    def test_resource_close_agentes_apple_services_excluded_and_kill_argv(self):
+        state = {"ps": self.AGENTES_PS_FULL}
+        calls = []
+
+        def ps_reader():
+            return CommandOutcome(0, state["ps"])
+
+        def launchd_reader():
+            return CommandOutcome(0, self.AGENTES_LD)
+
+        def killer(argv):
+            calls.append(list(argv))
+            state["ps"] = self.AGENTES_PS_AFTER_TERM
+            return CommandOutcome(0, "")
+
+        backend = AgentesBackend("/usr/bin/true", "ag-exclude", ps_reader=ps_reader,
+                                 launchd_reader=launchd_reader, killer=killer, grace_seconds=0.5)
+        manager, key = self._agentes_running(backend, "ag-1")
+        view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
+        self.assertEqual(view.state, "CleanupPending")
+        self.assertEqual(calls, [self.KILL_ARGV_PREFIX + ["4242"]])
+        containment = backend.last_containment
+        self.assertEqual([entry["pid"] for entry in containment["before"]], [4242, 4243])
+        self.assertFalse(containment["before"][1]["signalable"])
+        self.assertEqual(containment["signals"],
+                         [{"argv": self.KILL_ARGV_PREFIX + ["4242"], "rc": 0}])
+        self.assertEqual([entry["pid"] for entry in containment["after"]], [4243])
+        self.assertFalse(containment["after"][0]["signalable"])
+
+    def test_resource_close_agentes_ghost_label_pid0_blocks_without_signals(self):
+        ld_ghost = (
+            "user/502 = {\n"
+            "\tservices = {\n"
+            "\t\t       0      - \tb32-feedface\n"
+            "\t\t     515      - \tcom.apple.lsd\n"
+            "\t}\n"
+            "}\n"
+        )
+        calls = []
+        backend = AgentesBackend("/usr/bin/true", "ag-ghost",
+                                 ps_reader=lambda: CommandOutcome(0, ""),
+                                 launchd_reader=lambda: CommandOutcome(0, ld_ghost),
+                                 killer=lambda argv: calls.append(list(argv)) or CommandOutcome(0, ""),
+                                 grace_seconds=0.2)
+        manager, key = self._agentes_running(backend, "ag-ghost-1")
+        view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
+        self.assertEqual(view.state, "CleanupPending")
+        self.assertEqual(calls, [])
+        ghost = backend.last_containment["before"][0]
+        self.assertEqual((ghost["pid"], ghost["label"], ghost["signalable"],
+                          ghost["reason"]),
+                         (0, "b32-feedface", False, "launchd label may be relaunched"))
+        self.assertEqual(backend.last_containment["signals"], [])
+        self.assertEqual([entry["label"] for entry in backend.last_containment["after"]],
+                         ["b32-feedface"])
+
+    def test_resource_close_agentes_reader_failure_closes_without_signals(self):
+        variants = (
+            ("launchd-rc", lambda: CommandOutcome(0, self.AGENTES_PS_FULL),
+             lambda: CommandOutcome(1, "launchctl: operation failed\n")),
+            ("services-block-missing", lambda: CommandOutcome(0, self.AGENTES_PS_FULL),
+             lambda: CommandOutcome(0, "user/502 = {\n\ttype = user\n}\n")),
+            ("ps-rc", lambda: CommandOutcome(1, "ps: nobody\n"),
+             lambda: CommandOutcome(0, self.AGENTES_LD)),
+        )
+        for name, ps_reader, launchd_reader in variants:
+            with self.subTest(name):
+                calls = []
+                backend = AgentesBackend("/usr/bin/true", f"ag-fail-{name}",
+                                         ps_reader=ps_reader, launchd_reader=launchd_reader,
+                                         killer=lambda argv: calls.append(list(argv)) or CommandOutcome(0, ""),
+                                         grace_seconds=0.2)
+                manager, key = self._agentes_running(backend, f"ag-fail-session-{name}", capacity=3)
+                view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
+                self.assertEqual(view.state, "CleanupPending")
+                self.assertEqual(view.reason, "host unavailable")
+                self.assertEqual(calls, [])
+
+    def test_resource_close_agentes_lstart_change_skips_signal(self):
+        ps_lstart_a = ("700 1 Sat Oct  3 09:00:00 2026 "
+                       "/opt/homebrew/bin/python3 -c import time; time.sleep(30) b32n4\n")
+        ps_lstart_b = ("700 1 Sun Nov  1 10:00:00 2026 "
+                       "/opt/homebrew/bin/python3 -c import time; time.sleep(30) b32n4\n")
+        reads = [ps_lstart_a, ps_lstart_b]
+        calls = []
+
+        def ps_reader():
+            return CommandOutcome(0, reads.pop(0) if reads else ps_lstart_b)
+
+        backend = AgentesBackend("/usr/bin/true", "ag-lstart", ps_reader=ps_reader,
+                                 launchd_reader=lambda: CommandOutcome(0, self.AGENTES_LD),
+                                 killer=lambda argv: calls.append(list(argv)) or CommandOutcome(0, ""),
+                                 grace_seconds=0.2)
+        manager, key = self._agentes_running(backend, "ag-lstart-1")
+        view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
+        self.assertEqual(view.state, "CleanupPending")
+        self.assertEqual(calls, [])
+        self.assertEqual(backend.last_containment["signals"], [])
+
+    def test_resource_identity_agentes_prelaunch_busy_refuses_launch(self):
+        shim, log = self._tmux_shim()
+        calls = []
+        busy_ps = ("999 1 Sat Oct  3 09:00:00 2026 "
+                   "/opt/homebrew/bin/python3 -c import time; time.sleep(30) b32n5\n")
+        backend = AgentesBackend(str(shim), "ag-busy",
+                                 ps_reader=lambda: CommandOutcome(0, busy_ps),
+                                 launchd_reader=lambda: CommandOutcome(0, self.AGENTES_LD),
+                                 killer=lambda argv: calls.append(list(argv)) or CommandOutcome(0, ""))
+        with self.assertRaisesRegex(AccountBusyError, "999"):
+            backend.launch("ag-x", ["/usr/bin/true"])
+        self.assertEqual(calls, [])
+        self.assertFalse(log.exists())
+
+    def test_resource_close_agentes_survivor_holds_capacity_then_verifies(self):
+        survivor_ps = ("4242 1 Sat Oct  3 09:00:00 2026 "
+                       "/opt/homebrew/bin/python3 -c import time; time.sleep(30) b32n6\n")
+        state = {"ps": survivor_ps}
+        calls = []
+
+        def ps_reader():
+            return CommandOutcome(0, state["ps"])
+
+        def killer(argv):
+            calls.append(list(argv))
+            return CommandOutcome(0, "")
+
+        backend = AgentesBackend("/usr/bin/true", "ag-survivor", ps_reader=ps_reader,
+                                 launchd_reader=lambda: CommandOutcome(0, self.AGENTES_LD),
+                                 killer=killer, grace_seconds=0.3)
+        manager, key = self._agentes_running(backend, "ag-survivor-1")
+        view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
+        self.assertEqual(view.state, "CleanupPending")
+        self.assertEqual(view.reason, "descendant absence unverified")
+        self.assertEqual(manager.counts()["active"], 1)
+        self.assertEqual(len(calls), 1)
+        state["ps"] = ""
+        view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
+        self.assertEqual(view.state, "AbsenceVerified")
+        self.assertEqual(manager.counts()["active"], 0)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(backend.last_containment["before"], [])
+        self.assertEqual(backend.last_containment["after"], [])
+
+    def test_resource_identity_agentes_happy_launch_and_presence_clear(self):
+        shim, _log = self._tmux_shim()
+        calls = []
+        workdir = "/private/tmp/b32-ag-fixed"
+
+        def killer(argv):
+            calls.append(list(argv))
+            if "/usr/bin/mktemp" in argv:
+                return CommandOutcome(0, workdir + "\n")
+            return CommandOutcome(0, "")
+
+        backend = AgentesBackend(str(shim), "ag-happy",
+                                 ps_reader=lambda: CommandOutcome(0, ""),
+                                 launchd_reader=lambda: CommandOutcome(0, self.AGENTES_LD),
+                                 killer=killer)
+        made = backend.launch("ag-x", ["/opt/homebrew/bin/python3", "-c",
+                                       "import time; time.sleep(30)", "b32n7"])
+        self.assertEqual(made, workdir)
+        self.assertEqual(len(calls), 2)
+        self.assertIn("/usr/bin/mktemp", calls[0])
+        panel = calls[1]
+        for token in ("new-session", "sudo", "-n", "-u", "agentes"):
+            self.assertIn(token, panel)
+        self.assertIn("PATH=/opt/homebrew/bin:/usr/bin:/bin", panel)
+        self.assertIn("TMPDIR=" + workdir, panel)
+        self.assertIn(str(shim), panel)
+        self.assertIn("run", panel)
+        self.assertEqual(backend.account_presence(), ())
+
+    REAL_DETACHED_LAUNCHER = (
+        "import os,sys,time\n"
+        "nonce=sys.argv[1]\n"
+        "if os.fork()==0:\n"
+        "    os.setsid()\n"
+        "    if os.fork()==0:\n"
+        "        os.closerange(0,3)\n"
+        "        time.sleep(120)\n"
+        "    os._exit(0)\n"
+        "time.sleep(120)\n"
+    )
+    REAL_TERM_IGNORING_LAUNCHER = (
+        "import os,signal,sys,time\n"
+        "nonce=sys.argv[1]\n"
+        "if os.fork()==0:\n"
+        "    os.setsid()\n"
+        "    if os.fork()==0:\n"
+        "        os.closerange(0,3)\n"
+        "        signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "        time.sleep(120)\n"
+        "    os._exit(0)\n"
+        "time.sleep(120)\n"
+    )
+
+    def _require_agentes_account(self):
+        if sys.platform != "darwin":
+            self.skipTest("macOS agent account proof")
+        if not shutil.which("tmux"):
+            self.fail("tmux not installed")
+        probe = subprocess.run(["sudo", "-n", "-u", "agentes", "/usr/bin/true"],
+                               capture_output=True)
+        if probe.returncode != 0:
+            self.fail("sudo -n -u agentes is not available")
+
+    def _agentes_rows(self):
+        done = subprocess.run(["ps", "-o", "pid=,ppid=,lstart=,command=", "-U", "agentes"],
+                              capture_output=True, text=True)
+        return parse_agent_ps(done.stdout) if done.returncode == 0 else ()
+
+    def _registered_nonce(self, nonce):
+        return {(row.pid, row.lstart) for row in self._agentes_rows() if nonce in row.command}
+
+    def _sweep_registered(self, registered, nonce):
+        for row in self._agentes_rows():
+            if nonce not in row.command or (row.pid, row.lstart) not in registered:
+                continue
+            subprocess.run(["/usr/bin/lockf", "-t", "30", "-k", "/private/tmp/b32-agentes.lock",
+                            "sudo", "-n", "-u", "agentes", "/bin/kill", "-TERM", str(row.pid)],
+                           capture_output=True)
+
+    def _nonce_gone(self, nonce, timeout=10.0):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if subprocess.run(["pgrep", "-f", "--", nonce], capture_output=True).returncode != 0:
+                return True
+            time.sleep(0.1)
+        return False
+
+    def test_resource_close_real_detached_children_proven_absent(self):
+        self._require_agentes_account()
+        tmux = shutil.which("tmux")
+        socket = f"b32-ag-detached-{os.getpid()}"
+
+        def tmux_cmd(*args):
+            return subprocess.run([tmux, "-L", socket, *args], capture_output=True, text=True)
+
+        backend = AgentesBackend(tmux, socket)
+        manager = ResourceManager(self.host.spool, "host-test", backend, capacity=1)
+        nonce = ""
+        registered = set()
+        try:
+            held = manager.reserve(self.key, "ag-owned", "TaskCreated")
+            manager.begin_launch(self.key)
+            nonce = held.nonce
+            backend.launch("ag-owned", ["/opt/homebrew/bin/python3", "-c",
+                                        self.REAL_DETACHED_LAUNCHER, nonce])
+            backend.mark("ag-owned", nonce)
+            self.assertEqual(manager.attach(self.key).state, "Running")
+            registered = self._registered_nonce(nonce)
+            self.assertTrue(registered, "detached grandchild did not reach the agent account")
+            self.assertEqual(manager.close(self.key, {"kind": "cancel", "receipt": "c1"}).state,
+                             "AbsenceVerified")
+            self.assertTrue(self._nonce_gone(nonce), "nonce processes survived an AbsenceVerified close")
+        finally:
+            tmux_cmd("kill-server")
+            self._sweep_registered(registered, nonce)
+
+    def test_resource_close_real_launchd_label_stays_pending(self):
+        self._require_agentes_account()
+        tmux = shutil.which("tmux")
+        socket = f"b32-ag-submit-{os.getpid()}"
+
+        def tmux_cmd(*args):
+            return subprocess.run([tmux, "-L", socket, *args], capture_output=True, text=True)
+
+        backend = AgentesBackend(tmux, socket)
+        manager = ResourceManager(self.host.spool, "host-test", backend, capacity=1)
+        nonce = ""
+        label = ""
+        registered = set()
+        try:
+            held = manager.reserve(self.key, "ag-sub", "TaskCreated")
+            manager.begin_launch(self.key)
+            nonce = held.nonce
+            label = f"b32-{nonce}"
+            backend.launch("ag-sub", ["/opt/homebrew/bin/python3", "-c",
+                                      "import time; time.sleep(120)", nonce])
+            staging = Path(tempfile.mkdtemp(prefix="b32-", dir="/private/tmp"))
+            staging.chmod(0o755)
+            plist = staging / f"{label}.plist"
+            plist.write_text(
+                f"<?xml version='1.0' encoding='UTF-8'?>\n"
+                f"<!DOCTYPE plist PUBLIC '-//Apple//DTD PLIST 1.0//EN' "
+                f"'http://www.apple.com/DTDs/PropertyList-1.0.dtd'>\n"
+                f"<plist version='1.0'><dict>\n"
+                f"<key>Label</key><string>{label}</string>\n"
+                f"<key>ProgramArguments</key><array>\n"
+                f"<string>/opt/homebrew/bin/python3</string><string>-c</string>\n"
+                f"<string>import time; time.sleep(120)</string><string>{nonce}</string>\n"
+                f"</array>\n"
+                f"<key>KeepAlive</key><false/>\n"
+                f"<key>RunAtLoad</key><true/>\n"
+                f"</dict></plist>\n")
+            self.addCleanup(shutil.rmtree, staging, ignore_errors=True)
+            bootstrapped = subprocess.run(["sudo", "-n", "-u", "agentes", "/bin/launchctl",
+                                           "bootstrap", "user/502", str(plist)],
+                                          capture_output=True, text=True)
+            if bootstrapped.returncode == 5:
+                self.skipTest("user/502 solo tiene sesion Background creada por mds: no aloja "
+                              "etiquetas hasta que David inicie sesion real de agentes "
+                              "(medido: submit es stub sin registro, bootstrap y load dan EIO 5)")
+            self.assertEqual(bootstrapped.returncode, 0, bootstrapped.stderr)
+            backend.mark("ag-sub", nonce)
+            self.assertEqual(manager.attach(self.key).state, "Running")
+            registered = self._registered_nonce(nonce)
+            self.assertGreaterEqual(len(registered), 2, "pane child and launchd child expected")
+            self.assertEqual(manager.close(self.key, {"kind": "cancel", "receipt": "c1"}).state,
+                             "CleanupPending")
+            printed = subprocess.run(["sudo", "-n", "-u", "agentes", "/bin/launchctl",
+                                      "print", f"user/502/{label}"], capture_output=True)
+            self.assertEqual(printed.returncode, 0, "launchd label must remain in user/502")
+            self.assertTrue(self._nonce_gone(nonce), "launchd child should be gone after containment")
+        finally:
+            if label:
+                removed = subprocess.run(["sudo", "-n", "-u", "agentes", "/bin/launchctl",
+                                          "remove", label], capture_output=True)
+                if removed.returncode != 0:
+                    subprocess.run(["sudo", "-n", "-u", "agentes", "/bin/launchctl",
+                                    "bootout", f"user/502/{label}"], capture_output=True)
+            tmux_cmd("kill-server")
+            self._sweep_registered(registered, nonce)
+
+    def test_resource_close_real_term_ignoring_survivor_stays_pending(self):
+        self._require_agentes_account()
+        tmux = shutil.which("tmux")
+        socket = f"b32-ag-ignorer-{os.getpid()}"
+
+        def tmux_cmd(*args):
+            return subprocess.run([tmux, "-L", socket, *args], capture_output=True, text=True)
+
+        backend = AgentesBackend(tmux, socket)
+        manager = ResourceManager(self.host.spool, "host-test", backend, capacity=1)
+        nonce = ""
+        registered = set()
+        gone = True
+        try:
+            held = manager.reserve(self.key, "ag-ignore", "TaskCreated")
+            manager.begin_launch(self.key)
+            nonce = held.nonce
+            backend.launch("ag-ignore", ["/opt/homebrew/bin/python3", "-c",
+                                         self.REAL_TERM_IGNORING_LAUNCHER, nonce])
+            backend.mark("ag-ignore", nonce)
+            self.assertEqual(manager.attach(self.key).state, "Running")
+            registered = self._registered_nonce(nonce)
+            view = manager.close(self.key, {"kind": "cancel", "receipt": "c1"})
+            self.assertEqual(view.state, "CleanupPending")
+            self.assertEqual(view.reason, "descendant absence unverified")
+            survivors = [row for row in self._agentes_rows()
+                         if nonce in row.command and (row.pid, row.lstart) in registered]
+            self.assertTrue(survivors, "the TERM-ignoring survivor must still be present")
+        finally:
+            tmux_cmd("kill-server")
+            for row in self._agentes_rows():
+                if nonce and nonce in row.command and (row.pid, row.lstart) in registered:
+                    subprocess.run(["sudo", "-n", "-u", "agentes", "/bin/kill",
+                                    "-KILL", str(row.pid)], capture_output=True)
+            if nonce:
+                gone = self._nonce_gone(nonce)
+        if not gone:
+            self.fail("TERM-ignoring survivor was not killed in cleanup")
+
+    def test_resource_100_cycles_real_account_absence_verified(self):
+        self._require_agentes_account()
+        tmux = shutil.which("tmux")
+        socket = f"b32-ag-cycles-{os.getpid()}"
+
+        def tmux_cmd(*args):
+            return subprocess.run([tmux, "-L", socket, *args], capture_output=True, text=True)
+
+        backend = AgentesBackend(tmux, socket)
+        manager = ResourceManager(self.host.spool, "host-test", backend, capacity=1)
+        nonces = []
+        try:
+            for number in range(100):
+                key = OperationKey("host-test", f"b32ag-task-{number}", 1,
+                                   f"b32ag-instance-{number}")
+                session = f"b32ag{number}"
+                held = manager.reserve(key, session, "TaskCreated")
+                manager.begin_launch(key)
+                backend.launch(session, ["/opt/homebrew/bin/python3", "-c",
+                                         "import time; time.sleep(30)", held.nonce])
+                backend.mark(session, held.nonce)
+                self.assertEqual(manager.attach(key).state, "Running")
+                self.assertEqual(manager.close(key, {"kind": "result",
+                                                     "receipt": f"cycle-{number}"}).state,
+                                 "AbsenceVerified")
+                self.assertTrue(self._nonce_gone(held.nonce),
+                                f"cycle {number} left processes with its nonce")
+                nonces.append(held.nonce)
+        finally:
+            tmux_cmd("kill-server")
+            for nonce in nonces:
+                self._sweep_registered(self._registered_nonce(nonce), nonce)
+        pooled = ResourceManager(self.host.spool, "host-test", FakeBackend(), capacity=10)
+        for number in range(10):
+            pooled.reserve(OperationKey("host-test", f"b32ag-pool-{number}", 1,
+                                        f"b32ag-pool-instance-{number}"),
+                           f"b32agpool{number}", "IntentionalPool")
+        self.assertEqual(manager.counts(), {"active": 10, "history": 100, "pool": 10})
 
 
 if __name__ == "__main__":

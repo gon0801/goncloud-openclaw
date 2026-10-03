@@ -1,10 +1,12 @@
 import argparse
 import json
+import os
 import secrets
 import sqlite3
 import subprocess
 import sys
-from dataclasses import dataclass
+import time
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from contracts import OperationKey, operation_id
@@ -309,6 +311,220 @@ class TmuxBackend:
         return self._fields(f"{identity['sessionId']}:") == (*fields[:4], "")
 
 
+AGENT_USER = "agentes"
+LAUNCHD_DOMAIN = "user/502"
+AGENT_PATH = "/opt/homebrew/bin:/usr/bin:/bin"
+LOCK_PATH = "/private/tmp/b32-agentes.lock"
+WORKROOT = "/private/tmp"
+LOCK_ARGV = ["/usr/bin/lockf", "-t", "30", "-k", LOCK_PATH]
+APPLE_LABEL_PREFIX = "com.apple."
+NEVER_SIGNAL_PREFIXES = ("/System/", "/usr/libexec/", "/usr/sbin/")
+
+
+@dataclass(frozen=True)
+class CommandOutcome:
+    rc: int
+    stdout: str
+
+
+@dataclass(frozen=True)
+class AgentProcess:
+    pid: int
+    ppid: int
+    lstart: str
+    command: str
+
+
+@dataclass(frozen=True)
+class LaunchdService:
+    label: str
+    pid: int
+
+
+@dataclass(frozen=True)
+class Presence:
+    pid: int
+    lstart: str
+    command: str
+    label: str | None
+    signalable: bool
+    reason: str
+
+
+class AccountBusyError(RuntimeError):
+    pass
+
+
+def parse_agent_ps(text: str) -> tuple[AgentProcess, ...]:
+    processes = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split(maxsplit=7)
+        if len(parts) < 8 or not parts[0].isdigit() or not parts[1].isdigit():
+            raise OSError(f"agent ps line unreadable: {line!r}")
+        processes.append(AgentProcess(int(parts[0]), int(parts[1]),
+                                      " ".join(parts[2:7]), parts[7]))
+    return tuple(processes)
+
+
+def parse_launchd_services(text: str) -> tuple[LaunchdService, ...]:
+    lines = text.splitlines()
+    start = next((i for i, line in enumerate(lines) if line.strip() == "services = {"), None)
+    if start is None:
+        raise OSError("launchd services block missing")
+    services = []
+    closed = False
+    for line in lines[start + 1:]:
+        if line.strip() == "}":
+            closed = True
+            break
+        if not line.strip():
+            continue
+        parts = line.split()
+        if len(parts) != 3 or not parts[0].isdigit():
+            raise OSError(f"launchd service entry unreadable: {line!r}")
+        services.append(LaunchdService(parts[2], int(parts[0])))
+    if not closed or not services:
+        raise OSError("launchd services block empty or unterminated")
+    return tuple(services)
+
+
+def classify_presence(processes: tuple[AgentProcess, ...],
+                      services: tuple[LaunchdService, ...]) -> tuple[Presence, ...]:
+    excluded = {service.pid for service in services
+                if service.pid > 0 and service.label.startswith(APPLE_LABEL_PREFIX)}
+    label_by_pid = {}
+    for service in services:
+        if service.pid > 0:
+            label_by_pid.setdefault(service.pid, service.label)
+    presences = []
+    for process in processes:
+        if process.pid in excluded:
+            continue
+        executable = process.command.split()[0] if process.command.split() else ""
+        forbidden = executable == "xpcproxy" or executable.startswith(NEVER_SIGNAL_PREFIXES)
+        presences.append(Presence(process.pid, process.lstart, process.command,
+                                  label_by_pid.get(process.pid), not forbidden,
+                                  "system binary not signalable" if forbidden
+                                  else "agent process"))
+    for service in services:
+        if service.pid == 0 and not service.label.startswith(APPLE_LABEL_PREFIX):
+            presences.append(Presence(0, "", "", service.label, False,
+                                      "launchd label may be relaunched"))
+    presences.sort(key=lambda presence: (presence.pid, presence.label or ""))
+    return tuple(presences)
+
+
+def _subprocess_outcome(argv: list[str], timeout: float) -> CommandOutcome:
+    try:
+        done = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise OSError(f"command timed out: {' '.join(argv)}") from exc
+    return CommandOutcome(done.returncode, done.stdout)
+
+
+def default_ps_reader():
+    def read() -> CommandOutcome:
+        return _subprocess_outcome(["ps", "-o", "pid=,ppid=,lstart=,command=", "-U", AGENT_USER], 10)
+    return read
+
+
+def default_launchd_reader():
+    def read() -> CommandOutcome:
+        return _subprocess_outcome(LOCK_ARGV + ["sudo", "-n", "-u", AGENT_USER,
+                                                "/bin/launchctl", "print", LAUNCHD_DOMAIN], 15)
+    return read
+
+
+def default_killer():
+    def run_argv(argv: list[str]) -> CommandOutcome:
+        return _subprocess_outcome(argv, 35)
+    return run_argv
+
+
+class AgentesBackend(TmuxBackend):
+    def __init__(self, tmux_bin: str, socket: str, boot_id: str | None = None, *,
+                 ps_reader=None, launchd_reader=None, killer=None, grace_seconds: float = 5.0):
+        super().__init__(tmux_bin, socket, boot_id)
+        self._ps_reader = ps_reader if ps_reader is not None else default_ps_reader()
+        self._launchd_reader = launchd_reader if launchd_reader is not None else default_launchd_reader()
+        self._killer = killer if killer is not None else default_killer()
+        self.grace_seconds = grace_seconds
+        self.last_containment = None
+
+    def account_presence(self) -> tuple[Presence, ...]:
+        ps_out = self._ps_reader()
+        if ps_out.rc != 0:
+            raise OSError("agent ps read failed")
+        processes = parse_agent_ps(ps_out.stdout)
+        ld_out = self._launchd_reader()
+        if ld_out.rc != 0:
+            raise OSError("launchd read failed")
+        return classify_presence(processes, parse_launchd_services(ld_out.stdout))
+
+    def prove_absent(self, identity: dict) -> bool | None:
+        before = self.account_presence()
+        self.last_containment = {"session": identity.get("sessionName"),
+                                 "nonce": identity.get("nonce"),
+                                 "before": [asdict(entry) for entry in before],
+                                 "signals": [], "after": None}
+        if not before:
+            self.last_containment["after"] = []
+            return True
+        second = self.account_presence()
+        alive = {(entry.pid, entry.lstart) for entry in second}
+        signaled = []
+        for candidate in before:
+            if not candidate.signalable or (candidate.pid, candidate.lstart) not in alive:
+                continue
+            argv = LOCK_ARGV + ["sudo", "-n", "-u", AGENT_USER, "/bin/kill",
+                                "-TERM", str(candidate.pid)]
+            outcome = self._killer(argv)
+            self.last_containment["signals"].append({"argv": argv, "rc": outcome.rc})
+            signaled.append((candidate.pid, candidate.lstart))
+        if signaled:
+            deadline = time.monotonic() + self.grace_seconds
+            while time.monotonic() < deadline:
+                try:
+                    ps_out = self._ps_reader()
+                    if ps_out.rc == 0:
+                        remaining = {(p.pid, p.lstart) for p in parse_agent_ps(ps_out.stdout)}
+                        if not any(pair in remaining for pair in signaled):
+                            break
+                except OSError:
+                    pass
+                time.sleep(0.1)
+        after = self.account_presence()
+        self.last_containment["after"] = [asdict(entry) for entry in after]
+        return not after
+
+    def launch(self, session: str, command: list[str]) -> str:
+        present = self.account_presence()
+        if present:
+            detail = "; ".join(f"pid={entry.pid} label={entry.label} {entry.reason}"
+                               for entry in present)
+            raise AccountBusyError(f"agent account busy ({len(present)} present): {detail}")
+        mktemp = LOCK_ARGV + ["sudo", "-n", "-u", AGENT_USER, "/usr/bin/mktemp",
+                              "-d", f"{WORKROOT}/b32-ag-XXXXXX"]
+        made = self._killer(mktemp)
+        workdir = made.stdout.strip()
+        if made.rc != 0 or not workdir:
+            raise OSError("agent workdir creation failed")
+        # sh recibe workdir como $1 ("run" es solo $0); shift+exec deja al CLI
+        # como proceso del pane en lugar de un sh envolvente.
+        # TMPDIR explicito: sin el, el dirhelper XPC de la cuenta en sesion
+        # Background deja colgado a todo CLI que llame temp_dir (codex medido).
+        panel = LOCK_ARGV + [self.tmux_bin, "-L", self.socket, "new-session", "-d",
+                             "-s", session, "--", "sudo", "-n", "-u", AGENT_USER,
+                             "-H", "env", "PATH=" + AGENT_PATH, "TMPDIR=" + workdir,
+                             "/bin/sh", "-c",
+                             'cd "$1" && shift && exec "$@"', "run", workdir, *command]
+        if self._killer(panel).rc != 0:
+            raise OSError("agent panel spawn failed")
+        return workdir
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=("close",))
@@ -318,6 +534,8 @@ def main() -> int:
     parser.add_argument("--evidence", required=True, type=Path)
     parser.add_argument("--tmux-socket", required=True)
     parser.add_argument("--tmux-bin", default="tmux")
+    parser.add_argument("--backend", choices=("tmux", "agentes"),
+                        default=os.environ.get("AGENT_WORK_BACKEND", "tmux"))
     args = parser.parse_args()
     from host import Host
     host = Host(args.host_id, args.state_dir)
@@ -330,10 +548,15 @@ def main() -> int:
         receipt = host.receipt(args.host_id, key)
         if not receipt or receipt["receiptId"] != evidence.get("receipt"):
             raise ValueError("result receipt is not durable for this task")
-    backend = TmuxBackend(args.tmux_bin, args.tmux_socket)
+    backend = (AgentesBackend(args.tmux_bin, args.tmux_socket) if args.backend == "agentes"
+               else TmuxBackend(args.tmux_bin, args.tmux_socket))
     manager = ResourceManager(host.spool, args.host_id, backend)
     view = manager.close(key, evidence)
-    print(canonical({"state": view.state, "reason": view.reason}))
+    report = {"state": view.state, "reason": view.reason}
+    containment = getattr(backend, "last_containment", None)
+    if containment is not None:
+        report["containment"] = containment
+    print(canonical(report))
     return 0
 
 
