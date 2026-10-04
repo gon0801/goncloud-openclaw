@@ -1,0 +1,157 @@
+# B3: batería de cierre de B3 — G completa, integración nativa del par y batería de R del bloque
+
+Fecha: 2026-10-04. Host local: macOS (darwin, arm64). No es CI. Encargo B3-bateria con la
+Corrección 1 de David: la corrida completa de R quedó CORTADA POR ORDEN DE DAVID y la batería
+de R del bloque es la corrida --changed contra la base pública c074824a27.
+
+## El par (verificado antes de lanzar y al cerrar)
+
+- G: 8f8aed9bbdb2b59121714e1bafdbd3de3e26f8ef, rama encargos/b3, worktree ~/dev/wt/encargos-b3.
+  Árbol limpio antes y después de las baterías.
+- R: be3f71cd0c0b0ae231224754bd3462e250fdfe87, rama feat/agent-work-integration,
+  /Users/dn/dev/openclaw-agent-work-integration. Árbol limpio antes y después.
+- Cuenta agentes antes de cada batería: solo 3 xpcproxy com.apple.* (pid 62340, 62342, 69070).
+
+## Paso 1 — batería de G (una vez)
+
+Comando: cd ~/dev/wt/encargos-b3 && LANG=en_US.UTF-8 bash scripts/run-checks.sh
+Inicio 2026-10-04T09:13:23Z, fin 09:43:35Z. Duración 30 min 12 s. Exit 1.
+LOGDIR de la corrida: logs/run-checks/corrida-20261004-021323-18303 (102 entradas:
+99 ok, 2 fallas, verify-corpus ok). Log completo del driver y copia íntegra del LOGDIR:
+  ~/.local/state/encargos-loop/artifacts/B3-bateria/paso1-g-bateria.log
+  ~/.local/state/encargos-loop/artifacts/B3-bateria/g-logdir-corrida/
+
+Pruebas reales como agentes (test-agent-work-host.sh, OK en 47 s): 14 + 41 pruebas, 1 skip.
+La suite de 41 es test-agent-work-resources.py; el skip cae en la posición 29 alfabética,
+test_resource_close_real_launchd_label_stays_pending (SKIP por EIO 5, como en T7). Las demás
+pruebas real_* pasaron (100_cycles_real_tmux_processes, 100_cycles_real_account_absence,
+close_real_detached_children_proven_absent, close_real_term_ignoring_survivor_stays_pending).
+
+Skips sin AGENT_WORK_RUNTIME_SOURCE, anotados como NO CORRIDOS, no como pases:
+- test-agent-work-e2e.sh: cli_gateway (1 skip) y review_tail_restart (1 skip); la tercera
+  prueba del wrapper sí corrió.
+- test-agent-work-integration.sh (OK en 4 s, 56 pruebas): 1 skip, la prueba cruzada de
+  test-agent-work-integration.py.
+La integración real del par se corrió en el paso 2 con los 9 casos del ejecutor.
+
+Fallas de la batería de G y clasificación (reproducidas solas sobre 8f8aed9 y, en worktree
+aislado de mktemp -d, sobre el SHA literal de base 3bc4a0fabaaf5fb92b707d1a6fa0c57dd3348a49):
+
+1. test-cli-modos.sh (rc=1, 3 s). Comando y salida idénticos en los dos árboles:
+   «FAIL: drift de version registro vs host: claude: registro 2.1.285 vs host
+   '2.1.288 (Claude Code)'; codex: registro 0.159.2 vs host 'codex-cli 0.160.0'».
+   Clasificación: limitación de la BASE/HOST, conocida (fila B0 auditoría 2026-10-02 de
+   followups.md; el host subió de 2.1.287 a 2.1.288 y codex a 0.160.0 desde la auditoría).
+   No es bloqueante.
+2. test-doc-check-evidencia.sh (rc=1, 0 s). Pasa en la base (0 archivos en el rango) y falla
+   solo en 8f8aed9: «docs/evidence/agent-work/b32a-codex-dirhelper-sample.txt no arranca con
+   titulo '# ' / RECHAZADO (30 archivo(s) en el rango)». El archivo lo agrega 0c911c0, commit
+   del rango B3. Clasificación: viene del DIFF de B3.
+   BLOQUEANTE DEL CIERRE, reportado y NO corregido aquí (prohibido por el encargo).
+
+## Paso 2 — integración nativa del par (9 casos del ejecutor)
+
+Copia aislada de R: git worktree add --detach de be3f71c en mktemp -d
+(/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.0uBpT1c7GW/r-be3f71c, dejada en pie).
+- CI=1 pnpm install --frozen-lockfile --prefer-offline --ignore-scripts → exit 0 (4.1 s).
+- pnpm build → exit 0 (6 m 43.8 s).
+
+Con G en 8f8aed9, por caso:
+  AGENT_WORK_RUNTIME_SOURCE=<copia> bash scripts/agent-work/test-runtime.sh <caso>
+Secuencial, una vez por caso. Los 9 casos terminaron exit=0 y la primera línea de cada log,
+comparada con head -1, es exactamente:
+  {"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "be3f71cd0c0b0ae231224754bd3462e250fdfe87"}
+
+| caso              | exit | duración |
+|-------------------|------|----------|
+| budget_tree       | 0    | 23 s     |
+| budget_context    | 0    | 7 s      |
+| budget_evasion    | 0    | 17 s     |
+| recovery_limit    | 0    | 7 s      |
+| waiting_reason    | 0    | 9 s      |
+| recovery_queue    | 0    | 10 s     |
+| resource_release  | 0    | 11 s     |
+| projection_gateway| 0    | 39 s     |
+| idle_72h          | 0    | 437 s    |
+
+Logs: ~/.local/state/encargos-loop/artifacts/B3-bateria/paso2-caso-<caso>.log
+Resumen: ~/.local/state/encargos-loop/artifacts/B3-bateria/paso2-resumen.txt
+
+## Paso 3 — batería de R
+
+### 3a. Corrida completa: CORTADA POR ORDEN DE DAVID (no abortada, no pase)
+
+Comando: LANG=en_US.UTF-8 pnpm test (= node --import ./scripts/tsx.mjs
+scripts/test-projects.mts) en la copia aislada de R be3f71c. Una sola vez.
+Inicio 2026-10-04T10:11:08Z. Claude Code la detuvo por orden de David: el driver terminó con
+«vitest.ui.config.ts exited by signal SIGTERM» y «[test] FAILED (exit 143)». Última señal de
+vida observada 16:31:24Z; proceso muerto observado 16:41:17Z. Corte entre ambas.
+Log completo (26 MB): ~/.local/state/encargos-loop/artifacts/B3-bateria/paso3-r-bateria.log
+
+Evidencia PARCIAL, no la batería del bloque. Conteo contra el log (el método, porque las
+cifras citadas en la Corrección 1 —504/701, 92.580 verdes, 111 × en 23 archivos— no son
+reproducibles contra el log en disco; la diferencia queda documentada, no conciliada):
+- Anunciados: 701 shards («broad local run will start 701 Vitest shards»).
+- Arrancados: 522 líneas «[test] starting <config>» (443 tooling, 26 infra, 22 unit-fast,
+  5 unit-src, 26 configs de un arranque). Nunca llegó a e2e ni a buena parte de tooling.
+- 967 bloques de resumen «Test Files»; suma de «Tests N passed»: 110.901;
+  líneas ✓ del log: 121.430 (120.244 únicas).
+- Inventario de caídas: 100 líneas «× |proj| archivo > caso» únicas en 35 archivos
+  (149 líneas únicas con el grep literal de la Corrección, grep -E '^ *×' | sort -u).
+  La lista está en ~/.local/state/encargos-loop/artifacts/B3-bateria/paso3-x-resultado.txt
+  y paso3-x-archivos.txt. La ausencia de un archivo aquí NO es un pase.
+- Frente a lo conocido: 17 archivos coinciden 1:1 con las listas de B1/batería y B2
+  (followups.md y B2-R-bateria.txt) más openclaw-state-db.test.ts, conocida de B3-2b-r1
+  (falla igual en 63e37b8 y 77bdfab). Las 4 fallas de UI de B2 (locale en_CA) NO aparecieron:
+  el shard ui corrió entero en verde con LANG=en_US.UTF-8, coherente con el triage de B2.
+  backup-create (timeout de carga de B2) tampoco cayó esta vez.
+- 18 archivos con × no están en ninguna lista conocida (state-startup-corpus parts 1-8 y
+  state-corpus-fixture-lifetime, schema.help.quality, schema.hints,
+  update-managed-service-handoff-identity, node-worker-supervisor.recovery, crabbox-wrapper,
+  gh-read, k8s-deploy, live-docker-stage, update-first-hop-package-fixtures): los shards que
+  las contienen nunca llegaron a correr en B1 (cortada a 4,5 h) ni B2 (abortada a 2 h 58 m),
+  así que «no conocida» aquí no significa «regresión nueva». Con la corrida cortada no se
+  pueden clasificar (base / diff / carga); quedan como inventario parcial sin clasificar.
+
+### 3b. Batería de R del bloque (Corrección 1): --changed contra la base pública
+
+Comando (una vez, en la misma copia de R be3f71c):
+  LANG=en_US.UTF-8 node --import ./scripts/tsx.mjs scripts/test-projects.mts \
+    --changed c074824a27c96d3983043f9eeb33823cd1772d8c
+Inicio 2026-10-04T16:44:26Z, fin 16:48:23Z (driver 236,76 s; shard 69,41 s). Exit 1.
+Log completo (2,0 MB): ~/.local/state/encargos-loop/artifacts/B3-bateria/paso3b-r-changed.log
+
+- 1 shard arrancado (vitest.unit-fast.config.ts): 937 archivos de pruebas,
+  10.537 pruebas → 10.529 pasan, 2 fallan, 6 skip.
+  « Test Files 2 failed | 932 passed | 3 skipped (937) ».
+- Inventario de caídas (2, las dos CONOCIDAS, cero fallas nuevas):
+  1. |unit-fast| src/infra/outbound/sanitize-text.test.ts > sanitizeForPlainText >
+     preserves unspaced comparison prose in 🙂<limit and wait>5s — idéntica a B1/B2;
+     limitación de la BASE (fila B1/batería: falla también en c074824a27).
+  2. |unit-fast| test/scripts/check-native-state-schema-version.test.ts > native state
+     schema version guard > keeps the checked-in Swift and TypeScript contracts aligned —
+     drift Swift 19 vs TS 26, de la serie del programa, pendiente por la fila B5/T11.
+- Cero fallas nuevas → cero reproducciones be3f71c/5b14e9e/c074824a27 (la regla de la
+  Corrección 1 solo exige reproducir las no conocidas).
+- Nota de alcance: la selección es por cambios contra c074824a27; lo que no seleccionó no
+  queda certificado por esta corrida. La cobertura de las 18 familias sin clasificar de la
+  corrida completa sigue abierta.
+
+## Resumen del cierre
+
+- Batería de G: 2 en rojo. 1 de base/host (cli-modos) y 1 del diff de B3 que es BLOQUEANTE
+  DEL CIERRE: b32a-codex-dirhelper-sample.txt (0c911c0) sin título «# » hace caer
+  test-doc-check-evidencia.sh y caerá el doc-check de CI con fetch-depth 0.
+- Integración nativa del par: 9/9 casos en verde con el recibo JSON exacto.
+- Batería de R del bloque: solo las 2 fallas conocidas; nada nuevo atribuible a B3.
+- Corrida completa de R: cortada por orden de David; tercera batería completa local que no
+  converge (B1 cortada, B2 abortada por el runner, B3 cortada por orden).
+
+## Lo que este encargo NO hizo
+
+- No corrigió el bloqueante del doc-check ni ninguna otra falla (prohibido).
+- No clasificó las 18 familias desconocidas de la corrida cortada (no hay corrida íntegra
+  contra la que clasificar; la batería del bloque no las selecciona).
+- No relanzó batería alguna; cada corrida se lanzó una sola vez.
+- No hizo push, PR ni CI (prohibido); no marcó casillas del plan (T7 ya está completa).
+- No tocó la cuenta agentes, sudoers, gateway, claw ni crons.
