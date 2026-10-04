@@ -10,6 +10,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
@@ -22,7 +23,7 @@ from resources import (AccountBusyError, AGENT_USER, AgentesBackend, CommandOutc
 
 class FakeBackend:
     def __init__(self):
-        self.boot_id = "boot-one"
+        self.boot_id = "00000000-0000-0000-0000-000000000001"
         self.live = {}
         self.stops = []
         self.revokes = []
@@ -83,7 +84,7 @@ class ResourceTests(unittest.TestCase):
         self.backend.live["worker-1"]["serverStart"] = "restarted-tmux-server"
         self.assertEqual(self.manager.close(self.key, {"kind": "result", "receipt": "r1"}).state, "CleanupPending")
         self.assertEqual(self.backend.stops, [])
-        self.backend.boot_id = "boot-two"
+        self.backend.boot_id = "00000000-0000-0000-0000-000000000002"
         self.assertEqual(self.manager.close(self.key, {"kind": "result", "receipt": "r1"}).state, "AbsenceVerified")
         self.assertEqual(self.backend.stops, [])
 
@@ -410,11 +411,12 @@ class ResourceTests(unittest.TestCase):
         token = f"agent-work-detached-{os.getpid()}"
         launcher = Path(self.tmp.name) / "launch-detached.py"
         launcher.write_text(
-            "import json,subprocess,sys,time\n"
+            "import json,os,subprocess,sys,time\n"
             "from pathlib import Path\n"
             "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)',sys.argv[2]],"
             "start_new_session=True)\n"
-            "start=subprocess.run(['ps','-o','lstart=','-p',str(child.pid)],capture_output=True,text=True).stdout.strip()\n"
+            "start=subprocess.run(['ps','-o','lstart=','-p',str(child.pid)],capture_output=True,text=True,"
+            "env={**os.environ,'TZ':'UTC','LC_ALL':'C'}).stdout.strip()\n"
             "Path(sys.argv[1]).write_text(json.dumps({'pid':child.pid,'start':start}))\n"
             "time.sleep(60)\n"
         )
@@ -438,11 +440,51 @@ class ResourceTests(unittest.TestCase):
             self.assertEqual(manager.counts()["active"], 1)
         finally:
             tmux_cmd("kill-server")
-            if child and backend._start(str(child["pid"])) == child["start"]:
+            if child:
                 command = subprocess.run(["ps", "-o", "command=", "-p", str(child["pid"])],
                                          capture_output=True, text=True).stdout
                 if token in command:
                     os.kill(child["pid"], signal.SIGTERM)
+
+    def test_resource_identity_survives_timezone_and_locale_shift(self):
+        tmux = shutil.which("tmux")
+        if not tmux:
+            self.skipTest("tmux not installed")
+        socket = f"agent-work-tzshift-{os.getpid()}"
+        def tmux_cmd(*args):
+            return subprocess.run([tmux, "-L", socket, *args], capture_output=True, text=True)
+        try:
+            self.assertEqual(tmux_cmd("new-session", "-d", "-s", "shifty", "/bin/sleep", "120").returncode, 0)
+            with mock.patch.dict(os.environ, {"TZ": "America/Vancouver", "LANG": "en_CA.UTF-8"}):
+                reserve_backend = TmuxBackend(tmux, socket)
+                manager = ResourceManager(self.host.spool, "host-test", reserve_backend, capacity=2)
+                held = manager.reserve(self.key, "shifty", "TaskCreated")
+                self.assertTrue(manager.begin_launch(self.key).launch_now)
+                reserve_backend.mark("shifty", held.nonce)
+                self.assertEqual(manager.attach(self.key).state, "Running")
+                saved = reserve_backend.observe("shifty")
+            self.assertTrue(saved)
+            with mock.patch.dict(os.environ, {"TZ": "UTC", "LANG": "en_US.UTF-8"}):
+                close_backend = TmuxBackend(tmux, socket)
+                self.assertEqual(close_backend.boot_id, reserve_backend.boot_id)
+                self.assertEqual(close_backend.observe("shifty"), saved)
+                restarted = ResourceManager(self.host.spool, "host-test", close_backend, capacity=2)
+                view = restarted.close(self.key, {"kind": "cancel", "receipt": "tz-shift"})
+            self.assertEqual(view.state, "CleanupPending")
+            self.assertEqual(view.reason, "descendant absence unverified")
+        finally:
+            tmux_cmd("kill-server")
+
+    def test_resource_close_legacy_boot_identity_stays_pending(self):
+        self.backend.boot_id = "{ sec = 1790061849, usec = 36070 } Tue Sep 22 00:24:09 2026"
+        held = self.manager.reserve(self.key, "legacy-boot", "TaskCreated")
+        self.assertTrue(self.manager.begin_launch(self.key).launch_now)
+        self.backend.launch("legacy-boot", held.nonce, 701)
+        self.assertEqual(self.manager.attach(self.key).state, "Running")
+        self.backend.boot_id = "00000000-0000-0000-0000-000000000002"
+        view = self.manager.close(self.key, {"kind": "cancel", "receipt": "legacy-boot"})
+        self.assertEqual(view.state, "CleanupPending")
+        self.assertEqual(view.reason, "boot identity unrecognized")
 
     def _managed_shell(self):
         root = Path(self.tmp.name)

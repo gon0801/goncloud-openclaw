@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 import secrets
 import sqlite3
 import subprocess
@@ -14,6 +15,19 @@ from spool import Spool, canonical
 
 TERMINAL = ("AbsenceVerified", "ReleasedAdopted")
 OWNERS = ("TaskCreated", "UserAdopted", "IntentionalPool")
+PS_ENV = {"TZ": "UTC", "LC_ALL": "C"}
+BOOTTIME_RE = re.compile(r"sec\s*=\s*(\d+),\s*usec\s*=\s*(\d+)")
+BOOT_ID_RE = re.compile(r"\d+\.\d{6}")
+LINUX_BOOT_ID_RE = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
+
+
+def _ps(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["ps", *args], capture_output=True, text=True,
+                          env={**os.environ, **PS_ENV})
+
+
+def recognized_boot_id(value: str) -> bool:
+    return bool(BOOT_ID_RE.fullmatch(value) or LINUX_BOOT_ID_RE.fullmatch(value))
 
 
 @dataclass(frozen=True)
@@ -137,6 +151,11 @@ class ResourceManager:
             return self._state(key, row["revision"], "CleanupPending", "closure already requested", observed)
         return self._state(key, row["revision"], "Running", identity=observed)
 
+    def _boot_state(self, saved: str) -> str:
+        if saved == self.backend.boot_id:
+            return "same"
+        return "reboot" if recognized_boot_id(saved) else "unrecognized"
+
     def close(self, key: OperationKey, evidence: dict) -> ResourceView:
         if not isinstance(evidence, dict) or evidence.get("kind") not in ("result", "cancel") or not evidence.get("receipt"):
             raise ValueError("durable result or cancellation evidence required")
@@ -173,8 +192,11 @@ class ResourceManager:
         if identity is None:
             if original["state"] == "Reserved":
                 return self._state(key, revision, "AbsenceVerified")
-            if self.backend.boot_id != original["boot_id"]:
+            boot = self._boot_state(original["boot_id"])
+            if boot == "reboot":
                 return self._state(key, revision, "AbsenceVerified")
+            if boot == "unrecognized":
+                return self._state(key, revision, "CleanupPending", "boot identity unrecognized")
             try:
                 observed = self.backend.observe(original["session_name"])
             except OSError:
@@ -183,8 +205,11 @@ class ResourceManager:
                     and observed.get("bootId") == original["boot_id"]):
                 return self._state(key, revision, "CleanupPending", "launch identity recovered", observed)
             return self._state(key, revision, "CleanupPending", "launch outcome uncertain")
-        if self.backend.boot_id != identity["bootId"]:
+        boot = self._boot_state(identity["bootId"])
+        if boot == "reboot":
             return self._state(key, revision, "AbsenceVerified")
+        if boot == "unrecognized":
+            return self._state(key, revision, "CleanupPending", "boot identity unrecognized")
         try:
             observed = self.backend.observe(original["session_name"])
         except OSError:
@@ -220,7 +245,10 @@ class TmuxBackend:
         if boot_id:
             self.boot_id = boot_id
         elif sys.platform == "darwin":
-            self.boot_id = subprocess.check_output(["sysctl", "-n", "kern.boottime"], text=True).strip()
+            match = BOOTTIME_RE.search(subprocess.check_output(["sysctl", "-n", "kern.boottime"], text=True))
+            if match is None:
+                raise RuntimeError("host boottime unreadable")
+            self.boot_id = f"{match.group(1)}.{int(match.group(2)):06d}"
         elif sys.platform.startswith("linux"):
             self.boot_id = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
         else:
@@ -233,7 +261,7 @@ class TmuxBackend:
     def _start(pid: str) -> str:
         if not pid.isdigit():
             return ""
-        result = subprocess.run(["ps", "-o", "lstart=", "-p", pid], capture_output=True, text=True)
+        result = _ps("-o", "lstart=", "-p", pid)
         return result.stdout.strip() if result.returncode == 0 else ""
 
     def _fields(self, target: str) -> tuple[str, str, str, str, str] | None:
