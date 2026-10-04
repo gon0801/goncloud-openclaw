@@ -38,6 +38,10 @@ case "$case_name" in
     test_file='src/gateway/server-methods/managed-tasks.test.ts'
     test_pattern='serves and acknowledges a durable projection over an authenticated Gateway connection'
     probe_restart=0 ;;
+  resource_release)
+    test_file='src/agents/tasks/managed-task.host-closure.test.ts'
+    test_pattern=''
+    probe_restart=0 ;;
   budget_tree)
     test_file='src/agents/tasks/managed-task.budget.test.ts'
     test_pattern='shares model-call capacity across children|holds uncertain call capacity across retries and restart|allows one automatic recovery call per root'
