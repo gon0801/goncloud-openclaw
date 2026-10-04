@@ -1306,6 +1306,106 @@ bash "$CORR" cerrar t-relanzo >/dev/null 2>&1 \
   || fail "B0-1-r2: cerrar fallo tras relanzo con el mismo nombre"
 echo "ok (B0-1-r2): relanzo con el mismo nombre deja una corrida ordinaria cerrable"
 
+# B3/T7: reemplazar una entrada gestionada exige el mismo encargo_ref y host_id.
+# Una entrada con host_id/encargo_ref es el enlace a un recurso del host; un
+# relanzo que no los traiga rompe el enlace sin aviso. El relanzo con los
+# mismos refs sigue siendo valido: es la re-entrega del flujo host u operador
+# con la misma tarea (el vigia no pasa refs; su relanzo de una gestionada
+# queda rechazado, residual en followups).
+bash "$CORR" abrir t-reemp --runbook "$RB" --vigia claw --cli-modos "$T/modos.tsv" --simulacro >/dev/null \
+  || fail "B3/T7: abrir t-reemp fallo"
+bash "$CORR" lanzar-sesion t-reemp carril bueno "$T/ses" --nombre ses-gest >/dev/null \
+  || fail "B3/T7: lanzar-sesion ses-gest fallo"
+"$TM_REAL" -L "$L" kill-session -t "=ses-gest" 2>/dev/null
+python3 - "$T/corridas/t-reemp/registro.json" <<'PY' || fail "B3/T7: no se pudo marcar gestionada la entrada"
+import json, sys
+reg = sys.argv[1]
+d = json.load(open(reg))
+for entrada in d["sesiones"]:
+    if entrada.get("nombre") == "ses-gest":
+        entrada["host_id"] = "host-b31"
+        entrada["encargo_ref"] = "/b31/sin-registrar.json"
+json.dump(d, open(reg, "w"))
+PY
+if bash "$CORR" lanzar-sesion t-reemp carril bueno "$T/ses" --nombre ses-gest >"$T/b31-reemp.sin.log" 2>&1; then
+  fail "B3/T7: el relanzo sin encargo_ref/host_id reemplazo una entrada gestionada"
+fi
+grep -q "gestionada" "$T/b31-reemp.sin.log" \
+  || fail "B3/T7: el rechazo no nombra la sesion gestionada"
+n_gest="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); e=[s for s in d.get("sesiones",[]) if s.get("nombre")=="ses-gest"]; print(sum(1 for s in e if s.get("host_id")=="host-b31" and s.get("encargo_ref")))' "$T/corridas/t-reemp/registro.json")"
+[ "$n_gest" = "1" ] || fail "B3/T7: la entrada gestionada quedo $n_gest veces tras el rechazo"
+mkdir -p "$T/host-b31/ses"
+printf 'b3 t7\n' > "$T/host-b31/brief.txt"
+REF="$(python3 - "$T/host-b31" <<'PY'
+import hashlib, sys
+from pathlib import Path
+sys.path.insert(0, "scripts/agent-work")
+from contracts import AuthorizedOperation, OperationKey
+from host import Host
+raiz = Path(sys.argv[1])
+brief = raiz / "brief.txt"
+host = Host("host-b31", raiz / "state")
+key = OperationKey("host-b31", "b31-task", 1, "b31-instance")
+op = AuthorizedOperation(key=key, producer_id="fake", capability="b31-secret", session="ses-gest",
+                         workspace_ref=str(raiz), brief_ref=str(brief),
+                         brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
+                         input_revision={"kind": "code", "repository": "repo", "sha": "a" * 40},
+                         result_contract="review.v1", claim_id="b31-claim")
+print(host.apply(key, op, lambda *_: None,
+                 lambda a: {"state": "host-admitted", "claimId": a["claimId"],
+                            "hostId": a["hostId"], "instanceId": a["instanceId"],
+                            "generation": a["generation"]}).assignment_ref)
+PY
+)" || fail "B3/T7: no se pudo registrar el encargo de control"
+python3 - "$T/corridas/t-reemp/registro.json" "$REF" <<'PY' || fail "B3/T7: no se pudo apuntar la entrada al encargo real"
+import json, sys
+reg, ref = sys.argv[1], sys.argv[2]
+d = json.load(open(reg))
+for entrada in d["sesiones"]:
+    if entrada.get("nombre") == "ses-gest":
+        entrada["encargo_ref"] = ref
+json.dump(d, open(reg, "w"))
+PY
+AGENT_WORK_HOST_STATE_DIR="$T/host-b31/state" bash "$CORR" lanzar-sesion t-reemp carril bueno "$T/ses" --nombre ses-gest \
+  --encargo-ref "$REF" --host-id host-b31 >"$T/b31-reemp.con.log" 2>&1 \
+  || fail "B3/T7: el relanzo con el mismo encargo_ref y host_id fallo: $(cat "$T/b31-reemp.con.log")"
+n_reemp="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); e=[s for s in d.get("sesiones",[]) if s.get("nombre")=="ses-gest"]; print(len(e), sum(1 for s in e if s.get("encargo_ref")==sys.argv[2]))' "$T/corridas/t-reemp/registro.json" "$REF")"
+[ "$n_reemp" = "1 1" ] || fail "B3/T7: el relanzo valido dejo el registro en: $n_reemp"
+python3 - "$T/corridas/t-reemp/registro.json" <<'PY' || fail "B3/T7: no se pudo duplicar la entrada gestionada"
+import json, sys
+reg = sys.argv[1]
+d = json.load(open(reg))
+e = next(s for s in d["sesiones"] if isinstance(s, dict) and s.get("nombre") == "ses-gest")
+d["sesiones"].insert(0, dict(e))
+json.dump(d, open(reg, "w"))
+PY
+"$TM_REAL" -L "$L" kill-session -t "=ses-gest" 2>/dev/null
+if AGENT_WORK_HOST_STATE_DIR="$T/host-b31/state" bash "$CORR" lanzar-sesion t-reemp carril bueno "$T/ses" --nombre ses-gest \
+  --encargo-ref "$REF" --host-id host-b31 >"$T/b31-reemp.dup.log" 2>&1; then
+  fail "B3/T7: el relanzo con dos entradas gestionadas duplicadas reemplazo el registro"
+fi
+grep -q "duplicada" "$T/b31-reemp.dup.log" \
+  || fail "B3/T7: el rechazo de duplicados no nombra la duplicidad"
+n_dup="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(sum(1 for s in d.get("sesiones",[]) if isinstance(s,dict) and s.get("nombre")=="ses-gest"))' "$T/corridas/t-reemp/registro.json")"
+[ "$n_dup" = "2" ] || fail "B3/T7: el rechazo de duplicados altero el registro ($n_dup entradas)"
+python3 - "$T/corridas/t-reemp/registro.json" <<'PY' || fail "B3/T7: no se pudo reparar el registro duplicado"
+import json, sys
+reg = sys.argv[1]
+d = json.load(open(reg))
+vistas, sesiones = set(), []
+for entrada in d["sesiones"]:
+    nombre = entrada.get("nombre") if isinstance(entrada, dict) else None
+    if nombre == "ses-gest":
+        if nombre in vistas:
+            continue
+        vistas.add(nombre)
+    sesiones.append(entrada)
+d["sesiones"] = sesiones
+json.dump(d, open(reg, "w"))
+PY
+"$TM_REAL" -L "$L" kill-session -t "=ses-gest" 2>/dev/null
+echo "ok (B3/T7): reemplazo de gestionada exige el mismo encargo_ref y host_id"
+
 # (spec) F3 r9: `encargo` es un campo de contrato versionado de sesiones[]:
 # lo escribe lanzar-sesion cuando hay --encargo y lo re-entrega el relanzo
 # automatico del vigia. La spec del registro debe documentarlo.

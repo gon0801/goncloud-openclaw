@@ -1,0 +1,18 @@
+test_resource_close_agentes_ghost_label_pid0_blocks_without_signals (__main__.ResourceTests.test_resource_close_agentes_ghost_label_pid0_blocks_without_signals) ... FAIL
+
+======================================================================
+FAIL: test_resource_close_agentes_ghost_label_pid0_blocks_without_signals (__main__.ResourceTests.test_resource_close_agentes_ghost_label_pid0_blocks_without_signals)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b3/scripts/tests/test-agent-work-resources.py", line 681, in test_resource_close_agentes_ghost_label_pid0_blocks_without_signals
+    self.assertEqual(view.state, "CleanupPending")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'AbsenceVerified' != 'CleanupPending'
+- AbsenceVerified
++ CleanupPending
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.009s
+
+FAILED (failures=1)

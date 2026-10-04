@@ -248,6 +248,12 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(output["sent"], ["task-2"])
         self.assertEqual(output["errors"][0]["operationId"], operation_id(self.key))
 
+    def test_host_receipts_partial_report_is_refused(self):
+        self.apply(self.key, self.operation, lambda *_: None)
+        with self.assertRaisesRegex(ValueError, "partial final result"):
+            self.host.report("mac-test", self.report(typedPayload="solo texto"))
+        self.assertEqual(self.host.pending("mac-test"), [])
+
     def test_host_receipts_reject_partial_foreign_old_and_exit_only(self):
         self.apply(self.key, self.operation, lambda *_: None)
         for changed in (

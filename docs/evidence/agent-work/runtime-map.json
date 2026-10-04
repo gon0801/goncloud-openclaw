@@ -21,7 +21,8 @@
     "providerBoundary": "src/agents/provider-stream.ts",
     "sessionLifecycle": "src/agents/subagents/registry/subagent-registry-lifecycle-completion.ts",
     "migrations": "src/state/openclaw-state-schema.sql",
-    "nativeTests": "src/gateway/agent-turn/agent-wait-dedupe.test.ts"
+    "nativeTests": "src/gateway/agent-turn/agent-wait-dedupe.test.ts",
+    "recoverySiblingsTests": "src/agents/tasks/managed-task.recovery.siblings.test.ts"
   },
   "relatedPaths": [
     "src/agents/subagents/spawn/subagent-spawn-request.ts",

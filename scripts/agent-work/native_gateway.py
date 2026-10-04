@@ -95,6 +95,35 @@ class GatewayProjectionClient:
             "artifactBase64": base64.b64encode(artifact_bytes).decode("ascii"),
         })
 
+    def close_host(self, assignment, state, reason, evidence_digest):
+        if not isinstance(assignment, dict) or assignment.get("hostId") != self.host_id:
+            raise ValueError("host closure identity mismatch")
+        fields = ("taskId", "instanceId", "producerId", "capability")
+        if any(not assignment.get(field) for field in fields):
+            raise ValueError("host closure assignment incomplete")
+        generation = assignment["generation"]
+        if not isinstance(generation, int) or isinstance(generation, bool) or generation < 1:
+            raise ValueError("host closure generation must be positive")
+        if state not in ("CleanupPending", "AbsenceVerified", "ReleasedAdopted"):
+            raise ValueError("host closure state invalid")
+        if (state == "CleanupPending" and not reason) or len(reason) > 4096:
+            raise ValueError("host closure reason invalid")
+        if not re.fullmatch(r"[0-9a-f]{64}", evidence_digest or ""):
+            raise ValueError("host closure evidence digest invalid")
+        params = {"hostId": self.host_id, "instanceId": assignment["instanceId"],
+                  "capability": {"taskId": assignment["taskId"], "generation": generation,
+                                 "producerId": assignment["producerId"],
+                                 "token": assignment["capability"]},
+                  "state": state, "reason": reason, "evidenceDigest": evidence_digest}
+        if assignment.get("adapterId"):
+            params["adapterId"] = assignment["adapterId"]
+        receipt = self._call("managedTasks.host.close", params)
+        if (not isinstance(receipt, dict) or receipt.get("taskId") != assignment["taskId"]
+                or receipt.get("generation") != generation or receipt.get("state") != state
+                or receipt.get("evidenceDigest") != evidence_digest):
+            raise RuntimeError("native host closure receipt identity mismatch")
+        return receipt
+
     def admit_host(self, assignment):
         if not isinstance(assignment, dict) or assignment.get("hostId") != self.host_id:
             raise ValueError("host admission identity mismatch")
@@ -277,13 +306,19 @@ def transfer_gateway_projections(client, *, evidence_root, progress_state_dir, p
 
 
 def pump_once(client, *, host, evidence_root, progress_state_dir, progress_client, cli_claim=None):
-    """Report, claim authorized work, and drain projections in one code-only pass."""
+    """Report, close, claim authorized work, and drain projections in one code-only pass."""
     receipts = []
     report_error = None
     try:
         receipts = host.flush(client.host_id, client.report_host_result)
     except (OSError, RuntimeError, ValueError) as exc:
         report_error = exc
+    closed = 0
+    closure_errors = []
+    try:
+        closed, closure_errors = host.flush_closures(client.host_id, client.close_host)
+    except (OSError, RuntimeError, ValueError) as exc:
+        closure_errors = [str(exc)]
     claimed = None
     claim_error = None
     if cli_claim is not None:
@@ -299,7 +334,9 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
         raise report_error
     if claim_error is not None:
         raise claim_error
-    result = {"reported": len(receipts), "transferred": transferred}
+    if closure_errors:
+        raise RuntimeError("; ".join(closure_errors))
+    result = {"reported": len(receipts), "transferred": transferred, "closed": closed}
     if cli_claim is not None:
         result["claimed"] = 1 if claimed is not None else 0
     return result
@@ -396,9 +433,19 @@ def main(argv=None):
     if args.flush_results:
         if not args.host_state_dir:
             parser.error("--flush-results requires --host-state-dir")
-        receipts = Host(args.host_id, args.host_state_dir).flush(args.host_id, client.report_host_result)
-        print(json.dumps({"reported": len(receipts)}))
-        return 0
+        host = Host(args.host_id, args.host_state_dir)
+        reported, report_error = 0, None
+        try:
+            reported = len(host.flush(args.host_id, client.report_host_result))
+        except (OSError, RuntimeError, ValueError) as exc:
+            report_error = exc
+        closed, closure_errors = host.flush_closures(args.host_id, client.close_host)
+        if report_error is not None:
+            print(f"agent-work flush: {report_error}", file=sys.stderr, flush=True)
+        for error in closure_errors:
+            print(f"agent-work closure: {error}", file=sys.stderr, flush=True)
+        print(json.dumps({"closed": closed, "reported": reported}))
+        return 1 if report_error is not None or closure_errors else 0
     if not all((args.evidence_root, args.progress_state_dir, args.progress_client)):
         parser.error("projection transfer requires evidence and progress paths")
     count = transfer_gateway_projections(

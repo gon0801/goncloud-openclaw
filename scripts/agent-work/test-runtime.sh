@@ -38,6 +38,10 @@ case "$case_name" in
     test_file='src/gateway/server-methods/managed-tasks.test.ts'
     test_pattern='serves and acknowledges a durable projection over an authenticated Gateway connection'
     probe_restart=0 ;;
+  resource_release)
+    test_file='src/agents/tasks/managed-task.host-closure.test.ts'
+    test_pattern=''
+    probe_restart=0 ;;
   budget_tree)
     test_file='src/agents/tasks/managed-task.budget.test.ts'
     test_pattern='shares model-call capacity across children|holds uncertain call capacity across retries and restart|allows one automatic recovery call per root'
@@ -45,6 +49,10 @@ case "$case_name" in
   budget_context)
     test_file='src/agents/tasks/managed-task.budget.test.ts'
     test_pattern='rejects incomplete runtime budget and context shapes|counts context components once|retains full reservation when terminal provider usage is absent'
+    probe_restart=0 ;;
+  budget_evasion)
+    test_file='src/agents/tasks/managed-task.native-report.test.ts'
+    test_pattern='keeps root creation within the managed run lifetime'
     probe_restart=0 ;;
   waiting_reason)
     test_file='src/agents/tasks/managed-task.admission.test.ts'
@@ -58,6 +66,7 @@ case "$case_name" in
     probe_restart=0 ;;
   recovery_queue)
     test_file='src/agents/tasks/managed-task.recovery.test.ts'
+    extra_test_files=('src/agents/tasks/managed-task.recovery.siblings.test.ts')
     test_pattern=''
     probe_restart=0 ;;
   delegation_bypass)

@@ -123,7 +123,13 @@ if os.environ['CORR_SES_ENCARGO_REF']:
   e['host_id']=os.environ['CORR_SES_HOST_ID']
 # El relanzo con el mismo nombre llega aqui solo con la sesion vieja muerta
 # (crear la nueva exige el nombre libre) y reemplaza su entrada: los guardias
-# de identidad de cerrar y terminar-sesion exigen nombres unicos.
+# de identidad de cerrar y terminar-sesion exigen nombres unicos. Una entrada
+# gestionada (host_id o encargo_ref) es el enlace al recurso del host.
+vieja=[x for x in d['sesiones'] if isinstance(x,dict) and x.get('nombre')==os.environ['CORR_SES_NOMBRE'] and (x.get('host_id') or x.get('encargo_ref'))]
+if len(vieja)>1:
+  raise SystemExit('lanzar-sesion: identidad de sesion gestionada duplicada en el registro')
+if vieja and (os.environ['CORR_SES_ENCARGO_REF']!=vieja[0].get('encargo_ref') or os.environ['CORR_SES_HOST_ID']!=vieja[0].get('host_id')):
+  raise SystemExit('lanzar-sesion: reemplazo de sesion gestionada exige el mismo encargo_ref y host_id')
 d['sesiones']=[x for x in d['sesiones'] if not (isinstance(x,dict) and x.get('nombre')==os.environ['CORR_SES_NOMBRE'])]
 d['sesiones'].append(e)" \
     || { lock_soltar "$reg"

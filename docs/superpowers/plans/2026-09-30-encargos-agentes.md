@@ -190,7 +190,7 @@ Produce `reserveModelCall(rootId, requestUsageBound)` y `settleModelCall(reserva
 - [x] Implementa reserva previa, liquidación y perfiles finitos. Incluye límites de concurrencia, profundidad, hijos y llamadas.
 - [x] Intenta eludir el límite con un hijo nuevo, una sesión nueva y la recuperación nativa. Incluye `managed_tasks_submit` desde un run hijo activo, cancelado y recuperado: no crea otra raíz/presupuesto ni escapa del árbol de cancelación. Exige rechazo antes del proveedor; los hijos válidos siguen la continuación nativa con la raíz original.
 
-Verifica con `budget_tree` y `budget_context`. El perfil productivo se fija en T11 usando configuración y medición reales; no extrapoles el perfil pequeño del ensayo ni cambies silenciosamente un límite existente.
+Verifica con `budget_tree`, `budget_context` y `budget_evasion`. El perfil productivo se fija en T11 usando configuración y medición reales; no extrapoles el perfil pequeño del ensayo ni cambies silenciosamente un límite existente.
 
 ### T5. Recupera pendientes y muestra su causa sin inferencia
 
@@ -205,7 +205,7 @@ Consume `inspect`, admisión y recibos. Produce recuperación determinista por i
 - [ ] Implementa la recuperación sobre la cola nativa y sus eventos de capacidad. No abras supervisores ni scouts de lectura.
 - [x] Comprueba el contador externo del proveedor y la ausencia de rutas de recuperación que lo evadan.
 
-Verifica con `idle_72h`, `recovery_limit` y `waiting_reason`. Cierra B2 con la batería nativa del SHA final.
+Verifica con `idle_72h`, `recovery_limit`, `waiting_reason` y `recovery_queue`. Cierra B2 con la batería nativa del SHA final.
 
 ### T6. Entrega y recoge resultados de los CLI por identidad
 
@@ -215,7 +215,7 @@ Produce `Host.apply(OperationKey, AuthorizedOperation)` y el informe portable qu
 
 - [x] Añade `host_receipts`: registro antes de entrega, ACK vinculado al encargo y un solo encargo activo por instancia.
 - [x] Añade informe parcial, credencial ajena, versión antigua y salida cero sin informe. Ninguno acredita entrega válida.
-- [ ] Ejecuta las pruebas en rojo con socket tmux y directorios de ensayo.
+- [x] Ejecuta las pruebas en rojo con socket tmux y directorios de ensayo.
 - [x] Implementa entrega por referencia, escritura atómica de resultados y spool hasta recibo durable. Usa `hostId` explícito para cada lectura.
 - [x] Repite cien veces el informe y pierde su ACK. Exige un resultado y el mismo recibo.
 
@@ -227,14 +227,14 @@ Depende de T6. Crea `G/scripts/agent-work/resources.py`. Modifica `host.py`, `sc
 
 Produce reserva idempotente de host, identidad resistente a reutilización y `AbsenceVerified` o `CleanupPending`. El runtime conserva la reserva del árbol hasta recibir prueba válida.
 
-- [ ] Añade `resource_identity`: PID reutilizado, reinicio del host, cambio de servidor tmux y sesión adoptada. Una sesión preexistente sin prueba de creación no se clasifica como pool propio por carecer de nonce. Cubre claim, replay, cierre y cierre repetido; exige cero señales a recursos ajenos.
-- [ ] Añade `resource_close`: caída entre reserva y lanzamiento, descendiente desacoplado, ACK perdido y stop fallido.
-- [ ] Ejecuta los casos en rojo.
-- [ ] Implementa captura de evidencia, contención o rastreo de descendientes, detención y verificación. Sustituye éxito aparente tras fallo de stop por cierre pendiente en la ruta gestionada.
-- [ ] Comprueba que terminar el turno del padre no abandona al hijo y que un host inaccesible no libera cupo.
-- [ ] Ejecuta `resource_100_cycles`. Exige cero procesos propios abandonados y cuentas separadas para historial y pool intencional.
+- [x] Añade `resource_identity`: PID reutilizado, reinicio del host, cambio de servidor tmux y sesión adoptada. Una sesión preexistente sin prueba de creación no se clasifica como pool propio por carecer de nonce. Cubre claim, replay, cierre y cierre repetido; exige cero señales a recursos ajenos.
+- [x] Añade `resource_close`: caída entre reserva y lanzamiento, descendiente desacoplado, ACK perdido y stop fallido.
+- [x] Ejecuta los casos en rojo.
+- [x] Implementa captura de evidencia, contención o rastreo de descendientes, detención y verificación. Sustituye éxito aparente tras fallo de stop por cierre pendiente en la ruta gestionada.
+- [x] Comprueba que terminar el turno del padre no abandona al hijo y que un host inaccesible no libera cupo. Evidencia conjunta B3-2b (R `77bdfab`: cupo retenido hasta cierre terminal, `managedTasks.host.close`, esquema 27) y B3-2c-r1 (G: cierre de adoptada desaparecida con prueba positiva, spool de cierres con reintentos, envío con recibo verificado y prueba cruzada `projection_gateway`).
+- [x] Ejecuta `resource_100_cycles`. Exige cero procesos propios abandonados y cuentas separadas para historial y pool intencional.
 
-Verifica los tres casos con `test-agent-work-host.sh`. Certifica cada combinación de host y adaptador de `coverage.json`; una combinación sin prueba permanece deshabilitada. Cierra B3 con la batería de `G` y la integración nativa del mismo par de artefactos.
+Verifica los tres casos con `test-agent-work-host.sh` y los casos `resource_release` y `projection_gateway` del ejecutor `test-runtime.sh`. Certifica cada combinación de host y adaptador de `coverage.json`; una combinación sin prueba permanece deshabilitada. Cierra B3 con la batería de `G` y la integración nativa del mismo par de artefactos.
 
 ### T8. Enlaza resultados con progreso y con el director
 

@@ -18,13 +18,13 @@
   "hosts": [{"id": "mac-local", "platform": "macOS", "status": "sandbox-tested-uncertified"}, {"id": "windows-remote", "platform": "Windows", "status": "disabled-unverified"}],
   "hostAdapterCoverage": {
     "mac-local": {
-      "claude_fable": "disabled-descendant-proof-pending",
-      "claude_opus": "disabled-descendant-proof-pending",
-      "kimi_k3": "disabled-descendant-proof-pending",
-      "kimi_coding": "disabled-descendant-proof-pending",
-      "codex": "disabled-descendant-proof-pending",
-      "zcode": "disabled-descendant-proof-pending",
-      "grok": "disabled-descendant-proof-pending"
+      "claude_fable": "disabled-operator-setup-pending",
+      "claude_opus": "disabled-operator-setup-pending",
+      "kimi_k3": "disabled-operator-setup-pending",
+      "kimi_coding": "disabled-operator-setup-pending",
+      "codex": "disabled-operator-setup-pending",
+      "zcode": "disabled-operator-setup-pending",
+      "grok": "disabled-operator-setup-pending"
     },
     "windows-remote": {
       "claude_fable": "disabled-host-unverified",
@@ -36,11 +36,21 @@
       "grok": "disabled-host-unverified"
     }
   },
-  "resourceSandboxEvidence": "bash scripts/tests/test-agent-work-host.sh resource_identity; resource_close; resource_100_cycles",
+  "macOperatorSetup": {
+    "status": "pending-operator-session",
+    "reason": "La cuenta dedicada agentes (uid 502) esta lista y el backend de recursos TaskCreated cierra con AbsenceVerified por frontera de cuenta, pero ninguna combinacion arranca en produccion hasta que David inicie la sesion de cada CLI como agentes (con admision apagada y sin reservas activas). El lanzador backend.launch() fija PATH=/opt/homebrew/bin:/usr/bin:/bin y TMPDIR=<workdir>.",
+    "measured": {
+      "sudo": "sudo -n -u agentes /usr/bin/true rc=0 (sudoers dn ALL=(agentes) NOPASSWD: ALL)",
+      "cliVersionProbes": "kimi, zcode y grok rc=0; claude rc=0 (una corrida rc=143 por la limpieza concurrente de una corrida vieja); codex rc=124 sin TMPDIR y rc=0 en dos corridas con TMPDIR apuntando a un directorio escribible por agentes",
+      "codexHang": "El binario nativo de codex (Rust) queda colgado en std::env::temp_dir -> confstr(_CS_DARWIN_USER_TEMP_DIR) -> XPC dirhelper de la cuenta en sesion Background; el lanzador lo evita con TMPDIR=<workdir> (sample guardado en la evidencia B3-2a-r1)",
+      "launchdLabels": "launchctl submit es un stub sin registro en macOS 26.7 (rc=0 como dn sin crear etiqueta, rc=1 como agentes) y bootstrap/load en user/502 dan EIO 5 mientras la unica sesion sea Background creada por mds; la prueba real de etiqueta launchd queda condicionada a la sesion real de David"
+    }
+  },
+  "resourceSandboxEvidence": "bash scripts/tests/test-agent-work-host.sh resource_identity (6); resource_close (20); resource_100_cycles (3, con ciclos de procesos reales en tmux aislado b31-* y contador externo pgrep del nonce en argv, mas el ciclo real como agentes: test_resource_100_cycles_real_account_absence_verified, 100 ciclos TaskCreated capacity=1 cada uno AbsenceVerified)",
   "macDescendantProof": {
-    "status": "unavailable",
-    "evidence": "ResourceTests.test_resource_detached_child_keeps_mac_closure_pending (isolated tmux socket)",
-    "limitation": "A child can call setsid and outlive its tmux pane. After the pane exits, the observed session/PID identity cannot enumerate or prove absence of that reparented child. The tested adapter therefore retains CleanupPending and host capacity; no Mac CLI combination is certified."
+    "status": "available-account-boundary",
+    "evidence": "ResourceTests.test_resource_close_real_detached_children_proven_absent (nieto setsid + doble fork + descriptores cerrados como agentes, close AbsenceVerified y pgrep del nonce en cero); test_resource_close_real_term_ignoring_survivor_stays_pending (sobreviviente a TERM queda CleanupPending honesto con cupo retenido); test_resource_100_cycles_real_account_absence_verified (100 ciclos reales capacity=1); dobles de la frontera: exclusion com.apple.*, etiqueta no-Apple con pid 0, falla cerrada sin senales, doble lectura con lstart",
+    "limitation": "La prueba es por frontera de cuenta: exige la cuenta dedicada agentes de uso exclusivo durante tareas activas y capacidad 1. El barrido manda SIGTERM (sin escalada a SIGKILL todavia): un CLI que ignore TERM queda CleanupPending reintenteble. La regla de etiqueta launchd no-Apple con pid 0 (relanzable) esta probada con dobles; su caso real queda condicionado a la sesion real de agentes. Ninguna combinacion Mac esta certificada."
   },
   "certificationRequired": ["authenticated requester identity", "finite budget", "durable admission", "portable result", "verified resource close"]
 }

@@ -2,9 +2,11 @@
 """Crash boundaries between native task results and the progress queue."""
 
 import base64
+import contextlib
 import copy
 import hashlib
 import json
+import io
 import os
 from pathlib import Path
 import queue
@@ -27,6 +29,7 @@ from host import Host  # noqa: E402
 import native_gateway  # noqa: E402
 from native_gateway import GatewayProjectionClient, main as gateway_main, transfer_gateway_projections  # noqa: E402
 from progress_bridge import event_id, projection_digest, transfer_host_projection, transfer_projection  # noqa: E402
+from resources import ResourceManager  # noqa: E402
 from spool import atomic_json, canonical  # noqa: E402
 from corrida_worker import task_handoffs  # noqa: E402
 from corrida_worker.reconcile import reconcile  # noqa: E402
@@ -303,10 +306,28 @@ class ProjectionTransferTest(unittest.TestCase):
                 gateway_main(args)
         with mock.patch("native_gateway.Host") as host_type:
             host_type.return_value.flush.return_value = [{"receiptId": "native-one"}]
+            host_type.return_value.flush_closures.return_value = (0, [])
             with mock.patch("builtins.print") as output:
                 self.assertEqual(gateway_main(args + ["--host-state-dir", str(self.root / "host")]), 0)
         host_type.assert_called_once_with("host-one", str(self.root / "host"))
-        output.assert_called_once_with('{"reported": 1}')
+        output.assert_called_once_with('{"closed": 0, "reported": 1}')
+
+    def test_flush_results_sends_results_before_closures_and_fails_on_errors(self):
+        args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "host-one",
+                "--expect-url", "ws://127.0.0.1:18789", "--flush-results",
+                "--host-state-dir", str(self.root / "host")]
+        order = []
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with mock.patch("native_gateway.Host") as host_type:
+            host = host_type.return_value
+            host.flush.side_effect = lambda *_: order.append("results") or [{"receiptId": "r1"}]
+            host.flush_closures.side_effect = lambda *_: order.append("closures") or (2, ["op-x: gateway down"])
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                code = gateway_main(args)
+        self.assertEqual(code, 1)
+        self.assertEqual(order, ["results", "closures"])
+        self.assertEqual(stdout.getvalue().strip().splitlines()[-1], '{"closed": 2, "reported": 1}')
+        self.assertIn("op-x: gateway down", stderr.getvalue())
 
     def test_watch_entrypoint_requires_host_and_restores_signal_handlers(self):
         args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "host-one",
@@ -457,14 +478,17 @@ class ProjectionTransferTest(unittest.TestCase):
                 self.projections = []
                 return receipt
 
+            def close_host(self, *_):
+                raise AssertionError("no closures are pending in this test")
+
         client = Client()
         args = {"evidence_root": self.evidence_root, "progress_state_dir": self.state_dir,
                 "progress_client": ROOT / "scripts" / "mac" / "progress-events.py"}
         self.assertEqual(native_gateway.pump_once(client, host=host, **args),
-                         {"reported": 1, "transferred": 1})
+                         {"reported": 1, "transferred": 1, "closed": 0})
         for _ in range(100):
             self.assertEqual(native_gateway.pump_once(client, host=host, **args),
-                             {"reported": 0, "transferred": 0})
+                             {"reported": 0, "transferred": 0, "closed": 0})
         self.assertEqual(len(client.reports), 1)
         self.assertEqual(len(list((self.state_dir / "runs" / "run-1" / "queue").glob("*.json"))), 1)
 
@@ -472,6 +496,9 @@ class ProjectionTransferTest(unittest.TestCase):
         class FailingHost:
             def flush(self, *_):
                 raise RuntimeError("host report unavailable")
+
+            def flush_closures(self, *_):
+                return 0, []
 
             def operation_key_for(self, *_):
                 return None
@@ -492,11 +519,57 @@ class ProjectionTransferTest(unittest.TestCase):
                 self.receipts.append(receipt)
                 return receipt
 
+            def close_host(self, *_):
+                raise AssertionError("no closures are pending in this test")
+
         pending = self.pending
         client = Client()
         with self.assertRaisesRegex(RuntimeError, "host report unavailable"):
             native_gateway.pump_once(
                 client, host=FailingHost(), evidence_root=self.evidence_root,
+                progress_state_dir=self.state_dir,
+                progress_client=ROOT / "scripts" / "mac" / "progress-events.py",
+            )
+        self.assertEqual(len(client.receipts), 1)
+        self.assertEqual(len(list((self.state_dir / "runs" / "run-1" / "queue").glob("*.json"))), 1)
+
+    def test_pump_closure_failure_does_not_block_projections(self):
+        class ClosureFailingHost:
+            def flush(self, *_):
+                return []
+
+            def flush_closures(self, *_):
+                return 0, ["op-x: gateway down"]
+
+            def operation_key_for(self, *_):
+                return None
+
+        class Client:
+            host_id = "host-one"
+
+            def __init__(self):
+                self.receipts = []
+
+            def report_host_result(self, *_):
+                return {field: self.pending[field] for field in
+                        ("hostId", "taskId", "generation", "instanceId", "producerId")} | {
+                    "resultId": "r", "receiptId": "native-one"}
+
+            def list_pending(self, after_task_id=None, limit=100):
+                return [] if self.receipts else [self.pending]
+
+            def ack(self, receipt):
+                self.receipts.append(receipt)
+                return receipt
+
+            def close_host(self, *_):
+                raise AssertionError("closure failures come from the host double")
+
+        client = Client()
+        client.pending = self.pending
+        with self.assertRaisesRegex(RuntimeError, "op-x: gateway down"):
+            native_gateway.pump_once(
+                client, host=ClosureFailingHost(), evidence_root=self.evidence_root,
                 progress_state_dir=self.state_dir,
                 progress_client=ROOT / "scripts" / "mac" / "progress-events.py",
             )
@@ -531,6 +604,9 @@ class ProjectionTransferTest(unittest.TestCase):
 
             def list_pending(self, after_task_id=None, limit=100):
                 return []
+
+            def close_host(self, *_):
+                raise AssertionError("no closures are pending in this test")
 
         client = Client()
         result_path = self.root / "host" / "inbox" / (operation_id(key) + ".json")
@@ -618,6 +694,9 @@ class ProjectionTransferTest(unittest.TestCase):
 
             def list_pending(self, after_task_id=None, limit=100):
                 return []
+
+            def close_host(self, *_):
+                raise AssertionError("no closures are pending in this test")
 
         native_gateway.watch_pump(
             Client(), host=host,
@@ -1681,6 +1760,282 @@ class CliClaimTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "brief digest mismatch"):
             native_gateway._brief_to_workspace(Client(), self.claim, self.root / "workspace")
         self.assertEqual(list((self.root / "workspace" / "managed-briefs").iterdir()), [])
+
+
+class ClosureBackend:
+    def __init__(self):
+        self.boot_id = "00000000-0000-0000-0000-000000000001"
+        self.socket = "sock-closures"
+        self.live = {}
+        self.pane_gone_result = False
+
+    def observe(self, session):
+        return self.live.get(session)
+
+    def revoke(self, identity):
+        return True
+
+    def stop(self, identity):
+        for session, current in list(self.live.items()):
+            if current == identity:
+                del self.live[session]
+                break
+        return True
+
+    def prove_absent(self, identity):
+        return identity not in self.live.values()
+
+    def launch(self, session, nonce, pid):
+        self.live[session] = {
+            "bootId": self.boot_id, "nonce": nonce, "socket": self.socket,
+            "serverPid": 100, "serverStart": "server-birth",
+            "sessionId": f"@{pid}", "paneId": f"%{pid}",
+            "panePid": pid, "paneStart": f"start-{pid}",
+        }
+
+    def pane_gone(self, identity):
+        return self.pane_gone_result
+
+
+class ClosureFlushTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.backend = ClosureBackend()
+        self.next_pid = 800
+
+    def capture(self, calls, fail_task_ids=frozenset()):
+        def close_to_runtime(assignment, state, reason, evidence_digest):
+            calls.append({"taskId": assignment["taskId"], "generation": assignment["generation"],
+                          "instanceId": assignment["instanceId"], "state": state, "reason": reason,
+                          "evidenceDigest": evidence_digest, "adapterId": assignment.get("adapterId")})
+            if assignment["taskId"] in fail_task_ids:
+                raise RuntimeError("gateway unreachable")
+            return {"taskId": assignment["taskId"], "generation": assignment["generation"],
+                    "state": state, "reason": reason, "evidenceDigest": evidence_digest,
+                    "updatedAtMs": 1}
+        return close_to_runtime
+
+    def seed(self, task_id, instance_id, *, register=True):
+        workspace = self.root / f"workspace-{instance_id}"
+        workspace.mkdir()
+        brief = workspace / "brief.txt"
+        brief.write_text("closure seed")
+        host = Host("host-one", self.root / "host")
+        key = OperationKey("host-one", task_id, 1, instance_id)
+        if register:
+            operation = AuthorizedOperation(
+                key=key, producer_id="codex", capability="closure-secret",
+                session=f"session-{instance_id}", workspace_ref=str(workspace), brief_ref=str(brief),
+                brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
+                input_revision={"kind": "code", "repository": "repo", "sha": "c" * 40},
+                result_contract="review.v1", claim_id=f"claim-{instance_id}", adapter_id="codex")
+            host.apply(key, operation, lambda *_: None,
+                       lambda a: {"state": "host-admitted", "claimId": a["claimId"],
+                                  "hostId": a["hostId"], "instanceId": a["instanceId"],
+                                  "generation": a["generation"]})
+        manager = ResourceManager(host.spool, "host-one", self.backend, capacity=4)
+        held = manager.reserve(key, f"session-{instance_id}", "UserAdopted")
+        manager.begin_launch(key)
+        self.backend.launch(f"session-{instance_id}", held.nonce, self.next_pid)
+        self.next_pid += 1
+        manager.attach(key)
+        return host, manager, key
+
+    def test_flush_sends_registered_closure_with_digest_and_adapter(self):
+        host, manager, key = self.seed("task-close", "instance-a")
+        self.backend.live.pop("session-instance-a")
+        manager.close(key, {"kind": "result", "receipt": "seed-result"})
+        calls = []
+        closed, errors = host.flush_closures("host-one", self.capture(calls))
+        self.assertEqual((closed, errors), (1, []))
+        expected = hashlib.sha256(canonical(
+            {"kind": "result", "receipt": "seed-result"}).encode()).hexdigest()
+        self.assertEqual(calls, [{"taskId": "task-close", "generation": 1,
+                                  "instanceId": "instance-a",
+                                  "state": "CleanupPending",
+                                  "reason": "adopted session unverifiable",
+                                  "evidenceDigest": expected, "adapterId": "codex"}])
+        last = host.spool.closure_last(operation_id(key))
+        self.assertEqual((last["state"], last["reason"], last["evidence_digest"]),
+                         ("CleanupPending", "adopted session unverifiable", expected))
+
+    def test_flush_retries_after_network_error(self):
+        host, manager, key = self.seed("task-close", "instance-a")
+        self.backend.live.pop("session-instance-a")
+        manager.close(key, {"kind": "result", "receipt": "seed-result"})
+        calls = []
+        closed, errors = host.flush_closures("host-one", self.capture(calls, {"task-close"}))
+        self.assertEqual(closed, 0)
+        self.assertEqual(len(errors), 1)
+        self.assertIsNone(host.spool.closure_last(operation_id(key)))
+        closed, errors = host.flush_closures("host-one", self.capture(calls))
+        self.assertEqual((closed, errors), (1, []))
+        self.assertEqual(len(calls), 2)
+        with host.spool.connection() as db:
+            row = db.execute("SELECT COUNT(*) FROM inbox_errors").fetchone()
+        self.assertEqual(row[0], 0)
+
+    def test_flush_second_pass_is_idempotent(self):
+        host, manager, key = self.seed("task-close", "instance-a")
+        self.backend.live.pop("session-instance-a")
+        manager.close(key, {"kind": "result", "receipt": "seed-result"})
+        calls = []
+        self.assertEqual(host.flush_closures("host-one", self.capture(calls)), (1, []))
+        replay = []
+        self.assertEqual(host.flush_closures("host-one", self.capture(replay)), (0, []))
+        self.assertEqual(replay, [])
+
+    def test_flush_pending_replaces_pending(self):
+        host, manager, key = self.seed("task-close", "instance-a")
+        self.backend.live.pop("session-instance-a")
+        manager.close(key, {"kind": "result", "receipt": "seed-result"})
+        calls = []
+        self.assertEqual(host.flush_closures("host-one", self.capture(calls)), (1, []))
+        self.backend.pane_gone_result = True
+        manager.close(key, {"kind": "result", "receipt": "seed-result"})
+        calls.clear()
+        self.assertEqual(host.flush_closures("host-one", self.capture(calls)), (1, []))
+        self.assertEqual(calls[0]["state"], "ReleasedAdopted")
+        self.assertEqual(calls[0]["reason"], "adopted session gone")
+        last = host.spool.closure_last(operation_id(key))
+        self.assertEqual(last["state"], "ReleasedAdopted")
+
+    def test_flush_never_sends_pending_after_accepted_terminal(self):
+        host, manager_a, key_a = self.seed("task-term", "instance-1")
+        _, manager_b, key_b = self.seed("task-term", "instance-2")
+        self.backend.boot_id = "00000000-0000-0000-0000-000000000002"
+        manager_a.close(key_a, {"kind": "result", "receipt": "seed-result"})
+        self.backend.boot_id = "00000000-0000-0000-0000-000000000001"
+        self.backend.live.pop("session-instance-2")
+        manager_b.close(key_b, {"kind": "result", "receipt": "seed-result"})
+        calls = []
+        self.assertEqual(host.flush_closures("host-one", self.capture(calls)), (1, []))
+        self.assertEqual([call["instanceId"] for call in calls], ["instance-1"])
+        self.assertEqual(calls[0]["state"], "ReleasedAdopted")
+        self.assertEqual(host.flush_closures("host-one", self.capture(calls)), (0, []))
+
+    def test_flush_without_assignment_notes_inbox_error(self):
+        host, manager, key = self.seed("task-orphan", "instance-orphan", register=False)
+        manager.close(key, {"kind": "cancel", "receipt": "orphan-1"})
+        calls = []
+        self.assertEqual(host.flush_closures("host-one", self.capture(calls)), (0, []))
+        self.assertEqual(calls, [])
+        with host.spool.connection() as db:
+            row = db.execute("SELECT error FROM inbox_errors WHERE operation_id=?",
+                             (operation_id(key),)).fetchone()
+        self.assertEqual(row["error"], "closure without assignment")
+
+    def test_flush_without_resources_table_returns_zero(self):
+        host = Host("host-one", self.root / "host-empty")
+        calls = []
+        self.assertEqual(host.flush_closures("host-one", self.capture(calls)), (0, []))
+        self.assertEqual(calls, [])
+
+    def test_flush_first_failure_continues_to_second(self):
+        host, manager_a, key_a = self.seed("task-fail", "instance-1")
+        _, manager_b, key_b = self.seed("task-pass", "instance-2")
+        for session in ("session-instance-1", "session-instance-2"):
+            self.backend.live.pop(session)
+        manager_a.close(key_a, {"kind": "result", "receipt": "seed-result"})
+        manager_b.close(key_b, {"kind": "result", "receipt": "seed-result"})
+        calls = []
+
+        def fail_once(assignment, state, reason, digest):
+            calls.append(assignment["taskId"])
+            if len(calls) == 1:
+                raise RuntimeError("gateway unreachable")
+            return {"taskId": assignment["taskId"], "generation": assignment["generation"],
+                    "state": state, "reason": reason, "evidenceDigest": digest,
+                    "updatedAtMs": 1}
+
+        closed, errors = host.flush_closures("host-one", fail_once)
+        self.assertEqual(closed, 1)
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(sorted(calls), ["task-fail", "task-pass"])
+        lasts = [host.spool.closure_last(operation_id(key_a)) is None,
+                 host.spool.closure_last(operation_id(key_b)) is None]
+        self.assertEqual(sorted(lasts), [False, True])
+
+    def test_flush_rejects_mismatched_receipt_and_stays_pending(self):
+        host, manager, key = self.seed("task-close", "instance-a")
+        self.backend.live.pop("session-instance-a")
+        manager.close(key, {"kind": "result", "receipt": "seed-result"})
+        client = GatewayProjectionClient("/isolated/openclaw", "host-one", "ws://gateway")
+        wrong = {"taskId": "task-other", "generation": 1, "state": "CleanupPending",
+                 "reason": "adopted session unverifiable", "evidenceDigest": "0" * 64}
+        with mock.patch.object(client, "_call", side_effect=lambda *_: dict(wrong)):
+            closed, errors = host.flush_closures("host-one", client.close_host)
+        self.assertEqual(closed, 0)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("receipt", errors[0])
+        self.assertIsNone(host.spool.closure_last(operation_id(key)))
+
+
+class ClientCloseTest(unittest.TestCase):
+    def setUp(self):
+        self.client = GatewayProjectionClient("/isolated/openclaw", "host-one", "ws://gateway")
+        self.assignment = {"hostId": "host-one", "taskId": "task-x", "generation": 2,
+                           "instanceId": "instance-x", "producerId": "codex",
+                           "capability": "tok", "adapterId": "codex"}
+
+    def receipt(self, **changes):
+        base = {"taskId": "task-x", "generation": 2, "state": "CleanupPending",
+                "reason": "reason-text", "evidenceDigest": "a" * 64, "updatedAtMs": 5}
+        return {**base, **changes}
+
+    def test_close_host_sends_contract_params_and_accepts_matching_receipt(self):
+        seen = {}
+
+        def fake_call(method, params, **kwargs):
+            seen["method"] = method
+            seen["params"] = params
+            return self.receipt()
+
+        with mock.patch.object(self.client, "_call", side_effect=fake_call):
+            receipt = self.client.close_host(self.assignment, "CleanupPending",
+                                             "reason-text", "a" * 64)
+        self.assertEqual(seen["method"], "managedTasks.host.close")
+        self.assertEqual(seen["params"], {
+            "hostId": "host-one", "instanceId": "instance-x", "adapterId": "codex",
+            "capability": {"taskId": "task-x", "generation": 2,
+                           "producerId": "codex", "token": "tok"},
+            "state": "CleanupPending", "reason": "reason-text",
+            "evidenceDigest": "a" * 64,
+        })
+        self.assertEqual(receipt["updatedAtMs"], 5)
+
+    def test_close_host_omits_absent_adapter(self):
+        assignment = {**self.assignment, "adapterId": None}
+        seen = {}
+
+        def fake_call(method, params, **kwargs):
+            seen["params"] = params
+            return self.receipt(state="ReleasedAdopted", reason="adopted session gone")
+
+        with mock.patch.object(self.client, "_call", side_effect=fake_call):
+            self.client.close_host(assignment, "ReleasedAdopted", "adopted session gone", "a" * 64)
+        self.assertNotIn("adapterId", seen["params"])
+
+    def test_close_host_rejects_mismatched_receipt_identity(self):
+        for changes in ({"taskId": "other"}, {"generation": 3},
+                        {"state": "AbsenceVerified"}, {"evidenceDigest": "b" * 64}):
+            with mock.patch.object(self.client, "_call", side_effect=lambda *_: self.receipt(**changes)):
+                with self.assertRaisesRegex(RuntimeError, "closure receipt identity mismatch"):
+                    self.client.close_host(self.assignment, "CleanupPending", "reason-text", "a" * 64)
+
+    def test_close_host_rejects_invalid_boundary(self):
+        with self.assertRaisesRegex(ValueError, "generation"):
+            self.client.close_host({**self.assignment, "generation": 0},
+                                   "CleanupPending", "reason-text", "a" * 64)
+        with self.assertRaisesRegex(ValueError, "state"):
+            self.client.close_host(self.assignment, "Closing", "reason-text", "a" * 64)
+        with self.assertRaisesRegex(ValueError, "reason"):
+            self.client.close_host(self.assignment, "CleanupPending", "", "a" * 64)
+        with self.assertRaisesRegex(ValueError, "digest"):
+            self.client.close_host(self.assignment, "CleanupPending", "reason-text", "zz")
 
 
 if __name__ == "__main__":
