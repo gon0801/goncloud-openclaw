@@ -90,7 +90,10 @@ Log completo (26 MB): ~/.local/state/encargos-loop/artifacts/B3-bateria/paso3-r-
 
 Evidencia PARCIAL, no la batería del bloque. Conteo contra el log (el método, porque las
 cifras citadas en la Corrección 1 —504/701, 92.580 verdes, 111 × en 23 archivos— no son
-reproducibles contra el log en disco; la diferencia queda documentada, no conciliada):
+reproducibles contra el log en disco; el VEREDICTO-B3-bateria y esta revisión lo dejan como
+hipótesis no conciliada: se habrían tomado con la corrida en marcha, hacia las 15:32Z, y la
+corrida siguió hasta las 16:41Z; un recuento hasta ese momento no da exactamente esas cifras.
+Conteos propios sobre el log final:
 - Anunciados: 701 shards («broad local run will start 701 Vitest shards»).
 - Arrancados: 522 líneas «[test] starting <config>» (443 tooling, 26 infra, 22 unit-fast,
   5 unit-src, 26 configs de un arranque). Nunca llegó a e2e ni a buena parte de tooling.
@@ -113,7 +116,7 @@ reproducibles contra el log en disco; la diferencia queda documentada, no concil
   así que «no conocida» aquí no significa «regresión nueva». Con la corrida cortada no se
   pueden clasificar (base / diff / carga); quedan como inventario parcial sin clasificar.
 
-### 3b. Batería de R del bloque (Corrección 1): --changed contra la base pública
+### 3b. Corrida --changed de la Corrección 1 (r1): NO cubrió nuestro código
 
 Comando (una vez, en la misma copia de R be3f71c):
   LANG=en_US.UTF-8 node --import ./scripts/tsx.mjs scripts/test-projects.mts \
@@ -131,27 +134,108 @@ Log completo (2,0 MB): ~/.local/state/encargos-loop/artifacts/B3-bateria/paso3b-
   2. |unit-fast| test/scripts/check-native-state-schema-version.test.ts > native state
      schema version guard > keeps the checked-in Swift and TypeScript contracts aligned —
      drift Swift 19 vs TS 26, de la serie del programa, pendiente por la fila B5/T11.
-- Cero fallas nuevas → cero reproducciones be3f71c/5b14e9e/c074824a27 (la regla de la
-  Corrección 1 solo exige reproducir las no conocidas).
+- CORRECCIÓN DEL VEREDICTO-B3-bateria (r2): esta corrida NO es la batería del bloque.
+  La selección --changed eligió un solo shard (unit-fast) y no corrió NINGUNO de los 34
+  archivos de prueba de R que cambiamos, ni nada de src/agents/tasks, src/gateway o
+  src/state. El comando era incorrecto (error del revisor de la Corrección 1, no del
+  implementador). La batería del bloque real es la de la sección siguiente (r2).
 - Nota de alcance: la selección es por cambios contra c074824a27; lo que no seleccionó no
-  queda certificado por esta corrida. La cobertura de las 18 familias sin clasificar de la
-  corrida completa sigue abierta.
+  queda certificado por esta corrida.
+
+### 3c. Batería de R del bloque (r2): objetivos explícitos sobre be3f71c
+
+Tres corridas, cada una una sola vez, en la copia aislada de R be3f71c. Carpeta de logs:
+~/.local/state/encargos-loop/artifacts/B3-bateria-r2/
+
+Objetivos (generación de la lista, no es prueba):
+  ~/.local/state/encargos-loop/bateria-r-objetivos.sh /Users/dn/dev/openclaw-agent-work-integration \
+    > artifacts/B3-bateria-r2/objetivos.txt
+Exit 0, 599 líneas (34 archivos de prueba que cambiamos + los que importan directamente un
+módulo que cambiamos; fuera los módulos que solo declaran tipos y las *.live.test.ts).
+
+Tipos:
+- LANG=en_US.UTF-8 pnpm tsgo:core → exit 0, 34 s.
+- LANG=en_US.UTF-8 pnpm tsgo:core:test → exit 2, 57 s. Falla con 81 errores de tipos en 4
+  archivos nuestros de src/agents/tasks: managed-task.host-closure.test.ts (50),
+  managed-task.provider-stream.test.ts (16), managed-task.recovery.siblings.test.ts (9),
+  managed-task.recovery.test.ts (6). Triage (corridas solas en copias aisladas):
+  sobre 5b14e9e el mismo comando falla con 31 errores (provider-stream 16, recovery 15)
+  y sobre c074824a27 pasa (exit 0, 789 s; los 4 archivos no existen en la base pública,
+  comprobado con git cat-file). Clase: viene de B0 a B2 (31 errores ya en B2); B3 añadió
+  los archivos nuevos con 59 errores más y redujo recovery de 15 a 6. Va a followups.md,
+  no es bloqueante de B3.
+
+Pruebas (599 objetivos explícitos):
+  LANG=en_US.UTF-8 OPENCLAW_NODE_TEST_PLAN_CONTINUE_ON_FAILURE=1 \
+    node --import ./scripts/tsx.mjs scripts/test-projects.mts $(cat objetivos.txt)
+Inicio 2026-10-04T17:45:34Z, fin 19:17:27Z (5472,77 s ≈ 91 min). Exit 1.
+- 29 de 29 shards arrancados (grep -c '^\[test\] starting' = 29), como anuncia el plan.
+- 41 líneas «×» únicas en 14 archivos (el grep literal de la Corrección
+  `grep -E '^ *×' | sort -u` da 41; un archivo cae en un formato de línea sin prefijo
+  «× |proj|», detectado cruzando los .test.ts citados en todas las líneas ×).
+- Conocidas, NO reproducidas (aparecen en B1-R-bateria.txt / B2-R-bateria.txt / followups.md,
+  más sanitize-text y check-native-state-schema-version): heartbeat-runner.model-override,
+  openclaw-database-maintenance, openclaw-database-preflight, check-native-state-schema-version.
+- Nuevas, reproducidas solas en copias aisladas (be3f71c, 5b14e9e, c074824a27;
+  node --import ./scripts/tsx.mjs scripts/test-projects.mts <archivo>), una vez por árbol:
+
+  | archivo (src/… salvo indización)                          | be3f71c | 5b14e9e | c074824a27 | clase |
+  |-----------------------------------------------------------|---------|---------|------------|-------|
+  | agents/embedded-agent-runner/run/attempt-stream-transport | 1       | 1       | 0          | B0→B2 |
+  | agents/embedded-agent-runner/run/attempt.exec-review-transcript | 1   | 1       | 0          | B0→B2 |
+  | agents/embedded-agent-runner/run/attempt.spawn-workspace.diagnostics | 1 | 1     | 0          | B0→B2 |
+  | agents/embedded-agent-runner/run/attempt.tool-search-catalog-abort | 1  | 1       | 0          | B0→B2 |
+  | cli/update-cli/update-command-admit                        | 1       | 1       | 0          | B0→B2 |
+  | config/schema.hints                                        | 1       | 1       | 0          | B0→B2 |
+  | node-host/node-worker-supervisor.recovery                  | 1       | 0       | n/a        | **B3, BLOQUEANTE** |
+  | state/openclaw-state-db                                    | 1       | 1       | 0          | B0→B2 |
+  | tui/tui-pty-local.e2e                                      | 1       | 1       | 1          | base pública |
+  | e2e/qa-lab/runtime/agent-sandboxed-exec-behavior.e2e       | 1       | 1       | 1          | base pública |
+
+- BLOQUEANTE DEL CIERRE (viene del diff de B3, no se corrige aquí):
+  src/node-host/node-worker-supervisor.recovery.test.ts > node worker supervisor recovery >
+  «replay kills the exact stale-owner worker group with a dead leader before releasing
+  capacity» — AssertionError: expected { …(19) } to match object { state: 'interrupted',
+  …(1) }. Falla sola sobre be3f71c (54 s) y pasa sola sobre 5b14e9e (54 s, exit 0). Es uno
+  de los tres archivos que la revisión de r2 marcó como importadores de módulos que
+  cambiamos; los otros dos (schema.hints, openclaw-state-db) vienen de B0→B2, no de B3.
+- B0→B2 (falla en be3f71c y 5b14e9e, pasa en la base pública; va a followups.md): los 7
+  archivos de la tabla con esa clase, incluidos schema.hints y openclaw-state-db.
+- Limitación de la base pública (falla en los tres árboles): tui-pty-local.e2e y
+  agent-sandboxed-exec-behavior.e2e.
+- Carga u orden: ninguno (ningún archivo nuevo pasó solo en be3f71c).
+- Logs de las reproducciones: artifacts/B3-bateria-r2/solo-{be3f71c,5b14e9e,c074824a27}-*.log
+  con sus resumen.txt. Copias aisladas dejadas en pie: r-5b14e9e y r-c074824a27 (rutas en
+  triage-worktree-*.path). Nota: dos lanzamientos del bucle de 5b14e9e murieron al instante
+  por un error de ruta en el guion del bucle (dur=0 s, sin corrida real); el tercero corrió
+  completo y sus logs son los válidos.
 
 ## Resumen del cierre
 
-- Batería de G: 2 en rojo. 1 de base/host (cli-modos) y 1 del diff de B3 que es BLOQUEANTE
-  DEL CIERRE: b32a-codex-dirhelper-sample.txt (0c911c0) sin título «# » hace caer
-  test-doc-check-evidencia.sh y caerá el doc-check de CI con fetch-depth 0.
-- Integración nativa del par: 9/9 casos en verde con el recibo JSON exacto.
-- Batería de R del bloque: solo las 2 fallas conocidas; nada nuevo atribuible a B3.
+- Batería de G (r1): 2 en rojo. 1 de base/host (cli-modos) y 1 del diff de B3, el doc-check
+  de b32a-codex-dirhelper-sample.txt (0c911c0). RESUELTO en r2: título «# » agregado como
+  primera línea y prueba doc-check en verde tras el commit de r2.
+- Integración nativa del par (r1): 9/9 casos en verde con el recibo JSON exacto.
+- Corrida --changed de la Corrección 1 (r1): NO cubría nuestro código (0 de los 34 archivos
+  nuestros, solo el shard unit-fast); el VEREDICTO la declara comando incorrecto y no es la
+  batería del bloque.
+- Batería de R del bloque (r2, objetivos 599): 29/29 shards, 41 × en 14 archivos. 4
+  conocidas sin reproducción, 10 nuevas triageadas: 1 BLOQUEANTE de B3
+  (node-worker-supervisor.recovery, «replay kills the exact stale-owner worker group with a
+  dead leader before releasing capacity»), 7 de B0→B2 (a followups.md), 2 limitación de la
+  base pública. Tipos: tsgo:core verde; tsgo:core:test con 81 errores en 4 archivos
+  nuestros, deuda de B0→B2 ampliada por B3 (a followups.md).
 - Corrida completa de R: cortada por orden de David; tercera batería completa local que no
-  converge (B1 cortada, B2 abortada por el runner, B3 cortada por orden).
+  converge (B1 cortada, B2 abortada por el runner, B3 cortada por orden). Las cifras de la
+  Corrección 1 quedan como hipótesis no conciliada (toma ~15:32Z con la corrida en marcha).
 
 ## Lo que este encargo NO hizo
 
-- No corrigió el bloqueante del doc-check ni ninguna otra falla (prohibido).
-- No clasificó las 18 familias desconocidas de la corrida cortada (no hay corrida íntegra
-  contra la que clasificar; la batería del bloque no las selecciona).
-- No relanzó batería alguna; cada corrida se lanzó una sola vez.
+- r1 no clasificó las 18 familias desconocidas de la corrida cortada; r2 tampoco (no hay
+  corrida íntegra contra la que clasificar; la batería del bloque usa objetivos explícitos).
+- No se corrigió ninguna falla ni el bloqueante de B3 (prohibido: se reporta).
+- No se relanzó corrida terminada alguna; cada corrida de este cierre se lanzó una sola vez
+  (los dos lanzamientos rotos del bucle de 5b14e9e nunca ejecutaron pruebas: cd fallido,
+  dur=0 s).
 - No hizo push, PR ni CI (prohibido); no marcó casillas del plan (T7 ya está completa).
 - No tocó la cuenta agentes, sudoers, gateway, claw ni crons.

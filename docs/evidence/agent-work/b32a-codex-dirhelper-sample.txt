@@ -1,3 +1,4 @@
+# B3-2a: muestra de sample de codex con el dirhelper (evidencia de la línea 233, T7)
 Analysis of sampling codex (pid 52955) every 1 millisecond
 Process:         codex [52955]
 Path:            /opt/homebrew/*/codex
