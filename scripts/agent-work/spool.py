@@ -205,8 +205,8 @@ class Spool:
                        (canonical(receipt), operation_id))
 
     def closure_rows(self) -> list[dict]:
-        # A spool without a resources table (no ResourceManager was ever built)
-        # has nothing to send; the missing table reads as an empty outbox.
+        # Only ResourceManager builds the resources table; without one there
+        # is nothing to send.
         try:
             with self.connection() as db:
                 rows = db.execute(
