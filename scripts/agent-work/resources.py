@@ -179,15 +179,24 @@ class ResourceManager:
                 observed = self.backend.observe(original["session_name"])
             except OSError:
                 return self._state(key, revision, "CleanupPending", "host unavailable")
-            if identity is None or observed != identity:
-                return self._state(key, revision, "CleanupPending", "adopted identity uncertain")
-            try:
-                revoked = self.backend.revoke(identity)
-            except OSError:
-                revoked = False
-            if not revoked:
-                return self._state(key, revision, "CleanupPending", "adopted capability removal failed")
-            return self._state(key, revision, "ReleasedAdopted")
+            if observed is not None:
+                if identity is None or observed != identity:
+                    return self._state(key, revision, "CleanupPending", "adopted identity uncertain")
+                try:
+                    revoked = self.backend.revoke(identity)
+                except OSError:
+                    revoked = False
+                if not revoked:
+                    return self._state(key, revision, "CleanupPending", "adopted capability removal failed")
+                return self._state(key, revision, "ReleasedAdopted")
+            if identity is not None and identity.get("socket") == self.backend.socket:
+                try:
+                    gone = self.backend.pane_gone(identity)
+                except OSError:
+                    return self._state(key, revision, "CleanupPending", "host unavailable")
+                if gone is True:
+                    return self._state(key, revision, "ReleasedAdopted", "adopted session gone")
+            return self._state(key, revision, "CleanupPending", "adopted session unverifiable")
         identity = json.loads(original["identity_json"]) if original["identity_json"] else None
         if identity is None:
             if original["state"] == "Reserved":
@@ -320,6 +329,16 @@ class TmuxBackend:
         if not self._guarded(fields, f"kill-session -t {identity['sessionId']}"):
             return False
         return self._fields(f"{identity['sessionId']}:") is None
+
+    def pane_gone(self, identity: dict) -> bool:
+        # A pane pid missing from the process table (rc=1, both streams empty)
+        # is the only positive proof of death here. Any other outcome stays
+        # False, including a reused pid, so close keeps CleanupPending.
+        pane_pid = identity.get("panePid")
+        if isinstance(pane_pid, bool) or not isinstance(pane_pid, int):
+            return False
+        result = _ps("-p", str(pane_pid), "-o", "pid=")
+        return result.returncode == 1 and result.stdout == "" and result.stderr == ""
 
     def prove_absent(self, identity: dict) -> bool | None:
         if self.observe(identity["sessionName"]) == identity:

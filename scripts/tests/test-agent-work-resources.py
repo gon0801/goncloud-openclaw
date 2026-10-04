@@ -24,17 +24,25 @@ from resources import (AccountBusyError, AGENT_USER, AgentesBackend, CommandOutc
 class FakeBackend:
     def __init__(self):
         self.boot_id = "00000000-0000-0000-0000-000000000001"
+        self.socket = "sock-test"
         self.live = {}
         self.stops = []
         self.revokes = []
         self.fail_stop = False
         self.detached = False
         self.offline = False
+        self.pane_gone_result = False
+        self.pane_gone_error = None
 
     def observe(self, session):
         if self.offline:
             raise OSError("host unreachable")
         return self.live.get(session)
+
+    def pane_gone(self, identity):
+        if self.pane_gone_error is not None:
+            raise self.pane_gone_error
+        return self.pane_gone_result
 
     def stop(self, identity):
         self.stops.append(identity)
@@ -55,7 +63,7 @@ class FakeBackend:
 
     def launch(self, session, nonce, pid):
         self.live[session] = {
-            "bootId": self.boot_id, "nonce": nonce,
+            "bootId": self.boot_id, "nonce": nonce, "socket": self.socket,
             "serverPid": 100, "serverStart": "server-birth",
             "sessionId": f"@{pid}", "paneId": f"%{pid}",
             "panePid": pid, "paneStart": f"start-{pid}",
@@ -485,6 +493,76 @@ class ResourceTests(unittest.TestCase):
         view = self.manager.close(self.key, {"kind": "cancel", "receipt": "legacy-boot"})
         self.assertEqual(view.state, "CleanupPending")
         self.assertEqual(view.reason, "boot identity unrecognized")
+
+    def _adopted(self, key, session, pid):
+        held = self.manager.reserve(key, session, "UserAdopted")
+        self.assertTrue(self.manager.begin_launch(key).launch_now)
+        self.backend.launch(session, held.nonce, pid)
+        self.assertEqual(self.manager.attach(key).state, "Running")
+
+    def test_resource_close_adopted_alive_pane_stays_pending(self):
+        key = OperationKey("host-test", "task-gone", 1, "instance-alive")
+        self._adopted(key, "adopted-alive", 711)
+        self.backend.live.pop("adopted-alive")
+        view = self.manager.close(key, {"kind": "cancel", "receipt": "alive-1"})
+        self.assertEqual(view.state, "CleanupPending")
+        self.assertEqual(view.reason, "adopted session unverifiable")
+        self.assertEqual(self.backend.revokes, [])
+
+    def test_resource_close_adopted_foreign_socket_stays_pending(self):
+        key = OperationKey("host-test", "task-gone", 1, "instance-foreign")
+        held = self.manager.reserve(key, "adopted-foreign", "UserAdopted")
+        self.assertTrue(self.manager.begin_launch(key).launch_now)
+        self.backend.launch("adopted-foreign", held.nonce, 712)
+        self.backend.live["adopted-foreign"]["socket"] = "another-sock"
+        self.assertEqual(self.manager.attach(key).state, "Running")
+        self.backend.live.pop("adopted-foreign")
+        self.backend.pane_gone_result = True
+        view = self.manager.close(key, {"kind": "cancel", "receipt": "foreign-1"})
+        self.assertEqual(view.state, "CleanupPending")
+        self.assertEqual(view.reason, "adopted session unverifiable")
+        self.assertEqual(self.backend.revokes, [])
+
+    def test_resource_close_adopted_gone_positive_proof_releases(self):
+        key = OperationKey("host-test", "task-gone", 1, "instance-gone")
+        self._adopted(key, "adopted-gone", 713)
+        self.backend.live.pop("adopted-gone")
+        self.backend.pane_gone_result = True
+        view = self.manager.close(key, {"kind": "cancel", "receipt": "gone-1"})
+        self.assertEqual(view.state, "ReleasedAdopted")
+        self.assertEqual(view.reason, "adopted session gone")
+        self.assertEqual(self.backend.revokes, [])
+
+    def test_resource_close_adopted_reused_pid_stays_pending(self):
+        key = OperationKey("host-test", "task-gone", 1, "instance-reuse")
+        self._adopted(key, "adopted-reuse", 714)
+        self.backend.live.pop("adopted-reuse")
+        view = self.manager.close(key, {"kind": "cancel", "receipt": "reuse-1"})
+        self.assertEqual(view.state, "CleanupPending")
+        self.assertEqual(view.reason, "adopted session unverifiable")
+        self.assertEqual(self.backend.revokes, [])
+
+    def test_resource_close_adopted_ps_failure_stays_pending(self):
+        key = OperationKey("host-test", "task-gone", 1, "instance-psfail")
+        self._adopted(key, "adopted-psfail", 715)
+        self.backend.live.pop("adopted-psfail")
+        self.backend.pane_gone_error = OSError("ps read failed")
+        view = self.manager.close(key, {"kind": "cancel", "receipt": "psfail-1"})
+        self.assertEqual(view.state, "CleanupPending")
+        self.assertEqual(view.reason, "host unavailable")
+        self.assertEqual(self.backend.revokes, [])
+
+    def test_pane_gone_requires_rc1_with_silent_streams(self):
+        backend = TmuxBackend("tmux", "sock-pscheck")
+        survivor = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        try:
+            self.assertFalse(backend.pane_gone({"panePid": survivor.pid}))
+        finally:
+            survivor.kill()
+            survivor.wait()
+        self.assertTrue(backend.pane_gone({"panePid": survivor.pid}))
+        self.assertFalse(backend.pane_gone({"panePid": "not-a-pid"}))
+        self.assertFalse(backend.pane_gone({}))
 
     def _managed_shell(self):
         root = Path(self.tmp.name)
