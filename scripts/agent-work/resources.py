@@ -312,6 +312,7 @@ class TmuxBackend:
 
 
 AGENT_USER = "agentes"
+AGENT_UID = 502
 LAUNCHD_DOMAIN = "user/502"
 AGENT_PATH = "/opt/homebrew/bin:/usr/bin:/bin"
 LOCK_PATH = "/private/tmp/b32-agentes.lock"
@@ -358,25 +359,27 @@ class AccountBusyError(RuntimeError):
 
 
 def parse_agent_ps(text: str) -> tuple[AgentProcess, ...]:
+    # ps -A output carries a uid column, filtered here to the agent account:
+    # `ps -U agentes` exits 1 with empty output when the account has no live
+    # process, which would read the clearest possible state as a read failure.
     # ps prints an argv-embedded newline as a raw line break, so any line that
     # is not a full pid row belongs to the previous process's command text.
     # Joining it there keeps a multi-line command from blocking every future
     # read, and keeps injected look-alike rows inert instead of signal targets.
-    processes: list[AgentProcess] = []
+    rows: list[tuple[str, int, str, str]] = []
     for line in text.splitlines():
         if not line.strip():
             continue
-        parts = line.split(maxsplit=7)
-        if len(parts) >= 8 and parts[0].isdigit() and parts[1].isdigit():
-            processes.append(AgentProcess(int(parts[0]),
-                                          " ".join(parts[2:7]), parts[7]))
-        elif processes:
-            previous = processes[-1]
-            processes[-1] = AgentProcess(previous.pid, previous.lstart,
-                                         previous.command + "\n" + line)
+        parts = line.split(maxsplit=8)
+        if len(parts) >= 9 and parts[0].isdigit() and parts[1].isdigit() and parts[2].isdigit():
+            rows.append((parts[0], int(parts[1]), " ".join(parts[3:8]), parts[8]))
+        elif rows:
+            uid, pid, lstart, command = rows[-1]
+            rows[-1] = (uid, pid, lstart, command + "\n" + line)
         else:
             raise OSError(f"agent ps line unreadable: {line!r}")
-    return tuple(processes)
+    return tuple(AgentProcess(pid, lstart, command)
+                 for uid, pid, lstart, command in rows if int(uid) == AGENT_UID)
 
 
 def parse_launchd_services(text: str) -> tuple[LaunchdService, ...]:
@@ -446,7 +449,9 @@ def _subprocess_outcome(argv: list[str], timeout: float) -> CommandOutcome:
 
 def default_ps_reader():
     def read() -> CommandOutcome:
-        return _subprocess_outcome(["ps", "-o", "pid=,ppid=,lstart=,command=", "-U", AGENT_USER], 10)
+        # -A (all users) exits 0 even when the agent account has no process;
+        # parse_agent_ps filters the uid column. Any nonzero rc stays a closed failure.
+        return _subprocess_outcome(["ps", "-A", "-o", "uid=,pid=,ppid=,lstart=,command="], 10)
     return read
 
 

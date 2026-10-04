@@ -597,12 +597,12 @@ class ResourceTests(unittest.TestCase):
         "}\n"
     )
     AGENTES_PS_FULL = (
-        "4242 1 Sat Oct  3 09:00:00 2026 /opt/homebrew/bin/python3 -c import time; time.sleep(30) b32nonce1\n"
-        "4243 1 Sat Oct  3 09:00:01 2026 /usr/libexec/remotemanagementd worker\n"
-        "515 1 Sat Oct  3 09:00:02 2026 /usr/libexec/xpcproxy com.apple.lsd\n"
+        "  502 4242     1 Sat Oct  3 09:00:00 2026 /opt/homebrew/bin/python3 -c import time; time.sleep(30) b32nonce1\n"
+        "  502 4243     1 Sat Oct  3 09:00:01 2026 /usr/libexec/remotemanagementd worker\n"
+        "  502  515     1 Sat Oct  3 09:00:02 2026 /usr/libexec/xpcproxy com.apple.lsd\n"
     )
     AGENTES_PS_AFTER_TERM = (
-        "4243 1 Sat Oct  3 09:00:01 2026 /usr/libexec/remotemanagementd worker\n"
+        "  502 4243     1 Sat Oct  3 09:00:01 2026 /usr/libexec/remotemanagementd worker\n"
     )
     KILL_ARGV_PREFIX = ["/usr/bin/lockf", "-t", "30", "-k", "/private/tmp/b32-agentes.lock",
                         "sudo", "-n", "-u", "agentes", "/bin/kill", "-TERM"]
@@ -694,7 +694,7 @@ class ResourceTests(unittest.TestCase):
              lambda: CommandOutcome(1, "launchctl: operation failed\n")),
             ("services-block-missing", lambda: CommandOutcome(0, self.AGENTES_PS_FULL),
              lambda: CommandOutcome(0, "user/502 = {\n\ttype = user\n}\n")),
-            ("ps-rc", lambda: CommandOutcome(1, "ps: nobody\n"),
+            ("ps-A-rc", lambda: CommandOutcome(1, "ps: nobody\n"),
              lambda: CommandOutcome(0, self.AGENTES_LD)),
             ("launchd-rc-valid-text", lambda: CommandOutcome(0, self.AGENTES_PS_FULL),
              lambda: CommandOutcome(1, self.AGENTES_LD)),
@@ -714,10 +714,40 @@ class ResourceTests(unittest.TestCase):
                 self.assertEqual(view.reason, "host unavailable")
                 self.assertEqual(calls, [])
 
+    def test_resource_close_agentes_empty_account_reads_clear_and_launch_proceeds(self):
+        # ps -A lists every user; a healthy empty agent account is output with
+        # only foreign uid rows, and that must read as clear, not as failure.
+        foreign_ps = (
+            "  501  4021     1 Sat Oct  3 09:00:00 2026 /opt/homebrew/bin/fake-cli run-1\n"
+            "    0     1     0 Fri Jan  1 00:00:00 2026 /sbin/launchd\n"
+        )
+        shim, _log = self._tmux_shim()
+        calls = []
+
+        def runner(argv):
+            calls.append(list(argv))
+            if argv[:1] == ["ps"]:
+                return CommandOutcome(1, "")
+            if "/usr/bin/mktemp" in argv:
+                return CommandOutcome(0, "/private/tmp/b32-ag-empty\n")
+            return CommandOutcome(0, "")
+
+        backend = AgentesBackend(str(shim), "ag-empty",
+                                 ps_reader=lambda: CommandOutcome(0, foreign_ps),
+                                 launchd_reader=lambda: CommandOutcome(0, self.AGENTES_LD),
+                                 runner=runner, grace_seconds=0.2)
+        manager, key = self._agentes_running(backend, "ag-empty-1")
+        view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
+        self.assertEqual(view.state, "AbsenceVerified")
+        made = backend.launch("ag-empty-2", ["/opt/homebrew/bin/python3", "-c",
+                                             "import time; time.sleep(30)", "b32n9"])
+        self.assertEqual(made, "/private/tmp/b32-ag-empty")
+        self.assertTrue(any("/usr/bin/mktemp" in call for call in calls))
+
     def test_resource_close_agentes_lstart_change_skips_signal(self):
-        ps_lstart_a = ("700 1 Sat Oct  3 09:00:00 2026 "
+        ps_lstart_a = ("  502  700     1 Sat Oct  3 09:00:00 2026 "
                        "/opt/homebrew/bin/python3 -c import time; time.sleep(30) b32n4\n")
-        ps_lstart_b = ("700 1 Sun Nov  1 10:00:00 2026 "
+        ps_lstart_b = ("  502  700     1 Sun Nov  1 10:00:00 2026 "
                        "/opt/homebrew/bin/python3 -c import time; time.sleep(30) b32n4\n")
         reads = [ps_lstart_a, ps_lstart_b]
         calls = []
@@ -738,7 +768,7 @@ class ResourceTests(unittest.TestCase):
     def test_resource_identity_agentes_prelaunch_busy_refuses_launch(self):
         shim, log = self._tmux_shim()
         calls = []
-        busy_ps = ("999 1 Sat Oct  3 09:00:00 2026 "
+        busy_ps = ("  502  999     1 Sat Oct  3 09:00:00 2026 "
                    "/opt/homebrew/bin/python3 -c import time; time.sleep(30) b32n5\n")
         backend = AgentesBackend(str(shim), "ag-busy",
                                  ps_reader=lambda: CommandOutcome(0, busy_ps),
@@ -750,7 +780,7 @@ class ResourceTests(unittest.TestCase):
         self.assertFalse(log.exists())
 
     def test_resource_close_agentes_survivor_holds_capacity_then_verifies(self):
-        survivor_ps = ("4242 1 Sat Oct  3 09:00:00 2026 "
+        survivor_ps = ("  502 4242     1 Sat Oct  3 09:00:00 2026 "
                        "/opt/homebrew/bin/python3 -c import time; time.sleep(30) b32n6\n")
         state = {"ps": survivor_ps}
         calls = []
@@ -849,8 +879,8 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual(backend.account_presence(), ())
 
     def test_resource_identity_agentes_multiline_argv_never_makes_a_phantom_row(self):
-        multiline_ps = ("4242 1 Sat Oct  3 09:00:00 2026 /opt/homebrew/bin/python3 -c 'import os\n"
-                        "701 1 Sat Oct  3 09:00:00 2026 /bin/injected -c fake\n"
+        multiline_ps = ("  502 4242     1 Sat Oct  3 09:00:00 2026 /opt/homebrew/bin/python3 -c 'import os\n"
+                        "  502  701     1 Sat Oct  3 09:00:00 2026 /bin/injected -c fake\n"
                         "time.sleep(30)' b32n8\n")
         calls = []
         backend = AgentesBackend("/usr/bin/true", "ag-multiline",
@@ -902,7 +932,7 @@ class ResourceTests(unittest.TestCase):
             self.fail("sudo -n -u agentes is not available")
 
     def _agentes_rows(self):
-        done = subprocess.run(["ps", "-o", "pid=,ppid=,lstart=,command=", "-U", "agentes"],
+        done = subprocess.run(["ps", "-A", "-o", "uid=,pid=,ppid=,lstart=,command="],
                               capture_output=True, text=True)
         return parse_agent_ps(done.stdout) if done.returncode == 0 else ()
 
