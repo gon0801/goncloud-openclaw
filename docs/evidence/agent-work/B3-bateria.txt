@@ -181,61 +181,103 @@ Inicio 2026-10-04T17:45:34Z, fin 19:17:27Z (5472,77 s ≈ 91 min). Exit 1.
 
   | archivo (src/… salvo indización)                          | be3f71c | 5b14e9e | c074824a27 | clase |
   |-----------------------------------------------------------|---------|---------|------------|-------|
-  | agents/embedded-agent-runner/run/attempt-stream-transport | 1       | 1       | 0          | B0→B2 |
-  | agents/embedded-agent-runner/run/attempt.exec-review-transcript | 1   | 1       | 0          | B0→B2 |
-  | agents/embedded-agent-runner/run/attempt.spawn-workspace.diagnostics | 1 | 1     | 0          | B0→B2 |
-  | agents/embedded-agent-runner/run/attempt.tool-search-catalog-abort | 1  | 1       | 0          | B0→B2 |
-  | cli/update-cli/update-command-admit                        | 1       | 1       | 0          | B0→B2 |
-  | config/schema.hints                                        | 1       | 1       | 0          | B0→B2 |
-  | node-host/node-worker-supervisor.recovery                  | 1       | 0       | n/a        | **B3, BLOQUEANTE** |
-  | state/openclaw-state-db                                    | 1       | 1       | 0          | B0→B2 |
+  | agents/embedded-agent-runner/run/attempt-stream-transport | 1       | 1       | 0          | B4/regresión |
+  | agents/embedded-agent-runner/run/attempt.exec-review-transcript | 1   | 1       | 0          | B4/regresión |
+  | agents/embedded-agent-runner/run/attempt.spawn-workspace.diagnostics | 1 | 1     | 0          | B4/regresión |
+  | agents/embedded-agent-runner/run/attempt.tool-search-catalog-abort | 1  | 1       | 0          | B4/regresión |
+  | cli/update-cli/update-command-admit                        | 1       | 1       | 0          | B4/regresión |
+  | config/schema.hints                                        | 1       | 1       | 0          | B4/regresión |
+  | node-host/node-worker-supervisor.recovery                  | 1       | 0       | n/a        | base (tiempos) |
+  | state/openclaw-state-db                                    | 1       | 1       | 0          | B4/regresión |
   | tui/tui-pty-local.e2e                                      | 1       | 1       | 1          | base pública |
   | e2e/qa-lab/runtime/agent-sandboxed-exec-behavior.e2e       | 1       | 1       | 1          | base pública |
 
-- BLOQUEANTE DEL CIERRE (viene del diff de B3, no se corrige aquí):
-  src/node-host/node-worker-supervisor.recovery.test.ts > node worker supervisor recovery >
-  «replay kills the exact stale-owner worker group with a dead leader before releasing
-  capacity» — AssertionError: expected { …(19) } to match object { state: 'interrupted',
-  …(1) }. Falla sola sobre be3f71c (54 s) y pasa sola sobre 5b14e9e (54 s, exit 0). Es uno
-  de los tres archivos que la revisión de r2 marcó como importadores de módulos que
-  cambiamos; los otros dos (schema.hints, openclaw-state-db) vienen de B0→B2, no de B3.
-- B0→B2 (falla en be3f71c y 5b14e9e, pasa en la base pública; va a followups.md): los 7
-  archivos de la tabla con esa clase, incluidos schema.hints y openclaw-state-db.
-- Limitación de la base pública (falla en los tres árboles): tui-pty-local.e2e y
-  agent-sandboxed-exec-behavior.e2e.
-- Carga u orden: ninguno (ningún archivo nuevo pasó solo en be3f71c).
+- CORRECCIÓN DE CLASIFICACIÓN (r3, VEREDICTO-B3-bateria-r2): node-worker-supervisor.recovery
+  NO es bloqueante de B3. Es una limitación de la base pública por tiempos en esta Mac: el
+  revisor la corrió sola tres veces por árbol (logs en
+  ~/.local/state/encargos-loop/artifacts/B3-bateria-revisor/sup-*.log) y cayó 3 de 3 en
+  c074824a27, 1 de 3 en 5b14e9e y 3 de 3 en be3f71c, siempre con las mismas pruebas
+  («replay/cancel kills the exact stale-owner worker group with a dead leader»). Una corrida
+  única por árbol, como la de r2, no alcanza para clasificar una prueba de tiempos.
+- CORRECCIÓN DE CLASIFICACIÓN (r3): los 7 archivos que fallan en 5b14e9e y en be3f71c pero
+  pasan en c074824a27 son regresiones nuestras de B0 a B2 (fila B4/regresiones de
+  followups.md): ya están en main y nadie las vio porque las baterías anteriores corrían la
+  suite ajena. Los arregla el primer encargo de B4, junto con los 22 errores de tipos de
+  B0 a B2.
 - Logs de las reproducciones: artifacts/B3-bateria-r2/solo-{be3f71c,5b14e9e,c074824a27}-*.log
   con sus resumen.txt. Copias aisladas dejadas en pie: r-5b14e9e y r-c074824a27 (rutas en
   triage-worktree-*.path). Nota: dos lanzamientos del bucle de 5b14e9e murieron al instante
   por un error de ruta en el guion del bucle (dur=0 s, sin corrida real); el tercero corrió
   completo y sus logs son los válidos.
 
+### 3d. Arreglo de tipos de B3 y par nuevo (r3)
+
+`tsgo:core:test` en be3f71c daba 81 errores: host-closure 50, provider-stream 16, siblings 9,
+recovery 6. Los dos archivos nuevos de B3 (creados por 77bdfab, a47bc74, 4f2f7b5, 9f8ce95 y
+63e37b8) aportaban los 59 de más. El arreglo (R commit 3c1c7485375705ecb25411646994bdc37b63a10b)
+tipa los hijos resueltos con guardas, sin tocar aserciones, valores esperados ni
+any/@ts-ignore/@ts-expect-error: guarda en el helper createRootWithCliChildren, guardas locales
+en los dos tests que indexan handling.childTaskIds, y tupla tipada en el retorno de siblings().
+
+- Antes (be3f71c): host-closure 50, siblings 9, provider-stream 16, recovery 6. Total 81.
+- Después (3c1c748): host-closure 0, siblings 0, provider-stream 16, recovery 6. Total 22,
+  solo la deuda de B0 a B2, intacta (es trabajo de B4).
+- Las dos pruebas, antes y después con el mismo conteo: managed-task.host-closure.test.ts
+  10 pruebas exit 0 en be3f71c y en 3c1c748; managed-task.recovery.siblings.test.ts
+  2 pruebas exit 0 en los dos. Logs: artifacts/B3-bateria-r3/pre-{host-closure,siblings}-count.log,
+  pre-commit-*.log, post-*.log, tsgo-core-test-post.log.
+- Build de 3c1c748 en la copia aislada: exit 0, 5 m 27 s (artifacts/B3-bateria-r3/build-post.log).
+
+Integración del par nuevo, G f7ccda0 con R 3c1c748 (copia aislada reconstruida):
+  AGENT_WORK_RUNTIME_SOURCE=<copia en 3c1c748> bash scripts/agent-work/test-runtime.sh <caso>
+Los 9 casos terminaron exit=0 y la primera línea de cada log, comparada con head -1, es
+exactamente:
+  {"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "3c1c7485375705ecb25411646994bdc37b63a10b"}
+
+| caso              | exit | duración |
+|-------------------|------|----------|
+| budget_tree       | 0    | 22 s     |
+| budget_context    | 0    | 8 s      |
+| budget_evasion    | 0    | 12 s     |
+| recovery_limit    | 0    | 7 s      |
+| waiting_reason    | 0    | 9 s      |
+| recovery_queue    | 0    | 11 s     |
+| resource_release  | 0    | 12 s     |
+| projection_gateway| 0    | 31 s     |
+| idle_72h          | 0    | 443 s    |
+
+Logs: ~/.local/state/encargos-loop/artifacts/B3-bateria-r3/caso-<caso>.log y casos-resumen.txt.
+
 ## Resumen del cierre
 
 - Batería de G (r1): 2 en rojo. 1 de base/host (cli-modos) y 1 del diff de B3, el doc-check
   de b32a-codex-dirhelper-sample.txt (0c911c0). RESUELTO en r2: título «# » agregado como
   primera línea y prueba doc-check en verde tras el commit de r2.
-- Integración nativa del par (r1): 9/9 casos en verde con el recibo JSON exacto.
+- Integración nativa del par (r1): 9/9 casos en verde con el recibo JSON exacto; repetida
+  en r3 con el par nuevo (f7ccda0 + 3c1c748): 9/9 en verde, mismo recibo con el SHA nuevo.
 - Corrida --changed de la Corrección 1 (r1): NO cubría nuestro código (0 de los 34 archivos
   nuestros, solo el shard unit-fast); el VEREDICTO la declara comando incorrecto y no es la
   batería del bloque.
 - Batería de R del bloque (r2, objetivos 599): 29/29 shards, 41 × en 14 archivos. 4
-  conocidas sin reproducción, 10 nuevas triageadas: 1 BLOQUEANTE de B3
-  (node-worker-supervisor.recovery, «replay kills the exact stale-owner worker group with a
-  dead leader before releasing capacity»), 7 de B0→B2 (a followups.md), 2 limitación de la
-  base pública. Tipos: tsgo:core verde; tsgo:core:test con 81 errores en 4 archivos
-  nuestros, deuda de B0→B2 ampliada por B3 (a followups.md).
+  conocidas sin reproducción, 10 nuevas triageadas y CORREGIDAS en r3: node-worker-supervisor
+  .recovery es limitación de la base pública (tiempos; 3 corridas por árbol del revisor),
+  7 archivos son regresiones nuestras de B0→B2 (fila B4/regresiones, trabajo del primer
+  encargo de B4) y 2 son limitación de la base pública. Cero bloqueantes de B3 en pruebas.
+- Tipos (r3): los 59 errores que B3 dejó en host-closure y siblings quedaron corregidos en
+  R 3c1c748 con guardas, sin tocar aserciones; tsgo:core:test baja de 81 a 22, los de
+  B0→B2 (B4). tsgo:core sigue verde.
 - Corrida completa de R: cortada por orden de David; tercera batería completa local que no
   converge (B1 cortada, B2 abortada por el runner, B3 cortada por orden). Las cifras de la
   Corrección 1 quedan como hipótesis no conciliada (toma ~15:32Z con la corrida en marcha).
 
 ## Lo que este encargo NO hizo
 
-- r1 no clasificó las 18 familias desconocidas de la corrida cortada; r2 tampoco (no hay
-  corrida íntegra contra la que clasificar; la batería del bloque usa objetivos explícitos).
-- No se corrigió ninguna falla ni el bloqueante de B3 (prohibido: se reporta).
+- r1/r2 no clasificaron las 18 familias desconocidas de la corrida cortada; r3 tampoco (no
+  hay corrida íntegra contra la que clasificar; la batería del bloque usa objetivos explícitos).
+- No se arreglaron los 22 errores de tipos de B0→B2 ni las 7 regresiones de B0→B2: son
+  trabajo de B4 (fila B4/regresiones).
+- No se corrigió ninguna falla en R fuera de los dos archivos de prueba tipados en r3.
 - No se relanzó corrida terminada alguna; cada corrida de este cierre se lanzó una sola vez
-  (los dos lanzamientos rotos del bucle de 5b14e9e nunca ejecutaron pruebas: cd fallido,
-  dur=0 s).
+  (los dos lanzamientos rotos del bucle de 5b14e9e en r2 nunca ejecutaron pruebas).
 - No hizo push, PR ni CI (prohibido); no marcó casillas del plan (T7 ya está completa).
 - No tocó la cuenta agentes, sudoers, gateway, claw ni crons.
