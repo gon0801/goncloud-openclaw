@@ -563,6 +563,9 @@ class ResourceTests(unittest.TestCase):
         self.assertTrue(backend.pane_gone({"panePid": survivor.pid}))
         self.assertFalse(backend.pane_gone({"panePid": "not-a-pid"}))
         self.assertFalse(backend.pane_gone({}))
+        self.assertFalse(backend.pane_gone({"panePid": -1}))
+        self.assertFalse(backend.pane_gone({"panePid": 99999999999}))
+        self.assertFalse(backend.pane_gone({"panePid": 0}))
 
     def _managed_shell(self):
         root = Path(self.tmp.name)

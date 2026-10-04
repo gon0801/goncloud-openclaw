@@ -337,7 +337,7 @@ class TmuxBackend:
         # is the only positive proof of death here. Any other outcome stays
         # False, including a reused pid, so close keeps CleanupPending.
         pane_pid = identity.get("panePid")
-        if isinstance(pane_pid, bool) or not isinstance(pane_pid, int):
+        if isinstance(pane_pid, bool) or not isinstance(pane_pid, int) or pane_pid <= 1:
             return False
         result = _ps("-p", str(pane_pid), "-o", "pid=")
         return result.returncode == 1 and result.stdout == "" and result.stderr == ""
