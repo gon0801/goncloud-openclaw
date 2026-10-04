@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Callable
 
 from contracts import AuthorizedOperation, HostObservation, OperationKey, ResultReceipt, operation_id
-from spool import Spool, atomic_json, canonical
+from spool import TERMINAL_STATES, Spool, atomic_json, canonical, closure_digest
 
 MAX_ARTIFACT_BYTES = 10 * 1024 * 1024
 RESULT_SCHEMA = "agent-work.result.v1"
@@ -284,6 +284,43 @@ class Host:
             self.spool.acknowledge(op_id, receipt)
             receipts.append(receipt)
         return receipts
+
+    def flush_closures(self, host_id: str,
+                       close_to_runtime: Callable[[dict, str, str, str], dict]) -> tuple[int, list[str]]:
+        """Send every changed resource closure; each one fails alone."""
+        self._host(host_id)
+        closed, errors = 0, []
+        rows = self.spool.closure_rows()
+        seen_terminals = {(row["task_id"], row["generation"]) for row in rows
+                          if row["state"] in TERMINAL_STATES}
+        for row in rows:
+            op_id = row["operation_id"]
+            try:
+                current = self.spool.get(op_id)
+                if current is None:
+                    self.spool.note_inbox_error(op_id, "closure without assignment")
+                    continue
+                assignment = json.loads(current["operation_json"])
+                digest = closure_digest(row["evidence_json"])
+                last = self.spool.closure_last(op_id)
+                if last and (last["state"], last["reason"], last["evidence_digest"]) \
+                        == (row["state"], row["reason"], digest):
+                    self.spool.clear_inbox_error(op_id)
+                    continue
+                if row["state"] == "CleanupPending" and (
+                        (row["task_id"], row["generation"]) in seen_terminals
+                        or self.spool.closure_terminal(row["task_id"], row["generation"])
+                        is not None):
+                    continue
+                receipt = close_to_runtime(assignment, row["state"], row["reason"], digest)
+                self.spool.closure_record(op_id, row["task_id"], row["generation"],
+                                          row["instance_id"], row["state"], row["reason"], digest)
+                self.spool.clear_inbox_error(op_id)
+                closed += 1
+            except (OSError, RuntimeError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+                self.spool.note_inbox_error(op_id, f"closure failed: {exc}")
+                errors.append(f"{op_id}: {exc}")
+        return closed, errors
 
     def receipt(self, host_id: str, key: OperationKey) -> dict | None:
         self._host(host_id)

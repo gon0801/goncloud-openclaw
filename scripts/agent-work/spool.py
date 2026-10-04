@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -7,9 +8,16 @@ import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
+TERMINAL_STATES = ("AbsenceVerified", "ReleasedAdopted")
+SENDABLE_STATES = ("CleanupPending", "AbsenceVerified", "ReleasedAdopted")
+
 
 def canonical(data: object) -> str:
     return json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def closure_digest(evidence_json: str) -> str:
+    return hashlib.sha256(canonical(json.loads(evidence_json)).encode()).hexdigest()
 
 
 def atomic_json(path: Path, data: object) -> None:
@@ -62,6 +70,17 @@ class Spool:
                     operation_id TEXT PRIMARY KEY,
                     error TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS closure_sends (
+                    operation_id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    generation INTEGER NOT NULL,
+                    instance_id TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    evidence_digest TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS closure_sends_task_generation
+                    ON closure_sends(task_id, generation);
             """)
             db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT value FROM metadata WHERE key='host_id'").fetchone()
@@ -184,3 +203,42 @@ class Spool:
                 return
             db.execute("UPDATE operations SET receipt_json=?,status='acknowledged' WHERE operation_id=?",
                        (canonical(receipt), operation_id))
+
+    def closure_rows(self) -> list[dict]:
+        # A spool without a resources table (no ResourceManager was ever built)
+        # has nothing to send; the missing table reads as an empty outbox.
+        try:
+            with self.connection() as db:
+                rows = db.execute(
+                    f"SELECT * FROM resources WHERE evidence_json IS NOT NULL "
+                    f"AND state IN ({','.join('?' * len(SENDABLE_STATES))}) ORDER BY operation_id",
+                    SENDABLE_STATES,
+                ).fetchall()
+        except sqlite3.OperationalError:
+            return []
+        return [dict(row) for row in rows]
+
+    def closure_last(self, operation_id: str) -> dict | None:
+        with self.connection() as db:
+            row = db.execute("SELECT * FROM closure_sends WHERE operation_id=?", (operation_id,)).fetchone()
+        return dict(row) if row else None
+
+    def closure_terminal(self, task_id: str, generation: int) -> dict | None:
+        with self.connection() as db:
+            rows = db.execute("SELECT state FROM closure_sends WHERE task_id=? AND generation=?",
+                              (task_id, generation)).fetchall()
+        for row in rows:
+            if row["state"] in TERMINAL_STATES:
+                return {"state": row["state"]}
+        return None
+
+    def closure_record(self, operation_id: str, task_id: str, generation: int, instance_id: str,
+                       state: str, reason: str, evidence_digest: str) -> None:
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute(
+                "INSERT INTO closure_sends VALUES (?,?,?,?,?,?,?) "
+                "ON CONFLICT(operation_id) DO UPDATE SET task_id=excluded.task_id,"
+                "generation=excluded.generation,instance_id=excluded.instance_id,"
+                "state=excluded.state,reason=excluded.reason,evidence_digest=excluded.evidence_digest",
+                (operation_id, task_id, generation, instance_id, state, reason, evidence_digest))
