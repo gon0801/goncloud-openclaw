@@ -231,10 +231,10 @@ Produce reserva idempotente de host, identidad resistente a reutilización y `Ab
 - [x] Añade `resource_close`: caída entre reserva y lanzamiento, descendiente desacoplado, ACK perdido y stop fallido.
 - [x] Ejecuta los casos en rojo.
 - [x] Implementa captura de evidencia, contención o rastreo de descendientes, detención y verificación. Sustituye éxito aparente tras fallo de stop por cierre pendiente en la ruta gestionada.
-- [ ] Comprueba que terminar el turno del padre no abandona al hijo y que un host inaccesible no libera cupo.
+- [x] Comprueba que terminar el turno del padre no abandona al hijo y que un host inaccesible no libera cupo. Evidencia conjunta B3-2b (R `77bdfab`: cupo retenido hasta cierre terminal, `managedTasks.host.close`, esquema 27) y B3-2c-r1 (G: cierre de adoptada desaparecida con prueba positiva, spool de cierres con reintentos, envío con recibo verificado y prueba cruzada `projection_gateway`).
 - [x] Ejecuta `resource_100_cycles`. Exige cero procesos propios abandonados y cuentas separadas para historial y pool intencional.
 
-Verifica los tres casos con `test-agent-work-host.sh`. Certifica cada combinación de host y adaptador de `coverage.json`; una combinación sin prueba permanece deshabilitada. Cierra B3 con la batería de `G` y la integración nativa del mismo par de artefactos.
+Verifica los tres casos con `test-agent-work-host.sh` y los casos `resource_release` y `projection_gateway` del ejecutor `test-runtime.sh`. Certifica cada combinación de host y adaptador de `coverage.json`; una combinación sin prueba permanece deshabilitada. Cierra B3 con la batería de `G` y la integración nativa del mismo par de artefactos.
 
 ### T8. Enlaza resultados con progreso y con el director
 
