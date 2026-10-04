@@ -2,9 +2,11 @@
 """Crash boundaries between native task results and the progress queue."""
 
 import base64
+import contextlib
 import copy
 import hashlib
 import json
+import io
 import os
 from pathlib import Path
 import queue
@@ -304,10 +306,28 @@ class ProjectionTransferTest(unittest.TestCase):
                 gateway_main(args)
         with mock.patch("native_gateway.Host") as host_type:
             host_type.return_value.flush.return_value = [{"receiptId": "native-one"}]
+            host_type.return_value.flush_closures.return_value = (0, [])
             with mock.patch("builtins.print") as output:
                 self.assertEqual(gateway_main(args + ["--host-state-dir", str(self.root / "host")]), 0)
         host_type.assert_called_once_with("host-one", str(self.root / "host"))
-        output.assert_called_once_with('{"reported": 1}')
+        output.assert_called_once_with('{"closed": 0, "reported": 1}')
+
+    def test_flush_results_sends_results_before_closures_and_fails_on_errors(self):
+        args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "host-one",
+                "--expect-url", "ws://127.0.0.1:18789", "--flush-results",
+                "--host-state-dir", str(self.root / "host")]
+        order = []
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with mock.patch("native_gateway.Host") as host_type:
+            host = host_type.return_value
+            host.flush.side_effect = lambda *_: order.append("results") or [{"receiptId": "r1"}]
+            host.flush_closures.side_effect = lambda *_: order.append("closures") or (2, ["op-x: gateway down"])
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                code = gateway_main(args)
+        self.assertEqual(code, 1)
+        self.assertEqual(order, ["results", "closures"])
+        self.assertEqual(stdout.getvalue().strip().splitlines()[-1], '{"closed": 2, "reported": 1}')
+        self.assertIn("op-x: gateway down", stderr.getvalue())
 
     def test_watch_entrypoint_requires_host_and_restores_signal_handlers(self):
         args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "host-one",
@@ -458,14 +478,17 @@ class ProjectionTransferTest(unittest.TestCase):
                 self.projections = []
                 return receipt
 
+            def close_host(self, *_):
+                raise AssertionError("no closures are pending in this test")
+
         client = Client()
         args = {"evidence_root": self.evidence_root, "progress_state_dir": self.state_dir,
                 "progress_client": ROOT / "scripts" / "mac" / "progress-events.py"}
         self.assertEqual(native_gateway.pump_once(client, host=host, **args),
-                         {"reported": 1, "transferred": 1})
+                         {"reported": 1, "transferred": 1, "closed": 0})
         for _ in range(100):
             self.assertEqual(native_gateway.pump_once(client, host=host, **args),
-                             {"reported": 0, "transferred": 0})
+                             {"reported": 0, "transferred": 0, "closed": 0})
         self.assertEqual(len(client.reports), 1)
         self.assertEqual(len(list((self.state_dir / "runs" / "run-1" / "queue").glob("*.json"))), 1)
 
@@ -473,6 +496,9 @@ class ProjectionTransferTest(unittest.TestCase):
         class FailingHost:
             def flush(self, *_):
                 raise RuntimeError("host report unavailable")
+
+            def flush_closures(self, *_):
+                return 0, []
 
             def operation_key_for(self, *_):
                 return None
@@ -493,11 +519,57 @@ class ProjectionTransferTest(unittest.TestCase):
                 self.receipts.append(receipt)
                 return receipt
 
+            def close_host(self, *_):
+                raise AssertionError("no closures are pending in this test")
+
         pending = self.pending
         client = Client()
         with self.assertRaisesRegex(RuntimeError, "host report unavailable"):
             native_gateway.pump_once(
                 client, host=FailingHost(), evidence_root=self.evidence_root,
+                progress_state_dir=self.state_dir,
+                progress_client=ROOT / "scripts" / "mac" / "progress-events.py",
+            )
+        self.assertEqual(len(client.receipts), 1)
+        self.assertEqual(len(list((self.state_dir / "runs" / "run-1" / "queue").glob("*.json"))), 1)
+
+    def test_pump_closure_failure_does_not_block_projections(self):
+        class ClosureFailingHost:
+            def flush(self, *_):
+                return []
+
+            def flush_closures(self, *_):
+                return 0, ["op-x: gateway down"]
+
+            def operation_key_for(self, *_):
+                return None
+
+        class Client:
+            host_id = "host-one"
+
+            def __init__(self):
+                self.receipts = []
+
+            def report_host_result(self, *_):
+                return {field: self.pending[field] for field in
+                        ("hostId", "taskId", "generation", "instanceId", "producerId")} | {
+                    "resultId": "r", "receiptId": "native-one"}
+
+            def list_pending(self, after_task_id=None, limit=100):
+                return [] if self.receipts else [self.pending]
+
+            def ack(self, receipt):
+                self.receipts.append(receipt)
+                return receipt
+
+            def close_host(self, *_):
+                raise AssertionError("closure failures come from the host double")
+
+        client = Client()
+        client.pending = self.pending
+        with self.assertRaisesRegex(RuntimeError, "op-x: gateway down"):
+            native_gateway.pump_once(
+                client, host=ClosureFailingHost(), evidence_root=self.evidence_root,
                 progress_state_dir=self.state_dir,
                 progress_client=ROOT / "scripts" / "mac" / "progress-events.py",
             )
@@ -532,6 +604,9 @@ class ProjectionTransferTest(unittest.TestCase):
 
             def list_pending(self, after_task_id=None, limit=100):
                 return []
+
+            def close_host(self, *_):
+                raise AssertionError("no closures are pending in this test")
 
         client = Client()
         result_path = self.root / "host" / "inbox" / (operation_id(key) + ".json")
@@ -619,6 +694,9 @@ class ProjectionTransferTest(unittest.TestCase):
 
             def list_pending(self, after_task_id=None, limit=100):
                 return []
+
+            def close_host(self, *_):
+                raise AssertionError("no closures are pending in this test")
 
         native_gateway.watch_pump(
             Client(), host=host,
@@ -1863,12 +1941,101 @@ class ClosureFlushTest(unittest.TestCase):
         manager_a.close(key_a, {"kind": "result", "receipt": "seed-result"})
         manager_b.close(key_b, {"kind": "result", "receipt": "seed-result"})
         calls = []
-        closed, errors = host.flush_closures("host-one", self.capture(calls, {"task-fail"}))
+
+        def fail_once(assignment, state, reason, digest):
+            calls.append(assignment["taskId"])
+            if len(calls) == 1:
+                raise RuntimeError("gateway unreachable")
+            return {"taskId": assignment["taskId"], "generation": assignment["generation"],
+                    "state": state, "reason": reason, "evidenceDigest": digest,
+                    "updatedAtMs": 1}
+
+        closed, errors = host.flush_closures("host-one", fail_once)
         self.assertEqual(closed, 1)
         self.assertEqual(len(errors), 1)
-        self.assertEqual(sorted(call["taskId"] for call in calls), ["task-fail", "task-pass"])
-        self.assertIsNone(host.spool.closure_last(operation_id(key_a)))
-        self.assertIsNotNone(host.spool.closure_last(operation_id(key_b)))
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(sorted(calls), ["task-fail", "task-pass"])
+        lasts = [host.spool.closure_last(operation_id(key_a)) is None,
+                 host.spool.closure_last(operation_id(key_b)) is None]
+        self.assertEqual(sorted(lasts), [False, True])
+
+    def test_flush_rejects_mismatched_receipt_and_stays_pending(self):
+        host, manager, key = self.seed("task-close", "instance-a")
+        self.backend.live.pop("session-instance-a")
+        manager.close(key, {"kind": "result", "receipt": "seed-result"})
+        client = GatewayProjectionClient("/isolated/openclaw", "host-one", "ws://gateway")
+        wrong = {"taskId": "task-other", "generation": 1, "state": "CleanupPending",
+                 "reason": "adopted session unverifiable", "evidenceDigest": "0" * 64}
+        with mock.patch.object(client, "_call", side_effect=lambda *_: dict(wrong)):
+            closed, errors = host.flush_closures("host-one", client.close_host)
+        self.assertEqual(closed, 0)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("receipt", errors[0])
+        self.assertIsNone(host.spool.closure_last(operation_id(key)))
+
+
+class ClientCloseTest(unittest.TestCase):
+    def setUp(self):
+        self.client = GatewayProjectionClient("/isolated/openclaw", "host-one", "ws://gateway")
+        self.assignment = {"hostId": "host-one", "taskId": "task-x", "generation": 2,
+                           "instanceId": "instance-x", "producerId": "codex",
+                           "capability": "tok", "adapterId": "codex"}
+
+    def receipt(self, **changes):
+        base = {"taskId": "task-x", "generation": 2, "state": "CleanupPending",
+                "reason": "reason-text", "evidenceDigest": "a" * 64, "updatedAtMs": 5}
+        return {**base, **changes}
+
+    def test_close_host_sends_contract_params_and_accepts_matching_receipt(self):
+        seen = {}
+
+        def fake_call(method, params, **kwargs):
+            seen["method"] = method
+            seen["params"] = params
+            return self.receipt()
+
+        with mock.patch.object(self.client, "_call", side_effect=fake_call):
+            receipt = self.client.close_host(self.assignment, "CleanupPending",
+                                             "reason-text", "a" * 64)
+        self.assertEqual(seen["method"], "managedTasks.host.close")
+        self.assertEqual(seen["params"], {
+            "hostId": "host-one", "instanceId": "instance-x", "adapterId": "codex",
+            "capability": {"taskId": "task-x", "generation": 2,
+                           "producerId": "codex", "token": "tok"},
+            "state": "CleanupPending", "reason": "reason-text",
+            "evidenceDigest": "a" * 64,
+        })
+        self.assertEqual(receipt["updatedAtMs"], 5)
+
+    def test_close_host_omits_absent_adapter(self):
+        assignment = {**self.assignment, "adapterId": None}
+        seen = {}
+
+        def fake_call(method, params, **kwargs):
+            seen["params"] = params
+            return self.receipt(state="ReleasedAdopted", reason="adopted session gone")
+
+        with mock.patch.object(self.client, "_call", side_effect=fake_call):
+            self.client.close_host(assignment, "ReleasedAdopted", "adopted session gone", "a" * 64)
+        self.assertNotIn("adapterId", seen["params"])
+
+    def test_close_host_rejects_mismatched_receipt_identity(self):
+        for changes in ({"taskId": "other"}, {"generation": 3},
+                        {"state": "AbsenceVerified"}, {"evidenceDigest": "b" * 64}):
+            with mock.patch.object(self.client, "_call", side_effect=lambda *_: self.receipt(**changes)):
+                with self.assertRaisesRegex(RuntimeError, "closure receipt identity mismatch"):
+                    self.client.close_host(self.assignment, "CleanupPending", "reason-text", "a" * 64)
+
+    def test_close_host_rejects_invalid_boundary(self):
+        with self.assertRaisesRegex(ValueError, "generation"):
+            self.client.close_host({**self.assignment, "generation": 0},
+                                   "CleanupPending", "reason-text", "a" * 64)
+        with self.assertRaisesRegex(ValueError, "state"):
+            self.client.close_host(self.assignment, "Closing", "reason-text", "a" * 64)
+        with self.assertRaisesRegex(ValueError, "reason"):
+            self.client.close_host(self.assignment, "CleanupPending", "", "a" * 64)
+        with self.assertRaisesRegex(ValueError, "digest"):
+            self.client.close_host(self.assignment, "CleanupPending", "reason-text", "zz")
 
 
 if __name__ == "__main__":
