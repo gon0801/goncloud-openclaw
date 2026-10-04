@@ -744,6 +744,38 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual(made, "/private/tmp/b32-ag-empty")
         self.assertTrue(any("/usr/bin/mktemp" in call for call in calls))
 
+    def test_resource_close_agentes_apple_label_on_user_binary_stays_signalable(self):
+        # A live com.apple.* label pointing at an account-owned user binary is
+        # forgeable text: the process stays present and signalable, and only a
+        # real OS binary under the label is excluded.
+        fake_label_ld = (
+            "user/502 = {\n"
+            "\tservices = {\n"
+            "\t\t   4242   (pe) \tcom.apple.fake\n"
+            "\t\t    515      - \tcom.apple.lsd\n"
+            "\t}\n"
+            "}\n"
+        )
+        calls = []
+        backend = AgentesBackend("/usr/bin/true", "ag-fakelabel",
+                                 ps_reader=lambda: CommandOutcome(
+                                     0,
+                                     "  502 4242     1 Sat Oct  3 09:00:00 2026 "
+                                     "/opt/homebrew/bin/python3 -c import time; "
+                                     "time.sleep(120) b32n10\n"),
+                                 launchd_reader=lambda: CommandOutcome(0, fake_label_ld),
+                                 runner=lambda argv: calls.append(list(argv))
+                                 or (CommandOutcome(0, "Sat Oct  3 09:00:00 2026 "
+                                                    "/opt/homebrew/bin/python3 -c import time; "
+                                                    "time.sleep(120) b32n10\n")
+                                     if argv[:1] == ["ps"] else CommandOutcome(0, "")),
+                                 grace_seconds=0.2)
+        manager, key = self._agentes_running(backend, "ag-fakelabel-1")
+        view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
+        self.assertEqual(view.state, "CleanupPending")
+        self.assertEqual([call for call in calls if "/bin/kill" in call],
+                         [self.KILL_ARGV_PREFIX + ["4242"]])
+
     def test_resource_close_agentes_lstart_change_skips_signal(self):
         ps_lstart_a = ("  502  700     1 Sat Oct  3 09:00:00 2026 "
                        "/opt/homebrew/bin/python3 -c import time; time.sleep(30) b32n4\n")
