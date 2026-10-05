@@ -12,6 +12,7 @@ from pathlib import Path
 import queue
 import signal
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -1949,6 +1950,36 @@ class ClosureFlushTest(unittest.TestCase):
         calls = []
         self.assertEqual(host.flush_closures("host-one", self.capture(calls)), (0, []))
         self.assertEqual(calls, [])
+
+    def test_flush_locked_database_raises_oserror(self):
+        host = Host("host-one", self.root / "host-locked")
+
+        @contextlib.contextmanager
+        def locked():
+            class LockedConnection:
+                def execute(self, *_):
+                    raise sqlite3.OperationalError("database is locked")
+
+            yield LockedConnection()
+
+        with mock.patch.object(host.spool, "connection", locked):
+            with self.assertRaisesRegex(OSError, "database is locked"):
+                host.flush_closures("host-one", self.capture([]))
+
+    def test_flush_results_reports_locked_closure_error_and_emits_json(self):
+        args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "host-one",
+                "--expect-url", "ws://127.0.0.1:18789", "--flush-results",
+                "--host-state-dir", str(self.root / "host-locked")]
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with mock.patch("native_gateway.Host") as host_type:
+            host = host_type.return_value
+            host.flush.return_value = []
+            host.flush_closures.side_effect = OSError("database is locked")
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                code = gateway_main(args)
+        self.assertEqual(code, 1)
+        self.assertEqual(stdout.getvalue().strip().splitlines()[-1], '{"closed": 0, "reported": 0}')
+        self.assertIn("database is locked", stderr.getvalue())
 
     def test_flush_first_failure_continues_to_second(self):
         host, manager_a, key_a = self.seed("task-fail", "instance-1")

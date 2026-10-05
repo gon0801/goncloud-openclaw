@@ -214,7 +214,9 @@ class Spool:
                     f"AND state IN ({','.join('?' * len(SENDABLE_STATES))}) ORDER BY operation_id",
                     SENDABLE_STATES,
                 ).fetchall()
-        except sqlite3.OperationalError:
+        except sqlite3.OperationalError as exc:
+            if "no such table" not in str(exc):
+                raise OSError(str(exc)) from exc
             return []
         return [dict(row) for row in rows]
 

@@ -439,7 +439,10 @@ def main(argv=None):
             reported = len(host.flush(args.host_id, client.report_host_result))
         except (OSError, RuntimeError, ValueError) as exc:
             report_error = exc
-        closed, closure_errors = host.flush_closures(args.host_id, client.close_host)
+        try:
+            closed, closure_errors = host.flush_closures(args.host_id, client.close_host)
+        except (OSError, RuntimeError, ValueError) as exc:
+            closed, closure_errors = 0, [str(exc)]
         if report_error is not None:
             print(f"agent-work flush: {report_error}", file=sys.stderr, flush=True)
         for error in closure_errors:
