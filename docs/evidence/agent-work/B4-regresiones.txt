@@ -1,0 +1,124 @@
+# B4: regresiones nuestras de R (parte 1)
+
+Encargo B4-1-r1. Tres regresiones de la serie B0→B2, reproducidas en R
+`/Users/dn/dev/openclaw-agent-work-integration` (head de partida `3c1c7485375705ecb25411646994bdc37b63a10b`)
+y arregladas con tres commits. Base pública verde de referencia: `c074824a27c96d3983043f9eeb33823cd1772d8c`.
+Logs completos en `~/.local/state/encargos-loop/artifacts/B4-1-r1/`.
+
+## Regresión 1: el intento embebido consulta el binding gestionado y falla dentro de vitest
+
+- **Causa.** `608b3b21d83` (B2/T4, "Guard managed OpenAI provider calls with durable budget") agregó
+  `resolveManagedProviderRunBinding(attempt.runId, attempt.sessionKey)` en `prepareEmbeddedAttemptTransport`
+  (`src/agents/embedded-agent-runner/run/attempt-stream-settle.ts:473`). Esa llamada abre la base compartida;
+  el rechazo `!isMainThread` de `src/infra/sqlite-worker-store.ts:225-229` (código de la base pública, sin tocar)
+  la tumba dentro de vitest, porque los archivos corren en el pool `threads`
+  (`test/vitest/vitest.shared.config.ts:104`) donde `isMainThread` es falso. Las pruebas que necesitan el
+  broker van en forks: los 5 archivos no estaban en `databaseWorkerCoreTestFiles`.
+- **Commit que la introdujo:** `608b3b21d83`.
+- **Arreglo.** Entorno de pruebas, opción 1 (no hizo falta `vi.mock`): los 5 archivos se agregaron a
+  `databaseWorkerCoreTestFiles` y `attempt.code-mode-continuation.test.ts` además a
+  `databaseWorkerCoreFormerFastKinds` con `"unitFastIsolated"` (precedente `595ecfcaa72`). Así corren en el
+  proyecto `infra`, en forks, con broker y binding reales. Ningún archivo de prueba valida
+  `databaseWorkerCoreFormerFastKinds` (`git grep` vacío); las que leen `databaseWorkerCoreTestFiles` calculan
+  sus expectativas desde la lista misma.
+- **Paso 1 (producción corre el intento en el hilo principal).** Primer grep (arranques de workers):
+
+```
+src/test-utils/state-database-contention.ts:7:  const holder = new Worker(
+src/infra/worker-cpu.ts:63:export function createCpuTrackedWorker(...args: ConstructorParameters<typeof Worker>): Worker {
+src/infra/worker-cpu.ts:64:  const worker = new Worker(...args);
+src/infra/sqlite-worker-broker-lifecycle.ts:54:      createCpuTrackedWorker(options.carrierUrl, {
+src/infra/worker-task-pool-core.ts:397:      return createCpuTrackedWorker(workerUrl, workerOptions);
+src/config/sessions/session-accessor.sqlite-archive.ts:40:  return createCpuTrackedWorker(workerUrl, {
+src/secrets/egress-proxy/proxy-worker.ts:41:  const worker = createCpuTrackedWorker(workerUrl, {
+src/cli/gateway-cli/shutdown-hard-exit.ts:21:    worker = createCpuTrackedWorker(
+src/state/openclaw-state-lease-heartbeat.ts:377:        createCpuTrackedWorker(url, {
+src/gateway/cli-session-history.claude-snapshot.ts:200:            worker = createCpuTrackedWorker(OVERSIZED_ENTRY_WORKER_SOURCE, { eval: true });
+extensions/discord/src/voice/audio-worker-thread.ts:34:    ? workerSdk.createCpuTrackedWorker(url, workerOptions)
+extensions/discord/src/voice/audio-worker-thread.ts:35:    : new Worker(url, workerOptions);
+extensions/telegram/src/telegram-ingress-worker.ts:109:  const worker = createCpuTrackedWorker(
+extensions/openai/realtime-quicksilver-socket.ts:39:    const worker = createCpuTrackedWorker(workerUrl, {
+extensions/openai/realtime-quicksilver-peer.runtime.ts:60:    const worker = createCpuTrackedWorker(url, {
+```
+
+  Segundo grep (workers que cargan el intento): **vacío** (exit 1, sin coincidencias). Ningún worker carga
+  `embedded-agent-runner/run`, `harness/builtin-openclaw` ni `runEmbeddedAttempt`.
+- **Pruebas nuevas del guardia (obligatorias).** `src/agents/embedded-agent-runner/run/attempt-stream-transport.managed-binding.test.ts`,
+  con `vi.mock` de `../../tasks/managed-task.run-binding.js` y doble parcial de `managed-task.provider-stream.js`:
+  **(a)** el doble rechaza → `prepareEmbeddedAttemptTransport` rechaza con el mismo error y no llama a
+  `registerProviderStreamForModel`; **(b)** binding gestionado → el stream sale de
+  `createManagedNativeProviderStream(model, binding)` y el doble se llamó con `runId`/`sessionKey` del intento;
+  **(c)** binding gestionado + plugin con `wrapStreamFn` → rechaza con el mensaje completo
+  `Managed provider plugin stream is not budget-certified` (regex anclada `^...$`, no subcadena; el mensaje de
+  `managed-task.provider-stream.ts` es otro: "Managed provider **transport** is not budget-certified").
+  Fixtures copiados de `attempt-stream-transport.test.ts` con `sessionKey` agregado y el mismo `beforeEach`
+  de `extraParamsTesting.setProviderRuntimeDepsForTest({ wrapProviderStreamFn: () => undefined })`.
+  El archivo nuevo corre en su proyecto natural (`agents-embedded-agent-run`): como el binding está doblado,
+  no necesita el broker y no se agregó a `databaseWorkerCoreTestFiles`.
+- **Rojo** (`rojo-1.log`): 24 pruebas fallidas (23 + 1), todas `SqliteWorkerError: Shared-state admission
+  requires the host broker`, en los 5 archivos.
+- **Mutaciones** (cada una revertida después):
+  - `mutacion-1a.log`: envolver la línea 473 en `try { … } catch { null }` → rojo (a).
+  - `mutacion-1b.log`: borrar la consulta (`managedRun = null`) → rojo (a), (b) y (c) ((a) también cae porque
+    el doble deja de llamarse; (b) y (c) caen como exige el encargo).
+  - `mutacion-1c.log`: borrar el `if` del `wrapStreamFn` (líneas 474-476) → rojo solo (c).
+- **Verde** (`verde-1.log`, `verde-final.log`): 5 archivos + nuevo = 32 pruebas (29 + 3), exit 0.
+- **Commit:** `f2aa7dba2f992960991323d2ba5b1180f3dd037e`.
+
+## Regresión 2: la sección `managedTasks` sin declarar en dos pruebas de config
+
+- **Causa.** Agregamos la sección raíz `managedTasks` sin decidir su documentación ni su tier. La prueba
+  `schema.hints.test.ts:16-18` lo exige ("Adding a root config key requires choosing a docsUrl or listing it
+  here"); la de `schema.help.quality.test.ts` exige declaración de tier.
+- **Commit que la introdujo:** el commit de B0/T6 que agregó la sección raíz `managedTasks` (config de tareas
+  gestionadas; la sección llega con la serie del programa, sin docsUrl decidido).
+- **Arreglo.** `"managedTasks"` a `SECTIONS_WITHOUT_DOCS` en `src/config/schema.hints.test.ts` (mecanismo de la
+  propia prueba; no hay página, `grep -rli managedTasks docs` solo da notas de versión) y
+  `managedTasks` a `ROOT_TIER_PATHS` en `src/config/schema.tiers.ts` (orden alfabético, `advanced` por la vía
+  de `mergeTierHint`, porque las tareas gestionadas están apagadas por defecto — es el stub exacto que la
+  prueba sugiere: `"managedTasks": { advanced: true }`).
+- **Rojo** (`rojo-2.log`): `expected [ 'managedTasks' ] to deeply equal []` y
+  `1 config path(s) have no tier declaration`.
+- **Mutación** (`mutacion-2.log`): revertido solo el cambio de `schema.tiers.ts` → vuelve el rojo de tier.
+- **Verde** (`verde-2.log`, `verde-final.log`): 19 + 14 pruebas, exit 0.
+- **Commit:** `c0dd682ded8123a5ae914c8a0e1f9283954c050b`.
+
+## Regresión 3: `heartbeat-runner.model-override` despierta como `heartbeat` en vez de `cron`
+
+- **Causa.** `02bbd93292c33bb1134a9c5c913b91a3df8090ed` ("Resume managed task with original requester identity")
+  re-clasificó el evento de tarea seleccionado: antes caía en `cronEvents` (así un despertar cron que cargaba
+  una tarea daba `hasCronEvents` → `InternalTurnSource: "cron"`); ahora va a `genericEvents` (su propia prueba
+  `heartbeat-runner-prompt.managed-task.test.ts` lo exige, incluso con `isCronWake=true`) y el `'cron'` de
+  `InternalTurnSource` se deriva aparte, en `src/infra/heartbeat-runner-run.ts`.
+- **Commit que la introdujo:** `02bbd93292c` (confirmado por bisect, ver abajo; la pista
+  `git log -S'event !== selectedTaskEvent'` apuntaba al mismo SHA).
+- **Bisect.** Copia aislada nueva (`git worktree add --detach` en `mktemp -d`,
+  `CI=1 pnpm install --frozen-lockfile --prefer-offline --ignore-scripts`; `git log c074824a27..5b14e9e --
+  pnpm-lock.yaml package.json` vacío, un solo install basta). `git bisect start 5b14e9e563a4f3802aa5e95e57e1d35904ea0c85 c074824a27c96d3983043f9eeb33823cd1772d8c`
+  y `git bisect run` con un script que corre solo `src/infra/heartbeat-runner.model-override.test.ts` y sale
+  1 con `×` en "cron-carried task", 0 con `✓`, 125 en otro caso. Primer commit malo: `02bbd93292c33bb1134a9c5c913b91a3df8090ed`.
+  `git bisect reset` al final; el bisect no tocó el checkout de R.
+- **Arreglo.** En `heartbeat-runner-run.ts`, la derivación de `InternalTurnSource` vuelve a reportar `'cron'`
+  cuando un despertar cron carga una tarea seleccionada: `prepared.hasCronEvents || (prepared.selectedTaskEventId
+  !== undefined && wake.wakeSource === "cron")`. No se devuelve el evento a `cronEvents`: las pruebas del
+  commit que rompió quedan verdes, junto con `heartbeat-runner.event-routing.test.ts`.
+- **Rojo** (`rojo-3.log`): `expected 'heartbeat' to be 'cron'` en `ctx?.InternalTurnSource`, línea 140.
+- **Mutación** (`mutacion-3.log`): revertido solo ese cambio → vuelve el rojo de "cron-carried task".
+- **Verde** (`/tmp/b4-1-verde3-intento1.log`, resumido en `verde-final.log`): model-override (9),
+  prompt.managed-task + event-routing + delivery + store + sentinel + requester e2e (47), y dos shards de 7.
+- **Commit:** `6d6582f532191b1216492522c5b0aff377444c7b`.
+
+## Verificación
+
+- **Verde de una vez** (`verde-final.log`): los 5 attempt + archivo nuevo + `schema.hints` +
+  `schema.help.quality` + `heartbeat-runner.model-override`, exit 0 (93 pruebas).
+- **Los 34 de la lista** `git diff --name-only --diff-filter=AM c074824a27c96d3983043f9eeb33823cd1772d8c 3c1c7485375705ecb25411646994bdc37b63a10b | grep '\.test\.ts$'`
+  (`los-34.log`, PID en `los-34.pid`): exit 0, 793 pruebas pasadas, 0 `×`.
+- **Build** (`build.log`, PID en `build.pid`): `pnpm build` en R después del último commit, exit 0.
+  `jq -r .commit dist/build-info.json` = `6d6582f532191b1216492522c5b0aff377444c7b` = `git rev-parse HEAD`.
+- **Integración desde G** (`caso-*.log`): `AGENT_WORK_RUNTIME_SOURCE=/Users/dn/dev/openclaw-agent-work-integration
+  bash scripts/agent-work/test-runtime.sh budget_tree`, `budget_evasion`, `projection_gateway`. Primera línea
+  de cada log: `"candidateSha": "6d6582f532191b1216492522c5b0aff377444c7b"` y
+  `"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"` (diff vacío,
+  `git status --porcelain` de R sin salida). Exit 0 los tres.
+- Todas las suites con `LANG=en_US.UTF-8`.
