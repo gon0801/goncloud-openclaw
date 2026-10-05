@@ -202,7 +202,7 @@ Consume `inspect`, admisión y recibos. Produce recuperación determinista por i
 - [x] Añade `recovery_limit`: un fallo elegible permite una recuperación automática adicional por raíz; el siguiente conserva bloqueo sin otra llamada.
 - [x] Añade `waiting_reason`: distingue cola ocupada, transporte caído, resultado inválido y admisión incierta en hasta 120 segundos.
 - [x] Ejecuta las pruebas en rojo.
-- [ ] Implementa la recuperación sobre la cola nativa y sus eventos de capacidad. No abras supervisores ni scouts de lectura.
+- [x] Implementa la recuperación sobre la cola nativa y sus eventos de capacidad. No abras supervisores ni scouts de lectura.
 - [x] Comprueba el contador externo del proveedor y la ausencia de rutas de recuperación que lo evadan.
 
 Verifica con `idle_72h`, `recovery_limit`, `waiting_reason` y `recovery_queue`. Cierra B2 con la batería nativa del SHA final.

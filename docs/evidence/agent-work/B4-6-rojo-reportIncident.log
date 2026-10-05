@@ -1,0 +1,13 @@
+ FAIL  |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > reserves recovery receipts to the recovery engine instead of the token path
+AssertionError: expected [Function] to throw error including 'producer incident is invalid' but got 'Managed task incident is invalid'
+
+Expected: "producer incident is invalid"
+Received: "Managed task incident is invalid"
+
+ ❯ src/agents/tasks/managed-task.store.test.ts:390:6
+    388|         },
+    389|       }),
+    390|     ).rejects.toThrow("producer incident is invalid");
+       |      ^
+    391|     await expect(
+    392|       reportManagedTaskIncident({

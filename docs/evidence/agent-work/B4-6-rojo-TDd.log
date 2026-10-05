@@ -1,0 +1,13 @@
+ FAIL  |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the managed recovery brake ahead of profile rotation and model fallback
+AssertionError: promise rejected "FailoverError: LLM request failed: connec… { …(17) }" instead of resolving
+ ❯ src/agents/embedded-agent-runner/run/attempt-recovery.test.ts:1052:62
+    1050|     expect(braked.recovery.action).toBe("proceed");
+    1051|     expect(braked.failoverRetryController.advanceAuthProfile).not.toHa…
+    1052|     await expect(handleAssistantFailureAfterRecovery(braked)).resolves…
+       |                                                              ^
+    1053|       action: "proceed",
+    1054|       assistantProfileFailureReason: null,
+
+Caused by: FailoverError: LLM request failed: connection refused by the provider endpoint.
+ ❯ Module.handleEmbeddedAssistantFailure src/agents/embedded-agent-runner/run/assistant-failure.ts:485:7
+ ❯ src/agents/embedded-agent-runner/run/attempt-recovery.test.ts:1052:5

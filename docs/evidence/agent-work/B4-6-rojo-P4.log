@@ -1,0 +1,21 @@
+ FAIL  |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > shows no wait while the recovered retry runs, then the transport wait and incident when it dies
+AssertionError: expected { …(4) } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "cause": "transport-unavailable",
+  "episodeId": "transport-unavailable:43f465ecb59ee59ec9f45d4f73bc61aa77ddec5e9b03c821209391b5ea2e3a4a",
+  "sinceMs": 1791193802496,
+  "taskId": "ec1f6b9e-0b3f-45b6-aa50-6eafbf9b6fcb",
+}
+
+ ❯ src/agents/tasks/managed-task.recovery.test.ts:470:71
+    468|       await drain(stream);
+    469|       expect((await stream.result()).stopReason).toBe("error");
+    470|       expect((await inspectManagedTask({ caller, taskId }))?.waiting).…
+       |                                                                       ^
+    471|       const binding2 = await bindingFor();
+    472|       const recovered = await openStream(provider, binding2);
