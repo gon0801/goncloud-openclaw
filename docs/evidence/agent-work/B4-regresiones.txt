@@ -346,3 +346,84 @@ SHA de cierre `739ca5334eaa5b5449ee5769223c4d40b8f52846`, un commit por causa. L
 - Todo con `LANG=en_US.UTF-8`. No tocado: lo de B4-1 y B4-2, los 6 no bloqueantes de los bots (van en
   B4-4), `secret-state-tables.test.ts`, y el error de tipos preexistente de
   `server.managed-task-requester.e2e.test.ts` (fila B1/T2).
+
+# B4: no bloqueantes de B3 y residuales de B4-3
+
+R1 y R2 van en R `96f8e5fadf64ba0a5d473e3e0d968d5f5b4fe32d`; G1 y G2 en G
+`439b94e862ae44e674f04558d7e7863792f44389` y `fedc62e56f15e48f63661191dfd33884d8e71c2a`.
+Logs en `~/.local/state/encargos-loop/artifacts/B4-4-r1/`.
+
+- **R1 prueba del manifiesto autorreferente** (`git-backup-codec.test.ts`). El `it` «omits the
+  producer token…» recorría `["managed_tasks", ...STATE_SECRET_DEPENDENT_TABLE_NAMES]`: si la lista
+  de producción perdía una tabla, la prueba la perdía en silencio. **Cambio:** lista literal de 11
+  tablas (`managed_tasks` + las 10 dependientes) e import de `STATE_SECRET_DEPENDENT_TABLE_NAMES`
+  fuera de la línea 10 (`no-unused-vars` es error en oxlint). **Mutación** (`mutacion-R1.log`): quita
+  `managed_task_waits` de la lista fuente -> rojo,
+  `managed_task_waits: expected [ 'apns_registrations', …(26) ] to include 'managed_task_waits'`
+  desde el `toContain`; revertida. **Verde:** suite de los 3 archivos de R en `verde-R-suite.log`
+  (6 unitarias + 7 del e2e, 0 `×`).
+- **R2 comentario** (`secret-state-tables.ts`): `/** Tables whose rows depend by FK on a secret
+  table; omitted with it. */` en vez del español.
+- **R3 último error de tipos** (`server.managed-task-requester.e2e.test.ts`). **Rojo**
+  (`rojo-R3-tsgo-src.log`, tsgo shard src sobre el árbol sin arreglo):
+  `(99,5): TS2339 Property 'replayAfterTurnStart' does not exist`. **Cambio:** `replayAfterTurnStart:
+  false` en las 4 filas del primer `it.each` que no lo traían. Efectos: los títulos de esos 4 casos
+  pasan de `replay: undefined` a `replay: false` (visibles en `verde-R-suite.log`); la lógica no
+  cambia (`Boolean(undefined)` y `false` son lo mismo; usos en las líneas ~105, ~198 y ~473); el
+  conteo queda en 5 casos del primer `it.each` y 7 pruebas del archivo.
+- **G1 generación 0 en `claim_cli_once`** (`native_gateway.py:251`). **Rojo**
+  (`rojo-G1.log`): con claim y capability en 0, la vieja condición `< 0` dejaba pasar el claim y
+  moría después en `_brief_to_workspace` con `AttributeError: 'Client' object has no attribute
+  'brief_chunk'`, no con el rechazo de identidad. **Cambio:** `< 0` -> `< 1`; en
+  `test-agent-work-integration.py` los valores de las líneas 1617, 1619 (claim y capability), 1706
+  (recibo de `admit_host`, que `host.py:146` compara con la generación del claim) y 1728
+  (`OperationKey`) pasan de 0 a 1; la 2031 no se toca (es un `close_host` que prueba un rechazo).
+  **Prueba nueva** `test_zero_generation_claim_is_rejected` en `CliClaimTest`: claim y capability
+  ambos en 0 a propósito (si solo el claim fuera 0, el rechazo vendría de la discrepancia con la
+  capability y la mutación no lo detectaría); espera
+  `ValueError: host claim identity mismatch`. **Mutación** (`mutacion-G1.log`): devolver la condición
+  a `< 0` -> rojo (el AttributeError vuelve). **Verde:** `verde-G1-cli.log`, CliClaimTest 5/5.
+- **G2 `closure_rows` escondía errores reales** (`spool.py:217`). **Rojo** (`rojo-G2.log`): (a)
+  `OSError not raised` (el `OperationalError("database is locked")` se tragaba y `flush_closures`
+  devolvía `(0, [])`); (b) el `OSError` salía como traceback crudo de `gateway_main` sin JSON.
+  **Cambio:** en `closure_rows` solo el caso con `"no such table"` en el mensaje devuelve `[]`;
+  cualquier otro se relanza como `OSError(str(exc)) from exc`. En `--flush-results`
+  (`native_gateway.py:442`) el `flush_closures` queda dentro de `try` con
+  `except (OSError, RuntimeError, ValueError)` -> `(0, [str(exc)])`, la misma forma de
+  `pump_once:318-321`. **Mutaciones:** volver a atrapar todo -> (a) roja (`mutacion-G2a.log`); quitar
+  el `try` de `:442` -> (b) roja (`mutacion-G2b.log`, `OSError: database is locked` como error de
+  unittest). **Verde:** `verde-G2-flush.log`, ClosureFlushTest 11/11. En `--watch` la falla visible
+  sigue siendo la línea `agent-work pump: …` en stderr, sin exit.
+- **G3 conteos de `coverage.json`:** medidos en el head con
+  `grep -cE 'def test_[a-z0-9_]*resource_identity'` = 8 y `resource_close` = 29 en
+  `test-agent-work-resources.py`; línea 49 actualizada a `resource_identity (8); resource_close
+  (29)`. Comprobación: `python3 -m json.tool` sin error y el `grep -o` devuelve (8) y (29).
+- **G4 redacción de `B2-triage-base-vs-diff.md`:** el timeout de backup-create pasó a "no se
+  reprodujo en aislado; causa no determinada" (fuera "Espurio" y "es de carga") en Resultados y en
+  Decision; la atribución de los 4 fallos de UI al locale se queda. Método gana la línea del LANG
+  efectivo no registrado. Misma corrección en la fila B2/bateria de `followups.md`.
+- **G5 sin opt-in para la cuenta `agentes`:** decisión anotada al final de la celda de acción de la
+  fila B3-2c de `terminar-sesion.sh`/`cerrar.sh` en `followups.md`: las pruebas reales de `agentes`
+  siguen siendo requisito del host certificado; sin opt-in porque si se saltaran por defecto, en esta
+  Mac podrían quedar sin correr sin que nadie lo note. Sin cambio de código.
+- **G6 "Docstring coverage":** no aplica, sin cambio; el repo no usa docstrings como regla. Va en la
+  sección `## Resueltos en B4-4-r1` de `followups.md`.
+
+## Verificación (B4-4-r1)
+
+- **Integración G completa** (`verde-G-integracion.log`): `python3
+  scripts/tests/test-agent-work-integration.py`, 59 pruebas, OK (skipped=1), rojos de G1 y G2 antes
+  del arreglo en `rojo-G1.log` y `rojo-G2.log`.
+- **Doc-check G:** `LANG=en_US.UTF-8 bash scripts/tests/test-doc-check-evidencia.sh` -> OK
+  (`doc-check.log`).
+- **Suite R** (`verde-R-suite.log`): `git-backup-codec.test.ts` + `secret-state-tables.test.ts` +
+  `server.managed-task-requester.e2e.test.ts` con `OPENCLAW_NODE_TEST_PLAN_CONTINUE_ON_FAILURE=1`,
+  todo verde; el shard del e2e dispara el build implícito de E2E del runner, no el build prohibido.
+- **Tipos R** (`tipos.log`): bucle de 27 franjas de `run-tsgo-core-test-shards.mjs --stripe $i/27`:
+  `grep -c 'error TS'` = 0 y las 27 líneas `rc=0`. `pnpm tsgo:core` (`tsgo-core.log`) y
+  `pnpm tsgo:test:root` (`tsgo-root.log`) exit 0.
+- **No corrido aquí:** `pnpm build` ni los casos del ejecutor (en R solo cambian pruebas y un
+  comentario). La batería del bloque corre al final de B4 con los heads finales.
+- **Fuera de alcance (anotado, sin arreglo):** `host.py:97` y `resources.py:77` también aceptan
+  generación 0; las lecturas del spool fuera de `closure_rows` lanzan `sqlite3.OperationalError`
+  crudo y `pump_once`/`watch_pump` no lo atrapan.

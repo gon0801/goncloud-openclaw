@@ -20,6 +20,8 @@ Metodo (una sola corrida por celda, sin reintentos)
   scripts/tests/test-doc-check-evidencia.sh` -> OK (22 archivos en el rango);
   `bash scripts/clasificar-cambio.sh --base origin/main --head HEAD` ->
   carril=completo (esperado: 22 archivos, logs de evidencia + 1 script).
+- LANG efectivo de estas corridas (logs /tmp/triage-*.log) y de la bateria B2
+  (artifacts/B2-R-bateria-completo.log): no quedó registrado.
 
 Resultados
 - UI (provider-usage x2 incl. `JP¥13` vs `¥13`, chat-composer-context, usage/view):
@@ -29,7 +31,7 @@ Resultados
   carga ni orden. No es regresion del diff R 2046bd95 -> 5b14e9e (el diff de B2 toca 13
   ficheros).
 - backup-create (timeout 120 s en bateria, `private agent DB=true`): VERDE en base (26 s)
-  y en head (25 s) en aislado; el timeout es de carga, no del diff. Espurio.
+  y en head (25 s) en aislado; el timeout no se reprodujo en aislado; causa no determinada.
 - Los otros 8 de la bateria coinciden 1:1 con la fila B1/bateria de followups.md
   (ya registrados, sin corregir donde hubo comparable).
 - La bateria quedo INCOMPLETA por aborto propio del runner (~571/700 shards sin arrancar);
@@ -47,7 +49,8 @@ B2-2-r1 (revisor, causa UI = locale)
 
 Decision
 - Correccion de codigo NO procede (ni en R ni en G): los 4 fallos de UI son limitacion
-  del host y de la base por locale, y el timeout de backup-create es de carga.
+  del host y de la base por locale; el timeout de backup-create no se reprodujo en aislado;
+  causa no determinada.
 - Va a followups.md como fila B2/bateria (limitacion de bateria local + flakies
   documentados). El cierre B2 sigue: respaldo R, ledger, push+PR, CI, revisor, merge.
 - G clasificador y doc-check verdes en local; si CI los pone rojos, es re-run (ajeno),

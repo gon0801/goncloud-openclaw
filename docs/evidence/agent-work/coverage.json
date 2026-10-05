@@ -46,7 +46,7 @@
       "launchdLabels": "launchctl submit es un stub sin registro en macOS 26.7 (rc=0 como dn sin crear etiqueta, rc=1 como agentes) y bootstrap/load en user/502 dan EIO 5 mientras la unica sesion sea Background creada por mds; la prueba real de etiqueta launchd queda condicionada a la sesion real de David"
     }
   },
-  "resourceSandboxEvidence": "bash scripts/tests/test-agent-work-host.sh resource_identity (6); resource_close (20); resource_100_cycles (3, con ciclos de procesos reales en tmux aislado b31-* y contador externo pgrep del nonce en argv, mas el ciclo real como agentes: test_resource_100_cycles_real_account_absence_verified, 100 ciclos TaskCreated capacity=1 cada uno AbsenceVerified)",
+  "resourceSandboxEvidence": "bash scripts/tests/test-agent-work-host.sh resource_identity (8); resource_close (29); resource_100_cycles (3, con ciclos de procesos reales en tmux aislado b31-* y contador externo pgrep del nonce en argv, mas el ciclo real como agentes: test_resource_100_cycles_real_account_absence_verified, 100 ciclos TaskCreated capacity=1 cada uno AbsenceVerified)",
   "macDescendantProof": {
     "status": "available-account-boundary",
     "evidence": "ResourceTests.test_resource_close_real_detached_children_proven_absent (nieto setsid + doble fork + descriptores cerrados como agentes, close AbsenceVerified y pgrep del nonce en cero); test_resource_close_real_term_ignoring_survivor_stays_pending (sobreviviente a TERM queda CleanupPending honesto con cupo retenido); test_resource_100_cycles_real_account_absence_verified (100 ciclos reales capacity=1); dobles de la frontera: exclusion com.apple.*, etiqueta no-Apple con pid 0, falla cerrada sin senales, doble lectura con lstart",
