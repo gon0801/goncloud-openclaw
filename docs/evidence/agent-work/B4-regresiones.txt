@@ -218,3 +218,131 @@ SHA de cierre `1a9bd1a32a8eebdf52929184d8464839bb4dd7d8`, un commit por causa. L
   `"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"` (diff vacío).
 - Todo con `LANG=en_US.UTF-8`. No tocado: lo de B4-1, los 22 errores de tipos, `secret-state-tables`,
   `eager-import-closure`, `pr-worktree-provision` (fuera de alcance de B4-2).
+
+# B4: regresiones nuestras de R (parte 3)
+
+Encargo B4-3-r1. El token de productor en los respaldos, el inventario del wrapper de PR y los tipos
+(tercera parte de B4/regresiones). Head de partida `1a9bd1a32a8eebdf52929184d8464839bb4dd7d8`,
+SHA de cierre `739ca5334eaa5b5449ee5769223c4d40b8f52846`, un commit por causa. Logs completos en
+`~/.local/state/encargos-loop/artifacts/B4-3-r1/`.
+
+## Causa A: un módulo nuestro falta en el inventario del wrapper de PR
+
+- **Síntomas.** `eager-import-closure` (2) y `pr-worktree-provision` (3):
+  `Missing runtime imports: src/config/zod-schema.managed-tasks.ts. Add these lines to
+  scripts/pr-lib/wrapper-components.txt`, `src/config/zod-schema.root-shape.ts: unresolved
+  ./zod-schema.managed-tasks.js` y, en el wrapper extraído, `Cannot find module
+  .../src/config/zod-schema.managed-tasks.js`.
+- **Causa.** `zod-schema.root-shape.ts` importa el esquema de tareas gestionadas, pero el módulo no
+  está en `wrapper-components.txt`, así que el wrapper de PR se provisiona sin él.
+- **Arreglo.** `src/config/zod-schema.managed-tasks.ts` insertada tras `src/config/zod-schema.logging.ts`
+  (línea ~538 de `scripts/pr-lib/wrapper-components.txt`). El módulo solo importa `node:path` y `zod`,
+  ya cubiertos; no hizo falta ninguna ruta extra.
+- **Rojo** (`rojo.log`): 5 failed | 27 passed | 1 skipped en los dos archivos.
+- **Mutación** (`mutacion-A.log`): quitar la línea del inventario → 5 failed de nuevo, 3 menciones de
+  `Missing runtime imports`. Revertida.
+- **Verde** (`verde-A.log`): los dos archivos, 32 passed | 1 skipped.
+- **Commit:** `c7802c794fb20e8c578ae41eb02be650544e5631`.
+
+## Causa B: `managed_tasks.producer_token` es una credencial viva y va en los respaldos "sin secretos"
+
+- **Síntoma.** `secret-state-tables.test.ts` "classifies every schema table with credential-suggestive
+  columns": `credential-bearing tables must be redacted or reviewed safe … "openclaw-state-schema.sql:
+  managed_tasks (producer_token)"`.
+- **Por qué es serio.** `producer_token` se crea con `randomBytes(32).toString("hex")`
+  (`managed-task.store.ts:59`), se guarda en claro y se compara directo (`managed-task.worker.ts:220`,
+  `:414`). Los respaldos Git con `excludeSecrets` solo omiten `STATE_SECRET_TABLE_NAMES`
+  (`git-backup-codec.ts:243`), así que el respaldo redactado —el que se empuja al remoto en los
+  programados con push— llevaba el token.
+- **Diseño (fijado por el encargo; escrito en `diseno-B.md`).** `managed_tasks` entra a
+  `STATE_SECRET_TABLE_NAMES`; nuevo export `STATE_SECRET_DEPENDENT_TABLE_NAMES` con las 10 tablas cuya
+  fila depende por FK de una tabla secreta (`managed_task_waits`, `wait_clears`, `admissions`,
+  `incidents`, `handlings`, `children`, `cancellations`, `host_closures`, `budgets`,
+  `budget_reservations`); el códec las omite con `excludeSecrets` y las reporta en
+  `manifest.excludedTables` igual que a las secretas (solo rol global; `redactedSecretTables`).
+  Sin cierre genérico por FK: arrastraría `web_push_approval_deliveries`; queda como seguimiento.
+  Prohibidos respetados: sin cambio de esquema, sin hash del token, sin filas con token sustituido,
+  sin `sanitizeOpenClawGlobalStateSnapshot`, sin `GIT_BACKUP_PROJECTION_TABLES`,
+  `secret-state-tables.test.ts` intacto.
+- **Panel (interrogate, solo lectura, sobre `diseno-B.md` y el códec), antes de implementar.**
+  `panel-glm53` (GLM 5.3): BLOCKERS 0 — 3 warnings (el hueco preexistente de
+  `web_push_approval_deliveries` cuelga de `web_push_subscriptions` ya secreta; el cierre FK sin
+  guarda estructural contra drift del esquema; los tokens ya volcados siguen vivos sin rotación) y
+  1 nit (`excludedTables` mezcla dos motivos de omisión). `panel-glm52` (GLM 5.2): BLOCKERS 0 —
+  2 warnings (el mismo hueco web_push, que hoy deja restores redactados rotos en hosts con web push;
+  el cierre FK sin prueba estructural) y 1 nit (el mensaje B2 lleva partes variables, asertar por
+  regex). `panel-glm47` (GLM 4.7): BLOCKERS 0 — 1 warning (el cierre FK sin guarda estructural) y
+  1 nit (la advertencia al restaurar no distingue credencial de pérdida de tareas). Diversidad
+  reducida: solo familia GLM. Ningún bloqueante con evidencia; el diseño no cambió y no hubo segunda
+  ronda. Los tres avisos compartidos van como seguimiento (ver followups).
+- **Verificación del conjunto de 11 tablas hecha por los tres revisores** contra
+  `openclaw-state-schema.sql`: 12 cláusulas `REFERENCES managed_tasks` dentro de las 10,
+  `budget_reservations` → `budgets` también cubierta, ninguna otra tabla referencia `managed_task*`,
+  sin triggers en el esquema de estado; las 11 se recrean vacías en `convergeRestoredSchema` (ninguna
+  es lazy-additive) y `validateRestoredOwner` corre `foreign_key_check` (`git-backup-codec.ts:499`).
+- **Pruebas nuevas de comportamiento** (`src/snapshot/git-backup-codec.test.ts`, base con esquema
+  canónico vía `openOpenClawStateDatabase({ path })`; árbol con madre, hija y raíz en
+  `managed_task_children` y una fila en cada una de las 10 dependientes; token literal de 64 hex):
+  1. con `excludeSecrets: true` el token no aparece en ningún archivo bajo `outputPath` y
+     `manifest.excludedTables` contiene `managed_tasks` y las 10 dependientes;
+  2. ese respaldo redactado se restaura sin error (`foreign_key_check` incluido) y `managed_tasks`
+     queda vacía;
+  3. control con `excludeSecrets: false`: la misma función encuentra el token en
+     `tables/managed_tasks.jsonl` y el respaldo se restaura.
+- **Rojo** (`rojo.log`): secret-state-tables 1 failed.
+- **Mutaciones.** `mutacion-B1.log`: `managed_tasks` fuera de `STATE_SECRET_TABLE_NAMES` → prueba 1
+  roja (`managed_tasks: expected [...] to include 'managed_tasks'`), prueba 2 roja (`{ n: 3 }` vs
+  `{ n: +0 }`) y `secret-state-tables` roja (3 failed | 3 passed). Revertida.
+  `mutacion-B2.log`: solo `managed_task_budget_reservations` fuera del redactado → prueba 2 roja con
+  `SQLite foreign_key_check failed for .../database.sqlite: managed_task_budget_reservations row 1
+  references managed_task_budgets (foreign key 1)`, lanzado por `assertSqliteIntegrity`
+  (`sqlite-integrity.ts:232` desde `git-backup-codec.ts:499`); 1 failed | 3 passed. Revertida.
+- **Verde** (`verde-B.log`): `git-backup-codec.test.ts` + `secret-state-tables.test.ts`, 6 passed.
+- **Documentación:** `docs/cli/backup.md` lista `managed_tasks`, las 10 dependientes y la consecuencia
+  (un respaldo redactado restaurado no trae tareas gestionadas).
+- **Costos aceptados (seguimiento, no arreglados aquí).** `subagent_runs.payload_json.managedTaskId`
+  queda apuntando a tareas que ya no existen tras restaurar un respaldo redactado; los commits
+  anteriores del repositorio de respaldos conservan los tokens ya volcados y no hay rotación.
+- **Commit:** `d066863142ab5e102757fd747e63a2c4f3132776`.
+
+## Causa C: errores de tipos en pruebas nuestras
+
+- **Medición** (`tipos-antes.log`, 27 franjas de `run-tsgo-core-test-shards.mjs` en 1a9bd1a): **23
+  errores**, no 22 como esperaba el encargo (número real anotado). En los dos archivos de B0 a B2, 22:
+  `managed-task.provider-stream.test.ts` 16 (`TS2741 recovery` falta en el literal del ayudante
+  `admittedRun`) y `managed-task.recovery.test.ts` 6 (`TS18048 step` posiblemente undefined ×3 en el
+  servidor scriptable, `TS2550 Promise.withResolvers` ×2, `TS2339 sinceMs` sobre el recibo unión ×1).
+  El error 23 es `TS2339 replayAfterTurnStart` en `server.managed-task-requester.e2e.test.ts:99`,
+  ajeno a esta ronda (fila B1/T2): no se tocó, queda en "no hecho" de esta parte.
+- **Arreglo (solo tipos, mismas aserciones).** `provider-stream`: `recovery: false` en el retorno del
+  ayudante (el binding solo se lee como booleano, `managed-task.provider-stream.ts:101`, `:243`; hoy
+  `resolveManagedProviderRunBinding` devuelve `recovery: false` para una admisión nueva, así que es
+  equivalente). `recovery`: guarda `if (!step) throw` tras la indexación; estrechamiento del recibo
+  con `if (granted?.state !== "granted") throw` antes de leer `granted.sinceMs` (la aserción
+  `toEqual` previa queda igual); diferidos tipados locales en vez de `Promise.withResolvers`.
+  Sin quitar aserciones, sin `any`, sin `@ts-ignore`/`@ts-expect-error`.
+- **Conteo de pruebas:** 15 + 8 = 23 antes y después del cambio.
+- **Verde** (`verde-C.log`): los dos archivos, 23 passed. Tipos (`tipos-despues.log`, mismo bucle de
+  27 franjas): 0 errores en los dos archivos y ninguno nuevo respecto de `tipos-antes.log` (persiste
+  solo el `replayAfterTurnStart` preexistente). `pnpm tsgo:test:root` exit 0 antes y después
+  (`tsgo-root-antes.log`, `tsgo-root-despues.log`).
+- **Commit:** `739ca5334eaa5b5449ee5769223c4d40b8f52846`.
+
+## Verificación (parte 3)
+
+- **Verde de una vez** (`verde-una-vez.log`, PID en `verde-una-vez.pid`): los 3 archivos del rojo +
+  los 4 `src/snapshot/git-backup*.test.ts` + los 2 de la causa C: 4 shards, todo passed (63 passed |
+  2 skipped), 0 `×`.
+- **Los 36** (`los-36.log`, PID en `los-36.pid`; lista en `36-pruebas.txt` de
+  `git diff --name-only --diff-filter=AM c074824a27…6d6582f… | grep '\.test\.ts$'`): 8 shards passed,
+  38 archivos de prueba, 0 `×`.
+- **Tipos:** `pnpm tsgo:core` exit 0 (`tsgo-core.log`); bucle de 27 franjas antes/después arriba.
+- **Build** (`build.log`, PID en `build.pid`): `pnpm build` exit 0;
+  `jq -r .commit dist/build-info.json` = `739ca5334eaa5b5449ee5769223c4d40b8f52846` = HEAD.
+- **Integración desde G** (`caso-budget_tree.log`, `caso-resource_release.log`,
+  `caso-projection_gateway.log`): `AGENT_WORK_RUNTIME_SOURCE=… bash scripts/agent-work/test-runtime.sh
+  <caso>`, exit 0 los tres; `"candidateSha": "739ca5334eaa5b5449ee5769223c4d40b8f52846"` y
+  `"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"` (diff vacío).
+- Todo con `LANG=en_US.UTF-8`. No tocado: lo de B4-1 y B4-2, los 6 no bloqueantes de los bots (van en
+  B4-4), `secret-state-tables.test.ts`, y el error de tipos preexistente de
+  `server.managed-task-requester.e2e.test.ts` (fila B1/T2).
