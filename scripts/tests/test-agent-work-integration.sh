@@ -20,7 +20,13 @@ fi
 if [ "${1:-}" = "projection_crash" ]; then
   shift
   exec python3 "$(dirname "$0")/test-agent-work-integration.py" \
-    ProjectionTransferTest.test_projection_crash_after_result_ack_reuses_one_durable_event "$@"
+    ProjectionTransferTest.test_projection_crash_after_result_ack_reuses_one_durable_event \
+    ProjectionTransferTest.test_projection_crash_before_enqueue_rebuilds_the_same_event_from_pending "$@"
+fi
+if [ "${1:-}" = "projection_board_outage" ]; then
+  shift
+  exec python3 "$(dirname "$0")/test-agent-work-integration.py" \
+    ProjectionTransferTest.test_lost_transfer_ack_and_board_outage_converge_without_repeating_the_review "$@"
 fi
 if [ "${1:-}" = "director_handling" ]; then
   shift

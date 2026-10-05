@@ -105,6 +105,149 @@ class ProjectionTransferTest(unittest.TestCase):
         self.assertEqual(receipt["contentHash"], self.pending["result"]["contentHash"])
         self.assertEqual(receipt["queueHash"], hashlib.sha256(first_bytes).hexdigest())
 
+    def test_projection_crash_before_enqueue_rebuilds_the_same_event_from_pending(self):
+        acknowledged = []
+        before = copy.deepcopy(self.pending)
+
+        with mock.patch("progress_bridge.subprocess.run",
+                        side_effect=ConnectionError("crash before enqueue")):
+            with self.assertRaises(ConnectionError):
+                self.transfer(acknowledged.append)
+        self.assertEqual(acknowledged, [])
+        queue = self.state_dir / "runs" / "run-1" / "queue"
+        self.assertEqual(list(queue.glob("*.json")) if queue.exists() else [], [])
+        self.assertEqual(self.pending, before)
+
+        receipt = self.transfer(lambda value: acknowledged.append(value) or value)
+        queued = list(queue.glob("*.json"))
+        self.assertEqual([path.name for path in queued], [self.pending["eventId"] + ".json"])
+        event = json.loads(queued[0].read_text())
+        self.assertEqual(event["id"], self.pending["eventId"])
+        self.assertEqual(event["verdict"], "aprobado")
+        self.assertEqual(event["sha"], self.pending["result"]["sha"])
+        self.assertEqual(receipt["eventId"], self.pending["eventId"])
+        self.assertEqual(receipt["contentHash"], self.pending["result"]["contentHash"])
+        self.assertEqual(len(acknowledged), 1)
+
+    def test_lost_transfer_ack_and_board_outage_converge_without_repeating_the_review(self):
+        before = copy.deepcopy(self.pending)
+        board = self.root / "openclaw"
+        board.write_text("""#!/usr/bin/env python3
+import json, os, pathlib, sys
+args = sys.argv[1:]
+assert args[:2] == ['gateway', 'call'] and args[-1] == '--json'
+method = args[2]
+params = json.loads(args[args.index('--params') + 1])
+with open(os.environ['FAKE_LOG'], 'a') as f:
+    f.write(json.dumps({'method':method,'params':params})+'\\n')
+mode = pathlib.Path(os.environ['FAKE_MODE']).read_text().strip()
+if mode == 'offline':
+    sys.exit(1)
+if mode == 'lost-ack' and method == 'runbook.progress.event':
+    calls = [json.loads(line) for line in pathlib.Path(os.environ['FAKE_LOG']).read_text().splitlines()]
+    if len([item for item in calls if item['method'] == 'runbook.progress.event']) == 1:
+        sys.exit(1)
+if mode == 'warning-prefix':
+    print('Config warning: optional plugin was skipped')
+if method == 'runbook.progress.get':
+    lanes = [{'id':'B3'}] if mode == 'open-race' else []
+    if mode == 'worker-conflict':
+        lanes = [{'id':'B3','worker':{'id':'new-worker'},'ultimo_evento':{'at':'2026-09-30T12:02:00Z'}}]
+    if mode == 'worker-safe-conflict':
+        lanes = [{'id':'B3','worker':None,'ultimo_evento':{'at':'2026-09-30T11:59:00Z'}}]
+    if mode == 'worker-fractional-conflict':
+        lanes = [{'id':'B3','worker':{'id':'worker-1'},'ultimo_evento':{'at':'2026-09-30T12:02:00.500Z'}}]
+    if mode == 'worker-native-conflict':
+        lanes = [{'id':'B3','worker':{'id':'old-worker'},'ultimo_evento':{'at':'2026-09-30T12:02:00Z'}}]
+    print(json.dumps({'ok':True,'revision':7,'doc':{'schema':'runbook-progress.v1','corrida':'run-1','fase':'9','lead':{'actualizado':'now'},'carriles':lanes}}))
+elif mode in ('open-race', 'open-race-mismatch') and method == 'runbook.progress.event' and params['kind'] == 'run.opened':
+    print(json.dumps({'ok':False,'reason':'corrida ya existe'}))
+elif mode == 'legacy-stale' and method == 'runbook.progress.event' and params['kind'] == 'run.opened':
+    print(json.dumps({'ok':False,'reason':'legacy projection changed or invalid'}))
+elif mode == 'legacy-stale-old' and method == 'runbook.progress.event' and params['id'] == 'opened-old':
+    print(json.dumps({'ok':False,'reason':'legacy projection changed or invalid'}))
+elif mode == 'wrong-sha':
+    print(json.dumps({'ok':False,'razon':'SHA revisado distinto'}))
+elif mode == 'worker-stale-generation':
+    print(json.dumps({'ok':False,'reason':'worker anterior al estado del carril'}))
+elif mode in ('revision-conflict-generic', 'worker-conflict', 'worker-fractional-conflict'):
+    print(json.dumps({'ok':False,'reason':'revision conflict','revision':7}))
+elif mode in ('revision-conflict', 'worker-safe-conflict', 'worker-native-conflict'):
+    calls = [json.loads(line) for line in pathlib.Path(os.environ['FAKE_LOG']).read_text().splitlines()]
+    events = [item for item in calls if item['method'] == 'runbook.progress.event']
+    print(json.dumps({'ok':False,'reason':'revision conflict','revision':7} if len(events) == 1 else {'ok':True,'revision':8}))
+else:
+    print(json.dumps({'ok':True,'revision':8}))
+""")
+        board.chmod(0o755)
+        mode = self.root / "mode"
+        mode.write_text("ok")
+        log = self.root / "board-calls.jsonl"
+        acks = []
+        receipts = []
+
+        def lose_first_native_ack(receipt):
+            acks.append(receipt)
+            if len(acks) == 1:
+                raise ConnectionError("native transfer ACK lost")
+            receipts.append(receipt)
+            return receipt
+
+        def publish():
+            return subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "mac" / "progress-events.py"),
+                 "--state-dir", str(self.state_dir), "--openclaw-bin", str(board),
+                 "publish", "--corrida", "run-1"],
+                env=dict(os.environ, FAKE_LOG=str(log), FAKE_MODE=str(mode)),
+                capture_output=True, text=True,
+            )
+
+        def board_event_calls():
+            if not log.exists():
+                return []
+            return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()
+                    if json.loads(line).get("method") == "runbook.progress.event"]
+
+        run_dir = self.state_dir / "runs" / "run-1"
+        evidence_path = run_dir / "evidence" / (self.pending["eventId"] + ".json")
+
+        with self.assertRaises(ConnectionError):
+            self.transfer(lose_first_native_ack)
+        mode.write_text("offline")
+        outaged = publish()
+        self.assertNotEqual(outaged.returncode, 0, outaged.stderr)
+        retained = evidence_path.read_bytes()
+        self.assertEqual(board_event_calls(), [])
+
+        receipt = self.transfer(lose_first_native_ack)
+        mode.write_text("offline")
+        outaged_again = publish()
+        self.assertNotEqual(outaged_again.returncode, 0, outaged_again.stderr)
+        self.assertEqual(evidence_path.read_bytes(), retained)
+        self.assertEqual(board_event_calls(), [])
+
+        mode.write_text("ok")
+        recovered = publish()
+        self.assertEqual(recovered.returncode, 0, recovered.stderr)
+        self.assertEqual(list((run_dir / "queue").glob("*.json")), [])
+        self.assertEqual([path.name for path in (run_dir / "sent").glob("*.json")],
+                         [self.pending["eventId"] + ".json"])
+        events = board_event_calls()
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["params"]["id"], self.pending["eventId"])
+
+        sent_before = list((run_dir / "sent").glob("*.json"))
+        queued_before = list((run_dir / "queue").glob("*.json"))
+        replayed = self.transfer(lose_first_native_ack)
+        final = publish()
+        self.assertEqual(final.returncode, 0, final.stderr)
+        self.assertEqual(replayed, receipt)
+        self.assertEqual(board_event_calls(), events)
+        self.assertEqual(list((run_dir / "queue").glob("*.json")), queued_before)
+        self.assertEqual(list((run_dir / "sent").glob("*.json")), sent_before)
+        self.assertEqual(evidence_path.read_bytes(), retained)
+        self.assertEqual(self.pending, before)
+
     def test_changed_evidence_or_foreign_host_cannot_confirm_transfer(self):
         acknowledgements = []
         self.evidence.write_text("VEREDICTO cambios\n", encoding="utf-8")
@@ -832,6 +975,19 @@ class DirectorHandlingTest(unittest.TestCase):
             managed["decision"] = decision
         return observation
 
+    def _changes_observation(self):
+        observation = self._review_observation(
+            {"verdict": "changes", "findingsRef": "artifact:findings"},
+        )
+        observation["lanes"]["l1"]["managed_task"]["correctionAssignment"] = {
+            "target": {"kind": "agent", "agentId": "ingenieria"},
+            "instructionRef": {"ref": "artifact:findings", "digest": "sha256:findings"},
+            "inputRevision": {"kind": "code", "repository": "repo", "sha": "b" * 40},
+            "resultContract": "review.v1",
+            "continuation": {"kind": "requester"},
+        }
+        return observation
+
     def test_changes_derives_correction_from_typed_review_result(self):
         correction = {
             "target": {"kind": "agent", "agentId": "ingenieria"},
@@ -1102,6 +1258,99 @@ class DirectorHandlingTest(unittest.TestCase):
         second = task_handoffs.resolve_task_handling(request, idempotent_resolver)
         self.assertEqual(first, second)
         self.assertEqual(native_effects, [self.decision])
+
+    def test_lost_resolve_response_replans_the_same_durable_correction(self):
+        observation = self._changes_observation()
+        _, effects = reconcile(state_from_record(self.record), observation)
+        durable = self._apply(self.record, effects[0])
+        _, effects = reconcile(state_from_record(durable), observation)
+        self.assertEqual([effect.op for effect in effects], ["resolve_task_handling"])
+        planned = copy.deepcopy(effects[0].args)
+
+        def lost_resolver(value):
+            raise ConnectionError("resolve response lost")
+
+        with self.assertRaises(ConnectionError):
+            task_handoffs.resolve_task_handling(effects[0].args, lost_resolver)
+
+        replayed = json.loads(json.dumps(durable))
+        _, effects = reconcile(state_from_record(replayed), observation)
+        self.assertEqual([effect.op for effect in effects], ["resolve_task_handling"])
+        self.assertEqual(effects[0].args, planned)
+        self.assertEqual(effects[0].args["decision"]["children"][0]["slot"], "corregir")
+
+        changed = copy.deepcopy(observation)
+        changed["lanes"]["l1"]["managed_task"]["correctionAssignment"] = {
+            **observation["lanes"]["l1"]["managed_task"]["correctionAssignment"],
+            "instructionRef": {"ref": "artifact:other-findings", "digest": "sha256:other"},
+        }
+        with self.assertRaisesRegex(task_handoffs.TaskHandlingError, "conflicts with durable intent"):
+            reconcile(state_from_record(durable), changed)
+
+    def test_two_consumers_plan_one_identical_intent(self):
+        observation = self._changes_observation()
+        _, first_effects = reconcile(state_from_record(self.record), observation)
+        _, second_effects = reconcile(state_from_record(self.record), observation)
+        self.assertEqual([effect.op for effect in first_effects], ["record_task_handling"])
+        self.assertEqual(first_effects[0].args, second_effects[0].args)
+
+        durable = self._apply(self.record, first_effects[0])
+        _, applied, duplicated = reduce_events(durable, [{
+            "lane": second_effects[0].lane,
+            "kind": "intent.task_handling",
+            "payload": second_effects[0].args,
+        }])
+        self.assertEqual((applied, duplicated), (0, 1))
+
+        _, effects = reconcile(state_from_record(durable), observation)
+        self.assertEqual([effect.op for effect in effects], ["resolve_task_handling"])
+
+    def test_failed_result_returns_to_the_registered_requester(self):
+        requester_assignment = {
+            "target": {"kind": "agent", "agentId": "operaciones"},
+            "instructionRef": {"ref": "artifact:retry", "digest": "sha256:retry"},
+            "inputRevision": {"kind": "code", "repository": "repo", "sha": "b" * 40},
+            "resultContract": "review.v1",
+            "continuation": {"kind": "requester"},
+        }
+        observation = copy.deepcopy(self.observation)
+        managed = observation["lanes"]["l1"]["managed_task"]
+        managed["result"] = {"kind": "failed", "reasonRef": "artifact:reason"}
+        managed["requesterAssignment"] = requester_assignment
+        managed["decision"] = {"kind": "complete", "evidenceRef": "attacker-controlled"}
+
+        _, effects = reconcile(state_from_record(self.record), observation)
+        self.assertEqual([effect.op for effect in effects], ["record_task_handling"])
+        self.assertEqual(effects[0].args["decision"], {
+            "kind": "continue",
+            "children": [{"slot": "solicitante", "assignment": requester_assignment}],
+        })
+
+        cancelled = copy.deepcopy(observation)
+        cancelled["lanes"]["l1"]["managed_task"]["result"] = {
+            "kind": "executor-cancelled", "reasonRef": "artifact:reason",
+        }
+        _, effects = reconcile(state_from_record(self.record), cancelled)
+        self.assertEqual(effects[0].args["decision"], {
+            "kind": "continue",
+            "children": [{"slot": "solicitante", "assignment": requester_assignment}],
+        })
+
+        inside = copy.deepcopy(observation)
+        inside["lanes"]["l1"]["managed_task"]["result"] = {
+            "kind": "failed", "reasonRef": "artifact:reason",
+            "requesterAssignment": {"target": {"kind": "agent", "agentId": "intruso"}},
+        }
+        _, effects = reconcile(state_from_record(self.record), inside)
+        self.assertEqual(effects[0].args["decision"], {
+            "kind": "continue",
+            "children": [{"slot": "solicitante", "assignment": requester_assignment}],
+        })
+
+        orphaned = copy.deepcopy(observation)
+        del orphaned["lanes"]["l1"]["managed_task"]["requesterAssignment"]
+        with self.assertRaisesRegex(task_handoffs.TaskHandlingError, "requester assignment"):
+            reconcile(state_from_record(self.record), orphaned)
 
     def test_gateway_resolver_sends_the_durable_intent_without_child_tokens(self):
         _, effects = reconcile(state_from_record(self.record), self.observation)

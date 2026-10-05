@@ -1,0 +1,15 @@
+F
+======================================================================
+FAIL: test_lost_resolve_response_replans_the_same_durable_correction (__main__.DirectorHandlingTest.test_lost_resolve_response_replans_the_same_durable_correction)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 1287, in test_lost_resolve_response_replans_the_same_durable_correction
+    with self.assertRaisesRegex(task_handoffs.TaskHandlingError, "conflicts with durable intent"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: TaskHandlingError not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+FAILED (failures=1)
+rc=1

@@ -1,0 +1,22 @@
+F
+======================================================================
+FAIL: test_failed_result_returns_to_the_registered_requester (__main__.DirectorHandlingTest.test_failed_result_returns_to_the_registered_requester)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 1324, in test_failed_result_returns_to_the_registered_requester
+    self.assertEqual(effects[0].args["decision"], {
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "kind": "continue",
+        ^^^^^^^^^^^^^^^^^^^
+        "children": [{"slot": "solicitante", "assignment": requester_assignment}],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    })
+    ^^
+AssertionError: {'kind': 'complete', 'evidenceRef': 'attacker-controlled'} != {'kind': 'continue', 'children': [{'slot': 'solicitan[321 chars]}}}]}
+Diff is 785 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)
+rc=1

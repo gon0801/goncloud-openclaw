@@ -242,13 +242,13 @@ Depende de B1–B3. Crea `G/scripts/agent-work/progress_bridge.py`, `scripts/mac
 
 Produce `transferProjection(pending)` con confirmación por ID y contenido, y `applyTaskResult(record, result)` para el director. Conserva las decisiones de negocio en el reconciliador existente.
 
-- [ ] Añade `projection_crash`: cae después del ACK de resultado y antes de encolar progreso. Reconstruye el mismo evento desde `ProjectionPending`.
-- [ ] Añade pérdida del ACK de transferencia y tablero caído. Exige evidencia retenida, cola convergente y ninguna revisión repetida.
-- [ ] Añade `director_handling`: persiste decisión antes de `resolve`; perder su respuesta conserva la misma corrección. Dos consumidores no generan dos efectos.
-- [ ] Ejecuta los casos en rojo.
-- [ ] Implementa los puentes usando los IDs del contrato de progreso existente. No guardes otra bandera autoritativa de consumo en `corrida`.
-- [ ] Integra las transiciones definidas de revisión: `Changes` prepara el delta de corrección; `Approved` conduce a la compuerta vigente. Un caso que requiere juicio vuelve al solicitante registrado.
-- [ ] Si el director U3b aún no está implementado, añade solo esas transiciones al reconciliador existente y sus contratos. No construyas otra máquina de estados ni incorpores su antigua política de rondas.
+- [x] Añade `projection_crash`: cae después del ACK de resultado y antes de encolar progreso. Reconstruye el mismo evento desde `ProjectionPending`.
+- [x] Añade pérdida del ACK de transferencia y tablero caído. Exige evidencia retenida, cola convergente y ninguna revisión repetida.
+- [x] Añade `director_handling`: persiste decisión antes de `resolve`; perder su respuesta conserva la misma corrección. Dos consumidores no generan dos efectos.
+- [x] Ejecuta los casos en rojo.
+- [x] Implementa los puentes usando los IDs del contrato de progreso existente. No guardes otra bandera autoritativa de consumo en `corrida`.
+- [x] Integra las transiciones definidas de revisión: `Changes` prepara el delta de corrección; `Approved` conduce a la compuerta vigente. Un caso que requiere juicio vuelve al solicitante registrado.
+- [x] Si el director U3b aún no está implementado, añade solo esas transiciones al reconciliador existente y sus contratos. No construyas otra máquina de estados ni incorpores su antigua política de rondas.
 
 Verifica `projection_crash` y `director_handling` con `test-agent-work-integration.sh`. Corre `bash scripts/tests/test-progress-events-client.sh` y `bash scripts/tests/test-corrida-reconcile.sh` para los límites modificados.
 
