@@ -18,6 +18,14 @@ if [ "${1:-}" = "agents_routing" ]; then
   ( cd "$AGENT_WORK_RUNTIME_SOURCE" && pnpm exec vitest run -c test/vitest/vitest.e2e.config.ts src/gateway/server.managed-task-requester.e2e.test.ts )
   exec bash "$here/test-agent-work-e2e.sh" cli_gateway
 fi
+if [ "${1:-}" = "main_cli_loop" ]; then
+  shift
+  if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
+    echo 'main_cli_loop requiere AGENT_WORK_RUNTIME_SOURCE con R construido' >&2
+    exit 2
+  fi
+  exec bash "$here/test-agent-work-e2e.sh" main_cli_loop
+fi
 if [ "${1:-}" = "delegation_bypass" ]; then
   shift
   exec bash "$here/../agent-work/test-runtime.sh" delegation_bypass "$@"

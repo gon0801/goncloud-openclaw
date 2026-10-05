@@ -1,0 +1,34 @@
+R_HEAD=33f4e47982b3421ff51dedcdbe7601c3bbf43dd1 R_DIFF=901234a4a2dbd9ed
+ .../agent-work/managed-cli-gateway-harness.mjs     | 150 +++++++++++++++++++--
+ scripts/tests/test-agent-work-e2e.sh               |  14 +-
+ scripts/tests/test-agent-work-integration.sh       |   8 ++
+ 3 files changed, 157 insertions(+), 15 deletions(-)
+test_loop_session_requests_cli_and_only_its_session_wakes (__main__.MainCliLoopE2E.test_loop_session_requests_cli_and_only_its_session_wakes) ... FAIL
+
+======================================================================
+FAIL: test_loop_session_requests_cli_and_only_its_session_wakes (__main__.MainCliLoopE2E.test_loop_session_requests_cli_and_only_its_session_wakes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_main_cli_loop_e2e.py", line 250, in test_loop_session_requests_cli_and_only_its_session_wakes
+    self.assertEqual([(row["sessionKey"], row["contextKey"]) for row in in_flight],
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [(LOOP_SESSION, context_key)])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [('agent:main:main', 'task:c6e76bb6-da4e-4fa4-aa49-8d18a0e1249e')] != [('agent:main:encargos-loop', 'task:c6e76bb6-da4e-4fa4-aa49-8d18a0e1249e')]
+
+First differing element 0:
+('agent:main:main', 'task:c6e76bb6-da4e-4fa4-aa49-8d18a0e1249e')
+('agent:main:encargos-loop', 'task:c6e76bb6-da4e-4fa4-aa49-8d18a0e1249e')
+
+- [('agent:main:main', 'task:c6e76bb6-da4e-4fa4-aa49-8d18a0e1249e')]
+?               ^ ^^
+
++ [('agent:main:encargos-loop', 'task:c6e76bb6-da4e-4fa4-aa49-8d18a0e1249e')]
+?               ^^^ ^^^^^^^^^
+
+
+----------------------------------------------------------------------
+Ran 1 test in 75.311s
+
+FAILED (failures=1)
+rc=1

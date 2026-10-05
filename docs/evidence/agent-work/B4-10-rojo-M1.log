@@ -1,0 +1,23 @@
+R_HEAD=33f4e47982b3421ff51dedcdbe7601c3bbf43dd1 R_DIFF=901234a4a2dbd9ed
+ .../agent-work/managed-cli-gateway-harness.mjs     | 145 +++++++++++++++++++--
+ scripts/tests/test-agent-work-e2e.sh               |  14 +-
+ scripts/tests/test-agent-work-integration.sh       |   8 ++
+ 3 files changed, 152 insertions(+), 15 deletions(-)
+test_loop_session_requests_cli_and_only_its_session_wakes (__main__.MainCliLoopE2E.test_loop_session_requests_cli_and_only_its_session_wakes) ... FAIL
+
+======================================================================
+FAIL: test_loop_session_requests_cli_and_only_its_session_wakes (__main__.MainCliLoopE2E.test_loop_session_requests_cli_and_only_its_session_wakes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_main_cli_loop_e2e.py", line 245, in test_loop_session_requests_cli_and_only_its_session_wakes
+    self.assertTrue(wakes, "the report never woke the requester session; "
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                    f"session queue: {gateway.call('deliveries')}")
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [] is not true : the report never woke the requester session; session queue: []
+
+----------------------------------------------------------------------
+Ran 1 test in 97.201s
+
+FAILED (failures=1)
+rc=1
