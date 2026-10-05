@@ -86,6 +86,41 @@ class AgentsRouting(unittest.TestCase):
         output = subprocess.run(command, capture_output=True, text=True, check=True)
         self.assertEqual(json.loads(output.stdout), self.request("ingenieria", "adversary"))
 
+    def test_model_wakes_inventory_lists_every_repo_wake_source(self):
+        wakes = self.coverage["modelWakes"]
+        snapshot = json.loads(
+            (ROOT / "docs/evidence/agent-work/B4-8-cron-vigia-snapshot.json").read_text()
+        )
+        sources = [entry["source"] for entry in wakes["entries"]]
+        recreators = [recreator["path"] for entry in wakes["entries"]
+                      for recreator in entry["recreators"]]
+        listed = subprocess.run(
+            ["git", "grep", "-l", "--", "--vigia\\|vigia-mac\\|\"$vigia\" = \"claw\"",
+             "--", "scripts", "agents", ":!scripts/tests"],
+            cwd=ROOT, capture_output=True, text=True, check=True,
+        ).stdout.splitlines()
+        self.assertTrue(listed, "git grep found no repo wake sources")
+        for path in listed:
+            self.assertTrue(
+                any(source.startswith(f"{path}:") for source in sources) or path in recreators,
+                f"repo wake source {path} is missing from modelWakes",
+            )
+        live_ids = {job["id"] for job in snapshot["vigiaJobs"]}
+        cron_ids = {entry["id"] for entry in wakes["entries"] if entry["kind"] == "cron"}
+        self.assertLessEqual(live_ids, cron_ids)
+        for entry in wakes["entries"]:
+            for key in ("kind", "id", "name", "targets", "cadence", "source", "recreators"):
+                self.assertIn(key, entry)
+            self.assertIsInstance(entry["targets"], list)
+            self.assertTrue(entry["targets"], f"entry {entry['name']} has empty targets")
+            self.assertIsInstance(entry["recreators"], list)
+            self.assertTrue(entry["recreators"], f"entry {entry['name']} has empty recreators")
+            for recreator in entry["recreators"]:
+                self.assertEqual(
+                    set(recreator), {"path", "line", "state"},
+                    f"recreator {recreator} of {entry['name']} needs exactly path, line, state",
+                )
+
     def test_parallel_preparation_never_observes_partial_artifact(self):
         writing = threading.Event()
         release = threading.Event()

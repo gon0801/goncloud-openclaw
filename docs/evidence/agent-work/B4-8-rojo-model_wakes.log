@@ -1,0 +1,50 @@
+...E....
+======================================================================
+ERROR: test_model_wakes_inventory_lists_every_repo_wake_source (__main__.AgentsRouting.test_model_wakes_inventory_lists_every_repo_wake_source)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 90, in test_model_wakes_inventory_lists_every_repo_wake_source
+    wakes = self.coverage["modelWakes"]
+            ~~~~~~~~~~~~~^^^^^^^^^^^^^^
+KeyError: 'modelWakes'
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.040s
+
+FAILED (errors=1)
+rc=1
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.053s
+
+OK
+rc=0
+== mutacion: sin la entrada del hook Stop ==
+...F....
+======================================================================
+FAIL: test_model_wakes_inventory_lists_every_repo_wake_source (__main__.AgentsRouting.test_model_wakes_inventory_lists_every_repo_wake_source)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 104, in test_model_wakes_inventory_lists_every_repo_wake_source
+    self.assertTrue(
+    ~~~~~~~~~~~~~~~^
+        any(source.startswith(f"{path}:") for source in sources) or path in recreators,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        f"repo wake source {path} is missing from modelWakes",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: False is not true : repo wake source scripts/mac/claude-stop-openclaw-event.sh is missing from modelWakes
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.057s
+
+FAILED (failures=1)
+rc=1
+== entrada restaurada ==
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.053s
+
+OK
+rc=0

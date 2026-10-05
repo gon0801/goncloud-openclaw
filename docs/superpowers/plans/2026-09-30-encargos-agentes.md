@@ -258,7 +258,7 @@ Depende de T8. Modifica las entradas nativas identificadas en T0, `scripts/mac/c
 
 Consume las cinco operaciones del diseño. Produce un único camino gestionado por encargo, con identidad y presupuesto heredados.
 
-- [ ] Añade `agents_routing`: ingeniería solicita a adversary, operaciones solicita a ingeniería y un agente solicita a un CLI remoto. Incluye un agente registrado que no se llame `main`.
+- [x] Añade `agents_routing`: ingeniería solicita a adversary, operaciones solicita a ingeniería y un agente solicita a un CLI remoto. Incluye un agente registrado que no se llame `main`.
 - [x] Añade `delegation_bypass`: una ruta gestionada intenta enviar o crear un hijo sin contrato. Exige rechazo sin eludir la política de permisos.
 - [x] Añade `hook_is_observation`: Stop o quietud sin informe no despierta un modelo.
 - [ ] Ejecuta los casos en rojo.
@@ -267,7 +267,7 @@ Consume las cinco operaciones del diseño. Produce un único camino gestionado p
 - [ ] Añade `main_cli_loop`: `main` solicita a un CLI en una sesión adoptada de `mac-local`, como en los loops de claw. El encargo sale de una sesión durable de `main`, nunca de un turno `isolated` de cron. El CLI entrega `agent-work.result.v1` por referencia en lugar de los archivos `LISTO`/`VEREDICTO`, y el informe despierta solo a la sesión que hizo `submit`. Mientras el CLI trabaja, cero solicitudes al proveedor. Registra la ruta en `coverage.json` y `routing.py` y actualiza `agent-dispatch` de `main`. La sesión adoptada se retira sin matar procesos, como `UserAdopted`; sin prueba, la ruta queda deshabilitada y su vigía se conserva.
 - [ ] Añade `cli_silent_failure`: el CLI de esa ruta cierra su sesión sin informe, abre un diálogo de permiso, vence su plazo o entrega un informe inválido. Cada caso produce una sola incidencia durable con causa (`PermissionRequired`, `DeadlineMissed`, `TransportUnavailable` o resultado inválido) que despierta una vez a la sesión solicitante. Ningún caso abre turnos periódicos de modelo.
 - [ ] Añade `cli_delivery_acceptance`: el host da por entregado un encargo a un CLI solo cuando el propio CLI escribe una aceptación ligada a ese encargo; teclear la referencia o verla en pantalla no cuenta. Sin aceptación en el plazo del encargo, la entrega queda `uncertain` con incidencia `TransportUnavailable` para el solicitante y no se vuelve a teclear a ciegas. Incluye una sugerencia fantasma en el composer y una sesión ocupada que no tomó la entrada.
-- [ ] Inventaría en `coverage.json` los despertares con modelo de cada entrada: cron `*-vigia`, `corrida/latido.sh` con `vigia=claw` y avisos a `agent:main:vigia-mac`. Guarda ID, cadencia y recreadores, incluidos el `PROMPT.md` y `arranque.txt` de cada loop y la plantilla `~/.claude/skills/prompt-claw/SKILL.md`, que crea un `<loop>-vigia` por loop.
+- [x] Inventaría en `coverage.json` los despertares con modelo de cada entrada: cron `*-vigia`, `corrida/latido.sh` con `vigia=claw` y avisos a `agent:main:vigia-mac`. Guarda ID, cadencia y recreadores, incluidos el `PROMPT.md` y `arranque.txt` de cada loop y la plantilla `~/.claude/skills/prompt-claw/SKILL.md`, que crea un `<loop>-vigia` por loop.
 
 Verifica con `test-agent-work-integration.sh agents_routing`, `delegation_bypass`, `hook_is_observation`, `main_cli_loop`, `cli_silent_failure` y `cli_delivery_acceptance`. Reutiliza `test-agent-dispatch-spawn.sh` y `test-corrida-avisos.sh` para sus contratos modificados. No declares cobertura total mientras quede una fila gestionada sin prueba.
 
