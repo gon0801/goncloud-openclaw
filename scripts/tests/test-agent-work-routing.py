@@ -58,6 +58,21 @@ class AgentsRouting(unittest.TestCase):
         self.assertEqual(request["assignment"]["target"],
                          {"kind": "cli", "hostId": "windows-remote", "adapterId": "codex"})
 
+    def test_cli_route_is_limited_to_its_requester(self):
+        certified = json.loads(json.dumps(self.coverage))
+        certified["hostAdapterCoverage"]["mac-local"]["claude_opus"] = "certified"
+        with self.assertRaisesRegex(RouteUnavailable, "outside the managed perimeter"):
+            self.request("operaciones", "mac-local/claude_opus", coverage=certified)
+
+    def test_main_cli_route_stays_disabled_until_mac_local_is_certified(self):
+        with self.assertRaisesRegex(RouteUnavailable, "not certified"):
+            self.request("main", "mac-local/claude_opus")
+        certified = json.loads(json.dumps(self.coverage))
+        certified["hostAdapterCoverage"]["mac-local"]["claude_opus"] = "certified"
+        request = self.request("main", "mac-local/claude_opus", coverage=certified)
+        self.assertEqual(request["assignment"]["target"],
+                         {"kind": "cli", "hostId": "mac-local", "adapterId": "claude_opus"})
+
     def test_outside_managed_perimeter_is_rejected(self):
         with self.assertRaisesRegex(RouteUnavailable, "route"):
             self.request("scout", "adversary")
@@ -75,6 +90,30 @@ class AgentsRouting(unittest.TestCase):
             self.assertIn("managed_tasks_submit", content)
             self.assertIn("managed_tasks_admit", content)
             self.assertIn("Fuera del perímetro gestionado", content)
+
+    def test_main_cli_loop_instructions_keep_the_route_disabled_until_certified(self):
+        lines = (ROOT / "agents/main/agent/workshop-skills/agent-dispatch/SKILL.md").read_text(
+            encoding="utf-8"
+        ).splitlines()
+        starts = [i for i, line in enumerate(lines)
+                  if line.startswith("La ruta de `main` a un CLI de la Mac")]
+        self.assertEqual(len(starts), 1, "expected exactly one main CLI route paragraph")
+        paragraph_lines = []
+        for line in lines[starts[0]:]:
+            if not line.strip():
+                break
+            paragraph_lines.append(line)
+        paragraph = " ".join("\n".join(paragraph_lines).split())
+        for expected in (
+            "--requester main --target mac-local/",
+            "managed_tasks_submit",
+            "managed_tasks_admit",
+            "isolated",
+            "agent-work.result.v1",
+            "UserAdopted",
+            "Mientras `mac-local` no esté `certified` en `coverage.json`, esta ruta está deshabilitada",
+        ):
+            self.assertIn(expected, paragraph)
 
     def test_cli_prints_native_submit_parameters(self):
         command = [sys.executable, str(ROOT / "scripts/agent-work/routing.py"),

@@ -19,6 +19,18 @@ tool o la combinación host/adaptador no está habilitada, el encargo queda
 bloqueado; no uses el despacho legado para un encargo gestionado. Los pedidos
 fuera de ese perímetro conservan el flujo de esta skill.
 
+La ruta de `main` a un CLI de la Mac (`mac-local`) se prepara con `python3
+scripts/agent-work/routing.py --requester main --target mac-local/<adaptador>`
+y sigue `managed_tasks_submit` → `managed_tasks_admit` →
+`managed_tasks_inspect` → `managed_tasks_resolve`. `main` pide desde su sesión
+durable del loop, nunca desde un turno `isolated` de cron, y R lo rechaza. El
+CLI entrega `agent-work.result.v1` por referencia, en lugar de los archivos
+`LISTO` y `VEREDICTO`, y el informe despierta solo a la sesión que hizo
+`submit`. La sesión adoptada se retira sin matar procesos (`UserAdopted`).
+Mientras `mac-local` no esté `certified` en `coverage.json`, esta ruta está
+deshabilitada y el loop sigue con su flujo de hoy (vigía, `LISTO` y
+`VEREDICTO`).
+
 Pedidos de ingeniería nativa por harnesses de la Mac usan la skill
 `native-harness-orchestration` (Task 9). Con `CORRIDA_NATIVE_ROUTING=off` o
 <!-- candado: test-native-harness-orchestration-skill.sh -->
