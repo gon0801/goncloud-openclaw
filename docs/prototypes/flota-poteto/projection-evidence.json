@@ -1,0 +1,361 @@
+{
+  "initial": {
+    "proposed": {
+      "native": {
+        "agents": {
+          "main": {
+            "allowAgents": [
+              "legacy",
+              "engineer"
+            ],
+            "memory": "keep"
+          },
+          "engineer": {
+            "bundle": {
+              "poteto": "CANONICAL POTETO CONTENT",
+              "mapping": "native mapping",
+              "specialty": "backend",
+              "skills": {
+                "code": "coding instructions"
+              }
+            },
+            "bundle_digest": "d1631b4f0c100d6d65858a567ecaf86c22a34538fccbb20bef412febac2d7cd6",
+            "primary": "f-1"
+          }
+        },
+        "models": {
+          "f-1": {
+            "family": "f"
+          }
+        },
+        "gateway": {
+          "port": 42
+        },
+        "routes": {
+          "backend": "engineer"
+        }
+      },
+      "cli": {
+        "workers": {
+          "worker": {
+            "bundle": {
+              "poteto": "CANONICAL POTETO CONTENT",
+              "mapping": "cli mapping",
+              "specialty": "backend",
+              "skills": {
+                "code": "coding instructions"
+              }
+            },
+            "bundle_digest": "3cac7e85e34b012c4480677875f8c578d405e6e3acd067e3e4ced860966775c2",
+            "model": "f-1",
+            "argv": [
+              "tool",
+              "--model",
+              "f-1",
+              "--prompt-file",
+              "bundle.txt"
+            ]
+          }
+        },
+        "capacity": 3
+      },
+      "sessions": {
+        "old": {
+          "model": "f-1"
+        }
+      }
+    },
+    "gaps": [],
+    "inventory": [
+      "native:engineer",
+      "cli:worker"
+    ],
+    "contracts": {
+      "native:engineer": {
+        "runtime": "native",
+        "id": "engineer",
+        "model": "f-1",
+        "bundle": {
+          "poteto": "CANONICAL POTETO CONTENT",
+          "mapping": "native mapping",
+          "specialty": "backend",
+          "skills": {
+            "code": "coding instructions"
+          }
+        },
+        "bundle_digest": "d1631b4f0c100d6d65858a567ecaf86c22a34538fccbb20bef412febac2d7cd6",
+        "expires": 200,
+        "generation": "935364605040c13392fe1a02a10285f723b728d73dca6ad6d34c14fd8d5e49be"
+      },
+      "cli:worker": {
+        "runtime": "cli",
+        "id": "worker",
+        "model": "f-1",
+        "bundle": {
+          "poteto": "CANONICAL POTETO CONTENT",
+          "mapping": "cli mapping",
+          "specialty": "backend",
+          "skills": {
+            "code": "coding instructions"
+          }
+        },
+        "bundle_digest": "3cac7e85e34b012c4480677875f8c578d405e6e3acd067e3e4ced860966775c2",
+        "expires": 200,
+        "generation": "a76efc3a8df474b985eb124183318333910d08134cd3fa2f43c778ed07f63d59"
+      }
+    },
+    "generations": {
+      "native": "935364605040c13392fe1a02a10285f723b728d73dca6ad6d34c14fd8d5e49be",
+      "cli": "a76efc3a8df474b985eb124183318333910d08134cd3fa2f43c778ed07f63d59"
+    },
+    "changes": [
+      "native",
+      "cli"
+    ],
+    "active": {
+      "native": false,
+      "cli": false
+    }
+  },
+  "promotion": {
+    "proposed": {
+      "native": {
+        "agents": {
+          "main": {
+            "allowAgents": [
+              "legacy",
+              "engineer"
+            ],
+            "memory": "keep"
+          },
+          "engineer": {
+            "bundle": {
+              "poteto": "CANONICAL POTETO CONTENT",
+              "mapping": "native mapping",
+              "specialty": "backend",
+              "skills": {
+                "code": "coding instructions"
+              }
+            },
+            "bundle_digest": "d1631b4f0c100d6d65858a567ecaf86c22a34538fccbb20bef412febac2d7cd6",
+            "primary": "f-2"
+          }
+        },
+        "models": {
+          "f-1": {
+            "family": "f"
+          },
+          "f-2": {
+            "family": "f"
+          }
+        },
+        "gateway": {
+          "port": 42
+        },
+        "routes": {
+          "backend": "engineer"
+        }
+      },
+      "cli": {
+        "workers": {
+          "worker": {
+            "bundle": {
+              "poteto": "CANONICAL POTETO CONTENT",
+              "mapping": "cli mapping",
+              "specialty": "backend",
+              "skills": {
+                "code": "coding instructions"
+              }
+            },
+            "bundle_digest": "3cac7e85e34b012c4480677875f8c578d405e6e3acd067e3e4ced860966775c2",
+            "model": "f-2",
+            "argv": [
+              "tool",
+              "--model",
+              "f-2",
+              "--prompt-file",
+              "bundle.txt"
+            ]
+          }
+        },
+        "capacity": 3
+      },
+      "sessions": {
+        "old": {
+          "model": "f-1"
+        }
+      }
+    },
+    "gaps": [],
+    "inventory": [
+      "native:engineer",
+      "cli:worker"
+    ],
+    "contracts": {
+      "native:engineer": {
+        "runtime": "native",
+        "id": "engineer",
+        "model": "f-2",
+        "bundle": {
+          "poteto": "CANONICAL POTETO CONTENT",
+          "mapping": "native mapping",
+          "specialty": "backend",
+          "skills": {
+            "code": "coding instructions"
+          }
+        },
+        "bundle_digest": "d1631b4f0c100d6d65858a567ecaf86c22a34538fccbb20bef412febac2d7cd6",
+        "expires": 200,
+        "generation": "351e5c0eab491cad88be5e5d911a04267f07dc0c7230fabf2c924c907a0fc722"
+      },
+      "cli:worker": {
+        "runtime": "cli",
+        "id": "worker",
+        "model": "f-2",
+        "bundle": {
+          "poteto": "CANONICAL POTETO CONTENT",
+          "mapping": "cli mapping",
+          "specialty": "backend",
+          "skills": {
+            "code": "coding instructions"
+          }
+        },
+        "bundle_digest": "3cac7e85e34b012c4480677875f8c578d405e6e3acd067e3e4ced860966775c2",
+        "expires": 200,
+        "generation": "7f04e8798dc7675155b42ed1c61ae01e8d8e6959947043582f50bfe975f99343"
+      }
+    },
+    "generations": {
+      "native": "351e5c0eab491cad88be5e5d911a04267f07dc0c7230fabf2c924c907a0fc722",
+      "cli": "7f04e8798dc7675155b42ed1c61ae01e8d8e6959947043582f50bfe975f99343"
+    },
+    "changes": [
+      "native",
+      "cli"
+    ],
+    "active": {
+      "native": false,
+      "cli": false
+    }
+  },
+  "partial_activation": {
+    "proposed": {
+      "native": {
+        "agents": {
+          "main": {
+            "allowAgents": [
+              "legacy",
+              "engineer"
+            ],
+            "memory": "keep"
+          },
+          "engineer": {
+            "bundle": {
+              "poteto": "CANONICAL POTETO CONTENT",
+              "mapping": "native mapping",
+              "specialty": "backend",
+              "skills": {
+                "code": "coding instructions"
+              }
+            },
+            "bundle_digest": "d1631b4f0c100d6d65858a567ecaf86c22a34538fccbb20bef412febac2d7cd6",
+            "primary": "f-2"
+          }
+        },
+        "models": {
+          "f-1": {
+            "family": "f"
+          },
+          "f-2": {
+            "family": "f"
+          }
+        },
+        "gateway": {
+          "port": 42
+        },
+        "routes": {
+          "backend": "engineer"
+        }
+      },
+      "cli": {
+        "workers": {
+          "worker": {
+            "bundle": {
+              "poteto": "CANONICAL POTETO CONTENT",
+              "mapping": "cli mapping",
+              "specialty": "backend",
+              "skills": {
+                "code": "coding instructions"
+              }
+            },
+            "bundle_digest": "3cac7e85e34b012c4480677875f8c578d405e6e3acd067e3e4ced860966775c2",
+            "model": "f-2",
+            "argv": [
+              "tool",
+              "--model",
+              "f-2",
+              "--prompt-file",
+              "bundle.txt"
+            ]
+          }
+        },
+        "capacity": 3
+      },
+      "sessions": {
+        "old": {
+          "model": "f-1"
+        }
+      }
+    },
+    "gaps": [],
+    "inventory": [
+      "native:engineer",
+      "cli:worker"
+    ],
+    "contracts": {
+      "native:engineer": {
+        "runtime": "native",
+        "id": "engineer",
+        "model": "f-2",
+        "bundle": {
+          "poteto": "CANONICAL POTETO CONTENT",
+          "mapping": "native mapping",
+          "specialty": "backend",
+          "skills": {
+            "code": "coding instructions"
+          }
+        },
+        "bundle_digest": "d1631b4f0c100d6d65858a567ecaf86c22a34538fccbb20bef412febac2d7cd6",
+        "expires": 200,
+        "generation": "351e5c0eab491cad88be5e5d911a04267f07dc0c7230fabf2c924c907a0fc722"
+      },
+      "cli:worker": {
+        "runtime": "cli",
+        "id": "worker",
+        "model": "f-2",
+        "bundle": {
+          "poteto": "CANONICAL POTETO CONTENT",
+          "mapping": "cli mapping",
+          "specialty": "backend",
+          "skills": {
+            "code": "coding instructions"
+          }
+        },
+        "bundle_digest": "3cac7e85e34b012c4480677875f8c578d405e6e3acd067e3e4ced860966775c2",
+        "expires": 200,
+        "generation": "7f04e8798dc7675155b42ed1c61ae01e8d8e6959947043582f50bfe975f99343"
+      }
+    },
+    "generations": {
+      "native": "351e5c0eab491cad88be5e5d911a04267f07dc0c7230fabf2c924c907a0fc722",
+      "cli": "7f04e8798dc7675155b42ed1c61ae01e8d8e6959947043582f50bfe975f99343"
+    },
+    "changes": [
+      "native"
+    ],
+    "active": {
+      "native": false,
+      "cli": true
+    }
+  }
+}
