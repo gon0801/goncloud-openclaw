@@ -1614,9 +1614,9 @@ class CliClaimTest(unittest.TestCase):
             "continuation": {"kind": "requester"},
         }
         self.claim = {
-            "taskId": "task-one", "generation": 0, "claimId": "claim-one",
+            "taskId": "task-one", "generation": 1, "claimId": "claim-one",
             "hostId": "host-one", "adapterId": "codex", "instanceId": "instance-one",
-            "capability": {"taskId": "task-one", "generation": 0,
+            "capability": {"taskId": "task-one", "generation": 1,
                            "producerId": "codex", "token": "secret"},
             "assignment": self.assignment,
         }
@@ -1703,7 +1703,7 @@ class CliClaimTest(unittest.TestCase):
             def admit_host(self, assignment):
                 self.admitted.append(assignment)
                 return {"state": "host-admitted", "hostId": "host-one",
-                        "instanceId": "instance-one", "claimId": "claim-one", "generation": 0}
+                        "instanceId": "instance-one", "claimId": "claim-one", "generation": 1}
 
         backend = Backend()
         from resources import ResourceManager
@@ -1725,7 +1725,7 @@ class CliClaimTest(unittest.TestCase):
         self.assertEqual(manager.counts()["active"], 1)
         self.assertEqual(client.offsets, [0, 4096])
         self.assertEqual(client.admitted[0]["adapterId"], "codex")
-        key = OperationKey("host-one", "task-one", 0, "instance-one")
+        key = OperationKey("host-one", "task-one", 1, "instance-one")
         evidence = {"kind": "result", "receipt": "durable-result-one"}
         self.assertEqual(manager.close(key, evidence).state, "ReleasedAdopted")
         self.assertEqual(manager.close(key, evidence).state, "ReleasedAdopted")
@@ -1748,6 +1748,23 @@ class CliClaimTest(unittest.TestCase):
                                           session="worker-one", workspace_root=self.root,
                                           deliver=lambda *_: None,
                                           coverage={"hostAdapterCoverage": {"host-one": {"codex": "disabled"}}})
+
+    def test_zero_generation_claim_is_rejected(self):
+        claim = {**self.claim,
+                 "generation": 0,
+                 "capability": {**self.claim["capability"], "generation": 0}}
+
+        class Client:
+            host_id = "host-one"
+
+            def claim_host(self, *_):
+                return claim
+
+        with self.assertRaisesRegex(ValueError, "host claim identity mismatch"):
+            native_gateway.claim_cli_once(Client(), host=self.host, manager=None,
+                                          adapter_id="codex", instance_id="instance-one",
+                                          session="worker-one", workspace_root=self.root,
+                                          deliver=lambda *_: None, coverage=self.coverage)
 
     def test_changed_brief_chunk_is_rejected_before_materialization(self):
         class Client:

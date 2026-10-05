@@ -248,7 +248,7 @@ def claim_cli_once(client, *, host, manager, adapter_id, instance_id, session,
             or target != {"kind": "cli", "hostId": client.host_id, "adapterId": adapter_id}
             or not isinstance(claim.get("taskId"), str) or not claim["taskId"]
             or not isinstance(claim.get("generation"), int) or isinstance(claim["generation"], bool)
-            or claim["generation"] < 0 or not isinstance(claim.get("claimId"), str)
+            or claim["generation"] < 1 or not isinstance(claim.get("claimId"), str)
             or not claim["claimId"] or not isinstance(capability, dict)
             or capability.get("taskId") != claim["taskId"]
             or capability.get("generation") != claim["generation"]
