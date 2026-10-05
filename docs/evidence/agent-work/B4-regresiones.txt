@@ -122,3 +122,99 @@ extensions/openai/realtime-quicksilver-peer.runtime.ts:60:    const worker = cre
   `"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"` (diff vacío,
   `git status --porcelain` de R sin salida). Exit 0 los tres.
 - Todas las suites con `LANG=en_US.UTF-8`.
+
+# B4: regresiones nuestras de R (parte 2)
+
+Encargo B4-2-r1. Las otras tres causas de las seis pruebas que pasan en la base pública
+`c074824a27c96d3983043f9eeb33823cd1772d8c` y fallan en el head. Head de partida `6d6582f532191b1216492522c5b0aff377444c7b`,
+SHA de cierre `1a9bd1a32a8eebdf52929184d8464839bb4dd7d8`, un commit por causa. Logs completos en
+`~/.local/state/encargos-loop/artifacts/B4-2-r1/`.
+
+## Causa A: la versión 27 no está declarada fuera de TypeScript
+
+- **Síntomas.** `openclaw-database-preflight`: `expected { state: 19, agent: 24 } to deeply equal { state: 27, agent: 24 }`
+  (`package.json` `openclaw.schemaVersions.state: 19` frente a `OPENCLAW_STATE_SCHEMA_VERSION` 27).
+  `check-native-state-schema-version`: `Native state schema version drift: Swift supports 19, TypeScript owns 27`.
+  `update-command-admit`: `state database … has schema 27; target supports 19`.
+- **Causa.** B0→B3 subieron el esquema de estado a 27 sin alinear `package.json` ni la constante Swift
+  `maximumSupportedSchemaVersion` (`apps/shared/OpenClawKit/Sources/OpenClawNativeState/OpenClawNativeStateSQLite.swift:43`).
+  El "target supports 19" de la admisión de updates sale del mismo `package.json` vía `supportedVersions`
+  (`src/cli/update-cli/schema-preflight.ts:57`, alimentado por `preflightOpenClawDatabaseSchemas`); no hay segundo punto.
+- **Lectura de Swift antes de subir el número.** Líneas 296-300: el guard rechaza bases con `user_version` mayor que el
+  máximo (con 19 rechaza una 27; con 27 pasa). 302-318: la lista cerrada de `validateVersionZeroOwnership` (433-463)
+  solo corre con `user_version == 0` (línea 302), así que no cuenta; una base versionada entra por 312-318:
+  `validateSharedDatabaseMetadata` (465-480, valida `schema_meta` contra la versión) y existencia de la tabla nativa
+  pedida (314-318). `validateTableShape` (482-498) valida columnas, STRICT e índice de solo esa tabla. El diff no toca
+  ninguna tabla nativa, así que subir a 27 no rompe ninguna validación.
+- **Arreglo.** `package.json` `state` 19→27 (`agent` queda 24) y Swift `maximumSupportedSchemaVersion` 19→27.
+- **Rojo** (`rojo.log`): las 3 pruebas.
+- **Mutaciones.** `mutacion-A.log`: `package.json` de vuelta a 19 → preflight rojo
+  (`expected { state: 19, agent: 24 } to deeply equal { state: 27, agent: 24 }`, 1 failed | 21 passed).
+  `mutacion-A2.log`: Swift de vuelta a 19 → check-native rojo (`Native state schema version drift: Swift supports 19,
+  TypeScript owns 27`). Ambas revertidas. La compilación Swift no corre en esta Mac: el guard lee el fuente; compilar
+  la app nativa queda fuera (T12), dicho como no hecho.
+- **Verde:** preflight 2/2, check-native 22/22, update-command-admit 22/22.
+- **Commit:** `2b704ddbcde705cd0056689bdcb3f54f8138689b`.
+
+## Causa B: tres columnas de la v25 registradas como aditivas de la misma versión
+
+- **Síntomas.** `openclaw-database-maintenance.test.ts:170` y las 2 de `read-only-state-compat.test.ts:41-58`:
+  `error in index idx_managed_tasks_projection_pending after drop column: no such column: projection_json`.
+- **Causa.** `412bf5be195` ("Add durable managed task progress projections") creó `managed_tasks.projection_json`,
+  `projection_receipt_json` y `projection_publisher_host_id`, su índice parcial (`openclaw-state-schema.sql:1614-1616`),
+  subió a v25 y además registró las tres en `lazyColumns` (`src/state/openclaw-state-db-additive-columns.ts:48-50`).
+  Ese registro las declara como columnas que una base v25+ puede no tener, y es falso: las pruebas que recorren esa
+  lista las borran con `DROP COLUMN` y el índice parcial revienta. Upstream registra así solo columnas opcionales; las
+  que llegan con un salto de versión van en `versionedStateMigrations` (`src/state/openclaw-state-db-maintenance.ts`,
+  v13→v18). La excepción upstream de v19 (`authorization_id` lazy con índice único) no se extiende a este índice:
+  nuestras tres columnas son obligatorias en una base v25+.
+- **Arreglo (sin tocar ninguna prueba).** Las tres columnas fuera de `lazyColumns`; nueva migración
+  `migrateManagedTaskProgressProjections` con gate `previousVersion < 25`, que no hace nada si `managed_tasks` no
+  existe (base nueva o `DROP TABLE`, `managed-task.store.test.ts:216`) y si existe agrega cada columna con
+  `tableExists` + `ensureColumn` (estilo `migrateGitHubPublicationRequesterAuthority`, v18); entrada nueva al final de
+  `versionedStateMigrations` con `applied: "Added managed task progress projection columns (v25)"`. Orden verificado en
+  `src/state/openclaw-state-db-schema-runtime.ts`: `ensureAdditiveStateColumns` (:139) → `versionedStateMigrations`
+  (:140-144) → `executeCanonicalStateSchema` (:147, crea `idx_managed_tasks_projection_pending`). Una base v24 termina
+  con las tres columnas y el índice.
+- **Rojo** (`rojo.log`): maintenance 1, read-only-compat 2.
+- **Mutación** (`mutacion-B.log`): quitar la entrada de la migración → `managed-task.projection.test.ts` rojo
+  ("upgrades a v24 task database and exposes legacy projection intent for reconciliation", 1 failed | 6 passed). Revertida.
+- **Verde:** maintenance + read-only-compat + preflight 42 pruebas; `managed-task.projection` 7. Ninguna prueba tocada.
+- **Commit:** `b571a0dbcfa3cf7f728f1790a6dde6aa523738c1`.
+
+## Causa C: el tope de lecturas del doctor
+
+- **Síntoma.** `openclaw-state-db.test.ts` "rejects a missing current-schema table instead of recreating it empty":
+  `expected 882 to be less than or equal to 850`. Guardia de rendimiento upstream (`af2c17e6003`, #149155) que cuenta
+  las lecturas SQL de un rechazo repetido del doctor.
+- **Medición** (después del commit de B; sondas con `expandedSQL` leído tras ejecutar, porque el observador guardaba
+  `sourceSQL` con `?` sin sustituir y las sondas por objeto pasan el nombre como parámetro):
+  base pública 835 lecturas; head 882 (3 corridas: 882, 882, 882; máximo 882). Los dos cambios temporales de medición
+  (console.log y `expandedSQL` en el contador) se revirtieron en la base y en el head; `git status --porcelain` vacío
+  en ambos. Todo en `medicion-C.log`.
+- **Consultas** (`consultas-base-uniq.txt` / `consultas-head-uniq.txt` / `diff-consultas.txt`):
+  base 638 únicas, head 680; **43 consultas nuevas o más frecuentes**, 48 lecturas extra, 1 desaparecida (la consulta
+  `WITH expected…` del guardia, que crece con la lista de tablas). Las 43 nombran `managed_task`, `idx_managed`
+  (prefijo de `idx_managed_tasks_projection_pending`) o `sqlite_autoindex_managed_task`: **0 sin objeto nuestro**
+  (`consultas-no-nuestras.txt` vacío). Dato de contexto: +16 `CREATE TABLE|INDEX|UNIQUE INDEX` sobre los 262 de la base.
+- **Arreglo medido.** Tope 850 → 897 = `850 + (lecturas head − lecturas base)` = `850 + (882 − 835)`, con comentario de
+  una línea con la cuenta. Es el único cambio de pruebas ajenas del encargo.
+- **Mutación** (`mutacion-C.log`): tope en lecturas head − 1 (881) → rojo `expected 882 to be less than or equal to 881`
+  (1 failed | 225 passed | 1 skipped). Revertida.
+- **Verde:** `openclaw-state-db.test.ts` 226 passed | 1 skipped.
+- **Commit:** `1a9bd1a32a8eebdf52929184d8464839bb4dd7d8`.
+
+## Verificación (parte 2)
+
+- **Verde de una vez** (`verde.log`, PID en `verde.pid`): las 6 + `managed-task.projection`, 4 shards passed, 0 `×`.
+- **Los 36** (`los-36.log`, PID en `los-36.pid`; lista en `36-pruebas.txt` de
+  `git diff --name-only --diff-filter=AM c074824a27…6d6582f… | grep '\.test\.ts$'`): 8 shards passed, 810 pruebas, 0 `×`.
+- **Tipos** (`tsgo-core.log`): `pnpm tsgo:core` en R, exit 0.
+- **Build** (`build.log`, PID en `build.pid`): `pnpm build` exit 0;
+  `jq -r .commit dist/build-info.json` = `1a9bd1a32a8eebdf52929184d8464839bb4dd7d8` = HEAD.
+- **Integración desde G** (`caso-budget_tree.log`, `caso-recovery_queue.log`, `caso-idle_72h.log`):
+  `AGENT_WORK_RUNTIME_SOURCE=/Users/dn/dev/openclaw-agent-work-integration bash scripts/agent-work/test-runtime.sh <caso>`,
+  exit 0 los tres; primera línea con `"candidateSha": "1a9bd1a32a8eebdf52929184d8464839bb4dd7d8"` y
+  `"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"` (diff vacío).
+- Todo con `LANG=en_US.UTF-8`. No tocado: lo de B4-1, los 22 errores de tipos, `secret-state-tables`,
+  `eager-import-closure`, `pr-worktree-provision` (fuera de alcance de B4-2).
