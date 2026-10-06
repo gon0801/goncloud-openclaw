@@ -1,0 +1,14 @@
+.F...
+======================================================================
+FAIL: test_definitive_rejection_is_not_retried (__main__.IncidentClientTest.test_definitive_rejection_is_not_retried)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2608, in test_definitive_rejection_is_not_retried
+    self.assertIn("Managed task incident conflict", errors[0])
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'Managed task incident conflict' not found in '13635233e260a04a9f1c1efaab448dce200d2f806f686525603c9ee900bf9151: native projection Gateway rejected request'
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.055s
+
+FAILED (failures=1)

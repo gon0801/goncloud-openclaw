@@ -625,14 +625,17 @@ else:
             def close_host(self, *_):
                 raise AssertionError("no closures are pending in this test")
 
+            def report_host_incident(self, *_):
+                raise AssertionError("unexpected incident")
+
         client = Client()
         args = {"evidence_root": self.evidence_root, "progress_state_dir": self.state_dir,
                 "progress_client": ROOT / "scripts" / "mac" / "progress-events.py"}
         self.assertEqual(native_gateway.pump_once(client, host=host, **args),
-                         {"reported": 1, "transferred": 1, "closed": 0})
+                         {"reported": 1, "transferred": 1, "closed": 0, "incidents": 0})
         for _ in range(100):
             self.assertEqual(native_gateway.pump_once(client, host=host, **args),
-                             {"reported": 0, "transferred": 0, "closed": 0})
+                             {"reported": 0, "transferred": 0, "closed": 0, "incidents": 0})
         self.assertEqual(len(client.reports), 1)
         self.assertEqual(len(list((self.state_dir / "runs" / "run-1" / "queue").glob("*.json"))), 1)
 
@@ -642,6 +645,9 @@ else:
                 raise RuntimeError("host report unavailable")
 
             def flush_closures(self, *_):
+                return 0, []
+
+            def flush_incidents(self, *_):
                 return 0, []
 
             def operation_key_for(self, *_):
@@ -666,6 +672,9 @@ else:
             def close_host(self, *_):
                 raise AssertionError("no closures are pending in this test")
 
+            def report_host_incident(self, *_):
+                raise AssertionError("unexpected incident")
+
         pending = self.pending
         client = Client()
         with self.assertRaisesRegex(RuntimeError, "host report unavailable"):
@@ -684,6 +693,9 @@ else:
 
             def flush_closures(self, *_):
                 return 0, ["op-x: gateway down"]
+
+            def flush_incidents(self, *_):
+                return 0, []
 
             def operation_key_for(self, *_):
                 return None
@@ -708,6 +720,9 @@ else:
 
             def close_host(self, *_):
                 raise AssertionError("closure failures come from the host double")
+
+            def report_host_incident(self, *_):
+                raise AssertionError("unexpected incident")
 
         client = Client()
         client.pending = self.pending
@@ -751,6 +766,9 @@ else:
 
             def close_host(self, *_):
                 raise AssertionError("no closures are pending in this test")
+
+            def report_host_incident(self, *_):
+                raise AssertionError("unexpected incident")
 
         client = Client()
         result_path = self.root / "host" / "inbox" / (operation_id(key) + ".json")
@@ -841,6 +859,9 @@ else:
 
             def close_host(self, *_):
                 raise AssertionError("no closures are pending in this test")
+
+            def report_host_incident(self, *_):
+                raise AssertionError("unexpected incident")
 
         native_gateway.watch_pump(
             Client(), host=host,
@@ -2464,6 +2485,276 @@ class IncidentFlushTest(unittest.TestCase):
         host.flush_incidents("host-one", failing_send)
         self.assertEqual(failures, [late, late])
         self.assertEqual(self.incident_row(host, self.EXPECTED_KEY)["status"], "rejected")
+
+
+class IncidentClientTest(unittest.TestCase):
+    INCIDENT = {"kind": "transport-unavailable", "episodeId": "session-closed-1",
+                "evidenceRef": "artifact:closed"}
+    EXPECTED_KEY = "host:1:transport-unavailable:session-closed-1"
+    EXPECTED_DIGEST = hashlib.sha256(
+        b'{"episodeId":"session-closed-1","evidenceRef":"artifact:closed",'
+        b'"kind":"transport-unavailable"}').hexdigest()
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.client = GatewayProjectionClient("/isolated/openclaw", "host-one",
+                                              "ws://127.0.0.1:18789")
+        self.assignment = {"hostId": "host-one", "taskId": "task-x", "generation": 1,
+                           "instanceId": "instance-x", "producerId": "codex",
+                           "capability": "incident-secret", "adapterId": "codex"}
+
+    def seed(self, task_id, instance_id, *, state="host", adapter_id="codex", generation=1):
+        workspace = self.root / f"workspace-{state}-{instance_id}"
+        workspace.mkdir(parents=True)
+        brief = workspace / "brief.txt"
+        brief.write_text("incident seed")
+        host = Host("host-one", self.root / state)
+        key = OperationKey("host-one", task_id, generation, instance_id)
+        operation = AuthorizedOperation(
+            key=key, producer_id="codex", capability="incident-secret",
+            session=f"session-{instance_id}", workspace_ref=str(workspace), brief_ref=str(brief),
+            brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
+            input_revision={"kind": "code", "repository": "repo", "sha": "c" * 40},
+            result_contract="review.v1", claim_id=f"claim-{instance_id}", adapter_id=adapter_id)
+        host.apply(key, operation, lambda *_: None,
+                   lambda a: {"state": "host-admitted", "claimId": a["claimId"],
+                              "hostId": a["hostId"], "instanceId": a["instanceId"],
+                              "generation": a["generation"]})
+        return host, key
+
+    def incident_row(self, host, incident_key):
+        with host.spool.connection() as db:
+            row = db.execute("SELECT * FROM incidents WHERE incident_key=?",
+                             (incident_key,)).fetchone()
+        return dict(row) if row else None
+
+    def receipt(self, task_id="task-x", **changes):
+        base = {"taskId": task_id, "generation": 1,
+                "incidentKey": self.EXPECTED_KEY, "incidentDigest": self.EXPECTED_DIGEST}
+        return {**base, **changes}
+
+    def rejection(self, message, error_type="gateway_request_error"):
+        return subprocess.CompletedProcess(
+            [], 1, json.dumps({"ok": False, "error": {"type": error_type,
+                                                      "code": "INVALID_REQUEST",
+                                                      "message": message,
+                                                      "retryable": False}}), "")
+
+    def test_client_sends_exact_params_and_checks_receipt(self):
+        with mock.patch("native_gateway.subprocess.run",
+                        return_value=subprocess.CompletedProcess(
+                            [], 0, json.dumps(self.receipt()), "")) as invoke:
+            receipt = self.client.report_host_incident(self.assignment, self.INCIDENT)
+        self.assertEqual(receipt, self.receipt())
+        command = invoke.call_args.args[0]
+        self.assertEqual(command[:4], ["/isolated/openclaw", "gateway", "call",
+                                       "managedTasks.host.incident"])
+        self.assertIn("--device-auth", command)
+        self.assertEqual(json.loads(command[command.index("--params") + 1]),
+                         {"hostId": "host-one", "adapterId": "codex",
+                          "instanceId": "instance-x",
+                          "capability": {"taskId": "task-x", "generation": 1,
+                                         "producerId": "codex", "token": "incident-secret"},
+                          "incident": self.INCIDENT})
+        for changes in ({"taskId": "other"}, {"generation": 2},
+                        {"incidentKey": "host:1:transport-unavailable:other"},
+                        {"incidentDigest": "b" * 64}):
+            with self.subTest(changes):
+                with mock.patch("native_gateway.subprocess.run",
+                                return_value=subprocess.CompletedProcess(
+                                    [], 0, json.dumps(self.receipt(**changes)), "")):
+                    with self.assertRaisesRegex(RuntimeError, "receipt identity mismatch"):
+                        self.client.report_host_incident(self.assignment, self.INCIDENT)
+        for name, assignment in [
+                ("without adapterId", {**self.assignment, "adapterId": None}),
+                ("empty adapterId", {**self.assignment, "adapterId": ""}),
+                ("generation 0", {**self.assignment, "generation": 0}),
+                ("generation True", {**self.assignment, "generation": True})]:
+            with self.subTest(name):
+                with mock.patch("native_gateway.subprocess.run") as invoke:
+                    with self.assertRaises(ValueError):
+                        self.client.report_host_incident(assignment, self.INCIDENT)
+                self.assertFalse(invoke.called)
+
+    def test_lost_response_resends_the_same_incident(self):
+        host, key = self.seed("task-lost", "instance-lost")
+        host.record_incident("host-one", key, self.INCIDENT)
+        responses = [
+            subprocess.CompletedProcess([], 1, "", "lost Gateway response"),
+            subprocess.CompletedProcess([], 0, json.dumps(self.receipt(task_id="task-lost")), ""),
+        ]
+        with mock.patch("native_gateway.subprocess.run", side_effect=responses) as invoke:
+            sent, errors = host.flush_incidents("host-one", self.client.report_host_incident)
+            self.assertEqual((sent, len(errors)), (0, 1))
+            self.assertIn("rejected request", errors[0])
+            self.assertEqual(self.incident_row(host, self.EXPECTED_KEY)["status"], "pending")
+            self.assertEqual(host.flush_incidents("host-one", self.client.report_host_incident),
+                             (1, []))
+            self.assertEqual(host.flush_incidents("host-one", self.client.report_host_incident),
+                             (0, []))
+        self.assertEqual(invoke.call_count, 2)
+        commands = [call.args[0] for call in invoke.call_args_list]
+        self.assertEqual(commands[0], commands[1])
+
+    def test_definitive_rejection_is_not_retried(self):
+        host, key = self.seed("task-reject", "instance-reject", state="host-reject")
+        host.record_incident("host-one", key, self.INCIDENT)
+        with mock.patch("native_gateway.subprocess.run",
+                        return_value=self.rejection("Managed task incident conflict")) as invoke:
+            sent, errors = host.flush_incidents("host-one", self.client.report_host_incident)
+        self.assertEqual((sent, len(errors)), (0, 1))
+        self.assertIn("Managed task incident conflict", errors[0])
+        row = self.incident_row(host, self.EXPECTED_KEY)
+        self.assertEqual(row["status"], "rejected")
+        self.assertEqual(row["error"], "Managed task incident conflict")
+        with mock.patch("native_gateway.subprocess.run") as invoke:
+            self.assertEqual(host.flush_incidents("host-one", self.client.report_host_incident),
+                             (0, []))
+            self.assertEqual(invoke.call_count, 0)
+
+        with self.subTest("other error type is not definitive"):
+            other_host, other_key = self.seed("task-other", "instance-other", state="host-other")
+            fresh = {"kind": "invalid-result", "episodeId": "bad-1",
+                     "evidenceRef": "artifact:bad"}
+            other_host.record_incident("host-one", other_key, fresh)
+            with mock.patch("native_gateway.subprocess.run",
+                            return_value=self.rejection(
+                                "Managed task incident conflict", error_type="other_error")):
+                sent, errors = other_host.flush_incidents(
+                    "host-one", self.client.report_host_incident)
+            self.assertEqual((sent, len(errors)), (0, 1))
+            self.assertEqual(
+                self.incident_row(other_host, "host:1:invalid-result:bad-1")["status"],
+                "pending")
+
+        host, key = self.seed("task-retry", "instance-retry", state="host-retry")
+        late = {"kind": "deadline-missed", "episodeId": "late-1", "evidenceRef": "artifact:late"}
+        host.record_incident("host-one", key, late)
+        unauthorized = self.rejection("Managed host device or adapter is not authorized")
+        with mock.patch("native_gateway.subprocess.run",
+                        side_effect=[unauthorized, unauthorized]) as invoke:
+            sent, errors = host.flush_incidents("host-one", self.client.report_host_incident)
+            self.assertEqual((sent, len(errors)), (0, 1))
+            self.assertEqual(
+                self.incident_row(host, "host:1:deadline-missed:late-1")["status"], "pending")
+            self.assertEqual(invoke.call_count, 1)
+            host.flush_incidents("host-one", self.client.report_host_incident)
+            self.assertEqual(invoke.call_count, 2)
+
+
+class IncidentPumpTest(unittest.TestCase):
+    INCIDENT = {"kind": "transport-unavailable", "episodeId": "session-closed-1",
+                "evidenceRef": "artifact:closed"}
+    EXPECTED_KEY = "host:1:transport-unavailable:session-closed-1"
+    EXPECTED_DIGEST = hashlib.sha256(
+        b'{"episodeId":"session-closed-1","evidenceRef":"artifact:closed",'
+        b'"kind":"transport-unavailable"}').hexdigest()
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def seed(self, task_id, instance_id):
+        workspace = self.root / f"workspace-{instance_id}"
+        workspace.mkdir(parents=True)
+        brief = workspace / "brief.txt"
+        brief.write_text("incident seed")
+        host = Host("host-one", self.root / "host")
+        key = OperationKey("host-one", task_id, 1, instance_id)
+        operation = AuthorizedOperation(
+            key=key, producer_id="codex", capability="incident-secret",
+            session=f"session-{instance_id}", workspace_ref=str(workspace), brief_ref=str(brief),
+            brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
+            input_revision={"kind": "code", "repository": "repo", "sha": "c" * 40},
+            result_contract="review.v1", claim_id=f"claim-{instance_id}", adapter_id="codex")
+        host.apply(key, operation, lambda *_: None,
+                   lambda a: {"state": "host-admitted", "claimId": a["claimId"],
+                              "hostId": a["hostId"], "instanceId": a["instanceId"],
+                              "generation": a["generation"]})
+        return host, key
+
+    def pump_args(self, name):
+        return {"evidence_root": self.root / f"evidence-{name}",
+                "progress_state_dir": self.root / f"progress-{name}",
+                "progress_client": str(self.root / f"progress-events-{name}.py")}
+
+    def test_pump_incident_failure_does_not_block_results(self):
+        events = []
+
+        class IncidentFailingHost:
+            def flush(self, *_):
+                events.append("results")
+                return []
+
+            def flush_closures(self, *_):
+                events.append("closures")
+                return 0, []
+
+            def flush_incidents(self, *_):
+                events.append("incidents")
+                raise OSError("database is locked")
+
+            def operation_key_for(self, *_):
+                return None
+
+        class Client:
+            host_id = "host-one"
+
+            def report_host_result(self, *_):
+                raise AssertionError("no results are pending in this test")
+
+            def list_pending(self, after_task_id=None, limit=100):
+                return []
+
+            def close_host(self, *_):
+                raise AssertionError("closure failures come from the host double")
+
+            def report_host_incident(self, *_):
+                raise AssertionError("incident failures come from the host double")
+
+        client = Client()
+        with self.assertRaises(Exception) as caught:
+            native_gateway.pump_once(
+                client, host=IncidentFailingHost(), cli_claim=lambda: events.append("claim"),
+                **self.pump_args("failure"),
+            )
+        self.assertIs(type(caught.exception), RuntimeError)
+        self.assertIn("database is locked", str(caught.exception))
+        self.assertEqual(events, ["results", "closures", "incidents", "claim"])
+
+    def test_pump_sends_an_incident_once_across_idle_polls(self):
+        host, key = self.seed("task-idle", "instance-idle")
+        host.record_incident("host-one", key, self.INCIDENT)
+        calls = []
+
+        class RecordingClient:
+            host_id = "host-one"
+
+            def report_host_result(self, *_):
+                raise AssertionError("no results are pending in this test")
+
+            def list_pending(self, after_task_id=None, limit=100):
+                return []
+
+            def close_host(self, *_):
+                raise AssertionError("no closures are pending in this test")
+
+            def report_host_incident(self, assignment, incident):
+                calls.append((assignment, incident))
+                return {"taskId": assignment["taskId"], "generation": assignment["generation"],
+                        "incidentKey": IncidentPumpTest.EXPECTED_KEY,
+                        "incidentDigest": IncidentPumpTest.EXPECTED_DIGEST}
+
+        client = RecordingClient()
+        self.assertEqual(native_gateway.pump_once(client, host=host, **self.pump_args("idle")),
+                         {"reported": 0, "transferred": 0, "closed": 0, "incidents": 1})
+        for _ in range(100):
+            self.assertEqual(native_gateway.pump_once(client, host=host, **self.pump_args("idle")),
+                             {"reported": 0, "transferred": 0, "closed": 0, "incidents": 0})
+        self.assertEqual(len(calls), 1)
 
 
 class ClientCloseTest(unittest.TestCase):

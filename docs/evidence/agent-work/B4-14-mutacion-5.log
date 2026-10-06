@@ -1,0 +1,21 @@
+...F.
+======================================================================
+FAIL: test_pump_incident_failure_does_not_block_results (__main__.IncidentPumpTest.test_pump_incident_failure_does_not_block_results)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2726, in test_pump_incident_failure_does_not_block_results
+    self.assertEqual(events, ["results", "closures", "incidents", "claim"])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['incidents', 'results', 'closures', 'claim'] != ['results', 'closures', 'incidents', 'claim']
+
+First differing element 0:
+'incidents'
+'results'
+
+- ['incidents', 'results', 'closures', 'claim']
++ ['results', 'closures', 'incidents', 'claim']
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.069s
+
+FAILED (failures=1)

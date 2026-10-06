@@ -13,10 +13,23 @@ import tempfile
 import threading
 from pathlib import Path
 
-from contracts import AuthorizedOperation, OperationKey
+from contracts import AuthorizedOperation, IncidentRejected, OperationKey
 from host import Host, TmuxTransport
 from progress_bridge import transfer_host_projection, transfer_projection
-from spool import canonical
+from spool import canonical, incident_identity
+
+DEFINITIVE_INCIDENT_REJECTIONS = (
+    "Managed task incident conflict",
+    "Managed task generation mismatch",
+    "Managed task producer mismatch",
+    "Managed task not found",
+    "Managed task host does not own this CLI assignment",
+    "Managed task incident key or digest is invalid",
+    "Managed task host incident is invalid",
+    "Managed host incident identity is invalid",
+    "invalid managed host incident params",
+    "Managed task assignment is invalid",
+)
 
 
 class GatewayProjectionClient:
@@ -27,7 +40,7 @@ class GatewayProjectionClient:
         self.host_id = host_id
         self.expected_url = expected_url
 
-    def _call(self, method, params, *, nullable=False):
+    def _call(self, method, params, *, nullable=False, definitive=()):
         serialized = json.dumps(params, sort_keys=True, separators=(",", ":"))
         command = [self.openclaw_bin, "gateway", "call", method,
                    "--json", "--timeout", "30000"]
@@ -53,6 +66,16 @@ class GatewayProjectionClient:
             if pending is not None:
                 os.unlink(pending)
         if response.returncode:
+            if definitive:
+                try:
+                    parsed = json.loads(response.stdout)
+                except json.JSONDecodeError:
+                    parsed = None
+                if (isinstance(parsed, dict) and parsed.get("ok") is False
+                        and isinstance(parsed.get("error"), dict)
+                        and parsed["error"].get("type") == "gateway_request_error"
+                        and parsed["error"].get("message") in definitive):
+                    raise IncidentRejected(parsed["error"].get("message"))
             raise RuntimeError("native projection Gateway rejected request")
         try:
             parsed = json.loads(response.stdout)
@@ -122,6 +145,32 @@ class GatewayProjectionClient:
                 or receipt.get("generation") != generation or receipt.get("state") != state
                 or receipt.get("evidenceDigest") != evidence_digest):
             raise RuntimeError("native host closure receipt identity mismatch")
+        return receipt
+
+    def report_host_incident(self, assignment, incident):
+        if not isinstance(assignment, dict) or assignment.get("hostId") != self.host_id:
+            raise ValueError("host incident identity mismatch")
+        fields = ("taskId", "instanceId", "producerId", "capability")
+        if any(not assignment.get(field) for field in fields):
+            raise ValueError("host incident assignment incomplete")
+        if not assignment.get("adapterId"):
+            raise ValueError("host incident adapter required")
+        generation = assignment["generation"]
+        if not isinstance(generation, int) or isinstance(generation, bool) or generation < 1:
+            raise ValueError("host incident generation must be positive")
+        incident_key, incident_digest = incident_identity(generation, incident)
+        params = {"hostId": self.host_id, "adapterId": assignment["adapterId"],
+                  "instanceId": assignment["instanceId"],
+                  "capability": {"taskId": assignment["taskId"], "generation": generation,
+                                 "producerId": assignment["producerId"],
+                                 "token": assignment["capability"]},
+                  "incident": incident}
+        receipt = self._call("managedTasks.host.incident", params,
+                             definitive=DEFINITIVE_INCIDENT_REJECTIONS)
+        expected = {"taskId": assignment["taskId"], "generation": generation,
+                    "incidentKey": incident_key, "incidentDigest": incident_digest}
+        if receipt != expected:
+            raise RuntimeError("native host incident receipt identity mismatch")
         return receipt
 
     def admit_host(self, assignment):
@@ -319,6 +368,13 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
         closed, closure_errors = host.flush_closures(client.host_id, client.close_host)
     except (OSError, RuntimeError, ValueError) as exc:
         closure_errors = [str(exc)]
+    incidents_sent = 0
+    incident_errors = []
+    try:
+        incidents_sent, incident_errors = host.flush_incidents(
+            client.host_id, client.report_host_incident)
+    except (OSError, RuntimeError, ValueError) as exc:
+        incident_errors = [str(exc)]
     claimed = None
     claim_error = None
     if cli_claim is not None:
@@ -334,9 +390,11 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
         raise report_error
     if claim_error is not None:
         raise claim_error
-    if closure_errors:
-        raise RuntimeError("; ".join(closure_errors))
-    result = {"reported": len(receipts), "transferred": transferred, "closed": closed}
+    errors = closure_errors + incident_errors
+    if errors:
+        raise RuntimeError("; ".join(errors))
+    result = {"reported": len(receipts), "transferred": transferred, "closed": closed,
+              "incidents": incidents_sent}
     if cli_claim is not None:
         result["claimed"] = 1 if claimed is not None else 0
     return result

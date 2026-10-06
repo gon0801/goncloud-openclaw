@@ -1,0 +1,57 @@
+EFFFF
+======================================================================
+ERROR: test_client_sends_exact_params_and_checks_receipt (__main__.IncidentClientTest.test_client_sends_exact_params_and_checks_receipt)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2549, in test_client_sends_exact_params_and_checks_receipt
+    receipt = self.client.report_host_incident(self.assignment, self.INCIDENT)
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/native_gateway.py", line 143, in report_host_incident
+    raise NotImplementedError("host incident report pending")
+NotImplementedError: host incident report pending
+
+======================================================================
+FAIL: test_definitive_rejection_is_not_retried (__main__.IncidentClientTest.test_definitive_rejection_is_not_retried)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2608, in test_definitive_rejection_is_not_retried
+    self.assertIn("Managed task incident conflict", errors[0])
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'Managed task incident conflict' not found in '13635233e260a04a9f1c1efaab448dce200d2f806f686525603c9ee900bf9151: host incident report pending'
+
+======================================================================
+FAIL: test_lost_response_resends_the_same_incident (__main__.IncidentClientTest.test_lost_response_resends_the_same_incident)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2591, in test_lost_response_resends_the_same_incident
+    self.assertIn("rejected request", errors[0])
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'rejected request' not found in 'ff81ffe781fa4ecda8287b067b25a0ef0c59676c4ec2ec1c59ffe25e2712d88f: host incident report pending'
+
+======================================================================
+FAIL: test_pump_incident_failure_does_not_block_results (__main__.IncidentPumpTest.test_pump_incident_failure_does_not_block_results)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2719, in test_pump_incident_failure_does_not_block_results
+    with self.assertRaises(Exception) as caught:
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+AssertionError: Exception not raised
+
+======================================================================
+FAIL: test_pump_sends_an_incident_once_across_idle_polls (__main__.IncidentPumpTest.test_pump_sends_an_incident_once_across_idle_polls)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2752, in test_pump_sends_an_incident_once_across_idle_polls
+    self.assertEqual(native_gateway.pump_once(client, host=host, **self.pump_args("idle")),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     {"reported": 0, "transferred": 0, "closed": 0, "incidents": 1})
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'reported': 0, 'transferred': 0, 'closed': 0} != {'reported': 0, 'transferred': 0, 'closed': 0, 'incidents': 1}
+- {'closed': 0, 'reported': 0, 'transferred': 0}
++ {'closed': 0, 'incidents': 1, 'reported': 0, 'transferred': 0}
+?              ++++++++++++++++
+
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.018s
+
+FAILED (failures=4, errors=1)

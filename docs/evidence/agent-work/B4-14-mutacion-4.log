@@ -1,0 +1,14 @@
+...F.
+======================================================================
+FAIL: test_pump_incident_failure_does_not_block_results (__main__.IncidentPumpTest.test_pump_incident_failure_does_not_block_results)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2724, in test_pump_incident_failure_does_not_block_results
+    self.assertIs(type(caught.exception), RuntimeError)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: <class 'OSError'> is not <class 'RuntimeError'>
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.073s
+
+FAILED (failures=1)
