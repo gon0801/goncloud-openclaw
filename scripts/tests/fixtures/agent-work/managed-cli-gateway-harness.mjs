@@ -77,6 +77,9 @@ if (countingProvider) {
         at: Date.now(), method: request.method, path: request.url,
         wakeTasks: [...body.matchAll(/Managed task (\S+) generation \d+ has a final result/g)]
           .map((match) => match[1]),
+        // Host incidents the model was told about; the session history repeats earlier ones.
+        incidentWakes: [...body.matchAll(/Managed task (\S+) generation \d+ recorded incident ([a-z-]+);/g)]
+          .map((match) => ({ taskId: match[1], kind: match[2] })),
         startedDeliveries: sessionDeliveries().filter((row) => row.deliveryStartedAt !== null)
           .map(({ sessionKey: key, contextKey, enqueuedAt }) => ({ sessionKey: key, contextKey, enqueuedAt })),
       });

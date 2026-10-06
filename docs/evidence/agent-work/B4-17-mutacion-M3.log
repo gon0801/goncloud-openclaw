@@ -1,0 +1,91 @@
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+F{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+F{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+F{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+F
+======================================================================
+FAIL: test_closed_session_without_report (__main__.CliSilentFailureE2E.test_closed_session_without_report)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 235, in test_closed_session_without_report
+    self.silent_case("transport-unavailable", {"episodeId": "session-closed"},
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     deadline=DEADLINE_SECONDS)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 208, in silent_case
+    self.assertEqual(late, [], f"a pass {later}s later raised {late}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:transport-unavailable:session-closed-1791285354'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:session-closed-1791285354'
+
+- ['host:1:transport-unavailable:session-closed-1791285354']
++ [] : a pass 3600s later raised ['host:1:transport-unavailable:session-closed-1791285354']
+
+======================================================================
+FAIL: test_deadline_missed (__main__.CliSilentFailureE2E.test_deadline_missed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 244, in test_deadline_missed
+    passes, delivered_at = self.silent_case("deadline-missed", {"episodeId": "deadline"},
+                           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                            deadline=DEADLINE_SECONDS)
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 191, in silent_case
+    self.assertTrue(settled, f"the incident never woke the requester; queue={new_queue_rows()}")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [] is not true : the incident never woke the requester; queue=[('61a1e8604abdbcd87476ddc58fedd475422405a549c7c099fa05a32795086aa2', 'pending')]
+
+======================================================================
+FAIL: test_invalid_report (__main__.CliSilentFailureE2E.test_invalid_report)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 251, in test_invalid_report
+    self.silent_case("invalid-result", {"episodeId": "invalid-result"}, deadline=DEADLINE_SECONDS)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 208, in silent_case
+    self.assertEqual(late, [], f"a pass {later}s later raised {late}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:invalid-result:invalid-result-1791285417'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:invalid-result:invalid-result-1791285417'
+
+- ['host:1:invalid-result:invalid-result-1791285417']
++ [] : a pass 3600s later raised ['host:1:invalid-result:invalid-result-1791285417']
+
+======================================================================
+FAIL: test_permission_dialog (__main__.CliSilentFailureE2E.test_permission_dialog)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 241, in test_permission_dialog
+    self.silent_case("permission-required", {"promptIdentity": PROCEED_ID + "-1"}, deadline=None)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 191, in silent_case
+    self.assertTrue(settled, f"the incident never woke the requester; queue={new_queue_rows()}")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [] is not true : the incident never woke the requester; queue=[('fb2db4de6ccca9023de1d3fa84133d029aa6ceaf8259892376ba1efa2d6a4d73', 'pending')]
+
+----------------------------------------------------------------------
+Ran 4 tests in 176.702s
+
+FAILED (failures=4)
+rc=1
