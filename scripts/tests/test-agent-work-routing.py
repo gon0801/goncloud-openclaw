@@ -111,6 +111,8 @@ class AgentsRouting(unittest.TestCase):
             "isolated",
             "agent-work.result.v1",
             "UserAdopted",
+            "delivery-unaccepted",
+            "no lo vuelvas a teclear ni a pedir a ciegas",
             "Mientras `mac-local` no esté `certified` en `coverage.json`, esta ruta está deshabilitada",
         ):
             self.assertIn(expected, paragraph)

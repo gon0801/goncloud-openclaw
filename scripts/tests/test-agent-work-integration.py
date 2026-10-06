@@ -3055,6 +3055,31 @@ class SilentFailureTest(unittest.TestCase):
                 gateway_main(args + cli + ["--cli-deadline-seconds", "0"])
         never.assert_not_called()
 
+    def test_watch_entrypoint_types_each_claim_once(self):
+        # cli_delivery_acceptance: the deliver main hands to each claim types the reference once.
+        args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "host-one",
+                "--expect-url", "ws://127.0.0.1:18789", "--evidence-root", str(self.root / "e"),
+                "--progress-state-dir", str(self.root / "p"), "--progress-client", "/isolated/c.py",
+                "--watch", "--host-state-dir", str(self.root / "host"),
+                "--cli-adapter-id", "codex", "--cli-instance-id", "instance-one",
+                "--cli-session", "worker-one", "--cli-workspace-root", str(self.root / "w"),
+                "--cli-tmux-socket", "sock-watch", "--cli-deadline-seconds", "900"]
+        with mock.patch("native_gateway.watch_pump") as watch:
+            gateway_main(args)
+        claim = watch.call_args.kwargs["cli_claim"]
+
+        def claimed(*_, deliver, session, **__):
+            deliver("/state/inbox/op-one.json", session)
+
+        with mock.patch("native_gateway.claim_cli_once", side_effect=claimed), \
+                mock.patch("subprocess.run") as run:
+            claim()
+        # Any command that carries the reference types it, whatever its flags.
+        typed = [call.args[0] for call in run.call_args_list if "/state/inbox/op-one.json" in str(call)]
+        self.assertEqual(len(typed), 1, f"main typed the reference {len(typed)} times")
+        self.assertEqual(typed[0][:6], ["tmux", "-L", "sock-watch", "send-keys", "-t", "=worker-one:"])
+        self.assertIn("Open assignment JSON at /state/inbox/op-one.json.", typed[0][-1])
+
 
 class PromptBackend(ClosureBackend):
     """ClosureBackend whose panes show a scripted screen; liveness of capture is TmuxBackend's job."""

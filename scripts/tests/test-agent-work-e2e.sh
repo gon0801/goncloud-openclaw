@@ -26,6 +26,10 @@ run_cli_silent_failure() {
   python3 scripts/tests/test_agent_work_cli_silent_failure_e2e.py
 }
 
+run_cli_delivery_acceptance() {
+  python3 scripts/tests/test_agent_work_cli_delivery_acceptance_e2e.py
+}
+
 case "${1:-all}" in
   all)
     run_delivery_latency
@@ -33,6 +37,7 @@ case "${1:-all}" in
     run_cli_gateway
     run_main_cli_loop
     run_cli_silent_failure
+    run_cli_delivery_acceptance
     ;;
   delivery_latency)
     run_delivery_latency
@@ -65,8 +70,15 @@ case "${1:-all}" in
     fi
     run_cli_silent_failure
     ;;
+  cli_delivery_acceptance)
+    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
+      echo "cli_delivery_acceptance requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
+      exit 2
+    fi
+    run_cli_delivery_acceptance
+    ;;
   *)
-    echo "casos disponibles: delivery_latency, review_tail_restart, cli_gateway, main_cli_loop, cli_silent_failure" >&2
+    echo "casos disponibles: delivery_latency, review_tail_restart, cli_gateway, main_cli_loop, cli_silent_failure, cli_delivery_acceptance" >&2
     exit 2
     ;;
 esac

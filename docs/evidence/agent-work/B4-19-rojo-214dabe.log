@@ -1,0 +1,40 @@
+FF
+======================================================================
+FAIL: test_busy_session_that_never_took_the_input (__main__.CliDeliveryAcceptanceE2E.test_busy_session_that_never_took_the_input)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_delivery_acceptance_e2e.py", line 286, in test_busy_session_that_never_took_the_input
+    observed, screen = self.unaccepted_case("busy")
+                       ~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_delivery_acceptance_e2e.py", line 182, in unaccepted_case
+    self.assertEqual(observed.status, "typed",
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     f"typing the reference counted as a delivery; screen={cli.screen()!r}")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'delivered' != 'typed'
+- delivered
++ typed
+ : typing the reference counted as a delivery; screen='delivery-cli ready (busy)\n* Working... (5s - esc to interrupt)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n'
+
+======================================================================
+FAIL: test_phantom_suggestion_in_the_composer (__main__.CliDeliveryAcceptanceE2E.test_phantom_suggestion_in_the_composer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_delivery_acceptance_e2e.py", line 281, in test_phantom_suggestion_in_the_composer
+    observed, screen = self.unaccepted_case("phantom")
+                       ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_delivery_acceptance_e2e.py", line 182, in unaccepted_case
+    self.assertEqual(observed.status, "typed",
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     f"typing the reference counted as a delivery; screen={cli.screen()!r}")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'delivered' != 'typed'
+- delivered
++ typed
+ : typing the reference counted as a delivery; screen='delivery-cli ready (phantom)\n> Open assignment JSON at /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/agent-work-cli-delivery-rxi8fkia/phantom/host/assignments/624335513f2e8a885e4a73b14c15cf5683f57550b707ff6e562132e60c58a8fc.json. Follow briefRef and write agent-work.result.v1 atomically to resultRef.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n'
+
+----------------------------------------------------------------------
+Ran 2 tests in 66.835s
+
+FAILED (failures=2)
+rc=1

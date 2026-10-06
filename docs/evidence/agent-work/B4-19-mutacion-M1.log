@@ -1,0 +1,23 @@
+F
+======================================================================
+FAIL: test_phantom_suggestion_in_the_composer (__main__.CliDeliveryAcceptanceE2E.test_phantom_suggestion_in_the_composer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_delivery_acceptance_e2e.py", line 281, in test_phantom_suggestion_in_the_composer
+    observed, screen = self.unaccepted_case("phantom")
+                       ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_delivery_acceptance_e2e.py", line 182, in unaccepted_case
+    self.assertEqual(observed.status, "typed",
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     f"typing the reference counted as a delivery; screen={cli.screen()!r}")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'delivered' != 'typed'
+- delivered
++ typed
+ : typing the reference counted as a delivery; screen='delivery-cli ready (phantom)\n> Open assignment JSON at /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/agent-work-cli-delivery-gn_0litz/phantom/host/assignments/f4757f86ac717811ec1a33997a4685e0b3de4962f8450a797a7d018a7d46ef22.json. First write agent-work.accept.v1 atomically to acceptRef with schema, hostId, taskId, generation, instanceId, claimId and capability copied from the assignment. Then follow briefRef and write agent-work.result.v1 atomically to resultRef.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n'
+
+----------------------------------------------------------------------
+Ran 1 test in 61.434s
+
+FAILED (failures=1)
+rc=1

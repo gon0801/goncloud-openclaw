@@ -26,7 +26,12 @@ y sigue `managed_tasks_submit` → `managed_tasks_admit` →
 durable del loop, nunca desde un turno `isolated` de cron, y R lo rechaza. El
 CLI entrega `agent-work.result.v1` por referencia, en lugar de los archivos
 `LISTO` y `VEREDICTO`, y el informe despierta solo a la sesión que hizo
-`submit`. La sesión adoptada se retira sin matar procesos (`UserAdopted`).
+`submit`. El host da el encargo por entregado solo cuando el CLI escribe su
+aceptación (`agent-work.accept.v1` en `acceptRef`); teclearlo o verlo en
+pantalla no cuenta. Si la aceptación no llega en el plazo, llega una incidencia
+`transport-unavailable` con `delivery-unaccepted`: no lo vuelvas a teclear ni a
+pedir a ciegas; revisa con `managed_tasks_inspect` y decide. La sesión adoptada
+se retira sin matar procesos (`UserAdopted`).
 Mientras `mac-local` no esté `certified` en `coverage.json`, esta ruta está
 deshabilitada y el loop sigue con su flujo de hoy (vigía, `LISTO` y
 `VEREDICTO`).

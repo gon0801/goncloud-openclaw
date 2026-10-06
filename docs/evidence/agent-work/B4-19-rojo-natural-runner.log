@@ -1,0 +1,15 @@
+$ test-agent-work-e2e.sh cli_delivery_acceptance
+casos disponibles: delivery_latency, review_tail_restart, cli_gateway, main_cli_loop, cli_silent_failure
+rc=2
+$ test-agent-work-integration.sh cli_delivery_acceptance
+E
+======================================================================
+ERROR: cli_delivery_acceptance (unittest.loader._FailedTest.cli_delivery_acceptance)
+----------------------------------------------------------------------
+AttributeError: module '__main__' has no attribute 'cli_delivery_acceptance'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+FAILED (errors=1)
+rc=1

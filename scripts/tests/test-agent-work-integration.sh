@@ -49,6 +49,30 @@ if [ "${1:-}" = "cli_silent_failure" ]; then
   fi
   exit 0
 fi
+if [ "${1:-}" = "cli_delivery_acceptance" ]; then
+  shift
+  if [ "$#" -ne 0 ]; then
+    echo "cli_delivery_acceptance no acepta argumentos" >&2
+    exit 2
+  fi
+  if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
+    echo 'cli_delivery_acceptance requiere AGENT_WORK_RUNTIME_SOURCE con R construido' >&2
+    exit 2
+  fi
+  python3 "$here/test-agent-work-integration.py" DeliveryAcceptanceTest \
+    SilentFailureTest.test_uncertain_and_reported_operations_never_raise_incidents \
+    SilentFailureTest.test_watch_entrypoint_types_each_claim_once
+  e2e_log="$(mktemp)"
+  trap 'rm -f "$e2e_log"' EXIT
+  bash "$here/test-agent-work-e2e.sh" cli_delivery_acceptance 2>&1 | tee "$e2e_log"
+  # Un E2E saltado o quitado no puede pasar por verde: cada caso imprime su línea.
+  cases="$({ grep -o 'CLI_DELIVERY_ACCEPTANCE_E2E case=[a-z]*' "$e2e_log" || true; } | sort -u | wc -l | tr -d ' ')"
+  if [ "$cases" != 2 ]; then
+    echo "cli_delivery_acceptance: el E2E cubrió $cases de 2 casos" >&2
+    exit 1
+  fi
+  exit 0
+fi
 if [ "${1:-}" = "delegation_bypass" ]; then
   shift
   exec bash "$here/../agent-work/test-runtime.sh" delegation_bypass "$@"
