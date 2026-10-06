@@ -12,8 +12,8 @@ import tempfile
 from pathlib import Path
 from typing import Callable
 
-from contracts import AuthorizedOperation, HostObservation, OperationKey, ResultReceipt, operation_id
-from spool import TERMINAL_STATES, Spool, atomic_json, canonical, closure_digest
+from contracts import AuthorizedOperation, HostObservation, IncidentRejected, OperationKey, ResultReceipt, operation_id
+from spool import TERMINAL_STATES, Spool, atomic_json, canonical, closure_digest, incident_identity
 
 MAX_ARTIFACT_BYTES = 10 * 1024 * 1024
 RESULT_SCHEMA = "agent-work.result.v1"
@@ -321,6 +321,43 @@ class Host:
                 self.spool.note_inbox_error(op_id, f"closure failed: {exc}")
                 errors.append(f"{op_id}: {exc}")
         return closed, errors
+
+    def record_incident(self, host_id: str, key: OperationKey, incident: dict) -> dict:
+        self._host(host_id)
+        self._host(key.host_id)
+        current = self.spool.get(operation_id(key))
+        if current is None:
+            raise ValueError("unknown operation")
+        assignment = json.loads(current["operation_json"])
+        adapter = assignment.get("adapterId")
+        generation = assignment.get("generation")
+        if not isinstance(adapter, str) or not adapter.strip() \
+                or not isinstance(generation, int) or isinstance(generation, bool) or generation < 1:
+            raise ValueError("operation cannot carry host incidents")
+        incident_key, incident_digest = incident_identity(generation, incident)
+        return self.spool.record_incident(key.task_id, incident_key, operation_id(key),
+                                          canonical(incident), incident_digest)
+
+    def flush_incidents(self, host_id: str, send: Callable[[dict, dict], dict]) -> tuple[int, list[str]]:
+        """Send every pending incident; each one fails alone and rejections never retry."""
+        self._host(host_id)
+        sent, errors = 0, []
+        for row in self.spool.pending_incidents():
+            try:
+                current = self.spool.get(row["operation_id"])
+                if current is None:
+                    raise ValueError("incident without assignment")
+                assignment = json.loads(current["operation_json"])
+                receipt = send(assignment, json.loads(row["incident_json"]))
+                self.spool.incident_sent(row["task_id"], row["incident_key"], receipt)
+                sent += 1
+            except IncidentRejected as exc:
+                self.spool.incident_failed(row["task_id"], row["incident_key"], str(exc), rejected=True)
+                errors.append(f"{row['operation_id']}: {exc}")
+            except (OSError, RuntimeError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+                self.spool.incident_failed(row["task_id"], row["incident_key"], str(exc))
+                errors.append(f"{row['operation_id']}: {exc}")
+        return sent, errors
 
     def receipt(self, host_id: str, key: OperationKey) -> dict | None:
         self._host(host_id)

@@ -1,0 +1,234 @@
+EEEEEEEEEEEEEEEEEEEEE
+======================================================================
+ERROR: test_flush_incidents_marks_conflict_rejected_without_retry (__main__.IncidentFlushTest.test_flush_incidents_marks_conflict_rejected_without_retry)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2436, in test_flush_incidents_marks_conflict_rejected_without_retry
+    host.record_incident("host-one", key, self.INCIDENT)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 326, in record_incident
+    raise NotImplementedError("Host.record_incident")
+NotImplementedError: Host.record_incident
+
+======================================================================
+ERROR: test_flush_incidents_retries_after_lost_response (__main__.IncidentFlushTest.test_flush_incidents_retries_after_lost_response)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2416, in test_flush_incidents_retries_after_lost_response
+    host.record_incident("host-one", key, self.INCIDENT)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 326, in record_incident
+    raise NotImplementedError("Host.record_incident")
+NotImplementedError: Host.record_incident
+
+======================================================================
+ERROR: test_flush_incidents_sends_once (__main__.IncidentFlushTest.test_flush_incidents_sends_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2388, in test_flush_incidents_sends_once
+    host.record_incident("host-one", key, self.INCIDENT)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 326, in record_incident
+    raise NotImplementedError("Host.record_incident")
+NotImplementedError: Host.record_incident
+
+======================================================================
+ERROR: test_incident_identity_keys_per_kind (__main__.IncidentFlushTest.test_incident_identity_keys_per_kind) [permission-required]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2346, in test_incident_identity_keys_per_kind
+    self.assertEqual(incident_identity(1, incident)[0], expected)
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/spool.py", line 24, in incident_identity
+    raise NotImplementedError("incident_identity")
+NotImplementedError: incident_identity
+
+======================================================================
+ERROR: test_incident_identity_keys_per_kind (__main__.IncidentFlushTest.test_incident_identity_keys_per_kind) [deadline-missed]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2346, in test_incident_identity_keys_per_kind
+    self.assertEqual(incident_identity(1, incident)[0], expected)
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/spool.py", line 24, in incident_identity
+    raise NotImplementedError("incident_identity")
+NotImplementedError: incident_identity
+
+======================================================================
+ERROR: test_incident_identity_keys_per_kind (__main__.IncidentFlushTest.test_incident_identity_keys_per_kind) [transport-unavailable]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2346, in test_incident_identity_keys_per_kind
+    self.assertEqual(incident_identity(1, incident)[0], expected)
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/spool.py", line 24, in incident_identity
+    raise NotImplementedError("incident_identity")
+NotImplementedError: incident_identity
+
+======================================================================
+ERROR: test_incident_identity_keys_per_kind (__main__.IncidentFlushTest.test_incident_identity_keys_per_kind) [invalid-result]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2346, in test_incident_identity_keys_per_kind
+    self.assertEqual(incident_identity(1, incident)[0], expected)
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/spool.py", line 24, in incident_identity
+    raise NotImplementedError("incident_identity")
+NotImplementedError: incident_identity
+
+======================================================================
+ERROR: test_record_incident_rejects_invalid_input (__main__.IncidentFlushTest.test_record_incident_rejects_invalid_input) [extra key]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2373, in test_record_incident_rejects_invalid_input
+    host.record_incident("host-one", key, incident)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 326, in record_incident
+    raise NotImplementedError("Host.record_incident")
+NotImplementedError: Host.record_incident
+
+======================================================================
+ERROR: test_record_incident_rejects_invalid_input (__main__.IncidentFlushTest.test_record_incident_rejects_invalid_input) [missing evidenceRef]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2373, in test_record_incident_rejects_invalid_input
+    host.record_incident("host-one", key, incident)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 326, in record_incident
+    raise NotImplementedError("Host.record_incident")
+NotImplementedError: Host.record_incident
+
+======================================================================
+ERROR: test_record_incident_rejects_invalid_input (__main__.IncidentFlushTest.test_record_incident_rejects_invalid_input) [unknown kind]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2373, in test_record_incident_rejects_invalid_input
+    host.record_incident("host-one", key, incident)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 326, in record_incident
+    raise NotImplementedError("Host.record_incident")
+NotImplementedError: Host.record_incident
+
+======================================================================
+ERROR: test_record_incident_rejects_invalid_input (__main__.IncidentFlushTest.test_record_incident_rejects_invalid_input) [episodeId too long]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2373, in test_record_incident_rejects_invalid_input
+    host.record_incident("host-one", key, incident)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 326, in record_incident
+    raise NotImplementedError("Host.record_incident")
+NotImplementedError: Host.record_incident
+
+======================================================================
+ERROR: test_record_incident_rejects_invalid_input (__main__.IncidentFlushTest.test_record_incident_rejects_invalid_input) [episodeId 258 utf16 units]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2373, in test_record_incident_rejects_invalid_input
+    host.record_incident("host-one", key, incident)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 326, in record_incident
+    raise NotImplementedError("Host.record_incident")
+NotImplementedError: Host.record_incident
+
+======================================================================
+ERROR: test_record_incident_rejects_invalid_input (__main__.IncidentFlushTest.test_record_incident_rejects_invalid_input) [episodeId not text]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2373, in test_record_incident_rejects_invalid_input
+    host.record_incident("host-one", key, incident)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 326, in record_incident
+    raise NotImplementedError("Host.record_incident")
+NotImplementedError: Host.record_incident
+
+======================================================================
+ERROR: test_record_incident_rejects_invalid_input (__main__.IncidentFlushTest.test_record_incident_rejects_invalid_input) [not an object]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2373, in test_record_incident_rejects_invalid_input
+    host.record_incident("host-one", key, incident)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 326, in record_incident
+    raise NotImplementedError("Host.record_incident")
+NotImplementedError: Host.record_incident
+
+======================================================================
+ERROR: test_record_incident_rejects_invalid_input (__main__.IncidentFlushTest.test_record_incident_rejects_invalid_input) [permission without promptIdentity]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2373, in test_record_incident_rejects_invalid_input
+    host.record_incident("host-one", key, incident)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 326, in record_incident
+    raise NotImplementedError("Host.record_incident")
+NotImplementedError: Host.record_incident
+
+======================================================================
+ERROR: test_record_incident_rejects_invalid_input (__main__.IncidentFlushTest.test_record_incident_rejects_invalid_input) [generation 0 operation]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2381, in test_record_incident_rejects_invalid_input
+    host.record_incident(*args)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 326, in record_incident
+    raise NotImplementedError("Host.record_incident")
+NotImplementedError: Host.record_incident
+
+======================================================================
+ERROR: test_record_incident_rejects_invalid_input (__main__.IncidentFlushTest.test_record_incident_rejects_invalid_input) [operation without adapterId]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2381, in test_record_incident_rejects_invalid_input
+    host.record_incident(*args)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 326, in record_incident
+    raise NotImplementedError("Host.record_incident")
+NotImplementedError: Host.record_incident
+
+======================================================================
+ERROR: test_record_incident_rejects_invalid_input (__main__.IncidentFlushTest.test_record_incident_rejects_invalid_input) [unknown operation]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2381, in test_record_incident_rejects_invalid_input
+    host.record_incident(*args)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 326, in record_incident
+    raise NotImplementedError("Host.record_incident")
+NotImplementedError: Host.record_incident
+
+======================================================================
+ERROR: test_record_incident_rejects_invalid_input (__main__.IncidentFlushTest.test_record_incident_rejects_invalid_input) [foreign host]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2381, in test_record_incident_rejects_invalid_input
+    host.record_incident(*args)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 326, in record_incident
+    raise NotImplementedError("Host.record_incident")
+NotImplementedError: Host.record_incident
+
+======================================================================
+ERROR: test_record_incident_rejects_invalid_input (__main__.IncidentFlushTest.test_record_incident_rejects_invalid_input)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2383, in test_record_incident_rejects_invalid_input
+    count = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+            ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.OperationalError: no such table: incidents
+
+======================================================================
+ERROR: test_record_incident_twice_keeps_one_row (__main__.IncidentFlushTest.test_record_incident_twice_keeps_one_row)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2314, in test_record_incident_twice_keeps_one_row
+    host.record_incident("host-one", key, self.INCIDENT)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 326, in record_incident
+    raise NotImplementedError("Host.record_incident")
+NotImplementedError: Host.record_incident
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.024s
+
+FAILED (errors=21)

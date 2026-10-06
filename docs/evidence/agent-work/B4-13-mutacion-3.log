@@ -1,0 +1,54 @@
+FFF...
+======================================================================
+FAIL: test_flush_incidents_marks_conflict_rejected_without_retry (__main__.IncidentFlushTest.test_flush_incidents_marks_conflict_rejected_without_retry)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2450, in test_flush_incidents_marks_conflict_rejected_without_retry
+    self.assertEqual(len(calls), 1)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+AssertionError: 2 != 1
+
+======================================================================
+FAIL: test_flush_incidents_retries_after_lost_response (__main__.IncidentFlushTest.test_flush_incidents_retries_after_lost_response)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2431, in test_flush_incidents_retries_after_lost_response
+    self.assertEqual(host.flush_incidents("host-one", send), (0, []))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Tuples differ: (1, []) != (0, [])
+
+First differing element 0:
+1
+0
+
+- (1, [])
+?  ^
+
++ (0, [])
+?  ^
+
+
+======================================================================
+FAIL: test_flush_incidents_sends_once (__main__.IncidentFlushTest.test_flush_incidents_sends_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2409, in test_flush_incidents_sends_once
+    self.assertEqual(host.flush_incidents("host-one", send), (0, []))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Tuples differ: (1, []) != (0, [])
+
+First differing element 0:
+1
+0
+
+- (1, [])
+?  ^
+
++ (0, [])
+?  ^
+
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.029s
+
+FAILED (failures=3)

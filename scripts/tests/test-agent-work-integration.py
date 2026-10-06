@@ -25,13 +25,13 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 sys.path.insert(0, str(ROOT / "scripts" / "mac"))
-from contracts import AuthorizedOperation, OperationKey, operation_id  # noqa: E402
+from contracts import AuthorizedOperation, IncidentRejected, OperationKey, operation_id  # noqa: E402
 from host import Host  # noqa: E402
 import native_gateway  # noqa: E402
 from native_gateway import GatewayProjectionClient, main as gateway_main, transfer_gateway_projections  # noqa: E402
 from progress_bridge import event_id, projection_digest, transfer_host_projection, transfer_projection  # noqa: E402
 from resources import ResourceManager  # noqa: E402
-from spool import atomic_json, canonical  # noqa: E402
+from spool import atomic_json, canonical, incident_identity  # noqa: E402
 from corrida_worker import task_handoffs  # noqa: E402
 from corrida_worker.reconcile import reconcile  # noqa: E402
 from corrida_worker.state import reduce_events, state_from_record  # noqa: E402
@@ -2269,6 +2269,201 @@ class ClosureFlushTest(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("receipt", errors[0])
         self.assertIsNone(host.spool.closure_last(operation_id(key)))
+
+
+class IncidentFlushTest(unittest.TestCase):
+    INCIDENT = {"kind": "transport-unavailable", "episodeId": "session-closed-1",
+                "evidenceRef": "artifact:closed"}
+    EXPECTED_KEY = "host:1:transport-unavailable:session-closed-1"
+    EXPECTED_DIGEST = hashlib.sha256(
+        b'{"episodeId":"session-closed-1","evidenceRef":"artifact:closed",'
+        b'"kind":"transport-unavailable"}').hexdigest()
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def seed(self, task_id, instance_id, *, adapter_id="codex", generation=1):
+        workspace = self.root / f"workspace-{instance_id}"
+        workspace.mkdir()
+        brief = workspace / "brief.txt"
+        brief.write_text("incident seed")
+        host = Host("host-one", self.root / "host")
+        key = OperationKey("host-one", task_id, generation, instance_id)
+        operation = AuthorizedOperation(
+            key=key, producer_id="codex", capability="incident-secret",
+            session=f"session-{instance_id}", workspace_ref=str(workspace), brief_ref=str(brief),
+            brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
+            input_revision={"kind": "code", "repository": "repo", "sha": "c" * 40},
+            result_contract="review.v1", claim_id=f"claim-{instance_id}", adapter_id=adapter_id)
+        host.apply(key, operation, lambda *_: None,
+                   lambda a: {"state": "host-admitted", "claimId": a["claimId"],
+                              "hostId": a["hostId"], "instanceId": a["instanceId"],
+                              "generation": a["generation"]})
+        return host, key
+
+    def incident_row(self, host, incident_key):
+        with host.spool.connection() as db:
+            row = db.execute("SELECT * FROM incidents WHERE incident_key=?",
+                             (incident_key,)).fetchone()
+        return dict(row) if row else None
+
+    def test_record_incident_twice_keeps_one_row(self):
+        host, key = self.seed("task-twice", "instance-twice")
+        host.record_incident("host-one", key, self.INCIDENT)
+        reopened = Host("host-one", self.root / "host")
+        reopened.record_incident("host-one", key, self.INCIDENT)
+        with reopened.spool.connection() as db:
+            count = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+        self.assertEqual(count, 1)
+        row = self.incident_row(reopened, self.EXPECTED_KEY)
+        self.assertEqual(row["status"], "pending")
+        self.assertEqual(row["incident_key"], self.EXPECTED_KEY)
+        self.assertEqual(row["incident_digest"], self.EXPECTED_DIGEST)
+        with self.assertRaises(ValueError):
+            reopened.record_incident("host-one", key,
+                                     {**self.INCIDENT, "evidenceRef": "artifact:recaptured"})
+        self.assertEqual(self.incident_row(reopened, self.EXPECTED_KEY)["incident_digest"],
+                         self.EXPECTED_DIGEST)
+
+    def test_incident_identity_keys_per_kind(self):
+        cases = [
+            ("permission-required",
+             {"kind": "permission-required", "promptIdentity": "prompt-1",
+              "evidenceRef": "artifact:dialog"},
+             "host:1:permission-required:prompt-1"),
+            ("deadline-missed",
+             {"kind": "deadline-missed", "episodeId": "late-1", "evidenceRef": "artifact:late"},
+             "host:1:deadline-missed:late-1"),
+            ("transport-unavailable", self.INCIDENT, self.EXPECTED_KEY),
+            ("invalid-result",
+             {"kind": "invalid-result", "episodeId": "bad-1", "evidenceRef": "artifact:bad"},
+             "host:1:invalid-result:bad-1"),
+        ]
+        for kind, incident, expected in cases:
+            with self.subTest(kind):
+                self.assertEqual(incident_identity(1, incident)[0], expected)
+
+    def test_record_incident_rejects_invalid_input(self):
+        host, key = self.seed("task-main", "instance-main")
+        _, zero_key = self.seed("task-zero", "instance-zero", generation=0)
+        _, bare_key = self.seed("task-bare", "instance-bare", adapter_id="")
+        ghost_key = OperationKey("host-one", "task-ghost", 1, "instance-ghost")
+        bad_incidents = [
+            ("extra key", {"kind": "transport-unavailable", "episodeId": "e-1",
+                           "evidenceRef": "artifact:one", "extra": "nope"}),
+            ("missing evidenceRef", {"kind": "transport-unavailable", "episodeId": "e-1"}),
+            ("unknown kind", {"kind": "recovery-transport-failure", "episodeId": "e-1",
+                              "evidenceRef": "artifact:one"}),
+            ("episodeId too long", {"kind": "transport-unavailable", "episodeId": "e" * 257,
+                                    "evidenceRef": "artifact:one"}),
+            ("episodeId 258 utf16 units", {"kind": "transport-unavailable",
+                                           "episodeId": "\U0001f4c9" * 129,
+                                           "evidenceRef": "artifact:one"}),
+            ("episodeId not text", {"kind": "transport-unavailable", "episodeId": 7,
+                                    "evidenceRef": "artifact:one"}),
+            ("not an object", ["transport-unavailable"]),
+            ("permission without promptIdentity", {"kind": "permission-required",
+                                                   "evidenceRef": "artifact:dialog"}),
+        ]
+        for name, incident in bad_incidents:
+            with self.subTest(name):
+                with self.assertRaises(ValueError):
+                    host.record_incident("host-one", key, incident)
+        for name, args in [
+                ("generation 0 operation", ("host-one", zero_key, self.INCIDENT)),
+                ("operation without adapterId", ("host-one", bare_key, self.INCIDENT)),
+                ("unknown operation", ("host-one", ghost_key, self.INCIDENT)),
+                ("foreign host", ("host-two", key, self.INCIDENT))]:
+            with self.subTest(name):
+                with self.assertRaises(ValueError):
+                    host.record_incident(*args)
+        with host.spool.connection() as db:
+            count = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+        self.assertEqual(count, 0)
+
+    def test_flush_incidents_sends_once(self):
+        host, key = self.seed("task-send", "instance-send")
+        host.record_incident("host-one", key, self.INCIDENT)
+        calls = []
+
+        def send(assignment, incident):
+            calls.append({"assignment": assignment, "incident": incident})
+            return {"taskId": assignment["taskId"], "generation": assignment["generation"],
+                    "incidentKey": self.EXPECTED_KEY, "incidentDigest": self.EXPECTED_DIGEST}
+
+        self.assertEqual(host.flush_incidents("host-one", send), (1, []))
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["incident"], self.INCIDENT)
+        assignment = calls[0]["assignment"]
+        self.assertEqual((assignment["hostId"], assignment["taskId"], assignment["generation"],
+                          assignment["instanceId"], assignment["adapterId"]),
+                         ("host-one", "task-send", 1, "instance-send", "codex"))
+        row = self.incident_row(host, self.EXPECTED_KEY)
+        self.assertEqual(row["status"], "sent")
+        self.assertEqual(json.loads(row["receipt_json"]),
+                         {"taskId": "task-send", "generation": 1,
+                          "incidentKey": self.EXPECTED_KEY,
+                          "incidentDigest": self.EXPECTED_DIGEST})
+        self.assertEqual(host.flush_incidents("host-one", send), (0, []))
+        host.record_incident("host-one", key, self.INCIDENT)
+        self.assertEqual(host.flush_incidents("host-one", send), (0, []))
+        self.assertEqual(len(calls), 1)
+
+    def test_flush_incidents_retries_after_lost_response(self):
+        host, key = self.seed("task-lost", "instance-lost")
+        host.record_incident("host-one", key, self.INCIDENT)
+        calls = []
+
+        def send(assignment, incident):
+            calls.append(incident)
+            if len(calls) == 1:
+                raise TimeoutError("runtime stored the receipt but its ACK was lost")
+            return {"taskId": assignment["taskId"], "generation": assignment["generation"],
+                    "incidentKey": self.EXPECTED_KEY, "incidentDigest": self.EXPECTED_DIGEST}
+
+        sent, errors = host.flush_incidents("host-one", send)
+        self.assertEqual((sent, len(errors)), (0, 1))
+        self.assertEqual(self.incident_row(host, self.EXPECTED_KEY)["status"], "pending")
+        self.assertEqual(host.flush_incidents("host-one", send), (1, []))
+        self.assertEqual(calls, [self.INCIDENT, self.INCIDENT])
+        self.assertEqual(host.flush_incidents("host-one", send), (0, []))
+        self.assertEqual(len(calls), 2)
+
+    def test_flush_incidents_marks_conflict_rejected_without_retry(self):
+        host, key = self.seed("task-reject", "instance-reject")
+        host.record_incident("host-one", key, self.INCIDENT)
+        calls = []
+
+        def rejecting_send(assignment, incident):
+            calls.append(incident)
+            raise IncidentRejected("Managed task incident conflict")
+
+        sent, errors = host.flush_incidents("host-one", rejecting_send)
+        self.assertEqual((sent, len(errors)), (0, 1))
+        self.assertIn("Managed task incident conflict", errors[0])
+        row = self.incident_row(host, self.EXPECTED_KEY)
+        self.assertEqual(row["status"], "rejected")
+        self.assertEqual(row["error"], "Managed task incident conflict")
+        host.flush_incidents("host-one", rejecting_send)
+        self.assertEqual(len(calls), 1)
+
+        late = {"kind": "deadline-missed", "episodeId": "late-1", "evidenceRef": "artifact:late"}
+        host.record_incident("host-one", key, late)
+        failures = []
+
+        def failing_send(assignment, incident):
+            failures.append(incident)
+            raise RuntimeError("gateway unreachable")
+
+        sent, errors = host.flush_incidents("host-one", failing_send)
+        self.assertEqual((sent, len(errors)), (0, 1))
+        self.assertEqual(self.incident_row(host, "host:1:deadline-missed:late-1")["status"],
+                         "pending")
+        host.flush_incidents("host-one", failing_send)
+        self.assertEqual(failures, [late, late])
+        self.assertEqual(self.incident_row(host, self.EXPECTED_KEY)["status"], "rejected")
 
 
 class ClientCloseTest(unittest.TestCase):

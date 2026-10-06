@@ -20,6 +20,39 @@ def closure_digest(evidence_json: str) -> str:
     return hashlib.sha256(canonical(json.loads(evidence_json)).encode()).hexdigest()
 
 
+HOST_INCIDENT_KINDS = ("permission-required", "deadline-missed", "transport-unavailable",
+                       "invalid-result")
+
+
+def incident_identity(generation: int, incident: object) -> tuple[str, str]:
+    if not isinstance(incident, dict):
+        raise ValueError("host incident must be an object")
+    kind = incident.get("kind")
+    if kind not in HOST_INCIDENT_KINDS:
+        raise ValueError("unknown host incident kind")
+    identity_field = "promptIdentity" if kind == "permission-required" else "episodeId"
+    if set(incident) != {"kind", identity_field, "evidenceRef"}:
+        raise ValueError("host incident fields do not match its kind")
+    for field in (identity_field, "evidenceRef"):
+        if not isinstance(incident[field], str):
+            raise ValueError(f"host incident {field} must be text")
+    episode = incident[identity_field]
+
+    def utf16_length(text: str) -> int:
+        # zod .max/.min count string length in UTF-16 units, not code points.
+        return len(text.encode("utf-16-le")) // 2
+
+    if kind == "permission-required":
+        if utf16_length(episode) < 1:
+            raise ValueError("host incident promptIdentity must not be empty")
+    elif not 1 <= utf16_length(episode) <= 256:
+        raise ValueError("host incident episodeId must be 1..256 utf16 units")
+    if utf16_length(incident["evidenceRef"]) < 1:
+        raise ValueError("host incident evidenceRef must not be empty")
+    return (f"host:{generation}:{kind}:{episode}",
+            hashlib.sha256(canonical(incident).encode()).hexdigest())
+
+
 def atomic_json(path: Path, data: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix=".pending-", dir=path.parent)
@@ -81,6 +114,17 @@ class Spool:
                 );
                 CREATE INDEX IF NOT EXISTS closure_sends_task_generation
                     ON closure_sends(task_id, generation);
+                CREATE TABLE IF NOT EXISTS incidents (
+                    task_id TEXT NOT NULL,
+                    incident_key TEXT NOT NULL,
+                    operation_id TEXT NOT NULL,
+                    incident_json TEXT NOT NULL,
+                    incident_digest TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    receipt_json TEXT,
+                    error TEXT,
+                    PRIMARY KEY (task_id, incident_key)
+                );
             """)
             db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT value FROM metadata WHERE key='host_id'").fetchone()
@@ -203,6 +247,45 @@ class Spool:
                 return
             db.execute("UPDATE operations SET receipt_json=?,status='acknowledged' WHERE operation_id=?",
                        (canonical(receipt), operation_id))
+
+    def record_incident(self, task_id: str, incident_key: str, operation_id: str,
+                        incident_json: str, incident_digest: str) -> dict:
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT * FROM incidents WHERE task_id=? AND incident_key=?",
+                             (task_id, incident_key)).fetchone()
+            if row:
+                if row["incident_digest"] != incident_digest:
+                    raise ValueError("incident conflicts with different evidence")
+                return dict(row)
+            db.execute("INSERT INTO incidents VALUES (?,?,?,?,?,'pending',NULL,NULL)",
+                       (task_id, incident_key, operation_id, incident_json, incident_digest))
+            return dict(db.execute("SELECT * FROM incidents WHERE task_id=? AND incident_key=?",
+                                   (task_id, incident_key)).fetchone())
+
+    def pending_incidents(self) -> list[dict]:
+        with self.connection() as db:
+            rows = db.execute("SELECT * FROM incidents WHERE status='pending' "
+                              "ORDER BY task_id, incident_key").fetchall()
+            return [dict(row) for row in rows]
+
+    def incident_sent(self, task_id: str, incident_key: str, receipt: dict) -> None:
+        with self.connection() as db:
+            db.execute("UPDATE incidents SET status='sent', receipt_json=?, error=NULL "
+                       "WHERE task_id=? AND incident_key=? AND status='pending'",
+                       (canonical(receipt), task_id, incident_key))
+
+    def incident_failed(self, task_id: str, incident_key: str, error: str,
+                        rejected: bool = False) -> None:
+        with self.connection() as db:
+            if rejected:
+                db.execute("UPDATE incidents SET status='rejected', error=? "
+                           "WHERE task_id=? AND incident_key=? AND status='pending'",
+                           (error[:512], task_id, incident_key))
+            else:
+                db.execute("UPDATE incidents SET error=? "
+                           "WHERE task_id=? AND incident_key=? AND status='pending'",
+                           (error[:512], task_id, incident_key))
 
     def closure_rows(self) -> list[dict]:
         # Only ResourceManager builds the resources table; without one there

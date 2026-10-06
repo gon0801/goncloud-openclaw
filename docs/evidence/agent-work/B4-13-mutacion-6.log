@@ -1,0 +1,17 @@
+F.....
+======================================================================
+FAIL: test_flush_incidents_marks_conflict_rejected_without_retry (__main__.IncidentFlushTest.test_flush_incidents_marks_conflict_rejected_without_retry)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2447, in test_flush_incidents_marks_conflict_rejected_without_retry
+    self.assertEqual(row["status"], "rejected")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'pending' != 'rejected'
+- pending
++ rejected
+
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.029s
+
+FAILED (failures=1)
