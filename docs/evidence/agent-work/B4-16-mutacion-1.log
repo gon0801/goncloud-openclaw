@@ -1,0 +1,24 @@
+/Users/dn/dev/wt/encargos-b4/scripts/agent-work/resources.py:46: FutureWarning: Possible nested set at position 248
+  return re.compile(match.group(1), re.IGNORECASE)
+...........F........
+======================================================================
+FAIL: test_lib_sh_pattern_compiles_cleanly_and_matches_the_measured_dialogs (__main__.SilentPromptTest.test_lib_sh_pattern_compiles_cleanly_and_matches_the_measured_dialogs)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3115, in test_lib_sh_pattern_compiles_cleanly_and_matches_the_measured_dialogs
+    self.assertEqual([str(warning.message) for warning in caught], [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['Possible nested set at position 248'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'Possible nested set at position 248'
+
+- ['Possible nested set at position 248']
++ []
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.850s
+
+FAILED (failures=1)
+rc=1

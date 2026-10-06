@@ -464,7 +464,7 @@ def main(argv=None):
     if args.claim_once or any(cli_fields):
         if not all(cli_fields) or not args.host_state_dir:
             parser.error("CLI claim requires adapter, stable instance, session, workspace, socket and host state")
-        from resources import ResourceManager, TmuxBackend
+        from resources import ResourceManager, TmuxBackend, load_approval_pattern
         host = Host(args.host_id, args.host_state_dir)
         backend = TmuxBackend(args.tmux_bin, args.cli_tmux_socket)
         manager = ResourceManager(host.spool, args.host_id, backend)
@@ -480,9 +480,12 @@ def main(argv=None):
 
         if args.cli_deadline_seconds is not None and not args.cli_deadline_seconds > 0:
             parser.error("--cli-deadline-seconds must be positive")
+
+        approval = load_approval_pattern(Path(__file__).resolve().parents[1] / "mac/corrida/lib.sh")
         cli_watch = lambda: host.detect_silent_failures(
             args.host_id, manager.session_gone, now=time.time(),
-            deadline_seconds=args.cli_deadline_seconds)
+            deadline_seconds=args.cli_deadline_seconds,
+            prompt_identity=lambda key: manager.prompt_identity(key, approval))
     if args.claim_once:
         if args.watch or args.flush_results:
             parser.error("--claim-once excludes --watch and --flush-results")

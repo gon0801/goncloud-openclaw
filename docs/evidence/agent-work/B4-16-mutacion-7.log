@@ -1,0 +1,40 @@
+..................F.
+======================================================================
+FAIL: test_unreadable_unbound_or_released_panes_are_neither_dialog_nor_clean (__main__.SilentPromptTest.test_unreadable_unbound_or_released_panes_are_neither_dialog_nor_clean)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3328, in test_unreadable_unbound_or_released_panes_are_neither_dialog_nor_clean
+    self.assertEqual(self.step(manager, OSError("tmux socket busy")), [])
+                     ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3105, in step
+    return self.watch(Host("host-one", self.root / "host"), manager, now=now)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3099, in watch
+    return host.detect_silent_failures("host-one", manager.session_gone, now=now, deadline_seconds=deadline,
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                       prompt_identity=read)
+                                       ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 309, in detect_silent_failures
+    observed = prompt_identity(key)
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3098, in read
+    return manager.prompt_identity(key, load_approval_pattern(self.LIB_SH))
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/resources.py", line 295, in prompt_identity
+    screen = self.backend.capture(json.loads(row["identity_json"]))
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3057, in capture
+    raise screen
+OSError: tmux socket busy
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3330, in test_unreadable_unbound_or_released_panes_are_neither_dialog_nor_clean
+    self.fail(f"an unreadable pane escaped the pass: {exc}")
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: an unreadable pane escaped the pass: tmux socket busy
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.757s
+
+FAILED (failures=1)
+rc=1

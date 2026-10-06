@@ -1,0 +1,22 @@
+..................F.
+======================================================================
+FAIL: test_unreadable_unbound_or_released_panes_are_neither_dialog_nor_clean (__main__.SilentPromptTest.test_unreadable_unbound_or_released_panes_are_neither_dialog_nor_clean)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3336, in test_unreadable_unbound_or_released_panes_are_neither_dialog_nor_clean
+    self.assertEqual(self.step(manager, self.BLOCKED), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:permission-required:prompt-a676f3[57 chars]1-2'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-2'
+
+- ['host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-2']
++ []
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.821s
+
+FAILED (failures=1)
+rc=1

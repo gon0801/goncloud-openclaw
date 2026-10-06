@@ -19,6 +19,33 @@ MAX_ARTIFACT_BYTES = 10 * 1024 * 1024
 RESULT_SCHEMA = "agent-work.result.v1"
 SILENT_EPISODES = {"invalid-result": "invalid-result", "transport-unavailable": "session-closed",
                    "deadline-missed": "deadline"}
+DIALOG_PASSES = 2
+
+
+def next_dialog_state(state: dict, observed: str) -> tuple[dict, bool]:
+    dialog = dict(state)
+    if observed == "":
+        dialog["candidate"] = None
+        dialog["seen"] = 0
+        dialog["clean"] = min(dialog["clean"] + 1, DIALOG_PASSES)
+        if dialog["clean"] >= DIALOG_PASSES:
+            dialog["open_identity"] = None
+        return dialog, False
+    if observed == state["open_identity"]:
+        dialog["clean"] = 0
+        dialog["candidate"] = None
+        dialog["seen"] = 0
+        return dialog, False
+    dialog["clean"] = 0
+    dialog["seen"] = dialog["seen"] + 1 if observed == state["candidate"] else 1
+    if dialog["seen"] < DIALOG_PASSES:
+        dialog["candidate"] = observed
+        return dialog, False
+    dialog["open_identity"] = observed
+    dialog["episode"] = dialog["episode"] + 1
+    dialog["candidate"] = None
+    dialog["seen"] = 0
+    return dialog, True
 
 
 def under(path: str, root: str) -> Path:
@@ -246,7 +273,9 @@ class Host:
         return self.report(host_id, json.loads(result_ref.read_text()))
 
     def detect_silent_failures(self, host_id: str, session_gone: Callable[[OperationKey], bool], *,
-                               now: float, deadline_seconds: float | None = None) -> list[str]:
+                               now: float, deadline_seconds: float | None = None,
+                               prompt_identity: Callable[[OperationKey], str | None] | None = None
+                               ) -> list[str]:
         self._host(host_id)
         if deadline_seconds is not None and (isinstance(deadline_seconds, bool)
                                              or not isinstance(deadline_seconds, (int, float))
@@ -271,19 +300,40 @@ class Host:
                 continue
             if kind is None and session_gone(key):
                 kind = "transport-unavailable"
-            candidates = [kind] if kind else []
-            if not candidates and deadline_seconds is not None:
-                delivered = self.spool.delivered_at(op_id)
-                if delivered is not None and now - delivered >= deadline_seconds:
-                    candidates = ["deadline-missed"]
-            for kind in candidates:
-                incident = {"kind": kind, "episodeId": SILENT_EPISODES[kind],
-                            "evidenceRef": f"host-operation:{op_id}"}
+            incidents = []
+            dialog = None
+            before = None
+            dialog_recorded = False
+            if kind is None:
+                if prompt_identity is not None:
+                    observed = prompt_identity(key)
+                    if observed is not None:
+                        before = self.spool.dialog_state(op_id)
+                        dialog, opened = next_dialog_state(before, observed)
+                        if opened:
+                            incidents.append({"kind": "permission-required",
+                                              "promptIdentity": f"{dialog['open_identity']}-{dialog['episode']}",
+                                              "evidenceRef": f"host-operation:{op_id}"})
+                if deadline_seconds is not None:
+                    delivered = self.spool.delivered_at(op_id)
+                    if delivered is not None and now - delivered >= deadline_seconds:
+                        incidents.append({"kind": "deadline-missed", "episodeId": SILENT_EPISODES["deadline-missed"],
+                                          "evidenceRef": f"host-operation:{op_id}"})
+            else:
+                incidents.append({"kind": kind, "episodeId": SILENT_EPISODES[kind],
+                                  "evidenceRef": f"host-operation:{op_id}"})
+            for incident in incidents:
                 incident_key = incident_identity(key.generation, incident)[0]
                 if self.spool.has_incident(key.task_id, incident_key):
                     continue
-                self.record_incident(host_id, key, incident)
+                if incident["kind"] == "permission-required":
+                    self.record_incident(host_id, key, incident, dialog_state=dialog)
+                    dialog_recorded = True
+                else:
+                    self.record_incident(host_id, key, incident)
                 detected.append(incident_key)
+            if dialog is not None and dialog != before and not dialog_recorded:
+                self.spool.save_dialog_state(op_id, dialog)
         return detected
 
     def pending(self, host_id: str) -> list[dict]:
@@ -365,7 +415,8 @@ class Host:
                 errors.append(f"{op_id}: {exc}")
         return closed, errors
 
-    def record_incident(self, host_id: str, key: OperationKey, incident: dict) -> dict:
+    def record_incident(self, host_id: str, key: OperationKey, incident: dict, *,
+                        dialog_state: dict | None = None) -> dict:
         self._host(host_id)
         self._host(key.host_id)
         current = self.spool.get(operation_id(key))
@@ -379,7 +430,7 @@ class Host:
             raise ValueError("operation cannot carry host incidents")
         incident_key, incident_digest = incident_identity(generation, incident)
         return self.spool.record_incident(key.task_id, incident_key, operation_id(key),
-                                          canonical(incident), incident_digest)
+                                          canonical(incident), incident_digest, dialog_state=dialog_state)
 
     def flush_incidents(self, host_id: str, send: Callable[[dict, dict], dict]) -> tuple[int, list[str]]:
         """Send every pending incident; each one fails alone and rejections never retry."""

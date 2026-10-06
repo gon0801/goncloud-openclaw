@@ -1,0 +1,29 @@
+.........F..........
+======================================================================
+FAIL: test_dialog_and_deadline_are_two_incidents (__main__.SilentPromptTest.test_dialog_and_deadline_are_two_incidents)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3306, in test_dialog_and_deadline_are_two_incidents
+    self.assertEqual(self.watch(host, manager, now=1060.0, deadline=60),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [self.PROCEED_1, "host:1:deadline-missed:deadline"])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['hos[71 chars]d290da292dc115ae5ac52ff3-1'] != ['hos[71 chars]d290da292dc115ae5ac52ff3-1', 'host:1:deadline-missed:deadline']
+
+Second list contains 1 additional elements.
+First extra element 1:
+'host:1:deadline-missed:deadline'
+
+- ['host:1:permission-required:prompt-7d94515e70c2994a231d611d9a75feb4b34c8c89d290da292dc115ae5ac52ff3-1']
+?                                                                                                        ^
+
++ ['host:1:permission-required:prompt-7d94515e70c2994a231d611d9a75feb4b34c8c89d290da292dc115ae5ac52ff3-1',
+?                                                                                                        ^
+
++  'host:1:deadline-missed:deadline']
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.761s
+
+FAILED (failures=1)
+rc=1

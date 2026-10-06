@@ -10,6 +10,8 @@ import io
 import os
 from pathlib import Path
 import queue
+import re
+import secrets
 import signal
 import shutil
 import sqlite3
@@ -20,6 +22,7 @@ import threading
 import time
 import unittest
 from unittest import mock
+import warnings
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -30,7 +33,8 @@ from host import Host  # noqa: E402
 import native_gateway  # noqa: E402
 from native_gateway import GatewayProjectionClient, main as gateway_main, transfer_gateway_projections  # noqa: E402
 from progress_bridge import event_id, projection_digest, transfer_host_projection, transfer_projection  # noqa: E402
-from resources import ResourceManager  # noqa: E402
+from resources import (ResourceManager, TmuxBackend, approval_prompt_identity, approval_tail,  # noqa: E402
+                       load_approval_pattern)
 from spool import atomic_json, canonical, incident_identity  # noqa: E402
 from corrida_worker import task_handoffs  # noqa: E402
 from corrida_worker.reconcile import reconcile  # noqa: E402
@@ -3034,6 +3038,396 @@ class SilentFailureTest(unittest.TestCase):
                 gateway_main(args + cli + ["--cli-deadline-seconds", "0"])
         never.assert_not_called()
 
+
+class PromptBackend(ClosureBackend):
+    """ClosureBackend whose panes show a scripted screen; liveness of capture is TmuxBackend's job."""
+
+    def __init__(self):
+        super().__init__()
+        self.screens = {}
+        self.sessions = {}
+
+    def launch(self, session, nonce, pid):
+        super().launch(session, nonce, pid)
+        self.sessions[f"%{pid}"] = session
+
+    def capture(self, identity):
+        screen = self.screens.get(self.sessions.get(identity["paneId"]))
+        if isinstance(screen, Exception):
+            raise screen
+        return screen
+
+
+class SilentPromptTest(unittest.TestCase):
+    LIB_SH = ROOT / "scripts" / "mac" / "corrida" / "lib.sh"
+    WATCHER = ROOT / "scripts" / "mac" / "tmux-activity-watch.sh"
+    # Measured zcode dialog (test-tmux-activity-watch.sh 2f) with a braille spinner and a clock on
+    # the waiting line, and an ASCII spinner with a token counter on the last line.
+    BLOCKED = ("Permission - Bash\nHigh risk tools require explicit approval\n sed -n 1,2p tipos.d.ts\n"
+               "> Allow once\n  Always allow in this project\n  Deny\n"
+               "⠋ Waiting for approval 0:07 (7s)\n girando |  ↑ 1.2k tokens\n")
+    # Measured claude dialog (test-tmux-activity-watch.sh 2g).
+    PROCEED = (" Detected a destructive delete command:\n rm -rf /tmp/e1verif /tmp/mig1.log\n"
+               " Run it? [plugin:claude-code-harness]\n Do you want to proceed?\n   1. Yes\n   2. No\n"
+               " Esc to cancel  Tab to amend\n")
+    IDLE = "trabajo normal\n esc to interrupt\n"
+    BLOCKED_ID = "prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1"
+    PROCEED_ID = "prompt-7d94515e70c2994a231d611d9a75feb4b34c8c89d290da292dc115ae5ac52ff3"
+    ONCE_ID = "prompt-168511d24d9ee03122b3200f929be11eaaedad45cb0ecb20a95f549b3e3f4d0f"
+    BLOCKED_1 = "host:1:permission-required:" + BLOCKED_ID + "-1"
+    BLOCKED_2 = "host:1:permission-required:" + BLOCKED_ID + "-2"
+    BLOCKED_3 = "host:1:permission-required:" + BLOCKED_ID + "-3"
+    PROCEED_1 = "host:1:permission-required:" + PROCEED_ID + "-1"
+    PROCEED_2 = "host:1:permission-required:" + PROCEED_ID + "-2"
+    OP_ID = SilentFailureTest.OP_ID
+
+    seed = SilentFailureTest.seed
+    close_session = SilentFailureTest.close_session
+    rows = SilentFailureTest.rows
+    write_result = SilentFailureTest.write_result
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.backend = PromptBackend()
+        self.next_pid = 900
+
+    def watch(self, host, manager, *, now, deadline=None):
+        def read(key):
+            return manager.prompt_identity(key, load_approval_pattern(self.LIB_SH))
+        return host.detect_silent_failures("host-one", manager.session_gone, now=now, deadline_seconds=deadline,
+                                           prompt_identity=read)
+
+    def step(self, manager, screen, *, now=1.0):
+        """One pass with the default task's pane showing screen, from a freshly opened Host."""
+        self.backend.screens["session-instance-silent"] = screen
+        return self.watch(Host("host-one", self.root / "host"), manager, now=now)
+
+    def keys(self, host):
+        return [row[0] for row in self.rows(host)]
+
+    def test_lib_sh_pattern_compiles_cleanly_and_matches_the_measured_dialogs(self):
+        re.purge()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            pattern = load_approval_pattern(self.LIB_SH)
+        self.assertEqual([str(warning.message) for warning in caught], [])
+        self.assertIn("APROBACION_RE='" + pattern.pattern.replace("[\\[", "[[") + "'\n", self.LIB_SH.read_text())
+        measured = ["Do you want to proceed?", "> Allow once", "Would you like to allow this network access?",
+                    " Run this command?", "  $ echo hola > /tmp/pp-cursor-agent.txt Waiting for approval...",
+                    "  Do you trust the contents of this directory?", "  Trust this folder?",
+                    "  Press enter to confirm or esc to go back", "  navigate  Enter select  Esc exit",
+                    "  Use arrow keys to navigate, Enter to select, or press the key shown",
+                    " Overwrite existing config? [y/N]", " Continue? (yes/no)"]
+        for line in measured:
+            with self.subTest(dialog=line):
+                self.assertIsNotNone(pattern.search(line))
+        idle = [" ? for shortcuts", " esc to interrupt",
+                " yolo  K3-256k thinking: high   @: mention files | ! to run a shell command",
+                "  Auto mode (shift + tab to cycle)", "  tab agents  ctrl+p commands",
+                "  Shift+Tab:mode  |  Ctrl+x:shortcuts", " /help commands  /status details",
+                " Voice input ( + v to start)", " Ask Codex to do anything",
+                " Wait for the active turn or press Ctrl+C before running a slash command.",
+                "Continue y/n", "y/n"]
+        for line in idle:
+            with self.subTest(idle=line):
+                self.assertIsNone(pattern.search(line))
+        missing = self.root / "lib.sh"
+        missing.write_text("APPROVAL_RE='allow once'\n")
+        with self.assertRaisesRegex(ValueError, "APROBACION_RE"):
+            load_approval_pattern(missing)
+
+    def test_prompt_identity_ignores_clocks_spinners_tokens_and_the_cursor(self):
+        pattern = load_approval_pattern(self.LIB_SH)
+        self.assertEqual(approval_prompt_identity(self.BLOCKED, pattern), self.BLOCKED_ID)
+        repaints = {
+            "clock on the dialog line": self.BLOCKED.replace("0:07 (7s)", "1:02:03 (12.5s)"),
+            "braille spinner on the dialog line": self.BLOCKED.replace("⠋", "⠙"),
+            "ascii spinner and token counter": self.BLOCKED.replace("girando |  ↑ 1.2k", "girando /  ↑ 3.4k"),
+            "cursor moved": self.BLOCKED.replace("> Allow once\n  Always", "  Allow once\n> Always"),
+        }
+        for name, screen in repaints.items():
+            with self.subTest(name):
+                self.assertEqual(approval_prompt_identity(screen, pattern), self.BLOCKED_ID)
+        self.assertEqual(approval_prompt_identity(self.PROCEED, pattern), self.PROCEED_ID)
+        work = "".join(f"linea de trabajo {n}\n" for n in range(14))
+        self.assertEqual(approval_prompt_identity("> Allow once\n" + work, pattern), self.ONCE_ID)
+        self.assertEqual(approval_prompt_identity("> Allow once\n" + work.replace("\n", "\n\n  \n"), pattern),
+                         self.ONCE_ID)
+        self.assertIsNone(approval_prompt_identity("> Allow once\n" + work + "linea de trabajo 14\n", pattern))
+        self.assertIsNone(approval_prompt_identity(self.IDLE, pattern))
+
+    def test_tail_is_the_watcher_tail(self):
+        source = self.WATCHER.read_text()
+        function = source[source.index("approval_tail() {"):]
+        function = function[:function.index("\n}\n") + 3]
+        lines = re.search(r"^APPROVAL_TAIL_LINES=\$\{APPROVAL_TAIL_LINES:-(\d+)\}$", source, re.M).group(1)
+        screens = [self.BLOCKED, self.PROCEED,
+                   "> Allow once\n" + "".join(f"trabajo {n} 3s\n\n" for n in range(20)),
+                   "a b\n \n\t\n \r\nreloj 12:34:56 1.5h 0.25s 7m\n… café ⠋\n", ""]
+        for screen in screens:
+            with self.subTest(screen=screen[:24]):
+                watcher = subprocess.run(["bash", "-c", function + "approval_tail"], input=screen.encode(),
+                                         capture_output=True, check=True,
+                                         env={**os.environ, "LC_ALL": "C", "APPROVAL_TAIL_LINES": lines})
+                self.assertEqual(approval_tail(screen), watcher.stdout.decode("ascii").splitlines())
+
+    @unittest.skipUnless(shutil.which("tmux"), "tmux not installed")
+    def test_capture_reads_only_the_recorded_pane_with_real_tmux(self):
+        tmux = shutil.which("tmux")
+        socket = f"agent-work-prompt-{os.getpid()}-{secrets.token_hex(4)}"
+        socket_file = Path(os.environ.get("TMUX_TMPDIR") or "/tmp") / f"tmux-{os.getuid()}" / socket
+
+        def tmux_cmd(*args):
+            return subprocess.run([tmux, "-f", "/dev/null", "-L", socket, *args], capture_output=True, text=True)
+
+        self.addCleanup(lambda: socket_file.unlink() if socket_file.exists() else None)
+        self.addCleanup(tmux_cmd, "kill-server")
+
+        def start(session, text="Permission - Bash\\n> Allow once\\n  Deny\\n", painted="Allow once"):
+            self.assertEqual(tmux_cmd("new-session", "-d", "-s", session, "-x", "80", "-y", "20", "/bin/sh", "-c",
+                                      f"printf '{text}'; exec /bin/sleep 30").returncode, 0)
+            for _ in range(100):
+                if painted in tmux_cmd("capture-pane", "-p", "-t", f"={session}:").stdout:
+                    return
+                time.sleep(0.05)
+            self.fail(f"{session} never painted {painted}")
+
+        start("worker")
+        start("keeper")
+        start("idle", "trabajo normal\\n", "trabajo normal")
+        backend = TmuxBackend(tmux, socket)
+        host = Host("host-one", self.root / "host")
+        manager = ResourceManager(host.spool, "host-one", backend, capacity=2)
+        key = OperationKey("host-one", "task-tmux", 1, "instance-tmux")
+        idle = OperationKey("host-one", "task-idle", 1, "instance-idle")
+        for resource, session in ((key, "worker"), (idle, "idle")):
+            held = manager.reserve(resource, session, "UserAdopted")
+            manager.begin_launch(resource)
+            backend.mark(session, held.nonce)
+            self.assertEqual(manager.attach(resource).state, "Running")
+        identity = backend.observe("worker")
+        self.assertEqual(backend.capture(identity).split("\n")[:3], ["Permission - Bash", "> Allow once", "  Deny"])
+        pattern = load_approval_pattern(self.LIB_SH)
+        self.assertEqual(manager.prompt_identity(key, pattern), self.ONCE_ID)
+        self.assertEqual(manager.prompt_identity(idle, pattern), "")
+        self.assertEqual(tmux_cmd("kill-session", "-t", "=worker").returncode, 0)
+        self.assertIsNone(backend.capture(identity))
+        self.assertIsNone(manager.prompt_identity(key, pattern))
+        start("worker")
+        self.assertIsNone(backend.capture(identity))
+        self.assertIsNone(manager.prompt_identity(key, pattern))
+        self.assertEqual(tmux_cmd("kill-server").returncode, 0)
+        start("worker")
+        self.assertEqual(tmux_cmd("display-message", "-p", "-t", "=worker:", "#{pane_id}").stdout.strip(),
+                         identity["paneId"])
+        self.assertIsNone(backend.capture(identity))
+        self.assertIsNone(manager.prompt_identity(key, pattern))
+
+    def test_one_dialog_is_one_incident_across_100_repainted_passes(self):
+        host, manager, key, _ = self.seed()
+        self.assertEqual(self.step(manager, self.BLOCKED), [])
+        self.assertEqual(self.step(manager, self.BLOCKED), [self.BLOCKED_1])
+        for second in range(98):
+            repainted = self.BLOCKED.replace("girando |", "girando " + "|/-\\"[second % 4]).replace(
+                "0:07", f"0:{second % 60:02d}").replace("⠋", "⠙" if second % 2 else "⠋")
+            self.assertEqual(self.step(manager, repainted, now=2.0 + second), [])
+        self.assertEqual(self.rows(host), [(
+            self.BLOCKED_1, "pending",
+            '{"evidenceRef":"host-operation:8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571",'
+            '"kind":"permission-required",'
+            '"promptIdentity":"prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1"}')])
+
+    def test_the_same_dialog_after_two_clean_passes_is_a_new_episode_across_host_restarts(self):
+        host, manager, key, _ = self.seed()
+        passes = [(self.BLOCKED, []), (self.BLOCKED, [self.BLOCKED_1]), (self.IDLE, []), (self.IDLE, []),
+                  (self.BLOCKED, []), (self.BLOCKED, [self.BLOCKED_2]), (self.BLOCKED, [])]
+        for number, (screen, expected) in enumerate(passes):
+            self.assertEqual(self.step(manager, screen), expected, f"pass {number}")
+        self.assertEqual(self.keys(host), [self.BLOCKED_1, self.BLOCKED_2])
+        # The episode lives in the spool file, not in this process.
+        with contextlib.closing(sqlite3.connect(self.root / "host" / "host.sqlite")) as db:
+            self.assertEqual(db.execute("SELECT open_identity,episode,candidate,seen,clean FROM dialog_watch "
+                                        "WHERE operation_id=?", (self.OP_ID,)).fetchall(),
+                             [(self.BLOCKED_ID, 2, None, 0, 0)])
+
+    def test_one_clean_pass_does_not_close_the_episode(self):
+        host, manager, key, _ = self.seed()
+        passes = [(self.BLOCKED, []), (self.BLOCKED, [self.BLOCKED_1]), (self.IDLE, []),
+                  (self.BLOCKED, []), (self.BLOCKED, []), (self.IDLE, []), (self.BLOCKED, [])]
+        for number, (screen, expected) in enumerate(passes):
+            self.assertEqual(self.step(manager, screen), expected, f"pass {number}")
+        self.assertEqual(self.keys(host), [self.BLOCKED_1])
+
+    def test_a_dialog_seen_in_single_passes_never_counts(self):
+        host, manager, key, _ = self.seed()
+        for number, screen in enumerate([self.BLOCKED, self.IDLE, self.BLOCKED, self.IDLE, self.PROCEED,
+                                         self.IDLE, self.IDLE, self.BLOCKED, self.IDLE]):
+            self.assertEqual(self.step(manager, screen), [], f"pass {number}")
+        self.assertEqual(self.rows(host), [])
+
+    def test_a_yes_no_line_in_the_output_for_one_pass_raises_nothing(self):
+        host, manager, key, _ = self.seed()
+        output = "".join(f"npm warn deprecated paquete-{n}\n" for n in range(20))
+        self.assertEqual(self.step(manager, output + "Overwrite existing config? [y/N] y\n"), [])
+        self.assertEqual(self.step(manager, output + "Overwrite existing config? [y/N] y\n" + output), [])
+        self.assertEqual(self.step(manager, output + "listo\n"), [])
+        self.assertEqual(self.rows(host), [])
+
+    def test_a_different_dialog_without_a_clean_gap_is_another_episode(self):
+        host, manager, key, _ = self.seed()
+        passes = [(self.BLOCKED, []), (self.BLOCKED, [self.BLOCKED_1]), (self.IDLE, []), (self.PROCEED, []),
+                  (self.PROCEED, [self.PROCEED_2]), (self.BLOCKED, []), (self.PROCEED, []), (self.BLOCKED, []),
+                  (self.BLOCKED, [self.BLOCKED_3])]
+        for number, (screen, expected) in enumerate(passes):
+            self.assertEqual(self.step(manager, screen), expected, f"pass {number}")
+        self.assertEqual(self.keys(host), [self.PROCEED_2, self.BLOCKED_1, self.BLOCKED_3])
+
+    def test_a_crash_while_saving_the_dialog_neither_repeats_nor_skips_an_episode(self):
+        host, manager, key, _ = self.seed()
+        self.assertEqual(self.step(manager, self.BLOCKED), [])
+        with mock.patch("spool.Spool.save_dialog_state", side_effect=OSError("disk full")):
+            try:
+                self.step(manager, self.BLOCKED)
+            except OSError:
+                pass
+        # The dialog goes away right after the crash and the same wording comes back later.
+        passes = [(self.IDLE, []), (self.IDLE, []), (self.BLOCKED, []), (self.BLOCKED, [self.BLOCKED_2])]
+        for number, (screen, expected) in enumerate(passes):
+            self.assertEqual(self.step(manager, screen), expected, f"pass {number} after the crash")
+        self.assertEqual(self.keys(host), [self.BLOCKED_1, self.BLOCKED_2])
+
+    def test_dialog_and_deadline_are_two_incidents(self):
+        with mock.patch("spool.time.time", return_value=1000.0):
+            host, manager, key, _ = self.seed()
+        self.backend.screens["session-instance-silent"] = self.PROCEED
+        self.assertEqual(self.watch(host, manager, now=1059.0, deadline=60), [])
+        self.assertEqual(self.watch(host, manager, now=1060.0, deadline=60),
+                         [self.PROCEED_1, "host:1:deadline-missed:deadline"])
+        self.assertEqual(self.watch(host, manager, now=5000.0, deadline=60), [])
+        self.assertEqual(self.keys(host), ["host:1:deadline-missed:deadline", self.PROCEED_1])
+
+    def test_closed_session_or_invalid_result_wins_over_the_dialog(self):
+        host, manager, closed, _ = self.seed("task-closed", "instance-closed")
+        _, _, invalid, _ = self.seed("task-invalid", "instance-invalid")
+        self.backend.screens["session-instance-closed"] = self.PROCEED
+        self.backend.screens["session-instance-invalid"] = self.PROCEED
+        self.close_session(closed)
+        self.write_result(host, invalid, valid=False)
+        self.assertEqual(self.watch(host, manager, now=1.0),
+                         ["host:1:transport-unavailable:session-closed", "host:1:invalid-result:invalid-result"])
+        self.assertEqual(self.watch(host, manager, now=2.0), [])
+        self.assertEqual(self.watch(host, manager, now=3.0), [])
+        self.assertEqual(self.keys(host),
+                         ["host:1:invalid-result:invalid-result", "host:1:transport-unavailable:session-closed"])
+
+    def test_unreadable_unbound_or_released_panes_are_neither_dialog_nor_clean(self):
+        host, manager, key, _ = self.seed()
+        try:
+            self.assertEqual(self.step(manager, OSError("tmux socket busy")), [])
+        except OSError as exc:
+            self.fail(f"an unreadable pane escaped the pass: {exc}")
+        self.assertEqual(self.step(manager, self.BLOCKED), [])
+        self.assertEqual(self.step(manager, self.BLOCKED), [self.BLOCKED_1])
+        for screen in (OSError("tmux socket busy"), OSError("tmux socket busy"), None, None):
+            self.assertEqual(self.step(manager, screen), [])
+        self.assertEqual(self.step(manager, self.BLOCKED), [])
+        self.assertEqual(self.step(manager, self.BLOCKED), [])
+        self.assertEqual(manager.close(key, {"kind": "cancel", "receipt": "cancel-1"}).state, "ReleasedAdopted")
+        self.assertEqual(self.step(manager, self.PROCEED), [])
+        self.assertEqual(self.step(manager, self.PROCEED), [])
+        self.assertEqual(self.keys(host), [self.BLOCKED_1])
+
+    def test_watch_entrypoint_reads_dialogs_with_the_lib_sh_pattern(self):
+        args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "host-one",
+                "--expect-url", "ws://127.0.0.1:18789", "--evidence-root", str(self.root / "e"),
+                "--progress-state-dir", str(self.root / "p"), "--progress-client", "/isolated/c.py",
+                "--watch", "--host-state-dir", str(self.root / "host"),
+                "--cli-adapter-id", "codex", "--cli-instance-id", "instance-one",
+                "--cli-session", "worker-one", "--cli-workspace-root", str(self.root / "w"),
+                "--cli-tmux-socket", "sock-watch"]
+        with mock.patch("native_gateway.watch_pump") as watch:
+            gateway_main(args)
+        with mock.patch.object(Host, "detect_silent_failures", return_value=[]) as detect:
+            self.assertEqual(watch.call_args.kwargs["cli_watch"](), [])
+        reader = detect.call_args.kwargs.get("prompt_identity")
+        self.assertTrue(callable(reader), "main must pass prompt_identity to the detector")
+        key = OperationKey("host-one", "task-x", 1, "instance-one")
+        with mock.patch.object(ResourceManager, "prompt_identity", autospec=True,
+                               return_value="prompt-x") as read:
+            self.assertEqual(reader(key), "prompt-x")
+        manager, seen_key, pattern = read.call_args.args
+        self.assertIs(manager, detect.call_args.args[1].__self__)
+        self.assertEqual(seen_key, key)
+        self.assertEqual(pattern.pattern, load_approval_pattern(self.LIB_SH).pattern)
+        self.assertIsNotNone(pattern.search("DO YOU WANT TO PROCEED?"))
+
+
+    def test_the_episode_and_its_incident_commit_together(self):
+        for table in ("incidents", "dialog_watch"):
+            with self.subTest(crash_writing=table):
+                self.setUp()
+                host, manager, key, _ = self.seed()
+                self.assertEqual(self.step(manager, self.BLOCKED), [])
+                with contextlib.closing(sqlite3.connect(self.root / "host" / "host.sqlite")) as db:
+                    for event in ("INSERT", "UPDATE"):
+                        db.execute(f"CREATE TRIGGER crash_{event} BEFORE {event} ON {table} "
+                                   "BEGIN SELECT RAISE(ABORT, 'disk full'); END")
+                    db.commit()
+                with self.assertRaises(sqlite3.DatabaseError):
+                    self.step(manager, self.BLOCKED)
+                with contextlib.closing(sqlite3.connect(self.root / "host" / "host.sqlite")) as db:
+                    db.execute("DROP TRIGGER crash_INSERT")
+                    db.execute("DROP TRIGGER crash_UPDATE")
+                    db.commit()
+                self.assertEqual(self.rows(host), [], "an incident was kept without its episode")
+                self.assertEqual(self.step(manager, self.BLOCKED), [self.BLOCKED_1],
+                                 "an episode was kept without its incident")
+
+    def test_a_pane_without_a_resource_row_is_neither_dialog_nor_clean(self):
+        host, manager, key, _ = self.seed()
+        with host.spool.connection() as db:
+            db.execute("DELETE FROM resources")
+        try:
+            self.assertIsNone(manager.prompt_identity(key, load_approval_pattern(self.LIB_SH)))
+            self.assertEqual(self.step(manager, self.BLOCKED), [])
+        except ValueError as exc:
+            self.fail(f"a pane without a resource row escaped the pass: {exc}")
+
+    def shim_backend(self, text):
+        shim = self.root / "tmux-shim"
+        shim.write_text(f"#!/bin/sh\nprintf '{text}'\n")
+        shim.chmod(0o755)
+        return TmuxBackend(str(shim), "sock-shim", boot_id="1.000000")
+
+    def test_capture_replaces_bytes_that_are_not_utf8(self):
+        backend = self.shim_backend("\\377> Allow once\\n")
+        identity = {"sessionName": "worker", "paneId": "%0"}
+        with mock.patch.object(TmuxBackend, "observe", return_value=identity):
+            try:
+                self.assertEqual(backend.capture(identity), "\ufffd> Allow once\n")
+            except UnicodeDecodeError as exc:
+                self.fail(f"a byte that is not UTF-8 escaped capture: {exc}")
+
+    def test_capture_rejects_a_pane_replaced_while_it_was_read(self):
+        backend = self.shim_backend("> Allow once\\n")
+        identity = {"sessionName": "worker", "paneId": "%0"}
+        with mock.patch.object(TmuxBackend, "observe", side_effect=[identity, None]):
+            self.assertIsNone(backend.capture(identity))
+
+    def test_idle_passes_stop_writing_once_the_episode_is_closed(self):
+        host, manager, key, _ = self.seed()
+        for screen in (self.BLOCKED, self.BLOCKED, self.IDLE, self.IDLE):
+            self.step(manager, screen)
+        with mock.patch("spool.Spool.save_dialog_state") as save, mock.patch("spool.Spool._put_dialog") as put:
+            for _ in range(20):
+                self.assertEqual(self.step(manager, self.IDLE), [])
+        save.assert_not_called()
+        put.assert_not_called()
+        with contextlib.closing(sqlite3.connect(self.root / "host" / "host.sqlite")) as db:
+            self.assertEqual(db.execute("SELECT open_identity,episode,candidate,seen,clean FROM dialog_watch").fetchall(),
+                             [(None, 1, None, 0, 2)])
 
 class ClientCloseTest(unittest.TestCase):
     def setUp(self):

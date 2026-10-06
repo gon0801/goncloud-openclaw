@@ -1,0 +1,25 @@
+........F...........
+======================================================================
+FAIL: test_closed_session_or_invalid_result_wins_over_the_dialog (__main__.SilentPromptTest.test_closed_session_or_invalid_result_wins_over_the_dialog)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3318, in test_closed_session_or_invalid_result_wins_over_the_dialog
+    self.assertEqual(self.watch(host, manager, now=1.0),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     ["host:1:transport-unavailable:session-closed", "host:1:invalid-result:invalid-result"])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['host:1:transport-unavailable:session-clo[40 chars]ult']
+
+Second list contains 2 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:session-closed'
+
+- []
++ ['host:1:transport-unavailable:session-closed',
++  'host:1:invalid-result:invalid-result']
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.787s
+
+FAILED (failures=1)
+rc=1
