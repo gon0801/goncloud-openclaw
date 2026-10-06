@@ -5,6 +5,7 @@ import json
 import os
 import sqlite3
 import tempfile
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -125,6 +126,10 @@ class Spool:
                     error TEXT,
                     PRIMARY KEY (task_id, incident_key)
                 );
+                CREATE TABLE IF NOT EXISTS delivery_clock (
+                    operation_id TEXT PRIMARY KEY,
+                    delivered_at REAL NOT NULL
+                );
             """)
             db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT value FROM metadata WHERE key='host_id'").fetchone()
@@ -186,8 +191,11 @@ class Spool:
 
     def delivered(self, operation_id: str) -> None:
         with self.connection() as db:
-            db.execute("UPDATE operations SET status='delivered' WHERE operation_id=? AND status='attempted'",
-                       (operation_id,))
+            updated = db.execute("UPDATE operations SET status='delivered' WHERE operation_id=? AND status='attempted'",
+                                 (operation_id,))
+            if updated.rowcount == 1:
+                db.execute("INSERT OR IGNORE INTO delivery_clock VALUES (?,?)",
+                           (operation_id, time.time()))
 
     def record(self, operation_id: str, result_id: str, result: dict, result_path: Path) -> None:
         with self.connection() as db:
@@ -218,6 +226,18 @@ class Spool:
         with self.connection() as db:
             rows = db.execute("SELECT operation_json FROM operations WHERE result_id IS NULL ORDER BY operation_id").fetchall()
             return [json.loads(row[0]) for row in rows]
+
+    def delivered_at(self, operation_id: str) -> float | None:
+        with self.connection() as db:
+            row = db.execute("SELECT delivered_at FROM delivery_clock WHERE operation_id=?",
+                             (operation_id,)).fetchone()
+        return row["delivered_at"] if row else None
+
+    def has_incident(self, task_id: str, incident_key: str) -> bool:
+        with self.connection() as db:
+            row = db.execute("SELECT 1 FROM incidents WHERE task_id=? AND incident_key=?",
+                             (task_id, incident_key)).fetchone()
+        return row is not None
 
     def note_inbox_error(self, operation_id: str, error: str) -> None:
         with self.connection() as db:

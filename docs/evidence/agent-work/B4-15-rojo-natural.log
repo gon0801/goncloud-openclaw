@@ -1,0 +1,131 @@
+EEEEEEEEFEE
+======================================================================
+ERROR: test_closed_session_records_one_transport_incident_across_100_passes (__main__.SilentFailureTest.test_closed_session_records_one_transport_incident_across_100_passes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2828, in test_closed_session_records_one_transport_incident_across_100_passes
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1001.0,
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                 deadline_seconds=60), [])
+                                                 ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 248, in detect_silent_failures
+    raise NotImplementedError("Host.detect_silent_failures")
+NotImplementedError: Host.detect_silent_failures
+
+======================================================================
+ERROR: test_closed_session_requires_positive_proof (__main__.SilentFailureTest.test_closed_session_requires_positive_proof) [pane pid still answers]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2856, in test_closed_session_requires_positive_proof
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1.0), [])
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 248, in detect_silent_failures
+    raise NotImplementedError("Host.detect_silent_failures")
+NotImplementedError: Host.detect_silent_failures
+
+======================================================================
+ERROR: test_closed_session_requires_positive_proof (__main__.SilentFailureTest.test_closed_session_requires_positive_proof) [another tmux server]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2860, in test_closed_session_requires_positive_proof
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1.0), [])
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 248, in detect_silent_failures
+    raise NotImplementedError("Host.detect_silent_failures")
+NotImplementedError: Host.detect_silent_failures
+
+======================================================================
+ERROR: test_closed_session_requires_positive_proof (__main__.SilentFailureTest.test_closed_session_requires_positive_proof) [tmux unreadable]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2866, in test_closed_session_requires_positive_proof
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1.0), [])
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 248, in detect_silent_failures
+    raise NotImplementedError("Host.detect_silent_failures")
+NotImplementedError: Host.detect_silent_failures
+
+======================================================================
+ERROR: test_closed_session_requires_positive_proof (__main__.SilentFailureTest.test_closed_session_requires_positive_proof) [result unreadable]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2869, in test_closed_session_requires_positive_proof
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1.0), [])
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 248, in detect_silent_failures
+    raise NotImplementedError("Host.detect_silent_failures")
+NotImplementedError: Host.detect_silent_failures
+
+======================================================================
+ERROR: test_deadline_counts_from_durable_delivery_once (__main__.SilentFailureTest.test_deadline_counts_from_durable_delivery_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2892, in test_deadline_counts_from_durable_delivery_once
+    self.assertEqual(Host("host-one", self.root / "host").spool.delivered_at(self.OP_ID), 1000.0)
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/spool.py", line 224, in delivered_at
+    raise NotImplementedError("Spool.delivered_at")
+NotImplementedError: Spool.delivered_at
+
+======================================================================
+ERROR: test_invalid_result_is_one_incident_and_a_valid_result_still_reports (__main__.SilentFailureTest.test_invalid_result_is_one_incident_and_a_valid_result_still_reports)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2877, in test_invalid_result_is_one_incident_and_a_valid_result_still_reports
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=9000.0,
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                 deadline_seconds=60),
+                                                 ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 248, in detect_silent_failures
+    raise NotImplementedError("Host.detect_silent_failures")
+NotImplementedError: Host.detect_silent_failures
+
+======================================================================
+ERROR: test_pump_detects_before_sending_and_sends_once (__main__.SilentFailureTest.test_pump_detects_before_sending_and_sends_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2951, in test_pump_detects_before_sending_and_sends_once
+    self.assertEqual(native_gateway.pump_once(client, host=host, cli_watch=watch, **args),
+                     ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/native_gateway.py", line 361, in pump_once
+    raise NotImplementedError("pump_once cli_watch")
+NotImplementedError: pump_once cli_watch
+
+======================================================================
+ERROR: test_uncertain_and_reported_operations_never_raise_incidents (__main__.SilentFailureTest.test_uncertain_and_reported_operations_never_raise_incidents)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2918, in test_uncertain_and_reported_operations_never_raise_incidents
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=10.0 ** 9,
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                 deadline_seconds=60), [])
+                                                 ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 248, in detect_silent_failures
+    raise NotImplementedError("Host.detect_silent_failures")
+NotImplementedError: Host.detect_silent_failures
+
+======================================================================
+ERROR: test_watch_entrypoint_wires_cli_watch_with_the_host_deadline (__main__.SilentFailureTest.test_watch_entrypoint_wires_cli_watch_with_the_host_deadline)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3022, in test_watch_entrypoint_wires_cli_watch_with_the_host_deadline
+    self.assertEqual(wired(), [])
+                     ~~~~~^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/native_gateway.py", line 475, in cli_watch
+    raise NotImplementedError("cli watch wiring")
+NotImplementedError: cli watch wiring
+
+======================================================================
+FAIL: test_pump_watch_failure_does_not_block_incidents (__main__.SilentFailureTest.test_pump_watch_failure_does_not_block_incidents)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3002, in test_pump_watch_failure_does_not_block_incidents
+    self.assertIs(type(caught.exception), RuntimeError)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: <class 'NotImplementedError'> is not <class 'RuntimeError'>
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.048s
+
+FAILED (failures=1, errors=10)
+rc=1

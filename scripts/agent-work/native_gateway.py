@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 from contracts import AuthorizedOperation, IncidentRejected, OperationKey
@@ -354,8 +355,9 @@ def transfer_gateway_projections(client, *, evidence_root, progress_state_dir, p
     raise RuntimeError("native projection Gateway page limit exceeded")
 
 
-def pump_once(client, *, host, evidence_root, progress_state_dir, progress_client, cli_claim=None):
-    """Report, close, claim authorized work, and drain projections in one code-only pass."""
+def pump_once(client, *, host, evidence_root, progress_state_dir, progress_client,
+              cli_claim=None, cli_watch=None):
+    """Report, close, detect silent CLI failures, claim authorized work, and drain projections in one code-only pass."""
     receipts = []
     report_error = None
     try:
@@ -368,6 +370,13 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
         closed, closure_errors = host.flush_closures(client.host_id, client.close_host)
     except (OSError, RuntimeError, ValueError) as exc:
         closure_errors = [str(exc)]
+    detected = 0
+    watch_errors = []
+    if cli_watch is not None:
+        try:
+            detected = len(cli_watch())
+        except (OSError, RuntimeError, ValueError) as exc:
+            watch_errors = [str(exc)]
     incidents_sent = 0
     incident_errors = []
     try:
@@ -390,18 +399,20 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
         raise report_error
     if claim_error is not None:
         raise claim_error
-    errors = closure_errors + incident_errors
+    errors = closure_errors + watch_errors + incident_errors
     if errors:
         raise RuntimeError("; ".join(errors))
     result = {"reported": len(receipts), "transferred": transferred, "closed": closed,
               "incidents": incidents_sent}
     if cli_claim is not None:
         result["claimed"] = 1 if claimed is not None else 0
+    if cli_watch is not None:
+        result["detected"] = detected
     return result
 
 
 def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_client,
-               stop_event, interval=1.0, cli_claim=None):
+               stop_event, interval=1.0, cli_claim=None, cli_watch=None):
     """Poll with code; a failed pass leaves durable host and native work for retry."""
     if not 0 < interval <= 5:
         raise ValueError("poll interval must be between zero and five seconds")
@@ -411,7 +422,7 @@ def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_clie
             result = pump_once(
                 client, host=host, evidence_root=evidence_root,
                 progress_state_dir=progress_state_dir, progress_client=progress_client,
-                cli_claim=cli_claim,
+                cli_claim=cli_claim, cli_watch=cli_watch,
             )
         except (OSError, RuntimeError, ValueError) as exc:
             error = str(exc)
@@ -440,6 +451,7 @@ def main(argv=None):
     parser.add_argument("--cli-session")
     parser.add_argument("--cli-workspace-root")
     parser.add_argument("--cli-tmux-socket")
+    parser.add_argument("--cli-deadline-seconds", type=float)
     parser.add_argument("--tmux-bin", default="tmux")
     parser.add_argument("--flush-results", action="store_true")
     parser.add_argument("--watch", action="store_true")
@@ -448,6 +460,7 @@ def main(argv=None):
     cli_fields = (args.cli_adapter_id, args.cli_instance_id, args.cli_session,
                   args.cli_workspace_root, args.cli_tmux_socket)
     cli_claim = None
+    cli_watch = None
     if args.claim_once or any(cli_fields):
         if not all(cli_fields) or not args.host_state_dir:
             parser.error("CLI claim requires adapter, stable instance, session, workspace, socket and host state")
@@ -464,6 +477,12 @@ def main(argv=None):
             workspace_root=args.cli_workspace_root, deliver=transport.deliver,
             coverage=coverage,
         )
+
+        if args.cli_deadline_seconds is not None and not args.cli_deadline_seconds > 0:
+            parser.error("--cli-deadline-seconds must be positive")
+        cli_watch = lambda: host.detect_silent_failures(
+            args.host_id, manager.session_gone, now=time.time(),
+            deadline_seconds=args.cli_deadline_seconds)
     if args.claim_once:
         if args.watch or args.flush_results:
             parser.error("--claim-once excludes --watch and --flush-results")
@@ -482,7 +501,8 @@ def main(argv=None):
             watch_pump(
                 client, host=Host(args.host_id, args.host_state_dir),
                 evidence_root=args.evidence_root, progress_state_dir=args.progress_state_dir,
-                progress_client=args.progress_client, stop_event=stop, cli_claim=cli_claim,
+                progress_client=args.progress_client, stop_event=stop,
+                cli_claim=cli_claim, cli_watch=cli_watch,
             )
         finally:
             signal.signal(signal.SIGTERM, old_term)

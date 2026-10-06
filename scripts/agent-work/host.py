@@ -17,6 +17,8 @@ from spool import TERMINAL_STATES, Spool, atomic_json, canonical, closure_digest
 
 MAX_ARTIFACT_BYTES = 10 * 1024 * 1024
 RESULT_SCHEMA = "agent-work.result.v1"
+SILENT_EPISODES = {"invalid-result": "invalid-result", "transport-unavailable": "session-closed",
+                   "deadline-missed": "deadline"}
 
 
 def under(path: str, root: str) -> Path:
@@ -242,6 +244,47 @@ class Host:
         if result_ref.stat().st_size > 1024 * 1024:
             raise ValueError("result too large")
         return self.report(host_id, json.loads(result_ref.read_text()))
+
+    def detect_silent_failures(self, host_id: str, session_gone: Callable[[OperationKey], bool], *,
+                               now: float, deadline_seconds: float | None = None) -> list[str]:
+        self._host(host_id)
+        if deadline_seconds is not None and (isinstance(deadline_seconds, bool)
+                                             or not isinstance(deadline_seconds, (int, float))
+                                             or deadline_seconds <= 0):
+            raise ValueError("deadline must be a positive number of seconds")
+        detected = []
+        for assignment in self.spool.awaiting_results():
+            key = OperationKey(assignment["hostId"], assignment["taskId"],
+                               assignment["generation"], assignment["instanceId"])
+            op_id = operation_id(key)
+            current = self.spool.get(op_id)
+            if current is None or current["status"] != "delivered" or not assignment.get("adapterId"):
+                continue
+            try:
+                receipt = self.collect(host_id, key)
+                if receipt is not None:
+                    continue
+                kind = None
+            except ValueError:
+                kind = "invalid-result"
+            except OSError:
+                continue
+            if kind is None and session_gone(key):
+                kind = "transport-unavailable"
+            candidates = [kind] if kind else []
+            if not candidates and deadline_seconds is not None:
+                delivered = self.spool.delivered_at(op_id)
+                if delivered is not None and now - delivered >= deadline_seconds:
+                    candidates = ["deadline-missed"]
+            for kind in candidates:
+                incident = {"kind": kind, "episodeId": SILENT_EPISODES[kind],
+                            "evidenceRef": f"host-operation:{op_id}"}
+                incident_key = incident_identity(key.generation, incident)[0]
+                if self.spool.has_incident(key.task_id, incident_key):
+                    continue
+                self.record_incident(host_id, key, incident)
+                detected.append(incident_key)
+        return detected
 
     def pending(self, host_id: str) -> list[dict]:
         self._host(host_id)

@@ -1,0 +1,543 @@
+diff --git a/scripts/agent-work/host.py b/scripts/agent-work/host.py
+index c5c8749..6dcc101 100755
+--- a/scripts/agent-work/host.py
++++ b/scripts/agent-work/host.py
+@@ -17,6 +17,8 @@ from spool import TERMINAL_STATES, Spool, atomic_json, canonical, closure_digest
+
+ MAX_ARTIFACT_BYTES = 10 * 1024 * 1024
+ RESULT_SCHEMA = "agent-work.result.v1"
++SILENT_EPISODES = {"invalid-result": "invalid-result", "transport-unavailable": "session-closed",
++                   "deadline-missed": "deadline"}
+
+
+ def under(path: str, root: str) -> Path:
+@@ -243,6 +245,47 @@ class Host:
+             raise ValueError("result too large")
+         return self.report(host_id, json.loads(result_ref.read_text()))
+
++    def detect_silent_failures(self, host_id: str, session_gone: Callable[[OperationKey], bool], *,
++                               now: float, deadline_seconds: float | None = None) -> list[str]:
++        self._host(host_id)
++        if deadline_seconds is not None and (isinstance(deadline_seconds, bool)
++                                             or not isinstance(deadline_seconds, (int, float))
++                                             or deadline_seconds <= 0):
++            raise ValueError("deadline must be a positive number of seconds")
++        detected = []
++        for assignment in self.spool.awaiting_results():
++            key = OperationKey(assignment["hostId"], assignment["taskId"],
++                               assignment["generation"], assignment["instanceId"])
++            op_id = operation_id(key)
++            current = self.spool.get(op_id)
++            if current is None or current["status"] != "delivered" or not assignment.get("adapterId"):
++                continue
++            try:
++                receipt = self.collect(host_id, key)
++                if receipt is not None:
++                    continue
++                kind = None
++            except ValueError:
++                kind = "invalid-result"
++            except OSError:
++                continue
++            if kind is None and session_gone(key):
++                kind = "transport-unavailable"
++            candidates = [kind] if kind else []
++            if not candidates and deadline_seconds is not None:
++                delivered = self.spool.delivered_at(op_id)
++                if delivered is not None and now - delivered >= deadline_seconds:
++                    candidates = ["deadline-missed"]
++            for kind in candidates:
++                incident = {"kind": kind, "episodeId": SILENT_EPISODES[kind],
++                            "evidenceRef": f"host-operation:{op_id}"}
++                incident_key = incident_identity(key.generation, incident)[0]
++                if self.spool.has_incident(key.task_id, incident_key):
++                    continue
++                self.record_incident(host_id, key, incident)
++                detected.append(incident_key)
++        return detected
++
+     def pending(self, host_id: str) -> list[dict]:
+         self._host(host_id)
+         for assignment in self.spool.awaiting_results():
+diff --git a/scripts/agent-work/native_gateway.py b/scripts/agent-work/native_gateway.py
+index 9f0d390..8e6534b 100644
+--- a/scripts/agent-work/native_gateway.py
++++ b/scripts/agent-work/native_gateway.py
+@@ -11,6 +11,7 @@ import subprocess
+ import sys
+ import tempfile
+ import threading
++import time
+ from pathlib import Path
+
+ from contracts import AuthorizedOperation, IncidentRejected, OperationKey
+@@ -354,8 +355,9 @@ def transfer_gateway_projections(client, *, evidence_root, progress_state_dir, p
+     raise RuntimeError("native projection Gateway page limit exceeded")
+
+
+-def pump_once(client, *, host, evidence_root, progress_state_dir, progress_client, cli_claim=None):
+-    """Report, close, claim authorized work, and drain projections in one code-only pass."""
++def pump_once(client, *, host, evidence_root, progress_state_dir, progress_client,
++              cli_claim=None, cli_watch=None):
++    """Report, close, detect silent CLI failures, claim authorized work, and drain projections in one code-only pass."""
+     receipts = []
+     report_error = None
+     try:
+@@ -368,6 +370,13 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
+         closed, closure_errors = host.flush_closures(client.host_id, client.close_host)
+     except (OSError, RuntimeError, ValueError) as exc:
+         closure_errors = [str(exc)]
++    detected = 0
++    watch_errors = []
++    if cli_watch is not None:
++        try:
++            detected = len(cli_watch())
++        except (OSError, RuntimeError, ValueError) as exc:
++            watch_errors = [str(exc)]
+     incidents_sent = 0
+     incident_errors = []
+     try:
+@@ -390,18 +399,20 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
+         raise report_error
+     if claim_error is not None:
+         raise claim_error
+-    errors = closure_errors + incident_errors
++    errors = closure_errors + watch_errors + incident_errors
+     if errors:
+         raise RuntimeError("; ".join(errors))
+     result = {"reported": len(receipts), "transferred": transferred, "closed": closed,
+               "incidents": incidents_sent}
+     if cli_claim is not None:
+         result["claimed"] = 1 if claimed is not None else 0
++    if cli_watch is not None:
++        result["detected"] = detected
+     return result
+
+
+ def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_client,
+-               stop_event, interval=1.0, cli_claim=None):
++               stop_event, interval=1.0, cli_claim=None, cli_watch=None):
+     """Poll with code; a failed pass leaves durable host and native work for retry."""
+     if not 0 < interval <= 5:
+         raise ValueError("poll interval must be between zero and five seconds")
+@@ -411,7 +422,7 @@ def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_clie
+             result = pump_once(
+                 client, host=host, evidence_root=evidence_root,
+                 progress_state_dir=progress_state_dir, progress_client=progress_client,
+-                cli_claim=cli_claim,
++                cli_claim=cli_claim, cli_watch=cli_watch,
+             )
+         except (OSError, RuntimeError, ValueError) as exc:
+             error = str(exc)
+@@ -440,6 +451,7 @@ def main(argv=None):
+     parser.add_argument("--cli-session")
+     parser.add_argument("--cli-workspace-root")
+     parser.add_argument("--cli-tmux-socket")
++    parser.add_argument("--cli-deadline-seconds", type=float)
+     parser.add_argument("--tmux-bin", default="tmux")
+     parser.add_argument("--flush-results", action="store_true")
+     parser.add_argument("--watch", action="store_true")
+@@ -448,6 +460,7 @@ def main(argv=None):
+     cli_fields = (args.cli_adapter_id, args.cli_instance_id, args.cli_session,
+                   args.cli_workspace_root, args.cli_tmux_socket)
+     cli_claim = None
++    cli_watch = None
+     if args.claim_once or any(cli_fields):
+         if not all(cli_fields) or not args.host_state_dir:
+             parser.error("CLI claim requires adapter, stable instance, session, workspace, socket and host state")
+@@ -464,6 +477,12 @@ def main(argv=None):
+             workspace_root=args.cli_workspace_root, deliver=transport.deliver,
+             coverage=coverage,
+         )
++
++        if args.cli_deadline_seconds is not None and not args.cli_deadline_seconds > 0:
++            parser.error("--cli-deadline-seconds must be positive")
++        cli_watch = lambda: host.detect_silent_failures(
++            args.host_id, manager.session_gone, now=time.time(),
++            deadline_seconds=args.cli_deadline_seconds)
+     if args.claim_once:
+         if args.watch or args.flush_results:
+             parser.error("--claim-once excludes --watch and --flush-results")
+@@ -482,7 +501,8 @@ def main(argv=None):
+             watch_pump(
+                 client, host=Host(args.host_id, args.host_state_dir),
+                 evidence_root=args.evidence_root, progress_state_dir=args.progress_state_dir,
+-                progress_client=args.progress_client, stop_event=stop, cli_claim=cli_claim,
++                progress_client=args.progress_client, stop_event=stop,
++                cli_claim=cli_claim, cli_watch=cli_watch,
+             )
+         finally:
+             signal.signal(signal.SIGTERM, old_term)
+diff --git a/scripts/agent-work/resources.py b/scripts/agent-work/resources.py
+index 717b481..e1cfa2a 100644
+--- a/scripts/agent-work/resources.py
++++ b/scripts/agent-work/resources.py
+@@ -237,6 +237,23 @@ class ResourceManager:
+             return self._state(key, revision, "CleanupPending", "descendant absence unverified")
+         return self._state(key, revision, "AbsenceVerified")
+
++    def session_gone(self, key: OperationKey) -> bool:
++        try:
++            row = self._row(key)
++        except ValueError:
++            return False
++        if row["state"] != "Running" or not row["identity_json"]:
++            return False
++        identity = json.loads(row["identity_json"])
++        if not identity.get("socket") or identity["socket"] != getattr(self.backend, "socket", None):
++            return False
++        try:
++            if self.backend.observe(row["session_name"]) == identity:
++                return False
++            return self.backend.pane_gone(identity) is True
++        except OSError:
++            return False
++
+     def counts(self) -> dict:
+         with self.spool.connection() as db:
+             rows = db.execute("SELECT ownership,state FROM resources").fetchall()
+diff --git a/scripts/agent-work/spool.py b/scripts/agent-work/spool.py
+index 40a4161..0a4b1e0 100644
+--- a/scripts/agent-work/spool.py
++++ b/scripts/agent-work/spool.py
+@@ -5,6 +5,7 @@ import json
+ import os
+ import sqlite3
+ import tempfile
++import time
+ from contextlib import contextmanager
+ from pathlib import Path
+
+@@ -125,6 +126,10 @@ class Spool:
+                     error TEXT,
+                     PRIMARY KEY (task_id, incident_key)
+                 );
++                CREATE TABLE IF NOT EXISTS delivery_clock (
++                    operation_id TEXT PRIMARY KEY,
++                    delivered_at REAL NOT NULL
++                );
+             """)
+             db.execute("BEGIN IMMEDIATE")
+             row = db.execute("SELECT value FROM metadata WHERE key='host_id'").fetchone()
+@@ -186,8 +191,11 @@ class Spool:
+
+     def delivered(self, operation_id: str) -> None:
+         with self.connection() as db:
+-            db.execute("UPDATE operations SET status='delivered' WHERE operation_id=? AND status='attempted'",
+-                       (operation_id,))
++            updated = db.execute("UPDATE operations SET status='delivered' WHERE operation_id=? AND status='attempted'",
++                                 (operation_id,))
++            if updated.rowcount == 1:
++                db.execute("INSERT OR IGNORE INTO delivery_clock VALUES (?,?)",
++                           (operation_id, time.time()))
+
+     def record(self, operation_id: str, result_id: str, result: dict, result_path: Path) -> None:
+         with self.connection() as db:
+@@ -219,6 +227,18 @@ class Spool:
+             rows = db.execute("SELECT operation_json FROM operations WHERE result_id IS NULL ORDER BY operation_id").fetchall()
+             return [json.loads(row[0]) for row in rows]
+
++    def delivered_at(self, operation_id: str) -> float | None:
++        with self.connection() as db:
++            row = db.execute("SELECT delivered_at FROM delivery_clock WHERE operation_id=?",
++                             (operation_id,)).fetchone()
++        return row["delivered_at"] if row else None
++
++    def has_incident(self, task_id: str, incident_key: str) -> bool:
++        with self.connection() as db:
++            row = db.execute("SELECT 1 FROM incidents WHERE task_id=? AND incident_key=?",
++                             (task_id, incident_key)).fetchone()
++        return row is not None
++
+     def note_inbox_error(self, operation_id: str, error: str) -> None:
+         with self.connection() as db:
+             db.execute("INSERT INTO inbox_errors VALUES (?,?) ON CONFLICT(operation_id) DO UPDATE SET error=excluded.error",
+diff --git a/scripts/tests/test-agent-work-integration.py b/scripts/tests/test-agent-work-integration.py
+index 620c30b..46ab8f3 100644
+--- a/scripts/tests/test-agent-work-integration.py
++++ b/scripts/tests/test-agent-work-integration.py
+@@ -2757,6 +2757,284 @@ class IncidentPumpTest(unittest.TestCase):
+         self.assertEqual(len(calls), 1)
+
+
++class SilentFailureTest(unittest.TestCase):
++    OP_ID = "8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571"
++    CLOSED = {"kind": "transport-unavailable", "episodeId": "session-closed",
++              "evidenceRef": "host-operation:8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571"}
++
++    def setUp(self):
++        self.tmp = tempfile.TemporaryDirectory()
++        self.addCleanup(self.tmp.cleanup)
++        self.root = Path(self.tmp.name)
++        self.backend = ClosureBackend()
++        self.next_pid = 900
++
++    def seed(self, task_id="task-silent", instance_id="instance-silent", deliver=lambda *_: None):
++        workspace = self.root / f"workspace-{instance_id}"
++        workspace.mkdir()
++        brief = workspace / "brief.txt"
++        brief.write_text("silent seed")
++        host = Host("host-one", self.root / "host")
++        key = OperationKey("host-one", task_id, 1, instance_id)
++        manager = ResourceManager(host.spool, "host-one", self.backend, capacity=4)
++        session = f"session-{instance_id}"
++        held = manager.reserve(key, session, "UserAdopted")
++        manager.begin_launch(key)
++        self.backend.launch(session, held.nonce, self.next_pid)
++        self.next_pid += 1
++        manager.attach(key)
++        operation = AuthorizedOperation(
++            key=key, producer_id="codex", capability="silent-secret", session=session,
++            workspace_ref=str(workspace), brief_ref=str(brief),
++            brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
++            input_revision={"kind": "code", "repository": "repo", "sha": "c" * 40},
++            result_contract="review.v1", claim_id=f"claim-{instance_id}", adapter_id="codex")
++        observation = host.apply(key, operation, deliver,
++                                 lambda a: {"state": "host-admitted", "claimId": a["claimId"],
++                                            "hostId": a["hostId"], "instanceId": a["instanceId"],
++                                            "generation": a["generation"]})
++        return host, manager, key, observation
++
++    def close_session(self, key):
++        self.backend.live.pop(f"session-{key.instance_id}")
++        self.backend.pane_gone_result = True
++
++    def rows(self, host):
++        with host.spool.connection() as db:
++            return [(row["incident_key"], row["status"], row["incident_json"])
++                    for row in db.execute("SELECT * FROM incidents ORDER BY incident_key")]
++
++    def write_result(self, host, key, *, valid):
++        assignment = json.loads(host.spool.get(operation_id(key))["operation_json"])
++        if not valid:
++            atomic_json(Path(assignment["resultRef"]),
++                        {"schema": "agent-work.result.v1", "kind": "produced"})
++            return
++        artifact = Path(assignment["workspaceRef"]) / "review.txt"
++        artifact.write_text("VEREDICTO aprobado\n")
++        atomic_json(Path(assignment["resultRef"]), {
++            "schema": "agent-work.result.v1", "kind": "produced",
++            "hostId": assignment["hostId"], "taskId": assignment["taskId"],
++            "generation": assignment["generation"], "instanceId": assignment["instanceId"],
++            "producerId": assignment["producerId"], "capability": assignment["capability"],
++            "observedRevision": assignment["inputRevision"],
++            "typedPayload": {"verdict": "approved", "evidenceRef": "review.txt"},
++            "artifactRef": str(artifact),
++            "digest": hashlib.sha256(artifact.read_bytes()).hexdigest()})
++
++    def test_closed_session_records_one_transport_incident_across_100_passes(self):
++        with mock.patch("spool.time.time", return_value=1000.0):
++            host, manager, key, _ = self.seed()
++        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1001.0,
++                                                     deadline_seconds=60), [])
++        self.assertEqual(self.rows(host), [])
++        self.close_session(key)
++        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1002.0,
++                                                     deadline_seconds=60),
++                         ["host:1:transport-unavailable:session-closed"])
++        for second in range(99):
++            self.assertEqual(Host("host-one", self.root / "host").detect_silent_failures(
++                "host-one", manager.session_gone, now=1060.0 + second, deadline_seconds=60), [])
++        self.assertEqual(self.rows(host), [(
++            "host:1:transport-unavailable:session-closed", "pending",
++            '{"episodeId":"session-closed","evidenceRef":"host-operation:'
++            '8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571",'
++            '"kind":"transport-unavailable"}')])
++        _, _, other, _ = self.seed("task-other", "instance-other")
++        self.close_session(other)
++        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=2000.0),
++                         ["host:1:transport-unavailable:session-closed"])
++        with host.spool.connection() as db:
++            self.assertEqual([row[0] for row in db.execute("SELECT task_id FROM incidents ORDER BY task_id")],
++                             ["task-other", "task-silent"])
++
++    def test_closed_session_requires_positive_proof(self):
++        host, manager, key, _ = self.seed()
++        self.backend.live.pop("session-instance-silent")
++        with self.subTest("pane pid still answers"):
++            self.backend.pane_gone_result = False
++            self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1.0), [])
++        with self.subTest("another tmux server"):
++            self.backend.pane_gone_result = True
++            self.backend.socket = "sock-other"
++            self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1.0), [])
++            self.backend.socket = "sock-closures"
++        with self.subTest("tmux unreadable"):
++            def unreadable(session):
++                raise OSError("tmux socket busy")
++            with mock.patch.object(self.backend, "observe", unreadable):
++                self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1.0), [])
++        with self.subTest("result unreadable"):
++            with mock.patch.object(Host, "collect", side_effect=OSError("disk busy")):
++                self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1.0), [])
++        self.assertEqual(self.rows(host), [])
++
++    def test_invalid_result_is_one_incident_and_a_valid_result_still_reports(self):
++        with mock.patch("spool.time.time", return_value=1000.0):
++            host, manager, key, _ = self.seed()
++        self.write_result(host, key, valid=False)
++        self.close_session(key)
++        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=9000.0,
++                                                     deadline_seconds=60),
++                         ["host:1:invalid-result:invalid-result"])
++        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=9001.0,
++                                                     deadline_seconds=60), [])
++        self.assertEqual([row[0] for row in self.rows(host)], ["host:1:invalid-result:invalid-result"])
++        self.write_result(host, key, valid=True)
++        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=9002.0,
++                                                     deadline_seconds=60), [])
++        self.assertEqual([(result["taskId"], result["typedPayload"]["verdict"])
++                          for result in host.pending("host-one")], [("task-silent", "approved")])
++
++    def test_deadline_counts_from_durable_delivery_once(self):
++        with mock.patch("spool.time.time", return_value=1000.0):
++            host, manager, key, _ = self.seed()
++        self.assertEqual(Host("host-one", self.root / "host").spool.delivered_at(self.OP_ID), 1000.0)
++        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=10.0 ** 9), [])
++        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1059.0,
++                                                     deadline_seconds=60), [])
++        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1060.0,
++                                                     deadline_seconds=60),
++                         ["host:1:deadline-missed:deadline"])
++        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=5000.0,
++                                                     deadline_seconds=60), [])
++        self.assertEqual([row[0] for row in self.rows(host)], ["host:1:deadline-missed:deadline"])
++        for invalid in (0, -1, True, "60"):
++            with self.subTest(deadline=invalid):
++                with self.assertRaises(ValueError):
++                    host.detect_silent_failures("host-one", manager.session_gone, now=5000.0,
++                                                deadline_seconds=invalid)
++
++    def test_uncertain_and_reported_operations_never_raise_incidents(self):
++        def lost(*_):
++            raise OSError("tmux send-keys failed")
++        host, manager, uncertain, observation = self.seed("task-uncertain", "instance-uncertain", lost)
++        self.assertEqual(observation.status, "uncertain")
++        self.close_session(uncertain)
++        _, _, reported, _ = self.seed("task-reported", "instance-reported")
++        self.write_result(host, reported, valid=True)
++        self.assertEqual(len(host.pending("host-one")), 1)
++        self.backend.live.pop("session-instance-reported")
++        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=10.0 ** 9,
++                                                     deadline_seconds=60), [])
++        self.assertEqual(self.rows(host), [])
++
++    def test_pump_detects_before_sending_and_sends_once(self):
++        host, manager, key, _ = self.seed()
++        self.close_session(key)
++        calls = []
++
++        class RecordingClient:
++            host_id = "host-one"
++
++            def report_host_result(self, *_):
++                raise AssertionError("no results are pending in this test")
++
++            def list_pending(self, after_task_id=None, limit=100):
++                return []
++
++            def close_host(self, *_):
++                raise AssertionError("no closures are pending in this test")
++
++            def report_host_incident(self, assignment, incident):
++                calls.append((assignment["taskId"], incident))
++                key_, digest = incident_identity(assignment["generation"], incident)
++                return {"taskId": assignment["taskId"], "generation": assignment["generation"],
++                        "incidentKey": key_, "incidentDigest": digest}
++
++        def watch():
++            return host.detect_silent_failures("host-one", manager.session_gone, now=2.0)
++
++        args = {"evidence_root": self.root / "evidence", "progress_state_dir": self.root / "progress",
++                "progress_client": str(self.root / "progress-events.py")}
++        client = RecordingClient()
++        self.assertEqual(native_gateway.pump_once(client, host=host, cli_watch=watch, **args),
++                         {"reported": 0, "transferred": 0, "closed": 0, "incidents": 1, "detected": 1})
++        for _ in range(100):
++            self.assertEqual(native_gateway.pump_once(client, host=host, cli_watch=watch, **args),
++                             {"reported": 0, "transferred": 0, "closed": 0, "incidents": 0,
++                              "detected": 0})
++        self.assertEqual(calls, [("task-silent", self.CLOSED)])
++
++    def test_pump_watch_failure_does_not_block_incidents(self):
++        events = []
++
++        class Host_:
++            def flush(self, *_):
++                events.append("results")
++                return []
++
++            def flush_closures(self, *_):
++                events.append("closures")
++                return 0, []
++
++            def flush_incidents(self, *_):
++                events.append("incidents")
++                return 0, []
++
++            def operation_key_for(self, *_):
++                return None
++
++        class Client:
++            host_id = "host-one"
++
++            def list_pending(self, after_task_id=None, limit=100):
++                return []
++
++            def report_host_result(self, *_):
++                raise AssertionError("unexpected result")
++
++            def close_host(self, *_):
++                raise AssertionError("unexpected closure")
++
++            def report_host_incident(self, *_):
++                raise AssertionError("unexpected incident")
++
++        def watch():
++            events.append("watch")
++            raise OSError("tmux socket busy")
++
++        with self.assertRaises(Exception) as caught:
++            native_gateway.pump_once(
++                Client(), host=Host_(), cli_claim=lambda: events.append("claim"), cli_watch=watch,
++                evidence_root=self.root / "e", progress_state_dir=self.root / "p",
++                progress_client=str(self.root / "c.py"))
++        self.assertIs(type(caught.exception), RuntimeError)
++        self.assertIn("tmux socket busy", str(caught.exception))
++        self.assertEqual(events, ["results", "closures", "watch", "incidents", "claim"])
++
++    def test_watch_entrypoint_wires_cli_watch_with_the_host_deadline(self):
++        args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "host-one",
++                "--expect-url", "ws://127.0.0.1:18789", "--evidence-root", str(self.root / "e"),
++                "--progress-state-dir", str(self.root / "p"), "--progress-client", "/isolated/c.py",
++                "--watch", "--host-state-dir", str(self.root / "host")]
++        cli = ["--cli-adapter-id", "codex", "--cli-instance-id", "instance-one",
++               "--cli-session", "worker-one", "--cli-workspace-root", str(self.root / "w"),
++               "--cli-tmux-socket", "sock-watch"]
++        with mock.patch("native_gateway.watch_pump") as watch:
++            gateway_main(args)
++        self.assertIsNone(watch.call_args.kwargs["cli_watch"])
++        with mock.patch("native_gateway.watch_pump") as watch:
++            gateway_main(args + cli + ["--cli-deadline-seconds", "900"])
++        wired = watch.call_args.kwargs["cli_watch"]
++        with mock.patch.object(Host, "detect_silent_failures", return_value=[]) as detect, \
++                mock.patch("time.time", return_value=4242.0):
++            self.assertEqual(wired(), [])
++        self.assertEqual(detect.call_args.args[0], "host-one")
++        self.assertIs(detect.call_args.args[1].__func__, ResourceManager.session_gone)
++        self.assertEqual(detect.call_args.kwargs["now"], 4242.0)
++        self.assertEqual(detect.call_args.kwargs["deadline_seconds"], 900.0)
++        stop = threading.Event()
++        with mock.patch("native_gateway.pump_once", side_effect=lambda *_, **__: stop.set() or {}) as pump:
++            native_gateway.watch_pump(object(), host=None, evidence_root=None, progress_state_dir=None,
++                                      progress_client=None, stop_event=stop, cli_watch=wired)
++        self.assertIs(pump.call_args.kwargs.get("cli_watch"), wired)
++        with mock.patch("sys.stderr"), mock.patch("native_gateway.watch_pump") as never:
++            with self.assertRaises(SystemExit):
++                gateway_main(args + cli + ["--cli-deadline-seconds", "0"])
++        never.assert_not_called()
++
++
+ class ClientCloseTest(unittest.TestCase):
+     def setUp(self):
+         self.client = GatewayProjectionClient("/isolated/openclaw", "host-one", "ws://gateway")

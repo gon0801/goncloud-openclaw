@@ -237,6 +237,23 @@ class ResourceManager:
             return self._state(key, revision, "CleanupPending", "descendant absence unverified")
         return self._state(key, revision, "AbsenceVerified")
 
+    def session_gone(self, key: OperationKey) -> bool:
+        try:
+            row = self._row(key)
+        except ValueError:
+            return False
+        if row["state"] != "Running" or not row["identity_json"]:
+            return False
+        identity = json.loads(row["identity_json"])
+        if not identity.get("socket") or identity["socket"] != getattr(self.backend, "socket", None):
+            return False
+        try:
+            if self.backend.observe(row["session_name"]) == identity:
+                return False
+            return self.backend.pane_gone(identity) is True
+        except OSError:
+            return False
+
     def counts(self) -> dict:
         with self.spool.connection() as db:
             rows = db.execute("SELECT ownership,state FROM resources").fetchall()

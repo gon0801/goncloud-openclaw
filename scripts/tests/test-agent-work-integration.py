@@ -2757,6 +2757,284 @@ class IncidentPumpTest(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
 
+class SilentFailureTest(unittest.TestCase):
+    OP_ID = "8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571"
+    CLOSED = {"kind": "transport-unavailable", "episodeId": "session-closed",
+              "evidenceRef": "host-operation:8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571"}
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.backend = ClosureBackend()
+        self.next_pid = 900
+
+    def seed(self, task_id="task-silent", instance_id="instance-silent", deliver=lambda *_: None):
+        workspace = self.root / f"workspace-{instance_id}"
+        workspace.mkdir()
+        brief = workspace / "brief.txt"
+        brief.write_text("silent seed")
+        host = Host("host-one", self.root / "host")
+        key = OperationKey("host-one", task_id, 1, instance_id)
+        manager = ResourceManager(host.spool, "host-one", self.backend, capacity=4)
+        session = f"session-{instance_id}"
+        held = manager.reserve(key, session, "UserAdopted")
+        manager.begin_launch(key)
+        self.backend.launch(session, held.nonce, self.next_pid)
+        self.next_pid += 1
+        manager.attach(key)
+        operation = AuthorizedOperation(
+            key=key, producer_id="codex", capability="silent-secret", session=session,
+            workspace_ref=str(workspace), brief_ref=str(brief),
+            brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
+            input_revision={"kind": "code", "repository": "repo", "sha": "c" * 40},
+            result_contract="review.v1", claim_id=f"claim-{instance_id}", adapter_id="codex")
+        observation = host.apply(key, operation, deliver,
+                                 lambda a: {"state": "host-admitted", "claimId": a["claimId"],
+                                            "hostId": a["hostId"], "instanceId": a["instanceId"],
+                                            "generation": a["generation"]})
+        return host, manager, key, observation
+
+    def close_session(self, key):
+        self.backend.live.pop(f"session-{key.instance_id}")
+        self.backend.pane_gone_result = True
+
+    def rows(self, host):
+        with host.spool.connection() as db:
+            return [(row["incident_key"], row["status"], row["incident_json"])
+                    for row in db.execute("SELECT * FROM incidents ORDER BY incident_key")]
+
+    def write_result(self, host, key, *, valid):
+        assignment = json.loads(host.spool.get(operation_id(key))["operation_json"])
+        if not valid:
+            atomic_json(Path(assignment["resultRef"]),
+                        {"schema": "agent-work.result.v1", "kind": "produced"})
+            return
+        artifact = Path(assignment["workspaceRef"]) / "review.txt"
+        artifact.write_text("VEREDICTO aprobado\n")
+        atomic_json(Path(assignment["resultRef"]), {
+            "schema": "agent-work.result.v1", "kind": "produced",
+            "hostId": assignment["hostId"], "taskId": assignment["taskId"],
+            "generation": assignment["generation"], "instanceId": assignment["instanceId"],
+            "producerId": assignment["producerId"], "capability": assignment["capability"],
+            "observedRevision": assignment["inputRevision"],
+            "typedPayload": {"verdict": "approved", "evidenceRef": "review.txt"},
+            "artifactRef": str(artifact),
+            "digest": hashlib.sha256(artifact.read_bytes()).hexdigest()})
+
+    def test_closed_session_records_one_transport_incident_across_100_passes(self):
+        with mock.patch("spool.time.time", return_value=1000.0):
+            host, manager, key, _ = self.seed()
+        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1001.0,
+                                                     deadline_seconds=60), [])
+        self.assertEqual(self.rows(host), [])
+        self.close_session(key)
+        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1002.0,
+                                                     deadline_seconds=60),
+                         ["host:1:transport-unavailable:session-closed"])
+        for second in range(99):
+            self.assertEqual(Host("host-one", self.root / "host").detect_silent_failures(
+                "host-one", manager.session_gone, now=1060.0 + second, deadline_seconds=60), [])
+        self.assertEqual(self.rows(host), [(
+            "host:1:transport-unavailable:session-closed", "pending",
+            '{"episodeId":"session-closed","evidenceRef":"host-operation:'
+            '8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571",'
+            '"kind":"transport-unavailable"}')])
+        _, _, other, _ = self.seed("task-other", "instance-other")
+        self.close_session(other)
+        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=2000.0),
+                         ["host:1:transport-unavailable:session-closed"])
+        with host.spool.connection() as db:
+            self.assertEqual([row[0] for row in db.execute("SELECT task_id FROM incidents ORDER BY task_id")],
+                             ["task-other", "task-silent"])
+
+    def test_closed_session_requires_positive_proof(self):
+        host, manager, key, _ = self.seed()
+        self.backend.live.pop("session-instance-silent")
+        with self.subTest("pane pid still answers"):
+            self.backend.pane_gone_result = False
+            self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1.0), [])
+        with self.subTest("another tmux server"):
+            self.backend.pane_gone_result = True
+            self.backend.socket = "sock-other"
+            self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1.0), [])
+            self.backend.socket = "sock-closures"
+        with self.subTest("tmux unreadable"):
+            def unreadable(session):
+                raise OSError("tmux socket busy")
+            with mock.patch.object(self.backend, "observe", unreadable):
+                self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1.0), [])
+        with self.subTest("result unreadable"):
+            with mock.patch.object(Host, "collect", side_effect=OSError("disk busy")):
+                self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1.0), [])
+        self.assertEqual(self.rows(host), [])
+
+    def test_invalid_result_is_one_incident_and_a_valid_result_still_reports(self):
+        with mock.patch("spool.time.time", return_value=1000.0):
+            host, manager, key, _ = self.seed()
+        self.write_result(host, key, valid=False)
+        self.close_session(key)
+        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=9000.0,
+                                                     deadline_seconds=60),
+                         ["host:1:invalid-result:invalid-result"])
+        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=9001.0,
+                                                     deadline_seconds=60), [])
+        self.assertEqual([row[0] for row in self.rows(host)], ["host:1:invalid-result:invalid-result"])
+        self.write_result(host, key, valid=True)
+        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=9002.0,
+                                                     deadline_seconds=60), [])
+        self.assertEqual([(result["taskId"], result["typedPayload"]["verdict"])
+                          for result in host.pending("host-one")], [("task-silent", "approved")])
+
+    def test_deadline_counts_from_durable_delivery_once(self):
+        with mock.patch("spool.time.time", return_value=1000.0):
+            host, manager, key, _ = self.seed()
+        self.assertEqual(Host("host-one", self.root / "host").spool.delivered_at(self.OP_ID), 1000.0)
+        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=10.0 ** 9), [])
+        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1059.0,
+                                                     deadline_seconds=60), [])
+        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1060.0,
+                                                     deadline_seconds=60),
+                         ["host:1:deadline-missed:deadline"])
+        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=5000.0,
+                                                     deadline_seconds=60), [])
+        self.assertEqual([row[0] for row in self.rows(host)], ["host:1:deadline-missed:deadline"])
+        for invalid in (0, -1, True, "60"):
+            with self.subTest(deadline=invalid):
+                with self.assertRaises(ValueError):
+                    host.detect_silent_failures("host-one", manager.session_gone, now=5000.0,
+                                                deadline_seconds=invalid)
+
+    def test_uncertain_and_reported_operations_never_raise_incidents(self):
+        def lost(*_):
+            raise OSError("tmux send-keys failed")
+        host, manager, uncertain, observation = self.seed("task-uncertain", "instance-uncertain", lost)
+        self.assertEqual(observation.status, "uncertain")
+        self.close_session(uncertain)
+        _, _, reported, _ = self.seed("task-reported", "instance-reported")
+        self.write_result(host, reported, valid=True)
+        self.assertEqual(len(host.pending("host-one")), 1)
+        self.backend.live.pop("session-instance-reported")
+        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=10.0 ** 9,
+                                                     deadline_seconds=60), [])
+        self.assertEqual(self.rows(host), [])
+
+    def test_pump_detects_before_sending_and_sends_once(self):
+        host, manager, key, _ = self.seed()
+        self.close_session(key)
+        calls = []
+
+        class RecordingClient:
+            host_id = "host-one"
+
+            def report_host_result(self, *_):
+                raise AssertionError("no results are pending in this test")
+
+            def list_pending(self, after_task_id=None, limit=100):
+                return []
+
+            def close_host(self, *_):
+                raise AssertionError("no closures are pending in this test")
+
+            def report_host_incident(self, assignment, incident):
+                calls.append((assignment["taskId"], incident))
+                key_, digest = incident_identity(assignment["generation"], incident)
+                return {"taskId": assignment["taskId"], "generation": assignment["generation"],
+                        "incidentKey": key_, "incidentDigest": digest}
+
+        def watch():
+            return host.detect_silent_failures("host-one", manager.session_gone, now=2.0)
+
+        args = {"evidence_root": self.root / "evidence", "progress_state_dir": self.root / "progress",
+                "progress_client": str(self.root / "progress-events.py")}
+        client = RecordingClient()
+        self.assertEqual(native_gateway.pump_once(client, host=host, cli_watch=watch, **args),
+                         {"reported": 0, "transferred": 0, "closed": 0, "incidents": 1, "detected": 1})
+        for _ in range(100):
+            self.assertEqual(native_gateway.pump_once(client, host=host, cli_watch=watch, **args),
+                             {"reported": 0, "transferred": 0, "closed": 0, "incidents": 0,
+                              "detected": 0})
+        self.assertEqual(calls, [("task-silent", self.CLOSED)])
+
+    def test_pump_watch_failure_does_not_block_incidents(self):
+        events = []
+
+        class Host_:
+            def flush(self, *_):
+                events.append("results")
+                return []
+
+            def flush_closures(self, *_):
+                events.append("closures")
+                return 0, []
+
+            def flush_incidents(self, *_):
+                events.append("incidents")
+                return 0, []
+
+            def operation_key_for(self, *_):
+                return None
+
+        class Client:
+            host_id = "host-one"
+
+            def list_pending(self, after_task_id=None, limit=100):
+                return []
+
+            def report_host_result(self, *_):
+                raise AssertionError("unexpected result")
+
+            def close_host(self, *_):
+                raise AssertionError("unexpected closure")
+
+            def report_host_incident(self, *_):
+                raise AssertionError("unexpected incident")
+
+        def watch():
+            events.append("watch")
+            raise OSError("tmux socket busy")
+
+        with self.assertRaises(Exception) as caught:
+            native_gateway.pump_once(
+                Client(), host=Host_(), cli_claim=lambda: events.append("claim"), cli_watch=watch,
+                evidence_root=self.root / "e", progress_state_dir=self.root / "p",
+                progress_client=str(self.root / "c.py"))
+        self.assertIs(type(caught.exception), RuntimeError)
+        self.assertIn("tmux socket busy", str(caught.exception))
+        self.assertEqual(events, ["results", "closures", "watch", "incidents", "claim"])
+
+    def test_watch_entrypoint_wires_cli_watch_with_the_host_deadline(self):
+        args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "host-one",
+                "--expect-url", "ws://127.0.0.1:18789", "--evidence-root", str(self.root / "e"),
+                "--progress-state-dir", str(self.root / "p"), "--progress-client", "/isolated/c.py",
+                "--watch", "--host-state-dir", str(self.root / "host")]
+        cli = ["--cli-adapter-id", "codex", "--cli-instance-id", "instance-one",
+               "--cli-session", "worker-one", "--cli-workspace-root", str(self.root / "w"),
+               "--cli-tmux-socket", "sock-watch"]
+        with mock.patch("native_gateway.watch_pump") as watch:
+            gateway_main(args)
+        self.assertIsNone(watch.call_args.kwargs["cli_watch"])
+        with mock.patch("native_gateway.watch_pump") as watch:
+            gateway_main(args + cli + ["--cli-deadline-seconds", "900"])
+        wired = watch.call_args.kwargs["cli_watch"]
+        with mock.patch.object(Host, "detect_silent_failures", return_value=[]) as detect, \
+                mock.patch("time.time", return_value=4242.0):
+            self.assertEqual(wired(), [])
+        self.assertEqual(detect.call_args.args[0], "host-one")
+        self.assertIs(detect.call_args.args[1].__func__, ResourceManager.session_gone)
+        self.assertEqual(detect.call_args.kwargs["now"], 4242.0)
+        self.assertEqual(detect.call_args.kwargs["deadline_seconds"], 900.0)
+        stop = threading.Event()
+        with mock.patch("native_gateway.pump_once", side_effect=lambda *_, **__: stop.set() or {}) as pump:
+            native_gateway.watch_pump(object(), host=None, evidence_root=None, progress_state_dir=None,
+                                      progress_client=None, stop_event=stop, cli_watch=wired)
+        self.assertIs(pump.call_args.kwargs.get("cli_watch"), wired)
+        with mock.patch("sys.stderr"), mock.patch("native_gateway.watch_pump") as never:
+            with self.assertRaises(SystemExit):
+                gateway_main(args + cli + ["--cli-deadline-seconds", "0"])
+        never.assert_not_called()
+
+
 class ClientCloseTest(unittest.TestCase):
     def setUp(self):
         self.client = GatewayProjectionClient("/isolated/openclaw", "host-one", "ws://gateway")
