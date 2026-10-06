@@ -197,7 +197,12 @@ class MainCliLoopE2E(unittest.TestCase):
                     delivered = []
 
                     def fake_cli(assignment_ref, session):
-                        delivered.append((json.loads(Path(assignment_ref).read_text()), session))
+                        operation = json.loads(Path(assignment_ref).read_text())
+                        delivered.append((operation, session))
+                        # The CLI takes the assignment with its own acceptance before working.
+                        atomic_json(Path(operation["acceptRef"]), {
+                            "schema": "agent-work.accept.v1", **{field: operation[field] for field in (
+                                "hostId", "taskId", "generation", "instanceId", "claimId", "capability")}})
 
                     first = claim_cli_once(client, host=host, manager=manager, adapter_id=ADAPTER,
                                            instance_id=INSTANCE, session=CLI_SESSION,

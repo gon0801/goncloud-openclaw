@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 sys.path.insert(0, str(ROOT / "scripts" / "mac"))
 from contracts import AuthorizedOperation, IncidentRejected, OperationKey, operation_id  # noqa: E402
-from host import Host  # noqa: E402
+from host import Host, TmuxTransport  # noqa: E402
 import native_gateway  # noqa: E402
 from native_gateway import GatewayProjectionClient, main as gateway_main, transfer_gateway_projections  # noqa: E402
 from progress_bridge import event_id, projection_digest, transfer_host_projection, transfer_projection  # noqa: E402
@@ -1987,8 +1987,9 @@ class CliClaimTest(unittest.TestCase):
         deliveries = []
         kwargs = dict(host=self.host, manager=manager, adapter_id="codex",
                       instance_id="instance-one", session="worker-one",
-                      workspace_root=self.root / "workspace", deliver=lambda ref, session: deliveries.append(
-                          (json.loads(Path(ref).read_text()), session)), coverage=self.coverage)
+                      workspace_root=self.root / "workspace", deliver=lambda ref, session: (deliveries.append(
+                          (json.loads(Path(ref).read_text()), session)), accept_assignment(ref)),
+                      coverage=self.coverage)
         first = native_gateway.claim_cli_once(client, **kwargs)
         second = native_gateway.claim_cli_once(client, **kwargs)
         self.assertEqual(first.status, "delivered")
@@ -2052,6 +2053,15 @@ class CliClaimTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "brief digest mismatch"):
             native_gateway._brief_to_workspace(Client(), self.claim, self.root / "workspace")
         self.assertEqual(list((self.root / "workspace" / "managed-briefs").iterdir()), [])
+
+
+def accept_assignment(assignment_ref, *_):
+    """A CLI double that takes the assignment: it writes its own agent-work.accept.v1 to acceptRef."""
+    assignment = json.loads(Path(assignment_ref).read_text())
+    atomic_json(Path(assignment["acceptRef"]), {
+        "schema": "agent-work.accept.v1", "hostId": assignment["hostId"], "taskId": assignment["taskId"],
+        "generation": assignment["generation"], "instanceId": assignment["instanceId"],
+        "claimId": assignment["claimId"], "capability": assignment["capability"]})
 
 
 class ClosureBackend:
@@ -2773,7 +2783,7 @@ class SilentFailureTest(unittest.TestCase):
         self.backend = ClosureBackend()
         self.next_pid = 900
 
-    def seed(self, task_id="task-silent", instance_id="instance-silent", deliver=lambda *_: None):
+    def seed(self, task_id="task-silent", instance_id="instance-silent", deliver=accept_assignment):
         workspace = self.root / f"workspace-{instance_id}"
         workspace.mkdir()
         brief = workspace / "brief.txt"
@@ -2912,16 +2922,23 @@ class SilentFailureTest(unittest.TestCase):
     def test_uncertain_and_reported_operations_never_raise_incidents(self):
         def lost(*_):
             raise OSError("tmux send-keys failed")
-        host, manager, uncertain, observation = self.seed("task-uncertain", "instance-uncertain", lost)
+        with mock.patch("spool.time.time", return_value=1000.0):
+            host, manager, uncertain, observation = self.seed("task-uncertain", "instance-uncertain", lost)
         self.assertEqual(observation.status, "uncertain")
         self.close_session(uncertain)
         _, _, reported, _ = self.seed("task-reported", "instance-reported")
         self.write_result(host, reported, valid=True)
         self.assertEqual(len(host.pending("host-one")), 1)
         self.backend.live.pop("session-instance-reported")
+        # Never accepted: its only incident is the unaccepted delivery, never the closed session.
+        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1059.0,
+                                                     deadline_seconds=60), [])
+        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1060.0,
+                                                     deadline_seconds=60),
+                         ["host:1:transport-unavailable:delivery-unaccepted"])
         self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=10.0 ** 9,
                                                      deadline_seconds=60), [])
-        self.assertEqual(self.rows(host), [])
+        self.assertEqual([row[0] for row in self.rows(host)], ["host:1:transport-unavailable:delivery-unaccepted"])
 
     def test_pump_detects_before_sending_and_sends_once(self):
         host, manager, key, _ = self.seed()
@@ -3428,6 +3445,325 @@ class SilentPromptTest(unittest.TestCase):
         with contextlib.closing(sqlite3.connect(self.root / "host" / "host.sqlite")) as db:
             self.assertEqual(db.execute("SELECT open_identity,episode,candidate,seen,clean FROM dialog_watch").fetchall(),
                              [(None, 1, None, 0, 2)])
+
+class DeliveryAcceptanceTest(unittest.TestCase):
+    """cli_delivery_acceptance: a typed reference becomes a delivery only through the CLI's own acceptance."""
+
+    OP_ID = SilentFailureTest.OP_ID
+    SESSION = "session-instance-silent"
+    UNACCEPTED_KEY = "host:1:transport-unavailable:delivery-unaccepted"
+    UNACCEPTED_JSON = ('{"episodeId":"delivery-unaccepted","evidenceRef":"host-operation:'
+                       '8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571",'
+                       '"kind":"transport-unavailable"}')
+    GOOD = {"schema": "agent-work.accept.v1", "hostId": "host-one", "taskId": "task-silent",
+            "generation": 1, "instanceId": "instance-silent", "claimId": "claim-instance-silent",
+            "capability": "silent-secret"}
+
+    rows = SilentFailureTest.rows
+    close_session = SilentFailureTest.close_session
+    write_result = SilentFailureTest.write_result
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.backend = PromptBackend()
+        self.next_pid = 900
+        self.typed = []
+
+    def type_only(self, assignment_ref, session):
+        """What TmuxTransport knows after send-keys: the keys reached the pane, nothing more."""
+        self.typed.append((assignment_ref, session))
+
+    def seed(self, task_id="task-silent", instance_id="instance-silent", deliver=None):
+        with mock.patch("spool.time.time", return_value=1000.0):
+            return SilentFailureTest.seed(self, task_id, instance_id, deliver or self.type_only)
+
+    def replay(self, host, key):
+        """The same claim applied again, as claim_cli_once does on every pump pass."""
+        workspace = self.root / f"workspace-{key.instance_id}"
+        brief = workspace / "brief.txt"
+        operation = AuthorizedOperation(
+            key=key, producer_id="codex", capability="silent-secret", session=f"session-{key.instance_id}",
+            workspace_ref=str(workspace), brief_ref=str(brief),
+            brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
+            input_revision={"kind": "code", "repository": "repo", "sha": "c" * 40},
+            result_contract="review.v1", claim_id=f"claim-{key.instance_id}", adapter_id="codex")
+        return host.apply(key, operation, self.type_only,
+                          lambda a: {"state": "host-admitted", "claimId": a["claimId"], "hostId": a["hostId"],
+                                     "instanceId": a["instanceId"], "generation": a["generation"]})
+
+    def status(self, host, key=None):
+        return host.spool.get(operation_id(key) if key else self.OP_ID)["status"]
+
+    def incident_tasks(self, host):
+        with host.spool.connection() as db:
+            return [tuple(row) for row in db.execute("SELECT task_id, incident_key FROM incidents ORDER BY task_id")]
+
+    def test_typing_the_reference_is_not_a_delivery_until_the_cli_accepts(self):
+        host, manager, key, observation = self.seed()
+        ref = str(self.root / "host" / "assignments" / f"{self.OP_ID}.json")
+        self.assertEqual((observation.status, observation.assignment_ref), ("typed", ref))
+        self.assertEqual(self.typed, [(ref, self.SESSION)])
+        self.assertEqual(json.loads(Path(ref).read_text())["acceptRef"],
+                         str(self.root / "host" / "inbox" / f"{self.OP_ID}.accept.json"))
+        self.assertEqual(self.status(host), "attempted")
+        self.assertEqual(host.spool.attempted_at(self.OP_ID), 1000.0)
+        self.assertIsNone(host.spool.delivered_at(self.OP_ID))
+        self.assertFalse(host.take_acceptance("host-one", key))
+        self.assertEqual(host.settle_deliveries("host-one", now=1059.0, deadline_seconds=60), [])
+        self.assertEqual(self.status(host), "attempted")
+        accept_assignment(ref)
+        with mock.patch("spool.time.time", return_value=1030.0):
+            self.assertEqual(host.settle_deliveries("host-one", now=1059.5, deadline_seconds=60), [])
+        self.assertEqual(self.status(host), "delivered")
+        self.assertEqual(host.spool.delivered_at(self.OP_ID), 1030.0)
+        # The result deadline counts from the acceptance, not from the typing.
+        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1089.0,
+                                                     deadline_seconds=60), [])
+        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1090.0,
+                                                     deadline_seconds=60), ["host:1:deadline-missed:deadline"])
+        self.assertEqual(self.typed, [(ref, self.SESSION)])
+
+    def test_a_phantom_suggestion_in_the_composer_is_one_uncertain_incident_and_never_retyped(self):
+        host, manager, key, observation = self.seed()
+        ref = observation.assignment_ref
+        # The composer shows the reference as a suggestion: visible on screen, never submitted.
+        self.backend.screens[self.SESSION] = (
+            "╭────────────────────────────────────────────────────────────╮\n"
+            f"│ > Open assignment JSON at {ref}. First write agent-work.accept.v1 │\n"
+            "╰────────────────────────────────────────────────────────────╯\n"
+            "  ? for shortcuts\n")
+
+        def watch(now):
+            return Host("host-one", self.root / "host").detect_silent_failures(
+                "host-one", manager.session_gone, now=now, deadline_seconds=60,
+                prompt_identity=lambda k: manager.prompt_identity(k, load_approval_pattern(SilentPromptTest.LIB_SH)))
+
+        self.assertEqual(watch(1059.0), [])
+        self.assertEqual(self.status(host), "attempted")
+        self.assertEqual(watch(1060.0), [self.UNACCEPTED_KEY])
+        self.assertEqual(self.status(host), "uncertain")
+        for second in range(100):
+            self.assertEqual(watch(1061.0 + second), [])
+            self.assertEqual(self.replay(host, key).status, "uncertain")
+        self.assertEqual(self.typed, [(ref, self.SESSION)])
+        self.assertEqual(self.rows(host), [(self.UNACCEPTED_KEY, "pending", self.UNACCEPTED_JSON)])
+
+    def test_a_busy_session_that_never_took_the_input_is_uncertain_and_a_late_acceptance_is_no_new_incident(self):
+        host, manager, key, observation = self.seed()
+        ref = observation.assignment_ref
+        # Mid-turn: the typed reference waits in the composer queue behind the running turn.
+        self.backend.screens[self.SESSION] = (
+            "⏺ Running the test battery\n"
+            "✻ Herding… (412s · ↓ 9.1k tokens · esc to interrupt)\n"
+            f"> Open assignment JSON at {ref}. First write agent-work.accept.v1\n")
+        self.assertEqual(host.settle_deliveries("host-one", now=1060.0, deadline_seconds=60), [self.UNACCEPTED_KEY])
+        self.assertEqual(self.status(host), "uncertain")
+        # The turn ends and the CLI takes the input late, with its own acceptance.
+        accept_assignment(ref)
+        with mock.patch("spool.time.time", return_value=1500.0):
+            self.assertEqual(host.settle_deliveries("host-one", now=1500.0, deadline_seconds=60), [])
+        self.assertEqual(self.status(host), "delivered")
+        self.assertEqual(host.spool.delivered_at(self.OP_ID), 1500.0)
+        for second in range(100):
+            self.assertEqual(host.settle_deliveries("host-one", now=1501.0 + second, deadline_seconds=600), [])
+        self.assertEqual(self.rows(host), [(self.UNACCEPTED_KEY, "pending", self.UNACCEPTED_JSON)])
+        self.assertEqual(self.typed, [(ref, self.SESSION)])
+        # From now on it is watched as a delivery: a closed session is its own incident.
+        self.close_session(key)
+        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1502.0),
+                         ["host:1:transport-unavailable:session-closed"])
+
+    def test_only_an_acceptance_bound_to_this_assignment_counts(self):
+        host, manager, key, observation = self.seed()
+        target = Path(json.loads(Path(observation.assignment_ref).read_text())["acceptRef"])
+        elsewhere = self.root / "elsewhere.json"
+        elsewhere.write_text(json.dumps(self.GOOD))
+        good = self.GOOD
+        forgeries = {
+            "the typed text": f"Open assignment JSON at {observation.assignment_ref}.".encode(),
+            "another capability": json.dumps({**good, "capability": "silent-secreT"}).encode(),
+            "a capability that is not ASCII": json.dumps({**good, "capability": "silent-secrét"}).encode(),
+            "another claim": json.dumps({**good, "claimId": "claim-other"}).encode(),
+            "another task": json.dumps({**good, "taskId": "task-other"}).encode(),
+            "another host": json.dumps({**good, "hostId": "host-two"}).encode(),
+            "another instance": json.dumps({**good, "instanceId": "instance-other"}).encode(),
+            "another generation": json.dumps({**good, "generation": 2}).encode(),
+            "a boolean generation": json.dumps({**good, "generation": True}).encode(),
+            "a float generation": json.dumps({**good, "generation": 1.0}).encode(),
+            "a number capability": json.dumps({**good, "capability": 7}).encode(),
+            "UTF-16": json.dumps(good).encode("utf-16"),
+            "a text generation": json.dumps({**good, "generation": "1"}).encode(),
+            "the result schema": json.dumps({**good, "schema": "agent-work.result.v1"}).encode(),
+            "an extra field": json.dumps({**good, "note": "taken"}).encode(),
+            "no capability": json.dumps({k: v for k, v in good.items() if k != "capability"}).encode(),
+            "not an object": json.dumps([good]).encode(),
+            "empty": b"",
+            "not UTF-8": b"\xff\xfe{}",
+            "padded past 4096 bytes": b" " * 4096 + json.dumps(good).encode(),
+        }
+        for name, content in forgeries.items():
+            with self.subTest(name):
+                target.write_bytes(content)
+                self.assertFalse(host.take_acceptance("host-one", key))
+        self.assertEqual(host.settle_deliveries("host-one", now=1001.0, deadline_seconds=60), [])
+        self.assertEqual(self.status(host), "attempted")
+        target.unlink()
+        with self.subTest("a symlink to a valid acceptance"):
+            target.symlink_to(elsewhere)
+            try:
+                self.assertFalse(host.take_acceptance("host-one", key))
+            finally:
+                target.unlink()
+        with self.subTest("a directory"):
+            target.mkdir()
+            try:
+                self.assertFalse(host.take_acceptance("host-one", key))
+            finally:
+                target.rmdir()
+        self.assertEqual(self.status(host), "attempted")
+        target.write_bytes(json.dumps(good).encode())
+        self.assertTrue(host.take_acceptance("host-one", key))
+        self.assertEqual(self.status(host), "delivered")
+
+    def test_a_valid_result_without_acceptance_counts_and_an_invalid_one_does_not(self):
+        host, manager, valid, _ = self.seed("task-valid", "instance-valid")
+        _, _, invalid, _ = self.seed("task-invalid", "instance-invalid")
+        self.write_result(host, valid, valid=True)
+        self.write_result(host, invalid, valid=False)
+        self.assertEqual(host.settle_deliveries("host-one", now=1060.0, deadline_seconds=60), [self.UNACCEPTED_KEY])
+        self.assertEqual((self.status(host, valid), self.status(host, invalid)), ("reported", "uncertain"))
+        self.assertEqual(self.incident_tasks(host), [("task-invalid", self.UNACCEPTED_KEY)])
+        self.assertEqual([result["taskId"] for result in host.pending("host-one")], ["task-valid"])
+
+    def test_without_a_deadline_it_waits_and_an_unreadable_inbox_is_not_a_missing_acceptance(self):
+        host, manager, key, _ = self.seed()
+        self.assertEqual(host.settle_deliveries("host-one", now=10.0 ** 12), [])
+        self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=10.0 ** 12), [])
+        self.assertEqual(self.status(host), "attempted")
+        with self.subTest("acceptance unreadable"):
+            accept = Path(json.loads(host.spool.get(self.OP_ID)["operation_json"])["acceptRef"])
+            accept.write_text(json.dumps(self.GOOD))
+            accept.chmod(0)
+            try:
+                with self.assertRaises(OSError):
+                    host.take_acceptance("host-one", key)
+                self.assertEqual(host.settle_deliveries("host-one", now=1060.0, deadline_seconds=60), [])
+            finally:
+                accept.chmod(0o600)
+                accept.unlink()
+        with self.subTest("result unreadable"):
+            with mock.patch.object(Host, "collect", side_effect=OSError("disk busy")):
+                self.assertEqual(host.settle_deliveries("host-one", now=1060.0, deadline_seconds=60), [])
+        self.assertEqual(self.status(host), "attempted")
+        self.assertEqual(self.rows(host), [])
+        for invalid in (0, -1, True, "60"):
+            with self.subTest(deadline=invalid):
+                with self.assertRaises(ValueError):
+                    host.settle_deliveries("host-one", now=5000.0, deadline_seconds=invalid)
+        with self.assertRaisesRegex(ValueError, "hostId mismatch"):
+            host.settle_deliveries("host-two", now=5000.0, deadline_seconds=60)
+
+    def test_a_failed_send_keys_is_still_judged_by_the_cli_acceptance(self):
+        def typed_then_lost(assignment_ref, session):
+            self.typed.append((assignment_ref, session))
+            raise subprocess.CalledProcessError(1, ["tmux", "send-keys", "Enter"])
+
+        host, manager, took, first = self.seed("task-took", "instance-took", typed_then_lost)
+        _, _, lost, second = self.seed("task-lost", "instance-lost", typed_then_lost)
+        self.assertEqual((first.status, second.status), ("uncertain", "uncertain"))
+        accept_assignment(first.assignment_ref)
+        self.assertEqual(host.settle_deliveries("host-one", now=1060.0, deadline_seconds=60), [self.UNACCEPTED_KEY])
+        self.assertEqual((self.status(host, took), self.status(host, lost)), ("delivered", "uncertain"))
+        self.assertEqual(self.incident_tasks(host), [("task-lost", self.UNACCEPTED_KEY)])
+        self.assertEqual(len(self.typed), 2)
+
+    def test_uncertain_and_its_incident_survive_a_crash_together(self):
+        for table, event in (("incidents", "INSERT"), ("operations", "UPDATE")):
+            with self.subTest(crash_writing=table):
+                self.setUp()
+                host, manager, key, _ = self.seed()
+                with contextlib.closing(sqlite3.connect(self.root / "host" / "host.sqlite")) as db:
+                    db.execute(f"CREATE TRIGGER crash BEFORE {event} ON {table} "
+                               "BEGIN SELECT RAISE(ABORT, 'disk full'); END")
+                    db.commit()
+                with self.assertRaises(sqlite3.DatabaseError):
+                    host.settle_deliveries("host-one", now=1060.0, deadline_seconds=60)
+                with contextlib.closing(sqlite3.connect(self.root / "host" / "host.sqlite")) as db:
+                    db.execute("DROP TRIGGER crash")
+                    db.commit()
+                self.assertEqual(host.settle_deliveries("host-one", now=1061.0, deadline_seconds=60),
+                                 [self.UNACCEPTED_KEY], "the crash lost the incident")
+                self.assertEqual(self.status(host), "uncertain")
+                self.assertEqual(self.rows(host), [(self.UNACCEPTED_KEY, "pending", self.UNACCEPTED_JSON)])
+
+    def test_the_pump_settles_once_and_its_claim_replays_never_retype(self):
+        host, manager, key, observation = self.seed()
+        calls = []
+
+        class RecordingClient:
+            host_id = "host-one"
+
+            def report_host_result(self, *_):
+                raise AssertionError("no results are pending in this test")
+
+            def list_pending(self, after_task_id=None, limit=100):
+                return []
+
+            def close_host(self, *_):
+                raise AssertionError("no closures are pending in this test")
+
+            def report_host_incident(self, assignment, incident):
+                calls.append((assignment["taskId"], incident))
+                key_, digest = incident_identity(assignment["generation"], incident)
+                return {"taskId": assignment["taskId"], "generation": assignment["generation"],
+                        "incidentKey": key_, "incidentDigest": digest}
+
+        clock = [1059.0]
+
+        def watch():
+            # The cli_watch that native_gateway.main wires.
+            return host.detect_silent_failures("host-one", manager.session_gone, now=clock[0], deadline_seconds=60)
+
+        args = {"cli_claim": lambda: self.replay(host, key), "cli_watch": watch,
+                "evidence_root": self.root / "evidence", "progress_state_dir": self.root / "progress",
+                "progress_client": str(self.root / "progress-events.py")}
+        client = RecordingClient()
+        idle = {"reported": 0, "transferred": 0, "closed": 0, "incidents": 0, "claimed": 1, "detected": 0}
+        self.assertEqual(native_gateway.pump_once(client, host=host, **args), idle)
+        clock[0] = 1060.0
+        self.assertEqual(native_gateway.pump_once(client, host=host, **args),
+                         {**idle, "incidents": 1, "detected": 1})
+        for second in range(100):
+            clock[0] = 1061.0 + second
+            self.assertEqual(native_gateway.pump_once(client, host=host, **args), idle)
+        self.assertEqual(calls, [("task-silent", json.loads(self.UNACCEPTED_JSON))])
+        self.assertEqual(self.typed, [(observation.assignment_ref, self.SESSION)])
+
+    def test_the_transport_types_only_the_reference_and_asks_for_the_acceptance(self):
+        with mock.patch("host.subprocess.run") as run:
+            TmuxTransport("tmux", "sock-accept").deliver("/state/assignments/op.json", "worker-one")
+        self.assertEqual([call.args[0] for call in run.call_args_list], [
+            ["tmux", "-L", "sock-accept", "set-environment", "-t", "=worker-one", "AGENT_WORK_MANAGED", "1"],
+            ["tmux", "-L", "sock-accept", "send-keys", "-t", "=worker-one:", "-l", "--",
+             "Open assignment JSON at /state/assignments/op.json. First write agent-work.accept.v1 "
+             "atomically to acceptRef with schema, hostId, taskId, generation, instanceId, claimId and "
+             "capability copied from the assignment. Then follow briefRef and write agent-work.result.v1 "
+             "atomically to resultRef."],
+            ["tmux", "-L", "sock-accept", "send-keys", "-t", "=worker-one:", "Enter"]])
+
+
+    def test_the_typing_and_its_attempt_clock_are_one_write(self):
+        Host("host-one", self.root / "host")
+        with contextlib.closing(sqlite3.connect(self.root / "host" / "host.sqlite")) as db:
+            db.execute("CREATE TRIGGER crash BEFORE INSERT ON delivery_attempts "
+                       "BEGIN SELECT RAISE(ABORT, 'disk full'); END")
+            db.commit()
+        with self.assertRaises(sqlite3.DatabaseError):
+            self.seed()
+        self.assertEqual(self.typed, [])
+        self.assertEqual(self.status(Host("host-one", self.root / "host")), "registered")
 
 class ClientCloseTest(unittest.TestCase):
     def setUp(self):

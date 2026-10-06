@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """CLI double for cli_silent_failure, run inside a real tmux pane.
 
-It reads the assignment that TmuxTransport types, then fails in the way named by
-its argument and never writes a valid report.
+It reads the assignment that TmuxTransport types, accepts it as a CLI must (its own
+agent-work.accept.v1), then fails in the way named by its argument and never writes a
+valid report.
 """
 
 import json
@@ -29,6 +30,12 @@ def main(cause):
         time.sleep(LINGER_SECONDS)
         return
     assignment = json.loads(Path(match.group(1)).read_text())
+    accept = Path(assignment["acceptRef"])
+    pending = accept.with_name(accept.name + ".pending")
+    pending.write_text(json.dumps({"schema": "agent-work.accept.v1", **{
+        field: assignment[field] for field in ("hostId", "taskId", "generation", "instanceId",
+                                               "claimId", "capability")}}))
+    os.replace(pending, accept)
     if cause == "transport-unavailable":
         return
     if cause == "invalid-result":

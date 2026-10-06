@@ -1,0 +1,18 @@
+F..................
+======================================================================
+FAIL: test_a_busy_session_that_never_took_the_input_is_uncertain_and_a_late_acceptance_is_no_new_incident (__main__.DeliveryAcceptanceTest.test_a_busy_session_that_never_took_the_input_is_uncertain_and_a_late_acceptance_is_no_new_incident)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3567, in test_a_busy_session_that_never_took_the_input_is_uncertain_and_a_late_acceptance_is_no_new_incident
+    self.assertEqual(self.status(host), "delivered")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'uncertain' != 'delivered'
+- uncertain
++ delivered
+
+
+----------------------------------------------------------------------
+Ran 19 tests in 0.557s
+
+FAILED (failures=1)
+rc=1

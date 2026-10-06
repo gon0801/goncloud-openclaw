@@ -163,8 +163,12 @@ class CliSilentFailureE2E(unittest.TestCase):
                                       workspace_root=root / "workspace",
                                       deliver=TmuxTransport(cli.tmux, cli.socket).deliver,
                                       coverage=self.certified)
-            self.assertEqual(observed.status, "delivered")
-            op_id = operation_id(OperationKey(HOST_ID, task_id, 1, instance))
+            # Typing is not delivery: the double's own acceptance is (cli_delivery_acceptance).
+            self.assertIn(observed.status, ("typed", "delivered"))
+            key = OperationKey(HOST_ID, task_id, 1, instance)
+            op_id = operation_id(key)
+            self.assertTrue(wait_for(lambda: host.take_acceptance(HOST_ID, key), 15),
+                            f"the CLI double never accepted; screen={cli.screen()!r}")
             delivered_at = host.spool.delivered_at(op_id)
             incident = {"kind": cause, **incident_id, "evidenceRef": f"host-operation:{op_id}"}
             incident_key = f"host:1:{cause}:{next(iter(incident_id.values()))}"

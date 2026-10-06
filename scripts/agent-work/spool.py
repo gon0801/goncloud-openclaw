@@ -127,6 +127,10 @@ class Spool:
                     error TEXT,
                     PRIMARY KEY (task_id, incident_key)
                 );
+                CREATE TABLE IF NOT EXISTS delivery_attempts (
+                    operation_id TEXT PRIMARY KEY,
+                    attempted_at REAL NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS delivery_clock (
                     operation_id TEXT PRIMARY KEY,
                     delivered_at REAL NOT NULL
@@ -196,11 +200,16 @@ class Spool:
             db.execute("BEGIN IMMEDIATE")
             updated = db.execute("UPDATE operations SET status='attempted' WHERE operation_id=? AND status='registered'",
                                  (operation_id,))
-            return updated.rowcount == 1
+            if updated.rowcount != 1:
+                return False
+            db.execute("INSERT OR IGNORE INTO delivery_attempts VALUES (?,?)",
+                       (operation_id, time.time()))
+            return True
 
     def delivered(self, operation_id: str) -> None:
         with self.connection() as db:
-            updated = db.execute("UPDATE operations SET status='delivered' WHERE operation_id=? AND status='attempted'",
+            updated = db.execute("UPDATE operations SET status='delivered' "
+                                 "WHERE operation_id=? AND status IN ('attempted','uncertain')",
                                  (operation_id,))
             if updated.rowcount == 1:
                 db.execute("INSERT OR IGNORE INTO delivery_clock VALUES (?,?)",
@@ -235,6 +244,26 @@ class Spool:
         with self.connection() as db:
             rows = db.execute("SELECT operation_json FROM operations WHERE result_id IS NULL ORDER BY operation_id").fetchall()
             return [json.loads(row[0]) for row in rows]
+
+    def attempted_at(self, operation_id: str) -> float | None:
+        with self.connection() as db:
+            row = db.execute("SELECT attempted_at FROM delivery_attempts WHERE operation_id=?",
+                             (operation_id,)).fetchone()
+        return row["attempted_at"] if row else None
+
+    def delivery_uncertain(self, operation_id: str, task_id: str, incident_key: str,
+                           incident_json: str, incident_digest: str) -> bool:
+        """attempted -> uncertain together with its incident; False when it already left attempted."""
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            updated = db.execute("UPDATE operations SET status='uncertain' "
+                                 "WHERE operation_id=? AND status='attempted'",
+                                 (operation_id,))
+            if updated.rowcount != 1:
+                return False
+            db.execute("INSERT OR IGNORE INTO incidents VALUES (?,?,?,?,?,'pending',NULL,NULL)",
+                       (task_id, incident_key, operation_id, incident_json, incident_digest))
+            return True
 
     def delivered_at(self, operation_id: str) -> float | None:
         with self.connection() as db:

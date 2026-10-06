@@ -1,0 +1,135 @@
+FFFF.F...FF.......F.
+======================================================================
+FAIL: test_a_busy_session_that_never_took_the_input_is_uncertain_and_a_late_acceptance_is_no_new_incident (__main__.DeliveryAcceptanceTest.test_a_busy_session_that_never_took_the_input_is_uncertain_and_a_late_acceptance_is_no_new_incident)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3561, in test_a_busy_session_that_never_took_the_input_is_uncertain_and_a_late_acceptance_is_no_new_incident
+    self.assertEqual(host.settle_deliveries("host-one", now=1060.0, deadline_seconds=60), [self.UNACCEPTED_KEY])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['host:1:transport-unavailable:delivery-unaccepted']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:delivery-unaccepted'
+
+- []
++ ['host:1:transport-unavailable:delivery-unaccepted']
+
+======================================================================
+FAIL: test_a_failed_send_keys_is_still_judged_by_the_cli_acceptance (__main__.DeliveryAcceptanceTest.test_a_failed_send_keys_is_still_judged_by_the_cli_acceptance)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3677, in test_a_failed_send_keys_is_still_judged_by_the_cli_acceptance
+    self.assertEqual(host.settle_deliveries("host-one", now=1060.0, deadline_seconds=60), [self.UNACCEPTED_KEY])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['host:1:transport-unavailable:delivery-unaccepted']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:delivery-unaccepted'
+
+- []
++ ['host:1:transport-unavailable:delivery-unaccepted']
+
+======================================================================
+FAIL: test_a_phantom_suggestion_in_the_composer_is_one_uncertain_incident_and_never_retyped (__main__.DeliveryAcceptanceTest.test_a_phantom_suggestion_in_the_composer_is_one_uncertain_incident_and_never_retyped)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3545, in test_a_phantom_suggestion_in_the_composer_is_one_uncertain_incident_and_never_retyped
+    self.assertEqual(watch(1060.0), [self.UNACCEPTED_KEY])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['host:1:transport-unavailable:delivery-unaccepted']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:delivery-unaccepted'
+
+- []
++ ['host:1:transport-unavailable:delivery-unaccepted']
+
+======================================================================
+FAIL: test_a_valid_result_without_acceptance_counts_and_an_invalid_one_does_not (__main__.DeliveryAcceptanceTest.test_a_valid_result_without_acceptance_counts_and_an_invalid_one_does_not)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3635, in test_a_valid_result_without_acceptance_counts_and_an_invalid_one_does_not
+    self.assertEqual(host.settle_deliveries("host-one", now=1060.0, deadline_seconds=60), [self.UNACCEPTED_KEY])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['host:1:transport-unavailable:delivery-unaccepted']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:delivery-unaccepted'
+
+- []
++ ['host:1:transport-unavailable:delivery-unaccepted']
+
+======================================================================
+FAIL: test_the_pump_settles_once_and_its_claim_replays_never_retype (__main__.DeliveryAcceptanceTest.test_the_pump_settles_once_and_its_claim_replays_never_retype)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3736, in test_the_pump_settles_once_and_its_claim_replays_never_retype
+    self.assertEqual(native_gateway.pump_once(client, host=host, **args),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     {**idle, "incidents": 1, "detected": 1})
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'rep[23 chars]': 0, 'closed': 0, 'incidents': 0, 'claimed': 1, 'detected': 0} != {'rep[23 chars]': 0, 'closed': 0, 'incidents': 1, 'claimed': 1, 'detected': 1}
+  {'claimed': 1,
+   'closed': 0,
+-  'detected': 0,
+?              ^
+
++  'detected': 1,
+?              ^
+
+-  'incidents': 0,
+?               ^
+
++  'incidents': 1,
+?               ^
+
+   'reported': 0,
+   'transferred': 0}
+
+======================================================================
+FAIL: test_uncertain_and_its_incident_survive_a_crash_together (__main__.DeliveryAcceptanceTest.test_uncertain_and_its_incident_survive_a_crash_together) (crash_writing='incidents')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3691, in test_uncertain_and_its_incident_survive_a_crash_together
+    with self.assertRaises(sqlite3.DatabaseError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: DatabaseError not raised
+
+======================================================================
+FAIL: test_uncertain_and_its_incident_survive_a_crash_together (__main__.DeliveryAcceptanceTest.test_uncertain_and_its_incident_survive_a_crash_together) (crash_writing='operations')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3691, in test_uncertain_and_its_incident_survive_a_crash_together
+    with self.assertRaises(sqlite3.DatabaseError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: DatabaseError not raised
+
+======================================================================
+FAIL: test_uncertain_and_reported_operations_never_raise_incidents (__main__.SilentFailureTest.test_uncertain_and_reported_operations_never_raise_incidents)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2936, in test_uncertain_and_reported_operations_never_raise_incidents
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1060.0,
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                 deadline_seconds=60),
+                                                 ^^^^^^^^^^^^^^^^^^^^^
+                     ["host:1:transport-unavailable:delivery-unaccepted"])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['host:1:transport-unavailable:delivery-unaccepted']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:delivery-unaccepted'
+
+- []
++ ['host:1:transport-unavailable:delivery-unaccepted']
+
+----------------------------------------------------------------------
+Ran 19 tests in 0.324s
+
+FAILED (failures=8)
+rc=1
