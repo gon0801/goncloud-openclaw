@@ -1,0 +1,6 @@
+ok (1): cwd inexistente aborta con 1
+ok (2): crea la sesión en el cwd, la marca, espera el prompt y el mensaje entra con su sentinel
+ok (3): con la sesión viva no relanza (YA-EXISTE, rc 2)
+ok (4): sin prompt no manda nada y sale con 4
+FAIL: (5) s7 no es gestionada y debia lanzarse marcada: rc=6 ATORADO s7 es una sesion gestionada de la corrida r7 (T9 :266): la relanza su host, no lanzar-lead
+rc=1

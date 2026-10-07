@@ -234,9 +234,23 @@ fi
 if [ ! -x "$TMUX_BIN" ]; then
   linea unknown lead "sin tmux en $TMUX_BIN"
 else
-  cands=$("$TMUX_BIN" list-sessions -F '#{session_name}' 2>/dev/null | grep -E "wt-f$FASE_RE-" || true)
-  if [ -z "$cands" ]; then
+  # Una sesion gestionada la vigila su host y no lleva la marca del vigilante
+  # antiguo (T9 :266): no cuenta ni como marcada ni como sin marcar.
+  todas=$("$TMUX_BIN" list-sessions -F '#{session_name}' 2>/dev/null | grep -E "wt-f$FASE_RE-" || true)
+  cands=""
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    g=$("$TMUX_BIN" show-environment -t "$s" AGENT_WORK_MANAGED 2>/dev/null) || g=""
+    [ "$g" = "AGENT_WORK_MANAGED=1" ] && continue
+    if [ -z "$cands" ]; then cands="$s"; else cands="$cands
+$s"; fi
+  done <<EOF
+$todas
+EOF
+  if [ -z "$todas" ]; then
     linea ROJO lead "ninguna sesion de tmux con 'wt-f$FASE-' en el nombre: el lead no esta lanzado"
+  elif [ -z "$cands" ]; then
+    linea ROJO lead "solo hay sesiones gestionadas con 'wt-f$FASE-' en el nombre: el lead no esta lanzado"
   else
     marcadas=""
     for s in $cands; do

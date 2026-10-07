@@ -61,6 +61,19 @@ corrida_lanzar_sesion() {
   bin="$(bin_de_tabla "$binario")" || return 1
   [ -d "$dir" ] || { echo "sin directorio: $dir" >&2; return 1; }
   "$TMUX_BIN" has-session -t "=$nombre" 2>/dev/null && { echo "la sesion ya existe: $nombre" >&2; return 1; }
+  # El reemplazo de una sesion gestionada se rechaza ANTES de crear la sesion
+  # (T9 :266): rechazarlo recien al anotar dejaba una sesion viva y marcada
+  # unos segundos. La comprobacion autoritativa sigue al anotar, bajo lock.
+  CORR_SES_NOMBRE="$nombre" CORR_SES_ENCARGO_REF="$encargo_ref" CORR_SES_HOST_ID="$host_id" \
+    python3 -c "
+import json,os,sys
+d=json.load(open(sys.argv[1]))
+vieja=[x for x in (d.get('sesiones') or []) if isinstance(x,dict) and x.get('nombre')==os.environ['CORR_SES_NOMBRE'] and (x.get('host_id') or x.get('encargo_ref'))]
+if len(vieja)>1:
+  raise SystemExit('lanzar-sesion: identidad de sesion gestionada duplicada en el registro')
+if vieja and (os.environ['CORR_SES_ENCARGO_REF']!=vieja[0].get('encargo_ref') or os.environ['CORR_SES_HOST_ID']!=vieja[0].get('host_id')):
+  raise SystemExit('lanzar-sesion: reemplazo de sesion gestionada exige el mismo encargo_ref y host_id')
+" "$reg" || return 1
   # Fail-fast del carril (M1 ai-review): reserva y worktree se verifican
   # ANTES de crear la sesion; la CLI no spawnea en un directorio no
   # autorizado. Al exito el lock queda retenido: se suelta aqui; la

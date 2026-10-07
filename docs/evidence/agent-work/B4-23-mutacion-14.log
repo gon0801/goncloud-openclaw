@@ -1,0 +1,13 @@
+ok (1): una fase realmente arrancada sale VERDE y con codigo 0
+ok (2): sin el reloj global sale ROJO y los nombra a los dos
+ok (2b): un cron creado pero apagado tampoco cuenta
+ok (2c): avance-tareas con otra cadencia no cuenta
+ok (2d): un vigia por corrida sin migrar bloquea el arranque
+ok (2e): el modo global no exige empuje propio y sigue rechazando el vigia legado
+ok (2f): con el flag, un empuje propio sobrante sale ROJO y nombrado
+ok (2g): con el flag el reloj global sigue exigiendose presente, encendido y a 15 min
+ok (3): sin el primer avance enviado sale ROJO
+ok (4): el apunte de sesiones ausente, o sin la linea del lead, sale ROJO
+ok (5): una sesion de la fase sin marcar sale ROJO
+ROJO: (5b) solo la gestionada: ROJO     lead                   sesiones de la fase sin marcar: — el vigilante no las mira
+rc=1

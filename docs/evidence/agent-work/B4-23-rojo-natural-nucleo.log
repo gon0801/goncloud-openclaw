@@ -1,0 +1,3 @@
+ok (B0-1-r2): relanzo con el mismo nombre deja una corrida ordinaria cerrable
+FAIL: T9 :266: el relanzo sin refs de una gestionada creo o marco la sesion antes de rechazarla
+rc=1

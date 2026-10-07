@@ -1,0 +1,10 @@
+ok (1): cwd inexistente aborta con 1
+ok (2): crea la sesión en el cwd, la marca, espera el prompt y el mensaje entra con su sentinel
+ok (3): con la sesión viva no relanza (YA-EXISTE, rc 2)
+ok (4): sin prompt no manda nada y sale con 4
+FAIL: (5) gestionada s5a (ambas): rc=0 marca=OPENCLAW_WATCH=1
+cwd=/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.shhGhhp4rS/wt
+proceso=cat
+prompt=ok (0s)
+LISTO s5a /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.shhGhhp4rS/wt
+rc=1

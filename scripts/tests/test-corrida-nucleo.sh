@@ -1332,11 +1332,15 @@ for entrada in d["sesiones"]:
         entrada["encargo_ref"] = "/b31/sin-registrar.json"
 json.dump(d, open(reg, "w"))
 PY
+sin_desde=$(( $(wc -l <"$TMUX_LOG") + 1 ))
 if bash "$CORR" lanzar-sesion t-reemp carril bueno "$T/ses" --nombre ses-gest >"$T/b31-reemp.sin.log" 2>&1; then
   fail "B3/T7: el relanzo sin encargo_ref/host_id reemplazo una entrada gestionada"
 fi
 grep -q "gestionada" "$T/b31-reemp.sin.log" \
   || fail "B3/T7: el rechazo no nombra la sesion gestionada"
+# B4-23 (T9 :266): el rechazo llega antes de crear la sesion; si no, nace marcada unos segundos.
+tail -n +"$sin_desde" "$TMUX_LOG" | grep -qE 'new-session -d -s ses-gest |set-environment -t =ses-gest OPENCLAW_WATCH 1' \
+  && fail "T9 :266: el relanzo sin refs de una gestionada creo o marco la sesion antes de rechazarla"
 n_gest="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); e=[s for s in d.get("sesiones",[]) if s.get("nombre")=="ses-gest"]; print(sum(1 for s in e if s.get("host_id")=="host-b31" and s.get("encargo_ref")))' "$T/corridas/t-reemp/registro.json")"
 [ "$n_gest" = "1" ] || fail "B3/T7: la entrada gestionada quedo $n_gest veces tras el rechazo"
 mkdir -p "$T/host-b31/ses"
