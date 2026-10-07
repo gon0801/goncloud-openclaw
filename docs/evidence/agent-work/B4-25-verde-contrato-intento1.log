@@ -1,0 +1,6 @@
+FALLO: workspace-implementer contrato sin la frase del encargo gestionado (T9 :265) justo despues de la linea Nunca:
+FALLO: workspace-verifier contrato sin la frase del encargo gestionado (T9 :265) justo despues de la linea Nunca:
+FALLO: workspace-reviewer contrato sin la frase del encargo gestionado (T9 :265) justo despues de la linea Nunca:
+FALLO: workspace-adversary contrato sin la frase del encargo gestionado (T9 :265) justo despues de la linea Nunca:
+ROJO: 4 fallos en contratos de dispatch
+rc=1

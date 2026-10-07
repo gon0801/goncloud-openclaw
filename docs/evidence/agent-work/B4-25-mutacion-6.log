@@ -1,0 +1,17 @@
+.....F.......
+======================================================================
+FAIL: test_legacy_dispatch_routes_are_declared_outside_the_perimeter (__main__.AgentsRouting.test_legacy_dispatch_routes_are_declared_outside_the_perimeter)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 103, in test_legacy_dispatch_routes_are_declared_outside_the_perimeter
+    self.assertEqual(text.count(antes + frase + despues), 1,
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     f"{path}: la frase de la ruta vieja (T9 :265) no esta justo despues de {antes.splitlines()[0]!r}")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 0 != 1 : agents/main/agent/workshop-skills/agent-dispatch/SKILL.md: la frase de la ruta vieja (T9 :265) no esta justo despues de '## Chain dispatch (brief / "-saikit" lane)'
+
+----------------------------------------------------------------------
+Ran 13 tests in 0.074s
+
+FAILED (failures=1)
+rc=1

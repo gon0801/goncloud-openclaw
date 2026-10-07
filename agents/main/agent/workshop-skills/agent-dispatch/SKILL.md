@@ -44,6 +44,8 @@ agent-dispatch de abajo; no copies la máquina de estados del harness aquí.
 
 ## Chain dispatch (brief / "-saikit" lane)
 
+Legacy route (T9 `:265`): this chain (`sessions_spawn` to implementer, verifier and reviewer) stays outside the managed perimeter until its adoption (T12). Inside a managed run the runtime rejects `sessions_spawn` and `sessions_send`; only the requester-target pairs listed in "Ruteo nativo vs. legado" use the guarded route, and none of them goes from `main` to implementer, verifier or reviewer.
+
 0. Multi-PR rounds need delivery sequencing: an external reviewer re-reading an OLD brief can race the implementer's push (it re-read the unchanged brief file, saw old PR heads, and re-stamped its previous verdict instead of reviewing the fixes — verified 2026-09-13). Write the brief file pointing at the NEW head SHAs, list the per-finding commits, and only then deliver; if a reviewer reports "nothing new", compare the PR heads it cites against the actual pushed heads before dispatching fixes.
 
 1. Read the brief yourself before dispatching; it names the lane and the role order. Dispatch one role at a time with `sessions_spawn agentId=<role> mode=run` and put the whole shared context in `task` (a spawned child starts with isolated context). Its completion comes back to you as a new turn even after your turn has closed; dispatch the next role then. Observed full lane: implementer -> verifier -> reviewer.
@@ -78,6 +80,8 @@ agent-dispatch de abajo; no copies la máquina de estados del harness aquí.
 9. Consolidate across roles and report only the synthesized result.
 
 ## External review loop (Claude on the Mac)
+
+Legacy route (T9 `:265`): this loop (tmux delivery, `OPENCLAW_WATCH`, `VEREDICTO` files) stays outside the managed perimeter until its adoption (T12). The managed `main` to Mac CLI route is the one in "Ruteo nativo vs. legado", and it stays off until `mac-local` is certified.
 
 David repeatedly orders a fix-then-review loop against the Claude Code tab in the Mac project ("revisa y haz el loop hasta que Claude apruebe"; asked 2026-09-11 and 2026-09-13 for different lanes). Verified full cycle 2026-09-13 (bloque 6: ronda 1 `VEREDICTO: CAMBIOS` with 8 findings, then fixes pushed → ronda 2 `VEREDICTO: APROBADO`):
 

@@ -91,6 +91,18 @@ class AgentsRouting(unittest.TestCase):
             self.assertIn("managed_tasks_admit", content)
             self.assertIn("Fuera del perímetro gestionado", content)
 
+    def test_legacy_dispatch_routes_are_declared_outside_the_perimeter(self):
+        # T9 :265: cada ruta vieja de despacho, y cada destino gestionado, lo dice en su lugar exacto.
+        for path, antes, frase, despues in (
+            ('agents/main/agent/workshop-skills/agent-dispatch/SKILL.md', '## Chain dispatch (brief / "-saikit" lane)\n\n', 'Legacy route (T9 `:265`): this chain (`sessions_spawn` to implementer, verifier and reviewer) stays outside the managed perimeter until its adoption (T12). Inside a managed run the runtime rejects `sessions_spawn` and `sessions_send`; only the requester-target pairs listed in "Ruteo nativo vs. legado" use the guarded route, and none of them goes from `main` to implementer, verifier or reviewer.', '\n\n0. '),
+            ('agents/main/agent/workshop-skills/agent-dispatch/SKILL.md', '## External review loop (Claude on the Mac)\n\n', 'Legacy route (T9 `:265`): this loop (tmux delivery, `OPENCLAW_WATCH`, `VEREDICTO` files) stays outside the managed perimeter until its adoption (T12). The managed `main` to Mac CLI route is the one in "Ruteo nativo vs. legado", and it stays off until `mac-local` is certified.', '\n\nDavid repeatedly orders'),
+            ('agents/main/agent/workshop-skills/native-harness-orchestration/SKILL.md', '| Cerrar | `corrida.sh cerrar <id>` | `cerrada <id>` |\n\n', 'Ruta anterior (T9 `:265`): la corrida abierta con `--vigia claw` y los CLI arrancados con `adaptador start` y entregados con `adaptador deliver` (`ADAPTADOR-MARCA`) siguen fuera del perímetro gestionado hasta su adopción (T12). Un CLI gestionado entra solo por `Host.apply`: en producción, `claim_cli_once` con `TmuxTransport`; `adaptador deliver-ref` es su transporte alterno por `corrida.sh`. Los dos marcan la sesión con `AGENT_WORK_MANAGED=1`, y sobre esa sesión no se usa `adaptador deliver`.', '\n\n## Pre-install / manual (Fases 14 y 23)'),
+            ('agents/ingenieria/agent/workshop-skills/managed-task-routing/SKILL.md', 'Si una operación gestionada es rechazada, informa el bloqueo sin reenviarla por sessions_spawn, sessions_send ni CLI directo.\n\n', 'Si te llegó un encargo gestionado (T9 `:265`): cuando `managed_tasks_report` está entre tus tools, el resultado sale solo con `managed_tasks_report`; dentro de ese run el runtime rechaza `sessions_send` y `sessions_spawn`, así que no reportes ni delegues por ahí, tampoco los carriles paralelos de `mac-node-ops`.', '\n'),
+        ):
+            text = (ROOT / path).read_text(encoding="utf-8")
+            self.assertEqual(text.count(antes + frase + despues), 1,
+                             f"{path}: la frase de la ruta vieja (T9 :265) no esta justo despues de {antes.splitlines()[0]!r}")
+
     def test_main_cli_loop_instructions_keep_the_route_disabled_until_certified(self):
         lines = (ROOT / "agents/main/agent/workshop-skills/agent-dispatch/SKILL.md").read_text(
             encoding="utf-8"
