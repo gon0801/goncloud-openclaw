@@ -1,0 +1,18 @@
+....F.........
+======================================================================
+FAIL: test_every_live_cron_is_classified (__main__.AgentsRouting.test_every_live_cron_is_classified) (cron='encargos-vigia')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 207, in test_every_live_cron_is_classified
+    self.assertEqual(row["perimeter"], perimeters[row["kind"]])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'out-of-perimeter' != 'legacy-until-adoption'
+- out-of-perimeter
++ legacy-until-adoption
+
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.075s
+
+FAILED (failures=1)
+rc=1

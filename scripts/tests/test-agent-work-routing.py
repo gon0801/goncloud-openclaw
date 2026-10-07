@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Requester-side routing contract for managed tasks."""
 
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -168,11 +169,58 @@ class AgentsRouting(unittest.TestCase):
             self.assertIn(exception[path.split("/")[0]], (ROOT / path).read_text(),
                           f"{path} manda marcar con OPENCLAW_WATCH y no dice la excepcion de las gestionadas")
 
+    def test_every_live_cron_is_classified(self):
+        # T9 :265: cada cron vivo de la foto queda clasificado, con su perimetro y su razon; los de negocio
+        # conservan horario y funcion (el sha256 del mensaje vivo). La foto es un dado: su sha256 es literal.
+        reasons = {
+            "business": "cron de negocio: conserva horario y función; fuera del perímetro, no delega trabajo con resultado esperado (T9 :265)",
+            "technical": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)",
+            "system": "tarea interna del gateway; no delega (T9 :265)",
+            "vigia": "vigía de un loop: conserva su ruta hasta que T12 lo suspenda y retire por entrada (plan :312, :317 y :318; T9 :265 y :266)",
+        }
+        perimeters = {"business": "out-of-perimeter", "technical": "out-of-perimeter",
+                      "system": "out-of-perimeter", "vigia": "legacy-until-adoption"}
+        cron_jobs = self.coverage["cronJobs"]
+        self.assertEqual(cron_jobs["snapshot"], "docs/evidence/agent-work/B4-26-cron-snapshot.json")
+        self.assertEqual(hashlib.sha256((ROOT / cron_jobs["snapshot"]).read_bytes()).hexdigest(),
+                         "c300335f2b00ed9ddd7ac8056acba9102da8e5ce97bb4d065c9d51966d86986f",
+                         "the cron snapshot changed: a new snapshot is a new file and a new literal here")
+        snapshot = json.loads((ROOT / cron_jobs["snapshot"]).read_text())
+        jobs = {job["id"]: job for job in snapshot["jobs"]}
+        self.assertEqual(len(jobs), snapshot["total"], "the snapshot lost or repeated a job")
+        ids = [row["id"] for row in cron_jobs["entries"]]
+        self.assertEqual(len(ids), len(set(ids)), "a cron is classified twice")
+        self.assertEqual(set(ids), set(jobs), "cronJobs must classify every live cron and nothing else")
+        kinds = {}
+        for row in cron_jobs["entries"]:
+            kinds.setdefault(row["kind"], set()).add(row["name"])
+        self.assertEqual(kinds.get("business"), {
+            "packing-digest-20h", "packing-extras-7h", "packing-extras-11h", "verif-digest-20h",
+            "Renueva el token de acceso de Shopify de la tienda theglamw…"})
+        self.assertEqual(kinds.get("system"), {"Memory Dreaming Promotion"})
+        wake_ids = {entry["id"] for entry in self.coverage["modelWakes"]["entries"] if entry["kind"] == "cron"}
+        for row in cron_jobs["entries"]:
+            job = jobs[row["id"]]
+            with self.subTest(cron=row["name"]):
+                self.assertEqual(row["name"], job["name"])
+                self.assertIn(row["kind"], reasons)
+                self.assertEqual(row["perimeter"], perimeters[row["kind"]])
+                self.assertEqual(row["reason"], reasons[row["kind"]])
+                self.assertEqual(row["kind"] == "vigia", job["name"].endswith("-vigia"))
+                if row["kind"] == "vigia":
+                    self.assertIn(row["id"], wake_ids, "a live vigia is missing from modelWakes")
+                if row["kind"] == "business":
+                    self.assertEqual(row["schedule"], job["schedule"])
+                    self.assertEqual(row["messageSha256"], job["messageSha256"])
+                else:
+                    self.assertNotIn("schedule", row)
+
     def test_model_wakes_inventory_lists_every_repo_wake_source(self):
         wakes = self.coverage["modelWakes"]
-        snapshot = json.loads(
-            (ROOT / "docs/evidence/agent-work/B4-8-cron-vigia-snapshot.json").read_text()
-        )
+        # T9 :265: la foto completa de crons (B4-26) reemplaza a la de B4-8, que solo guardo dos vigias.
+        self.assertEqual(wakes["snapshot"], "docs/evidence/agent-work/B4-26-cron-snapshot.json")
+        snapshot = json.loads((ROOT / wakes["snapshot"]).read_text())
+        self.assertEqual(wakes["capturedAt"], snapshot["capturedAt"])
         sources = [entry["source"] for entry in wakes["entries"]]
         recreators = [recreator["path"] for entry in wakes["entries"]
                       for recreator in entry["recreators"]]
@@ -188,7 +236,17 @@ class AgentsRouting(unittest.TestCase):
                 any(source.startswith(f"{path}:") for source in sources) or path in recreators,
                 f"repo wake source {path} is missing from modelWakes",
             )
-        live_ids = {job["id"] for job in snapshot["vigiaJobs"]}
+        live = {job["id"]: job for job in snapshot["jobs"] if job["name"].endswith("-vigia")}
+        live_ids = set(live)
+        self.assertTrue(live_ids, "the snapshot has no live vigia")
+        live_names = {job["name"] for job in live.values()}
+        for entry in wakes["entries"]:
+            job = live.get(entry["id"])
+            if job:
+                self.assertEqual((entry["name"], entry["cadence"]),
+                                 (job["name"], f"every {job['schedule']['everyMs']} ms"))
+            elif entry["kind"] == "cron":
+                self.assertNotIn(entry["name"], live_names, "a live vigia keeps a stale id in modelWakes")
         cron_ids = {entry["id"] for entry in wakes["entries"] if entry["kind"] == "cron"}
         self.assertLessEqual(live_ids, cron_ids)
         for entry in wakes["entries"]:

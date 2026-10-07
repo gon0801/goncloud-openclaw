@@ -54,21 +54,61 @@
     "limitation": "La prueba es por frontera de cuenta: exige la cuenta dedicada agentes de uso exclusivo durante tareas activas y capacidad 1. El barrido manda SIGTERM (sin escalada a SIGKILL todavia): un CLI que ignore TERM queda CleanupPending reintenteble. La regla de etiqueta launchd no-Apple con pid 0 (relanzable) esta probada con dobles; su caso real queda condicionado a la sesion real de agentes. Ninguna combinacion Mac esta certificada."
   },
   "certificationRequired": ["authenticated requester identity", "finite budget", "durable admission", "portable result", "verified resource close"],
-  "modelWakes": {
-    "capturedAt": "2026-10-05T14:43:52Z",
-    "snapshot": "docs/evidence/agent-work/B4-8-cron-vigia-snapshot.json",
+  "cronJobs": {
+    "snapshot": "docs/evidence/agent-work/B4-26-cron-snapshot.json",
     "entries": [
-      {"kind": "cron", "id": "2c0dfb08-b1fa-4bbd-a6b2-71ce2112b85e", "name": "encargos-vigia", "targets": ["isolated"], "cadence": "every 300000 ms", "source": "gateway cron", "recreators": [
-        {"path": "~/.local/state/encargos-loop/PROMPT.md", "line": 486, "state": "activo"},
+      {"id": "0b64a449-a9b9-4daa-b06b-64377080a22b", "name": "revisor-correcciones-vigia", "kind": "vigia", "perimeter": "legacy-until-adoption", "reason": "vigía de un loop: conserva su ruta hasta que T12 lo suspenda y retire por entrada (plan :312, :317 y :318; T9 :265 y :266)"},
+      {"id": "73239004-d53a-4d07-b4e0-de9586b2bba5", "name": "encargos-vigia", "kind": "vigia", "perimeter": "legacy-until-adoption", "reason": "vigía de un loop: conserva su ruta hasta que T12 lo suspenda y retire por entrada (plan :312, :317 y :318; T9 :265 y :266)"},
+      {"id": "bdff9fb3-1541-4f18-b9e8-9aa0d395a20a", "name": "avance-tareas", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "d69a5c51-9691-4e53-b29b-eac12ddc10ee", "name": "skill-collection-review-reviewer", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "6f60a8a0-3f09-4818-a48c-24aae243385c", "name": "packing-digest-20h", "kind": "business", "perimeter": "out-of-perimeter", "reason": "cron de negocio: conserva horario y función; fuera del perímetro, no delega trabajo con resultado esperado (T9 :265)", "schedule": {"kind": "cron", "expr": "0 20 * * 0-4", "tz": "America/Mexico_City"}, "messageSha256": "8d6be8c13c7f29fc0782f8ae95fd1e3d94524f32324a10d1b497c7f5781a16d6"},
+      {"id": "0aa73c30-19b4-4f06-ac8e-6661a7e1dfb3", "name": "verif-digest-20h", "kind": "business", "perimeter": "out-of-perimeter", "reason": "cron de negocio: conserva horario y función; fuera del perímetro, no delega trabajo con resultado esperado (T9 :265)", "schedule": {"kind": "cron", "expr": "45 20 * * 0-4", "tz": "America/Mexico_City", "staggerMs": 0}, "messageSha256": "055a0772a68d350239bb661fc46e33d3ed2bcb23cc7a71d32f4ae3218f5d28bc"},
+      {"id": "35798aa2-d734-4d9a-bc6a-25634eeb1a24", "name": "Memory Dreaming Promotion", "kind": "system", "perimeter": "out-of-perimeter", "reason": "tarea interna del gateway; no delega (T9 :265)"},
+      {"id": "bc1cf8df-4c9f-4ed9-8b90-d94c4d3218be", "name": "skill-collection-review-operaciones", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "dbc3eee3-28d4-4043-bee9-8fd584341bf8", "name": "Renueva el token de acceso de Shopify de la tienda theglamw…", "kind": "business", "perimeter": "out-of-perimeter", "reason": "cron de negocio: conserva horario y función; fuera del perímetro, no delega trabajo con resultado esperado (T9 :265)", "schedule": {"kind": "cron", "tz": "America/New_York", "expr": "0 6 * * *"}, "messageSha256": "0568f4facd95aa140be436710710ecb17fd5227dc58cbc84bc43a85b2caef467"},
+      {"id": "7c7c50e9-5a0e-40bd-bcb3-ba95f8a9d022", "name": "cuotas-proveedores", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "7bb5fac4-a1bb-4b85-b4ed-7ceeb187cbc3", "name": "packing-extras-7h", "kind": "business", "perimeter": "out-of-perimeter", "reason": "cron de negocio: conserva horario y función; fuera del perímetro, no delega trabajo con resultado esperado (T9 :265)", "schedule": {"kind": "cron", "expr": "0 7 * * 1-5", "tz": "America/Mexico_City", "staggerMs": 0}, "messageSha256": "c0a1a13ac751c2d51b0e29cfbd016a13d9014a6b6a47bbccb1f7e51a206b6f64"},
+      {"id": "9386486d-37d6-4ae1-bf7b-12892527f2d9", "name": "packing-extras-11h", "kind": "business", "perimeter": "out-of-perimeter", "reason": "cron de negocio: conserva horario y función; fuera del perímetro, no delega trabajo con resultado esperado (T9 :265)", "schedule": {"kind": "cron", "expr": "0 11 * * 1-5", "tz": "America/Mexico_City", "staggerMs": 0}, "messageSha256": "c3ac34d81bcb8c2f1a3e39a1967b2e777c4738f23d8a550668d72a83d8a36d65"},
+      {"id": "506bb2fd-9fc6-4910-9b31-660a583983b1", "name": "skill-collection-review-pers", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "a1f8dd05-3429-4b7a-88db-716ca078a681", "name": "skill-collection-review-odoo", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "979efd68-24bb-4343-9596-abbff42ed11d", "name": "skill-collection-review-amazon", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "7716c524-3983-4020-bed8-c0c8071e8353", "name": "skill-collection-review-eggbot", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "54441fb0-2620-4a6c-a83c-f984ebdc9fd2", "name": "skill-collection-review-mail", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "aef2ad97-2220-495b-988e-d5b8d7d9f7c9", "name": "skill-collection-review-limpia", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "9dfb3081-1fbb-4c4c-9bbc-c58315e8b6d1", "name": "skill-collection-review-skillverif", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "06f25e53-7748-4290-8b34-1bb5962280c6", "name": "skill-collection-review-scout", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "764f1c58-c2d2-4aa6-84ec-4d27de978da7", "name": "skill-collection-review-meli", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "c33a3c8f-2615-4d55-982d-bca3561d8883", "name": "skill-collection-review-implementer", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "4fa8b00c-d82a-45b0-884e-06360c25d827", "name": "skill-collection-review-adversary", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "8c26f371-f132-41af-a772-b3f13641c3ad", "name": "skill-collection-review-main", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "3e3f1b30-3e10-4ea0-8a17-a9e1efe8d83f", "name": "skill-collection-review-tinkabot", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "f999b502-3c0b-460c-b678-6691720faaca", "name": "skill-collection-review-ingenieria", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "c167c15d-5502-43aa-8909-7ae598f67db1", "name": "skill-collection-review-gonserver", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "017d46a0-cb71-4ec9-af4f-52c721dc18f2", "name": "skill-collection-review-verifier", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"},
+      {"id": "d75d65d7-81fd-4e44-bb40-0d89694ef0f6", "name": "skill-collection-review-arras", "kind": "technical", "perimeter": "out-of-perimeter", "reason": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)"}
+    ]
+  },
+  "modelWakes": {
+    "capturedAt": "2026-10-07T20:17:55Z",
+    "snapshot": "docs/evidence/agent-work/B4-26-cron-snapshot.json",
+    "entries": [
+      {"kind": "cron", "id": "0b64a449-a9b9-4daa-b06b-64377080a22b", "name": "revisor-correcciones-vigia", "targets": ["isolated"], "cadence": "every 300000 ms", "source": "gateway cron", "recreators": [
+        {"path": "~/.local/state/revisor-correcciones-loop/PROMPT.md", "line": 136, "state": "activo"},
+        {"path": "~/.local/state/revisor-correcciones-loop/arranque.txt", "line": 5, "state": "activo"},
+        {"path": "~/.local/state/revisor-correcciones-loop/vigia-msg.txt", "line": null, "state": "activo"},
+        {"path": "~/.claude/skills/prompt-claw/SKILL.md", "line": 76, "state": "activo"}
+      ]},
+      {"kind": "cron", "id": "73239004-d53a-4d07-b4e0-de9586b2bba5", "name": "encargos-vigia", "targets": ["isolated"], "cadence": "every 300000 ms", "source": "gateway cron", "recreators": [
+        {"path": "~/.local/state/encargos-loop/PROMPT.md", "line": 493, "state": "activo"},
         {"path": "~/.local/state/encargos-loop/arranque.txt", "line": 7, "state": "activo"},
         {"path": "~/.local/state/encargos-loop/vigia-msg.txt", "line": null, "state": "activo"},
         {"path": "~/.claude/skills/prompt-claw/SKILL.md", "line": 76, "state": "activo"},
         {"path": "~/.local/state/_archivo-loops-2026-10-03/crons/encargos-vigia-ebffeaca.json", "line": null, "state": "dormido"}
       ]},
       {"kind": "cron", "id": "712ca2dd-2375-4290-ad0e-72927c0adcfd", "name": "jev-ads-02-vigia", "targets": ["isolated"], "cadence": "every 300000 ms", "source": "gateway cron", "recreators": [
-        {"path": "~/.local/state/jev-ads-02-loop/PROMPT.md", "line": 144, "state": "activo"},
-        {"path": "~/.local/state/jev-ads-02-loop/arranque.txt", "line": 5, "state": "activo"},
-        {"path": "~/.local/state/jev-ads-02-loop/vigia-msg.txt", "line": null, "state": "activo"},
+        {"path": "~/.local/state/jev-ads-02-loop/PROMPT.md", "line": 144, "state": "cerrado"},
+        {"path": "~/.local/state/jev-ads-02-loop/arranque.txt", "line": 5, "state": "cerrado"},
+        {"path": "~/.local/state/jev-ads-02-loop/vigia-msg.txt", "line": null, "state": "cerrado"},
         {"path": "~/.claude/skills/prompt-claw/SKILL.md", "line": 76, "state": "activo"}
       ]},
       {"kind": "cron", "id": null, "name": "acos-evidencia-vigia", "targets": ["session:agent:main:acos-evidencia"], "cadence": "every 5m", "source": "gateway cron", "recreators": [

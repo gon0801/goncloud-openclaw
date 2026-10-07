@@ -1,0 +1,24 @@
+....F....F....
+======================================================================
+FAIL: test_every_live_cron_is_classified (__main__.AgentsRouting.test_every_live_cron_is_classified) (cron='revisor-correcciones-vigia')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 211, in test_every_live_cron_is_classified
+    self.assertIn(row["id"], wake_ids, "a live vigia is missing from modelWakes")
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '0b64a449-a9b9-4daa-b06b-64377080a22b' not found in {'712ca2dd-2375-4290-ad0e-72927c0adcfd', '73239004-d53a-4d07-b4e0-de9586b2bba5', None} : a live vigia is missing from modelWakes
+
+======================================================================
+FAIL: test_model_wakes_inventory_lists_every_repo_wake_source (__main__.AgentsRouting.test_model_wakes_inventory_lists_every_repo_wake_source)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 251, in test_model_wakes_inventory_lists_every_repo_wake_source
+    self.assertLessEqual(live_ids, cron_ids)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'73239004-d53a-4d07-b4e0-de9586b2bba5', '0b64a449-a9b9-4daa-b06b-64377080a22b'} not less than or equal to {'712ca2dd-2375-4290-ad0e-72927c0adcfd', '73239004-d53a-4d07-b4e0-de9586b2bba5', None}
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.077s
+
+FAILED (failures=2)
+rc=1

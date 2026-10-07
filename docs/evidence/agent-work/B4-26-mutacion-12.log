@@ -1,0 +1,15 @@
+....F.........
+======================================================================
+FAIL: test_every_live_cron_is_classified (__main__.AgentsRouting.test_every_live_cron_is_classified)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 200, in test_every_live_cron_is_classified
+    self.assertEqual(kinds.get("system"), {"Memory Dreaming Promotion"})
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: None != {'Memory Dreaming Promotion'}
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.075s
+
+FAILED (failures=1)
+rc=1
