@@ -136,8 +136,9 @@ class AgentsRouting(unittest.TestCase):
         recreators = [recreator["path"] for entry in wakes["entries"]
                       for recreator in entry["recreators"]]
         listed = subprocess.run(
-            ["git", "grep", "-l", "--", "--vigia\\|vigia-mac\\|\"$vigia\" = \"claw\"",
-             "--", "scripts", "agents", ":!scripts/tests"],
+            # T9 :266: tambien quien pone la marca del vigilante y los runbooks que lo hacen.
+            ["git", "grep", "-l", "--", "--vigia\\|vigia-mac\\|\"$vigia\" = \"claw\"\\|OPENCLAW_WATCH 1",
+             "--", "scripts", "agents", "docs/runbooks", ":!scripts/tests"],
             cwd=ROOT, capture_output=True, text=True, check=True,
         ).stdout.splitlines()
         self.assertTrue(listed, "git grep found no repo wake sources")
