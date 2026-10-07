@@ -257,10 +257,11 @@ tt abrir revisar-facturas "Revisar facturas de septiembre" "Bajar facturas" "Cua
 tt paso revisar-facturas 1 mergeado "facturas bajadas" >/dev/null || fail "(9) paso fallo"
 out=$(tick) || fail "(9) el tick fallo: $out"
 printf '%s' "$out" | head -1 | grep -qx "corrida:revisar-facturas|SEND|periodico" || fail "(9) el tick no lo reporta: $out"
-printf '%s' "$out" | grep -qx "\[AVANZA\] Revisar facturas de septiembre — 33% (1/3 partes)" \
-  || fail "(9) el AVANZA no dice el titulo y 1 de 3 partes: $out"
-printf '%s' "$out" | grep -q "Fase 0\|desconocido" && fail "(9) el AVANZA dice Fase 0 o desconocido: $out"
-printf '%s' "$out" | grep -A1 "^Que sigue:" | grep -q "cuadrar contra el banco" || fail "(9) Que sigue no trae el siguiente paso: $out"
+printf '%s' "$out" | grep -qx "Revisar facturas de septiembre: 1 de 3 partes." \
+  || fail "(9) el corte no dice el titulo y 1 de 3 partes: $out"
+printf '%s' "$out" | grep -q "Fase 0\|desconocido" && fail "(9) el corte dice Fase 0 o desconocido: $out"
+printf '%s' "$out" | grep -qx "Sigue: Cuadrar contra el banco." || fail "(9) el corte no nombra la parte que sigue: $out"
+printf '%s' "$out" | grep -q "AVANZA\|%\|Que sigue" && fail "(9) el corte trae etiquetas, porcentajes o texto libre: $out"
 tt atencion revisar-facturas "Necesito el acceso al banco" >/dev/null || fail "(9) atencion fallo"
 out=$(tick) || fail "(9) el tick fallo: $out"
 printf '%s' "$out" | head -1 | grep -qx "corrida:revisar-facturas|SEND|inmediato" || fail "(9) atencion no sale de inmediato: $out"

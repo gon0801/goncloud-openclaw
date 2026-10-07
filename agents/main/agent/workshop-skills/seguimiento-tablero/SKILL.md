@@ -1,6 +1,6 @@
 ---
 name: seguimiento-tablero
-description: Úsala SIEMPRE que David te encargue directo (por Telegram, sin prompt de Claude) algo de más de un paso o de más de ~30 minutos, o cuando arranques a mano un loop o una corrida larga. Antes de empezar lo abres en el tablero, lo marcas en cada paso real y lo cierras al terminar; así el reloj avance-tareas le manda a David el [AVANZA] cada 30 minutos con el título y cuántas partes van, sin gastar tu turno.
+description: Úsala SIEMPRE que David te encargue directo (por Telegram, sin prompt de Claude) algo de más de un paso o de más de ~30 minutos, o cuando arranques a mano un loop o una corrida larga. Antes de empezar lo abres en el tablero, lo marcas en cada paso real y lo cierras al terminar; así el reloj avance-tareas le manda a David un corte corto cada vez que hay novedad (y un latido cada 4 horas), con el título y cuántas partes van, sin gastar tu turno.
 ---
 
 # Seguimiento en el tablero
