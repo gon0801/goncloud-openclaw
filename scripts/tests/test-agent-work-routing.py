@@ -127,6 +127,35 @@ class AgentsRouting(unittest.TestCase):
         output = subprocess.run(command, capture_output=True, text=True, check=True)
         self.assertEqual(json.loads(output.stdout), self.request("ingenieria", "adversary"))
 
+    def test_every_doc_that_marks_a_session_names_the_managed_exception(self):
+        # T9 :266: quien manda marcar con OPENCLAW_WATCH dice tambien que una gestionada no se marca ni se relanza.
+        exception = {
+            "agents": "Exception (T9 `:266`): a managed session (tmux `AGENT_WORK_MANAGED=1`, or a run registry "
+                      "entry with `encargo_ref` or `host_id`) is never marked with `OPENCLAW_WATCH` and never "
+                      "relaunched by hand; its host reports a close, a dialog or a missed deadline to the requester.",
+            "docs": "Excepción (T9 `:266`): una sesión gestionada (`AGENT_WORK_MANAGED=1` en tmux, o una entrada "
+                    "del registro con `encargo_ref` o `host_id`) nunca se marca con `OPENCLAW_WATCH` ni se relanza "
+                    "a mano; su host le reporta al solicitante el cierre, el diálogo o el plazo vencido.",
+        }
+        listed = subprocess.run(
+            ["git", "grep", "-l", "-E", "-e", "OPENCLAW_WATCH[[:space:]=]+[\"']?1",
+             "-e", "marcada con `OPENCLAW_WATCH`", "-e", "se marca al lanzarla", "-e", "(registra y |la |y la )marca (la sesi[oó]n )?antes",
+             "-e", "marks? BEFORE", "--", "agents", "docs/runbooks"],
+            cwd=ROOT, capture_output=True, text=True, check=True,
+        ).stdout.splitlines()
+        self.assertLessEqual({
+            "agents/main/agent/workshop-skills/agent-dispatch/SKILL.md",
+            "agents/main/agent/workshop-skills/mac-tmux-control/SKILL.md",
+            "docs/runbooks/autopilot-fase10.md", "docs/runbooks/autopilot-fase17.md",
+            "docs/runbooks/autopilot-fase7.md", "docs/runbooks/base-openclaw.md",
+            "docs/runbooks/guia-del-vigia.md", "docs/runbooks/loop-autopilot.md",
+            "docs/runbooks/base-summonaikit.md", "docs/runbooks/autopilot-fase14.md",
+            "docs/runbooks/autopilot-fase15.md",
+        }, set(listed))
+        for path in listed:
+            self.assertIn(exception[path.split("/")[0]], (ROOT / path).read_text(),
+                          f"{path} manda marcar con OPENCLAW_WATCH y no dice la excepcion de las gestionadas")
+
     def test_model_wakes_inventory_lists_every_repo_wake_source(self):
         wakes = self.coverage["modelWakes"]
         snapshot = json.loads(

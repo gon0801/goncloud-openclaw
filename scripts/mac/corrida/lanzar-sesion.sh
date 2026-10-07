@@ -79,6 +79,7 @@ corrida_lanzar_sesion() {
       || { "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; marcas_lock_soltar; return 1; }
   fi
   lanzar_sesion_marcar "$id" "$nombre" "$reg" "$carril" "$worker" "$barra" \
+    "$([ -n "$encargo_ref" ] && echo 1 || echo 0)" \
     || { marcas_lock_soltar; return 1; }
   if [ -n "$encargo" ]; then
     lanzar_sesion_entregar "$nombre" "$encargo" \
@@ -199,18 +200,23 @@ if c.get('estado')!='reservado': sys.exit(2)
 }
 
 # Fase marcar-registrar: dueno, marca ANTES del primer send-keys (el orden
+# (una sesion gestionada no lleva marca: T9 :266)
 
 # lo vigila la prueba con el log del shim), barra, y en un carril los datos
 # del worker antes de entregar nada.
-lanzar_sesion_marcar() { # $1 id $2 nombre $3 reg $4 carril $5 worker $6 barra
-  local id="$1" nombre="$2" reg="$3" carril="$4" worker="$5" barra="$6"
+lanzar_sesion_marcar() { # $1 id $2 nombre $3 reg $4 carril $5 worker $6 barra $7 gestionada (1|0)
+  local id="$1" nombre="$2" reg="$3" carril="$4" worker="$5" barra="$6" gestionada="$7"
   # Publicar el dueno antes de la marca cierra la ventana en que una reconciliacion
   # podria confundir este nombre reutilizado con una sesion de una corrida cerrada.
   "$TMUX_BIN" set-environment -t "=$nombre" OPENCLAW_WATCH_RUN "$id" \
     || { echo "no se pudo publicar el dueno de la sesion" >&2; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
   # La marca ocurre ANTES del primer send-keys (el orden lo vigila la prueba con el log del shim).
-  "$TMUX_BIN" set-environment -t "=$nombre" OPENCLAW_WATCH 1 \
-    || { echo "no se pudo marcar la sesion" >&2; "$TMUX_BIN" set-environment -t "=$nombre" -u OPENCLAW_WATCH_RUN 2>/dev/null; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
+  # Una sesion gestionada la vigila su host, que reporta al solicitante (T9 :266);
+  # la marca del vigilante antiguo no se le pone.
+  if [ "$gestionada" != "1" ]; then
+    "$TMUX_BIN" set-environment -t "=$nombre" OPENCLAW_WATCH 1 \
+      || { echo "no se pudo marcar la sesion" >&2; "$TMUX_BIN" set-environment -t "=$nombre" -u OPENCLAW_WATCH_RUN 2>/dev/null; "$TMUX_BIN" kill-session -t "=$nombre" 2>/dev/null; return 1; }
+  fi
   local pantalla espera=0
   pantalla=""
   while [ "$espera" -lt 10 ]; do

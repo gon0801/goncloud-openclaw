@@ -43,6 +43,8 @@ el validador vive en `scripts/mac/corrida/lib.sh` y la prueba 9.1 lo carga por s
 `corrida.sh lanzar-sesion` serializa la creación, las marcas y el registro con el
 mismo lock global que usa la reconciliación. Publica `OPENCLAW_WATCH_RUN=<id>`
 antes de activar `OPENCLAW_WATCH=1` y conserva el lock hasta registrar la sesión.
+Una sesión gestionada (`--encargo-ref` con `--host-id`) recibe `OPENCLAW_WATCH_RUN=<id>`
+y `AGENT_WORK_MANAGED=1`, nunca `OPENCLAW_WATCH=1` (T9 `:266`).
 Así una limpieza decidida sobre una sesión vieja no puede caer sobre otra que
 reutilizó el mismo nombre. Cuando
 un carril termina, el vigía ejecuta `corrida.sh terminar-sesion <id> <sesion>`:

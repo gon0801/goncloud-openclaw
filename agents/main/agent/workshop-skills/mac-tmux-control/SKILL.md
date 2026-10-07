@@ -33,7 +33,7 @@ Drive CLI agents by **tmux session name** through `exec` with `host="node"` and 
    sleep 0.4
    /opt/homebrew/bin/tmux send-keys -t <session> Enter
    ```
-   Unmark it with `-u OPENCLAW_WATCH` when the chain ends.
+   Unmark it with `-u OPENCLAW_WATCH` when the chain ends. Exception (T9 `:266`): a managed session (tmux `AGENT_WORK_MANAGED=1`, or a run registry entry with `encargo_ref` or `host_id`) is never marked with `OPENCLAW_WATCH` and never relaunched by hand; its host reports a close, a dialog or a missed deadline to the requester.
    - Completion: `/opt/homebrew/bin/tmux capture-pane` shows the typed text gone from the prompt and a spinner / "esc to interrupt" / new output (see step 5), and `/opt/homebrew/bin/tmux show-environment -t <session> OPENCLAW_WATCH` prints `OPENCLAW_WATCH=1`.
 
 4. Keys and dialogs: use tmux key names, one per call — `Enter`, `Escape`, `Up`, `Down`, `Tab`, `C-c`, `BSpace`. Claude Code's folder-trust dialog (`❯ No, exit / Yes, I trust this folder`) is answered with `Down` then `Enter`; a `Do you want to proceed? ❯ 1. Yes` prompt with `Enter` (David's standing instruction is Yes for task-related prompts; surface prompts about unrelated commands, live profiles or secrets instead). If the prompt still holds stale text or a menu, send `Escape` first, then `C-c` if needed, and re-read before typing. A TUI stuck on `Interrupted · What should Claude do instead?` takes the new instruction typed as in step 3.

@@ -18,6 +18,7 @@ recibe seguimiento en lenguaje de usuario, contrato `seguimiento.v1`).
 - Solo las sesiones marcadas (`OPENCLAW_WATCH=1`) emiten eventos. Si esperas
   algo de una sesión y no llega nada, revisa la marca antes de suponer que
   sigue trabajando.
+- Excepción (T9 `:266`): una sesión gestionada (`AGENT_WORK_MANAGED=1` en tmux, o una entrada del registro con `encargo_ref` o `host_id`) nunca se marca con `OPENCLAW_WATCH` ni se relanza a mano; su host le reporta al solicitante el cierre, el diálogo o el plazo vencido.
 - Lo que escale a David sale como mensaje `seguimiento.v1` por `corrida_mensaje`
   — la llaman los subcomandos de `corrida.sh` por dentro (hoy `preflight` y
   `cerrar`) —, que lo valida antes de mandarlo.
