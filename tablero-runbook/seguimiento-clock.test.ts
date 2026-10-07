@@ -502,6 +502,19 @@ describe("aviso inmediato por pendiente", () => {
     assert.ok(d.mensaje.includes("Falta iniciar la sesión del revisor."), d.mensaje);
   });
 
+  it("another immediate notice confirmed in between keeps the items already delivered", () => {
+    const activas = [encargos("Falta tu visto bueno para seguir"), u3a()];
+    const r1 = decidirSeguimiento({ ahora: T0, previo: corteEn(T0, activas), activas, inmediato: null });
+    if (r1.accion !== "SEND") throw new Error("primer aviso esperado");
+    const r2 = decidirSeguimiento({
+      ahora: T0 + 60, previo: confirmado(r1.estadoTrasConfirmar, 5), activas,
+      inmediato: { tipo: "DETENIDA", texto: V1_DETENIDA },
+    });
+    if (r2.accion !== "SEND") throw new Error("detenida esperada");
+    const r3 = decidirSeguimiento({ ahora: T0 + 120, previo: confirmado(r2.estadoTrasConfirmar, 6), activas, inmediato: null });
+    assert.equal(r3.accion, "NO_REPLY");
+  });
+
   it("the scratch round-trips the delivered items and rejects a malformed list", () => {
     const estado: EstadoSeguimiento = {
       ...corteEn(T0, []),

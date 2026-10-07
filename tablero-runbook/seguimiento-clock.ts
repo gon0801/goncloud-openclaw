@@ -476,9 +476,13 @@ export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
           schema: SCHEMA_SEGUIMIENTO_CLOCK,
           corte: previo.corte,
           ultimoEstado: previo.ultimoEstado,
+          // Otro aviso (explícito o de corrupción) no borra lo ya avisado
+          // de la atención: si no, se repetiría al volver a ser lo único.
           ultimoInmediato: soloPendientes
             ? { firma: firma ?? "", messageId: null, entregados: pendientes.map(firmaPendiente) }
-            : { firma: firma ?? "", messageId: null },
+            : ya?.entregados !== undefined
+              ? { firma: firma ?? "", messageId: null, entregados: ya.entregados }
+              : { firma: firma ?? "", messageId: null },
           trabajosActivos: ids,
         },
       };

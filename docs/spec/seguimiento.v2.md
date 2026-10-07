@@ -25,8 +25,9 @@ pasar texto interno de los agentes.
 
 - **Línea 1, la novedad.** Frases fijas armadas con conteos y estados, nunca
   con texto libre de un agente: un trabajo entró al seguimiento, terminó una o
-  más partes, tiene una parte atorada, destrabó una parte, necesita o ya no
-  necesita respuesta, o salió del seguimiento. En un latido sin cambios dice
+  más partes, cambió su cuenta de partes, tiene una parte atorada, destrabó
+  una parte, necesita o ya no necesita respuesta, salió del seguimiento, o
+  cambiaron las tareas sueltas. En un latido sin cambios dice
   `Sin novedad: todo sigue en curso.`
 - **Dos líneas por trabajo, como máximo.**
   - `<nombre>: <c> de <n> <partes|tareas>.` La fracción sale de las unidades
@@ -99,7 +100,10 @@ esta forma (`schema: "seguimiento-clock.v1"`):
   porque otro aparezca, cambie o desaparezca (medido el 2026-10-07: la firma
   era del conjunto y cada cambio reenviaba el paquete entero). Un trabajo
   rancio se pregunta una vez mientras siga rancio. Un scratch sin `entregados`
-  cuenta su conjunto firmado como ya avisado. El `messageId` de su
+  cuenta su conjunto firmado como ya avisado. La lista se guarda con el
+  siguiente envío confirmado, porque un tick callado no escribe: un pendiente
+  que se libera y vuelve antes de ese envío sigue contando como avisado (para
+  David nunca dejó de estar pendiente); después de él, es un aviso nuevo. El `messageId` de su
   entrega es el del nivel superior del estado; el campo `messageId` anidado
   queda como legado: siempre `null` en escrituras nuevas y aceptado al leer
   por compatibilidad con scratches viejos. Vive separado
