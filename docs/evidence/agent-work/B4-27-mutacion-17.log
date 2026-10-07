@@ -1,0 +1,15 @@
+....F..........
+======================================================================
+FAIL: test_every_inventory_entry_is_migrated_or_declared_out (__main__.AgentsRouting.test_every_inventory_entry_is_migrated_or_declared_out) (entry='file:scripts/lanzar-lead.sh')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 326, in test_every_inventory_entry_is_migrated_or_declared_out
+    self.assertRegex(item["path"], r"^scripts/tests/test-[^/]+$", f"evidence {item} is not a G test")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Regex didn't match: '^scripts/tests/test-[^/]+$' not found in 'docs/evidence/agent-work/coverage.json' : evidence {'path': 'docs/evidence/agent-work/coverage.json', 'test': 'lanzar-lead'} is not a G test
+
+----------------------------------------------------------------------
+Ran 15 tests in 0.088s
+
+FAILED (failures=1)
+rc=1

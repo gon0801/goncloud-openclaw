@@ -1,0 +1,17 @@
+....F..........
+======================================================================
+FAIL: test_every_inventory_entry_is_migrated_or_declared_out (__main__.AgentsRouting.test_every_inventory_entry_is_migrated_or_declared_out) (entry='managed:main->mac-local/claude_opus')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 332, in test_every_inventory_entry_is_migrated_or_declared_out
+    self.assertTrue(item["literal"] in (ROOT / item["path"]).read_text(encoding="utf-8"),
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                    f"instruction {item} is not in its file")
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : instruction {'path': 'agents/main/agent/workshop-skills/agent-dispatch/SKILL.md', 'literal': 'frase que no esta'} is not in its file
+
+----------------------------------------------------------------------
+Ran 15 tests in 0.088s
+
+FAILED (failures=1)
+rc=1

@@ -1,0 +1,15 @@
+....F..........
+======================================================================
+FAIL: test_every_inventory_entry_is_migrated_or_declared_out (__main__.AgentsRouting.test_every_inventory_entry_is_migrated_or_declared_out) (entry='wake:hook Stop de Claude Code')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 312, in test_every_inventory_entry_is_migrated_or_declared_out
+    self.assertIn(row["state"], states)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'certified' not found in {'managed-prepared', 'legacy-until-adoption', 'perimeter-guarded', 'out-of-perimeter'}
+
+----------------------------------------------------------------------
+Ran 15 tests in 0.086s
+
+FAILED (failures=1)
+rc=1

@@ -262,6 +262,76 @@ class AgentsRouting(unittest.TestCase):
                     f"recreator {recreator} of {entry['name']} needs exactly path, line, state",
                 )
 
+    def test_every_inventory_entry_is_migrated_or_declared_out(self):
+        # T9 :265: cada entrada del inventario queda gestionada (preparada y apagada), protegida en el
+        # perimetro o declarada fuera con su razon. Lo que se exige sale del repo, no de las filas.
+        states = {"managed-prepared", "perimeter-guarded", "legacy-until-adoption", "out-of-perimeter"}
+        wakes = self.coverage["modelWakes"]["entries"]
+        rows = {}
+        for row in self.coverage["migration"]:
+            self.assertFalse(row["id"] in rows, f"{row['id']} is registered twice")
+            rows[row["id"]] = row
+        required = {f"requester:{name}" for name in self.coverage["requesters"]}
+        required |= {f"route:{route['kind']}" for route in self.coverage["routes"]}
+        required |= {f"managed:{route['requester']}->{route['target']}"
+                     for route in self.coverage["managedRequesterRoutes"]}
+        required |= {f"wake:{entry['name']}" for entry in wakes}
+        required |= {f"wake:{job['name']}" for job in self.coverage["cronJobs"]["entries"] if job["kind"] == "vigia"}
+        # T9 (plan :257): los helpers, los lanzadores y el reparador que relanza carriles.
+        required |= {f"file:{path}" for path in (
+            "scripts/mac/claude-stop-openclaw-event.sh", "scripts/mac/tmux-activity-watch.sh",
+            "scripts/mac/corrida/avisos.sh", "scripts/mac/corrida/lanzar-sesion.sh",
+            "scripts/lanzar-lead.sh", "scripts/lanzar-fase.sh", "scripts/mac/agent-tmux.sh",
+            "scripts/mac/corrida/adaptador.sh", "scripts/mac/corrida/reconciliar.sh")}
+        # El inventario nombra sus fuentes y recreadores del repo (plan :272).
+        required |= {f"file:{entry['source'].split(':')[0]}" for entry in wakes
+                     if not entry["source"].startswith("gateway")}
+        required |= {f"file:{recreator['path']}" for entry in wakes for recreator in entry["recreators"]
+                     if not recreator["path"].startswith("~")}
+        listed = subprocess.run(
+            ["git", "grep", "-l", "-E",
+             "-e", "sessions_spawn|sessions_send|managed_tasks_|adaptador(\\.sh)? (start|deliver)|--vigia",
+             # T9 :266: quien manda marcar con OPENCLAW_WATCH vigila; es la busqueda de la prueba de su excepcion.
+             "-e", "OPENCLAW_WATCH[[:space:]=]+[\"']?1", "-e", "marcada con `OPENCLAW_WATCH`",
+             "-e", "se marca al lanzarla", "-e", "(registra y |la |y la )marca (la sesi[oó]n )?antes",
+             "-e", "marks? BEFORE",
+             "--", "agents", "docs/runbooks", "workspace-*/*.md", ":!workspace-*/memory/*"],
+            cwd=ROOT, capture_output=True, text=True, check=True,
+        ).stdout.splitlines()
+        self.assertIn("workspace-adversary/AGENTS.md", listed, "the instruction scan lost the workspaces")
+        self.assertIn("docs/runbooks/guia-del-vigia.md", listed, "the instruction scan lost the marking docs")
+        required |= {f"file:{path}" for path in listed}
+        self.assertEqual(set(rows), required, "migration must register every inventory entry and nothing else")
+        # El estado no es libre: un vigia de cron se retira en T12, una ruta gestionada sin certificar esta
+        # preparada y apagada, y solo un archivo puede quedar fuera del perimetro.
+        cron_wakes = {f"wake:{entry['name']}" for entry in wakes if entry["kind"] == "cron"}
+        uncertified = {f"managed:{route['requester']}->{route['target']}"
+                       for route in self.coverage["managedRequesterRoutes"] if not route["certified"]}
+        for row in rows.values():
+            with self.subTest(entry=row["id"]):
+                self.assertIn(row["state"], states)
+                self.assertTrue(row["reason"].strip())
+                self.assertEqual(row.get("adoption"), "T12" if row["state"] == "legacy-until-adoption" else None)
+                if row["id"] in cron_wakes:
+                    self.assertEqual(row["state"], "legacy-until-adoption")
+                if row["id"] in uncertified:
+                    self.assertEqual(row["state"], "managed-prepared")
+                if row["state"] == "out-of-perimeter":
+                    self.assertTrue(row["id"].startswith("file:"), "only a file can be declared out of the perimeter")
+                if row["state"] in ("managed-prepared", "perimeter-guarded"):
+                    self.assertTrue(row["evidence"], "a migrated entry needs the test that fixes it")
+                if row["state"] == "managed-prepared":
+                    self.assertTrue(row["instructions"], "a managed entry needs its instructions")
+                for item in row["evidence"]:
+                    self.assertRegex(item["path"], r"^scripts/tests/test-[^/]+$", f"evidence {item} is not a G test")
+                    self.assertTrue(item["test"] in (ROOT / item["path"]).read_text(encoding="utf-8"),
+                                    f"evidence {item} does not exist")
+                for item in row["instructions"]:
+                    self.assertRegex(item["path"], r"^(agents|docs/runbooks|workspace-[a-z]+)/",
+                                     f"instruction {item} is not an instruction file")
+                    self.assertTrue(item["literal"] in (ROOT / item["path"]).read_text(encoding="utf-8"),
+                                    f"instruction {item} is not in its file")
+
     def test_parallel_preparation_never_observes_partial_artifact(self):
         writing = threading.Event()
         release = threading.Event()

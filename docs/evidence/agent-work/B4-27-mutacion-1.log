@@ -1,0 +1,16 @@
+....F..........
+======================================================================
+FAIL: test_every_inventory_entry_is_migrated_or_declared_out (__main__.AgentsRouting.test_every_inventory_entry_is_migrated_or_declared_out)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 304, in test_every_inventory_entry_is_migrated_or_declared_out
+    self.assertEqual(set(rows), required, "migration must register every inventory entry and nothing else")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Items in the second set but not the first:
+'file:scripts/mac/corrida/avisos.sh' : migration must register every inventory entry and nothing else
+
+----------------------------------------------------------------------
+Ran 15 tests in 0.095s
+
+FAILED (failures=1)
+rc=1

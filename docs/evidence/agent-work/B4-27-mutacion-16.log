@@ -1,0 +1,18 @@
+....F..........
+======================================================================
+FAIL: test_every_inventory_entry_is_migrated_or_declared_out (__main__.AgentsRouting.test_every_inventory_entry_is_migrated_or_declared_out) (entry='wake:encargos-vigia')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 316, in test_every_inventory_entry_is_migrated_or_declared_out
+    self.assertEqual(row["state"], "legacy-until-adoption")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'perimeter-guarded' != 'legacy-until-adoption'
+- perimeter-guarded
++ legacy-until-adoption
+
+
+----------------------------------------------------------------------
+Ran 15 tests in 0.088s
+
+FAILED (failures=1)
+rc=1

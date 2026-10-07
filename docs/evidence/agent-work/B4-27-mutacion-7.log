@@ -1,0 +1,17 @@
+....F..........
+======================================================================
+FAIL: test_every_inventory_entry_is_migrated_or_declared_out (__main__.AgentsRouting.test_every_inventory_entry_is_migrated_or_declared_out) (entry='file:scripts/lanzar-lead.sh')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 327, in test_every_inventory_entry_is_migrated_or_declared_out
+    self.assertTrue(item["test"] in (ROOT / item["path"]).read_text(encoding="utf-8"),
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                    f"evidence {item} does not exist")
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : evidence {'path': 'scripts/tests/test-lanzar-lead.sh', 'test': '(9) no existe'} does not exist
+
+----------------------------------------------------------------------
+Ran 15 tests in 0.087s
+
+FAILED (failures=1)
+rc=1
