@@ -217,7 +217,7 @@ print(datetime.fromtimestamp(int(os.environ['OWED_HM'])).strftime('%H:%M'))" 2>/
   # (2) el vigia: con el parte y la accion que toca (loop 12). claw se despierta
   # con system event; hermes lee la linea de eventos.jsonl por ssh (9.0). Solo
   # cuando hay acciones: un parte sin nada pendiente no gasta un turno del vigia.
-  if [ -n "$P_ACCIONES" ] && [ "$P_FIRMA" != "$lfv" ]; then
+  if [ -n "$P_ACCIONES" ] && [ "$P_FIRMA_VIGIA" != "$lfv" ]; then
     local vigia rc=0 acc_claves
     vigia="$(json_campo "$reg" vigia)"
     acc_claves="$(printf '%s\n' "$P_ACCIONES" | cut -d'|' -f1 | paste -sd, -)"
@@ -239,7 +239,7 @@ print(datetime.fromtimestamp(int(os.environ['OWED_HM'])).strftime('%H:%M'))" 2>/
         EVT_ok=true EVT_corrida="$id" EVT_parte="$parte4" evento_jsonl "$dir" || rc=1
     fi
     if [ "$rc" -eq 0 ]; then
-      lfv="$P_FIRMA"
+      lfv="$P_FIRMA_VIGIA"
       lat_escribir "$lat" "$lfirma" "$lult" "$letq" "$lfv" "$lci" \
         || { echo "latido: no se pudo escribir $lat; el vigia puede despertarse de mas al proximo tick" >&2; lrc=1; }
     fi

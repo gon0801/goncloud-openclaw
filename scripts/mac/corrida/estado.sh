@@ -128,8 +128,9 @@ except Exception: print(-1)" 2>/dev/null)"
 
 # parte_calcular <id>: deja el parte en P_ETIQ P_AVANCE P_CAMBIO P_SIGUE
 # P_NECESITO, la firma discreta del estado en P_FIRMA (para que el latido sepa
-# que cambio sin depender de los minutos), las acciones para el vigia en
-# P_ACCIONES (una por linea "clave|texto") y el detalle en P_DETALLE.
+# que cambio sin depender de los minutos), la firma del vigia en P_FIRMA_VIGIA
+# (como P_FIRMA, sin etiqueta ni sesiones gestionadas), las acciones para el
+# vigia en P_ACCIONES (una por linea "clave|texto") y el detalle en P_DETALLE.
 parte_calcular() {
   local id="$1"
   local reg; reg="$(registro_de "$id")"
@@ -172,6 +173,7 @@ EOF
     P_SIGUE="no queda nada por hacer"
     P_NECESITO="nada"
     P_FIRMA="cerrada"
+    P_FIRMA_VIGIA="cerrada"
     P_ACCIONES=""
     P_DETALLE="corrida $id cerrada desde $inicio, vigia $vigia
 cerrada: nada que vigilar"
@@ -180,14 +182,19 @@ cerrada: nada que vigilar"
 
   # Cada sesion: viva o muerta, contrato, dialogo (y si la politica lo cubre),
   # quietud de 30 min sin haber terminado. Estados discretos por prioridad.
-  local nombres="" n rol cli ses_st contrato panel pan_limp
+  local nombres="" n rol cli ges ses_st contrato panel pan_limp
   local trabajando=0 det="" fir_ses="" acc=""
   local n_dlg_joven=0 n_dlg_pedir=0 n_callada=0 n_listo=0 n_atorada=0 n_muerta=0 n_muerta_lead=0
+  # Contadores y firma del vigia (T9 :266): una entrada con encargo_ref o
+  # host_id la vigila su host, que manda la incidencia al solicitante; el
+  # parte a David las sigue contando con los n_*.
+  local v_muerta=0 v_muerta_lead=0 v_callada=0 v_dlg=0 v_atorada=0 v_listo=0
+  local fir_vigia=""
   local quieta_primera="" desde_pedir="" desde_dialogo=""
   nombres="$(CORR_REG="$reg" python3 -c "
 import json,os
-print(chr(10).join('%s|%s|%s'%(s.get('nombre',''),s.get('rol') or '',s.get('cli','')) for s in json.load(open(os.environ['CORR_REG'])).get('sesiones',[])))" 2>/dev/null)"
-  while IFS='|' read -r n rol cli; do
+print(chr(10).join('%s|%s|%s|%s'%(s.get('nombre',''),s.get('rol') or '',s.get('cli',''),'g' if (s.get('encargo_ref') or s.get('host_id')) else '') for s in json.load(open(os.environ['CORR_REG'])).get('sesiones',[])))" 2>/dev/null)"
+  while IFS='|' read -r n rol cli ges; do
     [ -n "$n" ] || continue
     panel="$CORRIDA_STATE/$id/.panel.$n.$$"
     pan_limp="$panel.limpio"
@@ -242,6 +249,18 @@ print(chr(10).join('%s|%s|%s'%(s.get('nombre',''),s.get('rol') or '',s.get('cli'
         [ "$rol" = "lead" ] && n_muerta_lead=$((n_muerta_lead+1))
         st_det="muerta (sin sesion de tmux)";;
     esac
+    if [ -z "$ges" ]; then
+      case "$ses_st" in
+        muerta)
+          v_muerta=$((v_muerta+1))
+          [ "$rol" = "lead" ] && v_muerta_lead=$((v_muerta_lead+1));;
+        callada) v_callada=$((v_callada+1));;
+        dialogo-joven|dialogo-pedir) v_dlg=$((v_dlg+1));;
+        atorada) v_atorada=$((v_atorada+1));;
+        listo) v_listo=$((v_listo+1));;
+      esac
+      fir_vigia="$fir_vigia$n:$ses_st,"
+    fi
     fir_ses="$fir_ses$n:$ses_st,"
     det="$det
 sesion $n ($rol, $cli): $st_det"
@@ -258,23 +277,23 @@ $(sed 's/^/  /' "$pan_limp")"
 $nombres
 EOF
 
-  # Acciones para el vigia, segun loop 12.
-  [ "$n_muerta_lead" -gt 0 ] \
+  # Acciones para el vigia, segun loop 12: solo lo de fuera del perimetro.
+  [ "$v_muerta_lead" -gt 0 ] \
     && acc="$acc
 relanzar-lead|la sesion del lead murio: relanzar al lead en otro host (loop 12 y 9)"
-  [ "$n_muerta" -gt "$n_muerta_lead" ] \
+  [ "$v_muerta" -gt "$v_muerta_lead" ] \
     && acc="$acc
 relanzar|sesion de carril muerta: relanzar una vez con el mismo encargo; a la segunda, declarar atorado (loop 12)"
-  [ "$n_callada" -gt 0 ] \
+  [ "$v_callada" -gt 0 ] \
     && acc="$acc
 relanzar|carril callado 30 min o mas sin terminar: relanzar una vez con el mismo encargo; a la segunda, declarar atorado (loop 12)"
-  [ $((n_dlg_joven + n_dlg_pedir)) -gt 0 ] \
+  [ "$v_dlg" -gt 0 ] \
     && acc="$acc
 contestar|dialogo esperando: contestar con la tabla de preaprobaciones; lo que no este en la tabla, rechazar y declarar (loop 12)"
-  [ "$n_atorada" -gt 0 ] \
+  [ "$v_atorada" -gt 0 ] \
     && acc="$acc
 declarar|carril atorado: declararlo y seguir con lo demas (loop 12)"
-  [ "$n_listo" -gt 0 ] \
+  [ "$v_listo" -gt 0 ] \
     && acc="$acc
 recoger|carril con LISTO sin recoger: recoger lo terminado (loop 3)"
 
@@ -375,6 +394,7 @@ recoger|carril con LISTO sin recoger: recoger lo terminado (loop 3)"
   fi
 
   P_FIRMA="e=$P_ETIQ|av=$nav/$m|pr=$GH_TXT|ses=$fir_ses"
+  P_FIRMA_VIGIA="av=$nav/$m|pr=$GH_TXT|ses=$fir_vigia"
   P_ACCIONES="${acc#"$LF"}"
   P_DETALLE="corrida $id $estado desde $inicio, vigia $vigia
 ${det#"$LF"}
