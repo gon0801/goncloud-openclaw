@@ -191,7 +191,19 @@ describe("decidirSeguimiento", () => {
   it("a job leaving the cut is news for the ones that remain", () => {
     const d = decidirSeguimiento({ ahora: 1800, previo: corteEn(0, [resumen14(2, 4, 50), resumen15()]), activas: [resumen15()], inmediato: null });
     if (d.accion !== "SEND") throw new Error("corte esperado");
-    assert.match(d.mensaje, /^Un trabajo salió del seguimiento\.\n/);
+    assert.match(d.mensaje, /^Un trabajo ya no está activo\.\n/);
+  });
+
+  it("an advance that stops being verifiable, or becomes verifiable again, is news", () => {
+    const conocida = resumen14(2, 4, 50);
+    const desconocida: ResumenSeguimiento = { ...conocida, progreso: { kind: "desconocido", motivo: "plan-sin-verificar" } };
+    const pierde = decidirSeguimiento({ ahora: 1800, previo: corteEn(0, [conocida]), activas: [desconocida], inmediato: null });
+    if (pierde.accion !== "SEND") throw new Error("corte esperado");
+    assert.match(pierde.mensaje, /^Fase 14 dejó de tener un avance verificable\.\nFase 14: avance desconocido\.\n/);
+    const recupera = decidirSeguimiento({ ahora: 1800, previo: corteEn(0, [desconocida]), activas: [conocida], inmediato: null });
+    if (recupera.accion !== "SEND") throw new Error("corte esperado");
+    assert.match(recupera.mensaje, /^Fase 14 ya tiene un avance verificable\.\nFase 14: 2 de 4 tareas\.\n/);
+    assert.equal(decidirSeguimiento({ ahora: 1800, previo: corteEn(0, [desconocida]), activas: [desconocida], inmediato: null }).accion, "NO_REPLY");
   });
 
   it("a saved state that cannot be compared sends one plain cut instead of failing or going silent", () => {

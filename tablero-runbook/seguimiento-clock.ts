@@ -149,7 +149,7 @@ function resumenEstable(
   });
 }
 
-type DigestPrevio = { c: number; n: number; x: string[] | null; q: boolean | null };
+type DigestPrevio = { c: number; n: number; conocido: boolean; x: string[] | null; q: boolean | null };
 
 function leerResumen(previo: string): { trabajos: Map<string, DigestPrevio>; sueltas: string } | null {
   try {
@@ -167,6 +167,8 @@ function leerResumen(previo: string): { trabajos: Map<string, DigestPrevio>; sue
       trabajos.set(t, {
         c,
         n,
+        // Un avance desconocido se guarda con porcentaje nulo.
+        conocido: typeof e["p"] === "number",
         x: Array.isArray(x) ? x.filter((v): v is string => typeof v === "string") : null,
         q: typeof q === "boolean" ? q : null,
       });
@@ -203,7 +205,11 @@ function novedadesDesde(
       frases.push(`${nombre} entró al seguimiento.`);
       continue;
     }
-    if (r.progreso.kind === "conocido") {
+    if (r.progreso.kind === "desconocido") {
+      if (p.conocido) frases.push(`${nombre} dejó de tener un avance verificable.`);
+    } else if (!p.conocido) {
+      frases.push(`${nombre} ya tiene un avance verificable.`);
+    } else {
       const { completadas, total } = r.progreso;
       if (completadas > p.c && total === p.n) {
         const singular = r.unidad === "partes" ? "una parte" : "una tarea";
@@ -228,7 +234,9 @@ function novedadesDesde(
   }
   const salieron = [...previo.trabajos.keys()].filter((t) => !presentes.has(t)).length;
   if (salieron > 0) {
-    frases.push(salieron === 1 ? "Un trabajo salió del seguimiento." : `${salieron} trabajos salieron del seguimiento.`);
+    // Cerrado o rancio: las dos cosas lo sacan del corte, y de un rancio ya
+    // se preguntó aparte. La frase no afirma que haya terminado.
+    frases.push(salieron === 1 ? "Un trabajo ya no está activo." : `${salieron} trabajos ya no están activos.`);
   }
   if (JSON.stringify(digestSueltas(sueltas)) !== previo.sueltas) {
     frases.push("Cambiaron las tareas sueltas.");

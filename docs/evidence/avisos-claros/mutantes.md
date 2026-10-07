@@ -14,3 +14,4 @@ Todos se corrieron con `node --test <archivo de prueba>` y se revirtieron.
 | Se listan todas las partes pendientes | `seguimiento-render.ts` | "with several pending parts names only the next one" |
 | Un scratch viejo no cuenta su paquete como avisado | `seguimiento-clock.ts` | "a scratch saved before per-item signatures counts its whole bundle as already sent" |
 | Otro aviso confirmado borra la lista de pendientes ya avisados | `seguimiento-clock.ts` | "another immediate notice confirmed in between keeps the items already delivered" |
+| La novedad ignora que el avance dejó de ser verificable | `seguimiento-clock.ts` | "an advance that stops being verifiable, or becomes verifiable again, is news" |

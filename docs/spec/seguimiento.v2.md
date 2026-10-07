@@ -26,8 +26,9 @@ pasar texto interno de los agentes.
 - **Línea 1, la novedad.** Frases fijas armadas con conteos y estados, nunca
   con texto libre de un agente: un trabajo entró al seguimiento, terminó una o
   más partes, cambió su cuenta de partes, tiene una parte atorada, destrabó
-  una parte, necesita o ya no necesita respuesta, salió del seguimiento, o
-  cambiaron las tareas sueltas. En un latido sin cambios dice
+  una parte, necesita o ya no necesita respuesta, su avance dejó de ser
+  verificable o volvió a serlo, un trabajo ya no está activo (se cerró o
+  lleva más de un día sin moverse), o cambiaron las tareas sueltas. En un latido sin cambios dice
   `Sin novedad: todo sigue en curso.`
 - **Dos líneas por trabajo, como máximo.**
   - `<nombre>: <c> de <n> <partes|tareas>.` La fracción sale de las unidades
