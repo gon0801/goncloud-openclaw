@@ -1,7 +1,8 @@
 # Avisos claros: mutantes
 
 Cada fila rompe una regla del cambio a propósito y anota qué prueba lo detecta.
-Todos se corrieron con `node --test <archivo de prueba>` y se revirtieron.
+Los de `tablero-runbook/` se corrieron con `node --test <archivo de prueba>` y el del
+latido con `bash scripts/tests/test-corrida-latido.sh`; todos se revirtieron.
 
 | Mutante | Archivo | Prueba que falla |
 | --- | --- | --- |
@@ -16,3 +17,4 @@ Todos se corrieron con `node --test <archivo de prueba>` y se revirtieron.
 | Otro aviso confirmado borra la lista de pendientes ya avisados | `seguimiento-clock.ts` | "another immediate notice confirmed in between keeps the items already delivered" |
 | La novedad ignora que el avance dejó de ser verificable | `seguimiento-clock.ts` | "an advance that stops being verifiable, or becomes verifiable again, is news" |
 | El vigilante de silencio conserva el umbral de 25 minutos | `scripts/mac/corrida/latido.sh` | caso "callado 1900" de `scripts/tests/test-corrida-latido.sh` |
+| El umbral de silencio queda por debajo del plazo del latido | `scripts/mac/corrida/latido.sh` | caso "callado 14160" de `scripts/tests/test-corrida-latido.sh` |
