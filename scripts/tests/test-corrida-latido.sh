@@ -806,6 +806,12 @@ FIRMA_VIGIA=${FV0}m-lead:muerta,m-a:muerta,m-b:callada,m-c:dialogo-joven,m-f:dia
 seis per-seis "m-lead m-a m-b m-c m-f m-d m-e m-g"
 [ "$(parte_de per-seis)" = "FIRMA_VIGIA=$FV0" ] \
   || fail "perimetro: con todas gestionadas el vigia todavia tiene acciones o firma: $(parte_de per-seis | tr '\n' ' ')"
+# El parte a David no cambia: su firma (P_FIRMA) sigue contando las gestionadas.
+firma_david="$( ( export CORR_AHORA="$((T0 + 2000))"
+  . scripts/mac/corrida/lib.sh; . scripts/mac/corrida/estado.sh
+  parte_calcular per-seis >/dev/null 2>&1; printf '%s' "${P_FIRMA:-}" ) )"
+[ "$firma_david" = "e=NECESITO TU RESPUESTA|${FV0}m-lead:muerta,m-a:muerta,m-b:callada,m-c:dialogo-joven,m-f:dialogo-pedir,m-d:atorada,m-e:listo,m-g:trabajando," ] \
+  || fail "perimetro: la firma del parte a David dejo de contar las sesiones gestionadas: $firma_david"
 seis per-seis "m-lead m-b m-c m-e"
 esperado="relanzar
 contestar
@@ -818,5 +824,10 @@ seis per-seis "m-lead m-a m-b m-f m-d m-e m-g"
 [ "$(parte_de per-seis)" = "contestar
 FIRMA_VIGIA=${FV0}m-c:dialogo-joven," ] \
   || fail "perimetro: un dialogo joven fuera del perimetro ya no despierta al vigia: $(parte_de per-seis | tr '\n' ' ')"
+# Y el lead muerto, solo, fuera del perimetro: relanzar-lead sin relanzar de carril.
+seis per-seis "m-a m-b m-c m-f m-d m-e m-g"
+[ "$(parte_de per-seis)" = "relanzar-lead
+FIRMA_VIGIA=${FV0}m-lead:muerta," ] \
+  || fail "perimetro: con solo el lead muerto fuera del perimetro el vigia no recibe solo relanzar-lead: $(parte_de per-seis | tr '\n' ' ')"
 
 echo "TODO VERDE: test-corrida-latido"
