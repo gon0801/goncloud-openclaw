@@ -202,11 +202,25 @@ function reportarRoto(
   problemas.push({ trabajoId, motivo });
 }
 
+/** La corrida que nombra un documento de fase, ¿ya está cerrada en su propio registro? */
+function corridaCerrada(stateDir: string, corrida: string): boolean {
+  if (!CORRIDA_RE.test(corrida)) return false;
+  try {
+    const managed = isManagedProgress(stateDir, corrida) && readManagedProgress(stateDir, corrida);
+    const doc: unknown = managed
+      ? managed
+      : JSON.parse(readFileSync(join(stateDir, "progress", "c", `${corrida}.json`), "utf8"));
+    return esProgresoDoc(doc) && doc.cierre.at !== null;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Inventario activo para `runbook.progress.list`: todo documento abierto del
  * stateDir existente (fases en `progress/*.json`, corridas en `progress/c/`),
  * cada uno resumido con su cruce acotado. Los cerrados (`cierre.at` puesto)
- * no aparecen. Un archivo que nombra una fase o corrida pero no se puede
+ * no aparecen, tampoco por un archivo de fase viejo que nombre su corrida. Un archivo que nombra una fase o corrida pero no se puede
  * leer, parsear o validar NO desaparece: conserva su `trabajoId` con un
  * resumen conservador y su causa en `problemas`, para que el director nunca
  * lo confunda con "nada activo" ni retire el reloj. Deduplica por
@@ -277,6 +291,12 @@ export async function listarSeguimientoActivo(
       continue;
     }
     if (crudoDoc.cierre.at !== null) continue;
+    // Un archivo de fase puede quedar viejo y abierto cuando su corrida ya
+    // se cerró por el registro de eventos: la corrida cerrada manda.
+    if (
+      trabajoId.startsWith("fase:") && typeof crudoDoc.corrida === "string"
+      && corridaCerrada(cfg.stateDir, crudoDoc.corrida)
+    ) continue;
     let plan: PlanCruce = crudoDoc.plan === null ? NO_DECLARADO : SIN_VERIFICAR;
     if (crudoDoc.plan !== undefined && crudoDoc.plan !== null) {
       try {

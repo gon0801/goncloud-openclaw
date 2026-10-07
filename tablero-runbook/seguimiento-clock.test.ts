@@ -1,10 +1,10 @@
 /**
  * seguimiento-clock.test.ts — máquina de estados 15/30 (`seguimiento-clock.v1`).
  *
- * TDD rojo-primero: este archivo se escribió ANTES de `seguimiento-clock.ts`.
- * Dos ticks de 15 minutos producen como máximo un Telegram periódico; un
- * permiso, una caída o un cierre salen de inmediato sin duplicar el reporte
- * de rutina. El corte confirmado solo avanza con `ok:true` más `messageId`.
+ * Dos ticks de 15 minutos producen como máximo un Telegram periódico, y solo
+ * si hay novedad (o toca el latido de 4 horas); un permiso, una caída o un
+ * cierre salen de inmediato sin duplicar el reporte de rutina ni repetir un
+ * pendiente ya avisado. El corte confirmado solo avanza con `ok:true` más `messageId`.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -125,25 +125,100 @@ describe("decidirSeguimiento", () => {
   });
 
   it("R12: cuadricula de 15 min — tick 900 mudo, tick desfasado 1795 envia (tolerancia), tick 1800 envia; ciclo nuevo 2700 mudo y 3600 envia", () => {
-    const activas = [resumen14(1, 4, 25)];
-    const d900 = decidirSeguimiento({ ahora: 900, previo: corteEn(0, activas), activas, inmediato: null });
+    // Con novedad (una tarea más): la ventana es lo único que decide.
+    const antes = [resumen14(1, 4, 25)];
+    const activas = [resumen14(2, 4, 50)];
+    const d900 = decidirSeguimiento({ ahora: 900, previo: corteEn(0, antes), activas, inmediato: null });
     assert.equal(d900.accion, "NO_REPLY");
-    const dDesfase = decidirSeguimiento({ ahora: 1795, previo: corteEn(0, activas), activas, inmediato: null });
+    const dDesfase = decidirSeguimiento({ ahora: 1795, previo: corteEn(0, antes), activas, inmediato: null });
     assert.equal(dDesfase.accion, "SEND");
     if (dDesfase.accion !== "SEND") throw new Error("desfase R12 inesperado");
     assert.equal(dDesfase.tipo, "periodico");
-    const d1800 = decidirSeguimiento({ ahora: 1800, previo: corteEn(0, activas), activas, inmediato: null });
+    const d1800 = decidirSeguimiento({ ahora: 1800, previo: corteEn(0, antes), activas, inmediato: null });
     assert.equal(d1800.accion, "SEND");
-    const d2700 = decidirSeguimiento({ ahora: 2700, previo: corteEn(1800, activas), activas, inmediato: null });
+    const d2700 = decidirSeguimiento({ ahora: 2700, previo: corteEn(1800, antes), activas, inmediato: null });
     assert.equal(d2700.accion, "NO_REPLY");
-    const d3600 = decidirSeguimiento({ ahora: 3600, previo: corteEn(1800, activas), activas, inmediato: null });
+    const d3600 = decidirSeguimiento({ ahora: 3600, previo: corteEn(1800, antes), activas, inmediato: null });
     assert.equal(d3600.accion, "SEND");
   });
 
-  it("a failed delivery does not advance the confirmed cut", () => {
+  it("without news a due tick stays silent; the heartbeat goes out four hours after the last cut", () => {
     const activas = [resumen14(1, 4, 25)];
-    const d1 = decidirSeguimiento({ ahora: 1800, previo: corteEn(0, activas), activas, inmediato: null });
-    const d2 = decidirSeguimiento({ ahora: 2700, previo: corteEn(0, activas), activas, inmediato: null });
+    const previo = corteEn(0, activas);
+    for (const ahora of [1800, 3600, 14399]) {
+      const d = decidirSeguimiento({ ahora, previo, activas, inmediato: null });
+      assert.equal(d.accion, "NO_REPLY", `tick ${ahora}`);
+      if (d.accion !== "NO_REPLY") throw new Error("silencio esperado");
+      // El silencio no mueve el corte ni el estado contra el que se compara.
+      assert.deepEqual(d.estado.corte, previo.corte);
+      assert.equal(d.estado.ultimoEstado, previo.ultimoEstado);
+    }
+    const latido = decidirSeguimiento({ ahora: 14400, previo, activas, inmediato: null });
+    assert.equal(latido.accion, "SEND");
+    if (latido.accion !== "SEND") throw new Error("latido esperado");
+    assert.equal(latido.tipo, "periodico");
+    assert.equal(latido.mensaje, "Sin novedad: todo sigue en curso.\nFase 14: 1 de 4 tareas.\nAhora: Implementación.\nNo necesito nada de ti.\n");
+    assert.deepEqual(latido.estadoTrasConfirmar.corte, { kind: "reporte-confirmado", ultimoReporteConfirmado: 14400 });
+  });
+
+  it("news accumulated during silent ticks goes out in the first due cut, compared against the last one sent", () => {
+    const previo = corteEn(0, [resumen14(1, 4, 25)]);
+    const mudo = decidirSeguimiento({ ahora: 900, previo, activas: [resumen14(2, 4, 50)], inmediato: null });
+    if (mudo.accion !== "NO_REPLY") throw new Error("ventana no cumplida");
+    const d = decidirSeguimiento({ ahora: 1800, previo: mudo.estado, activas: [resumen14(3, 4, 75)], inmediato: null });
+    if (d.accion !== "SEND") throw new Error("corte esperado");
+    assert.match(d.mensaje, /^Fase 14 terminó 2 tareas\.\n/);
+  });
+
+  it("a part getting stuck or unstuck is news; so is an attention request appearing or clearing", () => {
+    const base = resumen14(1, 4, 25);
+    const atorada: ResumenSeguimiento = { ...base, carriles: [{ ...base.carriles[0]!, estado: "atorado" }] };
+    const seAtora = decidirSeguimiento({ ahora: 1800, previo: corteEn(0, [base]), activas: [atorada], inmediato: null });
+    if (seAtora.accion !== "SEND") throw new Error("atorada esperada");
+    assert.equal(seAtora.mensaje, "Fase 14 tiene una parte atorada.\nFase 14: 1 de 4 tareas.\nAtorada: Implementación.\nNo necesito nada de ti.\n");
+    const seSuelta = decidirSeguimiento({ ahora: 1800, previo: corteEn(0, [atorada]), activas: [base], inmediato: null });
+    if (seSuelta.accion !== "SEND") throw new Error("destrabada esperada");
+    assert.match(seSuelta.mensaje, /^Fase 14 destrabó una parte\.\n/);
+
+    const pide = resumenAtencion("Falta tu visto bueno");
+    const yaAvisado = { ...corteEn(0, [pide]), ultimoInmediato: { firma: "x", messageId: null, entregados: ["fase:14:Falta tu visto bueno"] } };
+    const seLibera = decidirSeguimiento({ ahora: 1800, previo: yaAvisado, activas: [base], inmediato: null });
+    if (seLibera.accion !== "SEND") throw new Error("liberada esperada");
+    assert.match(seLibera.mensaje, /^Fase 14 ya no necesita tu respuesta\.\n/);
+    assert.equal(seLibera.estadoTrasConfirmar.ultimoInmediato, null);
+  });
+
+  it("a job leaving the cut is news for the ones that remain", () => {
+    const d = decidirSeguimiento({ ahora: 1800, previo: corteEn(0, [resumen14(2, 4, 50), resumen15()]), activas: [resumen15()], inmediato: null });
+    if (d.accion !== "SEND") throw new Error("corte esperado");
+    assert.match(d.mensaje, /^Un trabajo salió del seguimiento\.\n/);
+  });
+
+  it("a saved state that cannot be compared sends one plain cut instead of failing or going silent", () => {
+    for (const ultimoEstado of ["", "fase:9|0/3", "[1,2]"]) {
+      const previo = { ...corteEn(0, []), ultimoEstado };
+      const d = decidirSeguimiento({ ahora: 1800, previo, activas: [resumen14(1, 4, 25)], inmediato: null });
+      if (d.accion !== "SEND") throw new Error(`corte esperado con ${JSON.stringify(ultimoEstado)}`);
+      assert.match(d.mensaje, /^Estado actual del trabajo\.\n/);
+    }
+  });
+
+  it("a state saved before stuck parts and attention were tracked compares by counts and does not invent news", () => {
+    const viejo = JSON.stringify({ a: [{ t: "fase:14", f: "14", c: 1, n: 4, p: 25 }], s: [], i: null });
+    const base = resumen14(1, 4, 25);
+    const atorada: ResumenSeguimiento = { ...base, carriles: [{ ...base.carriles[0]!, estado: "atorado" }] };
+    const previo = { ...corteEn(0, []), ultimoEstado: viejo };
+    assert.equal(decidirSeguimiento({ ahora: 1800, previo, activas: [atorada], inmediato: null }).accion, "NO_REPLY");
+    const avanza = decidirSeguimiento({ ahora: 1800, previo, activas: [resumen14(2, 4, 50)], inmediato: null });
+    if (avanza.accion !== "SEND") throw new Error("avance esperado");
+    assert.match(avanza.mensaje, /^Fase 14 terminó una tarea\.\n/);
+  });
+
+  it("a failed delivery does not advance the confirmed cut", () => {
+    const antes = [resumen14(1, 4, 25)];
+    const activas = [resumen14(2, 4, 50)];
+    const d1 = decidirSeguimiento({ ahora: 1800, previo: corteEn(0, antes), activas, inmediato: null });
+    const d2 = decidirSeguimiento({ ahora: 2700, previo: corteEn(0, antes), activas, inmediato: null });
     assert.equal(d1.accion, "SEND");
     assert.equal(d2.accion, "SEND");
   });
@@ -159,8 +234,8 @@ describe("decidirSeguimiento", () => {
   });
 
   it("a restart from confirmed scratch sends at most once per two ticks", () => {
-    const activas = [resumen14(1, 4, 25)];
-    const previo = corteEn(0, activas);
+    const activas = [resumen14(2, 4, 50)];
+    const previo = corteEn(0, [resumen14(1, 4, 25)]);
     const primero = decidirSeguimiento({ ahora: 900, previo, activas, inmediato: null });
     assert.equal(primero.accion, "NO_REPLY");
     if (primero.accion !== "NO_REPLY") throw new Error("tick tras reinicio inesperado");
@@ -196,8 +271,8 @@ describe("decidirSeguimiento", () => {
   });
 
   it("a confirmed periodic send advances the cut; an immediate preserves it", () => {
-    const activas = [resumen14(1, 4, 25)];
-    const per = decidirSeguimiento({ ahora: 1800, previo: corteEn(0, activas), activas, inmediato: null });
+    const activas = [resumen14(2, 4, 50)];
+    const per = decidirSeguimiento({ ahora: 1800, previo: corteEn(0, [resumen14(1, 4, 25)]), activas, inmediato: null });
     assert.equal(per.accion, "SEND");
     if (per.accion !== "SEND") throw new Error("periodico inesperado");
     assert.deepEqual(per.estadoTrasConfirmar.corte,
@@ -232,7 +307,8 @@ describe("decidirSeguimiento", () => {
     if (d.accion !== "SEND") throw new Error("consolidado inesperado");
     assert.match(d.mensaje, /Fase 14/);
     assert.match(d.mensaje, /Fase 15/);
-    assert.equal(d.mensaje.match(/Que cambió:/g)?.length, 1);
+    assert.equal(d.mensaje.match(/^Empezó el seguimiento\.$/gm)?.length, 1);
+    assert.equal(d.mensaje.match(/^No necesito nada de ti\.$/gm)?.length, 1);
   });
 
   it("with no active work a tick stays silent instead of rendering emptiness", () => {
@@ -243,7 +319,7 @@ describe("decidirSeguimiento", () => {
     assert.deepEqual(d.estado.trabajosActivos, []);
   });
 
-  it("a due cut with changed counts names the advance; unchanged counts confirm continuity", () => {
+  it("a due cut with changed counts names the advance; unchanged counts stay silent until the heartbeat", () => {
     const antes = [resumen14(1, 4, 25)];
     const primero = decidirSeguimiento({ ahora: 1800, previo: crearEstadoInicial(0, antes), activas: antes, inmediato: null });
     assert.equal(primero.accion, "SEND");
@@ -253,16 +329,13 @@ describe("decidirSeguimiento", () => {
     const segundo = decidirSeguimiento({ ahora: 3600, previo, activas: despues, inmediato: null });
     assert.equal(segundo.accion, "SEND");
     if (segundo.accion !== "SEND") throw new Error("segundo corte inesperado");
-    assert.match(segundo.mensaje, /avanzó de 1\/4 a 2\/4/);
-    const tercero = decidirSeguimiento({
-      ahora: 5400,
-      previo: confirmado(segundo.estadoTrasConfirmar, 8),
-      activas: despues,
-      inmediato: null,
-    });
+    assert.match(segundo.mensaje, /^Fase 14 terminó una tarea\.\nFase 14: 2 de 4 tareas\.\n/);
+    const trasSegundo = confirmado(segundo.estadoTrasConfirmar, 8);
+    assert.equal(decidirSeguimiento({ ahora: 5400, previo: trasSegundo, activas: despues, inmediato: null }).accion, "NO_REPLY");
+    const tercero = decidirSeguimiento({ ahora: 3600 + 14400, previo: trasSegundo, activas: despues, inmediato: null });
     assert.equal(tercero.accion, "SEND");
-    if (tercero.accion !== "SEND") throw new Error("tercer corte inesperado");
-    assert.match(tercero.mensaje, /sigue en curso/);
+    if (tercero.accion !== "SEND") throw new Error("latido inesperado");
+    assert.match(tercero.mensaje, /^Sin novedad: todo sigue en curso\.\n/);
   });
 });
 
@@ -274,7 +347,7 @@ describe("decidirSeguimiento con una corrida", () => {
       ahora: 3600, previo: confirmado(primero.estadoTrasConfirmar, 7), activas: [resumenCorrida(1)], inmediato: null,
     });
     if (segundo.accion !== "SEND") throw new Error("segundo corte inesperado");
-    assert.match(segundo.mensaje, /Migrar el correo avanzó de 0\/3 a 1\/3\./);
+    assert.match(segundo.mensaje, /^Migrar el correo terminó una parte\.\nMigrar el correo: 1 de 3 partes\.\n/);
     assert.doesNotMatch(segundo.mensaje, /Fase 0/);
   });
 
@@ -325,7 +398,7 @@ describe("decidirSeguimiento con una corrida", () => {
     const activas = [resumenCorrida(1, titulo)];
     const p = decidirSeguimiento({ ahora: 1800, previo: crearEstadoInicial(0, activas), activas, inmediato: null });
     if (p.accion !== "SEND") throw new Error("periódico esperado");
-    assert.match(p.mensaje, /^\[AVANZA\] migrar-correo — 33% \(1\/3 partes\)$/m);
+    assert.match(p.mensaje, /^migrar-correo: 1 de 3 partes\.$/m);
     assert.doesNotMatch(p.mensaje, /Comando: /);
 
     const rancia = [{ ...resumenCorrida(1, titulo), actualizado: "2026-09-01T00:00:00Z" }];
@@ -350,7 +423,97 @@ describe("decidirSeguimiento con una corrida", () => {
     const activas = [resumen14(1, 4, 25), resumenCorrida(1)];
     const segundo = decidirSeguimiento({ ahora: 3600, previo: confirmado(primero.estadoTrasConfirmar, 7), activas, inmediato: null });
     if (segundo.accion !== "SEND") throw new Error("segundo corte inesperado");
-    assert.match(segundo.mensaje, /Migrar el correo entró al seguimiento con 1\/3 partes\./);
+    assert.match(segundo.mensaje, /^Migrar el correo entró al seguimiento\.\n/);
+    assert.match(segundo.mensaje, /^Migrar el correo: 1 de 3 partes\.$/m);
+    assert.match(segundo.mensaje, /^Fase 14: 1 de 4 tareas\.$/m);
+  });
+});
+
+describe("aviso inmediato por pendiente", () => {
+  const T0 = Date.parse("2026-10-07T12:00:00Z") / 1000;
+  const iso = (secs: number): string => new Date(secs * 1000).toISOString();
+
+  function encargos(motivo: string | null): ResumenSeguimiento {
+    return {
+      ...resumenCorrida(1, "Encargos durables"),
+      trabajoId: "corrida:encargos",
+      actualizado: iso(T0 - 600),
+      atencionRequerida: { necesaria: motivo !== null, motivo },
+    };
+  }
+  /** Trabajo abierto que no se mueve desde hace seis días: rancio. */
+  function u3a(): ResumenSeguimiento {
+    return { ...resumenCorrida(1, "Cerrar el tablero viejo"), trabajoId: "corrida:u3a", actualizado: iso(T0 - 6 * 86400) };
+  }
+  const RANCIA = "Cerrar el tablero viejo no se mueve desde el 1 de octubre: ¿sigue viva o la cierro?";
+
+  it("when one pending item changes its text, only that one is sent: the stale job is not asked again", () => {
+    // Medido el 2026-10-07: el aviso juntaba todos los pendientes y firmaba
+    // el conjunto, así que cada cambio de texto reenviaba también lo viejo.
+    const activas1 = [encargos("Falta iniciar la sesión del revisor"), u3a()];
+    const r1 = decidirSeguimiento({ ahora: T0, previo: corteEn(T0, activas1), activas: activas1, inmediato: null });
+    if (r1.accion !== "SEND") throw new Error("primer aviso esperado");
+    assert.ok(r1.mensaje.includes("Falta iniciar la sesión del revisor."), r1.mensaje);
+    assert.ok(r1.mensaje.includes(RANCIA), r1.mensaje);
+
+    const activas2 = [encargos("Falta tu visto bueno para seguir"), u3a()];
+    const r2 = decidirSeguimiento({ ahora: T0 + 300, previo: confirmado(r1.estadoTrasConfirmar, 5), activas: activas2, inmediato: null });
+    if (r2.accion !== "SEND") throw new Error("segundo aviso esperado");
+    assert.equal(r2.tipo, "inmediato");
+    assert.ok(r2.mensaje.includes("Falta tu visto bueno para seguir."), r2.mensaje);
+    assert.ok(!r2.mensaje.includes("Cerrar el tablero viejo"), r2.mensaje);
+    assert.equal(validarMensajeV1(r2.mensaje).ok, true);
+
+    const r3 = decidirSeguimiento({ ahora: T0 + 600, previo: confirmado(r2.estadoTrasConfirmar, 6), activas: activas2, inmediato: null });
+    assert.equal(r3.accion, "NO_REPLY");
+  });
+
+  it("an item that clears does not resend the ones that stay; if it comes back it is sent alone", () => {
+    const con = [encargos("Falta tu visto bueno para seguir"), u3a()];
+    const r1 = decidirSeguimiento({ ahora: T0, previo: corteEn(T0, con), activas: con, inmediato: null });
+    if (r1.accion !== "SEND") throw new Error("primer aviso esperado");
+    const sin = [encargos(null), u3a()];
+    const r2 = decidirSeguimiento({ ahora: T0 + 300, previo: confirmado(r1.estadoTrasConfirmar, 5), activas: sin, inmediato: null });
+    assert.equal(r2.accion, "NO_REPLY");
+    if (r2.accion !== "NO_REPLY") throw new Error("silencio esperado");
+    assert.deepEqual(r2.estado.ultimoInmediato?.entregados, ["corrida:u3a:rancia"]);
+    const r3 = decidirSeguimiento({ ahora: T0 + 600, previo: r2.estado, activas: con, inmediato: null });
+    if (r3.accion !== "SEND") throw new Error("regreso esperado");
+    assert.ok(r3.mensaje.includes("Falta tu visto bueno para seguir."), r3.mensaje);
+    assert.ok(!r3.mensaje.includes("Cerrar el tablero viejo"), r3.mensaje);
+  });
+
+  it("a stale job is asked once while it stays stale, whatever its date says", () => {
+    const r1 = decidirSeguimiento({ ahora: T0, previo: corteEn(T0, [u3a()]), activas: [u3a()], inmediato: null });
+    if (r1.accion !== "SEND") throw new Error("pregunta esperada");
+    const otraFecha = [{ ...u3a(), actualizado: iso(T0 - 5 * 86400) }];
+    const r2 = decidirSeguimiento({ ahora: T0 + 900, previo: confirmado(r1.estadoTrasConfirmar, 5), activas: otraFecha, inmediato: null });
+    assert.equal(r2.accion, "NO_REPLY");
+  });
+
+  it("a scratch saved before per-item signatures counts its whole bundle as already sent", () => {
+    const activas = [encargos("Falta tu visto bueno para seguir"), u3a()];
+    const firmaDelConjunto = `n:corrida:encargos:Falta tu visto bueno para seguir|corrida:u3a:${RANCIA}`;
+    const viejo: EstadoSeguimiento = { ...corteEn(T0, activas), ultimoInmediato: { firma: firmaDelConjunto, messageId: null } };
+    assert.equal(decidirSeguimiento({ ahora: T0 + 60, previo: viejo, activas, inmediato: null }).accion, "NO_REPLY");
+    const cambia = [encargos("Falta iniciar la sesión del revisor"), u3a()];
+    const d = decidirSeguimiento({ ahora: T0 + 60, previo: viejo, activas: cambia, inmediato: null });
+    if (d.accion !== "SEND") throw new Error("aviso esperado");
+    assert.ok(d.mensaje.includes("Falta iniciar la sesión del revisor."), d.mensaje);
+  });
+
+  it("the scratch round-trips the delivered items and rejects a malformed list", () => {
+    const estado: EstadoSeguimiento = {
+      ...corteEn(T0, []),
+      ultimoInmediato: { firma: "n:x", messageId: null, entregados: ["corrida:u3a:rancia"] },
+    };
+    assert.deepEqual(parseEstadoSeguimiento(JSON.parse(JSON.stringify(estado))), estado);
+    for (const entregados of ["x", [1], { a: 1 }]) {
+      assert.throws(
+        () => parseEstadoSeguimiento({ ...estado, ultimoInmediato: { firma: "n:x", messageId: null, entregados } }),
+        /estado-invalido/,
+      );
+    }
   });
 });
 
@@ -453,21 +616,20 @@ describe("trabajo ilegible", () => {
     assert.equal(primero.tipo, "inmediato");
     // Confirmación por contrato público: messageId SOLO en el nivel superior.
     const previo = confirmado(primero.estadoTrasConfirmar, 41);
-    // Minuto 30: la corrupción no pospone el corte debido (spec l.120-126) y
-    // el único trabajo activo sigue sin carriles: el reporte sale seguro,
-    // sin lanzar y sin inventar actividad.
-    const segundo = decidirSeguimiento({
+    // El único trabajo activo sigue sin carriles y sin novedad: el latido
+    // sale seguro, sin lanzar y sin inventar actividad.
+    assert.equal(decidirSeguimiento({
       ahora: 1800, previo, activas: [corrupta], problemas, inmediato: null,
+    }).accion, "NO_REPLY");
+    const segundo = decidirSeguimiento({
+      ahora: 14400, previo, activas: [corrupta], problemas, inmediato: null,
     });
     assert.equal(segundo.accion, "SEND");
     if (segundo.accion !== "SEND") throw new Error("corte con solo corrupcion inesperado");
     assert.equal(segundo.tipo, "periodico");
-    assert.match(segundo.mensaje, /\[AVANZA\] Fase 14 — desconocido/);
-    assert.match(segundo.mensaje, /sin lectura nueva del avance en esta ventana\./);
-    assert.doesNotMatch(segundo.mensaje, /minutos en la unidad actual/);
-    assert.doesNotMatch(segundo.mensaje, /última evidencia/);
+    assert.equal(segundo.mensaje, "Sin novedad: todo sigue en curso.\nFase 14: avance desconocido.\nNo necesito nada de ti.\n");
     assert.deepEqual(segundo.estadoTrasConfirmar.corte,
-      { kind: "reporte-confirmado", ultimoReporteConfirmado: 1800 });
+      { kind: "reporte-confirmado", ultimoReporteConfirmado: 14400 });
   });
 
   it("a changed corruption report sends again", () => {
@@ -744,7 +906,7 @@ describe("seguimiento rancio", () => {
     assert.equal(r2.accion, "SEND");
     if (r2.accion !== "SEND") throw new Error("periódico esperado");
     assert.equal(r2.tipo, "periodico");
-    assert.match(r2.mensaje, /\[AVANZA\] Fase 15/);
+    assert.match(r2.mensaje, /^Fase 15: 1 de 2 tareas\.$/m);
     assert.doesNotMatch(r2.mensaje, /Fase 9/);
     assert.deepEqual(r2.estadoTrasConfirmar.trabajosActivos, ["fase:15", "fase:9"]);
 
@@ -761,7 +923,7 @@ describe("seguimiento rancio", () => {
     assert.equal(d23.accion, "SEND");
     if (d23.accion !== "SEND") throw new Error("periódico esperado");
     assert.equal(d23.tipo, "periodico");
-    assert.match(d23.mensaje, /\[AVANZA\] Fase 14/);
+    assert.match(d23.mensaje, /^Fase 14: /m);
 
     const d25 = decidirSeguimiento({
       ahora: T0, previo: corteEn(T0 - 1800, []), activas: [fase("14", haceSecs(25 * 3600))], inmediato: null,
@@ -808,11 +970,15 @@ describe("seguimiento rancio", () => {
     assert.equal(r1.accion, "SEND");
     if (r1.accion !== "SEND") throw new Error("detenida esperada");
     assert.match(r1.mensaje, /^\[DETENIDA\] /);
+    const trasDetenida = confirmado(r1.estadoTrasConfirmar, 3);
+    assert.equal(decidirSeguimiento({
+      ahora: T0 + 60, previo: trasDetenida, activas: [conservador], problemas, inmediato: null,
+    }).accion, "NO_REPLY");
     const r2 = decidirSeguimiento({
-      ahora: T0 + 60, previo: confirmado(r1.estadoTrasConfirmar, 3), activas: [conservador], problemas, inmediato: null,
+      ahora: T0 - 1800 + 14400, previo: trasDetenida, activas: [conservador], problemas, inmediato: null,
     });
     assert.equal(r2.accion, "SEND");
-    if (r2.accion !== "SEND") throw new Error("periódico esperado");
-    assert.match(r2.mensaje, /\[AVANZA\] Fase 14 — desconocido/);
+    if (r2.accion !== "SEND") throw new Error("latido esperado");
+    assert.equal(r2.mensaje, "Sin novedad: todo sigue en curso.\nFase 14: avance desconocido.\nNo necesito nada de ti.\n");
   });
 });

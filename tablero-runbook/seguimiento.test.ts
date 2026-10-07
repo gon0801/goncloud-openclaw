@@ -266,4 +266,53 @@ describe("listarSeguimientoActivo", () => {
     const lista = await listar(docDeClaw({ plan: { repo: "gon0801/goncloud-openclaw", ruta: "Plans.md", seccion: null } }));
     assert.deepEqual(lista.activas[0]?.progreso, { kind: "desconocido", motivo: "plan-sin-verificar" });
   });
+
+  it("a phase file naming a corrida already closed in progress/c is not listed as active", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "seguimiento-cerrada-"));
+    try {
+      mkdirSync(join(dir, "progress", "c"), { recursive: true });
+      const fase = docBase({
+        fase: "0",
+        titulo: "Fase 0",
+        corrida: "u3a-cierre",
+        lead: { agente: "muse", inicio: "2026-09-01T00:00:00Z", actualizado: "2026-09-02T00:00:00Z" },
+      });
+      writeFileSync(join(dir, "progress", "0.json"), JSON.stringify(fase));
+      const cerrada = docDeClaw({
+        corrida: "u3a-cierre",
+        cierre: { at: "2026-10-01T00:00:00Z", telegram_message_id: 1, resumen: "cerrada" },
+      });
+      writeFileSync(join(dir, "progress", "c", "u3a-cierre.json"), JSON.stringify(cerrada));
+      const lista = await listarSeguimientoActivo({ stateDir: dir }, { ghPath: "/sin/gh" });
+      assert.deepEqual(lista.activas.map((a) => a.trabajoId), []);
+      assert.deepEqual(lista.problemas, []);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a phase file naming a corrida closed only in progress/e is not listed as active", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "seguimiento-cerrada-e-"));
+    try {
+      mkdirSync(join(dir, "progress", "c"), { recursive: true });
+      const fase = docBase({
+        fase: "0",
+        titulo: "Fase 0",
+        corrida: "solo-e-cierre",
+        lead: { agente: "muse", inicio: "2026-09-01T00:00:00Z", actualizado: "2026-09-02T00:00:00Z" },
+      });
+      writeFileSync(join(dir, "progress", "0.json"), JSON.stringify(fase));
+      const doc = docDeClaw({ corrida: "solo-e-cierre", plan: null });
+      const opened = submitProgressEvent(dir, { kind: "run.opened", id: "open-e", corrida: "solo-e-cierre", at: "2026-09-30T12:00:00Z", doc, roundBudget: {} });
+      assert.equal(opened.ok, true);
+      const closed = submitProgressEvent(dir, { kind: "run.closed", id: "close-e", corrida: "solo-e-cierre", at: "2026-10-01T00:00:00Z", expectedRevision: 1, resumen: "cerrada en eventos" });
+      assert.equal(closed.ok, true, JSON.stringify(closed));
+      unlinkSync(join(dir, "progress", "c", "solo-e-cierre.json"));
+      const lista = await listarSeguimientoActivo({ stateDir: dir }, { ghPath: "/sin/gh" });
+      assert.deepEqual(lista.activas.map((a) => a.trabajoId), []);
+      assert.deepEqual(lista.problemas, []);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

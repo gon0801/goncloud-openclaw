@@ -620,7 +620,7 @@ it("v2-native-workers: el HTML del tablero es identico por RPC y HTTP", async ()
         { modo: "tick", estado: r1.estado, tareasSueltas: [suelta] });
       assert.equal(r2.accion, "SEND");
       assert.equal(r2.tipo, "periodico");
-      assert.match(r2.mensaje, /Trabajo suelto — 0% \(0\/1\)/);
+      assert.match(r2.mensaje, /^Trabajo suelto: 0 de 1\.$/m);
     } finally {
       mod._setRelojSeguimientoForTest(undefined);
       rmSync(dir, { recursive: true, force: true });
@@ -799,7 +799,7 @@ it("v2-native-workers: el HTML del tablero es identico por RPC y HTTP", async ()
       assert.equal(r2.accion, "SEND");
       assert.equal(r2.tipo, "periodico");
       assert.match(r2.mensaje, /Fase 14/);
-      assert.match(r2.mensaje, /sigue en curso/);
+      assert.match(r2.mensaje, /^Empezó el seguimiento\.\nFase 14: /);
       assert.deepEqual(r2.estadoTrasConfirmar.corte,
         { kind: "reporte-confirmado", ultimoReporteConfirmado: TS + 1800 });
 

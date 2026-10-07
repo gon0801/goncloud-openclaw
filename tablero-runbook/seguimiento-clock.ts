@@ -3,10 +3,10 @@
  * periodico en la cuadrícula de 15 minutos.
  *
  * La vigilancia interna corre cada 15 minutos; el Telegram consolidado sale
- * en esa cuadrícula: con la ventana de 25 minutos (R12), el primer tick que
- * la cumple envía — en cuadrícula sana ese tick es el de +1800 desde el
- * corte, y un tick desfasado del cron que caiga entre 1500 y 1800 también
- * envía (tolerancia de desfase, el alcance que R12 promete). `decidirSeguimiento` es puro: nunca llama a Telegram, al disco ni
+ * en esa cuadrícula, como mucho uno por ventana de 25 minutos (R12) y solo
+ * si hay novedad desde el último corte enviado (o un latido cada 4 horas):
+ * en cuadrícula sana el primer tick que cumple la ventana es el de +1800, y
+ * un tick desfasado del cron que caiga entre 1500 y 1800 también la cumple. `decidirSeguimiento` es puro: nunca llama a Telegram, al disco ni
  * al reloj. Dada la época actual, los resúmenes activos, las tareas sueltas,
  * el último estado confirmado (scratch de la automatización `avance-tareas`)
  * y un eventual evento inmediato, devuelve `NO_REPLY` o `SEND`.
@@ -41,6 +41,14 @@ export const VENTANA_REPORTE_SECS = 1500;
  */
 export const RANCIO_SECS = 86400;
 
+/**
+ * Sin novedad el corte no sale: a David le llega solo lo que cambió. Cada 4
+ * horas sale igual un latido, para que el silencio no se confunda con un
+ * reloj muerto. Medido el 2026-10-07: el corte salía cada 30 minutos sin
+ * cambio alguno.
+ */
+export const LATIDO_SIN_NOVEDAD_SECS = 14400;
+
 export type CorteSeguimiento =
   | { kind: "esperando-primer-reporte"; inicioVentana: number }
   | { kind: "reporte-confirmado"; ultimoReporteConfirmado: number };
@@ -49,7 +57,11 @@ export type EstadoSeguimiento = {
   schema: "seguimiento-clock.v1";
   corte: CorteSeguimiento;
   ultimoEstado: string;
-  ultimoInmediato: { firma: string; messageId: number | null } | null;
+  /**
+   * `entregados`: una firma por pendiente ya avisado. Ausente en un scratch
+   * anterior a la firma por pendiente, donde `firma` era la del conjunto.
+   */
+  ultimoInmediato: { firma: string; messageId: number | null; entregados?: string[] } | null;
   messageId: number | null;
   trabajosActivos: string[];
 };
@@ -93,7 +105,7 @@ function inicioVentanaDe(corte: CorteSeguimiento): number {
   }
 }
 
-type ResumenDigest = { t: string; f: string; c: number; n: number; p: number | null };
+type ResumenDigest = { t: string; f: string; c: number; n: number; p: number | null; x?: string[]; q?: boolean };
 
 function esNumeroFinito(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
@@ -108,10 +120,17 @@ function digestConteo(p: ConteoObjetivo): { c: number; n: number; p: number | nu
   return { c: p.completadas, n: p.total, p: p.porcentaje };
 }
 
+function digestSueltas(sueltas: TareaSuelta[]): ResumenDigest[] {
+  return sueltas.map((t) => {
+    const d = digestConteo(t.progreso);
+    return { t: `suelta:${t.nombre}`, f: "", c: d.c, n: d.n, p: d.p };
+  }).sort((x, y) => (x.t < y.t ? -1 : x.t > y.t ? 1 : 0));
+}
+
 /**
- * Resumen estable del corte: identificadores de trabajo más conteos y
- * porcentajes por fase (las sueltas van con su nombre). Es lo que se compara
- * entre ventanas para el `Que cambió` y para no repetir un inmediato tratado.
+ * Resumen estable del corte: por trabajo, sus conteos, sus partes atoradas y
+ * si pide atención (las sueltas van con su nombre). Es lo que se compara
+ * contra el último corte enviado para saber si hay novedad.
  */
 function resumenEstable(
   activas: ResumenSeguimiento[],
@@ -120,63 +139,101 @@ function resumenEstable(
 ): string {
   const a: ResumenDigest[] = activas.map((r) => {
     const d = digestConteo(r.progreso);
-    return { t: r.trabajoId, f: r.fase, c: d.c, n: d.n, p: d.p };
-  }).sort((x, y) => (x.t < y.t ? -1 : x.t > y.t ? 1 : 0));
-  const s = sueltas.map((t) => {
-    const d = digestConteo(t.progreso);
-    return { t: `suelta:${t.nombre}`, f: "", c: d.c, n: d.n, p: d.p };
+    const x = r.carriles.filter((c) => c.estado === "atorado").map((c) => c.id).sort();
+    return { t: r.trabajoId, f: r.fase, c: d.c, n: d.n, p: d.p, x, q: r.atencionRequerida.necesaria };
   }).sort((x, y) => (x.t < y.t ? -1 : x.t > y.t ? 1 : 0));
   return JSON.stringify({
     a,
-    s,
+    s: digestSueltas(sueltas),
     i: inmediato === null ? null : { tipo: inmediato.tipo, texto: inmediato.texto },
   });
 }
 
-function leerResumen(previo: string): Map<string, { c: number; n: number }> {
-  const mapa = new Map<string, { c: number; n: number }>();
+type DigestPrevio = { c: number; n: number; x: string[] | null; q: boolean | null };
+
+function leerResumen(previo: string): { trabajos: Map<string, DigestPrevio>; sueltas: string } | null {
   try {
     const d: unknown = JSON.parse(previo);
-    const arr: unknown = esObjeto(d) && Array.isArray(d["a"]) ? d["a"] : d;
-    if (!Array.isArray(arr)) return mapa;
-    for (const e of arr) {
+    if (!esObjeto(d) || !Array.isArray(d["a"])) return null;
+    const trabajos = new Map<string, DigestPrevio>();
+    for (const e of d["a"]) {
       if (!esObjeto(e)) continue;
       const t = e["t"];
       const c = e["c"];
       const n = e["n"];
-      if (typeof t !== "string") continue;
-      if (typeof c !== "number" || typeof n !== "number") continue;
-      mapa.set(t, { c, n });
+      if (typeof t !== "string" || typeof c !== "number" || typeof n !== "number") continue;
+      const x = e["x"];
+      const q = e["q"];
+      trabajos.set(t, {
+        c,
+        n,
+        x: Array.isArray(x) ? x.filter((v): v is string => typeof v === "string") : null,
+        q: typeof q === "boolean" ? q : null,
+      });
     }
+    return { trabajos, sueltas: JSON.stringify(d["s"] ?? []) };
   } catch {
-    // Resumen ilegible: sin base para el diff, el cambio queda vacío y el
-    // reporte cae al texto de continuidad con la última evidencia.
+    return null;
   }
-  return mapa;
 }
 
-/** `Que cambió` derivado de conteos, sin inventar prosa: compara contra el último corte confirmado. */
-function derivarCambio(
+function cuantas(n: number, una: string, varias: string): string {
+  return n === 1 ? una : `${n} ${varias}`;
+}
+
+/**
+ * Novedades desde el último corte enviado, en frases fijas armadas con
+ * conteos y estados: nunca con texto libre de un agente. `null` cuando el
+ * estado guardado no se puede comparar (scratch viejo o ilegible).
+ */
+function novedadesDesde(
   ultimoEstado: string,
-  activas: ResumenSeguimiento[],
-): string {
-  const prev = leerResumen(ultimoEstado);
-  if (prev.size === 0) return "";
-  const lineas: string[] = [];
-  for (const r of activas) {
-    if (r.progreso.kind === "desconocido") continue;
-    const p = prev.get(r.trabajoId);
+  vivas: ResumenSeguimiento[],
+  sueltas: TareaSuelta[],
+): string[] | null {
+  const previo = leerResumen(ultimoEstado);
+  if (previo === null) return null;
+  const frases: string[] = [];
+  const presentes = new Set<string>();
+  for (const r of vivas) {
+    presentes.add(r.trabajoId);
+    const nombre = nombreCuerpo(r);
+    const p = previo.trabajos.get(r.trabajoId);
     if (p === undefined) {
-      lineas.push(`${nombreCuerpo(r)} entró al seguimiento con ${r.progreso.completadas}/${r.progreso.total} ${r.unidad}.`);
-    } else if (p.c !== r.progreso.completadas || p.n !== r.progreso.total) {
-      lineas.push(`${nombreCuerpo(r)} avanzó de ${p.c}/${p.n} a ${r.progreso.completadas}/${r.progreso.total}.`);
+      frases.push(`${nombre} entró al seguimiento.`);
+      continue;
+    }
+    if (r.progreso.kind === "conocido") {
+      const { completadas, total } = r.progreso;
+      if (completadas > p.c && total === p.n) {
+        const singular = r.unidad === "partes" ? "una parte" : "una tarea";
+        frases.push(`${nombre} terminó ${cuantas(completadas - p.c, singular, r.unidad)}.`);
+      } else if (completadas !== p.c || total !== p.n) {
+        frases.push(`${nombre} cambió su cuenta: ahora van ${completadas} de ${total} ${r.unidad}.`);
+      }
+    }
+    const atoradasAntes = p.x;
+    if (atoradasAntes !== null) {
+      const atoradas = r.carriles.filter((c) => c.estado === "atorado").map((c) => c.id);
+      const nuevas = atoradas.filter((id) => !atoradasAntes.includes(id)).length;
+      const sueltasYa = atoradasAntes.filter((id) => !atoradas.includes(id)).length;
+      if (nuevas > 0) frases.push(`${nombre} tiene ${cuantas(nuevas, "una parte atorada", "partes atoradas")}.`);
+      if (sueltasYa > 0) frases.push(`${nombre} destrabó ${cuantas(sueltasYa, "una parte", "partes")}.`);
+    }
+    if (p.q !== null && p.q !== r.atencionRequerida.necesaria) {
+      frases.push(r.atencionRequerida.necesaria
+        ? `${nombre} necesita tu respuesta.`
+        : `${nombre} ya no necesita tu respuesta.`);
     }
   }
-  return lineas.join(" ");
-}
-
-function derivarSiguiente(activas: ResumenSeguimiento[]): string {
-  return activas.map((r) => r.siguientePaso).filter((s) => s !== "").join(" ");
+  const salieron = [...previo.trabajos.keys()].filter((t) => !presentes.has(t)).length;
+  if (salieron > 0) {
+    frases.push(salieron === 1 ? "Un trabajo salió del seguimiento." : `${salieron} trabajos salieron del seguimiento.`);
+  }
+  if (JSON.stringify(digestSueltas(sueltas)) !== previo.sueltas) {
+    frases.push("Cambiaron las tareas sueltas.");
+  }
+  return frases;
 }
 
 function derivarNecesita(activas: ResumenSeguimiento[]): string {
@@ -337,6 +394,26 @@ function firmaInmediato(
   return null;
 }
 
+/** Firma de un pendiente: un trabajo rancio se pregunta una vez, diga lo que diga su fecha. */
+function firmaPendiente(p: AtencionPendiente): string {
+  return p.rancia ? `${p.trabajoId}:rancia` : `${p.trabajoId}:${p.motivo ?? ""}`;
+}
+
+/**
+ * Pendientes ya avisados. Un scratch anterior a la firma por pendiente solo
+ * trae la firma del conjunto: si es la del conjunto de hoy, todo él cuenta
+ * como avisado.
+ */
+function pendientesEntregados(
+  ya: EstadoSeguimiento["ultimoInmediato"],
+  pendientes: AtencionPendiente[],
+): string[] {
+  if (ya === null) return [];
+  const actuales = pendientes.map(firmaPendiente);
+  if (ya.entregados !== undefined) return ya.entregados.filter((f) => actuales.includes(f));
+  return ya.firma === firmaInmediato(null, [], pendientes) ? actuales : [];
+}
+
 function componerInmediato(
   problemas: ProblemaSeguimiento[],
   pendientes: AtencionPendiente[],
@@ -370,27 +447,27 @@ export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
   // corte debido.
   const { vivas, rancias } = partirPorFrescura(activas, ahora, problemas);
   const pendientes = atencionPendiente(vivas, rancias);
-  const derivado = explicito === null ? componerInmediato(problemas, pendientes, activas) : null;
+  const soloPendientes = explicito === null && problemas.length === 0;
+  // Con solo atención pendiente, el aviso lleva lo que falta avisar: lo ya
+  // entregado no vuelve a salir porque otro pendiente aparezca o cambie.
+  const entregados = soloPendientes ? pendientesEntregados(previo.ultimoInmediato, pendientes) : [];
+  const porAvisar = soloPendientes
+    ? pendientes.filter((p) => !entregados.includes(firmaPendiente(p)))
+    : pendientes;
+  const derivado = explicito === null ? componerInmediato(problemas, porAvisar, activas) : null;
   const efectivo = explicito ?? derivado;
+  const firma = firmaInmediato(explicito, problemas, pendientes);
   if (efectivo !== null) {
-    if (explicito !== null) {
-      const v1 = validarMensajeV1(efectivo.texto);
-      if (!v1.ok || v1.etiqueta !== efectivo.tipo) {
-        throw new Error("decidirSeguimiento: inmediato explícito inválido");
-      }
-    } else {
-      const v1 = validarMensajeV1(efectivo.texto);
-      if (!v1.ok || v1.etiqueta !== efectivo.tipo) {
-        throw new Error("decidirSeguimiento: inmediato derivado inválido");
-      }
+    const v1 = validarMensajeV1(efectivo.texto);
+    if (!v1.ok || v1.etiqueta !== efectivo.tipo) {
+      throw new Error(`decidirSeguimiento: inmediato ${explicito !== null ? "explícito" : "derivado"} inválido`);
     }
-    const firma = firmaInmediato(explicito, problemas, pendientes);
     const ya = previo.ultimoInmediato;
     // El scratch solo se persiste tras entrega confirmada, así que una firma
     // presente ya fue entregada; exigir además el messageId anidado repetiría
     // el aviso en cada tick, porque el contrato público solo llena el
     // messageId del nivel superior y el anidado queda informativo.
-    if (ya === null || ya.firma !== firma) {
+    if (soloPendientes || ya === null || ya.firma !== firma) {
       return {
         accion: "SEND",
         tipo: "inmediato",
@@ -399,7 +476,9 @@ export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
           schema: SCHEMA_SEGUIMIENTO_CLOCK,
           corte: previo.corte,
           ultimoEstado: previo.ultimoEstado,
-          ultimoInmediato: { firma: firma ?? "", messageId: null },
+          ultimoInmediato: soloPendientes
+            ? { firma: firma ?? "", messageId: null, entregados: pendientes.map(firmaPendiente) }
+            : { firma: firma ?? "", messageId: null },
           trabajosActivos: ids,
         },
       };
@@ -409,21 +488,31 @@ export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
   }
 
   // Sin condición inmediata activa se registra inactiva; con condición ya
-  // tratada se conserva pendiente.
-  const sinCondicion = efectivo === null;
+  // tratada se conserva pendiente. Un pendiente que desapareció sale de la
+  // lista de avisados: si vuelve, es un evento nuevo.
+  const sinCondicion = explicito === null && problemas.length === 0 && pendientes.length === 0;
+  const inmediatoVigente: EstadoSeguimiento["ultimoInmediato"] = sinCondicion
+    ? null
+    : soloPendientes
+      ? { firma: firma ?? "", messageId: previo.ultimoInmediato?.messageId ?? null, entregados }
+      : previo.ultimoInmediato;
   const silencio = (): EstadoSeguimiento => ({
     ...previo,
     trabajosActivos: ids,
-    ultimoInmediato: sinCondicion ? null : previo.ultimoInmediato,
+    ultimoInmediato: inmediatoVigente,
   });
 
   if (vivas.length === 0 && sueltas.length === 0) {
     return { accion: "NO_REPLY", estado: silencio() };
   }
 
+  let primerCorte: boolean;
   switch (previo.corte.kind) {
     case "esperando-primer-reporte":
+      primerCorte = true;
+      break;
     case "reporte-confirmado":
+      primerCorte = false;
       break;
     default: {
       const nunca: never = previo.corte;
@@ -431,32 +520,45 @@ export function decidirSeguimiento(args: EntradaDecision): DecisionSeguimiento {
     }
   }
 
-  if (ahora - inicioVentanaDe(previo.corte) >= VENTANA_REPORTE_SECS) {
-    const mensaje = renderSeguimientoV2({
+  const desdeElCorte = ahora - inicioVentanaDe(previo.corte);
+  if (desdeElCorte < VENTANA_REPORTE_SECS) {
+    return { accion: "NO_REPLY", estado: silencio() };
+  }
+
+  // El primer corte y el de un estado que no se puede comparar salen siempre.
+  // Después solo sale lo que trae novedad; sin ella, un latido cada 4 horas.
+  const comparadas = novedadesDesde(previo.ultimoEstado, vivas, sueltas);
+  let novedades: string[];
+  if (primerCorte) {
+    novedades = comparadas !== null && comparadas.length > 0 ? comparadas : ["Empezó el seguimiento."];
+  } else if (comparadas === null) {
+    novedades = ["Estado actual del trabajo."];
+  } else if (comparadas.length > 0) {
+    novedades = comparadas;
+  } else if (desdeElCorte >= LATIDO_SIN_NOVEDAD_SECS) {
+    novedades = [];
+  } else {
+    return { accion: "NO_REPLY", estado: silencio() };
+  }
+
+  return {
+    accion: "SEND",
+    tipo: "periodico",
+    mensaje: renderSeguimientoV2({
       fases: vivas,
       tareasSueltas: sueltas,
       ahora: ahora * 1000,
-      cambio: derivarCambio(previo.ultimoEstado, vivas),
-      siguiente: derivarSiguiente(vivas),
+      novedades,
       necesita: derivarNecesita(vivas),
-    });
-    return {
-      accion: "SEND",
-      tipo: "periodico",
-      mensaje,
-      estadoTrasConfirmar: {
-        schema: SCHEMA_SEGUIMIENTO_CLOCK,
-        corte: { kind: "reporte-confirmado", ultimoReporteConfirmado: ahora },
-        ultimoEstado: resumenEstable(vivas, sueltas, null),
-        // Regla del spec: la condición desaparecida se registra inactiva
-        // (null); si vuelve, es un evento nuevo y sale otra vez.
-        ultimoInmediato: sinCondicion ? null : previo.ultimoInmediato,
-        trabajosActivos: ids,
-      },
-    };
-  }
-
-  return { accion: "NO_REPLY", estado: silencio() };
+    }),
+    estadoTrasConfirmar: {
+      schema: SCHEMA_SEGUIMIENTO_CLOCK,
+      corte: { kind: "reporte-confirmado", ultimoReporteConfirmado: ahora },
+      ultimoEstado: resumenEstable(vivas, sueltas, null),
+      ultimoInmediato: inmediatoVigente,
+      trabajosActivos: ids,
+    },
+  };
 }
 
 /**
@@ -501,7 +603,13 @@ export function parseEstadoSeguimiento(raw: unknown): EstadoSeguimiento {
     if (mid !== null && !(typeof mid === "number" && Number.isInteger(mid) && mid > 0)) {
       throw new Error(invalido);
     }
-    ultimoInmediato = { firma: inmediatoRaw["firma"], messageId: mid };
+    const entregados = inmediatoRaw["entregados"];
+    if (entregados !== undefined && !(Array.isArray(entregados) && entregados.every((f) => typeof f === "string"))) {
+      throw new Error(invalido);
+    }
+    ultimoInmediato = entregados === undefined
+      ? { firma: inmediatoRaw["firma"], messageId: mid }
+      : { firma: inmediatoRaw["firma"], messageId: mid, entregados: entregados.filter((f): f is string => typeof f === "string") };
   }
   return {
     schema: SCHEMA_SEGUIMIENTO_CLOCK,
