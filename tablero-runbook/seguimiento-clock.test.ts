@@ -480,17 +480,25 @@ describe("aviso inmediato por pendiente", () => {
     assert.equal(r3.accion, "NO_REPLY");
   });
 
-  it("an item that clears does not resend the ones that stay; if it comes back it is sent alone", () => {
+  it("an item that clears does not resend the ones that stay; once that is told, its return is sent alone", () => {
     const con = [encargos("Falta tu visto bueno para seguir"), u3a()];
     const r1 = decidirSeguimiento({ ahora: T0, previo: corteEn(T0, con), activas: con, inmediato: null });
     if (r1.accion !== "SEND") throw new Error("primer aviso esperado");
+    const trasAviso = confirmado(r1.estadoTrasConfirmar, 5);
     const sin = [encargos(null), u3a()];
-    const r2 = decidirSeguimiento({ ahora: T0 + 300, previo: confirmado(r1.estadoTrasConfirmar, 5), activas: sin, inmediato: null });
-    assert.equal(r2.accion, "NO_REPLY");
-    if (r2.accion !== "NO_REPLY") throw new Error("silencio esperado");
-    assert.deepEqual(r2.estado.ultimoInmediato?.entregados, ["corrida:u3a:rancia"]);
-    const r3 = decidirSeguimiento({ ahora: T0 + 600, previo: r2.estado, activas: con, inmediato: null });
+    assert.equal(decidirSeguimiento({ ahora: T0 + 300, previo: trasAviso, activas: sin, inmediato: null }).accion, "NO_REPLY");
+    // Un tick callado no escribe el scratch: si vuelve antes del siguiente
+    // envío, para David nunca dejó de estar pendiente y no se repite.
+    assert.equal(decidirSeguimiento({ ahora: T0 + 600, previo: trasAviso, activas: con, inmediato: null }).accion, "NO_REPLY");
+    // El corte debido cuenta que ya no hace falta; ese envío guarda la lista.
+    const corte = decidirSeguimiento({ ahora: T0 + 1800, previo: trasAviso, activas: sin, inmediato: null });
+    if (corte.accion !== "SEND") throw new Error("corte esperado");
+    assert.equal(corte.tipo, "periodico");
+    assert.match(corte.mensaje, /^Encargos durables ya no necesita tu respuesta\./);
+    assert.deepEqual(corte.estadoTrasConfirmar.ultimoInmediato?.entregados, ["corrida:u3a:rancia"]);
+    const r3 = decidirSeguimiento({ ahora: T0 + 2100, previo: confirmado(corte.estadoTrasConfirmar, 6), activas: con, inmediato: null });
     if (r3.accion !== "SEND") throw new Error("regreso esperado");
+    assert.equal(r3.tipo, "inmediato");
     assert.ok(r3.mensaje.includes("Falta tu visto bueno para seguir."), r3.mensaje);
     assert.ok(!r3.mensaje.includes("Cerrar el tablero viejo"), r3.mensaje);
   });

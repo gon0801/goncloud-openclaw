@@ -28,7 +28,9 @@ pasar texto interno de los agentes.
   más partes, cambió su cuenta de partes, tiene una parte atorada, destrabó
   una parte, necesita o ya no necesita respuesta, su avance dejó de ser
   verificable o volvió a serlo, un trabajo ya no está activo (se cerró o
-  lleva más de un día sin moverse), o cambiaron las tareas sueltas. En un latido sin cambios dice
+  lleva más de un día sin moverse), o cambiaron las tareas sueltas. El primer corte de un trabajo
+  dice `Empezó el seguimiento.`; uno cuyo estado guardado no se puede comparar,
+  `Estado actual del trabajo.`; un latido sin cambios,
   `Sin novedad: todo sigue en curso.`
 - **Dos líneas por trabajo, como máximo.**
   - `<nombre>: <c> de <n> <partes|tareas>.` La fracción sale de las unidades

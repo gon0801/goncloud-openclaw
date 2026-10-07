@@ -15,18 +15,17 @@
 
 LAT_TOPE_MSG=900    # 15 min entre mensajes, salvo NECESITO
 LAT_HORA_MSJ=3600   # sin mensaje aunque todo avance: a la hora, uno
-LAT_SILENCIO=1500   # 30 min menos un intervalo del tick (300 s): el aviso
-                    # sale ANTES de los 30 min aun en el peor caso (ticks
-                    # cada 300 s => maximo 1799 s de hueco), 14.8 r3
-LAT_VENTANA=1800    # el PRIMER TICK de la cuadricula de 15 min que cumple la
-                    # ventana del consolidador (VENTANA_REPORTE_SECS = 1500 en
-                    # tablero-runbook/seguimiento-clock.ts): ceil(1500/900)*900
-                    # = 1800. NO es una copia de la constante: el reporte solo
-                    # puede caer en un tick del cron de 900, asi que con todo
-                    # sano llega en corte_base + 1800 sea la ventana 1500 o
-                    # 1800. Solo pasado corte_base + ella el aviso grita
-                    # atraso; antes, avance normal, 14.8 r4 (R12 r3: el error
-                    # de origen fue copiar la constante tal cual).
+LAT_SILENCIO=14100  # el consolidador calla mientras no hay novedad y manda un
+                    # latido a las 4 horas (LATIDO_SIN_NOVEDAD_SECS = 14400 en
+                    # tablero-runbook/seguimiento-clock.ts). Este aviso sale un
+                    # intervalo del tick (300 s) antes: aun en el peor caso de
+                    # ticks cada 300 s llega antes de las 4 horas. Medido el
+                    # 2026-10-07: con 1500 avisaba cada 25 min de un reloj
+                    # callado y sano.
+LAT_VENTANA=14400   # pasado corte_base + ella el latido del consolidador de
+                    # verdad no llego y el aviso lo dice con su hora; antes,
+                    # el consolidador sigue en plazo. 14400 cae en la
+                    # cuadricula de 15 min del cron.
 
 evento_jsonl() { # $1 dir de la corrida; pares EVT_<campo>=valor en el entorno.
                  # Solo los campos del evento van en la linea: la linea ya vive
@@ -158,7 +157,7 @@ latido_de() { # $1 dir de la corrida (con el registro adentro)
   # (1b) 14.8 r2: el aviso de avance lo manda el corte del consolidador (cron
   # avance-tareas), y cuando ese corte calla nadie avisa — el silencio de sim9.
   # Este bloque es la garantia del latido: con corrida abierta y mas de
-  # LAT_SILENCIO (25 min) sin NINGUNA senal de avance (ni confirmacion del
+  # LAT_SILENCIO (4 horas menos un tick) sin NINGUNA senal de avance (ni confirmacion del
   # consolidador ni mensaje entregado a David), manda su PROPIO aviso por el
   # camino directo (corrida_aviso_directo, sin pasar por la acumulacion del
   # AVANZA, que es lo callado) y deja constancia en eventos.jsonl AUNQUE el
@@ -169,8 +168,8 @@ latido_de() { # $1 dir de la corrida (con el registro adentro)
   # (cron list ilegible) el control se salta este tick con su rastro en
   # stderr: contra un gateway callado no hay envio posible; al volver, si el
   # corte sigue callado, avisa. r4: el aviso no grita atraso antes de tiempo.
-  # R12 r3: el umbral de silencio (1500) es MENOR que la ventana efectiva del
-  # consolidador (1800, el primer tick de cuadricula que cumple los 1500):
+  # R12 r3: el umbral de silencio es MENOR que el plazo del latido del
+  # consolidador (LAT_VENTANA):
   # dentro de la ventana el reporte no esta atrasado y el aviso sale como
   # avance normal; pasado corte_base + LAT_VENTANA el reporte de verdad no
   # llego y "se debía ... y no ha llegado" dice la verdad (con la hora real:
@@ -207,7 +206,7 @@ print(datetime.fromtimestamp(int(os.environ['OWED_HM'])).strftime('%H:%M'))" 2>/
       rc_td=0
       # La etiqueta es la del parte (14.27 R16): una corrida DETENIDA no sale
       # como AVANZA. No se limita a AVANZA porque (1) solo reenvia un DETENIDO
-      # igual a la hora y la promesa de 14.8 es un aviso cada 30 min.
+      # igual a la hora y la promesa de 14.8 es no pasar de 4 horas sin aviso.
       corrida_aviso_directo "$id" "$P_ETIQ" "$P_AVANCE" "$cambio_td" "$P_SIGUE" "$P_NECESITO" || rc_td=1
       EVT_tipo=avance-tardanza EVT_owed="$(epoch_a_iso "$owed")" \
         EVT_ok="$([ "$rc_td" -eq 0 ] && echo true || echo false)" evento_jsonl "$dir"
