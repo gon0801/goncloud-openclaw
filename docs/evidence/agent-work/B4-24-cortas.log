@@ -1,0 +1,73 @@
+$ test-u3a-19-3.sh
+ok (1-F1): el diseño describe ci-y-revisor en copia unica
+ok (3-F2): R5 apunta al Task 3 Step 1 del plan
+ok (7-F2): sin ocho entradas en spec, plan ni scripts
+ok (7-F1): legacy explicita que no bloquea ni se lanza
+ok (12): candidatos del director por diseño declarado
+ok (13): ningun loop dice cada 20 min
+ok (15): sin directorio ni procesos huerfanos
+ok (4-F1): el caso (2p) fija el candado retomado
+ok (8): el hook Stop respeta OPENCLAW_WATCH_RUN
+ok (10-F1): publicacion por eventos, sin set entero
+ok (F9): sin ramas rc_av == 2 en el vigia
+ok (9-confianza): preflight desde el checkout principal
+TODO VERDE: u3a-19-3
+rc=0
+$ test-guia-del-vigia.sh
+ok (1): la guia existe y es Markdown plano, sin HTML
+ok (2): la guia trae una fila por cada evento del vigilante (waiting, quiet, closed)
+ok (3): la guia trae la fila del fin de turno de Claude Code
+ok (4): la guia trae la fila del parte, con las cuatro etiquetas de seguimiento.v1
+TODO VERDE: guia-del-vigia
+rc=0
+$ test-corrida-latido.sh
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: progreso pendiente; se reintentará en el próximo tick
+TODO VERDE: test-corrida-latido
+rc=0
