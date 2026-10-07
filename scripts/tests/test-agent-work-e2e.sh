@@ -30,6 +30,14 @@ run_cli_delivery_acceptance() {
   python3 scripts/tests/test_agent_work_cli_delivery_acceptance_e2e.py
 }
 
+run_acceptance_matrix() {
+  python3 scripts/tests/test_agent_work_acceptance.py
+}
+
+run_acceptance() {
+  python3 scripts/tests/test_agent_work_acceptance.py AcceptanceMatrixTest AcceptanceStrictTest
+}
+
 case "${1:-all}" in
   all)
     run_delivery_latency
@@ -38,6 +46,13 @@ case "${1:-all}" in
     run_main_cli_loop
     run_cli_silent_failure
     run_cli_delivery_acceptance
+    run_acceptance_matrix
+    ;;
+  acceptance_matrix)
+    run_acceptance_matrix
+    ;;
+  acceptance)
+    run_acceptance
     ;;
   delivery_latency)
     run_delivery_latency
@@ -78,7 +93,7 @@ case "${1:-all}" in
     run_cli_delivery_acceptance
     ;;
   *)
-    echo "casos disponibles: delivery_latency, review_tail_restart, cli_gateway, main_cli_loop, cli_silent_failure, cli_delivery_acceptance" >&2
+    echo "casos disponibles: delivery_latency, review_tail_restart, cli_gateway, main_cli_loop, cli_silent_failure, cli_delivery_acceptance, acceptance_matrix, acceptance" >&2
     exit 2
     ;;
 esac
