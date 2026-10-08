@@ -66,3 +66,6 @@
 ## Resueltos en B4-30-r1
 - Fila B4-29 del hijo `corregir` sin aceptar: en `review_tail_restart` el modelo del solicitante admite el hijo y el mismo CLI escribe su `accept.v1` (`host.take_acceptance`).
 - Residual 1 de VEREDICTO-B4-29-r1: la prueba exige que el hijo vaya sobre la misma revisión y al mismo destino que la revisión (`inputRevision` y `target` iguales a los de la raíz).
+
+## Resueltos fuera del loop (resource_close)
+- Fila B4-28 de `resource_close`: la limpieza ya no depende de la foto `registered`; `_kill_nonce` relee `ps` y mata por nonce hasta que no quede ninguno, con la prueba de dobles `test_resource_close_cleanup_kills_nonce_processes_born_after_the_snapshot` (roja con la limpieza vieja). David corrió la suite real tres veces seguidas el 2026-10-08: tres `OK (skipped=1)` y ningún proceso de `agentes` vivo. Revisión independiente (otro modelo): aprobada.

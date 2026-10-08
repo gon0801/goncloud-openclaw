@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 
 from contracts import AuthorizedOperation, OperationKey
 from host import Host
-from resources import (AccountBusyError, AGENT_USER, AgentesBackend, CommandOutcome,
+from resources import (AccountBusyError, AGENT_USER, AgentesBackend, AgentProcess, CommandOutcome,
                        LOCK_ARGV, ResourceManager, TmuxBackend, parse_agent_ps)
 
 
@@ -1094,12 +1094,34 @@ class ResourceTests(unittest.TestCase):
     def _registered_nonce(self, nonce):
         return {(row.pid, row.lstart) for row in self._agentes_rows() if nonce in row.command}
 
-    def _sweep_registered(self, registered, nonce):
-        for row in self._agentes_rows():
-            if nonce not in row.command or (row.pid, row.lstart) not in registered:
-                continue
-            argv = LOCK_ARGV + ["sudo", "-n", "-u", AGENT_USER, "/bin/kill", "-TERM", str(row.pid)]
-            subprocess.run(argv, capture_output=True)
+    def _kill_nonce(self, nonce, timeout=10.0):
+        # Relee ps en cada vuelta: un nieto del doble fork puede nacer despues de la foto `registered`.
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            rows = [row for row in self._agentes_rows() if nonce in row.command]
+            if not rows:
+                return True
+            for row in rows:
+                subprocess.run(LOCK_ARGV + ["sudo", "-n", "-u", AGENT_USER, "/bin/kill", "-KILL",
+                                            str(row.pid)], capture_output=True)
+            time.sleep(0.1)
+        return False
+
+    def test_resource_close_cleanup_kills_nonce_processes_born_after_the_snapshot(self):
+        nonce = "b32-late-nonce"
+        late = AgentProcess(4242, "Wed Oct  7 21:00:00 2026", f"/opt/homebrew/bin/python3 -c x {nonce}")
+        other = AgentProcess(4343, "Wed Oct  7 21:00:00 2026", "/opt/homebrew/bin/python3 -c x otro")
+        listings = iter([(late, other), (other,)])
+        killed = []
+
+        def run(argv, **kwargs):
+            killed.append(argv[-1])
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        with mock.patch.object(self, "_agentes_rows", side_effect=lambda: next(listings)), \
+                mock.patch.object(subprocess, "run", side_effect=run):
+            self.assertTrue(self._kill_nonce(nonce))
+        self.assertEqual(killed, ["4242"])
 
     def _nonce_gone(self, nonce, timeout=10.0):
         deadline = time.monotonic() + timeout
@@ -1140,7 +1162,8 @@ class ResourceTests(unittest.TestCase):
             self.assertTrue(self._nonce_gone(nonce), "nonce processes survived an AbsenceVerified close")
         finally:
             tmux_cmd("kill-server")
-            self._sweep_registered(registered, nonce)
+            if nonce:
+                self._kill_nonce(nonce)
 
     def test_resource_close_real_launchd_label_stays_pending(self):
         self._require_agentes_account()
@@ -1204,7 +1227,8 @@ class ResourceTests(unittest.TestCase):
                     subprocess.run(["sudo", "-n", "-u", "agentes", "/bin/launchctl",
                                     "bootout", f"user/502/{label}"], capture_output=True)
             tmux_cmd("kill-server")
-            self._sweep_registered(registered, nonce)
+            if nonce:
+                self._kill_nonce(nonce)
 
     def test_resource_close_real_term_ignoring_survivor_stays_pending(self):
         self._require_agentes_account()
@@ -1236,12 +1260,8 @@ class ResourceTests(unittest.TestCase):
             self.assertTrue(survivors, "the TERM-ignoring survivor must still be present")
         finally:
             tmux_cmd("kill-server")
-            for row in self._agentes_rows():
-                if nonce and nonce in row.command and (row.pid, row.lstart) in registered:
-                    subprocess.run(["sudo", "-n", "-u", "agentes", "/bin/kill",
-                                    "-KILL", str(row.pid)], capture_output=True)
             if nonce:
-                gone = self._nonce_gone(nonce)
+                gone = self._kill_nonce(nonce)
         if not gone:
             self.fail("TERM-ignoring survivor was not killed in cleanup")
 
@@ -1276,7 +1296,7 @@ class ResourceTests(unittest.TestCase):
         finally:
             tmux_cmd("kill-server")
             for nonce in nonces:
-                self._sweep_registered(self._registered_nonce(nonce), nonce)
+                self._kill_nonce(nonce)
         pooled = ResourceManager(self.host.spool, "host-test", FakeBackend(), capacity=10)
         for number in range(10):
             pooled.reserve(OperationKey("host-test", f"b32ag-pool-{number}", 1,
