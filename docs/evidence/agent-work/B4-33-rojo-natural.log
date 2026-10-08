@@ -1,0 +1,20 @@
+F
+======================================================================
+FAIL: test_before_delivery_a_second_dispatcher_recovers_the_task (__main__.CrashBoundariesE2E.test_before_delivery_a_second_dispatcher_recovers_the_task)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 149, in test_before_delivery_a_second_dispatcher_recovers_the_task
+    self.assert_domain(second, task_id, "B1")
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 108, in assert_domain
+    self.assertTrue(wait_for(lambda: self.wakes(task_id), 60),
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                    f"the requester was never woken; provider: {lines(self.provider_log)}")
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [] is not true : the requester was never woken; provider: []
+
+----------------------------------------------------------------------
+Ran 1 test in 121.997s
+
+FAILED (failures=1)
+rc=1

@@ -48,13 +48,13 @@ class ReviewCli:
 
     session = "review-cli"
 
-    def __init__(self):
+    def __init__(self, *cli_args):
         self.tmux = shutil.which("tmux")
         self.socket = f"agent-work-review-{os.getpid()}-{secrets.token_hex(4)}"
         self.socket_file = (Path(os.environ.get("TMUX_TMPDIR") or "/tmp")
                             / f"tmux-{os.getuid()}" / self.socket)
         started = self._tmux("new-session", "-d", "-s", self.session, "-x", "200", "-y", "50",
-                             sys.executable, "-u", str(REVIEW_CLI))
+                             sys.executable, "-u", str(REVIEW_CLI), *cli_args)
         if started.returncode:
             raise RuntimeError("tmux could not start the reviewer double: " + started.stderr)
         if not wait_for(lambda: "review-cli ready" in self.capture("-50"), 15):

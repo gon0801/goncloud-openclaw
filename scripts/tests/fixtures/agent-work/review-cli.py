@@ -4,6 +4,8 @@
 For each assignment that TmuxTransport types it writes its own agent-work.accept.v1. The
 first one is the review: it prints its verdict, pushes it out of the last 80 lines with
 more output, and leaves the result file. Later ones (the correction) are only accepted.
+With a path argument it appends its start and every acceptance there, so a test counts
+what the CLI did from outside the Gateway.
 """
 
 import hashlib
@@ -26,8 +28,15 @@ def atomic(path, value):
     os.replace(pending, path)
 
 
+def record(event, **fields):
+    if len(sys.argv) > 1:
+        with open(sys.argv[1], "a") as log:
+            log.write(json.dumps({"event": event, "pid": os.getpid(), **fields}) + "\n")
+
+
 def main():
     signal.alarm(LINGER_SECONDS)  # SIGALRM ends the double even while readline blocks
+    record("started")
     print("review-cli ready", flush=True)
     reviewed = False
     while True:
@@ -41,6 +50,7 @@ def main():
         atomic(Path(assignment["acceptRef"]), {"schema": "agent-work.accept.v1", **{
             field: assignment[field] for field in ("hostId", "taskId", "generation", "instanceId",
                                                    "claimId", "capability")}})
+        record("accepted", taskId=assignment["taskId"], generation=assignment["generation"])
         print(f"review-cli accepted {assignment['taskId']}", flush=True)
         if reviewed:
             continue

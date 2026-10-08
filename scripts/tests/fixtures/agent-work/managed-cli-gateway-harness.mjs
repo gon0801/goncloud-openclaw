@@ -9,7 +9,10 @@
 // correction child and admits that child, as a model would without a human reminder.
 // CROSS_PROVIDER_HOLD=1 records each request and never answers it, so a crash lands
 // in the middle of the model turn.
+// CROSS_PROVIDER_LOG appends every provider request to that file as it arrives, with the
+// Gateway's pid, so a test counts requests across a crash from outside the Gateway.
 import { createHash, randomUUID } from "node:crypto";
+import { appendFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import { createServer } from "node:http";
 import path from "node:path";
@@ -160,7 +163,7 @@ if (countingProvider) {
         toolNames = ["<unparsed>"];
       }
       const item = scriptedItem(body, wakeTasks);
-      providerRequests.push({
+      const record = {
         at: Date.now(), method: request.method, path: request.url,
         wakeTasks, toolNames, answered: item.type === "function_call" ? item.name : "message",
         // Host incidents the model was told about; the session history repeats earlier ones.
@@ -168,7 +171,11 @@ if (countingProvider) {
           .map((match) => ({ taskId: match[1], kind: match[2] })),
         startedDeliveries: sessionDeliveries().filter((row) => row.deliveryStartedAt !== null)
           .map(({ sessionKey: key, contextKey, enqueuedAt }) => ({ sessionKey: key, contextKey, enqueuedAt })),
-      });
+      };
+      providerRequests.push(record);
+      if (process.env.CROSS_PROVIDER_LOG) {
+        appendFileSync(process.env.CROSS_PROVIDER_LOG, `${JSON.stringify({ ...record, gatewayPid: process.pid })}\n`);
+      }
       if (process.env.CROSS_PROVIDER_HOLD === "1") return;
       const events = [
         { type: "response.output_item.added", output_index: 0, item },

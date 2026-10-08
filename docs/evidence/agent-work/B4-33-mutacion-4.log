@@ -1,0 +1,35 @@
+CLAIMS_AFTER_RESTART ['reported', 'reported', 'reported']
+F
+======================================================================
+FAIL: test_between_admission_and_answer_the_restart_never_hands_it_over_again (__main__.CrashBoundariesE2E.test_between_admission_and_answer_the_restart_never_hands_it_over_again)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 179, in test_between_admission_and_answer_the_restart_never_hands_it_over_again
+    self.assert_domain(second, task_id, "B3")
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 116, in assert_domain
+    self.assertEqual([(e["taskId"], e["generation"]) for e in cli if e["event"] == "accepted"],
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [(task_id, 1)], "the CLI was handed the assignment more than once")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [('19[34 chars]', 1), ('19390332-6193-431e-bfe4-cd47714c0ec8'[90 chars], 1)] != [('19[34 chars]', 1)]
+
+First list contains 3 additional elements.
+First extra element 1:
+('19390332-6193-431e-bfe4-cd47714c0ec8', 1)
+
+- [('19390332-6193-431e-bfe4-cd47714c0ec8', 1),
+?                                             ^
+
++ [('19390332-6193-431e-bfe4-cd47714c0ec8', 1)]
+?                                             ^
+
+-  ('19390332-6193-431e-bfe4-cd47714c0ec8', 1),
+-  ('19390332-6193-431e-bfe4-cd47714c0ec8', 1),
+-  ('19390332-6193-431e-bfe4-cd47714c0ec8', 1)] : the CLI was handed the assignment more than once
+
+----------------------------------------------------------------------
+Ran 1 test in 90.632s
+
+FAILED (failures=1)
+rc=1

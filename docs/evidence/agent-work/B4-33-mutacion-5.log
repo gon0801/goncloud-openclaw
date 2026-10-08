@@ -1,0 +1,18 @@
+F
+======================================================================
+FAIL: test_between_result_and_ack_the_host_repeats_the_same_report (__main__.CrashBoundariesE2E.test_between_result_and_ack_the_host_repeats_the_same_report)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 220, in test_between_result_and_ack_the_host_repeats_the_same_report
+    self.assert_domain(second, task_id, "B4")
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 119, in assert_domain
+    self.assertEqual(len(wakes), 1, f"the requester was woken more than once: {wakes}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 2 != 1 : the requester was woken more than once: [{'at': 1791462449967, 'method': 'POST', 'path': '/v1/responses', 'wakeTasks': ['e2842af9-9f85-469b-939d-44391ab79306'], 'toolNames': ['apply_patch', 'edit', 'exec', 'ls', 'process', 'read', 'sessions_yield', 'tool_call', 'tool_describe', 'tool_search', 'write'], 'answered': 'message', 'incidentWakes': [], 'startedDeliveries': [{'sessionKey': 'agent:main:encargos-loop', 'contextKey': 'task:e2842af9-9f85-469b-939d-44391ab79306', 'enqueuedAt': 1791462443353}], 'gatewayPid': 54257}, {'at': 1791462487169, 'method': 'POST', 'path': '/v1/responses', 'wakeTasks': ['e2842af9-9f85-469b-939d-44391ab79306'], 'toolNames': ['apply_patch', 'edit', 'exec', 'ls', 'process', 'read', 'sessions_yield', 'tool_call', 'tool_describe', 'tool_search', 'write'], 'answered': 'message', 'incidentWakes': [], 'startedDeliveries': [{'sessionKey': 'agent:main:encargos-loop', 'contextKey': 'task:e2842af9-9f85-469b-939d-44391ab79306', 'enqueuedAt': 1791462479348}], 'gatewayPid': 56876}]
+
+----------------------------------------------------------------------
+Ran 1 test in 89.552s
+
+FAILED (failures=1)
+rc=1

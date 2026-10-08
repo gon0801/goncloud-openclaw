@@ -34,6 +34,10 @@ run_cli_delivery_acceptance() {
   python3 scripts/tests/test_agent_work_cli_delivery_acceptance_e2e.py
 }
 
+run_crash_boundaries() {
+  python3 scripts/tests/test_agent_work_crash_boundaries_e2e.py
+}
+
 run_acceptance_matrix() {
   python3 scripts/tests/test_agent_work_acceptance.py
 }
@@ -51,6 +55,7 @@ case "${1:-all}" in
     run_main_cli_loop
     run_cli_silent_failure
     run_cli_delivery_acceptance
+    run_crash_boundaries
     run_acceptance_matrix
     ;;
   review_tail_restart_director)
@@ -104,8 +109,15 @@ case "${1:-all}" in
     fi
     run_cli_delivery_acceptance
     ;;
+  crash_boundaries)
+    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
+      echo "crash_boundaries requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
+      exit 2
+    fi
+    run_crash_boundaries
+    ;;
   *)
-    echo "casos disponibles: delivery_latency, review_tail_restart, cli_gateway, main_cli_loop, cli_silent_failure, cli_delivery_acceptance, review_tail_restart_director, acceptance_matrix, acceptance" >&2
+    echo "casos disponibles: delivery_latency, review_tail_restart, cli_gateway, main_cli_loop, cli_silent_failure, cli_delivery_acceptance, crash_boundaries, review_tail_restart_director, acceptance_matrix, acceptance" >&2
     exit 2
     ;;
 esac
