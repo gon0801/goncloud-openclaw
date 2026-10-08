@@ -1,0 +1,42 @@
+EF
+======================================================================
+ERROR: test_a_cancellation_then_a_late_result_wakes_nobody (__main__.CrashBoundariesE2E.test_a_cancellation_then_a_late_result_wakes_nobody)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 300, in test_a_cancellation_then_a_late_result_wakes_nobody
+    first.tool("cancel", {"taskId": task_id, "reason": "requester withdrew"}, "cancel-turn")
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_main_cli_loop_e2e.py", line 126, in tool
+    return self.call("tool", **fields)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_main_cli_loop_e2e.py", line 120, in call
+    return self._message()["result"]
+           ~~~~~~~~~~~~~^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_main_cli_loop_e2e.py", line 112, in _message
+    raise HarnessError(value.get("error"))
+test_agent_work_main_cli_loop_e2e.HarnessError: Error: invalid requester tool command
+    at runTool (/Users/dn/dev/wt/encargos-b4/scripts/tests/fixtures/agent-work/managed-cli-gateway-harness.mjs:245:11)
+    at <anonymous> (/Users/dn/dev/wt/encargos-b4/scripts/tests/fixtures/agent-work/managed-cli-gateway-harness.mjs:309:26)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+======================================================================
+FAIL: test_between_decision_and_its_receipt_the_restart_recovers_the_same_child (__main__.CrashBoundariesE2E.test_between_decision_and_its_receipt_the_restart_recovers_the_same_child)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 288, in test_between_decision_and_its_receipt_the_restart_recovers_the_same_child
+    self.assertEqual(acting[second.pid], decide, "the restart did not recover the decision")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit']
+
+Second list contains 3 additional elements.
+First extra element 0:
+'managed_tasks_inspect'
+
+- []
++ ['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit'] : the restart did not recover the decision
+
+----------------------------------------------------------------------
+Ran 2 tests in 122.353s
+
+FAILED (failures=1, errors=1)
+rc=1

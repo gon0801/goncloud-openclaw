@@ -87,3 +87,96 @@ con `rc=0` (los casos de R se saltan), ruteo `OK` (15 pruebas) e integración
 `OK (skipped=1)` (115 pruebas); cinco `rc=0`. La matriz estricta quedó en
 `B4-33-estricto.log`: `acceptance is incomplete` con A2, A3, A6, A8, A10, A11, A13,
 B2, B5, B6, B7 y los tres T10; ya sin B1, B3 ni B4.
+
+## B4-34-r1
+
+Segunda parte de la casilla `:280` del plan: las fronteras B5 y B7 de la tabla
+"Estados y fronteras de caída", sobre el mismo caso `crash_boundaries`. **No marca
+`:280`**: B2 y B6 (caídas del host) quedan para el encargo siguiente.
+
+Este commit sobre la base `3297a0c`, con R `978355503c44` construido. Verde: 5 casos,
+458 s, `OK` (`bash scripts/tests/test-agent-work-e2e.sh crash_boundaries`, con R como
+`AGENT_WORK_RUNTIME_SOURCE`).
+
+### Qué cambia en el arnés
+
+- `CROSS_PROVIDER_HOLD=admit`: el arnés retiene la petición que admitiría al hijo,
+  así que el Gateway puede morir con la admisión todavía en vuelo.
+- El guion (`CROSS_PROVIDER_SCRIPT=review-correction`) acepta también una tarea ya
+  `handled` y la decide otra vez con las mismas claves, como haría un modelo que
+  nunca vio su recibo.
+- El arnés gana la acción `cancel`, que usa el solicitante con `managed_tasks_cancel`.
+
+### Por frontera
+
+- **B5 (entre decidir y confirmar el consumo):** el modelo con guion inspecciona el
+  resultado y lo resuelve con una corrección; la decisión, el hijo y el recibo quedan
+  grabados juntos. El arnés retiene la petición siguiente (`admit`) y el Gateway muere
+  sin que el modelo vea su recibo. El Gateway nuevo vuelve a entregar el despertar; el
+  modelo decide otra vez con las mismas claves, R devuelve el mismo hijo, el modelo lo
+  admite y el CLI lo acepta. Se exige: un manejo y el mismo hijo de antes de la caída,
+  ninguna revisión nueva del mismo SHA, el CLI recibe la revisión y una sola corrección,
+  y según el archivo del proveedor `inspect`, `resolve` y `admit` en cada Gateway (el
+  `admit` del primero quedó retenido y nunca corrió).
+  `CRASH_BOUNDARY B5 pids=[36158, 39098] handlings=1 children=1 cli_accepted=2 acting_first=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit'] acting_second=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit']`
+- **B7 (cancelación y resultado tardío):** el CLI deja su resultado, el solicitante
+  cancela y el Gateway muere; el host reporta el resultado al Gateway nuevo. Se exige:
+  resultado archivado (`handlingState` `cancelled` y `deliveryState` `result-recorded`),
+  una continuación sobre la tarea cancelada rechazada con `Managed task is cancelled`,
+  cero despertares, ningún manejo ni hijo, una sola entrega al CLI y el host sin
+  pendientes.
+  `CRASH_BOUNDARY B7 pids=[18709, 20841] handling=cancelled delivery=result-recorded wakes=0 children=0 cli_accepted=1`
+
+(Líneas de la corrida verde `B4-34-verde.log`; los pids cambian en cada corrida.)
+
+`handling_unresolved` (`scripts/agent-work/test-runtime.sh`) suma la prueba
+`propagates cancellation to children committed before the parent was cancelled`:
+la cancelación del padre llega a los hijos ya creados (`B4-34-handling-unresolved.log`,
+`Tests 5 passed`).
+
+### Discriminación rojo → verde
+
+Rojo natural, solo con la prueba y sin el arnés nuevo: los casos `-k decision
+-k cancellation` fallan con `rc=1` y dos fallos (`B4-34-rojo-natural.log`, 122 s).
+B7 con `invalid requester tool command`, porque el arnés todavía no acepta `cancel`;
+B5 con `the restart did not recover the decision`, porque sin la retención el primer
+Gateway termina la corrección antes de caer y el segundo no decide nada.
+
+Tres mutaciones, una a la vez, todas en R; la 2 cae en el contador externo del
+proveedor.
+
+| n | Qué rompe en R | Filtro | Falla con | Log |
+|---|---|---|---|---|
+| 1 | `resolve` deja de recuperar la decisión ya grabada | `decision` | `the correction was never admitted` (163 s) | `B4-34-mutacion-1.log` |
+| 2 | un resultado tardío de una tarea cancelada despierta al solicitante | `cancellation` | `a cancelled task woke the requester` (81 s) | `B4-34-mutacion-2.log` |
+| 3 | una tarea cancelada acepta otra continuación | `cancellation` | `the cancelled generation accepted a continuation` (61 s) | `B4-34-mutacion-3.log` |
+
+### Límites
+
+- En B5 el modelo es un guion que repite la misma decisión; un modelo real podría
+  leer el recibo en vez de repetirla.
+- En B7 el Gateway cae sin nada en vuelo: la cancelación ya está confirmada, y la
+  misma prueba sin caída daría el mismo resultado. Lo que exige la caída es que la
+  cancelación sea durable y se aplique al resultado que llega después. La carrera
+  entre cancelar y reportar no la corre ninguna prueba: R las serializa en la
+  transacción de escritura de SQLite, y `serializes cancellation against a competing
+  continuation` cubre cancelar contra resolver, no contra reportar.
+- En B5 la ausencia de una revisión nueva se cumple por construcción: en esta prueba
+  solo `reviewed()` registra revisiones y el modelo con guion nunca llama `submit`;
+  la comprobación protege la prueba, no a R.
+- B2 y B6 quedan para el encargo siguiente.
+
+### Regresión y suites cortas
+
+Regresión con R `978355503c44`, los cuatro casos en verde: `review_tail_restart`
+(2 casos, 181 s, `B4-34-reg-review_tail_restart.log`), `cli_gateway` (35 s,
+`B4-34-reg-cli_gateway.log`), `main_cli_loop` (2 casos, 77 s,
+`B4-34-reg-main_cli_loop.log`) y `review_tail_restart_director` (23 s,
+`B4-34-reg-review_tail_restart_director.log`).
+
+Suites cortas sin R (`B4-34-cortas.log`): `test-candados-declarados.sh` y
+`test-runbooks-no-contradicen-entorno.sh` con `TODO VERDE`, `test-agent-work-e2e.sh`
+con `rc=0` (`crash_boundaries` sale `OK (skipped=5)`), ruteo `OK` (15 pruebas) e
+integración `OK (skipped=1)` (115 pruebas); cinco `rc=0`. La matriz quedó en
+`B4-34-estricto.log`: `acceptance is incomplete` con A2, A6, A8, A10, A11, A13, B2,
+B6 y los tres T10; ya sin A3, B5 ni B7.

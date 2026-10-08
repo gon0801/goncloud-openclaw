@@ -8,7 +8,8 @@
 // requester's model: on a result wake it inspects the task, resolves it with one
 // correction child and admits that child, as a model would without a human reminder.
 // CROSS_PROVIDER_HOLD=1 records each request and never answers it, so a crash lands
-// in the middle of the model turn.
+// in the middle of the model turn. CROSS_PROVIDER_HOLD=admit holds only the request that
+// would admit the correction: the decision is committed and the model never saw its receipt.
 // CROSS_PROVIDER_LOG appends every provider request to that file as it arrives, with the
 // Gateway's pid, so a test counts requests across a crash from outside the Gateway.
 import { createHash, randomUUID } from "node:crypto";
@@ -131,7 +132,10 @@ function scriptedItem(body, wakeTasks) {
     } catch {
       return message("The managed task tools are not available in this turn.");
     }
-    if (!snapshot || snapshot.handlingState !== "pending-handling" || snapshot.result?.payload?.verdict !== "changes") {
+    // A turn that died after its decision left the task handled; the model decides again with
+    // the same keys, as one that never saw the receipt would.
+    if (!snapshot || !["pending-handling", "handled"].includes(snapshot.handlingState)
+      || snapshot.result?.payload?.verdict !== "changes") {
       return message("No correction needed.");
     }
     return call("call_correction_resolve", "managed_tasks_resolve",
@@ -176,7 +180,8 @@ if (countingProvider) {
       if (process.env.CROSS_PROVIDER_LOG) {
         appendFileSync(process.env.CROSS_PROVIDER_LOG, `${JSON.stringify({ ...record, gatewayPid: process.pid })}\n`);
       }
-      if (process.env.CROSS_PROVIDER_HOLD === "1") return;
+      const hold = process.env.CROSS_PROVIDER_HOLD;
+      if (hold === "1" || (hold === "admit" && item.name === "managed_tasks_admit")) return;
       const events = [
         { type: "response.output_item.added", output_index: 0, item },
         { type: "response.output_item.done", output_index: 0, item },
@@ -241,7 +246,7 @@ process.stdout.write(`${JSON.stringify({ type: "ready", url: `ws://127.0.0.1:${p
 async function runTool(command) {
   const name = `managed_tasks_${command.action}`;
   const runId = command.runId;
-  if (!runId || !["submit", "admit", "inspect", "resolve"].includes(command.action)) {
+  if (!runId || !["submit", "admit", "inspect", "resolve", "cancel"].includes(command.action)) {
     throw new Error("invalid requester tool command");
   }
   // A turn may name another session of the same agent, such as a cron run.
