@@ -1,0 +1,15 @@
+F
+======================================================================
+FAIL: test_the_same_result_reported_a_hundred_times_across_a_crash_is_recorded_once (__main__.CienReenviosE2E.test_the_same_result_reported_a_hundred_times_across_a_crash_is_recorded_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cien_reenvios_e2e.py", line 90, in test_the_same_result_reported_a_hundred_times_across_a_crash_is_recorded_once
+    self.assertEqual(len(sent), REPORTS, "a repeated report never reached the Gateway")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 3 != 100 : a repeated report never reached the Gateway
+
+----------------------------------------------------------------------
+Ran 1 test in 67.804s
+
+FAILED (failures=1)
+rc=1

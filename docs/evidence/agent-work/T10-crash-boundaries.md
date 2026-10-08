@@ -233,13 +233,17 @@ Rojo natural, con solo la prueba y sin el fixture del host: `-k reservation` fal
 proceso del host no arranca (`B4-35-rojo-natural.log`, 29 s). Base sin cambios antes
 de aplicar nada: `delivery_latency` en `OK` (`B4-35-base.log`).
 
-Las cuatro mutaciones del host de esta ronda no corrieron: la sesión quedó cortada
-después del verde y el cierre se ordenó con la evidencia existente. Las cuatro
-(`mutar.py` en los dados del encargo B4-35-r1) están por correr en una ronda
-siguiente; sus textos esperados son `the restarted host could not recover its
-reservation` (1), `the restarted host used a launch it cannot attribute` (2),
-`the restarted host did not declare the delivery uncertain` (3) y
-`the restarted host did not recover the launch by its nonce` (4).
+Las cuatro mutaciones del host no corrieron en la sesión del implementador, que quedó
+cortada después del verde. Las corrió el revisor sobre este mismo commit `3a805fb`
+(VEREDICTO-B4-35-r1). Cada una sale con un solo FAIL y su texto (el `rc=1` lo anota
+VEREDICTO-B4-35-r1; el log no lo guarda):
+`the restarted host could not recover its reservation` (1, `B4-35-revisor-mutacion-1.log`),
+`the restarted host used a launch it cannot attribute` (2, `B4-35-revisor-mutacion-2.log`),
+`the restarted host did not declare the delivery uncertain` (3, `B4-35-revisor-mutacion-3.log`)
+y `the restarted host did not recover the launch by its nonce` (4, `B4-35-revisor-mutacion-4.log`).
+También sobre `3a805fb`, la matriz estricta (`B4-35-revisor-estricto.log`), la regresión
+(`B4-35-revisor-reg-cli_gateway.log` y `B4-35-revisor-reg-main_cli_loop.log`) y las suites
+cortas (`B4-35-revisor-cortas.log`) salen como pedía el encargo.
 
 ### Límites
 
