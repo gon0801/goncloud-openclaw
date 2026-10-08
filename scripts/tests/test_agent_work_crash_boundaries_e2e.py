@@ -16,7 +16,16 @@ Boundaries of docs/superpowers/specs/2026-09-30-encargos-agentes-design.md cover
 - B5, between decision and its receipt: the requester's correction is committed and the
   Gateway dies before the model sees it, so the redelivered wake recovers the same child;
 - B7, cancellation and a late result: the requester cancels, the Gateway dies, and the result
-  that arrives afterwards is archived without waking anyone or allowing a continuation.
+  that arrives afterwards is archived without waking anyone or allowing a continuation;
+- B2, between reserving and launching on the host: the host process dies with the resource
+  reserved, or with the session already marked with the launch's nonce, and the restarted host
+  recovers the same instance; or it dies with a launch it cannot attribute and keeps its
+  capacity without typing anything;
+- B6, after an external tool: the host process dies right after typing into the CLI, and the
+  restart declares the delivery uncertain and never types it again.
+
+B2 and B6 crash the host, not the Gateway: the host runs as its own process
+(fixtures/agent-work/crash-host.py) that stops at one point and is killed with SIGKILL there.
 """
 
 import faulthandler
@@ -24,6 +33,9 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
+import subprocess
+import threading
 import sys
 import tempfile
 import time
@@ -43,6 +55,7 @@ from test_agent_work_main_cli_loop_e2e import (  # noqa: E402
     ADAPTER, HOST_ID, HarnessError, LoopGateway, built_runtime, certified_coverage, loop_route, wait_for)
 from test_agent_work_review_correction_restart_e2e import SCRIPTED, ReviewCli  # noqa: E402
 
+CRASH_HOST = Path(__file__).resolve().parent / "fixtures/agent-work/crash-host.py"
 RUN_LIMIT_SECONDS = 900
 # After the last step, how long a late duplicate (a second wake or a second delivery) gets to show.
 SETTLE_SECONDS = 20
@@ -331,6 +344,144 @@ class CrashBoundariesE2E(unittest.TestCase):
                   f"cli_accepted={len([e for e in cli if e['event'] == 'accepted'])}", flush=True)
         finally:
             second.close()
+    def crash_host(self, gateway, point):
+        """The host process stops at <point> and dies there with SIGKILL; a new one takes over."""
+        process = subprocess.Popen(
+            [sys.executable, str(CRASH_HOST), gateway.url, str(self.root / "host"), self.cli.socket,
+             self.cli.session, str(self.root / "workspace"), point],
+            env={**gateway.env, "CRASH_HOST_OPENCLAW": str(self.runtime / "openclaw.mjs")},
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        # A host that hangs without printing is killed after 60 s, which ends the read below.
+        watchdog = threading.Timer(60, process.kill)
+        watchdog.start()
+        try:
+            seen = []
+            for line in process.stdout:
+                seen.append(line)
+                if line.strip() == f"STOP {point}":
+                    break
+            self.assertEqual(seen[-1:], [f"STOP {point}\n"], f"the host never reached {point}: {''.join(seen)}")
+        finally:
+            watchdog.cancel()
+            process.send_signal(signal.SIGKILL)
+            code = process.wait(10)
+        self.assertEqual(code, -signal.SIGKILL, "the host did not die by SIGKILL at its stop")
+        self.host = Host(HOST_ID, self.root / "host")
+        self.manager = ResourceManager(self.host.spool, HOST_ID, TmuxBackend(self.cli.tmux, self.cli.socket))
+        return process.pid
+
+    def resources(self):
+        with self.host.spool.connection() as db:
+            return [dict(row) for row in db.execute(
+                "SELECT task_id, instance_id, state, reason, nonce FROM resources ORDER BY task_id")]
+
+    def submitted(self, gateway):
+        request = prepare_request(coverage=self.certified, **loop_route(self.root, gateway.state_dir))
+        with mock.patch.dict(os.environ, gateway.env):
+            task_id = gateway.tool("submit", request, "submit-turn")["taskId"]
+            gateway.tool("admit", {"taskId": task_id, "admissionKey": "crash-admission"}, "admit-turn")
+        return task_id
+
+    def report_and_close(self, gateway, task_id):
+        with mock.patch.dict(os.environ, gateway.env):
+            receipts = self.host.flush(HOST_ID, self.client(gateway).report_host_result)
+        self.assertEqual([(r["taskId"], r["generation"]) for r in receipts], [(task_id, 1)])
+        closed = self.manager.close(OperationKey(HOST_ID, task_id, 1, "crash-instance"),
+                                    {"kind": "result", "receipt": receipts[0]["receiptId"]})
+        self.assertEqual(closed.state, "ReleasedAdopted")
+
+    def test_between_reservation_and_launch_the_restarted_host_recovers_the_same_instance(self):
+        gateway = self.gateway()
+        try:
+            task_id = self.submitted(gateway)
+            host_pid = self.crash_host(gateway, "reserved")
+            reserved = self.resources()
+            self.assertEqual([(r["task_id"], r["state"]) for r in reserved], [(task_id, "Reserved")],
+                             "the host died without its reservation")
+            with mock.patch.dict(os.environ, gateway.env):
+                try:
+                    observed = self.claim(self.client(gateway))
+                except ValueError as error:
+                    self.fail(f"the restarted host could not recover its reservation: {error}")
+            self.assertIn(observed.status, ("typed", "delivered"))
+            self.review_done(task_id)
+            self.report_and_close(gateway, task_id)
+            after = self.resources()
+            self.assertEqual([(r["task_id"], r["nonce"]) for r in after], [(task_id, reserved[0]["nonce"])],
+                             "the restarted host did not recover the same instance")
+            self.assert_domain(gateway, task_id, "B2")
+            print(f"HOST_CRASH B2 point=reserved host_pid={host_pid} resources={[r['state'] for r in after]} "
+                  f"same_nonce=1", flush=True)
+        finally:
+            gateway.close()
+
+    def test_after_marking_the_restarted_host_recovers_the_launch_by_its_nonce(self):
+        gateway = self.gateway()
+        try:
+            task_id = self.submitted(gateway)
+            host_pid = self.crash_host(gateway, "marked")
+            marked = self.resources()
+            self.assertEqual([(r["task_id"], r["state"]) for r in marked], [(task_id, "Launching")],
+                             "the host died without its launch")
+            with mock.patch.dict(os.environ, gateway.env):
+                try:
+                    observed = self.claim(self.client(gateway))
+                except (RuntimeError, ValueError) as error:
+                    self.fail(f"the restarted host did not recover the launch by its nonce: {error}")
+            self.assertIn(observed.status, ("typed", "delivered"))
+            self.review_done(task_id)
+            self.report_and_close(gateway, task_id)
+            after = self.resources()
+            self.assertEqual([(r["task_id"], r["nonce"]) for r in after], [(task_id, marked[0]["nonce"])],
+                             "the restarted host did not keep the marked instance")
+            self.assert_domain(gateway, task_id, "B2")
+            print(f"HOST_CRASH B2 point=marked host_pid={host_pid} resources={[r['state'] for r in after]} "
+                  f"same_nonce=1", flush=True)
+        finally:
+            gateway.close()
+
+    def test_an_unattributable_launch_keeps_its_capacity_and_types_nothing(self):
+        gateway = self.gateway()
+        try:
+            task_id = self.submitted(gateway)
+            host_pid = self.crash_host(gateway, "launching")
+            with mock.patch.dict(os.environ, gateway.env):
+                with self.assertRaisesRegex(RuntimeError, "host resource identity is not running",
+                                            msg="the restarted host used a launch it cannot attribute"):
+                    self.claim(self.client(gateway))
+            rows = self.resources()
+            self.assertEqual([(r["task_id"], r["state"], r["reason"]) for r in rows],
+                             [(task_id, "CleanupPending", "launch identity uncertain")],
+                             "the unattributable launch was not kept for reconciliation")
+            with self.assertRaisesRegex(ValueError, "host resource capacity exhausted",
+                                        msg="the unattributable launch gave its capacity back"):
+                self.manager.reserve(OperationKey(HOST_ID, "another-task", 1, "another-instance"),
+                                     self.cli.session, "UserAdopted")
+            time.sleep(SETTLE_SECONDS)
+            self.assertEqual([e for e in lines(self.cli_log) if e["event"] == "accepted"], [],
+                             "an unattributable launch was typed into the CLI")
+            self.assertEqual(lines(self.provider_log), [], "the requester was woken without a result")
+            print(f"HOST_CRASH B2 point=launching host_pid={host_pid} "
+                  f"resources={[(r['state'], r['reason']) for r in rows]} cli_accepted=0 provider=0", flush=True)
+        finally:
+            gateway.close()
+
+    def test_after_typing_the_restarted_host_declares_uncertainty_and_never_types_again(self):
+        gateway = self.gateway()
+        try:
+            task_id = self.submitted(gateway)
+            host_pid = self.crash_host(gateway, "typed")
+            with mock.patch.dict(os.environ, gateway.env):
+                observed = self.claim(self.client(gateway))
+            self.assertEqual(observed.status, "uncertain", "the restarted host did not declare the delivery uncertain")
+            self.review_done(task_id)
+            self.report_and_close(gateway, task_id)
+            self.assert_domain(gateway, task_id, "B6")
+            print(f"HOST_CRASH B6 point=typed host_pid={host_pid} status_after_restart={observed.status}",
+                  flush=True)
+        finally:
+            gateway.close()
+
 
 if __name__ == "__main__":
     faulthandler.dump_traceback_later(RUN_LIMIT_SECONDS, exit=True)

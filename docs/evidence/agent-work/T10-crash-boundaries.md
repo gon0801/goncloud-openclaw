@@ -180,3 +180,80 @@ con `rc=0` (`crash_boundaries` sale `OK (skipped=5)`), ruteo `OK` (15 pruebas) e
 integración `OK (skipped=1)` (115 pruebas); cinco `rc=0`. La matriz quedó en
 `B4-34-estricto.log`: `acceptance is incomplete` con A2, A6, A8, A10, A11, A13, B2,
 B6 y los tres T10; ya sin A3, B5 ni B7.
+
+## B4-35-r1
+
+Tercera parte de la casilla `:280` del plan: las fronteras B2 y B6, las dos caídas
+del host. Con esto quedan cubiertas las siete fronteras B1 a B7 de la tabla "Estados
+y fronteras de caída", y **se marca `:280`**.
+
+Este commit sobre la base `e4415d8`, con R `978355503c44` construido. Verde: 9 casos,
+660 s, `OK` (`bash scripts/tests/test-agent-work-e2e.sh crash_boundaries`, con R como
+`AGENT_WORK_RUNTIME_SOURCE`).
+
+### Cómo se mata al host
+
+El host corre como un proceso aparte: el fixture nuevo
+`scripts/tests/fixtures/agent-work/crash-host.py` reclama una asignación del CLI y se
+detiene para siempre en un punto (`reserved`, `launching`, `marked` o `typed`), donde
+imprime `STOP <punto>`; la prueba lo mata ahí con `SIGKILL`. Después, un host nuevo
+sigue el trabajo sobre el mismo estado durable.
+
+### Por frontera
+
+- **B2, reservado:** el host muere con el recurso reservado y nada lanzado. El host
+  reiniciado recupera la misma instancia (el mismo nonce), teclea una sola vez, y el
+  resto sigue: un resultado, un despertar y el recurso en `ReleasedAdopted`.
+  `HOST_CRASH B2 point=reserved host_pid=92420 resources=['ReleasedAdopted'] same_nonce=1`
+  `CRASH_BOUNDARY B2 pids=[91186] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]`
+- **B2, marcado:** el host muere con el lanzamiento empezado y la sesión ya marcada
+  con su nonce. El host reiniciado recupera la instancia por ese nonce, como pide el
+  spec ("recuperar la instancia por nonce e inicio"), teclea una sola vez y el resto
+  sigue igual.
+  `HOST_CRASH B2 point=marked host_pid=72300 resources=['ReleasedAdopted'] same_nonce=1`
+  `CRASH_BOUNDARY B2 pids=[71195] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]`
+- **B2, sin atribuir:** el host muere con el lanzamiento empezado y la sesión sin
+  marcar. El host reiniciado no puede atribuir el lanzamiento: lo deja en
+  `CleanupPending` con `launch identity uncertain`, conserva el cupo (otra reserva da
+  `host resource capacity exhausted`), no teclea nada en el CLI y no despierta a nadie.
+  `HOST_CRASH B2 point=launching host_pid=77449 resources=[('CleanupPending', 'launch identity uncertain')] cli_accepted=0 provider=0`
+- **B6 (después de una herramienta externa):** el host muere justo después de teclear
+  en el CLI, sin haberlo registrado. El host reiniciado declara la entrega incierta
+  (`uncertain`), no vuelve a teclear y converge con la aceptación que escribió el
+  propio CLI: queda una sola aceptación del CLI y un solo despertar.
+  `HOST_CRASH B6 point=typed host_pid=74942 status_after_restart=uncertain`
+  `CRASH_BOUNDARY B6 pids=[73813] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]`
+
+(Líneas de la corrida verde `B4-35-verde.log`; los pids cambian en cada corrida.)
+
+### Discriminación rojo → verde
+
+Rojo natural, con solo la prueba y sin el fixture del host: `-k reservation` falla con
+`rc=1` y un fallo, `the host never reached reserved`, porque sin `crash-host.py` el
+proceso del host no arranca (`B4-35-rojo-natural.log`, 29 s). Base sin cambios antes
+de aplicar nada: `delivery_latency` en `OK` (`B4-35-base.log`).
+
+Las cuatro mutaciones del host de esta ronda no corrieron: la sesión quedó cortada
+después del verde y el cierre se ordenó con la evidencia existente. Las cuatro
+(`mutar.py` en los dados del encargo B4-35-r1) están por correr en una ronda
+siguiente; sus textos esperados son `the restarted host could not recover its
+reservation` (1), `the restarted host used a launch it cannot attribute` (2),
+`the restarted host did not declare the delivery uncertain` (3) y
+`the restarted host did not recover the launch by its nonce` (4).
+
+### Límites
+
+- El host reiniciado corre dentro del proceso de la prueba sobre el mismo estado del
+  host, no como otro proceso aparte.
+- En B2 sin atribuir, la conciliación del recurso en `CleanupPending` (reportarlo a R
+  y liberarlo) no se prueba aquí.
+- El CLI es un doble en tmux.
+- En B6, `uncertain` es lo que devuelve el reclamo del host reiniciado: el spool queda
+  en `attempted` y no se abre incidente; la convergencia con la aceptación del CLI la
+  dispara la prueba (`take_acceptance`), no el host; la declaración durable
+  (`settle_deliveries` al vencer el plazo) no se prueba aquí.
+- La prueba fija `uncertain` aunque la aceptación del CLI ya está en el disco al
+  reiniciar: consultar el efecto por identidad (spec `:182`) no está implementado en
+  el reclamo.
+
+Las siete fronteras B1 a B7 quedan cubiertas; marca `:280`.

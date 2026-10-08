@@ -1,0 +1,31 @@
+CRASH_BOUNDARY B7 pids=[67884, 69207] handling=cancelled delivery=result-recorded wakes=0 children=0 cli_accepted=1
+./Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py:422: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
+  host_pid = self.crash_host(gateway, "marked")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+CRASH_BOUNDARY B2 pids=[71195] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
+HOST_CRASH B2 point=marked host_pid=72300 resources=['ReleasedAdopted'] same_nonce=1
+./Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py:473: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
+  host_pid = self.crash_host(gateway, "typed")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+CRASH_BOUNDARY B6 pids=[73813] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
+HOST_CRASH B6 point=typed host_pid=74942 status_after_restart=uncertain
+./Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py:447: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
+  host_pid = self.crash_host(gateway, "launching")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+HOST_CRASH B2 point=launching host_pid=77449 resources=[('CleanupPending', 'launch identity uncertain')] cli_accepted=0 provider=0
+.CRASH_BOUNDARY B1 pids=[78536, 79653] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]
+.CLAIMS_AFTER_RESTART ['reported', 'reported', 'reported']
+CRASH_BOUNDARY B3 pids=[82350, 83909] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]
+.CRASH_BOUNDARY B5 pids=[86469, 88379] handlings=1 children=1 cli_accepted=2 acting_first=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit'] acting_second=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit']
+./Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py:397: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
+  host_pid = self.crash_host(gateway, "reserved")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+CRASH_BOUNDARY B2 pids=[91186] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
+HOST_CRASH B2 point=reserved host_pid=92420 resources=['ReleasedAdopted'] same_nonce=1
+.CRASH_BOUNDARY B4 pids=[93998, 95508] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1, 0]
+.
+----------------------------------------------------------------------
+Ran 9 tests in 659.947s
+
+OK
+rc=0
