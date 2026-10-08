@@ -1,0 +1,330 @@
+[test] starting test/vitest/vitest.gateway-server.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+[vitest-workers] local cache miss after 1572ms
+node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js (2400:30) [33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js:2400:31 [38;5;246m][0m
+      [38;5;246m│[0m
+ [38;5;246m2400 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mA[0m[38;5;249mS[0m[38;5;249mM[0m[38;5;249m_[0m[38;5;249mC[0m[38;5;249mO[0m[38;5;249mN[0m[38;5;249mS[0m[38;5;249mT[0m[38;5;249mS[0m[38;5;249m[[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249ma[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m][0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m     │[0m                               ──┬─
+ [38;5;240m     │[0m                                 ╰─── Use of direct `eval` here.
+ [38;5;240m     │[0m
+ [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m──────╯[0m
+
+node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js (2423:32) [33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js:2423:33 [38;5;246m][0m
+      [38;5;246m│[0m
+ [38;5;246m2423 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mm[0m[38;5;249mo[0m[38;5;249md[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mE[0m[38;5;249mx[0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249ms[0m[38;5;249m[[0m[38;5;249mn[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249m][0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m     │[0m                                 ──┬─
+ [38;5;240m     │[0m                                   ╰─── Use of direct `eval` here.
+ [38;5;240m     │[0m
+ [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m──────╯[0m
+
+node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/resolve-evaluate-options.js (48:0) [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "" in "node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/resolve-evaluate-options.js" may not be preserved when bundling.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/resolve-evaluate-options.js:48:1 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m48 │[0m ''
+ [38;5;240m   │[0m ─┬
+ [38;5;240m   │[0m  ╰── module level directive may not be preserved
+ [38;5;240m   │[0m
+ [38;5;240m   │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m────╯[0m
+
+node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-is-declaration.js (11:0) [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "" in "node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-is-declaration.js" may not be preserved when bundling.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-is-declaration.js:11:1 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m11 │[0m ''
+ [38;5;240m   │[0m ─┬
+ [38;5;240m   │[0m  ╰── module level directive may not be preserved
+ [38;5;240m   │[0m
+ [38;5;240m   │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m────╯[0m
+
+node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-create.js (6:0) [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "" in "node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-create.js" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-create.js:6:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m6 │[0m ''
+ [38;5;240m  │[0m ─┬
+ [38;5;240m  │[0m  ╰── module level directive may not be preserved
+ [38;5;240m  │[0m
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/comment.js (12:0) [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "" in "node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/comment.js" may not be preserved when bundling.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/comment.js:12:1 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m12 │[0m ''
+ [38;5;240m   │[0m ─┬
+ [38;5;240m   │[0m  ╰── module level directive may not be preserved
+ [38;5;240m   │[0m
+ [38;5;240m   │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m────╯[0m
+
+node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/text.js (9:0) [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "" in "node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/text.js" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/text.js:9:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m9 │[0m ''
+ [38;5;240m  │[0m ─┬
+ [38;5;240m  │[0m  ╰── module level directive may not be preserved
+ [38;5;240m  │[0m
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[vitest-workers] prepared bb07cf7fcdba in 15521ms (16698 inputs, 17251 outputs)
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses one producer settlement callback for startup session recovery (recovered) 448ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses one producer settlement callback for startup session recovery (moved-to-failed) 418ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses the same producer settlement callback for targeted recovery 433ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > enqueues the sentinel note and wakes the session even when outbound delivery succeeds 417ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > records a non-owner update notice without delivery or a diagnostic wake 126ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > records a non-owner restart notice without delivery or a diagnostic wake 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses the durable update outcome on boot (webchat, already terminal: false) 80ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses the durable update outcome on boot (telegram, already terminal: true) 306ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > bounds pending notice retries while preserving CLI run ownership (false) 137ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > bounds pending notice retries while preserving CLI run ownership (true) 100ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > appends and broadcasts an internal update outcome once (continuation: false, ledger: false) 1712ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > appends and broadcasts an internal update outcome once (continuation: true, ledger: false) 1416ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > appends and broadcasts an internal update outcome once (continuation: false, ledger: true) 1402ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > warns and wakes the internal session when the update notice append is failed 420ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > warns and wakes the internal session when the update notice append is thrown 422ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps durable update/ok notice delivery separate from the wake 420ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps durable update/skipped notice delivery separate from the wake 418ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps durable update/error notice delivery separate from the wake 413ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps durable restart/ok notice delivery separate from the wake 415ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists every downstream intent before consuming the loaded revision 411ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > stops delivery when guarded sentinel consumption fails 411ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves a newer sentinel while draining durable work from the loaded revision 418ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not resend a restart notice whose stable queue id is already owned 419ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > queues the restart wake before a system-event continuation 420ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > queues a failed outbound notice for durable recovery without dropping the agent wake 417ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > schedules safe recovery when the delivered notice cannot be acknowledged 413ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > still dispatches continuation after a restart notice is queued for recovery 419ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > prefers top-level sentinel threadId for wake routing context 431ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > runs agentTurn continuation internally after the restart notice without routed final delivery 423ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > replays generated-media provenance through the owning session agent 3ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > fences an adopted generic turn in its explicit queue state directory 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps a generated-media gateway rejection before acceptance retryable 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > authorizes queued media replay for an active cron continuation 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > defers a generated-media turn still owned by agent recovery 435ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retains the local fence when gateway dedupe reports another in-flight owner 417ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > fails closed when a terminal agent turn has no replayable result 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries a captured empty terminal result instead of dead-lettering it 420ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses durable terminal evidence to retry media omitted before queue acknowledgement 422ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters an interrupted attempt without durable agent evidence 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not replay private terminal media as an owning-transcript delivery 413ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > asks the normal agent loop to deliver automatic generated-media replies 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > accepts normalized generated-media evidence without a bare retry 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists internal generated audio as managed transcript content 440ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists targetless global generated media in its resolved owner transcript (resumed: false, MEDIA: true) 1090ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists targetless global generated media in its resolved owner transcript (resumed: false, MEDIA: false) 1059ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists targetless global generated media in its resolved owner transcript (resumed: true, MEDIA: false) 1030ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists proven internal media before retrying the missing subset 407ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not count private reasoning media as an owning-transcript reply 410ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries a completed agent turn that omitted the expected media 408ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries when automatic aggregate evidence contains media only in a hidden payload 423ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > accepts suppressed automatic media as a committed durable delivery 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > accepts a suppressed visible automatic completion notice 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries only media proven missing from a successful partial delivery 438ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > checks partial automatic evidence only for media still missing 426ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > suppresses ambiguous caption replay while repairing missing media 414ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not accept explicitly hidden automatic evidence as a visible notice 411ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries missing media after an unrelated text payload was sent 414ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters a partial send without exact per-payload evidence 3ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters truncated terminal evidence before retrying missing media 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters impossible truncated messaging-tool evidence 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters aggregate-only message-tool evidence before replaying 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters unaccounted aggregate evidence mixed with routed tool sends 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters impossible message-tool delivery to a different destination 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters impossible committed side effects before a fresh attempt 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters a partial visible send instead of replaying it 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dispatches agentTurn continuation for a completed run entry 428ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not dispatch a queued agentTurn continuation after the session key changes 413ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > still delivers systemEvent continuations for completed run entries 421ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves the session chat type for agentTurn continuations 438ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > authorizes routed agentTurn continuations while preserving Telegram topic routing 417ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves derived reply transport ids in internal continuation context 417ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dispatches agentTurn continuation from session delivery context when sentinel routing is empty 412ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > requests another wake after enqueueing a systemEvent continuation 419ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > logs and continues when continuation delivery fails 428ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > logs and continues when continuation dispatch reports a delivery error 433ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries restart continuations when the previous run is still shutting down 428ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > records an unroutable agentTurn notice without a diagnostic wake 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > records an unroutable systemEvent notice without a diagnostic wake 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps the sentinel file when durable continuation handoff fails 3ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes continuation once and does not replay it on later startup cycles 424ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps a consumed update sentinel available for reconnect status polling 418ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > delivers the producer notice to the complete original ledger route 283ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not wake a restored runtime from the standalone CLI producer 71ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes only a targetless CLI outcome without a model wake (failed, true) 69ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes only a targetless CLI outcome without a model wake (succeeded, true) 68ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes only a targetless CLI outcome without a model wake (rolled-back, true) 70ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes only a targetless CLI outcome without a model wake (skipped, true) 68ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes only a targetless CLI outcome without a model wake (failed, false) 69ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves an explicit targetless CLI note 438ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps a targetless Control UI update out of the ambient chat 72ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes a targetless config-patch acknowledgement without waking an agent 3ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes a targetless config-apply acknowledgement without waking an agent 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves an explicit targetless config restart note 417ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > delivers a session-less update notice through the system main route (from base: false) 412ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > delivers a session-less update notice through the system main route (from base: true) 419ms
+ × |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > durably wakes the configured system-agent session when the sentinel has no sessionKey 420ms
+   → expected { sessionKey: '<redacted len=14>', …(4) } to not have property "deliveryContext"
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves system-agent ownership for a targetless global wake 436ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > records targetless non-delivery when system-agent ownership is missing 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > skips outbound restart notice when no canonical delivery context survives restart 442ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > resolves session routing before queueing the heartbeat wake 427ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.stateReadWorkers
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > merges base session routing into partial thread metadata 418ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > binds legacy system event to its destination without rewriting its queued key 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > binds stored system-event owner to its destination without rewriting its queued key 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > binds agent turn without a route to its destination without rewriting its queued key 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > binds replaced agent-turn session to its destination without rewriting its queued key 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > does not wake a replacement session for a managed result 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > marks a managed result wake as a task continuation 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > replays a managed result after a pre-turn crash but not after the turn starts 422ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > delivers a managed result again after the gateway died with its turn in flight 680ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > carries a persisted owner through global session lookup in an explicit roster 175ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.system-event-owner.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.system-event-owner.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.system-event-owner.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.system-event-owner.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.system-event-owner.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.system-event-owner.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > joins managed media promotion before publishing an internal restart delivery 541ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > stops pending update recovery and joins its retry (queued) 90ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > stops pending update recovery and joins its retry (running) 65ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > stops pending update recovery and joins its retry (admission) 65ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > refuses legacy notice import with an absent Gateway owner 66ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > refuses legacy notice import with an maintenance Gateway owner 70ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > joins a paused import without publishing after canonical database close revokes admission 93ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > retains failed import cleanup until canonical database close retries its owner 75ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > consumes only the captured restart sentinel after preparation changes state root (newer=false) 1059ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > consumes only the captured restart sentinel after preparation changes state root (newer=true) 1048ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > reconciles only the pending update's terminal snapshot before preparing work (same) 1055ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > reconciles only the pending update's terminal snapshot before preparing work (continuation) 1057ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > reconciles only the pending update's terminal snapshot before preparing work (other-handoff) 1074ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > reconciles only the pending update's terminal snapshot before preparing work (other-run) 1057ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > reconciles only the pending update's terminal snapshot before preparing work (restart) 1057ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > reconciles only the pending update's terminal snapshot before preparing work (replaced-again) 1054ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > reconciles only the pending update's terminal snapshot before preparing work (stopped) 822ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > does not rewrite pending update sentinels during status refresh 63ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > recovers published legacy update notices through the registered sidecar (final) 668ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > recovers published legacy update notices through the registered sidecar (portable-claim) 690ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > recovers published legacy update notices through the registered sidecar (late-final) 674ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > recovers published legacy update notices through the registered sidecar (newer-native) 71ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > recovers published legacy update notices through the registered sidecar (consumed-native) 70ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > recovers published legacy update notices through the registered sidecar (stopped) 69ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > recovers published legacy update notices through the registered sidecar (stop-during-import) 67ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > keeps registered pending restart recovery on its original state and session after ambient drift (requested) 1249ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > keeps registered pending restart recovery on its original state and session after ambient drift (verifying) 1224ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > keeps registered pending restart recovery on its original state and session after ambient drift (stopped) 434ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > keeps registered pending restart recovery on its original state and session after ambient drift (terminal-before-marker) 1216ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > keeps registered pending restart recovery on its original state and session after ambient drift (replaced-handoff) 439ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.state-context.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.state-context.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.state-context.test.ts: retiring openclaw.stateReadWorkers
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.state-context.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.state-context.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.state-context.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.state-context.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > keeps registered pending restart recovery on its original state and session after ambient drift (replaced-kind) 441ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > sends the four update milestones only to a configured owner (owner) 849ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > sends the four update milestones only to a configured owner (non-owner) 529ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > sends the four update milestones only to a configured owner (no-owners) 541ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > sends the four update milestones only to a configured owner (control-ui) 540ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > reports sent lifecycle delivery without starting inline recovery 658ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > reports suppressed lifecycle delivery without starting inline recovery 645ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > reports failed lifecycle delivery without starting inline recovery 644ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > reports throw lifecycle delivery without starting inline recovery 656ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > reports observed delivery even when queue acknowledgement fails 641ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > bounds a blocked lifecycle send while its work owner retains queue settlement 652ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > preserves observed delivery when an after-commit hook exceeds the notice deadline 662ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > finishes a real durable send under the admitted RPC root after restart admission closes 665ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > retains notice custody when ambient state directory changes during preparation 663ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > retains notice custody when ambient supervisor mode changes during preparation 668ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > retains lifecycle delivery through preparation when ambient state directory changes 664ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > retains lifecycle delivery through preparation when ambient supervisor mode changes 654ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > retains lifecycle delivery through transport when ambient state directory changes 664ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > retains lifecycle delivery through transport when ambient supervisor mode changes 661ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > retains explicitly captured restart custody through retry recovery 686ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > retains explicitly captured restart custody through permanent rejection 660ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > serializes stable notice preparation before modifiers can run twice 422ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > emits message_sent only after the durable notice terminal is committed 660ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > replays a retryable provider-not-dispatched failure after the startup scan 665ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > does not blindly resend an ambiguous platform attempt 670ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > dead-letters a permanent provider rejection without replay 669ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel-notice.test.ts: draining agent database custody {"databases":4,"leases":4,"pending":0,"activePending":0,"retainedCloses":0,"resources":0,"closing":0,"selections":0}
+
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel-notice.test.ts > restart sentinel notice recovery > preserves the shipped 45-attempt budget before dead-lettering 933ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel-notice.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel-notice.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel-notice.test.ts: retiring openclaw.stateReadWorkers
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel-notice.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel-notice.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel-notice.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel-notice.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: current 1172ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: replaced-before 595ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: rotated-before 589ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: deleted-before 918ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: replaced-after 620ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: rotated-after 973ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: store-after 1246ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: replaced-at-enqueue 593ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: store-at-enqueue 796ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: generation-at-enqueue 578ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: store-during-dispatch 898ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > retries one refused queue admission without losing media when transcript retention is also unavailable 650ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.media-binding.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.media-binding.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.media-binding.test.ts: retiring openclaw.stateReadWorkers
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.media-binding.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.media-binding.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.media-binding.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.media-binding.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > ends bounded handoff without claiming durability when both storage paths remain unavailable 573ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > durably wakes the configured system-agent session when the sentinel has no sessionKey
+AssertionError: expected { sessionKey: '<redacted len=14>', …(4) } to not have property "deliveryContext"
+ ❯ src/gateway/server-restart-sentinel.test.ts:3830:30
+    3828|     expect(mocks.deliverOutboundPayloads).not.toHaveBeenCalled();
+    3829|     const eventOptions = mocks.enqueueSystemEvent.mock.calls[0]?.[1];
+    3830|     expect(eventOptions).not.toHaveProperty("deliveryContext");
+       |                              ^
+    3831|   });
+    3832|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 4 passed (5)
+      Tests  1 failed | 179 passed (180)
+   Start at  01:18:53
+   Duration  101.13s (tests 79%, transform 18%, import 2%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] failed 1 Vitest shard in 103.61s
+[test] FAILED (exit 1)
+rc=1
