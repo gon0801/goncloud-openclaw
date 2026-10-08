@@ -62,9 +62,10 @@ def built_runtime(test):
 class LoopGateway:
     """The cli_gateway harness, configured for main's loop session and a counting provider."""
 
-    def __init__(self, runtime, root):
+    def __init__(self, runtime, root, reuse_state=False, extra_env=None):
+        # reuse_state starts a second Gateway process over the first one's durable state.
         self.state_dir = root / "gateway"
-        self.state_dir.mkdir()
+        self.state_dir.mkdir(exist_ok=reuse_state)
         token = "main-cli-loop-isolated-token"
         self.env = {**os.environ, "AGENT_WORK_RUNTIME_SOURCE": str(runtime),
                     "OPENCLAW_STATE_DIR": str(self.state_dir),
@@ -73,7 +74,7 @@ class LoopGateway:
                     "CROSS_REQUESTER_AGENT_ID": "main",
                     "CROSS_REQUESTER_SESSION_KEY": LOOP_SESSION,
                     "CROSS_HOST_ID": HOST_ID, "CROSS_HOST_ADAPTER": ADAPTER,
-                    "CROSS_PROVIDER": "loopback"}
+                    "CROSS_PROVIDER": "loopback", **(extra_env or {})}
         self.process = subprocess.Popen(
             ["node", "--import", str(runtime / "scripts/tsx.mjs"), str(FIXTURE)],
             cwd=runtime, env=self.env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -83,7 +84,8 @@ class LoopGateway:
         self.logs = []
         threading.Thread(target=self._collect, daemon=True).start()
         try:
-            self.url = self._message()["url"]
+            ready = self._message()
+            self.url, self.pid = ready["url"], ready["pid"]
         except BaseException:
             self.close()
             raise
@@ -125,6 +127,13 @@ class LoopGateway:
 
     def provider_requests(self):
         return self.call("provider")["requests"]
+
+    def kill(self):
+        """The Gateway dies without a clean stop, as in a crash."""
+        self.process.kill()
+        self.process.wait(timeout=10)
+        self.process.stdin.close()
+        self.process.stdout.close()
 
     def close(self):
         if self.process.poll() is None:

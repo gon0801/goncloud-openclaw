@@ -4,6 +4,9 @@
 // Python test drives native requester tools and G's real CLI transport.
 // Defaults reproduce cli_gateway; CROSS_* variables pick another requester
 // session, host, or a loopback model provider that counts every request.
+// CROSS_PROVIDER_SCRIPT=review-correction makes that provider act as the
+// requester's model: on a result wake it inspects the task and resolves it with
+// one correction child, as a model would without a human reminder.
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import { createServer } from "node:http";
@@ -22,6 +25,10 @@ const sessionKey = process.env.CROSS_REQUESTER_SESSION_KEY || "agent:ingenieria:
 const hostId = process.env.CROSS_HOST_ID || "e2e-host";
 const hostAdapter = process.env.CROSS_HOST_ADAPTER || "codex";
 const countingProvider = process.env.CROSS_PROVIDER === "loopback";
+const scriptedCorrection = process.env.CROSS_PROVIDER_SCRIPT === "review-correction";
+if (scriptedCorrection && !countingProvider) {
+  throw new Error("CROSS_PROVIDER_SCRIPT needs CROSS_PROVIDER=loopback");
+}
 if (!sessionKey.startsWith(`agent:${requesterAgentId}:`)) {
   throw new Error("CROSS_REQUESTER_SESSION_KEY must belong to CROSS_REQUESTER_AGENT_ID");
 }
@@ -65,6 +72,69 @@ function sessionDeliveries() {
   });
 }
 
+function managedTaskRows() {
+  const db = stateDb.openOpenClawStateDatabase().db;
+  return {
+    tasks: db.prepare("SELECT task_id, assignment_json, result_json FROM managed_tasks ORDER BY created_at, task_id")
+      .all().map((row) => {
+        const assignment = JSON.parse(row.assignment_json);
+        return {
+          taskId: row.task_id, resultContract: assignment.resultContract,
+          inputRevision: assignment.inputRevision, hasResult: row.result_json !== null,
+        };
+      }),
+    children: db.prepare("SELECT parent_task_id, slot, child_task_id FROM managed_task_children ORDER BY parent_task_id, slot")
+      .all().map((row) => ({ parentTaskId: row.parent_task_id, slot: row.slot, childTaskId: row.child_task_id })),
+    handlings: db.prepare("SELECT task_id FROM managed_task_handlings ORDER BY task_id").all()
+      .map((row) => row.task_id),
+  };
+}
+
+// The correction keeps the reviewed revision and target and asks for a ready.v1 fix.
+function correctionDecision(taskId, receipt) {
+  const row = stateDb.openOpenClawStateDatabase().db.prepare(
+    "SELECT assignment_json FROM managed_tasks WHERE task_id = ?").get(taskId);
+  const reviewed = JSON.parse(row.assignment_json);
+  return {
+    receipt,
+    decision: { kind: "continue", children: [{ slot: "corregir", assignment: {
+      target: reviewed.target, instructionRef: reviewed.instructionRef,
+      inputRevision: reviewed.inputRevision, resultContract: "ready.v1",
+      continuation: { kind: "requester" },
+    } }] },
+  };
+}
+
+function scriptedItem(body, wakeTasks) {
+  const message = (text) => ({
+    type: "message", id: randomUUID(), role: "assistant", status: "completed",
+    content: [{ type: "output_text", text, annotations: [] }],
+  });
+  const call = (callId, name, args) => ({
+    type: "function_call", id: randomUUID(), call_id: callId, name,
+    arguments: JSON.stringify(args), status: "completed",
+  });
+  if (!scriptedCorrection || wakeTasks.length === 0) return message("NO_REPLY");
+  const outputs = (JSON.parse(body).input ?? []).filter((entry) =>
+    entry.type === "function_call_output" && String(entry.call_id).startsWith("call_correction_"));
+  const taskId = wakeTasks.at(-1);
+  if (outputs.length === 0) return call("call_correction_inspect", "managed_tasks_inspect", { taskId });
+  if (outputs.length === 1) {
+    let snapshot;
+    try {
+      snapshot = JSON.parse(outputs[0].output);
+    } catch {
+      return message("The managed task tools are not available in this turn.");
+    }
+    if (snapshot.handlingState !== "pending-handling" || snapshot.result?.payload?.verdict !== "changes") {
+      return message("No correction needed.");
+    }
+    return call("call_correction_resolve", "managed_tasks_resolve",
+      correctionDecision(taskId, snapshot.resultReceipt));
+  }
+  return message("Correction registered.");
+}
+
 const providerRequests = [];
 let provider;
 if (countingProvider) {
@@ -73,20 +143,24 @@ if (countingProvider) {
     request.on("data", (chunk) => chunks.push(chunk));
     request.on("end", () => {
       const body = Buffer.concat(chunks).toString("utf8");
+      const wakeTasks = [...body.matchAll(/Managed task (\S+) generation \d+ has a final result/g)]
+        .map((match) => match[1]);
+      let toolNames = [];
+      try {
+        toolNames = (JSON.parse(body).tools ?? []).map((entry) => entry.name ?? entry.function?.name);
+      } catch {
+        toolNames = ["<unparsed>"];
+      }
+      const item = scriptedItem(body, wakeTasks);
       providerRequests.push({
         at: Date.now(), method: request.method, path: request.url,
-        wakeTasks: [...body.matchAll(/Managed task (\S+) generation \d+ has a final result/g)]
-          .map((match) => match[1]),
+        wakeTasks, toolNames, answered: item.type === "function_call" ? item.name : "message",
         // Host incidents the model was told about; the session history repeats earlier ones.
         incidentWakes: [...body.matchAll(/Managed task (\S+) generation \d+ recorded incident ([a-z-]+);/g)]
           .map((match) => ({ taskId: match[1], kind: match[2] })),
         startedDeliveries: sessionDeliveries().filter((row) => row.deliveryStartedAt !== null)
           .map(({ sessionKey: key, contextKey, enqueuedAt }) => ({ sessionKey: key, contextKey, enqueuedAt })),
       });
-      const item = {
-        type: "message", id: randomUUID(), role: "assistant", status: "completed",
-        content: [{ type: "output_text", text: "NO_REPLY", annotations: [] }],
-      };
       const events = [
         { type: "response.output_item.added", output_index: 0, item },
         { type: "response.output_item.done", output_index: 0, item },
@@ -121,6 +195,8 @@ const config = {
   gateway: { mode: "local", bind: "loopback", port },
   channels: {}, cron: { enabled: false }, plugins: { enabled: false },
   session: { store: storePath },
+  // The requester's model must see the managed task tools directly in its turn.
+  ...(process.env.CROSS_TOOLS_PROFILE === "full" ? { tools: { profile: "full", toolSearch: false } } : {}),
   agents: provider
     ? {
       defaults: {
@@ -144,7 +220,7 @@ const { client, server } = await gateway.startGatewayWithClient({
   scopes: ["operator.admin"], deviceIdentity,
 });
 await server.startupSettled;
-process.stdout.write(`${JSON.stringify({ type: "ready", url: `ws://127.0.0.1:${port}` })}\n`);
+process.stdout.write(`${JSON.stringify({ type: "ready", url: `ws://127.0.0.1:${port}`, pid: process.pid })}\n`);
 
 async function runTool(command) {
   const name = `managed_tasks_${command.action}`;
@@ -204,6 +280,7 @@ const operations = {
   deliveries: async () => sessionDeliveries(),
   provider: async () => ({ enabled: Boolean(provider), requests: providerRequests }),
   sessions: async () => sessions.listSessionEntryKeysReadOnly({ agentId: requesterAgentId, storePath }),
+  tasks: async () => managedTaskRows(),
   stop: async () => ({ stopped: true }),
 };
 const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
@@ -226,3 +303,4 @@ if (provider) {
   provider.listener.closeAllConnections();
   await new Promise((resolve) => provider.listener.close(resolve));
 }
+process.exit(0);

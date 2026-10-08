@@ -32,6 +32,11 @@
 | B4-28 | `docs/cron-messages/packing-digest-20h.v14.txt` ya no es el mensaje vivo (otro sha256), y el cron de renovación del token de Shopify no tiene texto versionado. | Versionar los mensajes vivos. |
 | B4-28 | `cuotas-proveedores` es el `canal_de` por defecto de `scripts/mac/corrida/abrir.sh:7`. | T12 mueve el canal antes de retirar ese cron. |
 | B4-28 | La foto `B4-26-cron-snapshot.json` queda fechada (2026-10-07T20:17:55Z) y su sha256 es literal en la prueba. | Una foto nueva es un archivo y un literal nuevos. |
+| B4-29 | `cites()` de `scripts/tests/test_agent_work_acceptance.py` acepta citas que no son pruebas: en un `.sh`, palabras de un `test_pattern` (`children`, `restart`); en un `.py`, cualquier `def` (`setUp`). La comparación de la línea 287 del plan solo mira la frase "La aceptación exige también", y `REF` acepta rutas absolutas (VEREDICTO-B4-28-r1). | Endurecer `cites()` y `REF` antes del par final de T10. |
+| B4-29 | El estricto de `acceptance` no lee los logs: no ve casos de R saltados ni un `build-info` distinto del par (VEREDICTO-B4-28-r1). | Encargo del par final (T10 `:282` y `:284`). |
+| B4-29 | En `review_correction_restart` el resultado llega después del reinicio del Gateway: G no prueba que una fila de despertar ya encolada sobreviva a un reinicio. Eso lo prueba R (`src/gateway/server.managed-task-requester.e2e.test.ts:452-481` y `:570`). | Retener el despertar antes del `kill` si hace falta probarlo en G. |
+| B4-29 | En `review_correction_restart` la corrección queda registrada en R (manejo y fila del hijo `corregir`), pero el hijo queda `registered`: nadie lo admite y ningún CLI escribe su `accept.v1`. "Aceptada" se prueba solo como el `resolve` que R acepta. | B4-30: admitir el hijo y que el CLI lo acepte. |
+| B4-29 | El arnés pone `tools: { profile: "full", toolSearch: false }` para que el modelo del solicitante vea `managed_tasks_*` en su turno; con la config por defecto del arnés quedan detrás de `tool_search`. No está comprobado qué ve `main` en producción. | Comprobarlo antes de T12. |
 
 ## Residuales B0-1-r1 (no reabren, van al PR)
 - Motivo del salto invisible en CI: `test-agent-work-e2e.sh` sin argumentos (como lo invoca `run-checks.sh`) imprime OK (skipped=1) dos veces sin el motivo. Arreglo de una línea: correr con `-v` o imprimir el motivo en el wrapper.

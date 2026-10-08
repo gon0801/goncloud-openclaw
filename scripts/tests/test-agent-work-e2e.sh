@@ -30,6 +30,10 @@ run_cli_delivery_acceptance() {
   python3 scripts/tests/test_agent_work_cli_delivery_acceptance_e2e.py
 }
 
+run_review_correction_restart() {
+  python3 scripts/tests/test_agent_work_review_correction_restart_e2e.py
+}
+
 run_acceptance_matrix() {
   python3 scripts/tests/test_agent_work_acceptance.py
 }
@@ -46,7 +50,15 @@ case "${1:-all}" in
     run_main_cli_loop
     run_cli_silent_failure
     run_cli_delivery_acceptance
+    run_review_correction_restart
     run_acceptance_matrix
+    ;;
+  review_correction_restart)
+    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
+      echo "review_correction_restart requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
+      exit 2
+    fi
+    run_review_correction_restart
     ;;
   acceptance_matrix)
     run_acceptance_matrix
@@ -93,7 +105,7 @@ case "${1:-all}" in
     run_cli_delivery_acceptance
     ;;
   *)
-    echo "casos disponibles: delivery_latency, review_tail_restart, cli_gateway, main_cli_loop, cli_silent_failure, cli_delivery_acceptance, acceptance_matrix, acceptance" >&2
+    echo "casos disponibles: delivery_latency, review_tail_restart, cli_gateway, main_cli_loop, cli_silent_failure, cli_delivery_acceptance, review_correction_restart, acceptance_matrix, acceptance" >&2
     exit 2
     ;;
 esac
