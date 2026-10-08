@@ -1,0 +1,76 @@
+$ test-candados-declarados.sh
+ok auto-prueba: los 4 estilos de ruta literal se detectan y exigen su marca
+ok ida: las 137 frases ancladas por 14 test(s) tienen su marca
+ok vuelta: las 88 marca(s) de agents/** y docs/agent-skills/** apuntan a tests que existen y afirman su frase
+TODO VERDE: candados declarados (137 frases, 88 marcas)
+rc=0
+$ test-runbooks-no-contradicen-entorno.sh
+ok (1): el detector marca bootstrap imposible, docker run, glm viejo y comandos sin PATH; deja pasar las formas buenas y las prohibiciones
+ok (2):       25 runbooks revisados, sin bootstrap imposible, sin docker run y sin glm viejo
+ok (2b): cross-review y tmux de los autopilot y del loop con prefijo de PATH o ruta absoluta
+ok (2b-bis): ningun runbook lanza a un implementador sin PATH embebido y flag dentro del comando
+ok (2c): ningun runbook de fase designa un modelo como lead
+ok (2d): runbooks futuros revisados: autopilot-fase14.md autopilot-fase15.md autopilot-fase17.md; fixtures bueno/malo discriminan cada regla
+TODO VERDE: runbooks sin contradicciones con el kit ni con el entorno
+rc=0
+$ test-agent-work-e2e.sh
+{"closed": 0, "incidents": 0, "reported": 1, "transferred": 0}
+DELIVERY_LATENCY {"detection_to_persisted_receipt_s": 0.25, "write_to_detection_s": 4.999}
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.009s
+
+OK
+ss
+----------------------------------------------------------------------
+Ran 2 tests in 0.000s
+
+OK (skipped=2)
+s
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK (skipped=1)
+s
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK (skipped=1)
+ss
+----------------------------------------------------------------------
+Ran 2 tests in 0.000s
+
+OK (skipped=2)
+s
+----------------------------------------------------------------------
+Ran 0 tests in 0.000s
+
+OK (skipped=1)
+s
+----------------------------------------------------------------------
+Ran 0 tests in 0.000s
+
+OK (skipped=1)
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.006s
+
+OK
+rc=0
+$ ruteo
+...............
+----------------------------------------------------------------------
+Ran 15 tests in 0.096s
+
+OK
+rc=0
+$ test-agent-work-integration.py
+.............................................s..............{"closed": 0, "incidents": 0, "reported": 1, "transferred": 0}
+DELIVERY_LATENCY {"detection_to_persisted_receipt_s": 0.25, "write_to_detection_s": 4.999}
+.{"closed": 0, "incidents": 0, "reported": 1, "transferred": 0}
+......................................................
+----------------------------------------------------------------------
+Ran 115 tests in 6.082s
+
+OK (skipped=1)
+rc=0

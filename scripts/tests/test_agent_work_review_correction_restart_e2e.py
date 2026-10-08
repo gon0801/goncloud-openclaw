@@ -2,6 +2,9 @@
 """review_tail_restart: the reviewer's verdict leaves the last 80 lines, the Gateway crashes,
 and the requester still registers and admits one correction that the CLI accepts.
 
+Two crash points: before the result reaches R, and in the literal order of the plan, with the
+result reported and the requester's wake turn in flight when the Gateway dies.
+
 The reviewer is a CLI double in a real tmux pane. The requester's model is the harness provider,
 scripted: it wakes on the durable result, inspects it, resolves it with one correction child and
 admits that child. Nobody reminds it: the test never calls inspect, resolve or admit after the
@@ -75,6 +78,12 @@ class ReviewCli:
 
 class ReviewTailRestartE2E(unittest.TestCase):
     def test_verdict_out_of_the_tail_and_a_crash_still_give_one_accepted_correction(self):
+        self.review_tail_restart(wake_in_flight=False)
+
+    def test_a_crash_with_the_wake_turn_in_flight_still_gives_one_accepted_correction(self):
+        self.review_tail_restart(wake_in_flight=True)
+
+    def review_tail_restart(self, wake_in_flight):
         runtime = built_runtime(self)
         if not shutil.which("tmux"):
             raise AssertionError("review_tail_restart runs the reviewer double in a real tmux pane")
@@ -86,7 +95,8 @@ class ReviewTailRestartE2E(unittest.TestCase):
             host = Host(HOST_ID, root / "host")
             manager = ResourceManager(host.spool, HOST_ID, TmuxBackend(cli.tmux, cli.socket))
             deliver = TmuxTransport(cli.tmux, cli.socket).deliver
-            first = LoopGateway(runtime, root, extra_env=SCRIPTED)
+            hold = {"CROSS_PROVIDER_HOLD": "1"} if wake_in_flight else {}
+            first = LoopGateway(runtime, root, extra_env={**SCRIPTED, **hold})
             try:
                 request = prepare_request(coverage=certified, **loop_route(root, first.state_dir))
                 with mock.patch.dict(os.environ, first.env):
@@ -113,6 +123,16 @@ class ReviewTailRestartE2E(unittest.TestCase):
                                     "the reviewer never finished its output")
                     in_tail = VERDICT in cli.capture("-80")
                     self.assertFalse(in_tail, "the verdict is still in the last 80 lines")
+                    if wake_in_flight:
+                        # The result reaches R before the crash and the requester's wake turn starts.
+                        receipts = host.flush(HOST_ID, client.report_host_result)
+                        self.assertEqual(len(receipts), 1)
+                        closed = manager.close(review_key, {"kind": "result",
+                                                            "receipt": receipts[0]["receiptId"]})
+                        self.assertEqual(closed.state, "ReleasedAdopted")
+                        in_flight = wait_for(lambda: [r for r in first.provider_requests()
+                                                      if task_id in r["wakeTasks"]], 60)
+                        self.assertTrue(in_flight, "the first Gateway never started the wake turn")
             finally:
                 first.kill()
 
@@ -121,14 +141,15 @@ class ReviewTailRestartE2E(unittest.TestCase):
                 self.assertNotEqual(second.pid, first.pid, "the Gateway did not restart")
                 before = second.call("tasks")
                 self.assertEqual([(task["taskId"], task["hasResult"]) for task in before["tasks"]],
-                                 [(task_id, False)], "the restart lost or changed the task")
+                                 [(task_id, wake_in_flight)], "the restart lost or changed the task")
                 with mock.patch.dict(os.environ, second.env):
                     client = GatewayProjectionClient(str(runtime / "openclaw.mjs"), HOST_ID, second.url)
-                    receipts = host.flush(HOST_ID, client.report_host_result)
-                    self.assertEqual(len(receipts), 1)
-                    closed = manager.close(review_key, {"kind": "result",
-                                                        "receipt": receipts[0]["receiptId"]})
-                    self.assertEqual(closed.state, "ReleasedAdopted")
+                    if not wake_in_flight:
+                        receipts = host.flush(HOST_ID, client.report_host_result)
+                        self.assertEqual(len(receipts), 1)
+                        closed = manager.close(review_key, {"kind": "result",
+                                                            "receipt": receipts[0]["receiptId"]})
+                        self.assertEqual(closed.state, "ReleasedAdopted")
 
                     rows = wait_for(lambda: (lambda value: value if value["children"] else None)(
                         second.call("tasks")), 60)
@@ -167,13 +188,16 @@ class ReviewTailRestartE2E(unittest.TestCase):
                            and task["inputRevision"].get("sha") == REVIEWED_SHA]
                 self.assertEqual(reviews, [task_id], "a new review of the same SHA was registered")
                 requests = second.provider_requests()
-                self.assertEqual(requests[0]["wakeTasks"], [task_id],
-                                 "the requester acted before its durable wake")
                 answered = [request["answered"] for request in requests]
-                self.assertEqual(answered, ["managed_tasks_inspect", "managed_tasks_resolve",
-                                            "managed_tasks_admit", "message"])
-                self.assertIn("managed_tasks_resolve", requests[0]["toolNames"])
-                print(f"REVIEW_TAIL_RESTART verdict_in_tail_80={int(in_tail)} pid1={first.pid} pid2={second.pid} "
+                acting = [request for request in requests if request["answered"] != "message"]
+                self.assertEqual([request["answered"] for request in acting],
+                                 ["managed_tasks_inspect", "managed_tasks_resolve", "managed_tasks_admit"],
+                                 f"the requester did not inspect, resolve and admit exactly once: {answered}")
+                self.assertEqual(acting[0]["wakeTasks"], [task_id],
+                                 "the requester acted before its durable wake")
+                self.assertIn("managed_tasks_resolve", acting[0]["toolNames"])
+                print(f"REVIEW_TAIL_RESTART wake_in_flight={int(wake_in_flight)} "
+                      f"verdict_in_tail_80={int(in_tail)} pid1={first.pid} pid2={second.pid} "
                       f"handlings={len(rows['handlings'])} children={len(rows['children'])} "
                       f"correction_accepted={int(bool(accepted))} provider={answered}", flush=True)
             finally:

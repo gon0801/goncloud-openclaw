@@ -69,3 +69,6 @@
 
 ## Resueltos fuera del loop (resource_close)
 - Fila B4-28 de `resource_close`: la limpieza ya no depende de la foto `registered`; `_kill_nonce` relee `ps` y mata por nonce hasta que no quede ninguno, con la prueba de dobles `test_resource_close_cleanup_kills_nonce_processes_born_after_the_snapshot` (roja con la limpieza vieja). David corrió la suite real tres veces seguidas el 2026-10-08: tres `OK (skipped=1)` y ningún proceso de `agentes` vivo. Revisión independiente (otro modelo): aprobada.
+
+## Resueltos en B4-32-r1
+- Fila B4-30, caída con el despertar en vuelo: R 978355503c44 (B4-31) suelta al arrancar los despertares gestionados cuyo turno empezó un proceso muerto, y `review_tail_restart` lo prueba de punta a punta con el orden literal del plan (`test_a_crash_with_the_wake_turn_in_flight_still_gives_one_accepted_correction`). Con R sin ese arreglo, el caso sale rojo con `the requester never resolved`.

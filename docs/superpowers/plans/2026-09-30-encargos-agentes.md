@@ -275,7 +275,7 @@ Verifica con `test-agent-work-integration.sh agents_routing`, `delegation_bypass
 
 Depende de T9. Crea `G/scripts/tests/test-agent-work-e2e.sh`, `docs/evidence/agent-work/acceptance.md` y `followups.md`. Conecta las nuevas pruebas al runner de su repositorio sin excluir pruebas existentes.
 
-- [ ] Añade `review_tail_restart`: el revisor entrega, la respuesta sale de las últimas 80 líneas y el solicitante reinicia. Exige una corrección registrada y aceptada sin recordatorio humano.
+- [x] Añade `review_tail_restart`: el revisor entrega, la respuesta sale de las últimas 80 líneas y el solicitante reinicia. Exige una corrección registrada y aceptada sin recordatorio humano.
 - [x] Añade `delivery_latency` con reloj controlado: desde la escritura durable del informe hasta su detección, hasta 5 segundos; desde la detección hasta el recibo durable, hasta otros 5 segundos. Simula hosts despiertos y red sana; guarda ambas mediciones por separado.
 - [ ] Añade las fronteras de caída de la especificación con un contador externo de procesos y peticiones. Comprueba los resultados de dominio, no solo filas de la base.
 - [ ] Ejecuta los casos en rojo antes de corregir cualquier fallo de integración.

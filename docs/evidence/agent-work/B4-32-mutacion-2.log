@@ -1,0 +1,32 @@
+F
+======================================================================
+FAIL: test_a_crash_with_the_wake_turn_in_flight_still_gives_one_accepted_correction (__main__.ReviewTailRestartE2E.test_a_crash_with_the_wake_turn_in_flight_still_gives_one_accepted_correction)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_review_correction_restart_e2e.py", line 84, in test_a_crash_with_the_wake_turn_in_flight_still_gives_one_accepted_correction
+    self.review_tail_restart(wake_in_flight=True)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_review_correction_restart_e2e.py", line 142, in review_tail_restart
+    self.assertEqual([(task["taskId"], task["hasResult"]) for task in before["tasks"]],
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [(task_id, wake_in_flight)], "the restart lost or changed the task")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [('20[37 chars]True), ('f0c86fa5d1054da4a607d6d666401c4bd1d4f[32 chars]lse)] != [('20[37 chars]True)]
+
+First list contains 1 additional elements.
+First extra element 1:
+('f0c86fa5d1054da4a607d6d666401c4bd1d4f5dab7ffa4c8610531c4f021a5e5', False)
+
+- [('20d5e2b9-4119-468c-9c5e-b870be313163', True),
+?                                                ^
+
++ [('20d5e2b9-4119-468c-9c5e-b870be313163', True)]
+?                                                ^
+
+-  ('f0c86fa5d1054da4a607d6d666401c4bd1d4f5dab7ffa4c8610531c4f021a5e5', False)] : the restart lost or changed the task
+
+----------------------------------------------------------------------
+Ran 1 test in 68.945s
+
+FAILED (failures=1)
+rc=1

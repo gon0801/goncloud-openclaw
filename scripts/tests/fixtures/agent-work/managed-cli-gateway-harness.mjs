@@ -7,6 +7,8 @@
 // CROSS_PROVIDER_SCRIPT=review-correction makes that provider act as the
 // requester's model: on a result wake it inspects the task, resolves it with one
 // correction child and admits that child, as a model would without a human reminder.
+// CROSS_PROVIDER_HOLD=1 records each request and never answers it, so a crash lands
+// in the middle of the model turn.
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import { createServer } from "node:http";
@@ -126,7 +128,7 @@ function scriptedItem(body, wakeTasks) {
     } catch {
       return message("The managed task tools are not available in this turn.");
     }
-    if (snapshot.handlingState !== "pending-handling" || snapshot.result?.payload?.verdict !== "changes") {
+    if (!snapshot || snapshot.handlingState !== "pending-handling" || snapshot.result?.payload?.verdict !== "changes") {
       return message("No correction needed.");
     }
     return call("call_correction_resolve", "managed_tasks_resolve",
@@ -167,6 +169,7 @@ if (countingProvider) {
         startedDeliveries: sessionDeliveries().filter((row) => row.deliveryStartedAt !== null)
           .map(({ sessionKey: key, contextKey, enqueuedAt }) => ({ sessionKey: key, contextKey, enqueuedAt })),
       });
+      if (process.env.CROSS_PROVIDER_HOLD === "1") return;
       const events = [
         { type: "response.output_item.added", output_index: 0, item },
         { type: "response.output_item.done", output_index: 0, item },
