@@ -5,8 +5,8 @@
 // Defaults reproduce cli_gateway; CROSS_* variables pick another requester
 // session, host, or a loopback model provider that counts every request.
 // CROSS_PROVIDER_SCRIPT=review-correction makes that provider act as the
-// requester's model: on a result wake it inspects the task and resolves it with
-// one correction child, as a model would without a human reminder.
+// requester's model: on a result wake it inspects the task, resolves it with one
+// correction child and admits that child, as a model would without a human reminder.
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import { createServer } from "node:http";
@@ -79,7 +79,7 @@ function managedTaskRows() {
       .all().map((row) => {
         const assignment = JSON.parse(row.assignment_json);
         return {
-          taskId: row.task_id, resultContract: assignment.resultContract,
+          taskId: row.task_id, resultContract: assignment.resultContract, target: assignment.target,
           inputRevision: assignment.inputRevision, hasResult: row.result_json !== null,
         };
       }),
@@ -132,7 +132,13 @@ function scriptedItem(body, wakeTasks) {
     return call("call_correction_resolve", "managed_tasks_resolve",
       correctionDecision(taskId, snapshot.resultReceipt));
   }
-  return message("Correction registered.");
+  if (outputs.length === 2) {
+    const [childTaskId] = JSON.parse(outputs[1].output).childTaskIds ?? [];
+    if (!childTaskId) return message("The correction has no child to admit.");
+    return call("call_correction_admit", "managed_tasks_admit",
+      { taskId: childTaskId, admissionKey: "corregir-admission" });
+  }
+  return message("Correction registered and admitted.");
 }
 
 const providerRequests = [];

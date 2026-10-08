@@ -37,6 +37,7 @@
 | B4-29 | En `review_correction_restart` el resultado llega después del reinicio del Gateway: G no prueba que una fila de despertar ya encolada sobreviva a un reinicio. Eso lo prueba R (`src/gateway/server.managed-task-requester.e2e.test.ts:452-481` y `:570`). | Retener el despertar antes del `kill` si hace falta probarlo en G. |
 | B4-29 | En `review_correction_restart` la corrección queda registrada en R (manejo y fila del hijo `corregir`), pero el hijo queda `registered`: nadie lo admite y ningún CLI escribe su `accept.v1`. "Aceptada" se prueba solo como el `resolve` que R acepta. | B4-30: admitir el hijo y que el CLI lo acepte. |
 | B4-29 | El arnés pone `tools: { profile: "full", toolSearch: false }` para que el modelo del solicitante vea `managed_tasks_*` en su turno; con la config por defecto del arnés quedan detrás de `tool_search`. No está comprobado qué ve `main` en producción. | Comprobarlo antes de T12. |
+| B4-30 | Caída del Gateway con el turno de despertar en vuelo: el segundo Gateway no vuelve a entregar la fila gestionada (R `src/gateway/server-restart-sentinel.ts:153-155`, "managed task continuation already started") y su aviso de turno interrumpido no nombra la tarea, así que el solicitante no corrige (medido por el lector de B4-30: el host reporta al primer Gateway, el proveedor retiene el turno del despertar y el Gateway muere; sin corrección en 180 s, dos veces). `review_tail_restart` reporta después del reinicio y no lo cubre. | R: reentregar el despertar o nombrar la tarea en la recuperación; después, G sube ese orden a `review_tail_restart` y marca `:278`. |
 
 ## Residuales B0-1-r1 (no reabren, van al PR)
 - Motivo del salto invisible en CI: `test-agent-work-e2e.sh` sin argumentos (como lo invoca `run-checks.sh`) imprime OK (skipped=1) dos veces sin el motivo. Arreglo de una línea: correr con `-v` o imprimir el motivo en el wrapper.
@@ -61,3 +62,7 @@
 - G4 redacción de `B2-triage-base-vs-diff.md`: el timeout de backup-create "no se reprodujo en aislado; causa no determinada" (sin "Espurio" ni "es de carga"), LANG no quedó registrado; también en la fila B2/bateria; en el commit de documentos de B4-4-r1.
 - G5 sin opt-in para la cuenta `agentes`: decisión anotada en la fila B3-2c (cablear `terminar-sesion.sh` y `cerrar.sh`); en el commit de documentos de B4-4-r1.
 - G6 "Docstring coverage": no aplica, sin cambio; el repo no usa docstrings como regla.
+
+## Resueltos en B4-30-r1
+- Fila B4-29 del hijo `corregir` sin aceptar: en `review_tail_restart` el modelo del solicitante admite el hijo y el mismo CLI escribe su `accept.v1` (`host.take_acceptance`).
+- Residual 1 de VEREDICTO-B4-29-r1: la prueba exige que el hijo vaya sobre la misma revisión y al mismo destino que la revisión (`inputRevision` y `target` iguales a los de la raíz).

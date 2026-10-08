@@ -1,0 +1,14 @@
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+CLI_SILENT_FAILURE_E2E cause=transport-unavailable incident=host:1:transport-unavailable:session-closed detections=1 incident_rpcs=1 wake_requests=1 wake_latency_s=6.92 passes=11 idle_passes_after_wake=5 session=agent:main:encargos-loop deadline_s=6.0
+.{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+CLI_SILENT_FAILURE_E2E cause=deadline-missed incident=host:1:deadline-missed:deadline detections=1 incident_rpcs=1 wake_requests=1 wake_latency_s=0.38 passes=12 idle_passes_after_wake=5 session=agent:main:encargos-loop deadline_s=6.0
+.{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+CLI_SILENT_FAILURE_E2E cause=invalid-result incident=host:1:invalid-result:invalid-result detections=1 incident_rpcs=1 wake_requests=1 wake_latency_s=0.46 passes=7 idle_passes_after_wake=6 session=agent:main:encargos-loop deadline_s=6.0
+.{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+CLI_SILENT_FAILURE_E2E cause=permission-required incident=host:1:permission-required:prompt-7d94515e70c2994a231d611d9a75feb4b34c8c89d290da292dc115ae5ac52ff3-1 detections=1 incident_rpcs=1 wake_requests=1 wake_latency_s=0.38 passes=7 idle_passes_after_wake=5 session=agent:main:encargos-loop deadline_s=None
+.
+----------------------------------------------------------------------
+Ran 4 tests in 88.515s
+
+OK
+rc=0
