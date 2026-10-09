@@ -1,15 +1,12 @@
 /**
- * tablero-runbook/seguimiento-render.ts — reporte consolidado de 30 minutos
+ * tablero-runbook/seguimiento-render.ts — corte de avance para el propietario
  * (`seguimiento.v2`).
  *
- * Puro, sin I/O: del resumen objetivo (Task 1) al texto para el propietario.
- * Un solo mensaje aunque haya varias fases. `seguimiento.v1` queda solo para
- * avisos inmediatos de cuatro líneas y registros viejos.
- *
- * Lo que imprime sale de lo que recibe: cada carril no omitido del insumo
- * aparece con su fracción auditable. Elegir qué carriles entran al corte es
- * trabajo de quien arma el insumo (el reloj de la Task 3), no del renderer.
- * Los carriles `omitido` (trabajo cancelado) nunca se imprimen.
+ * Puro, sin I/O: del resumen objetivo al texto que lee alguien que no
+ * programa. Un solo mensaje aunque haya varios trabajos: una línea de
+ * novedad, dos líneas por trabajo y una de cierre. Las partes terminadas y las
+ * pendientes no se listan una por una; las `omitido` nunca aparecen.
+ * `seguimiento.v1` queda para los avisos inmediatos de cuatro líneas.
  */
 import type { ConteoObjetivo, ResumenSeguimiento } from "./seguimiento.ts";
 
@@ -186,25 +183,14 @@ export type EntradaSeguimientoV2 = {
   fases: ResumenSeguimiento[];
   tareasSueltas: TareaSuelta[];
   ahora: number;
-  cambio: string;
-  siguiente: string;
+  /**
+   * Frases fijas que arma el reloj a partir de conteos y estados (nunca texto
+   * libre de un agente). Vacío en un latido sin novedad.
+   */
+  novedades: string[];
+  /** `nada`, o el motivo de la atención pendiente. */
   necesita: string;
 };
-
-type BloqueContable = {
-  nombre: string;
-  progreso: ConteoObjetivo;
-  detalle: string;
-};
-
-function fraccion(p: ConteoObjetivo): string {
-  if (p.kind === "desconocido") return "desconocido";
-  return `${p.porcentaje}% (${p.completadas}/${p.total})`;
-}
-
-function bloqueContable(b: BloqueContable): string {
-  return `${b.nombre} — ${fraccion(b.progreso)}\n${b.detalle}`;
-}
 
 type NombrableTrabajo = Pick<ResumenSeguimiento, "trabajoId" | "fase" | "titulo">;
 
@@ -234,66 +220,84 @@ export function nombreCuerpo(r: NombrableTrabajo): string {
   return tituloApto(r.titulo) ?? (sanearTextoPropietario(id) !== null ? `Trabajo ${id}` : "Trabajo en curso");
 }
 
-function nombreSano(nombre: string, id: string, indice: number, clase: string): string {
-  return sanearTextoPropietario(nombre)
-    ?? (sanearTextoPropietario(id) ? `${clase} ${id}` : `${clase} ${indice + 1}`);
-}
-
-function estadoSano(estado: string): string {
-  return sanearTextoPropietario(estado) ?? "seguimiento";
-}
-
 function esTerminal(estado: string): boolean {
   return estado === "mergeado" || estado === "omitido" || estado === "revertido";
 }
 
-type ActividadViva = {
-  detalle: string;
-  iniciadaEn: string;
-  ultimaEvidencia: string;
-  estado: string | null;
-};
+/** Primera línea de un latido: el corte sale sin que nada haya cambiado. */
+export const SIN_NOVEDAD = "Sin novedad: todo sigue en curso.";
 
-function actividadEnCurso(input: EntradaSeguimientoV2): ActividadViva | null {
-  for (const fase of input.fases) {
-    const actual = fase.carriles.find((c) => c.estado !== "omitido" && !esTerminal(c.estado))
-      ?? fase.carriles.find((c) => c.estado !== "omitido");
-    if (actual !== undefined) {
-      return { ...actual.actividad, estado: actual.estado };
-    }
-  }
-  const suelta = input.tareasSueltas[0];
-  if (suelta !== undefined) return { ...suelta.actividad, estado: null };
-  return null;
+function conteo(p: ConteoObjetivo, unidad: string): string {
+  return p.kind === "desconocido" ? "avance desconocido" : `${p.completadas} de ${p.total} ${unidad}`;
 }
 
-function evidenciaSana(act: ActividadViva): string {
-  return sanearTextoPropietario(act.ultimaEvidencia)
-    ?? sanearTextoPropietario(act.detalle)
-    ?? (act.estado === null ? "en seguimiento" : `en ${estadoSano(act.estado)}`);
+// Código inicial de una parte ("B4 ", "IN ", "S.1 ", "C3a "): le sirve a quien
+// lleva el plan, no al propietario. Pide un dígito o dos mayúsculas para no
+// comerse un artículo ("El cierre", "La entrega").
+const CODIGO_PARTE_RE = /^(?:[A-Z]{1,3}\d+[a-z]?|[A-Z]\.\d+|[A-Z]{2,3})\s+(?=\S)/;
+
+/** Nombre de una parte para el propietario: sin su código, o `la parte k`. */
+function nombreParte(nombre: string, posicion: number): string {
+  const limpio = sanearTextoPropietario(nombre.replace(CODIGO_PARTE_RE, ""));
+  return limpio !== null && !tieneMarcadorReservado(limpio) ? limpio : `la parte ${posicion}`;
 }
 
-function textoCambio(input: EntradaSeguimientoV2): string {
-  const cambioSano = input.cambio === "" ? "" : sanearTextoPropietario(input.cambio);
-  if (cambioSano !== null && cambioSano !== "") return cambioSano;
-  // Ventana sin cambios: el reporte de 30 minutos sale igual porque confirma
-  // que el trabajo continúa. Dice el tiempo en la unidad actual y la última
-  // evidencia; nunca "nada nuevo".
-  const act = actividadEnCurso(input);
-  // Caso toda-fase-conservador-sin-carriles (p.ej. corrupción) sin sueltas:
-  // no hay actividad que citar y no se inventa ninguna; el corte de 30
-  // minutos sale igual.
-  if (act === null) {
-    return "El trabajo sigue bajo seguimiento: sin lectura nueva del avance en esta ventana.";
-  }
-  const inicioMs = Date.parse(act.iniciadaEn);
-  if (Number.isNaN(inicioMs)) {
-    throw new Error(`renderSeguimientoV2: iniciadaEn inválida (${act.iniciadaEn})`);
-  }
-  const minutos = Math.max(0, Math.floor((input.ahora - inicioMs) / 60000));
-  return `El trabajo sigue en curso: ${minutos} minutos en la unidad actual; última evidencia: ${evidenciaSana(act)}.`;
+/** Tiempo desde el último movimiento, en la unidad más grande que lo dice entero. */
+function haceCuanto(desde: string, ahora: number): string | null {
+  const ms = Date.parse(desde);
+  if (!Number.isFinite(ms)) return null;
+  const minutos = Math.floor((ahora - ms) / 60000);
+  if (minutos < 1) return null;
+  if (minutos < 60) return minutos === 1 ? "1 minuto" : `${minutos} minutos`;
+  const horas = Math.floor(minutos / 60);
+  if (horas < 48) return horas === 1 ? "1 hora" : `${horas} horas`;
+  return `${Math.floor(horas / 24)} días`;
 }
 
+function enumerar(nombres: string[]): string {
+  if (nombres.length <= 1) return nombres.join("");
+  const ultimo = nombres[nombres.length - 1];
+  return `${nombres.slice(0, -1).join(", ")} ${/^h?i(?!e)/i.test(ultimo) ? "e" : "y"} ${ultimo}`;
+}
+
+/**
+ * Segunda línea de un trabajo: qué se está haciendo y qué está atorado. Las
+ * partes terminadas y las pendientes no se listan: ya las cuenta la fracción.
+ */
+function lineaActividad(fase: ResumenSeguimiento, ahora: number): string | null {
+  const partes = fase.carriles.filter((c) => c.estado !== "omitido");
+  if (partes.length === 0) return null;
+  const nombradas = partes.map((c, i) => ({ c, nombre: nombreParte(c.nombre, i + 1) }));
+  const atoradas = nombradas.filter((x) => x.c.estado === "atorado");
+  const pendientes = nombradas.filter((x) => x.c.estado === "pendiente");
+  const enCurso = nombradas.filter((x) => !esTerminal(x.c.estado) && x.c.estado !== "atorado" && x.c.estado !== "pendiente");
+  const frases: string[] = [];
+  if (enCurso.length > 0) {
+    const hace = enCurso.length === 1 ? haceCuanto(enCurso[0].c.actividad.iniciadaEn, ahora) : null;
+    frases.push(`Ahora: ${enumerar(enCurso.map((x) => x.nombre))}${hace !== null ? ` (último movimiento hace ${hace})` : ""}.`);
+  } else if (pendientes.length > 0) {
+    frases.push(`Sigue: ${pendientes[0].nombre}.`);
+  } else if (atoradas.length === 0 && partes.every((c) => c.estado === "mergeado")) {
+    frases.push(`Todas las ${fase.unidad} terminadas; falta cerrarlo.`);
+  }
+  if (atoradas.length > 0) {
+    frases.push(`${atoradas.length === 1 ? "Atorada" : "Atoradas"}: ${enumerar(atoradas.map((x) => x.nombre))}.`);
+  }
+  return frases.length > 0 ? frases.join(" ") : null;
+}
+
+function lineaNecesita(necesita: string): string {
+  if (necesita.replace(/\.$/, "") === "nada") return "No necesito nada de ti.";
+  const motivo = tieneMarcadorReservado(necesita) ? null : sanearTextoPropietario(necesita);
+  if (motivo === null) return "Necesito de ti: Tienes una decisión pendiente.";
+  return `Necesito de ti: ${/[.?!]$/.test(motivo) ? motivo : `${motivo}.`}`;
+}
+
+/**
+ * Corte de avance para el propietario. Una línea de novedad, dos líneas por
+ * trabajo y una de cierre: lo que alguien que no programa necesita para saber
+ * si va bien, qué se está haciendo y si le toca hacer algo.
+ */
 export function renderSeguimientoV2(input: EntradaSeguimientoV2): string {
   if (!Number.isFinite(input.ahora) || input.ahora < 0) {
     throw new Error("renderSeguimientoV2: ahora inválida");
@@ -301,30 +305,17 @@ export function renderSeguimientoV2(input: EntradaSeguimientoV2): string {
   if (input.fases.length === 0 && input.tareasSueltas.length === 0) {
     throw new Error("renderSeguimientoV2: sin fases ni tareas sueltas");
   }
-  const partes: string[] = [];
+  const novedades = input.novedades.filter((n) => sanearTextoPropietario(n) !== null);
+  const lineas: string[] = [novedades.length > 0 ? novedades.join(" ") : SIN_NOVEDAD];
   for (const fase of input.fases) {
-    const p = fase.progreso;
-    const encabezado = p.kind === "desconocido"
-      ? `[AVANZA] ${nombreEncabezado(fase)} — desconocido`
-      : `[AVANZA] ${nombreEncabezado(fase)} — ${p.porcentaje}% (${p.completadas}/${p.total} ${fase.unidad})`;
-    partes.push(encabezado);
-    fase.carriles.filter((c) => c.estado !== "omitido").forEach((c, i) => {
-      partes.push(bloqueContable({
-        nombre: nombreSano(c.nombre, c.id, i, "Carril"),
-        progreso: c.progreso,
-        detalle: sanearTextoPropietario(c.actividad.detalle) ?? `En ${estadoSano(c.estado)}.`,
-      }));
-    });
+    lineas.push(`${nombreEncabezado(fase)}: ${conteo(fase.progreso, fase.unidad)}.`);
+    const actividad = lineaActividad(fase, input.ahora);
+    if (actividad !== null) lineas.push(actividad);
   }
   input.tareasSueltas.forEach((s, i) => {
-    partes.push(bloqueContable({
-      nombre: nombreSano(s.nombre, "", i, "Tarea"),
-      progreso: s.progreso,
-      detalle: sanearTextoPropietario(s.actividad.detalle) ?? "En seguimiento.",
-    }));
+    const avance = s.progreso.kind === "desconocido" ? "avance desconocido" : `${s.progreso.completadas} de ${s.progreso.total}`;
+    lineas.push(`${sanearTextoPropietario(s.nombre) ?? `Tarea ${i + 1}`}: ${avance}.`);
   });
-  partes.push(`Que cambió:\n${textoCambio(input)}`);
-  partes.push(`Que sigue:\n${sanearTextoPropietario(input.siguiente) ?? "Continuar con el trabajo en curso."}`);
-  partes.push(`Que necesito de ti:\n${sanearTextoPropietario(input.necesita) ?? "Hay una respuesta pendiente de tu parte."}`);
-  return `${partes.join("\n\n")}\n`;
+  lineas.push(lineaNecesita(input.necesita));
+  return `${lineas.join("\n")}\n`;
 }

@@ -1,7 +1,8 @@
 #!/bin/bash
 # 9.5 latido + 9.8 rama por defecto en rojo. Con openclaw de mentira (anota, no
 # manda), tmux de mentira, gh de mentira y reloj inyectado: lo rutinario
-# (AVANZA) se acumula para el corte global de 30 min sin mandar; dialogo de
+# (AVANZA) se acumula para el corte global (que sale con novedad, o como
+# latido a las 4 horas) sin mandar; dialogo de
 # 10 min => NECESITO aunque no haya pasado el tope; dialogo sin cobertura de
 # politica => NECESITO inmediato; dos ticks seguidos no duplican; sin corridas
 # => cero llamadas. El mensaje sale aunque falle el evento al vigia, y al
@@ -546,8 +547,13 @@ assert d.get('sha')=='feed888777666', d
 assert d.get('autor')=='gon0801', d
 " || fail "14.9: el registro local no trae sha y autor del cambio automatico"
 
+# Los casos (12) a (16) corren 4 horas despues de T0: el consolidador calla
+# mientras no hay novedad y su latido llega a las 4 horas, asi que antes de ese
+# plazo el control de silencio no tiene nada que decir.
+TQ=$((T0 + 14400))
+
 # (12) 14.8 r2: el consolidador callado no deja al avance sin aviso. Con el
-# scratch del cron avance-tareas legible pero congelado hace 31m40s y NINGUN
+# scratch del cron avance-tareas legible pero congelado hace mas de 4 horas y un tick, y NINGUN
 # mensaje entregado, el latido manda su PROPIO aviso por el camino directo
 # (sin pasar por la acumulacion del AVANZA), lo anota en mensajes.jsonl y deja
 # constancia en eventos.jsonl; el tick siguiente no reavisa (la senal avanzo
@@ -556,18 +562,17 @@ LLAMADAS="$T/l15.log"; export LLAMADAS; : > "$LLAMADAS"
 solo_dejar t-tarda
 montar_corrida t-tarda avanza
 : > "$CORRIDA_STATE/t-tarda/mensajes.jsonl"
-trabajando_en "$T0"
-printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((T0-1900))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-tarda\"]}" > "$T/scratch.json"
+trabajando_en "$TQ"
+printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((TQ-14800))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-tarda\"]}" > "$T/scratch.json"
 export SCRATCH_FILE="$T/scratch.json"
-tick "$T0" || fail "tardanza: el tick revinto"
+tick "$TQ" || fail "tardanza: el tick revinto"
 grep -q "se debía a las " "$LLAMADAS" \
   || fail "tardanza: el latido no mando su aviso por el camino directo"
-# r4 + R12 r3: la hora anunciada es la REAL: el primer tick de la cuadricula
-# de 15 min que cumple VENTANA_REPORTE_SECS = corte_base + 1800 (ceil(1500/900)*900),
-# no corte_base + LAT_SILENCIO (residual owed de r3).
-HORA_DEBIDA="$(python3 -c "import datetime; print(datetime.datetime.fromtimestamp($((T0 - 1900 + 1800))).strftime('%H:%M'))")"
+# r4 + R12 r3: la hora anunciada es la REAL: corte_base + 14400, el plazo del
+# latido del consolidador (LAT_VENTANA), no corte_base + LAT_SILENCIO.
+HORA_DEBIDA="$(python3 -c "import datetime; print(datetime.datetime.fromtimestamp($((TQ - 14800 + 14400))).strftime('%H:%M'))")"
 grep -q "se debía a las $HORA_DEBIDA y no ha llegado" "$LLAMADAS" \
-  || fail "tardanza: la hora anunciada no es corte_base + 1800 (salio $HORA_DEBIDA como debida?)"
+  || fail "tardanza: la hora anunciada no es corte_base + 14400 (salio $HORA_DEBIDA como debida?)"
 MSJ="$CORRIDA_STATE/t-tarda/mensajes.jsonl" python3 -c "
 import json,os
 ls=[json.loads(l) for l in open(os.environ['MSJ']) if l.strip()]
@@ -579,65 +584,56 @@ assert 'te aviso desde el latido' in u.get('texto',''), u
 " || fail "tardanza: la entrega no quedo anotada con ok y su texto en mensajes.jsonl"
 [ "$(evjson t-tarda avance-tardanza)" = "1" ] || fail "tardanza: no quedo constancia en eventos.jsonl"
 antes="$(msgs)"
-tick "$((T0 + 300))" || fail "tardanza: el segundo tick revinto"
+tick "$((TQ + 300))" || fail "tardanza: el segundo tick revinto"
 [ "$(msgs)" = "$antes" ] || fail "tardanza: el segundo tick reaviso ($(msgs) sends contra $antes)"
 [ "$(grep -c "te aviso desde el latido" "$LLAMADAS")" = "1" ] || fail "tardanza: el aviso se duplico"
 
-# Guarda: con el scratch FRESCO y sin mensajes, el tick no avisa tardanza
-# (no avisar de mas).
+# Guarda: con el consolidador callado y SANO el tick no avisa tardanza. Desde
+# el 2026-10-07 el consolidador calla mientras no hay novedad, asi que un
+# corte de hace 32 minutos o 2 horas es normal (con el umbral viejo de 1500 s
+# avisaba cada 25 minutos). Tampoco habla a 4 minutos del latido (14160 s) ni
+# un minuto pasado el plazo (14460 s): su umbral va un tick despues, para no
+# avisar de un reloj sano ni tapar el aviso verdadero con uno tranquilizador.
+for callado in 1900 7200 14160 14460; do
+  LLAMADAS="$T/l16-$callado.log"; export LLAMADAS; : > "$LLAMADAS"
+  solo_dejar "t-callado-$callado"
+  montar_corrida "t-callado-$callado" avanza
+  : > "$CORRIDA_STATE/t-callado-$callado/mensajes.jsonl"
+  trabajando_en "$TQ"
+  printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((TQ-callado))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-callado-$callado\"]}" > "$T/scratch-callado.json"
+  export SCRATCH_FILE="$T/scratch-callado.json"
+  tick "$TQ" || fail "callado $callado: el tick revinto"
+  grep -q "te aviso desde el latido" "$LLAMADAS" \
+    && fail "callado $callado: con el consolidador callado y sano el latido aviso de tardanza"
+  unset SCRATCH_FILE
+done
+
 LLAMADAS="$T/l16.log"; export LLAMADAS; : > "$LLAMADAS"
 solo_dejar t-fresco
 montar_corrida t-fresco avanza
 : > "$CORRIDA_STATE/t-fresco/mensajes.jsonl"
-trabajando_en "$T0"
-printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((T0-300))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-fresco\"]}" > "$T/scratch-fresco.json"
+trabajando_en "$TQ"
+printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((TQ-300))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-fresco\"]}" > "$T/scratch-fresco.json"
 export SCRATCH_FILE="$T/scratch-fresco.json"
-tick "$T0" || fail "fresco: el tick revinto"
+tick "$TQ" || fail "fresco: el tick revinto"
 [ "$(msgs)" = "0" ] || fail "fresco: con el scratch al dia salieron $(msgs) avisos de tardanza"
 unset SCRATCH_FILE
 
-# (13) 14.8 r4 + R12 r3: en la ventana de 30 min el aviso sale UNA vez y dice
-# la verdad. El umbral de silencio sigue en 1500 s (r3: el aviso sale antes de
-# los 30 min aun en el peor caso de ticks cada 300 s), pero el consolidador
-# sano a 4 min de su proximo reporte REAL (corte hace 1560 s; el reporte solo
-# esta atrasado pasado corte_base + 1800, el primer tick de cuadricula que
-# cumple la ventana) no puede recibir un aviso que diga "no ha llegado". Y no
-# se repite: el propio aviso anotado con ok avanza la senal.
-LLAMADAS="$T/l17.log"; export LLAMADAS; : > "$LLAMADAS"
-solo_dejar t-limite
-montar_corrida t-limite avanza
-: > "$CORRIDA_STATE/t-limite/mensajes.jsonl"
-trabajando_en "$T0"
-printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((T0-1560))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-limite\"]}" > "$T/scratch-limite.json"
-export SCRATCH_FILE="$T/scratch-limite.json"
-tick "$T0" || fail "limite: el tick revinto"
-grep -q "te aviso desde el latido" "$LLAMADAS" \
-  || fail "limite: con la senal hace 1560 s el aviso ya tiene que salir"
-if grep -q "no ha llegado" "$LLAMADAS"; then
-  fail "limite: con el consolidador sano (el reporte aun no esta atrasado) el aviso dice que no ha llegado"
-fi
-[ "$(evjson t-limite avance-tardanza)" = "1" ] || fail "limite: no quedo constancia en eventos.jsonl"
-antes="$(grep -c "te aviso desde el latido" "$LLAMADAS")"
-tick "$((T0 + 300))" || fail "limite: el segundo tick revinto"
-[ "$(grep -c "te aviso desde el latido" "$LLAMADAS")" = "$antes" ] \
-  || fail "limite: el aviso se repitio dentro de la ventana"
-unset SCRATCH_FILE
-
-# (14) R12 r3 B3: el grito de atraso sale SOLO pasado corte_base + 1800 (el
-# primer tick de la cuadricula de 15 min que cumple VENTANA_REPORTE_SECS),
-# con la hora de corte + 1800. Con silencio 1860 s el reporte de verdad no
-# llego; entre el tick mudo de +900 y el reporte de +1800 nada se debe.
+# (14) R12 r3 B3: el grito de atraso sale SOLO pasado corte_base + 14400 (el
+# plazo del latido del consolidador), con la hora de corte + 14400. Con
+# silencio 14760 s el latido de verdad no llego; antes de ese plazo nada se
+# debe.
 LLAMADAS="$T/l18.log"; export LLAMADAS; : > "$LLAMADAS"
 solo_dejar t-intermedio
 montar_corrida t-intermedio avanza
 : > "$CORRIDA_STATE/t-intermedio/mensajes.jsonl"
-trabajando_en "$T0"
-printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((T0-1860))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-intermedio\"]}" > "$T/scratch-intermedio.json"
+trabajando_en "$TQ"
+printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((TQ-14760))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-intermedio\"]}" > "$T/scratch-intermedio.json"
 export SCRATCH_FILE="$T/scratch-intermedio.json"
-tick "$T0" || fail "intermedio: el tick revinto"
-HORA_DEBIDA="$(python3 -c "import datetime; print(datetime.datetime.fromtimestamp($((T0 - 1860 + 1800))).strftime('%H:%M'))")"
+tick "$TQ" || fail "intermedio: el tick revinto"
+HORA_DEBIDA="$(python3 -c "import datetime; print(datetime.datetime.fromtimestamp($((TQ - 14760 + 14400))).strftime('%H:%M'))")"
 grep -q "se debía a las $HORA_DEBIDA y no ha llegado" "$LLAMADAS" \
-  || fail "intermedio: con silencio 1860 s el reporte esta atrasado y debia gritar corte_base + 1800 ($HORA_DEBIDA)"
+  || fail "intermedio: con silencio 14760 s el latido esta atrasado y debia gritar corte_base + 14400 ($HORA_DEBIDA)"
 unset SCRATCH_FILE
 
 tardanza_ok() { # $1 corrida -> los valores de ok de sus avance-tardanza, en orden
@@ -651,14 +647,14 @@ print(' '.join(d.get('ok','') for d in map(json.loads, open(os.environ['EVTJ']))
 LLAMADAS="$T/l19.log"; export LLAMADAS; : > "$LLAMADAS"
 solo_dejar t-tcae
 montar_corrida t-tcae avanza
-trabajando_en "$T0"
-printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((T0-1900))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-tcae\"]}" > "$T/scratch-tcae.json"
+trabajando_en "$TQ"
+printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((TQ-14800))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-tcae\"]}" > "$T/scratch-tcae.json"
 export SCRATCH_FILE="$T/scratch-tcae.json"
-ENVIO_MODO=mal tick "$T0" >/dev/null 2>&1
+ENVIO_MODO=mal tick "$TQ" >/dev/null 2>&1
 [ "$(tardanza_ok t-tcae)" = "false" ] || fail "envio caido: la constancia no es un avance-tardanza ok:false ($(tardanza_ok t-tcae))"
 grep -q '"ok": true' "$CORRIDA_STATE/t-tcae/mensajes.jsonl" && fail "envio caido: quedo anotado como entregado"
-trabajando_en "$((T0 + 300))"
-tick "$((T0 + 300))" || fail "envio caido: el reintento revinto"
+trabajando_en "$((TQ + 300))"
+tick "$((TQ + 300))" || fail "envio caido: el reintento revinto"
 [ "$(tardanza_ok t-tcae)" = "false true" ] || fail "envio caido: el tick siguiente no reintento y entrego ($(tardanza_ok t-tcae))"
 [ "$(grep -c "te aviso desde el latido" "$LLAMADAS")" = "2" ] \
   || fail "envio caido: el reintento no mando el aviso de silencio"
@@ -671,13 +667,13 @@ unset SCRATCH_FILE
 LLAMADAS="$T/l20.log"; export LLAMADAS; : > "$LLAMADAS"
 solo_dejar t-det
 montar_corrida t-det avanza
-watch_a m-a "$((T0 - 1900))"; watch_a m-lead "$((T0 - 120))"; watch_a m-b "$((T0 - 120))"
+watch_a m-a "$((TQ - 1900))"; watch_a m-lead "$((TQ - 120))"; watch_a m-b "$((TQ - 120))"
 FDET='e=DETENIDA|av=2/5|pr=GitHub: sin verificar|ses=m-lead:trabajando,m-a:callada,m-b:trabajando,'
 printf '{"firma": "%s", "ult_msj": %s, "etq": "DETENIDA", "firma_vigia": "%s", "ci_sha": ""}\n' \
-  "$FDET" "$((T0 - 600))" "$FDET" > "$CORRIDA_STATE/t-det/latido.json"
-printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((T0-1900))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-det\"]}" > "$T/scratch-det.json"
+  "$FDET" "$((TQ - 600))" "$FDET" > "$CORRIDA_STATE/t-det/latido.json"
+printf '%s\n' "{\"schema\":\"seguimiento-clock.v1\",\"corte\":{\"kind\":\"reporte-confirmado\",\"ultimoReporteConfirmado\":$((TQ-14800))},\"ultimoEstado\":\"\",\"ultimoInmediato\":null,\"messageId\":null,\"trabajosActivos\":[\"corrida:t-det\"]}" > "$T/scratch-det.json"
 export SCRATCH_FILE="$T/scratch-det.json"
-tick "$T0" >/dev/null 2>&1 || fail "detenida: el tick revinto"
+tick "$TQ" >/dev/null 2>&1 || fail "detenida: el tick revinto"
 [ "$(msgs)" = "1" ] && [ "$(grep -c "te aviso desde el latido" "$LLAMADAS")" = "1" ] \
   || fail "detenida: el silencio no produjo un solo aviso del latido (msgs=$(msgs))"
 grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[DETENIDA\]" \

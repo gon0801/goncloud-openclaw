@@ -15,18 +15,16 @@
 
 LAT_TOPE_MSG=900    # 15 min entre mensajes, salvo NECESITO
 LAT_HORA_MSJ=3600   # sin mensaje aunque todo avance: a la hora, uno
-LAT_SILENCIO=1500   # 30 min menos un intervalo del tick (300 s): el aviso
-                    # sale ANTES de los 30 min aun en el peor caso (ticks
-                    # cada 300 s => maximo 1799 s de hueco), 14.8 r3
-LAT_VENTANA=1800    # el PRIMER TICK de la cuadricula de 15 min que cumple la
-                    # ventana del consolidador (VENTANA_REPORTE_SECS = 1500 en
-                    # tablero-runbook/seguimiento-clock.ts): ceil(1500/900)*900
-                    # = 1800. NO es una copia de la constante: el reporte solo
-                    # puede caer en un tick del cron de 900, asi que con todo
-                    # sano llega en corte_base + 1800 sea la ventana 1500 o
-                    # 1800. Solo pasado corte_base + ella el aviso grita
-                    # atraso; antes, avance normal, 14.8 r4 (R12 r3: el error
-                    # de origen fue copiar la constante tal cual).
+LAT_VENTANA=14400   # el consolidador calla mientras no hay novedad y manda un
+                    # latido a las 4 horas (LATIDO_SIN_NOVEDAD_SECS en
+                    # tablero-runbook/seguimiento-clock.ts). Pasado corte_base
+                    # + ella el latido de verdad no llego. 14400 cae en la
+                    # cuadricula de 15 min del cron.
+LAT_SILENCIO=14700  # un tick (300 s) DESPUES del plazo: mientras el
+                    # consolidador esta sano y callado este control no habla,
+                    # y cuando habla es porque el latido ya no llego. Medido el
+                    # 2026-10-07: con el umbral por debajo del plazo avisaba
+                    # de un reloj sano antes de cada latido.
 
 evento_jsonl() { # $1 dir de la corrida; pares EVT_<campo>=valor en el entorno.
                  # Solo los campos del evento van en la linea: la linea ya vive
@@ -158,7 +156,7 @@ latido_de() { # $1 dir de la corrida (con el registro adentro)
   # (1b) 14.8 r2: el aviso de avance lo manda el corte del consolidador (cron
   # avance-tareas), y cuando ese corte calla nadie avisa — el silencio de sim9.
   # Este bloque es la garantia del latido: con corrida abierta y mas de
-  # LAT_SILENCIO (25 min) sin NINGUNA senal de avance (ni confirmacion del
+  # LAT_SILENCIO (4 horas mas un tick) sin NINGUNA senal de avance (ni confirmacion del
   # consolidador ni mensaje entregado a David), manda su PROPIO aviso por el
   # camino directo (corrida_aviso_directo, sin pasar por la acumulacion del
   # AVANZA, que es lo callado) y deja constancia en eventos.jsonl AUNQUE el
@@ -168,13 +166,10 @@ latido_de() { # $1 dir de la corrida (con el registro adentro)
   # no reavisa hasta otro rago de LAT_SILENCIO. Con el gateway sin respuesta
   # (cron list ilegible) el control se salta este tick con su rastro en
   # stderr: contra un gateway callado no hay envio posible; al volver, si el
-  # corte sigue callado, avisa. r4: el aviso no grita atraso antes de tiempo.
-  # R12 r3: el umbral de silencio (1500) es MENOR que la ventana efectiva del
-  # consolidador (1800, el primer tick de cuadricula que cumple los 1500):
-  # dentro de la ventana el reporte no esta atrasado y el aviso sale como
-  # avance normal; pasado corte_base + LAT_VENTANA el reporte de verdad no
-  # llego y "se debía ... y no ha llegado" dice la verdad (con la hora real:
-  # owed es corte_base + LAT_VENTANA, no + LAT_SILENCIO).
+  # corte sigue callado, avisa. El umbral va DESPUES del plazo del latido del
+  # consolidador (LAT_VENTANA): antes de el un reloj callado esta sano y este
+  # control no dice nada; pasado, "se debía ... y no ha llegado" dice la verdad
+  # con la hora real (owed es corte_base + LAT_VENTANA).
   local lect senal corte_base apertura owed cambio_td rc_td
   lect="$(lat_avance_ultima_senal "$dir")"
   if [ "$lect" = "ILEGIBLE" ]; then
@@ -190,16 +185,13 @@ except Exception: print(0)" 2>/dev/null)"
     [ "$apertura" -gt "$senal" ] && senal="$apertura"
     if [ $(( now - senal )) -ge "$LAT_SILENCIO" ]; then
       if [ "$corte_base" -gt 0 ]; then
+        # senal >= corte_base y LAT_SILENCIO > LAT_VENTANA: aqui el plazo ya
+        # paso siempre, asi que la hora que se anuncia es la real.
         owed=$(( corte_base + LAT_VENTANA ))
-        if [ "$now" -ge "$owed" ]; then
-          cambio_td="el reporte de avance se debía a las $(OWED_HM="$owed" python3 -c "
+        cambio_td="el reporte de avance se debía a las $(OWED_HM="$owed" python3 -c "
 import os
 from datetime import datetime
 print(datetime.fromtimestamp(int(os.environ['OWED_HM'])).strftime('%H:%M'))" 2>/dev/null) y no ha llegado; te aviso desde el latido"
-        else
-          owed=""
-          cambio_td="el reporte de avance no está atrasado; te aviso desde el latido"
-        fi
       else
         owed=""
         cambio_td="el reloj de avance no dejó rastro legible; te aviso desde el latido"
@@ -207,7 +199,7 @@ print(datetime.fromtimestamp(int(os.environ['OWED_HM'])).strftime('%H:%M'))" 2>/
       rc_td=0
       # La etiqueta es la del parte (14.27 R16): una corrida DETENIDA no sale
       # como AVANZA. No se limita a AVANZA porque (1) solo reenvia un DETENIDO
-      # igual a la hora y la promesa de 14.8 es un aviso cada 30 min.
+      # igual a la hora y la promesa de 14.8 es no pasar de 4 horas sin aviso.
       corrida_aviso_directo "$id" "$P_ETIQ" "$P_AVANCE" "$cambio_td" "$P_SIGUE" "$P_NECESITO" || rc_td=1
       EVT_tipo=avance-tardanza EVT_owed="$(epoch_a_iso "$owed")" \
         EVT_ok="$([ "$rc_td" -eq 0 ] && echo true || echo false)" evento_jsonl "$dir"
