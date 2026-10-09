@@ -1,0 +1,30 @@
+EXTRA_CLAIMS_AFTER_FIRST_SUCCESS [None, None, None]
+F
+======================================================================
+FAIL: test_a_cancellation_then_a_late_result_wakes_nobody (__main__.CrashBoundariesE2E.test_a_cancellation_then_a_late_result_wakes_nobody)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt-b4-40-r1/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 353, in test_a_cancellation_then_a_late_result_wakes_nobody
+    self.assertEqual([(e["taskId"], e["generation"]) for e in cli if e["event"] == "accepted"],
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [(task_id, 1)], "the CLI was handed the assignment more than once")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [('88[22 chars]a474bfeda13a', 1), ('88fc9bd5-0651-4b77-bb44-a474bfeda13a', 1)] != [('88[22 chars]a474bfeda13a', 1)]
+
+First list contains 1 additional elements.
+First extra element 1:
+('88fc9bd5-0651-4b77-bb44-a474bfeda13a', 1)
+
+- [('88fc9bd5-0651-4b77-bb44-a474bfeda13a', 1),
+?                                             ^
+
++ [('88fc9bd5-0651-4b77-bb44-a474bfeda13a', 1)]
+?                                             ^
+
+-  ('88fc9bd5-0651-4b77-bb44-a474bfeda13a', 1)] : the CLI was handed the assignment more than once
+
+----------------------------------------------------------------------
+Ran 1 test in 83.290s
+
+FAILED (failures=1)
+EXIT=1

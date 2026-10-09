@@ -77,6 +77,19 @@ def out_of_block_problem(task, anchor):
     return None if anchor in "\n".join(section) else f"{task} does not hold '{anchor}'"
 
 
+DECLARED_SHELL_SKIP_REF = "scripts/tests/test-agent-work-host.sh::resource_close"
+DECLARED_SHELL_SKIP_TEST = "test_resource_close_real_launchd_label_stays_pending"
+DECLARED_SHELL_SKIP_REASON = "user/502 Background-only"
+
+
+def shell_skip_allowed(ref, skip):
+    """The only shell skip the pair accepts is the declared launchd one: without a real
+    agentes login session the launchd label test skips, and it must keep skipping loudly."""
+    return (ref == DECLARED_SHELL_SKIP_REF
+            and skip.startswith(DECLARED_SHELL_SKIP_TEST + ":")
+            and DECLARED_SHELL_SKIP_REASON in skip)
+
+
 def pair_problems(refs, pair, doc, changed_since_pair):
     g_sha, r_sha = pair
     problems = []
@@ -98,8 +111,13 @@ def pair_problems(refs, pair, doc, changed_since_pair):
             continue
         if run["rc"] != 0:
             problems.append(f"{ref} ended rc={run['rc']}")
-        if ref.split("::")[0].endswith(".py") and run["skips"]:
-            problems.append(f"{ref} skipped: " + "; ".join(run["skips"]))
+        if ref.split("::")[0].endswith(".py"):
+            if run["skips"]:
+                problems.append(f"{ref} skipped: " + "; ".join(run["skips"]))
+        else:
+            denied = [skip for skip in run["skips"] if not shell_skip_allowed(ref, skip)]
+            if denied:
+                problems.append(f"{ref} skipped: " + "; ".join(denied))
     problems += [f"{path} changed after the pair" for path in changed_since_pair if not AFTER_PAIR.match(path)]
     return problems
 
@@ -192,7 +210,9 @@ class AcceptanceGuardsTest(unittest.TestCase):
         doc = {"G": "a" * 40, "R": "b" * 40, "rBuildCommit": "b" * 40, "rDiffSha256": EMPTY_SHA256,
                "gDirty": [], "runs": [
                    {"ref": "scripts/agent-work/test-runtime.sh::idle_72h", "rc": 0, "skips": []},
-                   {"ref": "scripts/tests/test-agent-work-host.sh::resource_close", "rc": 0, "skips": ["1 (count)"]},
+                   {"ref": "scripts/tests/test-agent-work-host.sh::resource_close", "rc": 0, "skips": [
+                       "test_resource_close_real_launchd_label_stays_pending: user/502 Background-only: "
+                       "bootstrap/load give EIO 5 until David starts a real agentes login session"]},
                    {"ref": "scripts/tests/t.py::test_one", "rc": 0, "skips": []}]}
         doc.update(changes)
         return doc
@@ -213,6 +233,34 @@ class AcceptanceGuardsTest(unittest.TestCase):
         for expected, doc in cases.items():
             with self.subTest(expected=expected):
                 self.assertEqual(pair_problems(self.REFS, self.PAIR, doc, []), [expected])
+
+    LAUNCHD_SKIP = ("test_resource_close_real_launchd_label_stays_pending: user/502 Background-only: "
+                      "bootstrap/load give EIO 5 until David starts a real agentes login session")
+    SHELL_REF = "scripts/tests/test-agent-work-host.sh::resource_close"
+
+    def shell_doc(self, ref, skips):
+        runs = [run for run in self.pair()["runs"] if run["ref"] != ref]
+        return self.pair(runs=runs + [{"ref": ref, "rc": 0, "skips": skips}])
+
+    def test_a_shell_skip_must_be_the_declared_launchd_skip(self):
+        self.assertEqual(pair_problems(self.REFS, self.PAIR, self.shell_doc(self.SHELL_REF, [self.LAUNCHD_SKIP]),
+                                       []), [])
+        cases = {
+            "bare count": ["1 (count)"],
+            "another test": ["test_other: user/502 Background-only: x"],
+            "another reason": ["test_resource_close_real_launchd_label_stays_pending: something else"],
+            "mixed": [self.LAUNCHD_SKIP, "test_other: something"],
+        }
+        for label, skips in cases.items():
+            with self.subTest(label=label):
+                denied = [skip for skip in skips if not shell_skip_allowed(self.SHELL_REF, skip)]
+                self.assertTrue(denied, "the case must deny something")
+                self.assertEqual(pair_problems(self.REFS, self.PAIR, self.shell_doc(self.SHELL_REF, skips), []),
+                                 [f"{self.SHELL_REF} skipped: " + "; ".join(denied)])
+        other = "scripts/agent-work/test-runtime.sh::idle_72h"
+        with self.subTest(label="declared skip on another shell ref"):
+            self.assertEqual(pair_problems(self.REFS, self.PAIR, self.shell_doc(other, [self.LAUNCHD_SKIP]), []),
+                             [f"{other} skipped: {self.LAUNCHD_SKIP}"])
 
     def test_only_evidence_prose_may_change_after_the_pair(self):
         allowed = ["docs/evidence/agent-work/acceptance.md", "docs/evidence/agent-work/acceptance-pair.json",

@@ -280,6 +280,13 @@ class CrashBoundariesE2E(unittest.TestCase):
 
                 self.assertTrue(wait_for(claim_correction, 90),
                                 f"the correction was never admitted; provider: {lines(self.provider_log)}")
+                # The correction is admitted once; the host loop keeps claiming and must never
+                # type it again. The CLI file below pins the single correction.
+                extra = [(found.status if found is not None else None)
+                         for found in (self.claim(client, "correction-instance") for _ in range(3))]
+                self.assertFalse({"typed", "delivered"} & set(extra),
+                                 "the restart typed the correction again")
+                print(f"EXTRA_CLAIMS_AFTER_FIRST_SUCCESS {extra}", flush=True)
                 key = OperationKey(HOST_ID, child, 1, "correction-instance")
                 self.assertTrue(wait_for(lambda: self.host.take_acceptance(HOST_ID, key), 15),
                                 "the CLI never accepted the correction")
@@ -331,6 +338,13 @@ class CrashBoundariesE2E(unittest.TestCase):
                                             msg="the cancelled generation accepted a continuation"):
                     second.tool("resolve", {"receipt": snapshot["resultReceipt"], "decision": continuation},
                                 "resolve-turn")
+                # The cancellation is durable; the host loop keeps claiming and must get nothing
+                # typed. The CLI file below pins the single review delivery.
+                extra = [(found.status if found is not None else None)
+                         for found in (self.claim(self.client(second)) for _ in range(3))]
+                self.assertFalse({"typed", "delivered"} & set(extra),
+                                 "the cancelled task was typed again")
+                print(f"EXTRA_CLAIMS_AFTER_FIRST_SUCCESS {extra}", flush=True)
             time.sleep(SETTLE_SECONDS)
             self.assertEqual(self.wakes(task_id), [], "a cancelled task woke the requester")
             rows = second.call("tasks")
@@ -344,6 +358,68 @@ class CrashBoundariesE2E(unittest.TestCase):
                   f"cli_accepted={len([e for e in cli if e['event'] == 'accepted'])}", flush=True)
         finally:
             second.close()
+    def test_cancel_and_report_at_once_keep_a_single_terminal_state(self):
+        gateway = self.gateway()
+        try:
+            task_id, request = self.reviewed(gateway)
+            with mock.patch.dict(os.environ, gateway.env):
+                client = self.client(gateway)
+                gate = threading.Barrier(2)
+                outcomes = {}
+
+                def report():
+                    try:
+                        gate.wait(30)
+                        outcomes["receipts"] = self.host.flush(HOST_ID, client.report_host_result)
+                    except Exception as error:  # noqa: BLE001 - whichever side loses is evidence
+                        outcomes["report_error"] = f"{type(error).__name__}: {error}"
+
+                worker = threading.Thread(target=report, name="race-report")
+                worker.start()
+                gate.wait(30)
+                try:
+                    outcomes["cancel"] = gateway.tool(
+                        "cancel", {"taskId": task_id, "reason": "requester withdrew"}, "cancel-turn")
+                except HarnessError as error:
+                    outcomes["cancel_error"] = str(error)
+                wakes_at_cancel = len(self.wakes(task_id))
+                worker.join(180)
+                self.assertFalse(worker.is_alive(), "the racing report never finished")
+                print(f"RACE_OUTCOME cancel={bool(outcomes.get('cancel'))} "
+                      f"receipts={len(outcomes.get('receipts', []))} wakes_at_cancel={wakes_at_cancel} "
+                      f"cancel_error={outcomes.get('cancel_error')} "
+                      f"report_error={outcomes.get('report_error')}", flush=True)
+                receipts = outcomes.get("receipts", [])
+                self.assertEqual([(r["taskId"], r["generation"]) for r in receipts], [(task_id, 1)],
+                                 "the racing report was not taken")
+                snapshot = gateway.tool("inspect", {"taskId": task_id}, "inspect-turn")
+                self.assertEqual((snapshot["handlingState"], snapshot["deliveryState"]),
+                                 ("cancelled", "result-recorded"), "the race did not converge")
+                assignment = request["assignment"]
+                continuation = {"kind": "continue", "children": [{"slot": "corregir", "assignment": {
+                    "target": assignment["target"], "instructionRef": assignment["instructionRef"],
+                    "inputRevision": assignment["inputRevision"], "resultContract": "ready.v1",
+                    "continuation": {"kind": "requester"}}}]}
+                with self.assertRaisesRegex(HarnessError, "Managed task is cancelled",
+                                            msg="the race left a continuation open"):
+                    gateway.tool("resolve", {"receipt": snapshot["resultReceipt"], "decision": continuation},
+                                 "resolve-turn")
+            time.sleep(SETTLE_SECONDS)
+            self.assertEqual(len(self.wakes(task_id)), wakes_at_cancel,
+                             "a wake fired after the cancellation was confirmed")
+            self.assertLessEqual(len(self.wakes(task_id)), 1, "the race woke the requester twice")
+            rows = gateway.call("tasks")
+            self.assertEqual((rows["handlings"], rows["children"]), ([], []), "the race left a continuation")
+            cli = lines(self.cli_log)
+            self.assertEqual([(e["taskId"], e["generation"]) for e in cli if e["event"] == "accepted"],
+                             [(task_id, 1)], "the CLI was handed the assignment more than once")
+            self.assertEqual(self.host.pending(HOST_ID), [], "the host still holds the racing result")
+            print(f"RACE_B7 pids={self.pids} handling={snapshot['handlingState']} "
+                  f"delivery={snapshot['deliveryState']} wakes={len(self.wakes(task_id))} children=0 "
+                  f"cli_accepted={len([e for e in cli if e['event'] == 'accepted'])}", flush=True)
+        finally:
+            gateway.close()
+
     def crash_host(self, gateway, point):
         """The host process stops at <point> and dies there with SIGKILL; a new one takes over."""
         process = subprocess.Popen(

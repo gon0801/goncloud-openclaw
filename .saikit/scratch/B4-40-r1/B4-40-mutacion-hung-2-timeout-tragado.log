@@ -1,0 +1,22 @@
+F
+======================================================================
+FAIL: test_resource_close_hung_host_close_times_out_and_holds_capacity (__main__.ResourceTests.test_resource_close_hung_host_close_times_out_and_holds_capacity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt-b4-40-r1/scripts/tests/test-agent-work-resources.py", line 1030, in test_resource_close_hung_host_close_times_out_and_holds_capacity
+    self.assertEqual((view.state, view.reason), ("CleanupPending", "host unavailable"))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Tuples differ: ('CleanupPending', 'launch outcome uncertain') != ('CleanupPending', 'host unavailable')
+
+First differing element 1:
+'launch outcome uncertain'
+'host unavailable'
+
+- ('CleanupPending', 'launch outcome uncertain')
++ ('CleanupPending', 'host unavailable')
+
+----------------------------------------------------------------------
+Ran 1 test in 30.015s
+
+FAILED (failures=1)
+EXIT=1

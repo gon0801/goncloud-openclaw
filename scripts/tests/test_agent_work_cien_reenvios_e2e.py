@@ -10,6 +10,7 @@ outside the Gateway as in crash_boundaries.
 
 import faulthandler
 import os
+import time
 from pathlib import Path
 import sys
 import unittest
@@ -18,6 +19,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 # The module, not the class: a TestCase imported here would run all its cases too.
 import test_agent_work_crash_boundaries_e2e as boundaries  # noqa: E402
+from contracts import OperationKey  # noqa: E402
 from test_agent_work_crash_boundaries_e2e import HOST_ID, LostAck, lines, wait_for  # noqa: E402
 import native_gateway  # noqa: E402
 
@@ -97,6 +99,43 @@ class CienReenviosE2E(unittest.TestCase):
                   flush=True)
         finally:
             second.close()
+
+
+    def test_a_report_with_the_same_id_and_another_digest_is_rejected(self):
+        gateway = self.gateway()
+        try:
+            task_id, _ = self.reviewed(gateway)
+            key = OperationKey(HOST_ID, task_id, 1, "crash-instance")
+            self.assertEqual(len(self.host.pending(HOST_ID)), 1)
+            result, artifact = self.host.result_snapshot(HOST_ID, key)
+            with mock.patch.dict(os.environ, gateway.env):
+                client = self.client(gateway)
+                receipts = self.host.flush(HOST_ID, client.report_host_result)
+            self.assertEqual(len(receipts), 1)
+            original = receipts[0]["receiptId"]
+            self.assertEqual(self.host.pending(HOST_ID), [], "the acknowledged result is still pending")
+            # The same task with another digest: same identity, another payload, and the
+            # artifact still matches the original digest on our side.
+            forged = dict(result)
+            forged["typedPayload"] = {"verdict": "changes", "findingsRef": "findings-b40.txt"}
+            with mock.patch.dict(os.environ, gateway.env):
+                # G's transport wraps every Gateway refusal alike; the conflict itself is pinned
+                # by the refusal plus the original receipt kept below.
+                with self.assertRaisesRegex(RuntimeError, "native projection Gateway rejected request",
+                                            msg="R took a second digest for the same task"):
+                    client.report_host_result(forged, artifact)
+                snapshot = gateway.tool("inspect", {"taskId": task_id}, "inspect-turn")
+            self.assertEqual(snapshot["resultReceipt"],
+                             {"taskId": task_id, "generation": 1, "resultDigest": original},
+                             "the rejected report moved the original receipt")
+            self.assertTrue(wait_for(lambda: self.wakes(task_id), 60),
+                            "the requester was never woken by the original report")
+            time.sleep(boundaries.SETTLE_SECONDS)
+            self.assertEqual(len(self.wakes(task_id)), 1,
+                             "the rejected report woke the requester again")
+            print(f"DIGEST_CONFLICT pids={self.pids} receipts=1 original_kept=1 wakes=1", flush=True)
+        finally:
+            gateway.close()
 
 
 if __name__ == "__main__":

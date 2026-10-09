@@ -1,0 +1,3 @@
+M1 (G): sin `timeout=` en TmuxBackend._tmux, close contra un host colgado no vuelve
+nunca; la corrida se mato con `timeout 75`.
+EXIT=124

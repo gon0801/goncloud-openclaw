@@ -1014,6 +1014,29 @@ class ResourceTests(unittest.TestCase):
             restarted.reserve(OperationKey("host-test", "replacement", 1, "instance-new"),
                               "replacement", "TaskCreated")
 
+    def test_resource_close_hung_host_close_times_out_and_holds_capacity(self):
+        # A11/A13/B2: the host answers nothing; close lands in CleanupPending
+        # within the tmux timeout and the slot stays held.
+        hung = Path(self.tmp.name) / "hung-tmux.sh"
+        hung.write_text("#!" + sys.executable + "\nimport threading; threading.Event().wait(120)\n")
+        hung.chmod(0o755)
+        backend = TmuxBackend(str(hung), "hung-sock")
+        manager = ResourceManager(self.host.spool, "host-test", backend, capacity=1)
+        manager.reserve(self.key, "worker-1", "TaskCreated")
+        manager.begin_launch(self.key)
+        started = time.monotonic()
+        view = manager.close(self.key, {"kind": "cancel", "receipt": "c1"})
+        elapsed = time.monotonic() - started
+        self.assertEqual((view.state, view.reason), ("CleanupPending", "host unavailable"))
+        self.assertGreaterEqual(elapsed, TmuxBackend.TMUX_TIMEOUT_SECONDS - 5,
+                                "close did not wait for the hung host to time out")
+        self.assertLess(elapsed, TmuxBackend.TMUX_TIMEOUT_SECONDS + 60,
+                        "close blocked past the tmux timeout")
+        with self.assertRaisesRegex(ValueError, "capacity"):
+            manager.reserve(OperationKey("host-test", "replacement", 1, "instance-new"),
+                            "replacement", "TaskCreated")
+        print(f"HUNG_HOST elapsed={elapsed:.1f}s state={view.state} reason={view.reason}", flush=True)
+
     def test_resource_close_session_gone_with_a_surviving_descendant_still_holds(self):
         # A13: after a failed stop, a vanished session is not absence while a descendant lives.
         survivor = "  502 4242     1 Sat Oct  3 09:00:00 2026 /opt/homebrew/bin/python3 -c x SURV\n"

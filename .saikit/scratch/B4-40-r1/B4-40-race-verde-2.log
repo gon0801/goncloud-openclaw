@@ -1,0 +1,8 @@
+RACE_OUTCOME cancel=True receipts=1 wakes_at_cancel=0 cancel_error=None report_error=None
+RACE_B7 pids=[2190] handling=cancelled delivery=result-recorded wakes=0 children=0 cli_accepted=1
+.
+----------------------------------------------------------------------
+Ran 1 test in 52.624s
+
+OK
+EXIT=0

@@ -310,6 +310,9 @@ class ResourceManager:
 
 class TmuxBackend:
     NONCE_OPTION = "@agent_work_resource_nonce"
+    # A hung tmux server must never block resource reconciliation: every tmux
+    # call fails into CleanupPending ("host unavailable") after this long.
+    TMUX_TIMEOUT_SECONDS = 30
 
     def __init__(self, tmux_bin: str, socket: str, boot_id: str | None = None):
         if not socket or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in socket):
@@ -329,7 +332,11 @@ class TmuxBackend:
             raise RuntimeError("host platform has no verified boot identity")
 
     def _tmux(self, *args: str) -> subprocess.CompletedProcess:
-        return subprocess.run([self.tmux_bin, "-L", self.socket, *args], capture_output=True, text=True)
+        try:
+            return subprocess.run([self.tmux_bin, "-L", self.socket, *args], capture_output=True,
+                                  text=True, timeout=self.TMUX_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired as exc:
+            raise OSError(f"tmux did not answer within {self.TMUX_TIMEOUT_SECONDS}s") from exc
 
     @staticmethod
     def _start(pid: str) -> str:

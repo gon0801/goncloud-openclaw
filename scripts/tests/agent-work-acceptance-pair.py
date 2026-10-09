@@ -108,8 +108,16 @@ def main():
         path, case = ref.split("::")
         index += 1
         rc, seconds, log = run(index, f"{Path(path).stem}-{case}", ["bash", path, case])
-        skipped = sum(int(n) for n in re.findall(r"skipped=(\d+)", log.read_text(encoding="utf-8")))
-        doc["runs"].append({"ref": ref, "rc": rc, "seconds": seconds, "skips": [f"{skipped} (count)"] if skipped else [],
+        out = log.read_text(encoding="utf-8")
+        skipped = sum(int(n) for n in re.findall(r"skipped=(\d+)", out))
+        # Verbose unittest lines name each skipped test, so the guards can tell the declared
+        # launchd skip apart from any other skip; anything unparsable keeps the bare count.
+        skips = [f"{name}: {reason}"
+                 for name, reason in re.findall(r"^(test_\S+) \([^)]*\) \.\.\. skipped \'(.*)\'$",
+                                                out, re.M)]
+        if skipped and not skips:
+            skips = [f"{skipped} (count)"]
+        doc["runs"].append({"ref": ref, "rc": rc, "seconds": seconds, "skips": skips,
                             "log": str(log.relative_to(ROOT))})
     for path, names in python.items():
         index += 1
