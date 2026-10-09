@@ -122,6 +122,14 @@ Logs: `~/.local/state/encargos-loop/artifacts/B4-bateria/paso3-r-objetivos.log`
 (2,5 MB), `paso3-x-resultado.txt` (12 líneas únicas), `paso3-x-archivos.txt`,
 `objetivos.txt`, `paso3-tsgo-core.log`, `paso3-tsgo-core-test.log` y sus `.exit`.
 
+## Revisión: pruebas con import dinámico (VEREDICTO-B4-bateria)
+
+El selector `bateria-r-objetivos.sh` solo tomaba `from '…/<módulo>'` y dejó fuera 42 archivos de prueba que importan con `import()` un módulo que cambiamos. Entre ellos están `server-restart-sentinel`, `server-startup-restart-sentinel`, `sessions-spawn` y `subagent-spawn`. El revisor los corrió una vez sobre `978355503c44`, con el mismo comando del paso 3: 41 archivos en verde y 1 falla, `scheduleRestartSentinelWake > durably wakes the configured system-agent session when the sentinel has no sessionKey`.
+
+Corrida sola en tres SHAs: roja en `978355503c44` y en `3c1c748`, verde en la base pública `c074824a27`. Es una regresión nuestra anterior a B4 y no bloquea el cierre de B4. La fila B4-31 de `followups.md` lleva su destino: arreglarla en R antes de habilitar la admisión (T11).
+
+El selector ya toma `from` e `import(`: sobre el par da 655 objetivos (613 + 42), sin ninguno fuera. Los logs están en `~/.local/state/encargos-loop/artifacts/B4-bateria-revisor/`.
+
 ## Casilla del plan
 
 `:284` marcada `[x]`: la integridad del paso 1 quedó registrada (dos valores + error
