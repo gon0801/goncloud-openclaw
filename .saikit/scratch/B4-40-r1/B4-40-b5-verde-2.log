@@ -1,0 +1,8 @@
+EXTRA_CLAIMS_AFTER_FIRST_SUCCESS ['delivered', 'delivered', 'delivered']
+CRASH_BOUNDARY B5 pids=[76346, 78239] handlings=1 children=1 cli_accepted=2 acting_first=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit'] acting_second=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit']
+.
+----------------------------------------------------------------------
+Ran 1 test in 100.801s
+
+OK
+EXIT=0

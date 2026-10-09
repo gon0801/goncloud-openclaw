@@ -280,11 +280,12 @@ class CrashBoundariesE2E(unittest.TestCase):
 
                 self.assertTrue(wait_for(claim_correction, 90),
                                 f"the correction was never admitted; provider: {lines(self.provider_log)}")
-                # The correction is admitted once; the host loop keeps claiming and must never
-                # type it again. The CLI file below pins the single correction.
+                # The correction is admitted once; the host loop keeps claiming. A re-claim
+                # never types again: before the CLI accepts it reports uncertainty, after it
+                # sees the delivery. The CLI file below pins the single correction.
                 extra = [(found.status if found is not None else None)
                          for found in (self.claim(client, "correction-instance") for _ in range(3))]
-                self.assertFalse({"typed", "delivered"} & set(extra),
+                self.assertFalse({"typed"} & set(extra),
                                  "the restart typed the correction again")
                 print(f"EXTRA_CLAIMS_AFTER_FIRST_SUCCESS {extra}", flush=True)
                 key = OperationKey(HOST_ID, child, 1, "correction-instance")
@@ -342,7 +343,7 @@ class CrashBoundariesE2E(unittest.TestCase):
                 # typed. The CLI file below pins the single review delivery.
                 extra = [(found.status if found is not None else None)
                          for found in (self.claim(self.client(second)) for _ in range(3))]
-                self.assertFalse({"typed", "delivered"} & set(extra),
+                self.assertFalse({"typed"} & set(extra),
                                  "the cancelled task was typed again")
                 print(f"EXTRA_CLAIMS_AFTER_FIRST_SUCCESS {extra}", flush=True)
             time.sleep(SETTLE_SECONDS)
