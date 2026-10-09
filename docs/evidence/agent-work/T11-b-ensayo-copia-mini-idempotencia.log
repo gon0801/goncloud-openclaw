@@ -1,0 +1,20 @@
+# ensayo limpio sobre ~/respaldos/claw-mini-copia-20261009-1255 con R 818f0fd (2026-10-09T23:36:23Z): comando colgado que corrió después de la corrida limpia; prepare idempotente y apply "already native", sin cambios
+cron vigia-ensayo habilitado: None
+$ cutover_live.py prepare --entry /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/entry.json
+{"entry": {"adapter": "claude_opus", "deviceId": "<deviceId-mac>", "host": "mac-local", "id": "ensayo:vigia", "instructionRoot": "/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/instructions", "legacyCrons": ["vigia-ensayo"], "runTimeoutSeconds": 3600, "spools": []}, "generation": 2, "owner": "native", "schema": "agent-work-cutover.v2", "suspended": {"ae908e75-e4ac-449b-9c68-543ec38b5d32": {"disabledAtMs": 1791588958426, "job": {"agentId": "main", "configRevision": "sha256:rGkh_w8yPL-RxpmHeG2QgkOFMEfD7bSkHSj1RaBsKe8", "createdAtMs": 1791588955769, "delivery": {"mode": "none"}, "effectiveAgentId": "main", "enabled": true, "id": "ae908e75-e4ac-449b-9c68-543ec38b5d32", "name": "vigia-ensayo", "nextRunAtMs": 1791589255769, "payload": {"kind": "agentTurn", "message": "cutover-cron-vigia-ensayo", "toolsAllow": ["*"]}, "schedule": {"anchorMs": 1791588955769, "everyMs": 300000, "kind": "every"}, "scheduledToolPolicy": {"mode": "trusted", "version": 1}, "sessionTarget": "isolated", "state": {"nextRunAtMs": 1791589255769}, "updatedAtMs": 1791588955769, "wakeMode": "now"}, "name": "vigia-ensayo"}}}
+rc=0 0s
+$ cutover_live.py apply --wait-seconds 30
+already native
+rc=0 0s
+$ cutover_live.py apply --wait-seconds 120 --limits /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/limits-ensayo.json
+already native
+rc=0 0s
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import sys,json;d=json.load(sys.stdin);m=d['resolved']['managedTasks'];print('managedTasks:', json.dumps({'enabled':m['enabled'],'adapters':m['hosts']['mac-local']['adapters'],'runTimeoutSeconds':m['runTimeoutSeconds'],'maxModelCalls':m['profile']['maxModelCalls']}))
+                                             ~^^^^^^^^^^^^
+KeyError: 'resolved'
+estado: native generación 2
+2026-10-09T16:36:04.011-07:00 [admission] closed: restart (SIGUSR2: config reload: managedTasks)
+2026-10-09T16:36:04.011-07:00 [gateway] received SIGUSR2; restarting
+2026-10-09T16:36:09.649-07:00 [gateway] ready

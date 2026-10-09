@@ -1,0 +1,39 @@
+$ cutover_live.py prepare --entry /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.iJzyi5kfbr/entry.json
+{"entry": {"adapter": "claude_opus", "deviceId": "<deviceId-mac>", "host": "mac-local", "id": "ensayo:vigia", "instructionRoot": "/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.iJzyi5kfbr/oc/instructions", "legacyCrons": ["vigia-ensayo"], "runTimeoutSeconds": 3600, "spools": []}, "generation": 1, "owner": "legacy", "schema": "agent-work-cutover.v2", "suspended": {}}
+rc=0
+$ cutover_live.py apply --wait-seconds 20
+cutover: production limits are unknown: maxContextTokens
+rc=1
+$ cron vigia-ensayo tras la negativa
+[('vigia-ensayo', True)]
+$ cutover_live.py apply --wait-seconds 20 --limits /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.iJzyi5kfbr/limits-ensayo.json
+cutover: config.get: {
+  "ok": false,
+  "error": {
+    "type": "gateway_request_error",
+    "code": "UNAVAILABLE",
+    "message": "gateway rejected websocket upgrade (HTTP 503): Gateway websocket admission closed",
+    "details": {
+      "reason": "websocket-upgrade-rejected",
+      "httpStatus": 503
+    },
+    "retryable": true
+  }
+}
+rc=1
+$ cutover_live.py inspect
+cutover: cron.list: {
+  "ok": false,
+  "error": {
+    "type": "gateway_request_error",
+    "code": "UNAVAILABLE",
+    "message": "gateway rejected websocket upgrade (HTTP 503): Gateway websocket admission closed",
+    "details": {
+      "reason": "websocket-upgrade-rejected",
+      "httpStatus": 503
+    },
+    "retryable": true
+  }
+}
+rc=1
+$ managedTasks tras el corte

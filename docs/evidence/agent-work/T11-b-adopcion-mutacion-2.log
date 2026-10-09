@@ -1,0 +1,26 @@
+F
+======================================================================
+FAIL: test_adoption_keeps_the_cli_session_and_delivers_a_result_captured_across_it (__main__.CutoverFencingE2E.test_adoption_keeps_the_cli_session_and_delivers_a_result_captured_across_it)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_fencing_e2e.py", line 165, in test_adoption_keeps_the_cli_session_and_delivers_a_result_captured_across_it
+    self.assertEqual(sorted(managed["hosts"][HOST_ID]["adapters"]), sorted([ADAPTER, "codex"]))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['codex'] != ['claude_opus', 'codex']
+
+First differing element 0:
+'codex'
+'claude_opus'
+
+Second list contains 1 additional elements.
+First extra element 1:
+'codex'
+
+- ['codex']
++ ['claude_opus', 'codex']
+
+----------------------------------------------------------------------
+Ran 1 test in 36.281s
+
+FAILED (failures=1)
+rc=1

@@ -1,0 +1,36 @@
+E
+======================================================================
+ERROR: test_adoption_keeps_the_cli_session_and_delivers_a_result_captured_across_it (__main__.CutoverFencingE2E.test_adoption_keeps_the_cli_session_and_delivers_a_result_captured_across_it)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_fencing_e2e.py", line 155, in test_adoption_keeps_the_cli_session_and_delivers_a_result_captured_across_it
+    result = cutover_live.apply(self.state, client, now_ms=lambda: int(time.time() * 1000),
+                                wait_seconds=30)
+  File "/Users/dn/dev/wt/encargos-b5/scripts/agent-work/cutover_live.py", line 131, in apply
+    client.call("config.patch", {"raw": json.dumps(patch), "baseHash": config["hash"]})
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_fencing_e2e.py", line 37, in call
+    return self.gateway.call("rpc", method=method, params=params)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_main_cli_loop_e2e.py", line 120, in call
+    return self._message()["result"]
+           ~~~~~~~~~~~~~^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_main_cli_loop_e2e.py", line 112, in _message
+    raise HarnessError(value.get("error"))
+test_agent_work_main_cli_loop_e2e.HarnessError: GatewayClientRequestError: config.patch would remove entries from array path(s): managedTasks.hosts.mac-local.adapters. Pass replacePaths with the exact path(s) when this is intentional, or use config.apply for full-config replacement.
+    at Object.createRequestError (/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.M23m1lMydW/r/packages/gateway-client/src/client.ts:293:38)
+    at GatewayPendingRequests.handleResponse (/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.M23m1lMydW/r/packages/gateway-client/src/pending-request.ts:253:17)
+    at GatewayProtocolClient.handleMessage (/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.M23m1lMydW/r/packages/gateway-client/src/protocol-client.ts:491:19)
+    at Object.message (/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.M23m1lMydW/r/packages/gateway-client/src/protocol-client.ts:207:33)
+    at WebSocket.<anonymous> (/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.M23m1lMydW/r/packages/gateway-client/src/client.ts:496:41)
+    at WebSocket.emit (node:events:514:20)
+    at Receiver.receiverOnMessage (/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.M23m1lMydW/r/node_modules/.pnpm/ws@8.21.3/node_modules/ws/lib/websocket.js:1239:20)
+    at Receiver.emit (node:events:514:20)
+    at Receiver.dataMessage (/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.M23m1lMydW/r/node_modules/.pnpm/ws@8.21.3/node_modules/ws/lib/receiver.js:633:14)
+    at Receiver.getData (/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.M23m1lMydW/r/node_modules/.pnpm/ws@8.21.3/node_modules/ws/lib/receiver.js:532:10)
+
+----------------------------------------------------------------------
+Ran 1 test in 34.942s
+
+FAILED (errors=1)
+rc=1

@@ -1,0 +1,15 @@
+F
+======================================================================
+FAIL: test_an_uncertain_admission_blocks_the_transfer (__main__.CutoverFencingE2E.test_an_uncertain_admission_blocks_the_transfer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_fencing_e2e.py", line 100, in test_an_uncertain_admission_blocks_the_transfer
+    with self.assertRaisesRegex(cutover_live.CutoverRefused, "uncertain admission task-uncertain"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: CutoverRefused not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 26.805s
+
+FAILED (failures=1)
+rc=1

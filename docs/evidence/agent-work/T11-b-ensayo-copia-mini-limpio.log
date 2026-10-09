@@ -1,0 +1,19 @@
+# ensayo limpio sobre ~/respaldos/claw-mini-copia-20261009-1255 con R 818f0fd (2026-10-09T23:35:54Z); copia recién armada por ensayo-gateway.sh
+# Nota: el archivo original lo pisó, a las 23:36:23Z, un comando anterior que se había quedado colgado y corrió después contra el mismo gateway (ver ensayo-copia-mini-idempotencia.log). Este contenido es la salida que la corrida imprimió en pantalla, copiada tal cual (las líneas JSON de prepare, omitidas).
+crons de la copia: 31
+cron vigia-ensayo habilitado: True
+$ cutover_live.py prepare --entry /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/entry.json
+rc=0 0s
+$ cutover_live.py apply --wait-seconds 30
+cutover: production limits are unknown: maxContextTokens
+rc=1 1s
+tras la negativa: [('vigia-ensayo', True)]
+$ cutover_live.py apply --wait-seconds 120 --limits /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/limits-ensayo.json
+transferred
+rc=0 13s
+tras el corte: [('vigia-ensayo', False)]
+managedTasks: {"enabled": true, "adapters": ["claude_opus"], "runTimeoutSeconds": 3600, "maxModelCalls": 2160}
+estado: native generación 2
+2026-10-09T16:36:04.011-07:00 [admission] closed: restart (SIGUSR2: config reload: managedTasks)
+2026-10-09T16:36:04.011-07:00 [gateway] received SIGUSR2; restarting
+2026-10-09T16:36:09.649-07:00 [gateway] ready

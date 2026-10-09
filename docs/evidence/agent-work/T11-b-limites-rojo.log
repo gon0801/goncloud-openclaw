@@ -1,0 +1,17 @@
+E
+======================================================================
+ERROR: test_unknown_limits_refuse_before_any_cron_is_touched (__main__.CutoverFencingE2E.test_unknown_limits_refuse_before_any_cron_is_touched)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_fencing_e2e.py", line 173, in test_unknown_limits_refuse_before_any_cron_is_touched
+    cutover_live.apply(self.state, client, now_ms=lambda: int(time.time() * 1000),
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                       wait_seconds=10, limits_path=limits)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: apply() got an unexpected keyword argument 'limits_path'
+
+----------------------------------------------------------------------
+Ran 1 test in 26.238s
+
+FAILED (errors=1)
+rc=1

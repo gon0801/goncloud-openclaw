@@ -1,0 +1,16 @@
+E
+======================================================================
+ERROR: test_an_in_flight_turn_is_drained_then_the_old_cron_never_asks_again (__main__.CutoverFencingE2E.test_an_in_flight_turn_is_drained_then_the_old_cron_never_asks_again)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_fencing_e2e.py", line 78, in test_an_in_flight_turn_is_drained_then_the_old_cron_never_asks_again
+    result = cutover_live.apply(self.state, client, now_ms=now, wait_seconds=30)
+  File "/Users/dn/dev/wt/encargos-b5/scripts/agent-work/cutover_live.py", line 116, in apply
+    raise CutoverRefused(f"{job['name']} did not stop")
+cutover_live.CutoverRefused: vigia-viejo did not stop
+
+----------------------------------------------------------------------
+Ran 1 test in 35.192s
+
+FAILED (errors=1)
+rc=1
