@@ -3228,8 +3228,9 @@ class SilentPromptTest(unittest.TestCase):
         self.addCleanup(tmux_cmd, "kill-server")
 
         def start(session, text="Permission - Bash\\n> Allow once\\n  Deny\\n", painted="Allow once"):
-            self.assertEqual(tmux_cmd("new-session", "-d", "-s", session, "-x", "80", "-y", "20", "/bin/sh", "-c",
-                                      f"printf '{text}'; exec /bin/sleep 30").returncode, 0)
+            created = tmux_cmd("new-session", "-d", "-s", session, "-x", "80", "-y", "20", "/bin/sh", "-c",
+                               f"printf '{text}'; exec /bin/sleep 30")
+            self.assertEqual(created.returncode, 0, f"tmux new-session {session}: {created.stderr.strip()}")
             for _ in range(100):
                 if painted in tmux_cmd("capture-pane", "-p", "-t", f"={session}:").stdout:
                     return
