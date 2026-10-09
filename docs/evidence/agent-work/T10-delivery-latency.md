@@ -49,3 +49,56 @@ por el intervalo de sondeo (`watch_pump` exige `interval <= 5`), pero
 el intervalo instalado real y el costo del transporte Gateway quedan fuera de esta
 prueba. El caso entró en G con `9a18540` y el reloj simulado con `4687b0b`.
 SHA de R: no aplica — el lado nativo está simulado por el cliente falso.
+
+## B4-38-r1: reloj real contra el Gateway de R
+
+Este commit va sobre la base `2058a11`, con R `978355503c44` construido. Cubre lo que la
+sección de arriba deja fuera: el transporte real `openclaw gateway call` y el runtime R real.
+
+Prueba: `scripts/tests/test_agent_work_delivery_latency_e2e.py`, caso `delivery_latency_r` de
+`bash scripts/tests/test-agent-work-e2e.sh`. Arranca el Gateway real de R aislado (el de
+`crash_boundaries`), registra y admite una tarea y corre el bucle de producción `watch_pump` con
+su sondeo por defecto de 1 s en un hilo. El doble del CLI recibe la asignación y escribe su
+resultado. Mide con el reloj real:
+
+- escritura: la hora de modificación del archivo de resultado. El doble escribe y renombra sin
+  fsync, así que el tramo 1 queda del lado conservador;
+- detección: la primera llamada a `Host.report` del bucle, como en la sección de arriba;
+- recibo: el commit de `Spool.acknowledge`, como en la sección de arriba.
+
+Exige cada tramo en 5 s o menos. Línea del verde (`B4-38-verde.log`):
+
+```
+DELIVERY_LATENCY_R {"write_to_detection_seconds": 0.016, "detection_to_receipt_seconds": 1.212, "limit_seconds": 5}
+```
+
+En otras corridas el tramo 1 dio entre 0,02 y 1,55 s (depende de en qué punto de la espera cae
+la escritura) y el tramo 2 entre 1,1 y 1,4 s.
+
+No hay rojo natural: el comportamiento ya existía. El rojo lo dan dos mutaciones del host de G:
+
+| Mutación | Qué rompe | Falla con | Log |
+|---|---|---|---|
+| 1 | el host no ve un resultado hasta que tiene 6 s | `detection took longer than 5 s` | `B4-38-mutacion-1.log` |
+| 2 | el reporte al Gateway tarda 6 s más | `the durable receipt took longer than 5 s` | `B4-38-mutacion-2.log` |
+
+Límites:
+
+- La corrida con R no demuestra el peor caso: un bucle que se salta búsquedas (por ejemplo, un
+  `flush` o un `collect` en una de cada cuatro pasadas) no lo detecta esta prueba. El peor caso
+  del sondeo de diseño lo fija el caso con reloj controlado de arriba. Así lo decidió David
+  (opción A del ATORADO de la preparación de B4-38, 2026-10-09).
+- El bucle de la prueba corre sin `cli_claim` ni `cli_watch`; el `--watch` de producción sí los
+  usa. Un lector midió una pasada que reclama y entrega en unos 4,3 s, así que el peor caso real,
+  si la escritura coincide con otra entrega, puede pasar de 5 s.
+- Host despierto, red local y el Gateway en la misma Mac; no se prueba un host remoto ni una red
+  lenta. Cada reporte lanza el CLI de openclaw, y es la mayor parte del tramo 2.
+- La línea "SHA de R: no aplica" de arriba vale para el caso con reloj controlado; este caso sí
+  usa R, en `978355503c44`.
+
+No marca `:282`: siguen parciales A8, A10 y T10:idle_72h.
+
+Regresión con R: `cli_gateway` en `OK`, `rc=0` (`B4-38-reg-cli_gateway.log`). Suites cortas sin
+R: los dos `TODO VERDE`, el runner sin R con `rc=0` (los casos de R se saltan), ruteo `OK` e
+integración `OK (skipped=1)`, cinco `rc=0` (`B4-38-cortas.log`). La matriz estricta queda con A8,
+A10 y T10:idle_72h (`B4-38-estricto.log`).

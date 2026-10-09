@@ -46,6 +46,10 @@ run_dispatchers_cancel() {
   python3 scripts/tests/test_agent_work_dispatchers_cancel_e2e.py
 }
 
+run_delivery_latency_r() {
+  python3 scripts/tests/test_agent_work_delivery_latency_e2e.py
+}
+
 run_acceptance_matrix() {
   python3 scripts/tests/test_agent_work_acceptance.py
 }
@@ -66,6 +70,7 @@ case "${1:-all}" in
     run_crash_boundaries
     run_cien_reenvios
     run_dispatchers_cancel
+    run_delivery_latency_r
     run_acceptance_matrix
     ;;
   review_tail_restart_director)
@@ -140,8 +145,15 @@ case "${1:-all}" in
     fi
     run_dispatchers_cancel
     ;;
+  delivery_latency_r)
+    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
+      echo "delivery_latency_r requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
+      exit 2
+    fi
+    run_delivery_latency_r
+    ;;
   *)
-    echo "casos disponibles: delivery_latency, review_tail_restart, cli_gateway, main_cli_loop, cli_silent_failure, cli_delivery_acceptance, crash_boundaries, cien_reenvios, dispatchers_cancel, review_tail_restart_director, acceptance_matrix, acceptance" >&2
+    echo "casos disponibles: delivery_latency, review_tail_restart, cli_gateway, main_cli_loop, cli_silent_failure, cli_delivery_acceptance, crash_boundaries, cien_reenvios, dispatchers_cancel, delivery_latency_r, review_tail_restart_director, acceptance_matrix, acceptance" >&2
     exit 2
     ;;
 esac
