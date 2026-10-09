@@ -261,3 +261,22 @@ cortas (`B4-35-revisor-cortas.log`) salen como pedía el encargo.
   el reclamo.
 
 Las siete fronteras B1 a B7 quedan cubiertas; marca `:280`.
+
+## B4-40-r1
+
+Residuales de B4-34 que solo pedian G, con R `978355503c44` fijo, en este
+commit. B5 y B7 reclaman tres veces mas tras el primer exito antes de la
+espera final, con la asercion del archivo del CLI: B5 deja `uncertain` x3 y
+una sola correccion (`B4-40-b5-verde.log`, OK 103 s); B7 deja `None` x3 y una
+sola entrega (`B4-40-b7-verde.log`, OK 83 s). La carrera de cancelar y
+reportar a la vez (`test_cancel_and_report_at_once_keep_a_single_terminal_state`)
+queda en un solo estado terminal (`cancelled`/`result-recorded`), sin
+despertares tras cancelar y con el tardio archivado (dos verdes de ~53 s).
+Discriminacion: el doble que entrega dos veces sale rojo en B5 (`the CLI did
+not get the review and one correction`) y en B7 (`the CLI was handed the
+assignment more than once`). Evidencia en `.saikit/scratch/B4-40-r1/` mas la
+corrida del par.
+
+Limites que se cierran: la carrera entre cancelar y reportar ya la corre una
+prueba; la ausencia de revision nueva en B5 ya no es por construccion (tres
+reclamos extra mas archivo del CLI).

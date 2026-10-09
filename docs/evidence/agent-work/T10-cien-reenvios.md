@@ -56,3 +56,14 @@ commit (`B4-36-estricto.log`).
 
 No marca `:282`: quedan parciales A6, A8, A10, A11, A13, T10:delivery_latency y
 T10:idle_72h.
+
+## B4-40-r1
+
+Residual de B4-36 que solo pedia G, con R fijo, en este commit. Prueba nueva
+`test_a_report_with_the_same_id_and_another_digest_is_rejected`: tras el ACK,
+un reporte con el mismo id y otro digest sale rechazado, el recibo original no
+cambia (`resultReceipt` intacto) y el rechazado no despierta (un solo
+despertar; verde 59 s, `B4-40-digest-verde.log` en `.saikit/scratch/B4-40-r1/`,
+mas la corrida del par). El limite "no se prueba la comprobacion de conflicto
+de R ni reportes distintos" queda cubierto; el transporte de G envuelve el
+rechazo en `native projection Gateway rejected request`.

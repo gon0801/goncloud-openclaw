@@ -36,7 +36,7 @@ class Result(unittest.TextTestResult):
             self._set(test, "FAIL")
 unittest.TextTestRunner(verbosity=2, resultclass=Result).run(suite)
 json.dump(status, open(out, "w"))
- scripts/tests/test-agent-work-integration.py /Users/dn/dev/wt/encargos-b4/docs/evidence/agent-work/par-final/.29.json test_lost_resolve_ack_retries_the_same_correction test_two_consumers_share_one_native_effect test_two_consumers_plan_one_identical_intent test_uncertified_route_never_claims test_lost_transfer_ack_and_board_outage_converge_without_repeating_the_review
+ scripts/tests/test-agent-work-integration.py /Users/dn/dev/wt-b4-40-r1/docs/evidence/agent-work/par-final/.29.json test_lost_resolve_ack_retries_the_same_correction test_two_consumers_share_one_native_effect test_two_consumers_plan_one_identical_intent test_uncertified_route_never_claims test_lost_transfer_ack_and_board_outage_converge_without_repeating_the_review
 test_uncertified_route_never_claims (cited.CliClaimTest.test_uncertified_route_never_claims) ... ok
 test_lost_resolve_ack_retries_the_same_correction (cited.DirectorHandlingTest.test_lost_resolve_ack_retries_the_same_correction) ... ok
 test_two_consumers_plan_one_identical_intent (cited.DirectorHandlingTest.test_two_consumers_plan_one_identical_intent) ... ok
@@ -44,8 +44,8 @@ test_two_consumers_share_one_native_effect (cited.DirectorHandlingTest.test_two_
 test_lost_transfer_ack_and_board_outage_converge_without_repeating_the_review (cited.ProjectionTransferTest.test_lost_transfer_ack_and_board_outage_converge_without_repeating_the_review) ... ok
 
 ----------------------------------------------------------------------
-Ran 5 tests in 0.800s
+Ran 5 tests in 0.637s
 
 OK
 
-rc=0 seconds=0.9
+rc=0 seconds=0.7

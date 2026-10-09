@@ -1,8 +1,8 @@
 $ bash scripts/agent-work/test-runtime.sh handling_unresolved
 {"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "978355503c44313536ab4cd03a6bfb7a5423404b"}
-[vitest-workers] local cache hit after 2564ms
+[vitest-workers] local cache hit after 2459ms
 [vitest-workers] reused local compiler outputs
-[vitest-workers] prepared 25946ed6e39f in 2595ms (16698 inputs, 17251 outputs)
+[vitest-workers] prepared a4e8e659ab2d in 2488ms (16698 inputs, 17251 outputs)
 [test] starting test/vitest/vitest.infra.config.ts
 
  RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
@@ -13,20 +13,20 @@ $ bash scripts/agent-work/test-runtime.sh handling_unresolved
  ↓ |infra| src/agents/tasks/managed-task.handling.test.ts > managed task handling > shares concurrent admission capacity across children of a finished parent
  ↓ |infra| src/agents/tasks/managed-task.handling.test.ts > managed task handling > commits one decision, child, and receipt and recovers them after a lost ACK
  ↓ |infra| src/agents/tasks/managed-task.handling.test.ts > managed task handling > rolls back the whole decision when one child is invalid
- ✓ |infra| src/agents/tasks/managed-task.handling.test.ts > managed task handling > keeps a result pending across agent_end and cancels without replaying late output 787ms
- ✓ |infra| src/agents/tasks/managed-task.handling.test.ts > managed task handling > archives a result received after cancellation without creating a continuation 459ms
- ✓ |infra| src/agents/tasks/managed-task.handling.test.ts > managed task handling > serializes cancellation against a competing continuation and preserves the result 430ms
- ✓ |infra| src/agents/tasks/managed-task.handling.test.ts > managed task handling > preserves an uncertain external effect without replaying a child after restart 762ms
- ✓ |infra| src/agents/tasks/managed-task.handling.test.ts > managed task handling > propagates cancellation to children committed before the parent was cancelled 408ms
+ ✓ |infra| src/agents/tasks/managed-task.handling.test.ts > managed task handling > keeps a result pending across agent_end and cancels without replaying late output 769ms
+ ✓ |infra| src/agents/tasks/managed-task.handling.test.ts > managed task handling > archives a result received after cancellation without creating a continuation 443ms
+ ✓ |infra| src/agents/tasks/managed-task.handling.test.ts > managed task handling > serializes cancellation against a competing continuation and preserves the result 408ms
+ ✓ |infra| src/agents/tasks/managed-task.handling.test.ts > managed task handling > preserves an uncertain external effect without replaying a child after restart 743ms
+ ✓ |infra| src/agents/tasks/managed-task.handling.test.ts > managed task handling > propagates cancellation to children committed before the parent was cancelled 393ms
  ↓ |infra| src/agents/tasks/managed-task.handling.test.ts > managed task handling > upgrades a version 22 database before resolving its first result
 
  Test Files  1 passed (1)
       Tests  5 passed | 7 skipped (12)
-   Start at  22:55:51
-   Duration  4.82s (tests 62%, transform 25%, import 10%, setup 4%)
+   Start at  02:00:45
+   Duration  4.70s (tests 61%, transform 25%, import 10%, setup 4%)
 
 [vitest-workers] verifying completed generation before cleanup
 [vitest-workers] retained completed compiler outputs for reuse
-[test] passed 1 Vitest shard in 8.76s
+[test] passed 1 Vitest shard in 8.49s
 
-rc=0 seconds=9.2
+rc=0 seconds=8.9

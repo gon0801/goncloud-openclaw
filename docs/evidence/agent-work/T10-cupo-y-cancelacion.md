@@ -113,3 +113,15 @@ cinco `rc=0`.
   el error `Managed host assignment is bound to another instance`, que no se corren aquí.
 - La fila B4-28 sigue en la tabla de pendientes de `followups.md` aunque "Resueltos fuera
   del loop" la resuelve; no se toca `followups.md` y queda para el cierre de T10.
+
+## B4-40-r1
+
+Residual de B4-37 que solo pedia G, con R fijo, en este commit.
+`TMUX_TIMEOUT_SECONDS = 30` en `TmuxBackend._tmux` (el vencimiento sale como
+`OSError` a CleanupPending `host unavailable`) y prueba nueva de host colgado
+con un tmux falso que no responde: `close` vuelve en 30 s en CleanupPending y
+retiene el cupo. Verde en la corrida del par (`resource_close`, 33 pruebas OK
+con el unico salto launchd declarado). Mutaciones: sin timeout cuelga (matado
+por `timeout 75`, EXIT=124); tragar el vencimiento como exito vacio da otro
+motivo y sale rojo. El limite "Host dormido ... sin prueba en la suite y sin
+timeout en `TmuxBackend._tmux`" queda cubierto.

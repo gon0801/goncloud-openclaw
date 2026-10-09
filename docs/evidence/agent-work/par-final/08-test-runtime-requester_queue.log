@@ -1,22 +1,12 @@
 $ bash scripts/agent-work/test-runtime.sh requester_queue
 {"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "978355503c44313536ab4cd03a6bfb7a5423404b"}
 [test] preparing E2E runtime before Vitest workers
-[build-all] plugins:assets:build
-$ node --import ./scripts/tsx.mjs scripts/bundled-plugin-assets.mts --phase build
-[canvas] build: node scripts/bundle-a2ui.mjs
-A2UI bundle up to date; skipping.
-[diffs] build: node --import tsx ../../scripts/build-diffs-viewer-runtime.mts curated
-[diffs-language-pack] build: node --import tsx ../../scripts/build-diffs-viewer-runtime.mts full
-[discord] build: node --import tsx ../../scripts/build-discord-activity-sdk.mts
-[workboard] build: node --import ../../scripts/tsx.mjs ../../scripts/build-plugin-control-ui.mts
-[build-all] plugins:assets:build done in 1.37s
-[build-all] tsdown
 
  WARN  TypeScript 7.0 does not yet have a stable API and is experimental. Some options will be unavailable.
 
-[33m[PLUGIN_TIMINGS] [0mPlugin hooks ran for 5.4s of this 5.5s build (99%).
+[33m[PLUGIN_TIMINGS] [0mPlugin hooks ran for 5.4s of this 5.4s build (99%).
 The slowest hooks, timed inside each callback (the wait before a callback starts is excluded, the time it awaits is included):
-  - openclaw-native-declarations buildStart (97%, 5.3s, 1 call)
+  - openclaw-native-declarations buildStart (97%, 5.2s, 1 call)
 Additional hook time came from the hooks below and from hooks under 1s.
 3 hooks are listed without a time. Their calls overlapped, so the time inside one call includes work from other calls. To find their cost, profile the build with `node --cpu-prof`:
   - tsdown:deps resolveId (810 calls)
@@ -24,187 +14,7 @@ Additional hook time came from the hooks below and from hooks under 1s.
   - rolldown-plugin-dts:fake-js transform (132 calls)
 See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
 
-[tsdown-build] invocation 1/11 finished in 5.7s
-
- WARN  TypeScript 7.0 does not yet have a stable API and is experimental. Some options will be unavailable.
-
-[tsdown-build] invocation 2/11 finished in 50.6s
-[33m[PLUGIN_TIMINGS] [0mPlugin hooks ran for 7.9s of this 8.4s build (94%).
-The slowest hooks, timed inside each callback (the wait before a callback starts is excluded, the time it awaits is included):
-  - tsdown:deps generateBundle (81%, 6.8s, 1 call)
-Additional hook time came from the hooks below and from hooks under 1s.
-1 hook is listed without a time. Its calls overlapped, so the time inside one call includes work from other calls. To find its cost, profile the build with `node --cpu-prof`:
-  - tsdown:deps resolveId (1828 calls)
-See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
-
-node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js (2400:30) [33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
-      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js:2400:31 [38;5;246m][0m
-      [38;5;246m│[0m
- [38;5;246m2400 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mA[0m[38;5;249mS[0m[38;5;249mM[0m[38;5;249m_[0m[38;5;249mC[0m[38;5;249mO[0m[38;5;249mN[0m[38;5;249mS[0m[38;5;249mT[0m[38;5;249mS[0m[38;5;249m[[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249ma[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m][0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249m)[0m[38;5;249m;[0m
- [38;5;240m     │[0m                               ──┬─
- [38;5;240m     │[0m                                 ╰─── Use of direct `eval` here.
- [38;5;240m     │[0m
- [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
-[38;5;246m──────╯[0m
-
-node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js (2423:32) [33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
-      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js:2423:33 [38;5;246m][0m
-      [38;5;246m│[0m
- [38;5;246m2423 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mm[0m[38;5;249mo[0m[38;5;249md[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mE[0m[38;5;249mx[0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249ms[0m[38;5;249m[[0m[38;5;249mn[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249m][0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249m)[0m[38;5;249m;[0m
- [38;5;240m     │[0m                                 ──┬─
- [38;5;240m     │[0m                                   ╰─── Use of direct `eval` here.
- [38;5;240m     │[0m
- [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
-[38;5;246m──────╯[0m
-
-node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js (2400:30) [33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
-      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js:2400:31 [38;5;246m][0m
-      [38;5;246m│[0m
- [38;5;246m2400 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mA[0m[38;5;249mS[0m[38;5;249mM[0m[38;5;249m_[0m[38;5;249mC[0m[38;5;249mO[0m[38;5;249mN[0m[38;5;249mS[0m[38;5;249mT[0m[38;5;249mS[0m[38;5;249m[[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249ma[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m][0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249m)[0m[38;5;249m;[0m
- [38;5;240m     │[0m                               ──┬─
- [38;5;240m     │[0m                                 ╰─── Use of direct `eval` here.
- [38;5;240m     │[0m
- [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
-[38;5;246m──────╯[0m
-
-node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js (2423:32) [33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
-      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js:2423:33 [38;5;246m][0m
-      [38;5;246m│[0m
- [38;5;246m2423 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mm[0m[38;5;249mo[0m[38;5;249md[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mE[0m[38;5;249mx[0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249ms[0m[38;5;249m[[0m[38;5;249mn[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249m][0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249m)[0m[38;5;249m;[0m
- [38;5;240m     │[0m                                 ──┬─
- [38;5;240m     │[0m                                   ╰─── Use of direct `eval` here.
- [38;5;240m     │[0m
- [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
-[38;5;246m──────╯[0m
-
-node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/lib/coreBundle.js (66352:28) [33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
-       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/lib/coreBundle.js:66352:29 [38;5;246m][0m
-       [38;5;246m│[0m
- [38;5;246m66352 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249m`[0m[38;5;249m([0m[38;5;249m$[0m[38;5;249m{[0m[38;5;249me[0m[38;5;249mx[0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249m}[0m[38;5;249m)[0m[38;5;249m`[0m[38;5;249m)[0m[38;5;249m;[0m
- [38;5;240m      │[0m                             ──┬─
- [38;5;240m      │[0m                               ╰─── Use of direct `eval` here.
- [38;5;240m      │[0m
- [38;5;240m      │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
-[38;5;246m───────╯[0m
-
-node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/lib/coreBundle.js (66359:28) [33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
-       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/lib/coreBundle.js:66359:29 [38;5;246m][0m
-       [38;5;246m│[0m
- [38;5;246m66359 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249m`[0m[38;5;249m([0m[38;5;249m$[0m[38;5;249m{[0m[38;5;249me[0m[38;5;249mx[0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249m}[0m[38;5;249m)[0m[38;5;249m`[0m[38;5;249m)[0m[38;5;249m;[0m
- [38;5;240m      │[0m                             ──┬─
- [38;5;240m      │[0m                               ╰─── Use of direct `eval` here.
- [38;5;240m      │[0m
- [38;5;240m      │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
-[38;5;246m───────╯[0m
-
-node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js (2400:30) [33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
-      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js:2400:31 [38;5;246m][0m
-      [38;5;246m│[0m
- [38;5;246m2400 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mA[0m[38;5;249mS[0m[38;5;249mM[0m[38;5;249m_[0m[38;5;249mC[0m[38;5;249mO[0m[38;5;249mN[0m[38;5;249mS[0m[38;5;249mT[0m[38;5;249mS[0m[38;5;249m[[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249ma[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m][0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249m)[0m[38;5;249m;[0m
- [38;5;240m     │[0m                               ──┬─
- [38;5;240m     │[0m                                 ╰─── Use of direct `eval` here.
- [38;5;240m     │[0m
- [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
-[38;5;246m──────╯[0m
-
-node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js (2423:32) [33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
-      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js:2423:33 [38;5;246m][0m
-      [38;5;246m│[0m
- [38;5;246m2423 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mm[0m[38;5;249mo[0m[38;5;249md[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mE[0m[38;5;249mx[0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249ms[0m[38;5;249m[[0m[38;5;249mn[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249m][0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249m)[0m[38;5;249m;[0m
- [38;5;240m     │[0m                                 ──┬─
- [38;5;240m     │[0m                                   ╰─── Use of direct `eval` here.
- [38;5;240m     │[0m
- [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
-[38;5;246m──────╯[0m
-
-node_modules/.pnpm/baileys@7.0.0-rc14_patch_hash=03ae85550381d1bda7d014c9aa9f544ad421d35d745d1167fd5d33f7f_9d67036bf670790577c4f43e8f6884c2/node_modules/baileys/lib/Utils/messages-media.js (18:85) [33m[UNRESOLVED_IMPORT] [0mCould not resolve 'sharp' in node_modules/.pnpm/baileys@7.0.0-rc14_patch_hash=03ae85550381d1bda7d014c9aa9f544ad421d35d745d1167fd5d33f7f_9d67036bf670790577c4f43e8f6884c2/node_modules/baileys/lib/Utils/messages-media.js
-    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/baileys@7.0.0-rc14_patch_hash=03ae85550381d1bda7d014c9aa9f544ad421d35d745d1167fd5d33f7f_9d67036bf670790577c4f43e8f6884c2/node_modules/baileys/lib/Utils/messages-media.js:18:86 [38;5;246m][0m
-    [38;5;246m│[0m
- [38;5;246m18 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249m[[0m[38;5;249mj[0m[38;5;249mi[0m[38;5;249mm[0m[38;5;249mp[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249ms[0m[38;5;249mh[0m[38;5;249ma[0m[38;5;249mr[0m[38;5;249mp[0m[38;5;249m][0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249ma[0m[38;5;249mw[0m[38;5;249ma[0m[38;5;249mi[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mP[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mm[0m[38;5;249mi[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249m.[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249ml[0m[38;5;249m([0m[38;5;249m[[0m[38;5;249mi[0m[38;5;249mm[0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m([0m[38;5;249m'[0m[38;5;249mj[0m[38;5;249mi[0m[38;5;249mm[0m[38;5;249mp[0m[38;5;249m'[0m[38;5;249m)[0m[38;5;249m.[0m[38;5;249mc[0m[38;5;249ma[0m[38;5;249mt[0m[38;5;249mc[0m[38;5;249mh[0m[38;5;249m([0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m[38;5;249m [0m[38;5;249m}[0m[38;5;249m)[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mm[0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m([0m'sharp'[38;5;249m)[0m[38;5;249m.[0m[38;5;249mc[0m[38;5;249ma[0m[38;5;249mt[0m[38;5;249mc[0m[38;5;249mh[0m[38;5;249m([0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m[38;5;249m [0m[38;5;249m}[0m[38;5;249m)[0m[38;5;249m][0m[38;5;249m)[0m[38;5;249m;[0m
- [38;5;240m   │[0m                                                                                      ───┬───
- [38;5;240m   │[0m                                                                                         ╰───── Module not found, treating it as an external dependency
-[38;5;246m────╯[0m
-
-node_modules/.pnpm/@audio+decode@3.15.0/node_modules/@audio/decode/audio-decode.js (156:24) [33m[UNRESOLVED_IMPORT] [0mCould not resolve '@audio/decode-ape' in node_modules/.pnpm/@audio+decode@3.15.0/node_modules/@audio/decode/audio-decode.js
-     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/@audio+decode@3.15.0/node_modules/@audio/decode/audio-decode.js:156:25 [38;5;246m][0m
-     [38;5;246m│[0m
- [38;5;246m156 │[0m [38;5;249mr[0m[38;5;249me[0m[38;5;249mg[0m[38;5;249m([0m[38;5;249m'[0m[38;5;249ma[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249m'[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mm[0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m([0m'@audio/decode-ape'[38;5;249m)[0m[38;5;249m)[0m
- [38;5;240m    │[0m                         ─────────┬─────────
- [38;5;240m    │[0m                                  ╰─────────── Module not found, treating it as an external dependency
-[38;5;246m─────╯[0m
-
-[tsdown-build] invocation 3/11 finished in 16.2s
-
- WARN  TypeScript 7.0 does not yet have a stable API and is experimental. Some options will be unavailable.
-
-[tsdown-build] invocation 4/11 finished in 36.1s
-
- WARN  TypeScript 7.0 does not yet have a stable API and is experimental. Some options will be unavailable.
-
-[tsdown-build] invocation 5/11 finished in 35.1s
-
- WARN  TypeScript 7.0 does not yet have a stable API and is experimental. Some options will be unavailable.
-
-[tsdown-build] invocation 6/11 finished in 37.2s
-
- WARN  TypeScript 7.0 does not yet have a stable API and is experimental. Some options will be unavailable.
-
-[tsdown-build] invocation 7/11 finished in 33.9s
-
- WARN  TypeScript 7.0 does not yet have a stable API and is experimental. Some options will be unavailable.
-
-[tsdown-build] invocation 8/11 finished in 31.2s
-
- WARN  TypeScript 7.0 does not yet have a stable API and is experimental. Some options will be unavailable.
-
-[tsdown-build] invocation 9/11 finished in 37.3s
-
- WARN  TypeScript 7.0 does not yet have a stable API and is experimental. Some options will be unavailable.
-
-[tsdown-build] invocation 10/11 finished in 31.2s
-
- WARN  TypeScript 7.0 does not yet have a stable API and is experimental. Some options will be unavailable.
-
-[tsdown-build] invocation 11/11 finished in 30.8s
-[build-all] tsdown done in 5m 47.9s
-[build-all] external-plugins:local-dist
-[plugin-npm-runtime-build] build assets diffs: node --import tsx ../../scripts/build-diffs-viewer-runtime.mts curated
-[plugin-npm-runtime-build] build assets diffs-language-pack: node --import tsx ../../scripts/build-diffs-viewer-runtime.mts full
-[plugin-npm-runtime-build] build assets discord: node --import tsx ../../scripts/build-discord-activity-sdk.mts
-[external-plugin-local-dist] built 96 plugins in 1817ms
-[build-all] external-plugins:local-dist done in 2.03s
-[build-all] check-cli-bootstrap-imports
-CLI bootstrap import guard passed.
-[build-all] check-cli-bootstrap-imports done in 4.81s
-[build-all] plugins:assets:copy
-$ node --import ./scripts/tsx.mjs scripts/bundled-plugin-assets.mts --phase copy
-[browser] copy: node scripts/copy-chrome-extension.mjs
-[canvas] copy: node scripts/copy-a2ui.mjs
-[workboard] copy: node --import ../../scripts/tsx.mjs ../../scripts/build-plugin-control-ui.mts --copy
-[build-all] plugins:assets:copy done in 859ms
-[build-all] runtime-postbuild
-[plugin-control-plane-loads] verified 53 built modules with native require and checked doctor closures
-runtime-postbuild: 13 phases completed in 6592ms (slowest: previous release update compat chunks 3889ms)
-[build-all] runtime-postbuild done in 6.89s
-[build-all] build-stamp
-[build-all] build-stamp done in 221ms
-[build-all] runtime-postbuild-stamp
-[build-all] runtime-postbuild-stamp done in 163ms
-[build-all] phase timings: total 6m 4.3s; slowest tsdown 5m 47.9s; runtime-postbuild 6.89s; check-cli-bootstrap-imports 4.81s; external-plugins:local-dist 2.03s; plugins:assets:build 1.37s; plugins:assets:copy 859ms; build-stamp 221ms; runtime-postbuild-stamp 163ms
-
- WARN  TypeScript 7.0 does not yet have a stable API and is experimental. Some options will be unavailable.
-
-[33m[PLUGIN_TIMINGS] [0mPlugin hooks ran for 5.0s of this 5.0s build (99%).
-The slowest hooks, timed inside each callback (the wait before a callback starts is excluded, the time it awaits is included):
-  - openclaw-native-declarations buildStart (97%, 4.8s, 1 call)
-Additional hook time came from the hooks below and from hooks under 1s.
-3 hooks are listed without a time. Their calls overlapped, so the time inside one call includes work from other calls. To find their cost, profile the build with `node --cpu-prof`:
-  - tsdown:deps resolveId (810 calls)
-  - rolldown-plugin-dts:resolver resolveId (894 calls)
-  - rolldown-plugin-dts:fake-js transform (132 calls)
-See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
-
-[tsdown-build] invocation 1/1 finished in 5.2s
+[tsdown-build] invocation 1/1 finished in 5.6s
 [test] starting test/vitest/vitest.e2e.config.ts
 
  RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
@@ -212,93 +22,24 @@ See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more det
 
  RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
 
-[vitest-workers] local cache miss after 2217ms
-node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/resolve-evaluate-options.js (48:0) [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "" in "node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/resolve-evaluate-options.js" may not be preserved when bundling.
-    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/resolve-evaluate-options.js:48:1 [38;5;246m][0m
-    [38;5;246m│[0m
- [38;5;246m48 │[0m ''
- [38;5;240m   │[0m ─┬
- [38;5;240m   │[0m  ╰── module level directive may not be preserved
- [38;5;240m   │[0m
- [38;5;240m   │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-[38;5;246m────╯[0m
-
-node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-is-declaration.js (11:0) [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "" in "node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-is-declaration.js" may not be preserved when bundling.
-    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-is-declaration.js:11:1 [38;5;246m][0m
-    [38;5;246m│[0m
- [38;5;246m11 │[0m ''
- [38;5;240m   │[0m ─┬
- [38;5;240m   │[0m  ╰── module level directive may not be preserved
- [38;5;240m   │[0m
- [38;5;240m   │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-[38;5;246m────╯[0m
-
-node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-create.js (6:0) [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "" in "node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-create.js" may not be preserved when bundling.
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-create.js:6:1 [38;5;246m][0m
-   [38;5;246m│[0m
- [38;5;246m6 │[0m ''
- [38;5;240m  │[0m ─┬
- [38;5;240m  │[0m  ╰── module level directive may not be preserved
- [38;5;240m  │[0m
- [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-[38;5;246m───╯[0m
-
-node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/comment.js (12:0) [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "" in "node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/comment.js" may not be preserved when bundling.
-    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/comment.js:12:1 [38;5;246m][0m
-    [38;5;246m│[0m
- [38;5;246m12 │[0m ''
- [38;5;240m   │[0m ─┬
- [38;5;240m   │[0m  ╰── module level directive may not be preserved
- [38;5;240m   │[0m
- [38;5;240m   │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-[38;5;246m────╯[0m
-
-node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/text.js (9:0) [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "" in "node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/text.js" may not be preserved when bundling.
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/text.js:9:1 [38;5;246m][0m
-   [38;5;246m│[0m
- [38;5;246m9 │[0m ''
- [38;5;240m  │[0m ─┬
- [38;5;240m  │[0m  ╰── module level directive may not be preserved
- [38;5;240m  │[0m
- [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
-[38;5;246m───╯[0m
-
-node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js (2400:30) [33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
-      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js:2400:31 [38;5;246m][0m
-      [38;5;246m│[0m
- [38;5;246m2400 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mA[0m[38;5;249mS[0m[38;5;249mM[0m[38;5;249m_[0m[38;5;249mC[0m[38;5;249mO[0m[38;5;249mN[0m[38;5;249mS[0m[38;5;249mT[0m[38;5;249mS[0m[38;5;249m[[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249ma[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m][0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249m)[0m[38;5;249m;[0m
- [38;5;240m     │[0m                               ──┬─
- [38;5;240m     │[0m                                 ╰─── Use of direct `eval` here.
- [38;5;240m     │[0m
- [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
-[38;5;246m──────╯[0m
-
-node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js (2423:32) [33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
-      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js:2423:33 [38;5;246m][0m
-      [38;5;246m│[0m
- [38;5;246m2423 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mm[0m[38;5;249mo[0m[38;5;249md[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mE[0m[38;5;249mx[0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249ms[0m[38;5;249m[[0m[38;5;249mn[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249m][0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249m)[0m[38;5;249m;[0m
- [38;5;240m     │[0m                                 ──┬─
- [38;5;240m     │[0m                                   ╰─── Use of direct `eval` here.
- [38;5;240m     │[0m
- [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
-[38;5;246m──────╯[0m
-
-[vitest-workers] prepared e3b7cd5513d5 in 13493ms (16698 inputs, 17251 outputs)
+[vitest-workers] local cache hit after 1967ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared e990545b282b in 1997ms (16698 inputs, 17251 outputs)
  ↓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: false, replay: false)
  ↓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: true, restart: false, replay: false)
- ✓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: false) 10572ms
- ✓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: true) 7439ms
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: false) 10754ms
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: true) 7441ms
  ↓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (operaciones -> ingenieria, isolated: false, restart: false, replay: false)
- ✓ src/gateway/server.managed-task-requester.e2e.test.ts > delivers a durably reported managed result after restart to a busy requester (restart: true) 7303ms
- ✓ src/gateway/server.managed-task-requester.e2e.test.ts > delivers a durably reported managed result after restart to a deleted requester (restart: true) 10763ms
- ✓ src/gateway/server.managed-task-requester.e2e.test.ts (7 tests | 3 skipped) 36082ms
-   ✓ registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: false) 10572ms
-   ✓ registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: true) 7439ms
-   ✓ delivers a durably reported managed result after restart to a busy requester (restart: true) 7303ms
-   ✓ delivers a durably reported managed result after restart to a deleted requester (restart: true) 10763ms
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts > delivers a durably reported managed result after restart to a busy requester (restart: true) 6965ms
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts > delivers a durably reported managed result after restart to a deleted requester (restart: true) 10426ms
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts (7 tests | 3 skipped) 35590ms
+   ✓ registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: false) 10754ms
+   ✓ registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: true) 7441ms
+   ✓ delivers a durably reported managed result after restart to a busy requester (restart: true) 6965ms
+   ✓ delivers a durably reported managed result after restart to a deleted requester (restart: true) 10426ms
  ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > does not deliver an unreported managed result after restart (idle requester)
- ✓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > does not deliver an unreported managed result after restart (deleted requester) 1858ms
- ✓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > does not deliver an unreported managed result after restart (busy requester) 1041ms
+ ✓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > does not deliver an unreported managed result after restart (deleted requester) 1667ms
+ ✓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > does not deliver an unreported managed result after restart (busy requester) 957ms
  ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > does not deliver an unreported managed result after restart (idle_72h requester)
  ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > settles overlapping caller turns with alpha first (same ownership, yielded=undefined)
  ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > settles overlapping caller turns with alpha first (distinct ownership, yielded=undefined)
@@ -318,24 +59,24 @@ node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-
  ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > preserves serial continuation without replaying an accepted wave (cli, next child accepted=true, requester final=true)
  ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > delivers a yielded result despite an older failed grandchild awaiting cleanup
  ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > caps a stale requester batch despite foreign active work in a global session
- ✓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts (22 tests | 20 skipped) 2902ms
+ ✓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts (22 tests | 20 skipped) 2626ms
    ✓ requester settle wake product flow (22)
-     ✓ does not deliver an unreported managed result after restart (deleted requester) 1858ms
-     ✓ does not deliver an unreported managed result after restart (busy requester) 1041ms
+     ✓ does not deliver an unreported managed result after restart (deleted requester) 1667ms
+     ✓ does not deliver an unreported managed result after restart (busy requester) 957ms
 
  Test Files  2 passed (2)
       Tests  6 passed | 23 skipped (29)
-   Start at  23:02:10
-   Duration  56.86s (tests 69%, transform 28%, import 3%)
+   Start at  02:00:59
+   Duration  43.66s (tests 88%, transform 9%, import 3%)
 
 
  Test Files  2 passed (2)
       Tests  6 passed | 23 skipped (29)
-   Start at  23:02:10
-   Duration  56.86s (tests 69%, transform 28%, import 3%)
+   Start at  02:00:59
+   Duration  43.67s (tests 88%, transform 9%, import 3%)
 
 [vitest-workers] verifying completed generation before cleanup
 [vitest-workers] retained completed compiler outputs for reuse
-[test] passed 1 Vitest shard in 430.70s
+[test] passed 1 Vitest shard in 52.44s
 
-rc=0 seconds=431.1
+rc=0 seconds=52.8

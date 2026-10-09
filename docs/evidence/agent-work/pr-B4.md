@@ -6,14 +6,14 @@ Cubre T8 (7/7), T9 (10/10) y T10 (7/8 al escribir esto; `:284` lo cierra `B4-bat
 
 ## Dependencias exactas
 
-- G: la rama `encargos/b4` desde `77fafb0f66e595d6a4812c3591d09627315dde82`. El par de aceptación es G `7e1b1476c9909a6ef90ea42b164846e248b7253c`. Después de ese commit solo cambia prosa de evidencia, y el estricto lo comprueba.
+- G: la rama `encargos/b4` desde `77fafb0f66e595d6a4812c3591d09627315dde82`. El par de aceptación es G `b3b44e4d7521d19b87dccb0a2e1901c4b87986d0`. Después de ese commit solo cambia prosa de evidencia, y el estricto lo comprueba.
 - R: `978355503c44313536ab4cd03a6bfb7a5423404b` en la rama `feat/agent-work-integration` de `/Users/dn/dev/openclaw-agent-work-integration`, sobre la base pública `c074824a27c96d3983043f9eeb33823cd1772d8c` (`v2026.9.7`). A R no se le hace push nunca. El cierre del bloque lo respalda con `git bundle` y verifica que el bundle contenga ese SHA.
 - La batería de R corre sobre ese mismo SHA de R: son nuestras pruebas y sus importadores directos (`bateria-r-objetivos.sh`), no la suite completa de OpenClaw.
 
 ## Evidencia
 
 - La matriz `docs/evidence/agent-work/acceptance.md`: una fila por escenario y por frontera del spec, más los casos de T10. Todas las filas del bloque están en `completa` con el mismo par.
-- La corrida del par, `acceptance-pair.json`, con un log por comando en `par-final/`. Corre una vez cada una de las 51 pruebas que cita la matriz contra R construido en el par y limpio, y las 51 salieron en verde. `bash scripts/tests/test-agent-work-e2e.sh acceptance` exige esa corrida y la lee.
+- La corrida del par, `acceptance-pair.json`, con un log por comando en `par-final/`. Corre una vez cada una de las 54 pruebas que cita la matriz contra R construido en el par y limpio, y las 54 salieron en verde. `bash scripts/tests/test-agent-work-e2e.sh acceptance` exige esa corrida y la lee.
 - Recibos por tarea: `T8.md`, `T9.md`, `T10-*.md`. Los logs de rojo, verde y mutación de cada encargo están en `B4-*.log`.
 
 ## Fuera de este bloque
@@ -29,7 +29,17 @@ Cubre T8 (7/7), T9 (10/10) y T10 (7/8 al escribir esto; `:284` lo cierra `B4-bat
 - `delivery_latency_r` mide una corrida real contra R y no demuestra el peor caso: el peor caso del sondeo lo fija `delivery_latency`, con reloj controlado. El bucle de esa prueba corre sin `cli_claim` ni `cli_watch`. Una pasada que también reclama y entrega midió unos 4,3 s.
 - La mitad de A2 sobre "los mismos hijos" se cumple en vacío (NO_REPLY). "Una sola vez" lo fija el contador de despertares.
 - El no reemplazo del lado de R (`managed-task.host-closure.test.ts`) no se corre desde G. La readmisión de una tarea cancelada no se alcanza sin desarmar tres guardas de R: la prueba fija la causa del rechazo.
-- `test_resource_close_real_launchd_label_stays_pending` se salta sin una sesión de login real de la cuenta `agentes` (`user/502 Background-only: bootstrap/load give EIO 5`). Es el único salto de la corrida del par, contado en `resource_close`.
+- `test_resource_close_real_launchd_label_stays_pending` se salta sin una sesión de login real de la cuenta `agentes` (`user/502 Background-only: bootstrap/load give EIO 5`). Es el único salto de la corrida del par; el par lo nombra con su motivo en vez de contarlo (`resource_close`).
+
+
+- La carrera de cancelar y reportar se observo del lado en que la cancelacion
+  confirma primero (el reporte tarda mas en lanzarse); el orden inverso no se
+  observo en las corridas.
+- El rechazo del digest ajeno se ve en G como `native projection Gateway
+  rejected request`; lo que lo fija como conflicto es el recibo original
+  intacto y el despertar unico.
+- El host colgado es un binario falso que no responde (no un tmux real
+  colgado); el limite son 30 s por llamada de tmux.
 
 ## Admisión productiva deshabilitada
 

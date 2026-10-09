@@ -1,29 +1,29 @@
 $ bash scripts/agent-work/test-runtime.sh budget_context
 {"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "978355503c44313536ab4cd03a6bfb7a5423404b"}
-[vitest-workers] local cache hit after 1835ms
+[vitest-workers] local cache hit after 1909ms
 [vitest-workers] reused local compiler outputs
-[vitest-workers] prepared 7284f2ec01ad in 1865ms (16698 inputs, 17251 outputs)
+[vitest-workers] prepared 80f5bbfa0fe7 in 1937ms (16698 inputs, 17251 outputs)
 [test] starting test/vitest/vitest.infra.config.ts
 
  RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
 
  ↓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > rejects invented admission reservations and preserves the root reservation on restart
- ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > rejects incomplete runtime budget and context shapes before provider dispatch 475ms
+ ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > rejects incomplete runtime budget and context shapes before provider dispatch 454ms
  ↓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > holds uncertain call capacity across retries and restart
- ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > counts context components once, includes cached input, and rejects missing output enforcement 423ms
+ ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > counts context components once, includes cached input, and rejects missing output enforcement 402ms
  ↓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > reserves before provider dispatch and retains an uncertain stream after failure
- ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > retains full reservation when terminal provider usage is absent 737ms
+ ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > retains full reservation when terminal provider usage is absent 716ms
  ↓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > rejects a cancelled managed run before provider invocation
  ↓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > allows one automatic recovery call per root across restart and blocks the next before invoke
  ↓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > shares model-call capacity across children after the parent turn ends and after restart
 
  Test Files  1 passed (1)
       Tests  3 passed | 6 skipped (9)
-   Start at  23:09:03
-   Duration  3.41s (tests 51%, transform 29%, import 14%, setup 6%)
+   Start at  02:07:22
+   Duration  3.27s (tests 51%, transform 29%, import 14%, setup 6%)
 
 [vitest-workers] verifying completed generation before cleanup
 [vitest-workers] retained completed compiler outputs for reuse
-[test] passed 1 Vitest shard in 6.51s
+[test] passed 1 Vitest shard in 6.42s
 
-rc=0 seconds=6.9
+rc=0 seconds=6.8

@@ -1,10 +1,11 @@
 $ bash scripts/tests/test-agent-work-e2e.sh cien_reenvios
-CRASH_BOUNDARY A2 pids=[82859, 92803] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1, 0]
-CIEN_REENVIOS reports=100 receipts=1 wakes=1 provider_requests=1 sent=100 pids=[82859, 92803]
+DIGEST_CONFLICT pids=[81761] receipts=1 original_kept=1 wakes=1
+.CRASH_BOUNDARY A2 pids=[84023, 87495] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1, 0]
+CIEN_REENVIOS reports=100 receipts=1 wakes=1 provider_requests=1 sent=100 pids=[84023, 87495]
 .
 ----------------------------------------------------------------------
-Ran 1 test in 196.999s
+Ran 2 tests in 232.312s
 
 OK
 
-rc=0 seconds=197.1
+rc=0 seconds=232.4

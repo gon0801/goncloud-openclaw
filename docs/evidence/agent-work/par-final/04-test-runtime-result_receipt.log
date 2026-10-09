@@ -1,8 +1,8 @@
 $ bash scripts/agent-work/test-runtime.sh result_receipt
 {"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "978355503c44313536ab4cd03a6bfb7a5423404b"}
-[vitest-workers] local cache hit after 1871ms
+[vitest-workers] local cache hit after 1793ms
 [vitest-workers] reused local compiler outputs
-[vitest-workers] prepared 0366b23b9b51 in 1902ms (16698 inputs, 17251 outputs)
+[vitest-workers] prepared ac90857049eb in 1822ms (16698 inputs, 17251 outputs)
 [test] starting test/vitest/vitest.infra.config.ts
 
  RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
@@ -10,22 +10,22 @@ $ bash scripts/agent-work/test-runtime.sh result_receipt
  ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > does not commit a tool-issued task after its turn authority is revoked
  ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > rejects model-authored assignment fields outside the task contract
  ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates a logical key within one requester across turns and restarts
- ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > accepts only the current producer, generation, digest, and revision 543ms
+ ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > accepts only the current producer, generation, digest, and revision 471ms
  ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > upgrades a version 19 database before the first managed task
- ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > does not store malformed JSON or a result without its required fields 431ms
- ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > rejects an empty or unversioned review while leaving the final slot available 828ms
- ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > persists PermissionRequired as an incident without consuming the final result 764ms
+ ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > does not store malformed JSON or a result without its required fields 396ms
+ ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > rejects an empty or unversioned review while leaving the final slot available 745ms
+ ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > persists PermissionRequired as an incident without consuming the final result 738ms
  ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > reserves recovery receipts to the recovery engine instead of the token path
  ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > reserves host incidents to the host worker path instead of the token path
  ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates director retries within a corrida without crossing corrida authority
 
  Test Files  1 passed (1)
       Tests  4 passed | 7 skipped (11)
-   Start at  22:44:46
-   Duration  4.35s (tests 62%, transform 22%, import 11%, setup 5%)
+   Start at  01:49:16
+   Duration  4.04s (tests 61%, transform 23%, import 11%, setup 5%)
 
 [vitest-workers] verifying completed generation before cleanup
 [vitest-workers] retained completed compiler outputs for reuse
-[test] passed 1 Vitest shard in 7.51s
+[test] passed 1 Vitest shard in 7.08s
 
-rc=0 seconds=7.9
+rc=0 seconds=7.5

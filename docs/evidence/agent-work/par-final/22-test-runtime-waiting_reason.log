@@ -1,16 +1,33 @@
 $ bash scripts/agent-work/test-runtime.sh waiting_reason
 {"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "978355503c44313536ab4cd03a6bfb7a5423404b"}
-[vitest-workers] local cache hit after 1894ms
+[vitest-workers] local cache hit after 1886ms
 [vitest-workers] reused local compiler outputs
-[vitest-workers] prepared 93a63cf424e8 in 1924ms (16698 inputs, 17251 outputs)
+[vitest-workers] prepared fe21bb7abc19 in 1914ms (16698 inputs, 17251 outputs)
 [test] starting test/vitest/vitest.infra.config.ts
 
  RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
 
+ ↓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rejects an invented budget reservation before claiming a native run
+ ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > lets one emitter claim, keeps a crash uncertain, and recovers the exact native run 1537ms
+ ↓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rejects revoked authority before claiming and fences a delayed prior request
+ ↓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rechecks authority inside the worker before persisting a claim
+ ↓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > refuses admission after cancellation and cannot confirm an outstanding claim
+ ↓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > upgrades a version 20 task ledger without losing its registered tasks
+ ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > does not commit a tool-issued task after its turn authority is revoked
+ ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > rejects model-authored assignment fields outside the task contract
+ ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates a logical key within one requester across turns and restarts
+ ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > accepts only the current producer, generation, digest, and revision
+ ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > upgrades a version 19 database before the first managed task
+ ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > does not store malformed JSON or a result without its required fields 399ms
+ ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > rejects an empty or unversioned review while leaving the final slot available
+ ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > persists PermissionRequired as an incident without consuming the final result
+ ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > reserves recovery receipts to the recovery engine instead of the token path
+ ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > reserves host incidents to the host worker path instead of the token path
+ ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates director retries within a corrida without crossing corrida authority
  ↓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > derives managed identity from the native run rather than model fields
  ↓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > restores managed identity from SQLite and charges the next HTTP request
  ↓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > finds a managed run in SQLite before the registry is hydrated
- ✓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > persists a transport wait when the reserved HTTP request loses its connection 883ms
+ ✓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > persists a transport wait when the reserved HTTP request loses its connection 795ms
  ↓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > does not label an HTTP rejection as a transport outage
  ↓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > persists a transport wait when an accepted SSE response ends before DONE
  ↓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > persists a transport wait when the SSE socket drops after headers
@@ -22,31 +39,14 @@ $ bash scripts/agent-work/test-runtime.sh waiting_reason
  ↓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > records a Responses transport outage against its reserved HTTP call
  ↓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > rejects a cancelled managed run before the HTTP boundary
  ↓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > blocks server-endpoint compaction above the output allowance before HTTP
- ↓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rejects an invented budget reservation before claiming a native run
- ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > lets one emitter claim, keeps a crash uncertain, and recovers the exact native run 1545ms
- ↓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rejects revoked authority before claiming and fences a delayed prior request
- ↓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rechecks authority inside the worker before persisting a claim
- ↓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > refuses admission after cancellation and cannot confirm an outstanding claim
- ↓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > upgrades a version 20 task ledger without losing its registered tasks
- ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > does not commit a tool-issued task after its turn authority is revoked
- ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > rejects model-authored assignment fields outside the task contract
- ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates a logical key within one requester across turns and restarts
- ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > accepts only the current producer, generation, digest, and revision
- ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > upgrades a version 19 database before the first managed task
- ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > does not store malformed JSON or a result without its required fields 423ms
- ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > rejects an empty or unversioned review while leaving the final slot available
- ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > persists PermissionRequired as an incident without consuming the final result
- ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > reserves recovery receipts to the recovery engine instead of the token path
- ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > reserves host incidents to the host worker path instead of the token path
- ↓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates director retries within a corrida without crossing corrida authority
 
  Test Files  3 passed (3)
       Tests  3 passed | 29 skipped (32)
-   Start at  23:10:52
-   Duration  7.55s (tests 41%, transform 26%, import 25%, setup 8%)
+   Start at  02:09:24
+   Duration  7.25s (tests 41%, transform 26%, import 25%, setup 8%)
 
 [vitest-workers] verifying completed generation before cleanup
 [vitest-workers] retained completed compiler outputs for reuse
-[test] passed 1 Vitest shard in 10.74s
+[test] passed 1 Vitest shard in 10.42s
 
-rc=0 seconds=11.1
+rc=0 seconds=10.8

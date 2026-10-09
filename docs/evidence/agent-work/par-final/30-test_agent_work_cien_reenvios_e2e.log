@@ -36,12 +36,13 @@ class Result(unittest.TextTestResult):
             self._set(test, "FAIL")
 unittest.TextTestRunner(verbosity=2, resultclass=Result).run(suite)
 json.dump(status, open(out, "w"))
- scripts/tests/test-agent-work-host.py /Users/dn/dev/wt-b4-40-r1/docs/evidence/agent-work/par-final/.28.json test_host_receipts_replay_and_lost_ack
-test_host_receipts_replay_and_lost_ack (cited.HostReceipts.test_host_receipts_replay_and_lost_ack) ... ok
+ scripts/tests/test_agent_work_cien_reenvios_e2e.py /Users/dn/dev/wt-b4-40-r1/docs/evidence/agent-work/par-final/.30.json test_a_report_with_the_same_id_and_another_digest_is_rejected
+test_a_report_with_the_same_id_and_another_digest_is_rejected (cited.CienReenviosE2E.test_a_report_with_the_same_id_and_another_digest_is_rejected) ... DIGEST_CONFLICT pids=[86644] receipts=1 original_kept=1 wakes=1
+ok
 
 ----------------------------------------------------------------------
-Ran 1 test in 0.028s
+Ran 1 test in 55.243s
 
 OK
 
-rc=0 seconds=0.2
+rc=0 seconds=55.3
