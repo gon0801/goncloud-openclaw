@@ -3232,9 +3232,19 @@ class SilentPromptTest(unittest.TestCase):
         self.addCleanup(tmux_cmd, "kill-server")
 
         def start(session, text="Permission - Bash\\n> Allow once\\n  Deny\\n", painted="Allow once"):
-            created = tmux_cmd("new-session", "-d", "-s", session, "-x", "80", "-y", "20", "/bin/sh", "-c",
-                               f"printf '{text}'; exec /bin/sleep 30")
-            self.assertEqual(created.returncode, 0, f"tmux new-session {session}: {created.stderr.strip()}")
+            command = ("new-session", "-d", "-s", session, "-x", "80", "-y", "20", "/bin/sh", "-c",
+                       f"printf '{text}'; exec /bin/sleep 30")
+            created = tmux_cmd(*command)
+            if created.returncode != 0:
+                # On the GitHub Ubuntu runner the first server start can die ("server exited
+                # unexpectedly"); retry once with server logging so a second failure says why.
+                logs = Path(tempfile.mkdtemp(prefix="agent-work-tmux-log-"))
+                self.addCleanup(shutil.rmtree, logs, True)
+                created = subprocess.run([tmux, "-vv", "-L", socket, *command], capture_output=True, text=True,
+                                         stdin=subprocess.DEVNULL, cwd=logs, env={**os.environ, "HOME": home})
+                server_log = "".join(path.read_text(errors="replace")[-1500:] for path in logs.glob("tmux-server-*.log"))
+                self.assertEqual(created.returncode, 0,
+                                 f"tmux new-session {session}: {created.stderr.strip()}\n{server_log}")
             for _ in range(100):
                 if painted in tmux_cmd("capture-pane", "-p", "-t", f"={session}:").stdout:
                     return
