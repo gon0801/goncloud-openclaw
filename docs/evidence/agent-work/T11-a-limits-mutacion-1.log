@@ -1,0 +1,22 @@
+..F
+======================================================================
+FAIL: test_the_repo_limits_keep_admission_closed_while_a_limit_is_unknown (__main__.LimitsProfileTest.test_the_repo_limits_keep_admission_closed_while_a_limit_is_unknown)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_artifact.py", line 159, in test_the_repo_limits_keep_admission_closed_while_a_limit_is_unknown
+    self.assertEqual(artifact.limit_problems(limits), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['production admission is enabled with unknown limits: maxContextTokens'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'production admission is enabled with unknown limits: maxContextTokens'
+
+- ['production admission is enabled with unknown limits: maxContextTokens']
++ []
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.000s
+
+FAILED (failures=1)
+rc=1

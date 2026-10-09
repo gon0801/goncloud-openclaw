@@ -1,0 +1,65 @@
+# smoke  date=2026-10-09T21:08:07Z node=v24.19.0 PREFIX=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.b9SlvIjcim HOME=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.7szWoXz6gX
+
+$ ls -l /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.b9SlvIjcim/bin/openclaw
+lrwxr-xr-x  1 dn  staff  41 Oct  9 14:08 /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.b9SlvIjcim/bin/openclaw -> ../lib/node_modules/openclaw/openclaw.mjs
+exit=0 duration=.008s
+
+$ env HOME=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.7szWoXz6gX /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.b9SlvIjcim/bin/openclaw --version
+OpenClaw 2026.9.7 (818f0fd)
+exit=0 duration=.143s
+
+$ env HOME=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.7szWoXz6gX node /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.b9SlvIjcim/lib/node_modules/openclaw/dist/entry.js --version
+OpenClaw 2026.9.7 (818f0fd)
+exit=0 duration=.129s
+
+$ openclaw --help | head -4
+
+OpenClaw 2026.9.7 (818f0fd) — All your chats, one OpenClaw.
+
+Usage: openclaw [options] [command]
+
+$ cat dist/build-info.json
+{
+  "version": "2026.9.7",
+  "commit": "818f0fdacfb090c5ea51d29db9744ac90e977fcb",
+  "builtAt": "2026-10-09T20:59:44.058Z",
+  "buildId": "2026.9.7-release-818f0fdacfb0-2026-10-09T20-59-44.058Z"
+}
+
+
+sha256 dist/entry.js instalado = b655d5ea5dde95fd95c793adfe599a5ebf4e54253b1b8c479e7da50cd1557606
+sha256 dist/entry.js del build  = b655d5ea5dde95fd95c793adfe599a5ebf4e54253b1b8c479e7da50cd1557606 -> IGUAL
+
+# @openclaw/ai que resuelve el paquete instalado
+file:///private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.b9SlvIjcim/lib/node_modules/@openclaw/ai/dist/transports.mjs
+marcador del cambio de R (openclaw.responsesDispatchHook) en ese @openclaw/ai: 1 coincidencia(s)
+# carga del chunk raíz que importa responsesDispatchHook de @openclaw/ai/transports
+chunk load OK
+
+################ CONTRAEJEMPLO: solo el tgz raíz, sin el tgz de @openclaw/ai
+$ env HOME=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.kSHWEVgvaR npm install -g --prefix /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.L6i4mGh8I0 /Users/dn/.local/state/encargos-loop/artifacts/T11-a/paquete/openclaw-2026.9.7.tgz
+npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+
+added 343 packages in 13s
+npm warn allow-scripts 5 packages have install scripts not yet covered by allowScripts:
+npm warn allow-scripts   @google/genai@2.23.0 (preinstall: echo 'preinstall: no-op')
+npm warn allow-scripts   esbuild@0.28.2 (postinstall: node install.js)
+npm warn allow-scripts   koffi@3.3.1 (install: node ./cnoke.cjs -P . -D src/koffi --prebuild --release)
+npm warn allow-scripts   protobufjs@7.6.6 (postinstall: node scripts/postinstall)
+npm warn allow-scripts   openclaw@2026.9.7 (preinstall: node scripts/preinstall-package-manager-warning.mjs; postinstall: node scripts/postinstall-bundled-plugins.mjs)
+npm warn allow-scripts
+npm warn allow-scripts Run `npm install -g --allow-scripts=@google/genai,esbuild,koffi,protobufjs,openclaw` to allow these scripts once, or `npm config set allow-scripts=@google/genai,esbuild,koffi,protobufjs,openclaw --location=user` to allow them for all global installs.
+npm notice
+npm notice New major version of npm available! 11.17.0 -> 12.2.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+npm notice To update run: npm install -g npm@12.2.0
+npm notice
+exit=0 duration=13.113s
+
+$ env HOME=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.kSHWEVgvaR /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.L6i4mGh8I0/bin/openclaw --version
+OpenClaw 2026.9.7 (818f0fd)
+exit=0 duration=.133s
+
+file:///private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.L6i4mGh8I0/lib/node_modules/openclaw/node_modules/@openclaw/ai/dist/transports.mjs
+marcador R: 0 coincidencia(s) (npm bajó @openclaw/ai@2026.9.7 de upstream)
+chunk load FAIL: SyntaxError The requested module '@openclaw/ai/transports' does not provide an export named 'responsesDispatchHook'

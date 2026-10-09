@@ -1,12 +1,12 @@
 {
   "schema": "agent-work-limits.v1",
-  "status": "test-only",
+  "status": "production-profile-measured; admission closed while maxContextTokens is unknown",
   "source": {
     "repository": "openclaw/openclaw",
     "commit": "51e3ab940e675e03c9325c3a62a65b9d6396b945",
     "file": "src/agents/tasks/managed-task.budget.test.ts",
     "lines": "38-49",
-    "method": "synthetic fixture; no production measurement"
+    "method": "testProfile: synthetic fixture; productionProfile: measured (see productionProfile.method)"
   },
   "testProfile": {
     "maxConcurrentTasks": 2,
@@ -20,6 +20,35 @@
     "maxTreeTokens": 30,
     "maxAutomaticRecoveryCalls": 1
   },
-  "productionProfile": null,
+  "productionProfile": {
+    "values": {
+      "maxConcurrentTasks": 5,
+      "maxDepth": 2,
+      "maxChildren": 6,
+      "maxModelCalls": 2160,
+      "maxInputTokens": 669000000,
+      "maxOutputTokens": 510000,
+      "maxCacheReadTokens": 661000000,
+      "maxContextTokens": null,
+      "maxTreeTokens": 669000000,
+      "maxAutomaticRecoveryCalls": 1
+    },
+    "sources": {
+      "maxConcurrentTasks": "ceil(3 x 1.5); 3 = raiz + 2 hijos simultaneos en el arbol agent:ingenieria:subagent:c0689b4a (subagent_runs, 2026-09-25); acotado por agents.defaults.subagents.maxConcurrent efectivo 8 (ausente en openclaw.json, default agent-limits.ts:25)",
+      "maxDepth": "ceil(1 x 1.5); profundidad maxima observada 1 (8 corridas con requester_session_key de subagente, ningun nieto); acotado por 4 = maxSpawnDepth efectivo 5 (default agent-limits.ts:31) menos el nivel de la raiz",
+      "maxChildren": "ceil(4 x 1.5); maximo 4 hijos totales bajo agent:ingenieria:subagent:99edf82b (subagent_runs); registro incompleto (885 de 1923 corridas), anidamiento posiblemente subcontado",
+      "maxModelCalls": "ceil(1440 x 1.5); maximo de mensajes assistant con usage por corrida de subagente (ingenieria 2026-09-29, session_transcript_archives); n=1923, mediana 5, p95 65",
+      "maxInputTokens": "445540546 x 1.5, redondeo arriba a 3 cifras; entrada = input+cacheRead+cacheWrite por llamada (provider-stream.ts:240), suma por corrida; n=1923, mediana 112460, p95 3495223",
+      "maxOutputTokens": "252098 x 1.5 + 131072 (reserva de una llamada al maxTokens de opencode-go-resp/muse-spark-1.3-contributor en openclaw.json), redondeo arriba a 3 cifras; n=1923, mediana 2324, p95 27681",
+      "maxCacheReadTokens": "440339646 x 1.5, redondeo arriba a 3 cifras; suma cacheRead por corrida; n=1923, mediana 90918, p95 3397030",
+      "maxContextTokens": "null: el codigo aplica el limite a bytes UTF-8 del cuerpo HTTP (provider-stream.ts:147-150) y la copia no guarda esos bytes; cota inferior 568939 tokens por llamada (sin 3 atipicos de openai/gpt-5.6-sol); contextWindow declarado 1048576 (muse-spark), unknown (deepseek-v4.1-flash)",
+      "maxTreeTokens": "445792644 x 1.5, redondeo arriba a 3 cifras; arbol = entrada + salida por corrida; n=1923, mediana 114248, p95 3514452",
+      "maxAutomaticRecoveryCalls": "politica del spec 2026-09-30-encargos-agentes-design.md (una recuperacion automatica por raiz) = tope zod max(1) en zod-schema.managed-tasks.ts"
+    },
+    "rule": "máximo observado × 1,5 redondeado hacia arriba, acotado por los límites nativos efectivos; con p95 × 1,5 (98 llamadas, 5,3 M tokens por árbol) se bloquearía cerca del 5 % de las corridas observadas",
+    "measuredAt": "2026-10-09",
+    "measuredOn": "copia consistente de la Mac Mini del 2026-10-09 12:55 PDT (estado 19, 1923 corridas de subagente del 2026-09-23 al 2026-10-09)",
+    "method": "docs/evidence/agent-work/T11.md"
+  },
   "productionAdmissionEnabled": false
 }

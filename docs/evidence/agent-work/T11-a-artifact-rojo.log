@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_artifact.py", line 16, in <module>
+    import artifact  # noqa: E402
+    ^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'artifact'
+rc=1

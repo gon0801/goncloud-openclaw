@@ -1,0 +1,24 @@
+F..
+======================================================================
+FAIL: test_an_unknown_value_blocks_admission (__main__.LimitsProfileTest.test_an_unknown_value_blocks_admission)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_artifact.py", line 145, in test_an_unknown_value_blocks_admission
+    self.assertEqual(artifact.limit_problems(self.doc(True, maxContextTokens=None)),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     ["production admission is enabled with unknown limits: maxContextTokens"])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['production admission is enabled with unknown limits: maxContextTokens']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'production admission is enabled with unknown limits: maxContextTokens'
+
+- []
++ ['production admission is enabled with unknown limits: maxContextTokens']
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.000s
+
+FAILED (failures=1)
+rc=1

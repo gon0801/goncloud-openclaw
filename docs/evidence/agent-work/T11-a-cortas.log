@@ -1,0 +1,52 @@
+$ bash scripts/tests/test-candados-declarados.sh
+ok auto-prueba: los 4 estilos de ruta literal se detectan y exigen su marca
+ok ida: las 137 frases ancladas por 14 test(s) tienen su marca
+ok vuelta: las 88 marca(s) de agents/** y docs/agent-skills/** apuntan a tests que existen y afirman su frase
+TODO VERDE: candados declarados (137 frases, 88 marcas)
+rc=0
+$ bash scripts/tests/test-runbooks-no-contradicen-entorno.sh
+ok (1): el detector marca bootstrap imposible, docker run, glm viejo y comandos sin PATH; deja pasar las formas buenas y las prohibiciones
+ok (2):       25 runbooks revisados, sin bootstrap imposible, sin docker run y sin glm viejo
+ok (2b): cross-review y tmux de los autopilot y del loop con prefijo de PATH o ruta absoluta
+ok (2b-bis): ningun runbook lanza a un implementador sin PATH embebido y flag dentro del comando
+ok (2c): ningun runbook de fase designa un modelo como lead
+ok (2d): runbooks futuros revisados: autopilot-fase14.md autopilot-fase15.md autopilot-fase17.md; fixtures bueno/malo discriminan cada regla
+TODO VERDE: runbooks sin contradicciones con el kit ni con el entorno
+rc=0
+$ bash scripts/tests/test-agent-work-cutover.sh
+test_authorization_and_artifact_are_pinned (test_agent_work_cutover.CutoverTest.test_authorization_and_artifact_are_pinned) ... ok
+test_cutover_fencing_preserves_capture_pending_and_session (test_agent_work_cutover.CutoverTest.test_cutover_fencing_preserves_capture_pending_and_session) ... ok
+test_failed_rollback_freezes_admission_and_keeps_new_binary (test_agent_work_cutover.CutoverTest.test_failed_rollback_freezes_admission_and_keeps_new_binary) ... ok
+test_old_authorization_cannot_reuse_generation_after_rollback (test_agent_work_cutover.CutoverTest.test_old_authorization_cannot_reuse_generation_after_rollback) ... ok
+test_schema_incompatible_rollback_freezes_without_downgrade (test_agent_work_cutover.CutoverTest.test_schema_incompatible_rollback_freezes_without_downgrade) ... ok
+test_uncertainty_or_old_cron_in_flight_fails_closed (test_agent_work_cutover.CutoverTest.test_uncertainty_or_old_cron_in_flight_fails_closed) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.704s
+
+OK
+test_the_repo_manifest_matches_the_reviewed_runtime (test_agent_work_artifact.ArtifactManifestTest.test_the_repo_manifest_matches_the_reviewed_runtime) ... ok
+test_a_missing_package_file_is_refused (test_agent_work_artifact.ArtifactVerifyTest.test_a_missing_package_file_is_refused) ... ok
+test_a_newer_schema_cannot_be_declared_readable_by_the_previous_binary (test_agent_work_artifact.ArtifactVerifyTest.test_a_newer_schema_cannot_be_declared_readable_by_the_previous_binary) ... ok
+test_a_package_built_from_another_commit_is_refused (test_agent_work_artifact.ArtifactVerifyTest.test_a_package_built_from_another_commit_is_refused) ... ok
+test_a_package_that_is_not_the_recorded_one_is_refused (test_agent_work_artifact.ArtifactVerifyTest.test_a_package_that_is_not_the_recorded_one_is_refused) ... ok
+test_an_entry_point_that_is_not_the_reviewed_build_is_refused (test_agent_work_artifact.ArtifactVerifyTest.test_an_entry_point_that_is_not_the_reviewed_build_is_refused) ... ok
+test_the_built_packages_of_the_reviewed_source_verify (test_agent_work_artifact.ArtifactVerifyTest.test_the_built_packages_of_the_reviewed_source_verify) ... ok
+test_the_cli_exits_with_the_problems (test_agent_work_artifact.ArtifactVerifyTest.test_the_cli_exits_with_the_problems) ... ok
+test_the_migrations_must_be_the_schema_of_both_commits (test_agent_work_artifact.ArtifactVerifyTest.test_the_migrations_must_be_the_schema_of_both_commits) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 1.419s
+
+OK
+rc=0
+$ bash scripts/tests/test-instalar-mac.sh
+OK test-instalar-mac
+rc=0
+$ python3 scripts/tests/test_agent_work_acceptance.py
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.009s
+
+OK
+rc=0

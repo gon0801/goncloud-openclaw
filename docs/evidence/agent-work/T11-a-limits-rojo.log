@@ -1,0 +1,33 @@
+EEE
+======================================================================
+ERROR: test_an_unknown_value_blocks_admission (__main__.LimitsProfileTest.test_an_unknown_value_blocks_admission)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_artifact.py", line 144, in test_an_unknown_value_blocks_admission
+    self.assertEqual(artifact.limit_problems(self.doc(maxContextTokens=None)), [])
+                     ^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'artifact' has no attribute 'limit_problems'
+
+======================================================================
+ERROR: test_every_limit_is_finite_positive_and_sourced (__main__.LimitsProfileTest.test_every_limit_is_finite_positive_and_sourced)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_artifact.py", line 153, in test_every_limit_is_finite_positive_and_sourced
+    self.assertEqual(artifact.limit_problems(bad), [
+                     ^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'artifact' has no attribute 'limit_problems'
+
+======================================================================
+ERROR: test_the_repo_limits_keep_admission_closed_while_a_limit_is_unknown (__main__.LimitsProfileTest.test_the_repo_limits_keep_admission_closed_while_a_limit_is_unknown)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_artifact.py", line 159, in test_the_repo_limits_keep_admission_closed_while_a_limit_is_unknown
+    self.assertEqual(artifact.limit_problems(limits), [])
+                     ^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'artifact' has no attribute 'limit_problems'
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.001s
+
+FAILED (errors=3)
+rc=1
