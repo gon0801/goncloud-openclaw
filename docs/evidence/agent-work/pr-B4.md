@@ -2,7 +2,7 @@
 
 Cuerpo del PR de `encargos/b4` a `main`. Lo abre el cierre del bloque con `gh pr create --body-file docs/evidence/agent-work/pr-B4.md`, después de la batería del bloque (`B4-bateria`, plan `:284`).
 
-Cubre T8 (7/7), T9 (10/10) y T10 (7/8 al escribir esto; `:284` lo cierra `B4-bateria`) del plan `docs/superpowers/plans/2026-09-30-encargos-agentes.md`.
+Cubre T8 (7/7), T9 (10/10) y T10 (8/8) del plan `docs/superpowers/plans/2026-09-30-encargos-agentes.md`.
 
 ## Dependencias exactas
 
@@ -43,4 +43,4 @@ Están en la tabla de `followups.md`, cada uno con su condición de cierre y su 
 
 ## Batería del bloque
 
-La agrega `B4-bateria` (plan `:284`): el artefacto nativo con integridad registrada y una sola corrida de las baterías completas.
+Corrida una sola vez el 2026-10-09; detalle, comandos e integridad en `B4-bateria.md`. El artefacto nativo de R `978355503c44` se construyó en copia aislada (install y build exit 0; sha256 de `dist/entry.js` y digest del árbol de `dist`, 13 884 archivos, registrados; `pnpm pack` sale 1 por `bundleDependencies` con `nodeLinker: isolated`, error literal anotado sin arreglo). La batería de G (39 min 44 s) dejó 100 ok y `test-cli-modos.sh` rojo por el drift de inventario conocido, idéntico sobre la base `77fafb0f`: limitación de la base. La batería de R (613 objetivos, 29/29 shards, 1 h 57 min) dejó 12 líneas `×` en 3 archivos, los tres conocidos de B3 (recovery por tiempos; tui-pty y sandbox Docker de la base pública), sin fallas nuevas; la fila `scheduleRestartSentinelWake` de `followups.md` sigue pendiente porque su archivo no entró a los objetivos (import dinámico no casado por el selector).

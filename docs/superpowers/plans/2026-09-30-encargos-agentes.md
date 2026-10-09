@@ -281,7 +281,7 @@ Depende de T9. Crea `G/scripts/tests/test-agent-work-e2e.sh`, `docs/evidence/age
 - [x] Ejecuta los casos en rojo antes de corregir cualquier fallo de integración.
 - [x] Completa la matriz de aceptación enlazando cada caso con su prueba y el par de SHA de `G` y `R`.
 - [x] Ejecuta las pruebas focalizadas y resuelve los hallazgos del bloque.
-- [ ] Construye el artefacto nativo con integridad registrada. Ejecuta una sola vez las baterías completas del bloque en los jobs correspondientes.
+- [x] Construye el artefacto nativo con integridad registrada. Ejecuta una sola vez las baterías completas del bloque en los jobs correspondientes.
 - [x] Prepara los PR con las dependencias exactas, evidencia y limitaciones de adaptadores. Conserva deshabilitada la admisión productiva.
 
 Verifica con `bash scripts/tests/test-agent-work-e2e.sh review_tail_restart` y `acceptance`. La aceptación exige también `delivery_latency`, `idle_72h`, `resource_100_cycles` y los cien reenvíos, con evidencia reutilizada del mismo SHA cuando sea válida.
