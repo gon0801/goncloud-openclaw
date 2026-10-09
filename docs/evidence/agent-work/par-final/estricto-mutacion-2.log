@@ -1,0 +1,23 @@
+..F
+======================================================================
+FAIL: test_everything_is_complete_on_one_pair (__main__.AcceptanceStrictTest.test_everything_is_complete_on_one_pair)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 250, in test_everything_is_complete_on_one_pair
+    self.assertEqual(pair_problems(matrix_refs(matrix_rows()), (g_sha, r_sha), doc, changed), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['scripts/tests/test_agent_work_crash_boun[124 chars]out'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'scripts/tests/test_agent_work_crash_boundaries_e2e.py::test_a_cancellation_then_a_late_result_wakes_nobody skipped: set AGENT_WORK_RUNTIME_SOURCE to a built R checkout'
+
++ []
+- ['scripts/tests/test_agent_work_crash_boundaries_e2e.py::test_a_cancellation_then_a_late_result_wakes_nobody '
+-  'skipped: set AGENT_WORK_RUNTIME_SOURCE to a built R checkout']
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.028s
+
+FAILED (failures=1)
+rc=1

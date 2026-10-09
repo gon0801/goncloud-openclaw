@@ -279,10 +279,10 @@ Depende de T9. Crea `G/scripts/tests/test-agent-work-e2e.sh`, `docs/evidence/age
 - [x] Añade `delivery_latency` con reloj controlado: desde la escritura durable del informe hasta su detección, hasta 5 segundos; desde la detección hasta el recibo durable, hasta otros 5 segundos. Simula hosts despiertos y red sana; guarda ambas mediciones por separado.
 - [x] Añade las fronteras de caída de la especificación con un contador externo de procesos y peticiones. Comprueba los resultados de dominio, no solo filas de la base.
 - [x] Ejecuta los casos en rojo antes de corregir cualquier fallo de integración.
-- [ ] Completa la matriz de aceptación enlazando cada caso con su prueba y el par de SHA de `G` y `R`.
-- [ ] Ejecuta las pruebas focalizadas y resuelve los hallazgos del bloque.
+- [x] Completa la matriz de aceptación enlazando cada caso con su prueba y el par de SHA de `G` y `R`.
+- [x] Ejecuta las pruebas focalizadas y resuelve los hallazgos del bloque.
 - [ ] Construye el artefacto nativo con integridad registrada. Ejecuta una sola vez las baterías completas del bloque en los jobs correspondientes.
-- [ ] Prepara los PR con las dependencias exactas, evidencia y limitaciones de adaptadores. Conserva deshabilitada la admisión productiva.
+- [x] Prepara los PR con las dependencias exactas, evidencia y limitaciones de adaptadores. Conserva deshabilitada la admisión productiva.
 
 Verifica con `bash scripts/tests/test-agent-work-e2e.sh review_tail_restart` y `acceptance`. La aceptación exige también `delivery_latency`, `idle_72h`, `resource_100_cycles` y los cien reenvíos, con evidencia reutilizada del mismo SHA cuando sea válida.
 
