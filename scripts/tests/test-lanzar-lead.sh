@@ -45,15 +45,13 @@ echo "ok (4): sin prompt no manda nada y sale con 4"
 
 # 5. T9 :266: lanzar-lead no relanza una sesion gestionada (encargo_ref o host_id en una
 # corrida abierta): la relanza su host. Filas: las dos claves, solo host_id, solo
-# encargo_ref, claves vacias con encargo plano, gestionada de una corrida cerrada, un
-# registro ilegible de otra corrida y un registro que no se puede recorrer.
+# encargo_ref, claves vacias con encargo plano, gestionada de una corrida cerrada y un
+# registro que no se puede recorrer.
 reg() { # $1 corrida $2 estado $3 sesion $4 json extra de la entrada
   mkdir -p "$CORRIDA_STATE/$1"
   printf '{"id": "%s", "estado": "%s", "sesiones": [{"nombre": "%s", "rol": "lead", "cli": "glm", "dir": "/tmp"%s}]}\n' \
     "$1" "$2" "$3" "$4" >"$CORRIDA_STATE/$1/registro.json"
 }
-mkdir -p "$CORRIDA_STATE/r-roto"
-printf '{no es json' >"$CORRIDA_STATE/r-roto/registro.json"
 for fila in "s5a r5a ambas" "s5h r5h host" "s5r r5r ref"; do
   set -- $fila
   case "$3" in
@@ -81,7 +79,7 @@ out=$(bash scripts/lanzar-lead.sh -s s9 -c "$CWD" -m 'x -saikit' -p 'FAKE>' -t 5
 [ "$rc" -eq 6 ] && [ "$(printf '%s\n' "$out" | tail -1)" = "ATORADO no pude comprobar si s9 es una sesion gestionada" ] \
   || fail "(5) un registro que no se puede recorrer debia frenar el lanzamiento: rc=$rc $out"
 "$TMUX_BIN" has-session -t "=s9" 2>/dev/null && fail "(5) con el registro sin recorrer se creo la sesion s9"
-echo "ok (5): una sesion gestionada no se relanza (dos claves, una sola, cualquier corrida abierta); claves vacias, corrida cerrada o registro ilegible ajeno, como siempre; sin poder comprobar, no lanza"
+echo "ok (5): una sesion gestionada no se relanza (dos claves, una sola, cualquier corrida abierta); claves vacias o corrida cerrada, como siempre; sin poder comprobar, no lanza"
 
 # 5c. Filas que faltaban. Cada una con su propio CORRIDA_STATE, para que el
 # registro r9 (sesiones: 5) de arriba no las frene.
@@ -120,5 +118,14 @@ S="$T/c-raros"; regen "$S" r14a '[]'; regen "$S" r14b '{"id": "r14b", "estado": 
 regen "$S" r14c '{"id": "r14c", "estado": "abierta", "sesiones": [{"nombre": "s14", "host_id": null, "encargo_ref": null}]}'
 lanza_ok s14 "registro no-objeto, entradas no-objeto y claves null no son gestion" CORRIDA_STATE="$S"
 echo "ok (5c): sin CORRIDA_STATE lee el default; nombre repetido entre corridas; la corrida es el directorio; sin corridas, registros raros y null lanzan"
+
+# 5d. B4-28: un registro.json ilegible podria ser el de la corrida duena de la
+# gestionada; sin leerlo no se sabe, asi que frena como cualquier registro sin comprobar.
+S="$T/c-roto"; regen "$S" r15 '{no es json'
+out=$(CORRIDA_STATE="$S" bash scripts/lanzar-lead.sh -s s15 -c "$CWD" -m 'x -saikit' -p 'FAKE>' -t 5 -- "$CLI" 2>&1); rc=$?
+[ "$rc" -eq 6 ] && [ "$(printf '%s\n' "$out" | tail -1)" = "ATORADO no pude comprobar si s15 es una sesion gestionada" ] \
+  || fail "(5d) un registro ilegible debia frenar el lanzamiento: rc=$rc $out"
+"$TMUX_BIN" has-session -t "=s15" 2>/dev/null && fail "(5d) con un registro ilegible se creo la sesion s15"
+echo "ok (5d): un registro ilegible frena el lanzamiento (rc 6) en vez de saltarse"
 
 echo "TODO VERDE: lanzar-lead"

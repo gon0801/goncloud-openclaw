@@ -1,0 +1,128 @@
+# Hallazgo 2 mutacion 2: [[:space:]]+ pasa a ' +' (solo espacios, sin tabulador) (el log muestra el diff completo contra HEAD; la mutacion es la linea del patron)
+# copia: /private/tmp/claude-501/-Users-dn-dev-goncloud-openclaw/0d327440-0586-4e4c-86b0-f8b3bd36ebc8/scratchpad/b439res.ia9M/g @ e72027a2ed58735729fc2ddbb2eb9571253cb6ae
+# fecha: 2026-10-09T05:12:38Z
+# comando: python3 scripts/tests/test-agent-work-routing.py -v
+# diff aplicado en scripts/tests/test-agent-work-routing.py:
+#   diff --git a/scripts/tests/test-agent-work-routing.py b/scripts/tests/test-agent-work-routing.py
+#   index a88aace..5870600 100644
+#   --- a/scripts/tests/test-agent-work-routing.py
+#   +++ b/scripts/tests/test-agent-work-routing.py
+#   @@ -3,6 +3,7 @@
+#
+#    import hashlib
+#    import json
+#   +import os
+#    from pathlib import Path
+#    import subprocess
+#    import sys
+#   @@ -17,6 +18,15 @@ from routing import prepare_request, RouteUnavailable  # noqa: E402
+#    import routing  # noqa: E402
+#
+#
+#   +def repo_wake_sources(root):
+#   +    # T9 :266: tambien quien pone la marca del vigilante y los runbooks que lo hacen.
+#   +    return subprocess.run(
+#   +        ["git", "grep", "-l", "-E", "--", "--vigia|vigia-mac|\"\\$vigia\" = \"claw\"|OPENCLAW_WATCH +1",
+#   +         "--", "scripts", "agents", "docs/runbooks", ":!scripts/tests"],
+#   +        cwd=root, capture_output=True, text=True, check=True,
+#   +    ).stdout.splitlines()
+#   +
+#   +
+#    class AgentsRouting(unittest.TestCase):
+#        def setUp(self):
+#            self.temp = tempfile.TemporaryDirectory()
+#   @@ -224,12 +234,7 @@ class AgentsRouting(unittest.TestCase):
+#            sources = [entry["source"] for entry in wakes["entries"]]
+#            recreators = [recreator["path"] for entry in wakes["entries"]
+#                          for recreator in entry["recreators"]]
+#   -        listed = subprocess.run(
+#   -            # T9 :266: tambien quien pone la marca del vigilante y los runbooks que lo hacen.
+#   -            ["git", "grep", "-l", "--", "--vigia\\|vigia-mac\\|\"$vigia\" = \"claw\"\\|OPENCLAW_WATCH 1",
+#   -             "--", "scripts", "agents", "docs/runbooks", ":!scripts/tests"],
+#   -            cwd=ROOT, capture_output=True, text=True, check=True,
+#   -        ).stdout.splitlines()
+#   +        listed = repo_wake_sources(ROOT)
+#            self.assertTrue(listed, "git grep found no repo wake sources")
+#            for path in listed:
+#                self.assertTrue(
+#   @@ -262,6 +267,32 @@ class AgentsRouting(unittest.TestCase):
+#                        f"recreator {recreator} of {entry['name']} needs exactly path, line, state",
+#                    )
+#
+#   +    def test_wake_source_search_sees_the_mark_with_any_spacing(self):
+#   +        # B4-28: la busqueda del inventario ve la marca con mas de un espacio o un tabulador,
+#   +        # como la de B4-22, y sigue viendo las otras fuentes.
+#   +        repo = self.root / "repo"
+#   +        files = {
+#   +            "scripts/una.sh": "tmux set-environment -t s OPENCLAW_WATCH 1\n",
+#   +            "scripts/dos.sh": "tmux set-environment -t s OPENCLAW_WATCH  1\n",
+#   +            "scripts/tab.sh": "tmux set-environment -t s OPENCLAW_WATCH\t1\n",
+#   +            "scripts/vigia.sh": "lanzar --vigia claw\n",
+#   +            "scripts/mac.sh": "usa vigia-mac\n",
+#   +            "scripts/claw.sh": 'if [ "$vigia" = "claw" ]; then :; fi\n',
+#   +            "scripts/run.sh": "tmux set-environment -t s OPENCLAW_WATCH_RUN r1\n",
+#   +            "scripts/tests/t.sh": "tmux set-environment -t s OPENCLAW_WATCH  1\n",
+#   +        }
+#   +        for name, text in files.items():
+#   +            (repo / name).parent.mkdir(parents=True, exist_ok=True)
+#   +            (repo / name).write_text(text, encoding="utf-8")
+#   +        with mock.patch.dict(os.environ):
+#   +            for key in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"):
+#   +                os.environ.pop(key, None)
+#   +            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+#   +            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+#   +            listed = repo_wake_sources(repo)
+#   +        self.assertEqual(listed, ["scripts/claw.sh", "scripts/dos.sh", "scripts/mac.sh", "scripts/tab.sh",
+#   +                                  "scripts/una.sh", "scripts/vigia.sh"])
+#   +
+#        def test_every_inventory_entry_is_migrated_or_declared_out(self):
+#            # T9 :265: cada entrada del inventario queda gestionada (preparada y apagada), protegida en el
+#            # perimetro o declarada fuera con su razon. Lo que se exige sale del repo, no de las filas.
+test_agent_instructions_call_the_guarded_route_and_keep_legacy_outside (__main__.AgentsRouting.test_agent_instructions_call_the_guarded_route_and_keep_legacy_outside) ... ok
+test_cli_prints_native_submit_parameters (__main__.AgentsRouting.test_cli_prints_native_submit_parameters) ... ok
+test_cli_route_is_limited_to_its_requester (__main__.AgentsRouting.test_cli_route_is_limited_to_its_requester) ... ok
+test_every_doc_that_marks_a_session_names_the_managed_exception (__main__.AgentsRouting.test_every_doc_that_marks_a_session_names_the_managed_exception) ... ok
+test_every_inventory_entry_is_migrated_or_declared_out (__main__.AgentsRouting.test_every_inventory_entry_is_migrated_or_declared_out) ... ok
+test_every_live_cron_is_classified (__main__.AgentsRouting.test_every_live_cron_is_classified) ... ok
+test_ingenieria_to_adversary_preserves_target_and_brief (__main__.AgentsRouting.test_ingenieria_to_adversary_preserves_target_and_brief) ... ok
+test_legacy_dispatch_routes_are_declared_outside_the_perimeter (__main__.AgentsRouting.test_legacy_dispatch_routes_are_declared_outside_the_perimeter) ... ok
+test_main_cli_loop_instructions_keep_the_route_disabled_until_certified (__main__.AgentsRouting.test_main_cli_loop_instructions_keep_the_route_disabled_until_certified) ... ok
+test_main_cli_route_stays_disabled_until_mac_local_is_certified (__main__.AgentsRouting.test_main_cli_route_stays_disabled_until_mac_local_is_certified) ... ok
+test_model_wakes_inventory_lists_every_repo_wake_source (__main__.AgentsRouting.test_model_wakes_inventory_lists_every_repo_wake_source) ... ok
+test_operaciones_to_ingenieria_keeps_operaciones_as_requester (__main__.AgentsRouting.test_operaciones_to_ingenieria_keeps_operaciones_as_requester) ... ok
+test_outside_managed_perimeter_is_rejected (__main__.AgentsRouting.test_outside_managed_perimeter_is_rejected) ... ok
+test_parallel_preparation_never_observes_partial_artifact (__main__.AgentsRouting.test_parallel_preparation_never_observes_partial_artifact) ... ok
+test_remote_cli_requires_certified_host_adapter (__main__.AgentsRouting.test_remote_cli_requires_certified_host_adapter) ... ok
+test_wake_source_search_sees_the_mark_with_any_spacing (__main__.AgentsRouting.test_wake_source_search_sees_the_mark_with_any_spacing) ... FAIL
+
+======================================================================
+FAIL: test_wake_source_search_sees_the_mark_with_any_spacing (__main__.AgentsRouting.test_wake_source_search_sees_the_mark_with_any_spacing)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-dn-dev-goncloud-openclaw/0d327440-0586-4e4c-86b0-f8b3bd36ebc8/scratchpad/b439res.ia9M/g/scripts/tests/test-agent-work-routing.py", line 293, in test_wake_source_search_sees_the_mark_with_any_spacing
+    self.assertEqual(listed, ["scripts/claw.sh", "scripts/dos.sh", "scripts/mac.sh", "scripts/tab.sh",
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                              "scripts/una.sh", "scripts/vigia.sh"])
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['scr[43 chars]ac.sh', 'scripts/una.sh', 'scripts/vigia.sh'] != ['scr[43 chars]ac.sh', 'scripts/tab.sh', 'scripts/una.sh', 'scripts/vigia.sh']
+
+First differing element 3:
+'scripts/una.sh'
+'scripts/tab.sh'
+
+Second list contains 1 additional elements.
+First extra element 5:
+'scripts/vigia.sh'
+
+  ['scripts/claw.sh',
+   'scripts/dos.sh',
+   'scripts/mac.sh',
++  'scripts/tab.sh',
+   'scripts/una.sh',
+   'scripts/vigia.sh']
+
+----------------------------------------------------------------------
+Ran 16 tests in 0.113s
+
+FAILED (failures=1)
+rc=1

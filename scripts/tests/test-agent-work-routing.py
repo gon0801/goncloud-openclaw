@@ -3,6 +3,7 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -15,6 +16,16 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 from routing import prepare_request, RouteUnavailable  # noqa: E402
 import routing  # noqa: E402
+import native_gateway  # noqa: E402
+
+
+def repo_wake_sources(root):
+    # T9 :266: tambien quien pone la marca del vigilante y los runbooks que lo hacen.
+    return subprocess.run(
+        ["git", "grep", "-l", "-E", "--", "--vigia|vigia-mac|\"\\$vigia\" = \"claw\"|OPENCLAW_WATCH[[:space:]]+1",
+         "--", "scripts", "agents", "docs/runbooks", ":!scripts/tests"],
+        cwd=root, capture_output=True, text=True, check=True,
+    ).stdout.splitlines()
 
 
 class AgentsRouting(unittest.TestCase):
@@ -58,6 +69,26 @@ class AgentsRouting(unittest.TestCase):
         request = self.request("ingenieria", "windows-remote/codex", coverage=certified)
         self.assertEqual(request["assignment"]["target"],
                          {"kind": "cli", "hostId": "windows-remote", "adapterId": "codex"})
+
+    def test_no_inventory_cli_is_certified_so_no_cli_route_or_claim_opens(self):
+        class Client:
+            def claim_host(self, *_):
+                raise AssertionError("an uncertified adapter must not reach the gateway")
+
+        refused = []
+        for requester, host_id in sorted(routing.CLI_ROUTES):
+            for adapter_id in self.coverage["cliAdapters"]:
+                with self.assertRaisesRegex(RouteUnavailable, f"route {host_id}/{adapter_id} is not certified"):
+                    self.request(requester, f"{host_id}/{adapter_id}")
+                client = Client()
+                client.host_id = host_id
+                with self.assertRaisesRegex(ValueError, "host adapter route is not certified"):
+                    native_gateway.claim_cli_once(client, host=None, manager=None, adapter_id=adapter_id,
+                                                  instance_id="instance-one", session="worker-one",
+                                                  workspace_root=self.root, deliver=lambda *_: None,
+                                                  coverage=self.coverage)
+                refused.append(f"{host_id}/{adapter_id}")
+        self.assertEqual(len(refused), 14)
 
     def test_cli_route_is_limited_to_its_requester(self):
         certified = json.loads(json.dumps(self.coverage))
@@ -224,12 +255,7 @@ class AgentsRouting(unittest.TestCase):
         sources = [entry["source"] for entry in wakes["entries"]]
         recreators = [recreator["path"] for entry in wakes["entries"]
                       for recreator in entry["recreators"]]
-        listed = subprocess.run(
-            # T9 :266: tambien quien pone la marca del vigilante y los runbooks que lo hacen.
-            ["git", "grep", "-l", "--", "--vigia\\|vigia-mac\\|\"$vigia\" = \"claw\"\\|OPENCLAW_WATCH 1",
-             "--", "scripts", "agents", "docs/runbooks", ":!scripts/tests"],
-            cwd=ROOT, capture_output=True, text=True, check=True,
-        ).stdout.splitlines()
+        listed = repo_wake_sources(ROOT)
         self.assertTrue(listed, "git grep found no repo wake sources")
         for path in listed:
             self.assertTrue(
@@ -261,6 +287,32 @@ class AgentsRouting(unittest.TestCase):
                     set(recreator), {"path", "line", "state"},
                     f"recreator {recreator} of {entry['name']} needs exactly path, line, state",
                 )
+
+    def test_wake_source_search_sees_the_mark_with_any_spacing(self):
+        # B4-28: la busqueda del inventario ve la marca con mas de un espacio o un tabulador,
+        # como la de B4-22, y sigue viendo las otras fuentes.
+        repo = self.root / "repo"
+        files = {
+            "scripts/una.sh": "tmux set-environment -t s OPENCLAW_WATCH 1\n",
+            "scripts/dos.sh": "tmux set-environment -t s OPENCLAW_WATCH  1\n",
+            "scripts/tab.sh": "tmux set-environment -t s OPENCLAW_WATCH\t1\n",
+            "scripts/vigia.sh": "lanzar --vigia claw\n",
+            "scripts/mac.sh": "usa vigia-mac\n",
+            "scripts/claw.sh": 'if [ "$vigia" = "claw" ]; then :; fi\n',
+            "scripts/run.sh": "tmux set-environment -t s OPENCLAW_WATCH_RUN r1\n",
+            "scripts/tests/t.sh": "tmux set-environment -t s OPENCLAW_WATCH  1\n",
+        }
+        for name, text in files.items():
+            (repo / name).parent.mkdir(parents=True, exist_ok=True)
+            (repo / name).write_text(text, encoding="utf-8")
+        with mock.patch.dict(os.environ):
+            for key in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"):
+                os.environ.pop(key, None)
+            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            listed = repo_wake_sources(repo)
+        self.assertEqual(listed, ["scripts/claw.sh", "scripts/dos.sh", "scripts/mac.sh", "scripts/tab.sh",
+                                  "scripts/una.sh", "scripts/vigia.sh"])
 
     def test_every_inventory_entry_is_migrated_or_declared_out(self):
         # T9 :265: cada entrada del inventario queda gestionada (preparada y apagada), protegida en el

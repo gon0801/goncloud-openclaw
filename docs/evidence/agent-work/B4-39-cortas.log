@@ -1,0 +1,196 @@
+$ bash scripts/tests/test-candados-declarados.sh
+ok auto-prueba: los 4 estilos de ruta literal se detectan y exigen su marca
+ok ida: las 137 frases ancladas por 14 test(s) tienen su marca
+ok vuelta: las 88 marca(s) de agents/** y docs/agent-skills/** apuntan a tests que existen y afirman su frase
+TODO VERDE: candados declarados (137 frases, 88 marcas)
+rc=0
+$ bash scripts/tests/test-runbooks-no-contradicen-entorno.sh
+ok (1): el detector marca bootstrap imposible, docker run, glm viejo y comandos sin PATH; deja pasar las formas buenas y las prohibiciones
+ok (2):       25 runbooks revisados, sin bootstrap imposible, sin docker run y sin glm viejo
+ok (2b): cross-review y tmux de los autopilot y del loop con prefijo de PATH o ruta absoluta
+ok (2b-bis): ningun runbook lanza a un implementador sin PATH embebido y flag dentro del comando
+ok (2c): ningun runbook de fase designa un modelo como lead
+ok (2d): runbooks futuros revisados: autopilot-fase14.md autopilot-fase15.md autopilot-fase17.md; fixtures bueno/malo discriminan cada regla
+TODO VERDE: runbooks sin contradicciones con el kit ni con el entorno
+rc=0
+$ bash scripts/tests/test-agent-work-e2e.sh
+{"closed": 0, "incidents": 0, "reported": 1, "transferred": 0}
+DELIVERY_LATENCY {"detection_to_persisted_receipt_s": 0.25, "write_to_detection_s": 4.999}
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.010s
+
+OK
+ss
+----------------------------------------------------------------------
+Ran 2 tests in 0.000s
+
+OK (skipped=2)
+s
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK (skipped=1)
+s
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK (skipped=1)
+ss
+----------------------------------------------------------------------
+Ran 2 tests in 0.000s
+
+OK (skipped=2)
+s
+----------------------------------------------------------------------
+Ran 0 tests in 0.000s
+
+OK (skipped=1)
+s
+----------------------------------------------------------------------
+Ran 0 tests in 0.000s
+
+OK (skipped=1)
+sssssssss
+----------------------------------------------------------------------
+Ran 9 tests in 0.000s
+
+OK (skipped=9)
+s
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK (skipped=1)
+s
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK (skipped=1)
+s
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK (skipped=1)
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.009s
+
+OK
+rc=0
+$ python3 scripts/tests/test-agent-work-routing.py
+.................
+----------------------------------------------------------------------
+Ran 17 tests in 0.128s
+
+OK
+rc=0
+$ python3 scripts/tests/test-agent-work-integration.py
+.............................................s..............{"closed": 0, "incidents": 0, "reported": 1, "transferred": 0}
+DELIVERY_LATENCY {"detection_to_persisted_receipt_s": 0.25, "write_to_detection_s": 4.999}
+.{"closed": 0, "incidents": 0, "reported": 1, "transferred": 0}
+......................................................
+----------------------------------------------------------------------
+Ran 115 tests in 6.320s
+
+OK (skipped=1)
+rc=0
+$ bash scripts/tests/test-lanzar-lead.sh
+ok (1): cwd inexistente aborta con 1
+ok (2): crea la sesión en el cwd, la marca, espera el prompt y el mensaje entra con su sentinel
+ok (3): con la sesión viva no relanza (YA-EXISTE, rc 2)
+ok (4): sin prompt no manda nada y sale con 4
+ok (5): una sesion gestionada no se relanza (dos claves, una sola, cualquier corrida abierta); claves vacias o corrida cerrada, como siempre; sin poder comprobar, no lanza
+ok (5c): sin CORRIDA_STATE lee el default; nombre repetido entre corridas; la corrida es el directorio; sin corridas, registros raros y null lanzan
+ok (5d): un registro ilegible frena el lanzamiento (rc 6) en vez de saltarse
+TODO VERDE: lanzar-lead
+rc=0
+$ bash scripts/tests/test-corrida-avisos.sh
+ok (a): emision feliz escribe un aviso valido y despierta al lead
+ok (b): la misma llave deduplica por identidad, otra llave emite otro aviso
+ok (c): sesion ajena, corrida cerrada e inexistente caen con rc 3 y sin escritura
+ok (d): dueno ocupado o lead ausente no reciben teclas y el pendiente persiste
+avisos: 2 atendidos, 0 descartados
+ok (e): atender reclama por rename, marca atendido y corre reconciliar una sola vez
+avisos: 0 atendidos, 1 descartados
+avisos: 0 atendidos, 1 descartados
+ok (f): aviso tardio de sesion fuera del registro o corrida cerrada queda descartado con motivo
+ok (g): dos emitir concurrentes con la misma llave convergen en un solo aviso
+ok (h): CORRIDA_AVISOS=0 deja emitir, atender y despertar en no-op
+ok (i): metadatos invalidos caen con rc 2 y sin escritura
+ok (j): despertar reintenta el despertar del lead sin tocar los pendientes
+ok (k-con-run): el hook de una corrida manda avisos emitir con la llave del mtime y nada a vigia-mac
+ok (k-sin-run): sin corrida la llamada del hook es identica a la de siempre
+ok (k-reversa): CORRIDA_AVISOS=0 devuelve el hook a la ruta de vigia-mac
+ok (k-managed): Stop gestionado sin informe no despierta modelo
+ok (l): con el lock no cedido, atender no reclama nada y sale 1
+ok (m): un dialogo Run this command? frena el despertar sin teclear
+ok (n): atender solo trata lo que reclamo en su pasada
+ok (p): el recordatorio con la misma llave no pisa el tratado previo
+ok (o): despertar con varias corridas despierta a cada una
+ok (q): una gestionada no emite (rc 3, sin aviso ni teclas) y su pendiente viejo se descarta; claves vacias, null y encargo plano, como siempre
+ok (r): un pendiente sin sesion, sin gestionadas en la corrida, se descarta como no registrado
+TODO VERDE: test-corrida-avisos (U1 + U3 hook)
+rc=0
+$ bash scripts/tests/test-corrida-latido.sh
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+TODO VERDE: test-corrida-latido
+rc=0
+$ /bin/bash scripts/tests/test-corrida-latido.sh
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+TODO VERDE: test-corrida-latido
+rc=0
+$ /bin/bash scripts/tests/test-lanzar-lead.sh
+ok (1): cwd inexistente aborta con 1
+ok (2): crea la sesión en el cwd, la marca, espera el prompt y el mensaje entra con su sentinel
+ok (3): con la sesión viva no relanza (YA-EXISTE, rc 2)
+ok (4): sin prompt no manda nada y sale con 4
+ok (5): una sesion gestionada no se relanza (dos claves, una sola, cualquier corrida abierta); claves vacias o corrida cerrada, como siempre; sin poder comprobar, no lanza
+ok (5c): sin CORRIDA_STATE lee el default; nombre repetido entre corridas; la corrida es el directorio; sin corridas, registros raros y null lanzan
+ok (5d): un registro ilegible frena el lanzamiento (rc 6) en vez de saltarse
+TODO VERDE: lanzar-lead
+rc=0
+$ python3 scripts/tests/test_agent_work_acceptance.py
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.009s
+
+OK
+rc=0

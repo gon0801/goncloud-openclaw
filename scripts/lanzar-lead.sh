@@ -51,10 +51,8 @@ hallazgo=$(CORRIDA_STATE="${CORRIDA_STATE:-$HOME/.local/state/corridas}" CORRIDA
 import glob, json, os
 encontrada = None
 for ruta in sorted(glob.glob(os.environ["CORRIDA_STATE"] + "/*/registro.json")):
-    try:
-        d = json.load(open(ruta))
-    except Exception:
-        continue
+    # Un registro ilegible puede ser el de la corrida duena: no se salta, frena (sin salida => ATORADO).
+    d = json.load(open(ruta))
     if not isinstance(d, dict) or d.get("estado") != "abierta":
         continue
     for s in d.get("sesiones") or []:

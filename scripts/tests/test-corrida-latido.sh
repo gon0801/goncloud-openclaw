@@ -90,6 +90,27 @@ chmod +x "$T/bin/tmux-falso" "$T/bin/gh-falso" "$T/bin/openclaw"
 export TMUX_BIN="$T/bin/tmux-falso" GH_BIN="$T/bin/gh-falso" OPENCLAW_BIN="$T/bin/openclaw"
 export GH_LOG="$T/gh.log"
 LLAMADAS="$T/llamadas.log"; export LLAMADAS
+# B4-28: un HOME senuelo con su propio progress-events.py. Si un tick corriera el
+# progress-events del HOME de quien lanza la prueba, aqui quedaria anotado.
+SENUELO="$T/senuelo"; mkdir -p "$SENUELO/bin"
+cat >"$SENUELO/bin/progress-events.py" <<STUB
+#!/bin/sh
+printf '%s\n' "\$*" >> "$SENUELO/tocado.log"
+exit 0
+STUB
+chmod +x "$SENUELO/bin/progress-events.py"
+senuelo_intacto() { # $1 caso
+  [ ! -e "$SENUELO/tocado.log" ] \
+    || fail "$1 el latido de la prueba corrio el progress-events del HOME de quien la lanza: $(tr '\n' ' ' <"$SENUELO/tocado.log")"
+}
+# Todo tick de la prueba publica con un progress-events de mentira que anota en $T.
+cat >"$T/bin/progress-events-falso" <<'STUB'
+#!/bin/sh
+printf '%s\n' "$*" >> "$PROGRESS_EVENTS_LOG"
+exit 0
+STUB
+chmod +x "$T/bin/progress-events-falso"
+export PROGRESS_EVENTS_BIN="$T/bin/progress-events-falso" PROGRESS_EVENTS_LOG="$T/progress-events.log"
 
 montar_corrida() { # $1 id, $2 escenario base; registra sesiones y paneles del fixture
   mkdir -p "$CORRIDA_STATE/$1"
@@ -187,19 +208,13 @@ printf 'no soy json\n' >"$CORRIDA_STATE/basura/registro.json"
 montar_corrida lat-cerrada cerrada
 sed -i.bak 's/"m-cerrada"/"lat-cerrada"/' "$CORRIDA_STATE/lat-cerrada/registro.json" && rm -f "$CORRIDA_STATE/lat-cerrada/registro.json.bak"
 : > "$LLAMADAS"
-tick "$T0" || fail "el latido fallo sin corridas abiertas"
+HOME="$SENUELO" tick "$T0" || fail "el latido fallo sin corridas abiertas"
+senuelo_intacto "(1)"
 [ "$(msgs)" = "0" ] || fail "sin corridas abiertas salieron $(msgs) llamadas"
 [ "$(evts)" = "0" ] || fail "sin corridas abiertas desperto al vigia"
-cat >"$T/bin/progress-events-falso" <<'STUB'
-#!/bin/sh
-printf '%s\n' "$*" >> "$PROGRESS_EVENTS_LOG"
-exit 0
-STUB
-chmod +x "$T/bin/progress-events-falso"
-export PROGRESS_EVENTS_BIN="$T/bin/progress-events-falso" PROGRESS_EVENTS_LOG="$T/progress-events.log"
+: > "$PROGRESS_EVENTS_LOG"
 tick "$T0" || fail "el latido fallo al reintentar progreso pendiente"
 grep -qx 'publish-all' "$PROGRESS_EVENTS_LOG" || fail "el latido no reintento el outbox de progreso sin otro cambio"
-unset PROGRESS_EVENTS_BIN PROGRESS_EVENTS_LOG
 [ ! -e "$CORRIDA_STATE/basura/latido.json" ] || fail "el latido le hablo a un dir sin registro valido"
 
 # (2) primer tick: un AVANZA acumulado (sin mandar); dos ticks seguidos no duplican.
@@ -829,5 +844,11 @@ seis per-seis "m-a m-b m-c m-f m-d m-e m-g"
 [ "$(parte_de per-seis)" = "relanzar-lead
 FIRMA_VIGIA=${FV0}m-lead:muerta," ] \
   || fail "perimetro: con solo el lead muerto fuera del perimetro el vigia no recibe solo relanzar-lead: $(parte_de per-seis | tr '\n' ' ')"
+
+# (18) B4-28: despues de todos los casos, un tick sigue sin correr el progress-events
+# del HOME de quien lanza la prueba (su estado real queda intacto).
+solo_dejar
+HOME="$SENUELO" tick "$((T0 + 2100))" >/dev/null 2>&1 || fail "(18) el tick del senuelo revento"
+senuelo_intacto "(18)"
 
 echo "TODO VERDE: test-corrida-latido"

@@ -1208,8 +1208,17 @@ bash "$CORR" seguimiento --json 2>/dev/null | grep -q "t-estados" \
   || fail "seguimiento pierde la corrida con handoff/stopped"
 mkdir -p "$T/lat" && cp -r "$T/corridas/t-estados" "$T/lat/" \
   || fail "sin copia para latido"
-( cd "$T" && CORRIDA_STATE="$T/lat" bash "$CORR_ABS" latido >/dev/null 2>&1 ) \
+# B4-39: el latido publica con un progress-events de mentira; un HOME senuelo con su
+# propio progress-events.py prueba que no corre el del HOME de quien lanza la prueba.
+mkdir -p "$T/senuelo-lat/bin"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/tocado.log"\n' "$T/senuelo-lat" >"$T/senuelo-lat/bin/progress-events.py"
+printf '#!/bin/sh\nexit 0\n' >"$T/bin/progress-events-nulo"
+chmod +x "$T/senuelo-lat/bin/progress-events.py" "$T/bin/progress-events-nulo"
+( cd "$T" && HOME="$T/senuelo-lat" PROGRESS_EVENTS_BIN="$T/bin/progress-events-nulo" CORRIDA_STATE="$T/lat" \
+    bash "$CORR_ABS" latido >/dev/null 2>&1 ) \
   || fail "latido se rompe con handoff/stopped"
+[ ! -e "$T/senuelo-lat/tocado.log" ] \
+  || fail "latido corrio el progress-events del HOME de quien lanza la prueba: $(cat "$T/senuelo-lat/tocado.log")"
 
 # 14.18: con_tope mata el GRUPO entero al vencer el tope. Un comando que lanza
 # un nieto de larga duracion no puede dejarlo vivo tras el tope, y los caminos

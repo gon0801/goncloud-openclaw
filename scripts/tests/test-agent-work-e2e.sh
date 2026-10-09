@@ -86,6 +86,13 @@ case "${1:-all}" in
   acceptance)
     run_acceptance
     ;;
+  acceptance_pair)
+    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
+      echo "acceptance_pair requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
+      exit 2
+    fi
+    python3 scripts/tests/agent-work-acceptance-pair.py
+    ;;
   delivery_latency)
     run_delivery_latency
     ;;
@@ -153,7 +160,7 @@ case "${1:-all}" in
     run_delivery_latency_r
     ;;
   *)
-    echo "casos disponibles: delivery_latency, review_tail_restart, cli_gateway, main_cli_loop, cli_silent_failure, cli_delivery_acceptance, crash_boundaries, cien_reenvios, dispatchers_cancel, delivery_latency_r, review_tail_restart_director, acceptance_matrix, acceptance" >&2
+    echo "casos disponibles: delivery_latency, review_tail_restart, cli_gateway, main_cli_loop, cli_silent_failure, cli_delivery_acceptance, crash_boundaries, cien_reenvios, dispatchers_cancel, delivery_latency_r, review_tail_restart_director, acceptance_matrix, acceptance, acceptance_pair" >&2
     exit 2
     ;;
 esac

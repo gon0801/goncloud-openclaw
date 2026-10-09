@@ -512,4 +512,16 @@ grep -q 'send-keys -t =lead-main: -l -- corrida.sh avisos atender t31' "$TECLAS"
   || fail "(q) despertar no desperto al lead por el pendiente valido de p-e: $(cat "$TECLAS")"
 echo "ok (q): una gestionada no emite (rc 3, sin aviso ni teclas) y su pendiente viejo se descarta; claves vacias, null y encargo plano, como siempre"
 
+# (r) B4-28: un pendiente sin campo sesion en una corrida sin gestionadas no es de
+# una gestionada (la lista vacia no casa con la sesion vacia): se descarta porque
+# ninguna sesion registrada se llama asi.
+registro t25 abierta lead-main:lead:zcode,ses-c25:carril:glm
+mkdir -p "$(avisos_dir t25)"
+printf '{"schema":"corrida-aviso.v1","tipo":"cierre"}\n' >"$(avisos_dir t25)/t25-sin-sesion.json"
+out=$(CORRIDA_BIN="$CC" bash "$CORR_ABS" avisos atender t25) || fail "(r) atender t25 fallo"
+[ "$out" = "avisos: 0 atendidos, 1 descartados" ] || fail "(r) el pendiente sin sesion debio descartarse: $out"
+[ "$(json_leer "$CORRIDA_STATE/t25/avisos/tratados/t25-sin-sesion.json" descartado)" = "la sesion  ya no esta registrada" ] \
+  || fail "(r) el pendiente sin sesion no quedo descartado como no registrado: $(json_leer "$CORRIDA_STATE/t25/avisos/tratados/t25-sin-sesion.json" descartado)"
+echo "ok (r): un pendiente sin sesion, sin gestionadas en la corrida, se descarta como no registrado"
+
 echo "TODO VERDE: test-corrida-avisos (U1 + U3 hook)"
