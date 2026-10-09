@@ -1,0 +1,27 @@
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "3efdd85da4891a6cbffc6dce592838ab870ec6fb"}
+[vitest-workers] local cache hit after 1874ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 571cc70b3f62 in 1906ms (16697 inputs, 17251 outputs)
+[test] starting test/vitest/vitest.infra.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > upgrades a v26 database before its first host closure 157ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > retains the slot while cleanup is pending and replaces its announcement 469ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > gates terminal closures and keeps them immutable and idempotent 441ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > releases the slot on a ReleasedAdopted closure and retains drifted bindings 440ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > authorizes only the bound producer instance for closures 447ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > keeps the child slot through the parent turn end until a terminal host closure 816ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > releases an unbound claimed admission when the requester cancels it 410ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > keeps the slot of a cancelled agent task without a result 419ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > keeps a bound claimed admission across cancellation until a terminal host closure 432ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > keeps releasing the agent slot on a final result 416ms
+
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+   Start at  04:30:55
+   Duration  6.25s (tests 74%, transform 16%, import 8%, setup 3%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 9.44s

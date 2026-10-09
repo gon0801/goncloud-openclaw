@@ -1,0 +1,36 @@
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "f5c6834b7210477ba571c5461ce345c802669304"}
+[vitest-workers] local cache hit after 1969ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 3a1131817529 in 2006ms (16697 inputs, 17251 outputs)
+[test] starting test/vitest/vitest.infra.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > grants recovery before the failed stream result returns and the marker survives restart 1062ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > recovers without a second admission, gateway entry, or queue row 622ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > holds the crashed run's scheduler slot through its native retry 630ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > shows no wait while the recovered retry runs, then the transport wait and incident when it dies 600ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > writes a recovery incident receipt only for an admitted run holding its marker 462ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > pins queue-busy for a granted recovery while the native row is still queued 562ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > persists the post-grant failure receipt across restart 982ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > refuses an already-granted recovery after restart even when the native run turned terminal 854ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > recovers a managed run with managedTasks configuration absent 566ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > finishes a recovered run of two model calls with the fund charged once 568ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > refuses the recovery episode when charged claims already spent the fund 579ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > refuses every later model call of a run whose recovery is exhausted, before any HTTP 559ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > does not recover a cancelled tree 561ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > a managed transport failure recovers on the runner's own retry and charges the fund exactly once 601ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > shows each waiting cause within 120 seconds 577ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.siblings.test.ts > root-wide recovery grants across siblings > refuses a sibling's recovery once another child of the root holds the grant 522ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.siblings.test.ts > root-wide recovery grants across siblings > blocks a sibling's recovery-charged call once another child spent the root fund 458ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.siblings.test.ts > root-wide recovery grants across siblings > charges the unified pool once per episode with a sibling refused 454ms
+
+ Test Files  2 passed (2)
+      Tests  18 passed (18)
+   Start at  05:25:30
+   Duration  15.27s (tests 75%, transform 11%, import 11%, setup 3%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 18.65s
+rc=0

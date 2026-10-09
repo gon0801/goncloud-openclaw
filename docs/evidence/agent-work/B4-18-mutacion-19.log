@@ -1,0 +1,18 @@
+..F................
+======================================================================
+FAIL: test_a_phantom_suggestion_in_the_composer_is_one_uncertain_incident_and_never_retyped (__main__.DeliveryAcceptanceTest.test_a_phantom_suggestion_in_the_composer_is_one_uncertain_incident_and_never_retyped)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3544, in test_a_phantom_suggestion_in_the_composer_is_one_uncertain_incident_and_never_retyped
+    self.assertEqual(self.status(host), "attempted")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'delivered' != 'attempted'
+- delivered
++ attempted
+
+
+----------------------------------------------------------------------
+Ran 19 tests in 0.475s
+
+FAILED (failures=1)
+rc=1

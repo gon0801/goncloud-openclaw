@@ -1,0 +1,22 @@
+....F.........
+======================================================================
+FAIL: test_every_live_cron_is_classified (__main__.AgentsRouting.test_every_live_cron_is_classified)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 185, in test_every_live_cron_is_classified
+    self.assertEqual(hashlib.sha256((ROOT / cron_jobs["snapshot"]).read_bytes()).hexdigest(),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     "c300335f2b00ed9ddd7ac8056acba9102da8e5ce97bb4d065c9d51966d86986f",
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     "the cron snapshot changed: a new snapshot is a new file and a new literal here")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'cf81fcd66dcc69b0529b0ded8c67e61083dfc3623a4002a3c667b176e78defda' != 'c300335f2b00ed9ddd7ac8056acba9102da8e5ce97bb4d065c9d51966d86986f'
+- cf81fcd66dcc69b0529b0ded8c67e61083dfc3623a4002a3c667b176e78defda
++ c300335f2b00ed9ddd7ac8056acba9102da8e5ce97bb4d065c9d51966d86986f
+ : the cron snapshot changed: a new snapshot is a new file and a new literal here
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.071s
+
+FAILED (failures=1)
+rc=1

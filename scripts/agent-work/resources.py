@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -30,6 +31,36 @@ def _ps(*args: str) -> subprocess.CompletedProcess:
 
 def recognized_boot_id(value: str) -> bool:
     return bool(BOOT_ID_RE.fullmatch(value) or LINUX_BOOT_ID_RE.fullmatch(value))
+
+
+APPROVAL_TAIL_LINES = 15
+APPROVAL_BLANK_RE = re.compile(r"[ \t\n\r\v\f]*")
+APPROVAL_CLOCK_RES = (re.compile(r"[0-9]+(\.[0-9]+)?[smh]"),
+                      re.compile(r"[0-9]{1,2}:[0-9]{2}(:[0-9]{2})?"))
+
+
+def load_approval_pattern(lib_sh: Path) -> re.Pattern:
+    match = re.search(r"^APROBACION_RE='([^']+)'$", lib_sh.read_text(encoding="utf-8"), re.M)
+    if match is None:
+        raise ValueError("APROBACION_RE not found")
+    return re.compile(match.group(1).replace("[[", "[\\["), re.IGNORECASE)
+
+
+def approval_tail(screen: str) -> list[str]:
+    lines = [line for line in screen.split("\n") if not APPROVAL_BLANK_RE.fullmatch(line)]
+    tail = []
+    for line in lines[-APPROVAL_TAIL_LINES:]:
+        for clock in APPROVAL_CLOCK_RES:
+            line = clock.sub("", line)
+        tail.append("".join(c for c in line if c == "\t" or " " <= c <= "~"))
+    return tail
+
+
+def approval_prompt_identity(screen: str, pattern: re.Pattern) -> str | None:
+    matching = [line.strip(" \t>") for line in approval_tail(screen) if pattern.search(line)]
+    if not matching:
+        return None
+    return "prompt-" + hashlib.sha256("\n".join(matching).encode()).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -237,6 +268,38 @@ class ResourceManager:
             return self._state(key, revision, "CleanupPending", "descendant absence unverified")
         return self._state(key, revision, "AbsenceVerified")
 
+    def session_gone(self, key: OperationKey) -> bool:
+        try:
+            row = self._row(key)
+        except ValueError:
+            return False
+        if row["state"] != "Running" or not row["identity_json"]:
+            return False
+        identity = json.loads(row["identity_json"])
+        if not identity.get("socket") or identity["socket"] != getattr(self.backend, "socket", None):
+            return False
+        try:
+            if self.backend.observe(row["session_name"]) == identity:
+                return False
+            return self.backend.pane_gone(identity) is True
+        except OSError:
+            return False
+
+    def prompt_identity(self, key: OperationKey, pattern: re.Pattern) -> str | None:
+        try:
+            row = self._row(key)
+        except ValueError:
+            return None
+        if row["state"] != "Running" or not row["identity_json"]:
+            return None
+        try:
+            screen = self.backend.capture(json.loads(row["identity_json"]))
+        except OSError:
+            return None
+        if screen is None:
+            return None
+        return approval_prompt_identity(screen, pattern) or ""
+
     def counts(self) -> dict:
         with self.spool.connection() as db:
             rows = db.execute("SELECT ownership,state FROM resources").fetchall()
@@ -341,6 +404,16 @@ class TmuxBackend:
             return False
         result = _ps("-p", str(pane_pid), "-o", "pid=")
         return result.returncode == 1 and result.stdout == "" and result.stderr == ""
+
+    def capture(self, identity: dict) -> str | None:
+        if self.observe(identity["sessionName"]) != identity:
+            return None
+        result = subprocess.run(
+            [self.tmux_bin, "-L", self.socket, "capture-pane", "-p", "-t", identity["paneId"]],
+            capture_output=True, encoding="utf-8", errors="replace")
+        if result.returncode or self.observe(identity["sessionName"]) != identity:
+            return None
+        return result.stdout
 
     def prove_absent(self, identity: dict) -> bool | None:
         if self.observe(identity["sessionName"]) == identity:

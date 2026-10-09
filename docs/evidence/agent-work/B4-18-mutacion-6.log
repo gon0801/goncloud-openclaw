@@ -1,0 +1,27 @@
+....FF..............
+======================================================================
+FAIL: test_only_an_acceptance_bound_to_this_assignment_counts (__main__.DeliveryAcceptanceTest.test_only_an_acceptance_bound_to_this_assignment_counts) [a symlink to a valid acceptance]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3616, in test_only_an_acceptance_bound_to_this_assignment_counts
+    self.assertFalse(host.take_acceptance("host-one", key))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_only_an_acceptance_bound_to_this_assignment_counts (__main__.DeliveryAcceptanceTest.test_only_an_acceptance_bound_to_this_assignment_counts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3625, in test_only_an_acceptance_bound_to_this_assignment_counts
+    self.assertEqual(self.status(host), "attempted")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'delivered' != 'attempted'
+- delivered
++ attempted
+
+
+----------------------------------------------------------------------
+Ran 19 tests in 0.596s
+
+FAILED (failures=2)
+rc=1

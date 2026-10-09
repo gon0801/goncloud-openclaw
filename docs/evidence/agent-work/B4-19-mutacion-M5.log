@@ -1,0 +1,39 @@
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 1, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 1, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 1, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 1, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 1, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 1, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 1, "incidents": 0, "reported": 0, "transferred": 0}
+F
+======================================================================
+FAIL: test_phantom_suggestion_in_the_composer (__main__.CliDeliveryAcceptanceE2E.test_phantom_suggestion_in_the_composer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_delivery_acceptance_e2e.py", line 281, in test_phantom_suggestion_in_the_composer
+    observed, screen = self.unaccepted_case("phantom")
+                       ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_delivery_acceptance_e2e.py", line 234, in unaccepted_case
+    self.assertEqual(late, [], f"a pass {later}s later raised {late}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:transport-unavailable:delivery-unaccepted'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:delivery-unaccepted'
+
+- ['host:1:transport-unavailable:delivery-unaccepted']
++ [] : a pass 3600s later raised ['host:1:transport-unavailable:delivery-unaccepted']
+
+----------------------------------------------------------------------
+Ran 1 test in 94.398s
+
+FAILED (failures=1)
+rc=1

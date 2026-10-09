@@ -1,0 +1,3 @@
+ok (B0-1-r2): relanzo con el mismo nombre deja una corrida ordinaria cerrable
+FAIL: B4-22: la gestionada recibio OPENCLAW_WATCH 1 en algun momento de su lanzamiento
+rc=1

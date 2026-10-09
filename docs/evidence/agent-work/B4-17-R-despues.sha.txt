@@ -1,0 +1,2 @@
+# B4-17-r1: huella de R despues (git status --porcelain --ignored | shasum -a 256)
+88f9864b28f5b406dd5733d5d2c2bf65163f0daa045296497ae850d4a1ecf168  -

@@ -1,0 +1,29 @@
+....E....F....
+======================================================================
+ERROR: test_every_live_cron_is_classified (__main__.AgentsRouting.test_every_live_cron_is_classified)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 183, in test_every_live_cron_is_classified
+    cron_jobs = self.coverage["cronJobs"]
+                ~~~~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'cronJobs'
+
+======================================================================
+FAIL: test_model_wakes_inventory_lists_every_repo_wake_source (__main__.AgentsRouting.test_model_wakes_inventory_lists_every_repo_wake_source)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 221, in test_model_wakes_inventory_lists_every_repo_wake_source
+    self.assertEqual(wakes["snapshot"], "docs/evidence/agent-work/B4-26-cron-snapshot.json")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'docs/evidence/agent-work/B4-8-cron-vigia-snapshot.json' != 'docs/evidence/agent-work/B4-26-cron-snapshot.json'
+- docs/evidence/agent-work/B4-8-cron-vigia-snapshot.json
+?                             ^     ------
++ docs/evidence/agent-work/B4-26-cron-snapshot.json
+?                             ^^
+
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.060s
+
+FAILED (failures=1, errors=1)
+rc=1

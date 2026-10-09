@@ -1,0 +1,35 @@
+F
+======================================================================
+FAIL: test_between_result_and_ack_the_host_repeats_the_same_report (__main__.CrashBoundariesE2E.test_between_result_and_ack_the_host_repeats_the_same_report)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 215, in test_between_result_and_ack_the_host_repeats_the_same_report
+    receipts = self.host.flush(HOST_ID, self.client(second).report_host_result)
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 464, in flush
+    receipt = report_to_runtime(result, artifact_bytes)
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/native_gateway.py", line 117, in report_host_result
+    return self._call("managedTasks.host.report", {
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "hostId": self.host_id, "resultId": result_id, "result": result,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "artifactBase64": base64.b64encode(artifact_bytes).decode("ascii"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    })
+    ^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/native_gateway.py", line 80, in _call
+    raise RuntimeError("native projection Gateway rejected request")
+RuntimeError: native projection Gateway rejected request
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 217, in test_between_result_and_ack_the_host_repeats_the_same_report
+    self.fail(f"R refused the repeated report: {error}")
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: R refused the repeated report: native projection Gateway rejected request
+
+----------------------------------------------------------------------
+Ran 1 test in 67.576s
+
+FAILED (failures=1)
+rc=1

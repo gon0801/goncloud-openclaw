@@ -1,0 +1,21 @@
+F
+======================================================================
+FAIL: test_a_cancellation_then_a_late_result_wakes_nobody (__main__.CrashBoundariesE2E.test_a_cancellation_then_a_late_result_wakes_nobody)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 322, in test_a_cancellation_then_a_late_result_wakes_nobody
+    self.assertEqual(self.wakes(task_id), [], "a cancelled task woke the requester")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [{'at': 1791482053216, 'method': 'POST', '[437 chars]933}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'at': 1791482053216, 'method': 'POST', 'path': '/v1/responses', 'wakeTasks': ['81d9bb59-9c49-4349-9e4d-624d8ecd0f1e'], 'toolNames': ['apply_patch', 'edit', 'exec', 'ls', 'process', 'read', 'sessions_yield', 'tool_call', 'tool_describe', 'tool_search', 'write'], 'answered': 'message', 'incidentWakes': [], 'startedDeliveries': [{'sessionKey': 'agent:main:encargos-loop', 'contextKey': 'task:81d9bb59-9c49-4349-9e4d-624d8ecd0f1e', 'enqueuedAt': 1791482043722}], 'gatewayPid': 68933}
+
+Diff is 758 characters long. Set self.maxDiff to None to see it. : a cancelled task woke the requester
+
+----------------------------------------------------------------------
+Ran 1 test in 81.485s
+
+FAILED (failures=1)
+rc=1

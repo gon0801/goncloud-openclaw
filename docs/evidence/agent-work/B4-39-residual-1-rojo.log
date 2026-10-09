@@ -1,0 +1,6 @@
+# Hallazgo 1 rojo: test-corrida-latido.sh sin arreglo (unset PROGRESS_EVENTS_BIN y sin binario de prueba en el primer tick) + senuelo de HOME en (1) y (18)
+# copia: /private/tmp/claude-501/-Users-dn-dev-goncloud-openclaw/0d327440-0586-4e4c-86b0-f8b3bd36ebc8/scratchpad/b439res.ia9M/g @ e72027a2ed58735729fc2ddbb2eb9571253cb6ae
+# fecha: 2026-10-09T05:13:14Z
+# comando: bash scripts/tests/test-corrida-latido.sh
+FAIL: (1) el latido de la prueba corrio el progress-events del HOME de quien la lanza: publish-all
+rc=1

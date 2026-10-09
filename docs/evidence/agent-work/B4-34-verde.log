@@ -1,0 +1,12 @@
+CRASH_BOUNDARY B7 pids=[18709, 20841] handling=cancelled delivery=result-recorded wakes=0 children=0 cli_accepted=1
+.CRASH_BOUNDARY B1 pids=[24103, 26013] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]
+.CLAIMS_AFTER_RESTART ['reported', 'reported', 'reported']
+CRASH_BOUNDARY B3 pids=[30089, 32187] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]
+.CRASH_BOUNDARY B5 pids=[36158, 39098] handlings=1 children=1 cli_accepted=2 acting_first=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit'] acting_second=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit']
+.CRASH_BOUNDARY B4 pids=[43350, 46033] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1, 0]
+.
+----------------------------------------------------------------------
+Ran 5 tests in 457.880s
+
+OK
+rc=0

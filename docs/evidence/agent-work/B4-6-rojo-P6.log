@@ -1,0 +1,19 @@
+ FAIL  |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > persists the post-grant failure receipt across restart
+AssertionError: expected undefined to match object { …(2) }
+
+- Expected:
+{
+  "episodeId": "recovery:4860532e-b97e-46cf-8c18-ab5b7a18c62b",
+  "kind": "recovery-transport-failure",
+}
+
++ Received:
+undefined
+
+ ❯ src/agents/tasks/managed-task.recovery.test.ts:530:38
+    528|       closeOpenClawStateDatabaseForTest();
+    529|       const snapshot = await inspectManagedTask({ caller, taskId });
+    530|       expect(snapshot?.incidents[0]).toMatchObject({
+       |                                      ^
+    531|         kind: "recovery-transport-failure",
+    532|         episodeId: `recovery:${taskId}`,

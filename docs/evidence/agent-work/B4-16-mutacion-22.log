@@ -1,0 +1,22 @@
+..F.................
+======================================================================
+FAIL: test_a_different_dialog_without_a_clean_gap_is_another_episode (__main__.SilentPromptTest.test_a_different_dialog_without_a_clean_gap_is_another_episode)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3284, in test_a_different_dialog_without_a_clean_gap_is_another_episode
+    self.assertEqual(self.step(manager, screen), expected, f"pass {number}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['host:1:permission-required:prompt-7d9451[57 chars]3-2']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'host:1:permission-required:prompt-7d94515e70c2994a231d611d9a75feb4b34c8c89d290da292dc115ae5ac52ff3-2'
+
+- []
++ ['host:1:permission-required:prompt-7d94515e70c2994a231d611d9a75feb4b34c8c89d290da292dc115ae5ac52ff3-2'] : pass 4
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.756s
+
+FAILED (failures=1)
+rc=1

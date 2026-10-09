@@ -1,0 +1,18 @@
+....F.........
+======================================================================
+FAIL: test_every_live_cron_is_classified (__main__.AgentsRouting.test_every_live_cron_is_classified) (cron='verif-digest-20h')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 208, in test_every_live_cron_is_classified
+    self.assertEqual(row["reason"], reasons[row["kind"]])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'cron técnico' != 'cron de negocio: conserva horario y función; f[66 chars]265)'
+- cron técnico
++ cron de negocio: conserva horario y función; fuera del perímetro, no delega trabajo con resultado esperado (T9 :265)
+
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.077s
+
+FAILED (failures=1)
+rc=1

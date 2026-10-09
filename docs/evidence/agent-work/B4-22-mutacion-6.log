@@ -1,0 +1,2 @@
+FAIL: B4-22: el carril no gestionado no quedo marcado antes del primer send-keys (marca= tecla=135)
+rc=1

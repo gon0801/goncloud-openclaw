@@ -1,0 +1,34 @@
+..F.......
+======================================================================
+FAIL: test_cli_route_is_limited_to_its_requester (__main__.AgentsRouting.test_cli_route_is_limited_to_its_requester)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 64, in test_cli_route_is_limited_to_its_requester
+    with self.assertRaisesRegex(RouteUnavailable, "outside the managed perimeter"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: RouteUnavailable not raised
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.053s
+
+FAILED (failures=1)
+rc=1
+....F.....
+======================================================================
+FAIL: test_main_cli_route_stays_disabled_until_mac_local_is_certified (__main__.AgentsRouting.test_main_cli_route_stays_disabled_until_mac_local_is_certified)
+----------------------------------------------------------------------
+routing.RouteUnavailable: route main -> mac-local/claude_opus is outside the managed perimeter
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 68, in test_main_cli_route_stays_disabled_until_mac_local_is_certified
+    with self.assertRaisesRegex(RouteUnavailable, "not certified"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "not certified" does not match "route main -> mac-local/claude_opus is outside the managed perimeter"
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.050s
+
+FAILED (failures=1)
+rc=1

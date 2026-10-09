@@ -1,0 +1,18 @@
+...................F
+======================================================================
+FAIL: test_watch_entrypoint_reads_dialogs_with_the_lib_sh_pattern (__main__.SilentPromptTest.test_watch_entrypoint_reads_dialogs_with_the_lib_sh_pattern)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3363, in test_watch_entrypoint_reads_dialogs_with_the_lib_sh_pattern
+    self.assertEqual(pattern.pattern, load_approval_pattern(self.LIB_SH).pattern)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'allow once' != 'allow once|always allow|would you like to allow|do [219 chars]o[)]'
+- allow once
++ allow once|always allow|would you like to allow|do you want to proceed|run this command\?|waiting for approval|do you trust|trust this (folder|workspace)|enter (to )?(select|confirm|continue)|esc (to )?(cancel|go back|exit)|arrow keys to navigate|[\[(]y/n[])]|[(]yes/no[)]
+
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.866s
+
+FAILED (failures=1)
+rc=1

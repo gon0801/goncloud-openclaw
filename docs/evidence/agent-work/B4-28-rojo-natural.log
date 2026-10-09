@@ -1,0 +1,24 @@
+FF
+======================================================================
+FAIL: test_every_row_is_well_formed (__main__.AcceptanceMatrixTest.test_every_row_is_well_formed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 52, in setUp
+    self.assertTrue(MATRIX.is_file(), "docs/evidence/agent-work/acceptance.md does not exist")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : docs/evidence/agent-work/acceptance.md does not exist
+
+======================================================================
+FAIL: test_every_spec_scenario_boundary_and_t10_case_has_one_row (__main__.AcceptanceMatrixTest.test_every_spec_scenario_boundary_and_t10_case_has_one_row)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 52, in setUp
+    self.assertTrue(MATRIX.is_file(), "docs/evidence/agent-work/acceptance.md does not exist")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : docs/evidence/agent-work/acceptance.md does not exist
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.000s
+
+FAILED (failures=2)
+rc=1

@@ -1,0 +1,24 @@
+F.......
+======================================================================
+FAIL: test_closed_session_records_one_transport_incident_across_100_passes (__main__.SilentFailureTest.test_closed_session_records_one_transport_incident_across_100_passes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2845, in test_closed_session_records_one_transport_incident_across_100_passes
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=2000.0),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     ["host:1:transport-unavailable:session-closed"])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['host:1:transport-unavailable:session-closed']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:session-closed'
+
+- []
++ ['host:1:transport-unavailable:session-closed']
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.196s
+
+FAILED (failures=1)
+rc=1

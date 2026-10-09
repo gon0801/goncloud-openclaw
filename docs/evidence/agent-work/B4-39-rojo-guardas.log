@@ -1,0 +1,217 @@
+FFFFFFFFFFFFFF
+======================================================================
+FAIL: test_a_citation_path_must_be_relative_to_the_repo (__main__.AcceptanceGuardsTest.test_a_citation_path_must_be_relative_to_the_repo)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 128, in test_a_citation_path_must_be_relative_to_the_repo
+    self.assertEqual(REF.findall("`/Users/x/a.py::test_one`"), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [('/Users/x/a.py', 'test_one')] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+('/Users/x/a.py', 'test_one')
+
+- [('/Users/x/a.py', 'test_one')]
++ []
+
+======================================================================
+FAIL: test_a_python_citation_must_be_a_test_method (__main__.AcceptanceGuardsTest.test_a_python_citation_must_be_a_test_method)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 123, in test_a_python_citation_must_be_a_test_method
+    self.assertFalse(cites("x.py", "setUp", text))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_a_shell_citation_must_be_a_case_the_runner_dispatches (__main__.AcceptanceGuardsTest.test_a_shell_citation_must_be_a_case_the_runner_dispatches)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 118, in test_a_shell_citation_must_be_a_case_the_runner_dispatches
+    self.assertFalse(cites("x.sh", name, self.RUNTIME_SH), name)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false : children
+
+======================================================================
+FAIL: test_an_out_of_block_row_names_a_task_whose_plan_section_holds_it (__main__.AcceptanceGuardsTest.test_an_out_of_block_row_names_a_task_whose_plan_section_holds_it)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 134, in test_an_out_of_block_row_names_a_task_whose_plan_section_holds_it
+    self.assertEqual(out_of_block_problem("T11", "mide 30 minutos sin novedades"),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     "T11 does not hold 'mide 30 minutos sin novedades'")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: None != "T11 does not hold 'mide 30 minutos sin novedades'"
+
+======================================================================
+FAIL: test_only_evidence_prose_may_change_after_the_pair (__main__.AcceptanceGuardsTest.test_only_evidence_prose_may_change_after_the_pair) (path='docs/evidence/agent-work/coverage.json')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 177, in test_only_evidence_prose_may_change_after_the_pair
+    self.assertEqual(pair_problems(self.REFS, self.PAIR, self.pair(), [path]),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [f"{path} changed after the pair"])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['docs/evidence/agent-work/coverage.json changed after the pair']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'docs/evidence/agent-work/coverage.json changed after the pair'
+
+- []
++ ['docs/evidence/agent-work/coverage.json changed after the pair']
+
+======================================================================
+FAIL: test_only_evidence_prose_may_change_after_the_pair (__main__.AcceptanceGuardsTest.test_only_evidence_prose_may_change_after_the_pair) (path='scripts/agent-work/host.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 177, in test_only_evidence_prose_may_change_after_the_pair
+    self.assertEqual(pair_problems(self.REFS, self.PAIR, self.pair(), [path]),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [f"{path} changed after the pair"])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['scripts/agent-work/host.py changed after the pair']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'scripts/agent-work/host.py changed after the pair'
+
+- []
++ ['scripts/agent-work/host.py changed after the pair']
+
+======================================================================
+FAIL: test_only_evidence_prose_may_change_after_the_pair (__main__.AcceptanceGuardsTest.test_only_evidence_prose_may_change_after_the_pair) (path='scripts/tests/test_agent_work_acceptance.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 177, in test_only_evidence_prose_may_change_after_the_pair
+    self.assertEqual(pair_problems(self.REFS, self.PAIR, self.pair(), [path]),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [f"{path} changed after the pair"])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['scripts/tests/test_agent_work_acceptance.py changed after the pair']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'scripts/tests/test_agent_work_acceptance.py changed after the pair'
+
+- []
++ ['scripts/tests/test_agent_work_acceptance.py changed after the pair']
+
+======================================================================
+FAIL: test_the_pair_run_must_cover_every_cited_test_green_on_the_pair (__main__.AcceptanceGuardsTest.test_the_pair_run_must_cover_every_cited_test_green_on_the_pair) (expected='the run is of G cccccccccccccccccccccccccccccccccccccccc')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 167, in test_the_pair_run_must_cover_every_cited_test_green_on_the_pair
+    self.assertEqual(pair_problems(self.REFS, self.PAIR, doc, []), [expected])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['the run is of G cccccccccccccccccccccccccccccccccccccccc']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'the run is of G cccccccccccccccccccccccccccccccccccccccc'
+
+- []
++ ['the run is of G cccccccccccccccccccccccccccccccccccccccc']
+
+======================================================================
+FAIL: test_the_pair_run_must_cover_every_cited_test_green_on_the_pair (__main__.AcceptanceGuardsTest.test_the_pair_run_must_cover_every_cited_test_green_on_the_pair) (expected='R was built at cccccccccccccccccccccccccccccccccccccccc, not at the pair')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 167, in test_the_pair_run_must_cover_every_cited_test_green_on_the_pair
+    self.assertEqual(pair_problems(self.REFS, self.PAIR, doc, []), [expected])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['R was built at cccccccccccccccccccccccccccccccccccccccc, not at the pair']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'R was built at cccccccccccccccccccccccccccccccccccccccc, not at the pair'
+
+- []
++ ['R was built at cccccccccccccccccccccccccccccccccccccccc, not at the pair']
+
+======================================================================
+FAIL: test_the_pair_run_must_cover_every_cited_test_green_on_the_pair (__main__.AcceptanceGuardsTest.test_the_pair_run_must_cover_every_cited_test_green_on_the_pair) (expected='R had uncommitted changes')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 167, in test_the_pair_run_must_cover_every_cited_test_green_on_the_pair
+    self.assertEqual(pair_problems(self.REFS, self.PAIR, doc, []), [expected])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['R had uncommitted changes']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'R had uncommitted changes'
+
+- []
++ ['R had uncommitted changes']
+
+======================================================================
+FAIL: test_the_pair_run_must_cover_every_cited_test_green_on_the_pair (__main__.AcceptanceGuardsTest.test_the_pair_run_must_cover_every_cited_test_green_on_the_pair) (expected='G had uncommitted changes: M scripts/x.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 167, in test_the_pair_run_must_cover_every_cited_test_green_on_the_pair
+    self.assertEqual(pair_problems(self.REFS, self.PAIR, doc, []), [expected])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['G had uncommitted changes: M scripts/x.py']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'G had uncommitted changes: M scripts/x.py'
+
+- []
++ ['G had uncommitted changes: M scripts/x.py']
+
+======================================================================
+FAIL: test_the_pair_run_must_cover_every_cited_test_green_on_the_pair (__main__.AcceptanceGuardsTest.test_the_pair_run_must_cover_every_cited_test_green_on_the_pair) (expected='scripts/tests/t.py::test_one was not run')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 167, in test_the_pair_run_must_cover_every_cited_test_green_on_the_pair
+    self.assertEqual(pair_problems(self.REFS, self.PAIR, doc, []), [expected])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['scripts/tests/t.py::test_one was not run']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'scripts/tests/t.py::test_one was not run'
+
+- []
++ ['scripts/tests/t.py::test_one was not run']
+
+======================================================================
+FAIL: test_the_pair_run_must_cover_every_cited_test_green_on_the_pair (__main__.AcceptanceGuardsTest.test_the_pair_run_must_cover_every_cited_test_green_on_the_pair) (expected='scripts/tests/t.py::test_one ended rc=1')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 167, in test_the_pair_run_must_cover_every_cited_test_green_on_the_pair
+    self.assertEqual(pair_problems(self.REFS, self.PAIR, doc, []), [expected])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['scripts/tests/t.py::test_one ended rc=1']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'scripts/tests/t.py::test_one ended rc=1'
+
+- []
++ ['scripts/tests/t.py::test_one ended rc=1']
+
+======================================================================
+FAIL: test_the_pair_run_must_cover_every_cited_test_green_on_the_pair (__main__.AcceptanceGuardsTest.test_the_pair_run_must_cover_every_cited_test_green_on_the_pair) (expected='scripts/tests/t.py::test_one skipped: set AGENT_WORK_RUNTIME_SOURCE')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 167, in test_the_pair_run_must_cover_every_cited_test_green_on_the_pair
+    self.assertEqual(pair_problems(self.REFS, self.PAIR, doc, []), [expected])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['scripts/tests/t.py::test_one skipped: set AGENT_WORK_RUNTIME_SOURCE']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'scripts/tests/t.py::test_one skipped: set AGENT_WORK_RUNTIME_SOURCE'
+
+- []
++ ['scripts/tests/t.py::test_one skipped: set AGENT_WORK_RUNTIME_SOURCE']
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.002s
+
+FAILED (failures=14)
+rc=1

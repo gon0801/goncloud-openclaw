@@ -1,0 +1,13 @@
+ FAIL  |infra| src/agents/tasks/managed-task.recovery.siblings.test.ts > root-wide recovery grants across siblings > charges the unified pool once per episode with a sibling refused
+AssertionError: expected +0 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 0
+
+ ❯ src/agents/tasks/managed-task.recovery.siblings.test.ts:250:7
+    248|       (await inspectManagedTask({ caller, taskId: parent.taskId }))?.b…
+    249|         .automaticRecoveryCalls,
+    250|     ).toBe(2);

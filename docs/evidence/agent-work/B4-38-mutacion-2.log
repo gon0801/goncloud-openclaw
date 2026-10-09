@@ -1,0 +1,17 @@
+{"closed": 0, "incidents": 0, "reported": 1, "transferred": 0}
+DELIVERY_LATENCY_R {"write_to_detection_seconds": 1.528, "detection_to_receipt_seconds": 7.151, "limit_seconds": 5}
+F
+======================================================================
+FAIL: test_report_detected_and_receipted_within_five_seconds_each_against_r (__main__.DeliveryLatencyR.test_report_detected_and_receipted_within_five_seconds_each_against_r)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_delivery_latency_e2e.py", line 89, in test_report_detected_and_receipted_within_five_seconds_each_against_r
+    self.assertLessEqual(receipt, LIMIT_SECONDS, "the durable receipt took longer than 5 s")
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 7.150967121124268 not less than or equal to 5 : the durable receipt took longer than 5 s
+
+----------------------------------------------------------------------
+Ran 1 test in 40.575s
+
+FAILED (failures=1)
+rc=1

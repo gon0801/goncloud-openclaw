@@ -1,0 +1,40 @@
+.FF......
+======================================================================
+FAIL: test_closed_session_requires_positive_proof (__main__.SilentFailureTest.test_closed_session_requires_positive_proof) [result unreadable]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2869, in test_closed_session_requires_positive_proof
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1.0), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:invalid-result:invalid-result'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:invalid-result:invalid-result'
+
+- ['host:1:invalid-result:invalid-result']
++ []
+
+======================================================================
+FAIL: test_closed_session_requires_positive_proof (__main__.SilentFailureTest.test_closed_session_requires_positive_proof)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2870, in test_closed_session_requires_positive_proof
+    self.assertEqual(self.rows(host), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [('host:1:invalid-result:invalid-result', [160 chars]"}')] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+('host:1:invalid-result:invalid-result', 'pending', '{"episodeId":"invalid-result","evidenceRef":"host-operation:8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571","kind":"invalid-result"}')
+
++ []
+- [('host:1:invalid-result:invalid-result',
+-   'pending',
+-   '{"episodeId":"invalid-result","evidenceRef":"host-operation:8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571","kind":"invalid-result"}')]
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.194s
+
+FAILED (failures=2)
+rc=1

@@ -1,0 +1,19 @@
+ FAIL  |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > finishes a recovered run of two model calls with the fund charged once
+AssertionError: expected { …(4) } to match object { recovery: true }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "recovery": true,
++   "recovery": false,
+  }
+
+ ❯ src/agents/tasks/managed-task.recovery.test.ts:605:24
+    603|       expect((await stream.result()).stopReason).toBe("error");
+    604|       const binding2 = await bindingFor();
+    605|       expect(binding2).toMatchObject({ recovery: true });
+       |                        ^
+    606|       const recoveredA = await openStream(provider, binding2);
+    607|       await drain(recoveredA);

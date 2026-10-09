@@ -1,0 +1,31 @@
+...FF
+======================================================================
+FAIL: test_pump_incident_failure_does_not_block_results (__main__.IncidentPumpTest.test_pump_incident_failure_does_not_block_results)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2719, in test_pump_incident_failure_does_not_block_results
+    with self.assertRaises(Exception) as caught:
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+AssertionError: Exception not raised
+
+======================================================================
+FAIL: test_pump_sends_an_incident_once_across_idle_polls (__main__.IncidentPumpTest.test_pump_sends_an_incident_once_across_idle_polls)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2752, in test_pump_sends_an_incident_once_across_idle_polls
+    self.assertEqual(native_gateway.pump_once(client, host=host, **self.pump_args("idle")),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     {"reported": 0, "transferred": 0, "closed": 0, "incidents": 1})
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'reported': 0, 'transferred': 0, 'closed': 0, 'incidents': 0} != {'reported': 0, 'transferred': 0, 'closed': 0, 'incidents': 1}
+- {'closed': 0, 'incidents': 0, 'reported': 0, 'transferred': 0}
+?                            ^
+
++ {'closed': 0, 'incidents': 1, 'reported': 0, 'transferred': 0}
+?                            ^
+
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.031s
+
+FAILED (failures=2)

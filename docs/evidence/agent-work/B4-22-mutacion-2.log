@@ -1,0 +1,2 @@
+FAIL: la marca no va antes del primer send-keys (marca= tecla=7)
+rc=1

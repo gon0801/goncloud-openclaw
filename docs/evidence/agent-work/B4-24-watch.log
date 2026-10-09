@@ -1,0 +1,48 @@
+ok (1): los tres scripts parsean (bash 3.2 y homebrew bash) y el plist es un LaunchAgent valido
+ok (2a-pre): sin marcador no hay eventos; con marcador avisa cualquier sesion
+ok (2a-unmark): desmarcar borra el estado y el cierre posterior no despierta a nadie
+ok (2a-managed): quiet y cierre gestionados no despiertan modelo
+ok (2a): quiet una sola vez por silencio, se repite si vuelve a hablar y se calla, sesion no vigilada nunca dispara
+ok (2b): sesion cerrada dispara 'closed' y borra su archivo de estado
+ok (2c): un envio fallido no marca notified (fail-open) y se reintenta en el siguiente tick
+ok (2d): tmux ausente = tick salteado, sin closed en falso y con el estado intacto
+ok (2e): un TUI que repinta la misma pantalla cuenta como callado (se mide el contenido, no el repintado)
+ok (2f): prompt de permiso avisa de inmediato, una vez por prompt, con recordatorio, sin duplicar 'quiet' y sin confundirse con prosa
+ok (2g): ocho pantallas de espera medidas en seis CLIs avisan; diez pantallas ociosas o trabajando no
+ok (2h): el silencio se recuerda; un dialogo que ningun patron conoce no se queda sin avisar; un estado de la version anterior no repite el aviso
+ok (2i): cada evento enviado queda anotado en eventos.jsonl (t epoch + texto)
+ok (2j): el dialogo se le ofrece a la politica primero; si contesta no despierta a nadie, y sin corrida.sh va como hoy
+ok (2k): run_once neutraliza CORRIDA_BIN por defecto; sin enganche explicito, el dialogo avisa como hoy
+scripts/mac/tmux-activity-watch.sh: line 248: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.95bE9WkHBb/state2/eventos.jsonl: Is a directory
+scripts/mac/tmux-activity-watch.sh: line 248: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.95bE9WkHBb/state2/eventos.jsonl: Is a directory
+ok (2m): un fallo del journal no rompe la notificacion y queda en el log
+ok (2n): la cadencia por defecto es 15 min de silencio y 60 min de recordatorio
+ok (2o): el vigilante lanza el latido cada LATIDO_SECS, sin corrida.sh no lanza, y un fallo no lo tumba
+ok (2p): --once no lanza el latido sin LATIDO_ONCE=1, marca futura no lo calla, candado serializa, enteros validados
+ok (2): maquina de estados del vigilante verificada con tmux real (/opt/homebrew/bin/tmux)
+ok (3a): fuera de tmux ($TMUX vacio) el hook no manda nada y sale 0
+ok (3a-bis): dentro de tmux sin OPENCLAW_WATCH el hook tampoco manda nada
+ok (3b): dentro de tmux el hook manda cwd + sesion + ultimo texto del asistente en 2do plano
+ok (4): anclas de mac-tmux-control y agent-dispatch presentes
+ok (4c): owner-report-delivery clasifica el wake-up interno antes de entregar
+ok (2l): los eventos de una corrida se rutearon a su sesion, vivos y cerrados; sin corrida, a agent:main:vigia-mac
+ok (2m): el vigilante relanza una vez las sesiones de una corrida abierta y reporta; ni dos veces, ni cerradas, ni fuera del registro
+ok (2q-1): quiet y closed de una corrida van por avisos, sin system events y sin repetirse
+ok (2q-2): el repintado no cambia la llave del dialogo (un aviso por episodio); un dialogo distinto, si
+ok (2q-3): sin corrida marcada o con la reversa, los eventos salen por agent:main:vigia-mac como siempre
+ok (2q-4): los pendientes de mas de 30 s despiertan una vez por tick, con tope de 5 corridas y sin consumirse
+ok (2q-5): el relanzo re-entrega el --encargo registrado y sin encargo queda igual que siempre
+ok (2q-5b): una sesion gestionada no se relanza: ni con las dos claves, ni con una, ni a la segunda caida
+ok (2q-5c): gestion con encargo plano no se relanza; claves vacias o null se relanzan como siempre; corrida cerrada sin evento
+ok (2q-7): la ruta de avisos journaliza la senal en eventos.jsonl
+ok (2q-8): el emitir colgado no cuelga el tick (tope de reloj y reintento)
+ok (2q-9): el despertar respeta el sello de retroceso por corrida
+ok (2q-10): el emitir lento va desacoplado y el tick no lo espera
+ok (2q-11): fallo durable del emitir con reintento por tick y borrado al emitir bien
+ok (2q-12): el rechazo definitivo descarta el registro y queda en el log
+ok (2q-13): el relanzamiento hace touch al registro (backoff por mtime)
+ok (2q-14): el registro en el tope se descarta con su linea en el log
+ok (2q-16): el wake propio no reinicia el reloj de recordatorio (R2)
+ok (2q-17): aviso consumido + turno nuevo -> fin de turno nuevo avisa de inmediato, no a los 60 min
+TODO VERDE: tmux-activity-watch
+rc=0

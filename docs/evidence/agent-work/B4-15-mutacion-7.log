@@ -1,0 +1,79 @@
+F.FFF...
+======================================================================
+FAIL: test_closed_session_records_one_transport_incident_across_100_passes (__main__.SilentFailureTest.test_closed_session_records_one_transport_incident_across_100_passes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2836, in test_closed_session_records_one_transport_incident_across_100_passes
+    self.assertEqual(Host("host-one", self.root / "host").detect_silent_failures(
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "host-one", manager.session_gone, now=1060.0 + second, deadline_seconds=60), [])
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:transport-unavailable:session-closed'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:session-closed'
+
+- ['host:1:transport-unavailable:session-closed']
++ []
+
+======================================================================
+FAIL: test_deadline_counts_from_durable_delivery_once (__main__.SilentFailureTest.test_deadline_counts_from_durable_delivery_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2899, in test_deadline_counts_from_durable_delivery_once
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=5000.0,
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                 deadline_seconds=60), [])
+                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:deadline-missed:deadline'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:deadline-missed:deadline'
+
+- ['host:1:deadline-missed:deadline']
++ []
+
+======================================================================
+FAIL: test_invalid_result_is_one_incident_and_a_valid_result_still_reports (__main__.SilentFailureTest.test_invalid_result_is_one_incident_and_a_valid_result_still_reports)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2880, in test_invalid_result_is_one_incident_and_a_valid_result_still_reports
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=9001.0,
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                 deadline_seconds=60), [])
+                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:invalid-result:invalid-result'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:invalid-result:invalid-result'
+
+- ['host:1:invalid-result:invalid-result']
++ []
+
+======================================================================
+FAIL: test_pump_detects_before_sending_and_sends_once (__main__.SilentFailureTest.test_pump_detects_before_sending_and_sends_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2954, in test_pump_detects_before_sending_and_sends_once
+    self.assertEqual(native_gateway.pump_once(client, host=host, cli_watch=watch, **args),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     {"reported": 0, "transferred": 0, "closed": 0, "incidents": 0,
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      "detected": 0})
+                      ^^^^^^^^^^^^^^^
+AssertionError: {'reported': 0, 'transferred': 0, 'closed': 0, 'incidents': 0, 'detected': 1} != {'reported': 0, 'transferred': 0, 'closed': 0, 'incidents': 0, 'detected': 0}
+- {'closed': 0, 'detected': 1, 'incidents': 0, 'reported': 0, 'transferred': 0}
+?                           ^
+
++ {'closed': 0, 'detected': 0, 'incidents': 0, 'reported': 0, 'transferred': 0}
+?                           ^
+
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.068s
+
+FAILED (failures=4)
+rc=1

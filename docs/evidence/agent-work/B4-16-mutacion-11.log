@@ -1,0 +1,15 @@
+...................F
+======================================================================
+FAIL: test_watch_entrypoint_reads_dialogs_with_the_lib_sh_pattern (__main__.SilentPromptTest.test_watch_entrypoint_reads_dialogs_with_the_lib_sh_pattern)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3355, in test_watch_entrypoint_reads_dialogs_with_the_lib_sh_pattern
+    self.assertTrue(callable(reader), "main must pass prompt_identity to the detector")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : main must pass prompt_identity to the detector
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.818s
+
+FAILED (failures=1)
+rc=1

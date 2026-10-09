@@ -1,0 +1,53 @@
+....FEEF.
+======================================================================
+ERROR: test_record_incident_rejects_invalid_input (__main__.IncidentFlushTest.test_record_incident_rejects_invalid_input) [missing evidenceRef]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2373, in test_record_incident_rejects_invalid_input
+    host.record_incident("host-one", key, incident)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 337, in record_incident
+    incident_key, incident_digest = incident_identity(generation, incident)
+                                    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/spool.py", line 35, in incident_identity
+    if not isinstance(incident[field], str):
+                      ~~~~~~~~^^^^^^^
+KeyError: 'evidenceRef'
+
+======================================================================
+ERROR: test_record_incident_rejects_invalid_input (__main__.IncidentFlushTest.test_record_incident_rejects_invalid_input) [permission without promptIdentity]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2373, in test_record_incident_rejects_invalid_input
+    host.record_incident("host-one", key, incident)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 337, in record_incident
+    incident_key, incident_digest = incident_identity(generation, incident)
+                                    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/spool.py", line 35, in incident_identity
+    if not isinstance(incident[field], str):
+                      ~~~~~~~~^^^^^^^
+KeyError: 'promptIdentity'
+
+======================================================================
+FAIL: test_record_incident_rejects_invalid_input (__main__.IncidentFlushTest.test_record_incident_rejects_invalid_input) [extra key]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2372, in test_record_incident_rejects_invalid_input
+    with self.assertRaises(ValueError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_record_incident_rejects_invalid_input (__main__.IncidentFlushTest.test_record_incident_rejects_invalid_input)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2384, in test_record_incident_rejects_invalid_input
+    self.assertEqual(count, 0)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^
+AssertionError: 1 != 0
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.030s
+
+FAILED (failures=2, errors=2)

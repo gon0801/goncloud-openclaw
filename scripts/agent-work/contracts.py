@@ -16,6 +16,10 @@ def operation_id(key: OperationKey) -> str:
     return hashlib.sha256(json.dumps(identity, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
 
 
+class IncidentRejected(RuntimeError):
+    """Definitive rejection from R; the incident must not be retried."""
+
+
 @dataclass(frozen=True)
 class AuthorizedOperation:
     key: OperationKey

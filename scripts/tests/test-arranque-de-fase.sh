@@ -232,6 +232,36 @@ if [ -n "${TM:-}" ]; then
 $out"
   "$TM" -L "$L" set-environment -t 'tok-wt-f5-lead' OPENCLAW_WATCH 1 2>/dev/null
   echo "ok (5): una sesion de la fase sin marcar sale ROJO"
+  # (5b) T9 :266: una sesion gestionada de la fase (AGENT_WORK_MANAGED=1) no cuenta ni
+  # como marcada ni como sin marcar: la vigila su host. Filas: lead sin marcar con la
+  # gestionada sin marcar y marcada; lead marcado con la gestionada marcada; solo la
+  # gestionada.
+  "$TM" -L "$L" new-session -d -s 'tok-wt-f5-c1' 2>/dev/null
+  "$TM" -L "$L" set-environment -t 'tok-wt-f5-c1' AGENT_WORK_MANAGED 1 2>/dev/null
+  linea_lead() { corre 5 | grep -E '^(ROJO|VERDE|unknown) +lead '; }
+  rojo_solo_lead="$(printf '%-8s %-22s %s' ROJO lead 'sesiones de la fase sin marcar: tok-wt-f5-lead— el vigilante no las mira')"
+  "$TM" -L "$L" set-environment -t 'tok-wt-f5-lead' -u OPENCLAW_WATCH 2>/dev/null
+  [ "$(linea_lead)" = "$rojo_solo_lead" ] || fail "(5b) lead sin marcar y gestionada sin marcar: $(linea_lead)"
+  "$TM" -L "$L" set-environment -t 'tok-wt-f5-c1' OPENCLAW_WATCH 1 2>/dev/null
+  [ "$(linea_lead)" = "$rojo_solo_lead" ] || fail "(5b) una gestionada marcada no hace VERDE al lead sin marcar: $(linea_lead)"
+  "$TM" -L "$L" set-environment -t 'tok-wt-f5-lead' OPENCLAW_WATCH 1 2>/dev/null
+  [ "$(linea_lead)" = "$(printf '%-8s %-22s %s' VERDE lead 'sesion del lead viva y marcada: tok-wt-f5-lead')" ] \
+    || fail "(5b) lead marcado y gestionada marcada: $(linea_lead)"
+  "$TM" -L "$L" rename-session -t 'tok-wt-f5-lead' 'tok-guardado' 2>/dev/null
+  [ "$(linea_lead)" = "$(printf '%-8s %-22s %s' ROJO lead "solo hay sesiones gestionadas con 'wt-f5-' en el nombre: el lead no esta lanzado")" ] \
+    || fail "(5b) solo la gestionada: $(linea_lead)"
+  "$TM" -L "$L" rename-session -t 'tok-guardado' 'tok-wt-f5-lead' 2>/dev/null
+    # (5c) solo AGENT_WORK_MANAGED=1 es gestion: con 0 o quitada (-u), la sesion cuenta.
+    "$TM" -L "$L" set-environment -t 'tok-wt-f5-lead' -u OPENCLAW_WATCH 2>/dev/null
+    "$TM" -L "$L" set-environment -t 'tok-wt-f5-c1' -u OPENCLAW_WATCH 2>/dev/null
+    rojo_dos="$(printf '%-8s %-22s %s' ROJO lead 'sesiones de la fase sin marcar: tok-wt-f5-c1 tok-wt-f5-lead— el vigilante no las mira')"
+    "$TM" -L "$L" set-environment -t 'tok-wt-f5-c1' AGENT_WORK_MANAGED 0 2>/dev/null
+    [ "$(linea_lead)" = "$rojo_dos" ] || fail "(5c) AGENT_WORK_MANAGED=0 no es gestion: $(linea_lead)"
+    "$TM" -L "$L" set-environment -t 'tok-wt-f5-c1' -u AGENT_WORK_MANAGED 2>/dev/null
+    [ "$(linea_lead)" = "$rojo_dos" ] || fail "(5c) AGENT_WORK_MANAGED quitada no es gestion: $(linea_lead)"
+    "$TM" -L "$L" set-environment -t 'tok-wt-f5-lead' OPENCLAW_WATCH 1 2>/dev/null
+    "$TM" -L "$L" kill-session -t 'tok-wt-f5-c1' 2>/dev/null
+  echo "ok (5b): una sesion gestionada de la fase no cuenta ni como marcada ni como sin marcar; solo AGENT_WORK_MANAGED=1 es gestion"
 else
   echo "SKIP (5): sin tmux en esta maquina"
 fi

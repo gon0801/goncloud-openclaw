@@ -218,6 +218,15 @@ def _decision_payload(
     verify_gate_evidence: bool = True,
     fallback_gate: Optional[Mapping[str, Any]] = None,
 ) -> tuple[dict, Optional[dict]]:
+    result = raw.get("result")
+    if isinstance(result, dict) and result.get("kind") in ("failed", "executor-cancelled"):
+        return ({
+            "kind": "continue",
+            "children": [{
+                "slot": "solicitante",
+                "assignment": _requester_assignment(raw, lane_observation),
+            }],
+        }, None)
     typed_payload = _typed_review_payload(raw)
     if typed_payload is not None:
         return _decision_from_review(

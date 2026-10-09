@@ -1,0 +1,15 @@
+F.
+======================================================================
+FAIL: test_every_row_is_well_formed (__main__.AcceptanceMatrixTest.test_every_row_is_well_formed) (row='A15')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 92, in test_every_row_is_well_formed
+    self.assertTrue((ROOT / row["recibo"]).is_file(), f"receipt {row['recibo']} does not exist")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : receipt docs/evidence/agent-work/T8-no-existe.md does not exist
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.005s
+
+FAILED (failures=1)
+rc=1

@@ -1,0 +1,65 @@
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "978355503c44313536ab4cd03a6bfb7a5423404b"}
+[test] starting test/vitest/vitest.e2e.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+[vitest-workers] local cache hit after 2562ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 55948bddad58 in 2596ms (16698 inputs, 17251 outputs)
+ ↓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: false, replay: false)
+ ↓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: true, restart: false, replay: false)
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: false) 11706ms
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: true) 7912ms
+ ↓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (operaciones -> ingenieria, isolated: false, restart: false, replay: false)
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts > delivers a durably reported managed result after restart to a busy requester (restart: true) 7705ms
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts > delivers a durably reported managed result after restart to a deleted requester (restart: true) 10812ms
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts (7 tests | 3 skipped) 38138ms
+   ✓ registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: false) 11706ms
+   ✓ registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: true) 7912ms
+   ✓ delivers a durably reported managed result after restart to a busy requester (restart: true) 7705ms
+   ✓ delivers a durably reported managed result after restart to a deleted requester (restart: true) 10812ms
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > does not deliver an unreported managed result after restart (idle requester)
+ ✓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > does not deliver an unreported managed result after restart (deleted requester) 1820ms
+ ✓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > does not deliver an unreported managed result after restart (busy requester) 1002ms
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > does not deliver an unreported managed result after restart (idle_72h requester)
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > settles overlapping caller turns with alpha first (same ownership, yielded=undefined)
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > settles overlapping caller turns with alpha first (distinct ownership, yielded=undefined)
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > settles overlapping caller turns with alpha first (mixed-unbound ownership, yielded=undefined)
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > settles overlapping caller turns with alpha first (same ownership, yielded=alpha)
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > settles overlapping caller turns with beta first (same ownership, yielded=undefined)
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > settles overlapping caller turns with beta first (distinct ownership, yielded=undefined)
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > settles overlapping caller turns with beta first (mixed-unbound ownership, yielded=undefined)
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > settles overlapping caller turns with beta first (same ownership, yielded=alpha)
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > delivers the visible requester final
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > settles the rejected delivered-row wake
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > backs off when rejected-wake settlement…
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > retires a stale empty announce after re…
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > preserves serial continuation without replaying an accepted wave (cli, next child accepted=true, requester final=false)
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > preserves serial continuation without replaying an accepted wave (cli, next child accepted=false, requester final=false)
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > preserves serial continuation without replaying an accepted wave (native, next child accepted=true, requester final=false)
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > preserves serial continuation without replaying an accepted wave (cli, next child accepted=true, requester final=true)
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > delivers a yielded result despite an older failed grandchild awaiting cleanup
+ ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > caps a stale requester batch despite foreign active work in a global session
+ ✓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts (22 tests | 20 skipped) 2824ms
+   ✓ requester settle wake product flow (22)
+     ✓ does not deliver an unreported managed result after restart (deleted requester) 1820ms
+     ✓ does not deliver an unreported managed result after restart (busy requester) 1002ms
+
+ Test Files  2 passed (2)
+      Tests  6 passed | 23 skipped (29)
+   Start at  01:33:05
+   Duration  48.23s (tests 85%, transform 10%, import 4%)
+
+
+ Test Files  2 passed (2)
+      Tests  6 passed | 23 skipped (29)
+   Start at  01:33:05
+   Duration  48.23s (tests 85%, transform 10%, import 4%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 49.94s
+rc=0

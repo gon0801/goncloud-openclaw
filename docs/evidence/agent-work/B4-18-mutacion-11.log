@@ -1,0 +1,60 @@
+..F..F...........F.
+======================================================================
+FAIL: test_a_phantom_suggestion_in_the_composer_is_one_uncertain_incident_and_never_retyped (__main__.DeliveryAcceptanceTest.test_a_phantom_suggestion_in_the_composer_is_one_uncertain_incident_and_never_retyped)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3548, in test_a_phantom_suggestion_in_the_composer_is_one_uncertain_incident_and_never_retyped
+    self.assertEqual(watch(1061.0 + second), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:transport-unavailable:delivery-unaccepted'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:delivery-unaccepted'
+
+- ['host:1:transport-unavailable:delivery-unaccepted']
++ []
+
+======================================================================
+FAIL: test_the_pump_settles_once_and_its_claim_replays_never_retype (__main__.DeliveryAcceptanceTest.test_the_pump_settles_once_and_its_claim_replays_never_retype)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3740, in test_the_pump_settles_once_and_its_claim_replays_never_retype
+    self.assertEqual(native_gateway.pump_once(client, host=host, **args), idle)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'rep[23 chars]': 0, 'closed': 0, 'incidents': 0, 'claimed': 1, 'detected': 1} != {'rep[23 chars]': 0, 'closed': 0, 'incidents': 0, 'claimed': 1, 'detected': 0}
+  {'claimed': 1,
+   'closed': 0,
+-  'detected': 1,
+?              ^
+
++  'detected': 0,
+?              ^
+
+   'incidents': 0,
+   'reported': 0,
+   'transferred': 0}
+
+======================================================================
+FAIL: test_uncertain_and_reported_operations_never_raise_incidents (__main__.SilentFailureTest.test_uncertain_and_reported_operations_never_raise_incidents)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2939, in test_uncertain_and_reported_operations_never_raise_incidents
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=10.0 ** 9,
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                 deadline_seconds=60), [])
+                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:transport-unavailable:delivery-unaccepted'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:delivery-unaccepted'
+
+- ['host:1:transport-unavailable:delivery-unaccepted']
++ []
+
+----------------------------------------------------------------------
+Ran 19 tests in 0.349s
+
+FAILED (failures=3)
+rc=1

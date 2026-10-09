@@ -6,6 +6,8 @@ cd "$(dirname "$0")/../.." || exit 1
 REF=${TEST_REF:-WORKTREE}
 fails=0
 SCOUT_FRASE='Scout: no tiene workspace versionado en este repo'
+# T9 :265: el contrato dice como reporta un encargo gestionado, justo despues de la linea Nunca:.
+GESTION_FRASE='Encargo gestionado (T9 `:265`): si el pedido te llegó como encargo gestionado (`managed_tasks_report` está entre tus tools), en lugar de reportar a main el resultado sale solo con `managed_tasks_report`; dentro de ese run el runtime rechaza `sessions_send` y `sessions_spawn`, así que no reportes ni delegues por ahí.'
 for ws in workspace-implementer workspace-verifier workspace-reviewer workspace-adversary; do
   if [ "$REF" = "WORKTREE" ]; then
     f=$(cat "$ws/AGENTS.md" 2>/dev/null) || { echo "FALLO: $ws/AGENTS.md no existe en el working tree"; fails=$((fails+1)); continue; }
@@ -17,6 +19,9 @@ for ws in workspace-implementer workspace-verifier workspace-reviewer workspace-
   printf '%s\n' "$bloque" | grep -qi "Nunca:" || { echo "FALLO: $ws contrato sin campo 'Nunca:'"; fails=$((fails+1)); }
   printf '%s\n' "$bloque" | grep -qi "Reporta" || { echo "FALLO: $ws contrato sin campo 'Reporta'"; fails=$((fails+1)); }
   printf '%s\n' "$bloque" | grep -q "main" || { echo "FALLO: $ws contrato no nombra a main como destinatario"; fails=$((fails+1)); }
+  [ "$(printf '%s\n' "$f" | grep -c '^## Contrato de dispatch$')" = 1 ] || { echo "FALLO: $ws tiene mas de un bloque '## Contrato de dispatch'"; fails=$((fails+1)); }
+  [ "$(printf '%s\n' "$bloque" | grep -A2 '^Nunca:' | sed -n 2p)|$(printf '%s\n' "$bloque" | grep -A2 '^Nunca:' | sed -n 3p)" = "|$GESTION_FRASE" ] \
+    || { echo "FALLO: $ws contrato sin la frase del encargo gestionado (T9 :265) justo despues de la linea Nunca:"; fails=$((fails+1)); }
   printf '%s\n' "$f" | grep -q "$SCOUT_FRASE" && { echo "FALLO: $ws carga la frase de scout (debe vivir fuera de estos AGENTS.md)"; fails=$((fails+1)); }
   nunca=$(printf '%s\n' "$bloque" | grep -i '^Nunca:' | head -n 1)
   if [ -z "$nunca" ]; then echo "FALLO: $ws contrato sin linea que empiece en 'Nunca:'"; fails=$((fails+1)); continue; fi

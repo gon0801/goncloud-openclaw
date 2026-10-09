@@ -1,0 +1,30 @@
+F
+======================================================================
+FAIL: test_the_same_dialog_after_two_clean_passes_is_a_new_episode_across_host_restarts (__main__.SilentPromptTest.test_the_same_dialog_after_two_clean_passes_is_a_new_episode_across_host_restarts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3251, in test_the_same_dialog_after_two_clean_passes_is_a_new_episode_across_host_restarts
+    self.assertEqual(db.execute("SELECT open_identity,episode,candidate,seen,clean FROM dialog_watch "
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                "WHERE operation_id=?", (self.OP_ID,)).fetchall(),
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [(self.BLOCKED_ID, 2, None, 0, 0)])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != [('prompt-a676f37c2271c679cf49abcbd92eb67d[45 chars], 0)]
+
+Second list contains 1 additional elements.
+First extra element 0:
+('prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1', 2, None, 0, 0)
+
+- []
++ [('prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1',
++   2,
++   None,
++   0,
++   0)]
+
+----------------------------------------------------------------------
+Ran 1 test in 0.014s
+
+FAILED (failures=1)
+rc=1

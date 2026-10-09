@@ -1,0 +1,6 @@
+3.2.57(1)-release
+ok (B0-1-r2): relanzo con el mismo nombre deja una corrida ordinaria cerrable
+ok (B3/T7): reemplazo de gestionada exige el mismo encargo_ref y host_id
+ok (spec): corrida.v1.md documenta encargo en sesiones[] del registro
+TODO VERDE: test-corrida-nucleo
+rc=0

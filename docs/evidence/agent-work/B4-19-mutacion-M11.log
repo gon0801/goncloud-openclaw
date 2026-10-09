@@ -1,0 +1,15 @@
+F
+======================================================================
+FAIL: test_watch_entrypoint_types_each_claim_once (__main__.SilentFailureTest.test_watch_entrypoint_types_each_claim_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3079, in test_watch_entrypoint_types_each_claim_once
+    self.assertEqual(len(typed), 1, f"main typed the reference {len(typed)} times")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 2 != 1 : main typed the reference 2 times
+
+----------------------------------------------------------------------
+Ran 1 test in 0.010s
+
+FAILED (failures=1)
+rc=1

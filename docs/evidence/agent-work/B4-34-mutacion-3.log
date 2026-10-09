@@ -1,0 +1,17 @@
+F
+======================================================================
+FAIL: test_a_cancellation_then_a_late_result_wakes_nobody (__main__.CrashBoundariesE2E.test_a_cancellation_then_a_late_result_wakes_nobody)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 317, in test_a_cancellation_then_a_late_result_wakes_nobody
+    with self.assertRaisesRegex(HarnessError, "Managed task is cancelled",
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                msg="the cancelled generation accepted a continuation"):
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: HarnessError not raised : the cancelled generation accepted a continuation
+
+----------------------------------------------------------------------
+Ran 1 test in 61.133s
+
+FAILED (failures=1)
+rc=1

@@ -1,0 +1,24 @@
+F
+======================================================================
+FAIL: test_changes_after_a_gateway_crash_register_one_correction_without_a_reminder (__main__.ReviewCorrectionRestartE2E.test_changes_after_a_gateway_crash_register_one_correction_without_a_reminder)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_review_correction_restart_e2e.py", line 100, in test_changes_after_a_gateway_crash_register_one_correction_without_a_reminder
+    self.assertEqual([(c["parentTaskId"], c["slot"]) for c in rows["children"]],
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [(task_id, "corregir")])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != [('ef772817-ff01-4921-b554-81e7f421386b', 'corregir')]
+
+Second list contains 1 additional elements.
+First extra element 0:
+('ef772817-ff01-4921-b554-81e7f421386b', 'corregir')
+
+- []
++ [('ef772817-ff01-4921-b554-81e7f421386b', 'corregir')]
+
+----------------------------------------------------------------------
+Ran 1 test in 80.456s
+
+FAILED (failures=1)
+rc=1

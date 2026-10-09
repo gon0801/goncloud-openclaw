@@ -1,0 +1,22 @@
+ FAIL  |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not transient-retry a transport failure marked managed_recovery_exhausted
+AssertionError: expected { action: 'retry', …(4) } to deeply equal { action: 'proceed' }
+
+- Expected
++ Received
+
+  {
+-   "action": "proceed",
++   "action": "retry",
++   "authRetryPending": false,
++   "codexAppServerRecoveryRetries": 0,
++   "lastRetryFailoverReason": "timeout",
++   "thinkLevel": "off",
+  }
+
+ ❯ src/agents/embedded-agent-runner/run/attempt-recovery.test.ts:989:29
+    987|       ],
+    988|     });
+    989|     expect(marked.recovery).toEqual({ action: "proceed" });
+       |                             ^
+    990|     expect(
+    991|       marked.onAgentEvent.mock.calls.filter(([event]) => event?.data?.…

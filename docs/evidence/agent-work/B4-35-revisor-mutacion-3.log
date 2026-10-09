@@ -1,0 +1,20 @@
+/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.4EVhNYdm7f/g/scripts/tests/test_agent_work_crash_boundaries_e2e.py:473: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
+  host_pid = self.crash_host(gateway, "typed")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+F
+======================================================================
+FAIL: test_after_typing_the_restarted_host_declares_uncertainty_and_never_types_again (__main__.CrashBoundariesE2E.test_after_typing_the_restarted_host_declares_uncertainty_and_never_types_again)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.4EVhNYdm7f/g/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 476, in test_after_typing_the_restarted_host_declares_uncertainty_and_never_types_again
+    self.assertEqual(observed.status, "uncertain", "the restarted host did not declare the delivery uncertain")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'delivered' != 'uncertain'
+- delivered
++ uncertain
+ : the restarted host did not declare the delivery uncertain
+
+----------------------------------------------------------------------
+Ran 1 test in 32.183s
+
+FAILED (failures=1)

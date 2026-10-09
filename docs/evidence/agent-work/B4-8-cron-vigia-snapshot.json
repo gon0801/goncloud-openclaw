@@ -1,0 +1,45 @@
+{
+  "capturedAt": "2026-10-05T14:43:52Z",
+  "source": "~/.openclaw/bin/openclaw cron list --json (lectura, gateway Windows por túnel 127.0.0.1:18789)",
+  "totalJobs": 28,
+  "vigiaJobs": [
+    {
+      "id": "712ca2dd-2375-4290-ad0e-72927c0adcfd",
+      "name": "jev-ads-02-vigia",
+      "enabled": true,
+      "agentId": "main",
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "schedule": {
+        "kind": "every",
+        "everyMs": 300000,
+        "anchorMs": 1791187397054
+      },
+      "messageSha256": "38efeb33e8e98d8b268fdf61088c4468755e2bb62df228e94351fd0661381fa0",
+      "messageChars": 1267
+    },
+    {
+      "id": "2c0dfb08-b1fa-4bbd-a6b2-71ce2112b85e",
+      "name": "encargos-vigia",
+      "enabled": true,
+      "agentId": "main",
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "schedule": {
+        "kind": "every",
+        "everyMs": 300000,
+        "anchorMs": 1791105098390
+      },
+      "messageSha256": "454bc215a3059d86821f4ef99a25ecb8c6b7e06a84dad6c1af361bde576a37fa",
+      "messageChars": 1020
+    }
+  ]
+}

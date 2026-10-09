@@ -1,0 +1,38 @@
+R_HEAD=33f4e47982b3421ff51dedcdbe7601c3bbf43dd1 R_DIFF=e3b0c44298fc1c14
+ .../agent-work/managed-cli-gateway-harness.mjs     | 152 +++++++++++++++++++--
+ scripts/tests/test-agent-work-e2e.sh               |  14 +-
+ scripts/tests/test-agent-work-integration.sh       |   8 ++
+ 3 files changed, 159 insertions(+), 15 deletions(-)
+test_loop_session_requests_cli_and_only_its_session_wakes (__main__.MainCliLoopE2E.test_loop_session_requests_cli_and_only_its_session_wakes) ... MUTATION vigia turn: {'runId': '911d1618-b92f-4de0-b630-efa13185819f', 'status': 'error', 'startedAt': 1791232564902, 'endedAt': 1791232564968, 'error': "⚠️ Agent couldn't generate a response. Please try again.", 'stopReason': 'stop', 'livenessState': 'abandoned', 'terminalReceipt': {'runId': '911d1618-b92f-4de0-b630-efa13185819f', 'sessionId': 'f4da55d2-dbb8-40d0-8306-72308a685a9b', 'turnId': '911d1618-b92f-4de0-b630-efa13185819f', 'requested': {'provider': 'mock-openai', 'model': 'agent-work-loopback'}, 'effective': {'provider': 'mock-openai', 'model': 'agent-work-loopback', 'responseModel': 'agent-work-loopback'}, 'successfulToolNames': [], 'rerouted': False, 'terminalDisposition': 'not-visible'}, 'terminalReply': {'disposition': 'silent'}}
+FAIL
+
+======================================================================
+FAIL: test_loop_session_requests_cli_and_only_its_session_wakes (__main__.MainCliLoopE2E.test_loop_session_requests_cli_and_only_its_session_wakes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_main_cli_loop_e2e.py", line 234, in test_loop_session_requests_cli_and_only_its_session_wakes
+    self.assertEqual(in_window, [], "provider requests while the CLI worked")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [{'at': 1791232564806, 'method': 'POST', '[169 chars] []}] != []
+
+First list contains 2 additional elements.
+First extra element 0:
+{'at': 1791232564806, 'method': 'POST', 'path': '/v1/responses', 'wakeTasks': [], 'startedDeliveries': []}
+
++ []
+- [{'at': 1791232564806,
+-   'method': 'POST',
+-   'path': '/v1/responses',
+-   'startedDeliveries': [],
+-   'wakeTasks': []},
+-  {'at': 1791232564909,
+-   'method': 'POST',
+-   'path': '/v1/responses',
+-   'startedDeliveries': [],
+-   'wakeTasks': []}] : provider requests while the CLI worked
+
+----------------------------------------------------------------------
+Ran 1 test in 68.280s
+
+FAILED (failures=1)
+rc=1

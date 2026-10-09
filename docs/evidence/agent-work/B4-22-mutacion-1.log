@@ -1,0 +1,3 @@
+ok (B0-1-r2): relanzo con el mismo nombre deja una corrida ordinaria cerrable
+FAIL: B4-22: la sesion gestionada no nacio como se esperaba (marca|gestion|corrida): OPENCLAW_WATCH=1|AGENT_WORK_MANAGED=1|OPENCLAW_WATCH_RUN=t-reemp
+rc=1

@@ -1,0 +1,54 @@
+..............FF....
+======================================================================
+FAIL: test_prompt_identity_ignores_clocks_spinners_tokens_and_the_cursor (__main__.SilentPromptTest.test_prompt_identity_ignores_clocks_spinners_tokens_and_the_cursor)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3158, in test_prompt_identity_ignores_clocks_spinners_tokens_and_the_cursor
+    self.assertIsNone(approval_prompt_identity("> Allow once\n" + work + "linea de trabajo 14\n", pattern))
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'prompt-168511d24d9ee03122b3200f929be11eaaedad45cb0ecb20a95f549b3e3f4d0f' is not None
+
+======================================================================
+FAIL: test_tail_is_the_watcher_tail (__main__.SilentPromptTest.test_tail_is_the_watcher_tail) (screen='> Allow once\ntrabajo 0 3')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3174, in test_tail_is_the_watcher_tail
+    self.assertEqual(approval_tail(screen), watcher.stdout.decode("ascii").splitlines())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['trabajo 4 ', 'trabajo 5 ', 'trabajo 6 ', 'trabajo[178 chars]19 '] != ['trabajo 5 ', 'trabajo 6 ', 'trabajo 7 ', 'trabajo[164 chars]19 ']
+
+First differing element 0:
+'trabajo 4 '
+'trabajo 5 '
+
+First list contains 1 additional elements.
+First extra element 15:
+'trabajo 19 '
+
+- ['trabajo 4 ',
+?           ^
+
++ ['trabajo 5 ',
+?           ^
+
+-  'trabajo 5 ',
+   'trabajo 6 ',
+   'trabajo 7 ',
+   'trabajo 8 ',
+   'trabajo 9 ',
+   'trabajo 10 ',
+   'trabajo 11 ',
+   'trabajo 12 ',
+   'trabajo 13 ',
+   'trabajo 14 ',
+   'trabajo 15 ',
+   'trabajo 16 ',
+   'trabajo 17 ',
+   'trabajo 18 ',
+   'trabajo 19 ']
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.842s
+
+FAILED (failures=2)
+rc=1

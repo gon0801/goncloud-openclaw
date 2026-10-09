@@ -1,0 +1,133 @@
+F.FFFF..FFFF........
+======================================================================
+FAIL: test_a_busy_session_that_never_took_the_input_is_uncertain_and_a_late_acceptance_is_no_new_incident (__main__.DeliveryAcceptanceTest.test_a_busy_session_that_never_took_the_input_is_uncertain_and_a_late_acceptance_is_no_new_incident)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3561, in test_a_busy_session_that_never_took_the_input_is_uncertain_and_a_late_acceptance_is_no_new_incident
+    self.assertEqual(host.settle_deliveries("host-one", now=1060.0, deadline_seconds=60), [self.UNACCEPTED_KEY])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['host:1:transport-unavailable:delivery-unaccepted']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:delivery-unaccepted'
+
+- []
++ ['host:1:transport-unavailable:delivery-unaccepted']
+
+======================================================================
+FAIL: test_a_phantom_suggestion_in_the_composer_is_one_uncertain_incident_and_never_retyped (__main__.DeliveryAcceptanceTest.test_a_phantom_suggestion_in_the_composer_is_one_uncertain_incident_and_never_retyped)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3544, in test_a_phantom_suggestion_in_the_composer_is_one_uncertain_incident_and_never_retyped
+    self.assertEqual(self.status(host), "attempted")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'delivered' != 'attempted'
+- delivered
++ attempted
+
+
+======================================================================
+FAIL: test_a_valid_result_without_acceptance_counts_and_an_invalid_one_does_not (__main__.DeliveryAcceptanceTest.test_a_valid_result_without_acceptance_counts_and_an_invalid_one_does_not)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3635, in test_a_valid_result_without_acceptance_counts_and_an_invalid_one_does_not
+    self.assertEqual(host.settle_deliveries("host-one", now=1060.0, deadline_seconds=60), [self.UNACCEPTED_KEY])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['host:1:transport-unavailable:delivery-unaccepted']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:delivery-unaccepted'
+
+- []
++ ['host:1:transport-unavailable:delivery-unaccepted']
+
+======================================================================
+FAIL: test_only_an_acceptance_bound_to_this_assignment_counts (__main__.DeliveryAcceptanceTest.test_only_an_acceptance_bound_to_this_assignment_counts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3611, in test_only_an_acceptance_bound_to_this_assignment_counts
+    self.assertEqual(self.status(host), "attempted")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'delivered' != 'attempted'
+- delivered
++ attempted
+
+
+======================================================================
+FAIL: test_the_pump_settles_once_and_its_claim_replays_never_retype (__main__.DeliveryAcceptanceTest.test_the_pump_settles_once_and_its_claim_replays_never_retype)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3741, in test_the_pump_settles_once_and_its_claim_replays_never_retype
+    self.assertEqual(calls, [("task-silent", json.loads(self.UNACCEPTED_JSON))])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [('ta[24 chars]: 'deadline', 'evidenceRef': 'host-operation:8[89 chars]d'})] != [('ta[24 chars]: 'delivery-unaccepted', 'evidenceRef': 'host-[106 chars]e'})]
+
+First differing element 0:
+('tas[23 chars]: 'deadline', 'evidenceRef': 'host-operation:8[88 chars]ed'})
+('tas[23 chars]: 'delivery-unaccepted', 'evidenceRef': 'host-[105 chars]le'})
+
+  [('task-silent',
+-   {'episodeId': 'deadline',
+?                    --
+
++   {'episodeId': 'delivery-unaccepted',
+?                      ++++++ +++ ++++
+
+     'evidenceRef': 'host-operation:8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571',
+-    'kind': 'deadline-missed'})]
++    'kind': 'transport-unavailable'})]
+
+======================================================================
+FAIL: test_typing_the_reference_is_not_a_delivery_until_the_cli_accepts (__main__.DeliveryAcceptanceTest.test_typing_the_reference_is_not_a_delivery_until_the_cli_accepts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3506, in test_typing_the_reference_is_not_a_delivery_until_the_cli_accepts
+    self.assertEqual((observation.status, observation.assignment_ref), ("typed", ref))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Tuples differ: ('delivered', '/var/folders/hp/sc_3c6qs7nvd[116 chars]son') != ('typed', '/var/folders/hp/sc_3c6qs7nvdswl_[112 chars]son')
+
+First differing element 0:
+'delivered'
+'typed'
+
+- ('delivered',
++ ('typed',
+   '/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp1ufgd0ld/host/assignments/8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571.json')
+
+======================================================================
+FAIL: test_uncertain_and_its_incident_survive_a_crash_together (__main__.DeliveryAcceptanceTest.test_uncertain_and_its_incident_survive_a_crash_together) (crash_writing='incidents')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3691, in test_uncertain_and_its_incident_survive_a_crash_together
+    with self.assertRaises(sqlite3.DatabaseError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: DatabaseError not raised
+
+======================================================================
+FAIL: test_uncertain_and_its_incident_survive_a_crash_together (__main__.DeliveryAcceptanceTest.test_uncertain_and_its_incident_survive_a_crash_together) (crash_writing='operations')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3691, in test_uncertain_and_its_incident_survive_a_crash_together
+    with self.assertRaises(sqlite3.DatabaseError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: DatabaseError not raised
+
+======================================================================
+FAIL: test_without_a_deadline_it_waits_and_an_unreadable_inbox_is_not_a_missing_acceptance (__main__.DeliveryAcceptanceTest.test_without_a_deadline_it_waits_and_an_unreadable_inbox_is_not_a_missing_acceptance)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3644, in test_without_a_deadline_it_waits_and_an_unreadable_inbox_is_not_a_missing_acceptance
+    self.assertEqual(self.status(host), "attempted")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'delivered' != 'attempted'
+- delivered
++ attempted
+
+
+----------------------------------------------------------------------
+Ran 19 tests in 0.472s
+
+FAILED (failures=9)
+rc=1

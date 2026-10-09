@@ -411,7 +411,7 @@ open(os.environ['REL_F'],'a').write(json.dumps(p)+chr(10))" 2>/dev/null ||
 # (" | relanzada automaticamente: ..." / " | no se pudo relanzar: ..." / " | ya se
 # relanzo ...") o nada si la sesion no es relanzable (el evento sale como antes).
 relanzo_automatico() {
-  local session=$1 run=$2 datos estado rol cli dir encargo marca salida rc razon
+  local session=$1 run=$2 datos estado rol cli dir gestion encargo marca salida rc razon
   [[ -n $run && -x $CORRIDA_BIN ]] || return 0
   [[ $run =~ ^[A-Za-z0-9_-]+$ ]] || return 0
   datos=$(REL_REG="$CORRIDA_STATE/$run/registro.json" REL_S="$session" python3 -c "
@@ -421,10 +421,17 @@ e=None
 for s in d.get('sesiones') or []:
   if isinstance(s,dict) and s.get('nombre')==os.environ['REL_S']: e=s
 if e and all(e.get(k) for k in ('rol','cli','dir')):
-  print('\t'.join([str(d.get('estado','')),e['rol'],e['cli'],e['dir'],str(e.get('encargo') or '')]))" 2>/dev/null) || datos=""
+  print('\t'.join([str(d.get('estado','')),e['rol'],e['cli'],e['dir'],'1' if (e.get('encargo_ref') or e.get('host_id')) else '0',str(e.get('encargo') or '')]))" 2>/dev/null) || datos=""
   [[ -n $datos ]] || return 0
-  IFS=$'\t' read -r estado rol cli dir encargo <<<"$datos"
+  IFS=$'\t' read -r estado rol cli dir gestion encargo <<<"$datos"
   [[ $estado == abierta ]] || return 0
+  # Gestionada (encargo_ref o host_id): la vigila su host y manda la incidencia
+  # al solicitante (T9 :266); relanzarla aqui recrearia el vigia antiguo.
+  if [[ $gestion == 1 ]]; then
+    relanzo_evento "$run" "$session" false "sesion gestionada: no se relanza; la reporta su host"
+    printf ' | sesion gestionada: no se relanza automaticamente; la reporta su host (corrida %s)' "$run"
+    return 0
+  fi
   mkdir -p "$RELANZO_DIR" 2>/dev/null || true
   marca="$RELANZO_DIR/$run.$session"
   # mkdir atomico: dos vigias con el mismo STATE_DIR (un --once manual y el

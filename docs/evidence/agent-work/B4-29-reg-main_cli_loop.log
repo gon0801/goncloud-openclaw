@@ -1,0 +1,8 @@
+MAIN_CLI_LOOP_CRON_REFUSED session=agent:main:cron:encargos-vigia:run:49266f76-b05e-4964-b96a-d7024250964c refused=1 loop_submit=registered
+.MAIN_CLI_LOOP_E2E requester=agent:main:encargos-loop submit=1 admit=1 delivery=1 window_s=12.3 window_provider_requests=0 report=1 wake_latency_s=6.10 wake_requests=1 provider_after_report=1 session_queue=[('5b66ef17916e8d8f1b09f50b41e5bcc7a8d68c302bc03485dda8a8924acd84c1', 'completed')] sessions=['agent:main:encargos-loop'] close=ReleasedAdopted stops=0
+.
+----------------------------------------------------------------------
+Ran 2 tests in 75.900s
+
+OK
+rc=0

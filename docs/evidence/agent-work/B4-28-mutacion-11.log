@@ -1,0 +1,15 @@
+.F
+======================================================================
+FAIL: test_every_spec_scenario_boundary_and_t10_case_has_one_row (__main__.AcceptanceMatrixTest.test_every_spec_scenario_boundary_and_t10_case_has_one_row)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 66, in test_every_spec_scenario_boundary_and_t10_case_has_one_row
+    self.assertIn(case, verifica[0], f"T10 no longer names {case}")
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'idle_72h' not found in 'Verifica con `bash scripts/tests/test-agent-work-e2e.sh review_tail_restart` y `acceptance`. La aceptación exige también `delivery_latency`, `resource_100_cycles` y los cien reenvíos, con evidencia reutilizada del mismo SHA cuando sea válida.' : T10 no longer names idle_72h
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.004s
+
+FAILED (failures=1)
+rc=1

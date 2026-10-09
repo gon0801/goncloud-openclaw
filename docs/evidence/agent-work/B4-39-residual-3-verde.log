@@ -1,0 +1,13 @@
+# Hallazgo 3 verde: lanzar-lead.sh con el arreglo + caso (5d)
+# copia: /private/tmp/claude-501/-Users-dn-dev-goncloud-openclaw/0d327440-0586-4e4c-86b0-f8b3bd36ebc8/scratchpad/b439res.ia9M/g @ e72027a2ed58735729fc2ddbb2eb9571253cb6ae
+# fecha: 2026-10-09T05:11:02Z
+# comando: bash scripts/tests/test-lanzar-lead.sh
+ok (1): cwd inexistente aborta con 1
+ok (2): crea la sesión en el cwd, la marca, espera el prompt y el mensaje entra con su sentinel
+ok (3): con la sesión viva no relanza (YA-EXISTE, rc 2)
+ok (4): sin prompt no manda nada y sale con 4
+ok (5): una sesion gestionada no se relanza (dos claves, una sola, cualquier corrida abierta); claves vacias o corrida cerrada, como siempre; sin poder comprobar, no lanza
+ok (5c): sin CORRIDA_STATE lee el default; nombre repetido entre corridas; la corrida es el directorio; sin corridas, registros raros y null lanzan
+ok (5d): un registro ilegible frena el lanzamiento (rc 6) en vez de saltarse
+TODO VERDE: lanzar-lead
+rc=0

@@ -1,0 +1,24 @@
+F
+======================================================================
+FAIL: test_changes_after_a_gateway_crash_register_one_correction_without_a_reminder (__main__.ReviewCorrectionRestartE2E.test_changes_after_a_gateway_crash_register_one_correction_without_a_reminder)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_review_correction_restart_e2e.py", line 75, in test_changes_after_a_gateway_crash_register_one_correction_without_a_reminder
+    self.assertEqual([(task["taskId"], task["hasResult"]) for task in before["tasks"]],
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [(task_id, False)], "the restart lost or changed the task")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != [('7e97eacf-77ce-4b0d-a4a3-795af20979f9', False)]
+
+Second list contains 1 additional elements.
+First extra element 0:
+('7e97eacf-77ce-4b0d-a4a3-795af20979f9', False)
+
+- []
++ [('7e97eacf-77ce-4b0d-a4a3-795af20979f9', False)] : the restart lost or changed the task
+
+----------------------------------------------------------------------
+Ran 1 test in 62.279s
+
+FAILED (failures=1)
+rc=1

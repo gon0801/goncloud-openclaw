@@ -12,6 +12,8 @@ export TMUX_BIN
 limpia() { "$TM" -L "$L" kill-server 2>/dev/null; rm -rf "$T"; }
 trap limpia EXIT
 CWD="$T/wt"; mkdir -p "$CWD"
+# Los registros de corrida de esta prueba viven en $T, nunca en el estado real.
+export CORRIDA_STATE="$T/corridas"; mkdir -p "$CORRIDA_STATE"
 
 # 1. cwd inexistente → 1
 out=$(bash scripts/lanzar-lead.sh -s s1 -c "$T/no-existe" -m 'hola -saikit' -- cat 2>&1); rc=$?
@@ -40,5 +42,90 @@ CLI2="$T/mudo.sh"; printf '#!/bin/sh\nexec cat\n' > "$CLI2"; chmod +x "$CLI2"
 out=$(bash scripts/lanzar-lead.sh -s s2 -c "$CWD" -m 'x -saikit' -p 'NUNCA>' -t 3 -- "$CLI2" 2>&1); rc=$?
 [ "$rc" -eq 4 ] && printf '%s\n' "$out" | grep -q 'ATORADO sin prompt' || fail "(4) sin prompt: rc=$rc $out"
 echo "ok (4): sin prompt no manda nada y sale con 4"
+
+# 5. T9 :266: lanzar-lead no relanza una sesion gestionada (encargo_ref o host_id en una
+# corrida abierta): la relanza su host. Filas: las dos claves, solo host_id, solo
+# encargo_ref, claves vacias con encargo plano, gestionada de una corrida cerrada y un
+# registro que no se puede recorrer.
+reg() { # $1 corrida $2 estado $3 sesion $4 json extra de la entrada
+  mkdir -p "$CORRIDA_STATE/$1"
+  printf '{"id": "%s", "estado": "%s", "sesiones": [{"nombre": "%s", "rol": "lead", "cli": "glm", "dir": "/tmp"%s}]}\n' \
+    "$1" "$2" "$3" "$4" >"$CORRIDA_STATE/$1/registro.json"
+}
+for fila in "s5a r5a ambas" "s5h r5h host" "s5r r5r ref"; do
+  set -- $fila
+  case "$3" in
+    ambas) reg "$2" abierta "$1" ', "host_id": "mac-local", "encargo_ref": "/host/inbox/x.json"' ;;
+    host) reg "$2" abierta "$1" ', "host_id": "mac-local"' ;;
+    ref) reg "$2" abierta "$1" ', "encargo_ref": "/host/inbox/x.json"' ;;
+  esac
+  out=$(bash scripts/lanzar-lead.sh -s "$1" -c "$CWD" -m 'x -saikit' -p 'FAKE>' -t 5 -- "$CLI" 2>&1); rc=$?
+  [ "$rc" -eq 6 ] || fail "(5) gestionada $1 ($3): rc=$rc $out"
+  [ "$(printf '%s\n' "$out" | tail -1)" = "ATORADO $1 es una sesion gestionada de la corrida $2 (T9 :266): la relanza su host, no lanzar-lead" ] \
+    || fail "(5) gestionada $1 ($3): la ultima linea no es la del ATORADO: $out"
+  "$TMUX_BIN" has-session -t "=$1" 2>/dev/null && fail "(5) gestionada $1 ($3): se creo la sesion"
+done
+reg r6 abierta s6 ', "host_id": "", "encargo_ref": "", "encargo": "/tmp/plano.txt"'
+reg r7 cerrada s7 ', "host_id": "mac-local", "encargo_ref": "/host/inbox/x.json"'
+for s in s6 s7; do
+  out=$(bash scripts/lanzar-lead.sh -s "$s" -c "$CWD" -m 'ruta anterior -saikit' -p 'FAKE>' -t 15 -- "$CLI" 2>&1); rc=$?
+  [ "$rc" -eq 0 ] && printf '%s\n' "$out" | tail -1 | grep -qE "^LISTO $s " \
+    && printf '%s\n' "$out" | grep -qx 'marca=OPENCLAW_WATCH=1' \
+    || fail "(5) $s no es gestionada y debia lanzarse marcada: rc=$rc $out"
+done
+reg r9 abierta s9 ''
+printf '{"id": "r9b", "estado": "abierta", "sesiones": 5}\n' >"$CORRIDA_STATE/r9/registro.json"
+out=$(bash scripts/lanzar-lead.sh -s s9 -c "$CWD" -m 'x -saikit' -p 'FAKE>' -t 5 -- "$CLI" 2>&1); rc=$?
+[ "$rc" -eq 6 ] && [ "$(printf '%s\n' "$out" | tail -1)" = "ATORADO no pude comprobar si s9 es una sesion gestionada" ] \
+  || fail "(5) un registro que no se puede recorrer debia frenar el lanzamiento: rc=$rc $out"
+"$TMUX_BIN" has-session -t "=s9" 2>/dev/null && fail "(5) con el registro sin recorrer se creo la sesion s9"
+echo "ok (5): una sesion gestionada no se relanza (dos claves, una sola, cualquier corrida abierta); claves vacias o corrida cerrada, como siempre; sin poder comprobar, no lanza"
+
+# 5c. Filas que faltaban. Cada una con su propio CORRIDA_STATE, para que el
+# registro r9 (sesiones: 5) de arriba no las frene.
+regen() { # $1 state $2 corrida $3 json completo del registro
+  mkdir -p "$1/$2"; printf '%s\n' "$3" >"$1/$2/registro.json"
+}
+lanza_ok() { # $1 sesion $2 etiqueta; resto: entorno para env
+  local s="$1" et="$2"; shift 2
+  out=$(env "$@" bash scripts/lanzar-lead.sh -s "$s" -c "$CWD" -m "ruta anterior $s -saikit" -p 'FAKE>' -t 15 -- "$CLI" 2>&1); rc=$?
+  [ "$rc" -eq 0 ] && printf '%s\n' "$out" | tail -1 | grep -qE "^LISTO $s " \
+    && printf '%s\n' "$out" | grep -qx 'marca=OPENCLAW_WATCH=1' \
+    || fail "(5c) $et: $s debia lanzarse marcada: rc=$rc $out"
+}
+frena() { # $1 sesion $2 corrida esperada $3 etiqueta; resto: entorno para env
+  local s="$1" c="$2" et="$3"; shift 3
+  out=$(env "$@" bash scripts/lanzar-lead.sh -s "$s" -c "$CWD" -m 'x -saikit' -p 'FAKE>' -t 5 -- "$CLI" 2>&1); rc=$?
+  [ "$rc" -eq 6 ] && [ "$(printf '%s\n' "$out" | tail -1)" = "ATORADO $s es una sesion gestionada de la corrida $c (T9 :266): la relanza su host, no lanzar-lead" ] \
+    || fail "(5c) $et: rc=$rc $out"
+  "$TMUX_BIN" has-session -t "=$s" 2>/dev/null && fail "(5c) $et: se creo la sesion $s"
+}
+G=', "host_id": "mac-local", "encargo_ref": "/host/inbox/x.json"'
+# (a) sin CORRIDA_STATE en el entorno: la guarda lee el default ~/.local/state/corridas
+H="$T/home"; regen "$H/.local/state/corridas" r10 "{\"id\": \"r10\", \"estado\": \"abierta\", \"sesiones\": [{\"nombre\": \"s10\"$G}]}"
+frena s10 r10 "sin CORRIDA_STATE la guarda no leyo el estado por defecto" -u CORRIDA_STATE HOME="$H"
+# (b) el mismo nombre en dos corridas abiertas: una entrada plana antes no tapa a la gestionada
+S="$T/c-dup"; regen "$S" r11a '{"id": "r11a", "estado": "abierta", "sesiones": [{"nombre": "s11", "encargo": "/tmp/plano.txt"}]}'
+regen "$S" r11b "{\"id\": \"r11b\", \"estado\": \"abierta\", \"sesiones\": [{\"nombre\": \"s11\"$G}]}"
+frena s11 r11b "nombre repetido en dos corridas abiertas: la primera entrada plana tapo a la gestionada" CORRIDA_STATE="$S"
+# (c) <corrida> es el directorio del registro, no su campo id
+S="$T/c-id"; regen "$S" r12 "{\"id\": \"otro-id\", \"estado\": \"abierta\", \"sesiones\": [{\"nombre\": \"s12\"$G}]}"
+frena s12 r12 "la corrida del ATORADO no es el directorio del registro" CORRIDA_STATE="$S"
+# (d) sin directorio de corridas: ruta anterior intacta
+lanza_ok s13 "sin directorio de corridas" CORRIDA_STATE="$T/no-hay-corridas"
+# (e) registro que no es objeto, entrada que no es objeto, claves null: se saltan
+S="$T/c-raros"; regen "$S" r14a '[]'; regen "$S" r14b '{"id": "r14b", "estado": "abierta", "sesiones": ["s14", 7, null]}'
+regen "$S" r14c '{"id": "r14c", "estado": "abierta", "sesiones": [{"nombre": "s14", "host_id": null, "encargo_ref": null}]}'
+lanza_ok s14 "registro no-objeto, entradas no-objeto y claves null no son gestion" CORRIDA_STATE="$S"
+echo "ok (5c): sin CORRIDA_STATE lee el default; nombre repetido entre corridas; la corrida es el directorio; sin corridas, registros raros y null lanzan"
+
+# 5d. B4-28: un registro.json ilegible podria ser el de la corrida duena de la
+# gestionada; sin leerlo no se sabe, asi que frena como cualquier registro sin comprobar.
+S="$T/c-roto"; regen "$S" r15 '{no es json'
+out=$(CORRIDA_STATE="$S" bash scripts/lanzar-lead.sh -s s15 -c "$CWD" -m 'x -saikit' -p 'FAKE>' -t 5 -- "$CLI" 2>&1); rc=$?
+[ "$rc" -eq 6 ] && [ "$(printf '%s\n' "$out" | tail -1)" = "ATORADO no pude comprobar si s15 es una sesion gestionada" ] \
+  || fail "(5d) un registro ilegible debia frenar el lanzamiento: rc=$rc $out"
+"$TMUX_BIN" has-session -t "=s15" 2>/dev/null && fail "(5d) con un registro ilegible se creo la sesion s15"
+echo "ok (5d): un registro ilegible frena el lanzamiento (rc 6) en vez de saltarse"
 
 echo "TODO VERDE: lanzar-lead"

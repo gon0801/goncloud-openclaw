@@ -1,0 +1,213 @@
+[test] starting test/vitest/vitest.agents-embedded-agent-run.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+[vitest-workers] local cache miss after 1449ms
+node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js (2400:30) [33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js:2400:31 [38;5;246m][0m
+      [38;5;246m│[0m
+ [38;5;246m2400 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mA[0m[38;5;249mS[0m[38;5;249mM[0m[38;5;249m_[0m[38;5;249mC[0m[38;5;249mO[0m[38;5;249mN[0m[38;5;249mS[0m[38;5;249mT[0m[38;5;249mS[0m[38;5;249m[[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249ma[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m][0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m     │[0m                               ──┬─
+ [38;5;240m     │[0m                                 ╰─── Use of direct `eval` here.
+ [38;5;240m     │[0m
+ [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m──────╯[0m
+
+node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js (2423:32) [33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js:2423:33 [38;5;246m][0m
+      [38;5;246m│[0m
+ [38;5;246m2423 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mm[0m[38;5;249mo[0m[38;5;249md[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mE[0m[38;5;249mx[0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249ms[0m[38;5;249m[[0m[38;5;249mn[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249m][0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m     │[0m                                 ──┬─
+ [38;5;240m     │[0m                                   ╰─── Use of direct `eval` here.
+ [38;5;240m     │[0m
+ [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m──────╯[0m
+
+node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/resolve-evaluate-options.js (48:0) [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "" in "node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/resolve-evaluate-options.js" may not be preserved when bundling.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/resolve-evaluate-options.js:48:1 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m48 │[0m ''
+ [38;5;240m   │[0m ─┬
+ [38;5;240m   │[0m  ╰── module level directive may not be preserved
+ [38;5;240m   │[0m
+ [38;5;240m   │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m────╯[0m
+
+node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-create.js (6:0) [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "" in "node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-create.js" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-create.js:6:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m6 │[0m ''
+ [38;5;240m  │[0m ─┬
+ [38;5;240m  │[0m  ╰── module level directive may not be preserved
+ [38;5;240m  │[0m
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-is-declaration.js (11:0) [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "" in "node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-is-declaration.js" may not be preserved when bundling.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-is-declaration.js:11:1 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m11 │[0m ''
+ [38;5;240m   │[0m ─┬
+ [38;5;240m   │[0m  ╰── module level directive may not be preserved
+ [38;5;240m   │[0m
+ [38;5;240m   │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m────╯[0m
+
+node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/comment.js (12:0) [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "" in "node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/comment.js" may not be preserved when bundling.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/comment.js:12:1 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m12 │[0m ''
+ [38;5;240m   │[0m ─┬
+ [38;5;240m   │[0m  ╰── module level directive may not be preserved
+ [38;5;240m   │[0m
+ [38;5;240m   │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m────╯[0m
+
+node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/text.js (9:0) [33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "" in "node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/text.js" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/text.js:9:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m9 │[0m ''
+ [38;5;240m  │[0m ─┬
+ [38;5;240m  │[0m  ╰── module level directive may not be preserved
+ [38;5;240m  │[0m
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[vitest-workers] prepared c4abc404456e in 14646ms (16697 inputs, 17251 outputs)
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/embedded-agent-runner/run/attempt-recovery.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/embedded-agent-runner/run/attempt-recovery.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/embedded-agent-runner/run/attempt-recovery.test.ts: retiring openclaw.agentDatabaseLifecycle
+
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > fails fast on ECONNREFUSED for setup while normal runs retain connection retries
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > fails fast on ENOTFOUND for setup while normal runs retain connection retries
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > fails fast on EHOSTUNREACH for setup while normal runs retain connection retries
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > fails fast on ENETUNREACH for setup while normal runs retain connection retries
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > records accepted recovery with prior tool settlement but no private content
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > records rejected recovery with prior tool settlement but no private content
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues an output-limited response before any tool executes
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not revive an earlier output-limit error after a completed response
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues output-limited work from settled results after visible progress
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps repeated output-limit recovery inside the existing retry budget
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not bypass the output-limit budget through empty-error retries
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues slow output generation without consuming the transient outage window
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when a tool result is missing
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when a lifecycle item remains active
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when asynchronous tool work remains
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when a tool intentionally ended the turn
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when approval is pending
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when the harness owns transport recovery
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when the attempt yielded
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when the retry budget is disabled
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when the run was cancelled
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when the run deadline expired
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not resume an incomplete call after response.incomplete/unknown
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not resume an incomplete call after response.incomplete/content_filter
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not resume an incomplete call after response.completed/max_output_tokens
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not recover stale overflow after a completed validation response
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not recover stale overflow after a completed success response
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > recovers the completed overflow with replaySafe=false
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > recovers the completed overflow with replaySafe=true
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not compact a provider overflow when a tool result is missing
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not compact a provider overflow when a lifecycle item remains active
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not compact a provider overflow when asynchronous tool work remains
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not compact a provider overflow when a tool intentionally ended the turn
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not compact a provider overflow when approval is pending
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not compact a provider overflow when the harness owns transport recovery
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not compact a provider overflow when the attempt yielded
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not compact a provider overflow when the run was cancelled
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues after respecting the provider floor of 3600000 ms
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues after respecting the provider floor of 30000 ms
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues after respecting the provider floor of 5000 ms
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues after respecting the provider floor of 11054 ms
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues after respecting the provider floor of 8500 ms
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues after respecting the provider floor of 7000 ms
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues after respecting the provider floor of 7000 ms
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > honors prompt-exception pacing for HTTP 429 with floor 8500
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > honors prompt-exception pacing for HTTP 503 with floor 7000
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > honors prompt-exception pacing for HTTP 429 with floor 8500
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > honors prompt-exception pacing for HTTP 429 with floor 11054
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > honors prompt-exception pacing for HTTP 429 with floor 12000
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > honors a Retry-After HTTP date 30000 ms ahead
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > honors a Retry-After HTTP date 3900000 ms ahead
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > fails over past the saved maxRetryDelay…
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps waiting past the cap when tool ac…
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > still sleeps the same floor with no fal…
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps a floor inside the cap on the sam…
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > preserves the larger header floor after an SDK failure becomes an assistant message
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > exhausts ten rate-limited attempts before profile rotation and model failover
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues a settled exec batch after WebSocket error
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues a settled exec batch after WebSocket closed: reason included ECONN…
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues a settled exec batch after Responses stream ended with unresolved …
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues after a transient transport drop on a settled failed-tool batch
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues a settled write batch after an idle timeout (tool failed: false)
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues a settled write batch after an idle timeout (tool failed: true)
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when a tool result is missing
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when a lifecycle item remains active
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when asynchronous tool work remains
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when a tool intentionally ended the turn
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when approval is pending
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when the harness owns transport recovery
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when the attempt yielded
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when the retry budget is exhausted
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when compaction timed out
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when tool execution timed out
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when the run deadline expired
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues a parked Code Mode run from its persisted waiting result with activeCount=0
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues a parked Code Mode run from its persisted waiting result with activeCount=1
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues the existing transcript when tools have uncertain outcomes
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues the existing transcript when the failed tool summary does not match the settled batch
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues the existing transcript when the failed tool batch is parked but not fully settled
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues the existing transcript when the failure is retryable but not a transport drop
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues the existing transcript when the errored turn already carried visible text
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues the existing transcript when Codex reports a terminal provider prompt error
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when the run was externally aborted
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when the run timed out
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when the attempt yielded
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when the assistant error is not transient
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when a permanent WebSocket close has transient-looking reason text
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when Gateway storage is locked
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when the provider requires authentication
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when the provider has exhausted its quota
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when the continuation budget is spent
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > surfaces before_agent_run blocks with current carried usage
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > bypasses prompt failover for an operation-scoped compaction failure
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not transient-retry a transport failure marked managed_recovery_exhausted
+ × |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > still retries the same transport text when no managed recovery mark is present 15ms
+   → expected { action: 'proceed' } to match object { action: 'retry' }
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > gates the transport-diagnostic retry path too when the managed mark is present
+ ↓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the managed recovery brake ahead of profile rotation and model fallback
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > still retries the same transport text when no managed recovery mark is present
+AssertionError: expected { action: 'proceed' } to match object { action: 'retry' }
+
+- Expected
++ Received
+
+  {
+-   "action": "retry",
++   "action": "proceed",
+  }
+
+ ❯ src/agents/embedded-agent-runner/run/attempt-recovery.test.ts:1003:30
+    1001|       diagnostics: [],
+    1002|     });
+    1003|     expect(control.recovery).toMatchObject({ action: "retry" });
+       |                              ^
+    1004|   });
+    1005|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 96 skipped (97)
+   Start at  03:06:14
+   Duration  18.29s (transform 93%, import 6%, worker 1%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] failed 1 Vitest shard in 19.97s
+[test] FAILED (exit 1)

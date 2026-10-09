@@ -144,6 +144,9 @@ class NativeCliGatewayE2E(unittest.TestCase):
 
                     def fake_cli(assignment_ref, session):
                         operation = json.loads(Path(assignment_ref).read_text())
+                        atomic_json(Path(operation["acceptRef"]), {
+                            "schema": "agent-work.accept.v1", **{field: operation[field] for field in (
+                                "hostId", "taskId", "generation", "instanceId", "claimId", "capability")}})
                         artifact = root / "workspace" / "review.txt"
                         artifact.write_text("VEREDICTO aprobado\n")
                         result = {

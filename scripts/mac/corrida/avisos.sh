@@ -32,7 +32,8 @@ avisos_sha1() { # $1 cadena -> sha1 hex corto; la identidad dedupable de un avis
   printf '%s\n' "$h" | awk '{ print substr($1, 1, 10) }'
 }
 
-avisos_datos_de() { # $1 reg $2 sesion -> "estado\trol\tcli\tlead" (rol/cli vacios si no esta)
+avisos_datos_de() { # $1 reg $2 sesion -> "estado\trol\tcli\tlead\tgestionada" (rol/cli vacios si no esta)
+  # gestionada: 1 si la entrada de la sesion trae encargo_ref o host_id con valor; 0 si no (o si no esta)
   AV_REG="$1" AV_S="$2" python3 -c "
 import json,os
 d=json.load(open(os.environ['AV_REG']))
@@ -42,7 +43,8 @@ for x in d.get('sesiones') or []:
     if x.get('nombre')==os.environ['AV_S']: ent=x
     if x.get('rol')=='lead' and x.get('nombre'): lead=x['nombre']
 print('\t'.join([str(d.get('estado') or ''), str((ent or {}).get('rol') or ''),
-                 str((ent or {}).get('cli') or ''), lead]))" 2>/dev/null
+                 str((ent or {}).get('cli') or ''), lead,
+                 '1' if (ent or {}).get('encargo_ref') or (ent or {}).get('host_id') else '0']))" 2>/dev/null
 }
 
 avisos_lead_de() { # $1 reg -> nombre de la sesion lead (vacio si no hay)
@@ -60,6 +62,15 @@ import json,os
 d=json.load(open(os.environ['AV_REG']))
 for x in d.get('sesiones') or []:
     if isinstance(x,dict) and x.get('nombre'): print(x['nombre'])" 2>/dev/null
+}
+
+avisos_gestionadas_de() { # $1 reg -> nombres de sesiones gestionadas, uno por linea
+  AV_REG="$1" python3 -c "
+import json,os
+d=json.load(open(os.environ['AV_REG']))
+for x in d.get('sesiones') or []:
+    if isinstance(x,dict) and x.get('nombre') and (x.get('encargo_ref') or x.get('host_id')):
+        print(x['nombre'])" 2>/dev/null
 }
 
 avisos_escribir() { # $1 dir $2 id $3 corrida $4 sesion $5 rol $6 cli $7 tipo $8 detalle
@@ -122,7 +133,7 @@ avisos_emitir() {
     return 2
   fi
   local corrida="$1" sesion="$2" tipo="$3"; shift 3
-  local llave="" detalle="" datos estado rol cli reg id
+  local llave="" detalle="" datos estado rol cli gestionada reg id
   while [ $# -gt 0 ]; do
     case "$1" in
       --llave)
@@ -142,8 +153,8 @@ avisos_emitir() {
   [ "${#detalle}" -le 200 ] || { echo "avisos emitir: el detalle supera 200 caracteres" >&2; return 2; }
   # Codigos de salida de emitir: 0 = emitido o deduplicado; 2 = uso invalido;
   # 1 = fallo pasajero (el lock no cedio: el reintento del vigia aplica); 3 =
-  # RECHAZO DEFINITIVO (no existe, corrida cerrada o sesion ajena: ningun
-  # reintento puede arreglarlo y el vigia descarta el registro).
+  # RECHAZO DEFINITIVO (no existe, corrida cerrada, sesion ajena o sesion
+  # gestionada: ningun reintento puede arreglarlo y el vigia descarta el registro).
   corrida_id_valido "$corrida" || { echo "avisos emitir: id invalido: $corrida" >&2; return 3; }
   reg="$(registro_de "$corrida")"
   [ -f "$reg" ] || { echo "avisos emitir: sin registro: $corrida" >&2; return 3; }
@@ -152,6 +163,7 @@ avisos_emitir() {
   estado="$(printf '%s' "$datos" | cut -f1)"
   rol="$(printf '%s' "$datos" | cut -f2)"
   cli="$(printf '%s' "$datos" | cut -f3)"
+  gestionada="$(printf '%s' "$datos" | cut -f5)"
   if [ "$estado" != "abierta" ]; then
     lock_soltar "$reg"
     echo "avisos emitir: la corrida $corrida no esta abierta (estado: $estado)" >&2
@@ -160,6 +172,13 @@ avisos_emitir() {
   if [ -z "$rol" ]; then
     lock_soltar "$reg"
     echo "avisos emitir: la sesion $sesion no esta en el registro de $corrida" >&2
+    return 3
+  fi
+  # Una sesion gestionada la reporta su host al solicitante, y un aviso aqui
+  # despertaria al lead por ella; va antes del id para no deduplicar (T9 :265).
+  if [ "$gestionada" = "1" ]; then
+    lock_soltar "$reg"
+    echo "avisos emitir: la sesion $sesion de $corrida es gestionada (T9 :265): la reporta su host" >&2
     return 3
   fi
   id="${corrida}-${sesion}-${tipo}-$(avisos_sha1 "$llave")"
@@ -183,7 +202,7 @@ avisos_atender() {
     echo "uso: corrida.sh avisos atender <corrida>" >&2
     return 2
   fi
-  local corrida="$1" reg dir f estado ses salida rc=0 n=0 validos=0 reclamados=""
+  local corrida="$1" reg dir f estado ses gest salida rc=0 n=0 validos=0 reclamados=""
   corrida_id_valido "$corrida" || { echo "avisos atender: id invalido: $corrida" >&2; return 1; }
   reg="$(registro_de "$corrida")"
   [ -f "$reg" ] || { echo "avisos atender: sin registro: $corrida" >&2; return 1; }
@@ -214,6 +233,7 @@ avisos_atender() {
   [ "$n" -gt 0 ] || { lock_soltar "$reg"; echo "sin pendientes"; return 0; }
   estado="$(json_campo "$reg" estado)"
   ses="$(avisos_registradas_de "$reg")"
+  gest="$(avisos_gestionadas_de "$reg")"
   lock_soltar "$reg"
   # Solo lo reclamado en esta pasada: un tratado viejo conserva su sello y su
   # descarte (B1 r11).
@@ -221,6 +241,10 @@ avisos_atender() {
     [ -f "$f" ] || continue
     if [ "$estado" != "abierta" ]; then
       avisos_marcar "$f" descartado "la corrida $corrida no esta abierta"
+      continue
+    fi
+    if [ -n "$gest" ] && printf '%s\n' "$gest" | grep -Fxq -- "$(json_campo "$f" sesion)"; then
+      avisos_marcar "$f" descartado "la sesion $(json_campo "$f" sesion) es gestionada: la reporta su host"
       continue
     fi
     if printf '%s\n' "$ses" | grep -Fxq -- "$(json_campo "$f" sesion)"; then
@@ -250,7 +274,7 @@ avisos_despertar() {
   [ "$#" -ge 1 ] || { echo "uso: corrida.sh avisos despertar <corrida> [corrida ...]" >&2; return 2; }
   # Varios ids en UNA invocacion: el reintento del vigia corre una vez por tick
   # y un spawn de corrida.sh por pendiente retrasaba el tick entero.
-  local corrida reg dir f hay
+  local corrida reg dir f hay gest
   for corrida in "$@"; do
     corrida_id_valido "$corrida" || continue
     reg="$(registro_de "$corrida")"
@@ -259,8 +283,13 @@ avisos_despertar() {
     dir="$CORRIDA_STATE/$corrida/avisos"
     [ -d "$dir" ] || continue
     hay=""
+    gest="$(avisos_gestionadas_de "$reg")"
     for f in "$dir"/*.json; do
       [ -f "$f" ] || { continue; }
+      # T9 :265: un pendiente de una sesion gestionada no despierta al lead; el proximo atender lo descarta.
+      if [ -n "$gest" ] && printf '%s\n' "$gest" | grep -Fxq -- "$(json_campo "$f" sesion)"; then
+        continue
+      fi
       hay=1
       break
     done

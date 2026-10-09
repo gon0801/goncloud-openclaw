@@ -1,0 +1,26 @@
+..F.....
+======================================================================
+FAIL: test_deadline_counts_from_durable_delivery_once (__main__.SilentFailureTest.test_deadline_counts_from_durable_delivery_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2896, in test_deadline_counts_from_durable_delivery_once
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1060.0,
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                 deadline_seconds=60),
+                                                 ^^^^^^^^^^^^^^^^^^^^^
+                     ["host:1:deadline-missed:deadline"])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['host:1:deadline-missed:deadline']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'host:1:deadline-missed:deadline'
+
+- []
++ ['host:1:deadline-missed:deadline']
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.190s
+
+FAILED (failures=1)
+rc=1

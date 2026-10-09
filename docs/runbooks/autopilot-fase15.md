@@ -51,6 +51,8 @@ menos cada 30 minutos. Canal: Telegram, con el destino leído del cron
 `seguimiento.v1` y salen validados por `corrida.sh`, como define
 `loop-autopilot.md` §8.
 
+Excepción (T9 `:266`): una sesión gestionada (`AGENT_WORK_MANAGED=1` en tmux, o una entrada del registro con `encargo_ref` o `host_id`) nunca se marca con `OPENCLAW_WATCH` ni se relanza a mano; su host le reporta al solicitante el cierre, el diálogo o el plazo vencido.
+
 ## Clases de comando
 
 | Clase | Para qué | Candado |

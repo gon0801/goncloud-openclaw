@@ -1,0 +1,25 @@
+..F...
+======================================================================
+FAIL: test_flush_incidents_sends_once (__main__.IncidentFlushTest.test_flush_incidents_sends_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2411, in test_flush_incidents_sends_once
+    self.assertEqual(host.flush_incidents("host-one", send), (0, []))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Tuples differ: (1, []) != (0, [])
+
+First differing element 0:
+1
+0
+
+- (1, [])
+?  ^
+
++ (0, [])
+?  ^
+
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.029s
+
+FAILED (failures=1)

@@ -1,0 +1,22 @@
+..F.....
+======================================================================
+FAIL: test_a_citation_path_must_be_relative_to_the_repo (__main__.AcceptanceGuardsTest.test_a_citation_path_must_be_relative_to_the_repo)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 176, in test_a_citation_path_must_be_relative_to_the_repo
+    self.assertEqual(REF.findall("`/Users/x/a.py::test_one`"), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [('/Users/x/a.py', 'test_one')] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+('/Users/x/a.py', 'test_one')
+
+- [('/Users/x/a.py', 'test_one')]
++ []
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.007s
+
+FAILED (failures=1)
+rc=1

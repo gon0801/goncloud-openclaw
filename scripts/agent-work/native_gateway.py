@@ -11,12 +11,26 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 
-from contracts import AuthorizedOperation, OperationKey
+from contracts import AuthorizedOperation, IncidentRejected, OperationKey
 from host import Host, TmuxTransport
 from progress_bridge import transfer_host_projection, transfer_projection
-from spool import canonical
+from spool import canonical, incident_identity
+
+DEFINITIVE_INCIDENT_REJECTIONS = (
+    "Managed task incident conflict",
+    "Managed task generation mismatch",
+    "Managed task producer mismatch",
+    "Managed task not found",
+    "Managed task host does not own this CLI assignment",
+    "Managed task incident key or digest is invalid",
+    "Managed task host incident is invalid",
+    "Managed host incident identity is invalid",
+    "invalid managed host incident params",
+    "Managed task assignment is invalid",
+)
 
 
 class GatewayProjectionClient:
@@ -27,7 +41,7 @@ class GatewayProjectionClient:
         self.host_id = host_id
         self.expected_url = expected_url
 
-    def _call(self, method, params, *, nullable=False):
+    def _call(self, method, params, *, nullable=False, definitive=()):
         serialized = json.dumps(params, sort_keys=True, separators=(",", ":"))
         command = [self.openclaw_bin, "gateway", "call", method,
                    "--json", "--timeout", "30000"]
@@ -53,6 +67,16 @@ class GatewayProjectionClient:
             if pending is not None:
                 os.unlink(pending)
         if response.returncode:
+            if definitive:
+                try:
+                    parsed = json.loads(response.stdout)
+                except json.JSONDecodeError:
+                    parsed = None
+                if (isinstance(parsed, dict) and parsed.get("ok") is False
+                        and isinstance(parsed.get("error"), dict)
+                        and parsed["error"].get("type") == "gateway_request_error"
+                        and parsed["error"].get("message") in definitive):
+                    raise IncidentRejected(parsed["error"].get("message"))
             raise RuntimeError("native projection Gateway rejected request")
         try:
             parsed = json.loads(response.stdout)
@@ -122,6 +146,32 @@ class GatewayProjectionClient:
                 or receipt.get("generation") != generation or receipt.get("state") != state
                 or receipt.get("evidenceDigest") != evidence_digest):
             raise RuntimeError("native host closure receipt identity mismatch")
+        return receipt
+
+    def report_host_incident(self, assignment, incident):
+        if not isinstance(assignment, dict) or assignment.get("hostId") != self.host_id:
+            raise ValueError("host incident identity mismatch")
+        fields = ("taskId", "instanceId", "producerId", "capability")
+        if any(not assignment.get(field) for field in fields):
+            raise ValueError("host incident assignment incomplete")
+        if not assignment.get("adapterId"):
+            raise ValueError("host incident adapter required")
+        generation = assignment["generation"]
+        if not isinstance(generation, int) or isinstance(generation, bool) or generation < 1:
+            raise ValueError("host incident generation must be positive")
+        incident_key, incident_digest = incident_identity(generation, incident)
+        params = {"hostId": self.host_id, "adapterId": assignment["adapterId"],
+                  "instanceId": assignment["instanceId"],
+                  "capability": {"taskId": assignment["taskId"], "generation": generation,
+                                 "producerId": assignment["producerId"],
+                                 "token": assignment["capability"]},
+                  "incident": incident}
+        receipt = self._call("managedTasks.host.incident", params,
+                             definitive=DEFINITIVE_INCIDENT_REJECTIONS)
+        expected = {"taskId": assignment["taskId"], "generation": generation,
+                    "incidentKey": incident_key, "incidentDigest": incident_digest}
+        if receipt != expected:
+            raise RuntimeError("native host incident receipt identity mismatch")
         return receipt
 
     def admit_host(self, assignment):
@@ -248,7 +298,7 @@ def claim_cli_once(client, *, host, manager, adapter_id, instance_id, session,
             or target != {"kind": "cli", "hostId": client.host_id, "adapterId": adapter_id}
             or not isinstance(claim.get("taskId"), str) or not claim["taskId"]
             or not isinstance(claim.get("generation"), int) or isinstance(claim["generation"], bool)
-            or claim["generation"] < 0 or not isinstance(claim.get("claimId"), str)
+            or claim["generation"] < 1 or not isinstance(claim.get("claimId"), str)
             or not claim["claimId"] or not isinstance(capability, dict)
             or capability.get("taskId") != claim["taskId"]
             or capability.get("generation") != claim["generation"]
@@ -305,8 +355,9 @@ def transfer_gateway_projections(client, *, evidence_root, progress_state_dir, p
     raise RuntimeError("native projection Gateway page limit exceeded")
 
 
-def pump_once(client, *, host, evidence_root, progress_state_dir, progress_client, cli_claim=None):
-    """Report, close, claim authorized work, and drain projections in one code-only pass."""
+def pump_once(client, *, host, evidence_root, progress_state_dir, progress_client,
+              cli_claim=None, cli_watch=None):
+    """Report, close, detect silent CLI failures, claim authorized work, and drain projections in one code-only pass."""
     receipts = []
     report_error = None
     try:
@@ -319,6 +370,20 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
         closed, closure_errors = host.flush_closures(client.host_id, client.close_host)
     except (OSError, RuntimeError, ValueError) as exc:
         closure_errors = [str(exc)]
+    detected = 0
+    watch_errors = []
+    if cli_watch is not None:
+        try:
+            detected = len(cli_watch())
+        except (OSError, RuntimeError, ValueError) as exc:
+            watch_errors = [str(exc)]
+    incidents_sent = 0
+    incident_errors = []
+    try:
+        incidents_sent, incident_errors = host.flush_incidents(
+            client.host_id, client.report_host_incident)
+    except (OSError, RuntimeError, ValueError) as exc:
+        incident_errors = [str(exc)]
     claimed = None
     claim_error = None
     if cli_claim is not None:
@@ -334,16 +399,20 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
         raise report_error
     if claim_error is not None:
         raise claim_error
-    if closure_errors:
-        raise RuntimeError("; ".join(closure_errors))
-    result = {"reported": len(receipts), "transferred": transferred, "closed": closed}
+    errors = closure_errors + watch_errors + incident_errors
+    if errors:
+        raise RuntimeError("; ".join(errors))
+    result = {"reported": len(receipts), "transferred": transferred, "closed": closed,
+              "incidents": incidents_sent}
     if cli_claim is not None:
         result["claimed"] = 1 if claimed is not None else 0
+    if cli_watch is not None:
+        result["detected"] = detected
     return result
 
 
 def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_client,
-               stop_event, interval=1.0, cli_claim=None):
+               stop_event, interval=1.0, cli_claim=None, cli_watch=None):
     """Poll with code; a failed pass leaves durable host and native work for retry."""
     if not 0 < interval <= 5:
         raise ValueError("poll interval must be between zero and five seconds")
@@ -353,7 +422,7 @@ def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_clie
             result = pump_once(
                 client, host=host, evidence_root=evidence_root,
                 progress_state_dir=progress_state_dir, progress_client=progress_client,
-                cli_claim=cli_claim,
+                cli_claim=cli_claim, cli_watch=cli_watch,
             )
         except (OSError, RuntimeError, ValueError) as exc:
             error = str(exc)
@@ -382,6 +451,7 @@ def main(argv=None):
     parser.add_argument("--cli-session")
     parser.add_argument("--cli-workspace-root")
     parser.add_argument("--cli-tmux-socket")
+    parser.add_argument("--cli-deadline-seconds", type=float)
     parser.add_argument("--tmux-bin", default="tmux")
     parser.add_argument("--flush-results", action="store_true")
     parser.add_argument("--watch", action="store_true")
@@ -390,10 +460,11 @@ def main(argv=None):
     cli_fields = (args.cli_adapter_id, args.cli_instance_id, args.cli_session,
                   args.cli_workspace_root, args.cli_tmux_socket)
     cli_claim = None
+    cli_watch = None
     if args.claim_once or any(cli_fields):
         if not all(cli_fields) or not args.host_state_dir:
             parser.error("CLI claim requires adapter, stable instance, session, workspace, socket and host state")
-        from resources import ResourceManager, TmuxBackend
+        from resources import ResourceManager, TmuxBackend, load_approval_pattern
         host = Host(args.host_id, args.host_state_dir)
         backend = TmuxBackend(args.tmux_bin, args.cli_tmux_socket)
         manager = ResourceManager(host.spool, args.host_id, backend)
@@ -406,6 +477,15 @@ def main(argv=None):
             workspace_root=args.cli_workspace_root, deliver=transport.deliver,
             coverage=coverage,
         )
+
+        if args.cli_deadline_seconds is not None and not args.cli_deadline_seconds > 0:
+            parser.error("--cli-deadline-seconds must be positive")
+
+        approval = load_approval_pattern(Path(__file__).resolve().parents[1] / "mac/corrida/lib.sh")
+        cli_watch = lambda: host.detect_silent_failures(
+            args.host_id, manager.session_gone, now=time.time(),
+            deadline_seconds=args.cli_deadline_seconds,
+            prompt_identity=lambda key: manager.prompt_identity(key, approval))
     if args.claim_once:
         if args.watch or args.flush_results:
             parser.error("--claim-once excludes --watch and --flush-results")
@@ -424,7 +504,8 @@ def main(argv=None):
             watch_pump(
                 client, host=Host(args.host_id, args.host_state_dir),
                 evidence_root=args.evidence_root, progress_state_dir=args.progress_state_dir,
-                progress_client=args.progress_client, stop_event=stop, cli_claim=cli_claim,
+                progress_client=args.progress_client, stop_event=stop,
+                cli_claim=cli_claim, cli_watch=cli_watch,
             )
         finally:
             signal.signal(signal.SIGTERM, old_term)
@@ -439,7 +520,10 @@ def main(argv=None):
             reported = len(host.flush(args.host_id, client.report_host_result))
         except (OSError, RuntimeError, ValueError) as exc:
             report_error = exc
-        closed, closure_errors = host.flush_closures(args.host_id, client.close_host)
+        try:
+            closed, closure_errors = host.flush_closures(args.host_id, client.close_host)
+        except (OSError, RuntimeError, ValueError) as exc:
+            closed, closure_errors = 0, [str(exc)]
         if report_error is not None:
             print(f"agent-work flush: {report_error}", file=sys.stderr, flush=True)
         for error in closure_errors:

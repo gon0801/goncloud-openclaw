@@ -1,0 +1,195 @@
+[test] starting test/vitest/vitest.gateway-database-workers.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+[vitest-workers] local cache hit after 2548ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared c8a6db2cbbc9 in 2582ms (16698 inputs, 17251 outputs)
+ ✓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > prebinds the oldest CLI claim to one authenticated host instance before admission 479ms
+ ✓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > closes a bound host task only for its authenticated device 431ms
+ × |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > records one host incident only for its authenticated device and adapter 424ms
+   → Missing managed projection RPC managedTasks.host.incident
+ ✓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > serves a bounded brief only to the prebound authenticated host 448ms
+ × |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > requires operator admin authority for host reports and projections 3ms
+   → expected undefined to be 'operator.admin' // Object.is equality
+ ✓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > resolves one director decision through the guarded Gateway handler and replays its receipt 775ms
+ ✓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > accepts one CLI host result, rejects another host, and replays the same native receipt 820ms
+ ✓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > lists a durable projection and acknowledges only its exact host receipt 418ms
+ ✓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > rejects malformed or revoked requests before confirming a projection 416ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.stateReadWorkers
+[sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > serves and acknowledges a durable projection over an authenticated Gateway connection 18854ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > records one host incident only for its authenticated device and adapter
+Error: Missing managed projection RPC managedTasks.host.incident
+ ❯ call src/gateway/server-methods/managed-tasks.test.ts:72:13
+     70|     const handler = coreGatewayHandlers[method];
+     71|     if (!handler) {
+     72|       throw new Error(`Missing managed projection RPC ${method}`);
+       |             ^
+     73|     }
+     74|     await handler({
+ ❯ src/gateway/server-methods/managed-tasks.test.ts:246:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > requires operator admin authority for host reports and projections
+AssertionError: expected undefined to be 'operator.admin' // Object.is equality
+
+- Expected:
+"operator.admin"
+
++ Received:
+undefined
+
+ ❯ src/gateway/server-methods/managed-tasks.test.ts:441:81
+    439|     expect(resolveCoreOperatorGatewayMethodScope("managedTasks.host.br…
+    440|     expect(resolveCoreOperatorGatewayMethodScope("managedTasks.host.cl…
+    441|     expect(resolveCoreOperatorGatewayMethodScope("managedTasks.host.in…
+       |                                                                                 ^
+    442|       "operator.admin",
+    443|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 8 passed (10)
+   Start at  16:48:14
+   Duration  28.84s (tests 81%, transform 16%, import 2%, worker 1%)
+
+[test] starting test/vitest/vitest.gateway-server.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-methods-list.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-methods-list.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-methods-list.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-methods-list.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > GATEWAY_EVENTS > advertises Talk event streams in hello features 5ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > GATEWAY_EVENTS > advertises node topology updates 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > GATEWAY_EVENTS > advertises skill invalidation updates 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > GATEWAY_EVENTS > advertises profile-scoped preference invalidation updates 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > GATEWAY_EVENTS > advertises portal replace-set updates 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > GATEWAY_EVENTS > advertises session observer digests 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > GATEWAY_EVENTS > advertises question methods and events 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises plugin surface refresh for capability rotation 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises plugin reload with admin mutation policy and generation invalidation 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises node plugin tool catalog updates 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises node skill catalog updates 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises unified approval lookup, history, and resolution 1ms
+ × |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > appends new methods after model probing while preserving retained older method order 5ms
+   → expected [ 'models.probe', …(155) ] to deeply equal [ 'migrations.memory.plan', …(155) ]
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises ClawHub skill trust methods 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises Control UI GitHub previews 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises Control UI session pull request detection 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises explicit session viewer presence 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises session workspace reveal 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises the versioned activity audit method 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises update.hold 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises update.runs.get 4ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises update.runs.list 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > keeps deprecated restart preflight compatibility read-only and advertised 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > classifies cron mutations as control-plane writes 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > does not advertise hidden core handlers 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > rate-limits speculative inference under operator write authority 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > registers the hidden node protocol feature publication method 1ms
+ × |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > preserves the legacy advertised method order 2ms
+   → expected [ 'terminal.upload', …(163) ] to deeply equal [ 'sessions.catalog.continue', …(163) ]
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises API-key saving as an administrator control-plane write 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises the versioned Talk session RPCs 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises and wires cloud worker environment methods with their required scopes 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > advertises placement mutations with target-aware scopes 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > classifies proposal evaluation as a control-plane write 1ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > classifies project cloning as a described control-plane write 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > appends new methods after model probing while preserving retained older method order
+AssertionError: expected [ 'models.probe', …(155) ] to deeply equal [ 'migrations.memory.plan', …(155) ]
+
+- Expected
++ Received
+
+@@ -1,6 +1,7 @@
+  [
++   "models.probe",
+    "migrations.memory.plan",
+    "migrations.memory.apply",
+    "ui.command",
+    "approval.history",
+    "plugin.surface.refresh",
+@@ -152,7 +153,6 @@
+    "managedTasks.host.claim",
+    "managedTasks.host.brief",
+    "managedTasks.host.report",
+    "managedTasks.resolve",
+    "managedTasks.host.close",
+-   "managedTasks.host.incident",
+  ]
+
+ ❯ src/gateway/server-methods-list.test.ts:261:64
+    259|       "managedTasks.host.incident",
+    260|     ];
+    261|     expect(listGatewayMethods().slice(-expectedSuffix.length)).toEqual…
+       |                                                                ^
+    262|     const methods = listGatewayMethods();
+    263|     const legacyCount = LEGACY_ADVERTISED_GATEWAY_METHODS.length;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |gateway-server (gateway-server-parallel)| src/gateway/server-methods-list.test.ts > listGatewayMethods > preserves the legacy advertised method order
+AssertionError: expected [ 'terminal.upload', …(163) ] to deeply equal [ 'sessions.catalog.continue', …(163) ]
+
+- Expected
++ Received
+
+@@ -1,6 +1,7 @@
+  [
++   "terminal.upload",
+    "sessions.catalog.continue",
+    "sessions.catalog.archive",
+    "<redacted len=12>",
+    "approval.resolve",
+    "sessions.search",
+@@ -160,7 +161,6 @@
+    "managedTasks.host.claim",
+    "managedTasks.host.brief",
+    "managedTasks.host.report",
+    "managedTasks.resolve",
+    "managedTasks.host.close",
+-   "managedTasks.host.incident",
+  ]
+
+ ❯ src/gateway/server-methods-list.test.ts:549:59
+    547|       "managedTasks.host.incident",
+    548|     ];
+    549|     expect(coreMethods.slice(-expectedCoreSuffix.length)).toEqual(expe…
+       |                                                           ^
+    550|     expect(methods.indexOf("approval.get")).toBeGreaterThan(methods.in…
+    551|     expect(methods.indexOf("approval.resolve")).toBe(methods.indexOf("…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 32 passed (34)
+   Start at  16:48:43
+   Duration  3.24s (transform 63%, import 24%, worker 7%, setup 4%, tests 2%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] failed 2 Vitest shards in 33.86s
+[test] FAILED (exit 1)
+rc=1

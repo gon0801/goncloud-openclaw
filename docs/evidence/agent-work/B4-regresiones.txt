@@ -1,0 +1,429 @@
+# B4: regresiones nuestras de R (parte 1)
+
+Encargo B4-1-r1. Tres regresiones de la serie B0→B2, reproducidas en R
+`/Users/dn/dev/openclaw-agent-work-integration` (head de partida `3c1c7485375705ecb25411646994bdc37b63a10b`)
+y arregladas con tres commits. Base pública verde de referencia: `c074824a27c96d3983043f9eeb33823cd1772d8c`.
+Logs completos en `~/.local/state/encargos-loop/artifacts/B4-1-r1/`.
+
+## Regresión 1: el intento embebido consulta el binding gestionado y falla dentro de vitest
+
+- **Causa.** `608b3b21d83` (B2/T4, "Guard managed OpenAI provider calls with durable budget") agregó
+  `resolveManagedProviderRunBinding(attempt.runId, attempt.sessionKey)` en `prepareEmbeddedAttemptTransport`
+  (`src/agents/embedded-agent-runner/run/attempt-stream-settle.ts:473`). Esa llamada abre la base compartida;
+  el rechazo `!isMainThread` de `src/infra/sqlite-worker-store.ts:225-229` (código de la base pública, sin tocar)
+  la tumba dentro de vitest, porque los archivos corren en el pool `threads`
+  (`test/vitest/vitest.shared.config.ts:104`) donde `isMainThread` es falso. Las pruebas que necesitan el
+  broker van en forks: los 5 archivos no estaban en `databaseWorkerCoreTestFiles`.
+- **Commit que la introdujo:** `608b3b21d83`.
+- **Arreglo.** Entorno de pruebas, opción 1 (no hizo falta `vi.mock`): los 5 archivos se agregaron a
+  `databaseWorkerCoreTestFiles` y `attempt.code-mode-continuation.test.ts` además a
+  `databaseWorkerCoreFormerFastKinds` con `"unitFastIsolated"` (precedente `595ecfcaa72`). Así corren en el
+  proyecto `infra`, en forks, con broker y binding reales. Ningún archivo de prueba valida
+  `databaseWorkerCoreFormerFastKinds` (`git grep` vacío); las que leen `databaseWorkerCoreTestFiles` calculan
+  sus expectativas desde la lista misma.
+- **Paso 1 (producción corre el intento en el hilo principal).** Primer grep (arranques de workers):
+
+```
+src/test-utils/state-database-contention.ts:7:  const holder = new Worker(
+src/infra/worker-cpu.ts:63:export function createCpuTrackedWorker(...args: ConstructorParameters<typeof Worker>): Worker {
+src/infra/worker-cpu.ts:64:  const worker = new Worker(...args);
+src/infra/sqlite-worker-broker-lifecycle.ts:54:      createCpuTrackedWorker(options.carrierUrl, {
+src/infra/worker-task-pool-core.ts:397:      return createCpuTrackedWorker(workerUrl, workerOptions);
+src/config/sessions/session-accessor.sqlite-archive.ts:40:  return createCpuTrackedWorker(workerUrl, {
+src/secrets/egress-proxy/proxy-worker.ts:41:  const worker = createCpuTrackedWorker(workerUrl, {
+src/cli/gateway-cli/shutdown-hard-exit.ts:21:    worker = createCpuTrackedWorker(
+src/state/openclaw-state-lease-heartbeat.ts:377:        createCpuTrackedWorker(url, {
+src/gateway/cli-session-history.claude-snapshot.ts:200:            worker = createCpuTrackedWorker(OVERSIZED_ENTRY_WORKER_SOURCE, { eval: true });
+extensions/discord/src/voice/audio-worker-thread.ts:34:    ? workerSdk.createCpuTrackedWorker(url, workerOptions)
+extensions/discord/src/voice/audio-worker-thread.ts:35:    : new Worker(url, workerOptions);
+extensions/telegram/src/telegram-ingress-worker.ts:109:  const worker = createCpuTrackedWorker(
+extensions/openai/realtime-quicksilver-socket.ts:39:    const worker = createCpuTrackedWorker(workerUrl, {
+extensions/openai/realtime-quicksilver-peer.runtime.ts:60:    const worker = createCpuTrackedWorker(url, {
+```
+
+  Segundo grep (workers que cargan el intento): **vacío** (exit 1, sin coincidencias). Ningún worker carga
+  `embedded-agent-runner/run`, `harness/builtin-openclaw` ni `runEmbeddedAttempt`.
+- **Pruebas nuevas del guardia (obligatorias).** `src/agents/embedded-agent-runner/run/attempt-stream-transport.managed-binding.test.ts`,
+  con `vi.mock` de `../../tasks/managed-task.run-binding.js` y doble parcial de `managed-task.provider-stream.js`:
+  **(a)** el doble rechaza → `prepareEmbeddedAttemptTransport` rechaza con el mismo error y no llama a
+  `registerProviderStreamForModel`; **(b)** binding gestionado → el stream sale de
+  `createManagedNativeProviderStream(model, binding)` y el doble se llamó con `runId`/`sessionKey` del intento;
+  **(c)** binding gestionado + plugin con `wrapStreamFn` → rechaza con el mensaje completo
+  `Managed provider plugin stream is not budget-certified` (regex anclada `^...$`, no subcadena; el mensaje de
+  `managed-task.provider-stream.ts` es otro: "Managed provider **transport** is not budget-certified").
+  Fixtures copiados de `attempt-stream-transport.test.ts` con `sessionKey` agregado y el mismo `beforeEach`
+  de `extraParamsTesting.setProviderRuntimeDepsForTest({ wrapProviderStreamFn: () => undefined })`.
+  El archivo nuevo corre en su proyecto natural (`agents-embedded-agent-run`): como el binding está doblado,
+  no necesita el broker y no se agregó a `databaseWorkerCoreTestFiles`.
+- **Rojo** (`rojo-1.log`): 24 pruebas fallidas (23 + 1), todas `SqliteWorkerError: Shared-state admission
+  requires the host broker`, en los 5 archivos.
+- **Mutaciones** (cada una revertida después):
+  - `mutacion-1a.log`: envolver la línea 473 en `try { … } catch { null }` → rojo (a).
+  - `mutacion-1b.log`: borrar la consulta (`managedRun = null`) → rojo (a), (b) y (c) ((a) también cae porque
+    el doble deja de llamarse; (b) y (c) caen como exige el encargo).
+  - `mutacion-1c.log`: borrar el `if` del `wrapStreamFn` (líneas 474-476) → rojo solo (c).
+- **Verde** (`verde-1.log`, `verde-final.log`): 5 archivos + nuevo = 32 pruebas (29 + 3), exit 0.
+- **Commit:** `f2aa7dba2f992960991323d2ba5b1180f3dd037e`.
+
+## Regresión 2: la sección `managedTasks` sin declarar en dos pruebas de config
+
+- **Causa.** Agregamos la sección raíz `managedTasks` sin decidir su documentación ni su tier. La prueba
+  `schema.hints.test.ts:16-18` lo exige ("Adding a root config key requires choosing a docsUrl or listing it
+  here"); la de `schema.help.quality.test.ts` exige declaración de tier.
+- **Commit que la introdujo:** el commit de B0/T6 que agregó la sección raíz `managedTasks` (config de tareas
+  gestionadas; la sección llega con la serie del programa, sin docsUrl decidido).
+- **Arreglo.** `"managedTasks"` a `SECTIONS_WITHOUT_DOCS` en `src/config/schema.hints.test.ts` (mecanismo de la
+  propia prueba; no hay página, `grep -rli managedTasks docs` solo da notas de versión) y
+  `managedTasks` a `ROOT_TIER_PATHS` en `src/config/schema.tiers.ts` (orden alfabético, `advanced` por la vía
+  de `mergeTierHint`, porque las tareas gestionadas están apagadas por defecto — es el stub exacto que la
+  prueba sugiere: `"managedTasks": { advanced: true }`).
+- **Rojo** (`rojo-2.log`): `expected [ 'managedTasks' ] to deeply equal []` y
+  `1 config path(s) have no tier declaration`.
+- **Mutación** (`mutacion-2.log`): revertido solo el cambio de `schema.tiers.ts` → vuelve el rojo de tier.
+- **Verde** (`verde-2.log`, `verde-final.log`): 19 + 14 pruebas, exit 0.
+- **Commit:** `c0dd682ded8123a5ae914c8a0e1f9283954c050b`.
+
+## Regresión 3: `heartbeat-runner.model-override` despierta como `heartbeat` en vez de `cron`
+
+- **Causa.** `02bbd93292c33bb1134a9c5c913b91a3df8090ed` ("Resume managed task with original requester identity")
+  re-clasificó el evento de tarea seleccionado: antes caía en `cronEvents` (así un despertar cron que cargaba
+  una tarea daba `hasCronEvents` → `InternalTurnSource: "cron"`); ahora va a `genericEvents` (su propia prueba
+  `heartbeat-runner-prompt.managed-task.test.ts` lo exige, incluso con `isCronWake=true`) y el `'cron'` de
+  `InternalTurnSource` se deriva aparte, en `src/infra/heartbeat-runner-run.ts`.
+- **Commit que la introdujo:** `02bbd93292c` (confirmado por bisect, ver abajo; la pista
+  `git log -S'event !== selectedTaskEvent'` apuntaba al mismo SHA).
+- **Bisect.** Copia aislada nueva (`git worktree add --detach` en `mktemp -d`,
+  `CI=1 pnpm install --frozen-lockfile --prefer-offline --ignore-scripts`; `git log c074824a27..5b14e9e --
+  pnpm-lock.yaml package.json` vacío, un solo install basta). `git bisect start 5b14e9e563a4f3802aa5e95e57e1d35904ea0c85 c074824a27c96d3983043f9eeb33823cd1772d8c`
+  y `git bisect run` con un script que corre solo `src/infra/heartbeat-runner.model-override.test.ts` y sale
+  1 con `×` en "cron-carried task", 0 con `✓`, 125 en otro caso. Primer commit malo: `02bbd93292c33bb1134a9c5c913b91a3df8090ed`.
+  `git bisect reset` al final; el bisect no tocó el checkout de R.
+- **Arreglo.** En `heartbeat-runner-run.ts`, la derivación de `InternalTurnSource` vuelve a reportar `'cron'`
+  cuando un despertar cron carga una tarea seleccionada: `prepared.hasCronEvents || (prepared.selectedTaskEventId
+  !== undefined && wake.wakeSource === "cron")`. No se devuelve el evento a `cronEvents`: las pruebas del
+  commit que rompió quedan verdes, junto con `heartbeat-runner.event-routing.test.ts`.
+- **Rojo** (`rojo-3.log`): `expected 'heartbeat' to be 'cron'` en `ctx?.InternalTurnSource`, línea 140.
+- **Mutación** (`mutacion-3.log`): revertido solo ese cambio → vuelve el rojo de "cron-carried task".
+- **Verde** (`/tmp/b4-1-verde3-intento1.log`, resumido en `verde-final.log`): model-override (9),
+  prompt.managed-task + event-routing + delivery + store + sentinel + requester e2e (47), y dos shards de 7.
+- **Commit:** `6d6582f532191b1216492522c5b0aff377444c7b`.
+
+## Verificación
+
+- **Verde de una vez** (`verde-final.log`): los 5 attempt + archivo nuevo + `schema.hints` +
+  `schema.help.quality` + `heartbeat-runner.model-override`, exit 0 (93 pruebas).
+- **Los 34 de la lista** `git diff --name-only --diff-filter=AM c074824a27c96d3983043f9eeb33823cd1772d8c 3c1c7485375705ecb25411646994bdc37b63a10b | grep '\.test\.ts$'`
+  (`los-34.log`, PID en `los-34.pid`): exit 0, 793 pruebas pasadas, 0 `×`.
+- **Build** (`build.log`, PID en `build.pid`): `pnpm build` en R después del último commit, exit 0.
+  `jq -r .commit dist/build-info.json` = `6d6582f532191b1216492522c5b0aff377444c7b` = `git rev-parse HEAD`.
+- **Integración desde G** (`caso-*.log`): `AGENT_WORK_RUNTIME_SOURCE=/Users/dn/dev/openclaw-agent-work-integration
+  bash scripts/agent-work/test-runtime.sh budget_tree`, `budget_evasion`, `projection_gateway`. Primera línea
+  de cada log: `"candidateSha": "6d6582f532191b1216492522c5b0aff377444c7b"` y
+  `"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"` (diff vacío,
+  `git status --porcelain` de R sin salida). Exit 0 los tres.
+- Todas las suites con `LANG=en_US.UTF-8`.
+
+# B4: regresiones nuestras de R (parte 2)
+
+Encargo B4-2-r1. Las otras tres causas de las seis pruebas que pasan en la base pública
+`c074824a27c96d3983043f9eeb33823cd1772d8c` y fallan en el head. Head de partida `6d6582f532191b1216492522c5b0aff377444c7b`,
+SHA de cierre `1a9bd1a32a8eebdf52929184d8464839bb4dd7d8`, un commit por causa. Logs completos en
+`~/.local/state/encargos-loop/artifacts/B4-2-r1/`.
+
+## Causa A: la versión 27 no está declarada fuera de TypeScript
+
+- **Síntomas.** `openclaw-database-preflight`: `expected { state: 19, agent: 24 } to deeply equal { state: 27, agent: 24 }`
+  (`package.json` `openclaw.schemaVersions.state: 19` frente a `OPENCLAW_STATE_SCHEMA_VERSION` 27).
+  `check-native-state-schema-version`: `Native state schema version drift: Swift supports 19, TypeScript owns 27`.
+  `update-command-admit`: `state database … has schema 27; target supports 19`.
+- **Causa.** B0→B3 subieron el esquema de estado a 27 sin alinear `package.json` ni la constante Swift
+  `maximumSupportedSchemaVersion` (`apps/shared/OpenClawKit/Sources/OpenClawNativeState/OpenClawNativeStateSQLite.swift:43`).
+  El "target supports 19" de la admisión de updates sale del mismo `package.json` vía `supportedVersions`
+  (`src/cli/update-cli/schema-preflight.ts:57`, alimentado por `preflightOpenClawDatabaseSchemas`); no hay segundo punto.
+- **Lectura de Swift antes de subir el número.** Líneas 296-300: el guard rechaza bases con `user_version` mayor que el
+  máximo (con 19 rechaza una 27; con 27 pasa). 302-318: la lista cerrada de `validateVersionZeroOwnership` (433-463)
+  solo corre con `user_version == 0` (línea 302), así que no cuenta; una base versionada entra por 312-318:
+  `validateSharedDatabaseMetadata` (465-480, valida `schema_meta` contra la versión) y existencia de la tabla nativa
+  pedida (314-318). `validateTableShape` (482-498) valida columnas, STRICT e índice de solo esa tabla. El diff no toca
+  ninguna tabla nativa, así que subir a 27 no rompe ninguna validación.
+- **Arreglo.** `package.json` `state` 19→27 (`agent` queda 24) y Swift `maximumSupportedSchemaVersion` 19→27.
+- **Rojo** (`rojo.log`): las 3 pruebas.
+- **Mutaciones.** `mutacion-A.log`: `package.json` de vuelta a 19 → preflight rojo
+  (`expected { state: 19, agent: 24 } to deeply equal { state: 27, agent: 24 }`, 1 failed | 21 passed).
+  `mutacion-A2.log`: Swift de vuelta a 19 → check-native rojo (`Native state schema version drift: Swift supports 19,
+  TypeScript owns 27`). Ambas revertidas. La compilación Swift no corre en esta Mac: el guard lee el fuente; compilar
+  la app nativa queda fuera (T12), dicho como no hecho.
+- **Verde:** preflight 2/2, check-native 22/22, update-command-admit 22/22.
+- **Commit:** `2b704ddbcde705cd0056689bdcb3f54f8138689b`.
+
+## Causa B: tres columnas de la v25 registradas como aditivas de la misma versión
+
+- **Síntomas.** `openclaw-database-maintenance.test.ts:170` y las 2 de `read-only-state-compat.test.ts:41-58`:
+  `error in index idx_managed_tasks_projection_pending after drop column: no such column: projection_json`.
+- **Causa.** `412bf5be195` ("Add durable managed task progress projections") creó `managed_tasks.projection_json`,
+  `projection_receipt_json` y `projection_publisher_host_id`, su índice parcial (`openclaw-state-schema.sql:1614-1616`),
+  subió a v25 y además registró las tres en `lazyColumns` (`src/state/openclaw-state-db-additive-columns.ts:48-50`).
+  Ese registro las declara como columnas que una base v25+ puede no tener, y es falso: las pruebas que recorren esa
+  lista las borran con `DROP COLUMN` y el índice parcial revienta. Upstream registra así solo columnas opcionales; las
+  que llegan con un salto de versión van en `versionedStateMigrations` (`src/state/openclaw-state-db-maintenance.ts`,
+  v13→v18). La excepción upstream de v19 (`authorization_id` lazy con índice único) no se extiende a este índice:
+  nuestras tres columnas son obligatorias en una base v25+.
+- **Arreglo (sin tocar ninguna prueba).** Las tres columnas fuera de `lazyColumns`; nueva migración
+  `migrateManagedTaskProgressProjections` con gate `previousVersion < 25`, que no hace nada si `managed_tasks` no
+  existe (base nueva o `DROP TABLE`, `managed-task.store.test.ts:216`) y si existe agrega cada columna con
+  `tableExists` + `ensureColumn` (estilo `migrateGitHubPublicationRequesterAuthority`, v18); entrada nueva al final de
+  `versionedStateMigrations` con `applied: "Added managed task progress projection columns (v25)"`. Orden verificado en
+  `src/state/openclaw-state-db-schema-runtime.ts`: `ensureAdditiveStateColumns` (:139) → `versionedStateMigrations`
+  (:140-144) → `executeCanonicalStateSchema` (:147, crea `idx_managed_tasks_projection_pending`). Una base v24 termina
+  con las tres columnas y el índice.
+- **Rojo** (`rojo.log`): maintenance 1, read-only-compat 2.
+- **Mutación** (`mutacion-B.log`): quitar la entrada de la migración → `managed-task.projection.test.ts` rojo
+  ("upgrades a v24 task database and exposes legacy projection intent for reconciliation", 1 failed | 6 passed). Revertida.
+- **Verde:** maintenance + read-only-compat + preflight 42 pruebas; `managed-task.projection` 7. Ninguna prueba tocada.
+- **Commit:** `b571a0dbcfa3cf7f728f1790a6dde6aa523738c1`.
+
+## Causa C: el tope de lecturas del doctor
+
+- **Síntoma.** `openclaw-state-db.test.ts` "rejects a missing current-schema table instead of recreating it empty":
+  `expected 882 to be less than or equal to 850`. Guardia de rendimiento upstream (`af2c17e6003`, #149155) que cuenta
+  las lecturas SQL de un rechazo repetido del doctor.
+- **Medición** (después del commit de B; sondas con `expandedSQL` leído tras ejecutar, porque el observador guardaba
+  `sourceSQL` con `?` sin sustituir y las sondas por objeto pasan el nombre como parámetro):
+  base pública 835 lecturas; head 882 (3 corridas: 882, 882, 882; máximo 882). Los dos cambios temporales de medición
+  (console.log y `expandedSQL` en el contador) se revirtieron en la base y en el head; `git status --porcelain` vacío
+  en ambos. Todo en `medicion-C.log`.
+- **Consultas** (`consultas-base-uniq.txt` / `consultas-head-uniq.txt` / `diff-consultas.txt`):
+  base 638 únicas, head 680; **43 consultas nuevas o más frecuentes**, 48 lecturas extra, 1 desaparecida (la consulta
+  `WITH expected…` del guardia, que crece con la lista de tablas). Las 43 nombran `managed_task`, `idx_managed`
+  (prefijo de `idx_managed_tasks_projection_pending`) o `sqlite_autoindex_managed_task`: **0 sin objeto nuestro**
+  (`consultas-no-nuestras.txt` vacío). Dato de contexto: +16 `CREATE TABLE|INDEX|UNIQUE INDEX` sobre los 262 de la base.
+- **Arreglo medido.** Tope 850 → 897 = `850 + (lecturas head − lecturas base)` = `850 + (882 − 835)`, con comentario de
+  una línea con la cuenta. Es el único cambio de pruebas ajenas del encargo.
+- **Mutación** (`mutacion-C.log`): tope en lecturas head − 1 (881) → rojo `expected 882 to be less than or equal to 881`
+  (1 failed | 225 passed | 1 skipped). Revertida.
+- **Verde:** `openclaw-state-db.test.ts` 226 passed | 1 skipped.
+- **Commit:** `1a9bd1a32a8eebdf52929184d8464839bb4dd7d8`.
+
+## Verificación (parte 2)
+
+- **Verde de una vez** (`verde.log`, PID en `verde.pid`): las 6 + `managed-task.projection`, 4 shards passed, 0 `×`.
+- **Los 36** (`los-36.log`, PID en `los-36.pid`; lista en `36-pruebas.txt` de
+  `git diff --name-only --diff-filter=AM c074824a27…6d6582f… | grep '\.test\.ts$'`): 8 shards passed, 810 pruebas, 0 `×`.
+- **Tipos** (`tsgo-core.log`): `pnpm tsgo:core` en R, exit 0.
+- **Build** (`build.log`, PID en `build.pid`): `pnpm build` exit 0;
+  `jq -r .commit dist/build-info.json` = `1a9bd1a32a8eebdf52929184d8464839bb4dd7d8` = HEAD.
+- **Integración desde G** (`caso-budget_tree.log`, `caso-recovery_queue.log`, `caso-idle_72h.log`):
+  `AGENT_WORK_RUNTIME_SOURCE=/Users/dn/dev/openclaw-agent-work-integration bash scripts/agent-work/test-runtime.sh <caso>`,
+  exit 0 los tres; primera línea con `"candidateSha": "1a9bd1a32a8eebdf52929184d8464839bb4dd7d8"` y
+  `"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"` (diff vacío).
+- Todo con `LANG=en_US.UTF-8`. No tocado: lo de B4-1, los 22 errores de tipos, `secret-state-tables`,
+  `eager-import-closure`, `pr-worktree-provision` (fuera de alcance de B4-2).
+
+# B4: regresiones nuestras de R (parte 3)
+
+Encargo B4-3-r1. El token de productor en los respaldos, el inventario del wrapper de PR y los tipos
+(tercera parte de B4/regresiones). Head de partida `1a9bd1a32a8eebdf52929184d8464839bb4dd7d8`,
+SHA de cierre `739ca5334eaa5b5449ee5769223c4d40b8f52846`, un commit por causa. Logs completos en
+`~/.local/state/encargos-loop/artifacts/B4-3-r1/`.
+
+## Causa A: un módulo nuestro falta en el inventario del wrapper de PR
+
+- **Síntomas.** `eager-import-closure` (2) y `pr-worktree-provision` (3):
+  `Missing runtime imports: src/config/zod-schema.managed-tasks.ts. Add these lines to
+  scripts/pr-lib/wrapper-components.txt`, `src/config/zod-schema.root-shape.ts: unresolved
+  ./zod-schema.managed-tasks.js` y, en el wrapper extraído, `Cannot find module
+  .../src/config/zod-schema.managed-tasks.js`.
+- **Causa.** `zod-schema.root-shape.ts` importa el esquema de tareas gestionadas, pero el módulo no
+  está en `wrapper-components.txt`, así que el wrapper de PR se provisiona sin él.
+- **Arreglo.** `src/config/zod-schema.managed-tasks.ts` insertada tras `src/config/zod-schema.logging.ts`
+  (línea ~538 de `scripts/pr-lib/wrapper-components.txt`). El módulo solo importa `node:path` y `zod`,
+  ya cubiertos; no hizo falta ninguna ruta extra.
+- **Rojo** (`rojo.log`): 5 failed | 27 passed | 1 skipped en los dos archivos.
+- **Mutación** (`mutacion-A.log`): quitar la línea del inventario → 5 failed de nuevo, 3 menciones de
+  `Missing runtime imports`. Revertida.
+- **Verde** (`verde-A.log`): los dos archivos, 32 passed | 1 skipped.
+- **Commit:** `c7802c794fb20e8c578ae41eb02be650544e5631`.
+
+## Causa B: `managed_tasks.producer_token` es una credencial viva y va en los respaldos "sin secretos"
+
+- **Síntoma.** `secret-state-tables.test.ts` "classifies every schema table with credential-suggestive
+  columns": `credential-bearing tables must be redacted or reviewed safe … "openclaw-state-schema.sql:
+  managed_tasks (producer_token)"`.
+- **Por qué es serio.** `producer_token` se crea con `randomBytes(32).toString("hex")`
+  (`managed-task.store.ts:59`), se guarda en claro y se compara directo (`managed-task.worker.ts:220`,
+  `:414`). Los respaldos Git con `excludeSecrets` solo omiten `STATE_SECRET_TABLE_NAMES`
+  (`git-backup-codec.ts:243`), así que el respaldo redactado —el que se empuja al remoto en los
+  programados con push— llevaba el token.
+- **Diseño (fijado por el encargo; escrito en `diseno-B.md`).** `managed_tasks` entra a
+  `STATE_SECRET_TABLE_NAMES`; nuevo export `STATE_SECRET_DEPENDENT_TABLE_NAMES` con las 10 tablas cuya
+  fila depende por FK de una tabla secreta (`managed_task_waits`, `wait_clears`, `admissions`,
+  `incidents`, `handlings`, `children`, `cancellations`, `host_closures`, `budgets`,
+  `budget_reservations`); el códec las omite con `excludeSecrets` y las reporta en
+  `manifest.excludedTables` igual que a las secretas (solo rol global; `redactedSecretTables`).
+  Sin cierre genérico por FK: arrastraría `web_push_approval_deliveries`; queda como seguimiento.
+  Prohibidos respetados: sin cambio de esquema, sin hash del token, sin filas con token sustituido,
+  sin `sanitizeOpenClawGlobalStateSnapshot`, sin `GIT_BACKUP_PROJECTION_TABLES`,
+  `secret-state-tables.test.ts` intacto.
+- **Panel (interrogate, solo lectura, sobre `diseno-B.md` y el códec), antes de implementar.**
+  `panel-glm53` (GLM 5.3): BLOCKERS 0 — 3 warnings (el hueco preexistente de
+  `web_push_approval_deliveries` cuelga de `web_push_subscriptions` ya secreta; el cierre FK sin
+  guarda estructural contra drift del esquema; los tokens ya volcados siguen vivos sin rotación) y
+  1 nit (`excludedTables` mezcla dos motivos de omisión). `panel-glm52` (GLM 5.2): BLOCKERS 0 —
+  2 warnings (el mismo hueco web_push, que hoy deja restores redactados rotos en hosts con web push;
+  el cierre FK sin prueba estructural) y 1 nit (el mensaje B2 lleva partes variables, asertar por
+  regex). `panel-glm47` (GLM 4.7): BLOCKERS 0 — 1 warning (el cierre FK sin guarda estructural) y
+  1 nit (la advertencia al restaurar no distingue credencial de pérdida de tareas). Diversidad
+  reducida: solo familia GLM. Ningún bloqueante con evidencia; el diseño no cambió y no hubo segunda
+  ronda. Los tres avisos compartidos van como seguimiento (ver followups).
+- **Verificación del conjunto de 11 tablas hecha por los tres revisores** contra
+  `openclaw-state-schema.sql`: 12 cláusulas `REFERENCES managed_tasks` dentro de las 10,
+  `budget_reservations` → `budgets` también cubierta, ninguna otra tabla referencia `managed_task*`,
+  sin triggers en el esquema de estado; las 11 se recrean vacías en `convergeRestoredSchema` (ninguna
+  es lazy-additive) y `validateRestoredOwner` corre `foreign_key_check` (`git-backup-codec.ts:499`).
+- **Pruebas nuevas de comportamiento** (`src/snapshot/git-backup-codec.test.ts`, base con esquema
+  canónico vía `openOpenClawStateDatabase({ path })`; árbol con madre, hija y raíz en
+  `managed_task_children` y una fila en cada una de las 10 dependientes; token literal de 64 hex):
+  1. con `excludeSecrets: true` el token no aparece en ningún archivo bajo `outputPath` y
+     `manifest.excludedTables` contiene `managed_tasks` y las 10 dependientes;
+  2. ese respaldo redactado se restaura sin error (`foreign_key_check` incluido) y `managed_tasks`
+     queda vacía;
+  3. control con `excludeSecrets: false`: la misma función encuentra el token en
+     `tables/managed_tasks.jsonl` y el respaldo se restaura.
+- **Rojo** (`rojo.log`): secret-state-tables 1 failed.
+- **Mutaciones.** `mutacion-B1.log`: `managed_tasks` fuera de `STATE_SECRET_TABLE_NAMES` → prueba 1
+  roja (`managed_tasks: expected [...] to include 'managed_tasks'`), prueba 2 roja (`{ n: 3 }` vs
+  `{ n: +0 }`) y `secret-state-tables` roja (3 failed | 3 passed). Revertida.
+  `mutacion-B2.log`: solo `managed_task_budget_reservations` fuera del redactado → prueba 2 roja con
+  `SQLite foreign_key_check failed for .../database.sqlite: managed_task_budget_reservations row 1
+  references managed_task_budgets (foreign key 1)`, lanzado por `assertSqliteIntegrity`
+  (`sqlite-integrity.ts:232` desde `git-backup-codec.ts:499`); 1 failed | 3 passed. Revertida.
+- **Verde** (`verde-B.log`): `git-backup-codec.test.ts` + `secret-state-tables.test.ts`, 6 passed.
+- **Documentación:** `docs/cli/backup.md` lista `managed_tasks`, las 10 dependientes y la consecuencia
+  (un respaldo redactado restaurado no trae tareas gestionadas).
+- **Costos aceptados (seguimiento, no arreglados aquí).** `subagent_runs.payload_json.managedTaskId`
+  queda apuntando a tareas que ya no existen tras restaurar un respaldo redactado; los commits
+  anteriores del repositorio de respaldos conservan los tokens ya volcados y no hay rotación.
+- **Commit:** `d066863142ab5e102757fd747e63a2c4f3132776`.
+
+## Causa C: errores de tipos en pruebas nuestras
+
+- **Medición** (`tipos-antes.log`, 27 franjas de `run-tsgo-core-test-shards.mjs` en 1a9bd1a): **23
+  errores**, no 22 como esperaba el encargo (número real anotado). En los dos archivos de B0 a B2, 22:
+  `managed-task.provider-stream.test.ts` 16 (`TS2741 recovery` falta en el literal del ayudante
+  `admittedRun`) y `managed-task.recovery.test.ts` 6 (`TS18048 step` posiblemente undefined ×3 en el
+  servidor scriptable, `TS2550 Promise.withResolvers` ×2, `TS2339 sinceMs` sobre el recibo unión ×1).
+  El error 23 es `TS2339 replayAfterTurnStart` en `server.managed-task-requester.e2e.test.ts:99`,
+  ajeno a esta ronda (fila B1/T2): no se tocó, queda en "no hecho" de esta parte.
+- **Arreglo (solo tipos, mismas aserciones).** `provider-stream`: `recovery: false` en el retorno del
+  ayudante (el binding solo se lee como booleano, `managed-task.provider-stream.ts:101`, `:243`; hoy
+  `resolveManagedProviderRunBinding` devuelve `recovery: false` para una admisión nueva, así que es
+  equivalente). `recovery`: guarda `if (!step) throw` tras la indexación; estrechamiento del recibo
+  con `if (granted?.state !== "granted") throw` antes de leer `granted.sinceMs` (la aserción
+  `toEqual` previa queda igual); diferidos tipados locales en vez de `Promise.withResolvers`.
+  Sin quitar aserciones, sin `any`, sin `@ts-ignore`/`@ts-expect-error`.
+- **Conteo de pruebas:** 15 + 8 = 23 antes y después del cambio.
+- **Verde** (`verde-C.log`): los dos archivos, 23 passed. Tipos (`tipos-despues.log`, mismo bucle de
+  27 franjas): 0 errores en los dos archivos y ninguno nuevo respecto de `tipos-antes.log` (persiste
+  solo el `replayAfterTurnStart` preexistente). `pnpm tsgo:test:root` exit 0 antes y después
+  (`tsgo-root-antes.log`, `tsgo-root-despues.log`).
+- **Commit:** `739ca5334eaa5b5449ee5769223c4d40b8f52846`.
+
+## Verificación (parte 3)
+
+- **Verde de una vez** (`verde-una-vez.log`, PID en `verde-una-vez.pid`): los 3 archivos del rojo +
+  los 4 `src/snapshot/git-backup*.test.ts` + los 2 de la causa C: 4 shards, todo passed (63 passed |
+  2 skipped), 0 `×`.
+- **Los 36** (`los-36.log`, PID en `los-36.pid`; lista en `36-pruebas.txt` de
+  `git diff --name-only --diff-filter=AM c074824a27…6d6582f… | grep '\.test\.ts$'`): 8 shards passed,
+  38 archivos de prueba, 0 `×`.
+- **Tipos:** `pnpm tsgo:core` exit 0 (`tsgo-core.log`); bucle de 27 franjas antes/después arriba.
+- **Build** (`build.log`, PID en `build.pid`): `pnpm build` exit 0;
+  `jq -r .commit dist/build-info.json` = `739ca5334eaa5b5449ee5769223c4d40b8f52846` = HEAD.
+- **Integración desde G** (`caso-budget_tree.log`, `caso-resource_release.log`,
+  `caso-projection_gateway.log`): `AGENT_WORK_RUNTIME_SOURCE=… bash scripts/agent-work/test-runtime.sh
+  <caso>`, exit 0 los tres; `"candidateSha": "739ca5334eaa5b5449ee5769223c4d40b8f52846"` y
+  `"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"` (diff vacío).
+- Todo con `LANG=en_US.UTF-8`. No tocado: lo de B4-1 y B4-2, los 6 no bloqueantes de los bots (van en
+  B4-4), `secret-state-tables.test.ts`, y el error de tipos preexistente de
+  `server.managed-task-requester.e2e.test.ts` (fila B1/T2).
+
+# B4: no bloqueantes de B3 y residuales de B4-3
+
+R1 y R2 van en R `96f8e5fadf64ba0a5d473e3e0d968d5f5b4fe32d`; G1 y G2 en G
+`439b94e862ae44e674f04558d7e7863792f44389` y `fedc62e56f15e48f63661191dfd33884d8e71c2a`.
+Logs en `~/.local/state/encargos-loop/artifacts/B4-4-r1/`.
+
+- **R1 prueba del manifiesto autorreferente** (`git-backup-codec.test.ts`). El `it` «omits the
+  producer token…» recorría `["managed_tasks", ...STATE_SECRET_DEPENDENT_TABLE_NAMES]`: si la lista
+  de producción perdía una tabla, la prueba la perdía en silencio. **Cambio:** lista literal de 11
+  tablas (`managed_tasks` + las 10 dependientes) e import de `STATE_SECRET_DEPENDENT_TABLE_NAMES`
+  fuera de la línea 10 (`no-unused-vars` es error en oxlint). **Mutación** (`mutacion-R1.log`): quita
+  `managed_task_waits` de la lista fuente -> rojo,
+  `managed_task_waits: expected [ 'apns_registrations', …(26) ] to include 'managed_task_waits'`
+  desde el `toContain`; revertida. **Verde:** suite de los 3 archivos de R en `verde-R-suite.log`
+  (6 unitarias + 7 del e2e, 0 `×`).
+- **R2 comentario** (`secret-state-tables.ts`): `/** Tables whose rows depend by FK on a secret
+  table; omitted with it. */` en vez del español.
+- **R3 último error de tipos** (`server.managed-task-requester.e2e.test.ts`). **Rojo**
+  (`rojo-R3-tsgo-src.log`, tsgo shard src sobre el árbol sin arreglo):
+  `(99,5): TS2339 Property 'replayAfterTurnStart' does not exist`. **Cambio:** `replayAfterTurnStart:
+  false` en las 4 filas del primer `it.each` que no lo traían. Efectos: los títulos de esos 4 casos
+  pasan de `replay: undefined` a `replay: false` (visibles en `verde-R-suite.log`); la lógica no
+  cambia (`Boolean(undefined)` y `false` son lo mismo; usos en las líneas ~105, ~198 y ~473); el
+  conteo queda en 5 casos del primer `it.each` y 7 pruebas del archivo.
+- **G1 generación 0 en `claim_cli_once`** (`native_gateway.py:251`). **Rojo**
+  (`rojo-G1.log`): con claim y capability en 0, la vieja condición `< 0` dejaba pasar el claim y
+  moría después en `_brief_to_workspace` con `AttributeError: 'Client' object has no attribute
+  'brief_chunk'`, no con el rechazo de identidad. **Cambio:** `< 0` -> `< 1`; en
+  `test-agent-work-integration.py` los valores de las líneas 1617, 1619 (claim y capability), 1706
+  (recibo de `admit_host`, que `host.py:146` compara con la generación del claim) y 1728
+  (`OperationKey`) pasan de 0 a 1; la 2031 no se toca (es un `close_host` que prueba un rechazo).
+  **Prueba nueva** `test_zero_generation_claim_is_rejected` en `CliClaimTest`: claim y capability
+  ambos en 0 a propósito (si solo el claim fuera 0, el rechazo vendría de la discrepancia con la
+  capability y la mutación no lo detectaría); espera
+  `ValueError: host claim identity mismatch`. **Mutación** (`mutacion-G1.log`): devolver la condición
+  a `< 0` -> rojo (el AttributeError vuelve). **Verde:** `verde-G1-cli.log`, CliClaimTest 5/5.
+- **G2 `closure_rows` escondía errores reales** (`spool.py:217`). **Rojo** (`rojo-G2.log`): (a)
+  `OSError not raised` (el `OperationalError("database is locked")` se tragaba y `flush_closures`
+  devolvía `(0, [])`); (b) el `OSError` salía como traceback crudo de `gateway_main` sin JSON.
+  **Cambio:** en `closure_rows` solo el caso con `"no such table"` en el mensaje devuelve `[]`;
+  cualquier otro se relanza como `OSError(str(exc)) from exc`. En `--flush-results`
+  (`native_gateway.py:442`) el `flush_closures` queda dentro de `try` con
+  `except (OSError, RuntimeError, ValueError)` -> `(0, [str(exc)])`, la misma forma de
+  `pump_once:318-321`. **Mutaciones:** volver a atrapar todo -> (a) roja (`mutacion-G2a.log`); quitar
+  el `try` de `:442` -> (b) roja (`mutacion-G2b.log`, `OSError: database is locked` como error de
+  unittest). **Verde:** `verde-G2-flush.log`, ClosureFlushTest 11/11. En `--watch` la falla visible
+  sigue siendo la línea `agent-work pump: …` en stderr, sin exit.
+- **G3 conteos de `coverage.json`:** medidos en el head con
+  `grep -cE 'def test_[a-z0-9_]*resource_identity'` = 8 y `resource_close` = 29 en
+  `test-agent-work-resources.py`; línea 49 actualizada a `resource_identity (8); resource_close
+  (29)`. Comprobación: `python3 -m json.tool` sin error y el `grep -o` devuelve (8) y (29).
+- **G4 redacción de `B2-triage-base-vs-diff.md`:** el timeout de backup-create pasó a "no se
+  reprodujo en aislado; causa no determinada" (fuera "Espurio" y "es de carga") en Resultados y en
+  Decision; la atribución de los 4 fallos de UI al locale se queda. Método gana la línea del LANG
+  efectivo no registrado. Misma corrección en la fila B2/bateria de `followups.md`.
+- **G5 sin opt-in para la cuenta `agentes`:** decisión anotada al final de la celda de acción de la
+  fila B3-2c de `terminar-sesion.sh`/`cerrar.sh` en `followups.md`: las pruebas reales de `agentes`
+  siguen siendo requisito del host certificado; sin opt-in porque si se saltaran por defecto, en esta
+  Mac podrían quedar sin correr sin que nadie lo note. Sin cambio de código.
+- **G6 "Docstring coverage":** no aplica, sin cambio; el repo no usa docstrings como regla. Va en la
+  sección `## Resueltos en B4-4-r1` de `followups.md`.
+
+## Verificación (B4-4-r1)
+
+- **Integración G completa** (`verde-G-integracion.log`): `python3
+  scripts/tests/test-agent-work-integration.py`, 59 pruebas, OK (skipped=1), rojos de G1 y G2 antes
+  del arreglo en `rojo-G1.log` y `rojo-G2.log`.
+- **Doc-check G:** `LANG=en_US.UTF-8 bash scripts/tests/test-doc-check-evidencia.sh` -> OK
+  (`doc-check.log`).
+- **Suite R** (`verde-R-suite.log`): `git-backup-codec.test.ts` + `secret-state-tables.test.ts` +
+  `server.managed-task-requester.e2e.test.ts` con `OPENCLAW_NODE_TEST_PLAN_CONTINUE_ON_FAILURE=1`,
+  todo verde; el shard del e2e dispara el build implícito de E2E del runner, no el build prohibido.
+- **Tipos R** (`tipos.log`): bucle de 27 franjas de `run-tsgo-core-test-shards.mjs --stripe $i/27`:
+  `grep -c 'error TS'` = 0 y las 27 líneas `rc=0`. `pnpm tsgo:core` (`tsgo-core.log`) y
+  `pnpm tsgo:test:root` (`tsgo-root.log`) exit 0.
+- **No corrido aquí:** `pnpm build` ni los casos del ejecutor (en R solo cambian pruebas y un
+  comentario). La batería del bloque corre al final de B4 con los heads finales.
+- **Fuera de alcance (anotado, sin arreglo):** `host.py:97` y `resources.py:77` también aceptan
+  generación 0; las lecturas del spool fuera de `closure_rows` lanzan `sqlite3.OperationalError`
+  crudo y `pump_once`/`watch_pump` no lo atrapan.

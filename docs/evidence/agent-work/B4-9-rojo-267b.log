@@ -1,0 +1,30 @@
+....F......
+======================================================================
+FAIL: test_main_cli_loop_instructions_keep_the_route_disabled_until_certified (__main__.AgentsRouting.test_main_cli_loop_instructions_keep_the_route_disabled_until_certified)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 100, in test_main_cli_loop_instructions_keep_the_route_disabled_until_certified
+    self.assertEqual(len(starts), 1, "expected exactly one main CLI route paragraph")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 0 != 1 : expected exactly one main CLI route paragraph
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.052s
+
+FAILED (failures=1)
+rc=1
+....F......
+======================================================================
+FAIL: test_main_cli_loop_instructions_keep_the_route_disabled_until_certified (__main__.AgentsRouting.test_main_cli_loop_instructions_keep_the_route_disabled_until_certified)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 116, in test_main_cli_loop_instructions_keep_the_route_disabled_until_certified
+    self.assertIn(expected, paragraph)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'isolated' not found in 'La ruta de `main` a un CLI de la Mac (`mac-local`) se prepara con `python3 scripts/agent-work/routing.py --requester main --target mac-local/<adaptador>` y sigue `managed_tasks_submit` → `managed_tasks_admit` → `managed_tasks_inspect` → `managed_tasks_resolve`. El CLI entrega `agent-work.result.v1` por referencia, en lugar de los archivos `LISTO` y `VEREDICTO`, y el informe despierta solo a la sesión que hizo `submit`. La sesión adoptada se retira sin matar procesos (`UserAdopted`). Mientras `mac-local` no esté `certified` en `coverage.json`, esta ruta está deshabilitada y el loop sigue con su flujo de hoy (vigía, `LISTO` y `VEREDICTO`).'
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.051s
+
+FAILED (failures=1)
+rc=1

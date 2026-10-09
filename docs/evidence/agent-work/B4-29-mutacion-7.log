@@ -1,0 +1,15 @@
+F
+======================================================================
+FAIL: test_changes_after_a_gateway_crash_register_one_correction_without_a_reminder (__main__.ReviewCorrectionRestartE2E.test_changes_after_a_gateway_crash_register_one_correction_without_a_reminder)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_review_correction_restart_e2e.py", line 96, in test_changes_after_a_gateway_crash_register_one_correction_without_a_reminder
+    self.assertTrue(rows, f"the requester never resolved; provider: {second.provider_requests()}")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: None is not true : the requester never resolved; provider: [{'at': 1791425670958, 'method': 'POST', 'path': '/v1/responses', 'wakeTasks': ['8d518855-18e6-4fcd-a7af-591f65361f33'], 'toolNames': ['agents_list', 'agents_wait', 'apply_patch', 'ask_user', 'create_goal', 'dashboard', 'edit', 'exec', 'get_goal', 'github_identity_status', 'ls', 'managed_tasks_admit', 'managed_tasks_artifact_read', 'managed_tasks_cancel', 'managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_submit', 'message', 'presence', 'process', 'progress_card', 'read', 'secrets', 'session_status', 'sessions_history', 'sessions_list', 'sessions_search', 'sessions_send', 'sessions_spawn', 'sessions_yield', 'skill_workshop', 'subagents', 'theme', 'transcripts', 'tts', 'update_goal', 'web_fetch', 'web_search', 'write'], 'answered': 'managed_tasks_inspect', 'incidentWakes': [], 'startedDeliveries': [{'sessionKey': 'agent:main:encargos-loop', 'contextKey': 'task:8d518855-18e6-4fcd-a7af-591f65361f33', 'enqueuedAt': 1791425660503}]}, {'at': 1791425671019, 'method': 'POST', 'path': '/v1/responses', 'wakeTasks': ['8d518855-18e6-4fcd-a7af-591f65361f33'], 'toolNames': ['agents_list', 'agents_wait', 'apply_patch', 'ask_user', 'create_goal', 'dashboard', 'edit', 'exec', 'get_goal', 'github_identity_status', 'ls', 'managed_tasks_admit', 'managed_tasks_artifact_read', 'managed_tasks_cancel', 'managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_submit', 'message', 'presence', 'process', 'progress_card', 'read', 'secrets', 'session_status', 'sessions_history', 'sessions_list', 'sessions_search', 'sessions_send', 'sessions_spawn', 'sessions_yield', 'skill_workshop', 'subagents', 'theme', 'transcripts', 'tts', 'update_goal', 'web_fetch', 'web_search', 'write'], 'answered': 'message', 'incidentWakes': [], 'startedDeliveries': [{'sessionKey': 'agent:main:encargos-loop', 'contextKey': 'task:8d518855-18e6-4fcd-a7af-591f65361f33', 'enqueuedAt': 1791425660503}]}]
+
+----------------------------------------------------------------------
+Ran 1 test in 123.772s
+
+FAILED (failures=1)
+rc=1

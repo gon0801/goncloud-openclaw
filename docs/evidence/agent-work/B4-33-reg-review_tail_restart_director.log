@@ -1,0 +1,7 @@
+REVIEW_TAIL_RESTART native_result=changes tail_lines=80 correction_children=1
+.
+----------------------------------------------------------------------
+Ran 1 test in 22.804s
+
+OK
+rc=0

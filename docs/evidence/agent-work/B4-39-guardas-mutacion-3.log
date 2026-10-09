@@ -1,0 +1,22 @@
+.......F
+======================================================================
+FAIL: test_the_pair_run_must_cover_every_cited_test_green_on_the_pair (__main__.AcceptanceGuardsTest.test_the_pair_run_must_cover_every_cited_test_green_on_the_pair) (expected='scripts/tests/t.py::test_one skipped: set AGENT_WORK_RUNTIME_SOURCE')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 215, in test_the_pair_run_must_cover_every_cited_test_green_on_the_pair
+    self.assertEqual(pair_problems(self.REFS, self.PAIR, doc, []), [expected])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['scripts/tests/t.py::test_one skipped: set AGENT_WORK_RUNTIME_SOURCE']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'scripts/tests/t.py::test_one skipped: set AGENT_WORK_RUNTIME_SOURCE'
+
+- []
++ ['scripts/tests/t.py::test_one skipped: set AGENT_WORK_RUNTIME_SOURCE']
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.007s
+
+FAILED (failures=1)
+rc=1

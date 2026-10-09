@@ -1,0 +1,11 @@
+# pre-commit sobre las rutas tocadas
+# copia: /private/tmp/claude-501/-Users-dn-dev-goncloud-openclaw/0d327440-0586-4e4c-86b0-f8b3bd36ebc8/scratchpad/b439res.ia9M/g @ e72027a2ed58735729fc2ddbb2eb9571253cb6ae
+# fecha: 2026-10-09T05:16:02Z
+# comando: pre-commit run --files scripts/lanzar-lead.sh scripts/tests/test-agent-work-routing.py scripts/tests/test-corrida-avisos.sh scripts/tests/test-corrida-latido.sh scripts/tests/test-lanzar-lead.sh
+trim trailing whitespace.................................................Passed
+fix end of files.........................................................Passed
+check for merge conflicts................................................Passed
+check for added large files..............................................Passed
+check json...........................................(no files to check)Skipped
+check yaml...........................................(no files to check)Skipped
+rc=0

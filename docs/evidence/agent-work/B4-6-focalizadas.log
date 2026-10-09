@@ -1,0 +1,189 @@
+[vitest-workers] local cache hit after 2186ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 35addd9ca533 in 2218ms (16697 inputs, 17251 outputs)
+[test] starting test/vitest/vitest.infra.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > grants recovery before the failed stream result returns and the marker survives restart 1015ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > recovers without a second admission, gateway entry, or queue row 581ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > holds the crashed run's scheduler slot through its native retry 587ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > shows no wait while the recovered retry runs, then the transport wait and incident when it dies 559ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > writes a recovery incident receipt only for an admitted run holding its marker 418ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > pins queue-busy for a granted recovery while the native row is still queued 524ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > persists the post-grant failure receipt across restart 901ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > refuses an already-granted recovery after restart even when the native run turned terminal 793ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > recovers a managed run with managedTasks configuration absent 526ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > finishes a recovered run of two model calls with the fund charged once 533ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > refuses the recovery episode when charged claims already spent the fund 527ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > refuses every later model call of a run whose recovery is exhausted, before any HTTP 519ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > does not recover a cancelled tree 521ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > a managed transport failure recovers on the runner's own retry and charges the fund exactly once 553ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > shows each waiting cause within 120 seconds 532ms
+ ✓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > derives managed identity from the native run rather than model fields 469ms
+ ✓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > restores managed identity from SQLite and charges the next HTTP request 450ms
+ ✓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > finds a managed run in SQLite before the registry is hydrated 414ms
+ ✓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > persists a transport wait when the reserved HTTP request loses its connection 754ms
+ ✓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > does not label an HTTP rejection as a transport outage 441ms
+ ✓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > persists a transport wait when an accepted SSE response ends before DONE 430ms
+ ✓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > persists a transport wait when the SSE socket drops after headers 455ms
+ ✓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > rejects uncertified provider routes before opening a connection 420ms
+ ✓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > reserves each real request before HTTP, verifies the wire output cap, and blocks a third call 434ms
+ ✓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > retains an unknown-use HTTP call and rejects later work at the call cap 429ms
+ ✓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > reserves a Responses request at the HTTP boundary and settles its reported usage 429ms
+ ✓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > blocks an SDK Responses retry before its second HTTP dispatch when recovery is exhausted 430ms
+ ✓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > records a Responses transport outage against its reserved HTTP call 435ms
+ ✓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > rejects a cancelled managed run before the HTTP boundary 424ms
+ ✓ |infra| src/agents/tasks/managed-task.provider-stream.test.ts > managed provider HTTP budget > blocks server-endpoint compaction above the output allowance before HTTP 424ms
+ ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > keeps root creation within the managed run lifetime (active) 1181ms
+ ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > keeps root creation within the managed run lifetime (cancelled) 613ms
+ ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > keeps root creation within the managed run lifetime (recovered) 1010ms
+ ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > keeps root creation within the managed run lifetime (released) 583ms
+ ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > stores one final result and replays its receipt without exposing a producer token 547ms
+ ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > assembles the report tool only for the bound managed child run 607ms
+ ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > refuses another run and a replaced native generation 538ms
+ ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > rolls back the result if authority is revoked before commit 522ms
+ ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > records an invalid report only for the bound native producer 552ms
+ ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > does not commit a tool-issued task after its turn authority is revoked 107ms
+ ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > rejects model-authored assignment fields outside the task contract 2ms
+ ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates a logical key within one requester across turns and restarts 766ms
+ ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > accepts only the current producer, generation, digest, and revision 434ms
+ ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > upgrades a version 19 database before the first managed task 455ms
+ ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > does not store malformed JSON or a result without its required fields 408ms
+ ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > rejects an empty or unversioned review while leaving the final slot available 762ms
+ ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > persists PermissionRequired as an incident without consuming the final result 757ms
+ ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > reserves recovery receipts to the recovery engine instead of the token path 403ms
+ ✓ |infra| src/agents/tasks/managed-task.store.test.ts > managed task durable registration and result > deduplicates director retries within a corrida without crossing corrida authority 395ms
+ ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > rejects invented admission reservations and preserves the root reservation on restart 408ms
+ ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > rejects incomplete runtime budget and context shapes before provider dispatch 476ms
+ ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > holds uncertain call capacity across retries and restart 777ms
+ ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > counts context components once, includes cached input, and rejects missing output enforcement 91ms
+ ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > reserves before provider dispatch and retains an uncertain stream after failure 89ms
+ ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > retains full reservation when terminal provider usage is absent 113ms
+ ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > rejects a cancelled managed run before provider invocation 97ms
+ ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > allows one automatic recovery call per root across restart and blocks the next before invoke 115ms
+ ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > shares model-call capacity across children after the parent turn ends and after restart 185ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.siblings.test.ts > root-wide recovery grants across siblings > refuses a sibling's recovery once another child of the root holds the grant 485ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.siblings.test.ts > root-wide recovery grants across siblings > blocks a sibling's recovery-charged call once another child spent the root fund 431ms
+ ✓ |infra| src/agents/tasks/managed-task.recovery.siblings.test.ts > root-wide recovery grants across siblings > charges the unified pool once per episode with a sibling refused 449ms
+
+ Test Files  6 passed (6)
+      Tests  61 passed (61)
+   Start at  04:23:46
+   Duration  39.09s (tests 80%, import 12%, transform 6%, setup 3%)
+
+[test] starting test/vitest/vitest.agents-embedded-agent-run.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > fails fast on ECONNREFUSED for setup while normal runs retain connection retries 33ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > fails fast on ENOTFOUND for setup while normal runs retain connection retries 3ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > fails fast on EHOSTUNREACH for setup while normal runs retain connection retries 2ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > fails fast on ENETUNREACH for setup while normal runs retain connection retries 2ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > records accepted recovery with prior tool settlement but no private content 5ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > records rejected recovery with prior tool settlement but no private content 2ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues an output-limited response before any tool executes 2ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not revive an earlier output-limit error after a completed response 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues output-limited work from settled results after visible progress 2ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps repeated output-limit recovery inside the existing retry budget 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not bypass the output-limit budget through empty-error retries 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues slow output generation without consuming the transient outage window 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when a tool result is missing 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when a lifecycle item remains active 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when asynchronous tool work remains 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when a tool intentionally ended the turn 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when approval is pending 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when the harness owns transport recovery 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when the attempt yielded 2ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when the retry budget is disabled 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when the run was cancelled 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue output-limited work when the run deadline expired 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not resume an incomplete call after response.incomplete/unknown 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not resume an incomplete call after response.incomplete/content_filter 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not resume an incomplete call after response.completed/max_output_tokens 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not recover stale overflow after a completed validation response 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not recover stale overflow after a completed success response 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > recovers the completed overflow with replaySafe=false 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > recovers the completed overflow with replaySafe=true 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not compact a provider overflow when a tool result is missing 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not compact a provider overflow when a lifecycle item remains active 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not compact a provider overflow when asynchronous tool work remains 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not compact a provider overflow when a tool intentionally ended the turn 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not compact a provider overflow when approval is pending 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not compact a provider overflow when the harness owns transport recovery 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not compact a provider overflow when the attempt yielded 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not compact a provider overflow when the run was cancelled 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues after respecting the provider floor of 3600000 ms 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues after respecting the provider floor of 30000 ms 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues after respecting the provider floor of 5000 ms 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues after respecting the provider floor of 11054 ms 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues after respecting the provider floor of 8500 ms 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues after respecting the provider floor of 7000 ms 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues after respecting the provider floor of 7000 ms 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > honors prompt-exception pacing for HTTP 429 with floor 8500 2ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > honors prompt-exception pacing for HTTP 503 with floor 7000 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > honors prompt-exception pacing for HTTP 429 with floor 8500 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > honors prompt-exception pacing for HTTP 429 with floor 11054 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > honors prompt-exception pacing for HTTP 429 with floor 12000 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > honors a Retry-After HTTP date 30000 ms ahead 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > honors a Retry-After HTTP date 3900000 ms ahead 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > fails over past the saved maxRetryDelay… 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps waiting past the cap when tool ac… 1ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/embedded-agent-runner/run/attempt-recovery.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/embedded-agent-runner/run/attempt-recovery.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/embedded-agent-runner/run/attempt-recovery.test.ts: retiring openclaw.agentDatabaseLifecycle
+
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > still sleeps the same floor with no fal… 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps a floor inside the cap on the sam… 3ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > preserves the larger header floor after an SDK failure becomes an assistant message 4ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > exhausts ten rate-limited attempts before profile rotation and model failover 2ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues a settled exec batch after WebSocket error 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues a settled exec batch after WebSocket closed: reason included ECONN… 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues a settled exec batch after Responses stream ended with unresolved … 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues after a transient transport drop on a settled failed-tool batch 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues a settled write batch after an idle timeout (tool failed: false) 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues a settled write batch after an idle timeout (tool failed: true) 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when a tool result is missing 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when a lifecycle item remains active 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when asynchronous tool work remains 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when a tool intentionally ended the turn 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when approval is pending 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when the harness owns transport recovery 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when the attempt yielded 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when the retry budget is exhausted 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when compaction timed out 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when tool execution timed out 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not continue an idle timeout when the run deadline expired 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues a parked Code Mode run from its persisted waiting result with activeCount=0 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues a parked Code Mode run from its persisted waiting result with activeCount=1 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues the existing transcript when tools have uncertain outcomes 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues the existing transcript when the failed tool summary does not match the settled batch 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues the existing transcript when the failed tool batch is parked but not fully settled 2ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues the existing transcript when the failure is retryable but not a transport drop 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues the existing transcript when the errored turn already carried visible text 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > continues the existing transcript when Codex reports a terminal provider prompt error 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when the run was externally aborted 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when the run timed out 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when the attempt yielded 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when the assistant error is not transient 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when a permanent WebSocket close has transient-looking reason text 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when Gateway storage is locked 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when the provider requires authentication 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when the provider has exhausted its quota 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the replay gate closed when the continuation budget is spent 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > surfaces before_agent_run blocks with current carried usage 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > bypasses prompt failover for an operation-scoped compaction failure 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > does not transient-retry a transport failure marked managed_recovery_exhausted 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > still retries the same transport text when no managed recovery mark is present 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > gates the transport-diagnostic retry path too when the managed mark is present 1ms
+ ✓ |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > keeps the managed recovery brake ahead of profile rotation and model fallback 1ms
+
+ Test Files  1 passed (1)
+      Tests  97 passed (97)
+   Start at  04:24:26
+   Duration  2.86s (transform 48%, import 38%, tests 5%, worker 5%, setup 3%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 2 Vitest shards in 45.88s

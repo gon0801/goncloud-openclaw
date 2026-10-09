@@ -17,8 +17,8 @@
 #   -t  segundos máximos de espera del prompt; default 60
 #   --  después va el CLI y sus flags, tal cual se ejecutan
 # salida: la última línea es `LISTO <sesion> <cwd>` o `ATORADO <razón>`
-# códigos: 0 ok · 1 uso/cwd inválido · 2 la sesión ya existía · 3 cwd del proceso distinto · 4 sin prompt · 5 el mensaje no entró
-# TMUX_BIN (default /opt/homebrew/bin/tmux) y PATH_LEAD se pueden fijar por entorno (los tests lo usan).
+# códigos: 0 ok · 1 uso/cwd inválido · 2 la sesión ya existía · 3 cwd del proceso distinto · 4 sin prompt · 5 el mensaje no entró · 6 sesión gestionada
+# TMUX_BIN (default /opt/homebrew/bin/tmux), PATH_LEAD y CORRIDA_STATE (default ~/.local/state/corridas) se pueden fijar por entorno (los tests lo usan).
 set -u
 TMUX_BIN=${TMUX_BIN:-/opt/homebrew/bin/tmux}
 PATH_LEAD=${PATH_LEAD:-/opt/homebrew/bin:/Users/dn/.local/bin:/Users/dn/bin}
@@ -44,6 +44,38 @@ if "$TMUX_BIN" has-session -t "$SESION" 2>/dev/null; then
   echo "ATORADO la sesion $SESION ya existe: kill-session antes de relanzar"
   exit 2
 fi
+
+# Una sesión gestionada (entrada con encargo_ref o host_id en una corrida abierta)
+# la relanza su host (T9 :266): lanzarla aquí con la marca recrearía el vigía antiguo.
+hallazgo=$(CORRIDA_STATE="${CORRIDA_STATE:-$HOME/.local/state/corridas}" CORRIDA_SESION="$SESION" python3 -c '
+import glob, json, os
+encontrada = None
+for ruta in sorted(glob.glob(os.environ["CORRIDA_STATE"] + "/*/registro.json")):
+    # Un registro ilegible puede ser el de la corrida duena: no se salta, frena (sin salida => ATORADO).
+    d = json.load(open(ruta))
+    if not isinstance(d, dict) or d.get("estado") != "abierta":
+        continue
+    for s in d.get("sesiones") or []:
+        if not isinstance(s, dict):
+            continue
+        if s.get("nombre") == os.environ["CORRIDA_SESION"] and (s.get("encargo_ref") or s.get("host_id")):
+            encontrada = os.path.basename(os.path.dirname(ruta))
+            break
+    if encontrada:
+        break
+print("GESTIONADA " + encontrada if encontrada else "LIBRE")
+' 2>/dev/null)
+case "$hallazgo" in
+  LIBRE) : ;;
+  GESTIONADA\ *)
+    echo "ATORADO $SESION es una sesion gestionada de la corrida ${hallazgo#GESTIONADA } (T9 :266): la relanza su host, no lanzar-lead"
+    exit 6
+    ;;
+  *)
+    echo "ATORADO no pude comprobar si $SESION es una sesion gestionada"
+    exit 6
+    ;;
+esac
 
 # El CLI y sus flags van dentro del comando de la sesión, con el PATH embebido.
 CMD="PATH=$PATH_LEAD:\$PATH exec"

@@ -1,0 +1,8 @@
+REVIEW_TAIL_RESTART wake_in_flight=1 verdict_in_tail_80=0 pid1=72627 pid2=75232 handlings=1 children=1 correction_accepted=1 provider=['message', 'managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit', 'message']
+.REVIEW_TAIL_RESTART wake_in_flight=0 verdict_in_tail_80=0 pid1=78658 pid2=80726 handlings=1 children=1 correction_accepted=1 provider=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit', 'message']
+.
+----------------------------------------------------------------------
+Ran 2 tests in 175.990s
+
+OK
+rc=0

@@ -1,0 +1,56 @@
+[tsgo:agents-root] passed in 3.5s
+slice 1 rc=0
+[tsgo:agents-other] passed in 4.1s
+slice 2 rc=0
+[dist artifacts] waiting for checkout ownership: /Users/dn/dev/openclaw-agent-work-integration/.artifacts/dist-artifacts.lock
+[tsgo:agents-tools] passed in 3.9s
+slice 3 rc=0
+[tsgo:gateway-root] passed in 5.1s
+slice 4 rc=0
+[dist artifacts] waiting for checkout ownership: /Users/dn/dev/openclaw-agent-work-integration/.artifacts/dist-artifacts.lock
+[tsgo:gateway-server] passed in 5.1s
+slice 5 rc=0
+[tsgo:gateway-other] passed in 3.4s
+slice 6 rc=0
+[tsgo:infra] passed in 3.6s
+slice 7 rc=0
+[tsgo:state-logging] passed in 3.5s
+slice 8 rc=0
+[tsgo:commands] passed in 3.8s
+slice 9 rc=0
+[tsgo:plugins-platform] passed in 4.0s
+slice 10 rc=0
+[tsgo:config-cli] passed in 3.7s
+slice 11 rc=0
+[tsgo:messaging] passed in 3.5s
+slice 12 rc=0
+[tsgo:services] passed in 3.6s
+slice 13 rc=0
+[tsgo:other] passed in 3.8s
+slice 14 rc=0
+[tsgo:ui-pages] passed in 4.3s
+slice 15 rc=0
+[tsgo:ui-e2e] passed in 4.2s
+slice 16 rc=0
+[tsgo:ui-other] passed in 3.9s
+slice 17 rc=0
+[tsgo:packages] passed in 3.5s
+slice 18 rc=0
+[tsgo:plugin-sdk] passed in 3.5s
+slice 19 rc=0
+[tsgo:commands-doctor] passed in 3.5s
+slice 20 rc=0
+[tsgo:cli-update] passed in 3.5s
+slice 21 rc=0
+[tsgo:gateway-methods] passed in 4.2s
+slice 22 rc=0
+[tsgo:ui-chat] passed in 4.1s
+slice 23 rc=0
+[tsgo:agents-sessions] passed in 3.4s
+slice 24 rc=0
+[tsgo:services-cron] passed in 3.4s
+slice 25 rc=0
+[tsgo:ui-app] passed in 3.9s
+slice 26 rc=0
+[tsgo:ui-components] passed in 3.9s
+slice 27 rc=0

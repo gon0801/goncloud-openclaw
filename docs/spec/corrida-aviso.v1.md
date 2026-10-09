@@ -36,6 +36,10 @@ consumidores concurrentes no duplican.
    sesión ajena o una corrida cerrada no emiten), deduplica por id, escribe
    el pendiente y despierta al dueño. El pendiente existe ANTES del
    despertar: si el despertar no aterriza, el aviso no se pierde.
+   Una sesión gestionada (`encargo_ref` o `host_id` con valor en su entrada
+   del registro) no emite: sale con código 3 y nada se escribe ni despierta,
+   porque la reporta su host al solicitante (T9 `:265`). `atender` descarta
+   con ese motivo un pendiente que ya existiera de ella.
 2. **Despertar**: send-keys a la sesión lead registrada de la corrida —
    `corrida.sh avisos atender <corrida>` — solo si su panel no muestra
    diálogo de aprobación (dueño ocupado: el pendiente espera). El vigilante

@@ -1,0 +1,3 @@
+FALLO: workspace-reviewer contrato sin la frase del encargo gestionado (T9 :265) justo despues de la linea Nunca:
+ROJO: 1 fallos en contratos de dispatch
+rc=1

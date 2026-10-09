@@ -1,0 +1,42 @@
+F
+======================================================================
+FAIL: test_the_same_result_reported_a_hundred_times_across_a_crash_is_recorded_once (__main__.CienReenviosE2E.test_the_same_result_reported_a_hundred_times_across_a_crash_is_recorded_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cien_reenvios_e2e.py", line 52, in repeat
+    self.host.flush(HOST_ID, report_then_lose_the_ack)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 464, in flush
+    receipt = report_to_runtime(result, artifact_bytes)
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cien_reenvios_e2e.py", line 45, in report_then_lose_the_ack
+    receipts.append(client.report_host_result(result, artifact))
+                    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/native_gateway.py", line 117, in report_host_result
+    return self._call("managedTasks.host.report", {
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "hostId": self.host_id, "resultId": result_id, "result": result,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "artifactBase64": base64.b64encode(artifact_bytes).decode("ascii"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    })
+    ^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/native_gateway.py", line 80, in _call
+    raise RuntimeError("native projection Gateway rejected request")
+RuntimeError: native projection Gateway rejected request
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cien_reenvios_e2e.py", line 72, in test_the_same_result_reported_a_hundred_times_across_a_crash_is_recorded_once
+    self.repeat(first, REPORTS // 2, receipts)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cien_reenvios_e2e.py", line 54, in repeat
+    self.fail(f"R refused a repeated report: {error}")
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: R refused a repeated report: native projection Gateway rejected request
+
+----------------------------------------------------------------------
+Ran 1 test in 32.735s
+
+FAILED (failures=1)
+rc=1

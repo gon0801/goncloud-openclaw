@@ -1,0 +1,22 @@
+F
+======================================================================
+FAIL: test_changes_after_a_gateway_crash_register_one_correction_without_a_reminder (__main__.ReviewCorrectionRestartE2E.test_changes_after_a_gateway_crash_register_one_correction_without_a_reminder)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_review_correction_restart_e2e.py", line 104, in test_changes_after_a_gateway_crash_register_one_correction_without_a_reminder
+    self.assertEqual(contracts, {task_id: "review.v1", child: "ready.v1"})
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'4b6[66 chars]7552be19df0f9f3873727086c67a6eecdb142bff4e038e70': 'review.v1'} != {'4b6[66 chars]7552be19df0f9f3873727086c67a6eecdb142bff4e038e70': 'ready.v1'}
+- {'183e05ad784bfbb07552be19df0f9f3873727086c67a6eecdb142bff4e038e70': 'review.v1',
+?                                                                         ^^^^
+
++ {'183e05ad784bfbb07552be19df0f9f3873727086c67a6eecdb142bff4e038e70': 'ready.v1',
+?                                                                         ^^^
+
+   '4b639650-e381-4859-ac43-c0d745074689': 'review.v1'}
+
+----------------------------------------------------------------------
+Ran 1 test in 83.262s
+
+FAILED (failures=1)
+rc=1

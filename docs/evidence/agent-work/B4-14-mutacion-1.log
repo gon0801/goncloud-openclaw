@@ -1,0 +1,41 @@
+FFFF....
+======================================================================
+FAIL: test_client_sends_exact_params_and_checks_receipt (__main__.IncidentClientTest.test_client_sends_exact_params_and_checks_receipt) [{'taskId': 'other'}]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2568, in test_client_sends_exact_params_and_checks_receipt
+    with self.assertRaisesRegex(RuntimeError, "receipt identity mismatch"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: RuntimeError not raised
+
+======================================================================
+FAIL: test_client_sends_exact_params_and_checks_receipt (__main__.IncidentClientTest.test_client_sends_exact_params_and_checks_receipt) [{'generation': 2}]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2568, in test_client_sends_exact_params_and_checks_receipt
+    with self.assertRaisesRegex(RuntimeError, "receipt identity mismatch"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: RuntimeError not raised
+
+======================================================================
+FAIL: test_client_sends_exact_params_and_checks_receipt (__main__.IncidentClientTest.test_client_sends_exact_params_and_checks_receipt) [{'incidentKey': 'host:1:transport-unavailable:other'}]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2568, in test_client_sends_exact_params_and_checks_receipt
+    with self.assertRaisesRegex(RuntimeError, "receipt identity mismatch"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: RuntimeError not raised
+
+======================================================================
+FAIL: test_client_sends_exact_params_and_checks_receipt (__main__.IncidentClientTest.test_client_sends_exact_params_and_checks_receipt) [{'incidentDigest': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'}]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2568, in test_client_sends_exact_params_and_checks_receipt
+    with self.assertRaisesRegex(RuntimeError, "receipt identity mismatch"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: RuntimeError not raised
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.064s
+
+FAILED (failures=4)

@@ -1,0 +1,24 @@
+ok (a): emision feliz escribe un aviso valido y despierta al lead
+ok (b): la misma llave deduplica por identidad, otra llave emite otro aviso
+ok (c): sesion ajena, corrida cerrada e inexistente caen con rc 3 y sin escritura
+ok (d): dueno ocupado o lead ausente no reciben teclas y el pendiente persiste
+avisos: 2 atendidos, 0 descartados
+ok (e): atender reclama por rename, marca atendido y corre reconciliar una sola vez
+avisos: 0 atendidos, 1 descartados
+avisos: 0 atendidos, 1 descartados
+ok (f): aviso tardio de sesion fuera del registro o corrida cerrada queda descartado con motivo
+ok (g): dos emitir concurrentes con la misma llave convergen en un solo aviso
+ok (h): CORRIDA_AVISOS=0 deja emitir, atender y despertar en no-op
+ok (i): metadatos invalidos caen con rc 2 y sin escritura
+ok (j): despertar reintenta el despertar del lead sin tocar los pendientes
+ok (k-con-run): el hook de una corrida manda avisos emitir con la llave del mtime y nada a vigia-mac
+ok (k-sin-run): sin corrida la llamada del hook es identica a la de siempre
+ok (k-reversa): CORRIDA_AVISOS=0 devuelve el hook a la ruta de vigia-mac
+ok (k-managed): Stop gestionado sin informe no despierta modelo
+ok (l): con el lock no cedido, atender no reclama nada y sale 1
+ok (m): un dialogo Run this command? frena el despertar sin teclear
+ok (n): atender solo trata lo que reclamo en su pasada
+ok (p): el recordatorio con la misma llave no pisa el tratado previo
+ok (o): despertar con varias corridas despierta a cada una
+TODO VERDE: test-corrida-avisos (U1 + U3 hook)
+rc=0

@@ -1,0 +1,568 @@
+{
+ "capturedAt": "2026-10-07T20:17:55Z",
+ "source": "~/.openclaw/bin/openclaw cron list --json (lectura, gateway Windows por túnel 127.0.0.1:18789); redactada: sin texto del mensaje (solo su sha256 y largo; para command, del argv), sin destino de entrega",
+ "total": 29,
+ "jobs": [
+  {
+   "id": "0b64a449-a9b9-4daa-b06b-64377080a22b",
+   "name": "revisor-correcciones-vigia",
+   "enabled": true,
+   "agentId": "main",
+   "sessionTarget": "isolated",
+   "wakeMode": "now",
+   "delivery": {
+    "mode": "none",
+    "channel": "last"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 300000,
+    "anchorMs": 1791241828656
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "536d94f567699b9966699b367f7499a426330f9e586749f458e18fa9407273be",
+   "messageChars": 1288
+  },
+  {
+   "id": "73239004-d53a-4d07-b4e0-de9586b2bba5",
+   "name": "encargos-vigia",
+   "enabled": true,
+   "agentId": "main",
+   "sessionTarget": "isolated",
+   "wakeMode": "now",
+   "delivery": {
+    "mode": "none",
+    "channel": "last"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 300000,
+    "anchorMs": 1791342374627
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "454bc215a3059d86821f4ef99a25ecb8c6b7e06a84dad6c1af361bde576a37fa",
+   "messageChars": 1020
+  },
+  {
+   "id": "bdff9fb3-1541-4f18-b9e8-9aa0d395a20a",
+   "name": "avance-tareas",
+   "enabled": true,
+   "agentId": null,
+   "sessionTarget": "isolated",
+   "wakeMode": "now",
+   "delivery": {
+    "mode": "none",
+    "channel": "last"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 900000,
+    "anchorMs": 1791303993944
+   },
+   "payloadKind": "command",
+   "messageSha256": "a593df643766778c84b2a249ce913704baa9847922f3db6efba01a534252fc83",
+   "messageChars": 254
+  },
+  {
+   "id": "d69a5c51-9691-4e53-b29b-eac12ddc10ee",
+   "name": "skill-collection-review-reviewer",
+   "enabled": true,
+   "agentId": "reviewer",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 5502687
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "6f60a8a0-3f09-4818-a48c-24aae243385c",
+   "name": "packing-digest-20h",
+   "enabled": true,
+   "agentId": "operaciones",
+   "sessionTarget": "isolated",
+   "wakeMode": "now",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "cron",
+    "expr": "0 20 * * 0-4",
+    "tz": "America/Mexico_City"
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "8d6be8c13c7f29fc0782f8ae95fd1e3d94524f32324a10d1b497c7f5781a16d6",
+   "messageChars": 9503
+  },
+  {
+   "id": "0aa73c30-19b4-4f06-ac8e-6661a7e1dfb3",
+   "name": "verif-digest-20h",
+   "enabled": true,
+   "agentId": "main",
+   "sessionTarget": "isolated",
+   "wakeMode": "now",
+   "delivery": {
+    "mode": "none",
+    "channel": "last"
+   },
+   "schedule": {
+    "kind": "cron",
+    "expr": "45 20 * * 0-4",
+    "tz": "America/Mexico_City",
+    "staggerMs": 0
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "055a0772a68d350239bb661fc46e33d3ed2bcb23cc7a71d32f4ae3218f5d28bc",
+   "messageChars": 4599
+  },
+  {
+   "id": "35798aa2-d734-4d9a-bc6a-25634eeb1a24",
+   "name": "Memory Dreaming Promotion",
+   "enabled": true,
+   "agentId": null,
+   "sessionTarget": "isolated",
+   "wakeMode": "now",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "cron",
+    "expr": "0 3 * * *"
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "f4c56c255003f1aba04bf11274ec6418e555943f4aa38a3da9183e3cf5d5e586",
+   "messageChars": 51
+  },
+  {
+   "id": "bc1cf8df-4c9f-4ed9-8b90-d94c4d3218be",
+   "name": "skill-collection-review-operaciones",
+   "enabled": true,
+   "agentId": "operaciones",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 34384922
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "dbc3eee3-28d4-4043-bee9-8fd584341bf8",
+   "name": "Renueva el token de acceso de Shopify de la tienda theglamw…",
+   "enabled": true,
+   "agentId": "main",
+   "sessionTarget": "isolated",
+   "wakeMode": "now",
+   "delivery": {
+    "mode": "none",
+    "channel": "telegram"
+   },
+   "schedule": {
+    "kind": "cron",
+    "tz": "America/New_York",
+    "expr": "0 6 * * *"
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "0568f4facd95aa140be436710710ecb17fd5227dc58cbc84bc43a85b2caef467",
+   "messageChars": 512
+  },
+  {
+   "id": "7c7c50e9-5a0e-40bd-bcb3-ba95f8a9d022",
+   "name": "cuotas-proveedores",
+   "enabled": true,
+   "agentId": "main",
+   "sessionTarget": "isolated",
+   "wakeMode": "now",
+   "delivery": {
+    "mode": "none",
+    "channel": "last"
+   },
+   "schedule": {
+    "kind": "cron",
+    "expr": "47 6 * * *",
+    "tz": "America/Mexico_City"
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "5974333d108ea1196245adb0ab56dd30bc4875cd2a4ed93d6faf820626b34b80",
+   "messageChars": 433
+  },
+  {
+   "id": "7bb5fac4-a1bb-4b85-b4ed-7ceeb187cbc3",
+   "name": "packing-extras-7h",
+   "enabled": true,
+   "agentId": "operaciones",
+   "sessionTarget": "isolated",
+   "wakeMode": "now",
+   "delivery": {
+    "mode": "none",
+    "channel": "last"
+   },
+   "schedule": {
+    "kind": "cron",
+    "expr": "0 7 * * 1-5",
+    "tz": "America/Mexico_City",
+    "staggerMs": 0
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "c0a1a13ac751c2d51b0e29cfbd016a13d9014a6b6a47bbccb1f7e51a206b6f64",
+   "messageChars": 8596
+  },
+  {
+   "id": "9386486d-37d6-4ae1-bf7b-12892527f2d9",
+   "name": "packing-extras-11h",
+   "enabled": true,
+   "agentId": "operaciones",
+   "sessionTarget": "isolated",
+   "wakeMode": "now",
+   "delivery": {
+    "mode": "none",
+    "channel": "last"
+   },
+   "schedule": {
+    "kind": "cron",
+    "expr": "0 11 * * 1-5",
+    "tz": "America/Mexico_City",
+    "staggerMs": 0
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "c3ac34d81bcb8c2f1a3e39a1967b2e777c4738f23d8a550668d72a83d8a36d65",
+   "messageChars": 8778
+  },
+  {
+   "id": "506bb2fd-9fc6-4910-9b31-660a583983b1",
+   "name": "skill-collection-review-pers",
+   "enabled": true,
+   "agentId": "pers",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 143922296
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "a1f8dd05-3429-4b7a-88db-716ca078a681",
+   "name": "skill-collection-review-odoo",
+   "enabled": true,
+   "agentId": "odoo",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 203226791
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "979efd68-24bb-4343-9596-abbff42ed11d",
+   "name": "skill-collection-review-amazon",
+   "enabled": true,
+   "agentId": "amazon",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 231705842
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "7716c524-3983-4020-bed8-c0c8071e8353",
+   "name": "skill-collection-review-eggbot",
+   "enabled": true,
+   "agentId": "eggbot",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 239804864
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "54441fb0-2620-4a6c-a83c-f984ebdc9fd2",
+   "name": "skill-collection-review-mail",
+   "enabled": true,
+   "agentId": "mail",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 259134464
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "aef2ad97-2220-495b-988e-d5b8d7d9f7c9",
+   "name": "skill-collection-review-limpia",
+   "enabled": true,
+   "agentId": "limpia",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 284933146
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "9dfb3081-1fbb-4c4c-9bbc-c58315e8b6d1",
+   "name": "skill-collection-review-skillverif",
+   "enabled": true,
+   "agentId": "skillverif",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 319195695
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "06f25e53-7748-4290-8b34-1bb5962280c6",
+   "name": "skill-collection-review-scout",
+   "enabled": true,
+   "agentId": "scout",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 322675889
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "764f1c58-c2d2-4aa6-84ec-4d27de978da7",
+   "name": "skill-collection-review-meli",
+   "enabled": true,
+   "agentId": "meli",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 388016183
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "c33a3c8f-2615-4d55-982d-bca3561d8883",
+   "name": "skill-collection-review-implementer",
+   "enabled": true,
+   "agentId": "implementer",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 390172266
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "4fa8b00c-d82a-45b0-884e-06360c25d827",
+   "name": "skill-collection-review-adversary",
+   "enabled": true,
+   "agentId": "adversary",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 429158020
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "8c26f371-f132-41af-a772-b3f13641c3ad",
+   "name": "skill-collection-review-main",
+   "enabled": true,
+   "agentId": "main",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 471276323
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "3e3f1b30-3e10-4ea0-8a17-a9e1efe8d83f",
+   "name": "skill-collection-review-tinkabot",
+   "enabled": true,
+   "agentId": "tinkabot",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 490283862
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "f999b502-3c0b-460c-b678-6691720faaca",
+   "name": "skill-collection-review-ingenieria",
+   "enabled": true,
+   "agentId": "ingenieria",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 497104622
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "c167c15d-5502-43aa-8909-7ae598f67db1",
+   "name": "skill-collection-review-gonserver",
+   "enabled": true,
+   "agentId": "gonserver",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 517737084
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "017d46a0-cb71-4ec9-af4f-52c721dc18f2",
+   "name": "skill-collection-review-verifier",
+   "enabled": true,
+   "agentId": "verifier",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 561293150
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "d75d65d7-81fd-4e44-bb40-0d89694ef0f6",
+   "name": "skill-collection-review-arras",
+   "enabled": true,
+   "agentId": "arras",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 563956180
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  }
+ ]
+}

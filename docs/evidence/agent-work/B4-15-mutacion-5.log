@@ -1,0 +1,44 @@
+F..F....
+======================================================================
+FAIL: test_closed_session_records_one_transport_incident_across_100_passes (__main__.SilentFailureTest.test_closed_session_records_one_transport_incident_across_100_passes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2836, in test_closed_session_records_one_transport_incident_across_100_passes
+    self.assertEqual(Host("host-one", self.root / "host").detect_silent_failures(
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "host-one", manager.session_gone, now=1060.0 + second, deadline_seconds=60), [])
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:deadline-missed:deadline'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:deadline-missed:deadline'
+
+- ['host:1:deadline-missed:deadline']
++ []
+
+======================================================================
+FAIL: test_invalid_result_is_one_incident_and_a_valid_result_still_reports (__main__.SilentFailureTest.test_invalid_result_is_one_incident_and_a_valid_result_still_reports)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2877, in test_invalid_result_is_one_incident_and_a_valid_result_still_reports
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=9000.0,
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                 deadline_seconds=60),
+                                                 ^^^^^^^^^^^^^^^^^^^^^
+                     ["host:1:invalid-result:invalid-result"])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:deadline-missed:deadline'] != ['host:1:invalid-result:invalid-result']
+
+First differing element 0:
+'host:1:deadline-missed:deadline'
+'host:1:invalid-result:invalid-result'
+
+- ['host:1:deadline-missed:deadline']
++ ['host:1:invalid-result:invalid-result']
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.135s
+
+FAILED (failures=2)
+rc=1

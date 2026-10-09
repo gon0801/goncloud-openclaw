@@ -1,0 +1,3 @@
+scripts/mac/corrida/lanzar-sesion.sh 230 "$TMUX_BIN" set-environment -t "=$nombre" OPENCLAW_WATCH 1 \
+scripts/lanzar-lead.sh 86 "$TMUX_BIN" set-environment -t "$SESION" OPENCLAW_WATCH 1
+rc=0

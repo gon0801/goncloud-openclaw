@@ -1,0 +1,31 @@
+F/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/case.py:668: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
+  with outcome.testPartExecutor(self):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+
+======================================================================
+FAIL: test_between_reservation_and_launch_the_restarted_host_recovers_the_same_instance (__main__.CrashBoundariesE2E.test_between_reservation_and_launch_the_restarted_host_recovers_the_same_instance)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 397, in test_between_reservation_and_launch_the_restarted_host_recovers_the_same_instance
+    host_pid = self.crash_host(gateway, "reserved")
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 363, in crash_host
+    self.assertEqual(seen[-1:], [f"STOP {point}\n"], f"the host never reached {point}: {''.join(seen)}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ["/opt/homebrew/Cellar/python@3.14/3.14.7/[216 chars]y\n"] != ['STOP reserved\n']
+
+First differing element 0:
+"/opt/homebrew/Cellar/python@3.14/3.14.7/[215 chars]ry\n"
+'STOP reserved\n'
+
++ ['STOP reserved\n']
+- ['/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python: '
+-  "can't open file "
+-  "'/Users/dn/dev/wt/encargos-b4/scripts/tests/fixtures/agent-work/crash-host.py': "
+-  '[Errno 2] No such file or directory\n'] : the host never reached reserved: /opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python: can't open file '/Users/dn/dev/wt/encargos-b4/scripts/tests/fixtures/agent-work/crash-host.py': [Errno 2] No such file or directory
+
+
+----------------------------------------------------------------------
+Ran 1 test in 29.098s
+
+FAILED (failures=1)
+rc=1

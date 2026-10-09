@@ -1,0 +1,15 @@
+.......F
+======================================================================
+FAIL: test_watch_entrypoint_wires_cli_watch_with_the_host_deadline (__main__.SilentFailureTest.test_watch_entrypoint_wires_cli_watch_with_the_host_deadline)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3031, in test_watch_entrypoint_wires_cli_watch_with_the_host_deadline
+    self.assertIs(pump.call_args.kwargs.get("cli_watch"), wired)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: None is not <function main.<locals>.<lambda> at 0x10a4b8880>
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.193s
+
+FAILED (failures=1)
+rc=1

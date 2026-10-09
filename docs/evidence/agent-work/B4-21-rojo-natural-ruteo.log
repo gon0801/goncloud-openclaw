@@ -1,0 +1,21 @@
+......F....
+======================================================================
+FAIL: test_model_wakes_inventory_lists_every_repo_wake_source (__main__.AgentsRouting.test_model_wakes_inventory_lists_every_repo_wake_source)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 146, in test_model_wakes_inventory_lists_every_repo_wake_source
+    self.assertTrue(
+    ~~~~~~~~~~~~~~~^
+        any(source.startswith(f"{path}:") for source in sources) or path in recreators,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        f"repo wake source {path} is missing from modelWakes",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: False is not true : repo wake source agents/main/agent/workshop-skills/agent-dispatch/SKILL.md is missing from modelWakes
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.069s
+
+FAILED (failures=1)
+rc=1

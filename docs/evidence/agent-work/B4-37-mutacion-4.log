@@ -1,0 +1,18 @@
+F
+======================================================================
+FAIL: test_resource_close_session_gone_with_a_surviving_descendant_still_holds (__main__.ResourceTests.test_resource_close_session_gone_with_a_surviving_descendant_still_holds)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-resources.py", line 1032, in test_resource_close_session_gone_with_a_surviving_descendant_still_holds
+    self.assertEqual(view.state, "CleanupPending", "the session vanished but a descendant survived")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'AbsenceVerified' != 'CleanupPending'
+- AbsenceVerified
++ CleanupPending
+ : the session vanished but a descendant survived
+
+----------------------------------------------------------------------
+Ran 1 test in 0.012s
+
+FAILED (failures=1)
+rc=1

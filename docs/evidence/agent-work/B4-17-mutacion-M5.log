@@ -1,0 +1,90 @@
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+F{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+F{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+F{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+F
+======================================================================
+FAIL: test_closed_session_without_report (__main__.CliSilentFailureE2E.test_closed_session_without_report)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 235, in test_closed_session_without_report
+    self.silent_case("transport-unavailable", {"episodeId": "session-closed"},
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     deadline=DEADLINE_SECONDS)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 217, in silent_case
+    self.assertEqual([row["sessionKey"] for row in in_flight], [LOOP_SESSION])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['agent:main:main'] != ['agent:main:encargos-loop']
+
+First differing element 0:
+'agent:main:main'
+'agent:main:encargos-loop'
+
+- ['agent:main:main']
++ ['agent:main:encargos-loop']
+
+======================================================================
+FAIL: test_deadline_missed (__main__.CliSilentFailureE2E.test_deadline_missed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 244, in test_deadline_missed
+    passes, delivered_at = self.silent_case("deadline-missed", {"episodeId": "deadline"},
+                           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                            deadline=DEADLINE_SECONDS)
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 217, in silent_case
+    self.assertEqual([row["sessionKey"] for row in in_flight], [LOOP_SESSION])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['agent:main:main'] != ['agent:main:encargos-loop']
+
+First differing element 0:
+'agent:main:main'
+'agent:main:encargos-loop'
+
+- ['agent:main:main']
++ ['agent:main:encargos-loop']
+
+======================================================================
+FAIL: test_invalid_report (__main__.CliSilentFailureE2E.test_invalid_report)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 251, in test_invalid_report
+    self.silent_case("invalid-result", {"episodeId": "invalid-result"}, deadline=DEADLINE_SECONDS)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 217, in silent_case
+    self.assertEqual([row["sessionKey"] for row in in_flight], [LOOP_SESSION])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['agent:main:main'] != ['agent:main:encargos-loop']
+
+First differing element 0:
+'agent:main:main'
+'agent:main:encargos-loop'
+
+- ['agent:main:main']
++ ['agent:main:encargos-loop']
+
+======================================================================
+FAIL: test_permission_dialog (__main__.CliSilentFailureE2E.test_permission_dialog)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 241, in test_permission_dialog
+    self.silent_case("permission-required", {"promptIdentity": PROCEED_ID + "-1"}, deadline=None)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 217, in silent_case
+    self.assertEqual([row["sessionKey"] for row in in_flight], [LOOP_SESSION])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['agent:main:main'] != ['agent:main:encargos-loop']
+
+First differing element 0:
+'agent:main:main'
+'agent:main:encargos-loop'
+
+- ['agent:main:main']
++ ['agent:main:encargos-loop']
+
+----------------------------------------------------------------------
+Ran 4 tests in 114.897s
+
+FAILED (failures=4)
+rc=1

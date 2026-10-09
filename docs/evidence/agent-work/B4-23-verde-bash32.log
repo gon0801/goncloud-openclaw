@@ -1,0 +1,34 @@
+3.2.57(1)-release
+ok (1): cwd inexistente aborta con 1
+ok (2): crea la sesión en el cwd, la marca, espera el prompt y el mensaje entra con su sentinel
+ok (3): con la sesión viva no relanza (YA-EXISTE, rc 2)
+ok (4): sin prompt no manda nada y sale con 4
+ok (5): una sesion gestionada no se relanza (dos claves, una sola, cualquier corrida abierta); claves vacias, corrida cerrada o registro ilegible ajeno, como siempre; sin poder comprobar, no lanza
+ok (5c): sin CORRIDA_STATE lee el default; nombre repetido entre corridas; la corrida es el directorio; sin corridas, registros raros y null lanzan
+TODO VERDE: lanzar-lead
+rc=0
+ok (1): una fase realmente arrancada sale VERDE y con codigo 0
+ok (2): sin el reloj global sale ROJO y los nombra a los dos
+ok (2b): un cron creado pero apagado tampoco cuenta
+ok (2c): avance-tareas con otra cadencia no cuenta
+ok (2d): un vigia por corrida sin migrar bloquea el arranque
+ok (2e): el modo global no exige empuje propio y sigue rechazando el vigia legado
+ok (2f): con el flag, un empuje propio sobrante sale ROJO y nombrado
+ok (2g): con el flag el reloj global sigue exigiendose presente, encendido y a 15 min
+ok (3): sin el primer avance enviado sale ROJO
+ok (4): el apunte de sesiones ausente, o sin la linea del lead, sale ROJO
+ok (5): una sesion de la fase sin marcar sale ROJO
+ok (5b): una sesion gestionada de la fase no cuenta ni como marcada ni como sin marcar; solo AGENT_WORK_MANAGED=1 es gestion
+ok (6): una fase que no esta en el plan sale ROJO, no VERDE por vacio
+ok (7): sin gateway las dos comprobaciones quedan unknown, nunca VERDE
+ok (8): una consulta fallida no cuenta aunque haya escrito una lista valida
+ok (9): con comprobaciones sin hacer el resumen lo dice, y no promete mas de lo que miro
+ok (9b): con todo comprobado el resumen es VERDE a secas
+ok (10): una respuesta ilegible se declara, no se interpreta
+TODO VERDE: arranque-de-fase
+rc=0
+ok (B0-1-r2): relanzo con el mismo nombre deja una corrida ordinaria cerrable
+ok (B3/T7): reemplazo de gestionada exige el mismo encargo_ref y host_id
+ok (spec): corrida.v1.md documenta encargo en sesiones[] del registro
+TODO VERDE: test-corrida-nucleo
+rc=0

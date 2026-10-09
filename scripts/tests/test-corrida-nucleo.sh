@@ -1052,6 +1052,11 @@ for campo in '"worker": *"claude_fable"' '"harness": *"claude-code"' '"provider"
   grep -q "$campo" "$T/corridas/t-carril/registro.json" || fail "el carril no persiste $campo"
 done
 validar_registro "$T/corridas/t-carril/registro.json" || fail "el registro con el carril lanzado no pasa validar_registro"
+# B4-22: con --carril --worker y sin gestion, la sesion sigue marcada antes del primer send-keys.
+m9=$(grep -n "set-environment -t =ses-carril-9 OPENCLAW_WATCH 1" "$TMUX_LOG" | head -1 | cut -d: -f1)
+k9=$(grep -n "send-keys -t =ses-carril-9:" "$TMUX_LOG" | head -1 | cut -d: -f1)
+[ -n "$m9" ] && [ -n "$k9" ] && [ "$m9" -lt "$k9" ] \
+  || fail "B4-22: el carril no gestionado no quedo marcado antes del primer send-keys (marca=$m9 tecla=$k9)"
 export SWALLOW=1 SWALLOW_N=2 SWALLOW_SES=ses-carril-9f
 rm -f "$T/tragado"
 bash "$CORR" lanzar-sesion t-carril carril bueno "$T/wt-9y" --nombre ses-carril-9f --encargo "$T/encargo.txt" --carril lane-9y --worker codex >/dev/null 2>&1 \
@@ -1203,8 +1208,17 @@ bash "$CORR" seguimiento --json 2>/dev/null | grep -q "t-estados" \
   || fail "seguimiento pierde la corrida con handoff/stopped"
 mkdir -p "$T/lat" && cp -r "$T/corridas/t-estados" "$T/lat/" \
   || fail "sin copia para latido"
-( cd "$T" && CORRIDA_STATE="$T/lat" bash "$CORR_ABS" latido >/dev/null 2>&1 ) \
+# B4-39: el latido publica con un progress-events de mentira; un HOME senuelo con su
+# propio progress-events.py prueba que no corre el del HOME de quien lanza la prueba.
+mkdir -p "$T/senuelo-lat/bin"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/tocado.log"\n' "$T/senuelo-lat" >"$T/senuelo-lat/bin/progress-events.py"
+printf '#!/bin/sh\nexit 0\n' >"$T/bin/progress-events-nulo"
+chmod +x "$T/senuelo-lat/bin/progress-events.py" "$T/bin/progress-events-nulo"
+( cd "$T" && HOME="$T/senuelo-lat" PROGRESS_EVENTS_BIN="$T/bin/progress-events-nulo" CORRIDA_STATE="$T/lat" \
+    bash "$CORR_ABS" latido >/dev/null 2>&1 ) \
   || fail "latido se rompe con handoff/stopped"
+[ ! -e "$T/senuelo-lat/tocado.log" ] \
+  || fail "latido corrio el progress-events del HOME de quien lanza la prueba: $(cat "$T/senuelo-lat/tocado.log")"
 
 # 14.18: con_tope mata el GRUPO entero al vencer el tope. Un comando que lanza
 # un nieto de larga duracion no puede dejarlo vivo tras el tope, y los caminos
@@ -1327,11 +1341,15 @@ for entrada in d["sesiones"]:
         entrada["encargo_ref"] = "/b31/sin-registrar.json"
 json.dump(d, open(reg, "w"))
 PY
+sin_desde=$(( $(wc -l <"$TMUX_LOG") + 1 ))
 if bash "$CORR" lanzar-sesion t-reemp carril bueno "$T/ses" --nombre ses-gest >"$T/b31-reemp.sin.log" 2>&1; then
   fail "B3/T7: el relanzo sin encargo_ref/host_id reemplazo una entrada gestionada"
 fi
 grep -q "gestionada" "$T/b31-reemp.sin.log" \
   || fail "B3/T7: el rechazo no nombra la sesion gestionada"
+# B4-23 (T9 :266): el rechazo llega antes de crear la sesion; si no, nace marcada unos segundos.
+tail -n +"$sin_desde" "$TMUX_LOG" | grep -qE 'new-session -d -s ses-gest |set-environment -t =ses-gest OPENCLAW_WATCH 1' \
+  && fail "T9 :266: el relanzo sin refs de una gestionada creo o marco la sesion antes de rechazarla"
 n_gest="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); e=[s for s in d.get("sesiones",[]) if s.get("nombre")=="ses-gest"]; print(sum(1 for s in e if s.get("host_id")=="host-b31" and s.get("encargo_ref")))' "$T/corridas/t-reemp/registro.json")"
 [ "$n_gest" = "1" ] || fail "B3/T7: la entrada gestionada quedo $n_gest veces tras el rechazo"
 mkdir -p "$T/host-b31/ses"
@@ -1366,11 +1384,57 @@ for entrada in d["sesiones"]:
         entrada["encargo_ref"] = ref
 json.dump(d, open(reg, "w"))
 PY
+ges_desde=$(( $(wc -l < "$TMUX_LOG") + 1 ))
 AGENT_WORK_HOST_STATE_DIR="$T/host-b31/state" bash "$CORR" lanzar-sesion t-reemp carril bueno "$T/ses" --nombre ses-gest \
   --encargo-ref "$REF" --host-id host-b31 >"$T/b31-reemp.con.log" 2>&1 \
   || fail "B3/T7: el relanzo con el mismo encargo_ref y host_id fallo: $(cat "$T/b31-reemp.con.log")"
 n_reemp="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); e=[s for s in d.get("sesiones",[]) if s.get("nombre")=="ses-gest"]; print(len(e), sum(1 for s in e if s.get("encargo_ref")==sys.argv[2]))' "$T/corridas/t-reemp/registro.json" "$REF")"
 [ "$n_reemp" = "1 1" ] || fail "B3/T7: el relanzo valido dejo el registro en: $n_reemp"
+# B4-22 (T9 :266): la sesion gestionada nace sin la marca del vigilante antiguo
+# y conserva su marca de gestion y su corrida duena. La no gestionada (ses-buena,
+# caso 2) sigue marcada antes del primer send-keys.
+ges_env="$("$TM_REAL" -L "$L" show-environment -t "=ses-gest" OPENCLAW_WATCH 2>&1)|$("$TM_REAL" -L "$L" show-environment -t "=ses-gest" AGENT_WORK_MANAGED 2>&1)|$("$TM_REAL" -L "$L" show-environment -t "=ses-gest" OPENCLAW_WATCH_RUN 2>&1)"
+[ "$ges_env" = "unknown variable: OPENCLAW_WATCH|AGENT_WORK_MANAGED=1|OPENCLAW_WATCH_RUN=t-reemp" ] \
+  || fail "B4-22: la sesion gestionada no nacio como se esperaba (marca|gestion|corrida): $ges_env"
+tail -n +"$ges_desde" "$TMUX_LOG" >"$T/b422-ges.log"
+grep -qF "set-environment -t =ses-gest OPENCLAW_WATCH 1" "$T/b422-ges.log" \
+  && fail "B4-22: la gestionada recibio OPENCLAW_WATCH 1 en algun momento de su lanzamiento"
+mg=$(grep -nF "set-environment -t =ses-gest AGENT_WORK_MANAGED 1" "$T/b422-ges.log" | head -1 | cut -d: -f1)
+rn=$(grep -nF "set-environment -t =ses-gest OPENCLAW_WATCH_RUN t-reemp" "$T/b422-ges.log" | head -1 | cut -d: -f1)
+[ -n "$mg" ] && [ -n "$rn" ] && [ "$mg" -lt "$rn" ] \
+  || fail "B4-22: la gestionada no nacio con AGENT_WORK_MANAGED antes de publicar su corrida (gestion=$mg corrida=$rn)"
+# B4-22: primer lanzamiento gestionado (nombre nuevo, sin entrada previa en el registro).
+REF1="$(python3 - "$T/host-b31" <<'PY'
+import hashlib, sys
+from pathlib import Path
+sys.path.insert(0, "scripts/agent-work")
+from contracts import AuthorizedOperation, OperationKey
+from host import Host
+raiz = Path(sys.argv[1])
+brief = raiz / "brief.txt"
+host = Host("host-b31", raiz / "state")
+key = OperationKey("host-b31", "b422-task", 1, "b422-instance")
+op = AuthorizedOperation(key=key, producer_id="fake", capability="b422-secret", session="ses-gest-1",
+                         workspace_ref=str(raiz), brief_ref=str(brief),
+                         brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
+                         input_revision={"kind": "code", "repository": "repo", "sha": "a" * 40},
+                         result_contract="review.v1", claim_id="b422-claim")
+print(host.apply(key, op, lambda *_: None,
+                 lambda a: {"state": "host-admitted", "claimId": a["claimId"],
+                            "hostId": a["hostId"], "instanceId": a["instanceId"],
+                            "generation": a["generation"]}).assignment_ref)
+PY
+)" || fail "B4-22: no se pudo registrar el encargo del primer lanzamiento gestionado"
+ges1_desde=$(( $(wc -l < "$TMUX_LOG") + 1 ))
+AGENT_WORK_HOST_STATE_DIR="$T/host-b31/state" bash "$CORR" lanzar-sesion t-reemp carril bueno "$T/ses" --nombre ses-gest-1 \
+  --encargo-ref "$REF1" --host-id host-b31 >"$T/b422-ges1.log" 2>&1 \
+  || fail "B4-22: el primer lanzamiento gestionado fallo: $(cat "$T/b422-ges1.log")"
+ges1_env="$("$TM_REAL" -L "$L" show-environment -t "=ses-gest-1" OPENCLAW_WATCH 2>&1)|$("$TM_REAL" -L "$L" show-environment -t "=ses-gest-1" AGENT_WORK_MANAGED 2>&1)|$("$TM_REAL" -L "$L" show-environment -t "=ses-gest-1" OPENCLAW_WATCH_RUN 2>&1)"
+[ "$ges1_env" = "unknown variable: OPENCLAW_WATCH|AGENT_WORK_MANAGED=1|OPENCLAW_WATCH_RUN=t-reemp" ] \
+  || fail "B4-22: el primer lanzamiento gestionado no nacio como se esperaba (marca|gestion|corrida): $ges1_env"
+tail -n +"$ges1_desde" "$TMUX_LOG" | grep -qF "set-environment -t =ses-gest-1 OPENCLAW_WATCH 1" \
+  && fail "B4-22: el primer lanzamiento gestionado recibio OPENCLAW_WATCH 1"
+"$TM_REAL" -L "$L" kill-session -t "=ses-gest-1" 2>/dev/null
 python3 - "$T/corridas/t-reemp/registro.json" <<'PY' || fail "B3/T7: no se pudo duplicar la entrada gestionada"
 import json, sys
 reg = sys.argv[1]

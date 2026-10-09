@@ -1,0 +1,15 @@
+....E..........
+======================================================================
+ERROR: test_every_inventory_entry_is_migrated_or_declared_out (__main__.AgentsRouting.test_every_inventory_entry_is_migrated_or_declared_out)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 271, in test_every_inventory_entry_is_migrated_or_declared_out
+    for row in self.coverage["migration"]:
+               ~~~~~~~~~~~~~^^^^^^^^^^^^^
+KeyError: 'migration'
+
+----------------------------------------------------------------------
+Ran 15 tests in 0.075s
+
+FAILED (errors=1)
+rc=1

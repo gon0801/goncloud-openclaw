@@ -1,0 +1,219 @@
+FFF..F...FF.FFF.FFFF.
+======================================================================
+FAIL: test_a_crash_while_saving_the_dialog_neither_repeats_nor_skips_an_episode (__main__.SilentPromptTest.test_a_crash_while_saving_the_dialog_neither_repeats_nor_skips_an_episode)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3298, in test_a_crash_while_saving_the_dialog_neither_repeats_nor_skips_an_episode
+    self.assertEqual(self.step(manager, screen), expected, f"pass {number} after the crash")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:permission-required:prompt-a7db12[57 chars]f-2'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:permission-required:prompt-a7db1235eed209f10de810e711125e516aa9601459bd638cf8c349accbf51dbf-2'
+
+- ['host:1:permission-required:prompt-a7db1235eed209f10de810e711125e516aa9601459bd638cf8c349accbf51dbf-2']
++ [] : pass 1 after the crash
+
+======================================================================
+FAIL: test_a_dialog_seen_in_single_passes_never_counts (__main__.SilentPromptTest.test_a_dialog_seen_in_single_passes_never_counts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3267, in test_a_dialog_seen_in_single_passes_never_counts
+    self.assertEqual(self.step(manager, screen), [], f"pass {number}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:permission-required:prompt-a7db12[57 chars]f-1'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:permission-required:prompt-a7db1235eed209f10de810e711125e516aa9601459bd638cf8c349accbf51dbf-1'
+
+- ['host:1:permission-required:prompt-a7db1235eed209f10de810e711125e516aa9601459bd638cf8c349accbf51dbf-1']
++ [] : pass 6
+
+======================================================================
+FAIL: test_a_different_dialog_without_a_clean_gap_is_another_episode (__main__.SilentPromptTest.test_a_different_dialog_without_a_clean_gap_is_another_episode)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3284, in test_a_different_dialog_without_a_clean_gap_is_another_episode
+    self.assertEqual(self.step(manager, screen), expected, f"pass {number}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['hos[26 chars]ompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71[22 chars]0-1'] != ['hos[26 chars]ompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc4[22 chars]1-1']
+
+First differing element 0:
+'host[25 chars]ompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71[21 chars]a0-1'
+'host[25 chars]ompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc4[21 chars]a1-1'
+
+- ['host:1:permission-required:prompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71505f560435aa11a4d9eeba0-1']
++ ['host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1'] : pass 1
+
+======================================================================
+FAIL: test_capture_reads_only_the_recorded_pane_with_real_tmux (__main__.SilentPromptTest.test_capture_reads_only_the_recorded_pane_with_real_tmux)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3213, in test_capture_reads_only_the_recorded_pane_with_real_tmux
+    self.assertEqual(manager.prompt_identity(key, pattern), self.ONCE_ID)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'prompt-0203e7a84a2aa7465b257993d244d16f4ab8f77c8238ae8cc2103c7710561ac3' != 'prompt-168511d24d9ee03122b3200f929be11eaaedad45cb0ecb20a95f549b3e3f4d0f'
+- prompt-0203e7a84a2aa7465b257993d244d16f4ab8f77c8238ae8cc2103c7710561ac3
++ prompt-168511d24d9ee03122b3200f929be11eaaedad45cb0ecb20a95f549b3e3f4d0f
+
+
+======================================================================
+FAIL: test_dialog_and_deadline_are_two_incidents (__main__.SilentPromptTest.test_dialog_and_deadline_are_two_incidents)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3306, in test_dialog_and_deadline_are_two_incidents
+    self.assertEqual(self.watch(host, manager, now=1060.0, deadline=60),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [self.PROCEED_1, "host:1:deadline-missed:deadline"])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['hos[26 chars]ompt-fbe5000382ec113f75ec4e4042e4c3fccdf9f2136[57 chars]ine'] != ['hos[26 chars]ompt-7d94515e70c2994a231d611d9a75feb4b34c8c89d[57 chars]ine']
+
+First differing element 0:
+'host[25 chars]ompt-fbe5000382ec113f75ec4e4042e4c3fccdf9f2136[21 chars]ff-1'
+'host[25 chars]ompt-7d94515e70c2994a231d611d9a75feb4b34c8c89d[21 chars]f3-1'
+
+- ['host:1:permission-required:prompt-fbe5000382ec113f75ec4e4042e4c3fccdf9f21369a88e626362afa411cbb1ff-1',
++ ['host:1:permission-required:prompt-7d94515e70c2994a231d611d9a75feb4b34c8c89d290da292dc115ae5ac52ff3-1',
+   'host:1:deadline-missed:deadline']
+
+======================================================================
+FAIL: test_idle_passes_stop_writing_once_the_episode_is_closed (__main__.SilentPromptTest.test_idle_passes_stop_writing_once_the_episode_is_closed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3429, in test_idle_passes_stop_writing_once_the_episode_is_closed
+    self.assertEqual(db.execute("SELECT open_identity,episode,candidate,seen,clean FROM dialog_watch").fetchall(),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [(None, 1, None, 0, 2)])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [('prompt-a7db1235eed209f10de810e711125e516[44 chars], 0)] != [(None, 1, None, 0, 2)]
+
+First differing element 0:
+('prompt-a7db1235eed209f10de810e711125e516[43 chars]0, 0)
+(None, 1, None, 0, 2)
+
++ [(None, 1, None, 0, 2)]
+- [('prompt-a7db1235eed209f10de810e711125e516aa9601459bd638cf8c349accbf51dbf',
+-   2,
+-   None,
+-   0,
+-   0)]
+
+======================================================================
+FAIL: test_one_clean_pass_does_not_close_the_episode (__main__.SilentPromptTest.test_one_clean_pass_does_not_close_the_episode)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3260, in test_one_clean_pass_does_not_close_the_episode
+    self.assertEqual(self.step(manager, screen), expected, f"pass {number}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['hos[26 chars]ompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71[22 chars]0-1'] != ['hos[26 chars]ompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc4[22 chars]1-1']
+
+First differing element 0:
+'host[25 chars]ompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71[21 chars]a0-1'
+'host[25 chars]ompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc4[21 chars]a1-1'
+
+- ['host:1:permission-required:prompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71505f560435aa11a4d9eeba0-1']
++ ['host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1'] : pass 1
+
+======================================================================
+FAIL: test_one_dialog_is_one_incident_across_100_repainted_passes (__main__.SilentPromptTest.test_one_dialog_is_one_incident_across_100_repainted_passes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3231, in test_one_dialog_is_one_incident_across_100_repainted_passes
+    self.assertEqual(self.step(manager, self.BLOCKED), [self.BLOCKED_1])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['hos[26 chars]ompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71[22 chars]0-1'] != ['hos[26 chars]ompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc4[22 chars]1-1']
+
+First differing element 0:
+'host[25 chars]ompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71[21 chars]a0-1'
+'host[25 chars]ompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc4[21 chars]a1-1'
+
+- ['host:1:permission-required:prompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71505f560435aa11a4d9eeba0-1']
++ ['host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1']
+
+======================================================================
+FAIL: test_prompt_identity_ignores_clocks_spinners_tokens_and_the_cursor (__main__.SilentPromptTest.test_prompt_identity_ignores_clocks_spinners_tokens_and_the_cursor)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3143, in test_prompt_identity_ignores_clocks_spinners_tokens_and_the_cursor
+    self.assertEqual(approval_prompt_identity(self.BLOCKED, pattern), self.BLOCKED_ID)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'prompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71505f560435aa11a4d9eeba0' != 'prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1'
+- prompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71505f560435aa11a4d9eeba0
++ prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1
+
+
+======================================================================
+FAIL: test_the_episode_and_its_incident_commit_together (__main__.SilentPromptTest.test_the_episode_and_its_incident_commit_together) (crash_writing='incidents')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3385, in test_the_episode_and_its_incident_commit_together
+    self.assertEqual(self.step(manager, self.BLOCKED), [self.BLOCKED_1],
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     "an episode was kept without its incident")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['hos[26 chars]ompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71[22 chars]0-1'] != ['hos[26 chars]ompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc4[22 chars]1-1']
+
+First differing element 0:
+'host[25 chars]ompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71[21 chars]a0-1'
+'host[25 chars]ompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc4[21 chars]a1-1'
+
+- ['host:1:permission-required:prompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71505f560435aa11a4d9eeba0-1']
++ ['host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1'] : an episode was kept without its incident
+
+======================================================================
+FAIL: test_the_episode_and_its_incident_commit_together (__main__.SilentPromptTest.test_the_episode_and_its_incident_commit_together) (crash_writing='dialog_watch')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3385, in test_the_episode_and_its_incident_commit_together
+    self.assertEqual(self.step(manager, self.BLOCKED), [self.BLOCKED_1],
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     "an episode was kept without its incident")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['hos[26 chars]ompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71[22 chars]0-1'] != ['hos[26 chars]ompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc4[22 chars]1-1']
+
+First differing element 0:
+'host[25 chars]ompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71[21 chars]a0-1'
+'host[25 chars]ompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc4[21 chars]a1-1'
+
+- ['host:1:permission-required:prompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71505f560435aa11a4d9eeba0-1']
++ ['host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1'] : an episode was kept without its incident
+
+======================================================================
+FAIL: test_the_same_dialog_after_two_clean_passes_is_a_new_episode_across_host_restarts (__main__.SilentPromptTest.test_the_same_dialog_after_two_clean_passes_is_a_new_episode_across_host_restarts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3247, in test_the_same_dialog_after_two_clean_passes_is_a_new_episode_across_host_restarts
+    self.assertEqual(self.step(manager, screen), expected, f"pass {number}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['hos[26 chars]ompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71[22 chars]0-1'] != ['hos[26 chars]ompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc4[22 chars]1-1']
+
+First differing element 0:
+'host[25 chars]ompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71[21 chars]a0-1'
+'host[25 chars]ompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc4[21 chars]a1-1'
+
+- ['host:1:permission-required:prompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71505f560435aa11a4d9eeba0-1']
++ ['host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1'] : pass 1
+
+======================================================================
+FAIL: test_unreadable_unbound_or_released_panes_are_neither_dialog_nor_clean (__main__.SilentPromptTest.test_unreadable_unbound_or_released_panes_are_neither_dialog_nor_clean)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3332, in test_unreadable_unbound_or_released_panes_are_neither_dialog_nor_clean
+    self.assertEqual(self.step(manager, self.BLOCKED), [self.BLOCKED_1])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['hos[26 chars]ompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71[22 chars]0-1'] != ['hos[26 chars]ompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc4[22 chars]1-1']
+
+First differing element 0:
+'host[25 chars]ompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71[21 chars]a0-1'
+'host[25 chars]ompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc4[21 chars]a1-1'
+
+- ['host:1:permission-required:prompt-681c73062b78c16ff6539ecfa73c5cc49f95f2a71505f560435aa11a4d9eeba0-1']
++ ['host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1']
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.575s
+
+FAILED (failures=13)
+rc=1

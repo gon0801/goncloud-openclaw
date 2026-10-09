@@ -1,0 +1,7 @@
+DISPATCHERS_CANCEL pids=[31154, 32481] tasks=1 handling=cancelled children=0 cli_accepted=1 wakes=0
+.
+----------------------------------------------------------------------
+Ran 1 test in 83.877s
+
+OK
+rc=0

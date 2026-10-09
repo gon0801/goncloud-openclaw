@@ -1,0 +1,26 @@
+F
+======================================================================
+FAIL: test_director_persists_decision_before_native_resolve (__main__.DirectorHandlingTest.test_director_persists_decision_before_native_resolve)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 1200, in test_director_persists_decision_before_native_resolve
+    self.assertEqual([effect.op for effect in effects], ["record_task_handling"])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['resolve_task_handling'] != ['record_task_handling']
+
+First differing element 0:
+'resolve_task_handling'
+'record_task_handling'
+
+- ['resolve_task_handling']
+?     ^ ^^^
+
++ ['record_task_handling']
+?     ^ ^^
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)
+rc=1

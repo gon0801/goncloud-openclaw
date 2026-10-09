@@ -1,0 +1,21 @@
+.F...
+======================================================================
+FAIL: test_definitive_rejection_is_not_retried (__main__.IncidentClientTest.test_definitive_rejection_is_not_retried) [other error type is not definitive]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2628, in test_definitive_rejection_is_not_retried
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        self.incident_row(other_host, "host:1:invalid-result:bad-1")["status"],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "pending")
+        ^^^^^^^^^^
+AssertionError: 'rejected' != 'pending'
+- rejected
++ pending
+
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.067s
+
+FAILED (failures=1)

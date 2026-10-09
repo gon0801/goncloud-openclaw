@@ -1,0 +1,9 @@
+ FAIL  |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > refuses the recovery episode when charged claims already spent the fund
+TypeError: undefined is not iterable (cannot read property Symbol(Symbol.iterator))
+ ❯ src/agents/tasks/managed-task.recovery.test.ts:644:34
+    642|       const result = await stream.result();
+    643|       expect(result).toMatchObject({ stopReason: "error" });
+    644|       expect(result.diagnostics).toContainEqual(
+       |                                  ^
+    645|         expect.objectContaining({
+    646|           type: "managed_recovery_exhausted",

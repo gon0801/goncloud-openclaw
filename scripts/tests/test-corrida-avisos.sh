@@ -97,6 +97,8 @@ echo "ok (b): la misma llave deduplica por identidad, otra llave emite otro avis
 # (c) Sesion ajena, corrida cerrada y corrida inexistente: rc 3 (rechazo definitivo, no se reintenta), motivo, sin escribir.
 emitir t1 ses-fantasma fin-turno --llave k 2>"$T/err-c1" && fail "(c) la sesion ajena debio fallar"
 grep -q . "$T/err-c1" || fail "(c) el rechazo de la sesion ajena no da motivo"
+[ "$(cat "$T/err-c1")" = "avisos emitir: la sesion ses-fantasma no esta en el registro de t1" ] \
+  || fail "(c) el rechazo de la sesion ajena no es el literal: $(cat "$T/err-c1")"
 registro t2 cerrada lead-main:lead:zcode,ses-c2:carril:glm
 emitir t2 ses-c2 fin-turno --llave k 2>/dev/null && fail "(c) la corrida cerrada debio fallar"
 [ "$(n_pend t2)" -eq 0 ] || fail "(c) la corrida cerrada dejo un aviso escrito"
@@ -412,5 +414,114 @@ bash "$CORR_ABS" avisos despertar to1 to2 || fail "(o) despertar con dos corrida
 grep -q -- '-- corrida.sh avisos atender to1$' "$TECLAS" || fail "(o) no desperto a to1: $(cat "$TECLAS")"
 grep -q -- '-- corrida.sh avisos atender to2$' "$TECLAS" || fail "(o) no desperto a to2: $(cat "$TECLAS")"
 echo "ok (o): despertar con varias corridas despierta a cada una"
+
+# (q) T9 :265: una sesion gestionada (encargo_ref o host_id con valor) la reporta su
+# host al solicitante; emitir la rechaza con rc 3 sin escribir ni despertar al lead,
+# y atender descarta con motivo un pendiente viejo de ella. Filas: las dos claves,
+# solo host_id, solo encargo_ref; claves vacias, null y encargo plano se emiten.
+registro_q() { # $1 id: lead-main y una sesion por fila de la tabla
+  mkdir -p "$CORRIDA_STATE/$1"
+  R_ID="$1" R_DIR="$CORRIDA_STATE/$1" python3 - <<'PY'
+import json, os
+base = {'rol': 'carril', 'cli': 'glm', 'dueno': 'lead', 'dir': '/tmp'}
+filas = [('lead-main', {'rol': 'lead', 'cli': 'zcode'}),
+         ('g-ab', {'host_id': 'mac-local', 'encargo_ref': '/host/inbox/ab.json'}),
+         ('g-h', {'host_id': 'mac-local'}),
+         ('g-r', {'encargo_ref': '/host/inbox/r.json'}),
+         ('g-v', {'host_id': '', 'encargo_ref': ''}),
+         ('g-n', {'host_id': None, 'encargo_ref': None}),
+         ('p-e', {'encargo': '/tmp/plano.txt'})]
+ses = [dict(base, nombre=n, **extra) for n, extra in filas]
+json.dump({'id': os.environ['R_ID'], 'estado': 'abierta', 'sesiones': ses},
+          open(os.path.join(os.environ['R_DIR'], 'registro.json'), 'w'))
+PY
+}
+registro_q t20
+for s in g-ab g-h g-r; do
+  : >"$TECLAS"
+  emitir t20 "$s" fin-turno --llave "q-$s" 2>"$T/err-q"; rc=$?
+  [ "$rc" -eq 3 ] || fail "(q) emitir sobre la gestionada $s debio salir 3 (rc=$rc)"
+  [ "$(cat "$T/err-q")" = "avisos emitir: la sesion $s de t20 es gestionada (T9 :265): la reporta su host" ] \
+    || fail "(q) el rechazo de $s no es el literal: $(cat "$T/err-q")"
+  [ "$(n_pend t20)" -eq 0 ] || fail "(q) emitir sobre la gestionada $s dejo un aviso escrito"
+  grep -q 'send-keys' "$TECLAS" && fail "(q) emitir sobre la gestionada $s desperto al lead: $(cat "$TECLAS")"
+done
+k=0
+for s in g-v g-n p-e; do
+  : >"$TECLAS"; k=$((k + 1))
+  emitir t20 "$s" fin-turno --llave "q-$s" || fail "(q) $s no es gestionada y debio emitirse"
+  [ "$(n_pend t20)" -eq "$k" ] || fail "(q) $s no dejo su aviso (hay $(n_pend t20))"
+  grep -q 'send-keys -t =lead-main: -l -- corrida.sh avisos atender t20' "$TECLAS" \
+    || fail "(q) el aviso de $s no desperto al lead: $(cat "$TECLAS")"
+done
+printf '{"schema":"corrida-aviso.v1","sesion":"g-ab","tipo":"fin-turno"}\n' >"$(avisos_dir t20)/t20-g-ab-fin-turno-viejo.json"
+: >"$CCLOG"
+out=$(CORRIDA_BIN="$CC" bash "$CORR_ABS" avisos atender t20) || fail "(q) atender t20 fallo"
+[ "$out" = "avisos: 3 atendidos, 1 descartados" ] || fail "(q) atender t20 no conto el descarte de la gestionada: $out"
+[ "$(json_leer "$CORRIDA_STATE/t20/avisos/tratados/t20-g-ab-fin-turno-viejo.json" descartado)" = "la sesion g-ab es gestionada: la reporta su host" ] \
+  || fail "(q) el pendiente viejo de g-ab no quedo descartado con su motivo"
+[ "$(grep -c '^reconciliar t20$' "$CCLOG")" -eq 1 ] || fail "(q) reconciliar debio llamarse una vez: $(cat "$CCLOG")"
+registro_q t21
+mkdir -p "$(avisos_dir t21)"
+printf '{"schema":"corrida-aviso.v1","sesion":"g-h","tipo":"cierre"}\n' >"$(avisos_dir t21)/t21-g-h-cierre-viejo.json"
+out=$(CORRIDA_BIN="$CC" bash "$CORR_ABS" avisos atender t21) || fail "(q) atender t21 fallo"
+[ "$out" = "avisos: 0 atendidos, 1 descartados" ] || fail "(q) con solo la gestionada atender debio descartarla: $out"
+grep -q '^reconciliar t21$' "$CCLOG" && fail "(q) el descarte de una gestionada corrio reconciliar"
+[ -e "$CORRIDA_STATE/t21/eventos.jsonl" ] && grep -q 'avisos-atendidos' "$CORRIDA_STATE/t21/eventos.jsonl" \
+  && fail "(q) el descarte de una gestionada anoto avisos-atendidos"
+# Pendiente viejo de una gestionada con solo encargo_ref: tambien se descarta.
+registro_q t22
+mkdir -p "$(avisos_dir t22)"
+printf '{"schema":"corrida-aviso.v1","sesion":"g-r","tipo":"cierre"}\n' >"$(avisos_dir t22)/t22-g-r-cierre-viejo.json"
+: >"$CCLOG"
+out=$(CORRIDA_BIN="$CC" bash "$CORR_ABS" avisos atender t22) || fail "(q) atender t22 fallo"
+[ "$out" = "avisos: 0 atendidos, 1 descartados" ] || fail "(q) un pendiente viejo de g-r (solo encargo_ref) debio descartarse: $out"
+grep -q '^reconciliar t22$' "$CCLOG" && fail "(q) el pendiente viejo de g-r corrio reconciliar"
+# La guarda va antes del dedupe: con un pendiente viejo del mismo id, sigue saliendo 3.
+registro_q t23
+mkdir -p "$(avisos_dir t23)"
+h=$(printf '%s' q-dup | shasum -a 1 | cut -c1-10)
+printf '{"schema":"corrida-aviso.v1","sesion":"g-ab","tipo":"fin-turno"}\n' >"$(avisos_dir t23)/t23-g-ab-fin-turno-$h.json"
+: >"$TECLAS"
+emitir t23 g-ab fin-turno --llave q-dup 2>"$T/err-q"; rc=$?
+[ "$rc" -eq 3 ] || fail "(q) con un pendiente del mismo id, emitir sobre g-ab debio salir 3 (rc=$rc)"
+grep -q 'send-keys' "$TECLAS" && fail "(q) con un pendiente del mismo id, emitir sobre g-ab desperto al lead"
+# La pertenencia es por nombre exacto: g-a no es gestionada aunque g-ab si.
+mkdir -p "$CORRIDA_STATE/t24"
+R_DIR="$CORRIDA_STATE/t24" python3 - <<'PY'
+import json, os
+b = {'rol': 'carril', 'cli': 'glm', 'dueno': 'lead', 'dir': '/tmp'}
+ses = [dict(b, nombre='lead-main', rol='lead', cli='zcode'), dict(b, nombre='g-a'),
+       dict(b, nombre='g-ab', host_id='mac-local', encargo_ref='/host/inbox/ab.json')]
+json.dump({'id': 't24', 'estado': 'abierta', 'sesiones': ses}, open(os.path.join(os.environ['R_DIR'], 'registro.json'), 'w'))
+PY
+mkdir -p "$(avisos_dir t24)"
+printf '{"schema":"corrida-aviso.v1","sesion":"g-a","tipo":"cierre"}\n' >"$(avisos_dir t24)/t24-g-a-cierre-viejo.json"
+out=$(CORRIDA_BIN="$CC" bash "$CORR_ABS" avisos atender t24) || fail "(q) atender t24 fallo"
+[ "$out" = "avisos: 1 atendidos, 0 descartados" ] || fail "(q) g-a no es gestionada (g-ab si): su pendiente debio atenderse: $out"
+# despertar no despierta al lead por un pendiente viejo de una gestionada, y si por uno valido.
+registro_q t31
+mkdir -p "$(avisos_dir t31)"
+printf '{"schema":"corrida-aviso.v1","sesion":"g-h","tipo":"cierre"}\n' >"$(avisos_dir t31)/t31-g-h-cierre-viejo.json"
+: >"$TECLAS"
+bash "$CORR_ABS" avisos despertar t31 || fail "(q) despertar t31 fallo"
+grep -q 'send-keys' "$TECLAS" && fail "(q) despertar desperto al lead por un pendiente de una gestionada: $(cat "$TECLAS")"
+printf '{"schema":"corrida-aviso.v1","sesion":"p-e","tipo":"cierre"}\n' >"$(avisos_dir t31)/t31-p-e-cierre-viejo.json"
+bash "$CORR_ABS" avisos despertar t31 || fail "(q) despertar t31 con un valido fallo"
+grep -q 'send-keys -t =lead-main: -l -- corrida.sh avisos atender t31' "$TECLAS" \
+  || fail "(q) despertar no desperto al lead por el pendiente valido de p-e: $(cat "$TECLAS")"
+echo "ok (q): una gestionada no emite (rc 3, sin aviso ni teclas) y su pendiente viejo se descarta; claves vacias, null y encargo plano, como siempre"
+
+# (r) B4-28: un pendiente sin campo sesion en una corrida sin gestionadas no es de
+# una gestionada (la lista vacia no casa con la sesion vacia): se descarta porque
+# ninguna sesion registrada se llama asi.
+registro t25 abierta lead-main:lead:zcode,ses-c25:carril:glm
+mkdir -p "$(avisos_dir t25)"
+printf '{"schema":"corrida-aviso.v1","tipo":"cierre"}\n' >"$(avisos_dir t25)/t25-sin-sesion.json"
+out=$(CORRIDA_BIN="$CC" bash "$CORR_ABS" avisos atender t25) || fail "(r) atender t25 fallo"
+[ "$out" = "avisos: 0 atendidos, 1 descartados" ] || fail "(r) el pendiente sin sesion debio descartarse: $out"
+[ "$(json_leer "$CORRIDA_STATE/t25/avisos/tratados/t25-sin-sesion.json" descartado)" = "la sesion  ya no esta registrada" ] \
+  || fail "(r) el pendiente sin sesion no quedo descartado como no registrado: $(json_leer "$CORRIDA_STATE/t25/avisos/tratados/t25-sin-sesion.json" descartado)"
+echo "ok (r): un pendiente sin sesion, sin gestionadas en la corrida, se descarta como no registrado"
 
 echo "TODO VERDE: test-corrida-avisos (U1 + U3 hook)"

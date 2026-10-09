@@ -1,0 +1,9 @@
+ FAIL  |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > does not recover a cancelled tree
+TypeError: undefined is not iterable (cannot read property Symbol(Symbol.iterator))
+ ❯ src/agents/tasks/managed-task.recovery.test.ts:719:34
+    717|       await expect(stream.result()).resolves.toMatchObject({ stopReaso…
+    718|       const result = await stream.result();
+    719|       expect(result.diagnostics).toContainEqual(
+       |                                  ^
+    720|         expect.objectContaining({
+    721|           type: "managed_recovery_exhausted",
