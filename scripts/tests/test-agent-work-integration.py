@@ -3221,8 +3221,12 @@ class SilentPromptTest(unittest.TestCase):
         socket = f"agent-work-prompt-{os.getpid()}-{secrets.token_hex(4)}"
         socket_file = Path(os.environ.get("TMUX_TMPDIR") or "/tmp") / f"tmux-{os.getuid()}" / socket
 
+        home = tempfile.mkdtemp(prefix="agent-work-tmux-home-")
+        self.addCleanup(shutil.rmtree, home, True)
+
         def tmux_cmd(*args):
-            return subprocess.run([tmux, "-f", "/dev/null", "-L", socket, *args], capture_output=True, text=True)
+            return subprocess.run([tmux, "-L", socket, *args], capture_output=True, text=True,
+                                  stdin=subprocess.DEVNULL, env={**os.environ, "HOME": home})
 
         self.addCleanup(lambda: socket_file.unlink() if socket_file.exists() else None)
         self.addCleanup(tmux_cmd, "kill-server")
