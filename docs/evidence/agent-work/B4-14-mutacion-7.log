@@ -1,0 +1,14 @@
+..F..
+======================================================================
+FAIL: test_lost_response_resends_the_same_incident (__main__.IncidentClientTest.test_lost_response_resends_the_same_incident)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2591, in test_lost_response_resends_the_same_incident
+    self.assertIn("rejected request", errors[0])
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'rejected request' not found in 'ff81ffe781fa4ecda8287b067b25a0ef0c59676c4ec2ec1c59ffe25e2712d88f: native projection Gateway returned invalid JSON'
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.066s
+
+FAILED (failures=1)

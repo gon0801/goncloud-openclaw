@@ -1,0 +1,15 @@
+F
+======================================================================
+FAIL: test_verdict_out_of_the_tail_and_a_crash_still_give_one_accepted_correction (__main__.ReviewTailRestartE2E.test_verdict_out_of_the_tail_and_a_crash_still_give_one_accepted_correction)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_review_correction_restart_e2e.py", line 115, in test_verdict_out_of_the_tail_and_a_crash_still_give_one_accepted_correction
+    self.assertFalse(in_tail, "the verdict is still in the last 80 lines")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false : the verdict is still in the last 80 lines
+
+----------------------------------------------------------------------
+Ran 1 test in 31.023s
+
+FAILED (failures=1)
+rc=1

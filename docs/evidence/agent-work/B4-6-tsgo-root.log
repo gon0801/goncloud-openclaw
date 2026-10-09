@@ -1,0 +1,6 @@
+$ node scripts/run-tsgo-core-test-shards.mjs root
+[dist artifacts] waiting for checkout ownership: /Users/dn/dev/openclaw-agent-work-integration/.artifacts/dist-artifacts.lock
+[tsgo:test-root-tooling] passed in 25.0s
+[tsgo:test-root-scripts] passed in 33.3s
+[tsgo:test-root-e2e] passed in 25.5s
+[tsgo:test-root-other] passed in 36.4s

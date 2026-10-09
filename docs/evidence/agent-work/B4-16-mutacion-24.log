@@ -1,0 +1,39 @@
+.......F............
+======================================================================
+FAIL: test_capture_replaces_bytes_that_are_not_utf8 (__main__.SilentPromptTest.test_capture_replaces_bytes_that_are_not_utf8)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3409, in test_capture_replaces_bytes_that_are_not_utf8
+    self.assertEqual(backend.capture(identity), "\ufffd> Allow once\n")
+                     ~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/resources.py", line 411, in capture
+    result = subprocess.run(
+        [self.tmux_bin, "-L", self.socket, "capture-pane", "-p", "-t", identity["paneId"]],
+        capture_output=True, encoding="utf-8")
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 557, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2194, in _communicate
+    stdout = self._translate_newlines(stdout,
+                                      self.stdout.encoding,
+                                      self.stdout.errors)
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1099, in _translate_newlines
+    data = data.decode(encoding, errors)
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3411, in test_capture_replaces_bytes_that_are_not_utf8
+    self.fail(f"a byte that is not UTF-8 escaped capture: {exc}")
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: a byte that is not UTF-8 escaped capture: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.881s
+
+FAILED (failures=1)
+rc=1

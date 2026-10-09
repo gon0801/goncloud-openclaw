@@ -1,0 +1,10 @@
+CRASH_BOUNDARY B1 pids=[4630, 6358] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]
+.CLAIMS_AFTER_RESTART ['reported', 'reported', 'reported']
+CRASH_BOUNDARY B3 pids=[10239, 12284] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]
+.CRASH_BOUNDARY B4 pids=[16150, 18817] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1, 0]
+.
+----------------------------------------------------------------------
+Ran 3 tests in 266.122s
+
+OK
+rc=0

@@ -1,0 +1,2 @@
+$ node scripts/run-tsgo.mjs -p tsconfig.core.json --incremental --tsBuildInfoFile .artifacts/tsgo-cache/core.tsbuildinfo
+[dist artifacts] waiting for checkout ownership: /Users/dn/dev/openclaw-agent-work-integration/.artifacts/dist-artifacts.lock

@@ -1,0 +1,16 @@
+....F.........
+======================================================================
+FAIL: test_every_live_cron_is_classified (__main__.AgentsRouting.test_every_live_cron_is_classified)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 193, in test_every_live_cron_is_classified
+    self.assertEqual(set(ids), set(jobs), "cronJobs must classify every live cron and nothing else")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Items in the second set but not the first:
+'8c26f371-f132-41af-a772-b3f13641c3ad' : cronJobs must classify every live cron and nothing else
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.077s
+
+FAILED (failures=1)
+rc=1

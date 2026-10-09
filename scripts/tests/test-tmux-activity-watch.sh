@@ -1269,6 +1269,106 @@ grep -q -- '--encargo' "$RARGV" && fail "(2q-5) se invento un encargo que no est
 run_re >/dev/null 2>&1 || true
 echo "ok (2q-5): el relanzo re-entrega el --encargo registrado y sin encargo queda igual que siempre"
 
+# (2q-5b) T9 :266: dentro del perimetro, el relanzo automatico no recrea el vigia
+# antiguo. Una entrada del registro con encargo_ref o host_id es gestionada: la
+# vigila su host, que manda la incidencia al solicitante. Al cerrarse no se relanza
+# (cero llamadas a lanzar-sesion), el aviso de cierre lo dice y queda un evento
+# relanzo-automatico con ok=false. Filas: las dos claves, solo host_id, solo
+# encargo_ref, una segunda caida y una corrida cerrada. Las rutas de siempre
+# (encargo plano y sin encargo) son las de (2q-5).
+registro_ges() { # $1 id $2 estado $3 sesion $4 claves: ambas | host | ref
+  mkdir -p "$CORRIDA_STATE/$1"
+  R_ID="$1" R_EST="$2" R_SES="$3" R_CLAVES="$4" R_DIR="$CORRIDA_STATE/$1" python3 - <<'PY'
+import json, os
+e = {'nombre': os.environ['R_SES'], 'rol': 'carril', 'cli': 'glm', 'dueno': 'lead', 'dir': '/tmp'}
+if os.environ['R_CLAVES'] in ('ambas', 'host'):
+    e['host_id'] = 'mac-local'
+if os.environ['R_CLAVES'] in ('ambas', 'ref'):
+    e['encargo_ref'] = '/host/inbox/' + os.environ['R_SES'] + '.json'
+json.dump({'id': os.environ['R_ID'], 'estado': os.environ['R_EST'], 'sesiones': [e]},
+          open(os.path.join(os.environ['R_DIR'], 'registro.json'), 'w'))
+PY
+}
+cierra_ges() { # $1 id $2 sesion $3 claves $4 estado -> cierra la sesion con un tick antes y otro despues
+  registro_ges "$1" "$4" "$2" "$3"
+  nace_enc "$2" "$1"
+  run_re >/dev/null 2>&1 || fail "--once (2q-5b, foto $2) fallo"
+  : >"$RARGV"; : >"$CALLS"
+  "$TM" -L "$L" kill-session -t "$2"
+  run_re >/dev/null 2>&1 || fail "--once (2q-5b, closed $2) fallo"
+}
+gestionada_sin_relanzo() { # $1 id $2 sesion: ningun lanzar-sesion, aviso literal y evento ok=false
+  [ ! -s "$RARGV" ] || fail "(2q-5b) se relanzo la sesion gestionada $2: $(cat "$RARGV")"
+  grep -qF "tmux: $2 closed | last cwd=" "$CALLS" \
+    || fail "(2q-5b) el cierre de $2 no llego al dueno: $(cat "$CALLS")"
+  grep -qF " | sesion gestionada: no se relanza automaticamente; la reporta su host (corrida $1)" "$CALLS" \
+    || fail "(2q-5b) el aviso de cierre de $2 no dice que es gestionada: $(cat "$CALLS")"
+  EVJ="$CORRIDA_STATE/$1/eventos.jsonl" EVS="$2" python3 -c "
+import json,os,sys
+ev=[json.loads(l) for l in open(os.environ['EVJ']) if l.strip()]
+rel=[e for e in ev if e.get('tipo')=='relanzo-automatico' and e.get('sesion')==os.environ['EVS']]
+ok=[(e['ok'],e['detalle']) for e in rel]==[(False,'sesion gestionada: no se relanza; la reporta su host')]
+sys.exit(0 if ok else 1)" || fail "(2q-5b) el evento relanzo-automatico de $2 no es el de una gestionada: $(cat "$CORRIDA_STATE/$1/eventos.jsonl" 2>/dev/null)"
+}
+for fila in "sim9-GA sim9-ga ambas" "sim9-GH sim9-gh host" "sim9-GR sim9-gr ref"; do
+  set -- $fila
+  cierra_ges "$1" "$2" "$3" abierta
+  gestionada_sin_relanzo "$1" "$2"
+done
+# Segunda caida de la misma gestionada (alguien la volvio a abrir a mano): tampoco
+# se relanza, y el aviso sigue diciendo gestionada, no "ya se relanzo".
+: >"$CORRIDA_STATE/sim9-GA/eventos.jsonl"
+cierra_ges sim9-GA sim9-ga ambas abierta
+gestionada_sin_relanzo sim9-GA sim9-ga
+# Corrida cerrada: como siempre, ni relanzo ni sufijo.
+cierra_ges sim9-GC sim9-gc ambas cerrada
+[ ! -s "$RARGV" ] || fail "(2q-5b) se relanzo una sesion de una corrida cerrada: $(cat "$RARGV")"
+grep -qF "tmux: sim9-gc closed | last cwd=" "$CALLS" || fail "(2q-5b) el cierre de sim9-gc no llego: $(cat "$CALLS")"
+grep -q 'sim9-gc closed | last cwd=[^|]*|' "$CALLS" \
+  && fail "(2q-5b) una sesion de una corrida cerrada no lleva sufijo de relanzo: $(cat "$CALLS")"
+echo "ok (2q-5b): una sesion gestionada no se relanza: ni con las dos claves, ni con una, ni a la segunda caida"
+
+# (2q-5c) Bordes de la regla: manda la gestion aunque la entrada traiga encargo
+# plano; una clave vacia o null NO es gestion (lanzar-sesion.sh:128 tampoco la
+# trata como gestionada); y una corrida cerrada no anota relanzo.
+registro_json() { # $1 id $2 sesion $3 json extra de la entrada
+  mkdir -p "$CORRIDA_STATE/$1"
+  R_ID="$1" R_SES="$2" R_EXTRA="$3" R_DIR="$CORRIDA_STATE/$1" python3 - <<'PY'
+import json, os
+e = {'nombre': os.environ['R_SES'], 'rol': 'carril', 'cli': 'glm', 'dueno': 'lead', 'dir': '/tmp'}
+e.update(json.loads(os.environ['R_EXTRA']))
+json.dump({'id': os.environ['R_ID'], 'estado': 'abierta', 'sesiones': [e]},
+          open(os.path.join(os.environ['R_DIR'], 'registro.json'), 'w'))
+PY
+}
+cierra_json() { # $1 id $2 sesion $3 json extra
+  registro_json "$1" "$2" "$3"
+  nace_enc "$2" "$1"
+  run_re >/dev/null 2>&1 || fail "--once (2q-5c, foto $2) fallo"
+  : >"$RARGV"; : >"$CALLS"
+  "$TM" -L "$L" kill-session -t "$2"
+  run_re >/dev/null 2>&1 || fail "--once (2q-5c, closed $2) fallo"
+}
+cierra_json sim9-GE sim9-ge "{\"host_id\": \"mac-local\", \"encargo_ref\": \"/host/inbox/sim9-ge.json\", \"encargo\": \"$ENC\"}"
+gestionada_sin_relanzo sim9-GE sim9-ge
+cierra_json sim9-GV sim9-gv "{\"host_id\": \"\", \"encargo_ref\": \"\", \"encargo\": \"$ENC\"}"
+grep -q "^lanzar-sesion sim9-GV carril glm /tmp --encargo $ENC --nombre sim9-gv$" "$RARGV" \
+  || fail "(2q-5c) claves vacias no son gestion: el relanzo debia ser el de siempre: $(cat "$RARGV")"
+grep -qF 'sesion gestionada' "$CALLS" && fail "(2q-5c) claves vacias no son gestion: $(cat "$CALLS")"
+"$TM" -L "$L" kill-session -t sim9-gv 2>/dev/null; run_re >/dev/null 2>&1 || true
+cierra_json sim9-GN sim9-gn '{"host_id": null, "encargo_ref": null}'
+grep -q '^lanzar-sesion sim9-GN carril glm /tmp --nombre sim9-gn$' "$RARGV" \
+  || fail "(2q-5c) claves null no son gestion: el relanzo debia ser el de siempre: $(cat "$RARGV")"
+grep -qF 'sesion gestionada' "$CALLS" && fail "(2q-5c) claves null no son gestion: $(cat "$CALLS")"
+"$TM" -L "$L" kill-session -t sim9-gn 2>/dev/null; run_re >/dev/null 2>&1 || true
+EVJ="$CORRIDA_STATE/sim9-GC/eventos.jsonl" python3 -c "
+import json,os,sys
+p=os.environ['EVJ']
+ev=[json.loads(l) for l in open(p) if l.strip()] if os.path.exists(p) else []
+sys.exit(1 if any(e.get('tipo')=='relanzo-automatico' for e in ev) else 0)" \
+  || fail "(2q-5c) una corrida cerrada no anota relanzo-automatico: $(cat "$CORRIDA_STATE/sim9-GC/eventos.jsonl")"
+echo "ok (2q-5c): gestion con encargo plano no se relanza; claves vacias o null se relanzan como siempre; corrida cerrada sin evento"
+
 # (2q-7) diario local (contrato del simulacro 5/6): con la ruta de avisos, la
 STATE_DIR="$T/state-2q-7"; mkdir -p "$STATE_DIR"
 # senal SIGUE quedando en eventos.jsonl del vigia: es lo que un vigia lee sin

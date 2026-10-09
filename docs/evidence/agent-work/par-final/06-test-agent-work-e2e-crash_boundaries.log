@@ -1,0 +1,37 @@
+$ bash scripts/tests/test-agent-work-e2e.sh crash_boundaries
+EXTRA_CLAIMS_AFTER_FIRST_SUCCESS [None, None, None]
+CRASH_BOUNDARY B7 pids=[92846, 94001] handling=cancelled delivery=result-recorded wakes=0 children=0 cli_accepted=1
+./Users/dn/dev/wt-b4-40-r1/scripts/tests/test_agent_work_crash_boundaries_e2e.py:499: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
+  host_pid = self.crash_host(gateway, "marked")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+CRASH_BOUNDARY B2 pids=[95985] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
+HOST_CRASH B2 point=marked host_pid=96946 resources=['ReleasedAdopted'] same_nonce=1
+./Users/dn/dev/wt-b4-40-r1/scripts/tests/test_agent_work_crash_boundaries_e2e.py:550: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
+  host_pid = self.crash_host(gateway, "typed")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+CRASH_BOUNDARY B6 pids=[98303] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
+HOST_CRASH B6 point=typed host_pid=99273 status_after_restart=uncertain
+./Users/dn/dev/wt-b4-40-r1/scripts/tests/test_agent_work_crash_boundaries_e2e.py:524: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
+  host_pid = self.crash_host(gateway, "launching")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+HOST_CRASH B2 point=launching host_pid=1833 resources=[('CleanupPending', 'launch identity uncertain')] cli_accepted=0 provider=0
+.CRASH_BOUNDARY B1 pids=[2817, 3801] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]
+.CLAIMS_AFTER_RESTART ['reported', 'reported', 'reported']
+CRASH_BOUNDARY B3 pids=[6100, 7289] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]
+.EXTRA_CLAIMS_AFTER_FIRST_SUCCESS ['delivered', 'delivered', 'delivered']
+CRASH_BOUNDARY B5 pids=[9603, 11175] handlings=1 children=1 cli_accepted=2 acting_first=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit'] acting_second=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit']
+./Users/dn/dev/wt-b4-40-r1/scripts/tests/test_agent_work_crash_boundaries_e2e.py:474: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
+  host_pid = self.crash_host(gateway, "reserved")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+CRASH_BOUNDARY B2 pids=[13752] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
+HOST_CRASH B2 point=reserved host_pid=14818 resources=['ReleasedAdopted'] same_nonce=1
+.CRASH_BOUNDARY B4 pids=[16212, 17705] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1, 0]
+.RACE_OUTCOME cancel=True receipts=1 wakes_at_cancel=0 cancel_error=None report_error=None
+RACE_B7 pids=[19555] handling=cancelled delivery=result-recorded wakes=0 children=0 cli_accepted=1
+.
+----------------------------------------------------------------------
+Ran 10 tests in 674.637s
+
+OK
+
+rc=0 seconds=674.7

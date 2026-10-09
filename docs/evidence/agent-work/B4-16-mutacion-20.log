@@ -1,0 +1,24 @@
+................F...
+======================================================================
+FAIL: test_the_episode_and_its_incident_commit_together (__main__.SilentPromptTest.test_the_episode_and_its_incident_commit_together) (crash_writing='dialog_watch')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3384, in test_the_episode_and_its_incident_commit_together
+    self.assertEqual(self.rows(host), [], "an incident was kept without its episode")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [('host:1:permission-required:prompt-a676f[293 chars]"}')] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+('host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1', 'pending', '{"evidenceRef":"host-operation:8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571","kind":"permission-required","promptIdentity":"prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1"}')
+
++ []
+- [('host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1',
+-   'pending',
+-   '{"evidenceRef":"host-operation:8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571","kind":"permission-required","promptIdentity":"prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1"}')] : an incident was kept without its episode
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.809s
+
+FAILED (failures=1)
+rc=1

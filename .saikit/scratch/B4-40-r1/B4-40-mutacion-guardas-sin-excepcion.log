@@ -1,0 +1,64 @@
+...F.FF
+======================================================================
+FAIL: test_a_shell_skip_must_be_the_declared_launchd_skip (__main__.AcceptanceGuardsTest.test_a_shell_skip_must_be_the_declared_launchd_skip)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt-b4-40-r1/scripts/tests/test_agent_work_acceptance.py", line 244, in test_a_shell_skip_must_be_the_declared_launchd_skip
+    self.assertEqual(pair_problems(self.REFS, self.PAIR, self.shell_doc(self.SHELL_REF, [self.LAUNCHD_SKIP]),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                   []), [])
+                                   ^^^^^^^^
+AssertionError: Lists differ: ['scripts/tests/test-agent-work-host.sh::r[173 chars]ion'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'scripts/tests/test-agent-work-host.sh::resource_close skipped: test_resource_close_real_launchd_label_stays_pending: user/502 Background-only: bootstrap/load give EIO 5 until David starts a real agentes login session'
+
++ []
+- ['scripts/tests/test-agent-work-host.sh::resource_close skipped: '
+-  'test_resource_close_real_launchd_label_stays_pending: user/502 '
+-  'Background-only: bootstrap/load give EIO 5 until David starts a real agentes '
+-  'login session']
+
+======================================================================
+FAIL: test_only_evidence_prose_may_change_after_the_pair (__main__.AcceptanceGuardsTest.test_only_evidence_prose_may_change_after_the_pair)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt-b4-40-r1/scripts/tests/test_agent_work_acceptance.py", line 267, in test_only_evidence_prose_may_change_after_the_pair
+    self.assertEqual(pair_problems(self.REFS, self.PAIR, self.pair(), allowed), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['scripts/tests/test-agent-work-host.sh::r[173 chars]ion'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'scripts/tests/test-agent-work-host.sh::resource_close skipped: test_resource_close_real_launchd_label_stays_pending: user/502 Background-only: bootstrap/load give EIO 5 until David starts a real agentes login session'
+
++ []
+- ['scripts/tests/test-agent-work-host.sh::resource_close skipped: '
+-  'test_resource_close_real_launchd_label_stays_pending: user/502 '
+-  'Background-only: bootstrap/load give EIO 5 until David starts a real agentes '
+-  'login session']
+
+======================================================================
+FAIL: test_the_pair_run_must_cover_every_cited_test_green_on_the_pair (__main__.AcceptanceGuardsTest.test_the_pair_run_must_cover_every_cited_test_green_on_the_pair)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt-b4-40-r1/scripts/tests/test_agent_work_acceptance.py", line 219, in test_the_pair_run_must_cover_every_cited_test_green_on_the_pair
+    self.assertEqual(pair_problems(self.REFS, self.PAIR, self.pair(), []), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['scripts/tests/test-agent-work-host.sh::r[173 chars]ion'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'scripts/tests/test-agent-work-host.sh::resource_close skipped: test_resource_close_real_launchd_label_stays_pending: user/502 Background-only: bootstrap/load give EIO 5 until David starts a real agentes login session'
+
++ []
+- ['scripts/tests/test-agent-work-host.sh::resource_close skipped: '
+-  'test_resource_close_real_launchd_label_stays_pending: user/502 '
+-  'Background-only: bootstrap/load give EIO 5 until David starts a real agentes '
+-  'login session']
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.001s
+
+FAILED (failures=3)

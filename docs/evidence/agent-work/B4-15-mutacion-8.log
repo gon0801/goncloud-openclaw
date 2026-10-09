@@ -1,0 +1,43 @@
+....FF..
+======================================================================
+FAIL: test_pump_detects_before_sending_and_sends_once (__main__.SilentFailureTest.test_pump_detects_before_sending_and_sends_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2951, in test_pump_detects_before_sending_and_sends_once
+    self.assertEqual(native_gateway.pump_once(client, host=host, cli_watch=watch, **args),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     {"reported": 0, "transferred": 0, "closed": 0, "incidents": 1, "detected": 1})
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'reported': 0, 'transferred': 0, 'closed': 0, 'incidents': 0, 'detected': 1} != {'reported': 0, 'transferred': 0, 'closed': 0, 'incidents': 1, 'detected': 1}
+- {'closed': 0, 'detected': 1, 'incidents': 0, 'reported': 0, 'transferred': 0}
+?                                           ^
+
++ {'closed': 0, 'detected': 1, 'incidents': 1, 'reported': 0, 'transferred': 0}
+?                                           ^
+
+
+======================================================================
+FAIL: test_pump_watch_failure_does_not_block_incidents (__main__.SilentFailureTest.test_pump_watch_failure_does_not_block_incidents)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3004, in test_pump_watch_failure_does_not_block_incidents
+    self.assertEqual(events, ["results", "closures", "watch", "incidents", "claim"])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['results', 'closures', 'incidents', 'watch', 'claim'] != ['results', 'closures', 'watch', 'incidents', 'claim']
+
+First differing element 2:
+'incidents'
+'watch'
+
+- ['results', 'closures', 'incidents', 'watch', 'claim']
+?                                      ---------
+
++ ['results', 'closures', 'watch', 'incidents', 'claim']
+?                        +++++++++
+
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.122s
+
+FAILED (failures=2)
+rc=1

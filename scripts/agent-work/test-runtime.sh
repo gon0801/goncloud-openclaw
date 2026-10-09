@@ -28,7 +28,7 @@ case "$case_name" in
     probe_restart=0 ;;
   handling_unresolved)
     test_file='src/agents/tasks/managed-task.handling.test.ts'
-    test_pattern='keeps a result pending across agent_end|archives a result received after cancellation|serializes cancellation against a competing continuation|preserves an uncertain external effect'
+    test_pattern='keeps a result pending across agent_end|archives a result received after cancellation|serializes cancellation against a competing continuation|propagates cancellation to children committed|preserves an uncertain external effect'
     probe_restart=0 ;;
   idle_72h)
     test_file='src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts'

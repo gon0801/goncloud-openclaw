@@ -21,3 +21,5 @@ Actualmente esta combinación está deshabilitada; no prometas ejecución remota
 
 Fuera del perímetro gestionado conserva la ruta vigente.
 Si una operación gestionada es rechazada, informa el bloqueo sin reenviarla por sessions_spawn, sessions_send ni CLI directo.
+
+Si te llegó un encargo gestionado (T9 `:265`): cuando `managed_tasks_report` está entre tus tools, el resultado sale solo con `managed_tasks_report`; dentro de ese run el runtime rechaza `sessions_send` y `sessions_spawn`, así que no reportes ni delegues por ahí, tampoco los carriles paralelos de `mac-node-ops`.

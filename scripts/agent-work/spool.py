@@ -5,11 +5,13 @@ import json
 import os
 import sqlite3
 import tempfile
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
 TERMINAL_STATES = ("AbsenceVerified", "ReleasedAdopted")
 SENDABLE_STATES = ("CleanupPending", "AbsenceVerified", "ReleasedAdopted")
+DIALOG_START = {"open_identity": None, "episode": 0, "candidate": None, "seen": 0, "clean": 0}
 
 
 def canonical(data: object) -> str:
@@ -18,6 +20,39 @@ def canonical(data: object) -> str:
 
 def closure_digest(evidence_json: str) -> str:
     return hashlib.sha256(canonical(json.loads(evidence_json)).encode()).hexdigest()
+
+
+HOST_INCIDENT_KINDS = ("permission-required", "deadline-missed", "transport-unavailable",
+                       "invalid-result")
+
+
+def incident_identity(generation: int, incident: object) -> tuple[str, str]:
+    if not isinstance(incident, dict):
+        raise ValueError("host incident must be an object")
+    kind = incident.get("kind")
+    if kind not in HOST_INCIDENT_KINDS:
+        raise ValueError("unknown host incident kind")
+    identity_field = "promptIdentity" if kind == "permission-required" else "episodeId"
+    if set(incident) != {"kind", identity_field, "evidenceRef"}:
+        raise ValueError("host incident fields do not match its kind")
+    for field in (identity_field, "evidenceRef"):
+        if not isinstance(incident[field], str):
+            raise ValueError(f"host incident {field} must be text")
+    episode = incident[identity_field]
+
+    def utf16_length(text: str) -> int:
+        # zod .max/.min count string length in UTF-16 units, not code points.
+        return len(text.encode("utf-16-le")) // 2
+
+    if kind == "permission-required":
+        if utf16_length(episode) < 1:
+            raise ValueError("host incident promptIdentity must not be empty")
+    elif not 1 <= utf16_length(episode) <= 256:
+        raise ValueError("host incident episodeId must be 1..256 utf16 units")
+    if utf16_length(incident["evidenceRef"]) < 1:
+        raise ValueError("host incident evidenceRef must not be empty")
+    return (f"host:{generation}:{kind}:{episode}",
+            hashlib.sha256(canonical(incident).encode()).hexdigest())
 
 
 def atomic_json(path: Path, data: object) -> None:
@@ -81,6 +116,33 @@ class Spool:
                 );
                 CREATE INDEX IF NOT EXISTS closure_sends_task_generation
                     ON closure_sends(task_id, generation);
+                CREATE TABLE IF NOT EXISTS incidents (
+                    task_id TEXT NOT NULL,
+                    incident_key TEXT NOT NULL,
+                    operation_id TEXT NOT NULL,
+                    incident_json TEXT NOT NULL,
+                    incident_digest TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    receipt_json TEXT,
+                    error TEXT,
+                    PRIMARY KEY (task_id, incident_key)
+                );
+                CREATE TABLE IF NOT EXISTS delivery_attempts (
+                    operation_id TEXT PRIMARY KEY,
+                    attempted_at REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS delivery_clock (
+                    operation_id TEXT PRIMARY KEY,
+                    delivered_at REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS dialog_watch (
+                    operation_id TEXT PRIMARY KEY,
+                    open_identity TEXT,
+                    episode INTEGER NOT NULL,
+                    candidate TEXT,
+                    seen INTEGER NOT NULL,
+                    clean INTEGER NOT NULL
+                );
             """)
             db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT value FROM metadata WHERE key='host_id'").fetchone()
@@ -138,12 +200,20 @@ class Spool:
             db.execute("BEGIN IMMEDIATE")
             updated = db.execute("UPDATE operations SET status='attempted' WHERE operation_id=? AND status='registered'",
                                  (operation_id,))
-            return updated.rowcount == 1
+            if updated.rowcount != 1:
+                return False
+            db.execute("INSERT OR IGNORE INTO delivery_attempts VALUES (?,?)",
+                       (operation_id, time.time()))
+            return True
 
     def delivered(self, operation_id: str) -> None:
         with self.connection() as db:
-            db.execute("UPDATE operations SET status='delivered' WHERE operation_id=? AND status='attempted'",
-                       (operation_id,))
+            updated = db.execute("UPDATE operations SET status='delivered' "
+                                 "WHERE operation_id=? AND status IN ('attempted','uncertain')",
+                                 (operation_id,))
+            if updated.rowcount == 1:
+                db.execute("INSERT OR IGNORE INTO delivery_clock VALUES (?,?)",
+                           (operation_id, time.time()))
 
     def record(self, operation_id: str, result_id: str, result: dict, result_path: Path) -> None:
         with self.connection() as db:
@@ -175,6 +245,57 @@ class Spool:
             rows = db.execute("SELECT operation_json FROM operations WHERE result_id IS NULL ORDER BY operation_id").fetchall()
             return [json.loads(row[0]) for row in rows]
 
+    def attempted_at(self, operation_id: str) -> float | None:
+        with self.connection() as db:
+            row = db.execute("SELECT attempted_at FROM delivery_attempts WHERE operation_id=?",
+                             (operation_id,)).fetchone()
+        return row["attempted_at"] if row else None
+
+    def delivery_uncertain(self, operation_id: str, task_id: str, incident_key: str,
+                           incident_json: str, incident_digest: str) -> bool:
+        """attempted -> uncertain together with its incident; False when it already left attempted."""
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            updated = db.execute("UPDATE operations SET status='uncertain' "
+                                 "WHERE operation_id=? AND status='attempted'",
+                                 (operation_id,))
+            if updated.rowcount != 1:
+                return False
+            db.execute("INSERT OR IGNORE INTO incidents VALUES (?,?,?,?,?,'pending',NULL,NULL)",
+                       (task_id, incident_key, operation_id, incident_json, incident_digest))
+            return True
+
+    def delivered_at(self, operation_id: str) -> float | None:
+        with self.connection() as db:
+            row = db.execute("SELECT delivered_at FROM delivery_clock WHERE operation_id=?",
+                             (operation_id,)).fetchone()
+        return row["delivered_at"] if row else None
+
+    def has_incident(self, task_id: str, incident_key: str) -> bool:
+        with self.connection() as db:
+            row = db.execute("SELECT 1 FROM incidents WHERE task_id=? AND incident_key=?",
+                             (task_id, incident_key)).fetchone()
+        return row is not None
+
+    def dialog_state(self, operation_id: str) -> dict:
+        with self.connection() as db:
+            row = db.execute("SELECT * FROM dialog_watch WHERE operation_id=?", (operation_id,)).fetchone()
+        if row is None:
+            return dict(DIALOG_START)
+        return {field: row[field] for field in DIALOG_START}
+
+    @staticmethod
+    def _put_dialog(db, operation_id: str, state: dict) -> None:
+        db.execute("INSERT INTO dialog_watch VALUES (?,?,?,?,?,?) "
+                   "ON CONFLICT(operation_id) DO UPDATE SET open_identity=excluded.open_identity,"
+                   "episode=excluded.episode,candidate=excluded.candidate,seen=excluded.seen,clean=excluded.clean",
+                   (operation_id, state["open_identity"], state["episode"], state["candidate"],
+                    state["seen"], state["clean"]))
+
+    def save_dialog_state(self, operation_id: str, state: dict) -> None:
+        with self.connection() as db:
+            self._put_dialog(db, operation_id, state)
+
     def note_inbox_error(self, operation_id: str, error: str) -> None:
         with self.connection() as db:
             db.execute("INSERT INTO inbox_errors VALUES (?,?) ON CONFLICT(operation_id) DO UPDATE SET error=excluded.error",
@@ -204,6 +325,47 @@ class Spool:
             db.execute("UPDATE operations SET receipt_json=?,status='acknowledged' WHERE operation_id=?",
                        (canonical(receipt), operation_id))
 
+    def record_incident(self, task_id: str, incident_key: str, operation_id: str,
+                        incident_json: str, incident_digest: str, dialog_state: dict | None = None) -> dict:
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT * FROM incidents WHERE task_id=? AND incident_key=?",
+                             (task_id, incident_key)).fetchone()
+            if row:
+                if row["incident_digest"] != incident_digest:
+                    raise ValueError("incident conflicts with different evidence")
+                return dict(row)
+            if dialog_state is not None:
+                self._put_dialog(db, operation_id, dialog_state)
+            db.execute("INSERT INTO incidents VALUES (?,?,?,?,?,'pending',NULL,NULL)",
+                       (task_id, incident_key, operation_id, incident_json, incident_digest))
+            return dict(db.execute("SELECT * FROM incidents WHERE task_id=? AND incident_key=?",
+                                   (task_id, incident_key)).fetchone())
+
+    def pending_incidents(self) -> list[dict]:
+        with self.connection() as db:
+            rows = db.execute("SELECT * FROM incidents WHERE status='pending' "
+                              "ORDER BY task_id, incident_key").fetchall()
+            return [dict(row) for row in rows]
+
+    def incident_sent(self, task_id: str, incident_key: str, receipt: dict) -> None:
+        with self.connection() as db:
+            db.execute("UPDATE incidents SET status='sent', receipt_json=?, error=NULL "
+                       "WHERE task_id=? AND incident_key=? AND status='pending'",
+                       (canonical(receipt), task_id, incident_key))
+
+    def incident_failed(self, task_id: str, incident_key: str, error: str,
+                        rejected: bool = False) -> None:
+        with self.connection() as db:
+            if rejected:
+                db.execute("UPDATE incidents SET status='rejected', error=? "
+                           "WHERE task_id=? AND incident_key=? AND status='pending'",
+                           (error[:512], task_id, incident_key))
+            else:
+                db.execute("UPDATE incidents SET error=? "
+                           "WHERE task_id=? AND incident_key=? AND status='pending'",
+                           (error[:512], task_id, incident_key))
+
     def closure_rows(self) -> list[dict]:
         # Only ResourceManager builds the resources table; without one there
         # is nothing to send.
@@ -214,7 +376,9 @@ class Spool:
                     f"AND state IN ({','.join('?' * len(SENDABLE_STATES))}) ORDER BY operation_id",
                     SENDABLE_STATES,
                 ).fetchall()
-        except sqlite3.OperationalError:
+        except sqlite3.OperationalError as exc:
+            if "no such table" not in str(exc):
+                raise OSError(str(exc)) from exc
             return []
         return [dict(row) for row in rows]
 

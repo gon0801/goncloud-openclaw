@@ -1,0 +1,15 @@
+F.
+======================================================================
+FAIL: test_every_row_is_well_formed (__main__.AcceptanceMatrixTest.test_every_row_is_well_formed) (row='A12')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 89, in test_every_row_is_well_formed
+    self.assertTrue(target.is_file(), f"{path} does not exist")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : scripts/tests/test-agent-work-host-no-existe.sh does not exist
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.005s
+
+FAILED (failures=1)
+rc=1

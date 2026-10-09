@@ -1,0 +1,34 @@
+..F..F
+======================================================================
+FAIL: test_flush_incidents_sends_once (__main__.IncidentFlushTest.test_flush_incidents_sends_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2411, in test_flush_incidents_sends_once
+    self.assertEqual(host.flush_incidents("host-one", send), (0, []))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Tuples differ: (1, []) != (0, [])
+
+First differing element 0:
+1
+0
+
+- (1, [])
+?  ^
+
++ (0, [])
+?  ^
+
+
+======================================================================
+FAIL: test_record_incident_twice_keeps_one_row (__main__.IncidentFlushTest.test_record_incident_twice_keeps_one_row)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2324, in test_record_incident_twice_keeps_one_row
+    with self.assertRaises(ValueError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.030s
+
+FAILED (failures=2)

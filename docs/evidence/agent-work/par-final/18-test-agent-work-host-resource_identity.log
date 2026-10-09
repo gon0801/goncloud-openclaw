@@ -1,0 +1,16 @@
+$ bash scripts/tests/test-agent-work-host.sh resource_identity
+test_resource_identity_adopted_without_nonce_and_claim_replay_close_reclose (__main__.ResourceTests.test_resource_identity_adopted_without_nonce_and_claim_replay_close_reclose) ... ok
+test_resource_identity_agentes_happy_launch_and_presence_clear (__main__.ResourceTests.test_resource_identity_agentes_happy_launch_and_presence_clear) ... ok
+test_resource_identity_agentes_multiline_argv_never_makes_a_phantom_row (__main__.ResourceTests.test_resource_identity_agentes_multiline_argv_never_makes_a_phantom_row) ... ok
+test_resource_identity_agentes_prelaunch_busy_refuses_launch (__main__.ResourceTests.test_resource_identity_agentes_prelaunch_busy_refuses_launch) ... ok
+test_resource_identity_pid_reuse_boot_change_and_adoption (__main__.ResourceTests.test_resource_identity_pid_reuse_boot_change_and_adoption) ... ok
+test_resource_identity_survives_timezone_and_locale_shift (__main__.ResourceTests.test_resource_identity_survives_timezone_and_locale_shift) ... ok
+test_resource_identity_tmux_replacement_never_marks_stops_or_revokes (__main__.ResourceTests.test_resource_identity_tmux_replacement_never_marks_stops_or_revokes) ... ok
+test_resource_identity_tmux_socket_and_adopted_session (__main__.ResourceTests.test_resource_identity_tmux_socket_and_adopted_session) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.591s
+
+OK
+
+rc=0 seconds=0.7

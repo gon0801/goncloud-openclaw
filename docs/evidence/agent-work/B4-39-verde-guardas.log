@@ -1,0 +1,28 @@
+FF.......
+======================================================================
+FAIL: test_every_row_is_well_formed (__main__.AcceptanceMatrixTest.test_every_row_is_well_formed) (row='A8')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 136, in test_every_row_is_well_formed
+    self.assertEqual(row["cobertura"] == "fuera-de-bloque", row["id"] in OUT_OF_BLOCK,
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     "only the rows in OUT_OF_BLOCK may be fuera-de-bloque")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False != True : only the rows in OUT_OF_BLOCK may be fuera-de-bloque
+
+======================================================================
+FAIL: test_every_row_is_well_formed (__main__.AcceptanceMatrixTest.test_every_row_is_well_formed) (row='T10:idle_72h')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 136, in test_every_row_is_well_formed
+    self.assertEqual(row["cobertura"] == "fuera-de-bloque", row["id"] in OUT_OF_BLOCK,
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     "only the rows in OUT_OF_BLOCK may be fuera-de-bloque")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False != True : only the rows in OUT_OF_BLOCK may be fuera-de-bloque
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.009s
+
+FAILED (failures=2)
+rc=1

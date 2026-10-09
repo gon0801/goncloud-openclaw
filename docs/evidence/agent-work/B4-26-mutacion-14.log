@@ -1,0 +1,15 @@
+.........F....
+======================================================================
+FAIL: test_model_wakes_inventory_lists_every_repo_wake_source (__main__.AgentsRouting.test_model_wakes_inventory_lists_every_repo_wake_source)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 249, in test_model_wakes_inventory_lists_every_repo_wake_source
+    self.assertNotIn(entry["name"], live_names, "a live vigia keeps a stale id in modelWakes")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'encargos-vigia' unexpectedly found in {'encargos-vigia', 'revisor-correcciones-vigia'} : a live vigia keeps a stale id in modelWakes
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.072s
+
+FAILED (failures=1)
+rc=1

@@ -1,0 +1,37 @@
+FF
+======================================================================
+FAIL: test_projection_crash_after_result_ack_reuses_one_durable_event (__main__.ProjectionTransferTest.test_projection_crash_after_result_ack_reuses_one_durable_event)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 98, in test_projection_crash_after_result_ack_reuses_one_durable_event
+    self.assertEqual(len(queued), 1)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+AssertionError: 0 != 1
+
+======================================================================
+FAIL: test_projection_crash_before_enqueue_rebuilds_the_same_event_from_pending (__main__.ProjectionTransferTest.test_projection_crash_before_enqueue_rebuilds_the_same_event_from_pending)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 116, in test_projection_crash_before_enqueue_rebuilds_the_same_event_from_pending
+    self.assertEqual(acknowledged, [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [{'taskId': 'task-one', 'generation': 1, '[388 chars]00'}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'taskId': 'task-one', 'generation': 1, 'resultDigest': 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'eventId': 'evt-761bd3e3a9c11101a170dc1b6950b74a', 'projectionDigest': '2b6054357adaf121b58969e4027160ed903d3b53be7c8d1e04e99c5ad07a0319', 'contentHash': 'dd731945495d6ba29793e1911014b87a3ba9a0e4005dd9d074a101e1c15acc5e', 'queueHash': '0000000000000000000000000000000000000000000000000000000000000000'}
+
++ []
+- [{'contentHash': 'dd731945495d6ba29793e1911014b87a3ba9a0e4005dd9d074a101e1c15acc5e',
+-   'eventId': 'evt-761bd3e3a9c11101a170dc1b6950b74a',
+-   'generation': 1,
+-   'projectionDigest': '2b6054357adaf121b58969e4027160ed903d3b53be7c8d1e04e99c5ad07a0319',
+-   'queueHash': '0000000000000000000000000000000000000000000000000000000000000000',
+-   'resultDigest': 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+-   'taskId': 'task-one'}]
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.003s
+
+FAILED (failures=2)
+rc=1

@@ -1,0 +1,96 @@
+=== loops con -vigia en ~/.local/state/*/ ===
+/Users/dn/.local/state/acos-evidencia/PROMPT.md
+/Users/dn/.local/state/acos-evidencia/arranque.txt
+/Users/dn/.local/state/cli-eventos-loop/PROMPT.md
+/Users/dn/.local/state/encargos-loop/PROMPT.md
+/Users/dn/.local/state/encargos-loop/arranque.txt
+/Users/dn/.local/state/encargos-loop/vigia-msg.txt
+/Users/dn/.local/state/jev-ads-01-loop/PROMPT.md
+/Users/dn/.local/state/jev-ads-02-loop/PROMPT.md
+/Users/dn/.local/state/jev-ads-02-loop/arranque.txt
+/Users/dn/.local/state/orbit-fase-d/PROMPT.md
+/Users/dn/.local/state/orbit-fase-d/arranque.txt
+/Users/dn/.local/state/revisor-loop/PROMPT.md
+/Users/dn/.local/state/revisor-loop/arranque.txt
+/Users/dn/.local/state/u3-loop/PROMPT.md
+/Users/dn/.local/state/u3-loop/arranque.txt
+/Users/dn/.local/state/u3a-cierre/PROMPT.md
+/Users/dn/.local/state/u3a-cierre/arranque.txt
+/Users/dn/.local/state/u3a-cierre/vigia-msg.txt
+/Users/dn/.local/state/u3a-loop/PROMPT.md
+/Users/dn/.local/state/u3a-loop/arranque.txt
+/Users/dn/.local/state/u3b-loop/PROMPT.md
+/Users/dn/.local/state/u3b-loop/arranque.txt
+/Users/dn/.local/state/u3b-loop/vigia-msg.txt
+=== fin ===
+=== lineas de creacion del cron por loop (PROMPT.md) ===
+/Users/dn/.local/state/acos-evidencia/PROMPT.md:143:  `openclaw cron add --name acos-evidencia-vigia --agent main --every 5m --session session:agent:main:acos-evidencia --no-deliver --message "$(cat ~/.local/state/acos-evidencia/vigia-msg.txt)"`.
+/Users/dn/.local/state/encargos-loop/PROMPT.md:486:`/Users/dn/.openclaw/bin/openclaw cron add --name encargos-vigia --agent main --every 5m --session isolated --no-deliver --tools '*' --message "$(cat /Users/dn/.local/state/encargos-loop/vigia-msg.txt)"`.
+/Users/dn/.local/state/jev-ads-01-loop/PROMPT.md:158:`/Users/dn/.openclaw/bin/openclaw cron add --name jev-ads-01-vigia --agent main --every 5m --session isolated --no-deliver --message "$(cat /Users/dn/.local/state/jev-ads-01-loop/vigia-msg.txt)"`.
+/Users/dn/.local/state/jev-ads-02-loop/PROMPT.md:144:  `/Users/dn/.openclaw/bin/openclaw cron add --name jev-ads-02-vigia --agent main --every 5m --session isolated --no-deliver --message "$(cat /Users/dn/.local/state/jev-ads-02-loop/vigia-msg.txt)"`
+/Users/dn/.local/state/orbit-fase-d/PROMPT.md:132:- Crea el cron `orbit-fase-d-vigia` (agente main, cada 20 min): "Loop Orbit Fase D: lee
+/Users/dn/.local/state/revisor-loop/PROMPT.md:202:- Crea el cron `revisor-loop-vigia` (agente main, cada 20 min): "Loop revisor: lee
+/Users/dn/.local/state/u3-loop/PROMPT.md:115:- Crea el cron `u3-loop-vigia` (agente main, cada 20 min): "Loop U3: lee
+/Users/dn/.local/state/u3a-cierre/PROMPT.md:113:  `openclaw cron add --name u3a-cierre-vigia --agent main --every 5m --session isolated --no-deliver --message "$(cat ~/.local/state/u3a-cierre/vigia-msg.txt)"`.
+/Users/dn/.local/state/u3a-loop/PROMPT.md:281:  `openclaw cron add --name u3a-loop-vigia --agent main --every 5m --session session:agent:main:u3a-loop --no-deliver --message "$(cat ~/.local/state/u3a-loop/vigia-msg.txt)"`. OJO: `--system-event` y `--session-key` solos NO sirven: el evento cae en `agent:main:main` (el Telegram de David); se midió el 2026-09-29.
+/Users/dn/.local/state/u3b-loop/PROMPT.md:126:  `openclaw cron add --name u3b-vigia --agent main --every 5m --session isolated --no-deliver --message "$(cat ~/.local/state/u3b-loop/vigia-msg.txt)"`.
+=== cli-eventos-loop: exclusion ===
+No crees `<loop>-vigia`, cron periódico, subagentes que solo miren pantallas ni consultas con modelos para saber si Muse terminó. Usa los archivos `LISTO` y `ATORADO`, los eventos existentes que ya funcionen y consultas deterministas del sistema cuando recibas un turno por una causa real. Si no llega un aviso automático, registra el límite y no finjas que hay vigilancia. La construcción del nuevo circuito es precisamente la solución a esa falta.
+=== primera linea de estado.md por loop ===
+acos-evidencia: # PAUSADO 2026-10-03 por orden de David: vigía acos-evidencia-vigia borrado. Claw no retoma ni manda encargos sin una orden explícita de David. Al pausar: A6 cerrada; encargo-A7-r1 preparado por Claude (Orbit) a pedido de David, sin LISTO.
+cli-eventos-loop: # CERRADO. Se fusionó en U3a, que cerró el 2026-10-01 (cc:completado). No retomar.
+encargos-loop: # ACTIVO desde 2026-10-04 (orden de David): claw lleva el loop con el PROMPT.md regenerado ese día.
+jev-ads-01-loop: # Estado Jev Ads 01
+jev-ads-02-loop: # Estado del loop jev-ads-02
+orbit-fase-d: # CERRADO 2026-09-27 (B1+B2+B3 y ledgers mergeados). No retomar.
+revisor-loop: # Estado del loop revisor
+u3-loop: # CERRADO. U3 (Fase 14) está cc:完了 en Plans.md (filas 14.x con PRs #178-#219; #185 mergeado 2026-09-27). Su vigía local vigia-corto.sh se detuvo el 2026-10-03 (STOP-VIGIA). No retomar.
+u3a-cierre: # CERRADO. PR #236 mergeado el 2026-10-01; U3a cc:completado en Plans.md. No retomar.
+u3a-loop: # CERRADO. U3a (Fase 19) está cc:completado en Plans.md (PRs #233/#235/#236/#237-#240). No retomar.
+u3b-loop: # Estado del loop u3b
+=== plantilla prompt-claw ~/.claude/skills/prompt-claw/SKILL.md:76 ===
+7. Vigilancia: cron `<loop>-vigia` cada 5 min con `--session isolated --no-deliver --message`
+=== archivo de crons borrados ===
+acos-evidencia-vigia-50fbec1d.json
+cron-list-all-antes.json
+encargos-vigia-ebffeaca.json
+heartbeat-main-1d989427.json
+tablero-server-watch-bd74cf1c.json
+=== anchors en el repo (git grep, sin scripts/tests) ===
+agents/main/agent/workshop-skills/mac-tmux-control/SKILL.md:69:run's session (`agent:main:sim9-<run>`); every other one goes to `agent:main:vigia-mac`, a session
+agents/main/agent/workshop-skills/native-harness-orchestration/SKILL.md:52:| Abrir corrida | `corrida.sh abrir <id> --runbook ... --vigia claw --cli-modos <tsv>` | registro abierto |
+scripts/mac/claude-stop-openclaw-event.sh:24:VIGIA_SESSION_KEY=agent:main:vigia-mac
+scripts/mac/claude-stop-openclaw-event.sh:118:# vigia-mac. Sin run: la llamada de siempre, identica.
+scripts/mac/corrida/abrir.sh:2:# corrida/abrir.sh (9.2). corrida.sh abrir <id> --runbook <ruta> --vigia <quien>
+scripts/mac/corrida/abrir.sh:10:      --runbook|--vigia|--cli-modos|--canal-de)
+scripts/mac/corrida/abrir.sh:14:      --vigia) vigia="$2"; shift 2;;
+scripts/mac/corrida/abrir.sh:21:  [ -n "$runbook" ] && [ -n "$vigia" ] || { echo "abrir: faltan --runbook o --vigia" >&2; return 2; }
+scripts/mac/corrida/latido.sh:224:    if [ "$vigia" = "claw" ]; then
+scripts/mac/simulacro-fase9.sh:459:  echo "  abriria con: corrida.sh abrir $SIM_ID --runbook $RUNBOOK --vigia claw --cli-modos <tabla> --simulacro"
+scripts/mac/simulacro-fase9.sh:503:  salida="$("$CORRIDA_BIN" abrir "$SIM_ID" --runbook "$RUNBOOK" --vigia claw --cli-modos "$TABLA" --simulacro 2>&1)"
+scripts/mac/smoke-native-harnesses.sh:185:  if ! bash "$CORRIDA" abrir "$cid" --runbook "$RUNBOOK" --vigia claw --cli-modos "$MODOS" --simulacro \
+scripts/mac/tmux-activity-watch.sh:163:VIGIA_SESSION_KEY=agent:main:vigia-mac
+=== latido: cadencia y reloj viejo ===
+# corrida/latido.sh (9.5). latido: el seguimiento garantizado, sin modelo.
+# Lo lanza el vigilante tmux-activity-watch.sh al final de un tick, cada
+# LATIDO_SECS (300 s) y con tope LATIDO_TOPE (14.29 D1: el LaunchAgent
+# ai.goncloud.corrida-latido sigue descargado y no hay otro reloj). Por cada
+100:#   LATIDO_SECS=300    (seconds between two `$CORRIDA_BIN latido` launches)
+=== vigilante: objetivo de eventos ===
+VIGIA_SESSION_KEY=agent:main:vigia-mac
+  if "$OPENCLAW_BIN" system event --mode now --timeout 15000 "${key_args[@]+"${key_args[@]}"}" --text "$text" >>"$LOG_FILE" 2>&1; then
+=== hook Stop: objetivo ===
+VIGIA_SESSION_KEY=agent:main:vigia-mac
+=== instalador y simulacro (recreadores) ===
+PL_FUENTE="$AQUI/ai.goncloud.tmux-activity-watch.plist"
+PL_NOMBRE="ai.goncloud.tmux-activity-watch.plist"
+ETIQUETA="ai.goncloud.tmux-activity-watch"
+BINS="corrida.sh cli-modos.tsv workers.v1.json corrida-worker.py progress-events.py agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh"
+  for f in corrida.sh cli-modos.tsv workers.v1.json agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh; do
+      --vigia) vigia="$2"; shift 2;;
+| Abrir corrida | `corrida.sh abrir <id> --runbook ... --vigia claw --cli-modos <tsv>` | registro abierto |
+  salida="$("$CORRIDA_BIN" abrir "$SIM_ID" --runbook "$RUNBOOK" --vigia claw --cli-modos "$TABLA" --simulacro 2>&1)"
+  if ! bash "$CORRIDA" abrir "$cid" --runbook "$RUNBOOK" --vigia claw --cli-modos "$MODOS" --simulacro \
+run's session (`agent:main:sim9-<run>`); every other one goes to `agent:main:vigia-mac`, a session
+=== settings.json: linea del hook Stop (solo lectura) ===
+129:            "command": "/opt/homebrew/bin/bash /Users/dn/bin/claude-stop-openclaw-event.sh",

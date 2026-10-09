@@ -1,0 +1,26 @@
+# Hallazgo 2 verde: busqueda ERE con OPENCLAW_WATCH[[:space:]]+1 + caso nuevo
+# copia: /private/tmp/claude-501/-Users-dn-dev-goncloud-openclaw/0d327440-0586-4e4c-86b0-f8b3bd36ebc8/scratchpad/b439res.ia9M/g @ e72027a2ed58735729fc2ddbb2eb9571253cb6ae
+# fecha: 2026-10-09T05:12:22Z
+# comando: python3 scripts/tests/test-agent-work-routing.py -v
+test_agent_instructions_call_the_guarded_route_and_keep_legacy_outside (__main__.AgentsRouting.test_agent_instructions_call_the_guarded_route_and_keep_legacy_outside) ... ok
+test_cli_prints_native_submit_parameters (__main__.AgentsRouting.test_cli_prints_native_submit_parameters) ... ok
+test_cli_route_is_limited_to_its_requester (__main__.AgentsRouting.test_cli_route_is_limited_to_its_requester) ... ok
+test_every_doc_that_marks_a_session_names_the_managed_exception (__main__.AgentsRouting.test_every_doc_that_marks_a_session_names_the_managed_exception) ... ok
+test_every_inventory_entry_is_migrated_or_declared_out (__main__.AgentsRouting.test_every_inventory_entry_is_migrated_or_declared_out) ... ok
+test_every_live_cron_is_classified (__main__.AgentsRouting.test_every_live_cron_is_classified) ... ok
+test_ingenieria_to_adversary_preserves_target_and_brief (__main__.AgentsRouting.test_ingenieria_to_adversary_preserves_target_and_brief) ... ok
+test_legacy_dispatch_routes_are_declared_outside_the_perimeter (__main__.AgentsRouting.test_legacy_dispatch_routes_are_declared_outside_the_perimeter) ... ok
+test_main_cli_loop_instructions_keep_the_route_disabled_until_certified (__main__.AgentsRouting.test_main_cli_loop_instructions_keep_the_route_disabled_until_certified) ... ok
+test_main_cli_route_stays_disabled_until_mac_local_is_certified (__main__.AgentsRouting.test_main_cli_route_stays_disabled_until_mac_local_is_certified) ... ok
+test_model_wakes_inventory_lists_every_repo_wake_source (__main__.AgentsRouting.test_model_wakes_inventory_lists_every_repo_wake_source) ... ok
+test_operaciones_to_ingenieria_keeps_operaciones_as_requester (__main__.AgentsRouting.test_operaciones_to_ingenieria_keeps_operaciones_as_requester) ... ok
+test_outside_managed_perimeter_is_rejected (__main__.AgentsRouting.test_outside_managed_perimeter_is_rejected) ... ok
+test_parallel_preparation_never_observes_partial_artifact (__main__.AgentsRouting.test_parallel_preparation_never_observes_partial_artifact) ... ok
+test_remote_cli_requires_certified_host_adapter (__main__.AgentsRouting.test_remote_cli_requires_certified_host_adapter) ... ok
+test_wake_source_search_sees_the_mark_with_any_spacing (__main__.AgentsRouting.test_wake_source_search_sees_the_mark_with_any_spacing) ... ok
+
+----------------------------------------------------------------------
+Ran 16 tests in 0.117s
+
+OK
+rc=0

@@ -1,0 +1,26 @@
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "3efdd85da4891a6cbffc6dce592838ab870ec6fb"}
+[vitest-workers] local cache hit after 1916ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 7cce9e791dac in 1946ms (16697 inputs, 17251 outputs)
+[test] starting test/vitest/vitest.infra.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+ ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > keeps root creation within the managed run lifetime (active) 1187ms
+ ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > keeps root creation within the managed run lifetime (cancelled) 613ms
+ ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > keeps root creation within the managed run lifetime (recovered) 1018ms
+ ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > keeps root creation within the managed run lifetime (released) 595ms
+ ↓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > stores one final result and replays its receipt without exposing a producer token
+ ↓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > assembles the report tool only for the bound managed child run
+ ↓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > refuses another run and a replaced native generation
+ ↓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > rolls back the result if authority is revoked before commit
+ ↓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > records an invalid report only for the bound native producer
+
+ Test Files  1 passed (1)
+      Tests  4 passed | 5 skipped (9)
+   Start at  04:30:13
+   Duration  7.38s (tests 49%, transform 30%, import 18%, setup 3%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 10.64s

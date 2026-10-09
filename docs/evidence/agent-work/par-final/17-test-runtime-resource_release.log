@@ -1,0 +1,30 @@
+$ bash scripts/agent-work/test-runtime.sh resource_release
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "978355503c44313536ab4cd03a6bfb7a5423404b"}
+[vitest-workers] local cache hit after 1801ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 16f3cf7fa16d in 1830ms (16698 inputs, 17251 outputs)
+[test] starting test/vitest/vitest.infra.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > upgrades a v26 database before its first host closure 155ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > retains the slot while cleanup is pending and replaces its announcement 434ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > gates terminal closures and keeps them immutable and idempotent 415ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > releases the slot on a ReleasedAdopted closure and retains drifted bindings 414ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > authorizes only the bound producer instance for closures 424ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > keeps the child slot through the parent turn end until a terminal host closure 753ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > releases an unbound claimed admission when the requester cancels it 390ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > keeps the slot of a cancelled agent task without a result 399ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > keeps a bound claimed admission across cancellation until a terminal host closure 438ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > keeps releasing the agent slot on a final result 408ms
+
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+   Start at  02:08:17
+   Duration  5.93s (tests 74%, transform 16%, import 8%, setup 3%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 8.97s
+
+rc=0 seconds=9.4

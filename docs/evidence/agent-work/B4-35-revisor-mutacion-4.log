@@ -1,0 +1,31 @@
+/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.4EVhNYdm7f/g/scripts/tests/test_agent_work_crash_boundaries_e2e.py:422: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
+  host_pid = self.crash_host(gateway, "marked")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+F
+======================================================================
+FAIL: test_after_marking_the_restarted_host_recovers_the_launch_by_its_nonce (__main__.CrashBoundariesE2E.test_after_marking_the_restarted_host_recovers_the_launch_by_its_nonce)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.4EVhNYdm7f/g/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 428, in test_after_marking_the_restarted_host_recovers_the_launch_by_its_nonce
+    observed = self.claim(self.client(gateway))
+  File "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.4EVhNYdm7f/g/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 105, in claim
+    return claim_cli_once(client, host=self.host, manager=self.manager, adapter_id=ADAPTER,
+                          instance_id=instance_id, session=self.cli.session,
+                          workspace_root=self.root / "workspace", deliver=self.deliver,
+                          coverage=self.certified)
+  File "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.4EVhNYdm7f/g/scripts/agent-work/native_gateway.py", line 319, in claim_cli_once
+    raise RuntimeError("host resource identity is not running")
+RuntimeError: host resource identity is not running
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.4EVhNYdm7f/g/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 430, in test_after_marking_the_restarted_host_recovers_the_launch_by_its_nonce
+    self.fail(f"the restarted host did not recover the launch by its nonce: {error}")
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: the restarted host did not recover the launch by its nonce: host resource identity is not running
+
+----------------------------------------------------------------------
+Ran 1 test in 31.879s
+
+FAILED (failures=1)

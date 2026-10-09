@@ -1,0 +1,15 @@
+..F
+======================================================================
+FAIL: test_everything_is_complete_on_one_pair (__main__.AcceptanceStrictTest.test_everything_is_complete_on_one_pair)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 101, in test_everything_is_complete_on_one_pair
+    self.assertEqual(len(pairs), 1, f"acceptance needs one G/R pair, got {sorted(pairs)}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 2 != 1 : acceptance needs one G/R pair, got [('0000000000000000000000000000000000000000', '6e3d428bf81c54effa0e06c67726e3a5ce90a24e'), ('7386298e4f93c31a69258f3c790ff5e3dee4ed66', '6e3d428bf81c54effa0e06c67726e3a5ce90a24e')]
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.005s
+
+FAILED (failures=1)
+rc=1

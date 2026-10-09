@@ -1,0 +1,66 @@
+FFFF
+======================================================================
+FAIL: test_closed_session_without_report (__main__.CliSilentFailureE2E.test_closed_session_without_report)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 235, in test_closed_session_without_report
+    self.silent_case("transport-unavailable", {"episodeId": "session-closed"},
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     deadline=DEADLINE_SECONDS)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 188, in silent_case
+    self.assertTrue(recorded, f"no durable incident; passes={passes} "
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                              f"pump_error={pump.error} screen={cli.screen()!r}")
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [] is not true : no durable incident; passes=[] pump_error=None screen=''
+
+======================================================================
+FAIL: test_deadline_missed (__main__.CliSilentFailureE2E.test_deadline_missed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 244, in test_deadline_missed
+    passes, delivered_at = self.silent_case("deadline-missed", {"episodeId": "deadline"},
+                           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                            deadline=DEADLINE_SECONDS)
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 188, in silent_case
+    self.assertTrue(recorded, f"no durable incident; passes={passes} "
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                              f"pump_error={pump.error} screen={cli.screen()!r}")
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [] is not true : no durable incident; passes=[] pump_error=None screen='silent-cli ready\nOpen assignment JSON at /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/agent-work-cli-silent-ly9hp2sb/deadline-missed/host/assignments/fead6e4c8449235a3912104e933286010b355e70a8bc1f6f3003485fc8ec7cb\ne.json. Follow briefRef and write agent-work.result.v1 atomically to resultRef.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n'
+
+======================================================================
+FAIL: test_invalid_report (__main__.CliSilentFailureE2E.test_invalid_report)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 251, in test_invalid_report
+    self.silent_case("invalid-result", {"episodeId": "invalid-result"}, deadline=DEADLINE_SECONDS)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 188, in silent_case
+    self.assertTrue(recorded, f"no durable incident; passes={passes} "
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                              f"pump_error={pump.error} screen={cli.screen()!r}")
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [] is not true : no durable incident; passes=[] pump_error=None screen='silent-cli ready\nOpen assignment JSON at /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/agent-work-cli-silent-ly9hp2sb/invalid-result/host/assignments/5cda3c082c3bd5c0a2a8ac53831922ca12a857abede3b58a63a7c9d48305b646\n.json. Follow briefRef and write agent-work.result.v1 atomically to resultRef.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n'
+
+======================================================================
+FAIL: test_permission_dialog (__main__.CliSilentFailureE2E.test_permission_dialog)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 241, in test_permission_dialog
+    self.silent_case("permission-required", {"promptIdentity": PROCEED_ID + "-1"}, deadline=None)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 188, in silent_case
+    self.assertTrue(recorded, f"no durable incident; passes={passes} "
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                              f"pump_error={pump.error} screen={cli.screen()!r}")
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [] is not true : no durable incident; passes=[] pump_error=None screen='silent-cli ready\nOpen assignment JSON at /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/agent-work-cli-silent-ly9hp2sb/permission-required/host/assignments/5150313da48d3e46fe728f5da5ca40986ad881df4dc58f92e983b1f4176\n88ef7.json. Follow briefRef and write agent-work.result.v1 atomically to resultRef.\n Detected a destructive delete command:\n rm -rf /tmp/e1verif /tmp/mig1.log\n Run it? [plugin:claude-code-harness]\n Do you want to proceed?\n   1. Yes\n   2. No\n Esc to cancel  Tab to amend\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n'
+
+----------------------------------------------------------------------
+Ran 4 tests in 233.665s
+
+FAILED (failures=4)
+rc=1

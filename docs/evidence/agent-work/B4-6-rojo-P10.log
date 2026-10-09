@@ -1,0 +1,19 @@
+ FAIL  |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > refuses every later model call of a run whose recovery is exhausted, before any HTTP
+AssertionError: expected { role: 'assistant', …(8) } to match object { stopReason: 'error' }
+(14 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "stopReason": "error",
++   "stopReason": "stop",
+  }
+
+ ❯ src/agents/tasks/managed-task.recovery.test.ts:689:37
+    687|       expect(provider.requests).toHaveLength(1);
+    688|       const stream2 = await openStream(provider, binding);
+    689|       await expect(stream2.result()).resolves.toMatchObject({ stopReas…
+       |                                     ^
+    690|       const result2 = await stream2.result();
+    691|       expect(result2.diagnostics).toContainEqual(

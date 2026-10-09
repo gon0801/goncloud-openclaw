@@ -1,0 +1,108 @@
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+F{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+F{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+F{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 0, "incidents": 1, "reported": 0, "transferred": 0}
+F
+======================================================================
+FAIL: test_closed_session_without_report (__main__.CliSilentFailureE2E.test_closed_session_without_report)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 235, in test_closed_session_without_report
+    self.silent_case("transport-unavailable", {"episodeId": "session-closed"},
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     deadline=DEADLINE_SECONDS)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 220, in silent_case
+    self.assertEqual(client.incident_reports, [incident], "the pump sent the incident again")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [{'episodeId': 'session-closed', 'evidenceRe[1263 chars]le'}] != [{'kind': 'transport-unavailable', 'episodeI[115 chars]06'}]
+
+First list contains 7 additional elements.
+First extra element 1:
+{'episodeId': 'session-closed', 'evidenceRef': 'host-operation:582a63bd45c2935306decd7d470b90b5b27cc8b531d2de452dc593306dfe7006', 'kind': 'transport-unavailable'}
+
+Diff is 1400 characters long. Set self.maxDiff to None to see it. : the pump sent the incident again
+
+======================================================================
+FAIL: test_deadline_missed (__main__.CliSilentFailureE2E.test_deadline_missed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 244, in test_deadline_missed
+    passes, delivered_at = self.silent_case("deadline-missed", {"episodeId": "deadline"},
+                           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                            deadline=DEADLINE_SECONDS)
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 220, in silent_case
+    self.assertEqual(client.incident_reports, [incident], "the pump sent the incident again")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [{'episodeId': 'deadline', 'evidenceRef': 'h[863 chars]ed'}] != [{'kind': 'deadline-missed', 'episodeId': 'd[103 chars]e6'}]
+
+First list contains 5 additional elements.
+First extra element 1:
+{'episodeId': 'deadline', 'evidenceRef': 'host-operation:4784f6161bcede027aab9bda85a6a1ee4f6f71f801863b6c5d439af6e41bf6e6', 'kind': 'deadline-missed'}
+
+Diff is 978 characters long. Set self.maxDiff to None to see it. : the pump sent the incident again
+
+======================================================================
+FAIL: test_invalid_report (__main__.CliSilentFailureE2E.test_invalid_report)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 251, in test_invalid_report
+    self.silent_case("invalid-result", {"episodeId": "invalid-result"}, deadline=DEADLINE_SECONDS)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 220, in silent_case
+    self.assertEqual(client.incident_reports, [incident], "the pump sent the incident again")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [{'episodeId': 'invalid-result', 'evidenceRe[893 chars]lt'}] != [{'kind': 'invalid-result', 'episodeId': 'in[108 chars]97'}]
+
+First list contains 5 additional elements.
+First extra element 1:
+{'episodeId': 'invalid-result', 'evidenceRef': 'host-operation:9377cb88570c97361010de750b94c6ecd0d8b2cfd36910925572e40c607bb197', 'kind': 'invalid-result'}
+
+Diff is 1008 characters long. Set self.maxDiff to None to see it. : the pump sent the incident again
+
+======================================================================
+FAIL: test_permission_dialog (__main__.CliSilentFailureE2E.test_permission_dialog)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 241, in test_permission_dialog
+    self.silent_case("permission-required", {"promptIdentity": PROCEED_ID + "-1"}, deadline=None)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 220, in silent_case
+    self.assertEqual(client.incident_reports, [incident], "the pump sent the incident again")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [{'evidenceRef': 'host-operation:d67c7fff3f8[1307 chars]-1'}] != [{'kind': 'permission-required', 'promptIden[177 chars]2b'}]
+
+First list contains 5 additional elements.
+First extra element 1:
+{'evidenceRef': 'host-operation:d67c7fff3f83eb75c8483b1545da5c9b42e52cf2083a535643ccb4cde072712b', 'kind': 'permission-required', 'promptIdentity': 'prompt-7d94515e70c2994a231d611d9a75feb4b34c8c89d290da292dc115ae5ac52ff3-1'}
+
+Diff is 1422 characters long. Set self.maxDiff to None to see it. : the pump sent the incident again
+
+----------------------------------------------------------------------
+Ran 4 tests in 134.935s
+
+FAILED (failures=4)
+rc=1

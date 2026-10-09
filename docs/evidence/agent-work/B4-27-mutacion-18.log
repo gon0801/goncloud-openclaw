@@ -1,0 +1,15 @@
+....F..........
+======================================================================
+FAIL: test_every_inventory_entry_is_migrated_or_declared_out (__main__.AgentsRouting.test_every_inventory_entry_is_migrated_or_declared_out) (entry='requester:main')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 320, in test_every_inventory_entry_is_migrated_or_declared_out
+    self.assertTrue(row["id"].startswith("file:"), "only a file can be declared out of the perimeter")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : only a file can be declared out of the perimeter
+
+----------------------------------------------------------------------
+Ran 15 tests in 0.087s
+
+FAILED (failures=1)
+rc=1

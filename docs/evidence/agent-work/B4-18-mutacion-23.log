@@ -1,0 +1,18 @@
+.......F...........
+======================================================================
+FAIL: test_the_typing_and_its_attempt_clock_are_one_write (__main__.DeliveryAcceptanceTest.test_the_typing_and_its_attempt_clock_are_one_write)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3766, in test_the_typing_and_its_attempt_clock_are_one_write
+    self.assertEqual(self.status(Host("host-one", self.root / "host")), "registered")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'attempted' != 'registered'
+- attempted
++ registered
+
+
+----------------------------------------------------------------------
+Ran 19 tests in 0.580s
+
+FAILED (failures=1)
+rc=1

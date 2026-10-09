@@ -1,0 +1,4 @@
+# Solo lectura: no toca el repo, ni el gateway, ni ninguna sesion, ni ningun cron.
+scripts/arranque-de-fase.sh:0
+scripts/mac/corrida/preflight.sh:0
+    if "$TMUX_BIN" new-session -d -s "$psn" -x 80 -y 10 "$embebido $bin $flag" 2>/dev/null; then

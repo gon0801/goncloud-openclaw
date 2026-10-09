@@ -1,0 +1,4 @@
+FALLO: workspace-verifier tiene mas de un bloque '## Contrato de dispatch'
+FALLO: workspace-verifier contrato sin la frase del encargo gestionado (T9 :265) justo despues de la linea Nunca:
+ROJO: 2 fallos en contratos de dispatch
+rc=1

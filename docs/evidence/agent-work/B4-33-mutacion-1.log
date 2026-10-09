@@ -1,0 +1,46 @@
+F
+======================================================================
+FAIL: test_before_delivery_a_second_dispatcher_recovers_the_task (__main__.CrashBoundariesE2E.test_before_delivery_a_second_dispatcher_recovers_the_task)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 139, in test_before_delivery_a_second_dispatcher_recovers_the_task
+    again = second.tool("submit", request, "dispatcher-2")
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_main_cli_loop_e2e.py", line 126, in tool
+    return self.call("tool", **fields)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_main_cli_loop_e2e.py", line 120, in call
+    return self._message()["result"]
+           ~~~~~~~~~~~~~^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_main_cli_loop_e2e.py", line 112, in _message
+    raise HarnessError(value.get("error"))
+test_agent_work_main_cli_loop_e2e.HarnessError: Error: UNIQUE constraint failed: managed_tasks.requester_scope, managed_tasks.task_key
+    at decodeSqliteWorkerReplyError (/Users/dn/dev/openclaw-agent-work-integration/src/infra/sqlite-worker-broker-reply.ts:259:33)
+    at receiveSqliteWorkerReply (/Users/dn/dev/openclaw-agent-work-integration/src/infra/sqlite-worker-broker-reply.ts:320:19)
+    at Object.receiveReply (/Users/dn/dev/openclaw-agent-work-integration/src/infra/sqlite-worker-broker-lifecycle.ts:65:32)
+    at Worker.<anonymous> (/Users/dn/dev/openclaw-agent-work-integration/src/infra/sqlite-worker-broker-lifecycle.ts:74:61)
+    at Worker.emit (node:events:514:20)
+    at MessagePort.<anonymous> (node:internal/worker:354:14)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:872:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 141, in test_before_delivery_a_second_dispatcher_recovers_the_task
+    self.fail(f"a second dispatcher could not recover the task: {error}")
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: a second dispatcher could not recover the task: Error: UNIQUE constraint failed: managed_tasks.requester_scope, managed_tasks.task_key
+    at decodeSqliteWorkerReplyError (/Users/dn/dev/openclaw-agent-work-integration/src/infra/sqlite-worker-broker-reply.ts:259:33)
+    at receiveSqliteWorkerReply (/Users/dn/dev/openclaw-agent-work-integration/src/infra/sqlite-worker-broker-reply.ts:320:19)
+    at Object.receiveReply (/Users/dn/dev/openclaw-agent-work-integration/src/infra/sqlite-worker-broker-lifecycle.ts:65:32)
+    at Worker.<anonymous> (/Users/dn/dev/openclaw-agent-work-integration/src/infra/sqlite-worker-broker-lifecycle.ts:74:61)
+    at Worker.emit (node:events:514:20)
+    at MessagePort.<anonymous> (node:internal/worker:354:14)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:872:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+
+----------------------------------------------------------------------
+Ran 1 test in 55.825s
+
+FAILED (failures=1)
+rc=1

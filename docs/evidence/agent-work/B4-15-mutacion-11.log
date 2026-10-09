@@ -1,0 +1,15 @@
+.......F
+======================================================================
+FAIL: test_watch_entrypoint_wires_cli_watch_with_the_host_deadline (__main__.SilentFailureTest.test_watch_entrypoint_wires_cli_watch_with_the_host_deadline)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3025, in test_watch_entrypoint_wires_cli_watch_with_the_host_deadline
+    self.assertEqual(detect.call_args.kwargs["now"], 4242.0)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1791261860.7465641 != 4242.0
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.185s
+
+FAILED (failures=1)
+rc=1

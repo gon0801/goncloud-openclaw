@@ -1,0 +1,18 @@
+....F..........
+======================================================================
+FAIL: test_every_inventory_entry_is_migrated_or_declared_out (__main__.AgentsRouting.test_every_inventory_entry_is_migrated_or_declared_out) (entry='managed:ingenieria->adversary')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 318, in test_every_inventory_entry_is_migrated_or_declared_out
+    self.assertEqual(row["state"], "managed-prepared")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'perimeter-guarded' != 'managed-prepared'
+- perimeter-guarded
++ managed-prepared
+
+
+----------------------------------------------------------------------
+Ran 15 tests in 0.087s
+
+FAILED (failures=1)
+rc=1

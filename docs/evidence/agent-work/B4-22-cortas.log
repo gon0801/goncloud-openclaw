@@ -1,0 +1,105 @@
+$ test-candados-declarados.sh
+ok auto-prueba: los 4 estilos de ruta literal se detectan y exigen su marca
+ok ida: las 137 frases ancladas por 14 test(s) tienen su marca
+ok vuelta: las 88 marca(s) de agents/** y docs/agent-skills/** apuntan a tests que existen y afirman su frase
+TODO VERDE: candados declarados (137 frases, 88 marcas)
+rc=0
+$ test-guia-del-vigia.sh
+ok (1): la guia existe y es Markdown plano, sin HTML
+ok (2): la guia trae una fila por cada evento del vigilante (waiting, quiet, closed)
+ok (3): la guia trae la fila del fin de turno de Claude Code
+ok (4): la guia trae la fila del parte, con las cuatro etiquetas de seguimiento.v1
+TODO VERDE: guia-del-vigia
+rc=0
+$ test-mac-tmux-control.sh
+ok (1): el detector marca escrituras a /dev/ttysN y node install, y deja pasar tmux y las prohibiciones
+ok (2):      120 instrucciones revisadas, ninguna escribe a /dev/ttysN ni instala el nodo headless
+ok (3): skill mac-tmux-control en main con sus anclas; mac-terminal-control la refiere
+ok (4): wrapper parsea, nombre saneado, flags del tool no son dir, falla bien sin argumentos o sin dir
+ok (4b): tmux.conf con mouse; las funciones de shell rutean a tmux solo fuera de tmux e interactivo
+ok (5): send-keys -l + Enter aparte llega al programa y capture-pane lo lee (/opt/homebrew/bin/tmux)
+TODO VERDE: mac-tmux-control
+rc=0
+$ test-agent-dispatch-spawn.sh
+PASS test-agent-dispatch-spawn
+rc=0
+$ test-loop-autopilot.sh
+ok (1): el detector marca un lead nombrado por modelo y deja pasar el rol y las menciones ajenas
+ok (2): las 13 secciones existen y van en orden
+ok (3): las anclas de reglas están
+ok (3-r1): la ronda 1 usa -Base y no -Desde
+ok (3-r1b): la ronda 1 de base-openclaw usa -Base y ni -Desde ni -Alcance
+ok (3d): regla 4 justificada con -Base e historia de fases 6 y 7 declarada
+ok (3a): autoridad de sesion ausente
+ok (3b): la seccion 4 repite mientras salgan bloqueantes y nunca promueve con uno abierto
+ok (3c): CodeRabbit por adjudicacion, merge libre y cierre sin revision repetida
+ok (3c-gate): CodeRabbit obligatorio para el PR, sin veto de rol ni recibo
+ok (3e): revision local antes del primer push; correccion local al mismo PR
+ok (4): el lead es un rol, no un modelo
+ok (5): cada sección de reglas cita el incidente que la originó
+ok (6): la sección 8 exige los dos pasos de publicar una fase, y dónde comprobarlo
+ok (7): §1, §3, §8, §9 y §12 referencian corrida.sh y seguimiento.v1; TIMEBOX con pausas en §3 y §12
+TODO VERDE: loop-autopilot
+rc=0
+$ test-runbooks-no-contradicen-entorno.sh
+ok (1): el detector marca bootstrap imposible, docker run, glm viejo y comandos sin PATH; deja pasar las formas buenas y las prohibiciones
+ok (2):       25 runbooks revisados, sin bootstrap imposible, sin docker run y sin glm viejo
+ok (2b): cross-review y tmux de los autopilot y del loop con prefijo de PATH o ruta absoluta
+ok (2b-bis): ningun runbook lanza a un implementador sin PATH embebido y flag dentro del comando
+ok (2c): ningun runbook de fase designa un modelo como lead
+ok (2d): runbooks futuros revisados: autopilot-fase14.md autopilot-fase15.md autopilot-fase17.md; fixtures bueno/malo discriminan cada regla
+TODO VERDE: runbooks sin contradicciones con el kit ni con el entorno
+rc=0
+$ test-camino-feliz.sh
+OK: mapa existe
+OK: skill agent-dispatch nombrada en el mapa
+OK: skill agent-dispatch existe
+OK: skill post-merge-closure nombrada en el mapa
+OK: skill post-merge-closure existe
+OK: skill owner-report-delivery nombrada en el mapa
+OK: skill owner-report-delivery existe
+OK: skill saikit-cierre-pr nombrada en el mapa
+OK: skill saikit-cierre-pr existe
+OK: skill goncloud-ssh-ops nombrada en el mapa
+OK: skill goncloud-ssh-ops existe
+OK: go/no-go unico (merge y deploy)
+OK: paso 7 declara permiso sin repetir merge ni deploy
+OK: merge en paso 8 y deploy en paso 9
+OK: Live SHA en celda Paso 10
+OK: Live SHA en celda Cierre 10
+OK: regresion vuelve al brief en Flujo principal
+OK: tabla Variantes tiene 3 fila(s)
+OK: tabla Bloqueos tiene 5 fila(s)
+OK: cero GraphQL en el mapa
+VERDE: mapa del camino feliz cumple la DoD de 6.4
+rc=0
+$ test-native-harness-orchestration-skill.sh
+TODO VERDE: native-harness-orchestration-skill
+rc=0
+$ test-fase14-plan-contract.sh
+TODO VERDE: contrato documental de Fase 14
+rc=0
+$ test-corrida-marcas.sh
+Terminated: 15             CORRIDA_STATE="$exit_state" FOREIGN_TRAP_FILE="$T/foreign-trap" bash -c '
+  . scripts/mac/corrida/lib.sh
+  trap '\''printf trap >>"$FOREIGN_TRAP_FILE"'\'' EXIT
+  marcas_lock_tomar || exit 2
+  lock_tomar "$CORRIDA_STATE/r1/registro.json" || exit 3
+  kill -TERM $$
+' > /dev/null 2>&1
+VERDE: terminar-sesion y reconciliar-marcas conservan el dueño de cada marca
+rc=0
+$ test-agent-work-host.py
+..............
+----------------------------------------------------------------------
+Ran 14 tests in 6.706s
+
+OK
+rc=0
+$ test-agent-work-resources.py
+............................s............
+----------------------------------------------------------------------
+Ran 41 tests in 39.952s
+
+OK (skipped=1)
+rc=0

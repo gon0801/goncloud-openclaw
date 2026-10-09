@@ -1,0 +1,31 @@
+EXTRA_CLAIMS_AFTER_FIRST_SUCCESS ['uncertain', 'uncertain', 'uncertain']
+F
+======================================================================
+FAIL: test_between_decision_and_its_receipt_the_restart_recovers_the_same_child (__main__.CrashBoundariesE2E.test_between_decision_and_its_receipt_the_restart_recovers_the_same_child)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt-b4-40-r1/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 301, in test_between_decision_and_its_receipt_the_restart_recovers_the_same_child
+    self.assertEqual([(e["taskId"], e["generation"]) for e in cli if e["event"] == "accepted"],
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [(task_id, 1), (child, 1)], "the CLI did not get the review and one correction")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [('e7[38 chars]), ('e7e066f1-8ee3-4aa6-a8bc-92ef7b1e2ad9', 1)[142 chars], 1)] != [('e7[38 chars]), ('d12089115e9ad05bb7509d89a8691027266ec24bb[24 chars], 1)]
+
+First differing element 1:
+('e7e066f1-8ee3-4aa6-a8bc-92ef7b1e2ad9', 1)
+('d12089115e9ad05bb7509d89a8691027266ec24bbadc967fd339a1284458ca47', 1)
+
+First list contains 2 additional elements.
+First extra element 2:
+('d12089115e9ad05bb7509d89a8691027266ec24bbadc967fd339a1284458ca47', 1)
+
+  [('e7e066f1-8ee3-4aa6-a8bc-92ef7b1e2ad9', 1),
+-  ('e7e066f1-8ee3-4aa6-a8bc-92ef7b1e2ad9', 1),
+-  ('d12089115e9ad05bb7509d89a8691027266ec24bbadc967fd339a1284458ca47', 1),
+   ('d12089115e9ad05bb7509d89a8691027266ec24bbadc967fd339a1284458ca47', 1)] : the CLI did not get the review and one correction
+
+----------------------------------------------------------------------
+Ran 1 test in 104.042s
+
+FAILED (failures=1)
+EXIT=1

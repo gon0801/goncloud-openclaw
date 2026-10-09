@@ -1,0 +1,31 @@
+R_HEAD=33f4e47982b3421ff51dedcdbe7601c3bbf43dd1 R_DIFF=e3b0c44298fc1c14
+ scripts/agent-work/resources.py                    |   1 +
+ .../agent-work/managed-cli-gateway-harness.mjs     | 145 +++++++++++++++++++--
+ scripts/tests/test-agent-work-e2e.sh               |  14 +-
+ scripts/tests/test-agent-work-integration.sh       |   8 ++
+ 4 files changed, 153 insertions(+), 15 deletions(-)
+test_loop_session_requests_cli_and_only_its_session_wakes (__main__.MainCliLoopE2E.test_loop_session_requests_cli_and_only_its_session_wakes) ... FAIL
+
+======================================================================
+FAIL: test_loop_session_requests_cli_and_only_its_session_wakes (__main__.MainCliLoopE2E.test_loop_session_requests_cli_and_only_its_session_wakes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_main_cli_loop_e2e.py", line 238, in test_loop_session_requests_cli_and_only_its_session_wakes
+    self.assertEqual(backend.stops, [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [{'bootId': 'fixture-boot', 'nonce': '0d59[59 chars]er'}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'bootId': 'fixture-boot', 'nonce': '0d598b37967a36c5fa172cd86dcd7107', 'sessionName': 'fixture-worker'}
+
++ []
+- [{'bootId': 'fixture-boot',
+-   'nonce': '0d598b37967a36c5fa172cd86dcd7107',
+-   'sessionName': 'fixture-worker'}]
+
+----------------------------------------------------------------------
+Ran 1 test in 69.161s
+
+FAILED (failures=1)
+rc=1

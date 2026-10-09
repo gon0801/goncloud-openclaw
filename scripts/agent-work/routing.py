@@ -13,6 +13,7 @@ class RouteUnavailable(ValueError):
 
 
 AGENT_ROUTES = {("ingenieria", "adversary"), ("operaciones", "ingenieria")}
+CLI_ROUTES = {("ingenieria", "windows-remote"), ("main", "mac-local")}
 
 
 def prepare_request(*, requester, target, key, brief, instruction_root,
@@ -23,6 +24,8 @@ def prepare_request(*, requester, target, key, brief, instruction_root,
         destination = {"kind": "agent", "agentId": target}
     elif "/" in target:
         host_id, adapter_id = target.split("/", 1)
+        if (requester, host_id) not in CLI_ROUTES:
+            raise RouteUnavailable(f"route {requester} -> {target} is outside the managed perimeter")
         if coverage["hostAdapterCoverage"].get(host_id, {}).get(adapter_id) != "certified":
             raise RouteUnavailable(f"route {target} is not certified")
         destination = {"kind": "cli", "hostId": host_id, "adapterId": adapter_id}

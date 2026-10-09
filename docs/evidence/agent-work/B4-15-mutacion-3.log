@@ -1,0 +1,24 @@
+......F.
+======================================================================
+FAIL: test_uncertain_and_reported_operations_never_raise_incidents (__main__.SilentFailureTest.test_uncertain_and_reported_operations_never_raise_incidents)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2918, in test_uncertain_and_reported_operations_never_raise_incidents
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=10.0 ** 9,
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                 deadline_seconds=60), [])
+                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:transport-unavailable:session-closed'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:session-closed'
+
+- ['host:1:transport-unavailable:session-closed']
++ []
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.197s
+
+FAILED (failures=1)
+rc=1

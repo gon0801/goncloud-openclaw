@@ -1,0 +1,21 @@
+F
+======================================================================
+FAIL: test_two_dispatchers_a_cancellation_and_a_stale_callback_keep_one_durable_order (__main__.DispatchersCancelE2E.test_two_dispatchers_a_cancellation_and_a_stale_callback_keep_one_durable_order)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_dispatchers_cancel_e2e.py", line 66, in test_two_dispatchers_a_cancellation_and_a_stale_callback_keep_one_durable_order
+    self.assertEqual(claims, [None, None, None], "the host was offered the cancelled task again")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [HostObservation(status='reported', assign[601 chars]on')] != [None, None, None]
+
+First differing element 0:
+HostObservation(status='reported', assign[168 chars]son')
+None
+
+Diff is 735 characters long. Set self.maxDiff to None to see it. : the host was offered the cancelled task again
+
+----------------------------------------------------------------------
+Ran 1 test in 62.969s
+
+FAILED (failures=1)
+rc=1

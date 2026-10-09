@@ -1,0 +1,15 @@
+....F..........
+======================================================================
+FAIL: test_every_inventory_entry_is_migrated_or_declared_out (__main__.AgentsRouting.test_every_inventory_entry_is_migrated_or_declared_out) (entry='file:scripts/mac/tmux-activity-watch.sh')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 322, in test_every_inventory_entry_is_migrated_or_declared_out
+    self.assertTrue(row["evidence"], "a migrated entry needs the test that fixes it")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [] is not true : a migrated entry needs the test that fixes it
+
+----------------------------------------------------------------------
+Ran 15 tests in 0.087s
+
+FAILED (failures=1)
+rc=1

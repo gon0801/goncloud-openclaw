@@ -1,0 +1,20 @@
+....F.........
+======================================================================
+FAIL: test_every_live_cron_is_classified (__main__.AgentsRouting.test_every_live_cron_is_classified)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 197, in test_every_live_cron_is_classified
+    self.assertEqual(kinds.get("business"), {
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+        "packing-digest-20h", "packing-extras-7h", "packing-extras-11h", "verif-digest-20h",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "Renueva el token de acceso de Shopify de la tienda theglamw…"})
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Items in the second set but not the first:
+'packing-digest-20h'
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.074s
+
+FAILED (failures=1)
+rc=1

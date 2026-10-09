@@ -1,0 +1,90 @@
+# Hallazgo 1 mutacion 1: vuelve el unset PROGRESS_EVENTS_BIN PROGRESS_EVENTS_LOG despues del caso (1) (corrida con HOME=/private/tmp/claude-501/-Users-dn-dev-goncloud-openclaw/0d327440-0586-4e4c-86b0-f8b3bd36ebc8/scratchpad/home-externo para no tocar el estado real; el diff del encabezado es el completo contra HEAD)
+# copia: /private/tmp/claude-501/-Users-dn-dev-goncloud-openclaw/0d327440-0586-4e4c-86b0-f8b3bd36ebc8/scratchpad/b439res.ia9M/g @ e72027a2ed58735729fc2ddbb2eb9571253cb6ae
+# fecha: 2026-10-09T05:14:50Z
+# comando: bash scripts/tests/test-corrida-latido.sh
+# diff aplicado en scripts/tests/test-corrida-latido.sh:
+#   diff --git a/scripts/tests/test-corrida-latido.sh b/scripts/tests/test-corrida-latido.sh
+#   index 36e2436..23b371b 100644
+#   --- a/scripts/tests/test-corrida-latido.sh
+#   +++ b/scripts/tests/test-corrida-latido.sh
+#   @@ -90,6 +90,27 @@ chmod +x "$T/bin/tmux-falso" "$T/bin/gh-falso" "$T/bin/openclaw"
+#    export TMUX_BIN="$T/bin/tmux-falso" GH_BIN="$T/bin/gh-falso" OPENCLAW_BIN="$T/bin/openclaw"
+#    export GH_LOG="$T/gh.log"
+#    LLAMADAS="$T/llamadas.log"; export LLAMADAS
+#   +# B4-28: un HOME senuelo con su propio progress-events.py. Si un tick corriera el
+#   +# progress-events del HOME de quien lanza la prueba, aqui quedaria anotado.
+#   +SENUELO="$T/senuelo"; mkdir -p "$SENUELO/bin"
+#   +cat >"$SENUELO/bin/progress-events.py" <<STUB
+#   +#!/bin/sh
+#   +printf '%s\n' "\$*" >> "$SENUELO/tocado.log"
+#   +exit 0
+#   +STUB
+#   +chmod +x "$SENUELO/bin/progress-events.py"
+#   +senuelo_intacto() { # $1 caso
+#   +  [ ! -e "$SENUELO/tocado.log" ] \
+#   +    || fail "$1 el latido de la prueba corrio el progress-events del HOME de quien la lanza: $(tr '\n' ' ' <"$SENUELO/tocado.log")"
+#   +}
+#   +# Todo tick de la prueba publica con un progress-events de mentira que anota en $T.
+#   +cat >"$T/bin/progress-events-falso" <<'STUB'
+#   +#!/bin/sh
+#   +printf '%s\n' "$*" >> "$PROGRESS_EVENTS_LOG"
+#   +exit 0
+#   +STUB
+#   +chmod +x "$T/bin/progress-events-falso"
+#   +export PROGRESS_EVENTS_BIN="$T/bin/progress-events-falso" PROGRESS_EVENTS_LOG="$T/progress-events.log"
+#
+#    montar_corrida() { # $1 id, $2 escenario base; registra sesiones y paneles del fixture
+#      mkdir -p "$CORRIDA_STATE/$1"
+#   @@ -187,16 +208,11 @@ printf 'no soy json\n' >"$CORRIDA_STATE/basura/registro.json"
+#    montar_corrida lat-cerrada cerrada
+#    sed -i.bak 's/"m-cerrada"/"lat-cerrada"/' "$CORRIDA_STATE/lat-cerrada/registro.json" && rm -f "$CORRIDA_STATE/lat-cerrada/registro.json.bak"
+#    : > "$LLAMADAS"
+#   -tick "$T0" || fail "el latido fallo sin corridas abiertas"
+#   +HOME="$SENUELO" tick "$T0" || fail "el latido fallo sin corridas abiertas"
+#   +senuelo_intacto "(1)"
+#    [ "$(msgs)" = "0" ] || fail "sin corridas abiertas salieron $(msgs) llamadas"
+#    [ "$(evts)" = "0" ] || fail "sin corridas abiertas desperto al vigia"
+#   -cat >"$T/bin/progress-events-falso" <<'STUB'
+#   -#!/bin/sh
+#   -printf '%s\n' "$*" >> "$PROGRESS_EVENTS_LOG"
+#   -exit 0
+#   -STUB
+#   -chmod +x "$T/bin/progress-events-falso"
+#   -export PROGRESS_EVENTS_BIN="$T/bin/progress-events-falso" PROGRESS_EVENTS_LOG="$T/progress-events.log"
+#   +: > "$PROGRESS_EVENTS_LOG"
+#    tick "$T0" || fail "el latido fallo al reintentar progreso pendiente"
+#    grep -qx 'publish-all' "$PROGRESS_EVENTS_LOG" || fail "el latido no reintento el outbox de progreso sin otro cambio"
+#    unset PROGRESS_EVENTS_BIN PROGRESS_EVENTS_LOG
+#   @@ -830,4 +846,10 @@ seis per-seis "m-a m-b m-c m-f m-d m-e m-g"
+#    FIRMA_VIGIA=${FV0}m-lead:muerta," ] \
+#      || fail "perimetro: con solo el lead muerto fuera del perimetro el vigia no recibe solo relanzar-lead: $(parte_de per-seis | tr '\n' ' ')"
+#
+#   +# (18) B4-28: despues de todos los casos, un tick sigue sin correr el progress-events
+#   +# del HOME de quien lanza la prueba (su estado real queda intacto).
+#   +solo_dejar
+#   +HOME="$SENUELO" tick "$((T0 + 2100))" >/dev/null 2>&1 || fail "(18) el tick del senuelo revento"
+#   +senuelo_intacto "(18)"
+#   +
+#    echo "TODO VERDE: test-corrida-latido"
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+FAIL: (18) el latido de la prueba corrio el progress-events del HOME de quien la lanza: publish-all
+rc=1

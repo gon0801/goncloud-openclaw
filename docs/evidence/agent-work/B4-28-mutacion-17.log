@@ -1,0 +1,15 @@
+F.
+======================================================================
+FAIL: test_every_row_is_well_formed (__main__.AcceptanceMatrixTest.test_every_row_is_well_formed) (row='A16')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 91, in test_every_row_is_well_formed
+    self.assertRegex(row["recibo"], r"^docs/evidence/agent-work/[^/]+\.md$", "a receipt is an evidence page")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Regex didn't match: '^docs/evidence/agent-work/[^/]+\\.md$' not found in '.gitignore' : a receipt is an evidence page
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.005s
+
+FAILED (failures=1)
+rc=1

@@ -1,0 +1,21 @@
+R_HEAD=33f4e47982b3421ff51dedcdbe7601c3bbf43dd1 R_DIFF=26e03082fe424f6c
+ .../agent-work/managed-cli-gateway-harness.mjs     | 145 +++++++++++++++++++--
+ scripts/tests/test-agent-work-e2e.sh               |  14 +-
+ scripts/tests/test-agent-work-integration.sh       |   8 ++
+ 3 files changed, 152 insertions(+), 15 deletions(-)
+test_isolated_cron_run_cannot_submit (__main__.MainCliLoopE2E.test_isolated_cron_run_cannot_submit) ... FAIL
+
+======================================================================
+FAIL: test_isolated_cron_run_cannot_submit (__main__.MainCliLoopE2E.test_isolated_cron_run_cannot_submit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_main_cli_loop_e2e.py", line 301, in test_isolated_cron_run_cannot_submit
+    with self.assertRaises(HarnessError) as refused:
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+AssertionError: HarnessError not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 55.708s
+
+FAILED (failures=1)
+rc=1

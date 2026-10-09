@@ -1,0 +1,2 @@
+$ node --import ./scripts/tsx.mjs scripts/check-line-cap-ratchet.mts
+Line-cap ratchet OK: 3 changed source files; no new violations or over-cap growth.

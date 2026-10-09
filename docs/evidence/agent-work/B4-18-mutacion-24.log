@@ -1,0 +1,21 @@
+....E..............
+======================================================================
+ERROR: test_only_an_acceptance_bound_to_this_assignment_counts (__main__.DeliveryAcceptanceTest.test_only_an_acceptance_bound_to_this_assignment_counts) [a number capability]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3609, in test_only_an_acceptance_bound_to_this_assignment_counts
+    self.assertFalse(host.take_acceptance("host-one", key))
+                     ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 324, in take_acceptance
+    if "acceptRef" not in assignment or not read_acceptance(assignment):
+                                            ~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/host.py", line 81, in read_acceptance
+    return hmac.compare_digest(accept["capability"].encode("utf-8", "surrogatepass"),
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'int' object has no attribute 'encode'
+
+----------------------------------------------------------------------
+Ran 19 tests in 0.608s
+
+FAILED (errors=1)
+rc=1

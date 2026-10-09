@@ -1,0 +1,26 @@
+...F....
+======================================================================
+FAIL: test_invalid_result_is_one_incident_and_a_valid_result_still_reports (__main__.SilentFailureTest.test_invalid_result_is_one_incident_and_a_valid_result_still_reports)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2877, in test_invalid_result_is_one_incident_and_a_valid_result_still_reports
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=9000.0,
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                 deadline_seconds=60),
+                                                 ^^^^^^^^^^^^^^^^^^^^^
+                     ["host:1:invalid-result:invalid-result"])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:transport-unavailable:session-closed'] != ['host:1:invalid-result:invalid-result']
+
+First differing element 0:
+'host:1:transport-unavailable:session-closed'
+'host:1:invalid-result:invalid-result'
+
+- ['host:1:transport-unavailable:session-closed']
++ ['host:1:invalid-result:invalid-result']
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.183s
+
+FAILED (failures=1)
+rc=1

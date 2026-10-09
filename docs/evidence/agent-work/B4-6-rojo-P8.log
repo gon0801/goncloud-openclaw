@@ -1,0 +1,18 @@
+ FAIL  |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > recovers a managed run with managedTasks configuration absent
+AssertionError: expected undefined to deeply equal { Object (episode_id) }
+
+- Expected:
+{
+  "episode_id": "recovery:eb39f6e2-0887-4c53-b0fe-45c58c259c2e",
+}
+
++ Received:
+undefined
+
+ ❯ src/agents/tasks/managed-task.recovery.test.ts:576:38
+    574|       await drain(stream);
+    575|       expect((await stream.result()).stopReason).toBe("error");
+    576|       expect(recoveryMarker(taskId)).toEqual({ episode_id: `recovery:$…
+       |                                      ^
+    577|       const binding2 = await bindingFor();
+    578|       expect(binding2).toMatchObject({ recovery: true });

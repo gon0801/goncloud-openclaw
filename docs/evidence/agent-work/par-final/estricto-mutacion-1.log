@@ -1,0 +1,22 @@
+..F
+======================================================================
+FAIL: test_everything_is_complete_on_one_pair (__main__.AcceptanceStrictTest.test_everything_is_complete_on_one_pair)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 250, in test_everything_is_complete_on_one_pair
+    self.assertEqual(pair_problems(matrix_refs(matrix_rows()), (g_sha, r_sha), doc, changed), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['scripts/tests/test-agent-work-e2e.sh::crash_boundaries ended rc=1'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'scripts/tests/test-agent-work-e2e.sh::crash_boundaries ended rc=1'
+
+- ['scripts/tests/test-agent-work-e2e.sh::crash_boundaries ended rc=1']
++ []
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.030s
+
+FAILED (failures=1)
+rc=1

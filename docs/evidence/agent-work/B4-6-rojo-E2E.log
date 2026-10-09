@@ -1,0 +1,18 @@
+ FAIL  |infra| src/agents/tasks/managed-task.recovery.test.ts > managed task recovery over the native queue > a managed transport failure recovers on the runner's own retry and charges the fund exactly once
+AssertionError: expected undefined to deeply equal { Object (episode_id) }
+
+- Expected:
+{
+  "episode_id": "recovery:55ba3d14-ca52-413b-b519-44d270895d7a",
+}
+
++ Received:
+undefined
+
+ ❯ src/agents/tasks/managed-task.recovery.test.ts:755:38
+    753|       await drain(stream);
+    754|       expect((await stream.result()).stopReason).toBe("error");
+    755|       expect(recoveryMarker(taskId)).toEqual({ episode_id: `recovery:$…
+       |                                      ^
+    756|       const binding2 = await bindingFor();
+    757|       const recovered = await openStream(provider, binding2);

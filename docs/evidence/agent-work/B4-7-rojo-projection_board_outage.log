@@ -1,0 +1,22 @@
+E
+======================================================================
+ERROR: test_lost_transfer_ack_and_board_outage_converge_without_repeating_the_review (__main__.ProjectionTransferTest.test_lost_transfer_ack_and_board_outage_converge_without_repeating_the_review)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 222, in test_lost_transfer_ack_and_board_outage_converge_without_repeating_the_review
+    receipt = self.transfer(lose_first_native_ack)
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 77, in transfer
+    return transfer_projection(
+        self.pending,
+    ...<4 lines>...
+        acknowledge_native=acknowledge,
+    )
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/progress_bridge.py", line 109, in transfer_projection
+    raise RuntimeError(f"cola de progreso rechazó la proyección: {completed.stderr.strip()}")
+RuntimeError: cola de progreso rechazó la proyección: progress-events: evento evt-761bd3e3a9c11101a170dc1b6950b74a ya fue rechazado; usa otro ID tras resolverlo
+
+----------------------------------------------------------------------
+Ran 1 test in 0.326s
+
+FAILED (errors=1)
+rc=1

@@ -1,0 +1,15 @@
+..F
+======================================================================
+FAIL: test_everything_is_complete_on_one_pair (__main__.AcceptanceStrictTest.test_everything_is_complete_on_one_pair)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 99, in test_everything_is_complete_on_one_pair
+    self.assertFalse(open_rows, "acceptance is incomplete: " + ", ".join(open_rows))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ['A1 parcial', 'A2 parcial', 'A3 parcial', 'A6 parcial', 'A8 parcial', 'A10 parcial', 'A11 parcial', 'A13 parcial', 'B1 parcial', 'B2 parcial', 'B3 parcial', 'B4 parcial', 'B5 parcial', 'B6 parcial', 'B7 parcial', 'T10:review_tail_restart parcial', 'T10:delivery_latency parcial', 'T10:idle_72h parcial', 'T10:cien_reenvios parcial'] is not false : acceptance is incomplete: A1 parcial, A2 parcial, A3 parcial, A6 parcial, A8 parcial, A10 parcial, A11 parcial, A13 parcial, B1 parcial, B2 parcial, B3 parcial, B4 parcial, B5 parcial, B6 parcial, B7 parcial, T10:review_tail_restart parcial, T10:delivery_latency parcial, T10:idle_72h parcial, T10:cien_reenvios parcial
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.005s
+
+FAILED (failures=1)
+rc=1

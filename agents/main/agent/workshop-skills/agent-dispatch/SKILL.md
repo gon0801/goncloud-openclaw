@@ -19,6 +19,23 @@ tool o la combinación host/adaptador no está habilitada, el encargo queda
 bloqueado; no uses el despacho legado para un encargo gestionado. Los pedidos
 fuera de ese perímetro conservan el flujo de esta skill.
 
+La ruta de `main` a un CLI de la Mac (`mac-local`) se prepara con `python3
+scripts/agent-work/routing.py --requester main --target mac-local/<adaptador>`
+y sigue `managed_tasks_submit` → `managed_tasks_admit` →
+`managed_tasks_inspect` → `managed_tasks_resolve`. `main` pide desde su sesión
+durable del loop, nunca desde un turno `isolated` de cron, y R lo rechaza. El
+CLI entrega `agent-work.result.v1` por referencia, en lugar de los archivos
+`LISTO` y `VEREDICTO`, y el informe despierta solo a la sesión que hizo
+`submit`. El host da el encargo por entregado solo cuando el CLI escribe su
+aceptación (`agent-work.accept.v1` en `acceptRef`); teclearlo o verlo en
+pantalla no cuenta. Si la aceptación no llega en el plazo, llega una incidencia
+`transport-unavailable` con `delivery-unaccepted`: no lo vuelvas a teclear ni a
+pedir a ciegas; revisa con `managed_tasks_inspect` y decide. La sesión adoptada
+se retira sin matar procesos (`UserAdopted`).
+Mientras `mac-local` no esté `certified` en `coverage.json`, esta ruta está
+deshabilitada y el loop sigue con su flujo de hoy (vigía, `LISTO` y
+`VEREDICTO`).
+
 Pedidos de ingeniería nativa por harnesses de la Mac usan la skill
 `native-harness-orchestration` (Task 9). Con `CORRIDA_NATIVE_ROUTING=off` o
 <!-- candado: test-native-harness-orchestration-skill.sh -->
@@ -26,6 +43,8 @@ con el gate de rollout por etapas sin aprobar, el pedido sigue la cadena
 agent-dispatch de abajo; no copies la máquina de estados del harness aquí.
 
 ## Chain dispatch (brief / "-saikit" lane)
+
+Legacy route (T9 `:265`): this chain (`sessions_spawn` to implementer, verifier and reviewer) stays outside the managed perimeter until its adoption (T12). Inside a managed run the runtime rejects `sessions_spawn` and `sessions_send`; only the requester-target pairs listed in "Ruteo nativo vs. legado" use the guarded route, and none of them goes from `main` to implementer, verifier or reviewer.
 
 0. Multi-PR rounds need delivery sequencing: an external reviewer re-reading an OLD brief can race the implementer's push (it re-read the unchanged brief file, saw old PR heads, and re-stamped its previous verdict instead of reviewing the fixes — verified 2026-09-13). Write the brief file pointing at the NEW head SHAs, list the per-finding commits, and only then deliver; if a reviewer reports "nothing new", compare the PR heads it cites against the actual pushed heads before dispatching fixes.
 
@@ -62,11 +81,13 @@ agent-dispatch de abajo; no copies la máquina de estados del harness aquí.
 
 ## External review loop (Claude on the Mac)
 
+Legacy route (T9 `:265`): this loop (tmux delivery, `OPENCLAW_WATCH`, `VEREDICTO` files) stays outside the managed perimeter until its adoption (T12). The managed `main` to Mac CLI route is the one in "Ruteo nativo vs. legado", and it stays off until `mac-local` is certified.
+
 David repeatedly orders a fix-then-review loop against the Claude Code tab in the Mac project ("revisa y haz el loop hasta que Claude apruebe"; asked 2026-09-11 and 2026-09-13 for different lanes). Verified full cycle 2026-09-13 (bloque 6: ronda 1 `VEREDICTO: CAMBIOS` with 8 findings, then fixes pushed → ronda 2 `VEREDICTO: APROBADO`):
 
 1. Write the brief to a Mac file (`/tmp/brief-<task>-r<N>.txt`): what to review (PRs, branches, head SHAs), the operator decisions it must not re-litigate (marked as such), the authoritative sources (Plans.md rows, artifact path), and the verdict format — first word `VEREDICTO: APROBADO` / `VEREDICTO: CAMBIOS` with file:line findings.
    - Completion: the brief file exists on the Mac (`wc -c`).
-2. Deliver by tmux session name when the Claude session runs in tmux (David launches agents with `agent-tmux.sh`, so check `/opt/homebrew/bin/tmux list-sessions` first). A session you create goes up with `corrida.sh lanzar-sesion` (it marks BEFORE the first send-keys and records the session in the run registry); one that already exists you mark yourself BEFORE the first send-keys: `set-environment -t <session> OPENCLAW_WATCH 1` (mac-tmux-control steps 3–5 and Wake-ups; unmark with `-u` when the loop ends). Then: `send-keys -t <session> -l 'Lee /tmp/brief-… y haz lo que pide'`, then `send-keys -t <session> Enter` in a separate call. Only for a tab confirmed to be outside tmux, fall back to ONE short `do script "Lee /tmp/brief-… y haz lo que pide"` into the project's tab (mac-terminal-control step 4). Either way, confirm delivery by the marker text appearing in the project transcript (mac-agent-transcript step 4), not by the tmux or osascript exit.
+2. Deliver by tmux session name when the Claude session runs in tmux (David launches agents with `agent-tmux.sh`, so check `/opt/homebrew/bin/tmux list-sessions` first). A session you create goes up with `corrida.sh lanzar-sesion` (it marks BEFORE the first send-keys and records the session in the run registry); one that already exists you mark yourself BEFORE the first send-keys: `set-environment -t <session> OPENCLAW_WATCH 1` (mac-tmux-control steps 3–5 and Wake-ups; unmark with `-u` when the loop ends). Then: `send-keys -t <session> -l 'Lee /tmp/brief-… y haz lo que pide'`, then `send-keys -t <session> Enter` in a separate call. Only for a tab confirmed to be outside tmux, fall back to ONE short `do script "Lee /tmp/brief-… y haz lo que pide"` into the project's tab (mac-terminal-control step 4). Either way, confirm delivery by the marker text appearing in the project transcript (mac-agent-transcript step 4), not by the tmux or osascript exit. Exception (T9 `:266`): a managed session (tmux `AGENT_WORK_MANAGED=1`, or a run registry entry with `encargo_ref` or `host_id`) is never marked with `OPENCLAW_WATCH` and never relaunched by hand; its host reports a close, a dialog or a missed deadline to the requester.
 3. Watch for a NEW verdict by counting `VEREDICTO` occurrences in the transcript against a baseline taken at delivery — the brief itself contains the word, so a plain grep false-positives (same rule as mac-terminal-control step 5's marker matching). The tmux watcher and the Stop hook (mac-tmux-control "Wake-ups") wake you on their own when the Mac session goes quiet or a turn ends; on waking, re-count `VEREDICTO` against the baseline instead of polling.
 <!-- candado: test-tmux-activity-watch.sh -->
    - The verdict can take 30+ minutes: Claude dispatches its own verifier/reviewer subagents and posts progress echoes (`SUMMONAIKIT HARNESS DELEGATED - awaiting verifier`). Read the final verdict from the transcript (mac-agent-transcript step 3), never from the tab tail.

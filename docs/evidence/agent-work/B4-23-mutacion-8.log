@@ -1,0 +1,6 @@
+ok (1): cwd inexistente aborta con 1
+ok (2): crea la sesión en el cwd, la marca, espera el prompt y el mensaje entra con su sentinel
+ok (3): con la sesión viva no relanza (YA-EXISTE, rc 2)
+ok (4): sin prompt no manda nada y sale con 4
+FAIL: (5) gestionada s5a (ambas): se creo la sesion
+rc=1

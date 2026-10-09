@@ -1,0 +1,24 @@
+.F
+======================================================================
+FAIL: test_every_spec_scenario_boundary_and_t10_case_has_one_row (__main__.AcceptanceMatrixTest.test_every_spec_scenario_boundary_and_t10_case_has_one_row)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 69, in test_every_spec_scenario_boundary_and_t10_case_has_one_row
+    self.assertEqual(re.findall(r"`([a-z0-9_]+)`", exige), T10_CASES[1:-1], "T10 :287 changed its cases")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['delivery_latency', 'idle_72h', 'resource_100_cycles', 'cross_restart'] != ['delivery_latency', 'idle_72h', 'resource_100_cycles']
+
+First list contains 1 additional elements.
+First extra element 3:
+'cross_restart'
+
+- ['delivery_latency', 'idle_72h', 'resource_100_cycles', 'cross_restart']
+?                                                       -----------------
+
++ ['delivery_latency', 'idle_72h', 'resource_100_cycles'] : T10 :287 changed its cases
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.005s
+
+FAILED (failures=1)
+rc=1

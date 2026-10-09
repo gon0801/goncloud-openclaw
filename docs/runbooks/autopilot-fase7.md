@@ -218,6 +218,8 @@ El nombre se escribe igual que lo armaría el lanzador, `<token>-<basename del d
 /opt/homebrew/bin/tmux set-environment -t <sesión> OPENCLAW_WATCH 1
 ```
 
+Excepción (T9 `:266`): una sesión gestionada (`AGENT_WORK_MANAGED=1` en tmux, o una entrada del registro con `encargo_ref` o `host_id`) nunca se marca con `OPENCLAW_WATCH` ni se relanza a mano; su host le reporta al solicitante el cierre, el diálogo o el plazo vencido.
+
 El `Enter` va en llamada aparte: en el mismo envío se lo traga el TUI. **Arrancó** cuando la captura muestra que el CLI leyó el archivo (su propia línea de lectura o el primer paso del plan); **no arrancó** si la captura sigue mostrando el prompt vacío pasados 60 s.
 
 **4. El modo sin preguntas, medido para los tres.** Leído de la ayuda de cada binario el 2026-09-17:

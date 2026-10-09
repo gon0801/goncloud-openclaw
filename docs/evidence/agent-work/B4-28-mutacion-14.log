@@ -1,0 +1,16 @@
+..fatal: Not a valid object name ffffffffffffffffffffffffffffffffffffffff^{commit}
+F
+======================================================================
+FAIL: test_everything_is_complete_on_one_pair (__main__.AcceptanceStrictTest.test_everything_is_complete_on_one_pair)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 106, in test_everything_is_complete_on_one_pair
+    self.assertEqual(known.returncode, 0, f"G {g_sha} is not a commit of this repo")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 128 != 0 : G ffffffffffffffffffffffffffffffffffffffff is not a commit of this repo
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.011s
+
+FAILED (failures=1)
+rc=1

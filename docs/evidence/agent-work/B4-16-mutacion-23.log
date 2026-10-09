@@ -1,0 +1,27 @@
+...F................
+======================================================================
+FAIL: test_a_pane_without_a_resource_row_is_neither_dialog_nor_clean (__main__.SilentPromptTest.test_a_pane_without_a_resource_row_is_neither_dialog_nor_clean)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3393, in test_a_pane_without_a_resource_row_is_neither_dialog_nor_clean
+    self.assertIsNone(manager.prompt_identity(key, load_approval_pattern(self.LIB_SH)))
+                      ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/resources.py", line 289, in prompt_identity
+    row = self._row(key)
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/resources.py", line 120, in _row
+    raise ValueError("resource reservation missing")
+ValueError: resource reservation missing
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3396, in test_a_pane_without_a_resource_row_is_neither_dialog_nor_clean
+    self.fail(f"a pane without a resource row escaped the pass: {exc}")
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: a pane without a resource row escaped the pass: resource reservation missing
+
+----------------------------------------------------------------------
+Ran 20 tests in 1.072s
+
+FAILED (failures=1)
+rc=1

@@ -1,0 +1,15 @@
+....F...
+======================================================================
+FAIL: test_a_shell_citation_must_be_a_case_the_runner_dispatches (__main__.AcceptanceGuardsTest.test_a_shell_citation_must_be_a_case_the_runner_dispatches)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 165, in test_a_shell_citation_must_be_a_case_the_runner_dispatches
+    self.assertFalse(cites("x.sh", name, self.RUNTIME_SH), name)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false : children
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.010s
+
+FAILED (failures=1)
+rc=1

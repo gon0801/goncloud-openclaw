@@ -1,0 +1,60 @@
+......FFF.
+======================================================================
+FAIL: test_only_evidence_prose_may_change_after_the_pair (__main__.AcceptanceGuardsTest.test_only_evidence_prose_may_change_after_the_pair) (path='docs/evidence/agent-work/coverage.json')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 225, in test_only_evidence_prose_may_change_after_the_pair
+    self.assertEqual(pair_problems(self.REFS, self.PAIR, self.pair(), [path]),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [f"{path} changed after the pair"])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['docs/evidence/agent-work/coverage.json changed after the pair']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'docs/evidence/agent-work/coverage.json changed after the pair'
+
+- []
++ ['docs/evidence/agent-work/coverage.json changed after the pair']
+
+======================================================================
+FAIL: test_only_evidence_prose_may_change_after_the_pair (__main__.AcceptanceGuardsTest.test_only_evidence_prose_may_change_after_the_pair) (path='scripts/agent-work/host.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 225, in test_only_evidence_prose_may_change_after_the_pair
+    self.assertEqual(pair_problems(self.REFS, self.PAIR, self.pair(), [path]),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [f"{path} changed after the pair"])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['scripts/agent-work/host.py changed after the pair']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'scripts/agent-work/host.py changed after the pair'
+
+- []
++ ['scripts/agent-work/host.py changed after the pair']
+
+======================================================================
+FAIL: test_only_evidence_prose_may_change_after_the_pair (__main__.AcceptanceGuardsTest.test_only_evidence_prose_may_change_after_the_pair) (path='scripts/tests/test_agent_work_acceptance.py')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 225, in test_only_evidence_prose_may_change_after_the_pair
+    self.assertEqual(pair_problems(self.REFS, self.PAIR, self.pair(), [path]),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [f"{path} changed after the pair"])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['scripts/tests/test_agent_work_acceptance.py changed after the pair']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'scripts/tests/test_agent_work_acceptance.py changed after the pair'
+
+- []
++ ['scripts/tests/test_agent_work_acceptance.py changed after the pair']
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.007s
+
+FAILED (failures=3)
+rc=1

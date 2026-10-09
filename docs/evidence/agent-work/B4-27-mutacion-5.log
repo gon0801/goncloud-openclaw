@@ -1,0 +1,15 @@
+....F..........
+======================================================================
+FAIL: test_every_inventory_entry_is_migrated_or_declared_out (__main__.AgentsRouting.test_every_inventory_entry_is_migrated_or_declared_out) (entry='wake:encargos-vigia')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 314, in test_every_inventory_entry_is_migrated_or_declared_out
+    self.assertEqual(row.get("adoption"), "T12" if row["state"] == "legacy-until-adoption" else None)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: None != 'T12'
+
+----------------------------------------------------------------------
+Ran 15 tests in 0.085s
+
+FAILED (failures=1)
+rc=1

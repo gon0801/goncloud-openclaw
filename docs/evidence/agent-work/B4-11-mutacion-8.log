@@ -1,0 +1,124 @@
+[test] starting test/vitest/vitest.agents-support.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+[vitest-workers] local cache miss after 1685ms
+node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js (2400:30) [EVAL] Use of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+      ╭─[ node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js:2400:31 ]
+      │
+ 2400 │           ASM_CONSTS[start] = eval(func);
+      │                               ──┬─
+      │                                 ╰─── Use of direct `eval` here.
+      │
+      │ Help: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+──────╯
+
+node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js (2423:32) [EVAL] Use of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+      ╭─[ node_modules/.pnpm/web-tree-sitter@0.27.0/node_modules/web-tree-sitter/web-tree-sitter.js:2423:33 ]
+      │
+ 2423 │           moduleExports[name] = eval(func);
+      │                                 ──┬─
+      │                                   ╰─── Use of direct `eval` here.
+      │
+      │ Help: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+──────╯
+
+node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/resolve-evaluate-options.js (48:0) [MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "" in "node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/resolve-evaluate-options.js" may not be preserved when bundling.
+    ╭─[ node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/resolve-evaluate-options.js:48:1 ]
+    │
+ 48 │ ''
+    │ ─┬
+    │  ╰── module level directive may not be preserved
+    │
+    │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+────╯
+
+node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-is-declaration.js (11:0) [MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "" in "node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-is-declaration.js" may not be preserved when bundling.
+    ╭─[ node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-is-declaration.js:11:1 ]
+    │
+ 11 │ ''
+    │ ─┬
+    │  ╰── module level directive may not be preserved
+    │
+    │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+────╯
+
+node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-create.js (6:0) [MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "" in "node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-create.js" may not be preserved when bundling.
+   ╭─[ node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-create.js:6:1 ]
+   │
+ 6 │ ''
+   │ ─┬
+   │  ╰── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/text.js (9:0) [MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "" in "node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/text.js" may not be preserved when bundling.
+   ╭─[ node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/text.js:9:1 ]
+   │
+ 9 │ ''
+   │ ─┬
+   │  ╰── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/comment.js (12:0) [MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "" in "node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/comment.js" may not be preserved when bundling.
+    ╭─[ node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/comment.js:12:1 ]
+    │
+ 12 │ ''
+    │ ─┬
+    │  ╰── module level directive may not be preserved
+    │
+    │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+────╯
+
+[vitest-workers] prepared 512389d041d0 in 14433ms (16698 inputs, 17251 outputs)
+ ✓ |agents-support| src/agents/tasks/managed-task.host-incident.test.ts > managed task host incidents > records a permission-required host incident durably and wakes the requester once 849ms
+ ✓ |agents-support| src/agents/tasks/managed-task.host-incident.test.ts > managed task host incidents > records a deadline-missed host incident durably and wakes the requester once 788ms
+ ✓ |agents-support| src/agents/tasks/managed-task.host-incident.test.ts > managed task host incidents > records a transport-unavailable host incident durably and wakes the requester once 784ms
+ ✓ |agents-support| src/agents/tasks/managed-task.host-incident.test.ts > managed task host incidents > records a invalid-result host incident durably and wakes the requester once 781ms
+ ✓ |agents-support| src/agents/tasks/managed-task.host-incident.test.ts > managed task host incidents > rejects the same episode recaptured with a different evidenceRef 440ms
+ ✓ |agents-support| src/agents/tasks/managed-task.host-incident.test.ts > managed task host incidents > rejects a foreign producer token without storing the incident 426ms
+ ✓ |agents-support| src/agents/tasks/managed-task.host-incident.test.ts > managed task host incidents > rejects a stale generation without storing the incident 424ms
+ ✓ |agents-support| src/agents/tasks/managed-task.host-incident.test.ts > managed task host incidents > rejects a foreign host without storing the incident 424ms
+ ✓ |agents-support| src/agents/tasks/managed-task.host-incident.test.ts > managed task host incidents > rejects a foreign adapter without storing the incident 424ms
+ ✓ |agents-support| src/agents/tasks/managed-task.host-incident.test.ts > managed task host incidents > rejects an instance without a confirmed admitted binding 436ms
+ ✓ |agents-support| src/agents/tasks/managed-task.host-incident.test.ts > managed task host incidents > stores the incident without waking for a director continuation 426ms
+ ✓ |agents-support| src/agents/tasks/managed-task.host-incident.test.ts > managed task host incidents > stores the incident without waking after a cancellation 423ms
+ × |agents-support| src/agents/tasks/managed-task.host-incident.test.ts > managed task host incidents > stores a later incident without an incident wake after a final result 430ms
+   → expected [ …(2) ] to not include 'b483b9764bfbc9f862f1006911eb778fd187d…'
+stderr | unknown test
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.host-incident.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.host-incident.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.host-incident.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.host-incident.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/agents/tasks/managed-task.host-incident.test.ts: retiring openclaw.agentDatabaseLifecycle
+
+ ✓ |agents-support| src/agents/tasks/managed-task.host-incident.test.ts > managed task host incidents > accepts a final result after an incident 408ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |agents-support| src/agents/tasks/managed-task.host-incident.test.ts > managed task host incidents > stores a later incident without an incident wake after a final result
+AssertionError: expected [ …(2) ] to not include 'b483b9764bfbc9f862f1006911eb778fd187d…'
+ ❯ src/agents/tasks/managed-task.host-incident.test.ts:391:21
+    389|     expect(incidentRows(registered.taskId)).toBe(1);
+    390|     const ids = wakeEntries(registered.taskId).map((entry) => entry.id…
+    391|     expect(ids).not.toContain(
+       |                     ^
+    392|       managedTaskIncidentDeliveryId(registered.taskId, 1, incidentKeyF…
+    393|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 passed (14)
+   Start at  15:22:30
+   Duration  24.32s (transform 66%, tests 31%, import 2%, worker 1%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] failed 1 Vitest shard in 26.10s
+[test] FAILED (exit 1)
+rc=1

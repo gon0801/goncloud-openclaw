@@ -1,0 +1,282 @@
+# T10: fronteras de caída con contador externo
+
+## B4-33-r1
+
+Primera parte de la casilla `:280` del plan (`docs/superpowers/plans/2026-09-30-encargos-agentes.md`,
+sección T10): las fronteras B1, B3 y B4 de la tabla "Estados y fronteras de caída" del
+spec, verificadas con contadores de peticiones y procesos que viven fuera del Gateway.
+**No marca `:280`**: B2, B5, B6 y B7 quedan para la segunda parte.
+
+Este commit sobre la base `b20d91c`, con R `978355503c44` construido. Prueba nueva:
+`scripts/tests/test_agent_work_crash_boundaries_e2e.py`, caso `crash_boundaries` del
+runner (`bash scripts/tests/test-agent-work-e2e.sh crash_boundaries`, con R como
+`AGENT_WORK_RUNTIME_SOURCE`). Verde: 3 casos, 266 s, `OK`.
+
+### Los dos contadores externos
+
+- `CROSS_PROVIDER_LOG`: el arnés (`scripts/tests/fixtures/agent-work/managed-cli-gateway-harness.mjs`)
+  agrega cada petición al proveedor en un archivo dado, con el pid del Gateway que la hizo.
+- El archivo del doble del CLI (`scripts/tests/fixtures/agent-work/review-cli.py`): con la
+  ruta como argumento, agrega ahí cada aceptación (y su arranque, solo como diagnóstico).
+  `ReviewCli` acepta argumentos para el doble.
+
+Sobreviven al `kill -9` del Gateway porque viven en procesos ajenos a él (el arnés y el
+doble del CLI) y escriben a archivos en disco: matar el Gateway no toca ni los procesos
+ni los archivos. El resultado de dominio exigido en los tres casos: una tarea con su
+resultado y ningún hijo; una sola aceptación del CLI según su archivo; un solo despertar
+del solicitante entre los dos Gateways según el archivo del proveedor; el host sin
+resultados pendientes.
+
+### Por frontera
+
+- **B1 (antes de entregar):** el Gateway cae después de registrar la tarea. Un segundo
+  despachador manda el mismo pedido al Gateway nuevo y recupera la misma tarea.
+  `CRASH_BOUNDARY B1 pids=[4630, 6358] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]`
+- **B3 (entre admitir y recibir respuesta):** el Gateway cae con el CLI ya trabajando.
+  Tras reiniciar, el host reclama tres veces y no vuelve a teclear nada; la readmisión
+  con la misma clave no crea otra admisión.
+  `CRASH_BOUNDARY B3 pids=[10239, 12284] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]`
+- **B4 (entre escribir resultado y ACK):** R registra el resultado y el ACK se pierde.
+  El despertar termina, el Gateway cae, y el host repite el mismo reporte al Gateway
+  nuevo y recibe el mismo recibo.
+  `CRASH_BOUNDARY B4 pids=[16150, 18817] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1, 0]`
+
+(Líneas de la corrida verde `B4-33-verde.log`; los pids cambian en cada corrida.)
+
+### Discriminación rojo → verde
+
+Rojo natural, sin los contadores: el caso B1 (`before_delivery`) falla con
+`the requester was never woken` (`rc=1`, 122 s) porque sin `CROSS_PROVIDER_LOG` en el
+arnés el archivo del proveedor nunca existe (`B4-33-rojo-natural.log`).
+
+Cinco mutaciones, una a la vez; cada caso falla por el defecto de dominio de su frontera.
+La 4 y la 5 son las que caen en los contadores externos (el archivo del CLI y el del
+proveedor).
+
+| n | Qué rompe | Filtro | Falla con | Log |
+|---|---|---|---|---|
+| 1 | R: `register` no recupera la tarea de la misma clave | `before_delivery` | `a second dispatcher could not recover the task` (56 s) | `B4-33-mutacion-1.log` |
+| 2 | G: el host vuelve a teclear una asignación cuyo resultado ya existe | `between_admission` | `the restart typed the assignment again` (64 s) | `B4-33-mutacion-2.log` |
+| 3 | R: un reporte repetido tras perder el ACK se rechaza como conflicto | `between_result` | `R refused the repeated report` (68 s) | `B4-33-mutacion-3.log` |
+| 4 | G: el host vuelve a teclear la asignación ya entregada e informa el estado de antes | `between_admission` | `the CLI was handed the assignment more than once` (91 s) | `B4-33-mutacion-4.log` |
+| 5 | R: el reporte repetido vuelve a encolar el despertar del solicitante | `between_result` | `the requester was woken more than once` (90 s) | `B4-33-mutacion-5.log` |
+
+### Límites
+
+- El CLI es un doble en tmux y el modelo contesta `NO_REPLY` sin guion.
+- El contador del proveedor vive en el proceso del arnés y escribe a un archivo,
+  separado del contador del servicio de R.
+- Un despertar o una entrega duplicados se detectan si llegan en los 20 s de espera
+  final; con R volviendo a encolar el despertar, llegó a los 7,5 a 7,7 s (medido por
+  un lector).
+- El contenido del resultado se fija por su digest (el mismo recibo en los dos
+  Gateways), no se inspecciona con `managed_tasks_inspect`.
+- B2, B5, B6 y B7 quedan para la segunda parte de `:280`.
+
+### Regresión y suites cortas
+
+Regresión con R `978355503c44`, los cuatro casos en verde: `review_tail_restart`
+(2 casos, 176 s, `B4-33-reg-review_tail_restart.log`), `cli_gateway` (35 s,
+`B4-33-reg-cli_gateway.log`), `main_cli_loop` (2 casos, 76 s,
+`B4-33-reg-main_cli_loop.log`) y `review_tail_restart_director` (23 s,
+`B4-33-reg-review_tail_restart_director.log`).
+
+Suites cortas sin R (`B4-33-cortas.log`): `test-candados-declarados.sh` y
+`test-runbooks-no-contradicen-entorno.sh` con `TODO VERDE`, `test-agent-work-e2e.sh`
+con `rc=0` (los casos de R se saltan), ruteo `OK` (15 pruebas) e integración
+`OK (skipped=1)` (115 pruebas); cinco `rc=0`. La matriz estricta quedó en
+`B4-33-estricto.log`: `acceptance is incomplete` con A2, A3, A6, A8, A10, A11, A13,
+B2, B5, B6, B7 y los tres T10; ya sin B1, B3 ni B4.
+
+## B4-34-r1
+
+Segunda parte de la casilla `:280` del plan: las fronteras B5 y B7 de la tabla
+"Estados y fronteras de caída", sobre el mismo caso `crash_boundaries`. **No marca
+`:280`**: B2 y B6 (caídas del host) quedan para el encargo siguiente.
+
+Este commit sobre la base `3297a0c`, con R `978355503c44` construido. Verde: 5 casos,
+458 s, `OK` (`bash scripts/tests/test-agent-work-e2e.sh crash_boundaries`, con R como
+`AGENT_WORK_RUNTIME_SOURCE`).
+
+### Qué cambia en el arnés
+
+- `CROSS_PROVIDER_HOLD=admit`: el arnés retiene la petición que admitiría al hijo,
+  así que el Gateway puede morir con la admisión todavía en vuelo.
+- El guion (`CROSS_PROVIDER_SCRIPT=review-correction`) acepta también una tarea ya
+  `handled` y la decide otra vez con las mismas claves, como haría un modelo que
+  nunca vio su recibo.
+- El arnés gana la acción `cancel`, que usa el solicitante con `managed_tasks_cancel`.
+
+### Por frontera
+
+- **B5 (entre decidir y confirmar el consumo):** el modelo con guion inspecciona el
+  resultado y lo resuelve con una corrección; la decisión, el hijo y el recibo quedan
+  grabados juntos. El arnés retiene la petición siguiente (`admit`) y el Gateway muere
+  sin que el modelo vea su recibo. El Gateway nuevo vuelve a entregar el despertar; el
+  modelo decide otra vez con las mismas claves, R devuelve el mismo hijo, el modelo lo
+  admite y el CLI lo acepta. Se exige: un manejo y el mismo hijo de antes de la caída,
+  ninguna revisión nueva del mismo SHA, el CLI recibe la revisión y una sola corrección,
+  y según el archivo del proveedor `inspect`, `resolve` y `admit` en cada Gateway (el
+  `admit` del primero quedó retenido y nunca corrió).
+  `CRASH_BOUNDARY B5 pids=[36158, 39098] handlings=1 children=1 cli_accepted=2 acting_first=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit'] acting_second=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit']`
+- **B7 (cancelación y resultado tardío):** el CLI deja su resultado, el solicitante
+  cancela y el Gateway muere; el host reporta el resultado al Gateway nuevo. Se exige:
+  resultado archivado (`handlingState` `cancelled` y `deliveryState` `result-recorded`),
+  una continuación sobre la tarea cancelada rechazada con `Managed task is cancelled`,
+  cero despertares, ningún manejo ni hijo, una sola entrega al CLI y el host sin
+  pendientes.
+  `CRASH_BOUNDARY B7 pids=[18709, 20841] handling=cancelled delivery=result-recorded wakes=0 children=0 cli_accepted=1`
+
+(Líneas de la corrida verde `B4-34-verde.log`; los pids cambian en cada corrida.)
+
+`handling_unresolved` (`scripts/agent-work/test-runtime.sh`) suma la prueba
+`propagates cancellation to children committed before the parent was cancelled`:
+la cancelación del padre llega a los hijos ya creados (`B4-34-handling-unresolved.log`,
+`Tests 5 passed`).
+
+### Discriminación rojo → verde
+
+Rojo natural, solo con la prueba y sin el arnés nuevo: los casos `-k decision
+-k cancellation` fallan con `rc=1` y dos fallos (`B4-34-rojo-natural.log`, 122 s).
+B7 con `invalid requester tool command`, porque el arnés todavía no acepta `cancel`;
+B5 con `the restart did not recover the decision`, porque sin la retención el primer
+Gateway termina la corrección antes de caer y el segundo no decide nada.
+
+Tres mutaciones, una a la vez, todas en R; la 2 cae en el contador externo del
+proveedor.
+
+| n | Qué rompe en R | Filtro | Falla con | Log |
+|---|---|---|---|---|
+| 1 | `resolve` deja de recuperar la decisión ya grabada | `decision` | `the correction was never admitted` (163 s) | `B4-34-mutacion-1.log` |
+| 2 | un resultado tardío de una tarea cancelada despierta al solicitante | `cancellation` | `a cancelled task woke the requester` (81 s) | `B4-34-mutacion-2.log` |
+| 3 | una tarea cancelada acepta otra continuación | `cancellation` | `the cancelled generation accepted a continuation` (61 s) | `B4-34-mutacion-3.log` |
+
+### Límites
+
+- En B5 el modelo es un guion que repite la misma decisión; un modelo real podría
+  leer el recibo en vez de repetirla.
+- En B7 el Gateway cae sin nada en vuelo: la cancelación ya está confirmada, y la
+  misma prueba sin caída daría el mismo resultado. Lo que exige la caída es que la
+  cancelación sea durable y se aplique al resultado que llega después. La carrera
+  entre cancelar y reportar no la corre ninguna prueba: R las serializa en la
+  transacción de escritura de SQLite, y `serializes cancellation against a competing
+  continuation` cubre cancelar contra resolver, no contra reportar.
+- En B5 la ausencia de una revisión nueva se cumple por construcción: en esta prueba
+  solo `reviewed()` registra revisiones y el modelo con guion nunca llama `submit`;
+  la comprobación protege la prueba, no a R.
+- B2 y B6 quedan para el encargo siguiente.
+
+### Regresión y suites cortas
+
+Regresión con R `978355503c44`, los cuatro casos en verde: `review_tail_restart`
+(2 casos, 181 s, `B4-34-reg-review_tail_restart.log`), `cli_gateway` (35 s,
+`B4-34-reg-cli_gateway.log`), `main_cli_loop` (2 casos, 77 s,
+`B4-34-reg-main_cli_loop.log`) y `review_tail_restart_director` (23 s,
+`B4-34-reg-review_tail_restart_director.log`).
+
+Suites cortas sin R (`B4-34-cortas.log`): `test-candados-declarados.sh` y
+`test-runbooks-no-contradicen-entorno.sh` con `TODO VERDE`, `test-agent-work-e2e.sh`
+con `rc=0` (`crash_boundaries` sale `OK (skipped=5)`), ruteo `OK` (15 pruebas) e
+integración `OK (skipped=1)` (115 pruebas); cinco `rc=0`. La matriz quedó en
+`B4-34-estricto.log`: `acceptance is incomplete` con A2, A6, A8, A10, A11, A13, B2,
+B6 y los tres T10; ya sin A3, B5 ni B7.
+
+## B4-35-r1
+
+Tercera parte de la casilla `:280` del plan: las fronteras B2 y B6, las dos caídas
+del host. Con esto quedan cubiertas las siete fronteras B1 a B7 de la tabla "Estados
+y fronteras de caída", y **se marca `:280`**.
+
+Este commit sobre la base `e4415d8`, con R `978355503c44` construido. Verde: 9 casos,
+660 s, `OK` (`bash scripts/tests/test-agent-work-e2e.sh crash_boundaries`, con R como
+`AGENT_WORK_RUNTIME_SOURCE`).
+
+### Cómo se mata al host
+
+El host corre como un proceso aparte: el fixture nuevo
+`scripts/tests/fixtures/agent-work/crash-host.py` reclama una asignación del CLI y se
+detiene para siempre en un punto (`reserved`, `launching`, `marked` o `typed`), donde
+imprime `STOP <punto>`; la prueba lo mata ahí con `SIGKILL`. Después, un host nuevo
+sigue el trabajo sobre el mismo estado durable.
+
+### Por frontera
+
+- **B2, reservado:** el host muere con el recurso reservado y nada lanzado. El host
+  reiniciado recupera la misma instancia (el mismo nonce), teclea una sola vez, y el
+  resto sigue: un resultado, un despertar y el recurso en `ReleasedAdopted`.
+  `HOST_CRASH B2 point=reserved host_pid=92420 resources=['ReleasedAdopted'] same_nonce=1`
+  `CRASH_BOUNDARY B2 pids=[91186] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]`
+- **B2, marcado:** el host muere con el lanzamiento empezado y la sesión ya marcada
+  con su nonce. El host reiniciado recupera la instancia por ese nonce, como pide el
+  spec ("recuperar la instancia por nonce e inicio"), teclea una sola vez y el resto
+  sigue igual.
+  `HOST_CRASH B2 point=marked host_pid=72300 resources=['ReleasedAdopted'] same_nonce=1`
+  `CRASH_BOUNDARY B2 pids=[71195] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]`
+- **B2, sin atribuir:** el host muere con el lanzamiento empezado y la sesión sin
+  marcar. El host reiniciado no puede atribuir el lanzamiento: lo deja en
+  `CleanupPending` con `launch identity uncertain`, conserva el cupo (otra reserva da
+  `host resource capacity exhausted`), no teclea nada en el CLI y no despierta a nadie.
+  `HOST_CRASH B2 point=launching host_pid=77449 resources=[('CleanupPending', 'launch identity uncertain')] cli_accepted=0 provider=0`
+- **B6 (después de una herramienta externa):** el host muere justo después de teclear
+  en el CLI, sin haberlo registrado. El host reiniciado declara la entrega incierta
+  (`uncertain`), no vuelve a teclear y converge con la aceptación que escribió el
+  propio CLI: queda una sola aceptación del CLI y un solo despertar.
+  `HOST_CRASH B6 point=typed host_pid=74942 status_after_restart=uncertain`
+  `CRASH_BOUNDARY B6 pids=[73813] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]`
+
+(Líneas de la corrida verde `B4-35-verde.log`; los pids cambian en cada corrida.)
+
+### Discriminación rojo → verde
+
+Rojo natural, con solo la prueba y sin el fixture del host: `-k reservation` falla con
+`rc=1` y un fallo, `the host never reached reserved`, porque sin `crash-host.py` el
+proceso del host no arranca (`B4-35-rojo-natural.log`, 29 s). Base sin cambios antes
+de aplicar nada: `delivery_latency` en `OK` (`B4-35-base.log`).
+
+Las cuatro mutaciones del host no corrieron en la sesión del implementador, que quedó
+cortada después del verde. Las corrió el revisor sobre este mismo commit `3a805fb`
+(VEREDICTO-B4-35-r1). Cada una sale con un solo FAIL y su texto (el `rc=1` lo anota
+VEREDICTO-B4-35-r1; el log no lo guarda):
+`the restarted host could not recover its reservation` (1, `B4-35-revisor-mutacion-1.log`),
+`the restarted host used a launch it cannot attribute` (2, `B4-35-revisor-mutacion-2.log`),
+`the restarted host did not declare the delivery uncertain` (3, `B4-35-revisor-mutacion-3.log`)
+y `the restarted host did not recover the launch by its nonce` (4, `B4-35-revisor-mutacion-4.log`).
+También sobre `3a805fb`, la matriz estricta (`B4-35-revisor-estricto.log`), la regresión
+(`B4-35-revisor-reg-cli_gateway.log` y `B4-35-revisor-reg-main_cli_loop.log`) y las suites
+cortas (`B4-35-revisor-cortas.log`) salen como pedía el encargo.
+
+### Límites
+
+- El host reiniciado corre dentro del proceso de la prueba sobre el mismo estado del
+  host, no como otro proceso aparte.
+- En B2 sin atribuir, la conciliación del recurso en `CleanupPending` (reportarlo a R
+  y liberarlo) no se prueba aquí.
+- El CLI es un doble en tmux.
+- En B6, `uncertain` es lo que devuelve el reclamo del host reiniciado: el spool queda
+  en `attempted` y no se abre incidente; la convergencia con la aceptación del CLI la
+  dispara la prueba (`take_acceptance`), no el host; la declaración durable
+  (`settle_deliveries` al vencer el plazo) no se prueba aquí.
+- La prueba fija `uncertain` aunque la aceptación del CLI ya está en el disco al
+  reiniciar: consultar el efecto por identidad (spec `:182`) no está implementado en
+  el reclamo.
+
+Las siete fronteras B1 a B7 quedan cubiertas; marca `:280`.
+
+## B4-40-r1
+
+Residuales de B4-34 que solo pedian G, con R `978355503c44` fijo, en este
+commit. B5 y B7 reclaman tres veces mas tras el primer exito antes de la
+espera final, con la asercion del archivo del CLI: B5 deja `uncertain` x3 y
+una sola correccion (`B4-40-b5-verde.log`, OK 103 s); B7 deja `None` x3 y una
+sola entrega (`B4-40-b7-verde.log`, OK 83 s). La carrera de cancelar y
+reportar a la vez (`test_cancel_and_report_at_once_keep_a_single_terminal_state`)
+queda en un solo estado terminal (`cancelled`/`result-recorded`), sin
+despertares tras cancelar y con el tardio archivado (dos verdes de ~53 s).
+Discriminacion: el doble que entrega dos veces sale rojo en B5 (`the CLI did
+not get the review and one correction`) y en B7 (`the CLI was handed the
+assignment more than once`). Evidencia en `.saikit/scratch/B4-40-r1/` mas la
+corrida del par.
+
+Limites que se cierran: la carrera entre cancelar y reportar ya la corre una
+prueba; la ausencia de revision nueva en B5 ya no es por construccion (tres
+reclamos extra mas archivo del CLI).

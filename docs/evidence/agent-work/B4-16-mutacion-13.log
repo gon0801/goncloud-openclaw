@@ -1,0 +1,182 @@
+FFF.F....F..FF..FFFF.
+======================================================================
+FAIL: test_a_crash_while_saving_the_dialog_neither_repeats_nor_skips_an_episode (__main__.SilentPromptTest.test_a_crash_while_saving_the_dialog_neither_repeats_nor_skips_an_episode)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3289, in test_a_crash_while_saving_the_dialog_neither_repeats_nor_skips_an_episode
+    self.assertEqual(self.step(manager, self.BLOCKED), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:permission-required:prompt-a676f3[57 chars]1-1'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1'
+
+- ['host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1']
++ []
+
+======================================================================
+FAIL: test_a_dialog_seen_in_single_passes_never_counts (__main__.SilentPromptTest.test_a_dialog_seen_in_single_passes_never_counts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3267, in test_a_dialog_seen_in_single_passes_never_counts
+    self.assertEqual(self.step(manager, screen), [], f"pass {number}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:permission-required:prompt-a676f3[57 chars]1-1'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1'
+
+- ['host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1']
++ [] : pass 0
+
+======================================================================
+FAIL: test_a_different_dialog_without_a_clean_gap_is_another_episode (__main__.SilentPromptTest.test_a_different_dialog_without_a_clean_gap_is_another_episode)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3284, in test_a_different_dialog_without_a_clean_gap_is_another_episode
+    self.assertEqual(self.step(manager, screen), expected, f"pass {number}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:permission-required:prompt-a676f3[57 chars]1-1'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1'
+
+- ['host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1']
++ [] : pass 0
+
+======================================================================
+FAIL: test_a_yes_no_line_in_the_output_for_one_pass_raises_nothing (__main__.SilentPromptTest.test_a_yes_no_line_in_the_output_for_one_pass_raises_nothing)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3273, in test_a_yes_no_line_in_the_output_for_one_pass_raises_nothing
+    self.assertEqual(self.step(manager, output + "Overwrite existing config? [y/N] y\n"), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:permission-required:prompt-aff4a1[57 chars]6-1'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:permission-required:prompt-aff4a153de020bd4cf0128062bce9141fa524f4b56c8ef147d51af6d611a41d6-1'
+
+- ['host:1:permission-required:prompt-aff4a153de020bd4cf0128062bce9141fa524f4b56c8ef147d51af6d611a41d6-1']
++ []
+
+======================================================================
+FAIL: test_dialog_and_deadline_are_two_incidents (__main__.SilentPromptTest.test_dialog_and_deadline_are_two_incidents)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3305, in test_dialog_and_deadline_are_two_incidents
+    self.assertEqual(self.watch(host, manager, now=1059.0, deadline=60), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:permission-required:prompt-7d9451[57 chars]3-1'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:permission-required:prompt-7d94515e70c2994a231d611d9a75feb4b34c8c89d290da292dc115ae5ac52ff3-1'
+
+- ['host:1:permission-required:prompt-7d94515e70c2994a231d611d9a75feb4b34c8c89d290da292dc115ae5ac52ff3-1']
++ []
+
+======================================================================
+FAIL: test_one_clean_pass_does_not_close_the_episode (__main__.SilentPromptTest.test_one_clean_pass_does_not_close_the_episode)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3260, in test_one_clean_pass_does_not_close_the_episode
+    self.assertEqual(self.step(manager, screen), expected, f"pass {number}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:permission-required:prompt-a676f3[57 chars]1-1'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1'
+
+- ['host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1']
++ [] : pass 0
+
+======================================================================
+FAIL: test_one_dialog_is_one_incident_across_100_repainted_passes (__main__.SilentPromptTest.test_one_dialog_is_one_incident_across_100_repainted_passes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3230, in test_one_dialog_is_one_incident_across_100_repainted_passes
+    self.assertEqual(self.step(manager, self.BLOCKED), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:permission-required:prompt-a676f3[57 chars]1-1'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1'
+
+- ['host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1']
++ []
+
+======================================================================
+FAIL: test_the_episode_and_its_incident_commit_together (__main__.SilentPromptTest.test_the_episode_and_its_incident_commit_together) (crash_writing='incidents')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3372, in test_the_episode_and_its_incident_commit_together
+    self.assertEqual(self.step(manager, self.BLOCKED), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:permission-required:prompt-a676f3[57 chars]1-1'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1'
+
+- ['host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1']
++ []
+
+======================================================================
+FAIL: test_the_episode_and_its_incident_commit_together (__main__.SilentPromptTest.test_the_episode_and_its_incident_commit_together) (crash_writing='dialog_watch')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3372, in test_the_episode_and_its_incident_commit_together
+    self.assertEqual(self.step(manager, self.BLOCKED), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:permission-required:prompt-a676f3[57 chars]1-1'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1'
+
+- ['host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1']
++ []
+
+======================================================================
+FAIL: test_the_same_dialog_after_two_clean_passes_is_a_new_episode_across_host_restarts (__main__.SilentPromptTest.test_the_same_dialog_after_two_clean_passes_is_a_new_episode_across_host_restarts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3247, in test_the_same_dialog_after_two_clean_passes_is_a_new_episode_across_host_restarts
+    self.assertEqual(self.step(manager, screen), expected, f"pass {number}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:permission-required:prompt-a676f3[57 chars]1-1'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1'
+
+- ['host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1']
++ [] : pass 0
+
+======================================================================
+FAIL: test_unreadable_unbound_or_released_panes_are_neither_dialog_nor_clean (__main__.SilentPromptTest.test_unreadable_unbound_or_released_panes_are_neither_dialog_nor_clean)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3331, in test_unreadable_unbound_or_released_panes_are_neither_dialog_nor_clean
+    self.assertEqual(self.step(manager, self.BLOCKED), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:permission-required:prompt-a676f3[57 chars]1-1'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1'
+
+- ['host:1:permission-required:prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1']
++ []
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.847s
+
+FAILED (failures=11)
+rc=1

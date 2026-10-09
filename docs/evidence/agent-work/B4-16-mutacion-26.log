@@ -1,0 +1,37 @@
+..........F.........
+======================================================================
+FAIL: test_idle_passes_stop_writing_once_the_episode_is_closed (__main__.SilentPromptTest.test_idle_passes_stop_writing_once_the_episode_is_closed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3426, in test_idle_passes_stop_writing_once_the_episode_is_closed
+    save.assert_not_called()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/mock.py", line 947, in assert_not_called
+    raise AssertionError(msg)
+AssertionError: Expected 'save_dialog_state' to not have been called. Called 20 times.
+Calls: [call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3}),
+ call('8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571', {'open_identity': None, 'episode': 1, 'candidate': None, 'seen': 0, 'clean': 3})].
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.805s
+
+FAILED (failures=1)
+rc=1

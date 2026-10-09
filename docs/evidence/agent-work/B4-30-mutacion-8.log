@@ -1,0 +1,15 @@
+F
+======================================================================
+FAIL: test_verdict_out_of_the_tail_and_a_crash_still_give_one_accepted_correction (__main__.ReviewTailRestartE2E.test_verdict_out_of_the_tail_and_a_crash_still_give_one_accepted_correction)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_review_correction_restart_e2e.py", line 135, in test_verdict_out_of_the_tail_and_a_crash_still_give_one_accepted_correction
+    self.assertTrue(rows, f"the requester never resolved; provider: {second.provider_requests()}")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: None is not true : the requester never resolved; provider: [{'at': 1791436391462, 'method': 'POST', 'path': '/v1/responses', 'wakeTasks': ['1ec75822-717f-4f4c-ac17-cb95c9fc6514'], 'toolNames': ['apply_patch', 'edit', 'exec', 'ls', 'process', 'read', 'sessions_yield', 'tool_call', 'tool_describe', 'tool_search', 'write'], 'answered': 'managed_tasks_inspect', 'incidentWakes': [], 'startedDeliveries': [{'sessionKey': 'agent:main:encargos-loop', 'contextKey': 'task:1ec75822-717f-4f4c-ac17-cb95c9fc6514', 'enqueuedAt': 1791436381692}]}, {'at': 1791436391496, 'method': 'POST', 'path': '/v1/responses', 'wakeTasks': ['1ec75822-717f-4f4c-ac17-cb95c9fc6514'], 'toolNames': ['apply_patch', 'edit', 'exec', 'ls', 'process', 'read', 'sessions_yield', 'tool_call', 'tool_describe', 'tool_search', 'write'], 'answered': 'message', 'incidentWakes': [], 'startedDeliveries': [{'sessionKey': 'agent:main:encargos-loop', 'contextKey': 'task:1ec75822-717f-4f4c-ac17-cb95c9fc6514', 'enqueuedAt': 1791436381692}]}]
+
+----------------------------------------------------------------------
+Ran 1 test in 122.899s
+
+FAILED (failures=1)
+rc=1

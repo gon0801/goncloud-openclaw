@@ -1,0 +1,17 @@
+.....F..
+======================================================================
+FAIL: test_an_out_of_block_row_names_a_task_whose_plan_section_holds_it (__main__.AcceptanceGuardsTest.test_an_out_of_block_row_names_a_task_whose_plan_section_holds_it)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 182, in test_an_out_of_block_row_names_a_task_whose_plan_section_holds_it
+    self.assertEqual(out_of_block_problem("T11", "mide 30 minutos sin novedades"),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     "T11 does not hold 'mide 30 minutos sin novedades'")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: None != "T11 does not hold 'mide 30 minutos sin novedades'"
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.007s
+
+FAILED (failures=1)
+rc=1

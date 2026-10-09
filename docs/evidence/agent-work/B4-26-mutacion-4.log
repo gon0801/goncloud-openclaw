@@ -1,0 +1,24 @@
+....F.........
+======================================================================
+FAIL: test_every_live_cron_is_classified (__main__.AgentsRouting.test_every_live_cron_is_classified) (cron='packing-extras-7h')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 213, in test_every_live_cron_is_classified
+    self.assertEqual(row["schedule"], job["schedule"])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'kin[16 chars]r': '0 8 * * 1-5', 'tz': 'America/Mexico_City', 'staggerMs': 0} != {'kin[16 chars]r': '0 7 * * 1-5', 'tz': 'America/Mexico_City', 'staggerMs': 0}
+- {'expr': '0 8 * * 1-5',
+?             ^
+
++ {'expr': '0 7 * * 1-5',
+?             ^
+
+   'kind': 'cron',
+   'staggerMs': 0,
+   'tz': 'America/Mexico_City'}
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.074s
+
+FAILED (failures=1)
+rc=1

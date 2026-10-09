@@ -1,0 +1,34 @@
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+CLI_SILENT_FAILURE_E2E cause=transport-unavailable incident=host:1:transport-unavailable:session-closed detections=1 incident_rpcs=1 wake_requests=1 wake_latency_s=6.22 passes=10 idle_passes_after_wake=5 session=agent:main:encargos-loop deadline_s=6.0
+.{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+CLI_SILENT_FAILURE_E2E cause=deadline-missed incident=host:1:deadline-missed:deadline detections=1 incident_rpcs=1 wake_requests=1 wake_latency_s=0.37 passes=12 idle_passes_after_wake=5 session=agent:main:encargos-loop deadline_s=6.0
+.{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+CLI_SILENT_FAILURE_E2E cause=invalid-result incident=host:1:invalid-result:invalid-result detections=1 incident_rpcs=1 wake_requests=1 wake_latency_s=0.37 passes=7 idle_passes_after_wake=6 session=agent:main:encargos-loop deadline_s=6.0
+.{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+F
+======================================================================
+FAIL: test_permission_dialog (__main__.CliSilentFailureE2E.test_permission_dialog)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 241, in test_permission_dialog
+    self.silent_case("permission-required", {"promptIdentity": PROCEED_ID + "-1"}, deadline=None)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 208, in silent_case
+    self.assertEqual(late, [], f"a pass {later}s later raised {late}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:permission-required:prompt-7d9451[57 chars]3-4'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:permission-required:prompt-7d94515e70c2994a231d611d9a75feb4b34c8c89d290da292dc115ae5ac52ff3-4'
+
+- ['host:1:permission-required:prompt-7d94515e70c2994a231d611d9a75feb4b34c8c89d290da292dc115ae5ac52ff3-4']
++ [] : a pass 3600s later raised ['host:1:permission-required:prompt-7d94515e70c2994a231d611d9a75feb4b34c8c89d290da292dc115ae5ac52ff3-4']
+
+----------------------------------------------------------------------
+Ran 4 tests in 115.787s
+
+FAILED (failures=1)
+rc=1

@@ -1,0 +1,15 @@
+..........F........
+======================================================================
+FAIL: test_without_a_deadline_it_waits_and_an_unreadable_inbox_is_not_a_missing_acceptance (__main__.DeliveryAcceptanceTest.test_without_a_deadline_it_waits_and_an_unreadable_inbox_is_not_a_missing_acceptance) [acceptance unreadable]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3650, in test_without_a_deadline_it_waits_and_an_unreadable_inbox_is_not_a_missing_acceptance
+    with self.assertRaises(OSError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^
+AssertionError: OSError not raised
+
+----------------------------------------------------------------------
+Ran 19 tests in 0.572s
+
+FAILED (failures=1)
+rc=1

@@ -1,0 +1,18 @@
+....F.........
+======================================================================
+FAIL: test_every_live_cron_is_classified (__main__.AgentsRouting.test_every_live_cron_is_classified) (cron='packing-extras-11h')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 214, in test_every_live_cron_is_classified
+    self.assertEqual(row["messageSha256"], job["messageSha256"])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '0000000000000000000000000000000000000000000000000000000000000000' != 'c3ac34d81bcb8c2f1a3e39a1967b2e777c4738f23d8a550668d72a83d8a36d65'
+- 0000000000000000000000000000000000000000000000000000000000000000
++ c3ac34d81bcb8c2f1a3e39a1967b2e777c4738f23d8a550668d72a83d8a36d65
+
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.076s
+
+FAILED (failures=1)
+rc=1

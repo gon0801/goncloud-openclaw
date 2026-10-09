@@ -1,0 +1,29 @@
+$ bash scripts/agent-work/test-runtime.sh budget_tree
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "978355503c44313536ab4cd03a6bfb7a5423404b"}
+[vitest-workers] local cache hit after 1834ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared cbaa21d39653 in 1864ms (16698 inputs, 17251 outputs)
+[test] starting test/vitest/vitest.infra.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+ ↓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > rejects invented admission reservations and preserves the root reservation on restart
+ ↓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > rejects incomplete runtime budget and context shapes before provider dispatch
+ ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > holds uncertain call capacity across retries and restart 840ms
+ ↓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > counts context components once, includes cached input, and rejects missing output enforcement
+ ↓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > reserves before provider dispatch and retains an uncertain stream after failure
+ ↓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > retains full reservation when terminal provider usage is absent
+ ↓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > rejects a cancelled managed run before provider invocation
+ ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > allows one automatic recovery call per root across restart and blocks the next before invoke 773ms
+ ✓ |infra| src/agents/tasks/managed-task.budget.test.ts > managed budget_tree and budget_context > shares model-call capacity across children after the parent turn ends and after restart 203ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed | 6 skipped (9)
+   Start at  02:07:14
+   Duration  3.69s (tests 52%, transform 29%, import 13%, setup 5%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 6.84s
+
+rc=0 seconds=7.2

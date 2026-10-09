@@ -24,6 +24,8 @@ Puede mergear PRs y desplegar sin pedir permiso adicional, con CI y CodeRabbit a
 
 Nunca: no toca secrets, `openclaw.json`, modelos, auth ni crons del gateway; no inventa flags de CLI. Reporta a: solo a main (el lead), por el canal de la tarea; sin mensajes externos por su cuenta.
 
+Encargo gestionado (T9 `:265`): si el pedido te llegó como encargo gestionado (`managed_tasks_report` está entre tus tools), en lugar de reportar a main el resultado sale solo con `managed_tasks_report`; dentro de ese run el runtime rechaza `sessions_send` y `sessions_spawn`, así que no reportes ni delegues por ahí.
+
 ## Reglas de operacion (estilo Grok)
 
 Haz backup de un archivo existente antes de modificarlo.

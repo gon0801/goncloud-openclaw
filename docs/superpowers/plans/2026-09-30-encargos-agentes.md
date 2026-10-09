@@ -202,7 +202,7 @@ Consume `inspect`, admisión y recibos. Produce recuperación determinista por i
 - [x] Añade `recovery_limit`: un fallo elegible permite una recuperación automática adicional por raíz; el siguiente conserva bloqueo sin otra llamada.
 - [x] Añade `waiting_reason`: distingue cola ocupada, transporte caído, resultado inválido y admisión incierta en hasta 120 segundos.
 - [x] Ejecuta las pruebas en rojo.
-- [ ] Implementa la recuperación sobre la cola nativa y sus eventos de capacidad. No abras supervisores ni scouts de lectura.
+- [x] Implementa la recuperación sobre la cola nativa y sus eventos de capacidad. No abras supervisores ni scouts de lectura.
 - [x] Comprueba el contador externo del proveedor y la ausencia de rutas de recuperación que lo evadan.
 
 Verifica con `idle_72h`, `recovery_limit`, `waiting_reason` y `recovery_queue`. Cierra B2 con la batería nativa del SHA final.
@@ -242,13 +242,13 @@ Depende de B1–B3. Crea `G/scripts/agent-work/progress_bridge.py`, `scripts/mac
 
 Produce `transferProjection(pending)` con confirmación por ID y contenido, y `applyTaskResult(record, result)` para el director. Conserva las decisiones de negocio en el reconciliador existente.
 
-- [ ] Añade `projection_crash`: cae después del ACK de resultado y antes de encolar progreso. Reconstruye el mismo evento desde `ProjectionPending`.
-- [ ] Añade pérdida del ACK de transferencia y tablero caído. Exige evidencia retenida, cola convergente y ninguna revisión repetida.
-- [ ] Añade `director_handling`: persiste decisión antes de `resolve`; perder su respuesta conserva la misma corrección. Dos consumidores no generan dos efectos.
-- [ ] Ejecuta los casos en rojo.
-- [ ] Implementa los puentes usando los IDs del contrato de progreso existente. No guardes otra bandera autoritativa de consumo en `corrida`.
-- [ ] Integra las transiciones definidas de revisión: `Changes` prepara el delta de corrección; `Approved` conduce a la compuerta vigente. Un caso que requiere juicio vuelve al solicitante registrado.
-- [ ] Si el director U3b aún no está implementado, añade solo esas transiciones al reconciliador existente y sus contratos. No construyas otra máquina de estados ni incorpores su antigua política de rondas.
+- [x] Añade `projection_crash`: cae después del ACK de resultado y antes de encolar progreso. Reconstruye el mismo evento desde `ProjectionPending`.
+- [x] Añade pérdida del ACK de transferencia y tablero caído. Exige evidencia retenida, cola convergente y ninguna revisión repetida.
+- [x] Añade `director_handling`: persiste decisión antes de `resolve`; perder su respuesta conserva la misma corrección. Dos consumidores no generan dos efectos.
+- [x] Ejecuta los casos en rojo.
+- [x] Implementa los puentes usando los IDs del contrato de progreso existente. No guardes otra bandera autoritativa de consumo en `corrida`.
+- [x] Integra las transiciones definidas de revisión: `Changes` prepara el delta de corrección; `Approved` conduce a la compuerta vigente. Un caso que requiere juicio vuelve al solicitante registrado.
+- [x] Si el director U3b aún no está implementado, añade solo esas transiciones al reconciliador existente y sus contratos. No construyas otra máquina de estados ni incorpores su antigua política de rondas.
 
 Verifica `projection_crash` y `director_handling` con `test-agent-work-integration.sh`. Corre `bash scripts/tests/test-progress-events-client.sh` y `bash scripts/tests/test-corrida-reconcile.sh` para los límites modificados.
 
@@ -258,16 +258,16 @@ Depende de T8. Modifica las entradas nativas identificadas en T0, `scripts/mac/c
 
 Consume las cinco operaciones del diseño. Produce un único camino gestionado por encargo, con identidad y presupuesto heredados.
 
-- [ ] Añade `agents_routing`: ingeniería solicita a adversary, operaciones solicita a ingeniería y un agente solicita a un CLI remoto. Incluye un agente registrado que no se llame `main`.
+- [x] Añade `agents_routing`: ingeniería solicita a adversary, operaciones solicita a ingeniería y un agente solicita a un CLI remoto. Incluye un agente registrado que no se llame `main`.
 - [x] Añade `delegation_bypass`: una ruta gestionada intenta enviar o crear un hijo sin contrato. Exige rechazo sin eludir la política de permisos.
 - [x] Añade `hook_is_observation`: Stop o quietud sin informe no despierta un modelo.
-- [ ] Ejecuta los casos en rojo.
-- [ ] Migra cada entrada del inventario y actualiza sus instrucciones en el mismo cambio. Los cron de negocio conservan horarios y función.
-- [ ] Conserva las rutas anteriores fuera del perímetro gestionado hasta su adopción explícita. Dentro del perímetro, impide que un reparador recree el vigía antiguo.
-- [ ] Añade `main_cli_loop`: `main` solicita a un CLI en una sesión adoptada de `mac-local`, como en los loops de claw. El encargo sale de una sesión durable de `main`, nunca de un turno `isolated` de cron. El CLI entrega `agent-work.result.v1` por referencia en lugar de los archivos `LISTO`/`VEREDICTO`, y el informe despierta solo a la sesión que hizo `submit`. Mientras el CLI trabaja, cero solicitudes al proveedor. Registra la ruta en `coverage.json` y `routing.py` y actualiza `agent-dispatch` de `main`. La sesión adoptada se retira sin matar procesos, como `UserAdopted`; sin prueba, la ruta queda deshabilitada y su vigía se conserva.
-- [ ] Añade `cli_silent_failure`: el CLI de esa ruta cierra su sesión sin informe, abre un diálogo de permiso, vence su plazo o entrega un informe inválido. Cada caso produce una sola incidencia durable con causa (`PermissionRequired`, `DeadlineMissed`, `TransportUnavailable` o resultado inválido) que despierta una vez a la sesión solicitante. Ningún caso abre turnos periódicos de modelo.
-- [ ] Añade `cli_delivery_acceptance`: el host da por entregado un encargo a un CLI solo cuando el propio CLI escribe una aceptación ligada a ese encargo; teclear la referencia o verla en pantalla no cuenta. Sin aceptación en el plazo del encargo, la entrega queda `uncertain` con incidencia `TransportUnavailable` para el solicitante y no se vuelve a teclear a ciegas. Incluye una sugerencia fantasma en el composer y una sesión ocupada que no tomó la entrada.
-- [ ] Inventaría en `coverage.json` los despertares con modelo de cada entrada: cron `*-vigia`, `corrida/latido.sh` con `vigia=claw` y avisos a `agent:main:vigia-mac`. Guarda ID, cadencia y recreadores, incluidos el `PROMPT.md` y `arranque.txt` de cada loop y la plantilla `~/.claude/skills/prompt-claw/SKILL.md`, que crea un `<loop>-vigia` por loop.
+- [x] Ejecuta los casos en rojo.
+- [x] Migra cada entrada del inventario y actualiza sus instrucciones en el mismo cambio. Los cron de negocio conservan horarios y función.
+- [x] Conserva las rutas anteriores fuera del perímetro gestionado hasta su adopción explícita. Dentro del perímetro, impide que un reparador recree el vigía antiguo.
+- [x] Añade `main_cli_loop`: `main` solicita a un CLI en una sesión adoptada de `mac-local`, como en los loops de claw. El encargo sale de una sesión durable de `main`, nunca de un turno `isolated` de cron. El CLI entrega `agent-work.result.v1` por referencia en lugar de los archivos `LISTO`/`VEREDICTO`, y el informe despierta solo a la sesión que hizo `submit`. Mientras el CLI trabaja, cero solicitudes al proveedor. Registra la ruta en `coverage.json` y `routing.py` y actualiza `agent-dispatch` de `main`. La sesión adoptada se retira sin matar procesos, como `UserAdopted`; sin prueba, la ruta queda deshabilitada y su vigía se conserva.
+- [x] Añade `cli_silent_failure`: el CLI de esa ruta cierra su sesión sin informe, abre un diálogo de permiso, vence su plazo o entrega un informe inválido. Cada caso produce una sola incidencia durable con causa (`PermissionRequired`, `DeadlineMissed`, `TransportUnavailable` o resultado inválido) que despierta una vez a la sesión solicitante. Ningún caso abre turnos periódicos de modelo.
+- [x] Añade `cli_delivery_acceptance`: el host da por entregado un encargo a un CLI solo cuando el propio CLI escribe una aceptación ligada a ese encargo; teclear la referencia o verla en pantalla no cuenta. Sin aceptación en el plazo del encargo, la entrega queda `uncertain` con incidencia `TransportUnavailable` para el solicitante y no se vuelve a teclear a ciegas. Incluye una sugerencia fantasma en el composer y una sesión ocupada que no tomó la entrada.
+- [x] Inventaría en `coverage.json` los despertares con modelo de cada entrada: cron `*-vigia`, `corrida/latido.sh` con `vigia=claw` y avisos a `agent:main:vigia-mac`. Guarda ID, cadencia y recreadores, incluidos el `PROMPT.md` y `arranque.txt` de cada loop y la plantilla `~/.claude/skills/prompt-claw/SKILL.md`, que crea un `<loop>-vigia` por loop.
 
 Verifica con `test-agent-work-integration.sh agents_routing`, `delegation_bypass`, `hook_is_observation`, `main_cli_loop`, `cli_silent_failure` y `cli_delivery_acceptance`. Reutiliza `test-agent-dispatch-spawn.sh` y `test-corrida-avisos.sh` para sus contratos modificados. No declares cobertura total mientras quede una fila gestionada sin prueba.
 
@@ -275,14 +275,14 @@ Verifica con `test-agent-work-integration.sh agents_routing`, `delegation_bypass
 
 Depende de T9. Crea `G/scripts/tests/test-agent-work-e2e.sh`, `docs/evidence/agent-work/acceptance.md` y `followups.md`. Conecta las nuevas pruebas al runner de su repositorio sin excluir pruebas existentes.
 
-- [ ] Añade `review_tail_restart`: el revisor entrega, la respuesta sale de las últimas 80 líneas y el solicitante reinicia. Exige una corrección registrada y aceptada sin recordatorio humano.
+- [x] Añade `review_tail_restart`: el revisor entrega, la respuesta sale de las últimas 80 líneas y el solicitante reinicia. Exige una corrección registrada y aceptada sin recordatorio humano.
 - [x] Añade `delivery_latency` con reloj controlado: desde la escritura durable del informe hasta su detección, hasta 5 segundos; desde la detección hasta el recibo durable, hasta otros 5 segundos. Simula hosts despiertos y red sana; guarda ambas mediciones por separado.
-- [ ] Añade las fronteras de caída de la especificación con un contador externo de procesos y peticiones. Comprueba los resultados de dominio, no solo filas de la base.
-- [ ] Ejecuta los casos en rojo antes de corregir cualquier fallo de integración.
-- [ ] Completa la matriz de aceptación enlazando cada caso con su prueba y el par de SHA de `G` y `R`.
-- [ ] Ejecuta las pruebas focalizadas y resuelve los hallazgos del bloque.
+- [x] Añade las fronteras de caída de la especificación con un contador externo de procesos y peticiones. Comprueba los resultados de dominio, no solo filas de la base.
+- [x] Ejecuta los casos en rojo antes de corregir cualquier fallo de integración.
+- [x] Completa la matriz de aceptación enlazando cada caso con su prueba y el par de SHA de `G` y `R`.
+- [x] Ejecuta las pruebas focalizadas y resuelve los hallazgos del bloque.
 - [ ] Construye el artefacto nativo con integridad registrada. Ejecuta una sola vez las baterías completas del bloque en los jobs correspondientes.
-- [ ] Prepara los PR con las dependencias exactas, evidencia y limitaciones de adaptadores. Conserva deshabilitada la admisión productiva.
+- [x] Prepara los PR con las dependencias exactas, evidencia y limitaciones de adaptadores. Conserva deshabilitada la admisión productiva.
 
 Verifica con `bash scripts/tests/test-agent-work-e2e.sh review_tail_restart` y `acceptance`. La aceptación exige también `delivery_latency`, `idle_72h`, `resource_100_cycles` y los cien reenvíos, con evidencia reutilizada del mismo SHA cuando sea válida.
 

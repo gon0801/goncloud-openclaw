@@ -1,0 +1,22 @@
+ FAIL  |agents-embedded-agent-run| src/agents/embedded-agent-runner/run/attempt-recovery.test.ts > recoverEmbeddedRunAttempt > gates the transport-diagnostic retry path too when the managed mark is present
+AssertionError: expected { action: 'retry', …(4) } to deeply equal { action: 'proceed' }
+
+- Expected
++ Received
+
+  {
+-   "action": "proceed",
++   "action": "retry",
++   "authRetryPending": false,
++   "codexAppServerRecoveryRetries": 0,
++   "lastRetryFailoverReason": "timeout",
++   "thinkLevel": "off",
+  }
+
+ ❯ src/agents/embedded-agent-runner/run/attempt-recovery.test.ts:1027:27
+    1025|       ],
+    1026|     });
+    1027|     expect(both.recovery).toEqual({ action: "proceed" });
+       |                           ^
+    1028|     expect(
+    1029|       both.onAgentEvent.mock.calls.filter(([event]) => event?.data?.ph…

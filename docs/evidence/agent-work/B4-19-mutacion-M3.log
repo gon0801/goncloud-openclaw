@@ -1,0 +1,40 @@
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 1, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 1, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 1, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 1, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 1, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 1, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 1, "incidents": 0, "reported": 0, "transferred": 0}
+F
+======================================================================
+FAIL: test_phantom_suggestion_in_the_composer (__main__.CliDeliveryAcceptanceE2E.test_phantom_suggestion_in_the_composer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_delivery_acceptance_e2e.py", line 281, in test_phantom_suggestion_in_the_composer
+    observed, screen = self.unaccepted_case("phantom")
+                       ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_delivery_acceptance_e2e.py", line 222, in unaccepted_case
+    self.assertEqual(typed, [observed.assignment_ref],
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     f"the reference was typed {len(typed)} times; claims={claims}")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['/va[169 chars]json', '/var/folders/hp/sc_3c6qs7nvdswl_x3w5sd[2475 chars]son'] != ['/va[169 chars]json']
+
+First list contains 14 additional elements.
+First extra element 1:
+'/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/agent-work-cli-delivery-x7ppc7h9/phantom/host/assignments/a47f5d12a8667b811e9775a3b5cbcdafc5bb12815ef7cdcddfd10c4881fb17ac.json'
+
+Diff is 3296 characters long. Set self.maxDiff to None to see it. : the reference was typed 15 times; claims=['typed', 'typed', 'typed', 'typed', 'typed', 'typed', 'typed', 'typed', 'typed', 'typed', 'typed', 'typed', 'typed', 'typed', 'typed']
+
+----------------------------------------------------------------------
+Ran 1 test in 93.037s
+
+FAILED (failures=1)
+rc=1

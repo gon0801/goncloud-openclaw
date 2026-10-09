@@ -1,0 +1,11 @@
+$ bash scripts/tests/test-agent-work-host.sh resource_100_cycles
+test_resource_100_cycles_no_orphans_or_pool_leaks (__main__.ResourceTests.test_resource_100_cycles_no_orphans_or_pool_leaks) ... ok
+test_resource_100_cycles_real_account_absence_verified (__main__.ResourceTests.test_resource_100_cycles_real_account_absence_verified) ... ok
+test_resource_100_cycles_real_tmux_processes_leave_no_own_processes (__main__.ResourceTests.test_resource_100_cycles_real_tmux_processes_leave_no_own_processes) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 28.216s
+
+OK
+
+rc=0 seconds=28.3

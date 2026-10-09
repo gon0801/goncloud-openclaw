@@ -1,0 +1,50 @@
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: el consolidador no respondio (cron list ilegible): el control de silencio se salta este tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: progreso pendiente; se reintentará en el próximo tick
+latido: progreso pendiente; se reintentará en el próximo tick
+FAIL: perimetro: el vigia se desperto por una gestionada muerta, callada o en dialogo: OPENCLAW system event --mode now --timeout 15000 --session-key agent:main:sim9-per-gest2 --text corrida per-gest2 | accion: relanzar|sesion de carril muerta: relanzar una vez con el mismo encargo; a la segunda, declarar atorado (loop 12) ; relanzar|carril callado 30 min o mas sin terminar: relanzar una vez con el mismo encargo; a la segunda, declarar atorado (loop 12) ; contestar|dialogo esperando: contestar con la tabla de preaprobaciones; lo que no este en la tabla, rechazar y declarar (loop 12) | parte: [NECESITO TU RESPUESTA] Corrida, 2 de 5 partes terminadas / Que cambio: un carril lleva 11 minutos esperando una decision tuya / Que sigue: ninguna sesion esta trabajando; quedan 4 horas y 49 minutos de ventana de trabajo (en pausa por la espera); GitHub: sin verificar / Que necesito de ti: un carril espera desde hace 11 minutos tu decision: con tu si sigue solo, con tu no se detiene ahi | estado: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.ObL9ZDmw2Q/corridas/per-gest2
+rc=1

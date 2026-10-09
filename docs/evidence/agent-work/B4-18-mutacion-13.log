@@ -1,0 +1,22 @@
+...F...............
+======================================================================
+FAIL: test_a_valid_result_without_acceptance_counts_and_an_invalid_one_does_not (__main__.DeliveryAcceptanceTest.test_a_valid_result_without_acceptance_counts_and_an_invalid_one_does_not)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3635, in test_a_valid_result_without_acceptance_counts_and_an_invalid_one_does_not
+    self.assertEqual(host.settle_deliveries("host-one", now=1060.0, deadline_seconds=60), [self.UNACCEPTED_KEY])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['host:1:transport-unavailable:delivery-unaccepted']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:delivery-unaccepted'
+
+- []
++ ['host:1:transport-unavailable:delivery-unaccepted']
+
+----------------------------------------------------------------------
+Ran 19 tests in 0.566s
+
+FAILED (failures=1)
+rc=1

@@ -91,6 +91,27 @@ chmod +x "$T/bin/tmux-falso" "$T/bin/gh-falso" "$T/bin/openclaw"
 export TMUX_BIN="$T/bin/tmux-falso" GH_BIN="$T/bin/gh-falso" OPENCLAW_BIN="$T/bin/openclaw"
 export GH_LOG="$T/gh.log"
 LLAMADAS="$T/llamadas.log"; export LLAMADAS
+# B4-28: un HOME senuelo con su propio progress-events.py. Si un tick corriera el
+# progress-events del HOME de quien lanza la prueba, aqui quedaria anotado.
+SENUELO="$T/senuelo"; mkdir -p "$SENUELO/bin"
+cat >"$SENUELO/bin/progress-events.py" <<STUB
+#!/bin/sh
+printf '%s\n' "\$*" >> "$SENUELO/tocado.log"
+exit 0
+STUB
+chmod +x "$SENUELO/bin/progress-events.py"
+senuelo_intacto() { # $1 caso
+  [ ! -e "$SENUELO/tocado.log" ] \
+    || fail "$1 el latido de la prueba corrio el progress-events del HOME de quien la lanza: $(tr '\n' ' ' <"$SENUELO/tocado.log")"
+}
+# Todo tick de la prueba publica con un progress-events de mentira que anota en $T.
+cat >"$T/bin/progress-events-falso" <<'STUB'
+#!/bin/sh
+printf '%s\n' "$*" >> "$PROGRESS_EVENTS_LOG"
+exit 0
+STUB
+chmod +x "$T/bin/progress-events-falso"
+export PROGRESS_EVENTS_BIN="$T/bin/progress-events-falso" PROGRESS_EVENTS_LOG="$T/progress-events.log"
 
 montar_corrida() { # $1 id, $2 escenario base; registra sesiones y paneles del fixture
   mkdir -p "$CORRIDA_STATE/$1"
@@ -188,19 +209,13 @@ printf 'no soy json\n' >"$CORRIDA_STATE/basura/registro.json"
 montar_corrida lat-cerrada cerrada
 sed -i.bak 's/"m-cerrada"/"lat-cerrada"/' "$CORRIDA_STATE/lat-cerrada/registro.json" && rm -f "$CORRIDA_STATE/lat-cerrada/registro.json.bak"
 : > "$LLAMADAS"
-tick "$T0" || fail "el latido fallo sin corridas abiertas"
+HOME="$SENUELO" tick "$T0" || fail "el latido fallo sin corridas abiertas"
+senuelo_intacto "(1)"
 [ "$(msgs)" = "0" ] || fail "sin corridas abiertas salieron $(msgs) llamadas"
 [ "$(evts)" = "0" ] || fail "sin corridas abiertas desperto al vigia"
-cat >"$T/bin/progress-events-falso" <<'STUB'
-#!/bin/sh
-printf '%s\n' "$*" >> "$PROGRESS_EVENTS_LOG"
-exit 0
-STUB
-chmod +x "$T/bin/progress-events-falso"
-export PROGRESS_EVENTS_BIN="$T/bin/progress-events-falso" PROGRESS_EVENTS_LOG="$T/progress-events.log"
+: > "$PROGRESS_EVENTS_LOG"
 tick "$T0" || fail "el latido fallo al reintentar progreso pendiente"
 grep -qx 'publish-all' "$PROGRESS_EVENTS_LOG" || fail "el latido no reintento el outbox de progreso sin otro cambio"
-unset PROGRESS_EVENTS_BIN PROGRESS_EVENTS_LOG
 [ ! -e "$CORRIDA_STATE/basura/latido.json" ] || fail "el latido le hablo a un dir sin registro valido"
 
 # (2) primer tick: un AVANZA acumulado (sin mandar); dos ticks seguidos no duplican.
@@ -664,5 +679,172 @@ tick "$TQ" >/dev/null 2>&1 || fail "detenida: el tick revinto"
 grep "message send" "$LLAMADAS" | tail -1 | grep -q "\[DETENIDA\]" \
   || fail "detenida: el aviso de silencio no lleva la etiqueta del parte: $(grep "message send" "$LLAMADAS" | tail -1)"
 unset SCRATCH_FILE
+
+# (17) T9 :266, perimetro: el vigia de la corrida no atiende las sesiones
+# gestionadas (entrada del registro con encargo_ref y host_id: las vigila su host,
+# que manda la incidencia al solicitante) y conserva su ruta para las que no lo
+# son. Un encargo plano (--encargo) no es gestion.
+gestionar() { # $1 corrida, $2 sesion, $3 1=gestionada (encargo_ref y host_id, como
+              # lanzar-sesion --encargo-ref --host-id) 0=solo encargo plano (--encargo)
+  GREG="$CORRIDA_STATE/$1/registro.json" GSES="$2" GGES="$3" python3 -c "
+import json,os
+p=os.environ['GREG']; d=json.load(open(p))
+for s in d['sesiones']:
+  if s['nombre']==os.environ['GSES']:
+    if os.environ['GGES']=='1':
+      s['encargo_ref']='/host/inbox/'+s['nombre']+'.json'; s['host_id']='mac-local'
+    else:
+      s['encargo']='/tmp/brief-'+s['nombre']+'.md'
+json.dump(d,open(p,'w'),indent=1)" || fail "perimetro: no se pudo editar el registro de $1"
+}
+ultimo_evento() { grep "system event" "$LLAMADAS" | tail -1; }
+# (17a) la ruta anterior se conserva: un carril con encargo plano muere y el vigia
+# despierta con relanzar.
+LLAMADAS="$T/l21.log"; export LLAMADAS; : > "$LLAMADAS"
+solo_dejar per-leg
+montar_corrida per-leg avanza
+gestionar per-leg m-a 0
+rm -f "$PANEL_DIR/m-a.txt"
+watch_a m-lead "$((T0 - 120))"; watch_a m-b "$((T0 - 120))"
+tick "$T0" >/dev/null 2>&1 || fail "perimetro: el tick de la ruta anterior revento"
+[ "$(evts)" = "1" ] \
+  || fail "perimetro: la ruta anterior perdio su vigia: un carril no gestionado murio y nadie desperto (evts=$(evts))"
+ultimo_evento | grep -qF "relanzar|" || fail "perimetro: el vigia de la ruta anterior no trae relanzar: $(ultimo_evento)"
+# (17b) dentro del perimetro: el carril gestionado termina (LISTO sin recoger) y
+# el resto trabaja: nadie despierta al vigia, ni queda evento-vigia.
+LLAMADAS="$T/l22.log"; export LLAMADAS; : > "$LLAMADAS"
+solo_dejar per-gest
+montar_corrida per-gest avanza
+gestionar per-gest m-a 1
+printf 'carril A terminando\nLISTO abc1234\n' > "$PANEL_DIR/m-a.txt"
+for s in m-lead m-a m-b; do watch_a "$s" "$((T0 + 600 - 120))"; done
+tick "$((T0 + 600))" >/dev/null 2>&1 || fail "perimetro: el tick con la sesion gestionada revento"
+[ "$(evts)" = "0" ] || fail "perimetro: el vigia se desperto por una sesion gestionada: $(ultimo_evento)"
+# El parte a David sigue contando la sesion gestionada.
+CORR_AHORA="$((T0 + 600))" bash "$CORR" estado per-gest 2>/dev/null | grep -qF "un carril termino su parte y aun no se recoge" \
+  || fail "perimetro: el parte a David dejo de contar la sesion gestionada"
+# (17c) en la misma corrida muere un carril no gestionado: el vigia despierta solo
+# por el (relanzar), sin la accion del LISTO gestionado (recoger).
+rm -f "$PANEL_DIR/m-b.txt"
+tick "$((T0 + 900))" >/dev/null 2>&1 || fail "perimetro: el tick del carril no gestionado revento"
+[ "$(evts)" = "1" ] \
+  || fail "perimetro: un carril no gestionado de una corrida con gestionadas no desperto al vigia (evts=$(evts))"
+ultimo_evento | grep -qF "relanzar|" || fail "perimetro: el vigia no trae relanzar del carril no gestionado: $(ultimo_evento)"
+ultimo_evento | grep -qF "recoger|" && fail "perimetro: el vigia recibio la accion de la sesion gestionada: $(ultimo_evento)"
+# (17d) dentro del perimetro, las otras rutas: un lead gestionado callado, un carril
+# gestionado muerto y otro gestionado en dialogo, y despues atorado, tampoco
+# despiertan al vigia.
+LLAMADAS="$T/l23.log"; export LLAMADAS; : > "$LLAMADAS"
+solo_dejar per-gest2
+montar_corrida per-gest2 avanza
+for s in m-lead m-a m-b; do gestionar per-gest2 "$s" 1; done
+rm -f "$PANEL_DIR/m-a.txt"
+watch_a m-lead "$((T0 + 1200 - 1900))"
+watch_a m-b "$((T0 + 1200 - 120))" "Bash(ls)" "$((T0 + 1200 - 700))"
+tick "$((T0 + 1200))" >/dev/null 2>&1 || fail "perimetro: el tick con gestionadas detenidas revento"
+[ "$(evts)" = "0" ] || fail "perimetro: el vigia se desperto por una gestionada muerta, callada o en dialogo: $(ultimo_evento)"
+printf 'carril B\nATORADO sin permisos\n' > "$PANEL_DIR/m-b.txt"
+watch_a m-b "$((T0 + 1300 - 120))"
+tick "$((T0 + 1300))" >/dev/null 2>&1 || fail "perimetro: el tick con la gestionada atorada revento"
+[ "$(evts)" = "0" ] || fail "perimetro: el vigia se desperto por una gestionada atorada: $(ultimo_evento)"
+# (17e) la firma que decide redespertar al vigia no cuenta las gestionadas: un carril
+# no gestionado callado lo despierta una vez; si despues solo cambia una gestionada,
+# no se le reenvia la accion pendiente ("a la segunda, declarar atorado").
+LLAMADAS="$T/l24.log"; export LLAMADAS; : > "$LLAMADAS"
+solo_dejar per-firma
+montar_corrida per-firma avanza
+gestionar per-firma m-a 1
+watch_a m-lead "$((T0 + 1500 - 120))"; watch_a m-a "$((T0 + 1500 - 120))"; watch_a m-b "$((T0 + 1500 - 1900))"
+tick "$((T0 + 1500))" >/dev/null 2>&1 || fail "perimetro: el tick del carril callado revento"
+[ "$(evts)" = "1" ] || fail "perimetro: el carril no gestionado callado no desperto al vigia (evts=$(evts))"
+printf 'carril A terminando\nLISTO abc1234\n' > "$PANEL_DIR/m-a.txt"
+tick "$((T0 + 1600))" >/dev/null 2>&1 || fail "perimetro: el tick del cambio gestionado revento"
+[ "$(evts)" = "1" ] || fail "perimetro: un cambio de una sesion gestionada le reenvio al vigia una accion ajena: $(ultimo_evento)"
+
+# (17f) la regla contra valores literales, sin pasar por el latido: una corrida con
+# una sesion por cada estado que el parte distingue (lead muerto, carril muerto,
+# callado, en dialogo joven cubierto por la politica, en dialogo por pedir, atorado,
+# con LISTO y trabajando). Las acciones (P_ACCIONES, sus claves) y la firma del vigia
+# (P_FIRMA_VIGIA) valen exactamente lo esperado con todas fuera del perimetro, con
+# todas dentro y mezcladas.
+seis() { # $1 corrida, $2 lista "nombre:g" de las gestionadas (g) separadas por espacio
+  SREG="$CORRIDA_STATE/$1/registro.json" SGES="$2" python3 -c "
+import json,os
+p=os.environ['SREG']; d=json.load(open(p))
+ges=set(os.environ['SGES'].split())
+d['sesiones']=[]
+d['preaprobaciones']=[{'patron':'permiso','decision':'Aprobado'}]
+for n,rol in (('m-lead','lead'),('m-a','carril'),('m-b','carril'),('m-c','carril'),('m-f','carril'),('m-d','carril'),('m-e','carril'),('m-g','carril')):
+  s={'nombre':n,'rol':rol,'cli':'glm','dueno':'lead','dir':'/tmp/wt-'+n}
+  if n in ges: s['encargo_ref']='/host/inbox/'+n+'.json'; s['host_id']='mac-local'
+  d['sesiones'].append(s)
+json.dump(d,open(p,'w'),indent=1)" || fail "perimetro: no se pudo armar el registro de $1"
+}
+parte_de() { # $1 corrida -> las claves de P_ACCIONES, una por linea, y la linea FIRMA_VIGIA=...
+  ( export CORR_AHORA="$((T0 + 2000))"
+    . scripts/mac/corrida/lib.sh
+    . scripts/mac/corrida/estado.sh
+    parte_calcular "$1" >/dev/null 2>&1 || { echo ROTO; exit 0; }
+    [ -n "$P_ACCIONES" ] && printf '%s\n' "$P_ACCIONES" | cut -d'|' -f1
+    printf 'FIRMA_VIGIA=%s\n' "$P_FIRMA_VIGIA" )
+}
+solo_dejar per-seis
+montar_corrida per-seis avanza
+rm -f "$PANEL_DIR/m-lead.txt" "$PANEL_DIR/m-a.txt"
+printf 'carril B\nsin novedades\n' > "$PANEL_DIR/m-b.txt"
+watch_a m-b "$((T0 + 2000 - 1900))"
+printf 'carril C\nesperando permiso\n' > "$PANEL_DIR/m-c.txt"
+watch_a m-c "$((T0 + 2000 - 120))" "Bash(ls)" "$((T0 + 2000 - 120))"
+printf 'carril F\nesperando confirmacion\n' > "$PANEL_DIR/m-f.txt"
+watch_a m-f "$((T0 + 2000 - 120))" "Bash(ls)" "$((T0 + 2000 - 700))"
+printf 'carril D\nATORADO sin permisos\n' > "$PANEL_DIR/m-d.txt"
+watch_a m-d "$((T0 + 2000 - 120))"
+printf 'carril E\nLISTO abc1234\n' > "$PANEL_DIR/m-e.txt"
+watch_a m-e "$((T0 + 2000 - 120))"
+printf 'carril G\ntrabajando\n' > "$PANEL_DIR/m-g.txt"
+watch_a m-g "$((T0 + 2000 - 120))"
+FV0='av=2/5|pr=GitHub: sin verificar|ses='
+seis per-seis ""
+esperado="relanzar-lead
+relanzar
+relanzar
+contestar
+declarar
+recoger
+FIRMA_VIGIA=${FV0}m-lead:muerta,m-a:muerta,m-b:callada,m-c:dialogo-joven,m-f:dialogo-pedir,m-d:atorada,m-e:listo,m-g:trabajando,"
+[ "$(parte_de per-seis)" = "$esperado" ] \
+  || fail "perimetro: fuera del perimetro las acciones o la firma del vigia no son las de siempre: $(parte_de per-seis | tr '\n' ' ')"
+seis per-seis "m-lead m-a m-b m-c m-f m-d m-e m-g"
+[ "$(parte_de per-seis)" = "FIRMA_VIGIA=$FV0" ] \
+  || fail "perimetro: con todas gestionadas el vigia todavia tiene acciones o firma: $(parte_de per-seis | tr '\n' ' ')"
+# El parte a David no cambia: su firma (P_FIRMA) sigue contando las gestionadas.
+firma_david="$( ( export CORR_AHORA="$((T0 + 2000))"
+  . scripts/mac/corrida/lib.sh; . scripts/mac/corrida/estado.sh
+  parte_calcular per-seis >/dev/null 2>&1; printf '%s' "${P_FIRMA:-}" ) )"
+[ "$firma_david" = "e=NECESITO TU RESPUESTA|${FV0}m-lead:muerta,m-a:muerta,m-b:callada,m-c:dialogo-joven,m-f:dialogo-pedir,m-d:atorada,m-e:listo,m-g:trabajando," ] \
+  || fail "perimetro: la firma del parte a David dejo de contar las sesiones gestionadas: $firma_david"
+seis per-seis "m-lead m-b m-c m-e"
+esperado="relanzar
+contestar
+declarar
+FIRMA_VIGIA=${FV0}m-a:muerta,m-f:dialogo-pedir,m-d:atorada,m-g:trabajando,"
+[ "$(parte_de per-seis)" = "$esperado" ] \
+  || fail "perimetro: mezcladas, las acciones o la firma del vigia cuentan una gestionada: $(parte_de per-seis | tr '\n' ' ')"
+# Y el dialogo joven, solo, fuera del perimetro: sigue despertando al vigia.
+seis per-seis "m-lead m-a m-b m-f m-d m-e m-g"
+[ "$(parte_de per-seis)" = "contestar
+FIRMA_VIGIA=${FV0}m-c:dialogo-joven," ] \
+  || fail "perimetro: un dialogo joven fuera del perimetro ya no despierta al vigia: $(parte_de per-seis | tr '\n' ' ')"
+# Y el lead muerto, solo, fuera del perimetro: relanzar-lead sin relanzar de carril.
+seis per-seis "m-a m-b m-c m-f m-d m-e m-g"
+[ "$(parte_de per-seis)" = "relanzar-lead
+FIRMA_VIGIA=${FV0}m-lead:muerta," ] \
+  || fail "perimetro: con solo el lead muerto fuera del perimetro el vigia no recibe solo relanzar-lead: $(parte_de per-seis | tr '\n' ' ')"
+
+# (18) B4-28: despues de todos los casos, un tick sigue sin correr el progress-events
+# del HOME de quien lanza la prueba (su estado real queda intacto).
+solo_dejar
+HOME="$SENUELO" tick "$((T0 + 2100))" >/dev/null 2>&1 || fail "(18) el tick del senuelo revento"
+senuelo_intacto "(18)"
 
 echo "TODO VERDE: test-corrida-latido"

@@ -12,11 +12,74 @@ import tempfile
 from pathlib import Path
 from typing import Callable
 
-from contracts import AuthorizedOperation, HostObservation, OperationKey, ResultReceipt, operation_id
-from spool import TERMINAL_STATES, Spool, atomic_json, canonical, closure_digest
+from contracts import AuthorizedOperation, HostObservation, IncidentRejected, OperationKey, ResultReceipt, operation_id
+from spool import TERMINAL_STATES, Spool, atomic_json, canonical, closure_digest, incident_identity
 
 MAX_ARTIFACT_BYTES = 10 * 1024 * 1024
 RESULT_SCHEMA = "agent-work.result.v1"
+SILENT_EPISODES = {"invalid-result": "invalid-result", "transport-unavailable": "session-closed",
+                   "deadline-missed": "deadline"}
+DIALOG_PASSES = 2
+ACCEPT_SCHEMA = "agent-work.accept.v1"
+UNACCEPTED_EPISODE = "delivery-unaccepted"
+ACCEPT_BOUND = ("hostId", "taskId", "generation", "instanceId", "claimId")
+MAX_ACCEPT_BYTES = 4096
+
+
+def next_dialog_state(state: dict, observed: str) -> tuple[dict, bool]:
+    dialog = dict(state)
+    if observed == "":
+        dialog["candidate"] = None
+        dialog["seen"] = 0
+        dialog["clean"] = min(dialog["clean"] + 1, DIALOG_PASSES)
+        if dialog["clean"] >= DIALOG_PASSES:
+            dialog["open_identity"] = None
+        return dialog, False
+    if observed == state["open_identity"]:
+        dialog["clean"] = 0
+        dialog["candidate"] = None
+        dialog["seen"] = 0
+        return dialog, False
+    dialog["clean"] = 0
+    dialog["seen"] = dialog["seen"] + 1 if observed == state["candidate"] else 1
+    if dialog["seen"] < DIALOG_PASSES:
+        dialog["candidate"] = observed
+        return dialog, False
+    dialog["open_identity"] = observed
+    dialog["episode"] = dialog["episode"] + 1
+    dialog["candidate"] = None
+    dialog["seen"] = 0
+    return dialog, True
+
+
+def check_deadline(deadline_seconds: float | None) -> None:
+    if deadline_seconds is not None and (isinstance(deadline_seconds, bool)
+                                         or not isinstance(deadline_seconds, (int, float))
+                                         or deadline_seconds <= 0):
+        raise ValueError("deadline must be a positive number of seconds")
+
+
+def read_acceptance(assignment: dict) -> bool:
+    """True only for the CLI's own agent-work.accept.v1 bound to this assignment."""
+    accept_ref = Path(assignment["acceptRef"])
+    if accept_ref.is_symlink() or not accept_ref.exists():
+        return False
+    info = accept_ref.stat()
+    if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_ACCEPT_BYTES:
+        return False
+    try:
+        accept = json.loads(accept_ref.read_bytes().decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(accept, dict) or set(accept) != {"schema", "capability", *ACCEPT_BOUND}:
+        return False
+    if accept["schema"] != ACCEPT_SCHEMA or not isinstance(accept["capability"], str):
+        return False
+    for field in ACCEPT_BOUND:
+        if type(accept[field]) is not type(assignment[field]) or accept[field] != assignment[field]:
+            return False
+    return hmac.compare_digest(accept["capability"].encode("utf-8", "surrogatepass"),
+                               assignment["capability"].encode("utf-8", "surrogatepass"))
 
 
 def under(path: str, root: str) -> Path:
@@ -123,6 +186,7 @@ class Host:
         }
         if operation.adapter_id:
             assignment["adapterId"] = operation.adapter_id
+            assignment["acceptRef"] = str(self.state_dir / "inbox" / f"{op_id}.accept.json")
         digest = hashlib.sha256(canonical(assignment).encode()).hexdigest()
         current = self.spool.get(op_id)
         if current and current["operation_digest"] != digest:
@@ -152,8 +216,14 @@ class Host:
             deliver(str(assignment_ref), operation.session)
         except Exception:
             return HostObservation("uncertain", str(assignment_ref))
-        self.spool.delivered(op_id)
-        return HostObservation("delivered", str(assignment_ref))
+        if "acceptRef" not in assignment:
+            self.spool.delivered(op_id)
+            return HostObservation("delivered", str(assignment_ref))
+        try:
+            accepted = self.take_acceptance(key.host_id, key)
+        except OSError:
+            accepted = False
+        return HostObservation("delivered" if accepted else "typed", str(assignment_ref))
 
     def report(self, host_id: str, result: dict) -> ResultReceipt:
         self._host(host_id)
@@ -243,6 +313,121 @@ class Host:
             raise ValueError("result too large")
         return self.report(host_id, json.loads(result_ref.read_text()))
 
+    def take_acceptance(self, host_id: str, key: OperationKey) -> bool:
+        """True only when the CLI's own agent-work.accept.v1 for this assignment is on disk; promotes it."""
+        self._host(host_id)
+        op_id = operation_id(key)
+        current = self.spool.get(op_id)
+        if current is None:
+            raise ValueError("unknown operation")
+        assignment = json.loads(current["operation_json"])
+        if "acceptRef" not in assignment or not read_acceptance(assignment):
+            return False
+        self.spool.delivered(op_id)
+        return True
+
+    def settle_deliveries(self, host_id: str, *, now: float,
+                          deadline_seconds: float | None = None) -> list[str]:
+        """Typed CLI deliveries: accepted -> delivered; past the deadline -> uncertain plus one incident."""
+        self._host(host_id)
+        check_deadline(deadline_seconds)
+        detected = []
+        for assignment in self.spool.awaiting_results():
+            if "acceptRef" not in assignment:
+                continue
+            key = OperationKey(assignment["hostId"], assignment["taskId"],
+                               assignment["generation"], assignment["instanceId"])
+            op_id = operation_id(key)
+            current = self.spool.get(op_id)
+            if current is None or current["status"] not in ("attempted", "uncertain"):
+                continue
+            try:
+                if self.take_acceptance(host_id, key):
+                    continue
+            except OSError:
+                continue
+            if current["status"] == "uncertain":
+                continue
+            try:
+                receipt = self.collect(host_id, key)
+            except ValueError:
+                receipt = None
+            except OSError:
+                continue
+            if receipt is not None:
+                continue
+            attempted = self.spool.attempted_at(op_id)
+            if deadline_seconds is None or attempted is None or now - attempted < deadline_seconds:
+                continue
+            incident = {"kind": "transport-unavailable", "episodeId": UNACCEPTED_EPISODE,
+                        "evidenceRef": f"host-operation:{op_id}"}
+            incident_key, incident_digest = incident_identity(key.generation, incident)
+            if self.spool.delivery_uncertain(op_id, key.task_id, incident_key,
+                                             canonical(incident), incident_digest):
+                detected.append(incident_key)
+        return detected
+
+    def detect_silent_failures(self, host_id: str, session_gone: Callable[[OperationKey], bool], *,
+                               now: float, deadline_seconds: float | None = None,
+                               prompt_identity: Callable[[OperationKey], str | None] | None = None
+                               ) -> list[str]:
+        self._host(host_id)
+        check_deadline(deadline_seconds)
+        detected = self.settle_deliveries(host_id, now=now, deadline_seconds=deadline_seconds)
+        for assignment in self.spool.awaiting_results():
+            key = OperationKey(assignment["hostId"], assignment["taskId"],
+                               assignment["generation"], assignment["instanceId"])
+            op_id = operation_id(key)
+            current = self.spool.get(op_id)
+            if current is None or current["status"] != "delivered" or not assignment.get("adapterId"):
+                continue
+            try:
+                receipt = self.collect(host_id, key)
+                if receipt is not None:
+                    continue
+                kind = None
+            except ValueError:
+                kind = "invalid-result"
+            except OSError:
+                continue
+            if kind is None and session_gone(key):
+                kind = "transport-unavailable"
+            incidents = []
+            dialog = None
+            before = None
+            dialog_recorded = False
+            if kind is None:
+                if prompt_identity is not None:
+                    observed = prompt_identity(key)
+                    if observed is not None:
+                        before = self.spool.dialog_state(op_id)
+                        dialog, opened = next_dialog_state(before, observed)
+                        if opened:
+                            incidents.append({"kind": "permission-required",
+                                              "promptIdentity": f"{dialog['open_identity']}-{dialog['episode']}",
+                                              "evidenceRef": f"host-operation:{op_id}"})
+                if deadline_seconds is not None:
+                    delivered = self.spool.delivered_at(op_id)
+                    if delivered is not None and now - delivered >= deadline_seconds:
+                        incidents.append({"kind": "deadline-missed", "episodeId": SILENT_EPISODES["deadline-missed"],
+                                          "evidenceRef": f"host-operation:{op_id}"})
+            else:
+                incidents.append({"kind": kind, "episodeId": SILENT_EPISODES[kind],
+                                  "evidenceRef": f"host-operation:{op_id}"})
+            for incident in incidents:
+                incident_key = incident_identity(key.generation, incident)[0]
+                if self.spool.has_incident(key.task_id, incident_key):
+                    continue
+                if incident["kind"] == "permission-required":
+                    self.record_incident(host_id, key, incident, dialog_state=dialog)
+                    dialog_recorded = True
+                else:
+                    self.record_incident(host_id, key, incident)
+                detected.append(incident_key)
+            if dialog is not None and dialog != before and not dialog_recorded:
+                self.spool.save_dialog_state(op_id, dialog)
+        return detected
+
     def pending(self, host_id: str) -> list[dict]:
         self._host(host_id)
         for assignment in self.spool.awaiting_results():
@@ -322,6 +507,44 @@ class Host:
                 errors.append(f"{op_id}: {exc}")
         return closed, errors
 
+    def record_incident(self, host_id: str, key: OperationKey, incident: dict, *,
+                        dialog_state: dict | None = None) -> dict:
+        self._host(host_id)
+        self._host(key.host_id)
+        current = self.spool.get(operation_id(key))
+        if current is None:
+            raise ValueError("unknown operation")
+        assignment = json.loads(current["operation_json"])
+        adapter = assignment.get("adapterId")
+        generation = assignment.get("generation")
+        if not isinstance(adapter, str) or not adapter.strip() \
+                or not isinstance(generation, int) or isinstance(generation, bool) or generation < 1:
+            raise ValueError("operation cannot carry host incidents")
+        incident_key, incident_digest = incident_identity(generation, incident)
+        return self.spool.record_incident(key.task_id, incident_key, operation_id(key),
+                                          canonical(incident), incident_digest, dialog_state=dialog_state)
+
+    def flush_incidents(self, host_id: str, send: Callable[[dict, dict], dict]) -> tuple[int, list[str]]:
+        """Send every pending incident; each one fails alone and rejections never retry."""
+        self._host(host_id)
+        sent, errors = 0, []
+        for row in self.spool.pending_incidents():
+            try:
+                current = self.spool.get(row["operation_id"])
+                if current is None:
+                    raise ValueError("incident without assignment")
+                assignment = json.loads(current["operation_json"])
+                receipt = send(assignment, json.loads(row["incident_json"]))
+                self.spool.incident_sent(row["task_id"], row["incident_key"], receipt)
+                sent += 1
+            except IncidentRejected as exc:
+                self.spool.incident_failed(row["task_id"], row["incident_key"], str(exc), rejected=True)
+                errors.append(f"{row['operation_id']}: {exc}")
+            except (OSError, RuntimeError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+                self.spool.incident_failed(row["task_id"], row["incident_key"], str(exc))
+                errors.append(f"{row['operation_id']}: {exc}")
+        return sent, errors
+
     def receipt(self, host_id: str, key: OperationKey) -> dict | None:
         self._host(host_id)
         self._host(key.host_id)
@@ -352,7 +575,9 @@ class TmuxTransport:
     def deliver(self, assignment_ref: str, session: str) -> None:
         if not session.replace("-", "").replace("_", "").isalnum():
             raise ValueError("invalid session")
-        text = f"Open assignment JSON at {assignment_ref}. Follow briefRef and write agent-work.result.v1 atomically to resultRef."
+        text = (f"Open assignment JSON at {assignment_ref}. First write agent-work.accept.v1 atomically to "
+                "acceptRef with schema, hostId, taskId, generation, instanceId, claimId and capability copied "
+                "from the assignment. Then follow briefRef and write agent-work.result.v1 atomically to resultRef.")
         subprocess.run([self.tmux_bin, "-L", self.socket, "set-environment", "-t", f"={session}",
                         "AGENT_WORK_MANAGED", "1"], check=True, capture_output=True)
         command = [self.tmux_bin, "-L", self.socket, "send-keys", "-t", f"={session}:"]

@@ -77,7 +77,7 @@ Lecturas iniciales desde el repo OpenClaw: `git fetch origin`, `git show origin/
 
 Antes de activar el lanzamiento por frase, validar `bash scripts/lanzar-fase.sh 14 --dry-run -- <cli> <flag>` con la CLI y el flag verificados en el base instalado. Hasta pasar ese check no anunciar “lista para ejecutar”. El primer efecto de la corrida registra `fase14-harness` y las siete tareas pendientes en el tablero mediante el mecanismo instalado de Fase 9.
 
-El lead usa `corrida.sh lanzar-sesion` para abrir cada worker después de reservar su carril; esa ruta registra y marca la sesión antes de entregar el brief.
+El lead usa `corrida.sh lanzar-sesion` para abrir cada worker después de reservar su carril; esa ruta registra y marca la sesión antes de entregar el brief. Excepción (T9 `:266`): una sesión gestionada (`AGENT_WORK_MANAGED=1` en tmux, o una entrada del registro con `encargo_ref` o `host_id`) nunca se marca con `OPENCLAW_WATCH` ni se relanza a mano; su host le reporta al solicitante el cierre, el diálogo o el plazo vencido.
 
 ## Roles y alcance
 

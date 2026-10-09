@@ -1,0 +1,40 @@
+.FF......
+======================================================================
+FAIL: test_closed_session_requires_positive_proof (__main__.SilentFailureTest.test_closed_session_requires_positive_proof) [another tmux server]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2860, in test_closed_session_requires_positive_proof
+    self.assertEqual(host.detect_silent_failures("host-one", manager.session_gone, now=1.0), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['host:1:transport-unavailable:session-closed'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:session-closed'
+
+- ['host:1:transport-unavailable:session-closed']
++ []
+
+======================================================================
+FAIL: test_closed_session_requires_positive_proof (__main__.SilentFailureTest.test_closed_session_requires_positive_proof)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2870, in test_closed_session_requires_positive_proof
+    self.assertEqual(self.rows(host), [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [('host:1:transport-unavailable:session-cl[174 chars]"}')] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+('host:1:transport-unavailable:session-closed', 'pending', '{"episodeId":"session-closed","evidenceRef":"host-operation:8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571","kind":"transport-unavailable"}')
+
++ []
+- [('host:1:transport-unavailable:session-closed',
+-   'pending',
+-   '{"episodeId":"session-closed","evidenceRef":"host-operation:8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571","kind":"transport-unavailable"}')]
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.202s
+
+FAILED (failures=2)
+rc=1

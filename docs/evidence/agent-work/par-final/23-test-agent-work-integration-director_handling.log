@@ -1,0 +1,8 @@
+$ bash scripts/tests/test-agent-work-integration.sh director_handling
+.................
+----------------------------------------------------------------------
+Ran 17 tests in 23.432s
+
+OK
+
+rc=0 seconds=23.5

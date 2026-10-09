@@ -1,0 +1,15 @@
+...F....
+======================================================================
+FAIL: test_a_python_citation_must_be_a_test_method (__main__.AcceptanceGuardsTest.test_a_python_citation_must_be_a_test_method)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_acceptance.py", line 171, in test_a_python_citation_must_be_a_test_method
+    self.assertFalse(cites("x.py", "setUp", text))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.007s
+
+FAILED (failures=1)
+rc=1

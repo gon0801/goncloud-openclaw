@@ -1,0 +1,24 @@
+.........F.........
+======================================================================
+FAIL: test_uncertain_and_its_incident_survive_a_crash_together (__main__.DeliveryAcceptanceTest.test_uncertain_and_its_incident_survive_a_crash_together) (crash_writing='incidents')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3696, in test_uncertain_and_its_incident_survive_a_crash_together
+    self.assertEqual(host.settle_deliveries("host-one", now=1061.0, deadline_seconds=60),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     [self.UNACCEPTED_KEY], "the crash lost the incident")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [] != ['host:1:transport-unavailable:delivery-unaccepted']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'host:1:transport-unavailable:delivery-unaccepted'
+
+- []
++ ['host:1:transport-unavailable:delivery-unaccepted'] : the crash lost the incident
+
+----------------------------------------------------------------------
+Ran 19 tests in 0.564s
+
+FAILED (failures=1)
+rc=1

@@ -1,0 +1,15 @@
+R_HEAD=33f4e47982b3421ff51dedcdbe7601c3bbf43dd1 R_DIFF=e3b0c44298fc1c14
+ docs/evidence/agent-work/T9.md                     |  45 +++++++
+ docs/evidence/agent-work/coverage.json             |   2 +-
+ .../plans/2026-09-30-encargos-agentes.md           |   2 +-
+ .../agent-work/managed-cli-gateway-harness.mjs     | 145 +++++++++++++++++++--
+ scripts/tests/test-agent-work-e2e.sh               |  14 +-
+ scripts/tests/test-agent-work-integration.sh       |   8 ++
+ 6 files changed, 199 insertions(+), 17 deletions(-)
+CLI_GATEWAY_E2E submit=1 admit=1 delivery=1 report=1 blocked=1
+.
+----------------------------------------------------------------------
+Ran 1 test in 65.414s
+
+OK
+rc=0

@@ -1,0 +1,53 @@
+FFF...
+======================================================================
+FAIL: test_flush_incidents_marks_conflict_rejected_without_retry (__main__.IncidentFlushTest.test_flush_incidents_marks_conflict_rejected_without_retry)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2447, in test_flush_incidents_marks_conflict_rejected_without_retry
+    self.assertEqual(row["status"], "rejected")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'sent' != 'rejected'
+- sent
++ rejected
+
+
+======================================================================
+FAIL: test_flush_incidents_retries_after_lost_response (__main__.IncidentFlushTest.test_flush_incidents_retries_after_lost_response)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2428, in test_flush_incidents_retries_after_lost_response
+    self.assertEqual(self.incident_row(host, self.EXPECTED_KEY)["status"], "pending")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'sent' != 'pending'
+- sent
++ pending
+
+
+======================================================================
+FAIL: test_flush_incidents_sends_once (__main__.IncidentFlushTest.test_flush_incidents_sends_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 2405, in test_flush_incidents_sends_once
+    self.assertEqual(json.loads(row["receipt_json"]),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     {"taskId": "task-send", "generation": 1,
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      "incidentKey": self.EXPECTED_KEY,
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      "incidentDigest": self.EXPECTED_DIGEST})
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'incidentKey': 'host:1:transport-unavailab[16 chars]d-1'} != {'taskId': 'task-send', 'generation': 1, 'i[142 chars]d2e'}
++ {'generation': 1,
++  'incidentDigest': 'c377c6e9fb97ffd3ac2db36b07d0e1e3f86a87dd07f69adf094fabc93824cd2e',
+- {'incidentKey': 'host:1:transport-unavailable:session-closed-1'}
+? ^                                                              ^
+
++  'incidentKey': 'host:1:transport-unavailable:session-closed-1',
+? ^                                                              ^
+
++  'taskId': 'task-send'}
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.030s
+
+FAILED (failures=3)

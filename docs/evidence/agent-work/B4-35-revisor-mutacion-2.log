@@ -1,0 +1,19 @@
+/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.4EVhNYdm7f/g/scripts/tests/test_agent_work_crash_boundaries_e2e.py:447: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
+  host_pid = self.crash_host(gateway, "launching")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+F
+======================================================================
+FAIL: test_an_unattributable_launch_keeps_its_capacity_and_types_nothing (__main__.CrashBoundariesE2E.test_an_unattributable_launch_keeps_its_capacity_and_types_nothing)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.4EVhNYdm7f/g/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 449, in test_an_unattributable_launch_keeps_its_capacity_and_types_nothing
+    with self.assertRaisesRegex(RuntimeError, "host resource identity is not running",
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                msg="the restarted host used a launch it cannot attribute"):
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: RuntimeError not raised : the restarted host used a launch it cannot attribute
+
+----------------------------------------------------------------------
+Ran 1 test in 32.245s
+
+FAILED (failures=1)

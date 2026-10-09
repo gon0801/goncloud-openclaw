@@ -1,0 +1,29 @@
+# Hallazgo 3 mutacion 1: vuelve el try/except Exception: continue (el registro ilegible se salta)
+# copia: /private/tmp/claude-501/-Users-dn-dev-goncloud-openclaw/0d327440-0586-4e4c-86b0-f8b3bd36ebc8/scratchpad/b439res.ia9M/g @ e72027a2ed58735729fc2ddbb2eb9571253cb6ae
+# fecha: 2026-10-09T05:11:17Z
+# comando: bash scripts/tests/test-lanzar-lead.sh
+# diff aplicado en scripts/lanzar-lead.sh:
+#   diff --git a/scripts/lanzar-lead.sh b/scripts/lanzar-lead.sh
+#   index 12c714f..93e8681 100755
+#   --- a/scripts/lanzar-lead.sh
+#   +++ b/scripts/lanzar-lead.sh
+#   @@ -51,6 +51,7 @@ hallazgo=$(CORRIDA_STATE="${CORRIDA_STATE:-$HOME/.local/state/corridas}" CORRIDA
+#    import glob, json, os
+#    encontrada = None
+#    for ruta in sorted(glob.glob(os.environ["CORRIDA_STATE"] + "/*/registro.json")):
+#   +    # Un registro ilegible puede ser el de la corrida duena: no se salta, frena (sin salida => ATORADO).
+#        try:
+#            d = json.load(open(ruta))
+#        except Exception:
+ok (1): cwd inexistente aborta con 1
+ok (2): crea la sesión en el cwd, la marca, espera el prompt y el mensaje entra con su sentinel
+ok (3): con la sesión viva no relanza (YA-EXISTE, rc 2)
+ok (4): sin prompt no manda nada y sale con 4
+ok (5): una sesion gestionada no se relanza (dos claves, una sola, cualquier corrida abierta); claves vacias o corrida cerrada, como siempre; sin poder comprobar, no lanza
+ok (5c): sin CORRIDA_STATE lee el default; nombre repetido entre corridas; la corrida es el directorio; sin corridas, registros raros y null lanzan
+FAIL: (5d) un registro ilegible debia frenar el lanzamiento: rc=0 marca=OPENCLAW_WATCH=1
+cwd=/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.qDjKp7v9VF/wt
+proceso=cat
+prompt=ok (0s)
+LISTO s15 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.qDjKp7v9VF/wt
+rc=1

@@ -1,0 +1,25 @@
+F
+======================================================================
+FAIL: test_no_inventory_cli_is_certified_so_no_cli_route_or_claim_opens (__main__.AgentsRouting.test_no_inventory_cli_is_certified_so_no_cli_route_or_claim_opens)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 76, in test_no_inventory_cli_is_certified_so_no_cli_route_or_claim_opens
+    native_gateway.claim_cli_once(client, host=None, manager=None, adapter_id=adapter_id,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                  instance_id="instance-one", session="worker-one",
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                  workspace_root=self.root, deliver=lambda *_: None,
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                  coverage=self.coverage)
+                                  ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/agent-work/native_gateway.py", line 285, in claim_cli_once
+    claim = client.claim_host(adapter_id, instance_id)
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-routing.py", line 66, in claim_host
+    raise AssertionError("an uncertified adapter must not reach the gateway")
+AssertionError: an uncertified adapter must not reach the gateway
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)
+rc=1

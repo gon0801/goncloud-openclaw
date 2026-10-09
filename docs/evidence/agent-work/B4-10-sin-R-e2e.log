@@ -1,0 +1,29 @@
+R_HEAD=33f4e47982b3421ff51dedcdbe7601c3bbf43dd1 R_DIFF=e3b0c44298fc1c14
+ docs/evidence/agent-work/coverage.json             |   2 +-
+ .../agent-work/managed-cli-gateway-harness.mjs     | 145 +++++++++++++++++++--
+ scripts/tests/test-agent-work-e2e.sh               |  14 +-
+ scripts/tests/test-agent-work-integration.sh       |   8 ++
+ 4 files changed, 153 insertions(+), 16 deletions(-)
+{"closed": 0, "reported": 1, "transferred": 0}
+DELIVERY_LATENCY {"detection_to_persisted_receipt_s": 0.25, "write_to_detection_s": 4.999}
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.009s
+
+OK
+s
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK (skipped=1)
+s
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK (skipped=1)
+ss
+----------------------------------------------------------------------
+Ran 2 tests in 0.000s
+
+OK (skipped=2)
+rc=0

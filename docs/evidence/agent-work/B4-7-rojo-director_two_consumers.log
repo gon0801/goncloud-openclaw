@@ -1,0 +1,16 @@
+F
+======================================================================
+FAIL: test_two_consumers_plan_one_identical_intent (__main__.DirectorHandlingTest.test_two_consumers_plan_one_identical_intent)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 1295, in test_two_consumers_plan_one_identical_intent
+    self.assertEqual(first_effects[0].args, second_effects[0].args)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'cal[685 chars]15031579000}, 'decisionDigest': 'ba812486bfc80[76 chars]n-1'} != {'cal[685 chars]15031624000}, 'decisionDigest': '891bfa58d9b2a[76 chars]n-1'}
+Diff is 1640 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+FAILED (failures=1)
+rc=1

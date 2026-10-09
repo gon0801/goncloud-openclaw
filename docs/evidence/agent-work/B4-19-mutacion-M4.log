@@ -1,0 +1,39 @@
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+F
+======================================================================
+FAIL: test_phantom_suggestion_in_the_composer (__main__.CliDeliveryAcceptanceE2E.test_phantom_suggestion_in_the_composer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_delivery_acceptance_e2e.py", line 281, in test_phantom_suggestion_in_the_composer
+    observed, screen = self.unaccepted_case("phantom")
+                       ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_delivery_acceptance_e2e.py", line 207, in unaccepted_case
+    self.assertTrue(recorded, f"no durable incident; passes={passes} claims={claims} "
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                              f"pump_error={pump.error} screen={cli.screen()!r}")
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [] is not true : no durable incident; passes=[(1791316140.3007202, []), (1791316142.5548851, []), (1791316144.753053, []), (1791316146.945447, []), (1791316149.183851, []), (1791316151.4269068, []), (1791316153.600493, []), (1791316155.775336, []), (1791316157.926794, []), (1791316160.087063, []), (1791316162.2418602, []), (1791316164.401119, []), (1791316166.564797, []), (1791316168.7268028, []), (1791316170.939883, []), (1791316173.1545558, []), (1791316175.327709, []), (1791316177.505811, []), (1791316179.634567, [])] claims=['typed', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain'] pump_error=None screen='delivery-cli ready (phantom)\n> Open assignment JSON at /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/agent-work-cli-delivery-back_txh/phantom/host/assignments/4724ad98c154bd187983524a1e560b735298f944a4785d145a1cc0614b26d0c0.json. First write agent-work.accept.v1 atomically to acceptRef with schema, hostId, taskId, generation, instanceId, claimId and capability copied from the assignment. Then follow briefRef and write agent-work.result.v1 atomically to resultRef.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n'
+
+----------------------------------------------------------------------
+Ran 1 test in 102.086s
+
+FAILED (failures=1)
+rc=1

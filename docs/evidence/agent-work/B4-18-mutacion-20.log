@@ -1,0 +1,28 @@
+......F............
+======================================================================
+FAIL: test_the_transport_types_only_the_reference_and_asks_for_the_acceptance (__main__.DeliveryAcceptanceTest.test_the_transport_types_only_the_reference_and_asks_for_the_acceptance)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3747, in test_the_transport_types_only_the_reference_and_asks_for_the_acceptance
+    self.assertEqual([call.args[0] for call in run.call_args_list], [
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        ["tmux", "-L", "sock-accept", "set-environment", "-t", "=worker-one", "AGENT_WORK_MANAGED", "1"],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+         "atomically to resultRef."],
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        ["tmux", "-L", "sock-accept", "send-keys", "-t", "=worker-one:", "Enter"]])
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [['tm[220 chars]on. Follow briefRef and write agent-work.resul[102 chars]er']] != [['tm[220 chars]on. First write agent-work.accept.v1 atomicall[268 chars]er']]
+
+First differing element 1:
+['tmu[121 chars]on. Follow briefRef and write agent-work.resul[26 chars]ef.']
+['tmu[121 chars]on. First write agent-work.accept.v1 atomicall[192 chars]ef.']
+
+Diff is 927 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 19 tests in 0.575s
+
+FAILED (failures=1)
+rc=1

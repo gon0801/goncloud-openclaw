@@ -1,0 +1,15 @@
+F
+======================================================================
+FAIL: test_between_admission_and_answer_the_restart_never_hands_it_over_again (__main__.CrashBoundariesE2E.test_between_admission_and_answer_the_restart_never_hands_it_over_again)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py", line 171, in test_between_admission_and_answer_the_restart_never_hands_it_over_again
+    self.assertFalse({"typed", "delivered"} & set(claims), "the restart typed the assignment again")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'delivered'} is not false : the restart typed the assignment again
+
+----------------------------------------------------------------------
+Ran 1 test in 64.497s
+
+FAILED (failures=1)
+rc=1

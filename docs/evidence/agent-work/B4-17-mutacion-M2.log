@@ -1,0 +1,40 @@
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+F{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+CLI_SILENT_FAILURE_E2E cause=deadline-missed incident=host:1:deadline-missed:deadline detections=1 incident_rpcs=1 wake_requests=1 wake_latency_s=0.38 passes=12 idle_passes_after_wake=5 session=agent:main:encargos-loop deadline_s=6.0
+.{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+F{"closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+CLI_SILENT_FAILURE_E2E cause=permission-required incident=host:1:permission-required:prompt-7d94515e70c2994a231d611d9a75feb4b34c8c89d290da292dc115ae5ac52ff3-1 detections=1 incident_rpcs=1 wake_requests=1 wake_latency_s=11.93 passes=18 idle_passes_after_wake=5 session=agent:main:encargos-loop deadline_s=None
+.
+======================================================================
+FAIL: test_closed_session_without_report (__main__.CliSilentFailureE2E.test_closed_session_without_report)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 235, in test_closed_session_without_report
+    self.silent_case("transport-unavailable", {"episodeId": "session-closed"},
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     deadline=DEADLINE_SECONDS)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 211, in silent_case
+    self.assertEqual(len(after), 1, f"the incident woke a model {len(after)} times")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 2 != 1 : the incident woke a model 2 times
+
+======================================================================
+FAIL: test_invalid_report (__main__.CliSilentFailureE2E.test_invalid_report)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 251, in test_invalid_report
+    self.silent_case("invalid-result", {"episodeId": "invalid-result"}, deadline=DEADLINE_SECONDS)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_cli_silent_failure_e2e.py", line 211, in silent_case
+    self.assertEqual(len(after), 1, f"the incident woke a model {len(after)} times")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 2 != 1 : the incident woke a model 2 times
+
+----------------------------------------------------------------------
+Ran 4 tests in 128.513s
+
+FAILED (failures=2)
+rc=1

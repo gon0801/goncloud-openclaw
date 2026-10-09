@@ -1,0 +1,26 @@
+$ bash scripts/agent-work/test-runtime.sh admission_restart
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "978355503c44313536ab4cd03a6bfb7a5423404b"}
+[vitest-workers] local cache hit after 1787ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 7d24e5807a8e in 1816ms (16698 inputs, 17251 outputs)
+[test] starting test/vitest/vitest.infra.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+ ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rejects an invented budget reservation before claiming a native run 397ms
+ ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > lets one emitter claim, keeps a crash uncertain, and recovers the exact native run 1512ms
+ ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rejects revoked authority before claiming and fences a delayed prior request 379ms
+ ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rechecks authority inside the worker before persisting a claim 377ms
+ ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > refuses admission after cancellation and cannot confirm an outstanding claim 61ms
+ ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > upgrades a version 20 task ledger without losing its registered tasks 128ms
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  01:49:08
+   Duration  4.57s (tests 65%, transform 21%, import 10%, setup 4%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 7.60s
+
+rc=0 seconds=8.0

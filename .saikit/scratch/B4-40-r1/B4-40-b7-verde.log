@@ -1,0 +1,8 @@
+EXTRA_CLAIMS_AFTER_FIRST_SUCCESS [None, None, None]
+CRASH_BOUNDARY B7 pids=[5632, 7304] handling=cancelled delivery=result-recorded wakes=0 children=0 cli_accepted=1
+.
+----------------------------------------------------------------------
+Ran 1 test in 83.693s
+
+OK
+EXIT=0

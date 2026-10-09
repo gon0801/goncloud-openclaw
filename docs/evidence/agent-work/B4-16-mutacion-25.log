@@ -1,0 +1,15 @@
+......F.............
+======================================================================
+FAIL: test_capture_rejects_a_pane_replaced_while_it_was_read (__main__.SilentPromptTest.test_capture_rejects_a_pane_replaced_while_it_was_read)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test-agent-work-integration.py", line 3417, in test_capture_rejects_a_pane_replaced_while_it_was_read
+    self.assertIsNone(backend.capture(identity))
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '> Allow once\n' is not None
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.755s
+
+FAILED (failures=1)
+rc=1

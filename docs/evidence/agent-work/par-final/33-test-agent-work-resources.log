@@ -1,0 +1,53 @@
+$ /opt/homebrew/opt/python@3.14/bin/python3.14 -c
+import importlib.util, json, sys, unittest
+import os
+path, out, names = sys.argv[1], sys.argv[2], set(sys.argv[3:])
+sys.path.insert(0, os.path.dirname(os.path.abspath(path)))
+spec = importlib.util.spec_from_file_location("cited", path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+suite = unittest.TestSuite()
+def walk(item):
+    if isinstance(item, unittest.TestSuite):
+        for child in item:
+            walk(child)
+    elif item.id().rsplit(".", 1)[-1] in names:
+        suite.addTest(item)
+walk(unittest.defaultTestLoader.loadTestsFromModule(module))
+status = {name: {"outcome": "missing", "skips": []} for name in names}
+class Result(unittest.TextTestResult):
+    def _set(self, test, outcome, skip=None):
+        entry = status[test.id().rsplit(".", 1)[-1]]
+        if entry["outcome"] in ("missing", "ok"):
+            entry["outcome"] = outcome
+        if skip is not None:
+            entry["skips"].append(skip)
+    def addSuccess(self, test):
+        super().addSuccess(test); self._set(test, "ok")
+    def addFailure(self, test, err):
+        super().addFailure(test, err); self._set(test, "FAIL")
+    def addError(self, test, err):
+        super().addError(test, err); self._set(test, "ERROR")
+    def addSkip(self, test, reason):
+        super().addSkip(test, reason); self._set(test, "skipped", reason)
+    def addSubTest(self, test, subtest, err):
+        super().addSubTest(test, subtest, err)
+        if err is not None:
+            self._set(test, "FAIL")
+unittest.TextTestRunner(verbosity=2, resultclass=Result).run(suite)
+json.dump(status, open(out, "w"))
+ scripts/tests/test-agent-work-resources.py /Users/dn/dev/wt-b4-40-r1/docs/evidence/agent-work/par-final/.33.json test_resource_close_crash_between_reserve_and_launch_with_host_unreachable_keeps_capacity test_resource_close_pending_holds_host_capacity_and_pool_is_separate test_resource_close_reservation_crash_stop_failure_and_detached_child test_resource_close_hung_host_close_times_out_and_holds_capacity test_resource_close_agentes_stop_failed_holds_without_signals_until_retried test_resource_close_session_gone_with_a_surviving_descendant_still_holds
+test_resource_close_agentes_stop_failed_holds_without_signals_until_retried (cited.ResourceTests.test_resource_close_agentes_stop_failed_holds_without_signals_until_retried) ... ok
+test_resource_close_crash_between_reserve_and_launch_with_host_unreachable_keeps_capacity (cited.ResourceTests.test_resource_close_crash_between_reserve_and_launch_with_host_unreachable_keeps_capacity) ... ok
+test_resource_close_hung_host_close_times_out_and_holds_capacity (cited.ResourceTests.test_resource_close_hung_host_close_times_out_and_holds_capacity) ... HUNG_HOST elapsed=30.0s state=CleanupPending reason=host unavailable
+ok
+test_resource_close_pending_holds_host_capacity_and_pool_is_separate (cited.ResourceTests.test_resource_close_pending_holds_host_capacity_and_pool_is_separate) ... ok
+test_resource_close_reservation_crash_stop_failure_and_detached_child (cited.ResourceTests.test_resource_close_reservation_crash_stop_failure_and_detached_child) ... ok
+test_resource_close_session_gone_with_a_surviving_descendant_still_holds (cited.ResourceTests.test_resource_close_session_gone_with_a_surviving_descendant_still_holds) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 30.071s
+
+OK
+
+rc=0 seconds=30.2
