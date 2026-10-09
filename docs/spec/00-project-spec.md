@@ -82,6 +82,26 @@ Estos contratos no cambian modelos de conversación ni sus fallbacks. Código y
 artefactos versionados siguen la cadena de calidad; la migración viva y el
 deploy pueden ejecutarlos todos los agentes sin autorización adicional.
 
+## Política de flota y poteto (contrato objetivo F)
+
+Pedido de David del 2026-10-04. Los agentes especializados nativos y los
+trabajadores CLI aplican poteto-mode mediante la adaptación de su ejecutor.
+Especialidad, responsabilidad, modelo y runtime son decisiones separadas. La
+selección conserva el propietario del encargo y usa evidencia de capacidades.
+
+Los modelos estables nuevos sustituyen a sus predecesores para encargos nuevos
+cuando existe evidencia de sucesión, acceso y compatibilidad. Las tareas
+admitidas conservan su modelo. Los agentes nuevos se descubren y conectan con
+perfil, instrucciones y ruta verificables; las carencias se muestran. Cada
+especialista carga contexto de dominio vigente y las skills necesarias sin
+heredar historiales ajenos ni borrar memoria durante la limpieza.
+
+Este es el objetivo de F.1–F.4, no una descripción del runtime desplegado.
+F.0 aporta diagnóstico, prototipo y rechazo de drift de modelo CLI. El diseño
+está en `docs/superpowers/specs/2026-10-04-flota-poteto-design.md` y la evidencia
+viva en `docs/evidence/flota-poteto-2026-10-04.md`. Se conservan admisión y ciclo
+de vida nativos, calidad por SHA y la publicación segura existente.
+
 ## Objetivo de recuperación limpia (pendiente de operación)
 
 David quiere reconstruir OpenClaw con estado nuevo y conservar los ocho agentes

@@ -999,15 +999,18 @@ worker_argv() { # $1 id $2 clave $3 worktree $4 brief $5 session_id $6 session_n
                 # sustituidos; rc 1 si el worker o la clave no existen, o si
                 # un marcador queda vacio ({effort} sin effort, {session_id}
                 # sin id real de la CLI): jamas un argumento vacio (14.13, B5)
-  WREG="$(corrida_workers_registry)" WID="$1" WK="$2" WWT="$3" WBR="$4" WSID="$5" WSN="$6" python3 -c "
-import json,os,sys
+  WLIB="$(dirname "${BASH_SOURCE[0]}")/.." WREG="$(corrida_workers_registry)" WID="$1" WK="$2" WWT="$3" WBR="$4" WSID="$5" WSN="$6" python3 -c "
+import os,sys
+from pathlib import Path
+sys.path.insert(0, os.environ['WLIB'])
+from corrida_worker.registry import load_registry
 try:
-  r=json.load(open(os.environ['WREG']))
-  w=[x for x in r['workers'] if x['id']==os.environ['WID']][0]
-  a=list(w['commands'][os.environ['WK']])
+  r=load_registry(Path(os.environ['WREG']))
+  w=next(x for x in r.workers if x.id==os.environ['WID'])
+  a=list(w.commands[os.environ['WK']])
   s={'{worktree}':os.environ['WWT'],'{brief}':os.environ['WBR'],
      '{session_id}':os.environ['WSID'],'{session_name}':os.environ['WSN']}
-  e=w.get('effort')
+  e=w.effort
   def sub(x):
     if '{effort}' in x:
       if not e:

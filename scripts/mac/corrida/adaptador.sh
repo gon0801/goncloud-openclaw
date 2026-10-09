@@ -404,6 +404,12 @@ adaptador_resume() {
     echo "adaptador: la corrida $id no esta abierta" >&2
     echo "unavailable"; return 0
   fi
+  local modelo; modelo="$(lane_campo "$reg" "$carril" model)"
+  if [ -z "$modelo" ] || [ "$modelo" != "$(worker_atributo "$worker" model)" ] \
+      || [ "$(lane_campo "$reg" "$carril" worker)" != "$worker" ] \
+      || [ "$(lane_campo "$reg" "$carril" session)" != "$sesion" ]; then
+    echo "unavailable"; return 0
+  fi
   local rol; rol="$(adaptador_rol_de_modo "$(lane_campo "$reg" "$carril" mode)")" \
     || { echo "unavailable"; return 0; }
   local bin; bin="$(resolver_bin_worker "$worker")" || { echo "unavailable"; return 0; }

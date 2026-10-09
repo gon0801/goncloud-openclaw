@@ -45,6 +45,7 @@ OPTIONAL_WORKER_KEYS = frozenset({"effort", "quota_group"})
 WORKER_ID_RE = re.compile(r"^[a-z0-9_]+$")
 EFFORT_COMMANDS = ("start:write", "start:review", "resume:write", "resume:review")
 TASK_TYPE_RE = re.compile(r"^[a-z0-9_-]+$")
+MODEL_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:-]*")
 PLACEHOLDER_RE = re.compile(r"\{([^{}]*)\}")
 SHELL_CHARS = frozenset(";|&$`\"'\\<>()*?!#~^")
 
@@ -143,6 +144,8 @@ def _check_binary(binary: object) -> str:
 def _check_argv_element(element: object) -> str:
     if not isinstance(element, str) or not element:
         raise CommandError("empty argv element")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in element):
+        raise CommandError("control character in command argument")
     if any(ch in SHELL_CHARS for ch in element):
         raise CommandError("shell operator in command")
     for name in PLACEHOLDER_RE.findall(element):
@@ -284,6 +287,16 @@ def _check_worker(raw: object) -> Worker:
         if not isinstance(value, str) or not value:
             raise RegistryError(f"bad {field}")
     commands = _check_commands(raw["commands"], capabilities)
+    if not MODEL_RE.fullmatch(raw["model"]):
+        raise RegistryError("bad model")
+    for key, argv in commands.items():
+        for index, argument in enumerate(argv):
+            if argument in ("--model", "-m"):
+                if index + 1 == len(argv) or argv[index + 1] != raw["model"]:
+                    raise CommandError(f"{key} model differs from worker.model")
+            elif argument.startswith(("--model=", "-m=")):
+                if argument.split("=", 1)[1] != raw["model"]:
+                    raise CommandError(f"{key} model differs from worker.model")
     # El par effort/marcador va cerrado en ambas direcciones (14.13, 14.13c):
     # effort sin {effort} en start/resume, o {effort} sin effort, es ERROR;
     # jamas una expansion a argumento vacio.

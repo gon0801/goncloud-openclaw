@@ -966,3 +966,24 @@ reproducible vuelve en dos rondas consecutivas; no se mergea abierto. Trabajo
 independiente puede seguir. Este plan no promete resolver falta de autoridad,
 credenciales o servicios externos ignorando su estado. Un solo PR
 `faseu6/cierre` reunirá los recibos finales; ningún estado cambia ahora a completo.
+
+## Fase F — Política de flota, poteto y especialidades
+
+Pedido de David del 2026-10-04. Cubre agentes nativos y CLI, versiones de modelos
+actualizadas, agentes nuevos conectados y contexto especializado limpio.
+[Diseño contrastado](docs/superpowers/specs/2026-10-04-flota-poteto-design.md) y
+[evidencia viva redactada](docs/evidence/flota-poteto-2026-10-04.md).
+Se extienden los propietarios de encargos y corridas existentes. No se crea otra
+cola ni se reemplaza el orden de U4/U6. Las filas pendientes no acreditan deploy.
+
+| Task | Contenido | DoD | Depends | Status |
+|---|---|---|---|---|
+| F.0 | `[lane:gate] [tdd:required]` Diagnóstico how/why, comparación de dos arquitecturas, prototipo y rechazo de discrepancias entre modelo declarado y argv CLI. | Evidencia de 19 agentes; prototipo de ambos runtimes reproducible; regresión roja antes del arreglo y verde después; revisión y hooks; sin afirmar renovación viva. | - | cc:WIP |
+| F.1 | `[lane:gate] [tdd:required]` Distribuir poteto canónico y adaptación nativa; reconciliar habilitación efectiva y especialidad de todos los agentes descubiertos. | Poteto elegible; contrato observado en turnos directos, hijos ordinarios, encargos gestionados y CLI; ausencia comprobada rechazada antes del trabajo; fuentes y skills de dominio con revisión; memorias preservadas; prueba representativa por especialidad. | F.0; rutas de encargos verificadas por host | cc:TODO |
+| F.2 | `[lane:gate] [tdd:required]` Renovación de modelos mediante evidencia de sucesión, acceso y capacidades por runtime; fijar snapshot de modelo/argv por intento antes de promover. | Nuevo modelo estable actualiza asignaciones sin editar IDs manualmente; sucesor incompatible queda visible; reanudación conserva versión; catálogo remoto autoritativo; propietario de mantenimiento existente invoca reconciliación; aplicación agrupada con revisión y lectura posterior. | F.0, F.1 | cc:TODO |
+| F.3 | `[lane:gate] [tdd:required]` Incorporación automática de agentes y contexto especializado mediante proyecciones por runtime. | Agente añadido después de la generación inicial se inventaría y conecta con perfil válido; sin perfil muestra carencia; delegación y retorno comprobados; publicación explícita a destinos nuevos; fuentes vencidas refrescadas; no hereda skills ajenas ni borra memoria. | F.1 | cc:TODO |
+| F.4 | `[lane:release] [tdd:required]` Acreditar el circuito integrado por host, con recuperación independiente del estado de preparación de la flota. | Pedido de dominio nativo y plan de ingeniería con CLI completan el circuito; poteto comprobado; promoción y nuevo agente ejercitados; fallo parcial no activa ambos runtimes; una CI completa del SHA final y checklist de deploy una vez. | F.2, F.3; contrato U4/U6 aplicable | cc:TODO |
+
+F.2 no usa presencia en catálogo como prueba de estabilidad. F.1 no usa la
+palabra poteto en un prompt como prueba de entrega efectiva. Se conserva la
+regla de detener el mismo bloqueante reproducible en dos rondas consecutivas.
