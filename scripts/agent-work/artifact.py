@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify that the native runtime packages are the build of the reviewed source (T11 :295).
 
-Usage: artifact.py verify --manifest <artifact-manifest.json> [--package-dir DIR] [--runtime-repo R]
+Usage: artifact.py verify --manifest <artifact-manifest.json> [--package-dir DIR] [--runtime-repo R] [--limits L]
 """
 import argparse
 import base64
@@ -103,12 +103,14 @@ def main():
     parser.add_argument("--manifest", type=Path, default=ROOT / "docs/evidence/agent-work/artifact-manifest.json")
     parser.add_argument("--package-dir", type=Path)
     parser.add_argument("--runtime-repo", type=Path)
+    parser.add_argument("--limits", type=Path, default=ROOT / "docs/evidence/agent-work/limits.json")
     args = parser.parse_args()
     manifest = json.loads(args.manifest.read_text())
     package_dir = args.package_dir or Path(manifest["packageDir"])
     runtime_repo = args.runtime_repo or Path(json.loads(
         (ROOT / "docs/evidence/agent-work/runtime-map.json").read_text())["runtime"]["localCheckout"])
     found = problems(manifest, package_dir, runtime_repo)
+    found += limit_problems(json.loads(args.limits.read_text()))
     if found:
         print("\n".join(f"artifact: {problem}" for problem in found), file=sys.stderr)
         return 1

@@ -114,6 +114,16 @@ class ArtifactVerifyTest(unittest.TestCase):
                                       "--runtime-repo", str(self.repo)], capture_output=True, text=True)
         good = run()
         self.assertEqual((good.returncode, good.stdout.strip()), (0, "artifact OK: openclaw 2026.9.7 from " + self.source))
+        limits = json.loads((ROOT / "docs/evidence/agent-work/limits.json").read_text())
+        limits["productionAdmissionEnabled"] = True
+        open_limits = Path(self.temp.name) / "limits.json"
+        open_limits.write_text(json.dumps(limits))
+        refused = subprocess.run([sys.executable, str(ROOT / "scripts/agent-work/artifact.py"), "verify",
+                                  "--manifest", str(path), "--package-dir", str(self.packages),
+                                  "--runtime-repo", str(self.repo), "--limits", str(open_limits)],
+                                 capture_output=True, text=True)
+        self.assertEqual((refused.returncode, refused.stderr.strip()),
+                         (1, "artifact: production admission is enabled with unknown limits: maxContextTokens"))
         (self.packages / "openclaw-2026.9.7.tgz").unlink()
         bad = run()
         self.assertEqual((bad.returncode, bad.stderr.strip()), (1, "artifact: openclaw-2026.9.7.tgz: missing"))

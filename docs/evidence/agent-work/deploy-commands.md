@@ -6,7 +6,7 @@ El artefacto y sus hashes están en `artifact-manifest.json`, y `scripts/agent-w
 
 ## Dónde vive OpenClaw en el host
 
-El instalador de OpenClaw pone el paquete global dentro de su propio Node. El lanzador es `~/.openclaw/bin/openclaw`, que ejecuta `~/.openclaw/tools/node/bin/node ~/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw/dist/entry.js`. Se midió en esta Mac. En la Mini, `health` reporta `childRuntime.execPath=/Users/gon/.openclaw/tools/node-v24.19.0/bin/node`, la misma estructura. Por eso la instalación en el host es un `npm install -g` con ese npm, sin `--prefix`.
+El instalador de OpenClaw pone el paquete global dentro de su propio Node. El lanzador es `~/.openclaw/bin/openclaw`, que ejecuta `~/.openclaw/tools/node/bin/node ~/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw/dist/entry.js`. Se midió en esta Mac. En la Mini, `health` reporta `childRuntime.execPath=/Users/gon/.openclaw/tools/node-v24.19.0/bin/node`, la misma estructura (`T11-a-mini-health.log`). Por eso la instalación en el host es un `npm install -g` con ese npm, sin `--prefix`.
 
 ## Construir y empaquetar (una vez por SHA, en la máquina de build)
 
@@ -28,7 +28,7 @@ Antes de instalar, saca una foto consistente de la base de estado y de la de cad
 
 | Paso | Comando | Salida esperada | Duración máxima | Ante fallo |
 |---|---|---|---|---|
-| 1. Foto | `F=~/.openclaw/respaldos/pre-<sha7>-$(date +%Y%m%d-%H%M); mkdir -p "$F"; sqlite3 ~/.openclaw/state/openclaw.sqlite ".backup $F/openclaw.sqlite"; for f in ~/.openclaw/agents/*/agent/openclaw-agent.sqlite; do sqlite3 "$f" ".backup $F/agent-$(basename "$(dirname "$(dirname "$f")")").sqlite"; done` | `sqlite3 "$F/openclaw.sqlite" 'PRAGMA user_version; PRAGMA quick_check;'` imprime `19` y `ok` | 1 min (medido el 2026-10-09 contra la Mini viva, por ssh: 564 MB en total, sin detener el gateway) | Sin foto válida no se instala. |
+| 1. Foto | `F=~/.openclaw/respaldos/pre-<sha7>-$(date +%Y%m%d-%H%M); mkdir -p "$F"; sqlite3 ~/.openclaw/state/openclaw.sqlite ".backup $F/openclaw.sqlite"; for f in ~/.openclaw/agents/*/agent/openclaw-agent.sqlite; do sqlite3 "$f" ".backup $F/agent-$(basename "$(dirname "$(dirname "$f")")").sqlite"; done` | `sqlite3 "$F/openclaw.sqlite" 'PRAGMA user_version; PRAGMA quick_check;'` imprime `19` y `ok` | 1 min (medido el 2026-10-09 contra la Mini viva, por ssh: 564 MB en total, sin detener el gateway; `T11-a-foto-mini.log`) | Sin foto válida no se instala. |
 | 2. Instalar | `~/.openclaw/tools/node/bin/npm install -g --allow-scripts=<dir>/openclaw-2026.9.7.tgz <dir>/openclaw-ai-2026.9.7.tgz <dir>/openclaw-2026.9.7.tgz` | `added … packages`; `npm warn allow-scripts` no lista `openclaw` | 2 min (medido: 15 s en un prefijo vacío) | La versión anterior queda reemplazada a medias: sigue la recuperación de abajo. |
 | 3. Humo | `~/.openclaw/bin/openclaw --version` | `OpenClaw 2026.9.7 (818f0fd)` | 5 s | Recuperación. |
 
