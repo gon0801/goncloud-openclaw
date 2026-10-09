@@ -1002,6 +1002,38 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual(calls, [])
         self.assertEqual(manager.counts()["active"], 0)
 
+    def test_resource_close_crash_between_reserve_and_launch_with_host_unreachable_keeps_capacity(self):
+        # A11: the host died after reserving and does not answer; nothing frees the slot.
+        self.manager.reserve(self.key, "worker-1", "TaskCreated")
+        self.manager.begin_launch(self.key)
+        self.backend.offline = True
+        restarted = ResourceManager(self.host.spool, "host-test", self.backend, capacity=1)
+        view = restarted.close(self.key, {"kind": "cancel", "receipt": "c1"})
+        self.assertEqual((view.state, view.reason), ("CleanupPending", "host unavailable"))
+        with self.assertRaisesRegex(ValueError, "capacity"):
+            restarted.reserve(OperationKey("host-test", "replacement", 1, "instance-new"),
+                              "replacement", "TaskCreated")
+
+    def test_resource_close_session_gone_with_a_surviving_descendant_still_holds(self):
+        # A13: after a failed stop, a vanished session is not absence while a descendant lives.
+        survivor = "  502 4242     1 Sat Oct  3 09:00:00 2026 /opt/homebrew/bin/python3 -c x SURV\n"
+        state = {"ps": "", "observe": "identity", "stop": False}
+        backend = AgentesBackend("/usr/bin/true", "ag-stopfail2",
+                                 ps_reader=lambda: CommandOutcome(0, state["ps"]),
+                                 launchd_reader=lambda: CommandOutcome(0, self.AGENTES_LD),
+                                 runner=lambda argv: CommandOutcome(0, ""), grace_seconds=0.2)
+        manager, key = self._agentes_running(backend, "ag-stopfail2-1")
+        identity = backend.observe("ag-stopfail2-1")
+        backend.observe = lambda _session: identity if state["observe"] == "identity" else None
+        backend.stop = lambda _identity: state["stop"]
+        self.assertEqual(manager.close(key, {"kind": "cancel", "receipt": "c1"}).reason, "stop failed")
+        state.update(stop=True, observe="gone", ps=survivor)
+        view = manager.close(key, {"kind": "cancel", "receipt": "c1"})
+        self.assertEqual(view.state, "CleanupPending", "the session vanished but a descendant survived")
+        self.assertEqual(manager.counts()["active"], 1)
+        state["ps"] = ""
+        self.assertEqual(manager.close(key, {"kind": "cancel", "receipt": "c1"}).state, "AbsenceVerified")
+
     def test_resource_identity_agentes_happy_launch_and_presence_clear(self):
         shim, _log = self._tmux_shim()
         calls = []

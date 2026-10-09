@@ -1,0 +1,7 @@
+CLI_GATEWAY_E2E submit=1 admit=1 delivery=1 report=1 blocked=1
+.
+----------------------------------------------------------------------
+Ran 1 test in 32.522s
+
+OK
+rc=0

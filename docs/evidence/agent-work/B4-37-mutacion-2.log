@@ -1,0 +1,37 @@
+F
+======================================================================
+FAIL: test_two_dispatchers_a_cancellation_and_a_stale_callback_keep_one_durable_order (__main__.DispatchersCancelE2E.test_two_dispatchers_a_cancellation_and_a_stale_callback_keep_one_durable_order)
+----------------------------------------------------------------------
+test_agent_work_main_cli_loop_e2e.HarnessError: Error: Managed task already has an admission claim
+    at decodeSqliteWorkerReplyError (/Users/dn/dev/openclaw-agent-work-integration/src/infra/sqlite-worker-broker-reply.ts:259:33)
+    at receiveSqliteWorkerReply (/Users/dn/dev/openclaw-agent-work-integration/src/infra/sqlite-worker-broker-reply.ts:320:19)
+    at Object.receiveReply (/Users/dn/dev/openclaw-agent-work-integration/src/infra/sqlite-worker-broker-lifecycle.ts:65:32)
+    at Worker.<anonymous> (/Users/dn/dev/openclaw-agent-work-integration/src/infra/sqlite-worker-broker-lifecycle.ts:74:61)
+    at Worker.emit (node:events:514:20)
+    at MessagePort.<anonymous> (node:internal/worker:354:14)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:872:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_dispatchers_cancel_e2e.py", line 61, in test_two_dispatchers_a_cancellation_and_a_stale_callback_keep_one_durable_order
+    with self.assertRaisesRegex(HarnessError, "Managed task is not awaiting an agent result",
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                msg="the readmission of the cancelled task was not refused for the cancellation"):
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "Managed task is not awaiting an agent result" does not match "Error: Managed task already has an admission claim
+    at decodeSqliteWorkerReplyError (/Users/dn/dev/openclaw-agent-work-integration/src/infra/sqlite-worker-broker-reply.ts:259:33)
+    at receiveSqliteWorkerReply (/Users/dn/dev/openclaw-agent-work-integration/src/infra/sqlite-worker-broker-reply.ts:320:19)
+    at Object.receiveReply (/Users/dn/dev/openclaw-agent-work-integration/src/infra/sqlite-worker-broker-lifecycle.ts:65:32)
+    at Worker.<anonymous> (/Users/dn/dev/openclaw-agent-work-integration/src/infra/sqlite-worker-broker-lifecycle.ts:74:61)
+    at Worker.emit (node:events:514:20)
+    at MessagePort.<anonymous> (node:internal/worker:354:14)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:872:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)" : the readmission of the cancelled task was not refused for the cancellation
+
+----------------------------------------------------------------------
+Ran 1 test in 58.751s
+
+FAILED (failures=1)
+rc=1
