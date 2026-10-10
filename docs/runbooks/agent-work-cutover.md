@@ -21,7 +21,7 @@ La primera prueba comprueba la sintaxis de las herramientas de empaquetado. Desp
 
 ## Condiciones pendientes para operación real
 
-B4 cerró (PR #251). T11-a dejó el paquete de R `818f0fd` construido y verificado por `artifact-manifest.json` (`artifact.py verify`), con la base de estado de 19 a 27 y el binario anterior incapaz de abrirla, y los comandos medidos en `deploy-commands.md`. `limits.json` ya trae un perfil productivo medido, pero `maxContextTokens` es desconocido: R lo aplica a bytes del cuerpo HTTP y la copia no los guarda. Por eso `productionAdmissionEnabled` sigue en `false`, y `artifact.limit_problems` rechaza habilitarlo mientras haya un valor `null`. Después se ensaya instalación y reversa del binario y configuración sobre un entorno aislado que ejecute el Gateway real. La reversa incompatible conserva el binario nuevo, admisión congelada y resultados pendientes. Ningún procedimiento reactiva el cron antiguo automáticamente.
+B4 cerró (PR #251), T11 cerró con B5 (PR #252) y la parte A de T12 se instaló el 2026-10-10. Desde B6 (PR #258), el artefacto es R `19c2ed1` (`artifact-manifest.json`, `artifact.py verify`), y certifica opencode Go con Responses. Con B7 (PR #260) `limits.json` ya no tiene ningún límite desconocido: `maxContextTokens` es la ventana del modelo en bytes. Con B8, los topes de gasto por encargo son el máximo observado × 10. `productionAdmissionEnabled` sigue en `false`, porque la admisión se abre por entrada. La reversa incompatible conserva el binario nuevo, la admisión congelada y los resultados pendientes. Ningún procedimiento reactiva el cron antiguo automáticamente.
 
 ## Corte real (T11-b)
 
