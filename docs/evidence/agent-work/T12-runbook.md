@@ -84,9 +84,44 @@ Solo con R `4b9785c` o posterior instalado (el corte escribe `managedTasks.reque
 | B.2 | Preparar e inspeccionar | `python3 scripts/agent-work/cutover_live.py prepare --state <estado> --entry entry.json` y `… inspect --state <estado> --wait-seconds 60` | `problems: []` |
 | B.3 | Suspender, drenar y transferir (`:312`, `:313`) | `python3 scripts/agent-work/cutover_live.py apply --state <estado> --wait-seconds 120` | `transferred`; un reinicio del gateway de unos 6 s; un solo emisor |
 | B.4 | Las dos entregas, la incidencia, la revisión con `Changes`, la operación sin SHA, cancelar y cerrar (`:313`, `:314`) | Con la ruta abierta, el flujo de `main_cli_loop` y `review_tail_restart` en vivo | Lo que esos casos prueban en `T10-*.md` |
-| B.5 | Tablero y cierre de trabajadores (`:315`) | `openclaw gateway call managedTasks.projections.list` y `resources.py` | proyección y cierres verificados |
+| B.5 | Tablero y cierre de trabajadores (`:315`) | `openclaw gateway call managedTasks.projections.list`; en la Mac, `corrida.sh terminar-sesion` o `cerrar` (sección siguiente) | proyección y cierres verificados |
 | B.6 | 30 minutos sin novedades (`:316`) | Contadores externos: peticiones al proveedor (el panel de opencode), `sessions.list` y `ps` del perímetro, al inicio y al final | cero inferencia atribuible a vigilancia |
 | B.7 | Retirar los despertares viejos (`:317`, `:318`) | Borrar los crons suspendidos (sus ids están en el estado del corte) y sus recreadores; cambiar `~/.claude/skills/prompt-claw/SKILL.md` para que un loop sobre la ruta adoptada no cree `<loop>-vigia` | — |
+
+### El brief de `main` en la Mini
+
+`main` encarga un paso a un CLI de la Mac con `managed_tasks_submit` y luego `managed_tasks_admit`. R lee el brief de `<instructionRoot>/<sha256>`: un archivo real (no un enlace), de 1 MB como máximo, cuyo sha256 es su nombre. `<instructionRoot>` es el valor de `entry.json` (B.1). `routing.py` no sirve en la Mini, porque necesita el repo y `coverage.json`. Para eso está `scripts/agent-work/brief.py`, que solo usa la biblioteca estándar de Python.
+
+Instalarlo, desde la Mac de desarrollo y en la raíz de G:
+
+```
+ssh gon@100.73.187.5 'mkdir -p -m 700 ~/.local/share/agent-work <instructionRoot>'
+scp scripts/agent-work/brief.py gon@100.73.187.5:.local/share/agent-work/brief.py
+shasum -a 256 scripts/agent-work/brief.py; ssh gon@100.73.187.5 'shasum -a 256 ~/.local/share/agent-work/brief.py'
+ssh gon@100.73.187.5 'R=$(mktemp -d); printf "prueba\n" | python3 ~/.local/share/agent-work/brief.py --root "$R" --host mac-local --adapter claude_opus; rm -rf "$R"'
+```
+
+Los dos sha256 tienen que coincidir. La última línea imprime un JSON con `instructionRef` y `target`. `<instructionRoot>` no puede ser un enlace simbólico: R y `brief.py` lo rechazan.
+
+Cómo lo usa `main`, con su tool de exec en la Mini:
+
+```
+python3 ~/.local/share/agent-work/brief.py --root <instructionRoot> --host mac-local --adapter <adapterId> <<'BRIEF'
+<texto del brief>
+BRIEF
+```
+
+También acepta `--file <archivo>` en lugar de la entrada estándar. Imprime una línea, por ejemplo:
+
+```
+{"instructionRef": {"digest": "sha256:<sha256>", "ref": "artifact:<sha256>"}, "target": {"adapterId": "<adapterId>", "hostId": "mac-local", "kind": "cli"}}
+```
+
+`main` pega `instructionRef` y `target` tal cual en `managed_tasks_submit`, junto con su `key`, `inputRevision`, `resultContract` y `continuation`, y después llama a `managed_tasks_admit`. Escribir el mismo brief dos veces es seguro: el archivo ya está y la salida es la misma. Si sale con 1, el motivo va en stderr y no hay nada que enviar: brief vacío o de más de 1 MB, raíz inexistente o enlazada, o un archivo con ese nombre y otro contenido. `brief.py` no certifica la ruta; un adaptador sin certificar (matriz A10) lo sigue rechazando R.
+
+### El cierre de una sesión gestionada en la Mac
+
+`corrida.sh terminar-sesion <id> <sesión> --evidence <archivo>` y `corrida.sh cerrar <id>` cierran el recurso de una sesión gestionada en tres pasos. Primero, `native_gateway.py --flush-results` entrega a R los resultados pendientes, para que el recibo sea durable antes del cierre. Después, `resources.py close` cierra el recurso. Al final, otro `--flush-results` manda el cierre terminal a R para que suelte el cupo. Si un paso falla, la sesión conserva sus marcas, y repetir el comando retoma el cierre. Las variables necesarias son `AGENT_WORK_HOST_STATE_DIR`, `AGENT_WORK_TMUX_SOCKET`, `AGENT_WORK_RESOURCE_BIN` (la ruta a `resources.py`), `AGENT_WORK_GATEWAY_BIN` (la ruta a `native_gateway.py`), `AGENT_WORK_EXPECT_URL` (la URL de 1.8) y `OPENCLAW_BIN`. Las sesiones no gestionadas no usan ninguna y no llaman al gateway.
 
 ## Reversa (plan `:319`)
 

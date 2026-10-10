@@ -601,11 +601,98 @@ class ResourceTests(unittest.TestCase):
             "with open(os.environ['FAKE_RESOURCE_LOG'],'a') as stream: stream.write(os.environ['FAKE_RESOURCE_STATE']+'\\n')\n"
             "print(json.dumps({'state':os.environ['FAKE_RESOURCE_STATE'],'reason':'test'}))\n"
         )
+        gateway = root / "gateway-shim.py"
+        gateway.write_text(
+            "import os,sys\n"
+            "with open(os.environ['FAKE_RESOURCE_LOG'],'a') as stream: stream.write('flush\\n')\n"
+            "with open(os.environ['FAKE_GATEWAY_LOG'],'a') as stream: stream.write(' '.join(sys.argv[1:])+'\\n')\n"
+            "calls=open(os.environ['FAKE_RESOURCE_LOG']).read().splitlines().count('flush')\n"
+            "sys.exit(1 if str(calls) in os.environ.get('FAKE_FLUSH_FAIL','').split(',') else 0)\n"
+        )
         env = dict(os.environ, CORRIDA_STATE=str(state), TMUX_BIN=str(tmux),
                    FAKE_TMUX_LOG=str(root / "tmux.log"), FAKE_RESOURCE_LOG=str(root / "resource.log"),
+                   FAKE_GATEWAY_LOG=str(root / "gateway.log"), OPENCLAW_BIN="/fake/openclaw",
                    AGENT_WORK_HOST_STATE_DIR=str(root / "host"), AGENT_WORK_TMUX_SOCKET="isolated-test",
-                   AGENT_WORK_RESOURCE_BIN=str(resource))
+                   AGENT_WORK_RESOURCE_BIN=str(resource), AGENT_WORK_GATEWAY_BIN=str(gateway),
+                   AGENT_WORK_EXPECT_URL="ws://127.0.0.1:18789")
         return root, reg, evidence, env
+
+    def _unmanaged_shell(self):
+        root, reg, evidence, env = self._managed_shell()
+        reg.write_text(json.dumps({
+            "id": "run-1", "estado": "abierta", "schema": "corrida.v2",
+            "sesiones": [{"nombre": "libre-1"}],
+            "lanes": [{"id": "lane-1", "session": "libre-1"}],
+        }))
+        return root, reg, env
+
+    def _log_lines(self, path):
+        return path.read_text().splitlines() if path.exists() else []
+
+    def test_resource_close_managed_termination_flushes_results_before_and_after_the_close(self):
+        root, reg, evidence, env = self._managed_shell()
+        command = ["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "terminar-sesion",
+                   "run-1", "managed-1", "--evidence", str(evidence)]
+        done = subprocess.run(command, env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"),
+                              capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self._log_lines(root / "resource.log"), ["flush", "AbsenceVerified", "flush"])
+        flush = ("--flush-results --openclaw-bin /fake/openclaw --host-id host-test "
+                 "--expect-url ws://127.0.0.1:18789 --host-state-dir " + str(root / "host"))
+        self.assertEqual(self._log_lines(root / "gateway.log"), [flush, flush])
+        self.assertIn("set-environment", (root / "tmux.log").read_text())
+
+    def test_resource_close_flush_argv_is_accepted_by_the_real_gateway_cli(self):
+        root, reg, evidence, env = self._managed_shell()
+        env["AGENT_WORK_GATEWAY_BIN"] = str(ROOT / "scripts" / "agent-work" / "native_gateway.py")
+        done = subprocess.run(["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "terminar-sesion",
+                               "run-1", "managed-1", "--evidence", str(evidence)],
+                              env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"), capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self._log_lines(root / "resource.log"), ["AbsenceVerified"])
+        self.assertTrue((root / "host" / "host.sqlite").is_file())
+
+    def test_resource_close_failed_flush_keeps_the_session_marked(self):
+        root, reg, evidence, env = self._managed_shell()
+        command = ["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "terminar-sesion",
+                   "run-1", "managed-1", "--evidence", str(evidence)]
+        before = subprocess.run(command, env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified",
+                                                  FAKE_FLUSH_FAIL="1"), capture_output=True, text=True)
+        self.assertNotEqual(before.returncode, 0)
+        self.assertIn("resultados sin entregar a R; no se cierra", before.stderr)
+        self.assertEqual(self._log_lines(root / "resource.log"), ["flush"])
+        after = subprocess.run(command, env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified",
+                                                 FAKE_FLUSH_FAIL="3"), capture_output=True, text=True)
+        self.assertNotEqual(after.returncode, 0)
+        self.assertIn("cerrado aqui, R sin avisar", after.stderr)
+        self.assertEqual(self._log_lines(root / "resource.log"), ["flush", "flush", "AbsenceVerified", "flush"])
+        self.assertNotIn("set-environment", "\n".join(self._log_lines(root / "tmux.log")))
+        retried = subprocess.run(command, env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"),
+                                 capture_output=True, text=True)
+        self.assertEqual(retried.returncode, 0, retried.stderr)
+        self.assertIn("set-environment", (root / "tmux.log").read_text())
+
+    def test_resource_close_unmanaged_termination_never_calls_the_gateway(self):
+        root, reg, env = self._unmanaged_shell()
+        done = subprocess.run(["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "terminar-sesion",
+                               "run-1", "libre-1"], env=env, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout, "terminada libre-1\n")
+        self.assertIn("set-environment", (root / "tmux.log").read_text())
+        self.assertFalse((root / "resource.log").exists())
+        self.assertFalse((root / "gateway.log").exists())
+
+    def test_resource_close_cerrar_unmanaged_lane_never_calls_the_gateway(self):
+        root, reg, env = self._unmanaged_shell()
+        shell = ('. "' + str(ROOT / "scripts" / "mac" / "corrida" / "lib.sh") + '"; '
+                 'AQUI="' + str(ROOT / "scripts" / "mac" / "corrida") + '"; '
+                 '. "' + str(ROOT / "scripts" / "mac" / "corrida" / "cerrar.sh") + '"; '
+                 'cerrar_archivar_lanes run-1 "' + str(reg) + '"')
+        done = subprocess.run(["bash", "-c", shell], env=env, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertTrue((root / "runs" / "run-1" / "archive" / "lane-1" / "transcript.txt").exists())
+        self.assertFalse((root / "resource.log").exists())
+        self.assertFalse((root / "gateway.log").exists())
 
     def test_resource_close_managed_termination_keeps_marks_while_pending(self):
         root, reg, evidence, env = self._managed_shell()
@@ -708,7 +795,7 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual(verified.returncode, 0, verified.stderr)
         self.assertEqual(verified.stderr, "")
         self.assertEqual((root / "resource.log").read_text().splitlines(),
-                         ["CleanupPending", "AbsenceVerified"])
+                         ["flush", "CleanupPending", "flush", "AbsenceVerified", "flush"])
 
     AGENTES_LD = (
         "user/502 = {\n"

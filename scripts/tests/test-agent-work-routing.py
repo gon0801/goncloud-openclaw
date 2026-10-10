@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 from routing import prepare_request, RouteUnavailable  # noqa: E402
 import routing  # noqa: E402
+import brief  # noqa: E402
 import native_gateway  # noqa: E402
 
 
@@ -387,7 +388,7 @@ class AgentsRouting(unittest.TestCase):
     def test_parallel_preparation_never_observes_partial_artifact(self):
         writing = threading.Event()
         release = threading.Event()
-        original_open = routing.os.open
+        original_open = brief.os.open
         result = []
         first = True
 
@@ -406,7 +407,7 @@ class AgentsRouting(unittest.TestCase):
             except Exception as exc:  # asserted below
                 result.append(exc)
 
-        with mock.patch("routing.os.open", side_effect=paused_open):
+        with mock.patch("brief.os.open", side_effect=paused_open):
             thread = threading.Thread(target=first_request)
             thread.start()
             self.assertTrue(writing.wait(2))
@@ -417,6 +418,87 @@ class AgentsRouting(unittest.TestCase):
                 thread.join(2)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0], second)
+
+
+class BriefHelper(unittest.TestCase):
+    """brief.py runs alone on the gateway host, so every case runs a lone copy in isolated mode."""
+
+    BRIEF = b"Revisa el commit abc y responde con review.v1\n"
+    DIGEST = "04571968f445442a0b4d79bec8324cb09a5df4044356a43fd27c04d86b376e8a"
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.tmp = Path(temp.name)
+        tool = self.tmp / "tool"
+        tool.mkdir()
+        self.helper = tool / "brief.py"
+        self.helper.write_bytes((ROOT / "scripts/agent-work/brief.py").read_bytes())
+        self.root = self.tmp / "instructions"
+        self.root.mkdir(mode=0o700)
+
+    def run_helper(self, *args, stdin=BRIEF):
+        return subprocess.run([sys.executable, "-I", str(self.helper), "--root", str(self.root), *args],
+                              input=stdin, capture_output=True, cwd=self.tmp)
+
+    def test_brief_writes_the_file_r_resolves_and_prints_the_submit_fragments(self):
+        done = self.run_helper("--host", "mac-local", "--adapter", "claude_opus")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(json.loads(done.stdout), {
+            "instructionRef": {"ref": "artifact:" + self.DIGEST, "digest": "sha256:" + self.DIGEST},
+            "target": {"kind": "cli", "hostId": "mac-local", "adapterId": "claude_opus"},
+        })
+        artifact = self.root / self.DIGEST
+        self.assertFalse(artifact.is_symlink())
+        self.assertTrue(artifact.is_file())
+        self.assertEqual(artifact.read_bytes(), self.BRIEF)
+        self.assertEqual(artifact.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(sorted(p.name for p in self.root.iterdir()), [self.DIGEST])
+
+    def test_brief_reads_a_file_and_omits_target_without_host(self):
+        brief = self.tmp / "brief.txt"
+        brief.write_bytes(self.BRIEF)
+        done = self.run_helper("--file", str(brief), stdin=b"")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(json.loads(done.stdout), {
+            "instructionRef": {"ref": "artifact:" + self.DIGEST, "digest": "sha256:" + self.DIGEST}})
+        half = self.run_helper("--host", "mac-local")
+        self.assertEqual(half.returncode, 2)
+        self.assertIn(b"--host and --adapter go together", half.stderr)
+
+    def test_brief_refuses_a_symlinked_root(self):
+        real = self.tmp / "real"
+        real.mkdir()
+        self.root.rmdir()
+        self.root.symlink_to(real, target_is_directory=True)
+        done = self.run_helper()
+        self.assertEqual(done.returncode, 1)
+        self.assertEqual(done.stderr, b"brief: instruction root must be an existing directory\n")
+        self.assertEqual(done.stdout, b"")
+        self.assertEqual(list(real.iterdir()), [])
+
+    def test_brief_enforces_the_one_megabyte_limit(self):
+        exact = b"a" * (1024 * 1024)
+        done = self.run_helper(stdin=exact)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual((self.root / hashlib.sha256(exact).hexdigest()).read_bytes(), exact)
+        over = self.run_helper(stdin=exact + b"a")
+        self.assertEqual(over.returncode, 1)
+        self.assertEqual(over.stderr, b"brief: brief must contain 1 to 1048576 bytes\n")
+        empty = self.run_helper(stdin=b"")
+        self.assertEqual(empty.returncode, 1)
+        self.assertEqual(sorted(p.name for p in self.root.iterdir()), [hashlib.sha256(exact).hexdigest()])
+
+    def test_brief_second_write_is_idempotent_and_a_tampered_artifact_is_refused(self):
+        first = self.run_helper()
+        second = self.run_helper()
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(second.stdout, first.stdout)
+        self.assertEqual(sorted(p.name for p in self.root.iterdir()), [self.DIGEST])
+        (self.root / self.DIGEST).write_bytes(b"otra cosa")
+        tampered = self.run_helper()
+        self.assertEqual(tampered.returncode, 1)
+        self.assertEqual(tampered.stderr, b"brief: instruction artifact differs from digest\n")
 
 
 if __name__ == "__main__":

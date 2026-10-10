@@ -70,8 +70,14 @@ cmp -s scripts/mac/workers.v1.json "$HOME/bin/workers.v1.json" \
 [ -x "$HOME/bin/corrida.sh" ] || fail "corrida.sh quedo sin +x"
 [ -x "$HOME/bin/tablero-trabajo.sh" ] || fail "tablero-trabajo.sh quedo sin +x (claw lo corre directo)"
 [ -x "$HOME/bin/progress-events.py" ] || fail "progress-events.py no quedo instalado y ejecutable"
-for f in contracts.py host.py native_gateway.py progress_bridge.py resources.py routing.py spool.py cutover.py; do
+for f in brief.py contracts.py host.py native_gateway.py progress_bridge.py resources.py routing.py spool.py cutover.py; do
   cmp -s "scripts/agent-work/$f" "$HOME/bin/agent-work/$f" || fail "agent-work/$f falta o difiere"
+done
+# routing.py importa brief.py: cada modulo instalado tiene que importar solo con lo instalado.
+for f in "$HOME"/bin/agent-work/*.py; do
+  m="$(basename "$f" .py)"
+  (cd / && python3 -I -c "import sys; sys.path.insert(0, sys.argv[1]); import $m" "$HOME/bin/agent-work") >/dev/null 2>&1 \
+    || fail "agent-work/$m.py instalado no importa con lo instalado"
 done
 [ -x "$HOME/bin/agent-work/cutover.py" ] || fail "cutover.py instalado sin +x"
 ncorr="$(ls "$HOME/bin/corrida"/*.sh 2>/dev/null | wc -l | tr -d ' ')"
