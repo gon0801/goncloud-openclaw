@@ -2,17 +2,15 @@
 
 Este paso a paso es para David, o para quien él autorice, y se corre en la Mac Mini del gateway vivo (`gon@100.73.187.5`). El plan deja T12 pendiente hasta que haya autorización y una ventana (plan `:305-:320`). Lo que se instala es el artefacto de `artifact-manifest.json` (R `f1c5f34`). Cada comando de abajo se ensayó en la Mac de desarrollo sobre una copia de la Mini (T11, `deploy-commands.md`). Los pasos que dependen de la Mini (cómo arranca y se detiene su gateway) se leen en la Mini antes de empezar.
 
-## Lo que hoy no se puede abrir
+## Qué trabajadores pueden recibir un encargo
 
-La admisión de encargos gestionados (plan `:313` a `:318`) **no se puede habilitar** con la configuración actual de la Mini:
-- R solo certifica el presupuesto de un trabajador que llama al proveedor `openai` por HTTP en `api.openai.com` (`createManagedNativeProviderStream`). Ningún agente de la Mini usa ese proveedor, y no hay credencial de `openai`.
-- Las rutas a un CLI no se pueden certificar, porque un CLI no deja controlar sus llamadas (spec, "Consumo y límite de recuperación"; matriz A10).
+Desde B6 (`B6.md`), R certifica el presupuesto según el servidor y la API, no según el nombre del proveedor:
+- `https://api.openai.com/v1`, con Chat Completions y Responses;
+- `https://opencode.ai/zen/go/v1`, solo con Responses.
 
-Para abrirla hace falta una de dos cosas, y decidirla le toca a David:
-- certificar en R los proveedores reales (opencode, APIs `openai-responses` y `openai-completions`);
-- dar a un agente trabajador un modelo `openai` con su clave.
+En la Mini eso cubre a `main`, `ingenieria` e `implementer`, cuyo primario es `opencode-go-resp/muse-spark-1.3-contributor`. No cubre a los agentes con primario `opencode-go/deepseek-v4.1-flash` (`adversary`, `operaciones`, `reviewer`, `verifier`, `scout`): ese proveedor pasa por el plugin `opencode-go`, y R rechaza un plugin dentro de un encargo.
 
-Mientras no pase, T12 llega hasta la **parte A**: instalar con la admisión cerrada, clasificar los resultados previos y medir `maxContextTokens` en sombra. La parte B queda escrita para cuando se decida.
+Un encargo que cae a un fallback por CLI (claude-cli) o a un plugin (codex) se rechaza antes de gastar. Las rutas a un CLI de la Mac siguen sin certificar (matriz A10): esos loops conservan su vigía y lo declaran (plan `:318`).
 
 ## Antes de la ventana (sin tocar nada vivo)
 
@@ -63,7 +61,7 @@ Imprime el máximo, el p95 y n por agente, y propone `maxContextTokens` como el 
 
 ## Parte B: abrir una entrada (plan `:312` a `:318`)
 
-Solo cuando haya un trabajador certificable (ver arriba) y `maxContextTokens` medido.
+Solo con R `19c2ed1` o posterior instalado, un trabajador certificable de la sección de arriba (por ejemplo, la ruta `operaciones → ingenieria`) y `maxContextTokens` medido.
 
 | # | Qué | Comando | Resultado |
 |---|---|---|---|

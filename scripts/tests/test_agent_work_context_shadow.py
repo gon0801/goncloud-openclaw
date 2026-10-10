@@ -22,9 +22,9 @@ def agent_db(state, agent, events):
         db.commit()
 
 
-def measured(bytes_, ts="2026-10-10T00:00:00Z", provider="openai"):
+def measured(bytes_, ts="2026-10-10T00:00:00Z", provider="opencode-go-resp", api="openai-responses"):
     return {"type": "provider.payload.measured", "ts": ts, "provider": provider,
-            "data": {"bytes": bytes_, "provider": provider, "api": "openai-responses", "modelId": "m"}}
+            "data": {"bytes": bytes_, "provider": provider, "api": api, "modelId": "m"}}
 
 
 class ContextShadowTest(unittest.TestCase):
@@ -34,7 +34,8 @@ class ContextShadowTest(unittest.TestCase):
     def test_the_limit_is_the_largest_measured_body_in_the_perimeter_times_one_and_a_half(self):
         with tempfile.TemporaryDirectory() as temp:
             state = Path(temp)
-            agent_db(state, "ingenieria", [measured(1000), measured(4000), {"type": "provider.prompt.observed"}])
+            agent_db(state, "ingenieria", [measured(1000), measured(4000), {"type": "provider.prompt.observed"},
+                                           measured(50_000, provider="opencode-go-2", api="openai-completions")])
             agent_db(state, "adversary", [measured(2500, ts="2026-10-11T00:00:00Z")])
             agent_db(state, "main", [measured(900_000)])
             run = self.run_tool(state, "ingenieria", "adversary")
@@ -48,7 +49,8 @@ class ContextShadowTest(unittest.TestCase):
     def test_no_measured_call_leaves_the_limit_unknown(self):
         with tempfile.TemporaryDirectory() as temp:
             state = Path(temp)
-            agent_db(state, "ingenieria", [{"type": "provider.prompt.observed"}])
+            agent_db(state, "ingenieria", [{"type": "provider.prompt.observed"},
+                                           measured(3000, api="openai-completions")])
             run = self.run_tool(state, "ingenieria")
             self.assertEqual(run.returncode, 1)
             self.assertEqual(json.loads(run.stdout)["maxContextTokens"], None)
