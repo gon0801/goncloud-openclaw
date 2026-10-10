@@ -12,6 +12,7 @@ Prints one JSON line per request and {"faithful": bool, "pairs": [[wire, event],
 """
 import sqlite3
 from contextlib import closing
+from datetime import datetime, timezone
 import json
 import subprocess
 import sys
@@ -63,6 +64,24 @@ class Capture(BaseHTTPRequestHandler):
         self.wfile.write(b"data: [DONE]\n\n")
 
 
+def measured_since(databases, since):
+    """Event sizes from this rehearsal only: a fresh copy of the live gateway already holds real traffic."""
+    sizes = []
+    for database in databases:
+        with closing(sqlite3.connect(f"file:{database}?mode=ro", uri=True)) as db:
+            rows = db.execute("SELECT event_json FROM trajectory_runtime_events "
+                              "WHERE event_json LIKE '%provider.payload.measured%'").fetchall()
+        for (raw,) in rows:
+            event = json.loads(raw)
+            if event.get("type") == "provider.payload.measured" and event.get("ts", "") >= since:
+                sizes.append(event["data"]["bytes"])
+    return sizes
+
+
+def faithful(wire, events):
+    return bool(wire) and sorted(wire) == sorted(events)
+
+
 def main():
     if len(sys.argv) < 4:
         sys.exit(__doc__)
@@ -90,6 +109,7 @@ def main():
                 reseat(value, f"{path}.{index}")
     reseat(config)
     host.write_config(config)
+    started = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
     host.start(prefix)
     summary = {}
     try:
@@ -108,17 +128,12 @@ def main():
     finally:
         host.stop()
         server.shutdown()
-    events = []
-    for database in sorted((host.state / "agents").glob("*/agent/openclaw-agent.sqlite")):
-        with closing(sqlite3.connect(f"file:{database}?mode=ro", uri=True)) as db:
-            rows = db.execute("SELECT event_json FROM trajectory_runtime_events "
-                              "WHERE event_json LIKE '%provider.payload.measured%'").fetchall()
-        events += [json.loads(row[0])["data"]["bytes"] for row in rows]
+    events = measured_since(sorted((host.state / "agents").glob("*/agent/openclaw-agent.sqlite")), started)
     wire = [request["bytes"] for request in CAPTURED]
     pairs = list(zip(sorted(wire), sorted(events)))
-    faithful = bool(wire) and sorted(wire) == sorted(events)
-    print(json.dumps({"faithful": faithful, "pairs": pairs, "bySession": summary, "ensayo": str(host.root)}))
-    return 0 if faithful else 1
+    ok = faithful(wire, events)
+    print(json.dumps({"faithful": ok, "pairs": pairs, "bySession": summary, "ensayo": str(host.root)}))
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

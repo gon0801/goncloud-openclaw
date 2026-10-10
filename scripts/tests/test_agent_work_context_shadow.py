@@ -11,6 +11,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOL = ROOT / "scripts/agent-work/runtime/medir-contexto-sombra.py"
+VERIFY = ROOT / "scripts/agent-work/runtime/verificar-medida-sombra.py"
+
+
+def load_verify():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("verificar_medida_sombra", VERIFY)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def agent_db(state, agent, events):
@@ -54,7 +63,20 @@ class ContextShadowTest(unittest.TestCase):
             run = self.run_tool(state, "ingenieria")
             self.assertEqual(run.returncode, 1)
             self.assertEqual(json.loads(run.stdout)["maxContextTokens"], None)
-            self.assertIn("no provider.payload.measured events for ingenieria", run.stderr)
+            self.assertIn("no Responses provider.payload.measured events for ingenieria", run.stderr)
+
+    def test_the_rehearsal_check_ignores_live_traffic_already_in_the_copy(self):
+        verify = load_verify()
+        with tempfile.TemporaryDirectory() as temp:
+            state = Path(temp)
+            agent_db(state, "main", [measured(900_000, ts="2026-10-10T05:15:11.883Z"),
+                                     measured(4000, ts="2026-10-10T18:00:01.000Z")])
+            databases = sorted(state.glob("agents/*/agent/openclaw-agent.sqlite"))
+            events = verify.measured_since(databases, "2026-10-10T18:00:00.000Z")
+            self.assertEqual(events, [4000])
+            self.assertTrue(verify.faithful([4000], events))
+            self.assertFalse(verify.faithful([4000], verify.measured_since(databases, "")))
+            self.assertFalse(verify.faithful([], []))
 
 
 if __name__ == "__main__":

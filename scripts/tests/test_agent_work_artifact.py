@@ -116,6 +116,7 @@ class ArtifactVerifyTest(unittest.TestCase):
         self.assertEqual((good.returncode, good.stdout.strip()), (0, "artifact OK: openclaw 2026.9.7 from " + self.source))
         limits = json.loads((ROOT / "docs/evidence/agent-work/limits.json").read_text())
         limits["productionAdmissionEnabled"] = True
+        limits["productionProfile"]["values"]["maxContextTokens"] = None
         open_limits = Path(self.temp.name) / "limits.json"
         open_limits.write_text(json.dumps(limits))
         refused = subprocess.run([sys.executable, str(ROOT / "scripts/agent-work/artifact.py"), "verify",
@@ -164,11 +165,11 @@ class LimitsProfileTest(unittest.TestCase):
             "maxChildren has no source", "maxDepth must be a positive integer or null",
             "maxModelCalls must be a positive integer or null", "maxTreeTokens is missing"])
 
-    def test_the_repo_limits_keep_admission_closed_while_a_limit_is_unknown(self):
+    def test_the_repo_limits_are_complete_and_admission_opens_only_per_entry(self):
         limits = json.loads((ROOT / "docs/evidence/agent-work/limits.json").read_text())
         self.assertEqual(artifact.limit_problems(limits), [])
         unknown = [field for field, value in limits["productionProfile"]["values"].items() if value is None]
-        self.assertEqual((unknown, limits["productionAdmissionEnabled"]), (["maxContextTokens"], False))
+        self.assertEqual((unknown, limits["productionAdmissionEnabled"]), ([], False))
 
 
 if __name__ == "__main__":
