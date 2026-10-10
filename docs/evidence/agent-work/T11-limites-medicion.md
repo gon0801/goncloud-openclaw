@@ -23,7 +23,7 @@ Fuente: `src/agents/tasks/managed-task.budget.worker.ts` y `managed-task.provide
 | maxTreeTokens | por raíz, total | `used.input + used.output + context + outputLimit`. worker.ts:489-490 |
 | maxAutomaticRecoveryCalls | por raíz | zod `min(0).max(1)` (`zod-schema.managed-tasks.ts`). |
 
-Solo las API `openai-completions` y `openai-responses` por HTTP están certificadas (provider-stream.ts:116-121). `anthropic-messages` y el runtime `claude-cli` lanzan "not budget-certified".
+Solo están certificadas las llamadas al proveedor `openai` por HTTP en `api.openai.com`, con las API `openai-completions` u `openai-responses` (provider-stream.ts:116-121, `createManagedNativeProviderStream`). Que otro proveedor use esas API, como `opencode-go-*`, no lo certifica. `anthropic-messages` y el runtime `claude-cli` lanzan "not budget-certified".
 
 ## 1. Configuración efectiva
 
@@ -154,5 +154,5 @@ Lectura franca de los valores. La regla de máximo × 1,5 deja topes de cientos 
 
 Otras restricciones fuera de los 10 campos:
 
-- Los primarios de los 8 agentes usan API certificables. Los fallbacks `kimi/k3` y `claude-cli` no lo son: una caída a ellos dentro de un encargo gestionado falla por diseño.
+- Los primarios de los 8 agentes usan API `openai-*`, pero ninguno es el proveedor `openai`, así que no son certificables (fila B5/T12 de `followups.md`). Los fallbacks `kimi/k3` y `claude-cli` no lo son: una caída a ellos dentro de un encargo gestionado falla por diseño.
 - `maxContextTokens ≤ maxInputTokens` se cumplirá con cualquier valor de bytes razonable.
