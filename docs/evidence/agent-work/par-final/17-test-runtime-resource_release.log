@@ -1,30 +1,30 @@
 $ bash scripts/agent-work/test-runtime.sh resource_release
 {"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "19c2ed13a046fa87e9ab766999bf66b419a1b91f"}
-[vitest-workers] local cache hit after 2214ms
+[vitest-workers] local cache hit after 4523ms
 [vitest-workers] reused local compiler outputs
-[vitest-workers] prepared 0c1aaa04e73c in 2245ms (16698 inputs, 17252 outputs)
+[vitest-workers] prepared 87f6b4f4f874 in 4558ms (16698 inputs, 17252 outputs)
 [test] starting test/vitest/vitest.infra.config.ts
 
  RUN  v5.0.1 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.OtFl7sEvgx/r
 
- ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > upgrades a v26 database before its first host closure 155ms
- ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > retains the slot while cleanup is pending and replaces its announcement 475ms
- ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > gates terminal closures and keeps them immutable and idempotent 441ms
- ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > releases the slot on a ReleasedAdopted closure and retains drifted bindings 441ms
- ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > authorizes only the bound producer instance for closures 439ms
- ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > keeps the child slot through the parent turn end until a terminal host closure 807ms
- ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > releases an unbound claimed admission when the requester cancels it 433ms
- ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > keeps the slot of a cancelled agent task without a result 430ms
- ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > keeps a bound claimed admission across cancellation until a terminal host closure 442ms
- ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > keeps releasing the agent slot on a final result 420ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > upgrades a v26 database before its first host closure 267ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > retains the slot while cleanup is pending and replaces its announcement 627ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > gates terminal closures and keeps them immutable and idempotent 529ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > releases the slot on a ReleasedAdopted closure and retains drifted bindings 486ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > authorizes only the bound producer instance for closures 518ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > keeps the child slot through the parent turn end until a terminal host closure 1015ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > releases an unbound claimed admission when the requester cancels it 521ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > keeps the slot of a cancelled agent task without a result 482ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > keeps a bound claimed admission across cancellation until a terminal host closure 539ms
+ ✓ |infra| src/agents/tasks/managed-task.host-closure.test.ts > managed task host closure > keeps releasing the agent slot on a final result 514ms
 
  Test Files  1 passed (1)
       Tests  10 passed (10)
-   Start at  02:30:27
-   Duration  6.44s (tests 72%, transform 18%, import 7%, setup 3%)
+   Start at  10:08:10
+   Duration  8.96s (tests 63%, transform 26%, import 8%, setup 3%)
 
 [vitest-workers] verifying completed generation before cleanup
 [vitest-workers] retained completed compiler outputs for reuse
-[test] passed 1 Vitest shard in 10.09s
+[test] passed 1 Vitest shard in 17.24s
 
-rc=0 seconds=10.5
+rc=0 seconds=18.0

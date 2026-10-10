@@ -39,8 +39,8 @@ ok (2h): el silencio se recuerda; un dialogo que ningun patron conoce no se qued
 ok (2i): cada evento enviado queda anotado en eventos.jsonl (t epoch + texto)
 ok (2j): el dialogo se le ofrece a la politica primero; si contesta no despierta a nadie, y sin corrida.sh va como hoy
 ok (2k): run_once neutraliza CORRIDA_BIN por defecto; sin enganche explicito, el dialogo avisa como hoy
-scripts/mac/tmux-activity-watch.sh: line 248: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.22GUnMCeei/state2/eventos.jsonl: Is a directory
-scripts/mac/tmux-activity-watch.sh: line 248: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.22GUnMCeei/state2/eventos.jsonl: Is a directory
+scripts/mac/tmux-activity-watch.sh: line 248: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.Ko7bCFZlTg/state2/eventos.jsonl: Is a directory
+scripts/mac/tmux-activity-watch.sh: line 248: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.Ko7bCFZlTg/state2/eventos.jsonl: Is a directory
 ok (2m): un fallo del journal no rompe la notificacion y queda en el log
 ok (2n): la cadencia por defecto es 15 min de silencio y 60 min de recordatorio
 ok (2o): el vigilante lanza el latido cada LATIDO_SECS, sin corrida.sh no lanza, y un fallo no lo tumba
@@ -72,4 +72,4 @@ ok (2q-16): el wake propio no reinicia el reloj de recordatorio (R2)
 ok (2q-17): aviso consumido + turno nuevo -> fin de turno nuevo avisa de inmediato, no a los 60 min
 TODO VERDE: tmux-activity-watch
 
-rc=0 seconds=161.0
+rc=0 seconds=166.3
