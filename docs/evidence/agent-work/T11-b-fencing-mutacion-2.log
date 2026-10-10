@@ -1,0 +1,15 @@
+F
+======================================================================
+FAIL: test_two_emitters_never_transfer (__main__.CutoverFencingE2E.test_two_emitters_never_transfer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_fencing_e2e.py", line 64, in test_two_emitters_never_transfer
+    with self.assertRaisesRegex(cutover_live.CutoverRefused, "two emitters for loop:encargos"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: CutoverRefused not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 27.524s
+
+FAILED (failures=1)
+rc=1

@@ -1,0 +1,143 @@
+[test] starting test/vitest/vitest.gateway-server.config.ts
+
+ RUN  v5.0.1 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.NrEp2bAGb9/r
+
+[vitest-workers] local cache hit after 2193ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 5cdcf246104e in 2224ms (16698 inputs, 17251 outputs)
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses one producer settlement callback for startup session recovery (recovered) 432ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses one producer settlement callback for startup session recovery (moved-to-failed) 406ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses the same producer settlement callback for targeted recovery 413ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > enqueues the sentinel note and wakes the session even when outbound delivery succeeds 432ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > records a non-owner update notice without delivery or a diagnostic wake 111ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > records a non-owner restart notice without delivery or a diagnostic wake 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses the durable update outcome on boot (webchat, already terminal: false) 76ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses the durable update outcome on boot (telegram, already terminal: true) 275ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > bounds pending notice retries while preserving CLI run ownership (false) 117ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > bounds pending notice retries while preserving CLI run ownership (true) 99ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > appends and broadcasts an internal update outcome once (continuation: false, ledger: false) 1721ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > appends and broadcasts an internal update outcome once (continuation: true, ledger: false) 1383ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > appends and broadcasts an internal update outcome once (continuation: false, ledger: true) 1365ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > warns and wakes the internal session when the update notice append is failed 408ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > warns and wakes the internal session when the update notice append is thrown 408ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps durable update/ok notice delivery separate from the wake 415ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps durable update/skipped notice delivery separate from the wake 410ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps durable update/error notice delivery separate from the wake 414ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps durable restart/ok notice delivery separate from the wake 414ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists every downstream intent before consuming the loaded revision 410ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > stops delivery when guarded sentinel consumption fails 411ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves a newer sentinel while draining durable work from the loaded revision 410ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not resend a restart notice whose stable queue id is already owned 414ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > queues the restart wake before a system-event continuation 438ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > queues a failed outbound notice for durable recovery without dropping the agent wake 438ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > schedules safe recovery when the delivered notice cannot be acknowledged 431ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > still dispatches continuation after a restart notice is queued for recovery 424ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > prefers top-level sentinel threadId for wake routing context 417ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > runs agentTurn continuation internally after the restart notice without routed final delivery 421ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > replays generated-media provenance through the owning session agent 3ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > fences an adopted generic turn in its explicit queue state directory 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps a generated-media gateway rejection before acceptance retryable 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > authorizes queued media replay for an active cron continuation 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > defers a generated-media turn still owned by agent recovery 415ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retains the local fence when gateway dedupe reports another in-flight owner 415ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > fails closed when a terminal agent turn has no replayable result 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries a captured empty terminal result instead of dead-lettering it 413ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses durable terminal evidence to retry media omitted before queue acknowledgement 413ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters an interrupted attempt without durable agent evidence 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not replay private terminal media as an owning-transcript delivery 421ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > asks the normal agent loop to deliver automatic generated-media replies 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > accepts normalized generated-media evidence without a bare retry 3ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists internal generated audio as managed transcript content 439ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists targetless global generated media in its resolved owner transcript (resumed: false, MEDIA: true) 1051ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists targetless global generated media in its resolved owner transcript (resumed: false, MEDIA: false) 1079ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists targetless global generated media in its resolved owner transcript (resumed: true, MEDIA: false) 1023ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists proven internal media before retrying the missing subset 413ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not count private reasoning media as an owning-transcript reply 427ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries a completed agent turn that omitted the expected media 416ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries when automatic aggregate evidence contains media only in a hidden payload 413ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > accepts suppressed automatic media as a committed durable delivery 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > accepts a suppressed visible automatic completion notice 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries only media proven missing from a successful partial delivery 418ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > checks partial automatic evidence only for media still missing 419ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > suppresses ambiguous caption replay while repairing missing media 414ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not accept explicitly hidden automatic evidence as a visible notice 424ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries missing media after an unrelated text payload was sent 423ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters a partial send without exact per-payload evidence 3ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters truncated terminal evidence before retrying missing media 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters impossible truncated messaging-tool evidence 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters aggregate-only message-tool evidence before replaying 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters unaccounted aggregate evidence mixed with routed tool sends 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters impossible message-tool delivery to a different destination 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters impossible committed side effects before a fresh attempt 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters a partial visible send instead of replaying it 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dispatches agentTurn continuation for a completed run entry 417ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not dispatch a queued agentTurn continuation after the session key changes 419ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > still delivers systemEvent continuations for completed run entries 467ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves the session chat type for agentTurn continuations 424ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > authorizes routed agentTurn continuations while preserving Telegram topic routing 421ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves derived reply transport ids in internal continuation context 424ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dispatches agentTurn continuation from session delivery context when sentinel routing is empty 420ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > requests another wake after enqueueing a systemEvent continuation 425ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > logs and continues when continuation delivery fails 423ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > logs and continues when continuation dispatch reports a delivery error 422ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries restart continuations when the previous run is still shutting down 438ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > records an unroutable agentTurn notice without a diagnostic wake 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > records an unroutable systemEvent notice without a diagnostic wake 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps the sentinel file when durable continuation handoff fails 3ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes continuation once and does not replay it on later startup cycles 434ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps a consumed update sentinel available for reconnect status polling 430ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > delivers the producer notice to the complete original ledger route 290ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not wake a restored runtime from the standalone CLI producer 69ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes only a targetless CLI outcome without a model wake (failed, true) 69ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes only a targetless CLI outcome without a model wake (succeeded, true) 67ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes only a targetless CLI outcome without a model wake (rolled-back, true) 67ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes only a targetless CLI outcome without a model wake (skipped, true) 68ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes only a targetless CLI outcome without a model wake (failed, false) 68ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves an explicit targetless CLI note 446ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps a targetless Control UI update out of the ambient chat 71ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes a targetless config-patch acknowledgement without waking an agent 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes a targetless config-apply acknowledgement without waking an agent 2ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves an explicit targetless config restart note 424ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > delivers a session-less update notice through the system main route (from base: false) 421ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > delivers a session-less update notice through the system main route (from base: true) 421ms
+ × |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > durably wakes the configured system-agent session when the sentinel has no sessionKey 437ms
+   → expected { sessionKey: '<redacted len=14>', …(4) } to not have property "deliveryContext"
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves system-agent ownership for a targetless global wake 450ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > records targetless non-delivery when system-agent ownership is missing 3ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > skips outbound restart notice when no canonical delivery context survives restart 431ms
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > resolves session routing before queueing the heartbeat wake 424ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.stateReadWorkers
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > merges base session routing into partial thread metadata 418ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |gateway-server (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > durably wakes the configured system-agent session when the sentinel has no sessionKey
+AssertionError: expected { sessionKey: '<redacted len=14>', …(4) } to not have property "deliveryContext"
+ ❯ src/gateway/server-restart-sentinel.test.ts:3830:30
+    3828|     expect(mocks.deliverOutboundPayloads).not.toHaveBeenCalled();
+    3829|     const eventOptions = mocks.enqueueSystemEvent.mock.calls[0]?.[1];
+    3830|     expect(eventOptions).not.toHaveProperty("deliveryContext");
+       |                              ^
+    3831|   });
+    3832|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 100 passed (101)
+   Start at  12:06:19
+   Duration  44.67s (tests 75%, transform 21%, import 3%, worker 1%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] failed 1 Vitest shard in 46.44s
+[test] FAILED (exit 1)

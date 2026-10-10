@@ -1,0 +1,14 @@
+F
+======================================================================
+FAIL: test_resource_close_real_term_ignoring_survivor_stays_pending (__main__.ResourceTests.test_resource_close_real_term_ignoring_survivor_stays_pending)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test-agent-work-resources.py", line 1292, in test_resource_close_real_term_ignoring_survivor_stays_pending
+    self.assertTrue(survivors, "the TERM-ignoring survivor must still be present")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [] is not true : the TERM-ignoring survivor must still be present
+
+----------------------------------------------------------------------
+Ran 1 test in 5.607s
+
+FAILED (failures=1)

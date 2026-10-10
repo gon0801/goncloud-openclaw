@@ -151,6 +151,9 @@ function scriptedItem(body, wakeTasks) {
 }
 
 const providerRequests = [];
+// Held responses keep a turn in flight until the test releases them (cutover_fencing).
+const heldResponses = [];
+let holdMarker = null;
 let provider;
 if (countingProvider) {
   const listener = createServer((request, response) => {
@@ -173,6 +176,8 @@ if (countingProvider) {
         // Host incidents the model was told about; the session history repeats earlier ones.
         incidentWakes: [...body.matchAll(/Managed task (\S+) generation \d+ recorded incident ([a-z-]+);/g)]
           .map((match) => ({ taskId: match[1], kind: match[2] })),
+        // Which cutover cron asked: the cron message carries "cutover-cron-<name>".
+        cronMarkers: [...new Set([...body.matchAll(/cutover-cron-([A-Za-z0-9_-]+)/g)].map((match) => match[1]))],
         startedDeliveries: sessionDeliveries().filter((row) => row.deliveryStartedAt !== null)
           .map(({ sessionKey: key, contextKey, enqueuedAt }) => ({ sessionKey: key, contextKey, enqueuedAt })),
       };
@@ -182,6 +187,10 @@ if (countingProvider) {
       }
       const hold = process.env.CROSS_PROVIDER_HOLD;
       if (hold === "1" || (hold === "admit" && item.name === "managed_tasks_admit")) return;
+      if (holdMarker && record.cronMarkers.includes(holdMarker)) {
+        heldResponses.push({ response, item });
+        return;
+      }
       const events = [
         { type: "response.output_item.added", output_index: 0, item },
         { type: "response.output_item.done", output_index: 0, item },
@@ -214,7 +223,7 @@ const port = await gateway.getGatewayE2ePortBlock();
 const agentList = [{ id: requesterAgentId }];
 const config = {
   gateway: { mode: "local", bind: "loopback", port },
-  channels: {}, cron: { enabled: false }, plugins: { enabled: false },
+  channels: {}, cron: { enabled: process.env.CROSS_CRON_ENABLED === "1" }, plugins: { enabled: false },
   session: { store: storePath },
   // The requester's model must see the managed task tools directly in its turn.
   ...(process.env.CROSS_TOOLS_PROFILE === "full" ? { tools: { profile: "full", toolSearch: false } } : {}),
@@ -232,7 +241,7 @@ const config = {
     ? { models: { mode: "replace", providers: { [provider.providerId]: provider.config } } }
     : {}),
   managedTasks: {
-    enabled: true, instructionRoot: stateDir, runTimeoutSeconds: 60, profile,
+    enabled: process.env.CROSS_MANAGED_ENABLED !== "0", instructionRoot: stateDir, runTimeoutSeconds: 60, profile,
     hosts: { [hostId]: { deviceId: deviceIdentity.deviceId, adapters: [hostAdapter] } },
   },
 };
@@ -300,6 +309,29 @@ const operations = {
   tool: runTool,
   deliveries: async () => sessionDeliveries(),
   provider: async () => ({ enabled: Boolean(provider), requests: providerRequests }),
+  rpc: async (command) => client.request(command.method, command.params ?? {}),
+  hold: async (command) => {
+    holdMarker = command.marker ?? null;
+    return { holding: holdMarker };
+  },
+  release: async () => {
+    const released = heldResponses.splice(0);
+    for (const { response, item } of released) {
+      const events = [
+        { type: "response.output_item.added", output_index: 0, item },
+        { type: "response.output_item.done", output_index: 0, item },
+        { type: "response.completed", response: {
+          id: randomUUID(), status: "completed", output: [item],
+          usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+        } },
+      ];
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      for (const event of events) response.write(`data: ${JSON.stringify(event)}\n\n`);
+      response.end("data: [DONE]\n\n");
+    }
+    holdMarker = null;
+    return { released: released.length };
+  },
   sessions: async () => sessions.listSessionEntryKeysReadOnly({ agentId: requesterAgentId, storePath }),
   tasks: async () => managedTaskRows(),
   stop: async () => ({ stopped: true }),

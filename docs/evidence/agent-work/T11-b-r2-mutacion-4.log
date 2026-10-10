@@ -1,0 +1,28 @@
+..E..
+======================================================================
+ERROR: test_a_restarting_gateway_is_waited_for_at_every_step (__main__.CutoverLiveTest.test_a_restarting_gateway_is_waited_for_at_every_step)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_live.py", line 110, in test_a_restarting_gateway_is_waited_for_at_every_step
+    self.assertEqual(self.apply(gateway, wait_seconds=30), "transferred")
+                     ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_live.py", line 77, in apply
+    return cutover_live.apply(self.state, gateway, now_ms=lambda: now, wait_seconds=wait_seconds,
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                              sleep=lambda _: None, limits_path=self.limits)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/agent-work/cutover_live.py", line 146, in apply
+    seen = retrying(lambda: observe(client, entry), deadline, sleep)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/agent-work/cutover_live.py", line 68, in observe
+    jobs = client.call("cron.list", {"includeDisabled": True})["jobs"]
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_live.py", line 35, in call
+    raise cutover_live.GatewayUnavailable(f"{method}: Gateway not reachable (restarting)")
+cutover_live.GatewayUnavailable: cron.list: Gateway not reachable (restarting)
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.004s
+
+FAILED (errors=1)
+rc=1

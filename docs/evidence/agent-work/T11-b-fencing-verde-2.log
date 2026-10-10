@@ -1,0 +1,9 @@
+test_an_in_flight_turn_is_drained_then_the_old_cron_never_asks_again (__main__.CutoverFencingE2E.test_an_in_flight_turn_is_drained_then_the_old_cron_never_asks_again) ... ok
+test_an_uncertain_admission_blocks_the_transfer (__main__.CutoverFencingE2E.test_an_uncertain_admission_blocks_the_transfer) ... ok
+test_two_emitters_never_transfer (__main__.CutoverFencingE2E.test_two_emitters_never_transfer) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 107.898s
+
+OK
+rc=0

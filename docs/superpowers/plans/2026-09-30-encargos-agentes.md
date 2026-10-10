@@ -292,13 +292,13 @@ Depende de B4. Esta tarea prepara procedimientos y ensayos; no activa producció
 
 Interfaz prevista: `cutover.py prepare`, `inspect`, `apply` y `rollback`, con manifiesto, generación y alcance explícitos. `apply` y `rollback` requieren autorización registrada y se ensayan primero con dobles.
 
-- [ ] Fija las versiones, SHA, hashes, migraciones y compatibilidad en el manifiesto. Verifica que el paquete corresponde al código revisado.
-- [ ] Escribe los comandos reales de instalación y recuperación a partir de T0. No uses el publicador de plugins como instalador del runtime nativo.
-- [ ] Define el perfil productivo finito en `limits.json`, con los valores obtenidos de configuración y medición. Un valor desconocido impide habilitar esa capacidad.
-- [ ] Añade y ejecuta en rojo `cutover_fencing`: dos emisores, resultados en vuelo, sesión activa y admisión incierta. Incluye un cron antiguo suspendido: conserva captura de resultados, drena sus turnos en vuelo y exige cero peticiones posteriores de ese cron y un solo propietario.
-- [ ] Implementa adopción sin reiniciar sesiones, cambio de propietario por generación y captura persistente durante la transición.
-- [ ] Ensaya reversa del binario y de la configuración. Comprueba compatibilidad con el esquema migrado; si el binario anterior no puede abrirlo, conserva la versión nueva con admisión congelada y usa el procedimiento probado de recuperación.
-- [ ] Prueba fallos del propio rollback y conserva pendientes. No reactives automáticamente cron de cinco minutos.
+- [x] Fija las versiones, SHA, hashes, migraciones y compatibilidad en el manifiesto. Verifica que el paquete corresponde al código revisado.
+- [x] Escribe los comandos reales de instalación y recuperación a partir de T0. No uses el publicador de plugins como instalador del runtime nativo.
+- [x] Define el perfil productivo finito en `limits.json`, con los valores obtenidos de configuración y medición. Un valor desconocido impide habilitar esa capacidad.
+- [x] Añade y ejecuta en rojo `cutover_fencing`: dos emisores, resultados en vuelo, sesión activa y admisión incierta. Incluye un cron antiguo suspendido: conserva captura de resultados, drena sus turnos en vuelo y exige cero peticiones posteriores de ese cron y un solo propietario.
+- [x] Implementa adopción sin reiniciar sesiones, cambio de propietario por generación y captura persistente durante la transición.
+- [x] Ensaya reversa del binario y de la configuración. Comprueba compatibilidad con el esquema migrado; si el binario anterior no puede abrirlo, conserva la versión nueva con admisión congelada y usa el procedimiento probado de recuperación.
+- [x] Prueba fallos del propio rollback y conserva pendientes. No reactives automáticamente cron de cinco minutos.
 
 Verifica con `bash scripts/tests/test-agent-work-cutover.sh`. El entregable incluye comandos ejecutados en ensayo, salidas esperadas, duración máxima y acción ante cada fallo. No incluyas comandos productivos supuestos o sin probar.
 

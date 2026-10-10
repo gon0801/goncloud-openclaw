@@ -1,0 +1,14 @@
+$ D=~/respaldos/claw-mini-copia-$(date +%Y%m%d-%H%M) && mkdir -p "$D" && chmod 700 "$D" && ssh gon@100.73.187.5 'set -e; T=$(mktemp -d); cd ~/.openclaw; sqlite3 state/openclaw.sqlite ".backup $T/openclaw.sqlite"; for f in agents/*/agent/openclaw-agent.sqlite; do a=$(echo "$f" | cut -d/ -f2); sqlite3 "$f" ".backup $T/agent-$a.sqlite"; done; cp openclaw.json "$T/"; tar -C "$T" -czf - .' | tar -C "$D" -xzf - && ls -la "$D" | head -30 && du -sh "$D"
+(corrido por David desde esta Mac el 2026-10-09 12:55 PDT; salida copiada tal cual, sin openclaw.json)
+-rw-r--r--   1 dn  staff  214065152 Oct  9 12:55 agent-main.sqlite
+-rw-r--r--   1 dn  staff  120393728 Oct  9 12:55 agent-ingenieria.sqlite
+-rw-r--r--   1 dn  staff   55631872 Oct  9 12:55 agent-implementer.sqlite
+-rw-r--r--   1 dn  staff  131362816 Oct  9 12:55 openclaw.sqlite
+(16 bases de agente más, de 0,6 a 18 MB)
+564M	/Users/dn/respaldos/claw-mini-copia-20261009-1255
+
+$ sqlite3 "file:$D/openclaw.sqlite?immutable=1" 'PRAGMA user_version; PRAGMA quick_check;'
+19
+ok
+$ sqlite3 "file:$D/agent-main.sqlite?immutable=1" 'PRAGMA user_version;'
+24

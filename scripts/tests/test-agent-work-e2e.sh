@@ -86,6 +86,21 @@ case "${1:-all}" in
   acceptance)
     run_acceptance
     ;;
+  cutover_fencing)
+    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
+      echo "cutover_fencing requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
+      exit 2
+    fi
+    python3 scripts/tests/test_agent_work_cutover_fencing_e2e.py -v
+    ;;
+  cutover_rollback)
+    if [ -z "${AGENT_WORK_CUTOVER_CANDIDATE_PREFIX:-}" ] || [ -z "${AGENT_WORK_CUTOVER_PREVIOUS_PREFIX:-}" ] \
+        || [ -z "${AGENT_WORK_CUTOVER_COPY:-}" ]; then
+      echo "cutover_rollback requiere AGENT_WORK_CUTOVER_CANDIDATE_PREFIX, AGENT_WORK_CUTOVER_PREVIOUS_PREFIX y AGENT_WORK_CUTOVER_COPY" >&2
+      exit 2
+    fi
+    python3 -W ignore scripts/tests/test_agent_work_cutover_rollback_e2e.py -v
+    ;;
   acceptance_pair)
     if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
       echo "acceptance_pair requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
@@ -160,7 +175,7 @@ case "${1:-all}" in
     run_delivery_latency_r
     ;;
   *)
-    echo "casos disponibles: delivery_latency, review_tail_restart, cli_gateway, main_cli_loop, cli_silent_failure, cli_delivery_acceptance, crash_boundaries, cien_reenvios, dispatchers_cancel, delivery_latency_r, review_tail_restart_director, acceptance_matrix, acceptance, acceptance_pair" >&2
+    echo "casos disponibles: delivery_latency, review_tail_restart, cli_gateway, main_cli_loop, cli_silent_failure, cli_delivery_acceptance, crash_boundaries, cien_reenvios, dispatchers_cancel, delivery_latency_r, review_tail_restart_director, acceptance_matrix, acceptance, acceptance_pair, cutover_fencing, cutover_rollback" >&2
     exit 2
     ;;
 esac

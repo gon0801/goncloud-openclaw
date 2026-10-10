@@ -36,11 +36,11 @@ class Result(unittest.TextTestResult):
             self._set(test, "FAIL")
 unittest.TextTestRunner(verbosity=2, resultclass=Result).run(suite)
 json.dump(status, open(out, "w"))
- scripts/tests/test-agent-work-host.py /Users/dn/dev/wt/encargos-b4/docs/evidence/agent-work/par-final/.28.json test_host_receipts_replay_and_lost_ack
+ scripts/tests/test-agent-work-host.py /Users/dn/dev/wt/encargos-b5/docs/evidence/agent-work/par-final/.28.json test_host_receipts_replay_and_lost_ack
 test_host_receipts_replay_and_lost_ack (cited.HostReceipts.test_host_receipts_replay_and_lost_ack) ... ok
 
 ----------------------------------------------------------------------
-Ran 1 test in 0.029s
+Ran 1 test in 0.028s
 
 OK
 

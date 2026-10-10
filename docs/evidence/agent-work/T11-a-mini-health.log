@@ -1,0 +1,6 @@
+$ ~/.openclaw/bin/openclaw health --json   (desde esta Mac, gateway remoto en la Mac Mini; 2026-10-09T19:24Z, explorador de T11)
+{
+  "childRuntime": {
+    "execPath": "/Users/gon/.openclaw/tools/node-v24.19.0/bin/node"
+  }
+}

@@ -1,0 +1,10 @@
+test_a_bad_snapshot_keeps_the_candidate_running_with_admission_frozen (__main__.CutoverRollbackE2E.test_a_bad_snapshot_keeps_the_candidate_running_with_admission_frozen) ... ok
+test_a_previous_binary_that_does_not_start_leaves_the_candidate_frozen_on_the_snapshot (__main__.CutoverRollbackE2E.test_a_previous_binary_that_does_not_start_leaves_the_candidate_frozen_on_the_snapshot) ... ok
+test_an_interrupted_rollback_resumes_without_reviving_the_old_cron (__main__.CutoverRollbackE2E.test_an_interrupted_rollback_resumes_without_reviving_the_old_cron) ... ok
+test_rollback_returns_the_previous_binary_on_the_snapshot_and_keeps_the_old_cron_suspended (__main__.CutoverRollbackE2E.test_rollback_returns_the_previous_binary_on_the_snapshot_and_keeps_the_old_cron_suspended) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 346.292s
+
+OK
+rc=0 347s

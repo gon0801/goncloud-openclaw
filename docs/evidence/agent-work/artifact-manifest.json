@@ -1,0 +1,71 @@
+{
+  "schema": "agent-work-artifact-manifest.v1",
+  "runtime": {
+    "repository": "openclaw/openclaw (fork, branch feat/agent-work-integration; never pushed)",
+    "sourceSha": "f1c5f34ae8f91652412188349c296b3c1a882701",
+    "publicBaseSha": "c074824a27c96d3983043f9eeb33823cd1772d8c",
+    "version": "2026.9.7",
+    "entrySha256": "78c5009e9f28f0b67a724aacf128718e411871493bc9307e90659bcf6718b461",
+    "node": "v24.19.0",
+    "build": "docs/evidence/agent-work/deploy-commands.md"
+  },
+  "packages": [
+    {
+      "name": "openclaw",
+      "version": "2026.9.7",
+      "file": "openclaw-2026.9.7.tgz",
+      "sha256": "76c0883e2a8f6206ed63dc78b291effbfa6946cf9d4bcc646ae9b88365982e2c",
+      "integrity": "sha512-oirsm7wdtU6L3WN5mek+/D5nkUEzB+g023kRlV5URsZz0XReC04aV4ab+I9ZpRboP8siF0T9t1218u7kHxPFjw=="
+    },
+    {
+      "name": "@openclaw/ai",
+      "version": "2026.9.7",
+      "file": "openclaw-ai-2026.9.7.tgz",
+      "sha256": "0512fd870a86f40ea06f13931ef36a9ca9af07286d378fb1e717453ba6ffbcc8",
+      "integrity": "sha512-lkQfGmEY1oijCpm89EKvLvIbSMhOtgrs+y9+zr+i7wYz7V/h03umsnSgHqBxa/GzAQwRMKhund1WEBrdKsZb3A=="
+    },
+    {
+      "name": "@openclaw/gateway-client",
+      "version": "2026.9.7",
+      "file": "openclaw-gateway-client-2026.9.7.tgz",
+      "sha256": "966aaae638ed6b962c18a7f6a895a89131b3738e10ef00e232ed65e98d497508",
+      "integrity": "sha512-/3ghRJlZDOgkBxsS+i31+kqZHrref/0+N2UbOigcHPbHIR1bCh7HmHOZS6gC3bURC8EDhgZVSzm1UtN2f/RA1g=="
+    },
+    {
+      "name": "@openclaw/gateway-protocol",
+      "version": "2026.9.7",
+      "file": "openclaw-gateway-protocol-2026.9.7.tgz",
+      "sha256": "9b76a0278dcd5b10a1102003db332dfaae22b5cd03a4bbe45ac64aeef761c0a1",
+      "integrity": "sha512-yAPZJt4ufxl3pD85QqT2pLsvIo9yRwfmPI93JIf4mJIa0/mLASWM2q12hYCsouF5MIVmSzV2QO/cvY+x9Fbdcw=="
+    }
+  ],
+  "installTogether": [
+    "openclaw",
+    "@openclaw/ai"
+  ],
+  "packageDir": "/Users/dn/.local/state/encargos-loop/artifacts/paquete-f1c5f34",
+  "previousRuntime": {
+    "version": "2026.9.7",
+    "sourceSha": "c074824a27c96d3983043f9eeb33823cd1772d8c",
+    "buildId": "c074824a27c9",
+    "install": "npm install -g openclaw@2026.9.7"
+  },
+  "migrations": {
+    "state": {
+      "from": 19,
+      "to": 27
+    },
+    "agent": {
+      "from": 24,
+      "to": 24
+    }
+  },
+  "schemaCompatibility": "previous-binary-unreadable",
+  "liveGatewayAt": {
+    "host": "Mac Mini (gon@100.73.187.5), darwin arm64",
+    "stateDir": "/Users/gon/.openclaw",
+    "observedAt": "2026-10-09",
+    "stateSchema": 19,
+    "agentSchema": 24
+  }
+}

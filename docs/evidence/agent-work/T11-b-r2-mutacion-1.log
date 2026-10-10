@@ -1,0 +1,17 @@
+....F
+======================================================================
+FAIL: test_an_old_cron_the_gateway_does_not_have_refuses_instead_of_leaving_two_emitters (__main__.CutoverLiveTest.test_an_old_cron_the_gateway_does_not_have_refuses_instead_of_leaving_two_emitters)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_live.py", line 81, in test_an_old_cron_the_gateway_does_not_have_refuses_instead_of_leaving_two_emitters
+    with self.assertRaisesRegex(cutover_live.CutoverRefused,
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                "loop:x names vigia-viejo, which matches 0 Gateway crons"):
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: CutoverRefused not raised
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.005s
+
+FAILED (failures=1)
+rc=1

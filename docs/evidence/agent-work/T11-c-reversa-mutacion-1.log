@@ -1,0 +1,15 @@
+F
+======================================================================
+FAIL: test_rollback_returns_the_previous_binary_on_the_snapshot_and_keeps_the_old_cron_suspended (__main__.CutoverRollbackE2E.test_rollback_returns_the_previous_binary_on_the_snapshot_and_keeps_the_old_cron_suspended)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_rollback_e2e.py", line 118, in test_rollback_returns_the_previous_binary_on_the_snapshot_and_keeps_the_old_cron_suspended
+    self.assertFalse(self.cron_enabled(), "the restored snapshot re-enabled the old cron")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false : the restored snapshot re-enabled the old cron
+
+----------------------------------------------------------------------
+Ran 1 test in 92.130s
+
+FAILED (failures=1)
+rc=1

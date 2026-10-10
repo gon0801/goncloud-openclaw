@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_fencing_e2e.py", line 15, in <module>
+    import cutover_live  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'cutover_live'
+rc=1

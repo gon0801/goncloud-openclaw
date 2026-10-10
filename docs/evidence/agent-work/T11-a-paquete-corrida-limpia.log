@@ -1,0 +1,7 @@
+== worktree: exit=0 duration=5s
+== install: exit=0 duration=5s
+== build: exit=0 duration=382s
+== pack: exit=0 duration=22s
+== npm-install: exit=0 duration=15s
+== smoke: exit=0 duration=0s
+TOTAL exit=0 duration=435s

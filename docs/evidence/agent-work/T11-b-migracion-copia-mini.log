@@ -1,0 +1,5 @@
+[state/db] state database schema migration pending; verifying integrity first
+[state-migrations] Startup migration warnings; continuing with degraded state.
+2026-10-09T15:49:25.260-07:00 [gateway] http server listening (16 plugins: anthropic, bonjour, browser, canvas, cua-computer, device-pair, file-transfer, geolocation, github, linux-node, memory-core, ollama, openai, opencode-go, talk-voice, xai; 11.1s)
+2026-10-09T15:49:26.573-07:00 [gateway] ready
+(primer arranque del gateway de R 818f0fd sobre la copia de la Mini: estado 19 -> 27)

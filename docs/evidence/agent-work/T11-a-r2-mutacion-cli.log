@@ -1,0 +1,26 @@
+F
+======================================================================
+FAIL: test_the_cli_exits_with_the_problems (__main__.ArtifactVerifyTest.test_the_cli_exits_with_the_problems)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_artifact.py", line 125, in test_the_cli_exits_with_the_problems
+    self.assertEqual((refused.returncode, refused.stderr.strip()),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     (1, "artifact: production admission is enabled with unknown limits: maxContextTokens"))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Tuples differ: (0, '') != (1, 'artifact: production admission is ena[39 chars]ens')
+
+First differing element 0:
+0
+1
+
+- (0, '')
++ (1,
++  'artifact: production admission is enabled with unknown limits: '
++  'maxContextTokens')
+
+----------------------------------------------------------------------
+Ran 1 test in 0.160s
+
+FAILED (failures=1)
+rc=1

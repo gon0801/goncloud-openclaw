@@ -1,0 +1,624 @@
+[test] starting test/vitest/vitest.gateway.config.ts
+
+ RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > gateway startup outcomes > formats reverse input in canonical subsystem order 7ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > gateway startup outcomes > uses the fixed vocabulary for unconfigured 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > gateway startup outcomes > uses the fixed vocabulary for explicitly disabled internal hooks 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > gateway startup outcomes > uses the fixed vocabulary for scheduled 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > gateway startup outcomes > uses the fixed vocabulary for gmail skip reasons 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > gateway startup outcomes > uses the fixed vocabulary for missing gmail account 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > gateway startup outcomes > records awaited internal hook outcomes without logging raw error fields 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > keeps default and explicit startup paths inside the owned fixture root 4ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > drains tracked sidecars and resets fixture state after the first cleanup failure 4ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > re-enables startup-gated methods after post-attach sidecars start 181ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > does not announce readiness while a core agent is refused (canary=false) 100ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > does not announce readiness while a core agent is refused (canary=true) 12ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > emits a sidecar readiness summary in startup trace details 68ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > fences startup recovery as soon as its gateway close prelude begins 13ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > gates main-session recovery behind post-ready work 67ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > stops restart recovery with gateway-lifetime sidecars 79ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > logs one startup outcome summary after sidecar registration and before readiness 76ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > reports internal hook load failures without copying the error into the summary 76ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > does not publish an imported hook candidate after Gateway close starts 16ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > refreshes the restart sentinel after sidecars without blocking post-attach 63ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > starts sidecars while startup logging is pending and waits for both 20ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > rejects deferred startup when logging fails but joins its pending peer 5ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > rejects deferred startup when sidecars fails but joins its pending peer 4ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > uses the current runtime config for deferred model publication 19ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > retains a sidecar whose cleanup fails after startup logging rejects 5ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > owns update RPC work without starting autonomous checks in minimal mode 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > owns update RPC work without starting autonomous checks in canary mode 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > loads update discovery only after the post-ready barrier 66ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > drains update discovery without waiting for post-ready work that never starts (stop) 64ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > drains update discovery without waiting for post-ready work that never starts (close-prelude) 5ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > publishes update-check cleanup ownership before deferred startup can fail 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > logs deferred gateway update check startup failures without failing ready 19ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > skips heavy restart sentinel refresh when no sentinel file exists 59ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > refreshes the restart sentinel when the sentinel row exists 62ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > detects restart sentinel rows in explicit state directories 60ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > avoids sync filesystem probes while checking restart sentinel presence 63ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > starts and can cancel Control UI assets for preparing roots while plugins are pending 20ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > starts and can cancel Control UI assets for initially failed roots while plugins are pending 19ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > starts and can cancel Control UI assets for already-ready bundled roots while plugins are pending 20ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > loads startup plugins after bind and before channel sidecars 18ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > admits update canary readiness only for attributed plugin failures (attributed=true) 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > admits update canary readiness only for attributed plugin failures (attributed=false) 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > waits for startup plugin attachment before channel sidecars 18ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > adopts a winning plugin generation without publishing stale deferred startup state 270ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > waits for sidecars by default before returning 19ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > keeps transcripts auto-start alive when Gmail post-ready sidecars stop 75ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > releases startup account starts before awaiting channel handoff 15ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > starts and reports plugin services after channel startup completes 62ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > does not start plugin services after deferred close starts during channel startup 4ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > keeps published service lifetime with its owner during Gateway close 63ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > keeps published service lifetime with its owner during replacement reservation 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > keeps published service lifetime with its owner during strict replacement 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > releases tracked startup after strict timeout while retaining service cleanup 5ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > settles deferred plugin cleanup during Gateway close before lazy service loading 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > settles deferred plugin cleanup during plugin replacement before lazy service loading 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > forwards strict cleanup through the deferred plugin service owner when it settles 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > forwards strict cleanup through the deferred plugin service owner when it times out 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > forwards strict cleanup through the deferred plugin service owner when it has no deadline 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > publishes the actual plugin cleanup owner before service startup 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > retains unchanged services when a deferred startup replacement commits 19ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > retains unchanged services when a deferred startup replacement rejects 20ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > revalidates deferred service admission after close during lazy loading 5ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > revalidates deferred service admission after commit during lazy loading 19ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > revalidates deferred service admission after recovery during lazy loading 21ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > revalidates deferred service admission after reject during lazy loading 18ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > fences late service capabilities while deferred startup consumes the replacement deadline 4ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > reports deferred plugin services after core startup returns 67ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > publishes models and traces skipped channels with prewarm flag undefined 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > publishes models and traces skipped channels with prewarm flag 1 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > continues startup tracing after a recovered channel startup error 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > records prepared runtime build grouping in the startup trace 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > prepares the model runtime with the active Gateway plugin registry 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > marks startup main-session orphans before model runtime and channel startup 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > skips model publication when the startup plugin generation loses ownership 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > awaits reply runtime after model publication and before channels and readiness 67ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > does not start channels when close begins during deferred sidecar preparation 14ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > marks startup main-session orphans before propagating model runtime failure 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > logs startup main-session marker failures and still starts channels 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > runs Gmail watcher after sidecars are ready 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > does not create post-ready sidecars after close begins during channel startup 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > retires queued producers during direct close before received work permits sidecar cleanup 6ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > retires queued producers during restart drain before received work permits sidecar cleanup 5ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > rechecks a queued Control UI producer after suspension admission resumes 4ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > reports an admitted startup hook failure during close before its sidecar stops 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > logs post-ready Gmail watcher failures without delaying sidecar readiness 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > cancels a post-ready Gmail watcher before the immediate starts 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > cancels a post-ready Gmail watcher after the immediate enters through sidecar stop 88ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > cancels a post-ready Gmail watcher after the immediate enters through close prelude 79ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > runs Gmail model validation after sidecars are ready 10ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > keeps startup-gated methods unavailable while sidecars are still resuming 65ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > warms the CA cache before worker placement and sidecar startup 64ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > stops worker placement runtime when channel and sidecar startup fails 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > stops worker placement once when close begins while it starts 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > keeps ignored deferred sidecar failure handled for direct callers 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > retires unadopted startup plugins when close begins during deferred loading 66ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > does not start the worker environment sidecar after close begins 4ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > does not activate restored recovery when close begins during activation loading 4ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > returns before loading startup plugins with deferred sidecars 63ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > dispatches registered gateway startup internal hooks without configured hook packs 4ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > cancels registered gateway startup hooks when close starts 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > waits for a healthy ACP runtime backend before startup identity reconcile after a forward wall-clock shift 108ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > waits for a healthy ACP runtime backend before startup identity reconcile after a backward wall-clock shift 53ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > retires unstarted ACP reconciliation when close wins during suspension 81ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > retires unstarted ACP reconciliation when close wins during backend readiness 124ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > retires unstarted ACP reconciliation when close wins during manager import 73ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > retires unstarted ACP reconciliation when close wins during reconciliation 72ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > retains the startup tail when close begins before restart-sentinel refresh starts 4ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > retains the startup tail when close begins during restart-sentinel refresh 65ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > retires startup sentinel admission parked behind suspension when the Gateway closes 62ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > retires startup gateway_start admission parked behind suspension when the Gateway closes 61ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > retains gateway_start loading until close can retire plugin metadata 61ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > runs gateway_start only for the registry whose startup completed 62ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > passes Gateway lifetime and live cron context through gateway_start (close) 62ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-startup-post-attach.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-startup-post-attach.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-startup-post-attach.test.ts: retiring openclaw.agentDatabaseLifecycle
+
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > passes Gateway lifetime and live cron context through gateway_start (restart) 61ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-post-attach.test.ts > startGatewayPostAttachRuntime > finishes startup without dispatching hooks for an empty registry 61ms
+[vitest-workers] local cache hit after 1841ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 79790056913d in 1871ms (16698 inputs, 17251 outputs)
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses one producer settlement callback for startup session recovery (recovered) 402ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses one producer settlement callback for startup session recovery (moved-to-failed) 379ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses the same producer settlement callback for targeted recovery 390ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > enqueues the sentinel note and wakes the session even when outbound delivery succeeds 386ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > records a non-owner update notice without delivery or a diagnostic wake 101ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > records a non-owner restart notice without delivery or a diagnostic wake 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses the durable update outcome on boot (webchat, already terminal: false) 82ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses the durable update outcome on boot (telegram, already terminal: true) 262ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > bounds pending notice retries while preserving CLI run ownership (false) 111ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > bounds pending notice retries while preserving CLI run ownership (true) 96ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > appends and broadcasts an internal update outcome once (continuation: false, ledger: false) 1539ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > appends and broadcasts an internal update outcome once (continuation: true, ledger: false) 1314ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > appends and broadcasts an internal update outcome once (continuation: false, ledger: true) 1325ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > warns and wakes the internal session when the update notice append is failed 387ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > warns and wakes the internal session when the update notice append is thrown 387ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps durable update/ok notice delivery separate from the wake 393ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps durable update/skipped notice delivery separate from the wake 396ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps durable update/error notice delivery separate from the wake 391ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps durable restart/ok notice delivery separate from the wake 395ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists every downstream intent before consuming the loaded revision 402ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > stops delivery when guarded sentinel consumption fails 389ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves a newer sentinel while draining durable work from the loaded revision 400ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not resend a restart notice whose stable queue id is already owned 392ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > queues the restart wake before a system-event continuation 395ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > queues a failed outbound notice for durable recovery without dropping the agent wake 394ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > schedules safe recovery when the delivered notice cannot be acknowledged 393ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > still dispatches continuation after a restart notice is queued for recovery 394ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > prefers top-level sentinel threadId for wake routing context 391ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > runs agentTurn continuation internally after the restart notice without routed final delivery 396ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > replays generated-media provenance through the owning session agent 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > fences an adopted generic turn in its explicit queue state directory 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps a generated-media gateway rejection before acceptance retryable 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > authorizes queued media replay for an active cron continuation 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > defers a generated-media turn still owned by agent recovery 388ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retains the local fence when gateway dedupe reports another in-flight owner 386ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > fails closed when a terminal agent turn has no replayable result 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries a captured empty terminal result instead of dead-lettering it 389ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > uses durable terminal evidence to retry media omitted before queue acknowledgement 387ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters an interrupted attempt without durable agent evidence 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not replay private terminal media as an owning-transcript delivery 390ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > asks the normal agent loop to deliver automatic generated-media replies 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > accepts normalized generated-media evidence without a bare retry 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists internal generated audio as managed transcript content 409ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists targetless global generated media in its resolved owner transcript (resumed: false, MEDIA: true) 998ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists targetless global generated media in its resolved owner transcript (resumed: false, MEDIA: false) 968ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists targetless global generated media in its resolved owner transcript (resumed: true, MEDIA: false) 988ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > persists proven internal media before retrying the missing subset 383ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not count private reasoning media as an owning-transcript reply 386ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries a completed agent turn that omitted the expected media 420ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries when automatic aggregate evidence contains media only in a hidden payload 391ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > accepts suppressed automatic media as a committed durable delivery 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > accepts a suppressed visible automatic completion notice 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries only media proven missing from a successful partial delivery 392ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > checks partial automatic evidence only for media still missing 393ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > suppresses ambiguous caption replay while repairing missing media 392ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not accept explicitly hidden automatic evidence as a visible notice 401ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries missing media after an unrelated text payload was sent 398ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters a partial send without exact per-payload evidence 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters truncated terminal evidence before retrying missing media 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters impossible truncated messaging-tool evidence 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters aggregate-only message-tool evidence before replaying 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters unaccounted aggregate evidence mixed with routed tool sends 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters impossible message-tool delivery to a different destination 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters impossible committed side effects before a fresh attempt 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dead-letters a partial visible send instead of replaying it 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dispatches agentTurn continuation for a completed run entry 395ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not dispatch a queued agentTurn continuation after the session key changes 398ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > still delivers systemEvent continuations for completed run entries 403ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves the session chat type for agentTurn continuations 395ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > authorizes routed agentTurn continuations while preserving Telegram topic routing 399ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves derived reply transport ids in internal continuation context 412ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > dispatches agentTurn continuation from session delivery context when sentinel routing is empty 394ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > requests another wake after enqueueing a systemEvent continuation 399ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > logs and continues when continuation delivery fails 403ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > logs and continues when continuation dispatch reports a delivery error 394ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > retries restart continuations when the previous run is still shutting down 400ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > records an unroutable agentTurn notice without a diagnostic wake 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > records an unroutable systemEvent notice without a diagnostic wake 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps the sentinel file when durable continuation handoff fails 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes continuation once and does not replay it on later startup cycles 389ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps a consumed update sentinel available for reconnect status polling 387ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > delivers the producer notice to the complete original ledger route 266ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > does not wake a restored runtime from the standalone CLI producer 66ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes only a targetless CLI outcome without a model wake (failed, true) 65ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes only a targetless CLI outcome without a model wake (succeeded, true) 65ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes only a targetless CLI outcome without a model wake (rolled-back, true) 66ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes only a targetless CLI outcome without a model wake (skipped, true) 68ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes only a targetless CLI outcome without a model wake (failed, false) 70ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves an explicit targetless CLI note 448ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > keeps a targetless Control UI update out of the ambient chat 71ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes a targetless config-patch acknowledgement without waking an agent 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > consumes a targetless config-apply acknowledgement without waking an agent 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves an explicit targetless config restart note 399ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > delivers a session-less update notice through the system main route (from base: false) 405ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > delivers a session-less update notice through the system main route (from base: true) 414ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > durably wakes the configured system-agent session when the sentinel has no sessionKey 398ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > preserves system-agent ownership for a targetless global wake 396ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > records targetless non-delivery when system-agent ownership is missing 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > skips outbound restart notice when no canonical delivery context survives restart 394ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > resolves session routing before queueing the heartbeat wake 410ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.stateReadWorkers
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.test.ts > scheduleRestartSentinelWake > merges base session routing into partial thread metadata 396ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > stops pending update recovery and joins its retry (queued) 94ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > stops pending update recovery and joins its retry (running) 63ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > stops pending update recovery and joins its retry (admission) 63ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > refuses legacy notice import with an absent Gateway owner 63ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > refuses legacy notice import with an maintenance Gateway owner 77ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > joins a paused import without publishing after canonical database close revokes admission 103ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > retains failed import cleanup until canonical database close retries its owner 74ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > consumes only the captured restart sentinel after preparation changes state root (newer=false) 1019ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > consumes only the captured restart sentinel after preparation changes state root (newer=true) 1008ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > reconciles only the pending update's terminal snapshot before preparing work (same) 1008ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > reconciles only the pending update's terminal snapshot before preparing work (continuation) 1007ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > reconciles only the pending update's terminal snapshot before preparing work (other-handoff) 1004ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > reconciles only the pending update's terminal snapshot before preparing work (other-run) 990ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > reconciles only the pending update's terminal snapshot before preparing work (restart) 987ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > reconciles only the pending update's terminal snapshot before preparing work (replaced-again) 991ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > reconciles only the pending update's terminal snapshot before preparing work (stopped) 783ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > does not rewrite pending update sentinels during status refresh 62ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > recovers published legacy update notices through the registered sidecar (final) 622ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > recovers published legacy update notices through the registered sidecar (portable-claim) 641ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > recovers published legacy update notices through the registered sidecar (late-final) 625ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > recovers published legacy update notices through the registered sidecar (newer-native) 65ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > recovers published legacy update notices through the registered sidecar (consumed-native) 66ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > recovers published legacy update notices through the registered sidecar (stopped) 64ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > recovers published legacy update notices through the registered sidecar (stop-during-import) 64ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > keeps registered pending restart recovery on its original state and session after ambient drift (requested) 1156ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > keeps registered pending restart recovery on its original state and session after ambient drift (verifying) 1167ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > keeps registered pending restart recovery on its original state and session after ambient drift (stopped) 420ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > keeps registered pending restart recovery on its original state and session after ambient drift (terminal-before-marker) 1141ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > keeps registered pending restart recovery on its original state and session after ambient drift (replaced-handoff) 412ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.state-context.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.state-context.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.state-context.test.ts: retiring openclaw.stateReadWorkers
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.state-context.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.state-context.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.state-context.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.state-context.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.state-context.test.ts > keeps registered pending restart recovery on its original state and session after ambient drift (replaced-kind) 407ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > starts channel health without activating scheduled services 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > keeps channel health recovery disabled when OPENCLAW_SKIP_CHANNELS suppresses startup 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > keeps channel health recovery disabled when OPENCLAW_SKIP_PROVIDERS suppresses startup 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > warns when cron is disabled but scheduled heartbeats remain enabled 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > does not warn about disabled cron when heartbeat cadence is disabled 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > reports cron-disabled automatic skill collection reviews 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > owns cron startup, watcher reconciliation, and completion after the requester closes 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > does not complete cron reconciliation when scheduler startup rejects 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > does not complete cron reconciliation when exit-watcher reconciliation rejects 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > keeps one independent root admitted until the reconciliation hook settles 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > activates heartbeat and delivery recovery after sidecars are ready 3ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-runtime-services.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-runtime-services.test.ts: retiring openclaw.stateSnapshotOwners
+
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > gives standalone scheduled heartbeats their owning Gateway context and broker 115ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > waits for active startup recovery before its stop handle settles 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > warns but holds shutdown until outbound recovery settles 4ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > stops unadmitted session recovery without reopening the restart fence 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > resumes pending session recovery when the restart fence rolls back 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > joins pending session recovery completion before scheduled-service shutdown finishes 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > joins pending session recovery AbortError before scheduled-service shutdown finishes 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > joins pending session scheduling completion before scheduled-service shutdown finishes 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > joins pending session scheduling AbortError before scheduled-service shutdown finishes 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > joins a pending session import without installing a runtime after shutdown 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > schedules pending session deliveries when startup recovery fails 3ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > keeps current delivery recovery running with clean while diagnosing legacy state once 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > keeps current delivery recovery running with legacy rows while diagnosing legacy state once 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > keeps current delivery recovery running with legacy files while diagnosing legacy state once 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > runs initial recovery again for the next scheduled-service lifecycle 4ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > retries outbound deliveries after an empty startup scan 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > reconstructs conversation route authorization for a recovered delivery attempt 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > uses the current runtime config when retrying queued outbound deliveries 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > never overlaps outbound retry drains or admits work between timer firings 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > coalesces late outbound recovery and stops retries with the gateway lifecycle 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > skips outbound retry ticks while gateway work admission is suspended 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > runs a scheduled idle task in an independent admitted root 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > retries a scheduled idle task while request work is active 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > rechecks request work after joining the admitted root set 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > cancels a scheduled idle task before its delay elapses 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.test.ts > server-runtime-services > keeps scheduled services disabled for minimal test gateways 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > permits a current gateway-owner to preview, reserve a receipt, and reach the GitHub CLI transport 178ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > permits a current system-admin to preview, reserve a receipt, and reach the GitHub CLI transport 65ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > revalidates delegated gateway-owner authority at auth, retired=true 68ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > revalidates delegated system-admin authority at auth, retired=true 66ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > revalidates delegated gateway-owner authority at auth, retired=false 67ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > revalidates delegated system-admin authority at auth, retired=false 65ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > revalidates delegated gateway-owner authority at prepared, retired=true 66ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > revalidates delegated system-admin authority at prepared, retired=true 64ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > refuses changed sentinel identity during real shared auth preflight 64ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > refuses changed sentinel same-identity-facts during real shared auth preflight 63ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > enforces the report publication boundary for an identified operator.write 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > enforces the report publication boundary for an identified named administrator 67ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > blocks issue creation when shared-auth authority closes after auth preflight 62ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > blocks issue creation when invalidated authority closes after auth preflight 65ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > blocks receipt reservation and GitHub CLI transport after shared-auth authority closes 62ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server/ws-connection/update-report-authority.server.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server/ws-connection/update-report-authority.server.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server/ws-connection/update-report-authority.server.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server/ws-connection/update-report-authority.server.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > blocks receipt reservation and GitHub CLI transport after invalidated authority closes 66ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > blocks preview and leaves no report artifact after shared-auth authority closes 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server/ws-connection/update-report-authority.server.test.ts > update report live authority boundary > blocks preview and leaves no report artifact after invalidated authority closes 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > binds legacy system event to its destination without rewriting its queued key 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > binds stored system-event owner to its destination without rewriting its queued key 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > binds agent turn without a route to its destination without rewriting its queued key 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > binds replaced agent-turn session to its destination without rewriting its queued key 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > does not wake a replacement session for a managed result 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > marks a managed result wake as a task continuation 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > replays a managed result after a pre-turn crash but not after the turn starts 397ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > delivers a managed result again after the gateway died with its turn in flight 668ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > carries a persisted owner through global session lookup in an explicit roster 178ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.system-event-owner.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.system-event-owner.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.system-event-owner.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.system-event-owner.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.system-event-owner.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.system-event-owner.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.system-event-owner.test.ts > joins managed media promotion before publishing an internal restart delivery 498ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.correlated-recovery.test.ts > registered correlated completion recovery custody > settles recovered with none ownership change 650ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.correlated-recovery.test.ts > registered correlated completion recovery custody > settles moved-to-failed with none ownership change 422ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.correlated-recovery.test.ts > registered correlated completion recovery custody > settles recovered with default ownership change 479ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.correlated-recovery.test.ts > registered correlated completion recovery custody > settles moved-to-failed with default ownership change 484ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.correlated-recovery.test.ts > registered correlated completion recovery custody > settles recovered with file ownership change 487ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.correlated-recovery.test.ts > registered correlated completion recovery custody > settles recovered with successor ownership change 616ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.correlated-recovery.test.ts > registered correlated completion recovery custody > settles recovered with default after commit ownership change 483ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.correlated-recovery.test.ts > registered correlated completion recovery custody > settles recovered with cleanup released at receipt ownership change 426ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.correlated-recovery.test.ts > registered correlated completion recovery custody > settles recovered with hydration pending ownership change 421ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-runtime-services.correlated-recovery.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-runtime-services.correlated-recovery.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-runtime-services.correlated-recovery.test.ts: retiring openclaw.stateReadWorkers
+[sqlite-test-lifecycle] src/gateway/server-runtime-services.correlated-recovery.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-runtime-services.correlated-recovery.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/gateway/server-runtime-services.correlated-recovery.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/gateway/server-runtime-services.correlated-recovery.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.correlated-recovery.test.ts > registered correlated completion recovery custody > settles recovered with retired owner ownership change 617ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: current 992ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: replaced-before 561ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: rotated-before 556ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: deleted-before 875ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: replaced-after 588ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: rotated-after 926ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: store-after 1176ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: replaced-at-enqueue 580ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: store-at-enqueue 752ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: generation-at-enqueue 545ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > keeps successful queue admission bound to the requester: store-during-dispatch 838ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > retries one refused queue admission without losing media when transcript retention is also unavailable 600ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.media-binding.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.media-binding.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.media-binding.test.ts: retiring openclaw.stateReadWorkers
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.media-binding.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.media-binding.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.media-binding.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/gateway/server-restart-sentinel.media-binding.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-restart-sentinel.media-binding.test.ts > original requester media handoff > ends bounded handoff without claiming durability when both storage paths remain unavailable 557ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-runtime-services.delivery-recovery.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-runtime-services.delivery-recovery.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-runtime-services.delivery-recovery.test.ts: retiring openclaw.stateReadWorkers
+[sqlite-test-lifecycle] src/gateway/server-runtime-services.delivery-recovery.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-runtime-services.delivery-recovery.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/gateway/server-runtime-services.delivery-recovery.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/gateway/server-runtime-services.delivery-recovery.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-runtime-services.delivery-recovery.test.ts > recovers a watcher-owned update notice on its runtime state after ambient root drift 1159ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server.health.test.ts > gateway server health/presence > connect + health + presence + status succeed 268ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server.health.test.ts > gateway server health/presence > presence events carry seq + stateVersion 805ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server.health.test.ts > gateway server health/presence > agent events stream with seq 75ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server.health.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server.health.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server.health.test.ts: retiring openclaw.stateReadWorkers
+[sqlite-test-lifecycle] src/gateway/server.health.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server.health.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/gateway/server.health.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/gateway/server.health.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server.health.lifecycle.test.ts > health teardown preserves rejected startup and removes its partial fixture state 583ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server.health.lifecycle.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server.health.lifecycle.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server.health.lifecycle.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server.health.lifecycle.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/gateway/server.health.lifecycle.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/gateway/server.health.lifecycle.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server.health.lifecycle.test.ts > health cleanup retains its environment until pending startup settles and the server closes 138ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-startup-restart-sentinel.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-startup-restart-sentinel.test.ts: retiring openclaw.stateSnapshotOwners
+
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-restart-sentinel.test.ts > keeps delayed restart sentinel recovery admitted until wake work completes 2ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-restart-sentinel.test.ts > cancels delayed restart sentinel recovery when sidecar closes (awaiting admission=false) 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-restart-sentinel.test.ts > cancels delayed restart sentinel recovery when sidecar closes (awaiting admission=true) 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-restart-sentinel.test.ts > cancels delayed restart sentinel recovery when scheduler closes (awaiting admission=false) 1ms
+ ✓ |gateway-server (gateway-server) (gateway-server-parallel)| src/gateway/server-startup-restart-sentinel.test.ts > cancels delayed restart sentinel recovery when scheduler closes (awaiting admission=true) 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > retires named administrator consent when identity changes during final validation 410ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > retires named administrator consent when attempt changes during final validation 77ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > retires named administrator consent when digest changes during final validation 72ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > never authenticates the host after owner demotion during artifact publication 72ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > enriches only the same scoped attempt in lifecycle order: compact 74ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > enriches only the same scoped attempt in lifecycle order: direct-success 70ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > enriches only the same scoped attempt in lifecycle order: other-scope 73ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > excludes poisoned command diagnostics through ledger and public preview: Command failed with exit code 1: custom… 95ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > excludes poisoned command diagnostics through ledger and public preview: custom-tool private-customer-text 72ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > excludes poisoned command diagnostics through ledger and public preview: Permission denied for private-customer-… 72ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > excludes poisoned command diagnostics through ledger and public preview: npm error code PRIVATE_CUSTOMER_ID 72ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > keeps an unrecognized check local, including unshipped extensions, when publishing a report 2531ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > keeps an unrecognized code local, including unshipped extensions, when publishing a report 80ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > keeps an unrecognized pluginId local, including unshipped extensions, when publishing a report 71ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > removes operator names from Doctor config path hooks.internal.entries.private-customer-key.enabled in public reports 70ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > removes operator names from Doctor config path gateway.auth.identityScopes.private-customer-key in public reports 68ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > removes operator names from Doctor config path tools.byProvider.private-customer-key.profile in public reports 71ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > retains core/doctor/runtime-tool-schemas through the ledger, local summary and public preview 76ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > retains readyz through the ledger, local summary and public preview 79ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > retains package-install through the ledger, local summary and public preview 77ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > retains package-swap through the ledger, local summary and public preview 79ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > retains managed-service through the ledger, local summary and public preview 81ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > retains plugin-update through the ledger, local summary and public preview 79ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > keeps skipped dirty reporting aligned with the actual outcome 63ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > keeps skipped not-git-install reporting aligned with the actual outcome 59ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > keeps skipped already-current reporting aligned with the actual outcome 63ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > keeps skipped dry-run reporting aligned with the actual outcome 63ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > keeps skipped cancelled reporting aligned with the actual outcome 62ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > previews failed without a sentinel and never treats status as verified rollback 64ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > previews rolled-back without a sentinel and never treats status as verified rollback 67ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > includes rollback/exit evidence only from a matching final sentinel: true 65ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > includes rollback/exit evidence only from a matching final sentinel: false 63ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > refuses a retained failed sentinel while the canonical run is running 56ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > refuses a retained failed sentinel while the canonical run is succeeded 61ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > reuses the durable created URL on duplicate submission without repeating transport 74ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > reuses CLI created across Gateway reconnect, changed preview: false 1598ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > reuses CLI created across Gateway reconnect, changed preview: true 1572ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > reuses CLI pending across Gateway reconnect, changed preview: false 1864ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > reuses CLI pending across Gateway reconnect, changed preview: true 1880ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > refuses a retired connection during auth-preflight and permits explicit resubmission after reconnect 72ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > refuses a retired connection during attempt-validation and permits explicit resubmission after reconnect 70ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > does not prepare a preview for an already-retired connection 65ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > retains a confirmed created URL if the connection retires after issue creation 340ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > handles replacement-run during auth preflight using authoritative final facts 74ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-methods/update-report-run.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-methods/update-report-run.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-methods/update-report-run.test.ts: retiring openclaw.agentDatabaseLifecycle
+
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > handles duplicate-finalization during auth preflight using authoritative final facts 84ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report-run.test.ts > Report action from the authoritative update ledger > handles changed-sentinel during auth preflight using authoritative final facts 71ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > pins a directly applied package campaign to its announced version 1818ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > pins a managed package campaign handoff to its announced version 86ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > keeps a configless extended-stable package install on that channel 84ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > keeps a plain package update on the moving configured channel 80ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > uses the prepared Git checkout instead of process artifacts 80ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > rejects a missing prepared root without scanning the process working directory 77ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > pins a directly applied dev campaign to its announced commit 79ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > pins a managed dev campaign handoff to its announced commit 92ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > rejects an explicit commit that conflicts with the adopted Git campaign before mutation 111ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > coalesces an explicit commit matching the adopted Git campaign 81ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > explicit Git target binding > rejects an explicit target while its campaign is applying 75ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > explicit Git target binding > keeps the requested commit through managed preflight and handoff after upstream advances 83ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > explicit Git target binding > passes the requested commit to a direct Git update 84ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > explicit Git target binding > rejects malformed short SHA before any update mutation 79ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > explicit Git target binding > rejects malformed nonhex SHA before any update mutation 76ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > explicit Git target binding > rejects malformed unsafe upstream before any update mutation 78ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > explicit Git target binding > rejects malformed wrong kind before any update mutation 76ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > explicit Git target binding > rejects malformed non-object before any update mutation 78ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > explicit Git target binding > rejects a target for another Git upstream before update mutation 76ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > explicit Git target binding > rejects an exact Git target outside the dev channel before update mutation 92ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > explicit Git target binding > rejects an exact Git target on a package install before update mutation 82ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > does not add a pin environment to a non-campaign managed handoff 88ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > records handoff preparation failure before ending the adopted campaign 88ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > continues without an explicit target when no campaign can be adopted 80ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > rejects an untargeted update while a campaign is applying 80ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > does not clear a replacement campaign when the adopted update fails 86ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-methods/update-run-campaign.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-methods/update-run-campaign.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-methods/update-run-campaign.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-methods/update-run-campaign.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > keeps the adopted campaign while a foreground update is accepted 80ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-run-campaign.test.ts > update.run campaign ownership > keeps the adopted campaign after a managed-service handoff starts 81ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > settles an applying campaign when its handed-off run finishes failed 291ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > settles an applying campaign when its handed-off run finishes succeeded 67ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > settles an applying campaign when its handed-off run finishes rolled-back 66ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > settles an applying campaign when its handed-off run finishes skipped 66ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > reconciles the admitted campaign run even when newer history masks it 83ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > preserves status and retries campaign reconciliation after an exact-run read fails 73ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > keeps an applying campaign when the latest run is running 63ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > keeps an applying campaign when the latest run is unrelated 66ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > does not clear a replacement campaign after an awaited ledger read 63ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > keeps private recovery receipts durable while status and history stay public 69ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > rechecks root ownership after a lazy restart read resets into accepting 3ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > rechecks root ownership after a lazy restart read resets into suspension 2ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > reads recorded progress without reconciliation during restart signal 395ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > reads recorded progress without reconciliation during restart drain 394ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > reads fresh status concurrently without copying the shared database 256ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > preserves readable history when reconciliation is refused through update.status 366ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > preserves readable history when reconciliation is refused through update.runs.get 367ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > revalidates recorded dead drivers through update.status 372ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > revalidates recorded dead drivers through update.runs.get 373ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > reconciles expired legacy admission before update.status reaches the UI 373ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > reconciles expired legacy admission before update.runs.get reaches the UI 373ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > projects distinct active and latest runs and reads persisted history in creation order 74ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > update history RPCs > rejects malformed identities, invalid limits, and unsupported query fields 62ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > reconciles an expired legacy admission on Gateway watcher startup 376ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-methods/update-status.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-methods/update-status.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-methods/update-status.test.ts: retiring openclaw.stateReadWorkers
+[sqlite-test-lifecycle] src/gateway/server-methods/update-status.test.ts: retiring openclaw.sqliteWorkerBroker
+[sqlite-test-lifecycle] src/gateway/server-methods/update-status.test.ts: retiring openclaw.sharedStateWorkerOwner
+[sqlite-test-lifecycle] src/gateway/server-methods/update-status.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-methods/update-status.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-methods| src/gateway/server-methods/update-status.test.ts > watches a valid active update when newer terminal history is malformed 78ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-effective-channel.test.ts > update.status effective channel > reports the lifecycle-owned channel before the startup schedule is ready 163ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-effective-channel.test.ts > update.status effective channel > prefers the current config channel over the startup schedule 2ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-methods/update-effective-channel.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-methods/update-effective-channel.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-methods/update-effective-channel.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-methods/update-effective-channel.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-methods| src/gateway/server-methods/update-effective-channel.test.ts > update.status effective channel > awaits the current config's checkout refresh before reporting its schedule 55ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-effective-channel.test.ts > update.status effective channel > keeps status available when install identity initialization fails 2ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-effective-channel.test.ts > update.status effective channel > refreshes the latest update sentinel before responding 2ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-effective-channel.test.ts > update.status effective channel > falls back to the cached update sentinel when refresh fails 2ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-effective-channel.test.ts > reports slow status phases with {"enabled":false,"elapsed":40000,"throws":false} 2ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-effective-channel.test.ts > reports slow status phases with {"enabled":true,"elapsed":999.9,"throws":false} 2ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-effective-channel.test.ts > reports slow status phases with {"enabled":true,"elapsed":1000,"throws":false} 3ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-effective-channel.test.ts > reports slow status phases with {"enabled":true,"elapsed":40000,"throws":true} 2ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-effective-channel.test.ts > attributes a failed status history read to its phase and preserves the error 1ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-methods/update-report.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-methods/update-report.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-methods/update-report.test.ts: retiring openclaw.agentDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-methods/update-report.test.ts: retiring openclaw.sessionGroupCatalog
+
+ ✓ |gateway-methods| src/gateway/server-methods/update-report.test.ts > update.report > previews a current legacy handoff failure without carrying command or log content 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report.test.ts > update.report > previews a current canonical run failure without carrying command or log content 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report.test.ts > update.report > preserves advisory classification when projecting persisted update steps 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report.test.ts > update.report > submits only the reviewed digest for the same current attempt 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report.test.ts > update.report > rechecks the attempt after preparation and refuses a replacement before submission 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report.test.ts > update.report > refuses submission when client authority closes during report preparation 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report.test.ts > update.report > refuses preview without a live authenticated-client guard 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report.test.ts > update.report > refuses submit without a live authenticated-client guard 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report.test.ts > update.report > rejects a stale update identity before preparing or submitting 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report.test.ts > update.report > rejects successful and non-update sentinels 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report.test.ts > update.report > rejects a classified skipped no-op but allows a skipped terminal failure 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-report.test.ts > update.report > uses the canonical sentinel instead of a stale cached attempt 1ms
+stderr | unknown test
+[sqlite-test-lifecycle] src/gateway/server-methods/update-status-schedule.test.ts: retiring openclaw.stateDatabaseLifecycle
+[sqlite-test-lifecycle] src/gateway/server-methods/update-status-schedule.test.ts: retiring openclaw.stateSnapshotOwners
+[sqlite-test-lifecycle] src/gateway/server-methods/update-status-schedule.test.ts: retiring openclaw.agentDatabaseLifecycle
+
+ ✓ |gateway-methods| src/gateway/server-methods/update-status-schedule.test.ts > reports cold configured scheduler policy without checkout discovery (auto=false) 5ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status-schedule.test.ts > reports cold configured scheduler policy without checkout discovery (auto=true) 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status-schedule.test.ts > preserves a live campaign while hydrating disabled policy 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status-schedule.test.ts > reads campaign publication after awaited run history 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status-schedule.test.ts > reports disabled checks before discovery (config) 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status-schedule.test.ts > reports disabled checks before discovery (environment) 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status-schedule.test.ts > does not report a newly enabled policy as idle from an old cache 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status-schedule.test.ts > uses local identity for a configless cold start without fetching 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status-schedule.test.ts > uses current channel after history lookup (replace) 3ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status-schedule.test.ts > uses current channel after history lookup (remove) 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status-schedule.test.ts > preserves the admitted campaign channel and target without publishing status reads 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status-schedule.test.ts > does not replace a live campaign's metadata during checkout refresh (applying=false) 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status-schedule.test.ts > does not replace a live campaign's metadata during checkout refresh (applying=true) 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status-schedule.test.ts > removes a settled campaign and its old channel target after history lookup 1ms
+ ✓ |gateway-methods| src/gateway/server-methods/update-status-schedule.test.ts > keeps the optional schedule unknown when local identity cannot resolve its channel 1ms
+
+ Test Files  18 passed (18)
+      Tests  482 passed (482)
+   Start at  13:02:06
+   Duration  118.78s (tests 85%, transform 11%, import 3%, worker 1%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 120.78s

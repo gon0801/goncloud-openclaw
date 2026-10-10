@@ -1,0 +1,7 @@
+$ cutover_live.py apply --wait-seconds 60 --limits /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.iJzyi5kfbr/limits-ensayo.json
+transferred
+rc=0
+$ cutover_live.py inspect
+{"problems": [], "state": {"entry": {"adapter": "claude_opus", "deviceId": "<deviceId-mac>", "host": "mac-local", "id": "ensayo:vigia", "instructionRoot": "/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.iJzyi5kfbr/oc/instructions", "legacyCrons": ["vigia-ensayo"], "runTimeoutSeconds": 3600, "spools": []}, "generation": 2, "owner": "native", "schema": "agent-work-cutover.v2", "suspended": {"9ad4e078-fd72-4a8c-99fd-2235b2e3a312": {"disabledAtMs": 1791587638622, "job": {"agentId": "main", "configRevision": "sha256:BxhAUHUzllAIx6lIkvHLSqMCNM0lqeug0iy0u67zYX0", "createdAtMs": 1791587317645, "delivery": {"mode": "none"}, "effectiveAgentId": "main", "enabled": true, "id": "9ad4e078-fd72-4a8c-99fd-2235b2e3a312", "name": "vigia-ensayo", "nextRunAtMs": 1791587917645, "payload": {"kind": "agentTurn", "message": "cutover-cron-vigia-ensayo", "toolsAllow": ["*"]}, "schedule": {"anchorMs": 1791587317645, "everyMs": 300000, "kind": "every"}, "scheduledToolPolicy": {"mode": "trusted", "version": 1}, "sessionTarget": "isolated", "state": {"consecutiveErrors": 0, "nextRunAtMs": 1791587917645, "scheduleActivatedAtMs": 1791587625718, "scheduleErrorCount": 0}, "updatedAtMs": 1791587625718, "wakeMode": "now"}, "name": "vigia-ensayo"}}}}
+rc=0
+managedTasks {"enabled": true, "adapters": ["claude_opus"], "runTimeoutSeconds": 3600}

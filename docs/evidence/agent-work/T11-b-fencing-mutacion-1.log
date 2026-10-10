@@ -1,0 +1,19 @@
+F
+======================================================================
+FAIL: test_an_in_flight_turn_is_drained_then_the_old_cron_never_asks_again (__main__.CutoverFencingE2E.test_an_in_flight_turn_is_drained_then_the_old_cron_never_asks_again)
+----------------------------------------------------------------------
+cutover_live.CutoverRefused: vigia-viejo is about to run
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_fencing_e2e.py", line 74, in test_an_in_flight_turn_is_drained_then_the_old_cron_never_asks_again
+    with self.assertRaisesRegex(cutover_live.CutoverRefused, f"{CRON} has a turn in flight"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "vigia-viejo has a turn in flight" does not match "vigia-viejo is about to run"
+
+----------------------------------------------------------------------
+Ran 1 test in 63.707s
+
+FAILED (failures=1)
+rc=1

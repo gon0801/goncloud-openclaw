@@ -1,8 +1,8 @@
 $ bash scripts/tests/test-agent-work-host.sh resource_100_cycles
 ...
 ----------------------------------------------------------------------
-Ran 3 tests in 29.060s
+Ran 3 tests in 27.559s
 
 OK
 
-rc=0 seconds=29.1
+rc=0 seconds=27.6

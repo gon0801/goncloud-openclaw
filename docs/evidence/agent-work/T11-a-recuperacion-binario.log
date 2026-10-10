@@ -1,0 +1,24 @@
+npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+
+added 343 packages in 10s
+npm warn allow-scripts 4 packages have install scripts not yet covered by allowScripts:
+npm warn allow-scripts   @google/genai@2.23.0 (preinstall: echo 'preinstall: no-op')
+npm warn allow-scripts   esbuild@0.28.2 (postinstall: node install.js)
+npm warn allow-scripts   koffi@3.3.1 (install: node ./cnoke.cjs -P . -D src/koffi --prebuild --release)
+npm warn allow-scripts   protobufjs@7.6.6 (postinstall: node scripts/postinstall)
+npm warn allow-scripts
+npm warn allow-scripts Run `npm install -g --allow-scripts=@google/genai,esbuild,koffi,protobufjs` to allow these scripts once, or `npm config set allow-scripts=@google/genai,esbuild,koffi,protobufjs --location=user` to allow them for all global installs.
+npm notice
+npm notice New major version of npm available! 11.17.0 -> 12.2.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+npm notice To update run: npm install -g npm@12.2.0
+npm notice
+install rc=0 10s
+OpenClaw 2026.9.7 (c074824)
+version rc=0
+{
+  "version": "2026.9.7",
+  "commit": "c074824a27c96d3983043f9eeb33823cd1772d8c",
+  "builtAt": "2026-09-29T23:33:45.013Z",
+  "buildId": "2026.9.7-release-c074824a27c9-2026-09-29T23-33-45.013Z"
+}

@@ -1098,11 +1098,14 @@ class ResourceTests(unittest.TestCase):
     REAL_TERM_IGNORING_LAUNCHER = (
         "import os,signal,sys,time\n"
         "nonce=sys.argv[1]\n"
+        "ready=sys.argv[2] if len(sys.argv) > 2 else None\n"
         "if os.fork()==0:\n"
         "    os.setsid()\n"
         "    if os.fork()==0:\n"
         "        os.closerange(0,3)\n"
         "        signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "        if ready:\n"
+        "            open(ready, 'w').close()\n"
         "        time.sleep(120)\n"
         "    os._exit(0)\n"
         "time.sleep(120)\n"
@@ -1279,9 +1282,19 @@ class ResourceTests(unittest.TestCase):
             held = manager.reserve(self.key, "ag-ignore", "TaskCreated")
             manager.begin_launch(self.key)
             nonce = held.nonce
+            # The survivor ignores SIGTERM only once it says so: closing earlier kills it like any
+            # other process, and the test found nothing (about 1 run in 5 failed that way).
+            ready_dir = Path(tempfile.mkdtemp(prefix="ag-ignore-ready-", dir="/tmp"))  # agentes cannot reach $TMPDIR
+            ready_dir.chmod(0o777)
+            self.addCleanup(shutil.rmtree, ready_dir, True)
+            ready = ready_dir / "ignoring"
             backend.launch("ag-ignore", ["/opt/homebrew/bin/python3", "-c",
-                                         self.REAL_TERM_IGNORING_LAUNCHER, nonce])
+                                         self.REAL_TERM_IGNORING_LAUNCHER, nonce, str(ready)])
             backend.mark("ag-ignore", nonce)
+            deadline = time.monotonic() + 15
+            while not ready.exists() and time.monotonic() < deadline:
+                time.sleep(0.1)
+            self.assertTrue(ready.exists(), "the survivor never started ignoring SIGTERM")
             self.assertEqual(manager.attach(self.key).state, "Running")
             registered = self._registered_nonce(nonce)
             view = manager.close(self.key, {"kind": "cancel", "receipt": "c1"})

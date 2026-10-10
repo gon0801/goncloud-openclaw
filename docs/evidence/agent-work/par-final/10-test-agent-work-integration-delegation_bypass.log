@@ -1,28 +1,28 @@
 $ bash scripts/tests/test-agent-work-integration.sh delegation_bypass
-{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "978355503c44313536ab4cd03a6bfb7a5423404b"}
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "f1c5f34ae8f91652412188349c296b3c1a882701"}
 [test] starting test/vitest/vitest.agents-tools.config.ts
 
- RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+ RUN  v5.0.1 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.1M76AV2If3/r
 
-[vitest-workers] local cache hit after 2462ms
+[vitest-workers] local cache hit after 2637ms
 [vitest-workers] reused local compiler outputs
-[vitest-workers] prepared 4cfca1e7f1de in 2493ms (16698 inputs, 17251 outputs)
+[vitest-workers] prepared bc96ffff1ade in 2668ms (16698 inputs, 17251 outputs)
 stderr | unknown test
 [sqlite-test-lifecycle] src/agents/tools/sessions-managed-delegation.test.ts: retiring openclaw.stateDatabaseLifecycle
 [sqlite-test-lifecycle] src/agents/tools/sessions-managed-delegation.test.ts: retiring openclaw.stateSnapshotOwners
 [sqlite-test-lifecycle] src/agents/tools/sessions-managed-delegation.test.ts: retiring openclaw.agentDatabaseLifecycle
 
- ✓ |agents-tools| src/agents/tools/sessions-managed-delegation.test.ts > managed native delegation boundary > rejects sessions_spawn before any child is created 9ms
+ ✓ |agents-tools| src/agents/tools/sessions-managed-delegation.test.ts > managed native delegation boundary > rejects sessions_spawn before any child is created 6ms
  ✓ |agents-tools| src/agents/tools/sessions-managed-delegation.test.ts > managed native delegation boundary > rejects sessions_send before Gateway delivery 2ms
  ✓ |agents-tools| src/agents/tools/sessions-managed-delegation.test.ts > managed native delegation boundary > does not apply the managed guard to an ordinary run 2ms
 
  Test Files  1 passed (1)
       Tests  3 passed (3)
-   Start at  23:05:46
-   Duration  8.50s (transform 84%, import 10%, worker 4%, setup 1%)
+   Start at  20:17:08
+   Duration  5.73s (transform 80%, import 15%, worker 3%, setup 2%)
 
 [vitest-workers] verifying completed generation before cleanup
 [vitest-workers] retained completed compiler outputs for reuse
-[test] passed 1 Vitest shard in 9.76s
+[test] passed 1 Vitest shard in 7.06s
 
-rc=0 seconds=10.2
+rc=0 seconds=7.4

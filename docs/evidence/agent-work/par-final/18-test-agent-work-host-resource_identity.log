@@ -1,7 +1,7 @@
 $ bash scripts/tests/test-agent-work-host.sh resource_identity
 ........
 ----------------------------------------------------------------------
-Ran 8 tests in 0.583s
+Ran 8 tests in 0.552s
 
 OK
 

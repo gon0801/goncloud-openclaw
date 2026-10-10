@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/Users/dn/.local/state/encargos-loop/repro-T11-b-r1.py", line 115, in <module>
+    scenario_1_fail_open()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/dn/.local/state/encargos-loop/repro-T11-b-r1.py", line 65, in scenario_1_fail_open
+    result = cutover_live.apply(state, client, now_ms=lambda: NOW, limits_path=LIMITS)
+  File "/Users/dn/dev/wt/encargos-b5/scripts/agent-work/cutover_live.py", line 151, in apply
+    raise CutoverRefused("; ".join(problems))
+cutover_live.CutoverRefused: loop:x names vigia-typo, which matches 0 Gateway crons; spool /tmp/t11b-repro-s1/spool-sin-nada does not exist
+rc=1

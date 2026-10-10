@@ -1,0 +1,2 @@
+artifact: openclaw-2026.9.7.tgz: dist/entry.js is not the recorded build
+rc=1

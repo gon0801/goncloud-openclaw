@@ -1,0 +1,21 @@
+F
+======================================================================
+FAIL: test_unknown_limits_refuse_before_any_cron_is_touched (__main__.CutoverFencingE2E.test_unknown_limits_refuse_before_any_cron_is_touched)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_fencing_e2e.py", line 181, in test_unknown_limits_refuse_before_any_cron_is_touched
+    self.assertEqual((state["owner"], state["generation"], state["suspended"]), ("legacy", 1, {}))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Tuples differ: ('transferring', 2, {'997065e1-f794-45f2-ba[736 chars]o'}}) != ('legacy', 1, {})
+
+First differing element 0:
+'transferring'
+'legacy'
+
+Diff is 2353 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 1 test in 26.681s
+
+FAILED (failures=1)
+rc=1

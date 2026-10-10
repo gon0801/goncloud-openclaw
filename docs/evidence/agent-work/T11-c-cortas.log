@@ -1,0 +1,143 @@
+$ bash scripts/tests/test-candados-declarados.sh
+ok auto-prueba: los 4 estilos de ruta literal se detectan y exigen su marca
+ok ida: las 137 frases ancladas por 14 test(s) tienen su marca
+ok vuelta: las 88 marca(s) de agents/** y docs/agent-skills/** apuntan a tests que existen y afirman su frase
+TODO VERDE: candados declarados (137 frases, 88 marcas)
+rc=0
+$ bash scripts/tests/test-runbooks-no-contradicen-entorno.sh
+ok (1): el detector marca bootstrap imposible, docker run, glm viejo y comandos sin PATH; deja pasar las formas buenas y las prohibiciones
+ok (2):       25 runbooks revisados, sin bootstrap imposible, sin docker run y sin glm viejo
+ok (2b): cross-review y tmux de los autopilot y del loop con prefijo de PATH o ruta absoluta
+ok (2b-bis): ningun runbook lanza a un implementador sin PATH embebido y flag dentro del comando
+ok (2c): ningun runbook de fase designa un modelo como lead
+ok (2d): runbooks futuros revisados: autopilot-fase14.md autopilot-fase15.md autopilot-fase17.md; fixtures bueno/malo discriminan cada regla
+TODO VERDE: runbooks sin contradicciones con el kit ni con el entorno
+rc=0
+$ bash scripts/tests/test-agent-work-cutover.sh
+test_authorization_and_artifact_are_pinned (test_agent_work_cutover.CutoverTest.test_authorization_and_artifact_are_pinned) ... ok
+test_cutover_fencing_preserves_capture_pending_and_session (test_agent_work_cutover.CutoverTest.test_cutover_fencing_preserves_capture_pending_and_session) ... ok
+test_failed_rollback_freezes_admission_and_keeps_new_binary (test_agent_work_cutover.CutoverTest.test_failed_rollback_freezes_admission_and_keeps_new_binary) ... ok
+test_old_authorization_cannot_reuse_generation_after_rollback (test_agent_work_cutover.CutoverTest.test_old_authorization_cannot_reuse_generation_after_rollback) ... ok
+test_schema_incompatible_rollback_freezes_without_downgrade (test_agent_work_cutover.CutoverTest.test_schema_incompatible_rollback_freezes_without_downgrade) ... ok
+test_uncertainty_or_old_cron_in_flight_fails_closed (test_agent_work_cutover.CutoverTest.test_uncertainty_or_old_cron_in_flight_fails_closed) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.771s
+
+OK
+test_the_repo_manifest_matches_the_reviewed_runtime (test_agent_work_artifact.ArtifactManifestTest.test_the_repo_manifest_matches_the_reviewed_runtime) ... ok
+test_a_missing_package_file_is_refused (test_agent_work_artifact.ArtifactVerifyTest.test_a_missing_package_file_is_refused) ... ok
+test_a_newer_schema_cannot_be_declared_readable_by_the_previous_binary (test_agent_work_artifact.ArtifactVerifyTest.test_a_newer_schema_cannot_be_declared_readable_by_the_previous_binary) ... ok
+test_a_package_built_from_another_commit_is_refused (test_agent_work_artifact.ArtifactVerifyTest.test_a_package_built_from_another_commit_is_refused) ... ok
+test_a_package_that_is_not_the_recorded_one_is_refused (test_agent_work_artifact.ArtifactVerifyTest.test_a_package_that_is_not_the_recorded_one_is_refused) ... ok
+test_an_entry_point_that_is_not_the_reviewed_build_is_refused (test_agent_work_artifact.ArtifactVerifyTest.test_an_entry_point_that_is_not_the_reviewed_build_is_refused) ... ok
+test_the_built_packages_of_the_reviewed_source_verify (test_agent_work_artifact.ArtifactVerifyTest.test_the_built_packages_of_the_reviewed_source_verify) ... ok
+test_the_cli_exits_with_the_problems (test_agent_work_artifact.ArtifactVerifyTest.test_the_cli_exits_with_the_problems) ... ok
+test_the_migrations_must_be_the_schema_of_both_commits (test_agent_work_artifact.ArtifactVerifyTest.test_the_migrations_must_be_the_schema_of_both_commits) ... ok
+test_an_unknown_value_blocks_admission (test_agent_work_artifact.LimitsProfileTest.test_an_unknown_value_blocks_admission) ... ok
+test_every_limit_is_finite_positive_and_sourced (test_agent_work_artifact.LimitsProfileTest.test_every_limit_is_finite_positive_and_sourced) ... ok
+test_the_repo_limits_keep_admission_closed_while_a_limit_is_unknown (test_agent_work_artifact.LimitsProfileTest.test_the_repo_limits_keep_admission_closed_while_a_limit_is_unknown) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 1.595s
+
+OK
+test_a_cli_that_does_not_answer_counts_as_an_unavailable_gateway (test_agent_work_cutover_live.CutoverLiveTest.test_a_cli_that_does_not_answer_counts_as_an_unavailable_gateway) ... ok
+test_a_gateway_that_stays_unavailable_refuses_after_the_wait (test_agent_work_cutover_live.CutoverLiveTest.test_a_gateway_that_stays_unavailable_refuses_after_the_wait) ... ok
+test_a_lost_drain_race_refuses_once_and_the_same_command_then_resumes (test_agent_work_cutover_live.CutoverLiveTest.test_a_lost_drain_race_refuses_once_and_the_same_command_then_resumes) ... ok
+test_a_profile_missing_a_limit_is_unknown_too (test_agent_work_cutover_live.CutoverLiveTest.test_a_profile_missing_a_limit_is_unknown_too) ... ok
+test_a_restarting_gateway_is_waited_for_at_every_step (test_agent_work_cutover_live.CutoverLiveTest.test_a_restarting_gateway_is_waited_for_at_every_step) ... ok
+test_a_spool_that_does_not_exist_refuses (test_agent_work_cutover_live.CutoverLiveTest.test_a_spool_that_does_not_exist_refuses) ... ok
+test_an_old_cron_the_gateway_does_not_have_refuses_instead_of_leaving_two_emitters (test_agent_work_cutover_live.CutoverLiveTest.test_an_old_cron_the_gateway_does_not_have_refuses_instead_of_leaving_two_emitters) ... ok
+test_the_spool_reader_closes_its_connection (test_agent_work_cutover_live.CutoverLiveTest.test_the_spool_reader_closes_its_connection) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 1.013s
+
+OK
+rc=0
+$ bash scripts/tests/test-agent-work-e2e.sh
+{"closed": 0, "incidents": 0, "reported": 1, "transferred": 0}
+DELIVERY_LATENCY {"detection_to_persisted_receipt_s": 0.25, "write_to_detection_s": 4.999}
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.010s
+
+OK
+ss
+----------------------------------------------------------------------
+Ran 2 tests in 0.000s
+
+OK (skipped=2)
+s
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK (skipped=1)
+s
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK (skipped=1)
+ss
+----------------------------------------------------------------------
+Ran 2 tests in 0.000s
+
+OK (skipped=2)
+s
+----------------------------------------------------------------------
+Ran 0 tests in 0.000s
+
+OK (skipped=1)
+s
+----------------------------------------------------------------------
+Ran 0 tests in 0.000s
+
+OK (skipped=1)
+sssssssss
+----------------------------------------------------------------------
+Ran 9 tests in 0.000s
+
+OK (skipped=9)
+s
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK (skipped=1)
+s
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK (skipped=1)
+s
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK (skipped=1)
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.010s
+
+OK
+rc=0
+$ python3 scripts/tests/test_agent_work_acceptance.py
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.008s
+
+OK
+rc=0
+$ python3 scripts/tests/test_agent_work_cutover_rollback_e2e.py
+sssss
+----------------------------------------------------------------------
+Ran 5 tests in 0.000s
+
+OK (skipped=5)
+rc=0
+$ python3 scripts/tests/test_agent_work_cutover_fencing_e2e.py
+ssssss
+----------------------------------------------------------------------
+Ran 6 tests in 0.000s
+
+OK (skipped=6)
+rc=0

@@ -1,0 +1,26 @@
+F
+======================================================================
+FAIL: test_an_interrupted_transfer_resumes_without_suspending_again (__main__.CutoverFencingE2E.test_an_interrupted_transfer_resumes_without_suspending_again)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_fencing_e2e.py", line 194, in test_an_interrupted_transfer_resumes_without_suspending_again
+    self.assertEqual((result, state["owner"], state["generation"]), ("transferred", "native", 2))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Tuples differ: ('transferred', 'native', 3) != ('transferred', 'native', 2)
+
+First differing element 2:
+3
+2
+
+- ('transferred', 'native', 3)
+?                           ^
+
++ ('transferred', 'native', 2)
+?                           ^
+
+
+----------------------------------------------------------------------
+Ran 1 test in 27.120s
+
+FAILED (failures=1)
+rc=1

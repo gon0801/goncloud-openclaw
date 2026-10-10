@@ -1,0 +1,19 @@
+test_a_bad_snapshot_keeps_the_candidate_running_with_admission_frozen (__main__.CutoverRollbackE2E.test_a_bad_snapshot_keeps_the_candidate_running_with_admission_frozen) ... ok
+test_a_previous_binary_that_does_not_start_leaves_the_candidate_frozen_on_the_snapshot (__main__.CutoverRollbackE2E.test_a_previous_binary_that_does_not_start_leaves_the_candidate_frozen_on_the_snapshot) ... FAIL
+test_an_interrupted_rollback_resumes_without_reviving_the_old_cron (__main__.CutoverRollbackE2E.test_an_interrupted_rollback_resumes_without_reviving_the_old_cron) ... ok
+test_rollback_returns_the_previous_binary_on_the_snapshot_and_keeps_the_old_cron_suspended (__main__.CutoverRollbackE2E.test_rollback_returns_the_previous_binary_on_the_snapshot_and_keeps_the_old_cron_suspended) ... ok
+
+======================================================================
+FAIL: test_a_previous_binary_that_does_not_start_leaves_the_candidate_frozen_on_the_snapshot (__main__.CutoverRollbackE2E.test_a_previous_binary_that_does_not_start_leaves_the_candidate_frozen_on_the_snapshot)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_rollback_e2e.py", line 144, in test_a_previous_binary_that_does_not_start_leaves_the_candidate_frozen_on_the_snapshot
+    self.assertFalse(self.cron_enabled())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+----------------------------------------------------------------------
+Ran 4 tests in 350.319s
+
+FAILED (failures=1)
+rc=1 350s
