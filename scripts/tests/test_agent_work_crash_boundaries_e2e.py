@@ -52,7 +52,8 @@ from native_gateway import GatewayProjectionClient, claim_cli_once  # noqa: E402
 from resources import ResourceManager, TmuxBackend  # noqa: E402
 from routing import prepare_request  # noqa: E402
 from test_agent_work_main_cli_loop_e2e import (  # noqa: E402
-    ADAPTER, HOST_ID, HarnessError, LoopGateway, built_runtime, certified_coverage, loop_route, wait_for)
+    ADAPTER, HOST_ID, PYTHON_DOUBLE, HarnessError, LoopGateway, built_runtime, certified_coverage, loop_route,
+    wait_for)
 from test_agent_work_review_correction_restart_e2e import SCRIPTED, ReviewCli  # noqa: E402
 
 CRASH_HOST = Path(__file__).resolve().parent / "fixtures/agent-work/crash-host.py"
@@ -84,7 +85,7 @@ class CrashBoundariesE2E(unittest.TestCase):
         self.addCleanup(self.cli.close)
         self.host = Host(HOST_ID, self.root / "host")
         self.manager = ResourceManager(self.host.spool, HOST_ID, TmuxBackend(self.cli.tmux, self.cli.socket))
-        self.deliver = TmuxTransport(self.cli.tmux, self.cli.socket).deliver
+        self.deliver = TmuxTransport(self.cli.tmux, self.cli.socket, PYTHON_DOUBLE).deliver
         self.pids = []
 
     def gateway(self, reuse_state=False, **env):
