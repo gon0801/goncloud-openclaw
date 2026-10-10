@@ -1,2 +1,0 @@
-{"faithful": true, "pairs": [[39555, 39555], [54632, 54632]], "bySession": {"operaciones:agent:operaciones:subagent:47833b28-3be2-4d42-a685-d050035e8809": {"rc": 0, "requests": 1, "maxBytes": 39555, "error": null}, "main:agent:main:telegram:default:direct:6470689715": {"rc": 0, "requests": 1, "maxBytes": 54632, "error": null}}, "ensayo": "/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/ensayo-gateway-lvbqsokq"}
-rc=0 34s

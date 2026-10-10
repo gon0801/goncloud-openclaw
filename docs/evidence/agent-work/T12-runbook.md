@@ -33,7 +33,7 @@ Mientras no pase, T12 llega hasta la **parte A**: instalar con la admisión cerr
 | 1.3 | Instalar los dos paquetes juntos | `~/.openclaw/tools/node/bin/npm install -g --allow-scripts=/tmp/openclaw-2026.9.7.tgz /tmp/openclaw-ai-2026.9.7.tgz /tmp/openclaw-2026.9.7.tgz` y `~/.openclaw/bin/openclaw --version` | `added … packages`; `OpenClaw 2026.9.7 (f1c5f34)` | 2 min | Reversa (sección Reversa). |
 | 1.4 | Arrancar | `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/<etiqueta>.plist` (o como se lanzaba en 0.3) | en el log, la migración y `[gateway] ready`; `openclaw --version` vía el CLI de la Mac: `(f1c5f34)` | 2 min (la migración 19 → 27 de la copia tardó segundos) | Reversa. |
 | 1.5 | Admisión cerrada | `openclaw gateway call config.get --params '{}' --json` | sin `managedTasks`, o `managedTasks.enabled` en `false` | 1 min | Si está abierta: `cutover_live` no corrió, algo la cambió; congelarla (`config.patch` con `{"managedTasks":{"enabled":false}}` y `baseHash`) y avisar. |
-| 1.6 | Releer lo instalado | `ls ~/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw/dist/build-info.json && cat` ese archivo; `openclaw health --json` | `commit` = `f1c5f34…`; `ok: true` | 1 min | Reversa. |
+| 1.6 | Releer lo instalado | `cat ~/.openclaw/tools/node-v24.19.0/lib/node_modules/openclaw/dist/build-info.json`; `openclaw health --json` | `commit` = `f1c5f34…`; `ok: true` | 1 min | Reversa. |
 | 1.7 | Resultados previos (`:311`) | En la ruta nativa todavía no hay resultados: el host de encargos nunca corrió en vivo, porque la admisión nunca se abrió. Los resultados de los loops viejos son archivos `LISTO-*` y `VEREDICTO-*` en `~/.local/state/<loop>/`, y se listan con `ls -lt ~/.local/state/*/LISTO-* ~/.local/state/*/VEREDICTO-*` | cada uno ya consumido, pendiente o antiguo; ninguno se reenvía | 2 min | Anotar en el recibo. |
 | 1.8 | Captura de resultados cuando exista el host (parte B) | En la Mac: `python3 scripts/agent-work/native_gateway.py --openclaw-bin ~/.openclaw/bin/openclaw --host-id mac-local --expect-url ws://127.0.0.1:18789 --host-state-dir <dir del host> --flush-results`, y para clasificar, `sqlite3 <dir del host>/host.sqlite "select status, count(*) from operations group by status"` | consumidos (`acknowledged`), pendientes (con resultado y sin recibo) y en vuelo; los `attempted` y `uncertain` se dejan sin reenviar | 1 min | Los resultados quedan en el spool; nunca se reenvía uno incierto. |
 
@@ -43,11 +43,21 @@ Después de la parte A, la Mini corre el runtime nuevo con la admisión cerrada,
 
 Con uno o dos días de tráfico real:
 
+En la Mini no está el repo, así que el script corre en la Mac de desarrollo sobre una copia de las bases hecha con el mismo `.backup` de 1.1. En la Mini:
+
 ```
-python3 scripts/agent-work/runtime/medir-contexto-sombra.py ~/.openclaw ingenieria adversary operaciones main
+S=/tmp/sombra; for a in ingenieria adversary operaciones main; do mkdir -p $S/agents/$a/agent; sqlite3 ~/.openclaw/agents/$a/agent/openclaw-agent.sqlite ".backup $S/agents/$a/agent/openclaw-agent.sqlite"; done
 ```
 
-Imprime el máximo, el p95 y n por agente, y propone `maxContextTokens` como el máximo × 1,5. Sale con 1 si un agente todavía no tiene ninguna llamada medida. El valor se lleva a `limits.json` (`productionProfile.values.maxContextTokens`) en un PR. `artifact.py verify` y `cutover_live` siguen negándose a abrir la admisión mientras haya un `null`. Que la medición es fiel se comprobó en la copia: el evento y el cuerpo que recibió el proveedor tuvieron los mismos bytes (39.555 y 54.632, `T11-T12-sombra.log`).
+En la Mac, desde el repo:
+
+```
+scp -r gon@100.73.187.5:/tmp/sombra /tmp/sombra && python3 scripts/agent-work/runtime/medir-contexto-sombra.py /tmp/sombra ingenieria adversary operaciones main
+```
+
+Al terminar, borra `/tmp/sombra` en las dos máquinas: son bases con conversaciones.
+
+Imprime el máximo, el p95 y n por agente, y propone `maxContextTokens` como el máximo × 1,5. Sale con 1 si un agente todavía no tiene ninguna llamada medida. El valor se lleva a `limits.json` (`productionProfile.values.maxContextTokens`) en un PR. `artifact.py verify` y `cutover_live` siguen negándose a abrir la admisión mientras haya un `null`. Que la medición es fiel se comprobó en la copia: el evento y el cuerpo que recibió el proveedor tuvieron los mismos bytes (39.555 y 54.632, `B5-logs.md`).
 
 ## Parte B: abrir una entrada (plan `:312` a `:318`)
 

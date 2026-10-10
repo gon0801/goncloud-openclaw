@@ -2,7 +2,7 @@
 
 Todos los comandos de esta página se ensayaron el 2026-10-09 en la Mac de desarrollo, que es macOS arm64 como la Mac Mini del gateway vivo. Usan el Node que trae OpenClaw (`~/.openclaw/tools/node`, v24.19.0). Nada de esto se corrió contra el gateway vivo: el ensayo usa prefijos y HOME temporales. La autorización y la ventana de T12 son de David.
 
-El artefacto y sus hashes están en `artifact-manifest.json`, y `scripts/agent-work/artifact.py verify` los comprueba. El runtime es la rama `feat/agent-work-integration` de R en `818f0fdacfb090c5ea51d29db9744ac90e977fcb`, que nunca se sube a ningún remoto. El que corre hoy en la Mini es el 2026.9.7 público, build `c074824a27c9`.
+El artefacto y sus hashes están en `artifact-manifest.json`, y `scripts/agent-work/artifact.py verify` los comprueba. El runtime es la rama `feat/agent-work-integration` de R en `f1c5f34ae8f91652412188349c296b3c1a882701`, que nunca se sube a ningún remoto. Las duraciones de abajo se midieron con el build de `818f0fd`. `f1c5f34` solo agrega el evento `provider.payload.measured`, y sobre él los e2e del corte y de la reversa dieron OK (`B5-logs.md`). El que corre hoy en la Mini es el 2026.9.7 público, build `c074824a27c9`.
 
 ## Dónde vive OpenClaw en el host
 
@@ -30,7 +30,7 @@ Antes de instalar, saca una foto consistente de la base de estado y de la de cad
 |---|---|---|---|---|
 | 1. Foto | `F=~/.openclaw/respaldos/pre-<sha7>-$(date +%Y%m%d-%H%M); mkdir -p "$F"; sqlite3 ~/.openclaw/state/openclaw.sqlite ".backup $F/openclaw.sqlite"; for f in ~/.openclaw/agents/*/agent/openclaw-agent.sqlite; do sqlite3 "$f" ".backup $F/agent-$(basename "$(dirname "$(dirname "$f")")").sqlite"; done; cp ~/.openclaw/openclaw.json "$F/"` | `sqlite3 "$F/openclaw.sqlite" 'PRAGMA user_version; PRAGMA quick_check;'` imprime `19` y `ok` | 1 min (medido el 2026-10-09 contra la Mini viva, por ssh: 564 MB en total, sin detener el gateway; `T11-a-foto-mini.log`) | Sin foto válida no se instala. |
 | 2. Instalar | `~/.openclaw/tools/node/bin/npm install -g --allow-scripts=<dir>/openclaw-2026.9.7.tgz <dir>/openclaw-ai-2026.9.7.tgz <dir>/openclaw-2026.9.7.tgz` | `added … packages`; `npm warn allow-scripts` no lista `openclaw` | 2 min (medido: 15 s en un prefijo vacío) | La versión anterior queda reemplazada a medias: sigue la recuperación de abajo. |
-| 3. Humo | `~/.openclaw/bin/openclaw --version` | `OpenClaw 2026.9.7 (818f0fd)` | 5 s | Recuperación. |
+| 3. Humo | `~/.openclaw/bin/openclaw --version` | `OpenClaw 2026.9.7 (f1c5f34)` | 5 s | Recuperación. |
 
 Los dos `.tgz` (`@openclaw/ai` y `openclaw`) van juntos en la misma instalación. Instalado solo, el paquete `openclaw` baja de npm el `@openclaw/ai` público, y el gateway truena al cargar con `does not provide an export named 'responsesDispatchHook'` (medido; está en `smoke.log` de la carpeta del paquete). `--allow-scripts` va con la ruta del `.tgz` raíz, porque npm compara contra la ruta y no contra el nombre `openclaw`. Instalar encima de un `openclaw@2026.9.7` público ya instalado deja la versión de R y quita el `@openclaw/ai` anidado de upstream (medido).
 
