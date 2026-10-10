@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """cutover_live decisions without a Gateway (VEREDICTO-T11-b-r1): an entry that does not match the
 Gateway refuses, a lost drain race does not wedge the cutover, and a restarting Gateway is waited for."""
+import contextlib
+import hashlib
+import io
 import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
@@ -17,28 +21,65 @@ PROFILE = {"maxConcurrentTasks": 5, "maxDepth": 2, "maxChildren": 6, "maxModelCa
            "maxContextTokens": 10, "maxTreeTokens": 10, "maxAutomaticRecoveryCalls": 1}
 
 
+def merged(base, patch):
+    if not isinstance(base, dict) or not isinstance(patch, dict):
+        return patch
+    result = dict(base)
+    for key, value in patch.items():
+        if value is None:
+            result.pop(key, None)
+        else:
+            result[key] = merged(base.get(key), value)
+    return result
+
+
+def shrunk_arrays(base, after, path="managedTasks"):
+    if isinstance(base, list):
+        return [] if isinstance(after, list) and all(item in after for item in base) else [path]
+    if not isinstance(base, dict):
+        return []
+    after = after if isinstance(after, dict) else {}
+    return [found for key, value in base.items() for found in shrunk_arrays(value, after.get(key), f"{path}.{key}")]
+
+
 class FakeGateway:
     """cron.list / cron.update / cron.runs / config.get / config.patch with R's observable effects."""
 
-    def __init__(self, jobs, cancel_on_disable=False, unavailable=None):
+    def __init__(self, jobs, cancel_on_disable=False, unavailable=None, managed=None):
         self.jobs = jobs
-        self.managed = {"enabled": False, "hosts": {}}
+        self.managed = managed or {"enabled": False, "hosts": {}}
         self.runs = {}
+        self.patches = []
         self.cancel_on_disable = cancel_on_disable
         # Method -> how many of its next calls fail as a restarting Gateway; "*" for every method.
         self.unavailable = dict(unavailable or {})
+        # Method -> how many of its next calls are refused outright, as a killed or rejecting call.
+        self.refused = {}
 
     def call(self, method, params):
         key = method if self.unavailable.get(method) else "*" if self.unavailable.get("*") else None
         if key:
             self.unavailable[key] -= 1
             raise cutover_live.GatewayUnavailable(f"{method}: Gateway not reachable (restarting)")
+        if self.refused.get(method):
+            self.refused[method] -= 1
+            raise cutover_live.CutoverRefused(f"{method}: connection reset")
         if method == "cron.list":
             return {"jobs": [dict(job) for job in self.jobs]}
         if method == "config.get":
-            return {"hash": "h", "resolved": {"managedTasks": self.managed}}
+            return {"hash": self.hash(), "resolved": {"managedTasks": self.managed}}
         if method == "config.patch":
-            self.managed = json.loads(params["raw"])["managedTasks"]
+            # R's config.patch: a merge patch on the config it was read from, never silently shortening an array.
+            if params["baseHash"] != self.hash():
+                raise cutover_live.CutoverRefused("config.patch: config changed since last load")
+            after = merged(self.managed, json.loads(params["raw"])["managedTasks"])
+            unconfirmed = [path for path in shrunk_arrays(self.managed, after)
+                           if path not in params.get("replacePaths", [])]
+            if unconfirmed:
+                raise cutover_live.CutoverRefused(
+                    f"config.patch would remove entries from array path(s): {', '.join(unconfirmed)}")
+            self.patches.append(json.loads(params["raw"]))
+            self.managed = after
             return {"ok": True}
         if method == "cron.update":
             job = next(job for job in self.jobs if job["id"] == params["id"])
@@ -50,6 +91,9 @@ class FakeGateway:
         if method == "cron.runs":
             return {"entries": self.runs.get(params["id"], [])}
         raise AssertionError(method)
+
+    def hash(self):
+        return hashlib.sha256(json.dumps(self.managed, sort_keys=True).encode()).hexdigest()
 
 
 def job(name="vigia-viejo", job_id="j1"):
@@ -76,6 +120,99 @@ class CutoverLiveTest(unittest.TestCase):
     def apply(self, gateway, now=NOW, wait_seconds=0):
         return cutover_live.apply(self.state, gateway, now_ms=lambda: now, wait_seconds=wait_seconds,
                                   sleep=lambda _: None, limits_path=self.limits)
+
+    def cli(self, gateway, *args):
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(cutover_live, "CliClient", lambda binary: gateway), \
+                mock.patch.object(sys, "argv", ["cutover_live.py", *args]), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = cutover_live.main()
+        return code, out.getvalue().strip(), err.getvalue().strip()
+
+    def test_the_first_cutover_names_main_as_the_only_requester(self):
+        gateway = FakeGateway([job()])
+        self.entry()
+        self.assertEqual(self.apply(gateway), "transferred")
+        self.assertEqual(gateway.managed["requesters"], ["main"])
+
+    def test_the_cutover_adds_main_to_an_operator_requester_list_and_drops_nothing(self):
+        gateway = FakeGateway([job()], managed={"enabled": False, "hosts": {}, "requesters": ["ingenieria"]})
+        self.entry()
+        self.assertEqual(self.apply(gateway), "transferred")
+        self.assertEqual(gateway.managed["requesters"], ["ingenieria", "main"])
+
+    def test_revert_closes_the_entry_then_re_enables_its_old_crons_and_keeps_the_spool(self):
+        gateway = FakeGateway([job(), job("otro-cron", "j2")])
+        gateway.jobs[1]["enabled"] = False
+        self.entry()
+        self.assertEqual(self.apply(gateway), "transferred")
+        result = self.root / "spool" / "result.json"
+        result.write_text('{"pending": true}')
+        self.assertEqual(self.cli(gateway, "revert", "--state", str(self.state)),
+                         (0, "reverted; old crons re-enabled", ""))
+        self.assertEqual(gateway.managed["enabled"], False)
+        self.assertEqual([(cron["id"], cron["enabled"]) for cron in gateway.jobs], [("j1", True), ("j2", False)])
+        state = json.loads(self.state.read_text())
+        self.assertEqual((state["owner"], state["generation"], state["revert"]), ("legacy", 3, {"phase": "done"}))
+        self.assertEqual(result.read_text(), '{"pending": true}')
+        patches = len(gateway.patches)
+        self.assertEqual(self.cli(gateway, "revert", "--state", str(self.state)), (0, "already reverted", ""))
+        self.assertEqual(len(gateway.patches), patches)
+
+    def test_revert_removes_only_its_adapter_when_the_host_keeps_another(self):
+        gateway = FakeGateway([job()], managed={"enabled": True, "instructionRoot": str(self.root),
+                                                "hosts": {"mini": {"deviceId": "device", "adapters": ["codex"]}}})
+        self.entry()
+        self.assertEqual(self.apply(gateway), "transferred")
+        self.assertEqual(gateway.managed["hosts"]["mini"]["adapters"], ["claude_opus", "codex"])
+        self.assertEqual(cutover_live.revert(self.state, gateway, sleep=lambda _: None), "reverted; old crons re-enabled")
+        self.assertEqual((gateway.managed["enabled"], gateway.managed["hosts"]["mini"]["adapters"]), (True, ["codex"]))
+        self.assertTrue(gateway.jobs[0]["enabled"])
+
+    def test_revert_drops_a_host_left_without_adapters_while_another_host_stays_open(self):
+        gateway = FakeGateway([job()], managed={"enabled": True, "instructionRoot": str(self.root),
+                                                "hosts": {"pc": {"deviceId": "pc-device", "adapters": ["codex"]}}})
+        self.entry()
+        self.assertEqual(self.apply(gateway), "transferred")
+        self.assertEqual(cutover_live.revert(self.state, gateway, sleep=lambda _: None), "reverted; old crons re-enabled")
+        self.assertEqual((gateway.managed["enabled"], gateway.managed["hosts"]),
+                         (True, {"pc": {"deviceId": "pc-device", "adapters": ["codex"]}}))
+
+    def test_a_revert_interrupted_between_its_steps_resumes_without_patching_again(self):
+        gateway = FakeGateway([job()])
+        self.entry()
+        self.assertEqual(self.apply(gateway), "transferred")
+        gateway.refused = {"cron.update": 1}
+        with self.assertRaisesRegex(cutover_live.CutoverRefused, "cron.update: connection reset"):
+            cutover_live.revert(self.state, gateway, sleep=lambda _: None)
+        state = json.loads(self.state.read_text())
+        self.assertEqual((state["owner"], state["revert"]), ("native", {"phase": "frozen"}))
+        self.assertEqual((gateway.managed["enabled"], gateway.jobs[0]["enabled"]), (False, False))
+        patches = len(gateway.patches)
+        self.assertEqual(cutover_live.revert(self.state, gateway, sleep=lambda _: None), "reverted; old crons re-enabled")
+        self.assertEqual((len(gateway.patches), gateway.jobs[0]["enabled"]), (patches, True))
+
+    def test_revert_refuses_an_entry_that_was_never_transferred(self):
+        gateway = FakeGateway([job()])
+        self.entry()
+        self.assertEqual(self.cli(gateway, "revert", "--state", str(self.state)),
+                         (1, "", "cutover: loop:x was never transferred; nothing to revert"))
+        self.assertEqual((gateway.patches, gateway.jobs[0]["enabled"]), ([], True))
+
+    def test_an_entry_transferred_again_after_a_revert_reverts_again(self):
+        gateway = FakeGateway([job()])
+        self.entry()
+        self.assertEqual(self.apply(gateway), "transferred")
+        self.assertEqual(cutover_live.revert(self.state, gateway, sleep=lambda _: None), "reverted; old crons re-enabled")
+        self.assertEqual(self.apply(gateway), "transferred")
+        self.assertEqual(cutover_live.revert(self.state, gateway, sleep=lambda _: None), "reverted; old crons re-enabled")
+        self.assertEqual((gateway.managed["enabled"], gateway.jobs[0]["enabled"]), (False, True))
+
+    def test_freeze_closes_all_admission_without_a_state_file(self):
+        gateway = FakeGateway([job()], managed={"enabled": True, "instructionRoot": str(self.root),
+                                                "hosts": {"mini": {"deviceId": "device", "adapters": ["codex"]}}})
+        self.assertEqual(self.cli(gateway, "freeze"), (0, "frozen", ""))
+        self.assertEqual((gateway.managed["enabled"], gateway.managed["hosts"]["mini"]["adapters"]), (False, ["codex"]))
 
     def test_an_old_cron_the_gateway_does_not_have_refuses_instead_of_leaving_two_emitters(self):
         gateway = FakeGateway([job("vigia-real", "jreal")])

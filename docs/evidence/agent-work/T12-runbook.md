@@ -76,7 +76,7 @@ Mide solo a los agentes que pueden recibir un encargo, y solo sus llamadas por R
 
 ## Parte B: abrir una entrada (plan `:312` a `:318`)
 
-Solo con R `19c2ed1` o posterior instalado, un trabajador certificable de la sección de arriba (por ejemplo, la ruta `operaciones → ingenieria`) y `maxContextTokens` medido.
+Solo con R `4b9785c` o posterior instalado (el corte escribe `managedTasks.requesters: ["main"]`, y un R anterior rechaza esa clave), un trabajador certificable de la sección de arriba (por ejemplo, la ruta `operaciones → ingenieria`) y `maxContextTokens` medido.
 
 | # | Qué | Comando | Resultado |
 |---|---|---|---|
@@ -90,7 +90,15 @@ Solo con R `19c2ed1` o posterior instalado, un trabajador certificable de la sec
 
 ## Reversa (plan `:319`)
 
-Ante cualquier falla:
+Si falla una entrada de la parte B y el binario nuevo sigue sano, se revierte solo esa entrada, sin la foto:
+
+```
+python3 scripts/agent-work/cutover_live.py revert --state <estado> --wait-seconds 120
+```
+
+Cierra primero la admisión de la entrada (quita su adaptador, o congela todo si era el único) y después rehabilita los crons viejos cuyos ids guardó el corte. No toca el spool. Si se interrumpe, el mismo comando retoma. Imprime `reverted; old crons re-enabled`. Para parar toda la admisión sin rehabilitar nada: `python3 scripts/agent-work/cutover_live.py freeze --wait-seconds 120`. El detalle está en `deploy-commands.md`, sección Revertir una sola entrada.
+
+Si falla el binario nuevo:
 1. congelar la admisión;
 2. conservar los resultados (el spool de la Mac no se toca);
 3. volver con la foto del paso 1.1.

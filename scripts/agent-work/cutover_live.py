@@ -2,7 +2,9 @@
 """Live adoption of one managed entry (T11 :298-:299): drain and suspend its old crons, then move
 ownership to the native route by generation. Every step reads the Gateway; nothing assumes.
 
-Usage: cutover_live.py prepare|inspect|apply --state <file> [--entry <entry.json>] [--wait-seconds N]
+Usage: cutover_live.py prepare|inspect|apply|revert --state <file> [--entry <entry.json>] [--wait-seconds N]
+       cutover_live.py freeze [--wait-seconds N]
+`revert` undoes one entry's cutover on the running Gateway; `freeze` closes all native admission.
 The Gateway is reached with `openclaw gateway call` (OPENCLAW_BIN, default ~/.openclaw/bin/openclaw).
 """
 import argparse
@@ -123,8 +125,11 @@ def native_patch(entry, config, limits):
     missing = [name for name, value in (("deviceId", device), ("instructionRoot", root)) if not value]
     if missing:
         raise CutoverRefused(f"{entry['id']} needs {', '.join(missing)} to open {entry['host']}/{entry['adapter']}")
+    requesters = managed.get("requesters", [])
     return {"managedTasks": {
         "enabled": True, "instructionRoot": root, "profile": values,
+        # R hands the requester tools only to these agents; an operator's list keeps its entries.
+        "requesters": requesters if "main" in requesters else [*requesters, "main"],
         "runTimeoutSeconds": managed.get("runTimeoutSeconds") or entry.get("runTimeoutSeconds", 3600),
         "hosts": {entry["host"]: {"deviceId": device,
                                   "adapters": sorted(set(host.get("adapters", [])) | {entry["adapter"]})}}}}
@@ -256,6 +261,84 @@ def freeze(client, wait_seconds=120, sleep=time.sleep):
         sleep(0.5)
 
 
+def entry_close_patch(entry, managed):
+    """The managedTasks patch and replacePaths that close admission for this entry alone; no patch once closed."""
+    hosts = managed.get("hosts", {})
+    adapters = hosts.get(entry["host"], {}).get("adapters", [])
+    if not managed.get("enabled") or entry["adapter"] not in adapters:
+        return None, []
+    remaining = [adapter for adapter in adapters if adapter != entry["adapter"]]
+    replace = [f"managedTasks.hosts.{entry['host']}.adapters"]
+    if remaining:
+        return {"managedTasks": {"hosts": {entry["host"]: {"adapters": remaining}}}}, replace
+    # R requires one adapter per host: an emptied host goes, and with no adapter left admission closes.
+    if any(host.get("adapters") for name, host in hosts.items() if name != entry["host"]):
+        return {"managedTasks": {"hosts": {entry["host"]: None}}}, replace
+    return {"managedTasks": {"enabled": False}}, []
+
+
+def close_entry(client, entry, deadline, sleep):
+    """Close the entry's admission; the managedTasks change restarts the Gateway, so wait for it."""
+    while True:
+        try:
+            config = client.call("config.get", {})
+            patch, replace = entry_close_patch(entry, config["resolved"].get("managedTasks", {}))
+            if patch is None:
+                return
+            client.call("config.patch", {"raw": json.dumps(patch), "baseHash": config["hash"],
+                                         "replacePaths": replace})
+        except GatewayUnavailable:
+            pass
+        if time.monotonic() >= deadline:
+            raise CutoverRefused(f"{entry['host']}/{entry['adapter']} did not close")
+        sleep(0.5)
+
+
+def enable_legacy(client, state, deadline, sleep):
+    """Re-enable exactly the old crons this cutover disabled, by the ids it recorded."""
+    def jobs():
+        listed = retrying(lambda: client.call("cron.list", {"includeDisabled": True}), deadline, sleep)
+        return {job["id"]: job for job in listed["jobs"]}
+    seen = jobs()
+    gone = [record["name"] for job_id, record in state["suspended"].items() if job_id not in seen]
+    if gone:
+        raise CutoverRefused(f"old crons are gone from the Gateway: {', '.join(gone)}")
+    for job_id in state["suspended"]:
+        if not seen[job_id]["enabled"]:
+            retrying(lambda: client.call("cron.update", {"id": job_id, "patch": {"enabled": True}}), deadline, sleep)
+    seen = jobs()
+    stopped = [record["name"] for job_id, record in state["suspended"].items() if not seen[job_id]["enabled"]]
+    if stopped:
+        raise CutoverRefused(f"old crons did not come back: {', '.join(stopped)}")
+
+
+def revert(path, client, wait_seconds=0, sleep=time.sleep):
+    """Undo one entry's cutover on the running Gateway: close its admission first, so there is never a
+    second emitter, then re-enable its old crons. Host spools are never touched. Each step leaves its
+    phase in the state, so the same command resumes."""
+    path = Path(path)
+    state = json.loads(path.read_text())
+    entry = state["entry"]
+    progress = state.get("revert", {})
+    if state["owner"] == "legacy":
+        if progress.get("phase") == "done":
+            return "already reverted"
+        raise CutoverRefused(f"{entry['id']} was never transferred; nothing to revert")
+    # A finished revert with the entry native again means a later apply transferred it anew.
+    if progress.get("phase") in (None, "done"):
+        progress = state["revert"] = {"phase": "start"}
+    deadline = time.monotonic() + max(wait_seconds, 60)
+    if progress["phase"] == "start":
+        close_entry(client, entry, deadline, sleep)
+        progress["phase"] = "frozen"
+        write_state(path, state)
+    enable_legacy(client, state, deadline, sleep)
+    state["owner"], state["generation"] = "legacy", state["generation"] + 1
+    progress["phase"] = "done"
+    write_state(path, state)
+    return "reverted; old crons re-enabled"
+
+
 def suspend_legacy(client, state):
     """The snapshot predates the cutover, so it holds the old crons enabled: suspend them again."""
     jobs = {job["id"]: job for job in client.call("cron.list", {"includeDisabled": True})["jobs"]}
@@ -338,12 +421,14 @@ class CliClient:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("prepare", "inspect", "apply"))
-    parser.add_argument("--state", required=True, type=Path)
+    parser.add_argument("command", choices=("prepare", "inspect", "apply", "freeze", "revert"))
+    parser.add_argument("--state", type=Path)
     parser.add_argument("--entry", type=Path)
     parser.add_argument("--wait-seconds", type=float, default=0)
     parser.add_argument("--limits", type=Path, default=LIMITS)
     args = parser.parse_args()
+    if args.command != "freeze" and args.state is None:
+        parser.error(f"{args.command} needs --state")
     client = CliClient(os.environ.get("OPENCLAW_BIN", str(Path.home() / ".openclaw/bin/openclaw")))
     try:
         if args.command == "prepare":
@@ -353,9 +438,14 @@ def main():
             seen = retrying(lambda: observe(client, state["entry"]), time.monotonic() + args.wait_seconds, time.sleep)
             print(json.dumps({"state": state, "problems": fence_problems(state["entry"], seen,
                                                                           int(time.time() * 1000))}, sort_keys=True))
-        else:
+        elif args.command == "apply":
             print(apply(args.state, client, lambda: int(time.time() * 1000), args.wait_seconds,
                         limits_path=args.limits))
+        elif args.command == "freeze":
+            freeze(client, max(args.wait_seconds, 60))
+            print("frozen")
+        else:
+            print(revert(args.state, client, args.wait_seconds))
     except CutoverRefused as refused:
         print(f"cutover: {refused}", file=sys.stderr)
         return 1
