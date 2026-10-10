@@ -41,7 +41,7 @@ El arranque del gateway con la base migrada (19 → 27) y la adopción se ensaya
 Lo midió el ensayo de T11-c sobre la copia de la Mini, con los dos binarios reales (`T11-c-*.log`):
 - el 2026.9.7 público se niega a arrancar sobre la base migrada (`refused startup because 1 OpenClaw database schema(s) are newer than this build ... uses schema 27`);
 - también rechaza la config del corte (`Unrecognized key: "managedTasks"`);
-- con la base y la config de la foto, arranca (`health ok`).
+- con la base y la config de la foto, arranca (`[gateway] ready`).
 
 Por eso recuperar es volver a la foto completa, que tiene que incluir `openclaw.json`. Pero la foto es de *antes* del corte, así que trae los crons viejos **habilitados**: restaurarla los reactivaría, y eso está prohibido (plan `:301`).
 

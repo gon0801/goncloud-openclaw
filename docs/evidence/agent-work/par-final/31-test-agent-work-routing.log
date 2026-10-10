@@ -36,7 +36,7 @@ class Result(unittest.TextTestResult):
             self._set(test, "FAIL")
 unittest.TextTestRunner(verbosity=2, resultclass=Result).run(suite)
 json.dump(status, open(out, "w"))
- scripts/tests/test-agent-work-routing.py /Users/dn/dev/wt/encargos-b4/docs/evidence/agent-work/par-final/.31.json test_remote_cli_requires_certified_host_adapter test_no_inventory_cli_is_certified_so_no_cli_route_or_claim_opens
+ scripts/tests/test-agent-work-routing.py /Users/dn/dev/wt/encargos-b5/docs/evidence/agent-work/par-final/.31.json test_remote_cli_requires_certified_host_adapter test_no_inventory_cli_is_certified_so_no_cli_route_or_claim_opens
 test_no_inventory_cli_is_certified_so_no_cli_route_or_claim_opens (cited.AgentsRouting.test_no_inventory_cli_is_certified_so_no_cli_route_or_claim_opens) ... ok
 test_remote_cli_requires_certified_host_adapter (cited.AgentsRouting.test_remote_cli_requires_certified_host_adapter) ... ok
 

@@ -1,33 +1,33 @@
 $ bash scripts/tests/test-agent-work-e2e.sh crash_boundaries
-CRASH_BOUNDARY B7 pids=[98956, 598] handling=cancelled delivery=result-recorded wakes=0 children=0 cli_accepted=1
-./Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py:422: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
+CRASH_BOUNDARY B7 pids=[33249, 34547] handling=cancelled delivery=result-recorded wakes=0 children=0 cli_accepted=1
+./Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_crash_boundaries_e2e.py:422: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
   host_pid = self.crash_host(gateway, "marked")
 ResourceWarning: Enable tracemalloc to get the object allocation traceback
-CRASH_BOUNDARY B2 pids=[2802] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
-HOST_CRASH B2 point=marked host_pid=3949 resources=['ReleasedAdopted'] same_nonce=1
-./Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py:473: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
+CRASH_BOUNDARY B2 pids=[36420] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
+HOST_CRASH B2 point=marked host_pid=37437 resources=['ReleasedAdopted'] same_nonce=1
+./Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_crash_boundaries_e2e.py:473: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
   host_pid = self.crash_host(gateway, "typed")
 ResourceWarning: Enable tracemalloc to get the object allocation traceback
-CRASH_BOUNDARY B6 pids=[5638] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
-HOST_CRASH B6 point=typed host_pid=6884 status_after_restart=uncertain
-./Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py:447: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
+CRASH_BOUNDARY B6 pids=[38787] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
+HOST_CRASH B6 point=typed host_pid=39799 status_after_restart=uncertain
+./Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_crash_boundaries_e2e.py:447: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
   host_pid = self.crash_host(gateway, "launching")
 ResourceWarning: Enable tracemalloc to get the object allocation traceback
-HOST_CRASH B2 point=launching host_pid=9369 resources=[('CleanupPending', 'launch identity uncertain')] cli_accepted=0 provider=0
-.CRASH_BOUNDARY B1 pids=[10405, 12109] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]
+HOST_CRASH B2 point=launching host_pid=42630 resources=[('CleanupPending', 'launch identity uncertain')] cli_accepted=0 provider=0
+.CRASH_BOUNDARY B1 pids=[43939, 45217] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]
 .CLAIMS_AFTER_RESTART ['reported', 'reported', 'reported']
-CRASH_BOUNDARY B3 pids=[14834, 17058] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]
-.CRASH_BOUNDARY B5 pids=[20203, 21899] handlings=1 children=1 cli_accepted=2 acting_first=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit'] acting_second=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit']
-./Users/dn/dev/wt/encargos-b4/scripts/tests/test_agent_work_crash_boundaries_e2e.py:397: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
+CRASH_BOUNDARY B3 pids=[49349, 51826] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]
+.CRASH_BOUNDARY B5 pids=[56857, 59399] handlings=1 children=1 cli_accepted=2 acting_first=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit'] acting_second=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit']
+./Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_crash_boundaries_e2e.py:397: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
   host_pid = self.crash_host(gateway, "reserved")
 ResourceWarning: Enable tracemalloc to get the object allocation traceback
-CRASH_BOUNDARY B2 pids=[24936] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
-HOST_CRASH B2 point=reserved host_pid=26155 resources=['ReleasedAdopted'] same_nonce=1
-.CRASH_BOUNDARY B4 pids=[27540, 29116] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1, 0]
+CRASH_BOUNDARY B2 pids=[61885] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
+HOST_CRASH B2 point=reserved host_pid=62900 resources=['ReleasedAdopted'] same_nonce=1
+.CRASH_BOUNDARY B4 pids=[64251, 65787] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1, 0]
 .
 ----------------------------------------------------------------------
-Ran 9 tests in 649.327s
+Ran 9 tests in 631.370s
 
 OK
 
-rc=0 seconds=649.4
+rc=0 seconds=631.5

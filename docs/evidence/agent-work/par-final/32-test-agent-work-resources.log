@@ -36,7 +36,7 @@ class Result(unittest.TextTestResult):
             self._set(test, "FAIL")
 unittest.TextTestRunner(verbosity=2, resultclass=Result).run(suite)
 json.dump(status, open(out, "w"))
- scripts/tests/test-agent-work-resources.py /Users/dn/dev/wt/encargos-b4/docs/evidence/agent-work/par-final/.32.json test_resource_close_crash_between_reserve_and_launch_with_host_unreachable_keeps_capacity test_resource_close_pending_holds_host_capacity_and_pool_is_separate test_resource_close_reservation_crash_stop_failure_and_detached_child test_resource_close_agentes_stop_failed_holds_without_signals_until_retried test_resource_close_session_gone_with_a_surviving_descendant_still_holds
+ scripts/tests/test-agent-work-resources.py /Users/dn/dev/wt/encargos-b5/docs/evidence/agent-work/par-final/.32.json test_resource_close_crash_between_reserve_and_launch_with_host_unreachable_keeps_capacity test_resource_close_pending_holds_host_capacity_and_pool_is_separate test_resource_close_reservation_crash_stop_failure_and_detached_child test_resource_close_agentes_stop_failed_holds_without_signals_until_retried test_resource_close_session_gone_with_a_surviving_descendant_still_holds
 test_resource_close_agentes_stop_failed_holds_without_signals_until_retried (cited.ResourceTests.test_resource_close_agentes_stop_failed_holds_without_signals_until_retried) ... ok
 test_resource_close_crash_between_reserve_and_launch_with_host_unreachable_keeps_capacity (cited.ResourceTests.test_resource_close_crash_between_reserve_and_launch_with_host_unreachable_keeps_capacity) ... ok
 test_resource_close_pending_holds_host_capacity_and_pool_is_separate (cited.ResourceTests.test_resource_close_pending_holds_host_capacity_and_pool_is_separate) ... ok
@@ -44,7 +44,7 @@ test_resource_close_reservation_crash_stop_failure_and_detached_child (cited.Res
 test_resource_close_session_gone_with_a_surviving_descendant_still_holds (cited.ResourceTests.test_resource_close_session_gone_with_a_surviving_descendant_still_holds) ... ok
 
 ----------------------------------------------------------------------
-Ran 5 tests in 0.052s
+Ran 5 tests in 0.036s
 
 OK
 

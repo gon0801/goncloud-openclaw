@@ -1,16 +1,16 @@
 $ bash scripts/agent-work/test-runtime.sh budget_evasion
-{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "978355503c44313536ab4cd03a6bfb7a5423404b"}
-[vitest-workers] local cache hit after 1813ms
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "f1c5f34ae8f91652412188349c296b3c1a882701"}
+[vitest-workers] local cache hit after 2100ms
 [vitest-workers] reused local compiler outputs
-[vitest-workers] prepared ffa781495a53 in 1843ms (16698 inputs, 17251 outputs)
+[vitest-workers] prepared bc5a14b2bcf1 in 2130ms (16698 inputs, 17251 outputs)
 [test] starting test/vitest/vitest.infra.config.ts
 
- RUN  v5.0.1 /Users/dn/dev/openclaw-agent-work-integration
+ RUN  v5.0.1 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.1M76AV2If3/r
 
- ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > keeps root creation within the managed run lifetime (active) 1242ms
- ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > keeps root creation within the managed run lifetime (cancelled) 634ms
- ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > keeps root creation within the managed run lifetime (recovered) 1021ms
- ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > keeps root creation within the managed run lifetime (released) 605ms
+ ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > keeps root creation within the managed run lifetime (active) 1208ms
+ ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > keeps root creation within the managed run lifetime (cancelled) 650ms
+ ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > keeps root creation within the managed run lifetime (recovered) 1044ms
+ ✓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > keeps root creation within the managed run lifetime (released) 628ms
  ↓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > stores one final result and replays its receipt without exposing a producer token
  ↓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > assembles the report tool only for the bound managed child run
  ↓ |infra| src/agents/tasks/managed-task.native-report.test.ts > managed native producer report > refuses another run and a replaced native generation
@@ -19,11 +19,11 @@ $ bash scripts/agent-work/test-runtime.sh budget_evasion
 
  Test Files  1 passed (1)
       Tests  4 passed | 5 skipped (9)
-   Start at  23:09:10
-   Duration  10.26s (transform 49%, tests 36%, import 13%, setup 2%)
+   Start at  20:20:33
+   Duration  7.50s (tests 50%, transform 30%, import 17%, setup 3%)
 
 [vitest-workers] verifying completed generation before cleanup
 [vitest-workers] retained completed compiler outputs for reuse
-[test] passed 1 Vitest shard in 13.41s
+[test] passed 1 Vitest shard in 11.00s
 
-rc=0 seconds=13.8
+rc=0 seconds=11.3
