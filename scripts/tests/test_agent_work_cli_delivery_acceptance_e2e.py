@@ -35,8 +35,8 @@ from routing import prepare_request  # noqa: E402
 from spool import canonical  # noqa: E402
 from test_agent_work_cli_silent_failure_e2e import CountingClient, incident_rows  # noqa: E402
 from test_agent_work_main_cli_loop_e2e import (  # noqa: E402
-    ADAPTER, HOST_ID, LOOP_SESSION, LoopGateway, built_runtime, certified_coverage, loop_route,
-    wait_for)
+    ADAPTER, HOST_ID, LOOP_SESSION, PYTHON_DOUBLE, LoopGateway, built_runtime, certified_coverage,
+    loop_route, wait_for)
 
 DELIVERY_CLI = ROOT / "scripts/tests/fixtures/agent-work/delivery-cli.py"
 LIB_SH = ROOT / "scripts/mac/corrida/lib.sh"
@@ -136,7 +136,7 @@ class CliDeliveryAcceptanceE2E(unittest.TestCase):
         route = dict(loop_route(root, gateway.state_dir), key=f"encargos-loop-{mode}")
         request = prepare_request(coverage=self.certified, **route)
         instance = f"delivery-{mode}"
-        transport = TmuxTransport(cli.tmux, cli.socket)
+        transport = TmuxTransport(cli.tmux, cli.socket, PYTHON_DOUBLE)
         typed = []
 
         def deliver(assignment_ref, session):

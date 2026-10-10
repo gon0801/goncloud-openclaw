@@ -26,7 +26,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from host import Host, TmuxTransport, read_acceptance  # noqa: E402
+from host import Host, TmuxTransport, cli_adapter, read_acceptance  # noqa: E402
 from native_gateway import claim_cli_once  # noqa: E402
 from resources import ResourceManager, TmuxBackend, load_approval_pattern  # noqa: E402
 from routing import prepare_request  # noqa: E402
@@ -151,7 +151,7 @@ class OpencodeAdapterE2E(unittest.TestCase):
         cli = OpencodeSession(workspace, host_dir)
         self.addCleanup(cli.close)
         log(f"gateway={gateway.url} socket={cli.socket} model={MODEL} workspace={workspace}")
-        transport = RecordingTransport(cli.tmux, cli.socket)
+        transport = RecordingTransport(cli.tmux, cli.socket, cli_adapter(ADAPTER))
         ready = wait_for(lambda: transport.state()[0] == "VACIO", 60)
         self.assertTrue(ready, f"opencode never showed an empty composer; screen={cli.screen()!r}")
         log("opencode composer VACIO")

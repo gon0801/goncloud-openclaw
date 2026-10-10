@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
@@ -36,6 +37,27 @@ COMPOSER_MENU = re.compile(r"^\s*[❯›]?\s*\d+[.)]?\s")
 # An option under the arrow is indented and numbered "2." or "2)"; a wrapped composer line such as
 # "1 atomically" (from "accept.v1") starts at the margin.
 COMPOSER_MENU_OPTION = re.compile(r"^\s+\d+[.)]\s")
+
+
+@dataclass(frozen=True)
+class CliAdapter:
+    """How the host knows a CLI's pane (tmux pane_current_command) and its empty composer."""
+    commands: tuple[str, ...]
+    placeholders: tuple[str, ...] = ()
+
+
+# Measured 2026-10-10 on opencode 1.18.35: tmux names the pane after the npm package's
+# opencode.exe, and an empty composer on the home screen shows one of three examples at random.
+CLI_ADAPTERS = {
+    "opencode": CliAdapter(("opencode", "opencode.exe"), tuple(
+        f'Ask anything… "{example}"' for example in
+        ("Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"))),
+}
+
+
+def cli_adapter(adapter_id: str) -> CliAdapter:
+    """An adapter nobody measured has no known placeholder, so any text in its composer defers."""
+    return CLI_ADAPTERS.get(adapter_id, CliAdapter((adapter_id,)))
 
 
 class DeliveryDeferred(Exception):
@@ -184,30 +206,39 @@ def _muted(style: dict) -> bool:
     return max(r, g, b) - min(r, g, b) <= 40 and max(r, g, b) <= 170
 
 
-def read_composer(screen: str, command: str) -> tuple[str, str]:
-    """composer-real.sh over a `capture-pane -e` screen: VACIO, REAL with the typed lines, or DESCONOCIDO."""
+def _composer_region(screen: str, command: str) -> list[list[tuple[dict, str]]] | str:
+    """composer-real.sh over a `capture-pane -e` screen: the styled runs of each composer line,
+    or why the screen shows no composer."""
     lines = screen.splitlines()
     while lines and not SGR.sub("", lines[-1]).strip():
         lines.pop()
     if not lines:
-        return "DESCONOCIDO", "empty screen"
+        return "empty screen"
     plain = [SGR.sub("", line) for line in lines]
+    columns = None
     if command.startswith("opencode"):
-        # The input box is the last run of lines that start with ┃; its last line is the agent bar.
+        # The input box is the last run of lines that start with ┃; its last line is the agent bar
+        # and the ╹▀▀▀ border under it spans the box. Measured 2026-10-10 (opencode 1.18.35): in a
+        # session the sidebar shares the box's lines to the right of that border.
         boxed = [i for i, line in enumerate(plain) if line.lstrip().startswith("┃")]
         if not boxed:
-            return "DESCONOCIDO", "no opencode input box"
+            return "no opencode input box"
         start = end = boxed[-1]
         while start - 1 in boxed:
             start -= 1
+        border = plain[end + 1].strip() if end + 1 < len(plain) else ""
+        if not border.startswith("╹"):
+            return "no opencode input box border"
+        left = plain[end + 1].index("╹")
+        columns = (left, left + len(border))
         region = range(start, end)
     else:
         prompts = [i for i, line in enumerate(plain) if line.lstrip().startswith(("❯", "›"))]
         if not prompts:
-            return "DESCONOCIDO", "no composer"
+            return "no composer"
         k = prompts[-1]
         if COMPOSER_MENU.match(plain[k]) or any(COMPOSER_MENU_OPTION.match(line) for line in plain[k + 1:k + 4]):
-            return "DESCONOCIDO", "menu or dialog open"
+            return "menu or dialog open"
         end = k + 1
         while end < len(plain):
             rule = plain[end].strip()
@@ -216,16 +247,47 @@ def read_composer(screen: str, command: str) -> tuple[str, str]:
             end += 1
         region = range(k, end)
     # capture-pane -e writes only style changes, and a wrapped line continues the previous style.
-    style, typed = {"dim": False, "fg": None}, []
+    style, out = {"dim": False, "fg": None}, []
     for i, line in enumerate(lines[:region.stop]):
         segments, style = _sgr_segments(line, style)
-        if i not in region:
-            continue
-        text = "".join(part for run_style, part in segments if not _muted(run_style))
-        text = text.strip(COMPOSER_GLYPHS).strip()
+        if i in region:
+            out.append(_columns(segments, columns) if columns else segments)
+    return out
+
+
+def _columns(segments: list[tuple[dict, str]], columns: tuple[int, int]) -> list[tuple[dict, str]]:
+    out, pos = [], 0
+    for style, part in segments:
+        out.append((style, part[max(columns[0] - pos, 0):max(columns[1] - pos, 0)]))
+        pos += len(part)
+    return out
+
+
+def _region_text(region: list[list[tuple[dict, str]]], keep: Callable[[dict], bool]) -> str:
+    typed = []
+    for segments in region:
+        text = "".join(part for style, part in segments if keep(style)).strip(COMPOSER_GLYPHS).strip()
         if text:
             typed.append(text)
-    return ("REAL", "\n".join(typed)) if typed else ("VACIO", "")
+    return "\n".join(typed)
+
+
+def read_composer(screen: str, command: str, placeholders: tuple[str, ...] = ()) -> tuple[str, str]:
+    """VACIO, REAL with the composer's text, or DESCONOCIDO. Colour does not count: a theme can draw
+    an operator's draft as dim as a placeholder, so only no text or a known placeholder is VACIO."""
+    region = _composer_region(screen, command)
+    if isinstance(region, str):
+        return "DESCONOCIDO", region
+    text = _region_text(region, lambda style: True)
+    if not text or any(same_text(text, placeholder) for placeholder in placeholders):
+        return "VACIO", ""
+    return "REAL", text
+
+
+def bright_composer_text(screen: str, command: str) -> str:
+    """The composer's text minus the runs drawn dim or grey, as a ghost suggestion is drawn."""
+    region = _composer_region(screen, command)
+    return "" if isinstance(region, str) else _region_text(region, lambda style: not _muted(style))
 
 
 def same_text(shown: str, typed: str) -> bool:
@@ -726,15 +788,19 @@ class Host:
 
 
 class TmuxTransport:
-    """Types into the composer only when it is empty, and presses Enter only on text it typed."""
+    """Types into the CLI's pinned pane only when its composer is empty, and presses Enter only on
+    text it typed."""
 
-    def __init__(self, tmux_bin: str, socket: str, *, settle_seconds: float = COMPOSER_SETTLE_SECONDS,
-                 timeout: float = TMUX_TIMEOUT_SECONDS, sleep: Callable[[float], None] = time.sleep):
+    def __init__(self, tmux_bin: str, socket: str, adapter: CliAdapter, *,
+                 settle_seconds: float = COMPOSER_SETTLE_SECONDS, timeout: float = TMUX_TIMEOUT_SECONDS,
+                 sleep: Callable[[float], None] = time.sleep):
         self.tmux_bin = tmux_bin
         self.socket = socket
+        self.adapter = adapter
         self.settle_seconds = settle_seconds
         self.timeout = timeout
         self.sleep = sleep
+        self.panes: dict[str, str] = {}
 
     def _tmux(self, *args: str) -> subprocess.CompletedProcess:
         try:
@@ -746,10 +812,33 @@ class TmuxTransport:
             raise OSError(f"tmux {args[0]} failed: {done.stderr.strip()}")
         return done
 
+    def _pane(self, session: str) -> tuple[str, str]:
+        """The CLI's pane, pinned the first time the host meets the session, and its command.
+
+        The operator may open or select another window of the session (C-b c), so the active
+        window is never the target. DeliveryDeferred when the pane is not the adapter's CLI."""
+        pane = self.panes.get(session)
+        if pane is None:
+            listed = self._tmux("list-panes", "-s", "-t", f"={session}", "-F",
+                                "#{pane_id}\t#{pane_current_command}").stdout.splitlines()
+            found = [pane_id for pane_id, _, command in (line.partition("\t") for line in listed)
+                     if command in self.adapter.commands]
+            if len(found) != 1:
+                raise DeliveryDeferred(f"session has {len(found)} panes running {'/'.join(self.adapter.commands)}")
+            pane = self.panes[session] = found[0]
+        name, _, command = self._tmux("display-message", "-p", "-t", pane,
+                                      "#{session_name}\t#{pane_current_command}").stdout.rstrip("\n").partition("\t")
+        if name != session or command not in self.adapter.commands:
+            raise DeliveryDeferred(f"pinned pane {pane} runs {command} in session {name}")
+        return pane, command
+
+    def _screen(self, session: str) -> tuple[str, str, str]:
+        pane, command = self._pane(session)
+        return pane, command, self._tmux("capture-pane", "-e", "-p", "-t", pane).stdout
+
     def composer(self, session: str) -> tuple[str, str]:
-        command = self._tmux("display-message", "-p", "-t", f"={session}:", "#{pane_current_command}")
-        screen = self._tmux("capture-pane", "-e", "-p", "-t", f"={session}:")
-        return read_composer(screen.stdout, command.stdout.strip())
+        _, command, screen = self._screen(session)
+        return read_composer(screen, command, self.adapter.placeholders)
 
     def deliver(self, assignment_ref: str, session: str) -> None:
         if not session.replace("-", "").replace("_", "").isalnum():
@@ -758,19 +847,23 @@ class TmuxTransport:
                 "acceptRef with schema, hostId, taskId, generation, instanceId, claimId and capability copied "
                 "from the assignment. Then follow briefRef and write agent-work.result.v1 atomically to resultRef.")
         try:
-            state, shown = self.composer(session)
+            pane, command, screen = self._screen(session)
+            state, shown = read_composer(screen, command, self.adapter.placeholders)
             if state != "VACIO":
                 raise DeliveryDeferred(f"composer is {state}: {shown}")
             self._tmux("set-environment", "-t", f"={session}", "AGENT_WORK_MANAGED", "1")
         except OSError as exc:
             raise DeliveryDeferred(str(exc)) from exc
-        target = ["send-keys", "-t", f"={session}:"]
-        self._tmux(*target, "-l", "--", text)
+        self._tmux("send-keys", "-t", pane, "-l", "--", text)
         self.sleep(self.settle_seconds)
-        state, shown = self.composer(session)
-        if state != "REAL" or not same_text(shown, text):
-            raise RuntimeError(f"composer shows {state} instead of the typed reference; Enter withheld")
-        self._tmux(*target, "Enter")
+        try:
+            _, command, screen = self._screen(session)
+        except (DeliveryDeferred, OSError) as exc:
+            raise RuntimeError(f"{exc}; Enter withheld") from exc
+        state, shown = read_composer(screen, command)
+        if state != "REAL" or not same_text(shown, text) or not same_text(bright_composer_text(screen, command), text):
+            raise RuntimeError(f"composer shows {state} {shown!r} instead of the typed reference; Enter withheld")
+        self._tmux("send-keys", "-t", pane, "Enter")
 
 
 class ShellAdapterTransport:

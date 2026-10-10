@@ -30,8 +30,8 @@ from resources import ResourceManager, TmuxBackend, load_approval_pattern  # noq
 from routing import prepare_request  # noqa: E402
 from spool import canonical  # noqa: E402
 from test_agent_work_main_cli_loop_e2e import (  # noqa: E402
-    ADAPTER, HOST_ID, LOOP_SESSION, LoopGateway, built_runtime, certified_coverage, loop_route,
-    wait_for)
+    ADAPTER, HOST_ID, LOOP_SESSION, PYTHON_DOUBLE, LoopGateway, built_runtime, certified_coverage,
+    loop_route, wait_for)
 
 SILENT_CLI = ROOT / "scripts/tests/fixtures/agent-work/silent-cli.py"
 LIB_SH = ROOT / "scripts/mac/corrida/lib.sh"
@@ -161,7 +161,7 @@ class CliSilentFailureE2E(unittest.TestCase):
             observed = claim_cli_once(client, host=host, manager=manager, adapter_id=ADAPTER,
                                       instance_id=instance, session=cli.session,
                                       workspace_root=root / "workspace",
-                                      deliver=TmuxTransport(cli.tmux, cli.socket).deliver,
+                                      deliver=TmuxTransport(cli.tmux, cli.socket, PYTHON_DOUBLE).deliver,
                                       coverage=self.certified)
             # Typing is not delivery: the double's own acceptance is (cli_delivery_acceptance).
             self.assertIn(observed.status, ("typed", "delivered"))
