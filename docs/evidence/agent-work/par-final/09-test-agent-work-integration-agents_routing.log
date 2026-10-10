@@ -1,22 +1,22 @@
 $ bash scripts/tests/test-agent-work-integration.sh agents_routing
 .................
 ----------------------------------------------------------------------
-Ran 17 tests in 0.123s
+Ran 17 tests in 0.124s
 
 OK
-{"candidateSha": "f1c5f34ae8f91652412188349c296b3c1a882701", "candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+{"candidateSha": "19c2ed13a046fa87e9ab766999bf66b419a1b91f", "candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
 
- RUN  v5.0.1 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.1M76AV2If3/r
+ RUN  v5.0.1 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.OtFl7sEvgx/r
 
 
- RUN  v5.0.1 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.1M76AV2If3/r
+ RUN  v5.0.1 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.OtFl7sEvgx/r
 
 
  WARN  TypeScript 7.0 does not yet have a stable API and is experimental. Some options will be unavailable.
 
-[33m[PLUGIN_TIMINGS] [0mPlugin hooks ran for 6.6s of this 6.6s build (100%).
+[33m[PLUGIN_TIMINGS] [0mPlugin hooks ran for 6.3s of this 6.3s build (99%).
 The slowest hooks, timed inside each callback (the wait before a callback starts is excluded, the time it awaits is included):
-  - openclaw-native-declarations buildStart (97%, 6.4s, 1 call)
+  - openclaw-native-declarations buildStart (97%, 6.2s, 1 call)
 Additional hook time came from the hooks below and from hooks under 1s.
 3 hooks are listed without a time. Their calls overlapped, so the time inside one call includes work from other calls. To find their cost, profile the build with `node --cpu-prof`:
   - tsdown:deps resolveId (810 calls)
@@ -24,39 +24,39 @@ Additional hook time came from the hooks below and from hooks under 1s.
   - rolldown-plugin-dts:fake-js transform (132 calls)
 See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
 
-[tsdown-build] invocation 1/1 finished in 6.8s
- ✓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: false, replay: false) 13252ms
- ✓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: true, restart: false, replay: false) 8788ms
- ✓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: false) 16895ms
- ✓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: true) 17631ms
- ✓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (operaciones -> ingenieria, isolated: false, restart: false, replay: false) 9696ms
- ✓ src/gateway/server.managed-task-requester.e2e.test.ts > delivers a durably reported managed result after restart to a busy requester (restart: true) 16916ms
- ✓ src/gateway/server.managed-task-requester.e2e.test.ts > delivers a durably reported managed result after restart to a deleted requester (restart: true) 19927ms
- ✓ src/gateway/server.managed-task-requester.e2e.test.ts (7 tests) 103108ms
-   ✓ registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: false, replay: false) 13252ms
-   ✓ registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: true, restart: false, replay: false) 8788ms
-   ✓ registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: false) 16895ms
-   ✓ registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: true) 17631ms
-   ✓ registers, admits, reports, and resolves a managed task through the authenticated Gateway (operaciones -> ingenieria, isolated: false, restart: false, replay: false) 9696ms
-   ✓ delivers a durably reported managed result after restart to a busy requester (restart: true) 16916ms
-   ✓ delivers a durably reported managed result after restart to a deleted requester (restart: true) 19927ms
+[tsdown-build] invocation 1/1 finished in 6.5s
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: false, replay: false) 21662ms
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: true, restart: false, replay: false) 9630ms
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: false) 17079ms
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: true) 16856ms
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts > registers, admits, reports, and resolves a managed task through the authenticated Gateway (operaciones -> ingenieria, isolated: false, restart: false, replay: false) 9648ms
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts > delivers a durably reported managed result after restart to a busy requester (restart: true) 16079ms
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts > delivers a durably reported managed result after restart to a deleted requester (restart: true) 19160ms
+ ✓ src/gateway/server.managed-task-requester.e2e.test.ts (7 tests) 110117ms
+   ✓ registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: false, replay: false) 21662ms
+   ✓ registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: true, restart: false, replay: false) 9630ms
+   ✓ registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: false) 17079ms
+   ✓ registers, admits, reports, and resolves a managed task through the authenticated Gateway (ingenieria -> adversary, isolated: false, restart: true, replay: true) 16856ms
+   ✓ registers, admits, reports, and resolves a managed task through the authenticated Gateway (operaciones -> ingenieria, isolated: false, restart: false, replay: false) 9648ms
+   ✓ delivers a durably reported managed result after restart to a busy requester (restart: true) 16079ms
+   ✓ delivers a durably reported managed result after restart to a deleted requester (restart: true) 19160ms
 
  Test Files  1 passed (1)
       Tests  7 passed (7)
-   Start at  20:14:43
-   Duration  114.18s (tests 98%, transform 1%, import 1%)
+   Start at  02:23:59
+   Duration  125.76s (tests 94%, transform 4%, import 1%)
 
 
  Test Files  1 passed (1)
       Tests  7 passed (7)
-   Start at  20:14:43
-   Duration  114.18s (tests 98%, transform 1%, import 1%)
+   Start at  02:23:59
+   Duration  125.76s (tests 94%, transform 4%, import 1%)
 
 CLI_GATEWAY_E2E submit=1 admit=1 delivery=1 report=1 blocked=1
 .
 ----------------------------------------------------------------------
-Ran 1 test in 30.405s
+Ran 1 test in 30.688s
 
 OK
 
-rc=0 seconds=145.4
+rc=0 seconds=157.6

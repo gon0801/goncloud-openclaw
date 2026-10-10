@@ -1,8 +1,8 @@
 $ bash scripts/tests/test-agent-work-integration.sh projection_crash
 ..
 ----------------------------------------------------------------------
-Ran 2 tests in 0.116s
+Ran 2 tests in 0.117s
 
 OK
 
-rc=0 seconds=0.3
+rc=0 seconds=0.2

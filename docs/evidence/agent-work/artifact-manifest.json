@@ -2,10 +2,10 @@
   "schema": "agent-work-artifact-manifest.v1",
   "runtime": {
     "repository": "openclaw/openclaw (fork, branch feat/agent-work-integration; never pushed)",
-    "sourceSha": "f1c5f34ae8f91652412188349c296b3c1a882701",
+    "sourceSha": "19c2ed13a046fa87e9ab766999bf66b419a1b91f",
     "publicBaseSha": "c074824a27c96d3983043f9eeb33823cd1772d8c",
     "version": "2026.9.7",
-    "entrySha256": "78c5009e9f28f0b67a724aacf128718e411871493bc9307e90659bcf6718b461",
+    "entrySha256": "8d2fc0d32930df32a976179242fae18e1487b1153cf4d648dede2cbfcaef2e56",
     "node": "v24.19.0",
     "build": "docs/evidence/agent-work/deploy-commands.md"
   },
@@ -14,8 +14,8 @@
       "name": "openclaw",
       "version": "2026.9.7",
       "file": "openclaw-2026.9.7.tgz",
-      "sha256": "76c0883e2a8f6206ed63dc78b291effbfa6946cf9d4bcc646ae9b88365982e2c",
-      "integrity": "sha512-oirsm7wdtU6L3WN5mek+/D5nkUEzB+g023kRlV5URsZz0XReC04aV4ab+I9ZpRboP8siF0T9t1218u7kHxPFjw=="
+      "sha256": "69de612d28c77dabdf62c214cd5e49247d5c5c8af8e926b75e460e3251e3d2b4",
+      "integrity": "sha512-2l2Vx3bflSRZZyFr4Ix/8WBMiFsCuPOebDy6ZjQluzXNdPzBgomvHZ49Q3kOE78ijUGICDZeoKoYz7+W54fp9A=="
     },
     {
       "name": "@openclaw/ai",
@@ -43,7 +43,7 @@
     "openclaw",
     "@openclaw/ai"
   ],
-  "packageDir": "/Users/dn/.local/state/encargos-loop/artifacts/paquete-f1c5f34",
+  "packageDir": "/Users/dn/.local/state/encargos-loop/artifacts/paquete-19c2ed1",
   "previousRuntime": {
     "version": "2026.9.7",
     "sourceSha": "c074824a27c96d3983043f9eeb33823cd1772d8c",

@@ -116,9 +116,10 @@ def main():
         events += [json.loads(row[0])["data"]["bytes"] for row in rows]
     wire = [request["bytes"] for request in CAPTURED]
     pairs = list(zip(sorted(wire), sorted(events)))
-    print(json.dumps({"faithful": bool(wire) and sorted(wire) == sorted(events), "pairs": pairs,
-                      "bySession": summary, "ensayo": str(host.root)}))
+    faithful = bool(wire) and sorted(wire) == sorted(events)
+    print(json.dumps({"faithful": faithful, "pairs": pairs, "bySession": summary, "ensayo": str(host.root)}))
+    return 0 if faithful else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

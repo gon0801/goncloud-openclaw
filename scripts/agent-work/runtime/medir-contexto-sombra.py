@@ -3,6 +3,8 @@
 body, and R from 2026-10-10 records that size on every provider call as the trajectory event
 provider.payload.measured. This reads those events read-only from the agent databases of a gateway
 state directory, for the agents in the managed perimeter, and proposes the limit as max x 1.5.
+Only Responses calls count: the managed reservation of the certified opencode Go route charges the
+Responses wire body, while a Chat Completions event measures a different serialization.
 
 Usage: medir-contexto-sombra.py <state-dir> <agent> [<agent> ...]
 Prints {"maxContextTokens": n|null, "byAgent": {...}, "from": ts, "to": ts}; exits 1 if an agent has
@@ -21,7 +23,8 @@ def measured(database):
         rows = db.execute("SELECT event_json FROM trajectory_runtime_events "
                           "WHERE event_json LIKE '%provider.payload.measured%'").fetchall()
     events = [json.loads(row[0]) for row in rows]
-    return [event for event in events if event.get("type") == "provider.payload.measured"]
+    return [event for event in events if event.get("type") == "provider.payload.measured"
+            and event.get("data", {}).get("api") == "openai-responses"]
 
 
 def p95(values):
