@@ -4,7 +4,7 @@
 Uso: AGENT_WORK_RUNTIME_SOURCE=<R construido> LANG=en_US.UTF-8 python3 scripts/tests/agent-work-acceptance-pair.py
 Los logs quedan en docs/evidence/agent-work/par-final/. El estricto de test_agent_work_acceptance.py lo lee.
 Corre en tres carriles: los casos de vitest de R (test-runtime.sh) uno tras otro, porque comparten la caché de R;
-el resto en paralelo (AGENT_WORK_PAIR_JOBS, 4 por omisión) al mismo tiempo; y al final, solos, los que miden latencia.
+el resto en paralelo (AGENT_WORK_PAIR_JOBS, 4 por omisión) al mismo tiempo; y al final, solos, los que miden latencia o reinician muchas veces el gateway de R.
 """
 import hashlib
 import json
@@ -22,7 +22,8 @@ from test_agent_work_acceptance import PAIR_DOC, matrix_refs, matrix_rows  # noq
 
 OUT = ROOT / "docs/evidence/agent-work/par-final"
 TIMEOUT = 3600
-ALONE = ("delivery_latency",)
+# Latency measurements, and the cases that restart R gateways many times: under load their gateway calls time out.
+ALONE = ("delivery_latency", "cien_reenvios", "crash_boundaries")
 PY_RUNNER = r"""
 import importlib.util, json, sys, unittest
 import os
