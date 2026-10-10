@@ -1,0 +1,21 @@
+# B8-r2 mutacion 6: the pinned pane is not checked against the adapter's command
+# rc=1; host.py restored
+# - 'if name != session or command not in self.adapter.commands:'
+# + 'if name != session:'
+......F.....
+======================================================================
+FAIL: test_tmux_delivery_defers_when_the_pane_does_not_run_the_adapter (__main__.HostReceipts.test_tmux_delivery_defers_when_the_pane_does_not_run_the_adapter)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b8/scripts/tests/test-agent-work-host.py", line 593, in test_tmux_delivery_defers_when_the_pane_does_not_run_the_adapter
+    self.assertEqual(self.apply(self.key, self.operation, transport.deliver).status, "deferred")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'delivered' != 'deferred'
+- delivered
++ deferred
+
+
+----------------------------------------------------------------------
+Ran 12 tests in 11.129s
+
+FAILED (failures=1)

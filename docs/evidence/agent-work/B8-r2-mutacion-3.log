@@ -1,0 +1,92 @@
+# B8-r2 mutacion 3: the transport targets the active window of the session, with no adapter check (as before B8-r2)
+# rc=1; host.py restored
+# - 'pane = self.panes.get(session)\n        if pane is None:'
+# + 'command = self._tmux("display-message", "-p", "-t", f"={session}:", "#{pane_current_command}").stdout.strip()\n        return f"={session}:", command\n        pane = self.panes.get(session)\n        if pane is None:'
+..FFEEF.FF..
+======================================================================
+ERROR: test_opencode_delivery_types_over_the_real_placeholder_and_submits (__main__.HostReceipts.test_opencode_delivery_types_over_the_real_placeholder_and_submits)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b8/scripts/tests/test-agent-work-host.py", line 527, in test_opencode_delivery_types_over_the_real_placeholder_and_submits
+    transport.deliver("/x/assignments/op-1.json", "oc")
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b8/scripts/agent-work/host.py", line 855, in deliver
+    raise DeliveryDeferred(f"composer is {state}: {shown}")
+host.DeliveryDeferred: composer is DESCONOCIDO: no composer
+
+======================================================================
+ERROR: test_opencode_delivery_withholds_enter_when_a_grey_draft_shares_the_composer (__main__.HostReceipts.test_opencode_delivery_withholds_enter_when_a_grey_draft_shares_the_composer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b8/scripts/tests/test-agent-work-host.py", line 535, in test_opencode_delivery_withholds_enter_when_a_grey_draft_shares_the_composer
+    transport.deliver("/x/assignments/op-1.json", "oc")
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b8/scripts/agent-work/host.py", line 855, in deliver
+    raise DeliveryDeferred(f"composer is {state}: {shown}")
+host.DeliveryDeferred: composer is DESCONOCIDO: no composer
+
+======================================================================
+FAIL: test_opencode_delivery_never_types_over_a_bright_draft (__main__.HostReceipts.test_opencode_delivery_never_types_over_a_bright_draft)
+----------------------------------------------------------------------
+host.DeliveryDeferred: composer is DESCONOCIDO: no composer
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b8/scripts/tests/test-agent-work-host.py", line 519, in test_opencode_delivery_never_types_over_a_bright_draft
+    with self.assertRaisesRegex(DeliveryDeferred, "borrador del operador"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "borrador del operador" does not match "composer is DESCONOCIDO: no composer"
+
+======================================================================
+FAIL: test_opencode_delivery_never_types_over_a_draft_the_theme_draws_grey (__main__.HostReceipts.test_opencode_delivery_never_types_over_a_draft_the_theme_draws_grey)
+----------------------------------------------------------------------
+host.DeliveryDeferred: composer is DESCONOCIDO: no composer
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b8/scripts/tests/test-agent-work-host.py", line 513, in test_opencode_delivery_never_types_over_a_draft_the_theme_draws_grey
+    with self.assertRaisesRegex(DeliveryDeferred, "borrador del operador"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "borrador del operador" does not match "composer is DESCONOCIDO: no composer"
+
+======================================================================
+FAIL: test_tmux_delivery_defers_when_the_pane_does_not_run_the_adapter (__main__.HostReceipts.test_tmux_delivery_defers_when_the_pane_does_not_run_the_adapter)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b8/scripts/tests/test-agent-work-host.py", line 586, in test_tmux_delivery_defers_when_the_pane_does_not_run_the_adapter
+    self.assertEqual(self.apply(self.key, self.operation,
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                TmuxTransport("tmux", socket, cli_adapter("opencode")).deliver).status, "deferred")
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'delivered' != 'deferred'
+- delivered
++ deferred
+
+
+======================================================================
+FAIL: test_tmux_delivery_never_types_into_a_shell_prompt (__main__.HostReceipts.test_tmux_delivery_never_types_into_a_shell_prompt)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b8/scripts/tests/test-agent-work-host.py", line 557, in test_tmux_delivery_never_types_into_a_shell_prompt
+    self.assertEqual(self.apply(self.key, self.operation, transport.deliver).status, "deferred")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'delivered' != 'deferred'
+- delivered
++ deferred
+
+
+======================================================================
+FAIL: test_tmux_delivery_stays_in_the_pinned_pane_when_the_operator_opens_windows (__main__.HostReceipts.test_tmux_delivery_stays_in_the_pinned_pane_when_the_operator_opens_windows)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b8/scripts/tests/test-agent-work-host.py", line 578, in test_tmux_delivery_stays_in_the_pinned_pane_when_the_operator_opens_windows
+    self.assertTrue(self.wait_for(lambda: self.host.collect("mac-test", self.key)))
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true
+
+----------------------------------------------------------------------
+Ran 12 tests in 15.930s
+
+FAILED (failures=5, errors=2)

@@ -1,0 +1,55 @@
+# B8-r2 mutacion 1: before typing, the composer reads only the bright text (colour classification, as before B8-r2)
+# rc=1; host.py restored
+# - 'text = _region_text(region, lambda style: True)\n    if not text or any('
+# + 'text = _region_text(region, lambda style: not _muted(style))\n    if not text or any('
+F..E.F......
+======================================================================
+ERROR: test_opencode_delivery_never_types_over_a_draft_the_theme_draws_grey (__main__.HostReceipts.test_opencode_delivery_never_types_over_a_draft_the_theme_draws_grey)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b8/scripts/tests/test-agent-work-host.py", line 514, in test_opencode_delivery_never_types_over_a_draft_the_theme_draws_grey
+    transport.deliver("/x/assignments/op-1.json", "oc")
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b8/scripts/agent-work/host.py", line 860, in deliver
+    _, command, screen = self._screen(session)
+                         ~~~~~~~~~~~~^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b8/scripts/agent-work/host.py", line 837, in _screen
+    return pane, command, self._tmux("capture-pane", "-e", "-p", "-t", pane).stdout
+                          ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b8/scripts/tests/test-agent-work-host.py", line 55, in _tmux
+    out = self.screens.pop(0)
+IndexError: pop from empty list
+
+======================================================================
+FAIL: test_composer_reading_counts_text_whatever_its_colour (__main__.HostReceipts.test_composer_reading_counts_text_whatever_its_colour)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b8/scripts/tests/test-agent-work-host.py", line 486, in test_composer_reading_counts_text_whatever_its_colour
+    self.assertEqual(read_composer(opencode_screen("home-empty"), "opencode.exe"),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     ("REAL", 'Ask anything… "Fix a TODO in the codebase"'),
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     "a placeholder no one measured for the adapter is text")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Tuples differ: ('VACIO', '') != ('REAL', 'Ask anything… "Fix a TODO in the codebase"')
+
+First differing element 0:
+'VACIO'
+'REAL'
+
+- ('VACIO', '')
++ ('REAL', 'Ask anything… "Fix a TODO in the codebase"') : a placeholder no one measured for the adapter is text
+
+======================================================================
+FAIL: test_opencode_delivery_withholds_enter_when_a_grey_draft_shares_the_composer (__main__.HostReceipts.test_opencode_delivery_withholds_enter_when_a_grey_draft_shares_the_composer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b8/scripts/tests/test-agent-work-host.py", line 534, in test_opencode_delivery_withholds_enter_when_a_grey_draft_shares_the_composer
+    with self.assertRaisesRegex(RuntimeError, "Enter withheld"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: RuntimeError not raised
+
+----------------------------------------------------------------------
+Ran 12 tests in 11.144s
+
+FAILED (failures=2, errors=1)

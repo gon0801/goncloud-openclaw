@@ -76,3 +76,12 @@ Ran 1 test in 112.776s
 
 OK
 ```
+
+Corrida 4, verde, sobre B8-r2 (2026-10-10): el host fija el pane de `opencode.exe` y juzga el composer sin mirar el color. Mismo comando, R en el mismo checkout construido. Log completo: `B8-r2-opencode-adapter-e2e.log`.
+
+```
+OPENCODE_E2E t=  32.9s draft in the composer: claim deferred, nothing typed
+OPENCODE_E2E t= 112.4s OPENCODE_ADAPTER_E2E tasks=2 typed=2 deferred_over_draft=1 incidents=0 sessions=['agent:main:encargos-loop'] claims=33
+Ran 1 test in 112.573s
+OK
+```
