@@ -72,7 +72,7 @@ scp -r gon@100.73.187.5:/tmp/sombra /tmp/sombra && python3 scripts/agent-work/ru
 
 Al terminar, borra `/tmp/sombra` en las dos máquinas: son bases con conversaciones.
 
-Mide solo a los agentes que pueden recibir un encargo, y solo sus llamadas por Responses (B6). Imprime el máximo, el p95 y n por agente, y propone `maxContextTokens` como el máximo × 1,5. Sale con 1 si uno de esos agentes todavía no tiene ninguna llamada por Responses medida. El valor se lleva a `limits.json` (`productionProfile.values.maxContextTokens`) en un PR. `artifact.py verify` y `cutover_live` siguen negándose a abrir la admisión mientras haya un `null`. Que la medición es fiel se comprobó en la copia: el evento y el cuerpo que recibió el proveedor tuvieron los mismos bytes (39.555 y 54.632, `B5-logs.md`).
+Mide solo a los agentes que pueden recibir un encargo, y solo sus llamadas por Responses (B6). Imprime el máximo, el p95 y n por agente. Su `maxContextTokens` propuesto (el máximo × 1,5) es solo el piso: desde B7, el valor de `limits.json` es la ventana del modelo en bytes. Es decir, `contextWindow` × bytes por token, y los bytes por token salen de `medir-bytes-por-token.py` (mismos argumentos) como el máximo medido × 1,5 (B7.md). `test_the_repo_context_limit_is_the_model_window_with_the_profile_margin` comprueba esa relación. Volver a medir sirve para subir el factor si un agente nuevo trae más bytes por token, nunca para bajar el valor al máximo × 1,5. Que la medición es fiel se comprobó en la copia: el evento y el cuerpo que recibió el proveedor tuvieron los mismos bytes (39.555 y 54.632, `B5-logs.md`).
 
 ## Parte B: abrir una entrada (plan `:312` a `:318`)
 

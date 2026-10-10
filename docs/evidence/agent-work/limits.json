@@ -29,7 +29,7 @@
       "maxInputTokens": 669000000,
       "maxOutputTokens": 510000,
       "maxCacheReadTokens": 661000000,
-      "maxContextTokens": 6815744,
+      "maxContextTokens": 10485760,
       "maxTreeTokens": 669000000,
       "maxAutomaticRecoveryCalls": 1
     },
@@ -41,14 +41,23 @@
       "maxInputTokens": "445540546 x 1.5, redondeo arriba a 3 cifras; entrada = input+cacheRead+cacheWrite por llamada (provider-stream.ts:240), suma por corrida; n=1923, mediana 112460, p95 3495223",
       "maxOutputTokens": "252098 x 1.5 + 131072 (reserva de una llamada al maxTokens de opencode-go-resp/muse-spark-1.3-contributor en openclaw.json), redondeo arriba a 3 cifras; n=1923, mediana 2324, p95 27681",
       "maxCacheReadTokens": "440339646 x 1.5, redondeo arriba a 3 cifras; suma cacheRead por corrida; n=1923, mediana 90918, p95 3397030",
-      "maxContextTokens": "6815744 bytes UTF-8 del cuerpo HTTP (la unidad que aplica provider-stream.ts) = 1048576 tokens de contextWindow de muse-spark-1.3-contributor x 6,5 bytes por token (máximo medido 6,11 en 283 llamadas de main con uso de opencode, B7.md). Es mayor que el máximo observado x 1,5 (1101002 x 1,5 = 1651503, 460 llamadas de main por Responses del 2026-10-10 05:15Z a 16:05Z), así que el límite solo frena un cuerpo que el modelo tampoco aceptaría; cubre también las compactaciones, que no pasan de la ventana del modelo",
+      "maxContextTokens": "10485760 bytes UTF-8 del cuerpo HTTP (la unidad que aplica provider-stream.ts) = 1048576 tokens de contextWindow de muse-spark-1.3-contributor x 10 bytes por token. El factor es el máximo medido (6,60 en 460 llamadas de main por Responses, cada una emparejada con su uso, B7.md) x 1,5, redondeado hacia arriba. Es mayor que el máximo observado x 1,5 (1101002 x 1,5 = 1651503), así que el límite no frena un cuerpo que el modelo aceptaría",
       "maxTreeTokens": "445792644 x 1.5, redondeo arriba a 3 cifras; arbol = entrada + salida por corrida; n=1923, mediana 114248, p95 3514452",
       "maxAutomaticRecoveryCalls": "politica del spec 2026-09-30-encargos-agentes-design.md (una recuperacion automatica por raiz) = tope zod max(1) en zod-schema.managed-tasks.ts"
     },
     "rule": "máximo observado × 1,5 redondeado hacia arriba, acotado por los límites nativos efectivos; con p95 × 1,5 (98 llamadas, 5,3 M tokens por árbol) se bloquearía cerca del 5 % de las corridas observadas",
     "measuredAt": "2026-10-09",
     "measuredOn": "copia consistente de la Mac Mini del 2026-10-09 12:55 PDT (estado 19, 1923 corridas de subagente del 2026-09-23 al 2026-10-09)",
-    "method": "docs/evidence/agent-work/T11.md"
+    "method": "docs/evidence/agent-work/T11.md",
+    "derivations": {
+      "maxContextTokens": {
+        "contextWindowTokens": 1048576,
+        "bytesPerToken": 10,
+        "measuredMaxBytesPerToken": 6.6,
+        "observedMaxBytes": 1101002,
+        "measuredWith": "scripts/agent-work/runtime/medir-bytes-por-token.py y medir-contexto-sombra.py sobre una copia .backup de main, ingenieria e implementer (2026-10-10, 05:15Z a 16:05Z)"
+      }
+    }
   },
   "productionAdmissionEnabled": false
 }

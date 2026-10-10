@@ -171,6 +171,16 @@ class LimitsProfileTest(unittest.TestCase):
         unknown = [field for field, value in limits["productionProfile"]["values"].items() if value is None]
         self.assertEqual((unknown, limits["productionAdmissionEnabled"]), ([], False))
 
+    def test_the_repo_context_limit_is_the_model_window_with_the_profile_margin(self):
+        limits = json.loads((ROOT / "docs/evidence/agent-work/limits.json").read_text())
+        profile = limits["productionProfile"]
+        derived = profile["derivations"]["maxContextTokens"]
+        value = profile["values"]["maxContextTokens"]
+        self.assertEqual(value, derived["contextWindowTokens"] * derived["bytesPerToken"])
+        self.assertGreaterEqual(derived["bytesPerToken"], derived["measuredMaxBytesPerToken"] * 1.5)
+        self.assertGreaterEqual(value, -(-derived["observedMaxBytes"] * 3 // 2))
+        self.assertLessEqual(value, profile["values"]["maxInputTokens"])
+
 
 if __name__ == "__main__":
     unittest.main()
