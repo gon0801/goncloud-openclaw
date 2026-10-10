@@ -26,6 +26,8 @@ Mientras no pase, T12 llega hasta la **parte A**: instalar con la admisión cerr
 
 ## Parte A: instalar con la admisión cerrada (plan `:309` a `:311`)
 
+Hecha el 2026-10-10 con el script `t12-parte-a.sh` (sección Script de `T12-parte-a.md`), que corre 0.4, 0.5 y 1.1 a 1.6 desde la Mac. Detiene el gateway antes de la foto y revierte solo si algo falla (`T12-parte-a.md`).
+
 | # | Qué | Comando (en la Mini) | Salida esperada | Duración | Si falla |
 |---|---|---|---|---|---|
 | 1.1 | Foto completa | `F=~/.openclaw/respaldos/pre-f1c5f34-$(date +%Y%m%d-%H%M); mkdir -p "$F"; sqlite3 ~/.openclaw/state/openclaw.sqlite ".backup $F/openclaw.sqlite"; for f in ~/.openclaw/agents/*/agent/openclaw-agent.sqlite; do sqlite3 "$f" ".backup $F/agent-$(basename "$(dirname "$(dirname "$f")")").sqlite"; done; cp ~/.openclaw/openclaw.json "$F/"` y luego `sqlite3 "$F/openclaw.sqlite" 'PRAGMA user_version; PRAGMA quick_check;'` | `19` y `ok` | 1 min (medido: 564 MB) | Sin foto válida no se instala. |
