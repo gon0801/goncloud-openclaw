@@ -80,6 +80,7 @@ class CutoverRollbackE2E(unittest.TestCase):
             shutil.copyfile(agent / "agent/openclaw-agent.sqlite", self.snapshot / f"agent-{agent.name}.sqlite")
         shutil.copyfile(self.copy / "openclaw.json", self.snapshot / "openclaw.json")
         self.host.start(self.candidate)
+        self.candidate_version = os.popen(f"{self.host.cli} --version").read()
         spool = Spool(self.host.root / "host-spool", "mac-local")
         spool.register("op-pending", "instance-1", "digest", "assignment:x", {"taskId": "task-1", "generation": 1})
         self.spool_file = self.host.root / "host-spool" / "host.sqlite"
@@ -131,7 +132,7 @@ class CutoverRollbackE2E(unittest.TestCase):
         with self.assertRaisesRegex(cutover_live.RollbackFailed, "snapshot database is unreadable"):
             self.rollback(snapshot=bad)
         self.assertEqual(self.host.schema(), 27)
-        self.assertIn("(818f0fd)", os.popen(f"{self.host.cli} --version").read())
+        self.assertEqual(os.popen(f"{self.host.cli} --version").read(), self.candidate_version)
         self.assert_candidate_frozen()
         self.assert_spool_untouched()
 
@@ -142,7 +143,7 @@ class CutoverRollbackE2E(unittest.TestCase):
         (broken / "bin/openclaw").chmod(0o755)
         with self.assertRaisesRegex(cutover_live.RollbackFailed, "previous binary did not start"):
             self.rollback(previous=broken)
-        self.assertIn("(818f0fd)", os.popen(f"{self.host.cli} --version").read())
+        self.assertEqual(os.popen(f"{self.host.cli} --version").read(), self.candidate_version)
         self.assert_candidate_frozen()
         self.assertFalse(self.cron_enabled())
         self.assertEqual(json.loads(self.state.read_text())["rollback"]["phase"], "failed-candidate-frozen")
@@ -152,7 +153,7 @@ class CutoverRollbackE2E(unittest.TestCase):
         with self.assertRaises(KeyboardInterrupt):
             self.rollback(host=Rollback(self.host, crash_before_stop=True))
         self.assertEqual(json.loads(self.state.read_text())["rollback"]["phase"], "frozen")
-        self.assertIn("(818f0fd)", os.popen(f"{self.host.cli} --version").read())
+        self.assertEqual(os.popen(f"{self.host.cli} --version").read(), self.candidate_version)
         self.assert_candidate_frozen()
         self.assert_spool_untouched()
 

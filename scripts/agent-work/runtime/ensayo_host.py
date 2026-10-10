@@ -9,6 +9,7 @@ import os
 import re
 import secrets
 import signal
+from contextlib import closing
 import shutil
 import sqlite3
 import subprocess
@@ -169,7 +170,8 @@ class EnsayoHost:
         return json.loads((self.state / "openclaw.json").read_text())
 
     def schema(self):
-        with sqlite3.connect(f"file:{self.state / 'state/openclaw.sqlite'}?immutable=1", uri=True) as db:
+        # mode=ro reads through the WAL; immutable=1 would miss a migration not yet checkpointed.
+        with closing(sqlite3.connect(f"file:{self.state / 'state/openclaw.sqlite'}?mode=ro", uri=True)) as db:
             return db.execute("PRAGMA user_version").fetchone()[0]
 
 

@@ -173,7 +173,10 @@ class CutoverFencingE2E(unittest.TestCase):
     def test_unknown_limits_refuse_before_any_cron_is_touched(self):
         gateway, _, client = self.start(managed_enabled=False)
         limits = self.root / "limits.json"
-        limits.write_text(json.dumps({"productionProfile": {"values": {"maxContextTokens": None}}}))
+        # The repo profile: every limit measured but maxContextTokens.
+        repo = json.loads((ROOT / "docs/evidence/agent-work/limits.json").read_text())
+        repo["productionProfile"]["values"]["maxContextTokens"] = None
+        limits.write_text(json.dumps(repo))
         with self.assertRaisesRegex(cutover_live.CutoverRefused,
                                     "production limits are unknown: maxContextTokens"):
             cutover_live.apply(self.state, client, now_ms=lambda: int(time.time() * 1000),
