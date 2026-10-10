@@ -80,7 +80,13 @@ class ContextShadowTest(unittest.TestCase):
             self.assertFalse(verify.faithful([], []))
 
     def test_bytes_per_token_pairs_each_call_with_the_next_usage_of_its_run_even_compressed(self):
-        from compression import zstd
+        def pack(data):
+            try:
+                from compression import zstd
+            except ImportError:
+                return subprocess.run(["zstd", "-c"], input=data, capture_output=True, check=True).stdout
+            return zstd.compress(data)
+
         with tempfile.TemporaryDirectory() as temp:
             state = Path(temp)
             path = state / "agents" / "main" / "agent" / "openclaw-agent.sqlite"
@@ -96,7 +102,7 @@ class ContextShadowTest(unittest.TestCase):
                 db.execute("INSERT INTO transcript_events VALUES ('s', 1, ?, NULL)",
                            (json.dumps(usage("2026-10-10T10:00:00.000Z", 999)),))
                 db.execute("INSERT INTO transcript_events VALUES ('s', 2, NULL, ?)",
-                           (zstd.compress(json.dumps(usage("2026-10-10T10:00:05.000Z", 1000)).encode()),))
+                           (pack(json.dumps(usage("2026-10-10T10:00:05.000Z", 1000)).encode()),))
                 db.commit()
             run = subprocess.run([sys.executable, str(BYTES_PER_TOKEN), str(state), "main"],
                                  capture_output=True, text=True)

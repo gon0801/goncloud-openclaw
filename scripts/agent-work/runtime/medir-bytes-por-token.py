@@ -11,11 +11,19 @@ Prints {"n": .., "min": .., "p50": .., "p95": .., "max": .., "largest": {...}}; 
 """
 import json
 import sqlite3
+import subprocess
 import sys
-from compression import zstd
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path
+
+
+def unpack(packed):
+    try:
+        from compression import zstd
+    except ImportError:  # Python before 3.14: the zstd CLI ships with the CI runners and Homebrew.
+        return subprocess.run(["zstd", "-dc"], input=packed, capture_output=True, check=True).stdout
+    return zstd.decompress(packed)
 
 
 def epoch_ms(value):
@@ -31,7 +39,7 @@ def pairs(database):
         transcript = db.execute("SELECT event_json, event_zstd FROM transcript_events").fetchall()
     usages = {}
     for raw, packed in transcript:
-        event = json.loads(raw if raw is not None else zstd.decompress(packed).decode())
+        event = json.loads(raw if raw is not None else unpack(packed).decode())
         message = event.get("message") or {}
         run = (message.get("__openclaw") or {}).get("runId")
         usage = message.get("usage") or {}
