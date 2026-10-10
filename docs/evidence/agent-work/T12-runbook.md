@@ -12,6 +12,21 @@ En la Mini eso cubre a `main`, `ingenieria` e `implementer`, cuyo primario es `o
 
 Un encargo que cae a un fallback por CLI (claude-cli) o a un plugin (codex) se rechaza antes de gastar. Las rutas a un CLI de la Mac siguen sin certificar (matriz A10): esos loops conservan su vigía y lo declaran (plan `:318`).
 
+## Actualizar la Mini a R `19c2ed1` (B6)
+
+La parte A instaló `f1c5f34` y sus tablas de abajo son el registro de esa instalación. La parte B necesita `19c2ed1`, el artefacto que hoy fija `artifact-manifest.json`. Para instalarlo:
+
+```
+bash ~/.local/state/encargos-loop/artifacts/T12/t12-actualizar-19c2ed1.sh
+```
+
+El script corre en la Mac de desarrollo; su texto está en `B6.md`, sección Script de actualización. Hace lo siguiente:
+1. Copia por scp los paquetes de `19c2ed1` y, para volver atrás, los de `f1c5f34`.
+2. Revisa los hashes, que la versión viva sea `f1c5f34` y que no haya crons corriendo.
+3. Detiene el gateway, toma una foto, instala, arranca y comprueba `build-info`, el esquema 27, la admisión cerrada y los mismos crons habilitados.
+
+Los dos builds usan el esquema 27, así que volver atrás es reinstalar `f1c5f34` sin restaurar la base. Si el gateway no se detiene, la reversa se para sin tocar nada. Salidas: `ACTUALIZADO OK`, `PARO` (no se tocó nada) o `REVERSA`.
+
 ## Antes de la ventana (sin tocar nada vivo)
 
 | # | Qué | Comando | Salida esperada | Si no |
@@ -46,18 +61,18 @@ Con uno o dos días de tráfico real:
 En la Mini no está el repo, así que el script corre en la Mac de desarrollo sobre una copia de las bases hecha con el mismo `.backup` de 1.1. En la Mini:
 
 ```
-S=/tmp/sombra; for a in ingenieria adversary operaciones main; do mkdir -p $S/agents/$a/agent; sqlite3 ~/.openclaw/agents/$a/agent/openclaw-agent.sqlite ".backup $S/agents/$a/agent/openclaw-agent.sqlite"; done
+S=/tmp/sombra; for a in main ingenieria implementer; do mkdir -p $S/agents/$a/agent; sqlite3 ~/.openclaw/agents/$a/agent/openclaw-agent.sqlite ".backup $S/agents/$a/agent/openclaw-agent.sqlite"; done
 ```
 
 En la Mac, desde el repo:
 
 ```
-scp -r gon@100.73.187.5:/tmp/sombra /tmp/sombra && python3 scripts/agent-work/runtime/medir-contexto-sombra.py /tmp/sombra ingenieria adversary operaciones main
+scp -r gon@100.73.187.5:/tmp/sombra /tmp/sombra && python3 scripts/agent-work/runtime/medir-contexto-sombra.py /tmp/sombra main ingenieria implementer
 ```
 
 Al terminar, borra `/tmp/sombra` en las dos máquinas: son bases con conversaciones.
 
-Imprime el máximo, el p95 y n por agente, y propone `maxContextTokens` como el máximo × 1,5. Sale con 1 si un agente todavía no tiene ninguna llamada medida. El valor se lleva a `limits.json` (`productionProfile.values.maxContextTokens`) en un PR. `artifact.py verify` y `cutover_live` siguen negándose a abrir la admisión mientras haya un `null`. Que la medición es fiel se comprobó en la copia: el evento y el cuerpo que recibió el proveedor tuvieron los mismos bytes (39.555 y 54.632, `B5-logs.md`).
+Mide solo a los agentes que pueden recibir un encargo, y solo sus llamadas por Responses (B6). Imprime el máximo, el p95 y n por agente, y propone `maxContextTokens` como el máximo × 1,5. Sale con 1 si uno de esos agentes todavía no tiene ninguna llamada por Responses medida. El valor se lleva a `limits.json` (`productionProfile.values.maxContextTokens`) en un PR. `artifact.py verify` y `cutover_live` siguen negándose a abrir la admisión mientras haya un `null`. Que la medición es fiel se comprobó en la copia: el evento y el cuerpo que recibió el proveedor tuvieron los mismos bytes (39.555 y 54.632, `B5-logs.md`).
 
 ## Parte B: abrir una entrada (plan `:312` a `:318`)
 
