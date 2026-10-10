@@ -1,6 +1,6 @@
 # Ensayo de adopción de encargos
 
-Estado: preparación de T11. B4 sigue abierto y no existe todavía un paquete nativo final comprobado. `cutover.py` funciona solo con `--simulation`; no instala un binario, modifica cron ni habla con un Gateway. El operador debe completar T11 con el artefacto y los comandos reales de T0 antes de pedir autorización para T12.
+Estado: T11 completa (PR #252), y la parte A de T12 está instalada en la Mini desde el 2026-10-10 (`docs/evidence/agent-work/T12-parte-a.md`). `cutover.py` funciona solo con `--simulation`: no instala un binario, no modifica cron ni habla con un Gateway. El corte real es `scripts/agent-work/cutover_live.py` (T11-b).
 
 ## Contrato del ensayo
 

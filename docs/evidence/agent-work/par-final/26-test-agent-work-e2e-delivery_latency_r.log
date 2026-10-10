@@ -1,10 +1,10 @@
 $ bash scripts/tests/test-agent-work-e2e.sh delivery_latency_r
 {"closed": 0, "incidents": 0, "reported": 1, "transferred": 0}
-DELIVERY_LATENCY_R {"write_to_detection_seconds": 1.415, "detection_to_receipt_seconds": 1.146, "limit_seconds": 5}
+DELIVERY_LATENCY_R {"write_to_detection_seconds": 1.367, "detection_to_receipt_seconds": 1.152, "limit_seconds": 5}
 .
 ----------------------------------------------------------------------
-Ran 1 test in 32.473s
+Ran 1 test in 31.811s
 
 OK
 
-rc=0 seconds=32.6
+rc=0 seconds=31.9
