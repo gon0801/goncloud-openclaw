@@ -307,7 +307,7 @@ Verifica con `bash scripts/tests/test-agent-work-cutover.sh`. El entregable incl
 Depende de T11, artefactos revisados e instrucción posterior de despliegue. Esta tarea permanece pendiente en la entrega del plan.
 
 - [x] Comprueba la autorización, los hashes, la revisión cruzada y una ventana sin trabajo que la instalación pueda interrumpir. Si no puedes verificar la ventana, pospón el cambio vivo.
-- [x] Instala mediante el procedimiento probado con admisión nueva deshabilitada y captura de resultados activa. Relee versiones, archivos y capacidades del runtime real.
+- [ ] Instala mediante el procedimiento probado con admisión nueva deshabilitada y captura de resultados activa. Relee versiones, archivos y capacidades del runtime real.
 - [x] Clasifica resultados previos como consumidos, pendientes o antiguos. Conserva los casos inciertos sin reenviarlos.
 - [ ] Suspende los despertares antiguos de la entrada controlada y guarda sus IDs y configuración. Drena o concilia sus turnos en vuelo; conserva la captura de resultados. No toques cron de negocio ajenos a esa entrada.
 - [ ] Transfiere la propiedad por generación y habilita la admisión de esa entrada. Comprueba que solo hay un emisor. Ejecuta dos entregas y una incidencia de permiso sin aprobarla.

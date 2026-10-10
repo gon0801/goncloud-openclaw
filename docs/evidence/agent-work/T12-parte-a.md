@@ -4,6 +4,10 @@ El 2026-10-10 a las 05:13Z, David corrió el script de la sección Script (`t12-
 
 ## Resultado
 
+Antes de correrlo, Claude revisó desde la Mac la otra mitad del paso 0.5, que el script no cubre: `sessions.list` con `activeMinutes: 10` devolvió 4 sesiones, todas terminadas.
+
+La instalación queda hecha, pero la casilla 2 de T12 en el plan sigue abierta. Pide además la captura de resultados activa, y el host de encargos no corre en vivo mientras la admisión siga cerrada.
+
 - El gateway estuvo fuera 36 s: se detuvo a las 05:13:56 y respondió `health` a las 05:14:32.
 - Instalado: `OpenClaw 2026.9.7 (f1c5f34)`, y `build-info.json` con `commit` `f1c5f34ae8f91652412188349c296b3c1a882701`. Los sha256 de los dos `.tgz` coinciden con `artifact-manifest.json`.
 - El estado migró del esquema 19 al 27. `managedTasks` no está en la config, así que la admisión de encargos sigue cerrada.
