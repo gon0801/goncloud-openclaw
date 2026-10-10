@@ -60,6 +60,7 @@ class CutoverFencingE2E(unittest.TestCase):
             "payload": {"kind": "agentTurn", "message": f"cutover-cron-{CRON} look at the loop"},
             "delivery": {"mode": "none"}})
         self.spool = Spool(self.root / "host-spool", HOST_ID)
+        (self.root / "host").mkdir(exist_ok=True)
         entry = {"id": "loop:encargos", "legacyCrons": [CRON], "host": HOST_ID, "adapter": adapter,
                  "spools": [str(self.root / "host-spool"), str(self.root / "host")]}
         self.state = self.root / "cutover-state.json"

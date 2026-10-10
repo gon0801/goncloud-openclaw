@@ -1,0 +1,23 @@
+.E...
+======================================================================
+ERROR: test_a_lost_drain_race_refuses_once_and_the_same_command_then_resumes (__main__.CutoverLiveTest.test_a_lost_drain_race_refuses_once_and_the_same_command_then_resumes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_live.py", line 100, in test_a_lost_drain_race_refuses_once_and_the_same_command_then_resumes
+    self.assertEqual(self.apply(gateway, now=NOW + 60_000), "transferred")
+                     ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_live.py", line 75, in apply
+    return cutover_live.apply(self.state, gateway, now_ms=lambda: now, wait_seconds=wait_seconds,
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                              sleep=lambda _: None, limits_path=self.limits)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/agent-work/cutover_live.py", line 174, in apply
+    raise CutoverRefused(f"{record['name']} was cancelled instead of drained; check its last turn, "
+                         "then run apply again")
+cutover_live.CutoverRefused: vigia-viejo was cancelled instead of drained; check its last turn, then run apply again
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.004s
+
+FAILED (errors=1)
+rc=1

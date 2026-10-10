@@ -66,19 +66,25 @@ def uncertain_operations(spool_dirs):
 
 def observe(client, entry):
     jobs = client.call("cron.list", {"includeDisabled": True})["jobs"]
-    legacy = [job for job in jobs if job["name"] in entry["legacyCrons"] or job["id"] in entry["legacyCrons"]]
+    matches = {name: [job for job in jobs if name in (job["name"], job["id"])] for name in entry["legacyCrons"]}
     managed = client.call("config.get", {})["resolved"].get("managedTasks", {})
     adapters = managed.get("hosts", {}).get(entry["host"], {}).get("adapters", [])
+    spools = entry.get("spools", [])
     return {
-        "legacy": legacy,
+        "legacy": [found[0] for found in matches.values() if len(found) == 1],
+        # An entry that does not name exactly the Gateway's crons would leave an old emitter running.
+        "unmatched": {name: len(found) for name, found in matches.items() if len(found) != 1},
+        "missingSpools": [spool for spool in spools if not Path(spool).is_dir()],
         "native": bool(managed.get("enabled")) and entry["adapter"] in adapters,
-        "uncertain": uncertain_operations(entry.get("spools", [])),
+        "uncertain": uncertain_operations(spools),
     }
 
 
 def fence_problems(entry, seen, now_ms):
     """Why ownership cannot move now; empty when the old crons can be suspended without cancelling."""
-    problems = []
+    problems = [f"{entry['id']} names {name}, which matches {count} Gateway crons"
+                for name, count in seen["unmatched"].items()]
+    problems += [f"spool {spool} does not exist" for spool in seen["missingSpools"]]
     enabled = [job for job in seen["legacy"] if job["enabled"]]
     if seen["native"] and enabled:
         problems.append(f"two emitters for {entry['id']}: {', '.join(job['name'] for job in enabled)} and "
@@ -114,6 +120,17 @@ def native_patch(entry, config, limits):
                                   "adapters": sorted(set(host.get("adapters", [])) | {entry["adapter"]})}}}}
 
 
+def retrying(step, deadline, sleep):
+    """Run one Gateway step, waiting through a restart (GatewayUnavailable) until the deadline."""
+    while True:
+        try:
+            return step()
+        except GatewayUnavailable:
+            if time.monotonic() >= deadline:
+                raise
+            sleep(0.5)
+
+
 def apply(path, client, now_ms, wait_seconds=0, sleep=time.sleep, limits_path=LIMITS):
     path = Path(path)
     state = json.loads(path.read_text())
@@ -121,34 +138,41 @@ def apply(path, client, now_ms, wait_seconds=0, sleep=time.sleep, limits_path=LI
     if state["owner"] == "native":
         return "already native"
     limits = json.loads(Path(limits_path).read_text())
+    deadline = time.monotonic() + wait_seconds
     if state["owner"] == "transferring":
         return finish_transfer(path, state, client, limits, wait_seconds, sleep)
-    native_patch(entry, client.call("config.get", {}), limits)
-    deadline = time.monotonic() + wait_seconds
+    retrying(lambda: native_patch(entry, client.call("config.get", {}), limits), deadline, sleep)
     while True:
-        seen = observe(client, entry)
+        seen = retrying(lambda: observe(client, entry), deadline, sleep)
         problems = fence_problems(entry, seen, now_ms())
         if not problems:
             break
         if time.monotonic() >= deadline:
             raise CutoverRefused("; ".join(problems))
         sleep(0.25)
+    disabled_now = []
     for job in seen["legacy"]:
         if not job["enabled"]:
             continue
         state["suspended"][job["id"]] = {"name": job["name"], "job": job, "disabledAtMs": now_ms()}
         write_state(path, state)
-        client.call("cron.update", {"id": job["id"], "patch": {"enabled": False}})
-    seen = observe(client, entry)
+        retrying(lambda: client.call("cron.update", {"id": job["id"], "patch": {"enabled": False}}), deadline, sleep)
+        disabled_now.append(job["id"])
+    seen = retrying(lambda: observe(client, entry), deadline, sleep)
     for job in seen["legacy"]:
         if job["enabled"] or (job.get("state") or {}).get("runningAtMs"):
             raise CutoverRefused(f"{job['name']} did not stop")
-        record = state["suspended"].get(job["id"])
-        if record:
-            cancelled = [run for run in client.call("cron.runs", {"id": job["id"]})["entries"]
-                         if run["ts"] >= record["disabledAtMs"] and "disabled by operator" in (run.get("error") or "")]
-            if cancelled:
-                raise CutoverRefused(f"{job['name']} was cancelled instead of drained")
+    # Only a cron this run disabled can have been cancelled by it. A cancellation is recorded and
+    # refuses once; the same command then resumes, since the cron is already suspended.
+    for job_id in disabled_now:
+        record = state["suspended"][job_id]
+        runs = retrying(lambda: client.call("cron.runs", {"id": job_id}), deadline, sleep)["entries"]
+        if any(run["ts"] >= record["disabledAtMs"] and "disabled by operator" in (run.get("error") or "")
+               for run in runs):
+            state.setdefault("cancelled", {})[job_id] = {"name": record["name"], "atMs": now_ms()}
+            write_state(path, state)
+            raise CutoverRefused(f"{record['name']} was cancelled instead of drained; check its last turn, "
+                                 "then run apply again")
     state["owner"], state["generation"] = "transferring", state["generation"] + 1
     write_state(path, state)
     return finish_transfer(path, state, client, limits, wait_seconds, sleep)
@@ -213,7 +237,7 @@ def main():
             print(json.dumps(prepare(args.state, json.loads(args.entry.read_text())), sort_keys=True))
         elif args.command == "inspect":
             state = json.loads(args.state.read_text())
-            seen = observe(client, state["entry"])
+            seen = retrying(lambda: observe(client, state["entry"]), time.monotonic() + args.wait_seconds, time.sleep)
             print(json.dumps({"state": state, "problems": fence_problems(state["entry"], seen,
                                                                           int(time.time() * 1000))}, sort_keys=True))
         else:
