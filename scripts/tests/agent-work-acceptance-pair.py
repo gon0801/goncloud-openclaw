@@ -3,6 +3,8 @@
 
 Uso: AGENT_WORK_RUNTIME_SOURCE=<R construido> LANG=en_US.UTF-8 python3 scripts/tests/agent-work-acceptance-pair.py
 Los logs quedan en docs/evidence/agent-work/par-final/. El estricto de test_agent_work_acceptance.py lo lee.
+Corre en tres carriles: los casos de vitest de R (test-runtime.sh) uno tras otro, porque comparten la caché de R;
+el resto en paralelo (AGENT_WORK_PAIR_JOBS, 4 por omisión) al mismo tiempo; y al final, solos, los que miden latencia.
 """
 import hashlib
 import json
@@ -11,6 +13,7 @@ import re
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,6 +22,7 @@ from test_agent_work_acceptance import PAIR_DOC, matrix_refs, matrix_rows  # noq
 
 OUT = ROOT / "docs/evidence/agent-work/par-final"
 TIMEOUT = 3600
+ALONE = ("delivery_latency",)
 PY_RUNNER = r"""
 import importlib.util, json, sys, unittest
 import os
@@ -103,26 +107,46 @@ def main():
         path, name = ref.split("::")
         if path.endswith(".py"):
             python.setdefault(path, []).append(name)
-    index = 0
+    jobs = []
     for ref in shell:
         path, case = ref.split("::")
-        index += 1
-        rc, seconds, log = run(index, f"{Path(path).stem}-{case}", ["bash", path, case])
-        skipped = sum(int(n) for n in re.findall(r"skipped=(\d+)", log.read_text(encoding="utf-8")))
-        doc["runs"].append({"ref": ref, "rc": rc, "seconds": seconds, "skips": [f"{skipped} (count)"] if skipped else [],
-                            "log": str(log.relative_to(ROOT))})
+        jobs.append(("shell", ref, f"{Path(path).stem}-{case}", ["bash", path, case]))
     for path, names in python.items():
-        index += 1
+        jobs.append(("python", path, Path(path).stem, names))
+    jobs = [(index, *job) for index, job in enumerate(jobs, start=1)]
+
+    def execute(job):
+        index, kind, ref, label, payload = job
+        if kind == "shell":
+            rc, seconds, log = run(index, label, payload)
+            skipped = sum(int(n) for n in re.findall(r"skipped=(\d+)", log.read_text(encoding="utf-8")))
+            return [{"ref": ref, "rc": rc, "seconds": seconds, "skips": [f"{skipped} (count)"] if skipped else [],
+                     "log": str(log.relative_to(ROOT))}]
         status_file = OUT / f".{index:02d}.json"
-        rc, seconds, log = run(index, Path(path).stem, [sys.executable, "-c", PY_RUNNER, path, str(status_file), *names])
+        rc, seconds, log = run(index, label, [sys.executable, "-c", PY_RUNNER, ref, str(status_file), *payload])
         status = json.loads(status_file.read_text()) if status_file.exists() else {}
         if status_file.exists():
             status_file.unlink()
-        for name in names:
-            entry = status.get(name, {"outcome": "missing", "skips": []})
-            doc["runs"].append({"ref": f"{path}::{name}", "rc": 0 if entry["outcome"] == "ok" and rc == 0 else 1,
-                                "outcome": entry["outcome"], "seconds": seconds, "skips": entry["skips"],
-                                "log": str(log.relative_to(ROOT))})
+        return [{"ref": f"{ref}::{name}",
+                 "rc": 0 if status.get(name, {}).get("outcome") == "ok" and rc == 0 else 1,
+                 "outcome": status.get(name, {"outcome": "missing"})["outcome"], "seconds": seconds,
+                 "skips": status.get(name, {"skips": []})["skips"], "log": str(log.relative_to(ROOT))}
+                for name in payload]
+
+    alone = [job for job in jobs if job[1] == "shell" and job[2].split("::")[1].startswith(ALONE)]
+    runtime = [job for job in jobs if job not in alone and job[2].startswith("scripts/agent-work/test-runtime.sh")]
+    parallel = [job for job in jobs if job not in alone and job not in runtime]
+    results = {}
+    workers = max(1, int(os.environ.get("AGENT_WORK_PAIR_JOBS", "4")))
+    with ThreadPoolExecutor(max_workers=workers + 1) as pool:
+        serial = pool.submit(lambda: {job[0]: execute(job) for job in runtime})
+        for job, runs in zip(parallel, pool.map(execute, parallel)):
+            results[job[0]] = runs
+        results.update(serial.result())
+    for job in alone:
+        results[job[0]] = execute(job)
+    for index in sorted(results):
+        doc["runs"].extend(results[index])
     doc["finishedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     PAIR_DOC.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     failed = [run["ref"] for run in doc["runs"] if run["rc"] != 0]
