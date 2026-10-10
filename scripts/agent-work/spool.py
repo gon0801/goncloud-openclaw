@@ -135,6 +135,13 @@ class Spool:
                     operation_id TEXT PRIMARY KEY,
                     delivered_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS delivery_verdicts (
+                    operation_id TEXT PRIMARY KEY,
+                    previous_status TEXT NOT NULL,
+                    verdict TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    decided_at REAL NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS dialog_watch (
                     operation_id TEXT PRIMARY KEY,
                     open_identity TEXT,
@@ -198,12 +205,36 @@ class Spool:
     def begin_delivery(self, operation_id: str) -> bool:
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
-            updated = db.execute("UPDATE operations SET status='attempted' WHERE operation_id=? AND status='registered'",
+            updated = db.execute("UPDATE operations SET status='attempted' "
+                                 "WHERE operation_id=? AND status IN ('registered','deferred')",
                                  (operation_id,))
             if updated.rowcount != 1:
                 return False
             db.execute("INSERT OR IGNORE INTO delivery_attempts VALUES (?,?)",
                        (operation_id, time.time()))
+            return True
+
+    def delivery_deferred(self, operation_id: str) -> None:
+        """attempted -> deferred when the transport proved nothing was typed; the clock restarts on retry."""
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            updated = db.execute("UPDATE operations SET status='deferred' WHERE operation_id=? AND status='attempted'",
+                                 (operation_id,))
+            if updated.rowcount == 1:
+                db.execute("DELETE FROM delivery_attempts WHERE operation_id=?", (operation_id,))
+
+    def resolve_delivery(self, operation_id: str, verdict: str, reason: str, now: float) -> bool:
+        """attempted or uncertain -> the operator's verdict, recorded with it; False when it already left both."""
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT status FROM operations WHERE operation_id=?", (operation_id,)).fetchone()
+            if row is None or row["status"] not in ("attempted", "uncertain"):
+                return False
+            db.execute("UPDATE operations SET status=? WHERE operation_id=?", (verdict, operation_id))
+            db.execute("INSERT INTO delivery_verdicts VALUES (?,?,?,?,?)",
+                       (operation_id, row["status"], verdict, reason, now))
+            if verdict == "delivered":
+                db.execute("INSERT OR IGNORE INTO delivery_clock VALUES (?,?)", (operation_id, now))
             return True
 
     def delivered(self, operation_id: str) -> None:

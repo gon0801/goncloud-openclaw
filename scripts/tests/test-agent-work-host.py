@@ -16,7 +16,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 
 from contracts import AuthorizedOperation, OperationKey
-from host import Host, ShellAdapterTransport, TmuxTransport, operation_id
+from cutover_live import uncertain_operations
+from host import Host, ShellAdapterTransport, TmuxTransport, main as host_main, operation_id, read_composer, same_text
+
+COMPOSER_CLI = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "composer-cli.py"
 
 
 def digest(data: bytes) -> str:
@@ -348,6 +351,152 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual([result["taskId"] for result in restarted.pending("mac-test")], ["task-1"])
         self.assertEqual(restarted.inbox_errors("mac-test"), [])
 
+    @staticmethod
+    def wait_for(predicate, seconds=5):
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if predicate():
+                return True
+            time.sleep(0.05)
+        return False
+
+    @staticmethod
+    def reference_text(assignment_ref):
+        return (f"Open assignment JSON at {assignment_ref}. First write agent-work.accept.v1 atomically to "
+                "acceptRef with schema, hostId, taskId, generation, instanceId, claimId and capability copied "
+                "from the assignment. Then follow briefRef and write agent-work.result.v1 atomically to resultRef.")
+
+    def composer_session(self, mode):
+        """A composer CLI double on its own tmux server; returns its socket, a tmux runner and the submitted log."""
+        if not shutil.which("tmux"):
+            self.skipTest("tmux not installed")
+        socket = f"agent-work-composer-{os.getpid()}-{mode}"
+        submitted = self.root / f"submitted-{mode}.log"
+
+        def tmux_cmd(*args):
+            return subprocess.run(["tmux", "-f", "/dev/null", "-L", socket, *args], capture_output=True, text=True)
+
+        self.addCleanup(tmux_cmd, "kill-server")
+        self.assertEqual(tmux_cmd("new-session", "-d", "-s", "worker-1", "-c", str(self.workspace),
+                                  sys.executable, str(COMPOSER_CLI), str(submitted), mode).returncode, 0)
+        self.assertTrue(self.wait_for(lambda: "❯" in tmux_cmd("capture-pane", "-p", "-t", "=worker-1:").stdout),
+                        "the composer double never painted its prompt")
+        return socket, tmux_cmd, submitted
+
+    def test_tmux_delivery_waits_for_the_text_and_never_types_over_the_operator(self):
+        socket, tmux_cmd, submitted = self.composer_session("0.15")
+        tmux_cmd("send-keys", "-t", "=worker-1:", "-l", "--", "borrador de David")
+        self.assertTrue(self.wait_for(
+            lambda: "borrador de David" in tmux_cmd("capture-pane", "-p", "-t", "=worker-1:").stdout))
+        transport = TmuxTransport("tmux", socket)
+        self.assertEqual(self.apply(self.key, self.operation, transport.deliver).status, "deferred")
+        self.assertEqual(self.host.spool.get(operation_id(self.key))["status"], "deferred")
+        self.assertIsNone(self.host.spool.attempted_at(operation_id(self.key)))
+        screen = tmux_cmd("capture-pane", "-p", "-t", "=worker-1:").stdout
+        self.assertIn("❯ borrador de David", screen)
+        self.assertNotIn("Open assignment", screen, "the host typed over the operator's text")
+        self.assertFalse(submitted.exists(), "Enter reached the operator's text")
+        self.assertEqual(tmux_cmd("show-environment", "-t", "=worker-1", "AGENT_WORK_MANAGED").returncode, 1)
+
+        tmux_cmd("send-keys", "-t", "=worker-1:", "C-u")
+        self.assertTrue(self.wait_for(
+            lambda: "borrador" not in tmux_cmd("capture-pane", "-p", "-t", "=worker-1:").stdout))
+        observation = self.apply(self.key, self.operation, transport.deliver)
+        self.assertEqual(observation.status, "delivered")
+        self.assertTrue(self.wait_for(lambda: self.host.collect("mac-test", self.key)))
+        self.assertEqual(submitted.read_text(), self.reference_text(observation.assignment_ref) + "\n")
+
+    def test_tmux_delivery_withholds_enter_when_the_composer_does_not_show_the_text(self):
+        socket, tmux_cmd, submitted = self.composer_session("no-echo")
+        observation = self.apply(self.key, self.operation, TmuxTransport("tmux", socket).deliver)
+        self.assertEqual(observation.status, "uncertain")
+        self.assertEqual(self.host.spool.get(operation_id(self.key))["status"], "attempted")
+        time.sleep(0.5)
+        self.assertFalse(submitted.exists(), "Enter was pressed on text the composer never showed")
+        retyped = []
+        self.assertEqual(self.apply(self.key, self.operation, lambda *args: retyped.append(args)).status, "uncertain")
+        self.assertEqual(retyped, [], "an uncertain delivery was typed again")
+
+    def test_tmux_delivery_is_deferred_while_the_session_is_unreachable(self):
+        socket, tmux_cmd, _ = self.composer_session("0")
+        tmux_cmd("kill-server")
+        observation = self.apply(self.key, self.operation, TmuxTransport("tmux", socket).deliver)
+        self.assertEqual(observation.status, "deferred")
+        self.assertEqual(self.apply(self.key, self.operation, lambda *_: None).status, "delivered")
+
+    def test_composer_reading_ignores_placeholders_and_ghosts(self):
+        grey, typed, reset = "\x1b[38;2;128;128;128m", "\x1b[38;2;238;238;238m", "\x1b[0m"
+        opencode_bar = "┃  Build · glm-5.1 zai-coding-plan\n"
+        self.assertEqual(read_composer(f"┃  {grey}Ask anything... \"Fix a TODO\"{reset}\n{opencode_bar}", "opencode"),
+                         ("VACIO", ""))
+        self.assertEqual(read_composer(f"┃  {typed}Open assignment{reset}\n┃  {typed}JSON at /x.json{reset}\n"
+                                       f"{opencode_bar}", "opencode"),
+                         ("REAL", "Open assignment\nJSON at /x.json"))
+        self.assertEqual(read_composer("salida vieja\n❯ \x1b[2mTry \"fix lint errors\"\x1b[22m\n\n", "node"),
+                         ("VACIO", ""))
+        self.assertEqual(read_composer("❯ \x1b[2mOpen assignment JSON at /x.json. First write\n"
+                                       "agent-work.accept.v1 atomically\x1b[0m\n", "python3"),
+                         ("VACIO", ""), "a dimmed ghost that wraps stays dim on its next line")
+        self.assertEqual(read_composer("❯ hola\n" + "─" * 20 + "\n", "claude"), ("REAL", "hola"))
+        self.assertEqual(read_composer("Do you want to proceed?\n❯ 1. Yes\n  2. No\n", "claude")[0], "DESCONOCIDO")
+        self.assertEqual(read_composer("Update available\n› Update now\n  2. Skip\n", "codex")[0], "DESCONOCIDO")
+        self.assertEqual(read_composer("❯ Open assignment JSON at /x.json. First write agent-work.accept.v\n"
+                                       "1 atomically to acceptRef\n", "python3"),
+                         ("REAL", "Open assignment JSON at /x.json. First write agent-work.accept.v\n"
+                                  "1 atomically to acceptRef"), "a wrapped line that starts with a digit is no menu")
+        self.assertEqual(read_composer("working...\n", "python3")[0], "DESCONOCIDO")
+        self.assertEqual(read_composer("", "opencode")[0], "DESCONOCIDO")
+        self.assertTrue(same_text("Open assignment\nJSON at /x.json", "Open assignment JSON at /x.json"))
+        self.assertFalse(same_text("Open assignment JSON at /y.json", "Open assignment JSON at /x.json"))
+
+    def uncertain_adapter_delivery(self):
+        def lost(*_):
+            raise RuntimeError("the keys may have reached the pane")
+
+        operation = replace(self.operation, adapter_id="codex")
+        self.assertEqual(self.apply(self.key, operation, lost).status, "uncertain")
+        return operation, operation_id(self.key)
+
+    def test_operator_verdict_settles_an_uncertain_delivery_without_typing_again(self):
+        operation, op_id = self.uncertain_adapter_delivery()
+        attempted = self.host.spool.attempted_at(op_id)
+        self.assertEqual(len(self.host.settle_deliveries("mac-test", now=attempted + 60, deadline_seconds=30)), 1)
+        self.assertEqual(self.host.spool.get(op_id)["status"], "uncertain")
+        state = str(self.root / "host")
+        self.assertEqual(uncertain_operations([state]), ["task-1"])
+
+        with self.assertRaisesRegex(ValueError, "verdict"):
+            host_main(["resolve-delivery", "mac-test", state, "task-1", "2", "retype", "no"])
+        with self.assertRaisesRegex(ValueError, "reason"):
+            host_main(["resolve-delivery", "mac-test", state, "task-1", "2", "abandoned", " "])
+        reason = "el pane no muestra la referencia; se cancela en R"
+        self.assertEqual(host_main(["resolve-delivery", "mac-test", state, "task-1", "2", "abandoned", reason]),
+                         "abandoned")
+        self.assertEqual(self.host.spool.get(op_id)["status"], "abandoned")
+        self.assertEqual(uncertain_operations([state]), [], "a settled delivery still blocks the cutover")
+        with self.host.spool.connection() as db:
+            self.assertEqual([tuple(row) for row in db.execute(
+                "SELECT previous_status, verdict, reason FROM delivery_verdicts WHERE operation_id=?", (op_id,))],
+                [("uncertain", "abandoned", reason)])
+        retyped = []
+        self.assertEqual(self.apply(self.key, operation, lambda *args: retyped.append(args)).status, "abandoned")
+        self.assertEqual(retyped, [], "an abandoned delivery was typed again")
+        self.assertEqual(self.host.settle_deliveries("mac-test", now=attempted + 9999, deadline_seconds=30), [])
+        with self.assertRaisesRegex(ValueError, "not attempted or uncertain"):
+            self.host.resolve_delivery("mac-test", self.key, "delivered", "otra vez")
+
+    def test_operator_verdict_delivered_starts_the_silent_failure_clock(self):
+        _, op_id = self.uncertain_adapter_delivery()
+        self.assertEqual(uncertain_operations([str(self.root / "host")]), ["task-1"])
+        self.assertEqual(self.host.resolve_delivery("mac-test", self.key, "delivered",
+                                                    "el pane muestra al CLI trabajando en la referencia"), "delivered")
+        self.assertEqual(self.host.spool.get(op_id)["status"], "delivered")
+        self.assertEqual(uncertain_operations([str(self.root / "host")]), [])
+        detected = self.host.detect_silent_failures("mac-test", lambda key: False,
+                                                    now=self.host.spool.delivered_at(op_id) + 60,
+                                                    deadline_seconds=30)
+        self.assertEqual(detected, ["host:2:deadline-missed:deadline"])
+
     def test_host_receipts_tmux_cli_without_hooks(self):
         if not shutil.which("tmux"):
             self.skipTest("tmux not installed")
@@ -371,9 +520,11 @@ class HostReceipts(unittest.TestCase):
             "print('FAKE-RESULT-WRITTEN',flush=True)\n"
             "sys.stdin.readline()\n"
         )
+        submitted = self.root / "worker-1-submitted.log"
         try:
             self.assertEqual(tmux_cmd("new-session", "-d", "-s", "worker-1", "-c", str(self.workspace),
-                                      sys.executable, str(cli)).returncode, 0)
+                                      sys.executable, str(COMPOSER_CLI), str(submitted), "0.15").returncode, 0)
+            self.assertTrue(self.wait_for(lambda: "❯" in tmux_cmd("capture-pane", "-p", "-t", "=worker-1:").stdout))
             transport = TmuxTransport("tmux", socket)
             observation = self.apply(self.key, self.operation, transport.deliver)
             self.assertEqual(observation.status, "delivered")
@@ -385,6 +536,8 @@ class HostReceipts(unittest.TestCase):
             self.assertEqual(len(self.host.pending("mac-test")), 1, tmux_cmd("capture-pane", "-p", "-t", "=worker-1:").stdout)
             self.assertEqual(self.host.pending("mac-test")[0]["typedPayload"],
                              {"verdict": "approved", "evidenceRef": "evidence.txt"})
+            self.assertEqual(submitted.read_text(), self.reference_text(observation.assignment_ref) + "\n",
+                             "the CLI did not get exactly the reference, once")
 
             self.assertEqual(tmux_cmd("new-session", "-d", "-s", "worker-2", "-c", str(self.workspace),
                                       sys.executable, str(cli)).returncode, 0)

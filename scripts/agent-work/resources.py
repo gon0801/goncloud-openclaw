@@ -22,6 +22,7 @@ PS_ENV = {"TZ": "UTC", "LC_ALL": "C"}
 BOOTTIME_RE = re.compile(r"sec\s*=\s*(\d+),\s*usec\s*=\s*(\d+)")
 BOOT_ID_RE = re.compile(r"\d+\.\d{6}")
 LINUX_BOOT_ID_RE = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
+TMUX_TIMEOUT_SECONDS = 5.0
 
 
 def _ps(*args: str) -> subprocess.CompletedProcess:
@@ -311,11 +312,13 @@ class ResourceManager:
 class TmuxBackend:
     NONCE_OPTION = "@agent_work_resource_nonce"
 
-    def __init__(self, tmux_bin: str, socket: str, boot_id: str | None = None):
+    def __init__(self, tmux_bin: str, socket: str, boot_id: str | None = None, *,
+                 timeout: float = TMUX_TIMEOUT_SECONDS):
         if not socket or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in socket):
             raise ValueError("an explicit isolated tmux socket is required")
         self.tmux_bin = tmux_bin
         self.socket = socket
+        self.timeout = timeout
         if boot_id:
             self.boot_id = boot_id
         elif sys.platform == "darwin":
@@ -329,7 +332,12 @@ class TmuxBackend:
             raise RuntimeError("host platform has no verified boot identity")
 
     def _tmux(self, *args: str) -> subprocess.CompletedProcess:
-        return subprocess.run([self.tmux_bin, "-L", self.socket, *args], capture_output=True, text=True)
+        # A hung tmux is an unreachable host (OSError), never a missing session.
+        try:
+            return subprocess.run([self.tmux_bin, "-L", self.socket, *args], capture_output=True,
+                                  encoding="utf-8", errors="replace", timeout=self.timeout)
+        except subprocess.TimeoutExpired as exc:
+            raise OSError(f"tmux {args[0]} timed out") from exc
 
     @staticmethod
     def _start(pid: str) -> str:
@@ -408,9 +416,7 @@ class TmuxBackend:
     def capture(self, identity: dict) -> str | None:
         if self.observe(identity["sessionName"]) != identity:
             return None
-        result = subprocess.run(
-            [self.tmux_bin, "-L", self.socket, "capture-pane", "-p", "-t", identity["paneId"]],
-            capture_output=True, encoding="utf-8", errors="replace")
+        result = self._tmux("capture-pane", "-p", "-t", identity["paneId"])
         if result.returncode or self.observe(identity["sessionName"]) != identity:
             return None
         return result.stdout

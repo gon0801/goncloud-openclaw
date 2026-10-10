@@ -1101,6 +1101,25 @@ class ResourceTests(unittest.TestCase):
             restarted.reserve(OperationKey("host-test", "replacement", 1, "instance-new"),
                               "replacement", "TaskCreated")
 
+    def test_resource_close_hung_tmux_times_out_as_host_unavailable(self):
+        # B4-37: a tmux client that never answers is an unreachable host, never a missing session.
+        hung = Path(self.tmp.name) / "tmux-hung"
+        hung.write_text("#!/bin/sh\nexec sleep 30\n")
+        hung.chmod(0o700)
+        backend = TmuxBackend(str(hung), "sock-hung", boot_id="1.000001", timeout=0.5)
+        manager = ResourceManager(self.host.spool, "host-test", backend, capacity=1)
+        manager.reserve(self.key, "worker-1", "UserAdopted")
+        manager.begin_launch(self.key)
+        started = time.monotonic()
+        attached = manager.attach(self.key)
+        closed = manager.close(self.key, {"kind": "cancel", "receipt": "c1"})
+        self.assertLess(time.monotonic() - started, 5, "a hung tmux froze the host loop")
+        self.assertEqual((attached.state, attached.reason), ("CleanupPending", "host unavailable"))
+        self.assertEqual((closed.state, closed.reason), ("CleanupPending", "host unavailable"))
+        self.assertFalse(manager.session_gone(self.key))
+        with self.assertRaisesRegex(ValueError, "capacity"):
+            manager.reserve(OperationKey("host-test", "replacement", 1, "instance-new"), "replacement", "TaskCreated")
+
     def test_resource_close_session_gone_with_a_surviving_descendant_still_holds(self):
         # A13: after a failed stop, a vanished session is not absence while a descendant lives.
         survivor = "  502 4242     1 Sat Oct  3 09:00:00 2026 /opt/homebrew/bin/python3 -c x SURV\n"
