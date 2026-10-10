@@ -1,0 +1,191 @@
+[plugins/doctor-contracts] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`.
+[plugins/doctor-contracts] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`.
+[plugins/doctor-contracts] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`.
+[plugins/doctor-contracts] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`.
+│
+◇  Doctor warnings ────────────────────────────────────────────────────────╮
+│                                                                          │
+│  - Plugin "brave" is unavailable: configured plugin payload              │
+│    verification failed (missing-package-dir): Install dir is missing:    │
+│    <plugin-install> Run `openclaw doctor --fix`.                         │
+│  - Plugin "clawmetry" is unavailable: configured plugin payload          │
+│    verification failed (missing-package-dir): Install dir is missing:    │
+│    <plugin-install> Run `openclaw doctor --fix`.                         │
+│  - Plugin "codex" is unavailable: configured plugin payload              │
+│    verification failed (missing-package-dir): Install dir is missing:    │
+│    <plugin-install> Run `openclaw doctor --fix`.                         │
+│  - Plugin "deepseek" is unavailable: configured plugin payload           │
+│    verification failed (missing-package-dir): Install dir is missing:    │
+│    <plugin-install> Run `openclaw doctor --fix`.                         │
+│  - Plugin "kimi" is unavailable: configured plugin payload verification  │
+│    failed (missing-package-dir): Install dir is missing:                 │
+│    <plugin-install> Run `openclaw doctor --fix`.                         │
+│  - Plugin "meta" is unavailable: configured plugin payload verification  │
+│    failed (missing-package-dir): Install dir is missing:                 │
+│    <plugin-install> Run `openclaw doctor --fix`.                         │
+│  - Plugin "moonshot" is unavailable: configured plugin payload           │
+│    verification failed (missing-package-dir): Install dir is missing:    │
+│    <plugin-install> Run `openclaw doctor --fix`.                         │
+│  - Plugin "openclaw-codex-watchdog" is unavailable: configured plugin    │
+│    payload verification failed (missing-package-dir): Install dir is     │
+│    missing: <plugin-install> Run `openclaw doctor --fix`.                │
+│  - Plugin "opencode" is unavailable: configured plugin payload           │
+│    verification failed (missing-package-dir): Install dir is missing:    │
+│    <plugin-install> Run `openclaw doctor --fix`.                         │
+│  - Plugin "shopify-ai-toolkit" is unavailable: configured plugin         │
+│    payload verification failed (missing-package-dir): Install dir is     │
+│    missing: <plugin-install> Run `openclaw doctor --fix`.                │
+│  - Plugin "tavily" is unavailable: configured plugin payload             │
+│    verification failed (missing-package-dir): Install dir is missing:    │
+│    <plugin-install> Run `openclaw doctor --fix`.                         │
+│  - Plugin "zai" is unavailable: configured plugin payload verification   │
+│    failed (missing-package-dir): Install dir is missing:                 │
+│    <plugin-install> Run `openclaw doctor --fix`.                         │
+│                                                                          │
+├──────────────────────────────────────────────────────────────────────────╯
+[state-migrations] Startup migration warnings; continuing with degraded state.
+- Plugin "brave": Install dir is missing: /Users/gon/.openclaw/extensions/brave. Run `openclaw update repair`.\n- Plugin "clawmetry": Install dir is missing: /Users/gon/.openclaw/extensions/clawmetry. Run `openclaw update repair`.\n- Plugin "codex": Install dir is missing: /Users/gon/.openclaw/npm/projects/openclaw-codex-8902d781d4__openclaw-generation__g-16ba66befdbdf562/node_modules/@openclaw/codex. Run `openclaw update repair`.\n- Plugin "deepseek": Install dir is missing: /Users/gon/.openclaw/npm/projects/openclaw-deepseek-provider-2481ed984b__openclaw-generation__g-205f69d2d5062d1f/node_modules/@openclaw/deepseek-provider. Run `openclaw update repair`.\n- Plugin "kimi": Install dir is missing: /Users/gon/.openclaw/npm/projects/openclaw-kimi-provider-9241ab9f01__openclaw-generation__g-8b7f2fc72293a81c/node_modules/@openclaw/kimi-provider. Run `openclaw update repair`.\n- Plugin "meta": Install dir is missing: /Users/gon/.openclaw/npm/projects/openclaw-meta-provider-a7e0aabe51__openclaw-generation__g-9aa3b0604cca33c7/node_modules/@openclaw/meta-provider. Run `openclaw update repair`.\n- Plugin "moonshot": Install dir is missing: /Users/gon/.openclaw/npm/projects/openclaw-moonshot-provider-4617b6c201/node_modules/@openclaw/moonshot-provider. Run `openclaw update repair`.\n- Plugin "openclaw-codex-watchdog": Install dir is missing: /Users/gon/.openclaw/git/git-858bacd3a1bd6df8/repo. Run `openclaw update repair`.\n- Plugin "opencode": Install dir is missing: /Users/gon/.openclaw/npm/projects/openclaw-opencode-provider-641bb4636d__openclaw-generation__g-b3d815899405e96d/node_modules/@openclaw/opencode-provider. Run `openclaw update repair`.\n- Plugin "shopify-ai-toolkit": Install dir is missing: /Users/gon/.openclaw/extensions/shopify-ai-toolkit. Run `openclaw update repair`.\n- Plugin "tavily": Install dir is missing: /Users/gon/.openclaw/npm/projects/openclaw-tavily-plugin-8ad843922d__openclaw-generation__g-ab3acf1e0fe5bc13/node_modules/@openclaw/tavily-plugin. Run `openclaw update repair`.\n- Plugin "zai": Install dir is missing: /Users/gon/.openclaw/extensions/zai. Run `openclaw update repair`.
+Run "openclaw doctor --fix" against the same state/config, then restart the gateway.
+2026-10-09T16:45:53.347-07:00 [gateway] loading configuration…
+2026-10-09T16:45:53.365-07:00 [gateway] resolving authentication…
+2026-10-09T16:45:53.367-07:00 [gateway] starting...
+2026-10-09T16:45:53.815-07:00 [gateway] shutdown budget at startup: drain=315000ms shutdown=325000ms reserve=10000ms exitMargin=5000ms; source=Gateway stop policy=330000ms
+2026-10-09T16:45:55.562-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=769 opsServed=2
+2026-10-09T16:45:55.636-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=618 opsServed=2
+2026-10-09T16:45:56.179-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=458 opsServed=2
+2026-10-09T16:45:56.560-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=826 opsServed=2
+2026-10-09T16:45:56.973-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=785 opsServed=2
+2026-10-09T16:45:57.387-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=819 opsServed=2
+2026-10-09T16:45:57.793-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=813 opsServed=2
+2026-10-09T16:45:58.216-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=821 opsServed=2
+2026-10-09T16:45:58.640-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=841 opsServed=2
+2026-10-09T16:45:59.064-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=841 opsServed=2
+2026-10-09T16:45:59.493-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=847 opsServed=1
+2026-10-09T16:45:59.918-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=847 opsServed=2
+2026-10-09T16:46:00.329-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=829 opsServed=1
+2026-10-09T16:46:00.752-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=826 opsServed=2
+2026-10-09T16:46:01.164-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=828 opsServed=1
+2026-10-09T16:46:01.571-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=809 opsServed=1
+2026-10-09T16:46:01.979-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=807 opsServed=1
+2026-10-09T16:46:02.391-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=814 opsServed=1
+2026-10-09T16:46:02.813-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=828 opsServed=1
+2026-10-09T16:46:02.881-07:00 [session-sqlite] reclamation worker retired reason=exclusive-handoff kind=canonical-validation ageMs=484 opsServed=1
+2026-10-09T16:46:02.886-07:00 [gateway] session: startup subagents: 0 interrupted, 1 retained by run/task owners
+2026-10-09T16:46:03.117-07:00 [gateway] starting HTTP server...
+2026-10-09T16:46:04.390-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.390-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.390-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.391-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.391-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.391-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.391-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.391-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.391-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.391-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.391-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.391-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.392-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.392-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.392-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.392-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.392-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.392-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.392-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.392-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.392-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.392-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.393-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.393-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.393-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.393-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.393-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.393-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.393-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.393-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.393-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.393-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.394-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.394-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.394-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.394-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.394-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate)
+2026-10-09T16:46:04.394-07:00 [gateway] [plugins] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`. (source=/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/tablero-runbook)
+2026-10-09T16:46:04.421-07:00 [gateway] agent model: opencode-go-resp/muse-spark-1.3-contributor (thinking=medium, fast=off)
+2026-10-09T16:46:04.421-07:00 [gateway] http server listening (16 plugins: anthropic, bonjour, browser, canvas, cua-computer, device-pair, file-transfer, geolocation, github, linux-node, memory-core, ollama, openai, opencode-go, talk-voice, xai; 10.6s)
+2026-10-09T16:46:04.421-07:00 [gateway] log file: /tmp/openclaw/openclaw-2026-10-09.log
+2026-10-09T16:46:04.421-07:00 [gateway] native runtime: {"pid":16360,"platform":"darwin","arch":"arm64","node":"24.19.0","v8":"13.6.233.17-node.51","uv":"1.52.1","openssl":"3.5.7","sqlite":"3.53.3"}
+2026-10-09T16:46:04.421-07:00 [gateway] worker startup state: {"workerCount":6,"workerLifecycle":[{"script":"other","started":2,"retired":[{"reason":"exit","count":2}]},{"script":"sqlite-store.worker.js","started":1,"retired":[]},{"script":"openclaw-state-lease-heartbeat.worker.js","started":1,"retired":[]},{"script":"openclaw-state-read.worker.js","started":2,"retired":[]},{"script":"session-accessor.sqlite-archive.worker.js","started":2,"retired":[{"reason":"closed","count":2}]},{"script":"session-transcript.worker.js","started":2,"retired":[]}],"compute":{"limit":17,"active":0,"waitingPools":0,"pendingTasks":0,"pendingBytes":0}}
+2026-10-09T16:46:04.427-07:00 [gateway] security warning: dangerous config flags enabled: browser.ssrfPolicy.dangerouslyAllowPrivateNetwork=true. Run `openclaw security audit`.
+2026-10-09T16:46:04.448-07:00 [gateway] starting channels and sidecars...
+2026-10-09T16:46:04.463-07:00 [hooks] loaded 1 internal hook handler
+2026-10-09T16:46:05.334-07:00 [gateway/channels] skipping channel start (OPENCLAW_SKIP_CHANNELS=1 or OPENCLAW_SKIP_PROVIDERS=1)
+2026-10-09T16:46:05.372-07:00 [plugins] bonjour: advertised gateway fqdn=David’s MacBook Pro (OpenClaw)._openclaw-gw._tcp.local. host=Mac.local. port=18799 state=announcing
+2026-10-09T16:46:05.417-07:00 [gateway] startup outcomes: internal-hooks=loaded; internal-startup-hook=scheduled; gateway-start-hooks=scheduled; gmail-watcher=skipped (hooks-disabled); gmail-model=skipped (not-configured)
+2026-10-09T16:46:05.418-07:00 [skill-workshop] scheduled skill collection reviews are disabled because the cron scheduler is disabled; enable cron and restart the gateway
+2026-10-09T16:46:05.419-07:00 [heartbeat] disabled
+2026-10-09T16:46:05.459-07:00 [gateway] ready
+2026-10-09T16:46:06.555-07:00 [gateway] update available (latest): v2026.9.9 (current v2026.9.7). Run: openclaw update
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/agents/main/agent/models.json
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/agents/operaciones/agent/models.json
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/agents/ingenieria/agent/models.json
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/agents/implementer/agent/models.json
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/agents/reviewer/agent/models.json
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/agents/adversary/agent/models.json
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/agents/verifier/agent/models.json
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/agents/scout/agent/models.json
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwF…dels.json
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/agents/pers/agent/models.json
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/agents/meli/agent/models.json
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/agents/mail/agent/models.json
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwF…dels.json
+2026-10-09T16:46:10.460-07:00 [agents/subagent-registry] subagent suspended delivery backlog reached warning threshold suspendedCount=51 warningThreshold=25
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/agents/odoo/agent/models.json
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/agents/arras/agent/models.json
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/agents/gonserver/agent/models.json
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/agents/skillverif/agent/models.json
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/agents/tinkabot/agent/models.json
+[agents/model-registry] model catalog load issue: Failed to load models.json: Provider zai, model glm-5.3: no "api" specified. Set at provider or model level.
+
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwF…dels.json
+2026-10-09T16:46:36.125-07:00 [admission] closed: stop (SIGTERM)
+2026-10-09T16:46:36.126-07:00 [gateway] received SIGTERM; shutting down
+2026-10-09T16:46:36.126-07:00 [gateway] shutdown budget at shutdown: drain=315000ms shutdown=325000ms reserve=10000ms exitMargin=5000ms; source=Gateway stop policy=330000ms
+2026-10-09T16:46:36.130-07:00 [gateway] active-work drain settled; beginning server close
+2026-10-09T16:46:36.149-07:00 [gmail-watcher] gmail watcher stopped
+2026-10-09T16:46:36.445-07:00 [shutdown] completed cleanly in 314ms

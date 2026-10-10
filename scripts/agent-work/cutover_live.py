@@ -6,6 +6,7 @@ Usage: cutover_live.py prepare|inspect|apply --state <file> [--entry <entry.json
 The Gateway is reached with `openclaw gateway call` (OPENCLAW_BIN, default ~/.openclaw/bin/openclaw).
 """
 import argparse
+from contextlib import closing
 import json
 import os
 import sqlite3
@@ -17,12 +18,20 @@ from pathlib import Path
 
 SCHEMA = "agent-work-cutover.v2"
 LIMITS = Path(__file__).resolve().parents[2] / "docs/evidence/agent-work/limits.json"
+# R's ManagedTaskBudgetProfileSchema; a profile missing one of them is not a finite profile.
+PROFILE_FIELDS = ("maxConcurrentTasks", "maxDepth", "maxChildren", "maxModelCalls", "maxInputTokens",
+                  "maxOutputTokens", "maxCacheReadTokens", "maxContextTokens", "maxTreeTokens",
+                  "maxAutomaticRecoveryCalls")
 # A drained cron must not start again before it is disabled: its next run stays this far away.
 NEXT_RUN_MARGIN_MS = 1000
 
 
 class CutoverRefused(RuntimeError):
     pass
+
+
+class RollbackFailed(CutoverRefused):
+    """The rollback stopped; the candidate keeps running with admission frozen and results kept."""
 
 
 class GatewayUnavailable(CutoverRefused):
@@ -57,7 +66,7 @@ def uncertain_operations(spool_dirs):
         database = Path(directory) / "host.sqlite"
         if not database.exists():
             continue
-        with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as db:
+        with closing(sqlite3.connect(f"file:{database}?mode=ro", uri=True)) as db:
             for operation_json, in db.execute(
                     "SELECT operation_json FROM operations WHERE status IN ('attempted','uncertain')"):
                 found.append(json.loads(operation_json)["taskId"])
@@ -103,7 +112,8 @@ def fence_problems(entry, seen, now_ms):
 def native_patch(entry, config, limits):
     """The managedTasks patch that opens the entry, or why it cannot open; checked before any write."""
     values = limits["productionProfile"]["values"]
-    unknown = sorted(field for field, value in values.items() if value is None)
+    unknown = sorted({field for field, value in values.items() if value is None}
+                     | {field for field in PROFILE_FIELDS if field not in values})
     if unknown:
         raise CutoverRefused("production limits are unknown: " + ", ".join(unknown))
     managed = config["resolved"].get("managedTasks", {})
@@ -204,13 +214,116 @@ def finish_transfer(path, state, client, limits, wait_seconds, sleep):
     return "transferred"
 
 
+def snapshot_problems(snapshot, previous_schema):
+    """A rollback snapshot is the pre-install photo: databases the previous binary reads, and its config."""
+    snapshot = Path(snapshot)
+    problems = []
+    database = snapshot / "openclaw.sqlite"
+    if not database.is_file():
+        return [f"snapshot {snapshot} has no openclaw.sqlite"]
+    try:
+        with closing(sqlite3.connect(f"file:{database}?immutable=1", uri=True)) as db:
+            version = db.execute("PRAGMA user_version").fetchone()[0]
+            check = db.execute("PRAGMA quick_check").fetchone()[0]
+    except sqlite3.DatabaseError as error:
+        return [f"snapshot database is unreadable: {error}"]
+    if version != previous_schema:
+        problems.append(f"snapshot state schema is {version}, the previous binary reads {previous_schema}")
+    if check != "ok":
+        problems.append(f"snapshot database fails quick_check: {check}")
+    config = snapshot / "openclaw.json"
+    if not config.is_file():
+        problems.append(f"snapshot {snapshot} has no openclaw.json")
+    elif "managedTasks" in json.loads(config.read_text()):
+        problems.append("snapshot config already has managedTasks; the previous binary rejects it")
+    return problems
+
+
+def freeze(client, wait_seconds=120, sleep=time.sleep):
+    """Close native admission; the managedTasks change restarts the Gateway, so wait for it."""
+    deadline = time.monotonic() + wait_seconds
+    while True:
+        try:
+            config = client.call("config.get", {})
+            if not config["resolved"].get("managedTasks", {}).get("enabled"):
+                return
+            client.call("config.patch", {"raw": json.dumps({"managedTasks": {"enabled": False}}),
+                                         "baseHash": config["hash"]})
+        except GatewayUnavailable:
+            pass
+        if time.monotonic() >= deadline:
+            raise RollbackFailed("admission did not freeze")
+        sleep(0.5)
+
+
+def suspend_legacy(client, state):
+    """The snapshot predates the cutover, so it holds the old crons enabled: suspend them again."""
+    jobs = {job["id"]: job for job in client.call("cron.list", {"includeDisabled": True})["jobs"]}
+    for job_id in state["suspended"]:
+        if jobs.get(job_id, {}).get("enabled"):
+            client.call("cron.update", {"id": job_id, "patch": {"enabled": False}})
+    jobs = {job["id"]: job for job in client.call("cron.list", {"includeDisabled": True})["jobs"]}
+    revived = [state["suspended"][job_id]["name"] for job_id in state["suspended"]
+               if jobs.get(job_id, {}).get("enabled")]
+    if revived:
+        raise RollbackFailed(f"old crons came back enabled: {', '.join(revived)}")
+
+
+def rollback(path, host, client_for, candidate, previous, snapshot, previous_schema=19):
+    """Back to the previous binary and config. The previous binary cannot read the migrated schema, so
+    the pre-install snapshot is restored; the entry's old crons stay suspended (never re-enabled here).
+    Any failure keeps the candidate running with admission frozen; host result spools are never touched."""
+    path = Path(path)
+    state = json.loads(path.read_text())
+    progress = state.setdefault("rollback", {"phase": "start"})
+    problems = snapshot_problems(snapshot, previous_schema)
+    if progress["phase"] == "start":
+        if problems:
+            freeze(client_for())
+            raise RollbackFailed("; ".join(problems) + "; the candidate keeps running with admission frozen")
+        freeze(client_for())
+        progress["phase"] = "frozen"
+        write_state(path, state)
+    if progress["phase"] == "frozen":
+        host.stop()
+        host.restore(snapshot)
+        progress["phase"] = "restored"
+        write_state(path, state)
+    if progress["phase"] == "restored":
+        try:
+            host.start(previous, skip_cron=True)
+        except RuntimeError as error:
+            # The restored config has no managedTasks: the candidate reopens the snapshot frozen. The
+            # snapshot predates the cutover, so its old crons are enabled: suspend them here too.
+            host.start(candidate, skip_cron=True)
+            suspend_legacy(client_for(), state)
+            progress["phase"] = "failed-candidate-frozen"
+            write_state(path, state)
+            raise RollbackFailed(f"previous binary did not start ({str(error).splitlines()[0]}); "
+                                 "the candidate runs on the restored snapshot with admission frozen")
+        suspend_legacy(client_for(), state)
+        host.stop()
+        host.start(previous, skip_cron=False)
+        suspend_legacy(client_for(), state)
+        state["owner"], state["generation"] = "legacy", state["generation"] + 1
+        progress["phase"] = "done"
+        write_state(path, state)
+        return "rolled-back; old crons stay suspended"
+    if progress["phase"] == "done":
+        return "already rolled back"
+    raise RollbackFailed(f"rollback stopped at {progress['phase']}; inspect before retrying")
+
+
 class CliClient:
-    def __init__(self, binary):
-        self.binary = binary
+    def __init__(self, binary, timeout=120):
+        self.binary, self.timeout = binary, timeout
 
     def call(self, method, params):
-        run = subprocess.run([self.binary, "gateway", "call", method, "--params", json.dumps(params), "--json"],
-                             capture_output=True, text=True, timeout=120)
+        try:
+            run = subprocess.run([self.binary, "gateway", "call", method, "--params", json.dumps(params), "--json"],
+                                 capture_output=True, text=True, timeout=self.timeout)
+        except subprocess.TimeoutExpired:
+            raise GatewayUnavailable(f"{method}: no answer in {self.timeout} s") from None
         if run.returncode != 0:
             text = run.stderr.strip() or run.stdout.strip()
             try:

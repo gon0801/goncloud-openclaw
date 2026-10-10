@@ -1,0 +1,18 @@
+F
+======================================================================
+FAIL: test_a_rollback_interrupted_before_stopping_leaves_the_candidate_frozen (__main__.CutoverRollbackE2E.test_a_rollback_interrupted_before_stopping_leaves_the_candidate_frozen)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_rollback_e2e.py", line 156, in test_a_rollback_interrupted_before_stopping_leaves_the_candidate_frozen
+    self.assert_candidate_frozen()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_rollback_e2e.py", line 110, in assert_candidate_frozen
+    self.assertFalse(managed.get("enabled"), "admission must stay frozen after a failed rollback")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false : admission must stay frozen after a failed rollback
+
+----------------------------------------------------------------------
+Ran 1 test in 57.994s
+
+FAILED (failures=1)
+rc=1

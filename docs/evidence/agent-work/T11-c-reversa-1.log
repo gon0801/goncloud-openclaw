@@ -1,0 +1,162 @@
+test_a_bad_snapshot_keeps_the_candidate_running_with_admission_frozen (__main__.CutoverRollbackE2E.test_a_bad_snapshot_keeps_the_candidate_running_with_admission_frozen) ... /opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py:1139: ResourceWarning: subprocess 31370 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10a0f3d30>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10a0f3c40>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10a0f3e20>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py:1139: ResourceWarning: subprocess 34158 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py:832: ResourceWarning: unclosed file <_io.TextIOWrapper name=4 encoding='UTF-8'>
+  _cleanup()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_previous_binary_that_does_not_start_leaves_the_candidate_frozen_on_the_snapshot (__main__.CutoverRollbackE2E.test_a_previous_binary_that_does_not_start_leaves_the_candidate_frozen_on_the_snapshot) ... /opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py:1139: ResourceWarning: subprocess 34311 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10a0f3d30>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10a0f1c60>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10a0f3e20>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10a0f3c40>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py:1139: ResourceWarning: subprocess 37861 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py:1139: ResourceWarning: subprocess 39365 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py:832: ResourceWarning: unclosed file <_io.TextIOWrapper name=3 encoding='UTF-8'>
+  _cleanup()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ERROR
+test_an_interrupted_rollback_resumes_without_reviving_the_old_cron (__main__.CutoverRollbackE2E.test_an_interrupted_rollback_resumes_without_reviving_the_old_cron) ... /opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py:1139: ResourceWarning: subprocess 39676 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10a0f3d30>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10a0f3c40>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10a0f3e20>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py:1139: ResourceWarning: subprocess 42826 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ERROR
+test_rollback_returns_the_previous_binary_on_the_snapshot_and_keeps_the_old_cron_suspended (__main__.CutoverRollbackE2E.test_rollback_returns_the_previous_binary_on_the_snapshot_and_keeps_the_old_cron_suspended) ... /opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py:1139: ResourceWarning: subprocess 45231 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10a0f3c40>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10a0f3e20>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10a0f3d30>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py:1139: ResourceWarning: subprocess 49911 is still running
+  _warn("subprocess %s is still running" % self.pid,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ERROR
+
+======================================================================
+ERROR: test_a_previous_binary_that_does_not_start_leaves_the_candidate_frozen_on_the_snapshot (__main__.CutoverRollbackE2E.test_a_previous_binary_that_does_not_start_leaves_the_candidate_frozen_on_the_snapshot)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_rollback_e2e.py", line 134, in test_a_previous_binary_that_does_not_start_leaves_the_candidate_frozen_on_the_snapshot
+    self.assertFalse(self.cron_enabled())
+                     ~~~~~~~~~~~~~~~~~^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_rollback_e2e.py", line 89, in cron_enabled
+    return next(job["enabled"] for job in self.client.call("cron.list", {"includeDisabled": True})["jobs"]
+                if job["id"] == self.job)
+StopIteration
+
+======================================================================
+ERROR: test_an_interrupted_rollback_resumes_without_reviving_the_old_cron (__main__.CutoverRollbackE2E.test_an_interrupted_rollback_resumes_without_reviving_the_old_cron)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_rollback_e2e.py", line 142, in test_an_interrupted_rollback_resumes_without_reviving_the_old_cron
+    self.assertEqual(self.rollback(), "rolled-back; old crons stay suspended")
+                     ~~~~~~~~~~~~~^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_rollback_e2e.py", line 100, in rollback
+    return cutover_live.rollback(self.state, host or Rollback(self.host), lambda: self.client,
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                 self.candidate, previous or self.previous, snapshot or self.copy)
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/agent-work/cutover_live.py", line 269, in rollback
+    suspend_legacy(client_for(), state)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/agent-work/cutover_live.py", line 231, in suspend_legacy
+    client.call("cron.update", {"id": job_id, "patch": {"enabled": False}})
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/agent-work/cutover_live.py", line 297, in call
+    raise (GatewayUnavailable if retryable else CutoverRefused)(f"{method}: {text}")
+cutover_live.CutoverRefused: cron.update: {
+  "ok": false,
+  "error": {
+    "type": "gateway_request_error",
+    "code": "INVALID_REQUEST",
+    "message": "Automation not found: 7cd3efe3-bd66-4791-b366-12d336d59e20. List automations and retry with a current job id. For cross-session management, use a fresh authenticated configured channel owner or Control UI administrator turn or the Automations page.",
+    "details": {
+      "code": "CRON_JOB_NOT_FOUND",
+      "jobId": "7cd3efe3-bd66-4791-b366-12d336d59e20"
+    },
+    "retryable": false
+  }
+}
+
+======================================================================
+ERROR: test_rollback_returns_the_previous_binary_on_the_snapshot_and_keeps_the_old_cron_suspended (__main__.CutoverRollbackE2E.test_rollback_returns_the_previous_binary_on_the_snapshot_and_keeps_the_old_cron_suspended)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_rollback_e2e.py", line 104, in test_rollback_returns_the_previous_binary_on_the_snapshot_and_keeps_the_old_cron_suspended
+    self.assertEqual(self.rollback(), "rolled-back; old crons stay suspended")
+                     ~~~~~~~~~~~~~^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_rollback_e2e.py", line 100, in rollback
+    return cutover_live.rollback(self.state, host or Rollback(self.host), lambda: self.client,
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                 self.candidate, previous or self.previous, snapshot or self.copy)
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/agent-work/cutover_live.py", line 269, in rollback
+    suspend_legacy(client_for(), state)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/agent-work/cutover_live.py", line 231, in suspend_legacy
+    client.call("cron.update", {"id": job_id, "patch": {"enabled": False}})
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/agent-work/cutover_live.py", line 297, in call
+    raise (GatewayUnavailable if retryable else CutoverRefused)(f"{method}: {text}")
+cutover_live.CutoverRefused: cron.update: {
+  "ok": false,
+  "error": {
+    "type": "gateway_request_error",
+    "code": "INVALID_REQUEST",
+    "message": "Automation not found: de9cb308-91c1-46a8-b9cb-7dd3767166dd. List automations and retry with a current job id. For cross-session management, use a fresh authenticated configured channel owner or Control UI administrator turn or the Automations page.",
+    "details": {
+      "code": "CRON_JOB_NOT_FOUND",
+      "jobId": "de9cb308-91c1-46a8-b9cb-7dd3767166dd"
+    },
+    "retryable": false
+  }
+}
+
+----------------------------------------------------------------------
+Ran 4 tests in 264.792s
+
+FAILED (errors=3)
+rc=1 265s

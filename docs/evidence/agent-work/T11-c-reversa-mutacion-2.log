@@ -1,0 +1,53 @@
+E
+======================================================================
+ERROR: test_a_bad_snapshot_keeps_the_candidate_running_with_admission_frozen (__main__.CutoverRollbackE2E.test_a_bad_snapshot_keeps_the_candidate_running_with_admission_frozen)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/agent-work/cutover_live.py", line 264, in rollback
+    host.start(previous, skip_cron=True)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_rollback_e2e.py", line 54, in start
+    return self.host.start(prefix, skip_cron=skip_cron)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/agent-work/runtime/ensayo_host.py", line 136, in start
+    raise RuntimeError(f"gateway of {prefix} did not start:\n{tail}")
+RuntimeError: gateway of /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.YYmH38Qa80 did not start:
+[openclaw] The CLI command failed.
+[openclaw] Reason: file is not a database
+[openclaw] Debug: set OPENCLAW_DEBUG=1 to include the stack trace.
+[openclaw] Try: openclaw doctor
+[openclaw] Help: openclaw --help
+
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_rollback_e2e.py", line 129, in test_a_bad_snapshot_keeps_the_candidate_running_with_admission_frozen
+    self.rollback(snapshot=bad)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_rollback_e2e.py", line 110, in rollback
+    return cutover_live.rollback(self.state, host or Rollback(self.host), lambda: self.client,
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                 self.candidate, previous or self.previous, snapshot or self.snapshot)
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/agent-work/cutover_live.py", line 268, in rollback
+    host.start(candidate, skip_cron=True)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_rollback_e2e.py", line 54, in start
+    return self.host.start(prefix, skip_cron=skip_cron)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dn/dev/wt/encargos-b5/scripts/agent-work/runtime/ensayo_host.py", line 136, in start
+    raise RuntimeError(f"gateway of {prefix} did not start:\n{tail}")
+RuntimeError: gateway of /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.nVARgr0x9c did not start:
+[openclaw] The CLI command failed.
+[openclaw] Reason: file is not a database
+[openclaw] Debug: set OPENCLAW_DEBUG=1 to include the stack trace.
+[openclaw] Try: openclaw doctor
+[openclaw] Help: openclaw --help
+
+
+----------------------------------------------------------------------
+Ran 1 test in 67.066s
+
+FAILED (errors=1)
+rc=1

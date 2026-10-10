@@ -1,0 +1,40 @@
+E..F...F
+======================================================================
+ERROR: test_a_cli_that_does_not_answer_counts_as_an_unavailable_gateway (__main__.CutoverLiveTest.test_a_cli_that_does_not_answer_counts_as_an_unavailable_gateway)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_live.py", line 134, in test_a_cli_that_does_not_answer_counts_as_an_unavailable_gateway
+    cutover_live.CliClient(str(slow), timeout=1).call("cron.list", {})
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+TypeError: CliClient.__init__() got an unexpected keyword argument 'timeout'
+
+======================================================================
+FAIL: test_a_profile_missing_a_limit_is_unknown_too (__main__.CutoverLiveTest.test_a_profile_missing_a_limit_is_unknown_too)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_live.py", line 125, in test_a_profile_missing_a_limit_is_unknown_too
+    with self.assertRaisesRegex(cutover_live.CutoverRefused, "production limits are unknown: maxTreeTokens"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: CutoverRefused not raised
+
+======================================================================
+FAIL: test_the_spool_reader_closes_its_connection (__main__.CutoverLiveTest.test_the_spool_reader_closes_its_connection)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_live.py", line 148, in test_the_spool_reader_closes_its_connection
+    self.assertEqual([str(warning.message) for warning in caught if warning.category is ResourceWarning], [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['unclosed database in <sqlite3.Connection object at 0x1079865c0>'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'unclosed database in <sqlite3.Connection object at 0x1079865c0>'
+
+- ['unclosed database in <sqlite3.Connection object at 0x1079865c0>']
++ []
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.008s
+
+FAILED (failures=2, errors=1)
+rc=1

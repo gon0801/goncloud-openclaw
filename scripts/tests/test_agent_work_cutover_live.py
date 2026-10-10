@@ -117,6 +117,36 @@ class CutoverLiveTest(unittest.TestCase):
             self.apply(gateway, wait_seconds=0)
         self.assertTrue(gateway.jobs[0]["enabled"])
 
+    def test_a_profile_missing_a_limit_is_unknown_too(self):
+        partial = {field: value for field, value in PROFILE.items() if field != "maxTreeTokens"}
+        self.limits.write_text(json.dumps({"productionProfile": {"values": partial}}))
+        gateway = FakeGateway([job()])
+        self.entry()
+        with self.assertRaisesRegex(cutover_live.CutoverRefused, "production limits are unknown: maxTreeTokens"):
+            self.apply(gateway)
+        self.assertTrue(gateway.jobs[0]["enabled"])
+
+    def test_a_cli_that_does_not_answer_counts_as_an_unavailable_gateway(self):
+        slow = self.root / "slow-openclaw"
+        slow.write_text("#!/bin/sh\nsleep 5\n")
+        slow.chmod(0o755)
+        with self.assertRaisesRegex(cutover_live.GatewayUnavailable, "cron.list: no answer in 1 s"):
+            cutover_live.CliClient(str(slow), timeout=1).call("cron.list", {})
+
+    def test_the_spool_reader_closes_its_connection(self):
+        import gc
+        import warnings
+        (self.root / "spool" / "host.sqlite").touch()
+        import sqlite3
+        with sqlite3.connect(self.root / "spool" / "host.sqlite") as db:
+            db.execute("CREATE TABLE operations (operation_json TEXT, status TEXT)")
+        db.close()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", ResourceWarning)
+            self.assertEqual(cutover_live.uncertain_operations([str(self.root / "spool")]), [])
+            gc.collect()
+        self.assertEqual([str(warning.message) for warning in caught if warning.category is ResourceWarning], [])
+
 
 if __name__ == "__main__":
     unittest.main()

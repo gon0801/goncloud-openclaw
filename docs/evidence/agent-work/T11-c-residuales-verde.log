@@ -1,0 +1,14 @@
+test_a_cli_that_does_not_answer_counts_as_an_unavailable_gateway (__main__.CutoverLiveTest.test_a_cli_that_does_not_answer_counts_as_an_unavailable_gateway) ... ok
+test_a_gateway_that_stays_unavailable_refuses_after_the_wait (__main__.CutoverLiveTest.test_a_gateway_that_stays_unavailable_refuses_after_the_wait) ... ok
+test_a_lost_drain_race_refuses_once_and_the_same_command_then_resumes (__main__.CutoverLiveTest.test_a_lost_drain_race_refuses_once_and_the_same_command_then_resumes) ... ok
+test_a_profile_missing_a_limit_is_unknown_too (__main__.CutoverLiveTest.test_a_profile_missing_a_limit_is_unknown_too) ... ok
+test_a_restarting_gateway_is_waited_for_at_every_step (__main__.CutoverLiveTest.test_a_restarting_gateway_is_waited_for_at_every_step) ... ok
+test_a_spool_that_does_not_exist_refuses (__main__.CutoverLiveTest.test_a_spool_that_does_not_exist_refuses) ... ok
+test_an_old_cron_the_gateway_does_not_have_refuses_instead_of_leaving_two_emitters (__main__.CutoverLiveTest.test_an_old_cron_the_gateway_does_not_have_refuses_instead_of_leaving_two_emitters) ... ok
+test_the_spool_reader_closes_its_connection (__main__.CutoverLiveTest.test_the_spool_reader_closes_its_connection) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 1.028s
+
+OK
+rc=0

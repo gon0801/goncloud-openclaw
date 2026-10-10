@@ -1,0 +1,10 @@
+[plugins/doctor-contracts] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`.
+[plugins/doctor-contracts] Configured plugin load path is unavailable: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/summa-gate. Uninspected plugin configuration is preserved. Restore access to the path, then run `openclaw doctor --fix`.
+OpenClaw config is invalid
+File: /var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.itWcwFAtIj/oc/openclaw.json
+Problem:
+  - <root>: Unrecognized key: "managedTasks"
+
+Inspect: openclaw config validate
+Audit, status, health, logs, and doctor commands still run with invalid config.
+Run "openclaw doctor --fix" to repair the config, then retry.

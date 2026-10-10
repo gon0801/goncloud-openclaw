@@ -1,0 +1,16 @@
+previous binary is missing
+F
+======================================================================
+FAIL: test_a_previous_binary_that_does_not_start_leaves_the_candidate_frozen_on_the_snapshot (__main__.CutoverRollbackE2E.test_a_previous_binary_that_does_not_start_leaves_the_candidate_frozen_on_the_snapshot)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b5/scripts/tests/test_agent_work_cutover_rollback_e2e.py", line 142, in test_a_previous_binary_that_does_not_start_leaves_the_candidate_frozen_on_the_snapshot
+    self.assertIn("(818f0fd)", os.popen(f"{self.host.cli} --version").read())
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '(818f0fd)' not found in ''
+
+----------------------------------------------------------------------
+Ran 1 test in 65.792s
+
+FAILED (failures=1)
+rc=1

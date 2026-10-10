@@ -28,7 +28,7 @@ Antes de instalar, saca una foto consistente de la base de estado y de la de cad
 
 | Paso | Comando | Salida esperada | Duración máxima | Ante fallo |
 |---|---|---|---|---|
-| 1. Foto | `F=~/.openclaw/respaldos/pre-<sha7>-$(date +%Y%m%d-%H%M); mkdir -p "$F"; sqlite3 ~/.openclaw/state/openclaw.sqlite ".backup $F/openclaw.sqlite"; for f in ~/.openclaw/agents/*/agent/openclaw-agent.sqlite; do sqlite3 "$f" ".backup $F/agent-$(basename "$(dirname "$(dirname "$f")")").sqlite"; done` | `sqlite3 "$F/openclaw.sqlite" 'PRAGMA user_version; PRAGMA quick_check;'` imprime `19` y `ok` | 1 min (medido el 2026-10-09 contra la Mini viva, por ssh: 564 MB en total, sin detener el gateway; `T11-a-foto-mini.log`) | Sin foto válida no se instala. |
+| 1. Foto | `F=~/.openclaw/respaldos/pre-<sha7>-$(date +%Y%m%d-%H%M); mkdir -p "$F"; sqlite3 ~/.openclaw/state/openclaw.sqlite ".backup $F/openclaw.sqlite"; for f in ~/.openclaw/agents/*/agent/openclaw-agent.sqlite; do sqlite3 "$f" ".backup $F/agent-$(basename "$(dirname "$(dirname "$f")")").sqlite"; done; cp ~/.openclaw/openclaw.json "$F/"` | `sqlite3 "$F/openclaw.sqlite" 'PRAGMA user_version; PRAGMA quick_check;'` imprime `19` y `ok` | 1 min (medido el 2026-10-09 contra la Mini viva, por ssh: 564 MB en total, sin detener el gateway; `T11-a-foto-mini.log`) | Sin foto válida no se instala. |
 | 2. Instalar | `~/.openclaw/tools/node/bin/npm install -g --allow-scripts=<dir>/openclaw-2026.9.7.tgz <dir>/openclaw-ai-2026.9.7.tgz <dir>/openclaw-2026.9.7.tgz` | `added … packages`; `npm warn allow-scripts` no lista `openclaw` | 2 min (medido: 15 s en un prefijo vacío) | La versión anterior queda reemplazada a medias: sigue la recuperación de abajo. |
 | 3. Humo | `~/.openclaw/bin/openclaw --version` | `OpenClaw 2026.9.7 (818f0fd)` | 5 s | Recuperación. |
 
@@ -38,15 +38,33 @@ El arranque del gateway con la base migrada (19 → 27) y la adopción se ensaya
 
 ## Recuperar
 
-R migra la base de estado de la versión 19 a la 27, y el binario 2026.9.7 público rechaza una base más nueva (`openclaw-database-preflight.ts:239,242` en `c074824a27`). Por eso recuperar no es solo reinstalar: también hay que volver a la foto.
+Lo midió el ensayo de T11-c sobre la copia de la Mini, con los dos binarios reales (`T11-c-*.log`):
+- el 2026.9.7 público se niega a arrancar sobre la base migrada (`refused startup because 1 OpenClaw database schema(s) are newer than this build ... uses schema 27`);
+- también rechaza la config del corte (`Unrecognized key: "managedTasks"`);
+- con la base y la config de la foto, arranca (`health ok`).
 
-| Paso | Comando | Salida esperada | Duración máxima | Ante fallo |
+Por eso recuperar es volver a la foto completa, que tiene que incluir `openclaw.json`. Pero la foto es de *antes* del corte, así que trae los crons viejos **habilitados**: restaurarla los reactivaría, y eso está prohibido (plan `:301`).
+
+`cutover_live.rollback` hace la reversa en este orden. Cada paso deja su fase en el estado del corte y se retoma:
+
+1. **Revisar la foto.** Tiene que existir, estar en la versión 19 con `quick_check ok` y traer un `openclaw.json` sin `managedTasks`. Si no, se niega **antes de detener nada**: congela la admisión y deja el candidato corriendo.
+2. **Congelar la admisión** (`managedTasks.enabled=false`). El gateway se reinicia y la reversa lo espera.
+3. **Detener el gateway, y restaurar las bases y la config de la foto.**
+4. **Arrancar el binario anterior con el planificador de cron apagado** y volver a suspender los crons viejos de la entrada, con los ids que guardó el corte.
+5. **Arrancar normal** y comprobar otra vez que siguen suspendidos.
+
+Si el binario anterior no arranca, vuelve el candidato sobre la foto restaurada. Sin `managedTasks` en la config, la admisión queda congelada, y también se suspenden ahí los crons viejos. La reversa nunca toca los spools del host, así que los resultados pendientes se conservan.
+
+| Paso en el host | Comando | Salida esperada | Duración máxima | Ante fallo |
 |---|---|---|---|---|
-| 1. Binario anterior | `~/.openclaw/tools/node/bin/npm install -g --allow-scripts=openclaw openclaw@2026.9.7` | `~/.openclaw/bin/openclaw --version` imprime `OpenClaw 2026.9.7 (c074824)` | 2 min (medido: 10 s en un prefijo vacío, con red) | Sin red, reinstala desde el `.tgz` público guardado (`npm pack openclaw@2026.9.7` en la preparación). |
-| 2. Base | Con el gateway detenido: `cp "$F/openclaw.sqlite" ~/.openclaw/state/openclaw.sqlite`, borrar `openclaw.sqlite-wal` y `openclaw.sqlite-shm` viejos, y lo mismo para cada `agent-<id>.sqlite` | `PRAGMA user_version` = `19` y `quick_check` = `ok` (medido sobre la copia: 1 s) | 5 min | Si el binario anterior no abre la base, conserva la versión nueva con la admisión congelada (spec y plan `:300`). |
+| Binario anterior | `~/.openclaw/tools/node/bin/npm install -g --allow-scripts=openclaw openclaw@2026.9.7` | `~/.openclaw/bin/openclaw --version` imprime `OpenClaw 2026.9.7 (c074824)` | 2 min (medido: 10 s en un prefijo vacío, con red) | Sin red, desde el `.tgz` público guardado en la preparación. |
+| Bases y config | Con el gateway detenido: copiar `$F/openclaw.sqlite` a `~/.openclaw/state/`, cada `agent-<id>.sqlite` a `~/.openclaw/agents/<id>/agent/openclaw-agent.sqlite` y `$F/openclaw.json` a `~/.openclaw/`, y borrar los `-wal` y `-shm` viejos | `PRAGMA user_version` = `19` y `quick_check` = `ok` | 5 min | La reversa se queda con el candidato congelado. |
+| Arranque sin cron | `OPENCLAW_SKIP_CRON=1 ~/.openclaw/bin/openclaw gateway` en primer plano, y `openclaw gateway call cron.update` con `enabled: false` para cada cron viejo | `cron.list`: los crons viejos en `enabled: false` | 3 min | Si el binario no arranca, se vuelve al candidato congelado (paso de arriba). |
 
-Lo que pasó entre la foto y la recuperación (sesiones, resultados) se pierde de la base restaurada. Por eso la ventana de instalación es sin trabajo en vuelo (T12 `:309`), y la captura de resultados queda activa durante todo el cambio. El ensayo completo de la reversa, con el gateway arrancado sobre la base restaurada y las fallas de la propia reversa, es T11-c (`:300` y `:301`).
+En el host vivo, los pasos de detener y arrancar el gateway dependen de cómo lo lanza la Mini (launchd). T12 los fija antes de la ventana, porque el ensayo los hace con `scripts/agent-work/runtime/ensayo_host.py`.
+
+Lo que pasó entre la foto y la recuperación (sesiones, resultados en la base) se pierde. Por eso la ventana de instalación es sin trabajo en vuelo (T12 `:309`), y los resultados que el host capturó siguen en su spool.
 
 ## Evidencia
 
-Las salidas de cada comando están en `~/.local/state/encargos-loop/artifacts/T11-a/`: `paquete/corrida-limpia.log`, `paquete/install.log`, `paquete/smoke.log`, `paquete/actualizacion-sobre-upstream.log`, `recuperacion-binario.log` y `foto-restauracion.log`. El recibo es `T11.md`.
+Las salidas de cada comando están en `~/.local/state/encargos-loop/artifacts/T11-a/`: `paquete/corrida-limpia.log`, `paquete/install.log`, `paquete/smoke.log`, `paquete/actualizacion-sobre-upstream.log`, `recuperacion-binario.log` y `foto-restauracion.log`. Los de la reversa son `T11-c-*.log`. El recibo es `T11.md`.
