@@ -136,6 +136,24 @@ class HostReceipts(unittest.TestCase):
                                     lambda *_: delivered.append(True)).status, "delivered")
         self.assertEqual(delivered, [True])
 
+    def test_cli_that_reads_only_the_assignment_gets_accepted_and_reported(self):
+        operation = replace(self.operation, adapter_id="opencode")
+        observation = self.apply(self.key, operation, lambda *_: None)
+        self.assertEqual(observation.status, "typed")
+        assignment = json.loads(Path(observation.assignment_ref).read_text())
+        protocol = assignment["protocol"]
+        self.assertEqual(set(protocol["fill"]), {"typedPayload", "artifactRef", "digest"})
+        Path(assignment["acceptRef"]).write_text(json.dumps(protocol["accept"]))
+        Path(assignment["resultRef"]).write_text(json.dumps({
+            **protocol["result"],
+            "typedPayload": {"verdict": "approved", "evidenceRef": "evidence.txt"},
+            "artifactRef": str(self.artifact),
+            "digest": digest(self.artifact.read_bytes()),
+        }))
+        self.assertTrue(self.host.take_acceptance("mac-test", self.key))
+        self.assertIsNotNone(self.host.collect("mac-test", self.key))
+        self.assertEqual(self.host.pending("mac-test"), [self.report()])
+
     def test_lost_native_admission_ack_retries_before_first_delivery(self):
         delivered = []
         admissions = []

@@ -10,7 +10,7 @@ Desde B6 (`B6.md`), R certifica el presupuesto según el servidor y la API, no s
 
 En la Mini eso cubre a `main`, `ingenieria` e `implementer`, cuyo primario es `opencode-go-resp/muse-spark-1.3-contributor`. No cubre a los agentes con primario `opencode-go/deepseek-v4.1-flash` (`adversary`, `operaciones`, `reviewer`, `verifier`, `scout`): ese proveedor pasa por el plugin `opencode-go`, y R rechaza un plugin dentro de un encargo.
 
-Un encargo que cae a un fallback por CLI (claude-cli) o a un plugin (codex) se rechaza antes de gastar. Las rutas a un CLI de la Mac siguen sin certificar (matriz A10): esos loops conservan su vigía y lo declaran (plan `:318`).
+Un encargo que cae a un fallback por CLI (claude-cli) o a un plugin (codex) se rechaza antes de gastar. Salvo `mac-local/opencode` (B8; ver "La sesión de opencode que adopta el host" en la parte B), las rutas a un CLI de la Mac siguen sin certificar (matriz A10): esos loops conservan su vigía y lo declaran (plan `:318`).
 
 ## Actualizar la Mini a R `19c2ed1` (B6)
 
@@ -118,6 +118,24 @@ También acepta `--file <archivo>` en lugar de la entrada estándar. Imprime una
 ```
 
 `main` pega `instructionRef` y `target` tal cual en `managed_tasks_submit`, junto con su `key`, `inputRevision`, `resultContract` y `continuation`, y después llama a `managed_tasks_admit`. Escribir el mismo brief dos veces es seguro: el archivo ya está y la salida es la misma. Si sale con 1, el motivo va en stderr y no hay nada que enviar: brief vacío o de más de 1 MB, raíz inexistente o enlazada, o un archivo con ese nombre y otro contenido. `brief.py` no certifica la ruta; un adaptador sin certificar (matriz A10) lo sigue rechazando R.
+
+### La sesión de opencode que adopta el host
+
+Desde B8 (`B8-opencode-adapter-e2e.md`), `mac-local/opencode` es la única combinación certificada. El host no lanza esa sesión: la adopta. Se lanza a mano, una vez, así:
+
+```
+tmux -L <socket> new-session -d -s <sesión> -x 200 -y 50 -c <workspace> \
+  -e 'OPENCODE_CONFIG_CONTENT={"permission":{"external_directory":{"<hostStateDir>/**":"allow"}}}' \
+  /opt/homebrew/bin/opencode -m zai-coding-plan/glm-5.3-flash
+```
+
+- `<socket>`, `<sesión>` y `<workspace>` son los mismos valores que recibe el host en `native_gateway.py --watch` (`--cli-tmux-socket`, `--cli-session` y `--cli-workspace-root`), con `--cli-adapter-id opencode` y un `--cli-instance-id` fijo. El brief llega a `<workspace>/managed-briefs/`, y el artefacto del resultado tiene que quedar dentro de `<workspace>`.
+- La asignación, `acceptRef` y `resultRef` viven en `<hostStateDir>` (`--host-state-dir`), fuera del workspace. Sin la regla `external_directory`, opencode se detiene en "Permission required" y el host reporta `permission-required`. `<hostStateDir>` va con su ruta real (en macOS, `/private/var/...` y no `/var/...`).
+- El binario va con ruta absoluta, porque el servidor tmux conserva su propio `PATH`. El modelo es `zai-coding-plan/*`, nunca `zai/*` (que cobra por token).
+- Compruébalo con `tmux -L <socket> display-message -p -t '=<sesión>:' '#{pane_current_command}'`, que debe imprimir `opencode.exe`. El host lee el composer de opencode solo si ese comando empieza con `opencode`.
+- `agent-tmux.sh opencode` no sirve para esto: usa el servidor tmux por defecto y no lleva la regla de permisos.
+- Mientras el operador tenga texto en el composer, el host espera y no teclea nada. Teclea la referencia una vez, sobre un composer vacío. La sesión no se marca con `OPENCLAW_WATCH`; el host le pone `AGENT_WORK_MANAGED=1`.
+- El host tiene cupo 1: el encargo siguiente se reclama solo cuando el anterior se cerró (sección siguiente). El cierre deja la sesión `ReleasedAdopted` con opencode vivo, lista para el próximo encargo.
 
 ### El cierre de una sesión gestionada en la Mac
 

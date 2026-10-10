@@ -93,6 +93,14 @@ case "${1:-all}" in
     fi
     python3 scripts/tests/test_agent_work_cutover_fencing_e2e.py -v
     ;;
+  opencode_adapter)
+    # En vivo y fuera de `all`: gasta cuota de GLM en un opencode real (B8).
+    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ] || [ "${AGENT_WORK_OPENCODE_LIVE:-}" != 1 ]; then
+      echo "opencode_adapter requiere AGENT_WORK_RUNTIME_SOURCE con R construido y AGENT_WORK_OPENCODE_LIVE=1" >&2
+      exit 2
+    fi
+    python3 scripts/tests/test_agent_work_opencode_adapter_e2e.py -v
+    ;;
   cutover_rollback)
     if [ -z "${AGENT_WORK_CUTOVER_CANDIDATE_PREFIX:-}" ] || [ -z "${AGENT_WORK_CUTOVER_PREVIOUS_PREFIX:-}" ] \
         || [ -z "${AGENT_WORK_CUTOVER_COPY:-}" ]; then

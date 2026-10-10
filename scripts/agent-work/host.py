@@ -25,6 +25,7 @@ DIALOG_PASSES = 2
 ACCEPT_SCHEMA = "agent-work.accept.v1"
 UNACCEPTED_EPISODE = "delivery-unaccepted"
 ACCEPT_BOUND = ("hostId", "taskId", "generation", "instanceId", "claimId")
+RESULT_BOUND = ("hostId", "taskId", "generation", "instanceId", "producerId", "capability")
 MAX_ACCEPT_BYTES = 4096
 TMUX_TIMEOUT_SECONDS = 5.0
 COMPOSER_SETTLE_SECONDS = 0.3
@@ -95,6 +96,30 @@ def read_acceptance(assignment: dict) -> bool:
             return False
     return hmac.compare_digest(accept["capability"].encode("utf-8", "surrogatepass"),
                                assignment["capability"].encode("utf-8", "surrogatepass"))
+
+
+def cli_protocol(assignment: dict) -> dict:
+    """The assignment spells out what a CLI writes, because the CLI has nothing else to go on."""
+    return {
+        "steps": [
+            "Before any other work, write the accept object as JSON to acceptRef, atomically: write a "
+            "temporary file in the same directory, then rename it onto acceptRef.",
+            "Do the work that the file at briefRef describes, inside workspaceRef.",
+            "Write the result object, plus every field named in fill holding what fill describes, as "
+            "JSON to resultRef, atomically in the same way. Copy every other field unchanged.",
+        ],
+        "accept": {"schema": ACCEPT_SCHEMA, "capability": assignment["capability"],
+                   **{field: assignment[field] for field in ACCEPT_BOUND}},
+        "result": {"schema": RESULT_SCHEMA, "kind": "produced",
+                   **{field: assignment[field] for field in RESULT_BOUND},
+                   "observedRevision": assignment["inputRevision"]},
+        "fill": {
+            "typedPayload": f"the JSON object that the {assignment['resultContract']} contract and the "
+                            "brief ask for",
+            "artifactRef": "the absolute path of the artifact file, inside workspaceRef",
+            "digest": "the lowercase hex SHA-256 of the artifact file's bytes",
+        },
+    }
 
 
 def under(path: str, root: str) -> Path:
@@ -303,6 +328,7 @@ class Host:
         if operation.adapter_id:
             assignment["adapterId"] = operation.adapter_id
             assignment["acceptRef"] = str(self.state_dir / "inbox" / f"{op_id}.accept.json")
+            assignment["protocol"] = cli_protocol(assignment)
         digest = hashlib.sha256(canonical(assignment).encode()).hexdigest()
         current = self.spool.get(op_id)
         if current and current["operation_digest"] != digest:

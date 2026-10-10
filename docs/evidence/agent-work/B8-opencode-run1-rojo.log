@@ -1,0 +1,104 @@
+test_main_loop_hands_tasks_to_an_adopted_opencode_session (__main__.OpencodeAdapterE2E.test_main_loop_hands_tasks_to_an_adopted_opencode_session) ... OPENCODE_E2E t=  26.3s gateway=ws://127.0.0.1:48000 socket=agent-work-opencode-47047-ef32beba model=zai-coding-plan/glm-5.3-flash workspace=/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/agent-work-opencode-fcrj4yb0/workspace
+OPENCODE_E2E t=  28.7s opencode composer VACIO
+OPENCODE_E2E t=  28.8s task 1 submitted and admitted taskId=27c4c5a4-db84-47d5-9e12-84c6353cf115
+OPENCODE_E2E t=  33.4s draft in the composer: claim deferred, nothing typed
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 1, "incidents": 1, "reported": 0, "transferred": 0}
+FAIL
+
+======================================================================
+FAIL: test_main_loop_hands_tasks_to_an_adopted_opencode_session (__main__.OpencodeAdapterE2E.test_main_loop_hands_tasks_to_an_adopted_opencode_session)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b8-opencode/scripts/tests/test_agent_work_opencode_adapter_e2e.py", line 228, in test_main_loop_hands_tasks_to_an_adopted_opencode_session
+    self.assertEqual(incident_rows(host), [], diagnose(task_id))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [('27c4c5a4-db84-47d5-9e12-84c6353cf115', [200 chars]"}')] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+('27c4c5a4-db84-47d5-9e12-84c6353cf115', 'host:1:invalid-result:invalid-result', 'pending', '{"episodeId":"invalid-result","evidenceRef":"host-operation:d26948b22622e161e9b2b2668c7562da06b3f1ea28576df7b9e71ef54aa50033","kind":"invalid-result"}')
+
++ []
+- [('27c4c5a4-db84-47d5-9e12-84c6353cf115',
+-   'host:1:invalid-result:invalid-result',
+-   'pending',
+-   '{"episodeId":"invalid-result","evidenceRef":"host-operation:d26948b22622e161e9b2b2668c7562da06b3f1ea28576df7b9e71ef54aa50033","kind":"invalid-result"}')] : claims=['deferred', 'typed', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'uncertain', 'delivered', 'delivered', 'delivered', 'delivered']
+typed=['VACIO']
+inbox_errors=[{'operationId': 'd26948b22622e161e9b2b2668c7562da06b3f1ea28576df7b9e71ef54aa50033', 'taskId': '27c4c5a4-db84-47d5-9e12-84c6353cf115', 'error': 'result schema or kind mismatch'}]
+incidents=[('27c4c5a4-db84-47d5-9e12-84c6353cf115', 'host:1:invalid-result:invalid-result', 'pending', '{"episodeId":"invalid-result","evidenceRef":"host-operation:d26948b22622e161e9b2b2668c7562da06b3f1ea28576df7b9e71ef54aa50033","kind":"invalid-result"}')]
+status=delivered
+accept={"capability": "<redacted>", "claimId": "60592a25-d733-4b2b-9494-0dd480565719", "generation": 1, "hostId": "mac-local", "instanceId": "opencode-loop-host", "schema": "agent-work.accept.v1", "taskId": "27c4c5a4-db84-47d5-9e12-84c6353cf115"}
+result={"artifacts": ["cert-1.txt"], "capability": "<redacted>", "claimId": "60592a25-d733-4b2b-9494-0dd480565719", "generation": 1, "hostId": "mac-local", "instanceId": "opencode-loop-host", "payload": {"evidenceRef": "cert-1.txt"}, "resultContract": "ready.v1", "schema": "agent-work.result.v1", "status": "ready", "taskId": "27c4c5a4-db84-47d5-9e12-84c6353cf115"}
+screen:
+     resultRef". It should include schema, and the typed payload. The resultContract is ready.v1, typed payload {"evidenceRef": "cert-1.txt"}. I'll include
+     schema, taskId, claimId, hostId, etc. copied where sensible, plus contract/result fields. Since the assignment doesn't specify exact result schema         Atomic agent-work accept and result
+     fields beyond schema name, I'll include: schema, hostId, taskId, generation, instanceId, claimId, capability, resultContract, status, payload. Keep it     writes
+     reasonable.
+                                                                                                                                                                Context
+     Let me do the mv and create cert-1.txt.                                                                                                                    24,399 tokens
+                                                                                                                                                                2% used
+     Brief: create cert-1.txt in the workspace with the exact line, then report it. Completing the atomic accept rename and creating the artifact:              $0.00 spent
+
+  ┃                                                                                                                                                             LSP
+  ┃  $ mv "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/agent-work-opencode-fcrj4yb0/host/inbox/.                                                   LSPs are disabled
+  ┃  d26948b22622e161e9b2b2668c7562da06b3f1ea28576df7b9e71ef54aa50033.accept.json.tmp" "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/agent-work-
+  ┃  opencode-fcrj4yb0/host/inbox/d26948b22622e161e9b2b2668c7562da06b3f1ea28576df7b9e71ef54aa50033.accept.json" && printf 'opencode-cert-1 6ba64ac65b5484bc\
+  ┃  n' > "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/agent-work-opencode-fcrj4yb0/workspace/cert-1.txt"
+  ┃
+  ┃  (no output)
+  ┃
+
+     Thought: 3ms
+
+     Now write the result JSON atomically to resultRef. Result contract ready.v1, typed payload {"evidenceRef": "cert-1.txt"}.
+
+  ┃
+  ┃  # Wrote /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/agent-work-opencode-fcrj4yb0/host/inbox/.
+  ┃  d26948b22622e161e9b2b2668c7562da06b3f1ea28576df7b9e71ef54aa50033.result.json.tmp
+  ┃
+  ┃   1 {"schema":"agent-work.result.v1","hostId":"mac-local","taskId":"27c4c5a4-db84-47d5-9e12-84c6353cf115","generation":1,"instanceId":"opencode-loop-
+  ┃     host","claimId":"60592a25-d733-4b2b-9494-0dd480565719","capability":"<redacted>",
+  ┃     "resultContract":"ready.v1","status":"ready","payload":{"evidenceRef":"cert-1.txt"},"artifacts":["cert-1.txt"]}
+  ┃   2
+  ┃
+
+  ┃
+  ┃  $ mv "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/agent-work-opencode-fcrj4yb0/host/inbox/.
+  ┃  d26948b22622e161e9b2b2668c7562da06b3f1ea28576df7b9e71ef54aa50033.result.json.tmp" "/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/agent-work-
+  ┃  opencode-fcrj4yb0/host/inbox/d26948b22622e161e9b2b2668c7562da06b3f1ea28576df7b9e71ef54aa50033.json" && cat "/private/var/folders/hp/
+  ┃  sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/agent-work-opencode-fcrj4yb0/workspace/cert-1.txt"
+  ┃
+  ┃  opencode-cert-1 6ba64ac65b5484bc
+  ┃
+
+     ▣  Build · GLM-5.3-Flash
+
+  ┃                                                                                                                                                             /private/var/folders/hp/
+  ┃                                                                                                                                                             sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/
+  ┃                                                                                                                                                             agent-work-opencode-fcrj4yb0/
+  ┃  Build · GLM-5.3-Flash Z.AI Coding Plan                                                                                                                     workspace:main
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝⬝⬝⬝⬝⬝⬝■  esc interrupt                                                                                                       24.4K (2%)  ctrl+p commands    • OpenCode 1.18.35
+
+
+
+----------------------------------------------------------------------
+Ran 1 test in 72.335s
+
+FAILED (failures=1)

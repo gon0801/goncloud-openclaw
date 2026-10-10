@@ -71,25 +71,58 @@ class AgentsRouting(unittest.TestCase):
         self.assertEqual(request["assignment"]["target"],
                          {"kind": "cli", "hostId": "windows-remote", "adapterId": "codex"})
 
-    def test_no_inventory_cli_is_certified_so_no_cli_route_or_claim_opens(self):
-        class Client:
-            def claim_host(self, *_):
-                raise AssertionError("an uncertified adapter must not reach the gateway")
+    def test_only_mac_local_opencode_is_certified_so_every_other_cli_route_or_claim_stays_closed(self):
+        """Deliberately changed in B8: mac-local/opencode was certified by a live opencode run on GLM.
 
-        refused = []
+        Before B8 no inventory CLI was certified and all 14 combinations were refused.
+        """
+        class Client:
+            def __init__(self, host_id):
+                self.host_id = host_id
+                self.claims = []
+
+            def claim_host(self, adapter_id, instance_id):
+                self.claims.append(f"{self.host_id}/{adapter_id}")
+                return None
+
+        opened, refused = [], []
         for requester, host_id in sorted(routing.CLI_ROUTES):
             for adapter_id in self.coverage["cliAdapters"]:
-                with self.assertRaisesRegex(RouteUnavailable, f"route {host_id}/{adapter_id} is not certified"):
-                    self.request(requester, f"{host_id}/{adapter_id}")
-                client = Client()
-                client.host_id = host_id
+                target = f"{host_id}/{adapter_id}"
+                client = Client(host_id)
+                claim = lambda: native_gateway.claim_cli_once(
+                    client, host=None, manager=None, adapter_id=adapter_id, instance_id="instance-one",
+                    session="worker-one", workspace_root=self.root, deliver=lambda *_: None,
+                    coverage=self.coverage)
+                if target == "mac-local/opencode":
+                    self.assertEqual(self.request(requester, target)["assignment"]["target"],
+                                     {"kind": "cli", "hostId": "mac-local", "adapterId": "opencode"})
+                    self.assertIsNone(claim())
+                    self.assertEqual(client.claims, [target])
+                    opened.append(target)
+                    continue
+                with self.assertRaisesRegex(RouteUnavailable, f"route {target} is not certified"):
+                    self.request(requester, target)
                 with self.assertRaisesRegex(ValueError, "host adapter route is not certified"):
-                    native_gateway.claim_cli_once(client, host=None, manager=None, adapter_id=adapter_id,
-                                                  instance_id="instance-one", session="worker-one",
-                                                  workspace_root=self.root, deliver=lambda *_: None,
-                                                  coverage=self.coverage)
-                refused.append(f"{host_id}/{adapter_id}")
-        self.assertEqual(len(refused), 14)
+                    claim()
+                self.assertEqual(client.claims, [], f"uncertified {target} reached the gateway")
+                refused.append(target)
+        self.assertEqual(opened, ["mac-local/opencode"])
+        self.assertEqual(len(refused), 15)
+        with self.assertRaisesRegex(RouteUnavailable, "outside the managed perimeter"):
+            self.request("ingenieria", "mac-local/opencode")
+
+    def test_every_certified_host_adapter_names_its_live_evidence(self):
+        certified = [(host_id, adapter_id)
+                     for host_id, adapters in self.coverage["hostAdapterCoverage"].items()
+                     for adapter_id, state in adapters.items() if state == "certified"]
+        self.assertEqual(certified, [("mac-local", "opencode")])
+        for host_id, adapter_id in certified:
+            evidence = self.coverage["hostAdapterEvidence"][host_id][adapter_id]
+            self.assertTrue(evidence, f"{host_id}/{adapter_id} is certified without evidence")
+            for item in evidence:
+                self.assertIn(item["test"], (ROOT / item["path"]).read_text(encoding="utf-8"),
+                              f"evidence {item} does not exist")
 
     def test_cli_route_is_limited_to_its_requester(self):
         certified = json.loads(json.dumps(self.coverage))
