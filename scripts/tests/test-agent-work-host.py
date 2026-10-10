@@ -376,6 +376,8 @@ class HostReceipts(unittest.TestCase):
         def tmux_cmd(*args):
             return subprocess.run(["tmux", "-f", "/dev/null", "-L", socket, *args], capture_output=True, text=True)
 
+        socket_file = Path(os.environ.get("TMUX_TMPDIR") or "/tmp") / f"tmux-{os.getuid()}" / socket
+        self.addCleanup(socket_file.unlink, missing_ok=True)
         self.addCleanup(tmux_cmd, "kill-server")
         self.assertEqual(tmux_cmd("new-session", "-d", "-s", "worker-1", "-c", str(self.workspace),
                                   sys.executable, str(COMPOSER_CLI), str(submitted), mode).returncode, 0)
