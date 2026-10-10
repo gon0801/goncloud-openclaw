@@ -4,9 +4,9 @@ $ bash scripts/agent-work/test-runtime.sh projection_gateway
 
  RUN  v5.0.1 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.OtFl7sEvgx/r
 
-[vitest-workers] local cache hit after 2237ms
+[vitest-workers] local cache hit after 5600ms
 [vitest-workers] reused local compiler outputs
-[vitest-workers] prepared 25ed8b77cb1d in 2270ms (16698 inputs, 17252 outputs)
+[vitest-workers] prepared 31fd26d5d97e in 5639ms (16698 inputs, 17252 outputs)
  ↓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > prebinds the oldest CLI claim to one authenticated host instance before admission
  ↓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > closes a bound host task only for its authenticated device
  ↓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > records one host incident only for its authenticated device and adapter
@@ -26,15 +26,15 @@ stderr | unknown test
 [sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.agentDatabaseLifecycle
 [sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.sessionGroupCatalog
 
- ✓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > serves and acknowledges a durable projection over an authenticated Gateway connection 30688ms
+ ✓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > serves and acknowledges a durable projection over an authenticated Gateway connection 37956ms
 
  Test Files  1 passed (1)
       Tests  1 passed | 9 skipped (10)
-   Start at  02:31:03
-   Duration  37.97s (tests 81%, transform 16%, import 2%, worker 1%)
+   Start at  10:08:58
+   Duration  49.31s (tests 78%, transform 19%, import 2%, worker 1%)
 
 [vitest-workers] verifying completed generation before cleanup
 [vitest-workers] retained completed compiler outputs for reuse
-[test] passed 1 Vitest shard in 39.84s
+[test] passed 1 Vitest shard in 52.35s
 
-rc=0 seconds=40.2
+rc=0 seconds=52.9

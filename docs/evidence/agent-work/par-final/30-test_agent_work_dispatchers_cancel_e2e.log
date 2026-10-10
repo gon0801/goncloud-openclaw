@@ -36,13 +36,13 @@ class Result(unittest.TextTestResult):
             self._set(test, "FAIL")
 unittest.TextTestRunner(verbosity=2, resultclass=Result).run(suite)
 json.dump(status, open(out, "w"))
- scripts/tests/test_agent_work_dispatchers_cancel_e2e.py /Users/dn/dev/wt/encargos-b6/docs/evidence/agent-work/par-final/.30.json test_two_dispatchers_a_cancellation_and_a_stale_callback_keep_one_durable_order
-test_two_dispatchers_a_cancellation_and_a_stale_callback_keep_one_durable_order (cited.DispatchersCancelE2E.test_two_dispatchers_a_cancellation_and_a_stale_callback_keep_one_durable_order) ... DISPATCHERS_CANCEL pids=[24507, 26817] tasks=1 handling=cancelled children=0 cli_accepted=1 wakes=0
+ scripts/tests/test_agent_work_dispatchers_cancel_e2e.py /Users/dn/dev/wt/encargos-b7/docs/evidence/agent-work/par-final/.30.json test_two_dispatchers_a_cancellation_and_a_stale_callback_keep_one_durable_order
+test_two_dispatchers_a_cancellation_and_a_stale_callback_keep_one_durable_order (cited.DispatchersCancelE2E.test_two_dispatchers_a_cancellation_and_a_stale_callback_keep_one_durable_order) ... DISPATCHERS_CANCEL pids=[79652, 83299] tasks=1 handling=cancelled children=0 cli_accepted=1 wakes=0
 ok
 
 ----------------------------------------------------------------------
-Ran 1 test in 79.148s
+Ran 1 test in 108.447s
 
 OK
 
-rc=0 seconds=79.3
+rc=0 seconds=108.6

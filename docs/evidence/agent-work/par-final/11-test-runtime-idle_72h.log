@@ -4,9 +4,9 @@ $ bash scripts/agent-work/test-runtime.sh idle_72h
 
  WARN  TypeScript 7.0 does not yet have a stable API and is experimental. Some options will be unavailable.
 
-[33m[PLUGIN_TIMINGS] [0mPlugin hooks ran for 6.3s of this 6.4s build (100%).
+[33m[PLUGIN_TIMINGS] [0mPlugin hooks ran for 7.5s of this 7.6s build (100%).
 The slowest hooks, timed inside each callback (the wait before a callback starts is excluded, the time it awaits is included):
-  - openclaw-native-declarations buildStart (97%, 6.2s, 1 call)
+  - openclaw-native-declarations buildStart (97%, 7.4s, 1 call)
 Additional hook time came from the hooks below and from hooks under 1s.
 3 hooks are listed without a time. Their calls overlapped, so the time inside one call includes work from other calls. To find their cost, profile the build with `node --cpu-prof`:
   - tsdown:deps resolveId (810 calls)
@@ -14,7 +14,7 @@ Additional hook time came from the hooks below and from hooks under 1s.
   - rolldown-plugin-dts:fake-js transform (132 calls)
 See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
 
-[tsdown-build] invocation 1/1 finished in 6.6s
+[tsdown-build] invocation 1/1 finished in 7.9s
 [test] starting test/vitest/vitest.e2e.config.ts
 
  RUN  v5.0.1 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.OtFl7sEvgx/r
@@ -22,13 +22,13 @@ See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more det
 
  RUN  v5.0.1 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.OtFl7sEvgx/r
 
-[vitest-workers] local cache hit after 2127ms
+[vitest-workers] local cache hit after 3259ms
 [vitest-workers] reused local compiler outputs
-[vitest-workers] prepared 177e350c26f3 in 2157ms (16698 inputs, 17252 outputs)
+[vitest-workers] prepared bdcdfb9a5603 in 3292ms (16698 inputs, 17252 outputs)
  ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > does not deliver an unreported managed result after restart (idle requester)
  ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > does not deliver an unreported managed result after restart (deleted requester)
  ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > does not deliver an unreported managed result after restart (busy requester)
- ✓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > does not deliver an unreported managed result after restart (idle_72h requester) 642ms
+ ✓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > does not deliver an unreported managed result after restart (idle_72h requester) 822ms
  ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > settles overlapping caller turns with alpha first (same ownership, yielded=undefined)
  ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > settles overlapping caller turns with alpha first (distinct ownership, yielded=undefined)
  ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > settles overlapping caller turns with alpha first (mixed-unbound ownership, yielded=undefined)
@@ -47,23 +47,23 @@ See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more det
  ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > preserves serial continuation without replaying an accepted wave (cli, next child accepted=true, requester final=true)
  ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > delivers a yielded result despite an older failed grandchild awaiting cleanup
  ↓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts > requester settle wake product flow > caps a stale requester batch despite foreign active work in a global session
- ✓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts (22 tests | 21 skipped) 645ms
+ ✓ src/agents/subagents/registry/subagent-registry.requester-wake.e2e.test.ts (22 tests | 21 skipped) 826ms
    ✓ requester settle wake product flow (22)
-     ✓ does not deliver an unreported managed result after restart (idle_72h requester) 642ms
+     ✓ does not deliver an unreported managed result after restart (idle_72h requester) 822ms
 
  Test Files  1 passed (1)
       Tests  1 passed | 21 skipped (22)
-   Start at  02:26:56
-   Duration  6.89s (transform 69%, import 16%, tests 10%, worker 3%, setup 1%)
+   Start at  10:03:56
+   Duration  9.48s (transform 73%, import 14%, tests 10%, worker 2%, setup 1%)
 
 
  Test Files  1 passed (1)
       Tests  1 passed | 21 skipped (22)
-   Start at  02:26:56
-   Duration  6.89s (transform 69%, import 16%, tests 10%, worker 3%, setup 1%)
+   Start at  10:03:56
+   Duration  9.48s (transform 73%, import 14%, tests 10%, worker 2%, setup 1%)
 
 [vitest-workers] verifying completed generation before cleanup
 [vitest-workers] retained completed compiler outputs for reuse
-[test] passed 1 Vitest shard in 16.74s
+[test] passed 1 Vitest shard in 21.60s
 
-rc=0 seconds=17.1
+rc=0 seconds=22.0

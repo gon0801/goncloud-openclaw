@@ -11,6 +11,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOL = ROOT / "scripts/agent-work/runtime/medir-contexto-sombra.py"
+VERIFY = ROOT / "scripts/agent-work/runtime/verificar-medida-sombra.py"
+BYTES_PER_TOKEN = ROOT / "scripts/agent-work/runtime/medir-bytes-por-token.py"
+
+
+def load_verify():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("verificar_medida_sombra", VERIFY)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def agent_db(state, agent, events):
@@ -54,7 +64,51 @@ class ContextShadowTest(unittest.TestCase):
             run = self.run_tool(state, "ingenieria")
             self.assertEqual(run.returncode, 1)
             self.assertEqual(json.loads(run.stdout)["maxContextTokens"], None)
-            self.assertIn("no provider.payload.measured events for ingenieria", run.stderr)
+            self.assertIn("no Responses provider.payload.measured events for ingenieria", run.stderr)
+
+    def test_the_rehearsal_check_ignores_live_traffic_already_in_the_copy(self):
+        verify = load_verify()
+        with tempfile.TemporaryDirectory() as temp:
+            state = Path(temp)
+            agent_db(state, "main", [measured(900_000, ts="2026-10-10T05:15:11.883Z"),
+                                     measured(4000, ts="2026-10-10T18:00:01.000Z")])
+            databases = sorted(state.glob("agents/*/agent/openclaw-agent.sqlite"))
+            events = verify.measured_since(databases, "2026-10-10T18:00:00.000Z")
+            self.assertEqual(events, [4000])
+            self.assertTrue(verify.faithful([4000], events))
+            self.assertFalse(verify.faithful([4000], verify.measured_since(databases, "")))
+            self.assertFalse(verify.faithful([], []))
+
+    def test_bytes_per_token_pairs_each_call_with_the_next_usage_of_its_run_even_compressed(self):
+        def pack(data):
+            try:
+                from compression import zstd
+            except ImportError:
+                return subprocess.run(["zstd", "-c"], input=data, capture_output=True, check=True).stdout
+            return zstd.compress(data)
+
+        with tempfile.TemporaryDirectory() as temp:
+            state = Path(temp)
+            path = state / "agents" / "main" / "agent" / "openclaw-agent.sqlite"
+            path.parent.mkdir(parents=True)
+            usage = lambda when, tokens: {"timestamp": when, "message": {
+                "role": "assistant", "__openclaw": {"runId": "run-1"},
+                "usage": {"input": 0, "cacheRead": tokens, "cacheWrite": 0}}}
+            with closing(sqlite3.connect(path)) as db:
+                db.execute("CREATE TABLE trajectory_runtime_events (session_id TEXT, seq INT, run_id TEXT, event_json TEXT)")
+                db.execute("CREATE TABLE transcript_events (session_id TEXT, seq INT, event_json TEXT, event_zstd BLOB)")
+                db.execute("INSERT INTO trajectory_runtime_events VALUES ('s', 1, 'run-1', ?)",
+                           (json.dumps(measured(6600, ts="2026-10-10T10:00:01.000Z")),))
+                db.execute("INSERT INTO transcript_events VALUES ('s', 1, ?, NULL)",
+                           (json.dumps(usage("2026-10-10T10:00:00.000Z", 999)),))
+                db.execute("INSERT INTO transcript_events VALUES ('s', 2, NULL, ?)",
+                           (pack(json.dumps(usage("2026-10-10T10:00:05.000Z", 1000)).encode()),))
+                db.commit()
+            run = subprocess.run([sys.executable, str(BYTES_PER_TOKEN), str(state), "main"],
+                                 capture_output=True, text=True)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            report = json.loads(run.stdout)
+            self.assertEqual((report["n"], report["max"], report["largest"]["tokens"]), (1, 6.6, 1000))
 
 
 if __name__ == "__main__":

@@ -51,7 +51,7 @@ def main():
               "byAgent": by_agent, "from": min(times, default=None), "to": max(times, default=None)}
     print(json.dumps(report, sort_keys=True))
     if missing:
-        print("no provider.payload.measured events for " + ", ".join(missing), file=sys.stderr)
+        print("no Responses provider.payload.measured events for " + ", ".join(missing), file=sys.stderr)
         return 1
     return 0
 

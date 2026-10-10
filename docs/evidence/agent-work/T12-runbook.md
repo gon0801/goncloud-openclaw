@@ -1,6 +1,6 @@
 # T12: instalación en vivo en la Mac Mini
 
-Este paso a paso es para David, o para quien él autorice, y se corre en la Mac Mini del gateway vivo (`gon@100.73.187.5`). El plan deja T12 pendiente hasta que haya autorización y una ventana (plan `:305-:320`). Lo que se instala es el artefacto de `artifact-manifest.json` (R `f1c5f34`). Cada comando de abajo se ensayó en la Mac de desarrollo sobre una copia de la Mini (T11, `deploy-commands.md`). Los pasos que dependen de la Mini (cómo arranca y se detiene su gateway) se leen en la Mini antes de empezar.
+Este paso a paso es para David, o para quien él autorice, y se corre en la Mac Mini del gateway vivo (`gon@100.73.187.5`). El plan deja T12 pendiente hasta que haya autorización y una ventana (plan `:305-:320`). Lo que se instala es el artefacto de `artifact-manifest.json`: R `f1c5f34` en la parte A, y `19c2ed1` desde B6. Cada comando de abajo se ensayó en la Mac de desarrollo sobre una copia de la Mini (T11, `deploy-commands.md`). Los pasos que dependen de la Mini (cómo arranca y se detiene su gateway) se leen en la Mini antes de empezar.
 
 ## Qué trabajadores pueden recibir un encargo
 
@@ -31,7 +31,7 @@ Los dos builds usan el esquema 27, así que volver atrás es reinstalar `f1c5f34
 
 | # | Qué | Comando | Salida esperada | Si no |
 |---|---|---|---|---|
-| 0.1 | El artefacto es el revisado | En la Mac de desarrollo: `python3 scripts/agent-work/artifact.py verify` | `artifact OK: openclaw 2026.9.7 from f1c5f34…` | No hay T12. |
+| 0.1 | El artefacto es el revisado | En la Mac de desarrollo: `python3 scripts/agent-work/artifact.py verify` | `artifact OK: openclaw 2026.9.7 from <sourceSha del manifiesto>` (en la parte A, `f1c5f34…`) | No hay T12. |
 | 0.2 | Copiar los paquetes a la Mini | `scp ~/.local/state/encargos-loop/artifacts/paquete-f1c5f34/openclaw-2026.9.7.tgz ~/.local/state/encargos-loop/artifacts/paquete-f1c5f34/openclaw-ai-2026.9.7.tgz gon@100.73.187.5:/tmp/` y, en la Mini, `shasum -a 256 /tmp/openclaw*.tgz` | los dos sha256 de `artifact-manifest.json` | Copiar otra vez; no instalar con otro hash. |
 | 0.3 | Cómo arranca el gateway en la Mini | En la Mini: `launchctl list \| grep -i openclaw; ps -axo pid,command \| grep -i "openclaw.*gateway" \| grep -v grep` | Una etiqueta launchd (anótala como `<etiqueta>`) y un proceso `openclaw-gateway` | Si no hay etiqueta launchd, anota cómo se lanza (proceso padre con `ps -o ppid=`) y úsalo en 1.2 y 1.4. |
 | 0.4 | Versión viva | `~/.openclaw/bin/openclaw --version` | `OpenClaw 2026.9.7 (c074824)` | Si es otra versión, el manifiesto (`previousRuntime`) ya no aplica: parar. |
@@ -72,7 +72,7 @@ scp -r gon@100.73.187.5:/tmp/sombra /tmp/sombra && python3 scripts/agent-work/ru
 
 Al terminar, borra `/tmp/sombra` en las dos máquinas: son bases con conversaciones.
 
-Mide solo a los agentes que pueden recibir un encargo, y solo sus llamadas por Responses (B6). Imprime el máximo, el p95 y n por agente, y propone `maxContextTokens` como el máximo × 1,5. Sale con 1 si uno de esos agentes todavía no tiene ninguna llamada por Responses medida. El valor se lleva a `limits.json` (`productionProfile.values.maxContextTokens`) en un PR. `artifact.py verify` y `cutover_live` siguen negándose a abrir la admisión mientras haya un `null`. Que la medición es fiel se comprobó en la copia: el evento y el cuerpo que recibió el proveedor tuvieron los mismos bytes (39.555 y 54.632, `B5-logs.md`).
+Mide solo a los agentes que pueden recibir un encargo, y solo sus llamadas por Responses (B6). Imprime el máximo, el p95 y n por agente. Su `maxContextTokens` propuesto (el máximo × 1,5) es solo el piso: desde B7, el valor de `limits.json` es la ventana del modelo en bytes. Es decir, `contextWindow` × bytes por token, y los bytes por token salen de `medir-bytes-por-token.py` (mismos argumentos) como el máximo medido × 1,5 (B7.md). `test_the_repo_context_limit_is_the_model_window_with_the_profile_margin` comprueba esa relación. Volver a medir sirve para subir el factor si un agente nuevo trae más bytes por token, nunca para bajar el valor al máximo × 1,5. Que la medición es fiel se comprobó en la copia: el evento y el cuerpo que recibió el proveedor tuvieron los mismos bytes (39.555 y 54.632, `B5-logs.md`).
 
 ## Parte B: abrir una entrada (plan `:312` a `:318`)
 

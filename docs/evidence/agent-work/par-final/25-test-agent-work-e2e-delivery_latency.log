@@ -3,8 +3,8 @@ $ bash scripts/tests/test-agent-work-e2e.sh delivery_latency
 DELIVERY_LATENCY {"detection_to_persisted_receipt_s": 0.25, "write_to_detection_s": 4.999}
 .
 ----------------------------------------------------------------------
-Ran 1 test in 0.008s
+Ran 1 test in 0.010s
 
 OK
 
-rc=0 seconds=0.1
+rc=0 seconds=0.2
