@@ -1,26 +1,26 @@
 $ bash scripts/agent-work/test-runtime.sh admission_restart
-{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "f1c5f34ae8f91652412188349c296b3c1a882701"}
-[vitest-workers] local cache hit after 2562ms
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "19c2ed13a046fa87e9ab766999bf66b419a1b91f"}
+[vitest-workers] local cache hit after 2619ms
 [vitest-workers] reused local compiler outputs
-[vitest-workers] prepared 18ed6ed069ca in 2593ms (16698 inputs, 17251 outputs)
+[vitest-workers] prepared e079d464c245 in 2650ms (16698 inputs, 17252 outputs)
 [test] starting test/vitest/vitest.infra.config.ts
 
- RUN  v5.0.1 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.1M76AV2If3/r
+ RUN  v5.0.1 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.OtFl7sEvgx/r
 
- ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rejects an invented budget reservation before claiming a native run 404ms
- ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > lets one emitter claim, keeps a crash uncertain, and recovers the exact native run 1549ms
- ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rejects revoked authority before claiming and fences a delayed prior request 392ms
- ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rechecks authority inside the worker before persisting a claim 392ms
- ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > refuses admission after cancellation and cannot confirm an outstanding claim 61ms
- ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > upgrades a version 20 task ledger without losing its registered tasks 127ms
+ ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rejects an invented budget reservation before claiming a native run 416ms
+ ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > lets one emitter claim, keeps a crash uncertain, and recovers the exact native run 1587ms
+ ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rejects revoked authority before claiming and fences a delayed prior request 398ms
+ ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > rechecks authority inside the worker before persisting a claim 399ms
+ ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > refuses admission after cancellation and cannot confirm an outstanding claim 62ms
+ ✓ |infra| src/agents/tasks/managed-task.admission.test.ts > managed task admission_restart > upgrades a version 20 task ledger without losing its registered tasks 128ms
 
  Test Files  1 passed (1)
       Tests  6 passed (6)
-   Start at  20:02:45
-   Duration  5.00s (tests 61%, transform 26%, import 9%, setup 4%)
+   Start at  02:04:28
+   Duration  5.13s (tests 61%, transform 26%, import 9%, setup 4%)
 
 [vitest-workers] verifying completed generation before cleanup
 [vitest-workers] retained completed compiler outputs for reuse
-[test] passed 1 Vitest shard in 8.99s
+[test] passed 1 Vitest shard in 9.20s
 
-rc=0 seconds=9.4
+rc=0 seconds=9.6

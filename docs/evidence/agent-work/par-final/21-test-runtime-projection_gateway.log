@@ -1,12 +1,12 @@
 $ bash scripts/agent-work/test-runtime.sh projection_gateway
-{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "f1c5f34ae8f91652412188349c296b3c1a882701"}
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "19c2ed13a046fa87e9ab766999bf66b419a1b91f"}
 [test] starting test/vitest/vitest.gateway-database-workers.config.ts
 
- RUN  v5.0.1 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.1M76AV2If3/r
+ RUN  v5.0.1 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.OtFl7sEvgx/r
 
-[vitest-workers] local cache hit after 2157ms
+[vitest-workers] local cache hit after 2237ms
 [vitest-workers] reused local compiler outputs
-[vitest-workers] prepared c32dc1ed19d0 in 2190ms (16698 inputs, 17251 outputs)
+[vitest-workers] prepared 25ed8b77cb1d in 2270ms (16698 inputs, 17252 outputs)
  ↓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > prebinds the oldest CLI claim to one authenticated host instance before admission
  ↓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > closes a bound host task only for its authenticated device
  ↓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > records one host incident only for its authenticated device and adapter
@@ -16,6 +16,7 @@ $ bash scripts/agent-work/test-runtime.sh projection_gateway
  ↓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > accepts one CLI host result, rejects another host, and replays the same native receipt
  ↓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > lists a durable projection and acknowledges only its exact host receipt
  ↓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > rejects malformed or revoked requests before confirming a projection
+[vitest] still running with no output for 30000ms.
 stderr | unknown test
 [sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.stateDatabaseLifecycle
 [sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.stateSnapshotOwners
@@ -25,15 +26,15 @@ stderr | unknown test
 [sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.agentDatabaseLifecycle
 [sqlite-test-lifecycle] src/gateway/server-methods/managed-tasks.test.ts: retiring openclaw.sessionGroupCatalog
 
- ✓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > serves and acknowledges a durable projection over an authenticated Gateway connection 22628ms
+ ✓ |gateway-database-workers| src/gateway/server-methods/managed-tasks.test.ts > managed task projection gateway authority > serves and acknowledges a durable projection over an authenticated Gateway connection 30688ms
 
  Test Files  1 passed (1)
       Tests  1 passed | 9 skipped (10)
-   Start at  20:21:29
-   Duration  27.48s (tests 83%, transform 14%, import 2%, worker 1%)
+   Start at  02:31:03
+   Duration  37.97s (tests 81%, transform 16%, import 2%, worker 1%)
 
 [vitest-workers] verifying completed generation before cleanup
 [vitest-workers] retained completed compiler outputs for reuse
-[test] passed 1 Vitest shard in 29.26s
+[test] passed 1 Vitest shard in 39.84s
 
-rc=0 seconds=29.6
+rc=0 seconds=40.2
