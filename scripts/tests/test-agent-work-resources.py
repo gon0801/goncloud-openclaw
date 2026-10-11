@@ -3,6 +3,7 @@ import json
 import hashlib
 import os
 import re
+import secrets
 import signal
 import shutil
 import subprocess
@@ -899,6 +900,45 @@ class ResourceTests(unittest.TestCase):
         view = self.manager.close(key, {"kind": "cancel", "receipt": "reuse-1"})
         self.assertEqual(view.state, "CleanupPending")
         self.assertEqual(view.reason, "adopted session unverifiable")
+        self.assertEqual(self.backend.revokes, [])
+
+    def pending_adopted(self, instance_id, pid):
+        """An adopted resource a pass left CleanupPending with its result evidence: tmux was unreachable."""
+        key = OperationKey("host-test", f"task-{instance_id}", 1, instance_id)
+        self._adopted(key, "canario", pid)
+        self.backend.offline = True
+        self.assertEqual(self.manager.close(key, {"kind": "result", "receipt": "rcpt"}).state, "CleanupPending")
+        self.backend.offline = False
+        return key
+
+    def resource(self, key):
+        with self.host.spool.connection() as db:
+            return tuple(db.execute("SELECT state, reason FROM resources WHERE operation_id=?",
+                                    (operation_id(key),)).fetchone())
+
+    def test_a_pending_adopted_session_that_still_carries_our_mark_is_not_released(self):
+        key = self.pending_adopted("canario-2", 716)
+        self.backend.live["canario"]["paneStart"] = "another-pane-birth"
+        self.assertEqual(self.manager.retry_cleanup(), (0, []))
+        self.assertEqual(self.resource(key), ("CleanupPending", "adopted identity uncertain"))
+        self.assertEqual(self.backend.revokes, [])
+
+    def test_an_adopted_session_the_host_cannot_attribute_stays_pending(self):
+        key = self.pending_adopted("canario-2", 717)
+        theirs = {**self.backend.live["canario"], "nonce": "f" * 32, "paneStart": "another-pane-birth"}
+        for case, pane, socket, reason in (
+                ("unobservable", None, "sock-test", "host unavailable"),
+                ("another tmux server", {**theirs, "socket": "another-sock"}, "another-sock",
+                 "adopted identity uncertain"),
+                ("a mark that is no nonce", {**theirs, "nonce": "not-a-nonce"}, "sock-test",
+                 "adopted identity uncertain")):
+            with self.subTest(case):
+                self.backend.offline = pane is None
+                self.backend.socket = socket
+                if pane is not None:
+                    self.backend.live["canario"] = pane
+                self.assertEqual(self.manager.retry_cleanup(), (0, []))
+                self.assertEqual(self.resource(key), ("CleanupPending", reason))
         self.assertEqual(self.backend.revokes, [])
 
     def test_resource_close_adopted_ps_failure_stays_pending(self):
@@ -1813,6 +1853,179 @@ class ResourceTests(unittest.TestCase):
                                         f"b32ag-pool-instance-{number}"),
                            f"b32agpool{number}", "IntentionalPool")
         self.assertEqual(manager.counts(), {"active": 10, "history": 100, "pool": 10})
+
+
+class LegacyAdoptionTests(unittest.TestCase):
+    """The two canary spools R still counted open on 2026-10-11, rebuilt on a tmux server of the test's own:
+    an abandoned delivery R later cancelled (mac-local) and an acknowledged one left CleanupPending once a
+    newer host marked the same pane (mac-local-b)."""
+
+    SCREENS = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "opencode"
+    SCREEN_CLI = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "screen-cli.py"
+    FAKE_R = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "fake-r-host.py"
+
+    def setUp(self):
+        self.tmux_bin = shutil.which("tmux")
+        if not self.tmux_bin:
+            self.skipTest("tmux not installed")
+        self.socket = f"agent-work-legacy-{os.getpid()}"
+        self.addCleanup(self.tmux, "kill-server")
+        self.tmp = tempfile.TemporaryDirectory(prefix="agent-work-legacy-")
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.keys = self.root / "canario.keys"
+        screen = str(self.SCREENS / "session-empty.ans")
+        started = self.tmux("new-session", "-d", "-s", "canario", "-x", "160", "-y", "40", "--", sys.executable,
+                            str(self.SCREEN_CLI), screen, screen, str(self.keys))
+        self.assertEqual(started.returncode, 0, started.stderr)
+        self.cli_pid = self.pane_field("pane_pid")
+        self.backend = TmuxBackend(self.tmux_bin, self.socket)
+
+    def tmux(self, *args):
+        return subprocess.run([self.tmux_bin, "-L", self.socket, *args], capture_output=True, text=True)
+
+    def pane_field(self, field):
+        return self.tmux("display-message", "-p", "-t", "=canario:", "#{" + field + "}").stdout.strip()
+
+    def adopt(self, host, instance_id, task_id):
+        manager = ResourceManager(host.spool, "host-test", self.backend)
+        key = OperationKey("host-test", task_id, 1, instance_id)
+        manager.reserve(key, "canario", "UserAdopted")
+        self.assertTrue(manager.begin_launch(key).launch_now)
+        manager.mark(key)
+        self.assertEqual(manager.attach(key).state, "Running")
+        brief = self.root / "brief.txt"
+        brief.write_text("revisa el cambio")
+        operation = AuthorizedOperation(
+            key=key, producer_id="opencode", capability=f"cap-{task_id}", session="canario",
+            workspace_ref=str(self.root), brief_ref=str(brief),
+            brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
+            input_revision={"kind": "code", "repository": "repo", "sha": "a" * 40},
+            result_contract="review.v1", claim_id=f"claim-{task_id}", adapter_id="opencode")
+        return manager, key, operation
+
+    def acknowledged_then_unreachable(self, host, instance_id, task_id):
+        """R acknowledged the result, and the pass that gave the session back found tmux unreachable."""
+        manager, key, operation = self.adopt(host, instance_id, task_id)
+        self.assertEqual(host.apply(key, operation, lambda *_: None, ResourceTests.admit).status, "typed")
+        host.spool.delivered(operation_id(key))
+        artifact = self.root / f"{task_id}.txt"
+        artifact.write_text("aprobado")
+        result = {"schema": "agent-work.result.v1", "kind": "produced", "hostId": "host-test", "taskId": task_id,
+                  "generation": 1, "instanceId": instance_id, "producerId": "opencode",
+                  "capability": f"cap-{task_id}", "observedRevision": operation.input_revision,
+                  "typedPayload": {"verdict": "approved"}, "artifactRef": str(artifact),
+                  "digest": hashlib.sha256(artifact.read_bytes()).hexdigest()}
+        host.report("host-test", result)
+        host.flush("host-test", lambda result, _: {
+            **{field: result[field] for field in ("hostId", "taskId", "generation", "instanceId", "producerId")},
+            "resultId": hashlib.sha256(canonical(result).encode()).hexdigest(), "receiptId": f"rcpt-{task_id}"})
+        unreachable = ResourceManager(host.spool, "host-test",
+                                      TmuxBackend(str(self.root / "no-tmux"), self.socket, self.backend.boot_id))
+        self.assertEqual(unreachable.close(key, {"kind": "result", "receipt": f"rcpt-{task_id}"}).reason,
+                         "host unavailable")
+        return manager, key
+
+    def state(self, host, key):
+        with host.spool.connection() as db:
+            return tuple(db.execute("SELECT state, reason FROM resources WHERE operation_id=?",
+                                    (operation_id(key),)).fetchone())
+
+    def test_a_pending_adopted_session_a_newer_host_marked_is_released_without_touching_the_pane(self):
+        old = Host("host-test", self.root / "mac-local-b")
+        manager, key = self.acknowledged_then_unreachable(old, "canario-2", "task-b")
+        closures = []
+
+        class Client:
+            host_id = "host-test"
+
+            def close_host(self, assignment, state, reason, _):
+                closures.append((assignment["taskId"], state, reason))
+                return {}
+
+            def report_host_result(self, *_):
+                raise AssertionError("the result was already acknowledged")
+
+            def report_host_incident(self, *_):
+                raise AssertionError("no incident was recorded")
+
+            def list_pending(self, **_):
+                return []
+
+        old.flush_closures("host-test", Client().close_host)
+        self.assertEqual(self.tmux("set-option", "-u", "-t", "=canario:", TmuxBackend.NONCE_OPTION).returncode, 0)
+        newer = Host("host-test", self.root / "mac-local-c")
+        newer_manager, newer_key, _ = self.adopt(newer, "canario-3", "task-c")
+        newer_mark = newer_manager._row(newer_key)["nonce"]
+
+        def one_pass():
+            return pump_once(Client(), host=old, evidence_root=self.tmp.name, progress_state_dir=self.tmp.name,
+                             progress_client="unused", cli_release=manager.release_acknowledged,
+                             cli_retry=manager.retry_cleanup)
+
+        self.assertEqual(one_pass(), {"reported": 0, "transferred": 0, "closed": 1, "incidents": 0,
+                                      "released": 0, "recovered": 1})
+        self.assertEqual(self.state(old, key), ("ReleasedAdopted", "adopted mark superseded"))
+        self.assertEqual(closures, [("task-b", "CleanupPending", "host unavailable"),
+                                    ("task-b", "ReleasedAdopted", "adopted mark superseded")])
+        self.assertEqual(one_pass()["closed"], 0)
+        self.assertEqual(len(closures), 2, "R got the terminal closure twice")
+        time.sleep(0.3)
+        self.assertEqual(self.keys.read_text() if self.keys.exists() else "", "", "a key reached the pane")
+        self.assertEqual((self.pane_field(TmuxBackend.NONCE_OPTION), self.pane_field("pane_pid")),
+                         (newer_mark, self.cli_pid), "the release touched the newer host's pane")
+        self.assertEqual(self.state(newer, newer_key), ("Running", ""))
+
+    def test_close_only_closes_both_legacy_spools_and_never_claims(self):
+        spool_dir = self.root / "legacy"
+        host = Host("host-test", spool_dir)
+        manager, abandoned, operation = self.adopt(host, "canario-1", "task-a")
+
+        def lost(*_):
+            raise RuntimeError("the keys may have reached the pane")
+
+        self.assertEqual(host.apply(abandoned, operation, lost, ResourceTests.admit).status, "uncertain")
+        host.resolve_delivery("host-test", abandoned, "abandoned", "un diálogo se comió la referencia")
+        _, pending = self.acknowledged_then_unreachable(host, "canario-2", "task-b")
+        newer_mark = secrets.token_hex(16)
+        self.assertEqual(self.tmux("set-option", "-t", "=canario:", TmuxBackend.NONCE_OPTION, newer_mark).returncode,
+                         0)
+        state, log = self.root / "r-state.json", self.root / "r-calls.jsonl"
+        state.write_text(json.dumps({"cancellations": {"task-a": "cancel-a"}, "results": ["task-b"],
+                                     "closures": {}}))
+        argv = ["--openclaw-bin", str(self.FAKE_R), "--host-id", "host-test", "--expect-url", "ws://127.0.0.1:1",
+                "--host-state-dir", str(spool_dir), "--close-only", "--cli-adapter-id", "opencode",
+                "--cli-tmux-socket", self.socket, "--tmux-bin", self.tmux_bin]
+        with mock.patch.dict(os.environ, {"FAKE_R_STATE": str(state), "FAKE_R_LOG": str(log)}):
+            first = subprocess.run([sys.executable, str(ROOT / "scripts/agent-work/native_gateway.py"), *argv],
+                                   capture_output=True, text=True)
+            self.assertEqual(first.returncode, 0, first.stderr + first.stdout)
+            again = subprocess.run([sys.executable, str(ROOT / "scripts/agent-work/native_gateway.py"), *argv],
+                                   capture_output=True, text=True)
+            self.assertEqual(again.returncode, 0, again.stderr + again.stdout)
+        calls = [json.loads(line) for line in log.read_text().splitlines()]
+        methods = [call["method"] for call in calls]
+        self.assertEqual(methods.count("managedTasks.host.claim"), 0, "--close-only asked R for work")
+        cancel_digest = hashlib.sha256(b'{"kind":"cancel","receipt":"cancel-a"}').hexdigest()
+        result_digest = hashlib.sha256(b'{"kind":"result","receipt":"rcpt-task-b"}').hexdigest()
+        self.assertEqual(sorted((call["params"]["capability"]["taskId"], call["params"]["instanceId"],
+                                 call["params"]["state"], call["params"]["reason"], call["params"]["evidenceDigest"])
+                                for call in calls if call["method"] == "managedTasks.host.close"),
+                         [("task-a", "canario-1", "ReleasedAdopted", "delivery abandoned", cancel_digest),
+                          ("task-b", "canario-2", "ReleasedAdopted", "adopted mark superseded", result_digest)])
+        self.assertEqual(set(methods), {"managedTasks.host.cancellation", "managedTasks.host.close"})
+        report = json.loads(first.stdout)
+        self.assertEqual(sorted((r["taskId"], r["state"]) for r in report["rClosures"]),
+                         [("task-a", "ReleasedAdopted"), ("task-b", "ReleasedAdopted")])
+        self.assertEqual(sorted((r["taskId"], r["before"][0], r["after"][0]) for r in report["resources"]),
+                         [("task-a", "ReleasedAdopted", "ReleasedAdopted"),
+                          ("task-b", "CleanupPending", "ReleasedAdopted")])
+        self.assertEqual(json.loads(again.stdout)["rClosures"], [], "a second run sent the closures again")
+        self.assertEqual(self.state(host, pending), ("ReleasedAdopted", "adopted mark superseded"))
+        time.sleep(0.3)
+        self.assertEqual(self.keys.read_text() if self.keys.exists() else "", "", "a key reached the pane")
+        self.assertEqual((self.pane_field(TmuxBackend.NONCE_OPTION), self.pane_field("pane_pid")),
+                         (newer_mark, self.cli_pid))
 
 
 class PermissionDialogTests(unittest.TestCase):

@@ -390,36 +390,72 @@ def transfer_gateway_projections(client, *, evidence_root, progress_state_dir, p
     raise RuntimeError("native projection Gateway page limit exceeded")
 
 
-def pump_once(client, *, host, evidence_root, progress_state_dir, progress_client,
-              cli_claim=None, cli_watch=None, cli_release=None, cli_cancel=None):
-    """Report, release acknowledged adopted sessions, release cancelled tasks, close, detect silent CLI
-    failures, claim authorized work, and drain projections in one code-only pass."""
+def close_pass(client, *, host, cli_release=None, cli_cancel=None, cli_retry=None, close_host=None):
+    """Report results, release acknowledged adopted sessions, release cancelled tasks, retry pending
+    cleanups and send the closures to R. Claims, delivers and types nothing; the cancellation step alone
+    may deny a cancelled task's permission dialog. Returns counts, the report error and the other errors."""
     receipts = []
     report_error = None
     try:
         receipts = host.flush(client.host_id, client.report_host_result)
     except (OSError, RuntimeError, ValueError) as exc:
         report_error = exc
-    released = 0
-    release_errors = []
-    if cli_release is not None:
+    counts, errors = {}, []
+    for name, step in (("released", cli_release), ("cancelled", cli_cancel), ("recovered", cli_retry)):
+        if step is None:
+            continue
         try:
-            released, release_errors = cli_release()
+            counts[name], step_errors = step()
         except (OSError, RuntimeError, ValueError) as exc:
-            release_errors = [str(exc)]
-    cancelled = 0
-    cancel_errors = []
-    if cli_cancel is not None:
-        try:
-            cancelled, cancel_errors = cli_cancel()
-        except (OSError, RuntimeError, ValueError) as exc:
-            cancel_errors = [str(exc)]
-    closed = 0
-    closure_errors = []
+            counts[name], step_errors = 0, [str(exc)]
+        errors += step_errors
     try:
-        closed, closure_errors = host.flush_closures(client.host_id, client.close_host)
+        counts["closed"], closure_errors = host.flush_closures(client.host_id, close_host or client.close_host)
     except (OSError, RuntimeError, ValueError) as exc:
-        closure_errors = [str(exc)]
+        counts["closed"], closure_errors = 0, [str(exc)]
+    return {"reported": len(receipts), **counts}, report_error, errors + closure_errors
+
+
+def close_only(client, *, host, manager, reject_dialog):
+    """One closing pass over a spool no host runs any more, for the instances its own rows name. Returns
+    each resource before and after, and the closure receipts R sent back."""
+    def resources():
+        with host.spool.connection() as db:
+            rows = db.execute("SELECT r.operation_id,r.task_id,r.instance_id,r.state,r.reason,o.status "
+                              "FROM resources r LEFT JOIN operations o ON o.operation_id=r.operation_id "
+                              "ORDER BY r.operation_id").fetchall()
+        return {row["operation_id"]: dict(row) for row in rows}
+
+    before = resources()
+    receipts = []
+
+    def close_host(*args):
+        receipt = client.close_host(*args)
+        receipts.append(receipt)
+        return receipt
+
+    counts, report_error, errors = close_pass(
+        client, host=host, cli_release=manager.release_acknowledged,
+        cli_cancel=lambda: manager.release_cancelled(client.host_cancellation, reject_dialog),
+        cli_retry=manager.retry_cleanup, close_host=close_host)
+    if report_error is not None:
+        errors.insert(0, f"report failed: {report_error}")
+    after = resources()
+    return {"counts": counts, "errors": errors, "rClosures": receipts,
+            "resources": [{"operationId": op_id, "taskId": row["task_id"], "instanceId": row["instance_id"],
+                           "operation": row["status"],
+                           "before": [before.get(op_id, {}).get("state"), before.get(op_id, {}).get("reason")],
+                           "after": [row["state"], row["reason"]],
+                           "lastSent": host.spool.closure_last(op_id)}
+                          for op_id, row in after.items()]}
+
+
+def pump_once(client, *, host, evidence_root, progress_state_dir, progress_client,
+              cli_claim=None, cli_watch=None, cli_release=None, cli_cancel=None, cli_retry=None):
+    """Settle closures (close_pass), detect silent CLI failures, claim authorized work, and drain
+    projections in one code-only pass."""
+    counts, report_error, errors = close_pass(client, host=host, cli_release=cli_release,
+                                              cli_cancel=cli_cancel, cli_retry=cli_retry)
     detected = 0
     watch_errors = []
     if cli_watch is not None:
@@ -449,24 +485,20 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
         raise report_error
     if claim_error is not None:
         raise claim_error
-    errors = release_errors + cancel_errors + closure_errors + watch_errors + incident_errors
+    errors += watch_errors + incident_errors
     if errors:
         raise RuntimeError("; ".join(errors))
-    result = {"reported": len(receipts), "transferred": transferred, "closed": closed,
-              "incidents": incidents_sent}
+    result = {**counts, "transferred": transferred, "incidents": incidents_sent}
     if cli_claim is not None:
         result["claimed"] = 1 if claimed is not None else 0
     if cli_watch is not None:
         result["detected"] = detected
-    if cli_release is not None:
-        result["released"] = released
-    if cli_cancel is not None:
-        result["cancelled"] = cancelled
     return result
 
 
 def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_client,
-               stop_event, interval=1.0, cli_claim=None, cli_watch=None, cli_release=None, cli_cancel=None):
+               stop_event, interval=1.0, cli_claim=None, cli_watch=None, cli_release=None, cli_cancel=None,
+               cli_retry=None):
     """Poll with code; a failed pass leaves durable host and native work for retry."""
     if not 0 < interval <= 5:
         raise ValueError("poll interval must be between zero and five seconds")
@@ -477,6 +509,7 @@ def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_clie
                 client, host=host, evidence_root=evidence_root,
                 progress_state_dir=progress_state_dir, progress_client=progress_client,
                 cli_claim=cli_claim, cli_watch=cli_watch, cli_release=cli_release, cli_cancel=cli_cancel,
+                cli_retry=cli_retry,
             )
         except (OSError, RuntimeError, ValueError) as exc:
             error = str(exc)
@@ -509,14 +542,31 @@ def main(argv=None):
     parser.add_argument("--tmux-bin", default="tmux")
     parser.add_argument("--flush-results", action="store_true")
     parser.add_argument("--watch", action="store_true")
+    parser.add_argument("--close-only", action="store_true",
+                        help="one closing pass over --host-state-dir, for the instances its rows name; never claims")
     args = parser.parse_args(argv)
     client = GatewayProjectionClient(args.openclaw_bin, args.host_id, args.expect_url)
+    if args.close_only:
+        if not all((args.host_state_dir, args.cli_adapter_id, args.cli_tmux_socket)):
+            parser.error("--close-only requires --host-state-dir, --cli-adapter-id and --cli-tmux-socket")
+        if (args.claim_once or args.watch or args.flush_results or args.cli_instance_id or args.cli_session
+                or args.cli_workspace_root):
+            parser.error("--close-only takes its instances from the spool and never claims")
+        from resources import ResourceManager, TmuxBackend
+        host = Host(args.host_id, args.host_state_dir)
+        backend = TmuxBackend(args.tmux_bin, args.cli_tmux_socket)
+        adapter = cli_adapter(args.cli_adapter_id)
+        report = close_only(client, host=host, manager=ResourceManager(host.spool, args.host_id, backend),
+                            reject_dialog=lambda identity: reject_permission_dialog(backend, identity, adapter))
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 1 if report["errors"] else 0
     cli_fields = (args.cli_adapter_id, args.cli_instance_id, args.cli_session,
                   args.cli_workspace_root, args.cli_tmux_socket)
     cli_claim = None
     cli_watch = None
     cli_release = None
     cli_cancel = None
+    cli_retry = None
     if args.claim_once or any(cli_fields):
         if not all(cli_fields) or not args.host_state_dir:
             parser.error("CLI claim requires adapter, stable instance, session, workspace, socket and host state")
@@ -538,6 +588,7 @@ def main(argv=None):
         adapter = cli_adapter(args.cli_adapter_id)
         cli_cancel = lambda: manager.release_cancelled(
             client.host_cancellation, lambda identity: reject_permission_dialog(backend, identity, adapter))
+        cli_retry = manager.retry_cleanup
 
         if args.cli_deadline_seconds is not None and not args.cli_deadline_seconds > 0:
             parser.error("--cli-deadline-seconds must be positive")
@@ -567,6 +618,7 @@ def main(argv=None):
                 evidence_root=args.evidence_root, progress_state_dir=args.progress_state_dir,
                 progress_client=args.progress_client, stop_event=stop,
                 cli_claim=cli_claim, cli_watch=cli_watch, cli_release=cli_release, cli_cancel=cli_cancel,
+                cli_retry=cli_retry,
             )
         finally:
             signal.signal(signal.SIGTERM, old_term)

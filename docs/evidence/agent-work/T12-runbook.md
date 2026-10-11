@@ -137,8 +137,40 @@ tmux -L <socket> new-session -d -s <sesión> -x 200 -y 50 -c <workspace> \
 - Mientras el operador tenga texto en el composer, de cualquier color, el host espera y no teclea nada. Solo cuentan como vacíos el composer sin texto y los tres placeholders medidos de opencode 1.18.35 (`Ask anything… "…"`). Teclea la referencia una vez y relee el composer cada 0,3 s, hasta 3 s, porque opencode tarda en dibujar una referencia larga. Pulsa Enter solo cuando el composer muestra exactamente lo que tecleó; si a los 3 s no lo muestra, no pulsa Enter, la entrega queda `uncertain` y la cierra el operador (1.8). La sesión no se marca con `OPENCLAW_WATCH`; el host le pone `AGENT_WORK_MANAGED=1`.
 - Mientras opencode muestre un diálogo, el host difiere la entrega y no teclea nada, porque el diálogo se llevaría las teclas. Un ejemplo es "Update Available … Skip Confirm", que opencode 1.18.35 abre al arrancar aunque `OPENCODE_DISABLE_AUTOUPDATE=1`. Ciérralo con Esc en la sesión (`tmux -L <socket> attach -t <sesión>`, Esc y después `C-b d`). La pasada siguiente entrega.
 - El host tiene cupo 1: el encargo siguiente se reclama solo cuando el anterior se cerró o se abandonó (1.8). Sin cupo, el host no le pide trabajo a R, porque R liga a la instancia la tarea que entrega.
-- Entre encargos no hay que cerrar nada a mano. En cuanto R da el recibo del resultado, la misma pasada de `native_gateway.py --watch` cierra el recurso adoptado con ese recibo como evidencia: quita la marca del host de la sesión sin parar opencode, la deja `ReleasedAdopted` y le manda el cierre a R. La pasada siguiente ya puede reclamar otro encargo. Si ese cierre queda `CleanupPending` (por ejemplo, `adopted identity uncertain` o `host unavailable`), el host no lo reintenta y retiene el cupo: ciérralo como en la sección siguiente.
+- Entre encargos no hay que cerrar nada a mano. En cuanto R da el recibo del resultado, la misma pasada de `native_gateway.py --watch` cierra el recurso adoptado con ese recibo como evidencia: quita la marca del host de la sesión sin parar opencode, la deja `ReleasedAdopted` y le manda el cierre a R. La pasada siguiente ya puede reclamar otro encargo. Si ese cierre queda `CleanupPending` (por ejemplo, `adopted identity uncertain` o `host unavailable`), cada pasada lo reintenta (desde B14). Si la sesión ya lleva la marca de otro recurso, o ninguna, el host ya no la tiene: deja el recurso `ReleasedAdopted` sin teclear ni quitar marcas, y le manda el cierre a R. Si todavía lleva la marca del host, o el host no la puede leer, o la lee desde otro servidor tmux, el recurso sigue `CleanupPending` y retiene el cupo: ciérralo como en la sección siguiente.
 - Un encargo cancelado tampoco se cierra a mano. Cada pasada pregunta a R (`managedTasks.host.cancellation`, desde el paquete de R `f8316c9`) si canceló la tarea de cada operación abierta. Si la canceló, el host marca la operación `cancelled` y cierra el recurso con la cancelación como evidencia. Si opencode muestra "Permission required" para ese encargo, antes lo rechaza con Esc, nunca con Enter, que aprueba. Después quita su marca sin parar opencode y le manda el cierre a R, y en esa misma pasada ya puede reclamar otro encargo. Si la pantalla muestra otro diálogo, el host no teclea nada y lo anota en los errores de la pasada; ciérralo tú en la sesión. Un cierre por cancelación que queda `CleanupPending` sí se reintenta en cada pasada.
+
+### El host en la Mac
+
+El host corre desde `~/dev/wt/agent-work-host`, en `tmux -L agent-work`, sesión `host`. Lo arranca este comando (el de `~/.local/state/agent-work-host/host-cmd.txt`):
+
+```
+OPENCLAW_BIN=/Users/dn/.openclaw-r/openclaw LANG=en_US.UTF-8 python3 scripts/agent-work/native_gateway.py --openclaw-bin /Users/dn/.openclaw-r/openclaw --host-id mac-local --expect-url ws://127.0.0.1:18789 --host-state-dir /Users/dn/.local/state/agent-work-host/mac-local-c --evidence-root /Users/dn/.local/state/agent-work-host/evidence --progress-state-dir /Users/dn/.local/state/runbook-progress-events --progress-client /Users/dn/bin/progress-events.py --watch --cli-adapter-id opencode --cli-instance-id canario-3 --cli-session canario --cli-workspace-root /Users/dn/dev/canario-encargos --cli-tmux-socket agent-work --cli-deadline-seconds 3600 2>&1 | tee -a /Users/dn/.local/state/agent-work-host/host.log
+```
+
+- `--progress-state-dir` es `/Users/dn/.local/state/runbook-progress-events`, el directorio que publica el latido. Con otro directorio, los avisos del host no llegan a nadie.
+- `~/bin/progress-events.py` tiene que ser igual a `scripts/mac/progress-events.py` del mismo checkout: una copia vieja no lleva los campos del ACK durable. Compruébalo antes de arrancar con `cmp ~/bin/progress-events.py scripts/mac/progress-events.py`, que no imprime nada si son iguales.
+- `--host-state-dir` y `--cli-instance-id` cambian solo cuando se empieza un spool nuevo. Un spool que ya no corre ningún host se cierra con la sección "Cerrar un spool viejo".
+
+### Cerrar un spool viejo
+
+Un spool que ya no corre ningún host puede seguir reteniendo cupo en R: R guarda un lugar de presupuesto para cada admisión cuyo cierre del host no es terminal. `native_gateway.py --close-only` hace una sola pasada de cierre sobre ese spool y sale. Reporta los resultados pendientes, suelta las sesiones con recibo, cierra las tareas que R canceló, reintenta los `CleanupPending` y manda los cierres a R. Nunca reclama trabajo, nunca entrega y nunca teclea; la única tecla posible es el Esc de B13 sobre un "Permission required" de una tarea cancelada. Toma las instancias de las filas del spool, así que no recibe `--cli-instance-id`. Abrir el spool sube su esquema a la versión 2, igual que al abrirlo un host nuevo.
+
+El 2026-10-11 quedaban dos spools viejos del canario. Con `~/dev/wt/agent-work-host` ya en el `main` que trae B14 (el checkout está en HEAD separado: `git -C ~/dev/wt/agent-work-host fetch origin && git -C ~/dev/wt/agent-work-host checkout --detach origin/main`; el host vivo ya cargó su código y no se reinicia para esto), se cierran desde `~/dev/wt/agent-work-host` con una línea cada uno. Cada línea guarda antes una copia del spool:
+
+```
+! cp ~/.local/state/agent-work-host/mac-local/host.sqlite ~/.local/state/agent-work-host/mac-local/host.sqlite.pre-b14 && LANG=en_US.UTF-8 python3 scripts/agent-work/native_gateway.py --openclaw-bin /Users/dn/.openclaw-r/openclaw --host-id mac-local --expect-url ws://127.0.0.1:18789 --host-state-dir /Users/dn/.local/state/agent-work-host/mac-local --close-only --cli-adapter-id opencode --cli-tmux-socket agent-work
+! cp ~/.local/state/agent-work-host/mac-local-b/host.sqlite ~/.local/state/agent-work-host/mac-local-b/host.sqlite.pre-b14 && LANG=en_US.UTF-8 python3 scripts/agent-work/native_gateway.py --openclaw-bin /Users/dn/.openclaw-r/openclaw --host-id mac-local --expect-url ws://127.0.0.1:18789 --host-state-dir /Users/dn/.local/state/agent-work-host/mac-local-b --close-only --cli-adapter-id opencode --cli-tmux-socket agent-work
+```
+
+Cada una imprime un JSON. `resources` dice, por recurso, su tarea, su instancia, el estado de su operación y el estado del recurso antes y después de la pasada. `rClosures` trae los recibos de `managedTasks.host.close` que R devolvió en esta corrida, con el estado que R guardó. `lastSent` es el último cierre que el spool tiene registrado como aceptado por R. Sale con 0 si no hubo errores; con 1, los errores van en `errors`, y repetir la línea es seguro, porque un cierre que R ya tiene no se vuelve a mandar. Lo esperado:
+
+| Spool | Tarea | Instancia | Recurso después | Cierre que R devuelve |
+|---|---|---|---|---|
+| `mac-local` | `1454c912-0604-4b7c-8808-f8b8da5d8828` | `canario-1` | `ReleasedAdopted`, `delivery abandoned` | `ReleasedAdopted`, con la cancelación de R como evidencia |
+| `mac-local-b` | `98431858-869c-4cab-9189-b10adb127489` | `canario-2` | `ReleasedAdopted`, `adopted mark superseded` (o `adopted mark cleared` si la sesión ya no lleva marca) | `ReleasedAdopted`, con el recibo del resultado como evidencia (`bb59de80…`) |
+
+Si `mac-local-b` sigue `CleanupPending` con `adopted identity uncertain`, la sesión `canario` todavía lleva su marca, `8d126bc852d15dfa51c0313eebda6140`: no la cierres a mano y anótalo en `followups.md`.
 
 ### El cierre de una sesión gestionada en la Mac
 
