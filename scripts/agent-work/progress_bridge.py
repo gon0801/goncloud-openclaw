@@ -12,6 +12,7 @@ import tempfile
 
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
+CLIENT_TIMEOUT = 30
 
 
 def canonical(value):
@@ -103,8 +104,12 @@ def transfer_projection(pending, *, host_id, evidence_root, progress_state_dir,
             stream.write(raw)
             stream.flush()
             os.fsync(stream.fileno())
-        completed = subprocess.run(command + ["--evidence-file", str(snapshot)],
-                                   capture_output=True, text=True, timeout=30)
+        try:
+            completed = subprocess.run(command + ["--evidence-file", str(snapshot)],
+                                       capture_output=True, text=True, timeout=CLIENT_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"progress queue timed out for corrida {destination['corrida']} "
+                               f"after {CLIENT_TIMEOUT} s") from None
     if completed.returncode:
         raise RuntimeError(f"cola de progreso rechazó la proyección: {completed.stderr.strip()}")
     try:

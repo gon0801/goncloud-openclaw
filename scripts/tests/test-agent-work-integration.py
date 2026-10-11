@@ -41,6 +41,25 @@ from corrida_worker.reconcile import reconcile  # noqa: E402
 from corrida_worker.state import reduce_events, state_from_record  # noqa: E402
 
 
+def accepting_board(root):
+    """A Gateway that accepts every progress event and logs each method it served."""
+    board = Path(root) / "accepting-openclaw"
+    board.write_text(f"""#!/usr/bin/env python3
+import json, sys
+args = sys.argv[1:]
+method = args[2]
+params = json.loads(args[args.index('--params') + 1])
+with open({str(Path(root) / 'board.jsonl')!r}, 'a') as log:
+    log.write(json.dumps([method, params.get('id')]) + '\\n')
+if method == 'runbook.progress.get':
+    print(json.dumps({{'ok': True, 'revision': 7, 'doc': {{'corrida': params['corrida'], 'carriles': []}}}}))
+else:
+    print(json.dumps({{'ok': True, 'revision': 8}}))
+""")
+    board.chmod(0o755)
+    return board
+
+
 class ProjectionTransferTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -642,9 +661,11 @@ else:
     def test_pump_reports_then_projects_once_across_repeated_idle_polls(self):
         host, _, _ = self.reported_host()
         pending = self.pending
+        board = accepting_board(self.root)
 
         class Client:
             host_id = "host-one"
+            openclaw_bin = str(board)
 
             def __init__(self):
                 self.reports = []
@@ -676,12 +697,16 @@ else:
         args = {"evidence_root": self.evidence_root, "progress_state_dir": self.state_dir,
                 "progress_client": ROOT / "scripts" / "mac" / "progress-events.py"}
         self.assertEqual(native_gateway.pump_once(client, host=host, **args),
-                         {"reported": 1, "transferred": 1, "closed": 0, "incidents": 0})
+                         {"reported": 1, "transferred": 1, "published": 1, "closed": 0, "incidents": 0})
         for _ in range(100):
             self.assertEqual(native_gateway.pump_once(client, host=host, **args),
-                             {"reported": 0, "transferred": 0, "closed": 0, "incidents": 0})
+                             {"reported": 0, "transferred": 0, "published": 0, "closed": 0, "incidents": 0})
         self.assertEqual(len(client.reports), 1)
-        self.assertEqual(len(list((self.state_dir / "runs" / "run-1" / "queue").glob("*.json"))), 1)
+        run = self.state_dir / "runs" / "run-1"
+        self.assertEqual(list((run / "queue").glob("*.json")), [])
+        self.assertEqual([path.name for path in (run / "sent").glob("*.json")], [pending["eventId"] + ".json"])
+        self.assertEqual((self.root / "board.jsonl").read_text().splitlines(),
+                         ['["runbook.progress.get", null]', f'["runbook.progress.event", "{pending["eventId"]}"]'])
 
     def test_pump_transfers_existing_projection_when_host_report_fails(self):
         class FailingHost:
@@ -697,8 +722,11 @@ else:
             def operation_key_for(self, *_):
                 return None
 
+        board = accepting_board(self.root)
+
         class Client:
             host_id = "host-one"
+            openclaw_bin = str(board)
 
             def __init__(self):
                 self.receipts = []
@@ -728,7 +756,8 @@ else:
                 progress_client=ROOT / "scripts" / "mac" / "progress-events.py",
             )
         self.assertEqual(len(client.receipts), 1)
-        self.assertEqual(len(list((self.state_dir / "runs" / "run-1" / "queue").glob("*.json"))), 1)
+        self.assertEqual([path.name for path in (self.state_dir / "runs" / "run-1" / "sent").glob("*.json")],
+                         [pending["eventId"] + ".json"])
 
     def test_pump_closure_failure_does_not_block_projections(self):
         class ClosureFailingHost:
@@ -744,8 +773,11 @@ else:
             def operation_key_for(self, *_):
                 return None
 
+        board = accepting_board(self.root)
+
         class Client:
             host_id = "host-one"
+            openclaw_bin = str(board)
 
             def __init__(self):
                 self.receipts = []
@@ -777,7 +809,8 @@ else:
                 progress_client=ROOT / "scripts" / "mac" / "progress-events.py",
             )
         self.assertEqual(len(client.receipts), 1)
-        self.assertEqual(len(list((self.state_dir / "runs" / "run-1" / "queue").glob("*.json"))), 1)
+        self.assertEqual([path.name for path in (self.state_dir / "runs" / "run-1" / "sent").glob("*.json")],
+                         [self.pending["eventId"] + ".json"])
 
     def test_delivery_latency_separates_detection_from_native_receipt(self):
         _, key, _, result, _ = self.registered_host()
@@ -966,6 +999,209 @@ else:
             self.transfer_from_host(restarted, key, acknowledged.append)
         self.assertEqual(acknowledged, [])
         self.assertFalse((self.state_dir / "runs" / "run-1" / "queue").exists())
+
+
+class ProgressPublishTest(unittest.TestCase):
+    """The host publishes its own progress queue: no latido, no human."""
+
+    def setUp(self):
+        ProjectionTransferTest.setUp(self)
+        self.run = self.state_dir / "runs" / "run-1"
+        self.mode = self.root / "publish-mode"
+        self.mode.write_text("ok")
+        self.argv_log = self.root / "publish-argv.jsonl"
+        self.progress = self.root / "progress.py"
+        self.progress.write_text(f"""#!/usr/bin/env python3
+import json, os, pathlib, sys, time
+args = sys.argv[1:]
+if 'publish' not in args:
+    if pathlib.Path({str(self.mode)!r}).read_text().strip() == 'slow':
+        time.sleep(30)
+    os.execv(sys.executable, [sys.executable, {str(ROOT / 'scripts' / 'mac' / 'progress-events.py')!r}] + args)
+with open({str(self.argv_log)!r}, 'a') as log:
+    log.write(json.dumps(args) + '\\n')
+run = pathlib.Path(args[args.index('--state-dir') + 1]) / 'runs' / args[args.index('--corrida') + 1]
+mode = pathlib.Path({str(self.mode)!r}).read_text().strip()
+if mode == 'fail':
+    print('progress-events: gateway no disponible para runbook.progress.get\\n', file=sys.stderr)
+    sys.exit(1)
+target = run / ('rejected' if mode == 'reject' else 'sent')
+target.mkdir(exist_ok=True)
+moved = 0
+for path in sorted((run / 'queue').glob('*.json')):
+    path.rename(target / path.name)
+    moved += 1
+if mode == 'reject':
+    print('progress-events: evento X rechazado: revision conflict', file=sys.stderr)
+    sys.exit(1)
+print(json.dumps({{'published': moved}}))
+""")
+        self.now = 0.0
+        self.publisher = native_gateway.ProgressPublisher(self.progress, self.state_dir, clock=lambda: self.now)
+        self.client = self.gateway([self.pending])
+
+    def gateway(self, rows):
+        class Client:
+            host_id = "host-one"
+            openclaw_bin = "/isolated/openclaw"
+
+            def list_pending(self, after_task_id=None, limit=100):
+                return list(rows)
+
+            def ack(self, receipt):
+                rows.clear()
+                return receipt
+
+            def report_host_result(self, *_):
+                raise AssertionError("the idle host reports nothing")
+
+            def close_host(self, *_):
+                raise AssertionError("the idle host closes nothing")
+
+            def report_host_incident(self, *_):
+                raise AssertionError("the idle host has no incidents")
+
+        return Client()
+
+    def idle_host(self):
+        class IdleHost:
+            def flush(self, *_):
+                return []
+
+            def flush_closures(self, *_):
+                return 0, []
+
+            def flush_incidents(self, *_):
+                return 0, []
+
+            def operation_key_for(self, *_):
+                return None
+
+        return IdleHost()
+
+    def pump(self):
+        return native_gateway.pump_once(
+            self.client, host=self.idle_host(), evidence_root=self.evidence_root, progress_state_dir=self.state_dir,
+            progress_client=self.progress, progress_publisher=self.publisher)
+
+    def publishes(self):
+        if not self.argv_log.exists():
+            return []
+        return [json.loads(line) for line in self.argv_log.read_text().splitlines()]
+
+    def queued(self, corrida, name, mtime):
+        queue = self.state_dir / "runs" / corrida / "queue"
+        queue.mkdir(parents=True, exist_ok=True)
+        path = queue / name
+        path.write_text("{}")
+        os.utime(path, (mtime, mtime))
+
+    def test_a_pass_publishes_the_projection_it_just_queued(self):
+        self.assertEqual(self.pump(), {"reported": 0, "transferred": 1, "published": 1, "closed": 0, "incidents": 0})
+        self.assertEqual(self.publishes(), [["--state-dir", str(self.state_dir), "--openclaw-bin", "/isolated/openclaw",
+                                             "publish", "--corrida", "run-1"]])
+        self.assertEqual([path.name for path in (self.run / "sent").iterdir()], [self.pending["eventId"] + ".json"])
+        self.assertEqual(list((self.run / "queue").iterdir()), [])
+
+    def test_an_idle_pass_with_empty_queues_spawns_no_publish(self):
+        self.client = self.gateway([])
+        (self.run / "queue").mkdir(parents=True)
+        (self.run / "sent").mkdir()
+        (self.run / "sent" / "evt-old.json").write_text("{}")
+        for _ in range(3):
+            self.assertEqual(self.pump(), {"reported": 0, "transferred": 0, "published": 0, "closed": 0, "incidents": 0})
+        self.assertEqual(self.publishes(), [])
+        self.queued("run-1", "evt-new.json", 1)
+        self.assertEqual(self.pump()["published"], 1)
+        self.assertEqual([argv[-1] for argv in self.publishes()], ["run-1"])
+
+    def test_a_failed_publish_keeps_the_event_queued_and_the_next_pass_retries(self):
+        self.mode.write_text("fail")
+        with self.assertRaises(RuntimeError) as caught:
+            self.pump()
+        self.assertEqual(str(caught.exception), "progress publish rejected corrida run-1: "
+                         "progress-events: gateway no disponible para runbook.progress.get")
+        self.assertEqual([path.name for path in (self.run / "queue").iterdir()], [self.pending["eventId"] + ".json"])
+        self.mode.write_text("ok")
+        self.assertEqual(self.pump(), {"reported": 0, "transferred": 0, "published": 1, "closed": 0, "incidents": 0})
+        self.assertEqual([argv[-1] for argv in self.publishes()], ["run-1", "run-1"])
+        self.assertEqual([path.name for path in (self.run / "sent").iterdir()], [self.pending["eventId"] + ".json"])
+
+    def test_a_rejected_event_is_reported_once_and_never_retried(self):
+        self.mode.write_text("reject")
+        with self.assertRaises(RuntimeError) as caught:
+            self.pump()
+        self.assertEqual(str(caught.exception),
+                         "progress publish rejected corrida run-1: progress-events: evento X rechazado: revision conflict")
+        for _ in range(3):
+            self.assertEqual(self.pump(), {"reported": 0, "transferred": 0, "published": 0, "closed": 0, "incidents": 0})
+        self.assertEqual([argv[-1] for argv in self.publishes()], ["run-1"])
+        self.assertEqual([path.name for path in (self.run / "rejected").iterdir()], [self.pending["eventId"] + ".json"])
+
+    def test_a_progress_client_timeout_fails_the_pass_without_acking_and_the_host_keeps_running(self):
+        acks = []
+        rows = [self.pending]
+        self.client = self.gateway(rows)
+        self.client.ack = lambda receipt: acks.append(receipt) or rows.clear() or receipt
+        self.mode.write_text("slow")
+        with mock.patch("progress_bridge.CLIENT_TIMEOUT", 0.5):
+            with self.assertRaises(RuntimeError) as caught:
+                self.pump()
+            self.assertEqual(str(caught.exception), "progress queue timed out for corrida run-1 after 0.5 s")
+            self.assertEqual(acks, [])
+            self.assertFalse((self.run / "queue" / (self.pending["eventId"] + ".json")).exists())
+
+            mode = self.mode
+            acks_at_wait = []
+
+            class TwoPasses:
+                def is_set(self):
+                    return len(acks_at_wait) == 2
+
+                def wait(self, _interval):
+                    acks_at_wait.append(len(acks))
+                    mode.write_text("ok")
+
+            stderr, stdout = io.StringIO(), io.StringIO()
+            self.mode.write_text("slow")
+            with contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(stdout):
+                native_gateway.watch_pump(
+                    self.client, host=self.idle_host(), evidence_root=self.evidence_root,
+                    progress_state_dir=self.state_dir, progress_client=self.progress, stop_event=TwoPasses(),
+                    interval=0.01)
+        self.assertEqual(stderr.getvalue(),
+                         "agent-work pump: progress queue timed out for corrida run-1 after 0.5 s\n")
+        self.assertEqual(stdout.getvalue(), '{"closed": 0, "incidents": 0, "published": 1, "reported": 0, '
+                         '"transferred": 1}\n')
+        self.assertEqual(acks_at_wait, [0, 1])
+        self.assertEqual([receipt["eventId"] for receipt in acks], [self.pending["eventId"]])
+        self.assertEqual([path.name for path in (self.run / "sent").iterdir()], [self.pending["eventId"] + ".json"])
+
+    def test_a_queue_that_keeps_failing_backs_off_until_it_changes(self):
+        self.client = self.gateway([])
+        self.mode.write_text("fail")
+        self.queued("stale", "evt-1.json", 1)
+        attempts = []
+        for now in (0, 0, 29, 30, 30, 89, 90):
+            self.now = now
+            try:
+                self.pump()
+            except RuntimeError:
+                pass
+            attempts.append(len(self.publishes()))
+        self.assertEqual(attempts, [1, 2, 2, 3, 3, 3, 4])
+        self.queued("stale", "evt-2.json", 2)
+        self.assertRaises(RuntimeError, self.pump)
+        self.assertEqual(len(self.publishes()), 5)
+
+    def test_a_pass_publishes_at_most_four_corridas_newest_first(self):
+        self.client = self.gateway([])
+        for index in range(1, 7):
+            self.queued(f"run-{index}", "evt.json", index)
+        self.assertEqual(self.pump()["published"], 4)
+        self.assertEqual(self.pump()["published"], 2)
+        self.assertEqual([argv[-1] for argv in self.publishes()],
+                         ["run-6", "run-5", "run-4", "run-3", "run-2", "run-1"])
 
 
 class DirectorHandlingTest(unittest.TestCase):
@@ -2826,10 +3062,10 @@ class IncidentPumpTest(unittest.TestCase):
 
         client = RecordingClient()
         self.assertEqual(native_gateway.pump_once(client, host=host, **self.pump_args("idle")),
-                         {"reported": 0, "transferred": 0, "closed": 0, "incidents": 1})
+                         {"reported": 0, "transferred": 0, "published": 0, "closed": 0, "incidents": 1})
         for _ in range(100):
             self.assertEqual(native_gateway.pump_once(client, host=host, **self.pump_args("idle")),
-                             {"reported": 0, "transferred": 0, "closed": 0, "incidents": 0})
+                             {"reported": 0, "transferred": 0, "published": 0, "closed": 0, "incidents": 0})
         self.assertEqual(len(calls), 1)
 
 
@@ -3032,10 +3268,10 @@ class SilentFailureTest(unittest.TestCase):
                 "progress_client": str(self.root / "progress-events.py")}
         client = RecordingClient()
         self.assertEqual(native_gateway.pump_once(client, host=host, cli_watch=watch, **args),
-                         {"reported": 0, "transferred": 0, "closed": 0, "incidents": 1, "detected": 1})
+                         {"reported": 0, "transferred": 0, "published": 0, "closed": 0, "incidents": 1, "detected": 1})
         for _ in range(100):
             self.assertEqual(native_gateway.pump_once(client, host=host, cli_watch=watch, **args),
-                             {"reported": 0, "transferred": 0, "closed": 0, "incidents": 0,
+                             {"reported": 0, "transferred": 0, "published": 0, "closed": 0, "incidents": 0,
                               "detected": 0})
         self.assertEqual(calls, [("task-silent", self.CLOSED)])
 
@@ -3833,7 +4069,7 @@ class DeliveryAcceptanceTest(unittest.TestCase):
                 "evidence_root": self.root / "evidence", "progress_state_dir": self.root / "progress",
                 "progress_client": str(self.root / "progress-events.py")}
         client = RecordingClient()
-        idle = {"reported": 0, "transferred": 0, "closed": 0, "incidents": 0, "claimed": 1, "detected": 0}
+        idle = {"reported": 0, "transferred": 0, "published": 0, "closed": 0, "incidents": 0, "claimed": 1, "detected": 0}
         self.assertEqual(native_gateway.pump_once(client, host=host, **args), idle)
         clock[0] = 1060.0
         self.assertEqual(native_gateway.pump_once(client, host=host, **args),

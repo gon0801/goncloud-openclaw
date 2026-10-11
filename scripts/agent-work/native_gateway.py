@@ -12,6 +12,7 @@ import sys
 import tempfile
 import threading
 import time
+from collections import namedtuple
 from pathlib import Path
 
 from contracts import AuthorizedOperation, IncidentRejected, OperationKey
@@ -390,6 +391,86 @@ def transfer_gateway_projections(client, *, evidence_root, progress_state_dir, p
     raise RuntimeError("native projection Gateway page limit exceeded")
 
 
+PublishFailure = namedtuple("PublishFailure", "queue attempts retry_at")
+
+
+class ProgressPublisher:
+    """Sends the durable progress queue to the board with `progress-client publish --corrida <c>`.
+
+    One call per queued corrida per pass, newest queue first, at most PER_PASS calls. A failed call
+    leaves its files queued: the next pass retries it, later failures of the same queue back off to
+    MAX_BACKOFF seconds, and any change to that queue makes it due again."""
+    PER_PASS = 4
+    MAX_BACKOFF = 300.0
+
+    def __init__(self, progress_client, state_dir, *, clock=time.monotonic):
+        self.progress_client = progress_client
+        self.state_dir = state_dir
+        self.clock = clock
+        self.failures = {}
+
+    def _queues(self):
+        runs = Path(self.state_dir) / "runs"
+        if not runs.is_dir() or runs.is_symlink():
+            return {}
+        queues = {}
+        for queue in runs.glob("*/queue"):
+            if queue.is_symlink() or queue.parent.is_symlink() or not queue.is_dir():
+                continue
+            stamps = {}
+            for path in queue.glob("*.json"):
+                try:
+                    stamps[path.name] = path.stat().st_mtime_ns
+                except FileNotFoundError:
+                    continue
+            if stamps:
+                queues[queue.parent.name] = (frozenset(stamps), max(stamps.values()))
+        return queues
+
+    def publish(self, gateway):
+        """Publishes with the Gateway client's openclaw binary. Returns the events the progress client
+        published and one error per failed corrida."""
+        queues = self._queues()
+        now = self.clock()
+        self.failures = {corrida: failure for corrida, failure in self.failures.items() if corrida in queues}
+        due = sorted((corrida for corrida, (names, _) in queues.items()
+                      if corrida not in self.failures or self.failures[corrida].queue != names
+                      or now >= self.failures[corrida].retry_at),
+                     key=lambda corrida: (-queues[corrida][1], corrida))
+        published, errors = 0, []
+        for corrida in due[:self.PER_PASS]:
+            command = [sys.executable, str(self.progress_client), "--state-dir", str(self.state_dir),
+                       "--openclaw-bin", gateway.openclaw_bin, "publish", "--corrida", corrida]
+            error = None
+            try:
+                completed = subprocess.run(command, capture_output=True, text=True, timeout=30)
+            except subprocess.TimeoutExpired:
+                error = f"progress publish timed out for corrida {corrida} after 30 s"
+            except OSError as exc:
+                error = f"progress publish unavailable for corrida {corrida}: {' '.join(str(exc).split())[:300]}"
+            else:
+                if completed.returncode:
+                    error = f"progress publish rejected corrida {corrida}: {_rejection(completed)}"
+                else:
+                    try:
+                        count = json.loads(completed.stdout).get("published")
+                    except (json.JSONDecodeError, AttributeError):
+                        count = None
+                    if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+                        error = f"progress publish returned no count for corrida {corrida}"
+            if error is None:
+                published += count
+                self.failures.pop(corrida, None)
+                continue
+            names = queues[corrida][0]
+            previous = self.failures.get(corrida)
+            attempts = previous.attempts + 1 if previous and previous.queue == names else 1
+            delay = 0 if attempts == 1 else min(self.MAX_BACKOFF, 15 * 2 ** (attempts - 1))
+            self.failures[corrida] = PublishFailure(names, attempts, now + delay)
+            errors.append(error)
+        return published, errors
+
+
 def close_pass(client, *, host, cli_release=None, cli_cancel=None, cli_retry=None, close_host=None):
     """Report results, release acknowledged adopted sessions, release cancelled tasks, retry pending
     cleanups and send the closures to R. Claims, delivers and types nothing; the cancellation step alone
@@ -451,9 +532,10 @@ def close_only(client, *, host, manager, reject_dialog):
 
 
 def pump_once(client, *, host, evidence_root, progress_state_dir, progress_client,
-              cli_claim=None, cli_watch=None, cli_release=None, cli_cancel=None, cli_retry=None):
-    """Settle closures (close_pass), detect silent CLI failures, claim authorized work, and drain
-    projections in one code-only pass."""
+              cli_claim=None, cli_watch=None, cli_release=None, cli_cancel=None, cli_retry=None,
+              progress_publisher=None):
+    """Settle closures (close_pass), detect silent CLI failures, claim authorized work, drain
+    projections and publish the progress queue in one code-only pass."""
     counts, report_error, errors = close_pass(client, host=host, cli_release=cli_release,
                                               cli_cancel=cli_cancel, cli_retry=cli_retry)
     detected = 0
@@ -481,14 +563,16 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
         client, evidence_root=evidence_root, progress_state_dir=progress_state_dir,
         progress_client=progress_client, host=host,
     )
+    publisher = progress_publisher or ProgressPublisher(progress_client, progress_state_dir)
+    published, publish_errors = publisher.publish(client)
     if report_error is not None:
         raise report_error
     if claim_error is not None:
         raise claim_error
-    errors += watch_errors + incident_errors
+    errors += watch_errors + incident_errors + publish_errors
     if errors:
         raise RuntimeError("; ".join(errors))
-    result = {**counts, "transferred": transferred, "incidents": incidents_sent}
+    result = {**counts, "transferred": transferred, "published": published, "incidents": incidents_sent}
     if cli_claim is not None:
         result["claimed"] = 1 if claimed is not None else 0
     if cli_watch is not None:
@@ -503,13 +587,14 @@ def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_clie
     if not 0 < interval <= 5:
         raise ValueError("poll interval must be between zero and five seconds")
     last_error = None
+    publisher = ProgressPublisher(progress_client, progress_state_dir)
     while not stop_event.is_set():
         try:
             result = pump_once(
                 client, host=host, evidence_root=evidence_root,
                 progress_state_dir=progress_state_dir, progress_client=progress_client,
                 cli_claim=cli_claim, cli_watch=cli_watch, cli_release=cli_release, cli_cancel=cli_cancel,
-                cli_retry=cli_retry,
+                cli_retry=cli_retry, progress_publisher=publisher,
             )
         except (OSError, RuntimeError, ValueError) as exc:
             error = str(exc)

@@ -333,7 +333,7 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual(pump_once(client, host=self.host, evidence_root=self.tmp.name,
                                    progress_state_dir=self.tmp.name, progress_client="unused",
                                    cli_release=manager.release_acknowledged),
-                         {"reported": 1, "transferred": 0, "closed": 1, "incidents": 0, "released": 1})
+                         {"reported": 1, "transferred": 0, "published": 0, "closed": 1, "incidents": 0, "released": 1})
         with self.host.spool.connection() as db:
             self.assertEqual(tuple(db.execute("SELECT state, evidence_json FROM resources WHERE operation_id=?",
                                               (operation_id(self.key),)).fetchone()),
@@ -413,7 +413,7 @@ class ResourceTests(unittest.TestCase):
         identity = self.backend.live["oc"]
         client, dialogs, claims = self.cancelling_client({"task-1": "cancel-1"}), [], []
         self.assertEqual(self.cancel_pass(client, manager, dialogs, claims),
-                         {"reported": 0, "transferred": 0, "closed": 1, "incidents": 0, "claimed": 0,
+                         {"reported": 0, "transferred": 0, "published": 0, "closed": 1, "incidents": 0, "claimed": 0,
                           "cancelled": 1})
         with self.host.spool.connection() as db:
             self.assertEqual(tuple(db.execute("SELECT state, evidence_json FROM resources WHERE operation_id=?",
@@ -432,7 +432,7 @@ class ResourceTests(unittest.TestCase):
         self.assertIn("oc", self.backend.live)
 
         self.assertEqual(self.cancel_pass(client, manager, dialogs, claims),
-                         {"reported": 0, "transferred": 0, "closed": 0, "incidents": 0, "claimed": 0,
+                         {"reported": 0, "transferred": 0, "published": 0, "closed": 0, "incidents": 0, "claimed": 0,
                           "cancelled": 0})
         self.assertEqual((client.reads, len(client.closures), len(dialogs)), (["task-1"], 1, 1))
         following = OperationKey("host-test", "task-2", 1, "instance-1")
@@ -445,7 +445,7 @@ class ResourceTests(unittest.TestCase):
         client, dialogs, claims = self.cancelling_client({}), [], []
         for _ in range(2):
             self.assertEqual(self.cancel_pass(client, manager, dialogs, claims),
-                             {"reported": 0, "transferred": 0, "closed": 0, "incidents": 0, "claimed": 0,
+                             {"reported": 0, "transferred": 0, "published": 0, "closed": 0, "incidents": 0, "claimed": 0,
                               "cancelled": 0})
         self.assertEqual(client.reads, ["task-1", "task-1"])
         with self.host.spool.connection() as db:
@@ -473,7 +473,7 @@ class ResourceTests(unittest.TestCase):
         self.assertFalse(manager.can_take("instance-1"))
         self.backend.offline = False
         self.assertEqual(self.cancel_pass(client, manager, dialogs, claims),
-                         {"reported": 0, "transferred": 0, "closed": 1, "incidents": 0, "claimed": 0,
+                         {"reported": 0, "transferred": 0, "published": 0, "closed": 1, "incidents": 0, "claimed": 0,
                           "cancelled": 1})
         self.assertEqual((client.reads, len(dialogs)), (["task-1"], 1))
         self.assertEqual([closure[1:3] for closure in client.closures],
@@ -495,7 +495,7 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual((client.reads, client.closures), (["task-1"], []))
         cancellations["task-1"] = "cancel-1"
         self.assertEqual(self.cancel_pass(client, manager, dialogs, claims),
-                         {"reported": 0, "transferred": 0, "closed": 1, "incidents": 0, "claimed": 0,
+                         {"reported": 0, "transferred": 0, "published": 0, "closed": 1, "incidents": 0, "claimed": 0,
                           "cancelled": 1})
         self.assertEqual(client.closures, [("task-1", "ReleasedAdopted", "delivery abandoned", hashlib.sha256(
             b'{"kind":"cancel","receipt":"cancel-1"}').hexdigest())])
@@ -1963,7 +1963,7 @@ class LegacyAdoptionTests(unittest.TestCase):
                              progress_client="unused", cli_release=manager.release_acknowledged,
                              cli_retry=manager.retry_cleanup)
 
-        self.assertEqual(one_pass(), {"reported": 0, "transferred": 0, "closed": 1, "incidents": 0,
+        self.assertEqual(one_pass(), {"reported": 0, "transferred": 0, "published": 0, "closed": 1, "incidents": 0,
                                       "released": 0, "recovered": 1})
         self.assertEqual(self.state(old, key), ("ReleasedAdopted", "adopted mark superseded"))
         self.assertEqual(closures, [("task-b", "CleanupPending", "host unavailable"),
