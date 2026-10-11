@@ -2,6 +2,7 @@
 import json
 import hashlib
 import os
+import re
 import signal
 import shutil
 import subprocess
@@ -9,6 +10,7 @@ import sys
 import tempfile
 import time
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -16,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 
 from contracts import AuthorizedOperation, OperationKey, operation_id
-from host import Host
+from host import Host, cli_adapter, read_composer, reject_permission_dialog
 from spool import canonical
 from native_gateway import claim_cli_once, pump_once
 from resources import (AccountBusyError, AGENT_USER, AgentesBackend, AgentProcess, CommandOutcome,
@@ -361,6 +363,145 @@ class ResourceTests(unittest.TestCase):
                              ("ReleasedAdopted", "delivery abandoned"))
         self.assertTrue(ResourceManager(host.spool, "host-test", self.backend, capacity=1).can_take("instance-2"))
         self.assertEqual(self.backend.stops, [], "the migration stopped the operator's CLI")
+
+    def cancelling_client(self, cancellations):
+        class Client:
+            host_id = "host-test"
+
+            def __init__(self):
+                self.reads, self.closures = [], []
+
+            def host_cancellation(self, assignment):
+                self.reads.append(assignment["taskId"])
+                return cancellations.get(assignment["taskId"])
+
+            def close_host(self, assignment, state, reason, digest):
+                self.closures.append((assignment["taskId"], state, reason, digest))
+                return {}
+
+            def list_pending(self, **_):
+                return []
+
+            def report_host_result(self, *_):
+                raise AssertionError("a cancelled task has no result to report")
+
+            def report_host_incident(self, *_):
+                raise AssertionError("no incident was recorded")
+
+        return Client()
+
+    def held_opencode(self, manager, key, pid):
+        operation = replace(self.adopt(manager, key, pid), adapter_id="opencode")
+        self.assertEqual(self.host.apply(key, operation, lambda *_: None, self.admit).status, "typed")
+        self.host.spool.delivered(operation_id(key))
+        return operation
+
+    def cancel_pass(self, client, manager, dialogs, claims):
+        def reject(identity):
+            dialogs.append(identity)
+            return "rejected"
+
+        return pump_once(client, host=self.host, evidence_root=self.tmp.name, progress_state_dir=self.tmp.name,
+                         progress_client="unused",
+                         cli_cancel=lambda: manager.release_cancelled(client.host_cancellation, reject),
+                         cli_claim=lambda: claims.append(manager.can_take("instance-1")))
+
+    def test_the_pump_releases_a_task_r_cancelled_and_frees_the_host_in_the_same_pass(self):
+        manager = ResourceManager(self.host.spool, "host-test", self.backend, capacity=1)
+        self.held_opencode(manager, self.key, 705)
+        identity = self.backend.live["oc"]
+        client, dialogs, claims = self.cancelling_client({"task-1": "cancel-1"}), [], []
+        self.assertEqual(self.cancel_pass(client, manager, dialogs, claims),
+                         {"reported": 0, "transferred": 0, "closed": 1, "incidents": 0, "claimed": 0,
+                          "cancelled": 1})
+        with self.host.spool.connection() as db:
+            self.assertEqual(tuple(db.execute("SELECT state, evidence_json FROM resources WHERE operation_id=?",
+                                              (operation_id(self.key),)).fetchone()),
+                             ("ReleasedAdopted", '{"kind":"cancel","receipt":"cancel-1"}'))
+        self.assertEqual(client.closures, [("task-1", "ReleasedAdopted", "", hashlib.sha256(
+            b'{"kind":"cancel","receipt":"cancel-1"}').hexdigest())])
+        self.assertEqual(self.host.spool.get(operation_id(self.key))["status"], "cancelled")
+        self.assertEqual(self.host.spool.cancellation(operation_id(self.key)),
+                         {"operation_id": operation_id(self.key), "cancellation_id": "cancel-1",
+                          "dialog": "rejected"})
+        self.assertEqual(dialogs, [identity], "the permission dialog was not answered before the release")
+        self.assertEqual(claims, [True], "the claim of the same pass found the host full")
+        self.assertEqual((self.backend.stops, self.backend.revokes), ([], [identity]),
+                         "cancelling stopped the operator's CLI")
+        self.assertIn("oc", self.backend.live)
+
+        self.assertEqual(self.cancel_pass(client, manager, dialogs, claims),
+                         {"reported": 0, "transferred": 0, "closed": 0, "incidents": 0, "claimed": 0,
+                          "cancelled": 0})
+        self.assertEqual((client.reads, len(client.closures), len(dialogs)), (["task-1"], 1, 1))
+        following = OperationKey("host-test", "task-2", 1, "instance-1")
+        self.assertEqual(self.host.apply(following, self.adopt(manager, following, 706), lambda *_: None,
+                                         self.admit).status, "delivered")
+
+    def test_a_task_r_did_not_cancel_keeps_its_session(self):
+        manager = ResourceManager(self.host.spool, "host-test", self.backend, capacity=1)
+        self.held_opencode(manager, self.key, 707)
+        client, dialogs, claims = self.cancelling_client({}), [], []
+        for _ in range(2):
+            self.assertEqual(self.cancel_pass(client, manager, dialogs, claims),
+                             {"reported": 0, "transferred": 0, "closed": 0, "incidents": 0, "claimed": 0,
+                              "cancelled": 0})
+        self.assertEqual(client.reads, ["task-1", "task-1"])
+        with self.host.spool.connection() as db:
+            self.assertEqual(tuple(db.execute("SELECT state, evidence_json FROM resources WHERE operation_id=?",
+                                              (operation_id(self.key),)).fetchone()), ("Running", None))
+        self.assertEqual(self.host.spool.get(operation_id(self.key))["status"], "delivered")
+        self.assertEqual((client.closures, dialogs, self.backend.revokes), ([], [], []))
+        self.assertFalse(manager.can_take("instance-2"))
+
+    def test_a_cancellation_whose_release_failed_retries_without_asking_r_again(self):
+        manager = ResourceManager(self.host.spool, "host-test", self.backend, capacity=1)
+        self.held_opencode(manager, self.key, 708)
+        client, dialogs, claims = self.cancelling_client({"task-1": "cancel-1"}), [], []
+
+        def reject_then_drop(identity):
+            dialogs.append(identity)
+            self.backend.offline = True
+            return "rejected"
+
+        with self.assertRaisesRegex(RuntimeError, "cancelled; resource CleanupPending: host unavailable"):
+            pump_once(client, host=self.host, evidence_root=self.tmp.name, progress_state_dir=self.tmp.name,
+                      progress_client="unused",
+                      cli_cancel=lambda: manager.release_cancelled(client.host_cancellation, reject_then_drop))
+        self.assertEqual(self.host.spool.get(operation_id(self.key))["status"], "cancelled")
+        self.assertFalse(manager.can_take("instance-1"))
+        self.backend.offline = False
+        self.assertEqual(self.cancel_pass(client, manager, dialogs, claims),
+                         {"reported": 0, "transferred": 0, "closed": 1, "incidents": 0, "claimed": 0,
+                          "cancelled": 1})
+        self.assertEqual((client.reads, len(dialogs)), (["task-1"], 1))
+        self.assertEqual([closure[1:3] for closure in client.closures],
+                         [("CleanupPending", "host unavailable"), ("ReleasedAdopted", "")])
+        self.assertEqual(claims, [True])
+
+    def test_r_gets_the_closure_of_an_abandoned_delivery_once_it_cancels_the_task(self):
+        manager = ResourceManager(self.host.spool, "host-test", self.backend, capacity=1)
+        operation = replace(self.adopt(manager, self.key, 709), adapter_id="opencode")
+
+        def lost(*_):
+            raise RuntimeError("the keys may have reached the pane")
+
+        self.assertEqual(self.host.apply(self.key, operation, lost, self.admit).status, "uncertain")
+        self.host.resolve_delivery("host-test", self.key, "abandoned", "un diálogo se comió la referencia")
+        cancellations, dialogs, claims = {}, [], []
+        client = self.cancelling_client(cancellations)
+        self.assertEqual(self.cancel_pass(client, manager, dialogs, claims)["closed"], 0)
+        self.assertEqual((client.reads, client.closures), (["task-1"], []))
+        cancellations["task-1"] = "cancel-1"
+        self.assertEqual(self.cancel_pass(client, manager, dialogs, claims),
+                         {"reported": 0, "transferred": 0, "closed": 1, "incidents": 0, "claimed": 0,
+                          "cancelled": 1})
+        self.assertEqual(client.closures, [("task-1", "ReleasedAdopted", "delivery abandoned", hashlib.sha256(
+            b'{"kind":"cancel","receipt":"cancel-1"}').hexdigest())])
+        self.assertEqual(self.cancel_pass(client, manager, dialogs, claims)["closed"], 0)
+        self.assertEqual((client.reads, len(client.closures), dialogs), (["task-1", "task-1"], 1, []))
+        self.assertEqual(self.host.spool.get(operation_id(self.key))["status"], "abandoned")
+        self.assertEqual((self.backend.stops, self.backend.revokes), ([], []), "the closure touched the CLI")
 
     def test_a_full_host_never_asks_r_for_a_claim(self):
         class Client:
@@ -1672,6 +1813,72 @@ class ResourceTests(unittest.TestCase):
                                         f"b32ag-pool-instance-{number}"),
                            f"b32agpool{number}", "IntentionalPool")
         self.assertEqual(manager.counts(), {"active": 10, "history": 100, "pool": 10})
+
+
+class PermissionDialogTests(unittest.TestCase):
+    """opencode 1.18.35 screens captured 2026-10-11, painted in panes of a tmux server of the test's own."""
+
+    SCREENS = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "opencode"
+    SCREEN_CLI = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "screen-cli.py"
+
+    def setUp(self):
+        self.tmux_bin = shutil.which("tmux")
+        if not self.tmux_bin:
+            self.skipTest("tmux not installed")
+        self.socket = f"agent-work-dialog-{os.getpid()}"
+        self.addCleanup(self.tmux, "kill-server")
+        self.tmp = tempfile.TemporaryDirectory(prefix="agent-work-dialog-")
+        self.addCleanup(self.tmp.cleanup)
+        self.backend = TmuxBackend(self.tmux_bin, self.socket)
+        self.adapter = cli_adapter("opencode")
+
+    def tmux(self, *args):
+        return subprocess.run([self.tmux_bin, "-L", self.socket, *args], capture_output=True, text=True)
+
+    def pane(self, session, screen, after="permission-rejected"):
+        log = Path(self.tmp.name) / f"{session}.keys"
+        lines = [re.sub(r"\x1b\[[0-9;]*m", "", line) for name in (screen, after)
+                 for line in (self.SCREENS / f"{name}.ans").read_text().rstrip("\n").split("\n")]
+        width = str(max(len(line) for line in lines) + 2)
+        height = str(max(len((self.SCREENS / f"{name}.ans").read_text().rstrip("\n").split("\n"))
+                         for name in (screen, after)))
+        started = self.tmux("new-session", "-d", "-s", session, "-x", width, "-y", height, "--", sys.executable,
+                            str(self.SCREEN_CLI), str(self.SCREENS / f"{screen}.ans"),
+                            str(self.SCREENS / f"{after}.ans"), str(log))
+        self.assertEqual(started.returncode, 0, started.stderr)
+        self.backend.mark(session, f"nonce-{session}")
+        identity = self.backend.observe(session)
+        deadline, shown = time.monotonic() + 5, None
+        while time.monotonic() < deadline:
+            time.sleep(0.05)
+            screen = self.backend.capture(identity) or ""
+            if screen.strip() and screen == shown:
+                break
+            shown = screen
+        return identity, log
+
+    def keys(self, log):
+        time.sleep(0.5)
+        return log.read_text() if log.exists() else ""
+
+    def test_a_cancelled_task_denies_the_permission_dialog_and_leaves_an_empty_composer(self):
+        identity, log = self.pane("oc", "permission-dialog")
+        self.assertEqual(reject_permission_dialog(self.backend, identity, self.adapter), "rejected")
+        self.assertEqual(self.keys(log), "Escape\n", "the dialog got an answer other than a denial")
+        self.assertEqual(read_composer(self.backend.capture(identity), "opencode", self.adapter.placeholders),
+                         ("VACIO", ""))
+        self.assertEqual(self.backend.observe("oc"), identity, "denying the dialog touched the session")
+
+    def test_a_pane_without_the_permission_dialog_is_left_untouched(self):
+        for session, screen, outcome in (("empty", "session-empty", "none"), ("draft", "session-draft", "none"),
+                                         ("update", "update-dialog", "left: opencode dialog open")):
+            identity, log = self.pane(session, screen)
+            self.assertEqual(reject_permission_dialog(self.backend, identity, self.adapter), outcome, screen)
+            self.assertEqual(self.keys(log), "", f"a key reached the {screen} pane")
+        identity, log = self.pane("moved", "permission-dialog")
+        self.assertEqual(reject_permission_dialog(self.backend, {**identity, "nonce": "another-resource"},
+                                                  self.adapter), "left: pane unverifiable")
+        self.assertEqual(self.keys(log), "", "a key reached a pane the host no longer holds")
 
 
 if __name__ == "__main__":

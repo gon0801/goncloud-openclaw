@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 from contracts import AuthorizedOperation, OperationKey
 from cutover_live import uncertain_operations
 from host import (CliAdapter, DeliveryDeferred, Host, ShellAdapterTransport, TmuxTransport, cli_adapter,
-                  main as host_main, operation_id, read_composer, same_text)
+                  SGR, main as host_main, operation_id, read_composer, same_text)
 
 COMPOSER_CLI = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "composer-cli.py"
 # capture-pane -e of opencode 1.18.35 on its default theme, 2026-10-10: the home screen, a session
@@ -579,6 +579,11 @@ class HostReceipts(unittest.TestCase):
         with self.assertRaisesRegex(DeliveryDeferred, "DESCONOCIDO"):
             transport.deliver("/x/assignments/op-1.json", "oc")
         self.assertEqual(transport.keys, [], "the dialog took the keys of the reference")
+
+    def test_opencode_composer_is_empty_when_the_sidebar_prints_on_the_box_border(self):
+        screen = opencode_screen("permission-rejected")
+        self.assertIn("▀▀▀    main", SGR.sub("", screen))
+        self.assertEqual(read_composer(screen, "opencode.exe", cli_adapter("opencode").placeholders), ("VACIO", ""))
 
     def test_opencode_delivery_types_over_the_real_placeholder_and_submits(self):
         reference = self.reference_text("/x/assignments/op-1.json")
