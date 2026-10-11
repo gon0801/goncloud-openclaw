@@ -298,6 +298,24 @@ class ResourceManager:
             return self._state(key, revision, "CleanupPending", "descendant absence unverified")
         return self._state(key, revision, "AbsenceVerified")
 
+    def release_acknowledged(self) -> tuple[int, list[str]]:
+        """Give each adopted session back to the operator once R acknowledged its result. The CLI keeps
+        running; close only revokes the host's nonce, so the next adoption takes the session again."""
+        with self.spool.connection() as db:
+            rows = db.execute("SELECT r.task_id,r.generation,r.instance_id,o.receipt_json FROM resources r "
+                              "JOIN operations o ON o.operation_id=r.operation_id "
+                              "WHERE r.ownership='UserAdopted' AND r.state IN ('Running','Closing') "
+                              "AND o.status='acknowledged'").fetchall()
+        released, errors = 0, []
+        for row in rows:
+            key = OperationKey(self.host_id, row["task_id"], row["generation"], row["instance_id"])
+            try:
+                receipt = json.loads(row["receipt_json"])["receiptId"]
+                released += self.close(key, {"kind": "result", "receipt": receipt}).state == "ReleasedAdopted"
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                errors.append(f"{operation_id(key)}: release failed: {exc}")
+        return released, errors
+
     def session_gone(self, key: OperationKey) -> bool:
         try:
             row = self._row(key)

@@ -53,7 +53,7 @@ class ScriptedTmux(TmuxTransport):
     def _tmux(self, *args):
         out = {"list-panes": "%1\topencode.exe\n", "display-message": "oc\topencode.exe\n"}.get(args[0], "")
         if args[0] == "capture-pane":
-            out = self.screens.pop(0)
+            out = self.screens.pop(0) if len(self.screens) > 1 else self.screens[0]
         if args[0] == "send-keys":
             self.keys.append(args[-1])
         return subprocess.CompletedProcess(args, 0, out, "")
@@ -586,6 +586,17 @@ class HostReceipts(unittest.TestCase):
             transport = ScriptedTmux(opencode_screen(before), opencode_screen(after))
             transport.deliver("/x/assignments/op-1.json", "oc")
             self.assertEqual(transport.keys, [reference, "Enter"], before)
+
+    def test_opencode_delivery_presses_enter_once_a_long_reference_finishes_drawing(self):
+        reference = self.reference_text("/x/assignments/op-1.json")
+        partial = opencode_box(f"{BRIGHT}{reference[:90]}{RESET}")
+        drawn = ScriptedTmux(opencode_screen("home-empty"), partial, opencode_box(f"{BRIGHT}{reference}{RESET}"))
+        drawn.deliver("/x/assignments/op-1.json", "oc")
+        self.assertEqual(drawn.keys, [reference, "Enter"])
+        stuck = ScriptedTmux(opencode_screen("home-empty"), partial)
+        with self.assertRaisesRegex(RuntimeError, "Enter withheld"):
+            stuck.deliver("/x/assignments/op-1.json", "oc")
+        self.assertEqual(stuck.keys, [reference], "Enter went out on a reference the composer never finished")
 
     def test_opencode_delivery_withholds_enter_when_a_grey_draft_shares_the_composer(self):
         reference = self.reference_text("/x/assignments/op-1.json")

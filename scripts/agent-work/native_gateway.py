@@ -357,14 +357,22 @@ def transfer_gateway_projections(client, *, evidence_root, progress_state_dir, p
 
 
 def pump_once(client, *, host, evidence_root, progress_state_dir, progress_client,
-              cli_claim=None, cli_watch=None):
-    """Report, close, detect silent CLI failures, claim authorized work, and drain projections in one code-only pass."""
+              cli_claim=None, cli_watch=None, cli_release=None):
+    """Report, release acknowledged adopted sessions, close, detect silent CLI failures, claim authorized work,
+    and drain projections in one code-only pass."""
     receipts = []
     report_error = None
     try:
         receipts = host.flush(client.host_id, client.report_host_result)
     except (OSError, RuntimeError, ValueError) as exc:
         report_error = exc
+    released = 0
+    release_errors = []
+    if cli_release is not None:
+        try:
+            released, release_errors = cli_release()
+        except (OSError, RuntimeError, ValueError) as exc:
+            release_errors = [str(exc)]
     closed = 0
     closure_errors = []
     try:
@@ -400,7 +408,7 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
         raise report_error
     if claim_error is not None:
         raise claim_error
-    errors = closure_errors + watch_errors + incident_errors
+    errors = release_errors + closure_errors + watch_errors + incident_errors
     if errors:
         raise RuntimeError("; ".join(errors))
     result = {"reported": len(receipts), "transferred": transferred, "closed": closed,
@@ -409,11 +417,13 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
         result["claimed"] = 1 if claimed is not None else 0
     if cli_watch is not None:
         result["detected"] = detected
+    if cli_release is not None:
+        result["released"] = released
     return result
 
 
 def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_client,
-               stop_event, interval=1.0, cli_claim=None, cli_watch=None):
+               stop_event, interval=1.0, cli_claim=None, cli_watch=None, cli_release=None):
     """Poll with code; a failed pass leaves durable host and native work for retry."""
     if not 0 < interval <= 5:
         raise ValueError("poll interval must be between zero and five seconds")
@@ -423,7 +433,7 @@ def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_clie
             result = pump_once(
                 client, host=host, evidence_root=evidence_root,
                 progress_state_dir=progress_state_dir, progress_client=progress_client,
-                cli_claim=cli_claim, cli_watch=cli_watch,
+                cli_claim=cli_claim, cli_watch=cli_watch, cli_release=cli_release,
             )
         except (OSError, RuntimeError, ValueError) as exc:
             error = str(exc)
@@ -462,6 +472,7 @@ def main(argv=None):
                   args.cli_workspace_root, args.cli_tmux_socket)
     cli_claim = None
     cli_watch = None
+    cli_release = None
     if args.claim_once or any(cli_fields):
         if not all(cli_fields) or not args.host_state_dir:
             parser.error("CLI claim requires adapter, stable instance, session, workspace, socket and host state")
@@ -478,6 +489,8 @@ def main(argv=None):
             workspace_root=args.cli_workspace_root, deliver=transport.deliver,
             coverage=coverage,
         )
+
+        cli_release = manager.release_acknowledged
 
         if args.cli_deadline_seconds is not None and not args.cli_deadline_seconds > 0:
             parser.error("--cli-deadline-seconds must be positive")
@@ -506,7 +519,7 @@ def main(argv=None):
                 client, host=Host(args.host_id, args.host_state_dir),
                 evidence_root=args.evidence_root, progress_state_dir=args.progress_state_dir,
                 progress_client=args.progress_client, stop_event=stop,
-                cli_claim=cli_claim, cli_watch=cli_watch,
+                cli_claim=cli_claim, cli_watch=cli_watch, cli_release=cli_release,
             )
         finally:
             signal.signal(signal.SIGTERM, old_term)
