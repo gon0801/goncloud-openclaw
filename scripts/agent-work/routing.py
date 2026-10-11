@@ -35,7 +35,7 @@ def prepare_request(*, requester, target, key, brief, instruction_root,
     if result_contract not in ("review.v1", "ready.v1"):
         raise ValueError("result contract is invalid")
     digest = write_instruction(instruction_root, Path(brief).read_bytes())
-    return {"key": key, "assignment": {
+    return {"taskKey": key, "assignment": {
         "target": destination,
         "instructionRef": instruction_ref(digest),
         "inputRevision": input_revision,
