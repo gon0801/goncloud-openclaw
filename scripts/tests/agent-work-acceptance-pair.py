@@ -3,8 +3,9 @@
 
 Uso: AGENT_WORK_RUNTIME_SOURCE=<R construido> LANG=en_US.UTF-8 python3 scripts/tests/agent-work-acceptance-pair.py
 Los logs quedan en docs/evidence/agent-work/par-final/. El estricto de test_agent_work_acceptance.py lo lee.
-Corre en tres carriles: los casos que corren vitest dentro de R (R_VITEST) uno tras otro, porque comparten la caché de R;
-el resto en paralelo (AGENT_WORK_PAIR_JOBS, 4 por omisión) al mismo tiempo; y al final, solos, los que miden latencia o reinician muchas veces el gateway de R.
+Por omisión corre todo en orden (AGENT_WORK_PAIR_JOBS=1): en paralelo, en esta Mac fallan por carga pruebas
+que miden tiempos o reinician procesos (B8, followups). Con AGENT_WORK_PAIR_JOBS>1 corre en tres carriles: los casos que corren vitest dentro de R (R_VITEST) uno tras otro, porque comparten la caché de R;
+el resto en paralelo (AGENT_WORK_PAIR_JOBS) al mismo tiempo; y al final, solos, los que miden latencia o reinician muchas veces el gateway de R.
 """
 import hashlib
 import json
@@ -141,7 +142,9 @@ def main():
     runtime = [job for job in jobs if job not in alone and job[2].startswith(R_VITEST)]
     parallel = [job for job in jobs if job not in alone and job not in runtime]
     results = {}
-    workers = max(1, int(os.environ.get("AGENT_WORK_PAIR_JOBS", "4")))
+    workers = max(1, int(os.environ.get("AGENT_WORK_PAIR_JOBS", "1")))
+    if workers == 1:
+        alone, runtime, parallel = jobs, [], []
     with ThreadPoolExecutor(max_workers=workers + 1) as pool:
         serial = pool.submit(lambda: {job[0]: execute(job) for job in runtime})
         for job, runs in zip(parallel, pool.map(execute, parallel)):
