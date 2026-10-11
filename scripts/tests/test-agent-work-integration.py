@@ -2037,7 +2037,7 @@ class CliClaimTest(unittest.TestCase):
                 return claim
 
         with self.assertRaisesRegex(ValueError, "host claim identity mismatch"):
-            native_gateway.claim_cli_once(Client(), host=self.host, manager=None,
+            native_gateway.claim_cli_once(Client(), host=self.host, manager=mock.Mock(can_take=lambda _: True),
                                           adapter_id="codex", instance_id="instance-one",
                                           session="worker-one", workspace_root=self.root,
                                           deliver=lambda *_: None, coverage=self.coverage)

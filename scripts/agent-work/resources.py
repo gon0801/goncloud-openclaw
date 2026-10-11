@@ -158,6 +158,20 @@ class ResourceManager:
                 raise ValueError("active instance already owns a resource") from exc
             return ResourceView("Reserved", nonce)
 
+    def can_take(self, instance_id: str) -> bool:
+        """Whether a claim for this instance can be reserved: its own unfinished operation, which the claim
+        replays, or room for a new resource. R binds a claimed task to the instance, so ask it only then."""
+        with self.spool.connection() as db:
+            rows = db.execute("SELECT r.instance_id,o.status,o.result_id FROM resources r "
+                              "LEFT JOIN operations o ON o.operation_id=r.operation_id "
+                              "WHERE r.state NOT IN ('AbsenceVerified','ReleasedAdopted')").fetchall()
+        own = [row for row in rows if row["instance_id"] == instance_id]
+        if own:
+            return any(row["status"] is None or (row["result_id"] is None
+                                                 and row["status"] not in ("acknowledged", "abandoned"))
+                       for row in own)
+        return len(rows) < self.capacity
+
     def begin_launch(self, key: OperationKey) -> ResourceView:
         with self.spool.connection() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -168,6 +182,21 @@ class ResourceManager:
                 return self._view(dict(row))
             db.execute("UPDATE resources SET state='Launching',revision=revision+1 WHERE operation_id=?", (self._key(key),))
             return ResourceView("Launching", row["nonce"], launch_now=True)
+
+    def mark(self, key: OperationKey) -> None:
+        """Tag the session with this resource's nonce. An abandoned delivery releases its row without reaching
+        tmux, so a nonce left by a released resource of this host is cleared first; any other nonce refuses."""
+        row = self._row(key)
+        observed = self.backend.observe(row["session_name"])
+        incumbent = observed.get("nonce") if observed else ""
+        if incumbent and incumbent != row["nonce"]:
+            with self.spool.connection() as db:
+                released = db.execute("SELECT 1 FROM resources WHERE nonce=? "
+                                      f"AND state IN ({','.join('?' * len(TERMINAL))})",
+                                      (incumbent, *TERMINAL)).fetchone()
+            if released and not self.backend.revoke(observed):
+                raise OSError("cannot clear a released resource's tmux nonce")
+        self.backend.mark(row["session_name"], row["nonce"])
 
     def attach(self, key: OperationKey) -> ResourceView:
         row = self._row(key)

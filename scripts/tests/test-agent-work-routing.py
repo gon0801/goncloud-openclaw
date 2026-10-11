@@ -91,7 +91,8 @@ class AgentsRouting(unittest.TestCase):
                 target = f"{host_id}/{adapter_id}"
                 client = Client(host_id)
                 claim = lambda: native_gateway.claim_cli_once(
-                    client, host=None, manager=None, adapter_id=adapter_id, instance_id="instance-one",
+                    client, host=None, manager=mock.Mock(can_take=lambda _: True), adapter_id=adapter_id,
+                    instance_id="instance-one",
                     session="worker-one", workspace_root=self.root, deliver=lambda *_: None,
                     coverage=self.coverage)
                 if target == "mac-local/opencode":

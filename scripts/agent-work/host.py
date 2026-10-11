@@ -37,6 +37,10 @@ COMPOSER_MENU = re.compile(r"^\s*[❯›]?\s*\d+[.)]?\s")
 # An option under the arrow is indented and numbered "2." or "2)"; a wrapped composer line such as
 # "1 atomically" (from "accept.v1") starts at the margin.
 COMPOSER_MENU_OPTION = re.compile(r"^\s+\d+[.)]\s")
+# Every opencode dialog (update, confirm, select) heads its box with the title and "esc" at the right
+# edge, and takes the keys while the composer under it still shows its placeholder. Measured
+# 2026-10-10 on opencode 1.18.35, "Update Available … esc" despite OPENCODE_DISABLE_AUTOUPDATE=1.
+OPENCODE_DIALOG_TITLE = re.compile(r"\S\s{2,}esc\s*$")
 
 
 @dataclass(frozen=True)
@@ -127,8 +131,9 @@ def cli_protocol(assignment: dict) -> dict:
             "Before any other work, write the accept object as JSON to acceptRef, atomically: write a "
             "temporary file in the same directory, then rename it onto acceptRef.",
             "Do the work that the file at briefRef describes, inside workspaceRef.",
-            "Write the result object, plus every field named in fill holding what fill describes, as "
-            "JSON to resultRef, atomically in the same way. Copy every other field unchanged.",
+            "Write, as JSON to resultRef and atomically in the same way, exactly the fields shown in "
+            "result with their values unchanged, plus every field named in fill holding what fill "
+            "describes. Write no other field.",
         ],
         "accept": {"schema": ACCEPT_SCHEMA, "capability": assignment["capability"],
                    **{field: assignment[field] for field in ACCEPT_BOUND}},
@@ -217,6 +222,8 @@ def _composer_region(screen: str, command: str) -> list[list[tuple[dict, str]]] 
     plain = [SGR.sub("", line) for line in lines]
     columns = None
     if command.startswith("opencode"):
+        if any(OPENCODE_DIALOG_TITLE.search(line) for line in plain):
+            return "opencode dialog open"
         # The input box is the last run of lines that start with ┃; its last line is the agent bar
         # and the ╹▀▀▀ border under it spans the box. Measured 2026-10-10 (opencode 1.18.35): in a
         # session the sidebar shares the box's lines to the right of that border.
@@ -440,6 +447,8 @@ class Host:
                     "observedRevision", "typedPayload", "artifactRef", "digest")
         if any(field not in result for field in required) or not isinstance(result["typedPayload"], dict):
             raise ValueError("partial final result")
+        # A CLI may copy extra fields (a model copied claimId from the assignment); R's report schema is strict.
+        result = {field: result[field] for field in ("schema", "kind", *required)}
         self._host(result["hostId"])
         if not isinstance(result["generation"], int) or isinstance(result["generation"], bool):
             raise ValueError("invalid generation")
@@ -575,7 +584,8 @@ class Host:
         return detected
 
     def resolve_delivery(self, host_id: str, key: OperationKey, verdict: str, reason: str) -> str:
-        """The operator settles an attempted or uncertain delivery; nothing is ever typed again."""
+        """The operator settles an attempted or uncertain delivery; nothing is ever typed again.
+        abandoned frees the instance and releases its adopted session without touching the CLI."""
         self._host(host_id)
         self._host(key.host_id)
         if verdict not in VERDICTS or not reason.strip():
@@ -668,7 +678,7 @@ class Host:
 
     def flush(self, host_id: str, report_to_runtime: Callable[[dict, bytes], dict]) -> list[dict]:
         self._host(host_id)
-        receipts = []
+        receipts, failure = [], None
         for result in self.pending(host_id):
             result_id = hashlib.sha256(canonical(result).encode()).hexdigest()
             key = OperationKey(result["hostId"], result["taskId"], result["generation"], result["instanceId"])
@@ -680,14 +690,22 @@ class Host:
             except (ValueError, OSError) as exc:
                 self.spool.note_inbox_error(op_id, str(exc))
                 continue
+            try:
+                receipt = report_to_runtime(result, artifact_bytes)
+                identity = ("hostId", "taskId", "generation", "instanceId", "producerId")
+                if not isinstance(receipt, dict) or any(receipt.get(field) != result[field] for field in identity) \
+                        or receipt.get("resultId") != result_id or not receipt.get("receiptId"):
+                    raise ValueError("runtime receipt identity mismatch")
+            except (OSError, RuntimeError, ValueError) as exc:
+                # R may refuse one result (a cancelled task); the others still go, and the pass reports the first.
+                self.spool.note_inbox_error(op_id, f"report failed: {exc}")
+                failure = failure or exc
+                continue
             self.spool.clear_inbox_error(op_id)
-            receipt = report_to_runtime(result, artifact_bytes)
-            identity = ("hostId", "taskId", "generation", "instanceId", "producerId")
-            if not isinstance(receipt, dict) or any(receipt.get(field) != result[field] for field in identity) \
-                    or receipt.get("resultId") != result_id or not receipt.get("receiptId"):
-                raise ValueError("runtime receipt identity mismatch")
             self.spool.acknowledge(op_id, receipt)
             receipts.append(receipt)
+        if failure is not None:
+            raise failure
         return receipts
 
     def flush_closures(self, host_id: str,

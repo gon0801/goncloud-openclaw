@@ -55,7 +55,7 @@ run_acceptance_matrix() {
 }
 
 run_acceptance() {
-  python3 scripts/tests/test_agent_work_acceptance.py AcceptanceMatrixTest AcceptanceStrictTest
+  AGENT_WORK_ACCEPTANCE_STRICT=1 python3 scripts/tests/test_agent_work_acceptance.py AcceptanceMatrixTest AcceptanceStrictTest
 }
 
 case "${1:-all}" in

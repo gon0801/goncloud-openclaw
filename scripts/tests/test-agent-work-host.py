@@ -22,7 +22,8 @@ from host import (CliAdapter, DeliveryDeferred, Host, ShellAdapterTransport, Tmu
 
 COMPOSER_CLI = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "composer-cli.py"
 # capture-pane -e of opencode 1.18.35 on its default theme, 2026-10-10: the home screen, a session
-# with its sidebar, an operator's draft, and the host's reference for /x/assignments/op-1.json.
+# with its sidebar, an operator's draft, the host's reference for /x/assignments/op-1.json, and the
+# "Update Available" dialog of the first live canary over the home screen's placeholder.
 OPENCODE_SCREENS = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "opencode"
 # tmux names a pane after its foreground process; the python double shows as Python on macOS.
 PYTHON_DOUBLE = CliAdapter(tuple(sorted({"Python", Path(sys.executable).name,
@@ -190,6 +191,28 @@ class HostReceipts(unittest.TestCase):
         self.assertIsNotNone(self.host.collect("mac-test", self.key))
         self.assertEqual(self.host.pending("mac-test"), [self.report()])
 
+    def test_a_cli_result_with_extra_fields_reaches_the_runtime_with_only_its_schema(self):
+        # Live canary 2026-10-11: GLM copied claimId into result.v1, and R's strict schema refused the report.
+        operation = replace(self.operation, adapter_id="opencode")
+        observation = self.apply(self.key, operation, lambda *_: None)
+        assignment = json.loads(Path(observation.assignment_ref).read_text())
+        protocol = assignment["protocol"]
+        self.assertEqual(protocol["steps"][2],
+                         "Write, as JSON to resultRef and atomically in the same way, exactly the fields shown in "
+                         "result with their values unchanged, plus every field named in fill holding what fill "
+                         "describes. Write no other field.")
+        Path(assignment["acceptRef"]).write_text(json.dumps(protocol["accept"]))
+        Path(assignment["resultRef"]).write_text(json.dumps({
+            **protocol["result"],
+            "claimId": assignment["claimId"],
+            "typedPayload": {"verdict": "approved", "evidenceRef": "evidence.txt"},
+            "artifactRef": str(self.artifact),
+            "digest": digest(self.artifact.read_bytes()),
+        }))
+        self.assertTrue(self.host.take_acceptance("mac-test", self.key))
+        self.assertIsNotNone(self.host.collect("mac-test", self.key))
+        self.assertEqual(self.host.pending("mac-test"), [self.report()])
+
     def test_lost_native_admission_ack_retries_before_first_delivery(self):
         delivered = []
         admissions = []
@@ -231,6 +254,34 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(len(list((self.root / "host" / "artifacts" / operation_id(self.key)).glob("*.bin"))), 1)
         self.assertEqual(Host("mac-test", self.root / "host").flush("mac-test", runtime)[0]["resultId"], result_id)
         self.assertEqual(calls, [(report, original), (report, original)])
+
+    def test_host_receipts_a_result_r_refuses_does_not_hold_back_the_others(self):
+        self.apply(self.key, self.operation, lambda *_: None)
+        self.host.report("mac-test", self.report())
+        second = OperationKey("mac-test", "task-2", 2, "instance-2")
+        self.apply(second, replace(self.operation, key=second, session="worker-2"), lambda *_: None)
+        self.host.report("mac-test", self.report(taskId="task-2", instanceId="instance-2"))
+        sent = []
+
+        def runtime(result, artifact_bytes):
+            sent.append(result["taskId"])
+            if len(sent) == 1:
+                raise RuntimeError("native projection Gateway rejected request")
+            return {**{field: result[field] for field in ("hostId", "taskId", "generation", "instanceId",
+                                                          "producerId")},
+                    "resultId": digest(json.dumps(result, ensure_ascii=False, sort_keys=True,
+                                                  separators=(",", ":")).encode()),
+                    "receiptId": "native-r2"}
+
+        with self.assertRaisesRegex(RuntimeError, "rejected request"):
+            self.host.flush("mac-test", runtime)
+        self.assertEqual(sorted(sent), ["task-1", "task-2"], "a result R refused held back the others")
+        refused = sent[0]
+        self.assertEqual([result["taskId"] for result in self.host.pending("mac-test")], [refused])
+        refused_key = self.key if refused == "task-1" else second
+        self.assertEqual(self.host.inbox_errors("mac-test"),
+                         [{"operationId": operation_id(refused_key), "taskId": refused,
+                           "error": "report failed: native projection Gateway rejected request"}])
 
     def test_host_receipts_tampered_snapshot_blocks_delivery(self):
         self.apply(self.key, self.operation, lambda *_: None)
@@ -519,6 +570,15 @@ class HostReceipts(unittest.TestCase):
         with self.assertRaisesRegex(DeliveryDeferred, "borrador del operador"):
             transport.deliver("/x/assignments/op-1.json", "oc")
         self.assertEqual(transport.keys, [])
+
+    def test_opencode_delivery_waits_while_a_dialog_covers_the_placeholder(self):
+        screen = opencode_screen("update-dialog")
+        self.assertEqual(read_composer(screen, "opencode.exe", cli_adapter("opencode").placeholders)[0],
+                         "DESCONOCIDO")
+        transport = ScriptedTmux(screen)
+        with self.assertRaisesRegex(DeliveryDeferred, "DESCONOCIDO"):
+            transport.deliver("/x/assignments/op-1.json", "oc")
+        self.assertEqual(transport.keys, [], "the dialog took the keys of the reference")
 
     def test_opencode_delivery_types_over_the_real_placeholder_and_submits(self):
         reference = self.reference_text("/x/assignments/op-1.json")

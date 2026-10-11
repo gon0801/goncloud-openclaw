@@ -284,6 +284,8 @@ def claim_cli_once(client, *, host, manager, adapter_id, instance_id, session,
     """Deliver to an existing session; adopting it never grants permission to stop it."""
     if coverage.get("hostAdapterCoverage", {}).get(client.host_id, {}).get(adapter_id) != "certified":
         raise ValueError("host adapter route is not certified")
+    if not manager.can_take(instance_id):
+        return None
     claim = client.claim_host(adapter_id, instance_id)
     if claim is None:
         return None
@@ -310,10 +312,9 @@ def claim_cli_once(client, *, host, manager, adapter_id, instance_id, session,
         raise ValueError("host claim contract invalid")
     brief = _brief_to_workspace(client, claim, workspace_root)
     key = OperationKey(client.host_id, claim["taskId"], claim["generation"], instance_id)
-    reservation = manager.reserve(key, session, "UserAdopted")
-    launch = manager.begin_launch(key)
-    if launch.launch_now:
-        manager.backend.mark(session, reservation.nonce)
+    manager.reserve(key, session, "UserAdopted")
+    if manager.begin_launch(key).launch_now:
+        manager.mark(key)
     if manager.attach(key).state != "Running":
         raise RuntimeError("host resource identity is not running")
     operation = AuthorizedOperation(

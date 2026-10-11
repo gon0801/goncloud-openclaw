@@ -183,9 +183,9 @@ class CrashBoundariesE2E(unittest.TestCase):
         try:
             with mock.patch.dict(os.environ, second.env):
                 client = self.client(second)
-                # The host loop keeps claiming after the restart; R hands back the same claim and the
-                # host sees it already delivered, so nothing is typed into the CLI again.
-                claims = [self.claim(client).status for _ in range(3)]
+                # The host loop keeps claiming after the restart. Its instance still holds the answered
+                # operation, so the host does not ask R again (B9); nothing is typed into the CLI again.
+                claims = [getattr(self.claim(client), "status", "not-asked") for _ in range(3)]
                 self.assertFalse({"typed", "delivered"} & set(claims), "the restart typed the assignment again")
                 print(f"CLAIMS_AFTER_RESTART {claims}", flush=True)
                 readmitted = second.tool("admit", {"taskId": task_id, "admissionKey": "crash-admission"},

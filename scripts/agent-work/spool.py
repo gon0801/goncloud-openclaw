@@ -11,6 +11,7 @@ from pathlib import Path
 
 TERMINAL_STATES = ("AbsenceVerified", "ReleasedAdopted")
 SENDABLE_STATES = ("CleanupPending", "AbsenceVerified", "ReleasedAdopted")
+SCHEMA_VERSION = 1
 DIALOG_START = {"open_identity": None, "episode": 0, "candidate": None, "seen": 0, "clean": 0}
 
 
@@ -75,6 +76,18 @@ def atomic_json(path: Path, data: object) -> None:
             os.unlink(name)
 
 
+def release_abandoned_sessions(db: sqlite3.Connection) -> None:
+    """Every adopted session still held by an abandoned operation goes back to the operator untouched;
+    the CLI is never stopped. Its tmux nonce stays until the next adoption clears it."""
+    if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='resources'").fetchone():
+        return
+    db.execute("UPDATE resources SET state='ReleasedAdopted',reason='delivery abandoned',revision=revision+1 "
+               "WHERE ownership='UserAdopted' "
+               f"AND state NOT IN ({','.join('?' * len(TERMINAL_STATES))}) "
+               "AND operation_id IN (SELECT operation_id FROM operations WHERE status='abandoned')",
+               TERMINAL_STATES)
+
+
 class Spool:
     def __init__(self, root: Path, host_id: str):
         self.root = root
@@ -99,8 +112,6 @@ class Spool:
                     result_json TEXT,
                     receipt_json TEXT
                 );
-                CREATE UNIQUE INDEX IF NOT EXISTS one_active_per_instance
-                    ON operations(instance_id) WHERE status != 'acknowledged';
                 CREATE TABLE IF NOT EXISTS inbox_errors (
                     operation_id TEXT PRIMARY KEY,
                     error TEXT NOT NULL
@@ -157,6 +168,13 @@ class Spool:
                 raise ValueError("host state belongs to another hostId")
             if not row:
                 db.execute("INSERT INTO metadata VALUES ('host_id', ?)", (host_id,))
+            if db.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
+                # 1: an abandoned operation no longer holds its instance.
+                db.execute("DROP INDEX IF EXISTS one_active_per_instance")
+                db.execute("CREATE UNIQUE INDEX one_active_per_instance ON operations(instance_id) "
+                           "WHERE status NOT IN ('acknowledged','abandoned')")
+                release_abandoned_sessions(db)
+                db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         self.path.chmod(0o600)
 
     @contextmanager
@@ -224,7 +242,8 @@ class Spool:
                 db.execute("DELETE FROM delivery_attempts WHERE operation_id=?", (operation_id,))
 
     def resolve_delivery(self, operation_id: str, verdict: str, reason: str, now: float) -> bool:
-        """attempted or uncertain -> the operator's verdict, recorded with it; False when it already left both."""
+        """attempted or uncertain -> the operator's verdict, recorded with it; False when it already left both.
+        abandoned also releases the adopted session, so the instance and the host's capacity take new work."""
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT status FROM operations WHERE operation_id=?", (operation_id,)).fetchone()
@@ -235,6 +254,8 @@ class Spool:
                        (operation_id, row["status"], verdict, reason, now))
             if verdict == "delivered":
                 db.execute("INSERT OR IGNORE INTO delivery_clock VALUES (?,?)", (operation_id, now))
+            else:
+                release_abandoned_sessions(db)
             return True
 
     def delivered(self, operation_id: str) -> None:
@@ -263,7 +284,9 @@ class Spool:
                 atomic_json(result_path, result)
             if row["result_id"]:
                 return
-            db.execute("UPDATE operations SET result_id=?,result_json=?,status='reported' WHERE operation_id=?",
+            # A late result keeps an abandoned operation off the instance, which may hold new work now.
+            db.execute("UPDATE operations SET result_id=?,result_json=?,"
+                       "status=CASE status WHEN 'abandoned' THEN status ELSE 'reported' END WHERE operation_id=?",
                        (result_id, canonical(result), operation_id))
 
     def pending(self) -> list[dict]:

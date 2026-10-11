@@ -15,8 +15,9 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 
-from contracts import AuthorizedOperation, OperationKey
+from contracts import AuthorizedOperation, OperationKey, operation_id
 from host import Host
+from native_gateway import claim_cli_once
 from resources import (AccountBusyError, AGENT_USER, AgentesBackend, AgentProcess, CommandOutcome,
                        LOCK_ARGV, ResourceManager, TmuxBackend, parse_agent_ps)
 
@@ -171,6 +172,172 @@ class ResourceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "capacity"):
             manager.reserve(OperationKey("host-test", "replacement", 1, "instance-new"),
                             "replacement", "TaskCreated")
+
+    def adopt(self, manager, key, pid):
+        """The host adopts the operator's opencode session "oc" for key, as claim_cli_once does."""
+        held = manager.reserve(key, "oc", "UserAdopted")
+        manager.begin_launch(key)
+        self.backend.launch("oc", held.nonce, pid)
+        self.assertEqual(manager.attach(key).state, "Running")
+        brief = Path(self.tmp.name) / "brief.txt"
+        brief.write_text("revisa el cambio")
+        return AuthorizedOperation(
+            key=key, producer_id="opencode", capability=f"cap-{key.task_id}", session="oc",
+            workspace_ref=self.tmp.name, brief_ref=str(brief),
+            brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
+            input_revision={"kind": "code", "repository": "repo", "sha": "a" * 40},
+            result_contract="review.v1", claim_id=f"claim-{key.task_id}")
+
+    @staticmethod
+    def admit(assignment):
+        return {"state": "host-admitted", "claimId": assignment["claimId"], "hostId": assignment["hostId"],
+                "instanceId": assignment["instanceId"], "generation": assignment["generation"]}
+
+    def test_an_abandoned_delivery_releases_the_adopted_session_and_frees_the_instance(self):
+        with self.host.spool.connection() as db:
+            db.executescript("""
+                DROP INDEX one_active_per_instance;
+                CREATE UNIQUE INDEX one_active_per_instance ON operations(instance_id)
+                    WHERE status != 'acknowledged';
+                PRAGMA user_version=0;
+            """)
+        host = Host("host-test", self.host.state_dir)
+        manager = ResourceManager(host.spool, "host-test", self.backend, capacity=1)
+        abandoned = self.adopt(manager, self.key, 701)
+
+        def lost(*_):
+            raise RuntimeError("the keys may have reached the pane")
+
+        self.assertEqual(host.apply(self.key, abandoned, lost, self.admit).status, "uncertain")
+        self.assertEqual(host.resolve_delivery("host-test", self.key, "abandoned", "un diálogo se comió la referencia"),
+                         "abandoned")
+        with host.spool.connection() as db:
+            self.assertEqual(tuple(db.execute("SELECT state, reason FROM resources WHERE operation_id=?",
+                                              (operation_id(self.key),)).fetchone()),
+                             ("ReleasedAdopted", "delivery abandoned"))
+        self.assertEqual((self.backend.stops, self.backend.revokes), ([], []), "abandoning touched the CLI")
+        self.assertIn("oc", self.backend.live)
+
+        following = OperationKey("host-test", "task-2", 1, "instance-1")
+        self.assertEqual(host.apply(following, self.adopt(manager, following, 702), lambda *_: None,
+                                    self.admit).status, "delivered")
+        artifact = Path(self.tmp.name) / "late.txt"
+        artifact.write_text("resultado tardío")
+        host.report("host-test", {
+            "schema": "agent-work.result.v1", "kind": "produced", "hostId": "host-test", "taskId": "task-1",
+            "generation": 1, "instanceId": "instance-1", "producerId": "opencode", "capability": "cap-task-1",
+            "observedRevision": abandoned.input_revision, "typedPayload": {"verdict": "approved"},
+            "artifactRef": str(artifact), "digest": hashlib.sha256(artifact.read_bytes()).hexdigest()})
+        self.assertEqual(host.spool.get(operation_id(self.key))["status"], "abandoned",
+                         "a late result put the abandoned operation back on the instance")
+        self.assertEqual(len(host.pending("host-test")), 1)
+
+    def operation(self, key):
+        brief = Path(self.tmp.name) / "brief.txt"
+        brief.write_text("revisa el cambio")
+        return AuthorizedOperation(
+            key=key, producer_id="opencode", capability=f"cap-{key.task_id}", session="oc",
+            workspace_ref=self.tmp.name, brief_ref=str(brief),
+            brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
+            input_revision={"kind": "code", "repository": "repo", "sha": "a" * 40},
+            result_contract="review.v1", claim_id=f"claim-{key.task_id}")
+
+    def test_the_session_of_an_abandoned_delivery_is_adopted_again_by_its_instance(self):
+        tmux = shutil.which("tmux")
+        if not tmux:
+            self.skipTest("tmux not installed")
+        socket = f"agent-work-readopt-{os.getpid()}"
+
+        def tmux_cmd(*args):
+            return subprocess.run([tmux, "-L", socket, *args], capture_output=True, text=True)
+
+        def session_nonce():
+            return tmux_cmd("display-message", "-p", "-t", "=oc:", "#{@agent_work_resource_nonce}").stdout.strip()
+
+        self.addCleanup(tmux_cmd, "kill-server")
+        self.assertEqual(tmux_cmd("new-session", "-d", "-s", "oc", "/bin/sleep", "60").returncode, 0)
+        cli_pid = tmux_cmd("display-message", "-p", "-t", "=oc:", "#{pane_pid}").stdout.strip()
+        manager = ResourceManager(self.host.spool, "host-test", TmuxBackend(tmux, socket), capacity=1)
+
+        def adopt(key):
+            manager.reserve(key, "oc", "UserAdopted")
+            self.assertTrue(manager.begin_launch(key).launch_now)
+            manager.mark(key)
+            self.assertEqual(manager.attach(key).state, "Running")
+
+        def lost(*_):
+            raise RuntimeError("the keys may have reached the pane")
+
+        adopt(self.key)
+        self.assertEqual(self.host.apply(self.key, self.operation(self.key), lost, self.admit).status, "uncertain")
+        self.host.resolve_delivery("host-test", self.key, "abandoned", "un diálogo se comió la referencia")
+        self.assertTrue(manager.can_take("instance-1"))
+
+        following = OperationKey("host-test", "task-2", 1, "instance-1")
+        adopt(following)
+        self.assertEqual(session_nonce(), manager._row(following)["nonce"])
+        self.assertEqual(self.host.apply(following, self.operation(following), lambda *_: None,
+                                         self.admit).status, "delivered")
+        self.assertEqual(manager.counts(), {"active": 1, "history": 1, "pool": 0})
+        self.assertEqual(tmux_cmd("display-message", "-p", "-t", "=oc:", "#{pane_pid}").stdout.strip(), cli_pid,
+                         "re-adopting the session stopped the operator's CLI")
+
+        intruder = OperationKey("host-test", "task-3", 1, "instance-2")
+        roomy = ResourceManager(self.host.spool, "host-test", TmuxBackend(tmux, socket), capacity=2)
+        roomy.reserve(intruder, "oc", "UserAdopted")
+        roomy.begin_launch(intruder)
+        with self.assertRaisesRegex(ValueError, "another resource"):
+            roomy.mark(intruder)
+        self.assertEqual(session_nonce(), manager._row(following)["nonce"], "a live resource lost its session")
+
+    def test_opening_a_spool_from_before_b9_releases_sessions_its_abandoned_deliveries_hold(self):
+        manager = ResourceManager(self.host.spool, "host-test", self.backend, capacity=1)
+        self.host.apply(self.key, self.adopt(manager, self.key, 703), lambda *_: None, self.admit)
+        with self.host.spool.connection() as db:
+            db.execute("UPDATE operations SET status='abandoned' WHERE operation_id=?", (operation_id(self.key),))
+            db.executescript("""
+                DROP INDEX one_active_per_instance;
+                CREATE UNIQUE INDEX one_active_per_instance ON operations(instance_id)
+                    WHERE status != 'acknowledged';
+                PRAGMA user_version=0;
+            """)
+        self.assertFalse(manager.can_take("instance-2"))
+
+        host = Host("host-test", self.host.state_dir)
+        with host.spool.connection() as db:
+            self.assertEqual(tuple(db.execute("SELECT state, reason FROM resources WHERE operation_id=?",
+                                              (operation_id(self.key),)).fetchone()),
+                             ("ReleasedAdopted", "delivery abandoned"))
+        self.assertTrue(ResourceManager(host.spool, "host-test", self.backend, capacity=1).can_take("instance-2"))
+        self.assertEqual(self.backend.stops, [], "the migration stopped the operator's CLI")
+
+    def test_a_full_host_never_asks_r_for_a_claim(self):
+        class Client:
+            host_id = "host-test"
+
+            def __init__(self):
+                self.claims = []
+
+            def claim_host(self, adapter_id, instance_id):
+                self.claims.append(instance_id)
+                return None
+
+        coverage = {"hostAdapterCoverage": {"host-test": {"opencode": "certified"}}}
+
+        def claims(manager, instance_id):
+            client = Client()
+            self.assertIsNone(claim_cli_once(client, host=self.host, manager=manager, adapter_id="opencode",
+                                             instance_id=instance_id, session="oc", workspace_root=self.tmp.name,
+                                             deliver=lambda *_: None, coverage=coverage))
+            return client.claims
+
+        full = ResourceManager(self.host.spool, "host-test", self.backend, capacity=1)
+        full.reserve(self.key, "oc", "UserAdopted")
+        self.assertEqual(claims(full, "instance-2"), [], "R bound a task to a host with no room for it")
+        self.assertEqual(claims(full, "instance-1"), ["instance-1"],
+                         "the instance cannot replay the claim its unfinished operation came from")
+        roomy = ResourceManager(self.host.spool, "host-test", self.backend, capacity=2)
+        self.assertEqual(claims(roomy, "instance-2"), ["instance-2"])
 
     def test_resource_100_cycles_no_orphans_or_pool_leaks(self):
         for number in range(100):
