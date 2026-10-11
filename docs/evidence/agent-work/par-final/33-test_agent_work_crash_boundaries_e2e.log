@@ -36,33 +36,33 @@ class Result(unittest.TextTestResult):
             self._set(test, "FAIL")
 unittest.TextTestRunner(verbosity=2, resultclass=Result).run(suite)
 json.dump(status, open(out, "w"))
- scripts/tests/test_agent_work_crash_boundaries_e2e.py /Users/dn/dev/wt/encargos-b8/docs/evidence/agent-work/par-final/.33.json test_between_reservation_and_launch_the_restarted_host_recovers_the_same_instance test_an_unattributable_launch_keeps_its_capacity_and_types_nothing test_before_delivery_a_second_dispatcher_recovers_the_task test_after_marking_the_restarted_host_recovers_the_launch_by_its_nonce test_between_admission_and_answer_the_restart_never_hands_it_over_again test_between_result_and_ack_the_host_repeats_the_same_report test_between_decision_and_its_receipt_the_restart_recovers_the_same_child test_after_typing_the_restarted_host_declares_uncertainty_and_never_types_again test_a_cancellation_then_a_late_result_wakes_nobody
-test_a_cancellation_then_a_late_result_wakes_nobody (cited.CrashBoundariesE2E.test_a_cancellation_then_a_late_result_wakes_nobody) ... CRASH_BOUNDARY B7 pids=[77791, 80085] handling=cancelled delivery=result-recorded wakes=0 children=0 cli_accepted=1
+ scripts/tests/test_agent_work_crash_boundaries_e2e.py /Users/dn/dev/wt/encargos-cierre/docs/evidence/agent-work/par-final/.33.json test_between_reservation_and_launch_the_restarted_host_recovers_the_same_instance test_an_unattributable_launch_keeps_its_capacity_and_types_nothing test_before_delivery_a_second_dispatcher_recovers_the_task test_after_marking_the_restarted_host_recovers_the_launch_by_its_nonce test_between_admission_and_answer_the_restart_never_hands_it_over_again test_between_result_and_ack_the_host_repeats_the_same_report test_between_decision_and_its_receipt_the_restart_recovers_the_same_child test_after_typing_the_restarted_host_declares_uncertainty_and_never_types_again test_a_cancellation_then_a_late_result_wakes_nobody
+test_a_cancellation_then_a_late_result_wakes_nobody (cited.CrashBoundariesE2E.test_a_cancellation_then_a_late_result_wakes_nobody) ... CRASH_BOUNDARY B7 pids=[85459, 87823] handling=cancelled delivery=result-recorded wakes=0 children=0 cli_accepted=1
 ok
-test_after_marking_the_restarted_host_recovers_the_launch_by_its_nonce (cited.CrashBoundariesE2E.test_after_marking_the_restarted_host_recovers_the_launch_by_its_nonce) ... CRASH_BOUNDARY B2 pids=[83450] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
-HOST_CRASH B2 point=marked host_pid=85531 resources=['ReleasedAdopted'] same_nonce=1
+test_after_marking_the_restarted_host_recovers_the_launch_by_its_nonce (cited.CrashBoundariesE2E.test_after_marking_the_restarted_host_recovers_the_launch_by_its_nonce) ... CRASH_BOUNDARY B2 pids=[91865] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
+HOST_CRASH B2 point=marked host_pid=94874 resources=['ReleasedAdopted'] same_nonce=1
 ok
-test_after_typing_the_restarted_host_declares_uncertainty_and_never_types_again (cited.CrashBoundariesE2E.test_after_typing_the_restarted_host_declares_uncertainty_and_never_types_again) ... CRASH_BOUNDARY B6 pids=[87828] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
-HOST_CRASH B6 point=typed host_pid=89990 status_after_restart=uncertain
+test_after_typing_the_restarted_host_declares_uncertainty_and_never_types_again (cited.CrashBoundariesE2E.test_after_typing_the_restarted_host_declares_uncertainty_and_never_types_again) ... CRASH_BOUNDARY B6 pids=[97276] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
+HOST_CRASH B6 point=typed host_pid=98993 status_after_restart=uncertain
 ok
-test_an_unattributable_launch_keeps_its_capacity_and_types_nothing (cited.CrashBoundariesE2E.test_an_unattributable_launch_keeps_its_capacity_and_types_nothing) ... HOST_CRASH B2 point=launching host_pid=94402 resources=[('CleanupPending', 'launch identity uncertain')] cli_accepted=0 provider=0
+test_an_unattributable_launch_keeps_its_capacity_and_types_nothing (cited.CrashBoundariesE2E.test_an_unattributable_launch_keeps_its_capacity_and_types_nothing) ... HOST_CRASH B2 point=launching host_pid=3360 resources=[('CleanupPending', 'launch identity uncertain')] cli_accepted=0 provider=0
 ok
-test_before_delivery_a_second_dispatcher_recovers_the_task (cited.CrashBoundariesE2E.test_before_delivery_a_second_dispatcher_recovers_the_task) ... CRASH_BOUNDARY B1 pids=[96023, 98269] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]
+test_before_delivery_a_second_dispatcher_recovers_the_task (cited.CrashBoundariesE2E.test_before_delivery_a_second_dispatcher_recovers_the_task) ... CRASH_BOUNDARY B1 pids=[4969, 7072] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]
 ok
-test_between_admission_and_answer_the_restart_never_hands_it_over_again (cited.CrashBoundariesE2E.test_between_admission_and_answer_the_restart_never_hands_it_over_again) ... CLAIMS_AFTER_RESTART ['reported', 'reported', 'reported']
-CRASH_BOUNDARY B3 pids=[2821, 4383] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]
+test_between_admission_and_answer_the_restart_never_hands_it_over_again (cited.CrashBoundariesE2E.test_between_admission_and_answer_the_restart_never_hands_it_over_again) ... CLAIMS_AFTER_RESTART ['not-asked', 'not-asked', 'not-asked']
+CRASH_BOUNDARY B3 pids=[10733, 12892] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[0, 1]
 ok
-test_between_decision_and_its_receipt_the_restart_recovers_the_same_child (cited.CrashBoundariesE2E.test_between_decision_and_its_receipt_the_restart_recovers_the_same_child) ... CRASH_BOUNDARY B5 pids=[8351, 10589] handlings=1 children=1 cli_accepted=2 acting_first=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit'] acting_second=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit']
+test_between_decision_and_its_receipt_the_restart_recovers_the_same_child (cited.CrashBoundariesE2E.test_between_decision_and_its_receipt_the_restart_recovers_the_same_child) ... CRASH_BOUNDARY B5 pids=[16583, 19713] handlings=1 children=1 cli_accepted=2 acting_first=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit'] acting_second=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit']
 ok
-test_between_reservation_and_launch_the_restarted_host_recovers_the_same_instance (cited.CrashBoundariesE2E.test_between_reservation_and_launch_the_restarted_host_recovers_the_same_instance) ... CRASH_BOUNDARY B2 pids=[14175] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
-HOST_CRASH B2 point=reserved host_pid=15301 resources=['ReleasedAdopted'] same_nonce=1
+test_between_reservation_and_launch_the_restarted_host_recovers_the_same_instance (cited.CrashBoundariesE2E.test_between_reservation_and_launch_the_restarted_host_recovers_the_same_instance) ... CRASH_BOUNDARY B2 pids=[23876] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1]
+HOST_CRASH B2 point=reserved host_pid=25668 resources=['ReleasedAdopted'] same_nonce=1
 ok
-test_between_result_and_ack_the_host_repeats_the_same_report (cited.CrashBoundariesE2E.test_between_result_and_ack_the_host_repeats_the_same_report) ... CRASH_BOUNDARY B4 pids=[16723, 22215] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1, 0]
+test_between_result_and_ack_the_host_repeats_the_same_report (cited.CrashBoundariesE2E.test_between_result_and_ack_the_host_repeats_the_same_report) ... CRASH_BOUNDARY B4 pids=[27858, 31395] tasks=1 cli_accepted=1 wakes=1 provider_by_gateway=[1, 0]
 ok
 
 ----------------------------------------------------------------------
-Ran 9 tests in 747.354s
+Ran 9 tests in 942.883s
 
 OK
 
-rc=0 seconds=747.4
+rc=0 seconds=943.0

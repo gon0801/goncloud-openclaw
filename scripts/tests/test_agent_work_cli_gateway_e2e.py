@@ -133,7 +133,7 @@ class NativeCliGatewayE2E(unittest.TestCase):
                     "resultContract": "review.v1", "continuation": {"kind": "requester"},
                 }
                 with mock.patch.dict(os.environ, env):
-                    submitted = request("submit", {"key": "cross-cli-review",
+                    submitted = request("submit", {"taskKey": "cross-cli-review",
                                                    "assignment": assignment}, "submit-turn")
                     task_id = submitted["taskId"]
                     self.assertEqual(submitted["state"], "registered")

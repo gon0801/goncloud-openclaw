@@ -36,15 +36,15 @@ class Result(unittest.TextTestResult):
             self._set(test, "FAIL")
 unittest.TextTestRunner(verbosity=2, resultclass=Result).run(suite)
 json.dump(status, open(out, "w"))
- scripts/tests/test_agent_work_review_correction_restart_e2e.py /Users/dn/dev/wt/encargos-b8/docs/evidence/agent-work/par-final/.27.json test_verdict_out_of_the_tail_and_a_crash_still_give_one_accepted_correction test_a_crash_with_the_wake_turn_in_flight_still_gives_one_accepted_correction
-test_a_crash_with_the_wake_turn_in_flight_still_gives_one_accepted_correction (cited.ReviewTailRestartE2E.test_a_crash_with_the_wake_turn_in_flight_still_gives_one_accepted_correction) ... REVIEW_TAIL_RESTART wake_in_flight=1 verdict_in_tail_80=0 pid1=62815 pid2=64414 handlings=1 children=1 correction_accepted=1 provider=['message', 'managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit', 'message']
+ scripts/tests/test_agent_work_review_correction_restart_e2e.py /Users/dn/dev/wt/encargos-cierre/docs/evidence/agent-work/par-final/.27.json test_verdict_out_of_the_tail_and_a_crash_still_give_one_accepted_correction test_a_crash_with_the_wake_turn_in_flight_still_gives_one_accepted_correction
+test_a_crash_with_the_wake_turn_in_flight_still_gives_one_accepted_correction (cited.ReviewTailRestartE2E.test_a_crash_with_the_wake_turn_in_flight_still_gives_one_accepted_correction) ... REVIEW_TAIL_RESTART wake_in_flight=1 verdict_in_tail_80=0 pid1=67408 pid2=70078 handlings=1 children=1 correction_accepted=1 provider=['message', 'managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit', 'message']
 ok
-test_verdict_out_of_the_tail_and_a_crash_still_give_one_accepted_correction (cited.ReviewTailRestartE2E.test_verdict_out_of_the_tail_and_a_crash_still_give_one_accepted_correction) ... REVIEW_TAIL_RESTART wake_in_flight=0 verdict_in_tail_80=0 pid1=66534 pid2=68479 handlings=1 children=1 correction_accepted=1 provider=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit', 'message']
+test_verdict_out_of_the_tail_and_a_crash_still_give_one_accepted_correction (cited.ReviewTailRestartE2E.test_verdict_out_of_the_tail_and_a_crash_still_give_one_accepted_correction) ... REVIEW_TAIL_RESTART wake_in_flight=0 verdict_in_tail_80=0 pid1=73625 pid2=75988 handlings=1 children=1 correction_accepted=1 provider=['managed_tasks_inspect', 'managed_tasks_resolve', 'managed_tasks_admit', 'message']
 ok
 
 ----------------------------------------------------------------------
-Ran 2 tests in 168.807s
+Ran 2 tests in 240.789s
 
 OK
 
-rc=0 seconds=168.9
+rc=0 seconds=240.9

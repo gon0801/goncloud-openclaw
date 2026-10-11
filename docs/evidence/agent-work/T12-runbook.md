@@ -1,6 +1,6 @@
 # T12: instalación en vivo en la Mac Mini
 
-Este paso a paso es para David, o para quien él autorice, y se corre en la Mac Mini del gateway vivo (`gon@100.73.187.5`). El plan deja T12 pendiente hasta que haya autorización y una ventana (plan `:305-:320`). Lo que se instala es el artefacto de `artifact-manifest.json`: R `f1c5f34` en la parte A, y `19c2ed1` desde B6. Cada comando de abajo se ensayó en la Mac de desarrollo sobre una copia de la Mini (T11, `deploy-commands.md`). Los pasos que dependen de la Mini (cómo arranca y se detiene su gateway) se leen en la Mini antes de empezar.
+Este paso a paso es para David, o para quien él autorice, y se corre en la Mac Mini del gateway vivo (`gon@100.73.187.5`). La parte A se hizo el 2026-10-10 y la parte B el 2026-10-11 (plan `:305-:320`). Desde el 2026-10-11 a las 15:15Z, la Mini corre R `f8316c9`. Antes pasó por `f1c5f34` (parte A), `19c2ed1`, `4b9785c` y `ff1709f`. Los hashes de cada paquete, el corte, los canarios y los contadores están en `deploy-receipt.md`. Cada comando de abajo se ensayó en la Mac de desarrollo sobre una copia de la Mini (T11, `deploy-commands.md`). Los pasos que dependen de la Mini (cómo arranca y se detiene su gateway) se leen en la Mini antes de empezar.
 
 ## Qué trabajadores pueden recibir un encargo
 
@@ -14,7 +14,7 @@ Un encargo que cae a un fallback por CLI (claude-cli) o a un plugin (codex) se r
 
 ## Actualizar la Mini a R `19c2ed1` (B6)
 
-La parte A instaló `f1c5f34` y sus tablas de abajo son el registro de esa instalación. La parte B necesita `19c2ed1`, el artefacto que hoy fija `artifact-manifest.json`. Para instalarlo:
+La parte A instaló `f1c5f34` y sus tablas de abajo son el registro de esa instalación. Esta sección es el registro de la actualización a `19c2ed1`. Las siguientes (`4b9785c`, `ff1709f` y `f8316c9`) usaron un script igual, `t12-actualizar-<sha>.sh`, en el mismo directorio; sus resultados están en `deploy-receipt.md`. Para instalar `19c2ed1`:
 
 ```
 bash ~/.local/state/encargos-loop/artifacts/T12/t12-actualizar-19c2ed1.sh
@@ -85,7 +85,7 @@ Solo con R `4b9785c` o posterior instalado (el corte escribe `managedTasks.reque
 | B.3 | Suspender, drenar y transferir (`:312`, `:313`) | `python3 scripts/agent-work/cutover_live.py apply --state <estado> --wait-seconds 120` | `transferred`; un reinicio del gateway de unos 6 s; un solo emisor |
 | B.4 | Las dos entregas, la incidencia, la revisión con `Changes`, la operación sin SHA, cancelar y cerrar (`:313`, `:314`) | Con la ruta abierta, el flujo de `main_cli_loop` y `review_tail_restart` en vivo | Lo que esos casos prueban en `T10-*.md` |
 | B.5 | Tablero y cierre de trabajadores (`:315`) | `openclaw gateway call managedTasks.projections.list`; en la Mac, `corrida.sh terminar-sesion` o `cerrar` (sección siguiente) | proyección y cierres verificados |
-| B.6 | 30 minutos sin novedades (`:316`) | Contadores externos: peticiones al proveedor (el panel de opencode), `sessions.list` y `ps` del perímetro, al inicio y al final | cero inferencia atribuible a vigilancia |
+| B.6 | 30 minutos sin novedades (`:316`) | Una foto al inicio y otra al final con `~/.local/state/encargos-loop/artifacts/T12/ventana-30/foto.sh`: eventos de las sesiones de `main` en la Mini, tablas `managed_task*` de R, crons vigía, tokens de opencode en su pane, líneas de `host.log` y procesos `openclaw agent` en la Mac. Las llamadas al proveedor se cuentan por los eventos `provider.payload.measured` de cada agente de la Mini | cero inferencia atribuible a vigilancia |
 | B.7 | Retirar los despertares viejos (`:317`, `:318`) | Borrar los crons suspendidos (sus ids están en el estado del corte) y sus recreadores; cambiar `~/.claude/skills/prompt-claw/SKILL.md` para que un loop sobre la ruta adoptada no cree `<loop>-vigia` | — |
 
 ### El brief de `main` en la Mini
@@ -156,14 +156,14 @@ OPENCLAW_BIN=/Users/dn/.openclaw-r/openclaw LANG=en_US.UTF-8 python3 scripts/age
 
 Un spool que ya no corre ningún host puede seguir reteniendo cupo en R: R guarda un lugar de presupuesto para cada admisión cuyo cierre del host no es terminal. `native_gateway.py --close-only` hace una sola pasada de cierre sobre ese spool y sale. Reporta los resultados pendientes, suelta las sesiones con recibo, cierra las tareas que R canceló, reintenta los `CleanupPending` y manda los cierres a R. Nunca reclama trabajo, nunca entrega y nunca teclea; la única tecla posible es el Esc de B13 sobre un "Permission required" de una tarea cancelada. Toma las instancias de las filas del spool, así que no recibe `--cli-instance-id`. Abrir el spool sube su esquema a la versión 2, igual que al abrirlo un host nuevo.
 
-El 2026-10-11 quedaban dos spools viejos del canario. Con `~/dev/wt/agent-work-host` ya en el `main` que trae B14 (el checkout está en HEAD separado: `git -C ~/dev/wt/agent-work-host fetch origin && git -C ~/dev/wt/agent-work-host checkout --detach origin/main`; el host vivo ya cargó su código y no se reinicia para esto), se cierran desde `~/dev/wt/agent-work-host` con una línea cada uno. Cada línea guarda antes una copia del spool:
+El 2026-10-11 quedaban dos spools viejos del canario. Con `~/dev/wt/agent-work-host` ya en el `main` que trae B14 (el checkout está en HEAD separado: `git -C ~/dev/wt/agent-work-host fetch origin && git -C ~/dev/wt/agent-work-host checkout --detach origin/main`), se cierran desde `~/dev/wt/agent-work-host` con una línea cada uno. `--close-only` no necesita reiniciar el host vivo. El 2026-10-11 el checkout pasó a `2be0f55` a las 19:27:09Z, y el host se reinició sobre ese código en el mismo segundo. Cada línea guarda antes una copia del spool. En Claude Code se corren con el prefijo `!`, que solo sirve para correr un comando desde Claude Code y no es parte de la línea:
 
 ```
-! cp ~/.local/state/agent-work-host/mac-local/host.sqlite ~/.local/state/agent-work-host/mac-local/host.sqlite.pre-b14 && LANG=en_US.UTF-8 python3 scripts/agent-work/native_gateway.py --openclaw-bin /Users/dn/.openclaw-r/openclaw --host-id mac-local --expect-url ws://127.0.0.1:18789 --host-state-dir /Users/dn/.local/state/agent-work-host/mac-local --close-only --cli-adapter-id opencode --cli-tmux-socket agent-work
-! cp ~/.local/state/agent-work-host/mac-local-b/host.sqlite ~/.local/state/agent-work-host/mac-local-b/host.sqlite.pre-b14 && LANG=en_US.UTF-8 python3 scripts/agent-work/native_gateway.py --openclaw-bin /Users/dn/.openclaw-r/openclaw --host-id mac-local --expect-url ws://127.0.0.1:18789 --host-state-dir /Users/dn/.local/state/agent-work-host/mac-local-b --close-only --cli-adapter-id opencode --cli-tmux-socket agent-work
+cp ~/.local/state/agent-work-host/mac-local/host.sqlite ~/.local/state/agent-work-host/mac-local/host.sqlite.pre-b14 && LANG=en_US.UTF-8 python3 scripts/agent-work/native_gateway.py --openclaw-bin /Users/dn/.openclaw-r/openclaw --host-id mac-local --expect-url ws://127.0.0.1:18789 --host-state-dir /Users/dn/.local/state/agent-work-host/mac-local --close-only --cli-adapter-id opencode --cli-tmux-socket agent-work
+cp ~/.local/state/agent-work-host/mac-local-b/host.sqlite ~/.local/state/agent-work-host/mac-local-b/host.sqlite.pre-b14 && LANG=en_US.UTF-8 python3 scripts/agent-work/native_gateway.py --openclaw-bin /Users/dn/.openclaw-r/openclaw --host-id mac-local --expect-url ws://127.0.0.1:18789 --host-state-dir /Users/dn/.local/state/agent-work-host/mac-local-b --close-only --cli-adapter-id opencode --cli-tmux-socket agent-work
 ```
 
-Cada una imprime un JSON. `resources` dice, por recurso, su tarea, su instancia, el estado de su operación y el estado del recurso antes y después de la pasada. `rClosures` trae los recibos de `managedTasks.host.close` que R devolvió en esta corrida, con el estado que R guardó. `lastSent` es el último cierre que el spool tiene registrado como aceptado por R. Sale con 0 si no hubo errores; con 1, los errores van en `errors`, y repetir la línea es seguro, porque un cierre que R ya tiene no se vuelve a mandar. Lo esperado:
+Cada una imprime un JSON. `resources` dice, por recurso, su tarea, su instancia, el estado de su operación y el estado del recurso antes y después de la pasada. El "antes" se lee con el spool ya abierto, así que ya trae lo que hizo la migración al esquema 2 (fila B14-r1 de `followups.md`). `rClosures` trae los recibos de `managedTasks.host.close` que R devolvió en esta corrida, con el estado que R guardó. `lastSent` es el último cierre que el spool tiene registrado como aceptado por R. Sale con 0 si no hubo errores; con 1, los errores van en `errors`, y repetir la línea es seguro, porque un cierre que R ya tiene no se vuelve a mandar. Lo esperado:
 
 | Spool | Tarea | Instancia | Recurso después | Cierre que R devuelve |
 |---|---|---|---|---|
@@ -171,6 +171,8 @@ Cada una imprime un JSON. `resources` dice, por recurso, su tarea, su instancia,
 | `mac-local-b` | `98431858-869c-4cab-9189-b10adb127489` | `canario-2` | `ReleasedAdopted`, `adopted mark superseded` (o `adopted mark cleared` si la sesión ya no lleva marca) | `ReleasedAdopted`, con el recibo del resultado como evidencia (`bb59de80…`) |
 
 Si `mac-local-b` sigue `CleanupPending` con `adopted identity uncertain`, la sesión `canario` todavía lleva su marca, `8d126bc852d15dfa51c0313eebda6140`: no la cierres a mano y anótalo en `followups.md`.
+
+El 2026-10-11, las dos líneas cerraron en R: `1454c912` a las 19:43:50Z con `delivery abandoned`, y `98431858` a las 19:43:58Z con `adopted mark cleared` (`deploy-receipt.md`, sección Canarios).
 
 ### El cierre de una sesión gestionada en la Mac
 
@@ -201,7 +203,7 @@ El binario anterior no abre la base migrada ni acepta `managedTasks` en la confi
 
 ## Al terminar (plan `:320`)
 
-Escribir una vez `docs/evidence/agent-work/deploy-receipt.md` con:
+Hecho el 2026-10-11: `deploy-receipt.md`. Lleva, una vez:
 - los hashes instalados (`build-info.json`, los sha256 de 0.2);
 - la generación del corte (si hubo parte B);
 - los contadores de B.6;

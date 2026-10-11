@@ -50,7 +50,7 @@ class AgentsRouting(unittest.TestCase):
     def test_ingenieria_to_adversary_preserves_target_and_brief(self):
         request = self.request("ingenieria", "adversary")
         self.assertEqual(request["assignment"]["target"], {"kind": "agent", "agentId": "adversary"})
-        self.assertEqual(request["key"], "review-r1")
+        self.assertEqual(request["taskKey"], "review-r1")
         self.assertEqual(request["assignment"]["continuation"], {"kind": "requester"})
         ref = request["assignment"]["instructionRef"]
         self.assertEqual((self.instructions / ref["ref"].split(":")[1]).read_bytes(),
