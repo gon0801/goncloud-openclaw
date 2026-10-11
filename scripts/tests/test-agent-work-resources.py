@@ -17,7 +17,8 @@ sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 
 from contracts import AuthorizedOperation, OperationKey, operation_id
 from host import Host
-from native_gateway import claim_cli_once
+from spool import canonical
+from native_gateway import claim_cli_once, pump_once
 from resources import (AccountBusyError, AGENT_USER, AgentesBackend, AgentProcess, CommandOutcome,
                        LOCK_ARGV, ResourceManager, TmuxBackend, parse_agent_ps)
 
@@ -289,6 +290,56 @@ class ResourceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "another resource"):
             roomy.mark(intruder)
         self.assertEqual(session_nonce(), manager._row(following)["nonce"], "a live resource lost its session")
+
+    def test_the_pump_gives_an_adopted_session_back_once_r_acknowledges_its_result(self):
+        class Client:
+            host_id = "host-test"
+
+            def __init__(self):
+                self.closures = []
+
+            def report_host_result(self, result, _):
+                return {**{field: result[field] for field in ("hostId", "taskId", "generation", "instanceId",
+                                                              "producerId")},
+                        "resultId": hashlib.sha256(canonical(result).encode()).hexdigest(), "receiptId": "rcpt-1"}
+
+            def close_host(self, assignment, state, reason, _):
+                self.closures.append((assignment["taskId"], state, reason))
+                return {}
+
+            def list_pending(self, **_):
+                return []
+
+            def report_host_incident(self, *_):
+                raise AssertionError("no incident was recorded")
+
+        manager = ResourceManager(self.host.spool, "host-test", self.backend, capacity=1)
+        operation = self.adopt(manager, self.key, 704)
+        self.assertEqual(self.host.apply(self.key, operation, lambda *_: None, self.admit).status, "delivered")
+        identity = self.backend.live["oc"]
+        artifact = Path(self.tmp.name) / "review.txt"
+        artifact.write_text("aprobado")
+        self.host.report("host-test", {
+            "schema": "agent-work.result.v1", "kind": "produced", "hostId": "host-test", "taskId": "task-1",
+            "generation": 1, "instanceId": "instance-1", "producerId": "opencode", "capability": "cap-task-1",
+            "observedRevision": operation.input_revision, "typedPayload": {"verdict": "approved"},
+            "artifactRef": str(artifact), "digest": hashlib.sha256(artifact.read_bytes()).hexdigest()})
+        self.assertFalse(manager.can_take("instance-1"))
+
+        client = Client()
+        self.assertEqual(pump_once(client, host=self.host, evidence_root=self.tmp.name,
+                                   progress_state_dir=self.tmp.name, progress_client="unused",
+                                   cli_release=manager.release_acknowledged),
+                         {"reported": 1, "transferred": 0, "closed": 1, "incidents": 0, "released": 1})
+        with self.host.spool.connection() as db:
+            self.assertEqual(tuple(db.execute("SELECT state, evidence_json FROM resources WHERE operation_id=?",
+                                              (operation_id(self.key),)).fetchone()),
+                             ("ReleasedAdopted", '{"kind":"result","receipt":"rcpt-1"}'))
+        self.assertEqual(client.closures, [("task-1", "ReleasedAdopted", "")])
+        self.assertTrue(manager.can_take("instance-1"), "the next task found the host full")
+        self.assertEqual((self.backend.stops, self.backend.revokes), ([], [identity]),
+                         "releasing stopped the operator's CLI")
+        self.assertIn("oc", self.backend.live)
 
     def test_opening_a_spool_from_before_b9_releases_sessions_its_abandoned_deliveries_hold(self):
         manager = ResourceManager(self.host.spool, "host-test", self.backend, capacity=1)

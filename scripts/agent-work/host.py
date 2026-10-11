@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import os
 import re
 import stat
@@ -30,6 +31,8 @@ RESULT_BOUND = ("hostId", "taskId", "generation", "instanceId", "producerId", "c
 MAX_ACCEPT_BYTES = 4096
 TMUX_TIMEOUT_SECONDS = 5.0
 COMPOSER_SETTLE_SECONDS = 0.3
+# opencode 1.18.35 took about a second to draw a long typed reference.
+COMPOSER_ECHO_SECONDS = 3.0
 VERDICTS = ("delivered", "abandoned")
 SGR = re.compile(r"\x1b\[([0-9;]*)m")
 COMPOSER_GLYPHS = "❯›┃│\u00a0 "
@@ -810,12 +813,13 @@ class TmuxTransport:
     text it typed."""
 
     def __init__(self, tmux_bin: str, socket: str, adapter: CliAdapter, *,
-                 settle_seconds: float = COMPOSER_SETTLE_SECONDS, timeout: float = TMUX_TIMEOUT_SECONDS,
-                 sleep: Callable[[float], None] = time.sleep):
+                 settle_seconds: float = COMPOSER_SETTLE_SECONDS, echo_seconds: float = COMPOSER_ECHO_SECONDS,
+                 timeout: float = TMUX_TIMEOUT_SECONDS, sleep: Callable[[float], None] = time.sleep):
         self.tmux_bin = tmux_bin
         self.socket = socket
         self.adapter = adapter
         self.settle_seconds = settle_seconds
+        self.echo_seconds = echo_seconds
         self.timeout = timeout
         self.sleep = sleep
         self.panes: dict[str, str] = {}
@@ -873,13 +877,16 @@ class TmuxTransport:
         except OSError as exc:
             raise DeliveryDeferred(str(exc)) from exc
         self._tmux("send-keys", "-t", pane, "-l", "--", text)
-        self.sleep(self.settle_seconds)
-        try:
-            _, command, screen = self._screen(session)
-        except (DeliveryDeferred, OSError) as exc:
-            raise RuntimeError(f"{exc}; Enter withheld") from exc
-        state, shown = read_composer(screen, command)
-        if state != "REAL" or not same_text(shown, text) or not same_text(bright_composer_text(screen, command), text):
+        for _ in range(max(1, math.ceil(self.echo_seconds / self.settle_seconds))):
+            self.sleep(self.settle_seconds)
+            try:
+                _, command, screen = self._screen(session)
+            except (DeliveryDeferred, OSError) as exc:
+                raise RuntimeError(f"{exc}; Enter withheld") from exc
+            state, shown = read_composer(screen, command)
+            if state == "REAL" and same_text(shown, text) and same_text(bright_composer_text(screen, command), text):
+                break
+        else:
             raise RuntimeError(f"composer shows {state} {shown!r} instead of the typed reference; Enter withheld")
         self._tmux("send-keys", "-t", pane, "Enter")
 
