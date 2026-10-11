@@ -68,6 +68,7 @@ Cada hueco tiene su arreglo, su revisión y su PR o paquete de R.
 | B12 | Canario 4 (`Managed task registration conflict`) | La redacción del transcript tapaba el campo `key` de submit, y `main` copiaba `***`. La entrada se llama ahora `taskKey`. R `ff1709f`. |
 | B13 | Canario 5 | El host lee la cancelación de R (`managedTasks.host.cancellation`), rechaza el diálogo de permiso con Esc y suelta la sesión. PR #264 y R `f8316c9`, VEREDICTO-B13-r1 APROBADO. |
 | B14 | Trabajadores 1 y 1b, anteriores a B9 | Un recurso adoptado cuya sesión lleva otra marca, o ninguna, queda `ReleasedAdopted`; `--close-only` cierra un spool viejo. PR #265, VEREDICTO-B14-r1 APROBADO. |
+| B15 | El par de cierre (`cien_reenvios` y `crash_boundaries`: `Managed task submit input is invalid`) | `routing.py` seguía armando el submit con `key`; tras B12 R lo rechaza. Ingeniería y operaciones, que pasan ese JSON tal cual, habrían fallado al encargar. Ahora emite `taskKey`, y `test-agent-work-routing.py` da rojo con `key`. Commit `c60f689` en este PR. |
 
 Dos derivas de despliegue se arreglaron a mano (fila B14, despliegue, de `followups.md`):
 - `~/bin/progress-events.py` era una copia vieja sin los campos del ACK durable. La copia anterior quedó en `~/.local/state/agent-work-host/progress-events.py.pre-c6`.
@@ -149,6 +150,10 @@ Corrido una vez, el 2026-10-11 a las 20:20Z, solo con lecturas.
 | Cliente de progreso | `cmp ~/bin/progress-events.py scripts/mac/progress-events.py` | iguales |
 | Directorio de progreso | `host-cmd.txt` | `--progress-state-dir /Users/dn/.local/state/runbook-progress-events` |
 | Sesión adoptada | `tmux -L agent-work display-message -p -t '=canario:' '#{pane_current_command}'` | `opencode.exe` |
+
+## Par de aceptación
+
+Una sola corrida al cierre, sobre G `c60f689` y R `f8316c9` (con R recompilado a ese commit): 33 de 33 casos con rc=0, de 20:30:27Z a 21:30:22Z. La primera corrida, sobre `2be0f55`, se detuvo porque destapó B15. El recibo está en `acceptance-pair.json` y los logs en `par-final/`. `bash scripts/tests/test-agent-work-e2e.sh acceptance` da OK con el par nuevo en `acceptance.md`.
 
 ## Lo que no se pudo comprobar
 

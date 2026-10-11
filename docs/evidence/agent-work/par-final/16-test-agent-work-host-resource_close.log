@@ -1,8 +1,8 @@
 $ bash scripts/tests/test-agent-work-host.sh resource_close
 ...............................s......
 ----------------------------------------------------------------------
-Ran 38 tests in 11.877s
+Ran 38 tests in 12.029s
 
 OK (skipped=1)
 
-rc=0 seconds=12.0
+rc=0 seconds=12.2

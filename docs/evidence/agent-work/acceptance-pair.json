@@ -1,121 +1,121 @@
 {
   "schema": "agent-work-acceptance-pair.v1",
-  "G": "119fb129d73d83e9dffb91d7346399000484544b",
+  "G": "c60f689a7ce4ea7afc7640cb6479f26f35a0a8a7",
   "gDirty": [],
-  "R": "4b9785c98b810160cb8025b614437433570f3e4a",
-  "rBuildCommit": "4b9785c98b810160cb8025b614437433570f3e4a",
+  "R": "f8316c9c867ebef79cfb66f8104b7f589c93e93a",
+  "rBuildCommit": "f8316c9c867ebef79cfb66f8104b7f589c93e93a",
   "rDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "startedAt": "2026-10-11T00:53:42Z",
+  "startedAt": "2026-10-11T20:30:27Z",
   "runs": [
     {
       "ref": "scripts/agent-work/test-runtime.sh::registration_identity",
       "rc": 0,
-      "seconds": 8.3,
+      "seconds": 15.9,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/01-test-runtime-registration_identity.log"
     },
     {
       "ref": "scripts/tests/test-agent-work-e2e.sh::cien_reenvios",
       "rc": 0,
-      "seconds": 189.6,
+      "seconds": 319.1,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/02-test-agent-work-e2e-cien_reenvios.log"
     },
     {
       "ref": "scripts/agent-work/test-runtime.sh::admission_restart",
       "rc": 0,
-      "seconds": 10.1,
+      "seconds": 18.7,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/03-test-runtime-admission_restart.log"
     },
     {
       "ref": "scripts/agent-work/test-runtime.sh::result_receipt",
       "rc": 0,
-      "seconds": 8.5,
+      "seconds": 15.1,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/04-test-runtime-result_receipt.log"
     },
     {
       "ref": "scripts/agent-work/test-runtime.sh::handling_atomic",
       "rc": 0,
-      "seconds": 7.3,
+      "seconds": 15.9,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/05-test-runtime-handling_atomic.log"
     },
     {
       "ref": "scripts/tests/test-agent-work-e2e.sh::crash_boundaries",
       "rc": 0,
-      "seconds": 648.4,
+      "seconds": 892.3,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/06-test-agent-work-e2e-crash_boundaries.log"
     },
     {
       "ref": "scripts/agent-work/test-runtime.sh::handling_unresolved",
       "rc": 0,
-      "seconds": 16.9,
+      "seconds": 13.4,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/07-test-runtime-handling_unresolved.log"
     },
     {
       "ref": "scripts/agent-work/test-runtime.sh::requester_queue",
       "rc": 0,
-      "seconds": 80.9,
+      "seconds": 84.4,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/08-test-runtime-requester_queue.log"
     },
     {
       "ref": "scripts/tests/test-agent-work-integration.sh::agents_routing",
       "rc": 0,
-      "seconds": 213.6,
+      "seconds": 242.7,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/09-test-agent-work-integration-agents_routing.log"
     },
     {
       "ref": "scripts/tests/test-agent-work-integration.sh::delegation_bypass",
       "rc": 0,
-      "seconds": 13.5,
+      "seconds": 10.4,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/10-test-agent-work-integration-delegation_bypass.log"
     },
     {
       "ref": "scripts/agent-work/test-runtime.sh::idle_72h",
       "rc": 0,
-      "seconds": 30.2,
+      "seconds": 24.5,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/11-test-runtime-idle_72h.log"
     },
     {
       "ref": "scripts/tests/test-agent-work-integration.sh::hook_is_observation",
       "rc": 0,
-      "seconds": 165.7,
+      "seconds": 167.1,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/12-test-agent-work-integration-hook_is_observation.log"
     },
     {
       "ref": "scripts/agent-work/test-runtime.sh::budget_tree",
       "rc": 0,
-      "seconds": 9.1,
+      "seconds": 13.1,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/13-test-runtime-budget_tree.log"
     },
     {
       "ref": "scripts/agent-work/test-runtime.sh::budget_context",
       "rc": 0,
-      "seconds": 7.6,
+      "seconds": 11.8,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/14-test-runtime-budget_context.log"
     },
     {
       "ref": "scripts/agent-work/test-runtime.sh::budget_evasion",
       "rc": 0,
-      "seconds": 12.0,
+      "seconds": 17.2,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/15-test-runtime-budget_evasion.log"
     },
     {
       "ref": "scripts/tests/test-agent-work-host.sh::resource_close",
       "rc": 0,
-      "seconds": 12.0,
+      "seconds": 12.2,
       "skips": [
         "1 (count)"
       ],
@@ -124,56 +124,56 @@
     {
       "ref": "scripts/agent-work/test-runtime.sh::resource_release",
       "rc": 0,
-      "seconds": 10.8,
+      "seconds": 14.5,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/17-test-runtime-resource_release.log"
     },
     {
       "ref": "scripts/tests/test-agent-work-host.sh::resource_identity",
       "rc": 0,
-      "seconds": 0.6,
+      "seconds": 0.8,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/18-test-agent-work-host-resource_identity.log"
     },
     {
       "ref": "scripts/tests/test-agent-work-host.sh::resource_100_cycles",
       "rc": 0,
-      "seconds": 28.0,
+      "seconds": 32.7,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/19-test-agent-work-host-resource_100_cycles.log"
     },
     {
       "ref": "scripts/tests/test-agent-work-integration.sh::projection_crash",
       "rc": 0,
-      "seconds": 0.2,
+      "seconds": 0.3,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/20-test-agent-work-integration-projection_crash.log"
     },
     {
       "ref": "scripts/agent-work/test-runtime.sh::projection_gateway",
       "rc": 0,
-      "seconds": 31.3,
+      "seconds": 48.9,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/21-test-runtime-projection_gateway.log"
     },
     {
       "ref": "scripts/agent-work/test-runtime.sh::waiting_reason",
       "rc": 0,
-      "seconds": 12.1,
+      "seconds": 17.0,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/22-test-runtime-waiting_reason.log"
     },
     {
       "ref": "scripts/tests/test-agent-work-integration.sh::director_handling",
       "rc": 0,
-      "seconds": 28.9,
+      "seconds": 36.8,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/23-test-agent-work-integration-director_handling.log"
     },
     {
       "ref": "scripts/tests/test-agent-work-e2e.sh::review_tail_restart",
       "rc": 0,
-      "seconds": 190.6,
+      "seconds": 228.7,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/24-test-agent-work-e2e-review_tail_restart.log"
     },
@@ -187,7 +187,7 @@
     {
       "ref": "scripts/tests/test-agent-work-e2e.sh::delivery_latency_r",
       "rc": 0,
-      "seconds": 33.2,
+      "seconds": 51.7,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/26-test-agent-work-e2e-delivery_latency_r.log"
     },
@@ -195,7 +195,7 @@
       "ref": "scripts/tests/test_agent_work_review_correction_restart_e2e.py::test_verdict_out_of_the_tail_and_a_crash_still_give_one_accepted_correction",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 168.9,
+      "seconds": 240.9,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/27-test_agent_work_review_correction_restart_e2e.log"
     },
@@ -203,7 +203,7 @@
       "ref": "scripts/tests/test_agent_work_review_correction_restart_e2e.py::test_a_crash_with_the_wake_turn_in_flight_still_gives_one_accepted_correction",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 168.9,
+      "seconds": 240.9,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/27-test_agent_work_review_correction_restart_e2e.log"
     },
@@ -211,7 +211,7 @@
       "ref": "scripts/tests/test-agent-work-host.py::test_host_receipts_replay_and_lost_ack",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 0.1,
+      "seconds": 0.2,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/28-test-agent-work-host.log"
     },
@@ -219,7 +219,7 @@
       "ref": "scripts/tests/test-agent-work-integration.py::test_lost_resolve_ack_retries_the_same_correction",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 0.8,
+      "seconds": 0.9,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/29-test-agent-work-integration.log"
     },
@@ -227,7 +227,7 @@
       "ref": "scripts/tests/test-agent-work-integration.py::test_two_consumers_share_one_native_effect",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 0.8,
+      "seconds": 0.9,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/29-test-agent-work-integration.log"
     },
@@ -235,7 +235,7 @@
       "ref": "scripts/tests/test-agent-work-integration.py::test_two_consumers_plan_one_identical_intent",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 0.8,
+      "seconds": 0.9,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/29-test-agent-work-integration.log"
     },
@@ -243,7 +243,7 @@
       "ref": "scripts/tests/test-agent-work-integration.py::test_uncertified_route_never_claims",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 0.8,
+      "seconds": 0.9,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/29-test-agent-work-integration.log"
     },
@@ -251,7 +251,7 @@
       "ref": "scripts/tests/test-agent-work-integration.py::test_lost_transfer_ack_and_board_outage_converge_without_repeating_the_review",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 0.8,
+      "seconds": 0.9,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/29-test-agent-work-integration.log"
     },
@@ -259,7 +259,7 @@
       "ref": "scripts/tests/test_agent_work_dispatchers_cancel_e2e.py::test_two_dispatchers_a_cancellation_and_a_stale_callback_keep_one_durable_order",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 83.9,
+      "seconds": 103.8,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/30-test_agent_work_dispatchers_cancel_e2e.log"
     },
@@ -283,7 +283,7 @@
       "ref": "scripts/tests/test-agent-work-resources.py::test_resource_close_crash_between_reserve_and_launch_with_host_unreachable_keeps_capacity",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 0.1,
+      "seconds": 0.2,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/32-test-agent-work-resources.log"
     },
@@ -291,7 +291,7 @@
       "ref": "scripts/tests/test-agent-work-resources.py::test_resource_close_pending_holds_host_capacity_and_pool_is_separate",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 0.1,
+      "seconds": 0.2,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/32-test-agent-work-resources.log"
     },
@@ -299,7 +299,7 @@
       "ref": "scripts/tests/test-agent-work-resources.py::test_resource_close_reservation_crash_stop_failure_and_detached_child",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 0.1,
+      "seconds": 0.2,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/32-test-agent-work-resources.log"
     },
@@ -307,7 +307,7 @@
       "ref": "scripts/tests/test-agent-work-resources.py::test_resource_close_agentes_stop_failed_holds_without_signals_until_retried",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 0.1,
+      "seconds": 0.2,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/32-test-agent-work-resources.log"
     },
@@ -315,7 +315,7 @@
       "ref": "scripts/tests/test-agent-work-resources.py::test_resource_close_session_gone_with_a_surviving_descendant_still_holds",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 0.1,
+      "seconds": 0.2,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/32-test-agent-work-resources.log"
     },
@@ -323,7 +323,7 @@
       "ref": "scripts/tests/test_agent_work_crash_boundaries_e2e.py::test_between_reservation_and_launch_the_restarted_host_recovers_the_same_instance",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 747.4,
+      "seconds": 943.0,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/33-test_agent_work_crash_boundaries_e2e.log"
     },
@@ -331,7 +331,7 @@
       "ref": "scripts/tests/test_agent_work_crash_boundaries_e2e.py::test_an_unattributable_launch_keeps_its_capacity_and_types_nothing",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 747.4,
+      "seconds": 943.0,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/33-test_agent_work_crash_boundaries_e2e.log"
     },
@@ -339,7 +339,7 @@
       "ref": "scripts/tests/test_agent_work_crash_boundaries_e2e.py::test_before_delivery_a_second_dispatcher_recovers_the_task",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 747.4,
+      "seconds": 943.0,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/33-test_agent_work_crash_boundaries_e2e.log"
     },
@@ -347,7 +347,7 @@
       "ref": "scripts/tests/test_agent_work_crash_boundaries_e2e.py::test_after_marking_the_restarted_host_recovers_the_launch_by_its_nonce",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 747.4,
+      "seconds": 943.0,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/33-test_agent_work_crash_boundaries_e2e.log"
     },
@@ -355,7 +355,7 @@
       "ref": "scripts/tests/test_agent_work_crash_boundaries_e2e.py::test_between_admission_and_answer_the_restart_never_hands_it_over_again",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 747.4,
+      "seconds": 943.0,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/33-test_agent_work_crash_boundaries_e2e.log"
     },
@@ -363,7 +363,7 @@
       "ref": "scripts/tests/test_agent_work_crash_boundaries_e2e.py::test_between_result_and_ack_the_host_repeats_the_same_report",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 747.4,
+      "seconds": 943.0,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/33-test_agent_work_crash_boundaries_e2e.log"
     },
@@ -371,7 +371,7 @@
       "ref": "scripts/tests/test_agent_work_crash_boundaries_e2e.py::test_between_decision_and_its_receipt_the_restart_recovers_the_same_child",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 747.4,
+      "seconds": 943.0,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/33-test_agent_work_crash_boundaries_e2e.log"
     },
@@ -379,7 +379,7 @@
       "ref": "scripts/tests/test_agent_work_crash_boundaries_e2e.py::test_after_typing_the_restarted_host_declares_uncertainty_and_never_types_again",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 747.4,
+      "seconds": 943.0,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/33-test_agent_work_crash_boundaries_e2e.log"
     },
@@ -387,10 +387,10 @@
       "ref": "scripts/tests/test_agent_work_crash_boundaries_e2e.py::test_a_cancellation_then_a_late_result_wakes_nobody",
       "rc": 0,
       "outcome": "ok",
-      "seconds": 747.4,
+      "seconds": 943.0,
       "skips": [],
       "log": "docs/evidence/agent-work/par-final/33-test_agent_work_crash_boundaries_e2e.log"
     }
   ],
-  "finishedAt": "2026-10-11T01:39:53Z"
+  "finishedAt": "2026-10-11T21:30:22Z"
 }
