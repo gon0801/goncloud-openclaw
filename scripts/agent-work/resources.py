@@ -64,6 +64,23 @@ def approval_prompt_identity(screen: str, pattern: re.Pattern) -> str | None:
     return "prompt-" + hashlib.sha256("\n".join(matching).encode()).hexdigest()
 
 
+NONCE_RE = re.compile(r"[0-9a-f]{32}")
+
+
+def adopted_mark_lost(identity: dict, observed: dict, socket: str) -> str | None:
+    """Why the host no longer holds an adopted pane, seen alive on the tmux server that held its mark: the
+    pane carries no mark, or another resource's. None while the pane may still carry ours, or when the
+    observation comes from another server or shows a value that is not a nonce."""
+    if identity.get("socket") != socket or observed.get("socket") != socket:
+        return None
+    mark = observed.get("nonce")
+    if mark == "":
+        return "adopted mark cleared"
+    if isinstance(mark, str) and mark != identity.get("nonce") and NONCE_RE.fullmatch(mark):
+        return "adopted mark superseded"
+    return None
+
+
 @dataclass(frozen=True)
 class ResourceView:
     state: str
@@ -242,6 +259,10 @@ class ResourceManager:
             except OSError:
                 return self._state(key, revision, "CleanupPending", "host unavailable")
             if observed is not None:
+                if identity is not None and observed != identity:
+                    lost = adopted_mark_lost(identity, observed, self.backend.socket)
+                    if lost:
+                        return self._state(key, revision, "ReleasedAdopted", lost)
                 if identity is None or observed != identity:
                     return self._state(key, revision, "CleanupPending", "adopted identity uncertain")
                 try:
@@ -367,6 +388,23 @@ class ResourceManager:
                     errors.append(f"{op_id}: cancelled; resource {view.state}: {view.reason}")
             except (OSError, RuntimeError, ValueError, KeyError, TypeError) as exc:
                 errors.append(f"{op_id}: cancel failed: {exc}")
+        return released, errors
+
+    def retry_cleanup(self) -> tuple[int, list[str]]:
+        """Close again every adopted resource a pass left CleanupPending with its evidence, so a pane that
+        since lost the host's mark, or died, ends terminal and flush_closures tells R. Only adopted ones:
+        the pump creates no other kind, and closing a TaskCreated resource stops processes."""
+        with self.spool.connection() as db:
+            rows = db.execute("SELECT task_id,generation,instance_id,evidence_json FROM resources "
+                              "WHERE ownership='UserAdopted' AND state='CleanupPending' "
+                              "AND evidence_json IS NOT NULL ORDER BY operation_id").fetchall()
+        released, errors = 0, []
+        for row in rows:
+            key = OperationKey(self.host_id, row["task_id"], row["generation"], row["instance_id"])
+            try:
+                released += self.close(key, json.loads(row["evidence_json"])).state in TERMINAL
+            except (OSError, ValueError) as exc:
+                errors.append(f"{operation_id(key)}: cleanup retry failed: {exc}")
         return released, errors
 
     def session_gone(self, key: OperationKey) -> bool:
