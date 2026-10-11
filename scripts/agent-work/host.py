@@ -5,10 +5,13 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
 import tempfile
+import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
@@ -23,7 +26,42 @@ DIALOG_PASSES = 2
 ACCEPT_SCHEMA = "agent-work.accept.v1"
 UNACCEPTED_EPISODE = "delivery-unaccepted"
 ACCEPT_BOUND = ("hostId", "taskId", "generation", "instanceId", "claimId")
+RESULT_BOUND = ("hostId", "taskId", "generation", "instanceId", "producerId", "capability")
 MAX_ACCEPT_BYTES = 4096
+TMUX_TIMEOUT_SECONDS = 5.0
+COMPOSER_SETTLE_SECONDS = 0.3
+VERDICTS = ("delivered", "abandoned")
+SGR = re.compile(r"\x1b\[([0-9;]*)m")
+COMPOSER_GLYPHS = "❯›┃│\u00a0 "
+COMPOSER_MENU = re.compile(r"^\s*[❯›]?\s*\d+[.)]?\s")
+# An option under the arrow is indented and numbered "2." or "2)"; a wrapped composer line such as
+# "1 atomically" (from "accept.v1") starts at the margin.
+COMPOSER_MENU_OPTION = re.compile(r"^\s+\d+[.)]\s")
+
+
+@dataclass(frozen=True)
+class CliAdapter:
+    """How the host knows a CLI's pane (tmux pane_current_command) and its empty composer."""
+    commands: tuple[str, ...]
+    placeholders: tuple[str, ...] = ()
+
+
+# Measured 2026-10-10 on opencode 1.18.35: tmux names the pane after the npm package's
+# opencode.exe, and an empty composer on the home screen shows one of three examples at random.
+CLI_ADAPTERS = {
+    "opencode": CliAdapter(("opencode", "opencode.exe"), tuple(
+        f'Ask anything… "{example}"' for example in
+        ("Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"))),
+}
+
+
+def cli_adapter(adapter_id: str) -> CliAdapter:
+    """An adapter nobody measured has no known placeholder, so any text in its composer defers."""
+    return CLI_ADAPTERS.get(adapter_id, CliAdapter((adapter_id,)))
+
+
+class DeliveryDeferred(Exception):
+    """Nothing was typed into the session, so the delivery can be retried."""
 
 
 def next_dialog_state(state: dict, observed: str) -> tuple[dict, bool]:
@@ -82,6 +120,30 @@ def read_acceptance(assignment: dict) -> bool:
                                assignment["capability"].encode("utf-8", "surrogatepass"))
 
 
+def cli_protocol(assignment: dict) -> dict:
+    """The assignment spells out what a CLI writes, because the CLI has nothing else to go on."""
+    return {
+        "steps": [
+            "Before any other work, write the accept object as JSON to acceptRef, atomically: write a "
+            "temporary file in the same directory, then rename it onto acceptRef.",
+            "Do the work that the file at briefRef describes, inside workspaceRef.",
+            "Write the result object, plus every field named in fill holding what fill describes, as "
+            "JSON to resultRef, atomically in the same way. Copy every other field unchanged.",
+        ],
+        "accept": {"schema": ACCEPT_SCHEMA, "capability": assignment["capability"],
+                   **{field: assignment[field] for field in ACCEPT_BOUND}},
+        "result": {"schema": RESULT_SCHEMA, "kind": "produced",
+                   **{field: assignment[field] for field in RESULT_BOUND},
+                   "observedRevision": assignment["inputRevision"]},
+        "fill": {
+            "typedPayload": f"the JSON object that the {assignment['resultContract']} contract and the "
+                            "brief ask for",
+            "artifactRef": "the absolute path of the artifact file, inside workspaceRef",
+            "digest": "the lowercase hex SHA-256 of the artifact file's bytes",
+        },
+    }
+
+
 def under(path: str, root: str) -> Path:
     try:
         resolved = Path(path).resolve(strict=True)
@@ -90,6 +152,147 @@ def under(path: str, root: str) -> Path:
     if not resolved.is_relative_to(Path(root).resolve(strict=True)) or not resolved.is_file():
         raise ValueError("reference outside authorized workspace")
     return resolved
+
+
+def _sgr_segments(line: str, style: dict) -> tuple[list[tuple[dict, str]], dict]:
+    """Styled runs of one captured line and the style it leaves for the next one."""
+    out, pos = [], 0
+    style = dict(style)
+    for match in SGR.finditer(line):
+        if match.start() > pos:
+            out.append((dict(style), line[pos:match.start()]))
+        codes = [code for code in match.group(1).split(";") if code] or ["0"]
+        i = 0
+        while i < len(codes):
+            code = codes[i]
+            if code == "0":
+                style = {"dim": False, "fg": None}
+            elif code == "2":
+                style["dim"] = True
+            elif code == "22":
+                style["dim"] = False
+            elif code == "39":
+                style["fg"] = None
+            elif code in ("38", "48") and i + 2 < len(codes) and codes[i + 1] == "5":
+                if code == "38":
+                    style["fg"] = ("256", int(codes[i + 2]))
+                i += 2
+            elif code in ("38", "48") and i + 4 < len(codes) and codes[i + 1] == "2":
+                if code == "38":
+                    style["fg"] = ("rgb", *(int(value) for value in codes[i + 2:i + 5]))
+                i += 4
+            elif code.isdigit() and (30 <= int(code) <= 37 or 90 <= int(code) <= 97):
+                style["fg"] = ("basic", int(code))
+            i += 1
+        pos = match.end()
+    if pos < len(line):
+        out.append((dict(style), line[pos:]))
+    return out, style
+
+
+def _muted(style: dict) -> bool:
+    # Measured 2026-10-02 (composer-real.sh): ghosts and placeholders are dim (SGR 2) or grey;
+    # typed text is the default colour or bright (opencode rgb 238,238,238).
+    if style["dim"]:
+        return True
+    fg = style["fg"]
+    if fg is None:
+        return False
+    if fg[0] == "basic":
+        return fg[1] in (30, 90)
+    if fg[0] == "256":
+        return 232 <= fg[1] <= 249
+    r, g, b = fg[1:]
+    return max(r, g, b) - min(r, g, b) <= 40 and max(r, g, b) <= 170
+
+
+def _composer_region(screen: str, command: str) -> list[list[tuple[dict, str]]] | str:
+    """composer-real.sh over a `capture-pane -e` screen: the styled runs of each composer line,
+    or why the screen shows no composer."""
+    lines = screen.splitlines()
+    while lines and not SGR.sub("", lines[-1]).strip():
+        lines.pop()
+    if not lines:
+        return "empty screen"
+    plain = [SGR.sub("", line) for line in lines]
+    columns = None
+    if command.startswith("opencode"):
+        # The input box is the last run of lines that start with ┃; its last line is the agent bar
+        # and the ╹▀▀▀ border under it spans the box. Measured 2026-10-10 (opencode 1.18.35): in a
+        # session the sidebar shares the box's lines to the right of that border.
+        boxed = [i for i, line in enumerate(plain) if line.lstrip().startswith("┃")]
+        if not boxed:
+            return "no opencode input box"
+        start = end = boxed[-1]
+        while start - 1 in boxed:
+            start -= 1
+        border = plain[end + 1].strip() if end + 1 < len(plain) else ""
+        if not border.startswith("╹"):
+            return "no opencode input box border"
+        left = plain[end + 1].index("╹")
+        columns = (left, left + len(border))
+        region = range(start, end)
+    else:
+        prompts = [i for i, line in enumerate(plain) if line.lstrip().startswith(("❯", "›"))]
+        if not prompts:
+            return "no composer"
+        k = prompts[-1]
+        if COMPOSER_MENU.match(plain[k]) or any(COMPOSER_MENU_OPTION.match(line) for line in plain[k + 1:k + 4]):
+            return "menu or dialog open"
+        end = k + 1
+        while end < len(plain):
+            rule = plain[end].strip()
+            if not rule or (len(rule) >= 10 and set(rule) <= set("─━═-")):
+                break
+            end += 1
+        region = range(k, end)
+    # capture-pane -e writes only style changes, and a wrapped line continues the previous style.
+    style, out = {"dim": False, "fg": None}, []
+    for i, line in enumerate(lines[:region.stop]):
+        segments, style = _sgr_segments(line, style)
+        if i in region:
+            out.append(_columns(segments, columns) if columns else segments)
+    return out
+
+
+def _columns(segments: list[tuple[dict, str]], columns: tuple[int, int]) -> list[tuple[dict, str]]:
+    out, pos = [], 0
+    for style, part in segments:
+        out.append((style, part[max(columns[0] - pos, 0):max(columns[1] - pos, 0)]))
+        pos += len(part)
+    return out
+
+
+def _region_text(region: list[list[tuple[dict, str]]], keep: Callable[[dict], bool]) -> str:
+    typed = []
+    for segments in region:
+        text = "".join(part for style, part in segments if keep(style)).strip(COMPOSER_GLYPHS).strip()
+        if text:
+            typed.append(text)
+    return "\n".join(typed)
+
+
+def read_composer(screen: str, command: str, placeholders: tuple[str, ...] = ()) -> tuple[str, str]:
+    """VACIO, REAL with the composer's text, or DESCONOCIDO. Colour does not count: a theme can draw
+    an operator's draft as dim as a placeholder, so only no text or a known placeholder is VACIO."""
+    region = _composer_region(screen, command)
+    if isinstance(region, str):
+        return "DESCONOCIDO", region
+    text = _region_text(region, lambda style: True)
+    if not text or any(same_text(text, placeholder) for placeholder in placeholders):
+        return "VACIO", ""
+    return "REAL", text
+
+
+def bright_composer_text(screen: str, command: str) -> str:
+    """The composer's text minus the runs drawn dim or grey, as a ghost suggestion is drawn."""
+    region = _composer_region(screen, command)
+    return "" if isinstance(region, str) else _region_text(region, lambda style: not _muted(style))
+
+
+def same_text(shown: str, typed: str) -> bool:
+    """The composer wraps long lines at its width, so layout whitespace does not count."""
+    return re.sub(r"\s+", "", shown) == re.sub(r"\s+", "", typed)
 
 
 class Host:
@@ -187,6 +390,7 @@ class Host:
         if operation.adapter_id:
             assignment["adapterId"] = operation.adapter_id
             assignment["acceptRef"] = str(self.state_dir / "inbox" / f"{op_id}.accept.json")
+            assignment["protocol"] = cli_protocol(assignment)
         digest = hashlib.sha256(canonical(assignment).encode()).hexdigest()
         current = self.spool.get(op_id)
         if current and current["operation_digest"] != digest:
@@ -214,6 +418,9 @@ class Host:
             return HostObservation("uncertain" if status == "attempted" else status, str(assignment_ref))
         try:
             deliver(str(assignment_ref), operation.session)
+        except DeliveryDeferred:
+            self.spool.delivery_deferred(op_id)
+            return HostObservation("deferred", str(assignment_ref))
         except Exception:
             return HostObservation("uncertain", str(assignment_ref))
         if "acceptRef" not in assignment:
@@ -366,6 +573,19 @@ class Host:
                                              canonical(incident), incident_digest):
                 detected.append(incident_key)
         return detected
+
+    def resolve_delivery(self, host_id: str, key: OperationKey, verdict: str, reason: str) -> str:
+        """The operator settles an attempted or uncertain delivery; nothing is ever typed again."""
+        self._host(host_id)
+        self._host(key.host_id)
+        if verdict not in VERDICTS or not reason.strip():
+            raise ValueError("verdict must be delivered or abandoned, with a reason")
+        op_id = operation_id(key)
+        if self.spool.get(op_id) is None:
+            raise ValueError("unknown operation")
+        if not self.spool.resolve_delivery(op_id, verdict, reason, time.time()):
+            raise ValueError(f"operation is {self.spool.get(op_id)['status']}, not attempted or uncertain")
+        return verdict
 
     def detect_silent_failures(self, host_id: str, session_gone: Callable[[OperationKey], bool], *,
                                now: float, deadline_seconds: float | None = None,
@@ -568,9 +788,57 @@ class Host:
 
 
 class TmuxTransport:
-    def __init__(self, tmux_bin: str, socket: str):
+    """Types into the CLI's pinned pane only when its composer is empty, and presses Enter only on
+    text it typed."""
+
+    def __init__(self, tmux_bin: str, socket: str, adapter: CliAdapter, *,
+                 settle_seconds: float = COMPOSER_SETTLE_SECONDS, timeout: float = TMUX_TIMEOUT_SECONDS,
+                 sleep: Callable[[float], None] = time.sleep):
         self.tmux_bin = tmux_bin
         self.socket = socket
+        self.adapter = adapter
+        self.settle_seconds = settle_seconds
+        self.timeout = timeout
+        self.sleep = sleep
+        self.panes: dict[str, str] = {}
+
+    def _tmux(self, *args: str) -> subprocess.CompletedProcess:
+        try:
+            done = subprocess.run([self.tmux_bin, "-L", self.socket, *args], capture_output=True,
+                                  encoding="utf-8", errors="replace", timeout=self.timeout)
+        except subprocess.TimeoutExpired as exc:
+            raise OSError(f"tmux {args[0]} timed out") from exc
+        if done.returncode:
+            raise OSError(f"tmux {args[0]} failed: {done.stderr.strip()}")
+        return done
+
+    def _pane(self, session: str) -> tuple[str, str]:
+        """The CLI's pane, pinned the first time the host meets the session, and its command.
+
+        The operator may open or select another window of the session (C-b c), so the active
+        window is never the target. DeliveryDeferred when the pane is not the adapter's CLI."""
+        pane = self.panes.get(session)
+        if pane is None:
+            listed = self._tmux("list-panes", "-s", "-t", f"={session}", "-F",
+                                "#{pane_id}\t#{pane_current_command}").stdout.splitlines()
+            found = [pane_id for pane_id, _, command in (line.partition("\t") for line in listed)
+                     if command in self.adapter.commands]
+            if len(found) != 1:
+                raise DeliveryDeferred(f"session has {len(found)} panes running {'/'.join(self.adapter.commands)}")
+            pane = self.panes[session] = found[0]
+        name, _, command = self._tmux("display-message", "-p", "-t", pane,
+                                      "#{session_name}\t#{pane_current_command}").stdout.rstrip("\n").partition("\t")
+        if name != session or command not in self.adapter.commands:
+            raise DeliveryDeferred(f"pinned pane {pane} runs {command} in session {name}")
+        return pane, command
+
+    def _screen(self, session: str) -> tuple[str, str, str]:
+        pane, command = self._pane(session)
+        return pane, command, self._tmux("capture-pane", "-e", "-p", "-t", pane).stdout
+
+    def composer(self, session: str) -> tuple[str, str]:
+        _, command, screen = self._screen(session)
+        return read_composer(screen, command, self.adapter.placeholders)
 
     def deliver(self, assignment_ref: str, session: str) -> None:
         if not session.replace("-", "").replace("_", "").isalnum():
@@ -578,11 +846,24 @@ class TmuxTransport:
         text = (f"Open assignment JSON at {assignment_ref}. First write agent-work.accept.v1 atomically to "
                 "acceptRef with schema, hostId, taskId, generation, instanceId, claimId and capability copied "
                 "from the assignment. Then follow briefRef and write agent-work.result.v1 atomically to resultRef.")
-        subprocess.run([self.tmux_bin, "-L", self.socket, "set-environment", "-t", f"={session}",
-                        "AGENT_WORK_MANAGED", "1"], check=True, capture_output=True)
-        command = [self.tmux_bin, "-L", self.socket, "send-keys", "-t", f"={session}:"]
-        subprocess.run(command + ["-l", "--", text], check=True, capture_output=True)
-        subprocess.run(command + ["Enter"], check=True, capture_output=True)
+        try:
+            pane, command, screen = self._screen(session)
+            state, shown = read_composer(screen, command, self.adapter.placeholders)
+            if state != "VACIO":
+                raise DeliveryDeferred(f"composer is {state}: {shown}")
+            self._tmux("set-environment", "-t", f"={session}", "AGENT_WORK_MANAGED", "1")
+        except OSError as exc:
+            raise DeliveryDeferred(str(exc)) from exc
+        self._tmux("send-keys", "-t", pane, "-l", "--", text)
+        self.sleep(self.settle_seconds)
+        try:
+            _, command, screen = self._screen(session)
+        except (DeliveryDeferred, OSError) as exc:
+            raise RuntimeError(f"{exc}; Enter withheld") from exc
+        state, shown = read_composer(screen, command)
+        if state != "REAL" or not same_text(shown, text) or not same_text(bright_composer_text(screen, command), text):
+            raise RuntimeError(f"composer shows {state} {shown!r} instead of the typed reference; Enter withheld")
+        self._tmux("send-keys", "-t", pane, "Enter")
 
 
 class ShellAdapterTransport:
@@ -605,10 +886,27 @@ class ShellAdapterTransport:
             raise RuntimeError(f"reference delivery uncertain: {sent.stderr.strip() or sent.stdout.strip()}")
 
 
+USAGE = ("usage: host.py verify-ref <hostId> <stateDir> <session> <assignmentRef>\n"
+         "       host.py resolve-delivery <hostId> <stateDir> <taskId> <generation> delivered|abandoned <reason>")
+
+
+def main(argv: list[str]) -> str | None:
+    if len(argv) == 5 and argv[0] == "verify-ref":
+        Host(argv[1], Path(argv[2])).verify_reference(argv[1], argv[3], argv[4])
+        return None
+    if len(argv) == 7 and argv[0] == "resolve-delivery":
+        host = Host(argv[1], Path(argv[2]))
+        key = host.operation_key_for(argv[1], argv[3], int(argv[4]))
+        if key is None:
+            raise ValueError("no host operation for that task generation")
+        return host.resolve_delivery(argv[1], key, argv[5], argv[6])
+    raise SystemExit(USAGE)
+
+
 if __name__ == "__main__":
-    if len(sys.argv) != 6 or sys.argv[1] != "verify-ref":
-        raise SystemExit("usage: host.py verify-ref <hostId> <stateDir> <session> <assignmentRef>")
     try:
-        Host(sys.argv[2], Path(sys.argv[3])).verify_reference(sys.argv[2], sys.argv[4], sys.argv[5])
+        printed = main(sys.argv[1:])
     except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
         raise SystemExit(str(exc)) from exc
+    if printed:
+        print(printed)

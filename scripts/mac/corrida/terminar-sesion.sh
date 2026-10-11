@@ -1,11 +1,23 @@
 #!/bin/bash
 # Retira la vigilancia de una sesion que pertenece a una corrida registrada.
 # No mata tmux, no borra worktrees y repetir la operacion es seguro.
+# Un cierre gestionado vacia los resultados del host hacia R antes de cerrar
+# (el recibo del resultado tiene que ser durable) y otra vez despues, para que
+# R reciba el cierre terminal y suelte el cupo.
+recurso_vaciar_resultados() { # $1 hostId
+  python3 "$AGENT_WORK_GATEWAY_BIN" --flush-results --openclaw-bin "$OPENCLAW_BIN" \
+    --host-id "$1" --expect-url "$AGENT_WORK_EXPECT_URL" \
+    --host-state-dir "$AGENT_WORK_HOST_STATE_DIR" >/dev/null
+}
+
 recurso_cerrar_gestionado() { # $1 hostId $2 encargo_ref $3 evidencia
   local host_id="$1" ref="$2" evidencia="$3" resource_bin result estado
   [ -n "${AGENT_WORK_HOST_STATE_DIR:-}" ] && [ -n "${AGENT_WORK_TMUX_SOCKET:-}" ] \
-    && [ -f "${AGENT_WORK_RESOURCE_BIN:-}" ] && [ -f "$evidencia" ] \
-    || { echo "recurso gestionado: faltan estado, socket, adaptador o evidencia" >&2; return 1; }
+    && [ -f "${AGENT_WORK_RESOURCE_BIN:-}" ] && [ -f "${AGENT_WORK_GATEWAY_BIN:-}" ] \
+    && [ -n "${AGENT_WORK_EXPECT_URL:-}" ] && [ -f "$evidencia" ] \
+    || { echo "recurso gestionado: faltan estado, socket, adaptador, gateway o evidencia" >&2; return 1; }
+  recurso_vaciar_resultados "$host_id" \
+    || { echo "recurso gestionado: resultados sin entregar a R; no se cierra" >&2; return 1; }
   resource_bin="$AGENT_WORK_RESOURCE_BIN"
   result="$(python3 "$resource_bin" close --host-id "$host_id" \
     --state-dir "$AGENT_WORK_HOST_STATE_DIR" --assignment "$ref" \
@@ -16,9 +28,11 @@ import json,os
 print(json.loads(os.environ["RESOURCE_RESULT"])["state"])
 ' 2>/dev/null)" || return 1
   case "$estado" in
-    AbsenceVerified|ReleasedAdopted) return 0;;
+    AbsenceVerified|ReleasedAdopted) ;;
     *) echo "recurso gestionado: cierre pendiente ($estado)" >&2; return 1;;
   esac
+  recurso_vaciar_resultados "$host_id" \
+    || { echo "recurso gestionado: cerrado aqui, R sin avisar; reintentar avisa" >&2; return 1; }
 }
 
 corrida_terminar_sesion() {

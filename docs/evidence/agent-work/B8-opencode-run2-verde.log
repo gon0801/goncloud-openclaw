@@ -1,0 +1,51 @@
+test_main_loop_hands_tasks_to_an_adopted_opencode_session (__main__.OpencodeAdapterE2E.test_main_loop_hands_tasks_to_an_adopted_opencode_session) ... OPENCODE_E2E t=  25.1s gateway=ws://127.0.0.1:42000 socket=agent-work-opencode-61670-1fc70c0f model=zai-coding-plan/glm-5.3-flash workspace=/private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/agent-work-opencode-xdqlc16v/workspace
+OPENCODE_E2E t=  27.5s opencode composer VACIO
+OPENCODE_E2E t=  27.6s task 1 submitted and admitted taskId=8f952768-3939-47c2-9f59-7d3686dc2d4e
+OPENCODE_E2E t=  31.7s draft in the composer: claim deferred, nothing typed
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+OPENCODE_E2E t=  79.4s task 1 accepted and reported receipt=27d10f97e5b5f6935cc52da79039fe2a2942dce1ce6c40964a56a0996c64777d
+{"claimed": 0, "closed": 0, "detected": 0, "incidents": 0, "reported": 1, "transferred": 0}
+OPENCODE_E2E t=  85.7s task 1 gateway result={"artifactRef": "artifact:b71eb3194d006af940473e9e97e29670eb5f3a15a8df5908799f6eccf4f702e8", "digest": "sha256:10406a9fb400b29bab71919e991435b3cb3cb1be72b7d72499a26b99997bfa50", "evidenceContentHash": "b71eb3194d006af940473e9e97e29670eb5f3a15a8df5908799f6eccf4f702e8", "kind": "produced", "observedRevision": {"kind": "code", "repository": "opencode-cert", "sha": "cccccccccccccccccccccccccccccccccccccccc"}, "payload": {"evidenceRef": "cert-1.txt"}}
+OPENCODE_E2E t=  85.7s task 1 woke agent:main:encargos-loop, handled, session released and kept
+OPENCODE_E2E t=  85.7s task 2 submitted and admitted taskId=70a1b512-e7d0-40af-b866-7b61f173fb07
+{"claimed": 1, "closed": 1, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 1, "closed": 0, "detected": 0, "incidents": 0, "reported": 0, "transferred": 0}
+{"claimed": 0, "closed": 0, "detected": 0, "incidents": 0, "reported": 1, "transferred": 0}
+OPENCODE_E2E t= 117.6s task 2 accepted and reported receipt=cff32cb9a1b206de761e47bd0817282371e813a151b5aa1f477c6265aa09a1b8
+OPENCODE_E2E t= 117.6s task 2 gateway result={"artifactRef": "artifact:201f2f61200271064aaade92de248dc0142f2c23cd770c925aeafe91c7aa4be7", "digest": "sha256:5cc94b38117173ca886cd46d86718a8b0dbaf18b6909f549589f8d9425bf90c9", "evidenceContentHash": "201f2f61200271064aaade92de248dc0142f2c23cd770c925aeafe91c7aa4be7", "kind": "produced", "observedRevision": {"kind": "code", "repository": "opencode-cert", "sha": "cccccccccccccccccccccccccccccccccccccccc"}, "payload": {"evidenceRef": "cert-2.txt"}}
+OPENCODE_E2E t= 117.7s task 2 woke agent:main:encargos-loop, handled, session released and kept
+OPENCODE_E2E t= 117.7s OPENCODE_ADAPTER_E2E tasks=2 typed=2 deferred_over_draft=1 incidents=0 sessions=['agent:main:encargos-loop'] claims=36
+ok
+
+----------------------------------------------------------------------
+Ran 1 test in 117.833s
+
+OK

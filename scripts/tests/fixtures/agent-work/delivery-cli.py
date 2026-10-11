@@ -3,10 +3,12 @@
 
 It never takes the assignment and never writes agent-work.accept.v1:
 
-- phantom: a composer that paints what is typed as dimmed text, like a ghost suggestion,
+- phantom: a `❯` composer that paints what is typed as dimmed text, like a ghost suggestion,
   and never submits it (Enter does nothing). The screen shows the assignment path.
-- busy: a session at work that paints its indicator and drops its input unprocessed, with no
-  echo. The screen never shows the reference.
+- busy: a session at work that paints its indicator above an empty `❯` composer and drops its
+  input unprocessed, with no echo. The screen never shows the reference.
+
+Either way the composer never shows the typed text as written, so TmuxTransport withholds Enter.
 
 Every byte that reaches the pane is logged to DELIVERY_CLI_RECEIVED, so the test counts the
 typing where it lands.
@@ -42,7 +44,7 @@ def quiet_terminal():
 
 def phantom(until):
     quiet_terminal()
-    sys.stdout.write("delivery-cli ready (phantom)\n> ")
+    sys.stdout.write("delivery-cli ready (phantom)\n❯ ")
     sys.stdout.flush()
     while time.monotonic() < until:
         ready, _, _ = select.select([sys.stdin.fileno()], [], [], TICK_SECONDS)
@@ -60,13 +62,16 @@ def phantom(until):
 
 def busy(until):
     quiet_terminal()
-    sys.stdout.write("delivery-cli ready (busy)\n")
+    # One write, so the ready line never shows without the composer under it.
+    sys.stdout.write("delivery-cli ready (busy)\n* Working... (0s - esc to interrupt)\n❯ ")
+    sys.stdout.flush()
     started = time.monotonic()
     while time.monotonic() < until:
         # Whatever was typed is logged and dropped: the session never took the input.
         while select.select([sys.stdin.fileno()], [], [], 0)[0]:
             received(os.read(sys.stdin.fileno(), 4096))
-        sys.stdout.write(f"\r* Working... ({int(time.monotonic() - started)}s - esc to interrupt)")
+        sys.stdout.write(f"\x1b[2;1H\x1b[2K* Working... ({int(time.monotonic() - started)}s - esc to interrupt)"
+                         "\x1b[3;1H\x1b[2K❯ ")
         sys.stdout.flush()
         time.sleep(TICK_SECONDS)
 

@@ -281,15 +281,17 @@ async function runTool(command) {
     profile, config, spawnContext: {}, runTimeoutSeconds: 60,
     resolveInstructionRef: async (ref) => {
       if (ref === "artifact:fixture-source") return bytes;
-      if (ref === `artifact:${expectedDigest}`) {
-        // routing.py writes the brief into instructionRoot, read as in production;
-        // the fixture-source brief exists only in the artifact store.
-        return fs.access(path.join(stateDir, expectedDigest)).then(
-          () => hostModule.resolveManagedTaskHostCapability(config).resolveInstructionRef(ref),
-          () => artifactModule.readManagedTaskArtifact(ref),
-        );
-      }
-      throw new Error("unrecognized fixture instruction reference");
+      const digest = /^artifact:([0-9a-f]{64})$/.exec(ref)?.[1];
+      if (!digest) throw new Error("unrecognized fixture instruction reference");
+      // routing.py writes any brief into instructionRoot, read as in production;
+      // the fixture-source brief exists only in the artifact store.
+      return fs.access(path.join(stateDir, digest)).then(
+        () => hostModule.resolveManagedTaskHostCapability(config).resolveInstructionRef(ref),
+        () => {
+          if (digest !== expectedDigest) throw new Error("unrecognized fixture instruction reference");
+          return artifactModule.readManagedTaskArtifact(ref);
+        },
+      );
     },
   });
   const tool = tools.find((entry) => entry.name === name);

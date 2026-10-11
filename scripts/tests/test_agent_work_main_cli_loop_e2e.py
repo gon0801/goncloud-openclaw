@@ -25,13 +25,16 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from contracts import OperationKey  # noqa: E402
-from host import Host  # noqa: E402
+from host import CliAdapter, Host  # noqa: E402
 from native_gateway import GatewayProjectionClient, claim_cli_once  # noqa: E402
 from resources import ResourceManager  # noqa: E402
 from routing import RouteUnavailable, prepare_request  # noqa: E402
 from spool import atomic_json  # noqa: E402
 from test_agent_work_cli_gateway_e2e import FIXTURE, FakeCliSession  # noqa: E402
 
+# tmux names a pane after its foreground process; a python CLI double shows as Python on macOS.
+PYTHON_DOUBLE = CliAdapter(tuple(sorted({"Python", Path(sys.executable).name,
+                                         Path(os.path.realpath(sys.executable)).name})))
 LOOP_SESSION = "agent:main:encargos-loop"
 FOREIGN_SESSIONS = ("agent:main:main", "agent:main:vigia-mac")
 FOREIGN_PREFIX = "agent:main:sim9-"

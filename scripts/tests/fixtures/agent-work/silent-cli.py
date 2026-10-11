@@ -22,7 +22,9 @@ LINGER_SECONDS = 600
 
 
 def main(cause):
-    print("silent-cli ready", flush=True)
+    # The empty `❯` composer TmuxTransport waits for; the terminal echoes what is typed after it.
+    sys.stdout.write("silent-cli ready\n❯ ")
+    sys.stdout.flush()
     typed = sys.stdin.readline()
     match = re.search(r"Open assignment JSON at (\S+\.json)\. ", typed)
     if match is None:

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """cli_delivery_acceptance: typing a reference or seeing it on screen is not a delivery.
 
+TmuxTransport presses Enter only when the composer shows the typed text as written. Neither
+double does (one dims it, the other never echoes it), so the text stays typed and unsubmitted.
+
 The R Gateway runs in the main_cli_loop harness with its counting model provider. The CLI is
 a double inside a real tmux pane on a private server that never accepts what it is given. The
 pump runs both CLI hooks native_gateway.main wires for --watch: the claim, replayed on every
@@ -32,8 +35,8 @@ from routing import prepare_request  # noqa: E402
 from spool import canonical  # noqa: E402
 from test_agent_work_cli_silent_failure_e2e import CountingClient, incident_rows  # noqa: E402
 from test_agent_work_main_cli_loop_e2e import (  # noqa: E402
-    ADAPTER, HOST_ID, LOOP_SESSION, LoopGateway, built_runtime, certified_coverage, loop_route,
-    wait_for)
+    ADAPTER, HOST_ID, LOOP_SESSION, PYTHON_DOUBLE, LoopGateway, built_runtime, certified_coverage,
+    loop_route, wait_for)
 
 DELIVERY_CLI = ROOT / "scripts/tests/fixtures/agent-work/delivery-cli.py"
 LIB_SH = ROOT / "scripts/mac/corrida/lib.sh"
@@ -133,7 +136,7 @@ class CliDeliveryAcceptanceE2E(unittest.TestCase):
         route = dict(loop_route(root, gateway.state_dir), key=f"encargos-loop-{mode}")
         request = prepare_request(coverage=self.certified, **route)
         instance = f"delivery-{mode}"
-        transport = TmuxTransport(cli.tmux, cli.socket)
+        transport = TmuxTransport(cli.tmux, cli.socket, PYTHON_DOUBLE)
         typed = []
 
         def deliver(assignment_ref, session):
@@ -179,20 +182,20 @@ class CliDeliveryAcceptanceE2E(unittest.TestCase):
             typed_at = time.time()
             observed = cli_claim()
             self.assertIsNotNone(observed, "the host claimed nothing")
-            self.assertEqual(observed.status, "typed",
-                             f"typing the reference counted as a delivery; screen={cli.screen()!r}")
+            self.assertEqual(observed.status, "uncertain",
+                             f"Enter went to a composer that never showed the text; screen={cli.screen()!r}")
             self.assertEqual(typed, [observed.assignment_ref])
             # Literal gate (opcion A): los bytes exactos que TmuxTransport.deliver deja en el pane:
-            # su texto mas un Enter (un newline en el terminal del doble). Se compara byte por byte
-            # al final: cierra por construccion el retecleo dentro del primer reclamo, donde una
-            # linea base tomada tras el reclamo ya contendria el reintento.
+            # su texto y ningun Enter, porque el composer nunca lo mostro escrito. Se compara byte
+            # por byte al final: cierra por construccion el retecleo dentro del primer reclamo, donde
+            # una linea base tomada tras el reclamo ya contendria el reintento.
             expected = ((f"Open assignment JSON at {observed.assignment_ref}. First write "
                          "agent-work.accept.v1 atomically to acceptRef with schema, hostId, taskId, "
                          "generation, instanceId, claimId and capability copied from the assignment. "
-                         "Then follow briefRef and write agent-work.result.v1 atomically to resultRef.\n").encode())
-            # What the one delivery leaves in the pane: its text and one Enter (a newline in the
-            # double's terminal). Any byte after it, the reference or not, is typing again.
-            delivery_bytes = wait_for(lambda: cli.received.exists() and cli.received.read_bytes().endswith(b"\n")
+                         "Then follow briefRef and write agent-work.result.v1 atomically to resultRef.").encode())
+            # What the one delivery leaves in the pane: its text, with Enter withheld. Any byte after
+            # it, the reference, an Enter or anything else, is typing again.
+            delivery_bytes = wait_for(lambda: cli.received.exists() and cli.received.read_bytes().endswith(b"resultRef.")
                                       and cli.received.read_bytes(), 2)
             self.assertTrue(delivery_bytes, "the delivery never reached the pane")
             key = OperationKey(HOST_ID, task_id, 1, instance)

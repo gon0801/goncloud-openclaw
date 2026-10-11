@@ -65,6 +65,23 @@ En el host vivo, los pasos de detener y arrancar el gateway dependen de cómo lo
 
 Lo que pasó entre la foto y la recuperación (sesiones, resultados en la base) se pierde. Por eso la ventana de instalación es sin trabajo en vuelo (T12 `:309`), y los resultados que el host capturó siguen en su spool.
 
+### Revertir una sola entrada, con el binario nuevo corriendo
+
+Si el binario nuevo funciona y lo que falla es una entrada adoptada, no hace falta la foto. `cutover_live.py revert` deshace el corte de esa entrada en el gateway vivo, en este orden:
+
+1. **Cierra la admisión de la entrada.** Quita su adaptador de `managedTasks.hosts.<host>.adapters` con `config.patch`, `baseHash` y `replacePaths`. Si el host se queda sin adaptadores, lo quita, porque R exige al menos uno por host. Si no queda ningún adaptador en ningún host, pone `managedTasks.enabled=false`. El gateway se reinicia y `revert` lo espera.
+2. **Rehabilita los crons viejos.** Solo los ids que el estado del corte guardó en `suspended`, que son los que el corte deshabilitó. Si alguno ya no existe en el gateway (por ejemplo, porque B.7 lo borró), se niega y lo nombra.
+3. **No toca los spools del host**, así que los resultados capturados se conservan.
+
+Cada paso deja su fase en `revert.phase` del estado (`start`, `frozen`, `done`), así que el mismo comando retoma donde se quedó. Al terminar, el estado queda con `owner: legacy` y la generación sube en uno. Si el estado muestra que la entrada nunca se transfirió (`owner: legacy` sin una reversa previa), se niega sin tocar nada.
+
+| Paso | Comando | Salida esperada | Duración máxima | Ante fallo |
+|---|---|---|---|---|
+| Revertir la entrada | `python3 scripts/agent-work/cutover_live.py revert --state <estado> --wait-seconds 120` | `reverted; old crons re-enabled`, o `already reverted` si ya se hizo | 2 min (espera al menos 60 s el reinicio) | `cutover: …` nombra la causa. Correr el mismo comando otra vez retoma desde la fase guardada. |
+| Congelar toda la admisión | `python3 scripts/agent-work/cutover_live.py freeze --wait-seconds 120` | `frozen` (`managedTasks.enabled=false`; no necesita `--state`) | 2 min | `cutover: admission did not freeze`: leer `config.get` y repetir. |
+
+`freeze` cierra la admisión de todas las entradas a la vez y no rehabilita ningún cron. Sirve para parar de golpe. `revert` es la reversa completa de una sola entrada.
+
 ## Evidencia
 
 Las salidas de cada comando están en `~/.local/state/encargos-loop/artifacts/T11-a/`: `paquete/corrida-limpia.log`, `paquete/install.log`, `paquete/smoke.log`, `paquete/actualizacion-sobre-upstream.log`, `recuperacion-binario.log` y `foto-restauracion.log`. Los de la reversa son `T11-c-*.log`. El recibo es `T11.md`.

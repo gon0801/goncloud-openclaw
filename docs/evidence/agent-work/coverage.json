@@ -15,7 +15,7 @@
     {"kind": "cli-tmux", "owner": "scripts/mac/corrida/adaptador.sh", "certified": false},
     {"kind": "user-adopted-session", "owner": "user", "certified": false}
   ],
-  "cliAdapters": ["claude_fable", "claude_opus", "kimi_k3", "kimi_coding", "codex", "zcode", "grok"],
+  "cliAdapters": ["claude_fable", "claude_opus", "kimi_k3", "kimi_coding", "codex", "zcode", "grok", "opencode"],
   "hosts": [{"id": "mac-local", "platform": "macOS", "status": "sandbox-tested-uncertified"}, {"id": "windows-remote", "platform": "Windows", "status": "disabled-unverified"}],
   "hostAdapterCoverage": {
     "mac-local": {
@@ -25,7 +25,8 @@
       "kimi_coding": "disabled-operator-setup-pending",
       "codex": "disabled-operator-setup-pending",
       "zcode": "disabled-operator-setup-pending",
-      "grok": "disabled-operator-setup-pending"
+      "grok": "disabled-operator-setup-pending",
+      "opencode": "certified"
     },
     "windows-remote": {
       "claude_fable": "disabled-host-unverified",
@@ -34,7 +35,16 @@
       "kimi_coding": "disabled-host-unverified",
       "codex": "disabled-host-unverified",
       "zcode": "disabled-host-unverified",
-      "grok": "disabled-host-unverified"
+      "grok": "disabled-host-unverified",
+      "opencode": "disabled-host-unverified"
+    }
+  },
+  "hostAdapterEvidence": {
+    "mac-local": {
+      "opencode": [
+        {"path": "docs/evidence/agent-work/B8-opencode-adapter-e2e.md", "test": "OPENCODE_ADAPTER_E2E tasks=2 typed=2 deferred_over_draft=1 incidents=0"},
+        {"path": "scripts/tests/test_agent_work_opencode_adapter_e2e.py", "test": "def test_main_loop_hands_tasks_to_an_adopted_opencode_session"}
+      ]
     }
   },
   "macOperatorSetup": {

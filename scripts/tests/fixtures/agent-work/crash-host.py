@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "tests"))
 from host import Host, TmuxTransport  # noqa: E402
 from native_gateway import GatewayProjectionClient, claim_cli_once  # noqa: E402
 from resources import ResourceManager, TmuxBackend  # noqa: E402
-from test_agent_work_main_cli_loop_e2e import ADAPTER, HOST_ID, certified_coverage  # noqa: E402
+from test_agent_work_main_cli_loop_e2e import ADAPTER, HOST_ID, PYTHON_DOUBLE, certified_coverage  # noqa: E402
 
 STOPS = ("reserved", "launching", "marked", "typed")
 
@@ -40,7 +40,7 @@ def main(url, host_dir, socket, session, workspace, point):
     host = Host(HOST_ID, Path(host_dir))
     backend = TmuxBackend(tmux, socket)
     manager = ResourceManager(host.spool, HOST_ID, backend)
-    deliver = TmuxTransport(tmux, socket).deliver
+    deliver = TmuxTransport(tmux, socket, PYTHON_DOUBLE).deliver
     if point == "reserved":
         manager.begin_launch = lambda key: stop(point)
     elif point == "launching":
@@ -50,7 +50,7 @@ def main(url, host_dir, socket, session, workspace, point):
         backend.mark = lambda session_name, nonce: (mark(session_name, nonce), stop(point))
     else:
         def deliver_then_stop(assignment_ref, target):
-            TmuxTransport(tmux, socket).deliver(assignment_ref, target)
+            TmuxTransport(tmux, socket, PYTHON_DOUBLE).deliver(assignment_ref, target)
             stop(point)
         deliver = deliver_then_stop
     _, certified = certified_coverage()

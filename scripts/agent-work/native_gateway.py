@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 from contracts import AuthorizedOperation, IncidentRejected, OperationKey
-from host import Host, TmuxTransport
+from host import Host, TmuxTransport, cli_adapter
 from progress_bridge import transfer_host_projection, transfer_projection
 from spool import canonical, incident_identity
 
@@ -468,7 +468,7 @@ def main(argv=None):
         host = Host(args.host_id, args.host_state_dir)
         backend = TmuxBackend(args.tmux_bin, args.cli_tmux_socket)
         manager = ResourceManager(host.spool, args.host_id, backend)
-        transport = TmuxTransport(args.tmux_bin, args.cli_tmux_socket)
+        transport = TmuxTransport(args.tmux_bin, args.cli_tmux_socket, cli_adapter(args.cli_adapter_id))
         coverage_path = Path(__file__).resolve().parents[2] / "docs/evidence/agent-work/coverage.json"
         coverage = json.loads(coverage_path.read_text())
         cli_claim = lambda: claim_cli_once(

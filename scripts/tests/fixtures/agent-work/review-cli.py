@@ -37,9 +37,12 @@ def record(event, **fields):
 def main():
     signal.alarm(LINGER_SECONDS)  # SIGALRM ends the double even while readline blocks
     record("started")
-    print("review-cli ready", flush=True)
+    sys.stdout.write("review-cli ready\n")
     reviewed = False
     while True:
+        # The empty `❯` composer TmuxTransport waits for; the terminal echoes what is typed after it.
+        sys.stdout.write("❯ ")
+        sys.stdout.flush()
         typed = sys.stdin.readline()
         if not typed:
             return

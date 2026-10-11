@@ -33,7 +33,7 @@ from native_gateway import GatewayProjectionClient, claim_cli_once  # noqa: E402
 from resources import ResourceManager, TmuxBackend  # noqa: E402
 from routing import prepare_request  # noqa: E402
 from test_agent_work_main_cli_loop_e2e import (  # noqa: E402
-    ADAPTER, HOST_ID, LoopGateway, built_runtime, certified_coverage, loop_route, wait_for)
+    ADAPTER, HOST_ID, PYTHON_DOUBLE, LoopGateway, built_runtime, certified_coverage, loop_route, wait_for)
 
 REVIEW_CLI = ROOT / "scripts/tests/fixtures/agent-work/review-cli.py"
 VERDICT = "VEREDICTO cambios: falta la prueba del borde"
@@ -94,7 +94,7 @@ class ReviewTailRestartE2E(unittest.TestCase):
             self.addCleanup(cli.close)
             host = Host(HOST_ID, root / "host")
             manager = ResourceManager(host.spool, HOST_ID, TmuxBackend(cli.tmux, cli.socket))
-            deliver = TmuxTransport(cli.tmux, cli.socket).deliver
+            deliver = TmuxTransport(cli.tmux, cli.socket, PYTHON_DOUBLE).deliver
             hold = {"CROSS_PROVIDER_HOLD": "1"} if wake_in_flight else {}
             first = LoopGateway(runtime, root, extra_env={**SCRIPTED, **hold})
             try:

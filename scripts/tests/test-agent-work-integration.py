@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 sys.path.insert(0, str(ROOT / "scripts" / "mac"))
 from contracts import AuthorizedOperation, IncidentRejected, OperationKey, operation_id  # noqa: E402
-from host import Host, TmuxTransport  # noqa: E402
+from host import CliAdapter, Host, TmuxTransport  # noqa: E402
 import native_gateway  # noqa: E402
 from native_gateway import GatewayProjectionClient, main as gateway_main, transfer_gateway_projections  # noqa: E402
 from progress_bridge import event_id, projection_digest, transfer_host_projection, transfer_projection  # noqa: E402
@@ -2055,6 +2055,28 @@ class CliClaimTest(unittest.TestCase):
         self.assertEqual(list((self.root / "workspace" / "managed-briefs").iterdir()), [])
 
 
+def composer_tmux(calls, command):
+    """subprocess.run for a session with one pane, %7, running command, whose empty composer echoes
+    what send-keys -l types."""
+    typed, session = [], []
+
+    def run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        stdout = ""
+        if argv[3] == "list-panes":
+            session.append(argv[argv.index("-t") + 1].lstrip("="))
+            stdout = f"%7\t{command}\n"
+        elif argv[3] == "display-message":
+            stdout = f"{session[0]}\t{command}\n"
+        elif argv[3] == "capture-pane":
+            stdout = "❯ " + "".join(typed) + "\n"
+        elif argv[3] == "send-keys" and "-l" in argv:
+            typed.append(argv[-1])
+        return subprocess.CompletedProcess(argv, 0, stdout, "")
+
+    return run
+
+
 def accept_assignment(assignment_ref, *_):
     """A CLI double that takes the assignment: it writes its own agent-work.accept.v1 to acceptRef."""
     assignment = json.loads(Path(assignment_ref).read_text())
@@ -3071,13 +3093,14 @@ class SilentFailureTest(unittest.TestCase):
         def claimed(*_, deliver, session, **__):
             deliver("/state/inbox/op-one.json", session)
 
+        calls = []
         with mock.patch("native_gateway.claim_cli_once", side_effect=claimed), \
-                mock.patch("subprocess.run") as run:
+                mock.patch("subprocess.run", side_effect=composer_tmux(calls, "codex")):
             claim()
         # Any command that carries the reference types it, whatever its flags.
-        typed = [call.args[0] for call in run.call_args_list if "/state/inbox/op-one.json" in str(call)]
+        typed = [argv for argv, _ in calls if "/state/inbox/op-one.json" in str(argv)]
         self.assertEqual(len(typed), 1, f"main typed the reference {len(typed)} times")
-        self.assertEqual(typed[0][:6], ["tmux", "-L", "sock-watch", "send-keys", "-t", "=worker-one:"])
+        self.assertEqual(typed[0][:6], ["tmux", "-L", "sock-watch", "send-keys", "-t", "%7"])
         self.assertIn("Open assignment JSON at /state/inbox/op-one.json.", typed[0][-1])
 
 
@@ -3782,16 +3805,28 @@ class DeliveryAcceptanceTest(unittest.TestCase):
         self.assertEqual(self.typed, [(observation.assignment_ref, self.SESSION)])
 
     def test_the_transport_types_only_the_reference_and_asks_for_the_acceptance(self):
-        with mock.patch("host.subprocess.run") as run:
-            TmuxTransport("tmux", "sock-accept").deliver("/state/assignments/op.json", "worker-one")
-        self.assertEqual([call.args[0] for call in run.call_args_list], [
+        calls, pauses = [], []
+        with mock.patch("host.subprocess.run", side_effect=composer_tmux(calls, "node")):
+            TmuxTransport("tmux", "sock-accept", CliAdapter(("node",)),
+                          sleep=lambda seconds: pauses.append((len(calls), seconds))
+                          ).deliver("/state/assignments/op.json", "worker-one")
+        read = [["tmux", "-L", "sock-accept", "display-message", "-p", "-t", "%7",
+                 "#{session_name}\t#{pane_current_command}"],
+                ["tmux", "-L", "sock-accept", "capture-pane", "-e", "-p", "-t", "%7"]]
+        self.assertEqual([argv for argv, _ in calls], [
+            ["tmux", "-L", "sock-accept", "list-panes", "-s", "-t", "=worker-one", "-F",
+             "#{pane_id}\t#{pane_current_command}"],
+            *read,
             ["tmux", "-L", "sock-accept", "set-environment", "-t", "=worker-one", "AGENT_WORK_MANAGED", "1"],
-            ["tmux", "-L", "sock-accept", "send-keys", "-t", "=worker-one:", "-l", "--",
+            ["tmux", "-L", "sock-accept", "send-keys", "-t", "%7", "-l", "--",
              "Open assignment JSON at /state/assignments/op.json. First write agent-work.accept.v1 "
              "atomically to acceptRef with schema, hostId, taskId, generation, instanceId, claimId and "
              "capability copied from the assignment. Then follow briefRef and write agent-work.result.v1 "
              "atomically to resultRef."],
-            ["tmux", "-L", "sock-accept", "send-keys", "-t", "=worker-one:", "Enter"]])
+            *read,
+            ["tmux", "-L", "sock-accept", "send-keys", "-t", "%7", "Enter"]])
+        self.assertEqual(pauses, [(5, 0.3)], "the composer was read before the typed text could render")
+        self.assertEqual({kwargs["timeout"] for _, kwargs in calls}, {5.0}, "a tmux call can hang the host")
 
 
     def test_the_typing_and_its_attempt_clock_are_one_write(self):

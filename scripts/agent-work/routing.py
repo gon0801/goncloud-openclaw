@@ -1,11 +1,10 @@
 """Prepare one immutable instruction artifact and native submit parameters."""
 
 import argparse
-import hashlib
 import json
-import os
 from pathlib import Path
-import tempfile
+
+from brief import instruction_ref, write_instruction
 
 
 class RouteUnavailable(ValueError):
@@ -35,32 +34,10 @@ def prepare_request(*, requester, target, key, brief, instruction_root,
         raise ValueError("input revision is invalid")
     if result_contract not in ("review.v1", "ready.v1"):
         raise ValueError("result contract is invalid")
-    content = Path(brief).read_bytes()
-    if not content or len(content) > 1024 * 1024:
-        raise ValueError("brief must contain 1 to 1048576 bytes")
-    digest = hashlib.sha256(content).hexdigest()
-    root = Path(instruction_root)
-    if root.is_symlink() or not root.is_dir():
-        raise ValueError("instruction root must be an existing directory")
-    artifact = root / digest
-    pending = None
-    try:
-        descriptor, pending = tempfile.mkstemp(prefix=".managed-instruction-", dir=root)
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(content)
-            stream.flush()
-            os.fsync(stream.fileno())
-        try:
-            os.link(pending, artifact)
-        except FileExistsError:
-            if artifact.is_symlink() or artifact.read_bytes() != content:
-                raise ValueError("instruction artifact differs from digest")
-    finally:
-        if pending is not None:
-            os.unlink(pending)
+    digest = write_instruction(instruction_root, Path(brief).read_bytes())
     return {"key": key, "assignment": {
         "target": destination,
-        "instructionRef": {"ref": f"artifact:{digest}", "digest": f"sha256:{digest}"},
+        "instructionRef": instruction_ref(digest),
         "inputRevision": input_revision,
         "resultContract": result_contract,
         "continuation": {"kind": "requester"},

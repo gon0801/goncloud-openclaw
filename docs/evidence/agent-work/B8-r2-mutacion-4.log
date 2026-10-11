@@ -1,0 +1,23 @@
+# B8-r2 mutacion 4: keys go to the active window of the session instead of the pinned pane
+# rc=1; host.py restored
+# - 'self._tmux("send-keys", "-t", pane, "-l", "--", text)'
+# + 'self._tmux("send-keys", "-t", f"={session}:", "-l", "--", text)'
+# - 'self._tmux("send-keys", "-t", pane, "Enter")'
+# + 'self._tmux("send-keys", "-t", f"={session}:", "Enter")'
+.........F..
+======================================================================
+FAIL: test_tmux_delivery_stays_in_the_pinned_pane_when_the_operator_opens_windows (__main__.HostReceipts.test_tmux_delivery_stays_in_the_pinned_pane_when_the_operator_opens_windows)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b8/scripts/tests/test-agent-work-host.py", line 577, in test_tmux_delivery_stays_in_the_pinned_pane_when_the_operator_opens_windows
+    self.assertEqual(observation.status, "delivered")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'uncertain' != 'delivered'
+- uncertain
++ delivered
+
+
+----------------------------------------------------------------------
+Ran 12 tests in 10.982s
+
+FAILED (failures=1)

@@ -1,28 +1,28 @@
 $ bash scripts/tests/test-agent-work-integration.sh delegation_bypass
-{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "19c2ed13a046fa87e9ab766999bf66b419a1b91f"}
+{"candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "candidateSha": "4b9785c98b810160cb8025b614437433570f3e4a"}
 [test] starting test/vitest/vitest.agents-tools.config.ts
 
- RUN  v5.0.1 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.OtFl7sEvgx/r
+ RUN  v5.0.1 /private/var/folders/hp/sc_3c6qs7nvdswl_x3w5sdbr0000gn/T/tmp.qZUNUxDjH4/r
 
-[vitest-workers] local cache hit after 3927ms
+[vitest-workers] local cache hit after 5791ms
 [vitest-workers] reused local compiler outputs
-[vitest-workers] prepared b78ae99e5482 in 3962ms (16698 inputs, 17252 outputs)
+[vitest-workers] prepared cc49ac8b9d4a in 5848ms (16698 inputs, 17252 outputs)
 stderr | unknown test
 [sqlite-test-lifecycle] src/agents/tools/sessions-managed-delegation.test.ts: retiring openclaw.stateDatabaseLifecycle
 [sqlite-test-lifecycle] src/agents/tools/sessions-managed-delegation.test.ts: retiring openclaw.stateSnapshotOwners
 [sqlite-test-lifecycle] src/agents/tools/sessions-managed-delegation.test.ts: retiring openclaw.agentDatabaseLifecycle
 
- ✓ |agents-tools| src/agents/tools/sessions-managed-delegation.test.ts > managed native delegation boundary > rejects sessions_spawn before any child is created 8ms
+ ✓ |agents-tools| src/agents/tools/sessions-managed-delegation.test.ts > managed native delegation boundary > rejects sessions_spawn before any child is created 7ms
  ✓ |agents-tools| src/agents/tools/sessions-managed-delegation.test.ts > managed native delegation boundary > rejects sessions_send before Gateway delivery 2ms
- ✓ |agents-tools| src/agents/tools/sessions-managed-delegation.test.ts > managed native delegation boundary > does not apply the managed guard to an ordinary run 2ms
+ ✓ |agents-tools| src/agents/tools/sessions-managed-delegation.test.ts > managed native delegation boundary > does not apply the managed guard to an ordinary run 3ms
 
  Test Files  1 passed (1)
       Tests  3 passed (3)
-   Start at  10:03:35
-   Duration  8.65s (transform 85%, import 11%, worker 3%, setup 1%)
+   Start at  18:13:27
+   Duration  11.08s (transform 84%, import 11%, worker 3%, setup 1%)
 
 [vitest-workers] verifying completed generation before cleanup
 [vitest-workers] retained completed compiler outputs for reuse
-[test] passed 1 Vitest shard in 10.37s
+[test] passed 1 Vitest shard in 12.87s
 
-rc=0 seconds=11.1
+rc=0 seconds=13.5

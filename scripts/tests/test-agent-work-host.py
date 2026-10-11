@@ -16,7 +16,46 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 
 from contracts import AuthorizedOperation, OperationKey
-from host import Host, ShellAdapterTransport, TmuxTransport, operation_id
+from cutover_live import uncertain_operations
+from host import (CliAdapter, DeliveryDeferred, Host, ShellAdapterTransport, TmuxTransport, cli_adapter,
+                  main as host_main, operation_id, read_composer, same_text)
+
+COMPOSER_CLI = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "composer-cli.py"
+# capture-pane -e of opencode 1.18.35 on its default theme, 2026-10-10: the home screen, a session
+# with its sidebar, an operator's draft, and the host's reference for /x/assignments/op-1.json.
+OPENCODE_SCREENS = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "opencode"
+# tmux names a pane after its foreground process; the python double shows as Python on macOS.
+PYTHON_DOUBLE = CliAdapter(tuple(sorted({"Python", Path(sys.executable).name,
+                                         Path(os.path.realpath(sys.executable)).name})))
+GRUVBOX, BRIGHT, RESET = "\x1b[38;2;146;131;116m", "\x1b[38;2;238;238;238m", "\x1b[0m"
+SHELL = "PS1='❯ ' bash --noprofile --norc -i"
+
+
+def opencode_screen(name):
+    return (OPENCODE_SCREENS / f"{name}.ans").read_text()
+
+
+def opencode_box(*rows):
+    """An opencode input box as capture-pane -e paints it, wide enough for one row per line."""
+    return "\n".join(["┃", *(f"┃  {row}" for row in rows), "┃", "┃  Build · GLM-5.3-Flash Z.AI Coding Plan",
+                      "╹" + "▀" * 399, ""])
+
+
+class ScriptedTmux(TmuxTransport):
+    """The production transport over a scripted tmux: one opencode pane, its screens in order."""
+
+    def __init__(self, *screens):
+        super().__init__("tmux", "unused", cli_adapter("opencode"), sleep=lambda _: None)
+        self.screens = list(screens)
+        self.keys = []
+
+    def _tmux(self, *args):
+        out = {"list-panes": "%1\topencode.exe\n", "display-message": "oc\topencode.exe\n"}.get(args[0], "")
+        if args[0] == "capture-pane":
+            out = self.screens.pop(0)
+        if args[0] == "send-keys":
+            self.keys.append(args[-1])
+        return subprocess.CompletedProcess(args, 0, out, "")
 
 
 def digest(data: bytes) -> str:
@@ -132,6 +171,24 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(self.apply(self.key, self.operation,
                                     lambda *_: delivered.append(True)).status, "delivered")
         self.assertEqual(delivered, [True])
+
+    def test_cli_that_reads_only_the_assignment_gets_accepted_and_reported(self):
+        operation = replace(self.operation, adapter_id="opencode")
+        observation = self.apply(self.key, operation, lambda *_: None)
+        self.assertEqual(observation.status, "typed")
+        assignment = json.loads(Path(observation.assignment_ref).read_text())
+        protocol = assignment["protocol"]
+        self.assertEqual(set(protocol["fill"]), {"typedPayload", "artifactRef", "digest"})
+        Path(assignment["acceptRef"]).write_text(json.dumps(protocol["accept"]))
+        Path(assignment["resultRef"]).write_text(json.dumps({
+            **protocol["result"],
+            "typedPayload": {"verdict": "approved", "evidenceRef": "evidence.txt"},
+            "artifactRef": str(self.artifact),
+            "digest": digest(self.artifact.read_bytes()),
+        }))
+        self.assertTrue(self.host.take_acceptance("mac-test", self.key))
+        self.assertIsNotNone(self.host.collect("mac-test", self.key))
+        self.assertEqual(self.host.pending("mac-test"), [self.report()])
 
     def test_lost_native_admission_ack_retries_before_first_delivery(self):
         delivered = []
@@ -348,6 +405,244 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual([result["taskId"] for result in restarted.pending("mac-test")], ["task-1"])
         self.assertEqual(restarted.inbox_errors("mac-test"), [])
 
+    @staticmethod
+    def wait_for(predicate, seconds=5):
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if predicate():
+                return True
+            time.sleep(0.05)
+        return False
+
+    @staticmethod
+    def reference_text(assignment_ref):
+        return (f"Open assignment JSON at {assignment_ref}. First write agent-work.accept.v1 atomically to "
+                "acceptRef with schema, hostId, taskId, generation, instanceId, claimId and capability copied "
+                "from the assignment. Then follow briefRef and write agent-work.result.v1 atomically to resultRef.")
+
+    def composer_session(self, mode):
+        """A composer CLI double on its own tmux server; returns its socket, a tmux runner and the submitted log."""
+        if not shutil.which("tmux"):
+            self.skipTest("tmux not installed")
+        socket = f"agent-work-composer-{os.getpid()}-{mode}"
+        submitted = self.root / f"submitted-{mode}.log"
+
+        def tmux_cmd(*args):
+            return subprocess.run(["tmux", "-f", "/dev/null", "-L", socket, *args], capture_output=True, text=True)
+
+        socket_file = Path(os.environ.get("TMUX_TMPDIR") or "/tmp") / f"tmux-{os.getuid()}" / socket
+        self.addCleanup(socket_file.unlink, missing_ok=True)
+        self.addCleanup(tmux_cmd, "kill-server")
+        self.assertEqual(tmux_cmd("new-session", "-d", "-s", "worker-1", "-c", str(self.workspace),
+                                  sys.executable, str(COMPOSER_CLI), str(submitted), mode).returncode, 0)
+        self.assertTrue(self.wait_for(lambda: "❯" in tmux_cmd("capture-pane", "-p", "-t", "=worker-1:").stdout),
+                        "the composer double never painted its prompt")
+        return socket, tmux_cmd, submitted
+
+    def test_tmux_delivery_waits_for_the_text_and_never_types_over_the_operator(self):
+        socket, tmux_cmd, submitted = self.composer_session("0.15")
+        tmux_cmd("send-keys", "-t", "=worker-1:", "-l", "--", "borrador de David")
+        self.assertTrue(self.wait_for(
+            lambda: "borrador de David" in tmux_cmd("capture-pane", "-p", "-t", "=worker-1:").stdout))
+        transport = TmuxTransport("tmux", socket, PYTHON_DOUBLE)
+        self.assertEqual(self.apply(self.key, self.operation, transport.deliver).status, "deferred")
+        self.assertEqual(self.host.spool.get(operation_id(self.key))["status"], "deferred")
+        self.assertIsNone(self.host.spool.attempted_at(operation_id(self.key)))
+        screen = tmux_cmd("capture-pane", "-p", "-t", "=worker-1:").stdout
+        self.assertIn("❯ borrador de David", screen)
+        self.assertNotIn("Open assignment", screen, "the host typed over the operator's text")
+        self.assertFalse(submitted.exists(), "Enter reached the operator's text")
+        self.assertEqual(tmux_cmd("show-environment", "-t", "=worker-1", "AGENT_WORK_MANAGED").returncode, 1)
+
+        tmux_cmd("send-keys", "-t", "=worker-1:", "C-u")
+        self.assertTrue(self.wait_for(
+            lambda: "borrador" not in tmux_cmd("capture-pane", "-p", "-t", "=worker-1:").stdout))
+        observation = self.apply(self.key, self.operation, transport.deliver)
+        self.assertEqual(observation.status, "delivered")
+        self.assertTrue(self.wait_for(lambda: self.host.collect("mac-test", self.key)))
+        self.assertEqual(submitted.read_text(), self.reference_text(observation.assignment_ref) + "\n")
+
+    def test_tmux_delivery_withholds_enter_when_the_composer_does_not_show_the_text(self):
+        socket, tmux_cmd, submitted = self.composer_session("no-echo")
+        observation = self.apply(self.key, self.operation, TmuxTransport("tmux", socket, PYTHON_DOUBLE).deliver)
+        self.assertEqual(observation.status, "uncertain")
+        self.assertEqual(self.host.spool.get(operation_id(self.key))["status"], "attempted")
+        time.sleep(0.5)
+        self.assertFalse(submitted.exists(), "Enter was pressed on text the composer never showed")
+        retyped = []
+        self.assertEqual(self.apply(self.key, self.operation, lambda *args: retyped.append(args)).status, "uncertain")
+        self.assertEqual(retyped, [], "an uncertain delivery was typed again")
+
+    def test_tmux_delivery_is_deferred_while_the_session_is_unreachable(self):
+        socket, tmux_cmd, _ = self.composer_session("0")
+        tmux_cmd("kill-server")
+        observation = self.apply(self.key, self.operation, TmuxTransport("tmux", socket, PYTHON_DOUBLE).deliver)
+        self.assertEqual(observation.status, "deferred")
+        self.assertEqual(self.apply(self.key, self.operation, lambda *_: None).status, "delivered")
+
+    def test_composer_reading_counts_text_whatever_its_colour(self):
+        placeholders = cli_adapter("opencode").placeholders
+        self.assertEqual(read_composer(opencode_screen("home-empty"), "opencode.exe", placeholders), ("VACIO", ""))
+        self.assertEqual(read_composer(opencode_screen("home-empty"), "opencode.exe"),
+                         ("REAL", 'Ask anything… "Fix a TODO in the codebase"'),
+                         "a placeholder no one measured for the adapter is text")
+        self.assertEqual(read_composer(opencode_screen("session-empty"), "opencode.exe", placeholders), ("VACIO", ""),
+                         "the session sidebar beside the input box is not composer text")
+        self.assertEqual(read_composer(opencode_screen("session-draft"), "opencode.exe", placeholders),
+                         ("REAL", "borrador del operador"))
+        self.assertEqual(read_composer(opencode_box(f"{GRUVBOX}borrador del operador{RESET}"), "opencode", placeholders),
+                         ("REAL", "borrador del operador"), "a theme that draws input grey hides no draft")
+        self.assertEqual(read_composer("┃  hola\n┃  Build · GLM-5.3-Flash\n", "opencode")[0], "DESCONOCIDO")
+        self.assertEqual(read_composer("salida vieja\n❯ \x1b[2mTry \"fix lint errors\"\x1b[22m\n\n", "node"),
+                         ("REAL", 'Try "fix lint errors"'), "a ghost suggestion is text to an unmeasured adapter")
+        self.assertEqual(read_composer("❯ hola\n" + "─" * 20 + "\n", "claude"), ("REAL", "hola"))
+        self.assertEqual(read_composer("❯ \n" + "─" * 20 + "\n", "claude"), ("VACIO", ""))
+        self.assertEqual(read_composer("Do you want to proceed?\n❯ 1. Yes\n  2. No\n", "claude")[0], "DESCONOCIDO")
+        self.assertEqual(read_composer("Update available\n› Update now\n  2. Skip\n", "codex")[0], "DESCONOCIDO")
+        self.assertEqual(read_composer("❯ Open assignment JSON at /x.json. First write agent-work.accept.v\n"
+                                       "1 atomically to acceptRef\n", "python3"),
+                         ("REAL", "Open assignment JSON at /x.json. First write agent-work.accept.v\n"
+                                  "1 atomically to acceptRef"), "a wrapped line that starts with a digit is no menu")
+        self.assertEqual(read_composer("working...\n", "python3")[0], "DESCONOCIDO")
+        self.assertEqual(read_composer("", "opencode")[0], "DESCONOCIDO")
+        self.assertTrue(same_text("Open assignment\nJSON at /x.json", "Open assignment JSON at /x.json"))
+        self.assertFalse(same_text("Open assignment JSON at /y.json", "Open assignment JSON at /x.json"))
+
+    def test_opencode_delivery_never_types_over_a_draft_the_theme_draws_grey(self):
+        transport = ScriptedTmux(opencode_box(f"{GRUVBOX}borrador del operador{RESET}"))
+        with self.assertRaisesRegex(DeliveryDeferred, "borrador del operador"):
+            transport.deliver("/x/assignments/op-1.json", "oc")
+        self.assertEqual(transport.keys, [], "the host typed over a grey draft")
+
+    def test_opencode_delivery_never_types_over_a_bright_draft(self):
+        transport = ScriptedTmux(opencode_screen("session-draft"))
+        with self.assertRaisesRegex(DeliveryDeferred, "borrador del operador"):
+            transport.deliver("/x/assignments/op-1.json", "oc")
+        self.assertEqual(transport.keys, [])
+
+    def test_opencode_delivery_types_over_the_real_placeholder_and_submits(self):
+        reference = self.reference_text("/x/assignments/op-1.json")
+        for before, after in (("home-empty", "home-reference"), ("session-empty", "session-reference")):
+            transport = ScriptedTmux(opencode_screen(before), opencode_screen(after))
+            transport.deliver("/x/assignments/op-1.json", "oc")
+            self.assertEqual(transport.keys, [reference, "Enter"], before)
+
+    def test_opencode_delivery_withholds_enter_when_a_grey_draft_shares_the_composer(self):
+        reference = self.reference_text("/x/assignments/op-1.json")
+        transport = ScriptedTmux(opencode_screen("home-empty"),
+                                 opencode_box(f"{GRUVBOX}borrador del operador{RESET}", f"{BRIGHT}{reference}{RESET}"))
+        with self.assertRaisesRegex(RuntimeError, "Enter withheld"):
+            transport.deliver("/x/assignments/op-1.json", "oc")
+        self.assertEqual(transport.keys, [reference], "Enter went out over the operator's draft")
+
+    def shell_session(self):
+        """A tmux server of its own whose session worker-1 is a bash with a ❯ prompt."""
+        if not shutil.which("tmux"):
+            self.skipTest("tmux not installed")
+        socket = f"agent-work-shell-{os.getpid()}"
+
+        def tmux_cmd(*args):
+            return subprocess.run(["tmux", "-f", "/dev/null", "-L", socket, *args], capture_output=True, text=True)
+
+        socket_file = Path(os.environ.get("TMUX_TMPDIR") or "/tmp") / f"tmux-{os.getuid()}" / socket
+        self.addCleanup(socket_file.unlink, missing_ok=True)
+        self.addCleanup(tmux_cmd, "kill-server")
+        self.assertEqual(tmux_cmd("new-session", "-d", "-s", "worker-1", "-x", "220", "-y", "50", SHELL).returncode, 0)
+        self.assertTrue(self.wait_for(lambda: "❯" in tmux_cmd("capture-pane", "-p", "-t", "=worker-1:").stdout))
+        return socket, tmux_cmd
+
+    def test_tmux_delivery_never_types_into_a_shell_prompt(self):
+        socket, tmux_cmd = self.shell_session()
+        transport = TmuxTransport("tmux", socket, cli_adapter("opencode"))
+        self.assertEqual(self.apply(self.key, self.operation, transport.deliver).status, "deferred")
+        time.sleep(0.3)
+        self.assertNotIn("Open assignment", tmux_cmd("capture-pane", "-p", "-t", "=worker-1:").stdout,
+                         "the reference reached the operator's shell")
+
+    def test_tmux_delivery_stays_in_the_pinned_pane_when_the_operator_opens_windows(self):
+        socket, tmux_cmd, submitted = self.composer_session("0.15")
+        transport = TmuxTransport("tmux", socket, PYTHON_DOUBLE)
+        self.assertEqual(transport.composer("worker-1"), ("VACIO", ""))
+        # C-b c: a new window, now the active one, with the operator's shell.
+        self.assertEqual(tmux_cmd("new-window", "-t", "=worker-1", SHELL).returncode, 0)
+        self.assertTrue(self.wait_for(lambda: "❯" in tmux_cmd("capture-pane", "-p", "-t", "=worker-1:").stdout))
+        # A second CLI of the same kind, in a third window, does not move the pin.
+        other = self.root / "submitted-other.log"
+        self.assertEqual(tmux_cmd("new-window", "-d", "-t", "=worker-1", sys.executable, str(COMPOSER_CLI),
+                                  str(other), "0.15").returncode, 0)
+        self.assertTrue(self.wait_for(lambda: len([command for command in tmux_cmd(
+            "list-panes", "-s", "-t", "=worker-1", "-F", "#{pane_current_command}").stdout.split()
+            if command in PYTHON_DOUBLE.commands]) == 2))
+        observation = self.apply(self.key, self.operation, transport.deliver)
+        self.assertEqual(observation.status, "delivered")
+        self.assertTrue(self.wait_for(lambda: self.host.collect("mac-test", self.key)))
+        self.assertEqual(submitted.read_text(), self.reference_text(observation.assignment_ref) + "\n")
+        self.assertFalse(other.exists(), "the reference went to the other CLI")
+        self.assertNotIn("Open assignment", tmux_cmd("capture-pane", "-p", "-t", "=worker-1:").stdout,
+                         "the reference reached the operator's shell in the active window")
+
+    def test_tmux_delivery_defers_when_the_pane_does_not_run_the_adapter(self):
+        socket, tmux_cmd, submitted = self.composer_session("0.15")
+        self.assertEqual(self.apply(self.key, self.operation,
+                                    TmuxTransport("tmux", socket, cli_adapter("opencode")).deliver).status, "deferred")
+        transport = TmuxTransport("tmux", socket, PYTHON_DOUBLE)
+        self.assertEqual(transport.composer("worker-1"), ("VACIO", ""))
+        pane = transport.panes["worker-1"]
+        self.assertEqual(tmux_cmd("respawn-pane", "-k", "-t", pane, SHELL).returncode, 0)
+        self.assertTrue(self.wait_for(lambda: "❯" in tmux_cmd("capture-pane", "-p", "-t", pane).stdout))
+        self.assertEqual(self.apply(self.key, self.operation, transport.deliver).status, "deferred")
+        time.sleep(0.3)
+        self.assertNotIn("Open assignment", tmux_cmd("capture-pane", "-p", "-t", pane).stdout)
+        self.assertFalse(submitted.exists())
+
+    def uncertain_adapter_delivery(self):
+        def lost(*_):
+            raise RuntimeError("the keys may have reached the pane")
+
+        operation = replace(self.operation, adapter_id="codex")
+        self.assertEqual(self.apply(self.key, operation, lost).status, "uncertain")
+        return operation, operation_id(self.key)
+
+    def test_operator_verdict_settles_an_uncertain_delivery_without_typing_again(self):
+        operation, op_id = self.uncertain_adapter_delivery()
+        attempted = self.host.spool.attempted_at(op_id)
+        self.assertEqual(len(self.host.settle_deliveries("mac-test", now=attempted + 60, deadline_seconds=30)), 1)
+        self.assertEqual(self.host.spool.get(op_id)["status"], "uncertain")
+        state = str(self.root / "host")
+        self.assertEqual(uncertain_operations([state]), ["task-1"])
+
+        with self.assertRaisesRegex(ValueError, "verdict"):
+            host_main(["resolve-delivery", "mac-test", state, "task-1", "2", "retype", "no"])
+        with self.assertRaisesRegex(ValueError, "reason"):
+            host_main(["resolve-delivery", "mac-test", state, "task-1", "2", "abandoned", " "])
+        reason = "el pane no muestra la referencia; se cancela en R"
+        self.assertEqual(host_main(["resolve-delivery", "mac-test", state, "task-1", "2", "abandoned", reason]),
+                         "abandoned")
+        self.assertEqual(self.host.spool.get(op_id)["status"], "abandoned")
+        self.assertEqual(uncertain_operations([state]), [], "a settled delivery must not block the cutover")
+        with self.host.spool.connection() as db:
+            self.assertEqual([tuple(row) for row in db.execute(
+                "SELECT previous_status, verdict, reason FROM delivery_verdicts WHERE operation_id=?", (op_id,))],
+                [("uncertain", "abandoned", reason)])
+        retyped = []
+        self.assertEqual(self.apply(self.key, operation, lambda *args: retyped.append(args)).status, "abandoned")
+        self.assertEqual(retyped, [], "an abandoned delivery was typed again")
+        self.assertEqual(self.host.settle_deliveries("mac-test", now=attempted + 9999, deadline_seconds=30), [])
+        with self.assertRaisesRegex(ValueError, "not attempted or uncertain"):
+            self.host.resolve_delivery("mac-test", self.key, "delivered", "otra vez")
+
+    def test_operator_verdict_delivered_starts_the_silent_failure_clock(self):
+        _, op_id = self.uncertain_adapter_delivery()
+        self.assertEqual(uncertain_operations([str(self.root / "host")]), ["task-1"])
+        self.assertEqual(self.host.resolve_delivery("mac-test", self.key, "delivered",
+                                                    "el pane muestra al CLI trabajando en la referencia"), "delivered")
+        self.assertEqual(self.host.spool.get(op_id)["status"], "delivered")
+        self.assertEqual(uncertain_operations([str(self.root / "host")]), [])
+        detected = self.host.detect_silent_failures("mac-test", lambda key: False,
+                                                    now=self.host.spool.delivered_at(op_id) + 60,
+                                                    deadline_seconds=30)
+        self.assertEqual(detected, ["host:2:deadline-missed:deadline"])
+
     def test_host_receipts_tmux_cli_without_hooks(self):
         if not shutil.which("tmux"):
             self.skipTest("tmux not installed")
@@ -371,10 +666,12 @@ class HostReceipts(unittest.TestCase):
             "print('FAKE-RESULT-WRITTEN',flush=True)\n"
             "sys.stdin.readline()\n"
         )
+        submitted = self.root / "worker-1-submitted.log"
         try:
             self.assertEqual(tmux_cmd("new-session", "-d", "-s", "worker-1", "-c", str(self.workspace),
-                                      sys.executable, str(cli)).returncode, 0)
-            transport = TmuxTransport("tmux", socket)
+                                      sys.executable, str(COMPOSER_CLI), str(submitted), "0.15").returncode, 0)
+            self.assertTrue(self.wait_for(lambda: "❯" in tmux_cmd("capture-pane", "-p", "-t", "=worker-1:").stdout))
+            transport = TmuxTransport("tmux", socket, PYTHON_DOUBLE)
             observation = self.apply(self.key, self.operation, transport.deliver)
             self.assertEqual(observation.status, "delivered")
             self.assertEqual(tmux_cmd("show-environment", "-t", "=worker-1", "AGENT_WORK_MANAGED").stdout.strip(),
@@ -385,6 +682,8 @@ class HostReceipts(unittest.TestCase):
             self.assertEqual(len(self.host.pending("mac-test")), 1, tmux_cmd("capture-pane", "-p", "-t", "=worker-1:").stdout)
             self.assertEqual(self.host.pending("mac-test")[0]["typedPayload"],
                              {"verdict": "approved", "evidenceRef": "evidence.txt"})
+            self.assertEqual(submitted.read_text(), self.reference_text(observation.assignment_ref) + "\n",
+                             "the CLI did not get exactly the reference, once")
 
             self.assertEqual(tmux_cmd("new-session", "-d", "-s", "worker-2", "-c", str(self.workspace),
                                       sys.executable, str(cli)).returncode, 0)

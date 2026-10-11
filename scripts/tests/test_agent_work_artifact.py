@@ -171,6 +171,23 @@ class LimitsProfileTest(unittest.TestCase):
         unknown = [field for field, value in limits["productionProfile"]["values"].items() if value is None]
         self.assertEqual((unknown, limits["productionAdmissionEnabled"]), ([], False))
 
+    def test_the_repo_spend_limits_are_ten_times_the_largest_observed_task(self):
+        limits = json.loads((ROOT / "docs/evidence/agent-work/limits.json").read_text())
+        profile = limits["productionProfile"]
+        spend = profile["derivations"]["spend"]
+
+        def up3(value):
+            step = 10 ** (len(str(int(value))) - 3)
+            return -(-value // step) * step
+
+        expected = {field: up3(observed * spend["factor"]) for field, observed in spend["observedMax"].items()}
+        expected["maxModelCalls"] = spend["observedMax"]["maxModelCalls"] * spend["factor"]
+        expected["maxOutputTokens"] = up3(spend["observedMax"]["maxOutputTokens"] * spend["factor"]
+                                          + spend["outputReservePerCall"])
+        self.assertEqual(spend["factor"], 10)
+        self.assertEqual({field: profile["values"][field] for field in expected}, expected)
+        self.assertGreaterEqual(profile["values"]["maxOutputTokens"] // spend["outputReservePerCall"], 20)
+
     def test_the_repo_context_limit_is_the_model_window_with_the_profile_margin(self):
         limits = json.loads((ROOT / "docs/evidence/agent-work/limits.json").read_text())
         profile = limits["productionProfile"]

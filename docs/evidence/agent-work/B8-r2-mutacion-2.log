@@ -1,0 +1,18 @@
+# B8-r2 mutacion 2: before Enter, only the bright text is compared with the typed text (raw text ignored)
+# rc=1; host.py restored
+# - 'if state != "REAL" or not same_text(shown, text) or not same_text(bright_composer_text(screen, command), text):'
+# + 'if not same_text(bright_composer_text(screen, command), text):'
+.....F......
+======================================================================
+FAIL: test_opencode_delivery_withholds_enter_when_a_grey_draft_shares_the_composer (__main__.HostReceipts.test_opencode_delivery_withholds_enter_when_a_grey_draft_shares_the_composer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/dn/dev/wt/encargos-b8/scripts/tests/test-agent-work-host.py", line 534, in test_opencode_delivery_withholds_enter_when_a_grey_draft_shares_the_composer
+    with self.assertRaisesRegex(RuntimeError, "Enter withheld"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: RuntimeError not raised
+
+----------------------------------------------------------------------
+Ran 12 tests in 11.343s
+
+FAILED (failures=1)
