@@ -1012,9 +1012,11 @@ class ProgressPublishTest(unittest.TestCase):
         self.argv_log = self.root / "publish-argv.jsonl"
         self.progress = self.root / "progress.py"
         self.progress.write_text(f"""#!/usr/bin/env python3
-import json, os, pathlib, sys
+import json, os, pathlib, sys, time
 args = sys.argv[1:]
 if 'publish' not in args:
+    if pathlib.Path({str(self.mode)!r}).read_text().strip() == 'slow':
+        time.sleep(30)
     os.execv(sys.executable, [sys.executable, {str(ROOT / 'scripts' / 'mac' / 'progress-events.py')!r}] + args)
 with open({str(self.argv_log)!r}, 'a') as log:
     log.write(json.dumps(args) + '\\n')
@@ -1061,7 +1063,7 @@ print(json.dumps({{'published': moved}}))
 
         return Client()
 
-    def pump(self):
+    def idle_host(self):
         class IdleHost:
             def flush(self, *_):
                 return []
@@ -1075,8 +1077,11 @@ print(json.dumps({{'published': moved}}))
             def operation_key_for(self, *_):
                 return None
 
+        return IdleHost()
+
+    def pump(self):
         return native_gateway.pump_once(
-            self.client, host=IdleHost(), evidence_root=self.evidence_root, progress_state_dir=self.state_dir,
+            self.client, host=self.idle_host(), evidence_root=self.evidence_root, progress_state_dir=self.state_dir,
             progress_client=self.progress, progress_publisher=self.publisher)
 
     def publishes(self):
@@ -1132,6 +1137,45 @@ print(json.dumps({{'published': moved}}))
             self.assertEqual(self.pump(), {"reported": 0, "transferred": 0, "published": 0, "closed": 0, "incidents": 0})
         self.assertEqual([argv[-1] for argv in self.publishes()], ["run-1"])
         self.assertEqual([path.name for path in (self.run / "rejected").iterdir()], [self.pending["eventId"] + ".json"])
+
+    def test_a_progress_client_timeout_fails_the_pass_without_acking_and_the_host_keeps_running(self):
+        acks = []
+        rows = [self.pending]
+        self.client = self.gateway(rows)
+        self.client.ack = lambda receipt: acks.append(receipt) or rows.clear() or receipt
+        self.mode.write_text("slow")
+        with mock.patch("progress_bridge.CLIENT_TIMEOUT", 0.5):
+            with self.assertRaises(RuntimeError) as caught:
+                self.pump()
+            self.assertEqual(str(caught.exception), "progress queue timed out for corrida run-1 after 0.5 s")
+            self.assertEqual(acks, [])
+            self.assertFalse((self.run / "queue" / (self.pending["eventId"] + ".json")).exists())
+
+            mode = self.mode
+            acks_at_wait = []
+
+            class TwoPasses:
+                def is_set(self):
+                    return len(acks_at_wait) == 2
+
+                def wait(self, _interval):
+                    acks_at_wait.append(len(acks))
+                    mode.write_text("ok")
+
+            stderr, stdout = io.StringIO(), io.StringIO()
+            self.mode.write_text("slow")
+            with contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(stdout):
+                native_gateway.watch_pump(
+                    self.client, host=self.idle_host(), evidence_root=self.evidence_root,
+                    progress_state_dir=self.state_dir, progress_client=self.progress, stop_event=TwoPasses(),
+                    interval=0.01)
+        self.assertEqual(stderr.getvalue(),
+                         "agent-work pump: progress queue timed out for corrida run-1 after 0.5 s\n")
+        self.assertEqual(stdout.getvalue(), '{"closed": 0, "incidents": 0, "published": 1, "reported": 0, '
+                         '"transferred": 1}\n')
+        self.assertEqual(acks_at_wait, [0, 1])
+        self.assertEqual([receipt["eventId"] for receipt in acks], [self.pending["eventId"]])
+        self.assertEqual([path.name for path in (self.run / "sent").iterdir()], [self.pending["eventId"] + ".json"])
 
     def test_a_queue_that_keeps_failing_backs_off_until_it_changes(self):
         self.client = self.gateway([])
