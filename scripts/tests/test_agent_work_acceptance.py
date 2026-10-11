@@ -6,6 +6,7 @@ esté completo con un solo par de SHA y que `acceptance-pair.json` (lo escribe a
 muestre cada prueba citada en verde sobre ese par: es el caso `acceptance` de test-agent-work-e2e.sh.
 """
 import json
+import os
 import re
 import subprocess
 import unittest
@@ -226,6 +227,10 @@ class AcceptanceGuardsTest(unittest.TestCase):
                                  [f"{path} changed after the pair"])
 
 
+# The pair runs once, when the plan closes (David, 2026-10-11): CI checks the matrix and its guards, and
+# `test-agent-work-e2e.sh acceptance` turns this strict check on with AGENT_WORK_ACCEPTANCE_STRICT=1.
+@unittest.skipUnless(os.environ.get("AGENT_WORK_ACCEPTANCE_STRICT") == "1",
+                     "the acceptance pair is checked only when the plan closes")
 class AcceptanceStrictTest(unittest.TestCase):
     def test_everything_is_complete_on_one_pair(self):
         rows = [row for row in matrix_rows() if row["cobertura"] != "fuera-de-bloque"]
