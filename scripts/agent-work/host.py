@@ -440,6 +440,8 @@ class Host:
                     "observedRevision", "typedPayload", "artifactRef", "digest")
         if any(field not in result for field in required) or not isinstance(result["typedPayload"], dict):
             raise ValueError("partial final result")
+        # A CLI may copy extra fields (a model copied claimId from the assignment); R's report schema is strict.
+        result = {field: result[field] for field in ("schema", "kind", *required)}
         self._host(result["hostId"])
         if not isinstance(result["generation"], int) or isinstance(result["generation"], bool):
             raise ValueError("invalid generation")

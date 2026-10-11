@@ -190,6 +190,24 @@ class HostReceipts(unittest.TestCase):
         self.assertIsNotNone(self.host.collect("mac-test", self.key))
         self.assertEqual(self.host.pending("mac-test"), [self.report()])
 
+    def test_a_cli_result_with_extra_fields_reaches_the_runtime_with_only_its_schema(self):
+        # Live canary 2026-10-11: GLM copied claimId into result.v1, and R's strict schema refused the report.
+        operation = replace(self.operation, adapter_id="opencode")
+        observation = self.apply(self.key, operation, lambda *_: None)
+        assignment = json.loads(Path(observation.assignment_ref).read_text())
+        protocol = assignment["protocol"]
+        Path(assignment["acceptRef"]).write_text(json.dumps(protocol["accept"]))
+        Path(assignment["resultRef"]).write_text(json.dumps({
+            **protocol["result"],
+            "claimId": assignment["claimId"],
+            "typedPayload": {"verdict": "approved", "evidenceRef": "evidence.txt"},
+            "artifactRef": str(self.artifact),
+            "digest": digest(self.artifact.read_bytes()),
+        }))
+        self.assertTrue(self.host.take_acceptance("mac-test", self.key))
+        self.assertIsNotNone(self.host.collect("mac-test", self.key))
+        self.assertEqual(self.host.pending("mac-test"), [self.report()])
+
     def test_lost_native_admission_ack_retries_before_first_delivery(self):
         delivered = []
         admissions = []
