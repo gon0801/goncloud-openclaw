@@ -197,6 +197,10 @@ class HostReceipts(unittest.TestCase):
         observation = self.apply(self.key, operation, lambda *_: None)
         assignment = json.loads(Path(observation.assignment_ref).read_text())
         protocol = assignment["protocol"]
+        self.assertEqual(protocol["steps"][2],
+                         "Write, as JSON to resultRef and atomically in the same way, exactly the fields shown in "
+                         "result with their values unchanged, plus every field named in fill holding what fill "
+                         "describes. Write no other field.")
         Path(assignment["acceptRef"]).write_text(json.dumps(protocol["accept"]))
         Path(assignment["resultRef"]).write_text(json.dumps({
             **protocol["result"],
@@ -250,6 +254,34 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(len(list((self.root / "host" / "artifacts" / operation_id(self.key)).glob("*.bin"))), 1)
         self.assertEqual(Host("mac-test", self.root / "host").flush("mac-test", runtime)[0]["resultId"], result_id)
         self.assertEqual(calls, [(report, original), (report, original)])
+
+    def test_host_receipts_a_result_r_refuses_does_not_hold_back_the_others(self):
+        self.apply(self.key, self.operation, lambda *_: None)
+        self.host.report("mac-test", self.report())
+        second = OperationKey("mac-test", "task-2", 2, "instance-2")
+        self.apply(second, replace(self.operation, key=second, session="worker-2"), lambda *_: None)
+        self.host.report("mac-test", self.report(taskId="task-2", instanceId="instance-2"))
+        sent = []
+
+        def runtime(result, artifact_bytes):
+            sent.append(result["taskId"])
+            if len(sent) == 1:
+                raise RuntimeError("native projection Gateway rejected request")
+            return {**{field: result[field] for field in ("hostId", "taskId", "generation", "instanceId",
+                                                          "producerId")},
+                    "resultId": digest(json.dumps(result, ensure_ascii=False, sort_keys=True,
+                                                  separators=(",", ":")).encode()),
+                    "receiptId": "native-r2"}
+
+        with self.assertRaisesRegex(RuntimeError, "rejected request"):
+            self.host.flush("mac-test", runtime)
+        self.assertEqual(sorted(sent), ["task-1", "task-2"], "a result R refused held back the others")
+        refused = sent[0]
+        self.assertEqual([result["taskId"] for result in self.host.pending("mac-test")], [refused])
+        refused_key = self.key if refused == "task-1" else second
+        self.assertEqual(self.host.inbox_errors("mac-test"),
+                         [{"operationId": operation_id(refused_key), "taskId": refused,
+                           "error": "report failed: native projection Gateway rejected request"}])
 
     def test_host_receipts_tampered_snapshot_blocks_delivery(self):
         self.apply(self.key, self.operation, lambda *_: None)

@@ -183,6 +183,21 @@ class ResourceManager:
             db.execute("UPDATE resources SET state='Launching',revision=revision+1 WHERE operation_id=?", (self._key(key),))
             return ResourceView("Launching", row["nonce"], launch_now=True)
 
+    def mark(self, key: OperationKey) -> None:
+        """Tag the session with this resource's nonce. An abandoned delivery releases its row without reaching
+        tmux, so a nonce left by a released resource of this host is cleared first; any other nonce refuses."""
+        row = self._row(key)
+        observed = self.backend.observe(row["session_name"])
+        incumbent = observed.get("nonce") if observed else ""
+        if incumbent and incumbent != row["nonce"]:
+            with self.spool.connection() as db:
+                released = db.execute("SELECT 1 FROM resources WHERE nonce=? "
+                                      f"AND state IN ({','.join('?' * len(TERMINAL))})",
+                                      (incumbent, *TERMINAL)).fetchone()
+            if released and not self.backend.revoke(observed):
+                raise OSError("cannot clear a released resource's tmux nonce")
+        self.backend.mark(row["session_name"], row["nonce"])
+
     def attach(self, key: OperationKey) -> ResourceView:
         row = self._row(key)
         if row["state"] not in ("Launching", "CleanupPending", "Running"):

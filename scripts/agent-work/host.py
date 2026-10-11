@@ -131,8 +131,9 @@ def cli_protocol(assignment: dict) -> dict:
             "Before any other work, write the accept object as JSON to acceptRef, atomically: write a "
             "temporary file in the same directory, then rename it onto acceptRef.",
             "Do the work that the file at briefRef describes, inside workspaceRef.",
-            "Write the result object, plus every field named in fill holding what fill describes, as "
-            "JSON to resultRef, atomically in the same way. Copy every other field unchanged.",
+            "Write, as JSON to resultRef and atomically in the same way, exactly the fields shown in "
+            "result with their values unchanged, plus every field named in fill holding what fill "
+            "describes. Write no other field.",
         ],
         "accept": {"schema": ACCEPT_SCHEMA, "capability": assignment["capability"],
                    **{field: assignment[field] for field in ACCEPT_BOUND}},
@@ -677,7 +678,7 @@ class Host:
 
     def flush(self, host_id: str, report_to_runtime: Callable[[dict, bytes], dict]) -> list[dict]:
         self._host(host_id)
-        receipts = []
+        receipts, failure = [], None
         for result in self.pending(host_id):
             result_id = hashlib.sha256(canonical(result).encode()).hexdigest()
             key = OperationKey(result["hostId"], result["taskId"], result["generation"], result["instanceId"])
@@ -689,14 +690,22 @@ class Host:
             except (ValueError, OSError) as exc:
                 self.spool.note_inbox_error(op_id, str(exc))
                 continue
+            try:
+                receipt = report_to_runtime(result, artifact_bytes)
+                identity = ("hostId", "taskId", "generation", "instanceId", "producerId")
+                if not isinstance(receipt, dict) or any(receipt.get(field) != result[field] for field in identity) \
+                        or receipt.get("resultId") != result_id or not receipt.get("receiptId"):
+                    raise ValueError("runtime receipt identity mismatch")
+            except (OSError, RuntimeError, ValueError) as exc:
+                # R may refuse one result (a cancelled task); the others still go, and the pass reports the first.
+                self.spool.note_inbox_error(op_id, f"report failed: {exc}")
+                failure = failure or exc
+                continue
             self.spool.clear_inbox_error(op_id)
-            receipt = report_to_runtime(result, artifact_bytes)
-            identity = ("hostId", "taskId", "generation", "instanceId", "producerId")
-            if not isinstance(receipt, dict) or any(receipt.get(field) != result[field] for field in identity) \
-                    or receipt.get("resultId") != result_id or not receipt.get("receiptId"):
-                raise ValueError("runtime receipt identity mismatch")
             self.spool.acknowledge(op_id, receipt)
             receipts.append(receipt)
+        if failure is not None:
+            raise failure
         return receipts
 
     def flush_closures(self, host_id: str,

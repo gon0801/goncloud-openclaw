@@ -76,6 +76,18 @@ def atomic_json(path: Path, data: object) -> None:
             os.unlink(name)
 
 
+def release_abandoned_sessions(db: sqlite3.Connection) -> None:
+    """Every adopted session still held by an abandoned operation goes back to the operator untouched;
+    the CLI is never stopped. Its tmux nonce stays until the next adoption clears it."""
+    if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='resources'").fetchone():
+        return
+    db.execute("UPDATE resources SET state='ReleasedAdopted',reason='delivery abandoned',revision=revision+1 "
+               "WHERE ownership='UserAdopted' "
+               f"AND state NOT IN ({','.join('?' * len(TERMINAL_STATES))}) "
+               "AND operation_id IN (SELECT operation_id FROM operations WHERE status='abandoned')",
+               TERMINAL_STATES)
+
+
 class Spool:
     def __init__(self, root: Path, host_id: str):
         self.root = root
@@ -161,6 +173,7 @@ class Spool:
                 db.execute("DROP INDEX IF EXISTS one_active_per_instance")
                 db.execute("CREATE UNIQUE INDEX one_active_per_instance ON operations(instance_id) "
                            "WHERE status NOT IN ('acknowledged','abandoned')")
+                release_abandoned_sessions(db)
                 db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         self.path.chmod(0o600)
 
@@ -241,12 +254,8 @@ class Spool:
                        (operation_id, row["status"], verdict, reason, now))
             if verdict == "delivered":
                 db.execute("INSERT OR IGNORE INTO delivery_clock VALUES (?,?)", (operation_id, now))
-            elif db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='resources'").fetchone():
-                # The operator's session goes back to the operator untouched; the CLI is never stopped.
-                db.execute("UPDATE resources SET state='ReleasedAdopted',reason='delivery abandoned',"
-                           "revision=revision+1 WHERE operation_id=? AND ownership='UserAdopted' "
-                           f"AND state NOT IN ({','.join('?' * len(TERMINAL_STATES))})",
-                           (operation_id, *TERMINAL_STATES))
+            else:
+                release_abandoned_sessions(db)
             return True
 
     def delivered(self, operation_id: str) -> None:
