@@ -284,6 +284,8 @@ def claim_cli_once(client, *, host, manager, adapter_id, instance_id, session,
     """Deliver to an existing session; adopting it never grants permission to stop it."""
     if coverage.get("hostAdapterCoverage", {}).get(client.host_id, {}).get(adapter_id) != "certified":
         raise ValueError("host adapter route is not certified")
+    if not manager.can_take(instance_id):
+        return None
     claim = client.claim_host(adapter_id, instance_id)
     if claim is None:
         return None

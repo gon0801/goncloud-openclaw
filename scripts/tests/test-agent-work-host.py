@@ -22,7 +22,8 @@ from host import (CliAdapter, DeliveryDeferred, Host, ShellAdapterTransport, Tmu
 
 COMPOSER_CLI = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "composer-cli.py"
 # capture-pane -e of opencode 1.18.35 on its default theme, 2026-10-10: the home screen, a session
-# with its sidebar, an operator's draft, and the host's reference for /x/assignments/op-1.json.
+# with its sidebar, an operator's draft, the host's reference for /x/assignments/op-1.json, and the
+# "Update Available" dialog of the first live canary over the home screen's placeholder.
 OPENCODE_SCREENS = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "opencode"
 # tmux names a pane after its foreground process; the python double shows as Python on macOS.
 PYTHON_DOUBLE = CliAdapter(tuple(sorted({"Python", Path(sys.executable).name,
@@ -537,6 +538,15 @@ class HostReceipts(unittest.TestCase):
         with self.assertRaisesRegex(DeliveryDeferred, "borrador del operador"):
             transport.deliver("/x/assignments/op-1.json", "oc")
         self.assertEqual(transport.keys, [])
+
+    def test_opencode_delivery_waits_while_a_dialog_covers_the_placeholder(self):
+        screen = opencode_screen("update-dialog")
+        self.assertEqual(read_composer(screen, "opencode.exe", cli_adapter("opencode").placeholders)[0],
+                         "DESCONOCIDO")
+        transport = ScriptedTmux(screen)
+        with self.assertRaisesRegex(DeliveryDeferred, "DESCONOCIDO"):
+            transport.deliver("/x/assignments/op-1.json", "oc")
+        self.assertEqual(transport.keys, [], "the dialog took the keys of the reference")
 
     def test_opencode_delivery_types_over_the_real_placeholder_and_submits(self):
         reference = self.reference_text("/x/assignments/op-1.json")

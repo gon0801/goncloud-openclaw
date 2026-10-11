@@ -37,6 +37,10 @@ COMPOSER_MENU = re.compile(r"^\s*[❯›]?\s*\d+[.)]?\s")
 # An option under the arrow is indented and numbered "2." or "2)"; a wrapped composer line such as
 # "1 atomically" (from "accept.v1") starts at the margin.
 COMPOSER_MENU_OPTION = re.compile(r"^\s+\d+[.)]\s")
+# Every opencode dialog (update, confirm, select) heads its box with the title and "esc" at the right
+# edge, and takes the keys while the composer under it still shows its placeholder. Measured
+# 2026-10-10 on opencode 1.18.35, "Update Available … esc" despite OPENCODE_DISABLE_AUTOUPDATE=1.
+OPENCODE_DIALOG_TITLE = re.compile(r"\S\s{2,}esc\s*$")
 
 
 @dataclass(frozen=True)
@@ -217,6 +221,8 @@ def _composer_region(screen: str, command: str) -> list[list[tuple[dict, str]]] 
     plain = [SGR.sub("", line) for line in lines]
     columns = None
     if command.startswith("opencode"):
+        if any(OPENCODE_DIALOG_TITLE.search(line) for line in plain):
+            return "opencode dialog open"
         # The input box is the last run of lines that start with ┃; its last line is the agent bar
         # and the ╹▀▀▀ border under it spans the box. Measured 2026-10-10 (opencode 1.18.35): in a
         # session the sidebar shares the box's lines to the right of that border.
@@ -577,7 +583,8 @@ class Host:
         return detected
 
     def resolve_delivery(self, host_id: str, key: OperationKey, verdict: str, reason: str) -> str:
-        """The operator settles an attempted or uncertain delivery; nothing is ever typed again."""
+        """The operator settles an attempted or uncertain delivery; nothing is ever typed again.
+        abandoned frees the instance and releases its adopted session without touching the CLI."""
         self._host(host_id)
         self._host(key.host_id)
         if verdict not in VERDICTS or not reason.strip():

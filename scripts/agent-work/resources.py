@@ -158,6 +158,20 @@ class ResourceManager:
                 raise ValueError("active instance already owns a resource") from exc
             return ResourceView("Reserved", nonce)
 
+    def can_take(self, instance_id: str) -> bool:
+        """Whether a claim for this instance can be reserved: its own unfinished operation, which the claim
+        replays, or room for a new resource. R binds a claimed task to the instance, so ask it only then."""
+        with self.spool.connection() as db:
+            rows = db.execute("SELECT r.instance_id,o.status,o.result_id FROM resources r "
+                              "LEFT JOIN operations o ON o.operation_id=r.operation_id "
+                              "WHERE r.state NOT IN ('AbsenceVerified','ReleasedAdopted')").fetchall()
+        own = [row for row in rows if row["instance_id"] == instance_id]
+        if own:
+            return any(row["status"] is None or (row["result_id"] is None
+                                                 and row["status"] not in ("acknowledged", "abandoned"))
+                       for row in own)
+        return len(rows) < self.capacity
+
     def begin_launch(self, key: OperationKey) -> ResourceView:
         with self.spool.connection() as db:
             db.execute("BEGIN IMMEDIATE")
