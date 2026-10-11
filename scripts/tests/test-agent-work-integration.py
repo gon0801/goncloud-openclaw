@@ -351,6 +351,46 @@ else:
         self.assertEqual(json.loads(ack_command[ack_command.index("--params") + 1]),
                          {"publisherHostId": "host-one", "receipt": receipt})
 
+    def test_a_rejected_gateway_call_names_its_method_and_the_gateway_error(self):
+        client = GatewayProjectionClient("/isolated/openclaw", "host-one", "ws://127.0.0.1:18789")
+        rejected_json = json.dumps({"ok": False, "error": {"type": "gateway_request_error",
+                                                           "message": "Managed host closure conflict"}})
+        responses = [subprocess.CompletedProcess([], 1, rejected_json, ""),
+                     subprocess.CompletedProcess([], 1, "", "gateway closed (1006)\n  at connect\n")]
+        with mock.patch("native_gateway.subprocess.run", side_effect=responses):
+            with self.assertRaises(RuntimeError) as first:
+                client.ack({"taskId": "task-one", "queueHash": "f" * 64})
+            with self.assertRaises(RuntimeError) as second:
+                client.list_pending()
+        self.assertEqual(str(first.exception), "native projection Gateway rejected request "
+                                               "managedTasks.projections.ack: Managed host closure conflict")
+        self.assertEqual(str(second.exception), "native projection Gateway rejected request "
+                                                "managedTasks.projections.list: gateway closed (1006) at connect")
+
+    def test_the_host_reads_its_task_cancellation_with_its_capability(self):
+        client = GatewayProjectionClient("/isolated/openclaw", "host-one", "ws://127.0.0.1:18789")
+        assignment = {"hostId": "host-one", "taskId": "task-one", "generation": 2, "instanceId": "canario",
+                      "producerId": "opencode", "capability": "cap-one", "adapterId": "opencode"}
+        responses = [
+            subprocess.CompletedProcess([], 0, json.dumps({"taskId": "task-one", "generation": 2,
+                                                           "cancellationId": None}), ""),
+            subprocess.CompletedProcess([], 0, json.dumps({"taskId": "task-one", "generation": 2,
+                                                           "cancellationId": "cancel-one"}), ""),
+            subprocess.CompletedProcess([], 0, json.dumps({"taskId": "task-two", "generation": 2,
+                                                           "cancellationId": "cancel-two"}), ""),
+        ]
+        with mock.patch("native_gateway.subprocess.run", side_effect=responses) as invoke:
+            self.assertIsNone(client.host_cancellation(assignment))
+            self.assertEqual(client.host_cancellation(assignment), "cancel-one")
+            with self.assertRaisesRegex(RuntimeError, "cancellation identity mismatch"):
+                client.host_cancellation(assignment)
+        command = invoke.call_args_list[0].args[0]
+        self.assertEqual(command[3], "managedTasks.host.cancellation")
+        self.assertIn("--device-auth", command)
+        self.assertEqual(json.loads(command[command.index("--params") + 1]), {
+            "hostId": "host-one", "adapterId": "opencode", "instanceId": "canario",
+            "capability": {"taskId": "task-one", "generation": 2, "producerId": "opencode", "token": "cap-one"}})
+
     def test_host_spool_reports_to_gateway_once_after_lost_response(self):
         host, key, artifact_bytes = self.reported_host()
         result = host.result_snapshot("host-one", key)[0]

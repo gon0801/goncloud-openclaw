@@ -14,9 +14,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from contracts import OperationKey, operation_id
-from spool import Spool, canonical
+from spool import SETTLED, TERMINAL_STATES as TERMINAL, Spool, canonical
 
-TERMINAL = ("AbsenceVerified", "ReleasedAdopted")
+TERMINAL_SQL = ",".join(repr(state) for state in TERMINAL)
 OWNERS = ("TaskCreated", "UserAdopted", "IntentionalPool")
 PS_ENV = {"TZ": "UTC", "LC_ALL": "C"}
 BOOTTIME_RE = re.compile(r"sec\s*=\s*(\d+),\s*usec\s*=\s*(\d+)")
@@ -83,7 +83,7 @@ class ResourceManager:
         self.backend = backend
         self.capacity = capacity
         with spool.connection() as db:
-            db.executescript("""
+            db.executescript(f"""
                 CREATE TABLE IF NOT EXISTS resources (
                     operation_id TEXT PRIMARY KEY,
                     host_id TEXT NOT NULL,
@@ -102,7 +102,7 @@ class ResourceManager:
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS one_active_resource_per_instance
                     ON resources(instance_id)
-                    WHERE state NOT IN ('AbsenceVerified','ReleasedAdopted');
+                    WHERE state NOT IN ({TERMINAL_SQL});
             """)
 
     def _key(self, key: OperationKey) -> str:
@@ -145,7 +145,7 @@ class ResourceManager:
                 if row["session_name"] != session or row["ownership"] != ownership:
                     raise ValueError("resource key conflicts with different content")
                 return self._view(dict(row))
-            active = db.execute("SELECT COUNT(*) FROM resources WHERE state NOT IN ('AbsenceVerified','ReleasedAdopted')").fetchone()[0]
+            active = db.execute(f"SELECT COUNT(*) FROM resources WHERE state NOT IN ({TERMINAL_SQL})").fetchone()[0]
             if active >= self.capacity:
                 raise ValueError("host resource capacity exhausted")
             nonce = secrets.token_hex(16)
@@ -164,11 +164,10 @@ class ResourceManager:
         with self.spool.connection() as db:
             rows = db.execute("SELECT r.instance_id,o.status,o.result_id FROM resources r "
                               "LEFT JOIN operations o ON o.operation_id=r.operation_id "
-                              "WHERE r.state NOT IN ('AbsenceVerified','ReleasedAdopted')").fetchall()
+                              f"WHERE r.state NOT IN ({TERMINAL_SQL})").fetchall()
         own = [row for row in rows if row["instance_id"] == instance_id]
         if own:
-            return any(row["status"] is None or (row["result_id"] is None
-                                                 and row["status"] not in ("acknowledged", "abandoned"))
+            return any(row["status"] is None or (row["result_id"] is None and row["status"] not in SETTLED)
                        for row in own)
         return len(rows) < self.capacity
 
@@ -314,6 +313,60 @@ class ResourceManager:
                 released += self.close(key, {"kind": "result", "receipt": receipt}).state == "ReleasedAdopted"
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 errors.append(f"{operation_id(key)}: release failed: {exc}")
+        return released, errors
+
+    def release_cancelled(self, read_cancellation, reject_dialog) -> tuple[int, list[str]]:
+        """Close the resource of every operation R cancelled, with R's cancellation id as evidence. R is asked
+        once per held operation and pass; once the spool records the cancellation, retries stay local. An
+        adopted pane gets its permission dialog denied first, while the host's nonce still proves the pane.
+        A session an abandoned delivery already gave back has no evidence, so its closure never reached R;
+        once R cancels that task, the cancellation becomes its evidence and flush_closures sends it."""
+        with self.spool.connection() as db:
+            rows = db.execute("SELECT r.*,o.operation_json,c.cancellation_id,c.dialog FROM resources r "
+                              "JOIN operations o ON o.operation_id=r.operation_id "
+                              "LEFT JOIN cancellations c ON c.operation_id=r.operation_id "
+                              f"WHERE (r.state NOT IN ({','.join('?' * len(TERMINAL))}) "
+                              "AND (c.operation_id IS NOT NULL OR "
+                              f"o.status NOT IN ({','.join('?' * len(SETTLED))}))) "
+                              "OR (r.state='ReleasedAdopted' AND r.evidence_json IS NULL AND o.status='abandoned') "
+                              "ORDER BY r.operation_id",
+                              (*TERMINAL, *SETTLED)).fetchall()
+        released, errors = 0, []
+        for row in rows:
+            key = OperationKey(self.host_id, row["task_id"], row["generation"], row["instance_id"])
+            op_id = row["operation_id"]
+            try:
+                evidence = json.loads(row["evidence_json"]) if row["evidence_json"] else None
+                if evidence is not None and evidence.get("kind") != "cancel":
+                    continue
+                cancellation_id, dialog = row["cancellation_id"], row["dialog"]
+                if row["state"] in TERMINAL:
+                    cancellation_id = read_cancellation(json.loads(row["operation_json"]))
+                    if cancellation_id is not None:
+                        with self.spool.connection() as db:
+                            db.execute("UPDATE resources SET evidence_json=?,revision=revision+1 "
+                                       "WHERE operation_id=? AND evidence_json IS NULL",
+                                       (canonical({"kind": "cancel", "receipt": cancellation_id}), op_id))
+                        released += 1
+                    continue
+                if cancellation_id is None:
+                    cancellation_id = read_cancellation(json.loads(row["operation_json"]))
+                    if cancellation_id is None:
+                        continue
+                    self.spool.cancel(op_id, cancellation_id)
+                if (dialog is None and row["ownership"] == "UserAdopted" and row["state"] == "Running"
+                        and row["identity_json"]):
+                    dialog = reject_dialog(json.loads(row["identity_json"]))
+                    self.spool.cancellation_dialog(op_id, dialog)
+                    if dialog.startswith("left"):
+                        errors.append(f"{op_id}: cancelled; permission dialog {dialog}")
+                view = self.close(key, {"kind": "cancel", "receipt": cancellation_id})
+                if view.state in TERMINAL:
+                    released += 1
+                else:
+                    errors.append(f"{op_id}: cancelled; resource {view.state}: {view.reason}")
+            except (OSError, RuntimeError, ValueError, KeyError, TypeError) as exc:
+                errors.append(f"{op_id}: cancel failed: {exc}")
         return released, errors
 
     def session_gone(self, key: OperationKey) -> bool:
@@ -475,6 +528,14 @@ class TmuxBackend:
         # outlive the pane, and be reparented; PID and session scans cannot
         # prove that every such child has exited.
         return None
+
+    def send_key(self, identity: dict, key: str) -> bool:
+        """One named key to the pane, only while it still carries this identity and its nonce."""
+        if key not in ("Escape",):
+            raise ValueError("only a measured reject key is sent")
+        fields = (str(identity["serverPid"]), identity["sessionId"], identity["paneId"],
+                  str(identity["panePid"]), identity["nonce"])
+        return self._guarded(fields, f"send-keys -t {identity['paneId']} {key}")
 
     def revoke(self, identity: dict) -> bool:
         if self.observe(identity["sessionName"]) != identity:

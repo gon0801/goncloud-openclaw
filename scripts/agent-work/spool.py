@@ -11,7 +11,8 @@ from pathlib import Path
 
 TERMINAL_STATES = ("AbsenceVerified", "ReleasedAdopted")
 SENDABLE_STATES = ("CleanupPending", "AbsenceVerified", "ReleasedAdopted")
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+SETTLED = ("acknowledged", "abandoned", "cancelled")
 DIALOG_START = {"open_identity": None, "episode": 0, "candidate": None, "seen": 0, "clean": 0}
 
 
@@ -153,6 +154,11 @@ class Spool:
                     reason TEXT NOT NULL,
                     decided_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS cancellations (
+                    operation_id TEXT PRIMARY KEY,
+                    cancellation_id TEXT NOT NULL,
+                    dialog TEXT
+                );
                 CREATE TABLE IF NOT EXISTS dialog_watch (
                     operation_id TEXT PRIMARY KEY,
                     open_identity TEXT,
@@ -169,10 +175,10 @@ class Spool:
             if not row:
                 db.execute("INSERT INTO metadata VALUES ('host_id', ?)", (host_id,))
             if db.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
-                # 1: an abandoned operation no longer holds its instance.
+                # 1: an abandoned operation no longer holds its instance. 2: nor does a cancelled one.
                 db.execute("DROP INDEX IF EXISTS one_active_per_instance")
                 db.execute("CREATE UNIQUE INDEX one_active_per_instance ON operations(instance_id) "
-                           "WHERE status NOT IN ('acknowledged','abandoned')")
+                           f"WHERE status NOT IN ({','.join(repr(status) for status in SETTLED)})")
                 release_abandoned_sessions(db)
                 db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         self.path.chmod(0o600)
@@ -286,17 +292,20 @@ class Spool:
                 return
             # A late result keeps an abandoned operation off the instance, which may hold new work now.
             db.execute("UPDATE operations SET result_id=?,result_json=?,"
-                       "status=CASE status WHEN 'abandoned' THEN status ELSE 'reported' END WHERE operation_id=?",
+                       "status=CASE WHEN status IN ('abandoned','cancelled') THEN status ELSE 'reported' END "
+                       "WHERE operation_id=?",
                        (result_id, canonical(result), operation_id))
 
     def pending(self) -> list[dict]:
         with self.connection() as db:
-            rows = db.execute("SELECT result_json FROM operations WHERE result_id IS NOT NULL AND receipt_json IS NULL ORDER BY operation_id").fetchall()
+            rows = db.execute("SELECT result_json FROM operations WHERE result_id IS NOT NULL AND receipt_json IS NULL "
+                              "AND status != 'cancelled' ORDER BY operation_id").fetchall()
             return [json.loads(row[0]) for row in rows]
 
     def awaiting_results(self) -> list[dict]:
         with self.connection() as db:
-            rows = db.execute("SELECT operation_json FROM operations WHERE result_id IS NULL ORDER BY operation_id").fetchall()
+            rows = db.execute("SELECT operation_json FROM operations WHERE result_id IS NULL AND status != 'cancelled' "
+                              "ORDER BY operation_id").fetchall()
             return [json.loads(row[0]) for row in rows]
 
     def attempted_at(self, operation_id: str) -> float | None:
@@ -378,6 +387,36 @@ class Spool:
                 return
             db.execute("UPDATE operations SET receipt_json=?,status='acknowledged' WHERE operation_id=?",
                        (canonical(receipt), operation_id))
+
+    def cancel(self, operation_id: str, cancellation_id: str) -> dict:
+        """R cancelled the task: the operation settles as cancelled, whatever it was waiting for, and keeps
+        R's cancellation id as the evidence its resource closes with."""
+        if not cancellation_id:
+            raise ValueError("cancellation id required")
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT * FROM cancellations WHERE operation_id=?", (operation_id,)).fetchone()
+            if row:
+                if row["cancellation_id"] != cancellation_id:
+                    raise ValueError("cancellation conflicts with a different id")
+                return dict(row)
+            updated = db.execute("UPDATE operations SET status='cancelled' WHERE operation_id=? "
+                                 f"AND status NOT IN ({','.join('?' * len(SETTLED))})",
+                                 (operation_id, *SETTLED))
+            if updated.rowcount != 1:
+                raise ValueError("only an unsettled operation can be cancelled")
+            db.execute("INSERT INTO cancellations VALUES (?,?,NULL)", (operation_id, cancellation_id))
+            return dict(db.execute("SELECT * FROM cancellations WHERE operation_id=?", (operation_id,)).fetchone())
+
+    def cancellation(self, operation_id: str) -> dict | None:
+        with self.connection() as db:
+            row = db.execute("SELECT * FROM cancellations WHERE operation_id=?", (operation_id,)).fetchone()
+        return dict(row) if row else None
+
+    def cancellation_dialog(self, operation_id: str, outcome: str) -> None:
+        with self.connection() as db:
+            db.execute("UPDATE cancellations SET dialog=? WHERE operation_id=? AND dialog IS NULL",
+                       (outcome[:512], operation_id))
 
     def record_incident(self, task_id: str, incident_key: str, operation_id: str,
                         incident_json: str, incident_digest: str, dialog_state: dict | None = None) -> dict:

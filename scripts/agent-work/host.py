@@ -48,17 +48,25 @@ OPENCODE_DIALOG_TITLE = re.compile(r"\S\s{2,}esc\s*$")
 
 @dataclass(frozen=True)
 class CliAdapter:
-    """How the host knows a CLI's pane (tmux pane_current_command) and its empty composer."""
+    """How the host knows a CLI's pane (tmux pane_current_command), its empty composer, and its permission
+    dialog: every pattern matches a line of the screen, and reject_key answers it with a denial."""
     commands: tuple[str, ...]
     placeholders: tuple[str, ...] = ()
+    permission_dialog: tuple[re.Pattern, ...] = ()
+    reject_key: str = ""
 
 
 # Measured 2026-10-10 on opencode 1.18.35: tmux names the pane after the npm package's
 # opencode.exe, and an empty composer on the home screen shows one of three examples at random.
+# Measured 2026-10-11 on opencode 1.18.35: "Allow once" is preselected, so Enter approves; Esc closes the
+# dialog and the tool call ends with "The user rejected permission to use this specific tool call."
 CLI_ADAPTERS = {
     "opencode": CliAdapter(("opencode", "opencode.exe"), tuple(
         f'Ask anything… "{example}"' for example in
-        ("Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"))),
+        ("Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests")),
+        permission_dialog=(re.compile(r"^\s*┃\s+△ Permission required(\s{2,}\S.*)?\s*$"),
+                           re.compile(r"^\s*┃\s+Allow once\s+Allow always\s+Reject\b")),
+        reject_key="Escape"),
 }
 
 
@@ -239,6 +247,8 @@ def _composer_region(screen: str, command: str) -> list[list[tuple[dict, str]]] 
         border = plain[end + 1].strip() if end + 1 < len(plain) else ""
         if not border.startswith("╹"):
             return "no opencode input box border"
+        # The sidebar can print on the border's own line ("╹▀▀▀    main"), so only the ▀ run counts.
+        border = re.match(r"╹▀*", border).group()
         left = plain[end + 1].index("╹")
         columns = (left, left + len(border))
         region = range(start, end)
@@ -298,6 +308,37 @@ def bright_composer_text(screen: str, command: str) -> str:
     """The composer's text minus the runs drawn dim or grey, as a ghost suggestion is drawn."""
     region = _composer_region(screen, command)
     return "" if isinstance(region, str) else _region_text(region, lambda style: not _muted(style))
+
+
+def permission_dialog_open(screen: str, adapter: CliAdapter) -> bool:
+    lines = screen.splitlines()
+    return bool(adapter.permission_dialog) and all(
+        any(pattern.search(SGR.sub("", line)) for line in lines) for pattern in adapter.permission_dialog)
+
+
+def reject_permission_dialog(backend, identity: dict, adapter: CliAdapter, *,
+                             settle_seconds: float = COMPOSER_SETTLE_SECONDS,
+                             wait_seconds: float = COMPOSER_ECHO_SECONDS,
+                             sleep: Callable[[float], None] = time.sleep) -> str:
+    """Deny the permission dialog a cancelled task left in its adopted pane, never approve it, and never stop
+    the CLI. rejected, none (the pane shows its composer), or left: why the screen was not touched or did not
+    come back to an empty composer."""
+    command = adapter.commands[0]
+    screen = backend.capture(identity)
+    if screen is None:
+        return "left: pane unverifiable"
+    if not permission_dialog_open(screen, adapter):
+        state, why = read_composer(screen, command, adapter.placeholders)
+        return f"left: {why}" if state == "DESCONOCIDO" else "none"
+    if not backend.send_key(identity, adapter.reject_key):
+        return "left: reject key not sent"
+    for _ in range(max(1, math.ceil(wait_seconds / settle_seconds))):
+        sleep(settle_seconds)
+        screen = backend.capture(identity)
+        if (screen is not None and not permission_dialog_open(screen, adapter)
+                and read_composer(screen, command, adapter.placeholders)[0] == "VACIO"):
+            return "rejected"
+    return "left: no empty composer after the reject key"
 
 
 def same_text(shown: str, typed: str) -> bool:

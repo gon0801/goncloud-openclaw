@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 from contracts import AuthorizedOperation, IncidentRejected, OperationKey
-from host import Host, TmuxTransport, cli_adapter
+from host import Host, TmuxTransport, cli_adapter, reject_permission_dialog
 from progress_bridge import transfer_host_projection, transfer_projection
 from spool import canonical, incident_identity
 
@@ -31,6 +31,19 @@ DEFINITIVE_INCIDENT_REJECTIONS = (
     "invalid managed host incident params",
     "Managed task assignment is invalid",
 )
+
+
+def _rejection(response):
+    """The Gateway's own words for a failed call: error.message from the JSON on stdout, else stderr."""
+    try:
+        parsed = json.loads(response.stdout)
+    except json.JSONDecodeError:
+        parsed = None
+    error = parsed.get("error") if isinstance(parsed, dict) else None
+    message = error.get("message") if isinstance(error, dict) else None
+    if not isinstance(message, str) or not message.strip():
+        message = response.stderr or response.stdout or f"exit {response.returncode}"
+    return " ".join(message.split())[:300]
 
 
 class GatewayProjectionClient:
@@ -77,7 +90,7 @@ class GatewayProjectionClient:
                         and parsed["error"].get("type") == "gateway_request_error"
                         and parsed["error"].get("message") in definitive):
                     raise IncidentRejected(parsed["error"].get("message"))
-            raise RuntimeError("native projection Gateway rejected request")
+            raise RuntimeError(f"native projection Gateway rejected request {method}: {_rejection(response)}")
         try:
             parsed = json.loads(response.stdout)
         except json.JSONDecodeError as exc:
@@ -147,6 +160,27 @@ class GatewayProjectionClient:
                 or receipt.get("evidenceDigest") != evidence_digest):
             raise RuntimeError("native host closure receipt identity mismatch")
         return receipt
+
+    def host_cancellation(self, assignment):
+        """R's cancellation id for the task this host holds, or None while it is not cancelled."""
+        if not isinstance(assignment, dict) or assignment.get("hostId") != self.host_id:
+            raise ValueError("host cancellation identity mismatch")
+        fields = ("taskId", "instanceId", "producerId", "capability", "adapterId")
+        if any(not assignment.get(field) for field in fields):
+            raise ValueError("host cancellation assignment incomplete")
+        generation = assignment["generation"]
+        if not isinstance(generation, int) or isinstance(generation, bool) or generation < 1:
+            raise ValueError("host cancellation generation must be positive")
+        response = self._call("managedTasks.host.cancellation", {
+            "hostId": self.host_id, "adapterId": assignment["adapterId"],
+            "instanceId": assignment["instanceId"],
+            "capability": {"taskId": assignment["taskId"], "generation": generation,
+                           "producerId": assignment["producerId"], "token": assignment["capability"]}})
+        cancellation_id = response.get("cancellationId")
+        if (response.get("taskId") != assignment["taskId"] or response.get("generation") != generation
+                or not (cancellation_id is None or (isinstance(cancellation_id, str) and cancellation_id))):
+            raise RuntimeError("native host cancellation identity mismatch")
+        return cancellation_id
 
     def report_host_incident(self, assignment, incident):
         if not isinstance(assignment, dict) or assignment.get("hostId") != self.host_id:
@@ -357,9 +391,9 @@ def transfer_gateway_projections(client, *, evidence_root, progress_state_dir, p
 
 
 def pump_once(client, *, host, evidence_root, progress_state_dir, progress_client,
-              cli_claim=None, cli_watch=None, cli_release=None):
-    """Report, release acknowledged adopted sessions, close, detect silent CLI failures, claim authorized work,
-    and drain projections in one code-only pass."""
+              cli_claim=None, cli_watch=None, cli_release=None, cli_cancel=None):
+    """Report, release acknowledged adopted sessions, release cancelled tasks, close, detect silent CLI
+    failures, claim authorized work, and drain projections in one code-only pass."""
     receipts = []
     report_error = None
     try:
@@ -373,6 +407,13 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
             released, release_errors = cli_release()
         except (OSError, RuntimeError, ValueError) as exc:
             release_errors = [str(exc)]
+    cancelled = 0
+    cancel_errors = []
+    if cli_cancel is not None:
+        try:
+            cancelled, cancel_errors = cli_cancel()
+        except (OSError, RuntimeError, ValueError) as exc:
+            cancel_errors = [str(exc)]
     closed = 0
     closure_errors = []
     try:
@@ -408,7 +449,7 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
         raise report_error
     if claim_error is not None:
         raise claim_error
-    errors = release_errors + closure_errors + watch_errors + incident_errors
+    errors = release_errors + cancel_errors + closure_errors + watch_errors + incident_errors
     if errors:
         raise RuntimeError("; ".join(errors))
     result = {"reported": len(receipts), "transferred": transferred, "closed": closed,
@@ -419,11 +460,13 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
         result["detected"] = detected
     if cli_release is not None:
         result["released"] = released
+    if cli_cancel is not None:
+        result["cancelled"] = cancelled
     return result
 
 
 def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_client,
-               stop_event, interval=1.0, cli_claim=None, cli_watch=None, cli_release=None):
+               stop_event, interval=1.0, cli_claim=None, cli_watch=None, cli_release=None, cli_cancel=None):
     """Poll with code; a failed pass leaves durable host and native work for retry."""
     if not 0 < interval <= 5:
         raise ValueError("poll interval must be between zero and five seconds")
@@ -433,7 +476,7 @@ def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_clie
             result = pump_once(
                 client, host=host, evidence_root=evidence_root,
                 progress_state_dir=progress_state_dir, progress_client=progress_client,
-                cli_claim=cli_claim, cli_watch=cli_watch, cli_release=cli_release,
+                cli_claim=cli_claim, cli_watch=cli_watch, cli_release=cli_release, cli_cancel=cli_cancel,
             )
         except (OSError, RuntimeError, ValueError) as exc:
             error = str(exc)
@@ -473,6 +516,7 @@ def main(argv=None):
     cli_claim = None
     cli_watch = None
     cli_release = None
+    cli_cancel = None
     if args.claim_once or any(cli_fields):
         if not all(cli_fields) or not args.host_state_dir:
             parser.error("CLI claim requires adapter, stable instance, session, workspace, socket and host state")
@@ -491,6 +535,9 @@ def main(argv=None):
         )
 
         cli_release = manager.release_acknowledged
+        adapter = cli_adapter(args.cli_adapter_id)
+        cli_cancel = lambda: manager.release_cancelled(
+            client.host_cancellation, lambda identity: reject_permission_dialog(backend, identity, adapter))
 
         if args.cli_deadline_seconds is not None and not args.cli_deadline_seconds > 0:
             parser.error("--cli-deadline-seconds must be positive")
@@ -519,7 +566,7 @@ def main(argv=None):
                 client, host=Host(args.host_id, args.host_state_dir),
                 evidence_root=args.evidence_root, progress_state_dir=args.progress_state_dir,
                 progress_client=args.progress_client, stop_event=stop,
-                cli_claim=cli_claim, cli_watch=cli_watch, cli_release=cli_release,
+                cli_claim=cli_claim, cli_watch=cli_watch, cli_release=cli_release, cli_cancel=cli_cancel,
             )
         finally:
             signal.signal(signal.SIGTERM, old_term)
