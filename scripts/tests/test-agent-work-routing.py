@@ -113,6 +113,63 @@ class AgentsRouting(unittest.TestCase):
         with self.assertRaisesRegex(RouteUnavailable, "outside the managed perimeter"):
             self.request("ingenieria", "mac-local/opencode")
 
+    def test_a_model_alias_is_claimed_only_by_a_canary_host_until_its_canary_certifies_it(self):
+        aliases = sorted(adapter for adapter, state in self.coverage["hostAdapterCoverage"]["mac-local"].items()
+                         if state == "sandbox-tested-uncertified")
+        self.assertEqual(aliases, ["opencode@opencode-go/deepseek-v4-pro", "opencode@opencode-go/grok-4.7",
+                                   "opencode@opencode-go/kimi-k3", "opencode@opencode-go/qwen3.8-max"])
+
+        class Client:
+            host_id = "mac-local"
+
+            def __init__(self):
+                self.claims = []
+
+            def claim_host(self, adapter_id, instance_id):
+                self.claims.append(adapter_id)
+                return None
+
+        def claim(adapter_id, canary):
+            client = Client()
+            try:
+                return native_gateway.claim_cli_once(
+                    client, host=None, manager=mock.Mock(can_take=lambda _: True), adapter_id=adapter_id,
+                    instance_id="deepseek-1", session="deepseek", workspace_root=self.root,
+                    deliver=lambda *_: None, coverage=self.coverage, canary=canary), client.claims
+            except ValueError as error:
+                return str(error), client.claims
+
+        for alias in aliases:
+            with self.assertRaisesRegex(RouteUnavailable, f"route mac-local/{alias} is not certified"):
+                self.request("main", f"mac-local/{alias}")
+            self.assertEqual(claim(alias, canary=False), ("host adapter route is not certified", []))
+            self.assertEqual(claim(alias, canary=True), (None, [alias]))
+        for closed in ("claude_opus", "opencode@opencode-go/glm-5.3"):
+            self.assertEqual(claim(closed, canary=True), ("host adapter route is not certified", []))
+        self.assertEqual(claim("opencode", canary=False), (None, ["opencode"]))
+
+    def test_the_watch_entrypoint_passes_cli_canary_to_each_claim(self):
+        alias = "opencode@opencode-go/deepseek-v4-pro"
+        args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "mac-local",
+                "--expect-url", "ws://127.0.0.1:18789", "--evidence-root", str(self.root / "e"),
+                "--progress-state-dir", str(self.root / "p"), "--progress-client", "/isolated/c.py",
+                "--watch", "--host-state-dir", str(self.root / "host"),
+                "--cli-adapter-id", alias, "--cli-instance-id", "deepseek-1",
+                "--cli-session", "deepseek", "--cli-workspace-root", str(self.root / "w"),
+                "--cli-tmux-socket", "sock-canary"]
+        claimed = []
+        with mock.patch.object(native_gateway.GatewayProjectionClient, "claim_host",
+                               lambda _, adapter_id, instance_id: claimed.append((adapter_id, instance_id))):
+            for flags in ([], ["--cli-canary"]):
+                with mock.patch("native_gateway.watch_pump") as watch:
+                    native_gateway.main(args + flags)
+                try:
+                    outcome = watch.call_args.kwargs["cli_claim"]()
+                except ValueError as error:
+                    outcome = str(error)
+                self.assertEqual((flags, outcome), (flags, None if flags else "host adapter route is not certified"))
+        self.assertEqual(claimed, [(alias, "deepseek-1")])
+
     def test_every_certified_host_adapter_names_its_live_evidence(self):
         certified = [(host_id, adapter_id)
                      for host_id, adapters in self.coverage["hostAdapterCoverage"].items()
@@ -162,7 +219,7 @@ class AgentsRouting(unittest.TestCase):
         # T9 :265: cada ruta vieja de despacho, y cada destino gestionado, lo dice en su lugar exacto.
         for path, antes, frase, despues in (
             ('agents/main/agent/workshop-skills/agent-dispatch/SKILL.md', '## Chain dispatch (brief / "-saikit" lane)\n\n', 'Legacy route (T9 `:265`): this chain (`sessions_spawn` to implementer, verifier and reviewer) stays outside the managed perimeter until its adoption (T12). Inside a managed run the runtime rejects `sessions_spawn` and `sessions_send`; only the requester-target pairs listed in "Ruteo nativo vs. legado" use the guarded route, and none of them goes from `main` to implementer, verifier or reviewer.', '\n\n0. '),
-            ('agents/main/agent/workshop-skills/agent-dispatch/SKILL.md', '## External review loop (Claude on the Mac)\n\n', 'Legacy route (T9 `:265`): this loop (tmux delivery, `OPENCLAW_WATCH`, `VEREDICTO` files) stays outside the managed perimeter until its adoption (T12). The managed `main` to Mac CLI route is the one in "Ruteo nativo vs. legado", and it stays off until `mac-local` is certified.', '\n\nDavid repeatedly orders'),
+            ('agents/main/agent/workshop-skills/agent-dispatch/SKILL.md', '## External review loop (Claude on the Mac)\n\n', 'Legacy route (T9 `:265`): this loop (tmux delivery, `OPENCLAW_WATCH`, `VEREDICTO` files) stays outside the managed perimeter until its adoption (T12). The managed `main` to Mac CLI route is the one in "Ruteo nativo vs. legado", driven by the `encargo-cli` skill.', '\n\nDavid repeatedly orders'),
             ('agents/main/agent/workshop-skills/native-harness-orchestration/SKILL.md', '| Cerrar | `corrida.sh cerrar <id>` | `cerrada <id>` |\n\n', 'Ruta anterior (T9 `:265`): la corrida abierta con `--vigia claw` y los CLI arrancados con `adaptador start` y entregados con `adaptador deliver` (`ADAPTADOR-MARCA`) siguen fuera del perímetro gestionado hasta su adopción (T12). Un CLI gestionado entra solo por `Host.apply`: en producción, `claim_cli_once` con `TmuxTransport`; `adaptador deliver-ref` es su transporte alterno por `corrida.sh`. Los dos marcan la sesión con `AGENT_WORK_MANAGED=1`, y sobre esa sesión no se usa `adaptador deliver`.', '\n\n## Pre-install / manual (Fases 14 y 23)'),
             ('agents/ingenieria/agent/workshop-skills/managed-task-routing/SKILL.md', 'Si una operación gestionada es rechazada, informa el bloqueo sin reenviarla por sessions_spawn, sessions_send ni CLI directo.\n\n', 'Si te llegó un encargo gestionado (T9 `:265`): cuando `managed_tasks_report` está entre tus tools, el resultado sale solo con `managed_tasks_report`; dentro de ese run el runtime rechaza `sessions_send` y `sessions_spawn`, así que no reportes ni delegues por ahí, tampoco los carriles paralelos de `mac-node-ops`.', '\n'),
         ):
@@ -170,7 +227,7 @@ class AgentsRouting(unittest.TestCase):
             self.assertEqual(text.count(antes + frase + despues), 1,
                              f"{path}: la frase de la ruta vieja (T9 :265) no esta justo despues de {antes.splitlines()[0]!r}")
 
-    def test_main_cli_loop_instructions_keep_the_route_disabled_until_certified(self):
+    def test_main_cli_route_points_main_at_the_encargo_cli_skill_and_not_at_routing_py(self):
         lines = (ROOT / "agents/main/agent/workshop-skills/agent-dispatch/SKILL.md").read_text(
             encoding="utf-8"
         ).splitlines()
@@ -184,7 +241,8 @@ class AgentsRouting(unittest.TestCase):
             paragraph_lines.append(line)
         paragraph = " ".join("\n".join(paragraph_lines).split())
         for expected in (
-            "--requester main --target mac-local/",
+            "sigue la skill `encargo-cli`",
+            "`~/.local/share/agent-work/brief.py` en la Mini (`routing.py` no corre ahí)",
             "managed_tasks_submit",
             "managed_tasks_admit",
             "isolated",
@@ -192,9 +250,37 @@ class AgentsRouting(unittest.TestCase):
             "UserAdopted",
             "delivery-unaccepted",
             "no lo vuelvas a teclear ni a pedir a ciegas",
-            "Mientras `mac-local` no esté `certified` en `coverage.json`, esta ruta está deshabilitada",
         ):
             self.assertIn(expected, paragraph)
+        self.assertNotIn("--requester main", paragraph)
+        self.assertNotIn("deshabilitada", paragraph)
+
+    def test_the_encargo_cli_skill_spells_the_steps_main_runs_on_the_mini(self):
+        skill = (ROOT / "agents/main/agent/workshop-skills/encargo-cli/SKILL.md").read_text(encoding="utf-8")
+        self.assertTrue(skill.startswith("---\nname: encargo-cli\ndescription: "))
+        for expected in (
+            "python3 ~/.local/share/agent-work/brief.py --root /Users/gon/.openclaw/workspace/managed-instructions "
+            "--host mac-local --adapter <alias> <<'BRIEF'",
+            "`managed_tasks_submit` con un `taskKey` nuevo (nunca `key`)",
+            '`{"kind": "code", "repository": "/Users/dn/dev/<repo>", "sha": "<HEAD>"}`',
+            '`{"kind": "artifact", "ref": <instructionRef.ref>, "digest": <instructionRef.digest>}`',
+            "`ready.v1` para implementar o arreglar, `review.v1` para revisar",
+            '`continuation`: `{"kind": "requester"}`',
+            "`managed_tasks_admit` con el `taskId` y `admissionKey` `<taskKey>-admit`",
+            "Termina tu turno.",
+            "`managed_tasks_artifact_read`",
+            "El `receipt` es el `resultReceipt` del inspect",
+            "`managed_tasks_resolve`, que lleva solo `receipt` y `decision`",
+            "se cancela con `managed_tasks_cancel`",
+            "Nunca apruebes una incidencia `permission-required`",
+            "Dile a David qué alias no tiene host",
+        ):
+            self.assertIn(expected, skill)
+        aliases = {adapter for adapter, state in self.coverage["hostAdapterCoverage"]["mac-local"].items()
+                   if adapter.startswith("opencode") and state in ("certified", "sandbox-tested-uncertified")}
+        offered = {line.split("`")[1] for line in skill.splitlines() if line.startswith("| ") and "`opencode" in line}
+        self.assertEqual(offered, aliases, "the skill offers an alias coverage.json does not know, or misses one")
+        self.assertNotIn("routing.py", skill)
 
     def test_cli_prints_native_submit_parameters(self):
         command = [sys.executable, str(ROOT / "scripts/agent-work/routing.py"),

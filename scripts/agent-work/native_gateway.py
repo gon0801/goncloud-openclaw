@@ -2,6 +2,7 @@
 
 import argparse
 import base64
+import fcntl
 import hashlib
 import json
 import os
@@ -317,9 +318,11 @@ def _brief_to_workspace(client, claim, workspace_root):
 
 
 def claim_cli_once(client, *, host, manager, adapter_id, instance_id, session,
-                   workspace_root, deliver, coverage):
-    """Deliver to an existing session; adopting it never grants permission to stop it."""
-    if coverage.get("hostAdapterCoverage", {}).get(client.host_id, {}).get(adapter_id) != "certified":
+                   workspace_root, deliver, coverage, canary=False):
+    """Deliver to an existing session; adopting it never grants permission to stop it. A canary host also
+    claims for a sandbox-tested route, so that route's own canary can certify it."""
+    accepted = ("certified", "sandbox-tested-uncertified") if canary else ("certified",)
+    if coverage.get("hostAdapterCoverage", {}).get(client.host_id, {}).get(adapter_id) not in accepted:
         raise ValueError("host adapter route is not certified")
     if not manager.can_take(instance_id):
         return None
@@ -404,7 +407,8 @@ class ProgressPublisher:
 
     One call per queued corrida per pass, newest queue first, at most PER_PASS calls. A failed call
     leaves its files queued: the next pass retries it, later failures of the same queue back off to
-    MAX_BACKOFF seconds, and any change to that queue makes it due again."""
+    MAX_BACKOFF seconds, and any change to that queue makes it due again. Every model-alias host shares
+    the state dir, so a pass publishes only while it holds the dir's lock; a busy lock skips the pass."""
     PER_PASS = 4
     TIMEOUT_SECONDS = 30
     BACKOFF_BASE_SECONDS = 15
@@ -438,6 +442,17 @@ class ProgressPublisher:
         """Publishes with the Gateway client's openclaw binary. Returns the events the progress client
         published and one error per failed corrida."""
         queues = self._queues()
+        if not queues:
+            self.failures = {}
+            return 0, []
+        with open(Path(self.state_dir) / ".host-publish.lock", "a") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return 0, []
+            return self._publish(gateway, queues)
+
+    def _publish(self, gateway, queues):
         now = self.clock()
         self.failures = {corrida: failure for corrida, failure in self.failures.items() if corrida in queues}
         due = sorted((corrida for corrida, (names, _) in queues.items()
@@ -653,6 +668,8 @@ def main(argv=None):
     parser.add_argument("--cli-workspace-root")
     parser.add_argument("--cli-tmux-socket")
     parser.add_argument("--cli-deadline-seconds", type=float)
+    parser.add_argument("--cli-canary", action="store_true",
+                        help="also claim for a sandbox-tested-uncertified adapter, to run its canary")
     parser.add_argument("--tmux-bin", default="tmux")
     parser.add_argument("--flush-results", action="store_true")
     parser.add_argument("--watch", action="store_true")
@@ -697,7 +714,7 @@ def main(argv=None):
             client, host=host, manager=manager, adapter_id=args.cli_adapter_id,
             instance_id=args.cli_instance_id, session=args.cli_session,
             workspace_root=args.cli_workspace_root, deliver=transport.deliver,
-            coverage=coverage,
+            coverage=coverage, canary=args.cli_canary,
         )
 
         cli_release = manager.release_acknowledged

@@ -2,9 +2,12 @@
 """cutover_live decisions without a Gateway (VEREDICTO-T11-b-r1): an entry that does not match the
 Gateway refuses, a lost drain race does not wedge the cutover, and a restarting Gateway is waited for."""
 import contextlib
+import copy
 import hashlib
 import io
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -284,6 +287,99 @@ class CutoverLiveTest(unittest.TestCase):
             gc.collect()
         self.assertEqual([str(warning.message) for warning in caught if warning.category is ResourceWarning], [])
 
+
+DEEPSEEK, KIMI = "opencode@opencode-go/deepseek-v4-pro", "opencode@opencode-go/kimi-k3"
+# The shape of the Mini's config: managedTasks as the cutover left it, and neighbours the patch must not touch.
+LIVE_CONFIG = {
+    "agents": {"entries": {"main": {"model": {"primary": "opencode-go-resp/muse-spark-1.3-contributor"},
+                                    "subagents": {"allowAgents": ["main", "ingenieria"]}}}},
+    "managedTasks": {"enabled": True, "instructionRoot": "/Users/gon/.openclaw/workspace/managed-instructions",
+                     "requesters": ["main"], "runTimeoutSeconds": 3600, "profile": PROFILE,
+                     "hosts": {"mac-local": {"deviceId": "device-mac", "adapters": ["opencode"]}}},
+    "skills": {"load": {"watch": True}},
+}
+
+
+class AdaptersTest(unittest.TestCase):
+    """cutover_live.py adapters against a copy of the Mini's config, through the openclaw CLI double."""
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+        self.config = self.root / "openclaw.json"
+        self.config.write_text(json.dumps(LIVE_CONFIG))
+        self.log = self.root / "calls.jsonl"
+        self.env = {**os.environ, "OPENCLAW_BIN": str(ROOT / "scripts/tests/fixtures/agent-work/openclaw-config-double.py"),
+                    "OPENCLAW_DOUBLE_CONFIG": str(self.config), "OPENCLAW_DOUBLE_LOG": str(self.log)}
+
+    def run_cli(self, *args):
+        done = subprocess.run([sys.executable, str(ROOT / "scripts/agent-work/cutover_live.py"), "adapters",
+                               "--host", "mac-local", *args], capture_output=True, text=True, env=self.env, timeout=60)
+        return done.returncode, done.stdout.strip(), done.stderr.strip()
+
+    def methods(self):
+        return [json.loads(line)["method"] for line in self.log.read_text().splitlines()] if self.log.exists() else []
+
+    def test_adding_aliases_appends_them_and_keeps_every_other_key(self):
+        self.assertEqual(self.run_cli("--add", DEEPSEEK, "--add", KIMI),
+                         (0, json.dumps({"host": "mac-local", "adapters": ["opencode", DEEPSEEK, KIMI]}), ""))
+        expected = copy.deepcopy(LIVE_CONFIG)
+        expected["managedTasks"]["hosts"]["mac-local"]["adapters"] = ["opencode", DEEPSEEK, KIMI]
+        self.assertEqual(json.loads(self.config.read_text()), expected)
+        patches = [json.loads(line)["params"] for line in self.log.read_text().splitlines()
+                   if json.loads(line)["method"] == "config.patch"]
+        self.assertEqual(len(patches), 1)
+        self.assertEqual(json.loads(patches[0]["raw"]),
+                         {"managedTasks": {"hosts": {"mac-local": {"adapters": ["opencode", DEEPSEEK, KIMI]}}}})
+        self.assertNotIn("replacePaths", patches[0])
+
+    def test_running_it_again_patches_nothing(self):
+        self.run_cli("--add", DEEPSEEK)
+        before = self.config.read_text()
+        self.assertEqual(self.run_cli("--add", DEEPSEEK, "--add", "opencode"),
+                         (0, json.dumps({"host": "mac-local", "adapters": ["opencode", DEEPSEEK]}), ""))
+        self.assertEqual(self.config.read_text(), before)
+        self.assertEqual(self.methods(), ["config.get", "config.patch", "config.get", "config.get"])
+
+    def test_a_dry_run_prints_the_patch_and_writes_nothing(self):
+        self.assertEqual(self.run_cli("--add", DEEPSEEK, "--dry-run"),
+                         (0, json.dumps({"patch": {"managedTasks": {"hosts": {"mac-local": {
+                             "adapters": ["opencode", DEEPSEEK]}}}}}, sort_keys=True), ""))
+        self.assertEqual(json.loads(self.config.read_text()), LIVE_CONFIG)
+        self.assertEqual(self.methods(), ["config.get"])
+
+    def test_an_adapter_without_a_tested_route_is_refused_before_any_write(self):
+        self.assertEqual(self.run_cli("--add", DEEPSEEK, "--add", "opencode@opencode-go/glm-5.3", "--add", "claude_opus"),
+                         (1, "", "cutover: mac-local has no tested route for opencode@opencode-go/glm-5.3, claude_opus"))
+        self.assertEqual(json.loads(self.config.read_text()), LIVE_CONFIG)
+        self.assertEqual(self.methods(), ["config.get"])
+
+    def test_a_host_that_is_not_open_is_refused(self):
+        closed = copy.deepcopy(LIVE_CONFIG)
+        closed["managedTasks"]["enabled"] = False
+        self.config.write_text(json.dumps(closed))
+        self.assertEqual(self.run_cli("--add", DEEPSEEK),
+                         (1, "", "cutover: mac-local is not open; a cutover opens it first"))
+        self.assertEqual(json.loads(self.config.read_text()), closed)
+
+    def test_the_restart_after_the_patch_is_waited_for(self):
+        coverage = json.loads((ROOT / "docs/evidence/agent-work/coverage.json").read_text())
+        gateway = FakeGateway([], managed=copy.deepcopy(LIVE_CONFIG["managedTasks"]),
+                              unavailable={"config.get": 1})
+        real_call = gateway.call
+
+        def restarting(method, params):
+            answer = real_call(method, params)
+            if method == "config.patch":
+                gateway.unavailable["config.get"] = 3
+            return answer
+
+        gateway.call = restarting
+        self.assertEqual(cutover_live.add_adapters(gateway, "mac-local", [DEEPSEEK], coverage, wait_seconds=30,
+                                                   sleep=lambda _: None), ["opencode", DEEPSEEK])
+        self.assertEqual(gateway.patches, [{"managedTasks": {"hosts": {"mac-local": {"adapters": ["opencode", DEEPSEEK]}}}}])
+        self.assertEqual(gateway.unavailable["config.get"], 0)
 
 if __name__ == "__main__":
     unittest.main()

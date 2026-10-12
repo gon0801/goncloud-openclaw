@@ -1117,6 +1117,18 @@ print(json.dumps({{'published': moved}}))
         self.assertEqual(self.pump()["published"], 1)
         self.assertEqual([argv[-1] for argv in self.publishes()], ["run-1"])
 
+    def test_a_pass_skips_publishing_while_another_host_holds_the_queue(self):
+        import fcntl
+        self.state_dir.mkdir(parents=True, exist_ok=True)
+        with open(self.state_dir / ".host-publish.lock", "a") as other_host:
+            fcntl.flock(other_host, fcntl.LOCK_EX)
+            self.assertEqual(self.pump(), {"reported": 0, "transferred": 1, "published": 0, "closed": 0,
+                                           "incidents": 0})
+            self.assertEqual(self.publishes(), [])
+            self.assertEqual([path.name for path in (self.run / "queue").iterdir()], [self.pending["eventId"] + ".json"])
+        self.assertEqual(self.pump(), {"reported": 0, "transferred": 0, "published": 1, "closed": 0, "incidents": 0})
+        self.assertEqual([argv[-1] for argv in self.publishes()], ["run-1"])
+
     def test_a_failed_publish_keeps_the_event_queued_and_the_next_pass_retries(self):
         self.mode.write_text("fail")
         with self.assertRaises(RuntimeError) as caught:

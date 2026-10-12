@@ -70,8 +70,31 @@ CLI_ADAPTERS = {
 }
 
 
+# An opencode adapter id names the model its session runs: "opencode" is the B8 session on GLM through
+# David's Z.AI coding plan, "opencode@<provider>/<model>" any model `opencode models` lists. zai/* bills
+# per token, so no alias reaches it.
+OPENCODE_DEFAULT_MODEL = "zai-coding-plan/glm-5.3-flash"
+OPENCODE_ALIAS = re.compile(r"opencode@([a-z0-9][a-z0-9-]*)/([A-Za-z0-9][A-Za-z0-9._-]*)")
+
+
+def opencode_model(adapter_id: str) -> str | None:
+    """The `opencode -m` model of an opencode adapter id; None for any other CLI."""
+    if adapter_id == "opencode":
+        return OPENCODE_DEFAULT_MODEL
+    if not adapter_id.startswith("opencode@"):
+        return None
+    match = OPENCODE_ALIAS.fullmatch(adapter_id)
+    if match is None:
+        raise ValueError(f"adapter {adapter_id} is not opencode@<provider>/<model>")
+    if match[1] == "zai":
+        raise ValueError(f"adapter {adapter_id} bills per token; use zai-coding-plan/")
+    return f"{match[1]}/{match[2]}"
+
+
 def cli_adapter(adapter_id: str) -> CliAdapter:
     """An adapter nobody measured has no known placeholder, so any text in its composer defers."""
+    if opencode_model(adapter_id) is not None:
+        return CLI_ADAPTERS["opencode"]
     return CLI_ADAPTERS.get(adapter_id, CliAdapter((adapter_id,)))
 
 
@@ -957,7 +980,8 @@ class ShellAdapterTransport:
 
 
 USAGE = ("usage: host.py verify-ref <hostId> <stateDir> <session> <assignmentRef>\n"
-         "       host.py resolve-delivery <hostId> <stateDir> <taskId> <generation> delivered|abandoned <reason>")
+         "       host.py resolve-delivery <hostId> <stateDir> <taskId> <generation> delivered|abandoned <reason>\n"
+         "       host.py opencode-model <adapterId>")
 
 
 def main(argv: list[str]) -> str | None:
@@ -970,6 +994,11 @@ def main(argv: list[str]) -> str | None:
         if key is None:
             raise ValueError("no host operation for that task generation")
         return host.resolve_delivery(argv[1], key, argv[5], argv[6])
+    if len(argv) == 2 and argv[0] == "opencode-model":
+        model = opencode_model(argv[1])
+        if model is None:
+            raise ValueError(f"adapter {argv[1]} is not an opencode adapter")
+        return model
     raise SystemExit(USAGE)
 
 
