@@ -4,7 +4,7 @@ Este es el recibo que pide el plan (`:320`). Cierra la parte B de `T12-runbook.m
 
 ## Qué corre en vivo
 
-- **Mini.** R `f8316c9c867ebef79cfb66f8104b7f589c93e93a` (B13), instalado el 2026-10-11 a las 15:15Z. Esquema 27. `managedTasks.enabled` en `true`, con `requesters: ["main"]` y el host `mac-local` con un solo adaptador, `opencode`.
+- **Mini.** Al cierre, R `f8316c9c867ebef79cfb66f8104b7f589c93e93a` (B13), instalado el 2026-10-11 a las 15:15Z. Después del cierre se instaló `605aef7` (B17-R, 2026-10-12 02:46Z; fila de abajo). El resto de esta sección describe el estado al cierre. Esquema 27. `managedTasks.enabled` en `true`, con `requesters: ["main"]` y el host `mac-local` con un solo adaptador, `opencode`.
 - **Mac.** El host corre G `2be0f55` desde `~/dev/wt/agent-work-host`, en `tmux -L agent-work`, sesión `host`. El host arrancó el 2026-10-11 a las 19:27:09Z, en el mismo segundo en que el checkout pasó a `2be0f55`. Spool `mac-local-c` (esquema 2), instancia `canario-3`, adaptador `opencode`, `--progress-state-dir ~/.local/state/runbook-progress-events`.
 
 ## Paquetes de R instalados en la Mini
@@ -18,6 +18,7 @@ Cada instalación la hizo un script desde la Mac (`t12-parte-a.sh` y `t12-actual
 | 2026-10-11 02:13 | `4b9785c` (B8) | `09d30e248e571ecb253c4d91314e99bfa55f1791858004f0382bec35bd5f0882` | `ACTUALIZADO OK`, admisión cerrada | `pre-4b9785c-20261010-1913` |
 | 2026-10-11 10:37 | `ff1709f` (B11 y B12) | `ac1dceade49cf7fbb8071f47fce08728c4d1ab910e3b84d7d6d59efdc9a271db` | `ACTUALIZADO OK`, `managedTasks como estaba` | `pre-ff1709f-20261011-0337` |
 | 2026-10-11 15:14 | `f8316c9` (B13) | `eb886e08905b21f597a412b261d21bc0c993e3dc202b5893e7f7c13d0b58c98d` | `ACTUALIZADO OK`, `managedTasks como estaba` | `pre-f8316c9-20261011-0814` |
+| 2026-10-12 02:46 | `605aef7` (B17-R, después del cierre) | `d4497986c35086455a666dd2f38134fa12cc9cd5bd47a42a5c0a6f8888ca6514` | `ACTUALIZADO OK`, `managedTasks como estaba` | `pre-605aef7-20261011-1946` |
 
 - `@openclaw/ai` es el mismo en los cinco: `0512fd870a86f40ea06f13931ef36a9ca9af07286d378fb1e717453ba6ffbcc8`.
 - En `f8316c9`, `package-bundle.json` registra además `@openclaw/gateway-client` (`966aaae638ed6b962c18a7f6a895a89131b3738e10ef00e232ed65e98d497508`) y `@openclaw/gateway-protocol` (`eda8533d019e1e1f6606993f315b5dbf1339e3e8b8a1b2fdb19d97c414282050`). No se instalan aparte; van dentro del paquete raíz.
