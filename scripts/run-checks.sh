@@ -18,18 +18,20 @@
 #
 # Fase 15.1 — inventario, logs y shards. Tres cambios de contrato:
 #
-#   SAIKIT_SHARD=1/3  solo scripts/tests/test-corrida-nucleo.sh
-#   SAIKIT_SHARD=2/3  scripts/tests/test-tmux-activity-watch.sh + test-corrida-preflight.sh
-#   SAIKIT_SHARD=3/3  el resto de scripts/tests/*.sh + Node (summa-gate y tablero-runbook)
-#                     + sintaxis + corpus
+#   SAIKIT_SHARD=i/5  la porcion i del reparto (i de 1 a 5)
 #   sin SAIKIT_SHARD  la bateria completa, como siempre
+#   --reparto         imprime el reparto (shard, peso, entrada) y no corre nada
 #
-# La union de los tres shards es exactamente la bateria de siempre: el inventario shell
-# sale del glob scripts/tests/*.sh (un test nuevo entra solo, sin tocar este archivo ni
-# el workflow) y las entradas node/sintaxis/corpus viven enteras en el shard 3. Un shard
-# invalido (4/3, x) sale 2 ANTES de correr nada, y un shard valido cuya prueba ya no esta
-# en el glob tambien sale en rojo: jamas un shard verde por no encontrar sus pruebas (el
-# mismo principio que el guard de "corridas == 0" de mas abajo).
+# El reparto es por DURACION MEDIDA, no por nombre: hasta 2026-10-12 el shard 3/3 era "el
+# resto" y tardaba 24 min contra 4 de los otros dos (run 38304658354). Cada entrada del
+# inventario lleva el peso en segundos de scripts/ci-duraciones.tsv (1 si no esta medida) y
+# se asigna, de la mas pesada a la mas liviana, al shard menos cargado. Es determinista:
+# mismo inventario y mismos pesos dan el mismo reparto en los cinco runners, y por eso la
+# union de los cinco es exactamente la bateria de siempre, con cada entrada una vez. El
+# inventario shell sale del glob scripts/tests/*.sh (un test nuevo entra solo, sin tocar
+# este archivo ni el workflow). Los pesos solo deciden el balance: un peso viejo o ausente
+# desbalancea, nunca saca una entrada de la union. Un shard invalido (6/5, 1/3, x) sale 2
+# ANTES de correr nada, y un arbol sin pruebas shell sale en rojo en cada shard.
 #
 # Cada entrada registra duracion, resultado y un log propio en logs/run-checks/ (que esta
 # en .gitignore: salida de maquina, no fuente): resumen.txt (una linea por entrada:
@@ -41,7 +43,8 @@
 # portable entre BSD y GNU sin sumar dependencias.
 #
 # Uso:  bash scripts/run-checks.sh
-#       SAIKIT_SHARD=i/3 bash scripts/run-checks.sh
+#       SAIKIT_SHARD=i/5 bash scripts/run-checks.sh
+#       bash scripts/run-checks.sh --reparto
 set -uo pipefail
 # Algunos runners pueden exportar GIT_DIR/GIT_INDEX_FILE/GIT_WORK_TREE/GIT_PREFIX al
 # correr la bateria: cualquier prueba que arme un repo con git escaparia al repo real
@@ -56,17 +59,22 @@ paso() { printf '\n=== %s\n' "$1"; }
 # --- shards: la validacion va ANTES de correr cualquier cosa. Un valor invalido no es
 # "corre lo que puedas": es un typo del workflow, y correr una porcion cualquiera de la
 # bateria con cara de exito seria el falso verde que este archivo existe para impedir.
-SHARD_NUCLEO=test-corrida-nucleo.sh
-SHARD_WATCHDOG=test-tmux-activity-watch.sh
-SHARD_PREFLIGHT=test-corrida-preflight.sh
-case "${SAIKIT_SHARD:-}" in
-  '') SHARD=todo ;;
-  1/3|2/3|3/3) SHARD=${SAIKIT_SHARD%/*} ;;
-  *)
-    echo "FAIL: SAIKIT_SHARD='${SAIKIT_SHARD}' no es un shard valido (1/3, 2/3 o 3/3; sin la variable, bateria completa)" >&2
+SHARDS_N=5
+PESOS=scripts/ci-duraciones.tsv
+SHARD=
+if [ -z "${SAIKIT_SHARD:-}" ]; then
+  SHARD=todo
+else
+  k=1
+  while [ "$k" -le "$SHARDS_N" ]; do
+    if [ "$SAIKIT_SHARD" = "$k/$SHARDS_N" ]; then SHARD=$k; fi
+    k=$((k + 1))
+  done
+  if [ -z "$SHARD" ]; then
+    echo "FAIL: SAIKIT_SHARD='${SAIKIT_SHARD}' no es un shard valido (1/$SHARDS_N a $SHARDS_N/$SHARDS_N; sin la variable, bateria completa)" >&2
     exit 2
-    ;;
-esac
+  fi
+fi
 
 # --- inventario shell: SOLO el glob manda (Fase 15.1). Nadie mantiene una lista a mano
 # que pueda quedarse corta: un archivo nuevo en scripts/tests/ ya esta en la bateria.
@@ -81,30 +89,58 @@ for t in scripts/tests/*.mjs; do
   node_tests+=("$(basename "$t")")
 done
 
-shell_corre() { # $1=basename -> 0 si el shard actual tiene que correrlo
-  case "$SHARD" in
-    todo) return 0 ;;
-    1) [ "$1" = "$SHARD_NUCLEO" ] ;;
-    2) [ "$1" = "$SHARD_WATCHDOG" ] || [ "$1" = "$SHARD_PREFLIGHT" ] ;;
-    3) [ "$1" != "$SHARD_NUCLEO" ] && [ "$1" != "$SHARD_WATCHDOG" ] && [ "$1" != "$SHARD_PREFLIGHT" ] ;;
-  esac
+# --- reparto: cada entrada (las cinco fijas de node/sintaxis/corpus y las del glob) va a
+# UN shard. Salida de repartir: "<shard>\t<peso>\t<id>", una linea por entrada. El orden
+# (peso descendente, id ascendente en orden C) va fijado con LC_ALL=C para que BSD y GNU
+# sort repartan igual.
+ENTRADAS_NODE="sintaxis-summa-gate bateria-summa-gate sintaxis-tablero-runbook bateria-tablero-runbook verify-corpus"
+TAB=$(printf '\t')
+repartir() {
+  {
+    printf '%s\n' $ENTRADAS_NODE
+    printf '%s\n' ${shell_tests[@]+"${shell_tests[@]}"} ${node_tests[@]+"${node_tests[@]}"}
+  } | awk -F'\t' -v pesos="$PESOS" '
+      BEGIN {
+        while ((getline l < pesos) > 0) {
+          if (l ~ /^#/ || l == "") continue
+          split(l, c, "\t"); p[c[2]] = c[1]
+        }
+      }
+      $0 != "" { w = ($0 in p) ? p[$0] + 0 : 1; if (w < 1) w = 1; print w "\t" $0 }' \
+    | LC_ALL=C sort -t "$TAB" -k1,1nr -k2,2 \
+    | awk -F'\t' -v n="$SHARDS_N" '
+      { m = 1; for (k = 2; k <= n; k++) if (c[k] + 0 < c[m] + 0) m = k
+        c[m] += $1; print m "\t" $1 "\t" $2 }'
 }
+REPARTO=$(repartir)
 
-glob_tiene() { # $1=basename: esta en el inventario que trajo el glob?
-  local x
-  for x in ${shell_tests[@]+"${shell_tests[@]}"}; do
-    [ "$x" = "$1" ] && return 0
-  done
+if [ "${1:-}" = "--reparto" ]; then
+  printf '%s\n' "$REPARTO" | LC_ALL=C sort -t "$TAB" -k1,1n -k2,2nr -k3,3
+  printf '%s\n' "$REPARTO" | awk -F'\t' -v n="$SHARDS_N" '
+    { c[$1] += $2; e[$1]++ }
+    END { for (k = 1; k <= n; k++) printf "# shard %d/%d: %d s estimados, %d entradas\n", k, n, c[k], e[k] }'
+  exit 0
+fi
+
+MIAS=$(printf '%s\n' "$REPARTO" | awk -F'\t' -v k="$SHARD" 'k == "todo" || $1 == k { print $3 }')
+corre() { # $1=id de entrada -> 0 si esta corrida tiene que correrla
+  case "
+$MIAS
+" in *"
+$1
+"*) return 0 ;; esac
   return 1
 }
 
 # --- node: las pruebas del plugin son .ts y `node --test` las corre por type stripping
 # nativo, que existe desde 22.6. El node del PATH puede ser mas viejo (o no estar), asi
 # que se elige explicitamente en vez de confiar en el default. Solo se exige cuando este
-# shard corre entradas node: el 1 y el 2 son solo shell, y no tienen por que romperse
-# en una maquina sin node.
+# shard corre entradas node: uno que solo recibio shell no tiene por que romperse en una
+# maquina sin node.
 corre_node=0
-case "$SHARD" in todo|3) corre_node=1 ;; esac
+for id in $ENTRADAS_NODE ${node_tests[@]+"${node_tests[@]}"}; do
+  if corre "$id"; then corre_node=1; fi
+done
 elegir_node() {
   local c
   for c in "$(command -v node 2>/dev/null)" \
@@ -176,24 +212,30 @@ case "$SHARD" in
   *)    paso "shard $SAIKIT_SHARD | logs y resumen en $LOGDIR" ;;
 esac
 
-if [ "$corre_node" -eq 1 ]; then
+if corre sintaxis-summa-gate; then
   paso "sintaxis summa-gate  (node $("$NODE" --version))"
   ejecutar sintaxis-summa-gate cmd_sintaxis_summa
   if [ "$RC_ULT" -eq 0 ]; then ok_entrada sintaxis-summa-gate; else falla_entrada sintaxis-summa-gate "$RC_ULT"; fi
+fi
 
+if corre bateria-summa-gate; then
   paso "bateria summa-gate  (node $("$NODE" --version))"
   ejecutar bateria-summa-gate cmd_bateria_summa
   if [ "$RC_ULT" -eq 0 ]; then ok_entrada bateria-summa-gate; else falla_entrada bateria-summa-gate "$RC_ULT"; fi
+fi
 
-  # --- tablero-runbook (Fase 7): mismos entrypoints que summa-gate, con UNA diferencia
-  # medida en Plans 7.3: `node --test` sobre un directorio sin pruebas sale 0 y reporta
-  # `# pass 0`, asi que el exit code solo no prueba que haya corrido nada. El guard de
-  # conteo exige al menos un pass; sin el, borrar todos los *.test.ts dejaria este bloque
-  # en verde y la bateria volveria a ser decorativa (el defecto que 5.2 ya corrigio una vez).
+# --- tablero-runbook (Fase 7): mismos entrypoints que summa-gate, con UNA diferencia
+# medida en Plans 7.3: `node --test` sobre un directorio sin pruebas sale 0 y reporta
+# `# pass 0`, asi que el exit code solo no prueba que haya corrido nada. El guard de
+# conteo exige al menos un pass; sin el, borrar todos los *.test.ts dejaria este bloque
+# en verde y la bateria volveria a ser decorativa (el defecto que 5.2 ya corrigio una vez).
+if corre sintaxis-tablero-runbook; then
   paso "sintaxis tablero-runbook  (node $("$NODE" --version))"
   ejecutar sintaxis-tablero-runbook cmd_sintaxis_tablero
   if [ "$RC_ULT" -eq 0 ]; then ok_entrada sintaxis-tablero-runbook; else falla_entrada sintaxis-tablero-runbook "$RC_ULT"; fi
+fi
 
+if corre bateria-tablero-runbook; then
   paso "bateria tablero-runbook  (node $("$NODE" --version))"
   ejecutar bateria-tablero-runbook cmd_bateria_tablero
   LOG_TR="$LOGDIR/bateria-tablero-runbook.log"
@@ -229,51 +271,29 @@ fi
 # arbol SIN una sola prueba — el `for` no encontraba nada y el `if -f` de verify-corpus se
 # salteaba en silencio. O sea el candado escrito para que los candados no fueran decorativos
 # podia decir verde sin correr nada, contradiciendo su propia cabecera. Ahora exige encontrar
-# lo que tiene que correr, y 15.1 agrega el caso espejo para shards: uno cuya prueba
-# estrella desaparecio del glob (rename, borrado) revienta en vez de salir verde por vacio.
+# lo que tiene que correr. Con el reparto por duracion ya no hay "prueba estrella" de un
+# shard que pueda faltar: el arbol sin pruebas shell es rojo en la bateria completa Y en
+# cada shard, porque las cinco entradas fijas igual se reparten y un shard quedaria verde
+# corriendo solo sintaxis.
 paso "pruebas de contrato de scripts/ (${#shell_tests[@]} del glob)"
-case "$SHARD" in
-  1)
-    if ! glob_tiene "$SHARD_NUCLEO"; then
-      printf '  FALLA el shard 1/3 esperaba %s y el glob no lo trae (renombrado o borrado)\n' "$SHARD_NUCLEO"
-      anotar_sin_log "shard1-sin-$SHARD_NUCLEO"
-    fi
-    ;;
-  2)
-    for esperada in "$SHARD_WATCHDOG" "$SHARD_PREFLIGHT"; do
-      if ! glob_tiene "$esperada"; then
-        printf '  FALLA el shard 2/3 esperaba %s y el glob no lo trae (renombrado o borrado)\n' "$esperada"
-        anotar_sin_log "shard2-sin-$esperada"
-      fi
-    done
-    ;;
-esac
-
-corridas=0
 for id in ${shell_tests[@]+"${shell_tests[@]}"}; do
-  shell_corre "$id" || continue
-  corridas=$((corridas + 1))
+  corre "$id" || continue
   ejecutar "$id" cmd_shell "$id"
   if [ "$RC_ULT" -eq 0 ]; then ok_entrada "$id"; else falla_entrada "$id" "$RC_ULT"; fi
 done
 
-if [ "$corre_node" -eq 1 ]; then
-  for id in ${node_tests[@]+"${node_tests[@]}"}; do
-    ejecutar "$id" cmd_node_test "$id"
-    if [ "$RC_ULT" -eq 0 ]; then ok_entrada "$id"; else falla_entrada "$id" "$RC_ULT"; fi
-  done
+for id in ${node_tests[@]+"${node_tests[@]}"}; do
+  corre "$id" || continue
+  ejecutar "$id" cmd_node_test "$id"
+  if [ "$RC_ULT" -eq 0 ]; then ok_entrada "$id"; else falla_entrada "$id" "$RC_ULT"; fi
+done
+
+if [ "${#shell_tests[@]}" -eq 0 ]; then
+  echo "FAIL: no se encontro NINGUNA prueba en scripts/tests/ — un candado que no corre no existe"
+  anotar_sin_log sin-pruebas-shell
 fi
 
-case "$SHARD" in
-  todo|3)
-    if [ "$corridas" -eq 0 ]; then
-      echo "FAIL: no se encontro NINGUNA prueba para este shard en scripts/tests/ — un candado que no corre no existe"
-      anotar_sin_log sin-pruebas-shell
-    fi
-    ;;
-esac
-
-if [ "$corre_node" -eq 1 ]; then
+if corre verify-corpus; then
   paso "corpus de rendiciones re-derivable"
   if [ -f summa-gate/verify-corpus.mjs ]; then
     ejecutar verify-corpus cmd_corpus

@@ -1,10 +1,10 @@
-# Mutacion de workflow-valido.yml (r3, cross-review codex): CUARTA entrada en
-# la matriz — 1/3, 2/3, 3/3 y una cuarta con valor NUEVO (4/4). Los tres
+# Mutacion de workflow-valido.yml (r3, cross-review codex): entrada DE MAS en
+# la matriz — 1/5 a 5/5 y una sexta con valor NUEVO (6/6). Los cinco
 # valores siguen presentes y cada uno UNA vez: la UNICA regla que rechaza
-# este archivo es el tope de EXACTAMENTE tres entradas. La cuarta lleva un
-# valor nuevo a proposito: con un 1/3 duplicado la rechazaba tambien la regla
-# cada-valor-UNA-vez y el tope quedaba sin prueba (medido en r3: quitando
-# solo la asercion -eq 3 del validador, la forma duplicada sigue rechazada
+# este archivo es el tope de EXACTAMENTE cinco entradas. La sexta lleva un
+# valor nuevo a proposito: con un 1/5 duplicado la rechazaba tambien la regla
+# cada-valor-UNA-vez y el tope quedaba sin prueba (medido: quitando
+# solo la asercion -eq 5 del validador, la forma duplicada sigue rechazada
 # mientras ESTE archivo pasa de rechazado a aceptado y los demas fixtures
 # conservan su veredicto). YAML valido que el ciclo (7) tiene que rechazar.
 # Lo consume scripts/tests/test-summa-gate-quality-entrypoints.sh.
@@ -35,14 +35,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - shard: 1/3
+          - shard: 1/5
             n: 1
-          - shard: 2/3
+          - shard: 2/5
             n: 2
-          - shard: 3/3
+          - shard: 3/5
             n: 3
-          - shard: 4/4
+          - shard: 4/5
             n: 4
+          - shard: 5/5
+            n: 5
+          - shard: 6/6
+            n: 6
     steps:
       - uses: actions/checkout@v7
         with:
