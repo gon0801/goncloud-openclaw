@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from contracts import OperationKey, operation_id
-from spool import SETTLED, TERMINAL_STATES as TERMINAL, Spool, canonical
+from spool import DIALOG_ATTEMPTS, DIALOG_STILL_OPEN, SETTLED, TERMINAL_STATES as TERMINAL, Spool, canonical
 
 TERMINAL_SQL = ",".join(repr(state) for state in TERMINAL)
 OWNERS = ("TaskCreated", "UserAdopted", "IntentionalPool")
@@ -23,6 +23,9 @@ BOOTTIME_RE = re.compile(r"sec\s*=\s*(\d+),\s*usec\s*=\s*(\d+)")
 BOOT_ID_RE = re.compile(r"\d+\.\d{6}")
 LINUX_BOOT_ID_RE = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
 TMUX_TIMEOUT_SECONDS = 5.0
+# A clock adjustment moves macOS kern.boottime within one boot (58 ms between two canary spools); a
+# reboot moves it by at least the previous uptime, far more than this.
+BOOT_DRIFT_SECONDS = 10.0
 
 
 def _ps(*args: str) -> subprocess.CompletedProcess:
@@ -32,6 +35,12 @@ def _ps(*args: str) -> subprocess.CompletedProcess:
 
 def recognized_boot_id(value: str) -> bool:
     return bool(BOOT_ID_RE.fullmatch(value) or LINUX_BOOT_ID_RE.fullmatch(value))
+
+
+def drifted_boot_id(saved: str, current: str) -> bool:
+    """A boottime this host saved earlier in the boot it is running now, read before a clock adjustment."""
+    return (saved != current and bool(BOOT_ID_RE.fullmatch(saved)) and bool(BOOT_ID_RE.fullmatch(current))
+            and abs(float(saved) - float(current)) <= BOOT_DRIFT_SECONDS)
 
 
 APPROVAL_TAIL_LINES = 15
@@ -121,6 +130,23 @@ class ResourceManager:
                     ON resources(instance_id)
                     WHERE state NOT IN ({TERMINAL_SQL});
             """)
+        self._align_boot_ids()
+
+    def _align_boot_ids(self) -> None:
+        """Rewrite to this boot's id the boot ids that unsettled resources saved before a clock adjustment, so
+        identity comparisons stay exact. Settled rows keep what they saved."""
+        current = self.backend.boot_id
+        with self.spool.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            rows = db.execute("SELECT operation_id,boot_id,identity_json FROM resources "
+                              f"WHERE state NOT IN ({TERMINAL_SQL})").fetchall()
+            for row in rows:
+                if drifted_boot_id(row["boot_id"], current):
+                    db.execute("UPDATE resources SET boot_id=? WHERE operation_id=?", (current, row["operation_id"]))
+                identity = json.loads(row["identity_json"]) if row["identity_json"] else {}
+                if drifted_boot_id(str(identity.get("bootId")), current):
+                    db.execute("UPDATE resources SET identity_json=? WHERE operation_id=?",
+                               (canonical({**identity, "bootId": current}), row["operation_id"]))
 
     def _key(self, key: OperationKey) -> str:
         if key.host_id != self.host_id or not key.task_id or not key.instance_id or key.generation < 0:
@@ -378,6 +404,13 @@ class ResourceManager:
                 if (dialog is None and row["ownership"] == "UserAdopted" and row["state"] == "Running"
                         and row["identity_json"]):
                     dialog = reject_dialog(json.loads(row["identity_json"]))
+                    if dialog == DIALOG_STILL_OPEN:
+                        attempts = self.spool.dialog_attempt(op_id)
+                        if attempts < DIALOG_ATTEMPTS:
+                            errors.append(f"{op_id}: cancelled; permission dialog {dialog}, "
+                                          f"attempt {attempts} of {DIALOG_ATTEMPTS}; the session stays held")
+                            continue
+                        dialog = f"{dialog} after {attempts} attempts"
                     self.spool.cancellation_dialog(op_id, dialog)
                     if dialog.startswith("left"):
                         errors.append(f"{op_id}: cancelled; permission dialog {dialog}")

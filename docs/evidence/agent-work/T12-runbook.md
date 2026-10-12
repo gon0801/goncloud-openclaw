@@ -155,6 +155,39 @@ OPENCLAW_BIN=/Users/dn/.openclaw-r/openclaw LANG=en_US.UTF-8 python3 scripts/age
 - `~/bin/progress-events.py` tiene que ser igual a `scripts/mac/progress-events.py` del mismo checkout: una copia vieja no lleva los campos del ACK durable. Compruébalo antes de arrancar con `cmp ~/bin/progress-events.py scripts/mac/progress-events.py`, que no imprime nada si son iguales.
 - `--host-state-dir` y `--cli-instance-id` cambian solo cuando se empieza un spool nuevo. Un spool que ya no corre ningún host se cierra con la sección "Cerrar un spool viejo".
 
+### El túnel ssh del CLI de R
+
+Cada llamada del host al CLI de R (`~/.openclaw-r/openclaw`, con `transport: ssh`, `sshTarget gon@100.73.187.5` y `sshIdentity ~/.ssh/id_gateway` en `~/.openclaw-r/openclaw.json`) abre su propio `ssh -N -L` y lo cierra al terminar. Un bloque `ControlMaster` en `~/.ssh/config` no cambia eso. R arma el comando en `src/infra/ssh-tunnel.ts` (`startSshPortForward`) con `-o ControlMaster=no -o ControlPath=none -o ControlPersist=no`, a propósito ("This exact child owns the route; aliases must not delegate to a shared master"). El paquete instalado trae las mismas opciones (`~/.openclaw-r/prefix/lib/node_modules/openclaw/dist/ssh-tunnel-*.mjs`). ssh se queda con el primer valor que encuentra para cada opción, y la línea de comandos se lee antes que `~/.ssh/config`. El CLI sí lee `~/.ssh/config` para el resto (no pasa `-F`), pero esas tres opciones nunca salen de ahí.
+
+Para comprobarlo sin conectarse a la Mini y sin tocar `~/.ssh/config`, con un archivo de prueba que trae el bloque (`ssh -G` solo imprime la configuración que usaría):
+
+```
+printf 'Host 100.73.187.5
+  ControlMaster auto
+  ControlPath /tmp/cm-%%C
+  ControlPersist 60
+' > /tmp/cm.conf
+ssh -F /tmp/cm.conf -G gon@100.73.187.5 2>/dev/null | grep -E '^control(master|path|persist) '
+ssh -F /tmp/cm.conf -G -o ControlMaster=no -o ControlPath=none -o ControlPersist=no gon@100.73.187.5 2>/dev/null | grep -E '^control(master|path|persist) '
+```
+
+El primer `ssh` imprime `controlmaster auto`, `controlpath /tmp/cm-…` y `controlpersist 60`: el bloque funciona solo. El segundo, con las opciones que pasa el CLI de R, imprime `controlmaster false` y `controlpersist no`, sin `controlpath`: el bloque no cuenta (medido el 2026-10-11).
+
+Los 255 de `host.log` no son fallos al abrir el túnel. Las 29 líneas del 2026-10-11 dicen `gateway closed (1006 abnormal closure (no close frame)): ssh exited (255)`: el websocket ya estaba abierto cuando ssh murió, y R no guarda el stderr de ssh en ese caso. La causa no está medida. Antes de cambiar nada, hay que medirla desde la Mac (esto sí abre conexiones a la Mini, así que lo decide David):
+
+```
+for i in $(seq 100); do /usr/bin/ssh -o BatchMode=yes -o ConnectTimeout=5 -o ControlMaster=no -o ControlPath=none -i ~/.ssh/id_gateway gon@100.73.187.5 'sleep 2' 2>>/tmp/ssh-255.log || echo "fallo $i: $?"; done
+```
+
+Si fallan, `/tmp/ssh-255.log` trae el mensaje de ssh, y en la Mini `log show --last 1h --predicate 'process == "sshd"'` dice si sshd cortó la conexión.
+
+Hay dos caminos, y ninguno está hecho:
+
+- En G, `GatewayProjectionClient._call` repite una vez la llamada que sale con `ssh exited (255)`. Los métodos `managedTasks.host.*` y `managedTasks.projections.*` que usa el host repiten sin efecto doble (el reclamo devuelve la misma asignación y el ACK, el cierre y el reporte llevan su id), pero hay que comprobarlo método por método, con prueba.
+- En R, una opción para que `gateway call` reuse una conexión propia: un `ControlPath` privado bajo `OPENCLAW_STATE_DIR` con `ControlPersist` corto. Necesita paquete nuevo de R y que el CLI siga siendo dueño de la ruta, que es lo que protege hoy `ControlPath=none`.
+
+No sirve un túnel largo aparte con `transport: direct`: R toma un `ws://127.0.0.1` sin ruta ssh como no ligado, y el alcance de la credencial del dispositivo cambia (`resolveGatewayDeviceAuthRoute` en `src/gateway/connection-details.ts`), así que las llamadas `--device-auth` del host necesitarían otro emparejamiento.
+
 ### Cerrar un spool viejo
 
 Un spool que ya no corre ningún host puede seguir reteniendo cupo en R: R guarda un lugar de presupuesto para cada admisión cuyo cierre del host no es terminal. `native_gateway.py --close-only` hace una sola pasada de cierre sobre ese spool y sale. Reporta los resultados pendientes, suelta las sesiones con recibo, cierra las tareas que R canceló, reintenta los `CleanupPending` y manda los cierres a R. Nunca reclama trabajo, nunca entrega y nunca teclea; la única tecla posible es el Esc de B13 sobre un "Permission required" de una tarea cancelada. Toma las instancias de las filas del spool, así que no recibe `--cli-instance-id`. Abrir el spool sube su esquema a la versión 2, igual que al abrirlo un host nuevo.
@@ -166,7 +199,7 @@ cp ~/.local/state/agent-work-host/mac-local/host.sqlite ~/.local/state/agent-wor
 cp ~/.local/state/agent-work-host/mac-local-b/host.sqlite ~/.local/state/agent-work-host/mac-local-b/host.sqlite.pre-b14 && LANG=en_US.UTF-8 python3 scripts/agent-work/native_gateway.py --openclaw-bin /Users/dn/.openclaw-r/openclaw --host-id mac-local --expect-url ws://127.0.0.1:18789 --host-state-dir /Users/dn/.local/state/agent-work-host/mac-local-b --close-only --cli-adapter-id opencode --cli-tmux-socket agent-work
 ```
 
-Cada una imprime un JSON. `resources` dice, por recurso, su tarea, su instancia, el estado de su operación y el estado del recurso antes y después de la pasada. El "antes" se lee con el spool ya abierto, así que ya trae lo que hizo la migración al esquema 2 (fila B14-r1 de `followups.md`). `rClosures` trae los recibos de `managedTasks.host.close` que R devolvió en esta corrida, con el estado que R guardó. `lastSent` es el último cierre que el spool tiene registrado como aceptado por R. Sale con 0 si no hubo errores; con 1, los errores van en `errors`, y repetir la línea es seguro, porque un cierre que R ya tiene no se vuelve a mandar. Lo esperado:
+Cada una imprime un JSON. `resources` dice, por recurso, su tarea, su instancia, el estado de su operación y el estado del recurso antes y después de la pasada. El "antes" se lee con el spool ya abierto, así que ya trae lo que hizo la migración al esquema 2 (fila B14-r1 de `followups.md`). `rClosures` trae los recibos de `managedTasks.host.close` que R devolvió en esta corrida, con el estado que R guardó. `lastSent` es el último cierre que el spool tiene registrado como aceptado por R. Sale con 0 si no hubo errores; con 1, los errores van en `errors`, y repetir la línea es seguro, porque un cierre que R ya tiene no se vuelve a mandar. Si el Esc de una tarea cancelada deja el "Permission required" en pantalla, la línea sale con 1, con `permission dialog visible but Esc did not close it, attempt <n> of 3` en `errors`, y deja la sesión tomada. Repetir la línea vuelve a intentar el Esc, y al tercer intento suelta la sesión igual y lo anota (desde B17). Lo esperado:
 
 | Spool | Tarea | Instancia | Recurso después | Cierre que R devuelve |
 |---|---|---|---|---|

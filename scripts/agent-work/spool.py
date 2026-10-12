@@ -13,6 +13,8 @@ TERMINAL_STATES = ("AbsenceVerified", "ReleasedAdopted")
 SENDABLE_STATES = ("CleanupPending", "AbsenceVerified", "ReleasedAdopted")
 SCHEMA_VERSION = 2
 SETTLED = ("acknowledged", "abandoned", "cancelled")
+DIALOG_STILL_OPEN = "left: permission dialog visible but Esc did not close it"
+DIALOG_ATTEMPTS = 3
 DIALOG_START = {"open_identity": None, "episode": 0, "candidate": None, "seen": 0, "clean": 0}
 
 
@@ -158,6 +160,10 @@ class Spool:
                     operation_id TEXT PRIMARY KEY,
                     cancellation_id TEXT NOT NULL,
                     dialog TEXT
+                );
+                CREATE TABLE IF NOT EXISTS dialog_rejections (
+                    operation_id TEXT PRIMARY KEY,
+                    attempts INTEGER NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS dialog_watch (
                     operation_id TEXT PRIMARY KEY,
@@ -417,6 +423,14 @@ class Spool:
         with self.connection() as db:
             db.execute("UPDATE cancellations SET dialog=? WHERE operation_id=? AND dialog IS NULL",
                        (outcome[:512], operation_id))
+
+    def dialog_attempt(self, operation_id: str) -> int:
+        """Count one more Esc that left a cancelled task's permission dialog on screen; returns the count."""
+        with self.connection() as db:
+            db.execute("INSERT INTO dialog_rejections VALUES (?,1) "
+                       "ON CONFLICT(operation_id) DO UPDATE SET attempts=attempts+1", (operation_id,))
+            return db.execute("SELECT attempts FROM dialog_rejections WHERE operation_id=?",
+                              (operation_id,)).fetchone()[0]
 
     def record_incident(self, task_id: str, incident_key: str, operation_id: str,
                         incident_json: str, incident_digest: str, dialog_state: dict | None = None) -> dict:
