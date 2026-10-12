@@ -1,0 +1,889 @@
+// Tomado el 2026-10-12: lo vivo en el gateway OpenClaw 2026.9.7 (Mac Mini).
+// Fuente: /Users/gon/.openclaw/openclaw.json en el host del gateway, leido con un parse de python3 de solo lectura (sin config.get ni escrituras).
+// Se omiten secretos y headers: cada proveedor conserva solo baseUrl, api y models; adapters de managedTasks reducidos a sus ids.
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "opencode-go/deepseek-v4.1-flash",
+        "fallbacks": [
+          "opencode-go-resp-2/muse-spark-1.3-contributor",
+          "anthropic/claude-opus-5",
+          "meta/muse-spark-1.3",
+          "xai/grok-4.6",
+          "zai/glm-5.3",
+          "openai/gpt-5.6-sol",
+          "kimi/k3"
+        ]
+      },
+      "models": {
+        "anthropic/claude-opus-5": {
+          "params": {
+            "thinking": "xhigh"
+          },
+          "agentRuntime": {
+            "id": "claude-cli"
+          }
+        },
+        "meta/muse-spark-1.3": {
+          "params": {
+            "thinking": "max"
+          }
+        },
+        "openai/gpt-5.6-sol": {
+          "params": {
+            "thinking": "xhigh"
+          }
+        },
+        "anthropic/claude-sonnet-5": {
+          "agentRuntime": {
+            "id": "claude-cli"
+          }
+        },
+        "anthropic/claude-fable-5-1": {
+          "agentRuntime": {
+            "id": "claude-cli"
+          }
+        },
+        "anthropic/claude-fable-5": {
+          "agentRuntime": {
+            "id": "claude-cli"
+          }
+        },
+        "anthropic/claude-opus-4-8": {
+          "agentRuntime": {
+            "id": "claude-cli"
+          }
+        },
+        "anthropic/claude-opus-4-7": {
+          "agentRuntime": {
+            "id": "claude-cli"
+          }
+        },
+        "anthropic/claude-sonnet-4-6": {
+          "agentRuntime": {
+            "id": "claude-cli"
+          }
+        },
+        "anthropic/claude-opus-4-6": {
+          "agentRuntime": {
+            "id": "claude-cli"
+          }
+        },
+        "openai/gpt-6-astra": {},
+        "opencode-go/deepseek-v4.1-flash": {},
+        "xai/grok-4.7": {
+          "alias": "Grok"
+        }
+      }
+    },
+    "entries": {
+      "main": {
+        "model": {
+          "primary": "opencode-go-resp/muse-spark-1.3-contributor",
+          "fallbacks": [
+            "opencode-go-resp-2/muse-spark-1.3-contributor",
+            "anthropic/claude-opus-5",
+            "meta/muse-spark-1.3",
+            "xai/grok-4.6",
+            "zai/glm-5.3",
+            "openai/gpt-5.6-sol",
+            "kimi/k3"
+          ]
+        },
+        "models": {
+          "anthropic/claude-opus-5": {
+            "params": {
+              "thinking": "xhigh"
+            }
+          },
+          "meta/muse-spark-1.3": {
+            "params": {
+              "thinking": "max"
+            }
+          },
+          "openai/gpt-5.6-sol": {
+            "params": {
+              "thinking": "xhigh"
+            }
+          }
+        }
+      },
+      "operaciones": {
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "opencode-go-2/deepseek-v4.1-flash",
+            "zai/glm-5.3-flash",
+            "openai/gpt-5.6-terra",
+            "anthropic/claude-sonnet-5",
+            "xai/grok-4.6",
+            "kimi/kimi-for-coding",
+            "meta/muse-spark-1.3"
+          ]
+        },
+        "models": {
+          "openai/gpt-5.6-terra": {
+            "params": {
+              "thinking": "xhigh"
+            }
+          },
+          "anthropic/claude-sonnet-5": {
+            "params": {
+              "thinking": "xhigh"
+            }
+          },
+          "kimi/kimi-for-coding": {
+            "params": {
+              "thinking": "high"
+            }
+          },
+          "meta/muse-spark-1.3": {
+            "params": {
+              "thinking": "max"
+            }
+          }
+        }
+      },
+      "ingenieria": {
+        "model": {
+          "primary": "opencode-go-resp/muse-spark-1.3-contributor",
+          "fallbacks": [
+            "opencode-go-resp-2/muse-spark-1.3-contributor",
+            "openai/gpt-5.6-sol",
+            "kimi/k3",
+            "zai/glm-5.3",
+            "meta/muse-spark-1.3",
+            "anthropic/claude-opus-5",
+            "xai/grok-4.6"
+          ]
+        },
+        "models": {
+          "openai/gpt-5.6-sol": {
+            "params": {
+              "thinking": "xhigh"
+            }
+          },
+          "meta/muse-spark-1.3": {
+            "params": {
+              "thinking": "max"
+            }
+          },
+          "anthropic/claude-opus-5": {
+            "params": {
+              "thinking": "xhigh"
+            }
+          }
+        }
+      },
+      "implementer": {
+        "model": {
+          "primary": "opencode-go-resp/muse-spark-1.3-contributor",
+          "fallbacks": [
+            "opencode-go-resp-2/muse-spark-1.3-contributor",
+            "meta/muse-spark-1.3",
+            "zai/glm-5.3-flash",
+            "xai/grok-4.6",
+            "anthropic/claude-sonnet-5",
+            "openai/gpt-5.6-terra",
+            "kimi/kimi-for-coding"
+          ]
+        },
+        "models": {
+          "meta/muse-spark-1.3": {
+            "params": {
+              "thinking": "max"
+            }
+          },
+          "anthropic/claude-sonnet-5": {
+            "params": {
+              "thinking": "xhigh"
+            }
+          },
+          "openai/gpt-5.6-terra": {
+            "params": {
+              "thinking": "xhigh"
+            }
+          },
+          "kimi/kimi-for-coding": {
+            "params": {
+              "thinking": "high"
+            }
+          }
+        }
+      },
+      "reviewer": {
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "opencode-go-2/deepseek-v4.1-flash",
+            "anthropic/claude-fable-5-1",
+            "kimi/k3",
+            "openai/gpt-6-astra",
+            "meta/muse-spark-1.3",
+            "xai/grok-4.6",
+            "zai/glm-5.3"
+          ]
+        },
+        "models": {
+          "meta/muse-spark-1.3": {
+            "params": {
+              "thinking": "max"
+            }
+          }
+        }
+      },
+      "adversary": {
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "opencode-go-2/deepseek-v4.1-flash",
+            "xai/grok-4.6",
+            "kimi/k3",
+            "zai/glm-5.3",
+            "meta/muse-spark-1.3",
+            "anthropic/claude-opus-5",
+            "openai/gpt-5.6-sol"
+          ]
+        },
+        "models": {
+          "meta/muse-spark-1.3": {
+            "params": {
+              "thinking": "max"
+            }
+          },
+          "anthropic/claude-opus-5": {
+            "params": {
+              "thinking": "xhigh"
+            }
+          },
+          "openai/gpt-5.6-sol": {
+            "params": {
+              "thinking": "xhigh"
+            }
+          }
+        }
+      },
+      "verifier": {
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "opencode-go-2/deepseek-v4.1-flash",
+            "zai/glm-5.3-flash",
+            "meta/muse-spark-1.3",
+            "kimi/kimi-for-coding",
+            "anthropic/claude-sonnet-5",
+            "openai/gpt-5.6-terra",
+            "deepseek/deepseek-flash"
+          ]
+        },
+        "models": {
+          "meta/muse-spark-1.3": {
+            "params": {
+              "thinking": "max"
+            }
+          },
+          "anthropic/claude-sonnet-5": {
+            "params": {
+              "thinking": "xhigh"
+            }
+          },
+          "openai/gpt-5.6-terra": {
+            "params": {
+              "thinking": "xhigh"
+            }
+          }
+        }
+      },
+      "scout": {
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "opencode-go-2/deepseek-v4.1-flash",
+            "zai/glm-5.3-flash",
+            "meta/muse-spark-1.3",
+            "kimi/kimi-for-coding",
+            "deepseek/deepseek-flash",
+            "anthropic/claude-sonnet-5",
+            "openai/gpt-5.6-terra"
+          ]
+        },
+        "models": {
+          "meta/muse-spark-1.3": {
+            "params": {
+              "thinking": "max"
+            }
+          },
+          "anthropic/claude-sonnet-5": {
+            "params": {
+              "thinking": "xhigh"
+            }
+          },
+          "openai/gpt-5.6-terra": {
+            "params": {
+              "thinking": "xhigh"
+            }
+          }
+        }
+      },
+      "amazon": {
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "opencode-go-2/deepseek-v4.1-flash",
+            "zai/glm-5.3-flash",
+            "openai/gpt-5.6-terra",
+            "anthropic/claude-sonnet-5",
+            "xai/grok-4.6",
+            "kimi/kimi-for-coding",
+            "meta/muse-spark-1.3"
+          ]
+        }
+      },
+      "pers": {
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "opencode-go-2/deepseek-v4.1-flash",
+            "zai/glm-5.3-flash",
+            "openai/gpt-5.6-terra",
+            "anthropic/claude-sonnet-5",
+            "xai/grok-4.6",
+            "kimi/kimi-for-coding",
+            "meta/muse-spark-1.3"
+          ]
+        }
+      },
+      "meli": {
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "opencode-go-2/deepseek-v4.1-flash",
+            "zai/glm-5.3-flash",
+            "openai/gpt-5.6-terra",
+            "anthropic/claude-sonnet-5",
+            "xai/grok-4.6",
+            "kimi/kimi-for-coding",
+            "meta/muse-spark-1.3"
+          ]
+        }
+      },
+      "mail": {
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "opencode-go-2/deepseek-v4.1-flash",
+            "zai/glm-5.3-flash",
+            "openai/gpt-5.6-terra",
+            "anthropic/claude-sonnet-5",
+            "xai/grok-4.6",
+            "kimi/kimi-for-coding",
+            "meta/muse-spark-1.3"
+          ]
+        }
+      },
+      "limpia": {
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "opencode-go-2/deepseek-v4.1-flash",
+            "zai/glm-5.3-flash",
+            "openai/gpt-5.6-terra",
+            "anthropic/claude-sonnet-5",
+            "xai/grok-4.6",
+            "kimi/kimi-for-coding",
+            "meta/muse-spark-1.3"
+          ]
+        }
+      },
+      "odoo": {
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "opencode-go-2/deepseek-v4.1-flash",
+            "zai/glm-5.3-flash",
+            "openai/gpt-5.6-terra",
+            "anthropic/claude-sonnet-5",
+            "xai/grok-4.6",
+            "kimi/kimi-for-coding",
+            "meta/muse-spark-1.3"
+          ]
+        }
+      },
+      "arras": {
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "opencode-go-2/deepseek-v4.1-flash",
+            "zai/glm-5.3-flash",
+            "openai/gpt-5.6-terra",
+            "anthropic/claude-sonnet-5",
+            "xai/grok-4.6",
+            "kimi/kimi-for-coding",
+            "meta/muse-spark-1.3"
+          ]
+        }
+      },
+      "gonserver": {
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "opencode-go-2/deepseek-v4.1-flash",
+            "zai/glm-5.3-flash",
+            "openai/gpt-5.6-terra",
+            "anthropic/claude-sonnet-5",
+            "xai/grok-4.6",
+            "kimi/kimi-for-coding",
+            "meta/muse-spark-1.3"
+          ]
+        }
+      },
+      "skillverif": {
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "opencode-go-2/deepseek-v4.1-flash",
+            "zai/glm-5.3-flash",
+            "openai/gpt-5.6-terra",
+            "anthropic/claude-sonnet-5",
+            "xai/grok-4.6",
+            "kimi/kimi-for-coding",
+            "meta/muse-spark-1.3"
+          ]
+        }
+      },
+      "tinkabot": {
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "opencode-go-2/deepseek-v4.1-flash",
+            "zai/glm-5.3-flash",
+            "openai/gpt-5.6-terra",
+            "anthropic/claude-sonnet-5",
+            "xai/grok-4.6",
+            "kimi/kimi-for-coding",
+            "meta/muse-spark-1.3"
+          ]
+        }
+      },
+      "eggbot": {
+        "model": {
+          "primary": "opencode-go/deepseek-v4.1-flash",
+          "fallbacks": [
+            "opencode-go-2/deepseek-v4.1-flash",
+            "zai/glm-5.3-flash",
+            "openai/gpt-5.6-terra",
+            "anthropic/claude-sonnet-5",
+            "xai/grok-4.6",
+            "kimi/kimi-for-coding",
+            "meta/muse-spark-1.3"
+          ]
+        }
+      }
+    }
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "xai": {
+        "baseUrl": "https://cli-chat-proxy.grok.com/v1",
+        "api": "openai-responses",
+        "models": [
+          {
+            "id": "grok-4.6",
+            "name": "Grok 4.6",
+            "api": "openai-responses",
+            "baseUrl": "https://cli-chat-proxy.grok.com/v1",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2,
+              "output": 6,
+              "cacheRead": 0.5,
+              "cacheWrite": 0
+            },
+            "contextWindow": 256000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "grok-4.5",
+            "name": "Grok 4.5",
+            "api": "openai-responses",
+            "baseUrl": "https://cli-chat-proxy.grok.com/v1",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2,
+              "output": 6,
+              "cacheRead": 0.3,
+              "cacheWrite": 0
+            },
+            "contextWindow": 256000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "grok-build-0.1",
+            "name": "Grok Build 0.1",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1,
+              "output": 2,
+              "cacheRead": 0.2,
+              "cacheWrite": 0
+            },
+            "contextWindow": 256000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "grok-4.3",
+            "name": "Grok 4.3",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1.25,
+              "output": 2.5,
+              "cacheRead": 0.2,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "grok-4.20-0309-reasoning",
+            "name": "Grok 4.20 0309 (Reasoning)",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1.25,
+              "output": 2.5,
+              "cacheRead": 0.2,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 30000
+          },
+          {
+            "id": "grok-4.20-0309-non-reasoning",
+            "name": "Grok 4.20 0309 (Non-Reasoning)",
+            "reasoning": false,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1.25,
+              "output": 2.5,
+              "cacheRead": 0.2,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 30000
+          },
+          {
+            "id": "grok-4.7",
+            "name": "Grok 4.7",
+            "api": "openai-responses",
+            "baseUrl": "https://cli-chat-proxy.grok.com/v1",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2,
+              "output": 6,
+              "cacheRead": 0.5,
+              "cacheWrite": 0
+            },
+            "contextWindow": 256000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "grok-4.7-build-fast",
+            "name": "Grok 4.7 Fast",
+            "api": "openai-responses",
+            "baseUrl": "https://cli-chat-proxy.grok.com/v1",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 256000,
+            "maxTokens": 64000
+          }
+        ]
+      },
+      "zai": {
+        "baseUrl": "https://api.z.ai/api/coding/paas/v4",
+        "models": [
+          {
+            "id": "glm-5.3",
+            "name": "GLM-5.3",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "contextWindow": 1048576,
+            "maxTokens": 131072,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "compat": {
+              "codeMode": "preferred"
+            }
+          },
+          {
+            "id": "glm-5.3-flash",
+            "name": "GLM-5.3-Flash",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "contextWindow": 1048576,
+            "maxTokens": 131072,
+            "cost": {
+              "input": 0.15,
+              "output": 0.5,
+              "cacheRead": 0.03,
+              "cacheWrite": 0
+            },
+            "compat": {
+              "codeMode": "preferred"
+            }
+          }
+        ]
+      },
+      "deepseek": {
+        "baseUrl": "https://api.deepseek.com",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "deepseek-flash",
+            "name": "DeepSeek V4.1 Flash",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "maxTokens": 8192
+          }
+        ]
+      },
+      "kimi": {
+        "baseUrl": "https://api.kimi.com/coding/v1",
+        "api": "anthropic-messages",
+        "models": [
+          {
+            "id": "k3",
+            "name": "Kimi K3",
+            "api": "anthropic-messages",
+            "baseUrl": "https://api.kimi.com/coding/v1",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0.3,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1048576,
+            "maxTokens": 131072,
+            "thinkingLevelMap": {
+              "minimal": "low",
+              "low": "low",
+              "medium": "high",
+              "high": "high",
+              "xhigh": "max",
+              "max": "max"
+            },
+            "compat": {
+              "codeMode": "preferred"
+            }
+          }
+        ]
+      },
+      "opencode-go": {
+        "baseUrl": "https://opencode.ai/zen/go/v1",
+        "models": [
+          {
+            "id": "mimo-v2.5-pro",
+            "name": "MiMo V2.5 Pro",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "maxTokens": 8192
+          },
+          {
+            "id": "deepseek-v4.1-flash",
+            "name": "DeepSeek V4.1 Flash",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "maxTokens": 8192
+          }
+        ]
+      },
+      "opencode-go-resp": {
+        "baseUrl": "https://opencode.ai/zen/go/v1",
+        "api": "openai-responses",
+        "models": [
+          {
+            "id": "muse-spark-1.3-contributor",
+            "name": "Muse Spark 1.3 Contributor",
+            "api": "openai-responses",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1048576,
+            "maxTokens": 131072
+          }
+        ]
+      },
+      "meta": {
+        "baseUrl": "https://api.meta.ai/v1",
+        "api": "openai-responses",
+        "models": [
+          {
+            "id": "muse-spark-1.3",
+            "name": "Muse Spark 1.3",
+            "api": "openai-responses",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "contextWindow": 1048576,
+            "maxTokens": 131072
+          }
+        ]
+      },
+      "opencode-go-2": {
+        "baseUrl": "https://opencode.ai/zen/go/v1",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "mimo-v2.5-pro",
+            "name": "MiMo V2.5 Pro",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "maxTokens": 8192
+          },
+          {
+            "id": "deepseek-v4.1-flash",
+            "name": "DeepSeek V4.1 Flash",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "maxTokens": 8192
+          }
+        ]
+      },
+      "opencode-go-resp-2": {
+        "baseUrl": "https://opencode.ai/zen/go/v1",
+        "api": "openai-responses",
+        "models": [
+          {
+            "id": "muse-spark-1.3-contributor",
+            "name": "Muse Spark 1.3 Contributor",
+            "api": "openai-responses",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1048576,
+            "maxTokens": 131072
+          }
+        ]
+      }
+    }
+  },
+  "managedTasks": {
+    "hosts": {
+      "mac-local": {
+        "adapters": [
+          "opencode",
+          "opencode@opencode-go/deepseek-v4-pro",
+          "opencode@opencode-go/kimi-k3",
+          "opencode@opencode-go/grok-4.7",
+          "opencode@opencode-go/qwen3.8-max"
+        ]
+      }
+    }
+  }
+}

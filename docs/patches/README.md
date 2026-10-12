@@ -145,6 +145,10 @@ sin dependencia json5: strip de `//`, comas colgantes y llaves sin comillas;
 discrimina con fixture malo y cruza cada id de la propuesta contra los ids de
 `modelos-vivos-2026-09-15.json5`).
 
+Foto más reciente de lo vivo: `modelos-vivos-2026-10-12.json5` (Mac Mini). Además de las
+cadenas trae `agents.*.models` y las filas de `models.providers`, sin secretos ni headers.
+Es una foto fechada igual que la anterior: sirve para comparar, no como fuente de rollback.
+
 Evidencia de que cada id existe (extraída el 2026-09-16; el archivo se fecha 09-15
 porque coincide con lo medido ese día en el brief de la corrida): `openclaw models
 list --json` falla en este gateway (`active gateway does not support required
