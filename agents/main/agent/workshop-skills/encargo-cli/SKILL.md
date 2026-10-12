@@ -1,17 +1,19 @@
 ---
 name: encargo-cli
-description: Úsala cuando David te pida trabajo en un repo de la Mac (implementar, arreglar o revisar), por ejemplo "agrega X en ~/dev/<repo>" o "revísalo con deepseek". Encargas el trabajo a un CLI de la Mac por la ruta gestionada (brief.py, managed_tasks_submit, managed_tasks_admit), terminas tu turno, y R te despierta con el resultado para que lo cierres.
+description: Úsala solo cuando David diga "por CLI" en un pedido de trabajo sobre un repo de la Mac (implementar, arreglar o revisar), por ejemplo "agrega X en ~/dev/<repo>, por CLI con deepseek". Sin "por CLI" no es esta skill, aunque nombre un modelo. Ese pedido sigue agent-dispatch. Encargas el trabajo a un CLI de la Mac por la ruta gestionada (brief.py, managed_tasks_submit, managed_tasks_admit), terminas tu turno, y R te despierta con el resultado para que lo cierres.
 ---
 
 # Encargo a la Mac
 
 R lleva el encargo: tú lo registras y lo admites, un host de la Mac se lo entrega a opencode, y el resultado te llega solo, como un turno nuevo en esta misma sesión. No vigiles, no esperes con `sleep` y no teclees en la Mac.
 
+Esta ruta entra solo con "por CLI". Si David no lo dijo, no encargues por aquí aunque nombre un modelo. Sigue `agent-dispatch`.
+
 ## El alias elige el modelo
 
-| David pide | `--adapter` |
+| Con "por CLI", David nombra | `--adapter` |
 |---|---|
-| nada, o "glm" | `opencode` (GLM 5.3 flash, plan de Z.AI) |
+| ningún modelo, o "glm" | `opencode` (GLM 5.3 flash, plan de Z.AI) |
 | "deepseek" | `opencode@opencode-go/deepseek-v4-pro` |
 | "kimi" | `opencode@opencode-go/kimi-k3` |
 | "grok" | `opencode@opencode-go/grok-4.7` |
