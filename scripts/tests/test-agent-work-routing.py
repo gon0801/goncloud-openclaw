@@ -241,6 +241,8 @@ class AgentsRouting(unittest.TestCase):
             paragraph_lines.append(line)
         paragraph = " ".join("\n".join(paragraph_lines).split())
         for expected in (
+            'entra solo cuando David dice "por CLI"',
+            "conserva el flujo de esta skill, aunque nombre un modelo",
             "sigue la skill `encargo-cli`",
             "`~/.local/share/agent-work/brief.py` en la Mini (`routing.py` no corre ahí)",
             "managed_tasks_submit",
@@ -257,7 +259,9 @@ class AgentsRouting(unittest.TestCase):
 
     def test_the_encargo_cli_skill_spells_the_steps_main_runs_on_the_mini(self):
         skill = (ROOT / "agents/main/agent/workshop-skills/encargo-cli/SKILL.md").read_text(encoding="utf-8")
-        self.assertTrue(skill.startswith("---\nname: encargo-cli\ndescription: "))
+        self.assertTrue(skill.startswith(
+            '---\nname: encargo-cli\ndescription: Úsala solo cuando David diga "por CLI" en un pedido de trabajo'))
+        self.assertIn('Sin "por CLI" no es esta skill, aunque nombre un modelo', skill.splitlines()[2])
         for expected in (
             "python3 ~/.local/share/agent-work/brief.py --root /Users/gon/.openclaw/workspace/managed-instructions "
             "--host mac-local --adapter <alias> <<'BRIEF'",

@@ -19,9 +19,12 @@ tool o la combinación host/adaptador no está habilitada, el encargo queda
 bloqueado; no uses el despacho legado para un encargo gestionado. Los pedidos
 fuera de ese perímetro conservan el flujo de esta skill.
 
-La ruta de `main` a un CLI de la Mac (`mac-local`) sigue la skill
-`encargo-cli`: el brief se escribe con `~/.local/share/agent-work/brief.py` en
-la Mini (`routing.py` no corre ahí) y sigue `managed_tasks_submit` →
+La ruta de `main` a un CLI de la Mac (`mac-local`) entra solo cuando David
+dice "por CLI". Sin esas palabras, un pedido de trabajo en un repo de la Mac
+conserva el flujo de esta skill, aunque nombre un modelo. Con ellas, `main`
+sigue la skill `encargo-cli`: el brief se escribe con
+`~/.local/share/agent-work/brief.py` en la Mini (`routing.py` no corre ahí) y
+sigue `managed_tasks_submit` →
 `managed_tasks_admit` → `managed_tasks_inspect` → `managed_tasks_resolve`.
 `main` pide desde su sesión durable, nunca desde un turno `isolated` de cron,
 y R lo rechaza. El CLI entrega `agent-work.result.v1` por referencia, en lugar
