@@ -1,5 +1,5 @@
 #!/bin/bash
-# Contrato de cobertura de CI (Bloque B1): la union de los tres shards publicados
+# Contrato de cobertura de CI (Bloque B1): la union de los cinco shards publicados
 # como artifacts ES la bateria completa, cada entrada exactamente una vez, y el
 # gate la AUDITA de verdad antes de dar verde.
 #
@@ -23,16 +23,16 @@
 #   (5)  una falla del runner -> el agregador (el validador) sale rojo
 #   (6)  eliminar la invocacion del runner (ningun shard) -> rechazo
 #   (7)  repetir la invocacion del MISMO shard sobre su artifact -> rechazo
-#   (7b) un artifact de shard fuera del contrato (shard-4) -> rechazo
-#   (8)  eliminar el shard 1/3 -> rechazo independiente
-#   (9)  eliminar el shard 2/3 -> rechazo independiente
-#   (10) eliminar el shard 3/3 -> rechazo independiente
+#   (7b) un artifact de shard fuera del contrato (shard-6) -> rechazo
+#   (8)  eliminar el shard 1/5 -> rechazo independiente
+#   (9)  eliminar el shard 2/5 -> rechazo independiente
+#   (10) eliminar cada uno de los shards 3/5, 4/5 y 5/5 -> rechazo independiente
 #   (11) resumenes vacios (cero pruebas) -> rechazo
 #   (12) un artifact esperado sin su resumen.txt -> rechazo
 #   (13) una prueba no inventariada en la union -> rechazo
 #   (w)  el workflow llama al MISMO validador que este test ejecuta, desde un job
 #        propio ci-contract SIN condicion de omision, la concurrencia cancela
-#        por PR y separa por SHA en push, y el gate baja los tres
+#        por PR y separa por SHA en push, y el gate baja los cinco
 #        artifacts y audita la union solo cuando la bateria corrio.
 #
 # El arbol de juguete es el MISMO contrato del que usa
@@ -177,7 +177,7 @@ correr_pipeline_valido() { # $1=dir artifacts destino
   local dest=$1 shard
   rm -rf "$dest"
   mkdir -p "$dest"
-  for shard in 1/3 2/3 3/3; do
+  for shard in 1/5 2/5 3/5 4/5 5/5; do
     correr_shard "$shard" "$dest/shard-${shard%/*}" || return 1
   done
 }
@@ -209,9 +209,9 @@ echo "ok (1): union valida aceptada y las 11 entradas logicas corrieron"
 
 echo "(2) cada shard exactamente una vez y ninguna entrada corre dos veces"
 n_inv=$(wc -l <"$INVOCACIONES" | tr -d ' ')
-[ "$n_inv" -eq 3 ] || fail "(2) esperaba exactamente 3 invocaciones del runner, hay $n_inv: $(tr '\n' ' ' <"$INVOCACIONES")"
+[ "$n_inv" -eq 5 ] || fail "(2) esperaba exactamente 5 invocaciones del runner, hay $n_inv: $(tr '\n' ' ' <"$INVOCACIONES")"
 got_inv=$(LC_ALL=C sort -u "$INVOCACIONES" | tr '\n' ' ' | sed 's/ $//')
-[ "$got_inv" = "1/3 2/3 3/3" ] || fail "(2) las invocaciones del runner no son una por shard: $got_inv"
+[ "$got_inv" = "1/5 2/5 3/5 4/5 5/5" ] || fail "(2) las invocaciones del runner no son una por shard: $got_inv"
 dup_tally=$(LC_ALL=C sort "$TALLY_GLOBAL" | uniq -d)
 [ -z "$dup_tally" ] || fail "(2) estas entradas corrieron mas de una vez: $dup_tally"
 echo "ok (2): una invocacion por shard, cero entradas repetidas"
@@ -238,19 +238,21 @@ $SALIDA_VALIDADOR"
 echo "ok (4): duplicado detectado"
 
 echo "(5) una falla del runner vuelve rojo el agregador"
-# La corrida roja REEMPLAZA la corrida del shard 3 sobre una union por lo demas
-# valida (el artifact nuevo trae UNA sola corrida, la roja): si se validara solo
+# La corrida roja REEMPLAZA la corrida de su shard sobre los artifacts del caso
+# valido (el artifact nuevo trae UNA sola corrida, la roja): si se validara solo
 # el shard rojo, el rechazo seria por shard faltante, y si la segunda corrida se
 # acumulara, el rechazo seria por re-corrida (caso 7); ninguno de los dos
-# demostraria lo que este caso mide (la fila en falla).
+# demostraria lo que este caso mide (la fila en falla). Con test-roja.sh en el
+# glob el reparto la deja en el shard 4 (sin pesos, las doce entradas van por
+# turno en orden C y test-roja.sh es la novena).
 rm -rf "$T/rojo"; cp -R "$T/ok" "$T/rojo"
-rm -rf "$T/rojo/shard-3"/corrida-*
+rm -rf "$T/rojo/shard-4"/corrida-*
 cp scripts/tests/fixtures/runner-shards/roja.sh "$R/scripts/tests/test-roja.sh"
-correr_shard 3/3 "$T/rojo/shard-3"
+correr_shard 4/5 "$T/rojo/shard-4"
 rc_roja=$?
 rm -f "$R/scripts/tests/test-roja.sh"
 [ "$rc_roja" -ne 0 ] || fail "(5) el shard con la prueba roja salio 0"
-RES_ROJO=$(ls -td "$T/rojo/shard-3"/corrida-*/resumen.txt 2>/dev/null | head -1)
+RES_ROJO=$(ls -td "$T/rojo/shard-4"/corrida-*/resumen.txt 2>/dev/null | head -1)
 grep -q '^falla' "$RES_ROJO" || fail "(5) el resumen del shard rojo no trae la fila en falla:
 $(cat "$RES_ROJO")"
 validar "$T/rojo"
@@ -276,15 +278,15 @@ echo "ok (6): sin invocacion no hay verde (registradas $n_inv invocaciones acumu
 
 echo "(7) repetir la invocacion del MISMO shard sobre el mismo artifact es rechazado"
 # Medido el 2026-09-22: la version anterior de este caso inventaba un artifact
-# shard-4; una re-corrida REAL del mismo shard re-escribe SU resumen.txt y el
+# shard de mas; una re-corrida REAL del mismo shard re-escribe SU resumen.txt y el
 # gate la daba por buena (el artifact queda como una corrida limpia). La
-# re-corrida de verdad se simula invocando 1/3 dos veces contra el mismo dir.
+# re-corrida de verdad se simula invocando 1/5 dos veces contra el mismo dir.
 rm -rf "$T/rerun"; cp -R "$T/ok" "$T/rerun"
-n13_antes=$(grep -c '^1/3$' "$INVOCACIONES")
-correr_shard 1/3 "$T/rerun/shard-1" || fail "(7) la primera corrida de 1/3 revinto"
-correr_shard 1/3 "$T/rerun/shard-1" || fail "(7) la segunda corrida de 1/3 revinto"
-n13=$(grep -c '^1/3$' "$INVOCACIONES")
-[ "$((n13 - n13_antes))" -eq 2 ] || fail "(7) el registro debia sumar dos 1/3 mas, tiene $n13_antes -> $n13"
+n15_antes=$(grep -c '^1/5$' "$INVOCACIONES")
+correr_shard 1/5 "$T/rerun/shard-1" || fail "(7) la primera corrida de 1/5 revinto"
+correr_shard 1/5 "$T/rerun/shard-1" || fail "(7) la segunda corrida de 1/5 revinto"
+n15=$(grep -c '^1/5$' "$INVOCACIONES")
+[ "$((n15 - n15_antes))" -eq 2 ] || fail "(7) el registro debia sumar dos 1/5 mas, tiene $n15_antes -> $n15"
 validar "$T/rerun"
 [ "$RC_VALIDADOR" -ne 0 ] || fail "(7) el validador acepto la RE-CORRIDA del mismo shard (rc=0): el artifact quedo como una sola corrida limpia y el gate no la detecta:
 $SALIDA_VALIDADOR"
@@ -292,46 +294,48 @@ grep -qE 'shard 1|re-corrida|corrida' <<<"$SALIDA_VALIDADOR" || fail "(7) el rec
 $SALIDA_VALIDADOR"
 echo "ok (7): la re-corrida del mismo shard deja rastro y el gate la rechaza"
 
-echo "(7b) un artifact de shard fuera del contrato (shard-4) es rechazado"
+echo "(7b) un artifact de shard fuera del contrato (shard-6) es rechazado"
 rm -rf "$T/dupinv"; cp -R "$T/ok" "$T/dupinv"
-correr_shard 1/3 "$T/dupinv/shard-4" || fail "(7b) la invocacion extra de 1/3 revinto"
+correr_shard 1/5 "$T/dupinv/shard-6" || fail "(7b) la invocacion extra de 1/5 revinto"
 validar "$T/dupinv"
-[ "$RC_VALIDADOR" -ne 0 ] || fail "(7b) el validador acepto un artifact fuera del contrato (shard-4):
+[ "$RC_VALIDADOR" -ne 0 ] || fail "(7b) el validador acepto un artifact fuera del contrato (shard-6):
 $SALIDA_VALIDADOR"
-grep -q 'shard-4' <<<"$SALIDA_VALIDADOR" || fail "(7b) el rechazo no nombra el artifact inesperado:
+grep -q 'shard-6' <<<"$SALIDA_VALIDADOR" || fail "(7b) el rechazo no nombra el artifact inesperado:
 $SALIDA_VALIDADOR"
 echo "ok (7b): el artifact de mas sigue rechazado por el conjunto exacto"
 
-echo "(8) eliminar el shard 1/3 es rechazado independientemente"
+echo "(8) eliminar el shard 1/5 es rechazado independientemente"
 rm -rf "$T/sin1"; cp -R "$T/ok" "$T/sin1"; rm -rf "$T/sin1/shard-1"
 validar "$T/sin1"
-[ "$RC_VALIDADOR" -ne 0 ] || fail "(8) el validador acepto la union sin el shard 1/3:
+[ "$RC_VALIDADOR" -ne 0 ] || fail "(8) el validador acepto la union sin el shard 1/5:
 $SALIDA_VALIDADOR"
 grep -q 'shard-1' <<<"$SALIDA_VALIDADOR" || fail "(8) el rechazo no nombra el shard que falta:
 $SALIDA_VALIDADOR"
 echo "ok (8): falta shard-1 -> rechazo"
 
-echo "(9) eliminar el shard 2/3 es rechazado independientemente"
+echo "(9) eliminar el shard 2/5 es rechazado independientemente"
 rm -rf "$T/sin2"; cp -R "$T/ok" "$T/sin2"; rm -rf "$T/sin2/shard-2"
 validar "$T/sin2"
-[ "$RC_VALIDADOR" -ne 0 ] || fail "(9) el validador acepto la union sin el shard 2/3:
+[ "$RC_VALIDADOR" -ne 0 ] || fail "(9) el validador acepto la union sin el shard 2/5:
 $SALIDA_VALIDADOR"
 grep -q 'shard-2' <<<"$SALIDA_VALIDADOR" || fail "(9) el rechazo no nombra el shard que falta:
 $SALIDA_VALIDADOR"
 echo "ok (9): falta shard-2 -> rechazo"
 
-echo "(10) eliminar el shard 3/3 es rechazado independientemente"
-rm -rf "$T/sin3"; cp -R "$T/ok" "$T/sin3"; rm -rf "$T/sin3/shard-3"
-validar "$T/sin3"
-[ "$RC_VALIDADOR" -ne 0 ] || fail "(10) el validador acepto la union sin el shard 3/3:
+echo "(10) eliminar cada uno de los shards 3/5, 4/5 y 5/5 es rechazado independientemente"
+for k in 3 4 5; do
+  rm -rf "$T/sin$k"; cp -R "$T/ok" "$T/sin$k"; rm -rf "$T/sin$k/shard-$k"
+  validar "$T/sin$k"
+  [ "$RC_VALIDADOR" -ne 0 ] || fail "(10) el validador acepto la union sin el shard $k/5:
 $SALIDA_VALIDADOR"
-grep -q 'shard-3' <<<"$SALIDA_VALIDADOR" || fail "(10) el rechazo no nombra el shard que falta:
+  grep -q "shard-$k" <<<"$SALIDA_VALIDADOR" || fail "(10) el rechazo no nombra el shard que falta ($k):
 $SALIDA_VALIDADOR"
-echo "ok (10): falta shard-3 -> rechazo"
+  echo "ok (10): falta shard-$k -> rechazo"
+done
 
 echo "(11) resumenes vacios (cero pruebas) son rechazados"
 rm -rf "$T/vacios"; cp -R "$T/ok" "$T/vacios"
-: >"$T/vacios/shard-1/corrida-"*/resumen.txt; : >"$T/vacios/shard-2/corrida-"*/resumen.txt; : >"$T/vacios/shard-3/corrida-"*/resumen.txt
+for k in 1 2 3 4 5; do : >"$T/vacios/shard-$k/corrida-"*/resumen.txt; done
 validar "$T/vacios"
 [ "$RC_VALIDADOR" -ne 0 ] || fail "(11) el validador acepto resumenes VACIOS (cero pruebas corridas):
 $SALIDA_VALIDADOR"
@@ -412,7 +416,7 @@ $GL"
 # El validador del YAML debe ser EL MISMO archivo que este test ejecuto arriba.
 path_yaml=$(printf '%s\n' "$GL" | grep -oE 'bash scripts/valida-union-shards\.sh' | head -1 | sed 's/^bash //')
 [ "$path_yaml" = "$VALIDADOR" ] || fail "(w) el gate no llama al MISMO validador que este test (YAML='$path_yaml' test='$VALIDADOR')"
-for n in 1 2 3; do
+for n in 1 2 3 4 5; do
   printf '%s\n' "$GL" | grep -qF "logs-run-checks-shard-$n" \
     || fail "(w) el gate no baja el artifact logs-run-checks-shard-$n:
 $GL"

@@ -3,7 +3,7 @@
 # Verifica: (1) el script `check` de summa-gate/package.json cubre los cuatro
 # .ts fuente; (2) scripts/run-checks.sh invoca `npm run check`; (3) CI alcanza
 # la bateria una sola vez de forma directa y pre-commit no la corre localmente.
-# 15.2 (carril W): (6) esa unica corrida es la MATRIZ de tres shards con
+# 15.2 (carril W): (6) esa unica corrida es la MATRIZ de cinco shards con
 # fail-fast: false y el gate depende de ella con la regla de pares; (7) fixtures
 # recortados demuestran que el validador rechaza shard faltante, fallo ignorado,
 # gate sin dependencia completa y gate con la dependencia escondida en un job
@@ -11,11 +11,11 @@
 # pushes rojos) — r2: TODOS los checks del job de shards corren DENTRO de la
 # seccion `shards:` anclada por su clave (un comentario u otro job satisfacia
 # los tokens mientras el shards real violaba el contrato) y la matriz exige
-# EXACTAMENTE tres entradas con cada valor UNA vez — r3: antes de matchear se
+# EXACTAMENTE cinco entradas con cada valor UNA vez — r3: antes de matchear se
 # quitan las lineas de COMENTARIO de cada seccion (un comentario dentro del
-# propio job shards satisfacia el grep -F de la corrida shardada) y un cuarto
-# entrada con valor NUEVO se rechaza por el tope de tres (fixture que solo el
-# tope rechaza: el exactly-once ya atrapaba a los duplicados) — r4: el filtro
+# propio job shards satisfacia el grep -F de la corrida shardada) y una
+# entrada de mas con valor NUEVO se rechaza por el tope de cinco (fixture que
+# solo el tope rechaza: el exactly-once ya atrapaba a los duplicados) — r4: el filtro
 # r3 ya corria sobre TODOS los checks de texto (reasigna la seccion antes de
 # cada grep), asi que el hallazgo de re-review (fail-fast, regla de pares y
 # upload satisfacibles con un comentario interno) NO reproduce contra el
@@ -151,15 +151,15 @@ contrato_shards() { # $1=yaml -> exit 0 si cumple el contrato de shards+gate
   # del job shards
   [ "$(printf '%s\n' "$seccion_shards" | grep -cE '^[[:space:]]+run:.*scripts/run-checks\.sh' || true)" -eq 1 ] || return 1
   printf '%s\n' "$seccion_shards" | grep -F 'run: SAIKIT_SHARD=${{ matrix.shard }} bash scripts/run-checks.sh' >/dev/null || return 1
-  # (b) matriz con fail-fast: false y EXACTAMENTE tres entradas de matrix
+  # (b) matriz con fail-fast: false y EXACTAMENTE cinco entradas de matrix
   # include, cada valor UNA vez: la union de resumen.txt cubre el glob y las
-  # entradas node/sintaxis/corpus solo si los tres corren, con cada entrada
-  # exactamente una vez. Duplicados (dos 1/3), entradas extra o faltantes
-  # rechazan (fixture shards-duplicado.yml: dos 1/3 y ningun 3/3; el loop
+  # entradas node/sintaxis/corpus solo si los cinco corren, con cada entrada
+  # exactamente una vez. Duplicados (dos 1/5), entradas extra o faltantes
+  # rechazan (fixture shards-duplicado.yml: dos 1/5 y ningun 5/5; el loop
   # viejo solo verificaba que APARECIERAN y aceptaba entradas de mas).
   printf '%s\n' "$seccion_shards" | grep -q 'fail-fast: false' || return 1
-  [ "$(printf '%s\n' "$seccion_shards" | grep -cE '^[[:space:]]*-[[:space:]]*shard:' || true)" -eq 3 ] || return 1
-  for s in 1/3 2/3 3/3; do
+  [ "$(printf '%s\n' "$seccion_shards" | grep -cE '^[[:space:]]*-[[:space:]]*shard:' || true)" -eq 5 ] || return 1
+  for s in 1/5 2/5 3/5 4/5 5/5; do
     [ "$(printf '%s\n' "$seccion_shards" | grep -cE "^[[:space:]]*-[[:space:]]*shard:[[:space:]]*$s[[:space:]]*\$" || true)" -eq 1 ] || return 1
   done
   # (c) los shards dependen del clasificador y solo se omiten con fast EXACTO
@@ -215,17 +215,17 @@ contrato_shards() { # $1=yaml -> exit 0 si cumple el contrato de shards+gate
 }
 contrato_shards .github/workflows/quality.yml \
   || fail "quality.yml no cumple el contrato de shards+gate (15.2)"
-echo "ok (6): tres shards fail-fast: false, gate siempre corre (if: always()), con dependencia completa y regla de pares"
+echo "ok (6): cinco shards fail-fast: false, gate siempre corre (if: always()), con dependencia completa y regla de pares"
 
 # (7) Sembrar fallos CON FIXTURES, nunca con pushes rojos deliberados. El fixture
 # valido es un recorte del workflow real; cada roto es una mutacion UNA por una:
-#   shard-faltante        la matriz pierde el 3/3 (la union deja de ser la bateria)
+#   shard-faltante        la matriz pierde el 5/5 (la union deja de ser la bateria)
 #   fallo-ignorado        continue-on-error en el job de shards
 #   gate-sin-dependencia  el gate ya no depende de los shards
 #   gate-sin-shards-senuelo  el needs completo vive en un job señuelo y el gate
 #                            arranca sin los shards (r1: el validador tiene que
 #                            anclar la seccion gate, no grepear todo el archivo)
-#   shards-duplicado      dos entradas 1/3 y ninguna 3/3 (r2: exactamente tres
+#   shards-duplicado      dos entradas 1/5 y ninguna 5/5 (r2: exactamente cinco
 #                            entradas, cada valor UNA vez)
 #   shards-en-comentario  los tokens del contrato en comentarios de OTRO job
 #                            mientras el shards real viola el contrato (r2: los
@@ -234,11 +234,11 @@ echo "ok (6): tres shards fail-fast: false, gate siempre corre (if: always()), c
 #                            dentro del propio job shards y el run real
 #                            monolitico (r3: se filtran las lineas de
 #                            comentario de la seccion antes de matchear)
-#   shards-cuatro-entradas    CUARTA entrada con valor NUEVO (4/4): los tres
+#   shards-entrada-de-mas     SEXTA entrada con valor NUEVO (6/6): los cinco
 #                            valores presentes cada una vez, SOLO el tope de
-#                            tres la rechaza — un duplicado de 1/3 ya lo
+#                            cinco la rechaza — un duplicado de 1/5 ya lo
 #                            atrapaba el exactly-once y no discriminaba el
-#                            tope (r3, medido: sin la asercion -eq 3 este
+#                            tope (medido: sin la asercion -eq 5 este
 #                            fixture pasa de rechazado a aceptado)
 #   shards-failfast-en-comentario  `fail-fast: false` SOLO en un comentario
 #                            dentro del propio job shards, estrategia real
@@ -270,7 +270,7 @@ FX=scripts/tests/fixtures/quality-shards
 [ -d "$FX" ] || fail "falta $FX"
 contrato_shards "$FX/workflow-valido.yml" \
   || fail "el fixture VALIDO no pasa el contrato: el validador esta roto, no discrimina"
-for roto in shard-faltante fallo-ignorado gate-sin-dependencia gate-sin-shards-senuelo shards-duplicado shards-en-comentario shards-run-en-comentario shards-cuatro-entradas shards-failfast-en-comentario gate-pareja-en-comentario gate-sin-always gate-always-step; do
+for roto in shard-faltante fallo-ignorado gate-sin-dependencia gate-sin-shards-senuelo shards-duplicado shards-en-comentario shards-run-en-comentario shards-entrada-de-mas shards-failfast-en-comentario gate-pareja-en-comentario gate-sin-always gate-always-step; do
   if contrato_shards "$FX/$roto.yml"; then
     fail "fixture $roto.yml no fue rechazado: el validador acepta $roto"
   fi

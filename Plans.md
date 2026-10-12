@@ -599,6 +599,7 @@ Esta política reemplaza para Fase 15 la obligación anterior de ejecutar toda l
 - Cambios mixtos ejecutan batería completa y checks documentales. Comparación fallida, historial incompleto o clasificador desconocido seleccionan completo. Para PR se consideran todos los cambios desde la base común hasta el head; para push, todo el rango before/after. Renombres consideran origen y destino, y se incluyen borrados.
 - El workflow corre siempre en PR y push a main. Un job clasifica; el gate siempre corre y distingue omisión autorizada por fast de fallo o cancelación. La clasificación se basa en archivos, nunca en el título, etiqueta o declaración del agente.
 - Durante implementación se ejecutan tests focalizados. CI ejecuta una batería completa por SHA final del bloque de código y checks documentales para bloques exclusivamente fast. No se repiten manualmente checks ya acreditados para el mismo SHA.
+- La batería se reparte en shards por duración medida (`scripts/ci-duraciones.tsv`), no por nombre, y ningún shard debe pasar de ~10 min: con el reparto por nombre un shard tardaba 24 min contra 4 de los otros dos y cada PR esperaba al más lento (run 38304658354, 2026-10-12).
 
 ### Spec skip reason
 

@@ -32,7 +32,7 @@
 #                    tope propio SIM_TOPE_TURNO_MAIN, no CORR_TOPE_RED)
 #   SIM9_NODE_BIN    el node (>=22, con type stripping nativo) que corre
 #                    decide-puro.mjs -- lo elige quien invoca este fixture
-#                    (test-simulacro-fase9.sh, con la misma receta de
+#                    (simulacro-fase9/escenarios.sh, con la misma receta de
 #                    scripts/run-checks.sh); sin el, cae al "node" ambiental.
 set -u
 DESTINO="${SIM9_DESTINO:-DESTINO-FALSO-SIM9}"

@@ -11,9 +11,14 @@
 # mudo (el vigia relanza igual: 5 y 6 FUNCIONA), "main" mudo y el relanzo del
 # vigia roto (casos 5 y 6 NO FUNCIONA), y "main" mudo en la observacion
 # extendida (el aviso real no sale: NO OBSERVADO, nunca "no aplica").
-# Uso: bash scripts/tests/test-simulacro-fase9.sh
+#
+# Este archivo NO esta en el glob de la bateria (scripts/tests/*.sh): tarda 11 min
+# en CI (663 s, run 38304658354) y solo no cabe en un job de ~10 min. La bateria lo
+# corre en dos entradas, scripts/tests/test-simulacro-fase9-a.sh y -b.sh, que
+# invocan este archivo con SIM9_PARTE=a|b. A mano corre entero.
+# Uso: bash scripts/tests/simulacro-fase9/escenarios.sh
 set -u
-cd "$(dirname "$0")/../.." || exit 1
+cd "$(dirname "$0")/../../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
 
 ARNES="$PWD/scripts/mac/simulacro-fase9.sh"
@@ -53,9 +58,27 @@ SIM9_NODE_BIN="$(elegir_node)" || fail "no hay un node capaz de importar un .ts 
 export SIM9_NODE_BIN
 
 # SIM9_SOLO=<n>[,<n>...] corre solo esos escenarios numerados (para iterar
-# rojo/verde de un punto sin pagar los ~9 min de la bateria completa); sin
-# el, corren todos (asi debe correr la bateria completa, una sola vez).
+# rojo/verde de un punto sin pagar los ~11 min del archivo entero); sin el,
+# corren todos.
 SIM9_SOLO="${SIM9_SOLO:-}"
+
+# Partes de la bateria. La union tiene que ser TODOS los escenarios de este archivo,
+# cada uno una vez: un escenario nuevo sin parte no correria en CI y nadie lo veria.
+# Se comprueba en cada corrida, con o sin SIM9_PARTE.
+SIM9_PARTE_A="1,2,3,4,5,6,7,8,9,10"
+SIM9_PARTE_B="11,12,13,14,15,16,17,18"
+ESTE=scripts/tests/simulacro-fase9/escenarios.sh
+escenarios_del_archivo="$(sed -n 's/^if debe_correr \([0-9][0-9]*\); then$/\1/p' "$ESTE" | sort -n | tr '\n' ',')"
+escenarios_de_las_partes="$(printf '%s,%s' "$SIM9_PARTE_A" "$SIM9_PARTE_B" | tr ',' '\n' | sort -n | tr '\n' ',')"
+[ -n "$escenarios_del_archivo" ] || fail "no se pudieron leer los escenarios de $ESTE"
+[ "$escenarios_del_archivo" = "$escenarios_de_las_partes" ] \
+  || fail "las partes a y b no cubren cada escenario exactamente una vez (archivo: $escenarios_del_archivo partes: $escenarios_de_las_partes)"
+case "${SIM9_PARTE:-}" in
+  '') ;;
+  a) SIM9_SOLO="$SIM9_PARTE_A" ;;
+  b) SIM9_SOLO="$SIM9_PARTE_B" ;;
+  *) fail "SIM9_PARTE='${SIM9_PARTE}' no es una parte valida (a o b; sin la variable corren todos)" ;;
+esac
 debe_correr() { # $1 numero de escenario; 0 = correrlo
   [ -z "$SIM9_SOLO" ] && return 0
   case ",$SIM9_SOLO," in *",$1,"*) return 0;; esac

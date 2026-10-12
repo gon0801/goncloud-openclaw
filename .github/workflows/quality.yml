@@ -18,13 +18,15 @@
 # documentales verdes. Clasificacion ausente, fallida o cancelada NUNCA pasa.
 #
 # Desde 15.2 (carril W) la bateria no corre monolitica: el job `shards` la
-# reparte en una matriz de TRES shards (mismo reparto que el runner: nucleo /
-# watchdog+preflight / resto del glob + Node + sintaxis + corpus), cada uno con
-# checkout y estado propios y fail-fast: false. La bateria en CI tiene un solo
-# entrypoint, scripts/run-checks.sh, invocado UNA vez en el YAML y multiplicado
-# en tres runners por la matriz; la union de sus logs/run-checks/corrida-*/resumen.txt
-# cubre la bateria con cada entrada exactamente una vez, y cada shard publica
-# sus logs como artifact para auditar esa union sin re-correr nada.
+# reparte en una matriz de CINCO shards, cada uno con checkout y estado propios
+# y fail-fast: false. El reparto lo hace el runner por duracion medida
+# (scripts/ci-duraciones.tsv): con tres shards por nombre, el tercero tardaba
+# 24 min contra 4 de los otros dos (run 38304658354). La bateria en CI tiene un
+# solo entrypoint, scripts/run-checks.sh, invocado UNA vez en el YAML y
+# multiplicado en cinco runners por la matriz; la union de sus
+# logs/run-checks/corrida-*/resumen.txt cubre la bateria con cada entrada
+# exactamente una vez, y cada shard publica sus logs como artifact para auditar
+# esa union sin re-correr nada.
 #
 # Los checks documentales son un paso REAL del job clasificador ("Checks
 # documentales del rango"): valida los contratos de los archivos CAMBIADOS
@@ -198,13 +200,13 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ── Shards (Fase 15.1/15.2, carriles R y W) ────────────────────────────────
-  # R (15.1) le dio al runner el reparto: SAIKIT_SHARD=1/3 corre el nucleo,
-  # 2/3 watchdog+preflight, 3/3 el resto del glob + Node + sintaxis + corpus;
-  # la union de los tres es la bateria entera, con cada entrada exactamente una
-  # vez en su logs/run-checks/corrida-*/resumen.txt. W (15.2) lo monta en CI: el job
+  # R (15.1) le dio al runner el reparto: SAIKIT_SHARD=i/5 corre la porcion i,
+  # asignada por duracion medida; la union de los cinco es la bateria entera,
+  # con cada entrada exactamente una vez en su
+  # logs/run-checks/corrida-*/resumen.txt. W (15.2) lo monta en CI: el job
   # `quality` monolitico se convierte en esta matriz (checkout y estado propios
   # por runner; fail-fast: false para que un shard rojo NO cancele a sus
-  # hermanos — los tres tienen que llegar a veredicto propio).
+  # hermanos — los cinco tienen que llegar a veredicto propio).
   # Reglas fijadas por S (15.0) y no renegociadas:
   #   1. Condicion de corrida de cada shard:
   #        needs: [clasificador]
@@ -216,18 +218,16 @@ jobs:
   #      valida; todo lo demas (failure/cancelled) rebota. S anoto "un par por
   #      shard (R_SHARD1, R_SHARD2, ...)", pero needs de GitHub no expone el
   #      resultado por pata de una matriz, solo el agregado del job — y aca el
-  #      agregado es EXACTO, no una perdida de granularidad: las tres patas
+  #      agregado es EXACTO, no una perdida de granularidad: las cinco patas
   #      comparten la MISMA condicion (el carril del clasificador), asi que es
-  #      success solo con las tres verdes, skipped solo si fast omitio la
+  #      success solo con las cinco verdes, skipped solo si fast omitio la
   #      matriz entera, y failure/cancelled si cualquiera rebota.
   #   3. Triggers, permisos y checkouts con persist-credentials: false quedan
   #      como estan.
-  # Reparto de dependencias: cada runner instala SOLO lo que su porcion de
-  # bateria necesita — lo instalado en otro job no se comparte implicitamente.
-  # El runner solo exige node>=22 cuando corre entradas node, y esas viven en el
-  # shard 3 (sintaxis + baterias del plugin y de tablero-runbook + corpus), asi
-  # que node 24 e `Install openclaw` son pasos de ese shard; el 1 y el 2 son
-  # solo shell. pre-commit es higiene estatica de archivos de TODO el repo (no
+  # Dependencias: lo instalado en otro job no se comparte, y con el reparto por
+  # duracion cualquier shard puede recibir entradas node o pruebas shell que
+  # usan node, asi que los cinco instalan node 24 y openclaw (unos 20 s por
+  # runner). pre-commit es higiene estatica de archivos de TODO el repo (no
   # forma parte de la bateria ni de la union): corre una vez, en el shard 1,
   # con la misma condicion de carril que ya tenia el job quality.
   shards:
@@ -242,12 +242,16 @@ jobs:
       matrix:
         # `n` sanitiza el nombre del artifact: upload-artifact no admite `/`.
         include:
-          - shard: 1/3
+          - shard: 1/5
             n: 1
-          - shard: 2/3
+          - shard: 2/5
             n: 2
-          - shard: 3/3
+          - shard: 3/5
             n: 3
+          - shard: 4/5
+            n: 4
+          - shard: 5/5
+            n: 5
     env:
       # Lo lee summa-gate/role.test.ts para el smoke de import del plugin.
       OPENCLAW_NODE_MODULES: ${{ github.workspace }}/node_modules/openclaw
@@ -257,11 +261,8 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node
-        # Solo el shard 3 corre entradas node; el 1 y el 2 son solo shell y no
-        # tienen por que romperse en una maquina sin node (mismo criterio del
-        # runner). Este repo no tiene package.json en la raiz: sin este paso
-        # explicito la bateria quedaria con el node que traiga el runner.
-        if: matrix.shard == '3/3'
+        # Este repo no tiene package.json en la raiz: sin este paso explicito
+        # la bateria quedaria con el node que traiga el runner.
         uses: actions/setup-node@v6
         with:
           # 24: las pruebas del plugin son .ts y `node --test` las corre por type
@@ -272,19 +273,18 @@ jobs:
       # instalado. Si esto fuera despues, la bateria fallaria por una dependencia
       # faltante y no por un defecto real.
       - name: Install openclaw (para el smoke de import del plugin)
-        if: matrix.shard == '3/3'
         run: |
           npm install --no-save --silent openclaw@2026.9.4
           test -d node_modules/openclaw || { echo "openclaw no quedo instalado"; exit 1; }
 
       - name: Run pre-commit (todos los candados locales, sobre todo el repo)
-        if: matrix.shard == '1/3'
+        if: matrix.n == 1
         uses: pre-commit/action@v3.0.1
 
       - name: Run shard de la bateria
         run: SAIKIT_SHARD=${{ matrix.shard }} bash scripts/run-checks.sh
 
-      # La auditoria de la union (los tres resumen.txt cubren el glob del head y
+      # La auditoria de la union (los cinco resumen.txt cubren el glob del head y
       # las entradas node/sintaxis/corpus exactamente una vez) se hace contra
       # estos artifacts, sin re-correr nada. `always()`: un shard que revienta
       # igual publica lo que alcanzo a correr. if-no-files-found: error — un
@@ -316,7 +316,7 @@ jobs:
 
       - name: Set up Node
         # El arbol de juguete del contrato corre entradas node de mentira que
-        # exigen >= 22 (mismo criterio del shard 3); el default del runner
+        # exigen >= 22 (mismo criterio de los shards); el default del runner
         # puede ser mas viejo.
         uses: actions/setup-node@v6
         with:
@@ -329,7 +329,7 @@ jobs:
   # ahora invocado por la matriz con SAIKIT_SHARD. Pre-commit conserva solo
   # validaciones rapidas de archivos para no cobrar la bateria completa en cada
   # commit local. Desde B1, ademas, el gate AUDITA el CONTENIDO de lo que la
-  # matriz produjo: baja los tres artifacts de logs y valida con
+  # matriz produjo: baja los cinco artifacts de logs y valida con
   # scripts/valida-union-shards.sh que su union sea exactamente el inventario
   # de la bateria del checkout — sin faltantes, duplicados, resumenes vacios ni
   # filas en falla. El resultado del job ya no alcanza: una matriz que pierde
@@ -386,9 +386,9 @@ jobs:
         env:
           R_CLASIFICADOR: ${{ needs.clasificador.result }}
           CARRIL: ${{ needs.clasificador.outputs.carril }}
-          # Resultado AGREGADO de la matriz de shards: las tres patas comparten
+          # Resultado AGREGADO de la matriz de shards: las cinco patas comparten
           # la misma condicion de corrida (el carril del clasificador), asi que
-          # el agregado es exacto — success solo con las tres verdes, skipped
+          # el agregado es exacto — success solo con las cinco verdes, skipped
           # solo si fast omitio la matriz entera, failure/cancelled si
           # cualquiera rebota.
           R_SHARDS: ${{ needs.shards.result }}
@@ -441,7 +441,7 @@ jobs:
 
       # Auditoria real de la union (B1), SOLO cuando la bateria corrio: en fast
       # no hay artifacts que auditar y la omision ya la autorizo la regla de
-      # pares de arriba con clasificacion fast. Tres pasos: bajar cada artifact
+      # pares de arriba con clasificacion fast. Tres partes: bajar cada artifact
       # a su dir, generar el inventario desde el checkout (glob + entradas
       # fijas del runner, el MISMO inventario que describe run-checks.sh) y
       # correr el validador de union. No se re-corrre nada: la auditoria solo
@@ -466,6 +466,20 @@ jobs:
         with:
           name: logs-run-checks-shard-3
           path: auditoria/shard-3
+
+      - name: Bajar artifact del shard 4
+        if: needs.shards.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: logs-run-checks-shard-4
+          path: auditoria/shard-4
+
+      - name: Bajar artifact del shard 5
+        if: needs.shards.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: logs-run-checks-shard-5
+          path: auditoria/shard-5
 
       - name: Auditar la union de los shards contra el inventario del checkout
         if: needs.shards.result == 'success'
