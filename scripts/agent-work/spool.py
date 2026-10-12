@@ -161,6 +161,10 @@ class Spool:
                     cancellation_id TEXT NOT NULL,
                     dialog TEXT
                 );
+                CREATE TABLE IF NOT EXISTS reservation_claims (
+                    operation_id TEXT PRIMARY KEY,
+                    assignment_json TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS dialog_rejections (
                     operation_id TEXT PRIMARY KEY,
                     attempts INTEGER NOT NULL
@@ -413,6 +417,14 @@ class Spool:
                 raise ValueError("only an unsettled operation can be cancelled")
             db.execute("INSERT INTO cancellations VALUES (?,?,NULL)", (operation_id, cancellation_id))
             return dict(db.execute("SELECT * FROM cancellations WHERE operation_id=?", (operation_id,)).fetchone())
+
+    def reservation_claim(self, operation_id: str) -> dict | None:
+        """The claim fields a reservation kept so its task can be read and closed in R before any operation
+        is registered: hostId, taskId, generation, instanceId, producerId, capability and adapterId."""
+        with self.connection() as db:
+            row = db.execute("SELECT assignment_json FROM reservation_claims WHERE operation_id=?",
+                             (operation_id,)).fetchone()
+        return json.loads(row[0]) if row else None
 
     def cancellation(self, operation_id: str) -> dict | None:
         with self.connection() as db:

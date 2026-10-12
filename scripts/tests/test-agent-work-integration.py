@@ -1129,6 +1129,37 @@ print(json.dumps({{'published': moved}}))
         self.assertEqual([argv[-1] for argv in self.publishes()], ["run-1", "run-1"])
         self.assertEqual([path.name for path in (self.run / "sent").iterdir()], [self.pending["eventId"] + ".json"])
 
+    def test_a_pass_whose_report_and_claim_fail_still_prints_its_publish_error(self):
+        host = self.idle_host()
+
+        def unavailable(*_):
+            raise RuntimeError("host report unavailable")
+
+        def uncertified():
+            raise ValueError("host adapter route is not certified")
+
+        class OnePass:
+            waits = 0
+
+            def is_set(self):
+                return self.waits == 1
+
+            def wait(self, _interval):
+                self.waits += 1
+
+        host.flush = unavailable
+        self.mode.write_text("fail")
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            native_gateway.watch_pump(
+                self.client, host=host, evidence_root=self.evidence_root, progress_state_dir=self.state_dir,
+                progress_client=self.progress, stop_event=OnePass(), interval=0.01, cli_claim=uncertified)
+        self.assertEqual(stderr.getvalue(),
+                         "agent-work pump: host report unavailable; host adapter route is not certified; "
+                         "progress publish rejected corrida run-1: progress-events: gateway no disponible para "
+                         "runbook.progress.get\n")
+        self.assertEqual([path.name for path in (self.run / "queue").iterdir()], [self.pending["eventId"] + ".json"])
+
     def test_a_rejected_event_is_reported_once_and_never_retried(self):
         self.mode.write_text("reject")
         with self.assertRaises(RuntimeError) as caught:

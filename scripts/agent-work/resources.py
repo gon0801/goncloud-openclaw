@@ -18,13 +18,14 @@ from spool import DIALOG_ATTEMPTS, DIALOG_STILL_OPEN, SETTLED, TERMINAL_STATES a
 
 TERMINAL_SQL = ",".join(repr(state) for state in TERMINAL)
 OWNERS = ("TaskCreated", "UserAdopted", "IntentionalPool")
+CLAIM_FIELDS = ("hostId", "taskId", "generation", "instanceId", "producerId", "capability", "adapterId")
 PS_ENV = {"TZ": "UTC", "LC_ALL": "C"}
 BOOTTIME_RE = re.compile(r"sec\s*=\s*(\d+),\s*usec\s*=\s*(\d+)")
 BOOT_ID_RE = re.compile(r"\d+\.\d{6}")
 LINUX_BOOT_ID_RE = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
 TMUX_TIMEOUT_SECONDS = 5.0
-# A clock adjustment moves macOS kern.boottime within one boot (58 ms between two canary spools); a
-# reboot moves it by at least the previous uptime, far more than this.
+# A clock adjustment moves macOS kern.boottime within one boot (58 ms between two canary spools); a new
+# boot normally moves it far more. Nothing guarantees a minimum, so a change within this window is one boot.
 BOOT_DRIFT_SECONDS = 10.0
 
 
@@ -88,6 +89,11 @@ def adopted_mark_lost(identity: dict, observed: dict, socket: str) -> str | None
     if isinstance(mark, str) and mark != identity.get("nonce") and NONCE_RE.fullmatch(mark):
         return "adopted mark superseded"
     return None
+
+
+def dialog_note(op_id: str, dialog: str) -> str:
+    """The pass error for a cancelled task's permission dialog the host could not deny cleanly."""
+    return f"{op_id}: cancelled; permission dialog {dialog}"
 
 
 @dataclass(frozen=True)
@@ -177,12 +183,20 @@ class ResourceManager:
             row = db.execute("SELECT * FROM resources WHERE operation_id=?", (self._key(key),)).fetchone()
             return self._view(dict(row))
 
-    def reserve(self, key: OperationKey, session: str, ownership: str) -> ResourceView:
+    def reserve(self, key: OperationKey, session: str, ownership: str, claim: dict | None = None) -> ResourceView:
+        """claim keeps the claim fields R needs (CLAIM_FIELDS), so a reservation whose host died before
+        registering its operation can still learn that R cancelled its task, and close."""
         op_id = self._key(key)
         if ownership not in OWNERS or not session or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in session):
             raise ValueError("invalid resource ownership or session")
+        if claim is not None and (set(claim) != set(CLAIM_FIELDS)
+                                  or (claim["hostId"], claim["taskId"], claim["generation"], claim["instanceId"])
+                                  != (key.host_id, key.task_id, key.generation, key.instance_id)):
+            raise ValueError("reservation claim does not match its resource key")
         with self.spool.connection() as db:
             db.execute("BEGIN IMMEDIATE")
+            if claim is not None:
+                db.execute("INSERT OR IGNORE INTO reservation_claims VALUES (?,?)", (op_id, canonical(claim)))
             row = db.execute("SELECT * FROM resources WHERE operation_id=?", (op_id,)).fetchone()
             if row:
                 if row["session_name"] != session or row["ownership"] != ownership:
@@ -279,6 +293,8 @@ class ResourceManager:
                        (canonical(evidence), op_id))
         revision = original["revision"] + 1
         if original["ownership"] == "UserAdopted":
+            if original["state"] == "Reserved":
+                return self._state(key, revision, "ReleasedAdopted", "adopted session never marked")
             identity = json.loads(original["identity_json"]) if original["identity_json"] else None
             try:
                 observed = self.backend.observe(original["session_name"])
@@ -407,13 +423,13 @@ class ResourceManager:
                     if dialog == DIALOG_STILL_OPEN:
                         attempts = self.spool.dialog_attempt(op_id)
                         if attempts < DIALOG_ATTEMPTS:
-                            errors.append(f"{op_id}: cancelled; permission dialog {dialog}, "
-                                          f"attempt {attempts} of {DIALOG_ATTEMPTS}; the session stays held")
+                            errors.append(f"{dialog_note(op_id, dialog)}, attempt {attempts} of "
+                                          f"{DIALOG_ATTEMPTS}; the session stays held")
                             continue
                         dialog = f"{dialog} after {attempts} attempts"
                     self.spool.cancellation_dialog(op_id, dialog)
                     if dialog.startswith("left"):
-                        errors.append(f"{op_id}: cancelled; permission dialog {dialog}")
+                        errors.append(dialog_note(op_id, dialog))
                 view = self.close(key, {"kind": "cancel", "receipt": cancellation_id})
                 if view.state in TERMINAL:
                     released += 1
@@ -421,6 +437,34 @@ class ResourceManager:
                     errors.append(f"{op_id}: cancelled; resource {view.state}: {view.reason}")
             except (OSError, RuntimeError, ValueError, KeyError, TypeError) as exc:
                 errors.append(f"{op_id}: cancel failed: {exc}")
+        orphans, orphan_errors = self._release_cancelled_reservations(read_cancellation)
+        return released + orphans, errors + orphan_errors
+
+    def _release_cancelled_reservations(self, read_cancellation) -> tuple[int, list[str]]:
+        """A host that died between reserve and register left a resource no operation names, and a claim
+        replay never reaches it once R cancels the task. Its stored claim asks R; R's cancellation closes it.
+        Without a stored claim (reserved before B18) R cannot be asked, so the resource stays as it is."""
+        with self.spool.connection() as db:
+            rows = db.execute("SELECT r.task_id,r.generation,r.instance_id,r.operation_id,c.assignment_json "
+                              "FROM resources r JOIN reservation_claims c ON c.operation_id=r.operation_id "
+                              "LEFT JOIN operations o ON o.operation_id=r.operation_id "
+                              "WHERE o.operation_id IS NULL AND r.evidence_json IS NULL "
+                              f"AND r.state NOT IN ({TERMINAL_SQL}) ORDER BY r.operation_id").fetchall()
+        released, errors = 0, []
+        for row in rows:
+            key = OperationKey(self.host_id, row["task_id"], row["generation"], row["instance_id"])
+            try:
+                cancellation_id = read_cancellation(json.loads(row["assignment_json"]))
+                if cancellation_id is None:
+                    continue
+                view = self.close(key, {"kind": "cancel", "receipt": cancellation_id})
+                if view.state in TERMINAL:
+                    released += 1
+                else:
+                    errors.append(f"{row['operation_id']}: cancelled before registering; "
+                                  f"resource {view.state}: {view.reason}")
+            except (OSError, RuntimeError, ValueError, KeyError, TypeError) as exc:
+                errors.append(f"{row['operation_id']}: cancel failed: {exc}")
         return released, errors
 
     def retry_cleanup(self) -> tuple[int, list[str]]:
@@ -572,7 +616,9 @@ class TmuxBackend:
                   str(identity["panePid"]), identity["nonce"])
         if not self._guarded(fields, f"kill-session -t {identity['sessionId']}"):
             return False
-        return self._fields(f"{identity['sessionId']}:") is None
+        # With another session on the server, display-message on a dead session id exits 0 with empty fields.
+        remaining = self._fields(f"{identity['sessionId']}:")
+        return remaining is None or remaining[1] != identity["sessionId"]
 
     def pane_gone(self, identity: dict) -> bool:
         # A pane pid missing from the process table (rc=1, both streams empty)

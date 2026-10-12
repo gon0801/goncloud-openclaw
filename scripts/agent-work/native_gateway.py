@@ -7,6 +7,7 @@ import json
 import os
 import re
 import signal
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -18,6 +19,7 @@ from pathlib import Path
 from contracts import AuthorizedOperation, IncidentRejected, OperationKey
 from host import Host, TmuxTransport, cli_adapter, reject_permission_dialog
 from progress_bridge import transfer_host_projection, transfer_projection
+from resources import dialog_note
 from spool import canonical, incident_identity
 
 DEFINITIVE_INCIDENT_REJECTIONS = (
@@ -347,7 +349,10 @@ def claim_cli_once(client, *, host, manager, adapter_id, instance_id, session,
         raise ValueError("host claim contract invalid")
     brief = _brief_to_workspace(client, claim, workspace_root)
     key = OperationKey(client.host_id, claim["taskId"], claim["generation"], instance_id)
-    manager.reserve(key, session, "UserAdopted")
+    manager.reserve(key, session, "UserAdopted", claim={
+        "hostId": client.host_id, "taskId": claim["taskId"], "generation": claim["generation"],
+        "instanceId": instance_id, "producerId": adapter_id, "capability": capability["token"],
+        "adapterId": adapter_id})
     if manager.begin_launch(key).launch_now:
         manager.mark(key)
     if manager.attach(key).state != "Running":
@@ -500,17 +505,35 @@ def close_pass(client, *, host, cli_release=None, cli_cancel=None, cli_retry=Non
     return {"reported": len(receipts), **counts}, report_error, errors + closure_errors
 
 
-def close_only(client, *, host, manager, reject_dialog):
-    """One closing pass over a spool no host runs any more, for the instances its own rows name. Returns
-    each resource before and after, and the closure receipts R sent back."""
-    def resources():
-        with host.spool.connection() as db:
-            rows = db.execute("SELECT r.operation_id,r.task_id,r.instance_id,r.state,r.reason,o.status "
-                              "FROM resources r LEFT JOIN operations o ON o.operation_id=r.operation_id "
-                              "ORDER BY r.operation_id").fetchall()
-        return {row["operation_id"]: dict(row) for row in rows}
+def spool_resources(db):
+    rows = db.execute("SELECT r.operation_id,r.task_id,r.instance_id,r.state,r.reason,o.status "
+                      "FROM resources r LEFT JOIN operations o ON o.operation_id=r.operation_id "
+                      "ORDER BY r.operation_id").fetchall()
+    return {row["operation_id"]: dict(row) for row in rows}
 
-    before = resources()
+
+def read_spool_resources(state_dir):
+    """Each resource as the spool holds it on disk, read-only, before Host opens and migrates it."""
+    path = Path(state_dir) / "host.sqlite"
+    if not path.is_file():
+        return {}
+    db = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    db.row_factory = sqlite3.Row
+    try:
+        return spool_resources(db)
+    except sqlite3.OperationalError as exc:
+        if "no such table" not in str(exc):
+            raise OSError(str(exc)) from exc
+        return {}
+    finally:
+        db.close()
+
+
+def close_only(client, *, host, manager, reject_dialog, before):
+    """One closing pass over a spool no host runs any more, for the instances its own rows name. before is
+    read_spool_resources from before the spool was opened. Returns the report (each resource before and after,
+    and the closure receipts R sent back) and whether the run failed. The dialog note of a released session
+    does not fail it; a session still held, or a closure that did not reach R, fails it with its own error."""
     receipts = []
 
     def close_host(*args):
@@ -524,14 +547,18 @@ def close_only(client, *, host, manager, reject_dialog):
         cli_retry=manager.retry_cleanup, close_host=close_host)
     if report_error is not None:
         errors.insert(0, f"report failed: {report_error}")
-    after = resources()
-    return {"counts": counts, "errors": errors, "rClosures": receipts,
-            "resources": [{"operationId": op_id, "taskId": row["task_id"], "instanceId": row["instance_id"],
-                           "operation": row["status"],
-                           "before": [before.get(op_id, {}).get("state"), before.get(op_id, {}).get("reason")],
-                           "after": [row["state"], row["reason"]],
-                           "lastSent": host.spool.closure_last(op_id)}
-                          for op_id, row in after.items()]}
+    with host.spool.connection() as db:
+        after = spool_resources(db)
+    resources = [{"operationId": op_id, "taskId": row["task_id"], "instanceId": row["instance_id"],
+                  "operation": row["status"],
+                  "before": [before.get(op_id, {}).get("state"), before.get(op_id, {}).get("reason")],
+                  "after": [row["state"], row["reason"]],
+                  "lastSent": host.spool.closure_last(op_id)}
+                 for op_id, row in after.items()]
+    notes = {dialog_note(op_id, cancellation["dialog"]) for op_id in after
+             if (cancellation := host.spool.cancellation(op_id)) and cancellation["dialog"]}
+    report = {"counts": counts, "errors": errors, "rClosures": receipts, "resources": resources}
+    return report, any(error not in notes for error in errors)
 
 
 def pump_once(client, *, host, evidence_root, progress_state_dir, progress_client,
@@ -568,13 +595,12 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
     )
     publisher = progress_publisher or ProgressPublisher(progress_client, progress_state_dir)
     published, publish_errors = publisher.publish(client)
-    if report_error is not None:
-        raise report_error
-    if claim_error is not None:
-        raise claim_error
+    raised = [error for error in (report_error, claim_error) if error is not None]
     errors += watch_errors + incident_errors + publish_errors
-    if errors:
-        raise RuntimeError("; ".join(errors))
+    if len(raised) == 1 and not errors:
+        raise raised[0]
+    if raised or errors:
+        raise RuntimeError("; ".join([*map(str, raised), *errors])) from (raised[0] if raised else None)
     result = {**counts, "transferred": transferred, "published": published, "incidents": incidents_sent}
     if cli_claim is not None:
         result["claimed"] = 1 if claimed is not None else 0
@@ -641,13 +667,15 @@ def main(argv=None):
                 or args.cli_workspace_root):
             parser.error("--close-only takes its instances from the spool and never claims")
         from resources import ResourceManager, TmuxBackend
+        before = read_spool_resources(args.host_state_dir)
         host = Host(args.host_id, args.host_state_dir)
         backend = TmuxBackend(args.tmux_bin, args.cli_tmux_socket)
         adapter = cli_adapter(args.cli_adapter_id)
-        report = close_only(client, host=host, manager=ResourceManager(host.spool, args.host_id, backend),
-                            reject_dialog=lambda identity: reject_permission_dialog(backend, identity, adapter))
+        report, failed = close_only(
+            client, host=host, manager=ResourceManager(host.spool, args.host_id, backend), before=before,
+            reject_dialog=lambda identity: reject_permission_dialog(backend, identity, adapter))
         print(json.dumps(report, indent=2, sort_keys=True))
-        return 1 if report["errors"] else 0
+        return 1 if failed else 0
     cli_fields = (args.cli_adapter_id, args.cli_instance_id, args.cli_session,
                   args.cli_workspace_root, args.cli_tmux_socket)
     cli_claim = None
