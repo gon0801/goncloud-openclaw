@@ -1,6 +1,6 @@
 ---
 name: encargo-cli
-description: Úsala solo cuando David diga "por CLI" en un pedido de trabajo sobre un repo de la Mac (implementar, arreglar o revisar), por ejemplo "agrega X en ~/dev/<repo>, por CLI con deepseek". Sin "por CLI" no es esta skill, aunque nombre un modelo. Ese pedido sigue agent-dispatch. Encargas el trabajo a un CLI de la Mac por la ruta gestionada (brief.py, managed_tasks_submit, managed_tasks_admit), terminas tu turno, y R te despierta con el resultado para que lo cierres.
+description: Úsala solo cuando David diga "por CLI" en un pedido de trabajo sobre un repo de la Mac (implementar, arreglar o revisar), por ejemplo "agrega X en ~/dev/<repo>, por CLI". Sin "por CLI" no es esta skill, aunque nombre un modelo. Ese pedido sigue agent-dispatch. Encargas el trabajo a un CLI de la Mac por la ruta gestionada (brief.py, managed_tasks_submit, managed_tasks_admit), terminas tu turno, y R te despierta con el resultado para que lo cierres.
 ---
 
 # Encargo a la Mac
@@ -9,17 +9,15 @@ R lleva el encargo: tú lo registras y lo admites, un host de la Mac se lo entre
 
 Esta ruta entra solo con "por CLI". Si David no lo dijo, no encargues por aquí aunque nombre un modelo. Sigue `agent-dispatch`.
 
-## El alias elige el modelo
+## Un solo alias: GLM por Z.AI
 
 | Con "por CLI", David nombra | `--adapter` |
 |---|---|
 | ningún modelo, o "glm" | `opencode` (GLM 5.3 flash, plan de Z.AI) |
-| "deepseek" | `opencode@opencode-go/deepseek-v4-pro` |
-| "kimi" | `opencode@opencode-go/kimi-k3` |
-| "grok" | `opencode@opencode-go/grok-4.7` |
-| "qwen" | `opencode@opencode-go/qwen3.8-max` |
 
-Si pide otro modelo, dile que no tiene alias; no inventes uno. Cada alias necesita su host corriendo en la Mac, y eso no lo ves tú.
+Si David nombra otro modelo con "por CLI" (deepseek, kimi, grok, qwen o cualquier otro), no encargues nada. Dile que para "por CLI" hoy solo está GLM por la suscripción de Z.AI, y que opencode Go está reservada para ti, `main`. Pregúntale si lo encargas con GLM. No inventes un alias. R y el host rechazan cualquier otro.
+
+El alias necesita su host corriendo en la Mac, y eso no lo ves tú.
 
 ## Encargar
 

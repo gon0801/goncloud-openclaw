@@ -601,40 +601,53 @@ class HostReceipts(unittest.TestCase):
     def test_an_opencode_model_alias_delivers_on_the_opencode_screens(self):
         reference = self.reference_text("/x/assignments/op-1.json")
         transport = ScriptedTmux(opencode_screen("home-empty"), opencode_screen("home-reference"),
-                                 adapter_id="opencode@opencode-go/deepseek-v4-pro")
+                                 adapter_id="opencode@zai-coding-plan/glm-5.3")
         transport.deliver("/x/assignments/op-1.json", "oc")
         self.assertEqual(transport.keys, [reference, "Enter"])
         grey = ScriptedTmux(opencode_box(f"{GRUVBOX}borrador del operador{RESET}"),
-                            adapter_id="opencode@opencode-go/kimi-k3")
+                            adapter_id="opencode@zai-coding-plan/glm-5.2")
         with self.assertRaisesRegex(DeliveryDeferred, "borrador del operador"):
             grey.deliver("/x/assignments/op-1.json", "oc")
         self.assertEqual(grey.keys, [])
 
     def test_an_opencode_adapter_id_names_the_model_of_its_session(self):
         self.assertEqual(opencode_model("opencode"), "zai-coding-plan/glm-5.3-flash")
-        self.assertEqual(opencode_model("opencode@opencode-go/deepseek-v4-pro"), "opencode-go/deepseek-v4-pro")
-        self.assertEqual(opencode_model("opencode@opencode-go/deepseek-v4.1-flash"), "opencode-go/deepseek-v4.1-flash")
+        self.assertEqual(opencode_model("opencode@zai-coding-plan/glm-5.3"), "zai-coding-plan/glm-5.3")
         self.assertEqual(opencode_model("opencode@zai-coding-plan/glm-5.3-flash"), "zai-coding-plan/glm-5.3-flash")
+        self.assertEqual(opencode_model("opencode@some-plan/model_1.2-x"), "some-plan/model_1.2-x")
         self.assertIsNone(opencode_model("codex"))
         self.assertIsNone(opencode_model("opencodex"))
         self.assertEqual(cli_adapter("codex").commands, ("codex",))
-        for malformed in ("opencode@", "opencode@deepseek-v4-pro", "opencode@opencode-go/", "opencode@/kimi-k3",
-                          "opencode@Opencode-go/kimi-k3", "opencode@opencode-go/kimi k3",
-                          "opencode@opencode-go/kimi-k3/x"):
+        for malformed in ("opencode@", "opencode@glm-5.3", "opencode@zai-coding-plan/", "opencode@/glm-5.3",
+                          "opencode@Zai-coding-plan/glm-5.3", "opencode@zai-coding-plan/glm 5.3",
+                          "opencode@zai-coding-plan/glm-5.3/x"):
             with self.assertRaisesRegex(ValueError, "is not opencode@<provider>/<model>"):
                 opencode_model(malformed)
         with self.assertRaisesRegex(ValueError, "bills per token"):
             opencode_model("opencode@zai/glm-4.7")
 
+    def test_no_adapter_id_reaches_the_opencode_go_subscription(self):
+        # David, 2026-10-12: "open code go es solamente para main". R may list the alias again; the host still refuses.
+        for model in ("deepseek-v4-pro", "kimi-k3", "grok-4.7", "qwen3.8-max", "glm-5.3"):
+            alias = f"opencode@opencode-go/{model}"
+            for resolve in (opencode_model, cli_adapter):
+                with self.assertRaises(ValueError) as refused:
+                    resolve(alias)
+                self.assertEqual(str(refused.exception), f"adapter {alias} spends the opencode Go subscription, "
+                                                         "reserved for main; use zai-coding-plan/")
+
     def test_host_cli_prints_the_model_of_an_opencode_alias(self):
         script = ROOT / "scripts/agent-work/host.py"
-        printed = subprocess.run([sys.executable, str(script), "opencode-model", "opencode@opencode-go/kimi-k3"],
+        printed = subprocess.run([sys.executable, str(script), "opencode-model", "opencode@zai-coding-plan/glm-5.3"],
                                  capture_output=True, text=True)
-        self.assertEqual((printed.returncode, printed.stdout), (0, "opencode-go/kimi-k3\n"))
-        refused = subprocess.run([sys.executable, str(script), "opencode-model", "opencode@zai/glm-4.7"],
-                                 capture_output=True, text=True)
-        self.assertEqual((refused.returncode, refused.stdout, refused.stderr),
-                         (1, "", "adapter opencode@zai/glm-4.7 bills per token; use zai-coding-plan/\n"))
+        self.assertEqual((printed.returncode, printed.stdout), (0, "zai-coding-plan/glm-5.3\n"))
+        for alias, reason in (("opencode@zai/glm-4.7", "bills per token"),
+                              ("opencode@opencode-go/kimi-k3",
+                               "spends the opencode Go subscription, reserved for main")):
+            refused = subprocess.run([sys.executable, str(script), "opencode-model", alias],
+                                     capture_output=True, text=True)
+            self.assertEqual((refused.returncode, refused.stdout, refused.stderr),
+                             (1, "", f"adapter {alias} {reason}; use zai-coding-plan/\n"))
         other = subprocess.run([sys.executable, str(script), "opencode-model", "codex"],
                                capture_output=True, text=True)
         self.assertEqual((other.returncode, other.stderr), (1, "adapter codex is not an opencode adapter\n"))

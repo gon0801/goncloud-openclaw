@@ -71,10 +71,15 @@ CLI_ADAPTERS = {
 
 
 # An opencode adapter id names the model its session runs: "opencode" is the B8 session on GLM through
-# David's Z.AI coding plan, "opencode@<provider>/<model>" any model `opencode models` lists. zai/* bills
-# per token, so no alias reaches it.
+# David's Z.AI coding plan, "opencode@<provider>/<model>" any model `opencode models` lists, except the
+# providers David closed for a por-CLI task. No alias reaches those, even if R lists one.
 OPENCODE_DEFAULT_MODEL = "zai-coding-plan/glm-5.3-flash"
 OPENCODE_ALIAS = re.compile(r"opencode@([a-z0-9][a-z0-9-]*)/([A-Za-z0-9][A-Za-z0-9._-]*)")
+OPENCODE_CLOSED_PROVIDERS = {
+    "zai": "bills per token",
+    # David, 2026-10-12: "open code go es solamente para main".
+    "opencode-go": "spends the opencode Go subscription, reserved for main",
+}
 
 
 def opencode_model(adapter_id: str) -> str | None:
@@ -86,8 +91,8 @@ def opencode_model(adapter_id: str) -> str | None:
     match = OPENCODE_ALIAS.fullmatch(adapter_id)
     if match is None:
         raise ValueError(f"adapter {adapter_id} is not opencode@<provider>/<model>")
-    if match[1] == "zai":
-        raise ValueError(f"adapter {adapter_id} bills per token; use zai-coding-plan/")
+    if match[1] in OPENCODE_CLOSED_PROVIDERS:
+        raise ValueError(f"adapter {adapter_id} {OPENCODE_CLOSED_PROVIDERS[match[1]]}; use zai-coding-plan/")
     return f"{match[1]}/{match[2]}"
 
 

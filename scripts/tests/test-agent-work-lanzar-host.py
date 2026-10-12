@@ -49,6 +49,8 @@ class LanzarHost(unittest.TestCase):
                     "OPENCLAW_BIN": "/isolated/openclaw", "AGENT_WORK_PYTHON": str(self.bin / "python-host"),
                     "AGENT_WORK_SETTLE_SECONDS": "0.5"}
         self.instance = f"ds{os.getpid()}{self.id()[-6:].replace('_', '')}"
+        # Its own name: the launcher looks for other hosts with pgrep, which also sees a live host of the machine.
+        self.session = f"s-{self.instance}"
 
     def launch(self, *args):
         return subprocess.run(["bash", str(LAUNCHER), *args], capture_output=True, text=True, env=self.env,
@@ -70,16 +72,16 @@ class LanzarHost(unittest.TestCase):
         return sorted(self.tmux("list-sessions", "-F", "#{session_name}").stdout.split())
 
     def test_an_alias_starts_its_model_session_and_a_host_with_the_live_flags(self):
-        launched = self.launch("--canario", "opencode@opencode-go/deepseek-v4-pro", self.instance, "deepseek",
+        launched = self.launch("--canario", "opencode@zai-coding-plan/glm-5.3", self.instance, self.session,
                                str(self.workspace))
         self.assertEqual(launched.returncode, 0, launched.stderr)
         spool = self.state / self.instance
         self.assertEqual(launched.stdout.splitlines()[-1],
-                         f"HOST {self.instance} opencode@opencode-go/deepseek-v4-pro opencode-go/deepseek-v4-pro "
-                         f"sesión=deepseek spool={spool}")
-        self.assertEqual(self.sessions(), sorted(["deepseek", f"host-{self.instance}"]))
+                         f"HOST {self.instance} opencode@zai-coding-plan/glm-5.3 zai-coding-plan/glm-5.3 "
+                         f"sesión={self.session} spool={spool}")
+        self.assertEqual(self.sessions(), sorted([self.session, f"host-{self.instance}"]))
         self.assertEqual(self.recorded("opencode"), [[
-            "-m", "opencode-go/deepseek-v4-pro", "OPENCODE_DISABLE_AUTOUPDATE=1",
+            "-m", "zai-coding-plan/glm-5.3", "OPENCODE_DISABLE_AUTOUPDATE=1",
             'OPENCODE_CONFIG_CONTENT={"permission":{"external_directory":{"' + str(spool) + '/**":"allow"}}}',
             f"PWD={self.workspace}"]])
         self.assertEqual(self.recorded("host"), [[
@@ -88,15 +90,15 @@ class LanzarHost(unittest.TestCase):
             "--host-state-dir", str(spool), "--evidence-root", str(self.state / "evidence"),
             "--progress-state-dir", str(self.root / "progress"),
             "--progress-client", str(self.root / "progress-events.py"), "--watch",
-            "--cli-adapter-id", "opencode@opencode-go/deepseek-v4-pro", "--cli-instance-id", self.instance,
-            "--cli-session", "deepseek", "--cli-workspace-root", str(self.workspace),
+            "--cli-adapter-id", "opencode@zai-coding-plan/glm-5.3", "--cli-instance-id", self.instance,
+            "--cli-session", self.session, "--cli-workspace-root", str(self.workspace),
             "--cli-tmux-socket", self.socket, "--cli-deadline-seconds", "3600", "--cli-canary",
             "OPENCLAW_BIN=/isolated/openclaw", "LANG=en_US.UTF-8", f"PWD={ROOT}"]])
         self.assertEqual((spool / "host.log").read_text(), "host double up\n")
         self.assertEqual(oct(spool.stat().st_mode & 0o777), "0o700")
 
     def test_the_default_alias_runs_glm_on_the_coding_plan_and_no_canary_flag(self):
-        launched = self.launch("opencode", self.instance, "glm", str(self.workspace))
+        launched = self.launch("opencode", self.instance, self.session, str(self.workspace))
         self.assertEqual(launched.returncode, 0, launched.stderr)
         self.assertEqual(self.recorded("opencode")[0][:2], ["-m", "zai-coding-plan/glm-5.3-flash"])
         host = self.recorded("host")[0]
@@ -104,61 +106,64 @@ class LanzarHost(unittest.TestCase):
         self.assertNotIn("--cli-canary", host)
 
     def test_a_second_run_reuses_the_session_and_the_host(self):
-        args = ("opencode@opencode-go/kimi-k3", self.instance, "kimi", str(self.workspace))
+        args = ("opencode@zai-coding-plan/glm-5.2", self.instance, self.session, str(self.workspace))
         self.assertEqual(self.launch(*args).returncode, 0)
         again = self.launch(*args)
         self.assertEqual(again.returncode, 0, again.stderr)
         self.assertEqual(again.stdout.splitlines()[:2],
-                         ["opencode: la sesión kimi ya corre opencode-go/kimi-k3", f"host: host-{self.instance} ya corre"])
+                         [f"opencode: la sesión {self.session} ya corre zai-coding-plan/glm-5.2",
+                          f"host: host-{self.instance} ya corre"])
         self.assertEqual(len(self.recorded("host")), 1, "a second host started for the same instance")
         self.assertEqual(len(self.recorded("opencode")), 1)
-        self.assertEqual(self.sessions(), sorted(["kimi", f"host-{self.instance}"]))
+        self.assertEqual(self.sessions(), sorted([self.session, f"host-{self.instance}"]))
 
     def test_the_same_instance_with_another_alias_is_refused(self):
-        self.assertEqual(self.launch("opencode@opencode-go/kimi-k3", self.instance, "kimi",
+        self.assertEqual(self.launch("opencode@zai-coding-plan/glm-5.2", self.instance, self.session,
                                      str(self.workspace)).returncode, 0)
-        other = self.launch("opencode@opencode-go/grok-4.7", self.instance, "grok", str(self.workspace))
+        other = self.launch("opencode@zai-coding-plan/glm-4.7", self.instance, f"{self.session}-b", str(self.workspace))
         self.assertEqual((other.returncode, other.stderr),
                          (1, f"lanzar-host: host-{self.instance} ya corre con otro comando "
                              f"(ver {self.state / self.instance}/host-cmd.txt)\n"))
         self.assertEqual(len(self.recorded("host")), 1)
 
     def test_a_session_that_runs_another_model_is_never_adopted(self):
-        self.tmux("new-session", "-d", "-s", "deepseek", "-c", str(self.workspace),
-                  str(self.bin / "opencode"), "-m", "opencode-go/kimi-k3")
-        refused = self.launch("opencode@opencode-go/deepseek-v4-pro", self.instance, "deepseek",
+        self.tmux("new-session", "-d", "-s", self.session, "-c", str(self.workspace),
+                  str(self.bin / "opencode"), "-m", "zai-coding-plan/glm-5.2")
+        refused = self.launch("opencode@zai-coding-plan/glm-5.3", self.instance, self.session,
                               str(self.workspace))
         self.assertEqual((refused.returncode, refused.stderr),
-                         (1, f"lanzar-host: la sesión deepseek no corre opencode-go/deepseek-v4-pro: "
-                             f"{self.bin / 'opencode'} -m opencode-go/kimi-k3\n"))
-        self.assertEqual(self.sessions(), ["deepseek"])
+                         (1, f"lanzar-host: la sesión {self.session} no corre zai-coding-plan/glm-5.3: "
+                             f"{self.bin / 'opencode'} -m zai-coding-plan/glm-5.2\n"))
+        self.assertEqual(self.sessions(), [self.session])
 
     def test_a_session_whose_permission_names_another_spool_is_never_adopted(self):
-        self.tmux("new-session", "-d", "-s", "deepseek", "-c", str(self.workspace),
+        self.tmux("new-session", "-d", "-s", self.session, "-c", str(self.workspace),
                   "-e", 'OPENCODE_CONFIG_CONTENT={"permission":{"external_directory":{"/old/**":"allow"}}}',
-                  str(self.bin / "opencode"), "-m", "opencode-go/deepseek-v4-pro")
-        refused = self.launch("opencode@opencode-go/deepseek-v4-pro", self.instance, "deepseek",
+                  str(self.bin / "opencode"), "-m", "zai-coding-plan/glm-5.3")
+        refused = self.launch("opencode@zai-coding-plan/glm-5.3", self.instance, self.session,
                               str(self.workspace))
         self.assertEqual(refused.returncode, 1)
-        self.assertIn("la sesión deepseek no permite el spool", refused.stderr)
-        self.assertEqual(self.sessions(), ["deepseek"])
+        self.assertIn(f"la sesión {self.session} no permite el spool", refused.stderr)
+        self.assertEqual(self.sessions(), [self.session])
 
     def test_a_host_of_the_same_instance_outside_the_launcher_blocks_a_second_one(self):
         stray = subprocess.Popen(["python3", "-c", "import time; time.sleep(60)", "--cli-instance-id", self.instance])
         self.addCleanup(stray.wait)
         self.addCleanup(stray.kill)
-        refused = self.launch("opencode@opencode-go/deepseek-v4-pro", self.instance, "deepseek",
+        refused = self.launch("opencode@zai-coding-plan/glm-5.3", self.instance, self.session,
                               str(self.workspace))
         self.assertEqual((refused.returncode, refused.stderr),
-                         (1, f"lanzar-host: otro host ya usa la instancia {self.instance} o la sesión deepseek "
+                         (1, f"lanzar-host: otro host ya usa la instancia {self.instance} o la sesión {self.session} "
                              f"(pid {stray.pid})\n"))
         self.assertEqual(self.recorded("host"), [])
         self.assertEqual(self.sessions(), [], "a refused launch left an opencode session behind")
 
     def test_a_bad_alias_starts_nothing(self):
         for alias, error in (("opencode@zai/glm-4.7", "adapter opencode@zai/glm-4.7 bills per token; use zai-coding-plan/"),
+                             ("opencode@opencode-go/kimi-k3", "adapter opencode@opencode-go/kimi-k3 spends the "
+                              "opencode Go subscription, reserved for main; use zai-coding-plan/"),
                              ("codex", "adapter codex is not an opencode adapter")):
-            refused = self.launch(alias, self.instance, "s", str(self.workspace))
+            refused = self.launch(alias, self.instance, self.session, str(self.workspace))
             self.assertEqual((refused.returncode, refused.stderr), (2, f"lanzar-host: {error}\n"))
         self.assertEqual(self.sessions(), [])
         self.assertFalse(self.state.exists())
