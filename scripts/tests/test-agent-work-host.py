@@ -197,10 +197,16 @@ class HostReceipts(unittest.TestCase):
         observation = self.apply(self.key, operation, lambda *_: None)
         assignment = json.loads(Path(observation.assignment_ref).read_text())
         protocol = assignment["protocol"]
+        # Live canary 8 2026-10-12: deepseek staged the accept object in /tmp, and opencode asked for /tmp.
+        self.assertEqual(protocol["steps"][0],
+                         "Before any other work, write the accept object as JSON to acceptRef, atomically: create "
+                         "the temporary file inside the directory that holds acceptRef (never in /tmp or any other "
+                         "directory), write the JSON there, then rename it onto acceptRef.")
         self.assertEqual(protocol["steps"][2],
-                         "Write, as JSON to resultRef and atomically in the same way, exactly the fields shown in "
-                         "result with their values unchanged, plus every field named in fill holding what fill "
-                         "describes. Write no other field.")
+                         "Write, as JSON to resultRef and atomically in the same way (a temporary file inside the "
+                         "directory that holds resultRef, never in /tmp, renamed onto resultRef), exactly the fields "
+                         "shown in result with their values unchanged, plus every field named in fill holding what "
+                         "fill describes. Write no other field.")
         Path(assignment["acceptRef"]).write_text(json.dumps(protocol["accept"]))
         Path(assignment["resultRef"]).write_text(json.dumps({
             **protocol["result"],

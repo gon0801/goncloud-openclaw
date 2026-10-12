@@ -162,12 +162,14 @@ def cli_protocol(assignment: dict) -> dict:
     """The assignment spells out what a CLI writes, because the CLI has nothing else to go on."""
     return {
         "steps": [
-            "Before any other work, write the accept object as JSON to acceptRef, atomically: write a "
-            "temporary file in the same directory, then rename it onto acceptRef.",
+            "Before any other work, write the accept object as JSON to acceptRef, atomically: create the "
+            "temporary file inside the directory that holds acceptRef (never in /tmp or any other "
+            "directory), write the JSON there, then rename it onto acceptRef.",
             "Do the work that the file at briefRef describes, inside workspaceRef.",
-            "Write, as JSON to resultRef and atomically in the same way, exactly the fields shown in "
-            "result with their values unchanged, plus every field named in fill holding what fill "
-            "describes. Write no other field.",
+            "Write, as JSON to resultRef and atomically in the same way (a temporary file inside the "
+            "directory that holds resultRef, never in /tmp, renamed onto resultRef), exactly the fields "
+            "shown in result with their values unchanged, plus every field named in fill holding what "
+            "fill describes. Write no other field.",
         ],
         "accept": {"schema": ACCEPT_SCHEMA, "capability": assignment["capability"],
                    **{field: assignment[field] for field in ACCEPT_BOUND}},
@@ -678,19 +680,24 @@ class Host:
                                assignment["generation"], assignment["instanceId"])
             op_id = operation_id(key)
             current = self.spool.get(op_id)
-            if current is None or current["status"] != "delivered" or not assignment.get("adapterId"):
+            if current is None or current["status"] not in ("attempted", "delivered") \
+                    or not assignment.get("adapterId"):
                 continue
-            try:
-                receipt = self.collect(host_id, key)
-                if receipt is not None:
+            kind = None
+            # Canary 8 (2026-10-12): opencode asked for a permission before the CLI wrote its acceptance.
+            # A typed reference the CLI has not acknowledged shows its dialog like a delivery does; its
+            # deadline is the acceptance one, which settle_deliveries owns.
+            if current["status"] == "delivered":
+                try:
+                    receipt = self.collect(host_id, key)
+                    if receipt is not None:
+                        continue
+                except ValueError:
+                    kind = "invalid-result"
+                except OSError:
                     continue
-                kind = None
-            except ValueError:
-                kind = "invalid-result"
-            except OSError:
-                continue
-            if kind is None and session_gone(key):
-                kind = "transport-unavailable"
+                if kind is None and session_gone(key):
+                    kind = "transport-unavailable"
             incidents = []
             dialog = None
             before = None

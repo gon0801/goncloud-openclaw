@@ -57,6 +57,6 @@ Si pide otro modelo, dile que no tiene alias; no inventes uno. Cada alias necesi
 - Con `delivery-unaccepted` o `transport-unavailable`, no reenvíes ni teclees en la Mac. Inspecciona y decide; si hay que repetir, es un encargo nuevo con otro `taskKey`.
 - Un `taskKey` ya usado con otro brief da `Managed task registration conflict`.
 - Si `admit` contesta `Managed CLI host adapter is not certified`, ese alias no está abierto en R. Dile a David cuál.
-- Si David pregunta y, después de varios minutos, `managed_tasks_inspect` sigue sin `result` y sin `incidents`, ningún host corre para ese alias. Dile a David qué alias no tiene host; no lo reintentes.
+- Si David pregunta y, después de varios minutos, `managed_tasks_inspect` sigue sin `result` y sin `incidents`, lo más probable es que ningún host corra para ese alias: un host vivo reporta `permission-required` en cuanto opencode pide un permiso, aun antes del acuse, y `delivery-unaccepted` a la hora si el CLI nunca acusó recibo. Dile a David qué alias no tiene host; no lo reintentes.
 - El CLI trabaja dentro del workspace de su host. Si el repo queda fuera, llega una incidencia de permiso: cancela y dile a David el repo y el alias.
 - Encarga desde tu sesión, nunca desde un turno `isolated` de cron: R lo rechaza.
