@@ -25,10 +25,14 @@ Para aplicar un cambio de modelos hoy, en el host del gateway:
   arreglos enteros: el patch lleva las filas que ya había y la nueva.
 - Un id nuevo de `anthropic/*` necesita su entrada en `agents.defaults.models` con
   `agentRuntime: claude-cli`; sin ella corre por otro runtime y otra credencial.
+- Al cambiar un id, las claves del id viejo no se van solas: en el mismo patch se anulan con
+  `null` (`agents.entries.<agente>.models["<id viejo>"]: null`). Las entradas del id viejo en
+  `agents.defaults.models` se dejan mientras alguna sesión siga fijada a él.
 - `openclaw models auth paste-api-key` sin `--profile-id` se niega a cambiar una llave
   compartida mientras algún agente guarde una copia propia. Con
-  `--profile-id <proveedor>:manual` escribe en la compartida (agente `main`) o en la copia del
-  agente indicado, y acepta la llave por stdin.
+  `--profile-id <proveedor>:manual` sí escribe, y el destino lo decide `--agent`: con
+  `--agent main` va a la llave compartida; con el nombre de un agente que guarda copia propia
+  va a esa copia. Hay que correrlo una vez por cada destino. Acepta la llave por stdin.
 
 Estos archivos ya fueron aplicados al gateway el 2026-09-10 y quedan como registro de lo aplicado. Nota de fidelidad: lo aplicado en produccion usa `deepseek/deepseek-v4-flash` donde la tabla FASE-B original decia `deepseek/deepseek-v4-pro` (decision de David, 2026-09-10); estos archivos ya reflejan el flash real. `modelos-rollback.json5` NO se toco: describe el estado pre-M1 exacto (primarios OpenAI) y solo sirve para volver a ese estado.
 
@@ -36,7 +40,7 @@ Estos archivos ya fueron aplicados al gateway el 2026-09-10 y quedan como regist
 
 Reglas de cadena (FASE B, brief `2026-09-10-cursor-FASE-B-cadenas-modelos.md`): ningun agente repite proveedor; toda la cadena en runtime nativo (sin OpenAI-OAuth/codex); 4 proveedores + Anthropic como 5o. Esta tabla reemplaza M1 puntos 1-2 del brief de agentes.
 
-**Donde se aplican.** `openclaw config patch` desde la Mac escribe `~/.openclaw/openclaw.json` local, no el gateway. Correr los patches **en el host del gateway** (CLI local al gateway; en septiembre era la maquina Windows, hoy es la Mac Mini). No usar `gateway call config.patch` a ciegas (sin dry-run verificado).
+**Donde se aplican.** `openclaw config patch` desde una maquina cliente (la Mac del propietario, que solo se conecta al gateway) escribe su `~/.openclaw/openclaw.json` local, no el del gateway. Correr los patches **en el host del gateway** (CLI local al gateway; en septiembre era la maquina Windows, hoy es la Mac Mini). No usar `gateway call config.patch` a ciegas (sin dry-run verificado).
 
 ## Fuente del rollback
 
