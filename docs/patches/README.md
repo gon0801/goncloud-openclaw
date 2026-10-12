@@ -1,12 +1,46 @@
 # Patches de modelo — APLICADOS 2026-09-10
 
+## Vigente desde la migración a la Mac Mini
+
+El gateway ya no corre en la máquina Windows: corre en la Mac Mini. Donde este documento
+dice "la máquina Windows" o "Windows / gateway", léase "el host del gateway". Lo demás de
+esta página es el registro de lo aplicado en septiembre y de una propuesta que no se aplicó.
+
+Las cadenas vivas ya no salen de estos patches. Se derivan de la tabla de
+`goncloud-hermes` (`model-routing.source.json`): ahí, `scripts/claw_models.py desired` dice
+qué cadena debe tener cada agente y `check --live <foto>` lista las diferencias contra una
+foto como `modelos-vivos-2026-10-12.json5`. La propuesta `modelos-primaries-repartidos.json5`
+y su prueba se conservan como registro: se validaron contra la foto de septiembre, que ya no
+describe lo vivo.
+
+Para aplicar un cambio de modelos hoy, en el host del gateway:
+
+- `openclaw config patch --stdin --dry-run` (o `--file`) valida sin escribir; el mismo
+  comando sin `--dry-run` aplica y recarga en caliente, sin reiniciar el gateway (medido en
+  2026.9.7).
+- Aplicar en un hueco sin corridas. Una sesión puede quedar marcada `running` durante días;
+  cuenta como corrida viva solo la que se actualizó hace menos de diez minutos.
+- Un modelo nuevo de un proveedor con filas escritas a mano (`meta`, `opencode-go-resp`, ...)
+  necesita su fila en `models.providers.<proveedor>.models`, y `config patch` reemplaza los
+  arreglos enteros: el patch lleva las filas que ya había y la nueva.
+- Un id nuevo de `anthropic/*` necesita su entrada en `agents.defaults.models` con
+  `agentRuntime: claude-cli`; sin ella corre por otro runtime y otra credencial.
+- Al cambiar un id, las claves del id viejo no se van solas: en el mismo patch se anulan con
+  `null` (`agents.entries.<agente>.models["<id viejo>"]: null`). Las entradas del id viejo en
+  `agents.defaults.models` se dejan mientras alguna sesión siga fijada a él.
+- `openclaw models auth paste-api-key` sin `--profile-id` se niega a cambiar una llave
+  compartida mientras algún agente guarde una copia propia. Con
+  `--profile-id <proveedor>:manual` sí escribe, y el destino lo decide `--agent`: con
+  `--agent main` va a la llave compartida; con el nombre de un agente que guarda copia propia
+  va a esa copia. Hay que correrlo una vez por cada destino. Acepta la llave por stdin.
+
 Estos archivos ya fueron aplicados al gateway el 2026-09-10 y quedan como registro de lo aplicado. Nota de fidelidad: lo aplicado en produccion usa `deepseek/deepseek-v4-flash` donde la tabla FASE-B original decia `deepseek/deepseek-v4-pro` (decision de David, 2026-09-10); estos archivos ya reflejan el flash real. `modelos-rollback.json5` NO se toco: describe el estado pre-M1 exacto (primarios OpenAI) y solo sirve para volver a ese estado.
 
 `config patch` mergea objetos y **reemplaza arrays enteros**. Los `fallbacks` del patch sustituyen la lista previa completa.
 
 Reglas de cadena (FASE B, brief `2026-09-10-cursor-FASE-B-cadenas-modelos.md`): ningun agente repite proveedor; toda la cadena en runtime nativo (sin OpenAI-OAuth/codex); 4 proveedores + Anthropic como 5o. Esta tabla reemplaza M1 puntos 1-2 del brief de agentes.
 
-**Donde se aplican.** `openclaw config patch` desde la Mac escribe `~/.openclaw/openclaw.json` local, no el gateway. Correr los patches **en la maquina Windows** (CLI local al gateway). No usar `gateway call config.patch` a ciegas (sin dry-run verificado).
+**Donde se aplican.** `openclaw config patch` desde una maquina cliente (la Mac del propietario, que solo se conecta al gateway) escribe su `~/.openclaw/openclaw.json` local, no el del gateway. Correr los patches **en el host del gateway** (CLI local al gateway; en septiembre era la maquina Windows, hoy es la Mac Mini). No usar `gateway call config.patch` a ciegas (sin dry-run verificado).
 
 ## Fuente del rollback
 
@@ -145,12 +179,13 @@ sin dependencia json5: strip de `//`, comas colgantes y llaves sin comillas;
 discrimina con fixture malo y cruza cada id de la propuesta contra los ids de
 `modelos-vivos-2026-09-15.json5`).
 
-Foto más reciente de lo vivo: `modelos-vivos-2026-10-12.json5` (Mac Mini). Además de las
-cadenas trae `agents.*.models` y las filas de `models.providers`. Los ids `anthropic/*` y
-`openai/*` de las cadenas no tienen fila ahí porque salen del catálogo de sus plugins
-(runtime `claude-cli` y harness `codex`), no de `models.providers`. Es una foto fechada
-igual que la anterior: sirve para comparar, no como fuente de rollback. La propuesta, su
-prueba y la evidencia de abajo siguen refiriéndose a la foto de septiembre.
+Foto más reciente de lo vivo: `modelos-vivos-2026-10-12.json5` (Mac Mini, tomada después
+de los cambios de modelos de ese día). Además de las cadenas trae `agents.*.models` y las
+filas de `models.providers`. Los ids de las cadenas que no tienen fila ahí (`anthropic/*`,
+`openai/*` y `kimi/kimi-for-coding`) los resuelve el catálogo de sus plugins, no
+`models.providers`. Es una foto fechada igual que la anterior: sirve para comparar, no como
+fuente de rollback. La propuesta, su prueba y la evidencia de abajo siguen refiriéndose a
+la foto de septiembre.
 
 Evidencia de que cada id existe (extraída el 2026-09-16; el archivo se fecha 09-15
 porque coincide con lo medido ese día en el brief de la corrida): `openclaw models
@@ -165,7 +200,7 @@ en la propuesta; quedan candidatos para después. `openclaw config get
 agents.entries.<id>.model` desde la Mac devuelve "unset" aunque esté puesto (quirk
 conocido): la lectura fiable es la de arriba.
 
-**No aplicar desde la Mac ni con runs en vuelo.** En la máquina Windows (gateway),
+**No aplicar desde la Mac ni con runs en vuelo.** En el host del gateway,
 en ventana muerta (cero runs: `config patch` recarga la config y mata los runs):
 
 ```bash
