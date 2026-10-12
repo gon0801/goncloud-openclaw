@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 from contracts import AuthorizedOperation, OperationKey
 from cutover_live import uncertain_operations
 from host import (CliAdapter, DeliveryDeferred, Host, ShellAdapterTransport, TmuxTransport, cli_adapter,
-                  SGR, main as host_main, operation_id, read_composer, same_text)
+                  SGR, main as host_main, opencode_model, operation_id, read_composer, same_text)
 
 COMPOSER_CLI = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "composer-cli.py"
 # capture-pane -e of opencode 1.18.35 on its default theme, 2026-10-10: the home screen, a session
@@ -45,8 +45,8 @@ def opencode_box(*rows):
 class ScriptedTmux(TmuxTransport):
     """The production transport over a scripted tmux: one opencode pane, its screens in order."""
 
-    def __init__(self, *screens):
-        super().__init__("tmux", "unused", cli_adapter("opencode"), sleep=lambda _: None)
+    def __init__(self, *screens, adapter_id="opencode"):
+        super().__init__("tmux", "unused", cli_adapter(adapter_id), sleep=lambda _: None)
         self.screens = list(screens)
         self.keys = []
 
@@ -591,6 +591,47 @@ class HostReceipts(unittest.TestCase):
             transport = ScriptedTmux(opencode_screen(before), opencode_screen(after))
             transport.deliver("/x/assignments/op-1.json", "oc")
             self.assertEqual(transport.keys, [reference, "Enter"], before)
+
+    def test_an_opencode_model_alias_delivers_on_the_opencode_screens(self):
+        reference = self.reference_text("/x/assignments/op-1.json")
+        transport = ScriptedTmux(opencode_screen("home-empty"), opencode_screen("home-reference"),
+                                 adapter_id="opencode@opencode-go/deepseek-v4-pro")
+        transport.deliver("/x/assignments/op-1.json", "oc")
+        self.assertEqual(transport.keys, [reference, "Enter"])
+        grey = ScriptedTmux(opencode_box(f"{GRUVBOX}borrador del operador{RESET}"),
+                            adapter_id="opencode@opencode-go/kimi-k3")
+        with self.assertRaisesRegex(DeliveryDeferred, "borrador del operador"):
+            grey.deliver("/x/assignments/op-1.json", "oc")
+        self.assertEqual(grey.keys, [])
+
+    def test_an_opencode_adapter_id_names_the_model_of_its_session(self):
+        self.assertEqual(opencode_model("opencode"), "zai-coding-plan/glm-5.3-flash")
+        self.assertEqual(opencode_model("opencode@opencode-go/deepseek-v4-pro"), "opencode-go/deepseek-v4-pro")
+        self.assertEqual(opencode_model("opencode@opencode-go/deepseek-v4.1-flash"), "opencode-go/deepseek-v4.1-flash")
+        self.assertEqual(opencode_model("opencode@zai-coding-plan/glm-5.3-flash"), "zai-coding-plan/glm-5.3-flash")
+        self.assertIsNone(opencode_model("codex"))
+        self.assertIsNone(opencode_model("opencodex"))
+        self.assertEqual(cli_adapter("codex").commands, ("codex",))
+        for malformed in ("opencode@", "opencode@deepseek-v4-pro", "opencode@opencode-go/", "opencode@/kimi-k3",
+                          "opencode@Opencode-go/kimi-k3", "opencode@opencode-go/kimi k3",
+                          "opencode@opencode-go/kimi-k3/x"):
+            with self.assertRaisesRegex(ValueError, "is not opencode@<provider>/<model>"):
+                opencode_model(malformed)
+        with self.assertRaisesRegex(ValueError, "bills per token"):
+            opencode_model("opencode@zai/glm-4.7")
+
+    def test_host_cli_prints_the_model_of_an_opencode_alias(self):
+        script = ROOT / "scripts/agent-work/host.py"
+        printed = subprocess.run([sys.executable, str(script), "opencode-model", "opencode@opencode-go/kimi-k3"],
+                                 capture_output=True, text=True)
+        self.assertEqual((printed.returncode, printed.stdout), (0, "opencode-go/kimi-k3\n"))
+        refused = subprocess.run([sys.executable, str(script), "opencode-model", "opencode@zai/glm-4.7"],
+                                 capture_output=True, text=True)
+        self.assertEqual((refused.returncode, refused.stdout, refused.stderr),
+                         (1, "", "adapter opencode@zai/glm-4.7 bills per token; use zai-coding-plan/\n"))
+        other = subprocess.run([sys.executable, str(script), "opencode-model", "codex"],
+                               capture_output=True, text=True)
+        self.assertEqual((other.returncode, other.stderr), (1, "adapter codex is not an opencode adapter\n"))
 
     def test_opencode_delivery_presses_enter_once_a_long_reference_finishes_drawing(self):
         reference = self.reference_text("/x/assignments/op-1.json")

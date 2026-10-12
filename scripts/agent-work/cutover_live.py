@@ -4,7 +4,9 @@ ownership to the native route by generation. Every step reads the Gateway; nothi
 
 Usage: cutover_live.py prepare|inspect|apply|revert --state <file> [--entry <entry.json>] [--wait-seconds N]
        cutover_live.py freeze [--wait-seconds N]
-`revert` undoes one entry's cutover on the running Gateway; `freeze` closes all native admission.
+       cutover_live.py adapters --host <hostId> --add <adapterId> [--add ...] [--dry-run] [--wait-seconds N]
+`revert` undoes one entry's cutover on the running Gateway; `freeze` closes all native admission;
+`adapters` opens more adapters of an open host, such as opencode model aliases.
 The Gateway is reached with `openclaw gateway call` (OPENCLAW_BIN, default ~/.openclaw/bin/openclaw).
 """
 import argparse
@@ -20,6 +22,9 @@ from pathlib import Path
 
 SCHEMA = "agent-work-cutover.v2"
 LIMITS = Path(__file__).resolve().parents[2] / "docs/evidence/agent-work/limits.json"
+COVERAGE = Path(__file__).resolve().parents[2] / "docs/evidence/agent-work/coverage.json"
+# A route R may admit: certified, or tested in the sandbox and waiting for its own canary.
+OPENABLE = ("certified", "sandbox-tested-uncertified")
 # R's ManagedTaskBudgetProfileSchema; a profile missing one of them is not a finite profile.
 PROFILE_FIELDS = ("maxConcurrentTasks", "maxDepth", "maxChildren", "maxModelCalls", "maxInputTokens",
                   "maxOutputTokens", "maxCacheReadTokens", "maxContextTokens", "maxTreeTokens",
@@ -261,6 +266,45 @@ def freeze(client, wait_seconds=120, sleep=time.sleep):
         sleep(0.5)
 
 
+def adapters_patch(managed, host_id, adapters, coverage):
+    """The managedTasks patch that appends adapters to an open host and keeps every other key; None once
+    they are all there. It only grows the list, so R's merge needs no replacePaths."""
+    known = coverage["hostAdapterCoverage"].get(host_id, {})
+    untested = [adapter for adapter in adapters if known.get(adapter) not in OPENABLE]
+    if untested:
+        raise CutoverRefused(f"{host_id} has no tested route for {', '.join(untested)}")
+    host = managed.get("hosts", {}).get(host_id)
+    if not managed.get("enabled") or not host:
+        raise CutoverRefused(f"{host_id} is not open; a cutover opens it first")
+    missing = [adapter for adapter in dict.fromkeys(adapters) if adapter not in host["adapters"]]
+    if not missing:
+        return None
+    return {"managedTasks": {"hosts": {host_id: {"adapters": [*host["adapters"], *missing]}}}}
+
+
+def add_adapters(client, host_id, adapters, coverage, wait_seconds=0, sleep=time.sleep):
+    """Open the adapters and return the host's adapter list as R re-reads it; the managedTasks change
+    restarts the Gateway, so wait for it. Running it again once they are open patches nothing."""
+    deadline = time.monotonic() + max(wait_seconds, 60)
+    patched = False
+    while True:
+        try:
+            config = client.call("config.get", {})
+            managed = config["resolved"].get("managedTasks", {})
+            patch = adapters_patch(managed, host_id, adapters, coverage)
+            if patch is None:
+                return managed["hosts"][host_id]["adapters"]
+            if not patched:
+                client.call("config.patch", {"raw": json.dumps(patch), "baseHash": config["hash"]})
+                patched = True
+                continue
+        except GatewayUnavailable:
+            pass
+        if time.monotonic() >= deadline:
+            raise CutoverRefused(f"{host_id} did not open {', '.join(adapters)}")
+        sleep(0.5)
+
+
 def entry_close_patch(entry, managed):
     """The managedTasks patch and replacePaths that close admission for this entry alone; no patch once closed."""
     hosts = managed.get("hosts", {})
@@ -421,13 +465,19 @@ class CliClient:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("prepare", "inspect", "apply", "freeze", "revert"))
+    parser.add_argument("command", choices=("prepare", "inspect", "apply", "freeze", "revert", "adapters"))
     parser.add_argument("--state", type=Path)
     parser.add_argument("--entry", type=Path)
     parser.add_argument("--wait-seconds", type=float, default=0)
     parser.add_argument("--limits", type=Path, default=LIMITS)
+    parser.add_argument("--host")
+    parser.add_argument("--add", action="append", default=[])
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
-    if args.command != "freeze" and args.state is None:
+    if args.command == "adapters":
+        if not args.host or not args.add:
+            parser.error("adapters needs --host and at least one --add")
+    elif args.command != "freeze" and args.state is None:
         parser.error(f"{args.command} needs --state")
     client = CliClient(os.environ.get("OPENCLAW_BIN", str(Path.home() / ".openclaw/bin/openclaw")))
     try:
@@ -444,6 +494,15 @@ def main():
         elif args.command == "freeze":
             freeze(client, max(args.wait_seconds, 60))
             print("frozen")
+        elif args.command == "adapters":
+            coverage = json.loads(COVERAGE.read_text())
+            if args.dry_run:
+                managed = retrying(lambda: client.call("config.get", {}), time.monotonic() + args.wait_seconds,
+                                   time.sleep)["resolved"].get("managedTasks", {})
+                print(json.dumps({"patch": adapters_patch(managed, args.host, args.add, coverage)}, sort_keys=True))
+            else:
+                adapters = add_adapters(client, args.host, args.add, coverage, args.wait_seconds)
+                print(json.dumps({"host": args.host, "adapters": adapters}))
         else:
             print(revert(args.state, client, args.wait_seconds))
     except CutoverRefused as refused:

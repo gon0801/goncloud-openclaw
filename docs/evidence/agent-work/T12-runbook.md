@@ -10,7 +10,7 @@ Desde B6 (`B6.md`), R certifica el presupuesto según el servidor y la API, no s
 
 En la Mini eso cubre a `main`, `ingenieria` e `implementer`, cuyo primario es `opencode-go-resp/muse-spark-1.3-contributor`. No cubre a los agentes con primario `opencode-go/deepseek-v4.1-flash` (`adversary`, `operaciones`, `reviewer`, `verifier`, `scout`): ese proveedor pasa por el plugin `opencode-go`, y R rechaza un plugin dentro de un encargo.
 
-Un encargo que cae a un fallback por CLI (claude-cli) o a un plugin (codex) se rechaza antes de gastar. Salvo `mac-local/opencode` (B8; ver "La sesión de opencode que adopta el host" en la parte B), las rutas a un CLI de la Mac siguen sin certificar (matriz A10): esos loops conservan su vigía y lo declaran (plan `:318`).
+Un encargo que cae a un fallback por CLI (claude-cli) o a un plugin (codex) se rechaza antes de gastar. Salvo `mac-local/opencode` (B8; ver "La sesión de opencode que adopta el host" en la parte B), las rutas a un CLI de la Mac siguen sin certificar (matriz A10): esos loops conservan su vigía y lo declaran (plan `:318`). Los alias de modelo de opencode (B19, sección "Un host por alias de modelo") se certifican uno por uno, cada uno con su propio canario.
 
 ## Actualizar la Mini a R `19c2ed1` (B6)
 
@@ -117,7 +117,7 @@ También acepta `--file <archivo>` en lugar de la entrada estándar. Imprime una
 {"instructionRef": {"digest": "sha256:<sha256>", "ref": "artifact:<sha256>"}, "target": {"adapterId": "<adapterId>", "hostId": "mac-local", "kind": "cli"}}
 ```
 
-`main` pega `instructionRef` y `target` tal cual en `managed_tasks_submit`, junto con su `key`, `inputRevision`, `resultContract` y `continuation`, y después llama a `managed_tasks_admit`. Escribir el mismo brief dos veces es seguro: el archivo ya está y la salida es la misma. Si sale con 1, el motivo va en stderr y no hay nada que enviar: brief vacío o de más de 1 MB, raíz inexistente o enlazada, o un archivo con ese nombre y otro contenido. `brief.py` no certifica la ruta; un adaptador sin certificar (matriz A10) lo sigue rechazando R.
+`main` pega `instructionRef` y `target` tal cual en `managed_tasks_submit`, junto con su `taskKey`, `inputRevision`, `resultContract` y `continuation`, y después llama a `managed_tasks_admit`. Desde B19 los pasos completos, sin que nadie se los dicte, están en la skill `encargo-cli` de `main` (`agents/main/agent/workshop-skills/encargo-cli/SKILL.md`). Escribir el mismo brief dos veces es seguro: el archivo ya está y la salida es la misma. Si sale con 1, el motivo va en stderr y no hay nada que enviar: brief vacío o de más de 1 MB, raíz inexistente o enlazada, o un archivo con ese nombre y otro contenido. `brief.py` no certifica la ruta; un adaptador sin certificar (matriz A10) lo sigue rechazando R.
 
 ### La sesión de opencode que adopta el host
 
@@ -154,6 +154,31 @@ OPENCLAW_BIN=/Users/dn/.openclaw-r/openclaw LANG=en_US.UTF-8 python3 scripts/age
 - Una cola de una corrida que el tablero no conoce no se publica nunca. El host la reintenta hasta una vez cada 5 min y deja en `host.log` una línea `progress publish rejected corrida <c>: progress-events: get no devolvió documento y revisión aceptados` por intento. `publish` no la manda sola a `rejected/`, porque `runbook.progress.get` contesta `desconocida` tanto a una corrida que no existe como a un candado ocupado o a un registro ilegible (`followups.md`, fila B16). Una cola así se archiva a mano, sin borrar nada: `mkdir -p ~/.local/state/runbook-progress-events/archivo-<fecha> && mv ~/.local/state/runbook-progress-events/runs/<c> ~/.local/state/runbook-progress-events/archivo-<fecha>/`. Las 49 colas de las pruebas de humo del 2026-10-04 (`smoke-*` y `r14`) se archivaron así el 2026-10-11 en `archivo-2026-10-11/`.
 - `~/bin/progress-events.py` tiene que ser igual a `scripts/mac/progress-events.py` del mismo checkout: una copia vieja no lleva los campos del ACK durable. Compruébalo antes de arrancar con `cmp ~/bin/progress-events.py scripts/mac/progress-events.py`, que no imprime nada si son iguales.
 - `--host-state-dir` y `--cli-instance-id` cambian solo cuando se empieza un spool nuevo. Un spool que ya no corre ningún host se cierra con la sección "Cerrar un spool viejo".
+
+### Un host por alias de modelo (B19)
+
+`main` elige el modelo que hace el trabajo con el `adapterId` del encargo. `opencode` es la sesión de B8, con GLM 5.3 flash del plan de Z.AI (`zai-coding-plan/glm-5.3-flash`). `opencode@<proveedor>/<modelo>` es cualquier otro modelo que liste `opencode models`, por ejemplo `opencode@opencode-go/deepseek-v4-pro`. El id lleva el modelo literal porque así es estable y se explica solo: R no le pide nada más que estar en `managedTasks.hosts.mac-local.adapters` (`managed-tasks.ts:158` de R), y el host saca de ahí el `-m` sin otra tabla. `host.py opencode-model <alias>` imprime el modelo de un alias. Rechaza un alias mal formado y cualquier `zai/*`, que cobra por token.
+
+Un host maneja una sola sesión de opencode, así que cada alias necesita su propio host. Los arranca, o reusa los que ya corren, `scripts/agent-work/lanzar-host.sh`, desde el checkout del host (`~/dev/wt/agent-work-host`):
+
+```
+bash scripts/agent-work/lanzar-host.sh [--canario] <alias> <instancia> <sesión> <workspace>
+```
+
+- Abre la sesión `<sesión>` de opencode en `tmux -L agent-work`, con `-m <modelo del alias>`, `OPENCODE_DISABLE_AUTOUPDATE=1` y la regla `external_directory` para el spool. Después abre el host en la sesión `host-<instancia>`, con el spool `~/.local/state/agent-work-host/<instancia>`, su log en `<spool>/host.log` y las mismas opciones que `host-cmd.txt` (incluido `--progress-state-dir ~/.local/state/runbook-progress-events`).
+- Correrlo dos veces no arranca nada nuevo: reusa la sesión si corre ese modelo con la regla de ese spool, y reusa el host si `<spool>/host-cmd.txt` trae el mismo comando. Se niega, sin arrancar nada, si la sesión corre otro modelo o permite otro spool, si `host-<instancia>` corre con otro comando, o si otro proceso ya lleva `--cli-instance-id <instancia>` o `--cli-session <sesión>`, por ejemplo el host vivo de la sesión `host`.
+- `--canario` agrega `--cli-canary` al host: además de los alias `certified`, reclama los que `coverage.json` tiene `sandbox-tested-uncertified`. Sin esa opción, un host de un alias sin certificar no reclama nada (`host adapter route is not certified` en cada pasada).
+- Los alias abiertos hoy son `opencode@opencode-go/deepseek-v4-pro`, `opencode@opencode-go/kimi-k3`, `opencode@opencode-go/grok-4.7` y `opencode@opencode-go/qwen3.8-max`, todos `sandbox-tested-uncertified`. Cada uno se certifica con su propio canario: un pedido casual a `main` que lo nombra, resuelto sin pasos dictados. Al pasar, el alias cambia a `certified` en `coverage.json`, con su evidencia en `hostAdapterEvidence`, y su host se relanza sin `--canario`.
+- El CLI trabaja dentro del workspace de su host. Un repo fuera de ese workspace termina en una incidencia de permiso.
+- Todos los hosts publican la misma cola, `~/.local/state/runbook-progress-events`. Una pasada publica solo mientras tiene el candado `.host-publish.lock` de ese directorio; si otro host lo tiene, esa pasada no publica y la siguiente lo vuelve a intentar. El host de la sesión `host` toma el candado cuando se reinicia sobre B19.
+- opencode 1.18.35 abre el diálogo "Update Available" al arrancar aunque lleve `OPENCODE_DISABLE_AUTOUPDATE=1`, y mientras esté abierto el host no entrega. Ciérralo con Esc (`tmux -L agent-work attach -t <sesión>`, Esc y después `C-b d`).
+
+R abre un alias con `cutover_live.py adapters`, que agrega los alias a la lista con `config.patch` y `baseHash`, sin `replacePaths`, y no toca ninguna otra clave. El script de B19 es `t12-adapters-1.sh` (`deploy-commands.md`, sección "Abrir alias de modelo en mac-local"). La skill de `main` se publica con `t12-skills-main-1.sh` (misma sección). No hace falta reiniciar el gateway: R vigila `workshop-skills` y el turno siguiente de `main` ve la skill nueva.
+
+El canario 8 (`~/.local/state/encargos-loop/canario/mensaje-8.txt`) certifica el alias de deepseek. Es un pedido casual, sin pasos: solo funciona si `main` sigue `encargo-cli` por su cuenta. Pasa si:
+- R tiene una tarea con `target.adapterId` `opencode@opencode-go/deepseek-v4-pro`, `inputRevision` de tipo `code` con el HEAD de `~/dev/canario-encargos`, un resultado `ready.v1` y una decisión `complete`;
+- el spool `~/.local/state/agent-work-host/deepseek-1` tiene esa operación `acknowledged` y su recurso `ReleasedAdopted`;
+- `~/dev/canario-encargos/saludo.py` define `saludar(nombre)`, y `saludar("David")` regresa `Hola, David`.
 
 ### El túnel ssh del CLI de R
 

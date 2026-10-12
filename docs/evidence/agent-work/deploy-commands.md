@@ -82,6 +82,147 @@ Cada paso deja su fase en `revert.phase` del estado (`start`, `frozen`, `done`),
 
 `freeze` cierra la admisión de todas las entradas a la vez y no rehabilita ningún cron. Sirve para parar de golpe. `revert` es la reversa completa de una sola entrada.
 
+## Abrir alias de modelo en mac-local (B19)
+
+Dos scripts de la Mac de desarrollo, en `~/.local/state/encargos-loop/artifacts/T12/`. Los dos corren desde el checkout del host, que tiene que traer B19, y no llevan secretos. Se ensayaron en la Mac contra una copia de la config con el CLI doble `scripts/tests/fixtures/agent-work/openclaw-config-double.py`, y el de las skills, además, con `ssh` y `scp` dobles sobre un HOME falso de la Mini. No se corrieron contra el gateway vivo ni contra la Mini.
+
+| Paso | Comando | Salida esperada | Duración máxima | Ante fallo |
+|---|---|---|---|---|
+| Abrir los alias en R | `bash ~/.local/state/encargos-loop/artifacts/T12/t12-adapters-1.sh` | `ADAPTADORES OK` y la lista `adapters` de `mac-local` con `opencode` y los cuatro alias | 3 min (el gateway se reinicia unos 6 s) | `PARO: …` nombra la causa. Hasta el paso 3 no se escribió nada; después, correrlo otra vez retoma, porque un alias que ya está no se vuelve a escribir. |
+| Publicar las skills de `main` | `bash ~/.local/state/encargos-loop/artifacts/T12/t12-skills-main-1.sh` | `SKILLS OK`, los dos sha256 iguales y `Sin reinicio` | 1 min | `PARO: …`. La copia anterior de `agent-dispatch` queda en `~/.openclaw/respaldos/skills-pre-b19-<fecha>/` de la Mini. |
+
+Quitar un alias es lo contrario y sí necesita `replacePaths`: `config.patch` con `{"managedTasks": {"hosts": {"mac-local": {"adapters": [<los que quedan>]}}}}`, `baseHash` y `replacePaths: ["managedTasks.hosts.mac-local.adapters"]`, como `entry_close_patch` de `cutover_live.py`.
+
+`t12-adapters-1.sh`:
+
+```bash
+#!/bin/bash
+# B19: abre en R los alias de modelo de opencode de mac-local (managedTasks.hosts.mac-local.adapters).
+# Corre en la Mac de desarrollo, desde el checkout del host, que ya debe traer B19. Solo agrega adaptadores
+# a esa lista, con config.patch y baseHash, sin replacePaths: no toca deviceId, requesters, profile ni
+# ninguna otra clave. El cambio de managedTasks reinicia el gateway (unos 6 s), y un turno en vuelo de
+# cualquier agente se pierde: córrelo sin loops ni encargos en curso.
+# Salidas: ADAPTADORES OK, o PARO con el motivo (sin cambios si paró antes del paso 4).
+set -uo pipefail
+G=${G:-$HOME/dev/wt/agent-work-host}
+export OPENCLAW_BIN=${OPENCLAW_BIN:-$HOME/.openclaw-r/openclaw} LANG=en_US.UTF-8
+LOG=${LOG:-$HOME/.local/state/encargos-loop/artifacts/T12/adapters-1-$(date -u +%Y%m%dT%H%M%SZ).log}
+ALIASES=(opencode@opencode-go/deepseek-v4-pro opencode@opencode-go/kimi-k3 opencode@opencode-go/grok-4.7
+         opencode@opencode-go/qwen3.8-max)
+paso() { echo "== $(date -u +%T) $*"; }
+paro() { echo "PARO: $*"; exit 1; }
+add=(); for a in "${ALIASES[@]}"; do add+=(--add "$a"); done
+{
+paso "1. El checkout $G trae B19"
+cd "$G" || paro "no existe $G"
+python3 scripts/agent-work/host.py opencode-model "${ALIASES[0]}" >/dev/null \
+  || paro "$G no trae B19: git -C $G fetch origin && git -C $G checkout --detach origin/main"
+
+paso "2. Ningún cron corriendo"
+"$OPENCLAW_BIN" gateway call cron.list --params '{}' --json | python3 -c '
+import json, sys
+running = [job["name"] for job in json.load(sys.stdin)["jobs"] if (job.get("state") or {}).get("runningAtMs")]
+print("corriendo: " + (", ".join(running) or "ninguno"))
+sys.exit(1 if running else 0)' || paro "hay crons corriendo; espera a que terminen"
+
+paso "3. Vista previa (no escribe)"
+python3 scripts/agent-work/cutover_live.py adapters --host mac-local "${add[@]}" --dry-run --wait-seconds 30 \
+  || paro "la vista previa falló; no se tocó nada"
+
+paso "4. Aplicar (el gateway se reinicia)"
+python3 scripts/agent-work/cutover_live.py adapters --host mac-local "${add[@]}" --wait-seconds 120 \
+  || paro "no se abrieron; correr el script otra vez retoma"
+
+paso "5. Releer la config viva"
+"$OPENCLAW_BIN" gateway call config.get --params '{}' --json | python3 -c '
+import json, sys
+managed = json.load(sys.stdin)["resolved"]["managedTasks"]
+adapters = managed["hosts"]["mac-local"]["adapters"]
+print(json.dumps({"enabled": managed.get("enabled"), "requesters": managed.get("requesters"), "adapters": adapters}))
+sys.exit(0 if managed.get("enabled") and set(sys.argv[1:]) <= set(adapters) else 1)' "${ALIASES[@]}" \
+  || paro "la config viva no trae los alias"
+echo "ADAPTADORES OK"
+} 2>&1 | tee "$LOG"
+status=$?
+echo "log: $LOG"
+exit $status
+```
+
+`t12-skills-main-1.sh`:
+
+```bash
+#!/bin/bash
+# B19: publica en la Mini las skills de main encargo-cli (nueva) y agent-dispatch (sin el puntero viejo a
+# routing.py). Corre en la Mac de desarrollo, desde el checkout del host, que ya debe traer B19.
+# No hace falta reiniciar el gateway. En R 605aef7 un watcher (chokidar) vigila workshop-skills
+# (src/skills/runtime/refresh-source-roots.ts:48) y sube la versión del snapshot de skills; el turno
+# siguiente de main la compara y rehace el catálogo (src/skills/runtime/session-snapshot.ts:79-116), y el
+# cuerpo de SKILL.md se lee del disco al invocarla. La excepción es skills.load.watch=false (paso 6).
+# Antes de pisar agent-dispatch guarda la copia de la Mini en ~/.openclaw/respaldos/skills-pre-b19-<fecha>/
+# (fuera de workshop-skills) y muestra qué líneas solo tiene esa copia.
+# Salidas: SKILLS OK, o PARO con el motivo.
+set -uo pipefail
+H=${H:-gon@100.73.187.5}
+G=${G:-$HOME/dev/wt/agent-work-host}
+export OPENCLAW_BIN=${OPENCLAW_BIN:-$HOME/.openclaw-r/openclaw} LANG=en_US.UTF-8
+LOG=${LOG:-$HOME/.local/state/encargos-loop/artifacts/T12/skills-main-1-$(date -u +%Y%m%dT%H%M%SZ).log}
+DEST=.openclaw/agents/main/agent/workshop-skills
+SRC=agents/main/agent/workshop-skills
+STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+BACKUP=.openclaw/respaldos/skills-pre-b19-$STAMP
+paso() { echo "== $(date -u +%T) $*"; }
+paro() { echo "PARO: $*"; exit 1; }
+{
+paso "1. El checkout $G trae B19"
+cd "$G" || paro "no existe $G"
+[ -f "$SRC/encargo-cli/SKILL.md" ] || paro "$G no trae B19: git -C $G fetch origin && git -C $G checkout --detach origin/main"
+
+paso "2. Ninguna skill de otra raíz tapa a estas (R deja ganar a la última raíz por name)"
+shadows=$(ssh -o ConnectTimeout=10 "$H" 'for d in ~/.openclaw/skills ~/.agents/skills ~/.openclaw/workspace/skills; do [ -d "$d" ] && grep -rlE "^name: (encargo-cli|agent-dispatch)$" "$d" --include=SKILL.md; done; true') \
+  || paro "no se pudo leer la Mini"
+[ -z "$shadows" ] || paro "estas skills taparían a las de main: $shadows"
+echo "ninguna"
+
+paso "3. Copia de respaldo de agent-dispatch en la Mini"
+ssh -o ConnectTimeout=10 "$H" "mkdir -p $DEST/encargo-cli $BACKUP && cp -p $DEST/agent-dispatch/SKILL.md $BACKUP/agent-dispatch.SKILL.md" \
+  || paro "no se pudo respaldar agent-dispatch en la Mini"
+echo "respaldo en la Mini: ~/$BACKUP/agent-dispatch.SKILL.md"
+scp -q "$H:$BACKUP/agent-dispatch.SKILL.md" "${LOG%.log}.agent-dispatch.mini" || paro "no se pudo traer la copia de la Mini"
+echo "líneas que solo tiene la copia de la Mini (se pierden al publicar; quedan en el respaldo):"
+diff "${LOG%.log}.agent-dispatch.mini" "$SRC/agent-dispatch/SKILL.md" | grep '^<' | head -40
+echo "($(diff "${LOG%.log}.agent-dispatch.mini" "$SRC/agent-dispatch/SKILL.md" | grep -c '^<') líneas)"
+
+paso "4. Copiar las dos skills"
+for s in encargo-cli agent-dispatch; do
+  scp -q "$SRC/$s/SKILL.md" "$H:$DEST/$s/SKILL.md" || paro "no se pudo copiar $s"
+done
+
+paso "5. sha256 en los dos lados"
+for s in encargo-cli agent-dispatch; do
+  a=$(shasum -a 256 "$SRC/$s/SKILL.md" | cut -d' ' -f1)
+  b=$(ssh "$H" "shasum -a 256 $DEST/$s/SKILL.md" | cut -d' ' -f1)
+  echo "$s mac=$a mini=$b"
+  [ "$a" = "$b" ] || paro "$s difiere en la Mini"
+done
+
+paso "6. ¿Hace falta reiniciar?"
+watch=$("$OPENCLAW_BIN" gateway call config.get --params '{}' --json | python3 -c '
+import json, sys
+print(json.dumps(json.load(sys.stdin)["resolved"].get("skills", {}).get("load", {}).get("watch")))') \
+  || paro "no se pudo leer la config (las skills ya están copiadas)"
+echo "skills.load.watch = $watch"
+if [ "$watch" = "false" ]; then
+  echo "REINICIO: con el watcher apagado, main no ve el cambio hasta reiniciar el gateway"
+else
+  echo "Sin reinicio: el siguiente turno de main ve encargo-cli"
+fi
+echo "SKILLS OK"
+} 2>&1 | tee "$LOG"
+status=$?
+echo "log: $LOG"
+exit $status
+```
+
 ## Evidencia
 
 Las salidas de cada comando están en `~/.local/state/encargos-loop/artifacts/T11-a/`: `paquete/corrida-limpia.log`, `paquete/install.log`, `paquete/smoke.log`, `paquete/actualizacion-sobre-upstream.log`, `recuperacion-binario.log` y `foto-restauracion.log`. Los de la reversa son `T11-c-*.log`. El recibo es `T11.md`.
