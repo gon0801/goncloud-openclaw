@@ -2408,6 +2408,15 @@ def composer_tmux(calls, command):
     return run
 
 
+def wait_until(condition, seconds):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if condition():
+            return True
+        time.sleep(0.1)
+    return condition()
+
+
 def accept_assignment(assignment_ref, *_):
     """A CLI double that takes the assignment: it writes its own agent-work.accept.v1 to acceptRef."""
     assignment = json.loads(Path(assignment_ref).read_text())
@@ -4170,6 +4179,195 @@ class DeliveryAcceptanceTest(unittest.TestCase):
             self.seed()
         self.assertEqual(self.typed, [])
         self.assertEqual(self.status(Host("host-one", self.root / "host")), "registered")
+
+class PermissionBeforeAcceptanceTest(unittest.TestCase):
+    """Canary 8 (2026-10-12): opencode asked for a permission before the CLI wrote its acceptance, and the
+    attempted delivery showed no incident until its 3600 s deadline. A dialog before the acceptance is
+    the same permission-required incident as one after it, once per dialog; the delivery stays attempted,
+    a late acceptance promotes it as before, and the deadline still raises delivery-unaccepted."""
+
+    OP_ID = SilentFailureTest.OP_ID
+    SESSION = "session-instance-silent"
+    BLOCKED = SilentPromptTest.BLOCKED
+    BLOCKED_1 = SilentPromptTest.BLOCKED_1
+    IDLE = SilentPromptTest.IDLE
+    UNACCEPTED_KEY = DeliveryAcceptanceTest.UNACCEPTED_KEY
+    SILENT_CLI = ROOT / "scripts/tests/fixtures/agent-work/silent-cli.py"
+    # silent-cli.py OPENCODE_DIALOG through approval_prompt_identity: the measured "Allow once" row.
+    OPENCODE_DIALOG_1 = ("host:1:permission-required:"
+                         "prompt-7beed4b9000035d34f0075d2110ab7e26ac92ed225626fc601b1a82ed522c6d9-1")
+    PYTHON_DOUBLE = CliAdapter(tuple(sorted({"Python", Path(sys.executable).name,
+                                             Path(os.path.realpath(sys.executable)).name})))
+
+    rows = SilentFailureTest.rows
+    keys = SilentPromptTest.keys
+    close_session = SilentFailureTest.close_session
+    status = DeliveryAcceptanceTest.status
+    type_only = DeliveryAcceptanceTest.type_only
+    seed = DeliveryAcceptanceTest.seed
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.backend = PromptBackend()
+        self.next_pid = 900
+        self.typed = []
+        self.pattern = load_approval_pattern(SilentPromptTest.LIB_SH)
+
+    def watch(self, host, manager, screen, *, now, deadline=3600):
+        self.backend.screens[self.SESSION] = screen
+        return Host("host-one", self.root / "host").detect_silent_failures(
+            "host-one", manager.session_gone, now=now, deadline_seconds=deadline,
+            prompt_identity=lambda key: manager.prompt_identity(key, self.pattern))
+
+    def test_a_dialog_before_the_acceptance_is_one_incident_and_the_delivery_stays_attempted(self):
+        host, manager, key, observation = self.seed()
+        self.assertEqual(self.status(host), "attempted")
+        self.assertEqual(self.watch(host, manager, self.IDLE, now=1001.0), [])
+        self.assertEqual(self.watch(host, manager, self.BLOCKED, now=1002.0), [])
+        self.assertEqual(self.watch(host, manager, self.BLOCKED, now=1003.0), [self.BLOCKED_1])
+        self.assertEqual(self.status(host), "attempted")
+        for second in range(98):
+            self.assertEqual(self.watch(host, manager, self.BLOCKED, now=1004.0 + second), [], f"pass {second}")
+        self.assertEqual(self.rows(host), [(
+            self.BLOCKED_1, "pending",
+            '{"evidenceRef":"host-operation:8557dce188b70f89bf47a35740de23ad29e83fbc9fad56773eee13cc66d32571",'
+            '"kind":"permission-required",'
+            '"promptIdentity":"prompt-a676f37c2271c679cf49abcbd92eb67d3d1935dc493645b761f5f28bee18bea1-1"}')])
+        # The operator denies the dialog, the CLI goes on and accepts late: delivered, same episode.
+        accept_assignment(observation.assignment_ref)
+        with mock.patch("spool.time.time", return_value=1200.0):
+            self.assertEqual(self.watch(host, manager, self.IDLE, now=1200.0), [])
+        self.assertEqual(self.status(host), "delivered")
+        self.assertEqual(host.spool.delivered_at(self.OP_ID), 1200.0)
+        self.assertEqual(self.watch(host, manager, self.BLOCKED, now=1201.0), [])
+        self.assertEqual(self.watch(host, manager, self.BLOCKED, now=1202.0), [])
+        self.assertEqual(self.keys(host), [self.BLOCKED_1])
+        self.assertEqual(self.typed, [(observation.assignment_ref, self.SESSION)])
+
+    def test_the_deadline_after_a_reported_dialog_is_the_unaccepted_delivery_incident(self):
+        host, manager, key, _ = self.seed()
+        self.assertEqual(self.watch(host, manager, self.BLOCKED, now=1001.0, deadline=60), [])
+        self.assertEqual(self.watch(host, manager, self.BLOCKED, now=1002.0, deadline=60), [self.BLOCKED_1])
+        self.assertEqual(self.watch(host, manager, self.BLOCKED, now=1059.0, deadline=60), [])
+        self.assertEqual(self.status(host), "attempted")
+        self.assertEqual(self.watch(host, manager, self.BLOCKED, now=1060.0, deadline=60), [self.UNACCEPTED_KEY])
+        self.assertEqual(self.status(host), "uncertain")
+        # Uncertain is the operator's verdict: neither the open dialog nor a new one raises anything more.
+        for second in range(100):
+            self.assertEqual(self.watch(host, manager, self.BLOCKED, now=1061.0 + second, deadline=60), [],
+                             f"pass {second}")
+        for second in range(3):
+            self.assertEqual(self.watch(host, manager, SilentPromptTest.PROCEED, now=1200.0 + second, deadline=60),
+                             [], f"pass {second} of another dialog")
+        self.assertEqual(self.keys(host), [self.BLOCKED_1, self.UNACCEPTED_KEY])
+
+    def test_a_closed_session_before_the_acceptance_waits_for_the_deadline(self):
+        host, manager, key, _ = self.seed()
+        self.close_session(key)
+        for second in range(59):
+            self.assertEqual(self.watch(host, manager, None, now=1001.0 + second, deadline=60), [], f"pass {second}")
+        self.assertEqual(self.status(host), "attempted")
+        self.assertEqual(self.watch(host, manager, None, now=1060.0, deadline=60), [self.UNACCEPTED_KEY])
+        self.assertEqual(self.keys(host), [self.UNACCEPTED_KEY])
+
+    @unittest.skipUnless(shutil.which("tmux"), "tmux not installed")
+    def test_the_pump_reports_the_opencode_dialog_before_the_acceptance_from_a_real_pane(self):
+        """The production path of canary 8: TmuxTransport types the reference into a real pane whose
+        CLI opens the opencode permission dialog instead of writing its acceptance; the pump's cli_watch
+        (native_gateway.main) reads the adopted pane and reports the incident once."""
+        tmux = shutil.which("tmux")
+        socket = f"agent-work-b21-{os.getpid()}-{secrets.token_hex(4)}"
+        socket_file = Path(os.environ.get("TMUX_TMPDIR") or "/tmp") / f"tmux-{os.getuid()}" / socket
+
+        def tmux_cmd(*args):
+            return subprocess.run([tmux, "-f", "/dev/null", "-L", socket, *args], capture_output=True,
+                                  text=True, stdin=subprocess.DEVNULL)
+
+        def screen():
+            return tmux_cmd("capture-pane", "-p", "-t", "=worker:").stdout
+
+        self.addCleanup(lambda: socket_file.unlink() if socket_file.exists() else None)
+        self.addCleanup(tmux_cmd, "kill-server")
+        started = tmux_cmd("new-session", "-d", "-s", "worker", "-x", "200", "-y", "50",
+                           sys.executable, "-u", str(self.SILENT_CLI), "permission-before-accept")
+        self.assertEqual(started.returncode, 0, started.stderr)
+        self.assertTrue(wait_until(lambda: "silent-cli ready" in screen(), 15), "the double never painted")
+        workspace = self.root / "workspace"
+        workspace.mkdir()
+        brief = workspace / "brief.txt"
+        brief.write_text("canario 8")
+        host = Host("host-one", self.root / "host")
+        backend = TmuxBackend(tmux, socket)
+        manager = ResourceManager(host.spool, "host-one", backend)
+        key = OperationKey("host-one", "task-silent", 1, "instance-silent")
+        held = manager.reserve(key, "worker", "UserAdopted")
+        manager.begin_launch(key)
+        backend.mark("worker", held.nonce)
+        self.assertEqual(manager.attach(key).state, "Running")
+        operation = AuthorizedOperation(
+            key=key, producer_id="opencode", capability="silent-secret", session="worker",
+            workspace_ref=str(workspace), brief_ref=str(brief),
+            brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
+            input_revision={"kind": "code", "repository": "repo", "sha": "c" * 40},
+            result_contract="ready.v1", claim_id="claim-instance-silent", adapter_id="opencode")
+        observation = host.apply(key, operation, TmuxTransport(tmux, socket, self.PYTHON_DOUBLE).deliver,
+                                 lambda a: {"state": "host-admitted", "claimId": a["claimId"], "hostId": a["hostId"],
+                                            "instanceId": a["instanceId"], "generation": a["generation"]})
+        self.assertEqual(observation.status, "typed", screen())
+        self.assertTrue(wait_until(lambda: "Allow once   Allow always   Reject" in screen(), 15),
+                        f"the double never opened its dialog; screen={screen()!r}")
+        self.assertFalse(host.take_acceptance("host-one", key))
+        self.assertEqual(self.status(host), "attempted")
+        attempted = host.spool.attempted_at(self.OP_ID)
+        calls = []
+
+        class RecordingClient:
+            host_id = "host-one"
+
+            def report_host_result(self, *_):
+                raise AssertionError("no results are pending in this test")
+
+            def list_pending(self, after_task_id=None, limit=100):
+                return []
+
+            def close_host(self, *_):
+                raise AssertionError("no closures are pending in this test")
+
+            def report_host_incident(self, assignment, incident):
+                calls.append((assignment["taskId"], incident))
+                key_, digest = incident_identity(assignment["generation"], incident)
+                return {"taskId": assignment["taskId"], "generation": assignment["generation"],
+                        "incidentKey": key_, "incidentDigest": digest}
+
+        def pump(now):
+            # The cli_watch of native_gateway.main with the live hosts' --cli-deadline-seconds 3600.
+            counts = native_gateway.pump_once(
+                RecordingClient(), host=host, evidence_root=self.root / "evidence",
+                progress_state_dir=self.root / "progress", progress_client=str(self.root / "progress-events.py"),
+                cli_watch=lambda: host.detect_silent_failures(
+                    "host-one", manager.session_gone, now=now, deadline_seconds=3600,
+                    prompt_identity=lambda k: manager.prompt_identity(k, self.pattern)))
+            return counts["detected"], counts["incidents"]
+
+        # What deepseek-1 printed for nine minutes: no detection, no incident. Pass 2 confirms the dialog.
+        self.assertEqual([pump(attempted + 1.0 + second) for second in range(7)],
+                         [(0, 0), (1, 1), (0, 0), (0, 0), (0, 0), (0, 0), (0, 0)])
+        incident = {"kind": "permission-required", "evidenceRef": f"host-operation:{self.OP_ID}",
+                    "promptIdentity": self.OPENCODE_DIALOG_1.split(":", 3)[3]}
+        self.assertEqual(calls, [("task-silent", incident)])
+        self.assertEqual(self.rows(host), [(self.OPENCODE_DIALOG_1, "sent", canonical(incident))])
+        self.assertEqual(self.status(host), "attempted")
+        self.assertIn("Allow once   Allow always   Reject", screen(), "the host touched the dialog")
+        # At the deadline the acceptance is still missing: that is the second incident, and the last.
+        self.assertEqual(pump(attempted + 3600.0), (1, 1))
+        self.assertEqual(calls[1], ("task-silent", {"kind": "transport-unavailable", "episodeId": "delivery-unaccepted",
+                                                     "evidenceRef": f"host-operation:{self.OP_ID}"}))
+        self.assertEqual(self.status(host), "uncertain")
+        self.assertEqual([pump(attempted + 3601.0 + second) for second in range(3)], [(0, 0)] * 3)
+        self.assertEqual(self.keys(host), [self.OPENCODE_DIALOG_1, self.UNACCEPTED_KEY])
+
 
 class ClientCloseTest(unittest.TestCase):
     def setUp(self):
