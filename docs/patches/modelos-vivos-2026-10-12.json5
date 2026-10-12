@@ -1,6 +1,6 @@
 // Tomado el 2026-10-12: lo vivo en el gateway OpenClaw 2026.9.7 (Mac Mini).
 // Fuente: /Users/gon/.openclaw/openclaw.json en el host del gateway, leido con un parse de python3 de solo lectura (sin config.get ni escrituras).
-// Se omiten secretos y headers: cada proveedor conserva solo baseUrl, api y models; adapters de managedTasks reducidos a sus ids.
+// Contenido: de agents solo model y models; de cada proveedor solo baseUrl, api y models (se omiten apiKey, headers, auth, request y timeoutSeconds); de managedTasks solo los ids de adapters. Nada mas de openclaw.json esta aqui.
 {
   "agents": {
     "defaults": {
