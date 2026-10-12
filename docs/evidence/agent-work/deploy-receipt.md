@@ -57,6 +57,40 @@ Tablero del canario 6, leído hoy con `runbook.progress.get` (`corrida: encargos
 - El mensaje del canario 5 (parte B de `mensaje-4.txt`) le pedía a `main` resolver la tarea con `{"kind": "blocked"}`. Eso no vale: `resolve` exige un resultado, y la tarea no tenía. Lo correcto es `managed_tasks_cancel`. `main` se detuvo, y `mensaje-5.txt` pidió la cancelación.
 - Los canarios 1 a 5 no llevaban `progressBinding`. Hasta el canario 6, el tablero no se había ejercido en vivo.
 
+### Canario 8: el alias `opencode@opencode-go/deepseek-v4-pro` (2026-10-12, después del cierre)
+
+El canario 8 pasó en su cuarto intento, el 2026-10-12 de las 21:31:32Z a las 21:32:20Z (48 s), sin intervención del operador. David mandó `canario/mensaje-8.txt` a `main` por Telegram. La Mini corría R `4acb881` y los hosts de la Mac corrían G `73f76ee6`. La evidencia está en `~/.local/state/encargos-loop/canario/c8/`, y el resumen en la entrada "CANARIO 8 PASA" de `~/.local/state/encargos-loop/estado.md`. Las líneas de abajo son copia literal de `r-tarea.txt` y la última es la fila de la operación en `spool-deepseek-1.txt`.
+
+```
+task: dd407096-78ef-43e5-9859-66a1d7779acb | key: canario-saludo-20261012-1431 | creada 21:31:32Z actualizada 21:32:09Z gen 1
+target: {'adapterId': 'opencode@opencode-go/deepseek-v4-pro', 'hostId': 'mac-local', 'kind': 'cli'}
+inputRevision: {'kind': 'code', 'repository': '/Users/dn/dev/canario-encargos', 'sha': '31e541fdb8b852a0b154d92f175bc1d8a3f22925'}
+resultContract: ready.v1 | continuation: {'kind': 'requester'}
+admision: canario-saludo-20261012-1431-admit admitted 21:31:34Z
+decision: {"evidenceRef":"saludo.py","kind":"complete"} 21:32:20Z
+cierre host: ReleasedAdopted  21:32:10Z
+cancelaciones: 0
+e4c55db542664da48f037cfbcc354f5cf8f5412e19f73756b07c5a4bb0ce9943|acknowledged|dd407096-78ef-43e5-9859-66a1d7779acb|1|deepseek-1|deepseek|UserAdopted|ReleasedAdopted
+```
+
+Los tres criterios de `T12-runbook.md` (sección "Un host por alias de modelo", "Pasa si"):
+
+| Criterio | Medido | Archivo de `canario/c8/` |
+|---|---|---|
+| Tarea en R | Tarea `dd407096-78ef-43e5-9859-66a1d7779acb`, `taskKey` `canario-saludo-20261012-1431`, solicitante `agent:main:main` con principal de remitente de Telegram. `target.adapterId` `opencode@opencode-go/deepseek-v4-pro` en `mac-local`. `inputRevision` de tipo `code` con `31e541fdb8b852a0b154d92f175bc1d8a3f22925`, que era el HEAD de `/Users/dn/dev/canario-encargos` y es el padre del commit de deepseek. Admitida a las 21:31:34Z. Resultado `ready.v1` de tipo `produced` con `evidenceRef` `saludo.py`. Decisión `complete` a las 21:32:20Z. 0 cancelaciones. | `r-tarea.txt` |
+| Spool `deepseek-1` | Operación `e4c55db542664da48f037cfbcc354f5cf8f5412e19f73756b07c5a4bb0ce9943` en `acknowledged`, con `attempted_at` a las 21:31:36Z y `delivered_at` a las 21:31:54Z. Recurso `ReleasedAdopted`, y el cierre llegó a R a las 21:32:10Z. 0 incidencias. | `spool-deepseek-1.txt` |
+| `saludo.py` | Deepseek hizo el commit `28693aa9b03ee1a456d53eff70ec10b892798746` a las 21:31:58Z, que agrega `saludo.py`. Su sha256 es `1a407d073ff3d0955ccf1cc83b5ae98bdd4bf2898989bc77247b35948d49c9c8`, igual al `digest` del resultado del CLI y al `evidenceContentHash` de R. `saludar("David")` regresa `Hola, David`. | `commit-28693aa.txt`, `result-sin-capability.json`, `saludo.py` |
+
+El pane de opencode 1.18.35 (`pane-deepseek.txt`) muestra el temporal del resultado en la carpeta de `resultRef` y el resumen de deepseek, que dice que escribió el acuse en `acceptRef`. El turno de deepseek tardó 31,8 s.
+
+Los tres intentos anteriores del mismo día fallaron. Las tres causas quedaron arregladas antes del intento 4, cada una con su PR mergeado o su paquete instalado. Las horas y los identificadores salen de las entradas del 2026-10-12 de `estado.md` y de `spool-deepseek-1.txt`.
+
+| Intento | Hora | Qué pasó | Causa | Arreglo |
+|---|---|---|---|---|
+| 1 | Mensaje a las 17:38:24Z | `saludo.py` quedó escrito, pero no por la ruta gestionada. `main` llamó a `sessions_spawn` con el subagente `implementer` (corrida `ddb9cbf7`, modelo `opencode-go/deepseek-v4.1-flash`). El spool `deepseek-1` quedó con 0 operaciones. | `main` leyó `agent-dispatch`, nunca leyó `encargo-cli` y resolvió el pedido con subagentes. No se midió si el catálogo de esa sesión ya traía `encargo-cli`. | David decidió ese día que la ruta gestionada entra solo cuando el pedido dice "por CLI". La regla está en el PR #272, mergeado en `e260f300`. `mensaje-8.txt` se reescribió con esas palabras, y la copia anterior es `mensaje-8.pre-por-cli.txt`. |
+| 2 | Mensaje a las 18:12:32Z | `main` siguió `encargo-cli`. `managed_tasks_submit` falló dos veces con `Managed task host identity does not match the admitted turn`. | R comparaba la sesión admitida, `agent:main:main`, solo contra la clave de política del turno. En un DM de canal a la sesión `main`, esa clave es la del remitente y nunca coincide. | R `4acb881` (B20-R, VEREDICTO-B20R-r1 APROBADO). Se instaló en la Mini a las 19:45Z (`artifacts/T12/actualizar-4acb881-20261012T194435Z.log`, `ACTUALIZADO OK`). |
+| 3 | Entrega a las 19:54:16Z | Submit y admit pasaron. Tarea `3f7a8b01-dba0-4ecc-8152-fa187c6792ae`, operación `32dddc0896ae529c89fe4f0936f314b032fb70bad0f6c2b26d0254d9dbfd9ed0`. Deepseek escribió el temporal del acuse en `/tmp`, opencode abrió "Permission required" y el host no lo reportó. `main` dijo que no había host. El diálogo se rechazó con Esc a las 20:03:13Z y `main` canceló la tarea. La operación quedó `cancelled` y su recurso `ReleasedAdopted`. | El host leía el diálogo de permiso solo en operaciones `delivered`, y esta seguía `attempted`. `protocol.steps` tampoco decía en qué carpeta va el temporal. | PR #273 (B21, G `99a38b99`), mergeado en `73f76ee6`, VEREDICTO-B21-r1 APROBADO. |
+
 ## Huecos encontrados en vivo
 
 Cada hueco tiene su arreglo, su revisión y su PR o paquete de R.
@@ -124,7 +158,8 @@ Del 2026-10-11 19:44:31Z a las 20:14:37Z (30 min 6 s). Antes de abrirla, los 7 t
 
 ## Cobertura efectiva
 
-- Certificado y en vivo: solo `main` → `mac-local`/`opencode`, en una sesión adoptada (B8). Es la única combinación con `certified` en `coverage.json` (`hostAdapterCoverage`).
+- Certificado y en vivo: solo `main` → `mac-local`/`opencode`, en una sesión adoptada (B8). Al cierre era la única combinación con `certified` en `coverage.json` (`hostAdapterCoverage`).
+- Después del cierre, el 2026-10-12, `main` → `mac-local`/`opencode@opencode-go/deepseek-v4-pro` también quedó `certified`, por el canario 8 (sección Canarios). Los alias de `kimi-k3`, `grok-4.7` y `qwen3.8-max` siguen `sandbox-tested-uncertified`.
 - No habilitados, como limitación:
   - En `mac-local`, los adaptadores `claude_fable`, `claude_opus`, `kimi_k3`, `kimi_coding`, `codex`, `zcode` y `grok`.
   - Todo `windows-remote`.

@@ -116,8 +116,8 @@ class AgentsRouting(unittest.TestCase):
     def test_a_model_alias_is_claimed_only_by_a_canary_host_until_its_canary_certifies_it(self):
         aliases = sorted(adapter for adapter, state in self.coverage["hostAdapterCoverage"]["mac-local"].items()
                          if state == "sandbox-tested-uncertified")
-        self.assertEqual(aliases, ["opencode@opencode-go/deepseek-v4-pro", "opencode@opencode-go/grok-4.7",
-                                   "opencode@opencode-go/kimi-k3", "opencode@opencode-go/qwen3.8-max"])
+        self.assertEqual(aliases, ["opencode@opencode-go/grok-4.7", "opencode@opencode-go/kimi-k3",
+                                   "opencode@opencode-go/qwen3.8-max"])
 
         class Client:
             host_id = "mac-local"
@@ -147,15 +147,19 @@ class AgentsRouting(unittest.TestCase):
         for closed in ("claude_opus", "opencode@opencode-go/glm-5.3"):
             self.assertEqual(claim(closed, canary=True), ("host adapter route is not certified", []))
         self.assertEqual(claim("opencode", canary=False), (None, ["opencode"]))
+        deepseek = "opencode@opencode-go/deepseek-v4-pro"
+        self.assertEqual(self.request("main", f"mac-local/{deepseek}")["assignment"]["target"],
+                         {"kind": "cli", "hostId": "mac-local", "adapterId": deepseek})
+        self.assertEqual(claim(deepseek, canary=False), (None, [deepseek]))
 
     def test_the_watch_entrypoint_passes_cli_canary_to_each_claim(self):
-        alias = "opencode@opencode-go/deepseek-v4-pro"
+        alias = "opencode@opencode-go/kimi-k3"
         args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "mac-local",
                 "--expect-url", "ws://127.0.0.1:18789", "--evidence-root", str(self.root / "e"),
                 "--progress-state-dir", str(self.root / "p"), "--progress-client", "/isolated/c.py",
                 "--watch", "--host-state-dir", str(self.root / "host"),
-                "--cli-adapter-id", alias, "--cli-instance-id", "deepseek-1",
-                "--cli-session", "deepseek", "--cli-workspace-root", str(self.root / "w"),
+                "--cli-adapter-id", alias, "--cli-instance-id", "kimi-1",
+                "--cli-session", "kimi", "--cli-workspace-root", str(self.root / "w"),
                 "--cli-tmux-socket", "sock-canary"]
         claimed = []
         with mock.patch.object(native_gateway.GatewayProjectionClient, "claim_host",
@@ -168,13 +172,14 @@ class AgentsRouting(unittest.TestCase):
                 except ValueError as error:
                     outcome = str(error)
                 self.assertEqual((flags, outcome), (flags, None if flags else "host adapter route is not certified"))
-        self.assertEqual(claimed, [(alias, "deepseek-1")])
+        self.assertEqual(claimed, [(alias, "kimi-1")])
 
     def test_every_certified_host_adapter_names_its_live_evidence(self):
         certified = [(host_id, adapter_id)
                      for host_id, adapters in self.coverage["hostAdapterCoverage"].items()
                      for adapter_id, state in adapters.items() if state == "certified"]
-        self.assertEqual(certified, [("mac-local", "opencode")])
+        self.assertEqual(certified, [("mac-local", "opencode"),
+                                     ("mac-local", "opencode@opencode-go/deepseek-v4-pro")])
         for host_id, adapter_id in certified:
             evidence = self.coverage["hostAdapterEvidence"][host_id][adapter_id]
             self.assertTrue(evidence, f"{host_id}/{adapter_id} is certified without evidence")

@@ -27,7 +27,7 @@
       "zcode": "disabled-operator-setup-pending",
       "grok": "disabled-operator-setup-pending",
       "opencode": "certified",
-      "opencode@opencode-go/deepseek-v4-pro": "sandbox-tested-uncertified",
+      "opencode@opencode-go/deepseek-v4-pro": "certified",
       "opencode@opencode-go/kimi-k3": "sandbox-tested-uncertified",
       "opencode@opencode-go/grok-4.7": "sandbox-tested-uncertified",
       "opencode@opencode-go/qwen3.8-max": "sandbox-tested-uncertified"
@@ -48,6 +48,10 @@
       "opencode": [
         {"path": "docs/evidence/agent-work/B8-opencode-adapter-e2e.md", "test": "OPENCODE_ADAPTER_E2E tasks=2 typed=2 deferred_over_draft=1 incidents=0"},
         {"path": "scripts/tests/test_agent_work_opencode_adapter_e2e.py", "test": "def test_main_loop_hands_tasks_to_an_adopted_opencode_session"}
+      ],
+      "opencode@opencode-go/deepseek-v4-pro": [
+        {"path": "docs/evidence/agent-work/deploy-receipt.md", "test": "task: dd407096-78ef-43e5-9859-66a1d7779acb | key: canario-saludo-20261012-1431 | creada 21:31:32Z actualizada 21:32:09Z gen 1"},
+        {"path": "docs/evidence/agent-work/deploy-receipt.md", "test": "e4c55db542664da48f037cfbcc354f5cf8f5412e19f73756b07c5a4bb0ce9943|acknowledged|dd407096-78ef-43e5-9859-66a1d7779acb|1|deepseek-1|deepseek|UserAdopted|ReleasedAdopted"}
       ]
     }
   },
