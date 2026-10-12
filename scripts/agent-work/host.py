@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Callable
 
 from contracts import AuthorizedOperation, HostObservation, IncidentRejected, OperationKey, ResultReceipt, operation_id
-from spool import TERMINAL_STATES, Spool, atomic_json, canonical, closure_digest, incident_identity
+from spool import DIALOG_STILL_OPEN, TERMINAL_STATES, Spool, atomic_json, canonical, closure_digest, incident_identity
 
 MAX_ARTIFACT_BYTES = 10 * 1024 * 1024
 RESULT_SCHEMA = "agent-work.result.v1"
@@ -338,6 +338,8 @@ def reject_permission_dialog(backend, identity: dict, adapter: CliAdapter, *,
         if (screen is not None and not permission_dialog_open(screen, adapter)
                 and read_composer(screen, command, adapter.placeholders)[0] == "VACIO"):
             return "rejected"
+    if screen is not None and permission_dialog_open(screen, adapter):
+        return DIALOG_STILL_OPEN
     return "left: no empty composer after the reject key"
 
 

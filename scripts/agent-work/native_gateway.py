@@ -401,6 +401,8 @@ class ProgressPublisher:
     leaves its files queued: the next pass retries it, later failures of the same queue back off to
     MAX_BACKOFF seconds, and any change to that queue makes it due again."""
     PER_PASS = 4
+    TIMEOUT_SECONDS = 30
+    BACKOFF_BASE_SECONDS = 15
     MAX_BACKOFF = 300.0
 
     def __init__(self, progress_client, state_dir, *, clock=time.monotonic):
@@ -443,9 +445,10 @@ class ProgressPublisher:
                        "--openclaw-bin", gateway.openclaw_bin, "publish", "--corrida", corrida]
             error = None
             try:
-                completed = subprocess.run(command, capture_output=True, text=True, timeout=30)
+                completed = subprocess.run(command, capture_output=True, text=True,
+                                           timeout=self.TIMEOUT_SECONDS)
             except subprocess.TimeoutExpired:
-                error = f"progress publish timed out for corrida {corrida} after 30 s"
+                error = f"progress publish timed out for corrida {corrida} after {self.TIMEOUT_SECONDS} s"
             except OSError as exc:
                 error = f"progress publish unavailable for corrida {corrida}: {' '.join(str(exc).split())[:300]}"
             else:
@@ -465,7 +468,7 @@ class ProgressPublisher:
             names = queues[corrida][0]
             previous = self.failures.get(corrida)
             attempts = previous.attempts + 1 if previous and previous.queue == names else 1
-            delay = 0 if attempts == 1 else min(self.MAX_BACKOFF, 15 * 2 ** (attempts - 1))
+            delay = 0 if attempts == 1 else min(self.MAX_BACKOFF, self.BACKOFF_BASE_SECONDS * 2 ** (attempts - 1))
             self.failures[corrida] = PublishFailure(names, attempts, now + delay)
             errors.append(error)
         return published, errors

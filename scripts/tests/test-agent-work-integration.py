@@ -1022,6 +1022,8 @@ with open({str(self.argv_log)!r}, 'a') as log:
     log.write(json.dumps(args) + '\\n')
 run = pathlib.Path(args[args.index('--state-dir') + 1]) / 'runs' / args[args.index('--corrida') + 1]
 mode = pathlib.Path({str(self.mode)!r}).read_text().strip()
+if mode == 'hang':
+    time.sleep(30)
 if mode == 'fail':
     print('progress-events: gateway no disponible para runbook.progress.get\\n', file=sys.stderr)
     sys.exit(1)
@@ -1176,6 +1178,16 @@ print(json.dumps({{'published': moved}}))
         self.assertEqual(acks_at_wait, [0, 1])
         self.assertEqual([receipt["eventId"] for receipt in acks], [self.pending["eventId"]])
         self.assertEqual([path.name for path in (self.run / "sent").iterdir()], [self.pending["eventId"] + ".json"])
+
+    def test_a_publish_that_outlives_its_timeout_fails_with_that_timeout_and_keeps_the_event(self):
+        self.mode.write_text("hang")
+        started = time.monotonic()
+        with mock.patch.object(native_gateway.ProgressPublisher, "TIMEOUT_SECONDS", 0.5):
+            with self.assertRaises(RuntimeError) as caught:
+                self.pump()
+        self.assertLess(time.monotonic() - started, 10, "the publish did not use its timeout")
+        self.assertEqual(str(caught.exception), "progress publish timed out for corrida run-1 after 0.5 s")
+        self.assertEqual([path.name for path in (self.run / "queue").iterdir()], [self.pending["eventId"] + ".json"])
 
     def test_a_queue_that_keeps_failing_backs_off_until_it_changes(self):
         self.client = self.gateway([])

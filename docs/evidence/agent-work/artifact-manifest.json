@@ -2,10 +2,10 @@
   "schema": "agent-work-artifact-manifest.v1",
   "runtime": {
     "repository": "openclaw/openclaw (fork, branch feat/agent-work-integration; never pushed)",
-    "sourceSha": "4b9785c98b810160cb8025b614437433570f3e4a",
+    "sourceSha": "605aef746ae4b6d330a759f96fdcc4cb76900f66",
     "publicBaseSha": "c074824a27c96d3983043f9eeb33823cd1772d8c",
     "version": "2026.9.7",
-    "entrySha256": "42d162a06311d08e4fb9e53344a5f090cae0622dd93a2b1aaf21cb8220fd91a5",
+    "entrySha256": "a185681531df6fe67d1c771f522ae04a59143c0ffba95f58c7bed88e9b36a5b3",
     "node": "v24.19.0",
     "build": "docs/evidence/agent-work/deploy-commands.md"
   },
@@ -14,8 +14,8 @@
       "name": "openclaw",
       "version": "2026.9.7",
       "file": "openclaw-2026.9.7.tgz",
-      "sha256": "09d30e248e571ecb253c4d91314e99bfa55f1791858004f0382bec35bd5f0882",
-      "integrity": "sha512-dtWZhzYmnBxxQb26tpu9FPeaxd5MTuwOrtAJIGsxfMt4qo6yg0twLOQmWYuOBbhI1GHhOTINaZT5G3Ze9lMacA=="
+      "sha256": "d4497986c35086455a666dd2f38134fa12cc9cd5bd47a42a5c0a6f8888ca6514",
+      "integrity": "sha512-8cmL5rpjUlB0THINMaqbugaNnD4fEL2EIxyi5zLkiQG/aJXxOf2blSFyFmXU518C2RJz8rHWYKt7jCXSA0MFnQ=="
     },
     {
       "name": "@openclaw/ai",
@@ -35,15 +35,15 @@
       "name": "@openclaw/gateway-protocol",
       "version": "2026.9.7",
       "file": "openclaw-gateway-protocol-2026.9.7.tgz",
-      "sha256": "9b76a0278dcd5b10a1102003db332dfaae22b5cd03a4bbe45ac64aeef761c0a1",
-      "integrity": "sha512-yAPZJt4ufxl3pD85QqT2pLsvIo9yRwfmPI93JIf4mJIa0/mLASWM2q12hYCsouF5MIVmSzV2QO/cvY+x9Fbdcw=="
+      "sha256": "eda8533d019e1e1f6606993f315b5dbf1339e3e8b8a1b2fdb19d97c414282050",
+      "integrity": "sha512-YT8xbRYI/tEEIih8MAN81JOzmpmGKxnwbmjnZ1ZVc0x8dvk+2wghzw9F+9/xwZ0stQqZouot+dx/Ba2672ZMhw=="
     }
   ],
   "installTogether": [
     "openclaw",
     "@openclaw/ai"
   ],
-  "packageDir": "/Users/dn/.local/state/encargos-loop/artifacts/paquete-4b9785c",
+  "packageDir": "/Users/dn/.local/state/encargos-loop/artifacts/paquete-605aef7",
   "previousRuntime": {
     "version": "2026.9.7",
     "sourceSha": "c074824a27c96d3983043f9eeb33823cd1772d8c",
