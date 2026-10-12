@@ -921,7 +921,7 @@ class ResourceTests(unittest.TestCase):
         for session, owner in (("made", "TaskCreated"), ("adopted", "UserAdopted")):
             socket = f"agent-work-boot-{os.getpid()}-{secrets.token_hex(3)}"
 
-            def tmux_cmd(*args):
+            def tmux_cmd(*args, socket=socket):
                 return subprocess.run([tmux, "-L", socket, *args], capture_output=True, text=True)
 
             self.addCleanup(tmux_cmd, "kill-server")
@@ -1978,7 +1978,7 @@ class LegacyAdoptionTests(unittest.TestCase):
         self.tmux_bin = shutil.which("tmux")
         if not self.tmux_bin:
             self.skipTest("tmux not installed")
-        self.socket = f"agent-work-legacy-{os.getpid()}"
+        self.socket = f"agent-work-legacy-{os.getpid()}-{secrets.token_hex(3)}"
         self.addCleanup(self.tmux, "kill-server")
         self.tmp = tempfile.TemporaryDirectory(prefix="agent-work-legacy-")
         self.addCleanup(self.tmp.cleanup)
@@ -2192,7 +2192,7 @@ class PermissionDialogTests(unittest.TestCase):
         self.tmux_bin = shutil.which("tmux")
         if not self.tmux_bin:
             self.skipTest("tmux not installed")
-        self.socket = f"agent-work-dialog-{os.getpid()}"
+        self.socket = f"agent-work-dialog-{os.getpid()}-{secrets.token_hex(3)}"
         self.addCleanup(self.tmux, "kill-server")
         self.tmp = tempfile.TemporaryDirectory(prefix="agent-work-dialog-")
         self.addCleanup(self.tmp.cleanup)
