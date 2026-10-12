@@ -126,6 +126,10 @@ def _is_ascii(text: str) -> bool:
     return True
 
 
+def has_control(text: str) -> bool:
+    return any(ord(ch) < 32 or 127 <= ord(ch) <= 159 for ch in text)
+
+
 def _check_binary(binary: object) -> str:
     if not isinstance(binary, str) or not binary:
         raise CommandError("empty binary")
@@ -143,6 +147,10 @@ def _check_binary(binary: object) -> str:
 def _check_argv_element(element: object) -> str:
     if not isinstance(element, str) or not element:
         raise CommandError("empty argv element")
+    # worker_argv entrega la argv una por linea: un salto dentro de un
+    # elemento lo parte en dos argumentos (p. ej. "--model\nwrong").
+    if has_control(element):
+        raise CommandError("control character in command argument")
     if any(ch in SHELL_CHARS for ch in element):
         raise CommandError("shell operator in command")
     for name in PLACEHOLDER_RE.findall(element):

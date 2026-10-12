@@ -996,11 +996,15 @@ except Exception:
 
 worker_argv() { # $1 id $2 clave $3 worktree $4 brief $5 session_id $6 session_name
                 # stdout: argv[1:] del comando, un arg por linea, placeholders
-                # sustituidos; rc 1 si el worker o la clave no existen, o si
+                # sustituidos; rc 1 si el worker o la clave no existen, si
                 # un marcador queda vacio ({effort} sin effort, {session_id}
-                # sin id real de la CLI): jamas un argumento vacio (14.13, B5)
-  WREG="$(corrida_workers_registry)" WID="$1" WK="$2" WWT="$3" WBR="$4" WSID="$5" WSN="$6" python3 -c "
+                # sin id real de la CLI): jamas un argumento vacio (14.13, B5);
+                # o si un argumento ya sustituido trae un caracter de control,
+                # que al releer por lineas lo partiria en dos (#247)
+  WLIB="$(dirname "${BASH_SOURCE[0]}")/.." WREG="$(corrida_workers_registry)" WID="$1" WK="$2" WWT="$3" WBR="$4" WSID="$5" WSN="$6" python3 -c "
 import json,os,sys
+sys.path.insert(0, os.environ['WLIB'])
+from corrida_worker.registry import has_control
 try:
   r=json.load(open(os.environ['WREG']))
   w=[x for x in r['workers'] if x['id']==os.environ['WID']][0]
@@ -1012,10 +1016,14 @@ try:
     if '{effort}' in x:
       if not e:
         raise ValueError('marcador {effort} sin campo effort en la entrada')
-      return x.replace('{effort}', e)
-    if x in s and not s[x]:
+      v=x.replace('{effort}', e)
+    elif x in s and not s[x]:
       raise ValueError('marcador '+x+' sin valor')
-    return s.get(x,x)
+    else:
+      v=s.get(x,x)
+    if has_control(v):
+      raise ValueError('caracter de control en argumento')
+    return v
   sys.stdout.write('\n'.join(sub(x) for x in a[1:]))
   if len(a) > 1: sys.stdout.write('\n')
 except Exception:
