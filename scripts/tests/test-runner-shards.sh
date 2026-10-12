@@ -9,14 +9,19 @@
 # monta un arbol de juguete (una copia de run-checks.sh + fixtures de un dia de vida
 # en scripts/tests/fixtures/runner-shards/) donde CADA entrada —shell, node, sintaxis
 # y corpus— deja una linea por ejecucion en un tally, y exige el contrato entero:
-#   (1) SAIKIT_SHARD=1/3, 2/3 y 3/3: la union de lo corrido es TODA la bateria
+#   (1) SAIKIT_SHARD=1/5 a 5/5: cada shard corre EXACTAMENTE su porcion del reparto
+#       por duracion (la entrada pesada queda sola), la union es TODA la bateria
 #       (shell + node + sintaxis + corpus) y nada corre dos veces;
-#   (2) sin SAIKIT_SHARD corre TODO, y un archivo NUEVO en el glob entra solo;
-#   (3) SAIKIT_SHARD invalido (4/3, x) sale != 0 sin haber corrido nada;
-#   (4) un shard cuya prueba estrella no esta en el glob sale rojo, nunca verde
-#       por vacio;
+#   (2) sin SAIKIT_SHARD corre TODO, y un archivo NUEVO en el glob entra solo, a la
+#       bateria completa y a exactamente un shard;
+#   (3) SAIKIT_SHARD invalido (6/5, 0/5, el 1/3 del reparto viejo, x) sale != 0 sin
+#       haber corrido nada;
+#   (4) un arbol sin pruebas shell sale rojo en cada shard, nunca verde corriendo
+#       solo las entradas fijas;
 #   (5) una prueba roja se ejecuta UNA sola vez: su PRIMERA salida y su exit code
-#       quedan en logs/run-checks/<prueba>.log y en resumen.txt.
+#       quedan en logs/run-checks/<prueba>.log y en resumen.txt;
+#   (6) con el inventario y los pesos REALES del repo ningun shard pasa de 9 min
+#       estimados (la regla de CI: un job de mas de ~10 min se reparte).
 # Uso: bash scripts/tests/test-runner-shards.sh
 set -u
 cd "$(dirname "$0")/../.." || exit 1
@@ -42,6 +47,10 @@ instalar preflight.sh test-corrida-preflight.sh
 instalar resto-a.sh   test-aaa.sh
 instalar resto-b.sh   test-zzz.sh
 instalar node.mjs     test-node-fixture.mjs
+# Pesos de juguete: el nucleo "tarda" 100 s y todo lo demas 1 (sin fila = 1). Con eso el
+# reparto por duracion tiene un resultado literal que esta prueba fija: el nucleo queda
+# SOLO en el shard 1 y las otras diez entradas se reparten entre los otros cuatro.
+printf '# juguete\n100\ttest-corrida-nucleo.sh\n' >"$T/scripts/ci-duraciones.tsv"
 
 # Entradas node/sintaxis/corpus de juguete: lo unico que hacen es dejar su linea en el
 # tally. Asi la union auditada incluye TODO lo que el runner puede correr, no solo shell.
@@ -114,32 +123,29 @@ esperar() { # $1=tally, $2=esperado (tags orden C, separados por espacio), $3=ca
 
 n_lineas() { wc -l <"$1" | tr -d ' '; }
 
-echo "(1) union de los tres shards = bateria completa, sin duplicados"
-run_runner 1/3 "$T/t1"
-[ "$RC_RUN" -eq 0 ] || fail "(1) shard 1/3 salio $RC_RUN:
+echo "(1) cada shard corre su porcion del reparto por duracion; la union es la bateria, sin duplicados"
+# Reparto literal: peso descendente (nucleo 100, el resto 1) y, a igual peso, id en
+# orden C; cada entrada va al shard menos cargado (a igual carga, el de menor numero).
+correr_shard_esperando() { # $1=i, $2=tally esperado (orden C)
+  run_runner "$1/5" "$T/s$1"
+  [ "$RC_RUN" -eq 0 ] || fail "(1) shard $1/5 salio $RC_RUN:
 $SALIDA"
-esperar "$T/t1" "nucleo" "(1) shard 1/3"
-case "$SALIDA" in *sintaxis-summa*|*bateria-tablero*|*corpus*) fail "(1) el shard 1/3 corrio entradas que no son suyas";; esac
-grep -q 'OK    test-corrida-nucleo.sh' <<<"$SALIDA" || fail "(1) el shard 1/3 no publico en su salida la prueba que corro:
+  esperar "$T/s$1" "$2" "(1) shard $1/5"
+  grep -q 'TODO VERDE' <<<"$SALIDA" || fail "(1) el shard $1/5 en verde no dice TODO VERDE"
+}
+correr_shard_esperando 1 "nucleo"
+grep -q 'OK    test-corrida-nucleo.sh' <<<"$SALIDA" || fail "(1) el shard 1/5 no publico en su salida la prueba que corrio:
 $SALIDA"
-grep -q 'TODO VERDE' <<<"$SALIDA" || fail "(1) un shard en verde no dice TODO VERDE"
+correr_shard_esperando 2 "bateria-summa resto-a resto-b"
+correr_shard_esperando 3 "bateria-tablero corpus preflight"
+correr_shard_esperando 4 "node-test sintaxis-summa"
+correr_shard_esperando 5 "sintaxis-tablero watchdog"
 
-run_runner 2/3 "$T/t2"
-[ "$RC_RUN" -eq 0 ] || fail "(1) shard 2/3 salio $RC_RUN:
-$SALIDA"
-esperar "$T/t2" "preflight watchdog" "(1) shard 2/3"
-case "$SALIDA" in *test-corrida-nucleo.sh*) fail "(1) el shard 2/3 corrio el nucleo, que es del shard 1";; esac
-
-run_runner 3/3 "$T/t3"
-[ "$RC_RUN" -eq 0 ] || fail "(1) shard 3/3 salio $RC_RUN:
-$SALIDA"
-esperar "$T/t3" "bateria-summa bateria-tablero corpus node-test resto-a resto-b sintaxis-summa sintaxis-tablero" "(1) shard 3/3"
-
-cat "$T/t1" "$T/t2" "$T/t3" >"$T/union"
+cat "$T/s1" "$T/s2" "$T/s3" "$T/s4" "$T/s5" >"$T/union"
 dup=$(LC_ALL=C sort "$T/union" | uniq -d)
 [ -z "$dup" ] || fail "(1) estas entradas corrieron en mas de un shard: $dup"
-esperar "$T/union" "bateria-summa bateria-tablero corpus node-test nucleo preflight resto-a resto-b sintaxis-summa sintaxis-tablero watchdog" "(1) union de los tres shards"
-echo "ok (1): la union de los tres shards es la bateria completa y nada corre dos veces"
+esperar "$T/union" "bateria-summa bateria-tablero corpus node-test nucleo preflight resto-a resto-b sintaxis-summa sintaxis-tablero watchdog" "(1) union de los cinco shards"
+echo "ok (1): cada shard corrio su porcion literal, la union es la bateria completa y nada corre dos veces"
 
 echo "(2) sin SAIKIT_SHARD corre TODO y un archivo nuevo entra solo por el glob"
 instalar nuevo.sh test-nuevo-recien-llegado.sh
@@ -147,32 +153,46 @@ run_runner '' "$T/t4"
 [ "$RC_RUN" -eq 0 ] || fail "(2) la bateria completa salio $RC_RUN:
 $SALIDA"
 esperar "$T/t4" "bateria-summa bateria-tablero corpus node-test nucleo nuevo preflight resto-a resto-b sintaxis-summa sintaxis-tablero watchdog" "(2) bateria completa"
-echo "ok (2): sin la variable corre TODO y el archivo nuevo entro solo por el glob"
+: >"$T/union-nuevo"
+for i in 1 2 3 4 5; do
+  run_runner "$i/5" "$T/n$i"
+  [ "$RC_RUN" -eq 0 ] || fail "(2) shard $i/5 con el archivo nuevo salio $RC_RUN:
+$SALIDA"
+  cat "$T/n$i" >>"$T/union-nuevo"
+done
+esperar "$T/union-nuevo" "bateria-summa bateria-tablero corpus node-test nucleo nuevo preflight resto-a resto-b sintaxis-summa sintaxis-tablero watchdog" "(2) union de los shards con el archivo nuevo"
+echo "ok (2): sin la variable corre TODO y el archivo nuevo entro solo, a la bateria y a exactamente un shard"
 
 echo "(3) shards invalidos salen != 0 sin correr nada"
-run_runner 4/3 "$T/t5"
-[ "$RC_RUN" -ne 0 ] || fail "(3) SAIKIT_SHARD=4/3 salio 0: un shard invalido no puede pasar por verde"
-[ "$(n_lineas "$T/t5")" -eq 0 ] || fail "(3) SAIKIT_SHARD=4/3 corrio pruebas igual: $(cat "$T/t5")"
-grep -Fq "SAIKIT_SHARD='4/3'" <<<"$SALIDA" || fail "(3) el mensaje de rechazo no nombra el shard invalido:
+for invalido in 6/5 0/5 1/3 x; do
+  run_runner "$invalido" "$T/t5"
+  [ "$RC_RUN" -ne 0 ] || fail "(3) SAIKIT_SHARD=$invalido salio 0: un shard invalido no puede pasar por verde"
+  [ "$(n_lineas "$T/t5")" -eq 0 ] || fail "(3) SAIKIT_SHARD=$invalido corrio pruebas igual: $(cat "$T/t5")"
+  grep -Fq "SAIKIT_SHARD='$invalido'" <<<"$SALIDA" || fail "(3) el mensaje de rechazo no nombra el shard invalido ($invalido):
 $SALIDA"
-run_runner x "$T/t6"
-[ "$RC_RUN" -ne 0 ] || fail "(3) SAIKIT_SHARD=x salio 0"
-[ "$(n_lineas "$T/t6")" -eq 0 ] || fail "(3) SAIKIT_SHARD=x corrio pruebas igual: $(cat "$T/t6")"
-echo "ok (3): 4/3 y x salen != 0 sin correr una sola entrada"
+done
+echo "ok (3): 6/5, 0/5, 1/3 y x salen != 0 sin correr una sola entrada"
 
-echo "(4) un shard sin su prueba en el glob es rojo, no un verde por vacio"
-rm "$T/scripts/tests/test-corrida-nucleo.sh"
-run_runner 1/3 "$T/t7"
-[ "$RC_RUN" -ne 0 ] || fail "(4) el shard 1/3 quedo verde sin test-corrida-nucleo.sh en el glob"
-grep -q 'esperaba test-corrida-nucleo.sh' <<<"$SALIDA" || fail "(4) la salida no dice cual prueba faltaba:
+echo "(4) un arbol sin pruebas shell es rojo en cada shard, no un verde por vacio"
+mkdir "$T/apartadas"
+mv "$T"/scripts/tests/*.sh "$T/apartadas/"
+for i in 1 2 3 4 5; do
+  run_runner "$i/5" "$T/t7"
+  [ "$RC_RUN" -ne 0 ] || fail "(4) el shard $i/5 quedo verde en un arbol sin una sola prueba shell:
 $SALIDA"
-echo "ok (4): el shard que no encuentra su prueba revienta"
+  grep -q 'no se encontro NINGUNA prueba' <<<"$SALIDA" || fail "(4) el shard $i/5 no dice que faltan las pruebas shell:
+$SALIDA"
+done
+mv "$T"/apartadas/*.sh "$T/scripts/tests/"
+echo "ok (4): sin pruebas shell los cinco shards revientan"
 
 echo "(5) una prueba roja: una sola ejecucion, primera salida y exit code en el log"
 instalar roja.sh test-roja.sh
-run_runner 3/3 "$T/t8"
+# Con la roja y el nuevo instalados el reparto literal deja en el shard 2:
+# bateria-summa-gate, test-aaa.sh y test-roja.sh.
+run_runner 2/5 "$T/t8"
 [ "$RC_RUN" -ne 0 ] || fail "(5) la prueba roja no propago su fallo (salio 0)"
-esperar "$T/t8" "bateria-summa bateria-tablero corpus node-test nuevo resto-a resto-b roja sintaxis-summa sintaxis-tablero" "(5) shard 3/3 con la roja"
+esperar "$T/t8" "bateria-summa resto-a roja" "(5) shard 2/5 con la roja"
 n=$(grep -c '^roja$' "$T/t8")
 [ "$n" -eq 1 ] || fail "(5) la prueba roja se ejecuto $n veces (esperaba 1): el runner no puede re-ejecutarla para diagnosticar"
 LOG_ROJA=$(ls -td "$T"/logs/run-checks/corrida-*/test-roja.sh.log 2>/dev/null | head -1)
@@ -195,5 +215,21 @@ $(cat "$RES")"
 grep -q "$(printf 'ok\t')" "$RES" || fail "(5) resumen.txt tampoco registro las entradas verdes:
 $(cat "$RES")"
 echo "ok (5): una sola ejecucion; primera salida y exit code conservados en el log y el resumen"
+
+echo "(6) con el inventario y los pesos reales ningun shard pasa de 9 min estimados"
+# La regla de CI de este repo: un job de mas de ~10 min se reparte. 540 s de pruebas
+# estimadas dejan margen para el checkout y la instalacion de cada runner. Si esto se
+# pone rojo, el arreglo es sumar shards o partir la prueba que no cabe, no subir el tope.
+REPARTO_REAL=$(env -u SAIKIT_SHARD bash scripts/run-checks.sh --reparto) || fail "(6) --reparto salio distinto de 0"
+cargas=$(printf '%s\n' "$REPARTO_REAL" | awk -F'\t' '!/^#/ { c[$1] += $2 } END { for (k = 1; k <= 5; k++) printf "%d ", c[k] }')
+for carga in $cargas; do
+  [ "$carga" -gt 0 ] || fail "(6) un shard quedo sin carga con el inventario real: $cargas"
+  [ "$carga" -le 540 ] || fail "(6) un shard pasa de 540 s estimados ($cargas): suma shards o parte la prueba que no cabe"
+done
+[ "$(printf '%s\n' $cargas | wc -l | tr -d ' ')" -eq 5 ] || fail "(6) el reparto real no tiene cinco shards: $cargas"
+n_real=$(printf '%s\n' "$REPARTO_REAL" | grep -vc '^#')
+n_unicas=$(printf '%s\n' "$REPARTO_REAL" | grep -v '^#' | cut -f3 | LC_ALL=C sort -u | wc -l | tr -d ' ')
+[ "$n_real" -eq "$n_unicas" ] || fail "(6) el reparto real repite entradas ($n_real filas, $n_unicas ids)"
+echo "ok (6): cargas estimadas por shard ($cargas) dentro de 540 s"
 
 echo "TODO VERDE: runner-shards"

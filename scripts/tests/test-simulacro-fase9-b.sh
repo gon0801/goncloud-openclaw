@@ -1,0 +1,6 @@
+#!/bin/bash
+# Parte b del simulacro de Fase 9. Los escenarios, cuales le tocan a cada parte y el
+# candado de que la union los cubre a todos viven en
+# scripts/tests/simulacro-fase9/escenarios.sh.
+# Uso: bash scripts/tests/test-simulacro-fase9-b.sh
+SIM9_PARTE=b exec bash "$(dirname "$0")/simulacro-fase9/escenarios.sh"

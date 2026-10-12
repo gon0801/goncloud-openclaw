@@ -9,7 +9,7 @@
 # auditoria seria decorativa; un solo archivo impide esa deriva.
 #
 # Que afirma (falla = exit 1, con la razon en stderr):
-#   1. Conjunto EXACTO de artifacts: shard-1, shard-2 y shard-3; ninguno mas.
+#   1. Conjunto EXACTO de artifacts: shard-1 a shard-5; ninguno mas.
 #   2. Cada shard con su resumen.txt (directo o bajo logs/run-checks/, la
 #      estructura que deja download-artifact sobre el upload de logs/run-checks/).
 #   3. Resumen bien formado: columnas ok|falla \t duracion \t rc \t id \t log,
@@ -26,7 +26,7 @@
 #      esta auditoria solo lee.
 #
 # Uso: bash scripts/valida-union-shards.sh <dir-artifacts> <archivo-inventario>
-#      <dir-artifacts>/shard-K/resumen.txt  con K en 1 2 3
+#      <dir-artifacts>/shard-K/resumen.txt  con K de 1 a 5
 # Exit: 0 ok | 1 rechazo con razon | 2 uso invalido
 set -u
 LC_ALL=C
@@ -38,6 +38,9 @@ if [ "$#" -ne 2 ]; then
 fi
 base=$1
 inventario=$2
+# El mismo numero de shards que reparte scripts/run-checks.sh (SHARDS_N) y que lista
+# la matriz de quality.yml.
+SHARDS="1 2 3 4 5"
 
 rechaza() { # $1=motivo (ya impreso con detalle si hace falta)
   printf 'valida-union-shards: RECHAZADO — %s\n' "$1" >&2
@@ -56,9 +59,9 @@ dups_inv=$(sort "$inventario" | uniq -d)
 encontrados=$(ls "$base" 2>/dev/null | grep -E '^shard-[0-9]+$' || true)
 [ -n "$encontrados" ] || rechaza "no hay NINGUN artifact de shard en $base (la bateria no corrio o no publico logs)"
 for d in $encontrados; do
-  case $d in
-    shard-1|shard-2|shard-3) ;;
-    *) rechaza "artifact fuera del contrato: $d (el reparto es exactamente shard-1, shard-2 y shard-3)" ;;
+  case " $SHARDS " in
+    *" ${d#shard-} "*) ;;
+    *) rechaza "artifact fuera del contrato: $d (el reparto es exactamente shard-1 a shard-5)" ;;
   esac
 done
 
@@ -73,7 +76,7 @@ trap 'rm -f "$tmp" "$tmp_inv"' EXIT
 # el runner truncara un resumen fijo, la re-corrida quedaria invisible: medido
 # 2026-09-22, el gate la daba por buena).
 : >"$tmp"
-for k in 1 2 3; do
+for k in $SHARDS; do
   d="$base/shard-$k"
   # El artifact real (upload de logs/run-checks/) trae las corridas en su
   # raiz: auditoria/shard-K/corrida-<marca>/resumen.txt (run 35748762272: sin
