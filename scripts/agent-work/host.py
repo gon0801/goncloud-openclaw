@@ -766,10 +766,12 @@ class Host:
             op_id = row["operation_id"]
             try:
                 current = self.spool.get(op_id)
-                if current is None:
+                # A reservation whose operation was never registered closes with the claim it kept.
+                assignment = (json.loads(current["operation_json"]) if current is not None
+                              else self.spool.reservation_claim(op_id))
+                if assignment is None:
                     self.spool.note_inbox_error(op_id, "closure without assignment")
                     continue
-                assignment = json.loads(current["operation_json"])
                 digest = closure_digest(row["evidence_json"])
                 last = self.spool.closure_last(op_id)
                 if last and (last["state"], last["reason"], last["evidence_digest"]) \
