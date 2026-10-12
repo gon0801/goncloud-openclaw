@@ -600,6 +600,9 @@ Esta política reemplaza para Fase 15 la obligación anterior de ejecutar toda l
 - El workflow corre siempre en PR y push a main. Un job clasifica; el gate siempre corre y distingue omisión autorizada por fast de fallo o cancelación. La clasificación se basa en archivos, nunca en el título, etiqueta o declaración del agente.
 - Durante implementación se ejecutan tests focalizados. CI ejecuta una batería completa por SHA final del bloque de código y checks documentales para bloques exclusivamente fast. No se repiten manualmente checks ya acreditados para el mismo SHA.
 - La batería se reparte en shards por duración medida (`scripts/ci-duraciones.tsv`), no por nombre, y ningún shard debe pasar de ~10 min: con el reparto por nombre un shard tardaba 24 min contra 4 de los otros dos y cada PR esperaba al más lento (run 38304658354, 2026-10-12).
+  - Pendiente (PR #277, revisores, no bloqueante): el caso (6) de `scripts/tests/test-runner-shards.sh` audita pesos declarados y una entrada sin fila en `scripts/ci-duraciones.tsv` pesa 1. Falta cruzar los ids del TSV contra el inventario de `--reparto` y fallar con la entrada que falta, o auditar la duración real que el validador ya lee.
+  - Pendiente (PR #277): el censo de escenarios de `scripts/tests/simulacro-fase9/escenarios.sh` solo cuenta la línea canónica `if debe_correr N; then`; un guard escrito de otra forma escaparía al candado. Las cinco entradas fijas están duplicadas en `scripts/run-checks.sh` y en el paso del gate de `quality.yml` sin contrato que las amarre.
+  - Sin decidir (operador): el carril fast de documentos puede dejar roja la batería de `main`, porque diez entradas leen `Plans.md`, `.saikit/progress/*.json` y `docs/evidence/*.jsonl` (medido 2026-10-12). Por eso no se reutiliza el verde de un commit anterior cuando el delta es solo documentos.
 
 ### Spec skip reason
 

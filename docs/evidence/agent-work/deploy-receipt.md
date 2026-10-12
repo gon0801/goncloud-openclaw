@@ -25,7 +25,7 @@ Cada instalación la hizo un script desde la Mac (`t12-parte-a.sh` y `t12-actual
 - `build-info.json` vivo: `commit` `f8316c9c867ebef79cfb66f8104b7f589c93e93a`, `buildId` `2026.9.7-release-f8316c9c867e-2026-10-11T11-15-14.185Z`. El empaquetado está en `artifacts/B13-empaquetar.log`, con el smoke `OpenClaw 2026.9.7 (f8316c9)`.
 - Una segunda corrida de `t12-actualizar-19c2ed1.sh`, a las 16:04:37Z del 2026-10-10, salió con `PARO` porque la versión viva ya era `19c2ed1`. No tocó nada.
 - Las dos últimas instalaciones se hicieron con la admisión abierta, porque el corte ya estaba hecho. No había encargos nuevos en esas ventanas: ninguna tarea de R se creó entre las 10:37 y las 10:38Z, ni entre las 15:14 y las 15:15Z. El host siguió capturando resultados durante las dos.
-- `artifact-manifest.json` sigue fijando `4b9785c`. No se cambió en este PR (fila nueva en `followups.md`).
+- Al cierre, `artifact-manifest.json` seguía fijando `4b9785c`. Después pasó a `605aef7` (B17) y a `4acb881` (PR #276, 2026-10-12), que es el que fija hoy (`followups.md`, secciones "Resueltos en B17" y "Resueltos en B20 y B21").
 
 ## El corte
 
@@ -90,6 +90,25 @@ Los tres intentos anteriores del mismo día fallaron. Las tres causas quedaron a
 | 1 | Mensaje a las 17:38:24Z | `saludo.py` quedó escrito, pero no por la ruta gestionada. `main` llamó a `sessions_spawn` con el subagente `implementer` (corrida `ddb9cbf7`, modelo `opencode-go/deepseek-v4.1-flash`). El spool `deepseek-1` quedó con 0 operaciones. | `main` leyó `agent-dispatch`, nunca leyó `encargo-cli` y resolvió el pedido con subagentes. No se midió si el catálogo de esa sesión ya traía `encargo-cli`. | David decidió ese día que la ruta gestionada entra solo cuando el pedido dice "por CLI". La regla está en el PR #272, mergeado en `e260f300`. `mensaje-8.txt` se reescribió con esas palabras, y la copia anterior es `mensaje-8.pre-por-cli.txt`. |
 | 2 | Mensaje a las 18:12:32Z | `main` siguió `encargo-cli`. `managed_tasks_submit` falló dos veces con `Managed task host identity does not match the admitted turn`. | R comparaba la sesión admitida, `agent:main:main`, solo contra la clave de política del turno. En un DM de canal a la sesión `main`, esa clave es la del remitente y nunca coincide. | R `4acb881` (B20-R, VEREDICTO-B20R-r1 APROBADO). Se instaló en la Mini a las 19:45Z (`artifacts/T12/actualizar-4acb881-20261012T194435Z.log`, `ACTUALIZADO OK`). |
 | 3 | Entrega a las 19:54:16Z | Submit y admit pasaron. Tarea `3f7a8b01-dba0-4ecc-8152-fa187c6792ae`, operación `32dddc0896ae529c89fe4f0936f314b032fb70bad0f6c2b26d0254d9dbfd9ed0`. Deepseek escribió el temporal del acuse en `/tmp`, opencode abrió "Permission required" y el host no lo reportó. `main` dijo que no había host. El diálogo se rechazó con Esc a las 20:03:13Z y `main` canceló la tarea. La operación quedó `cancelled` y su recurso `ReleasedAdopted`. | El host leía el diálogo de permiso solo en operaciones `delivered`, y esta seguía `attempted`. `protocol.steps` tampoco decía en qué carpeta va el temporal. | PR #273 (B21, G `99a38b99`), mergeado en `73f76ee6`, VEREDICTO-B21-r1 APROBADO. |
+
+### Los alias de opencode Go: certificado y cerrado el mismo día (2026-10-12)
+
+El alias de deepseek quedó `certified` con el PR #276, y su host `deepseek-1` se relanzó sin `--canario` (entrada de las 22:13:23Z de `estado.md`). La entrada de las 22:40:55Z registra la decisión de David, en sesión: "open code go es solamente para main". Al preguntarle por el alcance eligió "Reservada para claw": la suscripción de opencode Go es solo para el modelo propio de `main` en la Mini, y los encargos "por CLI" que corren opencode en la Mac no la gastan. Confirma el alcance de su orden del 2026-10-03: "opencode debe usar solo [la suscripción de Z.AI], no la suscripción opencode go ni zen". B19 había abierto los cuatro alias `opencode@opencode-go/*` sin consultarlo.
+
+Lo que se hizo en vivo ese día. Las horas son las de las entradas de `~/.local/state/encargos-loop/estado.md`, que no anota una hora aparte para cada paso:
+
+- Entrada de las 22:40:55Z. El host `deepseek-1` y su sesión de opencode quedaron apagados, con 0 entregas en vuelo.
+- Entrada de las 22:42:29Z. `managedTasks.hosts.mac-local.adapters` de R pasó de cinco entradas a `["opencode"]`, con `config.patch`, `baseHash` y `replacePaths: ["managedTasks.hosts.mac-local.adapters"]`, y con 0 crons corriendo. Releído después del reinicio del gateway: `enabled` en `true`, `requesters` con `main` y el mismo `deviceId`.
+
+El repo registra el mismo cierre:
+
+- En `coverage.json`, los alias de `deepseek-v4-pro`, `kimi-k3`, `grok-4.7` y `qwen3.8-max` están `disabled-operator-billing`. La `hostAdapterEvidence` de deepseek se conserva como historia: son las dos líneas del canario 8 de arriba.
+- `host.py opencode-model` rechaza cualquier `opencode-go/*`, así que ni `lanzar-host.sh` ni `native_gateway.py` arrancan un host con uno de esos alias, aunque R lo vuelva a listar.
+- La skill `encargo-cli` ofrece solo `opencode`. Si David nombra otro modelo con "por CLI", `main` le dice que hoy solo está GLM por la suscripción de Z.AI y que opencode Go está reservada para `main`.
+
+El canario 8 queda como evidencia de que la ruta por alias funciona, no de un modelo en uso. Para "por CLI" queda un solo camino: `opencode`, con GLM 5.3 flash por `zai-coding-plan`.
+
+Dos cosas no se hicieron. Nadie midió cuánto gastaron de opencode Go los cuatro intentos del canario 8. Y la copia de `encargo-cli` de la Mini no se publicó con este cambio (fila GO en `followups.md`).
 
 ## Huecos encontrados en vivo
 
@@ -159,7 +178,7 @@ Del 2026-10-11 19:44:31Z a las 20:14:37Z (30 min 6 s). Antes de abrirla, los 7 t
 ## Cobertura efectiva
 
 - Certificado y en vivo: solo `main` → `mac-local`/`opencode`, en una sesión adoptada (B8). Al cierre era la única combinación con `certified` en `coverage.json` (`hostAdapterCoverage`).
-- Después del cierre, el 2026-10-12, `main` → `mac-local`/`opencode@opencode-go/deepseek-v4-pro` también quedó `certified`, por el canario 8 (sección Canarios). Los alias de `kimi-k3`, `grok-4.7` y `qwen3.8-max` siguen `sandbox-tested-uncertified`.
+- Después del cierre, el 2026-10-12, `main` → `mac-local`/`opencode@opencode-go/deepseek-v4-pro` quedó `certified` por el canario 8, y David lo cerró ese mismo día junto con los alias de `kimi-k3`, `grok-4.7` y `qwen3.8-max` (sección Canarios). Los cuatro están `disabled-operator-billing`, y `main` → `mac-local`/`opencode` vuelve a ser la única combinación `certified`.
 - No habilitados, como limitación:
   - En `mac-local`, los adaptadores `claude_fable`, `claude_opus`, `kimi_k3`, `kimi_coding`, `codex`, `zcode` y `grok`.
   - Todo `windows-remote`.

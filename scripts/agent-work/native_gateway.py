@@ -23,6 +23,7 @@ from progress_bridge import transfer_host_projection, transfer_projection
 from resources import dialog_note
 from spool import canonical, incident_identity
 
+COVERAGE = Path(__file__).resolve().parents[2] / "docs/evidence/agent-work/coverage.json"
 DEFINITIVE_INCIDENT_REJECTIONS = (
     "Managed task incident conflict",
     "Managed task generation mismatch",
@@ -708,8 +709,7 @@ def main(argv=None):
         backend = TmuxBackend(args.tmux_bin, args.cli_tmux_socket)
         manager = ResourceManager(host.spool, args.host_id, backend)
         transport = TmuxTransport(args.tmux_bin, args.cli_tmux_socket, cli_adapter(args.cli_adapter_id))
-        coverage_path = Path(__file__).resolve().parents[2] / "docs/evidence/agent-work/coverage.json"
-        coverage = json.loads(coverage_path.read_text())
+        coverage = json.loads(COVERAGE.read_text())
         cli_claim = lambda: claim_cli_once(
             client, host=host, manager=manager, adapter_id=args.cli_adapter_id,
             instance_id=args.cli_instance_id, session=args.cli_session,

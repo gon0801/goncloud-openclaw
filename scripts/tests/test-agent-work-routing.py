@@ -72,9 +72,12 @@ class AgentsRouting(unittest.TestCase):
                          {"kind": "cli", "hostId": "windows-remote", "adapterId": "codex"})
 
     def test_only_mac_local_opencode_is_certified_so_every_other_cli_route_or_claim_stays_closed(self):
-        """Deliberately changed in B8: mac-local/opencode was certified by a live opencode run on GLM.
+        """Walks cliAdapters, the 8 inventory CLIs on 2 hosts: 1 route open and 15 refused.
 
-        Before B8 no inventory CLI was certified and all 14 combinations were refused.
+        B8 certified mac-local/opencode with a live opencode run on GLM. An opencode model alias
+        ("opencode@<provider>/<model>") is not in cliAdapters: canary 8 certified the deepseek alias on
+        2026-10-12 and David closed it the same day, so mac-local/opencode is again the only certified
+        route (test_no_opencode_go_alias_is_open_for_any_host).
         """
         class Client:
             def __init__(self, host_id):
@@ -113,79 +116,109 @@ class AgentsRouting(unittest.TestCase):
         with self.assertRaisesRegex(RouteUnavailable, "outside the managed perimeter"):
             self.request("ingenieria", "mac-local/opencode")
 
+    def claim(self, adapter_id, canary, coverage=None):
+        """What a host of that adapter gets from one claim, and the claims that reached the gateway."""
+        claims = []
+        client = mock.Mock(host_id="mac-local", claim_host=lambda adapter_id, instance_id: claims.append(adapter_id))
+        try:
+            return native_gateway.claim_cli_once(
+                client, host=None, manager=mock.Mock(can_take=lambda _: True), adapter_id=adapter_id,
+                instance_id="alias-1", session="alias", workspace_root=self.root,
+                deliver=lambda *_: None, coverage=coverage or self.coverage, canary=canary), claims
+        except ValueError as error:
+            return str(error), claims
+
     def test_a_model_alias_is_claimed_only_by_a_canary_host_until_its_canary_certifies_it(self):
-        aliases = sorted(adapter for adapter, state in self.coverage["hostAdapterCoverage"]["mac-local"].items()
-                         if state == "sandbox-tested-uncertified")
-        self.assertEqual(aliases, ["opencode@opencode-go/grok-4.7", "opencode@opencode-go/kimi-k3",
-                                   "opencode@opencode-go/qwen3.8-max"])
+        tested, certified = "opencode@zai-coding-plan/glm-5.2", "opencode@zai-coding-plan/glm-5.3"
+        coverage = json.loads(json.dumps(self.coverage))
+        coverage["hostAdapterCoverage"]["mac-local"].update(
+            {tested: "sandbox-tested-uncertified", certified: "certified"})
+        with self.assertRaisesRegex(RouteUnavailable, f"route mac-local/{tested} is not certified"):
+            self.request("main", f"mac-local/{tested}", coverage=coverage)
+        self.assertEqual(self.claim(tested, False, coverage), ("host adapter route is not certified", []))
+        self.assertEqual(self.claim(tested, True, coverage), (None, [tested]))
+        for closed in ("claude_opus", "opencode@zai-coding-plan/glm-4.7"):
+            self.assertEqual(self.claim(closed, True, coverage), ("host adapter route is not certified", []))
+        self.assertEqual(self.claim("opencode", False, coverage), (None, ["opencode"]))
+        self.assertEqual(self.request("main", f"mac-local/{certified}", coverage=coverage)["assignment"]["target"],
+                         {"kind": "cli", "hostId": "mac-local", "adapterId": certified})
+        self.assertEqual(self.claim(certified, False, coverage), (None, [certified]))
 
-        class Client:
-            host_id = "mac-local"
-
-            def __init__(self):
-                self.claims = []
-
-            def claim_host(self, adapter_id, instance_id):
-                self.claims.append(adapter_id)
-                return None
-
-        def claim(adapter_id, canary):
-            client = Client()
-            try:
-                return native_gateway.claim_cli_once(
-                    client, host=None, manager=mock.Mock(can_take=lambda _: True), adapter_id=adapter_id,
-                    instance_id="deepseek-1", session="deepseek", workspace_root=self.root,
-                    deliver=lambda *_: None, coverage=self.coverage, canary=canary), client.claims
-            except ValueError as error:
-                return str(error), client.claims
-
-        for alias in aliases:
+    def test_no_opencode_go_alias_is_open_for_any_host(self):
+        reason = ('David, 2026-10-12: "open code go es solamente para main". The opencode Go subscription pays '
+                  "main's own model; a por-CLI task runs on mac-local/opencode, GLM on the Z.AI coding plan. "
+                  "Do not reopen an opencode@opencode-go/ alias without his order.")
+        open_aliases = [f"{host_id}/{adapter_id} is {state}"
+                        for host_id, adapters in self.coverage["hostAdapterCoverage"].items()
+                        for adapter_id, state in adapters.items()
+                        if adapter_id.startswith("opencode@opencode-go/")
+                        and state in ("certified", "sandbox-tested-uncertified")]
+        self.assertEqual(open_aliases, [], reason)
+        for model in ("deepseek-v4-pro", "kimi-k3", "grok-4.7", "qwen3.8-max"):
+            alias = f"opencode@opencode-go/{model}"
+            self.assertEqual(self.coverage["hostAdapterCoverage"]["mac-local"][alias], "disabled-operator-billing")
             with self.assertRaisesRegex(RouteUnavailable, f"route mac-local/{alias} is not certified"):
                 self.request("main", f"mac-local/{alias}")
-            self.assertEqual(claim(alias, canary=False), ("host adapter route is not certified", []))
-            self.assertEqual(claim(alias, canary=True), (None, [alias]))
-        for closed in ("claude_opus", "opencode@opencode-go/glm-5.3"):
-            self.assertEqual(claim(closed, canary=True), ("host adapter route is not certified", []))
-        self.assertEqual(claim("opencode", canary=False), (None, ["opencode"]))
-        deepseek = "opencode@opencode-go/deepseek-v4-pro"
-        self.assertEqual(self.request("main", f"mac-local/{deepseek}")["assignment"]["target"],
-                         {"kind": "cli", "hostId": "mac-local", "adapterId": deepseek})
-        self.assertEqual(claim(deepseek, canary=False), (None, [deepseek]))
+            for canary in (False, True):
+                self.assertEqual(self.claim(alias, canary), ("host adapter route is not certified", []), reason)
 
-    def test_the_watch_entrypoint_passes_cli_canary_to_each_claim(self):
-        alias = "opencode@opencode-go/kimi-k3"
-        args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "mac-local",
+    def test_a_host_of_an_opencode_go_alias_does_not_start(self):
+        claimed = []
+        with mock.patch.object(native_gateway.GatewayProjectionClient, "claim_host",
+                               lambda _, adapter_id, instance_id: claimed.append(adapter_id)), \
+                mock.patch("native_gateway.watch_pump") as watch, \
+                self.assertRaisesRegex(ValueError, "^adapter opencode@opencode-go/kimi-k3 spends the opencode Go "
+                                                   "subscription, reserved for main; use zai-coding-plan/$"):
+            native_gateway.main(self.watch_args("opencode@opencode-go/kimi-k3") + ["--cli-canary"])
+        self.assertEqual((watch.call_count, claimed), (0, []))
+
+    def watch_args(self, alias):
+        return ["--openclaw-bin", "/isolated/openclaw", "--host-id", "mac-local",
                 "--expect-url", "ws://127.0.0.1:18789", "--evidence-root", str(self.root / "e"),
                 "--progress-state-dir", str(self.root / "p"), "--progress-client", "/isolated/c.py",
                 "--watch", "--host-state-dir", str(self.root / "host"),
-                "--cli-adapter-id", alias, "--cli-instance-id", "kimi-1",
-                "--cli-session", "kimi", "--cli-workspace-root", str(self.root / "w"),
+                "--cli-adapter-id", alias, "--cli-instance-id", "alias-1",
+                "--cli-session", "alias", "--cli-workspace-root", str(self.root / "w"),
                 "--cli-tmux-socket", "sock-canary"]
+
+    def test_the_watch_entrypoint_passes_cli_canary_to_each_claim(self):
+        alias = "opencode@zai-coding-plan/glm-5.2"
+        coverage = json.loads(json.dumps(self.coverage))
+        coverage["hostAdapterCoverage"]["mac-local"][alias] = "sandbox-tested-uncertified"
+        coverage_path = self.root / "coverage.json"
+        coverage_path.write_text(json.dumps(coverage))
         claimed = []
-        with mock.patch.object(native_gateway.GatewayProjectionClient, "claim_host",
-                               lambda _, adapter_id, instance_id: claimed.append((adapter_id, instance_id))):
+        with mock.patch.object(native_gateway, "COVERAGE", coverage_path), \
+                mock.patch.object(native_gateway.GatewayProjectionClient, "claim_host",
+                                  lambda _, adapter_id, instance_id: claimed.append((adapter_id, instance_id))):
             for flags in ([], ["--cli-canary"]):
                 with mock.patch("native_gateway.watch_pump") as watch:
-                    native_gateway.main(args + flags)
+                    native_gateway.main(self.watch_args(alias) + flags)
                 try:
                     outcome = watch.call_args.kwargs["cli_claim"]()
                 except ValueError as error:
                     outcome = str(error)
                 self.assertEqual((flags, outcome), (flags, None if flags else "host adapter route is not certified"))
-        self.assertEqual(claimed, [(alias, "kimi-1")])
+        self.assertEqual(claimed, [(alias, "alias-1")])
 
     def test_every_certified_host_adapter_names_its_live_evidence(self):
         certified = [(host_id, adapter_id)
                      for host_id, adapters in self.coverage["hostAdapterCoverage"].items()
                      for adapter_id, state in adapters.items() if state == "certified"]
-        self.assertEqual(certified, [("mac-local", "opencode"),
-                                     ("mac-local", "opencode@opencode-go/deepseek-v4-pro")])
+        self.assertEqual(certified, [("mac-local", "opencode")])
         for host_id, adapter_id in certified:
-            evidence = self.coverage["hostAdapterEvidence"][host_id][adapter_id]
-            self.assertTrue(evidence, f"{host_id}/{adapter_id} is certified without evidence")
+            self.assertTrue(self.coverage["hostAdapterEvidence"][host_id][adapter_id],
+                            f"{host_id}/{adapter_id} is certified without evidence")
+        # A closed alias keeps the evidence of its canary as history, and that evidence still has to exist.
+        kept = {(host_id, adapter_id): evidence
+                for host_id, adapters in self.coverage["hostAdapterEvidence"].items()
+                for adapter_id, evidence in adapters.items()}
+        self.assertEqual(sorted(kept), [("mac-local", "opencode"),
+                                        ("mac-local", "opencode@opencode-go/deepseek-v4-pro")])
+        for (host_id, adapter_id), evidence in kept.items():
             for item in evidence:
                 self.assertIn(item["test"], (ROOT / item["path"]).read_text(encoding="utf-8"),
-                              f"evidence {item} does not exist")
+                              f"evidence {item} of {host_id}/{adapter_id} does not exist")
 
     def test_cli_route_is_limited_to_its_requester(self):
         certified = json.loads(json.dumps(self.coverage))
@@ -289,6 +322,11 @@ class AgentsRouting(unittest.TestCase):
                    if adapter.startswith("opencode") and state in ("certified", "sandbox-tested-uncertified")}
         offered = {line.split("`")[1] for line in skill.splitlines() if line.startswith("| ") and "`opencode" in line}
         self.assertEqual(offered, aliases, "the skill offers an alias coverage.json does not know, or misses one")
+        self.assertEqual(offered, {"opencode"})
+        self.assertIn('Dile que para "por CLI" hoy solo está GLM por la suscripción de Z.AI, y que opencode Go '
+                      "está reservada para ti, `main`.", skill)
+        self.assertNotIn("opencode@", skill, "the skill names a model alias; por CLI runs only on opencode")
+        self.assertNotIn("por CLI con", skill.splitlines()[2], "the description offers a model by name")
         self.assertNotIn("routing.py", skill)
 
     def test_cli_prints_native_submit_parameters(self):
