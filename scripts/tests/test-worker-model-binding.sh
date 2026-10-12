@@ -22,7 +22,7 @@ got="$(argv scripts/mac/workers.v1.json grok start:write /tmp/wt)" \
 want="$(printf '%s\n' --reasoning-effort high --allow /tmp/wt)"
 [ "$got" = "$want" ] || fail "argv de grok distinto: $got"
 
-for sep in '\n' '\r' '\t' '\x7f' '\x00'; do
+for sep in '\n' '\r' '\t' '\x7f' '\x00' '\xc2\x85'; do
   python3 - "$T/reg.json" "$sep" <<'PY'
 import json, sys
 reg = json.load(open("scripts/mac/workers.v1.json"))

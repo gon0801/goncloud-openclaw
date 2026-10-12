@@ -127,7 +127,7 @@ def _is_ascii(text: str) -> bool:
 
 
 def has_control(text: str) -> bool:
-    return any(ord(ch) < 32 or ord(ch) == 127 for ch in text)
+    return any(ord(ch) < 32 or 127 <= ord(ch) <= 159 for ch in text)
 
 
 def _check_binary(binary: object) -> str:
