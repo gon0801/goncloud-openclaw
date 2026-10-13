@@ -220,12 +220,28 @@ Solo `rm /tmp/…` lo pidió.
 - `main` le avisa a David por Telegram el resultado de cada encargo, también de los de prueba.
 - La regla de "por CLI" de las instrucciones fijas de `main` vive solo en la Mini. Ese `AGENTS.md` no está en este repo. Su respaldo anterior quedó al lado, `AGENTS.md.antes-de-por-cli-20261013T055348Z`.
 - En la Mini quedaron publicados `~/.local/share/agent-work/brief.py` (sha256 `dd9ef198…59f9`) y la skill `encargo-cli` de `41ddb679` (sha256 `8ca5f42a6da68c1d…`). El respaldo de lo anterior está en `~/.openclaw/respaldos/pre-b22f3-20261013T050317Z/`.
-- Estado vivo al cerrar las mediciones: `host-encargos` en `--canario`, con el checkout del host en `6fa16cf9`.
+- Estado vivo al cerrar las mediciones: `host-encargos` en `--canario`, con el checkout del host en `6fa16cf9`. El estado final está en "Cierre".
 
 ## Lo que falta para cerrar este recibo
 
 1. El estreno de gpt no entregó trabajo, porque la suscripción de OpenAI está en su límite de uso.
 2. El estreno de deepseek espera a que David lo pida.
-3. La certificación. `coverage.json` no cambia con este recibo (`followups.md`, fila B22).
-4. El confinamiento real del proceso (`followups.md`, fila B22-S7).
-5. Que `estado --tarea` diga qué campo de un resultado falló (`followups.md`, fila B22-S9).
+3. El confinamiento real del proceso (`followups.md`, fila B22-S7).
+4. Que `estado --tarea` diga qué campo de un resultado falló (`followups.md`, fila B22-S9).
+
+## Cierre
+
+La fase 4 y la certificación se mergearon en `4000a1d4` (PR #284). `coverage.json` dice `certified` para `mac-local/opencode` con opencode 1.18.35.
+
+Después del merge, con el checkout del host en `4000a1d4`:
+
+- `tmux -L agent-work kill-session -t host-encargos` y `bash scripts/agent-work/lanzar-encargos.sh`, sin `--canario`. Imprimió `host: host-encargos arrancó` y la línea `HOST enc-1 opencode sesión=host-encargos spool=/Users/dn/.local/state/agent-work-host/enc-1 grupo=agent-work-enc1`, sin la palabra `canario`.
+- `encargo.py estado` contestó `"slot": "free"`, `"cli": "1.18.35"`, `"politica": "d1c1fb615b3f"`, `"canario": false` y el commit `4000a1d4d7a70f21061d014077b09dfdbe0d5e8b`.
+- `encargo.py preparar --repo ~/dev/canario-encargos` contestó `"ok": true` con `zai-coding-plan/glm-5.3-flash`.
+- La skill `agent-dispatch` de `main` se publicó en la Mini con `t12-skills-main-1.sh`: `SKILLS OK`, sha256 `ef8777cb…2f90d` en los dos lados. `encargo-cli` ya estaba igual (`54db32fb…fa3f5`).
+
+Un pedido real a `main` con el host ya sin canario, "agrega en el repo ~/dev/canario-encargos un archivo minimo.py … hazlo por CLI":
+
+| Tarea | Modelo | Qué pasó |
+|---|---|---|
+| `9ed258fc-59c1-4e72-ba3d-36819bea0eb9` | `zai-coding-plan/glm-5.3-flash` | PASA. `main` usó `read`, `exec`, `managed_tasks_submit` y `managed_tasks_admit`. Final: `acknowledged\|AbsenceVerified`, 0 permisos negados, `proveedoresLlamados ["zai-coding-plan"]`. En R: resultado, admisión `admitted` y `host_closure` `AbsenceVerified`. |
