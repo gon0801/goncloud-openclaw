@@ -819,7 +819,7 @@ class Decisions(Slot):
         self.assertEqual(self.held(), ("cancelled", "AbsenceVerified", ""))
 
     def refused(self, causa, piece):
-        self.assertEqual(self.one_pass()["claimed"], 1)
+        self.assertEqual(self.changes(), {"claimed": 1})
         self.assertEqual((self.backend.launches, self.r.admits, self.incidents()),
                          ([], ["task-1"], ["host:1:transport-unavailable:launch-refused"]))
         self.assertEqual(self.held(), ("registered", "Reserved", ""))
