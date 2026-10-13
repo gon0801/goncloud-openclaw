@@ -68,7 +68,7 @@ David (2026-10-10, B8).
 
 ### Rondas de revisión del loop de encargos
 
-Fuente: `revision-2026-10-12/decisiones-para-david.md`, punto 1. 81 veredictos:
+Fuente: `docs/evidence/sistema-agentes-unificado/revision-2026-10-12/decisiones-para-david.md`, punto 1. 81 veredictos:
 62 en ronda 1, 15 en ronda 2, 1 en ronda 3 y ninguno más arriba. Ningún tope
 entre 3 y 5+5 habría cambiado nada.
 

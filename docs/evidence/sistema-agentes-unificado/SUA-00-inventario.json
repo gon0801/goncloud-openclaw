@@ -272,8 +272,8 @@
       "autoridad": "RPC con scope operator.write (core-descriptors.ts:263-264)",
       "resultado": "SessionGoal en SessionEntry.goal (types.ts:400-401); estados active|paused|blocked|usage_limited|budget_limited|complete",
       "recibo": "session_goal_operations (openclaw-agent-schema.sql:539-549); evento goal_changed",
-      "fuente": {"capacidad": "passed", "version": "R 4acb881", "evidencia": "src/config/sessions/goals.test.ts (17 casos), goals-operations.test.ts (13 casos)"},
-      "instalado": {"capacidad": "passed", "version": "R 4acb881 en la Mini", "evidencia": "memoria del proyecto: una meta /goal vieja sigue active y sobrevive a /new; sessions.goal.clear + /new. Observado en vivo antes de este bloque"},
+      "fuente": {"capacidad": "passed", "version": "R 4acb881", "evidencia": "src/config/sessions/goals.test.ts (16 casos), goals-operations.test.ts (13 casos)"},
+      "instalado": {"capacidad": "unknown", "version": "R 4acb881 en la Mini", "razon": "ningun recibo de este bloque lo probo en la Mini. La fuente dice que /new borra el goal (src/auto-reply/reply/session.ts:1027; docs/tools/goal.md:116 de R). No se mide: SUA no reutiliza SessionGoal", "comando": "n/a"},
       "aceptadoEnVivo": {"capacidad": "unknown", "razon": "no es una ruta de trabajo entre agentes. Se inventaria por la decision de SUA-00 paso 2: no se reutiliza", "comando": "n/a"}
     },
     {
