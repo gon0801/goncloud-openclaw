@@ -1354,13 +1354,6 @@ class LiveEntrypoint(LiveSlot):
         first.communicate(timeout=15)
         self.assertEqual(first.returncode, 0)
 
-    def test_the_two_routes_never_mix_in_one_host(self):
-        mixed = self.gateway("--cli-adapter-id", "opencode", "--cli-session", "canario")
-        _, err = mixed.communicate(timeout=15)
-        self.assertEqual(mixed.returncode, 2)
-        self.assertIn("--workspace-root launches one opencode per task and excludes the adopted-session flags", err)
-        self.assertFalse((self.state / "host.json").exists())
-
 
 class LiveCloseOnly(LiveSlot):
     CASE = "hang"
@@ -1389,12 +1382,6 @@ class LiveCloseOnly(LiveSlot):
         self.assertEqual((self.sessions(), slot_group_processes()), (["keeper"], ()))
         with self.assertRaises(ProcessLookupError):
             os.kill(hung, 0)
-        both = subprocess.run([sys.executable, str(GATEWAY), "--openclaw-bin", str(FAKE_R), "--host-id", "mac-local",
-                               "--expect-url", "ws://127.0.0.1:1", "--host-state-dir", str(self.spool), "--close-only",
-                               "--slot-group", SLOT_GROUP, "--cli-adapter-id", "opencode", "--cli-tmux-socket",
-                               self.socket], capture_output=True, text=True, timeout=60)
-        self.assertEqual(both.returncode, 2)
-        self.assertIn("one of --cli-adapter-id (adopted sessions) and --slot-group (launched sessions)", both.stderr)
 
 
 if __name__ == "__main__":

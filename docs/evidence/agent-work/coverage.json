@@ -26,11 +26,7 @@
       "codex": "disabled-operator-setup-pending",
       "zcode": "disabled-operator-setup-pending",
       "grok": "disabled-operator-setup-pending",
-      "opencode": "sandbox-tested-uncertified",
-      "opencode@opencode-go/deepseek-v4-pro": "disabled-operator-billing",
-      "opencode@opencode-go/kimi-k3": "disabled-operator-billing",
-      "opencode@opencode-go/grok-4.7": "disabled-operator-billing",
-      "opencode@opencode-go/qwen3.8-max": "disabled-operator-billing"
+      "opencode": "sandbox-tested-uncertified"
     },
     "windows-remote": {
       "claude_fable": "disabled-host-unverified",
@@ -66,10 +62,6 @@
       "opencode": [
         {"path": "docs/evidence/agent-work/B8-opencode-adapter-e2e.md", "test": "OPENCODE_ADAPTER_E2E tasks=2 typed=2 deferred_over_draft=1 incidents=0"},
         {"path": "scripts/tests/test_agent_work_opencode_adapter_e2e.py", "test": "def test_main_loop_hands_tasks_to_an_adopted_opencode_session"}
-      ],
-      "opencode@opencode-go/deepseek-v4-pro": [
-        {"path": "docs/evidence/agent-work/deploy-receipt.md", "test": "task: dd407096-78ef-43e5-9859-66a1d7779acb | key: canario-saludo-20261012-1431 | creada 21:31:32Z actualizada 21:32:09Z gen 1"},
-        {"path": "docs/evidence/agent-work/deploy-receipt.md", "test": "e4c55db542664da48f037cfbcc354f5cf8f5412e19f73756b07c5a4bb0ce9943|acknowledged|dd407096-78ef-43e5-9859-66a1d7779acb|1|deepseek-1|deepseek|UserAdopted|ReleasedAdopted"}
       ]
     }
   },
@@ -268,7 +260,7 @@
     {"id": "file:scripts/mac/agent-tmux.sh", "state": "out-of-perimeter", "reason": "lanzador de David (UserAdopted): abre una sesión sin marca ni delegación", "evidence": [], "instructions": []},
     {"id": "file:agents/ingenieria/agent/workshop-skills/mac-node-ops/SKILL.md", "state": "perimeter-guarded", "reason": "sus carriles paralelos con sessions_spawn siguen fuera del perímetro; dentro de un run gestionado el runtime rechaza sessions_spawn y sessions_send (delegation_bypass)", "evidence": [{"path": "scripts/tests/test-agent-work-integration.sh", "test": "delegation_bypass"}], "instructions": [{"path": "agents/ingenieria/agent/workshop-skills/managed-task-routing/SKILL.md", "literal": "Si te llegó un encargo gestionado (T9 `:265`)"}]},
     {"id": "file:agents/ingenieria/agent/workshop-skills/managed-task-routing/SKILL.md", "state": "managed-prepared", "reason": "instrucciones de las rutas gestionadas de ingenieria", "evidence": [{"path": "scripts/tests/test-agent-work-routing.py", "test": "def test_agent_instructions_call_the_guarded_route_and_keep_legacy_outside"}], "instructions": [{"path": "agents/ingenieria/agent/workshop-skills/managed-task-routing/SKILL.md", "literal": "managed_tasks_submit"}, {"path": "agents/ingenieria/agent/workshop-skills/managed-task-routing/SKILL.md", "literal": "Si te llegó un encargo gestionado (T9 `:265`)"}]},
-    {"id": "file:agents/main/agent/workshop-skills/encargo-cli/SKILL.md", "state": "managed-prepared", "reason": "main encarga trabajo a un CLI de la Mac por mac-local (brief.py en la Mini, submit, admit y el cierre al despertar); el único alias es opencode: los de opencode Go están cerrados por decisión del operador (2026-10-12)", "evidence": [{"path": "scripts/tests/test-agent-work-routing.py", "test": "def test_the_encargo_cli_skill_spells_the_steps_main_runs_on_the_mini"}], "instructions": [{"path": "agents/main/agent/workshop-skills/encargo-cli/SKILL.md", "literal": "`managed_tasks_submit` con un `taskKey` nuevo (nunca `key`)"}]},
+    {"id": "file:agents/main/agent/workshop-skills/encargo-cli/SKILL.md", "state": "managed-prepared", "reason": "main encarga trabajo a un CLI de la Mac por mac-local (brief.py en la Mini, submit, admit y el cierre al despertar); el único adaptador es opencode y el modelo viaja en la cabecera del brief: opencode Go está cerrado por decisión del operador (2026-10-12)", "evidence": [{"path": "scripts/tests/test-agent-work-routing.py", "test": "def test_the_encargo_cli_skill_spells_the_steps_main_runs_on_the_mini"}], "instructions": [{"path": "agents/main/agent/workshop-skills/encargo-cli/SKILL.md", "literal": "`managed_tasks_submit` con un `taskKey` nuevo (nunca `key`)"}]},
     {"id": "file:agents/main/agent/workshop-skills/agent-dispatch/SKILL.md", "state": "managed-prepared", "reason": "declara las rutas gestionadas de main; la cadena y el loop externo quedan como ruta vieja hasta T12", "evidence": [{"path": "scripts/tests/test-agent-work-routing.py", "test": "def test_legacy_dispatch_routes_are_declared_outside_the_perimeter"}, {"path": "scripts/tests/test-agent-work-routing.py", "test": "def test_main_cli_route_points_main_at_the_encargo_cli_skill_and_not_at_routing_py"}], "instructions": [{"path": "agents/main/agent/workshop-skills/agent-dispatch/SKILL.md", "literal": "La ruta de `main` a un CLI de la Mac"}, {"path": "agents/main/agent/workshop-skills/agent-dispatch/SKILL.md", "literal": "Legacy route (T9 `:265`): this chain"}, {"path": "agents/main/agent/workshop-skills/agent-dispatch/SKILL.md", "literal": "Legacy route (T9 `:265`): this loop"}, {"path": "agents/main/agent/workshop-skills/agent-dispatch/SKILL.md", "literal": "Exception (T9 `:266`): a managed session"}]},
     {"id": "file:agents/main/agent/workshop-skills/native-harness-orchestration/SKILL.md", "state": "legacy-until-adoption", "reason": "adaptador start/deliver no tienen guarda propia de gestionadas: ruta vieja fuera del perímetro hasta T12; un CLI gestionado entra solo por Host.apply", "evidence": [{"path": "scripts/tests/test-agent-work-routing.py", "test": "def test_legacy_dispatch_routes_are_declared_outside_the_perimeter"}], "instructions": [{"path": "agents/main/agent/workshop-skills/native-harness-orchestration/SKILL.md", "literal": "Ruta anterior (T9 `:265`): la corrida abierta con `--vigia claw`"}], "adoption": "T12"},
     {"id": "file:agents/main/agent/workshop-skills/mac-tmux-control/SKILL.md", "state": "perimeter-guarded", "reason": "main marca con OPENCLAW_WATCH las sesiones que maneja por tmux; declara que una gestionada no se marca ni se relanza", "evidence": [{"path": "scripts/tests/test-agent-work-routing.py", "test": "def test_every_doc_that_marks_a_session_names_the_managed_exception"}, {"path": "scripts/tests/test-tmux-activity-watch.sh", "test": "ok (2a-managed)"}, {"path": "scripts/tests/test-tmux-activity-watch.sh", "test": "# (2q-5b)"}], "instructions": [{"path": "agents/main/agent/workshop-skills/mac-tmux-control/SKILL.md", "literal": "Exception (T9 `:266`): a managed session"}]},

@@ -552,6 +552,46 @@ else:
         self.assertEqual(signal.getsignal(signal.SIGTERM), old_term)
         self.assertEqual(signal.getsignal(signal.SIGINT), old_int)
 
+    def refused(self, *flags):
+        """The exit code and the error of an entrypoint call that must stop before it opens a spool or runs
+        a pass."""
+        stderr = io.StringIO()
+        with mock.patch("native_gateway.Host") as host_type, mock.patch("native_gateway.watch_pump") as watch, \
+                contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as left:
+            gateway_main(["--openclaw-bin", "/isolated/openclaw", "--host-id", "mac-local",
+                          "--expect-url", "ws://127.0.0.1:18789", *flags])
+        self.assertEqual((host_type.call_count, watch.call_count), (0, 0))
+        return left.exception.code, stderr.getvalue().strip().splitlines()[-1].split(": error: ", 1)[1]
+
+    def test_gateway_entrypoint_claims_only_with_a_workspace_root(self):
+        watch = ["--watch", "--host-state-dir", str(self.root / "host"), "--evidence-root", str(self.evidence_root),
+                 "--progress-state-dir", str(self.state_dir), "--progress-client", "/isolated/progress.py"]
+        for flags in (["--claim-once", "--host-state-dir", str(self.root / "host")],
+                      [*watch, "--cli-instance-id", "enc-1"], [*watch, "--cli-tmux-socket", "agent-work"]):
+            self.assertEqual(self.refused(*flags), (2, "a host claims only with --workspace-root"), flags)
+
+    def test_gateway_entrypoint_refuses_the_command_of_the_adopted_session_host(self):
+        # The flags of the B8 host, as host-b8-cmd.txt keeps them: this code no longer starts that host.
+        self.assertEqual(self.refused(
+            "--host-state-dir", str(self.root / "host"), "--evidence-root", str(self.evidence_root),
+            "--progress-state-dir", str(self.state_dir), "--progress-client", "/isolated/progress.py", "--watch",
+            "--cli-adapter-id", "opencode", "--cli-instance-id", "canario-3", "--cli-session", "canario",
+            "--cli-workspace-root", "/isolated/canario-encargos", "--cli-tmux-socket", "agent-work",
+            "--cli-deadline-seconds", "3600"),
+            (2, "unrecognized arguments: --cli-adapter-id opencode --cli-session canario --cli-workspace-root "
+                "/isolated/canario-encargos --cli-deadline-seconds 3600"))
+
+    def test_gateway_closing_pass_needs_its_spool_its_tmux_server_and_its_slot_group(self):
+        complete = ["--host-state-dir", str(self.root / "host"), "--cli-tmux-socket", "agent-work",
+                    "--slot-group", "agent-work-enc1"]
+        for missing in range(0, len(complete), 2):
+            flags = complete[:missing] + complete[missing + 2:]
+            self.assertEqual(self.refused("--close-only", *flags),
+                             (2, "--close-only requires --host-state-dir, --cli-tmux-socket and --slot-group"),
+                             complete[missing])
+        self.assertEqual(self.refused("--close-only", *complete, "--cli-instance-id", "enc-1"),
+                         (2, "--close-only takes its instances from the spool and never claims"))
+
     def test_gateway_entrypoint_imports_with_mac_system_python(self):
         system_python = Path("/usr/bin/python3")
         if not system_python.exists():
@@ -3386,63 +3426,6 @@ class SilentFailureTest(unittest.TestCase):
         self.assertIn("tmux socket busy", str(caught.exception))
         self.assertEqual(events, ["results", "closures", "watch", "incidents", "claim"])
 
-    def test_watch_entrypoint_wires_cli_watch_with_the_host_deadline(self):
-        args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "host-one",
-                "--expect-url", "ws://127.0.0.1:18789", "--evidence-root", str(self.root / "e"),
-                "--progress-state-dir", str(self.root / "p"), "--progress-client", "/isolated/c.py",
-                "--watch", "--host-state-dir", str(self.root / "host")]
-        cli = ["--cli-adapter-id", "codex", "--cli-instance-id", "instance-one",
-               "--cli-session", "worker-one", "--cli-workspace-root", str(self.root / "w"),
-               "--cli-tmux-socket", "sock-watch"]
-        with mock.patch("native_gateway.watch_pump") as watch:
-            gateway_main(args)
-        self.assertIsNone(watch.call_args.kwargs["cli_watch"])
-        with mock.patch("native_gateway.watch_pump") as watch:
-            gateway_main(args + cli + ["--cli-deadline-seconds", "900"])
-        wired = watch.call_args.kwargs["cli_watch"]
-        with mock.patch.object(Host, "detect_silent_failures", return_value=[]) as detect, \
-                mock.patch("time.time", return_value=4242.0):
-            self.assertEqual(wired(), [])
-        self.assertEqual(detect.call_args.args[0], "host-one")
-        self.assertIs(detect.call_args.args[1].__func__, ResourceManager.session_gone)
-        self.assertEqual(detect.call_args.kwargs["now"], 4242.0)
-        self.assertEqual(detect.call_args.kwargs["deadline_seconds"], 900.0)
-        stop = threading.Event()
-        with mock.patch("native_gateway.pump_once", side_effect=lambda *_, **__: stop.set() or {}) as pump:
-            native_gateway.watch_pump(object(), host=None, evidence_root=None, progress_state_dir=None,
-                                      progress_client=None, stop_event=stop, cli_watch=wired)
-        self.assertIs(pump.call_args.kwargs.get("cli_watch"), wired)
-        with mock.patch("sys.stderr"), mock.patch("native_gateway.watch_pump") as never:
-            with self.assertRaises(SystemExit):
-                gateway_main(args + cli + ["--cli-deadline-seconds", "0"])
-        never.assert_not_called()
-
-    def test_watch_entrypoint_types_each_claim_once(self):
-        # cli_delivery_acceptance: the deliver main hands to each claim types the reference once.
-        args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "host-one",
-                "--expect-url", "ws://127.0.0.1:18789", "--evidence-root", str(self.root / "e"),
-                "--progress-state-dir", str(self.root / "p"), "--progress-client", "/isolated/c.py",
-                "--watch", "--host-state-dir", str(self.root / "host"),
-                "--cli-adapter-id", "codex", "--cli-instance-id", "instance-one",
-                "--cli-session", "worker-one", "--cli-workspace-root", str(self.root / "w"),
-                "--cli-tmux-socket", "sock-watch", "--cli-deadline-seconds", "900"]
-        with mock.patch("native_gateway.watch_pump") as watch:
-            gateway_main(args)
-        claim = watch.call_args.kwargs["cli_claim"]
-
-        def claimed(*_, deliver, session, **__):
-            deliver("/state/inbox/op-one.json", session)
-
-        calls = []
-        with mock.patch("native_gateway.claim_cli_once", side_effect=claimed), \
-                mock.patch("subprocess.run", side_effect=composer_tmux(calls, "codex")):
-            claim()
-        # Any command that carries the reference types it, whatever its flags.
-        typed = [argv for argv, _ in calls if "/state/inbox/op-one.json" in str(argv)]
-        self.assertEqual(len(typed), 1, f"main typed the reference {len(typed)} times")
-        self.assertEqual(typed[0][:6], ["tmux", "-L", "sock-watch", "send-keys", "-t", "%7"])
-        self.assertIn("Open assignment JSON at /state/inbox/op-one.json.", typed[0][-1])
-
 
 class PromptBackend(ClosureBackend):
     """ClosureBackend whose panes show a scripted screen; liveness of capture is TmuxBackend's job."""
@@ -3758,31 +3741,6 @@ class SilentPromptTest(unittest.TestCase):
         self.assertEqual(self.step(manager, self.PROCEED), [])
         self.assertEqual(self.step(manager, self.PROCEED), [])
         self.assertEqual(self.keys(host), [self.BLOCKED_1])
-
-    def test_watch_entrypoint_reads_dialogs_with_the_lib_sh_pattern(self):
-        args = ["--openclaw-bin", "/isolated/openclaw", "--host-id", "host-one",
-                "--expect-url", "ws://127.0.0.1:18789", "--evidence-root", str(self.root / "e"),
-                "--progress-state-dir", str(self.root / "p"), "--progress-client", "/isolated/c.py",
-                "--watch", "--host-state-dir", str(self.root / "host"),
-                "--cli-adapter-id", "codex", "--cli-instance-id", "instance-one",
-                "--cli-session", "worker-one", "--cli-workspace-root", str(self.root / "w"),
-                "--cli-tmux-socket", "sock-watch"]
-        with mock.patch("native_gateway.watch_pump") as watch:
-            gateway_main(args)
-        with mock.patch.object(Host, "detect_silent_failures", return_value=[]) as detect:
-            self.assertEqual(watch.call_args.kwargs["cli_watch"](), [])
-        reader = detect.call_args.kwargs.get("prompt_identity")
-        self.assertTrue(callable(reader), "main must pass prompt_identity to the detector")
-        key = OperationKey("host-one", "task-x", 1, "instance-one")
-        with mock.patch.object(ResourceManager, "prompt_identity", autospec=True,
-                               return_value="prompt-x") as read:
-            self.assertEqual(reader(key), "prompt-x")
-        manager, seen_key, pattern = read.call_args.args
-        self.assertIs(manager, detect.call_args.args[1].__self__)
-        self.assertEqual(seen_key, key)
-        self.assertEqual(pattern.pattern, load_approval_pattern(self.LIB_SH).pattern)
-        self.assertIsNotNone(pattern.search("DO YOU WANT TO PROCEED?"))
-
 
     def test_the_episode_and_its_incident_commit_together(self):
         for table in ("incidents", "dialog_watch"):
@@ -4342,7 +4300,7 @@ class PermissionBeforeAcceptanceTest(unittest.TestCase):
                         "incidentKey": key_, "incidentDigest": digest}
 
         def pump(now):
-            # The cli_watch of native_gateway.main with the live hosts' --cli-deadline-seconds 3600.
+            # The watch of the adopted-session host of canary 8, with its deadline of 3600 s.
             counts = native_gateway.pump_once(
                 RecordingClient(), host=host, evidence_root=self.root / "evidence",
                 progress_state_dir=self.root / "progress", progress_client=str(self.root / "progress-events.py"),
