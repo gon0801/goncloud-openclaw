@@ -33,8 +33,8 @@ Vivas y probadas con un pedido real:
    host se lo dice a R y R te lo dice a ti. Probada en los canarios.
 5. **Cron vigía.** Un loop de claw con vigía despierta cada 5 minutos. El 11 de
    octubre gastaba 16 llamadas al proveedor cada 30 minutos; el 13 de octubre,
-   98 en nueve corridas, una cada 5 minutos, de las 14:19:04 a las 15:00:51. Solo queda
-   `bids-02-vigia`.
+   98 en nueve corridas, una cada 5 minutos, de las 14:19:04 a las 15:00:51. Era el único,
+   `bids-02-vigia`, y borró su propio cron ese día al cerrar su loop.
 
 Vivas en el código pero sin prueba en vivo en este bloque:
 
