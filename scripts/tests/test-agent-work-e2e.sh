@@ -14,6 +14,10 @@ run_main_cli_loop() {
   python3 scripts/tests/test_agent_work_main_cli_loop_e2e.py
 }
 
+run_ruta_viva() {
+  python3 scripts/tests/test_agent_work_ruta_viva_e2e.py
+}
+
 run_acceptance_matrix() {
   python3 scripts/tests/test_agent_work_acceptance.py
 }
@@ -26,6 +30,7 @@ case "${1:-all}" in
   all)
     run_delivery_latency
     run_main_cli_loop
+    run_ruta_viva
     run_acceptance_matrix
     ;;
   acceptance_matrix)
@@ -66,8 +71,16 @@ case "${1:-all}" in
     fi
     run_main_cli_loop
     ;;
+  ruta_viva)
+    # No comparte el grupo del slot con el host vivo: corre en _appserverusr (AGENT_WORK_E2E_SLOT_GROUP lo cambia).
+    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
+      echo "ruta_viva requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
+      exit 2
+    fi
+    run_ruta_viva
+    ;;
   *)
-    echo "casos disponibles: delivery_latency, main_cli_loop, acceptance_matrix, acceptance, acceptance_pair, cutover_fencing, cutover_rollback" >&2
+    echo "casos disponibles: delivery_latency, main_cli_loop, ruta_viva, acceptance_matrix, acceptance, acceptance_pair, cutover_fencing, cutover_rollback" >&2
     exit 2
     ;;
 esac
