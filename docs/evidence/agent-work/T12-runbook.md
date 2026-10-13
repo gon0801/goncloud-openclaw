@@ -194,6 +194,10 @@ El canario 8 (`~/.local/state/encargos-loop/canario/mensaje-8.txt`) pasó el 202
 
 Qué proveedor puede correr un encargo "por CLI" lo dice `docs/evidence/agent-work/proveedores-permitidos.json`. Cada permiso y cada cierre lleva las palabras de David, su fecha y su número de prompt. Lo escriben `permitir` y `cerrar`. La única edición a mano es reabrir un proveedor cerrado, que ningún comando hace. Lo que no tiene permiso está negado. Una entrada mal escrita deja el archivo sin efecto y no corre ningún encargo.
 
+Qué protegen `permitir` y `cerrar`. Que una entrada de la política no le atribuya a David, por descuido, algo que no dijo, y que un proveedor que él cerró no se reabra por un comando. Protegen contra los errores de quien opera y contra un agente que pide por un canal, por ejemplo `main` por Telegram (fila B22-S6 de `followups.md`).
+
+Qué no protegen, ni pretenden. A quien corre el comando en la Mac con intención de falsear: esa persona o ese agente también puede editar el JSON o el código. Contra eso la integridad de la política la dan el PR revisado, la prueba que fija los cierres y el historial de git, no este comando.
+
 El host vivo todavía no lee esta política. Sigue en el camino por alias de la sección anterior hasta la fase 2 de B22 (`followups.md`, fila B22). Hasta entonces los comandos sirven para ver y cambiar la política y para comprobar qué contestaría un pedido.
 
 ```
@@ -212,7 +216,8 @@ python3 scripts/agent-work/encargo.py cerrar <proveedor> --por "<quién cierra>"
 - `estado` contesta el latido del host de encargos (`host.json` del directorio de estado), que nace en la fase 2. `estado --tarea` todavía no existe y sale con 2.
 - `permitir` y `cerrar` se corren en una rama, en un checkout que no sea el del host, y el cambio entra por un PR. Se niegan en el checkout que nombra `host.json`, y lo vuelven a mirar justo antes de escribir. No los corre `main`: quien pide los encargos no es quien se los autoriza.
 - `cerrar` escribe aunque opencode no conteste: es el freno de emergencia. La fila sale `sin-catalogo` y un aviso por stderr. `permitir` también escribe sin opencode, salvo cuando liga un id o pone un filtro: esas dos comprobaciones leen el catálogo, y sin él el comando sale con 1 y no escribe.
-- `--cita` tiene que ser una subcadena literal del prompt `--ref` en `~/.claude-mem/claude-mem.db`, y la fecha sale de ese prompt. El comando no imprime el texto del prompt. Solo una cita cotejada atribuye algo a David: sin esa base, o con una referencia que no es `P####`, `permitir` se niega.
+- `--cita` tiene que ser una subcadena literal del prompt `--ref` en `~/.claude-mem/claude-mem.db`, y la fecha sale de ese prompt. El comando no imprime el texto del prompt. Solo una cita cotejada atribuye algo a David: sin esa base, o con una referencia que no es `P####`, `permitir` se niega. La línea de comandos no tiene forma de apuntar el cotejo a otra base.
+- Dos comandos que escriben a la vez no se pisan. El que llega segundo espera y aplica su cambio sobre lo que dejó el primero. Si el primero cerró el proveedor que el segundo iba a permitir, o cambió el mismo permiso, el segundo se niega.
 - Un permiso nuevo o una frase nueva sobre un permiso que existe pide `--cobro` con `--ref` y `--cita`. Ligar el id de un permiso que ya existe pide solo `--proveedor`, y el comando se niega si opencode no lista ningún modelo con ese id: un id se liga después de `opencode auth login`, no antes.
 - `--solo` y `--menos` ponen un filtro de modelos en un permiso que existe, con su propia cita. Los patrones se comparan con la parte del id que sigue a `<proveedor>/`, y `*` vale por cualquier tramo. El permiso `qwen` usa `--solo 'qwen*' --menos 'qwen-image*'`: de los 27 modelos de `alibaba-token-plan` entran seis. Un modelo que opencode lista y el filtro deja fuera contesta `modelo-fuera-del-permiso`. Un filtro que no cubre ninguno de los modelos que opencode lista de ese proveedor se rechaza.
 - `permitir` nunca abre un proveedor cerrado. Si el nombre o el id está en `closed`, se niega antes de mirar nada más, con cualquier combinación de argumentos. `opencode-go` y `opencode` están cerrados ("open code go es solamente para main", P10845), y `zai` desde el 2026-10-03.
@@ -232,7 +237,7 @@ Reabrir un proveedor cerrado no es un comando. Es un PR que edita `proveedores-p
 Cerrar de emergencia:
 
 1. En una rama, corre `encargo.py cerrar <id> --por "<quién cierra>" --motivo "<por qué>"`. No espera a opencode. Quita el permiso y deja el cierre.
-2. El cierre no lleva el nombre de David: dice quién cerró, por qué, y `sin-cotejar` donde iría el número de prompt. `encargo.py proveedores` lo muestra así en la columna `cita`.
+2. El cierre no lleva el nombre de David: dice quién cerró, por qué, y `sin-cotejar` donde iría el número de prompt. `encargo.py proveedores` lo muestra así en la columna `cita`, y el rechazo de `preparar` también dice `sin-cotejar`. `--por` no puede nombrar a David de ninguna forma.
 3. Abre el PR. La prueba que fija los cierres sale roja hasta que el mismo PR agregue el cierre nuevo.
 4. `cerrar` no reemplaza un cierre vigente. Cuando David diga su frase, cambiar el cierre de emergencia por uno con sus palabras es otra edición a mano en un PR.
 

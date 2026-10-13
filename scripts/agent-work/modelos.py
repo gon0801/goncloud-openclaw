@@ -29,6 +29,8 @@ DEFAULT_MODEL = "zai-coding-plan/glm-5.3-flash"
 
 POLICY_FILE = Path("docs/evidence/agent-work/proveedores-permitidos.json")
 POLICY_SCHEMA = "agent-work.provider-policy.v1"
+UNVERIFIED_REF = "sin-cotejar"
+"""Lo que lleva, en lugar de un número de prompt, un cierre de emergencia que nadie cotejó con el operador."""
 CATALOG_SCHEMA = "agent-work.catalog.v1"
 OPENCODE_TIMEOUT_SECONDS = 20.0
 
@@ -626,8 +628,12 @@ def _frase_no_permitido(caso: ProviderNotAllowed) -> tuple[str, tuple[str, ...]]
     partes = []
     for provider in dict.fromkeys(model.provider for model in caso.models):
         decision = cited.get(provider)
-        partes.append(f"{provider} está cerrado para encargos. {decision.by}, {decision.on}: «{decision.quote}»."
-                      if decision else f"{provider} no tiene permiso para encargos.")
+        if decision is None:
+            partes.append(f"{provider} no tiene permiso para encargos.")
+            continue
+        marker = f", {UNVERIFIED_REF}" if decision.ref == UNVERIFIED_REF else ""
+        partes.append(f"{provider} está cerrado para encargos. {decision.by}, {decision.on}{marker}: "
+                      f"«{decision.quote}».")
     con_sesion = tuple(name for name in caso.allowed if name not in caso.awaiting_login)
     if con_sesion:
         partes.append(f"Permitidos con sesión: {_lista(con_sesion)}.")
