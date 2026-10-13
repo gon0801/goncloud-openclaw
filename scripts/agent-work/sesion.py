@@ -195,6 +195,12 @@ def plan_launch(assignment: object, brief: bytes, *, policy: ProviderPolicy, cat
     return LaunchSpec(model, workspace, run, record, session_name(operation))
 
 
+SCRATCH_RULE = (" Keep every helper script and scratch file inside the directory that holds acceptRef: a command "
+                "that touches /tmp or any other path outside it and workspaceRef is denied and ends the session.")
+"""Va en el encargo y no solo en la asignación: sin `--auto` un permiso negado termina la sesión, y un
+modelo que deja su script en /tmp lo descubre al borrarlo, con el trabajo hecho y sin resultado."""
+
+
 def opencode_argv(spec: LaunchSpec, opencode_bin: Path, *, task_id: str) -> tuple[str, ...]:
     """El encargo viaja como un argumento, con stdin en /dev/null: no existe un teclado por el que alguien
     apruebe un permiso. Nunca lleva `--auto` ni `-i`: medido en opencode 1.18.35 (B22-fase0.md, M2 y M6),
@@ -203,7 +209,7 @@ def opencode_argv(spec: LaunchSpec, opencode_bin: Path, *, task_id: str) -> tupl
     if task_id.startswith("-"):
         raise ValueError(f"un taskId no empieza con guion: {task_id!r}")
     return (str(opencode_bin), "run", "-m", str(spec.model.model), "--format", "json", "--print-logs",
-            "--log-level", "INFO", "--title", task_id, delivery_line(str(spec.run.assignment)))
+            "--log-level", "INFO", "--title", task_id, delivery_line(str(spec.run.assignment)) + SCRATCH_RULE)
 
 
 def opencode_env(spec: LaunchSpec) -> dict[str, str]:
@@ -212,10 +218,14 @@ def opencode_env(spec: LaunchSpec) -> dict[str, str]:
     PWD es una guarda de seguridad: opencode 1.18.35 abre la sesión en la carpeta que dice PWD, no en el
     cwd real (B22-fase0.md, "PWD"), y el host corre desde su checkout, con la política adentro. La única
     carpeta externa permitida es la de esta corrida. `enabled_providers` y `small_model` cierran lo que el
-    `-m` no cubre: opencode elige por su cuenta el modelo de títulos y el de sus subagentes (M3)."""
+    `-m` no cubre: opencode elige por su cuenta el modelo de títulos y el de sus subagentes (M3).
+
+    TMPDIR apunta dentro de la corrida: un `rm /tmp/x` es un permiso negado, y un permiso negado termina la
+    sesión sin resultado (canario A del 2026-10-13, tarea bc3fd7b9)."""
     model = spec.model.model
     return {
         "PWD": str(spec.workspace.root),
+        "TMPDIR": str(spec.run.scratch),
         "OPENCODE_DISABLE_AUTOUPDATE": "1",
         "AGENT_WORK_MANAGED": "1",
         "OPENCODE_CONFIG_CONTENT": json.dumps({
@@ -226,6 +236,7 @@ def opencode_env(spec: LaunchSpec) -> dict[str, str]:
     }
 
 
+EXIT_NO_SCRATCH = 96
 EXIT_NO_WORKSPACE = 97
 EXIT_OUTSIDE_GROUP = 98
 """Códigos con que launch.sh sale antes de llegar a opencode."""
@@ -239,6 +250,7 @@ def launch_script(spec: LaunchSpec, argv: tuple[str, ...], env: dict[str, str], 
     return "\n".join([
         f'[ "$(/usr/bin/id -rg)" = {gid} ] || exit {EXIT_OUTSIDE_GROUP}',
         f"cd -- {shlex.quote(str(spec.workspace.root))} || exit {EXIT_NO_WORKSPACE}",
+        f"/bin/mkdir -p -m 700 -- {shlex.quote(str(spec.run.scratch))} || exit {EXIT_NO_SCRATCH}",
         *(f"export {name}={shlex.quote(value)}" for name, value in env.items()),
         f"exec {' '.join(map(shlex.quote, argv))} </dev/null >>{shlex.quote(str(record.events))} "
         f"2>>{shlex.quote(str(record.stderr))}",
