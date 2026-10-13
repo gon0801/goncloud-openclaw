@@ -326,6 +326,10 @@ class AgentsRouting(unittest.TestCase):
             "se cancela con `managed_tasks_cancel`",
             "En esta ruta nadie aprueba permisos, ni tú ni nadie en la Mac.",
             "un encargo por CLI nunca la usa: `opencode-go/*` y `opencode/*` están cerrados por orden de David",
+            # Live canary P 2026-10-13: main wrote the file with its own exec and answered "creado por CLI".
+            '"Por CLI" siempre es un encargo registrado en R, aunque el trabajo sea de una línea. No lo hagas tú '
+            "con `exec`, `write` ni `edit`.",
+            'Un "hecho por CLI" sin `taskId` es falso.',
         ):
             self.assertIn(expected, skill)
         self.assertNotIn("opencode@", skill, "the skill names a model alias; the model travels in the brief")

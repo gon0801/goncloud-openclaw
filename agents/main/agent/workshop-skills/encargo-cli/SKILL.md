@@ -9,6 +9,8 @@ R lleva el encargo. Tú lo preparas, lo registras y lo admites. El host de la Ma
 
 Esta ruta entra solo con "por CLI". Si David no lo dijo, no encargues por aquí aunque nombre un modelo. Sigue `agent-dispatch`.
 
+"Por CLI" siempre es un encargo registrado en R, aunque el trabajo sea de una línea. No lo hagas tú con `exec`, `write` ni `edit`. En esta skill tu `exec` corre solo `encargo.py` en la Mac y `brief.py` en la Mini. Un "hecho por CLI" sin `taskId` es falso.
+
 No hay tabla de modelos en esta skill. Qué modelos existen, cuáles están permitidos y cómo cobran lo contesta la Mac.
 
 ## Encargar
@@ -65,6 +67,7 @@ No hay tabla de modelos en esta skill. Qué modelos existen, cuáles están perm
 
 ## Trampas
 
+- No decidas tú si el trabajo se puede: encárgalo. Si pide tocar algo fuera del repo, el host lo niega y `estado` te lo dice. Hacerlo con tu `exec` se salta esa guarda.
 - En esta ruta nadie aprueba permisos, ni tú ni nadie en la Mac. Si opencode niega uno, el encargo termina sin resultado y `estado` lo nombra en `permisosNegados` y en la `frase`: cancela y díselo a David.
 - `resolve` necesita un resultado. Una tarea que solo tiene una incidencia se cancela con `managed_tasks_cancel` (`taskId` y `reason`).
 - No reenvíes un encargo que falló ni teclees en la Mac. Si hay que repetir, es un encargo nuevo con otro `taskKey`, empezando por el paso 1. Un `taskKey` ya usado con otro brief da `Managed task registration conflict`.
