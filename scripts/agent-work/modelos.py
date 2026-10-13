@@ -8,10 +8,11 @@ import hashlib
 import json
 import os
 import re
+import signal
 import subprocess
 import tempfile
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from types import MappingProxyType
@@ -269,11 +270,14 @@ class CatalogStore:
     """Frontera con el CLI. Guarda <state_root>/catalogo.json con escritura atómica. Solo ejecuta
     `opencode --version` y `opencode models`, por ruta absoluta, sin stdin y con tope de tiempo."""
 
-    def __init__(self, opencode_bin: Path, state_root: Path):
+    def __init__(self, opencode_bin: Path, state_root: Path, *, budget_seconds: float | None = None):
+        """`budget_seconds` es el tope de todo lo que este objeto puede esperar a opencode, entre todas sus
+        llamadas. Sin él, cada llamada tiene solo su tope propio."""
         if not Path(opencode_bin).is_absolute():
             raise ValueError(f"opencode va con ruta absoluta: {opencode_bin}")
         self.opencode_bin = Path(opencode_bin)
         self.path = Path(state_root) / "catalogo.json"
+        self.deadline = None if budget_seconds is None else time.monotonic() + budget_seconds
 
     def current(self, *, max_age_seconds: float = 6 * 3600) -> Catalog:
         """Relee con `opencode models` si el archivo falta, envejeció o `opencode --version` cambió."""
@@ -288,16 +292,33 @@ class CatalogStore:
         return self._list(self._version(), upstream=upstream)
 
     def _run(self, *args: str) -> str:
+        command = f"{self.opencode_bin} {' '.join(args)}"
+        timeout = OPENCODE_TIMEOUT_SECONDS
+        if self.deadline is not None:
+            timeout = min(timeout, self.deadline - time.monotonic())
+        if timeout <= 0:
+            raise CatalogUnavailable(f"{command}: se agotó el tope de tiempo del comando antes de llamarlo")
         # Listar no debe actualizar el CLI: una versión nueva cierra la ruta certificada.
         env = {**os.environ, "OPENCODE_DISABLE_AUTOUPDATE": "1"}
         try:
-            done = subprocess.run([str(self.opencode_bin), *args], stdin=subprocess.DEVNULL, capture_output=True,
-                                  text=True, timeout=OPENCODE_TIMEOUT_SECONDS, env=env)
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise CatalogUnavailable(f"{self.opencode_bin} {' '.join(args)}: {exc}") from exc
-        if done.returncode != 0:
-            raise CatalogUnavailable(f"{self.opencode_bin} {' '.join(args)} salió con {done.returncode}")
-        return done.stdout
+            # Sesión propia: al vencer el tope se mata el grupo entero. Un hijo de opencode que siga vivo
+            # con la tubería abierta dejaría esta llamada esperando su salida más allá del tope.
+            process = subprocess.Popen([str(self.opencode_bin), *args], stdin=subprocess.DEVNULL, text=True, env=env,
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+        except OSError as exc:
+            raise CatalogUnavailable(f"{command}: {exc}") from exc
+        try:
+            stdout, _ = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.communicate()
+            raise CatalogUnavailable(f"{command}: no contestó dentro del tope de {timeout:.0f} s") from exc
+        if process.returncode != 0:
+            raise CatalogUnavailable(f"{command} salió con {process.returncode}")
+        return stdout
 
     def _version(self) -> str:
         version = self._run("--version").strip()
@@ -307,6 +328,14 @@ class CatalogStore:
 
     def _list(self, version: str, *, upstream: bool) -> Catalog:
         listing = self._run("models", *(("--refresh",) if upstream else ()))
+        lines = [line.strip() for line in listing.splitlines() if line.strip()]
+        # Una salida vacía o con otra forma no es "ese proveedor no tiene sesión": es opencode sin contestar
+        # lo que se le pidió. No se guarda, para que la siguiente llamada vuelva a preguntar.
+        stray = next((line for line in lines if not isinstance(ModelId.parse(line), ModelId)), None)
+        if stray is not None:
+            raise CatalogUnavailable(f"{self.opencode_bin} models contestó una línea que no es un id: {stray[:80]!r}")
+        if not lines:
+            raise CatalogUnavailable(f"{self.opencode_bin} models no listó ningún modelo")
         catalog = Catalog.from_listing(listing, cli_version=version, listed_at=time.time())
         document = {"schema": CATALOG_SCHEMA, "cliVersion": catalog.cli_version, "listedAt": catalog.listed_at,
                     "models": sorted(str(model) for model in catalog.models)}
@@ -326,10 +355,11 @@ class CatalogStore:
             document = json.loads(self.path.read_text(encoding="utf-8"))
             if document["schema"] != CATALOG_SCHEMA:
                 return None
-            return Catalog.from_listing("\n".join(document["models"]), cli_version=str(document["cliVersion"]),
-                                        listed_at=float(document["listedAt"]))
+            cached = Catalog.from_listing("\n".join(document["models"]), cli_version=str(document["cliVersion"]),
+                                          listed_at=float(document["listedAt"]))
         except (OSError, ValueError, KeyError, TypeError):
             return None
+        return cached if cached.models else None
 
 
 @dataclass(frozen=True)
@@ -351,22 +381,27 @@ class ByName:
 
 ModelRequest = Union[DefaultModel, ExactModel, ByName]
 
-_WITNESS = object()
-
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class PermittedModel:
     """Prueba de que authorize dijo que sí. Solo authorize lo construye, y es lo único que acepta el
-    lanzador: un modelo de un proveedor sin permiso no tiene otro camino hacia `opencode -m`."""
+    lanzador: un modelo de un proveedor sin permiso no tiene otro camino hacia `opencode -m`.
+
+    No tiene constructor: llamarlo, o pasar por `dataclasses.replace`, lanza TypeError."""
     model: ModelId
     billing: Billing
     policy_digest: str
     cli_version: str
-    _witness: object = field(default=None, repr=False, compare=False)
 
-    def __post_init__(self) -> None:
-        if self._witness is not _WITNESS:
-            raise TypeError("PermittedModel solo sale de authorize")
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        raise TypeError("PermittedModel solo sale de authorize")
+
+
+def _permit(model: ModelId, billing: Billing, policy_digest: str, cli_version: str) -> PermittedModel:
+    permitted = object.__new__(PermittedModel)
+    for name, value in (("model", model), ("billing", billing), ("policy_digest", policy_digest),
+                        ("cli_version", cli_version)):
+        object.__setattr__(permitted, name, value)
+    return permitted
 
 
 @dataclass(frozen=True)
@@ -438,7 +473,7 @@ class MalformedHeader:
 @dataclass(frozen=True)
 class WorkspaceRefused:
     path: str
-    why: Literal["not-absolute", "outside-root", "not-a-git-toplevel", "missing"]
+    why: Literal["not-absolute", "outside-root", "not-a-git-toplevel", "missing", "no-commit", "invalid"]
 
 
 @dataclass(frozen=True)
@@ -532,9 +567,17 @@ def _by_name(request: ByName, policy: ProviderPolicy, catalog: Catalog) -> "Mode
     return NameMatchesNothing(request.words, permitted, _awaiting_login(policy, catalog))
 
 
-def authorize(request: ModelRequest, policy: ProviderPolicy, catalog: Catalog) -> "PermittedModel | Refusal":
+def authorize(request: "ModelRequest | MalformedModel", policy: ProviderPolicy,
+              catalog: Catalog) -> "PermittedModel | Refusal":
     """Pura. La llaman `preparar` (aviso en el mismo turno) y el host (la que manda). El proveedor se
-    revisa antes que el catálogo: uno sin permiso se rechaza aunque el modelo exista."""
+    revisa antes que el catálogo: uno sin permiso se rechaza aunque el modelo exista.
+
+    Acepta lo que devuelve `pedido`, así que un pedido mal formado sale tal cual. Cualquier otra cosa es
+    un error del llamador y lanza TypeError: nada que no sea DefaultModel pide el modelo por omisión."""
+    if isinstance(request, MalformedModel):
+        return request
+    if not isinstance(request, (DefaultModel, ExactModel, ByName)):
+        raise TypeError(f"authorize no conoce un pedido {type(request).__name__}")
     if policy.unreadable is not None or policy.digest is None:
         return PolicyUnreadable(policy.unreadable or "sin digest")
     if isinstance(request, ByName):
@@ -558,7 +601,7 @@ def authorize(request: ModelRequest, policy: ProviderPolicy, catalog: Catalog) -
                                                difflib.get_close_matches(candidate.name, sorted(names), n=3)))
     if not grant.admits(candidate):
         return _outside_grant((candidate,), policy)
-    return PermittedModel(candidate, grant.billing, policy.digest, catalog.cli_version, _WITNESS)
+    return _permit(candidate, grant.billing, policy.digest, catalog.cli_version)
 
 
 @dataclass(frozen=True)
@@ -625,7 +668,10 @@ def _frase_fuera_del_permiso(caso: ModelOutsideGrant) -> tuple[str, tuple[str, .
 def _frase_sin_coincidencia(caso: NameMatchesNothing) -> tuple[str, tuple[str, ...]]:
     frase = f"Ningún modelo permitido coincide con «{caso.words}»."
     if caso.allowed_models:
-        frase += f" Los que opencode lista: {_lista(_ids(caso.allowed_models))}."
+        providers = dict.fromkeys(model.provider for model in caso.allowed_models)
+        counts = (f"{provider} ({sum(model.provider == provider for model in caso.allowed_models)})"
+                  for provider in providers)
+        frase += f" Hay modelos permitidos de {_lista(tuple(counts))}."
     if caso.awaiting_login:
         frase += f" Permitidos sin sesión todavía: {_lista(caso.awaiting_login)}."
     return frase, ()
@@ -634,8 +680,10 @@ def _frase_sin_coincidencia(caso: NameMatchesNothing) -> tuple[str, tuple[str, .
 _CARPETA = {
     "not-absolute": "no es una ruta absoluta",
     "outside-root": "está fuera de la carpeta de repos permitida",
-    "not-a-git-toplevel": "no es la raíz de un repo git con un commit",
+    "not-a-git-toplevel": "no es la raíz de un repo git",
     "missing": "no existe",
+    "no-commit": "es un repo git sin ningún commit",
+    "invalid": "no es una carpeta de encargo válida",
 }
 
 _DESFASE = {"checkout": "otro checkout", "policy": "otra política", "cli-version": "otra versión de opencode"}

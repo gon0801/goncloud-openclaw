@@ -4,7 +4,8 @@
 `preparar` y `estado` son de `main`: dicen en el mismo turno si un pedido puede correr y con qué host.
 `proveedores`, `permitir` y `cerrar` son del operador: muestran y cambian qué proveedores pueden correr,
 con sus palabras. `permitir` y `cerrar` escriben la política del checkout donde corren, y el cambio llega
-al host por un PR. Sale 0 si la respuesta es sí, 3 si es un rechazo y 1 si opencode no contestó.
+al host por un PR. Sale 0 si la respuesta es sí, 3 si es un rechazo y 1 si opencode o git no contestaron
+a tiempo.
 """
 from __future__ import annotations
 
@@ -22,8 +23,8 @@ from pathlib import Path
 from typing import Literal
 
 from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, CatalogStore, CatalogUnavailable,
-                     Explicacion, HostDown, HostMismatch, MalformedModel, ModelFilter, ModelNotListed,
-                     OperatorCitation, PermittedModel, ProviderClosure, ProviderGrant, ProviderId,
+                     Explicacion, HostDown, HostMismatch, ModelFilter, ModelNotListed, OperatorCitation,
+                     PermittedModel, PolicyUnreadable, ProviderClosure, ProviderGrant, ProviderId,
                      ProviderNotConfigured, ProviderPolicy, SlotBlocked, WorkspaceRefused, authorize, explicar, pedido,
                      policy_document)
 from native_gateway import HostBeat
@@ -35,7 +36,9 @@ OPERATOR = "David"
 BEAT_ALIVE_SECONDS = 120.0
 """Una pasada del host con RPC colgados tarda hasta 105 s."""
 CATALOG_RECHECK_SECONDS = 60.0
-GIT_TIMEOUT_SECONDS = 10.0
+PREPARAR_DEADLINE_SECONDS = 30.0
+"""Lo que `preparar` puede tardar en total: `main` lo corre dentro de su turno."""
+GIT_TIMEOUT_SECONDS = 5.0
 OPENCODE_BIN = Path(os.environ.get("AGENT_WORK_OPENCODE", "/opt/homebrew/bin/opencode"))
 STATE_ROOT = Path(os.environ.get("AGENT_WORK_STATE_ROOT", str(Path.home() / ".local/state/agent-work-host")))
 PROMPTS_DB = Path.home() / ".claude-mem/claude-mem.db"
@@ -64,10 +67,15 @@ class ProviderRow:
     decision: Literal["permitido", "cerrado", "sin-decision"]
     billing: Billing | None
     cited: str | None
-    session: Literal["con-sesion", "sin-sesion", "sin-id"]
+    session: Literal["con-sesion", "sin-sesion", "sin-id", "sin-catalogo"]
+    """"sin-catalogo": opencode no contestó y la fila se escribió sin saber qué lista."""
     listed_models: int
     permitted_models: int
     """Cuántos de los listados cubre el permiso. Difiere de `listed_models` cuando el permiso trae filtro."""
+
+
+class DeadlineExceeded(RuntimeError):
+    """El comando agotó su tope de tiempo fuera de opencode."""
 
 
 @dataclass(frozen=True)
@@ -86,28 +94,37 @@ def latido(state_root: Path, now: float) -> "HostBeat | HostDown":
 
 
 def _head(repo: Path) -> str | None:
+    """El commit de HEAD, o None si el repo no tiene ninguno."""
     env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
     try:
         done = subprocess.run(["git", "-C", str(repo), "rev-parse", "--verify", "--quiet", "HEAD^{commit}"],
                               capture_output=True, text=True, timeout=GIT_TIMEOUT_SECONDS, env=env)
-    except (OSError, subprocess.TimeoutExpired):
+    except subprocess.TimeoutExpired as exc:
+        raise DeadlineExceeded(f"git rev-parse en {repo} no contestó en {GIT_TIMEOUT_SECONDS:.0f} s") from exc
+    except OSError:
         return None
     sha = done.stdout.strip()
     return sha if done.returncode == 0 and re.fullmatch(r"[0-9a-f]{40,64}", sha) else None
 
 
 def preparar(repo: Path | None, modelo: str | None, *, state_root: Path, checkout: Path, now: float,
-             opencode_bin: Path = OPENCODE_BIN, allowed_root: Path = ALLOWED_ROOT) -> "Preparado | Explicacion":
+             opencode_bin: Path = OPENCODE_BIN, allowed_root: Path = ALLOWED_ROOT,
+             deadline_seconds: float = PREPARAR_DEADLINE_SECONDS) -> "Preparado | Explicacion":
     """`encargo.py preparar [--repo <ruta>] [--modelo "<palabras>"]`.
 
     El pedido se juzga antes que el host, así "ese proveedor no está permitido" no queda tapado por "el
     host no corre". Es un aviso y no la compuerta: usa la misma authorize, la misma política y el mismo
-    catálogo que el host, y si alguien se la salta el host rechaza igual."""
+    catálogo que el host, y si alguien se la salta el host rechaza igual.
+
+    Termina dentro de `deadline_seconds`: opencode tiene ese tope menos lo que se le reserva a git."""
     policy = ProviderPolicy.load(Path(checkout) / POLICY_FILE)
-    store = CatalogStore(opencode_bin, state_root)
+    if policy.unreadable is not None:
+        # Antes de llamar a opencode: una política rota se dice aunque opencode no conteste.
+        return explicar(PolicyUnreadable(policy.unreadable))
+    store = CatalogStore(opencode_bin, state_root, budget_seconds=deadline_seconds - GIT_TIMEOUT_SECONDS)
     catalog = store.current()
     request = pedido(modelo)
-    model = request if isinstance(request, MalformedModel) else authorize(request, policy, catalog)
+    model = authorize(request, policy, catalog)
     if isinstance(model, (ProviderNotConfigured, ModelNotListed)) and now - catalog.listed_at > CATALOG_RECHECK_SECONDS:
         # David pudo acabar de correr `opencode auth login`: se mira una vez más antes de decir que falta.
         catalog = store.refresh()
@@ -140,7 +157,7 @@ def preparar(repo: Path | None, modelo: str | None, *, state_root: Path, checkou
     if workspace is not None:
         sha = _head(workspace.root)
         if sha is None:
-            return explicar(WorkspaceRefused(str(repo), "not-a-git-toplevel"))
+            return explicar(WorkspaceRefused(str(repo), "no-commit"))
         revision = {"kind": "code", "repository": str(workspace.root), "sha": sha}
     return Preparado(str(model.model), model.billing, revision,
                      ("--host", HOST_ID, "--adapter", ADAPTER_ID, "--model", str(model.model)),
@@ -151,21 +168,33 @@ def _cited(decision: OperatorCitation) -> str:
     return f"{decision.by} {decision.on} {decision.ref}"
 
 
-def _session(provider: ProviderId | None, catalog: Catalog) -> Literal["con-sesion", "sin-sesion", "sin-id"]:
+def _session(provider: ProviderId | None,
+             catalog: Catalog | None) -> Literal["con-sesion", "sin-sesion", "sin-id", "sin-catalogo"]:
     if provider is None:
         return "sin-id"
+    if catalog is None:
+        return "sin-catalogo"
     return "con-sesion" if catalog.of(provider) else "sin-sesion"
 
 
-def _grant_row(grant: ProviderGrant, catalog: Catalog) -> ProviderRow:
-    listed = catalog.of(grant.provider) if grant.provider is not None else frozenset()
+def _grant_row(grant: ProviderGrant, catalog: Catalog | None) -> ProviderRow:
+    listed = catalog.of(grant.provider) if catalog is not None and grant.provider is not None else frozenset()
     return ProviderRow(grant.name, grant.provider, "permitido", grant.billing, _cited(grant.decision),
                        _session(grant.provider, catalog), len(listed), sum(grant.admits(model) for model in listed))
 
 
-def _closure_row(closure: ProviderClosure, catalog: Catalog) -> ProviderRow:
+def _closure_row(closure: ProviderClosure, catalog: Catalog | None) -> ProviderRow:
     return ProviderRow(None, closure.provider, "cerrado", None, _cited(closure.decision),
-                       _session(closure.provider, catalog), len(catalog.of(closure.provider)), 0)
+                       _session(closure.provider, catalog), len(catalog.of(closure.provider)) if catalog else 0, 0)
+
+
+def _catalog_for_the_row(store: CatalogStore) -> Catalog | None:
+    """El catálogo cuando solo sirve para dibujar la fila: una escritura que no depende de él no espera
+    a que opencode conteste."""
+    try:
+        return store.current()
+    except CatalogUnavailable:
+        return None
 
 
 def proveedores(*, state_root: Path, checkout: Path, refrescar: bool = False,
@@ -228,8 +257,10 @@ def _host_checkout(checkout: Path, state_root: Path) -> str | None:
     return None
 
 
-def _write_policy(checkout: Path, grants: "tuple[ProviderGrant, ...]", closed: dict) -> str | None:
-    """Escritura atómica en formato canónico. Relee lo escrito: una política que no carga no se deja."""
+def _write_policy(checkout: Path, state_root: Path, grants: "tuple[ProviderGrant, ...]", closed: dict) -> str | None:
+    """Escritura atómica en formato canónico. Relee lo escrito: una política que no carga no se deja.
+    Vuelve a mirar `host.json` justo antes de reemplazar el archivo: entre la primera mirada y este punto
+    el comando pudo esperar a opencode, y un host pudo arrancar desde este checkout."""
     path = Path(checkout) / POLICY_FILE
     document = policy_document(grants, closed)
     descriptor, pending = tempfile.mkstemp(prefix=".politica-", dir=path.parent)
@@ -241,6 +272,9 @@ def _write_policy(checkout: Path, grants: "tuple[ProviderGrant, ...]", closed: d
         unreadable = ProviderPolicy.load(Path(pending)).unreadable
         if unreadable is not None:
             return f"la política resultante no carga: {unreadable}"
+        refused = _host_checkout(checkout, state_root)
+        if refused is not None:
+            return refused
         os.chmod(pending, 0o644)
         os.replace(pending, path)
     finally:
@@ -353,11 +387,16 @@ def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None,
             return (f"opencode no lista ningún modelo con el id {grant.provider}: un id se liga cuando el operador "
                     "ya inició sesión y `encargo.py proveedores` lo muestra")
     else:
-        catalog = store.current()
+        catalog = store.current() if include else _catalog_for_the_row(store)
+    if include and grant.provider is not None:
+        listed = catalog.of(grant.provider)
+        if listed and not any(grant.admits(model) for model in listed):
+            return (f"el filtro no cubre ninguno de los {len(listed)} modelos que opencode lista de "
+                    f"{grant.provider}: dejaría el proveedor sin ningún modelo")
     grants = (tuple(grant if entry.name == name else entry for entry in policy.grants) if existing is not None
               else policy.grants + (grant,))
     closed = {key: closure for key, closure in policy.closed.items() if closure is not closing}
-    return _write_policy(checkout, grants, closed) or _grant_row(grant, catalog)
+    return _write_policy(checkout, state_root, grants, closed) or _grant_row(grant, catalog)
 
 
 def cerrar(provider: ProviderId, *, citation: OperatorCitation, checkout: Path, state_root: Path,
@@ -380,17 +419,18 @@ def cerrar(provider: ProviderId, *, citation: OperatorCitation, checkout: Path, 
     closure = ProviderClosure(provider, citation)
     grants = tuple(grant for grant in policy.grants
                    if grant.provider != provider and not (grant.provider is None and grant.name == provider))
-    catalog = CatalogStore(opencode_bin, state_root).current()
-    return _write_policy(checkout, grants, {**policy.closed, provider: closure}) or _closure_row(closure, catalog)
+    written = _write_policy(checkout, state_root, grants, {**policy.closed, provider: closure})
+    return written or _closure_row(closure, _catalog_for_the_row(CatalogStore(opencode_bin, state_root)))
 
 
 def _table(rows: "tuple[ProviderRow, ...]") -> str:
     cells = [("nombre", "proveedor", "decisión", "cobro", "sesión", "lista", "entran", "cita")]
     for row in rows:
         unbound = row.decision == "permitido" and row.provider is None
+        unlisted = unbound or row.session == "sin-catalogo"
         cells.append((row.name or "-", "(sin id)" if unbound else row.provider, row.decision, row.billing or "-",
-                      row.session, "-" if unbound else str(row.listed_models),
-                      str(row.permitted_models) if row.decision == "permitido" and not unbound else "-",
+                      row.session, "-" if unlisted else str(row.listed_models),
+                      str(row.permitted_models) if row.decision == "permitido" and not unlisted else "-",
                       row.cited or "-"))
     widths = [max(len(line[column]) for line in cells) for column in range(len(cells[0]))]
     return "\n".join("  ".join(cell.ljust(width) for cell, width in zip(line, widths)).rstrip() for line in cells)
@@ -460,7 +500,10 @@ def _show(command: str, outcome: "tuple[ProviderRow, ...] | ProviderRow | str") 
     if isinstance(outcome, str):
         print(f"{command}: {outcome}", file=sys.stderr)
         return 3
-    print(_table(outcome if isinstance(outcome, tuple) else (outcome,)))
+    rows = outcome if isinstance(outcome, tuple) else (outcome,)
+    print(_table(rows))
+    if any(row.session == "sin-catalogo" for row in rows):
+        print(f"{command}: escrito. opencode no contestó, así que la fila va sin lo que lista.", file=sys.stderr)
     return 0
 
 
@@ -513,7 +556,9 @@ def main(argv: "list[str] | None" = None) -> int:
         return _COMMANDS[args.command](args, where, time.time())
     except CatalogUnavailable as exc:
         print(f"encargo: opencode no contestó: {exc}", file=sys.stderr)
-        return 1
+    except DeadlineExceeded as exc:
+        print(f"encargo: {exc}", file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":

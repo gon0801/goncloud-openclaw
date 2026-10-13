@@ -14,6 +14,7 @@ LAUNCH_SCHEMA = "agent-work.launch.v1"
 HEADER_END = "---"
 MAX_HEADER_LINES = 16
 ROUTE_FORM = "run-per-task"
+MAX_SHOWN = 200
 COVERAGE_FILE = Path("docs/evidence/agent-work/coverage.json")
 
 ALLOWED_ROOT = Path("/Users/dn/dev")
@@ -72,23 +73,36 @@ class Workspace:
 
     @staticmethod
     def for_repository(repository: object, *, allowed_root: Path) -> "Workspace | WorkspaceRefused":
-        if not isinstance(repository, str) or not Path(repository).is_absolute():
-            return WorkspaceRefused(str(repository), "not-absolute")
-        real = Path(repository).resolve()
-        if Path(allowed_root).resolve() not in real.parents:
+        if not isinstance(repository, str):
+            return WorkspaceRefused(str(repository)[:MAX_SHOWN], "invalid")
+        if not Path(repository).is_absolute():
+            return WorkspaceRefused(repository, "not-absolute")
+        try:
+            real = Path(repository).resolve()
+            inside = Path(allowed_root).resolve() in real.parents
+            # pathlib lanza ValueError con un NUL en la ruta, y RuntimeError con un bucle de enlaces hasta
+            # Python 3.12. Desde 3.13 el bucle cuenta como ruta que no existe.
+            folder, toplevel = real.is_dir(), (real / ".git").exists()
+        except (OSError, RuntimeError, ValueError):
+            return WorkspaceRefused(repository, "invalid")
+        if not inside:
             return WorkspaceRefused(repository, "outside-root")
-        if not real.is_dir():
+        if not folder:
             return WorkspaceRefused(repository, "missing")
-        if not (real / ".git").exists():
+        if not toplevel:
             return WorkspaceRefused(repository, "not-a-git-toplevel")
         return Workspace(real)
 
     @staticmethod
-    def for_revision(input_revision: dict, *, allowed_root: Path, run: RunDir) -> "Workspace | WorkspaceRefused":
-        if input_revision.get("kind") == "artifact":
+    def for_revision(input_revision: object, *, allowed_root: Path, run: RunDir) -> "Workspace | WorkspaceRefused":
+        """`input_revision` llega de R sin validar: lo que no es una revisión `code` o `artifact` se rechaza."""
+        kind = input_revision.get("kind") if isinstance(input_revision, dict) else None
+        if kind == "artifact":
             work = run.path / "work"
             work.mkdir(mode=0o700, exist_ok=True)
             return Workspace(work)
+        if kind != "code":
+            return WorkspaceRefused(str(input_revision)[:MAX_SHOWN], "invalid")
         return Workspace.for_repository(input_revision.get("repository"), allowed_root=allowed_root)
 
 
@@ -102,16 +116,22 @@ class Route:
     certified_cli_versions: frozenset[str]
 
     @staticmethod
-    def load(coverage: dict, host_id: str) -> "Route":
-        """De coverage.json: el estado en hostAdapterCoverage y las versiones en hostAdapterRoute. Una
-        entrada de otra forma de lanzamiento, o mal escrita, no certifica ninguna versión."""
-        status = coverage.get("hostAdapterCoverage", {}).get(host_id, {}).get("opencode", "absent")
-        entry = coverage.get("hostAdapterRoute", {}).get(host_id, {}).get("opencode")
-        versions: frozenset[str] = frozenset()
-        measured = entry.get("certifiedCliVersions") if isinstance(entry, dict) else None
-        if isinstance(measured, dict) and entry.get("form") == ROUTE_FORM:
-            versions = frozenset(measured)
-        return Route(host_id, "opencode", ROUTE_FORM, status, versions)
+    def load(coverage: object, host_id: str) -> "Route":
+        """De coverage.json, sin lanzar con ninguna forma de archivo. La ruta existe solo si
+        hostAdapterRoute declara para ese host una entrada `opencode` de forma `run-per-task`: recién
+        entonces vale el estado de hostAdapterCoverage, que sin esa entrada certifica otra ruta, la de la
+        sesión adoptada. Lo que falta o está mal escrito es una ruta ausente, sin versiones."""
+        def at(*keys: str) -> object:
+            value = coverage
+            for key in keys:
+                value = value.get(key) if isinstance(value, dict) else None
+            return value
+        entry, status = at("hostAdapterRoute", host_id, "opencode"), at("hostAdapterCoverage", host_id, "opencode")
+        if not isinstance(entry, dict) or entry.get("form") != ROUTE_FORM or not isinstance(status, str):
+            return Route(host_id, "opencode", ROUTE_FORM, "absent", frozenset())
+        measured = entry.get("certifiedCliVersions")
+        versions = (key for key in measured if isinstance(key, str)) if isinstance(measured, dict) else ()
+        return Route(host_id, "opencode", ROUTE_FORM, status, frozenset(versions))
 
     def open_for(self, cli_version: str, *, canary: bool) -> "None | RouteNotCertified":
         """Abierta si el estado es `certified` y la versión está medida. Con canary también abre para una
@@ -147,7 +167,8 @@ def plan_launch(assignment: dict, brief: bytes, *, policy: ProviderPolicy, catal
     model = authorize(ExactModel(header.model) if header.model else DefaultModel(), policy, catalog)
     if not isinstance(model, PermittedModel):
         return model
-    workspace = Workspace.for_revision(assignment["inputRevision"], allowed_root=allowed_root, run=run)
+    revision = assignment.get("inputRevision") if isinstance(assignment, dict) else None
+    workspace = Workspace.for_revision(revision, allowed_root=allowed_root, run=run)
     if not isinstance(workspace, Workspace):
         return workspace
     # El nombre sale de la operación: una repetición del mismo lanzamiento reserva la misma sesión.
