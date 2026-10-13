@@ -204,9 +204,18 @@ class HostReceipts(unittest.TestCase):
                          "directory), write the JSON there, then rename it onto acceptRef.")
         self.assertEqual(protocol["steps"][2],
                          "Write, as JSON to resultRef and atomically in the same way (a temporary file inside the "
-                         "directory that holds resultRef, never in /tmp, renamed onto resultRef), exactly the fields "
-                         "shown in result with their values unchanged, plus every field named in fill holding what "
-                         "fill describes. Write no other field.")
+                         "directory that holds resultRef, never in /tmp, renamed onto resultRef), one object: "
+                         "exactly the fields shown in result with their values unchanged, plus artifactRef, digest "
+                         "and typedPayload as three more fields at the top level of that same object, each holding "
+                         "what fill describes for it. Do not write a field named fill. Write no other field.")
+        # Live first task of qwen 2026-10-13 (task 15190266): it nested the three fields under "fill".
+        self.assertEqual(sorted(protocol["fill"]), ["artifactRef", "digest", "typedPayload"])
+        # Live canary A 2026-10-13: glm left a helper script in /tmp and `rm /tmp/…` ended its session.
+        self.assertEqual(protocol["steps"][3],
+                         "Keep every helper script and scratch file inside the directory that holds acceptRef, and "
+                         "create, read or delete nothing in /tmp or anywhere else outside workspaceRef and that "
+                         "directory: the CLI denies those commands.")
+        self.assertEqual(len(protocol["steps"]), 4)
         Path(assignment["acceptRef"]).write_text(json.dumps(protocol["accept"]))
         Path(assignment["resultRef"]).write_text(json.dumps({
             **protocol["result"],

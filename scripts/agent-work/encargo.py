@@ -40,7 +40,7 @@ from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, Cat
                      PermittedModel, PolicyUnreadable, ProviderClosure, ProviderGrant, ProviderId,
                      ProviderNotConfigured, ProviderPolicy, SlotBlocked, UNVERIFIED_REF, WorkspaceRefused, authorize,
                      explicar, pedido, policy_document)
-from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, Route, Workspace,
+from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_SCRATCH, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, Route, Workspace,
                     read_events)
 
 HOST_ID = "mac-local"
@@ -196,6 +196,7 @@ def preparar(repo: Path | None, modelo: str | None, *, state_root: Path, checkou
 
 
 _SALIDAS = {
+    EXIT_NO_SCRATCH: " El host no pudo crear la carpeta temporal del encargo.",
     EXIT_NO_WORKSPACE: " El host no pudo entrar a la carpeta del encargo.",
     EXIT_OUTSIDE_GROUP: " El proceso no quedó en el grupo del slot y el host no lanzó opencode.",
 }
@@ -417,15 +418,16 @@ def _write_policy(checkout: Path, state_root: Path,
         refused = _host_checkout(checkout, state_root)
         if refused is not None:
             return refused
+        document = policy_document(grants, closed)
+        unreadable = ProviderPolicy.parse(document, path.name).unreadable
+        if unreadable is not None:
+            return f"la política resultante no carga: {unreadable}"
         descriptor, pending = tempfile.mkstemp(prefix=".politica-", dir=path.parent)
         try:
             with os.fdopen(descriptor, "wb") as stream:
-                stream.write(policy_document(grants, closed))
+                stream.write(document)
                 stream.flush()
                 os.fsync(stream.fileno())
-            unreadable = ProviderPolicy.load(Path(pending)).unreadable
-            if unreadable is not None:
-                return f"la política resultante no carga: {unreadable}"
             _checkpoint("before-replace")
             os.chmod(pending, 0o644)
             os.replace(pending, path)

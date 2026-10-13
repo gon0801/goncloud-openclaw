@@ -9,10 +9,18 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 
 MAX_INSTRUCTION_BYTES = 1024 * 1024
+
+# Copies of LAUNCH_SCHEMA and HEADER_END (sesion.py) and of PROVIDER and MODEL_NAME (modelos.py), which
+# this file cannot import on the gateway host. test-agent-work-routing.py compares them.
+LAUNCH_SCHEMA = "agent-work.launch.v1"
+HEADER_END = "---"
+PROVIDER = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
+MODEL_NAME = re.compile(r"[A-Za-z0-9._:@/-]{1,128}")
 
 
 def write_instruction(instruction_root, content):
@@ -42,6 +50,19 @@ def write_instruction(instruction_root, content):
     return digest
 
 
+def model_id(text):
+    """A well-formed <provider>/<model>. Whether it may run is the host's answer, not this file's."""
+    provider, slash, name = text.partition("/")
+    if not slash or not PROVIDER.fullmatch(provider) or not MODEL_NAME.fullmatch(name):
+        raise argparse.ArgumentTypeError(f"not <provider>/<model>: {text!r}")
+    return text
+
+
+def launch_header(model):
+    """The header the host reads with LaunchHeader.parse. It goes inside the brief so the digest covers it."""
+    return f"{LAUNCH_SCHEMA}\nmodel: {model}\n{HEADER_END}\n".encode()
+
+
 def instruction_ref(digest):
     return {"ref": f"artifact:{digest}", "digest": f"sha256:{digest}"}
 
@@ -52,10 +73,14 @@ def main(argv=None):
     parser.add_argument("--file", type=Path, help="brief file; stdin when omitted")
     parser.add_argument("--host", help="target hostId, for example mac-local")
     parser.add_argument("--adapter", help="target adapterId, for example claude_opus")
+    parser.add_argument("--model", type=model_id, help="model the adapter launches, as <provider>/<model>")
     args = parser.parse_args(argv)
     if bool(args.host) != bool(args.adapter):
         parser.error("--host and --adapter go together")
     content = args.file.read_bytes() if args.file else sys.stdin.buffer.read()
+    if args.model and content:
+        # An empty brief stays empty, so write_instruction refuses it instead of publishing a bare header.
+        content = launch_header(args.model) + content
     try:
         digest = write_instruction(args.root, content)
     except (OSError, ValueError) as exc:

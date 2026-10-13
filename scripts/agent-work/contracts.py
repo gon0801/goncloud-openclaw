@@ -47,6 +47,11 @@ class RunDir:
     def result(self) -> Path:
         return self.path / "result.json"
 
+    @property
+    def scratch(self) -> Path:
+        """Where the session keeps helper scripts and temporary files: its TMPDIR."""
+        return self.path / "tmp"
+
     @staticmethod
     def for_operation(spool: Path, operation: str) -> "RunDir":
         if not OPERATION_ID.fullmatch(operation):

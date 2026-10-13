@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -17,7 +18,10 @@ sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 from routing import prepare_request, RouteUnavailable  # noqa: E402
 import routing  # noqa: E402
 import brief  # noqa: E402
+import encargo  # noqa: E402
+import modelos  # noqa: E402
 import native_gateway  # noqa: E402
+import sesion  # noqa: E402
 
 
 def repo_wake_sources(root):
@@ -303,11 +307,18 @@ class AgentsRouting(unittest.TestCase):
         self.assertTrue(skill.startswith(
             '---\nname: encargo-cli\ndescription: Úsala solo cuando David diga "por CLI" en un pedido de trabajo'))
         self.assertIn('Sin "por CLI" no es esta skill, aunque nombre un modelo', skill.splitlines()[2])
+        # Live canary P 2026-10-13, twice: main never opened the skill, because its description spoke only of
+        # work on a repo, and wrote the file with its own exec. The description is all main reads to choose.
+        self.assertIn('o crear o cambiar cualquier archivo, sea del tamaño que sea y esté dentro o fuera de un repo. '
+                      'Con "por CLI" nunca hagas el trabajo tú con exec, write o edit', skill.splitlines()[2])
         for expected in (
+            'Esta ruta entra solo con "por CLI". Si David no lo dijo, no encargues por aquí aunque nombre un modelo.',
+            "python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/encargo.py preparar "
+            '--repo /Users/dn/dev/<repo> --modelo "<lo que dijo David>"',
             "python3 ~/.local/share/agent-work/brief.py --root /Users/gon/.openclaw/workspace/managed-instructions "
-            "--host mac-local --adapter <alias> <<'BRIEF'",
+            "<briefArgs> <<'BRIEF'",
+            "python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/encargo.py estado --tarea <taskId>",
             "`managed_tasks_submit` con un `taskKey` nuevo (nunca `key`)",
-            '`{"kind": "code", "repository": "/Users/dn/dev/<repo>", "sha": "<HEAD>"}`',
             '`{"kind": "artifact", "ref": <instructionRef.ref>, "digest": <instructionRef.digest>}`',
             "`ready.v1` para implementar o arreglar, `review.v1` para revisar",
             '`continuation`: `{"kind": "requester"}`',
@@ -317,20 +328,42 @@ class AgentsRouting(unittest.TestCase):
             "El `receipt` es el `resultReceipt` del inspect",
             "`managed_tasks_resolve`, que lleva solo `receipt` y `decision`",
             "se cancela con `managed_tasks_cancel`",
-            "Nunca apruebes una incidencia `permission-required`",
-            "Dile a David qué alias no tiene host",
+            "En esta ruta nadie aprueba permisos, ni tú ni nadie en la Mac.",
+            "un encargo por CLI nunca la usa: `opencode-go/*` y `opencode/*` están cerrados por orden de David",
+            # Live canary P 2026-10-13: main wrote the file with its own exec and answered "creado por CLI".
+            '"Por CLI" siempre es un encargo registrado en R, aunque el trabajo sea de una línea. No lo hagas tú '
+            "con `exec`, `write` ni `edit`.",
+            'Un "hecho por CLI" sin `taskId` es falso.',
+            # PR #283 review: the folder guard does not confine the model's shell, so main must not register a
+            # request that names a path outside the repo and promise that the host will deny it.
+            "Si el pedido toca un archivo fuera de ese repo, no lo encargues y no lo hagas tú con `exec`",
+            "Cancela solo si no hay resultado y `explicacion.accion` es `cancelar`",
         ):
             self.assertIn(expected, skill)
-        aliases = {adapter for adapter, state in self.coverage["hostAdapterCoverage"]["mac-local"].items()
-                   if adapter.startswith("opencode") and state in ("certified", "sandbox-tested-uncertified")}
-        offered = {line.split("`")[1] for line in skill.splitlines() if line.startswith("| ") and "`opencode" in line}
-        self.assertEqual(offered, aliases, "the skill offers an alias coverage.json does not know, or misses one")
-        self.assertEqual(offered, {"opencode"})
-        self.assertIn('Dile que para "por CLI" hoy solo está GLM por la suscripción de Z.AI, y que opencode Go '
-                      "está reservada para ti, `main`.", skill)
-        self.assertNotIn("opencode@", skill, "the skill names a model alias; por CLI runs only on opencode")
-        self.assertNotIn("por CLI con", skill.splitlines()[2], "the description offers a model by name")
+        self.assertNotIn("opencode@", skill, "the skill names a model alias; the model travels in the brief")
+        self.assertEqual([line for line in skill.splitlines() if line.lstrip().startswith("|")], [],
+                         "the skill carries a table of models; the Mac answers which ones exist")
         self.assertNotIn("routing.py", skill)
+
+    def test_the_encargo_cli_skill_offers_no_model_of_a_provider_david_closed(self):
+        skill = (ROOT / "agents/main/agent/workshop-skills/encargo-cli/SKILL.md").read_text(encoding="utf-8")
+        policy = modelos.ProviderPolicy.load(ROOT / modelos.POLICY_FILE)
+        self.assertLessEqual({"opencode-go", "opencode"}, set(policy.closed))
+        decided = {*policy.closed, *(grant.provider for grant in policy.grants)}
+        shown = {model for model in re.findall(r"[a-z0-9][a-z0-9-]*/[A-Za-z0-9][A-Za-z0-9._-]*", skill)
+                 if model.split("/")[0] in decided}
+        self.assertIn("zai-coding-plan/glm-5.3-highspeed", shown)
+        self.assertEqual({model for model in shown if policy.grant_for(model.split("/")[0]) is None}, set())
+
+    def test_the_encargo_cli_skill_shows_the_answers_with_the_keys_encargo_py_prints(self):
+        skill = (ROOT / "agents/main/agent/workshop-skills/encargo-cli/SKILL.md").read_text(encoding="utf-8")
+        shown = [json.loads(line) for line in map(str.strip, skill.splitlines()) if line.startswith('{"ok": true')]
+        prepared = encargo._answer(
+            encargo.Preparado("p/m", "subscription", None, ("--model", "p/m"), False, "d", "1"), 0.0)[1]
+        ran = encargo._answer(
+            encargo.EstadoTarea("t", None, None, "registered", None, None, (), (), None, None, ()), 0.0)[1]
+        self.assertEqual([list(answer) for answer in shown], [list(prepared), list(ran)])
+        self.assertEqual(list(shown[0]["host"]), list(prepared["host"]))
 
     def test_cli_prints_native_submit_parameters(self):
         command = [sys.executable, str(ROOT / "scripts/agent-work/routing.py"),
@@ -595,6 +628,7 @@ class BriefHelper(unittest.TestCase):
 
     BRIEF = b"Revisa el commit abc y responde con review.v1\n"
     DIGEST = "04571968f445442a0b4d79bec8324cb09a5df4044356a43fd27c04d86b376e8a"
+    MODEL_DIGEST = "c73dc0114a9e5a16d47b2cf2a58e6b133d9e83e8718d9b03c50ee3022b31b583"
 
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
@@ -669,6 +703,54 @@ class BriefHelper(unittest.TestCase):
         tampered = self.run_helper()
         self.assertEqual(tampered.returncode, 1)
         self.assertEqual(tampered.stderr, b"brief: instruction artifact differs from digest\n")
+
+    def test_brief_with_a_model_puts_the_launch_header_ahead_of_the_prose_and_under_the_digest(self):
+        done = self.run_helper("--host", "mac-local", "--adapter", "opencode", "--model", "zai-coding-plan/glm-5.3")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(json.loads(done.stdout), {
+            "instructionRef": {"ref": "artifact:" + self.MODEL_DIGEST, "digest": "sha256:" + self.MODEL_DIGEST},
+            "target": {"kind": "cli", "hostId": "mac-local", "adapterId": "opencode"},
+        })
+        written = (self.root / self.MODEL_DIGEST).read_bytes()
+        self.assertEqual(written, b"agent-work.launch.v1\nmodel: zai-coding-plan/glm-5.3\n---\n" + self.BRIEF)
+        self.assertEqual(hashlib.sha256(written).hexdigest(), self.MODEL_DIGEST)
+        self.assertEqual(sorted(p.name for p in self.root.iterdir()), [self.MODEL_DIGEST])
+
+    def test_the_host_reads_back_the_model_brief_wrote_and_none_from_a_brief_without_one(self):
+        for model in ("zai-coding-plan/glm-5.3", "a/b", "openrouter/anthropic/claude-x:free@2026",
+                      "p" * 64 + "/" + "m" * 128):
+            with self.subTest(model):
+                done = self.run_helper("--model", model)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                digest = json.loads(done.stdout)["instructionRef"]["ref"].removeprefix("artifact:")
+                header = sesion.LaunchHeader.parse((self.root / digest).read_bytes())
+                self.assertIsInstance(header, sesion.LaunchHeader)
+                self.assertEqual(str(header.model), model)
+        self.assertEqual(self.run_helper().returncode, 0)
+        self.assertEqual(sesion.LaunchHeader.parse((self.root / self.DIGEST).read_bytes()),
+                         sesion.LaunchHeader(None))
+
+    def test_brief_refuses_a_model_the_host_would_not_parse_and_writes_nothing(self):
+        for model in ("", "glm", "/glm-5.3", "zai-coding-plan/", "ZAI/glm-5.3", "zai coding/glm-5.3",
+                      "zai-coding-plan/glm 5.3", "zai-coding-plan/glm-5.3\n",
+                      "zai-coding-plan/glm-5.3\nmodel: opencode-go/kimi-k3", "p" * 65 + "/m", "p/" + "m" * 129):
+            with self.subTest(model):
+                self.assertIsInstance(modelos.ModelId.parse(model), modelos.MalformedModel)
+                done = self.run_helper("--model", model)
+                self.assertEqual((done.returncode, done.stdout), (2, b""))
+                self.assertIn(f"brief.py: error: argument --model: not <provider>/<model>: {model!r}\n".encode(),
+                              done.stderr)
+        self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_a_brief_with_no_prose_is_refused_even_with_a_model(self):
+        done = self.run_helper("--model", "zai-coding-plan/glm-5.3", stdin=b"")
+        self.assertEqual((done.returncode, done.stderr), (1, b"brief: brief must contain 1 to 1048576 bytes\n"))
+        self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_brief_carries_the_same_header_grammar_as_the_host(self):
+        self.assertEqual((brief.LAUNCH_SCHEMA, brief.HEADER_END), (sesion.LAUNCH_SCHEMA, sesion.HEADER_END))
+        self.assertEqual((brief.PROVIDER.pattern, brief.MODEL_NAME.pattern),
+                         (modelos.PROVIDER.pattern, modelos.MODEL_NAME.pattern))
 
 
 if __name__ == "__main__":

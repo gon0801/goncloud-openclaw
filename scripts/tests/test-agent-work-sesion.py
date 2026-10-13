@@ -51,7 +51,9 @@ SLOT_GROUP = "agent-work-enc1"
 DEFAULT = "zai-coding-plan/glm-5.3-flash"
 LINE = ("Open assignment JSON at {}. First write agent-work.accept.v1 atomically to acceptRef with schema, hostId, "
         "taskId, generation, instanceId, claimId and capability copied from the assignment. Then follow briefRef "
-        "and write agent-work.result.v1 atomically to resultRef.")
+        "and write agent-work.result.v1 atomically to resultRef. Keep every helper script and scratch file inside "
+        "the directory that holds acceptRef, and touch nothing in /tmp or any other path outside it and "
+        "workspaceRef: the CLI denies those commands.")
 # Shapes measured on opencode 1.18.35 (docs/evidence/agent-work/B22-fase0.md: M3c, M2 and M6, M3b).
 CREATED = ('timestamp=2026-10-13T00:57:58.663Z level=INFO run=18f0109d message=created id=ses_ecd3bd778ffe2Ws3LL1t3bfkl1 '
            'slug=witty-planet version=1.18.35 projectID=53a94db2 directory={} path="" workspaceID=undefined\n')
@@ -101,6 +103,7 @@ def log(line):
 
 
 note("seen.json", {"argv": args, "PWD": os.environ.get("PWD"), "cwd": os.getcwd(), "rgid": os.getgid(),
+                   "TMPDIR": os.environ.get("TMPDIR"), "scratch_mode": oct(os.stat(os.environ["TMPDIR"]).st_mode & 0o7777),
                    "pid": os.getpid(), "config": os.environ.get("OPENCODE_CONFIG_CONTENT"),
                    "managed": os.environ.get("AGENT_WORK_MANAGED"),
                    "autoupdate": os.environ.get("OPENCODE_DISABLE_AUTOUPDATE"),
@@ -408,16 +411,33 @@ class Launch(Slot):
         with self.assertRaisesRegex(ValueError, "no empieza con guion"):
             opencode_argv(spec, Path("/opt/homebrew/bin/opencode"), task_id="--auto")
 
+    def test_the_model_brief_py_writes_is_the_one_the_host_launches(self):
+        instructions = self.root / "instructions"
+        instructions.mkdir()
+        done = subprocess.run([sys.executable, "-I", str(ROOT / "scripts/agent-work/brief.py"), "--root",
+                               str(instructions), "--host", "mac-local", "--adapter", "opencode",
+                               "--model", "zai-coding-plan/glm-5.3"], input=b"haz el saludo\n", capture_output=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        digest = json.loads(done.stdout)["instructionRef"]["ref"].removeprefix("artifact:")
+        argv = opencode_argv(self.spec((instructions / digest).read_bytes()), Path("/opt/homebrew/bin/opencode"),
+                             task_id="task-1")
+        self.assertEqual(argv[:4], ("/opt/homebrew/bin/opencode", "run", "-m", "zai-coding-plan/glm-5.3"))
+
     def test_the_environment_opens_the_task_folder_and_only_its_run_directory(self):
         spec = self.spec()
         env = opencode_env(spec)
         self.assertEqual(env["PWD"], str(self.repo))
         config = json.loads(env.pop("OPENCODE_CONFIG_CONTENT"))
-        self.assertEqual(env, {"PWD": str(self.repo), "OPENCODE_DISABLE_AUTOUPDATE": "1", "AGENT_WORK_MANAGED": "1"})
+        # Live canary A 2026-10-13: glm left its helper script in /tmp, `rm /tmp/…` was denied and the
+        # session ended with the work done and no result. The scratch folder is inside the one allowed key.
+        self.assertEqual(env, {"PWD": str(self.repo), "TMPDIR": f"{self.spool}/runs/{self.operation()}/tmp",
+                               "OPENCODE_DISABLE_AUTOUPDATE": "1", "AGENT_WORK_MANAGED": "1"})
         self.assertEqual(config, {
-            "permission": {"external_directory": {f"{self.spool}/runs/{self.operation()}/**": "allow"}},
+            "permission": {"external_directory": {"*": "deny", f"{self.spool}/runs/{self.operation()}/**": "allow"}},
             "enabled_providers": ["zai-coding-plan"], "small_model": DEFAULT})
-        self.assertEqual(len(config["permission"]["external_directory"]), 1)
+        # opencode applies the last rule that matches: the run directory has to come after the deny.
+        self.assertEqual(list(config["permission"]["external_directory"].items()),
+                         [("*", "deny"), (f"{self.spool}/runs/{self.operation()}/**", "allow")])
         token = opencode_env(self.spec(b"agent-work.launch.v1\nmodel: deepseek/deepseek-v4-pro\n---\n"))
         self.assertEqual(json.loads(token["OPENCODE_CONFIG_CONTENT"])["enabled_providers"], ["deepseek"])
 
@@ -439,6 +459,7 @@ class Launch(Slot):
                          [str(self.repo), str(self.repo), "a b\n$(echo no)", True,
                           ["un argumento con 'comillas' y $HOME"]])
         self.assertEqual((spec.record / "stderr.log").read_text(), "a los logs\n")
+        self.assertEqual(oct(spec.run.scratch.stat().st_mode & 0o7777), "0o700")
 
     def test_the_launch_script_runs_nothing_outside_the_slot_group_or_the_task_folder(self):
         spec = self.spec()
@@ -448,6 +469,9 @@ class Launch(Slot):
         self.assertEqual(outside_group.returncode, 98)
         gone = replace(spec, workspace=sesion.Workspace(self.root / "dev" / "borrada"))
         self.assertEqual(self.launched(launch_script(gone, argv, {}, os.getgid())).returncode, 97)
+        spec.run.scratch.write_text("un archivo donde va la carpeta")
+        self.assertEqual(self.launched(launch_script(spec, argv, {}, os.getgid())).returncode, 96)
+        spec.run.scratch.unlink()
         self.assertFalse((self.root / "corrio").exists())
         self.assertEqual(self.launched(launch_script(spec, argv, {}, os.getgid())).returncode, 0)
         self.assertTrue((self.root / "corrio").exists())
@@ -474,6 +498,21 @@ class Launch(Slot):
             session_directory="/Users/dn/dev/demo", providers_called=("zai-coding-plan",),
             tail=(*events.splitlines(), "esto no es JSON"), log_errors=()))
         self.assertEqual(sesion.session_directory(self.spool / "sessions" / self.operation()), "/Users/dn/dev/demo")
+        # Measured on opencode 1.18.35 with the "deny" rule (B22-canarios.md, M7): the model gets the error
+        # and the session goes on, so these come with a result as often as without one.
+        by_rule = read_events(self.write_run(
+            json.dumps({"type": "tool_use", "timestamp": STAMP, "part": {"type": "tool", "tool": "read", "state": {
+                "status": "error", "error": sesion.DENIED_BY_RULE + " Here are some of the relevant rules [...]"}}}) + "\n",
+            "timestamp=2026-10-13T05:17:45.444Z level=INFO run=838095b8 message=evaluated permission=external_directory "
+            "pattern=/Users/dn/.agents/pstack-plataformas/* action.permission=external_directory action.pattern=* "
+            "action.action=deny\n"
+            "timestamp=2026-10-13T05:17:55.889Z level=INFO run=838095b8 message=evaluated permission=edit "
+            "pattern=fin.txt action.permission=* action.action=allow action.pattern=*\n"))
+        self.assertEqual(by_rule.denied, (PermissionDenied("external_directory", "/Users/dn/.agents/pstack-plataformas/*"),))
+        only_in_the_flow = read_events(self.write_run(
+            json.dumps({"type": "tool_use", "timestamp": STAMP, "part": {"type": "tool", "tool": "read", "state": {
+                "status": "error", "error": sesion.DENIED_BY_RULE + " Here are some of the relevant rules [...]"}}}) + "\n", ""))
+        self.assertEqual(only_in_the_flow.denied, (PermissionDenied("tool:read", ""),))
         without_the_line = read_events(self.write_run(events, CREATED.format('"/Users/dn/dev/con espacio"')))
         self.assertEqual((without_the_line.denied, without_the_line.session_directory),
                          ((PermissionDenied("tool:bash", ""),), "/Users/dn/dev/con espacio"))
@@ -614,9 +653,10 @@ class Decisions(Slot):
             "session": self.session(), "cwd": str(self.repo),
             "argv": (str(self.bin / "opencode"), "run", "-m", DEFAULT, "--format", "json", "--print-logs", "--log-level",
                      "INFO", "--title", "task-1", LINE.format(run.assignment)),
-            "env": {"PWD": str(self.repo), "OPENCODE_DISABLE_AUTOUPDATE": "1", "AGENT_WORK_MANAGED": "1",
+            "env": {"PWD": str(self.repo), "TMPDIR": str(run.path / "tmp"), "OPENCODE_DISABLE_AUTOUPDATE": "1",
+                    "AGENT_WORK_MANAGED": "1",
                     "OPENCODE_CONFIG_CONTENT": json.dumps({
-                        "permission": {"external_directory": {f"{run.path}/**": "allow"}},
+                        "permission": {"external_directory": {"*": "deny", f"{run.path}/**": "allow"}},
                         "enabled_providers": ["zai-coding-plan"], "small_model": DEFAULT}, separators=(",", ":"))}}])
         self.assertEqual((self.r.claims, self.r.admits), ([("opencode", "enc-1")], ["task-1"]))
         self.assertEqual(self.held(), ("attempted", "Running", ""))
@@ -690,6 +730,22 @@ class Decisions(Slot):
         self.r.offer("task-2", b"otro\n", self.revision)
         self.assertEqual(self.one_pass()["claimed"], 1)
         self.assertEqual((self.beat()["slot"], len(self.backend.launches)), ("free", 2))
+
+    def test_estado_says_why_the_launch_script_left_before_reaching_opencode(self):
+        for code, why in ((96, "El host no pudo crear la carpeta temporal del encargo."),
+                          (97, "El host no pudo entrar a la carpeta del encargo."),
+                          (98, "El proceso no quedó en el grupo del slot y el host no lanzó opencode.")):
+            with self.subTest(code=code):
+                self.setUp()
+                self.launched()
+                record = self.record()
+                record.events.write_text("")
+                record.stderr.write_text("")
+                self.left(code)
+                self.assertEqual(self.one_pass()["detected"], 1)
+                _, answer = self.estado()
+                self.assertEqual((answer["salida"], answer["explicacion"]["frase"]),
+                                 (code, f"opencode salió sin acusar recibo. {why}"))
 
     def test_a_process_that_leaves_without_accepting_is_launch_failed_whatever_its_exit_code(self):
         for code in (1, 0):
@@ -1055,14 +1111,15 @@ class LiveResult(LiveSlot):
         self.assertEqual(self.r.reports, [("task-1", b"hecho por el doble\n")])
         self.assertEqual((self.repo / "b22-doble.txt").read_text(), "hecho por el doble\n")
         self.assertEqual(sorted(path.name for path in self.run_dir().path.iterdir()),
-                         ["accept.json", "assignment.json", "brief", "result.json"])
+                         ["accept.json", "assignment.json", "brief", "result.json", "tmp"])
         seen = self.seen()
         self.assertEqual((seen["PWD"], seen["cwd"], seen["rgid"], seen["stdin_is_dev_null"], seen["managed"],
                           seen["autoupdate"]), (str(self.repo), str(self.repo), slot_gid(), True, "1", "1"))
+        self.assertEqual((seen["TMPDIR"], seen["scratch_mode"]), (str(self.run_dir().path / "tmp"), "0o700"))
         self.assertEqual(seen["argv"], ["run", "-m", DEFAULT, "--format", "json", "--print-logs", "--log-level", "INFO",
                                         "--title", "task-1", LINE.format(self.run_dir().assignment)])
         self.assertEqual(json.loads(seen["config"])["permission"],
-                         {"external_directory": {f"{self.run_dir().path}/**": "allow"}})
+                         {"external_directory": {"*": "deny", f"{self.run_dir().path}/**": "allow"}})
         self.assertEqual((self.sessions(), slot_group_processes()), (["keeper"], ()))
         self.assertFalse((self.repo / "managed-briefs").exists())
         self.assertEqual({path.name: path.group() for path in (self.repo / "b22-doble.txt", self.run_dir().accept)},

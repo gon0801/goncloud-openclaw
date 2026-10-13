@@ -188,9 +188,13 @@ def cli_protocol(assignment: dict) -> dict:
             "directory), write the JSON there, then rename it onto acceptRef.",
             "Do the work that the file at briefRef describes, inside workspaceRef.",
             "Write, as JSON to resultRef and atomically in the same way (a temporary file inside the "
-            "directory that holds resultRef, never in /tmp, renamed onto resultRef), exactly the fields "
-            "shown in result with their values unchanged, plus every field named in fill holding what "
-            "fill describes. Write no other field.",
+            "directory that holds resultRef, never in /tmp, renamed onto resultRef), one object: exactly "
+            "the fields shown in result with their values unchanged, plus artifactRef, digest and "
+            "typedPayload as three more fields at the top level of that same object, each holding what "
+            "fill describes for it. Do not write a field named fill. Write no other field.",
+            "Keep every helper script and scratch file inside the directory that holds acceptRef, and "
+            "create, read or delete nothing in /tmp or anywhere else outside workspaceRef and that directory: "
+            "the CLI denies those commands.",
         ],
         "accept": {"schema": ACCEPT_SCHEMA, "capability": assignment["capability"],
                    **{field: assignment[field] for field in ACCEPT_BOUND}},

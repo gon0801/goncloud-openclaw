@@ -95,6 +95,8 @@ Veredicto de M6: **pasa**, con la clasificación "rechaza y termina". Después d
 
 Lo que fija. No existe un evento de permiso propio en el flujo. El permiso y su patrón solo salen en stderr. El flujo solo dice qué herramienta quedó en error. El código de salida es 0, así que el código no distingue un encargo terminado de uno cortado por un permiso.
 
+M7 acota esta conclusión (`B22-canarios.md`, sección "M7", medida el 2026-10-13). "Rechaza y termina" vale para un permiso "ask". Con una regla "deny" explícita, opencode le devuelve el error al modelo y la sesión sigue.
+
 ## M3a
 
 Pregunta. ¿`-m zai-coding-plan/no-existe` sale distinto de 0 en menos de 30 s?
@@ -293,5 +295,5 @@ Dos cosas que el recibo deja escritas. `newgrp` imprime `setgroups: Invalid argu
 
 ## Lo que falta para cerrar este recibo
 
-1. Repetir M5 con `--print-logs --log-level INFO`, que es como lanza el host. M5 pasó sin esas dos banderas. El canario A de la fase 2 es un encargo real lanzado con ellas.
+1. Repetir M5 con `--print-logs --log-level INFO`, que es como lanza el host. M5 pasó sin esas dos banderas. El canario A de la fase 2 es un encargo real lanzado con ellas. Su intento 2 pasó el 2026-10-13 (`B22-canarios.md`, "Salidas literales del canario A, intento 2").
 2. Guardar los tres comandos del experimento de `PWD` si se repite.
