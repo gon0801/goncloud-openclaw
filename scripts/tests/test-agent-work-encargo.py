@@ -30,17 +30,21 @@ here=$(dirname "$0")
 printf '%s\\n' "$*" >> "$here/argv.log"
 case "$*" in
   --version) cat "$here/version" ;;
-  models|"models --refresh") cat "$here/listing" ;;
+  models|"models --refresh") if [ -e "$here/before-listing" ]; then . "$here/before-listing"; fi; cat "$here/listing" ;;
   *) exit 64 ;;
 esac
 """
 PROMPTS = {
+    200: ("2026-10-01T07:00:00.000Z", "un texto antiguo cualquiera, de antes de todo esto"),
     10866: ("2026-10-12T23:42:35.842Z", "1 acepto 2. cualquiera 3. 1 hora SECRETO-sk-prueba-123"),
     10867: ("2026-10-12T23:47:47.629Z", "bla, de opencode solo tengo go, bla SECRETO-sk-prueba-456"),
     10886: ("2026-10-13T01:13:22.117Z", "sobre qwen hay forma de dejar solo los modelos qwen? gracias"),
     10890: ("2026-10-13T01:40:00.000Z", "sí, esos seis modelos de qwen están bien"),
     10901: ("2026-10-14T10:00:00.000Z", "ok, permite mistral para por CLI, cobra por suscripción"),
     10902: ("2026-10-15T08:00:00.000Z", "cierra muse para encargos, ya no lo pago"),
+    10903: ("2026-10-16T09:00:00.000Z", "reabre opencode go para encargos, ya tengo cuota de sobra"),
+    30001: ("2026-10-20T09:00:00.000Z", "recuerda: open code go es solamente para main, ya lo dije"),
+    30010: ("2026-10-21T09:00:00.000Z", "pero tengo deepseek por api, eso sí"),
 }
 DEFAULT_BRIEF_ARGS = ["--host", "mac-local", "--adapter", "opencode", "--model", "zai-coding-plan/glm-5.3-flash"]
 
@@ -245,6 +249,40 @@ class Preparar(Mac):
         self.policy_path.rename(self.policy_path.with_suffix(".bak"))
         self.assertEqual(self.preparar()["causa"], "politica-ilegible")
 
+    def test_a_broken_policy_is_said_even_when_opencode_does_not_answer(self):
+        (self.bin / "version").write_text("")
+        self.edit_policy(lambda doc: doc["providers"][0].update(billing="free"))
+        answer = self.preparar()
+        self.assertEqual((answer["causa"], answer["accion"]), ("politica-ilegible", "no-registrar"))
+        self.assertFalse((self.bin / "argv.log").exists())
+
+    def test_a_coverage_file_of_the_wrong_shape_is_an_uncertified_route_not_a_traceback(self):
+        for content in ("[]", '"certified"', '{"hostAdapterCoverage": [], "hostAdapterRoute": {"mac-local": 1}}', "{"):
+            with self.subTest(content):
+                (self.checkout / EVIDENCE / "coverage.json").write_text(content)
+                self.assertEqual(self.preparar()["causa"], "ruta-no-certificada")
+
+    def test_a_listing_that_is_empty_or_not_ids_is_opencode_not_answering_and_is_never_cached(self):
+        for listing, piece in (("", "no listó ningún modelo"), ("\n\n", "no listó ningún modelo"),
+                               ("Update available: 1.18.36\n" + LISTING, "una línea que no es un id"),
+                               ("error: not logged in\n", "una línea que no es un id")):
+            with self.subTest(listing[:30]):
+                (self.bin / "listing").write_text(listing)
+                code, out, err = self.cli("preparar", "--repo", str(self.repo), "--modelo", "grok 4.7")
+                self.assertEqual((code, out), (1, ""))
+                self.assertIn(piece, err)
+                self.assertFalse((self.state / "catalogo.json").exists())
+        (self.bin / "listing").write_text(LISTING)
+        self.assertEqual(self.preparar("--modelo", "grok 4.7")["causa"], "ruta-no-certificada")
+
+    def test_the_command_gives_up_at_its_deadline_even_when_opencode_leaves_a_child_holding_the_pipe(self):
+        (self.bin / "before-listing").write_text("sleep 30\n")
+        started = time.monotonic()
+        with self.assertRaisesRegex(encargo.CatalogUnavailable, "tope"):
+            encargo.preparar(self.repo, None, state_root=self.state, checkout=self.checkout, now=time.time(),
+                             opencode_bin=self.bin / "opencode", allowed_root=self.root / "dev", deadline_seconds=6.5)
+        self.assertLess(time.monotonic() - started, 5)
+
     def test_a_request_without_model_is_refused_when_the_default_provider_has_no_grant(self):
         self.edit_policy(lambda doc: doc.update(providers=[doc["providers"][7]], closed=[]))
         self.assertEqual(self.preparar(), {
@@ -259,7 +297,8 @@ class Preparar(Mac):
         empty = self.root / "dev" / "vacio"
         empty.mkdir()
         subprocess.run(["git", "-C", str(empty), "init", "-q"], check=True, capture_output=True)
-        for repo, piece in ((outside, "fuera de la carpeta"), (self.repo / "no-esta", "no existe"), (empty, "commit")):
+        for repo, piece in ((outside, "fuera de la carpeta"), (self.repo / "no-esta", "no existe"),
+                            (empty, "es un repo git sin ningún commit"), (self.root / "dev", "fuera de la carpeta")):
             with self.subTest(repo):
                 code, out, _ = self.cli("preparar", "--repo", str(repo))
                 answer = json.loads(out)
@@ -399,8 +438,8 @@ class Permitir(Mac):
         self.assert_refused(["mistral", "--cobro", "subscription", "--ref", "P99999", "--cita", "permite mistral"],
                             "no existe el prompt P99999")
         self.assert_refused(["mistral", "--cobro", "subscription", "--ref", "P10901", "--cita", "  "], "vacía")
-        self.assert_refused(["mistral", "--cobro", "subscription", "--ref", "P10901", "--cita",
-                             "permite mistral para por CLI", "--fecha", "2026-10-12"], "2026-10-14")
+        self.assert_refused(["mistral", "--cobro", "subscription", "--ref", "commit abc123 de David", "--cita",
+                             "permite mistral para por CLI"], "no es un prompt P####")
         self.assert_refused(["mistral", "--cobro", "subscription"], "--ref y --cita")
         self.assert_refused(["mistral", "--cobro", "subscription", "--cita", "permite mistral"], "van juntas")
 
@@ -433,20 +472,6 @@ class Permitir(Mac):
         self.assert_refused(["kimi"], "--proveedor")
         self.assert_refused(["Kimi", "--proveedor", "kimi-code-plan-cn"], "nombre inválido")
 
-    def test_a_closed_provider_stays_closed_without_reabre_and_a_new_phrase(self):
-        closed = ["opencode-go", "--cobro", "subscription", "--ref", "P10867", "--cita", "de opencode solo tengo go"]
-        self.assert_refused(closed, "opencode-go está cerrado", "«open code go es solamente para main»", "--reabre")
-        self.assert_refused(["go", "--proveedor", "opencode-go", "--cobro", "subscription", "--ref", "P10867",
-                             "--cita", "de opencode solo tengo go"], "opencode-go está cerrado")
-        self.edit_policy(lambda doc: doc["providers"][5].update(provider=None))
-        self.assert_refused(["kimi", "--proveedor", "opencode-go"], "opencode-go está cerrado")
-        self.assert_refused(["kimi", "--proveedor", "opencode-go", "--reabre"], "opencode-go está cerrado")
-        code, _, err, changed = self.permitir(*closed, "--proveedor", "opencode-go", "--reabre")
-        self.assertEqual((code, changed), (0, True), err)
-        policy = self.policy()
-        self.assertEqual((sorted(policy.closed), policy.grant_for("opencode-go").decision.ref),
-                         (["opencode", "zai"], "P10867"))
-
     def test_the_host_checkout_never_takes_a_live_write(self):
         self.beat(beatAt=time.time() - 86400)
         self.assert_refused(["mistral", "--cobro", "subscription", "--ref", "P10901", "--cita",
@@ -456,6 +481,52 @@ class Permitir(Mac):
         code, out, err = self.cli("cerrar", "meta", "--ref", "P10902", "--cita", "cierra muse para encargos")
         self.assertEqual((code, out), (3, ""))
         self.assertIn("es el del host de encargos", err)
+
+    def test_a_host_that_starts_from_this_checkout_while_the_command_runs_still_stops_the_write(self):
+        self.edit_policy(lambda doc: doc["providers"][5].update(provider=None))
+        self.beat()
+        (self.state / "host.json").rename(self.bin / "host.json")
+        (self.bin / "before-listing").write_text(f'cp "$here/host.json" "{self.state}/host.json"\n')
+        self.assert_refused(["kimi", "--proveedor", "kimi-code-plan-cn"], "es el del host de encargos")
+        self.assertEqual(self.argv_log()[-1], "models")
+
+    def test_a_filter_that_covers_no_listed_model_is_refused_instead_of_silently_blocking_the_provider(self):
+        phrase = ["--ref", "P10886", "--cita", "dejar solo los modelos qwen"]
+        self.assert_refused(["qwen", "--solo", "zzz*", *phrase],
+                            "no cubre ninguno de los modelos que opencode lista de alibaba-token-plan (27)")
+        self.assert_refused(["qwen", "--solo", "qwen*", "--menos", "qwen*", *phrase], "no cubre ninguno")
+        code, out, err, changed = self.permitir("claude", "--solo", "claude-opus-*", "--ref", "P10886", "--cita",
+                                                "dejar solo los modelos")
+        self.assertEqual((code, changed), (0, True), err)
+        self.assertEqual(self.policy().grant_for("anthropic").models.include, ("claude-opus-*",))
+
+    def test_binding_an_id_checks_the_filter_the_grant_already_carried(self):
+        (self.bin / "listing").write_text(LISTING + "mistral/large-3\nmistral/small-3\n")
+        code, _, err, changed = self.permitir("mistral", "--cobro", "subscription", "--solo", "medium*", "--ref",
+                                              "P10901", "--cita", "permite mistral para por CLI")
+        self.assertEqual((code, changed), (0, True), err)
+        self.assert_refused(["mistral", "--proveedor", "mistral"],
+                            "el filtro de mistral no cubre ninguno de los modelos que opencode lista de mistral (2)")
+        self.assertIsNone(self.policy().grants[8].provider)
+        (self.bin / "listing").write_text(LISTING + "mistral/large-3\nmistral/medium-3\n")
+        code, out, err, changed = self.permitir("mistral", "--proveedor", "mistral")
+        self.assertEqual((code, changed), (0, True), err)
+        self.assertEqual(out.splitlines()[1].split()[:7], ["mistral", "mistral", "permitido", "subscription",
+                                                           "con-sesion", "2", "1"])
+
+    def test_with_opencode_silent_a_grant_that_needs_no_listing_is_written_and_a_binding_or_a_filter_is_not(self):
+        (self.bin / "version").write_text("")
+        code, out, err, changed = self.permitir("mistral", "--cobro", "subscription", "--ref", "P10901", "--cita",
+                                                "permite mistral para por CLI")
+        self.assertEqual((code, changed), (0, True), err)
+        self.assertEqual(self.policy().grants[8].name, "mistral")
+        self.edit_policy(lambda doc: doc["providers"][5].update(provider=None))
+        for args in (["kimi", "--proveedor", "kimi-code-plan-cn"],
+                     ["qwen", "--solo", "qwen3.8*", "--ref", "P10886", "--cita", "dejar solo los modelos qwen"]):
+            with self.subTest(args):
+                code, out, err, changed = self.permitir(*args)
+                self.assertEqual((code, out, changed), (1, "", False))
+                self.assertIn("opencode no contestó", err)
 
     def test_a_new_grant_is_the_old_policy_plus_one_entry_with_the_date_of_the_prompt(self):
         before = self.policy()
@@ -506,17 +577,32 @@ class Permitir(Mac):
         qwen = self.policy().grant_for("alibaba-token-plan")
         self.assertEqual((qwen.billing, qwen.models, qwen.decision.ref), ("per-token", None, "P10901"))
 
-    def test_without_the_prompt_store_the_date_is_asked_and_the_row_says_unverified(self):
+    def test_without_the_prompt_store_nothing_is_attributed_to_david(self):
         self.prompts.unlink()
-        args = ["mistral", "--cobro", "per-token", "--ref", "P10901", "--cita", "permite mistral por token"]
-        self.assert_refused(args, "--fecha")
-        self.assert_refused([*args, "--fecha", "14/10/2026"], "AAAA-MM-DD")
-        code, out, err, changed = self.permitir(*args, "--fecha", "2026-10-14")
-        self.assertEqual((code, changed), (0, True), err)
-        self.assertIn("cita sin verificar", out)
-        self.assertEqual(self.policy().grants[8].decision.on, "2026-10-14")
-        self.assert_refused(["otro", "--cobro", "per-token", "--ref", "commit abc123 de David", "--cita", "permite otro"],
-                            "--fecha")
+        self.assert_refused(["mistral", "--cobro", "per-token", "--ref", "P10901", "--cita", "permite mistral"],
+                            "no existe la base de prompts")
+        self.assert_refused(["qwen", "--solo", "qwen3.8*", "--ref", "P10886", "--cita", "dejar solo los modelos qwen"],
+                            "no existe la base de prompts")
+        code, out, err = self.cli("cerrar", "meta", "--ref", "P10902", "--cita", "cierra muse para encargos")
+        self.assertEqual((code, out), (3, ""))
+        self.assertIn("no existe la base de prompts", err)
+        self.assertEqual([decision.by for decision in
+                          [grant.decision for grant in self.policy().grants]
+                          + [closure.decision for closure in self.policy().closed.values()]], ["David"] * 11)
+
+    def test_no_command_can_write_a_policy_that_drops_or_changes_a_closure(self):
+        policy, before = self.policy(), self.policy_path.read_bytes()
+        kept = dict(policy.closed)
+        kept.pop("zai")
+        self.assertIn("no quita ni cambia un cierre, y este tocaría el de zai",
+                      encargo._write_policy(self.checkout, self.state, policy.grants, kept))
+        changed = {**policy.closed, "opencode-go": policy.closed["opencode"].__class__(
+            "opencode-go", policy.grants[0].decision)}
+        self.assertIn("tocaría el de opencode-go",
+                      encargo._write_policy(self.checkout, self.state, policy.grants, changed))
+        self.assertEqual(self.policy_path.read_bytes(), before)
+        self.assertIsNone(encargo._write_policy(self.checkout, self.state, policy.grants, dict(policy.closed)))
+        self.assertEqual(self.policy_path.read_bytes(), before)
 
     def test_an_unreadable_policy_is_not_rewritten(self):
         self.edit_policy(lambda doc: doc["providers"][0].update(billing="free"))
@@ -539,8 +625,56 @@ class Cerrar(Mac):
         self.assertEqual(answer["causa"], "proveedor-no-permitido")
         self.assertIn("meta está cerrado para encargos. David, 2026-10-15: «cierra muse para encargos».", answer["frase"])
         written = self.policy_path.read_bytes()
-        self.assertEqual(self.cli("cerrar", "meta", "--ref", "P10902", "--cita", "cierra muse para encargos")[0], 0)
-        self.assertEqual(self.policy_path.read_bytes(), written)
+        code, out, err = self.cli("cerrar", "meta", "--ref", "P10902", "--cita", "cierra muse para encargos")
+        self.assertEqual((code, out, self.policy_path.read_bytes() == written), (3, "", True))
+        self.assertIn("meta ya está cerrado y su cierre no se reemplaza", err)
+
+    def test_closing_is_the_emergency_brake_and_writes_even_when_opencode_does_not_answer(self):
+        (self.bin / "version").write_text("")
+        code, out, err = self.cli("cerrar", "meta", "--ref", "P10902", "--cita", "cierra muse para encargos")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out.splitlines()[1].split(), ["-", "meta", "cerrado", "-", "sin-catalogo", "-", "-", "David",
+                                                       "2026-10-15", "P10902"])
+        self.assertIn("opencode no contestó", err)
+        policy = self.policy()
+        self.assertEqual((policy.grant_for("meta"), policy.closed["meta"].decision.ref), (None, "P10902"))
+        (self.bin / "opencode").unlink()
+        self.assertEqual(self.cli("cerrar", "xai", "--ref", "P10902", "--cita", "cierra muse para encargos")[0], 0)
+        self.assertIn("xai", self.policy().closed)
+
+    def test_an_emergency_closure_closes_without_putting_words_in_davids_mouth(self):
+        code, out, err = self.cli("cerrar", "xai", "--por", "Claude en la Mac", "--motivo", "gasto que nadie pidió en xai")
+        self.assertEqual(code, 0, err)
+        today = time.strftime("%Y-%m-%d", time.gmtime())
+        self.assertEqual(out.splitlines()[1].split(), ["-", "xai", "cerrado", "-", "con-sesion", "13", "-", "Claude",
+                                                       "en", "la", "Mac", today, "sin-cotejar"])
+        self.assertIn("sin cita cotejada. No es una decisión de David", err)
+        closure = self.policy().closed["xai"].decision
+        self.assertEqual((closure.by, closure.on, closure.ref, closure.quote),
+                         ("Claude en la Mac", today, "sin-cotejar", "gasto que nadie pidió en xai"))
+        self.assertIsNone(self.policy().grant_for("xai"))
+        answer = json.loads(self.cli("preparar", "--modelo", "xai/grok-4.7")[1])
+        self.assertEqual((answer["causa"], answer["frase"].split(". Permitidos")[0]), (
+            "proveedor-no-permitido",
+            f"xai está cerrado para encargos. Claude en la Mac, {today}: «gasto que nadie pidió en xai»"))
+        listed = self.cli("proveedores")[1].splitlines()
+        self.assertEqual([line.split()[-1] for line in listed if " cerrado " in line],
+                         ["P10845", "P10867", "P9840", "sin-cotejar"])
+
+    def test_an_emergency_closure_names_who_closes_and_why_and_is_never_david(self):
+        before = self.policy_path.read_bytes()
+        for args, piece in ((["--por", "David", "--motivo", "lo dijo ayer"], "--por no puede ser David"),
+                            (["--por", " david ", "--motivo", "lo dijo ayer"], "--por no puede ser David"),
+                            (["--por", "Claude en la Mac"], "--por y --motivo"), (["--motivo", "gasto raro"], "--por"),
+                            (["--por", "Claude", "--motivo", "  "], "quote"), ([], "--ref y --cita"),
+                            (["--ref", "P10902"], "--ref y --cita"),
+                            (["--por", "Claude", "--motivo", "gasto raro", "--ref", "P10902", "--cita",
+                              "cierra muse para encargos"], "--por y --motivo"),
+                            (["--ref", "Z9", "--cita", "cierra xai"], "no es un prompt P####")):
+            with self.subTest(args):
+                code, out, err = self.cli("cerrar", "xai", *args)
+                self.assertEqual((code, out, self.policy_path.read_bytes() == before), (3, "", True))
+                self.assertIn(piece, err)
 
     def test_closing_needs_davids_literal_words_too(self):
         before = self.policy_path.read_bytes()
@@ -562,6 +696,76 @@ class Cerrar(Mac):
         policy = self.policy()
         self.assertEqual(([grant.name for grant in policy.grants][4:], "kimi" in policy.closed),
                          (["muse", "qwen", "deepseek"], True))
+
+
+class ClosedStaysClosed(Mac):
+    """No command reopens a closed provider. Reopening is an edit of the policy file in a PR, with David's
+    new phrase, that also changes the test that pins the closures."""
+
+    def assert_stays_closed(self, *args, pieces=()):
+        before = self.policy_path.read_bytes()
+        try:
+            code, out, err = self.cli(*args)
+        except SystemExit as stopped:
+            code, out, err = stopped.code, "", ""
+        self.assertEqual((out, self.policy_path.read_bytes() == before), ("", True), err)
+        self.assertIn(code, (2, 3))
+        for piece in pieces:
+            self.assertIn(piece, err)
+        self.assertEqual(sorted(self.policy().closed), ["opencode", "opencode-go", "zai"])
+        answer = json.loads(self.cli("preparar", "--modelo", "opencode-go/deepseek-v4-pro")[1])
+        self.assertEqual(answer["causa"], "proveedor-no-permitido")
+
+    def test_the_three_commands_of_the_first_verdict_leave_opencode_go_closed(self):
+        own_words = ["permitir", "opencode-go", "--cobro", "subscription", "--ref", "P30001", "--cita",
+                     "open code go es solamente para main"]
+        self.assert_stays_closed(*own_words, "--reabre")
+        self.assert_stays_closed(*own_words, pieces=["opencode-go está cerrado", "PR"])
+        self.assert_stays_closed("permitir", "opencode-go", "--proveedor", "opencode-go",
+                                 pieces=["opencode-go está cerrado"])
+
+    def test_an_invented_quote_with_a_date_of_the_callers_choosing_reopens_nothing(self):
+        invented = ["permitir", "opencode-go", "--proveedor", "opencode-go", "--cobro", "subscription", "--ref", "Z9",
+                    "--cita", "para este proyecto usa opencode go tambien"]
+        self.assert_stays_closed(*invented, "--fecha", "2027-01-01", "--reabre")
+        self.assert_stays_closed(*invented, "--fecha", "2027-01-01")
+        self.assert_stays_closed(*invented, pieces=["opencode-go está cerrado"])
+
+    def test_closing_again_does_not_replace_the_closure_so_nothing_can_be_reopened_behind_it(self):
+        self.assert_stays_closed("cerrar", "opencode-go", "--ref", "P200", "--cita", "texto antiguo cualquiera",
+                                 pieces=["opencode-go ya está cerrado", "«open code go es solamente para main»"])
+        self.assertEqual(self.policy().closed["opencode-go"].decision.ref, "P10845")
+        after = ["permitir", "opencode-go", "--proveedor", "opencode-go", "--cobro", "subscription", "--ref", "P30010",
+                 "--cita", "pero tengo deepseek por api"]
+        self.assert_stays_closed(*after, "--reabre")
+        self.assert_stays_closed(*after, pieces=["opencode-go está cerrado"])
+        self.assert_stays_closed("cerrar", "zai", "--ref", "P10902", "--cita", "cierra muse para encargos",
+                                 pieces=["zai ya está cerrado"])
+
+    def test_a_true_new_phrase_of_david_does_not_reopen_by_command_either(self):
+        new_phrase = ["--cobro", "subscription", "--ref", "P10903", "--cita", "reabre opencode go para encargos"]
+        self.assert_stays_closed("permitir", "opencode-go", "--proveedor", "opencode-go", *new_phrase, "--reabre")
+        self.assert_stays_closed(
+            "permitir", "opencode-go", "--proveedor", "opencode-go", *new_phrase,
+            pieces=["opencode-go está cerrado por David (2026-10-12, P10845): «open code go es solamente para main»",
+                    "proveedores-permitidos.json", "PR", "la prueba que fija los cierres"])
+        self.assert_stays_closed("permitir", "opencode-go", *new_phrase, pieces=["opencode-go está cerrado"])
+
+    def test_a_grant_of_another_name_cannot_bind_a_closed_id(self):
+        new_phrase = ["--cobro", "subscription", "--ref", "P10903", "--cita", "reabre opencode go para encargos"]
+        self.edit_policy(lambda doc: doc["providers"][5].update(provider=None))
+        for args in (["kimi", "--proveedor", "opencode-go"], ["kimi", "--proveedor", "opencode-go", *new_phrase],
+                     ["go", "--proveedor", "opencode-go", *new_phrase], ["glm", "--proveedor", "zai", *new_phrase],
+                     ["otro", "--proveedor", "opencode", *new_phrase]):
+            with self.subTest(args):
+                self.assert_stays_closed("permitir", *args, pieces=["está cerrado"])
+
+    def test_a_filter_that_names_a_closed_provider_opens_nothing(self):
+        phrase = ["--ref", "P10886", "--cita", "dejar solo los modelos qwen"]
+        self.assert_stays_closed("permitir", "opencode", "--solo", "big-*", *phrase, pieces=["opencode está cerrado"])
+        self.assert_stays_closed("permitir", "opencode-go", "--proveedor", "opencode-go", "--solo", "deepseek*", *phrase,
+                                 pieces=["opencode-go está cerrado"])
+        self.assert_stays_closed("permitir", "qwen", "--solo", "opencode-go/*", *phrase, pieces=["no cubre ninguno"])
 
 
 if __name__ == "__main__":

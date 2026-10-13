@@ -851,9 +851,13 @@ class Decisions(Slot):
         self.r.offer("task-1", b"haz el saludo\n", {"kind": "code", "repository": str(outside), "sha": "a" * 40})
         self.refused("carpeta-no-permitida", f"{outside} está fuera de la carpeta de repos permitida.")
 
+    def test_a_revision_that_is_no_code_or_artifact_is_refused(self):
+        self.r.offer("task-1", b"haz el saludo\n", {"kind": "otra-cosa", "repository": str(self.repo)})
+        self.refused("carpeta-no-permitida", "no es una carpeta de encargo válida.")
+
     def test_a_repository_pathlib_cannot_read_is_refused_and_not_a_crash(self):
         self.r.offer("task-1", b"haz el saludo\n", {"kind": "code", "repository": "/Users/dn/dev/a\0b", "sha": "a" * 40})
-        self.refused("carpeta-no-permitida", "no es una ruta absoluta")
+        self.refused("carpeta-no-permitida", "/Users/dn/dev/a\x00b no es una carpeta de encargo válida.")
 
     def test_without_canary_the_sandbox_tested_route_launches_nothing(self):
         self.start(self.backend, canary=False)
@@ -915,16 +919,23 @@ class Decisions(Slot):
         self.assertEqual(self.held(), ("cancelled", "AbsenceVerified", ""))
 
     def test_a_plan_whose_model_authorize_does_not_permit_is_never_launched(self):
-        """Whoever builds the plan, the launcher asks authorize again before the model reaches `opencode -m`."""
+        """Whoever builds the plan, the launcher asks authorize again before the model reaches `opencode -m`.
+        PermittedModel has no constructor and refuses dataclasses.replace; what is left is to fabricate one on
+        purpose, field by field."""
         planned = self.run.plan
 
         def forged(*args, **kwargs):
             plan = planned(*args, **kwargs)
-            return replace(plan, model=replace(plan.model, model=ModelId("opencode-go", "deepseek-v4-pro")))
+            with self.assertRaises(TypeError):
+                replace(plan.model, model=ModelId("opencode-go", "deepseek-v4-pro"))
+            fabricated = object.__new__(type(plan.model))
+            for name in ("billing", "policy_digest", "cli_version"):
+                object.__setattr__(fabricated, name, getattr(plan.model, name))
+            object.__setattr__(fabricated, "model", ModelId("opencode-go", "deepseek-v4-pro"))
+            return replace(plan, model=fabricated)
 
         self.run.plan = forged
-        with contextlib.suppress(TypeError):
-            self.one_pass()
+        self.assertEqual(self.one_pass()["claimed"], 1)
         self.assertEqual(self.backend.launches, [], "a model of a closed provider reached the launcher")
         self.run.plan = planned
         self.assertEqual(self.one_pass()["claimed"], 1)

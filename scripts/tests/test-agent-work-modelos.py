@@ -7,6 +7,8 @@ below in the same change.
 """
 
 import collections
+import copy
+import dataclasses
 import hashlib
 import json
 from pathlib import Path
@@ -75,7 +77,6 @@ class PolicyFile(Policies):
             ("grok", "xai", "subscription"), ("gpt", "openai", "subscription"), ("muse", "meta", "subscription"),
             ("kimi", "kimi-code-plan-cn", "subscription"), ("qwen", "alibaba-token-plan", "subscription"),
             ("deepseek", "deepseek", "per-token")])
-        self.assertEqual(sorted(policy.closed), ["opencode", "opencode-go", "zai"])
         self.assertEqual([grant.name for grant in policy.grants if grant.models], ["qwen"])
         qwen = policy.grant_for("alibaba-token-plan").models
         self.assertEqual((qwen.include, qwen.exclude, qwen.decision.ref, qwen.decision.on, qwen.decision.quote),
@@ -89,8 +90,19 @@ class PolicyFile(Policies):
             self.assertRegex(decision.on, r"^2026-10-(03|12|13)$")
             self.assertRegex(decision.ref, r"^P\d+$")
             self.assertGreater(len(decision.quote), 20)
-        self.assertEqual(policy.closed["opencode-go"].decision.quote, "open code go es solamente para main")
         self.assertEqual(policy.digest, hashlib.sha256(POLICY.read_bytes()).hexdigest())
+
+    def test_the_closed_providers_are_exactly_these_three_each_with_davids_words(self):
+        """The only way to reopen a closed provider is a PR that edits the policy file with David's new
+        phrase. No command does it. That PR has to change this test too, in plain sight."""
+        closed = ProviderPolicy.load(POLICY).closed
+        self.assertEqual({provider: (closure.decision.by, closure.decision.on, closure.decision.ref,
+                                     closure.decision.quote) for provider, closure in closed.items()}, {
+            "opencode-go": ("David", "2026-10-12", "P10845", "open code go es solamente para main"),
+            "opencode": ("David", "2026-10-12", "P10867", "de opencode solo tengo go"),
+            "zai": ("David", "2026-10-03", "P9840",
+                    "pero open ode debe usar solo zcode sus iption no la suscripcion opencode go ni zen"),
+        })
 
     def test_the_repo_policy_is_already_in_the_format_permitir_writes(self):
         policy = ProviderPolicy.load(POLICY)
@@ -255,9 +267,21 @@ class CatalogPartition(unittest.TestCase):
                 self.assertEqual(authorize(ExactModel(model), self.policy, self.catalog),
                                  ModelOutsideGrant((model,), (qwen,)))
 
-    def test_a_permitted_model_cannot_be_built_outside_authorize(self):
+    def test_a_permitted_model_cannot_be_built_or_rewritten_outside_authorize(self):
+        closed = ModelId("opencode-go", "deepseek-v4-pro")
+        real = authorize(DefaultModel(), self.policy, self.catalog)
         with self.assertRaisesRegex(TypeError, "solo sale de authorize"):
-            PermittedModel(ModelId("opencode-go", "deepseek-v4-pro"), "subscription", "digest", "1.18.35")
+            PermittedModel(closed, "subscription", "digest", "1.18.35")
+        with self.assertRaisesRegex(TypeError, "solo sale de authorize"):
+            PermittedModel(model=closed, billing="subscription", policy_digest="digest", cli_version="1.18.35")
+        with self.assertRaisesRegex(TypeError, "solo sale de authorize"):
+            dataclasses.replace(real, model=closed)
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            real.model = closed
+        self.assertEqual((real.model, real.billing, real.policy_digest, real.cli_version),
+                         (DEFAULT, "subscription", self.policy.digest, "1.18.35"))
+        self.assertEqual(copy.copy(real), authorize(ExactModel(DEFAULT), self.policy, self.catalog))
+        self.assertIn("glm-5.3-flash", repr(real))
 
 
 class Authorize(Policies):
@@ -271,6 +295,13 @@ class Authorize(Policies):
     def test_a_request_without_a_model_runs_the_default_on_the_subscription(self):
         answer = self.ask(DefaultModel())
         self.assertEqual((answer.model, answer.billing), (DEFAULT, "subscription"))
+
+    def test_a_request_of_an_unknown_kind_never_falls_back_to_the_default_model(self):
+        malformed = modelos.pedido("Zai/glm")
+        self.assertEqual(self.ask(malformed), modelos.MalformedModel("Zai/glm"))
+        for request in (None, "zai-coding-plan/glm-5.3", DEFAULT, object()):
+            with self.subTest(request), self.assertRaises(TypeError):
+                self.ask(request)
 
     def test_the_default_model_is_refused_when_its_provider_has_no_grant(self):
         self.assertEqual(self.ask(DefaultModel(), policy=self.only_deepseek()),
@@ -483,6 +514,14 @@ class Explicar(Policies):
         with self.assertRaises(TypeError):
             explicar(DefaultModel())
 
+    def test_words_that_match_nothing_name_the_providers_david_can_ask_for_not_every_model(self):
+        answer = explicar(authorize(ByName("no existe tal"), self.policy, catalog()))
+        self.assertEqual(answer, modelos.Explicacion(
+            "nombre-sin-coincidencia",
+            "Ningún modelo permitido coincide con «no existe tal». Hay modelos permitidos de alibaba-token-plan (6), "
+            "deepseek (2), kimi-code-plan-cn (4), meta (6), openai (24), xai (13), zai-coding-plan (7). "
+            "Permitidos sin sesión todavía: claude.", "no-registrar"))
+
     def test_the_phrases_carry_the_values_david_needs(self):
         self.assertEqual(explicar(modelos.RouteNotCertified("1.18.36", ("1.18.35",))).frase,
                          "Ruta certificada para 1.18.35, la Mac tiene 1.18.36.")
@@ -497,8 +536,14 @@ class Explicar(Policies):
                          "deepseek)). No corre ningún encargo hasta arreglarla.")
         similar = explicar(ModelNotListed(ModelId("zai-coding-plan", "glm-5.3-flahs"), (DEFAULT,)))
         self.assertEqual((similar.accion, similar.candidatos), ("preguntar-a-david", ("zai-coding-plan/glm-5.3-flash",)))
-        self.assertEqual(explicar(modelos.WorkspaceRefused("/tmp/x", "not-a-git-toplevel")).frase,
-                         "/tmp/x no es la raíz de un repo git con un commit.")
+        self.assertEqual({why: explicar(modelos.WorkspaceRefused("/tmp/x", why)).frase for why in (
+            "not-absolute", "outside-root", "not-a-git-toplevel", "missing", "no-commit", "invalid")}, {
+            "not-absolute": "/tmp/x no es una ruta absoluta.",
+            "outside-root": "/tmp/x está fuera de la carpeta de repos permitida.",
+            "not-a-git-toplevel": "/tmp/x no es la raíz de un repo git.",
+            "missing": "/tmp/x no existe.",
+            "no-commit": "/tmp/x es un repo git sin ningún commit.",
+            "invalid": "/tmp/x no es una carpeta de encargo válida."})
 
     def test_an_incident_episode_asks_to_cancel_and_names_what_opencode_left(self):
         events = types.SimpleNamespace(
@@ -566,6 +611,7 @@ class Routes(unittest.TestCase):
 
     def test_todays_coverage_opens_the_run_per_task_route_only_for_a_canary_host(self):
         coverage = json.loads(COVERAGE.read_text())
+        self.assertEqual(coverage["hostAdapterRoute"]["mac-local"]["opencode"]["form"], "run-per-task")
         route = sesion.Route.load(coverage, "mac-local")
         self.assertEqual(route, sesion.Route("mac-local", "opencode", "run-per-task", "sandbox-tested-uncertified",
                                              frozenset({"1.18.35"})))
@@ -574,6 +620,31 @@ class Routes(unittest.TestCase):
                          "La ruta de encargos por opencode todavía no está certificada. La Mac tiene opencode 1.18.35.")
         self.assertIsNone(route.open_for("1.18.35", canary=True))
 
+    def test_the_adopted_session_certificate_does_not_open_the_run_per_task_route_even_for_a_canary(self):
+        """The coverage of before B22 phase 2: B8 had certified mac-local/opencode over an adopted session, and
+        no entry declared the run-per-task route."""
+        coverage = json.loads(COVERAGE.read_text())
+        coverage["hostAdapterCoverage"]["mac-local"]["opencode"] = "certified"
+        del coverage["hostAdapterRoute"]
+        route = sesion.Route.load(coverage, "mac-local")
+        self.assertEqual(route, sesion.Route("mac-local", "opencode", "run-per-task", "absent", frozenset()))
+        for canary in (False, True):
+            self.assertEqual(route.open_for("1.18.35", canary=canary), modelos.RouteNotCertified("1.18.35", ()))
+
+    def test_a_coverage_of_the_wrong_shape_is_an_absent_route_not_a_crash(self):
+        entry = {"form": "run-per-task", "certifiedCliVersions": {"1.18.35": "B22-fase0.md"}}
+        for coverage in ([], "certified", None, 7, {"hostAdapterCoverage": [], "hostAdapterRoute": []},
+                         {"hostAdapterCoverage": {"mac-local": "certified"}, "hostAdapterRoute": {"mac-local": "x"}},
+                         {"hostAdapterCoverage": {"mac-local": {"opencode": "certified"}},
+                          "hostAdapterRoute": {"mac-local": ["opencode"]}},
+                         {"hostAdapterCoverage": {"mac-local": {"opencode": ["certified"]}},
+                          "hostAdapterRoute": {"mac-local": {"opencode": entry}}},
+                         {"hostAdapterCoverage": "certified", "hostAdapterRoute": {"mac-local": {"opencode": entry}}}):
+            with self.subTest(coverage):
+                route = sesion.Route.load(coverage, "mac-local")
+                self.assertEqual(route.status, "absent")
+                self.assertEqual(route.open_for("1.18.35", canary=True).cli_version, "1.18.35")
+
     def test_the_route_reads_its_measured_versions_from_coverage(self):
         coverage = {"hostAdapterCoverage": {"mac-local": {"opencode": "certified"}},
                     "hostAdapterRoute": {"mac-local": {"opencode": {
@@ -581,12 +652,17 @@ class Routes(unittest.TestCase):
         self.assertEqual(sesion.Route.load(coverage, "mac-local"),
                          sesion.Route("mac-local", "opencode", "run-per-task", "certified", frozenset({"1.18.35"})))
         self.assertIsNone(sesion.Route.load(coverage, "mac-local").open_for("1.18.35", canary=False))
-        for broken in ({"form": "adopted-session", "certifiedCliVersions": {"1.18.35": "x"}}, {"form": "run-per-task"},
-                       {"form": "run-per-task", "certifiedCliVersions": ["1.18.35"]}, "certified"):
+        for broken, status in (({"form": "adopted-session", "certifiedCliVersions": {"1.18.35": "x"}}, "absent"),
+                               ({"form": "run-per-task"}, "certified"),
+                               ({"form": "run-per-task", "certifiedCliVersions": ["1.18.35"]}, "certified"),
+                               ({"form": "run-per-task", "certifiedCliVersions": {"1.18.36": "x", 7: "y"}}, "certified"),
+                               ("certified", "absent")):
             with self.subTest(broken):
                 coverage["hostAdapterRoute"]["mac-local"]["opencode"] = broken
-                self.assertEqual(sesion.Route.load(coverage, "mac-local").open_for("1.18.35", canary=False),
-                                 modelos.RouteNotCertified("1.18.35", ()))
+                route = sesion.Route.load(coverage, "mac-local")
+                self.assertEqual(route.status, status)
+                self.assertNotIn("1.18.35", route.certified_cli_versions)
+                self.assertIsInstance(route.open_for("1.18.35", canary=False), modelos.RouteNotCertified)
         self.assertEqual(sesion.Route.load(coverage, "windows-remote").status, "absent")
 
 
@@ -603,9 +679,10 @@ class Plans(Policies):
         self.route = sesion.Route("mac-local", "opencode", "run-per-task", "certified", frozenset({"1.18.35"}))
 
     def plan(self, brief=b"Revisa el commit aaaa\n", *, policy=None, revision=None, route=None, cli="1.18.35",
-             canary=False):
-        assignment = {"target": {"kind": "cli", "hostId": "mac-local", "adapterId": "opencode"},
-                      "inputRevision": revision or {"kind": "code", "repository": str(self.repo), "sha": "a" * 40}}
+             canary=False, assignment=...):
+        if assignment is ...:
+            assignment = {"target": {"kind": "cli", "hostId": "mac-local", "adapterId": "opencode"},
+                          "inputRevision": revision or {"kind": "code", "repository": str(self.repo), "sha": "a" * 40}}
         return sesion.plan_launch(assignment, brief, policy=policy or ProviderPolicy.load(POLICY), catalog=catalog(),
                                   route=route or self.route, cli_version=cli, allowed_root=self.allowed, run=self.run,
                                   record=self.root / "spool/sessions" / self.OPERATION, operation=self.OPERATION,
@@ -670,10 +747,30 @@ class Plans(Policies):
                                 (str(self.allowed / "enlace"), "outside-root"), ("dev/demo", "not-absolute"),
                                 (str(self.allowed / "no-esta"), "missing"), (str(self.allowed / "sin-git"),
                                                                              "not-a-git-toplevel"),
-                                (str(self.allowed), "outside-root"), (None, "not-absolute")):
+                                (str(self.allowed), "outside-root"), (None, "invalid"), (7, "invalid"),
+                                (str(self.repo) + "\0/x", "invalid"), ("", "not-absolute")):
             with self.subTest(repository):
                 answer = self.plan(revision={"kind": "code", "repository": repository, "sha": "a" * 40})
                 self.assertEqual(answer, modelos.WorkspaceRefused(str(repository), why))
+
+    def test_an_assignment_without_a_usable_input_revision_is_refused_not_a_crash(self):
+        target = {"kind": "cli", "hostId": "mac-local", "adapterId": "opencode"}
+        for assignment, path in (({"target": target}, "None"), ({"target": target, "inputRevision": None}, "None"),
+                                 ({"target": target, "inputRevision": [str(self.repo)]}, f"['{self.repo}']"),
+                                 ({"target": target, "inputRevision": str(self.repo)}, str(self.repo)),
+                                 ({"target": target, "inputRevision": {"repository": str(self.repo)}},
+                                  f"{{'repository': '{self.repo}'}}"),
+                                 ({"target": target, "inputRevision": {"kind": "url", "repository": str(self.repo)}},
+                                  f"{{'kind': 'url', 'repository': '{self.repo}'}}"),
+                                 ([], "None"), (None, "None")):
+            with self.subTest(assignment):
+                self.assertEqual(self.plan(assignment=assignment), modelos.WorkspaceRefused(path, "invalid"))
+
+    def test_a_symlink_loop_is_refused_on_every_python(self):
+        (self.allowed / "bucle").symlink_to(self.allowed / "bucle")
+        answer = self.plan(revision={"kind": "code", "repository": str(self.allowed / "bucle" / "x")})
+        self.assertIsInstance(answer, modelos.WorkspaceRefused)
+        self.assertIn(answer.why, ("invalid", "missing"))
 
     def test_a_task_without_repo_works_in_a_new_folder_inside_its_run(self):
         spec = self.plan(revision={"kind": "artifact", "ref": "artifact:aa", "digest": "sha256:aa"})

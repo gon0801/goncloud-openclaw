@@ -23,7 +23,7 @@ from contracts import (HOST_BEAT_FILE, AuthorizedOperation, HostBeat, HostObserv
 from host import (ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, DeliveryDeferred, Host, TmuxTransport, cli_adapter,
                   reject_permission_dialog)
 from modelos import (POLICY_FILE, CatalogStore, CatalogUnavailable, ExactModel, ModelNotListed,
-                     ProviderNotConfigured, ProviderPolicy, WorkspaceRefused, authorize, explicar)
+                     ProviderNotConfigured, ProviderPolicy, authorize, explicar)
 from progress_bridge import transfer_host_projection, transfer_projection
 from resources import BoundaryBusy, dialog_note
 from sesion import (COVERAGE_FILE, GroupBoundaryBackend, LaunchSpec, Route, opencode_argv, opencode_env, plan_launch,
@@ -568,9 +568,6 @@ class RunHost:
             catalog = self.catalog(fresh=True)
         except CatalogUnavailable:
             return route.open_for("sin contestar su versión", canary=False)
-        repository = assignment["inputRevision"].get("repository")
-        if isinstance(repository, str) and "\0" in repository:
-            return WorkspaceRefused(repr(repository), "not-absolute")
 
         def planned(listed):
             return plan_launch(assignment, brief, policy=self.policy, catalog=listed, route=route,
