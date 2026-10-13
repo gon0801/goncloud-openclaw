@@ -148,6 +148,7 @@ n=\$(cat "$SB/ssh-llamadas" 2>/dev/null || echo 0); n=\$((n + 1)); echo \$n > "$
 for a in "\$@"; do ultimo="\$a"; done
 printf '%s\n' "\$ultimo" > "$SB/ssh-comando"
 if [ \$n -le \$(cat "$SB/ssh-fallas" 2>/dev/null || echo 0) ]; then echo "ssh: connect to host: Operation timed out" >&2; exit 255; fi
+if [ -e "$SB/ssh-mudo" ]; then exec sleep 60; fi
 tar -cf - -C "$F" workspace workspace-operaciones workspace-ingenieria
 EOS
 chmod +x "$SB/ssh"
@@ -189,6 +190,19 @@ a1="$(avisos)"; correr env; rc=$?
 [ "$(avisos)" = "$a1" ] || fail "el lock de otra corrida viva disparó un aviso"
 [ "$(cat "$SB/clones/.lock/dueno")" = "$yo" ] || fail "se robó el lock de un proceso vivo"
 rm -rf "$SB/clones/.lock"
+
+# 17. Una copia que conecta y se queda muda no retiene la corrida: cada intento tiene tope.
+touch "$SB/ssh-mudo"; a2="$(avisos)"; t0=$(date +%s)
+RESPALDO_TOPE=1 RESPALDO_INTENTOS=2 por_ssh 0; rc=$?
+rm -f "$SB/ssh-mudo"
+[ "$rc" -eq 4 ] || fail "una copia muda no salió con 4 (rc=$rc)"
+[ $(( $(date +%s) - t0 )) -lt 20 ] || fail "una copia muda retuvo la corrida más de 20 s"
+[ "$(cat "$SB/ssh-llamadas")" = 2 ] || fail "con la copia muda no hizo sus 2 intentos"
+tail -1 "$SB/avisos" | grep -q "tras 2 intento(s): sin respuesta en 1s o copia incompleta" \
+  || fail "el aviso de la copia muda no trae la causa: $(tail -1 "$SB/avisos")"
+[ "$(avisos)" = "$((a2 + 1))" ] || fail "la copia muda no avisó exactamente una vez"
+[ -e "$SB/clones/.lock" ] && fail "el lock quedó tomado tras la copia muda"
+ls "$SB/clones"/.ssh-error.* >/dev/null 2>&1 && fail "quedó un archivo de error de ssh"
 
 # 8
 grep -vE '^[[:space:]]*#' "$S" | grep -nE -- '--force|push -f|\+HEAD:|\+refs/' && fail "el respaldo puede forzar un push"

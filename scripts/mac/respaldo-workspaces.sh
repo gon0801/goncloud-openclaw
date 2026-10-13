@@ -26,6 +26,7 @@ RESPALDO_MAX_MB="${RESPALDO_MAX_MB:-50}"                         # GitHub rechaz
 RESPALDO_RUNTIME="${RESPALDO_RUNTIME:-.openclaw}"
 RESPALDO_INTENTOS="${RESPALDO_INTENTOS:-3}"                     # copias por SSH antes de abortar
 RESPALDO_ESPERA="${RESPALDO_ESPERA:-60}"                        # segundos entre intentos
+RESPALDO_TOPE="${RESPALDO_TOPE:-600}"                           # segundos por intento de copia
 
 # workspace vivo -> repo de respaldo
 PARES="workspace:goncloud-workspace-main workspace-operaciones:goncloud-workspace-operaciones workspace-ingenieria:goncloud-workspace-ingenieria"
@@ -55,7 +56,7 @@ avisar() {
 # otra corrida viva (3) no es una falla del respaldo.
 al_salir() {
   local rc=$?
-  rm -rf "${TMP:-}" "${LOCK_PROPIO:-}" "$RESPALDO_DIR/.ssh-error"
+  rm -rf "${TMP:-}" "${LOCK_PROPIO:-}" "${ERR_SSH:-}"
   case "$rc" in 0|3) ;; *) avisar "$ULTIMO" ;; esac
 }
 trap al_salir EXIT
@@ -85,6 +86,7 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 fi
 identidad $$ > "$LOCK/dueno"
 LOCK_PROPIO="$LOCK"
+ERR_SSH="$RESPALDO_DIR/.ssh-error.$$"
 TMP="$(mktemp -d "$RESPALDO_DIR/.fuente.XXXXXX")"
 
 dirs=""
@@ -105,12 +107,17 @@ if [ "$RESPALDO_FUENTE" = ssh ]; then
   intento=1
   while :; do
     find "$TMP" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    # Cada intento tiene tope: una copia que conecta y se queda muda retendría el lock, y
+    # las corridas siguientes saldrían con 3, que no avisa. `alarm` mata a ssh al vencer.
     # shellcheck disable=SC2086
-    if "${RESPALDO_SSH:-ssh}" -i "$SSH_ID" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 \
-      "$SSH_TARGET" "tar -cf - -C $RESPALDO_RUNTIME$dirs" 2> "$RESPALDO_DIR/.ssh-error" | tar -xf - -C "$TMP"; then
+    if /usr/bin/perl -e 'alarm shift; exec @ARGV or exit 127' "$RESPALDO_TOPE" \
+      "${RESPALDO_SSH:-ssh}" -i "$SSH_ID" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 \
+      -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+      "$SSH_TARGET" "tar -cf - -C $RESPALDO_RUNTIME$dirs" 2> "$ERR_SSH" | tar -xf - -C "$TMP"; then
       break
     fi
-    causa="$(tr '\n' ' ' < "$RESPALDO_DIR/.ssh-error" | cut -c1-160)"
+    causa="$(tr '\n' ' ' < "$ERR_SSH" | cut -c1-160)"
+    [ -n "$causa" ] || causa="sin respuesta en ${RESPALDO_TOPE}s o copia incompleta"
     if [ "$intento" -ge "$RESPALDO_INTENTOS" ]; then
       falla "ABORTO: no se pudo copiar los workspaces por SSH tras $intento intento(s): $causa"; exit 4
     fi
