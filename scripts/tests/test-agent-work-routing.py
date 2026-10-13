@@ -201,7 +201,8 @@ class AgentsRouting(unittest.TestCase):
             "managed_tasks_admit",
             "isolated",
             "agent-work.result.v1",
-            "UserAdopted",
+            "El host lanza un proceso de opencode por encargo y lo cierra él mismo",
+            "Qué modelos se pueden pedir lo contesta `encargo.py preparar`.",
             "delivery-unaccepted",
             "no lo vuelvas a teclear ni a pedir a ciegas",
         ):

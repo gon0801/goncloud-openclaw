@@ -33,9 +33,9 @@ que hizo `submit`. El host da el encargo por entregado solo cuando el CLI
 escribe su aceptación (`agent-work.accept.v1` en `acceptRef`); teclearlo o
 verlo en pantalla no cuenta. Si la aceptación no llega en el plazo, llega una
 incidencia `transport-unavailable` con `delivery-unaccepted`: no lo vuelvas a
-teclear ni a pedir a ciegas; revisa con `managed_tasks_inspect` y decide. La
-sesión adoptada se retira sin matar procesos (`UserAdopted`). Solo los alias
-`certified` de `mac-local` en `coverage.json` corren fuera de un canario.
+teclear ni a pedir a ciegas; revisa con `managed_tasks_inspect` y decide. El
+host lanza un proceso de opencode por encargo y lo cierra él mismo al terminar
+o al cancelar. Qué modelos se pueden pedir lo contesta `encargo.py preparar`.
 
 Pedidos de ingeniería nativa por harnesses de la Mac usan la skill
 `native-harness-orchestration` (Task 9). Con `CORRIDA_NATIVE_ROUTING=off` o
