@@ -656,8 +656,8 @@ class ProgressPublisher:
 
     One call per queued corrida per pass, newest queue first, at most PER_PASS calls. A failed call
     leaves its files queued: the next pass retries it, later failures of the same queue back off to
-    MAX_BACKOFF seconds, and any change to that queue makes it due again. Every model-alias host shares
-    the state dir, so a pass publishes only while it holds the dir's lock; a busy lock skips the pass."""
+    MAX_BACKOFF seconds, and any change to that queue makes it due again. Hosts of one machine share the
+    state dir, so a pass publishes only while it holds the dir's lock; a busy lock skips the pass."""
     PER_PASS = 4
     TIMEOUT_SECONDS = 30
     BACKOFF_BASE_SECONDS = 15
