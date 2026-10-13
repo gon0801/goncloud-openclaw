@@ -192,8 +192,8 @@ def cli_protocol(assignment: dict) -> dict:
             "shown in result with their values unchanged, plus every field named in fill holding what "
             "fill describes. Write no other field.",
             "Keep every helper script and scratch file inside the directory that holds acceptRef, and "
-            "delete nothing outside it. A command that creates, reads or deletes a path in /tmp or anywhere "
-            "else outside workspaceRef and that directory is denied, and the session ends with no result.",
+            "create, read or delete nothing in /tmp or anywhere else outside workspaceRef and that directory: "
+            "the CLI denies those commands.",
         ],
         "accept": {"schema": ACCEPT_SCHEMA, "capability": assignment["capability"],
                    **{field: assignment[field] for field in ACCEPT_BOUND}},

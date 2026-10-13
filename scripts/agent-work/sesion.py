@@ -195,10 +195,11 @@ def plan_launch(assignment: object, brief: bytes, *, policy: ProviderPolicy, cat
     return LaunchSpec(model, workspace, run, record, session_name(operation))
 
 
-SCRATCH_RULE = (" Keep every helper script and scratch file inside the directory that holds acceptRef: a command "
-                "that touches /tmp or any other path outside it and workspaceRef is denied and ends the session.")
-"""Va en el encargo y no solo en la asignación: sin `--auto` un permiso negado termina la sesión, y un
-modelo que deja su script en /tmp lo descubre al borrarlo, con el trabajo hecho y sin resultado."""
+SCRATCH_RULE = (" Keep every helper script and scratch file inside the directory that holds acceptRef, and touch "
+                "nothing in /tmp or any other path outside it and workspaceRef: the CLI denies those commands.")
+"""Va en el encargo y no solo en la asignación, para que el modelo no gaste pasos en comandos que opencode
+va a negar. opencode 1.18.35 negó `rm /tmp/x` y dejó pasar `cat > /tmp/x` y `python3 /tmp/x`: la regla
+cubre las herramientas de archivo y las rutas que reconoce en un comando, no confina el shell."""
 
 
 def opencode_argv(spec: LaunchSpec, opencode_bin: Path, *, task_id: str) -> tuple[str, ...]:
@@ -220,8 +221,12 @@ def opencode_env(spec: LaunchSpec) -> dict[str, str]:
     carpeta externa permitida es la de esta corrida. `enabled_providers` y `small_model` cierran lo que el
     `-m` no cubre: opencode elige por su cuenta el modelo de títulos y el de sus subagentes (M3).
 
-    TMPDIR apunta dentro de la corrida: un `rm /tmp/x` es un permiso negado, y un permiso negado termina la
-    sesión sin resultado (canario A del 2026-10-13, tarea bc3fd7b9)."""
+    `external_directory` lleva dos reglas y su orden importa: opencode aplica la última que coincide. Lo de
+    fuera va con "deny" explícito y no con el "ask" por omisión: medido en 1.18.35 (B22-canarios.md, M7),
+    un "ask" sin nadie que conteste termina la sesión, y un "deny" le devuelve el error al modelo, que
+    sigue. Así murieron dos encargos con el trabajo hecho: `rm /tmp/x` (tarea bc3fd7b9) y la lectura de un
+    archivo que nombra el AGENTS.md global de opencode (tarea 730557f4). TMPDIR apunta dentro de la corrida
+    para que el modelo tenga dónde dejar sus archivos temporales."""
     model = spec.model.model
     return {
         "PWD": str(spec.workspace.root),
@@ -229,7 +234,7 @@ def opencode_env(spec: LaunchSpec) -> dict[str, str]:
         "OPENCODE_DISABLE_AUTOUPDATE": "1",
         "AGENT_WORK_MANAGED": "1",
         "OPENCODE_CONFIG_CONTENT": json.dumps({
-            "permission": {"external_directory": {f"{spec.run.path}/**": "allow"}},
+            "permission": {"external_directory": {"*": "deny", f"{spec.run.path}/**": "allow"}},
             "enabled_providers": [model.provider],
             "small_model": str(model),
         }, separators=(",", ":")),
@@ -258,6 +263,7 @@ def launch_script(spec: LaunchSpec, argv: tuple[str, ...], env: dict[str, str], 
 
 
 REJECTED_TOOL_CALL = "The user rejected permission to use this specific tool call."
+DENIED_BY_RULE = "The user has specified a rule which prevents you from using this specific tool call."
 DENIED_LINE = re.compile(r"permission requested: (\S+) \((.*)\); auto-rejecting")
 LOG_FIELD = re.compile(r'([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)')
 COLOUR = re.compile(r"\x1b\[[0-9;]*m")
@@ -267,10 +273,12 @@ SESSION_HEAD_LINES = 400
 
 @dataclass(frozen=True)
 class PermissionDenied:
-    """Un permiso que opencode negó solo. Sale de la línea de stderr
+    """Un permiso que opencode negó. Sale de stderr, de una de dos líneas:
         permission requested: <permission> (<pattern>); auto-rejecting
-    Si el flujo trae un `tool_use` rechazado y stderr no trae la línea, `permission` es
-    "tool:<herramienta>" y `pattern` queda vacío."""
+        … message=evaluated permission=<permission> pattern=<pattern> … action.action=deny
+    La primera es un "ask" sin nadie que conteste, y termina la sesión. La segunda es una regla "deny": el
+    modelo recibe el error y sigue. Si el flujo trae un `tool_use` negado y stderr no trae ninguna,
+    `permission` es "tool:<herramienta>" y `pattern` queda vacío."""
     permission: str
     pattern: str
 
@@ -346,7 +354,8 @@ def read_events(record: Path) -> RunEvents | None:
                     first_at = stamp / 1000
                 part = event.get("part") if isinstance(event.get("part"), dict) else {}
                 state = part.get("state") if isinstance(part.get("state"), dict) else {}
-                if event.get("type") == "tool_use" and state.get("error") == REJECTED_TOOL_CALL:
+                if event.get("type") == "tool_use" and str(state.get("error")).startswith(
+                        (REJECTED_TOOL_CALL, DENIED_BY_RULE)):
                     rejected.append(PermissionDenied(f"tool:{part.get('tool')}", ""))
                 failure = event.get("error") if event.get("type") == "error" else None
                 if isinstance(failure, dict):
@@ -360,6 +369,9 @@ def read_events(record: Path) -> RunEvents | None:
                     denied.append(PermissionDenied(asked[1], asked[2]))
                     continue
                 fields = _log_fields(line)
+                if fields.get("message") == "evaluated" and fields.get("action.action") == "deny":
+                    denied.append(PermissionDenied(fields.get("permission", ""), fields.get("pattern", "")))
+                    continue
                 opened = opened or _created_in(fields)
                 if fields.get("message") == "stream" and fields.get("providerID"):
                     providers.append(fields["providerID"])

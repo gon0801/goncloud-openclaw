@@ -210,9 +210,8 @@ class HostReceipts(unittest.TestCase):
         # Live canary A 2026-10-13: glm left a helper script in /tmp and `rm /tmp/…` ended its session.
         self.assertEqual(protocol["steps"][3],
                          "Keep every helper script and scratch file inside the directory that holds acceptRef, and "
-                         "delete nothing outside it. A command that creates, reads or deletes a path in /tmp or "
-                         "anywhere else outside workspaceRef and that directory is denied, and the session ends "
-                         "with no result.")
+                         "create, read or delete nothing in /tmp or anywhere else outside workspaceRef and that "
+                         "directory: the CLI denies those commands.")
         self.assertEqual(len(protocol["steps"]), 4)
         Path(assignment["acceptRef"]).write_text(json.dumps(protocol["accept"]))
         Path(assignment["resultRef"]).write_text(json.dumps({

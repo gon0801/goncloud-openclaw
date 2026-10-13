@@ -40,7 +40,7 @@ from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, Cat
                      PermittedModel, PolicyUnreadable, ProviderClosure, ProviderGrant, ProviderId,
                      ProviderNotConfigured, ProviderPolicy, SlotBlocked, UNVERIFIED_REF, WorkspaceRefused, authorize,
                      explicar, pedido, policy_document)
-from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, Route, Workspace,
+from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_SCRATCH, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, Route, Workspace,
                     read_events)
 
 HOST_ID = "mac-local"
@@ -196,6 +196,7 @@ def preparar(repo: Path | None, modelo: str | None, *, state_root: Path, checkou
 
 
 _SALIDAS = {
+    EXIT_NO_SCRATCH: " El host no pudo crear la carpeta temporal del encargo.",
     EXIT_NO_WORKSPACE: " El host no pudo entrar a la carpeta del encargo.",
     EXIT_OUTSIDE_GROUP: " El proceso no quedó en el grupo del slot y el host no lanzó opencode.",
 }
