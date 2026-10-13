@@ -95,6 +95,16 @@ function managedTaskRows() {
   };
 }
 
+// What each host told R about the process of a task, as R keeps it.
+function hostClosures() {
+  return stateDb.openOpenClawStateDatabase().db.prepare(
+    "SELECT task_id, generation, host_id, instance_id, state, reason, evidence_digest FROM managed_task_host_closures ORDER BY task_id, generation",
+  ).all().map((row) => ({
+    taskId: row.task_id, generation: row.generation, hostId: row.host_id, instanceId: row.instance_id,
+    state: row.state, reason: row.reason, evidenceDigest: row.evidence_digest,
+  }));
+}
+
 // The correction keeps the reviewed revision and target and asks for a ready.v1 fix.
 function correctionDecision(taskId, receipt) {
   const row = stateDb.openOpenClawStateDatabase().db.prepare(
@@ -335,6 +345,7 @@ const operations = {
   },
   sessions: async () => sessions.listSessionEntryKeysReadOnly({ agentId: requesterAgentId, storePath }),
   tasks: async () => managedTaskRows(),
+  closures: async () => hostClosures(),
   stop: async () => ({ stopped: true }),
 };
 const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
