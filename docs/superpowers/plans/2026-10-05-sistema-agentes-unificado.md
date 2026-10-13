@@ -44,6 +44,16 @@ son decisiones explícitas de David, con fecha y registro.
 - 2026-10-13: "1. sí solo SUA-00 2. claude y glm". Autoriza SUA-00 y nada más. Lo
   implementa Claude y lo revisa GLM. El orden de SUA-01 en adelante se decide con el
   inventario de SUA-00 en la mano.
+<!-- corr: D13 -->
+- 2026-10-13, después del inventario: "1. si 2. es en gon pc 3, se wuita 4. se quita".
+  Contesta las cuatro preguntas que dejó SUA-00. Uno: autoriza las mediciones vivas
+  sobre el gateway; se corrieron ese día y están en
+  `docs/evidence/sistema-agentes-unificado/SUA-00-mediciones.md`. Dos: Hermes corre
+  en la PC de Gon (`gon-pc` en la red privada, Windows). Tres: la ruta de corrida
+  (`scripts/mac/corrida.sh`, `corrida/`, `corrida_worker/`, `workers.v1.json`) se
+  retira; no se migra a SUA. Cuatro: la ruta de sesión adoptada de encargos se
+  borra con sus pruebas. Los dos retiros van en PR propios. Las marcas
+  `<!-- corr: D13 -->` de este plan señalan cada lugar que esas respuestas cambian.
 - 2026-10-12: las rondas siguen la regla 4 de quality-kit, con tope de 5 rondas por
   implementador y relevo a otro modelo con otras 5. La propuesta de cuatro ciclos
   queda inactiva.
@@ -62,7 +72,7 @@ no sirven.
 | G | origin/main `c11d74ed5a0b239ed4bd61c4d8a20c1f76dc2dda` (PR #285) | Encargos B0–B19 y B22 mergeados. Host de la Mac (`scripts/agent-work/`): desde B22 un solo host lanza un `opencode run -m <modelo>` por encargo (`lanzar-encargos.sh`, `sesion.py`), el modelo viaja en la cabecera del brief (`brief.py --model`) y `proveedores-permitidos.json` dice qué proveedores se pueden pedir. La ruta por alias y `lanzar-host.sh` ya no existen. Corte `cutover_live.py` (`agent-work-cutover.v2`), publicación propia del avance al tablero (B16) y `--close-only` (B14). El diseño se escribió en `~/dev/wt/flota-poteto` sobre `e5cae2d`, cabeza del PR #247, que se cerró sin entrar a main. |
 | R | `/Users/dn/dev/openclaw-agent-work-integration`, `4acb881e015a` | Instalado en la Mac Mini del gateway el 2026-10-12. Sobre `605aef7` trae B18-R (`c928144`, residuales de B11) y un arreglo: un turno directo de Telegram ya admite una tarea (`managed-task.turn.ts`). `managedTasks` en vivo con `requesters ["main"]`, host `mac-local` y `adapters ["opencode"]`. B22 no cambió R. |
 | O | `/Users/dn/dev/goncloud-Orbit`, `d83bb28902e97949fea7b3fabc5fed6203d936b1` (checkout local `master`) | Receta de deploy existente; automatización pendiente. Se vuelve a leer `origin/master` antes de SUA-08. |
-| H | Instalación, repo, plataforma y versión pendientes de inventario | No se inventan flags ni se usa OpenClaw como proxy. |
+| H | Corre en `gon-pc` (Windows), según David el 2026-10-13 <!-- corr: D13 -->. Instalación, repo y versión pendientes de inventario | No se inventan flags ni se usa OpenClaw como proxy. |
 
 Contacto con lo que dejó encargos:
 - Las rutas certificadas de SUA-03 y SUA-04 parten de `coverage.json` de G. Hoy
@@ -243,6 +253,16 @@ de `src/logging/redact.ts`).
 de metas que fije SUA-00 (`SessionGoal` o `src/agents/goals/`) <!-- corr: C4 -->; `scripts/mac/corrida_worker/{reconcile,task_handoffs,state}.py`,
 entradas `corrida.sh` y skill `native-harness-orchestration` como consumidores.
 
+<!-- corr: D13 -->
+La ruta de corrida se retira (David, 2026-10-13). `corrida_worker/{reconcile,task_handoffs,state}.py`,
+`corrida.sh` y la skill `native-harness-orchestration` dejan de ser consumidores de
+este bloque. La última frase del paso 5, la de reemplazar el decisor legacy por
+adaptadores de entrada, queda sin objeto: ese decisor se borra y no se envuelve. El verbo con que se despierta al controlador se elige con las
+mediciones del 2026-10-13 (`SUA-00-mediciones.md`, "Qué deciden estas mediciones"):
+un `system event` a `main` espera detrás de cualquier turno de `main` en vuelo, y
+un `agent --message` a una sesión distinta de la ocupada no esperó en la única
+muestra que se tomó.
+
 <!-- corr: C3.2 -->
 Canal de avisos y excepciones: Telegram vía OpenClaw, el mismo destino que los
 crons actuales. Se lee de la configuración, nunca se pega en el repo. Aquí se fija
@@ -272,6 +292,16 @@ ritual; crear repo o enviar mail sin autoridad sí queda detenido.
 **Dueño:** G/R. **Archivos:** `scripts/mac/workers.v1.json`,
 `corrida_worker/{registry,selector}.py`, `scripts/mac/corrida/lib.sh`, adaptadores
 nativos/CLI, configuración efectiva de perfiles y manifiestos administrados.
+
+<!-- corr: D13 -->
+La ruta de corrida se retira (David, 2026-10-13). `workers.v1.json`,
+`corrida_worker/{registry,selector}.py`, `corrida/lib.sh` y los adaptadores que
+abren una CLI en tmux dejan de existir, y este bloque no los migra. De las seis
+rutas del paso 2, "inicio" y "resume" de una CLI en tmux eran de esa ruta. La
+reproducción de argv del paso 5 era sobre `_check_argv_element` y `worker_argv`,
+que se van con ella. La única ruta por CLI que queda es un proceso de opencode por
+encargo. Qué queda de cada paso se decide al abrir este bloque, con el inventario
+al día.
 
 1. Materializar contexto de poteto canónico, perfil, skills y evidencia por tarea.
    Preservar memoria y archivos del usuario. Versionar contenido y adaptación.
@@ -354,6 +384,12 @@ activa bytes no acreditados. Revocación permanece tras reversa.
 verificadores de cobertura/corpus, hooks, recetas de repos y reglas administradas.
 Nuevos: política de calidad versionada y catálogo de efectos por repo.
 
+<!-- corr: D13 -->
+`corrida_worker/gates.py` se va con la ruta de corrida (David, 2026-10-13). Las
+reglas `mismo-revisor` y `bloqueante-repetido` desaparecen con él y no hay que
+retirarlas aparte. La política de rondas como datos se escribe nueva, no se migra
+de ese archivo.
+
 1. Implementar revisión independiente, resultados tipados, cobertura completa del
    diff y escritura restringida al resultado. No recortar silenciosamente el diff.
    <!-- corr: K9 -->
@@ -428,6 +464,11 @@ secretos/XSS sintéticos. Sin OpenGrokBot instalado. Probar fallos de envío sin
 
 **Dueño:** integración local H. **Archivos:** se fijan con el inventario real en el
 primer paso; contrato objetivo y fixtures son los de SUA-00, no APIs inventadas.
+
+<!-- corr: D13 -->
+Hermes corre en la PC de Gon (David, 2026-10-13): `gon-pc` en la red privada,
+Windows. El 2026-10-13 a las 15:05 UTC esa máquina estaba apagada o fuera de la
+red, así que la versión y las interfaces siguen `unknown`. El paso 1 se hace ahí.
 
 1. Identificar instalación, plataforma, entradas, store, scheduler, identidad,
    autoridad, procesos y transporte. Registrar cada interfaz soportada y su versión.
@@ -538,6 +579,9 @@ paridad o cierre total usando sólo el recibo de una computadora.
    cambios deliberados de política; una obligación omitida deja el programa abierto.
 2. Confirmar cero consumidores de autoridades, wrappers y copias retiradas. Eliminar
    sólo los residuales ya migrados; conservar evidencia histórica y cron de negocio.
+   <!-- corr: D13 -->
+   La ruta de corrida y la sesión adoptada de encargos no esperan a este bloque:
+   David decidió retirarlas el 2026-10-13 y salen antes, en PR propios.
 3. Publicar un único cierre del programa con enlaces a recibos. No repetir baterías
    válidas para producir otra marca verde. Registrar mejoras observadas frente al
    baseline y lo que no mejoró; no prometer ahorro sin medición.

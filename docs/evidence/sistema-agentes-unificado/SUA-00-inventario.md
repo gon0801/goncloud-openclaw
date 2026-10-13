@@ -31,8 +31,9 @@ Vivas y probadas con un pedido real:
    Es la única ruta certificada en `coverage.json`.
 4. **Incidencias y cancelación del host.** Si el encargo falla o lo cancelas, el
    host se lo dice a R y R te lo dice a ti. Probada en los canarios.
-5. **Cron vigía.** Un loop de claw con vigía despierta cada 5 minutos y gasta
-   16 llamadas al proveedor cada 30 minutos. Solo queda `bids-02-vigia`.
+5. **Cron vigía.** Un loop de claw con vigía despierta cada 5 minutos. El 11 de
+   octubre gastaba 16 llamadas al proveedor cada 30 minutos; el 13 de octubre,
+   98 en 45 minutos. Solo queda `bids-02-vigia`.
 
 Vivas en el código pero sin prueba en vivo en este bloque:
 
@@ -62,6 +63,22 @@ de modelo, `lanzar-host.sh`, y el latido como LaunchAgent.
 - R no tiene fan-in, hijos iniciales sin resultado padre, ni pausa de tareas.
   `SessionGoal` no sirve de base. SUA-01 construye la raíz junto a
   `managedTasks`.
+
+## Después del inventario: decisiones y mediciones del 2026-10-13
+
+El inventario de arriba y las tablas de abajo son la foto de SUA-00. Ese mismo
+día, David contestó las cuatro preguntas que el inventario dejó abiertas: "1. si
+2. es en gon pc 3, se wuita 4. se quita".
+
+| Pregunta | Respuesta | Qué cambia |
+|---|---|---|
+| ¿Se corren las mediciones vivas? | Sí | Corridas el 2026-10-13. Resultados en [SUA-00-mediciones](SUA-00-mediciones.md). El hueco "no hay medición del despertar por evento" queda cerrado |
+| ¿Dónde corre Hermes? | En la PC de Gon | `gon-pc` en la red privada, Windows. A las 15:05 UTC del 2026-10-13 estaba fuera de la red; versión e interfaces siguen `unknown` |
+| ¿La ruta de corrida se migra o se retira? | Se retira | Las filas de "Rutas de corrida" pasan a ser historia cuando entre el PR del retiro. SUA-02, SUA-03 y SUA-05 pierden los archivos que tomaban de ella (marcas `corr: D13` del plan) |
+| ¿La sesión adoptada se borra o se guarda? | Se borra | La fila "Sesión adoptada de opencode" y las piezas sin punto de entrada salen del repo en su propio PR |
+
+La lista de crons vivos (M-09) confirma la fila "Cron vigía": hay 30 crons y un
+solo vigía, `bids-02-vigia`.
 
 ## Cómo leer las tablas
 
@@ -147,10 +164,10 @@ esa ruta.
 
 | Ruta | Versión y ubicación | Dueño | Autoridad | Resultado y recibo | Fuente | Instalado | Aceptado en vivo |
 |---|---|---|---|---|---|---|---|
-| Hook Stop de Claude Code | `scripts/mac/claude-stop-openclaw-event.sh` | G, registro en la Mac | Exige `OPENCLAW_WATCH=1` y se calla con `AGENT_WORK_MANAGED=1` (`:36-44`) | `openclaw system event --mode now --session-key agent:main:vigia-mac` o `corrida.sh avisos emitir` (`:135-149`); sin recibo, salida a `/dev/null` | `passed`: `test-tmux-activity-watch.sh`, `test-u3a-19-3.sh` | `failed`: registrado en `~/.claude/settings.json:122`, pero la copia de `~/bin` no trae el bloque `AGENT_WORK_MANAGED` (5 líneas de diferencia) | `unknown`: medición M-01 |
+| Hook Stop de Claude Code | `scripts/mac/claude-stop-openclaw-event.sh` | G, registro en la Mac | Exige `OPENCLAW_WATCH=1` y se calla con `AGENT_WORK_MANAGED=1` (`:36-44`) | `openclaw system event --mode now --session-key agent:main:vigia-mac` o `corrida.sh avisos emitir` (`:135-149`); sin recibo, salida a `/dev/null` | `passed`: `test-tmux-activity-watch.sh`, `test-u3a-19-3.sh` | `failed`: registrado en `~/.claude/settings.json:122`, pero la copia de `~/bin` no trae el bloque `AGENT_WORK_MANAGED` (5 líneas de diferencia) | `unknown`: sin recibo de un despertar lanzado por este hook. M-01 midió el mismo verbo (`system event --mode now`) lanzado a mano |
 | Vigilante tmux (`tmux-activity-watch.sh`) | `scripts/mac/tmux-activity-watch.sh`; LaunchAgent `ai.goncloud.tmux-activity-watch` | G | Vigila `OPENCLAW_WATCH=1`, excluye `AGENT_WORK_MANAGED=1` (`:200-205`) | `system event` por quietud de 900 s, diálogo o cierre; lanza `corrida.sh latido` cada 300 s (`:104-106`) | `passed`: `test-tmux-activity-watch.sh` | `failed`: plist en disco, no cargado (`launchctl print`: Could not find service); copia de `~/bin` con 21 líneas de diferencia | `failed`: no corre. Sin él nadie lanza el latido desde esta Mac |
 | Latido de corrida (`corrida.sh latido`) | `scripts/mac/corrida/latido.sh`; LaunchAgent `ai.goncloud.corrida-latido` | G | n/a | `progress-events.py publish-all`, `system event` (`:220`, `:347`) | `passed`: `test-corrida-latido.sh` | `failed` a propósito: no cargado desde el 2026-09-27 y tiene que seguir así (`T12-runbook.md:290`) | `failed` a propósito |
-| Cron vigía de un loop (`<loop>-vigia`, isolated, cada 5 min) | Gateway en la Mini; recreador `prompt-claw` §7 | gateway | Un cron isolated no puede ser solicitante de `managedTasks` (`managed-task.turn.ts:42-44`) | Turno con modelo cada 5 min | `passed`: foto de 11 crons vigía en `coverage.json.modelWakes` del 2026-10-07; `test_every_live_cron_is_classified` (`test-agent-work-routing.py:314`) | `unknown`: la foto es vieja. Comando: `openclaw cron list --json` (M-09) | `passed`: solo `bids-02-vigia`, 66 eventos y 16 llamadas al proveedor en 30 min (`deploy-receipt.md`, Contadores) |
+| Cron vigía de un loop (`<loop>-vigia`, isolated, cada 5 min) | Gateway en la Mini; recreador `prompt-claw` §7 | gateway | Un cron isolated no puede ser solicitante de `managedTasks` (`managed-task.turn.ts:42-44`) | Turno con modelo cada 5 min | `passed`: foto de 11 crons vigía en `coverage.json.modelWakes` del 2026-10-07; `test_every_live_cron_is_classified` (`test-agent-work-routing.py:314`) | `passed`: `openclaw cron list --json` del 2026-10-13 da 30 crons y un solo vigía, `bids-02-vigia` (M-09). `coverage.json.modelWakes` sigue con la foto vieja | `passed`: solo `bids-02-vigia`. El 2026-10-11, 66 eventos de sesión y 16 llamadas al proveedor en 30 min (`deploy-receipt.md`, Contadores). El 2026-10-13, 98 llamadas al proveedor y 5 709 579 tokens en 45 min (`SUA-00-mediciones.md`, "El vigía de bids, medido") |
 | Crons de negocio | Gateway | gateway | `scheduledToolPolicy` del servidor | Turnos propios | `passed`: 27 `out-of-perimeter` en `coverage.json` | `passed`: 30 habilitados el 2026-10-11 | `passed`: 30 habilitados, 0 corriendo (`deploy-receipt.md`, Checklist posterior) |
 
 ## Orbit (O) y Hermes (H)
@@ -158,7 +175,7 @@ esa ruta.
 | Código | Base | Receta o instalación | Fuente | Instalado | Aceptado en vivo |
 |---|---|---|---|---|---|
 | O | `d83bb28902e97949fea7b3fabc5fed6203d936b1`, checkout local `master`, sin fetch en este bloque | `docs/DEPLOY.md` de `goncloud-Orbit`: receta manual con ssh y docker, rebuild con `--no-deps`, salud en 8010 (plan, SUA-08) | `unknown`: se relee `origin/master` en SUA-08 | `unknown`: no se leyó el servidor | `unknown`: sin recibo versionado de un deploy |
-| H | `unknown` | En esta Mac no hay runtime de Hermes: `~/.hermes` no existe, `which hermes` vacío, `pip3 show hermes-agent` no lo encuentra, `brew list` no lo lista. Existe `~/dev/goncloud-hermes` (configuración versionada de nueve perfiles) y `~/.hermes-ss` (ayudante de capturas para claw, no es el runtime). En G, `hermes` es un valor de vigía de corrida (`abrir.sh:22`, `latido.sh:228-230`) | `unknown` | `unknown`: la instalación no está en esta Mac. Lo contesta David: en qué máquina corre, con qué versión | `unknown`: SUA-07 paso 1 |
+| H | `unknown` | En esta Mac no hay runtime de Hermes: `~/.hermes` no existe, `which hermes` vacío, `pip3 show hermes-agent` no lo encuentra, `brew list` no lo lista. Existe `~/dev/goncloud-hermes` (configuración versionada de nueve perfiles) y `~/.hermes-ss` (ayudante de capturas para claw, no es el runtime). En G, `hermes` es un valor de vigía de corrida (`abrir.sh:22`, `latido.sh:228-230`) | `unknown` | `unknown`: corre en `gon-pc` (Windows), según David el 2026-10-13. Esa máquina estaba fuera de la red al medir; falta la versión | `unknown`: SUA-07 paso 1 |
 
 ## Consumidores de quality-kit en G
 

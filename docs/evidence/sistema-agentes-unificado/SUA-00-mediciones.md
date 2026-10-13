@@ -1,19 +1,35 @@
-# SUA-00, mediciones: lo que ya está medido, lo que falta y el baseline
+# SUA-00, mediciones: lo que se midió y el baseline
 
 Fecha: 2026-10-13. Bloque SUA-00, pasos 3 y 4 del
 [plan](../../superpowers/plans/2026-10-05-sistema-agentes-unificado.md).
-Este documento no corrió nada vivo. Las mediciones pendientes las corre el
-coordinador cuando la autorización las cubra. Cada una está marcada
-`PENDIENTE-MEDIR`. Inventario que acompaña: [SUA-00-inventario](SUA-00-inventario.md).
+El bloque SUA-00 no corrió nada vivo. David autorizó las mediciones vivas el
+2026-10-13 ("1. si") y el coordinador las corrió ese día, de las 14:47 a las
+15:05 UTC. Están en la sección "Mediciones vivas del 2026-10-13". Inventario
+que acompaña: [SUA-00-inventario](SUA-00-inventario.md).
 
 ## Resumen para David
 
-Hay una medición que ya vale y no se repite: en 30 minutos con un encargo
-vivo, nadie gastó inferencia en vigilarlo. Lo que falta medir es cuánto cuesta
-despertar a `main` por evento, cuánto contexto carga una sesión nueva frente a
-`/new`, y qué pasa si llega un evento mientras `main` está ocupado. Esas tres
-cosas deciden qué verbo usa SUA para despertar al controlador. Hasta tenerlas,
-no se elige verbo.
+Las diez mediciones ya están hechas. Lo que salió:
+
+- **Despertar a `main` por evento es rápido y barato si `main` está libre.**
+  El turno empieza 2,3 segundos después del aviso y cuesta unos 20 500 tokens.
+- **Si `main` está ocupado, el aviso por evento espera.** No se pierde, pero
+  no empieza hasta que `main` termina lo que esté haciendo, aunque sea en otra
+  sesión. Esperó 96 segundos detrás del vigía de bids.
+- **Un mensaje directo a otra sesión no esperó.** Empezó en 2,8 segundos con
+  otro turno de `main` en vuelo. Es una sola muestra.
+- **Sesión nueva y `/new` cargan lo mismo:** unos 20 mil tokens de contexto
+  base. No hay ahorro en reutilizar una sesión.
+- **El vigía de bids gasta mucho más que hace dos días.** En 45 minutos hizo
+  98 llamadas al modelo y 5,7 millones de tokens. El 11 de octubre eran 16
+  llamadas cada 30 minutos.
+- **Un cron aislado no puede pedir encargos.** R lo rechaza con el mensaje que
+  dice el código.
+- Nada de esto mandó mensajes a Telegram, y las sesiones de prueba quedaron
+  borradas.
+
+Con esto ya se puede elegir cómo se despierta el controlador de SUA-01 y
+SUA-02. La elección sigue siendo de esos bloques.
 
 ## Ya medido, se reutiliza
 
@@ -79,36 +95,152 @@ Lo que se puede afirmar con recibos. Lo que no, dicho como tal.
 | Dimensión | Baseline | Fuente | Qué no se puede medir |
 |---|---|---|---|
 | Vigilancia de un encargo por CLI | 0 llamadas al proveedor en 30 min | deploy-receipt.md, Contadores | nada |
-| Vigilancia de un loop de claw con vigía | 16 llamadas al proveedor en 30 min, unas 32 por hora, unas 768 por día | deploy-receipt.md, Contadores | tokens por llamada del vigía. `provider.payload.measured` los guarda en la Mini. `PENDIENTE-MEDIR` M-04 |
+| Vigilancia de un loop de claw con vigía | El 2026-10-11: 16 llamadas al proveedor en 30 min. El 2026-10-13: 98 llamadas y 5 709 579 tokens en 45 min (9 corridas de `bids-02-vigia`) | deploy-receipt.md, Contadores; M-04 de este documento | por qué subió entre las dos fechas. No se leyó el loop de bids |
 | Latencia pedido → resultado cerrado, ruta por CLI | 64,8 s para un encargo de un archivo | B22-canarios.md | latencia de un encargo real de ingeniería. Ningún loop real corre por la ruta |
-| Latencia pedido → resultado, ruta nativa | `unknown` | n/a | `subagent_runs` guarda árbol y tiempos, no se extrajo la duración en T11. `PENDIENTE-MEDIR` M-05 |
+| Latencia pedido → resultado, ruta nativa | mediana 83,4 s, p95 1 570,3 s, 902 corridas de subagente | M-05 de este documento | la latencia de un encargo nativo (`managed_tasks_submit` con destino agente): no hay ninguno |
 | Coste en dinero | `unknown` | n/a | todos los proveedores de la ruta por CLI cobran por suscripción salvo deepseek (`proveedores-permitidos.json`, `billing`). No hay tarifa por token que multiplicar |
 | Rondas de corrección por bloque | 1 ronda en 62 de 81 veredictos | decisiones-para-david.md | el coste en tokens de una ronda. No se midió |
-| Despertar por evento | `unknown` | n/a | `PENDIENTE-MEDIR` M-01 a M-03 |
+| Despertar por evento, `main` libre | 2,28 s hasta el inicio del turno; 20 502 tokens | M-01 de este documento | nada |
+| Despertar por evento, `main` ocupado | espera hasta que termina el turno en vuelo: 96,1 s detrás del vigía | M-02 de este documento | la espera máxima. Depende de lo que dure el turno en vuelo |
 
-## Pendiente de medir
+## Mediciones vivas del 2026-10-13
 
-Cada fila tiene un comando de solo lectura o sobre una sesión de ensayo propia,
-el número que sale y la decisión que depende de él. Nada de esto se corre desde
-G ni desde este bloque. Las sesiones de ensayo se llaman
-`agent:main:sua-ensayo-<fecha>-<n>` y se borran al terminar (M-08).
+Autorización: David, 2026-10-13, "1. si" a la pregunta de si se corrían las
+mediciones sobre el gateway. Las corrió el coordinador desde la MacBook, de las
+14:47 a las 15:05 UTC.
 
-| ID | Pregunta | Comando o procedimiento | Número que sale | Decisión que depende | Estado |
-|---|---|---|---|---|---|
-| M-01 | Latencia de un despertar por evento con el gateway ocioso | Con ningún turno de `main` en vuelo: `openclaw system event --mode now --timeout 15000 --session-key agent:main:sua-ensayo-<f>-1 --text "ensayo SUA-00 M-01: contesta NO_REPLY"`. Medir desde la emisión hasta el primer evento de la sesión en la base del agente | segundos hasta el inicio del turno, y tokens de ese turno | Verbo de despertar del controlador: `system event`, `agent --message` o cron con sesión durable | PENDIENTE-MEDIR |
-| M-02 | Qué pasa con un evento si `main` está ocupado | Mandar M-01 mientras `bids-02-vigia` tiene un turno en vuelo (verlo con `openclaw cron runs`). Comparar: ¿se encola, se pierde, o abre otro turno? | 0 o 1 turno adicional; tiempo de espera | Si el controlador necesita sesión propia distinta de la de `main` | PENDIENTE-MEDIR |
-| M-03 | Contexto base de una sesión nueva frente a `/new` | Un turno vacío en `agent:main:sua-ensayo-<f>-2` (sesión nueva) y otro en una sesión existente después de `/new`. Leer tokens de entrada de `provider.payload.measured` de cada uno | tokens de entrada de cada turno | Si cada reconciliación abre sesión propia o reutiliza una con `/new` | PENDIENTE-MEDIR |
-| M-04 | Tokens de un despertar vacío | Un turno que solo corre `managed_tasks_inspect` sobre una tarea cerrada y contesta `NO_REPLY` | tokens de entrada y salida | Cadencia del latido sin modelo frente a con modelo; cuánto cuesta cada vigía de 5 min | PENDIENTE-MEDIR |
-| M-05 | Latencia pedido → resultado por ruta nativa | Consulta de solo lectura sobre una copia de la Mini: `subagent_runs` con `created_at` y fin, mediana y p95 | segundos, mediana y p95 | Baseline nativo frente a los 64,8 s de la ruta por CLI | PENDIENTE-MEDIR |
-| M-06 | `NO_REPLY` y Telegram | Después de M-01: ¿la sesión de ensayo mandó algo a Telegram? Leer la base de la sesión, no el teléfono | 0 o más mensajes salientes | Si el aviso consolidado necesita filtro propio | PENDIENTE-MEDIR |
-| M-07 | Aislamiento del solicitante | Confirmar en vivo lo que dice `managed-task.turn.ts:42-44`: un cron isolated que llame `managed_tasks_submit` recibe "Managed task requires a durable requester session". Usar un cron de ensayo propio y borrarlo | 1 rechazo literal | Qué sesión usa el controlador: nunca un cron isolated | PENDIENTE-MEDIR |
-| M-08 | Borrado remoto de sesiones de ensayo | Desde la Mac: `openclaw sessions delete --session-key agent:main:sua-ensayo-<f>-<n>` por cada una. Memoria del proyecto: desde la Mac el delete va sin `--agent` | 0 sesiones `sua-ensayo-*` al final | Higiene; sin esto las sesiones de ensayo engordan la memoria del gateway | PENDIENTE-MEDIR |
-| M-09 | Crons vivos hoy | `openclaw cron list --json` | lista de crons y cuáles son `*-vigia` | Alinear `coverage.json.modelWakes` (foto del 2026-10-07) y la lista de entradas que SUA-09O corta | PENDIENTE-MEDIR |
-| M-10 | Memoria del gateway antes y después de los ensayos | `openclaw health --json` y la métrica de heap que da el gateway, antes de M-01 y después de M-08 | MB de heap | Si los ensayos dejan basura; memoria del proyecto: el aviso salta al 50 % del heap | PENDIENTE-MEDIR |
+Entorno medido: gateway OpenClaw 2026.9.7 en la Mini (`gon@100.73.187.5`, pid
+49116, R `4acb881`). CLI de la Mac: `~/.openclaw-r/openclaw`, 2026.9.7
+(`4b9785c`). Modelo de `main` en todos los turnos: `opencode-go-resp/muse-spark-1.3-contributor`.
 
-Regla para elegir el verbo: se elige con M-01, M-02 y M-04 en la mano, no por
-preferencia. Si M-02 muestra que un evento se pierde con `main` ocupado, el
-controlador no puede vivir en la sesión de `main`.
+Cómo se leyó cada turno: consultas de solo lectura sobre
+`~/.openclaw/agents/main/agent/openclaw-agent.sqlite` en la Mini, tabla
+`trajectory_runtime_events`. El inicio del turno es el evento `session.started`,
+que trae el disparador (`data.trigger`). Cada llamada al proveedor es un evento
+`provider.payload.measured`. Los tokens salen de `model.completed`, campo
+`data.usage`. Las horas de emisión son del reloj de la MacBook y las de los
+turnos, del reloj de la Mini. Los dos relojes se compararon ese día por ssh,
+tres veces: la Mini iba 0,15 s adelante, con 0,22 s de ida y vuelta. Las esperas
+de este documento que cruzan los dos relojes llevan ese margen, menos de 0,3 s. Las salidas crudas quedaron en
+`~/.local/state/sua-loop/mediciones/` de la MacBook, fuera del repo.
+
+Las sesiones de ensayo se llamaron `agent:main:sua-ensayo-20261013-<n>`, con
+`n` de 1 a 7. Ninguna llamada llevó `--deliver`.
+
+### Resultados
+
+| ID | Qué se hizo | Resultado |
+|---|---|---|
+| M-01 | `openclaw system event --mode now --timeout 15000 --session-key agent:main:sua-ensayo-20261013-1 --text "ensayo SUA-00 M-01: contesta NO_REPLY" --json`, emitido a las 14:51:45.264 sin ningún turno de `main` en vuelo | El comando contestó `{"ok": true}` a los 1,80 s, antes de que empezara el turno. La sesión no existía y el evento la creó a las 14:51:47.252. El turno empezó a las 14:51:47.541, 2,28 s después de la emisión, y terminó a las 14:51:49.089. Disparador `heartbeat`. Una llamada al proveedor, 81 952 bytes. Tokens: 20 479 de entrada, 23 de salida, 20 502 en total. Contestó `NO_REPLY` |
+| M-02 | Tres pasadas, descritas abajo | Un evento con `main` ocupado no se pierde y no abre un turno paralelo: espera. Un `agent --message` a otra sesión sí corre en paralelo |
+| M-03 | `/new` sobre la sesión 1 con `openclaw agent --agent main --session-key … --message-file`, y después un turno | El gateway contestó "✅ New session started." y escribió un evento `reset` con `reason: new`. El `session_id` no cambió. El primer turno después cargó 20 216 tokens de contexto (391 de entrada más 19 825 leídos de caché). Una sesión nueva cargó 20 479, 20 479 y 20 484 en tres muestras. La diferencia es de caché, no de contexto |
+| M-04 | Un turno por `agent --message` en la sesión 7 que llama una vez `managed_tasks_inspect` sobre la tarea cerrada `9ed258fc-59c1-4e72-ba3d-36819bea0eb9` y contesta `NO_REPLY` | 2 llamadas al proveedor, 165 209 bytes, 8,0 s. Tokens: 830 de entrada, 40 162 leídos de caché, 416 de salida, 41 408 en total. Más el coste real del vigía, abajo |
+| M-05 | Consulta de solo lectura sobre `subagent_runs` en `~/.openclaw/state/openclaw.sqlite` de la Mini, abierta con `mode=ro`. No fue sobre una copia. Duración de `createdAt` a `endedHookEmittedAt` | 902 corridas del 2026-09-23 al 2026-10-12. Mediana 83,4 s, p90 776,0 s, p95 1 570,3 s, máximo 609 577 s. Con solicitante `main`: 894 corridas, mediana 82,9 s, p95 1 573,5 s. Con solicitante `ingenieria`: 8 corridas, mediana 292,9 s, p95 414,9 s |
+| M-06 | Leer `conversation_deliveries` en la base de `main` después de los ensayos | 0 filas con origen en una sesión de ensayo y 0 filas creadas o cambiadas desde la emisión de M-01. No salió nada a Telegram |
+| M-07 | Cron de un disparo `sua-ensayo-m07`, `--session isolated --no-deliver`, corrido con `cron run`. Llamó `managed_tasks_inspect` y no `managed_tasks_submit`, para que no pudiera crear una tarea. Las dos herramientas pasan por la misma guarda, `captureManagedTaskTurn` (`managed-tasks-tool.ts:30`) | La herramienta devolvió `"error": "Managed task requires a durable requester session, not an isolated cron run"`. La corrida duró 5,9 s y gastó 41 619 tokens. El cron se borró con `cron rm` (`"removed": true`) y la lista volvió a 30 |
+| M-08 | `openclaw sessions delete --yes --json` con las siete llaves de ensayo, desde la Mac y sin `--agent` | Las siete contestaron `deleted`. `session_nodes` de `main` bajó de 56 a 49. Queda la fila de la corrida del cron de M-07: `sessions delete` contesta `not_found` para una sesión `agent:main:cron:<id>:run:<id>`, con y sin `--agent main`. Pasa lo mismo con cada corrida de un cron aislado; las limpia `session.maintenance` |
+| M-09 | `openclaw cron list --json` | 30 crons, los 30 habilitados. Un solo vigía: `bids-02-vigia` (`main`, cada 300 s, aislado, sin entrega). 19 `skill-collection-review-<agente>` semanales. 10 de negocio o mantenimiento: `packing-extras-7h` y `-11h`, `packing-digest-faseA-censo`, `-faseB-armado` y `-faseC-envio`, `verif-digest-20h`, `cuotas-proveedores`, `Memory Dreaming Promotion`, el de la renovación del token de Shopify y `seguimiento-yours-virtually-miercoles` (un disparo el 2026-10-14) |
+| M-10 | `ps -o rss=` del proceso del gateway antes y después, y `openclaw health --json` | RSS 3 176 128 KB a las 14:47:43 y 3 384 224 KB a las 15:05:21: subió 208 096 KB en 17,6 minutos. En ese rato corrieron los ensayos y también cuatro corridas del vigía, así que la subida no se puede atribuir a los ensayos. `health` no trae una métrica de heap. El event loop no se degradó (`delayP99Ms` 21,1 antes y 21,5 después). El gateway corre con `--max-old-space-size=8192` |
+
+### M-02, las tres pasadas
+
+La primera pasada, a las 14:54:39.808, no sirvió para la pregunta: la corrida
+del vigía de las 14:54:04 duró 20,1 s y ya había terminado. El turno empezó
+2,06 s después de la emisión. Vale como segunda muestra de M-01 (20 499 tokens).
+
+Pasada con un turno propio en vuelo. Un `agent --message` a la sesión 3 pidió
+correr `sleep 45` con `exec`. Ese turno corrió de las 14:56:03.334 a las
+14:56:52.0.
+
+| Aviso | Emitido | Su turno empezó | Espera |
+|---|---|---|---|
+| `system event` a otra sesión de `main` (la 4) | 14:56:16.637 | 14:56:52.542, medio segundo después de que terminó el turno en vuelo | 35,9 s |
+| `system event` a la misma sesión ocupada (la 3) | 14:56:17.999 | 14:56:56.838, después de que terminó el turno de la sesión 4 | 38,8 s |
+
+Los dos avisos produjeron un turno cada uno, en el orden en que se emitieron.
+
+Pasada con el vigía en vuelo. La corrida de `bids-02-vigia` de las 14:59:04.529
+duró 106,6 s y terminó a las 15:00:51.238. El evento a la sesión 5 se emitió a
+las 14:59:15.399 y su turno empezó a las 15:00:51.468: **96,1 s de espera**, y
+0,23 s después de que el cron terminó. El vigía corre en una sesión aislada,
+distinta de la del aviso.
+
+Pasada con `agent --message`. Con un turno en vuelo en la sesión 3 (de las
+15:01:15.196 a las 15:01:53.4), un `openclaw agent --agent main --session-key
+agent:main:sua-ensayo-20261013-6 --message-file …` emitido a las 15:01:26.168
+empezó su turno a las 15:01:29.000, **2,83 s después**, y terminó antes que el
+turno de la sesión 3. Corrió en paralelo.
+
+Lo que esto dice: los despertares por `system event --mode now` de `main` van
+uno detrás de otro y detrás de cualquier turno de `main` en vuelo, sea de otra
+sesión o de un cron aislado. Un `agent --message` a una sesión distinta no
+entró en esa fila en la única muestra que se tomó.
+
+No se midió: un `agent --message` a una sesión que ya tiene un turno en vuelo,
+un evento a `main` mientras el ocupado es otro agente, ni el modo
+`next-heartbeat`.
+
+### El vigía de bids, medido
+
+Las nueve corridas de `bids-02-vigia` de las 14:19 a las 14:59, leídas con la
+misma consulta:
+
+| Inicio | Duración | Llamadas al proveedor | Tokens en total |
+|---|---|---|---|
+| 14:19:04 | 143,6 s | 14 | 956 993 |
+| 14:24:04 | 57,1 s | 7 | 317 849 |
+| 14:29:04 | 9,0 s | 2 | 42 367 |
+| 14:34:04 | 113,9 s | 17 | 903 997 |
+| 14:39:04 | 93,5 s | 14 | 864 682 |
+| 14:44:04 | 108,5 s | 16 | 1 093 207 |
+| 14:49:04 | 139,1 s | 15 | 831 754 |
+| 14:54:04 | 20,1 s | 2 | 42 039 |
+| 14:59:04 | 106,6 s | 11 | 656 691 |
+
+Suma: 98 llamadas y 5 709 579 tokens en 45 minutos. La mayor parte son tokens
+leídos de caché. Una corrida que no encuentra nada que hacer cuesta 2 llamadas
+y unos 42 mil tokens. Una que trabaja hace de 7 a 17 llamadas con `exec`. En
+siete de las nueve corridas, `main` estuvo ocupado entre 57 y 144 segundos de
+cada 300. La ventana del 2026-10-11 dio 16 llamadas en 30 minutos; esta da 98
+en 45. No se investigó por qué subió.
+
+### Un `NO_REPLY` por `agent --message` se reintenta
+
+Hallazgo de M-03, con una sola muestra. El turno posterior a `/new` entró por
+`agent --message` (disparador `user`) y el modelo contestó solo `NO_REPLY`. El
+gateway repitió la llamada: dos veces con `opencode-go-resp` y dos con
+`opencode-go-resp-2`, las cuatro con `NO_REPLY`, y después cayó a
+`claude-cli/claude-opus-5-5`, que escribió 75 532 tokens de caché. Fueron cinco
+llamadas donde bastaba una, por tres entradas de proveedor del gateway. Las dos
+primeras llevan el nombre de opencode Go; no se leyó la configuración para
+saber si son dos cuentas o una.
+
+Con disparador `heartbeat` (`system event`), `NO_REPLY` se aceptó a la primera
+en las cuatro muestras. En M-04, con una herramienta antes del `NO_REPLY`, no
+hubo reintento y el CLI devolvió el texto "The tool run finished, but no final
+summary was produced."
+
+### Qué deciden estas mediciones
+
+La regla de este documento era elegir el verbo con M-01, M-02 y M-04 en la
+mano. Los hechos que pesan:
+
+1. Un controlador que despierte por `system event` en el agente `main` empieza
+   en 2,3 s si `main` está libre y espera lo que dure el turno en vuelo si no.
+   Con el vigía de bids activo, esa espera llegó a 96 s y puede llegar a 144 s.
+2. Un `agent --message` a una sesión distinta de la que tiene el turno en vuelo
+   no esperó (una muestra). No se midió el mensaje a una sesión ya ocupada. Su
+   turno tiene que contestar con texto, no con `NO_REPLY` solo: en la muestra
+   que lo hizo se pagaron cinco llamadas.
+3. Cada despertar cuesta unos 20 500 tokens de contexto base, con sesión nueva
+   o con `/new`. Uno que además llama una herramienta cuesta unos 41 mil.
+4. Un cron aislado no sirve de solicitante de `managedTasks`.
+5. La sesión de la corrida de un cron aislado no se puede borrar por llave
+   desde la Mac.
+
+Lo que queda sin medir y decide SUA-01 o SUA-02 si lo necesita: el coste de un
+cron con sesión durable, y el efecto de sacar al controlador a un agente
+propio, distinto de `main`.
 
 ## Lint y formato de R
 
