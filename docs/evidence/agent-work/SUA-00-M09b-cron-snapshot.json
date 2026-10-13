@@ -1,87 +1,8 @@
 {
- "capturedAt": "2026-10-13T14:47:37Z",
- "source": "~/.openclaw-r/openclaw cron list --json desde la MacBook contra el gateway de la Mini (lectura; medición M-09 de docs/evidence/sistema-agentes-unificado/SUA-00-mediciones.md). La salida cruda es ~/.local/state/sua-loop/mediciones/m09-crons.json, sha256 d6e438468a305d20cd6cc3300ebfd1c8559cbf1cd17c5f3beba1dd2089e5d172, y capturedAt es la fecha de ese archivo. Redactada: sin texto del mensaje (solo su sha256 y largo), sin destino de entrega",
- "total": 30,
+ "capturedAt": "2026-10-13T18:09:52Z",
+ "source": "openclaw cron list --json contra el gateway de la Mini (lectura). La salida cruda es ~/.local/state/sua-loop/mediciones/m09b-crons.json, sha256 10bae73a015b43a34a569fbad8ea11799e60e7b46cc07534f20567312aa30e70, y capturedAt es la fecha de ese archivo. Redactada: sin texto del mensaje (solo su sha256 y largo), sin destino de entrega",
+ "total": 29,
  "jobs": [
-  {
-   "id": "a65b9e51-008f-4212-8ae4-19c9e52f297d",
-   "name": "bids-02-vigia",
-   "enabled": true,
-   "agentId": "main",
-   "sessionTarget": "isolated",
-   "wakeMode": "now",
-   "delivery": {
-    "mode": "none",
-    "channel": "last"
-   },
-   "schedule": {
-    "kind": "every",
-    "everyMs": 300000,
-    "anchorMs": 1791863044164
-   },
-   "payloadKind": "agentTurn",
-   "messageSha256": "75c50dd2aec30582949ee7b3c3dad65646b77dea6748a61de9fd395625196022",
-   "messageChars": 2121
-  },
-  {
-   "id": "3e3f1b30-3e10-4ea0-8a17-a9e1efe8d83f",
-   "name": "skill-collection-review-tinkabot",
-   "enabled": true,
-   "agentId": "tinkabot",
-   "sessionTarget": "isolated",
-   "wakeMode": "next-heartbeat",
-   "delivery": {
-    "mode": "none"
-   },
-   "schedule": {
-    "kind": "every",
-    "everyMs": 604800000,
-    "anchorMs": 490283862
-   },
-   "payloadKind": "agentTurn",
-   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
-   "messageChars": 3199
-  },
-  {
-   "id": "9386486d-37d6-4ae1-bf7b-12892527f2d9",
-   "name": "packing-extras-11h",
-   "enabled": true,
-   "agentId": "operaciones",
-   "sessionTarget": "isolated",
-   "wakeMode": "now",
-   "delivery": {
-    "mode": "none",
-    "channel": "last"
-   },
-   "schedule": {
-    "kind": "cron",
-    "expr": "0 11 * * 1-5",
-    "tz": "America/Mexico_City",
-    "staggerMs": 0
-   },
-   "payloadKind": "agentTurn",
-   "messageSha256": "dd57386fd907234a45886daf2e696863ef27e83f719e2b783aa2322671db172e",
-   "messageChars": 8754
-  },
-  {
-   "id": "f999b502-3c0b-460c-b678-6691720faaca",
-   "name": "skill-collection-review-ingenieria",
-   "enabled": true,
-   "agentId": "ingenieria",
-   "sessionTarget": "isolated",
-   "wakeMode": "next-heartbeat",
-   "delivery": {
-    "mode": "none"
-   },
-   "schedule": {
-    "kind": "every",
-    "everyMs": 604800000,
-    "anchorMs": 497104622
-   },
-   "payloadKind": "agentTurn",
-   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
-   "messageChars": 3199
-  },
   {
    "id": "c167c15d-5502-43aa-8909-7ae598f67db1",
    "name": "skill-collection-review-gonserver",
@@ -317,6 +238,27 @@
    "payloadKind": "agentTurn",
    "messageSha256": "59888112e907e7d19049ca9262df3eebf7d1236c95f66fef67c87d0a8260abb9",
    "messageChars": 402
+  },
+  {
+   "id": "9386486d-37d6-4ae1-bf7b-12892527f2d9",
+   "name": "packing-extras-11h",
+   "enabled": true,
+   "agentId": "operaciones",
+   "sessionTarget": "isolated",
+   "wakeMode": "now",
+   "delivery": {
+    "mode": "none",
+    "channel": "last"
+   },
+   "schedule": {
+    "kind": "cron",
+    "expr": "0 11 * * 1-5",
+    "tz": "America/Mexico_City",
+    "staggerMs": 0
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "dd57386fd907234a45886daf2e696863ef27e83f719e2b783aa2322671db172e",
+   "messageChars": 8754
   },
   {
    "id": "d69a5c51-9691-4e53-b29b-eac12ddc10ee",
@@ -579,6 +521,44 @@
     "kind": "every",
     "everyMs": 604800000,
     "anchorMs": 471276323
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "3e3f1b30-3e10-4ea0-8a17-a9e1efe8d83f",
+   "name": "skill-collection-review-tinkabot",
+   "enabled": true,
+   "agentId": "tinkabot",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 490283862
+   },
+   "payloadKind": "agentTurn",
+   "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",
+   "messageChars": 3199
+  },
+  {
+   "id": "f999b502-3c0b-460c-b678-6691720faaca",
+   "name": "skill-collection-review-ingenieria",
+   "enabled": true,
+   "agentId": "ingenieria",
+   "sessionTarget": "isolated",
+   "wakeMode": "next-heartbeat",
+   "delivery": {
+    "mode": "none"
+   },
+   "schedule": {
+    "kind": "every",
+    "everyMs": 604800000,
+    "anchorMs": 497104622
    },
    "payloadKind": "agentTurn",
    "messageSha256": "73ff56de2590636d9dd52ead7a149052cd928f4b5b7462864e2b4c07047e48fe",

@@ -51,7 +51,8 @@ real de David.
 **Los huecos que importan para decidir el orden de SUA-01 en adelante:**
 
 - `coverage.json` se alineó con lo medido el 2026-10-13: dice `certified`, tiene
-  la ruta viva en `managedRequesterRoutes` y su foto de crons es M-09. Antes
+  la ruta viva en `managedRequesterRoutes` y su foto de crons es de las 18:09
+  UTC de ese día. Antes
   decía `inventory-only`, no tenía la ruta viva y su foto era del 7 de octubre.
   SUA-04 y SUA-09O parten de ese archivo. Queda para SUA-03 decidir los siete
   adaptadores que ningún host atiende (`followups.md`, fila SUA-00
@@ -79,8 +80,10 @@ día, David contestó las cuatro preguntas que el inventario dejó abiertas: "1.
 | ¿La ruta de corrida se migra o se retira? | Se retira | La ruta salió del repo el 2026-10-13 y las filas de "Rutas de corrida" son historia. SUA-02, SUA-03 y SUA-05 pierden los archivos que tomaban de ella (marcas `corr: D13` del plan) |
 | ¿La sesión adoptada se borra o se guarda? | Se borra | La fila "Sesión adoptada de opencode" y las piezas sin punto de entrada salen del repo en su propio PR |
 
-La lista de crons vivos (M-09) confirma la fila "Cron vigía": hay 30 crons y un
-solo vigía, `bids-02-vigia`.
+La lista de crons vivos (M-09) confirmó la fila "Cron vigía" a las 14:47 UTC:
+30 crons y un solo vigía, `bids-02-vigia`. A las 18:09 UTC del 2026-10-13 hay
+29 crons y ningún vigía: el loop `bids-02` cerró a las 15:52 UTC y su vigía
+borró su propio cron.
 
 ## Cómo leer las tablas
 
@@ -147,7 +150,7 @@ ya separa efectos ejecutados de evidencia por SHA. El contrato
 | `record_incident` | `host.py:954-969` | vigente | `refuse` (`:503`) y `detect_run_failures` (`:861`). Las llamadas desde `detect_silent_failures` (`:771`, `:774`) se borraron con él el 2026-10-13 |
 | `flush_incidents` | `host.py:971-990` | vigente | `pump_once`. Un rechazo definitivo no se reintenta (`DEFINITIVE_INCIDENT_REJECTIONS`, `native_gateway.py:34-45`) |
 | `CLI_ROUTES` | `routing.py:15`: `{("ingenieria", "windows-remote"), ("main", "mac-local")}` | vigente solo para las skills `managed-task-routing` de `ingenieria` y `operaciones` | `main` no lo usa: `test_main_cli_route_points_main_at_the_encargo_cli_skill_and_not_at_routing_py` (`test-agent-work-routing.py:194`). `windows-remote` sigue `disabled-host-unverified` |
-| `coverage.json.modelWakes` | `coverage.json:123-148` | vigente, alineado el 2026-10-13 | Foto del 2026-10-13T14:47:37Z (M-09) con 3 entradas: el cron `bids-02-vigia` y los dos avisos del repo. Lo anterior: foto del 2026-10-07 con 14 entradas, dos citas de línea que ya no cuadraban (`latido.sh:224` contra `:220-221`; `settings.json:129` contra `:122`) y vigías que `deploy-receipt.md` da por cerrados el 2026-10-11 |
+| `coverage.json.modelWakes` | `coverage.json:122-141` | vigente, alineado el 2026-10-13 | Foto del 2026-10-13T18:09:52Z con 2 entradas, los dos avisos del repo, y ningún cron: ese día `bids-02-vigia` borró su propio cron. Lo anterior: foto del 2026-10-07 con 14 entradas, dos citas de línea que ya no cuadraban (`latido.sh:224` contra `:220-221`; `settings.json:129` contra `:122`) y vigías que `deploy-receipt.md` da por cerrados el 2026-10-11 |
 | `main_cli_loop` | `test_agent_work_main_cli_loop_e2e.py`; caso `main_cli_loop` de `test-agent-work-e2e.sh` | recortado el 2026-10-13 | Se borró el caso que armaba a mano la ruta adoptada. Conserva `test_isolated_cron_run_cannot_submit` (R rechaza un submit desde un cron aislado) y `LoopGateway`, el arnés de R que usa `cutover_fencing` |
 | `detect_silent_failures` | `host.py:714-778` en la base | borrado el 2026-10-13 | Ninguna. Se fue con la ruta de sesión adoptada, junto con `settle_deliveries` y sus pruebas. La ruta viva usa `detect_run_failures` (`host.py:790`, `native_gateway.py:604` en la base) |
 | `managedTasks.host.cancellation` | R `managed-tasks.ts:371-401`; G `native_gateway.py:186` | vigente | La pasada del host. Probada en vivo: canarios A intento 1 y B terminaron `cancelled\|AbsenceVerified` |
@@ -169,7 +172,7 @@ de corrida. Sigue sin punto de entrada `cutover_live.rollback`.
 | Hook Stop de Claude Code | `scripts/mac/claude-stop-openclaw-event.sh` | G, registro en la Mac | Exige `OPENCLAW_WATCH=1` y se calla con `AGENT_WORK_MANAGED=1` (`:36-44`) | `openclaw system event --mode now --session-key agent:main:vigia-mac`; sin recibo, salida a `/dev/null` | `passed`: `test-tmux-activity-watch.sh` | `failed`: registrado en `~/.claude/settings.json:122`, pero la copia de `~/bin` no trae el bloque `AGENT_WORK_MANAGED` (5 líneas de diferencia) | `unknown`: sin recibo de un despertar lanzado por este hook. M-01 midió el mismo verbo (`system event --mode now`) lanzado a mano |
 | Vigilante tmux (`tmux-activity-watch.sh`) | `scripts/mac/tmux-activity-watch.sh`; LaunchAgent `ai.goncloud.tmux-activity-watch` | G | Vigila `OPENCLAW_WATCH=1`, excluye `AGENT_WORK_MANAGED=1` (`:200-205`) | `system event` por quietud de 900 s, diálogo o cierre | `passed`: `test-tmux-activity-watch.sh` | `failed`: plist en disco, no cargado (`launchctl print`: Could not find service); copia de `~/bin` con 21 líneas de diferencia | `failed`: no corre |
 | Latido de corrida (`corrida.sh latido`) | Retirado del repo el 2026-10-13 con la ruta de corrida. En G `2213b930`: `scripts/mac/corrida/latido.sh`; LaunchAgent `ai.goncloud.corrida-latido` | G | n/a | `progress-events.py publish-all`, `system event` (`:220`, `:347`) | `failed`: salió del repo con la ruta | `failed`: no cargado desde el 2026-09-27 (`T12-runbook.md:290`) | `failed`: apagado a propósito hasta su retiro |
-| Cron vigía de un loop (`<loop>-vigia`, isolated, cada 5 min) | Gateway en la Mini; recreador `prompt-claw` §7 | gateway | Un cron isolated no puede ser solicitante de `managedTasks` (`managed-task.turn.ts:42-44`) | Turno con modelo cada 5 min | `passed`: foto del 2026-10-13 en `coverage.json.modelWakes`, con un cron vigía; `test_every_live_cron_is_classified` (`test-agent-work-routing.py:329`) | `passed`: `openclaw cron list --json` del 2026-10-13 da 30 crons y un solo vigía, `bids-02-vigia` (M-09). `coverage.json.modelWakes` parte de esa foto desde el 2026-10-13 | `passed`: solo `bids-02-vigia`. El 2026-10-11, 66 eventos de sesión y 16 llamadas al proveedor en 30 min (`deploy-receipt.md`, Contadores). El 2026-10-13, 98 llamadas al proveedor y 5 709 579 tokens en nueve corridas, una cada 5 minutos, de las 14:19:04 a las 15:00:51 (`SUA-00-mediciones.md`, "El vigía de bids, medido") |
+| Cron vigía de un loop (`<loop>-vigia`, isolated, cada 5 min) | Gateway en la Mini; recreador `prompt-claw` §7 | gateway | Un cron isolated no puede ser solicitante de `managedTasks` (`managed-task.turn.ts:42-44`) | Turno con modelo cada 5 min | `passed`: foto del 2026-10-13 a las 18:09 UTC en `coverage.json.modelWakes`, sin crons vigía; `test_every_live_cron_is_classified` (`test-agent-work-routing.py:329`) | `passed`: `openclaw cron list --json` del 2026-10-13 daba 30 crons y un solo vigía, `bids-02-vigia`, a las 14:47 UTC (M-09), y 29 crons y ningún vigía a las 18:09 UTC. El loop `bids-02` cerró a las 15:52 UTC y su vigía borró su propio cron. `coverage.json.modelWakes` parte de la foto de las 18:09 | `passed`: solo `bids-02-vigia`, hasta que se borró el 2026-10-13. El 2026-10-11, 66 eventos de sesión y 16 llamadas al proveedor en 30 min (`deploy-receipt.md`, Contadores). El 2026-10-13, 98 llamadas al proveedor y 5 709 579 tokens en nueve corridas, una cada 5 minutos, de las 14:19:04 a las 15:00:51 (`SUA-00-mediciones.md`, "El vigía de bids, medido") |
 | Crons de negocio | Gateway | gateway | `scheduledToolPolicy` del servidor | Turnos propios | `passed`: 29 `out-of-perimeter` en `coverage.json` | `passed`: 30 habilitados el 2026-10-11 | `passed`: 30 habilitados, 0 corriendo (`deploy-receipt.md`, Checklist posterior) |
 
 ## Orbit (O) y Hermes (H)

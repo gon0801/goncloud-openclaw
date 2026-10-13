@@ -333,18 +333,15 @@ class AgentsRouting(unittest.TestCase):
             "business": "cron de negocio: conserva horario y función; fuera del perímetro, no delega trabajo con resultado esperado (T9 :265)",
             "technical": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)",
             "system": "tarea interna del gateway; no delega (T9 :265)",
-            "vigia": "vigía de un loop que no puede usar la ruta de encargos: T12 lo conservó y lo declaró (followups.md, fila T12 `bids-02`); sigue en su ruta hasta que SUA-09O lo inventaríe y cambie su dueño (T9 :265 y :266)",
         }
         # El único cron de la foto que delega: su mensaje despacha a otro agente, así que no lleva la razón de su clase.
         delegating = {
             "seguimiento-yours-virtually-miercoles": "cron de negocio de un solo disparo (2026-10-14): conserva horario y función; despacha al agente mail con sessions_spawn, la ruta nativa que sigue fuera del perímetro gestionado (migration, route:native-subagent)",
         }
-        perimeters = {"business": "out-of-perimeter", "technical": "out-of-perimeter",
-                      "system": "out-of-perimeter", "vigia": "legacy-until-adoption"}
         cron_jobs = self.coverage["cronJobs"]
-        self.assertEqual(cron_jobs["snapshot"], "docs/evidence/agent-work/SUA-00-M09-cron-snapshot.json")
+        self.assertEqual(cron_jobs["snapshot"], "docs/evidence/agent-work/SUA-00-M09b-cron-snapshot.json")
         self.assertEqual(hashlib.sha256((ROOT / cron_jobs["snapshot"]).read_bytes()).hexdigest(),
-                         "9bb7709881ef6851f7c55bfcf5fbb71721d1c81a4e71ac1f5bc0654b5dd26a7c",
+                         "4b055505ef2626dbb278479143e57e68c59447558a48f13426f9fbba51b81a0e",
                          "the cron snapshot changed: a new snapshot is a new file and a new literal here")
         snapshot = json.loads((ROOT / cron_jobs["snapshot"]).read_text())
         jobs = {job["id"]: job for job in snapshot["jobs"]}
@@ -361,19 +358,17 @@ class AgentsRouting(unittest.TestCase):
             "Renueva el token de acceso de Shopify de la tienda theglamw…",
             "seguimiento-yours-virtually-miercoles"})
         self.assertEqual(kinds.get("system"), {"Memory Dreaming Promotion"})
-        self.assertEqual(kinds.get("vigia"), {"bids-02-vigia"})
         self.assertEqual(len(kinds.get("technical")), 20)
-        wake_ids = {entry["id"] for entry in self.coverage["modelWakes"]["entries"] if entry["kind"] == "cron"}
+        # La foto no tiene vigías. Un `<loop>-vigia` en una foto nueva pide aquí su clase, su perímetro y su razón.
+        self.assertEqual(sorted(kinds), ["business", "system", "technical"])
+        self.assertEqual([job["name"] for job in snapshot["jobs"] if job["name"].endswith("-vigia")], [])
         for row in cron_jobs["entries"]:
             job = jobs[row["id"]]
             with self.subTest(cron=row["name"]):
                 self.assertEqual(row["name"], job["name"])
                 self.assertIn(row["kind"], reasons)
-                self.assertEqual(row["perimeter"], perimeters[row["kind"]])
+                self.assertEqual(row["perimeter"], "out-of-perimeter")
                 self.assertEqual(row["reason"], delegating.get(row["name"], reasons[row["kind"]]))
-                self.assertEqual(row["kind"] == "vigia", job["name"].endswith("-vigia"))
-                if row["kind"] == "vigia":
-                    self.assertIn(row["id"], wake_ids, "a live vigia is missing from modelWakes")
                 if row["kind"] == "business":
                     self.assertEqual(row["schedule"], job["schedule"])
                     self.assertEqual(row["messageSha256"], job["messageSha256"])
@@ -382,8 +377,8 @@ class AgentsRouting(unittest.TestCase):
 
     def test_model_wakes_inventory_lists_every_repo_wake_source(self):
         wakes = self.coverage["modelWakes"]
-        # La foto del 2026-10-13 (M-09 de SUA-00) reemplaza a la de B4-26, del 2026-10-07.
-        self.assertEqual(wakes["snapshot"], "docs/evidence/agent-work/SUA-00-M09-cron-snapshot.json")
+        # La foto del 2026-10-13 a las 18:09 UTC reemplaza a la de B4-26, del 2026-10-07.
+        self.assertEqual(wakes["snapshot"], "docs/evidence/agent-work/SUA-00-M09b-cron-snapshot.json")
         snapshot = json.loads((ROOT / wakes["snapshot"]).read_text())
         self.assertEqual(wakes["capturedAt"], snapshot["capturedAt"])
         sources = [entry["source"] for entry in wakes["entries"]]
@@ -399,9 +394,10 @@ class AgentsRouting(unittest.TestCase):
         # Un cron que ya no está en la foto no despierta a nadie: los crons del inventario son los vigías vivos.
         live = [(job["id"], job["name"], f"every {job['schedule']['everyMs']} ms")
                 for job in snapshot["jobs"] if job["name"].endswith("-vigia")]
-        self.assertEqual(live, [("a65b9e51-008f-4212-8ae4-19c9e52f297d", "bids-02-vigia", "every 300000 ms")])
+        self.assertEqual(live, [], "bids-02-vigia borró su propio cron el 2026-10-13: la foto no tiene vigías")
         self.assertEqual([(entry["id"], entry["name"], entry["cadence"])
                           for entry in wakes["entries"] if entry["kind"] == "cron"], live)
+        self.assertEqual([entry["id"] for entry in wakes["entries"]], ["tmux-activity-watch", "claude-code-stop-hook"])
         for entry in wakes["entries"]:
             for key in ("kind", "id", "name", "targets", "cadence", "source", "recreators"):
                 self.assertIn(key, entry)
@@ -476,9 +472,9 @@ class AgentsRouting(unittest.TestCase):
         self.assertIn("docs/runbooks/guia-del-vigia.md", listed, "the instruction scan lost the marking docs")
         required |= {f"file:{path}" for path in listed}
         self.assertEqual(set(rows), required, "migration must register every inventory entry and nothing else")
-        # El estado no es libre: un vigia de cron conserva su ruta hasta SUA-09O (T12 cerro sin adoptarlo) y solo
-        # un archivo puede quedar fuera del perimetro. Una ruta gestionada es managed-prepared, certificada o no:
-        # el vocabulario no tiene un estado para la que ya esta encendida, y eso lo dice su `certified`.
+        # El estado no es libre: un vigia de cron es ruta vieja hasta su adopcion y solo un archivo puede quedar
+        # fuera del perimetro. Una ruta gestionada es managed-prepared, certificada o no: el vocabulario no tiene
+        # un estado para la que ya esta encendida, y eso lo dice su `certified`.
         cron_wakes = {f"wake:{entry['name']}" for entry in wakes if entry["kind"] == "cron"}
         managed = {f"managed:{route['requester']}->{route['target']}"
                    for route in self.coverage["managedRequesterRoutes"]}
@@ -486,10 +482,9 @@ class AgentsRouting(unittest.TestCase):
             with self.subTest(entry=row["id"]):
                 self.assertIn(row["state"], states)
                 self.assertTrue(row["reason"].strip())
+                self.assertEqual(row.get("adoption"), "T12" if row["state"] == "legacy-until-adoption" else None)
                 if row["id"] in cron_wakes:
-                    self.assertEqual((row["state"], row.get("adoption")), ("legacy-until-adoption", "SUA-09O"))
-                else:
-                    self.assertEqual(row.get("adoption"), "T12" if row["state"] == "legacy-until-adoption" else None)
+                    self.assertEqual(row["state"], "legacy-until-adoption")
                 if row["id"] in managed:
                     self.assertEqual(row["state"], "managed-prepared")
                 if row["state"] == "out-of-perimeter":

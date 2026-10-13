@@ -246,8 +246,8 @@
       "autoridad": "un cron isolated no puede ser solicitante de managedTasks (managed-task.turn.ts:42-44)",
       "resultado": "turno con modelo cada 5 min; para bids-02-vigia, 16 llamadas al proveedor en 30 min el 2026-10-11 y 98 en nueve corridas, una cada 5 min, de las 14:19:04 a las 15:00:51 del 2026-10-13",
       "recibo": "eventos de sesion agent:main:cron:<id>; provider.payload.measured",
-      "fuente": {"capacidad": "passed", "version": "coverage.json modelWakes, foto del 2026-10-13 (M-09) con un cron vigia", "evidencia": "coverage.json:123-148; test-agent-work-routing.py test_every_live_cron_is_classified (:329)"},
-      "instalado": {"capacidad": "passed", "version": "openclaw cron list --json del 2026-10-13", "evidencia": "SUA-00-mediciones.md, M-09: 30 crons habilitados y un solo vigia, bids-02-vigia. coverage.json.modelWakes parte de esa foto desde el 2026-10-13"},
+      "fuente": {"capacidad": "passed", "version": "coverage.json modelWakes, foto del 2026-10-13 a las 18:09 UTC, sin crons vigia", "evidencia": "coverage.json:122-141; test-agent-work-routing.py test_every_live_cron_is_classified (:329)"},
+      "instalado": {"capacidad": "passed", "version": "openclaw cron list --json del 2026-10-13, a las 14:47 y a las 18:09 UTC", "evidencia": "SUA-00-mediciones.md, M-09 (14:47 UTC): 30 crons habilitados y un solo vigia, bids-02-vigia. A las 18:09 UTC: 29 crons y ningun vigia, porque el loop bids-02 cerro a las 15:52 UTC y su vigia borro su propio cron (docs/evidence/agent-work/SUA-00-M09b-cron-snapshot.json). coverage.json.modelWakes parte de la foto de las 18:09"},
       "aceptadoEnVivo": {"capacidad": "passed", "evidencia": "deploy-receipt.md, Contadores: 66 eventos nuevos de main en 30 min, todos de agent:main:cron:915213a2-..., bids-02-vigia; 16 llamadas al proveedor, todas suyas"}
     },
     {
@@ -259,7 +259,7 @@
       "autoridad": "scheduledToolPolicy del servidor",
       "resultado": "turnos propios",
       "recibo": "run-history del cron",
-      "fuente": {"capacidad": "passed", "version": "coverage.json clasifica 29 como out-of-perimeter (coverage.json:88-122)", "evidencia": "coverage.json"},
+      "fuente": {"capacidad": "passed", "version": "coverage.json clasifica 29 como out-of-perimeter (coverage.json:88-121)", "evidencia": "coverage.json"},
       "instalado": {"capacidad": "passed", "version": "30 habilitados el 2026-10-11", "evidencia": "deploy-receipt.md, Despertares viejos: los 30 crons habilitados son los mismos antes y despues"},
       "aceptadoEnVivo": {"capacidad": "passed", "evidencia": "deploy-receipt.md, Checklist posterior: 30 habilitados, 0 corriendo"}
     },
@@ -308,7 +308,7 @@
     {"id": "record_incident", "ubicacion": "scripts/agent-work/host.py:954-969", "estadoTrasB22": "vigente", "entradaHoy": "refuse (:503) y detect_run_failures (:861); las llamadas desde detect_silent_failures (:771, :774) se borraron con el 2026-10-13"},
     {"id": "flush_incidents", "ubicacion": "scripts/agent-work/host.py:971-990", "estadoTrasB22": "vigente", "entradaHoy": "pump_once (native_gateway.py:851-852)"},
     {"id": "CLI_ROUTES", "ubicacion": "scripts/agent-work/routing.py:15, {(ingenieria, windows-remote), (main, mac-local)}", "estadoTrasB22": "vigente solo para las skills managed-task-routing de ingenieria y operaciones", "entradaHoy": "main no lo usa: test_main_cli_route_points_main_at_the_encargo_cli_skill_and_not_at_routing_py (test-agent-work-routing.py:194). windows-remote sigue disabled-host-unverified"},
-    {"id": "coverage.json.modelWakes", "ubicacion": "docs/evidence/agent-work/coverage.json:123-148", "estadoTrasB22": "vigente, alineado el 2026-10-13", "entradaHoy": "foto del 2026-10-13T14:47:37Z (M-09) con 3 entradas: el cron bids-02-vigia y los dos avisos del repo. Lo anterior: foto del 2026-10-07 con 14 entradas, dos citas de linea que ya no cuadraban (latido.sh:224 contra :220-221; settings.json:129 contra :122) y vigias que deploy-receipt.md da por cerrados el 2026-10-11"},
+    {"id": "coverage.json.modelWakes", "ubicacion": "docs/evidence/agent-work/coverage.json:122-141", "estadoTrasB22": "vigente, alineado el 2026-10-13", "entradaHoy": "foto del 2026-10-13T18:09:52Z con 2 entradas, los dos avisos del repo, y ningun cron: ese dia bids-02-vigia borro su propio cron. Lo anterior: foto del 2026-10-07 con 14 entradas, dos citas de linea que ya no cuadraban (latido.sh:224 contra :220-221; settings.json:129 contra :122) y vigias que deploy-receipt.md da por cerrados el 2026-10-11"},
     {"id": "main_cli_loop", "ubicacion": "scripts/tests/test_agent_work_main_cli_loop_e2e.py; caso main_cli_loop de test-agent-work-e2e.sh", "estadoTrasB22": "recortado el 2026-10-13", "entradaHoy": "se borro el caso que armaba a mano la ruta de sesion adoptada. Conserva test_isolated_cron_run_cannot_submit (R rechaza un submit desde un cron aislado) y LoopGateway, el arnes de R que usa cutover_fencing"},
     {"id": "detect_silent_failures", "ubicacion": "scripts/agent-work/host.py:714-778 en la base", "estadoTrasB22": "borrado el 2026-10-13", "entradaHoy": "ninguna. Se fue con la ruta de sesion adoptada, junto con settle_deliveries y sus pruebas. La ruta viva usa detect_run_failures (host.py:790, native_gateway.py:604 en la base)"},
     {"id": "managedTasks.host.cancellation", "ubicacion": "R managed-tasks.ts:371-401; G native_gateway.py:186", "estadoTrasB22": "vigente", "entradaHoy": "la pasada del host"},
