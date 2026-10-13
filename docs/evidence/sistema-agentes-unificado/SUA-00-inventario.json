@@ -247,7 +247,7 @@
       "resultado": "turno con modelo cada 5 min; 16 llamadas al proveedor en 30 min para bids-02-vigia",
       "recibo": "eventos de sesion agent:main:cron:<id>; provider.payload.measured",
       "fuente": {"capacidad": "passed", "version": "coverage.json modelWakes, foto del 2026-10-07 con 11 crons vigia", "evidencia": "coverage.json:122-217; test-agent-work-routing.py test_every_live_cron_is_classified (:314)"},
-      "instalado": {"capacidad": "unknown", "razon": "la foto de coverage.json es del 2026-10-07 y lista vigias que deploy-receipt.md da por cerrados el 2026-10-11 (solo bids-02-vigia). No se leyo cron list en este bloque", "comando": "openclaw cron list --json, lo corre el coordinador (M-09)"},
+      "instalado": {"capacidad": "passed", "version": "openclaw cron list --json del 2026-10-13", "evidencia": "SUA-00-mediciones.md, M-09: 30 crons habilitados y un solo vigia, bids-02-vigia. coverage.json.modelWakes sigue con la foto del 2026-10-07"},
       "aceptadoEnVivo": {"capacidad": "passed", "evidencia": "deploy-receipt.md, Contadores: 66 eventos nuevos de main en 30 min, todos de agent:main:cron:915213a2-..., bids-02-vigia; 16 llamadas al proveedor, todas suyas"}
     },
     {
@@ -298,8 +298,8 @@
       "autoridad": "unknown",
       "resultado": "unknown",
       "recibo": "unknown",
-      "fuente": {"capacidad": "unknown", "version": null, "razon": "en esta Mac no hay runtime: ~/.hermes no existe, which hermes vacio, pip3 show hermes-agent no lo encuentra, brew no lo lista. Existe ~/dev/goncloud-hermes (configuracion de nueve perfiles) y ~/.hermes-ss (ayudante de capturas, no es el runtime)", "comando": "sed -n 1,80p ~/dev/goncloud-hermes/README.md y preguntar a David en que maquina corre"},
-      "instalado": {"capacidad": "unknown", "razon": "la instalacion no esta en esta Mac", "comando": "lo contesta David"},
+      "fuente": {"capacidad": "unknown", "version": null, "razon": "en esta Mac no hay runtime: ~/.hermes no existe, which hermes vacio, pip3 show hermes-agent no lo encuentra, brew no lo lista. Existe ~/dev/goncloud-hermes (configuracion de nueve perfiles) y ~/.hermes-ss (ayudante de capturas, no es el runtime)", "comando": "sed -n 1,80p ~/dev/goncloud-hermes/README.md y, con gon-pc encendida, leer la instalacion ahi"},
+      "instalado": {"capacidad": "unknown", "razon": "corre en gon-pc (Windows, red privada), segun David el 2026-10-13. Esa maquina estaba fuera de la red al medir; falta la version", "comando": "con gon-pc encendida, leer la version y las interfaces de Hermes ahi (SUA-07 paso 1)"},
       "aceptadoEnVivo": {"capacidad": "unknown", "razon": "sin inventario", "comando": "SUA-07 paso 1"}
     }
   ],
@@ -337,13 +337,12 @@
     {"archivo": "Plans.md y docs/runbooks/autopilot-fase*.md", "linea": null, "tipo": "texto", "queHace": "219 archivos mencionan quality-kit, saikit o cross-review fuera de docs/evidence; la mayoria es rastro historico"}
   ],
   "unknowns": [
-    {"id": "U1", "que": "crons vivos hoy en el gateway y cuales son vigias", "comando": "openclaw cron list --json"},
     {"id": "U2", "que": "si el host de encargos corre ahora", "comando": "python3 scripts/agent-work/encargo.py estado"},
     {"id": "U3", "que": "scope que R exige a managedTasks.resolve, cron.update, config.patch, system event y message send", "comando": "git -C /Users/dn/dev/openclaw-agent-work-integration grep -n operator src/gateway/methods/core-descriptors.ts"},
     {"id": "U4", "que": "corridas abiertas y si alguna trae authorization_ref", "comando": "ls ~/.local/state/corridas"},
     {"id": "U5", "que": "la copia de brief.py y de las skills en la Mini", "comando": "ssh gon@100.73.187.5 sha256sum ~/.local/share/agent-work/brief.py"},
     {"id": "U6", "que": "version local de openclaw en la Mac", "comando": "~/.openclaw/bin/openclaw --version"},
-    {"id": "U7", "que": "donde corre Hermes, con que version y que interfaces expone", "comando": "lo contesta David; despues sed -n 1,80p ~/dev/goncloud-hermes/README.md"},
+    {"id": "U7", "que": "version e interfaces de Hermes; corre en gon-pc (Windows), segun David el 2026-10-13", "comando": "con gon-pc encendida, leer la instalacion de Hermes ahi; despues sed -n 1,80p ~/dev/goncloud-hermes/README.md"},
     {"id": "U8", "que": "si las dos rutas agente a agente de CLI_ROUTES y AGENT_ROUTES estan habilitadas en R", "comando": "openclaw gateway call config.get y leer managedTasks.requesters"},
     {"id": "U9", "que": "archivos de estado del corte y la generacion vigente", "comando": "ls ~/.local/state/encargos-loop/B22/corte/"},
     {"id": "U10", "que": "diferencias exactas entre ~/bin y el repo", "comando": "bash scripts/mac/instalar-mac.sh --verificar"}
