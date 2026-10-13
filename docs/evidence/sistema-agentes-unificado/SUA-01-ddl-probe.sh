@@ -12,7 +12,12 @@ sqlite3 "$db" "PRAGMA foreign_keys=ON;" ".read $work/ddl.sql"
 run() { sqlite3 "$db" "PRAGMA foreign_keys=ON; $1" >/dev/null 2>"$work/err"; }
 ok=0; bad=0
 legal() { if run "$2"; then ok=$((ok+1)); else bad=$((bad+1)); echo "FALLA (debía entrar): $1: $(cat "$work/err")"; fi; }
-illegal() { if run "$2"; then bad=$((bad+1)); echo "FALLA (debía rechazarse): $1"; else ok=$((ok+1)); fi; }
+# Con un tercer argumento, el rechazo tiene que venir de esa restricción y no de otra.
+illegal() {
+  if run "$2"; then bad=$((bad+1)); echo "FALLA (debía rechazarse): $1"
+  elif [ -n "${3:-}" ] && ! grep -q "$3" "$work/err"; then bad=$((bad+1)); echo "FALLA (lo rechazó otra restricción): $1: $(cat "$work/err")"
+  else ok=$((ok+1)); fi
+}
 
 T="INSERT INTO managed_tasks (task_id, requester_scope, task_key, requester_json, assignment_json, assignment_digest, producer_id, producer_token, generation, created_at, updated_at) VALUES"
 legal "tareas" "$T ('t-a','{\"kind\":\"root\",\"rootId\":\"r1\"}','unit:A:1','{}','{}','d','x','p',1,1,1), ('t-a2','{\"kind\":\"root\",\"rootId\":\"r1\"}','unit:A:2','{}','{}','d','x','p',1,1,1), ('t-b','{\"kind\":\"root\",\"rootId\":\"r1\"}','unit:B:1','{}','{}','d','x','p',1,1,1);"
@@ -124,14 +129,14 @@ illegal "orden tras cancelled" "$C ('r1',5,4,'cancelled','resume','active',NULL,
 illegal "cancel tras cancelled" "$C ('r1',5,4,'cancelled','cancel','cancelled',NULL,'c-5','d','{}',1);"
 
 # Un CHECK que vale NULL pasa en SQLite. Cada cadena tiene que rechazar un prev_ en NULL fuera de su primera fila.
-illegal "orden tras cancelled con prev en NULL" "$C ('r1',5,NULL,NULL,'resume','active',NULL,'n-1','d','{}',1);"
-illegal "época saltada con prev en NULL" "$C ('r1',9,NULL,NULL,'pause','paused',NULL,'n-2','d','{}',1);"
-illegal "orden con prev_state en NULL" "$C ('r1',5,4,NULL,'resume','active',NULL,'n-3','d','{}',1);"
-illegal "raíz que nace pausada, sin prev" "$C ('r9',2,NULL,NULL,'pause','paused',NULL,'n-4','d','{}',1);"
-illegal "revisión 5 con prev en NULL" "$P ('r1',5,NULL,'pd','[]',NULL,'rev-5','d','{}',1);"
-illegal "intento 7 con prev en NULL" "$A ('r1','B',7,NULL,1,'hb','t-a','k-1',NULL,'failed','commit:k-1',1,1);"
-illegal "contador 9 con prev en NULL" "$N ('r1','rondas:A',9,NULL,'k-1');"
-illegal "generación 9 con prev en NULL" "$Q ('r1',9,NULL,'inst-9',1);"
+illegal "orden tras cancelled con prev en NULL" "$C ('r1',5,NULL,NULL,'resume','active',NULL,'n-1','d','{}',1);" "CHECK constraint failed"
+illegal "época saltada con prev en NULL" "$C ('r1',9,NULL,NULL,'pause','paused',NULL,'n-2','d','{}',1);" "CHECK constraint failed"
+illegal "orden con prev_state en NULL" "$C ('r1',5,4,NULL,'resume','active',NULL,'n-3','d','{}',1);" "CHECK constraint failed"
+illegal "raíz que nace pausada, sin prev" "$C ('r9',2,NULL,NULL,'pause','paused',NULL,'n-4','d','{}',1);" "CHECK constraint failed"
+illegal "revisión 5 con prev en NULL" "$P ('r1',5,NULL,'pd','[]',NULL,'rev-5','d','{}',1);" "CHECK constraint failed"
+illegal "intento 7 con prev en NULL" "$A ('r1','B',7,NULL,1,'hb','t-a','k-1',NULL,'failed','commit:k-1',1,1);" "CHECK constraint failed"
+illegal "contador 9 con prev en NULL" "$N ('r1','rondas:A',9,NULL,'k-1');" "CHECK constraint failed"
+illegal "generación 9 con prev en NULL" "$Q ('r1',9,NULL,'inst-9',1);" "CHECK constraint failed"
 
 fk="$(sqlite3 "$db" "PRAGMA foreign_key_check;")"
 [ -z "$fk" ] || { bad=$((bad+1)); echo "FALLA: foreign_key_check: $fk"; }

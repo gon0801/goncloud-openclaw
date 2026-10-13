@@ -1461,7 +1461,7 @@ Tres cosas hacen que esa compuerta pueda salir en rojo de verdad:
 | 12 | Revisión de plan | `reviseManagedRootPlan`. | `managed-root.plan.test.ts`, con el caso de escritores tras revisar | No |
 | 13 | Recuperar al solicitante | `recoverManagedRootRequester` y el despertar de la raíz. | `managed-root.requester.test.ts` | No |
 | 14 | Entrada del gateway y redacción | `managedTasks.root.read` y `managedTasks.root.control` en `src/gateway/server-methods/managed-tasks.ts`, con sus descriptores (`src/gateway/methods/core-descriptors.ts`). La prueba de tabla de redacción extendida. | La prueba de tabla, y dos casos nuevos en `src/gateway/server-methods/managed-tasks.test.ts` | El archivo sí. Sus manejadores de hoy no cambian |
-| 15 | Casos en G | `scripts/agent-work/test-runtime.sh` gana `root_contract`, `root_fan_in`, `root_recovery`, `root_control`, `root_effects`, `root_capacity` y `root_redaction`. `runtime-map.json` y el recibo del bloque. | Cada caso corre su archivo de R. `root_contract` exporta `AGENT_WORK_G_ROOT`, y una prueba de G valida con `contrato.py` los documentos que `readManagedRoot` emitió | No |
+| 15 | Casos en G | `docs/spec/sistema-agentes.v1.md` gana la frase del conflicto 2 ("antes de admitir, la época vigente de la raíz"). `scripts/agent-work/test-runtime.sh` gana `root_contract`, `root_fan_in`, `root_recovery`, `root_control`, `root_effects`, `root_capacity` y `root_redaction`. `runtime-map.json` y el recibo del bloque. | Cada caso corre su archivo de R. `root_contract` exporta `AGENT_WORK_G_ROOT`, y una prueba de G valida con `contrato.py` los documentos que `readManagedRoot` emitió | No |
 
 ### Por qué este orden
 
