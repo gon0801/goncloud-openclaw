@@ -116,6 +116,37 @@ class AgentsRouting(unittest.TestCase):
         for name in ("B22-fase0.md", "B22-canarios.md"):
             self.assertTrue((ROOT / "docs/evidence/agent-work" / name).is_file(), name)
 
+    def test_every_field_that_speaks_of_certification_agrees_with_host_adapter_coverage(self):
+        """routing.py and the host read hostAdapterCoverage. status, hosts and managedRequesterRoutes repeat it
+        for a reader: `certified` there means that some route under it is certified, and `inventory-only`
+        that none is. Until 2026-10-13 they said `inventory-only` while mac-local/opencode took real tasks."""
+        certified = {(host_id, adapter_id)
+                     for host_id, adapters in self.coverage["hostAdapterCoverage"].items()
+                     for adapter_id, state in adapters.items() if state == "certified"}
+        self.assertEqual(self.coverage["status"], "certified" if certified else "inventory-only")
+        self.assertEqual([(host["id"], host["status"]) for host in self.coverage["hosts"]],
+                         [("mac-local", "certified"), ("windows-remote", "disabled-unverified")])
+        self.assertEqual({host["id"] for host in self.coverage["hosts"] if host["status"] == "certified"},
+                         {host_id for host_id, _ in certified})
+        routes = self.coverage["managedRequesterRoutes"]
+        listed = [(route["requester"], route["target"]) for route in routes]
+        self.assertEqual(len(listed), len(set(listed)), "a managed route is listed twice")
+        for route in routes:
+            if route["kind"] == "cli":
+                with self.subTest(route=route["target"]):
+                    self.assertEqual(route["certified"], tuple(route["target"].split("/", 1)) in certified)
+        # The requester routing.py lets reach a host has a listed route to each certified adapter of it.
+        self.assertLessEqual({(requester, f"{host_id}/{adapter_id}") for requester, host in routing.CLI_ROUTES
+                              for host_id, adapter_id in certified if host == host_id}, set(listed))
+        self.assertEqual([key for key, route in zip(listed, routes) if route["certified"]],
+                         [("main", "mac-local/opencode")])
+
+    def test_every_repo_path_the_inventory_names_as_its_source_exists(self):
+        named = re.findall(r"\b(?:agents|scripts|docs)/[\w./-]*\w", self.coverage["source"])
+        self.assertIn("agents/main/agent/workshop-skills/agent-dispatch/SKILL.md", named)
+        for path in named:
+            self.assertTrue((ROOT / path).is_file(), f"source names {path}, which is not in the repo")
+
     def test_cli_route_is_limited_to_its_requester(self):
         certified = json.loads(json.dumps(self.coverage))
         certified["hostAdapterCoverage"]["mac-local"]["claude_opus"] = "certified"
@@ -302,14 +333,18 @@ class AgentsRouting(unittest.TestCase):
             "business": "cron de negocio: conserva horario y función; fuera del perímetro, no delega trabajo con resultado esperado (T9 :265)",
             "technical": "cron técnico: despierta un modelo o corre un comando sin delegar trabajo con resultado esperado; fuera del perímetro (T9 :265)",
             "system": "tarea interna del gateway; no delega (T9 :265)",
-            "vigia": "vigía de un loop: conserva su ruta hasta que T12 lo suspenda y retire por entrada (plan :312, :317 y :318; T9 :265 y :266)",
+            "vigia": "vigía de un loop que no puede usar la ruta de encargos: T12 lo conservó y lo declaró (followups.md, fila T12 `bids-02`); sigue en su ruta hasta que SUA-09O lo inventaríe y cambie su dueño (T9 :265 y :266)",
+        }
+        # El único cron de la foto que delega: su mensaje despacha a otro agente, así que no lleva la razón de su clase.
+        delegating = {
+            "seguimiento-yours-virtually-miercoles": "cron de negocio de un solo disparo (2026-10-14): conserva horario y función; despacha al agente mail con sessions_spawn, la ruta nativa que sigue fuera del perímetro gestionado (migration, route:native-subagent)",
         }
         perimeters = {"business": "out-of-perimeter", "technical": "out-of-perimeter",
                       "system": "out-of-perimeter", "vigia": "legacy-until-adoption"}
         cron_jobs = self.coverage["cronJobs"]
-        self.assertEqual(cron_jobs["snapshot"], "docs/evidence/agent-work/B4-26-cron-snapshot.json")
+        self.assertEqual(cron_jobs["snapshot"], "docs/evidence/agent-work/SUA-00-M09-cron-snapshot.json")
         self.assertEqual(hashlib.sha256((ROOT / cron_jobs["snapshot"]).read_bytes()).hexdigest(),
-                         "c300335f2b00ed9ddd7ac8056acba9102da8e5ce97bb4d065c9d51966d86986f",
+                         "9bb7709881ef6851f7c55bfcf5fbb71721d1c81a4e71ac1f5bc0654b5dd26a7c",
                          "the cron snapshot changed: a new snapshot is a new file and a new literal here")
         snapshot = json.loads((ROOT / cron_jobs["snapshot"]).read_text())
         jobs = {job["id"]: job for job in snapshot["jobs"]}
@@ -321,9 +356,13 @@ class AgentsRouting(unittest.TestCase):
         for row in cron_jobs["entries"]:
             kinds.setdefault(row["kind"], set()).add(row["name"])
         self.assertEqual(kinds.get("business"), {
-            "packing-digest-20h", "packing-extras-7h", "packing-extras-11h", "verif-digest-20h",
-            "Renueva el token de acceso de Shopify de la tienda theglamw…"})
+            "packing-digest-faseA-censo", "packing-digest-faseB-armado", "packing-digest-faseC-envio",
+            "packing-extras-7h", "packing-extras-11h", "verif-digest-20h",
+            "Renueva el token de acceso de Shopify de la tienda theglamw…",
+            "seguimiento-yours-virtually-miercoles"})
         self.assertEqual(kinds.get("system"), {"Memory Dreaming Promotion"})
+        self.assertEqual(kinds.get("vigia"), {"bids-02-vigia"})
+        self.assertEqual(len(kinds.get("technical")), 20)
         wake_ids = {entry["id"] for entry in self.coverage["modelWakes"]["entries"] if entry["kind"] == "cron"}
         for row in cron_jobs["entries"]:
             job = jobs[row["id"]]
@@ -331,7 +370,7 @@ class AgentsRouting(unittest.TestCase):
                 self.assertEqual(row["name"], job["name"])
                 self.assertIn(row["kind"], reasons)
                 self.assertEqual(row["perimeter"], perimeters[row["kind"]])
-                self.assertEqual(row["reason"], reasons[row["kind"]])
+                self.assertEqual(row["reason"], delegating.get(row["name"], reasons[row["kind"]]))
                 self.assertEqual(row["kind"] == "vigia", job["name"].endswith("-vigia"))
                 if row["kind"] == "vigia":
                     self.assertIn(row["id"], wake_ids, "a live vigia is missing from modelWakes")
@@ -343,8 +382,8 @@ class AgentsRouting(unittest.TestCase):
 
     def test_model_wakes_inventory_lists_every_repo_wake_source(self):
         wakes = self.coverage["modelWakes"]
-        # T9 :265: la foto completa de crons (B4-26) reemplaza a la de B4-8, que solo guardo dos vigias.
-        self.assertEqual(wakes["snapshot"], "docs/evidence/agent-work/B4-26-cron-snapshot.json")
+        # La foto del 2026-10-13 (M-09 de SUA-00) reemplaza a la de B4-26, del 2026-10-07.
+        self.assertEqual(wakes["snapshot"], "docs/evidence/agent-work/SUA-00-M09-cron-snapshot.json")
         snapshot = json.loads((ROOT / wakes["snapshot"]).read_text())
         self.assertEqual(wakes["capturedAt"], snapshot["capturedAt"])
         sources = [entry["source"] for entry in wakes["entries"]]
@@ -357,19 +396,12 @@ class AgentsRouting(unittest.TestCase):
                 any(source.startswith(f"{path}:") for source in sources) or path in recreators,
                 f"repo wake source {path} is missing from modelWakes",
             )
-        live = {job["id"]: job for job in snapshot["jobs"] if job["name"].endswith("-vigia")}
-        live_ids = set(live)
-        self.assertTrue(live_ids, "the snapshot has no live vigia")
-        live_names = {job["name"] for job in live.values()}
-        for entry in wakes["entries"]:
-            job = live.get(entry["id"])
-            if job:
-                self.assertEqual((entry["name"], entry["cadence"]),
-                                 (job["name"], f"every {job['schedule']['everyMs']} ms"))
-            elif entry["kind"] == "cron":
-                self.assertNotIn(entry["name"], live_names, "a live vigia keeps a stale id in modelWakes")
-        cron_ids = {entry["id"] for entry in wakes["entries"] if entry["kind"] == "cron"}
-        self.assertLessEqual(live_ids, cron_ids)
+        # Un cron que ya no está en la foto no despierta a nadie: los crons del inventario son los vigías vivos.
+        live = [(job["id"], job["name"], f"every {job['schedule']['everyMs']} ms")
+                for job in snapshot["jobs"] if job["name"].endswith("-vigia")]
+        self.assertEqual(live, [("a65b9e51-008f-4212-8ae4-19c9e52f297d", "bids-02-vigia", "every 300000 ms")])
+        self.assertEqual([(entry["id"], entry["name"], entry["cadence"])
+                          for entry in wakes["entries"] if entry["kind"] == "cron"], live)
         for entry in wakes["entries"]:
             for key in ("kind", "id", "name", "targets", "cadence", "source", "recreators"):
                 self.assertIn(key, entry)
@@ -444,19 +476,21 @@ class AgentsRouting(unittest.TestCase):
         self.assertIn("docs/runbooks/guia-del-vigia.md", listed, "the instruction scan lost the marking docs")
         required |= {f"file:{path}" for path in listed}
         self.assertEqual(set(rows), required, "migration must register every inventory entry and nothing else")
-        # El estado no es libre: un vigia de cron se retira en T12, una ruta gestionada sin certificar esta
-        # preparada y apagada, y solo un archivo puede quedar fuera del perimetro.
+        # El estado no es libre: un vigia de cron conserva su ruta hasta SUA-09O (T12 cerro sin adoptarlo) y solo
+        # un archivo puede quedar fuera del perimetro. Una ruta gestionada es managed-prepared, certificada o no:
+        # el vocabulario no tiene un estado para la que ya esta encendida, y eso lo dice su `certified`.
         cron_wakes = {f"wake:{entry['name']}" for entry in wakes if entry["kind"] == "cron"}
-        uncertified = {f"managed:{route['requester']}->{route['target']}"
-                       for route in self.coverage["managedRequesterRoutes"] if not route["certified"]}
+        managed = {f"managed:{route['requester']}->{route['target']}"
+                   for route in self.coverage["managedRequesterRoutes"]}
         for row in rows.values():
             with self.subTest(entry=row["id"]):
                 self.assertIn(row["state"], states)
                 self.assertTrue(row["reason"].strip())
-                self.assertEqual(row.get("adoption"), "T12" if row["state"] == "legacy-until-adoption" else None)
                 if row["id"] in cron_wakes:
-                    self.assertEqual(row["state"], "legacy-until-adoption")
-                if row["id"] in uncertified:
+                    self.assertEqual((row["state"], row.get("adoption")), ("legacy-until-adoption", "SUA-09O"))
+                else:
+                    self.assertEqual(row.get("adoption"), "T12" if row["state"] == "legacy-until-adoption" else None)
+                if row["id"] in managed:
                     self.assertEqual(row["state"], "managed-prepared")
                 if row["state"] == "out-of-perimeter":
                     self.assertTrue(row["id"].startswith("file:"), "only a file can be declared out of the perimeter")
