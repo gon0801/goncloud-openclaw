@@ -5,14 +5,14 @@
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
-grep -qF 'esta sección reemplaza las dos rutas y el paso 2 del flujo de abajo' agents/implementer/agent/workshop-skills/saikit-cierre-pr/SKILL.md \
-  || fail 'saikit-cierre-pr (implementer): la seccion Kit apagado no reemplaza la Ruta 2'
+grep -qF 'esta sección reemplaza la orden fechada del dueño y el paso 2 del flujo de abajo' agents/implementer/agent/workshop-skills/saikit-cierre-pr/SKILL.md \
+  || fail 'saikit-cierre-pr (implementer): la seccion Kit apagado no reemplaza el paso 2 del flujo'
 grep -qF 'ejecuta `gh pr merge <PR> --squash --match-head-commit <SHA>` (`docs/runbooks/loop-autopilot.md` §6)' agents/implementer/agent/workshop-skills/saikit-cierre-pr/SKILL.md \
   || fail 'saikit-cierre-pr (implementer): sin la instruccion de merge de §6'
 grep -qF '§6). En el nodo Mac usa `PATH=/opt/homebrew/bin:$PATH`.' agents/implementer/agent/workshop-skills/saikit-cierre-pr/SKILL.md \
   || fail 'saikit-cierre-pr (implementer): la via sin kit pierde el PATH del nodo Mac'
-grep -qF 'esta sección reemplaza las dos rutas y el paso 2 del flujo de abajo' agents/ingenieria/agent/workshop-skills/saikit-cierre-pr/SKILL.md \
-  || fail 'saikit-cierre-pr (ingenieria): la seccion Kit apagado no reemplaza la Ruta 2'
+grep -qF 'esta sección reemplaza la orden fechada del dueño y el paso 2 del flujo de abajo' agents/ingenieria/agent/workshop-skills/saikit-cierre-pr/SKILL.md \
+  || fail 'saikit-cierre-pr (ingenieria): la seccion Kit apagado no reemplaza el paso 2 del flujo'
 grep -qF 'ejecuta `gh pr merge <PR> --squash --match-head-commit <SHA>` (`docs/runbooks/loop-autopilot.md` §6)' agents/ingenieria/agent/workshop-skills/saikit-cierre-pr/SKILL.md \
   || fail 'saikit-cierre-pr (ingenieria): sin la instruccion de merge de §6'
 grep -qF '§6). En el nodo Mac usa `PATH=/opt/homebrew/bin:$PATH`.' agents/ingenieria/agent/workshop-skills/saikit-cierre-pr/SKILL.md \

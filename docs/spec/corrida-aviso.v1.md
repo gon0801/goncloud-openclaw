@@ -1,7 +1,7 @@
 # corrida-aviso.v1 — aviso de corrida con pendiente durable
 
-Fecha: 2026-09-29 (19.1 B2). Estado: activo en el código desde el merge;
-sin instalar en el host (la instalación y sus veinte transiciones son 19.2).
+Fecha: 2026-09-29 (19.1 B2). Estado: retirado. La ruta de corrida se retiró el
+2026-10-13 y este documento queda como lectura histórica.
 Extiende [corrida.v2.md](corrida.v2.md) sin tocar su validador. Fuente de
 verdad del aviso: el almacenamiento de la propia corrida. No hay servicio,
 cron ni aplicación nuevos: emiten el vigilante y el hook existentes, decide

@@ -7,8 +7,7 @@
 # Verifica: (1) el detector marca las formas del incidente y deja pasar las correctas (discrimina);
 # (2) ninguna instruccion versionada para agentes usa la forma mala; (3) la skill con la regla esta
 # en main/operaciones/ingenieria, identica y con sus anclas; (4) la fuente es determinista: con una
-# copia divergente de openclaw instalada en HOME, el veredicto no cambia y la copia queda intacta
-# (el mecanismo con el binario real lo audita el preflight de corrida, no esta prueba).
+# copia divergente de openclaw instalada en HOME, el veredicto no cambia y la copia queda intacta.
 # Uso: bash scripts/tests/test-browser-profile-flag.sh
 # OJO SI ESTA PRUEBA SE PONE EN ROJO POR EL PASO (3), el de "difiere de":
 # los archivos bajo agents/*/agent/workshop-skills/ son ARTEFACTOS GENERADOS. El cron
@@ -78,9 +77,7 @@ echo "ok (3): skill $SK en main/operaciones/ingenieria, identica y con sus ancla
 # salteaba con "skip" si faltaba: medido 2026-09-21, una copia divergente
 # pintaba la fuente de rojo y una maquina sin instalacion producia un skip
 # callado (el candado desaparecia justamente donde la instalacion podia estar
-# rota). El chequeo del mecanismo con el binario real vive en el preflight de
-# corrida (scripts/mac/corrida/preflight.sh), donde la ausencia es un unknown
-# explicito. Aca se prueba lo contrario: con una copia divergente PLANTADA en
+# rota). Aca se prueba lo contrario: con una copia divergente PLANTADA en
 # un HOME temporal, el veredicto de fuente no cambia, la copia no se ejecuta
 # y no se modifica.
 if [ -z "${HIJO_AISLADO:-}" ]; then

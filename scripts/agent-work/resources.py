@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import re
@@ -237,21 +236,6 @@ class ResourceManager:
                 return self._state(key, row["revision"], "CleanupPending", "launch outcome uncertain")
         launch(row["nonce"])
         return self.attach(key)
-
-    def mark(self, key: OperationKey) -> None:
-        """Tag the session with this resource's nonce. An abandoned delivery releases its row without reaching
-        tmux, so a nonce left by a released resource of this host is cleared first; any other nonce refuses."""
-        row = self._row(key)
-        observed = self.backend.observe(row["session_name"])
-        incumbent = observed.get("nonce") if observed else ""
-        if incumbent and incumbent != row["nonce"]:
-            with self.spool.connection() as db:
-                released = db.execute("SELECT 1 FROM resources WHERE nonce=? "
-                                      f"AND state IN ({','.join('?' * len(TERMINAL))})",
-                                      (incumbent, *TERMINAL)).fetchone()
-            if released and not self.backend.revoke(observed):
-                raise OSError("cannot clear a released resource's tmux nonce")
-        self.backend.mark(row["session_name"], row["nonce"])
 
     def attach(self, key: OperationKey) -> ResourceView:
         row = self._row(key)
@@ -584,23 +568,6 @@ class TmuxBackend:
                      f"#{{{self.NONCE_OPTION}}},{expected}}}")
         return self._tmux("if-shell", "-F", "-t", session_id, condition, command).returncode == 0
 
-    def mark(self, session: str, nonce: str) -> None:
-        if not session or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in session):
-            raise ValueError("invalid tmux session")
-        if not nonce or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in nonce):
-            raise ValueError("invalid tmux resource nonce")
-        current = self._fields(f"={session}:")
-        if current is None:
-            raise OSError("tmux session unavailable before delivery")
-        if current[4] and current[4] != nonce:
-            raise ValueError("tmux session already belongs to another resource")
-        session_id = current[1]
-        if not self._guarded(current, f"set-option -t {session_id} {self.NONCE_OPTION} {nonce}"):
-            raise OSError("cannot mark tmux resource before delivery")
-        marked = self._fields(f"{session_id}:")
-        if marked != (*current[:4], nonce):
-            raise OSError("tmux resource identity changed before delivery")
-
     def observe(self, session: str) -> dict | None:
         if not session or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in session):
             raise ValueError("invalid tmux session")
@@ -926,46 +893,3 @@ class AgentesBackend(TmuxBackend):
         if self._runner(panel).rc != 0:
             raise OSError("agent panel spawn failed")
         return workdir
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("close",))
-    parser.add_argument("--host-id", required=True)
-    parser.add_argument("--state-dir", required=True, type=Path)
-    parser.add_argument("--assignment", required=True, type=Path)
-    parser.add_argument("--evidence", required=True, type=Path)
-    parser.add_argument("--tmux-socket", required=True)
-    parser.add_argument("--tmux-bin", default="tmux")
-    parser.add_argument("--backend", choices=("tmux", "agentes"),
-                        default=os.environ.get("AGENT_WORK_BACKEND", "tmux"))
-    args = parser.parse_args()
-    from host import Host
-    host = Host(args.host_id, args.state_dir)
-    assignment = json.loads(args.assignment.read_text())
-    host.verify_reference(args.host_id, assignment["session"], str(args.assignment))
-    key = OperationKey(assignment["hostId"], assignment["taskId"],
-                       assignment["generation"], assignment["instanceId"])
-    evidence = json.loads(args.evidence.read_text())
-    if evidence.get("kind") == "result":
-        receipt = host.receipt(args.host_id, key)
-        if not receipt or receipt["receiptId"] != evidence.get("receipt"):
-            raise ValueError("result receipt is not durable for this task")
-    if args.backend == "agentes":
-        backend = AgentesBackend(args.tmux_bin, args.tmux_socket)
-    else:
-        backend = TmuxBackend(args.tmux_bin, args.tmux_socket)
-    manager = ResourceManager(host.spool, args.host_id, backend)
-    view = manager.close(key, evidence)
-    report = {"state": view.state, "reason": view.reason}
-    if isinstance(backend, AgentesBackend) and backend.last_containment is not None:
-        report["containment"] = backend.last_containment
-    print(canonical(report))
-    return 0
-
-
-if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
-        raise SystemExit(str(exc)) from exc

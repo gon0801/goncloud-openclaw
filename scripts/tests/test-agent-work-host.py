@@ -2,11 +2,9 @@
 import hashlib
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -480,82 +478,6 @@ class HostReceipts(unittest.TestCase):
         self.assertEqual(self.host.spool.get(op_id)["status"], "delivered")
         self.assertEqual(uncertain_operations([str(self.root / "host")]), [])
         self.assertEqual(self.watch(self.host.spool.delivered_at(op_id) + 60), ["host:2:deadline-missed:deadline"])
-
-    def test_host_receipts_tmux_cli_without_hooks(self):
-        if not shutil.which("tmux"):
-            self.skipTest("tmux not installed")
-        socket = "agent-work-host-" + str(os.getpid())
-        def tmux_cmd(*args):
-            return subprocess.run(["tmux", "-L", socket, *args], capture_output=True, text=True)
-        cli = self.root / "fake-cli.py"
-        cli.write_text(
-            "import hashlib,json,os,pathlib,re,sys\n"
-            "line=sys.stdin.readline()\n"
-            "ref=re.search(r'(/[^ ]+\\.json)',line).group(1)\n"
-            "a=json.loads(pathlib.Path(ref).read_text())\n"
-            "p=pathlib.Path(a['workspaceRef'])/'evidence.txt'\n"
-            "out=pathlib.Path(a['resultRef'])\n"
-            "r={'schema':'agent-work.result.v1','kind':'produced','hostId':a['hostId'],"
-            "'taskId':a['taskId'],'generation':a['generation'],'instanceId':a['instanceId'],"
-            "'producerId':a['producerId'],'capability':a['capability'],"
-            "'observedRevision':a['inputRevision'],'typedPayload':{'verdict':'approved','evidenceRef':'evidence.txt'},"
-            "'artifactRef':str(p),'digest':hashlib.sha256(p.read_bytes()).hexdigest()}\n"
-            "tmp=out.with_suffix('.tmp');tmp.write_text(json.dumps(r));os.replace(tmp,out)\n"
-            "print('FAKE-RESULT-WRITTEN',flush=True)\n"
-            "sys.stdin.readline()\n"
-        )
-        try:
-            self.assertEqual(tmux_cmd("new-session", "-d", "-s", "worker-2", "-c", str(self.workspace),
-                                      sys.executable, str(cli)).returncode, 0)
-            shim = self.root / "tmux-shim"
-            shim.write_text(f'#!/bin/sh\nexec {shutil.which("tmux")} -L {socket} "$@"\n')
-            shim.chmod(0o700)
-            key2 = OperationKey("mac-test", "task-2", 2, "instance-2")
-            op2 = replace(self.operation, key=key2, session="worker-2")
-            env = dict(os.environ, TMUX_BIN=str(shim), AGENT_WORK_HOST_STATE_DIR=str(self.root / "host"))
-
-            def deliver_ref(host_id, ref, session):
-                return subprocess.run(["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "adaptador",
-                                       "deliver-ref", "run-test", "lane-test", "worker-test", session, host_id, ref],
-                                      capture_output=True, text=True, env=env)
-
-            def via_adapter(ref, session):
-                sent = deliver_ref("mac-test", ref, session)
-                if sent.returncode or sent.stdout.strip() != "accepted":
-                    raise RuntimeError(sent.stderr)
-
-            self.assertEqual(self.apply(key2, op2, via_adapter).status, "delivered")
-            self.assertEqual(tmux_cmd("show-environment", "-t", "=worker-2", "AGENT_WORK_MANAGED").stdout.strip(),
-                             "AGENT_WORK_MANAGED=1")
-            ref = str(self.root / "host" / "assignments" / f"{operation_id(key2)}.json")
-            self.assertNotEqual(deliver_ref("foreign-host", ref, "worker-2").returncode, 0)
-            deadline = time.monotonic() + 5
-            while time.monotonic() < deadline and not self.host.collect("mac-test", key2):
-                time.sleep(0.1)
-            self.assertEqual([result["typedPayload"] for result in self.host.pending("mac-test")],
-                             [{"verdict": "approved", "evidenceRef": "evidence.txt"}])
-
-            self.assertEqual(tmux_cmd("new-session", "-d", "-s", "worker-3", "-c", str(self.workspace),
-                                      sys.executable, str(cli)).returncode, 0)
-            key3 = OperationKey("mac-test", "task-3", 2, "instance-3")
-            op3 = replace(self.operation, key=key3, session="worker-3")
-            def via_launcher(ref, session):
-                env = dict(os.environ, TMUX_BIN=str(shim), AGENT_WORK_REF=ref, AGENT_WORK_SESSION=session)
-                command = (f'. "{ROOT / "scripts" / "mac" / "corrida" / "lanzar-sesion.sh"}"; '
-                           'marcas_lock_refrescar() { :; }; '
-                           'lanzar_sesion_entregar_referencia "$AGENT_WORK_SESSION" "$AGENT_WORK_REF"')
-                sent = subprocess.run(["bash", "-c", command], env=env, capture_output=True, text=True)
-                self.assertEqual(sent.returncode, 0, sent.stderr)
-
-            self.assertEqual(self.apply(key3, op3, via_launcher).status, "delivered")
-            self.assertEqual(tmux_cmd("show-environment", "-t", "=worker-3", "AGENT_WORK_MANAGED").stdout.strip(),
-                             "AGENT_WORK_MANAGED=1")
-            deadline = time.monotonic() + 5
-            while time.monotonic() < deadline and not self.host.collect("mac-test", key3):
-                time.sleep(0.1)
-            self.assertEqual(len(self.host.pending("mac-test")), 2)
-        finally:
-            tmux_cmd("kill-server")
 
 
 if __name__ == "__main__":

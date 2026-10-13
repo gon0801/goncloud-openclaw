@@ -4,9 +4,7 @@
 # inventario completo con cualquier peso, y eso lo audita el gate.
 #
 # Fuente: resumen.txt de los tres shards del run 38304658354 (PR #273, 2026-10-12,
-# ubuntu-latest). test-simulacro-fase9-a.sh y -b.sh son los 663 s que midio ese run
-# para el archivo entero, repartidos con la proporcion medida en local por escenario
-# (376 s los escenarios 1 a 10, 323 s los 11 a 18).
+# ubuntu-latest).
 #
 # Para volver a medir, con los artifacts logs-run-checks-shard-* de un run verde
 # bajados en un directorio:
@@ -15,7 +13,6 @@
 4	bateria-tablero-runbook
 0	sintaxis-summa-gate
 0	sintaxis-tablero-runbook
-1	test-adaptador-reserva.sh
 0	test-agent-dispatch-spawn.sh
 5	test-agent-work-cutover.sh
 1	test-agent-work-e2e.sh
@@ -27,7 +24,6 @@
 0	test-agente-usuario.sh
 2	test-aplicar-vigia-sync-prueba.sh
 1	test-arranque-de-fase.sh
-2	test-autonomous-merge-authority.sh
 0	test-browser-profile-flag.sh
 0	test-camino-feliz.sh
 1	test-candados-declarados.sh
@@ -35,28 +31,12 @@
 11	test-cierre-de-fase.sh
 0	test-cierre-pr-merge-comando.sh
 1	test-clasificador-cambio.sh
-3	test-cli-modos.sh
 0	test-contrato-dispatch.sh
-10	test-corrida-avisos.sh
-8	test-corrida-estado.sh
-39	test-corrida-gates.sh
-73	test-corrida-latido.sh
-11	test-corrida-marcas.sh
-2	test-corrida-negritas.sh
-222	test-corrida-nucleo.sh
-87	test-corrida-preflight.sh
-29	test-corrida-reconcile.sh
-9	test-corrida-responder.sh
-5	test-corrida-seguimiento-global.sh
-1	test-corrida-terminal-visible.sh
-2	test-corrida-worktrees.sh
-0	test-cron-dest-de.sh
 0	test-crons-dos-copias.sh
 0	test-doc-check-evidencia.sh
 1	test-drive-merge-guard.sh
 4	test-esperar-contrato.sh
 0	test-evidencia-sin-texto-de-usuario.sh
-0	test-fase14-plan-contract.sh
 1	test-fase17-progress-event-atomic.sh
 0	test-fase17-progress-init.sh
 0	test-gateway-watchdog.sh
@@ -70,17 +50,12 @@
 0	test-loop-autopilot.sh
 2	test-mac-path-regla.sh
 1	test-mac-tmux-control.sh
-0	test-merge-allowlist-cierre-pr.sh
 0	test-merge-sin-kit.sh
-247	test-native-harness-adapters.sh
-0	test-native-harness-orchestration-skill.sh
-3	test-native-progress-worker.sh
 0	test-patch-modelos-repartidos.sh
 1	test-plans-fila-check.sh
 0	test-progreso-valido.sh
 4	test-progress-events-client.sh
 3	test-reconciliar-progreso.sh
-0	test-registro-lanes-native.sh
 1	test-respaldo-workspaces.sh
 0	test-restart-gateway-script.sh
 0	test-run-checks-reporta-fallo.sh
@@ -90,12 +65,9 @@
 2	test-runner-shards.sh
 0	test-saikit-cierre-pr-merge-owner.sh
 0	test-salida-del-observador-no-trackeada.sh
-357	test-simulacro-fase9-a.sh
-306	test-simulacro-fase9-b.sh
 0	test-sistema-agentes-contrato.sh
 1	test-skill-autopilot-runbook.sh
 0	test-skill-verify.sh
-56	test-smoke-native-harnesses.sh
 0	test-spec-fleet-roles.sh
 0	test-spec-tablero.sh
 1	test-summa-gate-quality-entrypoints.sh
@@ -104,7 +76,6 @@
 0	test-sync-pull-identity.sh
 20	test-tablero-trabajo.sh
 141	test-tmux-activity-watch.sh
-3	test-tui-falso-fixture.sh
 1	test-u1-build-selection.mjs
 1	test-u1-proveniencia-backup.mjs
 2	test-u1-publicacion.mjs
@@ -113,7 +84,4 @@
 1	test-u1-symlink-temp.mjs
 10	test-u1-un-solo-watchdog.sh
 0	test-u3a-19-3.sh
-1	test-worker-model-binding.sh
-3	test-worker-registry.sh
-7	test-worker-selector.sh
 0	verify-corpus

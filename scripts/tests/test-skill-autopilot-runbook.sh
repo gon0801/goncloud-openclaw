@@ -41,8 +41,8 @@ echo "ok (1): frontmatter con name y description"
 # (2) Los dieciseis slots numerados, en orden. Sin ellos la receta no produce un
 # documento ejecutable: cada slot cerrado es una pregunta que el lector no hace.
 # Los slots 14 (Seguimiento) y 15 (Clases de comando) nacen en la Fase 9, 9.7:
-# sin ellos el runbook no dice quien le habla a David ni el preflight tiene que
-# leer. El slot 16 (Promesa observable) nace en la Fase 9, 9.12: sin el, una
+# sin ellos el runbook no dice quien le habla a David ni que clases de comando
+# usa. El slot 16 (Promesa observable) nace en la Fase 9, 9.12: sin el, una
 # fila del plan puede cerrarse sin que nadie diga que veria un usuario si
 # funciona. No se renumera: runbooks y pruebas citan "slot 12" y "slot 13" por
 # numero.
@@ -87,7 +87,6 @@ for a in 'lead is written as a **role**' \
          'test-runbooks-no-contradicen-entorno.sh' \
          '14. **Seguimiento.**' \
          '15. **Clases de comando.**' \
-         'corrida.sh preflight' \
          '## Clases de comando' \
          'Plantilla del encargo del lead' \
          'espejo de progreso' \

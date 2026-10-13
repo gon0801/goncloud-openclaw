@@ -1,5 +1,7 @@
 # Construir el director de corrida.sh
 
+> **Histórico.** La ruta de corrida (`corrida.sh`) se retiró el 2026-10-13 por decisión de David. Este documento no se ejecuta. Lo que buscaba lo recoge el plan de SUA (`docs/superpowers/plans/2026-10-05-sistema-agentes-unificado.md`).
+
 Estado: plan propuesto para U3b. No inicia implementación ni instala nada.
 [Diseño](../specs/2026-09-29-director-corrida-design.md).
 [Tabla de transiciones, tipos y estado](../specs/2026-09-29-director-corrida-transiciones.md).

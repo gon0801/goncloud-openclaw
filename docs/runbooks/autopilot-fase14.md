@@ -1,5 +1,7 @@
 # Fase 14: guía de ejecución pendiente de Fases 15 y 9
 
+> **Histórico.** La ruta de corrida (`corrida.sh`) se retiró el 2026-10-13. Este documento queda como lectura histórica.
+
 > **NO LANZAR CON EL CORTE VIEJO.** Fase 15 ya está cerrada, pero U1/U2 de
 > `Plans.md` siguen pendientes. El sync Windows anterior está deshabilitado;
 > cualquier canary o merge vivo debe usar el nuevo deploy selectivo y un SHA

@@ -51,7 +51,9 @@ son decisiones explícitas de David, con fecha y registro.
   `docs/evidence/sistema-agentes-unificado/SUA-00-mediciones.md`. Dos: Hermes corre
   en la PC de Gon (`gon-pc` en la red privada, Windows). Tres: la ruta de corrida
   (`scripts/mac/corrida.sh`, `corrida/`, `corrida_worker/`, `workers.v1.json`) se
-  retira; no se migra a SUA. Cuatro: la ruta de sesión adoptada de encargos se
+  retira; no se migra a SUA. El retiro alcanza a los consumidores de `corrida.sh`:
+  el vigilante tmux y el hook Stop siguen sin ella, y el instalador y las skills
+  dejan de nombrarla. Cuatro: la ruta de sesión adoptada de encargos se
   borra con sus pruebas. Los dos retiros van en PR propios. Las marcas
   `<!-- corr: D13 -->` de este plan señalan cada lugar que esas respuestas cambian.
 - 2026-10-12: las rondas siguen la regla 4 de quality-kit, con tope de 5 rondas por
@@ -617,6 +619,11 @@ instalada y leída de vuelta, ningún launcher antiguo activo para el mismo enca
 | I22 | Corte por entrada deja un dueño; pending results/crash/reversa y cron mixto no pierden trabajo. |
 | I23 | Orbit por SHA remoto, respaldo, copia, salud y reversa; autorización e incertidumbre comprobadas. |
 | I24 | Cada host instala/reinstala/revierte y opera con el otro inaccesible; alias/runbook no duplican programas. |
+
+<!-- corr: D13 -->
+La ruta de corrida se retira (David, 2026-10-13). En I08 quedan sin ruta dos de
+las seis: "inicio" y "resume" de una CLI en tmux. En I09 quedan sin ruta `resume`
+y la reproducción de argv de esas CLI (`_check_argv_element`, `worker_argv`).
 
 ## Comandos existentes y comandos futuros
 

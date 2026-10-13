@@ -18,7 +18,3 @@ activa, al menos cada 30 minutos. Canal: Telegram; el destino se lee del cron.
 ```bash
 ssh servidor-interno uptime
 ```
-
-## Lanzamiento
-
-Las sesiones se lanzan con `corrida.sh lanzar-sesion`, que marca antes de mandar.

@@ -11,7 +11,3 @@ Todavía sin escribir: falta decir quién avisa, por dónde y cada cuánto.
 | Clase | Para qué | Candado |
 |---|---|---|
 | `gh` | leer cosas | permitido |
-
-## Lanzamiento
-
-Las sesiones se abren con la herramienta de corridas.

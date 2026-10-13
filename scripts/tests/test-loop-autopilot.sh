@@ -307,16 +307,12 @@ printf '%s' "$s8" | grep -q -i 'excluye la que estás viendo' \
   || fail "$DOC: la sección 8 no dice dónde comprobar el enlace; la barra excluye la fase que se está viendo y comprobarlo ahí da un falso rojo"
 echo "ok (6): la sección 8 exige los dos pasos de publicar una fase, y dónde comprobarlo"
 
-# (7) Fase 9, 9.7: las secciones que hablan de corridas referencian la
-# herramienta y el contrato que las sostienen. §1 (quien lanza y quien vigila),
-# §3 (encargo e implementacion), §8 (progreso y mensajes), §9 (relevo del lead)
-# y §12 (atores) nombran `corrida.sh` y `seguimiento.v1`: sin la referencia, el
-# loop manda un mecanismo que ya vive en codigo con otro nombre. El TIMEBOX con
-# pausas se mudo del runbook de la Fase 7 (§3 lo define, §12 lo aplica).
-for n in 1 3 8 9 12; do
+# (7) Fase 9, 9.7: las secciones que mandan mensajes a David referencian el
+# contrato que los sostiene. §1 (roles), §3 (loop por tarea), §8 (progreso y
+# mensajes) y §12 (atores) nombran `seguimiento.v1`. El TIMEBOX con pausas se
+# mudo del runbook de la Fase 7 (§3 lo define, §12 lo aplica).
+for n in 1 3 8 12; do
   s=$(seccion "$n")
-  printf '%s' "$s" | grep -qF 'corrida.sh' \
-    || fail "$DOC: la sección $n no referencia corrida.sh"
   printf '%s' "$s" | grep -qF 'seguimiento.v1' \
     || fail "$DOC: la sección $n no referencia seguimiento.v1"
 done
@@ -332,6 +328,6 @@ printf '%s' "$s3" | grep -qF 'espejo de progreso' \
 s12=$(seccion 12)
 printf '%s' "$s12" | grep -qF 'TIMEBOX de 6 h' \
   || fail "$DOC: la sección 12 no aplica el TIMEBOX de 6 h"
-echo "ok (7): §1, §3, §8, §9 y §12 referencian corrida.sh y seguimiento.v1; TIMEBOX con pausas en §3 y §12"
+echo "ok (7): §1, §3, §8 y §12 referencian seguimiento.v1; TIMEBOX con pausas en §3 y §12"
 
 echo "TODO VERDE: loop-autopilot"

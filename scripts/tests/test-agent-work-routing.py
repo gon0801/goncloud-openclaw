@@ -26,7 +26,7 @@ import sesion  # noqa: E402
 def repo_wake_sources(root):
     # T9 :266: tambien quien pone la marca del vigilante y los runbooks que lo hacen.
     return subprocess.run(
-        ["git", "grep", "-l", "-E", "--", "--vigia|vigia-mac|\"\\$vigia\" = \"claw\"|OPENCLAW_WATCH[[:space:]]+1",
+        ["git", "grep", "-l", "-E", "--", "vigia-mac|OPENCLAW_WATCH[[:space:]]+1",
          "--", "scripts", "agents", "docs/runbooks", ":!scripts/tests"],
         cwd=root, capture_output=True, text=True, check=True,
     ).stdout.splitlines()
@@ -154,7 +154,6 @@ class AgentsRouting(unittest.TestCase):
         for path, antes, frase, despues in (
             ('agents/main/agent/workshop-skills/agent-dispatch/SKILL.md', '## Chain dispatch (brief / "-saikit" lane)\n\n', 'Legacy route (T9 `:265`): this chain (`sessions_spawn` to implementer, verifier and reviewer) stays outside the managed perimeter until its adoption (T12). Inside a managed run the runtime rejects `sessions_spawn` and `sessions_send`; only the requester-target pairs listed in "Ruteo nativo vs. legado" use the guarded route, and none of them goes from `main` to implementer, verifier or reviewer.', '\n\n0. '),
             ('agents/main/agent/workshop-skills/agent-dispatch/SKILL.md', '## External review loop (Claude on the Mac)\n\n', 'Legacy route (T9 `:265`): this loop (tmux delivery, `OPENCLAW_WATCH`, `VEREDICTO` files) stays outside the managed perimeter until its adoption (T12). The managed `main` to Mac CLI route is the one in "Ruteo nativo vs. legado", driven by the `encargo-cli` skill.', '\n\nDavid repeatedly orders'),
-            ('agents/main/agent/workshop-skills/native-harness-orchestration/SKILL.md', '| Cerrar | `corrida.sh cerrar <id>` | `cerrada <id>` |\n\n', 'Ruta anterior (T9 `:265`): la corrida abierta con `--vigia claw` y los CLI arrancados con `adaptador start` y entregados con `adaptador deliver` (`ADAPTADOR-MARCA`) siguen fuera del perímetro gestionado hasta su adopción (T12). Un CLI gestionado entra solo por el host de encargos, que lanza un proceso de opencode por encargo (skill `encargo-cli`). Sobre una sesión marcada con `AGENT_WORK_MANAGED=1` no se usa `adaptador deliver`.', '\n\n## Pre-install / manual (Fases 14 y 23)'),
             ('agents/ingenieria/agent/workshop-skills/managed-task-routing/SKILL.md', 'Si una operación gestionada es rechazada, informa el bloqueo sin reenviarla por sessions_spawn, sessions_send ni CLI directo.\n\n', 'Si te llegó un encargo gestionado (T9 `:265`): cuando `managed_tasks_report` está entre tus tools, el resultado sale solo con `managed_tasks_report`; dentro de ese run el runtime rechaza `sessions_send` y `sessions_spawn`, así que no reportes ni delegues por ahí, tampoco los carriles paralelos de `mac-node-ops`.', '\n'),
         ):
             text = (ROOT / path).read_text(encoding="utf-8")
@@ -266,13 +265,15 @@ class AgentsRouting(unittest.TestCase):
 
     def test_every_doc_that_marks_a_session_names_the_managed_exception(self):
         # T9 :266: quien manda marcar con OPENCLAW_WATCH dice tambien que una gestionada no se marca ni se relanza.
+        # Los runbooks de fases cerradas no se reescriben: conservan la cláusula del registro de corrida.
+        spanish = ("Excepción (T9 `:266`): una sesión gestionada (`AGENT_WORK_MANAGED=1` en tmux{}) nunca se marca con "
+                   "`OPENCLAW_WATCH` ni se relanza a mano; su host le reporta al solicitante el cierre, el diálogo o "
+                   "el plazo vencido.")
         exception = {
-            "agents": "Exception (T9 `:266`): a managed session (tmux `AGENT_WORK_MANAGED=1`, or a run registry "
-                      "entry with `encargo_ref` or `host_id`) is never marked with `OPENCLAW_WATCH` and never "
-                      "relaunched by hand; its host reports a close, a dialog or a missed deadline to the requester.",
-            "docs": "Excepción (T9 `:266`): una sesión gestionada (`AGENT_WORK_MANAGED=1` en tmux, o una entrada "
-                    "del registro con `encargo_ref` o `host_id`) nunca se marca con `OPENCLAW_WATCH` ni se relanza "
-                    "a mano; su host le reporta al solicitante el cierre, el diálogo o el plazo vencido.",
+            "agents": ("Exception (T9 `:266`): a managed session (tmux `AGENT_WORK_MANAGED=1`) is never marked with "
+                       "`OPENCLAW_WATCH` and never relaunched by hand; its host reports a close, a dialog or a missed "
+                       "deadline to the requester.",),
+            "docs": (spanish.format(""), spanish.format(", o una entrada del registro con `encargo_ref` o `host_id`")),
         }
         listed = subprocess.run(
             ["git", "grep", "-l", "-E", "-e", "OPENCLAW_WATCH[[:space:]=]+[\"']?1",
@@ -290,8 +291,9 @@ class AgentsRouting(unittest.TestCase):
             "docs/runbooks/autopilot-fase15.md",
         }, set(listed))
         for path in listed:
-            self.assertIn(exception[path.split("/")[0]], (ROOT / path).read_text(),
-                          f"{path} manda marcar con OPENCLAW_WATCH y no dice la excepcion de las gestionadas")
+            text = (ROOT / path).read_text()
+            self.assertTrue(any(phrase in text for phrase in exception[path.split("/")[0]]),
+                            f"{path} manda marcar con OPENCLAW_WATCH y no dice la excepcion de las gestionadas")
 
     def test_every_live_cron_is_classified(self):
         # T9 :265: cada cron vivo de la foto queda clasificado, con su perimetro y su razon; los de negocio
@@ -389,9 +391,7 @@ class AgentsRouting(unittest.TestCase):
             "scripts/una.sh": "tmux set-environment -t s OPENCLAW_WATCH 1\n",
             "scripts/dos.sh": "tmux set-environment -t s OPENCLAW_WATCH  1\n",
             "scripts/tab.sh": "tmux set-environment -t s OPENCLAW_WATCH\t1\n",
-            "scripts/vigia.sh": "lanzar --vigia claw\n",
             "scripts/mac.sh": "usa vigia-mac\n",
-            "scripts/claw.sh": 'if [ "$vigia" = "claw" ]; then :; fi\n',
             "scripts/run.sh": "tmux set-environment -t s OPENCLAW_WATCH_RUN r1\n",
             "scripts/tests/t.sh": "tmux set-environment -t s OPENCLAW_WATCH  1\n",
         }
@@ -404,8 +404,7 @@ class AgentsRouting(unittest.TestCase):
             subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
             subprocess.run(["git", "add", "."], cwd=repo, check=True)
             listed = repo_wake_sources(repo)
-        self.assertEqual(listed, ["scripts/claw.sh", "scripts/dos.sh", "scripts/mac.sh", "scripts/tab.sh",
-                                  "scripts/una.sh", "scripts/vigia.sh"])
+        self.assertEqual(listed, ["scripts/dos.sh", "scripts/mac.sh", "scripts/tab.sh", "scripts/una.sh"])
 
     def test_every_inventory_entry_is_migrated_or_declared_out(self):
         # T9 :265: cada entrada del inventario queda gestionada (preparada y apagada), protegida en el
@@ -422,12 +421,10 @@ class AgentsRouting(unittest.TestCase):
                      for route in self.coverage["managedRequesterRoutes"]}
         required |= {f"wake:{entry['name']}" for entry in wakes}
         required |= {f"wake:{job['name']}" for job in self.coverage["cronJobs"]["entries"] if job["kind"] == "vigia"}
-        # T9 (plan :257): los helpers, los lanzadores y el reparador que relanza carriles.
+        # T9 (plan :257): los helpers y los lanzadores.
         required |= {f"file:{path}" for path in (
             "scripts/mac/claude-stop-openclaw-event.sh", "scripts/mac/tmux-activity-watch.sh",
-            "scripts/mac/corrida/avisos.sh", "scripts/mac/corrida/lanzar-sesion.sh",
-            "scripts/lanzar-lead.sh", "scripts/lanzar-fase.sh", "scripts/mac/agent-tmux.sh",
-            "scripts/mac/corrida/adaptador.sh", "scripts/mac/corrida/reconciliar.sh")}
+            "scripts/lanzar-lead.sh", "scripts/lanzar-fase.sh", "scripts/mac/agent-tmux.sh")}
         # El inventario nombra sus fuentes y recreadores del repo (plan :272).
         required |= {f"file:{entry['source'].split(':')[0]}" for entry in wakes
                      if not entry["source"].startswith("gateway")}
@@ -435,7 +432,7 @@ class AgentsRouting(unittest.TestCase):
                      if not recreator["path"].startswith("~")}
         listed = subprocess.run(
             ["git", "grep", "-l", "-E",
-             "-e", "sessions_spawn|sessions_send|managed_tasks_|adaptador(\\.sh)? (start|deliver)|--vigia",
+             "-e", "sessions_spawn|sessions_send|managed_tasks_",
              # T9 :266: quien manda marcar con OPENCLAW_WATCH vigila; es la busqueda de la prueba de su excepcion.
              "-e", "OPENCLAW_WATCH[[:space:]=]+[\"']?1", "-e", "marcada con `OPENCLAW_WATCH`",
              "-e", "se marca al lanzarla", "-e", "(registra y |la |y la )marca (la sesi[oó]n )?antes",

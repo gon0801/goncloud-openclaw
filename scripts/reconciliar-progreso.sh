@@ -12,13 +12,12 @@
 # carril pasa a mergeado y se limpia SOLO ese motivo (detenido_por), con un evento que
 # lo deja rastro. Nada mas: los carriles sin ese motivo, sin PR o con PR abierto no se
 # tocan; cierre.at jamas se escribe (que los PR esten mergeados no declara la fase
-# cerrada); y no manda mensajes ni toca el gateway: si la firma del parte cambia, el
-# aviso lo manda el latido que ya existe (9.5), una sola vez. Corrida de nuevo sobre
-# el mismo archivo no cambia nada y lo declara ("sin cambios").
+# cerrada); y no manda mensajes ni toca el gateway. Corrida de nuevo sobre el mismo
+# archivo no cambia nada y lo declara ("sin cambios").
 #
 # Uso:
 #   bash scripts/reconciliar-progreso.sh <progress.json> [otro.json ...]
-#   (por ejemplo .saikit/progress/9.json y el espejo de $CORRIDA_STATE)
+#   (por ejemplo .saikit/progress/9.json)
 #
 # Env (opcionales, para las pruebas): GH_BIN, CORR_AHORA (epoch determinista).
 #

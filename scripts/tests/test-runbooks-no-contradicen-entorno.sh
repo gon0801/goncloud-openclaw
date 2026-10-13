@@ -167,27 +167,25 @@ printf '%s\n' '| **lead** | tu: un CLI en tmux, de cualquier host del kit | mand
   && fail "(2c) el detector marca de mas: la fila escrita como rol"
 echo "ok (2c): ningun runbook de fase designa un modelo como lead"
 
-# (2d) Todo runbook NUEVO nace con seguimiento, clases y lanzamiento por
-# corrida.sh. Medido 2026-09-18/19 (Fase 9): los runbooks viejos se escribieron
-# antes de que corrida.sh existiera — sus corridas no se reescriben y quedan
-# exentos POR NOMBRE, cada uno listado abajo. Cualquier autopilot-*.md que no
-# este en esa lista es futuro y trae: (a) seccion "Seguimiento" CON CONTENIDO
-# CONCRETO (quien manda; canal con mecanismo y sin marcas de indefinido;
-# cadencia con numero+unidad en linea con marca de envio: palabras sueltas
-# pasaban y son rojas desde la r2); (b) seccion literal "## Clases de comando"
-# con al menos una fila VALIDA: clase del conjunto en celda propia (lo que el
-# preflight lee) y ninguna mencion de herramienta fuera de esa celda — un
-# comando real empieza por el ejecutable, una frase que lo trae en medio es
-# mencion y la fila no cuenta (r2: la forma minima `| gh | leer PRs... |`
-# pasa, `| gh | permiso para gh remoto |` no); (c) una llamada AFIRMATIVA a
-# `corrida.sh lanzar-sesion` (con forma de orden y sin negacion que la
-# preceda) y cero `new-session` escrito a mano. Heuristica documentada: el
-# candado distingue formas, no intenciones; un falso rojo se arregla
-# reescribiendo la linea. Una prohibicion ("nunca ...") cita la forma mala sin
-# mandarla: no cuenta.
-# Fase 16 se volvio historica tras la reinstalacion: no debe recuperar un
-# lanzamiento afirmativo para satisfacer el contrato de los runbooks nuevos.
-EXENTOS='autopilot-fase6.md autopilot-fase7.md autopilot-fase8.md autopilot-fase8-hallazgos.md autopilot-fase9.md autopilot-fase10.md autopilot-fase11.md autopilot-fase12.md autopilot-fase13.md autopilot-fase16.md autopilot-fase-saikit23.md'
+# (2d) Todo runbook NUEVO nace con seguimiento y clases, y no abre sesiones a
+# mano. Medido 2026-09-18/19 (Fase 9): los runbooks viejos se escribieron
+# antes de esa regla; no se reescriben y quedan exentos POR NOMBRE, cada uno
+# listado abajo. Cualquier autopilot-*.md que no este en esa lista es futuro y
+# trae: (a) seccion "Seguimiento" CON CONTENIDO CONCRETO (quien manda; canal
+# con mecanismo y sin marcas de indefinido; cadencia con numero+unidad en
+# linea con marca de envio: palabras sueltas pasaban y son rojas desde la r2);
+# (b) seccion literal "## Clases de comando" con al menos una fila VALIDA:
+# clase del conjunto en celda propia y ninguna mencion de herramienta fuera de
+# esa celda — un comando real empieza por el ejecutable, una frase que lo trae
+# en medio es mencion y la fila no cuenta (r2: la forma minima
+# `| gh | leer PRs... |` pasa, `| gh | permiso para gh remoto |` no); (c) cero
+# `new-session` escrito a mano. Heuristica documentada: el candado distingue
+# formas, no intenciones; un falso rojo se arregla reescribiendo la linea. Una
+# prohibicion ("nunca ...") cita la forma mala sin mandarla: no cuenta.
+# Fase 16 se volvio historica tras la reinstalacion: queda exenta mientras
+# prohiba su lanzamiento. Las fases 14, 15 y 17 son historicas desde el retiro
+# de la ruta de corrida (2026-10-13).
+EXENTOS='autopilot-fase6.md autopilot-fase7.md autopilot-fase8.md autopilot-fase8-hallazgos.md autopilot-fase9.md autopilot-fase10.md autopilot-fase11.md autopilot-fase12.md autopilot-fase13.md autopilot-fase14.md autopilot-fase15.md autopilot-fase16.md autopilot-fase17.md autopilot-fase-saikit23.md'
 exento() {
   case " $EXENTOS " in *" $1 "*) return 0;; esac
   return 1
@@ -295,32 +293,16 @@ EOF
 sesion_a_mano() { # 0 = trae new-session mandado (rojo); prohibiciones no cuentan
   grep -n 'new-session' "$1" 2>/dev/null | grep -v -i -E 'nunca|jam[aá]s|never' | grep -q .
 }
-lanzamiento_afirmativo() { # $1 archivo; 0 = hay llamada afirmativa a lanzar-sesion
-  local lineas; lineas=$(grep -nF 'corrida.sh lanzar-sesion' "$1" 2>/dev/null) || return 1
-  # la negacion vale solo si precede a la llamada ("Lanza con X, nunca a mano" es afirmativa)
-  local nums; nums=$(printf '%s\n' "$lineas" | sed 's/corrida\.sh lanzar-sesion.*//' \
-    | grep -v -i -E 'nunca|jam[aá]s|never|tampoco|prohibido|evita|evitar|(^|[^a-zA-Z])no (llames|llamar|lances|lanzar|uses|usar|ejecutes|ejecutar|corras|correr)|(^|[^a-zA-Z])sin (llamar|lanzar|usar|ejecutar|correr)' \
-    | cut -d: -f1 || true)
-  [ -n "$nums" ] || return 1
-  local n
-  for n in $nums; do
-    printf '%s\n' "$lineas" | grep -E "^$n:" \
-      | grep -q -E '^[0-9]+:[[:space:]]*([`|>~-]|\$[[:space:]]+|[^[:space:]]*corrida\.sh lanzar-sesion)|(lanzan|lanza|lanzar|abren|abre|abrir|ejecutan|ejecuta|ejecutar|corren|corre|correr|usan|usa|usar)[[:space:]]+.*corrida\.sh lanzar-sesion' \
-      && return 0
-  done
-  return 1
-}
 runbook_futuro_ok() { # $1 archivo; 0 = nace con todo
   tiene_seguimiento "$1" || return 1
   seguimiento_con_contenido "$1" || return 1
   tiene_clases "$1" || return 1
   clases_usadas_declaradas "$1" || return 1
-  lanzamiento_afirmativo "$1" || return 1
   sesion_a_mano "$1" && return 1
   return 0
 }
 FXF=scripts/tests/fixtures/runbook-futuro
-for fx in autopilot-bueno.md autopilot-malo-sin-seguimiento.md autopilot-malo-sin-clases.md autopilot-malo-clases-fuera-de-seccion.md autopilot-malo-clase-no-declarada.md autopilot-malo-new-session.md autopilot-malo-encabezados-vacios.md autopilot-malo-lanzar-negado.md autopilot-malo-seguimiento-vago.md autopilot-malo-seguimiento-sin-david.md autopilot-malo-seguimiento-sin-cambio.md autopilot-malo-seguimiento-lento.md; do
+for fx in autopilot-bueno.md autopilot-malo-sin-seguimiento.md autopilot-malo-sin-clases.md autopilot-malo-clases-fuera-de-seccion.md autopilot-malo-clase-no-declarada.md autopilot-malo-new-session.md autopilot-malo-encabezados-vacios.md autopilot-malo-seguimiento-vago.md autopilot-malo-seguimiento-sin-david.md autopilot-malo-seguimiento-sin-cambio.md autopilot-malo-seguimiento-lento.md; do
   [ -r "$FXF/$fx" ] || fail "(2d) no encuentro el fixture: $FXF/$fx"
   git check-ignore -q "$FXF/$fx" \
     && fail "(2d) $FXF/$fx esta en .gitignore: el commit no lo lleva y CI se queda sin el archivo"
@@ -339,8 +321,6 @@ runbook_futuro_ok "$FXF/autopilot-malo-new-session.md" \
   && fail "(2d) el fixture con new-session a mano paso: el candado deja abrir sesiones a mano"
 runbook_futuro_ok "$FXF/autopilot-malo-encabezados-vacios.md" \
   && fail "(2d) el fixture con encabezados vacios paso: el candado no exige contenido"
-runbook_futuro_ok "$FXF/autopilot-malo-lanzar-negado.md" \
-  && fail "(2d) el fixture con lanzamiento negado paso: la llamada debe ser afirmativa"
 runbook_futuro_ok "$FXF/autopilot-malo-seguimiento-vago.md" \
   && fail "(2d) el fixture con Seguimiento vago paso: palabras sueltas no declaran canal ni cadencia"
 runbook_futuro_ok "$FXF/autopilot-malo-seguimiento-sin-david.md" \
@@ -357,6 +337,10 @@ grep -Fq '**NO LANZAR ESTE RUNBOOK EN EL ESTADO REINSTALADO.**' docs/runbooks/au
   || fail '(2d) Fase 16 solo esta exenta mientras prohíba el lanzamiento viejo'
 grep -Fq 'U1 debe definir un runbook nuevo revisado contra el host vivo' docs/runbooks/autopilot-fase16.md \
   || fail '(2d) Fase 16 exenta sin ruta de reemplazo revisada'
+for e in autopilot-fase14.md autopilot-fase15.md autopilot-fase17.md; do
+  grep -Fq 'se retiró el 2026-10-13' "docs/runbooks/$e" \
+    || fail "(2d) $e solo esta exento mientras diga que la ruta de corrida se retiro"
+done
 # Y ningun runbook futuro versionado sale en rojo.
 NUEVOS=""
 while IFS= read -r f; do
@@ -364,10 +348,10 @@ while IFS= read -r f; do
   b=${f##*/}
   exento "$b" && continue
   NUEVOS="$NUEVOS $b"
-  runbook_futuro_ok "$f" || fail "(2d) $f: un runbook nuevo sin Seguimiento con contenido, sin fila de clases valida, sin lanzamiento afirmativo o con new-session a mano"
+  runbook_futuro_ok "$f" || fail "(2d) $f: un runbook nuevo sin Seguimiento con contenido, sin fila de clases valida o con new-session a mano"
 done <<EOF
 $(git ls-files --cached --others --exclude-standard -- 'docs/runbooks/autopilot-*.md')
 EOF
-[ -z "$NUEVOS" ] && NUEVOS=" (ninguno todavia; los 11 exentos saltados, declarado)"
+[ -z "$NUEVOS" ] && NUEVOS=" (ninguno todavia; los $(printf '%s\n' $EXENTOS | wc -l | tr -d ' ') exentos saltados, declarado)"
 echo "ok (2d): runbooks futuros revisados:$NUEVOS; fixtures bueno/malo discriminan cada regla"
 echo "TODO VERDE: runbooks sin contradicciones con el kit ni con el entorno"

@@ -27,6 +27,12 @@ from resources import (AccountBusyError, AGENT_USER, AgentesBackend, AgentProces
                        LOCK_ARGV, ResourceManager, TmuxBackend, parse_agent_ps)
 
 
+def stamp(backend, session, nonce):
+    """Tags a tmux session with a resource's nonce, as the host that launched or adopted it left it."""
+    subprocess.run([backend.tmux_bin, "-L", backend.socket, "set-option", "-t", f"={session}:",
+                    backend.NONCE_OPTION, nonce], check=True, capture_output=True)
+
+
 class FakeBackend:
     def __init__(self):
         self.boot_id = "00000000-0000-0000-0000-000000000001"
@@ -66,9 +72,6 @@ class FakeBackend:
     def revoke(self, identity):
         self.revokes.append(identity)
         return True
-
-    def mark(self, session, nonce):
-        self.live[session]["nonce"] = nonce
 
     def launch(self, session, nonce, pid):
         self.live[session] = {
@@ -239,64 +242,6 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual(host.spool.get(operation_id(self.key))["status"], "abandoned",
                          "a late result put the abandoned operation back on the instance")
         self.assertEqual(len(host.pending("host-test")), 1)
-
-    def operation(self, key):
-        brief = Path(self.tmp.name) / "brief.txt"
-        brief.write_text("revisa el cambio")
-        return AuthorizedOperation(
-            key=key, producer_id="opencode", capability=f"cap-{key.task_id}", session="oc",
-            workspace_ref=self.tmp.name, brief_ref=str(brief),
-            brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
-            input_revision={"kind": "code", "repository": "repo", "sha": "a" * 40},
-            result_contract="review.v1", claim_id=f"claim-{key.task_id}")
-
-    def test_the_session_of_an_abandoned_delivery_is_adopted_again_by_its_instance(self):
-        tmux = shutil.which("tmux")
-        if not tmux:
-            self.skipTest("tmux not installed")
-        socket = f"agent-work-readopt-{os.getpid()}"
-
-        def tmux_cmd(*args):
-            return subprocess.run([tmux, "-L", socket, *args], capture_output=True, text=True)
-
-        def session_nonce():
-            return tmux_cmd("display-message", "-p", "-t", "=oc:", "#{@agent_work_resource_nonce}").stdout.strip()
-
-        self.addCleanup(tmux_cmd, "kill-server")
-        self.assertEqual(tmux_cmd("new-session", "-d", "-s", "oc", "/bin/sleep", "60").returncode, 0)
-        cli_pid = tmux_cmd("display-message", "-p", "-t", "=oc:", "#{pane_pid}").stdout.strip()
-        manager = ResourceManager(self.host.spool, "host-test", TmuxBackend(tmux, socket), capacity=1)
-
-        def adopt(key):
-            manager.reserve(key, "oc", "UserAdopted")
-            self.assertTrue(manager.begin_launch(key).launch_now)
-            manager.mark(key)
-            self.assertEqual(manager.attach(key).state, "Running")
-
-        def lost(*_):
-            raise RuntimeError("the keys may have reached the pane")
-
-        adopt(self.key)
-        self.assertEqual(self.host.apply(self.key, self.operation(self.key), lost, self.admit).status, "uncertain")
-        self.host.resolve_delivery("host-test", self.key, "abandoned", "un diálogo se comió la referencia")
-        self.assertTrue(manager.can_take("instance-1"))
-
-        following = OperationKey("host-test", "task-2", 1, "instance-1")
-        adopt(following)
-        self.assertEqual(session_nonce(), manager._row(following)["nonce"])
-        self.assertEqual(self.host.apply(following, self.operation(following), lambda *_: None,
-                                         self.admit).status, "delivered")
-        self.assertEqual(manager.counts(), {"active": 1, "history": 1, "pool": 0})
-        self.assertEqual(tmux_cmd("display-message", "-p", "-t", "=oc:", "#{pane_pid}").stdout.strip(), cli_pid,
-                         "re-adopting the session stopped the operator's CLI")
-
-        intruder = OperationKey("host-test", "task-3", 1, "instance-2")
-        roomy = ResourceManager(self.host.spool, "host-test", TmuxBackend(tmux, socket), capacity=2)
-        roomy.reserve(intruder, "oc", "UserAdopted")
-        roomy.begin_launch(intruder)
-        with self.assertRaisesRegex(ValueError, "another resource"):
-            roomy.mark(intruder)
-        self.assertEqual(session_nonce(), manager._row(following)["nonce"], "a live resource lost its session")
 
     def test_the_pump_gives_an_adopted_session_back_once_r_acknowledges_its_result(self):
         class Client:
@@ -575,7 +520,7 @@ class ResourceTests(unittest.TestCase):
                 manager.begin_launch(key)
                 self.assertEqual(tmux_cmd("new-session", "-d", "-s", session, sys.executable,
                                           str(cli), held.nonce).returncode, 0)
-                backend.mark(session, held.nonce)
+                stamp(backend, session, held.nonce)
                 self.assertEqual(manager.attach(key).state, "Running")
                 self.assertEqual(manager.close(key, {"kind": "result", "receipt": f"cycle-{number}"}).state,
                                  "CleanupPending")
@@ -626,31 +571,6 @@ class ResourceTests(unittest.TestCase):
         self.assertIn("user-claimed", self.backend.live)
         self.assertEqual(self.manager.counts(), {"active": 1, "history": 1, "pool": 0})
 
-    def test_resource_close_lost_result_ack_never_closes_the_resource(self):
-        brief = Path(self.tmp.name) / "brief.txt"
-        brief.write_text("ack lost sandbox")
-        assignment = AuthorizedOperation(
-            key=self.key, producer_id="fake", capability="ack-secret", session="acked",
-            workspace_ref=self.tmp.name, brief_ref=str(brief),
-            brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
-            input_revision={"kind": "code", "repository": "repo", "sha": "a" * 40},
-            result_contract="review.v1", claim_id="ack-claim")
-        reference = self.host.apply(self.key, assignment, lambda *_: None,
-                                    lambda a: {"state": "host-admitted", "claimId": a["claimId"],
-                                               "hostId": a["hostId"], "instanceId": a["instanceId"],
-                                               "generation": a["generation"]}).assignment_ref
-        self.manager.reserve(self.key, "acked", "TaskCreated")
-        evidence = Path(self.tmp.name) / "result.json"
-        evidence.write_text('{"kind":"result","receipt":"lost-ack-1"}')
-        closed = subprocess.run([sys.executable, str(ROOT / "scripts" / "agent-work" / "resources.py"),
-                                 "close", "--host-id", "host-test", "--state-dir", str(self.host.state_dir),
-                                 "--assignment", reference, "--evidence", str(evidence),
-                                 "--tmux-socket", f"b31-ack-{os.getpid()}"],
-                                capture_output=True, text=True)
-        self.assertNotEqual(closed.returncode, 0, closed.stdout)
-        self.assertIn("receipt", closed.stderr)
-        self.assertEqual(self.manager.counts()["active"], 1)
-
     def test_resource_identity_tmux_socket_and_adopted_session(self):
         tmux = shutil.which("tmux")
         if not tmux:
@@ -662,33 +582,12 @@ class ResourceTests(unittest.TestCase):
         manager = ResourceManager(self.host.spool, "host-test", backend, capacity=2)
         try:
             self.assertEqual(tmux_cmd("new-session", "-d", "-s", "owned", "/bin/sleep", "30").returncode, 0)
-            brief = Path(self.tmp.name) / "brief.txt"
-            brief.write_text("sandbox task")
-            assignment = AuthorizedOperation(
-                key=self.key, producer_id="fake", capability="sandbox-secret", session="owned",
-                workspace_ref=self.tmp.name, brief_ref=str(brief),
-                brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
-                input_revision={"kind": "code", "repository": "repo", "sha": "a" * 40},
-                result_contract="review.v1", claim_id="sandbox-claim")
-            reference = self.host.apply(self.key, assignment, lambda *_: None,
-                                        lambda a: {"state": "host-admitted", "claimId": a["claimId"],
-                                                   "hostId": a["hostId"], "instanceId": a["instanceId"],
-                                                   "generation": a["generation"]}).assignment_ref
             owned = manager.reserve(self.key, "owned", "TaskCreated")
             self.assertTrue(manager.begin_launch(self.key).launch_now)
-            backend.mark("owned", owned.nonce)
-            with self.assertRaisesRegex(ValueError, "another resource"):
-                backend.mark("owned", "foreign-nonce")
+            stamp(backend, "owned", owned.nonce)
             self.assertEqual(manager.attach(self.key).state, "Running")
-            evidence = Path(self.tmp.name) / "cancel.json"
-            evidence.write_text('{"kind":"cancel","receipt":"sandbox-cancel-1"}')
-            closed = subprocess.run([sys.executable, str(ROOT / "scripts" / "agent-work" / "resources.py"),
-                                     "close", "--host-id", "host-test", "--state-dir", str(self.host.state_dir),
-                                     "--assignment", reference, "--evidence", str(evidence),
-                                     "--tmux-socket", socket, "--tmux-bin", tmux],
-                                    capture_output=True, text=True)
-            self.assertEqual(closed.returncode, 0, closed.stderr)
-            self.assertEqual(json.loads(closed.stdout)["state"], "CleanupPending")
+            self.assertEqual(manager.close(self.key, {"kind": "cancel", "receipt": "sandbox-cancel-1"}).state,
+                             "CleanupPending")
             self.assertNotEqual(tmux_cmd("has-session", "-t", "=owned").returncode, 0)
             self.assertEqual(manager.counts()["active"], 1)
 
@@ -696,7 +595,7 @@ class ResourceTests(unittest.TestCase):
             key2 = OperationKey("host-test", "task-2", 1, "instance-2")
             adopted = manager.reserve(key2, "adopted", "UserAdopted")
             manager.begin_launch(key2)
-            backend.mark("adopted", adopted.nonce)
+            stamp(backend, "adopted", adopted.nonce)
             self.assertEqual(manager.attach(key2).state, "Running")
             self.assertEqual(manager.close(key2, {"kind": "result", "receipt": "r2"}).state,
                              "ReleasedAdopted")
@@ -706,7 +605,7 @@ class ResourceTests(unittest.TestCase):
         finally:
             tmux_cmd("kill-server")
 
-    def test_resource_identity_tmux_replacement_never_marks_stops_or_revokes(self):
+    def test_resource_identity_tmux_replacement_never_stops_or_revokes(self):
         tmux = shutil.which("tmux")
         if not tmux:
             self.skipTest("tmux not installed")
@@ -720,42 +619,24 @@ class ResourceTests(unittest.TestCase):
             self.assertEqual(tmux_cmd("kill-session", "-t", "=worker").returncode, 0)
             new_worker()
         try:
-            for action in ("mark", "stop", "revoke"):
+            for action in ("stop", "revoke"):
                 new_worker()
-                backend.mark("worker", "old_nonce")
+                stamp(backend, "worker", "old_nonce")
                 old = backend.observe("worker")
-                if action == "mark":
-                    original = backend._tmux
-                    swapped = False
-                    def swap_on_read(*args):
-                        nonlocal swapped
-                        result = original(*args)
-                        if not swapped and args[0] in ("show-environment", "display-message"):
-                            swapped = True
-                            replace()
-                        return result
-                    backend._tmux = swap_on_read
-                    try:
-                        with self.assertRaises((OSError, ValueError)):
-                            backend.mark("worker", "old_nonce")
-                    finally:
-                        backend._tmux = original
-                else:
-                    original = backend.observe
-                    def swap_on_observe(session):
-                        seen = original(session)
-                        self.assertEqual(seen, old)
-                        replace()
-                        backend.mark("worker", "replacement_nonce")
-                        return seen
-                    backend.observe = swap_on_observe
-                    try:
-                        self.assertFalse(getattr(backend, action)(old))
-                    finally:
-                        backend.observe = original
+                original = backend.observe
+                def swap_on_observe(session):
+                    seen = original(session)
+                    self.assertEqual(seen, old)
+                    replace()
+                    stamp(backend, "worker", "replacement_nonce")
+                    return seen
+                backend.observe = swap_on_observe
+                try:
+                    self.assertFalse(getattr(backend, action)(old))
+                finally:
+                    backend.observe = original
                 self.assertEqual(tmux_cmd("has-session", "-t", "=worker").returncode, 0)
-                marker = backend.observe("worker")["nonce"]
-                self.assertEqual(marker, "" if action == "mark" else "replacement_nonce")
+                self.assertEqual(backend.observe("worker")["nonce"], "replacement_nonce")
                 self.assertEqual(tmux_cmd("kill-session", "-t", "=worker").returncode, 0)
         finally:
             tmux_cmd("kill-server")
@@ -795,7 +676,7 @@ class ResourceTests(unittest.TestCase):
             child = json.loads(child_ref.read_text())
             held = manager.reserve(self.key, "owned", "TaskCreated")
             manager.begin_launch(self.key)
-            backend.mark("owned", held.nonce)
+            stamp(backend, "owned", held.nonce)
             self.assertEqual(manager.attach(self.key).state, "Running")
             self.assertEqual(manager.close(self.key, {"kind": "cancel", "receipt": "detached-test"}).state,
                              "CleanupPending")
@@ -824,7 +705,7 @@ class ResourceTests(unittest.TestCase):
                 manager = ResourceManager(self.host.spool, "host-test", reserve_backend, capacity=2)
                 held = manager.reserve(self.key, "shifty", "TaskCreated")
                 self.assertTrue(manager.begin_launch(self.key).launch_now)
-                reserve_backend.mark("shifty", held.nonce)
+                stamp(reserve_backend, "shifty", held.nonce)
                 self.assertEqual(manager.attach(self.key).state, "Running")
                 saved = reserve_backend.observe("shifty")
             self.assertTrue(saved)
@@ -858,9 +739,9 @@ class ResourceTests(unittest.TestCase):
             self.assertEqual(tmux_cmd("new-session", "-d", "-s", session, "/bin/sleep", "120").returncode, 0)
             key = OperationKey("host-test", f"task-{session}", 1, f"instance-{session}")
             before = ResourceManager(host.spool, "host-test", TmuxBackend(tmux, socket, before_boot), capacity=2)
-            before.reserve(key, session, owner)
+            held = before.reserve(key, session, owner)
             self.assertTrue(before.begin_launch(key).launch_now)
-            before.mark(key)
+            stamp(before.backend, session, held.nonce)
             self.assertEqual(before.attach(key).state, "Running")
             after = ResourceManager(host.spool, "host-test", TmuxBackend(tmux, socket, after_boot), capacity=2)
             view = after.close(key, {"kind": "cancel", "receipt": f"c-{session}"})
@@ -896,9 +777,9 @@ class ResourceTests(unittest.TestCase):
         for session in ("made", "neighbour"):
             self.assertEqual(tmux_cmd("new-session", "-d", "-s", session, "/bin/sleep", "120").returncode, 0)
         manager = ResourceManager(self.host.spool, "host-test", TmuxBackend(tmux, socket, "1790061849.260675"))
-        manager.reserve(self.key, "made", "TaskCreated")
+        held = manager.reserve(self.key, "made", "TaskCreated")
         self.assertTrue(manager.begin_launch(self.key).launch_now)
-        manager.mark(self.key)
+        stamp(manager.backend, "made", held.nonce)
         self.assertEqual(manager.attach(self.key).state, "Running")
         view = manager.close(self.key, {"kind": "cancel", "receipt": "c-made"})
         self.assertEqual((view.state, view.reason), ("CleanupPending", "descendant absence unverified"))
@@ -1027,236 +908,6 @@ class ResourceTests(unittest.TestCase):
         self.assertFalse(backend.pane_gone({"panePid": -1}))
         self.assertFalse(backend.pane_gone({"panePid": 99999999999}))
         self.assertFalse(backend.pane_gone({"panePid": 0}))
-
-    def _managed_shell(self):
-        root = Path(self.tmp.name)
-        state = root / "runs"
-        run = state / "run-1"
-        run.mkdir(parents=True)
-        evidence = root / "receipt.json"
-        evidence.write_text('{"kind":"result","receipt":"native-r1"}')
-        assignment = root / "assignment.json"
-        assignment.write_text('{}')
-        reg = run / "registro.json"
-        reg.write_text(json.dumps({
-            "id": "run-1", "estado": "abierta", "schema": "corrida.v2",
-            "sesiones": [{"nombre": "managed-1", "host_id": "host-test",
-                          "encargo_ref": str(assignment)}],
-            "lanes": [{"id": "lane-1", "session": "managed-1",
-                       "resource_receipt_ref": str(evidence)}],
-        }))
-        tmux = root / "tmux-shim"
-        tmux.write_text(
-            "#!/bin/sh\n"
-            "printf '%s\\n' \"$*\" >>\"$FAKE_TMUX_LOG\"\n"
-            "case \"$1\" in\n"
-            " show-environment) case \"$*\" in *OPENCLAW_WATCH_RUN) echo OPENCLAW_WATCH_RUN=run-1;;"
-            " *OPENCLAW_WATCH) echo OPENCLAW_WATCH=1;; esac;;\n"
-            " capture-pane) echo screen;;\n"
-            "esac\n"
-        )
-        tmux.chmod(0o700)
-        resource = root / "resource-shim.py"
-        resource.write_text(
-            "import json,os\n"
-            "with open(os.environ['FAKE_RESOURCE_LOG'],'a') as stream: stream.write(os.environ['FAKE_RESOURCE_STATE']+'\\n')\n"
-            "print(json.dumps({'state':os.environ['FAKE_RESOURCE_STATE'],'reason':'test'}))\n"
-        )
-        gateway = root / "gateway-shim.py"
-        gateway.write_text(
-            "import os,sys\n"
-            "with open(os.environ['FAKE_RESOURCE_LOG'],'a') as stream: stream.write('flush\\n')\n"
-            "with open(os.environ['FAKE_GATEWAY_LOG'],'a') as stream: stream.write(' '.join(sys.argv[1:])+'\\n')\n"
-            "calls=open(os.environ['FAKE_RESOURCE_LOG']).read().splitlines().count('flush')\n"
-            "sys.exit(1 if str(calls) in os.environ.get('FAKE_FLUSH_FAIL','').split(',') else 0)\n"
-        )
-        env = dict(os.environ, CORRIDA_STATE=str(state), TMUX_BIN=str(tmux),
-                   FAKE_TMUX_LOG=str(root / "tmux.log"), FAKE_RESOURCE_LOG=str(root / "resource.log"),
-                   FAKE_GATEWAY_LOG=str(root / "gateway.log"), OPENCLAW_BIN="/fake/openclaw",
-                   AGENT_WORK_HOST_STATE_DIR=str(root / "host"), AGENT_WORK_TMUX_SOCKET="isolated-test",
-                   AGENT_WORK_RESOURCE_BIN=str(resource), AGENT_WORK_GATEWAY_BIN=str(gateway),
-                   AGENT_WORK_EXPECT_URL="ws://127.0.0.1:18789")
-        return root, reg, evidence, env
-
-    def _unmanaged_shell(self):
-        root, reg, evidence, env = self._managed_shell()
-        reg.write_text(json.dumps({
-            "id": "run-1", "estado": "abierta", "schema": "corrida.v2",
-            "sesiones": [{"nombre": "libre-1"}],
-            "lanes": [{"id": "lane-1", "session": "libre-1"}],
-        }))
-        return root, reg, env
-
-    def _log_lines(self, path):
-        return path.read_text().splitlines() if path.exists() else []
-
-    def test_resource_close_managed_termination_flushes_results_before_and_after_the_close(self):
-        root, reg, evidence, env = self._managed_shell()
-        command = ["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "terminar-sesion",
-                   "run-1", "managed-1", "--evidence", str(evidence)]
-        done = subprocess.run(command, env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"),
-                              capture_output=True, text=True)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(self._log_lines(root / "resource.log"), ["flush", "AbsenceVerified", "flush"])
-        flush = ("--flush-results --openclaw-bin /fake/openclaw --host-id host-test "
-                 "--expect-url ws://127.0.0.1:18789 --host-state-dir " + str(root / "host"))
-        self.assertEqual(self._log_lines(root / "gateway.log"), [flush, flush])
-        self.assertIn("set-environment", (root / "tmux.log").read_text())
-
-    def test_resource_close_flush_argv_is_accepted_by_the_real_gateway_cli(self):
-        root, reg, evidence, env = self._managed_shell()
-        env["AGENT_WORK_GATEWAY_BIN"] = str(ROOT / "scripts" / "agent-work" / "native_gateway.py")
-        done = subprocess.run(["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "terminar-sesion",
-                               "run-1", "managed-1", "--evidence", str(evidence)],
-                              env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"), capture_output=True, text=True)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(self._log_lines(root / "resource.log"), ["AbsenceVerified"])
-        self.assertTrue((root / "host" / "host.sqlite").is_file())
-
-    def test_resource_close_failed_flush_keeps_the_session_marked(self):
-        root, reg, evidence, env = self._managed_shell()
-        command = ["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "terminar-sesion",
-                   "run-1", "managed-1", "--evidence", str(evidence)]
-        before = subprocess.run(command, env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified",
-                                                  FAKE_FLUSH_FAIL="1"), capture_output=True, text=True)
-        self.assertNotEqual(before.returncode, 0)
-        self.assertIn("resultados sin entregar a R; no se cierra", before.stderr)
-        self.assertEqual(self._log_lines(root / "resource.log"), ["flush"])
-        after = subprocess.run(command, env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified",
-                                                 FAKE_FLUSH_FAIL="3"), capture_output=True, text=True)
-        self.assertNotEqual(after.returncode, 0)
-        self.assertIn("cerrado aqui, R sin avisar", after.stderr)
-        self.assertEqual(self._log_lines(root / "resource.log"), ["flush", "flush", "AbsenceVerified", "flush"])
-        self.assertNotIn("set-environment", "\n".join(self._log_lines(root / "tmux.log")))
-        retried = subprocess.run(command, env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"),
-                                 capture_output=True, text=True)
-        self.assertEqual(retried.returncode, 0, retried.stderr)
-        self.assertIn("set-environment", (root / "tmux.log").read_text())
-
-    def test_resource_close_unmanaged_termination_never_calls_the_gateway(self):
-        root, reg, env = self._unmanaged_shell()
-        done = subprocess.run(["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "terminar-sesion",
-                               "run-1", "libre-1"], env=env, capture_output=True, text=True)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(done.stdout, "terminada libre-1\n")
-        self.assertIn("set-environment", (root / "tmux.log").read_text())
-        self.assertFalse((root / "resource.log").exists())
-        self.assertFalse((root / "gateway.log").exists())
-
-    def test_resource_close_cerrar_unmanaged_lane_never_calls_the_gateway(self):
-        root, reg, env = self._unmanaged_shell()
-        shell = ('. "' + str(ROOT / "scripts" / "mac" / "corrida" / "lib.sh") + '"; '
-                 'AQUI="' + str(ROOT / "scripts" / "mac" / "corrida") + '"; '
-                 '. "' + str(ROOT / "scripts" / "mac" / "corrida" / "cerrar.sh") + '"; '
-                 'cerrar_archivar_lanes run-1 "' + str(reg) + '"')
-        done = subprocess.run(["bash", "-c", shell], env=env, capture_output=True, text=True)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertTrue((root / "runs" / "run-1" / "archive" / "lane-1" / "transcript.txt").exists())
-        self.assertFalse((root / "resource.log").exists())
-        self.assertFalse((root / "gateway.log").exists())
-
-    def test_resource_close_managed_termination_keeps_marks_while_pending(self):
-        root, reg, evidence, env = self._managed_shell()
-        command = ["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "terminar-sesion",
-                   "run-1", "managed-1", "--evidence", str(evidence)]
-        missing = subprocess.run(command[:-2], env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"),
-                                 capture_output=True, text=True)
-        self.assertNotEqual(missing.returncode, 0)
-        pending = subprocess.run(command, env=dict(env, FAKE_RESOURCE_STATE="CleanupPending"),
-                                 capture_output=True, text=True)
-        self.assertNotEqual(pending.returncode, 0)
-        self.assertNotIn("set-environment", (root / "tmux.log").read_text() if (root / "tmux.log").exists() else "")
-        self.assertEqual(json.loads(reg.read_text())["estado"], "abierta")
-        verified = subprocess.run(command, env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"),
-                                  capture_output=True, text=True)
-        self.assertEqual(verified.returncode, 0, verified.stderr)
-        self.assertIn("set-environment", (root / "tmux.log").read_text())
-
-    def test_resource_close_partial_binding_keeps_marked_session(self):
-        root, reg, evidence, env = self._managed_shell()
-        record = json.loads(reg.read_text())
-        del record["sesiones"][0]["encargo_ref"]
-        reg.write_text(json.dumps(record))
-        command = ["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "terminar-sesion",
-                   "run-1", "managed-1", "--evidence", str(evidence)]
-        result = subprocess.run(command, env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"),
-                                capture_output=True, text=True)
-        self.assertNotEqual(result.returncode, 0, result.stdout)
-        log = root / "tmux.log"
-        self.assertNotIn("set-environment", log.read_text() if log.exists() else "")
-
-    def test_resource_close_termination_rejects_duplicate_session_identity(self):
-        root, reg, evidence, env = self._managed_shell()
-        record = json.loads(reg.read_text())
-        record["sesiones"].insert(0, dict(record["sesiones"][0]))
-        reg.write_text(json.dumps(record))
-        command = ["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "terminar-sesion",
-                   "run-1", "managed-1", "--evidence", str(evidence)]
-        result = subprocess.run(command, env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"),
-                                capture_output=True, text=True)
-        self.assertNotEqual(result.returncode, 0, result.stdout)
-        log = root / "tmux.log"
-        self.assertNotIn("set-environment", log.read_text() if log.exists() else "")
-
-    def test_resource_close_cerrar_rejects_duplicate_session_identity(self):
-        root, reg, _, env = self._managed_shell()
-        record = json.loads(reg.read_text())
-        record["sesiones"].insert(0, {"nombre": "managed-1"})
-        reg.write_text(json.dumps(record))
-        shell = ('. "' + str(ROOT / "scripts" / "mac" / "corrida" / "lib.sh") + '"; '
-                 'AQUI="' + str(ROOT / "scripts" / "mac" / "corrida") + '"; '
-                 '. "' + str(ROOT / "scripts" / "mac" / "corrida" / "cerrar.sh") + '"; '
-                 'cerrar_archivar_lanes run-1 "' + str(reg) + '"')
-        result = subprocess.run(["bash", "-c", shell], env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"),
-                                capture_output=True, text=True)
-        self.assertNotEqual(result.returncode, 0, result.stdout)
-        self.assertFalse((root / "resource.log").exists())
-
-    def test_resource_close_cerrar_rejects_unbound_duplicate_lane(self):
-        root, reg, _, env = self._managed_shell()
-        record = json.loads(reg.read_text())
-        record["lanes"].append({"id": "lane-2", "session": "managed-1"})
-        reg.write_text(json.dumps(record))
-        shell = ('. "' + str(ROOT / "scripts" / "mac" / "corrida" / "lib.sh") + '"; '
-                 'AQUI="' + str(ROOT / "scripts" / "mac" / "corrida") + '"; '
-                 '. "' + str(ROOT / "scripts" / "mac" / "corrida" / "cerrar.sh") + '"; '
-                 'cerrar_archivar_lanes run-1 "' + str(reg) + '"')
-        result = subprocess.run(["bash", "-c", shell], env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"),
-                                capture_output=True, text=True)
-        self.assertNotEqual(result.returncode, 0, result.stdout)
-        self.assertFalse((root / "resource.log").exists())
-
-    def test_resource_close_cerrar_requires_lane_for_managed_session(self):
-        root, reg, _, env = self._managed_shell()
-        record = json.loads(reg.read_text())
-        record["lanes"] = []
-        reg.write_text(json.dumps(record))
-        shell = ('. "' + str(ROOT / "scripts" / "mac" / "corrida" / "lib.sh") + '"; '
-                 'AQUI="' + str(ROOT / "scripts" / "mac" / "corrida") + '"; '
-                 '. "' + str(ROOT / "scripts" / "mac" / "corrida" / "cerrar.sh") + '"; '
-                 'cerrar_archivar_lanes run-1 "' + str(reg) + '"')
-        result = subprocess.run(["bash", "-c", shell], env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"),
-                                capture_output=True, text=True)
-        self.assertNotEqual(result.returncode, 0, result.stdout)
-        self.assertFalse((root / "resource.log").exists())
-
-    def test_resource_close_cerrar_blocks_on_managed_pending(self):
-        root, reg, evidence, env = self._managed_shell()
-        shell = ('. "' + str(ROOT / "scripts" / "mac" / "corrida" / "lib.sh") + '"; '
-                 'AQUI="' + str(ROOT / "scripts" / "mac" / "corrida") + '"; '
-                 '. "' + str(ROOT / "scripts" / "mac" / "corrida" / "cerrar.sh") + '"; '
-                 'cerrar_archivar_lanes run-1 "' + str(reg) + '"')
-        pending = subprocess.run(["bash", "-c", shell], env=dict(env, FAKE_RESOURCE_STATE="CleanupPending"),
-                                 capture_output=True, text=True)
-        self.assertNotEqual(pending.returncode, 0)
-        self.assertTrue((root / "runs" / "run-1" / "archive" / "lane-1" / "transcript.txt").exists())
-        self.assertEqual(json.loads(reg.read_text())["estado"], "abierta")
-        verified = subprocess.run(["bash", "-c", shell], env=dict(env, FAKE_RESOURCE_STATE="AbsenceVerified"),
-                                  capture_output=True, text=True)
-        self.assertEqual(verified.returncode, 0, verified.stderr)
-        self.assertEqual(verified.stderr, "")
-        self.assertEqual((root / "resource.log").read_text().splitlines(),
-                         ["flush", "CleanupPending", "flush", "AbsenceVerified", "flush"])
 
     AGENTES_LD = (
         "user/502 = {\n"
@@ -1750,7 +1401,7 @@ class ResourceTests(unittest.TestCase):
             nonce = held.nonce
             backend.launch("ag-owned", ["/opt/homebrew/bin/python3", "-c",
                                         self.REAL_DETACHED_LAUNCHER, nonce])
-            backend.mark("ag-owned", nonce)
+            stamp(backend, "ag-owned", nonce)
             self.assertEqual(manager.attach(self.key).state, "Running")
             registered = self._registered_nonce(nonce)
             self.assertTrue(registered, "detached grandchild did not reach the agent account")
@@ -1810,7 +1461,7 @@ class ResourceTests(unittest.TestCase):
                 self.skipTest("user/502 Background-only: bootstrap/load give EIO 5 "
                               "until David starts a real agentes login session")
             self.assertEqual(bootstrapped.returncode, 0, bootstrapped.stderr)
-            backend.mark("ag-sub", nonce)
+            stamp(backend, "ag-sub", nonce)
             self.assertEqual(manager.attach(self.key).state, "Running")
             registered = self._registered_nonce(nonce)
             self.assertGreaterEqual(len(registered), 2, "pane child and launchd child expected")
@@ -1856,7 +1507,7 @@ class ResourceTests(unittest.TestCase):
             ready = ready_dir / "ignoring"
             backend.launch("ag-ignore", ["/opt/homebrew/bin/python3", "-c",
                                          self.REAL_TERM_IGNORING_LAUNCHER, nonce, str(ready)])
-            backend.mark("ag-ignore", nonce)
+            stamp(backend, "ag-ignore", nonce)
             deadline = time.monotonic() + 15
             while not ready.exists() and time.monotonic() < deadline:
                 time.sleep(0.1)
@@ -1896,7 +1547,7 @@ class ResourceTests(unittest.TestCase):
                 manager.begin_launch(key)
                 backend.launch(session, ["/opt/homebrew/bin/python3", "-c",
                                          "import time; time.sleep(30)", held.nonce])
-                backend.mark(session, held.nonce)
+                stamp(backend, session, held.nonce)
                 self.assertEqual(manager.attach(key).state, "Running")
                 self.assertEqual(manager.close(key, {"kind": "result",
                                                      "receipt": f"cycle-{number}"}).state,
@@ -1951,9 +1602,9 @@ class LegacyAdoptionTests(unittest.TestCase):
     def adopt(self, host, instance_id, task_id, session="canario"):
         manager = ResourceManager(host.spool, "host-test", self.backend)
         key = OperationKey("host-test", task_id, 1, instance_id)
-        manager.reserve(key, session, "UserAdopted")
+        held = manager.reserve(key, session, "UserAdopted")
         self.assertTrue(manager.begin_launch(key).launch_now)
-        manager.mark(key)
+        stamp(self.backend, session, held.nonce)
         self.assertEqual(manager.attach(key).state, "Running")
         brief = self.root / "brief.txt"
         brief.write_text("revisa el cambio")

@@ -103,8 +103,8 @@ function quitarPrefijoLinea1(linea: string): string {
 }
 
 // Marcadores que `validarMensajeV1` lee como estructura del mensaje. Un nombre
-// de trabajo que trae alguno cae a su id (mismo guardia que
-// `corrida_encabezado` en lib.sh): si no, el mensaje entero sale inválido.
+// de trabajo que trae alguno cae a su id: si no, el mensaje entero sale
+// inválido.
 const COMANDO = "Comando: ";
 const CAMBIO = "(Que cambio|Qué cambió): ";
 const SIGUE = "(Que sigue|Qué sigue): ";
@@ -117,8 +117,8 @@ export function tieneMarcadorReservado(s: string): boolean {
 }
 
 /**
- * Equivalente TypeScript del validador compartido de `seguimiento.v1`
- * (`mensaje_valido` en `scripts/mac/corrida/lib.sh`): cuatro líneas, etiqueta
+ * Validador de `seguimiento.v1` (`docs/spec/seguimiento.v1.md`): cuatro
+ * líneas, etiqueta
  * cerrada (incluida `ABIERTA`), avance `N de M partes` o `avance
  * desconocido` (extensión mínima para conteos que no se pueden expresar
  * honestamente; `CERRADA` y `ABIERTA` no lo exigen — `ABIERTA` puede no
@@ -126,7 +126,7 @@ export function tieneMarcadorReservado(s: string): boolean {
  * reglas de `Comando: ` y la misma jerga del límite de lenguaje — aplicada
  * solo al cuerpo (líneas 2 a 4): la línea 1 trae el nombre de la corrida, un
  * dato que quien manda el mensaje no controla, y ya se saneó antes
- * (`corrida_encabezado`). Devuelve la etiqueta cuando todo cuadra.
+ * (`nombreEncabezado`). Devuelve la etiqueta cuando todo cuadra.
  */
 export function validarMensajeV1(texto: string): { ok: true; etiqueta: EtiquetaV1 } | { ok: false } {
   if (typeof texto !== "string") return { ok: false };
@@ -166,8 +166,7 @@ export function validarMensajeV1(texto: string): { ok: true; etiqueta: EtiquetaV
   const cuerpo4 = cuarta.replace(new RegExp(`^${NECESITO}`), "").replace(/\s+$/, "");
   if (cuerpo4 === "") return { ok: false };
   // El límite de lenguaje se aplica solo al cuerpo (líneas 2 a 4): la línea 1
-  // (`primera`) trae el nombre de la corrida y queda fuera, igual que en
-  // `mensaje_valido` de lib.sh.
+  // (`primera`) trae el nombre de la corrida y queda fuera.
   if ([l2, l3, cuarta].some((linea) => sanearTextoPropietario(linea) === null)) {
     return { ok: false };
   }
@@ -201,9 +200,8 @@ function tituloApto(titulo: string): string | null {
 
 /**
  * Nombre de un trabajo en la línea 1 (encabezado), exenta del límite de
- * lenguaje igual que en `corrida_encabezado` de lib.sh: una fase por su
- * número; una corrida por su título, o por su id si el título trae jerga o
- * un marcador reservado.
+ * lenguaje: una fase por su número; una corrida por su título, o por su id
+ * si el título trae jerga o un marcador reservado.
  */
 export function nombreEncabezado(r: NombrableTrabajo): string {
   if (!r.trabajoId.startsWith("corrida:")) return `Fase ${r.fase}`;

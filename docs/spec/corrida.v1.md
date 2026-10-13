@@ -1,6 +1,7 @@
 # corrida.v1 — registro de una corrida autónoma
 
-Fecha: 2026-09-18. Estado: activo desde que se mergea (Fase 9, 9.1).
+Fecha: 2026-09-18. Estado: retirado. La ruta de corrida se retiró el 2026-10-13 y
+este documento queda como lectura histórica.
 
 ## Para qué
 

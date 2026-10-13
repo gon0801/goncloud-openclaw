@@ -12,7 +12,3 @@ minutos. Canal: Telegram; el destino se lee del cron.
 | Clase | Para qué | Candado |
 |---|---|---|
 | gh | leer PRs y CI | permitido |
-
-## Lanzamiento
-
-Las sesiones se lanzan con `corrida.sh lanzar-sesion`, que marca antes de mandar.

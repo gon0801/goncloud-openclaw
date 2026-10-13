@@ -1,5 +1,7 @@
 # Fase 9: cierre de corridas autónomas
 
+> **Histórico.** La ruta de corrida (`corrida.sh`) se retiró el 2026-10-13. Este documento queda como lectura histórica.
+
 > **Revalidar antes de lanzar.** La ruta activa es U2 de `Plans.md`. El sync
 > Windows y el watchdog se deshabilitaron durante la reinstalación; este
 > runbook no puede asumir que mergear despliega ni crear un segundo reloj.
