@@ -1,3 +1,0 @@
-carril A detenido
-trabajando la parte de mensajes
-Do you want to proceed? (y/n)
