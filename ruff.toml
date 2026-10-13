@@ -1,0 +1,10 @@
+# Alcance: solo los módulos nuevos de SUA. El legado de scripts/ no se reformatea.
+include = [
+    "scripts/sistema_agentes/**/*.py",
+    "scripts/tests/test-sistema-agentes-contrato.py",
+]
+target-version = "py39"
+line-length = 100
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B"]
