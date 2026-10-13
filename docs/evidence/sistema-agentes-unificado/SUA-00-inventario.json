@@ -305,7 +305,7 @@
   ],
   "piezas": [
     {"id": "managedTasks.host.incident", "ubicacion": "R src/gateway/server-methods/managed-tasks.ts:402-433; G scripts/agent-work/native_gateway.py:215", "estadoTrasB22": "vigente", "entradaHoy": "flush_incidents desde pump_once (native_gateway.py:851-852)"},
-    {"id": "record_incident", "ubicacion": "scripts/agent-work/host.py:954-969", "estadoTrasB22": "vigente", "entradaHoy": "refuse (:503) y detect_run_failures (:861); las llamadas desde detect_silent_failures (:771, :774) se borraron con el el 2026-10-13"},
+    {"id": "record_incident", "ubicacion": "scripts/agent-work/host.py:954-969", "estadoTrasB22": "vigente", "entradaHoy": "refuse (:503) y detect_run_failures (:861); las llamadas desde detect_silent_failures (:771, :774) se borraron con el 2026-10-13"},
     {"id": "flush_incidents", "ubicacion": "scripts/agent-work/host.py:971-990", "estadoTrasB22": "vigente", "entradaHoy": "pump_once (native_gateway.py:851-852)"},
     {"id": "CLI_ROUTES", "ubicacion": "scripts/agent-work/routing.py:15, {(ingenieria, windows-remote), (main, mac-local)}", "estadoTrasB22": "vigente solo para las skills managed-task-routing de ingenieria y operaciones", "entradaHoy": "main no lo usa: test_main_cli_route_points_main_at_the_encargo_cli_skill_and_not_at_routing_py (test-agent-work-routing.py:182). windows-remote sigue disabled-host-unverified"},
     {"id": "coverage.json.modelWakes", "ubicacion": "docs/evidence/agent-work/coverage.json:122-217", "estadoTrasB22": "desfasado", "entradaHoy": "foto del 2026-10-07 con 14 entradas. Dos citas de linea ya no cuadran (latido.sh:224 contra :220-221; settings.json:129 contra :122). Lista vigias que deploy-receipt.md da por cerrados el 2026-10-11"},
