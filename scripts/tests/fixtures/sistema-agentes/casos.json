@@ -336,6 +336,14 @@
     "ensayo": "I12"
   },
   {
+    "archivo": "excepcion/invalida-respuesta-fuera-de-opciones.json",
+    "esquema": "sistema-agentes.excepcion.v1",
+    "veredicto": "invalido",
+    "regla": "opcion-no-ofrecida",
+    "ruta": "response.optionId",
+    "ensayo": "I12"
+  },
+  {
     "archivo": "excepcion/invalida-sin-opciones.json",
     "esquema": "sistema-agentes.excepcion.v1",
     "veredicto": "invalido",

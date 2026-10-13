@@ -120,6 +120,7 @@
     "fixtures": [
       "excepcion/necesita-david.json",
       "excepcion/necesita-david-respondida.json",
+      "excepcion/invalida-respuesta-fuera-de-opciones.json",
       "excepcion/invalida-sin-opciones.json",
       "excepcion/invalida-reaviso-corto.json",
       "excepcion/invalida-opciones-en-texto.json"

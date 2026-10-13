@@ -14,7 +14,8 @@ Forma de los datos:
 - Una fecha es un texto ISO 8601 en UTC con sufijo `Z`. `efecto_admisible` recibe `ahora` así.
 
 Orden del veredicto: `schema`, luego las reglas propias del esquema (para meta `id-duplicado`,
-`dependencia-faltante`, `ciclo`, `criterio-faltante`), luego `campo-prohibido`. Las reglas
+`dependencia-faltante`, `ciclo`, `criterio-faltante`; para excepción `opcion-no-ofrecida`),
+luego `campo-prohibido`. Las reglas
 propias solo corren sobre un documento sin hallazgos `schema`, porque leen su forma sin
 volver a comprobarla.
 """
@@ -637,7 +638,19 @@ def _reglas_de_plan(meta: dict) -> list[Hallazgo]:
     return [hallazgo for regla in _REGLAS_DE_PLAN for hallazgo in regla(unidades)]
 
 
-_REGLAS_PROPIAS: Mapping[str, Callable[[dict], list[Hallazgo]]] = {META: _reglas_de_plan}
+def _respuesta_fuera_de_opciones(excepcion: dict) -> list[Hallazgo]:
+    respuesta = excepcion["response"]
+    ofrecidas = {opcion["optionId"] for opcion in excepcion["options"]}
+    if respuesta is None or respuesta["optionId"] in ofrecidas:
+        return []
+    detalle = f"{respuesta['optionId']} no es una de las opciones ofrecidas"
+    return [Hallazgo("opcion-no-ofrecida", "response.optionId", detalle)]
+
+
+_REGLAS_PROPIAS: Mapping[str, Callable[[dict], list[Hallazgo]]] = {
+    META: _reglas_de_plan,
+    EXCEPCION: _respuesta_fuera_de_opciones,
+}
 
 
 def _validar(documento: object, esquemas: Mapping[str, Campo]) -> list[Hallazgo]:

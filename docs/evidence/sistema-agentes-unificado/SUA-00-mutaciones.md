@@ -7,7 +7,7 @@ Prueba: `scripts/tests/test-sistema-agentes-contrato.py`. Contrato:
 ## Qué demuestra
 
 Cada guarda del validador tiene un caso que se pone rojo cuando la guarda se quita.
-Son 56 mutaciones. Ninguna sobrevive.
+Son 62 mutaciones. Ninguna sobrevive.
 
 ## Método
 
@@ -184,6 +184,7 @@ comando. Ninguna sobrevive.
 | 59 | inventario: un `unknown` sin razón ni comando | `rutas[2].aceptadoEnVivo` pierde `razon` y `comando`. | `Inventario.test_un_unknown_dice_su_razon_o_el_comando_que_lo_contesta` | `AssertionError: Lists differ: [('nativo.encargo', 'aceptadoEnVivo')] != []` |
 | 60 | inventario: falta una pieza que el plan pide | Se quita la pieza `ProgressPublisher`. | `Inventario.test_las_piezas_que_pide_el_plan_estan` | `AssertionError: Items in the first set but not the second:` |
 | 61 | inventario: id de ruta repetido | `rutas[1].id` pasa a ser el de `rutas[0]`. | `Inventario.test_los_ids_no_se_repiten_y_las_piezas_dicen_su_estado_tras_b22` | `AssertionError: Lists differ: ['cli[354 chars]ativo.encargo', 'nativo.turno', 'orbit.deploy'] != ['cli[354 chars]ativo.encargo', 'nativo.turno', 'nativo.turno', 'orbit.deploy']` |
+| 62 | excepción: la respuesta elige una opción ofrecida | `respuesta["optionId"] in ofrecidas` pasa a `True`. | `Fixtures.test_cada_fixture_invalido_da_un_solo_hallazgo_con_su_regla_y_su_ruta` | `AssertionError: Lists differ: [] != [('opcion-no-ofrecida', 'response.optionId')]` |
 
 Corrida verde después de restaurar:
 

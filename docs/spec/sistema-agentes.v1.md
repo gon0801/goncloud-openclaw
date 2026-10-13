@@ -100,7 +100,7 @@ Un campo nuevo en R entra además a la tabla de esa prueba de R.
   falta, tipo distinto, valor fuera de enum, mínimo o máximo, campo fuera de una
   tabla cerrada, `null` donde no se permite) lleva el código `schema`. Los demás
   códigos (`id-duplicado`, `dependencia-faltante`, `ciclo`, `criterio-faltante`,
-  `campo-prohibido`, y las cinco razones de autoridad) nombran una regla que la
+  `opcion-no-ofrecida`, `campo-prohibido`, y las cinco razones de autoridad) nombran una regla que la
   forma sola no atrapa. El validador devuelve `(regla, ruta, detalle)` por
   hallazgo, con la ruta JSON del campo.
 - Los campos marcados *mínimo* son los únicos que SUA-00 fija. Un bloque que
@@ -305,7 +305,7 @@ dos.
 | `recipient` | `{ "channel": "telegram", "principal": [...] }`. El canal se lee de la configuración, nunca del repo |
 | `raisedAt` | Fecha |
 | `renoticeAfterMs` | Entero. Mínimo `3600000`, una hora |
-| `response` | `null` o `{ "optionId", "by": [...], "at" }`. Una respuesta no se aplica a otra excepción |
+| `response` | `null` o `{ "optionId", "by": [...], "at" }`. Una respuesta no se aplica a otra excepción. Su `optionId` es uno de los de `options`; si no, el validador contesta `opcion-no-ofrecida` |
 
 ### Proyección (`sistema-agentes.proyeccion.v1`)
 
