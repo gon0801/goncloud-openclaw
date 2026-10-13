@@ -313,5 +313,68 @@ class Ensayos(unittest.TestCase):
         )
 
 
+INVENTARIO = ROOT / "docs/evidence/sistema-agentes-unificado/SUA-00-inventario.json"
+COLUMNAS = ("fuente", "instalado", "aceptadoEnVivo")
+CAPACIDADES = {"passed", "failed", "unknown"}
+
+
+class Inventario(unittest.TestCase):
+    """El inventario de SUA-00 separa fuente, instalado y aceptado en vivo, y un unknown trae
+    su razón o su comando."""
+
+    maxDiff = None
+
+    def setUp(self):
+        self.inventario = cargar_json(INVENTARIO)
+
+    def test_el_esquema_y_las_capacidades_son_los_del_documento(self):
+        self.assertEqual(self.inventario["schema"], "sua-inventario.v1")
+        self.assertEqual(set(self.inventario["capacidades"]), CAPACIDADES)
+        self.assertEqual(tuple(self.inventario["columnas"]), COLUMNAS)
+
+    def test_cada_ruta_trae_las_tres_columnas_con_capacidad_del_enum(self):
+        fuera = [
+            (ruta["id"], columna, ruta.get(columna, {}).get("capacidad"))
+            for ruta in self.inventario["rutas"]
+            for columna in COLUMNAS
+            if ruta.get(columna, {}).get("capacidad") not in CAPACIDADES
+        ]
+        self.assertEqual(fuera, [])
+
+    def test_un_unknown_dice_su_razon_o_el_comando_que_lo_contesta(self):
+        mudos = [
+            (ruta["id"], columna)
+            for ruta in self.inventario["rutas"]
+            for columna in COLUMNAS
+            if ruta[columna]["capacidad"] == "unknown"
+            and not (ruta[columna].get("razon") or ruta[columna].get("comando"))
+        ]
+        self.assertEqual(mudos, [])
+        self.assertEqual([u["id"] for u in self.inventario["unknowns"] if not u.get("comando")], [])
+
+    def test_los_ids_no_se_repiten_y_las_piezas_dicen_su_estado_tras_b22(self):
+        for lista in ("rutas", "piezas", "unknowns"):
+            ids = [fila["id"] for fila in self.inventario[lista]]
+            self.assertEqual(sorted(set(ids)), sorted(ids), lista)
+        self.assertEqual(
+            [p["id"] for p in self.inventario["piezas"] if not p.get("estadoTrasB22")], []
+        )
+
+    def test_las_piezas_que_pide_el_plan_estan(self):
+        pedidas = {
+            "managedTasks.host.incident",
+            "record_incident",
+            "flush_incidents",
+            "CLI_ROUTES",
+            "coverage.json.modelWakes",
+            "main_cli_loop",
+            "detect_silent_failures",
+            "managedTasks.host.cancellation",
+            "cutover_live.py",
+            "ProgressPublisher",
+        }
+        self.assertEqual(pedidas - {p["id"] for p in self.inventario["piezas"]}, set())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -147,4 +147,4 @@ el legado:
   solo cuando un bloque lo migre y lo diga en su recibo.
 
 La corrida que lo prueba está en [SUA-00-mutaciones](SUA-00-mutaciones.md),
-sección final.
+sección "Alcance del lint".

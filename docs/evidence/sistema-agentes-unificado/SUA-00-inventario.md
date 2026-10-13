@@ -109,6 +109,12 @@ nada (canario D). La guarda `external_directory` no confina el shell
 | Reanudar una CLI (`adaptador resume`) | Igual; argv `resume:<rol>` con `--continue` | G | La misma | `resumed` o `unavailable` (`adaptador.sh:415`) | `passed`: `test-native-harness-adapters.sh` | `unknown`: misma copia desfasada | `unknown`: sin recibo de un resume real |
 | Decisor de corrida (`reconciliar`, `compuerta`, `task_handoffs.py`) | G `2213b930`; `corrida_worker/{reconcile,gates,selector,registry,state,task_handoffs}.py`; `corrida-worker.py` | G | `gates.py`: revisión aprobada del head, revisor no autor, cero bloqueantes (`:251-264`); `mismo-revisor` (`:244-248`) y `bloqueante-repetido` con `rounds_seen >= 2` (`:401-402`); merge exige `authorization_ref` en `preaprobaciones.v1.json` (`compuerta.sh:68`); `resolve_via_gateway` llama `managedTasks.resolve` sin `--device-auth` (`task_handoffs.py:569-581`) | `CONVERGED`, `EXECUTED`, `REOBSERVAR` (`reconciliar.sh:52-74`); `ALLOW` o `DENY` (`compuerta.sh:211-215`); eventos `gate.*` y `evidence.*` en el registro | `passed`: `test-corrida-reconcile.sh`, `test-corrida-gates.sh` (fixtures 15 y 16), `test-agent-work-integration.py:1751` | `failed`: `~/bin/corrida_worker` no tiene `task_handoffs.py` | `unknown`: ningún script de G escribe `authorization_ref` ni `rounds_seen`. Con el kit apagado, `merge` da `DENY kit-no-disponible` (`compuerta.sh:95-98`). Nunca hubo un merge automático con recibo |
 
+Las formas de resultado de esta ruta no tienen spec en `docs/spec/`. `LISTO
+<sha>` lo lee una regex en `estado.sh:79-80` y `progress-events.py:174-175`.
+`VEREDICTO` lo lee `progress-events.py:176-177`. `agent-work.result.v1` vive en
+`host.py:24` y `:154-182`, y `ready.v1` y `review.v1` solo como valores en
+`routing.py:35` y en prosa en la skill `encargo-cli` (`SKILL.md:33`, `:36`).
+El contrato `sistema-agentes.v1` los envuelve en `resultado`.
 `corrida.v2` guarda `lanes`, `effects`, `evidence`, `outcome` y
 `authorization_ref` (`docs/spec/corrida.v2.md`). Es el único registro de G que
 ya separa efectos ejecutados de evidencia por SHA. El contrato

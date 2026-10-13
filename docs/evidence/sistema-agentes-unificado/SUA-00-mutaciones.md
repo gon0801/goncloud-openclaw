@@ -168,3 +168,47 @@ Ran 16 tests in 0.008s
 
 OK
 ```
+
+## Mutaciones de la revisión del lead (2026-10-13)
+
+Después de traer los tres commits del delegado a `sua/00-inventario`, el lead agregó
+`running → failed` a `TRANSICIONES` (el host cierra un intento sin resultado con
+`launch-failed` o `session-closed`, medido en `B22-canarios.md`) y la clase `Inventario`
+de la prueba, que valida `SUA-00-inventario.json`. Cinco mutaciones más, con el mismo
+comando. Ninguna sobrevive.
+
+| # | Guarda | Mutación | Caso que se puso rojo | Línea literal del fallo |
+|---|---|---|---|---|
+| 57 | transición: `running → failed` | `"running": frozenset({"reported", "failed", "cancelled"})` pasa a `frozenset({"reported", "cancelled"})`. | `Unidad.test_cada_par_de_estados_tiene_su_transicion_permitida_o_negada` con `desde='running', hasta='failed'` | `AssertionError: False is not True` |
+| 58 | inventario: capacidad fuera del enum | `rutas[3].instalado.capacidad` pasa de `passed` a `ok`. | `Inventario.test_cada_ruta_trae_las_tres_columnas_con_capacidad_del_enum` | `AssertionError: Lists differ: [('cli.encargo.run-per-task', 'instalado', 'ok')] != []` |
+| 59 | inventario: un `unknown` sin razón ni comando | `rutas[2].aceptadoEnVivo` pierde `razon` y `comando`. | `Inventario.test_un_unknown_dice_su_razon_o_el_comando_que_lo_contesta` | `AssertionError: Lists differ: [('nativo.encargo', 'aceptadoEnVivo')] != []` |
+| 60 | inventario: falta una pieza que el plan pide | Se quita la pieza `ProgressPublisher`. | `Inventario.test_las_piezas_que_pide_el_plan_estan` | `AssertionError: Items in the first set but not the second:` |
+| 61 | inventario: id de ruta repetido | `rutas[1].id` pasa a ser el de `rutas[0]`. | `Inventario.test_los_ids_no_se_repiten_y_las_piezas_dicen_su_estado_tras_b22` | `AssertionError: Lists differ: ['cli[354 chars]ativo.encargo', 'nativo.turno', 'orbit.deploy'] != ['cli[354 chars]ativo.encargo', 'nativo.turno', 'nativo.turno', 'orbit.deploy']` |
+
+Corrida verde después de restaurar:
+
+```
+$ LANG=en_US.UTF-8 PROGRESS_EVENTS_STATE_DIR=$(mktemp -d) python3 scripts/tests/test-sistema-agentes-contrato.py
+Ran 21 tests in 0.006s
+OK
+```
+
+## Alcance del lint
+
+Corrido por el lead sobre el árbol completo de `sua/00-inventario`, el 2026-10-13.
+
+```
+$ ruff check --show-files . | sort
+/Users/dn/dev/wt/sua-00/scripts/sistema_agentes/__init__.py
+/Users/dn/dev/wt/sua-00/scripts/sistema_agentes/contrato.py
+/Users/dn/dev/wt/sua-00/scripts/tests/test-sistema-agentes-contrato.py
+$ pre-commit run --all-files ruff-check
+ruff check...............................................................Passed
+$ pre-commit run --all-files ruff-format
+ruff format..............................................................Passed
+$ git status --short
+(sin cambios en archivos fuera de SUA)
+```
+
+Tres archivos de los 80 `.py` del repo entran al alcance. Ningún archivo legado se
+reformateó.

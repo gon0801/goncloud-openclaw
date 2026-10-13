@@ -96,6 +96,13 @@ Un campo nuevo en R entra además a la tabla de esa prueba de R.
   de `ManagedTaskAssignment` (`managed-task.types.ts:30-37`).
 - Un campo que un host no puede llenar va en `null` cuando el contrato lo
   permite, nunca inventado. Un consumidor trata `null` como desconocido.
+- Códigos de regla. Toda violación de forma de cualquier esquema (campo que
+  falta, tipo distinto, valor fuera de enum, mínimo o máximo, campo fuera de una
+  tabla cerrada, `null` donde no se permite) lleva el código `schema`. Los demás
+  códigos (`id-duplicado`, `dependencia-faltante`, `ciclo`, `criterio-faltante`,
+  `campo-prohibido`, y las cinco razones de autoridad) nombran una regla que la
+  forma sola no atrapa. El validador devuelve `(regla, ruta, detalle)` por
+  hallazgo, con la ruta JSON del campo.
 - Los campos marcados *mínimo* son los únicos que SUA-00 fija. Un bloque que
   necesite más los agrega como opcionales sin cambiar la versión.
 
@@ -167,10 +174,11 @@ Un efecto es admisible si su `action` está en `actions`, su repo en `repos`,
 su destino en `destinations` cuando el efecto tiene destino, y el `mode` de la
 unidad no supera el de la autoridad (`design` < `read` < `implement` <
 `publish`). El validador lo calcula con `efecto_admisible` y devuelve la
-primera razón del rechazo: `accion-fuera-de-autoridad`,
-`repo-fuera-de-autoridad`, `destino-fuera-de-autoridad`,
-`modo-fuera-de-autoridad`, `autoridad-vencida`. Esos son los fixtures de
-autoridad negativa de I07.
+primera razón del rechazo, en este orden: `autoridad-vencida`,
+`accion-fuera-de-autoridad`, `repo-fuera-de-autoridad`,
+`destino-fuera-de-autoridad`, `modo-fuera-de-autoridad`. Una autoridad vencida
+gana a cualquier otra razón porque ya no autoriza nada. Esos son los fixtures
+de autoridad negativa de I07.
 
 ### Unidad (`sistema-agentes.unidad.v1`)
 
@@ -182,14 +190,19 @@ Un intento de una unidad del plan, ligado a una tarea nativa. Es el
 | `schema` | `sistema-agentes.unidad.v1` |
 | `rootId`, `planRevision`, `unitId`, `attempt` | La clave única del binding. `attempt` es entero desde 1 |
 | `taskId` | Tarea nativa que lo ejecuta, o `null` antes de admitir |
-| `assignment` | `ManagedTaskAssignment` tal cual (`target`, `instructionRef`, `resultContract`, `continuation`) |
+| `assignment` | `ManagedTaskAssignment` tal cual. El validador exige `target`, `instructionRef`, `resultContract` y `continuation`. Los demás campos de R (`inputRevision`, `progressBinding`) pasan sin revisarse: su dueño es R |
 | `state` | `"pending"`, `"ready"`, `"admitted"`, `"running"`, `"reported"`, `"accepted"`, `"failed"` o `"cancelled"` |
 | `controlEpoch` | Época con la que se admitió. Una admisión con época obsoleta no inicia |
 
 Transiciones permitidas: `pending → ready` cuando todas las dependencias están
 `accepted`. `ready → admitted → running → reported`. `reported → accepted`
-solo con un claim `passed` por cada criterio de la unidad. `reported → failed`
-o cualquier estado no terminal `→ cancelled`. Un estado terminal no cambia.
+solo con un claim `passed` por cada criterio de la unidad. `reported → failed`.
+`running → failed` cuando el host cierra el intento sin resultado
+(`launch-failed` o `session-closed`, las incidencias que B22 midió en
+`B22-canarios.md`). Cualquier estado no terminal `→ cancelled`. Un estado
+terminal no cambia. `transicion_permitida` en `contrato.py` codifica la tabla.
+Las condiciones (dependencias aceptadas, un claim por criterio) las comprueba el
+dueño nativo en SUA-01, no el validador de forma.
 
 ### Resultado (`sistema-agentes.resultado.v1`)
 
@@ -245,7 +258,8 @@ Orden:
 | `reason` | Texto o `null` |
 | `issuedAt` | Fecha |
 
-Recibo, en `receipt`:
+Recibo, en `receipt`. Una orden sin `receipt` es una orden emitida. Con
+`receipt` es la respuesta del dueño nativo. El validador acepta las dos formas:
 
 | Campo | Qué es |
 |---|---|

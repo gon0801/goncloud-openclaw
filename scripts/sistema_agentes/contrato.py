@@ -65,7 +65,7 @@ TRANSICIONES: Mapping[str, frozenset[str]] = {
     "pending": frozenset({"ready", "cancelled"}),
     "ready": frozenset({"admitted", "cancelled"}),
     "admitted": frozenset({"running", "cancelled"}),
-    "running": frozenset({"reported", "cancelled"}),
+    "running": frozenset({"reported", "failed", "cancelled"}),
     "reported": frozenset({"accepted", "failed", "cancelled"}),
     "accepted": frozenset(),
     "failed": frozenset(),

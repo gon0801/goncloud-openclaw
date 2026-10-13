@@ -152,7 +152,7 @@
   {
     "desde": "running",
     "hasta": "failed",
-    "permitida": false
+    "permitida": true
   },
   {
     "desde": "running",
