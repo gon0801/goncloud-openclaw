@@ -53,7 +53,7 @@ son decisiones explícitas de David, con fecha y registro.
   (`scripts/mac/corrida.sh`, `corrida/`, `corrida_worker/`, `workers.v1.json`) se
   retira; no se migra a SUA. Cuatro: la ruta de sesión adoptada de encargos se
   borra con sus pruebas. Los dos retiros van en PR propios. Las marcas
-  `<!-- corr: D13 -->` de este plan señalan lo que esas respuestas dejan sin base.
+  `<!-- corr: D13 -->` de este plan señalan cada lugar que esas respuestas cambian.
 - 2026-10-12: las rondas siguen la regla 4 de quality-kit, con tope de 5 rondas por
   implementador y relevo a otro modelo con otras 5. La propuesta de cuatro ciclos
   queda inactiva.
@@ -72,7 +72,7 @@ no sirven.
 | G | origin/main `c11d74ed5a0b239ed4bd61c4d8a20c1f76dc2dda` (PR #285) | Encargos B0–B19 y B22 mergeados. Host de la Mac (`scripts/agent-work/`): desde B22 un solo host lanza un `opencode run -m <modelo>` por encargo (`lanzar-encargos.sh`, `sesion.py`), el modelo viaja en la cabecera del brief (`brief.py --model`) y `proveedores-permitidos.json` dice qué proveedores se pueden pedir. La ruta por alias y `lanzar-host.sh` ya no existen. Corte `cutover_live.py` (`agent-work-cutover.v2`), publicación propia del avance al tablero (B16) y `--close-only` (B14). El diseño se escribió en `~/dev/wt/flota-poteto` sobre `e5cae2d`, cabeza del PR #247, que se cerró sin entrar a main. |
 | R | `/Users/dn/dev/openclaw-agent-work-integration`, `4acb881e015a` | Instalado en la Mac Mini del gateway el 2026-10-12. Sobre `605aef7` trae B18-R (`c928144`, residuales de B11) y un arreglo: un turno directo de Telegram ya admite una tarea (`managed-task.turn.ts`). `managedTasks` en vivo con `requesters ["main"]`, host `mac-local` y `adapters ["opencode"]`. B22 no cambió R. |
 | O | `/Users/dn/dev/goncloud-Orbit`, `d83bb28902e97949fea7b3fabc5fed6203d936b1` (checkout local `master`) | Receta de deploy existente; automatización pendiente. Se vuelve a leer `origin/master` antes de SUA-08. |
-| H | Instalación, repo, plataforma y versión pendientes de inventario | No se inventan flags ni se usa OpenClaw como proxy. |
+| H | Corre en `gon-pc` (Windows), según David el 2026-10-13 <!-- corr: D13 -->. Instalación, repo y versión pendientes de inventario | No se inventan flags ni se usa OpenClaw como proxy. |
 
 Contacto con lo que dejó encargos:
 - Las rutas certificadas de SUA-03 y SUA-04 parten de `coverage.json` de G. Hoy
@@ -256,11 +256,12 @@ entradas `corrida.sh` y skill `native-harness-orchestration` como consumidores.
 <!-- corr: D13 -->
 La ruta de corrida se retira (David, 2026-10-13). `corrida_worker/{reconcile,task_handoffs,state}.py`,
 `corrida.sh` y la skill `native-harness-orchestration` dejan de ser consumidores de
-este bloque, y el paso 5 ya no tiene un decisor legacy que envolver con adaptadores
-de entrada. El verbo con que se despierta al controlador se elige con las
+este bloque. La última frase del paso 5, la de reemplazar el decisor legacy por
+adaptadores de entrada, queda sin objeto: ese decisor se borra y no se envuelve. El verbo con que se despierta al controlador se elige con las
 mediciones del 2026-10-13 (`SUA-00-mediciones.md`, "Qué deciden estas mediciones"):
 un `system event` a `main` espera detrás de cualquier turno de `main` en vuelo, y
-un `agent --message` a una sesión propia no espera.
+un `agent --message` a una sesión distinta de la ocupada no esperó en la única
+muestra que se tomó.
 
 <!-- corr: C3.2 -->
 Canal de avisos y excepciones: Telegram vía OpenClaw, el mismo destino que los

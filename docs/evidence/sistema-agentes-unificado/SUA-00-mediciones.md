@@ -1,4 +1,4 @@
-# SUA-00, mediciones: lo que ya está medido, lo que falta y el baseline
+# SUA-00, mediciones: lo que se midió y el baseline
 
 Fecha: 2026-10-13. Bloque SUA-00, pasos 3 y 4 del
 [plan](../../superpowers/plans/2026-10-05-sistema-agentes-unificado.md).
@@ -16,8 +16,8 @@ Las diez mediciones ya están hechas. Lo que salió:
 - **Si `main` está ocupado, el aviso por evento espera.** No se pierde, pero
   no empieza hasta que `main` termina lo que esté haciendo, aunque sea en otra
   sesión. Esperó 96 segundos detrás del vigía de bids.
-- **Un mensaje directo a otra sesión no espera.** Empezó en 2,8 segundos con
-  otro turno de `main` en vuelo.
+- **Un mensaje directo a otra sesión no esperó.** Empezó en 2,8 segundos con
+  otro turno de `main` en vuelo. Es una sola muestra.
 - **Sesión nueva y `/new` cargan lo mismo:** unos 20 mil tokens de contexto
   base. No hay ahorro en reutilizar una sesión.
 - **El vigía de bids gasta mucho más que hace dos días.** En 45 minutos hizo
@@ -119,7 +119,9 @@ Cómo se leyó cada turno: consultas de solo lectura sobre
 que trae el disparador (`data.trigger`). Cada llamada al proveedor es un evento
 `provider.payload.measured`. Los tokens salen de `model.completed`, campo
 `data.usage`. Las horas de emisión son del reloj de la MacBook y las de los
-turnos, del reloj de la Mini. Las salidas crudas quedaron en
+turnos, del reloj de la Mini. Los dos relojes se compararon ese día por ssh,
+tres veces: la Mini iba 0,15 s adelante, con 0,22 s de ida y vuelta. Las esperas
+de este documento que cruzan los dos relojes llevan ese margen, menos de 0,3 s. Las salidas crudas quedaron en
 `~/.local/state/sua-loop/mediciones/` de la MacBook, fuera del repo.
 
 Las sesiones de ensayo se llamaron `agent:main:sua-ensayo-20261013-<n>`, con
@@ -172,7 +174,7 @@ turno de la sesión 3. Corrió en paralelo.
 Lo que esto dice: los despertares por `system event --mode now` de `main` van
 uno detrás de otro y detrás de cualquier turno de `main` en vuelo, sea de otra
 sesión o de un cron aislado. Un `agent --message` a una sesión distinta no
-entra en esa fila.
+entró en esa fila en la única muestra que se tomó.
 
 No se midió: un `agent --message` a una sesión que ya tiene un turno en vuelo,
 un evento a `main` mientras el ocupado es otro agente, ni el modo
@@ -209,7 +211,9 @@ Hallazgo de M-03, con una sola muestra. El turno posterior a `/new` entró por
 gateway repitió la llamada: dos veces con `opencode-go-resp` y dos con
 `opencode-go-resp-2`, las cuatro con `NO_REPLY`, y después cayó a
 `claude-cli/claude-opus-5-5`, que escribió 75 532 tokens de caché. Fueron cinco
-llamadas en tres proveedores donde bastaba una.
+llamadas donde bastaba una, por tres entradas de proveedor del gateway. Las dos
+primeras llevan el nombre de opencode Go; no se leyó la configuración para
+saber si son dos cuentas o una.
 
 Con disparador `heartbeat` (`system event`), `NO_REPLY` se aceptó a la primera
 en las cuatro muestras. En M-04, con una herramienta antes del `NO_REPLY`, no
@@ -224,9 +228,10 @@ mano. Los hechos que pesan:
 1. Un controlador que despierte por `system event` en el agente `main` empieza
    en 2,3 s si `main` está libre y espera lo que dure el turno en vuelo si no.
    Con el vigía de bids activo, esa espera llegó a 96 s y puede llegar a 144 s.
-2. Un controlador que despierte por `agent --message` en una sesión propia no
-   espera. Su turno tiene que contestar con texto, no con `NO_REPLY` solo, o
-   paga cinco llamadas.
+2. Un `agent --message` a una sesión distinta de la que tiene el turno en vuelo
+   no esperó (una muestra). No se midió el mensaje a una sesión ya ocupada. Su
+   turno tiene que contestar con texto, no con `NO_REPLY` solo: en la muestra
+   que lo hizo se pagaron cinco llamadas.
 3. Cada despertar cuesta unos 20 500 tokens de contexto base, con sesión nueva
    o con `/new`. Uno que además llama una herramienta cuesta unos 41 mil.
 4. Un cron aislado no sirve de solicitante de `managedTasks`.
