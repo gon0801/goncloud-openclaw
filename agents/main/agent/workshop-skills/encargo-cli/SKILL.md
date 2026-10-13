@@ -67,8 +67,8 @@ No hay tabla de modelos en esta skill. Qué modelos existen, cuáles están perm
 
 ## Trampas
 
-- No decidas tú si el trabajo se puede: encárgalo. Si pide tocar algo fuera del repo, el host lo niega y `estado` te lo dice. Hacerlo con tu `exec` se salta esa guarda.
-- En esta ruta nadie aprueba permisos, ni tú ni nadie en la Mac. Si opencode niega uno, el encargo termina sin resultado y `estado` lo nombra en `permisosNegados` y en la `frase`: cancela y díselo a David.
+- Un encargo trabaja dentro de un repo de `/Users/dn/dev`. Si el pedido toca un archivo fuera de ese repo, no lo encargues y no lo hagas tú con `exec`: dile a David que por CLI solo se trabaja dentro de un repo de `~/dev` y pregúntale en cuál lo quiere. La guarda de carpeta de opencode no cubre todo lo que un modelo puede hacer desde su terminal.
+- En esta ruta nadie aprueba permisos, ni tú ni nadie en la Mac. Si opencode niega una llamada, el modelo sigue sin ella y `estado` la lista en `permisosNegados`, también en un encargo que terminó bien. Cancela solo si no hay resultado y `explicacion.accion` es `cancelar`, y dile a David la `frase`.
 - `resolve` necesita un resultado. Una tarea que solo tiene una incidencia se cancela con `managed_tasks_cancel` (`taskId` y `reason`).
 - No reenvíes un encargo que falló ni teclees en la Mac. Si hay que repetir, es un encargo nuevo con otro `taskKey`, empezando por el paso 1. Un `taskKey` ya usado con otro brief da `Managed task registration conflict`.
 - Si David pregunta por un encargo y `managed_tasks_inspect` sigue sin `result` ni `incidents`, corre `encargo.py estado --tarea <taskId>` y dile lo que conteste. Con `"ok": false` y `accion` `esperar`, el host todavía no reclamó la tarea. Con `causa` `sin-host`, el host de encargos no corre: dile la `frase`. Si ese `exec` falla, la Mac no responde: díselo.

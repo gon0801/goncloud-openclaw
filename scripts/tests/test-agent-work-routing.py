@@ -334,6 +334,10 @@ class AgentsRouting(unittest.TestCase):
             '"Por CLI" siempre es un encargo registrado en R, aunque el trabajo sea de una línea. No lo hagas tú '
             "con `exec`, `write` ni `edit`.",
             'Un "hecho por CLI" sin `taskId` es falso.',
+            # PR #283 review: the folder guard does not confine the model's shell, so main must not register a
+            # request that names a path outside the repo and promise that the host will deny it.
+            "Si el pedido toca un archivo fuera de ese repo, no lo encargues y no lo hagas tú con `exec`",
+            "Cancela solo si no hay resultado y `explicacion.accion` es `cancelar`",
         ):
             self.assertIn(expected, skill)
         self.assertNotIn("opencode@", skill, "the skill names a model alias; the model travels in the brief")
