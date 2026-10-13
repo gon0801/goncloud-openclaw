@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 import encargo  # noqa: E402
 from modelos import ExactModel, ModelId, PermittedModel, ProviderPolicy, authorize, Catalog  # noqa: E402
+from sesion import LaunchHeader  # noqa: E402
 
 EVIDENCE = Path("docs/evidence/agent-work")
 LISTING = (ROOT / "scripts/tests/fixtures/agent-work/opencode/models-1.18.35.txt").read_text()
@@ -347,6 +348,22 @@ class Preparar(Mac):
         self.assertEqual((without_repo["modelo"], without_repo["inputRevision"]),
                          ("zai-coding-plan/glm-5.3-highspeed", None))
 
+    def test_brief_py_takes_the_brief_arguments_as_they_come_and_the_host_reads_that_model(self):
+        self.certify()
+        self.beat()
+        answer = self.preparar("--modelo", "deepseek v4 pro")
+        instructions = self.root / "instructions"
+        instructions.mkdir()
+        done = subprocess.run([sys.executable, "-I", str(ROOT / "scripts/agent-work/brief.py"),
+                               "--root", str(instructions), *answer["briefArgs"]],
+                              input=b"Agrega saludo.py\n", capture_output=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        fragments = json.loads(done.stdout)
+        self.assertEqual(fragments["target"], {"kind": "cli", "hostId": "mac-local", "adapterId": "opencode"})
+        brief = (instructions / fragments["instructionRef"]["ref"].removeprefix("artifact:")).read_bytes()
+        self.assertEqual(brief, b"agent-work.launch.v1\nmodel: deepseek/deepseek-v4-pro\n---\nAgrega saludo.py\n")
+        self.assertEqual(str(LaunchHeader.parse(brief).model), answer["modelo"])
+
     def test_a_host_that_would_decide_with_something_else_is_out_of_step(self):
         self.certify()
         for change, piece in (({"policyDigest": "f" * 64}, "otra política"), ({"policyDigest": None}, "otra política"),
@@ -623,6 +640,16 @@ class Permitir(Mac):
         self.assertIsNone(encargo._write_policy(self.checkout, self.state,
                                                 lambda current: (current.grants, dict(current.closed))))
         self.assertEqual(self.policy_path.read_bytes(), before)
+
+    def test_a_resulting_policy_that_does_not_load_is_refused_naming_the_policy_file(self):
+        before = self.policy_path.read_bytes()
+        self.assertEqual(
+            encargo._write_policy(self.checkout, self.state,
+                                  lambda current: (current.grants + current.grants[:1], dict(current.closed))),
+            "la política resultante no carga: proveedores-permitidos.json: dos permisos se llaman glm")
+        self.assertEqual(self.policy_path.read_bytes(), before)
+        self.assertEqual(sorted(path.name for path in self.policy_path.parent.iterdir()),
+                         ["coverage.json", "proveedores-permitidos.json"])
 
     def test_an_unreadable_policy_is_not_rewritten(self):
         self.edit_policy(lambda doc: doc["providers"][0].update(billing="free"))

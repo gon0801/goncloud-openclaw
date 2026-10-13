@@ -408,6 +408,18 @@ class Launch(Slot):
         with self.assertRaisesRegex(ValueError, "no empieza con guion"):
             opencode_argv(spec, Path("/opt/homebrew/bin/opencode"), task_id="--auto")
 
+    def test_the_model_brief_py_writes_is_the_one_the_host_launches(self):
+        instructions = self.root / "instructions"
+        instructions.mkdir()
+        done = subprocess.run([sys.executable, "-I", str(ROOT / "scripts/agent-work/brief.py"), "--root",
+                               str(instructions), "--host", "mac-local", "--adapter", "opencode",
+                               "--model", "zai-coding-plan/glm-5.3"], input=b"haz el saludo\n", capture_output=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        digest = json.loads(done.stdout)["instructionRef"]["ref"].removeprefix("artifact:")
+        argv = opencode_argv(self.spec((instructions / digest).read_bytes()), Path("/opt/homebrew/bin/opencode"),
+                             task_id="task-1")
+        self.assertEqual(argv[:4], ("/opt/homebrew/bin/opencode", "run", "-m", "zai-coding-plan/glm-5.3"))
+
     def test_the_environment_opens_the_task_folder_and_only_its_run_directory(self):
         spec = self.spec()
         env = opencode_env(spec)

@@ -117,6 +117,17 @@ También acepta `--file <archivo>` en lugar de la entrada estándar. Imprime una
 {"instructionRef": {"digest": "sha256:<sha256>", "ref": "artifact:<sha256>"}, "target": {"adapterId": "<adapterId>", "hostId": "mac-local", "kind": "cli"}}
 ```
 
+Desde la fase 3 de B22 acepta `--model <proveedor>/<modelo>`, que llega en los `briefArgs` de `encargo.py preparar`. Con él escribe, delante del texto, la cabecera que lee el host de encargos:
+
+```
+agent-work.launch.v1
+model: <proveedor>/<modelo>
+---
+<texto del brief>
+```
+
+La cabecera es parte del archivo, así que el sha256 de `instructionRef` la cubre. Sin `--model` el archivo es el texto tal cual, y el host corre el modelo por omisión. Un valor que no es `<proveedor>/<modelo>` sale con 2 y no escribe nada. `brief.py` no decide si el modelo está permitido: lo contesta `encargo.py preparar` antes, y el host lo comprueba otra vez al reclamar.
+
 `main` pega `instructionRef` y `target` tal cual en `managed_tasks_submit`, junto con su `taskKey`, `inputRevision`, `resultContract` y `continuation`, y después llama a `managed_tasks_admit`. Desde B19 los pasos completos, sin que nadie se los dicte, están en la skill `encargo-cli` de `main` (`agents/main/agent/workshop-skills/encargo-cli/SKILL.md`). Escribir el mismo brief dos veces es seguro: el archivo ya está y la salida es la misma. Si sale con 1, el motivo va en stderr y no hay nada que enviar: brief vacío o de más de 1 MB, raíz inexistente o enlazada, o un archivo con ese nombre y otro contenido. `brief.py` no certifica la ruta; un adaptador sin certificar (matriz A10) lo sigue rechazando R.
 
 ### La sesión de opencode que adopta el host

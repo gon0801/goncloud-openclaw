@@ -216,10 +216,15 @@ class ProviderPolicy:
             raw = Path(path).read_bytes()
         except OSError as exc:
             return ProviderPolicy((), MappingProxyType({}), None, f"no se pudo leer {path}: {exc.strerror or exc}")
+        return ProviderPolicy.parse(raw, path.name)
+
+    @staticmethod
+    def parse(raw: bytes, name: str) -> "ProviderPolicy":
+        """La política que dicen esos bytes. `name` es el archivo que nombra `unreadable`."""
         digest = hashlib.sha256(raw).hexdigest()
         parsed = _parse_policy(raw)
         if isinstance(parsed, str):
-            return ProviderPolicy((), MappingProxyType({}), digest, f"{path.name}: {parsed}")
+            return ProviderPolicy((), MappingProxyType({}), digest, f"{name}: {parsed}")
         return ProviderPolicy(parsed[0], MappingProxyType(parsed[1]), digest, None)
 
     def grant_for(self, provider: ProviderId) -> ProviderGrant | None:

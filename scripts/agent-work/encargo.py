@@ -417,15 +417,16 @@ def _write_policy(checkout: Path, state_root: Path,
         refused = _host_checkout(checkout, state_root)
         if refused is not None:
             return refused
+        document = policy_document(grants, closed)
+        unreadable = ProviderPolicy.parse(document, path.name).unreadable
+        if unreadable is not None:
+            return f"la política resultante no carga: {unreadable}"
         descriptor, pending = tempfile.mkstemp(prefix=".politica-", dir=path.parent)
         try:
             with os.fdopen(descriptor, "wb") as stream:
-                stream.write(policy_document(grants, closed))
+                stream.write(document)
                 stream.flush()
                 os.fsync(stream.fileno())
-            unreadable = ProviderPolicy.load(Path(pending)).unreadable
-            if unreadable is not None:
-                return f"la política resultante no carga: {unreadable}"
             _checkpoint("before-replace")
             os.chmod(pending, 0o644)
             os.replace(pending, path)
