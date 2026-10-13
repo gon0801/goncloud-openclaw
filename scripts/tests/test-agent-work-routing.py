@@ -108,8 +108,8 @@ class AgentsRouting(unittest.TestCase):
                         deliver=lambda *_: None, coverage=self.coverage)
                 self.assertEqual(client.claims, [], f"uncertified {target} reached the gateway")
                 refused.append(target)
-        self.assertEqual(prepared, [])
-        self.assertEqual(len(refused), 16)
+        self.assertEqual(prepared, ["mac-local/opencode"])
+        self.assertEqual(len(refused), 15)
         with self.assertRaisesRegex(RouteUnavailable, "outside the managed perimeter"):
             self.request("ingenieria", "mac-local/opencode")
 
@@ -117,19 +117,22 @@ class AgentsRouting(unittest.TestCase):
         certified = [(host_id, adapter_id)
                      for host_id, adapters in self.coverage["hostAdapterCoverage"].items()
                      for adapter_id, state in adapters.items() if state == "certified"]
-        self.assertEqual(certified, [], "mac-local/opencode goes back to certified with the receipts of "
-                                        "canaries A and P of B22 as its evidence, in their own PR")
-        for host_id, adapter_id in certified:
-            self.assertTrue(self.coverage["hostAdapterEvidence"][host_id][adapter_id],
-                            f"{host_id}/{adapter_id} is certified without evidence")
-        kept = {(host_id, adapter_id): evidence
-                for host_id, adapters in self.coverage["hostAdapterEvidence"].items()
-                for adapter_id, evidence in adapters.items()}
-        self.assertEqual(sorted(kept), [("mac-local", "opencode")])
-        for (host_id, adapter_id), evidence in kept.items():
-            for item in evidence:
-                self.assertIn(item["test"], (ROOT / item["path"]).read_text(encoding="utf-8"),
-                              f"evidence {item} of {host_id}/{adapter_id} does not exist")
+        self.assertEqual(certified, [("mac-local", "opencode")])
+        evidence = self.coverage["hostAdapterEvidence"]
+        self.assertEqual({host_id: sorted(adapters) for host_id, adapters in evidence.items()},
+                         {"mac-local": ["opencode"]})
+        cited = evidence["mac-local"]["opencode"]
+        self.assertEqual(sorted({item["path"] for item in cited}), [
+            "docs/evidence/agent-work/B22-canarios.md", "docs/evidence/agent-work/B22-fase0.md",
+            "scripts/tests/test-agent-work-sesion.py"])
+        for item in cited:
+            self.assertIn(item["test"], (ROOT / item["path"]).read_text(encoding="utf-8"),
+                          f"evidence {item} of mac-local/opencode does not exist")
+        # The receipts of each opencode version the run-per-task route is certified for.
+        receipts = self.coverage["hostAdapterRoute"]["mac-local"]["opencode"]["certifiedCliVersions"]
+        self.assertEqual(receipts, {"1.18.35": "B22-fase0.md y B22-canarios.md"})
+        for name in ("B22-fase0.md", "B22-canarios.md"):
+            self.assertTrue((ROOT / "docs/evidence/agent-work" / name).is_file(), name)
 
     def test_cli_route_is_limited_to_its_requester(self):
         certified = json.loads(json.dumps(self.coverage))

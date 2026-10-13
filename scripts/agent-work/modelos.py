@@ -714,7 +714,8 @@ def _frase_ambiguo(caso: NameIsAmbiguous) -> tuple[str, tuple[str, ...]]:
 
 def _frase_ruta(caso: RouteNotCertified) -> tuple[str, tuple[str, ...]]:
     if caso.certified_versions:
-        return f"Ruta certificada para {_lista(caso.certified_versions)}, la Mac tiene {caso.cli_version}.", ()
+        return (f"Ruta certificada para {_lista(caso.certified_versions)}, la Mac tiene opencode {caso.cli_version}.",
+                ())
     return ("La ruta de encargos por opencode todavía no está certificada. "
             f"La Mac tiene opencode {caso.cli_version}."), ()
 

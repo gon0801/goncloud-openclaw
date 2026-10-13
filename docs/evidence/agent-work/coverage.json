@@ -26,7 +26,7 @@
       "codex": "disabled-operator-setup-pending",
       "zcode": "disabled-operator-setup-pending",
       "grok": "disabled-operator-setup-pending",
-      "opencode": "sandbox-tested-uncertified"
+      "opencode": "certified"
     },
     "windows-remote": {
       "claude_fable": "disabled-host-unverified",
@@ -43,7 +43,7 @@
     "mac-local": {
       "opencode": {
         "form": "run-per-task",
-        "certifiedCliVersions": {"1.18.35": "B22-fase0.md"},
+        "certifiedCliVersions": {"1.18.35": "B22-fase0.md y B22-canarios.md"},
         "closureProof": {
           "boundary": "procesos del uid del operador con rgid del grupo agent-work-enc1",
           "evidence": "docs/evidence/agent-work/B22-fase0.md (M4) y scripts/tests/test-agent-work-sesion.py",
@@ -60,8 +60,11 @@
   "hostAdapterEvidence": {
     "mac-local": {
       "opencode": [
-        {"path": "docs/evidence/agent-work/B8-opencode-adapter-e2e.md", "test": "OPENCODE_ADAPTER_E2E tasks=2 typed=2 deferred_over_draft=1 incidents=0"},
-        {"path": "scripts/tests/test_agent_work_opencode_adapter_e2e.py", "test": "def test_main_loop_hands_tasks_to_an_adopted_opencode_session"}
+        {"path": "docs/evidence/agent-work/B22-fase0.md", "test": "opencode:  /opt/homebrew/bin/opencode --version -> 1.18.35"},
+        {"path": "docs/evidence/agent-work/B22-canarios.md", "test": "687955d579ae284dc32272c3663ba4e88cfae159bfde0f3855f3991e70e56cab|381d9dfa-8eb7-4283-ad0b-27cfa727e75e|acknowledged|TaskCreated|AbsenceVerified|"},
+        {"path": "docs/evidence/agent-work/B22-canarios.md", "test": "5237cd43d8125148cf0e79fa85be934fd4be402331339a5bf64dcb1e15031001|bc3fd7b9-d1b6-4e5d-884a-4618963c6824|cancelled|TaskCreated|AbsenceVerified|"},
+        {"path": "docs/evidence/agent-work/B22-canarios.md", "test": "{\"ok\": true, \"tarea\": \"595755ae-247d-4ccc-993e-4754928ddb20\", \"modelo\": \"zai-coding-plan/glm-4.7\", \"cobro\": \"subscription\", \"estado\": \"acknowledged\", \"cierre\": \"AbsenceVerified\""},
+        {"path": "scripts/tests/test-agent-work-sesion.py", "test": "def test_a_task_that_ends_with_its_result_leaves_nothing_behind"}
       ]
     }
   },
