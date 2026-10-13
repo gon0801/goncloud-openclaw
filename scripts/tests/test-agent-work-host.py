@@ -689,6 +689,10 @@ class HostReceipts(unittest.TestCase):
         self.assertNotIn("Open assignment", tmux_cmd("capture-pane", "-p", "-t", pane).stdout)
         self.assertFalse(submitted.exists())
 
+    def watch(self, now):
+        return self.host.detect_run_failures("mac-test", lambda key: None, now=now, accept_deadline_seconds=30,
+                                             result_deadline_seconds=30)
+
     def uncertain_adapter_delivery(self):
         def lost(*_):
             raise RuntimeError("the keys may have reached the pane")
@@ -700,7 +704,7 @@ class HostReceipts(unittest.TestCase):
     def test_operator_verdict_settles_an_uncertain_delivery_without_typing_again(self):
         operation, op_id = self.uncertain_adapter_delivery()
         attempted = self.host.spool.attempted_at(op_id)
-        self.assertEqual(len(self.host.settle_deliveries("mac-test", now=attempted + 60, deadline_seconds=30)), 1)
+        self.assertEqual(self.watch(attempted + 60), ["host:2:transport-unavailable:delivery-unaccepted"])
         self.assertEqual(self.host.spool.get(op_id)["status"], "uncertain")
         state = str(self.root / "host")
         self.assertEqual(uncertain_operations([state]), ["task-1"])
@@ -721,7 +725,7 @@ class HostReceipts(unittest.TestCase):
         retyped = []
         self.assertEqual(self.apply(self.key, operation, lambda *args: retyped.append(args)).status, "abandoned")
         self.assertEqual(retyped, [], "an abandoned delivery was typed again")
-        self.assertEqual(self.host.settle_deliveries("mac-test", now=attempted + 9999, deadline_seconds=30), [])
+        self.assertEqual(self.watch(attempted + 9999), [])
         with self.assertRaisesRegex(ValueError, "not attempted or uncertain"):
             self.host.resolve_delivery("mac-test", self.key, "delivered", "otra vez")
 
@@ -732,10 +736,7 @@ class HostReceipts(unittest.TestCase):
                                                     "el pane muestra al CLI trabajando en la referencia"), "delivered")
         self.assertEqual(self.host.spool.get(op_id)["status"], "delivered")
         self.assertEqual(uncertain_operations([str(self.root / "host")]), [])
-        detected = self.host.detect_silent_failures("mac-test", lambda key: False,
-                                                    now=self.host.spool.delivered_at(op_id) + 60,
-                                                    deadline_seconds=30)
-        self.assertEqual(detected, ["host:2:deadline-missed:deadline"])
+        self.assertEqual(self.watch(self.host.spool.delivered_at(op_id) + 60), ["host:2:deadline-missed:deadline"])
 
     def test_host_receipts_tmux_cli_without_hooks(self):
         if not shutil.which("tmux"):
@@ -786,17 +787,23 @@ class HostReceipts(unittest.TestCase):
             shim.chmod(0o700)
             key2 = OperationKey("mac-test", "task-2", 2, "instance-2")
             op2 = replace(self.operation, key=key2, session="worker-2")
-            adapter = ShellAdapterTransport(ROOT / "scripts" / "mac" / "corrida.sh", "run-test", "lane-test",
-                                            "worker-test", "mac-test", self.root / "host", str(shim))
-            self.assertEqual(self.apply(key2, op2, adapter.deliver).status, "delivered")
+            env = dict(os.environ, TMUX_BIN=str(shim), AGENT_WORK_HOST_STATE_DIR=str(self.root / "host"))
+
+            def deliver_ref(host_id, ref, session):
+                return subprocess.run(["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "adaptador",
+                                       "deliver-ref", "run-test", "lane-test", "worker-test", session, host_id, ref],
+                                      capture_output=True, text=True, env=env)
+
+            def via_adapter(ref, session):
+                sent = deliver_ref("mac-test", ref, session)
+                if sent.returncode or sent.stdout.strip() != "accepted":
+                    raise RuntimeError(sent.stderr)
+
+            self.assertEqual(self.apply(key2, op2, via_adapter).status, "delivered")
             self.assertEqual(tmux_cmd("show-environment", "-t", "=worker-2", "AGENT_WORK_MANAGED").stdout.strip(),
                              "AGENT_WORK_MANAGED=1")
             ref = str(self.root / "host" / "assignments" / f"{operation_id(key2)}.json")
-            env = dict(os.environ, TMUX_BIN=str(shim), AGENT_WORK_HOST_STATE_DIR=str(self.root / "host"))
-            foreign = subprocess.run(["bash", str(ROOT / "scripts" / "mac" / "corrida.sh"), "adaptador",
-                                      "deliver-ref", "run-test", "lane-test", "worker-test", "worker-2",
-                                      "foreign-host", ref], capture_output=True, text=True, env=env)
-            self.assertNotEqual(foreign.returncode, 0)
+            self.assertNotEqual(deliver_ref("foreign-host", ref, "worker-2").returncode, 0)
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline and not self.host.collect("mac-test", key2):
                 time.sleep(0.1)

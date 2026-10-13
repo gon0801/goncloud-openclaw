@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 from contracts import AuthorizedOperation, OperationKey, operation_id
 from host import Host, cli_adapter, read_composer, reject_permission_dialog
 from spool import canonical
-from native_gateway import (GatewayProjectionClient, claim_cli_once, close_only, pump_once,
+from native_gateway import (GatewayProjectionClient, claim_cli_once, claim_run_once, close_only, pump_once,
                             read_spool_resources)
 from resources import (AccountBusyError, AGENT_USER, AgentesBackend, AgentProcess, CommandOutcome,
                        LOCK_ARGV, ResourceManager, TmuxBackend, parse_agent_ps)
@@ -676,17 +676,14 @@ class ResourceTests(unittest.TestCase):
                 self.claims.append(instance_id)
                 return None
 
-        coverage = {"hostAdapterCoverage": {"host-test": {"opencode": "certified"}}}
-
         def claims(manager, instance_id):
             client = Client()
-            self.assertIsNone(claim_cli_once(client, host=self.host, manager=manager, adapter_id="opencode",
-                                             instance_id=instance_id, session="oc", workspace_root=self.tmp.name,
-                                             deliver=lambda *_: None, coverage=coverage))
+            self.assertIsNone(claim_run_once(client, host=self.host, manager=manager, backend=self.backend,
+                                             instance_id=instance_id, deps=None))
             return client.claims
 
         full = ResourceManager(self.host.spool, "host-test", self.backend, capacity=1)
-        full.reserve(self.key, "oc", "UserAdopted")
+        full.reserve(self.key, "oc", "TaskCreated")
         self.assertEqual(claims(full, "instance-2"), [], "R bound a task to a host with no room for it")
         self.assertEqual(claims(full, "instance-1"), ["instance-1"],
                          "the instance cannot replay the claim its unfinished operation came from")

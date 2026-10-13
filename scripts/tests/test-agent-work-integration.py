@@ -28,7 +28,7 @@ import warnings
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 sys.path.insert(0, str(ROOT / "scripts" / "mac"))
-from contracts import AuthorizedOperation, IncidentRejected, OperationKey, operation_id  # noqa: E402
+from contracts import AuthorizedOperation, IncidentRejected, OperationKey, RunDir, operation_id  # noqa: E402
 from host import CliAdapter, Host, TmuxTransport  # noqa: E402
 import native_gateway  # noqa: E402
 from native_gateway import GatewayProjectionClient, main as gateway_main, transfer_gateway_projections  # noqa: E402
@@ -2408,10 +2408,9 @@ class CliClaimTest(unittest.TestCase):
                 return claim
 
         with self.assertRaisesRegex(ValueError, "host claim identity mismatch"):
-            native_gateway.claim_cli_once(Client(), host=self.host, manager=mock.Mock(can_take=lambda _: True),
-                                          adapter_id="codex", instance_id="instance-one",
-                                          session="worker-one", workspace_root=self.root,
-                                          deliver=lambda *_: None, coverage=self.coverage)
+            native_gateway._claim(Client(), "codex", "instance-one")
+        claim = self.claim
+        self.assertEqual(native_gateway._claim(Client(), "codex", "instance-one"), self.claim)
 
     def test_changed_brief_chunk_is_rejected_before_materialization(self):
         class Client:
@@ -2421,9 +2420,24 @@ class CliClaimTest(unittest.TestCase):
                         "dataBase64": base64.b64encode(b"bad").decode()}
 
         self_digest = self.digest
+        run = RunDir.for_operation(self.host.state_dir, "a" * 64)
         with self.assertRaisesRegex(ValueError, "brief digest mismatch"):
-            native_gateway._brief_to_workspace(Client(), self.claim, self.root / "workspace")
-        self.assertEqual(list((self.root / "workspace" / "managed-briefs").iterdir()), [])
+            native_gateway.fetch_brief(Client(), self.claim, run)
+        self.assertEqual(list(run.path.iterdir()), [])
+
+    def test_a_brief_longer_than_one_chunk_is_downloaded_in_bounded_ranges(self):
+        offsets = []
+
+        class Client:
+            def brief_chunk(_, adapter_id, instance_id, task_id, claim_id, offset, length):
+                offsets.append((offset, length))
+                return {"taskId": task_id, "claimId": claim_id, "digest": "sha256:" + self.digest,
+                        "size": len(self.brief), "offset": offset,
+                        "dataBase64": base64.b64encode(self.brief[offset:offset + length]).decode("ascii")}
+
+        run = RunDir.for_operation(self.host.state_dir, "a" * 64)
+        self.assertEqual(native_gateway.fetch_brief(Client(), self.claim, run).read_bytes(), self.brief)
+        self.assertEqual((len(self.brief), offsets), (5320, [(0, 4096), (4096, 4096)]))
 
 
 def composer_tmux(calls, command):
