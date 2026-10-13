@@ -51,7 +51,9 @@ SLOT_GROUP = "agent-work-enc1"
 DEFAULT = "zai-coding-plan/glm-5.3-flash"
 LINE = ("Open assignment JSON at {}. First write agent-work.accept.v1 atomically to acceptRef with schema, hostId, "
         "taskId, generation, instanceId, claimId and capability copied from the assignment. Then follow briefRef "
-        "and write agent-work.result.v1 atomically to resultRef.")
+        "and write agent-work.result.v1 atomically to resultRef. Keep every helper script and scratch file inside "
+        "the directory that holds acceptRef: a command that touches /tmp or any other path outside it and "
+        "workspaceRef is denied and ends the session.")
 # Shapes measured on opencode 1.18.35 (docs/evidence/agent-work/B22-fase0.md: M3c, M2 and M6, M3b).
 CREATED = ('timestamp=2026-10-13T00:57:58.663Z level=INFO run=18f0109d message=created id=ses_ecd3bd778ffe2Ws3LL1t3bfkl1 '
            'slug=witty-planet version=1.18.35 projectID=53a94db2 directory={} path="" workspaceID=undefined\n')
@@ -101,6 +103,7 @@ def log(line):
 
 
 note("seen.json", {"argv": args, "PWD": os.environ.get("PWD"), "cwd": os.getcwd(), "rgid": os.getgid(),
+                   "TMPDIR": os.environ.get("TMPDIR"), "scratch_mode": oct(os.stat(os.environ["TMPDIR"]).st_mode & 0o7777),
                    "pid": os.getpid(), "config": os.environ.get("OPENCODE_CONFIG_CONTENT"),
                    "managed": os.environ.get("AGENT_WORK_MANAGED"),
                    "autoupdate": os.environ.get("OPENCODE_DISABLE_AUTOUPDATE"),
@@ -413,7 +416,10 @@ class Launch(Slot):
         env = opencode_env(spec)
         self.assertEqual(env["PWD"], str(self.repo))
         config = json.loads(env.pop("OPENCODE_CONFIG_CONTENT"))
-        self.assertEqual(env, {"PWD": str(self.repo), "OPENCODE_DISABLE_AUTOUPDATE": "1", "AGENT_WORK_MANAGED": "1"})
+        # Live canary A 2026-10-13: glm left its helper script in /tmp, `rm /tmp/…` was denied and the
+        # session ended with the work done and no result. The scratch folder is inside the one allowed key.
+        self.assertEqual(env, {"PWD": str(self.repo), "TMPDIR": f"{self.spool}/runs/{self.operation()}/tmp",
+                               "OPENCODE_DISABLE_AUTOUPDATE": "1", "AGENT_WORK_MANAGED": "1"})
         self.assertEqual(config, {
             "permission": {"external_directory": {f"{self.spool}/runs/{self.operation()}/**": "allow"}},
             "enabled_providers": ["zai-coding-plan"], "small_model": DEFAULT})
@@ -439,6 +445,7 @@ class Launch(Slot):
                          [str(self.repo), str(self.repo), "a b\n$(echo no)", True,
                           ["un argumento con 'comillas' y $HOME"]])
         self.assertEqual((spec.record / "stderr.log").read_text(), "a los logs\n")
+        self.assertEqual(oct(spec.run.scratch.stat().st_mode & 0o7777), "0o700")
 
     def test_the_launch_script_runs_nothing_outside_the_slot_group_or_the_task_folder(self):
         spec = self.spec()
@@ -448,6 +455,9 @@ class Launch(Slot):
         self.assertEqual(outside_group.returncode, 98)
         gone = replace(spec, workspace=sesion.Workspace(self.root / "dev" / "borrada"))
         self.assertEqual(self.launched(launch_script(gone, argv, {}, os.getgid())).returncode, 97)
+        spec.run.scratch.write_text("un archivo donde va la carpeta")
+        self.assertEqual(self.launched(launch_script(spec, argv, {}, os.getgid())).returncode, 96)
+        spec.run.scratch.unlink()
         self.assertFalse((self.root / "corrio").exists())
         self.assertEqual(self.launched(launch_script(spec, argv, {}, os.getgid())).returncode, 0)
         self.assertTrue((self.root / "corrio").exists())
@@ -614,7 +624,8 @@ class Decisions(Slot):
             "session": self.session(), "cwd": str(self.repo),
             "argv": (str(self.bin / "opencode"), "run", "-m", DEFAULT, "--format", "json", "--print-logs", "--log-level",
                      "INFO", "--title", "task-1", LINE.format(run.assignment)),
-            "env": {"PWD": str(self.repo), "OPENCODE_DISABLE_AUTOUPDATE": "1", "AGENT_WORK_MANAGED": "1",
+            "env": {"PWD": str(self.repo), "TMPDIR": str(run.path / "tmp"), "OPENCODE_DISABLE_AUTOUPDATE": "1",
+                    "AGENT_WORK_MANAGED": "1",
                     "OPENCODE_CONFIG_CONTENT": json.dumps({
                         "permission": {"external_directory": {f"{run.path}/**": "allow"}},
                         "enabled_providers": ["zai-coding-plan"], "small_model": DEFAULT}, separators=(",", ":"))}}])
@@ -1055,10 +1066,11 @@ class LiveResult(LiveSlot):
         self.assertEqual(self.r.reports, [("task-1", b"hecho por el doble\n")])
         self.assertEqual((self.repo / "b22-doble.txt").read_text(), "hecho por el doble\n")
         self.assertEqual(sorted(path.name for path in self.run_dir().path.iterdir()),
-                         ["accept.json", "assignment.json", "brief", "result.json"])
+                         ["accept.json", "assignment.json", "brief", "result.json", "tmp"])
         seen = self.seen()
         self.assertEqual((seen["PWD"], seen["cwd"], seen["rgid"], seen["stdin_is_dev_null"], seen["managed"],
                           seen["autoupdate"]), (str(self.repo), str(self.repo), slot_gid(), True, "1", "1"))
+        self.assertEqual((seen["TMPDIR"], seen["scratch_mode"]), (str(self.run_dir().path / "tmp"), "0o700"))
         self.assertEqual(seen["argv"], ["run", "-m", DEFAULT, "--format", "json", "--print-logs", "--log-level", "INFO",
                                         "--title", "task-1", LINE.format(self.run_dir().assignment)])
         self.assertEqual(json.loads(seen["config"])["permission"],

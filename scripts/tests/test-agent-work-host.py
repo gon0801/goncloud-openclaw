@@ -207,6 +207,13 @@ class HostReceipts(unittest.TestCase):
                          "directory that holds resultRef, never in /tmp, renamed onto resultRef), exactly the fields "
                          "shown in result with their values unchanged, plus every field named in fill holding what "
                          "fill describes. Write no other field.")
+        # Live canary A 2026-10-13: glm left a helper script in /tmp and `rm /tmp/…` ended its session.
+        self.assertEqual(protocol["steps"][3],
+                         "Keep every helper script and scratch file inside the directory that holds acceptRef, and "
+                         "delete nothing outside it. A command that creates, reads or deletes a path in /tmp or "
+                         "anywhere else outside workspaceRef and that directory is denied, and the session ends "
+                         "with no result.")
+        self.assertEqual(len(protocol["steps"]), 4)
         Path(assignment["acceptRef"]).write_text(json.dumps(protocol["accept"]))
         Path(assignment["resultRef"]).write_text(json.dumps({
             **protocol["result"],
