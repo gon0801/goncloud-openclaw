@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""main_cli_loop: main asks a CLI in an adopted mac-local session from its durable loop session.
+"""main_cli_loop: the R Gateway harness of main's durable loop session, and what it refuses.
 
 The R Gateway runs in-process in the harness with a loopback model provider that
-counts every request. The CLI is a double; the route, host, and transport are real.
+counts every request.
 """
 
 import copy
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -18,32 +17,17 @@ import threading
 import time
 import unittest
 import uuid
-from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from contracts import OperationKey  # noqa: E402
-from host import CliAdapter, Host  # noqa: E402
-from native_gateway import GatewayProjectionClient, claim_cli_once  # noqa: E402
-from resources import ResourceManager  # noqa: E402
-from routing import RouteUnavailable, prepare_request  # noqa: E402
-from spool import atomic_json  # noqa: E402
-from test_agent_work_cli_gateway_e2e import FIXTURE, FakeCliSession  # noqa: E402
+from routing import prepare_request  # noqa: E402
 
-# tmux names a pane after its foreground process; a python CLI double shows as Python on macOS.
-PYTHON_DOUBLE = CliAdapter(tuple(sorted({"Python", Path(sys.executable).name,
-                                         Path(os.path.realpath(sys.executable)).name})))
+FIXTURE = ROOT / "scripts/tests/fixtures/agent-work/managed-cli-gateway-harness.mjs"
 LOOP_SESSION = "agent:main:encargos-loop"
-FOREIGN_SESSIONS = ("agent:main:main", "agent:main:vigia-mac")
-FOREIGN_PREFIX = "agent:main:sim9-"
 HOST_ID, ADAPTER = "mac-local", "claude_opus"
-INSTANCE = "loop-instance"
-CLI_SESSION = "fixture-worker"
 # Same bytes as the harness fixture brief, so its artifact resolver accepts the digest.
 BRIEF = b"Review the fixture change and return one verdict.\n"
-CLI_WORK_SECONDS = 8.0
 CRON_REFUSAL = "Managed task requires a durable requester session, not an isolated cron run"
 
 
@@ -63,7 +47,7 @@ def built_runtime(test):
 
 
 class LoopGateway:
-    """The cli_gateway harness, configured for main's loop session and a counting provider."""
+    """The R Gateway harness, configured for main's loop session and a counting provider."""
 
     def __init__(self, runtime, root, reuse_state=False, extra_env=None):
         # reuse_state starts a second Gateway process over the first one's durable state.
@@ -177,135 +161,6 @@ def certified_coverage():
 
 
 class MainCliLoopE2E(unittest.TestCase):
-    def test_loop_session_requests_cli_and_only_its_session_wakes(self):
-        runtime = built_runtime(self)
-        with tempfile.TemporaryDirectory(prefix="agent-work-main-cli-loop-") as temporary:
-            root = Path(temporary)
-            gateway = LoopGateway(runtime, root)
-            try:
-                coverage, certified = certified_coverage()
-                route = loop_route(root, gateway.state_dir)
-                with self.assertRaisesRegex(RouteUnavailable, "not certified"):
-                    prepare_request(coverage=coverage, **route)
-                request = prepare_request(coverage=certified, **route)
-                self.assertEqual(request["assignment"]["target"],
-                                 {"kind": "cli", "hostId": HOST_ID, "adapterId": ADAPTER})
-                client = GatewayProjectionClient(str(runtime / "openclaw.mjs"), HOST_ID, gateway.url)
-                host = Host(HOST_ID, root / "host")
-                backend = FakeCliSession()
-                manager = ResourceManager(host.spool, HOST_ID, backend)
-                with mock.patch.dict(os.environ, gateway.env):
-                    submitted = gateway.tool("submit", request, "loop-submit-turn")
-                    task_id = submitted["taskId"]
-                    context_key = f"task:{task_id}"
-                    self.assertEqual(submitted["state"], "registered")
-                    admitted = gateway.tool("admit", {"taskId": task_id,
-                                                      "admissionKey": "encargos-loop-attempt"},
-                                            "loop-admit-turn")
-                    self.assertEqual(admitted["state"], "host-pending")
-                    window_opened = time.time()
-                    window_start = len(gateway.provider_requests())
-
-                    delivered = []
-
-                    def fake_cli(assignment_ref, session):
-                        operation = json.loads(Path(assignment_ref).read_text())
-                        delivered.append((operation, session))
-                        # The CLI takes the assignment with its own acceptance before working.
-                        atomic_json(Path(operation["acceptRef"]), {
-                            "schema": "agent-work.accept.v1", **{field: operation[field] for field in (
-                                "hostId", "taskId", "generation", "instanceId", "claimId", "capability")}})
-
-                    first = claim_cli_once(client, host=host, manager=manager, adapter_id=ADAPTER,
-                                           instance_id=INSTANCE, session=CLI_SESSION,
-                                           workspace_root=root / "workspace", deliver=fake_cli,
-                                           coverage=certified)
-                    self.assertEqual(first.status, "delivered")
-                    self.assertEqual([(op["taskId"], session) for op, session in delivered],
-                                     [(task_id, CLI_SESSION)])
-                    operation = delivered[0][0]
-                    # The CLI works. No session wake and no provider request may happen meanwhile.
-                    working_until = time.monotonic() + CLI_WORK_SECONDS
-                    while time.monotonic() < working_until:
-                        self.assertEqual(gateway.call("deliveries"), [])
-                        time.sleep(0.5)
-                    artifact = root / "workspace" / "review.txt"
-                    artifact.write_text("VEREDICTO aprobado\n")
-                    atomic_json(Path(operation["resultRef"]), {
-                        "schema": "agent-work.result.v1", "kind": "produced",
-                        "hostId": operation["hostId"], "taskId": operation["taskId"],
-                        "generation": operation["generation"],
-                        "instanceId": operation["instanceId"],
-                        "producerId": operation["producerId"],
-                        "capability": operation["capability"],
-                        "observedRevision": operation["inputRevision"],
-                        "typedPayload": {"verdict": "approved", "evidenceRef": "review.txt"},
-                        "artifactRef": str(artifact),
-                        "digest": hashlib.sha256(artifact.read_bytes()).hexdigest(),
-                    })
-                    in_window = gateway.provider_requests()[window_start:]
-                    window_seconds = time.time() - window_opened
-                    self.assertEqual(in_window, [], "provider requests while the CLI worked")
-
-                    receipts = host.flush(HOST_ID, client.report_host_result)
-                    self.assertEqual(len(receipts), 1)
-                    key = OperationKey(HOST_ID, task_id, receipts[0]["generation"], INSTANCE)
-                    closed = manager.close(key, {"kind": "result", "receipt": receipts[0]["receiptId"]})
-                    self.assertEqual(closed.state, "ReleasedAdopted")
-                    self.assertEqual(backend.stops, [])
-                    self.assertEqual(len(backend.revocations), 1)
-                    self.assertIsNotNone(backend.observe(CLI_SESSION))
-
-                    # Positive control: the same counter sees the requester's wake after the report.
-                    wakes = wait_for(lambda: [r for r in gateway.provider_requests()
-                                              if task_id in r["wakeTasks"]], 30)
-                    self.assertTrue(wakes, "the report never woke the requester session; "
-                                    f"session queue: {gateway.call('deliveries')}")
-                    # The Gateway processes the wake itself: the turn starts with this task's
-                    # delivery in flight toward the submitting session, then settles it.
-                    in_flight = wakes[0]["startedDeliveries"]
-                    self.assertEqual([(row["sessionKey"], row["contextKey"]) for row in in_flight],
-                                     [(LOOP_SESSION, context_key)])
-                    wake_id = hashlib.sha256(
-                        f"managed-task-result:{task_id}:{receipts[0]['generation']}".encode()
-                    ).hexdigest()
-                    deliveries = wait_for(lambda: [
-                        (row["id"], row["status"]) for row in gateway.call("deliveries")
-                        if row["status"] != "pending"], 15)
-                    self.assertEqual(deliveries, [(wake_id, "completed")])
-                    self.assertEqual(len(gateway.call("deliveries")), 1)
-                    # From the durable wake row to the provider, on the Gateway clock: a wake
-                    # raised while the CLI worked would have reached the counter in the window.
-                    latency = (wakes[0]["at"] - in_flight[0]["enqueuedAt"]) / 1000
-                    self.assertLess(latency, window_seconds,
-                                    "the CLI window is too short to have caught a wake")
-                    sessions = gateway.call("sessions")
-                    self.assertEqual(sessions, [LOOP_SESSION])
-                    for foreign in FOREIGN_SESSIONS:
-                        self.assertNotIn(foreign, sessions)
-                    self.assertFalse([s for s in sessions if s.startswith(FOREIGN_PREFIX)])
-
-                    snapshot = gateway.tool("inspect", {"taskId": task_id}, "loop-inspect-turn")
-                    self.assertEqual(snapshot["handlingState"], "pending-handling")
-                    self.assertEqual(snapshot["result"]["payload"]["verdict"], "approved")
-                    decision = {"kind": "blocked", "reason": "fixture-review-complete"}
-                    gateway.tool("resolve", {"receipt": snapshot["resultReceipt"],
-                                             "decision": decision}, "loop-resolve-turn")
-                    final = gateway.tool("inspect", {"taskId": task_id}, "loop-final-inspect-turn")
-                    self.assertEqual(final["handlingState"], "handled")
-                    after_report = gateway.provider_requests()[window_start:]
-                    self.assertEqual(after_report, wakes, "the report woke a model more than once")
-                    self.assertEqual(len(wakes), 1)
-                    self.assertEqual(len(delivered), 1)
-                    print(f"MAIN_CLI_LOOP_E2E requester={LOOP_SESSION} submit=1 admit=1 delivery=1 "
-                          f"window_s={window_seconds:.1f} window_provider_requests={len(in_window)} "
-                          f"report=1 wake_latency_s={latency:.2f} wake_requests={len(wakes)} "
-                          f"provider_after_report={len(after_report)} session_queue={deliveries} "
-                          f"sessions={sessions} close={closed.state} stops={len(backend.stops)}",
-                          flush=True)
-            finally:
-                gateway.close()
-
     def test_isolated_cron_run_cannot_submit(self):
         runtime = built_runtime(self)
         with tempfile.TemporaryDirectory(prefix="agent-work-main-cli-cron-") as temporary:

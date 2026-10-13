@@ -4,27 +4,23 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import math
 import os
-import re
 import stat
-import subprocess
 import sys
 import tempfile
 import time
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
 from typing import Callable
 
 from contracts import (AuthorizedOperation, HostObservation, IncidentRejected, OperationKey, ResultReceipt,
                        SessionRecord, operation_id)
-from spool import DIALOG_STILL_OPEN, TERMINAL_STATES, Spool, atomic_json, canonical, closure_digest, incident_identity
+from spool import TERMINAL_STATES, Spool, atomic_json, canonical, closure_digest, incident_identity
 
 MAX_ARTIFACT_BYTES = 10 * 1024 * 1024
 RESULT_SCHEMA = "agent-work.result.v1"
 SILENT_EPISODES = {"invalid-result": "invalid-result", "transport-unavailable": "session-closed",
                    "deadline-missed": "deadline"}
-DIALOG_PASSES = 2
 ACCEPT_SCHEMA = "agent-work.accept.v1"
 UNACCEPTED_EPISODE = "delivery-unaccepted"
 # Episodes of the run-per-task route. Both travel as episodeId of transport-unavailable, which R accepts;
@@ -38,80 +34,11 @@ RESULT_DEADLINE_SECONDS = 3600.0
 ACCEPT_BOUND = ("hostId", "taskId", "generation", "instanceId", "claimId")
 RESULT_BOUND = ("hostId", "taskId", "generation", "instanceId", "producerId", "capability")
 MAX_ACCEPT_BYTES = 4096
-TMUX_TIMEOUT_SECONDS = 5.0
-COMPOSER_SETTLE_SECONDS = 0.3
-# opencode 1.18.35 took about a second to draw a long typed reference.
-COMPOSER_ECHO_SECONDS = 3.0
 VERDICTS = ("delivered", "abandoned")
-SGR = re.compile(r"\x1b\[([0-9;]*)m")
-COMPOSER_GLYPHS = "❯›┃│\u00a0 "
-COMPOSER_MENU = re.compile(r"^\s*[❯›]?\s*\d+[.)]?\s")
-# An option under the arrow is indented and numbered "2." or "2)"; a wrapped composer line such as
-# "1 atomically" (from "accept.v1") starts at the margin.
-COMPOSER_MENU_OPTION = re.compile(r"^\s+\d+[.)]\s")
-# Every opencode dialog (update, confirm, select) heads its box with the title and "esc" at the right
-# edge, and takes the keys while the composer under it still shows its placeholder. Measured
-# 2026-10-10 on opencode 1.18.35, "Update Available … esc" despite OPENCODE_DISABLE_AUTOUPDATE=1.
-OPENCODE_DIALOG_TITLE = re.compile(r"\S\s{2,}esc\s*$")
-
-
-@dataclass(frozen=True)
-class CliAdapter:
-    """How the host knows a CLI's pane (tmux pane_current_command), its empty composer, and its permission
-    dialog: every pattern matches a line of the screen, and reject_key answers it with a denial."""
-    commands: tuple[str, ...]
-    placeholders: tuple[str, ...] = ()
-    permission_dialog: tuple[re.Pattern, ...] = ()
-    reject_key: str = ""
-
-
-# Measured 2026-10-10 on opencode 1.18.35: tmux names the pane after the npm package's
-# opencode.exe, and an empty composer on the home screen shows one of three examples at random.
-# Measured 2026-10-11 on opencode 1.18.35: "Allow once" is preselected, so Enter approves; Esc closes the
-# dialog and the tool call ends with "The user rejected permission to use this specific tool call."
-CLI_ADAPTERS = {
-    "opencode": CliAdapter(("opencode", "opencode.exe"), tuple(
-        f'Ask anything… "{example}"' for example in
-        ("Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests")),
-        permission_dialog=(re.compile(r"^\s*┃\s+△ Permission required(\s{2,}\S.*)?\s*$"),
-                           re.compile(r"^\s*┃\s+Allow once\s+Allow always\s+Reject\b")),
-        reject_key="Escape"),
-}
-
-
-def cli_adapter(adapter_id: str) -> CliAdapter:
-    """An adapter nobody measured has no known placeholder, so any text in its composer defers."""
-    return CLI_ADAPTERS.get(adapter_id, CliAdapter((adapter_id,)))
 
 
 class DeliveryDeferred(Exception):
-    """Nothing was typed into the session, so the delivery can be retried."""
-
-
-def next_dialog_state(state: dict, observed: str) -> tuple[dict, bool]:
-    dialog = dict(state)
-    if observed == "":
-        dialog["candidate"] = None
-        dialog["seen"] = 0
-        dialog["clean"] = min(dialog["clean"] + 1, DIALOG_PASSES)
-        if dialog["clean"] >= DIALOG_PASSES:
-            dialog["open_identity"] = None
-        return dialog, False
-    if observed == state["open_identity"]:
-        dialog["clean"] = 0
-        dialog["candidate"] = None
-        dialog["seen"] = 0
-        return dialog, False
-    dialog["clean"] = 0
-    dialog["seen"] = dialog["seen"] + 1 if observed == state["candidate"] else 1
-    if dialog["seen"] < DIALOG_PASSES:
-        dialog["candidate"] = observed
-        return dialog, False
-    dialog["open_identity"] = observed
-    dialog["episode"] = dialog["episode"] + 1
-    dialog["candidate"] = None
-    dialog["seen"] = 0
-    return dialog, True
+    """Nothing was launched, so the delivery can be retried."""
 
 
 def check_deadline(deadline_seconds: float | None) -> None:
@@ -145,7 +72,7 @@ def read_acceptance(assignment: dict) -> bool:
 
 
 def delivery_line(assignment_ref: str) -> str:
-    """The one line a CLI gets: typed into an adopted session, or the argument of a launched one."""
+    """The one line a CLI gets, as the argument it is launched with."""
     return (f"Open assignment JSON at {assignment_ref}. First write agent-work.accept.v1 atomically to "
             "acceptRef with schema, hostId, taskId, generation, instanceId, claimId and capability copied "
             "from the assignment. Then follow briefRef and write agent-work.result.v1 atomically to resultRef.")
@@ -190,184 +117,6 @@ def under(path: str, root: str) -> Path:
     if not resolved.is_relative_to(Path(root).resolve(strict=True)) or not resolved.is_file():
         raise ValueError("reference outside authorized workspace")
     return resolved
-
-
-def _sgr_segments(line: str, style: dict) -> tuple[list[tuple[dict, str]], dict]:
-    """Styled runs of one captured line and the style it leaves for the next one."""
-    out, pos = [], 0
-    style = dict(style)
-    for match in SGR.finditer(line):
-        if match.start() > pos:
-            out.append((dict(style), line[pos:match.start()]))
-        codes = [code for code in match.group(1).split(";") if code] or ["0"]
-        i = 0
-        while i < len(codes):
-            code = codes[i]
-            if code == "0":
-                style = {"dim": False, "fg": None}
-            elif code == "2":
-                style["dim"] = True
-            elif code == "22":
-                style["dim"] = False
-            elif code == "39":
-                style["fg"] = None
-            elif code in ("38", "48") and i + 2 < len(codes) and codes[i + 1] == "5":
-                if code == "38":
-                    style["fg"] = ("256", int(codes[i + 2]))
-                i += 2
-            elif code in ("38", "48") and i + 4 < len(codes) and codes[i + 1] == "2":
-                if code == "38":
-                    style["fg"] = ("rgb", *(int(value) for value in codes[i + 2:i + 5]))
-                i += 4
-            elif code.isdigit() and (30 <= int(code) <= 37 or 90 <= int(code) <= 97):
-                style["fg"] = ("basic", int(code))
-            i += 1
-        pos = match.end()
-    if pos < len(line):
-        out.append((dict(style), line[pos:]))
-    return out, style
-
-
-def _muted(style: dict) -> bool:
-    # Measured 2026-10-02 (composer-real.sh): ghosts and placeholders are dim (SGR 2) or grey;
-    # typed text is the default colour or bright (opencode rgb 238,238,238).
-    if style["dim"]:
-        return True
-    fg = style["fg"]
-    if fg is None:
-        return False
-    if fg[0] == "basic":
-        return fg[1] in (30, 90)
-    if fg[0] == "256":
-        return 232 <= fg[1] <= 249
-    r, g, b = fg[1:]
-    return max(r, g, b) - min(r, g, b) <= 40 and max(r, g, b) <= 170
-
-
-def _composer_region(screen: str, command: str) -> list[list[tuple[dict, str]]] | str:
-    """composer-real.sh over a `capture-pane -e` screen: the styled runs of each composer line,
-    or why the screen shows no composer."""
-    lines = screen.splitlines()
-    while lines and not SGR.sub("", lines[-1]).strip():
-        lines.pop()
-    if not lines:
-        return "empty screen"
-    plain = [SGR.sub("", line) for line in lines]
-    columns = None
-    if command.startswith("opencode"):
-        if any(OPENCODE_DIALOG_TITLE.search(line) for line in plain):
-            return "opencode dialog open"
-        # The input box is the last run of lines that start with ┃; its last line is the agent bar
-        # and the ╹▀▀▀ border under it spans the box. Measured 2026-10-10 (opencode 1.18.35): in a
-        # session the sidebar shares the box's lines to the right of that border.
-        boxed = [i for i, line in enumerate(plain) if line.lstrip().startswith("┃")]
-        if not boxed:
-            return "no opencode input box"
-        start = end = boxed[-1]
-        while start - 1 in boxed:
-            start -= 1
-        border = plain[end + 1].strip() if end + 1 < len(plain) else ""
-        if not border.startswith("╹"):
-            return "no opencode input box border"
-        # The sidebar can print on the border's own line ("╹▀▀▀    main"), so only the ▀ run counts.
-        border = re.match(r"╹▀*", border).group()
-        left = plain[end + 1].index("╹")
-        columns = (left, left + len(border))
-        region = range(start, end)
-    else:
-        prompts = [i for i, line in enumerate(plain) if line.lstrip().startswith(("❯", "›"))]
-        if not prompts:
-            return "no composer"
-        k = prompts[-1]
-        if COMPOSER_MENU.match(plain[k]) or any(COMPOSER_MENU_OPTION.match(line) for line in plain[k + 1:k + 4]):
-            return "menu or dialog open"
-        end = k + 1
-        while end < len(plain):
-            rule = plain[end].strip()
-            if not rule or (len(rule) >= 10 and set(rule) <= set("─━═-")):
-                break
-            end += 1
-        region = range(k, end)
-    # capture-pane -e writes only style changes, and a wrapped line continues the previous style.
-    style, out = {"dim": False, "fg": None}, []
-    for i, line in enumerate(lines[:region.stop]):
-        segments, style = _sgr_segments(line, style)
-        if i in region:
-            out.append(_columns(segments, columns) if columns else segments)
-    return out
-
-
-def _columns(segments: list[tuple[dict, str]], columns: tuple[int, int]) -> list[tuple[dict, str]]:
-    out, pos = [], 0
-    for style, part in segments:
-        out.append((style, part[max(columns[0] - pos, 0):max(columns[1] - pos, 0)]))
-        pos += len(part)
-    return out
-
-
-def _region_text(region: list[list[tuple[dict, str]]], keep: Callable[[dict], bool]) -> str:
-    typed = []
-    for segments in region:
-        text = "".join(part for style, part in segments if keep(style)).strip(COMPOSER_GLYPHS).strip()
-        if text:
-            typed.append(text)
-    return "\n".join(typed)
-
-
-def read_composer(screen: str, command: str, placeholders: tuple[str, ...] = ()) -> tuple[str, str]:
-    """VACIO, REAL with the composer's text, or DESCONOCIDO. Colour does not count: a theme can draw
-    an operator's draft as dim as a placeholder, so only no text or a known placeholder is VACIO."""
-    region = _composer_region(screen, command)
-    if isinstance(region, str):
-        return "DESCONOCIDO", region
-    text = _region_text(region, lambda style: True)
-    if not text or any(same_text(text, placeholder) for placeholder in placeholders):
-        return "VACIO", ""
-    return "REAL", text
-
-
-def bright_composer_text(screen: str, command: str) -> str:
-    """The composer's text minus the runs drawn dim or grey, as a ghost suggestion is drawn."""
-    region = _composer_region(screen, command)
-    return "" if isinstance(region, str) else _region_text(region, lambda style: not _muted(style))
-
-
-def permission_dialog_open(screen: str, adapter: CliAdapter) -> bool:
-    lines = screen.splitlines()
-    return bool(adapter.permission_dialog) and all(
-        any(pattern.search(SGR.sub("", line)) for line in lines) for pattern in adapter.permission_dialog)
-
-
-def reject_permission_dialog(backend, identity: dict, adapter: CliAdapter, *,
-                             settle_seconds: float = COMPOSER_SETTLE_SECONDS,
-                             wait_seconds: float = COMPOSER_ECHO_SECONDS,
-                             sleep: Callable[[float], None] = time.sleep) -> str:
-    """Deny the permission dialog a cancelled task left in its adopted pane, never approve it, and never stop
-    the CLI. rejected, none (the pane shows its composer), or left: why the screen was not touched or did not
-    come back to an empty composer."""
-    command = adapter.commands[0]
-    screen = backend.capture(identity)
-    if screen is None:
-        return "left: pane unverifiable"
-    if not permission_dialog_open(screen, adapter):
-        state, why = read_composer(screen, command, adapter.placeholders)
-        return f"left: {why}" if state == "DESCONOCIDO" else "none"
-    if not backend.send_key(identity, adapter.reject_key):
-        return "left: reject key not sent"
-    for _ in range(max(1, math.ceil(wait_seconds / settle_seconds))):
-        sleep(settle_seconds)
-        screen = backend.capture(identity)
-        if (screen is not None and not permission_dialog_open(screen, adapter)
-                and read_composer(screen, command, adapter.placeholders)[0] == "VACIO"):
-            return "rejected"
-    if screen is not None and permission_dialog_open(screen, adapter):
-        return DIALOG_STILL_OPEN
-    return "left: no empty composer after the reject key"
-
-
-def same_text(shown: str, typed: str) -> bool:
-    """The composer wraps long lines at its width, so layout whitespace does not count."""
-    return re.sub(r"\s+", "", shown) == re.sub(r"\s+", "", typed)
 
 
 class Host:
@@ -441,7 +190,7 @@ class Host:
 
     def _assignment(self, key: OperationKey, operation: AuthorizedOperation, brief_ref: str) -> dict:
         """What every assignment carries, whatever happens to it next. Its result and acceptance live in the
-        run directory when the operation has one, and in the adopted layout otherwise."""
+        run directory when the operation has one, and under inbox/ otherwise."""
         op_id = operation_id(key)
         run = operation.run
         assignment = {
@@ -507,8 +256,8 @@ class Host:
               deliver: Callable[[str, str], None],
               admit: Callable[[dict], dict]) -> HostObservation:
         self._check(key, operation)
-        # An adopted session reads its brief inside the workspace. A launched one reads it in its run
-        # directory, the only folder outside the task's repo it may touch.
+        # A launched session reads its brief in its run directory, the only folder outside the task's repo
+        # it may touch. An operation without one keeps its brief inside the workspace.
         run = operation.run
         brief = under(operation.brief_ref, str(run.path) if run else operation.workspace_ref)
         if hashlib.sha256(brief.read_bytes()).hexdigest() != operation.brief_digest:
@@ -656,47 +405,6 @@ class Host:
         self.spool.delivered(op_id)
         return True
 
-    def settle_deliveries(self, host_id: str, *, now: float,
-                          deadline_seconds: float | None = None) -> list[str]:
-        """Typed CLI deliveries: accepted -> delivered; past the deadline -> uncertain plus one incident."""
-        self._host(host_id)
-        check_deadline(deadline_seconds)
-        detected = []
-        for assignment in self.spool.awaiting_results():
-            if "acceptRef" not in assignment:
-                continue
-            key = OperationKey(assignment["hostId"], assignment["taskId"],
-                               assignment["generation"], assignment["instanceId"])
-            op_id = operation_id(key)
-            current = self.spool.get(op_id)
-            if current is None or current["status"] not in ("attempted", "uncertain"):
-                continue
-            try:
-                if self.take_acceptance(host_id, key):
-                    continue
-            except OSError:
-                continue
-            if current["status"] == "uncertain":
-                continue
-            try:
-                receipt = self.collect(host_id, key)
-            except ValueError:
-                receipt = None
-            except OSError:
-                continue
-            if receipt is not None:
-                continue
-            attempted = self.spool.attempted_at(op_id)
-            if deadline_seconds is None or attempted is None or now - attempted < deadline_seconds:
-                continue
-            incident = {"kind": "transport-unavailable", "episodeId": UNACCEPTED_EPISODE,
-                        "evidenceRef": f"host-operation:{op_id}"}
-            incident_key, incident_digest = incident_identity(key.generation, incident)
-            if self.spool.delivery_uncertain(op_id, key.task_id, incident_key,
-                                             canonical(incident), incident_digest):
-                detected.append(incident_key)
-        return detected
-
     def resolve_delivery(self, host_id: str, key: OperationKey, verdict: str, reason: str) -> str:
         """The operator settles an attempted or uncertain delivery; nothing is ever typed again.
         abandoned frees the instance and releases its adopted session without touching the CLI."""
@@ -710,72 +418,6 @@ class Host:
         if not self.spool.resolve_delivery(op_id, verdict, reason, time.time()):
             raise ValueError(f"operation is {self.spool.get(op_id)['status']}, not attempted or uncertain")
         return verdict
-
-    def detect_silent_failures(self, host_id: str, session_gone: Callable[[OperationKey], bool], *,
-                               now: float, deadline_seconds: float | None = None,
-                               prompt_identity: Callable[[OperationKey], str | None] | None = None
-                               ) -> list[str]:
-        self._host(host_id)
-        check_deadline(deadline_seconds)
-        detected = self.settle_deliveries(host_id, now=now, deadline_seconds=deadline_seconds)
-        for assignment in self.spool.awaiting_results():
-            key = OperationKey(assignment["hostId"], assignment["taskId"],
-                               assignment["generation"], assignment["instanceId"])
-            op_id = operation_id(key)
-            current = self.spool.get(op_id)
-            if current is None or current["status"] not in ("attempted", "delivered") \
-                    or not assignment.get("adapterId"):
-                continue
-            kind = None
-            # Canary 8 (2026-10-12): opencode asked for a permission before the CLI wrote its acceptance.
-            # A typed reference the CLI has not acknowledged shows its dialog like a delivery does; its
-            # deadline is the acceptance one, which settle_deliveries owns.
-            if current["status"] == "delivered":
-                try:
-                    receipt = self.collect(host_id, key)
-                    if receipt is not None:
-                        continue
-                except ValueError:
-                    kind = "invalid-result"
-                except OSError:
-                    continue
-                if kind is None and session_gone(key):
-                    kind = "transport-unavailable"
-            incidents = []
-            dialog = None
-            before = None
-            dialog_recorded = False
-            if kind is None:
-                if prompt_identity is not None:
-                    observed = prompt_identity(key)
-                    if observed is not None:
-                        before = self.spool.dialog_state(op_id)
-                        dialog, opened = next_dialog_state(before, observed)
-                        if opened:
-                            incidents.append({"kind": "permission-required",
-                                              "promptIdentity": f"{dialog['open_identity']}-{dialog['episode']}",
-                                              "evidenceRef": f"host-operation:{op_id}"})
-                if deadline_seconds is not None:
-                    delivered = self.spool.delivered_at(op_id)
-                    if delivered is not None and now - delivered >= deadline_seconds:
-                        incidents.append({"kind": "deadline-missed", "episodeId": SILENT_EPISODES["deadline-missed"],
-                                          "evidenceRef": f"host-operation:{op_id}"})
-            else:
-                incidents.append({"kind": kind, "episodeId": SILENT_EPISODES[kind],
-                                  "evidenceRef": f"host-operation:{op_id}"})
-            for incident in incidents:
-                incident_key = incident_identity(key.generation, incident)[0]
-                if self.spool.has_incident(key.task_id, incident_key):
-                    continue
-                if incident["kind"] == "permission-required":
-                    self.record_incident(host_id, key, incident, dialog_state=dialog)
-                    dialog_recorded = True
-                else:
-                    self.record_incident(host_id, key, incident)
-                detected.append(incident_key)
-            if dialog is not None and dialog != before and not dialog_recorded:
-                self.spool.save_dialog_state(op_id, dialog)
-        return detected
 
     def _end_delivery(self, key: OperationKey, episode: str) -> list[str]:
         """A delivery that will never be accepted: uncertain together with its incident. The incident key
@@ -798,7 +440,7 @@ class Host:
         A process that left without its acceptance is launch-failed, and one that accepted and left without
         a result is session-closed, both in the pass after the exit and whatever the exit code: opencode
         ends with 0 after denying a permission. A session opened outside the task's folder is stopped. A
-        launch deferred since accept_deadline_seconds ago ends as launch-failed. No dialog is read here:
+        launch deferred since accept_deadline_seconds ago ends as launch-failed. No dialog is read:
         `opencode run` never waits for a permission."""
         self._host(host_id)
         check_deadline(accept_deadline_seconds)
@@ -951,8 +593,7 @@ class Host:
                 errors.append(f"{op_id}: {exc}")
         return closed, errors
 
-    def record_incident(self, host_id: str, key: OperationKey, incident: dict, *,
-                        dialog_state: dict | None = None) -> dict:
+    def record_incident(self, host_id: str, key: OperationKey, incident: dict) -> dict:
         self._host(host_id)
         self._host(key.host_id)
         current = self.spool.get(operation_id(key))
@@ -966,7 +607,7 @@ class Host:
             raise ValueError("operation cannot carry host incidents")
         incident_key, incident_digest = incident_identity(generation, incident)
         return self.spool.record_incident(key.task_id, incident_key, operation_id(key),
-                                          canonical(incident), incident_digest, dialog_state=dialog_state)
+                                          canonical(incident), incident_digest)
 
     def flush_incidents(self, host_id: str, send: Callable[[dict, dict], dict]) -> tuple[int, list[str]]:
         """Send every pending incident; each one fails alone and rejections never retry."""
@@ -1009,107 +650,6 @@ class Host:
         if not row or Path(row["assignment_ref"]).resolve() != candidate or assignment != json.loads(row["operation_json"]) \
                 or assignment["hostId"] != host_id or assignment["session"] != session:
             raise ValueError("assignment not registered for this host and session")
-
-
-class TmuxTransport:
-    """Types into the CLI's pinned pane only when its composer is empty, and presses Enter only on
-    text it typed."""
-
-    def __init__(self, tmux_bin: str, socket: str, adapter: CliAdapter, *,
-                 settle_seconds: float = COMPOSER_SETTLE_SECONDS, echo_seconds: float = COMPOSER_ECHO_SECONDS,
-                 timeout: float = TMUX_TIMEOUT_SECONDS, sleep: Callable[[float], None] = time.sleep):
-        self.tmux_bin = tmux_bin
-        self.socket = socket
-        self.adapter = adapter
-        self.settle_seconds = settle_seconds
-        self.echo_seconds = echo_seconds
-        self.timeout = timeout
-        self.sleep = sleep
-        self.panes: dict[str, str] = {}
-
-    def _tmux(self, *args: str) -> subprocess.CompletedProcess:
-        try:
-            done = subprocess.run([self.tmux_bin, "-L", self.socket, *args], capture_output=True,
-                                  encoding="utf-8", errors="replace", timeout=self.timeout)
-        except subprocess.TimeoutExpired as exc:
-            raise OSError(f"tmux {args[0]} timed out") from exc
-        if done.returncode:
-            raise OSError(f"tmux {args[0]} failed: {done.stderr.strip()}")
-        return done
-
-    def _pane(self, session: str) -> tuple[str, str]:
-        """The CLI's pane, pinned the first time the host meets the session, and its command.
-
-        The operator may open or select another window of the session (C-b c), so the active
-        window is never the target. DeliveryDeferred when the pane is not the adapter's CLI."""
-        pane = self.panes.get(session)
-        if pane is None:
-            listed = self._tmux("list-panes", "-s", "-t", f"={session}", "-F",
-                                "#{pane_id}\t#{pane_current_command}").stdout.splitlines()
-            found = [pane_id for pane_id, _, command in (line.partition("\t") for line in listed)
-                     if command in self.adapter.commands]
-            if len(found) != 1:
-                raise DeliveryDeferred(f"session has {len(found)} panes running {'/'.join(self.adapter.commands)}")
-            pane = self.panes[session] = found[0]
-        name, _, command = self._tmux("display-message", "-p", "-t", pane,
-                                      "#{session_name}\t#{pane_current_command}").stdout.rstrip("\n").partition("\t")
-        if name != session or command not in self.adapter.commands:
-            raise DeliveryDeferred(f"pinned pane {pane} runs {command} in session {name}")
-        return pane, command
-
-    def _screen(self, session: str) -> tuple[str, str, str]:
-        pane, command = self._pane(session)
-        return pane, command, self._tmux("capture-pane", "-e", "-p", "-t", pane).stdout
-
-    def composer(self, session: str) -> tuple[str, str]:
-        _, command, screen = self._screen(session)
-        return read_composer(screen, command, self.adapter.placeholders)
-
-    def deliver(self, assignment_ref: str, session: str) -> None:
-        if not session.replace("-", "").replace("_", "").isalnum():
-            raise ValueError("invalid session")
-        text = delivery_line(assignment_ref)
-        try:
-            pane, command, screen = self._screen(session)
-            state, shown = read_composer(screen, command, self.adapter.placeholders)
-            if state != "VACIO":
-                raise DeliveryDeferred(f"composer is {state}: {shown}")
-            self._tmux("set-environment", "-t", f"={session}", "AGENT_WORK_MANAGED", "1")
-        except OSError as exc:
-            raise DeliveryDeferred(str(exc)) from exc
-        self._tmux("send-keys", "-t", pane, "-l", "--", text)
-        for _ in range(max(1, math.ceil(self.echo_seconds / self.settle_seconds))):
-            self.sleep(self.settle_seconds)
-            try:
-                _, command, screen = self._screen(session)
-            except (DeliveryDeferred, OSError) as exc:
-                raise RuntimeError(f"{exc}; Enter withheld") from exc
-            state, shown = read_composer(screen, command)
-            if state == "REAL" and same_text(shown, text) and same_text(bright_composer_text(screen, command), text):
-                break
-        else:
-            raise RuntimeError(f"composer shows {state} {shown!r} instead of the typed reference; Enter withheld")
-        self._tmux("send-keys", "-t", pane, "Enter")
-
-
-class ShellAdapterTransport:
-    def __init__(self, corrida_script: Path, run_id: str, lane_id: str, worker_id: str,
-                 host_id: str, state_dir: Path, tmux_bin: str):
-        self.corrida_script = corrida_script
-        self.run_id = run_id
-        self.lane_id = lane_id
-        self.worker_id = worker_id
-        self.host_id = host_id
-        self.state_dir = state_dir
-        self.tmux_bin = tmux_bin
-
-    def deliver(self, assignment_ref: str, session: str) -> None:
-        command = ["bash", str(self.corrida_script), "adaptador", "deliver-ref", self.run_id,
-                   self.lane_id, self.worker_id, session, self.host_id, assignment_ref]
-        env = dict(os.environ, TMUX_BIN=self.tmux_bin, AGENT_WORK_HOST_STATE_DIR=str(self.state_dir))
-        sent = subprocess.run(command, capture_output=True, text=True, env=env)
-        if sent.returncode or sent.stdout.strip() != "accepted":
-            raise RuntimeError(f"reference delivery uncertain: {sent.stderr.strip() or sent.stdout.strip()}")
 
 
 USAGE = ("usage: host.py verify-ref <hostId> <stateDir> <session> <assignmentRef>\n"

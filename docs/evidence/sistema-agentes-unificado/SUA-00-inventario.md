@@ -108,7 +108,7 @@ Lo que R no tiene y SUA-01 va a construir: fan-in A+B→C (`managed_task_childre
 | Ruta | Versión y ubicación | Dueño | Autoridad | Resultado y recibo | Fuente | Instalado | Aceptado en vivo |
 |---|---|---|---|---|---|---|---|
 | Encargo por CLI, un proceso por encargo (`main` → `mac-local/opencode`) | G desde `4000a1d4` (PR #284); `lanzar-encargos.sh`, `native_gateway.py --workspace-root`, `sesion.py`, `brief.py --model`, `encargo.py`; opencode 1.18.35 | G (host) y R (tarea) | `--device-auth` en todo `managedTasks.host.*` (`native_gateway.py:73-74`); `assertHostDevice` en R (`managed-tasks.ts:145-162`); política `proveedores-permitidos.json` por `authorize` (`modelos.py:577`); grupo `agent-work-enc1` (`lanzar-encargos.sh:21`) | `agent-work.result.v1` en `runs/<op>/result.json` (`contracts.py:46-48`); spool `enc-1/host.sqlite`; en R `result_json`, `admitted`, `host_closure AbsenceVerified` | `passed`: `coverage.json` `hostAdapterRoute.mac-local.opencode` forma `run-per-task`, 1.18.35; 120 pruebas en `test-agent-work-{sesion,encargo,lanzar-encargos}.py` | `passed`: checkout del host en `4000a1d4`, `opencode 1.18.35` en `/opt/homebrew/bin`, `brief.py` y skill `encargo-cli` en la Mini (`B22-canarios.md`, Cierre y Otros hechos) | `passed`: canario D, tarea `595755ae…`, `glm-4.7`, `acknowledged\|AbsenceVerified`; tarea `9ed258fc…` con el host sin canario (`B22-canarios.md`) |
-| Sesión adoptada de opencode (host B8) | G `2213b930` conserva `claim_cli_once` (`native_gateway.py:384`), `TmuxTransport` (`host.py:1014`), `detect_silent_failures` (`host.py:714`) sin llamador | G | La misma de arriba | `agent-work.result.v1`; spools `mac-local`, `-b`, `-c` cerrados | `failed`: la fase 4 de B22 borró las banderas `--cli-adapter-id`, `--cli-session`, `--cli-workspace-root`, `--cli-canary` (`T12-runbook.md:140`); solo pruebas la llaman | `failed`: host B8 apagado el 2026-10-13, sha `bff085d7` (`B22-canarios.md`, El corte, paso 2) | `passed` histórico: 7 tareas y 7 cierres `ReleasedAdopted` el 2026-10-11 (`deploy-receipt.md`, R al cierre). Ya no arranca |
+| Sesión adoptada de opencode (host B8) | Retirada del repo el 2026-10-13. En G `2213b930` quedaban sin llamador `claim_cli_once` (`native_gateway.py:384`), `TmuxTransport` (`host.py:1014`) y `detect_silent_failures` (`host.py:714`) | G | La misma de arriba | `agent-work.result.v1`; spools `mac-local`, `-b`, `-c` cerrados | `failed`: David decidió "se quita" y el código salió del repo con sus pruebas e2e (`followups.md`, fila "B22 (ruta adoptada sin punto de entrada)"). Queda lo que cierra un spool de esa ruta: `--close-only` sobre filas `UserAdopted` (`LegacyAdoptionTests`, `test-agent-work-resources.py`) | `failed`: host B8 apagado el 2026-10-13, sha `bff085d7` (`B22-canarios.md`, El corte, paso 2) | `passed` histórico: 7 tareas y 7 cierres `ReleasedAdopted` el 2026-10-11 (`deploy-receipt.md`, R al cierre). Ya no arranca |
 | Host por alias de modelo (`lanzar-host.sh`, `opencode@<proveedor>/<modelo>`) | Borrado en `4000a1d4` | G | n/a | spool `deepseek-1` cerrado | `failed`: `git grep lanzar-host -- scripts` da 0 | `failed`: `deepseek-1` apagado desde el 2026-10-12 (`followups.md`, B19 dos hosts) | `passed` histórico: canario 8 el 2026-10-12, cerrado por David ese día (`deploy-receipt.md`, Cobertura efectiva) |
 | Hijo de una CLI | Cada CLI | cada CLI | La de la CLI; G no la mide | El de la CLI padre | `unknown`: G no modela hijos de CLI; el barrido del grupo los alcanza al cerrar (`B22-canarios.md`, Otros hechos: `tracker.js` de tokentracker) | `unknown` | `unknown`: es I08 e I09 de SUA-03 |
 
@@ -142,23 +142,24 @@ ya separa efectos ejecutados de evidencia por SHA. El contrato
 | Pieza | Dónde | Estado tras B22 | Entrada hoy |
 |---|---|---|---|
 | `managedTasks.host.incident` | R `managed-tasks.ts:402-433`; G `native_gateway.py:215` | vigente | `flush_incidents` desde `pump_once` (`native_gateway.py:851-852`) |
-| `record_incident` | `host.py:954-969` | vigente | `refuse` (`:503`) y `detect_run_failures` (`:861`). Las llamadas desde `detect_silent_failures` (`:771`, `:774`) ya no tienen quién las dispare |
+| `record_incident` | `host.py:954-969` | vigente | `refuse` (`:503`) y `detect_run_failures` (`:861`). Las llamadas desde `detect_silent_failures` (`:771`, `:774`) se borraron con él el 2026-10-13 |
 | `flush_incidents` | `host.py:971-990` | vigente | `pump_once`. Un rechazo definitivo no se reintenta (`DEFINITIVE_INCIDENT_REJECTIONS`, `native_gateway.py:34-45`) |
 | `CLI_ROUTES` | `routing.py:15`: `{("ingenieria", "windows-remote"), ("main", "mac-local")}` | vigente solo para las skills `managed-task-routing` de `ingenieria` y `operaciones` | `main` no lo usa: `test_main_cli_route_points_main_at_the_encargo_cli_skill_and_not_at_routing_py` (`test-agent-work-routing.py:182`). `windows-remote` sigue `disabled-host-unverified` |
 | `coverage.json.modelWakes` | `coverage.json:122-217` | desfasado | Foto del 2026-10-07 con 14 entradas. Dos citas de línea ya no cuadran (`latido.sh:224` contra `:220-221`; `settings.json:129` contra `:122`). Lista vigías que `deploy-receipt.md` da por cerrados el 2026-10-11 |
-| `main_cli_loop` | `test_agent_work_main_cli_loop_e2e.py`; `test-agent-work-e2e.sh:25` | caso de prueba sin ruta de producción | Arma a mano la ruta adoptada que `native_gateway.main` ya no arma (`followups.md`, B22 ruta adoptada sin punto de entrada) |
-| `detect_silent_failures` | `host.py:714-778` | sin punto de entrada | Solo pruebas. La ruta viva usa `detect_run_failures` (`host.py:790`, `native_gateway.py:604`) |
+| `main_cli_loop` | `test_agent_work_main_cli_loop_e2e.py`; caso `main_cli_loop` de `test-agent-work-e2e.sh` | recortado el 2026-10-13 | Se borró el caso que armaba a mano la ruta adoptada. Conserva `test_isolated_cron_run_cannot_submit` (R rechaza un submit desde un cron aislado) y `LoopGateway`, el arnés de R que usa `cutover_fencing` |
+| `detect_silent_failures` | `host.py:714-778` en la base | borrado el 2026-10-13 | Ninguna. Se fue con la ruta de sesión adoptada, junto con `settle_deliveries` y sus pruebas. La ruta viva usa `detect_run_failures` (`host.py:790`, `native_gateway.py:604` en la base) |
 | `managedTasks.host.cancellation` | R `managed-tasks.ts:371-401`; G `native_gateway.py:186` | vigente | La pasada del host. Probada en vivo: canarios A intento 1 y B terminaron `cancelled\|AbsenceVerified` |
 | `cutover_live.py` | `scripts/agent-work/cutover_live.py`, `agent-work-cutover.v2` | vigente sin `adapters` | `prepare\|inspect\|apply\|freeze\|revert` (`:424`). `rollback` (`:355`) es función sin subcomando. Probado en vivo: `loop:canario-encargos` con dueño `native` en generación 2 (`deploy-receipt.md`, El corte) |
 | `ProgressPublisher` | `native_gateway.py:654` | vigente | `pump_once` (`:866`) y `watch_pump` (`:889`). Sin encargo con `progressBinding` después del arreglo (`deploy-receipt.md`, Lo que no se pudo comprobar) |
 
-Piezas sin punto de entrada que B22 dejó a decisión de David (`followups.md`,
-fila "B22 (ruta adoptada sin punto de entrada)"): `claim_cli_once`,
-`TmuxTransport`, `ShellAdapterTransport`, `corrida.sh adaptador deliver-ref`
-(`adaptador.sh:16`, único llamador `ShellAdapterTransport.deliver`),
-`detect_silent_failures`, `Spool.cancellation`, y `cutover_live.rollback`. La
-skill `native-harness-orchestration` de `main` (`SKILL.md:68`) todavía describe
-esa ruta.
+De las piezas sin punto de entrada que B22 dejó a decisión de David, el
+2026-10-13 se borraron `claim_cli_once`, `TmuxTransport`,
+`ShellAdapterTransport`, `detect_silent_failures` y `Spool.cancellation`
+(`followups.md`, fila "B22 (ruta adoptada sin punto de entrada)", cerrada).
+Siguen sin punto de entrada `corrida.sh adaptador deliver-ref`
+(`adaptador.sh:16`), que perdió a su único llamador, y `cutover_live.rollback`.
+La skill `native-harness-orchestration` de `main` (`SKILL.md:68`) ya no describe
+esa ruta. Falta publicarla en la Mini.
 
 ## Despertares, crons y vigías
 
@@ -228,8 +229,9 @@ conducta en este bloque.
    `~/agent-work/host.py`, y el instalador lo deja en `~/bin/agent-work/`
    (`instalar-mac.sh:164`). Sin `AGENT_WORK_HOST_BIN` la copia no lo encuentra.
    Deducido de lectura.
-6. `native-harness-orchestration/SKILL.md:68` describe la ruta adoptada que ya no
-   arranca (ya en la fila T12 `coverage.json` de `followups.md`).
+6. Corregido el 2026-10-13: `native-harness-orchestration/SKILL.md:68` describía
+   la ruta adoptada que ya no arranca. Falta publicar la skill en la Mini (fila
+   T12 `coverage.json` de `followups.md`).
 7. En R, `usage_limited` de `SessionGoal` no lo escribe ningún código y
    `continuationTurns` nunca se incrementa (`goals-transitions.ts:95`,
    `:117`). No afecta a SUA porque no se reutiliza. Se anota para R.

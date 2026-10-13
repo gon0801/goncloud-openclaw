@@ -150,7 +150,7 @@ Lo que sigue vigente de entonces:
 
 Este código ya no arranca el host B8 ni un host por alias. `native_gateway.py` rechaza su comando con `unrecognized arguments`. Quien necesite esa ruta la corre desde el commit `bff085d7`, el último sobre el que corrió el host B8. Su comando exacto está en `~/.local/state/encargos-loop/B22/corte/host-b8-cmd.txt`. Cómo se operaba está en este runbook tal como quedó en ese commit: `git show bff085d7:docs/evidence/agent-work/T12-runbook.md`, secciones "La sesión de opencode que adopta el host", "El host en la Mac" y "Un host por alias de modelo (B19)".
 
-El código que entrega a una sesión adoptada (`claim_cli_once`, `TmuxTransport`) sigue en el repo, sin punto de entrada. Lo ejercitan las pruebas e2e con un CLI doble (`followups.md`, fila "B22 (ruta adoptada sin punto de entrada)").
+El código que entregaba a una sesión adoptada (`claim_cli_once`, `TmuxTransport`, la lectura del composer y `detect_silent_failures`) y sus pruebas e2e se borraron el 2026-10-13, por decisión de David ("se quita"; `followups.md`, fila "B22 (ruta adoptada sin punto de entrada)"). Queda lo que cierra un spool de esa ruta (sección "Cerrar un spool viejo").
 
 ### Proveedores permitidos y `encargo.py` (B22)
 
@@ -346,7 +346,7 @@ No sirve un túnel largo aparte con `transport: direct`: R toma un `ws://127.0.0
 
 ### Cerrar un spool viejo
 
-Un spool que ya no corre ningún host puede seguir reteniendo cupo en R: R guarda un lugar de presupuesto para cada admisión cuyo cierre del host no es terminal. `native_gateway.py --close-only` hace una sola pasada de cierre sobre ese spool y sale. Reporta los resultados pendientes, cierra las tareas con recibo y las que R canceló, reintenta los `CleanupPending` y manda los cierres a R. Para cerrar mata la sesión `enc-…` de cada una de esas tareas y barre el grupo del slot. Nunca reclama trabajo y nunca entrega. Toma las instancias de las filas del spool, así que no recibe `--cli-instance-id`. Pide `--host-state-dir`, `--cli-tmux-socket` y `--slot-group`. Abrir el spool sube su esquema a la versión 2, igual que al abrirlo un host nuevo.
+Un spool que ya no corre ningún host puede seguir reteniendo cupo en R: R guarda un lugar de presupuesto para cada admisión cuyo cierre del host no es terminal. `native_gateway.py --close-only` hace una sola pasada de cierre sobre ese spool y sale. Reporta los resultados pendientes, cierra las tareas con recibo y las que R canceló, reintenta los `CleanupPending` y manda los cierres a R. Para cerrar mata la sesión `enc-…` de cada una de esas tareas y barre el grupo del slot. Una sesión adoptada que quede viva en un spool anterior al corte no se mata ni se teclea: su fila queda `CleanupPending` (`adopted identity uncertain`) mientras el pane conserve la marca del host, y `ReleasedAdopted` cuando alguien quita la marca (`tmux -L agent-work set-option -u -t =<sesión>: @agent_work_resource_nonce`) o el pane muere. Nunca reclama trabajo y nunca entrega. Toma las instancias de las filas del spool, así que no recibe `--cli-instance-id`. Pide `--host-state-dir`, `--cli-tmux-socket` y `--slot-group`. Abrir el spool sube su esquema a la versión 2, igual que al abrirlo un host nuevo.
 
 Para el spool del host de encargos, desde `~/dev/wt/agent-work-host` y con el host apagado:
 

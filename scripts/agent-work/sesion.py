@@ -132,8 +132,8 @@ class Route:
     def load(coverage: object, host_id: str) -> "Route":
         """De coverage.json, sin lanzar con ninguna forma de archivo. La ruta existe solo si
         hostAdapterRoute declara para ese host una entrada `opencode` de forma `run-per-task`: recién
-        entonces vale el estado de hostAdapterCoverage, que sin esa entrada certifica otra ruta, la de la
-        sesión adoptada. Lo que falta o está mal escrito es una ruta ausente, sin versiones."""
+        entonces vale el estado de hostAdapterCoverage. Lo que falta o está mal escrito es una ruta ausente,
+        sin versiones."""
         def at(*keys: str) -> object:
             value = coverage
             for key in keys:

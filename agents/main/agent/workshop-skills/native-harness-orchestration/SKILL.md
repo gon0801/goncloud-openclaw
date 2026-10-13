@@ -65,7 +65,7 @@ su observación (`observed.*` en el registro).
 | Archivar | `corrida.sh cerrar <id>` | `archive/<lane>/` completo |
 | Cerrar | `corrida.sh cerrar <id>` | `cerrada <id>` |
 
-Ruta anterior (T9 `:265`): la corrida abierta con `--vigia claw` y los CLI arrancados con `adaptador start` y entregados con `adaptador deliver` (`ADAPTADOR-MARCA`) siguen fuera del perímetro gestionado hasta su adopción (T12). Un CLI gestionado entra solo por `Host.apply`: en producción, `claim_cli_once` con `TmuxTransport`; `adaptador deliver-ref` es su transporte alterno por `corrida.sh`. Los dos marcan la sesión con `AGENT_WORK_MANAGED=1`, y sobre esa sesión no se usa `adaptador deliver`.
+Ruta anterior (T9 `:265`): la corrida abierta con `--vigia claw` y los CLI arrancados con `adaptador start` y entregados con `adaptador deliver` (`ADAPTADOR-MARCA`) siguen fuera del perímetro gestionado hasta su adopción (T12). Un CLI gestionado entra solo por el host de encargos, que lanza un proceso de opencode por encargo (skill `encargo-cli`). Sobre una sesión marcada con `AGENT_WORK_MANAGED=1` no se usa `adaptador deliver`.
 
 ## Pre-install / manual (Fases 14 y 23)
 

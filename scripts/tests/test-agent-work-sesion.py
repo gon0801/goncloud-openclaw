@@ -21,6 +21,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -330,7 +331,7 @@ class Slot(unittest.TestCase):
                              progress_state_dir=str(self.root / "progress"), progress_client="unused",
                              cli_claim=self.run.claim, cli_watch=self.run.watch,
                              cli_release=self.manager.release_acknowledged,
-                             cli_cancel=lambda: self.manager.release_cancelled(self.r.host_cancellation, None),
+                             cli_cancel=lambda: self.manager.release_cancelled(self.r.host_cancellation),
                              cli_retry=self.manager.retry_cleanup, cli_beat=self.run.beat)
         except (OSError, RuntimeError, ValueError) as error:
             return str(error)
@@ -993,6 +994,29 @@ class Decisions(Slot):
         self.assertEqual(self.changes(), {"cancelled": 1, "closed": 1})
         self.assertEqual(self.held(), ("cancelled", "AbsenceVerified", ""))
 
+    def test_a_reservation_whose_host_died_before_registering_closes_once_r_cancels_its_task(self):
+        with mock.patch.object(self.host.spool, "get", side_effect=HostDied), self.assertRaises(HostDied):
+            self.run.claim()
+        self.start(self.backend)
+        self.assertEqual(self.held(), (None, "Reserved", ""))
+        asked = []
+        read = self.r.host_cancellation
+        self.r.host_cancellation = lambda assignment: asked.append(assignment) or read(assignment)
+        self.r.task = None
+        self.assertEqual((self.changes(), self.held()), ({}, (None, "Reserved", "")))
+        self.r.cancel("task-1")
+        self.assertEqual(self.changes(), {"cancelled": 1, "closed": 1})
+        self.assertEqual(asked, 2 * [{"hostId": "mac-local", "taskId": "task-1", "generation": 1, "instanceId": "enc-1",
+                                      "producerId": "opencode", "capability": "CAPACIDAD-task-1",
+                                      "adapterId": "opencode"}])
+        self.assertEqual(self.held(), (None, "AbsenceVerified", ""))
+        self.assertEqual(self.r.closures, [("task-1", "AbsenceVerified", "", hashlib.sha256(
+            b'{"kind":"cancel","receipt":"cancel-task-1"}').hexdigest())])
+        self.assertEqual((self.changes(), len(asked), len(self.r.closures)), ({}, 2, 1), "R was asked or told twice")
+        self.assertEqual((self.backend.launches, self.backend.stops), ([], []))
+        self.r.offer("task-2", b"otro\n", self.revision)
+        self.assertEqual(self.one_pass()["claimed"], 1)
+
     def test_a_plan_whose_model_authorize_does_not_permit_is_never_launched(self):
         """Whoever builds the plan, the launcher asks authorize again before the model reaches `opencode -m`.
         PermittedModel has no constructor and refuses dataclasses.replace; what is left is to fabricate one on
@@ -1037,6 +1061,113 @@ class Decisions(Slot):
         self.assertEqual(fetch_brief(self.r, claim, run).read_bytes(), b"haz el saludo\n")
         self.r.task = None
         self.assertEqual(fetch_brief(self.r, claim, run), run.brief, "a cached brief was downloaded again")
+
+    def test_only_an_acceptance_bound_to_this_assignment_counts(self):
+        self.launched()
+        key = OperationKey("mac-local", "task-1", 1, "enc-1")
+        run = self.run_dir()
+        good = json.loads(run.assignment.read_text())["protocol"]["accept"]
+        self.assertEqual(good, {"schema": "agent-work.accept.v1", "hostId": "mac-local", "taskId": "task-1",
+                                "generation": 1, "instanceId": "enc-1", "claimId": "claim-task-1",
+                                "capability": "CAPACIDAD-task-1"})
+        elsewhere = self.root / "elsewhere.json"
+        elsewhere.write_text(json.dumps(good))
+        forgeries = {
+            "the delivery line": f"Open assignment JSON at {run.assignment}.".encode(),
+            "another capability": json.dumps({**good, "capability": "CAPACIDAD-task-2"}).encode(),
+            "a capability that is not ASCII": json.dumps({**good, "capability": "CAPACIDÁD-task-1"}).encode(),
+            "another claim": json.dumps({**good, "claimId": "claim-other"}).encode(),
+            "another task": json.dumps({**good, "taskId": "task-other"}).encode(),
+            "another host": json.dumps({**good, "hostId": "host-two"}).encode(),
+            "another instance": json.dumps({**good, "instanceId": "instance-other"}).encode(),
+            "another generation": json.dumps({**good, "generation": 2}).encode(),
+            "a boolean generation": json.dumps({**good, "generation": True}).encode(),
+            "a float generation": json.dumps({**good, "generation": 1.0}).encode(),
+            "a number capability": json.dumps({**good, "capability": 7}).encode(),
+            "UTF-16": json.dumps(good).encode("utf-16"),
+            "a text generation": json.dumps({**good, "generation": "1"}).encode(),
+            "the result schema": json.dumps({**good, "schema": "agent-work.result.v1"}).encode(),
+            "an extra field": json.dumps({**good, "note": "taken"}).encode(),
+            "no capability": json.dumps({k: v for k, v in good.items() if k != "capability"}).encode(),
+            "not an object": json.dumps([good]).encode(),
+            "empty": b"",
+            "not UTF-8": b"\xff\xfe{}",
+            "padded past 4096 bytes": b" " * 4096 + json.dumps(good).encode(),
+        }
+        for name, content in forgeries.items():
+            with self.subTest(name):
+                run.accept.write_bytes(content)
+                self.assertFalse(self.host.take_acceptance("mac-local", key))
+        run.accept.unlink()
+        with self.subTest("a symlink to a valid acceptance"):
+            run.accept.symlink_to(elsewhere)
+            try:
+                self.assertFalse(self.host.take_acceptance("mac-local", key))
+            finally:
+                run.accept.unlink()
+        with self.subTest("a directory"):
+            run.accept.mkdir()
+            try:
+                self.assertFalse(self.host.take_acceptance("mac-local", key))
+            finally:
+                run.accept.rmdir()
+        self.assertEqual(self.held(), ("attempted", "Running", ""))
+        run.accept.write_bytes(json.dumps(good).encode())
+        self.assertTrue(self.host.take_acceptance("mac-local", key))
+        self.assertEqual(self.held(), ("delivered", "Running", ""))
+
+    def test_an_acceptance_the_host_cannot_read_is_not_a_missing_acceptance(self):
+        self.launched()
+        self.cli_writes(result=False)
+        self.run_dir().accept.chmod(0)
+        self.ahead = 301
+        self.assertEqual((self.one_pass()["detected"], self.held()), (0, ("attempted", "Running", "")))
+        self.run_dir().accept.chmod(0o600)
+        self.assertEqual((self.one_pass()["detected"], self.held()), (0, ("delivered", "Running", "")))
+
+    def test_a_valid_result_without_acceptance_counts_and_an_invalid_one_does_not(self):
+        self.launched()
+        self.cli_writes()
+        self.run_dir().accept.unlink()
+        self.assertEqual((self.one_pass()["reported"], self.r.reports), (1, [("task-1", b"hecho\n")]))
+        self.setUp()
+        self.launched()
+        self.run_dir().result.write_text('{"schema": "otra cosa"}')
+        self.ahead = 301
+        self.assertEqual((self.one_pass()["detected"], self.r.reports), (1, []))
+        self.assertEqual((self.incidents(), self.held()),
+                         (["host:1:transport-unavailable:delivery-unaccepted"], ("uncertain", "Running", "")))
+
+    def crash_writing(self, event, table):
+        """Fail that write of the spool, as a full disk would, until the returned call undoes it."""
+        def run(statement):
+            with contextlib.closing(sqlite3.connect(self.spool / "host.sqlite")) as db:
+                db.execute(statement)
+                db.commit()
+
+        run(f"CREATE TRIGGER crash BEFORE {event} ON {table} BEGIN SELECT RAISE(ABORT, 'disk full'); END")
+        return lambda: run("DROP TRIGGER crash")
+
+    def test_uncertain_and_its_incident_survive_a_crash_together(self):
+        for table, event in (("incidents", "INSERT"), ("operations", "UPDATE")):
+            with self.subTest(crash_writing=table):
+                self.setUp()
+                self.launched()
+                self.ahead = 301
+                recover = self.crash_writing(event, table)
+                with self.assertRaises(sqlite3.DatabaseError):
+                    self.run.watch()
+                recover()
+                self.assertEqual(self.run.watch(), ["host:1:transport-unavailable:delivery-unaccepted"],
+                                 "the crash lost the incident")
+                self.assertEqual((self.incidents(), self.held()),
+                                 (["host:1:transport-unavailable:delivery-unaccepted"], ("uncertain", "Running", "")))
+
+    def test_the_launch_and_its_attempt_clock_are_one_write(self):
+        self.crash_writing("INSERT", "delivery_attempts")
+        with self.assertRaises(sqlite3.DatabaseError):
+            self.run.claim()
+        self.assertEqual((self.backend.launches, self.held()), ([], ("registered", "Reserved", "")))
 
 
 def slot_gid():

@@ -16,7 +16,7 @@ if [ "${1:-}" = "agents_routing" ]; then
     "$(git -C "$AGENT_WORK_RUNTIME_SOURCE" rev-parse HEAD)" \
     "$(git -C "$AGENT_WORK_RUNTIME_SOURCE" diff --binary HEAD | shasum -a 256 | cut -d' ' -f1)"
   ( cd "$AGENT_WORK_RUNTIME_SOURCE" && pnpm exec vitest run -c test/vitest/vitest.e2e.config.ts src/gateway/server.managed-task-requester.e2e.test.ts )
-  exec bash "$here/test-agent-work-e2e.sh" cli_gateway
+  exit 0
 fi
 if [ "${1:-}" = "main_cli_loop" ]; then
   shift
@@ -25,52 +25,6 @@ if [ "${1:-}" = "main_cli_loop" ]; then
     exit 2
   fi
   exec bash "$here/test-agent-work-e2e.sh" main_cli_loop
-fi
-if [ "${1:-}" = "cli_silent_failure" ]; then
-  shift
-  if [ "$#" -ne 0 ]; then
-    echo "cli_silent_failure no acepta argumentos" >&2
-    exit 2
-  fi
-  if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
-    echo 'cli_silent_failure requiere AGENT_WORK_RUNTIME_SOURCE con R construido' >&2
-    exit 2
-  fi
-  python3 "$here/test-agent-work-integration.py" IncidentFlushTest IncidentClientTest IncidentPumpTest \
-    SilentFailureTest SilentPromptTest
-  e2e_log="$(mktemp)"
-  trap 'rm -f "$e2e_log"' EXIT
-  bash "$here/test-agent-work-e2e.sh" cli_silent_failure 2>&1 | tee "$e2e_log"
-  # Un E2E saltado o quitado no puede pasar por verde: cada causa imprime su línea.
-  causes="$({ grep -o 'CLI_SILENT_FAILURE_E2E cause=[a-z-]*' "$e2e_log" || true; } | sort -u | wc -l | tr -d ' ')"
-  if [ "$causes" != 4 ]; then
-    echo "cli_silent_failure: el E2E cubrió $causes de 4 causas" >&2
-    exit 1
-  fi
-  exit 0
-fi
-if [ "${1:-}" = "cli_delivery_acceptance" ]; then
-  shift
-  if [ "$#" -ne 0 ]; then
-    echo "cli_delivery_acceptance no acepta argumentos" >&2
-    exit 2
-  fi
-  if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
-    echo 'cli_delivery_acceptance requiere AGENT_WORK_RUNTIME_SOURCE con R construido' >&2
-    exit 2
-  fi
-  python3 "$here/test-agent-work-integration.py" DeliveryAcceptanceTest \
-    SilentFailureTest.test_uncertain_and_reported_operations_never_raise_incidents
-  e2e_log="$(mktemp)"
-  trap 'rm -f "$e2e_log"' EXIT
-  bash "$here/test-agent-work-e2e.sh" cli_delivery_acceptance 2>&1 | tee "$e2e_log"
-  # Un E2E saltado o quitado no puede pasar por verde: cada caso imprime su línea.
-  cases="$({ grep -o 'CLI_DELIVERY_ACCEPTANCE_E2E case=[a-z]*' "$e2e_log" || true; } | sort -u | wc -l | tr -d ' ')"
-  if [ "$cases" != 2 ]; then
-    echo "cli_delivery_acceptance: el E2E cubrió $cases de 2 casos" >&2
-    exit 1
-  fi
-  exit 0
 fi
 if [ "${1:-}" = "delegation_bypass" ]; then
   shift

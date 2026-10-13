@@ -1,29 +1,19 @@
 #!/usr/bin/env python3
 """T11 :298 cutover_fencing against the real R Gateway: an old cron is drained, never cancelled,
 never asks again, and ownership moves to the native route by generation only with one emitter."""
-import hashlib
 import json
-import os
 import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "tests"))
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
-from test_agent_work_main_cli_loop_e2e import (  # noqa: E402
-    ADAPTER, CLI_SESSION, HOST_ID, INSTANCE, LoopGateway, built_runtime, certified_coverage, loop_route, wait_for)
-from test_agent_work_cli_gateway_e2e import FakeCliSession  # noqa: E402
+from test_agent_work_main_cli_loop_e2e import ADAPTER, HOST_ID, LoopGateway, built_runtime, wait_for  # noqa: E402
 import cutover_live  # noqa: E402
-from contracts import OperationKey  # noqa: E402
-from host import Host  # noqa: E402
-from native_gateway import GatewayProjectionClient, claim_cli_once  # noqa: E402
-from resources import ResourceManager  # noqa: E402
-from routing import prepare_request  # noqa: E402
-from spool import Spool, atomic_json  # noqa: E402
+from spool import Spool  # noqa: E402
 
 EVERY_MS = 3000
 CRON = "vigia-viejo"
@@ -49,7 +39,7 @@ class CutoverFencingE2E(unittest.TestCase):
         self.limits = self.root / "rehearsal-limits.json"
         self.limits.write_text(json.dumps(limits))
 
-    def start(self, managed_enabled, adapter=ADAPTER):
+    def start(self, managed_enabled):
         gateway = LoopGateway(self.runtime, self.root, extra_env={
             "CROSS_CRON_ENABLED": "1", "CROSS_MANAGED_ENABLED": "1" if managed_enabled else "0"})
         self.addCleanup(gateway.close)
@@ -61,7 +51,7 @@ class CutoverFencingE2E(unittest.TestCase):
             "delivery": {"mode": "none"}})
         self.spool = Spool(self.root / "host-spool", HOST_ID)
         (self.root / "host").mkdir(exist_ok=True)
-        entry = {"id": "loop:encargos", "legacyCrons": [CRON], "host": HOST_ID, "adapter": adapter,
+        entry = {"id": "loop:encargos", "legacyCrons": [CRON], "host": HOST_ID, "adapter": ADAPTER,
                  "spools": [str(self.root / "host-spool"), str(self.root / "host")]}
         self.state = self.root / "cutover-state.json"
         cutover_live.prepare(self.state, entry)
@@ -116,59 +106,6 @@ class CutoverFencingE2E(unittest.TestCase):
         with self.assertRaisesRegex(cutover_live.CutoverRefused, "uncertain admission task-uncertain"):
             cutover_live.apply(self.state, client, now_ms=lambda: int(time.time() * 1000), wait_seconds=10, limits_path=self.limits)
         self.assertEqual(json.loads(self.state.read_text())["owner"], "legacy")
-
-    def test_adoption_keeps_the_cli_session_and_delivers_a_result_captured_across_it(self):
-        gateway, _, client = self.start(managed_enabled=True, adapter="codex")
-        coverage, certified = certified_coverage()
-        request = prepare_request(coverage=certified, **loop_route(self.root, gateway.state_dir))
-        projection = GatewayProjectionClient(str(self.runtime / "openclaw.mjs"), HOST_ID, gateway.url)
-        host = Host(HOST_ID, self.root / "host")
-        backend = FakeCliSession()
-        manager = ResourceManager(host.spool, HOST_ID, backend)
-        with mock.patch.dict(os.environ, gateway.env):
-            task_id = gateway.tool("submit", request, "cutover-submit-turn")["taskId"]
-            gateway.tool("admit", {"taskId": task_id, "admissionKey": "cutover-attempt"}, "cutover-admit-turn")
-            delivered = []
-
-            def fake_cli(assignment_ref, session):
-                operation = json.loads(Path(assignment_ref).read_text())
-                delivered.append(operation)
-                atomic_json(Path(operation["acceptRef"]), {
-                    "schema": "agent-work.accept.v1", **{field: operation[field] for field in (
-                        "hostId", "taskId", "generation", "instanceId", "claimId", "capability")}})
-
-            first = claim_cli_once(projection, host=host, manager=manager, adapter_id=ADAPTER,
-                                   instance_id=INSTANCE, session=CLI_SESSION,
-                                   workspace_root=self.root / "workspace", deliver=fake_cli,
-                                   coverage=certified)
-            self.assertEqual(first.status, "delivered")
-            operation = delivered[0]
-            artifact = self.root / "workspace" / "review.txt"
-            artifact.write_text("VEREDICTO aprobado\n")
-            atomic_json(Path(operation["resultRef"]), {
-                "schema": "agent-work.result.v1", "kind": "produced",
-                "hostId": operation["hostId"], "taskId": operation["taskId"],
-                "generation": operation["generation"], "instanceId": operation["instanceId"],
-                "producerId": operation["producerId"], "capability": operation["capability"],
-                "observedRevision": operation["inputRevision"],
-                "typedPayload": {"verdict": "approved", "evidenceRef": "review.txt"},
-                "artifactRef": str(artifact), "digest": hashlib.sha256(artifact.read_bytes()).hexdigest()})
-            key = OperationKey(HOST_ID, task_id, operation["generation"], INSTANCE)
-            host.take_acceptance(HOST_ID, key)
-            host.collect(HOST_ID, key)
-            self.assertEqual([result["taskId"] for result in host.pending(HOST_ID)], [task_id])
-            session_before = backend.observe(CLI_SESSION)
-            result = cutover_live.apply(self.state, client, now_ms=lambda: int(time.time() * 1000),
-                                        wait_seconds=30, limits_path=self.limits)
-            self.assertEqual(result, "transferred")
-            self.assertEqual([result["taskId"] for result in host.pending(HOST_ID)], [task_id],
-                             "the captured result was lost in the transfer")
-            receipts = host.flush(HOST_ID, projection.report_host_result)
-            self.assertEqual([receipt["taskId"] for receipt in receipts], [task_id])
-            self.assertEqual(host.pending(HOST_ID), [])
-            self.assertEqual((backend.stops, backend.observe(CLI_SESSION)), ([], session_before))
-            managed = client.call("config.get", {})["resolved"]["managedTasks"]
-            self.assertEqual(sorted(managed["hosts"][HOST_ID]["adapters"]), sorted([ADAPTER, "codex"]))
 
     def test_unknown_limits_refuse_before_any_cron_is_touched(self):
         gateway, _, client = self.start(managed_enabled=False)
