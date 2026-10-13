@@ -8,8 +8,7 @@ Quién manda: el lead manda a David un mensaje en cada cambio de estado; el part
 hora lo manda el vigía (claw). Canal: Telegram, con el destino leído del cron
 que ya entrega ahí, nunca pegado en este archivo. Cadencia: en cada cambio de
 estado y, mientras la corrida esté activa, al menos cada 30 minutos; un AVANZA a menos de 15 minutos del anterior se
-junta con el siguiente cambio. Todo mensaje cumple `seguimiento.v1` y sale
-validado por `corrida.sh`.
+junta con el siguiente cambio. Todo mensaje cumple `seguimiento.v1`.
 
 ## Clases de comando
 
@@ -18,8 +17,3 @@ validado por `corrida.sh`.
 | gh | leer PRs y CI | permitido |
 | `ssh` | `ssh despliegue` | negado |
 | red externa | bajar un tarball | negado |
-
-## Lanzamiento
-
-Las sesiones se lanzan con `corrida.sh lanzar-sesion`, que marca antes de
-mandar. Ningún comando de este runbook abre sesiones a mano.

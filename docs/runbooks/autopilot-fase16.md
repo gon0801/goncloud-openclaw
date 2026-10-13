@@ -1,5 +1,7 @@
 # Fase 16: Muse implementa la separación del runtime
 
+> **Histórico.** La ruta de corrida (`corrida.sh`) se retiró el 2026-10-13. Este documento queda como lectura histórica.
+
 > **NO LANZAR ESTE RUNBOOK EN EL ESTADO REINSTALADO.** Su corte Windows y sus
 > supuestos de sync son anteriores a la recuperación. `Plans.md` U1 decide
 > qué código reutilizar; exige un runbook nuevo, revisado contra el host vivo,

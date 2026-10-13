@@ -350,14 +350,14 @@ La columna "bloque" dice quién lo migra. Nada de esto cambia en SUA-00.
 |---|---|---|---|
 | `managed_tasks_submit` y `managedTasks.host.*` (R) | `ManagedTaskAssignment`, `review.v1`, `ready.v1` | `unidad.assignment` y `resultado.payload` los envuelven sin cambiarlos | SUA-01 |
 | `managed_tasks_resolve` con `ManagedTaskHandlingDecision` | `continue`, `complete`, `blocked`, `cancelled` por tarea | Decisión del controlador sobre la raíz, con `plan` y `control` | SUA-01, SUA-02 |
-| `corrida_worker/reconcile.py`, `task_handoffs.py` (G) | Decisión Python por SHA y `resolve_via_gateway` | Adaptador de entrada al controlador de R. No queda un decisor Python activo | SUA-02 |
-| `corrida_worker/gates.py` | Compuertas `cross-review`, `mismo-revisor`, `bloqueante-repetido` | `evidencia` + política de rondas como datos. Se retiran `mismo-revisor` y `bloqueante-repetido` | SUA-05 |
-| `autoridad-merge.sh`, `preaprobaciones.v1.json` | Tabla de preaprobaciones por corrida | `autoridad` embebida en `meta` | SUA-05 |
+| `corrida_worker/reconcile.py`, `task_handoffs.py` (G) | Decisión Python por SHA y `resolve_via_gateway` | Retirado el 2026-10-13, no se migra. No queda un decisor Python activo | SUA-02 |
+| `corrida_worker/gates.py` | Compuertas `cross-review`, `mismo-revisor`, `bloqueante-repetido` | Retirado el 2026-10-13, no se migra. La política de rondas como datos se escribe nueva | SUA-05 |
+| `autoridad-merge.sh`, `preaprobaciones.v1.json` | Tabla de preaprobaciones por corrida | Retirados el 2026-10-13, no se migran. `autoridad` va embebida en `meta` | SUA-05 |
 | `LISTO <sha>` y `VEREDICTO` en ventanas tmux | Texto en el pane | `resultado` con `resultContract` y `evidencia` del head exacto | SUA-03 |
-| `corrida.v2` (`corrida.sh`) | Registro por corrida con `lanes`, `effects`, `evidence`, `outcome` | `meta`, `unidad`, `evidencia`. `corrida.v2` queda como lectura histórica | SUA-03, SUA-09O |
+| `corrida.v2` (`corrida.sh`) | Registro por corrida con `lanes`, `effects`, `evidence`, `outcome` | Retirado el 2026-10-13, no se migra. `corrida.v2` queda como lectura histórica | SUA-03, SUA-09O |
 | `runbook-progress.v2`, `progress_bridge.py`, `ProgressPublisher` | Documento de progreso por fase | `proyeccion` derivada del dueño nativo. Un emisor por host | SUA-06 |
 | `ManagedTaskHostIncident`, `ManagedTaskIncident` (R), `record_incident` y `flush_incidents` (G) | Cuatro tipos de incidencia de host más `recovery-transport-failure` | `excepcion` con tipo, opciones y respuesta. Las incidencias de host siguen existiendo como hecho del host | SUA-02 |
-| `workers.v1.json`, `registry.py`, `selector.py` | Registro y selección de trabajadores CLI | `flota` con modelo exacto o desconocido y generación | SUA-03, SUA-04 |
+| `workers.v1.json`, `registry.py`, `selector.py` | Registro y selección de trabajadores CLI | Retirados el 2026-10-13, no se migran. `flota` lleva modelo exacto o desconocido y generación | SUA-03, SUA-04 |
 | `proveedores-permitidos.json`, `encargo.py` | Política de proveedores con la frase de David | Se conserva tal cual. `flota.accountRef` y `authority.accounts` la citan | SUA-04 |
 | `coverage.json` (`hostAdapterRoute`, `hostAdapterCoverage`) | Certificación de rutas | Fuente de `flota.host` y `flota.executor` admisibles, después de alinearlo consigo mismo | SUA-04 |
 | Hermes | Sin inventario | Implementa los mismos esquemas con su mecanismo local | SUA-07 |

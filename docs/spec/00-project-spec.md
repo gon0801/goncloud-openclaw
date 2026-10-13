@@ -149,17 +149,15 @@ Decisiones de la Fase 7 de Plans.md. El dato vive en `runbook-progress.v1.md` (S
 
 ## Corridas autónomas (Fase 9)
 
-Cinco reglas que todo runbook en autopilot cumple desde que existen `corrida.sh`
-y `seguimiento.v1` (contratos en `docs/spec/corrida.v1.md` y
+Cinco reglas que todo runbook en autopilot cumple (contrato de mensajes en
 `docs/spec/seguimiento.v1.md`):
 
-1. Toda corrida en autopilot se abre, lanza sus sesiones y se cierra por `corrida.sh`;
-   ningún runbook trae un `new-session` escrito a mano.
+1. Ningún runbook trae un `new-session` escrito a mano.
 2. El seguimiento lo garantiza el reloj global `avance-tareas` (cada 15 minutos,
    un solo reporte consolidado cada 30), el agente lo enriquece con eventos;
    ninguna espera pasa de 30 minutos sin mensaje. Ninguna corrida crea un cron
    de entrega propio.
-3. Un diálogo se contesta por la tabla de preaprobaciones del registro; la lista dura
+3. Un diálogo se contesta por la tabla de preaprobaciones del runbook; la lista dura
    (borrado recursivo, `DROP`, push a la rama por defecto, merge, lectura de
    credenciales) no la aprueba ninguna tabla.
 4. Antes de mandar una tecla a una sesión se relee la pantalla y se exige el mismo

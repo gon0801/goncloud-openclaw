@@ -1,6 +1,7 @@
 # corrida.v2 — registro de una corrida autónoma con reloj global
 
-Fecha: 2026-09-20. Estado: activo desde que se mergea. Extiende
+Fecha: 2026-09-20. Estado: retirado. La ruta de corrida se retiró el 2026-10-13 y
+este documento queda como lectura histórica. Extiende
 [corrida.v1.md](corrida.v1.md): el validador lee las dos versiones; v1 sigue
 aceptándose para registros viejos y para la migración.
 

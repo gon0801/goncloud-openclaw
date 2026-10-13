@@ -11,8 +11,3 @@ quién manda los mensajes ni por qué canal: esa es la semilla de la mutación
 | Clase | Para qué | Candado |
 |---|---|---|
 | `gh` | `gh pr checks` | permitido |
-
-## Lanzamiento
-
-Las sesiones se lanzan con `corrida.sh lanzar-sesion`, que marca antes de
-mandar. Ningún comando de este runbook abre sesiones a mano.

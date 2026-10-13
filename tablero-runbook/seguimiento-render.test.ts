@@ -278,7 +278,7 @@ describe("renderSeguimientoV2", () => {
     assert.doesNotMatch(text, /Fase 0/);
   });
 
-  it("a corrida whose title is not owner language is headed by its id, like corrida_encabezado", () => {
+  it("a corrida whose title is not owner language is headed by its id", () => {
     assert.match(renderSeguimientoV2(casoReal()), /\nrevisor-correcciones: 8 de 13 partes\.\n/);
   });
 
@@ -410,7 +410,7 @@ describe("esMensajeV1Valido", () => {
     "[NECESITO TU RESPUESTA] Corrida, avance desconocido\nQue cambio: la fase espera\nQue sigue: sigue igual\nQue necesito de ti: responde si o no.",
     "[CERRADA] Corrida, cierre en palabras\nQue cambio: x\nQue sigue: y\nQue necesito de ti: nada.",
     "[SIMULACRO] [AVANZA] Corrida, 2 de 5 partes terminadas\nQue cambio: queda lista\nQue sigue: sigue igual\nQue necesito de ti: nada.",
-    // Lo que emite corrida_mensaje ahora: nombre + hora, prefijo real, etiqueta ABIERTA
+    // Nombre + hora, prefijo real, etiqueta ABIERTA
     // (sin avance: no se sabe todavía cuántas partes tiene) y prefijos con acento.
     "▶️ [ABIERTA] Fase 9: cierre de corridas autónomas (abrió 09:00)\nQué cambió: Arrancó la corrida.\nQué sigue: Se irá viendo cuántas partes tiene conforme avance.\nQué necesito de ti: nada",
     // Un título de runbook con jerga en la línea 1 (CI) NO tumba el mensaje: la

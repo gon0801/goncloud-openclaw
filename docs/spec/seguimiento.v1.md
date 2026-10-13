@@ -68,8 +68,8 @@ importar qué le haya pasado el llamador (`responder.sh`, `latido.sh`...):
 ### El comando textual y el marcador `Comando: `
 
 La línea 4 puede terminar con UN comando textual de referencia, tras el marcador
-literal `Comando: ` — por ejemplo `... decir si o no a X; Comando: ~/bin/corrida.sh
-responder --sesion s --si`. El marcador existe para que la máquina distinga el comando
+literal `Comando: ` — por ejemplo `... decir si o no a X; Comando: <comando>`.
+El marcador existe para que la máquina distinga el comando
 del resto del mensaje: las líneas 2-3 y el cuerpo de la línea 4 se validan como
 lenguaje de usuario, y el único segmento tras `Comando: ` queda exento de esa
 validación. El marcador solo se permite en `NECESITO TU RESPUESTA` de una corrida
@@ -92,5 +92,3 @@ que un título como "Autopilot de la Fase 15 — CI completa" no puede tumbar
 todos los mensajes de esa corrida. La sanidad de la línea 1 se resuelve antes,
 en `corrida_encabezado`: si el título trae algo de la lista de arriba, cae al
 identificador de la corrida en vez de usarlo.
-
-Ejemplo válido y mutaciones en `scripts/tests/fixtures/corrida/mensaje-*.txt`.

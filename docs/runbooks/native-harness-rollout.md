@@ -1,5 +1,7 @@
 # Runbook: despliegue por etapas del ruteo nativo de harnesses (14.7)
 
+> **Histórico.** La ruta de corrida (`corrida.sh`) se retiró el 2026-10-13. Este documento queda como lectura histórica.
+
 Contrato único de interrupción: el ruteo nativo vive en la variable
 `CORRIDA_NATIVE_ROUTING` (`off` | `report` | `execute`). Con `off`, o sin
 definir, ni el preflight ni las corridas lanzan harnesses nativos y el flujo

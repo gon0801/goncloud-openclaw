@@ -33,21 +33,20 @@ Vivas y probadas con un pedido real:
    host se lo dice a R y R te lo dice a ti. Probada en los canarios.
 5. **Cron vigía.** Un loop de claw con vigía despierta cada 5 minutos. El 11 de
    octubre gastaba 16 llamadas al proveedor cada 30 minutos; el 13 de octubre,
-   98 en 45 minutos. Solo queda `bids-02-vigia`.
+   98 en nueve corridas, una cada 5 minutos, de las 14:19:04 a las 15:00:51. Solo queda
+   `bids-02-vigia`.
 
 Vivas en el código pero sin prueba en vivo en este bloque:
 
-- **Corrida por `corrida.sh`** (abrir, lanzar CLIs en tmux, reconciliar,
-  compuertas). Tiene 18 subcomandos y sus pruebas. La copia instalada en `~/bin`
-  no es la del repo, y el merge automático nunca pudo correr porque ningún
-  script escribe `authorization_ref`.
 - **Encargo nativo a un agente** (`managed_tasks_submit` con destino agente).
   R lo soporta. Ningún pedido real pasó por ahí.
 - **Hook Stop y vigilante tmux.** El hook está registrado. El vigilante no está
-  cargado en esta Mac. El latido está apagado a propósito.
+  cargado en esta Mac.
 
 Ya no arrancan: la sesión adoptada de opencode (host B8), los hosts por alias
-de modelo, `lanzar-host.sh`, y el latido como LaunchAgent.
+de modelo, `lanzar-host.sh`, y la corrida por `corrida.sh` con su latido. La
+ruta de corrida se retiró del repo el 2026-10-13 sin haber atendido un pedido
+real de David.
 
 **Los huecos que importan para decidir el orden de SUA-01 en adelante:**
 
@@ -74,7 +73,7 @@ día, David contestó las cuatro preguntas que el inventario dejó abiertas: "1.
 |---|---|---|
 | ¿Se corren las mediciones vivas? | Sí | Corridas el 2026-10-13. Resultados en [SUA-00-mediciones](SUA-00-mediciones.md). El hueco "no hay medición del despertar por evento" queda cerrado |
 | ¿Dónde corre Hermes? | En la PC de Gon | `gon-pc` en la red privada, Windows. A las 15:05 UTC del 2026-10-13 estaba fuera de la red; versión e interfaces siguen `unknown` |
-| ¿La ruta de corrida se migra o se retira? | Se retira | Las filas de "Rutas de corrida" pasan a ser historia cuando entre el PR del retiro. SUA-02, SUA-03 y SUA-05 pierden los archivos que tomaban de ella (marcas `corr: D13` del plan) |
+| ¿La ruta de corrida se migra o se retira? | Se retira | La ruta salió del repo el 2026-10-13 y las filas de "Rutas de corrida" son historia. SUA-02, SUA-03 y SUA-05 pierden los archivos que tomaban de ella (marcas `corr: D13` del plan) |
 | ¿La sesión adoptada se borra o se guarda? | Se borra | La fila "Sesión adoptada de opencode" y las piezas sin punto de entrada salen del repo en su propio PR |
 
 La lista de crons vivos (M-09) confirma la fila "Cron vigía": hay 30 crons y un
@@ -122,9 +121,9 @@ nada (canario D). La guarda `external_directory` no confina el shell
 
 | Ruta | Versión y ubicación | Dueño | Autoridad | Resultado y recibo | Fuente | Instalado | Aceptado en vivo |
 |---|---|---|---|---|---|---|---|
-| Inicio de una CLI en tmux (`corrida.sh lanzar-sesion`, `adaptador start`) | G `2213b930`; `scripts/mac/corrida/*.sh`, `workers.v1.json` con siete trabajadores (`claude_fable`, `claude_opus`, `kimi_k3`, `kimi_coding`, `codex`, `zcode`, `grok`), `max_external_sessions: 4` | G | Lock del registro, reserva del carril, registro validado (`adaptador.sh:256-266`); `_check_argv_element` rechaza caracteres de control y operadores de shell (`registry.py:147-162`); `worker_argv` revisa cada argumento sustituido (`lib.sh:1024-1025`). Sin device auth | `LISTO <sha>` o `VEREDICTO` en el pane (`estado.sh:79-80`); `ADAPTADOR-MARCA` (`adaptador.sh:290`); `~/.local/state/corridas/<id>/registro.json` con `schema: corrida.v2` | `passed`: `test-native-harness-adapters.sh`, `test-adaptador-reserva.sh`, `test-worker-registry.sh`, `test-worker-model-binding.sh` (en main desde el 2026-10-12) | `unknown`: `~/bin` difiere del repo en 10 scripts de `corrida/`, 3 de `corrida_worker/`, falta `task_handoffs.py` y no existe `~/bin/agent-work/`. Comando: `bash scripts/mac/instalar-mac.sh --verificar` | `unknown`: ningún recibo de este bloque muestra una corrida real con un pedido de David. Los loops de claw usan ventanas tmux por `prompt-claw`, no `corrida.sh`. Comando: `corrida.sh seguimiento --json` |
-| Reanudar una CLI (`adaptador resume`) | Igual; argv `resume:<rol>` con `--continue` | G | La misma | `resumed` o `unavailable` (`adaptador.sh:415`) | `passed`: `test-native-harness-adapters.sh` | `unknown`: misma copia desfasada | `unknown`: sin recibo de un resume real |
-| Decisor de corrida (`reconciliar`, `compuerta`, `task_handoffs.py`) | G `2213b930`; `corrida_worker/{reconcile,gates,selector,registry,state,task_handoffs}.py`; `corrida-worker.py` | G | `gates.py`: revisión aprobada del head, revisor no autor, cero bloqueantes (`:251-264`); `mismo-revisor` (`:244-248`) y `bloqueante-repetido` con `rounds_seen >= 2` (`:401-402`); merge exige `authorization_ref` en `preaprobaciones.v1.json` (`compuerta.sh:68`); `resolve_via_gateway` llama `managedTasks.resolve` sin `--device-auth` (`task_handoffs.py:569-581`) | `CONVERGED`, `EXECUTED`, `REOBSERVAR` (`reconciliar.sh:52-74`); `ALLOW` o `DENY` (`compuerta.sh:211-215`); eventos `gate.*` y `evidence.*` en el registro | `passed`: `test-corrida-reconcile.sh`, `test-corrida-gates.sh` (fixtures 15 y 16), `test-agent-work-integration.py:1751` | `failed`: `~/bin/corrida_worker` no tiene `task_handoffs.py` | `unknown`: ningún script de G escribe `authorization_ref` ni `rounds_seen`. Con el kit apagado, `merge` da `DENY kit-no-disponible` (`compuerta.sh:95-98`). Nunca hubo un merge automático con recibo |
+| Inicio de una CLI en tmux (`corrida.sh lanzar-sesion`, `adaptador start`) | Retirada del repo el 2026-10-13. En G `2213b930`: `scripts/mac/corrida/*.sh`, `workers.v1.json` con siete trabajadores (`claude_fable`, `claude_opus`, `kimi_k3`, `kimi_coding`, `codex`, `zcode`, `grok`), `max_external_sessions: 4` | G | Lock del registro, reserva del carril, registro validado (`adaptador.sh:256-266`); `_check_argv_element` rechaza caracteres de control y operadores de shell (`registry.py:147-162`); `worker_argv` revisa cada argumento sustituido (`lib.sh:1024-1025`). Sin device auth | `LISTO <sha>` o `VEREDICTO` en el pane (`estado.sh:79-80`); `ADAPTADOR-MARCA` (`adaptador.sh:290`); `~/.local/state/corridas/<id>/registro.json` con `schema: corrida.v2` | `failed`: David decidió "se quita" y la ruta salió del repo con sus pruebas (`followups.md`, filas SUA-00 de la ruta de corrida) | `failed`: la copia de `~/bin` ya difería del repo y queda sin fuente | `failed`: nunca atendió un pedido real de David. Los loops de claw usan ventanas tmux por `prompt-claw` |
+| Reanudar una CLI (`adaptador resume`) | Retirada del repo el 2026-10-13. Igual; argv `resume:<rol>` con `--continue` | G | La misma | `resumed` o `unavailable` (`adaptador.sh:415`) | `failed`: salió del repo con la ruta | `failed`: misma copia sin fuente | `failed`: sin recibo de un resume real |
+| Decisor de corrida (`reconciliar`, `compuerta`, `task_handoffs.py`) | Retirado del repo el 2026-10-13. En G `2213b930`: `corrida_worker/{reconcile,gates,selector,registry,state,task_handoffs}.py`; `corrida-worker.py` | G | `gates.py`: revisión aprobada del head, revisor no autor, cero bloqueantes (`:251-264`); `mismo-revisor` (`:244-248`) y `bloqueante-repetido` con `rounds_seen >= 2` (`:401-402`); merge exige `authorization_ref` en `preaprobaciones.v1.json` (`compuerta.sh:68`); `resolve_via_gateway` llama `managedTasks.resolve` sin `--device-auth` (`task_handoffs.py:569-581`) | `CONVERGED`, `EXECUTED`, `REOBSERVAR` (`reconciliar.sh:52-74`); `ALLOW` o `DENY` (`compuerta.sh:211-215`); eventos `gate.*` y `evidence.*` en el registro | `failed`: salió del repo con la ruta | `failed`: `~/bin/corrida_worker` no tiene `task_handoffs.py` y queda sin fuente | `failed`: nunca hubo un merge automático con recibo. Ningún script de G escribía `authorization_ref` ni `rounds_seen` |
 
 Las formas de resultado de esta ruta no tienen spec en `docs/spec/`. `LISTO
 <sha>` lo lee una regex en `estado.sh:79-80` y `progress-events.py:174-175`.
@@ -156,19 +155,18 @@ De las piezas sin punto de entrada que B22 dejó a decisión de David, el
 2026-10-13 se borraron `claim_cli_once`, `TmuxTransport`,
 `ShellAdapterTransport`, `detect_silent_failures` y `Spool.cancellation`
 (`followups.md`, fila "B22 (ruta adoptada sin punto de entrada)", cerrada).
-Siguen sin punto de entrada `corrida.sh adaptador deliver-ref`
-(`adaptador.sh:16`), que perdió a su único llamador, y `cutover_live.rollback`.
-La skill `native-harness-orchestration` de `main` (`SKILL.md:68`) ya no describe
-esa ruta. Falta publicarla en la Mini.
+`corrida.sh adaptador deliver-ref` (`adaptador.sh:16`) y la skill
+`native-harness-orchestration` de `main` se retiraron el 2026-10-13 con la ruta
+de corrida. Sigue sin punto de entrada `cutover_live.rollback`.
 
 ## Despertares, crons y vigías
 
 | Ruta | Versión y ubicación | Dueño | Autoridad | Resultado y recibo | Fuente | Instalado | Aceptado en vivo |
 |---|---|---|---|---|---|---|---|
-| Hook Stop de Claude Code | `scripts/mac/claude-stop-openclaw-event.sh` | G, registro en la Mac | Exige `OPENCLAW_WATCH=1` y se calla con `AGENT_WORK_MANAGED=1` (`:36-44`) | `openclaw system event --mode now --session-key agent:main:vigia-mac` o `corrida.sh avisos emitir` (`:135-149`); sin recibo, salida a `/dev/null` | `passed`: `test-tmux-activity-watch.sh`, `test-u3a-19-3.sh` | `failed`: registrado en `~/.claude/settings.json:122`, pero la copia de `~/bin` no trae el bloque `AGENT_WORK_MANAGED` (5 líneas de diferencia) | `unknown`: sin recibo de un despertar lanzado por este hook. M-01 midió el mismo verbo (`system event --mode now`) lanzado a mano |
-| Vigilante tmux (`tmux-activity-watch.sh`) | `scripts/mac/tmux-activity-watch.sh`; LaunchAgent `ai.goncloud.tmux-activity-watch` | G | Vigila `OPENCLAW_WATCH=1`, excluye `AGENT_WORK_MANAGED=1` (`:200-205`) | `system event` por quietud de 900 s, diálogo o cierre; lanza `corrida.sh latido` cada 300 s (`:104-106`) | `passed`: `test-tmux-activity-watch.sh` | `failed`: plist en disco, no cargado (`launchctl print`: Could not find service); copia de `~/bin` con 21 líneas de diferencia | `failed`: no corre. Sin él nadie lanza el latido desde esta Mac |
-| Latido de corrida (`corrida.sh latido`) | `scripts/mac/corrida/latido.sh`; LaunchAgent `ai.goncloud.corrida-latido` | G | n/a | `progress-events.py publish-all`, `system event` (`:220`, `:347`) | `passed`: `test-corrida-latido.sh` | `failed` a propósito: no cargado desde el 2026-09-27 y tiene que seguir así (`T12-runbook.md:290`) | `failed` a propósito |
-| Cron vigía de un loop (`<loop>-vigia`, isolated, cada 5 min) | Gateway en la Mini; recreador `prompt-claw` §7 | gateway | Un cron isolated no puede ser solicitante de `managedTasks` (`managed-task.turn.ts:42-44`) | Turno con modelo cada 5 min | `passed`: foto de 11 crons vigía en `coverage.json.modelWakes` del 2026-10-07; `test_every_live_cron_is_classified` (`test-agent-work-routing.py:314`) | `passed`: `openclaw cron list --json` del 2026-10-13 da 30 crons y un solo vigía, `bids-02-vigia` (M-09). `coverage.json.modelWakes` sigue con la foto vieja | `passed`: solo `bids-02-vigia`. El 2026-10-11, 66 eventos de sesión y 16 llamadas al proveedor en 30 min (`deploy-receipt.md`, Contadores). El 2026-10-13, 98 llamadas al proveedor y 5 709 579 tokens en 45 min (`SUA-00-mediciones.md`, "El vigía de bids, medido") |
+| Hook Stop de Claude Code | `scripts/mac/claude-stop-openclaw-event.sh` | G, registro en la Mac | Exige `OPENCLAW_WATCH=1` y se calla con `AGENT_WORK_MANAGED=1` (`:36-44`) | `openclaw system event --mode now --session-key agent:main:vigia-mac`; sin recibo, salida a `/dev/null` | `passed`: `test-tmux-activity-watch.sh` | `failed`: registrado en `~/.claude/settings.json:122`, pero la copia de `~/bin` no trae el bloque `AGENT_WORK_MANAGED` (5 líneas de diferencia) | `unknown`: sin recibo de un despertar lanzado por este hook. M-01 midió el mismo verbo (`system event --mode now`) lanzado a mano |
+| Vigilante tmux (`tmux-activity-watch.sh`) | `scripts/mac/tmux-activity-watch.sh`; LaunchAgent `ai.goncloud.tmux-activity-watch` | G | Vigila `OPENCLAW_WATCH=1`, excluye `AGENT_WORK_MANAGED=1` (`:200-205`) | `system event` por quietud de 900 s, diálogo o cierre | `passed`: `test-tmux-activity-watch.sh` | `failed`: plist en disco, no cargado (`launchctl print`: Could not find service); copia de `~/bin` con 21 líneas de diferencia | `failed`: no corre |
+| Latido de corrida (`corrida.sh latido`) | Retirado del repo el 2026-10-13 con la ruta de corrida. En G `2213b930`: `scripts/mac/corrida/latido.sh`; LaunchAgent `ai.goncloud.corrida-latido` | G | n/a | `progress-events.py publish-all`, `system event` (`:220`, `:347`) | `failed`: salió del repo con la ruta | `failed`: no cargado desde el 2026-09-27 (`T12-runbook.md:290`) | `failed`: apagado a propósito hasta su retiro |
+| Cron vigía de un loop (`<loop>-vigia`, isolated, cada 5 min) | Gateway en la Mini; recreador `prompt-claw` §7 | gateway | Un cron isolated no puede ser solicitante de `managedTasks` (`managed-task.turn.ts:42-44`) | Turno con modelo cada 5 min | `passed`: foto de 11 crons vigía en `coverage.json.modelWakes` del 2026-10-07; `test_every_live_cron_is_classified` (`test-agent-work-routing.py:314`) | `passed`: `openclaw cron list --json` del 2026-10-13 da 30 crons y un solo vigía, `bids-02-vigia` (M-09). `coverage.json.modelWakes` sigue con la foto vieja | `passed`: solo `bids-02-vigia`. El 2026-10-11, 66 eventos de sesión y 16 llamadas al proveedor en 30 min (`deploy-receipt.md`, Contadores). El 2026-10-13, 98 llamadas al proveedor y 5 709 579 tokens en nueve corridas, una cada 5 minutos, de las 14:19:04 a las 15:00:51 (`SUA-00-mediciones.md`, "El vigía de bids, medido") |
 | Crons de negocio | Gateway | gateway | `scheduledToolPolicy` del servidor | Turnos propios | `passed`: 27 `out-of-perimeter` en `coverage.json` | `passed`: 30 habilitados el 2026-10-11 | `passed`: 30 habilitados, 0 corriendo (`deploy-receipt.md`, Checklist posterior) |
 
 ## Orbit (O) y Hermes (H)
@@ -216,22 +214,26 @@ conducta en este bloque.
    en `managedRequesterRoutes`, con una ruta `main → mac-local/claude_opus`
    `disabled-operator-setup-pending`, y `modelWakes` del 2026-10-07 con citas de
    línea viejas.
-2. `~/bin` no es el repo: `claude-stop-openclaw-event.sh` y
+2. La parte de la ruta de corrida quedó sin objeto el 2026-10-13, con su
+   retiro. `~/bin` no es el repo: `claude-stop-openclaw-event.sh` y
    `tmux-activity-watch.sh` sin la exclusión `AGENT_WORK_MANAGED`, 10 scripts de
    `corrida/` y 3 de `corrida_worker/` distintos, falta `task_handoffs.py`, no
    existe `~/bin/agent-work/`.
-3. El merge automático de corrida no puede correr: ningún script escribe
+3. Sin objeto desde el 2026-10-13, con el retiro de la ruta de corrida. El
+   merge automático de corrida no puede correr: ningún script escribe
    `authorization_ref` ni `rounds_seen`. `bloqueante-repetido` nunca dispara en
    producción y `merge` da `DENY kit-no-disponible`.
-4. `corrida.sh autoridad-merge` no está en la lista de subcomandos y
+4. Sin objeto desde el 2026-10-13, con el retiro de la ruta de corrida.
+   `corrida.sh autoridad-merge` no está en la lista de subcomandos y
    `autoridad-merge.sh` no define `corrida_autoridad_merge`. Deducido de lectura.
-5. Instalado, `adaptador.sh:312` y `lanzar-sesion.sh:37` buscan `host.py` en
+5. Sin objeto desde el 2026-10-13, con el retiro de la ruta de corrida.
+   Instalado, `adaptador.sh:312` y `lanzar-sesion.sh:37` buscan `host.py` en
    `~/agent-work/host.py`, y el instalador lo deja en `~/bin/agent-work/`
    (`instalar-mac.sh:164`). Sin `AGENT_WORK_HOST_BIN` la copia no lo encuentra.
    Deducido de lectura.
-6. Corregido el 2026-10-13: `native-harness-orchestration/SKILL.md:68` describía
-   la ruta adoptada que ya no arranca. Falta publicar la skill en la Mini (fila
-   T12 `coverage.json` de `followups.md`).
+6. Sin objeto desde el 2026-10-13: `native-harness-orchestration/SKILL.md:68`
+   describía la ruta adoptada que ya no arranca, y la skill se retiró con la
+   ruta de corrida.
 7. En R, `usage_limited` de `SessionGoal` no lo escribe ningún código y
    `continuationTurns` nunca se incrementa (`goals-transitions.ts:95`,
    `:117`). No afecta a SUA porque no se reutiliza. Se anota para R.

@@ -20,8 +20,9 @@ Las diez mediciones ya están hechas. Lo que salió:
   otro turno de `main` en vuelo. Es una sola muestra.
 - **Sesión nueva y `/new` cargan lo mismo:** unos 20 mil tokens de contexto
   base. No hay ahorro en reutilizar una sesión.
-- **El vigía de bids gasta mucho más que hace dos días.** En 45 minutos hizo
-  98 llamadas al modelo y 5,7 millones de tokens. El 11 de octubre eran 16
+- **El vigía de bids gasta mucho más que hace dos días.** En nueve corridas,
+  una cada 5 minutos, de las 14:19:04 a las 15:00:51, hizo 98 llamadas al
+  modelo y 5,7 millones de tokens. El 11 de octubre eran 16
   llamadas cada 30 minutos.
 - **Un cron aislado no puede pedir encargos.** R lo rechaza con el mensaje que
   dice el código.
@@ -95,7 +96,7 @@ Lo que se puede afirmar con recibos. Lo que no, dicho como tal.
 | Dimensión | Baseline | Fuente | Qué no se puede medir |
 |---|---|---|---|
 | Vigilancia de un encargo por CLI | 0 llamadas al proveedor en 30 min | deploy-receipt.md, Contadores | nada |
-| Vigilancia de un loop de claw con vigía | El 2026-10-11: 16 llamadas al proveedor en 30 min. El 2026-10-13: 98 llamadas y 5 709 579 tokens en 45 min (9 corridas de `bids-02-vigia`) | deploy-receipt.md, Contadores; M-04 de este documento | por qué subió entre las dos fechas. No se leyó el loop de bids |
+| Vigilancia de un loop de claw con vigía | El 2026-10-11: 16 llamadas al proveedor en 30 min. El 2026-10-13: 98 llamadas y 5 709 579 tokens en 9 corridas de `bids-02-vigia`, una cada 5 min, de las 14:19:04 a las 15:00:51 | deploy-receipt.md, Contadores; M-04 de este documento | por qué subió entre las dos fechas. No se leyó el loop de bids |
 | Latencia pedido → resultado cerrado, ruta por CLI | 64,8 s para un encargo de un archivo | B22-canarios.md | latencia de un encargo real de ingeniería. Ningún loop real corre por la ruta |
 | Latencia pedido → resultado, ruta nativa | mediana 83,4 s, p95 1 570,3 s, 902 corridas de subagente | M-05 de este documento | la latencia de un encargo nativo (`managed_tasks_submit` con destino agente): no hay ninguno |
 | Coste en dinero | `unknown` | n/a | todos los proveedores de la ruta por CLI cobran por suscripción salvo deepseek (`proveedores-permitidos.json`, `billing`). No hay tarifa por token que multiplicar |
@@ -197,12 +198,12 @@ misma consulta:
 | 14:54:04 | 20,1 s | 2 | 42 039 |
 | 14:59:04 | 106,6 s | 11 | 656 691 |
 
-Suma: 98 llamadas y 5 709 579 tokens en 45 minutos. La mayor parte son tokens
+Suma: 98 llamadas y 5 709 579 tokens en nueve corridas, una cada 5 minutos, de las 14:19:04 a las 15:00:51. La mayor parte son tokens
 leídos de caché. Una corrida que no encuentra nada que hacer cuesta 2 llamadas
 y unos 42 mil tokens. Una que trabaja hace de 7 a 17 llamadas con `exec`. En
 siete de las nueve corridas, `main` estuvo ocupado entre 57 y 144 segundos de
 cada 300. La ventana del 2026-10-11 dio 16 llamadas en 30 minutos; esta da 98
-en 45. No se investigó por qué subió.
+en nueve corridas. No se investigó por qué subió.
 
 ### Un `NO_REPLY` por `agent --message` se reintenta
 

@@ -11,8 +11,3 @@ El lead informa que el canal del cron sigue sin definir; revisar en 60 minutos.
 | Clase | Para qué | Candado |
 |---|---|---|
 | gh | leer PRs y CI | permitido |
-
-## Lanzamiento
-
-Las sesiones se lanzan con `corrida.sh lanzar-sesion`, que marca antes de
-mandar.
