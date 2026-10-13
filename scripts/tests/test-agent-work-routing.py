@@ -307,6 +307,10 @@ class AgentsRouting(unittest.TestCase):
         self.assertTrue(skill.startswith(
             '---\nname: encargo-cli\ndescription: Úsala solo cuando David diga "por CLI" en un pedido de trabajo'))
         self.assertIn('Sin "por CLI" no es esta skill, aunque nombre un modelo', skill.splitlines()[2])
+        # Live canary P 2026-10-13, twice: main never opened the skill, because its description spoke only of
+        # work on a repo, and wrote the file with its own exec. The description is all main reads to choose.
+        self.assertIn('o crear o cambiar cualquier archivo, sea del tamaño que sea y esté dentro o fuera de un repo. '
+                      'Con "por CLI" nunca hagas el trabajo tú con exec, write o edit', skill.splitlines()[2])
         for expected in (
             'Esta ruta entra solo con "por CLI". Si David no lo dijo, no encargues por aquí aunque nombre un modelo.',
             "python3 /Users/dn/dev/wt/agent-work-host/scripts/agent-work/encargo.py preparar "

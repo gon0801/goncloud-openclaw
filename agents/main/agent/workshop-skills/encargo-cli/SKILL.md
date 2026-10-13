@@ -1,6 +1,6 @@
 ---
 name: encargo-cli
-description: Úsala solo cuando David diga "por CLI" en un pedido de trabajo sobre un repo de la Mac (implementar, arreglar o revisar), por ejemplo "agrega X en ~/dev/<repo>, por CLI con glm 5.3". Sin "por CLI" no es esta skill, aunque nombre un modelo. Ese pedido sigue agent-dispatch.
+description: Úsala solo cuando David diga "por CLI" en un pedido de trabajo en la Mac: implementar, arreglar, revisar, o crear o cambiar cualquier archivo, sea del tamaño que sea y esté dentro o fuera de un repo. Con "por CLI" nunca hagas el trabajo tú con exec, write o edit, aunque sea una línea: se encarga con esta skill. Ejemplo: "agrega X en ~/dev/<repo>, por CLI con glm 5.3". Sin "por CLI" no es esta skill, aunque nombre un modelo. Ese pedido sigue agent-dispatch.
 ---
 
 # Encargo a la Mac
