@@ -10,7 +10,7 @@ Desde B6 (`B6.md`), R certifica el presupuesto según el servidor y la API, no s
 
 En la Mini eso cubre a `main`, `ingenieria` e `implementer`, cuyo primario es `opencode-go-resp/muse-spark-1.3-contributor`. No cubre a los agentes con primario `opencode-go/deepseek-v4.1-flash` (`adversary`, `operaciones`, `reviewer`, `verifier`, `scout`): ese proveedor pasa por el plugin `opencode-go`, y R rechaza un plugin dentro de un encargo.
 
-Un encargo que cae a un fallback por CLI (claude-cli) o a un plugin (codex) se rechaza antes de gastar. Salvo `mac-local/opencode` (B8; ver "La sesión de opencode que adopta el host" en la parte B), las rutas a un CLI de la Mac siguen sin certificar (matriz A10): esos loops conservan su vigía y lo declaran (plan `:318`). Los cuatro alias de opencode Go que abrió B19 están cerrados desde el 2026-10-12 por decisión de David (sección "Un host por alias de modelo"). Un pedido "por CLI" corre solo en `opencode`.
+Un encargo que cae a un fallback por CLI (claude-cli) o a un plugin (codex) se rechaza antes de gastar. Hoy ninguna ruta a un CLI de la Mac está `certified` en `coverage.json` (matriz A10): esos loops conservan su vigía y lo declaran (plan `:318`). `mac-local/opencode` está en `sandbox-tested-uncertified` desde la fase 2 de B22. Abre solo mientras vive un host de encargos lanzado con `--canario` (sección "El host de encargos" en la parte B). B8 la había certificado sobre una sesión adoptada, y el host B8 está apagado desde el 2026-10-13. Los cuatro alias de opencode Go que abrió B19 están cerrados desde el 2026-10-12 por decisión de David (sección "Un host por alias de modelo"). Un pedido "por CLI" corre solo en `opencode`.
 
 ## Actualizar la Mini a R `19c2ed1` (B6)
 
@@ -132,7 +132,7 @@ La cabecera es parte del archivo, así que el sha256 de `instructionRef` la cubr
 
 ### La sesión de opencode que adopta el host
 
-B8 certificó `mac-local/opencode` sobre una sesión adoptada (`B8-opencode-adapter-e2e.md`). Desde la fase 2 de B22, `coverage.json` la tiene en `sandbox-tested-uncertified`, hasta que los canarios del host de encargos la certifiquen otra vez (sección "El host de encargos"). El host de esta sección no lanza su sesión: la adopta. Se lanza a mano, una vez, así:
+B8 certificó `mac-local/opencode` sobre una sesión adoptada (`B8-opencode-adapter-e2e.md`). Desde la fase 2 de B22, `coverage.json` la tiene en `sandbox-tested-uncertified`. La certificación nueva es la de la ruta `run-per-task` del host de encargos, y va en un PR aparte con `B22-canarios.md` como evidencia (sección "El host de encargos"). El host de esta sección es el host B8, que está apagado desde el 2026-10-13. Su sesión adoptada, `canario`, sigue viva. Ese host no lanza su sesión: la adopta. La sesión se lanza a mano, una vez, así:
 
 ```
 tmux -L <socket> new-session -d -s <sesión> -x 200 -y 50 -c <workspace> \
@@ -154,7 +154,9 @@ tmux -L <socket> new-session -d -s <sesión> -x 200 -y 50 -c <workspace> \
 
 ### El host en la Mac
 
-El host corre desde `~/dev/wt/agent-work-host`, en `tmux -L agent-work`, sesión `host`. Lo arranca este comando (el de `~/.local/state/agent-work-host/host-cmd.txt`):
+Esta sección describe el host B8. Está apagado desde el 2026-10-13 (`B22-canarios.md`, paso 2 del corte), y lo reemplaza el host de encargos. Queda aquí para la reversa de la fase 2.
+
+El host B8 corría desde `~/dev/wt/agent-work-host`, en `tmux -L agent-work`, sesión `host`. Lo arranca este comando, que quedó guardado en `~/.local/state/encargos-loop/B22/corte/host-b8-cmd.txt`:
 
 ```
 OPENCLAW_BIN=/Users/dn/.openclaw-r/openclaw LANG=en_US.UTF-8 python3 scripts/agent-work/native_gateway.py --openclaw-bin /Users/dn/.openclaw-r/openclaw --host-id mac-local --expect-url ws://127.0.0.1:18789 --host-state-dir /Users/dn/.local/state/agent-work-host/mac-local-c --evidence-root /Users/dn/.local/state/agent-work-host/evidence --progress-state-dir /Users/dn/.local/state/runbook-progress-events --progress-client /Users/dn/bin/progress-events.py --watch --cli-adapter-id opencode --cli-instance-id canario-3 --cli-session canario --cli-workspace-root /Users/dn/dev/canario-encargos --cli-tmux-socket agent-work --cli-deadline-seconds 3600 2>&1 | tee -a /Users/dn/.local/state/agent-work-host/host.log
@@ -169,15 +171,17 @@ OPENCLAW_BIN=/Users/dn/.openclaw-r/openclaw LANG=en_US.UTF-8 python3 scripts/age
 
 ### Un host por alias de modelo (B19)
 
-Desde el 2026-10-12, "por CLI" tiene un solo camino: `opencode`, con GLM 5.3 flash del plan de Z.AI. Ese día David dijo en sesión "open code go es solamente para main". Al preguntarle por el alcance eligió "Reservada para claw": la suscripción de opencode Go paga el modelo propio de `main` en la Mini, y un encargo "por CLI" que corre opencode en la Mac no la gasta. Confirma su orden del 2026-10-03: "opencode debe usar solo [la suscripción de Z.AI], no la suscripción opencode go ni zen". B19 había abierto cuatro alias `opencode@opencode-go/*` (`deepseek-v4-pro`, `kimi-k3`, `grok-4.7` y `qwen3.8-max`) sin consultarlo. Los cuatro están cerrados en tres lugares, y reabrir uno necesita una orden de David:
+Desde el corte del 2026-10-13, el modelo de un encargo ya no viaja en el `adapterId`. Viaja en la cabecera del brief, y lo autoriza `proveedores-permitidos.json` (secciones "Proveedores permitidos y `encargo.py`" y "El host de encargos"). Esta sección describe la ruta por alias, que sigue en el repo hasta la fase 4 de B22.
+
+Desde el 2026-10-12, "por CLI" tiene un solo adaptador, `opencode`. Hasta el corte corría solo GLM 5.3 flash del plan de Z.AI. Ese día David dijo en sesión "open code go es solamente para main". Al preguntarle por el alcance eligió "Reservada para claw": la suscripción de opencode Go paga el modelo propio de `main` en la Mini, y un encargo "por CLI" que corre opencode en la Mac no la gasta. Confirma su orden del 2026-10-03: "opencode debe usar solo [la suscripción de Z.AI], no la suscripción opencode go ni zen". B19 había abierto cuatro alias `opencode@opencode-go/*` (`deepseek-v4-pro`, `kimi-k3`, `grok-4.7` y `qwen3.8-max`) sin consultarlo. Los cuatro están cerrados en tres lugares, y reabrir uno necesita una orden de David:
 
 - En R, `managedTasks.hosts.mac-local.adapters` es `["opencode"]`. Un encargo a otro alias se rechaza con `Managed CLI host adapter is not certified`.
 - En `coverage.json` los cuatro están `disabled-operator-billing`. `routing.py` y el reclamo del host los rechazan, con y sin `--canario`, y `cutover_live.py adapters` se niega a abrirlos en R (`mac-local has no tested route for …`). La prueba `test_no_opencode_go_alias_is_open_for_any_host` sale roja si un alias `opencode@opencode-go/` vuelve a `certified` o a `sandbox-tested-uncertified`.
 - En el host, `host.py opencode-model` rechaza cualquier `opencode-go/*` (`spends the opencode Go subscription, reserved for main`). Por eso `lanzar-host.sh` no arranca nada con uno de esos alias, y `native_gateway.py` tampoco arranca un host con él aunque R lo vuelva a listar.
 
-El resto de la sección describe el mecanismo, que sigue sirviendo para un alias de un proveedor permitido. El catálogo permitido hoy es `zai-coding-plan/*`. `host.py` rechaza por nombre solo `zai/*` y `opencode-go/*`; cómo se fija el catálogo lo decide el rediseño B22 (`followups.md`).
+El resto de la sección describe el mecanismo, que sigue sirviendo para un alias de un proveedor permitido. Para un alias, `host.py` rechaza por nombre solo `zai/*` y `opencode-go/*`. El catálogo permitido de los encargos lo fija `proveedores-permitidos.json`.
 
-`main` elige el modelo que hace el trabajo con el `adapterId` del encargo. `opencode` es la sesión de B8, con GLM 5.3 flash del plan de Z.AI (`zai-coding-plan/glm-5.3-flash`). `opencode@<proveedor>/<modelo>` es otro modelo que liste `opencode models`, por ejemplo `opencode@zai-coding-plan/glm-5.3`. El id lleva el modelo literal porque así es estable y se explica solo: R no le pide nada más que estar en `managedTasks.hosts.mac-local.adapters` (`managed-tasks.ts:158` de R), y el host saca de ahí el `-m` sin otra tabla. `host.py opencode-model <alias>` imprime el modelo de un alias. Rechaza un alias mal formado, cualquier `zai/*`, que cobra por token, y cualquier `opencode-go/*`, que gasta la suscripción reservada para `main`.
+`main` elige el modelo que hace el trabajo con el `adapterId` del encargo. Hasta el corte, `opencode` era la sesión de B8, con GLM 5.3 flash del plan de Z.AI (`zai-coding-plan/glm-5.3-flash`). Desde el corte lo reclama el host de encargos. `opencode@<proveedor>/<modelo>` es otro modelo que liste `opencode models`, por ejemplo `opencode@zai-coding-plan/glm-5.3`. El id lleva el modelo literal porque así es estable y se explica solo: R no le pide nada más que estar en `managedTasks.hosts.mac-local.adapters` (`managed-tasks.ts:158` de R), y el host saca de ahí el `-m` sin otra tabla. `host.py opencode-model <alias>` imprime el modelo de un alias. Rechaza un alias mal formado, cualquier `zai/*`, que cobra por token, y cualquier `opencode-go/*`, que gasta la suscripción reservada para `main`.
 
 Un host maneja una sola sesión de opencode, así que cada alias necesita su propio host. Los arranca, o reusa los que ya corren, `scripts/agent-work/lanzar-host.sh`, desde el checkout del host (`~/dev/wt/agent-work-host`):
 
@@ -209,7 +213,7 @@ Qué protegen `permitir` y `cerrar`. Que una entrada de la política no le atrib
 
 Qué no protegen, ni pretenden. A quien corre el comando en la Mac con intención de falsear: esa persona o ese agente también puede editar el JSON o el código. Contra eso la integridad de la política la dan el PR revisado, la prueba que fija los cierres y el historial de git, no este comando.
 
-El host B8 que corre hoy no lee esta política. La lee el host de encargos de la sección siguiente, que el operador lanza en la fase 2 de B22 (`followups.md`, fila B22). Hasta entonces los comandos sirven para ver y cambiar la política y para comprobar qué contestaría un pedido.
+Esta política la lee el host de encargos de la sección siguiente, que corre desde el corte del 2026-10-13 (`B22-canarios.md`). El host B8 no la leía, y está apagado.
 
 ```
 python3 scripts/agent-work/encargo.py proveedores [--refrescar]
@@ -254,11 +258,15 @@ Cerrar de emergencia:
 
 ### El host de encargos, con una sesión de opencode por encargo (B22, fase 2)
 
-Este host reemplaza al de "El host en la Mac" cuando el operador corre los pasos de la fase 2 de B22 (`followups.md`, fila B22). Hasta entonces no corre: el código está en el repo y el host B8 sigue vivo en la sesión `host`.
+Este host reemplazó al de "El host en la Mac" el 2026-10-13, con los pasos de la fase 2 de B22. El recibo del corte es `B22-canarios.md`. Corre con `--canario` hasta que `coverage.json` diga `certified` (`followups.md`, fila B22).
 
-Un solo host atiende todos los modelos. Por cada encargo reclama la tarea, lee la cabecera del brief y autoriza el modelo con la misma `authorize` de `preparar`. Si el brief no trae cabecera, corre `zai-coding-plan/glm-5.3-flash`. Después lanza `opencode run -m <modelo>` en una sesión tmux nueva, `enc-<12 hex de la operación>`, con la carpeta del encargo como cwd y como `PWD`. El host no adopta ninguna sesión, no teclea y no aprueba permisos: `opencode run` sin `--auto` niega solo cada permiso que su configuración no concede y termina.
+Un solo host atiende todos los modelos. Por cada encargo reclama la tarea, lee la cabecera del brief y autoriza el modelo con la misma `authorize` de `preparar`. Si el brief no trae cabecera, corre `zai-coding-plan/glm-5.3-flash`. Después lanza `opencode run -m <modelo>` en una sesión tmux nueva, `enc-<12 hex de la operación>`, con la carpeta del encargo como cwd y como `PWD`, y con `TMPDIR` en `runs/<op>/tmp/`. El host no adopta ninguna sesión, no teclea y no aprueba permisos.
+
+Lo que queda fuera del repo y de la carpeta de la corrida lo niega una regla `deny`. El modelo recibe el error de esa llamada y la sesión sigue. Cualquier otro permiso que opencode pregunte lo rechaza opencode solo, porque `opencode run` corre sin `--auto` y sin teclado, y entonces la sesión termina. La medición es M7 de `B22-canarios.md`.
 
 El proceso corre con el grupo `agent-work-enc1` como grupo real, en la cuenta de David. Ese grupo es la frontera del slot: al cerrar, el host mata la sesión, manda TERM y después KILL a todo proceso de David con ese `rgid`, y reporta `AbsenceVerified` solo si no queda ninguno. Si queda alguno, el recurso sigue `CleanupPending`, retiene el cupo y cada pasada vuelve a barrer. La prueba no cubre a quien llame a un binario setuid que cambia de grupo (`newgrp`, `su`) ni a quien le pida el trabajo a launchd (`open`, `launchctl`). El grupo es de uso exclusivo del host: no lances nada a mano con `newgrp agent-work-enc1`, porque el host lo ve como slot ocupado y su siguiente cierre lo mata.
+
+No corras las clases `Live*` de `scripts/tests/test-agent-work-sesion.py` mientras el host tenga un encargo en vuelo. Lanzan procesos en `agent-work-enc1`, el mismo grupo del host (`followups.md`, fila "B22 (pruebas con el grupo real)").
 
 Antes de lanzarlo:
 
@@ -288,6 +296,15 @@ python3 scripts/agent-work/encargo.py estado --tarea <taskId>
 - Sin tarea contesta el latido (`~/.local/state/agent-work-host/host.json`, que el host escribe al empezar cada pasada): `pid`, `latidoHace`, `slot` (`free`, `running` o `blocked`), `bloqueadoPor`, `tarea`, `modelo`, `checkout`, `commit`, `politica`, `cli` y `canario`. Un latido de más de 120 s contesta `sin-host` y sale con 3.
 - `slot` `blocked` significa que el grupo tiene procesos que no son de ningún encargo. `bloqueadoPor` los lista como `pid hora-de-inicio comando`. El host no reclama mientras sigan ahí. Mátalos tú, por pid.
 - Con `--tarea` contesta lo que el host sabe de esa tarea: `modelo` (el `-m` que el host lanzó de verdad, leído de `sessions/<op>/argv.json`), `cobro`, `estado` (el de la operación en el spool), `cierre` (`AbsenceVerified`, `CleanupPending` o nada), `carpetaDeSesion` (la que opencode dijo en sus logs; tiene que ser el repo del encargo), `proveedoresLlamados` (tiene que ser solo el proveedor del modelo), `permisosNegados` (cada uno como `<permiso>:<patrón>`), `salida` (el código de salida, cuando el host vio salir el proceso sin resultado) y `logTail`. Si la tarea tuvo una incidencia, `explicacion` trae `causa`, `frase` y `accion`. Nada de lo que imprime lleva la capacidad de la tarea.
+- `permisosNegados` no es una incidencia. Lista también lo que negó la regla `deny` en un encargo que terminó bien. El estreno de grok terminó `acknowledged` con dos entradas (`B22-canarios.md`).
+- Una `salida` 96, 97 o 98 es de `launch.sh`, que salió antes de llegar a opencode. Si la tarea tuvo una incidencia, la `frase` termina con la causa:
+
+  | `salida` | Lo que agrega la `frase` |
+  |---|---|
+  | 96 | "El host no pudo crear la carpeta temporal del encargo." |
+  | 97 | "El host no pudo entrar a la carpeta del encargo." |
+  | 98 | "El proceso no quedó en el grupo del slot y el host no lanzó opencode." |
+
 - Una tarea que el host no ha reclamado contesta `tarea-desconocida`, con `accion` `esperar`, y sale con 3.
 
 Dónde queda cada cosa de un encargo, con `<op>` igual al id de la operación (64 hex):
@@ -295,8 +312,10 @@ Dónde queda cada cosa de un encargo, con `<op>` igual al id de la operación (6
 | Carpeta | Dueño | Contenido |
 |---|---|---|
 | El repo del encargo | El modelo | El trabajo y el artefacto del resultado. El brief ya no se copia a `<repo>/managed-briefs/`. |
-| `enc-1/runs/<op>/` | El host escribe `assignment.json` y `brief` (los dos en modo 0400). El CLI escribe `accept.json` y `result.json`. | Es la única carpeta fuera del repo que la sesión puede tocar (`external_directory` con una sola llave). |
+| `enc-1/runs/<op>/` | El host escribe `assignment.json` y `brief` (los dos en modo 0400). El CLI escribe `accept.json` y `result.json`, y deja sus temporales en `tmp/`. | Es la única carpeta fuera del repo que `external_directory` le permite a la sesión. La regla tiene dos llaves, `"*": "deny"` y `"<corrida>/**": "allow"`, donde `<corrida>` es la ruta de esta carpeta. Van en ese orden porque opencode aplica la última que coincide. `tmp/` es el `TMPDIR` de la sesión. `launch.sh` la crea con modo 700 antes de lanzar opencode. |
 | `enc-1/sessions/<op>/` | El host | `launch.sh`, `argv.json`, `events.jsonl` (el flujo de `--format json`), `stderr.log` (los logs de opencode), y, según el caso, `exit.json` y `blocked.json`. La sesión no tiene permiso ahí. |
+
+`external_directory` no confina el shell. Cubre las herramientas de archivo de opencode y las rutas que opencode reconoce en un comando. Una redirección o un script escriben donde la cuenta de David pueda (`B22-canarios.md`, "Límite medido", y `followups.md`, fila B22-S7).
 
 Qué incidencia deja cada falla. Las dos primeras viajan a R como `transport-unavailable`, igual que `session-closed` y `delivery-unaccepted`. Esta ruta nunca emite `permission-required`.
 
@@ -305,9 +324,11 @@ Qué incidencia deja cada falla. Las dos primeras viajan a R como `transport-una
 | El host no va a lanzar el encargo: proveedor cerrado o sin permiso, modelo que no existe, cabecera mal formada, carpeta fuera de `~/dev`, ruta sin certificar u opencode que no contesta su versión | `launch-refused` | En la pasada del reclamo |
 | opencode salió sin acusar recibo, con cualquier código. O la sesión abrió en otra carpeta, y el host la mató. O el slot estuvo ocupado 300 s por procesos ajenos | `launch-failed` | En la pasada siguiente a la salida |
 | El modelo no acusó recibo | `delivery-unaccepted` | A los 300 s del lanzamiento |
-| El modelo acusó recibo y el proceso salió sin resultado. Es lo que deja un permiso negado: opencode sale con 0 | `session-closed` | En la pasada siguiente a la salida |
+| El modelo acusó recibo y el proceso salió sin resultado. Por un permiso, pasa solo cuando opencode pregunta uno distinto de `external_directory`: lo rechaza solo y sale con 0 | `session-closed` | En la pasada siguiente a la salida |
 | El resultado llegó mal formado | `invalid-result` | Al leerlo |
 | El modelo acusó recibo y no entregó | `deadline-missed` | A los 3600 s del acuse |
+
+Un permiso que niega la regla `deny` no termina la sesión y no deja incidencia. `estado --tarea` lo lista en `permisosNegados`, aunque el encargo termine bien.
 
 En todos los casos `main` corre `estado --tarea`, repite la `frase` y cancela la tarea. Con la cancelación de R el host mata su sesión, barre el grupo y libera el cupo. El host no cierra nada por un plazo vencido.
 
@@ -318,9 +339,10 @@ Reversa de la fase 2:
 1. Apaga el host nuevo: `tmux -L agent-work kill-session -t host-encargos`.
 2. Si `sqlite3 -readonly ~/.local/state/agent-work-host/enc-1/host.sqlite "select count(*) from resources where state not in ('AbsenceVerified','ReleasedAdopted')"` no imprime `0`, cancela esas tareas en R y corre la pasada `--close-only --slot-group` de arriba hasta que imprima `0`.
 3. Revierte el commit de la fase 2 en `main` y actualiza el checkout del host.
-4. Relanza el host B8 con el comando de "El host en la Mac". `lanzar-host.sh` sigue en el repo hasta la fase 4.
+4. Relanza el host B8 en la sesión `host` de `tmux -L agent-work`, con su comando exacto. Quedó guardado en `~/.local/state/encargos-loop/B22/corte/host-b8-cmd.txt`. El commit sobre el que corría, `bff085d7`, está en `host-b8-sha.txt`, en la misma carpeta. `lanzar-host.sh` sigue en el repo hasta la fase 4.
+5. Regresa la Mini a lo anterior a la fase 3. Restaura `brief.py` (`~/.local/share/agent-work/brief.py`) y la skill `encargo-cli` de `main` desde el respaldo `~/.openclaw/respaldos/pre-b22f3-20261013T050317Z/` de la Mini.
 
-Mientras `coverage.json` tenga `mac-local/opencode` en `sandbox-tested-uncertified`, un host B8 que se reinicie sobre ese código sin `--cli-canary` no reclama nada: cada pasada sale con `host adapter route is not certified`. El proceso que ya corre no lo nota, porque leyó `coverage.json` al arrancar.
+Mientras `coverage.json` tenga `mac-local/opencode` en `sandbox-tested-uncertified`, un host B8 que se reinicie sobre ese código sin `--cli-canary` no reclama nada: cada pasada sale con `host adapter route is not certified`.
 
 ### El túnel ssh del CLI de R
 
