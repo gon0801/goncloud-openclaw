@@ -13,9 +13,6 @@ TERMINAL_STATES = ("AbsenceVerified", "ReleasedAdopted")
 SENDABLE_STATES = ("CleanupPending", "AbsenceVerified", "ReleasedAdopted")
 SCHEMA_VERSION = 2
 SETTLED = ("acknowledged", "abandoned", "cancelled")
-DIALOG_STILL_OPEN = "left: permission dialog visible but Esc did not close it"
-DIALOG_ATTEMPTS = 3
-DIALOG_START = {"open_identity": None, "episode": 0, "candidate": None, "seen": 0, "clean": 0}
 
 
 def canonical(data: object) -> str:
@@ -172,23 +169,11 @@ class Spool:
                 CREATE TABLE IF NOT EXISTS cancellations (
                     operation_id TEXT PRIMARY KEY,
                     cancellation_id TEXT NOT NULL,
-                    dialog TEXT
+                    dialog TEXT  -- never written; an older checkout still selects it
                 );
                 CREATE TABLE IF NOT EXISTS reservation_claims (
                     operation_id TEXT PRIMARY KEY,
                     assignment_json TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS dialog_rejections (
-                    operation_id TEXT PRIMARY KEY,
-                    attempts INTEGER NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS dialog_watch (
-                    operation_id TEXT PRIMARY KEY,
-                    open_identity TEXT,
-                    episode INTEGER NOT NULL,
-                    candidate TEXT,
-                    seen INTEGER NOT NULL,
-                    clean INTEGER NOT NULL
                 );
             """)
             db.execute("BEGIN IMMEDIATE")
@@ -262,7 +247,7 @@ class Spool:
             return True
 
     def delivery_deferred(self, operation_id: str) -> None:
-        """attempted -> deferred when the transport proved nothing was typed; the clock restarts on retry.
+        """attempted -> deferred when nothing was launched; the clock restarts on retry.
         The first deferral keeps its own time, so a delivery cannot be deferred for ever."""
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -372,25 +357,6 @@ class Spool:
                              (task_id, incident_key)).fetchone()
         return row is not None
 
-    def dialog_state(self, operation_id: str) -> dict:
-        with self.connection() as db:
-            row = db.execute("SELECT * FROM dialog_watch WHERE operation_id=?", (operation_id,)).fetchone()
-        if row is None:
-            return dict(DIALOG_START)
-        return {field: row[field] for field in DIALOG_START}
-
-    @staticmethod
-    def _put_dialog(db, operation_id: str, state: dict) -> None:
-        db.execute("INSERT INTO dialog_watch VALUES (?,?,?,?,?,?) "
-                   "ON CONFLICT(operation_id) DO UPDATE SET open_identity=excluded.open_identity,"
-                   "episode=excluded.episode,candidate=excluded.candidate,seen=excluded.seen,clean=excluded.clean",
-                   (operation_id, state["open_identity"], state["episode"], state["candidate"],
-                    state["seen"], state["clean"]))
-
-    def save_dialog_state(self, operation_id: str, state: dict) -> None:
-        with self.connection() as db:
-            self._put_dialog(db, operation_id, state)
-
     def note_inbox_error(self, operation_id: str, error: str) -> None:
         with self.connection() as db:
             db.execute("INSERT INTO inbox_errors VALUES (?,?) ON CONFLICT(operation_id) DO UPDATE SET error=excluded.error",
@@ -448,26 +414,8 @@ class Spool:
                              (operation_id,)).fetchone()
         return json.loads(row[0]) if row else None
 
-    def cancellation(self, operation_id: str) -> dict | None:
-        with self.connection() as db:
-            row = db.execute("SELECT * FROM cancellations WHERE operation_id=?", (operation_id,)).fetchone()
-        return dict(row) if row else None
-
-    def cancellation_dialog(self, operation_id: str, outcome: str) -> None:
-        with self.connection() as db:
-            db.execute("UPDATE cancellations SET dialog=? WHERE operation_id=? AND dialog IS NULL",
-                       (outcome[:512], operation_id))
-
-    def dialog_attempt(self, operation_id: str) -> int:
-        """Count one more Esc that left a cancelled task's permission dialog on screen; returns the count."""
-        with self.connection() as db:
-            db.execute("INSERT INTO dialog_rejections VALUES (?,1) "
-                       "ON CONFLICT(operation_id) DO UPDATE SET attempts=attempts+1", (operation_id,))
-            return db.execute("SELECT attempts FROM dialog_rejections WHERE operation_id=?",
-                              (operation_id,)).fetchone()[0]
-
     def record_incident(self, task_id: str, incident_key: str, operation_id: str,
-                        incident_json: str, incident_digest: str, dialog_state: dict | None = None) -> dict:
+                        incident_json: str, incident_digest: str) -> dict:
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT * FROM incidents WHERE task_id=? AND incident_key=?",
@@ -476,8 +424,6 @@ class Spool:
                 if row["incident_digest"] != incident_digest:
                     raise ValueError("incident conflicts with different evidence")
                 return dict(row)
-            if dialog_state is not None:
-                self._put_dialog(db, operation_id, dialog_state)
             db.execute("INSERT INTO incidents VALUES (?,?,?,?,?,'pending',NULL,NULL)",
                        (task_id, incident_key, operation_id, incident_json, incident_digest))
             return dict(db.execute("SELECT * FROM incidents WHERE task_id=? AND incident_key=?",

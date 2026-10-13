@@ -23,8 +23,8 @@ from test_agent_work_acceptance import PAIR_DOC, matrix_refs, matrix_rows  # noq
 
 OUT = ROOT / "docs/evidence/agent-work/par-final"
 TIMEOUT = 3600
-# Latency measurements, and the cases that restart R gateways many times: under load their gateway calls time out.
-ALONE = ("delivery_latency", "cien_reenvios", "crash_boundaries")
+# Latency measurements: under load their gateway calls time out.
+ALONE = ("delivery_latency",)
 # Cases that run vitest inside R share R's compiled cache, so they run one after another.
 R_VITEST = ("scripts/agent-work/test-runtime.sh::", "scripts/tests/test-agent-work-integration.sh::agents_routing",
             "scripts/tests/test-agent-work-integration.sh::delegation_bypass")

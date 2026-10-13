@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A pane that paints a captured CLI screen, for the host's dialog handling in a real tmux pane.
+"""A pane that paints a captured CLI screen and logs every key it gets, in a real tmux pane.
 
 Usage: screen-cli.py <screen.ans> <after.ans> <key-log>
 

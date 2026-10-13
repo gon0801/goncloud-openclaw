@@ -11,43 +11,11 @@ run_delivery_latency() {
 }
 
 run_review_tail_restart() {
-  python3 scripts/tests/test_agent_work_review_correction_restart_e2e.py
-}
-
-run_review_tail_restart_director() {
   python3 scripts/tests/test_agent_work_review_tail_restart.py
-}
-
-run_cli_gateway() {
-  python3 scripts/tests/test_agent_work_cli_gateway_e2e.py
 }
 
 run_main_cli_loop() {
   python3 scripts/tests/test_agent_work_main_cli_loop_e2e.py
-}
-
-run_cli_silent_failure() {
-  python3 scripts/tests/test_agent_work_cli_silent_failure_e2e.py
-}
-
-run_cli_delivery_acceptance() {
-  python3 scripts/tests/test_agent_work_cli_delivery_acceptance_e2e.py
-}
-
-run_crash_boundaries() {
-  python3 scripts/tests/test_agent_work_crash_boundaries_e2e.py
-}
-
-run_cien_reenvios() {
-  python3 scripts/tests/test_agent_work_cien_reenvios_e2e.py
-}
-
-run_dispatchers_cancel() {
-  python3 scripts/tests/test_agent_work_dispatchers_cancel_e2e.py
-}
-
-run_delivery_latency_r() {
-  python3 scripts/tests/test_agent_work_delivery_latency_e2e.py
 }
 
 run_acceptance_matrix() {
@@ -62,23 +30,8 @@ case "${1:-all}" in
   all)
     run_delivery_latency
     run_review_tail_restart
-    run_review_tail_restart_director
-    run_cli_gateway
     run_main_cli_loop
-    run_cli_silent_failure
-    run_cli_delivery_acceptance
-    run_crash_boundaries
-    run_cien_reenvios
-    run_dispatchers_cancel
-    run_delivery_latency_r
     run_acceptance_matrix
-    ;;
-  review_tail_restart_director)
-    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
-      echo "review_tail_restart_director requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
-      exit 2
-    fi
-    run_review_tail_restart_director
     ;;
   acceptance_matrix)
     run_acceptance_matrix
@@ -92,14 +45,6 @@ case "${1:-all}" in
       exit 2
     fi
     python3 scripts/tests/test_agent_work_cutover_fencing_e2e.py -v
-    ;;
-  opencode_adapter)
-    # En vivo y fuera de `all`: gasta cuota de GLM en un opencode real (B8).
-    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ] || [ "${AGENT_WORK_OPENCODE_LIVE:-}" != 1 ]; then
-      echo "opencode_adapter requiere AGENT_WORK_RUNTIME_SOURCE con R construido y AGENT_WORK_OPENCODE_LIVE=1" >&2
-      exit 2
-    fi
-    python3 scripts/tests/test_agent_work_opencode_adapter_e2e.py -v
     ;;
   cutover_rollback)
     if [ -z "${AGENT_WORK_CUTOVER_CANDIDATE_PREFIX:-}" ] || [ -z "${AGENT_WORK_CUTOVER_PREVIOUS_PREFIX:-}" ] \
@@ -126,13 +71,6 @@ case "${1:-all}" in
     fi
     run_review_tail_restart
     ;;
-  cli_gateway)
-    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
-      echo "cli_gateway requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
-      exit 2
-    fi
-    run_cli_gateway
-    ;;
   main_cli_loop)
     if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
       echo "main_cli_loop requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
@@ -140,50 +78,8 @@ case "${1:-all}" in
     fi
     run_main_cli_loop
     ;;
-  cli_silent_failure)
-    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
-      echo "cli_silent_failure requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
-      exit 2
-    fi
-    run_cli_silent_failure
-    ;;
-  cli_delivery_acceptance)
-    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
-      echo "cli_delivery_acceptance requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
-      exit 2
-    fi
-    run_cli_delivery_acceptance
-    ;;
-  crash_boundaries)
-    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
-      echo "crash_boundaries requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
-      exit 2
-    fi
-    run_crash_boundaries
-    ;;
-  cien_reenvios)
-    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
-      echo "cien_reenvios requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
-      exit 2
-    fi
-    run_cien_reenvios
-    ;;
-  dispatchers_cancel)
-    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
-      echo "dispatchers_cancel requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
-      exit 2
-    fi
-    run_dispatchers_cancel
-    ;;
-  delivery_latency_r)
-    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
-      echo "delivery_latency_r requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
-      exit 2
-    fi
-    run_delivery_latency_r
-    ;;
   *)
-    echo "casos disponibles: delivery_latency, review_tail_restart, cli_gateway, main_cli_loop, cli_silent_failure, cli_delivery_acceptance, crash_boundaries, cien_reenvios, dispatchers_cancel, delivery_latency_r, review_tail_restart_director, acceptance_matrix, acceptance, acceptance_pair, cutover_fencing, cutover_rollback" >&2
+    echo "casos disponibles: delivery_latency, review_tail_restart, main_cli_loop, acceptance_matrix, acceptance, acceptance_pair, cutover_fencing, cutover_rollback" >&2
     exit 2
     ;;
 esac

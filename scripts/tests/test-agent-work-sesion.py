@@ -331,7 +331,7 @@ class Slot(unittest.TestCase):
                              progress_state_dir=str(self.root / "progress"), progress_client="unused",
                              cli_claim=self.run.claim, cli_watch=self.run.watch,
                              cli_release=self.manager.release_acknowledged,
-                             cli_cancel=lambda: self.manager.release_cancelled(self.r.host_cancellation, None),
+                             cli_cancel=lambda: self.manager.release_cancelled(self.r.host_cancellation),
                              cli_retry=self.manager.retry_cleanup, cli_beat=self.run.beat)
         except (OSError, RuntimeError, ValueError) as error:
             return str(error)

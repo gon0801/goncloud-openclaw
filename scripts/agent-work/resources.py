@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
@@ -15,7 +14,7 @@ from pathlib import Path
 from typing import Callable
 
 from contracts import OperationKey, operation_id
-from spool import DIALOG_ATTEMPTS, DIALOG_STILL_OPEN, SETTLED, TERMINAL_STATES as TERMINAL, Spool, canonical
+from spool import SETTLED, TERMINAL_STATES as TERMINAL, Spool, canonical
 
 TERMINAL_SQL = ",".join(repr(state) for state in TERMINAL)
 OWNERS = ("TaskCreated", "UserAdopted", "IntentionalPool")
@@ -45,36 +44,6 @@ def drifted_boot_id(saved: str, current: str) -> bool:
             and abs(float(saved) - float(current)) <= BOOT_DRIFT_SECONDS)
 
 
-APPROVAL_TAIL_LINES = 15
-APPROVAL_BLANK_RE = re.compile(r"[ \t\n\r\v\f]*")
-APPROVAL_CLOCK_RES = (re.compile(r"[0-9]+(\.[0-9]+)?[smh]"),
-                      re.compile(r"[0-9]{1,2}:[0-9]{2}(:[0-9]{2})?"))
-
-
-def load_approval_pattern(lib_sh: Path) -> re.Pattern:
-    match = re.search(r"^APROBACION_RE='([^']+)'$", lib_sh.read_text(encoding="utf-8"), re.M)
-    if match is None:
-        raise ValueError("APROBACION_RE not found")
-    return re.compile(match.group(1).replace("[[", "[\\["), re.IGNORECASE)
-
-
-def approval_tail(screen: str) -> list[str]:
-    lines = [line for line in screen.split("\n") if not APPROVAL_BLANK_RE.fullmatch(line)]
-    tail = []
-    for line in lines[-APPROVAL_TAIL_LINES:]:
-        for clock in APPROVAL_CLOCK_RES:
-            line = clock.sub("", line)
-        tail.append("".join(c for c in line if c == "\t" or " " <= c <= "~"))
-    return tail
-
-
-def approval_prompt_identity(screen: str, pattern: re.Pattern) -> str | None:
-    matching = [line.strip(" \t>") for line in approval_tail(screen) if pattern.search(line)]
-    if not matching:
-        return None
-    return "prompt-" + hashlib.sha256("\n".join(matching).encode()).hexdigest()
-
-
 NONCE_RE = re.compile(r"[0-9a-f]{32}")
 
 
@@ -90,11 +59,6 @@ def adopted_mark_lost(identity: dict, observed: dict, socket: str) -> str | None
     if isinstance(mark, str) and mark != identity.get("nonce") and NONCE_RE.fullmatch(mark):
         return "adopted mark superseded"
     return None
-
-
-def dialog_note(op_id: str, dialog: str) -> str:
-    """The pass error for a cancelled task's permission dialog the host could not deny cleanly."""
-    return f"{op_id}: cancelled; permission dialog {dialog}"
 
 
 class BoundaryBusy(Exception):
@@ -413,8 +377,8 @@ class ResourceManager:
 
     def release_acknowledged(self) -> tuple[int, list[str]]:
         """Close each session once R acknowledged its result. An adopted one goes back to the operator: the
-        CLI keeps running and close only revokes the host's nonce, so the next adoption takes it again. One
-        the host launched is stopped, and it counts only once its process boundary is proven empty."""
+        CLI keeps running and close only revokes the host's nonce. One the host launched is stopped, and it
+        counts only once its process boundary is proven empty."""
         with self.spool.connection() as db:
             rows = db.execute("SELECT r.task_id,r.generation,r.instance_id,o.receipt_json FROM resources r "
                               "JOIN operations o ON o.operation_id=r.operation_id "
@@ -431,14 +395,13 @@ class ResourceManager:
                 errors.append(f"{operation_id(key)}: release failed: {exc}")
         return released, errors
 
-    def release_cancelled(self, read_cancellation, reject_dialog) -> tuple[int, list[str]]:
+    def release_cancelled(self, read_cancellation) -> tuple[int, list[str]]:
         """Close the resource of every operation R cancelled, with R's cancellation id as evidence. R is asked
-        once per held operation and pass; once the spool records the cancellation, retries stay local. An
-        adopted pane gets its permission dialog denied first, while the host's nonce still proves the pane.
+        once per held operation and pass; once the spool records the cancellation, retries stay local.
         A session an abandoned delivery already gave back has no evidence, so its closure never reached R;
         once R cancels that task, the cancellation becomes its evidence and flush_closures sends it."""
         with self.spool.connection() as db:
-            rows = db.execute("SELECT r.*,o.operation_json,c.cancellation_id,c.dialog FROM resources r "
+            rows = db.execute("SELECT r.*,o.operation_json,c.cancellation_id FROM resources r "
                               "JOIN operations o ON o.operation_id=r.operation_id "
                               "LEFT JOIN cancellations c ON c.operation_id=r.operation_id "
                               f"WHERE (r.state NOT IN ({','.join('?' * len(TERMINAL))}) "
@@ -455,7 +418,7 @@ class ResourceManager:
                 evidence = json.loads(row["evidence_json"]) if row["evidence_json"] else None
                 if evidence is not None and evidence.get("kind") != "cancel":
                     continue
-                cancellation_id, dialog = row["cancellation_id"], row["dialog"]
+                cancellation_id = row["cancellation_id"]
                 if row["state"] in TERMINAL:
                     cancellation_id = read_cancellation(json.loads(row["operation_json"]))
                     if cancellation_id is not None:
@@ -470,19 +433,6 @@ class ResourceManager:
                     if cancellation_id is None:
                         continue
                     self.spool.cancel(op_id, cancellation_id)
-                if (dialog is None and row["ownership"] == "UserAdopted" and row["state"] == "Running"
-                        and row["identity_json"]):
-                    dialog = reject_dialog(json.loads(row["identity_json"]))
-                    if dialog == DIALOG_STILL_OPEN:
-                        attempts = self.spool.dialog_attempt(op_id)
-                        if attempts < DIALOG_ATTEMPTS:
-                            errors.append(f"{dialog_note(op_id, dialog)}, attempt {attempts} of "
-                                          f"{DIALOG_ATTEMPTS}; the session stays held")
-                            continue
-                        dialog = f"{dialog} after {attempts} attempts"
-                    self.spool.cancellation_dialog(op_id, dialog)
-                    if dialog.startswith("left"):
-                        errors.append(dialog_note(op_id, dialog))
                 view = self.close(key, {"kind": "cancel", "receipt": cancellation_id})
                 if view.state in TERMINAL:
                     released += 1
@@ -538,23 +488,6 @@ class ResourceManager:
                 errors.append(f"{operation_id(key)}: cleanup retry failed: {exc}")
         return released, errors
 
-    def session_gone(self, key: OperationKey) -> bool:
-        try:
-            row = self._row(key)
-        except ValueError:
-            return False
-        if row["state"] != "Running" or not row["identity_json"]:
-            return False
-        identity = json.loads(row["identity_json"])
-        if not identity.get("socket") or identity["socket"] != getattr(self.backend, "socket", None):
-            return False
-        try:
-            if self.backend.observe(row["session_name"]) == identity:
-                return False
-            return self.backend.pane_gone(identity) is True
-        except OSError:
-            return False
-
     def _running_identity(self, key: OperationKey) -> dict | None:
         try:
             row = self._row(key)
@@ -590,21 +523,6 @@ class ResourceManager:
             rows = db.execute("SELECT operation_id,task_id,state FROM resources "
                               f"WHERE state NOT IN ({TERMINAL_SQL}) ORDER BY operation_id").fetchall()
         return [dict(row) for row in rows]
-
-    def prompt_identity(self, key: OperationKey, pattern: re.Pattern) -> str | None:
-        try:
-            row = self._row(key)
-        except ValueError:
-            return None
-        if row["state"] != "Running" or not row["identity_json"]:
-            return None
-        try:
-            screen = self.backend.capture(json.loads(row["identity_json"]))
-        except OSError:
-            return None
-        if screen is None:
-            return None
-        return approval_prompt_identity(screen, pattern) or ""
 
     def counts(self) -> dict:
         with self.spool.connection() as db:
@@ -720,14 +638,6 @@ class TmuxBackend:
         result = _ps("-p", str(pane_pid), "-o", "pid=")
         return result.returncode == 1 and result.stdout == "" and result.stderr == ""
 
-    def capture(self, identity: dict) -> str | None:
-        if self.observe(identity["sessionName"]) != identity:
-            return None
-        result = self._tmux("capture-pane", "-p", "-t", identity["paneId"])
-        if result.returncode or self.observe(identity["sessionName"]) != identity:
-            return None
-        return result.stdout
-
     def prove_absent(self, identity: dict) -> bool | None:
         if self.observe(identity["sessionName"]) == identity:
             return False
@@ -735,14 +645,6 @@ class TmuxBackend:
         # outlive the pane, and be reparented; PID and session scans cannot
         # prove that every such child has exited.
         return None
-
-    def send_key(self, identity: dict, key: str) -> bool:
-        """One named key to the pane, only while it still carries this identity and its nonce."""
-        if key not in ("Escape",):
-            raise ValueError("only a measured reject key is sent")
-        fields = (str(identity["serverPid"]), identity["sessionId"], identity["paneId"],
-                  str(identity["panePid"]), identity["nonce"])
-        return self._guarded(fields, f"send-keys -t {identity['paneId']} {key}")
 
     def revoke(self, identity: dict) -> bool:
         if self.observe(identity["sessionName"]) != identity:

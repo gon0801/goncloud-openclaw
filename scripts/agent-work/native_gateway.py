@@ -328,28 +328,12 @@ def _cached_brief(target, digest):
 
 
 def fetch_brief(client, claim, run):
-    """The brief of a run-per-task claim, in its run directory, mode 0400. It no longer lands in
-    <repo>/managed-briefs/, and it is downloaded before the task's folder is looked at."""
+    """The brief of a claim, in its run directory, mode 0400. It is downloaded before the task's folder is
+    looked at."""
     digest = _brief_digest(claim)
     if not _cached_brief(run.brief, digest):
         _publish_brief(run.path, run.brief, _download_brief(client, claim, digest), digest)
     return run.brief
-
-
-def _brief_to_workspace(client, claim, workspace_root):
-    digest = _brief_digest(claim)
-    root = Path(workspace_root)
-    if root.is_symlink():
-        raise ValueError("host workspace root is a symlink")
-    root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    briefs = root / "managed-briefs"
-    if briefs.is_symlink():
-        raise ValueError("host brief directory is a symlink")
-    briefs.mkdir(mode=0o700, exist_ok=True)
-    target = briefs / digest[7:]
-    if not _cached_brief(target, digest):
-        _publish_brief(briefs, target, _download_brief(client, claim, digest), digest)
-    return target
 
 
 def _claim(client, adapter_id, instance_id):
@@ -379,37 +363,6 @@ def _claim(client, adapter_id, instance_id):
     if not isinstance(assignment.get("inputRevision"), dict) or not assignment.get("resultContract"):
         raise ValueError("host claim contract invalid")
     return claim
-
-
-def claim_cli_once(client, *, host, manager, adapter_id, instance_id, session,
-                   workspace_root, deliver, coverage):
-    """Deliver to an existing session; adopting it never grants permission to stop it."""
-    if coverage.get("hostAdapterCoverage", {}).get(client.host_id, {}).get(adapter_id) != "certified":
-        raise ValueError("host adapter route is not certified")
-    if not manager.can_take(instance_id):
-        return None
-    claim = _claim(client, adapter_id, instance_id)
-    if claim is None:
-        return None
-    capability, assignment = claim["capability"], claim["assignment"]
-    brief = _brief_to_workspace(client, claim, workspace_root)
-    key = OperationKey(client.host_id, claim["taskId"], claim["generation"], instance_id)
-    manager.reserve(key, session, "UserAdopted", claim={
-        "hostId": client.host_id, "taskId": claim["taskId"], "generation": claim["generation"],
-        "instanceId": instance_id, "producerId": adapter_id, "capability": capability["token"],
-        "adapterId": adapter_id})
-    if manager.begin_launch(key).launch_now:
-        manager.mark(key)
-    if manager.attach(key).state != "Running":
-        raise RuntimeError("host resource identity is not running")
-    operation = AuthorizedOperation(
-        key=key, producer_id=adapter_id, capability=capability["token"], session=session,
-        workspace_ref=str(Path(workspace_root)), brief_ref=str(brief),
-        brief_digest=assignment["instructionRef"]["digest"][7:],
-        input_revision=assignment["inputRevision"], result_contract=assignment["resultContract"],
-        claim_id=claim["claimId"], adapter_id=adapter_id,
-    )
-    return host.apply(key, operation, deliver, client.admit_host)
 
 
 RUN_ADAPTER = "opencode"
@@ -744,9 +697,9 @@ class ProgressPublisher:
 
 
 def close_pass(client, *, host, cli_release=None, cli_cancel=None, cli_retry=None, close_host=None):
-    """Report results, release acknowledged adopted sessions, release cancelled tasks, retry pending
-    cleanups and send the closures to R. Claims, delivers and types nothing; the cancellation step alone
-    may deny a cancelled task's permission dialog. Returns counts, the report error and the other errors."""
+    """Report results, release acknowledged sessions, release cancelled tasks, retry pending cleanups and
+    send the closures to R. Claims and delivers nothing. Returns counts, the report error and the other
+    errors."""
     receipts = []
     report_error = None
     try:
@@ -807,8 +760,7 @@ def close_only(client, *, host, manager, before):
 
     counts, report_error, errors = close_pass(
         client, host=host, cli_release=manager.release_acknowledged,
-        # A launched session shows no dialog to deny: `opencode run` denies a permission and ends.
-        cli_cancel=lambda: manager.release_cancelled(client.host_cancellation, None),
+        cli_cancel=lambda: manager.release_cancelled(client.host_cancellation),
         cli_retry=manager.retry_cleanup, close_host=close_host)
     if report_error is not None:
         errors.insert(0, f"report failed: {report_error}")
@@ -976,7 +928,7 @@ def main(argv=None):
                       result_deadline_seconds=args.result_deadline_seconds)
         cli_claim, cli_watch, cli_beat = run.claim, run.watch, run.beat
         cli_release, cli_retry = manager.release_acknowledged, manager.retry_cleanup
-        cli_cancel = lambda: manager.release_cancelled(client.host_cancellation, None)
+        cli_cancel = lambda: manager.release_cancelled(client.host_cancellation)
     elif args.claim_once or args.cli_instance_id or args.cli_tmux_socket:
         parser.error("a host claims only with --workspace-root")
     if args.claim_once:

@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-import base64
 import json
 import hashlib
 import os
-import re
 import secrets
 import signal
 import shutil
@@ -20,9 +18,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 
 from contracts import AuthorizedOperation, OperationKey, operation_id
-from host import Host, cli_adapter, read_composer, reject_permission_dialog
+from host import Host
+from sesion import GroupBoundaryBackend
 from spool import canonical
-from native_gateway import (GatewayProjectionClient, claim_cli_once, claim_run_once, close_only, pump_once,
+from native_gateway import (GatewayProjectionClient, claim_run_once, close_only, pump_once,
                             read_spool_resources)
 from resources import (AccountBusyError, AGENT_USER, AgentesBackend, AgentProcess, CommandOutcome,
                        LOCK_ARGV, ResourceManager, TmuxBackend, parse_agent_ps)
@@ -183,7 +182,7 @@ class ResourceTests(unittest.TestCase):
                             "replacement", "TaskCreated")
 
     def adopt(self, manager, key, pid):
-        """The host adopts the operator's opencode session "oc" for key, as claim_cli_once does."""
+        """A resource of the operator's opencode session "oc" for key, as the adopted-session host left them."""
         held = manager.reserve(key, "oc", "UserAdopted")
         manager.begin_launch(key)
         self.backend.launch("oc", held.nonce, pid)
@@ -402,22 +401,18 @@ class ResourceTests(unittest.TestCase):
         self.host.spool.delivered(operation_id(key))
         return operation
 
-    def cancel_pass(self, client, manager, dialogs, claims):
-        def reject(identity):
-            dialogs.append(identity)
-            return "rejected"
-
+    def cancel_pass(self, client, manager, claims):
         return pump_once(client, host=self.host, evidence_root=self.tmp.name, progress_state_dir=self.tmp.name,
                          progress_client="unused",
-                         cli_cancel=lambda: manager.release_cancelled(client.host_cancellation, reject),
+                         cli_cancel=lambda: manager.release_cancelled(client.host_cancellation),
                          cli_claim=lambda: claims.append(manager.can_take("instance-1")))
 
     def test_the_pump_releases_a_task_r_cancelled_and_frees_the_host_in_the_same_pass(self):
         manager = ResourceManager(self.host.spool, "host-test", self.backend, capacity=1)
         self.held_opencode(manager, self.key, 705)
         identity = self.backend.live["oc"]
-        client, dialogs, claims = self.cancelling_client({"task-1": "cancel-1"}), [], []
-        self.assertEqual(self.cancel_pass(client, manager, dialogs, claims),
+        client, claims = self.cancelling_client({"task-1": "cancel-1"}), []
+        self.assertEqual(self.cancel_pass(client, manager, claims),
                          {"reported": 0, "transferred": 0, "published": 0, "closed": 1, "incidents": 0, "claimed": 0,
                           "cancelled": 1})
         with self.host.spool.connection() as db:
@@ -427,19 +422,15 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual(client.closures, [("task-1", "ReleasedAdopted", "", hashlib.sha256(
             b'{"kind":"cancel","receipt":"cancel-1"}').hexdigest())])
         self.assertEqual(self.host.spool.get(operation_id(self.key))["status"], "cancelled")
-        self.assertEqual(self.host.spool.cancellation(operation_id(self.key)),
-                         {"operation_id": operation_id(self.key), "cancellation_id": "cancel-1",
-                          "dialog": "rejected"})
-        self.assertEqual(dialogs, [identity], "the permission dialog was not answered before the release")
         self.assertEqual(claims, [True], "the claim of the same pass found the host full")
         self.assertEqual((self.backend.stops, self.backend.revokes), ([], [identity]),
                          "cancelling stopped the operator's CLI")
         self.assertIn("oc", self.backend.live)
 
-        self.assertEqual(self.cancel_pass(client, manager, dialogs, claims),
+        self.assertEqual(self.cancel_pass(client, manager, claims),
                          {"reported": 0, "transferred": 0, "published": 0, "closed": 0, "incidents": 0, "claimed": 0,
                           "cancelled": 0})
-        self.assertEqual((client.reads, len(client.closures), len(dialogs)), (["task-1"], 1, 1))
+        self.assertEqual((client.reads, len(client.closures)), (["task-1"], 1))
         following = OperationKey("host-test", "task-2", 1, "instance-1")
         self.assertEqual(self.host.apply(following, self.adopt(manager, following, 706), lambda *_: None,
                                          self.admit).status, "delivered")
@@ -447,9 +438,9 @@ class ResourceTests(unittest.TestCase):
     def test_a_task_r_did_not_cancel_keeps_its_session(self):
         manager = ResourceManager(self.host.spool, "host-test", self.backend, capacity=1)
         self.held_opencode(manager, self.key, 707)
-        client, dialogs, claims = self.cancelling_client({}), [], []
+        client, claims = self.cancelling_client({}), []
         for _ in range(2):
-            self.assertEqual(self.cancel_pass(client, manager, dialogs, claims),
+            self.assertEqual(self.cancel_pass(client, manager, claims),
                              {"reported": 0, "transferred": 0, "published": 0, "closed": 0, "incidents": 0, "claimed": 0,
                               "cancelled": 0})
         self.assertEqual(client.reads, ["task-1", "task-1"])
@@ -457,30 +448,25 @@ class ResourceTests(unittest.TestCase):
             self.assertEqual(tuple(db.execute("SELECT state, evidence_json FROM resources WHERE operation_id=?",
                                               (operation_id(self.key),)).fetchone()), ("Running", None))
         self.assertEqual(self.host.spool.get(operation_id(self.key))["status"], "delivered")
-        self.assertEqual((client.closures, dialogs, self.backend.revokes), ([], [], []))
+        self.assertEqual((client.closures, self.backend.revokes), ([], []))
         self.assertFalse(manager.can_take("instance-2"))
 
     def test_a_cancellation_whose_release_failed_retries_without_asking_r_again(self):
         manager = ResourceManager(self.host.spool, "host-test", self.backend, capacity=1)
         self.held_opencode(manager, self.key, 708)
-        client, dialogs, claims = self.cancelling_client({"task-1": "cancel-1"}), [], []
-
-        def reject_then_drop(identity):
-            dialogs.append(identity)
-            self.backend.offline = True
-            return "rejected"
-
+        client, claims = self.cancelling_client({"task-1": "cancel-1"}), []
+        self.backend.offline = True
         with self.assertRaisesRegex(RuntimeError, "cancelled; resource CleanupPending: host unavailable"):
             pump_once(client, host=self.host, evidence_root=self.tmp.name, progress_state_dir=self.tmp.name,
                       progress_client="unused",
-                      cli_cancel=lambda: manager.release_cancelled(client.host_cancellation, reject_then_drop))
+                      cli_cancel=lambda: manager.release_cancelled(client.host_cancellation))
         self.assertEqual(self.host.spool.get(operation_id(self.key))["status"], "cancelled")
         self.assertFalse(manager.can_take("instance-1"))
         self.backend.offline = False
-        self.assertEqual(self.cancel_pass(client, manager, dialogs, claims),
+        self.assertEqual(self.cancel_pass(client, manager, claims),
                          {"reported": 0, "transferred": 0, "published": 0, "closed": 1, "incidents": 0, "claimed": 0,
                           "cancelled": 1})
-        self.assertEqual((client.reads, len(dialogs)), (["task-1"], 1))
+        self.assertEqual(client.reads, ["task-1"])
         self.assertEqual([closure[1:3] for closure in client.closures],
                          [("CleanupPending", "host unavailable"), ("ReleasedAdopted", "")])
         self.assertEqual(claims, [True])
@@ -494,174 +480,26 @@ class ResourceTests(unittest.TestCase):
 
         self.assertEqual(self.host.apply(self.key, operation, lost, self.admit).status, "uncertain")
         self.host.resolve_delivery("host-test", self.key, "abandoned", "un diálogo se comió la referencia")
-        cancellations, dialogs, claims = {}, [], []
+        cancellations, claims = {}, []
         client = self.cancelling_client(cancellations)
-        self.assertEqual(self.cancel_pass(client, manager, dialogs, claims)["closed"], 0)
+        self.assertEqual(self.cancel_pass(client, manager, claims)["closed"], 0)
         self.assertEqual((client.reads, client.closures), (["task-1"], []))
         cancellations["task-1"] = "cancel-1"
-        self.assertEqual(self.cancel_pass(client, manager, dialogs, claims),
+        self.assertEqual(self.cancel_pass(client, manager, claims),
                          {"reported": 0, "transferred": 0, "published": 0, "closed": 1, "incidents": 0, "claimed": 0,
                           "cancelled": 1})
         self.assertEqual(client.closures, [("task-1", "ReleasedAdopted", "delivery abandoned", hashlib.sha256(
             b'{"kind":"cancel","receipt":"cancel-1"}').hexdigest())])
-        self.assertEqual(self.cancel_pass(client, manager, dialogs, claims)["closed"], 0)
-        self.assertEqual((client.reads, len(client.closures), dialogs), (["task-1", "task-1"], 1, []))
+        self.assertEqual(self.cancel_pass(client, manager, claims)["closed"], 0)
+        self.assertEqual((client.reads, len(client.closures)), (["task-1", "task-1"], 1))
         self.assertEqual(self.host.spool.get(operation_id(self.key))["status"], "abandoned")
         self.assertEqual((self.backend.stops, self.backend.revokes), ([], []), "the closure touched the CLI")
-
-    def dialog_retry(self, outcomes, key=None):
-        """A task R cancelled while its adopted pane answers each Esc with the next of outcomes. Returns the
-        Gateway client, the Esc attempts so far and one pump pass: its closure count, or its error."""
-        key = key or self.key
-        manager = ResourceManager(self.host.spool, "host-test", self.backend, capacity=1)
-        self.held_opencode(manager, key, 720)
-        client = self.cancelling_client({key.task_id: "cancel-1"})
-        script, tried = list(outcomes), []
-
-        def reject(identity):
-            tried.append(identity)
-            return script.pop(0)
-
-        def one_pass():
-            try:
-                return pump_once(client, host=self.host, evidence_root=self.tmp.name,
-                                 progress_state_dir=self.tmp.name, progress_client="unused",
-                                 cli_cancel=lambda: manager.release_cancelled(client.host_cancellation,
-                                                                              reject))["closed"]
-            except RuntimeError as exc:
-                return str(exc)
-
-        return client, tried, one_pass
-
-    def test_a_permission_dialog_the_esc_left_on_screen_keeps_the_session_and_is_retried(self):
-        client, tried, one_pass = self.dialog_retry(
-            ["left: permission dialog visible but Esc did not close it", "rejected"])
-        op_id = operation_id(self.key)
-        self.assertEqual(one_pass(), f"{op_id}: cancelled; permission dialog left: permission dialog visible but "
-                                     "Esc did not close it, attempt 1 of 3; the session stays held")
-        self.assertEqual(self.resource(self.key), ("Running", ""))
-        self.assertEqual((client.closures, self.backend.revokes), ([], []), "the host let go of the pane")
-        self.assertEqual(self.host.spool.cancellation(op_id)["dialog"], None)
-        self.assertEqual(one_pass(), 1)
-        self.assertEqual(client.closures, [("task-1", "ReleasedAdopted", "", hashlib.sha256(
-            b'{"kind":"cancel","receipt":"cancel-1"}').hexdigest())])
-        self.assertEqual(self.host.spool.cancellation(op_id)["dialog"], "rejected")
-        self.assertEqual(one_pass(), 0)
-        self.assertEqual((len(tried), client.reads), (2, ["task-1"]))
-
-    def test_a_permission_dialog_that_never_closes_is_released_after_three_attempts(self):
-        still = "left: permission dialog visible but Esc did not close it"
-        client, tried, one_pass = self.dialog_retry([still] * 3)
-        op_id = operation_id(self.key)
-        self.assertEqual([one_pass() for _ in range(4)], [
-            f"{op_id}: cancelled; permission dialog {still}, attempt 1 of 3; the session stays held",
-            f"{op_id}: cancelled; permission dialog {still}, attempt 2 of 3; the session stays held",
-            f"{op_id}: cancelled; permission dialog {still} after 3 attempts",
-            0])
-        self.assertEqual(len(tried), 3)
-        self.assertEqual(self.resource(self.key), ("ReleasedAdopted", ""))
-        self.assertEqual(self.host.spool.cancellation(op_id)["dialog"], f"{still} after 3 attempts")
-        self.assertEqual([closure[1:3] for closure in client.closures], [("ReleasedAdopted", "")])
-
-    def test_any_other_dialog_outcome_releases_the_session_in_the_same_pass(self):
-        for index, outcome in enumerate(("left: no empty composer after the reject key", "left: pane unverifiable",
-                                         "left: reject key not sent")):
-            with self.subTest(outcome):
-                key = OperationKey("host-test", f"task-left-{index}", 1, "instance-1")
-                client, tried, one_pass = self.dialog_retry([outcome], key)
-                self.assertEqual(one_pass(), f"{operation_id(key)}: cancelled; permission dialog {outcome}")
-                self.assertEqual(self.resource(key), ("ReleasedAdopted", ""))
-                self.assertEqual(self.host.spool.cancellation(operation_id(key))["dialog"], outcome)
-                self.assertEqual(([closure[1] for closure in client.closures], len(tried)),
-                                 (["ReleasedAdopted"], 1))
-
-    def orphan(self, attached):
-        """claim_cli_once adopts the operator's session "oc" for task-1, and the host dies before registering
-        the operation: right after reserve, or after attach. Returns the manager a restarted host opens."""
-        brief = b"revisa el cambio"
-        digest = hashlib.sha256(brief).hexdigest()
-        claim = {"hostId": "host-test", "adapterId": "opencode", "instanceId": "instance-1", "taskId": "task-1",
-                 "generation": 1, "claimId": "claim-task-1",
-                 "capability": {"taskId": "task-1", "generation": 1, "producerId": "opencode", "token": "cap-task-1"},
-                 "assignment": {"target": {"kind": "cli", "hostId": "host-test", "adapterId": "opencode"},
-                                "inputRevision": {"kind": "code", "repository": "repo", "sha": "a" * 40},
-                                "resultContract": "review.v1",
-                                "instructionRef": {"ref": "artifact:" + digest, "digest": "sha256:" + digest}}}
-
-        class Client:
-            host_id = "host-test"
-
-            def claim_host(self, *_):
-                return claim
-
-            def brief_chunk(self, adapter_id, instance_id, task_id, claim_id, offset, length):
-                return {"taskId": task_id, "claimId": claim_id, "digest": "sha256:" + digest, "offset": offset,
-                        "size": len(brief), "dataBase64": base64.b64encode(brief[offset:offset + length]).decode()}
-
-            def admit_host(self, _):
-                raise AssertionError("the host died before admitting")
-
-        class HostDied(Exception):
-            pass
-
-        self.backend.launch("oc", "", 730)
-        manager = ResourceManager(self.host.spool, "host-test", self.backend, capacity=1)
-        with mock.patch.object(*((self.host, "apply") if attached else (manager, "begin_launch")),
-                               side_effect=HostDied), self.assertRaises(HostDied):
-            claim_cli_once(Client(), host=self.host, manager=manager, adapter_id="opencode",
-                           instance_id="instance-1", session="oc", workspace_root=self.tmp.name,
-                           deliver=lambda *_: None,
-                           coverage={"hostAdapterCoverage": {"host-test": {"opencode": "certified"}}})
-        self.assertIsNone(self.host.spool.get(operation_id(self.key)))
-        return ResourceManager(self.host.spool, "host-test", self.backend, capacity=1)
-
-    def orphan_pass(self, client, manager, dialogs):
-        return pump_once(client, host=self.host, evidence_root=self.tmp.name, progress_state_dir=self.tmp.name,
-                         progress_client="unused",
-                         cli_cancel=lambda: manager.release_cancelled(client.host_cancellation, dialogs.append))
-
-    def test_a_reservation_whose_host_died_before_registering_closes_once_r_cancels_its_task(self):
-        for attached, reason in ((False, "adopted session never marked"), (True, "")):
-            with self.subTest(attached=attached):
-                self.setUp()
-                manager = self.orphan(attached)
-                self.assertFalse(manager.can_take("instance-2"))
-                client, dialogs = self.cancelling_client({"task-1": "cancel-1"}), []
-                asked = []
-                read = client.host_cancellation
-                client.host_cancellation = lambda assignment: asked.append(assignment) or read(assignment)
-                self.assertEqual(self.orphan_pass(client, manager, dialogs),
-                                 {"reported": 0, "transferred": 0, "published": 0, "closed": 1, "incidents": 0,
-                                  "cancelled": 1})
-                self.assertEqual(asked, [{"hostId": "host-test", "taskId": "task-1", "generation": 1,
-                                          "instanceId": "instance-1", "producerId": "opencode",
-                                          "capability": "cap-task-1", "adapterId": "opencode"}])
-                self.assertEqual(self.resource(self.key), ("ReleasedAdopted", reason))
-                self.assertEqual(client.closures, [("task-1", "ReleasedAdopted", reason, hashlib.sha256(
-                    b'{"kind":"cancel","receipt":"cancel-1"}').hexdigest())])
-                self.assertTrue(manager.can_take("instance-2"))
-                self.assertEqual(manager.reserve(OperationKey("host-test", "task-2", 1, "instance-2"), "oc2",
-                                                 "UserAdopted").state, "Reserved")
-                self.assertEqual(self.orphan_pass(client, manager, dialogs)["closed"], 0)
-                self.assertEqual((len(asked), len(client.closures)), (1, 1), "R was asked or told twice")
-                self.assertEqual((dialogs, self.backend.stops), ([], []), "the release typed or stopped")
-                self.assertEqual(len(self.backend.revokes), int(attached))
-                self.assertIn("oc", self.backend.live, "the release ended the operator's session")
-
-    def test_a_reservation_r_did_not_cancel_keeps_its_session(self):
-        manager = self.orphan(attached=False)
-        client, dialogs = self.cancelling_client({}), []
-        for _ in range(2):
-            self.assertEqual(self.orphan_pass(client, manager, dialogs)["cancelled"], 0)
-        self.assertEqual((client.reads, client.closures, dialogs), (["task-1", "task-1"], [], []))
-        self.assertEqual(self.resource(self.key), ("Reserved", ""))
-        self.assertFalse(manager.can_take("instance-2"))
 
     def test_a_reservation_without_its_claim_is_never_closed(self):
         self.manager.reserve(self.key, "oc", "UserAdopted")
         manager = ResourceManager(self.host.spool, "host-test", self.backend, capacity=1)
-        client, dialogs = self.cancelling_client({"task-1": "cancel-1"}), []
-        self.assertEqual(self.orphan_pass(client, manager, dialogs)["cancelled"], 0)
+        client = self.cancelling_client({"task-1": "cancel-1"})
+        self.assertEqual(self.cancel_pass(client, manager, [])["cancelled"], 0)
         self.assertEqual((client.reads, client.closures), ([], []))
         self.assertEqual(self.resource(self.key), ("Reserved", ""))
 
@@ -1739,7 +1577,6 @@ class ResourceTests(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 5, "a hung tmux froze the host loop")
         self.assertEqual((attached.state, attached.reason), ("CleanupPending", "host unavailable"))
         self.assertEqual((closed.state, closed.reason), ("CleanupPending", "host unavailable"))
-        self.assertFalse(manager.session_gone(self.key))
         with self.assertRaisesRegex(ValueError, "capacity"):
             manager.reserve(OperationKey("host-test", "replacement", 1, "instance-new"), "replacement", "TaskCreated")
 
@@ -2284,6 +2121,25 @@ class LegacyAdoptionTests(unittest.TestCase):
             "Managed host closure requires a final result or cancellation"])
         self.assertEqual((failed, report["rClosures"]), (True, []))
 
+    def test_a_closing_pass_never_touches_a_running_adopted_session_whose_task_r_cancelled(self):
+        """The pass over the backend main() gives it. It keeps the session while its pane carries the host's
+        mark, and gives it back once the operator clears that mark."""
+        spool_dir = self.root / "viva"
+        key = self.delivered(Host("host-test", spool_dir), "canario-1", "task-a")
+        state, log = self.root / "r-state.json", self.root / "r-calls.jsonl"
+        state.write_text(json.dumps({"cancellations": {"task-a": "cancel-a"}, "results": [], "closures": {}}))
+        self.backend = GroupBoundaryBackend(self.tmux_bin, self.socket, "slot", gid=os.getgid() + 1, table=lambda: "")
+        report, failed = self.close_only(spool_dir, state, log)
+        self.assertEqual((failed, report["errors"]), (True, [
+            f"{operation_id(key)}: cancelled; resource CleanupPending: adopted identity uncertain"]))
+        self.assertEqual(self.tmux("set-option", "-u", "-t", "=canario:", TmuxBackend.NONCE_OPTION).returncode, 0)
+        report, failed = self.close_only(spool_dir, state, log)
+        self.assertEqual((failed, [resource["after"] for resource in report["resources"]]),
+                         (False, [["ReleasedAdopted", "adopted mark cleared"]]))
+        time.sleep(0.3)
+        self.assertEqual((self.keys.read_text() if self.keys.exists() else "", self.pane_field("pane_pid")),
+                         ("", self.cli_pid), "the pass touched the operator's pane")
+
     def test_a_closing_pass_closes_both_legacy_spools_once_and_asks_r_for_no_work(self):
         spool_dir = self.root / "legacy"
         host = Host("host-test", spool_dir)
@@ -2327,119 +2183,6 @@ class LegacyAdoptionTests(unittest.TestCase):
         self.assertEqual((self.pane_field(TmuxBackend.NONCE_OPTION), self.pane_field("pane_pid")),
                          (newer_mark, self.cli_pid))
 
-
-class PermissionDialogTests(unittest.TestCase):
-    """opencode 1.18.35 screens captured 2026-10-11, painted in panes of a tmux server of the test's own."""
-
-    SCREENS = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "opencode"
-    SCREEN_CLI = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "screen-cli.py"
-
-    def setUp(self):
-        self.tmux_bin = shutil.which("tmux")
-        if not self.tmux_bin:
-            self.skipTest("tmux not installed")
-        self.socket = f"agent-work-dialog-{os.getpid()}-{secrets.token_hex(3)}"
-        self.addCleanup(self.tmux, "kill-server")
-        self.tmp = tempfile.TemporaryDirectory(prefix="agent-work-dialog-")
-        self.addCleanup(self.tmp.cleanup)
-        self.backend = TmuxBackend(self.tmux_bin, self.socket)
-        self.adapter = cli_adapter("opencode")
-
-    def tmux(self, *args):
-        return subprocess.run([self.tmux_bin, "-L", self.socket, *args], capture_output=True, text=True)
-
-    def pane(self, session, screen, after="permission-rejected", mark=None):
-        log = Path(self.tmp.name) / f"{session}.keys"
-        lines = [re.sub(r"\x1b\[[0-9;]*m", "", line) for name in (screen, after)
-                 for line in (self.SCREENS / f"{name}.ans").read_text().rstrip("\n").split("\n")]
-        width = str(max(len(line) for line in lines) + 2)
-        height = str(max(len((self.SCREENS / f"{name}.ans").read_text().rstrip("\n").split("\n"))
-                         for name in (screen, after)))
-        started = self.tmux("new-session", "-d", "-s", session, "-x", width, "-y", height, "--", sys.executable,
-                            str(self.SCREEN_CLI), str(self.SCREENS / f"{screen}.ans"),
-                            str(self.SCREENS / f"{after}.ans"), str(log))
-        self.assertEqual(started.returncode, 0, started.stderr)
-        if mark is None:
-            self.backend.mark(session, f"nonce-{session}")
-        else:
-            mark()
-        identity = self.backend.observe(session)
-        deadline, shown = time.monotonic() + 5, None
-        while time.monotonic() < deadline:
-            time.sleep(0.05)
-            screen = self.backend.capture(identity) or ""
-            if screen.strip() and screen == shown:
-                break
-            shown = screen
-        return identity, log
-
-    def keys(self, log):
-        time.sleep(0.5)
-        return log.read_text() if log.exists() else ""
-
-    def test_a_cancelled_task_denies_the_permission_dialog_and_leaves_an_empty_composer(self):
-        identity, log = self.pane("oc", "permission-dialog")
-        self.assertEqual(reject_permission_dialog(self.backend, identity, self.adapter), "rejected")
-        self.assertEqual(self.keys(log), "Escape\n", "the dialog got an answer other than a denial")
-        self.assertEqual(read_composer(self.backend.capture(identity), "opencode", self.adapter.placeholders),
-                         ("VACIO", ""))
-        self.assertEqual(self.backend.observe("oc"), identity, "denying the dialog touched the session")
-
-    def test_a_pane_without_the_permission_dialog_is_left_untouched(self):
-        for session, screen, outcome in (("empty", "session-empty", "none"), ("draft", "session-draft", "none"),
-                                         ("update", "update-dialog", "left: opencode dialog open")):
-            identity, log = self.pane(session, screen)
-            self.assertEqual(reject_permission_dialog(self.backend, identity, self.adapter), outcome, screen)
-            self.assertEqual(self.keys(log), "", f"a key reached the {screen} pane")
-        identity, log = self.pane("moved", "permission-dialog")
-        self.assertEqual(reject_permission_dialog(self.backend, {**identity, "nonce": "another-resource"},
-                                                  self.adapter), "left: pane unverifiable")
-        self.assertEqual(self.keys(log), "", "a key reached a pane the host no longer holds")
-
-    def test_a_cancelled_task_whose_dialog_outlives_the_esc_keeps_its_mark_until_the_last_attempt(self):
-        host = Host("host-test", Path(self.tmp.name) / "host")
-        manager = ResourceManager(host.spool, "host-test", self.backend)
-        key = OperationKey("host-test", "task-1", 1, "instance-1")
-        manager.reserve(key, "stuck", "UserAdopted")
-        self.assertTrue(manager.begin_launch(key).launch_now)
-        _, log = self.pane("stuck", "permission-dialog", "permission-dialog", mark=lambda: manager.mark(key))
-        self.assertEqual(manager.attach(key).state, "Running")
-        nonce = manager._row(key)["nonce"]
-        brief = Path(self.tmp.name) / "brief.txt"
-        brief.write_text("revisa el cambio")
-        operation = AuthorizedOperation(
-            key=key, producer_id="opencode", capability="cap-task-1", session="stuck", workspace_ref=self.tmp.name,
-            brief_ref=str(brief), brief_digest=hashlib.sha256(brief.read_bytes()).hexdigest(),
-            input_revision={"kind": "code", "repository": "repo", "sha": "a" * 40}, result_contract="review.v1",
-            claim_id="claim-task-1", adapter_id="opencode")
-        self.assertEqual(host.apply(key, operation, lambda *_: None, ResourceTests.admit).status, "typed")
-        host.spool.delivered(operation_id(key))
-
-        def reject(identity):
-            return reject_permission_dialog(self.backend, identity, self.adapter, settle_seconds=0.1,
-                                            wait_seconds=0.5)
-
-        still = (f"{operation_id(key)}: cancelled; permission dialog left: permission dialog visible but Esc did "
-                 "not close it")
-        passes = []
-        for _ in range(4):
-            outcome = manager.release_cancelled(lambda _: "cancel-1", reject)
-            mark = self.tmux("display-message", "-p", "-t", "=stuck:", "#{" + TmuxBackend.NONCE_OPTION + "}")
-            passes.append((outcome, mark.stdout.strip(), self.keys(log).count("Escape")))
-        self.assertEqual(passes, [
-            ((0, [f"{still}, attempt 1 of 3; the session stays held"]), nonce, 1),
-            ((0, [f"{still}, attempt 2 of 3; the session stays held"]), nonce, 2),
-            ((1, [f"{still} after 3 attempts"]), "", 3),
-            ((0, []), "", 3)])
-        self.assertEqual(self.keys(log), "Escape\nEscape\nEscape\n", "the dialog got an answer other than a denial")
-
-    def test_an_esc_that_leaves_the_dialog_on_screen_is_told_apart_from_a_composer_that_did_not_empty(self):
-        for session, after, outcome in (
-                ("stuck", "permission-dialog", "left: permission dialog visible but Esc did not close it"),
-                ("drafted", "session-draft", "left: no empty composer after the reject key")):
-            identity, log = self.pane(session, "permission-dialog", after)
-            self.assertEqual(reject_permission_dialog(self.backend, identity, self.adapter), outcome, after)
-            self.assertEqual(self.keys(log), "Escape\n", f"the {after} pane got other keys")
 
 if __name__ == "__main__":
     unittest.main()

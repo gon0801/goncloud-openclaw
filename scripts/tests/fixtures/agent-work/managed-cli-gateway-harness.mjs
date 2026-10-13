@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
 // A source-backed, isolated R Gateway with one certified fixture host. The
-// Python test drives native requester tools and G's real CLI transport.
-// Defaults reproduce cli_gateway; CROSS_* variables pick another requester
+// Python test drives native requester tools. CROSS_* variables pick another requester
 // session, host, or a loopback model provider that counts every request.
 // CROSS_PROVIDER_SCRIPT=review-correction makes that provider act as the
 // requester's model: on a result wake it inspects the task, resolves it with one
