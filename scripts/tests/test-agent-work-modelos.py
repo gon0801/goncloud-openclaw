@@ -77,7 +77,6 @@ class PolicyFile(Policies):
             ("grok", "xai", "subscription"), ("gpt", "openai", "subscription"), ("muse", "meta", "subscription"),
             ("kimi", "kimi-code-plan-cn", "subscription"), ("qwen", "alibaba-token-plan", "subscription"),
             ("deepseek", "deepseek", "per-token")])
-        self.assertEqual(sorted(policy.closed), ["opencode", "opencode-go", "zai"])
         self.assertEqual([grant.name for grant in policy.grants if grant.models], ["qwen"])
         qwen = policy.grant_for("alibaba-token-plan").models
         self.assertEqual((qwen.include, qwen.exclude, qwen.decision.ref, qwen.decision.on, qwen.decision.quote),
@@ -91,8 +90,19 @@ class PolicyFile(Policies):
             self.assertRegex(decision.on, r"^2026-10-(03|12|13)$")
             self.assertRegex(decision.ref, r"^P\d+$")
             self.assertGreater(len(decision.quote), 20)
-        self.assertEqual(policy.closed["opencode-go"].decision.quote, "open code go es solamente para main")
         self.assertEqual(policy.digest, hashlib.sha256(POLICY.read_bytes()).hexdigest())
+
+    def test_the_closed_providers_are_exactly_these_three_each_with_davids_words(self):
+        """The only way to reopen a closed provider is a PR that edits the policy file with David's new
+        phrase. No command does it. That PR has to change this test too, in plain sight."""
+        closed = ProviderPolicy.load(POLICY).closed
+        self.assertEqual({provider: (closure.decision.by, closure.decision.on, closure.decision.ref,
+                                     closure.decision.quote) for provider, closure in closed.items()}, {
+            "opencode-go": ("David", "2026-10-12", "P10845", "open code go es solamente para main"),
+            "opencode": ("David", "2026-10-12", "P10867", "de opencode solo tengo go"),
+            "zai": ("David", "2026-10-03", "P9840",
+                    "pero open ode debe usar solo zcode sus iption no la suscripcion opencode go ni zen"),
+        })
 
     def test_the_repo_policy_is_already_in_the_format_permitir_writes(self):
         policy = ProviderPolicy.load(POLICY)

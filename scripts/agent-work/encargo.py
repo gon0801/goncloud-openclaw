@@ -33,6 +33,8 @@ from sesion import ALLOWED_ROOT, COVERAGE_FILE, Route, Workspace
 HOST_ID = "mac-local"
 ADAPTER_ID = "opencode"
 OPERATOR = "David"
+UNVERIFIED_REF = "sin-cotejar"
+"""Lo que lleva, en lugar de un número de prompt, un cierre de emergencia que nadie cotejó."""
 BEAT_ALIVE_SECONDS = 120.0
 """Una pasada del host con RPC colgados tarda hasta 105 s."""
 CATALOG_RECHECK_SECONDS = 60.0
@@ -76,12 +78,6 @@ class ProviderRow:
 
 class DeadlineExceeded(RuntimeError):
     """El comando agotó su tope de tiempo fuera de opencode."""
-
-
-@dataclass(frozen=True)
-class CitaCotejada:
-    citation: OperatorCitation
-    verificada: bool
 
 
 def latido(state_root: Path, now: float) -> "HostBeat | HostDown":
@@ -214,39 +210,33 @@ def proveedores(*, state_root: Path, checkout: Path, refrescar: bool = False,
                     for provider in undecided))
 
 
-def citar(ref: str, quote: str, fecha: str | None, prompts: Path) -> "CitaCotejada | str":
-    """La cita del operador, cotejada contra el historial de prompts, o la razón por la que no vale.
+def citar(ref: str, quote: str, prompts: Path) -> "OperatorCitation | str":
+    """Las palabras del operador, cotejadas contra el historial de prompts, o la razón por la que no valen.
 
-    El texto del prompt nunca sale de sqlite: la consulta contesta solo si la cita es una subcadena y la
-    fecha del prompt. En esa base hay prompts con secretos."""
+    Es el único sitio que escribe `by` con el nombre del operador: sin un prompt P#### que contenga la
+    cita, nada se le atribuye. El texto del prompt nunca sale de sqlite: la consulta contesta solo si la
+    cita es una subcadena y la fecha del prompt. En esa base hay prompts con secretos."""
     if not quote.strip():
         return "la cita está vacía"
     numbered = PROMPT_REF.fullmatch(ref)
-    verified = False
-    if numbered and prompts.exists():
+    if numbered is None:
+        return f"{ref} no es un prompt P####: solo una cita cotejada contra el historial atribuye algo a {OPERATOR}"
+    if not prompts.exists():
+        return f"no existe la base de prompts {prompts}: sin ella la cita no se puede cotejar"
+    try:
+        db = sqlite3.connect(f"{prompts.resolve().as_uri()}?mode=ro", uri=True)
         try:
-            db = sqlite3.connect(f"{prompts.resolve().as_uri()}?mode=ro", uri=True)
-            try:
-                row = db.execute("SELECT instr(prompt_text, ?) > 0, substr(created_at, 1, 10) FROM user_prompts "
-                                 "WHERE id = ?", (quote, int(numbered[1]))).fetchone()
-            finally:
-                db.close()
-        except sqlite3.Error as exc:
-            return f"no se pudo leer la base de prompts {prompts}: {exc}"
-        if row is None:
-            return f"no existe el prompt {ref} en {prompts}"
-        if not row[0]:
-            return f"la cita no es una subcadena literal del prompt {ref}"
-        if fecha is not None and fecha != row[1]:
-            return f"--fecha {fecha} no es la fecha del prompt {ref}, que es {row[1]}"
-        on, verified = row[1], True
-    elif fecha is None:
-        return (f"la cita no se puede cotejar (sin {prompts}, o {ref} no es un P####): pasa --fecha AAAA-MM-DD y "
-                "queda como cita sin verificar")
-    else:
-        on = fecha
-    citation = OperatorCitation.parse({"by": OPERATOR, "on": on, "ref": ref, "quote": quote})
-    return citation if isinstance(citation, str) else CitaCotejada(citation, verified)
+            row = db.execute("SELECT instr(prompt_text, ?) > 0, substr(created_at, 1, 10) FROM user_prompts "
+                             "WHERE id = ?", (quote, int(numbered[1]))).fetchone()
+        finally:
+            db.close()
+    except sqlite3.Error as exc:
+        return f"no se pudo leer la base de prompts {prompts}: {exc}"
+    if row is None:
+        return f"no existe el prompt {ref} en {prompts}"
+    if not row[0]:
+        return f"la cita no es una subcadena literal del prompt {ref}"
+    return OperatorCitation.parse({"by": OPERATOR, "on": row[1], "ref": ref, "quote": quote})
 
 
 def _host_checkout(checkout: Path, state_root: Path) -> str | None:
@@ -258,9 +248,12 @@ def _host_checkout(checkout: Path, state_root: Path) -> str | None:
 
 
 def _write_policy(checkout: Path, state_root: Path, grants: "tuple[ProviderGrant, ...]", closed: dict) -> str | None:
-    """Escritura atómica en formato canónico. Relee lo escrito: una política que no carga no se deja.
-    Vuelve a mirar `host.json` justo antes de reemplazar el archivo: entre la primera mirada y este punto
-    el comando pudo esperar a opencode, y un host pudo arrancar desde este checkout."""
+    """Escritura atómica en formato canónico, y el único sitio que escribe la política.
+
+    No deja una política que no carga. No quita ni cambia un cierre que está en el archivo: eso no lo
+    hace ningún comando. Y vuelve a mirar `host.json` justo antes de reemplazar el archivo, porque entre
+    la primera mirada y este punto el comando pudo esperar a opencode y un host pudo arrancar desde este
+    checkout."""
     path = Path(checkout) / POLICY_FILE
     document = policy_document(grants, closed)
     descriptor, pending = tempfile.mkstemp(prefix=".politica-", dir=path.parent)
@@ -272,6 +265,9 @@ def _write_policy(checkout: Path, state_root: Path, grants: "tuple[ProviderGrant
         unreadable = ProviderPolicy.load(Path(pending)).unreadable
         if unreadable is not None:
             return f"la política resultante no carga: {unreadable}"
+        touched = [key for key, closure in ProviderPolicy.load(path).closed.items() if closed.get(key) != closure]
+        if touched:
+            return f"un comando no quita ni cambia un cierre, y este tocaría el de {', '.join(touched)}"
         refused = _host_checkout(checkout, state_root)
         if refused is not None:
             return refused
@@ -286,40 +282,16 @@ def _write_policy(checkout: Path, state_root: Path, grants: "tuple[ProviderGrant
 def _closed_phrase(closure: ProviderClosure) -> str:
     decision = closure.decision
     return (f"{closure.provider} está cerrado por {decision.by} ({decision.on}, {decision.ref}): "
-            f"«{decision.quote}». Abrirlo pide una frase nueva suya, posterior al cierre, en --ref y --cita, con "
-            f"--proveedor {closure.provider} y --reabre en el mismo comando")
+            f"«{decision.quote}». Ningún comando lo reabre. Reabrirlo es editar {POLICY_FILE} en un PR, con la "
+            f"frase nueva de {OPERATOR}, y cambiar en ese mismo PR la prueba que fija los cierres")
 
 
-def _same_words(one: str, other: str) -> bool:
-    """Una cita es la otra, o un trozo de la otra, sin contar mayúsculas ni espacios."""
-    one, other = (" ".join(text.casefold().split()) for text in (one, other))
-    return one in other or other in one
-
-
-def _not_a_new_phrase(citation: OperatorCitation, closing: ProviderClosure, policy: ProviderPolicy) -> str | None:
-    """Por qué `citation` no reabre el proveedor de `closing`, o None si es una frase nueva del operador.
-
-    Nueva quiere decir dos cosas que se pueden comprobar: no es la frase de ningún cierre, ni por su
-    prompt ni por sus palabras, y es posterior al cierre que quita."""
-    for closure in policy.closed.values():
-        decision = closure.decision
-        if citation.ref == decision.ref or _same_words(citation.quote, decision.quote):
-            return (f"es la frase con la que {decision.by} cerró {closure.provider} ({decision.ref}), y una frase "
-                    "de cierre no abre nada")
-    closed = closing.decision
-    numbered = PROMPT_REF.fullmatch(citation.ref), PROMPT_REF.fullmatch(closed.ref)
-    same_day_and_earlier = citation.on == closed.on and all(numbered) and int(numbered[0][1]) < int(numbered[1][1])
-    if citation.on < closed.on or same_day_and_earlier:
-        return f"es del {citation.on} ({citation.ref}), anterior al cierre del {closed.on} ({closed.ref})"
-    return None
-
-
-def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None,
-             citation: OperatorCitation | None, reopens: bool, checkout: Path, state_root: Path,
+def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None, ref: str | None,
+             quote: str | None, prompts: Path, checkout: Path, state_root: Path,
              include: tuple[str, ...] = (), exclude: tuple[str, ...] = (),
              opencode_bin: Path = OPENCODE_BIN) -> "ProviderRow | str":
     """`encargo.py permitir <nombre> [--proveedor <id>] [--cobro subscription|per-token] [--solo <patrón>]
-    [--menos <patrón>] [--ref P#### --cita "<palabras del operador>"] [--reabre]`
+    [--menos <patrón>] [--ref P#### --cita "<palabras del operador>"]`
 
     La fila que quedó escrita, o la razón por la que no escribió. Tres usos:
       permiso nuevo, o frase nueva sobre uno que existe   `--cobro` con `--ref` y `--cita`. Reemplaza la
@@ -327,15 +299,19 @@ def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None,
       filtro de modelos de un permiso que existe          `--solo` (y `--menos`) con `--ref` y `--cita`.
       ligar el id de un permiso que existe                solo `--proveedor`. No pide otra frase: el
                                                           operador ya lo permitió y esto registra un hecho.
-    Un id se liga cuando opencode ya lista modelos suyos, así nadie lo adivina. Un proveedor cerrado se
-    abre solo con `--reabre`, su id en `--proveedor` y una frase nueva: posterior al cierre y distinta, por
-    prompt y por palabras, de la frase de cualquier cierre. Nada se escribe en el checkout del host."""
-    refused = _host_checkout(checkout, state_root)
-    if refused is not None:
-        return refused
+    Nunca abre un proveedor cerrado: si el nombre o el id está en `closed` se niega antes de mirar nada
+    más, con cualquier combinación de argumentos. La cita se coteja aquí, contra `prompts`, así que no hay
+    forma de pasarle una sin cotejar. Un id se liga cuando opencode ya lista modelos suyos, así nadie lo
+    adivina. Nada se escribe en el checkout del host."""
     policy = ProviderPolicy.load(Path(checkout) / POLICY_FILE)
     if policy.unreadable is not None:
         return policy.unreadable
+    for key in (name, provider):
+        if key in policy.closed:
+            return _closed_phrase(policy.closed[key])
+    refused = _host_checkout(checkout, state_root)
+    if refused is not None:
+        return refused
     if not PROVIDER.fullmatch(name) or (provider is not None and not PROVIDER.fullmatch(provider)):
         return f"nombre inválido o id de proveedor inválido: {name} {provider or ''}".rstrip()
     for pattern in include + exclude:
@@ -343,8 +319,10 @@ def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None,
             return f"patrón de modelos inválido: {pattern!r}"
     if exclude and not include:
         return "--menos va con --solo"
+    if (ref is None) != (quote is None):
+        return "--ref y --cita van juntas"
     existing = next((grant for grant in policy.grants if grant.name == name), None)
-    if citation is None:
+    if ref is None:
         if billing is not None or include:
             return "un permiso nuevo, un cambio de cobro o un filtro piden --ref y --cita con las palabras del operador"
         if provider is None:
@@ -356,6 +334,9 @@ def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None,
                     "en --ref y --cita")
         grant = replace(existing, provider=provider)
     else:
+        citation = citar(ref, quote, prompts)
+        if isinstance(citation, str):
+            return citation
         models = ModelFilter(include, exclude, citation) if include else None
         bound = provider if provider is not None else (existing.provider if existing is not None else None)
         if billing is not None:
@@ -365,50 +346,48 @@ def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None,
         else:
             return ("con --ref y --cita pasa --cobro (permiso nuevo o frase nueva) o --solo (filtro de un permiso "
                     "que existe)")
-    if name in policy.closed and grant.provider != name:
-        # Quitar un cierre por la sola coincidencia del nombre dejaría un permiso sin id, y ligar un id no
-        # pide frase: el proveedor quedaría abierto en dos pasos. Reabrir y ligar van en un solo comando.
-        return _closed_phrase(policy.closed[name])
-    closing = policy.closed.get(grant.provider)
-    if closing is not None:
-        if not reopens or citation is None:
-            return _closed_phrase(closing)
-        stale = _not_a_new_phrase(citation, closing, policy)
-        if stale is not None:
-            return f"{_closed_phrase(closing)}. La cita que pasaste no lo abre: {stale}"
     if grant.provider is not None:
         holder = policy.grant_for(grant.provider)
         if holder is not None and holder.name != name:
             return f"{grant.provider} ya es el id de {holder.name}"
     store = CatalogStore(opencode_bin, state_root)
-    if grant.provider is not None and grant.provider != (existing.provider if existing is not None else None):
+    binds = grant.provider is not None and grant.provider != (existing.provider if existing is not None else None)
+    if binds:
         catalog = store.refresh()
         if not catalog.of(grant.provider):
             return (f"opencode no lista ningún modelo con el id {grant.provider}: un id se liga cuando el operador "
                     "ya inició sesión y `encargo.py proveedores` lo muestra")
     else:
         catalog = store.current() if include else _catalog_for_the_row(store)
-    if include and grant.provider is not None:
+    if grant.models is not None and grant.provider is not None and (binds or include):
+        # Al ligar también: un filtro puesto antes de que el permiso tuviera id nunca se comparó con nada.
         listed = catalog.of(grant.provider)
         if listed and not any(grant.admits(model) for model in listed):
-            return (f"el filtro no cubre ninguno de los {len(listed)} modelos que opencode lista de "
-                    f"{grant.provider}: dejaría el proveedor sin ningún modelo")
+            return (f"el filtro de {name} no cubre ninguno de los modelos que opencode lista de {grant.provider} "
+                    f"({len(listed)}): dejaría el proveedor sin ningún modelo")
     grants = (tuple(grant if entry.name == name else entry for entry in policy.grants) if existing is not None
               else policy.grants + (grant,))
-    closed = {key: closure for key, closure in policy.closed.items() if closure is not closing}
-    return _write_policy(checkout, state_root, grants, closed) or _grant_row(grant, catalog)
+    return _write_policy(checkout, state_root, grants, dict(policy.closed)) or _grant_row(grant, catalog)
 
 
-def cerrar(provider: ProviderId, *, citation: OperatorCitation, checkout: Path, state_root: Path,
+def cerrar(provider: ProviderId, *, ref: str | None, quote: str | None, by: str | None, reason: str | None,
+           prompts: Path, now: float, checkout: Path, state_root: Path,
            opencode_bin: Path = OPENCODE_BIN) -> "ProviderRow | str":
-    """`encargo.py cerrar <proveedor> --ref P#### --cita "<palabras del operador>"`. Quita el permiso si lo
-    había y deja el cierre con su cita. Un permiso sin id todavía se cierra por su nombre."""
-    refused = _host_checkout(checkout, state_root)
-    if refused is not None:
-        return refused
+    """`encargo.py cerrar <proveedor> --ref P#### --cita "<palabras del operador>"`, o de emergencia
+    `encargo.py cerrar <proveedor> --por "<quién>" --motivo "<por qué>"`.
+
+    Quita el permiso si lo había y deja el cierre. Un permiso sin id todavía se cierra por su nombre. Es
+    el freno: cierra aunque no haya una frase del operador que cotejar. En ese caso el cierre no lleva su
+    nombre: dice quién cerró, por qué, y `sin-cotejar` donde iría el número de prompt. Sobre un proveedor
+    que ya está cerrado no escribe nada, así el cierre vigente y su cita no cambian."""
     policy = ProviderPolicy.load(Path(checkout) / POLICY_FILE)
     if policy.unreadable is not None:
         return policy.unreadable
+    if provider in policy.closed:
+        return f"{provider} ya está cerrado y su cierre no se reemplaza. {_closed_phrase(policy.closed[provider])}"
+    refused = _host_checkout(checkout, state_root)
+    if refused is not None:
+        return refused
     if not PROVIDER.fullmatch(provider):
         return f"id de proveedor inválido: {provider}"
     named = next((grant for grant in policy.grants
@@ -416,6 +395,19 @@ def cerrar(provider: ProviderId, *, citation: OperatorCitation, checkout: Path, 
     if named is not None:
         # Cerrar la palabra dejaría vivo el permiso, y su proveedor seguiría corriendo.
         return f"{provider} es el nombre del permiso de {named.provider}: lo que se cierra es {named.provider}"
+    cited, emergency = ref is not None or quote is not None, by is not None or reason is not None
+    if cited == emergency or (cited and None in (ref, quote)) or (emergency and None in (by, reason)):
+        return (f"cerrar pide --ref y --cita con las palabras de {OPERATOR}, o --por y --motivo para cerrar de "
+                "emergencia sin atribuirle nada")
+    if cited:
+        citation = citar(ref, quote, prompts)
+    elif by.strip().casefold() == OPERATOR.casefold():
+        citation = f"--por no puede ser {OPERATOR}: lo que él decide se cita con --ref y --cita"
+    else:
+        citation = OperatorCitation.parse({"by": by, "on": time.strftime("%Y-%m-%d", time.gmtime(now)),
+                                           "ref": UNVERIFIED_REF, "quote": reason})
+    if isinstance(citation, str):
+        return citation
     closure = ProviderClosure(provider, citation)
     grants = tuple(grant for grant in policy.grants
                    if grant.provider != provider and not (grant.provider is None and grant.name == provider))
@@ -472,22 +464,14 @@ def _parser() -> argparse.ArgumentParser:
     allow.add_argument("--cobro", choices=("subscription", "per-token"))
     allow.add_argument("--solo", action="append", default=[], metavar="PATRÓN")
     allow.add_argument("--menos", action="append", default=[], metavar="PATRÓN")
-    allow.add_argument("--reabre", action="store_true")
     close = commands.add_parser("cerrar", help="cierra un proveedor con las palabras del operador")
     close.add_argument("proveedor")
+    close.add_argument("--por", help="quién cierra de emergencia, sin una frase del operador que cotejar")
+    close.add_argument("--motivo", help="por qué se cierra de emergencia")
     for command in (allow, close):
-        command.add_argument("--ref")
-        command.add_argument("--cita")
-        command.add_argument("--fecha", help="solo cuando la cita no se puede cotejar contra el historial")
+        command.add_argument("--ref", help="prompt P#### del historial que contiene la cita")
+        command.add_argument("--cita", help="palabras literales del operador en ese prompt")
     return parser
-
-
-def _citation(args: argparse.Namespace) -> "CitaCotejada | str | None":
-    if args.ref is None and args.cita is None:
-        return None
-    if args.ref is None or args.cita is None:
-        return "--ref y --cita van juntas"
-    return citar(args.ref, args.cita, args.fecha, args.prompts)
 
 
 def _say(result: "Preparado | Explicacion | HostBeat", now: float) -> int:
@@ -521,22 +505,17 @@ def _run_proveedores(args: argparse.Namespace, where: dict, now: float) -> int:
 
 
 def _run_politica(args: argparse.Namespace, where: dict, now: float) -> int:
-    cited = _citation(args)
-    if isinstance(cited, str):
-        return _show(args.command, cited)
-    citation = cited.citation if cited is not None else None
     if args.command == "permitir":
         outcome = permitir(args.nombre, provider=args.proveedor and ProviderId(args.proveedor), billing=args.cobro,
-                           citation=citation, reopens=args.reabre, include=tuple(args.solo),
+                           ref=args.ref, quote=args.cita, prompts=args.prompts, include=tuple(args.solo),
                            exclude=tuple(args.menos), **where)
-    elif citation is None:
-        outcome = "cerrar pide --ref y --cita con las palabras del operador"
     else:
-        outcome = cerrar(ProviderId(args.proveedor), citation=citation, **where)
-    code = _show(args.command, outcome)
-    if code == 0 and cited is not None and not cited.verificada:
-        print("cita sin verificar: no se cotejó contra el historial de prompts")
-    return code
+        outcome = cerrar(ProviderId(args.proveedor), ref=args.ref, quote=args.cita, by=args.por, reason=args.motivo,
+                         prompts=args.prompts, now=now, **where)
+    if isinstance(outcome, ProviderRow) and (outcome.cited or "").endswith(UNVERIFIED_REF):
+        print(f"cerrar: cerrado de emergencia, sin cita cotejada. No es una decisión de {OPERATOR}: falta su "
+              "frase, que entra con un PR.", file=sys.stderr)
+    return _show(args.command, outcome)
 
 
 _COMMANDS = {"preparar": _run_preparar, "estado": _run_estado, "proveedores": _run_proveedores,

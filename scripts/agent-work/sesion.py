@@ -153,7 +153,7 @@ class LaunchSpec:
     session: str
 
 
-def plan_launch(assignment: dict, brief: bytes, *, policy: ProviderPolicy, catalog: Catalog, route: Route,
+def plan_launch(assignment: object, brief: bytes, *, policy: ProviderPolicy, catalog: Catalog, route: Route,
                 cli_version: str, allowed_root: Path, run: RunDir, record: Path, operation: str,
                 canary: bool = False) -> "LaunchSpec | Refusal":
     """La frontera donde lo que llegó de R (JSON y bytes) se vuelve tipos del dominio. El primer rechazo
