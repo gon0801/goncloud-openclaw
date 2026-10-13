@@ -19,6 +19,7 @@
 0	test-agent-dispatch-spawn.sh
 5	test-agent-work-cutover.sh
 1	test-agent-work-e2e.sh
+11	test-agent-work-encargo.sh
 65	test-agent-work-host.sh
 14	test-agent-work-integration.sh
 0	test-agent-work-requester-queue-mapper.sh

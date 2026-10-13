@@ -1,0 +1,136 @@
+{
+  "schema": "agent-work.provider-policy.v1",
+  "providers": [
+    {
+      "name": "glm",
+      "provider": "zai-coding-plan",
+      "billing": "subscription",
+      "decision": {
+        "by": "David",
+        "on": "2026-10-03",
+        "ref": "P9830",
+        "quote": "abriendo ventana de opencode y usando ahi glm 5.3 flash, no se si tengas que cmabiar el prompt pero quiero que se use en opencode de ahora en adelante"
+      }
+    },
+    {
+      "name": "claude",
+      "provider": "anthropic",
+      "billing": "subscription",
+      "decision": {
+        "by": "David",
+        "on": "2026-10-12",
+        "ref": "P10868",
+        "quote": "si podemos usar opencode como harness pero con mis suscripciones de claude, gork, etc, no con los modelos de opencode, entiendes?"
+      }
+    },
+    {
+      "name": "grok",
+      "provider": "xai",
+      "billing": "subscription",
+      "decision": {
+        "by": "David",
+        "on": "2026-10-12",
+        "ref": "P10868",
+        "quote": "si podemos usar opencode como harness pero con mis suscripciones de claude, gork, etc, no con los modelos de opencode, entiendes?"
+      }
+    },
+    {
+      "name": "gpt",
+      "provider": "openai",
+      "billing": "subscription",
+      "decision": {
+        "by": "David",
+        "on": "2026-10-12",
+        "ref": "P10867",
+        "quote": "mis suscripciones y apis son para implementaciones etc, de opencode solo tengo go, todas mis suscripciones o api son independientes de opencode claude, kimi, grok qwen, muse, gpt, glm todas son suscripciones solo deepseek api"
+      }
+    },
+    {
+      "name": "muse",
+      "provider": "meta",
+      "billing": "subscription",
+      "decision": {
+        "by": "David",
+        "on": "2026-10-12",
+        "ref": "P10867",
+        "quote": "mis suscripciones y apis son para implementaciones etc, de opencode solo tengo go, todas mis suscripciones o api son independientes de opencode claude, kimi, grok qwen, muse, gpt, glm todas son suscripciones solo deepseek api"
+      }
+    },
+    {
+      "name": "kimi",
+      "provider": "kimi-code-plan-cn",
+      "billing": "subscription",
+      "decision": {
+        "by": "David",
+        "on": "2026-10-12",
+        "ref": "P10867",
+        "quote": "mis suscripciones y apis son para implementaciones etc, de opencode solo tengo go, todas mis suscripciones o api son independientes de opencode claude, kimi, grok qwen, muse, gpt, glm todas son suscripciones solo deepseek api"
+      }
+    },
+    {
+      "name": "qwen",
+      "provider": "alibaba-token-plan",
+      "billing": "subscription",
+      "models": {
+        "include": [
+          "qwen*"
+        ],
+        "exclude": [
+          "qwen-image*"
+        ],
+        "decision": {
+          "by": "David",
+          "on": "2026-10-13",
+          "ref": "P10886",
+          "quote": "sobre qwen hay forma de dejar solo los modelos qwen?"
+        }
+      },
+      "decision": {
+        "by": "David",
+        "on": "2026-10-12",
+        "ref": "P10867",
+        "quote": "mis suscripciones y apis son para implementaciones etc, de opencode solo tengo go, todas mis suscripciones o api son independientes de opencode claude, kimi, grok qwen, muse, gpt, glm todas son suscripciones solo deepseek api"
+      }
+    },
+    {
+      "name": "deepseek",
+      "provider": "deepseek",
+      "billing": "per-token",
+      "decision": {
+        "by": "David",
+        "on": "2026-10-12",
+        "ref": "P10847",
+        "quote": "pero tengo deepseek por api"
+      }
+    }
+  ],
+  "closed": [
+    {
+      "provider": "opencode-go",
+      "decision": {
+        "by": "David",
+        "on": "2026-10-12",
+        "ref": "P10845",
+        "quote": "open code go es solamente para main"
+      }
+    },
+    {
+      "provider": "opencode",
+      "decision": {
+        "by": "David",
+        "on": "2026-10-12",
+        "ref": "P10867",
+        "quote": "de opencode solo tengo go"
+      }
+    },
+    {
+      "provider": "zai",
+      "decision": {
+        "by": "David",
+        "on": "2026-10-03",
+        "ref": "P9840",
+        "quote": "pero open ode debe usar solo zcode sus iption no la suscripcion opencode go ni zen"
+      }
+    }
+  ]
+}

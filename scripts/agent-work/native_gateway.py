@@ -15,7 +15,9 @@ import tempfile
 import threading
 import time
 from collections import namedtuple
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional, Tuple
 
 from contracts import AuthorizedOperation, IncidentRejected, OperationKey
 from host import Host, TmuxTransport, cli_adapter, reject_permission_dialog
@@ -24,6 +26,57 @@ from resources import dialog_note
 from spool import canonical, incident_identity
 
 COVERAGE = Path(__file__).resolve().parents[2] / "docs/evidence/agent-work/coverage.json"
+HOST_BEAT_FILE = "host.json"
+HOST_SLOTS = ("free", "running", "blocked")
+
+
+@dataclass(frozen=True)
+class HostBeat:
+    """<state_root>/host.json: what `encargo.py` reads of the host that runs one opencode process per task.
+    policy_digest and cli_version say which provider policy and which opencode the host decides with."""
+    pid: int
+    started_at: float
+    beat_at: float
+    checkout: str
+    commit: str
+    cli_version: str
+    policy_digest: Optional[str]
+    slot: str
+    blocked_by: Tuple[str, ...]
+    task_id: Optional[str]
+    model: Optional[str]
+    since: Optional[float]
+
+    @staticmethod
+    def read(state_root: Path) -> "Optional[HostBeat]":
+        """None when no host ever wrote the file, or when what is there is not a beat."""
+        try:
+            raw = json.loads((Path(state_root) / HOST_BEAT_FILE).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+
+        def number(value):
+            return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+        def text_or_none(value):
+            return value is None or isinstance(value, str)
+
+        if not isinstance(raw, dict):
+            return None
+        blocked = raw.get("blockedBy")
+        if not (isinstance(raw.get("pid"), int) and not isinstance(raw["pid"], bool)
+                and number(raw.get("startedAt")) and number(raw.get("beatAt"))
+                and all(isinstance(raw.get(key), str) and raw[key] for key in ("checkout", "commit", "cliVersion"))
+                and text_or_none(raw.get("policyDigest")) and raw.get("slot") in HOST_SLOTS
+                and isinstance(blocked, list) and all(isinstance(item, str) for item in blocked)
+                and text_or_none(raw.get("taskId")) and text_or_none(raw.get("model"))
+                and (raw.get("since") is None or number(raw["since"]))):
+            return None
+        return HostBeat(raw["pid"], float(raw["startedAt"]), float(raw["beatAt"]), raw["checkout"], raw["commit"],
+                        raw["cliVersion"], raw.get("policyDigest"), raw["slot"], tuple(blocked), raw.get("taskId"),
+                        raw.get("model"), raw.get("since"))
+
+
 DEFINITIVE_INCIDENT_REJECTIONS = (
     "Managed task incident conflict",
     "Managed task generation mismatch",

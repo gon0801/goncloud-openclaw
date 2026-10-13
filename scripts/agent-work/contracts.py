@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 import hashlib
 import json
+from pathlib import Path
+import re
 
 
 @dataclass(frozen=True)
@@ -44,3 +46,34 @@ class HostObservation:
 @dataclass(frozen=True)
 class ResultReceipt:
     result_id: str
+
+
+@dataclass(frozen=True)
+class RunDir:
+    """<spool>/runs/<operation>/: the only folder outside the task's repo that its session may read and
+    write. It holds the four protocol files of one run, and no other code builds these paths."""
+    path: Path
+
+    @property
+    def assignment(self) -> Path:
+        return self.path / "assignment.json"
+
+    @property
+    def brief(self) -> Path:
+        return self.path / "brief"
+
+    @property
+    def accept(self) -> Path:
+        return self.path / "accept.json"
+
+    @property
+    def result(self) -> Path:
+        return self.path / "result.json"
+
+    @staticmethod
+    def for_operation(spool: Path, operation: str) -> "RunDir":
+        if not re.fullmatch(r"[0-9a-f]{64}", operation):
+            raise ValueError("operation id must be 64 hex characters")
+        path = Path(spool) / "runs" / operation
+        path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        return RunDir(path)
