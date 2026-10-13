@@ -23,7 +23,7 @@ En las tablas, `acknowledged|AbsenceVerified` es el estado de la operación y el
 
 El host B8 está apagado. El host de encargos corre en `--canario`. El canario D, que es el criterio de aceptación de B22, pasó.
 
-En el corte salieron cuatro defectos. Los tres primeros arreglos están en la rama `encargos/b22-fase3`. El cuarto es el commit `6fa16cf9`, de la rama `encargos/b22-fill`.
+En el corte salieron cuatro defectos. Los cuatro arreglos están en la rama `encargos/b22-fase3`.
 
 | Defecto | Dónde salió | Arreglo |
 |---|---|---|
@@ -154,7 +154,7 @@ La suscripción de Qwen funciona. `qwen3.6-flash` no siguió el protocolo de res
 {"ok": true, "tarea": "6ed852ea-281c-47c6-9313-1c0d6c7c9de4", "modelo": "xai/grok-4.7", "cobro": "subscription", "estado": "acknowledged", "cierre": "AbsenceVerified", "explicacion": null, "permisosNegados": ["external_directory:/Users/dn/.agents/pstack-plataformas/*", "external_directory:/Users/dn/.local/state/agent-work-host/*"], "proveedoresLlamados": ["xai"], "carpetaDeSesion": "/Users/dn/dev/canario-encargos", "salida": null}
 ```
 
-`estreno-grok2.r` trae el resultado de la tarea y `managed_task_host_closures: 0`. El `host_closure` de la tabla sale de `HECHOS.md`.
+`estreno-grok2.r` se leyó antes de que llegara a R el cierre del host, y trae `managed_task_host_closures: 0`. Una segunda lectura con `r-tarea.sh 6ed852ea-281c-47c6-9313-1c0d6c7c9de4` trae `managed_task_host_closures: 1`, con `state: AbsenceVerified`.
 
 `estreno-qwen.estado`, el intento 1. `estreno-qwen2.estado` trae la misma `explicacion`:
 

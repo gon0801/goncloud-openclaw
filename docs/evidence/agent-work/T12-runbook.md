@@ -338,9 +338,9 @@ Reversa de la fase 2:
 
 1. Apaga el host nuevo: `tmux -L agent-work kill-session -t host-encargos`.
 2. Si `sqlite3 -readonly ~/.local/state/agent-work-host/enc-1/host.sqlite "select count(*) from resources where state not in ('AbsenceVerified','ReleasedAdopted')"` no imprime `0`, cancela esas tareas en R y corre la pasada `--close-only --slot-group` de arriba hasta que imprima `0`.
-3. Revierte el commit de la fase 2 en `main` y actualiza el checkout del host.
+3. Revierte en `main` el commit de la fase 2, y el de la fase 3 si ya está mergeado, y actualiza el checkout del host.
 4. Relanza el host B8 en la sesión `host` de `tmux -L agent-work`, con su comando exacto. Quedó guardado en `~/.local/state/encargos-loop/B22/corte/host-b8-cmd.txt`. El commit sobre el que corría, `bff085d7`, está en `host-b8-sha.txt`, en la misma carpeta. `lanzar-host.sh` sigue en el repo hasta la fase 4.
-5. Regresa la Mini a lo anterior a la fase 3. Restaura `brief.py` (`~/.local/share/agent-work/brief.py`) y la skill `encargo-cli` de `main` desde el respaldo `~/.openclaw/respaldos/pre-b22f3-20261013T050317Z/` de la Mini.
+5. Regresa la Mini a lo anterior a la fase 3. Restaura `brief.py` y la skill `encargo-cli` de `main` desde el respaldo de la Mini: `ssh gon@100.73.187.5 'B=~/.openclaw/respaldos/pre-b22f3-20261013T050317Z; cp -p $B/brief.py ~/.local/share/agent-work/brief.py && cp -p $B/encargo-cli.SKILL.md ~/.openclaw/agents/main/agent/workshop-skills/encargo-cli/SKILL.md'`.
 
 Mientras `coverage.json` tenga `mac-local/opencode` en `sandbox-tested-uncertified`, un host B8 que se reinicie sobre ese código sin `--cli-canary` no reclama nada: cada pasada sale con `host adapter route is not certified`.
 
