@@ -8,8 +8,7 @@
 # sello y cuyo PR GitHub dice MERGED pasan a mergeado y se limpia SOLO ese motivo
 # (detenido_por); los carriles sin ese motivo, sin PR o con otro estado no se tocan;
 # cierre.at jamas se escribe; y si GitHub no contesta, el dato queda unknown sin
-# cambiar nada. El script no manda mensajes: si la firma del parte cambia, el aviso
-# lo manda el latido que ya existe (9.5), una sola vez.
+# cambiar nada. El script no manda mensajes.
 #
 # Todo corre con gh de mentira y reloj inyectado. Nunca se toca GitHub ni un perfil.
 #
@@ -174,49 +173,6 @@ $out"
 cmp -s "$P" "$P.tras-primera" \
   || fail "(3) la segunda pasada modifico el progreso: no es idempotente"
 echo "ok (3): la segunda pasada no cambia nada y lo declara"
-
-# (4) La firma del parte (P_FIRMA de estado.sh, la que mira el latido para mandar)
-# cambia SOLO con la primera reconciliacion; la segunda la deja quieta: sin mensaje
-# repetido. Se calcula con parte_calcular de verdad, sobre un espejo de la corrida.
-mkdir -p "$T/corridas/rec" "$T/repo" "$T/watch"
-cat >"$T/corridas/rec/registro.json" <<'REG'
-{"schema": "corrida.v2", "id": "rec", "runbook": "docs/runbooks/autopilot-fase9.md",
- "vigia": "claw", "simulacro": false, "seguimiento_global": true,
- "canal": {"cron": "verif-sync-repos", "destino": "DESTINO-FICTICIO-REC"},
- "cli_modos": "scripts/mac/cli-modos.tsv", "inicio": "2026-09-20T12:00:00+0000",
- "timebox_horas": 6, "sesiones": [], "preaprobaciones": [], "estado": "abierta"}
-REG
-cat >"$T/bin/tmux-falso" <<'STUB'
-#!/bin/sh
-exit 1
-STUB
-cat >"$T/bin/gh-falso" <<'STUB'
-#!/bin/sh
-case "$*" in
-  *"pr list"*) printf '[]\n';;
-esac
-exit 0
-STUB
-chmod +x "$T/bin/tmux-falso" "$T/bin/gh-falso"
-firma() { # $1 progress.json para el espejo -> P_FIRMA que calcularia el latido
-  cp "$1" "$T/corridas/rec/progress.json"
-  ( export CORRIDA_STATE="$T/corridas" WATCH_STATE_DIR="$T/watch" \
-           TMUX_BIN="$T/bin/tmux-falso" GH_BIN="$T/bin/gh-falso" REPO_DIR="$T/repo"
-    . scripts/mac/corrida/lib.sh
-    . scripts/mac/corrida/estado.sh
-    parte_calcular rec >/dev/null 2>&1 || { echo "ROTO"; exit 0; }
-    printf '%s' "$P_FIRMA" )
-}
-f0=$(firma "$P.original")
-f1=$(firma "$P.tras-primera")
-[ "$f0" != "ROTO" ] || fail "(4) parte_calcular rechazo el registro o el espejo del fixture"
-[ "$f1" != "ROTO" ] || fail "(4) parte_calcular rechazo el progreso reconciliado"
-[ "$f0" != "$f1" ] \
-  || fail "(4) la firma no cambio con la primera reconciliacion: el latido no avisaria el cambio"
-f2=$(firma "$P")
-[ "$f2" = "$f1" ] \
-  || fail "(4) la segunda pasada cambio la firma: mandaria otro mensaje"
-echo "ok (4): la firma del parte cambia una vez con el cambio real y queda quieta al repetir"
 
 # (5) GitHub caido: el dato queda unknown, el archivo no se toca y la fase no se cierra.
 P2="$T/caido.json"; progreso "$P2"; cp "$P2" "$P2.original"

@@ -36,7 +36,6 @@ if [ "${1:-}" = "hook_is_observation" ]; then
     echo "hook_is_observation no acepta argumentos" >&2
     exit 2
   fi
-  bash "$here/test-corrida-avisos.sh"
   exec bash "$here/test-tmux-activity-watch.sh"
 fi
 if [ "${1:-}" = "projection_crash" ]; then
@@ -49,10 +48,6 @@ if [ "${1:-}" = "projection_board_outage" ]; then
   shift
   exec python3 "$here/test-agent-work-integration.py" \
     ProjectionTransferTest.test_lost_transfer_ack_and_board_outage_converge_without_repeating_the_review "$@"
-fi
-if [ "${1:-}" = "director_handling" ]; then
-  shift
-  exec python3 "$here/test-agent-work-integration.py" DirectorHandlingTest "$@"
 fi
 if [ "$#" -eq 0 ]; then
   python3 "$here/test-agent-work-routing.py"

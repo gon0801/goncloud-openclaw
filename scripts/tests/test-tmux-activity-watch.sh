@@ -10,7 +10,7 @@
 # estados del vigilante (quiet una sola vez por silencio, activity nueva la resetea, closed
 # borra el estado, un envio fallido no marca notified, un TUI que repinta la misma pantalla
 # cuenta como callado, un prompt de permiso avisa de inmediato y se recuerda); (3) el Stop hook no manda nada fuera de
-# tmux y manda el texto correcto dentro de tmux; (4) las anclas de las dos skills.
+# tmux, manda el texto correcto dentro de tmux y calla en una sesion gestionada; (4) las anclas de las dos skills.
 # (El detector de test-mac-tmux-control.sh ya no corre anidado aqui: desde 15.1 el runner
 # lo corre por su cuenta en el inventario del glob — antes coronaba cada bateria dos veces.)
 # Uso: bash scripts/tests/test-tmux-activity-watch.sh
@@ -38,8 +38,8 @@ d = plistlib.load(open(sys.argv[1], 'rb'))
 assert d.get('Label') == 'ai.goncloud.tmux-activity-watch', 'Label incorrecto'
 assert d.get('KeepAlive') is True, 'falta KeepAlive'
 assert d.get('RunAtLoad') is True, 'falta RunAtLoad'
-assert d.get('EnvironmentVariables', {}).get('REPO_DIR'), 'falta REPO_DIR (el latido lo necesita bajo launchd)'
-" "$P" || fail "$P: no parsea como plist valido o le faltan Label/KeepAlive/RunAtLoad/REPO_DIR"
+assert 'UTF-8' in d.get('EnvironmentVariables', {}).get('LANG', ''), 'falta LANG UTF-8 (sin el, tmux lista con _ los acentos de las rutas)'
+" "$P" || fail "$P: no parsea como plist valido o le faltan Label/KeepAlive/RunAtLoad/LANG"
 echo "ok (1): los tres scripts parsean (bash 3.2 y homebrew bash) y el plist es un LaunchAgent valido"
 
 # (2) y (3) necesitan un servidor tmux de verdad.
@@ -53,11 +53,6 @@ else
 # en rutas fijas entre corridas).
 trap '"$TM" -L "$L" kill-server 2>/dev/null; if [ "${TAW_KEEP:-}" = "1" ]; then rm -rf /tmp/taw-r9; cp -r "$T" /tmp/taw-r9 2>/dev/null; fi; rm -rf "$T"' EXIT
   L="taw$$"
-  # Ninguna corrida del vigilante en esta prueba puede alcanzar el ~/bin/corrida.sh
-  # real: desde 14.29 D1 el tick lanza "latido" contra las corridas reales.
-  export CORRIDA_BIN="$T/no-hay-corrida"
-  # Ni el registro real: el barrido de closed relanza desde $CORRIDA_STATE.
-  export CORRIDA_STATE="$T/corridas"
 
   STATE_DIR="$T/state"
   LOG_FILE="$T/watch.log"
@@ -80,10 +75,6 @@ STUB
   chmod +x "$TMUX_SHIM"
 
   run_once() {
-    # BRIEF-r1 PA: sin CORRIDA_BIN explicito se apunta a una ruta que no existe:
-    # cuando Q4 instale ~/bin/corrida.sh, los casos sin enganche no deben llamar
-    # al responder real con nombres de sesion de prueba.
-    CORRIDA_BIN="${CORRIDA_BIN:-$T/no-hay-corrida}" \
     TMUX_BIN="$TMUX_SHIM" OPENCLAW_BIN="$STUB_OPENCLAW" QUIET_SECS=1 TICK_SECS=1 \
       STATE_DIR="$STATE_DIR" LOG_FILE="$LOG_FILE" \
       bash "$W" --once
@@ -141,6 +132,8 @@ $(cat "$CALLS")"
   [ "$n" -eq 1 ] || fail "con marcador y 2s de silencio esperaba 1 evento quiet, hubo $n:
 $(cat "$CALLS")"
   grep -q 'muse-orbit quiet for' "$CALLS" || fail "el evento no menciona muse-orbit quiet: $(cat "$CALLS")"
+  grep -q -- '--session-key agent:main:vigia-mac --text tmux: muse-orbit quiet for' "$CALLS" \
+    || fail "el evento quiet no va a la sesion fija agent:main:vigia-mac (sin clave cae en la de Telegram): $(cat "$CALLS")"
 
   run_once || fail "segundo --once fallo"
   n=$(wc -l <"$CALLS" | tr -d ' ')
@@ -169,6 +162,8 @@ $(cat "$CALLS")"
   [ "$n" -eq 3 ] || fail "esperaba un evento closed tras kill-session; hubo $n:
 $(cat "$CALLS")"
   tail -1 "$CALLS" | grep -q 'muse-orbit closed' || fail "el ultimo evento no es 'closed' de muse-orbit: $(tail -1 "$CALLS")"
+  tail -1 "$CALLS" | grep -q -- '--session-key agent:main:vigia-mac --text tmux: muse-orbit closed' \
+    || fail "el evento closed no va a la sesion fija agent:main:vigia-mac: $(tail -1 "$CALLS")"
   # El closed nombra el repo: el cwd viene del estado guardado (la sesion ya no existe para tmux).
   tail -1 "$CALLS" | grep -q 'last cwd=/' || fail "el evento closed no trae el cwd guardado: $(tail -1 "$CALLS")"
   [ -f "$STATE_DIR/muse-orbit.state" ] && fail "el archivo de estado de muse-orbit deberia haberse borrado tras closed"
@@ -269,6 +264,8 @@ $(cat "$CALLS")"
   n=$(grep -c 'glm-permiso waiting for approval' "$CALLS")
   [ "$n" -eq 1 ] || fail "(2f) un prompt de permiso a la vista avisa DE INMEDIATO, sin esperar QUIET_SECS; hubo $n:
 $(cat "$CALLS")"
+  grep -q -- '--session-key agent:main:vigia-mac --text tmux: glm-permiso waiting for approval' "$CALLS" \
+    || fail "(2f) el evento de aprobacion no va a la sesion fija agent:main:vigia-mac: $(cat "$CALLS")"
   # El reloj del TUI avanza ("running 3s" -> "running 4s"): sigue siendo EL MISMO prompt.
   sed -i.bak 's/running 3s/running 4s/' "$PANTALLA_F"; espera_pantalla glm-permiso 'running 4s'
   run_p || fail "--once (2f, mismo prompt) fallo"
@@ -483,99 +480,6 @@ assert "ev-log closed" in d.get("evento",""), "el ultimo evento no es el closed 
 PY
   echo "ok (2i): cada evento enviado queda anotado en eventos.jsonl (t epoch + texto)"
 
-  # (2j) Carril P (9.6): el dialogo se le ofrece a la politica (corrida.sh
-  # responder) ANTES de despertar a nadie. Si la politica contesta (rc 0) no sale
-  # evento y el prompt queda atendido; si no existe o no contesta, como hoy.
-  CORR_CALLS="$T/corrida-llamadas.txt"; : >"$CORR_CALLS"
-  COR_RC="$T/corrida-rc"; echo 1 >"$COR_RC"
-  COR_CONSUME="$T/corrida-consume"; echo 0 >"$COR_CONSUME"
-  PANTALLA_J="$T/pantalla-j.txt"
-  STUB_CORR="$T/corrida-stub"
-  cat >"$STUB_CORR" <<STUB
-#!/bin/sh
-# 14.29 D1: el vigilante tambien corre "latido"; ese no es un dialogo.
-[ "\$1" = latido ] && exit 0
-printf '%s\n' "CORR \$*" >> "$CORR_CALLS"
-rc=\$(cat "$COR_RC")
-# BRIEF-r2 QA: con rc 0 y CONSUME=1 el CLI de mentira se come la tecla (la
-# pantalla deja de mostrar el dialogo); con CONSUME=0 la tecla no hace nada.
-if [ "\$rc" = "0" ] && [ "\$(cat "$COR_CONSUME" 2>/dev/null || echo 0)" = "1" ]; then
-  printf 'aprobado, sigo trabajando\n' > "$PANTALLA_J"
-fi
-exit "\$rc"
-STUB
-  chmod +x "$STUB_CORR"
-  printf 'Permission - Bash\necho listar\n> Allow once\n  Deny\n running 3s\n' >"$PANTALLA_J"
-  "$TM" -L "$L" new-session -d -s pol-1 -x 100 -y 20 "$TUI $PANTALLA_J" || fail "no se pudo crear pol-1"
-  mark pol-1
-  : >"$CALLS"
-  espera_pantalla pol-1 'Allow once'
-  sleep 1
-  # La politica no contesta (rc 1: apagada, sin registro, escalada): como hoy.
-  CORRIDA_BIN="$STUB_CORR" run_p || fail "--once (2j, politica no contesta) fallo"
-  n=$(wc -l <"$CALLS" | tr -d ' ')
-  [ "$n" -eq 1 ] || fail "(2j) con la politica sin respuesta debia salir el evento; hubo $n"
-  grep -q 'pol-1 waiting for approval' "$CALLS" || fail "(2j) falta el evento de aprobacion: $(cat "$CALLS")"
-  grep -q '^CORR responder pol-1$' "$CORR_CALLS" || fail "(2j) el vigilante no le paso el dialogo a la politica: $(cat "$CORR_CALLS")"
-  # La politica contesta (rc 0) y el CLI consume la tecla (la pantalla deja de
-  # mostrar el dialogo): ningun evento, el prompt queda atendido.
-  sed -i.bak 's/echo listar/echo listar mas/' "$PANTALLA_J" && rm -f "$PANTALLA_J.bak"
-  espera_pantalla pol-1 'echo listar mas'
-  sleep 1
-  : >"$CALLS"
-  echo 1 >"$COR_CONSUME"
-  echo 0 >"$COR_RC"
-  CORRIDA_BIN="$STUB_CORR" run_p || fail "--once (2j, politica contesta) fallo"
-  n=$(wc -l <"$CALLS" | tr -d ' ')
-  [ "$n" -eq 0 ] || fail "(2j) la politica contesto: no debia salir NINGUN evento; hubo $n"
-  n=$(grep -c '^CORR responder pol-1$' "$CORR_CALLS")
-  [ "$n" -eq 2 ] || fail "(2j) la politica debia llamarse una vez por prompt; hubo $n"
-  grep -q '^approval=[0-9]' "$STATE_DIR/pol-1.state" || fail "(2j) el prompt atendido debe quedar marcado en el estado: $(cat "$STATE_DIR/pol-1.state")"
-  # Sin corrida.sh ejecutable el enganche esta inactivo: evento como hoy.
-  printf 'Permission - Bash\necho listar tres\n> Allow once\n  Deny\n running 3s\n' >"$PANTALLA_J"
-  espera_pantalla pol-1 'echo listar tres'
-  sleep 1
-  : >"$CALLS"
-  CORRIDA_BIN="$T/no-hay-corrida" run_p || fail "--once (2j, sin corrida.sh) fallo"
-  n=$(wc -l <"$CALLS" | tr -d ' ')
-  [ "$n" -eq 1 ] || fail "(2j) sin corrida.sh el evento debia salir como hoy; hubo $n"
-  n=$(grep -c '^CORR responder pol-1$' "$CORR_CALLS")
-  [ "$n" -eq 2 ] || fail "(2j) sin corrida.sh no debia llamarse a nadie nuevo; hubo $n"
-  # BRIEF-r2 QA (Major): un rc 0 del responder solo prueba que SUS send-keys
-  # salieron; si el CLI no consumio la tecla y el prompt SIGUE en pantalla, el
-  # vigilante no puede suprimir la escalada (quedaria mudo hasta el recordatorio
-  # de 900 s). El stub devuelve 0 sin tocar la pantalla: el evento sale igual.
-  echo 0 >"$COR_CONSUME"
-  echo 0 >"$COR_RC"
-  printf 'Permission - Bash\necho listar cinco\n> Allow once\n  Deny\n running 4s\n' >"$PANTALLA_J"
-  espera_pantalla pol-1 'echo listar cinco'
-  sleep 1
-  : >"$CALLS"
-  CORRIDA_BIN="$STUB_CORR" run_p || fail "--once (2j-QA, tecla no consumida) fallo"
-  n=$(wc -l <"$CALLS" | tr -d ' ')
-  [ "$n" -eq 1 ] || fail "(2j-QA) la politica devolvio 0 pero el prompt SIGUE: la escalada debe salir en el mismo ciclo; hubo $n"
-  grep -q 'pol-1 waiting for approval' "$CALLS" || fail "(2j-QA) falta la re-escalada del prompt no consumido: $(cat "$CALLS")"
-  "$TM" -L "$L" kill-session -t pol-1
-  echo "ok (2j): el dialogo se le ofrece a la politica primero; si contesta no despierta a nadie, y sin corrida.sh va como hoy"
-
-  # (2k) BRIEF-r1 PA: sin CORRIDA_BIN explicito, run_once lo apunta a una ruta
-  # inexistente: aunque exista un ~/bin/corrida.sh real (instalado en Q4), los
-  # casos sin enganche se comportan como hoy (el dialogo produce el evento).
-  run_once >/dev/null 2>&1   # traga el closed de pol-1 del caso anterior
-  PANTALLA_K="$T/pantalla-k.txt"
-  printf 'Permission - Bash\necho listar cuatro\n> Allow once\n  Deny\n running 3s\n' >"$PANTALLA_K"
-  "$TM" -L "$L" new-session -d -s pol-2 -x 100 -y 20 "$TUI $PANTALLA_K" || fail "no se pudo crear pol-2"
-  mark pol-2
-  : >"$CALLS"
-  espera_pantalla pol-2 'Allow once'
-  sleep 1
-  run_p || fail "--once (2k) fallo"
-  n=$(wc -l <"$CALLS" | tr -d ' ')
-  [ "$n" -eq 1 ] || fail "(2k) sin CORRIDA_BIN explicito el evento debia salir como hoy; hubo $n"
-  grep -q 'pol-2 waiting for approval' "$CALLS" || fail "(2k) falta el evento de pol-2: $(cat "$CALLS")"
-  "$TM" -L "$L" kill-session -t pol-2
-  echo "ok (2k): run_once neutraliza CORRIDA_BIN por defecto; sin enganche explicito, el dialogo avisa como hoy"
-
   # (2m) BRIEF-r2 QE: un fallo del journal (eventos.jsonl) no puede ni romper la
   # notificacion ni pasar en silencio: el evento se manda igual, el estado queda
   # notificado y el fallo queda en el log. eventos.jsonl como directorio hace
@@ -588,7 +492,7 @@ STUB
   : >"$LOG_FILE"
   sleep 2
   TMUX_BIN="$TMUX_SHIM" OPENCLAW_BIN="$STUB_OPENCLAW" QUIET_SECS=1 TICK_SECS=1 \
-    STATE_DIR="$STATE2" LOG_FILE="$LOG_FILE" CORRIDA_BIN="$T/no-hay-corrida" \
+    STATE_DIR="$STATE2" LOG_FILE="$LOG_FILE" \
     bash "$W" --once || fail "--once (2m) fallo"
   [ "$(grep -c 'ev-j quiet for' "$CALLS")" -eq 1 ] || fail "(2m) el evento debia mandarse igual pese al journal roto: $(cat "$CALLS")"
   grep -q 'notified=1' "$STATE2/ev-j.state" || fail "(2m) el fallo del journal no debe tocar el estado de notificacion"
@@ -605,13 +509,12 @@ STUB
   "$TM" -L "$L" new-session -d -s cad-default -x 80 -y 20 'cat' || fail "no se pudo crear cad-default"
   mark cad-default
   corre_default() {
-    CORRIDA_BIN="$T/no-hay-corrida" \
     TMUX_BIN="$TMUX_SHIM" OPENCLAW_BIN="$STUB_OPENCLAW" \
       STATE_DIR="$STATE_DIR" LOG_FILE="$LOG_FILE" \
       bash "$W" --once
   }
-  # Purga: los casos anteriores dejan sesiones muertas (pol-2, ev-j) cuyo
-  # `closed` sale en el primer tick que las ve; se consume antes de medir.
+  # Purga: el caso anterior deja una sesion muerta (ev-j) cuyo `closed` sale en
+  # el primer tick que la ve; se consume antes de medir.
   corre_default >/dev/null 2>&1 || fail "--once (2n, purga) fallo"
   : >"$CALLS"
   ahora=$(date +%s)
@@ -674,84 +577,6 @@ $(cat "$CALLS")"
   corre_default >/dev/null 2>&1 || true
   echo "ok (2n): la cadencia por defecto es 15 min de silencio y 60 min de recordatorio"
 
-  # (2o) 14.29 D1: el latido vive en el vigilante. Un --once lanza "latido" una
-  # vez; el siguiente tick inmediato no (LATIDO_SECS por defecto: 300 s); con la
-  # marca envejecida vuelve a lanzar; sin corrida.sh no lanza y sale 0; un latido
-  # que falla queda en el log y el vigilante sale 0.
-  STATE_LAT="$T/state-latido"
-  LAT_ARGV="$T/latido-argv.txt"; : >"$LAT_ARGV"
-  LAT_RC="$T/latido-rc"; echo 0 >"$LAT_RC"
-  STUB_LAT="$T/corrida-latido-stub"
-  cat >"$STUB_LAT" <<STUB
-#!/bin/sh
-printf '%s\n' "\$*" >> "$LAT_ARGV"
-exit "\$(cat "$LAT_RC")"
-STUB
-  chmod +x "$STUB_LAT"
-  corre_lat() { # $1 CORRIDA_BIN $2 STATE_DIR
-    LATIDO_ONCE="${LATIDO_ONCE-1}" CORRIDA_BIN="$1" TMUX_BIN="$TMUX_SHIM" OPENCLAW_BIN="$STUB_OPENCLAW" \
-      STATE_DIR="$2" LOG_FILE="$LOG_FILE" bash "$W" --once
-  }
-  corre_lat "$STUB_LAT" "$STATE_LAT" || fail "--once (2o, primer tick) fallo"
-  [ "$(cat "$LAT_ARGV")" = "latido" ] || fail "(2o) el primer tick debia lanzar 'latido' una vez: <$(cat "$LAT_ARGV")>"
-  grep -q 'latido launched (pid=[0-9]' "$LOG_FILE" || fail "(2o) el lanzamiento del latido debe quedar en el log: $(cat "$LOG_FILE")"
-  corre_lat "$STUB_LAT" "$STATE_LAT" || fail "--once (2o, tick inmediato) fallo"
-  n=$(wc -l <"$LAT_ARGV" | tr -d ' ')
-  [ "$n" -eq 1 ] || fail "(2o) un tick antes de LATIDO_SECS no debe relanzar el latido; hubo $n"
-  printf 'at=%s\npid=\n' "$(( $(date +%s) - 301 ))" >"$STATE_LAT/latido.stamp"
-  corre_lat "$STUB_LAT" "$STATE_LAT" || fail "--once (2o, marca vieja) fallo"
-  n=$(grep -cx 'latido' "$LAT_ARGV")
-  [ "$n" -eq 2 ] || fail "(2o) con la marca de hace 301 s el latido debia relanzarse; hubo $n"
-  rm -rf "$STATE_LAT"
-  corre_lat "$T/no-hay-corrida" "$STATE_LAT" || fail "(2o) sin corrida.sh el vigilante debia salir 0"
-  [ -e "$STATE_LAT/latido.stamp" ] && fail "(2o) sin corrida.sh no debe quedar marca de latido"
-  n=$(wc -l <"$LAT_ARGV" | tr -d ' ')
-  [ "$n" -eq 2 ] || fail "(2o) sin corrida.sh no debe lanzarse nada; hubo $n"
-  echo 1 >"$LAT_RC"
-  : >"$LOG_FILE"
-  corre_lat "$STUB_LAT" "$STATE_LAT" || fail "(2o) un latido que sale 1 no debe tumbar al vigilante"
-  grep -q 'latido failed (rc=1)' "$LOG_FILE" || fail "(2o) el latido fallido debe quedar en el log: $(cat "$LOG_FILE")"
-  grep -q '^at=[0-9]' "$STATE_LAT/latido.stamp" || fail "(2o) el latido fallido tambien deja la marca (no se reintenta cada tick)"
-  echo "ok (2o): el vigilante lanza el latido cada LATIDO_SECS, sin corrida.sh no lanza, y un fallo no lo tumba"
-
-  # (2p) 14.30: un --once manual no lanza el latido real salvo LATIDO_ONCE=1; una
-  # marca en el futuro con un pid vivo (reloj atrasado, pid reusado) no lo calla;
-  # el candado compartido con el LaunchAgent lo serializa y el de un vigilante
-  # muerto se retoma; LATIDO_SECS/LATIDO_TOPE no enteros no tumban el vigilante.
-  echo 0 >"$LAT_RC"; : >"$LAT_ARGV"; rm -rf "$STATE_LAT"
-  LATIDO_ONCE= corre_lat "$STUB_LAT" "$STATE_LAT" || fail "(2p) --once sin LATIDO_ONCE fallo"
-  [ -s "$LAT_ARGV" ] && fail "(2p) --once sin LATIDO_ONCE=1 no debe lanzar el latido: <$(cat "$LAT_ARGV")>"
-  [ -e "$STATE_LAT/latido.stamp" ] && fail "(2p) --once sin LATIDO_ONCE=1 no debe dejar marca de latido"
-  printf 'at=%s\npid=%s\n' "$(( $(date +%s) + 3600 ))" "$$" >"$STATE_LAT/latido.stamp"
-  corre_lat "$STUB_LAT" "$STATE_LAT" || fail "(2p) marca futura fallo"
-  [ "$(grep -cx latido "$LAT_ARGV")" -eq 1 ] || fail "(2p) una marca futura con pid vivo no debe callar el latido"
-  : >"$LAT_ARGV"; rm -f "$STATE_LAT/latido.stamp"
-  mkdir "$STATE_LAT/latido.lock"; printf '%s\n' "$$" >"$STATE_LAT/latido.lock/pid"
-  corre_lat "$STUB_LAT" "$STATE_LAT" || fail "(2p) candado ajeno fallo"
-  [ -s "$LAT_ARGV" ] && fail "(2p) con el candado en manos de un vigilante vivo no se lanza otro latido"
-  [ -d "$STATE_LAT/latido.lock" ] || fail "(2p) el candado ajeno no se toca"
-  sh -c 'exit 0' & muerto=$!; wait "$muerto"
-  printf '%s\n' "$muerto" >"$STATE_LAT/latido.lock/pid"
-  corre_lat "$STUB_LAT" "$STATE_LAT" || fail "(2p) candado muerto fallo"
-  [ "$(grep -cx latido "$LAT_ARGV")" -eq 1 ] || fail "(2p) el candado de un vigilante muerto se retoma y el latido sale"
-  [ -e "$STATE_LAT/latido.lock" ] && fail "(2p) el candado se suelta al terminar el tick"
-  : >"$LAT_ARGV"; rm -f "$STATE_LAT/latido.stamp"
-  mkdir "$STATE_LAT/latido.lock"; python3 -c 'import os,sys,time; t=time.time()-120; os.utime(sys.argv[1], (t, t))' "$STATE_LAT/latido.lock"
-  corre_lat "$STUB_LAT" "$STATE_LAT" || fail "(2p) candado huerfano sin pid fallo"
-  [ "$(grep -cx latido "$LAT_ARGV")" -eq 1 ] || fail "(2p) un candado sin pid de hace 2 min es huerfano: se retoma y el latido sale"
-  : >"$LAT_ARGV"; rm -f "$STATE_LAT/latido.stamp"
-  mkdir "$STATE_LAT/latido.lock"; printf '%s\n' "$$" >"$STATE_LAT/latido.lock/pid"
-  python3 -c 'import os,sys,time; t=time.time()-120; os.utime(sys.argv[1], (t, t))' "$STATE_LAT/latido.lock"
-  corre_lat "$STUB_LAT" "$STATE_LAT" || fail "(2p) candado viejo con pid reusado fallo"
-  [ "$(grep -cx latido "$LAT_ARGV")" -eq 1 ] || fail "(2p) un candado de hace 2 min con pid vivo (reusado) se retoma y el latido sale"
-  : >"$LAT_ARGV"; rm -rf "$STATE_LAT"; : >"$LOG_FILE"
-  LATIDO_SECS=abc LATIDO_TOPE=4m corre_lat "$STUB_LAT" "$STATE_LAT" \
-    || fail "(2p) LATIDO_SECS/LATIDO_TOPE no enteros tumbaron al vigilante: $(cat "$LOG_FILE")"
-  [ "$(grep -cx latido "$LAT_ARGV")" -eq 1 ] || fail "(2p) con valores invalidos el latido sale con los de fabrica"
-  grep -q 'LATIDO_SECS invalid (abc), using 300' "$LOG_FILE" || fail "(2p) LATIDO_SECS invalido debe quedar en el log"
-  grep -q 'LATIDO_TOPE invalid (4m), using 240' "$LOG_FILE" || fail "(2p) LATIDO_TOPE invalido debe quedar en el log"
-  echo "ok (2p): --once no lanza el latido sin LATIDO_ONCE=1, marca futura no lo calla, candado serializa, enteros validados"
-
   "$TM" -L "$L" kill-server 2>/dev/null
   echo "ok (2): maquina de estados del vigilante verificada con tmux real ($TM)"
 
@@ -781,14 +606,19 @@ print(json.dumps({
   echo "ok (3a): fuera de tmux (\$TMUX vacio) el hook no manda nada y sale 0"
 
   # Stub de tmux para el hook: contesta display-message (nombre de sesion) y show-environment
-  # (el marcador), segun el archivo MARK_FILE: "1" = marcada, vacio = sin marcar.
+  # (el marcador y AGENT_WORK_MANAGED), segun MARK_FILE y MANAGED_FILE: "1" = puesta, vacio = ausente.
   MARK_FILE="$T/mark"; : >"$MARK_FILE"
+  MANAGED_FILE="$T/managed"; : >"$MANAGED_FILE"
   DISPLAY_STUB="$T/tmux-display-stub"
   cat >"$DISPLAY_STUB" <<STUB
 #!/bin/sh
 if [ "\$1" = "display-message" ]; then
   echo "claude-orbit"
   exit 0
+fi
+if [ "\$1" = "show-environment" ] && [ "\$2" = "AGENT_WORK_MANAGED" ]; then
+  if [ "\$(cat "$MANAGED_FILE")" = "1" ]; then echo "AGENT_WORK_MANAGED=1"; exit 0; fi
+  echo "unknown variable: AGENT_WORK_MANAGED" >&2; exit 1
 fi
 if [ "\$1" = "show-environment" ]; then
   if [ "\$(cat "$MARK_FILE")" = "1" ]; then echo "OPENCLAW_WATCH=1"; exit 0; fi
@@ -830,6 +660,15 @@ STUB
   [ "$pipes" -eq 2 ] || fail "el texto del agente inyecto separadores '|' (hay $pipes, deben ser 2): $call"
   [ "$quotes" -eq 2 ] || fail "el texto del agente cerro la cita (hay $quotes comillas, deben ser 2): $call"
   echo "ok (3b): dentro de tmux el hook manda cwd + sesion + ultimo texto del asistente en 2do plano"
+
+  # Una sesion gestionada (AGENT_WORK_MANAGED=1) la reporta su host: el hook calla aunque
+  # lleve el marcador. El mismo stub, marcado, acaba de mandar un evento en (3b).
+  echo 1 >"$MANAGED_FILE"; : >"$CALLS"
+  out_rc=$(TMUX=fake TMUX_BIN="$DISPLAY_STUB" OPENCLAW_BIN="$STUB_OPENCLAW" bash -c "printf '%s' '$HOOK_JSON' | bash '$H'; echo \$?" | tail -1)
+  [ "$out_rc" = "0" ] || fail "(3-managed) el hook gestionado debe salir 0, salio $out_rc"
+  sleep 1
+  [ ! -s "$CALLS" ] || fail "(3-managed) el Stop de una sesion gestionada desperto un modelo: $(cat "$CALLS")"
+  echo "ok (3-managed): el Stop de una sesion gestionada no despierta modelo"
 fi
 
 # (4) Anclas de las dos skills tocadas.
@@ -865,21 +704,9 @@ DISP=agents/main/agent/workshop-skills/agent-dispatch/SKILL.md
 grep -qF 'Wake-ups' "$DISP" || fail "$DISP: el paso 3 no referencia el mecanismo de despertar de mac-tmux-control"
 grep -qF 'OPENCLAW_WATCH 1' "$DISP" || fail "$DISP: el paso 2 no marca la sesion al entregar"
 grep -qF -- '-u OPENCLAW_WATCH' "$DISP" || fail "$DISP: el paso 4 no desmarca al terminar el loop"
-# Fase 9, 9.7: las dos skills abren sesiones con corrida.sh (que marca antes de
-# mandar) y marcan ANTES del primer send-keys, no despues. Pendiente de
-# CodeRabbit del PR 60: marcar despues de mandar deja una ventana donde la
-# sesion trabaja sin vigilancia.
-grep -qF 'corrida.sh lanzar-sesion' "$SK" || fail "$SK: no abre sesiones con corrida.sh lanzar-sesion"
+# Marcar ANTES del primer send-keys, no despues: marcar despues de mandar deja
+# una ventana donde la sesion trabaja sin vigilancia (CodeRabbit, PR 60).
 grep -qF 'BEFORE the first send-keys' "$SK" || fail "$SK: no marca BEFORE the first send-keys"
-# Fase 9, 9.9: al aviso closed de una sesion que figura en una corrida ABIERTA, main la
-# relanza aunque no haya fase activa: el registro de la corrida, no la fase, es lo que
-# vuelve relanzable una sesion (medido 2026-09-24, simulacro 9.9: cuatro avisos de
-# sesiones sim9-* de una corrida abierta cayeron en el vacio). Y una sola vez.
-grep -qF 'lanzar-sesion <run-id> <rol> <cli> <dir> --nombre <session>' "$SK" \
-  || fail "$SK: falta el relanzo por corrida abierta en el evento closed"
-grep -qF 'do NOT relaunch a second time' "$SK" \
-  || fail "$SK: falta el tope de un solo relanzo por sesion cerrada"
-grep -qF 'corrida.sh lanzar-sesion' "$DISP" || fail "$DISP: no abre sesiones con corrida.sh lanzar-sesion"
 grep -qF 'BEFORE the first send-keys' "$DISP" || fail "$DISP: no marca BEFORE the first send-keys"
 grep -qF 'unmark' "$DISP" || fail "$DISP: falta desmarcar la cadena terminada o abandonada"
 echo "ok (4): anclas de mac-tmux-control y agent-dispatch presentes"
@@ -895,774 +722,6 @@ if grep -Eiq '(send|deliver)[^.]*every[^.]*(turn|inspection)' "$ENTREGA"; then
   fail "$ENTREGA: manda en cada turno/inspeccion antes de clasificar el wake-up interno"
 fi
 echo "ok (4c): owner-report-delivery clasifica el wake-up interno antes de entregar"
-
-# (2l) Enrutado por corrida (9.9b, medido 2026-09-25): los eventos de una sesion con
-# OPENCLAW_WATCH_RUN=<id> van con --session-key agent:main:sim9-<id> a la sesion propia
-# de la corrida; el "closed" tambien, con el id capturado en el .state ANTES de morir
-# (al cerrarse ya no se puede leer su entorno). Sin marca, el envio va a la sesion fija
-# agent:main:vigia-mac: sin clave caia en agent:main:main, atada al Telegram de David.
-if [ -n "${TM:-}" ] && [ -n "${TUI:-}" ]; then
-PANTALLA_R="$T/pantalla-ruta.txt"
-printf 'Run this command?\n$ echo hola\nrunning 9s\n' >"$PANTALLA_R"
-"$TM" -L "$L" new-session -d -s sim9-ruta -x 80 -y 20 "$TUI $PANTALLA_R" || fail "no se pudo crear sim9-ruta"
-mark sim9-ruta
-"$TM" -L "$L" set-environment -t sim9-ruta OPENCLAW_WATCH_RUN sim9-TEST-RUTA
-espera_pantalla sim9-ruta "running"
-: >"$CALLS"
-run_p || fail "--once (2l, prompt con run) fallo"
-grep -q -- '--session-key agent:main:sim9-sim9-TEST-RUTA' "$CALLS" \
-  || fail "(2l) el evento de una sesion con OPENCLAW_WATCH_RUN no lleva --session-key a la sesion de la corrida:
-$(cat "$CALLS")"
-"$TM" -L "$L" kill-session -t sim9-ruta
-: >"$CALLS"
-run_p || fail "--once (2l, closed con run) fallo"
-grep -q -- '--session-key agent:main:sim9-sim9-TEST-RUTA' "$CALLS" \
-  || fail "(2l) el evento 'closed' no lleva el --session-key del run capturado en .state:
-$(cat "$CALLS")"
-grep -q 'sim9-ruta closed' "$CALLS" || fail "(2l) no se vio el evento closed de sim9-ruta:
-$(cat "$CALLS")"
-# (2l, segunda parte) Una sesion NUEVA con el mismo nombre pero SIN run (marcada
-# a mano, sin corrida) no hereda el run del estado que dejo la anterior: sus
-# eventos van a agent:main:vigia-mac, nunca a la corrida vieja (CodeRabbit, dos
-# vueltas). El estado previo de sim9-ruta quedo con run=sim9-TEST-RUTA.
-"$TM" -L "$L" new-session -d -s sim9-ruta -x 80 -y 20 "$TUI $PANTALLA_R" || fail "no se pudo recrear sim9-ruta"
-mark sim9-ruta
-espera_pantalla sim9-ruta "running"
-: >"$CALLS"
-run_p || fail "--once (2l, sin run) fallo"
-grep -q 'sim9-ruta waiting for approval' "$CALLS" || fail "(2l) sin run no salio el evento de aprobacion:
-$(cat "$CALLS")"
-grep -q -- '--session-key agent:main:vigia-mac --text tmux: sim9-ruta waiting for approval' "$CALLS" \
-  || fail "(2l) el evento sin corrida no va a la sesion fija agent:main:vigia-mac:
-$(cat "$CALLS")"
-if grep -q -- 'sim9-TEST-RUTA' "$CALLS"; then
-  fail "(2l) la sesion recreada sin OPENCLAW_WATCH_RUN heredo el --session-key de la corrida previa:
-$(cat "$CALLS")"
-fi
-"$TM" -L "$L" kill-session -t sim9-ruta 2>/dev/null
-run_p >/dev/null 2>&1 || true
-echo "ok (2l): los eventos de una corrida se rutearon a su sesion, vivos y cerrados; sin corrida, a agent:main:vigia-mac"
-else
-  echo "SKIP (2l): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
-fi
-
-# (2m) Relanzo sin modelo (medido 2026-09-29, sim9-20260928-2039 casos 5 y 6): el
-# closed de una sesion de una corrida ABIERTA que figura en su registro lo relanza el
-# vigilante con corrida.sh lanzar-sesion, una sola vez por (corrida, sesion); el evento
-# sale igual, como reporte. El system event solo caia en una sesion del gateway en modo
-# steer, se mezclaba con otro turno y nadie relanzaba en 32 min.
-if [ -n "${TM:-}" ]; then
-RARGV="$T/relanzo-argv.txt"; : >"$RARGV"
-STUB_REL="$T/corrida-relanzo"
-cat >"$STUB_REL" <<STUB
-#!/bin/sh
-printf '%s\n' "\$*" >>"$RARGV"
-[ "\$1" = lanzar-sesion ] || exit 1
-if [ -f "$T/relanzo-falla" ]; then echo "lanzar-sesion: sin fila de modos para glm" >&2; exit 1; fi
-"$TMUX_SHIM" new-session -d -s "\$7" -x 80 -y 20 cat || exit 1
-"$TMUX_SHIM" set-environment -t "\$7" OPENCLAW_WATCH_RUN "\$2"
-"$TMUX_SHIM" set-environment -t "\$7" OPENCLAW_WATCH 1
-echo "\$7"
-STUB
-chmod +x "$STUB_REL"
-TRAB="$T/trabajo-rel"; mkdir -p "$TRAB"
-registro() { # $1 id $2 estado $3.. nombres de sesion en el registro
-  local id=$1 estado=$2; shift 2
-  mkdir -p "$CORRIDA_STATE/$id"
-  python3 -c "
-import json,sys
-p,i,e,d=sys.argv[1:5]
-json.dump({'id':i,'estado':e,'sesiones':[{'nombre':n,'rol':'carril','cli':'glm','dueno':'lead','dir':d} for n in sys.argv[5:]]},open(p,'w'))
-" "$CORRIDA_STATE/$id/registro.json" "$id" "$estado" "$TRAB" "$@"
-}
-nace() { # $1 sesion $2 run
-  "$TM" -L "$L" new-session -d -s "$1" -x 80 -y 20 cat || fail "no se pudo crear $1"
-  "$TM" -L "$L" set-environment -t "$1" OPENCLAW_WATCH_RUN "$2"
-  mark "$1"
-}
-# CORRIDA_AVISOS=0: este bloque mide la ruta de eventos + relanzo, que sin la
-# reversa sigue siendo la de hoy para corridas; la ruta de avisos es el (2q).
-run_r() { CORRIDA_BIN="$STUB_REL" CORRIDA_AVISOS=0 QUIET_SECS=100000 run_once; }
-n_lanzar() { grep -c '^lanzar-sesion' "$RARGV"; }
-ev_rel() { # $1 id $2 True|False -> lineas relanzo-automatico con ese ok
-  python3 -c "
-import json,sys
-n=0
-for l in open(sys.argv[1]):
-  d=json.loads(l)
-  if d.get('tipo')=='relanzo-automatico' and d.get('ok') is (sys.argv[2]=='True'): n+=1
-print(n)" "$CORRIDA_STATE/$1/eventos.jsonl" "$2" 2>/dev/null || echo 0
-}
-registro r-abierta abierta sim9-rel
-nace sim9-rel r-abierta
-nace sim9-fuera r-abierta
-run_r || fail "--once (2m, primera foto) fallo"
-: >"$CALLS"
-"$TM" -L "$L" kill-session -t sim9-rel
-run_r || fail "--once (2m, closed de una corrida abierta) fallo"
-[ "$(n_lanzar)" -eq 1 ] || fail "(2m) se esperaba un lanzar-sesion; hubo $(n_lanzar):
-$(cat "$RARGV")"
-[ "$(grep '^lanzar-sesion' "$RARGV")" = "lanzar-sesion r-abierta carril glm $TRAB --nombre sim9-rel" ] \
-  || fail "(2m) lanzar-sesion con argumentos distintos a los del registro: $(cat "$RARGV")"
-"$TM" -L "$L" show-environment -t sim9-rel OPENCLAW_WATCH_RUN 2>/dev/null | grep -qx 'OPENCLAW_WATCH_RUN=r-abierta' \
-  || fail "(2m) la sesion relanzada no quedo viva con OPENCLAW_WATCH_RUN=r-abierta"
-[ "$(ev_rel r-abierta True)" = 1 ] || fail "(2m) eventos.jsonl de la corrida sin relanzo-automatico ok true: $(cat "$CORRIDA_STATE/r-abierta/eventos.jsonl" 2>&1)"
-grep -q 'sim9-rel closed | last cwd=.* | relanzada automaticamente: corrida.sh lanzar-sesion r-abierta carril glm' "$CALLS" \
-  || fail "(2m) el evento closed no reporta el relanzo: $(cat "$CALLS")"
-grep -q -- '--session-key agent:main:sim9-r-abierta' "$CALLS" || fail "(2m) el reporte no va a la sesion de la corrida: $(cat "$CALLS")"
-run_r || fail "--once (2m, segundo tick) fallo"
-[ "$(n_lanzar)" -eq 1 ] || fail "(2m) el segundo tick relanzo otra vez: $(cat "$RARGV")"
-: >"$CALLS"
-"$TM" -L "$L" kill-session -t sim9-rel
-run_r || fail "--once (2m, segunda caida) fallo"
-[ "$(n_lanzar)" -eq 1 ] || fail "(2m) la sesion ya relanzada que murio otra vez se relanzo de nuevo: $(cat "$RARGV")"
-grep -q 'sim9-rel closed .*ya se relanzo automaticamente una vez y volvio a cerrarse: NO se relanza otra vez' "$CALLS" \
-  || fail "(2m) la segunda caida no escala en el evento: $(cat "$CALLS")"
-[ "$(ev_rel r-abierta False)" = 1 ] || fail "(2m) la segunda caida no quedo en eventos.jsonl con ok false"
-: >"$CALLS"
-"$TM" -L "$L" kill-session -t sim9-fuera
-run_r || fail "--once (2m, sesion fuera del registro) fallo"
-[ "$(n_lanzar)" -eq 1 ] || fail "(2m) se relanzo una sesion que no figura en el registro: $(cat "$RARGV")"
-grep -q 'sim9-fuera closed | last cwd=[^|]*$' "$CALLS" || fail "(2m) la sesion fuera del registro no dio el closed de siempre: $(cat "$CALLS")"
-registro r-cerrada cerrada sim9-cer
-nace sim9-cer r-cerrada
-run_r || fail "--once (2m, foto de la corrida cerrada) fallo"
-: >"$CALLS"
-"$TM" -L "$L" kill-session -t sim9-cer
-run_r || fail "--once (2m, closed de una corrida cerrada) fallo"
-[ "$(n_lanzar)" -eq 1 ] || fail "(2m) se relanzo una sesion de una corrida cerrada: $(cat "$RARGV")"
-grep -q 'sim9-cer closed | last cwd=[^|]*$' "$CALLS" || fail "(2m) la corrida cerrada no dio el closed de siempre: $(cat "$CALLS")"
-registro r-falla abierta sim9-fal
-nace sim9-fal r-falla
-run_r || fail "--once (2m, foto de la que falla) fallo"
-: >"$CALLS"; : >"$T/relanzo-falla"
-"$TM" -L "$L" kill-session -t sim9-fal
-run_r || fail "(2m) un lanzar-sesion que falla tumbo al vigilante"
-rm -f "$T/relanzo-falla"
-[ "$(n_lanzar)" -eq 2 ] || fail "(2m) no se intento el relanzo de sim9-fal: $(cat "$RARGV")"
-grep -q 'sim9-fal closed .*no se pudo relanzar: lanzar-sesion: sin fila de modos para glm (corrida r-falla)' "$CALLS" \
-  || fail "(2m) el fallo del relanzo no quedo en el evento: $(cat "$CALLS")"
-[ "$(ev_rel r-falla False)" = 1 ] || fail "(2m) el fallo del relanzo no quedo en eventos.jsonl con ok false"
-run_r || fail "--once (2m, tick tras el fallo) fallo"
-[ "$(n_lanzar)" -eq 2 ] || fail "(2m) un relanzo fallido se reintento solo: $(cat "$RARGV")"
-"$TM" -L "$L" kill-session -t sim9-rel 2>/dev/null
-echo "ok (2m): el vigilante relanza una vez las sesiones de una corrida abierta y reporta; ni dos veces, ni cerradas, ni fuera del registro"
-else
-  echo "SKIP (2m): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
-fi
-
-# (2q) 19.1 B2: la ruta de avisos. Una sesion marcada con OPENCLAW_WATCH_RUN y
-# corrida.sh ejecutable avisa por el pendiente durable (corrida.sh avisos emitir)
-# y no por system event; la llave de aprobacion es el hash de SOLO las lineas del
-# dialogo, asi el repintado del TUI no la cambia (hallazgo 4); los pendientes
-# viejos se despiertan una vez por tick con tope (sin cron nuevo); y el relanzo
-# re-entrega el --encargo registrado (hallazgo 7).
-if [ -n "${TM:-}" ]; then
-AARGV="$T/avisos-argv.txt"; : >"$AARGV"
-STUB_AV="$T/corrida-avisos-stub"
-cat >"$STUB_AV" <<STUB
-#!/bin/sh
-printf '%s\n' "\$*" >> "$AARGV"
-[ "\$1" = responder ] && exit 1
-exit 0
-STUB
-chmod +x "$STUB_AV"
-run_av() { CORRIDA_BIN="$STUB_AV" run_once; }
-esperar_aviso() { # $1 regex; 0 si aparece en AARGV dentro de 6s (el emitir va desacoplado)
-  local i=0
-  while [ "$i" -lt 30 ]; do
-    grep -Eq -- "$1" "$AARGV" 2>/dev/null && return 0
-    sleep 0.2
-    i=$((i + 1))
-  done
-  return 1
-}
-run_avsin() { CORRIDA_BIN="$STUB_AV" CORRIDA_AVISOS=0 run_once; }
-
-# Purga: los casos anteriores dejan sesiones muertas cuyo closed sale en el
-# primer tick que las ve; se consume antes de medir.
-run_av >/dev/null 2>&1 || fail "--once (2q, purga) fallo"
-: >"$AARGV"
-
-# (2q-1) quiet y closed de una sesion de corrida: por avisos, cero system events.
-STATE_DIR="$T/state-2q-1"; mkdir -p "$STATE_DIR"
-"$TM" -L "$L" new-session -d -s sim9-avq -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avq"
-mark sim9-avq
-"$TM" -L "$L" set-environment -t sim9-avq OPENCLAW_WATCH_RUN sim9-AVQ
-: >"$CALLS"
-sleep 2
-run_av || fail "--once (2q-1, quiet con avisos) fallo"
-esperar_aviso 'avisos emitir sim9-AVQ sim9-avq fin-turno' \
-  || fail "(2q-1) el quiet de una sesion con corrida debia ir por avisos (desacoplado):
-$(cat "$AARGV")"
-n=$(grep -c '^avisos emitir sim9-AVQ sim9-avq fin-turno --llave ' "$AARGV")
-[ "$n" -eq 1 ] || fail "(2q-1) el quiet de una sesion con corrida debia ir por avisos; hubo $n:
-$(cat "$AARGV")"
-n=$(wc -l <"$CALLS" | tr -d ' ')
-[ "$n" -eq 0 ] || fail "(2q-1) la ruta avisos no debe mandar system events: $(cat "$CALLS")"
-run_av || fail "--once (2q-1, segundo tick) fallo"
-[ "$(wc -l <"$AARGV" | tr -d ' ')" -eq 1 ] || fail "(2q-1) el segundo tick repitio el aviso (notified debia quedar 1): $(cat "$AARGV")"
-"$TM" -L "$L" kill-session -t sim9-avq
-: >"$AARGV"
-run_av || fail "--once (2q-1, closed) fallo"
-esperar_aviso 'avisos emitir sim9-AVQ sim9-avq cierre'
-grep -q '^avisos emitir sim9-AVQ sim9-avq cierre --llave closed$' "$AARGV" \
-  || fail "(2q-1) el closed debia ir por avisos con llave closed: $(cat "$AARGV")"
-[ -f "$STATE_DIR/sim9-avq.state" ] && fail "(2q-1) el aviso de cierre salio pero el estado no se borro"
-"$TM" -L "$L" kill-session -t sim9-avq 2>/dev/null
-echo "ok (2q-1): quiet y closed de una corrida van por avisos, sin system events y sin repetirse"
-
-# (2q-2) aprobacion y repintado (hallazgo 4): el reloj del TUI no cambia la llave
-STATE_DIR="$T/state-2q-2"; mkdir -p "$STATE_DIR"
-# (un aviso por episodio) y un dialogo distinto da llave nueva.
-PANTALLA_Q="$T/pantalla-q.txt"
-printf 'Permission - Bash\necho aviso-q\n> Allow once\n  Deny\n girando |\n' >"$PANTALLA_Q"
-"$TM" -L "$L" new-session -d -s sim9-avp -x 80 -y 20 "$TUI $PANTALLA_Q" || fail "no se pudo crear sim9-avp"
-mark sim9-avp
-"$TM" -L "$L" set-environment -t sim9-avp OPENCLAW_WATCH_RUN sim9-AVP
-espera_pantalla sim9-avp 'Allow once'
-sleep 1
-run_pav() { APPROVAL_REMIND_SECS=3 CORRIDA_BIN="$STUB_AV" run_once; }
-run_pav || fail "--once (2q-2, primer dialogo) fallo"
-esperar_aviso 'avisos emitir sim9-AVP sim9-avp aprobacion'
-n=$(grep -c '^avisos emitir sim9-AVP sim9-avp aprobacion --llave ' "$AARGV")
-[ "$n" -eq 1 ] || fail "(2q-2) el dialogo debia emitir un aviso de aprobacion; hubo $n:
-$(cat "$AARGV")"
-# Un spinner ASCII repinta la cola (el hash de la cola cambia) pero NO las lineas
-# del dialogo: la llave se mantiene y el aviso deduplica.
-sed -i.bak 's/girando |/girando \//' "$PANTALLA_Q"; rm -f "$PANTALLA_Q.bak"
-espera_pantalla sim9-avp 'girando /'
-run_pav || fail "--once (2q-2, repintado con spinner) fallo"
-esperar_aviso 'avisos emitir sim9-AVP sim9-avp aprobacion'
-n=$(grep -c '^avisos emitir sim9-AVP sim9-avp aprobacion --llave ' "$AARGV")
-[ "$n" -eq 2 ] || fail "(2q-2) el repintado debia reevaluar el dialogo (2 llamadas); hubo $n:
-$(cat "$AARGV")"
-n=$(grep '^avisos emitir sim9-AVP sim9-avp aprobacion --llave ' "$AARGV" | sort -u | wc -l | tr -d ' ')
-[ "$n" -eq 1 ] || fail "(2q-2) el repintado del TUI cambio la llave del dialogo (esperaba 1 llave unica, hubo $n):
-$(cat "$AARGV")"
-# Un dialogo DISTINTO (otra pregunta) cambia las lineas que casan: llave nueva.
-sed -i.bak 's/> Allow once/> Do you want to proceed?/' "$PANTALLA_Q"; rm -f "$PANTALLA_Q.bak"
-espera_pantalla sim9-avp 'Do you want to proceed'
-run_pav || fail "--once (2q-2, dialogo distinto) fallo"
-n=$(grep '^avisos emitir sim9-AVP sim9-avp aprobacion --llave ' "$AARGV" | sort -u | wc -l | tr -d ' ')
-[ "$n" -eq 2 ] || fail "(2q-2) un dialogo distinto debia dar una llave nueva (esperaba 2 llaves unicas, hubo $n):
-$(cat "$AARGV")"
-"$TM" -L "$L" kill-session -t sim9-avp
-run_av >/dev/null 2>&1 || true
-echo "ok (2q-2): el repintado no cambia la llave del dialogo (un aviso por episodio); un dialogo distinto, si"
-
-# (2q-3) sin OPENCLAW_WATCH_RUN, o con CORRIDA_AVISOS=0: la ruta de siempre.
-STATE_DIR="$T/state-2q-3"; mkdir -p "$STATE_DIR"
-"$TM" -L "$L" new-session -d -s sim9-avs -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avs"
-mark sim9-avs
-: >"$CALLS"; : >"$AARGV"
-sleep 2
-run_av || fail "--once (2q-3, sin run) fallo"
-grep -q '^avisos' "$AARGV" && fail "(2q-3) sin OPENCLAW_WATCH_RUN no debe haber ruta avisos: $(cat "$AARGV")"
-grep -q 'sim9-avs quiet for' "$CALLS" || fail "(2q-3) sin run el evento debia salir como hoy: $(cat "$CALLS")"
-"$TM" -L "$L" set-environment -t sim9-avs OPENCLAW_WATCH_RUN sim9-AVS
-"$TM" -L "$L" kill-session -t sim9-avs
-: >"$CALLS"; : >"$AARGV"
-run_avsin || fail "--once (2q-3, CORRIDA_AVISOS=0) fallo"
-grep -q '^avisos' "$AARGV" && fail "(2q-3) con CORRIDA_AVISOS=0 no debe haber ruta avisos: $(cat "$AARGV")"
-grep -q 'sim9-avs closed' "$CALLS" || fail "(2q-3) con la reversa el closed debia salir como hoy: $(cat "$CALLS")"
-echo "ok (2q-3): sin corrida marcada o con la reversa, los eventos salen por agent:main:vigia-mac como siempre"
-
-# (2q-4) reintento: pendientes con mtime viejo despiertan una vez por corrida y
-STATE_DIR="$T/state-2q-4"; mkdir -p "$STATE_DIR"
-# tick, con tope de 5 corridas; los frescos (menos de 30 s) no.
-mkdir -p "$CORRIDA_STATE/sim9-RT1/avisos" "$CORRIDA_STATE/sim9-RT2/avisos" "$CORRIDA_STATE/sim9-FRESCO/avisos"
-printf '{"schema":"corrida-aviso.v1"}\n' >"$CORRIDA_STATE/sim9-RT1/avisos/a.json"
-printf '{"schema":"corrida-aviso.v1"}\n' >"$CORRIDA_STATE/sim9-RT2/avisos/a.json"
-printf '{"schema":"corrida-aviso.v1"}\n' >"$CORRIDA_STATE/sim9-FRESCO/avisos/a.json"
-python3 -c 'import os,sys,time; t=time.time()-31
-for p in sys.argv[1:]: os.utime(p,(t,t))' \
-  "$CORRIDA_STATE/sim9-RT1/avisos/a.json" "$CORRIDA_STATE/sim9-RT2/avisos/a.json"
-: >"$AARGV"
-run_av || fail "--once (2q-4, reintento) fallo"
-# Una sola invocacion por tick con TODOS los ids (19.1-r2): un spawn de
-# corrida.sh por pendiente retrasaba el tick y tiraba la ventana de relanzo
-# del simulacro (SIM_ESPERA_DOBLE=6).
-[ "$(grep -c '^avisos despertar sim9-RT1 sim9-RT2$' "$AARGV")" -eq 1 ] || fail "(2q-4) falta el despertar en una sola llamada de RT1 y RT2: $(cat "$AARGV")"
-grep -q 'despertar sim9-FRESCO' "$AARGV" && fail "(2q-4) un pendiente fresco no debe despertarse: $(cat "$AARGV")"
-# B2 r11: cada corrida viaja como su propio argumento. Un solo argumento con
-# todos los ids no despierta a nadie y el retroceso suprime el reintento.
-ARGC_LOG="$T/despertar-argc.txt"; : >"$ARGC_LOG"
-STUB_ARGC="$T/corrida-argc"
-printf '#!/bin/sh\n[ "$2" = despertar ] && printf "%%s\\n" "$#" >> "%s"\nexit 0\n' "$ARGC_LOG" > "$STUB_ARGC"
-chmod +x "$STUB_ARGC"
-rm -f "$CORRIDA_STATE/sim9-RT1/avisos/.despertado" "$CORRIDA_STATE/sim9-RT2/avisos/.despertado"
-CORRIDA_BIN="$STUB_ARGC" run_once || fail "--once (2q-4, argumentos) fallo"
-[ "$(head -1 "$ARGC_LOG")" = "4" ] || fail "(2q-4) despertar debia recibir cada corrida como argumento propio (avisos despertar RT1 RT2 = 4 argumentos); recibio: $(cat "$ARGC_LOG")"
-[ -f "$CORRIDA_STATE/sim9-RT1/avisos/a.json" ] || fail "(2q-4) el despertar no debe consumir el pendiente"
-i=0
-while [ "$i" -lt 7 ]; do
-  mkdir -p "$CORRIDA_STATE/sim9-TOPE$i/avisos"
-  printf '{"schema":"corrida-aviso.v1"}\n' >"$CORRIDA_STATE/sim9-TOPE$i/avisos/a.json"
-  python3 -c 'import os,sys,time; t=time.time()-31; os.utime(sys.argv[1],(t,t))' "$CORRIDA_STATE/sim9-TOPE$i/avisos/a.json"
-  i=$((i + 1))
-done
-: >"$AARGV"
-run_av || fail "--once (2q-4, tope) fallo"
-n=$(grep -c '^avisos despertar ' "$AARGV")
-[ "$n" -eq 1 ] || fail "(2q-4) el reintento debe ser UNA llamada por tick (hubo $n): $(cat "$AARGV")"
-ids=$(grep '^avisos despertar ' "$AARGV" | head -1 | wc -w | tr -d ' ')
-[ "$ids" -eq 7 ] || fail "(2q-4) el tope de 5 corridas por tick no se respeto (ids en la llamada: $((ids - 2)), tope 5): $(cat "$AARGV")"
-rm -rf "$CORRIDA_STATE"/sim9-RT1 "$CORRIDA_STATE"/sim9-RT2 "$CORRIDA_STATE"/sim9-FRESCO "$CORRIDA_STATE"/sim9-TOPE*
-echo "ok (2q-4): los pendientes de mas de 30 s despiertan una vez por tick, con tope de 5 corridas y sin consumirse"
-
-# (2q-5) relanzo con encargo (hallazgo 7): lanzar-sesion re-entrega el --encargo
-STATE_DIR="$T/state-2q-5"; mkdir -p "$STATE_DIR"
-# del registro; sin encargo registrado, el comando queda como siempre.
-RARGV="$T/relanzo-enc-argv.txt"; : >"$RARGV"
-STUB_RE="$T/corrida-relanzo-enc"
-cat >"$STUB_RE" <<STUB
-#!/bin/sh
-printf '%s\n' "\$*" >> "$RARGV"
-[ "\$1" = lanzar-sesion ] || exit 1
-last=""
-for a in "\$@"; do last="\$a"; done
-"$TMUX_SHIM" new-session -d -s "\$last" -x 80 -y 20 cat || exit 1
-"$TMUX_SHIM" set-environment -t "\$last" OPENCLAW_WATCH_RUN "\$2"
-"$TMUX_SHIM" set-environment -t "\$last" OPENCLAW_WATCH 1
-echo "\$last"
-STUB
-chmod +x "$STUB_RE"
-ENC="$T/encargo-rel.txt"; printf 'trabaja la parte 3\n' >"$ENC"
-registro_enc() { # $1 id $2 estado $3 sesion $4 encargo ('-' = sin encargo)
-  mkdir -p "$CORRIDA_STATE/$1"
-  R_ID="$1" R_EST="$2" R_SES="$3" R_ENC="$4" R_DIR="$CORRIDA_STATE/$1" python3 - <<'PY'
-import json, os
-e = {'nombre': os.environ['R_SES'], 'rol': 'carril', 'cli': 'glm', 'dueno': 'lead', 'dir': '/tmp'}
-if os.environ['R_ENC'] != '-':
-    e['encargo'] = os.environ['R_ENC']
-json.dump({'id': os.environ['R_ID'], 'estado': os.environ['R_EST'], 'sesiones': [e]},
-          open(os.path.join(os.environ['R_DIR'], 'registro.json'), 'w'))
-PY
-}
-nace_enc() { # $1 sesion $2 run
-  "$TM" -L "$L" new-session -d -s "$1" -x 80 -y 20 cat || fail "no se pudo crear $1"
-  "$TM" -L "$L" set-environment -t "$1" OPENCLAW_WATCH_RUN "$2"
-  mark "$1"
-}
-run_re() { CORRIDA_BIN="$STUB_RE" CORRIDA_AVISOS=0 QUIET_SECS=100000 run_once; }
-registro_enc sim9-ENC abierta sim9-enc "$ENC"
-nace_enc sim9-enc sim9-ENC
-run_re >/dev/null 2>&1 || fail "--once (2q-5, foto) fallo"
-: >"$CALLS"
-"$TM" -L "$L" kill-session -t sim9-enc
-run_re || fail "--once (2q-5, closed con encargo) fallo"
-grep -q "^lanzar-sesion sim9-ENC carril glm /tmp --encargo $ENC --nombre sim9-enc$" "$RARGV" \
-  || fail "(2q-5) el relanzo no re-entrego el encargo del registro: $(cat "$RARGV")"
-"$TM" -L "$L" kill-session -t sim9-enc 2>/dev/null
-run_re >/dev/null 2>&1 || true
-registro_enc sim9-SINENC abierta sim9-sinenc -
-nace_enc sim9-sinenc sim9-SINENC
-run_re >/dev/null 2>&1 || fail "--once (2q-5, foto sin encargo) fallo"
-: >"$RARGV"; : >"$CALLS"
-"$TM" -L "$L" kill-session -t sim9-sinenc
-run_re || fail "--once (2q-5, closed sin encargo) fallo"
-grep -q '^lanzar-sesion sim9-SINENC carril glm /tmp --nombre sim9-sinenc$' "$RARGV" \
-  || fail "(2q-5) sin encargo el comando debia quedar como siempre: $(cat "$RARGV")"
-grep -q -- '--encargo' "$RARGV" && fail "(2q-5) se invento un encargo que no estaba en el registro: $(cat "$RARGV")"
-"$TM" -L "$L" kill-session -t sim9-sinenc 2>/dev/null
-run_re >/dev/null 2>&1 || true
-echo "ok (2q-5): el relanzo re-entrega el --encargo registrado y sin encargo queda igual que siempre"
-
-# (2q-5b) T9 :266: dentro del perimetro, el relanzo automatico no recrea el vigia
-# antiguo. Una entrada del registro con encargo_ref o host_id es gestionada: la
-# vigila su host, que manda la incidencia al solicitante. Al cerrarse no se relanza
-# (cero llamadas a lanzar-sesion), el aviso de cierre lo dice y queda un evento
-# relanzo-automatico con ok=false. Filas: las dos claves, solo host_id, solo
-# encargo_ref, una segunda caida y una corrida cerrada. Las rutas de siempre
-# (encargo plano y sin encargo) son las de (2q-5).
-registro_ges() { # $1 id $2 estado $3 sesion $4 claves: ambas | host | ref
-  mkdir -p "$CORRIDA_STATE/$1"
-  R_ID="$1" R_EST="$2" R_SES="$3" R_CLAVES="$4" R_DIR="$CORRIDA_STATE/$1" python3 - <<'PY'
-import json, os
-e = {'nombre': os.environ['R_SES'], 'rol': 'carril', 'cli': 'glm', 'dueno': 'lead', 'dir': '/tmp'}
-if os.environ['R_CLAVES'] in ('ambas', 'host'):
-    e['host_id'] = 'mac-local'
-if os.environ['R_CLAVES'] in ('ambas', 'ref'):
-    e['encargo_ref'] = '/host/inbox/' + os.environ['R_SES'] + '.json'
-json.dump({'id': os.environ['R_ID'], 'estado': os.environ['R_EST'], 'sesiones': [e]},
-          open(os.path.join(os.environ['R_DIR'], 'registro.json'), 'w'))
-PY
-}
-cierra_ges() { # $1 id $2 sesion $3 claves $4 estado -> cierra la sesion con un tick antes y otro despues
-  registro_ges "$1" "$4" "$2" "$3"
-  nace_enc "$2" "$1"
-  run_re >/dev/null 2>&1 || fail "--once (2q-5b, foto $2) fallo"
-  : >"$RARGV"; : >"$CALLS"
-  "$TM" -L "$L" kill-session -t "$2"
-  run_re >/dev/null 2>&1 || fail "--once (2q-5b, closed $2) fallo"
-}
-gestionada_sin_relanzo() { # $1 id $2 sesion: ningun lanzar-sesion, aviso literal y evento ok=false
-  [ ! -s "$RARGV" ] || fail "(2q-5b) se relanzo la sesion gestionada $2: $(cat "$RARGV")"
-  grep -qF "tmux: $2 closed | last cwd=" "$CALLS" \
-    || fail "(2q-5b) el cierre de $2 no llego al dueno: $(cat "$CALLS")"
-  grep -qF " | sesion gestionada: no se relanza automaticamente; la reporta su host (corrida $1)" "$CALLS" \
-    || fail "(2q-5b) el aviso de cierre de $2 no dice que es gestionada: $(cat "$CALLS")"
-  EVJ="$CORRIDA_STATE/$1/eventos.jsonl" EVS="$2" python3 -c "
-import json,os,sys
-ev=[json.loads(l) for l in open(os.environ['EVJ']) if l.strip()]
-rel=[e for e in ev if e.get('tipo')=='relanzo-automatico' and e.get('sesion')==os.environ['EVS']]
-ok=[(e['ok'],e['detalle']) for e in rel]==[(False,'sesion gestionada: no se relanza; la reporta su host')]
-sys.exit(0 if ok else 1)" || fail "(2q-5b) el evento relanzo-automatico de $2 no es el de una gestionada: $(cat "$CORRIDA_STATE/$1/eventos.jsonl" 2>/dev/null)"
-}
-for fila in "sim9-GA sim9-ga ambas" "sim9-GH sim9-gh host" "sim9-GR sim9-gr ref"; do
-  set -- $fila
-  cierra_ges "$1" "$2" "$3" abierta
-  gestionada_sin_relanzo "$1" "$2"
-done
-# Segunda caida de la misma gestionada (alguien la volvio a abrir a mano): tampoco
-# se relanza, y el aviso sigue diciendo gestionada, no "ya se relanzo".
-: >"$CORRIDA_STATE/sim9-GA/eventos.jsonl"
-cierra_ges sim9-GA sim9-ga ambas abierta
-gestionada_sin_relanzo sim9-GA sim9-ga
-# Corrida cerrada: como siempre, ni relanzo ni sufijo.
-cierra_ges sim9-GC sim9-gc ambas cerrada
-[ ! -s "$RARGV" ] || fail "(2q-5b) se relanzo una sesion de una corrida cerrada: $(cat "$RARGV")"
-grep -qF "tmux: sim9-gc closed | last cwd=" "$CALLS" || fail "(2q-5b) el cierre de sim9-gc no llego: $(cat "$CALLS")"
-grep -q 'sim9-gc closed | last cwd=[^|]*|' "$CALLS" \
-  && fail "(2q-5b) una sesion de una corrida cerrada no lleva sufijo de relanzo: $(cat "$CALLS")"
-echo "ok (2q-5b): una sesion gestionada no se relanza: ni con las dos claves, ni con una, ni a la segunda caida"
-
-# (2q-5c) Bordes de la regla: manda la gestion aunque la entrada traiga encargo
-# plano; una clave vacia o null NO es gestion (lanzar-sesion.sh:128 tampoco la
-# trata como gestionada); y una corrida cerrada no anota relanzo.
-registro_json() { # $1 id $2 sesion $3 json extra de la entrada
-  mkdir -p "$CORRIDA_STATE/$1"
-  R_ID="$1" R_SES="$2" R_EXTRA="$3" R_DIR="$CORRIDA_STATE/$1" python3 - <<'PY'
-import json, os
-e = {'nombre': os.environ['R_SES'], 'rol': 'carril', 'cli': 'glm', 'dueno': 'lead', 'dir': '/tmp'}
-e.update(json.loads(os.environ['R_EXTRA']))
-json.dump({'id': os.environ['R_ID'], 'estado': 'abierta', 'sesiones': [e]},
-          open(os.path.join(os.environ['R_DIR'], 'registro.json'), 'w'))
-PY
-}
-cierra_json() { # $1 id $2 sesion $3 json extra
-  registro_json "$1" "$2" "$3"
-  nace_enc "$2" "$1"
-  run_re >/dev/null 2>&1 || fail "--once (2q-5c, foto $2) fallo"
-  : >"$RARGV"; : >"$CALLS"
-  "$TM" -L "$L" kill-session -t "$2"
-  run_re >/dev/null 2>&1 || fail "--once (2q-5c, closed $2) fallo"
-}
-cierra_json sim9-GE sim9-ge "{\"host_id\": \"mac-local\", \"encargo_ref\": \"/host/inbox/sim9-ge.json\", \"encargo\": \"$ENC\"}"
-gestionada_sin_relanzo sim9-GE sim9-ge
-cierra_json sim9-GV sim9-gv "{\"host_id\": \"\", \"encargo_ref\": \"\", \"encargo\": \"$ENC\"}"
-grep -q "^lanzar-sesion sim9-GV carril glm /tmp --encargo $ENC --nombre sim9-gv$" "$RARGV" \
-  || fail "(2q-5c) claves vacias no son gestion: el relanzo debia ser el de siempre: $(cat "$RARGV")"
-grep -qF 'sesion gestionada' "$CALLS" && fail "(2q-5c) claves vacias no son gestion: $(cat "$CALLS")"
-"$TM" -L "$L" kill-session -t sim9-gv 2>/dev/null; run_re >/dev/null 2>&1 || true
-cierra_json sim9-GN sim9-gn '{"host_id": null, "encargo_ref": null}'
-grep -q '^lanzar-sesion sim9-GN carril glm /tmp --nombre sim9-gn$' "$RARGV" \
-  || fail "(2q-5c) claves null no son gestion: el relanzo debia ser el de siempre: $(cat "$RARGV")"
-grep -qF 'sesion gestionada' "$CALLS" && fail "(2q-5c) claves null no son gestion: $(cat "$CALLS")"
-"$TM" -L "$L" kill-session -t sim9-gn 2>/dev/null; run_re >/dev/null 2>&1 || true
-EVJ="$CORRIDA_STATE/sim9-GC/eventos.jsonl" python3 -c "
-import json,os,sys
-p=os.environ['EVJ']
-ev=[json.loads(l) for l in open(p) if l.strip()] if os.path.exists(p) else []
-sys.exit(1 if any(e.get('tipo')=='relanzo-automatico' for e in ev) else 0)" \
-  || fail "(2q-5c) una corrida cerrada no anota relanzo-automatico: $(cat "$CORRIDA_STATE/sim9-GC/eventos.jsonl")"
-echo "ok (2q-5c): gestion con encargo plano no se relanza; claves vacias o null se relanzan como siempre; corrida cerrada sin evento"
-
-# (2q-7) diario local (contrato del simulacro 5/6): con la ruta de avisos, la
-STATE_DIR="$T/state-2q-7"; mkdir -p "$STATE_DIR"
-# senal SIGUE quedando en eventos.jsonl del vigia: es lo que un vigia lee sin
-# pasar por el gateway, y los casos 5/6 del simulacro 9.9 la assertan.
-"$TM" -L "$L" new-session -d -s sim9-avj -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avj"
-mark sim9-avj
-"$TM" -L "$L" set-environment -t sim9-avj OPENCLAW_WATCH_RUN sim9-AVJ
-sleep 2
-run_av || fail "--once (2q-7, quiet con avisos) fallo"
-grep -qF "sim9-avj quiet" "$STATE_DIR/eventos.jsonl" 2>/dev/null \
-  || fail "(2q-7) la ruta de avisos debe anotar la senal en eventos.jsonl: $(cat "$STATE_DIR/eventos.jsonl" 2>/dev/null | tail -2)"
-echo "ok (2q-7): la ruta de avisos journaliza la senal en eventos.jsonl"
-"$TM" -L "$L" kill-session -t sim9-avj 2>/dev/null
-
-# (2q-8) tope de reloj: un corrida.sh colgado en avisos emitir NO puede
-STATE_DIR="$T/state-2q-8"; mkdir -p "$STATE_DIR"
-# colgar el tick (19.1-r2, simulacro etapa 8): el vigia reintenta en el
-# siguiente tick y sigue vivo.
-CORRIDA_CUELGA="$T/corrida-cuelga"
-printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then sleep 45; fi\nexit 0\n' > "$CORRIDA_CUELGA"
-chmod +x "$CORRIDA_CUELGA"
-"$TM" -L "$L" new-session -d -s sim9-avh -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avh"
-mark sim9-avh
-"$TM" -L "$L" set-environment -t sim9-avh OPENCLAW_WATCH_RUN sim9-AVH
-sleep 2
-inicio8=$(date +%s)
-export AVISOS_TOPE=3
-CORRIDA_BIN="$CORRIDA_CUELGA" run_once || fail "--once (2q-8, emitir colgado) fallo"
-unset AVISOS_TOPE
-duracion8=$(( $(date +%s) - inicio8 ))
-[ "$duracion8" -lt 20 ] || fail "(2q-8) el tick quedo colgado ${duracion8}s en el emitir (tope 3s)"
-run_av || fail "(2q-8) el vigia no sobrevivio al tick colgado"
-rm -f "$STATE_DIR/avisos-fallidos/"sim9-AVH*
-"$TM" -L "$L" kill-session -t sim9-avh 2>/dev/null
-echo "ok (2q-8): el emitir colgado no cuelga el tick (tope de reloj y reintento)"
-
-# (2q-9) retroceso del despertar: un pendiente viejo despierta UNA vez; mientras
-STATE_DIR="$T/state-2q-9"; mkdir -p "$STATE_DIR"
-# el sello del despertar sea fresco, los ticks siguientes no repiten teclas
-# (19.1-r2: despertar cada tick colapsaba la ventana de relanzo del simulacro).
-mkdir -p "$CORRIDA_STATE/sim9-BK1/avisos"
-printf '{"schema":"corrida-aviso.v1"}\n' >"$CORRIDA_STATE/sim9-BK1/avisos/a.json"
-python3 -c 'import os,sys,time; t=time.time()-31; os.utime(sys.argv[1],(t,t))' \
-  "$CORRIDA_STATE/sim9-BK1/avisos/a.json"
-: >"$AARGV"
-run_av || fail "--once (2q-9, primer despertar) fallo"
-[ "$(grep -c '^avisos despertar sim9-BK1$' "$AARGV")" -eq 1 ] || fail "(2q-9) falta el primer despertar de sim9-BK1: $(cat "$AARGV")"
-: >"$AARGV"
-run_av || fail "--once (2q-9, segundo tick) fallo"
-grep -q 'despertar sim9-BK1' "$AARGV" \
-  && fail "(2q-9) el sello fresco debia frenar el segundo despertar: $(cat "$AARGV")"
-"$TM" -L "$L" kill-session -t sim9-bk 2>/dev/null
-echo "ok (2q-9): el despertar respeta el sello de retroceso por corrida"
-
-# (2q-10) el tick no paga el coste del emitir: un corrida.sh que TARDA (8s,
-STATE_DIR="$T/state-2q-10"; mkdir -p "$STATE_DIR"
-# dentro del tope) no debe retrasar el tick: el emitir va desacoplado y el
-# pendiente lo escribe el proceso desacoplado (19.1-r4, etapa 8 del simulacro).
-CORRIDA_TARDA="$T/corrida-tarda"
-printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then sleep 8; fi\nexit 0\n' > "$CORRIDA_TARDA"
-chmod +x "$CORRIDA_TARDA"
-"$TM" -L "$L" new-session -d -s sim9-avt -x 80 -y 20 'cat' || fail "no se pudo crear sim9-avt"
-mark sim9-avt
-"$TM" -L "$L" set-environment -t sim9-avt OPENCLAW_WATCH_RUN sim9-AVT
-sleep 2
-inicio10=$(date +%s)
-CORRIDA_BIN="$CORRIDA_TARDA" run_once || fail "--once (2q-10, emitir lento) fallo"
-duracion10=$(( $(date +%s) - inicio10 ))
-[ "$duracion10" -lt 5 ] || fail "(2q-10) el tick espero ${duracion10}s al emitir lento (debia ir desacoplado)"
-rm -f "$STATE_DIR/avisos-fallidos/"sim9-AVT*
-"$TM" -L "$L" kill-session -t sim9-avt 2>/dev/null
-echo "ok (2q-10): el emitir lento va desacoplado y el tick no lo espera"
-
-# (2q-11) fallo durable del emitir desacoplado: un corrida.sh que SIEMPRE
-STATE_DIR="$T/state-2q-11"; mkdir -p "$STATE_DIR"
-export AVISOS_REINTENTO_SECS=3 AVISOS_FALLIDO_TOPE=8
-CORRIDA_FALLA="$T/corrida-falla"
-FALLA_LOG="$T/falla-llamadas.txt"; : >"$FALLA_LOG"
-FALLA_OK="$T/falla-ok"; rm -f "$FALLA_OK"
-# OJO: el stub se genera con UNA conversion %s por printf (el printf de bash
-# reusa el formato con los argumentos sobrantes y un formato corto producia un
-# stub doble que salia 0 siempre: el registro de fallo se borraba en el primer
-# intento y 2q-11 caia en rojo, ronda r7).
-{
-  printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then\n'
-  printf '  printf "%%s %%s\\n" "$(date -u +%%H:%%M:%%S)" "$*" >> "%s"\n' "$FALLA_LOG"
-  printf '  [ -f "%s" ] || exit 1\nfi\nexit 0\n' "$FALLA_OK"
-} > "$CORRIDA_FALLA"
-chmod +x "$CORRIDA_FALLA"
-run_falla() { CORRIDA_BIN="$CORRIDA_FALLA" run_once; }
-"$TM" -L "$L" new-session -d -s sim9-fl -x 80 -y 20 'cat' || fail "no se pudo crear sim9-fl"
-mark sim9-fl
-"$TM" -L "$L" set-environment -t sim9-fl OPENCLAW_WATCH_RUN sim9-FL
-sleep 2
-# Tick 1: el vigia escribe el fallo durable y lanza el emitir desacoplado
-# (3 intentos que fallan con este stub: el registro queda con intentos 0).
-run_falla || fail "--once (2q-11, emitir falla) fallo"
-# El silencio vence en el SEGUNDO tick (el primero solo ceba el estado):
-# el sondeo del registro tica.
-i=0
-while [ "$i" -lt 8 ]; do
-  ls "$STATE_DIR/avisos-fallidos/"sim9-FL*.json >/dev/null 2>&1 && break
-  sleep 1
-  run_falla >/dev/null 2>&1 || true
-  i=$((i + 1))
-done
-[ "$(ls "$STATE_DIR/avisos-fallidos/"sim9-FL*.json 2>/dev/null | wc -l | tr -d ' ')" -ge 1 ] \
-  || fail "(2q-11) el emitir que agota intentos debia dejar fallo durable en avisos-fallidos [fallidos: $(ls "$STATE_DIR/avisos-fallidos/" 2>/dev/null | tr '\n' ' ') | log: $(tail -4 "$LOG_FILE" 2>/dev/null | tr '\n' '/')]"
-# Los 3 intentos del desacoplado llegan en los ~7s siguientes.
-i=0
-while [ "$i" -lt 30 ]; do
-  llamadas1=$(wc -l <"$FALLA_LOG" | tr -d ' ')
-  [ "$llamadas1" -ge 3 ] && break
-  sleep 0.5
-  i=$((i + 1))
-done
-[ "$llamadas1" -ge 3 ] || fail "(2q-11) el desacoplado debia intentar 3 veces; hizo $llamadas1 [llamadas: $(cat "$FALLA_LOG" 2>/dev/null | tr '\n' '/')]"
-# Tick 2 tras el retroceso: el escaneo relanza el fallo (touch + emitir) y
-# los intentos nuevos hacen crecer el log de llamadas.
-sleep 4
-run_falla || fail "--once (2q-11, reintento del fallo) fallo"
-i=0
-while [ "$i" -lt 30 ]; do
-  llamadas2=$(wc -l <"$FALLA_LOG" | tr -d ' ')
-  [ "$llamadas2" -ge 6 ] && break
-  sleep 0.5
-  i=$((i + 1))
-done
-[ "$(wc -l <"$FALLA_LOG" | tr -d ' ')" -ge 6 ] \
-  || fail "(2q-11) el tick debia reintentar el fallo durable (se quedo en $(wc -l <"$FALLA_LOG" | tr -d ' ') llamadas)"
-# Recuperacion: con el stub emitiendo bien, el siguiente relanzamiento emite
-# bien y borra el registro.
-: >"$FALLA_OK"
-sleep 4
-run_falla || fail "--once (2q-11, recuperacion) fallo"
-i=0
-while [ "$i" -lt 30 ]; do
-  ls "$STATE_DIR/avisos-fallidos/"sim9-FL*.json >/dev/null 2>&1 || break
-  sleep 0.5
-  i=$((i + 1))
-done
-[ "$(ls "$STATE_DIR/avisos-fallidos/"sim9-FL*.json 2>/dev/null | wc -l | tr -d ' ')" -eq 0 ] \
-  || fail "(2q-11) al emitir bien el fallo durable debia borrarse"
-"$TM" -L "$L" kill-session -t sim9-fl 2>/dev/null
-rm -rf "$STATE_DIR/avisos-fallidos" "$CORRIDA_STATE/sim9-FL"
-"$TM" -L "$L" kill-session -t sim9-fl 2>/dev/null
-echo "ok (2q-11): fallo durable del emitir con reintento por tick y borrado al emitir bien"
-
-# (2q-12) rechazo definitivo descartado: un emitir que sale 3 (corrida
-STATE_DIR="$T/state-2q-12"; mkdir -p "$STATE_DIR"
-# cerrada, sesion ajena: corrida/avisos.sh) borra el registro de fallo en el
-# primer intento y NO se relanza para siempre.
-CORRIDA_RJ="$T/corrida-rechaza"
-printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then exit 3; fi\nexit 0\n' > "$CORRIDA_RJ"
-chmod +x "$CORRIDA_RJ"
-"$TM" -L "$L" new-session -d -s sim9-rj -x 80 -y 20 'cat' || fail "no se pudo crear sim9-rj"
-mark sim9-rj
-"$TM" -L "$L" set-environment -t sim9-rj OPENCLAW_WATCH_RUN sim9-RJ
-sleep 2
-CORRIDA_BIN="$CORRIDA_RJ" AVISOS_TOPE=2 run_once || fail "--once (2q-12, rechazo definitivo) fallo"
-i=0
-while [ "$i" -lt 30 ]; do
-  ls "$STATE_DIR/avisos-fallidos/"sim9-RJ*.json >/dev/null 2>&1 || break
-  sleep 0.5
-  i=$((i + 1))
-done
-[ "$(ls "$STATE_DIR/avisos-fallidos/"sim9-RJ*.json 2>/dev/null | wc -l | tr -d ' ')" -eq 0 ] \
-  || fail "(2q-12) un rechazo definitivo (exit 3) debia descartar el registro de fallo, no reintentarlo para siempre"
-grep -q "descartado" "$LOG_FILE" 2>/dev/null || fail "(2q-12) el descarte debia quedar en el log del vigia"
-rm -rf "$CORRIDA_STATE/sim9-RJ" "$STATE_DIR/avisos-fallidos/"sim9-RJ*
-rm -f "$STATE_DIR/avisos-fallidos/"sim9-RJ*
-"$TM" -L "$L" kill-session -t sim9-rj 2>/dev/null
-echo "ok (2q-12): el rechazo definitivo descarta el registro y queda en el log"
-
-# (2q-13) backoff del reintento: cada relanzamiento hace touch al registro
-STATE_DIR="$T/state-2q-13"; mkdir -p "$STATE_DIR"
-# antes de lanzar (el mtime fresco es el retroceso); sin touch, un fallo
-# pasajero se relanza cada tick y el mtime queda viejo.
-CORRIDA_TARDE="$T/corrida-tarde"
-printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then exit 1; fi\nexit 0\n' > "$CORRIDA_TARDE"
-chmod +x "$CORRIDA_TARDE"
-"$TM" -L "$L" new-session -d -s sim9-bk -x 80 -y 20 'cat' || fail "no se pudo crear sim9-bk"
-mark sim9-bk
-"$TM" -L "$L" set-environment -t sim9-bk OPENCLAW_WATCH_RUN sim9-BK
-sleep 2
-CORRIDA_BIN="$CORRIDA_TARDE" AVISOS_TOPE=2 run_once || fail "--once (2q-13, primer fallo) fallo"
-sleep 4
-REC_BK=$(ls "$STATE_DIR/avisos-fallidos/"sim9-BK*.json 2>/dev/null | head -1)
-[ -n "$REC_BK" ] || fail "(2q-13) sin registro de fallo tras el primer intento"
-antes=$(stat -c %Y "$REC_BK" 2>/dev/null || stat -f %m "$REC_BK" 2>/dev/null)
-sleep 2
-CORRIDA_BIN="$CORRIDA_TARDE" AVISOS_TOPE=2 run_once || fail "--once (2q-13, reintento) fallo"
-despues=$(stat -c %Y "$REC_BK" 2>/dev/null || stat -f %m "$REC_BK" 2>/dev/null)
-[ -n "$despues" ] && [ "$despues" -gt "$antes" ] \
-  || fail "(2q-13) el relanzamiento debia hacer touch al registro (mtime $antes no avanzo a $despues)"
-"$TM" -L "$L" kill-session -t sim9-bk 2>/dev/null
-echo "ok (2q-13): el relanzamiento hace touch al registro (backoff por mtime)"
-
-# (2q-14) tope total por registro: un fallo que agoto AVISOS_FALLIDO_TOPE
-STATE_DIR="$T/state-2q-14"; mkdir -p "$STATE_DIR"
-# reintentos se DESCARTA (registro fuera + linea en el log) y ya no ocupa
-# ranura de reintento (19.1-r5: un emitir que siempre agota su tope de reloj
-# no puede tapar los demas registros para siempre).
-CORRIDA_CAP="$T/corrida-cap"
-printf '#!/bin/sh\nif [ "$1" = avisos ] && [ "$2" = emitir ]; then exit 1; fi\nexit 0\n' > "$CORRIDA_CAP"
-chmod +x "$CORRIDA_CAP"
-mkdir -p "$STATE_DIR/avisos-fallidos"
-printf '{"schema":"avisos-fallido.v1","run":"sim9-CAP","sesion":"sim9-cap","tipo":"fin-turno","llave":"cafe","intentos":99,"actualizado":1790733000000}\n' > "$STATE_DIR/avisos-fallidos/sim9-CAP-sim9-cap-fin-turno-cafe.json"
-python3 -c 'import os,time; t=time.time()-40; os.utime("'"$STATE_DIR"'/avisos-fallidos/sim9-CAP-sim9-cap-fin-turno-cafe.json",(t,t))'
-CORRIDA_BIN="$CORRIDA_CAP" AVISOS_TOPE=2 run_once || fail "--once (2q-14, tope) fallo"
-sleep 1
-[ -f "$STATE_DIR/avisos-fallidos/sim9-CAP-sim9-cap-fin-turno-cafe.json" ] \
-  && fail "(2q-14) el registro en el tope debia descartarse: $(cat "$STATE_DIR/avisos-fallidos/sim9-CAP-sim9-cap-fin-turno-cafe.json" 2>/dev/null)"
-grep -q "descartado tras 99 reintentos" "$LOG_FILE" 2>/dev/null \
-  || fail "(2q-14) el descarte por tope debia quedar en el log del vigia"
-rm -f "$STATE_DIR/avisos-fallidos/"sim9-CAP*
-echo "ok (2q-14): el registro en el tope se descarta con su linea en el log"
-rm -rf "$CORRIDA_STATE/sim9-BK" "$STATE_DIR/avisos-fallidos/"sim9-BK*
-
-# (2q-16) R2 C2-r1: el wake propio no reinicia el reloj de recordatorio. El
-# aviso sale, el lead procesa el atender (el panel cambia: cat hace eco) y el
-# RECORDATORIO sale igual a QUIET_REMIND_SECS sobre la sesion quieta. Sin el
-# guard, el cambio de hash reiniciaba notified=0 y la segunda senal salia a
-# ~1 s como episodio nuevo (el caso A de 19.2 quedo SIN-RECUPERACION por eso).
-STATE_DIR="$T/state-2q-16"; mkdir -p "$STATE_DIR"
-QUIET_SECS=1 QUIET_REMIND_SECS=6 \
-"$TM" -L "$L" new-session -d -s rem-r2 -x 80 -y 20 'cat' || fail "no se pudo crear rem-r2"
-mark rem-r2
-"$TM" -L "$L" set-environment -t rem-r2 OPENCLAW_WATCH_RUN rem-R2
-sleep 2
-: >"$AARGV"
-t1=""; t2=""; i=0
-while [ "$i" -lt 80 ]; do
-  QUIET_REMIND_SECS=6 CORRIDA_BIN="$STUB_AV" run_av || fail "--once (2q-16) fallo"
-  n=$(grep -c 'avisos emitir rem-R2 rem-r2 fin-turno' "$AARGV" 2>/dev/null)
-  if [ -z "$t1" ] && [ "${n:-0}" -ge 1 ]; then
-    t1=$(date +%s)
-    # El eco del wake: el lead procesa el comando y el panel cambia.
-    "$TM" -L "$L" send-keys -t "=rem-r2:" "eco del wake" Enter
-  fi
-  if [ -n "$t1" ] && [ "${n:-0}" -ge 2 ]; then
-    t2=$(date +%s)
-    break
-  fi
-  sleep 0.7
-  i=$((i + 1))
-done
-[ -n "$t1" ] || fail "(2q-16) el primer quiet debia salir por avisos: $(cat "$AARGV")"
-[ -n "$t2" ] || fail "(2q-16) el recordatorio debia salir tras el wake propio: $(cat "$AARGV")"
-delta=$((t2 - t1))
-[ "$delta" -ge 5 ] || fail "(2q-16) la segunda senal llego ${delta}s tras la primera (< REMIND 6s): fue reinicio de reloj, no recordatorio"
-"$TM" -L "$L" kill-session -t "=rem-r2:" 2>/dev/null
-echo "ok (2q-16): el wake propio no reinicia el reloj de recordatorio (R2)"
-
-# (2q-17) B1 C2-r3: caso completo del guard. El aviso v1 sale, se CONSUME
-# (el atender lo mueve a tratados/<id>.json, CON extension) y el panel cambia
-# por un turno nuevo. El fin de turno nuevo debe avisar DE INMEDIATO (episodio
-# nuevo a QUIET_SECS), no a los 60 minutos (QUIET_REMIND_SECS default 3600).
-# Sin la extension .json en el guard (B1 C2-r3), el tratado nunca se encontraba
-# y la proteccion bloqueaba la senal nueva hasta el recordatorio.
-STATE_DIR="$T/state-2q-17"; mkdir -p "$STATE_DIR"
-CORRIDA_STATE17="$T/corrida-17"; mkdir -p "$CORRIDA_STATE17/rem-R17/avisos/tratados"
-"$TM" -L "$L" new-session -d -s rem-2q17 -x 80 -y 20 'cat' || fail "no se pudo crear rem-2q17"
-mark rem-2q17
-"$TM" -L "$L" set-environment -t rem-2q17 OPENCLAW_WATCH_RUN rem-R17
-sleep 2
-: >"$AARGV"
-t1=""; t2=""; h1=""; i=0
-while [ "$i" -lt 120 ]; do
-  CORRIDA_BIN="$STUB_AV" CORRIDA_STATE="$CORRIDA_STATE17" run_av || fail "--once (2q-17) fallo"
-  n=$(grep -c 'avisos emitir rem-R17 rem-2q17 fin-turno' "$AARGV" 2>/dev/null)
-  if [ -z "$t1" ] && [ "${n:-0}" -ge 1 ]; then
-    t1=$(date +%s)
-    h1=$(grep 'avisos emitir rem-R17 rem-2q17 fin-turno' "$AARGV" | head -1 | sed 's/.*--llave //')
-    # Consumo del aviso v1: aparece el tratado con su id (como el atender).
-    id1="rem-R17-rem-2q17-fin-turno-$(printf '%s' "$h1" | shasum -a 1 | awk '{print substr($1,1,10)}')"
-    : > "$CORRIDA_STATE17/rem-R17/avisos/tratados/$id1.json"
-    "$TM" -L "$L" send-keys -t "=rem-2q17:" "eco del wake 1" Enter
-  fi
-  if [ -n "$t1" ] && [ "${n:-0}" -ge 2 ]; then
-    t2=$(date +%s)
-    break
-  fi
-  sleep 0.7; i=$((i + 1))
-done
-[ -n "$t1" ] || fail "(2q-17) el primer quiet debia salir por avisos: $(cat "$AARGV")"
-[ -n "$t2" ] || fail "(2q-17) con el aviso consumido y un turno nuevo, el fin de turno debia avisar de inmediato, no a los 60 minutos: $(cat "$AARGV")"
-delta=$((t2 - t1))
-[ "$delta" -lt 5 ] || fail "(2q-17) la senal nueva llego ${delta}s tras el wake (>= 5s): el tratado consumido no solto la proteccion (falta .json en el guard?)"
-"$TM" -L "$L" kill-session -t "=rem-2q17:" 2>/dev/null
-echo "ok (2q-17): aviso consumido + turno nuevo -> fin de turno nuevo avisa de inmediato, no a los 60 min"
-else
-  echo "SKIP (2q): sin tmux en esta maquina; el mecanismo real se prueba en la Mac"
-fi
 
 # (5) Retirado en 15.1: la llamada anidada a scripts/tests/test-mac-tmux-control.sh.
 # Corria el detector DOS veces por bateria (una aqui, otra por el inventario del glob del

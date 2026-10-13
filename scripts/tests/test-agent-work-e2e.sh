@@ -10,10 +10,6 @@ run_delivery_latency() {
     ProjectionTransferTest.test_delivery_latency_acceptance_records_both_legs
 }
 
-run_review_tail_restart() {
-  python3 scripts/tests/test_agent_work_review_tail_restart.py
-}
-
 run_main_cli_loop() {
   python3 scripts/tests/test_agent_work_main_cli_loop_e2e.py
 }
@@ -29,7 +25,6 @@ run_acceptance() {
 case "${1:-all}" in
   all)
     run_delivery_latency
-    run_review_tail_restart
     run_main_cli_loop
     run_acceptance_matrix
     ;;
@@ -64,13 +59,6 @@ case "${1:-all}" in
   delivery_latency)
     run_delivery_latency
     ;;
-  review_tail_restart)
-    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
-      echo "review_tail_restart requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
-      exit 2
-    fi
-    run_review_tail_restart
-    ;;
   main_cli_loop)
     if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
       echo "main_cli_loop requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
@@ -79,7 +67,7 @@ case "${1:-all}" in
     run_main_cli_loop
     ;;
   *)
-    echo "casos disponibles: delivery_latency, review_tail_restart, main_cli_loop, acceptance_matrix, acceptance, acceptance_pair, cutover_fencing, cutover_rollback" >&2
+    echo "casos disponibles: delivery_latency, main_cli_loop, acceptance_matrix, acceptance, acceptance_pair, cutover_fencing, cutover_rollback" >&2
     exit 2
     ;;
 esac

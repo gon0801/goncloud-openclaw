@@ -1,13 +1,11 @@
 #!/bin/bash
-# scripts/mac/instalar-mac.sh (9.10). Instala las herramientas de corrida en
-# esta Mac desde el arbol del repo: ~/bin, ~/Library/LaunchAgents y
+# scripts/mac/instalar-mac.sh (9.10). Instala las herramientas de esta Mac
+# desde el arbol del repo: ~/bin, ~/Library/LaunchAgents y
 # ~/.tmux.conf, mas la linea de source en ~/.zshrc. Genera el plist con el
 # $HOME y el uid de quien lo corre (la plantilla trae /Users/dn a fuego y en
 # otra maquina no arranca ni avisa). Comprueba el blob de cada fuente contra
 # la rama por defecto ANTES de tocar disco: adulterado = error sin escribir
-# nada; ausente en la rama = se declara y se sigue. Nunca copia ni carga
-# ai.goncloud.corrida-latido (reloj viejo): el latido lo lanza el vigilante
-# tmux-activity-watch.sh cada 5 min con ~/bin/corrida.sh (14.29 D1).
+# nada; ausente en la rama = se declara y se sigue.
 # Idempotente: solo escribe lo que difiere y respalda lo reemplazado en
 # .anterior.
 # Uso: instalar-mac.sh [--dry-run|--verificar]
@@ -30,12 +28,8 @@ PL_NOMBRE="ai.goncloud.tmux-activity-watch.plist"
 ETIQUETA="ai.goncloud.tmux-activity-watch"
 LINEA_SOURCE="source ~/bin/agent-tmux-shell.zsh"
 # Manifiesto binario: fuentes relativas a scripts/mac, destino ~/bin (cp -p
-# conserva el +x). workers.v1.json viaja aqui porque corrida_workers_registry
-# lo resuelve junto al bin instalado (~/bin/workers.v1.json); sin el, el
-# adaptador instalado no resuelve ningun worker. El latido viejo NO esta en
-# esta lista: ni se copia ni se carga.
-BINS="corrida.sh cli-modos.tsv workers.v1.json corrida-worker.py progress-events.py agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh"
-CORRIDA_WORKER_PKG="corrida_worker"
+# conserva el +x).
+BINS="progress-events.py agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh"
 AGENT_WORK_FILES="brief.py contracts.py host.py modelos.py native_gateway.py progress_bridge.py resources.py routing.py sesion.py spool.py cutover.py"
 
 di() { printf '%s\n' "$1"; }
@@ -77,13 +71,6 @@ fase_blobs() {
     real="$("$GIT_BIN" -C "$RAIZ" hash-object "$RAIZ/agent-work/$f" 2>/dev/null)" || falla "no se pudo leer $rel"
     [ "$esperado" = "$real" ] || falla "blob distinto de $REF en $rel"
   done
-  local c
-  for c in "$AQUI"/corrida/*.sh; do
-    f="$(basename "$c")"; rel="scripts/mac/corrida/$f"
-    esperado="$("$GIT_BIN" -C "$RAIZ" rev-parse "$REF:$rel" 2>/dev/null)" || { avisa "sin referencia en $REF: $rel (se declara y se sigue)"; continue; }
-    real="$("$GIT_BIN" -C "$RAIZ" hash-object "$c" 2>/dev/null)" || falla "no se pudo leer $f"
-    [ "$esperado" = "$real" ] || falla "blob distinto de $REF en $rel"
-  done
   return 0
 }
 
@@ -101,13 +88,11 @@ modo_dry() {
   local f sha
   di "instalaria desde $AQUI (ref $REF@$(ref_sha)) a HOME=$HOME uid=$QUIEN_UID:"
   for f in $BINS; do sha="$(blob_de "$AQUI/$f")"; di "  bin/$f  (blob ${sha})"; done
-  for f in "$AQUI"/corrida/*.sh; do sha="$(blob_de "$f")"; di "  bin/corrida/$(basename "$f")  (blob ${sha})"; done
   for f in $AGENT_WORK_FILES; do sha="$(blob_de "$RAIZ/agent-work/$f")"; di "  bin/agent-work/$f  (blob ${sha})"; done
   di "  Library/LaunchAgents/$PL_NOMBRE  (generada con HOME=$HOME)"
   di "  .tmux.conf  (blob $(blob_de "$AQUI/tmux.conf"))"
   di "  .zshrc: agregaria \`$LINEA_SOURCE\` si falta"
   di "  cargaria: $LC_BIN bootstrap gui/$QUIEN_UID $LA_DIR/$PL_NOMBRE"
-  di "  jamas: el reloj viejo de 9.5 (retirado; no se copia ni se carga)"
 }
 
 modo_verificar() {
@@ -116,29 +101,11 @@ modo_verificar() {
     [ -f "$BIN_DIR/$f" ] || { di "FALTA: bin/$f"; mal=$((mal+1)); continue; }
     cmp -s "$AQUI/$f" "$BIN_DIR/$f" || { di "DIFIERE: bin/$f"; mal=$((mal+1)); continue; }
   done
-  for f in "$AQUI"/corrida/*.sh; do
-    local b; b="$(basename "$f")"
-    [ -f "$BIN_DIR/corrida/$b" ] || { di "FALTA: bin/corrida/$b"; mal=$((mal+1)); continue; }
-    cmp -s "$f" "$BIN_DIR/corrida/$b" || { di "DIFIERE: bin/corrida/$b"; mal=$((mal+1)); continue; }
-  done
-  for f in corrida-worker.py progress-events.py; do
-    [ -f "$BIN_DIR/$f" ] || { di "FALTA: bin/$f"; mal=$((mal+1)); continue; }
-    cmp -s "$AQUI/$f" "$BIN_DIR/$f" || { di "DIFIERE: bin/$f"; mal=$((mal+1)); continue; }
-    [ -x "$BIN_DIR/$f" ] || { di "SIN +x: bin/$f"; mal=$((mal+1)); continue; }
-  done
+  [ ! -f "$BIN_DIR/progress-events.py" ] || [ -x "$BIN_DIR/progress-events.py" ] || { di "SIN +x: bin/progress-events.py"; mal=$((mal+1)); }
   for f in $AGENT_WORK_FILES; do
     [ -f "$BIN_DIR/agent-work/$f" ] && cmp -s "$RAIZ/agent-work/$f" "$BIN_DIR/agent-work/$f" || { di "DIFIERE: bin/agent-work/$f"; mal=$((mal+1)); continue; }
   done
   [ -x "$BIN_DIR/agent-work/cutover.py" ] || { di "SIN +x: bin/agent-work/cutover.py"; mal=$((mal+1)); }
-  [ -d "$BIN_DIR/corrida_worker" ] || { di "FALTA: bin/corrida_worker"; mal=$((mal+1)); }
-  for f in "$AQUI"/corrida_worker/*.py; do
-    local b2; b2="$(basename "$f")"
-    [ -f "$BIN_DIR/corrida_worker/$b2" ] || { di "FALTA: bin/corrida_worker/$b2"; mal=$((mal+1)); continue; }
-    cmp -s "$f" "$BIN_DIR/corrida_worker/$b2" || { di "DIFIERE: bin/corrida_worker/$b2"; mal=$((mal+1)); continue; }
-  done
-  [ -f "$BIN_DIR/corrida/preaprobaciones.v1.json" ] || { di "FALTA: bin/corrida/preaprobaciones.v1.json"; mal=$((mal+1)); }
-  cmp -s "$AQUI/corrida/preaprobaciones.v1.json" "$BIN_DIR/corrida/preaprobaciones.v1.json" 2>/dev/null \
-    || { di "DIFIERE: bin/corrida/preaprobaciones.v1.json"; mal=$((mal+1)); }
   tmp="$(mktemp)" || falla "sin tmp para comparar el plist"
   generar_plist "$tmp" || { rm -f "$tmp"; falla "no se pudo generar el plist esperado"; }
   if [ ! -f "$LA_DIR/$PL_NOMBRE" ]; then di "FALTA: LaunchAgents/$PL_NOMBRE"; mal=$((mal+1));
@@ -153,29 +120,17 @@ modo_verificar() {
 
 modo_instalar() {
   local f sha reiniciar=0 n=0
-  mkdir -p "$BIN_DIR" "$BIN_DIR/corrida" "$BIN_DIR/agent-work" "$LA_DIR" || falla "no se pudieron crear directorios en $HOME"
+  mkdir -p "$BIN_DIR" "$BIN_DIR/agent-work" "$LA_DIR" || falla "no se pudieron crear directorios en $HOME"
   for f in $BINS; do
     copiar_si_difiere "$AQUI/$f" "$BIN_DIR/$f" || falla "no se pudo instalar bin/$f"
     # El LaunchAgent ejecuta este script: si cambio, hay que reiniciarlo.
     [ "$f" = "tmux-activity-watch.sh" ] && [ "$COPIO" = "1" ] && reiniciar=1
   done
-  for f in "$AQUI"/corrida/*.sh; do copiar_si_difiere "$f" "$BIN_DIR/corrida/$(basename "$f")" || falla "no se pudo instalar corrida/$(basename "$f")"; done
   for f in $AGENT_WORK_FILES; do
     copiar_si_difiere "$RAIZ/agent-work/$f" "$BIN_DIR/agent-work/$f" || falla "no se pudo instalar agent-work/$f"
   done
   chmod 755 "$BIN_DIR/agent-work/cutover.py"
-  # Task 9 Step 4: el plano de control nativo viaja atomico con el dispatcher:
-  # corrida-worker.py (+x, entrypoint), el paquete corrida_worker (sin +x),
-  # y la tabla de preaprobaciones junto al gate de autoridad.
-  copiar_si_difiere "$AQUI/corrida-worker.py" "$BIN_DIR/corrida-worker.py" || falla "no se pudo instalar bin/corrida-worker.py"
-  chmod 755 "$BIN_DIR/corrida-worker.py"
   chmod 755 "$BIN_DIR/progress-events.py"
-  mkdir -p "$BIN_DIR/corrida_worker" || falla "no se pudo crear bin/corrida_worker"
-  for f in "$AQUI"/corrida_worker/*.py; do
-    copiar_si_difiere "$f" "$BIN_DIR/corrida_worker/$(basename "$f")" || falla "no se pudo instalar corrida_worker/$(basename "$f")"
-    chmod 644 "$BIN_DIR/corrida_worker/$(basename "$f")"
-  done
-  copiar_si_difiere "$AQUI/corrida/preaprobaciones.v1.json" "$BIN_DIR/corrida/preaprobaciones.v1.json" || falla "no se pudo instalar corrida/preaprobaciones.v1.json"
   local pl_tmp; pl_tmp="$(mktemp)" || falla "sin tmp para el plist"
   generar_plist "$pl_tmp" || { rm -f "$pl_tmp"; falla "no se pudo generar el plist"; }
   copiar_si_difiere "$pl_tmp" "$LA_DIR/$PL_NOMBRE" || { rm -f "$pl_tmp"; falla "no se pudo instalar el plist"; }
@@ -198,7 +153,6 @@ modo_instalar() {
   fi
   di "instalado desde $AQUI (ref $REF@$(ref_sha)):"
   for f in $BINS; do sha="$(blob_de "$AQUI/$f")"; di "  bin/$f  ${sha}"; done
-  for f in "$AQUI"/corrida/*.sh; do sha="$(blob_de "$f")"; di "  bin/corrida/$(basename "$f")  ${sha}"; done
   for f in $AGENT_WORK_FILES; do sha="$(blob_de "$RAIZ/agent-work/$f")"; di "  bin/agent-work/$f  ${sha}"; done
   di "  LaunchAgents/$PL_NOMBRE  (generada HOME=$HOME)"
   di "  .tmux.conf  $(blob_de "$AQUI/tmux.conf")"

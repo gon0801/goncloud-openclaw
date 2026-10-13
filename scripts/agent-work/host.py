@@ -638,28 +638,11 @@ class Host:
             raise ValueError("unknown operation")
         return json.loads(row["receipt_json"]) if row["receipt_json"] else None
 
-    def verify_reference(self, host_id: str, session: str, assignment_ref: str) -> None:
-        self._host(host_id)
-        candidate = Path(assignment_ref).resolve(strict=True)
-        if candidate.parent != (self.state_dir / "assignments").resolve():
-            raise ValueError("assignment outside host state")
-        assignment = json.loads(candidate.read_text())
-        key = OperationKey(assignment["hostId"], assignment["taskId"],
-                           assignment["generation"], assignment["instanceId"])
-        row = self.spool.get(operation_id(key))
-        if not row or Path(row["assignment_ref"]).resolve() != candidate or assignment != json.loads(row["operation_json"]) \
-                or assignment["hostId"] != host_id or assignment["session"] != session:
-            raise ValueError("assignment not registered for this host and session")
+
+USAGE = "usage: host.py resolve-delivery <hostId> <stateDir> <taskId> <generation> delivered|abandoned <reason>"
 
 
-USAGE = ("usage: host.py verify-ref <hostId> <stateDir> <session> <assignmentRef>\n"
-         "       host.py resolve-delivery <hostId> <stateDir> <taskId> <generation> delivered|abandoned <reason>")
-
-
-def main(argv: list[str]) -> str | None:
-    if len(argv) == 5 and argv[0] == "verify-ref":
-        Host(argv[1], Path(argv[2])).verify_reference(argv[1], argv[3], argv[4])
-        return None
+def main(argv: list[str]) -> str:
     if len(argv) == 7 and argv[0] == "resolve-delivery":
         host = Host(argv[1], Path(argv[2]))
         key = host.operation_key_for(argv[1], argv[3], int(argv[4]))
@@ -671,8 +654,6 @@ def main(argv: list[str]) -> str | None:
 
 if __name__ == "__main__":
     try:
-        printed = main(sys.argv[1:])
+        print(main(sys.argv[1:]))
     except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
         raise SystemExit(str(exc)) from exc
-    if printed:
-        print(printed)

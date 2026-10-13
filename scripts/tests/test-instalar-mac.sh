@@ -1,5 +1,5 @@
 #!/bin/bash
-# 9.10 instalar-mac.sh: instala las herramientas de corrida en un HOME de
+# 9.10 instalar-mac.sh: instala las herramientas de la Mac en un HOME de
 # mentira con uid inyectado. Nada toca el HOME real ni launchd real: HOME,
 # INSTALAR_UID, LAUNCHCTL_BIN y GIT_BIN se inyectan. El stub de git de los
 # casos 1-6 simula el arbol integrado (la rama responde los blobs del arbol):
@@ -55,19 +55,14 @@ export INSTALAR_REF=HEAD
 # (1) --dry-run no toca nada e imprime que haria, con el uid inyectado.
 out="$(bash "$INST" --dry-run 2>&1)" || fail "dry-run fallo: $out"
 [ -z "$(ls -A "$HOME")" ] || fail "dry-run escribio en HOME: $(ls -A "$HOME")"
-printf '%s' "$out" | grep -q "corrida.sh" || fail "dry-run no anuncia corrida.sh"
+printf '%s' "$out" | grep -q "tmux-activity-watch.sh" || fail "dry-run no anuncia tmux-activity-watch.sh"
 printf '%s' "$out" | grep -q "gui/59999" || fail "dry-run no usa el uid inyectado (falta gui/59999)"
 
 # (2) instala el conjunto completo.
 out="$(bash "$INST" 2>&1)" || fail "instalar fallo: $out"
-for f in corrida.sh cli-modos.tsv workers.v1.json agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh; do
+for f in agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh; do
   [ -f "$HOME/bin/$f" ] || fail "falta \$HOME/bin/$f"
 done
-# El registro de workers viaja instalado: el adaptador instalado lo resuelve
-# en $HOME/bin (repro del reviewer: ~/bin/workers.v1.json nunca creado).
-cmp -s scripts/mac/workers.v1.json "$HOME/bin/workers.v1.json" \
-  || fail "el registro instalado difiere de scripts/mac/workers.v1.json"
-[ -x "$HOME/bin/corrida.sh" ] || fail "corrida.sh quedo sin +x"
 [ -x "$HOME/bin/tablero-trabajo.sh" ] || fail "tablero-trabajo.sh quedo sin +x (claw lo corre directo)"
 [ -x "$HOME/bin/progress-events.py" ] || fail "progress-events.py no quedo instalado y ejecutable"
 for f in brief.py contracts.py host.py modelos.py native_gateway.py progress_bridge.py resources.py routing.py sesion.py spool.py cutover.py; do
@@ -80,25 +75,9 @@ for f in "$HOME"/bin/agent-work/*.py; do
     || fail "agent-work/$m.py instalado no importa con lo instalado"
 done
 [ -x "$HOME/bin/agent-work/cutover.py" ] || fail "cutover.py instalado sin +x"
-ncorr="$(ls "$HOME/bin/corrida"/*.sh 2>/dev/null | wc -l | tr -d ' ')"
-[ "$ncorr" -eq 20 ] || fail "corrida/ trae $ncorr .sh, se esperaban 20"
-for f in abrir avisos lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento lib adaptador preparar-carril mostrar-terminal autoridad-merge reconciliar compuerta seleccionar; do
-  [ -f "$HOME/bin/corrida/$f.sh" ] || fail "falta \$HOME/bin/corrida/$f.sh"
-done
-# 14.21 punto 7: la lista explicita de arriba debe cubrir TODOS los
-# corrida/*.sh del repo; un script instalado y no listado se escapa del candado.
-for ruta in scripts/mac/corrida/*.sh; do
-  b="$(basename "$ruta" .sh)"
-  case " abrir avisos lanzar-sesion terminar-sesion reconciliar-marcas cerrar preflight estado latido responder seguimiento migrar-seguimiento lib adaptador preparar-carril mostrar-terminal autoridad-merge reconciliar compuerta seleccionar " in
-    *" $b "*) ;;
-    *) fail "corrida/$b.sh se instala pero no esta listado en la prueba" ;;
-  esac
-done
 PL="$HOME/Library/LaunchAgents/ai.goncloud.tmux-activity-watch.plist"
 [ -f "$PL" ] || fail "falta el plist generado"
 [ -f "$HOME/.tmux.conf" ] || fail "falta \$HOME/.tmux.conf"
-cmp -s scripts/mac/corrida/preaprobaciones.v1.json "$HOME/bin/corrida/preaprobaciones.v1.json" \
-  || fail "la tabla de preaprobaciones instalada difiere de scripts/mac"
 grep -qF "source ~/bin/agent-tmux-shell.zsh" "$HOME/.zshrc" 2>/dev/null \
   || fail "falta la linea de source en .zshrc"
 printf '%s' "$out" | grep -q "instalado" || fail "no imprime que quedo instalado"
@@ -107,10 +86,7 @@ printf '%s' "$out" | grep -q "instalado" || fail "no imprime que quedo instalado
 grep -qF "$HOME/bin/tmux-activity-watch.sh" "$PL" || fail "el plist no apunta al HOME instalado"
 grep -qF "/Users/dn" "$PL" && fail "el plist trae /Users/dn a fuego"
 
-# (4) el latido viejo ni se copia ni se carga.
-[ -e "$HOME/bin/corrida-latido.sh" ] && fail "copio un corrida-latido a bin"
-ls "$HOME/Library/LaunchAgents/" | grep -q "corrida-latido" && fail "copio el plist del latido viejo"
-grep -q "corrida-latido" "$LAUNCHLOG" 2>/dev/null && fail "cargo el latido viejo en launchd"
+# (4) el vigilante se carga con el uid inyectado.
 grep -q "bootstrap gui/59999" "$LAUNCHLOG" || fail "no cargo el vigilante con gui/59999"
 
 # (5) idempotente: segunda corrida no cambia bytes ni mtimes.
@@ -165,14 +141,14 @@ export HOME="$T/casa2"; mkdir -p "$HOME"
 cat >"$T/bin/git-adulterado" <<STUB
 #!/bin/sh
 case "\$*" in
-  *rev-parse*cli-modos.tsv*) printf '0000000000000000000000000000000000000000\n';;
+  *rev-parse*tablero-trabajo.sh*) printf '0000000000000000000000000000000000000000\n';;
   *) exec "$T/bin/git-integrado" "\$@";;
 esac
 STUB
 chmod +x "$T/bin/git-adulterado"
 out="$(GIT_BIN="$T/bin/git-adulterado" bash "$INST" 2>&1)" && fail "instalo con blob adulterado"
-printf '%s' "$out" | grep -q "cli-modos.tsv" || fail "no nombra el archivo con blob distinto: $out"
-[ -e "$T/casa2/bin/corrida.sh" ] && fail "escribio archivos antes de fallar el blob"
+printf '%s' "$out" | grep -q "tablero-trabajo.sh" || fail "no nombra el archivo con blob distinto: $out"
+[ -e "$T/casa2/bin" ] && fail "escribio archivos antes de fallar el blob"
 
 # (8) archivo ausente en la rama se declara y no aborta.
 cat >"$T/bin/git-ausente" <<STUB
@@ -198,25 +174,12 @@ out="$(bash "$INST" 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ]; then
   printf '%s' "$out" | grep -qE "blob distinto|sin referencia|sin comprobacion" \
     || fail "se nego sin explicar el blob/rama: $out"
-  [ -e "$T/casa4/bin/corrida.sh" ] && fail "escribio antes de fallar el blob real"
+  [ -e "$T/casa4/bin" ] && fail "escribio antes de fallar el blob real"
 else
   bash "$INST" --verificar >/dev/null 2>&1 || fail "instalo por defecto pero no verifica"
 fi
 
-# Anclas: la ref por defecto es la rama por defecto, y el latido viejo no esta
-# en el manifiesto (ni se copia ni se carga, en ningun modo).
+# Ancla: la ref por defecto es la rama por defecto.
 grep -qF 'INSTALAR_REF:-origin/main' "$INST" || fail "la ref por defecto no es origin/main"
-grep -v "^#" "$INST" | grep -q "corrida-latido" && fail "el instalador toca el latido viejo fuera de comentarios"
-
-# El runbook de Fase 9 instala con este script y verifica con --verificar; no
-# exige +x a los subcomandos de corrida/ (en git son 100644 y se cargan con `.`):
-# un `test -x` sobre ellos marcaba FALTA en una instalacion sana.
-RB9=docs/runbooks/autopilot-fase9.md
-grep -Eq 'bash scripts/mac/instalar-mac\.sh[[:space:]]*&&[[:space:]]*$' "$RB9" \
-  || fail "$RB9 no instala con instalar-mac.sh (encadenado con &&)"
-grep -qF 'bash scripts/mac/instalar-mac.sh --verificar' "$RB9" \
-  || fail "$RB9 no verifica con instalar-mac.sh --verificar"
-grep -qF 'test -x "$HOME/bin/corrida/' "$RB9" \
-  && fail "$RB9 exige +x a subcomandos de corrida/ que no son ejecutables"
 
 echo "OK test-instalar-mac"
