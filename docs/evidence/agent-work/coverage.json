@@ -26,7 +26,7 @@
       "codex": "disabled-operator-setup-pending",
       "zcode": "disabled-operator-setup-pending",
       "grok": "disabled-operator-setup-pending",
-      "opencode": "certified",
+      "opencode": "sandbox-tested-uncertified",
       "opencode@opencode-go/deepseek-v4-pro": "disabled-operator-billing",
       "opencode@opencode-go/kimi-k3": "disabled-operator-billing",
       "opencode@opencode-go/grok-4.7": "disabled-operator-billing",
@@ -41,6 +41,19 @@
       "zcode": "disabled-host-unverified",
       "grok": "disabled-host-unverified",
       "opencode": "disabled-host-unverified"
+    }
+  },
+  "hostAdapterRoute": {
+    "mac-local": {
+      "opencode": {
+        "form": "run-per-task",
+        "certifiedCliVersions": {"1.18.35": "B22-fase0.md"},
+        "closureProof": {
+          "boundary": "procesos del uid del operador con rgid del grupo agent-work-enc1",
+          "evidence": "docs/evidence/agent-work/B22-fase0.md (M4) y scripts/tests/test-agent-work-sesion.py",
+          "limitation": "Escapa quien llame a un binario setuid que cambia de grupo (newgrp, su) o quien le pida el trabajo a launchd (open, launchctl). El grupo del slot es de uso exclusivo del host: su cierre barre todo proceso del operador con ese rgid."
+        }
+      }
     }
   },
   "hostAdapterEvidence": {

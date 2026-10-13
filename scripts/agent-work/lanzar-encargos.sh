@@ -1,0 +1,69 @@
+#!/bin/bash
+# Starts, or reuses, the one host of "por CLI" tasks: it launches one opencode process per task, inside
+# the slot's group, with the model the task's brief asks for.
+# Usage: lanzar-encargos.sh [--canario]
+#   --canario   the host also launches on a sandbox-tested-uncertified route or a new opencode version,
+#               so the route's own canary can certify it
+# The host runs on tmux -L agent-work, session host-encargos, with the spool
+# ~/.local/state/agent-work-host/enc-1, in a loop that starts it again 5 s after it dies. Running this
+# again with the same arguments changes nothing. To stop it for good:
+#   tmux -L agent-work kill-session -t host-encargos
+set -euo pipefail
+
+tmux_bin=${AGENT_WORK_TMUX:-/opt/homebrew/bin/tmux}
+socket=${AGENT_WORK_TMUX_SOCKET:-agent-work}
+opencode_bin=${AGENT_WORK_OPENCODE:-/opt/homebrew/bin/opencode}
+state_root=${AGENT_WORK_STATE_ROOT:-$HOME/.local/state/agent-work-host}
+progress_dir=${AGENT_WORK_PROGRESS_DIR:-$HOME/.local/state/runbook-progress-events}
+progress_client=${AGENT_WORK_PROGRESS_CLIENT:-$HOME/bin/progress-events.py}
+openclaw_bin=${OPENCLAW_BIN:-$HOME/.openclaw-r/openclaw}
+python_bin=${AGENT_WORK_PYTHON:-python3}
+group=${AGENT_WORK_SLOT_GROUP:-agent-work-enc1}
+workspace_root=${AGENT_WORK_WORKSPACE_ROOT:-$HOME/dev}
+settle_seconds=${AGENT_WORK_SETTLE_SECONDS:-5}
+restart_seconds=${AGENT_WORK_RESTART_SECONDS:-5}
+repo=$(cd "$(dirname "$0")/../.." && pwd -P)
+instance=enc-1
+host_session=host-encargos
+
+falla() { echo "lanzar-encargos: $*" >&2; exit "${codigo:-1}"; }
+
+canary=()
+if [ "${1:-}" = "--canario" ]; then canary=(--canary); shift; fi
+[ $# -eq 0 ] || codigo=2 falla "uso: lanzar-encargos.sh [--canario]"
+user=$(id -un)
+id -Gn | tr ' ' '\n' | grep -qxF -- "$group" || codigo=2 falla "el grupo $group no existe o $user no pertenece a él. \
+Lo crea un administrador, una vez: sudo dseditgroup -o create $group && sudo dseditgroup -o edit -a $user -t user $group"
+[ -x "$opencode_bin" ] || codigo=2 falla "no existe $opencode_bin"
+[ -d "$workspace_root" ] || codigo=2 falla "no existe la raíz de repos $workspace_root"
+workspace_root=$(cd "$workspace_root" && pwd -P)
+
+mkdir -p "$state_root/$instance" "$state_root/evidence"
+chmod 700 "$state_root/$instance"
+state_root=$(cd "$state_root" && pwd -P)
+spool=$state_root/$instance
+t() { "$tmux_bin" -L "$socket" "$@"; }
+
+command=(env "OPENCLAW_BIN=$openclaw_bin" LANG=en_US.UTF-8 "$python_bin" scripts/agent-work/native_gateway.py
+  --openclaw-bin "$openclaw_bin" --host-id mac-local --expect-url ws://127.0.0.1:18789
+  --host-state-dir "$spool" --state-root "$state_root" --evidence-root "$state_root/evidence"
+  --progress-state-dir "$progress_dir" --progress-client "$progress_client" --watch
+  --cli-instance-id "$instance" --cli-tmux-socket "$socket" --tmux-bin "$tmux_bin"
+  --workspace-root "$workspace_root" --opencode-bin "$opencode_bin" --slot-group "$group"
+  ${canary[@]+"${canary[@]}"})
+# The host exits when it dies and when it is asked to stop (SIGTERM); either way the loop brings it back.
+line="while :; do $(printf '%q ' "${command[@]}")2>&1 | tee -a $(printf '%q' "$spool/host.log"); sleep $restart_seconds; done"
+
+if t has-session -t "=$host_session" 2>/dev/null; then
+  [ "$(cat "$spool/host-cmd.txt" 2>/dev/null)" = "$line" ] \
+    || falla "$host_session ya corre con otro comando (ver $spool/host-cmd.txt). Para cambiarlo, apágalo antes: \
+$tmux_bin -L $socket kill-session -t $host_session"
+  echo "host: $host_session ya corre"
+else
+  printf '%s\n' "$line" > "$spool/host-cmd.txt"
+  t new-session -d -s "$host_session" -x 200 -y 50 -c "$repo" "$line"
+  sleep "$settle_seconds"
+  t has-session -t "=$host_session" 2>/dev/null || falla "el host murió al arrancar: $(tail -5 "$spool/host.log" 2>/dev/null)"
+  echo "host: $host_session arrancó"
+fi
+echo "HOST $instance opencode sesión=$host_session spool=$spool grupo=$group${canary[0]+ canario}"

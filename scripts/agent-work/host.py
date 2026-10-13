@@ -12,11 +12,12 @@ import subprocess
 import sys
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
 
-from contracts import AuthorizedOperation, HostObservation, IncidentRejected, OperationKey, ResultReceipt, operation_id
+from contracts import (AuthorizedOperation, HostObservation, IncidentRejected, OperationKey, ResultReceipt,
+                       SessionRecord, operation_id)
 from spool import DIALOG_STILL_OPEN, TERMINAL_STATES, Spool, atomic_json, canonical, closure_digest, incident_identity
 
 MAX_ARTIFACT_BYTES = 10 * 1024 * 1024
@@ -26,6 +27,14 @@ SILENT_EPISODES = {"invalid-result": "invalid-result", "transport-unavailable": 
 DIALOG_PASSES = 2
 ACCEPT_SCHEMA = "agent-work.accept.v1"
 UNACCEPTED_EPISODE = "delivery-unaccepted"
+# Episodes of the run-per-task route. Both travel as episodeId of transport-unavailable, which R accepts;
+# what was refused, the exit code and the cause stay in the spool, where `encargo.py estado` reads them.
+REFUSED_EPISODE = "launch-refused"
+LAUNCH_FAILED_EPISODE = "launch-failed"
+ACCEPT_DEADLINE_SECONDS = 300.0
+"""From launch to acceptance. Measured three times: 18 s (canary 8), 13.51 s and 16.49 s (B22-fase0.md, M5)."""
+RESULT_DEADLINE_SECONDS = 3600.0
+"""From acceptance to result. David, P10866: "3. 1 hora"."""
 ACCEPT_BOUND = ("hostId", "taskId", "generation", "instanceId", "claimId")
 RESULT_BOUND = ("hostId", "taskId", "generation", "instanceId", "producerId", "capability")
 MAX_ACCEPT_BYTES = 4096
@@ -161,6 +170,13 @@ def read_acceptance(assignment: dict) -> bool:
             return False
     return hmac.compare_digest(accept["capability"].encode("utf-8", "surrogatepass"),
                                assignment["capability"].encode("utf-8", "surrogatepass"))
+
+
+def delivery_line(assignment_ref: str) -> str:
+    """The one line a CLI gets: typed into an adopted session, or the argument of a launched one."""
+    return (f"Open assignment JSON at {assignment_ref}. First write agent-work.accept.v1 atomically to "
+            "acceptRef with schema, hostId, taskId, generation, instanceId, claimId and capability copied "
+            "from the assignment. Then follow briefRef and write agent-work.result.v1 atomically to resultRef.")
 
 
 def cli_protocol(assignment: dict) -> dict:
@@ -437,9 +453,7 @@ class Host:
         finally:
             os.unlink(pending)
 
-    def apply(self, key: OperationKey, operation: AuthorizedOperation,
-              deliver: Callable[[str, str], None],
-              admit: Callable[[dict], dict]) -> HostObservation:
+    def _check(self, key: OperationKey, operation: AuthorizedOperation) -> None:
         self._host(key.host_id)
         if operation.key != key:
             raise ValueError("operation key mismatch")
@@ -448,11 +462,12 @@ class Host:
                                            operation.claim_id)) \
                 or not isinstance(operation.input_revision, dict):
             raise ValueError("invalid authorized operation")
-        brief = under(operation.brief_ref, operation.workspace_ref)
-        if hashlib.sha256(brief.read_bytes()).hexdigest() != operation.brief_digest:
-            raise ValueError("brief digest mismatch")
+
+    def _assignment(self, key: OperationKey, operation: AuthorizedOperation, brief_ref: str) -> dict:
+        """What every assignment carries, whatever happens to it next. Its result and acceptance live in the
+        run directory when the operation has one, and in the adopted layout otherwise."""
         op_id = operation_id(key)
-        assignment_ref = self.state_dir / "assignments" / f"{op_id}.json"
+        run = operation.run
         assignment = {
             "schema": "agent-work.assignment.v1",
             "hostId": key.host_id,
@@ -463,23 +478,74 @@ class Host:
             "capability": operation.capability,
             "claimId": operation.claim_id,
             "session": operation.session,
-            "workspaceRef": str(Path(operation.workspace_ref).resolve()),
-            "briefRef": str(brief),
+            "workspaceRef": operation.workspace_ref,
+            "briefRef": brief_ref,
             "briefDigest": operation.brief_digest,
             "inputRevision": operation.input_revision,
             "resultContract": operation.result_contract,
-            "resultRef": str(self.state_dir / "inbox" / f"{op_id}.json"),
+            "resultRef": str(run.result if run else self.state_dir / "inbox" / f"{op_id}.json"),
         }
         if operation.adapter_id:
             assignment["adapterId"] = operation.adapter_id
-            assignment["acceptRef"] = str(self.state_dir / "inbox" / f"{op_id}.accept.json")
-            assignment["protocol"] = cli_protocol(assignment)
+            assignment["acceptRef"] = str(run.accept if run else self.state_dir / "inbox" / f"{op_id}.accept.json")
+        return assignment
+
+    def _register(self, key: OperationKey, assignment: dict, assignment_ref: Path) -> None:
+        op_id = operation_id(key)
         digest = hashlib.sha256(canonical(assignment).encode()).hexdigest()
         current = self.spool.get(op_id)
         if current and current["operation_digest"] != digest:
             raise ValueError("operation key conflicts with different content")
         self.spool.register(op_id, key.instance_id, digest, str(assignment_ref), assignment)
-        (self.state_dir / "inbox").mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _admitted(receipt: object, key: OperationKey, claim_id: str) -> None:
+        if (not isinstance(receipt, dict) or receipt.get("state") != "host-admitted"
+                or receipt.get("claimId") != claim_id
+                or receipt.get("hostId") != key.host_id
+                or receipt.get("instanceId") != key.instance_id
+                or receipt.get("generation") != key.generation):
+            raise ValueError("native host admission receipt mismatch")
+
+    def refuse(self, key: OperationKey, operation: AuthorizedOperation, admit: Callable[[dict], dict],
+               why: dict) -> HostObservation:
+        """A task this host will not launch. Registers it with why (its causa and frase), admits it in R,
+        because R takes an incident only from a confirmed admission, and records the launch-refused incident.
+        Nothing is launched: the resource stays Reserved until R cancels the task. Running it again changes
+        nothing."""
+        self._check(key, operation)
+        if operation.run is None or not operation.adapter_id:
+            raise ValueError("only a run-per-task operation can be refused")
+        if set(why) != {"causa", "frase"} or not all(isinstance(text, str) and text for text in why.values()):
+            raise ValueError("a refusal carries its causa and its frase")
+        assignment = {**self._assignment(key, operation, operation.brief_ref), "refused": why}
+        self._register(key, assignment, operation.run.assignment)
+        incident = {"kind": "transport-unavailable", "episodeId": REFUSED_EPISODE,
+                    "evidenceRef": f"host-operation:{operation_id(key)}"}
+        if not self.spool.has_incident(key.task_id, incident_identity(key.generation, incident)[0]):
+            self._admitted(admit(assignment), key, operation.claim_id)
+            self.record_incident(key.host_id, key, incident)
+        return HostObservation("refused", str(operation.run.assignment))
+
+    def apply(self, key: OperationKey, operation: AuthorizedOperation,
+              deliver: Callable[[str, str], None],
+              admit: Callable[[dict], dict]) -> HostObservation:
+        self._check(key, operation)
+        # An adopted session reads its brief inside the workspace. A launched one reads it in its run
+        # directory, the only folder outside the task's repo it may touch.
+        run = operation.run
+        brief = under(operation.brief_ref, str(run.path) if run else operation.workspace_ref)
+        if hashlib.sha256(brief.read_bytes()).hexdigest() != operation.brief_digest:
+            raise ValueError("brief digest mismatch")
+        op_id = operation_id(key)
+        assignment_ref = run.assignment if run else self.state_dir / "assignments" / f"{op_id}.json"
+        assignment = self._assignment(key, replace(operation, workspace_ref=str(Path(operation.workspace_ref).resolve())),
+                                      str(brief))
+        if operation.adapter_id:
+            assignment["protocol"] = cli_protocol(assignment)
+        self._register(key, assignment, assignment_ref)
+        if not run:
+            (self.state_dir / "inbox").mkdir(parents=True, exist_ok=True)
         if assignment_ref.is_symlink():
             raise ValueError("assignment reference is a symlink")
         if assignment_ref.exists():
@@ -487,15 +553,11 @@ class Host:
                 raise ValueError("assignment reference changed")
         else:
             atomic_json(assignment_ref, assignment)
+            if run:
+                assignment_ref.chmod(0o400)
         status = self.spool.get(op_id)["status"]
         if status == "registered":
-            receipt = admit(assignment)
-            if (not isinstance(receipt, dict) or receipt.get("state") != "host-admitted"
-                    or receipt.get("claimId") != operation.claim_id
-                    or receipt.get("hostId") != key.host_id
-                    or receipt.get("instanceId") != key.instance_id
-                    or receipt.get("generation") != key.generation):
-                raise ValueError("native host admission receipt mismatch")
+            self._admitted(admit(assignment), key, operation.claim_id)
         if not self.spool.begin_delivery(op_id):
             status = self.spool.get(op_id)["status"]
             return HostObservation("uncertain" if status == "attempted" else status, str(assignment_ref))
@@ -739,6 +801,91 @@ class Host:
                 self.spool.save_dialog_state(op_id, dialog)
         return detected
 
+    def _end_delivery(self, key: OperationKey, episode: str) -> list[str]:
+        """A delivery that will never be accepted: uncertain together with its incident. The incident key
+        when this call made the change."""
+        op_id = operation_id(key)
+        incident = {"kind": "transport-unavailable", "episodeId": episode, "evidenceRef": f"host-operation:{op_id}"}
+        incident_key, digest = incident_identity(key.generation, incident)
+        changed = self.spool.delivery_uncertain(op_id, key.task_id, incident_key, canonical(incident), digest,
+                                                deferred=True)
+        return [incident_key] if changed else []
+
+    def detect_run_failures(self, host_id: str, session_exit: Callable[[OperationKey], object | None], *,
+                            now: float, accept_deadline_seconds: float, result_deadline_seconds: float,
+                            session_directory: Callable[[OperationKey], str | None] | None = None,
+                            stop_session: Callable[[OperationKey], object] | None = None) -> list[str]:
+        """The silent failures of launched sessions, one incident each. session_exit answers None while the
+        process lives and an object with its exit code once it left; session_directory answers the folder
+        opencode opened the session in.
+
+        A process that left without its acceptance is launch-failed, and one that accepted and left without
+        a result is session-closed, both in the pass after the exit and whatever the exit code: opencode
+        ends with 0 after denying a permission. A session opened outside the task's folder is stopped. A
+        launch deferred since accept_deadline_seconds ago ends as launch-failed. No dialog is read here:
+        `opencode run` never waits for a permission."""
+        self._host(host_id)
+        check_deadline(accept_deadline_seconds)
+        check_deadline(result_deadline_seconds)
+        detected = []
+        for assignment in self.spool.awaiting_results():
+            key = OperationKey(assignment["hostId"], assignment["taskId"],
+                               assignment["generation"], assignment["instanceId"])
+            op_id = operation_id(key)
+            current = self.spool.get(op_id)
+            if current is None or not assignment.get("adapterId") or "refused" in assignment:
+                continue
+            status = current["status"]
+            if status == "deferred":
+                first = self.spool.first_deferred_at(op_id)
+                if first is not None and now - first >= accept_deadline_seconds:
+                    detected += self._end_delivery(key, LAUNCH_FAILED_EPISODE)
+                continue
+            if status not in ("attempted", "delivered"):
+                continue
+            # The exit is read before the files: a CLI writes them before it leaves, so files read after an
+            # exit are final.
+            left = session_exit(key)
+            if left is not None:
+                record = SessionRecord.for_operation(self.state_dir, op_id)
+                if not record.exit.exists():
+                    atomic_json(record.exit, {"code": left.code})
+            opened = session_directory(key) if session_directory is not None else None
+            strayed = opened is not None and opened != assignment["workspaceRef"]
+            if strayed and left is None and stop_session is not None:
+                stop_session(key)
+            invalid = False
+            try:
+                accepted = status == "delivered" or self.take_acceptance(host_id, key)
+                if self.collect(host_id, key) is not None:
+                    continue
+            except ValueError:
+                invalid = True
+            except OSError:
+                continue
+            if not accepted:
+                attempted = self.spool.attempted_at(op_id)
+                if strayed or left is not None:
+                    detected += self._end_delivery(key, LAUNCH_FAILED_EPISODE)
+                elif attempted is not None and now - attempted >= accept_deadline_seconds:
+                    detected += self._end_delivery(key, UNACCEPTED_EPISODE)
+                continue
+            delivered = self.spool.delivered_at(op_id)
+            if invalid:
+                kind = "invalid-result"
+            elif left is not None:
+                kind = "transport-unavailable"
+            elif delivered is not None and now - delivered >= result_deadline_seconds:
+                kind = "deadline-missed"
+            else:
+                continue
+            incident = {"kind": kind, "episodeId": SILENT_EPISODES[kind], "evidenceRef": f"host-operation:{op_id}"}
+            incident_key = incident_identity(key.generation, incident)[0]
+            if not self.spool.has_incident(key.task_id, incident_key):
+                self.record_incident(host_id, key, incident)
+                detected.append(incident_key)
+        return detected
+
     def pending(self, host_id: str) -> list[dict]:
         self._host(host_id)
         for assignment in self.spool.awaiting_results():
@@ -807,7 +954,7 @@ class Host:
                 if assignment is None:
                     self.spool.note_inbox_error(op_id, "closure without assignment")
                     continue
-                digest = closure_digest(row["evidence_json"])
+                digest = closure_digest(row["evidence_json"], self.spool.closure_proof(op_id))
                 last = self.spool.closure_last(op_id)
                 if last and (last["state"], last["reason"], last["evidence_digest"]) \
                         == (row["state"], row["reason"], digest):
@@ -945,9 +1092,7 @@ class TmuxTransport:
     def deliver(self, assignment_ref: str, session: str) -> None:
         if not session.replace("-", "").replace("_", "").isalnum():
             raise ValueError("invalid session")
-        text = (f"Open assignment JSON at {assignment_ref}. First write agent-work.accept.v1 atomically to "
-                "acceptRef with schema, hostId, taskId, generation, instanceId, claimId and capability copied "
-                "from the assignment. Then follow briefRef and write agent-work.result.v1 atomically to resultRef.")
+        text = delivery_line(assignment_ref)
         try:
             pane, command, screen = self._screen(session)
             state, shown = read_composer(screen, command, self.adapter.placeholders)

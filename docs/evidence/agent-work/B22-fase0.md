@@ -1,6 +1,6 @@
 # B22, fase 0: recibo de las mediciones
 
-Borrador de `docs/evidence/agent-work/B22-fase0.md`. Es la evidencia de la versión de opencode que certifica la ruta `run-per-task` (`hostAdapterRoute` en `coverage.json`).
+Es la evidencia de la versión de opencode que certifica la ruta `run-per-task` (`hostAdapterRoute` en `coverage.json`).
 
 ```
 medido:    2026-10-13, entre las 00:28 y las 00:36 UTC
@@ -34,9 +34,9 @@ Todas las corridas comparten esto: stdin en `/dev/null`, sin `--auto`, `OPENCODE
 | M3c | pasa | Con `small_model`, todas las llamadas van al proveedor del encargo. |
 | M5 | no pasa, y después pasa | La primera corrida destapó que opencode toma su carpeta de `PWD`. Con `PWD` fijado, acuse y resultado llegan y el spool queda `acknowledged`. |
 | PWD | medido | El lanzador tiene que fijar `PWD` igual a la carpeta del encargo. |
-| M4 | sin medir | Espera el comando de administrador que crea el grupo `agent-work-enc1`. David ya lo aceptó. |
+| M4 | pasa | El grupo primario del pane es una frontera: lo heredan el pane y un nieto desprendido, y los archivos nuevos quedan en `staff`. |
 
-Un límite de este recibo. M1, M2, M6 y M3 corrieron con el script de antes del arreglo, así que sus sesiones abrieron en `<fase0>` y no en el repo temporal (ver "PWD"). Sus veredictos no dependen de eso: M1 y M3 no miran la carpeta, y el archivo de M2 estaba fuera de las dos carpetas. Antes de publicar el recibo conviene repetir M2 con el script ya arreglado (`./medir-run.sh --solo m2`), para que el rechazo quede medido con la sesión en el repo.
+Un límite de este recibo. Las corridas de M1, M2, M6 y M3 que se citan abajo son las de las 00:28Z, con el script de antes del arreglo, así que sus sesiones abrieron en `<fase0>` y no en el repo temporal (ver "PWD"). Sus veredictos no dependen de eso: M1 y M3 no miran la carpeta, y el archivo de M2 estaba fuera de las dos carpetas. Las cinco se repitieron a las 00:57:43Z con el script ya arreglado (sha256 `a8132fde…6f5633874`, crudos en `resultados-20261013T005743Z/`) y dieron el mismo veredicto: M1 sale con 0 a los 4,62 s, M2 y M6 "rechaza y termina" con 0 a los 7,68 s, M3a y M3b salen con 1 a los 0,76 s, y en M3c todas las llamadas van a `zai-coding-plan`.
 
 ## M1
 
@@ -245,11 +245,53 @@ Lo que no se midió. Qué hace `--dir`, que existe en la ayuda de `run`. El dise
 
 ## M4
 
-Sin medir. `medir-grupo.sh` (sha256 `bfa3fcfc…3770cd70`) sale con código 3 mientras el grupo `agent-work-enc1` no exista. La preparación está en `fases.md` y la corre David, que ya aceptó hacerlo ("1 acepto", P10866). Hay una medición previa a favor de la segunda mitad de M4: `mediciones/m8-grupo-de-archivos-nuevos.sh`, bajo `newgrp admin`, deja archivos, carpetas y objetos de git en `staff`.
+Pregunta. Con un grupo recién creado, ¿`newgrp agent-work-enc1` dentro de un pane de tmux deja al pane y a un nieto desprendido con ese `rgid`, sin cerrar sesión de macOS? ¿Con qué grupo quedan un archivo nuevo, una carpeta nueva y un commit hechos desde ese pane?
+
+Medido el 2026-10-13 a las 00:58:21Z con `medir-grupo.sh` (sha256 `bfa3fcfc…3770cd70`), tmux 3.7c, en su propio servidor `tmux -L b22-m4`. David creó el grupo antes con el comando de `fases.md`. Los crudos están en `~/.local/state/encargos-loop/B22/fase0/resultados-20261013T005821Z/`.
+
+```
+grupo: agent-work-enc1 gid=501; usuario: dn
+grupos del proceso que corre el script (id -G): 20 501 12 61 79 80 81 701 702 33 98 100 204 250 395 398 399 400
+```
+
+Salida literal. Lo que el pane dijo de sí mismo (`m4/dentro.txt`):
+
+```
+id del pane: rgid=501 grupo=agent-work-enc1 egid=501
+hijo:  8994  8986   501 /bin/sleep 90
+commit: rc=0 HEAD=0c37a2f9e8dc9b1231644faa79fc71a86e7549ba
+nieto desprendido: 8998 setgid(20) rechazado: [Errno 1] Operation not permitted rgid=501 egid=501
+```
+
+Lo que se vio desde fuera del pane (`m4/observaciones.txt`):
+
+```
+$ ps -o pid=,ppid=,rgid=,command= -p 8998
+ 8998     1   501 /bin/sleep 90
+$ ps -A -o rgid=,pid=,ppid=,command= | awk '$1 == 501'      (antes de lanzar el pane: nada; con el pane vivo: 4 procesos)
+$ stat -f %Sg <repo>/m4-archivo.txt
+staff
+$ stat -f %Sg <repo>/m4-carpeta
+staff
+$ stat -f %Sg <repo>/.git/objects/0c/37a2f9e8dc9b1231644faa79fc71a86e7549ba
+staff
+$ find <repo> -group agent-work-enc1
+$ tmux -L b22-m4 capture-pane -p -t =m4:
+newgrp: setgroups: Invalid argument
+$ tmux -L b22-m4 display-message -p -t =m4: '#{pane_dead} #{pane_dead_status}'
+1 7
+$ ps -A -o rgid=,pid=,ppid=,command= | awk '$1 == 501'      (después de cerrar el pane y matar los dos sleep: nada)
+```
+
+Veredicto de M4a, la herencia del `rgid`: **pasa**. El pane y el nieto desprendido, con `ppid` 1, corren con `rgid` 501, y `setgid(20)` desde el nieto da `Operation not permitted`.
+
+Veredicto de M4b, el grupo de lo que nace en el repo: **pasa**. El archivo, la carpeta y el objeto del commit quedan en `staff`, y `find -group agent-work-enc1` no encuentra nada.
+
+Lo que fija. La frontera de un slot puede ser el par (uid, `rgid`): `ps -o rgid=` muestra a cada proceso de la sesión, también al que se desprendió, y un proceso sin privilegios no puede salirse. El cierre no tiene que devolver archivos a `staff`. Un pane muerto conserva su código de salida en `#{pane_dead_status}`, que es lo que lee el host.
+
+Dos cosas que el recibo deja escritas. `newgrp` imprime `setgroups: Invalid argument` y corre el shell de todos modos, con el `rgid` ya cambiado. El host no supone que el cambio funcionó: la primera línea de su `launch.sh` compara `id -rg` con el gid del grupo y sale con 98 si no coincide. Y la prueba no cubre a quien llame a un binario setuid que cambia de grupo (`newgrp`, `su`) ni a quien le pida el trabajo a launchd (`open`, `launchctl`).
 
 ## Lo que falta para cerrar este recibo
 
-1. M4, cuando David cree el grupo.
-2. Repetir M2 con el script arreglado, para que la sesión esté en el repo.
-3. Repetir M5 con `--print-logs --log-level INFO`, que es como va a lanzar el host. M5 pasó sin esas dos banderas.
-4. Guardar los tres comandos del experimento de `PWD` si se repite.
+1. Repetir M5 con `--print-logs --log-level INFO`, que es como lanza el host. M5 pasó sin esas dos banderas. El canario A de la fase 2 es un encargo real lanzado con ellas.
+2. Guardar los tres comandos del experimento de `PWD` si se repite.

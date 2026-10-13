@@ -22,8 +22,13 @@ def canonical(data: object) -> str:
     return json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-def closure_digest(evidence_json: str) -> str:
-    return hashlib.sha256(canonical(json.loads(evidence_json)).encode()).hexdigest()
+def closure_digest(evidence_json: str, proof_json: str | None = None) -> str:
+    """What R receives as evidenceDigest. A closure that swept a process boundary also binds what it found,
+    signalled and left there."""
+    evidence = json.loads(evidence_json)
+    if proof_json is not None:
+        evidence = {"evidence": evidence, "proof": json.loads(proof_json)}
+    return hashlib.sha256(canonical(evidence).encode()).hexdigest()
 
 
 HOST_INCIDENT_KINDS = ("permission-required", "deadline-missed", "transport-unavailable",
@@ -145,6 +150,14 @@ class Spool:
                     operation_id TEXT PRIMARY KEY,
                     attempted_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS delivery_deferrals (
+                    operation_id TEXT PRIMARY KEY,
+                    first_at REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS closure_proofs (
+                    operation_id TEXT PRIMARY KEY,
+                    proof_json TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS delivery_clock (
                     operation_id TEXT PRIMARY KEY,
                     delivered_at REAL NOT NULL
@@ -249,13 +262,21 @@ class Spool:
             return True
 
     def delivery_deferred(self, operation_id: str) -> None:
-        """attempted -> deferred when the transport proved nothing was typed; the clock restarts on retry."""
+        """attempted -> deferred when the transport proved nothing was typed; the clock restarts on retry.
+        The first deferral keeps its own time, so a delivery cannot be deferred for ever."""
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             updated = db.execute("UPDATE operations SET status='deferred' WHERE operation_id=? AND status='attempted'",
                                  (operation_id,))
             if updated.rowcount == 1:
                 db.execute("DELETE FROM delivery_attempts WHERE operation_id=?", (operation_id,))
+                db.execute("INSERT OR IGNORE INTO delivery_deferrals VALUES (?,?)", (operation_id, time.time()))
+
+    def first_deferred_at(self, operation_id: str) -> float | None:
+        with self.connection() as db:
+            row = db.execute("SELECT first_at FROM delivery_deferrals WHERE operation_id=?",
+                             (operation_id,)).fetchone()
+        return row["first_at"] if row else None
 
     def resolve_delivery(self, operation_id: str, verdict: str, reason: str, now: float) -> bool:
         """attempted or uncertain -> the operator's verdict, recorded with it; False when it already left both.
@@ -325,12 +346,13 @@ class Spool:
         return row["attempted_at"] if row else None
 
     def delivery_uncertain(self, operation_id: str, task_id: str, incident_key: str,
-                           incident_json: str, incident_digest: str) -> bool:
-        """attempted -> uncertain together with its incident; False when it already left attempted."""
+                           incident_json: str, incident_digest: str, *, deferred: bool = False) -> bool:
+        """attempted -> uncertain together with its incident; False when it already left attempted. With
+        deferred, a delivery that never left deferred ends the same way."""
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
-            updated = db.execute("UPDATE operations SET status='uncertain' "
-                                 "WHERE operation_id=? AND status='attempted'",
+            updated = db.execute("UPDATE operations SET status='uncertain' WHERE operation_id=? "
+                                 + ("AND status IN ('attempted','deferred')" if deferred else "AND status='attempted'"),
                                  (operation_id,))
             if updated.rowcount != 1:
                 return False
@@ -500,6 +522,19 @@ class Spool:
                 raise OSError(str(exc)) from exc
             return []
         return [dict(row) for row in rows]
+
+    def save_closure_proof(self, operation_id: str, proof: dict) -> None:
+        """What the last closing sweep of this resource found, signalled and left."""
+        with self.connection() as db:
+            db.execute("INSERT INTO closure_proofs VALUES (?,?) "
+                       "ON CONFLICT(operation_id) DO UPDATE SET proof_json=excluded.proof_json",
+                       (operation_id, canonical(proof)))
+
+    def closure_proof(self, operation_id: str) -> str | None:
+        with self.connection() as db:
+            row = db.execute("SELECT proof_json FROM closure_proofs WHERE operation_id=?",
+                             (operation_id,)).fetchone()
+        return row["proof_json"] if row else None
 
     def closure_last(self, operation_id: str) -> dict | None:
         with self.connection() as db:

@@ -12,6 +12,7 @@ import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Callable
 
 from contracts import OperationKey, operation_id
 from spool import DIALOG_ATTEMPTS, DIALOG_STILL_OPEN, SETTLED, TERMINAL_STATES as TERMINAL, Spool, canonical
@@ -94,6 +95,15 @@ def adopted_mark_lost(identity: dict, observed: dict, socket: str) -> str | None
 def dialog_note(op_id: str, dialog: str) -> str:
     """The pass error for a cancelled task's permission dialog the host could not deny cleanly."""
     return f"{op_id}: cancelled; permission dialog {dialog}"
+
+
+class BoundaryBusy(Exception):
+    """The slot's process boundary holds processes before a launch. The launch is deferred, never stacked
+    on top of them."""
+
+    def __init__(self, processes: tuple):
+        super().__init__(f"slot boundary holds {len(processes)} process(es): " + "; ".join(map(str, processes)))
+        self.processes = tuple(str(process) for process in processes)
 
 
 @dataclass(frozen=True)
@@ -239,6 +249,31 @@ class ResourceManager:
             db.execute("UPDATE resources SET state='Launching',revision=revision+1 WHERE operation_id=?", (self._key(key),))
             return ResourceView("Launching", row["nonce"], launch_now=True)
 
+    def ensure_launched(self, key: OperationKey, launch: Callable[[str], None]) -> ResourceView:
+        """Converge to: one session carries this resource's nonce, and it was launched once. launch gets
+        the nonce and starts that session. BoundaryBusy while the slot's boundary holds a process before
+        the first launch: nothing changed, and the caller defers. A host that died after launching attaches
+        the session it finds. One that died before launching launches again only while the empty boundary
+        proves no earlier launch is alive."""
+        row = self._row(key)
+        if row["ownership"] != "TaskCreated":
+            raise ValueError("only a task-created resource is launched")
+        if row["state"] == "Reserved":
+            busy = self.backend.boundary()
+            if busy:
+                raise BoundaryBusy(busy)
+            self.begin_launch(key)
+        elif row["state"] != "Launching":
+            return self._view(row)
+        else:
+            observed = self.backend.observe(row["session_name"])
+            if observed is not None and observed.get("nonce") == row["nonce"]:
+                return self.attach(key)
+            if self.backend.boundary():
+                return self._state(key, row["revision"], "CleanupPending", "launch outcome uncertain")
+        launch(row["nonce"])
+        return self.attach(key)
+
     def mark(self, key: OperationKey) -> None:
         """Tag the session with this resource's nonce. An abandoned delivery releases its row without reaching
         tmux, so a nonce left by a released resource of this host is cleared first; any other nonce refuses."""
@@ -338,6 +373,15 @@ class ResourceManager:
             if (observed is not None and observed.get("nonce") == original["nonce"]
                     and observed.get("bootId") == original["boot_id"]):
                 return self._state(key, revision, "CleanupPending", "launch identity recovered", observed)
+            # No session carries the nonce. Only a backend that owns a process boundary can still prove
+            # that the launch left nothing alive.
+            try:
+                empty = getattr(self.backend, "prove_slot_empty", lambda: None)()
+            except OSError:
+                return self._state(key, revision, "CleanupPending", "host unavailable")
+            self._keep_proof(op_id)
+            if empty is True:
+                return self._state(key, revision, "AbsenceVerified")
             return self._state(key, revision, "CleanupPending", "launch outcome uncertain")
         boot = self._boot_state(identity["bootId"])
         if boot == "reboot":
@@ -356,24 +400,33 @@ class ResourceManager:
             absent = self.backend.prove_absent(identity)
         except OSError:
             return self._state(key, revision, "CleanupPending", "host unavailable")
+        self._keep_proof(op_id)
         if absent is not True:
             return self._state(key, revision, "CleanupPending", "descendant absence unverified")
         return self._state(key, revision, "AbsenceVerified")
 
+    def _keep_proof(self, op_id: str) -> None:
+        """A backend that swept a process boundary says what it found; the closure R receives binds it."""
+        proof = getattr(self.backend, "last_closure", None)
+        if proof is not None:
+            self.spool.save_closure_proof(op_id, asdict(proof))
+
     def release_acknowledged(self) -> tuple[int, list[str]]:
-        """Give each adopted session back to the operator once R acknowledged its result. The CLI keeps
-        running; close only revokes the host's nonce, so the next adoption takes the session again."""
+        """Close each session once R acknowledged its result. An adopted one goes back to the operator: the
+        CLI keeps running and close only revokes the host's nonce, so the next adoption takes it again. One
+        the host launched is stopped, and it counts only once its process boundary is proven empty."""
         with self.spool.connection() as db:
             rows = db.execute("SELECT r.task_id,r.generation,r.instance_id,o.receipt_json FROM resources r "
                               "JOIN operations o ON o.operation_id=r.operation_id "
-                              "WHERE r.ownership='UserAdopted' AND r.state IN ('Running','Closing') "
+                              "WHERE ((r.ownership='UserAdopted' AND r.state IN ('Running','Closing')) "
+                              "OR (r.ownership='TaskCreated' AND r.state IN ('Launching','Running','Closing'))) "
                               "AND o.status='acknowledged'").fetchall()
         released, errors = 0, []
         for row in rows:
             key = OperationKey(self.host_id, row["task_id"], row["generation"], row["instance_id"])
             try:
                 receipt = json.loads(row["receipt_json"])["receiptId"]
-                released += self.close(key, {"kind": "result", "receipt": receipt}).state == "ReleasedAdopted"
+                released += self.close(key, {"kind": "result", "receipt": receipt}).state in TERMINAL
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 errors.append(f"{operation_id(key)}: release failed: {exc}")
         return released, errors
@@ -468,12 +521,13 @@ class ResourceManager:
         return released, errors
 
     def retry_cleanup(self) -> tuple[int, list[str]]:
-        """Close again every adopted resource a pass left CleanupPending with its evidence, so a pane that
-        since lost the host's mark, or died, ends terminal and flush_closures tells R. Only adopted ones:
-        the pump creates no other kind, and closing a TaskCreated resource stops processes."""
+        """Close again every resource a pass left CleanupPending with its evidence, so flush_closures tells
+        R once it ends terminal: an adopted pane that since lost the host's mark or died, and a launched
+        session whose boundary still held a process. Closing a launched one sweeps its boundary again, so a
+        survivor of the first sweep cannot hold the slot for ever."""
         with self.spool.connection() as db:
             rows = db.execute("SELECT task_id,generation,instance_id,evidence_json FROM resources "
-                              "WHERE ownership='UserAdopted' AND state='CleanupPending' "
+                              "WHERE ownership IN ('UserAdopted','TaskCreated') AND state='CleanupPending' "
                               "AND evidence_json IS NOT NULL ORDER BY operation_id").fetchall()
         released, errors = 0, []
         for row in rows:
@@ -500,6 +554,42 @@ class ResourceManager:
             return self.backend.pane_gone(identity) is True
         except OSError:
             return False
+
+    def _running_identity(self, key: OperationKey) -> dict | None:
+        try:
+            row = self._row(key)
+        except ValueError:
+            return None
+        if row["state"] != "Running" or not row["identity_json"]:
+            return None
+        return json.loads(row["identity_json"])
+
+    def session_exit(self, key: OperationKey):
+        """How the launched session of a running resource left, or None while it lives or cannot be read."""
+        identity = self._running_identity(key)
+        if identity is None:
+            return None
+        try:
+            return self.backend.exit_of(identity)
+        except OSError:
+            return None
+
+    def stop_session(self, key: OperationKey) -> bool:
+        """Stop the launched session of a running resource. The resource keeps the slot until it closes."""
+        identity = self._running_identity(key)
+        if identity is None:
+            return False
+        try:
+            return self.backend.stop(identity)
+        except OSError:
+            return False
+
+    def held(self) -> list[dict]:
+        """Every resource that still holds the slot, with its task."""
+        with self.spool.connection() as db:
+            rows = db.execute("SELECT operation_id,task_id,state FROM resources "
+                              f"WHERE state NOT IN ({TERMINAL_SQL}) ORDER BY operation_id").fetchall()
+        return [dict(row) for row in rows]
 
     def prompt_identity(self, key: OperationKey, pattern: re.Pattern) -> str | None:
         try:

@@ -79,8 +79,8 @@ class PolicyFile(Policies):
         self.assertEqual([grant.name for grant in policy.grants if grant.models], ["qwen"])
         qwen = policy.grant_for("alibaba-token-plan").models
         self.assertEqual((qwen.include, qwen.exclude, qwen.decision.ref, qwen.decision.on, qwen.decision.quote),
-                         (("qwen*",), ("qwen-image*",), "P10886", "2026-10-13",
-                          "sobre qwen hay forma de dejar solo los modelos qwen?"))
+                         (("qwen*",), ("qwen-image*",), "P10890", "2026-10-13",
+                          "sí, esos seis modelos de qwen están bien"))
         decisions = ([grant.decision for grant in policy.grants] + [c.decision for c in policy.closed.values()]
                      + [qwen.decision])
         self.assertEqual(len(decisions), 12)
@@ -556,18 +556,23 @@ class Routes(unittest.TestCase):
         self.assertEqual(self.route("certified", ("1.18.35", "1.18.20")).open_for("1.18.36", canary=False),
                          modelos.RouteNotCertified("1.18.36", ("1.18.20", "1.18.35")))
         self.assertEqual(self.route("sandbox-tested-uncertified").open_for("1.18.35", canary=False),
-                         modelos.RouteNotCertified("1.18.35", ("1.18.35",)))
+                         modelos.RouteNotCertified("1.18.35", ()))
 
     def test_a_canary_also_opens_a_sandbox_tested_route_and_a_new_version_but_never_a_disabled_one(self):
         self.assertIsNone(self.route("sandbox-tested-uncertified").open_for("1.18.35", canary=True))
         self.assertIsNone(self.route("certified").open_for("1.18.36", canary=True))
         self.assertEqual(self.route("disabled-operator-billing").open_for("1.18.35", canary=True),
-                         modelos.RouteNotCertified("1.18.35", ("1.18.35",)))
+                         modelos.RouteNotCertified("1.18.35", ()))
 
-    def test_todays_coverage_has_no_version_certified_for_the_run_per_task_route(self):
+    def test_todays_coverage_opens_the_run_per_task_route_only_for_a_canary_host(self):
         coverage = json.loads(COVERAGE.read_text())
         route = sesion.Route.load(coverage, "mac-local")
+        self.assertEqual(route, sesion.Route("mac-local", "opencode", "run-per-task", "sandbox-tested-uncertified",
+                                             frozenset({"1.18.35"})))
         self.assertEqual(route.open_for("1.18.35", canary=False), modelos.RouteNotCertified("1.18.35", ()))
+        self.assertEqual(modelos.explicar(route.open_for("1.18.35", canary=False)).frase,
+                         "La ruta de encargos por opencode todavía no está certificada. La Mac tiene opencode 1.18.35.")
+        self.assertIsNone(route.open_for("1.18.35", canary=True))
 
     def test_the_route_reads_its_measured_versions_from_coverage(self):
         coverage = {"hostAdapterCoverage": {"mac-local": {"opencode": "certified"}},
@@ -650,7 +655,7 @@ class Plans(Policies):
         uncertified = sesion.Route("mac-local", "opencode", "run-per-task", "sandbox-tested-uncertified",
                                    frozenset({"1.18.35"}))
         broken = b"agent-work.launch.v1\nmodel: Zai/glm\n---\n"
-        self.assertEqual(self.plan(broken, route=uncertified), modelos.RouteNotCertified("1.18.35", ("1.18.35",)))
+        self.assertEqual(self.plan(broken, route=uncertified), modelos.RouteNotCertified("1.18.35", ()))
         self.assertEqual(self.plan(cli="1.18.36"), modelos.RouteNotCertified("1.18.36", ("1.18.35",)))
         self.assertIsInstance(self.plan(broken, route=uncertified, canary=True), modelos.MalformedHeader)
         self.assertEqual(self.plan(route=uncertified, canary=True).workspace.root, self.repo)
