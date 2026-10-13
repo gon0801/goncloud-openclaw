@@ -54,7 +54,7 @@ INSTANCE = "enc-1"
 MODEL = "zai-coding-plan/glm-5.3"
 ARTIFACT = b"hecho por el doble\n"
 # Long enough to catch a wake raised while opencode works: the first wake of a Gateway takes about 6 s.
-WORK_SECONDS = 10.0
+WORK_SECONDS = 15.0
 # opencode as the host launches it: every launch is counted, and the double starts once the gate opens.
 GATED_OPENCODE = """#!/bin/sh
 here=$(dirname "$0")
