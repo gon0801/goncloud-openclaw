@@ -1,10 +1,14 @@
 #!/bin/bash
-# Respaldo diario, de UN SOLO SENTIDO, de los workspaces vivos del gateway Windows
-# hacia GitHub: la rama `respaldo/runtime` de cada repo goncloud-workspace-*.
+# Respaldo diario, de UN SOLO SENTIDO, de los workspaces vivos del gateway hacia
+# GitHub: la rama `respaldo/runtime` de cada repo goncloud-workspace-*.
 #
 # Por qué desde la Mac: desde la separación del runtime (22/9) el sync del host está
 # apagado y el host no tiene credenciales de GitHub; la Mac sí, y ya entra al host por
 # SSH con la llave del túnel del gateway. No se crea ningún token.
+#
+# El gateway vive en la Mac mini desde el 2026-10-09. Este script siguió buscando la
+# carpeta del host Windows y abortó cuatro noches seguidas sin que nadie lo viera: por
+# eso la carpeta es un parámetro y una corrida que falla avisa.
 #
 # Qué NUNCA hace: escribir en el runtime (por SSH solo corre `tar -c`), empujar a una
 # rama que no empiece con `respaldo/`, usar --force, ni respaldar un workspace que no
@@ -18,16 +22,49 @@ RESPALDO_FUENTE="${RESPALDO_FUENTE:-ssh}"                       # ssh | <dir loc
 # agente SSH con llaves cargadas, así que git@github.com falla con publickey.
 RESPALDO_REMOTO_BASE="${RESPALDO_REMOTO_BASE:-https://github.com/gon0801}"
 RESPALDO_MAX_MB="${RESPALDO_MAX_MB:-50}"                         # GitHub rechaza archivos >100 MB
-RUNTIME_WIN='C:/Users/ehven/.openclaw'
+# Carpeta del runtime en el host, relativa a su home (ssh arranca ahí).
+RESPALDO_RUNTIME="${RESPALDO_RUNTIME:-.openclaw}"
+RESPALDO_INTENTOS="${RESPALDO_INTENTOS:-3}"                     # copias por SSH antes de abortar
+RESPALDO_ESPERA="${RESPALDO_ESPERA:-60}"                        # segundos entre intentos
+RESPALDO_TOPE="${RESPALDO_TOPE:-600}"                           # segundos por intento de copia
 
 # workspace vivo -> repo de respaldo
 PARES="workspace:goncloud-workspace-main workspace-operaciones:goncloud-workspace-operaciones workspace-ingenieria:goncloud-workspace-ingenieria"
 
 log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 
+# Una corrida que falla avisa: primero por claw, que le escribe a David por Telegram; si
+# el gateway no contesta (suele ser la misma causa que tumbó el respaldo), con una
+# notificación en esta Mac. RESPALDO_AVISO_CMD recibe el texto como $1 y sustituye a los dos.
+ULTIMO=""
+avisar() {
+  local texto="El respaldo diario de las instrucciones de claw falló: ${1:-sin detalle}. Dile a David, tal cual, que el respaldo no corrió y que le pida a Claude en la Mac revisar ~/Library/Logs/respaldo-workspaces.log."
+  if [ -n "${RESPALDO_AVISO_CMD:-}" ]; then
+    "$RESPALDO_AVISO_CMD" "$texto" && log "aviso enviado"
+    return 0
+  fi
+  if "${OPENCLAW_BIN:-$HOME/.openclaw/bin/openclaw}" agent --agent main --deliver --timeout 180 \
+      --message "$texto" >/dev/null 2>&1; then
+    log "aviso enviado por claw"
+  elif /usr/bin/osascript -e 'display notification "El respaldo diario de claw falló. Ver ~/Library/Logs/respaldo-workspaces.log" with title "Respaldo de claw"' >/dev/null 2>&1; then
+    log "aviso local (claw no contestó)"
+  else
+    log "no se pudo avisar"
+  fi
+}
+# El aviso sale al terminar, con la causa de la última línea ABORTO o FALLA. El lock de
+# otra corrida viva (3) no es una falla del respaldo.
+al_salir() {
+  local rc=$?
+  rm -rf "${TMP:-}" "${LOCK_PROPIO:-}" "${ERR_SSH:-}"
+  case "$rc" in 0|3) ;; *) avisar "$ULTIMO" ;; esac
+}
+trap al_salir EXIT
+falla() { ULTIMO="$*"; log "$*"; }
+
 case "$RESPALDO_RAMA" in
   respaldo/?*) ;;
-  *) log "ABORTO: la rama '$RESPALDO_RAMA' no empieza con respaldo/"; exit 2 ;;
+  *) falla "ABORTO: la rama '$RESPALDO_RAMA' no empieza con respaldo/"; exit 2 ;;
 esac
 
 mkdir -p "$RESPALDO_DIR"
@@ -48,8 +85,9 @@ if ! mkdir "$LOCK" 2>/dev/null; then
   mkdir "$LOCK" 2>/dev/null || { log "ABORTO: no se pudo tomar el lock $LOCK"; exit 3; }
 fi
 identidad $$ > "$LOCK/dueno"
+LOCK_PROPIO="$LOCK"
+ERR_SSH="$RESPALDO_DIR/.ssh-error.$$"
 TMP="$(mktemp -d "$RESPALDO_DIR/.fuente.XXXXXX")"
-trap 'rm -rf "$TMP" "$LOCK"' EXIT
 
 dirs=""
 for par in $PARES; do dirs="$dirs ${par%%:*}"; done
@@ -63,13 +101,29 @@ if [ "$RESPALDO_FUENTE" = ssh ]; then
     | python3 -c 'import json,os,sys; print(os.path.expanduser(json.load(sys.stdin)))' 2>/dev/null; }
   SSH_TARGET="$(campo sshTarget)"; SSH_ID="$(campo sshIdentity)"
   if [ -z "$SSH_TARGET" ] || [ -z "$SSH_ID" ]; then
-    log "ABORTO: no se pudo leer gateway.remote.sshTarget/sshIdentity con $OC"; exit 4
+    falla "ABORTO: no se pudo leer gateway.remote.sshTarget/sshIdentity con $OC"; exit 4
   fi
-  # shellcheck disable=SC2086
-  if ! ssh -i "$SSH_ID" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 \
-      "$SSH_TARGET" "tar -cf - -C $RUNTIME_WIN$dirs" | tar -xf - -C "$TMP"; then
-    log "ABORTO: no se pudo copiar los workspaces por SSH"; exit 4
-  fi
+  # A las 04:30 la Mac puede despertar sin red: se reintenta antes de abortar.
+  intento=1
+  while :; do
+    find "$TMP" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    # Cada intento tiene tope: una copia que conecta y se queda muda retendría el lock, y
+    # las corridas siguientes saldrían con 3, que no avisa. `alarm` mata a ssh al vencer.
+    # shellcheck disable=SC2086
+    if /usr/bin/perl -e 'alarm shift; exec @ARGV or exit 127' "$RESPALDO_TOPE" \
+      "${RESPALDO_SSH:-ssh}" -i "$SSH_ID" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 \
+      -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+      "$SSH_TARGET" "tar -cf - -C $RESPALDO_RUNTIME$dirs" 2> "$ERR_SSH" | tar -xf - -C "$TMP"; then
+      break
+    fi
+    causa="$(tr '\n' ' ' < "$ERR_SSH" | cut -c1-160)"
+    [ -n "$causa" ] || causa="sin respuesta en ${RESPALDO_TOPE}s o copia incompleta"
+    if [ "$intento" -ge "$RESPALDO_INTENTOS" ]; then
+      falla "ABORTO: no se pudo copiar los workspaces por SSH tras $intento intento(s): $causa"; exit 4
+    fi
+    log "intento $intento de copia por SSH falló ($causa); otro en ${RESPALDO_ESPERA}s"
+    intento=$((intento + 1)); sleep "$RESPALDO_ESPERA"
+  done
 else
   for d in $dirs; do
     [ -d "$RESPALDO_FUENTE/$d" ] && cp -R "$RESPALDO_FUENTE/$d" "$TMP/"
@@ -87,7 +141,7 @@ fallas=0
 for par in $PARES; do
   ws="${par%%:*}"; repo="${par#*:}"; src="$TMP/$ws"; clon="$RESPALDO_DIR/$repo"
   if [ ! -f "$src/IDENTITY.md" ]; then
-    log "$repo: FALLA: $ws no llegó entero (sin IDENTITY.md); su respaldo no se toca"
+    falla "$repo: FALLA: $ws no llegó entero (sin IDENTITY.md); su respaldo no se toca"
     fallas=$((fallas + 1)); continue
   fi
   (
@@ -121,7 +175,7 @@ for par in $PARES; do
   if [ $rc -eq 0 ]; then
     log "$repo: $(tail -1 "$TMP/.salida")"
   else
-    log "$repo: FALLA (rc=$rc): $(tr '\n' ' ' < "$TMP/.salida" | cut -c1-300)"
+    falla "$repo: FALLA (rc=$rc): $(tr '\n' ' ' < "$TMP/.salida" | cut -c1-300)"
     fallas=$((fallas + 1))
   fi
 done
