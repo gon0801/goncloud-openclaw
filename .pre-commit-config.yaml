@@ -40,3 +40,15 @@ repos:
         exclude: '^tls/'
       - id: check-json
       - id: check-yaml
+  # Hook propio, agregado 2026-10-13 (SUA-00). Lint y formato solo para los modulos
+  # nuevos de SUA. `files` lo acota: el legado de scripts/ no se reformatea. El alcance
+  # se repite en ruff.toml (`include`) para que `ruff check` a mano mire lo mismo.
+  # La version es la del ruff instalado en la Mac, para que el hook y la corrida a
+  # mano formateen igual.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.8
+    hooks:
+      - id: ruff-check
+        files: ^(scripts/sistema_agentes/|scripts/tests/test-sistema-agentes-contrato\.py)
+      - id: ruff-format
+        files: ^(scripts/sistema_agentes/|scripts/tests/test-sistema-agentes-contrato\.py)

@@ -92,6 +92,7 @@
 0	test-salida-del-observador-no-trackeada.sh
 357	test-simulacro-fase9-a.sh
 306	test-simulacro-fase9-b.sh
+0	test-sistema-agentes-contrato.sh
 1	test-skill-autopilot-runbook.sh
 0	test-skill-verify.sh
 56	test-smoke-native-harnesses.sh
