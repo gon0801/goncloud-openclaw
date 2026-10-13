@@ -60,8 +60,7 @@ if [ "${1:-}" = "cli_delivery_acceptance" ]; then
     exit 2
   fi
   python3 "$here/test-agent-work-integration.py" DeliveryAcceptanceTest \
-    SilentFailureTest.test_uncertain_and_reported_operations_never_raise_incidents \
-    SilentFailureTest.test_watch_entrypoint_types_each_claim_once
+    SilentFailureTest.test_uncertain_and_reported_operations_never_raise_incidents
   e2e_log="$(mktemp)"
   trap 'rm -f "$e2e_log"' EXIT
   bash "$here/test-agent-work-e2e.sh" cli_delivery_acceptance 2>&1 | tee "$e2e_log"

@@ -84,7 +84,7 @@ Cada paso deja su fase en `revert.phase` del estado (`start`, `frozen`, `done`),
 
 ## Abrir alias de modelo en mac-local (B19)
 
-Nota del 2026-10-12: `t12-adapters-1.sh` ya no se corre. Abría los cuatro alias `opencode@opencode-go/*`, que David cerró ese día ("open code go es solamente para main"; `deploy-receipt.md`, sección Canarios). Hoy se detiene en su paso 1, porque `host.py opencode-model` rechaza el alias, y `cutover_live.py adapters` tampoco los abre (`mac-local has no tested route for …`). Los alias salieron de R como dice el párrafo "Quitar un alias" de abajo. El script queda aquí como registro de lo que corrió en B19.
+Nota del 2026-10-12: `t12-adapters-1.sh` ya no se corre. Abría los cuatro alias `opencode@opencode-go/*`, que David cerró ese día ("open code go es solamente para main"; `deploy-receipt.md`, sección Canarios). Hoy se detiene en su paso 1, porque `host.py opencode-model` rechaza el alias, y `cutover_live.py adapters` tampoco los abre (`mac-local has no tested route for …`). Los alias salieron de R como dice el párrafo "Quitar un alias" de abajo. El script queda aquí como registro de lo que corrió en B19. Nota del 2026-10-13: la fase 4 de B22 borró `host.py opencode-model` y `cutover_live.py adapters`, así que el script ya no corre sobre el código de hoy.
 
 Dos scripts de la Mac de desarrollo, en `~/.local/state/encargos-loop/artifacts/T12/`. Los dos corren desde el checkout del host, que tiene que traer B19, y no llevan secretos. Se ensayaron en la Mac contra una copia de la config con el CLI doble `scripts/tests/fixtures/agent-work/openclaw-config-double.py`, y el de las skills, además, con `ssh` y `scp` dobles sobre un HOME falso de la Mini. No se corrieron contra el gateway vivo ni contra la Mini.
 

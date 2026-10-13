@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 from contracts import AuthorizedOperation, OperationKey
 from cutover_live import uncertain_operations
 from host import (CliAdapter, DeliveryDeferred, Host, ShellAdapterTransport, TmuxTransport, cli_adapter,
-                  SGR, main as host_main, opencode_model, operation_id, read_composer, same_text)
+                  SGR, main as host_main, operation_id, read_composer, same_text)
 
 COMPOSER_CLI = ROOT / "scripts" / "tests" / "fixtures" / "agent-work" / "composer-cli.py"
 # capture-pane -e of opencode 1.18.35 on its default theme, 2026-10-10: the home screen, a session
@@ -607,59 +607,8 @@ class HostReceipts(unittest.TestCase):
             transport.deliver("/x/assignments/op-1.json", "oc")
             self.assertEqual(transport.keys, [reference, "Enter"], before)
 
-    def test_an_opencode_model_alias_delivers_on_the_opencode_screens(self):
-        reference = self.reference_text("/x/assignments/op-1.json")
-        transport = ScriptedTmux(opencode_screen("home-empty"), opencode_screen("home-reference"),
-                                 adapter_id="opencode@zai-coding-plan/glm-5.3")
-        transport.deliver("/x/assignments/op-1.json", "oc")
-        self.assertEqual(transport.keys, [reference, "Enter"])
-        grey = ScriptedTmux(opencode_box(f"{GRUVBOX}borrador del operador{RESET}"),
-                            adapter_id="opencode@zai-coding-plan/glm-5.2")
-        with self.assertRaisesRegex(DeliveryDeferred, "borrador del operador"):
-            grey.deliver("/x/assignments/op-1.json", "oc")
-        self.assertEqual(grey.keys, [])
-
-    def test_an_opencode_adapter_id_names_the_model_of_its_session(self):
-        self.assertEqual(opencode_model("opencode"), "zai-coding-plan/glm-5.3-flash")
-        self.assertEqual(opencode_model("opencode@zai-coding-plan/glm-5.3"), "zai-coding-plan/glm-5.3")
-        self.assertEqual(opencode_model("opencode@zai-coding-plan/glm-5.3-flash"), "zai-coding-plan/glm-5.3-flash")
-        self.assertEqual(opencode_model("opencode@some-plan/model_1.2-x"), "some-plan/model_1.2-x")
-        self.assertIsNone(opencode_model("codex"))
-        self.assertIsNone(opencode_model("opencodex"))
-        self.assertEqual(cli_adapter("codex").commands, ("codex",))
-        for malformed in ("opencode@", "opencode@glm-5.3", "opencode@zai-coding-plan/", "opencode@/glm-5.3",
-                          "opencode@Zai-coding-plan/glm-5.3", "opencode@zai-coding-plan/glm 5.3",
-                          "opencode@zai-coding-plan/glm-5.3/x"):
-            with self.assertRaisesRegex(ValueError, "is not opencode@<provider>/<model>"):
-                opencode_model(malformed)
-        with self.assertRaisesRegex(ValueError, "bills per token"):
-            opencode_model("opencode@zai/glm-4.7")
-
-    def test_no_adapter_id_reaches_the_opencode_go_subscription(self):
-        # David, 2026-10-12: "open code go es solamente para main". R may list the alias again; the host still refuses.
-        for model in ("deepseek-v4-pro", "kimi-k3", "grok-4.7", "qwen3.8-max", "glm-5.3"):
-            alias = f"opencode@opencode-go/{model}"
-            for resolve in (opencode_model, cli_adapter):
-                with self.assertRaises(ValueError) as refused:
-                    resolve(alias)
-                self.assertEqual(str(refused.exception), f"adapter {alias} spends the opencode Go subscription, "
-                                                         "reserved for main; use zai-coding-plan/")
-
-    def test_host_cli_prints_the_model_of_an_opencode_alias(self):
-        script = ROOT / "scripts/agent-work/host.py"
-        printed = subprocess.run([sys.executable, str(script), "opencode-model", "opencode@zai-coding-plan/glm-5.3"],
-                                 capture_output=True, text=True)
-        self.assertEqual((printed.returncode, printed.stdout), (0, "zai-coding-plan/glm-5.3\n"))
-        for alias, reason in (("opencode@zai/glm-4.7", "bills per token"),
-                              ("opencode@opencode-go/kimi-k3",
-                               "spends the opencode Go subscription, reserved for main")):
-            refused = subprocess.run([sys.executable, str(script), "opencode-model", alias],
-                                     capture_output=True, text=True)
-            self.assertEqual((refused.returncode, refused.stdout, refused.stderr),
-                             (1, "", f"adapter {alias} {reason}; use zai-coding-plan/\n"))
-        other = subprocess.run([sys.executable, str(script), "opencode-model", "codex"],
-                               capture_output=True, text=True)
-        self.assertEqual((other.returncode, other.stderr), (1, "adapter codex is not an opencode adapter\n"))
+    def test_an_adapter_nobody_measured_is_known_only_by_its_command(self):
+        self.assertEqual(cli_adapter("codex"), CliAdapter(("codex",)))
 
     def test_opencode_delivery_presses_enter_once_a_long_reference_finishes_drawing(self):
         reference = self.reference_text("/x/assignments/op-1.json")

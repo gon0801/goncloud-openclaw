@@ -108,11 +108,11 @@ class Mac(unittest.TestCase):
         change(document)
         self.policy_path.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n")
 
-    def certify(self):
-        """What the evidence PR of canaries A and P does to the checkout's coverage."""
+    def sandbox_tested(self):
+        """The checkout's coverage with the route not certified yet, or with its certification reverted."""
         path = self.checkout / EVIDENCE / "coverage.json"
         coverage = json.loads(path.read_text())
-        coverage["hostAdapterCoverage"]["mac-local"]["opencode"] = "certified"
+        coverage["hostAdapterCoverage"]["mac-local"]["opencode"] = "sandbox-tested-uncertified"
         path.write_text(json.dumps(coverage))
 
     def beat(self, **changes):
@@ -192,11 +192,6 @@ class Proveedores(Mac):
 
 
 class Preparar(Mac):
-    def test_the_default_model_passes_and_what_is_missing_today_is_the_route(self):
-        self.assertEqual(self.preparar(), {
-            "ok": False, "causa": "ruta-no-certificada", "accion": "no-registrar", "candidatos": [],
-            "frase": "La ruta de encargos por opencode todavía no está certificada. La Mac tiene opencode 1.18.35."})
-
     def test_a_bare_provider_word_asks_david_which_model(self):
         answer = self.preparar("--modelo", "glm")
         self.assertEqual((answer["causa"], answer["accion"]), ("nombre-ambiguo", "preguntar-a-david"))
@@ -276,7 +271,7 @@ class Preparar(Mac):
                 self.assertIn(piece, err)
                 self.assertFalse((self.state / "catalogo.json").exists())
         (self.bin / "listing").write_text(LISTING)
-        self.assertEqual(self.preparar("--modelo", "grok 4.7")["causa"], "ruta-no-certificada")
+        self.assertEqual(self.preparar("--modelo", "grok 4.7")["causa"], "sin-host")
 
     def test_the_command_gives_up_at_its_deadline_even_when_opencode_leaves_a_child_holding_the_pipe(self):
         (self.bin / "before-listing").write_text("sleep 30\n")
@@ -293,7 +288,6 @@ class Preparar(Mac):
             "frase": "zai-coding-plan no tiene permiso para encargos. Permitidos con sesión: deepseek."})
 
     def test_the_folder_must_be_a_git_root_with_a_commit_under_the_operators_root(self):
-        self.certify()
         self.beat()
         outside = self.root / "fuera"
         (outside / ".git").mkdir(parents=True)
@@ -308,8 +302,7 @@ class Preparar(Mac):
                 self.assertEqual((code, answer["causa"]), (3, "carpeta-no-permitida"))
                 self.assertIn(piece, answer["frase"])
 
-    def test_with_the_route_certified_the_host_is_the_next_thing_missing(self):
-        self.certify()
+    def test_with_the_repos_certified_route_the_host_is_the_next_thing_missing(self):
         self.assertEqual(self.preparar(), {"ok": False, "causa": "sin-host", "accion": "no-registrar", "candidatos": [],
                                            "frase": "El host de encargos nunca corrió en esta Mac."})
         self.beat(beatAt=time.time() - 605)
@@ -317,9 +310,11 @@ class Preparar(Mac):
         (self.state / "host.json").write_text('{"pid": "4242"}')
         self.assertEqual(self.preparar()["causa"], "sin-host")
 
-    def test_until_the_canaries_certify_the_route_only_a_live_canary_host_opens_it(self):
-        """The repo's coverage as phase 2 leaves it: sandbox-tested, with 1.18.35 measured."""
-        self.assertEqual(self.preparar()["causa"], "ruta-no-certificada")
+    def test_a_sandbox_tested_route_is_opened_only_by_a_live_canary_host(self):
+        self.sandbox_tested()
+        self.assertEqual(self.preparar(), {
+            "ok": False, "causa": "ruta-no-certificada", "accion": "no-registrar", "candidatos": [],
+            "frase": "La ruta de encargos por opencode todavía no está certificada. La Mac tiene opencode 1.18.35."})
         self.beat()
         self.assertEqual(self.preparar()["frase"], "La ruta de encargos por opencode todavía no está certificada. "
                                                    "La Mac tiene opencode 1.18.35.")
@@ -333,7 +328,6 @@ class Preparar(Mac):
         self.assertEqual(self.preparar()["causa"], "ruta-no-certificada", "a canary host that died still opened it")
 
     def test_a_live_host_with_the_same_policy_and_cli_gets_the_brief_arguments(self):
-        self.certify()
         self.beat()
         self.assertEqual(self.preparar(), {
             "ok": True, "modelo": "zai-coding-plan/glm-5.3-flash", "cobro": "subscription",
@@ -349,7 +343,6 @@ class Preparar(Mac):
                          ("zai-coding-plan/glm-5.3-highspeed", None))
 
     def test_brief_py_takes_the_brief_arguments_as_they_come_and_the_host_reads_that_model(self):
-        self.certify()
         self.beat()
         answer = self.preparar("--modelo", "deepseek v4 pro")
         instructions = self.root / "instructions"
@@ -365,7 +358,6 @@ class Preparar(Mac):
         self.assertEqual(str(LaunchHeader.parse(brief).model), answer["modelo"])
 
     def test_a_host_that_would_decide_with_something_else_is_out_of_step(self):
-        self.certify()
         for change, piece in (({"policyDigest": "f" * 64}, "otra política"), ({"policyDigest": None}, "otra política"),
                               ({"checkout": "/otro/checkout"}, "otro checkout"),
                               ({"cliVersion": "1.18.20"}, "otra versión de opencode")):
@@ -386,15 +378,16 @@ class Preparar(Mac):
         stale["listedAt"] -= 120
         cache.write_text(json.dumps(stale))
         (self.bin / "listing").write_text(LISTING + "anthropic/claude-opus-5-5\n")
-        self.assertEqual(self.preparar("--modelo", "claude opus")["causa"], "ruta-no-certificada")
+        self.assertEqual(self.preparar("--modelo", "claude opus")["causa"], "sin-host")
         self.assertEqual(self.argv_log(), ["--version", "models", "--version", "--version", "models"])
 
-    def test_a_new_cli_version_relists_and_closes_the_route(self):
-        self.certify()
+    def test_a_new_cli_version_relists_and_closes_the_repos_certified_route(self):
         self.beat()
         self.assertTrue(self.preparar()["ok"])
         (self.bin / "version").write_text("1.18.36\n")
-        self.assertEqual(self.preparar()["frase"], "Ruta certificada para 1.18.35, la Mac tiene 1.18.36.")
+        closed = self.preparar()
+        self.assertEqual((closed["causa"], closed["frase"]),
+                         ("ruta-no-certificada", "Ruta certificada para 1.18.35, la Mac tiene opencode 1.18.36."))
         self.assertEqual(self.argv_log()[-2:], ["--version", "models"])
 
     def test_the_script_answers_one_json_line_when_run_as_a_program(self):

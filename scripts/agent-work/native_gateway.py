@@ -20,17 +20,16 @@ from pathlib import Path
 
 from contracts import (HOST_BEAT_FILE, AuthorizedOperation, HostBeat, HostObservation, IncidentRejected, OperationKey,
                        RunDir, SessionRecord, operation_id)
-from host import (ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, DeliveryDeferred, Host, TmuxTransport, cli_adapter,
-                  reject_permission_dialog)
+from host import ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, DeliveryDeferred, Host
 from modelos import (POLICY_FILE, CatalogStore, CatalogUnavailable, ExactModel, ModelNotListed,
                      ProviderNotConfigured, ProviderPolicy, authorize, explicar)
 from progress_bridge import transfer_host_projection, transfer_projection
-from resources import BoundaryBusy, dialog_note
+from resources import BoundaryBusy
 from sesion import (COVERAGE_FILE, GroupBoundaryBackend, LaunchSpec, Route, opencode_argv, opencode_env, plan_launch,
                     session_directory, session_name)
 from spool import atomic_json, canonical, incident_identity
 
-COVERAGE = Path(__file__).resolve().parents[2] / "docs/evidence/agent-work/coverage.json"
+CHECKOUT = Path(__file__).resolve().parents[2]
 
 DEFINITIVE_INCIDENT_REJECTIONS = (
     "Managed task incident conflict",
@@ -383,11 +382,9 @@ def _claim(client, adapter_id, instance_id):
 
 
 def claim_cli_once(client, *, host, manager, adapter_id, instance_id, session,
-                   workspace_root, deliver, coverage, canary=False):
-    """Deliver to an existing session; adopting it never grants permission to stop it. A canary host also
-    claims for a sandbox-tested route, so that route's own canary can certify it."""
-    accepted = ("certified", "sandbox-tested-uncertified") if canary else ("certified",)
-    if coverage.get("hostAdapterCoverage", {}).get(client.host_id, {}).get(adapter_id) not in accepted:
+                   workspace_root, deliver, coverage):
+    """Deliver to an existing session; adopting it never grants permission to stop it."""
+    if coverage.get("hostAdapterCoverage", {}).get(client.host_id, {}).get(adapter_id) != "certified":
         raise ValueError("host adapter route is not certified")
     if not manager.can_take(instance_id):
         return None
@@ -659,8 +656,8 @@ class ProgressPublisher:
 
     One call per queued corrida per pass, newest queue first, at most PER_PASS calls. A failed call
     leaves its files queued: the next pass retries it, later failures of the same queue back off to
-    MAX_BACKOFF seconds, and any change to that queue makes it due again. Every model-alias host shares
-    the state dir, so a pass publishes only while it holds the dir's lock; a busy lock skips the pass."""
+    MAX_BACKOFF seconds, and any change to that queue makes it due again. Hosts of one machine share the
+    state dir, so a pass publishes only while it holds the dir's lock; a busy lock skips the pass."""
     PER_PASS = 4
     TIMEOUT_SECONDS = 30
     BACKOFF_BASE_SECONDS = 15
@@ -796,11 +793,11 @@ def read_spool_resources(state_dir):
         db.close()
 
 
-def close_only(client, *, host, manager, reject_dialog, before):
+def close_only(client, *, host, manager, before):
     """One closing pass over a spool no host runs any more, for the instances its own rows name. before is
     read_spool_resources from before the spool was opened. Returns the report (each resource before and after,
-    and the closure receipts R sent back) and whether the run failed. The dialog note of a released session
-    does not fail it; a session still held, or a closure that did not reach R, fails it with its own error."""
+    and the closure receipts R sent back) and whether the run failed: a session still held, or a closure
+    that did not reach R, fails it with its own error."""
     receipts = []
 
     def close_host(*args):
@@ -810,7 +807,8 @@ def close_only(client, *, host, manager, reject_dialog, before):
 
     counts, report_error, errors = close_pass(
         client, host=host, cli_release=manager.release_acknowledged,
-        cli_cancel=lambda: manager.release_cancelled(client.host_cancellation, reject_dialog),
+        # A launched session shows no dialog to deny: `opencode run` denies a permission and ends.
+        cli_cancel=lambda: manager.release_cancelled(client.host_cancellation, None),
         cli_retry=manager.retry_cleanup, close_host=close_host)
     if report_error is not None:
         errors.insert(0, f"report failed: {report_error}")
@@ -822,10 +820,8 @@ def close_only(client, *, host, manager, reject_dialog, before):
                   "after": [row["state"], row["reason"]],
                   "lastSent": host.spool.closure_last(op_id)}
                  for op_id, row in after.items()]
-    notes = {dialog_note(op_id, cancellation["dialog"]) for op_id in after
-             if (cancellation := host.spool.cancellation(op_id)) and cancellation["dialog"]}
     report = {"counts": counts, "errors": errors, "rClosures": receipts, "resources": resources}
-    return report, any(error not in notes for error in errors)
+    return report, bool(errors)
 
 
 def pump_once(client, *, host, evidence_root, progress_state_dir, progress_client,
@@ -921,22 +917,15 @@ def main(argv=None):
     parser.add_argument("--progress-client")
     parser.add_argument("--host-state-dir")
     parser.add_argument("--claim-once", action="store_true")
-    parser.add_argument("--cli-adapter-id")
     parser.add_argument("--cli-instance-id")
-    parser.add_argument("--cli-session")
-    parser.add_argument("--cli-workspace-root")
     parser.add_argument("--cli-tmux-socket")
-    parser.add_argument("--cli-deadline-seconds", type=float)
-    parser.add_argument("--cli-canary", action="store_true",
-                        help="also claim for a sandbox-tested-uncertified adapter, to run its canary")
     parser.add_argument("--tmux-bin", default="tmux")
     parser.add_argument("--workspace-root",
-                        help="run one opencode process per task, in a git repo under this root; excludes the "
-                             "adopted-session flags --cli-adapter-id, --cli-session and --cli-workspace-root")
+                        help="claim tasks and run one opencode process per task, in a git repo under this root")
     parser.add_argument("--opencode-bin", default="/opt/homebrew/bin/opencode")
     parser.add_argument("--slot-group",
-                        help=f"group whose processes are the slot's boundary (default {SLOT_GROUP}); with "
-                             "--close-only, closes a spool of launched sessions")
+                        help=f"group whose processes are the slot's boundary (default {SLOT_GROUP}); "
+                             "--close-only requires it")
     parser.add_argument("--state-root", help="where host.json and catalogo.json live (default: the parent of "
                                              "--host-state-dir)")
     parser.add_argument("--accept-deadline-seconds", type=float, default=ACCEPT_DEADLINE_SECONDS)
@@ -950,29 +939,18 @@ def main(argv=None):
     args = parser.parse_args(argv)
     client = GatewayProjectionClient(args.openclaw_bin, args.host_id, args.expect_url)
     if args.close_only:
-        if not all((args.host_state_dir, args.cli_tmux_socket)) or bool(args.cli_adapter_id) == bool(args.slot_group):
-            parser.error("--close-only requires --host-state-dir, --cli-tmux-socket and one of --cli-adapter-id "
-                         "(adopted sessions) and --slot-group (launched sessions)")
-        if (args.claim_once or args.watch or args.flush_results or args.cli_instance_id or args.cli_session
-                or args.cli_workspace_root or args.workspace_root):
+        if not all((args.host_state_dir, args.cli_tmux_socket, args.slot_group)):
+            parser.error("--close-only requires --host-state-dir, --cli-tmux-socket and --slot-group")
+        if args.claim_once or args.watch or args.flush_results or args.cli_instance_id or args.workspace_root:
             parser.error("--close-only takes its instances from the spool and never claims")
-        from resources import ResourceManager, TmuxBackend
+        from resources import ResourceManager
         before = read_spool_resources(args.host_state_dir)
         host = Host(args.host_id, args.host_state_dir)
-        if args.slot_group:
-            # A launched session shows no dialog: `opencode run` denies a permission and ends.
-            backend, reject_dialog = GroupBoundaryBackend(args.tmux_bin, args.cli_tmux_socket, args.slot_group), None
-        else:
-            backend = TmuxBackend(args.tmux_bin, args.cli_tmux_socket)
-            adapter = cli_adapter(args.cli_adapter_id)
-            reject_dialog = lambda identity: reject_permission_dialog(backend, identity, adapter)
+        backend = GroupBoundaryBackend(args.tmux_bin, args.cli_tmux_socket, args.slot_group)
         report, failed = close_only(
-            client, host=host, manager=ResourceManager(host.spool, args.host_id, backend), before=before,
-            reject_dialog=reject_dialog)
+            client, host=host, manager=ResourceManager(host.spool, args.host_id, backend), before=before)
         print(json.dumps(report, indent=2, sort_keys=True))
         return 1 if failed else 0
-    cli_fields = (args.cli_adapter_id, args.cli_instance_id, args.cli_session,
-                  args.cli_workspace_root, args.cli_tmux_socket)
     cli_claim = None
     cli_watch = None
     cli_release = None
@@ -981,9 +959,6 @@ def main(argv=None):
     cli_beat = None
     host = None
     if args.workspace_root:
-        if any((args.cli_adapter_id, args.cli_session, args.cli_workspace_root, args.cli_canary,
-                args.cli_deadline_seconds is not None)):
-            parser.error("--workspace-root launches one opencode per task and excludes the adopted-session flags")
         if not all((args.host_state_dir, args.cli_instance_id, args.cli_tmux_socket)):
             parser.error("--workspace-root requires --host-state-dir, --cli-instance-id and --cli-tmux-socket")
         from resources import ResourceManager
@@ -995,43 +970,15 @@ def main(argv=None):
         backend = GroupBoundaryBackend(args.tmux_bin, args.cli_tmux_socket, args.slot_group or SLOT_GROUP)
         manager = ResourceManager(host.spool, args.host_id, backend)
         run = RunHost(client, host, manager, backend, instance_id=args.cli_instance_id,
-                      checkout=COVERAGE.parents[3], state_root=args.state_root or host.state_dir.parent,
+                      checkout=CHECKOUT, state_root=args.state_root or host.state_dir.parent,
                       opencode_bin=args.opencode_bin, allowed_root=args.workspace_root, canary=args.canary,
                       accept_deadline_seconds=args.accept_deadline_seconds,
                       result_deadline_seconds=args.result_deadline_seconds)
         cli_claim, cli_watch, cli_beat = run.claim, run.watch, run.beat
         cli_release, cli_retry = manager.release_acknowledged, manager.retry_cleanup
         cli_cancel = lambda: manager.release_cancelled(client.host_cancellation, None)
-    elif args.claim_once or any(cli_fields):
-        if not all(cli_fields) or not args.host_state_dir:
-            parser.error("CLI claim requires adapter, stable instance, session, workspace, socket and host state")
-        from resources import ResourceManager, TmuxBackend, load_approval_pattern
-        host = Host(args.host_id, args.host_state_dir)
-        backend = TmuxBackend(args.tmux_bin, args.cli_tmux_socket)
-        manager = ResourceManager(host.spool, args.host_id, backend)
-        transport = TmuxTransport(args.tmux_bin, args.cli_tmux_socket, cli_adapter(args.cli_adapter_id))
-        coverage = json.loads(COVERAGE.read_text())
-        cli_claim = lambda: claim_cli_once(
-            client, host=host, manager=manager, adapter_id=args.cli_adapter_id,
-            instance_id=args.cli_instance_id, session=args.cli_session,
-            workspace_root=args.cli_workspace_root, deliver=transport.deliver,
-            coverage=coverage, canary=args.cli_canary,
-        )
-
-        cli_release = manager.release_acknowledged
-        adapter = cli_adapter(args.cli_adapter_id)
-        cli_cancel = lambda: manager.release_cancelled(
-            client.host_cancellation, lambda identity: reject_permission_dialog(backend, identity, adapter))
-        cli_retry = manager.retry_cleanup
-
-        if args.cli_deadline_seconds is not None and not args.cli_deadline_seconds > 0:
-            parser.error("--cli-deadline-seconds must be positive")
-
-        approval = load_approval_pattern(Path(__file__).resolve().parents[1] / "mac/corrida/lib.sh")
-        cli_watch = lambda: host.detect_silent_failures(
-            args.host_id, manager.session_gone, now=time.time(),
-            deadline_seconds=args.cli_deadline_seconds,
-            prompt_identity=lambda key: manager.prompt_identity(key, approval))
+    elif args.claim_once or args.cli_instance_id or args.cli_tmux_socket:
+        parser.error("a host claims only with --workspace-root")
     if args.claim_once:
         if args.watch or args.flush_results:
             parser.error("--claim-once excludes --watch and --flush-results")

@@ -314,7 +314,7 @@ class Slot(unittest.TestCase):
         self.r = FakeR()
         self.ahead = 0.0
 
-    def start(self, backend, canary=True):
+    def start(self, backend, canary=False):
         """A host process over this slot: the first one, or the one that replaces a dead one."""
         self.backend = backend
         self.host = Host("mac-local", self.spool)
@@ -680,7 +680,7 @@ class Decisions(Slot):
         self.assertLess(abs(beat.pop("beatAt") - time.time()) + abs(beat.pop("startedAt") - time.time()), 10)
         self.assertEqual(beat, {"pid": os.getpid(), "checkout": str(self.checkout), "commit": "unknown",
                                 "cliVersion": "1.18.35", "policyDigest": policy.digest, "slot": "free", "blockedBy": [],
-                                "taskId": None, "model": None, "since": None, "spool": str(self.spool), "canary": True})
+                                "taskId": None, "model": None, "since": None, "spool": str(self.spool), "canary": False})
         self.assertEqual(HostBeat.read(self.state).spool, str(self.spool))
         self.r.offer("task-1", b"agent-work.launch.v1\nmodel: deepseek/deepseek-v4-pro\n---\nhaz el saludo\n",
                      self.revision)
@@ -915,32 +915,43 @@ class Decisions(Slot):
         self.r.offer("task-1", b"haz el saludo\n", {"kind": "code", "repository": "/Users/dn/dev/a\0b", "sha": "a" * 40})
         self.refused("carpeta-no-permitida", "/Users/dn/dev/a\x00b no es una carpeta de encargo válida.")
 
-    def test_without_canary_the_sandbox_tested_route_launches_nothing(self):
-        self.start(self.backend, canary=False)
-        self.refused("ruta-no-certificada", "todavía no está certificada")
-
-    def test_the_canary_does_not_open_a_route_that_was_never_sandbox_tested(self):
+    def route_status(self, status):
         coverage = self.checkout / EVIDENCE / "coverage.json"
         document = json.loads(coverage.read_text())
-        document["hostAdapterCoverage"]["mac-local"]["opencode"] = "blocked"
+        document["hostAdapterCoverage"]["mac-local"]["opencode"] = status
         coverage.write_text(json.dumps(document))
+
+    def test_without_canary_a_sandbox_tested_route_launches_nothing(self):
+        self.route_status("sandbox-tested-uncertified")
+        self.refused("ruta-no-certificada", "todavía no está certificada")
+
+    def test_a_canary_host_launches_on_a_sandbox_tested_route_and_says_so_in_its_beat(self):
+        self.route_status("sandbox-tested-uncertified")
+        self.start(self.backend, canary=True)
+        self.launched()
+        self.assertEqual((self.held(), self.beat()["canary"]), (("attempted", "Running", ""), True))
+
+    def test_the_canary_does_not_open_a_route_that_was_never_sandbox_tested(self):
+        self.route_status("blocked")
         self.start(self.backend, canary=True)
         self.refused("ruta-no-certificada", "todavía no está certificada")
 
-    def test_a_new_opencode_version_closes_the_certified_route(self):
-        coverage = self.checkout / EVIDENCE / "coverage.json"
-        document = json.loads(coverage.read_text())
-        document["hostAdapterCoverage"]["mac-local"]["opencode"] = "certified"
-        coverage.write_text(json.dumps(document))
+    def test_a_new_opencode_version_closes_the_repos_certified_route(self):
         (self.bin / "version").write_text("1.18.36\n")
-        self.start(self.backend, canary=False)
-        self.refused("ruta-no-certificada", "Ruta certificada para 1.18.35, la Mac tiene 1.18.36.")
+        self.start(self.backend)
+        self.refused("ruta-no-certificada", "Ruta certificada para 1.18.35, la Mac tiene opencode 1.18.36.")
+
+    def test_a_canary_host_launches_with_an_opencode_version_the_route_does_not_have_yet(self):
+        (self.bin / "version").write_text("1.18.36\n")
+        self.start(self.backend, canary=True)
+        self.launched()
+        self.assertEqual(self.held(), ("attempted", "Running", ""))
 
     def test_an_opencode_that_does_not_answer_refuses_the_task_instead_of_leaving_it_mute(self):
         (self.bin / "version").write_text("")
         self.start(self.backend)
         self.refused("ruta-no-certificada",
-                     "todavía no está certificada. La Mac tiene opencode sin contestar su versión.")
+                     "Ruta certificada para 1.18.35, la Mac tiene opencode sin contestar su versión.")
 
     def died(self, where):
         self.backend.dies = where
@@ -1354,13 +1365,6 @@ class LiveEntrypoint(LiveSlot):
         first.communicate(timeout=15)
         self.assertEqual(first.returncode, 0)
 
-    def test_the_two_routes_never_mix_in_one_host(self):
-        mixed = self.gateway("--cli-adapter-id", "opencode", "--cli-session", "canario")
-        _, err = mixed.communicate(timeout=15)
-        self.assertEqual(mixed.returncode, 2)
-        self.assertIn("--workspace-root launches one opencode per task and excludes the adopted-session flags", err)
-        self.assertFalse((self.state / "host.json").exists())
-
 
 class LiveCloseOnly(LiveSlot):
     CASE = "hang"
@@ -1389,12 +1393,6 @@ class LiveCloseOnly(LiveSlot):
         self.assertEqual((self.sessions(), slot_group_processes()), (["keeper"], ()))
         with self.assertRaises(ProcessLookupError):
             os.kill(hung, 0)
-        both = subprocess.run([sys.executable, str(GATEWAY), "--openclaw-bin", str(FAKE_R), "--host-id", "mac-local",
-                               "--expect-url", "ws://127.0.0.1:1", "--host-state-dir", str(self.spool), "--close-only",
-                               "--slot-group", SLOT_GROUP, "--cli-adapter-id", "opencode", "--cli-tmux-socket",
-                               self.socket], capture_output=True, text=True, timeout=60)
-        self.assertEqual(both.returncode, 2)
-        self.assertIn("one of --cli-adapter-id (adopted sessions) and --slot-group (launched sessions)", both.stderr)
 
 
 if __name__ == "__main__":

@@ -524,7 +524,7 @@ class Explicar(Policies):
 
     def test_the_phrases_carry_the_values_david_needs(self):
         self.assertEqual(explicar(modelos.RouteNotCertified("1.18.36", ("1.18.35",))).frase,
-                         "Ruta certificada para 1.18.35, la Mac tiene 1.18.36.")
+                         "Ruta certificada para 1.18.35, la Mac tiene opencode 1.18.36.")
         self.assertEqual(explicar(modelos.RouteNotCertified("1.18.35", ())).frase,
                          "La ruta de encargos por opencode todavía no está certificada. La Mac tiene opencode 1.18.35.")
         self.assertEqual(explicar(modelos.HostDown(600.0)).frase, "El host de encargos no corre desde hace 10 min.")
@@ -609,16 +609,17 @@ class Routes(unittest.TestCase):
         self.assertEqual(self.route("disabled-operator-billing").open_for("1.18.35", canary=True),
                          modelos.RouteNotCertified("1.18.35", ()))
 
-    def test_todays_coverage_opens_the_run_per_task_route_only_for_a_canary_host(self):
+    def test_the_repos_coverage_certifies_the_run_per_task_route_for_opencode_1_18_35_and_no_other_version(self):
         coverage = json.loads(COVERAGE.read_text())
         self.assertEqual(coverage["hostAdapterRoute"]["mac-local"]["opencode"]["form"], "run-per-task")
         route = sesion.Route.load(coverage, "mac-local")
-        self.assertEqual(route, sesion.Route("mac-local", "opencode", "run-per-task", "sandbox-tested-uncertified",
+        self.assertEqual(route, sesion.Route("mac-local", "opencode", "run-per-task", "certified",
                                              frozenset({"1.18.35"})))
-        self.assertEqual(route.open_for("1.18.35", canary=False), modelos.RouteNotCertified("1.18.35", ()))
-        self.assertEqual(modelos.explicar(route.open_for("1.18.35", canary=False)).frase,
-                         "La ruta de encargos por opencode todavía no está certificada. La Mac tiene opencode 1.18.35.")
-        self.assertIsNone(route.open_for("1.18.35", canary=True))
+        self.assertIsNone(route.open_for("1.18.35", canary=False))
+        self.assertEqual(route.open_for("1.18.36", canary=False), modelos.RouteNotCertified("1.18.36", ("1.18.35",)))
+        self.assertEqual(modelos.explicar(route.open_for("1.18.36", canary=False)).frase,
+                         "Ruta certificada para 1.18.35, la Mac tiene opencode 1.18.36.")
+        self.assertIsNone(route.open_for("1.18.36", canary=True))
 
     def test_the_adopted_session_certificate_does_not_open_the_run_per_task_route_even_for_a_canary(self):
         """The coverage of before B22 phase 2: B8 had certified mac-local/opencode over an adopted session, and

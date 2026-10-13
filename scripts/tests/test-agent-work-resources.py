@@ -22,7 +22,8 @@ sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 from contracts import AuthorizedOperation, OperationKey, operation_id
 from host import Host, cli_adapter, read_composer, reject_permission_dialog
 from spool import canonical
-from native_gateway import claim_cli_once, pump_once
+from native_gateway import (GatewayProjectionClient, claim_cli_once, close_only, pump_once,
+                            read_spool_resources)
 from resources import (AccountBusyError, AGENT_USER, AgentesBackend, AgentProcess, CommandOutcome,
                        LOCK_ARGV, ResourceManager, TmuxBackend, parse_agent_ps)
 
@@ -2136,61 +2137,27 @@ class LegacyAdoptionTests(unittest.TestCase):
         host.spool.delivered(operation_id(key))
         return key
 
-    def close_only(self, spool_dir, cancellations):
-        """One --close-only run against a fake R that cancelled these tasks. Returns its exit code and report."""
-        state, log = self.root / f"{spool_dir.name}-r.json", self.root / f"{spool_dir.name}-calls.jsonl"
-        state.write_text(json.dumps({"cancellations": cancellations, "results": [], "closures": {}}))
-        argv = ["--openclaw-bin", str(self.FAKE_R), "--host-id", "host-test", "--expect-url", "ws://127.0.0.1:1",
-                "--host-state-dir", str(spool_dir), "--close-only", "--cli-adapter-id", "opencode",
-                "--cli-tmux-socket", self.socket, "--tmux-bin", self.tmux_bin]
+    def close_only(self, spool_dir, state, log):
+        """One closing pass over the spool, against the fake R of state: its report and whether it failed."""
         with mock.patch.dict(os.environ, {"FAKE_R_STATE": str(state), "FAKE_R_LOG": str(log)}):
-            run = subprocess.run([sys.executable, str(ROOT / "scripts/agent-work/native_gateway.py"), *argv],
-                                 capture_output=True, text=True)
-        return run.returncode, json.loads(run.stdout)
+            before = read_spool_resources(spool_dir)
+            host = Host("host-test", spool_dir)
+            return close_only(GatewayProjectionClient(str(self.FAKE_R), "host-test", "ws://127.0.0.1:1"), host=host,
+                              manager=ResourceManager(host.spool, "host-test", self.backend), before=before)
 
-    def test_close_only_exits_zero_once_r_has_the_closure_of_a_pane_it_could_not_verify(self):
-        spool_dir = self.root / "unverifiable"
-        key = self.delivered(Host("host-test", spool_dir), "canario-1", "task-u")
-        newer_mark = secrets.token_hex(16)
-        self.assertEqual(self.tmux("set-option", "-t", "=canario:", TmuxBackend.NONCE_OPTION, newer_mark).returncode,
-                         0)
-        code, report = self.close_only(spool_dir, {"task-u": "cancel-u"})
-        self.assertEqual(report["errors"],
-                         [f"{operation_id(key)}: cancelled; permission dialog left: pane unverifiable"])
-        self.assertEqual([(r["taskId"], r["state"], r["reason"]) for r in report["rClosures"]],
-                         [("task-u", "ReleasedAdopted", "adopted mark superseded")])
-        self.assertEqual(code, 0, "R has the closure, yet the run failed")
-        self.assertEqual(self.keys.read_text() if self.keys.exists() else "", "", "a key reached the pane")
-        self.assertEqual(self.pane_field(TmuxBackend.NONCE_OPTION), newer_mark)
-
-    def test_close_only_exits_one_while_the_esc_leaves_the_dialog_and_the_session_stays_held(self):
-        keys = self.root / "atorado.keys"
-        dialog = str(self.SCREENS / "permission-dialog.ans")
-        started = self.tmux("new-session", "-d", "-s", "atorado", "-x", "160", "-y", "40", "--", sys.executable,
-                            str(self.SCREEN_CLI), dialog, dialog, str(keys))
-        self.assertEqual(started.returncode, 0, started.stderr)
-        time.sleep(0.5)
-        spool_dir = self.root / "held"
-        key = self.delivered(Host("host-test", spool_dir), "atorado-1", "task-h", "atorado")
-        code, report = self.close_only(spool_dir, {"task-h": "cancel-h"})
-        self.assertEqual(report["errors"], [
-            f"{operation_id(key)}: cancelled; permission dialog left: permission dialog visible but Esc did not "
-            "close it, attempt 1 of 3; the session stays held"])
-        self.assertEqual((report["rClosures"], [r["after"] for r in report["resources"]]), ([], [["Running", ""]]))
-        self.assertEqual(code, 1, "the session is still held, yet the run passed")
-        self.assertEqual(keys.read_text(), "Escape\n")
-
-    def test_close_only_reports_each_resource_as_the_spool_held_it_before_migrating(self):
+    def test_a_closing_pass_reports_each_resource_as_the_spool_held_it_before_migrating(self):
         spool_dir = self.root / "pre-b9"
         host = Host("host-test", spool_dir)
         key = self.delivered(host, "canario-1", "task-a")
         with host.spool.connection() as db:
             db.execute("UPDATE operations SET status='abandoned' WHERE operation_id=?", (operation_id(key),))
             db.execute("PRAGMA user_version=0")
-        code, report = self.close_only(spool_dir, {})
+        state = self.root / "r-state.json"
+        state.write_text(json.dumps({"cancellations": {}, "results": [], "closures": {}}))
+        report, failed = self.close_only(spool_dir, state, self.root / "r-calls.jsonl")
         self.assertEqual([(r["before"], r["after"]) for r in report["resources"]],
                          [(["Running", ""], ["ReleasedAdopted", "delivery abandoned"])])
-        self.assertEqual((code, report["errors"]), (0, []))
+        self.assertEqual((failed, report["errors"]), (False, []))
 
     def acknowledged_then_unreachable(self, host, instance_id, task_id):
         """R acknowledged the result, and the pass that gave the session back found tmux unreachable."""
@@ -2308,7 +2275,19 @@ class LegacyAdoptionTests(unittest.TestCase):
         self.assertEqual((self.pane_field(TmuxBackend.NONCE_OPTION), self.pane_field("pane_pid")),
                          ("", self.cli_pid), "the release touched the operator's pane")
 
-    def test_close_only_closes_both_legacy_spools_and_never_claims(self):
+    def test_a_closing_pass_fails_while_r_refuses_a_closure(self):
+        spool_dir = self.root / "refused"
+        host = Host("host-test", spool_dir)
+        _, key = self.acknowledged_then_unreachable(host, "canario-2", "task-b")
+        state = self.root / "r-state.json"
+        state.write_text(json.dumps({"cancellations": {}, "results": [], "closures": {}}))
+        report, failed = self.close_only(spool_dir, state, self.root / "r-calls.jsonl")
+        self.assertEqual(report["errors"], [
+            f"{operation_id(key)}: native projection Gateway rejected request managedTasks.host.close: "
+            "Managed host closure requires a final result or cancellation"])
+        self.assertEqual((failed, report["rClosures"]), (True, []))
+
+    def test_a_closing_pass_closes_both_legacy_spools_once_and_asks_r_for_no_work(self):
         spool_dir = self.root / "legacy"
         host = Host("host-test", spool_dir)
         manager, abandoned, operation = self.adopt(host, "canario-1", "task-a")
@@ -2325,19 +2304,12 @@ class LegacyAdoptionTests(unittest.TestCase):
         state, log = self.root / "r-state.json", self.root / "r-calls.jsonl"
         state.write_text(json.dumps({"cancellations": {"task-a": "cancel-a"}, "results": ["task-b"],
                                      "closures": {}}))
-        argv = ["--openclaw-bin", str(self.FAKE_R), "--host-id", "host-test", "--expect-url", "ws://127.0.0.1:1",
-                "--host-state-dir", str(spool_dir), "--close-only", "--cli-adapter-id", "opencode",
-                "--cli-tmux-socket", self.socket, "--tmux-bin", self.tmux_bin]
-        with mock.patch.dict(os.environ, {"FAKE_R_STATE": str(state), "FAKE_R_LOG": str(log)}):
-            first = subprocess.run([sys.executable, str(ROOT / "scripts/agent-work/native_gateway.py"), *argv],
-                                   capture_output=True, text=True)
-            self.assertEqual(first.returncode, 0, first.stderr + first.stdout)
-            again = subprocess.run([sys.executable, str(ROOT / "scripts/agent-work/native_gateway.py"), *argv],
-                                   capture_output=True, text=True)
-            self.assertEqual(again.returncode, 0, again.stderr + again.stdout)
+        report, failed = self.close_only(spool_dir, state, log)
+        self.assertFalse(failed, report["errors"])
+        again, failed_again = self.close_only(spool_dir, state, log)
+        self.assertFalse(failed_again, again["errors"])
         calls = [json.loads(line) for line in log.read_text().splitlines()]
         methods = [call["method"] for call in calls]
-        self.assertEqual(methods.count("managedTasks.host.claim"), 0, "--close-only asked R for work")
         cancel_digest = hashlib.sha256(b'{"kind":"cancel","receipt":"cancel-a"}').hexdigest()
         result_digest = hashlib.sha256(b'{"kind":"result","receipt":"rcpt-task-b"}').hexdigest()
         self.assertEqual(sorted((call["params"]["capability"]["taskId"], call["params"]["instanceId"],
@@ -2346,13 +2318,12 @@ class LegacyAdoptionTests(unittest.TestCase):
                          [("task-a", "canario-1", "ReleasedAdopted", "delivery abandoned", cancel_digest),
                           ("task-b", "canario-2", "ReleasedAdopted", "adopted mark superseded", result_digest)])
         self.assertEqual(set(methods), {"managedTasks.host.cancellation", "managedTasks.host.close"})
-        report = json.loads(first.stdout)
         self.assertEqual(sorted((r["taskId"], r["state"]) for r in report["rClosures"]),
                          [("task-a", "ReleasedAdopted"), ("task-b", "ReleasedAdopted")])
         self.assertEqual(sorted((r["taskId"], r["before"][0], r["after"][0]) for r in report["resources"]),
                          [("task-a", "ReleasedAdopted", "ReleasedAdopted"),
                           ("task-b", "CleanupPending", "ReleasedAdopted")])
-        self.assertEqual(json.loads(again.stdout)["rClosures"], [], "a second run sent the closures again")
+        self.assertEqual(again["rClosures"], [], "a second pass sent the closures again")
         self.assertEqual(self.state(host, pending), ("ReleasedAdopted", "adopted mark superseded"))
         time.sleep(0.3)
         self.assertEqual(self.keys.read_text() if self.keys.exists() else "", "", "a key reached the pane")

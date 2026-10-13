@@ -75,14 +75,9 @@ class AgentsRouting(unittest.TestCase):
         self.assertEqual(request["assignment"]["target"],
                          {"kind": "cli", "hostId": "windows-remote", "adapterId": "codex"})
 
-    def test_no_cli_route_is_certified_and_only_a_canary_host_claims_mac_local_opencode(self):
-        """Walks cliAdapters, the 8 inventory CLIs on 2 hosts: 16 routes refused, and one a canary host claims.
-
-        B8 certified mac-local/opencode over an adopted session. B22 phase 2 replaces that session with one
-        opencode process per task, so the route is sandbox-tested-uncertified until its canaries A and P
-        certify it: routing.py refuses it, an adopted-session host claims it only with --cli-canary, and the
-        other 15 stay closed for any host.
-        """
+    def test_only_a_certified_cli_route_is_prepared_and_the_rest_stay_closed_for_any_host(self):
+        """Walks cliAdapters, the 8 inventory CLIs on 2 hosts. routing.py prepares a request only for a
+        certified route, and for the rest an adopted-session claim never reaches the Gateway either."""
         class Client:
             def __init__(self, host_id):
                 self.host_id = host_id
@@ -92,140 +87,52 @@ class AgentsRouting(unittest.TestCase):
                 self.claims.append(f"{self.host_id}/{adapter_id}")
                 return None
 
-        opened, refused = [], []
+        prepared, refused = [], []
         for requester, host_id in sorted(routing.CLI_ROUTES):
             for adapter_id in self.coverage["cliAdapters"]:
                 target = f"{host_id}/{adapter_id}"
+                try:
+                    request = self.request(requester, target)
+                except RouteUnavailable as unavailable:
+                    self.assertEqual(str(unavailable), f"route {target} is not certified")
+                else:
+                    self.assertEqual(request["assignment"]["target"],
+                                     {"kind": "cli", "hostId": host_id, "adapterId": adapter_id})
+                    prepared.append(target)
+                    continue
                 client = Client(host_id)
-                claim = lambda: native_gateway.claim_cli_once(
-                    client, host=None, manager=mock.Mock(can_take=lambda _: True), adapter_id=adapter_id,
-                    instance_id="instance-one",
-                    session="worker-one", workspace_root=self.root, deliver=lambda *_: None,
-                    coverage=self.coverage)
-                if target == "mac-local/opencode":
-                    self.assertIsNone(native_gateway.claim_cli_once(
+                with self.assertRaisesRegex(ValueError, "host adapter route is not certified"):
+                    native_gateway.claim_cli_once(
                         client, host=None, manager=mock.Mock(can_take=lambda _: True), adapter_id=adapter_id,
                         instance_id="instance-one", session="worker-one", workspace_root=self.root,
-                        deliver=lambda *_: None, coverage=self.coverage, canary=True))
-                    self.assertEqual(client.claims, [target])
-                    client.claims.clear()
-                    opened.append(target)
-                with self.assertRaisesRegex(RouteUnavailable, f"route {target} is not certified"):
-                    self.request(requester, target)
-                with self.assertRaisesRegex(ValueError, "host adapter route is not certified"):
-                    claim()
+                        deliver=lambda *_: None, coverage=self.coverage)
                 self.assertEqual(client.claims, [], f"uncertified {target} reached the gateway")
                 refused.append(target)
-        self.assertEqual(opened, ["mac-local/opencode"])
-        self.assertEqual(len(refused), 16)
+        self.assertEqual(prepared, ["mac-local/opencode"])
+        self.assertEqual(len(refused), 15)
         with self.assertRaisesRegex(RouteUnavailable, "outside the managed perimeter"):
             self.request("ingenieria", "mac-local/opencode")
-
-    def claim(self, adapter_id, canary, coverage=None):
-        """What a host of that adapter gets from one claim, and the claims that reached the gateway."""
-        claims = []
-        client = mock.Mock(host_id="mac-local", claim_host=lambda adapter_id, instance_id: claims.append(adapter_id))
-        try:
-            return native_gateway.claim_cli_once(
-                client, host=None, manager=mock.Mock(can_take=lambda _: True), adapter_id=adapter_id,
-                instance_id="alias-1", session="alias", workspace_root=self.root,
-                deliver=lambda *_: None, coverage=coverage or self.coverage, canary=canary), claims
-        except ValueError as error:
-            return str(error), claims
-
-    def test_a_model_alias_is_claimed_only_by_a_canary_host_until_its_canary_certifies_it(self):
-        tested, certified = "opencode@zai-coding-plan/glm-5.2", "opencode@zai-coding-plan/glm-5.3"
-        coverage = json.loads(json.dumps(self.coverage))
-        coverage["hostAdapterCoverage"]["mac-local"].update(
-            {tested: "sandbox-tested-uncertified", certified: "certified"})
-        with self.assertRaisesRegex(RouteUnavailable, f"route mac-local/{tested} is not certified"):
-            self.request("main", f"mac-local/{tested}", coverage=coverage)
-        self.assertEqual(self.claim(tested, False, coverage), ("host adapter route is not certified", []))
-        self.assertEqual(self.claim(tested, True, coverage), (None, [tested]))
-        for closed in ("claude_opus", "opencode@zai-coding-plan/glm-4.7"):
-            self.assertEqual(self.claim(closed, True, coverage), ("host adapter route is not certified", []))
-        self.assertEqual(self.claim("opencode", False, coverage), ("host adapter route is not certified", []))
-        self.assertEqual(self.claim("opencode", True, coverage), (None, ["opencode"]))
-        self.assertEqual(self.request("main", f"mac-local/{certified}", coverage=coverage)["assignment"]["target"],
-                         {"kind": "cli", "hostId": "mac-local", "adapterId": certified})
-        self.assertEqual(self.claim(certified, False, coverage), (None, [certified]))
-
-    def test_no_opencode_go_alias_is_open_for_any_host(self):
-        reason = ('David, 2026-10-12: "open code go es solamente para main". The opencode Go subscription pays '
-                  "main's own model; a por-CLI task runs on mac-local/opencode, GLM on the Z.AI coding plan. "
-                  "Do not reopen an opencode@opencode-go/ alias without his order.")
-        open_aliases = [f"{host_id}/{adapter_id} is {state}"
-                        for host_id, adapters in self.coverage["hostAdapterCoverage"].items()
-                        for adapter_id, state in adapters.items()
-                        if adapter_id.startswith("opencode@opencode-go/")
-                        and state in ("certified", "sandbox-tested-uncertified")]
-        self.assertEqual(open_aliases, [], reason)
-        for model in ("deepseek-v4-pro", "kimi-k3", "grok-4.7", "qwen3.8-max"):
-            alias = f"opencode@opencode-go/{model}"
-            self.assertEqual(self.coverage["hostAdapterCoverage"]["mac-local"][alias], "disabled-operator-billing")
-            with self.assertRaisesRegex(RouteUnavailable, f"route mac-local/{alias} is not certified"):
-                self.request("main", f"mac-local/{alias}")
-            for canary in (False, True):
-                self.assertEqual(self.claim(alias, canary), ("host adapter route is not certified", []), reason)
-
-    def test_a_host_of_an_opencode_go_alias_does_not_start(self):
-        claimed = []
-        with mock.patch.object(native_gateway.GatewayProjectionClient, "claim_host",
-                               lambda _, adapter_id, instance_id: claimed.append(adapter_id)), \
-                mock.patch("native_gateway.watch_pump") as watch, \
-                self.assertRaisesRegex(ValueError, "^adapter opencode@opencode-go/kimi-k3 spends the opencode Go "
-                                                   "subscription, reserved for main; use zai-coding-plan/$"):
-            native_gateway.main(self.watch_args("opencode@opencode-go/kimi-k3") + ["--cli-canary"])
-        self.assertEqual((watch.call_count, claimed), (0, []))
-
-    def watch_args(self, alias):
-        return ["--openclaw-bin", "/isolated/openclaw", "--host-id", "mac-local",
-                "--expect-url", "ws://127.0.0.1:18789", "--evidence-root", str(self.root / "e"),
-                "--progress-state-dir", str(self.root / "p"), "--progress-client", "/isolated/c.py",
-                "--watch", "--host-state-dir", str(self.root / "host"),
-                "--cli-adapter-id", alias, "--cli-instance-id", "alias-1",
-                "--cli-session", "alias", "--cli-workspace-root", str(self.root / "w"),
-                "--cli-tmux-socket", "sock-canary"]
-
-    def test_the_watch_entrypoint_passes_cli_canary_to_each_claim(self):
-        alias = "opencode@zai-coding-plan/glm-5.2"
-        coverage = json.loads(json.dumps(self.coverage))
-        coverage["hostAdapterCoverage"]["mac-local"][alias] = "sandbox-tested-uncertified"
-        coverage_path = self.root / "coverage.json"
-        coverage_path.write_text(json.dumps(coverage))
-        claimed = []
-        with mock.patch.object(native_gateway, "COVERAGE", coverage_path), \
-                mock.patch.object(native_gateway.GatewayProjectionClient, "claim_host",
-                                  lambda _, adapter_id, instance_id: claimed.append((adapter_id, instance_id))):
-            for flags in ([], ["--cli-canary"]):
-                with mock.patch("native_gateway.watch_pump") as watch:
-                    native_gateway.main(self.watch_args(alias) + flags)
-                try:
-                    outcome = watch.call_args.kwargs["cli_claim"]()
-                except ValueError as error:
-                    outcome = str(error)
-                self.assertEqual((flags, outcome), (flags, None if flags else "host adapter route is not certified"))
-        self.assertEqual(claimed, [(alias, "alias-1")])
 
     def test_every_certified_host_adapter_names_its_live_evidence(self):
         certified = [(host_id, adapter_id)
                      for host_id, adapters in self.coverage["hostAdapterCoverage"].items()
                      for adapter_id, state in adapters.items() if state == "certified"]
-        self.assertEqual(certified, [], "mac-local/opencode goes back to certified with the receipts of "
-                                        "canaries A and P of B22 as its evidence, in their own PR")
-        for host_id, adapter_id in certified:
-            self.assertTrue(self.coverage["hostAdapterEvidence"][host_id][adapter_id],
-                            f"{host_id}/{adapter_id} is certified without evidence")
-        # A closed alias keeps the evidence of its canary as history, and that evidence still has to exist.
-        kept = {(host_id, adapter_id): evidence
-                for host_id, adapters in self.coverage["hostAdapterEvidence"].items()
-                for adapter_id, evidence in adapters.items()}
-        self.assertEqual(sorted(kept), [("mac-local", "opencode"),
-                                        ("mac-local", "opencode@opencode-go/deepseek-v4-pro")])
-        for (host_id, adapter_id), evidence in kept.items():
-            for item in evidence:
-                self.assertIn(item["test"], (ROOT / item["path"]).read_text(encoding="utf-8"),
-                              f"evidence {item} of {host_id}/{adapter_id} does not exist")
+        self.assertEqual(certified, [("mac-local", "opencode")])
+        evidence = self.coverage["hostAdapterEvidence"]
+        self.assertEqual({host_id: sorted(adapters) for host_id, adapters in evidence.items()},
+                         {"mac-local": ["opencode"]})
+        cited = evidence["mac-local"]["opencode"]
+        self.assertEqual(sorted({item["path"] for item in cited}), [
+            "docs/evidence/agent-work/B22-canarios.md", "docs/evidence/agent-work/B22-fase0.md",
+            "scripts/tests/test-agent-work-sesion.py"])
+        for item in cited:
+            self.assertIn(item["test"], (ROOT / item["path"]).read_text(encoding="utf-8"),
+                          f"evidence {item} of mac-local/opencode does not exist")
+        # The receipts of each opencode version the run-per-task route is certified for.
+        receipts = self.coverage["hostAdapterRoute"]["mac-local"]["opencode"]["certifiedCliVersions"]
+        self.assertEqual(receipts, {"1.18.35": "B22-fase0.md y B22-canarios.md"})
+        for name in ("B22-fase0.md", "B22-canarios.md"):
+            self.assertTrue((ROOT / "docs/evidence/agent-work" / name).is_file(), name)
 
     def test_cli_route_is_limited_to_its_requester(self):
         certified = json.loads(json.dumps(self.coverage))
@@ -294,7 +201,8 @@ class AgentsRouting(unittest.TestCase):
             "managed_tasks_admit",
             "isolated",
             "agent-work.result.v1",
-            "UserAdopted",
+            "El host lanza un proceso de opencode por encargo y lo cierra él mismo",
+            "Qué modelos se pueden pedir lo contesta `encargo.py preparar`.",
             "delivery-unaccepted",
             "no lo vuelvas a teclear ni a pedir a ciegas",
         ):
@@ -340,7 +248,6 @@ class AgentsRouting(unittest.TestCase):
             "Cancela solo si no hay resultado y `explicacion.accion` es `cancelar`",
         ):
             self.assertIn(expected, skill)
-        self.assertNotIn("opencode@", skill, "the skill names a model alias; the model travels in the brief")
         self.assertEqual([line for line in skill.splitlines() if line.lstrip().startswith("|")], [],
                          "the skill carries a table of models; the Mac answers which ones exist")
         self.assertNotIn("routing.py", skill)
