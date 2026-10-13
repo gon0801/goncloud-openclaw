@@ -252,7 +252,32 @@ def _write_policy(checkout: Path, grants: "tuple[ProviderGrant, ...]", closed: d
 def _closed_phrase(closure: ProviderClosure) -> str:
     decision = closure.decision
     return (f"{closure.provider} está cerrado por {decision.by} ({decision.on}, {decision.ref}): "
-            f"«{decision.quote}». Abrirlo pide --reabre con una frase nueva suya en --ref y --cita")
+            f"«{decision.quote}». Abrirlo pide una frase nueva suya, posterior al cierre, en --ref y --cita, con "
+            f"--proveedor {closure.provider} y --reabre en el mismo comando")
+
+
+def _same_words(one: str, other: str) -> bool:
+    """Una cita es la otra, o un trozo de la otra, sin contar mayúsculas ni espacios."""
+    one, other = (" ".join(text.casefold().split()) for text in (one, other))
+    return one in other or other in one
+
+
+def _not_a_new_phrase(citation: OperatorCitation, closing: ProviderClosure, policy: ProviderPolicy) -> str | None:
+    """Por qué `citation` no reabre el proveedor de `closing`, o None si es una frase nueva del operador.
+
+    Nueva quiere decir dos cosas que se pueden comprobar: no es la frase de ningún cierre, ni por su
+    prompt ni por sus palabras, y es posterior al cierre que quita."""
+    for closure in policy.closed.values():
+        decision = closure.decision
+        if citation.ref == decision.ref or _same_words(citation.quote, decision.quote):
+            return (f"es la frase con la que {decision.by} cerró {closure.provider} ({decision.ref}), y una frase "
+                    "de cierre no abre nada")
+    closed = closing.decision
+    numbered = PROMPT_REF.fullmatch(citation.ref), PROMPT_REF.fullmatch(closed.ref)
+    same_day_and_earlier = citation.on == closed.on and all(numbered) and int(numbered[0][1]) < int(numbered[1][1])
+    if citation.on < closed.on or same_day_and_earlier:
+        return f"es del {citation.on} ({citation.ref}), anterior al cierre del {closed.on} ({closed.ref})"
+    return None
 
 
 def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None,
@@ -268,8 +293,9 @@ def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None,
       filtro de modelos de un permiso que existe          `--solo` (y `--menos`) con `--ref` y `--cita`.
       ligar el id de un permiso que existe                solo `--proveedor`. No pide otra frase: el
                                                           operador ya lo permitió y esto registra un hecho.
-    Un id se liga cuando opencode ya lista modelos suyos, así nadie lo adivina. Un proveedor cerrado no
-    se abre sin `--reabre` y una frase nueva. Nada se escribe en el checkout del host."""
+    Un id se liga cuando opencode ya lista modelos suyos, así nadie lo adivina. Un proveedor cerrado se
+    abre solo con `--reabre`, su id en `--proveedor` y una frase nueva: posterior al cierre y distinta, por
+    prompt y por palabras, de la frase de cualquier cierre. Nada se escribe en el checkout del host."""
     refused = _host_checkout(checkout, state_root)
     if refused is not None:
         return refused
@@ -305,9 +331,17 @@ def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None,
         else:
             return ("con --ref y --cita pasa --cobro (permiso nuevo o frase nueva) o --solo (filtro de un permiso "
                     "que existe)")
-    closed_here = [key for key in dict.fromkeys((name, grant.provider)) if key in policy.closed]
-    if closed_here and not (reopens and citation is not None):
-        return _closed_phrase(policy.closed[closed_here[0]])
+    if name in policy.closed and grant.provider != name:
+        # Quitar un cierre por la sola coincidencia del nombre dejaría un permiso sin id, y ligar un id no
+        # pide frase: el proveedor quedaría abierto en dos pasos. Reabrir y ligar van en un solo comando.
+        return _closed_phrase(policy.closed[name])
+    closing = policy.closed.get(grant.provider)
+    if closing is not None:
+        if not reopens or citation is None:
+            return _closed_phrase(closing)
+        stale = _not_a_new_phrase(citation, closing, policy)
+        if stale is not None:
+            return f"{_closed_phrase(closing)}. La cita que pasaste no lo abre: {stale}"
     if grant.provider is not None:
         holder = policy.grant_for(grant.provider)
         if holder is not None and holder.name != name:
@@ -322,7 +356,7 @@ def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None,
         catalog = store.current()
     grants = (tuple(grant if entry.name == name else entry for entry in policy.grants) if existing is not None
               else policy.grants + (grant,))
-    closed = {key: closure for key, closure in policy.closed.items() if key not in closed_here}
+    closed = {key: closure for key, closure in policy.closed.items() if closure is not closing}
     return _write_policy(checkout, grants, closed) or _grant_row(grant, catalog)
 
 

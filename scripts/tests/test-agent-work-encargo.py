@@ -35,11 +35,15 @@ case "$*" in
 esac
 """
 PROMPTS = {
+    9000: ("2026-10-01T08:00:00.000Z", "usa opencode go para todo lo que quieras"),
+    10845: ("2026-10-12T22:36:19.659Z", "open code go es solamente para main. aparte, mañana vemos lo de kimi"),
     10866: ("2026-10-12T23:42:35.842Z", "1 acepto 2. cualquiera 3. 1 hora SECRETO-sk-prueba-123"),
     10867: ("2026-10-12T23:47:47.629Z", "bla, de opencode solo tengo go, bla SECRETO-sk-prueba-456"),
     10886: ("2026-10-13T01:13:22.117Z", "sobre qwen hay forma de dejar solo los modelos qwen? gracias"),
     10901: ("2026-10-14T10:00:00.000Z", "ok, permite mistral para por CLI, cobra por suscripción"),
     10902: ("2026-10-15T08:00:00.000Z", "cierra muse para encargos, ya no lo pago"),
+    10903: ("2026-10-16T09:00:00.000Z", "reabre opencode go para encargos, ya tengo cuota de sobra"),
+    30001: ("2026-10-20T09:00:00.000Z", "recuerda: open code go es solamente para main, ya lo dije"),
 }
 DEFAULT_BRIEF_ARGS = ["--host", "mac-local", "--adapter", "opencode", "--model", "zai-coding-plan/glm-5.3-flash"]
 
@@ -419,11 +423,65 @@ class Permitir(Mac):
         self.edit_policy(lambda doc: doc["providers"][5].update(provider=None))
         self.assert_refused(["kimi", "--proveedor", "opencode-go"], "opencode-go está cerrado")
         self.assert_refused(["kimi", "--proveedor", "opencode-go", "--reabre"], "opencode-go está cerrado")
-        code, _, err, changed = self.permitir(*closed, "--proveedor", "opencode-go", "--reabre")
+        self.assert_refused([*closed, "--proveedor", "opencode-go", "--reabre"], "cerró opencode (P10867)")
+        code, _, err, changed = self.permitir("kimi", "--proveedor", "opencode-go", "--cobro", "subscription",
+                                              "--reabre", "--ref", "P10903", "--cita", "reabre opencode go")
         self.assertEqual((code, changed), (0, True), err)
         policy = self.policy()
-        self.assertEqual((sorted(policy.closed), policy.grant_for("opencode-go").decision.ref),
-                         (["opencode", "zai"], "P10867"))
+        self.assertEqual((sorted(policy.closed), policy.grant_for("opencode-go").name),
+                         (["opencode", "zai"], "kimi"))
+
+    REOPEN = ["opencode-go", "--proveedor", "opencode-go", "--cobro", "subscription", "--reabre"]
+
+    def test_a_closed_provider_is_not_reopened_with_the_words_that_closed_it(self):
+        self.assert_refused([*self.REOPEN, "--ref", "P10845", "--cita", "open code go es solamente para main"],
+                            "opencode-go está cerrado", "frase nueva")
+        self.assert_refused(["opencode-go", "--cobro", "subscription", "--reabre", "--ref", "P30001", "--cita",
+                             "open code go es solamente para main"], "opencode-go está cerrado")
+        self.assert_refused(["opencode-go", "--proveedor", "opencode-go"], "opencode-go no tiene permiso")
+        answer = json.loads(self.cli("preparar", "--modelo", "opencode-go/deepseek-v4-pro")[1])
+        self.assertEqual(answer["causa"], "proveedor-no-permitido")
+
+    def test_a_reopening_phrase_is_none_of_the_closing_phrases_by_prompt_or_by_words(self):
+        for ref, quote, piece in (
+            ("P10845", "open code go es solamente para main", "cerró opencode-go (P10845)"),
+            ("P30001", "open code go es solamente para main", "cerró opencode-go (P10845)"),
+            ("P30001", "code go es solamente para", "cerró opencode-go (P10845)"),
+            ("P30001", "recuerda: open code go es solamente para main, ya", "cerró opencode-go (P10845)"),
+            ("P30001", "Open  Code GO es solamente para main".lower().replace("  ", " "), "cerró opencode-go"),
+            ("P10845", "open code", "cerró opencode-go (P10845)"),
+            ("P10845", "aparte, mañana vemos lo de kimi", "cerró opencode-go (P10845)"),
+            ("P10867", "de opencode solo tengo go", "cerró opencode (P10867)"),
+            ("P10867", "bla, de opencode", "cerró opencode (P10867)"),
+        ):
+            with self.subTest(ref=ref, quote=quote):
+                err = self.assert_refused([*self.REOPEN, "--ref", ref, "--cita", quote], "opencode-go está cerrado",
+                                          "La cita que pasaste no lo abre", piece)
+                self.assertIn("una frase de cierre no abre nada", err)
+
+    def test_a_reopening_phrase_is_later_than_the_closure_it_removes(self):
+        self.assert_refused([*self.REOPEN, "--ref", "P9000", "--cita", "usa opencode go para todo"],
+                            "es del 2026-10-01 (P9000), anterior al cierre del 2026-10-12 (P10845)")
+        self.edit_policy(lambda doc: doc["closed"][0]["decision"].update(on="2026-10-16", ref="P10999"))
+        self.assert_refused([*self.REOPEN, "--ref", "P10903", "--cita", "reabre opencode go para encargos"],
+                            "es del 2026-10-16 (P10903), anterior al cierre del 2026-10-16 (P10999)")
+
+    def test_reopening_binds_the_id_in_the_same_command_so_no_phraseless_step_can_finish_it(self):
+        new_phrase = ["--ref", "P10903", "--cita", "reabre opencode go para encargos"]
+        self.assert_refused(["opencode-go", "--cobro", "subscription", "--reabre", *new_phrase],
+                            "opencode-go está cerrado", "--proveedor opencode-go")
+        self.assert_refused(["opencode-go", "--proveedor", "meta", "--cobro", "subscription", "--reabre", *new_phrase],
+                            "opencode-go está cerrado")
+        self.assert_refused(["opencode-go", "--proveedor", "opencode-go"], "opencode-go no tiene permiso")
+        self.assertEqual(sorted(self.policy().closed), ["opencode", "opencode-go", "zai"])
+        code, out, err, changed = self.permitir(*self.REOPEN, *new_phrase)
+        self.assertEqual((code, changed), (0, True), err)
+        self.assertEqual(out.splitlines()[1].split(), ["opencode-go", "opencode-go", "permitido", "subscription",
+                                                       "con-sesion", "31", "31", "David", "2026-10-16", "P10903"])
+        policy = self.policy()
+        reopened = policy.grant_for("opencode-go")
+        self.assertEqual((sorted(policy.closed), reopened.decision.ref, reopened.decision.quote),
+                         (["opencode", "zai"], "P10903", "reabre opencode go para encargos"))
 
     def test_the_host_checkout_never_takes_a_live_write(self):
         self.beat(beatAt=time.time() - 86400)
