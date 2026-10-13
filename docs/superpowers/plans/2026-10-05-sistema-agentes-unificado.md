@@ -13,8 +13,10 @@ después de retirar la ruta de corrida (PR #291) y la sesión adoptada (PR #290)
 Este plan es el único programa futuro para U3b, U4, U5, U6 y flota. David aprobó
 su orden el 2026-10-13 (abajo, "Decisiones de David vigentes"). Integra la adopción
 selectiva de OpenCode. Retira el último resto de coordinación de quality-kit que
-sigue en G: el paro por bloqueante repetido copiado en la §4 de
-`docs/runbooks/loop-autopilot.md` (`:112`). <!-- corr: D14 -->
+sigue en G: la §4 de `docs/runbooks/loop-autopilot.md`, que todavía manda la
+revisión con otro modelo (`cross-review.ps1`), cambiar de revisor en cada ronda
+(`:102`), repetir rondas sin tope (`:111`) y parar por bloqueante repetido
+(`:112`). <!-- corr: D14 -->
 `scripts/mac/corrida_worker/gates.py`, que traía ese paro y la rotación forzada
 de revisor, salió del repo con la ruta de corrida (PR #291) y ya no hay nada que
 retirar de él. La revisión con otro modelo ya la quitó David
@@ -96,7 +98,7 @@ no sirven.
 
 | Código | Base | Uso y qué cambió frente a la base del diseño |
 |---|---|---|
-| G | origin/main `f1d25bbf989bf6d65547369a5e25319187bea6a1` (PR #292) <!-- corr: D14 --> | Encargos B0–B19 y B22 mergeados. Host de la Mac (`scripts/agent-work/`): desde B22 un solo host lanza un `opencode run -m <modelo>` por encargo (`lanzar-encargos.sh`, `sesion.py`), el modelo viaja en la cabecera del brief (`brief.py --model`) y `proveedores-permitidos.json` dice qué proveedores se pueden pedir. La ruta por alias y `lanzar-host.sh` ya no existen. Corte `cutover_live.py` (`agent-work-cutover.v2`), publicación propia del avance al tablero (B16) y `--close-only` (B14). <!-- corr: D14 --> Desde el 2026-10-13 tampoco existen la ruta de corrida (`scripts/mac/corrida.sh`, `corrida/`, `corrida_worker/`, `workers.v1.json`, `cli-modos.tsv`, el plist del latido; PR #291) ni la sesión adoptada de encargos (`claim_cli_once`, `TmuxTransport`, `detect_silent_failures` y sus e2e; PR #290). En `scripts/mac/` quedan el instalador, el vigilante tmux, el hook Stop, `progress-events.py`, `respaldo-workspaces.sh` y `tablero-trabajo.sh`. El checkout del host vivo (`~/dev/wt/agent-work-host`) sigue en `4000a1d4`, anterior a esos dos retiros. El diseño se escribió en `~/dev/wt/flota-poteto` sobre `e5cae2d`, cabeza del PR #247, que se cerró sin entrar a main. |
+| G | origin/main `f1d25bbf989bf6d65547369a5e25319187bea6a1` (PR #292) <!-- corr: D14 --> | Encargos B0–B19 y B22 mergeados. Host de la Mac (`scripts/agent-work/`): desde B22 un solo host lanza un `opencode run -m <modelo>` por encargo (`lanzar-encargos.sh`, `sesion.py`), el modelo viaja en la cabecera del brief (`brief.py --model`) y `proveedores-permitidos.json` dice qué proveedores se pueden pedir. La ruta por alias y `lanzar-host.sh` ya no existen. Corte `cutover_live.py` (`agent-work-cutover.v2`), publicación propia del avance al tablero (B16) y `--close-only` (B14). <!-- corr: D14 --> Desde el 2026-10-13 tampoco existen la ruta de corrida (`scripts/mac/corrida.sh`, `corrida/`, `corrida_worker/`, `workers.v1.json`, `cli-modos.tsv`, el plist del latido; PR #291) ni la sesión adoptada de encargos (`claim_cli_once`, `TmuxTransport`, `detect_silent_failures` y sus e2e; PR #290). En `scripts/mac/` quedan, entre otros, el instalador, el vigilante tmux, el hook Stop, `progress-events.py`, `respaldo-workspaces.sh` y `tablero-trabajo.sh`. El checkout del host vivo (`~/dev/wt/agent-work-host`) sigue en `4000a1d4`, anterior a esos dos retiros. El diseño se escribió en `~/dev/wt/flota-poteto` sobre `e5cae2d`, cabeza del PR #247, que se cerró sin entrar a main. |
 | R | `/Users/dn/dev/openclaw-agent-work-integration`, `4acb881e015a` | Instalado en la Mac Mini del gateway el 2026-10-12. Sobre `605aef7` trae B18-R (`c928144`, residuales de B11) y un arreglo: un turno directo de Telegram ya admite una tarea (`managed-task.turn.ts`). `managedTasks` en vivo con `requesters ["main"]`, host `mac-local` y `adapters ["opencode"]`. B22 no cambió R. |
 | O | `/Users/dn/dev/goncloud-Orbit`, `d83bb28902e97949fea7b3fabc5fed6203d936b1` (checkout local `master`) | Receta de deploy existente; automatización pendiente. Se vuelve a leer `origin/master` antes de SUA-08. |
 | H | Corre en `gon-pc` (Windows), según David el 2026-10-13 <!-- corr: D13 -->. Instalación, repo y versión pendientes de inventario | No se inventan flags ni se usa OpenClaw como proxy. |
@@ -290,9 +292,13 @@ autorizó el 2026-10-13 "de madrugada" y sin preguntarle cada vez.
 - **Solo de madrugada, hora de David.** Madrugada es entre las 00:00 y las 06:00
   del reloj de la Mini (`date` por ssh), que es la máquina donde corren los
   crons. Es el sentido llano de la palabra, no una ventana que David haya fijado;
-  si fija otra, la suya manda. A juzgar por sus nombres, los crons de negocio
-  corren a las 7 h, 11 h y 20 h (`packing-extras-7h`, `-11h`, `verif-digest-20h`;
-  M-09 solo da los nombres), así que esa ventana no los pisa.
+  si fija otra, la suya manda. La Mini corre en hora del Pacífico. Dentro de esa
+  ventana hay crons diarios, según la lectura de `openclaw cron list --json` del
+  2026-10-13 a las 18:09 UTC: a las 03:00 `Memory Dreaming Promotion` y la
+  renovación del token de Shopify, a las 05:47 `cuotas-proveedores` y a las 06:00
+  `packing-extras-7h` de lunes a viernes. Varios `skill-collection-review-*`
+  semanales también caen ahí. La ventana no basta por sí sola: manda la
+  comprobación del punto siguiente.
 - **Ningún cron cerca.** Antes de detener el gateway, `openclaw cron list --json`
   no trae ningún `runningAtMs` y ningún cron tiene su próxima corrida dentro de
   la ventana que tarda la instalación (`T12-runbook.md` da 2 min para instalar y
@@ -771,10 +777,12 @@ junto a la raíz, en R.
    Las tres piezas que coincidían con la regla vigente (revisión aprobada del head
    exacto antes del push, revisor que no es autor y cero bloqueantes para merge)
    se escriben nuevas en la política de datos de arriba, no se copian de
-   `gates.py`, que ya no existe. Lo único que queda por retirar es la copia del
-   paro por bloqueante repetido en `docs/runbooks/loop-autopilot.md` §4 (`:112`,
-   "Si el mismo bloqueante vuelve en dos rondas seguidas"), que sigue ahí después
-   del PR #291. El kit puede seguir como bootstrap opcional externo.
+   `gates.py`, que ya no existe. Lo que queda por retirar es la §4 de
+   `docs/runbooks/loop-autopilot.md`, que sigue ahí después del PR #291: la
+   revisión con `cross-review.ps1`, el cambio de revisor en cada ronda (`:102`),
+   las rondas sin tope (`:111`) y el paro por bloqueante repetido (`:112`, "Si
+   el mismo bloqueante vuelve en dos rondas seguidas"). La política nueva no
+   trae ninguna de las cuatro. El kit puede seguir como bootstrap opcional externo.
 
 **Verificar:** I12/I13/I21. Código cero con texto `BLOCKER` no aprueba; evidencia de
 otro head falla; comentario de bot sin check-run falla. Un bloqueante nuevo en
