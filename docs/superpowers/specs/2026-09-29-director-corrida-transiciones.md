@@ -1,5 +1,7 @@
 # Director de corrida.sh: transiciones, tipos y estado
 
+> **Histórico.** La ruta de corrida (`corrida.sh`) se retiró el 2026-10-13 por decisión de David. Este documento no se ejecuta. Lo que buscaba lo recoge el plan de SUA (`docs/superpowers/plans/2026-10-05-sistema-agentes-unificado.md`).
+
 Referencia del director de U3b (Fase 20). El porqué está en el
 [diseño](2026-09-29-director-corrida-design.md). El orden de trabajo está en el
 [plan](../plans/2026-09-29-director-corrida.md).

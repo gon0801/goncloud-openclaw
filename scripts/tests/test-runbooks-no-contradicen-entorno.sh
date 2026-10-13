@@ -337,6 +337,10 @@ grep -Fq '**NO LANZAR ESTE RUNBOOK EN EL ESTADO REINSTALADO.**' docs/runbooks/au
   || fail '(2d) Fase 16 solo esta exenta mientras prohíba el lanzamiento viejo'
 grep -Fq 'U1 debe definir un runbook nuevo revisado contra el host vivo' docs/runbooks/autopilot-fase16.md \
   || fail '(2d) Fase 16 exenta sin ruta de reemplazo revisada'
+for e in autopilot-fase14.md autopilot-fase15.md autopilot-fase17.md; do
+  grep -Fq 'se retiró el 2026-10-13' "docs/runbooks/$e" \
+    || fail "(2d) $e solo esta exento mientras diga que la ruta de corrida se retiro"
+done
 # Y ningun runbook futuro versionado sale en rojo.
 NUEVOS=""
 while IFS= read -r f; do

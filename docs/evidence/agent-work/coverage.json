@@ -186,19 +186,19 @@
         {"path": "~/.local/state/u3b-loop/vigia-msg.txt", "line": null, "state": "sin declarar"},
         {"path": "~/.claude/skills/prompt-claw/SKILL.md", "line": 76, "state": "activo"}
       ]},
-      {"kind": "aviso", "id": "tmux-activity-watch", "name": "vigilante tmux por quietud o cierre", "targets": ["agent:main:vigia-mac"], "cadence": "por quietud o diálogo", "source": "scripts/mac/tmux-activity-watch.sh:163", "recreators": [
+      {"kind": "aviso", "id": "tmux-activity-watch", "name": "vigilante tmux por quietud o cierre", "targets": ["agent:main:vigia-mac"], "cadence": "por quietud o diálogo", "source": "scripts/mac/tmux-activity-watch.sh:140", "recreators": [
         {"path": "scripts/mac/instalar-mac.sh", "line": 28, "state": "repo"},
-        {"path": "agents/main/agent/workshop-skills/mac-tmux-control/SKILL.md", "line": 69, "state": "repo"},
-        {"path": "scripts/lanzar-lead.sh", "line": 86, "state": "repo"},
-        {"path": "agents/main/agent/workshop-skills/agent-dispatch/SKILL.md", "line": 86, "state": "repo"},
+        {"path": "agents/main/agent/workshop-skills/mac-tmux-control/SKILL.md", "line": 68, "state": "repo"},
+        {"path": "scripts/lanzar-lead.sh", "line": 52, "state": "repo"},
+        {"path": "agents/main/agent/workshop-skills/agent-dispatch/SKILL.md", "line": 85, "state": "repo"},
         {"path": "docs/runbooks/base-openclaw.md", "line": 47, "state": "repo"},
         {"path": "docs/runbooks/autopilot-fase7.md", "line": 218, "state": "repo"},
         {"path": "docs/runbooks/autopilot-fase10.md", "line": 39, "state": "repo"}
       ]},
-      {"kind": "aviso", "id": "claude-code-stop-hook", "name": "hook Stop de Claude Code", "targets": ["agent:main:vigia-mac"], "cadence": "por evento Stop", "source": "scripts/mac/claude-stop-openclaw-event.sh:24", "recreators": [
-        {"path": "scripts/mac/instalar-mac.sh", "line": 37, "state": "repo"},
+      {"kind": "aviso", "id": "claude-code-stop-hook", "name": "hook Stop de Claude Code", "targets": ["agent:main:vigia-mac"], "cadence": "por evento Stop", "source": "scripts/mac/claude-stop-openclaw-event.sh:115", "recreators": [
+        {"path": "scripts/mac/instalar-mac.sh", "line": 32, "state": "repo"},
         {"path": "~/.claude/settings.json", "line": 129, "state": "activo"},
-        {"path": "agents/main/agent/workshop-skills/mac-tmux-control/SKILL.md", "line": 69, "state": "repo"}
+        {"path": "agents/main/agent/workshop-skills/mac-tmux-control/SKILL.md", "line": 68, "state": "repo"}
       ]}
     ]
   },
