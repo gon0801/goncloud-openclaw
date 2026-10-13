@@ -863,6 +863,14 @@ class Decisions(Slot):
         self.start(self.backend, canary=False)
         self.refused("ruta-no-certificada", "todavía no está certificada")
 
+    def test_the_canary_does_not_open_a_route_that_was_never_sandbox_tested(self):
+        coverage = self.checkout / EVIDENCE / "coverage.json"
+        document = json.loads(coverage.read_text())
+        document["hostAdapterCoverage"]["mac-local"]["opencode"] = "blocked"
+        coverage.write_text(json.dumps(document))
+        self.start(self.backend, canary=True)
+        self.refused("ruta-no-certificada", "todavía no está certificada")
+
     def test_a_new_opencode_version_closes_the_certified_route(self):
         coverage = self.checkout / EVIDENCE / "coverage.json"
         document = json.loads(coverage.read_text())
