@@ -1,14 +1,27 @@
-"""Qué va a lanzar el host para un encargo: la cabecera del brief, la carpeta validada, la ruta
-certificada y el plan que las junta con un modelo permitido."""
+"""La vida de un proceso opencode para un encargo: el plan (cabecera del brief, carpeta validada, ruta
+certificada, modelo permitido), el lanzamiento dentro del grupo del slot, lo que el proceso dijo, su
+salida y el cierre probado por la frontera de ese grupo."""
 from __future__ import annotations
 
+import grp
+import json
+import os
+import pwd
+import re
+import shlex
+import signal
+import time
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
 
-from contracts import RunDir
+from contracts import RunDir, SessionRecord
+from host import delivery_line
 from modelos import (Catalog, DefaultModel, ExactModel, MalformedHeader, ModelId, PermittedModel, ProviderPolicy,
                      Refusal, RouteNotCertified, WorkspaceRefused, authorize)
+from resources import BoundaryBusy, TmuxBackend, _ps
+from spool import atomic_json
 
 LAUNCH_SCHEMA = "agent-work.launch.v1"
 HEADER_END = "---"
@@ -138,7 +151,10 @@ class Route:
         versión nueva o un estado `sandbox-tested-uncertified`: así se recertifica la ruta."""
         if canary and self.status in ("certified", "sandbox-tested-uncertified"):
             return None
-        if self.status == "certified" and cli_version in self.certified_cli_versions:
+        if self.status != "certified":
+            # Las versiones medidas de una ruta sin certificar todavía no certifican nada.
+            return RouteNotCertified(cli_version, ())
+        if cli_version in self.certified_cli_versions:
             return None
         return RouteNotCertified(cli_version, tuple(sorted(self.certified_cli_versions)))
 
@@ -151,6 +167,11 @@ class LaunchSpec:
     run: RunDir
     record: Path
     session: str
+
+
+def session_name(operation: str) -> str:
+    """El nombre sale de la operación: una repetición del mismo lanzamiento reserva la misma sesión."""
+    return f"enc-{operation[:12]}"
 
 
 def plan_launch(assignment: object, brief: bytes, *, policy: ProviderPolicy, catalog: Catalog, route: Route,
@@ -171,5 +192,374 @@ def plan_launch(assignment: object, brief: bytes, *, policy: ProviderPolicy, cat
     workspace = Workspace.for_revision(revision, allowed_root=allowed_root, run=run)
     if not isinstance(workspace, Workspace):
         return workspace
-    # El nombre sale de la operación: una repetición del mismo lanzamiento reserva la misma sesión.
-    return LaunchSpec(model, workspace, run, record, f"enc-{operation[:12]}")
+    return LaunchSpec(model, workspace, run, record, session_name(operation))
+
+
+def opencode_argv(spec: LaunchSpec, opencode_bin: Path, *, task_id: str) -> tuple[str, ...]:
+    """El encargo viaja como un argumento, con stdin en /dev/null: no existe un teclado por el que alguien
+    apruebe un permiso. Nunca lleva `--auto` ni `-i`: medido en opencode 1.18.35 (B22-fase0.md, M2 y M6),
+    sin `--auto` niega cada permiso "ask" y termina. `--print-logs` manda a stderr la causa de un error, la
+    carpeta de la sesión y el proveedor de cada llamada, que el flujo JSON no trae (M3)."""
+    if task_id.startswith("-"):
+        raise ValueError(f"un taskId no empieza con guion: {task_id!r}")
+    return (str(opencode_bin), "run", "-m", str(spec.model.model), "--format", "json", "--print-logs",
+            "--log-level", "INFO", "--title", task_id, delivery_line(str(spec.run.assignment)))
+
+
+def opencode_env(spec: LaunchSpec) -> dict[str, str]:
+    """El único sitio que arma el entorno de opencode.
+
+    PWD es una guarda de seguridad: opencode 1.18.35 abre la sesión en la carpeta que dice PWD, no en el
+    cwd real (B22-fase0.md, "PWD"), y el host corre desde su checkout, con la política adentro. La única
+    carpeta externa permitida es la de esta corrida. `enabled_providers` y `small_model` cierran lo que el
+    `-m` no cubre: opencode elige por su cuenta el modelo de títulos y el de sus subagentes (M3)."""
+    model = spec.model.model
+    return {
+        "PWD": str(spec.workspace.root),
+        "OPENCODE_DISABLE_AUTOUPDATE": "1",
+        "AGENT_WORK_MANAGED": "1",
+        "OPENCODE_CONFIG_CONTENT": json.dumps({
+            "permission": {"external_directory": {f"{spec.run.path}/**": "allow"}},
+            "enabled_providers": [model.provider],
+            "small_model": str(model),
+        }, separators=(",", ":")),
+    }
+
+
+EXIT_NO_WORKSPACE = 97
+EXIT_OUTSIDE_GROUP = 98
+"""Códigos con que launch.sh sale antes de llegar a opencode."""
+
+
+def launch_script(spec: LaunchSpec, argv: tuple[str, ...], env: dict[str, str], gid: int) -> str:
+    """Lo que lee el shell de newgrp. El entorno se fija aquí, justo antes del exec, y no con `tmux -e`: ni
+    tmux ni ese shell pueden dejar otro PWD. newgrp corre el shell aunque no logre cambiar de grupo, así
+    que la primera línea lo comprueba: un proceso fuera del grupo quedaría fuera de la frontera."""
+    record = SessionRecord(spec.record)
+    return "\n".join([
+        f'[ "$(/usr/bin/id -rg)" = {gid} ] || exit {EXIT_OUTSIDE_GROUP}',
+        f"cd -- {shlex.quote(str(spec.workspace.root))} || exit {EXIT_NO_WORKSPACE}",
+        *(f"export {name}={shlex.quote(value)}" for name, value in env.items()),
+        f"exec {' '.join(map(shlex.quote, argv))} </dev/null >>{shlex.quote(str(record.events))} "
+        f"2>>{shlex.quote(str(record.stderr))}",
+    ]) + "\n"
+
+
+REJECTED_TOOL_CALL = "The user rejected permission to use this specific tool call."
+DENIED_LINE = re.compile(r"permission requested: (\S+) \((.*)\); auto-rejecting")
+LOG_FIELD = re.compile(r'([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)')
+COLOUR = re.compile(r"\x1b\[[0-9;]*m")
+TAIL_LINES = 40
+SESSION_HEAD_LINES = 400
+
+
+@dataclass(frozen=True)
+class PermissionDenied:
+    """Un permiso que opencode negó solo. Sale de la línea de stderr
+        permission requested: <permission> (<pattern>); auto-rejecting
+    Si el flujo trae un `tool_use` rechazado y stderr no trae la línea, `permission` es
+    "tool:<herramienta>" y `pattern` queda vacío."""
+    permission: str
+    pattern: str
+
+
+@dataclass(frozen=True)
+class RunEvents:
+    """Lo que el proceso dijo: el flujo de `--format json` y los logs que `--print-logs` manda a stderr.
+    No tiene "esperando un permiso": `opencode run` no espera, niega y sale con 0 (M6). Un permiso negado
+    se ve por la salida del proceso, y esto solo le pone causa."""
+    first_at: float | None
+    denied: tuple[PermissionDenied, ...]
+    error: str | None
+    session_directory: str | None
+    providers_called: tuple[str, ...]
+    tail: tuple[str, ...]
+    """Las últimas líneas del flujo."""
+    log_errors: tuple[str, ...]
+    """Las últimas líneas level=ERROR de los logs."""
+
+
+def _log_fields(line: str) -> dict[str, str]:
+    fields = {}
+    for name, value in LOG_FIELD.findall(line):
+        if value.startswith('"'):
+            try:
+                value = json.loads(value)
+            except ValueError:
+                value = value[1:-1]
+        fields[name] = value
+    return fields
+
+
+def _created_in(fields: dict[str, str]) -> str | None:
+    if fields.get("message") == "created" and fields.get("id", "").startswith("ses_"):
+        return fields.get("directory")
+    return None
+
+
+def session_directory(record: Path) -> str | None:
+    """La carpeta en que opencode abrió la sesión, leída del principio de sus logs. None si todavía no la
+    dice."""
+    try:
+        with SessionRecord(record).stderr.open(encoding="utf-8", errors="replace") as log:
+            for _, line in zip(range(SESSION_HEAD_LINES), log):
+                opened = _created_in(_log_fields(line))
+                if opened is not None:
+                    return opened
+    except OSError:
+        return None
+    return None
+
+
+def read_events(record: Path) -> RunEvents | None:
+    """Frontera con lo que escribe opencode. None si los archivos no se pueden leer. Una línea que no es
+    JSON, un evento desconocido o una línea de log con otra forma no fallan: no aportan y ya. Las formas
+    son las medidas en opencode 1.18.35 (B22-fase0.md); una versión nueva cierra la ruta antes."""
+    files = SessionRecord(record)
+    first_at, flow_error, rejected, tail = None, None, [], deque(maxlen=TAIL_LINES)
+    denied, log_error, log_cause, opened, providers = [], None, None, None, []
+    log_errors = deque(maxlen=TAIL_LINES)
+    try:
+        with files.events.open(encoding="utf-8", errors="replace") as flow:
+            for line in flow:
+                tail.append(line.rstrip("\n"))
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(event, dict):
+                    continue
+                stamp = event.get("timestamp")
+                if first_at is None and isinstance(stamp, (int, float)) and not isinstance(stamp, bool):
+                    first_at = stamp / 1000
+                part = event.get("part") if isinstance(event.get("part"), dict) else {}
+                state = part.get("state") if isinstance(part.get("state"), dict) else {}
+                if event.get("type") == "tool_use" and state.get("error") == REJECTED_TOOL_CALL:
+                    rejected.append(PermissionDenied(f"tool:{part.get('tool')}", ""))
+                failure = event.get("error") if event.get("type") == "error" else None
+                if isinstance(failure, dict):
+                    data = failure.get("data") if isinstance(failure.get("data"), dict) else {}
+                    flow_error = str(data.get("message") or failure.get("name") or flow_error)
+        with files.stderr.open(encoding="utf-8", errors="replace") as log:
+            for line in log:
+                line = COLOUR.sub("", line)
+                asked = DENIED_LINE.search(line)
+                if asked:
+                    denied.append(PermissionDenied(asked[1], asked[2]))
+                    continue
+                fields = _log_fields(line)
+                opened = opened or _created_in(fields)
+                if fields.get("message") == "stream" and fields.get("providerID"):
+                    providers.append(fields["providerID"])
+                if fields.get("level") == "ERROR":
+                    log_errors.append(line.rstrip("\n"))
+                    log_error = fields.get("error") or log_error
+                    log_cause = log_cause or fields.get("cause") or fields.get("message")
+    except OSError:
+        return None
+    return RunEvents(first_at, tuple(dict.fromkeys(denied or rejected)), log_error or log_cause or flow_error, opened,
+                     tuple(dict.fromkeys(providers)), tuple(tail), tuple(log_errors))
+
+
+@dataclass(frozen=True)
+class SessionExit:
+    """El código 0 no dice que el encargo salió bien: tras negar un permiso, opencode sale con 0 (M2). Lo
+    que cuenta es si hay acuse y resultado. `code` es None cuando la sesión ya no existe y su estado de
+    salida no se puede leer."""
+    code: int | None
+
+
+@dataclass(frozen=True)
+class ClosureProof:
+    """Evidencia de un cierre. Su digest viaja a R en managedTasks.host.close."""
+    pane_gone: bool
+    session_gone: bool
+    boundary_before: tuple[str, ...]
+    signals: tuple[str, ...]
+    boundary_after: tuple[str, ...]
+
+    @property
+    def absent(self) -> bool:
+        return self.pane_gone and self.session_gone and not self.boundary_after
+
+
+@dataclass(frozen=True)
+class BoundaryProcess:
+    pid: int
+    lstart: str
+    command: str
+
+    def __str__(self) -> str:
+        return f"{self.pid} {self.lstart} {self.command}"
+
+
+NEWGRP = "/usr/bin/newgrp"
+PS_ROW = re.compile(r"\s*(\d+)\s+(\d+)\s+(\d+)\s+(\w{3}\s+\w{3}\s+\d+\s+[\d:]+\s+\d{4})(?:\s(.*))?")
+COMMAND_SHOWN = 200
+KILL_WAIT_SECONDS = 2.0
+
+
+def parse_boundary(table: str, uid: int, gid: int) -> tuple[BoundaryProcess, ...]:
+    """Las filas `uid rgid pid lstart command` de ese usuario y ese grupo real. ps imprime un salto de
+    línea del argv tal cual, así que una línea que no es una fila completa es parte del comando anterior.
+    Una fila falsa escrita así solo puede agregar un proceso a la frontera, nunca esconder uno."""
+    found: list[BoundaryProcess] = []
+    for line in table.splitlines():
+        row = PS_ROW.fullmatch(line)
+        if row is None:
+            continue
+        if int(row[1]) == uid and int(row[2]) == gid:
+            found.append(BoundaryProcess(int(row[3]), " ".join(row[4].split()),
+                                         (row[5] or "").strip()[:COMMAND_SHOWN]))
+    return tuple(found)
+
+
+def read_process_table() -> str:
+    done = _ps("-A", "-ww", "-o", "uid=,rgid=,pid=,lstart=,command=")
+    if done.returncode != 0:
+        raise OSError("process table unreadable")
+    return done.stdout
+
+
+def read_process(pid: int) -> str:
+    """La fila de un solo pid, leída del kernel: una fila falsa en el argv de otro proceso no llega aquí."""
+    return _ps("-o", "uid=,rgid=,pid=,lstart=,command=", "-p", str(pid)).stdout
+
+
+class GroupBoundaryBackend(TmuxBackend):
+    """Backend TaskCreated que corre el pane con un grupo primario dedicado al slot, en la cuenta del
+    operador. La frontera es (uid, rgid): el rgid se hereda por fork, exec, setsid y doble fork, `ps` lo
+    muestra para cualquier binario y un proceso sin privilegios no puede cambiarlo. Medido en macOS 26.7
+    con `newgrp agent-work-enc1` dentro de tmux (B22-fase0.md, M4). Los archivos nuevos no heredan ese
+    grupo: toman el de su carpeta.
+
+    Escapa quien llame a un binario setuid que cambia de grupo (newgrp, su) o quien le pida el trabajo a
+    launchd (`open`, `launchctl`). Es el límite declarado de la prueba (coverage.json)."""
+    FORMAT = "#{pid}|#{session_id}|#{pane_id}|#{pane_pid}|#{@agent_work_resource_nonce}|#{session_created}"
+
+    def __init__(self, tmux_bin: str, socket: str, group: str, boot_id: str | None = None, *,
+                 grace_seconds: float = 5.0, gid: int | None = None,
+                 table: Callable[[], str] = read_process_table, process: Callable[[int], str] = read_process,
+                 kill: Callable[[int, int], None] = os.kill, sleep: Callable[[float], None] = time.sleep):
+        super().__init__(tmux_bin, socket, boot_id)
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]{0,63}", group):
+            raise ValueError("invalid slot group")
+        self.group = group
+        self.uid = os.getuid()
+        if gid is None:
+            try:
+                entry = grp.getgrnam(group)
+            except KeyError as exc:
+                raise ValueError(f"slot group {group} does not exist") from exc
+            if pwd.getpwuid(self.uid).pw_name not in entry.gr_mem:
+                raise ValueError(f"this user is not a member of the slot group {group}")
+            gid = entry.gr_gid
+        if gid == os.getgid():
+            raise ValueError("the slot group cannot be the host's own group: the boundary would hold the host")
+        self.gid = gid
+        self.grace_seconds = grace_seconds
+        self._table, self._process, self._kill, self._sleep = table, process, kill, sleep
+        self.last_closure: ClosureProof | None = None
+
+    def boundary(self) -> tuple[BoundaryProcess, ...]:
+        return parse_boundary(self._table(), self.uid, self.gid)
+
+    def launch(self, spec: LaunchSpec, nonce: str, argv: tuple[str, ...], env: dict[str, str]) -> None:
+        """Una sesión nueva cuyo pane entra al grupo del slot y lee launch.sh. Un solo comando tmux deja la
+        sesión con su nonce y con remain-on-exit, así un proceso que sale en menos de un segundo sigue
+        siendo la sesión de este recurso."""
+        busy = self.boundary()
+        if busy:
+            raise BoundaryBusy(busy)
+        record = SessionRecord(spec.record)
+        record.path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        atomic_json(record.argv, list(argv))
+        descriptor = os.open(record.launch, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as script:
+            script.write(launch_script(spec, argv, env, self.gid))
+        target = f"={spec.session}:"
+        done = self._tmux(
+            "new-session", "-d", "-s", spec.session, "-x", "200", "-y", "50", "-c", str(spec.workspace.root),
+            f"exec {NEWGRP} {shlex.quote(self.group)} < {shlex.quote(str(record.launch))}",
+            ";", "set-option", "-t", target, self.NONCE_OPTION, nonce,
+            ";", "set-option", "-t", target, "remain-on-exit", "on")
+        if done.returncode:
+            raise OSError(f"tmux could not launch {spec.session}: {done.stderr.strip()}")
+
+    def observe(self, session: str) -> dict | None:
+        """La identidad de la sesión, viva o con el pane muerto: el proceso de esta ruta termina solo, y la
+        identidad no cambia cuando lo hace. Lleva la hora en que tmux creó la sesión en lugar de la hora de
+        inicio del proceso, que deja de poder leerse cuando sale."""
+        if not session or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+                              for c in session):
+            raise ValueError("invalid tmux session")
+        shown = self._tmux("display-message", "-p", "-t", f"={session}:", self.FORMAT)
+        parts = shown.stdout.strip().split("|")
+        if shown.returncode or len(parts) != 6:
+            return None
+        server_pid, session_id, pane_id, pane_pid, nonce, created = parts
+        server_start = self._start(server_pid)
+        if not server_start or not pane_pid.isdigit():
+            return None
+        return {"bootId": self.boot_id, "nonce": nonce, "socket": self.socket, "sessionName": session,
+                "serverPid": int(server_pid), "serverStart": server_start, "sessionId": session_id,
+                "paneId": pane_id, "panePid": int(pane_pid), "sessionCreated": created}
+
+    def exit_of(self, identity: dict) -> SessionExit | None:
+        """None mientras el pane vive. Una sesión que ya no existe salió, con código desconocido."""
+        if self.observe(identity["sessionName"]) != identity:
+            return SessionExit(None)
+        shown = self._tmux("display-message", "-p", "-t", identity["paneId"], "#{pane_dead}|#{pane_dead_status}")
+        dead, _, status = shown.stdout.strip().partition("|")
+        if shown.returncode:
+            return SessionExit(None)
+        if dead != "1":
+            return None
+        return SessionExit(int(status) if status.isdigit() else None)
+
+    def _confirmed(self, target: BoundaryProcess) -> bool:
+        return target in parse_boundary(self._process(target.pid), self.uid, self.gid)
+
+    def _sweep(self) -> tuple[tuple[BoundaryProcess, ...], tuple[str, ...], tuple[BoundaryProcess, ...]]:
+        """TERM a lo que hay en la frontera, gracia, KILL a lo que quede, relectura. Cada señal va a un pid
+        cuyo uid, rgid y hora de inicio se confirmaron justo antes, nunca a un nombre."""
+        before = self.boundary()
+        signals = []
+        for sent, wait in ((signal.SIGTERM, self.grace_seconds), (signal.SIGKILL, KILL_WAIT_SECONDS)):
+            targets = [target for target in self.boundary() if self._confirmed(target)]
+            if not targets:
+                break
+            for target in targets:
+                try:
+                    self._kill(target.pid, sent)
+                except ProcessLookupError:
+                    continue
+                except PermissionError:
+                    signals.append(f"{sent.name} {target.pid} EPERM")
+                    continue
+                signals.append(f"{sent.name} {target.pid}")
+            waited = 0.0
+            while waited < wait and set(targets) & set(self.boundary()):
+                self._sleep(0.1)
+                waited += 0.1
+        return before, tuple(signals), self.boundary()
+
+    def prove_absent(self, identity: dict) -> bool:
+        """Mata la sesión y barre la frontera. True solo si la sesión ya no existe y la frontera quedó
+        vacía; lo que encontró queda en last_closure."""
+        self.last_closure = None
+        if self.observe(identity["sessionName"]) == identity:
+            self.stop(identity)
+        session_gone = self.observe(identity["sessionName"]) != identity
+        before, signals, after = self._sweep()
+        self.last_closure = ClosureProof(identity["panePid"] not in {process.pid for process in after}, session_gone,
+                                         tuple(map(str, before)), signals, tuple(map(str, after)))
+        return self.last_closure.absent
+
+    def prove_slot_empty(self) -> bool:
+        """El cierre de un lanzamiento que no dejó sesión con su nonce: no hay pane que matar, y la frontera
+        vacía prueba que no dejó nada vivo."""
+        self.last_closure = None
+        before, signals, after = self._sweep()
+        self.last_closure = ClosureProof(True, True, tuple(map(str, before)), signals, tuple(map(str, after)))
+        return self.last_closure.absent

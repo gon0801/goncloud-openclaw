@@ -15,67 +15,22 @@ import tempfile
 import threading
 import time
 from collections import namedtuple
-from dataclasses import dataclass
+from dataclasses import replace
 from pathlib import Path
-from typing import Optional, Tuple
 
-from contracts import AuthorizedOperation, IncidentRejected, OperationKey
-from host import Host, TmuxTransport, cli_adapter, reject_permission_dialog
+from contracts import (HOST_BEAT_FILE, AuthorizedOperation, HostBeat, HostObservation, IncidentRejected, OperationKey,
+                       RunDir, SessionRecord, operation_id)
+from host import (ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, DeliveryDeferred, Host, TmuxTransport, cli_adapter,
+                  reject_permission_dialog)
+from modelos import (POLICY_FILE, CatalogStore, CatalogUnavailable, ExactModel, ModelNotListed,
+                     ProviderNotConfigured, ProviderPolicy, authorize, explicar)
 from progress_bridge import transfer_host_projection, transfer_projection
-from resources import dialog_note
-from spool import canonical, incident_identity
+from resources import BoundaryBusy, dialog_note
+from sesion import (COVERAGE_FILE, GroupBoundaryBackend, LaunchSpec, Route, opencode_argv, opencode_env, plan_launch,
+                    session_directory, session_name)
+from spool import atomic_json, canonical, incident_identity
 
 COVERAGE = Path(__file__).resolve().parents[2] / "docs/evidence/agent-work/coverage.json"
-HOST_BEAT_FILE = "host.json"
-HOST_SLOTS = ("free", "running", "blocked")
-
-
-@dataclass(frozen=True)
-class HostBeat:
-    """<state_root>/host.json: what `encargo.py` reads of the host that runs one opencode process per task.
-    policy_digest and cli_version say which provider policy and which opencode the host decides with."""
-    pid: int
-    started_at: float
-    beat_at: float
-    checkout: str
-    commit: str
-    cli_version: str
-    policy_digest: Optional[str]
-    slot: str
-    blocked_by: Tuple[str, ...]
-    task_id: Optional[str]
-    model: Optional[str]
-    since: Optional[float]
-
-    @staticmethod
-    def read(state_root: Path) -> "Optional[HostBeat]":
-        """None when no host ever wrote the file, or when what is there is not a beat."""
-        try:
-            raw = json.loads((Path(state_root) / HOST_BEAT_FILE).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return None
-
-        def number(value):
-            return isinstance(value, (int, float)) and not isinstance(value, bool)
-
-        def text_or_none(value):
-            return value is None or isinstance(value, str)
-
-        if not isinstance(raw, dict):
-            return None
-        blocked = raw.get("blockedBy")
-        if not (isinstance(raw.get("pid"), int) and not isinstance(raw["pid"], bool)
-                and number(raw.get("startedAt")) and number(raw.get("beatAt"))
-                and all(isinstance(raw.get(key), str) and raw[key] for key in ("checkout", "commit", "cliVersion"))
-                and text_or_none(raw.get("policyDigest")) and raw.get("slot") in HOST_SLOTS
-                and isinstance(blocked, list) and all(isinstance(item, str) for item in blocked)
-                and text_or_none(raw.get("taskId")) and text_or_none(raw.get("model"))
-                and (raw.get("since") is None or number(raw["since"]))):
-            return None
-        return HostBeat(raw["pid"], float(raw["startedAt"]), float(raw["beatAt"]), raw["checkout"], raw["commit"],
-                        raw["cliVersion"], raw.get("policyDigest"), raw["slot"], tuple(blocked), raw.get("taskId"),
-                        raw.get("model"), raw.get("since"))
-
 
 DEFINITIVE_INCIDENT_REJECTIONS = (
     "Managed task incident conflict",
@@ -304,29 +259,17 @@ class GatewayProjectionClient:
         })
 
 
-def _brief_to_workspace(client, claim, workspace_root):
+def _brief_digest(claim):
     reference = claim["assignment"]["instructionRef"]
     digest = reference["digest"]
     if not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
         raise ValueError("host brief digest invalid")
     if reference["ref"] != "artifact:" + digest[7:]:
         raise ValueError("host brief reference is not portable")
-    root = Path(workspace_root)
-    if root.is_symlink():
-        raise ValueError("host workspace root is a symlink")
-    root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    briefs = root / "managed-briefs"
-    if briefs.is_symlink():
-        raise ValueError("host brief directory is a symlink")
-    briefs.mkdir(mode=0o700, exist_ok=True)
-    target = briefs / digest[7:]
-    if target.is_symlink():
-        raise ValueError("host brief target is a symlink")
-    if target.exists():
-        data = target.read_bytes()
-        if not data or len(data) > 1024 * 1024 or hashlib.sha256(data).hexdigest() != digest[7:]:
-            raise ValueError("host brief cache digest mismatch")
-        return target
+    return digest
+
+
+def _download_brief(client, claim, digest):
     data = bytearray()
     size = None
     while size is None or len(data) < size:
@@ -349,7 +292,11 @@ def _brief_to_workspace(client, claim, workspace_root):
         data.extend(raw)
     if hashlib.sha256(data).hexdigest() != digest[7:]:
         raise ValueError("host brief digest mismatch")
-    fd, pending = tempfile.mkstemp(prefix=".pending-", dir=briefs)
+    return bytes(data)
+
+
+def _publish_brief(directory, target, data, digest):
+    fd, pending = tempfile.mkstemp(prefix=".pending-", dir=directory)
     try:
         with os.fdopen(fd, "wb") as stream:
             stream.write(data)
@@ -361,25 +308,53 @@ def _brief_to_workspace(client, claim, workspace_root):
         except FileExistsError:
             if hashlib.sha256(target.read_bytes()).hexdigest() != digest[7:]:
                 raise ValueError("host brief cache digest mismatch")
-        directory = os.open(briefs, os.O_RDONLY)
+        handle = os.open(directory, os.O_RDONLY)
         try:
-            os.fsync(directory)
+            os.fsync(handle)
         finally:
-            os.close(directory)
+            os.close(handle)
     finally:
         os.unlink(pending)
+
+
+def _cached_brief(target, digest):
+    if target.is_symlink():
+        raise ValueError("host brief target is a symlink")
+    if not target.exists():
+        return False
+    data = target.read_bytes()
+    if not data or len(data) > 1024 * 1024 or hashlib.sha256(data).hexdigest() != digest[7:]:
+        raise ValueError("host brief cache digest mismatch")
+    return True
+
+
+def fetch_brief(client, claim, run):
+    """The brief of a run-per-task claim, in its run directory, mode 0400. It no longer lands in
+    <repo>/managed-briefs/, and it is downloaded before the task's folder is looked at."""
+    digest = _brief_digest(claim)
+    if not _cached_brief(run.brief, digest):
+        _publish_brief(run.path, run.brief, _download_brief(client, claim, digest), digest)
+    return run.brief
+
+
+def _brief_to_workspace(client, claim, workspace_root):
+    digest = _brief_digest(claim)
+    root = Path(workspace_root)
+    if root.is_symlink():
+        raise ValueError("host workspace root is a symlink")
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    briefs = root / "managed-briefs"
+    if briefs.is_symlink():
+        raise ValueError("host brief directory is a symlink")
+    briefs.mkdir(mode=0o700, exist_ok=True)
+    target = briefs / digest[7:]
+    if not _cached_brief(target, digest):
+        _publish_brief(briefs, target, _download_brief(client, claim, digest), digest)
     return target
 
 
-def claim_cli_once(client, *, host, manager, adapter_id, instance_id, session,
-                   workspace_root, deliver, coverage, canary=False):
-    """Deliver to an existing session; adopting it never grants permission to stop it. A canary host also
-    claims for a sandbox-tested route, so that route's own canary can certify it."""
-    accepted = ("certified", "sandbox-tested-uncertified") if canary else ("certified",)
-    if coverage.get("hostAdapterCoverage", {}).get(client.host_id, {}).get(adapter_id) not in accepted:
-        raise ValueError("host adapter route is not certified")
-    if not manager.can_take(instance_id):
-        return None
+def _claim(client, adapter_id, instance_id):
+    """The task R hands this instance, checked against who asked; None when R has none."""
     claim = client.claim_host(adapter_id, instance_id)
     if claim is None:
         return None
@@ -404,6 +379,22 @@ def claim_cli_once(client, *, host, manager, adapter_id, instance_id, session,
     assignment = claim["assignment"]
     if not isinstance(assignment.get("inputRevision"), dict) or not assignment.get("resultContract"):
         raise ValueError("host claim contract invalid")
+    return claim
+
+
+def claim_cli_once(client, *, host, manager, adapter_id, instance_id, session,
+                   workspace_root, deliver, coverage, canary=False):
+    """Deliver to an existing session; adopting it never grants permission to stop it. A canary host also
+    claims for a sandbox-tested route, so that route's own canary can certify it."""
+    accepted = ("certified", "sandbox-tested-uncertified") if canary else ("certified",)
+    if coverage.get("hostAdapterCoverage", {}).get(client.host_id, {}).get(adapter_id) not in accepted:
+        raise ValueError("host adapter route is not certified")
+    if not manager.can_take(instance_id):
+        return None
+    claim = _claim(client, adapter_id, instance_id)
+    if claim is None:
+        return None
+    capability, assignment = claim["capability"], claim["assignment"]
     brief = _brief_to_workspace(client, claim, workspace_root)
     key = OperationKey(client.host_id, claim["taskId"], claim["generation"], instance_id)
     manager.reserve(key, session, "UserAdopted", claim={
@@ -422,6 +413,213 @@ def claim_cli_once(client, *, host, manager, adapter_id, instance_id, session,
         claim_id=claim["claimId"], adapter_id=adapter_id,
     )
     return host.apply(key, operation, deliver, client.admit_host)
+
+
+RUN_ADAPTER = "opencode"
+SLOT_GROUP = "agent-work-enc1"
+CATALOG_RECHECK_SECONDS = 60.0
+
+
+def claim_run_once(client, *, host, manager, backend, instance_id, deps):
+    """Claim one task and launch its own opencode process inside the slot's group, or refuse it with an
+    incident. A slot whose group holds processes of no task has no room either: nothing is claimed that
+    could not be launched. A replayed claim converges: it finishes a refusal or a launch that a dead host
+    left half done, and never launches twice."""
+    if not manager.can_take(instance_id):
+        return None
+    if not manager.held() and backend.boundary():
+        return None
+    claim = _claim(client, RUN_ADAPTER, instance_id)
+    if claim is None:
+        return None
+    capability, assignment = claim["capability"], claim["assignment"]
+    key = OperationKey(client.host_id, claim["taskId"], claim["generation"], instance_id)
+    operation = operation_id(key)
+    run = RunDir.for_operation(host.state_dir, operation)
+    brief = fetch_brief(client, claim, run)
+    view = manager.reserve(key, session_name(operation), "TaskCreated", claim={
+        "hostId": client.host_id, "taskId": claim["taskId"], "generation": claim["generation"],
+        "instanceId": instance_id, "producerId": RUN_ADAPTER, "capability": capability["token"],
+        "adapterId": RUN_ADAPTER})
+    authorized = AuthorizedOperation(
+        key=key, producer_id=RUN_ADAPTER, capability=capability["token"], session=session_name(operation),
+        workspace_ref="", brief_ref=str(brief), brief_digest=assignment["instructionRef"]["digest"][7:],
+        input_revision=assignment["inputRevision"], result_contract=assignment["resultContract"],
+        claim_id=claim["claimId"], adapter_id=RUN_ADAPTER, run=run)
+    registered = host.spool.get(operation)
+    refused = json.loads(registered["operation_json"]).get("refused") if registered else None
+    if refused is not None:
+        return host.refuse(key, authorized, client.admit_host, refused)
+    waiting = registered is None or registered["status"] in ("registered", "deferred", "attempted")
+    if not (waiting and view.state in ("Reserved", "Launching")):
+        return HostObservation(registered["status"], registered["assignment_ref"])
+    record = SessionRecord.for_operation(host.state_dir, operation)
+    plan = deps.plan(assignment, brief.read_bytes(), run=run, record=record.path, operation=operation)
+    if not isinstance(plan, LaunchSpec):
+        why = explicar(plan, registrado=True)
+        if registered is not None:
+            raise ValueError(f"the launch of a registered operation is now refused: {why.causa}")
+        return host.refuse(key, authorized, client.admit_host, {"causa": why.causa, "frase": why.frase})
+
+    def launch(_assignment_ref, _session):
+        deps.recheck(plan)
+        argv = opencode_argv(plan, deps.opencode_bin, task_id=claim["taskId"])
+        try:
+            launched = manager.ensure_launched(key, lambda nonce: backend.launch(plan, nonce, argv, opencode_env(plan)))
+        except BoundaryBusy as busy:
+            atomic_json(record.blocked, {"boundary": list(busy.processes)})
+            raise DeliveryDeferred(str(busy)) from busy
+        if launched.state != "Running":
+            raise RuntimeError(f"the launch did not attach: {launched.state} {launched.reason}".rstrip())
+
+    observation = host.apply(key, replace(authorized, workspace_ref=str(plan.workspace.root)), launch,
+                             client.admit_host)
+    if registered is not None and registered["status"] == "attempted":
+        # The host died between recording this attempt and attaching its session.
+        try:
+            launch(observation.assignment_ref, authorized.session)
+        except DeliveryDeferred:
+            host.spool.delivery_deferred(operation)
+            return HostObservation("deferred", observation.assignment_ref)
+    return observation
+
+
+def _commit(checkout):
+    try:
+        done = subprocess.run(["git", "-C", str(checkout), "rev-parse", "HEAD"], capture_output=True, text=True,
+                              timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return "unknown"
+    sha = done.stdout.strip()
+    return sha if done.returncode == 0 and re.fullmatch(r"[0-9a-f]{40,64}", sha) else "unknown"
+
+
+class RunHost:
+    """The run-per-task route of one slot. Each pass loads the provider policy once, and beats and
+    authorizes with that same value, so a `git pull` of the host's checkout takes effect with no relaunch."""
+
+    def __init__(self, client, host, manager, backend, *, instance_id, checkout, state_root, opencode_bin,
+                 allowed_root, canary=False, accept_deadline_seconds=ACCEPT_DEADLINE_SECONDS,
+                 result_deadline_seconds=RESULT_DEADLINE_SECONDS, clock=time.time):
+        self.client, self.host, self.manager, self.backend = client, host, manager, backend
+        self.instance_id = instance_id
+        self.checkout = Path(checkout)
+        self.state_root = Path(state_root)
+        self.opencode_bin = Path(opencode_bin)
+        self.allowed_root = Path(allowed_root)
+        self.canary = canary
+        self.accept_deadline_seconds = accept_deadline_seconds
+        self.result_deadline_seconds = result_deadline_seconds
+        self.clock = clock
+        self.catalogs = CatalogStore(self.opencode_bin, self.state_root)
+        self.started_at = clock()
+        self.commit = _commit(self.checkout)
+        self.policy = ProviderPolicy.load(self.checkout / POLICY_FILE)
+        self._catalog = None
+        self._catalog_at = 0.0
+        self._opened = {}
+
+    def catalog(self, *, fresh=False):
+        """What opencode lists. Asked again before each launch plan, and once a minute for the beat."""
+        if fresh or self._catalog is None or self.clock() - self._catalog_at >= CATALOG_RECHECK_SECONDS:
+            self._catalog, self._catalog_at = self.catalogs.current(), self.clock()
+        return self._catalog
+
+    def _launched_model(self, operation):
+        try:
+            argv = json.loads(SessionRecord.locate(self.host.state_dir, operation).argv.read_text())
+            return argv[argv.index("-m") + 1]
+        except (OSError, ValueError, IndexError, TypeError):
+            return None
+
+    def beat(self):
+        """Write host.json: what `encargo.py preparar` reads to know this host lives, with which policy and
+        which opencode it decides, and whether its slot can take a task."""
+        self.policy = ProviderPolicy.load(self.checkout / POLICY_FILE)
+        try:
+            version = self.catalog().cli_version
+        except CatalogUnavailable:
+            version = "unknown"
+        slot, blocked, task_id, model, since = "free", (), None, None, None
+        held = self.manager.held()
+        if held:
+            slot, task_id = "running", held[0]["task_id"]
+            model = self._launched_model(held[0]["operation_id"])
+            since = self.host.spool.attempted_at(held[0]["operation_id"])
+        else:
+            blocked = tuple(str(process) for process in self.backend.boundary())
+            slot = "blocked" if blocked else "free"
+        beat = HostBeat(os.getpid(), self.started_at, self.clock(), str(self.checkout), self.commit, version,
+                        self.policy.digest, slot, blocked, task_id, model, since, str(self.host.state_dir),
+                        self.canary)
+        atomic_json(self.state_root / HOST_BEAT_FILE, beat.document())
+        return beat
+
+    def plan(self, assignment, brief, *, run, record, operation):
+        """The launch of one claim, or why not. An opencode that does not answer its version has no
+        certified route. A provider or a model the catalog lacks is looked up once more: the operator may
+        just have run `opencode auth login`."""
+        try:
+            coverage = json.loads((self.checkout / COVERAGE_FILE).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            coverage = {}
+        route = Route.load(coverage, self.client.host_id)
+        try:
+            catalog = self.catalog(fresh=True)
+        except CatalogUnavailable:
+            return route.open_for("sin contestar su versión", canary=False)
+
+        def planned(listed):
+            return plan_launch(assignment, brief, policy=self.policy, catalog=listed, route=route,
+                               cli_version=listed.cli_version, allowed_root=self.allowed_root, run=run,
+                               record=record, operation=operation, canary=self.canary)
+
+        plan = planned(catalog)
+        if (isinstance(plan, (ProviderNotConfigured, ModelNotListed))
+                and self.clock() - catalog.listed_at > CATALOG_RECHECK_SECONDS):
+            try:
+                self._catalog, self._catalog_at = self.catalogs.refresh(), self.clock()
+            except CatalogUnavailable:
+                return plan
+            plan = planned(self._catalog)
+        return plan
+
+    def recheck(self, plan):
+        """The launcher checks again what it was handed: the model that reaches `opencode -m` is the one
+        authorize permits with this pass's policy and catalog, whoever built the plan."""
+        if authorize(ExactModel(plan.model.model), self.policy, self.catalog()) != plan.model:
+            raise ValueError(f"{plan.model.model} is not what authorize permits now; nothing was launched")
+
+    def claim(self):
+        return claim_run_once(self.client, host=self.host, manager=self.manager, backend=self.backend,
+                              instance_id=self.instance_id, deps=self)
+
+    def _session_directory(self, key):
+        operation = operation_id(key)
+        if operation not in self._opened:
+            opened = session_directory(SessionRecord.locate(self.host.state_dir, operation).path)
+            if opened is None:
+                return None
+            self._opened[operation] = opened
+        return self._opened[operation]
+
+    def watch(self):
+        return self.host.detect_run_failures(
+            self.client.host_id, self.manager.session_exit, now=self.clock(),
+            accept_deadline_seconds=self.accept_deadline_seconds,
+            result_deadline_seconds=self.result_deadline_seconds,
+            session_directory=self._session_directory, stop_session=self.manager.stop_session)
+
+
+def hold_spool(state_dir):
+    """One host per spool. The lock dies with the process that holds it, so a dead host never keeps it."""
+    lock = open(Path(state_dir) / "host.lock", "a")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock.close()
+        return None
+    return lock
 
 
 def transfer_gateway_projections(client, *, evidence_root, progress_state_dir, progress_client, host=None):
@@ -632,11 +830,18 @@ def close_only(client, *, host, manager, reject_dialog, before):
 
 def pump_once(client, *, host, evidence_root, progress_state_dir, progress_client,
               cli_claim=None, cli_watch=None, cli_release=None, cli_cancel=None, cli_retry=None,
-              progress_publisher=None):
-    """Settle closures (close_pass), detect silent CLI failures, claim authorized work, drain
+              progress_publisher=None, cli_beat=None):
+    """Beat, settle closures (close_pass), detect silent CLI failures, claim authorized work, drain
     projections and publish the progress queue in one code-only pass."""
+    beat_errors = []
+    if cli_beat is not None:
+        try:
+            cli_beat()
+        except (OSError, RuntimeError, ValueError) as exc:
+            beat_errors = [f"host beat failed: {exc}"]
     counts, report_error, errors = close_pass(client, host=host, cli_release=cli_release,
                                               cli_cancel=cli_cancel, cli_retry=cli_retry)
+    errors = beat_errors + errors
     detected = 0
     watch_errors = []
     if cli_watch is not None:
@@ -680,7 +885,7 @@ def pump_once(client, *, host, evidence_root, progress_state_dir, progress_clien
 
 def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_client,
                stop_event, interval=1.0, cli_claim=None, cli_watch=None, cli_release=None, cli_cancel=None,
-               cli_retry=None):
+               cli_retry=None, cli_beat=None):
     """Poll with code; a failed pass leaves durable host and native work for retry."""
     if not 0 < interval <= 5:
         raise ValueError("poll interval must be between zero and five seconds")
@@ -692,7 +897,7 @@ def watch_pump(client, *, host, evidence_root, progress_state_dir, progress_clie
                 client, host=host, evidence_root=evidence_root,
                 progress_state_dir=progress_state_dir, progress_client=progress_client,
                 cli_claim=cli_claim, cli_watch=cli_watch, cli_release=cli_release, cli_cancel=cli_cancel,
-                cli_retry=cli_retry, progress_publisher=publisher,
+                cli_retry=cli_retry, progress_publisher=publisher, cli_beat=cli_beat,
             )
         except (OSError, RuntimeError, ValueError) as exc:
             error = str(exc)
@@ -725,6 +930,19 @@ def main(argv=None):
     parser.add_argument("--cli-canary", action="store_true",
                         help="also claim for a sandbox-tested-uncertified adapter, to run its canary")
     parser.add_argument("--tmux-bin", default="tmux")
+    parser.add_argument("--workspace-root",
+                        help="run one opencode process per task, in a git repo under this root; excludes the "
+                             "adopted-session flags --cli-adapter-id, --cli-session and --cli-workspace-root")
+    parser.add_argument("--opencode-bin", default="/opt/homebrew/bin/opencode")
+    parser.add_argument("--slot-group",
+                        help=f"group whose processes are the slot's boundary (default {SLOT_GROUP}); with "
+                             "--close-only, closes a spool of launched sessions")
+    parser.add_argument("--state-root", help="where host.json and catalogo.json live (default: the parent of "
+                                             "--host-state-dir)")
+    parser.add_argument("--accept-deadline-seconds", type=float, default=ACCEPT_DEADLINE_SECONDS)
+    parser.add_argument("--result-deadline-seconds", type=float, default=RESULT_DEADLINE_SECONDS)
+    parser.add_argument("--canary", action="store_true",
+                        help="also launch on a sandbox-tested-uncertified route or a new opencode version")
     parser.add_argument("--flush-results", action="store_true")
     parser.add_argument("--watch", action="store_true")
     parser.add_argument("--close-only", action="store_true",
@@ -732,19 +950,25 @@ def main(argv=None):
     args = parser.parse_args(argv)
     client = GatewayProjectionClient(args.openclaw_bin, args.host_id, args.expect_url)
     if args.close_only:
-        if not all((args.host_state_dir, args.cli_adapter_id, args.cli_tmux_socket)):
-            parser.error("--close-only requires --host-state-dir, --cli-adapter-id and --cli-tmux-socket")
+        if not all((args.host_state_dir, args.cli_tmux_socket)) or bool(args.cli_adapter_id) == bool(args.slot_group):
+            parser.error("--close-only requires --host-state-dir, --cli-tmux-socket and one of --cli-adapter-id "
+                         "(adopted sessions) and --slot-group (launched sessions)")
         if (args.claim_once or args.watch or args.flush_results or args.cli_instance_id or args.cli_session
-                or args.cli_workspace_root):
+                or args.cli_workspace_root or args.workspace_root):
             parser.error("--close-only takes its instances from the spool and never claims")
         from resources import ResourceManager, TmuxBackend
         before = read_spool_resources(args.host_state_dir)
         host = Host(args.host_id, args.host_state_dir)
-        backend = TmuxBackend(args.tmux_bin, args.cli_tmux_socket)
-        adapter = cli_adapter(args.cli_adapter_id)
+        if args.slot_group:
+            # A launched session shows no dialog: `opencode run` denies a permission and ends.
+            backend, reject_dialog = GroupBoundaryBackend(args.tmux_bin, args.cli_tmux_socket, args.slot_group), None
+        else:
+            backend = TmuxBackend(args.tmux_bin, args.cli_tmux_socket)
+            adapter = cli_adapter(args.cli_adapter_id)
+            reject_dialog = lambda identity: reject_permission_dialog(backend, identity, adapter)
         report, failed = close_only(
             client, host=host, manager=ResourceManager(host.spool, args.host_id, backend), before=before,
-            reject_dialog=lambda identity: reject_permission_dialog(backend, identity, adapter))
+            reject_dialog=reject_dialog)
         print(json.dumps(report, indent=2, sort_keys=True))
         return 1 if failed else 0
     cli_fields = (args.cli_adapter_id, args.cli_instance_id, args.cli_session,
@@ -754,7 +978,31 @@ def main(argv=None):
     cli_release = None
     cli_cancel = None
     cli_retry = None
-    if args.claim_once or any(cli_fields):
+    cli_beat = None
+    host = None
+    if args.workspace_root:
+        if any((args.cli_adapter_id, args.cli_session, args.cli_workspace_root, args.cli_canary,
+                args.cli_deadline_seconds is not None)):
+            parser.error("--workspace-root launches one opencode per task and excludes the adopted-session flags")
+        if not all((args.host_state_dir, args.cli_instance_id, args.cli_tmux_socket)):
+            parser.error("--workspace-root requires --host-state-dir, --cli-instance-id and --cli-tmux-socket")
+        from resources import ResourceManager
+        # The run directory goes into opencode's permission by its real path (/private/var, not /var).
+        host = Host(args.host_id, Path(args.host_state_dir).resolve())
+        held = hold_spool(host.state_dir)
+        if held is None:
+            parser.error(f"another host already runs on the spool {host.state_dir}")
+        backend = GroupBoundaryBackend(args.tmux_bin, args.cli_tmux_socket, args.slot_group or SLOT_GROUP)
+        manager = ResourceManager(host.spool, args.host_id, backend)
+        run = RunHost(client, host, manager, backend, instance_id=args.cli_instance_id,
+                      checkout=COVERAGE.parents[3], state_root=args.state_root or host.state_dir.parent,
+                      opencode_bin=args.opencode_bin, allowed_root=args.workspace_root, canary=args.canary,
+                      accept_deadline_seconds=args.accept_deadline_seconds,
+                      result_deadline_seconds=args.result_deadline_seconds)
+        cli_claim, cli_watch, cli_beat = run.claim, run.watch, run.beat
+        cli_release, cli_retry = manager.release_acknowledged, manager.retry_cleanup
+        cli_cancel = lambda: manager.release_cancelled(client.host_cancellation, None)
+    elif args.claim_once or any(cli_fields):
         if not all(cli_fields) or not args.host_state_dir:
             parser.error("CLI claim requires adapter, stable instance, session, workspace, socket and host state")
         from resources import ResourceManager, TmuxBackend, load_approval_pattern
@@ -787,6 +1035,8 @@ def main(argv=None):
     if args.claim_once:
         if args.watch or args.flush_results:
             parser.error("--claim-once excludes --watch and --flush-results")
+        if cli_beat is not None:
+            cli_beat()
         observation = cli_claim()
         print(json.dumps({"claimed": observation.status if observation else None}))
         return 0
@@ -800,11 +1050,11 @@ def main(argv=None):
         old_int = signal.signal(signal.SIGINT, lambda *_: stop.set())
         try:
             watch_pump(
-                client, host=Host(args.host_id, args.host_state_dir),
+                client, host=host or Host(args.host_id, args.host_state_dir),
                 evidence_root=args.evidence_root, progress_state_dir=args.progress_state_dir,
                 progress_client=args.progress_client, stop_event=stop,
                 cli_claim=cli_claim, cli_watch=cli_watch, cli_release=cli_release, cli_cancel=cli_cancel,
-                cli_retry=cli_retry,
+                cli_retry=cli_retry, cli_beat=cli_beat,
             )
         finally:
             signal.signal(signal.SIGTERM, old_term)

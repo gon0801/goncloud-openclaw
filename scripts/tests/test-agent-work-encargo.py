@@ -41,6 +41,7 @@ PROMPTS = {
     10866: ("2026-10-12T23:42:35.842Z", "1 acepto 2. cualquiera 3. 1 hora SECRETO-sk-prueba-123"),
     10867: ("2026-10-12T23:47:47.629Z", "bla, de opencode solo tengo go, bla SECRETO-sk-prueba-456"),
     10886: ("2026-10-13T01:13:22.117Z", "sobre qwen hay forma de dejar solo los modelos qwen? gracias"),
+    10890: ("2026-10-13T01:40:00.000Z", "sí, esos seis modelos de qwen están bien"),
     10901: ("2026-10-14T10:00:00.000Z", "ok, permite mistral para por CLI, cobra por suscripción"),
     10902: ("2026-10-15T08:00:00.000Z", "cierra muse para encargos, ya no lo pago"),
     10903: ("2026-10-16T09:00:00.000Z", "reabre opencode go para encargos, ya tengo cuota de sobra"),
@@ -107,16 +108,17 @@ class Mac(unittest.TestCase):
         self.policy_path.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n")
 
     def certify(self):
+        """What the evidence PR of canaries A and P does to the checkout's coverage."""
         path = self.checkout / EVIDENCE / "coverage.json"
         coverage = json.loads(path.read_text())
-        coverage["hostAdapterRoute"] = {"mac-local": {"opencode": {
-            "form": "run-per-task", "certifiedCliVersions": {"1.18.35": "B22-fase0.md"}}}}
+        coverage["hostAdapterCoverage"]["mac-local"]["opencode"] = "certified"
         path.write_text(json.dumps(coverage))
 
     def beat(self, **changes):
         beat = {"pid": 4242, "startedAt": time.time() - 600, "beatAt": time.time() - 3, "checkout": str(self.checkout),
                 "commit": "c" * 40, "cliVersion": "1.18.35", "policyDigest": self.policy().digest, "slot": "free",
-                "blockedBy": [], "taskId": None, "model": None, "since": None, **changes}
+                "blockedBy": [], "taskId": None, "model": None, "since": None, "spool": str(self.state / "enc-1"),
+                "canary": False, **changes}
         (self.state / "host.json").write_text(json.dumps(beat))
 
     def argv_log(self):
@@ -314,6 +316,21 @@ class Preparar(Mac):
         (self.state / "host.json").write_text('{"pid": "4242"}')
         self.assertEqual(self.preparar()["causa"], "sin-host")
 
+    def test_until_the_canaries_certify_the_route_only_a_live_canary_host_opens_it(self):
+        """The repo's coverage as phase 2 leaves it: sandbox-tested, with 1.18.35 measured."""
+        self.assertEqual(self.preparar()["causa"], "ruta-no-certificada")
+        self.beat()
+        self.assertEqual(self.preparar()["frase"], "La ruta de encargos por opencode todavía no está certificada. "
+                                                   "La Mac tiene opencode 1.18.35.")
+        self.beat(canary=True)
+        self.assertEqual(self.preparar(), {
+            "ok": True, "modelo": "zai-coding-plan/glm-5.3-flash", "cobro": "subscription",
+            "inputRevision": {"kind": "code", "repository": str(self.repo), "sha": self.head},
+            "briefArgs": DEFAULT_BRIEF_ARGS, "enFila": False,
+            "host": {"politica": self.policy().digest[:12], "cli": "1.18.35"}})
+        self.beat(canary=True, beatAt=time.time() - 121)
+        self.assertEqual(self.preparar()["causa"], "ruta-no-certificada", "a canary host that died still opened it")
+
     def test_a_live_host_with_the_same_policy_and_cli_gets_the_brief_arguments(self):
         self.certify()
         self.beat()
@@ -384,16 +401,21 @@ class Estado(Mac):
         self.assertLess(answer.pop("latidoHace"), 10)
         self.assertEqual(answer, {"ok": True, "pid": 4242, "slot": "running", "bloqueadoPor": [], "tarea": "t-9",
                                   "modelo": "zai-coding-plan/glm-5.3", "checkout": str(self.checkout),
-                                  "commit": "c" * 40, "politica": self.policy().digest[:12], "cli": "1.18.35"})
+                                  "commit": "c" * 40, "politica": self.policy().digest[:12], "cli": "1.18.35",
+                                  "canario": False})
         self.beat(beatAt=time.time() - 121)
         code, out, _ = self.cli("estado")
         self.assertEqual((code, json.loads(out)["frase"]), (3, "El host de encargos no corre desde hace 2 min."))
 
-    def test_a_task_query_is_a_usage_error_until_the_host_keeps_sessions(self):
+    def test_a_task_the_host_never_claimed_says_to_wait(self):
+        code, out, _ = self.cli("estado", "--tarea", "t-9")
+        self.assertEqual((code, json.loads(out)["causa"]), (3, "sin-host"))
         self.beat()
-        with self.assertRaises(SystemExit) as stopped:
-            self.cli("estado", "--tarea", "t-9")
-        self.assertEqual(stopped.exception.code, 2)
+        code, out, _ = self.cli("estado", "--tarea", "t-9")
+        self.assertEqual((code, json.loads(out)), (3, {
+            "ok": False, "causa": "tarea-desconocida", "accion": "esperar", "candidatos": [],
+            "frase": "El host de encargos no tiene ninguna operación de la tarea t-9. Puede que todavía no la "
+                     "haya reclamado."}))
 
 
 class Permitir(Mac):
@@ -559,8 +581,8 @@ class Permitir(Mac):
         self.assert_refused(["qwen", "--solo", "qwen [36]", "--ref", "P10886", "--cita", "dejar solo los modelos qwen"],
                             "patrón de modelos inválido")
         code, out, err, changed = self.permitir(
-            "qwen", "--solo", "qwen*", "--menos", "qwen-image*", "--ref", "P10886", "--cita",
-            "sobre qwen hay forma de dejar solo los modelos qwen?")
+            "qwen", "--solo", "qwen*", "--menos", "qwen-image*", "--ref", "P10890", "--cita",
+            "sí, esos seis modelos de qwen están bien")
         self.assertEqual((code, changed), (0, True), err)
         self.assertEqual(out.splitlines()[1].split()[:7], ["qwen", "alibaba-token-plan", "permitido", "subscription",
                                                            "con-sesion", "27", "6"])

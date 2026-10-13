@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """La línea de comandos de los encargos "por CLI".
 
-`preparar` y `estado` son de `main`: dicen en el mismo turno si un pedido puede correr y con qué host.
+`preparar` y `estado` son de `main`: dicen en el mismo turno si un pedido puede correr y con qué host, y
+después qué corrió de verdad una tarea y qué decirle al operador si falló.
 `proveedores`, `permitir` y `cerrar` son del operador: muestran y cambian qué proveedores pueden correr,
 con sus palabras. `permitir` y `cerrar` escriben la política del checkout donde corren, y el cambio llega
 al host por un PR. Sale 0 si la respuesta es sí, 3 si es un rechazo y 1 si opencode o git no contestaron
@@ -33,13 +34,14 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable, Iterator, Literal
 
+from contracts import HostBeat, SessionRecord
 from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, CatalogStore, CatalogUnavailable,
-                     Explicacion, HostDown, HostMismatch, ModelFilter, ModelNotListed, OperatorCitation,
+                     Explicacion, HostDown, HostMismatch, ModelFilter, ModelId, ModelNotListed, OperatorCitation,
                      PermittedModel, PolicyUnreadable, ProviderClosure, ProviderGrant, ProviderId,
                      ProviderNotConfigured, ProviderPolicy, SlotBlocked, UNVERIFIED_REF, WorkspaceRefused, authorize,
                      explicar, pedido, policy_document)
-from native_gateway import HostBeat
-from sesion import ALLOWED_ROOT, COVERAGE_FILE, Route, Workspace
+from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, Route, Workspace,
+                    read_events)
 
 HOST_ID = "mac-local"
 ADAPTER_ID = "opencode"
@@ -68,6 +70,27 @@ class Preparado:
     en_fila: bool
     politica: str
     cli: str
+
+
+@dataclass(frozen=True)
+class EstadoTarea:
+    """Lo que el host sabe de una tarea. Nada de aquí lleva la capacidad de la tarea: los logs de opencode
+    copian los comandos del modelo, y el modelo escribe la capacidad en su acuse."""
+    task_id: str
+    modelo: str | None
+    """El que el host lanzó de verdad, leído de argv.json, no de la memoria de quien pidió."""
+    cobro: Billing | None
+    estado: str
+    cierre: str | None
+    explicacion: Explicacion | None
+    permisos_negados: tuple[str, ...]
+    proveedores_llamados: tuple[str, ...]
+    """Debe ser solo el proveedor del modelo."""
+    carpeta_de_sesion: str | None
+    """Debe ser el repo del encargo."""
+    salida: int | None
+    """El código con que salió el proceso, cuando el host lo vio salir sin resultado."""
+    log_tail: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -146,10 +169,12 @@ def preparar(repo: Path | None, modelo: str | None, *, state_root: Path, checkou
         coverage = json.loads((Path(checkout) / COVERAGE_FILE).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         coverage = {}
-    closed = Route.load(coverage, HOST_ID).open_for(catalog.cli_version, canary=False)
+    beat = latido(state_root, now)
+    # Un host canario vivo corre también una ruta todavía sin certificar: su canario es un pedido real.
+    canary = isinstance(beat, HostBeat) and beat.canary
+    closed = Route.load(coverage, HOST_ID).open_for(catalog.cli_version, canary=canary)
     if closed is not None:
         return explicar(closed)
-    beat = latido(state_root, now)
     if isinstance(beat, HostDown):
         return explicar(beat)
     for what, theirs, ours in (("checkout", os.path.realpath(beat.checkout), os.path.realpath(checkout)),
@@ -168,6 +193,98 @@ def preparar(repo: Path | None, modelo: str | None, *, state_root: Path, checkou
     return Preparado(str(model.model), model.billing, revision,
                      ("--host", HOST_ID, "--adapter", ADAPTER_ID, "--model", str(model.model)),
                      beat.slot == "running", model.policy_digest[:12], beat.cli_version)
+
+
+_SALIDAS = {
+    EXIT_NO_WORKSPACE: " El host no pudo entrar a la carpeta del encargo.",
+    EXIT_OUTSIDE_GROUP: " El proceso no quedó en el grupo del slot y el host no lanzó opencode.",
+}
+
+
+def _operacion(spool: Path, task_id: str) -> "dict | None":
+    """La operación más reciente de esa tarea, con su recurso y sus incidencias, leída sin abrir el spool
+    para escritura."""
+    path = Path(spool) / "host.sqlite"
+    if not path.is_file():
+        return None
+    db = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    db.row_factory = sqlite3.Row
+    try:
+        rows = db.execute("SELECT o.operation_id,o.operation_json,o.status,r.state FROM operations o "
+                          "LEFT JOIN resources r ON r.operation_id=o.operation_id").fetchall()
+        found = None
+        for row in rows:
+            assignment = json.loads(row["operation_json"])
+            if assignment.get("taskId") == task_id and (found is None or assignment["generation"]
+                                                        > found["assignment"]["generation"]):
+                found = {"operation": row["operation_id"], "assignment": assignment, "status": row["status"],
+                         "resource": row["state"]}
+        if found is not None:
+            incidents = db.execute("SELECT incident_json FROM incidents WHERE operation_id=? ORDER BY rowid",
+                                   (found["operation"],)).fetchall()
+            found["episodes"] = [json.loads(row[0]).get("episodeId", "permission-required") for row in incidents]
+        return found
+    except (sqlite3.Error, ValueError, KeyError, TypeError):
+        return None
+    finally:
+        db.close()
+
+
+def _json(path: Path) -> object:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def estado(task_id: "str | None", *, state_root: Path, checkout: Path,
+           now: float) -> "EstadoTarea | HostBeat | Explicacion":
+    """`encargo.py estado [--tarea <taskId>]`. Solo lectura. Sin tarea contesta el latido del host. Con
+    tarea, qué modelo corrió de verdad, en qué carpeta abrió la sesión, a qué proveedores llamó y, si hubo
+    incidencia, la frase y la acción."""
+    if task_id is None:
+        beat = latido(state_root, now)
+        return explicar(beat) if isinstance(beat, HostDown) else beat
+    beat = HostBeat.read(state_root)
+    if beat is None:
+        return explicar(HostDown(None))
+    found = _operacion(Path(beat.spool), task_id)
+    if found is None:
+        return Explicacion("tarea-desconocida", f"El host de encargos no tiene ninguna operación de la tarea {task_id}. "
+                           "Puede que todavía no la haya reclamado.", "esperar")
+    assignment = found["assignment"]
+    record = SessionRecord.locate(Path(beat.spool), found["operation"])
+    capability = assignment.get("capability") or None
+
+    def limpio(text: str) -> str:
+        return text.replace(capability, "<capacidad>") if capability else text
+
+    argv = _json(record.argv)
+    modelo = argv[argv.index("-m") + 1] if isinstance(argv, list) and "-m" in argv[:-1] else None
+    parsed = ModelId.parse(modelo) if modelo else None
+    grant = (ProviderPolicy.load(Path(checkout) / POLICY_FILE).grant_for(parsed.provider)
+             if isinstance(parsed, ModelId) else None)
+    events = read_events(record.path)
+    left = _json(record.exit)
+    salida = left.get("code") if isinstance(left, dict) and isinstance(left.get("code"), int) else None
+    explicacion = None
+    if found["episodes"]:
+        episode = found["episodes"][-1]
+        blocked = _json(record.blocked)
+        refused = assignment.get("refused")
+        if episode == "launch-refused" and isinstance(refused, dict):
+            explicacion = Explicacion(refused["causa"], refused["frase"], "cancelar")
+        elif episode == "launch-failed" and argv is None and isinstance(blocked, dict):
+            explicacion = explicar(SlotBlocked(tuple(blocked.get("boundary", ()))), registrado=True)
+        else:
+            explicacion = explicar(episode, eventos=events)
+            explicacion = replace(explicacion, frase=limpio(explicacion.frase + _SALIDAS.get(salida, "")))
+    return EstadoTarea(
+        task_id, modelo, grant.billing if grant else None, found["status"],
+        found["resource"] if found["resource"] in ("AbsenceVerified", "CleanupPending") else None, explicacion,
+        tuple(f"{denied.permission}:{denied.pattern}" for denied in events.denied) if events else (),
+        events.providers_called if events else (), events.session_directory if events else None, salida,
+        tuple(limpio(line) for line in (*events.tail, *events.log_errors)) if events else ())
 
 
 def _cited(decision: OperatorCitation) -> str:
@@ -492,10 +609,19 @@ def _table(rows: "tuple[ProviderRow, ...]") -> str:
     return "\n".join("  ".join(cell.ljust(width) for cell, width in zip(line, widths)).rstrip() for line in cells)
 
 
-def _answer(result: "Preparado | Explicacion | HostBeat", now: float) -> tuple[int, dict]:
+def _answer(result: "Preparado | Explicacion | HostBeat | EstadoTarea", now: float) -> tuple[int, dict]:
     if isinstance(result, Explicacion):
         return 3, {"ok": False, "causa": result.causa, "frase": result.frase, "accion": result.accion,
                    "candidatos": list(result.candidatos)}
+    if isinstance(result, EstadoTarea):
+        why = result.explicacion
+        return 0, {"ok": True, "tarea": result.task_id, "modelo": result.modelo, "cobro": result.cobro,
+                   "estado": result.estado, "cierre": result.cierre,
+                   "explicacion": why and {"causa": why.causa, "frase": why.frase, "accion": why.accion},
+                   "permisosNegados": list(result.permisos_negados),
+                   "proveedoresLlamados": list(result.proveedores_llamados),
+                   "carpetaDeSesion": result.carpeta_de_sesion, "salida": result.salida,
+                   "logTail": list(result.log_tail)}
     if isinstance(result, Preparado):
         return 0, {"ok": True, "modelo": result.modelo, "cobro": result.cobro, "inputRevision": result.input_revision,
                    "briefArgs": list(result.brief_args), "enFila": result.en_fila,
@@ -503,7 +629,8 @@ def _answer(result: "Preparado | Explicacion | HostBeat", now: float) -> tuple[i
     return 0, {"ok": True, "pid": result.pid, "latidoHace": round(now - result.beat_at, 1), "slot": result.slot,
                "bloqueadoPor": list(result.blocked_by), "tarea": result.task_id, "modelo": result.model,
                "checkout": result.checkout, "commit": result.commit,
-               "politica": result.policy_digest and result.policy_digest[:12], "cli": result.cli_version}
+               "politica": result.policy_digest and result.policy_digest[:12], "cli": result.cli_version,
+               "canario": result.canary}
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -517,8 +644,8 @@ def _parser() -> argparse.ArgumentParser:
     prepare = commands.add_parser("preparar", help="dice si un pedido puede correr y con qué argumentos de brief.py")
     prepare.add_argument("--repo", type=Path)
     prepare.add_argument("--modelo")
-    state = commands.add_parser("estado", help="el latido del host de encargos")
-    state.add_argument("--tarea")
+    state = commands.add_parser("estado", help="el latido del host de encargos, o lo que corrió una tarea")
+    state.add_argument("--tarea", metavar="TASKID")
     listing = commands.add_parser("proveedores", help="qué proveedores pueden correr, cómo cobran y qué falta")
     listing.add_argument("--refrescar", action="store_true", help="pide a opencode que vuelva a bajar su lista")
     allow = commands.add_parser("permitir", help="escribe un permiso, un filtro o el id de un permiso que existe")
@@ -537,7 +664,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _say(result: "Preparado | Explicacion | HostBeat", now: float) -> int:
+def _say(result: "Preparado | Explicacion | HostBeat | EstadoTarea", now: float) -> int:
     code, answer = _answer(result, now)
     print(json.dumps(answer, ensure_ascii=False))
     return code
@@ -559,8 +686,7 @@ def _run_preparar(args: argparse.Namespace, where: dict, now: float) -> int:
 
 
 def _run_estado(args: argparse.Namespace, where: dict, now: float) -> int:
-    beat = latido(args.state_root, now)
-    return _say(explicar(beat) if isinstance(beat, HostDown) else beat, now)
+    return _say(estado(args.tarea, state_root=args.state_root, checkout=args.checkout, now=now), now)
 
 
 def _run_proveedores(args: argparse.Namespace, where: dict, now: float) -> int:
@@ -592,9 +718,6 @@ def main(argv: "list[str] | None" = None, *, prompts: Path = PROMPTS_DB) -> int:
     args.prompts = prompts
     if not args.opencode.is_absolute():
         parser.error(f"--opencode va con ruta absoluta: {args.opencode}")
-    if args.command == "estado" and args.tarea is not None:
-        parser.error("estado --tarea llega con la fase 2 de B22: lee el spool y los eventos de una sesión, que "
-                     "todavía no existen")
     where = {"state_root": args.state_root, "checkout": args.checkout, "opencode_bin": args.opencode}
     try:
         return _COMMANDS[args.command](args, where, time.time())

@@ -121,7 +121,7 @@ También acepta `--file <archivo>` en lugar de la entrada estándar. Imprime una
 
 ### La sesión de opencode que adopta el host
 
-Desde B8 (`B8-opencode-adapter-e2e.md`), `mac-local/opencode` está certificada. El host no lanza esa sesión: la adopta. Se lanza a mano, una vez, así:
+B8 certificó `mac-local/opencode` sobre una sesión adoptada (`B8-opencode-adapter-e2e.md`). Desde la fase 2 de B22, `coverage.json` la tiene en `sandbox-tested-uncertified`, hasta que los canarios del host de encargos la certifiquen otra vez (sección "El host de encargos"). El host de esta sección no lanza su sesión: la adopta. Se lanza a mano, una vez, así:
 
 ```
 tmux -L <socket> new-session -d -s <sesión> -x 200 -y 50 -c <workspace> \
@@ -198,22 +198,22 @@ Qué protegen `permitir` y `cerrar`. Que una entrada de la política no le atrib
 
 Qué no protegen, ni pretenden. A quien corre el comando en la Mac con intención de falsear: esa persona o ese agente también puede editar el JSON o el código. Contra eso la integridad de la política la dan el PR revisado, la prueba que fija los cierres y el historial de git, no este comando.
 
-El host vivo todavía no lee esta política. Sigue en el camino por alias de la sección anterior hasta la fase 2 de B22 (`followups.md`, fila B22). Hasta entonces los comandos sirven para ver y cambiar la política y para comprobar qué contestaría un pedido.
+El host B8 que corre hoy no lee esta política. La lee el host de encargos de la sección siguiente, que el operador lanza en la fase 2 de B22 (`followups.md`, fila B22). Hasta entonces los comandos sirven para ver y cambiar la política y para comprobar qué contestaría un pedido.
 
 ```
 python3 scripts/agent-work/encargo.py proveedores [--refrescar]
 python3 scripts/agent-work/encargo.py preparar [--repo <ruta>] [--modelo "<palabras o id>"]
-python3 scripts/agent-work/encargo.py estado
+python3 scripts/agent-work/encargo.py estado [--tarea <taskId>]
 python3 scripts/agent-work/encargo.py permitir <nombre> [--proveedor <id>] [--cobro subscription|per-token] [--solo <patrón>] [--menos <patrón>] [--ref P#### --cita "<palabras de David>"]
 python3 scripts/agent-work/encargo.py cerrar <proveedor> --ref P#### --cita "<palabras de David>"
 python3 scripts/agent-work/encargo.py cerrar <proveedor> --por "<quién cierra>" --motivo "<por qué>"
 ```
 
 - `proveedores` imprime una fila por permiso, una por cierre y una por cada proveedor que opencode lista sin decisión de David. `lista` es cuántos modelos lista opencode con ese id y `entran` cuántos cubre el permiso. `con-sesion` significa que opencode lista al menos un modelo. Una fila `sin-decision` trae el id con el que opencode nombra a un proveedor recién iniciado. `--refrescar` corre `opencode models --refresh`, para un modelo recién salido que no aparece.
-- `preparar` contesta una línea JSON y sale con 0 o con 3. Juzga el pedido antes que el host: primero la política y el modelo, después la carpeta, la ruta certificada y el latido del host. Un rechazo trae `causa`, `frase` y `accion`. Con `accion` `preguntar-a-david`, `candidatos` trae los ids exactos y la frase dice cómo cobra cada proveedor. Hasta la fase 2 un pedido válido contesta `ruta-no-certificada`.
+- `preparar` contesta una línea JSON y sale con 0 o con 3. Juzga el pedido antes que el host: primero la política y el modelo, después la carpeta, la ruta certificada y el latido del host. Un rechazo trae `causa`, `frase` y `accion`. Con `accion` `preguntar-a-david`, `candidatos` trae los ids exactos y la frase dice cómo cobra cada proveedor. Mientras `coverage.json` no diga `certified`, un pedido válido contesta `ruta-no-certificada`, salvo que viva un host lanzado con `--canario`.
 - `preparar` termina en 30 s o menos: opencode tiene 25 s entre todas sus llamadas y git 5 s. Si alguno no contesta a tiempo sale con 1 y lo dice por stderr, sin JSON. Una política ilegible se contesta antes de llamar a opencode.
 - `--modelo` acepta las palabras de David ("glm 5.3 highspeed") o un id exacto (`zai-coding-plan/glm-5.3`). Las palabras tienen que aparecer todas en el id de un modelo permitido. Si casan con varios, gana el que se llama igual, y si no hay uno solo se pregunta.
-- `estado` contesta el latido del host de encargos (`host.json` del directorio de estado), que nace en la fase 2. `estado --tarea` todavía no existe y sale con 2.
+- `estado` contesta el latido del host de encargos (`host.json` del directorio de estado), y `estado --tarea <taskId>` lo que ese host sabe de una tarea. Los dos están en la sección siguiente.
 - `permitir` y `cerrar` se corren en una rama, en un checkout que no sea el del host, y el cambio entra por un PR. Se niegan en el checkout que nombra `host.json`, y lo vuelven a mirar justo antes de escribir. No los corre `main`: quien pide los encargos no es quien se los autoriza.
 - `cerrar` escribe aunque opencode no conteste: es el freno de emergencia. La fila sale `sin-catalogo` y un aviso por stderr. `permitir` también escribe sin opencode, salvo cuando liga un id o pone un filtro: esas dos comprobaciones leen el catálogo, y sin él el comando sale con 1 y no escribe.
 - `--cita` tiene que ser una subcadena literal del prompt `--ref` en `~/.claude-mem/claude-mem.db`, y la fecha sale de ese prompt. El comando no imprime el texto del prompt. Solo una cita cotejada atribuye algo a David: sin esa base, o con una referencia que no es `P####`, `permitir` se niega. La línea de comandos no tiene forma de apuntar el cotejo a otra base.
@@ -240,6 +240,76 @@ Cerrar de emergencia:
 2. El cierre no lleva el nombre de David: dice quién cerró, por qué, y `sin-cotejar` donde iría el número de prompt. `encargo.py proveedores` lo muestra así en la columna `cita`, y el rechazo de `preparar` también dice `sin-cotejar`. `--por` no puede nombrar a David de ninguna forma.
 3. Abre el PR. La prueba que fija los cierres sale roja hasta que el mismo PR agregue el cierre nuevo.
 4. `cerrar` no reemplaza un cierre vigente. Cuando David diga su frase, cambiar el cierre de emergencia por uno con sus palabras es otra edición a mano en un PR.
+
+### El host de encargos, con una sesión de opencode por encargo (B22, fase 2)
+
+Este host reemplaza al de "El host en la Mac" cuando el operador corre los pasos de la fase 2 de B22 (`followups.md`, fila B22). Hasta entonces no corre: el código está en el repo y el host B8 sigue vivo en la sesión `host`.
+
+Un solo host atiende todos los modelos. Por cada encargo reclama la tarea, lee la cabecera del brief y autoriza el modelo con la misma `authorize` de `preparar`. Si el brief no trae cabecera, corre `zai-coding-plan/glm-5.3-flash`. Después lanza `opencode run -m <modelo>` en una sesión tmux nueva, `enc-<12 hex de la operación>`, con la carpeta del encargo como cwd y como `PWD`. El host no adopta ninguna sesión, no teclea y no aprueba permisos: `opencode run` sin `--auto` niega solo cada permiso que su configuración no concede y termina.
+
+El proceso corre con el grupo `agent-work-enc1` como grupo real, en la cuenta de David. Ese grupo es la frontera del slot: al cerrar, el host mata la sesión, manda TERM y después KILL a todo proceso de David con ese `rgid`, y reporta `AbsenceVerified` solo si no queda ninguno. Si queda alguno, el recurso sigue `CleanupPending`, retiene el cupo y cada pasada vuelve a barrer. La prueba no cubre a quien llame a un binario setuid que cambia de grupo (`newgrp`, `su`) ni a quien le pida el trabajo a launchd (`open`, `launchctl`). El grupo es de uso exclusivo del host: no lances nada a mano con `newgrp agent-work-enc1`, porque el host lo ve como slot ocupado y su siguiente cierre lo mata.
+
+Antes de lanzarlo:
+
+- El grupo existe y `dn` pertenece a él. `id -Gn | tr ' ' '\n' | grep -x agent-work-enc1` imprime `agent-work-enc1`. Si no imprime nada, David lo crea una vez: `sudo dseditgroup -o create agent-work-enc1 && sudo dseditgroup -o edit -a dn -t user agent-work-enc1`.
+- El host B8 está apagado. Los dos reclaman `mac-local/opencode`, y R le da cada tarea al primero que pregunta.
+- `cmp ~/bin/progress-events.py scripts/mac/progress-events.py` no imprime nada.
+
+Para lanzarlo, desde el checkout del host (`~/dev/wt/agent-work-host`):
+
+```
+bash scripts/agent-work/lanzar-encargos.sh [--canario]
+```
+
+- Abre la sesión `host-encargos` en `tmux -L agent-work`, con el spool `~/.local/state/agent-work-host/enc-1` y su log en `enc-1/host.log`. Imprime `host: host-encargos arrancó` y una línea `HOST enc-1 opencode sesión=host-encargos spool=… grupo=agent-work-enc1`.
+- El host corre dentro de un ciclo. Si el proceso muere, o si recibe `kill -TERM`, el ciclo lo vuelve a levantar a los 5 s y el host retoma del spool.
+- Correrlo dos veces con los mismos argumentos no arranca nada: contesta `host: host-encargos ya corre`. Con otros argumentos se niega y dice cómo apagarlo antes. El lanzador no mira la tabla de procesos de la máquina. El candado de un host por spool lo pone el propio host (`enc-1/host.lock`): un segundo proceso sobre el mismo spool sale con `another host already runs on the spool …`.
+- `--canario` pasa `--canary` al host. Con esa bandera el host también lanza sobre una ruta `sandbox-tested-uncertified` o con una versión de opencode que `coverage.json` todavía no tiene medida, y `preparar` contesta que sí mientras ese host viva. Sin ella, y mientras `coverage.json` no diga `certified`, el host rechaza cada encargo con `launch-refused` (`ruta-no-certificada`).
+- Para apagarlo: `tmux -L agent-work kill-session -t host-encargos`. Un encargo en vuelo no se pierde: su sesión `enc-…` sigue viva y el host la retoma al volver.
+
+Cómo se lee el estado, desde el mismo checkout:
+
+```
+python3 scripts/agent-work/encargo.py estado
+python3 scripts/agent-work/encargo.py estado --tarea <taskId>
+```
+
+- Sin tarea contesta el latido (`~/.local/state/agent-work-host/host.json`, que el host escribe al empezar cada pasada): `pid`, `latidoHace`, `slot` (`free`, `running` o `blocked`), `bloqueadoPor`, `tarea`, `modelo`, `checkout`, `commit`, `politica`, `cli` y `canario`. Un latido de más de 120 s contesta `sin-host` y sale con 3.
+- `slot` `blocked` significa que el grupo tiene procesos que no son de ningún encargo. `bloqueadoPor` los lista como `pid hora-de-inicio comando`. El host no reclama mientras sigan ahí. Mátalos tú, por pid.
+- Con `--tarea` contesta lo que el host sabe de esa tarea: `modelo` (el `-m` que el host lanzó de verdad, leído de `sessions/<op>/argv.json`), `cobro`, `estado` (el de la operación en el spool), `cierre` (`AbsenceVerified`, `CleanupPending` o nada), `carpetaDeSesion` (la que opencode dijo en sus logs; tiene que ser el repo del encargo), `proveedoresLlamados` (tiene que ser solo el proveedor del modelo), `permisosNegados` (cada uno como `<permiso>:<patrón>`), `salida` (el código de salida, cuando el host vio salir el proceso sin resultado) y `logTail`. Si la tarea tuvo una incidencia, `explicacion` trae `causa`, `frase` y `accion`. Nada de lo que imprime lleva la capacidad de la tarea.
+- Una tarea que el host no ha reclamado contesta `tarea-desconocida`, con `accion` `esperar`, y sale con 3.
+
+Dónde queda cada cosa de un encargo, con `<op>` igual al id de la operación (64 hex):
+
+| Carpeta | Dueño | Contenido |
+|---|---|---|
+| El repo del encargo | El modelo | El trabajo y el artefacto del resultado. El brief ya no se copia a `<repo>/managed-briefs/`. |
+| `enc-1/runs/<op>/` | El host escribe `assignment.json` y `brief` (los dos en modo 0400). El CLI escribe `accept.json` y `result.json`. | Es la única carpeta fuera del repo que la sesión puede tocar (`external_directory` con una sola llave). |
+| `enc-1/sessions/<op>/` | El host | `launch.sh`, `argv.json`, `events.jsonl` (el flujo de `--format json`), `stderr.log` (los logs de opencode), y, según el caso, `exit.json` y `blocked.json`. La sesión no tiene permiso ahí. |
+
+Qué incidencia deja cada falla. Las dos primeras viajan a R como `transport-unavailable`, igual que `session-closed` y `delivery-unaccepted`. Esta ruta nunca emite `permission-required`.
+
+| Qué pasó | Incidencia | Cuándo |
+|---|---|---|
+| El host no va a lanzar el encargo: proveedor cerrado o sin permiso, modelo que no existe, cabecera mal formada, carpeta fuera de `~/dev`, ruta sin certificar u opencode que no contesta su versión | `launch-refused` | En la pasada del reclamo |
+| opencode salió sin acusar recibo, con cualquier código. O la sesión abrió en otra carpeta, y el host la mató. O el slot estuvo ocupado 300 s por procesos ajenos | `launch-failed` | En la pasada siguiente a la salida |
+| El modelo no acusó recibo | `delivery-unaccepted` | A los 300 s del lanzamiento |
+| El modelo acusó recibo y el proceso salió sin resultado. Es lo que deja un permiso negado: opencode sale con 0 | `session-closed` | En la pasada siguiente a la salida |
+| El resultado llegó mal formado | `invalid-result` | Al leerlo |
+| El modelo acusó recibo y no entregó | `deadline-missed` | A los 3600 s del acuse |
+
+En todos los casos `main` corre `estado --tarea`, repite la `frase` y cancela la tarea. Con la cancelación de R el host mata su sesión, barre el grupo y libera el cupo. El host no cierra nada por un plazo vencido.
+
+Un spool `enc-1` que ya no corre ningún host se cierra con una pasada, igual que en "Cerrar un spool viejo", pero con el grupo en lugar del adaptador: `python3 scripts/agent-work/native_gateway.py --openclaw-bin /Users/dn/.openclaw-r/openclaw --host-id mac-local --expect-url ws://127.0.0.1:18789 --host-state-dir /Users/dn/.local/state/agent-work-host/enc-1 --close-only --slot-group agent-work-enc1 --cli-tmux-socket agent-work`. Esa pasada sí mata las sesiones `enc-…` de las tareas con recibo o canceladas.
+
+Reversa de la fase 2:
+
+1. Apaga el host nuevo: `tmux -L agent-work kill-session -t host-encargos`.
+2. Si `sqlite3 -readonly ~/.local/state/agent-work-host/enc-1/host.sqlite "select count(*) from resources where state not in ('AbsenceVerified','ReleasedAdopted')"` no imprime `0`, cancela esas tareas en R y corre la pasada `--close-only --slot-group` de arriba hasta que imprima `0`.
+3. Revierte el commit de la fase 2 en `main` y actualiza el checkout del host.
+4. Relanza el host B8 con el comando de "El host en la Mac". `lanzar-host.sh` sigue en el repo hasta la fase 4.
+
+Mientras `coverage.json` tenga `mac-local/opencode` en `sandbox-tested-uncertified`, un host B8 que se reinicie sobre ese código sin `--cli-canary` no reclama nada: cada pasada sale con `host adapter route is not certified`. El proceso que ya corre no lo nota, porque leyó `coverage.json` al arrancar.
 
 ### El túnel ssh del CLI de R
 

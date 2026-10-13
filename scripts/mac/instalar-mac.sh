@@ -36,7 +36,7 @@ LINEA_SOURCE="source ~/bin/agent-tmux-shell.zsh"
 # esta lista: ni se copia ni se carga.
 BINS="corrida.sh cli-modos.tsv workers.v1.json corrida-worker.py progress-events.py agent-tmux.sh agent-tmux-shell.zsh tmux-activity-watch.sh claude-stop-openclaw-event.sh shot.sh tablero-trabajo.sh"
 CORRIDA_WORKER_PKG="corrida_worker"
-AGENT_WORK_FILES="brief.py contracts.py host.py native_gateway.py progress_bridge.py resources.py routing.py spool.py cutover.py"
+AGENT_WORK_FILES="brief.py contracts.py host.py modelos.py native_gateway.py progress_bridge.py resources.py routing.py sesion.py spool.py cutover.py"
 
 di() { printf '%s\n' "$1"; }
 falla() { printf 'instalar-mac: error: %s\n' "$1" >&2; exit 1; }
