@@ -79,14 +79,14 @@
   },
   {
     "id": "I08",
-    "distingue": "Poteto completo llega y funciona en las seis rutas; ausencia impide admitir la ruta.",
+    "distingue": "Poteto completo llega y funciona en las cinco rutas vivas (turno nativo, hijo nativo, encargo nativo a un agente, encargo por CLI con un proceso de opencode por encargo, hijo de una CLI); ausencia impide admitir la ruta.",
     "bloque": "SUA-03",
     "estado": "especificado",
     "fixtures": []
   },
   {
     "id": "I09",
-    "distingue": "CLI/modelo/argv, resume y permisos efectivos; OpenCode y sus hijos, reviewer sin escritura.",
+    "distingue": "En la ruta por CLI el modelo efectivo es el pedido (cabecera del brief, `-m` lanzado, modelo que opencode usó); un intento nuevo conserva su snapshot; permisos efectivos medidos; opencode y sus hijos dentro del grupo del slot; reviewer sin escritura en fuente.",
     "bloque": "SUA-03",
     "estado": "especificado",
     "fixtures": [
