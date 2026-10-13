@@ -7,10 +7,20 @@ después qué corrió de verdad una tarea y qué decirle al operador si falló.
 con sus palabras. `permitir` y `cerrar` escriben la política del checkout donde corren, y el cambio llega
 al host por un PR. Sale 0 si la respuesta es sí, 3 si es un rechazo y 1 si opencode o git no contestaron
 a tiempo.
+
+Qué protegen `permitir` y `cerrar`. Que una entrada de la política no le atribuya al operador, por
+descuido, algo que no dijo, y que un proveedor que él cerró no se reabra por un comando. Protegen contra
+los errores de quien opera y contra un agente que pide por un canal, por ejemplo `main` por Telegram.
+
+Qué no protegen, ni pretenden. A quien corre el comando en la Mac con intención de falsear: esa persona
+o ese agente también puede editar el JSON o este código. Contra eso la integridad de la política la dan
+el PR revisado, la prueba que fija los cierres y el historial de git, no este comando.
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
 import json
 import os
 import re
@@ -19,24 +29,23 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Iterator, Literal
 
 from contracts import HostBeat, SessionRecord
 from modelos import (MODEL_PATTERN, POLICY_FILE, PROVIDER, Billing, Catalog, CatalogStore, CatalogUnavailable,
                      Explicacion, HostDown, HostMismatch, ModelFilter, ModelId, ModelNotListed, OperatorCitation,
                      PermittedModel, PolicyUnreadable, ProviderClosure, ProviderGrant, ProviderId,
-                     ProviderNotConfigured, ProviderPolicy, SlotBlocked, WorkspaceRefused, authorize, explicar, pedido,
-                     policy_document)
+                     ProviderNotConfigured, ProviderPolicy, SlotBlocked, UNVERIFIED_REF, WorkspaceRefused, authorize,
+                     explicar, pedido, policy_document)
 from sesion import (ALLOWED_ROOT, COVERAGE_FILE, EXIT_NO_WORKSPACE, EXIT_OUTSIDE_GROUP, Route, Workspace,
                     read_events)
 
 HOST_ID = "mac-local"
 ADAPTER_ID = "opencode"
 OPERATOR = "David"
-UNVERIFIED_REF = "sin-cotejar"
-"""Lo que lleva, en lugar de un número de prompt, un cierre de emergencia que nadie cotejó."""
 BEAT_ALIVE_SECONDS = 120.0
 """Una pasada del host con RPC colgados tarda hasta 105 s."""
 CATALOG_RECHECK_SECONDS = 60.0
@@ -47,7 +56,8 @@ OPENCODE_BIN = Path(os.environ.get("AGENT_WORK_OPENCODE", "/opt/homebrew/bin/ope
 STATE_ROOT = Path(os.environ.get("AGENT_WORK_STATE_ROOT", str(Path.home() / ".local/state/agent-work-host")))
 PROMPTS_DB = Path.home() / ".claude-mem/claude-mem.db"
 CHECKOUT = Path(__file__).resolve().parents[2]
-PROMPT_REF = re.compile(r"P(\d+)")
+PROMPT_REF = re.compile(r"P(\d{1,18})")
+"""Hasta 18 dígitos: un número más largo no cabe en un entero de sqlite."""
 
 
 @dataclass(frozen=True)
@@ -364,35 +374,64 @@ def _host_checkout(checkout: Path, state_root: Path) -> str | None:
     return None
 
 
-def _write_policy(checkout: Path, state_root: Path, grants: "tuple[ProviderGrant, ...]", closed: dict) -> str | None:
-    """Escritura atómica en formato canónico, y el único sitio que escribe la política.
+_checkpoint: "Callable[[str], None]" = lambda where: None
+"""Punto de espera de `_write_policy`, para las pruebas del candado: lo llama con "before-lock" y con
+"before-replace"."""
 
-    No deja una política que no carga. No quita ni cambia un cierre que está en el archivo: eso no lo
-    hace ningún comando. Y vuelve a mirar `host.json` justo antes de reemplazar el archivo, porque entre
-    la primera mirada y este punto el comando pudo esperar a opencode y un host pudo arrancar desde este
-    checkout."""
-    path = Path(checkout) / POLICY_FILE
-    document = policy_document(grants, closed)
-    descriptor, pending = tempfile.mkstemp(prefix=".politica-", dir=path.parent)
+
+@contextlib.contextmanager
+def _policy_lock(path: Path) -> "Iterator[None]":
+    """Candado exclusivo entre los procesos que escriben esa política. Va sobre la carpeta del archivo y
+    no sobre un archivo de candado: así no queda nada sin trackear junto a la evidencia."""
+    descriptor = os.open(path.parent, os.O_RDONLY)
     try:
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(document)
-            stream.flush()
-            os.fsync(stream.fileno())
-        unreadable = ProviderPolicy.load(Path(pending)).unreadable
-        if unreadable is not None:
-            return f"la política resultante no carga: {unreadable}"
-        touched = [key for key, closure in ProviderPolicy.load(path).closed.items() if closed.get(key) != closure]
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(descriptor)
+
+
+def _write_policy(checkout: Path, state_root: Path,
+                  change: "Callable[[ProviderPolicy], tuple[tuple[ProviderGrant, ...], dict] | str]") -> str | None:
+    """El único sitio que escribe la política. Aplica `change` a lo que hay en disco en ese momento, con
+    el candado tomado desde que lo lee hasta que lo reemplaza: un comando que entra en medio espera y
+    escribe sobre este resultado, no sobre una foto anterior.
+
+    `change` recibe la política recién leída y devuelve los permisos y cierres nuevos, o la razón por la
+    que no aplica. No se deja una política que no carga, ni una que quite o cambie un cierre que está en el
+    archivo. `host.json` se vuelve a mirar aquí, porque antes de llegar el comando pudo esperar a opencode
+    y un host pudo arrancar desde este checkout."""
+    path = Path(checkout) / POLICY_FILE
+    _checkpoint("before-lock")
+    with _policy_lock(path):
+        current = ProviderPolicy.load(path)
+        if current.unreadable is not None:
+            return current.unreadable
+        changed = change(current)
+        if isinstance(changed, str):
+            return changed
+        grants, closed = changed
+        touched = [key for key, closure in current.closed.items() if closed.get(key) != closure]
         if touched:
             return f"un comando no quita ni cambia un cierre, y este tocaría el de {', '.join(touched)}"
         refused = _host_checkout(checkout, state_root)
         if refused is not None:
             return refused
-        os.chmod(pending, 0o644)
-        os.replace(pending, path)
-    finally:
-        if os.path.exists(pending):
-            os.unlink(pending)
+        descriptor, pending = tempfile.mkstemp(prefix=".politica-", dir=path.parent)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(policy_document(grants, closed))
+                stream.flush()
+                os.fsync(stream.fileno())
+            unreadable = ProviderPolicy.load(Path(pending)).unreadable
+            if unreadable is not None:
+                return f"la política resultante no carga: {unreadable}"
+            _checkpoint("before-replace")
+            os.chmod(pending, 0o644)
+            os.replace(pending, path)
+        finally:
+            if os.path.exists(pending):
+                os.unlink(pending)
     return None
 
 
@@ -403,8 +442,12 @@ def _closed_phrase(closure: ProviderClosure) -> str:
             f"frase nueva de {OPERATOR}, y cambiar en ese mismo PR la prueba que fija los cierres")
 
 
+def _closed(policy: ProviderPolicy, *keys: "str | None") -> str | None:
+    return next((_closed_phrase(policy.closed[key]) for key in keys if key in policy.closed), None)
+
+
 def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None, ref: str | None,
-             quote: str | None, prompts: Path, checkout: Path, state_root: Path,
+             quote: str | None, checkout: Path, state_root: Path, prompts: Path = PROMPTS_DB,
              include: tuple[str, ...] = (), exclude: tuple[str, ...] = (),
              opencode_bin: Path = OPENCODE_BIN) -> "ProviderRow | str":
     """`encargo.py permitir <nombre> [--proveedor <id>] [--cobro subscription|per-token] [--solo <patrón>]
@@ -423,9 +466,9 @@ def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None,
     policy = ProviderPolicy.load(Path(checkout) / POLICY_FILE)
     if policy.unreadable is not None:
         return policy.unreadable
-    for key in (name, provider):
-        if key in policy.closed:
-            return _closed_phrase(policy.closed[key])
+    refused = _closed(policy, name, provider)
+    if refused is not None:
+        return refused
     refused = _host_checkout(checkout, state_root)
     if refused is not None:
         return refused
@@ -482,13 +525,38 @@ def permitir(name: str, *, provider: ProviderId | None, billing: Billing | None,
         if listed and not any(grant.admits(model) for model in listed):
             return (f"el filtro de {name} no cubre ninguno de los modelos que opencode lista de {grant.provider} "
                     f"({len(listed)}): dejaría el proveedor sin ningún modelo")
-    grants = (tuple(grant if entry.name == name else entry for entry in policy.grants) if existing is not None
-              else policy.grants + (grant,))
-    return _write_policy(checkout, state_root, grants, dict(policy.closed)) or _grant_row(grant, catalog)
+    def put(current: ProviderPolicy) -> "tuple[tuple[ProviderGrant, ...], dict] | str":
+        refused = _closed(current, name, grant.provider)
+        if refused is not None:
+            return refused
+        if next((entry for entry in current.grants if entry.name == name), None) != existing:
+            return f"el permiso {name} cambió mientras este comando corría: vuelve a correrlo"
+        grants = (tuple(grant if entry.name == name else entry for entry in current.grants) if existing is not None
+                  else current.grants + (grant,))
+        return grants, dict(current.closed)
+    return _write_policy(checkout, state_root, put) or _grant_row(grant, catalog)
+
+
+def _cannot_close(policy: ProviderPolicy, provider: ProviderId) -> str | None:
+    if provider in policy.closed:
+        return f"{provider} ya está cerrado y su cierre no se reemplaza. {_closed_phrase(policy.closed[provider])}"
+    named = next((grant for grant in policy.grants
+                  if grant.name == provider and grant.provider not in (None, provider)), None)
+    if named is not None:
+        # Cerrar la palabra dejaría vivo el permiso, y su proveedor seguiría corriendo.
+        return f"{provider} es el nombre del permiso de {named.provider}: lo que se cierra es {named.provider}"
+    return None
+
+
+def _names_the_operator(by: str) -> bool:
+    """Si quien dice cerrar se presenta con el nombre del operador, aunque venga con otras palabras, en
+    otro ancho de letra o con caracteres que no se ven."""
+    visible = "".join(char for char in unicodedata.normalize("NFKC", by) if unicodedata.category(char) != "Cf")
+    return OPERATOR.casefold() in visible.casefold()
 
 
 def cerrar(provider: ProviderId, *, ref: str | None, quote: str | None, by: str | None, reason: str | None,
-           prompts: Path, now: float, checkout: Path, state_root: Path,
+           now: float, checkout: Path, state_root: Path, prompts: Path = PROMPTS_DB,
            opencode_bin: Path = OPENCODE_BIN) -> "ProviderRow | str":
     """`encargo.py cerrar <proveedor> --ref P#### --cita "<palabras del operador>"`, o de emergencia
     `encargo.py cerrar <proveedor> --por "<quién>" --motivo "<por qué>"`.
@@ -500,35 +568,31 @@ def cerrar(provider: ProviderId, *, ref: str | None, quote: str | None, by: str 
     policy = ProviderPolicy.load(Path(checkout) / POLICY_FILE)
     if policy.unreadable is not None:
         return policy.unreadable
-    if provider in policy.closed:
-        return f"{provider} ya está cerrado y su cierre no se reemplaza. {_closed_phrase(policy.closed[provider])}"
-    refused = _host_checkout(checkout, state_root)
+    refused = _cannot_close(policy, provider) or _host_checkout(checkout, state_root)
     if refused is not None:
         return refused
     if not PROVIDER.fullmatch(provider):
         return f"id de proveedor inválido: {provider}"
-    named = next((grant for grant in policy.grants
-                  if grant.name == provider and grant.provider not in (None, provider)), None)
-    if named is not None:
-        # Cerrar la palabra dejaría vivo el permiso, y su proveedor seguiría corriendo.
-        return f"{provider} es el nombre del permiso de {named.provider}: lo que se cierra es {named.provider}"
     cited, emergency = ref is not None or quote is not None, by is not None or reason is not None
     if cited == emergency or (cited and None in (ref, quote)) or (emergency and None in (by, reason)):
         return (f"cerrar pide --ref y --cita con las palabras de {OPERATOR}, o --por y --motivo para cerrar de "
                 "emergencia sin atribuirle nada")
     if cited:
         citation = citar(ref, quote, prompts)
-    elif by.strip().casefold() == OPERATOR.casefold():
-        citation = f"--por no puede ser {OPERATOR}: lo que él decide se cita con --ref y --cita"
+    elif _names_the_operator(by):
+        citation = f"--por no puede nombrar a {OPERATOR}: lo que él decide se cita con --ref y --cita"
     else:
         citation = OperatorCitation.parse({"by": by, "on": time.strftime("%Y-%m-%d", time.gmtime(now)),
                                            "ref": UNVERIFIED_REF, "quote": reason})
     if isinstance(citation, str):
         return citation
     closure = ProviderClosure(provider, citation)
-    grants = tuple(grant for grant in policy.grants
-                   if grant.provider != provider and not (grant.provider is None and grant.name == provider))
-    written = _write_policy(checkout, state_root, grants, {**policy.closed, provider: closure})
+
+    def close(current: ProviderPolicy) -> "tuple[tuple[ProviderGrant, ...], dict] | str":
+        grants = tuple(grant for grant in current.grants
+                       if grant.provider != provider and not (grant.provider is None and grant.name == provider))
+        return _cannot_close(current, provider) or (grants, {**current.closed, provider: closure})
+    written = _write_policy(checkout, state_root, close)
     return written or _closure_row(closure, _catalog_for_the_row(CatalogStore(opencode_bin, state_root)))
 
 
@@ -576,7 +640,6 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--state-root", type=Path, default=STATE_ROOT, help="donde viven host.json y catalogo.json")
     parser.add_argument("--opencode", type=Path, default=OPENCODE_BIN, help="ruta absoluta de opencode")
     parser.add_argument("--workspace-root", type=Path, default=ALLOWED_ROOT, help="raíz de los repos de encargos")
-    parser.add_argument("--prompts", type=Path, default=PROMPTS_DB, help="historial de prompts para cotejar una cita")
     commands = parser.add_subparsers(dest="command", required=True)
     prepare = commands.add_parser("preparar", help="dice si un pedido puede correr y con qué argumentos de brief.py")
     prepare.add_argument("--repo", type=Path)
@@ -648,9 +711,11 @@ _COMMANDS = {"preparar": _run_preparar, "estado": _run_estado, "proveedores": _r
              "permitir": _run_politica, "cerrar": _run_politica}
 
 
-def main(argv: "list[str] | None" = None) -> int:
+def main(argv: "list[str] | None" = None, *, prompts: Path = PROMPTS_DB) -> int:
+    """`prompts` no tiene bandera: la línea de comandos coteja siempre contra el historial fijo."""
     parser = _parser()
     args = parser.parse_args(argv)
+    args.prompts = prompts
     if not args.opencode.is_absolute():
         parser.error(f"--opencode va con ruta absoluta: {args.opencode}")
     where = {"state_root": args.state_root, "checkout": args.checkout, "opencode_bin": args.opencode}

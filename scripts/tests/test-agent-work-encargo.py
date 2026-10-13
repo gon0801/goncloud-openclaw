@@ -15,8 +15,10 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
@@ -87,7 +89,7 @@ class Mac(unittest.TestCase):
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = encargo.main(["--checkout", str(self.checkout), "--state-root", str(self.state),
                                  "--opencode", str(self.bin / "opencode"), "--workspace-root", str(self.root / "dev"),
-                                 "--prompts", str(self.prompts), *args])
+                                 *args], prompts=self.prompts)
         return code, out.getvalue(), err.getvalue()
 
     def preparar(self, *args, repo=True):
@@ -440,6 +442,23 @@ class Permitir(Mac):
         self.assert_refused(["mistral", "--cobro", "subscription", "--ref", "P10901", "--cita", "  "], "vacía")
         self.assert_refused(["mistral", "--cobro", "subscription", "--ref", "commit abc123 de David", "--cita",
                              "permite mistral para por CLI"], "no es un prompt P####")
+        self.assert_refused(["mistral", "--cobro", "subscription", "--ref", "P" + "9" * 19, "--cita",
+                             "permite mistral para por CLI"], "no es un prompt P####")
+        self.assert_refused(["mistral", "--cobro", "subscription", "--ref", "P" + "9" * 18, "--cita",
+                             "permite mistral para por CLI"], "no existe el prompt P999999999999999999")
+
+    def test_the_command_line_has_no_way_to_point_the_check_at_another_prompt_store(self):
+        before = self.policy_path.read_bytes()
+        for position in (0, -1):
+            argv = ["--checkout", str(self.checkout), "--state-root", str(self.state), "--opencode",
+                    str(self.bin / "opencode"), "permitir", "mistral", "--cobro", "subscription", "--ref", "P10901",
+                    "--cita", "permite mistral para por CLI"]
+            argv[len(argv) if position else 0:len(argv) if position else 0] = ["--prompts", str(self.prompts)]
+            with self.subTest(argv[0]), self.assertRaises(SystemExit) as stopped, \
+                    contextlib.redirect_stderr(io.StringIO()):
+                encargo.main(argv)
+            self.assertEqual(stopped.exception.code, 2)
+        self.assertEqual(self.policy_path.read_bytes(), before)
         self.assert_refused(["mistral", "--cobro", "subscription"], "--ref y --cita")
         self.assert_refused(["mistral", "--cobro", "subscription", "--cita", "permite mistral"], "van juntas")
 
@@ -595,13 +614,14 @@ class Permitir(Mac):
         kept = dict(policy.closed)
         kept.pop("zai")
         self.assertIn("no quita ni cambia un cierre, y este tocaría el de zai",
-                      encargo._write_policy(self.checkout, self.state, policy.grants, kept))
+                      encargo._write_policy(self.checkout, self.state, lambda current: (current.grants, kept)))
         changed = {**policy.closed, "opencode-go": policy.closed["opencode"].__class__(
             "opencode-go", policy.grants[0].decision)}
         self.assertIn("tocaría el de opencode-go",
-                      encargo._write_policy(self.checkout, self.state, policy.grants, changed))
+                      encargo._write_policy(self.checkout, self.state, lambda current: (current.grants, changed)))
         self.assertEqual(self.policy_path.read_bytes(), before)
-        self.assertIsNone(encargo._write_policy(self.checkout, self.state, policy.grants, dict(policy.closed)))
+        self.assertIsNone(encargo._write_policy(self.checkout, self.state,
+                                                lambda current: (current.grants, dict(current.closed))))
         self.assertEqual(self.policy_path.read_bytes(), before)
 
     def test_an_unreadable_policy_is_not_rewritten(self):
@@ -656,15 +676,20 @@ class Cerrar(Mac):
         answer = json.loads(self.cli("preparar", "--modelo", "xai/grok-4.7")[1])
         self.assertEqual((answer["causa"], answer["frase"].split(". Permitidos")[0]), (
             "proveedor-no-permitido",
-            f"xai está cerrado para encargos. Claude en la Mac, {today}: «gasto que nadie pidió en xai»"))
+            f"xai está cerrado para encargos. Claude en la Mac, {today}, sin-cotejar: «gasto que nadie pidió en xai»"))
         listed = self.cli("proveedores")[1].splitlines()
         self.assertEqual([line.split()[-1] for line in listed if " cerrado " in line],
                          ["P10845", "P10867", "P9840", "sin-cotejar"])
 
     def test_an_emergency_closure_names_who_closes_and_why_and_is_never_david(self):
         before = self.policy_path.read_bytes()
-        for args, piece in ((["--por", "David", "--motivo", "lo dijo ayer"], "--por no puede ser David"),
-                            (["--por", " david ", "--motivo", "lo dijo ayer"], "--por no puede ser David"),
+        for args, piece in ((["--por", "David", "--motivo", "lo dijo ayer"], "--por no puede nombrar a David"),
+                            (["--por", " david ", "--motivo", "lo dijo ayer"], "--por no puede nombrar a David"),
+                            (["--por", "David (emergencia)", "--motivo", "x"], "--por no puede nombrar a David"),
+                            (["--por", "el DAVID de siempre", "--motivo", "x"], "--por no puede nombrar a David"),
+                            (["--por", "Ｄａｖｉｄ", "--motivo", "x"], "--por no puede nombrar a David"),
+                            (["--por", "Da\u200bvid", "--motivo", "x"], "--por no puede nombrar a David"),
+                            (["--por", "Dav\u00adid\ufeff", "--motivo", "x"], "--por no puede nombrar a David"),
                             (["--por", "Claude en la Mac"], "--por y --motivo"), (["--motivo", "gasto raro"], "--por"),
                             (["--por", "Claude", "--motivo", "  "], "quote"), ([], "--ref y --cita"),
                             (["--ref", "P10902"], "--ref y --cita"),
@@ -696,6 +721,90 @@ class Cerrar(Mac):
         policy = self.policy()
         self.assertEqual(([grant.name for grant in policy.grants][4:], "kimi" in policy.closed),
                          (["muse", "qwen", "deepseek"], True))
+
+
+class TwoWritersAtOnce(Mac):
+    """The policy lock, without a race: the first writer stops right before it replaces the file, the second
+    one starts, and the first waits to see whether the second gets into the same stretch."""
+
+    def writers(self, first, second):
+        """Runs `first` on this thread and starts `second` when `first` is about to replace the file. Returns
+        what each answered and whether `second` reached its own replace while `first` was still there."""
+        answers, reached_the_lock, replacing = {}, threading.Event(), threading.Event()
+        other = threading.Thread(target=lambda: answers.__setitem__("second", second()))
+
+        def checkpoint(where):
+            if threading.current_thread() is other:
+                (reached_the_lock if where == "before-lock" else replacing).set()
+            elif where == "before-replace":
+                other.start()
+                self.assertTrue(reached_the_lock.wait(10))
+                answers["overlapped"] = replacing.wait(0.5)
+
+        with mock.patch.object(encargo, "_checkpoint", checkpoint):
+            answers["first"] = first()
+            other.join(20)
+        self.assertFalse(other.is_alive())
+        return answers
+
+    def where(self):
+        return {"checkout": self.checkout, "state_root": self.state, "prompts": self.prompts,
+                "opencode_bin": self.bin / "opencode"}
+
+    def grant(self, name, quote="permite mistral para por CLI"):
+        return lambda: encargo.permitir(name, provider=None, billing="subscription", ref="P10901", quote=quote,
+                                        **self.where())
+
+    def test_an_emergency_closure_that_arrives_while_a_grant_is_being_written_is_not_lost(self):
+        answers = self.writers(self.grant("mistral"), lambda: encargo.cerrar(
+            "xai", ref=None, quote=None, by="Claude en la Mac", reason="carrera", now=time.time(), **self.where()))
+        self.assertEqual((answers["overlapped"], answers["first"].decision, answers["second"].decision),
+                         (False, "permitido", "cerrado"))
+        policy = self.policy()
+        self.assertEqual((sorted(policy.closed), [grant.name for grant in policy.grants]),
+                         (["opencode", "opencode-go", "xai", "zai"],
+                          ["glm", "claude", "gpt", "muse", "kimi", "qwen", "deepseek", "mistral"]))
+
+    def test_a_grant_that_arrives_while_another_grant_is_being_written_is_not_lost(self):
+        answers = self.writers(self.grant("mistral"), self.grant("cohere", "cobra por suscripción"))
+        self.assertEqual((answers["overlapped"], answers["first"].name, answers["second"].name),
+                         (False, "mistral", "cohere"))
+        self.assertEqual([grant.name for grant in self.policy().grants][8:], ["mistral", "cohere"])
+
+    def test_a_grant_decided_on_an_entry_that_changed_meanwhile_is_not_written_over_it(self):
+        ran = []
+
+        def checkpoint(where):
+            if where == "before-lock" and not ran:
+                ran.append(None)
+                ran[0] = encargo.permitir("qwen", provider=None, billing=None, ref="P10886", include=("qwen3.8*",),
+                                          quote="dejar solo los modelos qwen", **self.where())
+
+        with mock.patch.object(encargo, "_checkpoint", checkpoint):
+            answer = encargo.permitir("qwen", provider=None, billing="per-token", ref="P10901",
+                                      quote="permite mistral para por CLI", **self.where())
+        self.assertEqual((ran[0].permitted_models, answer),
+                         (2, "el permiso qwen cambió mientras este comando corría: vuelve a correrlo"))
+        qwen = self.policy().grant_for("alibaba-token-plan")
+        self.assertEqual((qwen.billing, qwen.models.include, qwen.decision.ref), ("subscription", ("qwen3.8*",), "P10867"))
+
+    def test_a_closure_of_the_same_provider_wins_over_the_grant_that_was_still_being_decided(self):
+        self.edit_policy(lambda doc: doc["providers"][5].update(provider=None))
+        closed_meanwhile = []
+
+        def checkpoint(where):
+            if where == "before-lock" and not closed_meanwhile:
+                closed_meanwhile.append(None)
+                closed_meanwhile[0] = encargo.cerrar("kimi-code-plan-cn", ref=None, quote=None, by="Claude en la Mac",
+                                                     reason="carrera", now=time.time(), **self.where())
+
+        with mock.patch.object(encargo, "_checkpoint", checkpoint):
+            answer = encargo.permitir("kimi", provider="kimi-code-plan-cn", billing=None, ref=None, quote=None,
+                                      **self.where())
+        self.assertEqual(closed_meanwhile[0].decision, "cerrado")
+        self.assertIn("kimi-code-plan-cn está cerrado por Claude en la Mac", answer)
+        self.assertEqual((self.policy().grant_for("kimi-code-plan-cn"), "kimi-code-plan-cn" in self.policy().closed),
+                         (None, True))
 
 
 class ClosedStaysClosed(Mac):
