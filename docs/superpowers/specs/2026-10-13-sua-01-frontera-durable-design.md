@@ -1290,7 +1290,7 @@ En R, subir la versión del esquema y poder volver al binario anterior se excluy
 El contrato lo define como "época con la que se admitió" y el validador exige un entero desde 1. Un intento `pending` o `ready` todavía no se admitió.
 - Opción A: `readManagedRoot` emite la época vigente de la raíz mientras el intento no tenga `admission_epoch`. Las unidades sin intento no emiten documento (conflicto 9).
 - Opción B: cambiar el contrato para que el campo admita `null`. Según sus propias reglas de versión, cambiar un tipo sube la versión mayor.
-- Recomendación: A, y una frase aclaratoria en el contrato en un PR de G aparte: "antes de admitir, la época vigente de la raíz". No cambia el esquema ni los fixtures.
+- Recomendación: A, y una frase aclaratoria en el contrato: "antes de admitir, la época vigente de la raíz". No cambia el esquema ni los fixtures. La escribe la rebanada 15, que es la de G.
 
 **Conflicto 3. "Pausa de una tarea gestionada" (inventario de SUA-00) frente a `control` sobre la raíz (contrato).**
 - Opción A: la pausa es solo de la raíz. Una tarea suelta no se pausa.
@@ -1542,6 +1542,14 @@ La segunda instalación es la del cierre del bloque, con la rebanada 14 mergeada
 | Un contrato de resultado nuevo, además de `review.v1` y `ready.v1` | El contrato pide que el bloque que lo necesite lo agregue en los dos lados. | El que lo necesite |
 
 ## 8. Riesgos, `unknown` y decisiones pendientes
+
+**Tres estados que el esquema deja escribir.** Los encontró la revisión del diseño (2026-10-13) con un probe propio. No están entre las promesas de la sección 4.1 y los cierra una guarda en ejecución, pero el implementador tiene que saber que el esquema no los caza:
+
+- Un `outcome_ref` que cita una orden que no existe. No lleva llave foránea porque apunta a tres cosas distintas (commit, época o revisión). Lo cubre la validación de quien lo escribe.
+- Un escritor a nombre de una unidad que el plan no tiene. Lo cierran la comprobación 6 del commit y `releaseUnitWriters`.
+- Un claim de evidencia con un `criterionId` que la unidad no define. Es inofensivo: nunca satisface un criterio real.
+
+Cada uno lleva su prueba en la rebanada que escribe esa tabla: la prueba intenta el estado por la función pública y espera el rechazo.
 
 ### Lo que no se pudo comprobar
 
