@@ -190,6 +190,55 @@ app del iPhone y Telegram. Confirmar después con `config.get` (comparar
   la rama `respaldo/runtime` de cada repo `goncloud-workspace-*`, una vez al
   día desde la Mac (`scripts/mac/respaldo-workspaces.sh`, instalación en
   `scripts/mac/ai.goncloud.respaldo-workspaces.plist`). El respaldo solo lee
-  el runtime y nunca empuja a `master`.
+  el runtime y nunca empuja a `master`. Desde el 2026-10-09 el runtime es la
+  Mac mini y el script lee `~/.openclaw` de ese host (`RESPALDO_RUNTIME`).
+  Cómo se restaura está en "Restaurar un workspace desde el respaldo".
 - **Watchdog**: `gateway-watchdog.ps1` se publica, pero la tarea programada
   `OpenClaw Gateway Watchdog` está deshabilitada. Publicar no la enciende.
+
+## Restaurar un workspace desde el respaldo
+
+Úsalo después de reinstalar el gateway o un agente, o cuando un archivo de instrucciones se perdió. El `AGENTS.md` del workspace de `main` trae reglas que no viven en ningún otro repo, entre ellas que "por CLI" siempre es un encargo y el formato de los reportes a David. Una reinstalación que deja ese archivo de fábrica las pierde.
+
+Todo corre en la Mac. Los ejemplos usan el workspace de `main`. Para los otros dos cambia `goncloud-workspace-main` y `workspace` por su par (`goncloud-workspace-operaciones` con `workspace-operaciones`, `goncloud-workspace-ingenieria` con `workspace-ingenieria`).
+
+1. Trae el respaldo y mira de cuándo es:
+
+   ```
+   R=~/.openclaw-respaldo/goncloud-workspace-main
+   git -C $R fetch origin
+   git -C $R log -5 --format='%ci %h %s' origin/respaldo/runtime
+   ```
+
+   Si el más reciente tiene más de dos días, el respaldo diario dejó de correr: revisa `~/Library/Logs/respaldo-workspaces.log` antes de restaurar.
+
+2. Saca una copia del commit que quieres, sin tocar nada vivo:
+
+   ```
+   D=$(mktemp -d); git -C $R archive origin/respaldo/runtime | tar -xf - -C "$D"
+   ```
+
+3. Compara con lo vivo antes de pisar. Sin salida, son iguales:
+
+   ```
+   ssh gon@100.73.187.5 'cat ~/.openclaw/workspace/AGENTS.md' | diff - "$D/AGENTS.md"
+   ```
+
+4. Restaura el archivo, con una copia del vivo al lado:
+
+   ```
+   ssh gon@100.73.187.5 'cp -p ~/.openclaw/workspace/AGENTS.md ~/.openclaw/workspace/AGENTS.md.antes-de-restaurar-$(date -u +%Y%m%dT%H%M%SZ)'
+   scp "$D/AGENTS.md" gon@100.73.187.5:.openclaw/workspace/AGENTS.md
+   ```
+
+   Para la carpeta entera, `rsync -a "$D"/ gon@100.73.187.5:.openclaw/workspace/` sin `--delete`: agrega y reemplaza, no borra lo que el vivo tenga de más.
+
+5. Comprueba las dos reglas de `main`. Cada línea debe imprimir `1`:
+
+   ```
+   ssh gon@100.73.187.5 "grep -c 'Si David dice \"por CLI\", es un encargo' ~/.openclaw/workspace/AGENTS.md; grep -c 'Formato de ese reporte' ~/.openclaw/workspace/AGENTS.md"
+   ```
+
+El siguiente turno de cada agente lee el archivo restaurado. No hace falta reiniciar el gateway.
+
+Si el respaldo diario falla, avisa solo. Primero le pide a `main` que se lo diga a David por Telegram. Si el gateway no contesta, deja una notificación en la Mac. La causa queda en `~/Library/Logs/respaldo-workspaces.log`.

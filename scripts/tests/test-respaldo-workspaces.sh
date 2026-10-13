@@ -13,6 +13,10 @@
 #      el remoto por defecto es HTTPS (launchd no tiene agente SSH con llaves).
 #   9-12. Lock huérfano se recupera, lock vivo se respeta, config SSH ilegible aborta,
 #         un PID reusado por otro proceso no retiene el lock.
+#   13-15. Por SSH pide la carpeta del runtime de la Mini (nunca la de Windows), reintenta
+#          una copia que falla y aborta con la causa cuando se acaban los intentos.
+#   16. Una corrida que falla avisa una vez con su causa; una que sale bien o que
+#       encuentra el lock de otra corrida viva no avisa.
 #
 # Uso: bash scripts/tests/test-respaldo-workspaces.sh
 set -u
@@ -24,6 +28,10 @@ fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
 
 SB="$(mktemp -d)"
 trap 'rm -rf "$SB"' EXIT
+# Ninguna corrida de esta prueba avisa de verdad: el aviso queda escrito en un archivo.
+printf '#!/bin/sh\nprintf "%%s\\n" "$1" >> "%s/avisos"\n' "$SB" > "$SB/aviso"; chmod +x "$SB/aviso"
+export RESPALDO_AVISO_CMD="$SB/aviso"
+avisos() { [ -f "$SB/avisos" ] && wc -l < "$SB/avisos" | tr -d ' ' || echo 0; }
 export GIT_CONFIG_GLOBAL="$SB/gitconfig" GIT_CONFIG_NOSYSTEM=1
 git config --global user.name prueba; git config --global user.email prueba@example.invalid
 git config --global init.defaultBranch master
@@ -123,6 +131,64 @@ grep -q "no se pudo copiar" "$SB/salida" && fail "con la config ilegible igual i
 mkdir -p "$SB/clones/.lock"; echo "$$ Thu 1 Jan 00:00:00 1970" > "$SB/clones/.lock/dueno"
 correr env || { cat "$SB/salida"; fail "un PID reusado retuvo el lock"; }
 grep -q "lock huérfano" "$SB/salida" || fail "no trató el PID reusado como huérfano"
+
+# 13. Por SSH pide la carpeta del runtime de la Mini. El 2026-10-09 el gateway se mudó a
+#     la Mini y el respaldo siguió pidiendo C:/Users/ehven/.openclaw: abortó cada noche.
+cat > "$SB/oc" <<'EOS'
+#!/bin/sh
+case "$3" in
+  *sshTarget) echo '"host-de-prueba"' ;;
+  *sshIdentity) echo '"/dev/null"' ;;
+esac
+EOS
+chmod +x "$SB/oc"
+cat > "$SB/ssh" <<EOS
+#!/bin/sh
+n=\$(cat "$SB/ssh-llamadas" 2>/dev/null || echo 0); n=\$((n + 1)); echo \$n > "$SB/ssh-llamadas"
+for a in "\$@"; do ultimo="\$a"; done
+printf '%s\n' "\$ultimo" > "$SB/ssh-comando"
+if [ \$n -le \$(cat "$SB/ssh-fallas" 2>/dev/null || echo 0) ]; then echo "ssh: connect to host: Operation timed out" >&2; exit 255; fi
+tar -cf - -C "$F" workspace workspace-operaciones workspace-ingenieria
+EOS
+chmod +x "$SB/ssh"
+por_ssh() {
+  rm -f "$SB/ssh-llamadas"; echo "$1" > "$SB/ssh-fallas"
+  OPENCLAW_BIN="$SB/oc" RESPALDO_SSH="$SB/ssh" RESPALDO_ESPERA=0 RESPALDO_DIR="$SB/clones" RESPALDO_FUENTE=ssh \
+    RESPALDO_REMOTO_BASE="$SB/remotos" RESPALDO_MAX_MB=1 bash "$S" > "$SB/salida" 2>&1
+}
+printf 'cambio por ssh\n' > "$F/workspace/memory/2026-10-13.md"
+a0="$(avisos)"
+por_ssh 0 || { cat "$SB/salida"; fail "la copia por SSH falló"; }
+[ "$(cat "$SB/ssh-comando")" = "tar -cf - -C .openclaw workspace workspace-operaciones workspace-ingenieria" ] \
+  || fail "por SSH pidió otra cosa: [$(cat "$SB/ssh-comando")]"
+grep -q 'C:/' "$S" && fail "el script todavía nombra una carpeta de Windows"
+rama_arbol goncloud-workspace-main | grep -q "memory/2026-10-13.md" || fail "lo copiado por SSH no llegó a la rama"
+[ "$(avisos)" = "$a0" ] || fail "una corrida que salió bien avisó"
+
+# 14. Una copia que falla se reintenta: dos fallas y a la tercera va.
+printf 'otro cambio\n' > "$F/workspace/memory/2026-10-14.md"
+por_ssh 2 || { cat "$SB/salida"; fail "no reintentó la copia por SSH"; }
+[ "$(cat "$SB/ssh-llamadas")" = 3 ] || fail "esperaba 3 llamadas a ssh, hubo $(cat "$SB/ssh-llamadas")"
+grep -q "intento 2 de copia por SSH falló (ssh: connect to host: Operation timed out" "$SB/salida" \
+  || fail "no dejó en el log el intento que falló"
+rama_arbol goncloud-workspace-main | grep -q "memory/2026-10-14.md" || fail "tras reintentar no respaldó"
+[ "$(avisos)" = "$a0" ] || fail "un reintento que terminó bien avisó"
+
+# 15 y 16. Sin más intentos aborta con la causa, y avisa una sola vez con ella.
+por_ssh 99; rc=$?
+[ "$rc" -eq 4 ] || fail "una copia que nunca llega no salió con 4 (rc=$rc)"
+[ "$(cat "$SB/ssh-llamadas")" = 3 ] || fail "no se detuvo a los 3 intentos"
+[ "$(avisos)" = "$((a0 + 1))" ] || fail "una corrida que abortó no avisó exactamente una vez"
+tail -1 "$SB/avisos" | grep -q "falló: ABORTO: no se pudo copiar los workspaces por SSH tras 3 intento(s): ssh: connect to host: Operation timed out" \
+  || fail "el aviso no trae la causa: $(tail -1 "$SB/avisos")"
+[ -e "$SB/clones/.lock" ] && fail "el lock quedó tomado tras abortar"
+# El lock de otra corrida viva no es una falla del respaldo: no avisa.
+mkdir -p "$SB/clones/.lock"; printf '%s' "$yo" > "$SB/clones/.lock/dueno"
+a1="$(avisos)"; correr env; rc=$?
+[ "$rc" -eq 3 ] || fail "con el lock vivo no salió con 3 (rc=$rc)"
+[ "$(avisos)" = "$a1" ] || fail "el lock de otra corrida viva disparó un aviso"
+[ "$(cat "$SB/clones/.lock/dueno")" = "$yo" ] || fail "se robó el lock de un proceso vivo"
+rm -rf "$SB/clones/.lock"
 
 # 8
 grep -vE '^[[:space:]]*#' "$S" | grep -nE -- '--force|push -f|\+HEAD:|\+refs/' && fail "el respaldo puede forzar un push"
