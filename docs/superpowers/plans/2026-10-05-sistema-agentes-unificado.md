@@ -156,8 +156,8 @@ SUA-00 corrió en solo lectura desde G `2213b930` y R `4acb881` y cerró el
 de `4acb881e`), así que esa condición de SUA-01 está cumplida. El inventario
 (`SUA-00-inventario.md`, "Host de encargos: piezas que el plan pide por nombre")
 cubrió las incidencias de host (`managedTasks.host.incident`;
-`record_incident` y `flush_incidents` en `scripts/agent-work/host.py` y
-`spool.py`), `CLI_ROUTES` (`routing.py`), `coverage.json.modelWakes`,
+`record_incident` en `scripts/agent-work/host.py` y `spool.py`, y `flush_incidents`
+en `host.py`), `CLI_ROUTES` (`routing.py`), `coverage.json.modelWakes`,
 `main_cli_loop`, `managedTasks.host.cancellation`, el
 corte `cutover_live.py` y la publicación del host (`ProgressPublisher`).
 `detect_silent_failures` se borró el 2026-10-13 con la sesión adoptada (PR #290);
@@ -207,11 +207,12 @@ Cada punto tiene su comando de comprobación. Se corren desde la MacBook, sobre
 1. **R local construido en su HEAD.** `git -C /Users/dn/dev/openclaw-agent-work-integration rev-parse HEAD`
    imprime `4acb881e015a27a36a5d5f2cb4002783e79cf29d`. El build de R escribe
    `dist/build-info.json` con el campo `commit` (`scripts/write-build-info.ts:135`,
-   `pnpm build`). Hoy ese archivo no existe en el checkout (`ls dist/build-info.json`
-   falla) y `followups.md` ("Ruta viva sin e2e contra R") dice que el `dist` que hay
-   es de `605aef74`. Comprobación, después de `pnpm build`:
+   `pnpm build`). Hecho el 2026-10-13 a las 17:43 UTC: el `dist` anterior era de
+   `605aef74`, y ahora `dist/build-info.json` dice `4acb881e…`. Con ese build la
+   línea base contra R dio `main_cli_loop` 1 OK y `cutover_fencing` 5 OK sobre G
+   `f1d25bbf`. Comprobación, que se repite después de cada `pnpm build`:
    `python3 -c "import json; print(json.load(open('dist/build-info.json'))['commit'])"`
-   imprime el mismo sha que `rev-parse HEAD`. Hasta entonces no corre en esta Mac
+   imprime el mismo sha que `rev-parse HEAD`. Sin ese build no corre en esta Mac
    ningún caso de `scripts/tests/test-agent-work-e2e.sh` que pida
    `AGENT_WORK_RUNTIME_SOURCE con R construido` (`main_cli_loop`,
    `cutover_fencing`, `acceptance_pair`) ni `test-runtime.sh projection_gateway`
@@ -229,7 +230,8 @@ Cada punto tiene su comando de comprobación. Se corren desde la MacBook, sobre
    `run-per-task`, opencode 1.18.35), entra la fila `main → mac-local/opencode`
    con `certified: true` y `B22-canarios.md` como evidencia, y `modelWakes` y
    `cronJobs` se rehacen con una lectura nueva de `openclaw cron list --json`
-   (M-09 del 2026-10-13 dio 30 crons y un solo vigía, `bids-02-vigia`). La foto
+   (M-09 del 2026-10-13 dio 30 crons y un solo vigía, `bids-02-vigia`, a las 14:47 UTC; a las
+   18:09 UTC eran 29 y ninguno, porque ese loop cerró y su vigía borró su propio cron). La foto
    nueva es un archivo nuevo y un sha256 literal nuevo en
    `test_every_live_cron_is_classified` (`scripts/tests/test-agent-work-routing.py:298-344`).
    Comprobación: `python3 scripts/tests/test-agent-work-routing.py` en verde y
@@ -240,7 +242,7 @@ Cada punto tiene su comando de comprobación. Se corren desde la MacBook, sobre
 3. **Un e2e de la ruta viva contra R antes de tocar `src/agents/tasks/`.** Hace
    falta, por esto: SUA-01 cambia `managed-task.{db,store,types}.ts` y migra
    datos, y el host de encargos depende de esas tablas y de
-   `managedTasks.host.*` (`assertHostDevice`, `managed-tasks.ts:145-162`;
+   `managedTasks.host.*` (`assertHostDevice`, `src/gateway/server-methods/managed-tasks.ts:145-162`;
    incidencias `:402-433`; cancelación `:371-401`). La única evidencia de la ruta
    viva contra un gateway real son los canarios de B22, que corrieron en la Mini,
    y las pruebas de G usan un doble (`FakeR`, `test-agent-work-sesion.py`). Los e2e
@@ -448,20 +450,24 @@ verbo se reintentó cinco veces y cayó a `claude-cli` (M-03); un controlador
 contesta `NO_REPLY` casi siempre. Decisión que esos hechos sostienen: el
 controlador despierta por el evento de sistema que R ya emite, a la sesión
 durable del solicitante, y no se agrega ningún `agent --message` ni ningún cron
-como despertador. La espera detrás de un turno de `main` es el coste conocido, y
-hoy su única fuente grande es `bids-02-vigia`.
+como despertador. La espera detrás de un turno de `main` es el coste conocido. Su
+única fuente grande era `bids-02-vigia`, que borró su propio cron el 2026-10-13 al
+cerrar su loop; vuelve con cada loop de claw que arranque con vigía.
 
 Lo que queda sin medir decide dónde vive el controlador, y se mide en este bloque
 antes de "Verificar", con el mismo método de M-02 (lectura de
 `trajectory_runtime_events`, sesiones `agent:<agente>:sua-ensayo-*` sin
 `--deliver`, borradas al final):
 
-- M-11, controlador en un agente propio. Con una corrida de `bids-02-vigia` en
-  vuelo, un `system event --mode now` a una sesión de otro agente ya configurado
-  en la Mini (por ejemplo `ingenieria`), tres muestras. Criterio: si en las tres
-  el turno empieza antes de que termine la corrida del vigía, el controlador vive
+- M-11, controlador en un agente propio. Con un turno de `main` en vuelo, un
+  `system event --mode now` a una sesión de otro agente ya configurado en la Mini
+  (por ejemplo `ingenieria`), tres muestras. El turno en vuelo se provoca como en
+  la segunda pasada de M-02: un `agent --message` a una sesión de ensayo de `main`
+  que corre `sleep 45` con `exec`. Ya no sirve esperar al vigía: no hay ninguno
+  desde el 2026-10-13. Criterio: si en las tres el turno del otro agente empieza
+  antes de que termine el turno de `main`, el controlador vive
   en un agente propio, ese agente entra a `managedTasks.requesters`
-  (`resolveManagedRequesterTools`, `openclaw-tools.managed-tools.ts:52-56`) y
+  (`resolveManagedRequesterTools`, `openclaw-tools.managed-tools.ts:53-59`) y
   `main` le pasa el pedido. Si en alguna espera, se queda en `main` y el plan
   acepta la fila: ninguna de las dos opciones cambia el verbo.
 - M-12, solo si SUA-02 necesita un tic periódico además del evento de R: coste de
@@ -892,7 +898,7 @@ commits, migración de store, rutas administradas y capacidades.
    El inventario parte del `coverage.json.modelWakes` ya rehecho en "Preparación
    antes de SUA-01", punto 2 (la foto del 2026-10-07 queda como historia), y de
    una lectura nueva de `openclaw cron list --json` el día del corte: M-09 del
-   2026-10-13 dio 30 crons habilitados y un solo vigía, `bids-02-vigia`, y
+   2026-10-13 dio 30 crons habilitados y un solo vigía, `bids-02-vigia`, que se borró ese mismo día, y
    `prompt-claw` §7 ya no crea `<loop>-vigia` en la ruta de encargos. El cambio
    de dueño usa el corte existente (`cutover_live.py`, `agent-work-cutover.v2`,
    subcomandos `prepare|inspect|apply|freeze|revert`; `rollback` es función sin
