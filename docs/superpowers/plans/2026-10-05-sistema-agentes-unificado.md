@@ -38,8 +38,8 @@ y Hermes funcionan en sus computadoras con estado y credenciales independientes.
 
 <!-- corr: D14 -->
 La autorización vigente es la del 2026-10-13 (abajo). Cubre implementar, lanzar
-trabajadores, integrar en R y en G, instalar versiones de R en la Mini de madrugada
-y el cambio de dueño de SUA-09, en el orden de este plan y sin volver a preguntar
+trabajadores, integrar en R y en G, instalar versiones de R en la Mini (a cualquier
+hora desde la corrección D15) y el cambio de dueño de SUA-09, en el orden de este plan y sin volver a preguntar
 por cada paso. No cubre el deploy de producción de Orbit (SUA-08 paso 4 y el
 ensayo real de SUA-10O) ni ninguna decisión de dinero o de proveedor: ahí se avisa
 a David y se espera su respuesta. Una autorización se interpreta con su alcance
@@ -192,7 +192,7 @@ de artefactos; compartir contratos no crea dependencia de disponibilidad entre h
 | SUA-06 | Proyección, avisos y LobsterBoard | SUA-02 | autorizado el 2026-10-13 |
 | SUA-07 | Implementación Hermes independiente | SUA-00; `gon-pc` en la red | autorizado el 2026-10-13; empieza cuando `gon-pc` esté en la red |
 | SUA-08 | Automatización de deploy de Orbit | SUA-05 | autorizado el 2026-10-13, salvo el deploy de producción (se avisa y se espera) |
-| SUA-09O | Paquete y transición exclusiva OpenClaw | SUA-04, SUA-05, SUA-06 | autorizado el 2026-10-13, cambio de dueño incluido; instala solo de madrugada |
+| SUA-09O | Paquete y transición exclusiva OpenClaw | SUA-04, SUA-05, SUA-06 | autorizado el 2026-10-13, cambio de dueño incluido; instala según "Regla de instalación en vivo" <!-- corr: D15 --> |
 | SUA-09H | Paquete y transición exclusiva Hermes | SUA-04, SUA-05, SUA-06, SUA-07 | autorizado el 2026-10-13; empieza cuando `gon-pc` esté en la red |
 | SUA-10O | Aceptación OpenClaw y Orbit | SUA-08, SUA-09O | autorizado el 2026-10-13, salvo el ensayo real de Orbit (se avisa y se espera) |
 | SUA-10H | Aceptación Hermes | SUA-09H | autorizado el 2026-10-13; empieza cuando `gon-pc` esté en la red |
@@ -305,7 +305,8 @@ autorizó el 2026-10-13 sin preguntarle cada vez. <!-- corr: D15 -->
 - **Un hueco sin nadie trabajando.** Antes de detener el gateway: ningún cron con
   `runningAtMs`, ninguno con su próxima corrida en menos de 150 s, ningún turno
   de agente empezado y sin terminar en la Mini (eventos `session.started` sin
-  `session.ended` en `trajectory_runtime_events`, últimos 30 min) y ningún
+  `session.ended` en `trajectory_runtime_events`, últimas 6 h; un turno
+  colgado más viejo lo ve quien lea esa tabla, no este filtro) y ningún
   encargo en vuelo (admisión `claimed` o `admitted` sin resultado ni
   cancelación). Se espera ese hueco hasta 20 min; si no llega, no se instala. La
   parada, la foto, la instalación y el arranque midieron entre 32 y 46 s en las
