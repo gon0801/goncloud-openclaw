@@ -26,7 +26,13 @@ from sistema_agentes.contrato import (  # noqa: E402
 
 FIXTURES = ROOT / "scripts/tests/fixtures/sistema-agentes"
 PLAN = ROOT / "docs/superpowers/plans/2026-10-05-sistema-agentes-unificado.md"
-FUERA_DE_CASOS = {"casos.json", "manifiesto-ensayos.json", "efectos.json", "transiciones.json"}
+FUERA_DE_CASOS = {
+    "casos.json",
+    "manifiesto-ensayos.json",
+    "efectos.json",
+    "transiciones.json",
+    "clases.json",
+}
 META = "sistema-agentes.meta.v1"
 ESQUEMAS_DEL_CONTRATO = [
     "sistema-agentes.meta.v1",
@@ -279,6 +285,91 @@ class Unidad(unittest.TestCase):
     def test_un_estado_que_el_contrato_no_conoce_no_transita(self):
         self.assertIs(transicion_permitida("waiting", "ready"), False)
         self.assertIs(transicion_permitida("pending", "ready"), True)
+
+
+TIPOS_DE_EXCEPCION = [
+    "SIN_REVISOR",
+    "SIN_CUOTA",
+    "AUTH_VENCIDA",
+    "CI_ROJO",
+    "BOT_CALLADO",
+    "CONFIRMAR_PLAN",
+    "NECESITA_DAVID",
+    "BLOQUEANTE_REPETIDO",
+    "DEPLOY_FALLO",
+    "CIERRE_ROJO",
+    "INESPERADO",
+    "EVIDENCIA_INCIERTA",
+    "CAPACIDAD_INCIERTA",
+]
+VOCABULARIO_DE_OPCIONES = {
+    "seguir",
+    "relevo",
+    "cancelar",
+    "listo",
+    "omitir",
+    "si",
+    "autorizar",
+    "aceptar",
+    "rechazar",
+    "conciliar",
+}
+
+
+class ClasesDeExcepcion(unittest.TestCase):
+    """`excepcion/clases.json` es la tabla que R copia en `ROOT_EXCEPTION_CLASSES` (SUA-02, 4.5)."""
+
+    maxDiff = None
+
+    def setUp(self):
+        self.clases = cargar_json(FIXTURES / "excepcion/clases.json")
+        self.base = cargar_json(FIXTURES / "excepcion/necesita-david.json")
+
+    def documento(self, tipo, opciones, respuesta=None):
+        return {
+            **self.base,
+            "type": tipo,
+            "options": [{"optionId": opcion, "text": opcion} for opcion in opciones],
+            "response": respuesta,
+        }
+
+    def test_las_clases_son_las_trece_del_contrato_en_su_orden(self):
+        self.assertEqual([clase["type"] for clase in self.clases], TIPOS_DE_EXCEPCION)
+
+    def test_cada_clase_ofrece_opciones_del_vocabulario_sin_repetir(self):
+        for clase in self.clases:
+            with self.subTest(tipo=clase["type"]):
+                self.assertEqual(set(clase), {"type", "options"})
+                self.assertTrue(clase["options"])
+                self.assertEqual(len(set(clase["options"])), len(clase["options"]))
+                self.assertLessEqual(set(clase["options"]), VOCABULARIO_DE_OPCIONES)
+
+    def test_ninguna_clase_conserva_una_opcion_que_cobertura_prohibe(self):
+        opciones = {clase["type"]: clase["options"] for clase in self.clases}
+        self.assertNotIn("hecho", opciones["CIERRE_ROJO"])
+        self.assertNotIn("si", opciones["BLOQUEANTE_REPETIDO"])
+        self.assertEqual(opciones["CIERRE_ROJO"], ["seguir", "cancelar"])
+        self.assertEqual(opciones["BLOQUEANTE_REPETIDO"], ["omitir", "cancelar"])
+
+    def test_cada_clase_con_sus_opciones_es_un_documento_que_el_contrato_acepta(self):
+        for clase in self.clases:
+            with self.subTest(tipo=clase["type"]):
+                documento = self.documento(clase["type"], clase["options"])
+                self.assertEqual(validar(documento), [])
+                respondido = self.documento(
+                    clase["type"],
+                    clase["options"],
+                    {
+                        "optionId": clase["options"][-1],
+                        "by": ["telegram", "owner-01"],
+                        "at": "2026-10-14T12:00:00Z",
+                    },
+                )
+                self.assertEqual(validar(respondido), [])
+
+    def test_un_tipo_fuera_de_la_tabla_no_es_del_contrato(self):
+        hallazgos = validar(self.documento("PREGUNTA_LIBRE", ["seguir"]))
+        self.assertEqual([(h.regla, h.ruta) for h in hallazgos], [("schema", "type")])
 
 
 class Nombres(unittest.TestCase):
