@@ -2,6 +2,7 @@
 include = [
     "scripts/sistema_agentes/**/*.py",
     "scripts/tests/test-sistema-agentes-contrato.py",
+    "scripts/tests/test-sistema-agentes-importar.py",
 ]
 target-version = "py39"
 line-length = 100
