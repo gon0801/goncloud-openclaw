@@ -179,11 +179,18 @@ export type ExceptionDraft = {
     | { kind: "attempt"; unitId: UnitId; attempt: number; cause: string }
     | { kind: "effect"; effectId: EffectId }
     | { kind: "unit"; unitId: UnitId; cause: string }
+    // El tope de rondas. `block` es el valor de `bloques:<unitId>` al llegar al tope: cada
+    // `seguir` aplicado lo sube, así que el segundo tope de una unidad es otra excepción.
+    | { kind: "rounds"; unitId: UnitId; block: number }
     | { kind: "root"; cause: string };
   options: RootExceptionOption[];          // subconjunto del vocabulario de la clase
   evidenceRef: { ref: string; digest: string } | null;
 };
 
+/**
+ * La fila de `managed_root_exceptions` tal como la usa `decide`. Es interna: no es el
+ * documento del contrato. `readManagedRoot` emite `ExceptionDocument` con la proyección de 4.5.
+ */
 export type RootException = ExceptionDraft & {
   raisedAt: number;
   noticedAt: number | null;
@@ -243,7 +250,7 @@ export function decideLooseTask(facts: LooseTaskFacts): LooseShadowProposal;
 
 `decide` recorre la foto en este orden fijo. Cada paso ve lo que los anteriores ya decidieron en la misma propuesta, como el commit de SUA-01 ve sus `outcomes` antes que sus `bindings`.
 
-1. **Control.** Con la raíz `paused` o `cancelled`, la propuesta no trae decisión. Solo trae `notify` del paso 8. Una respuesta del dueño se guarda igual (4.5) y se aplica tras `resume`.
+1. **Control.** Con la raíz `paused`, la propuesta no trae decisión. Solo trae `notify` del paso 8. Una respuesta del dueño se guarda igual (4.5) y se aplica tras `resume`. Con la raíz `cancelled`, la propuesta va vacía, también `notify`: una raíz cancelada no se reanuda, así que sus excepciones abiertas ya no tienen respuesta útil. `answerManagedRootException` contesta `root-not-active` (4.5) y la transacción de `cancel` completa el reaviso pendiente de la raíz (4.4).
 2. **Respuestas.** Cada excepción con respuesta y sin `appliedBy` se aplica según la tabla de 4.5, sobre su propio sujeto y nada más. Su id entra en `appliedAnswers`.
 3. **Resultados.** Cada resultado pendiente se consume. Si su intento ya terminó, solo se consume. Si no:
    - Un `review.v1` con `verdict: "changes"` termina el intento en `failed` y pasa al paso 6.
@@ -259,7 +266,7 @@ export function decideLooseTask(facts: LooseTaskFacts): LooseShadowProposal;
    | Cualquier otro `episodeId` | `INESPERADO`, sin reintento |
 
 5. **Efectos.** Un efecto `uncertain` levanta `EVIDENCIA_INCIERTA`. Un efecto `prepared` que la autoridad vigente no cubre y que no tiene concesión levanta `NECESITA_DAVID` con `autorizar`, `listo`, `omitir` y `cancelar`. Los efectos nuevos de los hechos se preparan siempre: así la excepción tiene un `effectId` real al que referirse. `decide` nunca prepara otra vez un `effectId` que ya está en la foto.
-6. **Correcciones.** Una unidad no aceptada cuyo último intento terminó en `failed` por su resultado (paso 3, no por una incidencia del paso 4) necesita otro intento. El contador `rondas:<unitId>` cuenta las correcciones de la unidad y no se reinicia con hallazgos nuevos, con una revisión que no cambie la huella de la unidad ni con un relevo. Con el contador por debajo de `roundsPerImplementer`, se pide una asignación de corrección. Al llegar, se pide una con `relay: true`. Al llegar a `roundsPerImplementer × (1 + relays)`, se levanta `NECESITA_DAVID` con `seguir`, `omitir` y `cancelar`, y no se liga nada más. El contador sube en el mismo commit que liga la corrección.
+6. **Correcciones.** Una unidad no aceptada cuyo último intento terminó en `failed` por su resultado (paso 3, no por una incidencia del paso 4) necesita otro intento. El contador `rondas:<unitId>` cuenta las correcciones de la unidad y no se reinicia con hallazgos nuevos, con una revisión que no cambie la huella de la unidad ni con un relevo. Con el contador por debajo de `roundsPerImplementer`, se pide una asignación de corrección. Al llegar, se pide una con `relay: true`. El tope es `roundsPerImplementer × (1 + relays + b)`, donde `b` es el contador `bloques:<unitId>`, que empieza en 0. Al llegar, se levanta `NECESITA_DAVID` con sujeto `{ kind: "rounds", unitId, block: b }` y opciones `seguir`, `omitir` y `cancelar`, y no se liga nada más. El contador `rondas` sube en el mismo commit que liga la corrección. Aplicar `seguir` sube `bloques:<unitId>` en el commit que aplica la respuesta: el tope crece `roundsPerImplementer` rondas, y si se vuelve a llegar, el sujeto lleva `block: b + 1` y la excepción tiene otro `exceptionId`. Sin esa generación, el segundo tope tendría el id del primero, ya respondido, y no se podría preguntar otra vez.
 7. **Unidades listas.** Cada unidad sin intento cuyas dependencias están aceptadas recibe una ligadura si el modelo trajo su asignación. Si no, se pide. Una excepción sobre una unidad no frena a otra que no depende de ella.
 8. **Avisos.** Cada excepción abierta sin aviso, o con `now >= noticedAt + renoticeAfterMs`, entra en `notify`.
 9. **Cierre.** Con todas las unidades del plan vigente aceptadas, `state` es `done`. Con todas terminadas y alguna sin aceptar, se levanta `CIERRE_ROJO`.
@@ -284,7 +291,7 @@ Dos despertares nuevos, los dos del mismo tipo `systemEvent`, con `requesterIden
 - **Tras un `resume` o una restricción del operador.** Sin él, nadie reconcilia una raíz que el operador reanudó por el gateway hasta el siguiente resultado. Lo encola la misma transacción de control, con llave `managed-root-control:<rootId>:<época>`.
 - **El reaviso.** Abajo.
 
-**El reloj.** Lo único de SUA-02 que depende de la hora es el reaviso de una excepción. Cuando el controlador marca un aviso, encola en la misma transacción una entrega `systemEvent` con `availableAt = ahora + renoticeAfterMs`, una por raíz, con llave `managed-root-renotice:<rootId>:<n>`, donde `n` es el número de avisos de la raíz. Al vencer, despierta a `main`. `main` llama `managed_roots_reconcile`, y el paso 8 de `decide` dice qué reavisar. Si al responder ya no queda ninguna excepción abierta en la raíz, la transacción de la respuesta borra esa entrega pendiente (`unknown` 5). Si no se puede borrar, el despertar llega, `notify` sale vacío y `main` contesta `NO_REPLY`: un despertar perdido, como mucho uno por hora y por raíz.
+**El reloj.** Lo único de SUA-02 que depende de la hora es el reaviso de una excepción. Cuando el controlador marca un aviso, encola en la misma transacción una entrega `systemEvent` para dentro de `renoticeAfterMs`, una por raíz, con llave `managed-root-renotice:<rootId>:<n>`. `n` es la suma de `notices` de todas las excepciones de la raíz después de marcar. Es un contador por raíz que no se guarda: se deriva. Sube en cada transacción de aviso, porque esa transacción sube `notices` de al menos una excepción, y nunca baja, porque `notices` solo sube y una excepción no se borra. Así una llave nunca se repite. Hace falta, porque la lápida de una entrega `completed` impide reutilizar su llave durante 30 días (`COMPLETED_TOMBSTONE_RETENTION_MS`, `src/infra/delivery-queue-sqlite-bound.ts:18`). Se descartaron dos llaves. `notices` de una sola excepción choca entre dos excepciones con el mismo número de avisos, y el segundo encolado se pierde. Meter el `exceptionId` daría un despertar por excepción, y aquí se quiere uno por raíz con todos los reavisos juntos. Hoy una entrega no se encola con `availableAt`: es `enqueueSessionDelivery` y después `deferSessionDelivery` (`session-delivery-queue.worker.ts:104-110`). La R6 hace los dos pasos dentro de la transacción de aviso: la inserción con `upsertBoundDeliveryQueueEntryInDatabase` y la misma escritura de `availableAt` que hace `sessionDelivery.defer`, con `updateDeliveryQueueEntryInDatabase` (`session-delivery-queue.worker.ts:52-56`). Solo después de que vuelve la transacción, el proceso principal llama `scheduleSessionDelivery`, que arma el temporizador desde `availableAt`. Si el defer fuera una transacción aparte, la entrega quedaría vencida en el intervalo y despertaría a `main` en ese momento. Al vencer, despierta a `main`. `main` llama `managed_roots_reconcile`, y el paso 8 de `decide` dice qué reavisar. Si al responder ya no queda ninguna excepción abierta en la raíz, la transacción de la respuesta borra esa entrega pendiente (`unknown` 5). La transacción de `cancel` la completa siempre: una raíz cancelada no reavisa. Si no se puede borrar, el despertar llega, `notify` sale vacío y `main` contesta `NO_REPLY`: un despertar perdido, como mucho uno por hora y por raíz.
 
 **Los demás plazos ya son eventos.** El host reporta `deadline-missed` como incidencia y R despierta. El plazo de la autoridad se comprueba al admitir y al iniciar un efecto (SUA-01). Nada más en SUA-02 espera al reloj.
 
@@ -357,12 +364,32 @@ CREATE TABLE IF NOT EXISTS managed_root_exceptions (
 
 Lo que el esquema no puede decir y queda en código, cada regla con su prueba: la opción respondida está en `options_json`; una respuesta no cambia (`UPDATE ... WHERE response_option IS NULL`, con una fila cambiada); y las opciones son un subconjunto del vocabulario de la clase.
 
+`options_json` guarda las opciones como objetos `{ optionId, text }`. El texto sale de `ROOT_EXCEPTION_OPTION_TEXT`, una frase fija en español por opción en `managed-root.exceptions.ts`, y se copia al levantar. Así cambiar ese texto en una versión nueva no reescribe una pregunta que David ya recibió.
+
+**El documento del contrato.** `RootException` es interna y `decide` la usa tal cual. Lo que sale de R hacia fuera (`readManagedRoot`, `managedTasks.root.read` y la respuesta de las herramientas) es `ExceptionDocument`, un `sistema-agentes.excepcion.v1`. Lo arma una sola función pura, `exceptionDocument(row, owner)`, y lo valida su parser de `managed-root.json.ts`. De dónde sale cada campo:
+
+| Campo del contrato | Sale de |
+|---|---|
+| `schema` | El literal `sistema-agentes.excepcion.v1` |
+| `exceptionId` | `exception_id` |
+| `rootId` | `root_id` |
+| `unitId` | Siempre presente. `unit_id`, que el commit llena con la unidad del sujeto (`attempt`, `unit`, `rounds`) o con la unidad del efecto si la tiene. `null` en otro caso |
+| `type` | `type` |
+| `options` | `options_json`, ya en forma `{ optionId, text }` |
+| `evidenceRef` | `evidence_ref_json` con `JSON.parse`, o `null` |
+| `recipient` | `recipient_json`: `{ channel, principal }`. `principal` es la lista del dueño (`JSON.parse` de `owner_json.principal`, como hace la meta de SUA-01) y `channel` es su segundo elemento |
+| `raisedAt` | `raised_at`, en milisegundos, con `new Date(ms).toISOString()`: ISO 8601 en UTC con `Z`, que `_FECHA` de `contrato.py` acepta con milisegundos |
+| `renoticeAfterMs` | `renotice_after_ms` |
+| `response` | `null` si `response_option` es nulo. Si no, `{ optionId: response_option, by: JSON.parse(response_by), at: new Date(response_at).toISOString() }` |
+
+`subject_json`, `attempt`, `effect_id`, `commit_id`, `noticed_at`, `notices` y `applied_commit_id` no salen en el documento. Son del controlador. El contrato no los pide, y una proyección explícita no saca lo que nadie lee.
+
 **Levantar.** Solo dentro de `commitManagedRootDecision`, en la lista `exceptions`, después de los `outcomes`. Una excepción y la decisión que la causa entran juntas o no entra ninguna.
 
 **Entregar.** `managed_roots_reconcile` devuelve cada excepción de `notify` con su código, su clase, la causa en una línea y sus opciones. `main` se lo dice a David en su respuesta, que sale por Telegram en la sesión de David, como el resultado de un encargo hoy (`B22-canarios.md:220`). `recipient` es `{ channel: <canal del principal>, principal: <principal del dueño> }`: sale del turno que abrió la raíz, no del repo ni de un argumento. R no sabe si Telegram entregó el mensaje. El contrato lo acepta: "sin prometer exactamente una notificación cuando no hay consulta o clave idempotente" (diseño del sistema, "Proyección, reloj y publicación").
 
 **Responder.** `answerManagedRootException({ rootId, exceptionId, optionId }, turn)`, una transacción:
-1. La raíz existe y no está `cancelled`. Si no, `root-not-active`.
+1. La raíz existe y no está `cancelled`. Si no, `root-not-active`. Con la raíz `paused` la respuesta se guarda y se aplica tras `resume` (4.3, paso 1). Con `cancelled` no se guarda: no hay `resume` que la aplique.
 2. El turno es el dueño con la instancia vigente (`managedRootStanding`).
 3. El `principal` del turno es el de `recipient`. Si no, `not-recipient`. Un turno de `main` sin remitente no puede contestar por David.
 4. La excepción existe en esa raíz (`exception-unknown`) y la opción está entre las suyas (`option-not-offered`).
@@ -540,6 +567,7 @@ Las pruebas de R son de `vitest` y llaman las herramientas o las órdenes como l
 | I07 | R, `managed-root.authority.test.ts` | Seis casos. Sin autoridad: `create-repo` y `send-mail` levantan `NECESITA_DAVID` y la unidad independiente se liga en el mismo commit. Revocación: tras restringir `push`, el inicio de un efecto `push` se rechaza y una concesión anterior no vale. Ampliar contesta `authority-widens`. Otra sesión: la foto es `null` y responder contesta `not-owner`. Un turno sin remitente no responde (`not-recipient`). Diseño: una unidad `implement` en una raíz `design` no abre. SHA futuro: un efecto cuyo destino no está en `destinations` se rechaza | Leer `authority_json` en vez de la vigente; aceptar respuesta de cualquiera |
 | I07 | Mismo archivo, "a large authorized request asks nothing" | Raíz de doce unidades dentro de su autoridad. Cero excepciones, y las que caben en el cupo se ligan | Una regla por tamaño |
 | I12 | `managed-root.decide.test.ts`, "corrections converge or stop" | Una unidad falla diez veces. Pide corrección hasta 5, relevo de 6 a 10, y en 10 levanta `NECESITA_DAVID` sin ligar más. Una revisión que no cambia la huella y hallazgos nuevos no bajan `rondas` | Reiniciar el contador; ligar después del tope |
+| I12 | `managed-root.controller.test.ts`, "a second correction cap asks again" | Una unidad llega al tope (10 fallos): sale `NECESITA_DAVID` con sujeto `block: 0`. Se responde `seguir`: `bloques:<unitId>` vale 1 y se pide otra corrección. Cinco fallos más llegan al tope 15: sale otra `NECESITA_DAVID` con `block: 1` y un `exceptionId` distinto. Responderla con `cancelar` entra (no `exception-answered`) y la unidad termina en `cancelled`. La primera sigue con su respuesta y su `appliedBy` | Un sujeto de tope sin `block`: la segunda excepción tendría el id de la primera y la respuesta contestaría `exception-answered` |
 | I12 | `managed-root.store.test.ts`, "a root opens only with a known quality policy" | `openManagedRoot` con `qualityPolicy.version` `quality-policy.v2` contesta `quality-policy-unknown` y no crea tablas. Con `quality-kit.regla4`, abre | Aceptar cualquier versión |
 
 ### El párrafo "Verificar" del bloque, frase por frase
@@ -560,6 +588,9 @@ Las pruebas de R son de `vitest` y llaman las herramientas o las órdenes como l
 | Las clases de R son las del contrato | `managed-root.exceptions.test.ts` compara `ROOT_EXCEPTION_CLASSES` con `excepcion/clases.json` y los tipos con el enum de `contrato.py`, con `AGENT_WORK_G_ROOT`. Sin la variable el caso falla por la guarda de nombres, como `root_contract` | Cambiar una opción en un solo lado |
 | El esquema rechaza cada estado ilegal | `managed-root.schema.test.ts` gana una fila por restricción de las dos tablas | Quitar la restricción |
 | Una respuesta no cambia | `managed-root.exception.test.ts`: un `UPDATE` directo que cambia la respuesta no lo hace la orden; la orden contesta `exception-answered` | Escribir sin `WHERE response_option IS NULL` |
+| El documento de una excepción es el del contrato | `managed-root.exceptions.test.ts`, con `AGENT_WORK_G_ROOT`: una excepción levantada, avisada y respondida sale de `readManagedRoot` como `ExceptionDocument` y `contrato.py` la valida sin hallazgos. Una sin respuesta trae `response: null`, y una de raíz trae `unitId: null` | Sacar la fila SQL tal cual, sin la proyección de 4.5 |
+| Una raíz cancelada no guarda respuestas ni reavisa | `managed-root.exception.test.ts`: con la raíz `paused`, responder entra y se aplica tras `resume`. Con `cancelled`, responder contesta `root-not-active`, la excepción sigue sin respuesta y no queda ninguna entrega de reaviso pendiente de la raíz | Guardar la respuesta en una raíz cancelada, o no completar el reaviso al cancelar |
+| Dos reavisos no comparten llave | `managed-root.exception.test.ts`: dos excepciones de la misma raíz, avisadas en dos transacciones, con un aviso cada una. Las dos entregas de reaviso tienen llaves distintas (`n` = 1 y 2) y ninguna inserción se pierde. El reaviso no se entrega antes de su `availableAt` | `n` tomado de `notices` de una excepción: las dos llaves serían `:1` |
 | El reaviso espera y sobrevive a un reinicio | `managed-root.exception.test.ts`: una entrega con `availableAt` a 200 ms no se entrega antes; tras un reinicio de prueba se entrega después | `unknown` 2 |
 | Sin la llave no hay herramientas | `openclaw-tools.managed-tools.test.ts`: con la configuración de la Mini sin `rootRequesters`, la lista de `main` es igual a la literal de hoy | Registrar sin mirar la llave |
 | Un hijo no recibe herramientas de raíz | Mismo archivo, con una sesión `isSubagentSessionKey` | `unknown` 3 |
