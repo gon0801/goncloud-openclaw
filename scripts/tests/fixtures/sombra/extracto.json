@@ -1,0 +1,285 @@
+{
+ "schema": "sua02-sombra-extracto.v1",
+ "source": "fixture",
+ "tasks": [
+  {
+   "taskId": "t-aceptar",
+   "createdAt": 1,
+   "requesterKind": "agent",
+   "target": {
+    "kind": "cli",
+    "hostId": "mac-local",
+    "adapterId": "opencode"
+   },
+   "resultContract": "ready.v1",
+   "result": {
+    "kind": "produced",
+    "payloadKeys": [
+     "evidenceRef"
+    ],
+    "verdict": null
+   },
+   "incidents": [],
+   "handling": {
+    "decision": "complete",
+    "at": 100
+   },
+   "cancellation": null
+  },
+  {
+   "taskId": "t-corregir",
+   "createdAt": 1,
+   "requesterKind": "agent",
+   "target": {
+    "kind": "cli",
+    "hostId": "mac-local",
+    "adapterId": "opencode"
+   },
+   "resultContract": "review.v1",
+   "result": {
+    "kind": "produced",
+    "payloadKeys": [
+     "findingsRef",
+     "verdict"
+    ],
+    "verdict": "changes"
+   },
+   "incidents": [],
+   "handling": {
+    "decision": "continue",
+    "at": 100
+   },
+   "cancellation": null
+  },
+  {
+   "taskId": "t-revision-aprobada",
+   "createdAt": 1,
+   "requesterKind": "agent",
+   "target": {
+    "kind": "cli",
+    "hostId": "mac-local",
+    "adapterId": "opencode"
+   },
+   "resultContract": "review.v1",
+   "result": {
+    "kind": "produced",
+    "payloadKeys": [
+     "evidenceRef",
+     "verdict"
+    ],
+    "verdict": "approved"
+   },
+   "incidents": [],
+   "handling": {
+    "decision": "complete",
+    "at": 100
+   },
+   "cancellation": null
+  },
+  {
+   "taskId": "t-reintentar",
+   "createdAt": 1,
+   "requesterKind": "agent",
+   "target": {
+    "kind": "cli",
+    "hostId": "mac-local",
+    "adapterId": "opencode"
+   },
+   "resultContract": "ready.v1",
+   "result": null,
+   "incidents": [
+    {
+     "kind": "transport-unavailable",
+     "episodeId": "launch-failed",
+     "at": 50
+    }
+   ],
+   "handling": null,
+   "cancellation": {
+    "reason": "x",
+    "at": 100
+   }
+  },
+  {
+   "taskId": "t-capacidad",
+   "createdAt": 1,
+   "requesterKind": "agent",
+   "target": {
+    "kind": "cli",
+    "hostId": "mac-local",
+    "adapterId": "opencode"
+   },
+   "resultContract": "ready.v1",
+   "result": null,
+   "incidents": [
+    {
+     "kind": "transport-unavailable",
+     "episodeId": "launch-refused",
+     "at": 50
+    }
+   ],
+   "handling": null,
+   "cancellation": {
+    "reason": "x",
+    "at": 100
+   }
+  },
+  {
+   "taskId": "t-permiso",
+   "createdAt": 1,
+   "requesterKind": "agent",
+   "target": {
+    "kind": "cli",
+    "hostId": "mac-local",
+    "adapterId": "opencode"
+   },
+   "resultContract": "ready.v1",
+   "result": null,
+   "incidents": [
+    {
+     "kind": "permission-required",
+     "episodeId": null,
+     "at": 50
+    },
+    {
+     "kind": "deadline-missed",
+     "episodeId": "deadline",
+     "at": 150
+    }
+   ],
+   "handling": null,
+   "cancellation": {
+    "reason": "x",
+    "at": 100
+   }
+  },
+  {
+   "taskId": "t-dos-fallos",
+   "createdAt": 1,
+   "requesterKind": "agent",
+   "target": {
+    "kind": "cli",
+    "hostId": "mac-local",
+    "adapterId": "opencode"
+   },
+   "resultContract": "ready.v1",
+   "result": null,
+   "incidents": [
+    {
+     "kind": "invalid-result",
+     "episodeId": "invalid-result",
+     "at": 40
+    },
+    {
+     "kind": "invalid-result",
+     "episodeId": "invalid-result",
+     "at": 60
+    }
+   ],
+   "handling": null,
+   "cancellation": {
+    "reason": "x",
+    "at": 100
+   }
+  },
+  {
+   "taskId": "t-incidencia-tardia",
+   "createdAt": 1,
+   "requesterKind": "agent",
+   "target": {
+    "kind": "cli",
+    "hostId": "mac-local",
+    "adapterId": "opencode"
+   },
+   "resultContract": "ready.v1",
+   "result": null,
+   "incidents": [
+    {
+     "kind": "transport-unavailable",
+     "episodeId": "launch-failed",
+     "at": 200
+    }
+   ],
+   "handling": null,
+   "cancellation": {
+    "reason": "x",
+    "at": 100
+   }
+  },
+  {
+   "taskId": "t-resultado-y-cancelacion",
+   "createdAt": 1,
+   "requesterKind": "agent",
+   "target": {
+    "kind": "cli",
+    "hostId": "mac-local",
+    "adapterId": "opencode"
+   },
+   "resultContract": "ready.v1",
+   "result": {
+    "kind": "produced",
+    "payloadKeys": [
+     "evidenceRef"
+    ],
+    "verdict": null
+   },
+   "incidents": [],
+   "handling": null,
+   "cancellation": {
+    "reason": "x",
+    "at": 100
+   }
+  },
+  {
+   "taskId": "t-aceptar-con-incidencia",
+   "createdAt": 1,
+   "requesterKind": "agent",
+   "target": {
+    "kind": "cli",
+    "hostId": "mac-local",
+    "adapterId": "opencode"
+   },
+   "resultContract": "ready.v1",
+   "result": {
+    "kind": "produced",
+    "payloadKeys": [
+     "evidenceRef"
+    ],
+    "verdict": null
+   },
+   "incidents": [
+    {
+     "kind": "invalid-result",
+     "episodeId": "invalid-result",
+     "at": 50
+    }
+   ],
+   "handling": {
+    "decision": "complete",
+    "at": 100
+   },
+   "cancellation": null
+  },
+  {
+   "taskId": "t-sin-decision",
+   "createdAt": 1,
+   "requesterKind": "agent",
+   "target": {
+    "kind": "cli",
+    "hostId": "mac-local",
+    "adapterId": "opencode"
+   },
+   "resultContract": "ready.v1",
+   "result": {
+    "kind": "produced",
+    "payloadKeys": [
+     "evidenceRef"
+    ],
+    "verdict": null
+   },
+   "incidents": [],
+   "handling": null,
+   "cancellation": null
+  }
+ ]
+}

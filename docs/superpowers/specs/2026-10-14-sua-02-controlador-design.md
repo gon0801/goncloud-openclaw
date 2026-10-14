@@ -244,7 +244,7 @@ export function decideLooseTask(facts: LooseTaskFacts): LooseShadowProposal;
 
 `decideRoot` es total: devuelve una propuesta para cualquier foto. Una propuesta con todas las listas vacías no produce commit.
 
-`RootConflict` gana ocho variantes: `effect-unknown`, `exception-unknown`, `exception-answered`, `option-not-offered`, `not-recipient`, `authority-widens`, `coverage-incomplete` y `quality-policy-unknown`. `RootDecision` gana `exceptions` y `appliedAnswers`. Las dos son listas nuevas de un commit que sigue siendo una transacción.
+`RootConflict` gana nueve variantes: `effect-unknown`, `exception-unknown`, `exception-answered`, `option-not-offered`, `not-recipient`, `authority-widens`, `coverage-incomplete`, `quality-policy-unknown` y `stale-authority-revision` (esta última la añadió R7, con la revisión vigente, como `stale-control-epoch`). `RootDecision` gana `exceptions` y `appliedAnswers`. Las dos son listas nuevas de un commit que sigue siendo una transacción.
 
 ### 4.3 Las reglas de `decide`
 
@@ -278,7 +278,7 @@ Lo que `decide` no hace: no pregunta por tamaño. Una raíz de doce unidades den
 1. Si los hechos traen una revisión de plan, llama `reviseManagedRootPlan`.
 2. Lee la foto ampliada (4.8) y llama `decideRoot`.
 3. Con `commit: true` y una decisión no vacía, llama `commitManagedRootDecision`. Si contesta `stale-control-epoch` o `stale-plan-revision`, vuelve a leer y a decidir una vez. Un segundo conflicto se devuelve al modelo. No hay bucle.
-4. Si el commit no cabe por cupo (`capacity`), lo repite sin `bindings`. Esperar plaza no es una excepción.
+4. Si el commit no cabe por cupo (`capacity`), lo repite con las ligaduras que caben, como pide la fila I07; las que no caben esperan plaza. Esperar plaza no es una excepción. <!-- corr: implementación R8, VEREDICTO-SUA02-T3-r1 R1 -->
 5. Admite cada intento creado por el camino de hoy, con `root: { expectedControlEpoch, expectedPlanRevision }` y `admissionKey` `<taskId>-e<época>`. Un destino CLI pasa por `reserveManagedAdmissionBudget` y `claimManagedTaskAdmission`. Un destino agente, por `createManagedSpawnAdmission` y `spawnSubagentDirect`, como `managed_tasks_admit` (`managed-tasks-tool.ts:116-220`). Ese cuerpo se extrae a una función que usan las dos herramientas (rebanada 1).
 6. Marca como avisadas las excepciones de `notify` y encola el siguiente reaviso (4.4).
 7. Devuelve al modelo `needs`, las excepciones a avisar con su texto y opciones, los intentos admitidos y `state`.
@@ -443,7 +443,7 @@ CREATE TABLE IF NOT EXISTS managed_root_authority (
 
 **Pedido natural.** `main` redacta el plan en el turno en que David lo pide. `managed_roots_open` recibe el texto del pedido y una cobertura: una entrada por frase del pedido, con su papel (`criterion`, `assumption` o `context`) y, para un criterio, los `criterionId` que la cubren. R parte el texto en frases con una regla fija y pura (`requestSentences`: por salto de línea y por punto seguido de espacio). Comprueba que cada frase tiene exactamente una entrada y que cada `criterionId` citado existe en el plan. Si no, `coverage-incomplete` con la primera frase que falta. Un criterio puede no venir de ninguna frase. Una frase no puede quedar sin papel. Esto no prueba que el modelo entendió el pedido. Prueba que no se saltó una frase sin decirlo.
 
-**Fila de `Plans.md`.** `importar_plans.py --repo <ruta> --filas <ids>` lee `Plans.md` y devuelve la entrada de `managed_roots_open`. Cada fila es una unidad: `unitId` es el id de la fila, `title` su "Entrega" hasta el primer punto, `dependsOn` las filas de "Depends" que están en la selección. Una dependencia fuera de la selección con estado cerrado es un supuesto. Abierta, el importador falla. Cada cláusula de "Compuerta verificable", separada por `;`, es un criterio literal con rol `verifier`. El texto del pedido son las filas tal cual, una línea por cláusula, así que la cobertura sale sola. El importador es puro y sus pruebas comparan contra valores literales.
+**Fila de `Plans.md`.** `importar_plans.py --repo <ruta> --filas <ids> --alcance <owner/repo>` lee `Plans.md` y devuelve la entrada de `managed_roots_open`. Cada fila es una unidad: `unitId` es el id de la fila, `title` su "Entrega" hasta el primer punto, `dependsOn` las filas de "Depends" que están en la selección. Una dependencia fuera de la selección con estado cerrado es un supuesto. Abierta, el importador falla. Cada cláusula de "Compuerta verificable", separada por `;`, es un criterio literal con rol `verifier`. El texto del pedido es el mensaje de David tal cual, que entra por la entrada estándar. Una frase suya que es de una cláusula cubre ese criterio; cualquier otra se vuelve un criterio `<fila>-p<n>` de las filas que nombra, o de todas, para que ninguna condición suya se pierda. Un `\|` dentro de una celda es contenido, y una fila sin sus cuatro columnas hace fallar al importador con el id de la fila. El importador es puro y sus pruebas comparan contra valores literales.
 
 **Validación.** La de SUA-01 (`validateRootPlan`, con las cuatro reglas del contrato) más la cobertura. Un plan sin unidades se rechaza con `plan-invalid` (4.10, residual 6).
 
@@ -480,7 +480,7 @@ CREATE TABLE IF NOT EXISTS managed_root_authority (
 | `zod-schema.managed-tasks.ts` | `rootRequesters` | Sí: la configuración se valida al arrancar |
 | `src/state/openclaw-state-schema.sql` y las listas perezosas | Las dos tablas nuevas | No |
 
-**Redacción.** La prueba de tabla (`managed-tasks-tool.test.ts`) gana los campos de las seis herramientas, todos en `false`: `request`, `text`, `coverage`, `role`, `criterionIds`, `commit`, `facts`, `assignments`, `relay`, `claims`, `revision`, `exceptionId`, `optionId`, `step`, `restrictionId`, `expectedAuthorityRevision`. Ninguno se llama `key`, `token`, `secret` ni `session`.
+**Redacción.** La prueba de tabla (en `managed-root.redaction.test.ts`, que recorre también los esquemas internos; se movió ahí en R9) gana los campos de las seis herramientas, todos en `false`: `request`, `text`, `coverage`, `role`, `criterionIds`, `commit`, `facts`, `assignments`, `relay`, `claims`, `revision`, `exceptionId`, `optionId`, `step`, `restrictionId`, `expectedAuthorityRevision`. Ninguno se llama `key`, `token`, `secret` ni `session`.
 
 ### 4.9 La sombra
 

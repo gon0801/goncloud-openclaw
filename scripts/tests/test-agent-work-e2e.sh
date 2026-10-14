@@ -18,6 +18,10 @@ run_ruta_viva() {
   python3 scripts/tests/test_agent_work_ruta_viva_e2e.py
 }
 
+run_raiz_controlador() {
+  python3 scripts/tests/test_agent_work_raiz_controlador_e2e.py
+}
+
 run_acceptance_matrix() {
   python3 scripts/tests/test_agent_work_acceptance.py
 }
@@ -31,6 +35,7 @@ case "${1:-all}" in
     run_delivery_latency
     run_main_cli_loop
     run_ruta_viva
+    run_raiz_controlador
     run_acceptance_matrix
     ;;
   acceptance_matrix)
@@ -79,8 +84,16 @@ case "${1:-all}" in
     fi
     run_ruta_viva
     ;;
+  raiz_controlador)
+    # Una raíz por el Gateway real de R: main despertado por R reconcilia sin turno de persona.
+    if [ -z "${AGENT_WORK_RUNTIME_SOURCE:-}" ]; then
+      echo "raiz_controlador requiere AGENT_WORK_RUNTIME_SOURCE con R construido" >&2
+      exit 2
+    fi
+    run_raiz_controlador
+    ;;
   *)
-    echo "casos disponibles: delivery_latency, main_cli_loop, ruta_viva, acceptance_matrix, acceptance, acceptance_pair, cutover_fencing, cutover_rollback" >&2
+    echo "casos disponibles: delivery_latency, main_cli_loop, ruta_viva, raiz_controlador, acceptance_matrix, acceptance, acceptance_pair, cutover_fencing, cutover_rollback" >&2
     exit 2
     ;;
 esac

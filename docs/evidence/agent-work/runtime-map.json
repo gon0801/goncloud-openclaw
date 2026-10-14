@@ -27,7 +27,10 @@
     "rootStore": "src/agents/tasks/managed-root.store.ts",
     "rootWorker": "src/agents/tasks/managed-root.worker.ts",
     "rootSchema": "src/state/openclaw-state-db-schema-additive.ts",
-    "rootGatewayMethods": "src/gateway/server-methods/managed-tasks.ts"
+    "rootGatewayMethods": "src/gateway/server-methods/managed-tasks.ts",
+    "rootDecide": "src/agents/tasks/managed-root.decide.ts",
+    "rootController": "src/agents/tasks/managed-root.controller.ts",
+    "rootTools": "src/agents/tools/managed-roots-tool.ts"
   },
   "relatedPaths": [
     "src/agents/subagents/spawn/subagent-spawn-request.ts",
