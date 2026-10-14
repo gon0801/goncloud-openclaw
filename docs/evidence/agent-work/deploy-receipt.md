@@ -25,7 +25,7 @@ Cada instalación la hizo un script desde la Mac (`t12-parte-a.sh` y `t12-actual
 - `build-info.json` vivo: `commit` `f8316c9c867ebef79cfb66f8104b7f589c93e93a`, `buildId` `2026.9.7-release-f8316c9c867e-2026-10-11T11-15-14.185Z`. El empaquetado está en `artifacts/B13-empaquetar.log`, con el smoke `OpenClaw 2026.9.7 (f8316c9)`.
 - Una segunda corrida de `t12-actualizar-19c2ed1.sh`, a las 16:04:37Z del 2026-10-10, salió con `PARO` porque la versión viva ya era `19c2ed1`. No tocó nada.
 - Las dos últimas instalaciones se hicieron con la admisión abierta, porque el corte ya estaba hecho. No había encargos nuevos en esas ventanas: ninguna tarea de R se creó entre las 10:37 y las 10:38Z, ni entre las 15:14 y las 15:15Z. El host siguió capturando resultados durante las dos.
-- Al cierre, `artifact-manifest.json` seguía fijando `4b9785c`. Después pasó a `605aef7` (B17) y a `4acb881` (PR #276, 2026-10-12), que es el que fija hoy (`followups.md`, secciones "Resueltos en B17" y "Resueltos en B20 y B21").
+- Al cierre, `artifact-manifest.json` seguía fijando `4b9785c`. Después pasó a `605aef7` (B17) a `4acb881` (PR #276, 2026-10-12) y a `65432d0` (cierre de SUA-01, 2026-10-14), que es el que fija hoy (`followups.md`, secciones "Resueltos en B17" y "Resueltos en B20 y B21"; sección "SUA-01" de abajo).
 
 ## El corte
 

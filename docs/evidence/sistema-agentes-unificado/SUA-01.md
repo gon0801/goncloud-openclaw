@@ -41,7 +41,7 @@ en todos los SHA; ninguna rebanada agregó uno.
 | 11 | `9dbd6191777d` | Cupo del gateway, escritores y contadores | APROBADO, Kimi (relevo) |
 | 12 | `198337f22c2e` | Revisión de plan | APROBADO, Kimi (relevo) |
 | 13 | `6cc2b97ddb5d` | Recuperar al solicitante | APROBADO, Kimi (relevo) |
-| 14 | `65432d099d07` | Entrada del gateway y redacción | Pendiente de revisión |
+| 14 | `65432d099d07` | Entrada del gateway y redacción | APROBADO (Kimi, `VEREDICTO-SUA01-R1415-r1`) |
 | 15 | este PR de G | Casos en G, contrato y este recibo | Pendiente de revisión |
 
 GLM revisó de la 1 a la 5. Agotó su cuota el 2026-10-14 a las 04:35Z y David
