@@ -1,6 +1,6 @@
 # Plan: Sistema unificado de agentes
 
-Fecha: 2026-10-05. Identificador: **SUA**. Estado: **SUA-00 cerrado el 2026-10-13 (PR #288 y #289); SUA-01 a SUA-11 autorizados de corrido el 2026-10-13**.
+Fecha: 2026-10-05. Identificador: **SUA**. Estado: **SUA-00 cerrado el 2026-10-13 (PR #288 y #289); SUA-01 cerrado el 2026-10-14 (recibo `docs/evidence/sistema-agentes-unificado/SUA-01.md`, R `65432d0` en la Mini); SUA-02 a SUA-11 autorizados de corrido el 2026-10-13**.
 <!-- corr: K1 -->
 Revisado el 2026-10-12 contra G `6e01ec0` y R `605aef7`, después del cierre de encargos.
 <!-- corr: B22 -->
@@ -53,6 +53,14 @@ tomadas: el orden, el 2026-10-13; las rondas, el 2026-10-12. <!-- corr: D14 -->
 <!-- corr: B22 -->
 **Decisiones de David vigentes.**
 
+<!-- corr: D15 -->
+- 2026-10-13, de noche, durante SUA-01: "no, no tienes que esperar a la madrugada o
+  por que en la madrugada?" y "ok instala, no esperes al loop". Quita la ventana de
+  madrugada de la autorización de abajo: la había propuesto el coordinador en su
+  pregunta. Las instalaciones van a cualquier hora, en un hueco sin turnos ni crons
+  (sección "Regla de instalación en vivo"). Ese mismo día GLM agotó su límite
+  semanal y David eligió a Kimi como revisor de relevo ("Kimi", ante las opciones
+  Codex, Kimi o esperar). Las marcas `<!-- corr: D15 -->` señalan lo que cambia.
 <!-- corr: D14 -->
 - 2026-10-13, después de las mediciones y de los dos retiros: "1. sí todo 2. sí de
   madrugada 3. si y entonces tienes que corregirnplan antes?". Contesta tres
@@ -176,7 +184,7 @@ de artefactos; compartir contratos no crea dependencia de disponibilidad entre h
 | Bloque | Entrega | Depende de | Estado |
 |---|---|---|---|
 | SUA-00 | Inventario residual, contratos y fixtures comunes | — | cerrado el 2026-10-13 (PR #288, #289) |
-| SUA-01 | Estado, DAG y control atómicos en OpenClaw | SUA-00 (cerrado); B18-R mergeado (R `c928144`, cumplido) <!-- corr: C1.1 -->; "Preparación antes de SUA-01" | autorizado el 2026-10-13 |
+| SUA-01 | Estado, DAG y control atómicos en OpenClaw | SUA-00 (cerrado); B18-R mergeado (R `c928144`, cumplido) <!-- corr: C1.1 -->; "Preparación antes de SUA-01" | cerrado el 2026-10-14 (`SUA-01.md`) |
 | SUA-02 | Controlador, autoridad y excepciones | SUA-01 | autorizado el 2026-10-13 |
 | SUA-03 | Poteto, perfiles y rutas nativo/CLI/OpenCode | SUA-02 | autorizado el 2026-10-13 |
 | SUA-04 | Catálogo, promoción y alta automática | SUA-03 | autorizado el 2026-10-13 |
@@ -287,24 +295,23 @@ Cada punto tiene su comando de comprobación. Se corren desde la MacBook, sobre
 <!-- corr: D14 -->
 Rige para cada versión de R que un bloque instale en la Mac Mini del gateway
 (`gon@100.73.187.5`), sea para un e2e vivo o para el corte de SUA-09O. David lo
-autorizó el 2026-10-13 "de madrugada" y sin preguntarle cada vez.
+autorizó el 2026-10-13 sin preguntarle cada vez. <!-- corr: D15 -->
 
-- **Solo de madrugada, hora de David.** Madrugada es entre las 00:00 y las 06:00
-  del reloj de la Mini (`date` por ssh), que es la máquina donde corren los
-  crons. Es el sentido llano de la palabra, no una ventana que David haya fijado;
-  si fija otra, la suya manda. La Mini corre en hora del Pacífico. Dentro de esa
-  ventana hay crons diarios, según la lectura de `openclaw cron list --json` del
-  2026-10-13 a las 18:09 UTC: a las 03:00 `Memory Dreaming Promotion` y la
-  renovación del token de Shopify, a las 05:47 `cuotas-proveedores` y a las 06:00
-  `packing-extras-7h` de lunes a viernes. Varios `skill-collection-review-*`
-  semanales también caen ahí. La ventana no basta por sí sola: manda la
-  comprobación del punto siguiente.
-- **Ningún cron cerca.** Antes de detener el gateway, `openclaw cron list --json`
-  no trae ningún `runningAtMs` y ningún cron tiene su próxima corrida dentro de
-  la ventana que tarda la instalación (`T12-runbook.md` da 2 min para instalar y
-  2 min para arrancar, filas 1.3 y 1.4). Con un cron a menos de 10 min, se espera a que
-  pase. `openclaw gateway call sessions.list --params '{"agentId":"main"}' --json`
-  sin turnos activos (`T12-runbook.md`, 0.5).
+- **A cualquier hora.** La primera versión de esta regla decía "solo de
+  madrugada". La madrugada la había propuesto el coordinador en su pregunta, y
+  David la quitó el mismo día: "no, no tienes que esperar a la madrugada", y
+  ante un loop suyo de Orbit con vigía cada 5 min, "ok instala, no esperes al
+  loop" (2026-10-13). Lo que protege a sus turnos es el punto siguiente.
+- **Un hueco sin nadie trabajando.** Antes de detener el gateway: ningún cron con
+  `runningAtMs`, ninguno con su próxima corrida en menos de 150 s, ningún turno
+  de agente empezado y sin terminar en la Mini (eventos `session.started` sin
+  `session.ended` en `trajectory_runtime_events`, últimos 30 min) y ningún
+  encargo en vuelo (admisión `claimed` o `admitted` sin resultado ni
+  cancelación). Se espera ese hueco hasta 20 min; si no llega, no se instala. La
+  parada, la foto, la instalación y el arranque midieron entre 32 y 46 s en las
+  instalaciones de SUA-01; con un vigía cada 5 min no existe un hueco de 10 min.
+  El script `t12-actualizar-sua01.sh` hace estas comprobaciones (registro en
+  `docs/evidence/sistema-agentes-unificado/SUA-01.md`).
 - **Foto y reversa listas antes de instalar.** Es el procedimiento de
   `T12-runbook.md`: el artefacto revisado (0.1, `artifact.py verify`), los
   paquetes nuevos y los de la versión anterior copiados y con hash (0.2), la foto

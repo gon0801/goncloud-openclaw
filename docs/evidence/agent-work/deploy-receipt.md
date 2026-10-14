@@ -110,6 +110,10 @@ El canario 8 queda como evidencia de que la ruta por alias funciona, no de un mo
 
 Dos cosas no se hicieron. Nadie midió cuánto gastaron de opencode Go los cuatro intentos del canario 8. Y la copia de `encargo-cli` de la Mini no se publicó con este cambio (fila GO en `followups.md`).
 
+## SUA-01 (2026-10-14)
+
+Dos instalaciones de R en la Mini, sin cambio de esquema (sigue en 27) y sin tablas nuevas. La primera, R `073e2e5` (rebanada 7), de 04:50:41Z a 04:51:27Z. La segunda, R `65432d0` (rebanada 14), de 10:15:01Z a 10:15:33Z. Las dos con `ACTUALIZADO OK`, los mismos 30 crons y un canario por CLI con `kimi-code-plan-cn/k3` en `acknowledged` con `AbsenceVerified` (tareas `5589e361-97a2-4290-9ea0-62af837e957f` y `13d5e4d0-6a42-4ead-b892-d1b64716f08d`). Detalle, fotos y reversa en `docs/evidence/sistema-agentes-unificado/SUA-01.md`.
+
 ## Huecos encontrados en vivo
 
 Cada hueco tiene su arreglo, su revisión y su PR o paquete de R.

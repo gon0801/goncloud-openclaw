@@ -95,11 +95,30 @@ en R. Evidencia en `~/.local/state/encargos-loop/B22/corte/sua01-073e2e5b.*`.
 
 ## Segunda instalación en la Mini
 
-<!-- PENDIENTE: la escribe el coordinador cuando ocurra. -->
-PENDIENTE. Se hace con la rebanada 14 aprobada (diseño, sección 6, "Primera
-instalación en la Mini", último párrafo). Su comprobación incluye que
-`openclaw gateway call managedTasks.root.read --params '{"rootId":"no-existe"}' --json`
-conteste `null` sin crear tablas.
+Se hizo el 2026-10-14 con la rebanada 14 aprobada (VEREDICTO-SUA01-R1415-r1,
+Kimi), con `ANTERIOR=073e2e5 t12-actualizar-sua01.sh 65432d099d07…
+--fuera-de-ventana`. Antes de instalar, la T11-c con el paquete instalado de
+`4acb881` sobre la base del worktree de la rebanada 14 volvió a pasar
+(`~/.local/state/sua-loop/t11c/t11c-sua01-r14-*.log`).
+
+Antes: R `073e2e5`, 30 crons, ninguno corriendo ni en los próximos 150 s, 0
+turnos de agentes y 0 encargos en vuelo, 0 tablas `managed_root%`. El gateway
+estuvo abajo de 10:15:01Z a 10:15:33Z. Después: `build-info` con el commit
+`65432d099d07`, esquema 27, 0 tablas `managed_root%`, `managedTasks` como estaba
+y los mismos 30 crons. `managedTasks.root.read` con `{"rootId":"no-existe"}`
+contestó `null` y siguió habiendo 0 tablas. Resultado: `ACTUALIZADO OK`. Foto
+previa: `~/.openclaw/respaldos/pre-65432d0-20261014-0315`. La reversa es
+reinstalar el paquete de `073e2e5` (o el de `4acb881`, que la T11-c probó sobre
+una base con las tablas). Log:
+`~/.local/state/encargos-loop/artifacts/T12/actualizar-65432d0-20261014T101452Z.log`.
+
+Canario después de instalar: tarea `13d5e4d0-6a42-4ead-b892-d1b64716f08d` con
+`kimi-code-plan-cn/k3`, `acknowledged` con `AbsenceVerified`, sin incidencias y
+con `result_digest` en R. Evidencia en
+`~/.local/state/encargos-loop/B22/corte/sua01-65432d0.*`.
+
+`artifact-manifest.json` apunta a `paquete-65432d0` (`artifact.py verify`: `artifact
+OK: openclaw 2026.9.7 from 65432d099d0771f48331069fcc2bf044b2c6b873`).
 
 ## Casos de G contra R
 
