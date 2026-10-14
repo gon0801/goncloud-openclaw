@@ -1,0 +1,31 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "meli",
+  "kind": "positiva",
+  "route": "mini-native/native/meli",
+  "brief": "Hoy es 2026-10-10. De estos pedidos de MercadoLibre de fixture, ¿cuáles están demorados? Contesta los ids.",
+  "fixture": {
+    "pedidos": [
+      {
+        "id": "MLM-1",
+        "promesa": "2026-10-05",
+        "entregado": null
+      },
+      {
+        "id": "MLM-2",
+        "promesa": "2026-10-12",
+        "entregado": null
+      },
+      {
+        "id": "MLM-3",
+        "promesa": "2026-10-04",
+        "entregado": "2026-10-03"
+      }
+    ]
+  },
+  "expect": {
+    "answer": [
+      "MLM-1"
+    ]
+  }
+}

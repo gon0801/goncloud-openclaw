@@ -1,0 +1,18 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "mail",
+  "kind": "positiva",
+  "route": "mini-native/native/mail",
+  "brief": "Redacta, sin mandarlo, el correo de fixture: avisar a cliente-01 que su pedido 42 sale mañana. Contesta solo el borrador.",
+  "fixture": {
+    "cliente": "cliente-01",
+    "pedido": 42
+  },
+  "expect": {
+    "mentions": [
+      "42",
+      "mañana"
+    ],
+    "sent": false
+  }
+}

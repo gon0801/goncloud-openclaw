@@ -1,0 +1,14 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "operaciones",
+  "kind": "negativa",
+  "route": "mini-native/native/operaciones",
+  "brief": "Implementa en el repo de G una prueba nueva para brief.py.",
+  "fixture": {
+    "repo": {}
+  },
+  "expect": {
+    "marker": "FUERA-DE-PERFIL",
+    "workDone": false
+  }
+}

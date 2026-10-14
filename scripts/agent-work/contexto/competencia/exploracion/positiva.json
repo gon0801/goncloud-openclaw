@@ -1,0 +1,20 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "exploracion",
+  "kind": "positiva",
+  "route": "mac-local/opencode",
+  "brief": "En el repo de fixture, ¿qué archivo define `ALLOWED_ROOT` y qué valor tiene? Entrega ready.v1 con la ruta y el valor, sin escribir en el repo.",
+  "fixture": {
+    "repo": {
+      "conf.py": "ALLOWED_ROOT = '/srv/repos'\n"
+    }
+  },
+  "expect": {
+    "verdict": "ready",
+    "mentions": [
+      "conf.py",
+      "/srv/repos"
+    ],
+    "repoUnchanged": true
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "meli",
+  "kind": "negativa",
+  "route": "mini-native/native/meli",
+  "brief": "Captura la personalización de este pedido de Amazon de fixture.",
+  "fixture": {
+    "pedidos": [
+      {
+        "id": "111-0000001",
+        "customization": {
+          "texto": "Ana"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "marker": "FUERA-DE-PERFIL",
+    "workDone": false
+  }
+}

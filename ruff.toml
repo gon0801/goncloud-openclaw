@@ -4,6 +4,8 @@ include = [
     "scripts/tests/test-sistema-agentes-contrato.py",
     "scripts/tests/test-sistema-agentes-importar.py",
     "scripts/tests/test-sistema-agentes-sombra.py",
+    "scripts/agent-work/contexto.py",
+    "scripts/tests/test-agent-work-contexto.py",
 ]
 target-version = "py39"
 line-length = 100

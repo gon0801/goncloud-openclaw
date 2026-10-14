@@ -1,0 +1,26 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "operaciones",
+  "kind": "positiva",
+  "route": "mini-native/native/operaciones",
+  "brief": "Con estas ventas de fixture, ¿cuánto se vendió el 2026-10-01? Contesta solo el total.",
+  "fixture": {
+    "ventas": [
+      {
+        "fecha": "2026-10-01",
+        "total": 120.5
+      },
+      {
+        "fecha": "2026-10-01",
+        "total": 79.5
+      },
+      {
+        "fecha": "2026-10-02",
+        "total": 10
+      }
+    ]
+  },
+  "expect": {
+    "answer": "200"
+  }
+}
