@@ -172,6 +172,7 @@ class RaizControladorE2E(unittest.TestCase):
             (ROOT / "scripts/tests/fixtures/importar-plans/Plans.md").read_text(encoding="utf-8"),
             ["7.2", "7.3"],
             REPO,
+            "Haz las filas 7.2 y 7.3. No toques la base vieja.",
         )
         bound = {}
         for name, plan in cases.items():

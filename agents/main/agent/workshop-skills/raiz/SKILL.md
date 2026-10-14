@@ -12,11 +12,13 @@ Una raíz es un plan con sus unidades, la autoridad que David dio y las pregunta
 ## Abrir una raíz
 
 1. Escribe el plan en el mismo turno en que David lo pide. Cada unidad tiene `unitId`, `title`, `dependsOn`, sus criterios (`criterionId`, `text`, `verifier`) y su `scope` (`repos` y `mode`). Un criterio que solo David puede dar por cumplido lleva `verifier` `owner`.
-2. Si David nombró filas de un `Plans.md`, no las copies a mano. Córrelo en la Mac (`host="node"`):
+2. Si David nombró filas de un `Plans.md`, no las copies a mano. Córrelo en la Mac (`host="node"`), con el mensaje de David tal cual por la entrada estándar, entre las dos líneas `PEDIDO_DE_DAVID`:
    ```
-   python3 /Users/dn/dev/wt/agent-work-host/scripts/sistema_agentes/importar_plans.py --repo /Users/dn/dev/<repo> --filas <ids> --alcance <owner/repo>
+   python3 /Users/dn/dev/wt/agent-work-host/scripts/sistema_agentes/importar_plans.py --repo /Users/dn/dev/<repo> --filas <ids> --alcance <owner/repo> <<'PEDIDO_DE_DAVID'
+   <el mensaje de David, sin cambiarle nada>
+   PEDIDO_DE_DAVID
    ```
-   Contesta una línea JSON con `request` y `plan`, listos para `managed_roots_open`. Con `"ok": false`, dile a David el `error` tal cual: una fila depende de otra que no está cerrada.
+   Contesta una línea JSON con `request` y `plan`, listos para `managed_roots_open`. `request.text` es el mensaje de David. Cada frase suya que no es de una fila queda como criterio `<fila>-p<n>` de las filas que nombra, o de todas: así no se pierde una condición suya. Si una frase solo pide las filas ("haz la 7.2 y la 7.3"), cambia su entrada a `context` y quita sus criterios `-p<n>`. Con `"ok": false`, dile a David el `error` tal cual: una fila depende de otra que no está cerrada, una fila no tiene sus cuatro columnas o no hay `Plans.md` en ese repo.
 3. La cobertura: cada frase del pedido de David lleva una entrada, con su papel (`criterion`, `assumption` o `context`) y, para un criterio, los `criterionId` que la cubren. R parte el texto por salto de línea y por punto seguido de espacio. Si falta una, `managed_roots_open` contesta `coverage-incomplete` con la frase: agrégala y repite.
 4. La autoridad son las palabras de David: `actions`, `repos`, `accounts`, `destinations`, `deadline` y `mode`. Lo que David no dijo no va. Quién la dio y cuándo lo escribe R desde tu turno.
 5. `managed_roots_open` con un `idempotencyKey` nuevo, `request` (`text` es el pedido de David tal cual), `authority` y `plan`. Abre solo desde un mensaje de David: un turno sin remitente no abre.

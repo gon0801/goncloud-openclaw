@@ -7,3 +7,5 @@
 | 7.3 | **Mostrar el arranque en el tablero.** | El tablero muestra la hora | 7.2, 7.1 | cc:TODO |
 | 7.4 | **Una fila abierta que nadie eligió.** | Algo pasa | - | cc:TODO |
 | 7.5 | **Depende de una abierta.** | Otra cosa pasa | 7.4 | cc:TODO |
+| 7.6 | **Una celda con una barra.** | `a \| b` imprime dos columnas; la prueba lo lee | 7.1 | cc:TODO |
+| 7.7 | **Una barra sin escapar.** | `a | b` parte la celda | - | cc:TODO |
