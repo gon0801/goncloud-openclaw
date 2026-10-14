@@ -3,6 +3,8 @@ set -euo pipefail
 
 case_name="${1:-}"
 extra_test_files=()
+# Cases whose proof is a test that skips without its input: each name has to pass, not skip.
+required_passes=()
 case "$case_name" in
   baseline) test_file='src/gateway/agent-turn/agent-wait-dedupe.test.ts'; test_pattern=''; probe_restart=1 ;;
   registration_identity)
@@ -73,6 +75,51 @@ case "$case_name" in
     test_file='src/agents/tools/sessions-managed-delegation.test.ts'
     test_pattern='rejects sessions_spawn before any child is created|rejects sessions_send before Gateway delivery|does not apply the managed guard to an ordinary run'
     probe_restart=0 ;;
+  root_contract)
+    # R validates with this checkout's contrato.py the documents readManagedRoot emitted.
+    test_file='src/agents/tasks/managed-root.machine.test.ts'
+    extra_test_files=('src/agents/tasks/managed-root.store.test.ts' 'src/agents/tasks/managed-root.decision.test.ts' 'src/agents/tasks/managed-root.control.test.ts')
+    test_pattern='against sistema-agentes\.v1|the contract accepts'
+    required_passes=(
+      'answers each of the 64 unit transitions like the contract'
+      'takes each authority fixture as the contract writes it'
+      "gives each effect the contract's first refusal"
+      "finds in each plan the contract's rule and path"
+      'opens the plan of pedido-chico as the contract writes it and emits a meta the contract accepts'
+      'opens the plan of fila-importada as the contract writes it and emits a meta the contract accepts'
+      'opens the plan of pedido-compuesto as the contract writes it and emits a meta the contract accepts'
+      'emits evidence and unit documents the contract accepts'
+      'emits a control receipt the contract accepts'
+    )
+    probe_restart=0 ;;
+  root_fan_in)
+    test_file='src/agents/tasks/managed-root.commit.test.ts'
+    extra_test_files=('src/agents/tasks/managed-root.decision.test.ts')
+    test_pattern=''
+    probe_restart=0 ;;
+  root_recovery)
+    test_file='src/agents/tasks/managed-root.requester.test.ts'
+    extra_test_files=('src/agents/tasks/managed-root.recovery.test.ts')
+    test_pattern=''
+    probe_restart=0 ;;
+  root_control)
+    test_file='src/agents/tasks/managed-root.control.test.ts'
+    extra_test_files=('src/agents/tasks/managed-root.plan.test.ts' 'src/gateway/server-methods/managed-tasks-root.test.ts')
+    test_pattern=''
+    probe_restart=0 ;;
+  root_effects)
+    test_file='src/agents/tasks/managed-root.effect.test.ts'
+    test_pattern=''
+    probe_restart=0 ;;
+  root_capacity)
+    test_file='src/agents/tasks/managed-root.capacity.test.ts'
+    test_pattern=''
+    probe_restart=0 ;;
+  root_redaction)
+    test_file='src/agents/tasks/managed-root.redaction.test.ts'
+    extra_test_files=('src/agents/tasks/managed-tasks-tool.test.ts')
+    test_pattern='against transcript redaction|declares no managed task input field that transcript redaction masks'
+    probe_restart=0 ;;
   *) printf 'Unknown or unimplemented agent-work runtime case: %s\n' "${1:-}" >&2; exit 2 ;;
 esac
 
@@ -99,17 +146,34 @@ diff = subprocess.check_output(['git', '-C', str(root), 'diff', '--binary', 'HEA
 print(json.dumps({'candidateSha': head, 'candidateDiffSha256': hashlib.sha256(diff).hexdigest()}, sort_keys=True), flush=True)
 PY
 cd "$source_root"
-if [ "$case_name" = projection_gateway ]; then
+if [ "$case_name" = projection_gateway ] || [ "$case_name" = root_control ]; then
   if [ ! -f dist/entry.js ]; then
-    printf 'Build the isolated OpenClaw CLI before projection_gateway\n' >&2
+    printf 'Build the isolated OpenClaw CLI before %s\n' "$case_name" >&2
     exit 2
   fi
+fi
+if [ "$case_name" = projection_gateway ] || [ "$case_name" = root_contract ]; then
   export AGENT_WORK_G_ROOT="$repo_root"
 fi
-if [ -n "$test_pattern" ]; then
-  node scripts/run-vitest.mjs "$test_file" "${extra_test_files[@]}" --testNamePattern "$test_pattern"
+run_vitest() {
+  if [ -n "$test_pattern" ]; then
+    node scripts/run-vitest.mjs "$test_file" "${extra_test_files[@]}" --testNamePattern "$test_pattern"
+  else
+    node scripts/run-vitest.mjs "$test_file" "${extra_test_files[@]}"
+  fi
+}
+if [ "${#required_passes[@]}" -eq 0 ]; then
+  run_vitest
 else
-  node scripts/run-vitest.mjs "$test_file" "${extra_test_files[@]}"
+  vitest_log="$(mktemp)"
+  trap 'rm -f "$vitest_log"' EXIT
+  run_vitest 2>&1 | tee "$vitest_log"
+  for name in "${required_passes[@]}"; do
+    if ! grep -F '✓' "$vitest_log" | grep -F " > $name" >/dev/null; then
+      printf '%s did not pass (skipped or missing): %s\n' "$case_name" "$name" >&2
+      exit 1
+    fi
+  done
 fi
 if [ "$probe_restart" -eq 1 ]; then
   AGENT_WORK_RUNTIME_SOURCE="$source_root" python3 "$repo_root/scripts/agent-work/probe-native-restart.py"

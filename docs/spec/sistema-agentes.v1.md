@@ -192,7 +192,7 @@ Un intento de una unidad del plan, ligado a una tarea nativa. Es el
 | `taskId` | Tarea nativa que lo ejecuta, o `null` antes de admitir |
 | `assignment` | `ManagedTaskAssignment` tal cual. El validador exige `target`, `instructionRef`, `resultContract` y `continuation`. Los demás campos de R (`inputRevision`, `progressBinding`) pasan sin revisarse: su dueño es R |
 | `state` | `"pending"`, `"ready"`, `"admitted"`, `"running"`, `"reported"`, `"accepted"`, `"failed"` o `"cancelled"` |
-| `controlEpoch` | Época con la que se admitió. Una admisión con época obsoleta no inicia |
+| `controlEpoch` | Época con la que se admitió; antes de admitir, la época vigente de la raíz. Una admisión con época obsoleta no inicia |
 
 Transiciones permitidas: `pending → ready` cuando todas las dependencias están
 `accepted`. `ready → admitted → running → reported`. `reported → accepted`

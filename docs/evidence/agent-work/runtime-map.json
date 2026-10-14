@@ -22,7 +22,12 @@
     "sessionLifecycle": "src/agents/subagents/registry/subagent-registry-lifecycle-completion.ts",
     "migrations": "src/state/openclaw-state-schema.sql",
     "nativeTests": "src/gateway/agent-turn/agent-wait-dedupe.test.ts",
-    "recoverySiblingsTests": "src/agents/tasks/managed-task.recovery.siblings.test.ts"
+    "recoverySiblingsTests": "src/agents/tasks/managed-task.recovery.siblings.test.ts",
+    "rootDomain": "src/agents/tasks/managed-root.types.ts",
+    "rootStore": "src/agents/tasks/managed-root.store.ts",
+    "rootWorker": "src/agents/tasks/managed-root.worker.ts",
+    "rootSchema": "src/state/openclaw-state-db-schema-additive.ts",
+    "rootGatewayMethods": "src/gateway/server-methods/managed-tasks.ts"
   },
   "relatedPaths": [
     "src/agents/subagents/spawn/subagent-spawn-request.ts",
