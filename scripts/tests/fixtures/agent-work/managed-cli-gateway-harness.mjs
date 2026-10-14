@@ -11,8 +11,12 @@
 // would admit the correction: the decision is committed and the model never saw its receipt.
 // CROSS_PROVIDER_LOG appends every provider request to that file as it arrives, with the
 // Gateway's pid, so a test counts requests across a crash from outside the Gateway.
+// CROSS_ROOT_REQUESTERS=1 gives the requester the managed root tools (managedTasks.rootRequesters).
+// CROSS_PROVIDER_SCRIPT=root-reconcile makes the provider act as main on a root wake: it calls
+// managed_roots_reconcile once with the facts CROSS_ROOT_FACTS (a JSON file) holds for the unit
+// whose result woke it, and answers NO_REPLY after the tool's output.
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import { createServer } from "node:http";
 import path from "node:path";
@@ -31,7 +35,9 @@ const hostId = process.env.CROSS_HOST_ID || "e2e-host";
 const hostAdapter = process.env.CROSS_HOST_ADAPTER || "codex";
 const countingProvider = process.env.CROSS_PROVIDER === "loopback";
 const scriptedCorrection = process.env.CROSS_PROVIDER_SCRIPT === "review-correction";
-if (scriptedCorrection && !countingProvider) {
+const scriptedRoot = process.env.CROSS_PROVIDER_SCRIPT === "root-reconcile";
+const rootRequesters = process.env.CROSS_ROOT_REQUESTERS === "1";
+if ((scriptedCorrection || scriptedRoot) && !countingProvider) {
   throw new Error("CROSS_PROVIDER_SCRIPT needs CROSS_PROVIDER=loopback");
 }
 if (!sessionKey.startsWith(`agent:${requesterAgentId}:`)) {
@@ -40,6 +46,7 @@ if (!sessionKey.startsWith(`agent:${requesterAgentId}:`)) {
 const load = (relative) => import(pathToFileURL(path.join(root, relative)).href);
 const [
   gateway, identity, sessions, toolModule, callerModule, artifactModule, hostModule, stateDb, mockModel,
+  rootToolModule, storeModule,
 ] = await Promise.all([
   load("src/gateway/test-helpers.e2e.ts"),
   load("src/infra/device-identity.ts"),
@@ -50,6 +57,8 @@ const [
   load("src/agents/tasks/managed-task.host.ts"),
   load("src/state/openclaw-state-db.ts"),
   load("src/gateway/test-openai-responses-model.ts"),
+  rootRequesters ? load("src/agents/tools/managed-roots-tool.ts") : null,
+  load("src/agents/tasks/managed-task.store.ts"),
 ]);
 
 await fs.mkdir(stateDir, { recursive: true });
@@ -120,7 +129,13 @@ function correctionDecision(taskId, receipt) {
   };
 }
 
-function scriptedItem(body, wakeTasks) {
+/** The facts the scripted main brings when the result of a unit of a root wakes it. */
+function rootFacts(unitId) {
+  const all = JSON.parse(readFileSync(process.env.CROSS_ROOT_FACTS ?? "", "utf8"));
+  return all[unitId] ?? { assignments: [], claims: [], effects: [] };
+}
+
+function scriptedItem(body, wakeTasks, rootWakes) {
   const message = (text) => ({
     type: "message", id: randomUUID(), role: "assistant", status: "completed",
     content: [{ type: "output_text", text, annotations: [] }],
@@ -129,6 +144,14 @@ function scriptedItem(body, wakeTasks) {
     type: "function_call", id: randomUUID(), call_id: callId, name,
     arguments: JSON.stringify(args), status: "completed",
   });
+  if (scriptedRoot) {
+    const done = (JSON.parse(body).input ?? []).some((entry) =>
+      entry.type === "function_call_output" && String(entry.call_id).startsWith("call_root_"));
+    const wake = rootWakes.at(-1);
+    if (!wake || done) return message("NO_REPLY");
+    return call(`call_root_${randomUUID()}`, "managed_roots_reconcile",
+      { rootId: wake.rootId, facts: rootFacts(wake.unitId) });
+  }
   if (!scriptedCorrection || wakeTasks.length === 0) return message("NO_REPLY");
   const outputs = (JSON.parse(body).input ?? []).filter((entry) =>
     entry.type === "function_call_output" && String(entry.call_id).startsWith("call_correction_"));
@@ -178,10 +201,13 @@ if (countingProvider) {
       } catch {
         toolNames = ["<unparsed>"];
       }
-      const item = scriptedItem(body, wakeTasks);
+      const rootWakes = [...body.matchAll(
+        /Managed root (\S+) has a result for unit (\S+) attempt (\d+)\. Call managed_roots_reconcile/g)]
+        .map((match) => ({ rootId: match[1], unitId: match[2], attempt: Number(match[3]) }));
+      const item = scriptedItem(body, wakeTasks, rootWakes);
       const record = {
         at: Date.now(), method: request.method, path: request.url,
-        wakeTasks, toolNames, answered: item.type === "function_call" ? item.name : "message",
+        wakeTasks, rootWakes, toolNames, answered: item.type === "function_call" ? item.name : "message",
         // Host incidents the model was told about; the session history repeats earlier ones.
         incidentWakes: [...body.matchAll(/Managed task (\S+) generation \d+ recorded incident ([a-z-]+);/g)]
           .map((match) => ({ taskId: match[1], kind: match[2] })),
@@ -251,6 +277,7 @@ const config = {
     : {}),
   managedTasks: {
     enabled: process.env.CROSS_MANAGED_ENABLED !== "0", instructionRoot: stateDir, runTimeoutSeconds: 60, profile,
+    ...(rootRequesters ? { rootRequesters: [requesterAgentId] } : {}),
     hosts: { [hostId]: { deviceId: deviceIdentity.deviceId, adapters: [hostAdapter] } },
   },
 };
@@ -316,8 +343,50 @@ async function runTool(command) {
   return result.details;
 }
 
+/** A turn of the requester that calls one managed root tool, as a person's message does. */
+async function runRootTool(command) {
+  if (!rootToolModule) throw new Error("set CROSS_ROOT_REQUESTERS=1 for the root tools");
+  const runId = command.runId;
+  if (!runId) throw new Error("invalid root tool command");
+  const tools = rootToolModule.createManagedRootTools({
+    source: {
+      agentId: requesterAgentId, sessionKey, sessionId: sessionIds.get(sessionKey), runId,
+      senderId: "fixture-person", channel: "discord", accountId: "fixture-team",
+    },
+    profile, config, spawnContext: {}, runTimeoutSeconds: 60,
+    resolveInstructionRef: (ref) => hostModule.resolveManagedTaskHostCapability(config).resolveInstructionRef(ref),
+  });
+  const tool = tools.find((entry) => entry.name === `managed_roots_${command.action}`);
+  if (!tool) throw new Error(`managed root tool ${command.action} missing`);
+  const result = await callerModule.withGatewayToolCallerIdentity(
+    {
+      agentId: requesterAgentId, sessionKey,
+      operationalRunInstance: { instanceId: runId, runId },
+      receiptAuthority: () => true,
+    },
+    () => tool.execute(`cross-root-${command.action}`, command.args),
+  );
+  return result.details;
+}
+
+/** A producer reports the final result of a task with its own capability, as a host does. */
+async function reportTask(command) {
+  const row = stateDb.openOpenClawStateDatabase().db.prepare(
+    "SELECT producer_id, producer_token, generation FROM managed_tasks WHERE task_id = ?").get(command.taskId);
+  if (!row) throw new Error("no such managed task");
+  return storeModule.reportManagedTaskResult({
+    capability: {
+      taskId: command.taskId, producerId: row.producer_id, token: row.producer_token,
+      generation: row.generation,
+    },
+    result: command.result,
+  });
+}
+
 const operations = {
   tool: runTool,
+  roottool: runRootTool,
+  report: reportTask,
   deliveries: async () => sessionDeliveries(),
   provider: async () => ({ enabled: Boolean(provider), requests: providerRequests }),
   rpc: async (command) => client.request(command.method, command.params ?? {}),

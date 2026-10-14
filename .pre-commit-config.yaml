@@ -49,6 +49,6 @@ repos:
     rev: v0.16.8
     hooks:
       - id: ruff-check
-        files: ^(scripts/sistema_agentes/|scripts/tests/test-sistema-agentes-(contrato|importar)\.py)
+        files: ^(scripts/sistema_agentes/|scripts/tests/test-sistema-agentes-(contrato|importar|sombra)\.py)
       - id: ruff-format
-        files: ^(scripts/sistema_agentes/|scripts/tests/test-sistema-agentes-(contrato|importar)\.py)
+        files: ^(scripts/sistema_agentes/|scripts/tests/test-sistema-agentes-(contrato|importar|sombra)\.py)

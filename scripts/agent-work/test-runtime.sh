@@ -120,6 +120,27 @@ case "$case_name" in
     extra_test_files=('src/agents/tasks/managed-tasks-tool.test.ts')
     test_pattern='against transcript redaction|declares no managed task input field that transcript redaction masks'
     probe_restart=0 ;;
+  root_controller)
+    # The controller of a root, its six tools and the native run of a root task in the registry.
+    test_file='src/agents/tasks/managed-root.controller.test.ts'
+    extra_test_files=('src/agents/tasks/managed-roots-tool.test.ts' 'src/agents/tasks/managed-root.native-registry.test.ts' 'src/agents/tasks/managed-root.decide.test.ts')
+    test_pattern=''
+    probe_restart=0 ;;
+  root_exceptions)
+    # The exceptions of a root against this checkout's contract: without AGENT_WORK_G_ROOT those cases fail.
+    test_file='src/agents/tasks/managed-root.exception.test.ts'
+    extra_test_files=('src/agents/tasks/managed-root.exceptions.test.ts' 'src/agents/tasks/managed-root.view.test.ts')
+    test_pattern=''
+    required_passes=(
+      'has the classes of excepcion/clases.json'
+      'raises only types that contrato.py accepts, with their option texts'
+      'emits exception documents the contract accepts'
+    )
+    probe_restart=0 ;;
+  root_authority)
+    test_file='src/agents/tasks/managed-root.authority.test.ts'
+    test_pattern=''
+    probe_restart=0 ;;
   *) printf 'Unknown or unimplemented agent-work runtime case: %s\n' "${1:-}" >&2; exit 2 ;;
 esac
 
@@ -152,7 +173,8 @@ if [ "$case_name" = projection_gateway ] || [ "$case_name" = root_control ]; the
     exit 2
   fi
 fi
-if [ "$case_name" = projection_gateway ] || [ "$case_name" = root_contract ]; then
+if [ "$case_name" = projection_gateway ] || [ "$case_name" = root_contract ] \
+    || [ "$case_name" = root_exceptions ]; then
   export AGENT_WORK_G_ROOT="$repo_root"
 fi
 run_vitest() {
