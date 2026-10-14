@@ -241,7 +241,68 @@ mano. Los hechos que pesan:
 
 Lo que queda sin medir y decide SUA-01 o SUA-02 si lo necesita: el coste de un
 cron con sesión durable, y el efecto de sacar al controlador a un agente
-propio, distinto de `main`.
+propio, distinto de `main`. El segundo se midió el 2026-10-14 (M-11, abajo). El
+primero no se mide: SUA-02 no necesita un tic (M-12, abajo).
+
+## Mediciones vivas del 2026-10-14 (SUA-02)
+
+Autorización: la de todo SUA del 2026-10-13 (plan, "Decisiones de David
+vigentes", D14). El plan pide M-11 dentro de SUA-02 ("SUA-02 — Controlador y
+autoridad"). La corrió el coordinador desde la MacBook, de las 10:41 a las
+10:45 UTC, con el script `m11.sh`.
+
+Entorno medido: gateway OpenClaw 2026.9.7 en la Mini, R `65432d0` (segunda
+instalación de SUA-01). CLI de la Mac: `~/.openclaw-r/openclaw`. Modelo de
+`main` y de `ingenieria` en todos los turnos: `opencode-go-resp/muse-spark-1.3-contributor`.
+Método: el de M-02. Las horas de emisión son del reloj de la MacBook y las de
+los turnos, de `trajectory_runtime_events` de cada agente en la Mini. Ninguna
+llamada llevó `--deliver`. Las salidas crudas están en
+`~/.local/state/sua-loop/mediciones/m11*` de la MacBook, fuera del repo.
+
+Las sesiones de ensayo se llamaron `agent:main:sua-ensayo-20261014-m11b<k>` y
+`agent:ingenieria:sua-ensayo-20261014-m11i<k>`, con `k` de 1 a 3.
+
+| ID | Qué se hizo | Resultado |
+|---|---|---|
+| M-11 | Tres muestras. En cada una, un `openclaw agent --agent main --session-key …m11b<k> --message-file m11-busy.txt` pide a `main` correr `sleep 45` con `exec`. Doce segundos después, `openclaw system event --mode now --timeout 15000 --session-key agent:ingenieria:sua-ensayo-20261014-m11i<k> --text "ensayo SUA-02 M-11 muestra <k>: contesta NO_REPLY" --json` | En las tres, el turno de `ingenieria` esperó a que terminara el turno de `main`. Esperas de 40,7 s, 40,2 s y 39,1 s. Tabla abajo |
+| M-12 | No se corrió | SUA-02 no necesita un tic además del evento de R. Razón abajo |
+
+### M-11, las tres muestras
+
+| Muestra | Turno de `main` (inicio, duración) | Evento emitido | `{"ok": true}` a los | Turno de `ingenieria` empezó | Espera | Después del fin de `main` |
+|---|---|---|---|---|---|---|
+| 1 | 10:41:55.079, 50,7 s (4 llamadas: `exec`, `process`, `process`) | 10:42:06.018 | 1,61 s | 10:42:46.689 | 40,7 s | 0,9 s |
+| 2 | 10:43:06.840, 48,0 s (2 llamadas, `exec`) | 10:43:17.794 | 1,12 s | 10:43:58.002 | 40,2 s | 3,2 s |
+| 3 | 10:44:15.947, 48,5 s (2 llamadas, `exec`) | 10:44:26.896 | 1,12 s | 10:45:06.009 | 39,1 s | 1,6 s |
+
+Cada turno de `ingenieria` duró de 1,4 a 1,8 s, hizo una llamada al proveedor
+(77 630 bytes, disparador `heartbeat`), contestó `NO_REPLY` y gastó 25 647,
+25 701 y 25 685 tokens en total. La primera sesión de `ingenieria` era nueva y
+leyó 3 441 tokens de caché; las otras dos leyeron 24 945. Al final se borraron
+las seis sesiones (`sessions delete`, las seis `deleted`).
+
+La línea "M-11 medido" de `~/.local/state/sua-loop/estado.md` da 39,6 s para la
+tercera espera. Los archivos crudos dan 39,1 s (`m11.3.ev.emision` 1791974666.896,
+turno a las 10:45:06.009 en `m11-turnos-ing.txt`). Esta tabla usa los crudos.
+
+Lo que esto dice: un `system event --mode now` a una sesión de otro agente
+también espera detrás de un turno de `main` en vuelo. La fila de M-02 no es solo
+de `main`. Por el criterio del plan ("si en alguna espera, se queda en `main`"),
+el controlador vive en `main`. No se midió si la espera es detrás de cualquier
+agente o solo de `main`, ni el modo `next-heartbeat`.
+
+### M-12, por qué no se corre
+
+El plan la pide solo si SUA-02 necesita un tic periódico además del evento de R.
+El diseño de SUA-02 (`docs/superpowers/specs/2026-10-14-sua-02-controlador-design.md`,
+4.4) no lo necesita. Lo único de SUA-02 que depende del reloj es el reaviso de
+una excepción, como mucho una vez por hora. Ese reaviso es una entrega de la cola
+de sesión de R con `availableAt` en el futuro, que R ya sabe esperar
+(`resolveRetryDelayMs`, `src/infra/session-delivery-queue-runtime.ts:63-73`, y
+`isDeliveryRecoveryRetryEligible`, `src/infra/delivery-recovery.shared.ts:80-86`).
+No cuesta nada hasta que vence, y al vencer cuesta un despertar como el de M-01.
+Los demás plazos ya llegan como hechos de R: el host reporta `deadline-missed`
+como incidencia y R despierta al solicitante.
 
 ## Lint y formato de R
 
