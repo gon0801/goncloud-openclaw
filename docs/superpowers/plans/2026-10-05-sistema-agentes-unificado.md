@@ -1,6 +1,6 @@
 # Plan: Sistema unificado de agentes
 
-Fecha: 2026-10-05. Identificador: **SUA**. Estado: **SUA-00 cerrado el 2026-10-13 (PR #288 y #289); SUA-01 cerrado el 2026-10-14 (recibo `docs/evidence/sistema-agentes-unificado/SUA-01.md`, R `65432d0` en la Mini); SUA-02 a SUA-11 autorizados de corrido el 2026-10-13**.
+Fecha: 2026-10-05. Identificador: **SUA**. Estado: **SUA-00 cerrado el 2026-10-13 (PR #288 y #289); SUA-01 cerrado el 2026-10-14 (recibo `docs/evidence/sistema-agentes-unificado/SUA-01.md`); SUA-02 cerrado el 2026-10-14 (recibo `SUA-02.md`, R `7b3db54` en la Mini); SUA-03 a SUA-11 autorizados de corrido el 2026-10-13**.
 <!-- corr: K1 -->
 Revisado el 2026-10-12 contra G `6e01ec0` y R `605aef7`, después del cierre de encargos.
 <!-- corr: B22 -->
@@ -185,7 +185,7 @@ de artefactos; compartir contratos no crea dependencia de disponibilidad entre h
 |---|---|---|---|
 | SUA-00 | Inventario residual, contratos y fixtures comunes | — | cerrado el 2026-10-13 (PR #288, #289) |
 | SUA-01 | Estado, DAG y control atómicos en OpenClaw | SUA-00 (cerrado); B18-R mergeado (R `c928144`, cumplido) <!-- corr: C1.1 -->; "Preparación antes de SUA-01" | cerrado el 2026-10-14 (`SUA-01.md`) |
-| SUA-02 | Controlador, autoridad y excepciones | SUA-01 | autorizado el 2026-10-13 |
+| SUA-02 | Controlador, autoridad y excepciones | SUA-01 | cerrado el 2026-10-14 (`SUA-02.md`) |
 | SUA-03 | Poteto, perfiles y rutas nativo/CLI/OpenCode | SUA-02 | autorizado el 2026-10-13 |
 | SUA-04 | Catálogo, promoción y alta automática | SUA-03 | autorizado el 2026-10-13 |
 | SUA-05 | Ingeniería y calidad propias del sistema | SUA-02, SUA-03 | autorizado el 2026-10-13 |

@@ -33,9 +33,9 @@ nombra. Sin la llave, `main` ve exactamente lo de hoy.
 | R7 | R `4249d6b36e96` | Restringir | CAMBIOS a la tanda T3, Kimi (`VEREDICTO-SUA02-T3-r1`); sin hallazgo en R7 |
 | R8 | R `29d87bd27e17` | Controlador y residual 1 de SUA-01 | CAMBIOS a la tanda T3: su bloqueante, una guarda sin prueba, es de R8 |
 | R9 | R `568409a22823` | Las seis herramientas y la llave | CAMBIOS a la tanda T3; sin hallazgo en R9 |
-| R10 | R `7b3db54226bf` | La prueba que pinea la guarda de R8 y la línea base de configuración | Pendiente, Kimi revisa la T3-r2 |
-| G2 | este PR | Skill `raiz` e importador de `Plans.md` | Pendiente |
-| G3 | este PR | Casos en G, la sombra y este recibo | Pendiente |
+| R10 | R `7b3db54226bf` | La prueba que pinea la guarda de R8 y la línea base de configuración | APROBADO, Kimi (`VEREDICTO-SUA02-T3-r2`, B1 cerrado) |
+| G2 | este PR | Skill `raiz` e importador de `Plans.md` | APROBADO, Kimi (`VEREDICTO-SUA02-G23-r1`) |
+| G3 | este PR | Casos en G, la sombra y este recibo | APROBADO, Kimi (`VEREDICTO-SUA02-G23-r1`) |
 
 Los veredictos están en `~/.local/state/encargos-loop/VEREDICTO-SUA02-*`. GLM no tuvo cuota en
 todo el bloque: Kimi revisó como relevo. Cada rebanada de R pasó la compuerta del diseño (sección
@@ -117,8 +117,25 @@ planes del contrato y la fila importada ligaron sus unidades listas: `pedido-chi
 
 ## Segunda parte: instalación en la Mini
 
-<!-- PENDIENTE: la escribe el coordinador cuando ocurra. -->
-PENDIENTE. Una sola instalación, con R9 aprobada (diseño, sección 6, "Instalación en la Mini: una,
-después de R9"). Antes, la T11-c con el paquete instalado de `65432d0` sobre una base sembrada con
-las trece tablas. La comprobación incluye que `main` no ve ninguna herramienta `managed_roots_*` y
-que `managedTasks.root.read` con `no-existe` sigue contestando `null` sin crear tablas.
+Una sola instalación, el 2026-10-14, con la T3 aprobada en su segunda ronda (R10). Antes, la T11-c
+sobre una base sembrada por el árbol de R10, que nace con las trece tablas: el paquete instalado de
+`65432d0` (lo que corría en la Mini) y el de `4acb881` (antes de SUA-01) arrancan su gateway sobre
+ella, contestan y la dejan en 27, trece tablas e integridad `ok`
+(`~/.local/state/sua-loop/t11c/t11c-sua02-*.log`).
+
+Con `ANTERIOR=65432d0 t12-actualizar-sua01.sh 7b3db54226bf… --fuera-de-ventana`. Antes: R `65432d0`,
+29 crons, ninguno corriendo ni en los próximos 150 s, 0 turnos de agentes y 0 encargos en vuelo, 0
+tablas `managed_root%`. El gateway estuvo abajo de 20:50:53Z a 20:51:27Z. Después: `build-info` con
+el commit `7b3db54226bf`, esquema 27, 0 tablas `managed_root%`, `managedTasks.root.read` con
+`no-existe` contestó `null` y siguió habiendo 0 tablas, `managedTasks` como estaba y los mismos 29
+crons. Resultado: `ACTUALIZADO OK`. Foto previa: `~/.openclaw/respaldos/pre-7b3db54-20261014-1350`.
+La reversa es reinstalar el paquete de `65432d0`. Log:
+`~/.local/state/encargos-loop/artifacts/T12/actualizar-7b3db54-20261014T205044Z.log`.
+
+Canario: tarea `b54d9fac-a649-4b1a-a49b-e237404556ab` con `kimi-code-plan-cn/k3`, `acknowledged` con
+`AbsenceVerified`, sin incidencias y con `result_digest` en R. `main` usó `read`, `exec`,
+`tool_describe`, `tool_call`, `managed_tasks_submit` y `managed_tasks_admit`, ninguna herramienta
+`managed_roots_*`: sin la llave `managedTasks.rootRequesters` no las ve. Evidencia en
+`~/.local/state/encargos-loop/B22/corte/sua02-7b3db54.*`.
+
+`artifact-manifest.json` apunta a `paquete-7b3db54`.
