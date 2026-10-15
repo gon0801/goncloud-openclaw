@@ -259,6 +259,20 @@ class Briefs(unittest.TestCase):
             self.assertFalse((destino / "lib.dylib").exists())
             self.assertFalse((destino / "state" / "otra.dylib").exists())
 
+    def test_the_exploration_outcome_line_names_the_incident_kind(self):
+        # R4 de SUA03-G5c-r3: la línea de A6 dice qué desenlace fue, con el kind.
+        self.assertEqual(
+            desenlace_de({"deliveryState": "result-recorded", "incidents": []}),
+            "resultado",
+        )
+        self.assertEqual(
+            desenlace_de({
+                "deliveryState": "registered",
+                "incidents": [{"kind": "deadline", "episodeId": "deadline-missed"}],
+            }),
+            "incidente:deadline",
+        )
+
     def test_artifact_path_reads_what_the_host_recorded(self):
         # E: el inspect de R devuelve artifactRef como artifact:<sha256>; la ruta real es
         # la que el host grabó en results/<op>.json.
