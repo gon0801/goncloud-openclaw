@@ -46,6 +46,10 @@ OPENCODE = os.environ.get("AGENT_WORK_OPENCODE", "/opt/homebrew/bin/opencode")
 # The group whose processes are a case's slot: the macOS group ruta_viva uses, shared with nothing.
 SLOT_GROUP = os.environ.get("AGENT_WORK_E2E_SLOT_GROUP", "_appserverusr")
 INSTANCE = "enc-1"
+BANCO_PLAZO = 900
+"""El plazo de resultado del host del banco (R1 de G5c-r3): vence antes que la espera
+de cada caso (el plazo por omisión del host, 3600 s, nunca dejaba llegar el incidente
+deadline-missed dentro de los 1500 s de espera). La espera se deriva de esta constante."""
 # La ruta del playbook dentro del paquete. La copia que conducta lee es la de la corrida
 # (runs/<op>/contexto/skills/...) en los casos con paquete, y la de la fuente del paquete
 # copiada en un raíz con contexto/ para el control sin paquete: la ruta del repo
@@ -281,19 +285,23 @@ class BancoE2E(unittest.TestCase):
         env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
         subprocess.run(["git", "-C", str(self.repo), *args], check=True, env=env, capture_output=True)
 
+    def host_argv(self):
+        return [sys.executable, str(ROOT / "scripts/agent-work/native_gateway.py"),
+                "--openclaw-bin", str(self.bin / "openclaw"), "--host-id", HOST_ID,
+                "--expect-url", self.gateway.url, "--host-state-dir", str(self.spool),
+                "--state-root", str(self.state), "--evidence-root", str(self.state / "evidence"),
+                "--progress-state-dir", str(self.root / "progress"), "--progress-client", "unused", "--watch",
+                "--cli-instance-id", INSTANCE, "--cli-tmux-socket", self.socket, "--tmux-bin", TMUX,
+                "--workspace-root", str(self.root / "dev"), "--opencode-bin", OPENCODE,
+                "--slot-group", SLOT_GROUP, "--canary",
+                "--result-deadline-seconds", str(BANCO_PLAZO)]
+
     def start_host(self):
         """A host over this case's slot, with --canary: the gate is armed and the profiles have no
         competence yet, so the banco would refuse itself without it."""
         with self.log.open("a") as log:
             self.host = subprocess.Popen(
-                [sys.executable, str(ROOT / "scripts/agent-work/native_gateway.py"),
-                 "--openclaw-bin", str(self.bin / "openclaw"), "--host-id", HOST_ID,
-                 "--expect-url", self.gateway.url, "--host-state-dir", str(self.spool),
-                 "--state-root", str(self.state), "--evidence-root", str(self.state / "evidence"),
-                 "--progress-state-dir", str(self.root / "progress"), "--progress-client", "unused", "--watch",
-                 "--cli-instance-id", INSTANCE, "--cli-tmux-socket", self.socket, "--tmux-bin", TMUX,
-                 "--workspace-root", str(self.root / "dev"), "--opencode-bin", OPENCODE,
-                 "--slot-group", SLOT_GROUP, "--canary"],
+                self.host_argv(),
                 cwd=ROOT, env={**self.gateway.env, "LANG": "en_US.UTF-8"}, stdout=log, stderr=subprocess.STDOUT)
 
     def stop_host(self):
@@ -381,12 +389,19 @@ class BancoE2E(unittest.TestCase):
     def snapshot(self, task_id):
         return self.gateway.tool("inspect", {"taskId": task_id}, "banco-inspect")
 
-    def wait_result(self, task_id, seconds=1500):
+    def wait_result(self, task_id, seconds=BANCO_PLAZO + 600):
         """The task reaches a recorded result, or the test fails with what the host and opencode said."""
         def recorded():
             snapshot = self.snapshot(task_id)
-            return snapshot if snapshot["deliveryState"] == "result-recorded" else None
+            return snapshot if snapshot["deliveryState"] == "result-recorded" or snapshot["incidents"] else None
         snapshot = self.reached(recorded, seconds, f"la tarea {task_id} nunca entregó resultado")
+        if snapshot["deliveryState"] != "result-recorded":
+            incidente = snapshot["incidents"][0]
+            self.fail(
+                f"la tarea {task_id} terminó en incidente "
+                f"{incidente['kind']}/{incidente['episodeId']} sin resultado; "
+                f"log del host: {self.log.read_text()[-3000:]}"
+            )
         estado = self.estado(task_id)
         self.assertIsNone(estado["explicacion"], estado["logTail"][-10:])
         return snapshot
@@ -427,7 +442,7 @@ class BancoE2E(unittest.TestCase):
         clone = self.run_dir(task_id).repo
         self.assertFalse(clone.exists(), "el clon de la corrida sobrevivió a su cierre")
 
-    def wait_result_or_incident(self, task_id, seconds=1500):
+    def wait_result_or_incident(self, task_id, seconds=BANCO_PLAZO + 600):
         def settled():
             snapshot = self.snapshot(task_id)
             return snapshot if snapshot["deliveryState"] == "result-recorded" or snapshot["incidents"] else None
