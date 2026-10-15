@@ -32,9 +32,11 @@ RC_GUARDAR="${RC_GUARDAR:-2}"             # archivos de cada tipo que se quedan 
 RC_TELEGRAM="${RC_TELEGRAM:-6470689715}"
 RC_FECHA="${RC_FECHA:-$(date +%Y%m%d)}"
 
-# Rutas relativas a $HOME; un patrón sin coincidencias se anota y se sigue.
-EXTRAS="Library/LaunchAgents/ai.openclaw.*.plist Library/LaunchAgents/ai.goncloud.*.plist
-goncloud-autoupdate .claude .claude.json .ssh .zshrc .openclaw-state .local/bin"
+# Rutas relativas a $HOME. Sin una requerida no se reinstala: si falta (un patrón sin
+# ninguna coincidencia), la corrida falla y avisa, aunque igual sube lo que hay. Una
+# opcional que falta solo se anota. El script instalado también es requerido.
+EXTRAS_REQUERIDOS="Library/LaunchAgents/ai.openclaw.*.plist goncloud-autoupdate .ssh .zshrc"
+EXTRAS_OPCIONALES="Library/LaunchAgents/ai.goncloud.*.plist .claude .claude.json .openclaw-state .local/bin"
 
 mkdir -p "$(dirname "$RC_LOG")" "$RC_DIR"
 exec >>"$RC_LOG" 2>&1
@@ -156,39 +158,51 @@ crear_backup() {
 
 # 2. Lo de fuera de ~/.openclaw, con rutas absolutas sin la / inicial: se restaura a un
 # directorio aparte y se copia de ahí (ver el runbook). La nota RESPALDO-EXTRAS.txt dice
-# qué faltó.
+# qué faltó: "falta (requerido): ..." u "omitido (no existe): ...".
 listar_extras() { # $1 nota, $2 lista
-  local patron ruta yo
+  local patron ruta yo tipo patrones
   case "$0" in /*) yo="$0" ;; *) yo="$PWD/$0" ;; esac
   printf 'Extras de %s, %s. Rutas relativas a /.\n' "$(hostname)" "$RC_FECHA" > "$1"
-  printf '%s\n' "$1" "$yo" > "$2"
-  for patron in $EXTRAS; do
-    # shellcheck disable=SC2086  # el patrón se expande a propósito
-    set -- "$HOME"/$patron
-    if [ -e "$1" ] || [ -L "$1" ]; then
-      for ruta in "$@"; do find "$ruta"; done
-    else
-      printf 'omitido (no existe): ~/%s\n' "$patron" >&3
-    fi
+  printf '%s\n' "$1" > "$2"
+  if [ -f "$yo" ]; then printf '%s\n' "$yo" >> "$2"; else printf 'falta (requerido): %s\n' "$yo" >> "$1"; fi
+  for tipo in requerido opcional; do
+    if [ "$tipo" = requerido ]; then patrones="$EXTRAS_REQUERIDOS"; else patrones="$EXTRAS_OPCIONALES"; fi
+    for patron in $patrones; do
+      # shellcheck disable=SC2086  # el patrón se expande a propósito
+      set -- "$HOME"/$patron
+      if [ -e "$1" ] || [ -L "$1" ]; then
+        # Sin sockets: tar no los archiva y su queja taparía la causa real de una falla.
+        for ruta in "$@"; do find "$ruta" ! -type s; done
+      elif [ "$tipo" = requerido ]; then
+        printf 'falta (requerido): ~/%s\n' "$patron" >&3
+      else
+        printf 'omitido (no existe): ~/%s\n' "$patron" >&3
+      fi
+    done
   done 3>> "$1" >> "$2"
 }
 crear_extras() {
   local destino="$RC_DIR/openclaw-extras-$RC_FECHA.tar.gz" nota="$RC_DIR/RESPALDO-EXTRAS.txt"
-  local lista="$TMP/extras.lista" intento
+  local lista="$TMP/extras.lista" intento armado="" faltan
   # Un archivo de ~/.claude que desaparece entre la lista y tar hace fallar a tar; con
   # la lista rehecha el segundo intento pasa. Dos fallas seguidas son una falla real.
   for intento in 1 2; do
     listar_extras "$nota" "$lista"
     sed 's|^/||' "$lista" > "$lista.rel"
     if tar -czf "$TMP/extras.tar.gz" --no-recursion -C / -T "$lista.rel" 2> "$TMP/tar.err"; then
-      grep '^omitido' "$nota" | while IFS= read -r l; do log "extras: $l"; done
-      mv -f "$TMP/extras.tar.gz" "$destino"
-      log "extras creados: $destino ($(du -h "$destino" | cut -f1), $(wc -l < "$lista" | tr -d ' ') rutas)"
-      subir "$destino"; return
+      armado=1; break
     fi
     log "extras: tar falló en el intento $intento: $(tr '\n' ' ' < "$TMP/tar.err" | cut -c1-200)"
   done
-  falla "no se pudo armar los extras: $(tr '\n' ' ' < "$TMP/tar.err" | cut -c1-200)"
+  grep '^omitido' "$nota" | while IFS= read -r l; do log "extras: $l"; done
+  faltan="$(sed -n 's/^falta (requerido): //p' "$nota" | awk '{ printf "%s%s", (NR > 1 ? ", " : ""), $0 }')"
+  [ -z "$faltan" ] || falla "faltan extras requeridos: $faltan"
+  if [ -z "$armado" ]; then
+    falla "no se pudo armar los extras: $(tr '\n' ' ' < "$TMP/tar.err" | cut -c1-200)"; return 1
+  fi
+  mv -f "$TMP/extras.tar.gz" "$destino"
+  log "extras creados: $destino ($(du -h "$destino" | cut -f1), $(wc -l < "$lista" | tr -d ' ') rutas)"
+  subir "$destino"
 }
 
 # Un fallo de uno no detiene al otro: el que sí sale se sube.

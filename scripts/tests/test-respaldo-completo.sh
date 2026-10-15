@@ -20,6 +20,9 @@
 #  12. SIGTERM a media subida: sale en el acto por la limpieza, mata la subida, no deja
 #      temporal ni lock, y avisa la causa.
 #  13. SIGKILL a media subida deja el temporal; la corrida siguiente lo borra.
+#  14. Faltan extras requeridos (plist ai.openclaw, goncloud-autoupdate, .zshrc): sale 1 y
+#      avisa una vez nombrándolos, pero igual sube los extras que hay y el backup. Un
+#      opcional que falta (.openclaw-state, desde el 1) no es falla.
 #
 # Corre el script con /bin/bash: en macOS es el 3.2 de la Mini.
 # Uso: bash scripts/tests/test-respaldo-completo.sh
@@ -237,6 +240,21 @@ set -- "$L"/.tmp.*
 correr || { cat "$SB/log"; fail "la corrida tras un SIGKILL falló"; }
 ls -A "$L" | grep -q '^\.' && fail "la corrida tras un SIGKILL dejó: $(ls -A "$L" | grep '^\.' | tr '\n' ' ')"
 grep -q "temporal de una corrida anterior borrado: $(basename "$1")" "$SB/log" || fail "el log no dice qué temporal viejo borró"
+
+# 14
+rm -rf "$SB/servidor" "$L"; rm -f "$SB/avisos"
+mkdir -p "$SB/aparte"
+mv "$H/Library/LaunchAgents/ai.openclaw.gateway.plist" "$H/goncloud-autoupdate" "$H/.zshrc" "$SB/aparte/"
+correr; rc=$?
+mv "$SB/aparte/ai.openclaw.gateway.plist" "$H/Library/LaunchAgents/"; mv "$SB/aparte/goncloud-autoupdate" "$SB/aparte/.zshrc" "$H/"
+[ "$rc" -eq 1 ] || fail "faltar extras requeridos no hizo fallar la corrida (rc=$rc)"
+[ "$(avisos)" = 1 ] || fail "faltar extras requeridos no avisó exactamente una vez: $(avisos)"
+[ "$(cat "$SB/avisos")" = "El respaldo completo de la Mac mini a gonserver falló: faltan extras requeridos: ~/Library/LaunchAgents/ai.openclaw.*.plist, ~/goncloud-autoupdate, ~/.zshrc. Revisa $SB/log." ] \
+  || fail "el aviso no nombra los requeridos que faltan: $(cat "$SB/avisos")"
+[ -f "$SV/openclaw-extras-$F.tar.gz" ] || fail "con requeridos faltantes no subió los extras que hay"
+[ -f "$SV/openclaw-backup-$F.tar.gz" ] || fail "con requeridos faltantes no subió el backup"
+tar -xzOf "$SV/openclaw-extras-$F.tar.gz" "${L#/}/RESPALDO-EXTRAS.txt" | grep -qx "falta (requerido): ~/.zshrc" \
+  || fail "la nota no dice qué requerido faltó"
 
 # 10
 sed -e "s|__HOME__|/Users/gon|g" -e "s|__NODE_BIN__|/Users/gon/.openclaw/tools/node-v24.19.0/bin|g" "$P" > "$SB/p.plist"
