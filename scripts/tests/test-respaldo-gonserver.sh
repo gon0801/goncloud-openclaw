@@ -230,7 +230,9 @@ for d in 09 10 11 12 13 14 15; do
   BASE_PRUEBA="$P" recibir openclaw "openclaw-backup-202610$d.tar.gz" "$SB/bueno.tar.gz" || fail "no recibió el día $d"
 done
 BASE_PRUEBA="$P" recibir openclaw openclaw-backup-20261001.tar.gz "$SB/bueno.tar.gz"; rc=$?
-[ "$rc" -eq 0 ] || fail "un día viejo que la poda quita salió $rc: $(cat "$SB/err")"
-[ "$(cat "$SB/out")" = "$(sha "$SB/bueno.tar.gz")" ] || fail "un día viejo que la poda quita no imprimió su sha: '$(cat "$SB/out")'"
+[ "$rc" -eq 5 ] || fail "un día más viejo que los que se guardan no se rechazó (rc=$rc, out='$(cat "$SB/out")')"
+[ ! -s "$SB/out" ] || fail "un día rechazado imprimió un sha"
+[ "$(ls "$P/openclaw" | tr '\n' ' ')" = "openclaw-backup-20261009.tar.gz openclaw-backup-20261010.tar.gz openclaw-backup-20261011.tar.gz openclaw-backup-20261012.tar.gz openclaw-backup-20261013.tar.gz openclaw-backup-20261014.tar.gz openclaw-backup-20261015.tar.gz " ] \
+  || fail "un día rechazado cambió lo guardado: $(ls -A "$P/openclaw" | tr '\n' ' ')"
 
 echo "ok: receptor por familia con validación, retención y sha; vigía callado al día y con un aviso sin token"

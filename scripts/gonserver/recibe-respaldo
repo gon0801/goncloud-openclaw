@@ -20,7 +20,7 @@
 #
 # Éxito: imprime el sha256 del archivo guardado y sale 0. Falla: mensaje en stderr y
 # salida distinta de 0 (2 nombre, familia o fecha inválidos, 3 archivo corrupto, 4 pasa
-# del tope). Nunca deja un archivo a medias: escribe a un temporal, lo valida con
+# del tope, 5 más viejo que los que se guardan). Nunca deja un archivo a medias: escribe a un temporal, lo valida con
 # `gzip -t` y lo renombra.
 set -eu
 umask 077
@@ -55,6 +55,12 @@ if [ "$n" -gt $((hoy + 1)) ] || [ "$n" -lt $((hoy - 60)) ]; then
 fi
 
 mkdir -p "$dir"
+# Un día más viejo que los que se guardan se podaría al instante: el cliente creería
+# que quedó guardado. Se rechaza antes de leer nada.
+if ! { ls -1 "$dir" | grep -E "^$prefijo-[0-9]{8}\.tar\.gz\$"; echo "$nombre"; } \
+    | sort -ru | head -n "$guardar" | grep -qxF "$nombre"; then
+  echo "ERROR: '$nombre' es más viejo que los $guardar que se guardan" >&2; exit 5
+fi
 tmp="$dir/.$nombre.tmp.$$"
 trap 'rm -f "$tmp"' EXIT
 trap 'exit 1' HUP INT TERM
