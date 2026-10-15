@@ -368,6 +368,26 @@ def _cited(decision: OperatorCitation) -> str:
     return f"{decision.by} {decision.on} {decision.ref}"
 
 
+def perfiles(checkout: Path) -> dict:
+    """`encargo.py perfiles`. Solo lectura: los perfiles del checkout en una línea, para que quien
+    pide vea qué especialidades existen, qué rutas las atienden y qué agentes siguen sin perfil
+    (SUA-03, 4.4)."""
+    documento = contexto.leer_json(Path(checkout) / CONTEXTO_DIR / "perfiles.v1.json")
+    filas = []
+    for perfil in documento["profiles"]:
+        filas.append({
+            "id": perfil["id"], "purpose": perfil["purpose"],
+            "resultContracts": list(perfil["resultContracts"]),
+            "rutas": [{"ruta": contexto.clave_de_ruta(ruta), "via": list(ruta["via"])}
+                      for ruta in perfil["routes"]],
+            "writesSource": perfil["writesSource"],
+            "competencia": {clave: {"status": dato.get("status"), "validUntil": dato.get("validUntil")}
+                            for clave, dato in perfil["competence"].items()},
+        })
+    return {"ok": True, "perfiles": filas,
+            "agentesSinPerfil": [agente["agentId"] for agente in documento.get("agents", ())]}
+
+
 def _session(provider: ProviderId | None,
              catalog: Catalog | None) -> Literal["con-sesion", "sin-sesion", "sin-id", "sin-catalogo"]:
     if provider is None:
@@ -727,6 +747,7 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--perfil", help="perfil de trabajador para la cabecera del brief; sin él, un encargo sin paquete")
     state = commands.add_parser("estado", help="el latido del host de encargos, o lo que corrió una tarea")
     state.add_argument("--tarea", metavar="TASKID")
+    commands.add_parser("perfiles", help="los perfiles del checkout y los agentes sin perfil, en una línea JSON")
     listing = commands.add_parser("proveedores", help="qué proveedores pueden correr, cómo cobran y qué falta")
     listing.add_argument("--refrescar", action="store_true", help="pide a opencode que vuelva a bajar su lista")
     allow = commands.add_parser("permitir", help="escribe un permiso, un filtro o el id de un permiso que existe")
@@ -771,6 +792,16 @@ def _run_estado(args: argparse.Namespace, where: dict, now: float) -> int:
     return _say(estado(args.tarea, state_root=args.state_root, checkout=args.checkout, now=now), now)
 
 
+def _run_perfiles(args: argparse.Namespace, where: dict, now: float) -> int:
+    try:
+        respuesta = perfiles(checkout=where["checkout"])
+    except (OSError, ValueError, KeyError) as error:
+        print(f"perfiles: no se pudo leer perfiles.v1.json del checkout: {error}", file=sys.stderr)
+        return 3
+    print(json.dumps(respuesta, ensure_ascii=False))
+    return 0
+
+
 def _run_proveedores(args: argparse.Namespace, where: dict, now: float) -> int:
     return _show("proveedores", proveedores(refrescar=args.refrescar, **where))
 
@@ -789,7 +820,8 @@ def _run_politica(args: argparse.Namespace, where: dict, now: float) -> int:
     return _show(args.command, outcome)
 
 
-_COMMANDS = {"preparar": _run_preparar, "estado": _run_estado, "proveedores": _run_proveedores,
+_COMMANDS = {"preparar": _run_preparar, "estado": _run_estado, "perfiles": _run_perfiles,
+             "proveedores": _run_proveedores,
              "permitir": _run_politica, "cerrar": _run_politica}
 
 
