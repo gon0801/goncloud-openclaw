@@ -240,6 +240,29 @@ def publicar_skill(origen: Path, destino: Path) -> None:
             archivo.unlink()
 
 
+def respalda_carpeta(origen: Path, respaldo: Path) -> None:
+    """El respaldo de una skill, atómico (C2): copia completa a una carpeta temporal
+    hermana y `os.replace` sobre el respaldo, quitando el viejo después, para que una
+    copia a medias nunca deje el respaldo roto ni a medias."""
+    copia = Path(tempfile.mkdtemp(dir=str(respaldo.parent), prefix="." + respaldo.name + "."))
+    viejo = None
+    try:
+        shutil.copytree(origen, copia / "nueva")
+        viejo = None
+        if respaldo.exists():
+            viejo = Path(
+                tempfile.mkdtemp(dir=str(respaldo.parent), prefix=".viejo-" + respaldo.name + ".")
+            )
+            os.replace(respaldo, viejo / "vieja")
+        os.replace(copia / "nueva", respaldo)
+    finally:
+        # El temporal que quede (una copia fallida, o el wrapper que ya se vació) es
+        # basura puntual: se limpia sin fallar; el respaldo anterior no se tocó.
+        shutil.rmtree(copia, ignore_errors=True)
+        if viejo is not None:
+            shutil.rmtree(viejo, ignore_errors=True)
+
+
 def con_candado(suya: Path, operacion) -> int:
     """El candado serializa publicadores (4.3): se toma antes de releyer cualquier cosa y se
     suelta al final. Quien edita a mano no toma el candado, y esa ventana es declarada."""
@@ -488,11 +511,9 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
                 continue
             respaldo = suya / gen / "skills" / nombre
             respaldo.parent.mkdir(parents=True, exist_ok=True)
-            if respaldo.exists():
-                shutil.rmtree(respaldo)
             # El respaldo es la foto de justo antes de esta escritura: lo que el digest
             # del estado valida y lo que la reversa restaura (4.3).
-            shutil.copytree(destino, respaldo)
+            respalda_carpeta(destino, respaldo)
         publicar_skill(publicacion / "skills" / nombre, destino)
         salida_skills[nombre] = "publicado"
 
@@ -513,9 +534,7 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
             continue
         respaldo = suya / gen / "skills" / nombre
         respaldo.parent.mkdir(parents=True, exist_ok=True)
-        if respaldo.exists():
-            shutil.rmtree(respaldo)
-        shutil.copytree(destino, respaldo)
+        respalda_carpeta(destino, respaldo)
         shutil.rmtree(destino)
         salida_skills[nombre] = "quitado"
         nuevas_skills.pop(nombre, None)
@@ -561,7 +580,7 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
         respaldo = suya / gen / "workspaces" / f"{identificador}.AGENTS.md"
         respaldo.parent.mkdir(parents=True, exist_ok=True)
         # La foto de justo antes de esta escritura: lo que valida el digest del estado.
-        respaldo.write_bytes(actual)
+        escribir_atomico(respaldo, actual)
         escribir_atomico(ruta, contenido)
         releido = sha256hex(leer_bytes(ruta))
         if releido != sha256hex(contenido):
