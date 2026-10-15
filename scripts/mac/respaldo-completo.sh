@@ -160,11 +160,18 @@ crear_backup() {
 
 # 2. Lo de fuera de ~/.openclaw, con rutas absolutas sin la / inicial: se restaura a un
 # directorio aparte y se copia de ahí (ver el runbook). La nota RESPALDO-EXTRAS.txt dice
-# qué faltó: "falta (requerido): ..." u "omitido (no existe): ...".
+# qué faltó: "falta (requerido): ..." u "omitido (no existe): ...". También trae las
+# versiones de OpenClaw y node: en una Mac nueva hay que instalarlas antes de poder
+# leer el backup con openclaw.
+VERSIONES=""
 listar_extras() { # $1 nota, $2 lista
   local patron ruta yo tipo patrones
   case "$0" in /*) yo="$0" ;; *) yo="$PWD/$0" ;; esac
-  printf 'Extras de %s, %s. Rutas relativas a /.\n' "$(hostname)" "$RC_FECHA" > "$1"
+  if [ -z "$VERSIONES" ]; then
+    VERSIONES="openclaw: $(con_tope 60 "$OPENCLAW_BIN" --version 2>/dev/null | head -1)
+node: $(con_tope 60 node --version 2>/dev/null) ($(command -v node))"
+  fi
+  printf 'Extras de %s, %s. Rutas relativas a /.\n%s\n' "$(hostname)" "$RC_FECHA" "$VERSIONES" > "$1"
   printf '%s\n' "$1" > "$2"
   if [ -f "$yo" ]; then printf '%s\n' "$yo" >> "$2"; else printf 'falta (requerido): %s\n' "$yo" >> "$1"; fi
   for tipo in requerido opcional; do

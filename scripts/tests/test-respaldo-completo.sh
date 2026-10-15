@@ -7,7 +7,8 @@
 #      el backup se crea con --verify; ssh va con la llave, IdentitiesOnly, BatchMode y
 #      StrictHostKeyChecking=yes (una llave de servidor desconocida no se acepta nunca).
 #   2. Extras: los plists ai.openclaw.* y ai.goncloud.* sí, otros no; sin sockets; lo que
-#      falta queda anotado en el log y en RESPALDO-EXTRAS.txt; incluye este script.
+#      falta queda anotado en el log y en RESPALDO-EXTRAS.txt; incluye este script; la
+#      nota trae las versiones de OpenClaw y node.
 #   3. En la Mac quedan los 2 más nuevos de cada tipo.
 #   4. Una subida que falla se reintenta alternando servidores y a la tercera va.
 #   5. Sin más intentos: sale 1, avisa una vez por `openclaw message send` con la causa de
@@ -59,6 +60,7 @@ cat > "$SB/openclaw" <<EOS
 #!/bin/sh
 printf '%s\n' "\$*" >> "$SB/oc-llamadas"
 case "\$1 \$2" in
+  "--version ") echo "OpenClaw 2026.9.7 (f8316c9)" ;;
   "backup create")
     out=""; prev=""
     for a in "\$@"; do [ "\$prev" = --output ] && out="\$a"; prev="\$a"; done
@@ -74,6 +76,7 @@ case "\$1 \$2" in
 esac
 EOS
 chmod +x "$SB/openclaw"
+mkdir -p "$SB/bin"; printf '#!/bin/sh\necho v24.19.0\n' > "$SB/bin/node"; chmod +x "$SB/bin/node"
 
 # ssh de mentira: anota argumentos, corre el receptor real. FAKE_SSH_FALLAS = cuántas
 # llamadas fallan primero; FAKE_SSH=sha-malo | mudo.
@@ -93,12 +96,12 @@ chmod +x "$SB/ssh"
 
 correr() { # variables extra como argumentos de env
   rm -f "$SB/ssh-n"
-  env HOME="$H" RC_DIR="$SB/local" RC_LOG="$SB/log" RC_FECHA="$F" OPENCLAW_BIN="$SB/openclaw" \
+  env HOME="$H" PATH="$SB/bin:$PATH" RC_DIR="$SB/local" RC_LOG="$SB/log" RC_FECHA="$F" OPENCLAW_BIN="$SB/openclaw" \
     RC_SSH="$SB/ssh" RC_ESPERA=0 RC_LLAVE="$H/.ssh/claw_goncloud" "$@" /bin/bash "$S"
 }
 lanzar() { # como correr, en segundo plano; deja el pid del script en PID
   rm -f "$SB/ssh-n" "$SB/ssh-pid"
-  env HOME="$H" RC_DIR="$SB/local" RC_LOG="$SB/log" RC_FECHA="$F" OPENCLAW_BIN="$SB/openclaw" \
+  env HOME="$H" PATH="$SB/bin:$PATH" RC_DIR="$SB/local" RC_LOG="$SB/log" RC_FECHA="$F" OPENCLAW_BIN="$SB/openclaw" \
     RC_SSH="$SB/ssh" RC_ESPERA=0 RC_LLAVE="$H/.ssh/claw_goncloud" "$@" /bin/bash "$S" &
   PID=$!
   for _ in $(seq 100); do [ -s "$SB/ssh-pid" ] && return 0; sleep 0.1; done
@@ -137,6 +140,9 @@ grep -qx "${S#/}" "$SB/extras.txt" || fail "los extras no traen el script instal
 grep -qx "${L#/}/RESPALDO-EXTRAS.txt" "$SB/extras.txt" || fail "los extras no traen su nota"
 tar -xzOf "$L/openclaw-extras-$F.tar.gz" "${L#/}/RESPALDO-EXTRAS.txt" | grep -qx "omitido (no existe): ~/.openclaw-state" \
   || fail "la nota no dice qué faltó"
+tar -xzOf "$L/openclaw-extras-$F.tar.gz" "${L#/}/RESPALDO-EXTRAS.txt" | sed -n '2,3p' > "$SB/versiones"
+[ "$(cat "$SB/versiones")" = "openclaw: OpenClaw 2026.9.7 (f8316c9)
+node: v24.19.0 ($SB/bin/node)" ] || fail "la nota no trae las versiones: $(cat "$SB/versiones")"
 grep -q "extras: omitido (no existe): ~/.openclaw-state" "$SB/log" || fail "el log no dice qué faltó"
 
 # 3
