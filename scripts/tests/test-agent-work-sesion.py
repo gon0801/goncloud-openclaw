@@ -1375,6 +1375,20 @@ class Decisions(Slot):
         self.backend.dies = None
         self.start(self.backend)
 
+    def test_a_clone_left_with_a_remote_is_built_again(self):
+        from native_gateway import build_clone
+
+        sha = self.git_out("-C", str(self.repo), "rev-parse", "HEAD")
+        destino = self.root / "clon"
+        build_clone(str(self.repo), sha, destino)
+        self.assertEqual(self.git_out("-C", str(destino), "remote"), "")
+        subprocess.run(["git", "-C", str(destino), "remote", "add", "origin", str(self.repo)], check=True,
+                       capture_output=True)
+        build_clone(str(self.repo), sha, destino)
+        self.assertEqual(self.git_out("-C", str(destino), "remote"), "",
+                         "a clone whose origin came back is rebuilt, not reused")
+        self.assertEqual(self.git_out("-C", str(destino), "rev-parse", "HEAD"), sha)
+
     def test_a_host_that_died_before_launching_launches_once_it_is_back(self):
         self.died("before-launching")
         self.assertEqual((self.held(), self.backend.launches), (("attempted", "Launching", ""), []))
