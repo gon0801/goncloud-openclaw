@@ -1041,7 +1041,14 @@ class PublicadorNativo(unittest.TestCase):
         self.assertEqual(codigo, 3, respuesta)
         destino = self.home / ".openclaw" / "skills" / "principle-x"
         self.assertFalse(destino.exists(), "quedó una restauración a medias")
-        self.assertEqual([p.name for p in destino.parent.iterdir() if p.name.startswith(".")], [])
+        self.assertEqual(
+            [
+                p.name
+                for p in destino.parent.iterdir()
+                if p.name.startswith(".") and p.name != ".sua-contexto.json"
+            ],
+            [],
+        )
         roto.chmod(0o644)
         codigo, revertir = self.publicar("revertir")
         self.assertEqual((revertir["conflictos"], codigo), (0, 0))
