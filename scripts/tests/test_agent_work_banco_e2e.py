@@ -290,6 +290,22 @@ class Briefs(unittest.TestCase):
                     banco.clean_slot()
         self.assertIn("el caso dejó procesos vivos en el slot: 4321", str(atrapado.exception))
 
+    def test_guardar_caso_replaces_a_previous_copy_wholesale(self):
+        # B6 de G5d: si el destino ya existe, se reemplaza entero; nada de la
+        # corrida anterior queda mezclado con la nueva.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            raiz = tmp / "caso"
+            (raiz / "repo").mkdir(parents=True)
+            (raiz / "repo" / "saluda.py").write_text("nuevo\n")
+            destino = tmp / "guardados" / "test_x"
+            (destino / "repo").mkdir(parents=True)
+            (destino / "repo" / "saluda.py").write_text("viejo\n")
+            (destino / "de-la-anterior.md").write_text("resto\n")
+            guardar_caso(raiz, destino)
+            self.assertEqual((destino / "repo" / "saluda.py").read_text(), "nuevo\n")
+            self.assertFalse((destino / "de-la-anterior.md").exists())
+
     def test_artifact_path_reads_what_the_host_recorded(self):
         # E: el inspect de R devuelve artifactRef como artifact:<sha256>; la ruta real es
         # la que el host grabó en results/<op>.json.
