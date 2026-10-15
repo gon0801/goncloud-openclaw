@@ -471,8 +471,17 @@ class Perfiles(unittest.TestCase):
             contexto.admite(fallida, nativa("amazon"), "ready.v1", ahora=AHORA).causa,
             "perfil-sin-competencia",
         )
-        # Generation 1 has no competence yet: only a canary admits, and only on its own routes.
-        pendiente = contexto.perfil(perfiles, "ingenieria")
+        # Una competence pending solo admite en canario, y solo en sus rutas: la
+        # real de ingenieria ya está certificada por M-16 (r5), así que el pending
+        # se pone en una copia.
+        pendiente = copy.deepcopy(contexto.perfil(perfiles, "ingenieria"))
+        pendiente["competence"]["mac-local/opencode"] = {
+            "status": "pending",
+            "model": None,
+            "evidence": None,
+            "at": None,
+            "validUntil": None,
+        }
         self.assertEqual(
             contexto.admite(pendiente, CLI, "ready.v1", ahora=AHORA).causa, "perfil-sin-competencia"
         )

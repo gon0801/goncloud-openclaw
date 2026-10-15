@@ -76,11 +76,11 @@
       "coverage": "checkpoint-only",
       "competence": {
         "mac-local/opencode": {
-          "status": "pending",
-          "model": null,
-          "evidence": null,
-          "at": null,
-          "validUntil": null
+          "status": "passed",
+          "model": "zai-coding-plan/glm-5.3-flash",
+          "evidence": "SUA-03-mediciones.md (M-16, banco)",
+          "at": "2026-10-15T00:00:00Z",
+          "validUntil": "2027-01-14T00:00:00Z"
         },
         "mini-native/native/ingenieria": {
           "status": "pending",
@@ -158,11 +158,11 @@
       "coverage": "checkpoint-only",
       "competence": {
         "mac-local/opencode": {
-          "status": "pending",
-          "model": null,
-          "evidence": null,
-          "at": null,
-          "validUntil": null
+          "status": "passed",
+          "model": "zai-coding-plan/glm-5.3-flash",
+          "evidence": "SUA-03-mediciones.md (M-16, banco)",
+          "at": "2026-10-15T00:00:00Z",
+          "validUntil": "2027-01-14T00:00:00Z"
         },
         "mini-native/native/reviewer": {
           "status": "pending",
@@ -228,11 +228,11 @@
       "coverage": "checkpoint-only",
       "competence": {
         "mac-local/opencode": {
-          "status": "pending",
-          "model": null,
-          "evidence": null,
-          "at": null,
-          "validUntil": null
+          "status": "passed",
+          "model": "zai-coding-plan/glm-5.3-flash",
+          "evidence": "SUA-03-mediciones.md (M-16, banco)",
+          "at": "2026-10-15T00:00:00Z",
+          "validUntil": "2027-01-14T00:00:00Z"
         },
         "mini-native/native/adversary": {
           "status": "pending",
@@ -297,11 +297,11 @@
       "coverage": "checkpoint-only",
       "competence": {
         "mac-local/opencode": {
-          "status": "pending",
-          "model": null,
-          "evidence": null,
-          "at": null,
-          "validUntil": null
+          "status": "passed",
+          "model": "zai-coding-plan/glm-5.3-flash",
+          "evidence": "SUA-03-mediciones.md (M-16, banco)",
+          "at": "2026-10-15T00:00:00Z",
+          "validUntil": "2027-01-14T00:00:00Z"
         },
         "mini-native/native/verifier": {
           "status": "pending",
@@ -367,11 +367,11 @@
       "coverage": "checkpoint-only",
       "competence": {
         "mac-local/opencode": {
-          "status": "pending",
-          "model": null,
-          "evidence": null,
-          "at": null,
-          "validUntil": null
+          "status": "passed",
+          "model": "zai-coding-plan/glm-5.3-flash",
+          "evidence": "SUA-03-mediciones.md (M-16, banco)",
+          "at": "2026-10-15T00:00:00Z",
+          "validUntil": "2027-01-14T00:00:00Z"
         },
         "mini-native/native/scout": {
           "status": "pending",
