@@ -368,13 +368,35 @@ def _cited(decision: OperatorCitation) -> str:
     return f"{decision.by} {decision.on} {decision.ref}"
 
 
+CAMPOS_DE_PERFIL = ("id", "purpose", "resultContracts", "routes", "writesSource", "competence")
+
+
+def _valida_perfiles(documento: object) -> dict:
+    """La forma que `perfiles` lee (C3): raíz objeto, `profiles` lista y cada perfil un
+    objeto con sus campos; cualquier otra cosa es ValueError con salida 3."""
+    if not isinstance(documento, dict):
+        raise ValueError("perfiles.v1.json no es un objeto")
+    perfiles = documento.get("profiles")
+    if not isinstance(perfiles, list):
+        raise ValueError("perfiles.v1.json no tiene una lista en 'profiles'")
+    for perfil in perfiles:
+        if not isinstance(perfil, dict):
+            raise ValueError("perfiles.v1.json tiene un perfil que no es un objeto")
+        for campo in CAMPOS_DE_PERFIL:
+            if campo not in perfil:
+                raise ValueError(f"el perfil {perfil.get('id', '?')} no trae {campo}")
+        if not isinstance(perfil["resultContracts"], list):
+            raise ValueError(
+                f"el perfil {perfil.get('id', '?')} no trae resultContracts como lista"
+            )
+    return documento
+
+
 def perfiles(checkout: Path) -> dict:
     """`encargo.py perfiles`. Solo lectura: los perfiles del checkout en una línea, para que quien
     pide vea qué especialidades existen, qué rutas las atienden y qué agentes siguen sin perfil
     (SUA-03, 4.4)."""
-    documento = contexto.leer_json(Path(checkout) / CONTEXTO_DIR / "perfiles.v1.json")
-    if not isinstance(documento.get("profiles"), list):
-        raise ValueError("perfiles.v1.json no tiene una lista en 'profiles'")
+    documento = _valida_perfiles(contexto.leer_json(Path(checkout) / CONTEXTO_DIR / "perfiles.v1.json"))
     filas = []
     for perfil in documento["profiles"]:
         filas.append({

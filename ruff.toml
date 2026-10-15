@@ -8,6 +8,7 @@ include = [
     "scripts/agent-work/flota.py",
     "scripts/agent-work/conducta.py",
     "scripts/agent-work/publicar-contexto.py",
+    "scripts/agent-work/extraer-nativo.py",
     "scripts/tests/test-agent-work-contexto.py",
     "scripts/tests/test-agent-work-flota.py",
     "scripts/tests/test-agent-work-conducta.py",

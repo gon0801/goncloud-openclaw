@@ -32,6 +32,22 @@ from pathlib import Path
 MARCA_INICIO = b"sua-contexto inicio"
 MARCA_FIN = b"sua-contexto fin"
 ESTADO_SCHEMA = "sua-contexto.v1"
+SSH_OPCIONES = (
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=15",
+    "-o",
+    "ServerAliveInterval=15",
+)
+"""En toda llamada ssh y scp (C6): sin cola de clave, con límite de conexión y latido, para
+que una Mini caída conteste en vez de colgar al operador sin salida."""
+TIMEOUT_AGENTES = 120
+TIMEOUT_SCP = 300
+TIMEOUT_BORRADO = 60
+"""Límites por llamada: la lista de agentes (local y remota), el scp y el borrado de /tmp.
+El --aplicar y el --revertir remotos no llevan timeout duro: pueden tardar lo que tarde
+publicar en la Mini."""
 
 
 class Rechazo(ValueError):
@@ -156,11 +172,15 @@ def listar_agentes(ruta_json: Path | None) -> list[dict]:
     if ruta_json is not None:
         agentes = leer_json(ruta_json)
     else:
-        corrida = subprocess.run(
-            [os.path.expanduser("~/.openclaw/bin/openclaw"), "agents", "list", "--json"],
-            capture_output=True,
-            text=True,
-        )
+        try:
+            corrida = subprocess.run(
+                [os.path.expanduser("~/.openclaw/bin/openclaw"), "agents", "list", "--json"],
+                capture_output=True,
+                text=True,
+                timeout=TIMEOUT_AGENTES,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise Rechazo(f"openclaw agents list no contestó en {TIMEOUT_AGENTES}s") from error
         if corrida.returncode != 0:
             raise Rechazo(f"openclaw agents list falló: {corrida.stderr.strip()}")
         agentes = json.loads(corrida.stdout)
@@ -218,6 +238,29 @@ def publicar_skill(origen: Path, destino: Path) -> None:
     for archivo in sorted(destino.rglob("*")):
         if archivo.is_file() and archivo.relative_to(destino).as_posix() not in de_la_publicacion:
             archivo.unlink()
+
+
+def respalda_carpeta(origen: Path, respaldo: Path) -> None:
+    """El respaldo de una skill, atómico (C2): copia completa a una carpeta temporal
+    hermana y `os.replace` sobre el respaldo, quitando el viejo después, para que una
+    copia a medias nunca deje el respaldo roto ni a medias."""
+    copia = Path(tempfile.mkdtemp(dir=str(respaldo.parent), prefix="." + respaldo.name + "."))
+    viejo = None
+    try:
+        shutil.copytree(origen, copia / "nueva")
+        viejo = None
+        if respaldo.exists():
+            viejo = Path(
+                tempfile.mkdtemp(dir=str(respaldo.parent), prefix=".viejo-" + respaldo.name + ".")
+            )
+            os.replace(respaldo, viejo / "vieja")
+        os.replace(copia / "nueva", respaldo)
+    finally:
+        # El temporal que quede (una copia fallida, o el wrapper que ya se vació) es
+        # basura puntual: se limpia sin fallar; el respaldo anterior no se tocó.
+        shutil.rmtree(copia, ignore_errors=True)
+        if viejo is not None:
+            shutil.rmtree(viejo, ignore_errors=True)
 
 
 def con_candado(suya: Path, operacion) -> int:
@@ -287,11 +330,15 @@ def armar_publicacion(
 
 
 def agentes_por_ssh(mini: str) -> list[dict]:
-    corrida = subprocess.run(
-        ["ssh", mini, "~/.openclaw/bin/openclaw", "agents", "list", "--json"],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        corrida = subprocess.run(
+            ["ssh", *SSH_OPCIONES, mini, "~/.openclaw/bin/openclaw", "agents", "list", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_AGENTES,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise Rechazo(f"ssh no contestó la lista de agentes en {TIMEOUT_AGENTES}s") from error
     try:
         agentes = json.loads(corrida.stdout) if corrida.returncode == 0 else None
     except ValueError:
@@ -344,9 +391,15 @@ def correr_desde_la_mac(accion: str, mini: str, checkout: Path) -> int:
             print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False))
             return 3
         nombre = carpeta.name
-        copia = subprocess.run(
-            ["scp", "-q", "-r", str(carpeta), f"{mini}:/tmp/"], capture_output=True, text=True
-        )
+        try:
+            copia = subprocess.run(
+                ["scp", "-q", *SSH_OPCIONES, "-r", str(carpeta), f"{mini}:/tmp/"],
+                capture_output=True,
+                text=True,
+                timeout=TIMEOUT_SCP,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise Rechazo(f"scp no terminó en {TIMEOUT_SCP}s") from error
         if copia.returncode != 0:
             print(copia.stderr.strip(), file=sys.stderr)
             return 1
@@ -354,6 +407,7 @@ def correr_desde_la_mac(accion: str, mini: str, checkout: Path) -> int:
         remoto = subprocess.run(
             [
                 "ssh",
+                *SSH_OPCIONES,
                 mini,
                 "python3",
                 f"/tmp/{nombre}/publicar-contexto.py",
@@ -372,8 +426,15 @@ def correr_desde_la_mac(accion: str, mini: str, checkout: Path) -> int:
     finally:
         if copiado:
             # Pase lo que pase en la Mini, la publicación no se queda en su /tmp (4.3):
-            # la mitad Mac la borra por ssh al terminar.
-            subprocess.run(["ssh", mini, "rm", "-rf", f"/tmp/{nombre}"], capture_output=True)
+            # la mitad Mac la borra por ssh al terminar (best effort, con su timeout).
+            try:
+                subprocess.run(
+                    ["ssh", *SSH_OPCIONES, mini, "rm", "-rf", f"/tmp/{nombre}"],
+                    capture_output=True,
+                    timeout=TIMEOUT_BORRADO,
+                )
+            except subprocess.TimeoutExpired:
+                pass
         shutil.rmtree(carpeta, ignore_errors=True)
 
 
@@ -418,12 +479,34 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
     salida_skills: dict[str, str] = {}
     salida_agentes: dict[str, str] = {}
 
+    foto_de_perfiles = suya / gen / "perfiles.v1.json"
+    marca_de_perfiles = suya / gen / "perfiles.v1.ausente"
     bytes_perfiles = (publicacion / "perfiles.v1.json").read_bytes()
     if not perfiles_dest.exists() or perfiles_dest.read_bytes() != bytes_perfiles:
+        if perfiles_dest.exists():
+            # La foto de justo antes (C5): lo que la reversa restaura; el archivo no
+            # lleva CAS porque solo lo escribe el publicador.
+            escribir_atomico(foto_de_perfiles, perfiles_dest.read_bytes())
+            marca_de_perfiles.unlink(missing_ok=True)
+        else:
+            # Primera publicación de esta generación: la marca lo dice (B1), para que la
+            # reversa quite el archivo y no lo confunda con "esta generación no lo tocó".
+            escribir_atomico(marca_de_perfiles, b"")
+            foto_de_perfiles.unlink(missing_ok=True)
         escribir_atomico(perfiles_dest, bytes_perfiles)
+    elif not foto_de_perfiles.exists() and not marca_de_perfiles.exists():
+        # Sin escritura y sin huella previa de esta generación (B1): los bytes actuales
+        # son la foto. Si ya hay foto o marca, esa es la de antes de la primera escritura
+        # de la generación y no se toca.
+        escribir_atomico(foto_de_perfiles, perfiles_dest.read_bytes())
 
     for nombre in nombres:
         destino = skills_dir / nombre
+        if not destino.exists() and nombre in estado["skills"]:
+            # CAS de skills (4.3): borrarla también es una edición (C4); no se recrea.
+            salida_skills[nombre] = "conflicto: se borró después de publicar"
+            conflictos += 1
+            continue
         if destino.exists():
             actual = digest_de_carpeta(destino)
             if nombre not in estado["skills"]:
@@ -441,17 +524,34 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
                 continue
             respaldo = suya / gen / "skills" / nombre
             respaldo.parent.mkdir(parents=True, exist_ok=True)
-            if respaldo.exists():
-                shutil.rmtree(respaldo)
             # El respaldo es la foto de justo antes de esta escritura: lo que el digest
             # del estado valida y lo que la reversa restaura (4.3).
-            shutil.copytree(destino, respaldo)
+            respalda_carpeta(destino, respaldo)
         publicar_skill(publicacion / "skills" / nombre, destino)
         salida_skills[nombre] = "publicado"
 
     nuevos_bloques = dict(estado["bloques"])
     nuevos_workspaces = dict(estado["workspaces"])
     nuevas_skills = dict(estado["skills"])
+    for nombre in sorted(set(estado["skills"]) - set(nombres)):
+        # Una skill administrada que esta generación ya no trae (fila L2 de G5): sale del
+        # home con respaldo para la reversa, o conflicto si cambió después de publicar.
+        destino = skills_dir / nombre
+        if not destino.exists():
+            salida_skills[nombre] = "quitado"
+            nuevas_skills.pop(nombre, None)
+            continue
+        if digest_de_carpeta(destino) != estado["skills"][nombre]:
+            salida_skills[nombre] = "conflicto: cambió después de publicar"
+            conflictos += 1
+            continue
+        respaldo = suya / gen / "skills" / nombre
+        respaldo.parent.mkdir(parents=True, exist_ok=True)
+        respalda_carpeta(destino, respaldo)
+        shutil.rmtree(destino)
+        salida_skills[nombre] = "quitado"
+        nuevas_skills.pop(nombre, None)
+
     for agente in agentes:
         identificador = agente["id"]
         ruta = Path(agente["workspace"]) / "AGENTS.md"
@@ -493,7 +593,7 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
         respaldo = suya / gen / "workspaces" / f"{identificador}.AGENTS.md"
         respaldo.parent.mkdir(parents=True, exist_ok=True)
         # La foto de justo antes de esta escritura: lo que valida el digest del estado.
-        respaldo.write_bytes(actual)
+        escribir_atomico(respaldo, actual)
         escribir_atomico(ruta, contenido)
         releido = sha256hex(leer_bytes(ruta))
         if releido != sha256hex(contenido):
@@ -507,6 +607,7 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
     cambios = (
         conflictos > 0
         or "publicado" in salida_skills.values()
+        or "quitado" in salida_skills.values()
         or ("publicado" in salida_agentes.values())
     )
     # El estado anterior de la generación es el estado tal como estaba antes de esta
@@ -517,7 +618,7 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
         escribir_atomico(anterior, canonico(estado) + b"\n")
     if cambios:
         for nombre, resultado in salida_skills.items():
-            if not resultado.startswith("conflicto"):
+            if not resultado.startswith("conflicto") and resultado != "quitado":
                 nuevas_skills[nombre] = digest_de_carpeta(skills_dir / nombre)
         nuevo_estado = {
             "schema": ESTADO_SCHEMA,
@@ -557,9 +658,27 @@ def revertir_en_la_mini(home: Path, agentes_json: Path | None) -> int:
     anterior_path = suya / gen / "estado-anterior.json"
     anterior = leer_json(anterior_path) if anterior_path.exists() else estado_vacio()
     nuevo = copy.deepcopy(anterior)
-    for nombre in sorted(estado["skills"]):
+    respaldos = suya / gen / "skills"
+    nombres_en_respaldo = (
+        {p.name for p in respaldos.iterdir() if p.is_dir() and not p.name.startswith(".")}
+        if respaldos.is_dir()
+        else set()
+    )
+    for nombre in sorted(set(estado["skills"]) | nombres_en_respaldo):
         destino = skills_dir / nombre
         respaldo = suya / gen / "skills" / nombre
+        if nombre not in estado["skills"]:
+            # La generación la quitó (solo vive como respaldo): vuelve si nadie ocupa su
+            # nombre; algo ajeno ahí dentro no se toca (4.3).
+            if destino.exists():
+                salida_skills[nombre] = "conflicto: no es del publicador"
+                conflictos += 1
+                nuevo["skills"].pop(nombre, None)
+            else:
+                shutil.copytree(respaldo, destino)
+                salida_skills[nombre] = "revertido"
+                nuevo["skills"][nombre] = digest_de_carpeta(destino)
+            continue
         if not respaldo.exists() and nombre in anterior["skills"]:
             salida_skills[nombre] = "igual"
             nuevo["skills"][nombre] = estado["skills"][nombre]
@@ -638,6 +757,16 @@ def revertir_en_la_mini(home: Path, agentes_json: Path | None) -> int:
         nuevo["digest"] = estado["digest"]
         nuevo["skills_anteriores"] = estado["skills_anteriores"]
     escribir_atomico(estado_path, canonico(nuevo) + b"\n")
+    # perfiles.v1.json también queda dentro de la reversa (C5 y B1): con foto, vuelve el
+    # de esta generación; con la marca de ausencia, se quita; sin ninguna de las dos (una
+    # generación que no tocó perfiles, o estado anterior al diseño), no se toca.
+    perfiles_dest = home / ".local" / "share" / "agent-work" / "perfiles.v1.json"
+    foto_de_perfiles = suya / gen / "perfiles.v1.json"
+    marca_de_perfiles = suya / gen / "perfiles.v1.ausente"
+    if foto_de_perfiles.exists():
+        escribir_atomico(perfiles_dest, foto_de_perfiles.read_bytes())
+    elif marca_de_perfiles.exists():
+        perfiles_dest.unlink(missing_ok=True)
     # La generación que reporta la reversa es la que revierte, la que estaba publicada.
     linea(estado["generacion"], salida_agentes, salida_skills, conflictos)
     return 4 if conflictos else 0

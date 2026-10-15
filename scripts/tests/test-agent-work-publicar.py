@@ -23,6 +23,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
@@ -176,7 +177,7 @@ class PublicadorNativo(unittest.TestCase):
         self.publicacion = carpeta
         return carpeta
 
-    def armar_generacion(self, generation, cambios=None, quitados=None):
+    def armar_generacion(self, generation, cambios=None, quitados=None, perfiles=None):
         """Publicación de una generación nueva: la fuente de la generación 1 con los cambios
         dados (y sin los archivos quitados), su manifiesto y su carpeta."""
         fuente = self.tmp / f"fuente-{generation}"
@@ -189,7 +190,7 @@ class PublicadorNativo(unittest.TestCase):
             (fuente / ruta).unlink()
         manifiesto = contexto.manifiesto(
             fuente,
-            self.perfiles,
+            perfiles or self.perfiles,
             repo="t",
             commit="t",
             version="0",
@@ -199,7 +200,38 @@ class PublicadorNativo(unittest.TestCase):
         )
         carpeta = self.tmp / f"publicacion-{next(self._contador)}"
         self.armador.armar_publicacion(
-            carpeta, manifiesto, self.perfiles, self.agentes, fuente=fuente, script=MODULO
+            carpeta,
+            manifiesto,
+            perfiles or self.perfiles,
+            self.agentes,
+            fuente=fuente,
+            script=MODULO,
+        )
+        self.publicacion = carpeta
+        return carpeta
+
+    def armar_sin_skill(self, generation, nombre):
+        """Publicación de una generación de la que sale una skill: fuera de la fuente y de
+        las skills que declaran los perfiles, como una skill que deja de administrarse."""
+        fuente = self.tmp / f"fuente-{generation}"
+        shutil.copytree(self.fuente, fuente)
+        shutil.rmtree(fuente / "skills" / nombre)
+        perfiles = copy.deepcopy(self.perfiles)
+        for perfil in perfiles["profiles"]:
+            perfil["skills"] = [s for s in perfil["skills"] if s != nombre]
+        manifiesto = contexto.manifiesto(
+            fuente,
+            perfiles,
+            repo="t",
+            commit="t",
+            version="0",
+            generation=generation,
+            adaptaciones=self.adaptaciones,
+            bloque=contexto.BLOQUE.read_bytes(),
+        )
+        carpeta = self.tmp / f"publicacion-{next(self._contador)}"
+        self.armador.armar_publicacion(
+            carpeta, manifiesto, perfiles, self.agentes, fuente=fuente, script=MODULO
         )
         self.publicacion = carpeta
         return carpeta
@@ -785,6 +817,210 @@ class PublicadorNativo(unittest.TestCase):
         destino = self.home / ".openclaw" / "skills" / "poteto-mode" / "playbooks" / "feature.md"
         self.assertEqual(destino.stat().st_mode & 0o777, 0o755)
 
+    def test_a_managed_skill_deleted_on_the_mini_is_a_conflict(self):
+        # C4 (DeepSeek F7): borrar una skill administrada es una edición; re-aplicar no
+        # la recrea en silencio.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        borrada = self.home / ".openclaw" / "skills" / "poteto-mode"
+        shutil.rmtree(borrada)
+        self.publicar("leer")
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(
+            aplicar["skills"]["poteto-mode"], "conflicto: se borró después de publicar"
+        )
+        self.assertEqual((aplicar["conflictos"], codigo), (1, 4))
+        self.assertFalse(borrada.exists())
+        self.assertEqual(
+            self.estado_del_home()["skills"]["poteto-mode"],
+            self.armador.digest_de_carpeta(self.publicacion / "skills" / "poteto-mode"),
+        )
+
+    def test_a_skill_that_leaves_the_manifest_is_removed_with_its_backup(self):
+        # C8 (fila L2 de G5): una skill administrada que la generación nueva ya no trae
+        # sale del home y del estado, con su respaldo para la reversa.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.armar_sin_skill(2, "principle-x")
+        self.publicar("leer")
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(aplicar["skills"]["principle-x"], "quitado")
+        self.assertEqual(codigo, 0)
+        self.assertFalse((self.home / ".openclaw" / "skills" / "principle-x").exists())
+        estado = self.estado_del_home()
+        self.assertNotIn("principle-x", estado["skills"])
+        respaldo = self.respaldo_de_generacion(2, "principle-x")
+        self.assertEqual(respaldo.read_bytes(), b"principio de juguete\n")
+
+    def test_a_dropped_skill_edited_on_the_mini_is_a_conflict(self):
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        editada = self.skill_del_home("principle-x")
+        editada.write_bytes(editada.read_bytes() + EDICION_AJENA)
+        self.armar_sin_skill(2, "principle-x")
+        self.publicar("leer")
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(aplicar["skills"]["principle-x"], "conflicto: cambió después de publicar")
+        self.assertEqual((aplicar["conflictos"], codigo), (1, 4))
+        self.assertIn(EDICION_AJENA, editada.read_bytes())
+        self.assertIn("principle-x", self.estado_del_home()["skills"])
+
+    def test_the_revert_brings_back_a_skill_that_left_the_manifest(self):
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.armar_sin_skill(2, "principle-x")
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.assertFalse((self.home / ".openclaw" / "skills" / "principle-x").exists())
+        codigo, revertir = self.publicar("revertir")
+        self.assertEqual(revertir["skills"]["principle-x"], "revertido")
+        self.assertEqual((revertir["conflictos"], codigo), (0, 0))
+        self.assertEqual(self.skill_del_home("principle-x").read_bytes(), b"principio de juguete\n")
+        self.assertEqual(self.estado_del_home()["generacion"], 1)
+        self.assertIn("principle-x", self.estado_del_home()["skills"])
+
+    def test_the_revert_restores_the_profiles_of_the_previous_generation(self):
+        # C5 (DeepSeek F3): perfiles.v1.json queda dentro de la reversa, sin CAS (el
+        # archivo es solo del publicador); la primera publicación lo quita al revertir.
+        perfiles_b = copy.deepcopy(self.perfiles)
+        perfiles_b["profiles"][0]["purpose"] = "Propósito de la generación 2\n"
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        destino = self.home / ".local" / "share" / "agent-work" / "perfiles.v1.json"
+        foto_a = destino.read_bytes()
+        self.armar_generacion(2, perfiles=perfiles_b)
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.assertNotEqual(destino.read_bytes(), foto_a)
+        self.publicar("revertir")
+        self.assertEqual(destino.read_bytes(), foto_a)
+        self.publicar("revertir")
+        self.assertFalse(destino.exists())
+
+    def test_a_failed_skill_backup_copy_leaves_the_previous_backup_whole(self):
+        # C2: el respaldo de una skill se arma en una carpeta temporal hermana y se pone
+        # en su lugar con os.replace, de modo que una copia a medias no rompa el respaldo.
+        origen = self.tmp / "origen-respaldo"
+        (origen / "intern").mkdir(parents=True)
+        (origen / "SKILL.md").write_text("nueva\n", encoding="utf-8")
+        respaldo = self.tmp / "respaldos" / "poteto-mode"
+        respaldo.mkdir(parents=True)
+        (respaldo / "SKILL.md").write_text("respaldo anterior\n", encoding="utf-8")
+        copia_real = shutil.copytree
+
+        def copia_que_falla(Origen, destino, **kwargs):
+            destino.mkdir(parents=True)
+            (destino / "SKILL.md").write_text("a medias\n", encoding="utf-8")
+            raise OSError("se acabó el disco")
+
+        with mock.patch.object(self.armador.shutil, "copytree", copia_que_falla):
+            with self.assertRaises(OSError):
+                self.armador.respalda_carpeta(origen, respaldo)
+        self.assertEqual((respaldo / "SKILL.md").read_bytes(), b"respaldo anterior\n")
+        self.assertEqual(copia_real, shutil.copytree)
+        self.assertEqual(
+            [p.name for p in respaldo.parent.iterdir()],
+            ["poteto-mode"],
+            "la copia a medias quedó tirada en la carpeta de respaldos",
+        )
+
+    def test_two_reverts_in_a_row_do_not_invent_a_conflict(self):
+        # C1a (R1 del veredicto r3): una edición del dueño fuera del bloque entre la gen 2
+        # y la gen 3 que pasó por --leer no conflicta la segunda reversa.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.armar_generacion(2, cambios={"skills/poteto-mode/SKILL.md": "poteto v2\n"})
+        self.publicar("leer")
+        self.publicar("aplicar")
+        meli = self.home / "workspaces" / "meli" / "AGENTS.md"
+        meli.write_bytes(meli.read_bytes() + LINEA_PROPIA)
+        self.publicar("leer")
+        self.armar_generacion(3, cambios={"skills/poteto-mode/SKILL.md": "poteto v3\n"})
+        self.publicar("leer")
+        self.publicar("aplicar")
+        codigo, primera = self.publicar("revertir")
+        self.assertEqual(primera["agentes"]["meli"], "revertido")
+        self.assertEqual((primera["conflictos"], codigo), (0, 0))
+        self.assertIn(LINEA_PROPIA, meli.read_bytes())
+        codigo, segunda = self.publicar("revertir")
+        self.assertEqual(
+            segunda["agentes"]["meli"], "revertido", "la segunda reversa inventó conflicto"
+        )
+        self.assertEqual((segunda["conflictos"], codigo), (0, 0))
+        self.assertEqual(self.estado_del_home()["generacion"], 1)
+
+    def test_an_agents_md_in_0640_keeps_its_mode_through_apply_and_revert(self):
+        # C1b (R2 del veredicto r3): el modo del AGENTS.md sobrevive escribir y revertir.
+        self.armar()
+        meli = self.home / "workspaces" / "meli" / "AGENTS.md"
+        meli.chmod(0o640)
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.assertEqual(meli.stat().st_mode & 0o777, 0o640)
+        self.publicar("revertir")
+        self.assertEqual(meli.stat().st_mode & 0o777, 0o640)
+
+    def test_an_agent_missing_from_the_revert_does_not_conflict_on_the_next_apply(self):
+        # C1c (R3 del veredicto r3): un agente que falta de la lista durante la reversa
+        # conserva su lugar en el estado; la siguiente --aplicar no lo ve como editado.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        solo_pers_y_main = self.tmp / "agents-sin-meli.json"
+        restantes = [a for a in self.agentes if a["id"] != "meli"]
+        solo_pers_y_main.write_text(json.dumps(restantes) + "\n", encoding="utf-8")
+        self.publicar("revertir", solo_pers_y_main)
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(aplicar["agentes"]["meli"], "igual")
+
+    def test_the_revert_keeps_the_profiles_a_generation_did_not_change(self):
+        # B1 del veredicto r1: una gen 2 con los mismos perfiles deja foto en 2/; la
+        # reversa devuelve los bytes de gen 1 y no borra el archivo.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        destino = self.home / ".local" / "share" / "agent-work" / "perfiles.v1.json"
+        foto = destino.read_bytes()
+        self.armar_generacion(2, cambios={"skills/poteto-mode/SKILL.md": "poteto 2\n"})
+        self.publicar("leer")
+        self.publicar("aplicar")
+        huella = self.home / ".openclaw" / "sua-contexto" / "2" / "perfiles.v1.json"
+        self.assertEqual(huella.read_bytes(), foto, "la gen 2 no dejó la foto de sus perfiles")
+        self.publicar("revertir")
+        self.assertTrue(destino.exists(), "la reversa de gen 2 borró perfiles.v1.json")
+        self.assertEqual(destino.read_bytes(), foto)
+
+    def test_reapplying_the_first_publication_and_reverting_removes_the_profiles(self):
+        # B1 del veredicto r1: la marca de ausencia de la primera publicación sobrevive al
+        # reintento de --aplicar, y la reversa quita el archivo.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        destino = self.home / ".local" / "share" / "agent-work" / "perfiles.v1.json"
+        self.assertTrue(destino.exists())
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.publicar("revertir")
+        self.assertFalse(destino.exists())
+
+    def test_the_revert_ignores_leftover_temp_folders_in_the_backups(self):
+        # N1 del veredicto r1: los temporales .<nombre>.* que respalda_carpeta deja si la
+        # matan a media copia no son skills; la reversa no los copia al home.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        basura = self.home / ".openclaw" / "sua-contexto" / "1" / "skills" / ".poteto-mode.xyz"
+        (basura / "intern").mkdir(parents=True)
+        (basura / "SKILL.md").write_text("copia a medias\n", encoding="utf-8")
+        codigo, revertir = self.publicar("revertir")
+        self.assertFalse((self.home / ".openclaw" / "skills" / ".poteto-mode.xyz").exists())
+
     def test_a_foreign_skill_with_a_managed_name_stops_that_skill(self):
         self.armar()
         ajena = self.home / ".openclaw" / "skills" / "poteto-mode"
@@ -872,6 +1108,12 @@ class PublicadorNativo(unittest.TestCase):
                 self.assertTrue(
                     any(MINI in llamada and "agents" in llamada for llamada in llamadas_ssh)
                 )
+                # C6: toda llamada ssh y scp lleva las opciones de no colgarse.
+                for llamada in llamadas_ssh:
+                    if not any("agents" in argumento for argumento in llamada):
+                        continue
+                    for opcion in self.armador.SSH_OPCIONES:
+                        self.assertIn(opcion, llamada)
                 llamadas_scp = self.llamadas(logs / "scp.log")
                 self.assertTrue(
                     any(
@@ -880,6 +1122,9 @@ class PublicadorNativo(unittest.TestCase):
                         for llamada in llamadas_scp
                     )
                 )
+                for llamada in llamadas_scp:
+                    for opcion in self.armador.SSH_OPCIONES:
+                        self.assertIn(opcion, llamada)
                 nombre = None
                 for llamada in llamadas_ssh:
                     for arg in llamada:
@@ -887,9 +1132,11 @@ class PublicadorNativo(unittest.TestCase):
                         if coincide:
                             nombre = coincide.group(1)
                 self.assertIsNotNone(nombre)
-                # La llamada remota es exactamente la del contrato.
+                # La llamada remota es exactamente la del contrato, con sus opciones y sin
+                # timeout duro (C6): la Mini puede tardar lo que tarde la publicación.
                 self.assertIn(
                     [
+                        *self.armador.SSH_OPCIONES,
                         MINI,
                         "python3",
                         f"/tmp/{nombre}/publicar-contexto.py",
@@ -900,6 +1147,19 @@ class PublicadorNativo(unittest.TestCase):
                     ],
                     llamadas_ssh,
                 )
+
+    def test_the_publisher_answers_a_line_of_json_when_ssh_expires(self):
+        # C6 (DeepSeek F4): un ssh que se pasa del timeout contesta Rechazo (línea JSON,
+        # salida 3) y no un traceback con el candado tomado.
+        self.assertEqual(self.armador.TIMEOUT_AGENTES, 120)
+        self.assertEqual(self.armador.TIMEOUT_SCP, 300)
+        self.assertEqual(self.armador.TIMEOUT_BORRADO, 60)
+        expirado = subprocess.TimeoutExpired(cmd="ssh", timeout=120)
+        with mock.patch.object(self.armador.subprocess, "run", side_effect=expirado):
+            with self.assertRaises(self.armador.Rechazo):
+                self.armador.agentes_por_ssh(MINI)
+            with self.assertRaises(self.armador.Rechazo):
+                self.armador.listar_agentes(None)
 
     def test_the_mac_half_refuses_a_source_that_disagrees_with_the_manifest(self):
         # S4 del veredicto r1: la mitad Mac valida cada archivo de la fuente contra el
@@ -1035,7 +1295,10 @@ class PublicadorNativo(unittest.TestCase):
                         self.assertNotIn("rm", llamada)
                 else:
                     self.assertIsNotNone(nombre)
-                    self.assertIn([MINI, "rm", "-rf", f"/tmp/{nombre}"], llamadas_ssh)
+                    self.assertIn(
+                        [*self.armador.SSH_OPCIONES, MINI, "rm", "-rf", f"/tmp/{nombre}"],
+                        llamadas_ssh,
+                    )
 
     def llamadas(self, registro):
         """Las llamadas de un log de juguete: argumentos por línea, --- entre llamadas."""
