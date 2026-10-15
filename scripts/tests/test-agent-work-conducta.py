@@ -179,6 +179,34 @@ class Conducta(unittest.TestCase):
             ),
         )
 
+    def test_a_playbook_outside_the_package_is_a_usage_error_and_not_a_false_missing_read(self):
+        # split("contexto/", 1)[-1] sobre una ruta sin contexto/ devolvía la ruta entera: la
+        # etiqueta nunca calzaba con lectura alguna y el veredicto reportaba un falso "falta la
+        # lectura" en vez de un error de uso (bots de #303, L166).
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "events.jsonl").write_text("\n".join(corrida()) + "\n")
+            (tmp / "resultado.md").write_text("Ran 4 tests in 0.01s\n")
+            fuera = tmp / "feature.md"
+            fuera.write_text(TEXTO)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = conducta.main(
+                    [
+                        "--eventos",
+                        str(tmp / "events.jsonl"),
+                        "--playbook",
+                        str(fuera),
+                        "--resultado",
+                        str(tmp / "resultado.md"),
+                    ]
+                )
+        self.assertEqual(code, 3)
+        respuesta = json.loads(out.getvalue())
+        self.assertFalse(respuesta["ok"])
+        self.assertIn("contexto/", respuesta["error"])
+        self.assertNotIn("razones", respuesta)
+
 
 if __name__ == "__main__":
     unittest.main()
