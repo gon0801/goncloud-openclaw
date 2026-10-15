@@ -715,9 +715,10 @@ class Routes(unittest.TestCase):
         self.assertIsNone(route({"1": "M-13"}).open_for("1.18.35", canary=False),
                           "a brief without a package only asks the version of the CLI")
 
-    def test_the_repos_coverage_certifies_generation_1_of_the_package(self):
+    def test_the_repos_coverage_does_not_certify_generation_1_of_the_package(self):
         # M-13 punto b: las skills de la generación 1 pierden contra ~/.agents/skills, así que la
         # generación 1 NO está certificada: solo un canario la corre, hasta la generación 2 de G4.
+        # El nombre anterior decía lo contrario de lo que el cuerpo exige (bots de #304, F10).
         route = sesion.Route.load(json.loads(COVERAGE.read_text(encoding="utf-8")), "mac-local")
         self.assertEqual(route.certified_context_generations, frozenset())
         self.assertEqual(route.open_for("1.18.35", 1, canary=False), modelos.GenerationNotCertified(1, ()))
