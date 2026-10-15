@@ -22,6 +22,7 @@ import argparse
 import base64
 import json
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -102,7 +103,12 @@ def _descomprimir(datos: bytes, tipo: str) -> bytes:
     if tipo == "modulo":
         from compression import zstd
 
-        return zstd.decompress(datos)
+        try:
+            return zstd.decompress(datos)
+        except zstd.ZstdError as error:
+            # ZstdError no es ValueError (N2): sin este puente un evento corrupto sale
+            # como traceback en vez de la línea JSON de siempre.
+            raise ValueError(f"event_zstd corrupto: {error}") from error
     resultado = subprocess.run(["zstd", "-d"], input=datos, capture_output=True, timeout=60)
     if resultado.returncode != 0:
         raise ValueError(f"zstd -d salió {resultado.returncode}: {resultado.stderr!r}")
@@ -118,9 +124,9 @@ def _traer(mini: str, base: str, sesiones: list[str], tipo: str) -> list[dict]:
         "python3",
         "-",
         "--db",
-        base,
+        shlex.quote(base),
         "--sesiones",
-        ",".join(sesiones),
+        shlex.quote(",".join(sesiones)),
     ]
     resultado = subprocess.run(
         comando,
