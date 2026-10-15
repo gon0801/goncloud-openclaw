@@ -169,6 +169,40 @@ class Briefs(unittest.TestCase):
                         self.assertIsInstance(carga[clave], str)
                         self.assertTrue(carga[clave].strip(), f"{clave} vacío")
 
+    def test_the_host_deadline_is_shorter_than_the_result_wait(self):
+        # R1 de SUA03-G5c-r3: el plazo de resultado del host del banco vence antes
+        # que la espera del caso, para que un bucle llegue a deadline-missed.
+        from types import SimpleNamespace
+        import inspect as _inspect
+
+        banco = BancoE2E.__new__(BancoE2E)
+        banco.bin = Path("/tmp/bin")
+        banco.spool = Path("/tmp/spool")
+        banco.state = Path("/tmp/state")
+        banco.root = Path("/tmp/raiz")
+        banco.socket = "banco-x"
+        banco.gateway = SimpleNamespace(url="http://127.0.0.1:1")
+        argv = banco.host_argv()
+        indice = argv.index("--result-deadline-seconds")
+        espera = _inspect.signature(BancoE2E.wait_result).parameters["seconds"].default
+        self.assertEqual(int(argv[indice + 1]), BANCO_PLAZO)
+        self.assertLess(BANCO_PLAZO, espera)
+
+    def test_wait_result_names_an_incident_instead_of_waiting_for_the_top(self):
+        # R1: con incidentes y sin resultado, wait_result falla nombrando el incidente.
+        banco = BancoE2E.__new__(BancoE2E)
+        banco.snapshot = lambda task_id: {
+            "deliveryState": "registered",
+            "incidents": [{"kind": "deadline", "episodeId": "deadline-missed"}],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            banco.log = Path(tmp) / "host.log"
+            banco.log.write_text("log\n")
+            with self.assertRaises(AssertionError) as atrapado:
+                banco.wait_result("task-x", seconds=1)
+        self.assertIn("deadline", str(atrapado.exception))
+        self.assertIn("deadline-missed", str(atrapado.exception))
+
     def test_artifact_path_reads_what_the_host_recorded(self):
         # E: el inspect de R devuelve artifactRef como artifact:<sha256>; la ruta real es
         # la que el host grabó en results/<op>.json.
