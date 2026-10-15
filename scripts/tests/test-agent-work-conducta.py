@@ -733,18 +733,68 @@ class ExtractorNativo(unittest.TestCase):
         self.assertIn(shlex.quote(base), llamadas)
         self.assertIn(shlex.quote("agent:x:turno"), llamadas)
 
-    def test_without_any_zstd_decoder_it_answers_an_error_and_writes_nothing(self):
+    def test_without_a_decoder_a_json_only_session_still_extracts(self):
+        # B2 (Minor de CodeRabbit en #307): el decodificador se exige solo al llegar una
+        # fila comprimida; una sesión con solo filas event_json se extrae sin zstd.
         especificacion = importlib.util.spec_from_file_location("extraer_nativo", MODULO_NATIVO)
         modulo = importlib.util.module_from_spec(especificacion)
         especificacion.loader.exec_module(modulo)
+        filas = "[filas]\n" + self.cruda("agent:x:turno", 0, 1, {"type": "session", "version": 4})
+
+        def ssh_falso(comando, input=None, capture_output=True, text=True, timeout=None):
+            assert "python3" in comando, comando
+            return subprocess.CompletedProcess(
+                comando, 0, stdout=filas.replace("[filas]\n", ""), stderr=""
+            )
+
         out = io.StringIO()
-        # Si llegara a ssh, el parche revienta: sin decodificador no debió intentar nada.
-        con_ssh_roto = mock.patch.object(
-            modulo.subprocess, "run", side_effect=AssertionError("no debió ssh")
-        )
         with (
             mock.patch.object(modulo, "_decodificador", return_value=None),
-            con_ssh_roto,
+            mock.patch.object(modulo.subprocess, "run", side_effect=ssh_falso),
+            contextlib.redirect_stdout(out),
+        ):
+            codigo = modulo.main(
+                [
+                    "--mini",
+                    MINI,
+                    "--agente",
+                    "x",
+                    "--sesion",
+                    "agent:x:turno",
+                    "--salida",
+                    str(self.salida),
+                ]
+            )
+        self.assertEqual(codigo, 0)
+        filas_escritas = [
+            json.loads(linea) for linea in self.salida.read_text(encoding="utf-8").splitlines()
+        ]
+        self.assertEqual(
+            filas_escritas,
+            [
+                {
+                    "session_key": "agent:x:turno",
+                    "session_id": "s-turno",
+                    "seq": 0,
+                    "created_at": 1,
+                    "event": {"type": "session", "version": 4},
+                }
+            ],
+        )
+
+    def test_without_a_decoder_a_compressed_row_is_an_error_line_and_writes_nothing(self):
+        especificacion = importlib.util.spec_from_file_location("extraer_nativo", MODULO_NATIVO)
+        modulo = importlib.util.module_from_spec(especificacion)
+        especificacion.loader.exec_module(modulo)
+        filas = self.cruda("agent:x:turno", 0, 1, {"type": "session"}, comprimido=True)
+
+        def ssh_falso(comando, input=None, capture_output=True, text=True, timeout=None):
+            return subprocess.CompletedProcess(comando, 0, stdout=filas + "\n", stderr="")
+
+        out = io.StringIO()
+        with (
+            mock.patch.object(modulo, "_decodificador", return_value=None),
+            mock.patch.object(modulo.subprocess, "run", side_effect=ssh_falso),
             contextlib.redirect_stdout(out),
         ):
             codigo = modulo.main(

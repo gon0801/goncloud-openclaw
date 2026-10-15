@@ -115,8 +115,9 @@ def _descomprimir(datos: bytes, tipo: str) -> bytes:
     return resultado.stdout
 
 
-def _traer(mini: str, base: str, sesiones: list[str], tipo: str) -> list[dict]:
-    """Una llamada ssh: las filas crudas de esas sesiones, con el evento ya decodificado."""
+def _traer(mini: str, base: str, sesiones: list[str], tipo: str | None) -> list[dict]:
+    """Una llamada ssh: las filas crudas de esas sesiones, con el evento ya decodificado.
+    `tipo` puede venir None y se resuelve al llegar la primera fila comprimida (B2)."""
     comando = [
         "ssh",
         *SSH_OPCIONES,
@@ -145,6 +146,12 @@ def _traer(mini: str, base: str, sesiones: list[str], tipo: str) -> list[dict]:
         cruda = json.loads(linea)
         evento = cruda.get("event_json")
         if evento is None and cruda.get("event_zstd") is not None:
+            tipo = tipo or _decodificador()
+            if tipo is None:
+                raise ValueError(
+                    "hay filas comprimidas y no hay forma de descomprimir zstd: falta "
+                    "compression.zstd (Python 3.14+) y el binario zstd no está en el PATH"
+                )
             evento = _descomprimir(base64.b64decode(cruda["event_zstd"]), tipo)
         filas.append(
             {
@@ -215,12 +222,9 @@ def main(argv: list[str] | None = None) -> int:
             if not clave.startswith(prefijo):
                 raise ValueError(f"--sesion debe empezar con {prefijo}: {clave}")
         base = args.base.replace("{agente}", args.agente)
+        # El decodificador se exige solo al llegar la primera fila con event_zstd (B2):
+        # una sesión con solo filas event_json se extrae en una Mac sin zstd.
         tipo = _decodificador()
-        if tipo is None:
-            raise ValueError(
-                "no hay forma de descomprimir zstd: falta compression.zstd (Python 3.14+) "
-                "y el binario zstd no está en el PATH"
-            )
         pendientes = list(dict.fromkeys(args.sesion))
         vistas: set[str] = set()
         filas: list[dict] = []
