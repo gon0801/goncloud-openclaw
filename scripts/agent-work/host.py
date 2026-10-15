@@ -49,9 +49,23 @@ class ReviewerWroteSource(ValueError):
         self.changed = changed
 
 
+def run_profile(assignment: dict) -> dict | None:
+    """The profile a run received in its package (SUA-03): read from the copy inside its run folder.
+    None for a run without one."""
+    try:
+        perfil = Path(assignment["resultRef"]).parent / "contexto" / "perfil.json"
+        profile = json.loads(perfil.read_bytes().decode("utf-8"))
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return profile if isinstance(profile, dict) and isinstance(profile.get("writesSource"), bool) else None
+
+
 def writes_source(assignment: dict) -> bool:
-    """Whether a run may write its task's repo. Until a run carries its profile (SUA-03, G3), a review
-    never does and everything else may, as today."""
+    """Whether a run may write its task's repo. A run with its package follows its profile (SUA-03, 4.4);
+    one without keeps the G2 rule: a review never does and everything else may, as today."""
+    perfil = run_profile(assignment)
+    if perfil is not None:
+        return perfil["writesSource"]
     return assignment["resultContract"] != REVIEW_CONTRACT
 
 
@@ -73,16 +87,17 @@ def _git_files(folder: Path) -> str:
 
 
 def repo_photo(repo: str) -> dict:
-    """What a reviewer's run must leave as it was: HEAD, the refs, the status with untracked files, the diff
-    against HEAD, and inside .git its config and its hooks, which run code at the next git command. Ignored
-    files are not in it: a test run leaves __pycache__ behind (until G3 runs the reviewer in a clone).
+    """What a reviewer's run must leave as it was: HEAD, the refs, the status with untracked and ignored
+    files (a reviewer may leave a __pycache__ behind, so the photo sums those too), the diff against
+    HEAD, and inside .git its config and its hooks, which run code at the next git command.
     OSError when the folder is not a git repo."""
     git_dir = Path(_git(repo, "rev-parse", "--absolute-git-dir").decode().strip())
     config = git_dir / "config"
     return {
         "head": _git(repo, "rev-parse", "HEAD").decode().strip(),
         "refs": hashlib.sha256(_git(repo, "for-each-ref")).hexdigest(),
-        "status": hashlib.sha256(_git(repo, "status", "--porcelain=v1", "-z", "--untracked-files=all")).hexdigest(),
+        "status": hashlib.sha256(_git(repo, "status", "--porcelain=v1", "-z", "--untracked-files=all",
+                                      "--ignored=matching")).hexdigest(),
         "diff": hashlib.sha256(_git(repo, "diff", "--binary", "HEAD")).hexdigest(),
         "config": hashlib.sha256(config.read_bytes() if config.is_file() else b"").hexdigest(),
         "hooks": _git_files(git_dir / "hooks"),

@@ -219,6 +219,8 @@ class LaunchSpec:
     """El perfil admitido de esta corrida. None: un encargo de hoy, sin paquete."""
     config: dict | None = None
     """El OPENCODE_CONFIG_CONTENT que el lanzador va a pasar. None: el de toda la vida."""
+    package: Package | None = None
+    """El paquete que este plan leyó: el paso de lanzamiento copia de su fuente y relee su digest."""
 
 
 def session_name(operation: str) -> str:
@@ -320,7 +322,7 @@ def plan_launch(assignment: object, brief: bytes, *, policy: ProviderPolicy, cat
         # El revisor trabaja en un clon desechable dentro de la corrida (4.8), que arma el paso de
         # lanzamiento: plan_launch se queda puro y solo señala la carpeta.
         workspace = Workspace(run.repo)
-    return LaunchSpec(model, workspace, run, record, session_name(operation), perfil, config)
+    return LaunchSpec(model, workspace, run, record, session_name(operation), perfil, config, package)
 
 
 SCRATCH_RULE = (" Keep every helper script and scratch file inside the directory that holds acceptRef, and touch "

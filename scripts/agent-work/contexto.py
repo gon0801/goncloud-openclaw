@@ -157,6 +157,28 @@ def comprobar_textos(manifiesto: dict, adaptaciones: dict[str, bytes], bloque: b
         raise ContextoIncompleto("el bloque de AGENTS.md no coincide con el manifiesto")
 
 
+def comprobar_fuente(manifiesto: dict, perfil: dict, fuente: Path) -> None:
+    """Cada archivo de la fuente que lleva el paquete coincide con el manifiesto (4.5): el
+    contexto-incompleto del lado del plan, que lee la fuente antes de decidir."""
+    esperado = {f["path"]: f["sha256"] for f in manifiesto["files"]}
+    for ruta in archivos_del_perfil(manifiesto, perfil):
+        origen = Path(fuente) / ruta
+        try:
+            datos = origen.read_bytes() if not origen.is_symlink() else b""
+        except OSError as error:
+            raise ContextoIncompleto(f"{ruta}: {error.strerror}") from error
+        if sha256(datos) != esperado[ruta]:
+            raise ContextoIncompleto(f"{ruta} no coincide con el manifiesto")
+
+
+def fuente_del_paquete(manifiesto: dict, plugins: Path | None = None) -> Path:
+    """La carpeta del checkout de pstack que el manifiesto fija, tal como Claude Code la instala
+    en esta Mac. Una fuente que ya no coincide lo dicen `construir` y `comprobar_fuente`."""
+    version = manifiesto["source"]["version"]
+    base = plugins or Path.home() / ".claude/plugins/cache/pstack-claude/pstack"
+    return base / version
+
+
 def perfil(perfiles: dict, id_perfil: str) -> dict:
     for candidato in perfiles["profiles"]:
         if candidato["id"] == id_perfil:
