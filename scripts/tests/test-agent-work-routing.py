@@ -252,6 +252,12 @@ class AgentsRouting(unittest.TestCase):
             # G4: el artefacto de una revisión va a la carpeta de la corrida, no al repo (4.8).
             'y `<hallazgos>` ya no es una ruta del repo: va donde lo dice el campo `protocol` de la asignación',
             "la carpeta que contiene `resultRef`, nunca dentro de `workspaceRef`",
+            # G5c-r2: un ready.v1 que no escribe fuente (exploracion) deja su artefacto
+            # en la carpeta de la corrida, como una revisión (B del r1 en el host).
+            'Para un `ready.v1` de un perfil que no escribe fuente (explorar, `exploracion`), el '
+            'typedPayload es `{"evidenceRef": "<hallazgos>"}` y `<hallazgos>` es la ruta absoluta '
+            "del artefacto: va donde lo dice el campo `protocol` de la asignación, dentro de la "
+            "carpeta que contiene `resultRef`, y no en el repo",
             '`continuation`: `{"kind": "requester"}`',
             "`managed_tasks_admit` con el `taskId` y `admissionKey` `<taskKey>-admit`",
             "Termina tu turno.",
