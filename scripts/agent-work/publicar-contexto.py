@@ -321,6 +321,7 @@ def correr_desde_la_mac(accion: str, mini: str, checkout: Path) -> int:
     # El staging nace en /tmp a propósito: la copia remota va a /tmp/<nombre> de la Mini y el
     # nombre de la carpeta local es el nombre remoto (en macOS TMPDIR no es /tmp).
     carpeta = Path(tempfile.mkdtemp(prefix="sua-contexto-", dir="/tmp"))
+    copiado = False
     try:
         try:
             armar_publicacion(
@@ -341,6 +342,7 @@ def correr_desde_la_mac(accion: str, mini: str, checkout: Path) -> int:
         if copia.returncode != 0:
             print(copia.stderr.strip(), file=sys.stderr)
             return 1
+        copiado = True
         remoto = subprocess.run(
             [
                 "ssh",
@@ -360,6 +362,10 @@ def correr_desde_la_mac(accion: str, mini: str, checkout: Path) -> int:
             sys.stderr.write(remoto.stderr)
         return remoto.returncode
     finally:
+        if copiado:
+            # Pase lo que pase en la Mini, la publicación no se queda en su /tmp (4.3):
+            # la mitad Mac la borra por ssh al terminar.
+            subprocess.run(["ssh", mini, "rm", "-rf", f"/tmp/{nombre}"], capture_output=True)
         shutil.rmtree(carpeta, ignore_errors=True)
 
 
@@ -410,21 +416,27 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
 
     for nombre in nombres:
         destino = skills_dir / nombre
-        if destino.exists() and nombre not in estado["skills"]:
-            salida_skills[nombre] = "conflicto: no es del publicador"
-            conflictos += 1
-            continue
-        if destino.exists() and digest_de_carpeta(destino) == digest_de_carpeta(
-            publicacion / "skills" / nombre
-        ):
-            salida_skills[nombre] = "igual"
-            continue
         if destino.exists():
+            actual = digest_de_carpeta(destino)
+            if nombre not in estado["skills"]:
+                salida_skills[nombre] = "conflicto: no es del publicador"
+                conflictos += 1
+                continue
+            if actual == digest_de_carpeta(publicacion / "skills" / nombre):
+                salida_skills[nombre] = "igual"
+                continue
+            if actual != estado["skills"][nombre]:
+                # CAS de skills (4.3): una edición en la Mini después de publicar es
+                # conflicto, igual que un bloque editado; no se pisa ni se respalda.
+                salida_skills[nombre] = "conflicto: cambió después de publicar"
+                conflictos += 1
+                continue
             respaldo = suya / gen / "skills" / nombre
             respaldo.parent.mkdir(parents=True, exist_ok=True)
-            if respaldo.exists():
-                shutil.rmtree(respaldo)
-            shutil.copytree(destino, respaldo)
+            if not respaldo.exists():
+                # El respaldo de la generación se escribe una sola vez: la primera vez que
+                # esta generación reescribe la skill (4.3). Reaplicarla no lo pisa.
+                shutil.copytree(destino, respaldo)
         publicar_skill(publicacion / "skills" / nombre, destino)
         salida_skills[nombre] = "publicado"
 
@@ -470,7 +482,8 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
             continue
         respaldo = suya / gen / "workspaces" / f"{identificador}.AGENTS.md"
         respaldo.parent.mkdir(parents=True, exist_ok=True)
-        respaldo.write_bytes(actual)
+        if not respaldo.exists():
+            respaldo.write_bytes(actual)
         escribir_atomico(ruta, contenido)
         releido = sha256hex(leer_bytes(ruta))
         if releido != sha256hex(contenido):
@@ -509,7 +522,9 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
 
 def revertir_en_la_mini(home: Path, agentes_json: Path | None) -> int:
     """`--revertir`: vuelve al respaldo lo que sigue igual a lo publicado; lo que cambió
-    después queda en conflicto, nombrado, y no se toca (4.3 Reversa)."""
+    después queda en conflicto, nombrado, y no se toca (4.3 Reversa). Una skill sin
+    respaldo es una que esta generación no reescribió: queda como está si ya estaba
+    publicada antes, y solo la quita la generación que la trajo."""
     skills_dir = home / ".openclaw" / "skills"
     estado_path = skills_dir / ".sua-contexto.json"
     suya = home / ".openclaw" / "sua-contexto"
@@ -525,6 +540,8 @@ def revertir_en_la_mini(home: Path, agentes_json: Path | None) -> int:
     salida_skills: dict[str, str] = {}
     salida_agentes: dict[str, str] = {}
 
+    anterior_path = suya / gen / "estado-anterior.json"
+    anterior = leer_json(anterior_path) if anterior_path.exists() else estado_vacio()
     for nombre in sorted(estado["skills"]):
         destino = skills_dir / nombre
         if digest_de_carpeta(destino) != estado["skills"][nombre]:
@@ -536,6 +553,8 @@ def revertir_en_la_mini(home: Path, agentes_json: Path | None) -> int:
             shutil.rmtree(destino)
             shutil.copytree(respaldo, destino)
             salida_skills[nombre] = "revertido"
+        elif nombre in anterior["skills"]:
+            salida_skills[nombre] = "igual"
         else:
             shutil.rmtree(destino)
             salida_skills[nombre] = "quitado"
@@ -566,11 +585,7 @@ def revertir_en_la_mini(home: Path, agentes_json: Path | None) -> int:
         else:
             salida_agentes[identificador] = "igual"
 
-    anterior = suya / gen / "estado-anterior.json"
-    if anterior.exists():
-        escribir_atomico(estado_path, anterior.read_bytes())
-    else:
-        escribir_atomico(estado_path, canonico(estado_vacio()) + b"\n")
+    escribir_atomico(estado_path, canonico(anterior) + b"\n")
     # La generación que reporta la reversa es la que revierte, la que estaba publicada.
     linea(estado["generacion"], salida_agentes, salida_skills, conflictos)
     return 4 if conflictos else 0
