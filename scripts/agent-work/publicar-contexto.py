@@ -582,7 +582,7 @@ def aplicar_en_la_mini(publicacion: Path, home: Path, agentes_json: Path | None)
         escribir_atomico(anterior, canonico(estado) + b"\n")
     if cambios:
         for nombre, resultado in salida_skills.items():
-            if not resultado.startswith("conflicto"):
+            if not resultado.startswith("conflicto") and resultado != "quitado":
                 nuevas_skills[nombre] = digest_de_carpeta(skills_dir / nombre)
         nuevo_estado = {
             "schema": ESTADO_SCHEMA,
