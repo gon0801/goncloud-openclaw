@@ -979,6 +979,46 @@ class PublicadorNativo(unittest.TestCase):
         codigo, aplicar = self.publicar("aplicar")
         self.assertEqual(aplicar["agentes"]["meli"], "igual")
 
+    def test_the_revert_keeps_the_profiles_a_generation_did_not_change(self):
+        # B1 del veredicto r1: una gen 2 con los mismos perfiles deja foto en 2/; la
+        # reversa devuelve los bytes de gen 1 y no borra el archivo.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        destino = self.home / ".local" / "share" / "agent-work" / "perfiles.v1.json"
+        foto = destino.read_bytes()
+        self.armar_generacion(2, cambios={"skills/poteto-mode/SKILL.md": "poteto 2\n"})
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.publicar("revertir")
+        self.assertTrue(destino.exists(), "la reversa de gen 2 borró perfiles.v1.json")
+        self.assertEqual(destino.read_bytes(), foto)
+
+    def test_reapplying_the_first_publication_and_reverting_removes_the_profiles(self):
+        # B1 del veredicto r1: la marca de ausencia de la primera publicación sobrevive al
+        # reintento de --aplicar, y la reversa quita el archivo.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        destino = self.home / ".local" / "share" / "agent-work" / "perfiles.v1.json"
+        self.assertTrue(destino.exists())
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.publicar("revertir")
+        self.assertFalse(destino.exists())
+
+    def test_the_revert_ignores_leftover_temp_folders_in_the_backups(self):
+        # N1 del veredicto r1: los temporales .<nombre>.* que respalda_carpeta deja si la
+        # matan a media copia no son skills; la reversa no los copia al home.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        basura = self.home / ".openclaw" / "sua-contexto" / "1" / "skills" / ".poteto-mode.xyz"
+        (basura / "intern").mkdir(parents=True)
+        (basura / "SKILL.md").write_text("copia a medias\n", encoding="utf-8")
+        codigo, revertir = self.publicar("revertir")
+        self.assertFalse((self.home / ".openclaw" / "skills" / ".poteto-mode.xyz").exists())
+
     def test_a_foreign_skill_with_a_managed_name_stops_that_skill(self):
         self.armar()
         ajena = self.home / ".openclaw" / "skills" / "poteto-mode"

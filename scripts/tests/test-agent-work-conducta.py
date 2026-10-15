@@ -10,6 +10,7 @@ import importlib.util
 import io
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -685,6 +686,52 @@ class ExtractorNativo(unittest.TestCase):
             json.loads(resultado.stdout.splitlines()[0])["sesiones"],
             ["agent:x:subagent:9", "agent:x:turno"],
         )
+
+    def test_a_corrupt_zstd_row_is_an_error_line_and_not_a_traceback(self):
+        # N2 del veredicto r1: ZstdError no es ValueError; un evento corrupto contesta
+        # línea JSON con salida 3 y no escribe --salida.
+        try:
+            from compression import zstd  # noqa: F401
+        except ImportError:
+            self.skipTest("esta prueba fija el camino de compression.zstd, no el del binario")
+        self.escribir_sesion(
+            "agent:x:turno",
+            [
+                self.cruda("agent:x:turno", 0, 1, {"type": "session", "version": 4}),
+                self.cruda("agent:x:turno", 1, 2, {"type": "message"}, comprimido=True),
+            ],
+        )
+        # Corromper la fila comprimida: la prueba la reescribe con bytes que no son zstd.
+        ruta = self.sesiones / "agent:x:turno.jsonl"
+        fila = json.loads(ruta.read_text(encoding="utf-8").splitlines()[1])
+        fila["event_zstd"] = base64.b64encode(b"esto no es zstd").decode("ascii")
+        lineas = ruta.read_text(encoding="utf-8").splitlines()
+        lineas[1] = json.dumps(fila)
+        ruta.write_text("\n".join(lineas) + "\n", encoding="utf-8")
+        resultado = self.extraer(["--sesion", "agent:x:turno"])
+        self.assertEqual(resultado.returncode, 3, resultado.stderr)
+        self.assertEqual(resultado.stderr, "")
+        respuesta = json.loads(resultado.stdout.splitlines()[0])
+        self.assertFalse(respuesta["ok"])
+        self.assertFalse(self.salida.exists())
+
+    def test_the_remote_arguments_travel_quoted_for_the_mini_shell(self):
+        # N3 del veredicto r1: ssh los pasa por el shell de la Mini; base y sesiones viajan
+        # con shlex.quote para que un espacio o un metacarácter no parta el comando.
+        self.escribir_sesion(
+            "agent:x:turno",
+            [self.cruda("agent:x:turno", 0, 1, {"type": "session", "version": 4})],
+        )
+        base = str(self.logs / "base con espacio.sqlite")
+        resultado = self.extraer(["--sesion", "agent:x:turno", "--base", base])
+        self.assertEqual((resultado.returncode, resultado.stderr), (0, ""))
+        llamadas = [
+            linea
+            for linea in (self.logs / "ssh.log").read_text(encoding="utf-8").splitlines()
+            if linea not in ("---", "--db", "--sesiones")
+        ]
+        self.assertIn(shlex.quote(base), llamadas)
+        self.assertIn(shlex.quote("agent:x:turno"), llamadas)
 
     def test_without_any_zstd_decoder_it_answers_an_error_and_writes_nothing(self):
         especificacion = importlib.util.spec_from_file_location("extraer_nativo", MODULO_NATIVO)
