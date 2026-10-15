@@ -929,6 +929,56 @@ class PublicadorNativo(unittest.TestCase):
             "la copia a medias quedó tirada en la carpeta de respaldos",
         )
 
+    def test_two_reverts_in_a_row_do_not_invent_a_conflict(self):
+        # C1a (R1 del veredicto r3): una edición del dueño fuera del bloque entre la gen 2
+        # y la gen 3 que pasó por --leer no conflicta la segunda reversa.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.armar_generacion(2, cambios={"skills/poteto-mode/SKILL.md": "poteto v2\n"})
+        self.publicar("leer")
+        self.publicar("aplicar")
+        meli = self.home / "workspaces" / "meli" / "AGENTS.md"
+        meli.write_bytes(meli.read_bytes() + LINEA_PROPIA)
+        self.publicar("leer")
+        self.armar_generacion(3, cambios={"skills/poteto-mode/SKILL.md": "poteto v3\n"})
+        self.publicar("leer")
+        self.publicar("aplicar")
+        codigo, primera = self.publicar("revertir")
+        self.assertEqual(primera["agentes"]["meli"], "revertido")
+        self.assertEqual((primera["conflictos"], codigo), (0, 0))
+        self.assertIn(LINEA_PROPIA, meli.read_bytes())
+        codigo, segunda = self.publicar("revertir")
+        self.assertEqual(
+            segunda["agentes"]["meli"], "revertido", "la segunda reversa inventó conflicto"
+        )
+        self.assertEqual((segunda["conflictos"], codigo), (0, 0))
+        self.assertEqual(self.estado_del_home()["generacion"], 1)
+
+    def test_an_agents_md_in_0640_keeps_its_mode_through_apply_and_revert(self):
+        # C1b (R2 del veredicto r3): el modo del AGENTS.md sobrevive escribir y revertir.
+        self.armar()
+        meli = self.home / "workspaces" / "meli" / "AGENTS.md"
+        meli.chmod(0o640)
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.assertEqual(meli.stat().st_mode & 0o777, 0o640)
+        self.publicar("revertir")
+        self.assertEqual(meli.stat().st_mode & 0o777, 0o640)
+
+    def test_an_agent_missing_from_the_revert_does_not_conflict_on_the_next_apply(self):
+        # C1c (R3 del veredicto r3): un agente que falta de la lista durante la reversa
+        # conserva su lugar en el estado; la siguiente --aplicar no lo ve como editado.
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        solo_pers_y_main = self.tmp / "agents-sin-meli.json"
+        restantes = [a for a in self.agentes if a["id"] != "meli"]
+        solo_pers_y_main.write_text(json.dumps(restantes) + "\n", encoding="utf-8")
+        self.publicar("revertir", solo_pers_y_main)
+        codigo, aplicar = self.publicar("aplicar")
+        self.assertEqual(aplicar["agentes"]["meli"], "igual")
+
     def test_a_foreign_skill_with_a_managed_name_stops_that_skill(self):
         self.armar()
         ajena = self.home / ".openclaw" / "skills" / "poteto-mode"
