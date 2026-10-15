@@ -912,7 +912,7 @@ class Decisions(Slot):
         artifact.write_text("sin hallazgos\n")
         Path(assignment2["acceptRef"]).write_text(json.dumps(assignment2["protocol"]["accept"]))
         Path(assignment2["resultRef"]).write_text(json.dumps({
-            **assignment2["protocol"]["result"], "typedPayload": {"verdict": "approved"},
+            **assignment2["protocol"]["result"], "typedPayload": {"verdict": "approved", "evidenceRef": "sin hallazgos"},
             "artifactRef": str(artifact), "digest": hashlib.sha256(b"sin hallazgos\n").hexdigest()}))
         self.left(0, "task-2")
         self.backend.survivors = ("4321 Tue Oct 13 00:58:21 2026 /bin/sleep 300",)
@@ -1014,7 +1014,7 @@ class Decisions(Slot):
         Path(assignment["acceptRef"]).write_text(json.dumps(assignment["protocol"]["accept"]))
         artifact.write_text("sin hallazgos\n")
         Path(assignment["resultRef"]).write_text(json.dumps({
-            **assignment["protocol"]["result"], "typedPayload": {"verdict": "approved"},
+            **assignment["protocol"]["result"], "typedPayload": {"verdict": "approved", "evidenceRef": "sin hallazgos"},
             "artifactRef": str(artifact), "digest": hashlib.sha256(b"sin hallazgos\n").hexdigest()}))
         return assignment
 
@@ -1063,7 +1063,7 @@ class Decisions(Slot):
         artifact = self.run_dir().path / "hallazgos.md"
         artifact.write_text("sin hallazgos\n")
         Path(assignment["resultRef"]).write_text(json.dumps({
-            **assignment["protocol"]["result"], "typedPayload": {"verdict": "approved"},
+            **assignment["protocol"]["result"], "typedPayload": {"verdict": "approved", "evidenceRef": "sin hallazgos"},
             "artifactRef": str(artifact), "digest": hashlib.sha256(b"sin hallazgos\n").hexdigest()}))
         self.left(0)
         self.one_pass()
@@ -1208,7 +1208,7 @@ class Decisions(Slot):
         artifact = self.run_dir("task-2").path / "hallazgos.md"
         artifact.write_text("ok\n")
         Path(assignment["resultRef"]).write_text(json.dumps({
-            **assignment["protocol"]["result"], "typedPayload": {"verdict": "approved"},
+            **assignment["protocol"]["result"], "typedPayload": {"verdict": "approved", "evidenceRef": "sin hallazgos"},
             "artifactRef": str(artifact), "digest": hashlib.sha256(b"ok\n").hexdigest()}))
         self.left(0, "task-2")
         self.one_pass()
@@ -1230,7 +1230,7 @@ class Decisions(Slot):
                 artifact = self.run_dir(task).path / "hallazgos.md"
                 artifact.write_text("ok\n")
                 Path(assignment["resultRef"]).write_text(json.dumps({
-                    **assignment["protocol"]["result"], "typedPayload": {"verdict": "approved"},
+                    **assignment["protocol"]["result"], "typedPayload": {"verdict": "approved", "evidenceRef": "sin hallazgos"},
                     "artifactRef": str(artifact), "digest": hashlib.sha256(b"ok\n").hexdigest()}))
                 self.left(0, task)
                 self.one_pass()
