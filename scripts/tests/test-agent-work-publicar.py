@@ -177,7 +177,7 @@ class PublicadorNativo(unittest.TestCase):
         self.publicacion = carpeta
         return carpeta
 
-    def armar_generacion(self, generation, cambios=None, quitados=None):
+    def armar_generacion(self, generation, cambios=None, quitados=None, perfiles=None):
         """Publicación de una generación nueva: la fuente de la generación 1 con los cambios
         dados (y sin los archivos quitados), su manifiesto y su carpeta."""
         fuente = self.tmp / f"fuente-{generation}"
@@ -190,7 +190,7 @@ class PublicadorNativo(unittest.TestCase):
             (fuente / ruta).unlink()
         manifiesto = contexto.manifiesto(
             fuente,
-            self.perfiles,
+            perfiles or self.perfiles,
             repo="t",
             commit="t",
             version="0",
@@ -200,7 +200,12 @@ class PublicadorNativo(unittest.TestCase):
         )
         carpeta = self.tmp / f"publicacion-{next(self._contador)}"
         self.armador.armar_publicacion(
-            carpeta, manifiesto, self.perfiles, self.agentes, fuente=fuente, script=MODULO
+            carpeta,
+            manifiesto,
+            perfiles or self.perfiles,
+            self.agentes,
+            fuente=fuente,
+            script=MODULO,
         )
         self.publicacion = carpeta
         return carpeta
@@ -877,6 +882,25 @@ class PublicadorNativo(unittest.TestCase):
         self.assertEqual(self.skill_del_home("principle-x").read_bytes(), b"principio de juguete\n")
         self.assertEqual(self.estado_del_home()["generacion"], 1)
         self.assertIn("principle-x", self.estado_del_home()["skills"])
+
+    def test_the_revert_restores_the_profiles_of_the_previous_generation(self):
+        # C5 (DeepSeek F3): perfiles.v1.json queda dentro de la reversa, sin CAS (el
+        # archivo es solo del publicador); la primera publicación lo quita al revertir.
+        perfiles_b = copy.deepcopy(self.perfiles)
+        perfiles_b["profiles"][0]["purpose"] = "Propósito de la generación 2\n"
+        self.armar()
+        self.publicar("leer")
+        self.publicar("aplicar")
+        destino = self.home / ".local" / "share" / "agent-work" / "perfiles.v1.json"
+        foto_a = destino.read_bytes()
+        self.armar_generacion(2, perfiles=perfiles_b)
+        self.publicar("leer")
+        self.publicar("aplicar")
+        self.assertNotEqual(destino.read_bytes(), foto_a)
+        self.publicar("revertir")
+        self.assertEqual(destino.read_bytes(), foto_a)
+        self.publicar("revertir")
+        self.assertFalse(destino.exists())
 
     def test_a_foreign_skill_with_a_managed_name_stops_that_skill(self):
         self.armar()
