@@ -280,6 +280,24 @@ def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def guardar_caso(raiz: Path, destino: Path) -> Path:
+    """La evidencia de un caso antes de borrar su temporal (R3 de G5c-r3): copia
+    la raíz sin ningún `.git` y sin `*.dylib`, que son lo pesado y lo que no dice
+    nada de la corrida."""
+    def ignora(dirpath, nombres):
+        fuera = set()
+        for nombre in nombres:
+            ruta = Path(dirpath) / nombre
+            if nombre == ".git" and ruta.is_dir():
+                fuera.add(nombre)
+            elif nombre.endswith(".dylib"):
+                fuera.add(nombre)
+        return fuera
+
+    shutil.copytree(raiz, destino, ignore=ignora, dirs_exist_ok=True)
+    return destino
+
+
 def matar_procesos_del_slot(boundary, kill, *, espera_term=10.0, paso=0.05,
                             reloj=time.monotonic, dormir=time.sleep):
     """Lo que queda en el grupo del slot tras kill-server (R2 de G5c-r3): SIGTERM a
@@ -315,6 +333,12 @@ class BancoE2E(unittest.TestCase):
         temp = tempfile.TemporaryDirectory(prefix="agent-work-banco-")
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name).resolve()
+        guardar = os.environ.get("AGENT_WORK_BANCO_GUARDAR")
+        if guardar:
+            # Se registra justo tras el temporal: en la pila de cleanups corre
+            # después de parar el host y limpiar el slot, y antes de borrarlo.
+            nombre = self.id().rsplit(".", 1)[-1]
+            self.addCleanup(lambda: guardar_caso(self.root, Path(guardar) / nombre))
         self.socket = f"banco-{os.getpid()}-{self.id().rsplit('.', 1)[-1][-24:]}"
         try:
             self.slot = GroupBoundaryBackend(TMUX, self.socket, SLOT_GROUP)
