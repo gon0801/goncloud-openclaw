@@ -1,0 +1,13 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "aceptacion",
+  "kind": "positiva",
+  "route": null,
+  "brief": "Como usuario, abre la página de fixture y di si el botón Enviar manda el formulario. Entrega review.v1.",
+  "fixture": {
+    "page": "<form><input name=q><button type=submit>Enviar</button></form>"
+  },
+  "expect": {
+    "verdict": "approved"
+  }
+}

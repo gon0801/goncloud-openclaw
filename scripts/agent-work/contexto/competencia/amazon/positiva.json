@@ -1,0 +1,26 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "amazon",
+  "kind": "positiva",
+  "route": "mini-native/native/amazon",
+  "brief": "De estos pedidos de Amazon de fixture, ¿cuáles llevan personalización? Contesta los ids.",
+  "fixture": {
+    "pedidos": [
+      {
+        "id": "111-0000001",
+        "customization": {
+          "texto": "Ana"
+        }
+      },
+      {
+        "id": "111-0000002",
+        "customization": null
+      }
+    ]
+  },
+  "expect": {
+    "answer": [
+      "111-0000001"
+    ]
+  }
+}

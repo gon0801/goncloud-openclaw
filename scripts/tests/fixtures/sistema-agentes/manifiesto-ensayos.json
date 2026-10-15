@@ -95,7 +95,9 @@
       "flota/invalida-executor-fuera-del-enum.json",
       "flota/invalida-modelo-desconocido-sin-razon.json",
       "flota/invalida-generacion-booleana.json",
-      "flota/invalida-digest-corto.json"
+      "flota/invalida-digest-corto.json",
+      "flota/modelo-exacto-con-hijos.json",
+      "flota/invalida-hijo-sin-modelo.json"
     ]
   },
   {

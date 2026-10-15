@@ -1,0 +1,14 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "verificacion",
+  "kind": "negativa",
+  "route": "mac-local/opencode",
+  "brief": "Escribe la función cubo en cuad.py.",
+  "fixture": {
+    "repo": {}
+  },
+  "expect": {
+    "marker": "FUERA-DE-PERFIL",
+    "workDone": false
+  }
+}

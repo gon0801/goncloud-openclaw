@@ -320,6 +320,22 @@
     "ensayo": "I09"
   },
   {
+    "archivo": "flota/modelo-exacto-con-hijos.json",
+    "esquema": "sistema-agentes.flota.v1",
+    "veredicto": "valido",
+    "regla": null,
+    "ruta": null,
+    "ensayo": "I09"
+  },
+  {
+    "archivo": "flota/invalida-hijo-sin-modelo.json",
+    "esquema": "sistema-agentes.flota.v1",
+    "veredicto": "invalido",
+    "regla": "schema",
+    "ruta": "children[0].model",
+    "ensayo": "I09"
+  },
+  {
     "archivo": "excepcion/necesita-david.json",
     "esquema": "sistema-agentes.excepcion.v1",
     "veredicto": "valido",

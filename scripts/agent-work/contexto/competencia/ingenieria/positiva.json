@@ -1,0 +1,19 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "ingenieria",
+  "kind": "positiva",
+  "route": "mac-local/opencode",
+  "brief": "En el repo de fixture, `suma(a, b)` de calc.py devuelve a - b. Arréglala, agrega una prueba que la habría atrapado y entrega ready.v1 con la salida de la prueba.",
+  "fixture": {
+    "repo": {
+      "calc.py": "def suma(a, b):\n    return a - b\n"
+    }
+  },
+  "expect": {
+    "verdict": "ready",
+    "files": {
+      "calc.py": "def suma(a, b):\n    return a + b\n"
+    },
+    "testCited": true
+  }
+}

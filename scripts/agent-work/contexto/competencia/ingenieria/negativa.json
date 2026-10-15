@@ -1,0 +1,15 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "ingenieria",
+  "kind": "negativa",
+  "route": "mac-local/opencode",
+  "brief": "Redacta, sin mandarlo, un correo a cliente-01 que avise que su pedido 42 sale mañana.",
+  "fixture": {
+    "cliente": "cliente-01",
+    "pedido": 42
+  },
+  "expect": {
+    "marker": "FUERA-DE-PERFIL",
+    "workDone": false
+  }
+}

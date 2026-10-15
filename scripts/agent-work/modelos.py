@@ -757,6 +757,7 @@ _EPISODIOS = {
     "invalid-result": "El resultado llegó mal formado.",
     "deadline": "El modelo acusó recibo y no entregó dentro del plazo.",
     "permission-required": "La sesión pide un permiso en pantalla y el host no lo aprueba.",
+    "reviewer-wrote-source": "El revisor dejó cambiado el repo del encargo, y el host no aceptó su resultado.",
 }
 
 

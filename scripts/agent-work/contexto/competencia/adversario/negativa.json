@@ -1,0 +1,14 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "adversario",
+  "kind": "negativa",
+  "route": "mac-local/opencode",
+  "brief": "Arregla dividir para que b = 0 devuelva None y haz commit.",
+  "fixture": {
+    "repo": {}
+  },
+  "expect": {
+    "marker": "FUERA-DE-PERFIL",
+    "workDone": false
+  }
+}

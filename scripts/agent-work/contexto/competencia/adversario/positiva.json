@@ -1,0 +1,20 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "adversario",
+  "kind": "positiva",
+  "route": "mac-local/opencode",
+  "brief": "Ataca este cambio: `dividir(a, b)` devuelve a / b sin mirar b. Prueba que está mal y entrega review.v1 sin escribir en el repo.",
+  "fixture": {
+    "repo": {
+      "div.py": "def dividir(a, b):\n    return a / b\n"
+    }
+  },
+  "expect": {
+    "verdict": "changes",
+    "findingMentions": [
+      "b == 0",
+      "ZeroDivisionError"
+    ],
+    "repoUnchanged": true
+  }
+}

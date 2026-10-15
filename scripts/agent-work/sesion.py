@@ -297,6 +297,22 @@ class RunEvents:
     """Las últimas líneas del flujo."""
     log_errors: tuple[str, ...]
     """Las últimas líneas level=ERROR de los logs."""
+    calls: tuple["ModelCall", ...] = ()
+    """Cada llamada al modelo que opencode registró, en orden."""
+    evaluations: tuple[str, ...] = ()
+    """Cada permiso que opencode evaluó, como "<permiso>:<acción>" y sin repetir: las reglas allow y
+    deny (`message=evaluated`) y los ask que nadie contestó ("<permiso>:ask"). Vacío quiere decir que
+    opencode no evaluó nada, no que no hubo permisos."""
+
+
+@dataclass(frozen=True)
+class ModelCall:
+    """Una línea `message=stream`: qué agente de opencode llamó a qué modelo. `small` es el modelo
+    pequeño que pone títulos; `agent` es `build` para la sesión del encargo, `title` para el título y
+    el nombre del agente para un hijo de `task` (B22-fase0.md, M1)."""
+    agent: str
+    model: str
+    small: bool
 
 
 def _log_fields(line: str) -> dict[str, str]:
@@ -338,6 +354,7 @@ def read_events(record: Path) -> RunEvents | None:
     files = SessionRecord(record)
     first_at, flow_error, rejected, tail = None, None, [], deque(maxlen=TAIL_LINES)
     denied, log_error, log_cause, opened, providers = [], None, None, None, []
+    calls, evaluations = [], []
     log_errors = deque(maxlen=TAIL_LINES)
     try:
         with files.events.open(encoding="utf-8", errors="replace") as flow:
@@ -367,14 +384,20 @@ def read_events(record: Path) -> RunEvents | None:
                 asked = DENIED_LINE.search(line)
                 if asked:
                     denied.append(PermissionDenied(asked[1], asked[2]))
+                    evaluations.append(f"{asked[1]}:ask")
                     continue
                 fields = _log_fields(line)
+                if fields.get("message") == "evaluated" and fields.get("action.action"):
+                    evaluations.append(f"{fields.get('permission', '')}:{fields['action.action']}")
                 if fields.get("message") == "evaluated" and fields.get("action.action") == "deny":
                     denied.append(PermissionDenied(fields.get("permission", ""), fields.get("pattern", "")))
                     continue
                 opened = opened or _created_in(fields)
                 if fields.get("message") == "stream" and fields.get("providerID"):
                     providers.append(fields["providerID"])
+                    if fields.get("modelID"):
+                        calls.append(ModelCall(fields.get("agent", ""), f"{fields['providerID']}/{fields['modelID']}",
+                                               fields.get("small") == "true"))
                 if fields.get("level") == "ERROR":
                     log_errors.append(line.rstrip("\n"))
                     log_error = fields.get("error") or log_error
@@ -382,7 +405,24 @@ def read_events(record: Path) -> RunEvents | None:
     except OSError:
         return None
     return RunEvents(first_at, tuple(dict.fromkeys(denied or rejected)), log_error or log_cause or flow_error, opened,
-                     tuple(dict.fromkeys(providers)), tuple(tail), tuple(log_errors))
+                     tuple(dict.fromkeys(providers)), tuple(tail), tuple(log_errors), tuple(calls),
+                     tuple(dict.fromkeys(evaluations)))
+
+
+def model_in_use(events: RunEvents | None, requested: str | None) -> tuple[str | None, str | None]:
+    """El modelo que corrió el encargo y, si no se sabe, por qué (diseño de SUA-03, 4.7). Cuenta las
+    llamadas de la sesión del encargo (`agent=build`, `small=false`) y las compara con el `-m` pedido."""
+    if events is None:
+        return None, "no se pueden leer los logs de opencode"
+    used = list(dict.fromkeys(call.model for call in events.calls if call.agent == "build" and not call.small))
+    if not used:
+        return None, "opencode no registró ninguna llamada"
+    if requested is None:
+        return None, f"opencode usó {', '.join(used)} y no se sabe qué se pidió"
+    other = [model for model in used if model != requested]
+    if other:
+        return None, f"opencode usó {', '.join(other)} y se pidió {requested}"
+    return requested, None
 
 
 @dataclass(frozen=True)

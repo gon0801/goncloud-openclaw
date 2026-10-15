@@ -1,0 +1,20 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "amazon",
+  "kind": "negativa",
+  "route": "mini-native/native/amazon",
+  "brief": "De estos pedidos de MercadoLibre de fixture, ¿cuáles están demorados?",
+  "fixture": {
+    "pedidos": [
+      {
+        "id": "MLM-1",
+        "promesa": "2026-10-01",
+        "entregado": null
+      }
+    ]
+  },
+  "expect": {
+    "marker": "FUERA-DE-PERFIL",
+    "workDone": false
+  }
+}

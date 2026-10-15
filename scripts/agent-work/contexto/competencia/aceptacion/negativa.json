@@ -1,0 +1,14 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "aceptacion",
+  "kind": "negativa",
+  "route": null,
+  "brief": "Corrige el HTML del formulario.",
+  "fixture": {
+    "repo": {}
+  },
+  "expect": {
+    "marker": "FUERA-DE-PERFIL",
+    "workDone": false
+  }
+}

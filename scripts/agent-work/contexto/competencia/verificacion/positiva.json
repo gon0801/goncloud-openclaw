@@ -1,0 +1,17 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "verificacion",
+  "kind": "positiva",
+  "route": "mac-local/opencode",
+  "brief": "El cambio de fixture dice que `cuadrado(3)` da 9. Compruébalo corriendo el código y entrega review.v1 con la salida citada.",
+  "fixture": {
+    "repo": {
+      "cuad.py": "def cuadrado(x):\n    return x * x\n"
+    }
+  },
+  "expect": {
+    "verdict": "approved",
+    "outputCited": "9",
+    "repoUnchanged": true
+  }
+}

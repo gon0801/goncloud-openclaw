@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "agent-work"))
 from routing import prepare_request, RouteUnavailable  # noqa: E402
 import routing  # noqa: E402
 import brief  # noqa: E402
+import contexto  # noqa: E402
 import encargo  # noqa: E402
 import modelos  # noqa: E402
 import sesion  # noqa: E402
@@ -661,6 +662,71 @@ class BriefHelper(unittest.TestCase):
         done = self.run_helper("--model", "zai-coding-plan/glm-5.3", stdin=b"")
         self.assertEqual((done.returncode, done.stderr), (1, b"brief: brief must contain 1 to 1048576 bytes\n"))
         self.assertEqual(list(self.root.iterdir()), [])
+
+    PERFILES = ROOT / "scripts/agent-work/contexto/perfiles.v1.json"
+
+    def test_brief_with_a_profile_for_a_cli_host_carries_only_the_profile_line(self):
+        for extra in ((), ("--perfiles", str(self.PERFILES))):
+            with self.subTest(extra=extra):
+                done = self.run_helper("--host", "mac-local", "--adapter", "opencode", "--model",
+                                       "zai-coding-plan/glm-5.3", "--perfil", "revision", *extra)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                digest = json.loads(done.stdout)["instructionRef"]["ref"].removeprefix("artifact:")
+                self.assertEqual((self.root / digest).read_bytes(),
+                                 b"agent-work.launch.v1\nmodel: zai-coding-plan/glm-5.3\nprofile: revision\n---\n"
+                                 + self.BRIEF)
+        alone = self.run_helper("--host", "mac-local", "--adapter", "opencode", "--perfil", "revision")
+        digest = json.loads(alone.stdout)["instructionRef"]["ref"].removeprefix("artifact:")
+        self.assertEqual((self.root / digest).read_bytes(),
+                         b"agent-work.launch.v1\nprofile: revision\n---\n" + self.BRIEF)
+
+    def test_brief_with_a_profile_for_a_native_target_carries_the_profile_under_the_digest(self):
+        done = self.run_helper("--perfil", "meli", "--perfiles", str(self.PERFILES))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("target", json.loads(done.stdout))
+        digest = json.loads(done.stdout)["instructionRef"]["ref"].removeprefix("artifact:")
+        meli = contexto.perfil(contexto.leer_json(self.PERFILES), "meli")
+        self.assertEqual(
+            (self.root / digest).read_bytes().decode(),
+            "agent-work.launch.v1\nprofile: meli\n---\n"
+            f"<!-- perfil inicio id=meli digest={contexto.digest_de_perfil(meli)} -->\n"
+            "Tu perfil en este encargo: meli. Trabajo de MercadoLibre: pedidos, demoras y preguntas. Rechaza lo "
+            "que no es de MercadoLibre con FUERA-DE-PERFIL.\n"
+            "Contratos que entregas: ready.v1. Escribes fuente: no. Skills de tu perfil, además de poteto: "
+            "ninguna.\n<!-- perfil fin -->\n" + self.BRIEF.decode(),
+        )
+
+    def test_brief_refuses_an_unknown_or_unreadable_profile_and_writes_nothing(self):
+        unknown = self.run_helper("--perfil", "cocina", "--perfiles", str(self.PERFILES))
+        self.assertEqual((unknown.returncode, unknown.stdout), (1, b""))
+        self.assertIn(b"brief: unknown profile 'cocina'", unknown.stderr)
+        for args, message in (
+            (("--perfil", "meli"), b"--perfil without --host is a native target and needs --perfiles"),
+            (("--perfiles", str(self.PERFILES)), b"--perfiles goes with --perfil"),
+            (("--perfil", "Meli", "--perfiles", str(self.PERFILES)), b"not a profile id: 'Meli'"),
+        ):
+            with self.subTest(args=args):
+                done = self.run_helper(*args)
+                self.assertEqual((done.returncode, done.stdout), (2, b""))
+                self.assertIn(message, done.stderr)
+        missing = self.run_helper("--perfil", "meli", "--perfiles", str(self.tmp / "no-existe.json"))
+        self.assertEqual(missing.returncode, 1)
+        self.assertIn(b"brief: cannot read", missing.stderr)
+        self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_todays_host_refuses_a_profile_line(self):
+        # G1 does not move the host: until G3 a brief with a profile is cabecera-mal-formada, which is
+        # why main does not pass --perfil before the window of G5.
+        done = self.run_helper("--host", "mac-local", "--adapter", "opencode", "--perfil", "ingenieria")
+        digest = json.loads(done.stdout)["instructionRef"]["ref"].removeprefix("artifact:")
+        self.assertEqual(sesion.LaunchHeader.parse((self.root / digest).read_bytes()),
+                         modelos.MalformedHeader("línea que este host no entiende: 'profile: ingenieria'"))
+
+    def test_brief_and_contexto_share_the_canonical_form(self):
+        sample = {"z": [1, {"ñ": "sí"}], "a": None}
+        self.assertEqual(brief.canonical(sample), contexto.canonico(sample))
+        for profile in contexto.leer_json(self.PERFILES)["profiles"]:
+            self.assertRegex(profile["id"], brief.PROFILE_ID)
 
     def test_brief_carries_the_same_header_grammar_as_the_host(self):
         self.assertEqual((brief.LAUNCH_SCHEMA, brief.HEADER_END), (sesion.LAUNCH_SCHEMA, sesion.HEADER_END))

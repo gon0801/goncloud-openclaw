@@ -1,0 +1,686 @@
+{
+  "schema": "agent-work.perfiles.v1",
+  "profiles": [
+    {
+      "id": "ingenieria",
+      "purpose": "Implementa un cambio en un repo con sus pruebas y entrega ready.v1 con la evidencia.",
+      "resultContracts": [
+        "ready.v1"
+      ],
+      "routes": [
+        {
+          "host": "mac-local",
+          "executor": "opencode",
+          "agentId": null,
+          "via": [
+            "task"
+          ]
+        },
+        {
+          "host": "mini-native",
+          "executor": "native",
+          "agentId": "ingenieria",
+          "via": [
+            "turn",
+            "child",
+            "task"
+          ]
+        },
+        {
+          "host": "mini-native",
+          "executor": "native",
+          "agentId": "implementer",
+          "via": [
+            "turn",
+            "child",
+            "task"
+          ]
+        }
+      ],
+      "writesSource": true,
+      "requiredTools": {
+        "opencode": [
+          "read",
+          "edit",
+          "bash",
+          "skill",
+          "task",
+          "todowrite"
+        ],
+        "openclaw": [
+          "read",
+          "edit",
+          "write",
+          "exec",
+          "sessions_spawn",
+          "progress_card"
+        ]
+      },
+      "skills": [
+        "architect",
+        "how",
+        "tdd"
+      ],
+      "sources": [
+        {
+          "ref": "G:agents/ingenieria/agent/workshop-skills",
+          "revision": "97d35ab0",
+          "validUntil": "2027-01-14T00:00:00Z"
+        },
+        {
+          "ref": "G:agents/implementer/agent/workshop-skills",
+          "revision": "97d35ab0",
+          "validUntil": "2027-01-14T00:00:00Z"
+        }
+      ],
+      "coverage": "checkpoint-only",
+      "competence": {
+        "mac-local/opencode": {
+          "status": "pending",
+          "model": null,
+          "evidence": null,
+          "at": null,
+          "validUntil": null
+        },
+        "mini-native/native/ingenieria": {
+          "status": "pending",
+          "model": null,
+          "evidence": null,
+          "at": null,
+          "validUntil": null
+        },
+        "mini-native/native/implementer": {
+          "status": "pending",
+          "model": null,
+          "evidence": null,
+          "at": null,
+          "validUntil": null
+        }
+      }
+    },
+    {
+      "id": "revision",
+      "purpose": "Revisa un cambio sin escribir fuente y entrega review.v1 con su veredicto y sus hallazgos.",
+      "resultContracts": [
+        "review.v1"
+      ],
+      "routes": [
+        {
+          "host": "mac-local",
+          "executor": "opencode",
+          "agentId": null,
+          "via": [
+            "task"
+          ]
+        },
+        {
+          "host": "mini-native",
+          "executor": "native",
+          "agentId": "reviewer",
+          "via": [
+            "turn",
+            "child"
+          ]
+        }
+      ],
+      "writesSource": false,
+      "requiredTools": {
+        "opencode": [
+          "read",
+          "bash",
+          "skill",
+          "task",
+          "todowrite"
+        ],
+        "openclaw": [
+          "read",
+          "exec",
+          "sessions_spawn",
+          "progress_card"
+        ]
+      },
+      "skills": [
+        "blast-radius",
+        "how"
+      ],
+      "sources": [
+        {
+          "ref": "G:agents/reviewer/agent/workshop-skills",
+          "revision": "97d35ab0",
+          "validUntil": "2027-01-14T00:00:00Z"
+        },
+        {
+          "ref": "G:docs/superpowers/specs/2026-10-14-sua-03-trabajadores-design.md",
+          "revision": "97d35ab0",
+          "validUntil": "2027-01-14T00:00:00Z"
+        }
+      ],
+      "coverage": "checkpoint-only",
+      "competence": {
+        "mac-local/opencode": {
+          "status": "pending",
+          "model": null,
+          "evidence": null,
+          "at": null,
+          "validUntil": null
+        },
+        "mini-native/native/reviewer": {
+          "status": "pending",
+          "model": null,
+          "evidence": null,
+          "at": null,
+          "validUntil": null
+        }
+      }
+    },
+    {
+      "id": "adversario",
+      "purpose": "Ataca un cambio para probar que está mal, sin escribir fuente, y entrega review.v1.",
+      "resultContracts": [
+        "review.v1"
+      ],
+      "routes": [
+        {
+          "host": "mac-local",
+          "executor": "opencode",
+          "agentId": null,
+          "via": [
+            "task"
+          ]
+        },
+        {
+          "host": "mini-native",
+          "executor": "native",
+          "agentId": "adversary",
+          "via": [
+            "turn",
+            "child"
+          ]
+        }
+      ],
+      "writesSource": false,
+      "requiredTools": {
+        "opencode": [
+          "read",
+          "bash",
+          "skill",
+          "task",
+          "todowrite"
+        ],
+        "openclaw": [
+          "read",
+          "exec",
+          "sessions_spawn",
+          "progress_card"
+        ]
+      },
+      "skills": [
+        "blast-radius",
+        "how"
+      ],
+      "sources": [
+        {
+          "ref": "G:docs/evidence/agent-work/coverage.json",
+          "revision": "97d35ab0",
+          "validUntil": "2027-01-14T00:00:00Z"
+        }
+      ],
+      "coverage": "checkpoint-only",
+      "competence": {
+        "mac-local/opencode": {
+          "status": "pending",
+          "model": null,
+          "evidence": null,
+          "at": null,
+          "validUntil": null
+        },
+        "mini-native/native/adversary": {
+          "status": "pending",
+          "model": null,
+          "evidence": null,
+          "at": null,
+          "validUntil": null
+        }
+      }
+    },
+    {
+      "id": "verificacion",
+      "purpose": "Comprueba con evidencia real que un cambio hace lo que dice, sin escribir fuente, y entrega review.v1.",
+      "resultContracts": [
+        "review.v1"
+      ],
+      "routes": [
+        {
+          "host": "mac-local",
+          "executor": "opencode",
+          "agentId": null,
+          "via": [
+            "task"
+          ]
+        },
+        {
+          "host": "mini-native",
+          "executor": "native",
+          "agentId": "verifier",
+          "via": [
+            "turn",
+            "child"
+          ]
+        }
+      ],
+      "writesSource": false,
+      "requiredTools": {
+        "opencode": [
+          "read",
+          "bash",
+          "skill",
+          "task",
+          "todowrite"
+        ],
+        "openclaw": [
+          "read",
+          "exec",
+          "sessions_spawn",
+          "progress_card"
+        ]
+      },
+      "skills": [
+        "how"
+      ],
+      "sources": [
+        {
+          "ref": "G:agents/verifier/agent/workshop-skills",
+          "revision": "97d35ab0",
+          "validUntil": "2027-01-14T00:00:00Z"
+        }
+      ],
+      "coverage": "checkpoint-only",
+      "competence": {
+        "mac-local/opencode": {
+          "status": "pending",
+          "model": null,
+          "evidence": null,
+          "at": null,
+          "validUntil": null
+        },
+        "mini-native/native/verifier": {
+          "status": "pending",
+          "model": null,
+          "evidence": null,
+          "at": null,
+          "validUntil": null
+        }
+      }
+    },
+    {
+      "id": "exploracion",
+      "purpose": "Averigua cómo es el terreno y entrega ready.v1 con los hechos y su procedencia, sin escribir fuente.",
+      "resultContracts": [
+        "ready.v1"
+      ],
+      "routes": [
+        {
+          "host": "mac-local",
+          "executor": "opencode",
+          "agentId": null,
+          "via": [
+            "task"
+          ]
+        },
+        {
+          "host": "mini-native",
+          "executor": "native",
+          "agentId": "scout",
+          "via": [
+            "turn",
+            "child"
+          ]
+        }
+      ],
+      "writesSource": false,
+      "requiredTools": {
+        "opencode": [
+          "read",
+          "bash",
+          "skill",
+          "task",
+          "todowrite"
+        ],
+        "openclaw": [
+          "read",
+          "exec",
+          "sessions_spawn",
+          "progress_card"
+        ]
+      },
+      "skills": [
+        "how",
+        "why"
+      ],
+      "sources": [
+        {
+          "ref": "G:docs/superpowers/specs/2026-10-14-sua-03-trabajadores-design.md",
+          "revision": "97d35ab0",
+          "validUntil": "2027-01-14T00:00:00Z"
+        }
+      ],
+      "coverage": "checkpoint-only",
+      "competence": {
+        "mac-local/opencode": {
+          "status": "pending",
+          "model": null,
+          "evidence": null,
+          "at": null,
+          "validUntil": null
+        },
+        "mini-native/native/scout": {
+          "status": "pending",
+          "model": null,
+          "evidence": null,
+          "at": null,
+          "validUntil": null
+        }
+      }
+    },
+    {
+      "id": "aceptacion",
+      "purpose": "Prueba como un usuario lo que se entregó y entrega review.v1. Perfil incompleto: ninguna ruta lo atiende, porque el agente usuario no está en la lista viva.",
+      "resultContracts": [
+        "review.v1"
+      ],
+      "routes": [],
+      "writesSource": false,
+      "requiredTools": {},
+      "skills": [],
+      "sources": [
+        {
+          "ref": "G:agents/usuario/agent/AGENTS.md",
+          "revision": "97d35ab0",
+          "validUntil": "2027-01-14T00:00:00Z"
+        },
+        {
+          "ref": "medicion:sua03-p1-p6.txt#P1",
+          "revision": "2026-10-14",
+          "validUntil": "2027-01-14T00:00:00Z"
+        }
+      ],
+      "coverage": "checkpoint-only",
+      "competence": {}
+    },
+    {
+      "id": "operaciones",
+      "purpose": "Trabajo de operaciones: reportes, Odoo y lo que no es de una tienda. No escribe en repos.",
+      "resultContracts": [
+        "ready.v1"
+      ],
+      "routes": [
+        {
+          "host": "mini-native",
+          "executor": "native",
+          "agentId": "operaciones",
+          "via": [
+            "turn",
+            "child"
+          ]
+        }
+      ],
+      "writesSource": false,
+      "requiredTools": {
+        "openclaw": [
+          "read",
+          "exec",
+          "sessions_spawn",
+          "progress_card"
+        ]
+      },
+      "skills": [],
+      "sources": [
+        {
+          "ref": "G:agents/operaciones/agent/workshop-skills",
+          "revision": "97d35ab0",
+          "validUntil": "2027-01-14T00:00:00Z"
+        }
+      ],
+      "coverage": "checkpoint-only",
+      "competence": {
+        "mini-native/native/operaciones": {
+          "status": "pending",
+          "model": null,
+          "evidence": null,
+          "at": null,
+          "validUntil": null
+        }
+      }
+    },
+    {
+      "id": "amazon",
+      "purpose": "Trabajo de Amazon Seller Central, como el censo de pedidos y personalizaciones. Rechaza lo que no es de Amazon con FUERA-DE-PERFIL.",
+      "resultContracts": [
+        "ready.v1"
+      ],
+      "routes": [
+        {
+          "host": "mini-native",
+          "executor": "native",
+          "agentId": "amazon",
+          "via": [
+            "turn",
+            "child"
+          ]
+        }
+      ],
+      "writesSource": false,
+      "requiredTools": {
+        "openclaw": [
+          "read",
+          "exec",
+          "sessions_spawn",
+          "progress_card"
+        ]
+      },
+      "skills": [],
+      "sources": [
+        {
+          "ref": "medicion:sua03-p1-p6.txt#P1",
+          "revision": "2026-10-14",
+          "validUntil": "2027-01-14T00:00:00Z"
+        },
+        {
+          "ref": "G:agents/operaciones/agent/workshop-skills/sellercentral-browser-census/SKILL.md",
+          "revision": "97d35ab0",
+          "validUntil": "2027-01-14T00:00:00Z"
+        }
+      ],
+      "coverage": "checkpoint-only",
+      "competence": {
+        "mini-native/native/amazon": {
+          "status": "pending",
+          "model": null,
+          "evidence": null,
+          "at": null,
+          "validUntil": null
+        }
+      }
+    },
+    {
+      "id": "meli",
+      "purpose": "Trabajo de MercadoLibre: pedidos, demoras y preguntas. Rechaza lo que no es de MercadoLibre con FUERA-DE-PERFIL.",
+      "resultContracts": [
+        "ready.v1"
+      ],
+      "routes": [
+        {
+          "host": "mini-native",
+          "executor": "native",
+          "agentId": "meli",
+          "via": [
+            "turn",
+            "child"
+          ]
+        }
+      ],
+      "writesSource": false,
+      "requiredTools": {
+        "openclaw": [
+          "read",
+          "exec",
+          "sessions_spawn",
+          "progress_card"
+        ]
+      },
+      "skills": [],
+      "sources": [
+        {
+          "ref": "medicion:sua03-p1-p6.txt#P1",
+          "revision": "2026-10-14",
+          "validUntil": "2027-01-14T00:00:00Z"
+        }
+      ],
+      "coverage": "checkpoint-only",
+      "competence": {
+        "mini-native/native/meli": {
+          "status": "pending",
+          "model": null,
+          "evidence": null,
+          "at": null,
+          "validUntil": null
+        }
+      }
+    },
+    {
+      "id": "mail",
+      "purpose": "Redacta correos con el formato de la casa sin mandarlos por su cuenta. Rechaza lo que no es correo con FUERA-DE-PERFIL.",
+      "resultContracts": [
+        "ready.v1"
+      ],
+      "routes": [
+        {
+          "host": "mini-native",
+          "executor": "native",
+          "agentId": "mail",
+          "via": [
+            "turn",
+            "child"
+          ]
+        }
+      ],
+      "writesSource": false,
+      "requiredTools": {
+        "openclaw": [
+          "read",
+          "exec",
+          "sessions_spawn",
+          "progress_card"
+        ]
+      },
+      "skills": [],
+      "sources": [
+        {
+          "ref": "medicion:sua03-p1-p6.txt#P1",
+          "revision": "2026-10-14",
+          "validUntil": "2027-01-14T00:00:00Z"
+        },
+        {
+          "ref": "medicion:sua03-p1-p6.txt#P5",
+          "revision": "2026-10-14",
+          "validUntil": "2027-01-14T00:00:00Z"
+        },
+        {
+          "ref": "G:agents/operaciones/agent/workshop-skills/gmail-compose-rich-mail/SKILL.md",
+          "revision": "97d35ab0",
+          "validUntil": "2027-01-14T00:00:00Z"
+        }
+      ],
+      "coverage": "checkpoint-only",
+      "competence": {
+        "mini-native/native/mail": {
+          "status": "pending",
+          "model": null,
+          "evidence": null,
+          "at": null,
+          "validUntil": null
+        }
+      }
+    },
+    {
+      "id": "odoo",
+      "purpose": "Trabajo en Odoo: inventario, ventas y reportes. Rechaza lo que no es de Odoo con FUERA-DE-PERFIL.",
+      "resultContracts": [
+        "ready.v1"
+      ],
+      "routes": [
+        {
+          "host": "mini-native",
+          "executor": "native",
+          "agentId": "odoo",
+          "via": [
+            "turn",
+            "child"
+          ]
+        }
+      ],
+      "writesSource": false,
+      "requiredTools": {
+        "openclaw": [
+          "read",
+          "exec",
+          "sessions_spawn",
+          "progress_card"
+        ]
+      },
+      "skills": [],
+      "sources": [
+        {
+          "ref": "medicion:sua03-p1-p6.txt#P1",
+          "revision": "2026-10-14",
+          "validUntil": "2027-01-14T00:00:00Z"
+        },
+        {
+          "ref": "medicion:sua03-p1-p6.txt#P5",
+          "revision": "2026-10-14",
+          "validUntil": "2027-01-14T00:00:00Z"
+        }
+      ],
+      "coverage": "checkpoint-only",
+      "competence": {
+        "mini-native/native/odoo": {
+          "status": "pending",
+          "model": null,
+          "evidence": null,
+          "at": null,
+          "validUntil": null
+        }
+      }
+    }
+  ],
+  "agents": [
+    {
+      "agentId": "pers",
+      "status": "sin-perfil"
+    },
+    {
+      "agentId": "limpia",
+      "status": "sin-perfil"
+    },
+    {
+      "agentId": "arras",
+      "status": "sin-perfil"
+    },
+    {
+      "agentId": "gonserver",
+      "status": "sin-perfil"
+    },
+    {
+      "agentId": "skillverif",
+      "status": "sin-perfil"
+    },
+    {
+      "agentId": "tinkabot",
+      "status": "sin-perfil"
+    },
+    {
+      "agentId": "eggbot",
+      "status": "sin-perfil"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "revision",
+  "kind": "positiva",
+  "route": "mac-local/opencode",
+  "brief": "Revisa el commit de fixture: `es_par(n)` devuelve `n % 2 == 1`. Entrega review.v1 sin escribir en el repo.",
+  "fixture": {
+    "repo": {
+      "par.py": "def es_par(n):\n    return n % 2 == 1\n"
+    }
+  },
+  "expect": {
+    "verdict": "changes",
+    "findingMentions": [
+      "es_par",
+      "% 2 == 1"
+    ],
+    "repoUnchanged": true
+  }
+}

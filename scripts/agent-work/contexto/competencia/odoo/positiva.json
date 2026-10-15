@@ -1,0 +1,26 @@
+{
+  "schema": "agent-work.competencia.v1",
+  "profile": "odoo",
+  "kind": "positiva",
+  "route": "mini-native/native/odoo",
+  "brief": "Con este inventario de Odoo de fixture, ¿qué productos están por debajo de su mínimo? Contesta las referencias.",
+  "fixture": {
+    "productos": [
+      {
+        "ref": "P-01",
+        "stock": 2,
+        "minimo": 5
+      },
+      {
+        "ref": "P-02",
+        "stock": 9,
+        "minimo": 5
+      }
+    ]
+  },
+  "expect": {
+    "answer": [
+      "P-01"
+    ]
+  }
+}
