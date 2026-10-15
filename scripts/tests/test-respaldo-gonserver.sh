@@ -9,6 +9,8 @@
 #   5. hermes: hermes-backup en hermes/ (7) y el nombre viejo claw-backup en claw/ (8).
 #   5b. Fecha del nombre: acepta de hoy-60 a hoy+1 (también cruzando mes y año); fuera de
 #       eso sale 2 sin escribir nada.
+#   5c. Tope de tamaño: lo que pasa de RECIBE_MAX_BYTES sale 4 sin archivo ni temporal;
+#       justo el tope entra; deja de leer en el tope, no escribe el envío entero.
 #   6. Vigía: todo al día no avisa ni imprime nada.
 #   7. Vigía: falta, viejo y encogido van en un solo aviso HTML escapado al chat del env.
 #   8. Vigía: si Telegram falla sale 2 y el token no aparece en ninguna salida.
@@ -93,7 +95,8 @@ done
 # 5b
 for caso in "20261015 20261016 si" "20261015 20260816 si" "20261015 20261017 no" "20261015 20260815 no" \
             "20261015 20991231 no" "20270101 20261102 si" "20270101 20261101 no" "20270101 20270102 si"; do
-  set -- $caso  # shellcheck disable=SC2086
+  # shellcheck disable=SC2086  # cada caso son tres palabras
+  set -- $caso
   rm -rf "$SB/fechas"
   BASE_PRUEBA="$SB/fechas" HOY="$1" recibir openclaw "openclaw-backup-$2.tar.gz" "$SB/bueno.tar.gz"; rc=$?
   if [ "$3" = si ]; then
@@ -105,6 +108,32 @@ for caso in "20261015 20261016 si" "20261015 20260816 si" "20261015 20261017 no"
     [ ! -e "$SB/fechas" ] || fail "hoy $1: la fecha $2 dejó algo escrito: $(find "$SB/fechas")"
   fi
 done
+
+# 5c
+tam=$(wc -c < "$SB/bueno.tar.gz" | tr -d ' ')
+rm -rf "$SB/tope"
+BASE_PRUEBA="$SB/tope" RECIBE_MAX_BYTES=$((tam - 1)) recibir openclaw openclaw-backup-20261015.tar.gz "$SB/bueno.tar.gz"; rc=$?
+[ "$rc" -eq 4 ] || fail "aceptó un archivo de $tam bytes con tope $((tam - 1)) (rc=$rc)"
+grep -q "pasa de $((tam - 1)) bytes" "$SB/err" || fail "rechazo por tamaño sin causa: $(cat "$SB/err")"
+[ -z "$(ls -A "$SB/tope/openclaw")" ] || fail "el rechazo por tamaño dejó algo: $(ls -A "$SB/tope/openclaw")"
+BASE_PRUEBA="$SB/tope" RECIBE_MAX_BYTES=$tam recibir openclaw openclaw-backup-20261015.tar.gz "$SB/bueno.tar.gz" \
+  || fail "rechazó un archivo de justo el tope: $(cat "$SB/err")"
+cmp -s "$SB/bueno.tar.gz" "$SB/tope/openclaw/openclaw-backup-20261015.tar.gz" || fail "con justo el tope no guardó el archivo entero"
+python3 -c '
+import sys
+n = 0
+try:
+    for _ in range(51200):
+        sys.stdout.buffer.write(bytes(1024)); n += 1024
+    sys.stdout.flush()
+except BrokenPipeError:
+    pass
+open(sys.argv[1], "w").write(str(n))' "$SB/enviados" 2>/dev/null \
+  | SSH_ORIGINAL_COMMAND=openclaw-backup-20261015.tar.gz RECIBE_BASE="$SB/tope" RECIBE_HOY=20261015 RECIBE_MAX_BYTES=4096 \
+    sh "$R" openclaw > /dev/null 2> "$SB/err"; rc=$?
+[ "$rc" -eq 4 ] || fail "un envío de 50 MB con tope 4096 no salió 4 (rc=$rc)"
+[ "$(cat "$SB/enviados")" -lt 1048576 ] || fail "el receptor leyó $(cat "$SB/enviados") bytes con tope 4096: no corta en el tope"
+[ "$(ls -A "$SB/tope/openclaw")" = openclaw-backup-20261015.tar.gz ] || fail "el envío de 50 MB dejó algo: $(ls -A "$SB/tope/openclaw")"
 
 # Vigía. Telegram de mentira en 127.0.0.1: registra cada POST y responde ok, o 500 si existe $SB/tg-falla.
 cat > "$SB/tg.py" <<'E'

@@ -15,13 +15,18 @@
 # la poda guarda los más nuevos por nombre, así que siete nombres con fecha futura
 # borrarían todas las copias reales y se quedarían para siempre.
 #
+# Cada subida tiene tope de RECIBE_MAX_BYTES (20 GiB): el disco de respaldos es
+# compartido y un `cat` sin tope lo puede llenar.
+#
 # Éxito: imprime el sha256 del archivo guardado y sale 0. Falla: mensaje en stderr y
-# salida distinta de 0 (2 nombre, familia o fecha inválidos, 3 archivo corrupto). Nunca
-# deja un archivo a medias: escribe a un temporal, lo valida con `gzip -t` y lo renombra.
+# salida distinta de 0 (2 nombre, familia o fecha inválidos, 3 archivo corrupto, 4 pasa
+# del tope). Nunca deja un archivo a medias: escribe a un temporal, lo valida con
+# `gzip -t` y lo renombra.
 set -eu
 umask 077
 
 BASE="${RECIBE_BASE:-/mnt/data/backups}"
+MAX="${RECIBE_MAX_BYTES:-21474836480}"
 familia="${1:-}"
 nombre="${SSH_ORIGINAL_COMMAND:-}"
 D8='[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
@@ -53,7 +58,10 @@ mkdir -p "$dir"
 tmp="$dir/.$nombre.tmp.$$"
 trap 'rm -f "$tmp"' EXIT
 trap 'exit 1' HUP INT TERM
-cat > "$tmp"
+head -c "$((MAX + 1))" > "$tmp"
+if [ "$(wc -c < "$tmp" | tr -d ' ')" -gt "$MAX" ]; then
+  echo "ERROR: el archivo pasa de $MAX bytes" >&2; exit 4
+fi
 gzip -t "$tmp" 2>/dev/null || { echo "ERROR: archivo corrupto o incompleto" >&2; exit 3; }
 mv -f "$tmp" "$dir/$nombre"
 
