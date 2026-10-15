@@ -187,6 +187,38 @@ class Conducta(unittest.TestCase):
             ),
         )
 
+    def test_a_relative_write_is_resolved_against_the_workers_directory(self):
+        # C5 de SUA03-G5c: una ruta relativa de un evento se resuelve contra la
+        # carpeta de trabajo del trabajador (--directorio), no contra el cwd de
+        # conducta; con ella, el write excluido no cuenta como cambio tras las pruebas.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            repo = tmp / "repo"
+            repo.mkdir()
+            lineas = corrida() + [herramienta("write", filePath="RESULTADO.md")]
+            (tmp / "events.jsonl").write_text("\n".join(lineas) + "\n")
+            libro = tmp / "run" / PLAYBOOK
+            libro.parent.mkdir(parents=True)
+            libro.write_text(TEXTO)
+            (tmp / "resultado.md").write_text("Ran 4 tests in 0.01s\n")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = conducta.main(
+                    [
+                        "--eventos",
+                        str(tmp / "events.jsonl"),
+                        "--playbook",
+                        str(libro),
+                        "--resultado",
+                        str(tmp / "resultado.md"),
+                        "--directorio",
+                        str(repo),
+                        "--excluir",
+                        str(repo / "RESULTADO.md"),
+                    ]
+                )
+        self.assertEqual((code, json.loads(out.getvalue())), (0, {"ok": True, "razones": []}))
+
     def test_a_playbook_outside_the_package_is_a_usage_error_and_not_a_false_missing_read(self):
         # split("contexto/", 1)[-1] sobre una ruta sin contexto/ devolvía la ruta entera: la
         # etiqueta nunca calzaba con lectura alguna y el veredicto reportaba un falso "falta la
