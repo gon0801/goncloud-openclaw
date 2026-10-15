@@ -129,6 +129,26 @@ class Briefs(unittest.TestCase):
                         self.assertIsInstance(carga[clave], str)
                         self.assertTrue(carga[clave].strip(), f"{clave} vacío")
 
+    def test_artifact_path_reads_what_the_host_recorded(self):
+        # E: el inspect de R devuelve artifactRef como artifact:<sha256>; la ruta real es
+        # la que el host grabó en results/<op>.json.
+        with tempfile.TemporaryDirectory() as tmp:
+            spool = Path(tmp) / "spool"
+            spool.mkdir()
+            identidad = operation_id(OperationKey(HOST_ID, "task-e", 1, INSTANCE))
+            grabados = spool / "results"
+            grabados.mkdir()
+            (grabados / f"{identidad}.json").write_text(
+                json.dumps({"artifactRef": "/tmp/el-artefacto.md"}), encoding="utf-8"
+            )
+            banco = BancoE2E.__new__(BancoE2E)
+            banco.spool = spool
+            self.assertEqual(banco.artifact_path("task-e"), Path("/tmp/el-artefacto.md"))
+            self.assertEqual(
+                banco.artifact_path("task-otra"),
+                spool / "results" / f"{operation_id(OperationKey(HOST_ID, 'task-otra', 1, INSTANCE))}.json",
+            )
+
 
 def sha256(data):
     return hashlib.sha256(data).hexdigest()
@@ -271,6 +291,16 @@ class BancoE2E(unittest.TestCase):
     def run_dir(self, task_id):
         return RunDir(self.spool / "runs" / self.operation(task_id))
 
+    def artifact_path(self, task_id):
+        """La ruta real del artefacto: la que grabó el host en results/<op>.json (E). El
+        inspect de R devuelve result.artifactRef como artifact:<sha256>, no como ruta."""
+        grabado = json.loads(
+            (self.spool / "results" / f"{self.operation(task_id)}.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        return Path(grabado["artifactRef"])
+
     def estado(self, task_id):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -297,7 +327,9 @@ class BancoE2E(unittest.TestCase):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             code = conducta.main(["--eventos", str(self.record(task_id).events),
-                                  "--playbook", str(playbook), "--resultado", str(artifact_path)])
+                                  "--playbook", str(playbook), "--resultado", str(artifact_path),
+                                  "--excluir", str(self.run_dir(task_id).path),
+                                  "--excluir", str(artifact_path)])
         return code, json.loads(out.getvalue())
 
     def assert_package_and_flota(self, task_id, specialist):
@@ -320,7 +352,7 @@ class BancoE2E(unittest.TestCase):
     def test_a_profiled_engineering_task_shows_the_behavior_the_design_asks_for(self):
         task_id = self.ask(FIX_BRIEF, "ready.v1", perfil="ingenieria")
         snapshot = self.wait_result(task_id)
-        artifact = Path(snapshot["result"]["artifactRef"])
+        artifact = self.artifact_path(task_id)
         self.assertTrue(artifact.is_file())
         code, verdict = self.conducta_verdict(task_id, artifact, self.run_dir(task_id).context / PLAYBOOK)
         self.assertEqual((code, verdict), (0, {"ok": True, "razones": []}), verdict["razones"])
@@ -334,7 +366,7 @@ class BancoE2E(unittest.TestCase):
     def test_the_control_without_a_package_is_red_for_the_expected_reason(self):
         task_id = self.ask(FIX_BRIEF, "ready.v1")
         snapshot = self.wait_result(task_id)
-        artifact = Path(snapshot["result"]["artifactRef"])
+        artifact = self.artifact_path(task_id)
         code, verdict = self.conducta_verdict(task_id, artifact, self.playbook_control)
         self.assertEqual(code, 1, "el control sin contexto salió verde")
         self.assertFalse(verdict["ok"])
@@ -349,7 +381,7 @@ class BancoE2E(unittest.TestCase):
         self.assertEqual(payload["verdict"], "changes", payload)
         # Con R validando el payload estricto, el hallazgo viaja en el artefacto, no en el
         # payload (A3): el brief le exige la ruta en findingsRef.
-        hallazgos = Path(snapshot["result"]["artifactRef"]).read_text(encoding="utf-8")
+        hallazgos = self.artifact_path(task_id).read_text(encoding="utf-8")
         self.assertIn("hello", hallazgos, "el hallazgo no nombra el defecto sembrado")
         self.assertEqual(self.photo_changes(), [], "el revisor dejó cambiado el repo real")
         self.assert_package_and_flota(task_id, "revision")
