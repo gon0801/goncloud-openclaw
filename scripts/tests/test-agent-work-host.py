@@ -607,17 +607,23 @@ class GitPhoto(unittest.TestCase):
         self.assertEqual(host.photo_changes(before, after), ["exclude"],
                          "an exclude rule that hides a planted file changed no field of the photo")
 
-    def test_a_field_the_previous_photo_does_not_have_is_not_compared(self):
-        # F4 de DeepSeek en #305: una foto previa grabada por un host anterior no trae `exclude`;
-        # compararlo contaba cualquier foto nueva como cambio de ese campo, con repo_after grabado.
+    def test_a_field_the_previous_photo_does_not_have_counts_as_a_change(self):
+        # C7 (F2 de DeepSeek en #306, que revierte el F4 de #305): una foto vieja
+        # incompleta debe contar como cambio, no dejar la comparación en []: si un campo
+        # falta en la foto previa, no se puede probar que no cambió.
         vieja = host.repo_photo(str(self.repo))
         del vieja["exclude"]
-        self.assertEqual(host.photo_changes(vieja, host.repo_photo(str(self.repo))), [])
+        self.assertEqual(
+            host.photo_changes(vieja, host.repo_photo(str(self.repo))),
+            ["exclude"],
+            "a field absent from the previous photo was silently left uncompared",
+        )
         exclude = self.repo / ".git" / "info" / "exclude"
-        exclude.parent.mkdir(parents=True, exist_ok=True)
+        exclude.parent.mkdir(parents=True)
         exclude.write_text("nueva.py\n")
-        self.assertEqual(host.photo_changes(vieja, host.repo_photo(str(self.repo))), [],
-                         "a field absent from the previous photo counted as a change")
+        (self.repo / "nueva.py").write_text("planted\n")
+        self.assertEqual(host.photo_changes(vieja, host.repo_photo(str(self.repo))), ["exclude"],
+                         "the missing field dominated the real change")
 
     def test_a_repo_without_commits_fails_closed_and_a_non_repo_does_not(self):
         unborn = self.root / "por-nacer"
