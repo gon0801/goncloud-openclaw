@@ -167,7 +167,9 @@ En 0.9.84, `poteto-mode` sin `scripts/` son 207 509 bytes y las `principle-*` 34
 
 **Adaptación `openclaw`.** Las equivalencias de OpenClaw: leer una skill con `read` en su ruta, delegar con `sessions_spawn`, la lista del playbook con `update_plan`. Los nombres exactos salen de `tools.effective` en la Mini (`unknown` 4) antes de escribirla.
 
-**Bloque de `AGENTS.md`.** Pocas líneas entre dos marcas: `<!-- sua-contexto inicio generación=<n> digest=sha256:<hex> -->` y `<!-- sua-contexto fin -->`. Dice: para trabajo de ingeniería, revisión o verificación, lee `poteto-openclaw` y luego `poteto-mode` antes de usar otra herramienta; tu perfil por omisión es `<id>`; si el brief trae `profile: <id>`, ese manda; al delegar con `sessions_spawn`, empieza el `task` con `profile: <id>`.
+**Bloque de `AGENTS.md`.** Pocas líneas entre dos marcas: `<!-- sua-contexto inicio generación=<n> digest=sha256:<hex> -->` y `<!-- sua-contexto fin -->`. Dice: para trabajo de ingeniería, revisión o verificación, lee `poteto-openclaw` y luego `poteto-mode` antes de usar otra herramienta; si el brief trae `profile: <id>`, ese manda; al delegar con `sessions_spawn`, empieza el `task` con el `profile: <id>` del pedido, si lo trae.
+
+El bloque tiene dos formas, según el agente. El perfil por omisión de un agente es el único perfil de `perfiles.v1.json` cuyas `routes` nombran ese `agentId`. Si hay exactamente uno, el bloque agrega la línea "tu perfil por omisión es `<id>`". Si hay cero o más de uno, el bloque no la lleva y dice en su lugar "no tienes perfil por omisión: sin `profile` en el pedido, trabaja sin perfil y dilo en tu resultado". Es el caso de los siete agentes `sin-perfil` (4.4). No hay centinela: en las rutas nativas no corre `plan_launch`, y en la ruta por CLI un brief sin `profile` ya es `perfil-ausente`.
 
 ### 4.3 Cómo llega a cada ruta
 
@@ -209,7 +211,7 @@ En esta Mac, la ruta por CLI no toca `~/.config/opencode/` ni `~/.agents/`. La c
 
 "Solo como hijo o turno" es lo medido: esos agentes no reciben un encargo nativo porque su primario pasa por un plugin (`T12-runbook.md:11`, y P1 da `opencode-go/deepseek-v4.1-flash` a los dieciséis). Amazon, Meli, mail y Odoo no se atienden por CLI: necesitan el navegador y las cuentas de la Mini. `main` no es un perfil de trabajador: es el solicitante. `aceptacion` queda con su ruta vacía: es un perfil incompleto y visible.
 
-**Agentes descubiertos sin perfil.** `pers`, `limpia`, `arras`, `gonserver`, `skillverif`, `tinkabot` y `eggbot`. Su rol no se deduce del nombre. Quedan en `perfiles.v1.json` como `{"agentId": …, "status": "sin-perfil"}`, y `encargo.py perfiles` los lista así. Reciben el bloque y poteto como cualquier agente, porque el publicador no elige por rol. Su perfil lo escribe quien lea su `AGENTS.md`, en SUA-04 (altas).
+**Agentes descubiertos sin perfil.** `pers`, `limpia`, `arras`, `gonserver`, `skillverif`, `tinkabot` y `eggbot`. Su rol no se deduce del nombre. Quedan en `perfiles.v1.json` como `{"agentId": …, "status": "sin-perfil"}`, y `encargo.py perfiles` los lista así. Reciben el bloque y poteto como cualquier agente, porque el publicador no elige por rol, pero su bloque va sin perfil por omisión (4.2). Su perfil lo escribe quien lea su `AGENTS.md`, en SUA-04 (altas).
 
 **Campos de cada perfil** (`perfiles.v1.json`): `id`, `purpose`, `resultContracts`, `routes` (lista de `{host, executor, agentId}`), `writesSource`, `requiredTools` por runtime, `skills` (nombres exactos del paquete), `sources` con `ref`, `revision` y `validUntil`, `coverage` (`checkpoint-only` o `events`) y `competence` por ruta: `{status, model, evidence, at, validUntil}`.
 
@@ -227,11 +229,11 @@ En esta Mac, la ruta por CLI no toca `~/.config/opencode/` ni `~/.agents/`. La c
 
 "Ausencia impide admitir la ruta" se cumple en dos niveles.
 
-**Por ruta, en la ruta por CLI: la aplica el host.** `coverage.json` gana, bajo `hostAdapterRoute.mac-local.opencode`, `contextGenerations: {"<n>": "<evidencia>"}`, como `certifiedCliVersions`. `Route.open_for` (`sesion.py:149`), que el host usa en cada reclamo (`RunHost.plan` carga la ruta en `native_gateway.py:516` y `plan_launch` la abre), abre solo si la versión de opencode y la generación del paquete están certificadas, salvo en `--canario`. Una generación sin certificar se rechaza con `ruta-no-certificada` antes de lanzar, como hoy una versión nueva de opencode. `encargo.py preparar` usa la misma función (`encargo.py:175`) y lo dice en el mismo turno.
+**Por ruta, en la ruta por CLI: la aplica el host.** `coverage.json` gana, bajo `hostAdapterRoute.mac-local.opencode`, `contextGenerations: {"<n>": "<evidencia>"}`, como `certifiedCliVersions`. `Route.open_for` (`sesion.py:149`), que el host usa en cada reclamo (`RunHost.plan` carga la ruta en `native_gateway.py:516` y `plan_launch` la abre), abre solo si la versión de opencode y la generación del paquete están certificadas, salvo en `--canario`. Una generación sin certificar se rechaza antes de lanzar con su propia causa, `generacion-no-certificada`: un rechazo nuevo `GenerationNotCertified(generation, certified)` en `modelos.py`, con su frase en la tabla de `explicar` ("El paquete de poteto de la generación `<n>` no está certificado para encargos; certificadas: `<lista>`."). `ruta-no-certificada` y `_frase_ruta` (`modelos.py:715-720`) siguen hablando solo de la versión de opencode. `encargo.py preparar` usa la misma función (`encargo.py:175`) y lo dice en el mismo turno.
 
 **Por ruta, en las rutas nativas: aplazado a SUA-04.** En SUA-03 ningún componente rechaza una generación nativa sin certificar. R no la conoce (4.11, conflicto 4), y el turno, el hijo y el encargo nativo los lanza R o el modelo de `main`, no un código de G que pueda negarse. Las rutas nativas se registran en `coverage.json` `routes` con su generación y su evidencia (rebanada G5), y la compuerta que las rechaza es el selector de SUA-04, que elige ruta leyendo ese archivo. Por eso el recibo de SUA-03 dice: I08 se cumple para la ruta por CLI y el hijo de una CLI; para las tres rutas nativas, entrega y conducta quedan certificadas, y "la ausencia impide admitir la ruta" queda aplazada a SUA-04. No dice que I08 se cumple en las nativas.
 
-**Por encargo, en la ruta por CLI.** `plan_launch` (`sesion.py:177-195`) gana estos rechazos, todos antes de lanzar y todos puros:
+**Por encargo, en la ruta por CLI.** Todos estos rechazos ocurren antes de lanzar. Siete los decide `plan_launch` (`sesion.py:177-195`), que sigue siendo puro: recibe el paquete ya leído y no escribe en la corrida. `contexto-incompleto` sale de las dos fronteras con disco: `RunHost.plan` lee la fuente con `contexto.py` y compara cada archivo con el manifiesto antes de llamar a `plan_launch`; y el paso de lanzamiento de `claim_run_once` (`native_gateway.py:414-427`) copia el paquete a `runs/<op>/contexto/`, relee el digest de la copia y solo entonces llama a `backend.launch`.
 
 | Causa | Cuándo |
 |---|---|
@@ -240,13 +242,13 @@ En esta Mac, la ruta por CLI no toca `~/.config/opencode/` ni `~/.agents/`. La c
 | `perfil-no-atiende-ruta` | El perfil no lista `mac-local`/`opencode` |
 | `perfil-no-admite-contrato` | `resultContract` de la asignación no está en `resultContracts` |
 | `perfil-sin-competencia` | `competence` de esa ruta no es `passed`, o venció |
-| `contexto-incompleto` | Al copiar el paquete, un archivo no coincide con el manifiesto |
+| `contexto-incompleto` | Un archivo de la fuente, o de la copia en la corrida, no coincide con el manifiesto. No es de `plan_launch` (arriba) |
 | `herramienta-negada` | La configuración que el host va a pasar niega una herramienta de `requiredTools`, por ejemplo `task` o `skill` |
 | `revisor-con-escritura` | El perfil tiene `writesSource: false` y la configuración que el host va a pasar no niega `edit` |
 
 `LaunchHeader` (`sesion.py:38-78`) acepta una línea más, `profile: <id>`. `brief.py --perfil <id>` la escribe. `encargo.py preparar --perfil <id>` la pone en `briefArgs`, con `ingenieria` por omisión, así `main` la copia sin conocer los perfiles. Un host viejo rechaza un brief con `profile` (`MalformedHeader`), por eso el orden de la ventana de G5 importa (sección 6).
 
-Así quedan las tres frases del "Verificar": quitar poteto es `contexto-incompleto` o una generación sin certificar; dejar escribir al reviewer es `revisor-con-escritura`; negar una herramienta del hijo es `herramienta-negada`.
+Así quedan las tres frases del "Verificar": quitar poteto es `contexto-incompleto` o `generacion-no-certificada`; dejar escribir al reviewer es `revisor-con-escritura`; negar una herramienta del hijo es `herramienta-negada`.
 
 En las rutas nativas no hay rechazo por encargo en SUA-03 (4.11, conflicto 4).
 
@@ -261,7 +263,7 @@ En las rutas nativas no hay rechazo por encargo en SUA-03 (4.11, conflicto 4).
 
 **Herramientas del procedimiento.** Cada perfil declara `requiredTools` por runtime. Para poteto en opencode: `read`, `edit`, `bash`, `skill`, `task`, `todowrite`; sin `edit` para los perfiles que no escriben. Para OpenClaw, los nombres de la adaptación. La sonda de conducta comprueba que se usaron.
 
-**Los siete perfiles locales.** La configuración por corrida pone `agent.<nombre>.model` al modelo del encargo para los siete. Los paneles pierden su diversidad de versiones de GLM: es honesto, porque un encargo corre un solo proveedor. La adaptación lo dice ("diversidad reducida: un solo modelo"). Si `unknown` 1 muestra que `agent.<nombre>` no se aplica desde `OPENCODE_CONFIG_CONTENT`, el host pone `permission.task: "deny"` y el perfil que exija `task` queda `herramienta-negada` hasta resolverlo.
+**Los siete perfiles locales.** La configuración por corrida pone `agent.<nombre>.model` al modelo del encargo para los siete. Los paneles pierden su diversidad de versiones de GLM: es honesto, porque un encargo corre un solo proveedor. La adaptación lo dice ("diversidad reducida: un solo modelo"). Si `unknown` 1 muestra que `agent.<nombre>` no se aplica desde `OPENCODE_CONFIG_CONTENT`, el host pone `permission.task: "deny"`. Como `task` está en los `requiredTools` de poteto en opencode, todos los perfiles de la ruta por CLI quedan `herramienta-negada`: la ruta por CLI no admite ningún encargo con perfil hasta resolverlo, y G3 no se mergea así.
 
 ### 4.7 `flota.v1` por intento
 
@@ -352,8 +354,8 @@ Las pruebas de G son `unittest` y el arnés de `test-agent-work-e2e.sh`. Cada fi
 | Ensayo | Archivo y caso | Qué hace | Fallo que la pone roja |
 |---|---|---|---|
 | I08 | `test-agent-work-sesion.py`, "a brief without a profile is refused before launch" | `plan_launch` con un brief sin `profile` contesta `perfil-ausente` y no crea `runs/<op>/contexto` | Lanzar con el perfil por omisión del host |
-| I08 | Mismo, "a package file that differs from the manifest is refused" | Un archivo de la fuente con un byte cambiado contesta `contexto-incompleto` | Copiar sin comprobar |
-| I08 | Mismo, "a new package generation closes the route" | `Route.open_for` con la generación 2 y `contextGenerations` con solo `1` cierra; con `--canario` abre | Mirar solo la versión de opencode |
+| I08 | Mismo, "a package file that differs from the manifest is refused" | Un archivo de la fuente con un byte cambiado: `RunHost.plan` contesta `contexto-incompleto` sin llamar a `plan_launch`. Una copia alterada antes de lanzar: el paso de lanzamiento contesta lo mismo y no llama a `backend.launch` | Copiar sin comprobar |
+| I08 | Mismo, "a new package generation closes the route" | `Route.open_for` con la generación 2 y `contextGenerations` con solo `1` contesta `generacion-no-certificada` y su frase literal; con `--canario` abre | Mirar solo la versión de opencode, o contestar la frase de la versión |
 | I08 | Mismo, "the run config delivers the package" | `opencode_env` lleva `instructions` y `skills.paths` dentro de la corrida, y `agent.<siete>.model` igual a `-m` | Olvidar un perfil local |
 | I08 | `test-agent-work-contexto.py`, "the package of each profile holds exactly its skills" | Lista literal de archivos por perfil | Una clausura calculada que arrastre otra skill |
 | I08 | `test_agent_work_banco_e2e.py` (caso `banco`, solo con `AGENT_WORK_BANCO_REAL=1`) | opencode real, modelo real, perfil `ingenieria`, tarea de fixture. `conducta.py` sobre sus eventos: lectura de `contexto/skills/poteto-mode/SKILL.md` y del playbook antes de la primera edición, un `todowrite` con el primer paso del playbook literal, una corrida de pruebas después de la última edición y su salida citada en el resultado | La sonda de control (abajo) pasa |
@@ -369,6 +371,7 @@ Las pruebas de G son `unittest` y el arnés de `test-agent-work-e2e.sh`. Cada fi
 | I09 | `banco` | Encargo `revision` sobre un repo con un error sembrado. Espera `changes` con el error nombrado y la foto del repo igual. Otro sobre un repo sano espera `approved`. `flota.v1` de cada uno con `model.id` no nulo y `permissions` no vacío | |
 | I11 | `test-agent-work-contexto.py`, "a profile admits only its routes and contracts" | `meli` por CLI: `perfil-no-atiende-ruta`. `ingenieria` con `review.v1`: `perfil-no-admite-contrato`. `meli` en la ruta nativa de `operaciones` con `ready.v1`: admite | Admitir por nombre |
 | I11 | Mismo, "an expired source or a missing competence closes only that profile" | `meli` con una fuente vencida no admite; `amazon` sí | Cerrar todos |
+| I11 | `test-agent-work-publicar.py`, "a block names a default profile only when the agent has exactly one" | Fixture con un agente de un perfil (`meli`), uno de ninguno (`pers`) y uno nombrado por dos perfiles. El bloque del primero trae "tu perfil por omisión es `meli`"; los otros dos no traen esa línea y sí la de "no tienes perfil por omisión" | Escribir `<id>` vacío, o elegir uno de dos |
 | I11 | `test-agent-work-publicar.py`, "the publisher touches only the block and its skills" | Árbol de fixture con `MEMORY.md`, `memory/`, `USER.md`, `SOUL.md`, una skill ajena en `~/.openclaw/skills` y un `AGENTS.md` con texto propio. Aplicar, aplicar otra vez y revertir. Todo lo no administrado queda byte por byte igual | Reescribir `AGENTS.md` entero |
 | I11 | Mismo, "an edited block is a conflict, not an overwrite" | Bloque con una línea cambiada a mano: ese agente queda en conflicto y su archivo no cambia; los demás se publican | Pisar la edición |
 | I11 | Mismo, "an edit between read and apply is a conflict" | `--leer`, luego una línea nueva fuera del bloque en un `AGENTS.md`, luego `--aplicar`: ese agente queda en conflicto y su archivo conserva la línea | Comprobar solo el bloque |
@@ -395,7 +398,7 @@ La de `mail` prueba solo la selección de contexto: qué skill y qué fuente lee
 | Frase | Dónde queda cubierta |
 |---|---|
 | I08/I09/I11/I18 | Tabla de arriba y sección 6 |
-| Quitar poteto impide la admisión | `perfil-ausente`, `contexto-incompleto`, generación sin certificar |
+| Quitar poteto impide la admisión | `perfil-ausente`, `contexto-incompleto`, `generacion-no-certificada` |
 | Permitir escritura al reviewer impide la admisión | `revisor-con-escritura`, y la foto del repo rechaza el resultado |
 | Deshabilitar una herramienta necesaria del hijo impide la admisión | `herramienta-negada` |
 | Perfil Meli pasa su tarea y rechaza una ajena | Admisión (I11, primera fila) y la sonda de competencia de `meli` |
@@ -434,7 +437,7 @@ Seis rebanadas de G. Ninguna de R. Cada una trae su prueba y deja verde lo anter
 | G0 | Línea base | Nada. La compuerta sobre G `97d35ab0` con `RWT` | Las de hoy | No |
 | G1 | Paquete y perfiles | `contexto/` con `poteto.v1.json` (generación 1), `perfiles.v1.json`, las dos adaptaciones, el bloque y los fixtures de competencia. `contexto.py`. `brief.py --perfil` (acepta la bandera y escribe la línea; con destino agente, también el texto del perfil desde `--perfiles`). `ruff.toml` y hooks | `test-agent-work-contexto.py`, las filas de `brief.py` en `test-agent-work-routing.py` | No |
 | G2 | Lo que el host lee del intento | `read_events` con `modelID`, `agent` y las evaluaciones `allow`. `flota.py` y `flota.json` al cerrar. `estado` con `modeloUsado`, `flota` y las causas de proveedor. Artefacto de revisión en la carpeta de la corrida y foto del repo real. `conducta.py`. El fixture `flota/modelo-exacto-con-hijos.json` | `test-agent-work-sesion.py`, `-host.py`, `-encargo.py`, `-flota.py`, `test-agent-work-conducta.py`, contrato | Sí, al actualizar su checkout (ventana) |
-| G3 | Lanzamiento con contexto | `LaunchHeader` con `profile`. `preparar --perfil`. Los ocho rechazos de `plan_launch`. Copia del paquete a la corrida. El clon desechable del revisor en `Workspace` y su borrado al cerrar. `opencode_env` con `instructions`, `skills.paths`, `agent.<siete>.model` y los permisos del perfil. `Route.open_for` con generación. El caso `banco`. Al final, `contextGenerations: {"1": …}` en `coverage.json` y `competence` de los cinco perfiles de la ruta CLI en `perfiles.v1.json`, con la evidencia del banco sobre el SHA de esta rebanada | `test-agent-work-sesion.py`, `-host.py`, `-encargo.py`, `-routing.py`, `banco` (M-16) | Sí, ídem |
+| G3 | Lanzamiento con contexto | `LaunchHeader` con `profile`. `preparar --perfil`. Los siete rechazos de `plan_launch`, `contexto-incompleto` en `RunHost.plan` y en el paso de lanzamiento, y `generacion-no-certificada` con su frase. Copia del paquete a la corrida. El clon desechable del revisor en `Workspace` y su borrado al cerrar. `opencode_env` con `instructions`, `skills.paths`, `agent.<siete>.model` y los permisos del perfil. `Route.open_for` con generación. El caso `banco`. Al final, `contextGenerations: {"1": …}` en `coverage.json` y `competence` de los cinco perfiles de la ruta CLI en `perfiles.v1.json`, con la evidencia del banco sobre el SHA de esta rebanada | `test-agent-work-sesion.py`, `-host.py`, `-encargo.py`, `-routing.py`, `banco` (M-16) | Sí, ídem |
 | G4 | Publicación nativa | `publicar-contexto.py` con `--leer`, `--aplicar` y `--revertir`, los tres con su CAS. La skill `poteto-openclaw` sale del manifiesto de la generación 1, no se escribe aparte. La skill `encargo-cli` con `--perfil` y el artefacto de revisión fuera del repo | `test-agent-work-publicar.py`; las anclas de `encargo-cli` en sus pruebas de siempre y `test-candados-declarados.sh` | No |
 | G5 | Ventana, sondas, canario y cierre | La ventana de abajo. Sondas nativas después (M-17) y de competencia. Canario A. `coverage.json` `routes` con las cinco rutas, su generación y su evidencia; sale `user-adopted-session` con su fila de `migration`. Fila de `followups.md` de los siete adaptadores. Recibo `docs/evidence/sistema-agentes-unificado/SUA-03.md`, que da I08 por cumplido solo en la ruta por CLI y el hijo de una CLI | `test-agent-work-routing.py` (las filas de `migration`), contrato, el recibo | Sí |
 
