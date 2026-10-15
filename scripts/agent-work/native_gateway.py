@@ -24,8 +24,8 @@ from contracts import (HOST_BEAT_FILE, AuthorizedOperation, HostBeat, HostObserv
                        RunDir, SessionRecord, operation_id)
 import contexto
 import flota
-from host import (ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, DeliveryDeferred, Host, PhotoFailed,
-                  repo_photo, writes_source)
+from host import (ACCEPT_DEADLINE_SECONDS, RESULT_DEADLINE_SECONDS, GIT_REPO_VARS, DeliveryDeferred, Host,
+                  PhotoFailed, repo_photo, writes_source)
 from modelos import (POLICY_FILE, CatalogStore, CatalogUnavailable, ContextoIncompleto, ExactModel, ModelNotListed,
                      PerfilRechazado, ProviderNotConfigured, ProviderPolicy, authorize, explicar)
 from progress_bridge import transfer_host_projection, transfer_projection
@@ -379,28 +379,32 @@ CATALOG_RECHECK_SECONDS = 60.0
 def build_clone(repository: str, sha: str, destino: Path) -> None:
     """The reviewer's disposable clone (SUA-03, 4.8). No hardlinks: no object of the clone is a file of the
     real repo. No origin: a push has nowhere to go. Idempotent: a host that died after cloning finds the
-    clone detached at the very revision it asked for and with no remote, and anything else is rebuilt."""
+    clone detached at the very revision it asked for and with no remote, and anything else is rebuilt.
+    Its git commands drop the inherited GIT_REPO_VARS, the same ones _git and _status_digest drop: a
+    GIT_DIR of the launcher's own load would move both the clone and its probes (F2 de DeepSeek en #305)."""
+    env = {name: value for name, value in os.environ.items() if name not in GIT_REPO_VARS}
     if destino.exists():
         head = subprocess.run(["git", "-C", str(destino), "rev-parse", "HEAD"], capture_output=True, text=True,
-                              timeout=30)
-        remotes = subprocess.run(["git", "-C", str(destino), "remote"], capture_output=True, text=True, timeout=30)
+                              timeout=30, env=env)
+        remotes = subprocess.run(["git", "-C", str(destino), "remote"], capture_output=True, text=True, timeout=30,
+                                 env=env)
         clean = subprocess.run(["git", "-C", str(destino), "status", "--porcelain=v1", "--untracked-files=all",
-                                "--ignored=traditional"], capture_output=True, text=True, timeout=60)
+                                "--ignored=traditional"], capture_output=True, text=True, timeout=60, env=env)
         if (head.returncode == 0 and head.stdout.strip() == sha and not remotes.stdout.strip()
                 and clean.returncode == 0 and not clean.stdout.strip()):
             return
         shutil.rmtree(destino, ignore_errors=True)
     clone = subprocess.run(["git", "clone", "--no-hardlinks", "--no-checkout", repository, str(destino)],
-                           capture_output=True, text=True, timeout=300)
+                           capture_output=True, text=True, timeout=300, env=env)
     if clone.returncode != 0:
         raise ValueError(f"git clone failed: {clone.stderr.strip()[:300]}")
     detach = subprocess.run(["git", "-C", str(destino), "checkout", "--detach", sha], capture_output=True,
-                            text=True, timeout=120)
+                            text=True, timeout=120, env=env)
     if detach.returncode != 0:
         shutil.rmtree(destino, ignore_errors=True)
         raise ValueError(f"git checkout --detach {sha[:12]} failed: {detach.stderr.strip()[:300]}")
     remote = subprocess.run(["git", "-C", str(destino), "remote", "remove", "origin"], capture_output=True,
-                            text=True, timeout=30)
+                            text=True, timeout=30, env=env)
     if remote.returncode != 0:
         raise ValueError("git remote remove origin failed")
 

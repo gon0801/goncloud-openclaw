@@ -87,12 +87,18 @@ carga fotografiaría otro árbol aunque el comando lleve -C. _git las quita de c
 (SUA-03, bots: el revisor no puede cambiar el repo del encargo sin cambiar la foto)."""
 
 
+class GitDeadline(OSError):
+    """El plazo de un git venció. No es "no es un repo": un vencimiento del primer comando de
+    repo_photo convertido en OSError plano salía del lanzador como repo ausente y lanzaba sin
+    foto (F1 de DeepSeek en #305: fallar abierto). repo_photo la convierte en PhotoFailed."""
+
+
 def _git(repo: str, *args: str) -> bytes:
     env = {name: value for name, value in os.environ.items() if name not in GIT_REPO_VARS}
     try:
         done = subprocess.run(["git", "-C", repo, *args], capture_output=True, timeout=60, env=env)
     except subprocess.TimeoutExpired as exc:
-        raise OSError(f"git {args[0]} timed out in {repo}") from exc
+        raise GitDeadline(f"git {args[0]} timed out in {repo}") from exc
     if done.returncode != 0:
         raise OSError(f"git {args[0]} failed in {repo}")
     return done.stdout
@@ -184,7 +190,12 @@ def repo_photo(repo: str, *, ignored: bool = False) -> dict:
     one, byte for byte. Which mode applies is the launcher's call, and it writes it in the
     before-photo so the after-photo reads the same one. OSError when the folder is not a git repo,
     PhotoFailed when it is one and the photo itself failed (a repo without commits included)."""
-    git_dir = Path(_git(repo, "rev-parse", "--absolute-git-dir").decode().strip())
+    try:
+        git_dir = Path(_git(repo, "rev-parse", "--absolute-git-dir").decode().strip())
+    except GitDeadline as exc:
+        # El primer comando está fuera del try de abajo: sin esta conversión, un plazo vencido aquí
+        # salía como "no es un repo" y la corrida lanzaba sin foto (F1 de DeepSeek en #305).
+        raise PhotoFailed(f"la foto de {repo} falló: {exc}") from exc
     config = git_dir / "config"
     exclude = git_dir / "info" / "exclude"
     status = ["status", "--porcelain=v1", "-z", "--untracked-files=all"]
@@ -208,7 +219,9 @@ def repo_photo(repo: str, *, ignored: bool = False) -> dict:
 
 
 def photo_changes(before: dict, after: dict) -> list[str]:
-    return [field for field in PHOTO_FIELDS if before.get(field) != after.get(field)]
+    # Un campo que la foto previa no tiene no se compara (F4 de DeepSeek en #305): una foto grabada
+    # por un host anterior a `exclude` contaría cualquier foto nueva como cambio de ese campo.
+    return [field for field in PHOTO_FIELDS if field in before and before.get(field) != after.get(field)]
 
 
 class DeliveryDeferred(Exception):

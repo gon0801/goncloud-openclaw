@@ -346,7 +346,7 @@ def estado(task_id: "str | None", *, state_root: Path, checkout: Path,
             changed = _json(record.repo_after)
             if episode == "reviewer-wrote-source" and isinstance(changed, dict):
                 medidas = {"head": "HEAD", "refs": "las refs", "status": "el status", "diff": "el diff",
-                           "config": ".git/config", "hooks": ".git/hooks"}
+                           "config": ".git/config", "hooks": ".git/hooks", "exclude": ".git/info/exclude"}
                 cambio = ", ".join(medidas.get(field, field) for field in changed.get("changed", []))
                 explicacion = replace(explicacion, frase=f"{explicacion.frase} En {changed.get('repo')} cambió "
                                                          f"{cambio}. El host no deshizo nada.")
