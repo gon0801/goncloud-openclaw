@@ -869,7 +869,7 @@ class Decisions(Slot):
         digests = json.loads(self.record().context.read_text())
         self.assertEqual(set(digests), {"poteto", "tools", "writesSource", "specialist", "generation", "profile"})
         self.assertEqual((digests["writesSource"], digests["specialist"], digests["generation"]),
-                         (True, "ingenieria", 1))
+                         (True, "ingenieria", 2))
         # What the host annotated is the digest of the copy it read back, not a value it made up (4.5).
         self.assertEqual(digests["poteto"], contexto.digest_del_paquete(run.context))
         self.cli_writes()

@@ -66,11 +66,12 @@ class Mac(unittest.TestCase):
         contexto_dir.mkdir(parents=True)
         for name in ("poteto.v1.json", "generaciones.json", "perfiles.v1.json"):
             shutil.copy(ROOT / "scripts/agent-work/contexto" / name, contexto_dir / name)
-        # The fixture certifies generation 1: the real coverage leaves it uncertified (M-13 point b),
-        # and a profiled pedido without a canary would stop at the generation gate, not at the profile.
+        # The fixture certifies the current generation (2 since G5d; 1 stays
+        # certified in the real coverage by M-16): a profiled pedido without a
+        # canary would otherwise stop at the generation gate, not at the profile.
         coverage_path = self.checkout / EVIDENCE / "coverage.json"
         coverage = json.loads(coverage_path.read_text())
-        coverage["hostAdapterRoute"]["mac-local"]["opencode"]["contextGenerations"] = {"1": "fixture"}
+        coverage["hostAdapterRoute"]["mac-local"]["opencode"]["contextGenerations"] = {"2": "fixture"}
         coverage_path.write_text(json.dumps(coverage))
         self.policy_path = self.checkout / EVIDENCE / "proveedores-permitidos.json"
         self.state = self.root / "state"
@@ -222,7 +223,7 @@ class Preparar(Mac):
         path.write_text(json.dumps(coverage))
         answer = self.preparar("--perfil", "ingenieria")
         self.assertEqual((answer["causa"], answer["accion"]), ("generacion-no-certificada", "no-registrar"))
-        self.assertIn("generación 1", answer["frase"])
+        self.assertIn("generación 2", answer["frase"])
 
     def test_a_profiled_pedido_says_when_the_checkout_has_no_package_to_deliver(self):
         self.beat()
