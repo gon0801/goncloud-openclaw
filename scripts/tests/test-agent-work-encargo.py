@@ -510,6 +510,25 @@ class Perfiles(Mac):
         self.assertFalse(respuesta["ok"])
         self.assertIn("profiles", respuesta["error"])
 
+    def test_a_profiles_file_with_a_broken_shape_is_an_error_and_not_a_traceback(self):
+        # C3: la raíz debe ser un objeto y cada perfil un objeto con los campos que
+        # perfiles() lee; cualquier otra forma contesta su línea JSON con salida 3.
+        ruta = self.checkout / "scripts" / "agent-work" / "contexto" / "perfiles.v1.json"
+        for contenido in (
+            ["no", "es", "un", "objeto"],
+            {"schema": "x", "profiles": [None]},
+            {"schema": "x", "profiles": [{"purpose": "sin id"}]},
+            {"schema": "x", "profiles": [{"id": "x", "purpose": "sin contratos"}]},
+        ):
+            with self.subTest(contenido=contenido):
+                ruta.write_text(json.dumps(contenido) + "\n", encoding="utf-8")
+                code, out, err = self.cli("perfiles")
+                self.assertEqual(code, 3)
+                self.assertEqual(out, "")
+                self.assertNotIn("Traceback", err)
+                respuesta = json.loads(err)
+                self.assertFalse(respuesta["ok"])
+
 
 class Permitir(Mac):
     def permitir(self, *args):
