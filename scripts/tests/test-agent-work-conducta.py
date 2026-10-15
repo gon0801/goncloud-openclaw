@@ -415,6 +415,32 @@ class Conducta(unittest.TestCase):
             ),
         )
 
+    def test_steps_out_of_order_inside_a_single_element_are_red(self):
+        # B5 de G5d: el orden también cuenta dentro de un mismo elemento: uno
+        # que trae el paso 2 y después el 1 no empieza con el paso 1.
+        filas = [
+            herramienta("read", filePath=f"{RUN}/contexto/skills/poteto-mode/SKILL.md"),
+            herramienta("read", filePath=f"{RUN}/{PLAYBOOK}"),
+            herramienta(
+                "todowrite",
+                todos=[
+                    {
+                        "content": "2. `architect` for parallel design exploration. "
+                        "1. `how` over the affected subsystem."
+                    }
+                ],
+            ),
+            herramienta("edit", filePath="/repo/calc.py", oldString="-", newString="+"),
+            herramienta("bash", command="python3 -m unittest test_calc.py", output=SALIDA),
+        ]
+        self.assertEqual(
+            juzgar(filas).razones,
+            (
+                "la primera lista no empieza con el primer paso del playbook: "
+                "'`how` over the affected subsystem.'",
+            ),
+        )
+
     def test_the_real_m16b_control_stays_red_for_the_missing_package_read(self):
         # El control cargó poteto-mode desde ~/.agents/skills (el global): no cuenta.
         with tempfile.TemporaryDirectory() as tmp:
