@@ -9,9 +9,9 @@ Este runbook cubre el respaldo diario de la Mac mini donde corre el gateway de O
 | Archivo | Contenido | En gonserver | En la Mini |
 |---|---|---|---|
 | `openclaw-backup-AAAAMMDD.tar.gz` | `openclaw backup create --verify`: todo `~/.openclaw` (configuración, `state/openclaw.sqlite`, agentes, `credentials/`, `.env`, perfil del navegador `browser/claw`) | `/mnt/data/backups/openclaw/`, los 7 más nuevos | `~/respaldo-completo/`, los 2 más nuevos |
-| `openclaw-extras-AAAAMMDD.tar.gz` | Lo que vive fuera de `~/.openclaw`: `~/Library/LaunchAgents/ai.openclaw.*.plist` y `ai.goncloud.*.plist`, `~/goncloud-autoupdate/`, `~/.claude/`, `~/.claude.json`, `~/.ssh/`, `~/.zshrc`, `~/.openclaw-state/`, `~/.local/bin/` y el script instalado | igual | igual |
+| `openclaw-extras-AAAAMMDD.tar.gz` | Lo que vive fuera de `~/.openclaw`. Requeridos: `~/Library/LaunchAgents/ai.openclaw.*.plist` (al menos uno), `~/goncloud-autoupdate/`, `~/.ssh/`, `~/.zshrc` y el script instalado. Opcionales: `~/Library/LaunchAgents/ai.goncloud.*.plist`, `~/.claude/`, `~/.claude.json`, `~/.openclaw-state/` y `~/.local/bin/` | igual | igual |
 
-Lo que faltaba el día del respaldo queda anotado en `Users/gon/respaldo-completo/RESPALDO-EXTRAS.txt`, dentro del archivo de extras.
+Dentro del archivo de extras, `Users/gon/respaldo-completo/RESPALDO-EXTRAS.txt` trae la salida de `openclaw --version` y `node --version` de ese día, y lo que faltaba. Si falta un requerido, la corrida falla y avisa, pero igual sube lo que hay. Si falta un opcional, solo queda anotado (`~/.openclaw-state/` no existía en la Mini el 2026-10-15).
 
 Lo que **no** está en el respaldo y hay que rehacer a mano:
 
@@ -19,9 +19,21 @@ Lo que **no** está en el respaldo y hay que rehacer a mano:
 - Los `node_modules` de los plugins y los enlaces de skills generados. OpenClaw los avisa al restaurar.
 - Las credenciales de canales con estado de ratchet (WhatsApp) pueden pedir volver a vincular.
 
-Cada subida tiene 3 intentos de hasta 30 minutos, alternando WireGuard (`10.13.13.1`) y Tailscale (`100.127.167.103`). El receptor contesta el sha256 de lo que guardó y el script lo compara con el local. Si algo falla, el script avisa por Telegram a David (`openclaw message send`). Si todo sale bien, no avisa. El detalle queda en `~/Library/Logs/goncloud/respaldo-completo.log`.
+Cada subida tiene 3 intentos de hasta 30 minutos, alternando WireGuard (`10.13.13.1`) y Tailscale (`100.127.167.103`). El receptor contesta el sha256 de lo que guardó y el script lo compara con el local. Si algo falla, el script avisa por Telegram a David (`openclaw message send`). Si todo sale bien, no avisa. El detalle queda en `~/Library/Logs/goncloud/respaldo-completo.log`. Si la corrida recibe SIGTERM (bootout de launchd o apagado de la Mac), borra su temporal y avisa. Si muere sin limpiar, la corrida siguiente borra los `~/respaldo-completo/.tmp.*` que queden.
 
-En gonserver, `vigila-respaldos` revisa todos los días a las 09:00 que `openclaw-backup`, `openclaw-extras` y `hermes-backup` tengan un archivo de menos de 36 h que pese al menos la mitad del anterior. Si no, avisa por Telegram con el bot de Orbit.
+El receptor rechaza un nombre cuya fecha no cae entre hoy-60 y hoy+1 según el reloj de gonserver (sale 2), y una subida de más de 20 GiB (sale 4). En los dos casos no escribe nada.
+
+En gonserver, `vigila-respaldos` revisa todos los días a las 09:00 que `openclaw-backup`, `openclaw-extras` y `hermes-backup` tengan un archivo de menos de 36 h que pese al menos la mitad del anterior. Si no, avisa por Telegram con el bot de Orbit. Las 09:00 son de la zona horaria de gonserver (`timedatectl | grep 'Time zone'`), no de la Mini.
+
+Nadie vigila al vigía. Si hay un problema y el archivo de claves falta o Telegram rechaza el envío, el aviso no sale. El vigía sale con 2 y el error solo queda en `/var/log/vigila-respaldos.log`. Para revisarlo, como root en gonserver:
+
+```sh
+tail -20 /var/log/vigila-respaldos.log              # vacío si todo estuvo al día; "ERROR: no se pudo avisar" si el aviso falló
+journalctl --since today | grep vigila-respaldos     # que cron lo haya lanzado a las 09:00
+/usr/local/bin/vigila-respaldos; echo "salida $?"    # 0 al día, 1 había problemas y avisó, 2 había problemas y no pudo avisar
+```
+
+La corrida a mano manda el aviso de Telegram si encuentra problemas.
 
 ## Instalar el receptor en gonserver
 
@@ -52,16 +64,53 @@ Se hace una vez, como root en gonserver, desde una copia de este repo. La cuenta
 
    El vigía lee el token y el chat del bot de `/mnt/data/appdata/orbit/secrets/accounting.env` y nunca los imprime.
 
-4. Comprueba el receptor desde la Mini con un archivo de prueba. Tiene que imprimir el mismo sha256 que `shasum`:
+4. Deja en `~/.ssh/known_hosts` de la Mini la llave de gonserver para sus dos direcciones, `10.13.13.1` y `100.127.167.103`. El script usa `StrictHostKeyChecking=yes`, así que con una dirección que no está en `known_hosts` la subida falla. El 2026-10-15 la Mini conocía `100.127.167.103` pero no `10.13.13.1`. Primero lee la huella verdadera en gonserver, desde la MacBook:
 
    ```sh
-   cd "$(mktemp -d)" && echo prueba > p && tar -czf openclaw-extras-20000101.tar.gz p && shasum -a 256 openclaw-extras-20000101.tar.gz
-   ssh -i ~/.ssh/claw_goncloud -o IdentitiesOnly=yes -o BatchMode=yes clawbackup@10.13.13.1 openclaw-extras-20000101.tar.gz < openclaw-extras-20000101.tar.gz
+   ssh gonserver 'ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub'
    ```
 
-   Después borra `/mnt/data/backups/openclaw/openclaw-extras-20000101.tar.gz` en gonserver.
+   En la Mini, pide la llave que contesta `10.13.13.1` y mira su huella:
+
+   ```sh
+   ssh-keyscan -t ed25519 10.13.13.1 2>/dev/null > /tmp/gonserver-wg.pub
+   ssh-keygen -lf /tmp/gonserver-wg.pub
+   ```
+
+   Si las dos huellas `SHA256:...` no son iguales, no la agregues: otra máquina contesta en esa dirección y hay que averiguar cuál. Si son iguales, agrégala y revisa las dos direcciones:
+
+   ```sh
+   cat /tmp/gonserver-wg.pub >> ~/.ssh/known_hosts
+   ssh-keygen -lF 10.13.13.1
+   ssh-keygen -lF 100.127.167.103
+   ```
+
+   Cada una tiene que mostrar al menos una huella. Si una muestra una línea `ED25519`, su huella tiene que ser la de gonserver.
+
+5. Comprueba el receptor desde la Mini con un archivo de prueba con la fecha de hoy. El receptor rechaza fechas viejas, y un nombre viejo como `20000101` quedaría fuera de los 7 más nuevos. Antes, desde la MacBook, comprueba que todavía no hay extras de hoy, porque la prueba los reemplazaría. Usa la misma fecha que imprime `date +%Y%m%d` en la Mini:
+
+   ```sh
+   F=AAAAMMDD
+   ssh gonserver "test ! -e /mnt/data/backups/openclaw/openclaw-extras-$F.tar.gz" && echo "se puede probar"
+   ```
+
+   En la Mini. El segundo comando tiene que imprimir el mismo sha256 que el primero:
+
+   ```sh
+   F=$(date +%Y%m%d); cd "$(mktemp -d)" && echo prueba > p && tar -czf openclaw-extras-$F.tar.gz p
+   shasum -a 256 openclaw-extras-$F.tar.gz
+   ssh -i ~/.ssh/claw_goncloud -o IdentitiesOnly=yes -o BatchMode=yes clawbackup@10.13.13.1 openclaw-extras-$F.tar.gz < openclaw-extras-$F.tar.gz
+   ```
+
+   Después borra la prueba, desde la MacBook, con la misma `F`:
+
+   ```sh
+   ssh gonserver "rm /mnt/data/backups/openclaw/openclaw-extras-$F.tar.gz"
+   ```
 
 ## Instalar el respaldo en la Mini
+
+Antes haz los pasos 4 y 5 de la sección anterior. Sin la llave de `10.13.13.1` en `known_hosts`, la primera subida falla.
 
 Como `gon`, desde una copia de este repo:
 
@@ -117,35 +166,47 @@ shasum -a 256 "$B" "$E"
 
 ### 2. Instalar OpenClaw en la versión del respaldo
 
-El manifiesto del archivo dice con qué versión de OpenClaw y de node se hizo:
+La nota del archivo de extras dice con qué versión de OpenClaw y de node se hizo el respaldo:
 
 ```sh
-RAIZ="$(tar -tzf "$B" | head -1 | cut -d/ -f1)"
-tar -xzOf "$B" "$RAIZ/manifest.json" | grep -E '"(runtimeVersion|nodeVersion)"'
+tar -xzOf "$E" Users/gon/respaldo-completo/RESPALDO-EXTRAS.txt | sed -n '2,3p'
 ```
 
-Instala esa misma versión en `~/.openclaw`, como estaba en la Mini. Sustituye `<runtimeVersion>` y `<nodeVersion sin la v>` por los valores del paso anterior. No uses `--onboard`, porque crearía un estado nuevo encima del que vas a restaurar:
+Imprime dos líneas como `openclaw: OpenClaw 2026.9.7 (f8316c9)` y `node: v24.19.0 (/Users/gon/.openclaw/tools/node-v24.19.0/bin/node)`. Los respaldos anteriores a que el script anotara las versiones no traen esas líneas. En ese caso instala cualquier versión, haz el paso 3 hasta `backup restore`, lee la versión en su `runtimeVersion` y vuelve a este paso.
+
+Instala esa misma versión en `~/.openclaw`, como estaba en la Mini. Sustituye `<versión de openclaw>` y `<versión de node sin la v>` por los valores de la nota, en el ejemplo `2026.9.7` y `24.19.0`. No uses `--onboard`, porque crearía un estado nuevo encima del que vas a restaurar:
 
 ```sh
 curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install-cli.sh \
-  | bash -s -- --prefix "$HOME/.openclaw" --version <runtimeVersion> --node-version <nodeVersion sin la v>
+  | bash -s -- --prefix "$HOME/.openclaw" --version <versión de openclaw> --node-version <versión de node sin la v>
 ~/.openclaw/bin/openclaw --version
 ```
 
 ### 3. Restaurar el estado de OpenClaw
 
-`openclaw backup restore` verifica el archivo y lo extrae en un directorio nuevo. Nunca escribe sobre `~/.openclaw`:
+`openclaw backup restore` verifica el archivo y lo extrae en un directorio nuevo. Nunca escribe sobre `~/.openclaw`. El destino tiene que estar vacío, así que si repites el paso, el `rm -rf` borra la extracción anterior:
 
 ```sh
-~/.openclaw/bin/openclaw backup restore ~/restauracion/"$B" --target ~/restauracion/estado --json
+rm -rf ~/restauracion/estado
+~/.openclaw/bin/openclaw backup restore ~/restauracion/"$B" --target ~/restauracion/estado --json > ~/restauracion/restore.json
+grep -E '"(ok|runtimeVersion)"' ~/restauracion/restore.json
+RAIZ="$(tar -tzf ~/restauracion/"$B" | head -1 | cut -d/ -f1)"
 P=~/restauracion/estado/"$RAIZ"/payload/posix/Users/gon/.openclaw
 ls "$P/openclaw.json" "$P/state/openclaw.sqlite"
 ```
+
+El `grep` tiene que mostrar `"ok": true` y un `runtimeVersion` igual a la versión que instalaste en el paso 2. Así lo reportó el restore de prueba del 2026-10-15 (`runtimeVersion: "2026.9.7"`).
 
 Comprueba que el gateway no está corriendo. Este comando tiene que fallar con `Could not find service`:
 
 ```sh
 launchctl print gui/$(id -u)/ai.openclaw.gateway
+```
+
+Si en cambio imprime el servicio, el instalador dejó un gateway cargado. Descárgalo y vuelve a correr el `launchctl print`:
+
+```sh
+launchctl bootout gui/$(id -u)/ai.openclaw.gateway
 ```
 
 Copia el estado a su lugar. Se excluyen `bin/` y `tools/` para conservar el OpenClaw y el node que acabas de instalar:
@@ -193,20 +254,20 @@ Esto también reactiva este respaldo diario (`ai.goncloud.respaldo-completo`).
 ### 6. Rehacer los inicios de sesión
 
 - **CLI `claude`.** Su sesión vive en el llavero. Corre `claude` y luego `/login`.
-- **Proveedores de modelos.** `openclaw models status --probe` dice cuáles fallan. Vuelve a entrar con `openclaw models auth login --provider <proveedor>`.
+- **Proveedores de modelos.** `~/.openclaw/bin/openclaw models status --probe` dice cuáles fallan. Vuelve a entrar con `~/.openclaw/bin/openclaw models auth login --provider <proveedor>`.
 - **Navegador de claw.** Abre el perfil `claw` y vuelve a iniciar sesión en Seller Central .com y .com.mx, Flex y Gmail.
 - **WhatsApp**, si está configurado y dejó de recibir. Vuelve a vincularlo.
-- **Plugins.** Si el restore avisó de plugins sin `node_modules`, corre `openclaw plugins update <id>` por cada uno.
+- **Plugins.** Si el restore avisó de plugins sin `node_modules`, corre `~/.openclaw/bin/openclaw plugins update <id>` por cada uno.
 
 ### 7. Comprobar
 
 Cada comprobación tiene su resultado esperado:
 
 ```sh
-openclaw gateway status            # el gateway corre y responde
-openclaw models status             # sin proveedores en error
-openclaw agent --agent main --timeout 180 --message "Responde solo: listo"   # contesta "listo"
-openclaw cron list --all           # las automatizaciones de la Mini (43 al 2026-10-15)
+~/.openclaw/bin/openclaw gateway status     # el gateway corre y responde
+~/.openclaw/bin/openclaw models status      # sin proveedores en error
+~/.openclaw/bin/openclaw agent --agent main --timeout 180 --message "Responde solo: listo"   # contesta "listo"
+~/.openclaw/bin/openclaw cron list --all    # las automatizaciones de la Mini (43 al 2026-10-15)
 ```
 
 Manda un mensaje a claw por Telegram y espera su respuesta. Por último, corre el respaldo una vez con `launchctl kickstart gui/$(id -u)/ai.goncloud.respaldo-completo` y revisa que el log termine en `terminado sin fallas`.
