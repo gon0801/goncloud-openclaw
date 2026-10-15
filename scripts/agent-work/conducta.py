@@ -300,7 +300,7 @@ def juzgar(
             for i, paso in enumerate(pasos)
             if paso.tool == "todowrite" and (lectura_libro is None or i > lectura_libro)
         ]
-        objetivo = _espacios(paso_uno).replace("`", "")
+        objetivo = _espacios(paso_uno).replace("`", "").rstrip(".")
         otros = {
             frase.rstrip(".")
             for numero, frase in _primeras_frases_numeradas(texto_del_playbook).items()
