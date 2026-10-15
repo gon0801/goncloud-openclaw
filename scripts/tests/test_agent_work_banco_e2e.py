@@ -207,6 +207,37 @@ class Briefs(unittest.TestCase):
         self.assertIn("deadline", str(atrapado.exception))
         self.assertIn("deadline-missed", str(atrapado.exception))
 
+    def test_a_process_that_survives_the_tmux_kill_gets_term_then_kill(self):
+        # R2 de SUA03-G5c-r3: lo que queda en el grupo tras kill-server recibe TERM
+        # y, si sigue a los 10 s, KILL; la limpieza termina con el grupo vacío.
+        import signal as _signal
+        from types import SimpleNamespace
+
+        proceso = SimpleNamespace(pid=4321)
+        vivo = {"term": False, "kill": False}
+        llamadas = []
+        reloj = {"t": 0.0}
+
+        def boundary():
+            return () if vivo["kill"] else (proceso,)
+
+        def kill(pid, senal):
+            llamadas.append((pid, senal))
+            if senal == _signal.SIGKILL:
+                vivo["kill"] = True
+
+        def dormir(segundos):
+            reloj["t"] += segundos
+
+        matados = matar_procesos_del_slot(
+            boundary, kill, espera_term=10.0, paso=0.05,
+            reloj=lambda: reloj["t"], dormir=dormir,
+        )
+        self.assertEqual(
+            llamadas, [(4321, _signal.SIGTERM), (4321, _signal.SIGKILL)])
+        self.assertEqual(matados, (4321,))
+        self.assertEqual(boundary(), ())
+
     def test_artifact_path_reads_what_the_host_recorded(self):
         # E: el inspect de R devuelve artifactRef como artifact:<sha256>; la ruta real es
         # la que el host grabó en results/<op>.json.
